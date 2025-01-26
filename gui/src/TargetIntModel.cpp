@@ -22,24 +22,32 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
     TargetIntData targetInt=targetIntList.at(index.row());
     if(index.column() == 1) return targetInt.segmentsList;
     else if(index.column() == 2) {
-      if(targetInt.isTargetIntegration||targetInt.isConvolution) return targetInt.numPoints;
+      if(targetInt.isTargetIntegration||targetInt.isConvolution||targetInt.isConvCoefficients) return targetInt.numPoints;
       else return QString(tr("N/A"));
     }
     else if(index.column() == 3) {
       if(targetInt.isConvolution) return QString(tr("YES"));
       else return QString(tr("NO"));
-    } else if (index.column() == 4) return targetInt.sigma;
+    } 
+    else if(index.column() == 4) return targetInt.sigma;
     else if(index.column() == 5) {
       if(targetInt.isTargetIntegration) return QString(tr("YES"));
       else return QString(tr("NO"));
-    } else if(index.column() == 6) return targetInt.density;
+    } 
+    else if(index.column() == 6) return targetInt.density;
     else if(index.column() == 7) return targetInt.stoppingPowerEq;
     else if(index.column() == 8) return targetInt.numParameters;
     else if(index.column() == 9) return QVariant(); 
     else if(index.column() == 10) {
       if(targetInt.isQCoefficients) return QString(tr("YES"));
       else return QString(tr("NO"));
-    } else if(index.column() == 11) return QVariant();
+    } 
+    else if(index.column() == 11) return QVariant();
+    else if(index.column() == 12) {
+      if(targetInt.isConvCoefficients) return QString(tr("YES"));
+      else return QString(tr("NO"));
+    } 
+    else if(index.column() == 13) return QVariant();
   } else if(role == Qt::EditRole) {
     TargetIntData targetInt=targetIntList.at(index.row());
     if(index.column()==1) return targetInt.segmentsList;
@@ -51,8 +59,10 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
     if(index.column()==7) return targetInt.stoppingPowerEq;
     if(index.column()==8) return targetInt.numParameters;
     if(index.column()==9) return QVariant::fromValue<QList<double> >(targetInt.parameters);    
-    if(index.column()==10) return  targetInt.isQCoefficients;
-    if(index.column()==11) return QVariant::fromValue<QList<double> >(targetInt.qCoefficients);    
+    if(index.column()==10) return targetInt.isQCoefficients;
+    if(index.column()==11) return QVariant::fromValue<QList<double> >(targetInt.qCoefficients);  
+    if(index.column()==12) return targetInt.isConvCoefficients;
+    if(index.column()==13) return QVariant::fromValue<QList<double> >(targetInt.convCoefficients);    
   } else if (role==Qt::CheckStateRole && index.column()==0) {
     TargetIntData targetInt=targetIntList.at(index.row());
     if(targetInt.isActive==1) return Qt::Checked;
@@ -89,6 +99,10 @@ QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, in
       return tr("Use Q-Coefficients?");
     case 11:
       return tr("Q-Coefficient List");
+    case 12:
+      return tr("Use Energy Dependant Convolution?");
+    case 13:
+      return tr("Convolution Parameters");
     default: 
       return QVariant();
     }
@@ -112,6 +126,8 @@ bool TargetIntModel::setData(const QModelIndex &index, const QVariant &value, in
     else if(index.column() == 9) tempData.parameters = value.value<QList<double> >();
     else if(index.column() == 10) tempData.isQCoefficients = value.toBool();
     else if(index.column() == 11) tempData.qCoefficients = value.value<QList<double> >();
+    else if(index.column() == 12) tempData.isConvCoefficients = value.toBool();
+    else if(index.column() == 13) tempData.convCoefficients = value.value<QList<double> >();
     else return false;
     targetIntList.replace(row,tempData);
     emit(dataChanged(index,index));
@@ -135,7 +151,7 @@ bool TargetIntModel::insertRows(int position, int rows, const QModelIndex &index
   if(rows>0) {
     beginInsertRows(QModelIndex(),position,position+rows-1);
     for(int row=0; row<rows; row++) {
-     TargetIntData tempData;
+      TargetIntData tempData;
       targetIntList.insert(position,tempData);
     }
     endInsertRows();

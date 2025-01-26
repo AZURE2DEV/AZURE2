@@ -20,6 +20,7 @@ class AddTargetIntDialog : public QDialog {
  public:
   AddTargetIntDialog(QWidget *parent=0);
   QCheckBox *isConvolutionCheck;
+  QCheckBox *isConvolutionDependentCheck;
   QCheckBox *isTargetIntegrationCheck;
   QCheckBox *isQCoefficientCheck;
   QLineEdit *sigmaText;
@@ -27,29 +28,40 @@ class AddTargetIntDialog : public QDialog {
   QSpinBox *numPointsSpin;
   QSpinBox *numParametersSpin;
   QSpinBox *numQCoefficientSpin;
+  QSpinBox *numConvCoefficientSpin;
   QLineEdit *densityText;
   QLineEdit *stoppingPowerEqText;
   QTableWidget *parametersTable;
   QTableWidget *qCoefficientTable;
+  QTableWidget *convCoefficientTable;
   QList<double> tempParameters;
   QList<double> tempQCoefficients;
+  QList<double> tempConvCoefficients;
   void createParameterItem(int row, double value = 0.0);
   void createQCoefficientItem(int row, double value = 1.0);
+  void createConvCoefficientItem(int row, double value = 1.0);
   
  public slots:
   void convolutionCheckChanged(bool checked);
+
   void targetIntCheckChanged(bool checked);
   void parameterSpinChanged(int newNumber);
   void parameterChanged(int row, int column);
+
   void qCoefficientCheckChanged(bool checked);
   void qCoefficientSpinChanged(int newNumber);
   void qCoefficientChanged(int row, int column);
+
+  void convCoefficientCheckChanged(bool checked);
+  void convCoefficientSpinChanged(int newNumber);
+  void convCoefficientChanged(int row, int column);
 
  private:
   QPushButton *okButton;
   QPushButton *cancelButton;
   QGroupBox *stoppingPowerBox;
   QGroupBox *qCoefficientBox;
+  QGroupBox *convCoefficientBox;
 };
 
 #endif

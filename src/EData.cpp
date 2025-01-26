@@ -326,46 +326,63 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
     PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(segment->GetEntranceKey()));
     PPair *exitPair = compound->GetPair(compound->GetPairNumFromKey(segment->GetExitKey()));
     double cmConversion;
-    if(entrancePair->GetPType()==20)
-      cmConversion = (exitPair->GetM(1)+exitPair->GetM(2))/exitPair->GetM(2);
-    else
-      cmConversion = entrancePair->GetM(2)/(entrancePair->GetM(1)+entrancePair->GetM(2));
+    if(entrancePair->GetPType()==20) cmConversion = (exitPair->GetM(1)+exitPair->GetM(2))/exitPair->GetM(2);
+    else cmConversion = entrancePair->GetM(2)/(entrancePair->GetM(1)+entrancePair->GetM(2));
+    
     if(segment->IsTargetEffect()) {
       TargetEffect *targetEffect = this->GetTargetEffect(segment->GetTargetEffectNum());
       double sigma = targetEffect->GetSigma();
       targetEffect->SetSigma(cmConversion*sigma);
+      
       for(EPointIterator point=segment->GetPoints().begin();point<segment->GetPoints().end();point++) {
-	point->SetTargetEffectNum(segment->GetTargetEffectNum());
-	if(targetEffect->IsTargetIntegration()||targetEffect->IsConvolution()) {
-	  double forwardDepth=0.0;
-	  double backwardDepth=0.0;
-	  if(targetEffect->IsTargetIntegration()) {
-	    double totalM=entrancePair->GetM(1)+entrancePair->GetM(2);
-	    double targetThickness = cmConversion*targetEffect->TargetThickness(point->GetLabEnergy(),configure);
-	    point->SetTargetThickness(targetThickness);
-	    if(targetEffect->IsConvolution()) {
-	      backwardDepth=targetThickness+targetEffect->convolutionRange*targetEffect->GetSigma()*5.0;
-	      forwardDepth=targetEffect->convolutionRange*targetEffect->GetSigma()*5.0;
-	    } else {
-	      backwardDepth=targetThickness;
-	      forwardDepth=0.0;
-	    }
-	  } else if(targetEffect->IsConvolution()) {
-	    backwardDepth=targetEffect->convolutionRange*targetEffect->GetSigma();
-	    forwardDepth=targetEffect->convolutionRange*targetEffect->GetSigma();
-	  }
-	  for(int i=0;i<targetEffect->NumSubPoints();i++) {
-	    double subEnergy=point->GetCMEnergy()+forwardDepth
-	      -(forwardDepth+backwardDepth)/(targetEffect->NumSubPoints())*i;
-	    EPoint subPoint(point->GetCMAngle(),subEnergy,&*segment);
-	    if(targetEffect->IsTargetIntegration()) {
-	      double stoppingPower=cmConversion*targetEffect->
-		GetStoppingPowerEq()->Evaluate(configure,subEnergy/cmConversion);
-	      subPoint.SetStoppingPower(stoppingPower);
-	    }
-	    point->AddSubPoint(subPoint);
-	  }
-	}
+	      point->SetTargetEffectNum(segment->GetTargetEffectNum());
+	      
+        if(targetEffect->IsTargetIntegration()||targetEffect->IsConvolution()||targetEffect->IsConvCoefficients()) {
+	        double forwardDepth=0.0;
+	        double backwardDepth=0.0;
+	  
+          if(targetEffect->IsTargetIntegration()) {
+            double totalM=entrancePair->GetM(1)+entrancePair->GetM(2);
+            double targetThickness = cmConversion*targetEffect->TargetThickness(point->GetLabEnergy(),configure);
+            point->SetTargetThickness(targetThickness);
+            if(targetEffect->IsConvolution()||targetEffect->IsConvCoefficients()) {
+              if(targetEffect->IsConvCoefficients()) {
+                backwardDepth=targetThickness+targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy())*5.0;
+                forwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy())*5.0;
+              }
+              else {
+                backwardDepth=targetThickness+targetEffect->convolutionRange*targetEffect->GetSigma()*5.0;
+                forwardDepth=targetEffect->convolutionRange*targetEffect->GetSigma()*5.0;
+              }
+            } 
+            else {
+              backwardDepth=targetThickness;
+              forwardDepth=0.0;
+            }
+	        } 
+    
+          else if(targetEffect->IsConvolution()||targetEffect->IsConvCoefficients()) {
+            if(targetEffect->IsConvCoefficients()){
+              backwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy());
+              forwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy());
+            }
+            else {
+              backwardDepth=targetEffect->convolutionRange*targetEffect->GetSigma();
+              forwardDepth=targetEffect->convolutionRange*targetEffect->GetSigma();
+            }
+          }
+
+          for(int i=0;i<targetEffect->NumSubPoints();i++) {
+            double subEnergy=point->GetCMEnergy()+forwardDepth-(forwardDepth+backwardDepth)/(targetEffect->NumSubPoints())*i;
+            EPoint subPoint(point->GetCMAngle(),subEnergy,&*segment);
+            if(targetEffect->IsTargetIntegration()) {
+              double stoppingPower=cmConversion*targetEffect->GetStoppingPowerEq()->Evaluate(configure,subEnergy/cmConversion);
+              subPoint.SetStoppingPower(stoppingPower);
+            }
+            point->AddSubPoint(subPoint);
+	        }
+
+	      }
       }
     }
   }

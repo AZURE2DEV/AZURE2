@@ -1112,7 +1112,8 @@ void EPoint::Calculate(CNuc* theCNuc,const Config &configure, EPoint *parent, in
 
   if(!this->IsTargetEffect()||
      (!this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsConvolution()&&
-      !this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsTargetIntegration())) {
+      !this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsTargetIntegration()&&
+      !this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsConvCoefficients())) {
     GenMatrixFunc *theMatrixFunc;
     if(configure.paramMask & Config::USE_AMATRIX) theMatrixFunc=new AMatrixFunc(theCNuc,configure);
     else theMatrixFunc=new RMatrixFunc(theCNuc,configure);
@@ -1134,11 +1135,12 @@ void EPoint::Calculate(CNuc* theCNuc,const Config &configure, EPoint *parent, in
       }
     }
     delete theMatrixFunc;
-  } else {
+  } 
+  else {
     for(int i = 1; i<=this->NumSubPoints();i++) {
       EPoint *subPoint=this->GetSubPoint(i);
       if(this->NumLocalMappedPoints()>0)
-	subPoint->Calculate(theCNuc,configure,this,i);
+	    subPoint->Calculate(theCNuc,configure,this,i);
       else subPoint->Calculate(theCNuc,configure);
     }
     this->IntegrateTargetEffect();
@@ -1249,7 +1251,8 @@ void EPoint::IntegrateTargetEffect() {
       outerCounter++;
     }
     yield=outerIntegral/(targetEffect->GetDensity()*1.E-24);
-  } else if(targetEffect->IsConvolution()) {
+  } 
+  else if(targetEffect->IsConvolution()) {
     double intFirst=0.0;
     double intEvenSum=0.0;
     double intOddSum=0.0;
@@ -1258,18 +1261,20 @@ void EPoint::IntegrateTargetEffect() {
     for(int i=0;i<this->NumSubPoints();i++) {
       double thisEnergy=this->GetSubPoint(i+1)->GetCMEnergy();
       double integrand=this->GetSubPoint(i+1)->GetFitCrossSection()
-	*targetEffect->GetConvolutionFactor(thisEnergy,centroid);
+	    *targetEffect->GetConvolutionFactor(thisEnergy,centroid);
       if(i==0) intFirst=integrand;
       else if(i%2==0) {
-	intEvenSum+=integrand;
-	if(i>=2) integral=energyStep/3.0*(intFirst+4.0*intOddSum+2.0*intEvenSum-integrand);
-      } else if(i%2!=0) {
-	  intOddSum+=integrand;
-	  if(i>=2) integral=energyStep/3.0*(intFirst+4.0*intOddSum+2.0*intEvenSum-3.0*integrand);
+	      intEvenSum+=integrand;
+	      if(i>=2) integral=energyStep/3.0*(intFirst+4.0*intOddSum+2.0*intEvenSum-integrand);
+      } 
+      else if(i%2!=0) {
+	      intOddSum+=integrand;
+	      if(i>=2) integral=energyStep/3.0*(intFirst+4.0*intOddSum+2.0*intEvenSum-3.0*integrand);
       }
     }
     yield=integral;
-  } else if(targetEffect->IsTargetIntegration()) {
+  } 
+  else if(targetEffect->IsTargetIntegration()) {
     double intFirst=0.0;
     double intEvenSum=0.0;
     double intOddSum=0.0;
@@ -1277,11 +1282,11 @@ void EPoint::IntegrateTargetEffect() {
     for(int i=0;i<this->NumSubPoints();i++) {
       double thisEnergy=this->GetSubPoint(i+1)->GetCMEnergy();
       double integrand=this->GetSubPoint(i+1)->GetFitCrossSection()/
-	this->GetSubPoint(i+1)->GetStoppingPower()/1e24;
+	    this->GetSubPoint(i+1)->GetStoppingPower()/1e24;
       if(i==0) intFirst=integrand;
       else if(i%2==0) {
-	intEvenSum+=integrand;
-	if(i>=2) integral=energyStep/3.0*(intFirst+4.0*intOddSum+2.0*intEvenSum-integrand);
+	    intEvenSum+=integrand;
+	    if(i>=2) integral=energyStep/3.0*(intFirst+4.0*intOddSum+2.0*intEvenSum-integrand);
       } else if(i%2!=0) {
 	  intOddSum+=integrand;
 	  if(i>=2) integral=energyStep/3.0*(intFirst+4.0*intOddSum+2.0*intEvenSum-3.0*integrand);
@@ -1289,6 +1294,41 @@ void EPoint::IntegrateTargetEffect() {
     }
     yield=integral/(targetEffect->GetDensity()*1.E-24);    
   }
+  else if(targetEffect->IsConvCoefficients()) {
+      double intFirst=0.0;
+    double intFirstC=0.0;
+    double intEvenSum=0.0;
+    double intEvenSumC=0.0;
+    double intOddSum=0.0;
+    double intOddSumC=0.0;
+    double integral=0.0;
+    double integralC=0.0;
+    double centroid=this->GetCMEnergy();
+    for(int i=0;i<this->NumSubPoints();i++) {
+      double thisEnergy=this->GetSubPoint(i+1)->GetCMEnergy();
+      double integrand=this->GetSubPoint(i+1)->GetFitCrossSection()*targetEffect->CalculateConvolutionFactor(thisEnergy,centroid);
+      double integrandC=targetEffect->CalculateConvolutionFactor(thisEnergy,centroid);
+      if(i==0) intFirst=integrand;
+      else if(i%2==0) {
+	      intEvenSum+=integrand;
+	      if(i>=2) integral=energyStep/3.0*(intFirst+4.0*intOddSum+2.0*intEvenSum-integrand);
+      } 
+      else if(i%2!=0) {
+	      intOddSum+=integrand;
+	      if(i>=2) integral=energyStep/3.0*(intFirst+4.0*intOddSum+2.0*intEvenSum-3.0*integrand);
+      }
+      if(i==0) intFirstC=integrandC;
+      else if(i%2==0) {
+	      intEvenSumC+=integrandC;
+	      if(i>=2) integralC=energyStep/3.0*(intFirstC+4.0*intOddSumC+2.0*intEvenSumC-integrandC);
+      } 
+      else if(i%2!=0) {
+	      intOddSumC+=integrandC;
+	      if(i>=2) integralC=energyStep/3.0*(intFirstC+4.0*intOddSumC+2.0*intEvenSumC-3.0*integrandC);
+      }
+    }
+    yield=integral/integralC;
+  } 
   this->SetFitCrossSection(yield);
 }
 

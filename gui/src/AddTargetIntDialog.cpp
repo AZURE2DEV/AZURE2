@@ -8,7 +8,6 @@
 #include <QHeaderView>
 #include <QPushButton>
 
-
 #include "AddTargetIntDialog.h"
 
 AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent) {
@@ -19,11 +18,13 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent) {
   numPointsSpin -> setMaximum(10000);
   numPointsSpin -> setSingleStep(10);
   numPointsSpin -> setValue(10);
+
   isConvolutionCheck = new QCheckBox(tr("Include Gaussian Convolution"));
   isConvolutionCheck->setChecked(false);
   connect(isConvolutionCheck,SIGNAL(toggled(bool)),this,SLOT(convolutionCheckChanged(bool)));
   sigmaText = new QLineEdit;
   sigmaText->setEnabled(false);
+  
   isTargetIntegrationCheck = new QCheckBox(tr("Include Target Integration"));
   isTargetIntegrationCheck->setChecked(false);
   connect(isTargetIntegrationCheck,SIGNAL(toggled(bool)),this,SLOT(targetIntCheckChanged(bool)));
@@ -50,9 +51,11 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent) {
   labelList.append(QString(tr("Parameter")));
   labelList.append(QString(tr("Value")));
   parametersTable->setHorizontalHeaderLabels(labelList);
+  
   isQCoefficientCheck = new QCheckBox(tr("Include Attenuation Coefficients"));
   isQCoefficientCheck->setChecked(false);
   connect(isQCoefficientCheck,SIGNAL(toggled(bool)),this,SLOT(qCoefficientCheckChanged(bool)));
+
   numQCoefficientSpin= new QSpinBox;
   numQCoefficientSpin->setMinimum(0);
   numQCoefficientSpin->setMaximum(6);
@@ -60,6 +63,7 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent) {
   numQCoefficientSpin->setValue(0);
   numQCoefficientSpin->setEnabled(false);
   connect(numQCoefficientSpin,SIGNAL(valueChanged(int)),this,SLOT(qCoefficientSpinChanged(int)));
+  
   qCoefficientTable = new QTableWidget(this);
   qCoefficientTable->setColumnCount(2);
   qCoefficientTable->setRowCount(0);
@@ -70,11 +74,39 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent) {
   qCoefficientTable->horizontalHeader()->setSectionResizeMode(1,QHeaderView::Stretch);
   qCoefficientTable->setShowGrid(false);
   connect(qCoefficientTable,SIGNAL(cellChanged(int,int)),this,SLOT(qCoefficientChanged(int,int)));
+
   QStringList qlabelList;
   qlabelList.append(QString(tr("Coefficent")));
   qlabelList.append(QString(tr("Value")));
   qCoefficientTable->setHorizontalHeaderLabels(qlabelList);
 
+  isConvolutionDependentCheck = new QCheckBox(tr("Include Energy Dependent Gaussian Convolution"));
+  isConvolutionDependentCheck->setChecked(false);
+  connect(isConvolutionDependentCheck,SIGNAL(toggled(bool)),this,SLOT(convCoefficientCheckChanged(bool)));
+
+  numConvCoefficientSpin= new QSpinBox;
+  numConvCoefficientSpin->setMinimum(0);
+  numConvCoefficientSpin->setMaximum(6);
+  numConvCoefficientSpin->setSingleStep(1);
+  numConvCoefficientSpin->setValue(0);
+  numConvCoefficientSpin->setEnabled(false);
+  connect(numConvCoefficientSpin,SIGNAL(valueChanged(int)),this,SLOT(convCoefficientSpinChanged(int)));
+
+  convCoefficientTable = new QTableWidget(this);
+  convCoefficientTable->setColumnCount(2);
+  convCoefficientTable->setRowCount(0);
+  convCoefficientTable->verticalHeader()->hide();
+  convCoefficientTable->verticalHeader()->setHighlightSections(false);
+  convCoefficientTable->horizontalHeader()->setHighlightSections(false);
+  convCoefficientTable->horizontalHeader()->setSectionResizeMode(0,QHeaderView::Stretch);
+  convCoefficientTable->horizontalHeader()->setSectionResizeMode(1,QHeaderView::Stretch);
+  convCoefficientTable->setShowGrid(false);
+  connect(convCoefficientTable,SIGNAL(cellChanged(int,int)),this,SLOT(convCoefficientChanged(int,int)));
+
+  QStringList convlabelList;
+  convlabelList.append(QString(tr("Coefficent")));
+  convlabelList.append(QString(tr("Value")));
+  convCoefficientTable->setHorizontalHeaderLabels(convlabelList);
 
   cancelButton = new QPushButton(tr("Cancel"));
   okButton = new QPushButton(tr("Accept"));
@@ -130,6 +162,19 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent) {
   qCoefficientBox->setLayout(qCoefficientLayout);
   qCoefficientBox->hide();
 
+  QGridLayout *energyConvolutionCheckBoxLayout = new QGridLayout;
+  energyConvolutionCheckBoxLayout->addWidget(isConvolutionDependentCheck,0,0);
+  energyConvolutionCheckBoxLayout->addItem(new QSpacerItem(1,20),0,1);
+  energyConvolutionCheckBoxLayout->addWidget(new QLabel(tr("Number of Coefficients:")),0,2,Qt::AlignRight);
+  energyConvolutionCheckBoxLayout->addWidget(numConvCoefficientSpin,0,3);
+  energyConvolutionCheckBoxLayout->setColumnStretch(1,1);
+
+  convCoefficientBox = new QGroupBox(tr("Convolution Coefficients"));
+  QVBoxLayout *convCoefficientLayout = new QVBoxLayout;
+  convCoefficientLayout->addWidget(convCoefficientTable);
+  convCoefficientBox->setLayout(convCoefficientLayout);
+  convCoefficientBox->hide();
+
   QHBoxLayout *buttonBox = new QHBoxLayout;
   buttonBox->addWidget(cancelButton);
   buttonBox->addWidget(okButton);
@@ -140,6 +185,8 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent) {
   mainLayout->addWidget(stoppingPowerBox);
   mainLayout->addLayout(qCoefficientCheckBoxLayout);
   mainLayout->addWidget(qCoefficientBox);
+  mainLayout->addLayout(energyConvolutionCheckBoxLayout);
+  mainLayout->addWidget(convCoefficientBox);
   mainLayout->addLayout(buttonBox);
 
   setLayout(mainLayout);
@@ -170,6 +217,17 @@ void AddTargetIntDialog::createQCoefficientItem(int row, double value) {
   qCoefficientTable->setItem(row,0,labelItem);
   qCoefficientTable->setItem(row,1,valueItem);
   qCoefficientTable->resizeRowsToContents();
+}
+
+void AddTargetIntDialog::createConvCoefficientItem(int row, double value) {
+  QTableWidgetItem *labelItem = new QTableWidgetItem(QString("a%1").arg(row));
+  QTableWidgetItem *valueItem = new QTableWidgetItem(QString("%1").arg(value));
+  labelItem->setTextAlignment(Qt::AlignCenter);
+  labelItem->setFlags(Qt::ItemIsEditable);
+  valueItem->setTextAlignment(Qt::AlignCenter);
+  convCoefficientTable->setItem(row,0,labelItem);
+  convCoefficientTable->setItem(row,1,valueItem);
+  convCoefficientTable->resizeRowsToContents();
 }
 
 void AddTargetIntDialog::convolutionCheckChanged(bool checked) {
@@ -227,6 +285,19 @@ void AddTargetIntDialog::qCoefficientCheckChanged(bool checked) {
   }
 }
 
+void AddTargetIntDialog::convCoefficientCheckChanged(bool checked) {
+  if(checked) {
+    convCoefficientBox->show();
+    numConvCoefficientSpin->setEnabled(true);
+    numPointsSpin->setEnabled(true);
+  } else {
+    convCoefficientBox->hide();
+    numConvCoefficientSpin->setEnabled(false);
+    numPointsSpin->setEnabled(false);
+    this->adjustSize();
+  }
+}
+
 void AddTargetIntDialog::qCoefficientSpinChanged(int newNumber){
   qCoefficientTable->clearContents();
   qCoefficientTable->setRowCount(newNumber);
@@ -238,6 +309,17 @@ void AddTargetIntDialog::qCoefficientSpinChanged(int newNumber){
   }
 }
 
+void AddTargetIntDialog::convCoefficientSpinChanged(int newNumber){
+  convCoefficientTable->clearContents();
+  convCoefficientTable->setRowCount(newNumber);
+  for(int i=0;i<newNumber;i++) {
+    if(i<tempConvCoefficients.size())
+      createConvCoefficientItem(i,tempConvCoefficients.at(i));
+    else 
+      createConvCoefficientItem(i);
+  }
+}
+
 void AddTargetIntDialog::qCoefficientChanged(int row, int column) {
   if(column==1) {
     while(row>=tempQCoefficients.size()) {
@@ -245,5 +327,15 @@ void AddTargetIntDialog::qCoefficientChanged(int row, int column) {
       tempQCoefficients.append(tempDouble);
     }
     tempQCoefficients[row]=qCoefficientTable->item(row,column)->text().toDouble();
+  }
+}
+
+void AddTargetIntDialog::convCoefficientChanged(int row, int column) {
+  if(column==1) {
+    while(row>=tempConvCoefficients.size()) {
+      double tempDouble=0.0;
+      tempConvCoefficients.append(tempDouble);
+    }
+    tempConvCoefficients[row]=convCoefficientTable->item(row,column)->text().toDouble();
   }
 }

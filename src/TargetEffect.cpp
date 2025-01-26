@@ -22,15 +22,18 @@ TargetEffect::TargetEffect(std::istream &stream,const Config& configure) {
   int isQCoefficients;
   int numQCoefficients;
   vector_r qCoefficients;
-  stream >> isActive >> segmentList >> numIntegrationPoints >> isConvolution
-	 >> sigma >> isTargetIntegration >> density >> stoppingPowerEq 
-	 >> numParameters;
+  int isConvCoefficients;
+  int numConvCoefficients;
+  vector_r convCoefficients;
+
+  stream >> isActive >> segmentList >> numIntegrationPoints >> isConvolution >> sigma >> isTargetIntegration >> density >> stoppingPowerEq >> numParameters;
   if(!stream.eof()) {
     for(int i=0;i<numParameters;i++) {
       double tempParameter;
       stream >> tempParameter;
       parameters.push_back(tempParameter);
     }
+    
     stream >> isQCoefficients >> numQCoefficients;
     for(int i=0;i<numQCoefficients;i++) {
       double tempQCoefficient;
@@ -39,6 +42,16 @@ TargetEffect::TargetEffect(std::istream &stream,const Config& configure) {
     }
     isQCoefficients_ = (isQCoefficients==1) ? true : false;
     qCoefficients_=qCoefficients;
+
+    stream >> isConvCoefficients >> numConvCoefficients;
+    for(int i=0;i<numConvCoefficients;i++) {
+      double tempConvCoefficient;
+      stream >> tempConvCoefficient;
+      convCoefficients.push_back(tempConvCoefficient);
+    }
+    isConvCoefficients_ = (isConvCoefficients==1) ? true : false;
+    convCoefficients_=convCoefficients;
+
     size_t found=0;
     while(found!=std::string::npos) {
       found=segmentList.find('\"');
@@ -105,6 +118,15 @@ bool TargetEffect::IsQCoefficients() const {
 }
 
 /*!
+ * Returns true if the target effect contains convolution coefficients, otherwise
+ * returns false.
+ */
+
+bool TargetEffect::IsConvCoefficients() const {
+  return isConvCoefficients_;
+}
+
+/*!
  * Returns the number of sub-points specified for the target effect in 
  * the input file.
  */
@@ -120,6 +142,15 @@ int TargetEffect::NumSubPoints() const {
 
 int TargetEffect::NumQCoefficients() const {
   return qCoefficients_.size();
+}
+
+/*!
+ * Returns the number of convolution coefficients for the target effect in 
+ * the input file.
+ */
+
+int TargetEffect::NumConvCoefficients() const {
+  return convCoefficients_.size();
 }
 
 /*!
@@ -154,6 +185,14 @@ double TargetEffect::TargetThickness(double energy, const Config& configure)  {
 
 double TargetEffect::GetQCoefficient(int order)  const {
   return (qCoefficients_.size()>order) ? qCoefficients_[order] : 1.;
+}
+
+/*!
+ * Returns the convolution coefficients for the given order specified in by the target effect.
+ */
+
+double TargetEffect::GetConvCoefficient(int order) const {
+  return (convCoefficients_.size()>order) ? convCoefficients_[order] : 1.;
 }
 
 /*!
@@ -224,5 +263,31 @@ Equation *TargetEffect::GetStoppingPowerEq() {
 
 double TargetEffect::GetConvolutionFactor(double energy, double centroid) const {
   double sigma=this->GetSigma();
+  return pow(2.*pi,-0.5)/sigma*exp(-pow(energy-centroid,2.0)/2.0/pow(sigma,2.0));
+}
+
+/*!
+ * Calculates the sigma of the Gaussian beam convolution as a function of energy.
+ */
+
+double TargetEffect::CalculateSigma(double energy) const {
+  double sigma=0;
+  if( this->NumConvCoefficients() > 0 ) {
+    sigma += this->GetConvCoefficient(0);
+    for(int i=1;i<this->NumConvCoefficients();i++) {
+      sigma += this->GetConvCoefficient(i)*pow(energy,i);
+    }
+  }
+  else sigma=this->GetSigma();
+  return sigma;
+}
+
+/*!
+ * Returns the multiplicative convolution factor for evaluation of the integrand
+ * of a target effect with energy dependent sigma.  
+ */
+
+double TargetEffect::CalculateConvolutionFactor(double energy, double centroid) const {
+  double sigma=this->CalculateSigma(energy);
   return pow(2.*pi,-0.5)/sigma*exp(-pow(energy-centroid,2.0)/2.0/pow(sigma,2.0));
 }
