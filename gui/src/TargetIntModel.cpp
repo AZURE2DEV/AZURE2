@@ -48,6 +48,7 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
       else return QString(tr("NO"));
     } 
     else if(index.column() == 13) return QVariant();
+    else if(index.column() == 14) return targetInt.convolutionEq;
   } else if(role == Qt::EditRole) {
     TargetIntData targetInt=targetIntList.at(index.row());
     if(index.column()==1) return targetInt.segmentsList;
@@ -62,7 +63,8 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
     if(index.column()==10) return targetInt.isQCoefficients;
     if(index.column()==11) return QVariant::fromValue<QList<double> >(targetInt.qCoefficients);  
     if(index.column()==12) return targetInt.isConvCoefficients;
-    if(index.column()==13) return QVariant::fromValue<QList<double> >(targetInt.convCoefficients);    
+    if(index.column()==13) return QVariant::fromValue<QList<double> >(targetInt.convCoefficients); 
+    if(index.column()==14) return targetInt.convolutionEq;
   } else if (role==Qt::CheckStateRole && index.column()==0) {
     TargetIntData targetInt=targetIntList.at(index.row());
     if(targetInt.isActive==1) return Qt::Checked;
@@ -128,6 +130,7 @@ bool TargetIntModel::setData(const QModelIndex &index, const QVariant &value, in
     else if(index.column() == 11) tempData.qCoefficients = value.value<QList<double> >();
     else if(index.column() == 12) tempData.isConvCoefficients = value.toBool();
     else if(index.column() == 13) tempData.convCoefficients = value.value<QList<double> >();
+    else if(index.column() == 14) tempData.convolutionEq = value.toString();
     else return false;
     targetIntList.replace(row,tempData);
     emit(dataChanged(index,index));

@@ -9,6 +9,7 @@
  */
 
 Equation::Equation() {
+  infixEquation_="";
 }
 
 /*!

@@ -1143,9 +1143,9 @@ void EPoint::Calculate(CNuc* theCNuc,const Config &configure, EPoint *parent, in
 	    subPoint->Calculate(theCNuc,configure,this,i);
       else subPoint->Calculate(theCNuc,configure);
     }
-    this->IntegrateTargetEffect();
+    this->IntegrateTargetEffect(configure);
     for(int i=1;i<=this->NumLocalMappedPoints();i++)
-      this->GetLocalMappedPoint(i)->IntegrateTargetEffect();
+      this->GetLocalMappedPoint(i)->IntegrateTargetEffect(configure);
   }
 }
 
@@ -1197,7 +1197,7 @@ void EPoint::AddSubPoint(EPoint subPoint) {
  * rule to perform the integration.
  */
 
-void EPoint::IntegrateTargetEffect() {
+void EPoint::IntegrateTargetEffect(const Config& configure) {
   double yield=0.0;
   TargetEffect *targetEffect=this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
   double energyStep=this->GetSubPoint(1)->GetCMEnergy()-this->GetSubPoint(2)->GetCMEnergy();
@@ -1306,8 +1306,8 @@ void EPoint::IntegrateTargetEffect() {
     double centroid=this->GetCMEnergy();
     for(int i=0;i<this->NumSubPoints();i++) {
       double thisEnergy=this->GetSubPoint(i+1)->GetCMEnergy();
-      double integrand=this->GetSubPoint(i+1)->GetFitCrossSection()*targetEffect->CalculateConvolutionFactor(thisEnergy,centroid);
-      double integrandC=targetEffect->CalculateConvolutionFactor(thisEnergy,centroid);
+      double integrand=this->GetSubPoint(i+1)->GetFitCrossSection()*targetEffect->CalculateConvolutionFactor(thisEnergy,centroid,configure);
+      double integrandC=targetEffect->CalculateConvolutionFactor(thisEnergy,centroid,configure);
       if(i==0) intFirst=integrand;
       else if(i%2==0) {
 	      intEvenSum+=integrand;

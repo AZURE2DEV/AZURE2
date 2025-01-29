@@ -37,6 +37,7 @@ class AddTargetIntDialog : public QDialog {
   QList<double> tempParameters;
   QList<double> tempQCoefficients;
   QList<double> tempConvCoefficients;
+  QLineEdit *convolutionEqText;
   void createParameterItem(int row, double value = 0.0);
   void createQCoefficientItem(int row, double value = 1.0);
   void createConvCoefficientItem(int row, double value = 1.0);

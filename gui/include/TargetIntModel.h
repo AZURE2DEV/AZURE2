@@ -7,7 +7,7 @@
 Q_DECLARE_METATYPE(QList<double>);
 
 struct TargetIntData {
-  static const int SIZE = 14;
+  static const int SIZE = 15;
   int isActive;
   QString segmentsList;
   int numPoints;
@@ -22,6 +22,7 @@ struct TargetIntData {
   QList<double> qCoefficients;
   bool isConvCoefficients;
   QList<double> convCoefficients;
+  QString convolutionEq;
 };
 
 class TargetIntModel : public QAbstractTableModel {

@@ -56,6 +56,9 @@ class Equation {
   void SetParameter(unsigned int index, double value, const Config&);
   std::vector<double> GetParameters() const;
   double Evaluate(const Config&, double x=0.0) const;
+  std::string GetEquation() const {
+    return infixEquation_;
+  };
  private:
   enum Associativity {LEFT,RIGHT};
   enum TokenType {NUMBER=1,OPERATOR=2,VARIABLE=4,PARAMETER=8,LEFTPAR=16,RIGHTPAR=32,FUNCTION=64};

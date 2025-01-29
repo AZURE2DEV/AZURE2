@@ -25,6 +25,7 @@ TargetEffect::TargetEffect(std::istream &stream,const Config& configure) {
   int isConvCoefficients;
   int numConvCoefficients;
   vector_r convCoefficients;
+  std::string convolutionEq;
 
   stream >> isActive >> segmentList >> numIntegrationPoints >> isConvolution >> sigma >> isTargetIntegration >> density >> stoppingPowerEq >> numParameters;
   if(!stream.eof()) {
@@ -43,7 +44,7 @@ TargetEffect::TargetEffect(std::istream &stream,const Config& configure) {
     isQCoefficients_ = (isQCoefficients==1) ? true : false;
     qCoefficients_=qCoefficients;
 
-    stream >> isConvCoefficients >> numConvCoefficients;
+    stream >> isConvCoefficients >> convolutionEq >> numConvCoefficients;
     for(int i=0;i<numConvCoefficients;i++) {
       double tempConvCoefficient;
       stream >> tempConvCoefficient;
@@ -62,6 +63,11 @@ TargetEffect::TargetEffect(std::istream &stream,const Config& configure) {
       found=stoppingPowerEq.find('\"');
       if(found!=std::string::npos) stoppingPowerEq.erase(found,1);
     }
+    found=0;
+    while(found!=std::string::npos) {
+      found=convolutionEq.find('\"');
+      if(found!=std::string::npos) convolutionEq.erase(found,1);
+    }
     if(isActive==1) isActive_=true;
     else isActive_=false;
     segmentsList_=segmentList;
@@ -75,7 +81,13 @@ TargetEffect::TargetEffect(std::istream &stream,const Config& configure) {
     if(isTargetIntegration_) {
       stoppingPowerEq_.Initialize(stoppingPowerEq,numParameters,configure);
       for(int i=0;i<numParameters;i++) {
-	stoppingPowerEq_.SetParameter(i,parameters[i],configure);
+	    stoppingPowerEq_.SetParameter(i,parameters[i],configure);
+      }
+    }
+    if(isConvCoefficients_) {
+      convolutionEq_.Initialize(convolutionEq,numConvCoefficients,configure);
+      for(int i=0;i<numConvCoefficients;i++) {
+        convolutionEq_.SetParameter(i,convCoefficients[i],configure);
       }
     }
   }
@@ -257,6 +269,16 @@ Equation *TargetEffect::GetStoppingPowerEq() {
 }
 
 /*!
+ * Returns the Equation object corresponding to the parametrized convolution.
+ */
+
+Equation *TargetEffect::GetConvolutionEq() {
+  Equation *tempEquation;
+  tempEquation=&convolutionEq_;
+  return tempEquation;
+}
+
+/*!
  * Returns the multiplicative convolution factor for evaluation of the integrand
  * of a target effect.  
  */
@@ -270,13 +292,11 @@ double TargetEffect::GetConvolutionFactor(double energy, double centroid) const 
  * Calculates the sigma of the Gaussian beam convolution as a function of energy.
  */
 
-double TargetEffect::CalculateSigma(double energy) const {
+double TargetEffect::CalculateSigma(double energy, const Config& configure) {
   double sigma=0;
-  if( this->NumConvCoefficients() > 0 ) {
-    sigma += this->GetConvCoefficient(0);
-    for(int i=1;i<this->NumConvCoefficients();i++) {
-      sigma += this->GetConvCoefficient(i)*pow(energy,i);
-    }
+  // Check if convolution equation is defined
+  if(this->GetConvolutionEq()->GetEquation()!="") {
+    sigma=this->GetConvolutionEq()->Evaluate(configure,energy);
   }
   else sigma=this->GetSigma();
   return sigma;
@@ -287,7 +307,7 @@ double TargetEffect::CalculateSigma(double energy) const {
  * of a target effect with energy dependent sigma.  
  */
 
-double TargetEffect::CalculateConvolutionFactor(double energy, double centroid) const {
-  double sigma=this->CalculateSigma(energy);
+double TargetEffect::CalculateConvolutionFactor(double energy, double centroid, const Config& configure) {
+  double sigma=this->CalculateSigma(energy,configure);
   return pow(2.*pi,-0.5)/sigma*exp(-pow(energy-centroid,2.0)/2.0/pow(sigma,2.0));
 }

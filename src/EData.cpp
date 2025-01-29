@@ -347,8 +347,8 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
             point->SetTargetThickness(targetThickness);
             if(targetEffect->IsConvolution()||targetEffect->IsConvCoefficients()) {
               if(targetEffect->IsConvCoefficients()) {
-                backwardDepth=targetThickness+targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy())*5.0;
-                forwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy())*5.0;
+                backwardDepth=targetThickness+targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure)*5.0;
+                forwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure)*5.0;
               }
               else {
                 backwardDepth=targetThickness+targetEffect->convolutionRange*targetEffect->GetSigma()*5.0;
@@ -363,8 +363,8 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
     
           else if(targetEffect->IsConvolution()||targetEffect->IsConvCoefficients()) {
             if(targetEffect->IsConvCoefficients()){
-              backwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy());
-              forwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy());
+              backwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure);
+              forwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure);
             }
             else {
               backwardDepth=targetEffect->convolutionRange*targetEffect->GetSigma();

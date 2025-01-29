@@ -109,7 +109,7 @@ class EPoint {
   void ClearLocalMappedPoints();
   void SetTargetEffectNum(int);
   void AddSubPoint(EPoint);
-  void IntegrateTargetEffect();
+  void IntegrateTargetEffect(const Config&);
   void SetParentData(EData*);
   void SetStoppingPower(double);
   void SetTargetThickness(double);

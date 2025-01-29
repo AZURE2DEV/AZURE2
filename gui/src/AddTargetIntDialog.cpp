@@ -84,6 +84,7 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent) {
   isConvolutionDependentCheck->setChecked(false);
   connect(isConvolutionDependentCheck,SIGNAL(toggled(bool)),this,SLOT(convCoefficientCheckChanged(bool)));
 
+  convolutionEqText = new QLineEdit;
   numConvCoefficientSpin= new QSpinBox;
   numConvCoefficientSpin->setMinimum(0);
   numConvCoefficientSpin->setMaximum(6);
@@ -171,6 +172,10 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent) {
 
   convCoefficientBox = new QGroupBox(tr("Convolution Coefficients"));
   QVBoxLayout *convCoefficientLayout = new QVBoxLayout;
+  QHBoxLayout *equationConvLayout = new QHBoxLayout;
+  equationConvLayout->addWidget(new QLabel(tr("y=")));
+  equationConvLayout->addWidget(convolutionEqText);
+  convCoefficientLayout->addLayout(equationConvLayout);
   convCoefficientLayout->addWidget(convCoefficientTable);
   convCoefficientBox->setLayout(convCoefficientLayout);
   convCoefficientBox->hide();

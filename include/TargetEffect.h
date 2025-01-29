@@ -28,17 +28,18 @@ class TargetEffect {
   int NumQCoefficients() const;
   int NumConvCoefficients() const;
   double GetSigma() const;
-  double CalculateSigma(double) const;
+  double CalculateSigma(double,const Config&);
   double GetDensity() const;
   double TargetThickness(double,const Config&);
   double GetConvolutionFactor(double, double) const;
-  double CalculateConvolutionFactor(double, double) const;
+  double CalculateConvolutionFactor(double, double, const Config&);
   double GetQCoefficient(int) const;
   double GetConvCoefficient(int) const;
   void SetSigma(double);
   void SetNumSubPoints(int);
   std::vector<int> GetSegmentsList() const;
   Equation *GetStoppingPowerEq();
+  Equation *GetConvolutionEq();
   ///The multiple of sigma above and below centroid energy to use as integration range
   static constexpr double convolutionRange=3.;
  private:
@@ -54,6 +55,7 @@ class TargetEffect {
   std::string segmentsList_;
   vector_r qCoefficients_;
   vector_r convCoefficients_;
+  Equation convolutionEq_;
 };
 
 #endif

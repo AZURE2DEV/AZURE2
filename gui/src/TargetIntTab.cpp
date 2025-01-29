@@ -24,6 +24,7 @@ TargetIntTab::TargetIntTab(QWidget *parent) : QWidget(parent) {
   targetIntView->setColumnHidden(9,true);
   targetIntView->setColumnHidden(11,true);
   targetIntView->setColumnHidden(13,true);
+  targetIntView->setColumnHidden(14,true);
 
   targetIntView->setColumnWidth(0,27);
   targetIntView->horizontalHeader()->setSectionResizeMode(0,QHeaderView::Fixed);
@@ -97,6 +98,7 @@ void TargetIntTab::addLine() {
     
     newLine.isConvCoefficients = (aDialog.isConvolutionDependentCheck->isChecked()) ? (true) : (false);
     for(int i=0;i<aDialog.numConvCoefficientSpin->value();i++) newLine.convCoefficients.append(aDialog.tempConvCoefficients.at(i));
+    newLine.convolutionEq=aDialog.convolutionEqText->text();
     
     addLine(newLine);
   }
@@ -135,6 +137,8 @@ void TargetIntTab::addLine(TargetIntData line) {
   targetIntModel->setData(index,line.isConvCoefficients,Qt::EditRole);
   index = targetIntModel->index(lines.size(),13,QModelIndex());
   targetIntModel->setData(index,QVariant::fromValue<QList<double> >(line.convCoefficients),Qt::EditRole);
+  index = targetIntModel->index(lines.size(),14,QModelIndex());
+  targetIntModel->setData(index,line.convolutionEq,Qt::EditRole);
 
   targetIntView->resizeRowsToContents();
 }
@@ -187,6 +191,9 @@ void TargetIntTab::editLine() {
   i=targetIntModel->index(index.row(),13,QModelIndex());
   var=targetIntModel->data(i,Qt::EditRole);
   QList<double> convCoefficients = var.value<QList<double> >();
+  i=targetIntModel->index(index.row(),14,QModelIndex());
+  var=targetIntModel->data(i,Qt::EditRole);
+  QString convolutionEq = var.toString();
 
   AddTargetIntDialog aDialog;
   aDialog.setWindowTitle(tr("Edit an Experimental Effect Line"));
@@ -213,6 +220,7 @@ void TargetIntTab::editLine() {
   else aDialog.isConvolutionDependentCheck->setChecked(false);
   aDialog.tempConvCoefficients=convCoefficients;
   aDialog.numConvCoefficientSpin->setValue(convCoefficients.size());
+  aDialog.convolutionEqText->setText(convolutionEq);
 
   if(aDialog.exec()) {
     QString newSegmentsList = aDialog.segmentsListText->text();
@@ -297,6 +305,11 @@ void TargetIntTab::editLine() {
         i=targetIntModel->index(index.row(),13,QModelIndex());
         targetIntModel->setData(i,QVariant::fromValue<QList<double> >(convCoefficients),Qt::EditRole);
     }
+    QString newconvolutionEq=aDialog.convolutionEqText->text();
+    if(convolutionEq!=newconvolutionEq) {
+      i=targetIntModel->index(index.row(),14,QModelIndex());
+      targetIntModel->setData(i,newconvolutionEq,Qt::EditRole);
+    }
   }
 }
 
@@ -341,7 +354,7 @@ bool TargetIntTab::writeFile(QTextStream& outStream) {
 
     if(lines.at(i).isConvCoefficients) outStream << qSetFieldWidth(0) << "              1";
     else outStream << qSetFieldWidth(0) << "              0";
-    outStream << qSetFieldWidth(0) << "              " <<  lines.at(i).convCoefficients.size() << ' ';
+    outStream << qSetFieldWidth(0) << "              " <<  " \""+lines[i].convolutionEq.remove(' ')+"\" " << qSetFieldWidth(0) << lines.at(i).convCoefficients.size() << ' ';
     for(int j=0;j<lines.at(i).convCoefficients.size();j++) outStream << qSetFieldWidth(0) <<  lines.at(i).convCoefficients.at(j) << ' ';
     outStream<<endl;
 
@@ -370,6 +383,7 @@ bool TargetIntTab::readFile(QTextStream& inStream) {
   int numConvCoefficients;
   QList<double> convCoefficients;
   int isConvCoefficient;
+  QString convolutionEq;
 
   QString line("");
   while(!inStream.atEnd()&&line.trimmed()!=QString("</targetInt>")) {
@@ -416,6 +430,7 @@ bool TargetIntTab::readFile(QTextStream& inStream) {
       
       in >> isConvCoefficient;
       if(in.status()==QTextStream::Ok) {
+        in >> convolutionEq;
 	      in >> numConvCoefficients;
 	      i=0;
 	      while(i<numConvCoefficients) {	
@@ -436,7 +451,7 @@ bool TargetIntTab::readFile(QTextStream& inStream) {
       bool tempIsTargetIntegration=false;
       if(isTargetIntegration==1) tempIsTargetIntegration=true;
       
-      TargetIntData newLine = {isActive,segmentsList.remove('\"'),numPoints,tempIsConvolution,sigma,tempIsTargetIntegration,density,stoppingPowerEq.remove('\"'),numParameters,parameters,tempIsQCoefficient,qCoefficients,tempIsConvCoefficient,convCoefficients};
+      TargetIntData newLine = {isActive,segmentsList.remove('\"'),numPoints,tempIsConvolution,sigma,tempIsTargetIntegration,density,stoppingPowerEq.remove('\"'),numParameters,parameters,tempIsQCoefficient,qCoefficients,tempIsConvCoefficient,convCoefficients,convolutionEq.remove('\"')};
       addLine(newLine);
     }
   }
