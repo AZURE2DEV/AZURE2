@@ -1,6 +1,7 @@
 #ifndef EPOINT_H
 #define EPOINT_H
 
+#include <cstring>
 #include "Constants.h"
 
 ///A container structure for a reference to a data point.
