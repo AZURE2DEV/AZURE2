@@ -1295,7 +1295,7 @@ void EPoint::IntegrateTargetEffect(const Config& configure) {
     yield=integral/(targetEffect->GetDensity()*1.E-24);    
   }
   else if(targetEffect->IsConvCoefficients()) {
-      double intFirst=0.0;
+    double intFirst=0.0;
     double intFirstC=0.0;
     double intEvenSum=0.0;
     double intEvenSumC=0.0;
@@ -1328,7 +1328,7 @@ void EPoint::IntegrateTargetEffect(const Config& configure) {
       }
     }
     yield=integral/integralC;
-  } 
+  }
   this->SetFitCrossSection(yield);
 }
 

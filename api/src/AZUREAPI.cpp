@@ -113,14 +113,17 @@ bool AZUREAPI::UpdateParameters( ) {
   compound()->TransformOut( configure() );
 
   for(int i = 0; i < params.GetMinuitParams().Params().size(); i++){
-    if( !params.GetMinuitParams().Parameter(i).IsFixed( ) ){
+    //if( !params.GetMinuitParams().Parameter(i).IsFixed( ) ){
       names_.push_back( params.GetMinuitParams().Parameter(i).GetName() );
-    }
+    //}
     fixed_.push_back( params.GetMinuitParams().Parameter(i).IsFixed() );
   }
 
   all_ = compound()->GetTransformParams( configure() );
   for (int i = 0; i < all_.size(); ++i) {
+    std::cout << "all_[" << i << "] = " << all_[i] << std::endl;
+    std::cout << "fixed_[" << i << "] = " << fixed_[i] << std::endl;
+    std::cout << "names_[" << i << "] = " << names_[i] << std::endl;
     if( !fixed_[i] ){
       values_.push_back( all_[i] );
     }

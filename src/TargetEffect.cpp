@@ -90,6 +90,7 @@ TargetEffect::TargetEffect(std::istream &stream,const Config& configure) {
         convolutionEq_.SetParameter(i,convCoefficients[i],configure);
       }
     }
+    
   }
 }
 

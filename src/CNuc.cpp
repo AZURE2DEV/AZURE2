@@ -1211,7 +1211,8 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
 	if(pair->GetPType()==0 &&
 	   level->GetE()>(pair->GetSepE()+pair->GetExE())) isUnbound=true;
       }
-      if(!isUnbound) p.Fix(varname);
+	  // Jakub's Fix: it can create problems with the fit with pyazr and brick
+      //if(!isUnbound) p.Fix(varname);
       if(level->EnergyFixed()&&!p.Parameter(p.Index(varname)).IsFixed()) p.Fix(varname); 
       for(int ch=1;ch<=this->GetJGroup(j)->NumChannels();ch++) {
 	sprintf(varname,"j=%d_la=%d_ch=%d_rwa",j,la,ch);
