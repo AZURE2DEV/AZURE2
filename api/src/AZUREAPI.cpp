@@ -121,9 +121,9 @@ bool AZUREAPI::UpdateParameters( ) {
 
   all_ = compound()->GetTransformParams( configure() );
   for (int i = 0; i < all_.size(); ++i) {
-    std::cout << "all_[" << i << "] = " << all_[i] << std::endl;
-    std::cout << "fixed_[" << i << "] = " << fixed_[i] << std::endl;
-    std::cout << "names_[" << i << "] = " << names_[i] << std::endl;
+    //std::cout << "all_[" << i << "] = " << all_[i] << std::endl;
+    //std::cout << "fixed_[" << i << "] = " << fixed_[i] << std::endl;
+    //std::cout << "names_[" << i << "] = " << names_[i] << std::endl;
     if( !fixed_[i] ){
       values_.push_back( all_[i] );
     }
