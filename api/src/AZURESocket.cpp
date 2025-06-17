@@ -226,6 +226,20 @@ bool AZURESocket::start() {
       sendPacket( response );
     }
 
+    // Get data angles
+    else if( buffer[0] == 21 ){
+      int idx = (int)buffer[2];
+      vector_r response = api_->data_angles( idx );
+      sendPacket( response );
+    }
+
+    // Get calculated angles
+    else if( buffer[0] == 22 ){
+      int idx = (int)buffer[2];
+      vector_r response = api_->calculated_angles( idx );
+      sendPacket( response );
+    }
+
     //close(clientSocket_);
 
   }

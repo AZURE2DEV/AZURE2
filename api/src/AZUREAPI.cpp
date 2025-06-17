@@ -137,6 +137,7 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
 
   calculatedConv_.clear( );
   calculatedEnergies_.clear( );
+  calculatedAngles_.clear( );
   calculatedSegments_.clear( );
   calculatedSegmentsE1_.clear( );
   calculatedSegmentsE2_.clear( );
@@ -181,7 +182,7 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
 
     std::vector<EPoint>& data = segments[i].GetPoints();
 
-    std::vector<double> cross, crossE1, crossE2, energies, conv;
+    std::vector<double> cross, crossE1, crossE2, energies, angles, conv;
     for( int k = 0; k < data.size( ); ++k ){
 
       if(!data[k].IsMapped()) data[k].Calculate(localCompound,configure());
@@ -189,6 +190,7 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
       cross.push_back( data[k].GetFitCrossSection() );
       //crossE1.push_back( data[k].GetFitE1CrossSection() );
       //crossE2.push_back( data[k].GetFitE2CrossSection() );
+      angles.push_back( data[k].GetCMAngle() );
       energies.push_back( data[k].GetCMEnergy( ) );
       conv.push_back( data[k].GetSFactorConversion() );
 
@@ -199,6 +201,7 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
     //calculatedSegmentsE1_.push_back( crossE1 );
     //calculatedSegmentsE2_.push_back( crossE2 );
     calculatedEnergies_.push_back( energies );
+    calculatedAngles_.push_back( angles );
 
   }
 
@@ -219,6 +222,7 @@ bool AZUREAPI::CalculateExternalCapture( ){
 int AZUREAPI::UpdateData( ) {
 
   dataEnergies_.clear( );
+  dataAngles_.clear( );
   dataSegments_.clear( );
   dataSegmentsErrors_.clear( );
   dataConv_.clear( );
@@ -241,10 +245,11 @@ int AZUREAPI::UpdateData( ) {
 
     std::vector<EPoint>& data = segments[i].GetPoints();
 
-    std::vector<double> energies, cross, crossErr, conv;
+    std::vector<double> energies, angles, cross, crossErr, conv;
     for( int k = 0; k < data.size( ); ++k ){
 
       energies.push_back( data[k].GetCMEnergy( ) );
+      angles.push_back( data[k].GetCMAngle( ) );
       cross.push_back( data[k].GetCMCrossSection() );
       crossErr.push_back( data[k].GetCMCrossSectionError() );
       conv.push_back( data[k].GetSFactorConversion() );
@@ -253,6 +258,7 @@ int AZUREAPI::UpdateData( ) {
 
     dataEnergies_.push_back( energies );
     dataSegments_.push_back( cross );
+    dataAngles_.push_back( angles );
     dataSegmentsErrors_.push_back( crossErr );
     dataConv_.push_back( conv );
 
