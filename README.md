@@ -10,6 +10,30 @@ Thank you for choosing AZURE2 to for all your R-Matrix needs.
 
 This file contains a brief description of how to compile the AZURE2 package.  
 
+## Building a Docker container
+
+Docker provides a way to create a portable ``container" for your software.  This is particularly useful if you would like to avoid installing the software from scratch or need to run your software in a High-Performance Computing environment.
+
+Scripts for building the docker container for AZURE2 and running the container for AZURE2 are in the `scripts` directory.  To build and then run the docker container, 
+
+```
+$ cd /path/to/AZURE2
+$ source scripts/build.sh
+$ source scripts/run_gui.sh
+```
+
+## Building a Singularity/Apptainer container
+
+Docker containers can be run on your local machine but are not usable in HPC environments.  HPC environments require you to use Singularity (which has recently been renamed Apptainer).  To create a singularity image file (.sif) that you can use on an HPC resource, you can convert your Docker image with apptainer:
+
+```
+sudo apptainer build AZURE2.sif docker-daemon://azure2:latest
+```
+
+This will create a file, `AZURE2.sif`, that you can copy to your HPC resource.
+
+# Building AZURE2 from source
+
 ## Dependencies
 
 **CMake**
