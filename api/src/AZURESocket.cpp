@@ -240,6 +240,35 @@ bool AZURESocket::start() {
       sendPacket( response );
     }
 
+    // Get RWA params
+    else if( buffer[0] == 23 ){
+      api_->UpdateParameters( );
+      vector_r response = api_->params_values_rwa( );
+      sendPacket( response );
+    }
+
+    // Calculate from RWA params
+    else if( buffer[0] == 24 ){
+      vector_r params;
+      for( int i = 0; i < buffer[1]; ++i ){
+        params.push_back( buffer[2+i] );
+      }
+      double nSegments = (double)api_->UpdateSegmentsRWA( params );
+      std::vector<double> response;
+      response.push_back( nSegments );
+      sendPacket( response );
+    }
+
+    // Transform RWA parameters
+    else if( buffer[0] == 25 ){
+      vector_r params;
+      for( int i = 0; i < buffer[1]; ++i ){
+        params.push_back( buffer[2+i] );
+      }
+      vector_r transformedParams = api_->TransformRWAParameters( params );
+      sendPacket( transformedParams );
+    }
+
     //close(clientSocket_);
 
   }

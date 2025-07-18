@@ -35,6 +35,8 @@ class AZUREAPI {
   int UpdateData( );
   // Update segments values
   int UpdateSegments(vector_r& p);
+  // Update segments values for RWA
+  int UpdateSegmentsRWA(vector_r& p);
   // Calculate the external capture for data
   bool CalculateExternalCapture( );
   // Reads the parameters values
@@ -65,6 +67,10 @@ class AZUREAPI {
    */
   vector_r params_values() const {return values_;};
   /*!
+   * Returns a pointer to the parameter values object for RWA.
+   */
+  vector_r params_values_rwa() const {return values_rwa_;};
+  /*!
    * Returns a pointer to the parameter names object.
    */
   std::string params_names(int i) const {return names_[i];};
@@ -72,6 +78,10 @@ class AZUREAPI {
    * Returns a pointer to the parameter names object.
    */
   vector_r params_all() const {return all_;};
+  /*!
+   * Returns a pointer to the parameter names object for RWA.
+   */
+  vector_r params_all_rwa() const {return all_rwa_;};
   /*!
    * Returns a pointer to the calculated segments object.
    */
@@ -124,6 +134,10 @@ class AZUREAPI {
    * Returns a pointer to the calculated sfactor conversion.
    */
   vector_r calculated_conv( int i ) const {return calculatedConv_[i];};
+  /*!
+   * Transform RWA parameters to physical values
+   */
+  vector_r TransformRWAParameters(const vector_r& p) const;
  
  
  private:
@@ -136,7 +150,7 @@ class AZUREAPI {
   // Parameters
   std::vector<bool> fixed_;
   std::vector<std::string> names_;
-  vector_r all_, values_, norms_, normsErrors_;
+  vector_r all_, all_rwa_, values_, values_rwa_, norms_, normsErrors_;
 
   // Data
   std::vector<vector_r> dataConv_;

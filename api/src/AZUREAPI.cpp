@@ -99,9 +99,11 @@ bool AZUREAPI::Initialize( ){
 bool AZUREAPI::UpdateParameters( ) {
 
   all_.clear( );
+  all_rwa_.clear( );
   names_.clear( );
   fixed_.clear( );
   values_.clear( );
+  values_rwa_.clear( );
 
   AZUREParams params;
   compound()->FillMnParams(params.GetMinuitParams());
@@ -114,9 +116,13 @@ bool AZUREAPI::UpdateParameters( ) {
 
   for(int i = 0; i < params.GetMinuitParams().Params().size(); i++){
     //if( !params.GetMinuitParams().Parameter(i).IsFixed( ) ){
-      names_.push_back( params.GetMinuitParams().Parameter(i).GetName() );
+    names_.push_back( params.GetMinuitParams().Parameter(i).GetName() );
     //}
+    all_rwa_.push_back( params.GetMinuitParams().Parameter(i).Value() );
     fixed_.push_back( params.GetMinuitParams().Parameter(i).IsFixed() );
+    if( !fixed_.back() ) {
+      values_rwa_.push_back( params.GetMinuitParams().Parameter(i).Value() );
+    } 
   }
 
   all_ = compound()->GetTransformParams( configure() );
@@ -208,6 +214,121 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
   return calculatedSegments_.size( );
 
 }
+
+int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
+
+  calculatedConv_.clear( );
+  calculatedEnergies_.clear( );
+  calculatedAngles_.clear( );
+  calculatedSegments_.clear( );
+  calculatedSegmentsE1_.clear( );
+  calculatedSegmentsE2_.clear( );
+
+  int k = 0;
+  vector_r params_ = all_rwa_;
+  for( int i = 0; i < p.size( ); ++i ){
+    if( !fixed_[i] ){
+      params_[i] = p[k];
+      ++k;
+    }
+  }
+
+  CNuc* localCompound = NULL;
+  EData* localData = NULL;
+  localCompound = compound();
+  localData = data();
+
+  AZUREParams params;
+  localCompound->FillCompoundFromParams(params_);
+  //localCompound->CalcShiftFunctions(configure());
+  //bool isValid = localCompound->TransformIn( configure( ) );
+
+  //if( !isValid ) return 0;
+
+  //localCompound->FillMnParams(params.GetMinuitParams());
+  //localData->FillMnParams(params.GetMinuitParams());
+  //localCompound->FillCompoundFromParams(params.GetMinuitParams( ).Params( ));
+
+  //Fill Compound Nucleus From Minuit Parameters
+  if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+
+  int newKey  = -1;
+  int prevKey = -1;
+  int nSegments = 0;
+
+  std::vector<ESegment>& segments = localData->GetSegments( );
+  for( int i = 0; i < segments.size( ); ++i ){
+    
+    newKey = segments[i].GetSegmentKey( );
+    if( prevKey == newKey ) continue;
+    prevKey = newKey; ++nSegments;
+
+    std::vector<EPoint>& data = segments[i].GetPoints();
+
+    std::vector<double> cross, crossE1, crossE2, energies, angles, conv;
+    for( int k = 0; k < data.size( ); ++k ){
+
+      if(!data[k].IsMapped()) data[k].Calculate(localCompound,configure());
+
+      cross.push_back( data[k].GetFitCrossSection() );
+      //crossE1.push_back( data[k].GetFitE1CrossSection() );
+      //crossE2.push_back( data[k].GetFitE2CrossSection() );
+      angles.push_back( data[k].GetCMAngle() );
+      energies.push_back( data[k].GetCMEnergy( ) );
+      conv.push_back( data[k].GetSFactorConversion() );
+
+    }
+
+    calculatedConv_.push_back( conv );
+    calculatedSegments_.push_back( cross );
+    //calculatedSegmentsE1_.push_back( crossE1 );
+    //calculatedSegmentsE2_.push_back( crossE2 );
+    calculatedEnergies_.push_back( energies );
+    calculatedAngles_.push_back( angles );
+
+  }
+
+  return calculatedSegments_.size( );
+
+}
+
+// Transform RWA parameters to physical values
+vector_r AZUREAPI::TransformRWAParameters(const vector_r& p) const {
+
+  vector_r params = all_rwa_;
+  int k = 0;
+  for( int i = 0; i < p.size( ); ++i ){
+    if( !fixed_[i] ){
+      params[i] = p[k];
+      ++k;
+    }
+  }
+
+  CNuc* localCompound = NULL;
+  EData* localData = NULL;
+  localCompound = compound();
+  localData = data();
+
+  localCompound->FillCompoundFromParams(params);
+
+  localCompound->TransformOut( configure() );
+
+  vector_r transformedParams = compound()->GetTransformParams( configure() );
+
+  // Get only non fixed parameters
+  vector_r transformed;
+  k = 0;
+  for( int i = 0; i < transformedParams.size( ); ++i ){
+    if( !fixed_[i] ){
+      transformed.push_back( transformedParams[i] );
+      ++k;
+    }
+  }
+
+  return transformed;
+
+}
+
 
 bool AZUREAPI::CalculateExternalCapture( ){
 
