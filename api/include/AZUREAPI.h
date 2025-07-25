@@ -138,6 +138,10 @@ class AZUREAPI {
    * Transform RWA parameters to physical values
    */
   vector_r TransformRWAParameters(const vector_r& p) const;
+  /*!
+   * Transform all RWA parameters to physical values
+   */
+  vector_r TransformAllRWAParameters(const vector_r& p) const;
  
  
  private:

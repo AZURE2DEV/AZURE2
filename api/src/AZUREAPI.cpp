@@ -329,6 +329,40 @@ vector_r AZUREAPI::TransformRWAParameters(const vector_r& p) const {
 
 }
 
+// Transform RWA parameters to physical values
+vector_r AZUREAPI::TransformAllRWAParameters(const vector_r& p) const {
+
+  vector_r params = all_rwa_;
+  int k = 0;
+  for( int i = 0; i < p.size( ); ++i ){
+    params[i] = p[k];
+    ++k;
+  }
+
+  CNuc* localCompound = NULL;
+  EData* localData = NULL;
+  localCompound = compound();
+  localData = data();
+
+  localCompound->FillCompoundFromParams(params);
+
+  localCompound->TransformOut( configure() );
+
+  vector_r transformedParams = compound()->GetTransformParams( configure() );
+
+  // Get only non fixed parameters
+  vector_r transformed;
+  k = 0;
+  for( int i = 0; i < transformedParams.size( ); ++i ){
+    if( !fixed_[i] ){
+      transformed.push_back( transformedParams[i] );
+      ++k;
+    }
+  }
+
+  return transformed;
+
+}
 
 bool AZUREAPI::CalculateExternalCapture( ){
 

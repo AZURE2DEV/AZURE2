@@ -20,7 +20,7 @@ find_package (Minuit2 REQUIRED)
 include_directories(${MINUIT2_INCLUDE_DIR})
 find_package (OpenMP REQUIRED)
 include_directories(${OPENMP_INCLUDE_DIR})
-find_package(BLAS REQUIRED)
+#find_package(BLAS REQUIRED)
 
 option (BUILD_LIBRARY
        "Build AZURE2 as a library" OFF)

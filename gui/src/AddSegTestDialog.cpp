@@ -164,9 +164,6 @@ void AddSegTestDialog::dataTypeChanged(int index) {
     lowAngleText->setEnabled(false);
     highAngleText->setEnabled(false);
     angleStepText->setEnabled(false);
-    lowAngleText->setText("0");
-    highAngleText->setText("0");
-    angleStepText->setText("0");
   }
   if(index==4) {
     exitPairIndexSpin->setVisible(false);
@@ -174,5 +171,10 @@ void AddSegTestDialog::dataTypeChanged(int index) {
   } else {
     totalCaptureLabel->setVisible(false);
     exitPairIndexSpin->setVisible(true);
+  }
+  if(index==5) {
+    lowAngleText->setEnabled(true);
+    highAngleText->setEnabled(true);
+    angleStepText->setEnabled(true);
   }
 }

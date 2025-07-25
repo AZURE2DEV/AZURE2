@@ -269,6 +269,16 @@ bool AZURESocket::start() {
       sendPacket( transformedParams );
     }
 
+    // Transform all RWA parameters
+    else if( buffer[0] == 26 ){
+      vector_r params;
+      for( int i = 0; i < buffer[1]; ++i ){
+        params.push_back( buffer[2+i] );
+      }
+      vector_r transformedParams = api_->TransformAllRWAParameters( params );
+      sendPacket( transformedParams );
+    }
+
     //close(clientSocket_);
 
   }

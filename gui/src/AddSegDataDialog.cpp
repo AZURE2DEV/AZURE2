@@ -180,6 +180,10 @@ void AddSegDataDialog::dataTypeChanged(int index) {
     totalCaptureLabel->setVisible(false);
     exitPairIndexSpin->setVisible(true);
   }
+  if(index==4) {
+    lowAngleText->setEnabled(true);
+    highAngleText->setEnabled(true);
+  }
 }
 
 void AddSegDataDialog::varyNormChanged(int state) {
