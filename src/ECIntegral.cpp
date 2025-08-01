@@ -1,6 +1,7 @@
 #include "ECIntegral.h"
 #include "AngCoeff.h"
 #include "EffectiveCharge.h"
+#include "ECIntegralCache.h"
 #include <math.h>
 #include <gsl/gsl_integration.h>
 #include <assert.h>
@@ -104,7 +105,40 @@ complex ECIntegral::operator()(int theInitialLValue, int theFinalLValue,
 			       double theInitialJValue, double theFinalJValue,
 			       int theLMult, char radType,
 			       double inEnergy, double levelEnergy,
-			       bool isChannelCapture) {
+			       bool isChannelCapture, bool forceRecalc) {
+  
+  if (useCaching_ && g_ecIntegralCache && !forceRecalc) {
+    ECIntegralCache::IntegralKey key;
+    key.liValue = theInitialLValue;
+    key.lfValue = theFinalLValue;
+    key.siValue = theInitialSValue;
+    key.sfValue = theFinalSValue;
+    key.jInitial = theInitialJValue;
+    key.jFinal = theFinalJValue;
+    key.multL = theLMult;
+    key.radType = radType;
+    key.bindingEnergy = levelEnergy;
+    key.isChannelCapture = isChannelCapture;
+
+    complex cachedIntegral = g_ecIntegralCache->GetIntegral(key, inEnergy, pair(), *configure_);
+    if (cachedIntegral != complex(0.0, 0.0)) {
+      return cachedIntegral;
+    }
+    
+  }
+
+  complex integral = CalculateDirect(theInitialLValue, theFinalLValue, theInitialSValue, theFinalSValue,
+                        theInitialJValue, theFinalJValue, theLMult, radType,
+                        inEnergy, levelEnergy, isChannelCapture);
+  return integral;
+}
+
+complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue, 
+                                   double theInitialSValue, double theFinalSValue,
+                                   double theInitialJValue, double theFinalJValue,
+                                   int theLMult, char radType,
+                                   double inEnergy, double levelEnergy,
+                                   bool isChannelCapture) {
   ResetIntegrals();
 
   double sepEnergy = pair()->GetSepE()+pair()->GetExE();
@@ -190,4 +224,4 @@ complex ECIntegral::operator()(int theInitialLValue, int theFinalLValue,
   }	    
   
   return ecAmplitude*overlapIntegral;
-};
+}

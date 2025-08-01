@@ -3,11 +3,19 @@
 #include "AZUREParams.h"
 #include "Config.h"
 #include "ReactionRate.h"
+#include "ParameterLimitsManager.h"
+#include "ECIntegralCache.h"
+#include "ECAmplitudeCache.h"
 #include "Minuit2/MnPrint.h"
 #include "GSLException.h"
 #include <Minuit2/FunctionMinimum.h>
 #include <Minuit2/MnMigrad.h>
 #include <Minuit2/MnMinos.h>
+#include <fstream>
+#include <sstream>
+#include <map>
+
+
 
 int AZUREMain::operator()(){
   //Fill compound nucleus from nucfile
@@ -47,6 +55,8 @@ int AZUREMain::operator()(){
     } 
     if((configure().fileCheckMask|configure().screenCheckMask) & Config::CHECK_DATA)
       data()->PrintData(configure());
+      
+    // Cache will be populated dynamically as integrals are calculated
   } else {
     if(!compound()->IsPairKey(configure().rateParams.entrancePair)||!compound()->IsPairKey(configure().rateParams.exitPair)) {
       configure().outStream << "Reaction rate pairs do not exist in compound nucleus." << std::endl;
@@ -79,15 +89,34 @@ int AZUREMain::operator()(){
   }
 
   if(!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
+    // Initialize shared EC amplitude cache for interpolation
+    if(configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {
+      InitializeECAmplitudeCache();
+      configure().outStream << "Initialized shared EC amplitude cache..." << std::endl;
+    }
+    
     //Initialize data object
     if(data()->Initialize(compound(),configure())==-1) {
       configure().outStream << std::endl
 			  << "Calculation was aborted." << std::endl;
       return -1;
     }
+
+    // ECIntegral cache pre-population disabled - using simple EC amplitude interpolation instead
+    // The EC amplitudes are cached with their energies and interpolated directly
+    // if((configure().paramMask & Config::USE_EXTERNAL_CAPTURE) && g_ecIntegralCache) {
+    //   configure().outStream << "Pre-populating EC integral cache..." << std::endl;
+    //   g_ecIntegralCache->PopulateCacheForData(data(), compound(), configure());
+    // }
+
+    // Create ParameterLimitsManager and apply settings
+    configure().outStream << "Applying parameter settings with Parameter Manager..." << std::endl;
+    ParameterLimitsManager limitsManager(&configure(), compound(), data(), &params);
+    limitsManager.ReadParameterSettings();
+    limitsManager.ApplyAllParameterSettings(params.GetMinuitParams());
   
     //Declare a new instance of FCNBase
-    AZURECalc theFunc(data(),compound(),configure());
+    AZURECalc theFunc(data(),compound(),configure(),&limitsManager);
     theFunc.SetErrorDef(1.0);
     
     if(configure().paramMask & Config::PERFORM_FIT) {
@@ -259,6 +288,14 @@ int AZUREMain::operator()(){
     return -1;
   }
   compound()->PrintTransformParams(configure());
+
+  // Cleanup shared EC amplitude cache
+  if(configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {
+    if(g_ecAmplitudeCache) {
+      //g_ecAmplitudeCache->PrintStats();
+    }
+    CleanupECAmplitudeCache();
+  }
 
   return 0;
 }

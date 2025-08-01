@@ -16,7 +16,7 @@ EditOptionsDialog.cpp RunTab.cpp AddSegTestDialog.cpp
 SegmentsDataModel.cpp AddTargetIntDialog.cpp SegmentsTab.cpp
 AZURESetup.cpp LevelsModel.cpp SegmentsTestModel.cpp
 ChannelDetails.cpp LevelsTab.cpp TargetIntModel.cpp ChannelsModel.cpp
-main.cpp TargetIntTab.cpp AboutAZURE2Dialog.cpp InfoDialog.cpp InTabDocs.cpp)
+main.cpp TargetIntTab.cpp FittingTab.cpp AboutAZURE2Dialog.cpp InfoDialog.cpp InTabDocs.cpp)
 
 set (AZURESETUP_HEADERS ../include/AddLevelDialog.h
 ../include/AddPairDialog.h ../include/AddSegDataDialog.h
@@ -31,7 +31,7 @@ set (AZURESETUP_HEADERS ../include/AddLevelDialog.h
 ../include/RichTextDelegate.h ../include/RunTab.h
 ../include/SegmentsDataModel.h ../include/SegmentsTab.h
 ../include/SegmentsTestModel.h ../include/TargetIntModel.h
-../include/TargetIntTab.h ../include/TextEditBuffer.h
+../include/TargetIntTab.h ../include/FittingTab.h ../include/TextEditBuffer.h
 ../include/AboutAZURE2Dialog.h ../include/InfoDialog.h)
 
 set (AZURESETUP_RCCS AZURESetup.qrc)

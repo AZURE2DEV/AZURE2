@@ -181,7 +181,16 @@ void AMatrixFunc::CalculateTMatrix(EPoint *point) {
 	  ->GetLevel(theECMGroup->GetLevelNum());
 	double ecNormParam=finalLevel->GetFitGamma(theECMGroup->GetFinalChannel())*
 	  finalLevel->GetSqrtNFFactor()*finalLevel->GetECConversionFactor(theECMGroup->GetFinalChannel());
-	complex tmatrix=ecNormParam*point->GetECAmplitude(k,m);
+	// Use energy-shift aware EC amplitude calculation if energy shifts are active
+	complex ecAmplitude;
+	if(configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {
+	  // Use the new method that accounts for energy shifts through interpolation
+	  ecAmplitude = point->GetECAmplitudeWithShift(k, m, compound(), configure());
+	} else {
+	  // Use cached amplitude for backward compatibility
+	  ecAmplitude = point->GetECAmplitude(k, m);
+	}
+	complex tmatrix = ecNormParam * ecAmplitude;
 	if(theECMGroup->IsChannelCapture()) {
 	  int internalChannel=theECMGroup->GetIntChannelNum();
 	  MGroup *chanMGroup=compound()->GetPair(aa)->GetDecay(theECMGroup->GetChanCapDecay())

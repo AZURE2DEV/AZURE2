@@ -4,6 +4,7 @@
 #include "CoulFunc.h"
 #include "WhitFunc.h"
 #include "Config.h"
+#include "ECIntegralCache.h"
 
 class EffectiveCharge;
 
@@ -27,6 +28,8 @@ class ECIntegral {
     params_.whitFunc = new WhitFunc(pPair);
     params_.useLongWavelengthApprox = !!(configure.paramMask&Config::USE_LONGWAVELENGTH_APPROX);
     pair_ = pPair;
+    configure_ = &configure;
+    useCaching_ = !!(configure.paramMask&Config::USE_EXTERNAL_CAPTURE);
   };
   /*!
    * The CoulFunc and WhitFunc objects are destroyed with the object.
@@ -35,7 +38,7 @@ class ECIntegral {
     delete params_.coulFunc;
     delete params_.whitFunc;
   };
-  complex operator()(int,int,double,double,double,double,int,char,double,double,bool);
+  complex operator()(int,int,double,double,double,double,int,char,double,double,bool,bool =false);
  private:
   void ResetIntegrals() {FW_=0.;GW_=0.;};
   void Integrate(double);
@@ -60,8 +63,17 @@ class ECIntegral {
   } Params;
   Params params_;
   PPair *pair_;
+  const Config *configure_;
+  bool useCaching_;
   double FW_;
   double GW_;
+  
+  /*!
+   * Calculate integral directly without caching
+   */
+  complex CalculateDirect(int liValue, int lfValue, double siValue, double sfValue,
+                         double jInitial, double jFinal, int multL, char radType,
+                         double energy, double bindingEnergy, bool isChannelCapture);
 };
 
 

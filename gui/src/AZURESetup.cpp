@@ -12,6 +12,7 @@
 #include <QDesktopServices>
 
 #include "AZURESetup.h"
+#include "FittingTab.h"
 #include "EditChecksDialog.h"
 #include "EditDirsDialog.h"
 #include "RunTab.h"
@@ -52,6 +53,9 @@ AZURESetup::AZURESetup() : config(std::cout) {
 
   targetIntTab=new TargetIntTab;
 
+  fittingTab = new FittingTab();
+  fittingTab->setTabReferences(levelsTab, segmentsTab);
+  
   runTab = new RunTab();
   connect(runTab->calcButton,SIGNAL(clicked()),this,SLOT(SaveAndRun()));
 
@@ -63,6 +67,7 @@ AZURESetup::AZURESetup() : config(std::cout) {
   tabWidget->addTab(levelsTab,tr("&Levels and Channels"));
   tabWidget->addTab(segmentsTab,tr("&Segments"));
   tabWidget->addTab(targetIntTab,tr("&Experimental Effects"));
+  tabWidget->addTab(fittingTab,tr("&Fitting Settings"));
   tabWidget->addTab(runTab,tr("&Calculate"));
 #ifdef USE_QWT
   tabWidget->addTab(plotTab,tr("Pl&ot"));
@@ -262,6 +267,12 @@ bool AZURESetup::readFile(QString filename) {
   if(!targetIntTab->readFile(in)) return false;
 
   line=QString("");
+  while(line.trimmed()!=QString("<parameterSettings>")&&!in.atEnd()) line = in.readLine();
+  if(!in.atEnd() && line.trimmed()==QString("<parameterSettings>")) {
+    if(!fittingTab->readParameterSettings(in)) return false;
+  }
+  
+  line=QString("");
   while(line.trimmed()!=QString("<lastRun>")&&!in.atEnd()) line = in.readLine();
   if(!in.atEnd()) 
     if(!this->readLastRun(in)) return false;
@@ -281,6 +292,9 @@ bool AZURESetup::readFile(QString filename) {
   GetConfig().configfile=QDir::fromNativeSeparators(info.absoluteFilePath()).toStdString();
   setWindowTitle(QString("AZURE2 -- %1").arg(QString::fromStdString(GetConfig().configfile)));
   QDir::setCurrent(directory);
+  
+  // Populate FittingTab with current GUI state after file is loaded
+  fittingTab->populateFromCurrentGUIState();
 
   QSettings settings;
   QStringList files = settings.value("recentFileList").toStringList();
@@ -495,6 +509,10 @@ bool AZURESetup::writeFile(QString filename) {
   if(!targetIntTab->writeFile(out)) return false;
   out << "</targetInt>" << endl;  
  
+  out << "<parameterSettings>" << endl;
+  if(!fittingTab->writeParameterSettings(out)) return false;
+  out << "</parameterSettings>" << endl;
+  
   out << "<lastRun>" << endl;
   if(!writeLastRun(out)) return false;
   out << "</lastRun>" << endl;
@@ -982,6 +1000,7 @@ void AZURESetup::reset() {
   levelsTab->reset();
   segmentsTab->reset();
   targetIntTab->reset();
+  fittingTab->reset();
   runTab->reset();
 #ifdef USE_QWT
   plotTab->reset();

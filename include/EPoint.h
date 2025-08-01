@@ -58,6 +58,7 @@ class EPoint {
   double GetLabEnergy() const;
   double GetCMEnergy() const;
   double GetExcitationEnergy() const;
+  double GetOriginalEnergy() const;
   double GetLegendreP(int) const;
   double GetLabCrossSection() const;
   double GetCMCrossSection() const;
@@ -65,6 +66,8 @@ class EPoint {
   double GetCMCrossSectionError() const;
   double GetGeometricalFactor() const;
   double GetFitCrossSection() const;
+  double GetFitE1CrossSection() const;
+  double GetFitE2CrossSection() const;
   double GetSFactorConversion() const;
   double GetSqrtPenetrability(int,int) const;
   double GetJ() const;
@@ -78,6 +81,7 @@ class EPoint {
   complex GetExpHardSpherePhase(int,int) const;
   complex GetCoulombAmplitude() const;
   complex GetECAmplitude(int,int) const;
+  complex GetECAmplitudeWithShift(int,int,CNuc*,const Config&) const;
   EnergyMap GetMap() const;
   void Initialize(CNuc*,const Config&);
   void ConvertLabEnergy(PPair*);
@@ -92,10 +96,16 @@ class EPoint {
   void AddLegendreP(double);
   void SetGeometricalFactor(double);
   void SetFitCrossSection(double);
+  void SetFitE1CrossSection(double);
+  void SetFitE2CrossSection(double);
   void SetSFactorConversion(double);
+  void SetLabEnergy(double);
+  void SetCMEnergy(double);
+  void SetExcitationEnergy(double);
   void SetExitKey(int);
   void CalcLegendreP(int,CNuc*,TargetEffect*);
   void CalcEDependentValues(CNuc*,const Config&);
+  void RecalcEDependentValues(CNuc*,const Config&);
   void AddLoElement(int,int,complex);
   void AddSqrtPenetrability(int,int,double);
   void AddExpCoulombPhase(int,int,complex);
@@ -104,6 +114,7 @@ class EPoint {
   void SetCoulombAmplitude(complex);
   void CalculateECAmplitudes(CNuc*,const Config&);
   void AddECAmplitude(int,int,complex);
+  void AddECAmplitude(int,int,complex,double);
   void Calculate(CNuc*,const Config &configure,EPoint* parent=NULL, int subPointNum=0);
   void SetMap(int,int);
   void AddLocalMappedPoint(EPoint*);
@@ -134,6 +145,7 @@ class EPoint {
   int max_ang_dist_order_;
   double cm_angle_;
   double lab_angle_;
+  double original_energy_;
   double cm_energy_;
   double lab_energy_;
   double excitation_energy_;
@@ -143,6 +155,8 @@ class EPoint {
   double lab_dcrosssection_;
   double geofactor_;
   double fitcrosssection_;
+  double fitE1crosssection_;
+  double fitE2crosssection_;
   double sfactorconv_;
   double j_value_;
   double stoppingPower_;
@@ -158,9 +172,11 @@ class EPoint {
   matrix_c coulombphase_;
   matrix_c hardspherephase_;
   matrix_c ec_amplitudes_;
+  matrix_r ec_energies_;  // Energies at which EC amplitudes were calculated
   std::vector<EPoint*> local_mapped_points_;
   std::vector<EPoint> integrationPoints_;
   EData* parentData_;
+  ESegment* parentSegment_;
 };
 
 #endif

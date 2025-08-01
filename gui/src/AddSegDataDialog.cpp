@@ -58,6 +58,14 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   dataNormErrorText->setMaximumWidth(50);
   varyNormCheck = new QCheckBox(tr("Vary Norm?"));
   //connect(varyNormCheck,SIGNAL(stateChanged(int)),this,SLOT(varyNormChanged(int)));
+  
+  energyShiftText = new QLineEdit;
+  energyShiftText->setText("0.0");
+  energyShiftLabel = new QLabel(tr("Energy Shift [MeV]:"));
+  energyShiftErrorText = new QLineEdit;
+  energyShiftErrorText->setText("0.0");
+  energyShiftErrorLabel = new QLabel(tr("Energy Shift Error [MeV]:"));
+  varyEnergyShiftCheck = new QCheckBox(tr("Vary Energy Shift?"));
 
   cancelButton = new QPushButton(tr("Cancel"));
   okButton = new QPushButton(tr("Accept"));
@@ -126,6 +134,19 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   fileLayout->addWidget(chooseFileButton,0,1);
   fileLayout->setColumnStretch(0,1);
   lowerLayout->addLayout(fileLayout,2,1,1,2);
+  
+  lowerLayout->addWidget(energyShiftLabel,3,0,Qt::AlignRight);
+  QHBoxLayout *energyShiftLayout = new QHBoxLayout;
+  energyShiftLayout->addWidget(energyShiftText);
+  energyShiftLayout->addWidget(varyEnergyShiftCheck);
+  lowerLayout->addLayout(energyShiftLayout,3,1);
+  QGridLayout *energyShiftErrorLayout = new QGridLayout;
+  energyShiftErrorLayout->addItem(new QSpacerItem(1,25),0,0);
+  energyShiftErrorLayout->setColumnStretch(0,1);
+  energyShiftErrorLayout->addWidget(energyShiftErrorLabel,0,1,Qt::AlignRight);
+  energyShiftErrorLayout->addWidget(energyShiftErrorText,0,2);
+  lowerLayout->addLayout(energyShiftErrorLayout,3,2);
+  
   valueLayout->addLayout(lowerLayout,2,0,1,2);
   valueBox->setLayout(valueLayout);
 

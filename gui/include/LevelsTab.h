@@ -30,6 +30,8 @@ class LevelsTab : public QWidget {
   bool writeNuclearFile(QTextStream& outStream);
   bool readNuclearFile(QTextStream& inStream);
   void reset();
+  LevelsModel* getLevelsModel() { return levelsModel; }
+  ChannelsModel* getChannelsModel() { return channelsModel; }
 
  public slots:
   void addLevel();

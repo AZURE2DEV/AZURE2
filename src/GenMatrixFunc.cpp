@@ -154,8 +154,8 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
         angleIntegratedE2XS=real(sumE2)/100.;
 	if(!point->IsAngularDist()) {
 	  point->SetFitCrossSection(angleIntegratedXS);
-          //point->SetFitE1CrossSection(angleIntegratedE1XS);
-          //point->SetFitE2CrossSection(angleIntegratedE2XS);
+      point->SetFitE1CrossSection(angleIntegratedE1XS);
+      point->SetFitE2CrossSection(angleIntegratedE2XS);
 	  return;
 	}
       }   

@@ -18,6 +18,8 @@
 
 EData::EData() {
   iterations_=0;
+  normParamOffset_=0;
+  energyShiftParamOffset_=0;
   isFit_=true;
   isErrorAnalysis_=false;
 }
@@ -282,6 +284,13 @@ int EData::NumTargetEffects() const {
  */
 int EData::GetNormParamOffset() const {
   return normParamOffset_;
+}
+
+/*!
+ * Returns the offset of the energy shift parameters in the Minuit parameter vector.
+ */
+int EData::GetEnergyShiftParamOffset() const {
+  return energyShiftParamOffset_;
 }
 
 /*!
@@ -950,12 +959,50 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit) {
                                          out << "CM,";
                                       } else out << "Lab,";
 				  out << segment->GetNorm() << ","
-                                      << "0" << std::endl;
+                                      << segment->GetEnergyShift() << std::endl;
       }
       out.flush();
       out.close();
     } else configure.outStream << "Could not write normalization file." << std::endl;
-  } 
+  }
+  
+  // Check if any energy shifts are varied
+  bool isVaryEnergyShift=false;
+  for(ESegmentIterator segment=GetSegments().begin();segment<GetSegments().end();segment++) {
+    if(segment->IsVaryEnergyShift()) {
+      isVaryEnergyShift=true;
+      break;
+    }
+  }
+  
+  // Write energy shifts file
+  if(isVaryEnergyShift) {
+    std::string outputfile=configure.outputdir+"shifts.out";
+    std::ofstream out(outputfile.c_str());
+    if(out) {
+      out.precision(4);
+      out << std::scientific;
+      out << "segment_key_#, file_name, low_angle_bound, high_angle_bound, aframe, low_energy_bound, high_energy_bound, eframe, norm, shift" << std::endl;
+      for(ESegmentIterator segment=GetSegments().begin();segment<GetSegments().end();segment++) {
+	if(segment->IsVaryEnergyShift()) out << segment->GetSegmentKey() << ","
+                                             << segment->GetDataFile() << ","
+			             << segment->GetMinAngle() << ","
+			             << segment->GetMaxAngle() << ",";
+                                             if(segment->IsCMDifferential()==true){
+                                                out << "CM,";
+                                             } else out << "Lab,";
+                                         out << segment->GetMinEnergy() << ","
+                                             << segment->GetMaxEnergy() << ",";
+                                             if(segment->IsCMDifferential()==true){
+                                                out << "CM,";
+                                             } else out << "Lab,";
+		 out << segment->GetNorm() << ","
+                                             << segment->GetEnergyShift() << std::endl;
+      }
+      out.flush();
+      out.close();
+    } else configure.outStream << "Could not write energy shifts file." << std::endl;
+  }
 }
 
 /*!
@@ -1143,6 +1190,14 @@ void EData::SetNormParamOffset(int offset) {
 }
 
 /*!
+ * Sets the energy shift parameter offset in the parameter vector.
+ */  
+
+void EData::SetEnergyShiftParamOffset(int offset) {
+  energyShiftParamOffset_=offset;
+}
+
+/*!
  * Fills the Minuit parameter array from initial values in the EData object.
  */
 
@@ -1154,6 +1209,21 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
       sprintf(varname,"segment_%d_norm",segment->GetSegmentKey());
       p.Add(varname,segment->GetNorm(),segment->GetNorm()*0.05);
       p.SetLowerLimit(varname,0.0);
+      
+      // Parameter settings will be applied by ParameterLimitsManager during fit
+    }
+    if(segment->IsTotalCapture()) segment+=segment->IsTotalCapture()-1;
+  }
+  
+  // Add energy shift parameters
+  SetEnergyShiftParamOffset(p.Params().size());
+  for(ESegmentIterator segment=GetSegments().begin();segment<GetSegments().end();segment++) {
+    if(segment->IsVaryEnergyShift()) {
+      sprintf(varname,"segment_%d_energy_shift",segment->GetSegmentKey());
+      double stepSize = (segment->GetEnergyShiftError() > 0.0) ? segment->GetEnergyShiftError() * 0.1 : 0.001;
+      p.Add(varname,segment->GetEnergyShift(),stepSize);
+      
+      // Parameter settings will be applied by ParameterLimitsManager during fit
     }
     if(segment->IsTotalCapture()) segment+=segment->IsTotalCapture()-1;
   }
@@ -1177,6 +1247,33 @@ void EData::FillNormsFromParams(const vector_r &p) {
   for(ESegmentIterator segment=GetSegments().begin();segment<GetSegments().end();segment++) {
     if(segment->IsVaryNorm()) {
       segment->SetNorm(p[i]); 
+      i++;
+    }
+    if(segment->IsTotalCapture()) segment+=segment->IsTotalCapture()-1;
+  }
+}
+
+/*!
+ * Fills the Energy Shifts from the Minuit parameter array.
+ */
+
+void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc* theCNuc, const Config* configure) {
+  int i=GetEnergyShiftParamOffset();
+  if(data) {
+    for(ESegmentIterator segment=data->GetSegments().begin();segment<data->GetSegments().end();segment++) {
+      if(segment->IsVaryEnergyShift()) {
+        segment->SetEnergyShift(p[i]); 
+        segment->UpdatePointEnergiesWithShift(theCNuc, configure);
+        i++;
+      }
+      if(segment->IsTotalCapture()) segment+=segment->IsTotalCapture()-1;
+    }
+    return;
+  }
+  for(ESegmentIterator segment=GetSegments().begin();segment<GetSegments().end();segment++) {
+    if(segment->IsVaryEnergyShift()) {
+      segment->SetEnergyShift(p[i]); 
+      segment->UpdatePointEnergiesWithShift();
       i++;
     }
     if(segment->IsTotalCapture()) segment+=segment->IsTotalCapture()-1;

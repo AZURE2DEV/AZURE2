@@ -2,6 +2,7 @@
 #define AZUREAPI_H
 
 #include "AZUREMain.h"
+#include "ECIntegralCache.h"
 
 #include "Constants.h"
 #include <vector>
@@ -27,7 +28,9 @@ class AZUREAPI {
    */
   AZUREAPI(Config& configure) : configure_(configure) { };
   
-  ~AZUREAPI() {};
+  ~AZUREAPI() {
+    CleanupECIntegralCache();
+  };
 
   bool Initialize( );
 

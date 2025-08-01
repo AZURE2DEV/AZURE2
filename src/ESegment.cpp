@@ -39,6 +39,10 @@ ESegment::ESegment(SegLine segLine) {
   datafile_=segLine.dataFile();
   dataNorm_= dataNormNominal_ = segLine.dataNorm();
   dataNormError_=segLine.dataNormError();
+  energyShift_=energyShiftNominal_=segLine.energyShift();
+  energyShiftError_=segLine.energyShiftError();
+  if(segLine.varyEnergyShift()==1) varyEnergyShift_=true;
+  else varyEnergyShift_=false;
   if(segLine.varyNorm()==1) varyNorm_=true;
   else varyNorm_=false;
   targetEffectNum_=0;
@@ -85,6 +89,9 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   datafile_="";
   dataNorm_= dataNormNominal_ = 1.;
   dataNormError_=0.;
+  energyShift_=energyShiftNominal_=0.0;
+  energyShiftError_=0.0;
+  varyEnergyShift_=false;
   varyNorm_=false;
   targetEffectNum_=0;
   isTargetEffect_=false;
@@ -376,6 +383,83 @@ double ESegment::GetNormError() const {
 
 std::string ESegment::GetDataFile() const {
   return datafile_;
+}
+
+/*!
+ * Returns the energy shift value for the data segment.
+ */
+
+double ESegment::GetEnergyShift() const {
+  return energyShift_;
+}
+
+/*!
+ * Returns the nominal energy shift value for the data segment.
+ */
+
+double ESegment::GetNominalEnergyShift() const {
+  return energyShiftNominal_;
+}
+
+/*!
+ * Returns the energy shift error for the data segment.
+ */
+
+double ESegment::GetEnergyShiftError() const {
+  return energyShiftError_;
+}
+
+/*!
+ * Returns true if the energy shift is varied in the fit.
+ */
+
+bool ESegment::IsVaryEnergyShift() const {
+  return varyEnergyShift_;
+}
+
+/*!
+ * Sets the energy shift value for the data segment.
+ */
+
+void ESegment::SetEnergyShift(double energyShift) {
+  energyShift_=energyShift;
+}
+
+/*!
+ * Updates the energies of all points in this segment based on the current energy shift.
+ */
+
+void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configure) {
+  for(int i = 0; i < NumPoints(); i++) {
+    EPoint* point = GetPoint(i+1);
+    if(point && point->GetOriginalEnergy() > 0) {
+      double originalEnergy = point->GetOriginalEnergy();
+      double shiftedEnergy = originalEnergy + energyShift_;
+      
+      // Don't allow energies below 0.005 MeV
+      if(shiftedEnergy < 0.005) {
+        shiftedEnergy = originalEnergy;
+      }
+      
+      // Update lab energy
+      point->SetLabEnergy(shiftedEnergy);
+      
+      // If we have access to CNuc, perform proper energy conversions
+      if(theCNuc) {
+        PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+        
+        // Perform the same conversions as in ESegment::Fill()
+        if(entrancePair->GetPType()==20) {
+          PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
+          point->ConvertDecayEnergy(exitPair);
+        } else if (this->IsCMDifferential()) {
+          point->ConvertLabEnergy(entrancePair); 
+        } else if(!this->IsCMDifferential()){
+          point->ConvertLabEnergy(entrancePair);
+        }
+      }
+    }
+  }
 }
 
 /*!

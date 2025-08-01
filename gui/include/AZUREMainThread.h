@@ -10,6 +10,7 @@
 #include "RunTab.h"
 #include "AZUREMain.h"
 #include "Config.h"
+#include "ECIntegralCache.h"
 #include <iostream>
 
 class AZUREMainThreadWorker : public QObject {
@@ -22,7 +23,23 @@ Q_OBJECT
   void done();
  public slots:
   void run() {
+    if (azureMain_.configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {
+      CleanupECIntegralCache();
+      std::string cacheFile;
+      if (azureMain_.configure().paramMask & Config::CALCULATE_WITH_DATA) {
+        cacheFile = azureMain_.configure().outputdir + "intEC_cache.dat";
+      } else {
+        cacheFile = azureMain_.configure().outputdir + "intEC_cache.extrap";
+      }
+      InitializeECIntegralCache(cacheFile);    
+    }
+    
     azureMain_();
+    
+    if (azureMain_.configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {
+      CleanupECIntegralCache();
+    }
+    
     emit done();
   };
  private:

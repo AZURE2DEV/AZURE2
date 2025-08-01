@@ -27,6 +27,7 @@ class EData {
   int Iterations() const;
   int NumTargetEffects() const;
   int GetNormParamOffset() const;
+  int GetEnergyShiftParamOffset() const;
   int ReadTargetEffectsFile(const Config&,CNuc*);
   bool IsFit() const;
   bool IsErrorAnalysis() const;
@@ -49,8 +50,10 @@ class EData {
   void MapData();
   void AddTargetEffect(TargetEffect);
   void SetNormParamOffset(int);
+  void SetEnergyShiftParamOffset(int);
   void FillMnParams(ROOT::Minuit2::MnUserParameters&);
   void FillNormsFromParams(const vector_r &);
+  void FillEnergyShiftsFromParams(const vector_r &, EData *data = nullptr, CNuc* theCNuc = nullptr, const Config* configure = nullptr);
   void DeleteLastSegment();
   ESegment *GetSegment(int);
   ESegment *GetSegmentFromKey(int);
@@ -64,6 +67,7 @@ class EData {
   std::vector<ESegment> segments_;
   int iterations_;
   int normParamOffset_;
+  int energyShiftParamOffset_;
   bool isFit_;
   bool isErrorAnalysis_;
 };

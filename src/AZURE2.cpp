@@ -15,6 +15,7 @@
 #include "SegLine.h"
 #include "ExtrapLine.h"
 #include "GSLException.h"
+#include "ECIntegralCache.h"
 #include <stdlib.h>
 #include <iostream>
 #include <iomanip>
@@ -639,6 +640,19 @@ int main(int argc,char *argv[]){
     //Read the external capture file name to be used, if any
     getExternalCaptureFile(useReadline,configure);
    
+    // Initialize EC Integral caching system if external capture is enabled
+    
+    if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
+      std::string cacheFile;
+      if (configure.paramMask & Config::CALCULATE_WITH_DATA) {
+        cacheFile = configure.outputdir + "intEC_cache.dat";
+      } else {
+        cacheFile = configure.outputdir + "intEC_cache.extrap";
+      }
+      InitializeECIntegralCache(cacheFile);
+      configure.outStream << "EC Integral cache initialized: " << cacheFile << std::endl;
+    }
+   
     //Create instance of main AZURE function, print start message,
     // and execute
     AZUREMain azureMain(configure);
@@ -647,6 +661,11 @@ int main(int argc,char *argv[]){
   
     //Print exit message
     exitMessage(configure);
+    
+    // Cleanup EC Integral caching system
+    if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
+      CleanupECIntegralCache();
+    }
 
   }
 

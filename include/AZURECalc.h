@@ -8,6 +8,7 @@
 class Config;
 class EData;
 class CNuc;
+class ParameterLimitsManager;
 
 ///A function class to perform the calculation of the chi-squared value
 
@@ -24,9 +25,10 @@ class AZURECalc : public ROOT::Minuit2::FCNBase {
    * The AZURECalc object is created with reference to an EData and CNuc object.
    *. The runtime configurations are also passed through a Config structure.
    */
-  AZURECalc(EData* data,CNuc* compound, const Config& configure) : configure_(configure) {
+  AZURECalc(EData* data,CNuc* compound, const Config& configure, ParameterLimitsManager* limitsManager = nullptr) : configure_(configure) {
     data_=data;
     compound_=compound;
+    limitsManager_=limitsManager;
   };
   
   ~AZURECalc() {};
@@ -58,10 +60,16 @@ class AZURECalc : public ROOT::Minuit2::FCNBase {
    * See Minuit2 documentation for an explanation of this function.
    */
   void SetErrorDef(double def) {theErrorDef=def;};
+  
+  /*!
+   * Calculate nuisance parameter chi-squared contribution
+   */
+  double CalculateNuisanceChiSquared(const vector_r& p) const;
  private:
   const Config &configure_;
   EData *data_;
   CNuc *compound_;
+  ParameterLimitsManager *limitsManager_;
   double theErrorDef;
 };
 

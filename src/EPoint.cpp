@@ -5,6 +5,8 @@
 #include "CoulFunc.h"
 #include "DataLine.h"
 #include "ECIntegral.h"
+#include "ECAmplitudeCache.h"
+#include "ECIntegralCache.h"
 #include "EData.h"
 #include "ESegment.h"
 #include "RMatrixFunc.h"
@@ -13,6 +15,7 @@
 #include "IntegratedFermiFunc.h"
 #include <iostream>
 #include <assert.h>
+#include <fstream>
 
 /*!
  * This constructor is used if the data point is to be created from a line in a data file.
@@ -25,15 +28,24 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   exit_key_=parent->GetExitKey();
   cm_angle_=dataLine.angle();
   lab_angle_=dataLine.angle();
+  original_energy_=dataLine.energy();
+  double shiftedEnergy = dataLine.energy() + parent->GetEnergyShift();
+  // Don't allow energies below 0.005 MeV
+  if(shiftedEnergy < 0.005) {
+    shiftedEnergy = dataLine.energy();
+  }
   cm_energy_=dataLine.energy();
-  lab_energy_=dataLine.energy();
+  lab_energy_=shiftedEnergy;
   excitation_energy_=dataLine.energy();
+  parentSegment_=parent;
   cm_crosssection_=dataLine.crossSection();
   cm_dcrosssection_=dataLine.error();
   lab_crosssection_=dataLine.crossSection();
   lab_dcrosssection_=dataLine.error();
   geofactor_=0.;
   fitcrosssection_=0.;
+  fitE1crosssection_=0.;
+  fitE2crosssection_=0.; 
   sfactorconv_=0.;
   is_differential_=parent->IsDifferential();
   is_phase_=parent->IsPhase();
@@ -60,15 +72,19 @@ EPoint::EPoint(double angle, double energy, ESegment* parent) {
   exit_key_=parent->GetExitKey();
   lab_angle_=angle;
   cm_angle_=angle;
+  original_energy_=energy;
   lab_energy_=energy;
   cm_energy_=energy;
   excitation_energy_=energy;
+  parentSegment_=parent;
   cm_crosssection_=0.;
   cm_dcrosssection_=0.1;
   lab_crosssection_=0.;
   lab_dcrosssection_=0.1;
   geofactor_=0.;
   fitcrosssection_=0.;
+  fitE1crosssection_=0.;
+  fitE2crosssection_=0.; 
   sfactorconv_=0.;
   is_differential_=parent->IsDifferential();
   is_phase_=parent->IsPhase();
@@ -97,15 +113,19 @@ EPoint::EPoint(double angle, double energy, int entranceKey,
   exit_key_=exitKey;
   lab_angle_=angle;
   cm_angle_=angle;
+  original_energy_=energy;
   lab_energy_=energy;
   cm_energy_=energy;
   excitation_energy_=energy;
+  parentSegment_=nullptr;
   cm_crosssection_=0.;
   cm_dcrosssection_=0.1;
   lab_crosssection_=0.;
   lab_dcrosssection_=0.1;
   geofactor_=0.;
   fitcrosssection_=0.;
+  fitE1crosssection_=0.;
+  fitE2crosssection_=0.; 
   sfactorconv_=0.;
   is_differential_=isDifferential;
   is_phase_=isPhase;
@@ -280,6 +300,10 @@ double EPoint::GetExcitationEnergy() const {
   return excitation_energy_;
 }
 
+double EPoint::GetOriginalEnergy() const {
+  return original_energy_;
+}
+
 
 /*! 
  * Returns the Legendre polynomial specified by an order.  
@@ -335,6 +359,14 @@ double EPoint::GetGeometricalFactor() const {
 
 double EPoint::GetFitCrossSection() const {
   return fitcrosssection_;
+}
+
+double EPoint::GetFitE1CrossSection() const {
+  return fitE1crosssection_;
+}
+
+double EPoint::GetFitE2CrossSection() const {
+  return fitE2crosssection_;
 }
 
 /*!
@@ -447,6 +479,73 @@ complex EPoint::GetCoulombAmplitude() const {
 
 complex EPoint::GetECAmplitude(int kGroupNum, int ecMGroupNum) const {
   return ec_amplitudes_[kGroupNum-1][ecMGroupNum-1];
+}
+
+/*!
+ * Returns the external capture amplitude with current energy (including shifts)
+ * This method interpolates between existing cached EC amplitudes based on energy.
+ */
+complex EPoint::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *theCNuc, const Config& configure) const {
+  // Check if we have valid indices
+  if(kGroupNum < 1 || kGroupNum > ec_amplitudes_.size()) {
+    return complex(0.0, 0.0);
+  }
+  if(ecMGroupNum < 1 || ecMGroupNum > ec_amplitudes_[kGroupNum-1].size()) {
+    return complex(0.0, 0.0);
+  }
+  
+  // Check if we have energy data for interpolation
+  if(ec_energies_.size() < kGroupNum || ec_energies_[kGroupNum-1].size() < ecMGroupNum) {
+    // Fall back to cached amplitude if no energy data
+    std::cout << "ECAmplitudeWithShift: No energy data for kGroupNum: " 
+              << kGroupNum << ", ecMGroupNum: " << ecMGroupNum << std::endl;
+    return GetECAmplitude(kGroupNum, ecMGroupNum);
+  }
+  
+  // Get current energy including shifts
+  double currentEnergy = this->GetCMEnergy();
+  
+  // Get the specific energy and amplitude for this (kGroupNum, ecMGroupNum) combination
+  double cachedEnergy = ec_energies_[kGroupNum-1][ecMGroupNum-1];
+  complex cachedAmplitude = ec_amplitudes_[kGroupNum-1][ecMGroupNum-1];
+  
+  // If the current energy is close to the cached energy, use cached amplitude
+  double energyTolerance = 0.001; // 1 keV tolerance
+  if(std::abs(currentEnergy - cachedEnergy) < energyTolerance) {
+    return cachedAmplitude;
+  }
+
+  // Try to get interpolated amplitude from shared cache (with dynamic calculation)
+  if (g_ecAmplitudeCache) {
+    ECAmplitudeCache::AmplitudeKey key;
+    key.kGroupNum = kGroupNum;
+    key.ecMGroupNum = ecMGroupNum;
+    key.entranceKey = this->GetEntranceKey();
+    key.exitKey = this->GetExitKey();
+    
+    // First try to get from cache, and if not available, calculate and add
+    complex interpolatedAmplitude = g_ecAmplitudeCache->GetInterpolatedAmplitude(key, currentEnergy, true, theCNuc, &configure);
+
+    // Calculate the exact amplitude if not found in cache
+    //complex interpolatedAmplitude = g_ecAmplitudeCache->CalculateAndAddAmplitude(key, currentEnergy, theCNuc, configure);
+
+    // If we got a non-zero amplitude or we have cached data, use it
+    if (interpolatedAmplitude != complex(0.0, 0.0) || g_ecAmplitudeCache->HasData(key)) {
+      return interpolatedAmplitude;
+    }
+    
+    // TODO: This is where a correct value can be calculated and added to the cache.
+    // The CalculateAndAddAmplitude method in ECAmplitudeCache performs the full
+    // EC amplitude calculation including the external capture integral computation.
+    // When called with calculateIfMissing=true, it will:
+    // 1. Find the appropriate ECMGroup and decay pathway
+    // 2. Calculate entrance phase shifts and penetrabilities  
+    // 3. Compute the external capture integral (using ECIntegralCache with forceAdd=true)
+    // 4. Combine all factors to get the final EC amplitude
+    // 5. Add the result to both caches for future interpolation
+  }
+  
+  return cachedAmplitude;
 }
 
 /*!
@@ -686,12 +785,44 @@ void EPoint::SetFitCrossSection(double crossSection) {
   fitcrosssection_=crossSection;
 }
 
+void EPoint::SetFitE1CrossSection(double e1crossSection) {
+  fitE1crosssection_= e1crossSection;
+}
+
+void EPoint::SetFitE2CrossSection(double e2crossSection) {
+  fitE2crosssection_= e2crossSection;
+}
+
 /*!
  * Sets the multiplicative conversion from cross section to s-factor.
  */
 
 void EPoint::SetSFactorConversion(double conversion) {
   sfactorconv_=conversion;
+}
+
+/*!
+ * Sets the lab energy to the given value;
+ */
+
+void EPoint::SetLabEnergy(double energy) {
+  lab_energy_=energy;
+}
+
+/*!
+ * Sets the CM energy to the given value;
+ */
+
+void EPoint::SetCMEnergy(double energy) {
+  cm_energy_=energy;
+}
+
+/*!
+ * Sets the excitation energy to the given value;
+ */
+
+void EPoint::SetExcitationEnergy(double energy) {
+  excitation_energy_=energy;
 }
 
 /*!
@@ -935,6 +1066,24 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config& configure) {
 }
 
 /*!
+ * Recalculates energy-dependent values using the current (possibly shifted) energy.
+ * This is needed when energy shifts are applied after initialization.
+ */
+void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config& configure) {
+  // Clear existing energy-dependent values first
+  lo_elements_.clear();
+  penetrabilities_.clear();
+  coulombphase_.clear();
+  hardspherephase_.clear();
+  
+  // Recalculate with current energy
+  this->CalcEDependentValues(theCNuc, configure);
+  
+  // Also recalculate Coulomb amplitude with current energy
+  this->CalcCoulombAmplitude(theCNuc);
+}
+
+/*!
  * Adds an \f$ L_o \f$ matrix element with reference to positions in the JGroup and subsequent
  * AChannel vectors.  
  */
@@ -1097,11 +1246,33 @@ void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config& configure) {
  * Adds an external capture amplitude with reference to a specified reaction pathway.
  */
 
-void EPoint::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude) {
-  vector_c d;
-  while(kGroupNum>ec_amplitudes_.size()) ec_amplitudes_.push_back(d);
+void EPoint::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude, double energy) {
+  vector_c d_amp;
+  vector_r d_energy;
+  while(kGroupNum>ec_amplitudes_.size()) {
+    ec_amplitudes_.push_back(d_amp);
+    ec_energies_.push_back(d_energy);
+  }
   ec_amplitudes_[kGroupNum-1].push_back(ecAmplitude);
-  assert(ecMGroupNum=ec_amplitudes_[kGroupNum-1].size());
+  ec_energies_[kGroupNum-1].push_back(energy);
+  assert(ecMGroupNum==ec_amplitudes_[kGroupNum-1].size());
+  assert(ec_amplitudes_[kGroupNum-1].size() == ec_energies_[kGroupNum-1].size());
+  
+  // Add to shared cache for interpolation across different EPoints
+  if (g_ecAmplitudeCache) {
+    ECAmplitudeCache::AmplitudeKey key;
+    key.kGroupNum = kGroupNum;
+    key.ecMGroupNum = ecMGroupNum;
+    key.entranceKey = this->GetEntranceKey();
+    key.exitKey = this->GetExitKey();
+    g_ecAmplitudeCache->AddAmplitude(key, energy, ecAmplitude);
+  }
+}
+
+void EPoint::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude) {
+  // Default behavior - use current CM energy
+  double currentEnergy = this->GetCMEnergy();
+  AddECAmplitude(kGroupNum, ecMGroupNum, ecAmplitude, currentEnergy);
 }
 
 /*!
@@ -1114,6 +1285,14 @@ void EPoint::Calculate(CNuc* theCNuc,const Config &configure, EPoint *parent, in
      (!this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsConvolution()&&
       !this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsTargetIntegration()&&
       !this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsConvCoefficients())) {
+    
+    // If using external capture with energy shifts, recalculate energy-dependent values
+    // This ensures that geometrical factors, penetrabilities, phases, etc. are calculated
+    // with the current (possibly shifted) energy rather than the original initialization energy
+    if(configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
+      this->RecalcEDependentValues(theCNuc, configure);
+    }
+    
     GenMatrixFunc *theMatrixFunc;
     if(configure.paramMask & Config::USE_AMATRIX) theMatrixFunc=new AMatrixFunc(theCNuc,configure);
     else theMatrixFunc=new RMatrixFunc(theCNuc,configure);
@@ -1131,6 +1310,10 @@ void EPoint::Calculate(CNuc* theCNuc,const Config &configure, EPoint *parent, in
     } else {
       for(int i=1;i<=this->NumLocalMappedPoints();i++) {
 	EPoint *mappedPoint = this->GetLocalMappedPoint(i);
+	// Recalculate energy-dependent values for mapped points too
+	if(configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
+	  mappedPoint->RecalcEDependentValues(theCNuc, configure);
+	}
 	theMatrixFunc->CalculateCrossSection(mappedPoint);
       }
     }
@@ -1139,6 +1322,10 @@ void EPoint::Calculate(CNuc* theCNuc,const Config &configure, EPoint *parent, in
   else {
     for(int i = 1; i<=this->NumSubPoints();i++) {
       EPoint *subPoint=this->GetSubPoint(i);
+      // Recalculate energy-dependent values for sub-points too if using external capture
+      if(configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
+        subPoint->RecalcEDependentValues(theCNuc, configure);
+      }
       if(this->NumLocalMappedPoints()>0)
 	    subPoint->Calculate(theCNuc,configure,this,i);
       else subPoint->Calculate(theCNuc,configure);

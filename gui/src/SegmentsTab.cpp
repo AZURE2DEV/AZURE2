@@ -38,6 +38,10 @@ SegmentsTab::SegmentsTab(QWidget *parent) : QWidget(parent) {
   segmentsDataView->setColumnHidden(11,true);
   segmentsDataView->setColumnHidden(12,true);
   segmentsDataView->setColumnHidden(13,true);
+  segmentsDataView->setColumnWidth(14,120);
+  segmentsDataView->setItemDelegateForColumn(14,rt);
+  segmentsDataView->setColumnHidden(15,true);
+  segmentsDataView->setColumnHidden(16,true);
   connect(segmentsDataView->selectionModel(),SIGNAL(selectionChanged(QItemSelection,QItemSelection)),this,SLOT(updateSegDataButtons(QItemSelection)));
   connect(segmentsDataView,SIGNAL(doubleClicked(QModelIndex)),this,SLOT(editSegDataLine()));
 
@@ -206,6 +210,10 @@ void SegmentsTab::addSegDataLine() {
     else newLine.varyNorm=0;
     newLine.phaseJ=aDialog.phaseJValueText->text().toDouble();
     newLine.phaseL=aDialog.phaseLValueText->text().toInt();
+    newLine.energyShift=aDialog.energyShiftText->text().toDouble();
+    newLine.energyShiftError=aDialog.energyShiftErrorText->text().toDouble();
+    if(aDialog.varyEnergyShiftCheck->isChecked()) newLine.varyEnergyShift=1;
+    else newLine.varyEnergyShift=0;
     addSegDataLine(newLine);
   }
 }
@@ -242,6 +250,12 @@ void SegmentsTab::addSegDataLine(SegmentsDataData line) {
     segmentsDataModel->setData(index,line.phaseJ,Qt::EditRole);
     index = segmentsDataModel->index(lines.size(),13,QModelIndex());
     segmentsDataModel->setData(index,line.phaseL,Qt::EditRole);
+    index = segmentsDataModel->index(lines.size(),14,QModelIndex());
+    segmentsDataModel->setData(index,line.energyShift,Qt::EditRole);
+    index = segmentsDataModel->index(lines.size(),15,QModelIndex());
+    segmentsDataModel->setData(index,line.energyShiftError,Qt::EditRole);
+    index = segmentsDataModel->index(lines.size(),16,QModelIndex());
+    segmentsDataModel->setData(index,line.varyEnergyShift,Qt::EditRole);
     segmentsDataView->resizeRowToContents(lines.size());
     updateSegDataButtons(segmentsDataView->selectionModel()->selection());
   } else {
@@ -353,6 +367,15 @@ void SegmentsTab::editSegDataLine() {
   i=segmentsDataModel->index(index.row(),13,QModelIndex());
   var=segmentsDataModel->data(i,Qt::EditRole);
   QString phaseL=var.toString();
+  i=segmentsDataModel->index(index.row(),14,QModelIndex());
+  var=segmentsDataModel->data(i,Qt::EditRole);
+  QString energyShift=var.toString();
+  i=segmentsDataModel->index(index.row(),15,QModelIndex());
+  var=segmentsDataModel->data(i,Qt::EditRole);
+  QString energyShiftError=var.toString();
+  i=segmentsDataModel->index(index.row(),16,QModelIndex());
+  var=segmentsDataModel->data(i,Qt::EditRole);
+  int varyEnergyShift=var.toInt();
 
 
   AddSegDataDialog aDialog;
@@ -371,6 +394,10 @@ void SegmentsTab::editSegDataLine() {
   else aDialog.varyNormCheck->setChecked(false);
   aDialog.phaseJValueText->setText(phaseJ);
   aDialog.phaseLValueText->setText(phaseL);
+  aDialog.energyShiftText->setText(energyShift);
+  aDialog.energyShiftErrorText->setText(energyShiftError);
+  if(varyEnergyShift==1) aDialog.varyEnergyShiftCheck->setChecked(true);
+  else aDialog.varyEnergyShiftCheck->setChecked(false);
 
   if(aDialog.exec()) {
     int newEntrancePairIndex=aDialog.entrancePairIndexSpin->value();
@@ -439,6 +466,22 @@ void SegmentsTab::editSegDataLine() {
     if(newPhaseL!=phaseL) {
       i=segmentsDataModel->index(index.row(),13,QModelIndex());
       segmentsDataModel->setData(i,newPhaseL,Qt::EditRole);
+    }
+    QString newEnergyShift=aDialog.energyShiftText->text();
+    if(newEnergyShift!=energyShift) {
+      i=segmentsDataModel->index(index.row(),14,QModelIndex());
+      segmentsDataModel->setData(i,newEnergyShift,Qt::EditRole);
+    }
+    QString newEnergyShiftError=aDialog.energyShiftErrorText->text();
+    if(newEnergyShiftError!=energyShiftError) {
+      i=segmentsDataModel->index(index.row(),15,QModelIndex());
+      segmentsDataModel->setData(i,newEnergyShiftError,Qt::EditRole);
+    }
+    int newVaryEnergyShift=0;
+    if(aDialog.varyEnergyShiftCheck->isChecked()) newVaryEnergyShift=1;
+    if(newVaryEnergyShift!=varyEnergyShift) {
+      i=segmentsDataModel->index(index.row(),16,QModelIndex());
+      segmentsDataModel->setData(i,newVaryEnergyShift,Qt::EditRole);
     }
   }
 }
@@ -614,6 +657,12 @@ void SegmentsTab::moveSegDataLine(unsigned int upDown) {
   segmentsDataModel->setData(index,line.phaseJ,Qt::EditRole);
   index = segmentsDataModel->index(future,13,QModelIndex());
   segmentsDataModel->setData(index,line.phaseL,Qt::EditRole);
+  index = segmentsDataModel->index(future,14,QModelIndex());
+  segmentsDataModel->setData(index,line.energyShift,Qt::EditRole);
+  index = segmentsDataModel->index(future,15,QModelIndex());
+  segmentsDataModel->setData(index,line.energyShiftError,Qt::EditRole);
+  index = segmentsDataModel->index(future,16,QModelIndex());
+  segmentsDataModel->setData(index,line.varyEnergyShift,Qt::EditRole);
   segmentsDataView->resizeRowToContents(future);
 
   selectionModel->select(segmentsDataModel->index(future,0,QModelIndex()),
@@ -722,6 +771,9 @@ bool SegmentsTab::readSegDataFile(QTextStream& inStream) {
   int varyNorm;
   double phaseJ;
   int phaseL;
+  double energyShift;
+  double energyShiftError;
+  int varyEnergyShift;
 
   QString line("");
   while(!inStream.atEnd()&&line.trimmed()!=QString("</segmentsData>")) {
@@ -743,10 +795,30 @@ bool SegmentsTab::readSegDataFile(QTextStream& inStream) {
       if(stm.status()!=QTextStream::Ok) {
 	dataNormError=0.;
 	dataFile=restOfLine.trimmed();
-      } else dataFile=stm.readLine().trimmed();
+	energyShift=0.0;
+	energyShiftError=0.0;
+	varyEnergyShift=0;
+      } else {
+        QString restOfLine2=stm.readLine();
+        QTextStream stm2(&restOfLine2);
+        stm2>>energyShift;
+        if(stm2.status()!=QTextStream::Ok) {
+          energyShift=0.0;
+          energyShiftError=0.0;
+          varyEnergyShift=0;
+          dataFile=restOfLine2.trimmed();
+        } else {
+          stm2>>energyShiftError>>varyEnergyShift;
+          if(stm2.status()!=QTextStream::Ok) {
+            energyShiftError=0.0;
+            varyEnergyShift=0;
+          }
+          dataFile=stm2.readLine().trimmed();
+        }
+      }
       if(in.status()!=QTextStream::Ok) return false;
       SegmentsDataData newLine = {isActive,entrancePairIndex,exitPairIndex,lowEnergy,highEnergy,lowAngle,
-				  highAngle,dataType,dataFile,dataNorm,dataNormError,varyNorm,phaseJ,phaseL};
+				  highAngle,dataType,dataFile,dataNorm,dataNormError,varyNorm,phaseJ,phaseL,energyShift,energyShiftError,varyEnergyShift};
       addSegDataLine(newLine);
     }
   }
@@ -772,6 +844,9 @@ bool SegmentsTab::writeSegDataFile(QTextStream& outStream) {
     outStream << qSetFieldWidth(15) << lines.at(i).dataNorm
 	      << qSetFieldWidth(15) << lines.at(i).varyNorm
 	      << qSetFieldWidth(15) << lines.at(i).dataNormError
+	      << qSetFieldWidth(15) << lines.at(i).energyShift
+	      << qSetFieldWidth(15) << lines.at(i).energyShiftError
+	      << qSetFieldWidth(15) << lines.at(i).varyEnergyShift
 	      << qSetFieldWidth(0) << lines.at(i).dataFile << endl;
   }
  

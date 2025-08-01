@@ -36,6 +36,11 @@ class AddSegDataDialog : public QDialog {
   QLabel* phaseLValueLabel;
   QLabel* phaseJValueLabel;
   QLabel* totalCaptureLabel;
+  QLineEdit *energyShiftText;
+  QLabel *energyShiftLabel;
+  QLineEdit *energyShiftErrorText;
+  QLabel *energyShiftErrorLabel;
+  QCheckBox *varyEnergyShiftCheck;
 
  public slots:
   void setChooseFile();

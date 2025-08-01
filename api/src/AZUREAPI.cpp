@@ -2,6 +2,7 @@
 #include "AZUREParams.h"
 
 #include "GSLException.h"
+#include "ECIntegralCache.h"
 
 #include "Config.h"
 #include "CNuc.h"
@@ -26,6 +27,16 @@ bool AZUREAPI::Initialize( ){
   else configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
 
   configure().integralsfile=file;
+
+  // Initialize EC Integral caching system
+
+  std::string cacheFile;
+  if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
+    cacheFile = configure().outputdir + "intEC_cache.dat";
+  } else {
+    cacheFile = configure().outputdir + "intEC_cache.extrap";
+  }
+  InitializeECIntegralCache(cacheFile);
 
   // FIXME: It crashes on Linux (but fine on Mac)
   //if( compound_ != nullptr ) delete compound_;
@@ -194,8 +205,8 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
       if(!data[k].IsMapped()) data[k].Calculate(localCompound,configure());
 
       cross.push_back( data[k].GetFitCrossSection() );
-      //crossE1.push_back( data[k].GetFitE1CrossSection() );
-      //crossE2.push_back( data[k].GetFitE2CrossSection() );
+      crossE1.push_back( data[k].GetFitE1CrossSection() );
+      crossE2.push_back( data[k].GetFitE2CrossSection() );
       angles.push_back( data[k].GetCMAngle() );
       energies.push_back( data[k].GetCMEnergy( ) );
       conv.push_back( data[k].GetSFactorConversion() );
@@ -204,8 +215,8 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
 
     calculatedConv_.push_back( conv );
     calculatedSegments_.push_back( cross );
-    //calculatedSegmentsE1_.push_back( crossE1 );
-    //calculatedSegmentsE2_.push_back( crossE2 );
+    calculatedSegmentsE1_.push_back( crossE1 );
+    calculatedSegmentsE2_.push_back( crossE2 );
     calculatedEnergies_.push_back( energies );
     calculatedAngles_.push_back( angles );
 
@@ -271,8 +282,8 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
       if(!data[k].IsMapped()) data[k].Calculate(localCompound,configure());
 
       cross.push_back( data[k].GetFitCrossSection() );
-      //crossE1.push_back( data[k].GetFitE1CrossSection() );
-      //crossE2.push_back( data[k].GetFitE2CrossSection() );
+      crossE1.push_back( data[k].GetFitE1CrossSection() );
+      crossE2.push_back( data[k].GetFitE2CrossSection() );
       angles.push_back( data[k].GetCMAngle() );
       energies.push_back( data[k].GetCMEnergy( ) );
       conv.push_back( data[k].GetSFactorConversion() );
@@ -281,8 +292,8 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
 
     calculatedConv_.push_back( conv );
     calculatedSegments_.push_back( cross );
-    //calculatedSegmentsE1_.push_back( crossE1 );
-    //calculatedSegmentsE2_.push_back( crossE2 );
+    calculatedSegmentsE1_.push_back( crossE1 );
+    calculatedSegmentsE2_.push_back( crossE2 );
     calculatedEnergies_.push_back( energies );
     calculatedAngles_.push_back( angles );
 
@@ -467,11 +478,21 @@ void AZUREAPI::SetExtrap( ) {
 // Set radius to a fixed value
 void AZUREAPI::SetRadius( int idx, double r ) {
   
+  CleanupECIntegralCache();
+  
   if( compound_ != nullptr ) delete compound_;
   if( data_ != nullptr ) delete data_;
 
   compound_ = new CNuc;
   data_     = new EData;
+  
+  std::string cacheFile;
+  if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
+    cacheFile = configure().outputdir + "intEC_cache.dat";
+  } else {
+    cacheFile = configure().outputdir + "intEC_cache.extrap";
+  }
+  InitializeECIntegralCache(cacheFile);
 
   std::pair<int,double> pair = std::make_pair( idx, r );
 

@@ -21,12 +21,41 @@ class SegLine {
     stream >> dataNorm_ >> varyNorm_ >> dataNormError_;
     std::string dummyString;
     getline(stream,dummyString);
-    int p2 = dummyString.find_last_not_of(" \n\t\r");
-    if (p2 != std::string::npos) {  
-      int p1 = dummyString.find_first_not_of(" \n\t\r");
-      if (p1 == std::string::npos) p1 = 0;
-      dataFile_=dummyString.substr(p1,(p2-p1)+1);
-    } else dataFile_=std::string();  
+    
+    // Try to parse energy shift from the remaining line, default to 0.0 for backward compatibility
+    std::istringstream restStream(dummyString);
+    double tempEnergyShift;
+    if(restStream >> tempEnergyShift) {
+      energyShift_ = tempEnergyShift;
+      // Try to read energyShiftError and varyEnergyShift
+      if(restStream >> energyShiftError_ >> varyEnergyShift_) {
+        // Successfully read all three values
+      } else {
+        // Only energy shift was available (old format)
+        energyShiftError_ = 0.0;
+        varyEnergyShift_ = 0;
+      }
+      // Get remaining string after energy shift parameters
+      std::string remainingString;
+      getline(restStream, remainingString);
+      int p2 = remainingString.find_last_not_of(" \n\t\r");
+      if (p2 != std::string::npos) {  
+        int p1 = remainingString.find_first_not_of(" \n\t\r");
+        if (p1 == std::string::npos) p1 = 0;
+        dataFile_=remainingString.substr(p1,(p2-p1)+1);
+      } else dataFile_=std::string();  
+    } else {
+      // No energy shift found, treat entire dummyString as dataFile (backward compatibility)
+      energyShift_ = 0.0;
+      energyShiftError_ = 0.0;
+      varyEnergyShift_ = 0;
+      int p2 = dummyString.find_last_not_of(" \n\t\r");
+      if (p2 != std::string::npos) {  
+        int p1 = dummyString.find_first_not_of(" \n\t\r");
+        if (p1 == std::string::npos) p1 = 0;
+        dataFile_=dummyString.substr(p1,(p2-p1)+1);
+      } else dataFile_=std::string();  
+    }
   };
   /*!
    * Returns non-zero if the line is to be included in the calculation.
@@ -88,6 +117,18 @@ class SegLine {
    * if the segment contains phase shift.
    */
   int phaseL() const {return phaseL_;};
+  /*!
+   * Returns the energy shift value for the segment.
+   */
+  double energyShift() const {return energyShift_;};
+  /*!
+   * Returns the energy shift error for the segment.
+   */
+  double energyShiftError() const {return energyShiftError_;};
+  /*!
+   * Returns non-zero if the energy shift is to be fit.
+   */
+  int varyEnergyShift() const {return varyEnergyShift_;};
  private:
   int isActive_;
   int entranceKey_;
@@ -103,6 +144,9 @@ class SegLine {
   int varyNorm_;
   double phaseJ_;
   int phaseL_;
+  double energyShift_;
+  double energyShiftError_;
+  int varyEnergyShift_;
 };
 
 #endif

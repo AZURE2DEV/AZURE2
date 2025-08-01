@@ -10,6 +10,7 @@
 #include "Config.h"
 
 class RunTab;
+class FittingTab;
 #ifdef USE_QWT
 class PlotTab;
 #endif
@@ -105,6 +106,7 @@ class AZURESetup : public QMainWindow {
   LevelsTab *levelsTab;
   SegmentsTab *segmentsTab;
   TargetIntTab *targetIntTab;
+  FittingTab *fittingTab;
   RunTab *runTab;
   AZUREMainThread *azureMain;
 #ifdef USE_QWT

@@ -45,6 +45,7 @@ class PlotEntry {
   friend class AZUREPlot;
 
  private:
+  void sortPointsByXAxis(int xAxisType);
   bool hasNegative_;
   int type_;
   int entranceKey_;

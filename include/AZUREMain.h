@@ -45,6 +45,7 @@ class AZUREMain {
    * Returns a pointer to the EData object.
    */
   EData *data() const {return data_;};
+
  private:
   const Config &configure_;
   CNuc *compound_;

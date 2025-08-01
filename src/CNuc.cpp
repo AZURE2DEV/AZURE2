@@ -1200,10 +1200,12 @@ void CNuc::PrintAngularDists(const Config &configure) {
 
 void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
   char varname[50];
+  int energyIndex=1;
   for(int j=1;j<=this->NumJGroups();j++) {
     for(int la=1;la<=this->GetJGroup(j)->NumLevels();la++) {
       ALevel *level=this->GetJGroup(j)->GetLevel(la);
       sprintf(varname,"j=%d_la=%d_energy",j,la);
+	  sprintf(varname,"energy_%d",energyIndex);
       p.Add(varname,level->GetE(),0.1*level->GetE());
       bool isUnbound=false;
       for(int ir=1;ir<=this->NumPairs();ir++) {
@@ -1214,12 +1216,20 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
 	  // Jakub's Fix: it can create problems with the fit with pyazr and brick
       //if(!isUnbound) p.Fix(varname);
       if(level->EnergyFixed()&&!p.Parameter(p.Index(varname)).IsFixed()) p.Fix(varname); 
+      
+      // Parameter settings will be applied by ParameterLimitsManager during fit
+      int widthIndex=1;
       for(int ch=1;ch<=this->GetJGroup(j)->NumChannels();ch++) {
 	sprintf(varname,"j=%d_la=%d_ch=%d_rwa",j,la,ch);
+	sprintf(varname,"width_%d_%d",energyIndex,widthIndex);
+	widthIndex++;
 	p.Add(varname,level->GetGamma(ch),0.1*level->GetGamma(ch));
 	if(level->GetGamma(ch)==0.0) p.Fix(varname);
 	if(level->ChannelFixed(ch)&&!p.Parameter(p.Index(varname)).IsFixed()) p.Fix(varname);
+	
+	// Parameter settings will be applied by ParameterLimitsManager during fit
       }
+	energyIndex++;
     }
   }
 }

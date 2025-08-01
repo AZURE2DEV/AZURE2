@@ -22,6 +22,7 @@
 #include <iostream>
 
 #include <math.h>
+#include <algorithm>
 
 QwtText AZUREZoomer::trackerTextF( const QPointF &pos ) const
 {
@@ -111,7 +112,21 @@ bool PlotEntry::readData() {
   return true;
 }
 
+// Helper function to sort plot points by x-axis value
+void PlotEntry::sortPointsByXAxis(int xAxisType) {
+  std::sort(points_.begin(), points_.end(), [xAxisType](const PlotPoint& a, const PlotPoint& b) {
+    switch(xAxisType) {
+      case 0: return a.energy < b.energy;           // CoM Energy
+      case 1: return a.excitationEnergy < b.excitationEnergy; // Excitation Energy  
+      case 2: return a.angle < b.angle;             // CoM Angle
+      default: return a.energy < b.energy;
+    }
+  });
+}
+
 void PlotEntry::attach(QwtPlot* plot, int xAxisType, int yAxisType, QwtSymbol::Style style) {
+  // Sort points by x-axis value to ensure proper plotting order
+  sortPointsByXAxis(xAxisType);
   QVector<QPointF> fit(points_.size());
   if(type_==0) {
     QVector<QPointF> data(points_.size());

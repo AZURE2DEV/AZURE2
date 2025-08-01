@@ -4,3 +4,4 @@ build/**
 .vscode/**
 .vscode/settings.json
 azure2
+CLAUDE.md
