@@ -6,6 +6,7 @@
 #include <vector>
 #include "Constants.h"
 #include "Equation.h"
+// #include "Straggling.h"  // ERYA straggling integration - commented for now
 
 ///An AZURE target effect entry
 
@@ -40,6 +41,12 @@ class TargetEffect {
   std::vector<int> GetSegmentsList() const;
   Equation *GetStoppingPowerEq();
   Equation *GetConvolutionEq();
+  
+  // ERYA straggling integration methods (commented for now)
+  // bool IsStraggling() const;
+  // int GetTargetElement() const;
+  // void SetTargetElement(int element);
+  // double CalculateDoubleConvolution(double energy, double centroid, const Config& configure);
   ///The multiple of sigma above and below centroid energy to use as integration range
   static constexpr double convolutionRange=3.;
  private:
@@ -56,6 +63,11 @@ class TargetEffect {
   vector_r qCoefficients_;
   vector_r convCoefficients_;
   Equation convolutionEq_;
+  
+  // ERYA straggling integration variables (commented for now)
+  // bool isStraggling_;
+  // int targetElement_;
+  // std::unique_ptr<Straggling> stragglingCalculator_;
 };
 
 #endif

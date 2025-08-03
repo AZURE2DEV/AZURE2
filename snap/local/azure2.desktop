@@ -1,0 +1,25 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=AZURE2
+GenericName=R-Matrix Analysis Software
+Comment=Nuclear physics R-Matrix analysis and data fitting
+Exec=azure2
+Icon=azure2
+Terminal=false
+Categories=Science;Physics;Education;Math;
+Keywords=nuclear;physics;rmatrix;analysis;nuclear-physics;data-analysis;
+StartupWMClass=AZURE2
+MimeType=text/plain;application/x-azure2;
+Actions=GUI;CLI;
+
+[Desktop Action GUI]
+Name=AZURE2 GUI
+Exec=azure2.azure2-gui
+Icon=azure2
+
+[Desktop Action CLI]
+Name=AZURE2 Command Line
+Exec=azure2
+Icon=azure2
+Terminal=true

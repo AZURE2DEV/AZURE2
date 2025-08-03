@@ -11,6 +11,8 @@ class QCheckBox;
 class QTableWidget;
 class QGroupBox;
 class QSize;
+class QComboBox;
+class QPushButton;
 
 QT_END_NAMESPACE
 
@@ -31,6 +33,9 @@ class AddTargetIntDialog : public QDialog {
   QSpinBox *numConvCoefficientSpin;
   QLineEdit *densityText;
   QLineEdit *stoppingPowerEqText;
+  QComboBox *elementComboBox;
+  QPushButton *fetchStoppingPowerButton;
+  QCheckBox *isStraggling;
   QTableWidget *parametersTable;
   QTableWidget *qCoefficientTable;
   QTableWidget *convCoefficientTable;
@@ -57,12 +62,19 @@ class AddTargetIntDialog : public QDialog {
   void convCoefficientSpinChanged(int newNumber);
   void convCoefficientChanged(int row, int column);
 
+  void elementSelectionChanged(int index);
+  void fetchStoppingPowerParameters();
+
  private:
   QPushButton *okButton;
   QPushButton *cancelButton;
   QGroupBox *stoppingPowerBox;
   QGroupBox *qCoefficientBox;
   QGroupBox *convCoefficientBox;
+  
+  int selectedElement_;
+  void populateElementComboBox();
+  void updateStoppingPowerFromERYA(int element);
 };
 
 #endif

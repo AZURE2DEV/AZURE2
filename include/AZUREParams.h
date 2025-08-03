@@ -1,7 +1,7 @@
 #ifndef AZUREPARAMS_H
 #define AZUREPARAMS_H
 
-#include <Minuit2/MnUserParameters.h>
+#include "Minuit2/MnUserParameters.h"
 #include <iostream>
 #include <fstream>
 #include <iomanip>

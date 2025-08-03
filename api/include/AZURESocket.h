@@ -4,9 +4,33 @@
 #include <iostream>
 #include <string>
 #include <cstring>
+// Check if Windows or Linux
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#pragma comment(lib, "ws2_32.lib")
+#else
+#include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#endif
+
+// Windows compatibility definitions for close
+#ifdef _WIN32
+#define close closesocket
+#define socklen_t int
+#else
+#include <unistd.h>
+#endif
+
+#ifdef _WIN32
+using socket_t = SOCKET;
+#else
+using socket_t = int;
+#endif
 
 #include "AZUREAPI.h"
 
@@ -16,8 +40,8 @@ class AZURESocket {
 
 private:
     int port_;
-    int serverSocket_;
-    int clientSocket_;
+    socket_t serverSocket_;
+    socket_t clientSocket_;
     struct sockaddr_in serverAddress_;
     struct sockaddr_in clientAddress_;
 

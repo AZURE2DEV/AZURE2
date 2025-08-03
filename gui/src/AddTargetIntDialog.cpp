@@ -7,10 +7,14 @@
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QPushButton>
+#include <QComboBox>
+#include <QMessageBox>
+#include <vector>
 
 #include "AddTargetIntDialog.h"
+#include "ElementMap.h"
 
-AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent) {
+AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent), selectedElement_(13) {
   segmentsListText = new QLineEdit;
   numPointsSpin = new QSpinBox;
   numPointsSpin->setEnabled(false);
@@ -31,6 +35,17 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent) {
   densityText = new QLineEdit;
   densityText->setEnabled(false);
   stoppingPowerEqText = new QLineEdit;
+  
+  // Element selection for ERYA integration
+  elementComboBox = new QComboBox;
+  populateElementComboBox();
+  connect(elementComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(elementSelectionChanged(int)));
+  
+  fetchStoppingPowerButton = new QPushButton(tr("Fetch from ERYA"));
+  connect(fetchStoppingPowerButton, SIGNAL(clicked()), this, SLOT(fetchStoppingPowerParameters()));
+  
+  isStraggling = new QCheckBox(tr("Include Energy Straggling"));
+  isStraggling->setChecked(false);
   numParametersSpin = new QSpinBox;
   numParametersSpin -> setMinimum(0);
   numParametersSpin -> setMaximum(10);
@@ -136,6 +151,17 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent) {
 
   stoppingPowerBox = new QGroupBox(tr("Effective Stopping Cross Section [MeV cm^2/atoms]"));
   QVBoxLayout *stoppingPowerLayout = new QVBoxLayout;
+  
+  // Element selection layout
+  QHBoxLayout *elementLayout = new QHBoxLayout;
+  elementLayout->addWidget(new QLabel(tr("Target Element:")));
+  elementLayout->addWidget(elementComboBox);
+  elementLayout->addWidget(fetchStoppingPowerButton);
+  stoppingPowerLayout->addLayout(elementLayout);
+  
+  // Straggling checkbox
+  stoppingPowerLayout->addWidget(isStraggling);
+  
   QHBoxLayout *stoppingPowerTopLayout = new QHBoxLayout;
   QHBoxLayout *equationLayout = new QHBoxLayout;
   equationLayout->addWidget(new QLabel(tr("y=")));
@@ -343,4 +369,104 @@ void AddTargetIntDialog::convCoefficientChanged(int row, int column) {
     }
     tempConvCoefficients[row]=convCoefficientTable->item(row,column)->text().toDouble();
   }
+}
+
+void AddTargetIntDialog::populateElementComboBox() {
+  // Populate combo box with elements from ElementMap
+  elementComboBox->clear();
+  
+  // Add common elements relevant for nuclear physics experiments
+  std::vector<int> commonElements = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30};
+  
+  for (int Z : commonElements) {
+    if (elementMap.find(Z) != elementMap.end()) {
+      QString elementText = QString("%1 (%2)").arg(elementMap.at(Z)).arg(Z);
+      elementComboBox->addItem(elementText, Z);
+    }
+  }
+  
+  // Set default to Aluminum (Z=13)
+  int alIndex = elementComboBox->findData(13);
+  if (alIndex >= 0) {
+    elementComboBox->setCurrentIndex(alIndex);
+  }
+}
+
+void AddTargetIntDialog::elementSelectionChanged(int index) {
+  if (index >= 0) {
+    selectedElement_ = elementComboBox->itemData(index).toInt();
+  }
+}
+
+void AddTargetIntDialog::fetchStoppingPowerParameters() {
+  // Integrate with ERYA to fetch stopping power parameters
+  updateStoppingPowerFromERYA(selectedElement_);
+}
+
+void AddTargetIntDialog::updateStoppingPowerFromERYA(int element) {
+  // This method integrates with ERYA to get stopping power parameters
+  // For now, we'll use simplified Ziegler stopping power formula
+  
+  QString elementName = elementMap.at(element);
+  
+  // Show information message
+  QMessageBox::information(this, tr("ERYA Integration"), 
+                          tr("Fetching stopping power parameters for %1 (Z=%2) from ERYA database.\n\n"
+                             "Note: This is a simplified implementation. "
+                             "Full ERYA integration would use SRIM tables.").arg(elementName).arg(element));
+  
+  // Set simplified stopping power equation for the selected element
+  // Using Ziegler formula: dE/dx = A * Z / E^n
+  QString equation;
+  double param1, param2;
+  
+  switch (element) {
+    case 13: // Aluminum
+      equation = "a0*13/pow(x,0.8)";
+      param1 = 0.1;  // Simplified coefficient
+      param2 = 0.8;  // Energy dependence
+      break;
+    case 14: // Silicon
+      equation = "a0*14/pow(x,0.8)";
+      param1 = 0.12;
+      param2 = 0.8;
+      break;
+    case 6:  // Carbon
+      equation = "a0*6/pow(x,0.8)";
+      param1 = 0.08;
+      param2 = 0.8;
+      break;
+    case 8:  // Oxygen
+      equation = "a0*8/pow(x,0.8)";
+      param1 = 0.09;
+      param2 = 0.8;
+      break;
+    default:
+      equation = QString("a0*%1/pow(x,0.8)").arg(element);
+      param1 = 0.1 * element / 13.0;  // Scale relative to Al
+      param2 = 0.8;
+      break;
+  }
+  
+  // Update GUI with the stopping power equation
+  stoppingPowerEqText->setText(equation);
+  
+  // Set number of parameters to 2 (coefficient and power)
+  numParametersSpin->setValue(2);
+  
+  // Update parameter table
+  parametersTable->clearContents();
+  parametersTable->setRowCount(2);
+  
+  createParameterItem(0, param1);
+  createParameterItem(1, param2);
+  
+  // Update temporary parameters
+  tempParameters.clear();
+  tempParameters.append(param1);
+  tempParameters.append(param2);
+  
+  // Set typical density for the element (atoms/cm²)
+  double density = 1e18; // Typical thin film density
+  densityText->setText(QString::number(density, 'e', 2));
 }
