@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 4.0)
 project(AZURE2)
 
 # Version info
@@ -16,6 +16,7 @@ option(USE_STAT "Use stat() function (not for Windows)" ON)
 option(USE_QWT "Use Qwt to build Plot tab." OFF)
 option(USE_API "Use API version." OFF)
 option(USE_READLINE "Use Readline library for CLI input." ON)
+option(USE_ERYA "Use ERYA SRIM stopping power utilities." ON)
 option(USE_GCOV "Create a GCov-enabled build." OFF)
 option(CODE_COVERAGE "Enable coverage reporting" ON)
 
@@ -122,7 +123,7 @@ endif()
 # Extra includes/libs
 set(AZURE2_SOURCE_DIR ${CMAKE_BUILD_DIRECTORY})
 include_directories(${AZURE2_SOURCE_DIR}/coul/include)
-set(EXTRA_LIBS coul ${OpenMP_LIBRARIES})
+set(EXTRA_LIBS coul pugixml ${OpenMP_LIBRARIES})
 
 # Windows DLL bundling function (define before subdirectories)
 function(copy_dll_if_exists target_name dll_name dll_path)
@@ -145,6 +146,22 @@ add_subdirectory(minuit2)
 
 # Add Minuit2 to include directories
 include_directories(${AZURE2_SOURCE_DIR}/minuit2/inc)
+
+# ERYA SRIM utilities (optional)
+if(USE_ERYA)
+    # Add ERYA subdirectory (pugixml is handled inside erya/CMakeLists.txt)
+    add_subdirectory(erya)
+    
+    # Add include directories from ERYA module
+    include_directories(${SRIM_UTILITIES_INCLUDE_DIRS})
+    
+    # Define USE_ERYA preprocessor macro
+    add_definitions(-DUSE_ERYA)
+    
+    message(STATUS "ERYA SRIM utilities enabled")
+else()
+    message(STATUS "ERYA SRIM utilities disabled")
+endif()
 
 # GUI and core modules
 if(USE_API)
@@ -206,6 +223,15 @@ endif()
 
 add_subdirectory(coul)
 add_subdirectory(src)
+
+# Install and copy SRIM data file (only if ERYA is enabled)
+if(USE_ERYA)
+    install(FILES erya/data/SRIM2013.xml DESTINATION share/azure2/ COMPONENT Runtime)
+    
+    # Copy SRIM data file to build directory for development
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/erya/data/SRIM2013.xml
+                   ${CMAKE_CURRENT_BINARY_DIR}/SRIM2013.xml COPYONLY)
+endif()
 
 # Conditional defines
 if(NOT USE_STAT)

@@ -34,76 +34,22 @@ else()
     set(CMAKE_AUTOMOC ON)
     set(CMAKE_AUTORCC ON)
     set(CMAKE_AUTOUIC ON)
-    
+     
+    list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/Modules")
     find_package (Qt5 COMPONENTS Core PrintSupport Gui Widgets REQUIRED)
     set(QT_LIBRARIES Qt5::Core Qt5::Gui Qt5::PrintSupport Qt5::Widgets)
-    
-    if(USE_QWT)
-        # Try to find Qwt using standard CMake find_package
-        find_package(Qwt QUIET)
-        
-        if(NOT Qwt_FOUND)
-            message(STATUS "Standard Qwt package not found, searching system locations...")
-            
-            # Define common search paths
-            set(QWT_SEARCH_PATHS
-                # Conda environments
-                "$ENV{CONDA_PREFIX}"
-                "$ENV{CONDA_PREFIX}/lib"
-                "$ENV{HOME}/miniconda3/envs/main"
-                "$ENV{HOME}/miniforge3/envs/main"
-                # Standard system paths
-                "/usr/local"
-                "/opt/homebrew"
-                "/usr"
-                # Additional common paths
-                "/opt/local"
-                "$ENV{HOME}/.local"
-            )
-            
-            # Search for QWT headers
-            find_path(QWT_INCLUDE_DIR
-                NAMES qwt.h qwt_plot.h
-                PATHS ${QWT_SEARCH_PATHS}
-                PATH_SUFFIXES include include/qwt qwt
-                NO_DEFAULT_PATH
-            )
-            
-            # Search for QWT library
-            find_library(QWT_LIBRARY
-                NAMES qwt qwt6 libqwt libqwt6
-                PATHS ${QWT_SEARCH_PATHS}
-                PATH_SUFFIXES lib lib64
-                NO_DEFAULT_PATH
-            )
-            
-            # Check if we found both header and library
-            if(QWT_INCLUDE_DIR AND QWT_LIBRARY)
-                message(STATUS "Found QWT manually:")
-                message(STATUS "  Headers: ${QWT_INCLUDE_DIR}")
-                message(STATUS "  Library: ${QWT_LIBRARY}")
-                
-                # Set up the QWT target manually
-                add_library(Qwt::Qwt UNKNOWN IMPORTED)
-                set_target_properties(Qwt::Qwt PROPERTIES
-                    IMPORTED_LOCATION "${QWT_LIBRARY}"
-                    INTERFACE_INCLUDE_DIRECTORIES "${QWT_INCLUDE_DIR}"
-                )
-                
-                set(QWT_LIBRARIES Qwt::Qwt)
-                set(Qwt_FOUND TRUE)
-                
-                # Add include directory
-                include_directories(${QWT_INCLUDE_DIR})
-            else()
-                message(FATAL_ERROR "Could not find QWT library. Please install QWT or set USE_QWT=OFF")
-            endif()
-        else()
-            message(STATUS "Found QWT using find_package")
-            set(QWT_LIBRARIES ${QWT_LIBRARIES})
-        endif()
-        
-        add_definitions(-DUSE_QWT)
+    # Try to find Qwt using standard CMake find_package
+    find_package(Qwt QUIET)
+	if(NOT Qwt_FOUND) 
+        message(FATAL_ERROR "Could not find QWT library. Please install QWT or set USE_QWT=OFF") 
+    else()
+        message(STATUS "Found QWT using find_package") 
+        # Since the custom FindQwt.cmake module finds the library and include directories,
+        # we need to use those variables to set up our build.
+        # The find_package call will set QWT_LIBRARY and QWT_INCLUDE_DIR.
+        set(QWT_LIBRARIES ${QWT_LIBRARY}) 
+        include_directories(${QWT_INCLUDE_DIR}) 
+        add_definitions(-DUSE_QWT) 
     endif()
 endif()
 
@@ -158,11 +104,15 @@ elseif(WIN32)
     target_compile_definitions(AZURESetup PRIVATE -DWIN_SPACING)
 endif()
 
-# Link Qt and Qwt directly
+# Link Qt, and optionally Qwt and ERYA utilities
 target_link_libraries(AZURESetup PRIVATE ${QT_LIBRARIES})
 
 if(USE_QWT)
     target_link_libraries(AZURESetup PRIVATE ${QWT_LIBRARIES})
+endif()
+
+if(USE_ERYA)
+    target_link_libraries(AZURESetup PRIVATE pugixml srim_utilities)
 endif()
 
 # Export to parent

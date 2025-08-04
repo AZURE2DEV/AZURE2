@@ -93,6 +93,21 @@ if [ "$EXE_FOUND" = false ]; then
     exit 1
 fi
 
+# Copy SRIM2013.xml file if ERYA is enabled
+echo -e "${YELLOW}Copying SRIM2013.xml for ERYA support...${NC}"
+SRIM_FILE_FOUND=false
+for srim_path in "/workspace/SRIM2013.xml" "/workspace/build-windows/SRIM2013.xml" "/workspace/erya/data/SRIM2013.xml"; do
+    if docker exec "$CONTAINER_ID" test -f "$srim_path" 2>/dev/null; then
+        echo "Copying SRIM2013.xml from: $srim_path"
+        docker cp "$CONTAINER_ID:$srim_path" "$OUTPUT_DIR/" 2>/dev/null && SRIM_FILE_FOUND=true
+        break
+    fi
+done
+
+if [ "$SRIM_FILE_FOUND" = false ]; then
+    echo "SRIM2013.xml not found - ERYA features may not work"
+fi
+
 # Copy DLL files from multiple possible locations
 echo -e "${YELLOW}Copying DLL files...${NC}"
 

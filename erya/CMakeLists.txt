@@ -1,37 +1,35 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 4.0)
+# ERYA SRIM Utilities CMakeLists.txt
+# This is a subdirectory of the main AZURE2 project
 
-PROJECT(stragg VERSION 1.0.0 DESCRIPTION "Straggling Utilities")
+# Add subdirectory for pugixml
+add_subdirectory(pugixml)
 
-cmake_policy(SET CMP0078 OLD)
-cmake_policy(SET CMP0086 OLD)
+# Create SRIM utilities library
+add_library(srim_utilities STATIC
+    src/SRIMUtilities.cpp
+)
 
-FIND_PACKAGE(SWIG REQUIRED)
-FIND_PACKAGE(Python3 COMPONENTS Development)
+# Set include directories for the library
+target_include_directories(srim_utilities PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/pugixml/src
+)
 
-INCLUDE(${SWIG_USE_FILE})
-INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR} ${PYTHON_INCLUDE_PATH})
+# Link with pugixml
+target_link_libraries(srim_utilities PRIVATE pugixml)
 
-ADD_SUBDIRECTORY(pugixml)
+# Make the library target available to parent scope
+set(SRIM_UTILITIES_LIBRARIES srim_utilities PARENT_SCOPE)
 
-SET_SOURCE_FILES_PROPERTIES(python/stragg.i PROPERTIES CPLUSPLUS ON)
+# Export include directories to parent scope
+set(SRIM_UTILITIES_INCLUDE_DIRS 
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/pugixml/src
+    PARENT_SCOPE)
 
-SWIG_ADD_LIBRARY(stragg LANGUAGE python SOURCES python/stragg.i 
-    src/ChebyshevPolynomial.cc
-    src/HermitePolynomial.cc
-    src/GaussFunction.cc
-    src/DiracFunction.cc
-    src/LandauFunction.cc
-    src/VavilovAiryFunction.cc
-    src/VavilovEdgeworthFunction.cc
-    src/VavilovMoyalFunction.cc
-    src/PhysicsDistribution.cc
-    src/ResonanceFunction.cc
-    src/Layer.cc
-    src/SRIM.cc
-    src/SRIMTable.cc)
-SWIG_LINK_LIBRARIES(stragg Python3::Module pugixml)
-
-EXECUTE_PROCESS(COMMAND python3 -c "from distutils.sysconfig import get_python_lib; print( get_python_lib() )" OUTPUT_VARIABLE PYTHON_SITE_PACKAGES OUTPUT_STRIP_TRAILING_WHITESPACE)
-INSTALL(TARGETS _stragg DESTINATION ${PYTHON_SITE_PACKAGES})
-INSTALL(FILES ${CMAKE_BINARY_DIR}/stragg.py DESTINATION ${PYTHON_SITE_PACKAGES})
-INSTALL(FILES data/SRIM2013.xml DESTINATION /opt/)
+# Install targets (only if this is the main project, not a subdirectory)
+if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+    install(FILES include/SRIMUtilities.h DESTINATION include/erya)
+    install(TARGETS srim_utilities DESTINATION lib)
+    install(FILES data/SRIM2013.xml DESTINATION share/azure2/)
+endif()

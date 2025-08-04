@@ -73,6 +73,18 @@ if [ -d "$BUNDLE_PATH" ]; then
     # Copy any additional resources
     mkdir -p "$BUNDLE_PATH/Contents/Resources"
     
+    # Copy SRIM2013.xml for ERYA support
+    echo -e "${YELLOW}Copying SRIM2013.xml for ERYA support...${NC}"
+    if [ -f "../erya/data/SRIM2013.xml" ]; then
+        cp "../erya/data/SRIM2013.xml" "$BUNDLE_PATH/Contents/Resources/"
+        echo "SRIM2013.xml copied to bundle Resources"
+    elif [ -f "SRIM2013.xml" ]; then
+        cp "SRIM2013.xml" "$BUNDLE_PATH/Contents/Resources/"
+        echo "SRIM2013.xml copied to bundle Resources"
+    else
+        echo "Warning: SRIM2013.xml not found - ERYA features may not work"
+    fi
+    
     echo -e "${GREEN}Bundling dependencies for standalone distribution...${NC}"
     
     # Use macdeployqt if available (Qt's deployment tool)

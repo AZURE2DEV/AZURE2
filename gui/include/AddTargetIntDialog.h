@@ -2,6 +2,8 @@
 #define ADDTARGETINTDIALOG_H
 
 #include <QDialog>
+#include <string>
+#include <vector>
 
 QT_BEGIN_NAMESPACE
 
@@ -34,8 +36,12 @@ class AddTargetIntDialog : public QDialog {
   QLineEdit *densityText;
   QLineEdit *stoppingPowerEqText;
   QComboBox *elementComboBox;
+  QLineEdit *compoundText;
   QPushButton *fetchStoppingPowerButton;
   QCheckBox *isStraggling;
+  QLineEdit *energyText;
+  QLineEdit *deltaEText;
+  QPushButton *calculateDeltaEButton;
   QTableWidget *parametersTable;
   QTableWidget *qCoefficientTable;
   QTableWidget *convCoefficientTable;
@@ -64,6 +70,7 @@ class AddTargetIntDialog : public QDialog {
 
   void elementSelectionChanged(int index);
   void fetchStoppingPowerParameters();
+  void calculateDeltaE();
 
  private:
   QPushButton *okButton;
@@ -74,7 +81,9 @@ class AddTargetIntDialog : public QDialog {
   
   int selectedElement_;
   void populateElementComboBox();
-  void updateStoppingPowerFromERYA(int element);
+  void updateStoppingPowerFromElement(int element);
+  void updateStoppingPowerFromCompound(const std::string& formula);
+  void updateStoppingPowerGUI(const QString& equation, const std::vector<double>& parameters, const QString& materialName);
 };
 
 #endif

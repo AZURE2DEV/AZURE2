@@ -490,6 +490,7 @@ double Equation::GetTokenValue(TokenPair token, double x, const Config& configur
  */
 
 double Equation::Evaluate(const Config& configure,double x) const {
+  //std::cout << "Evaluating equation: " << infixEquation_ << " for x = " << x << std::endl;
   std::vector<TokenPair> localOutput=output_;
   std::istringstream stm;
   double result=0.0;

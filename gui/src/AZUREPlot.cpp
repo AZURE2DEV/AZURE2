@@ -9,6 +9,7 @@
 #include <QImageWriter>
 #include <QtPrintSupport/QPrinter>
 #include <QtPrintSupport/QPrintDialog>
+#include <QTextStream>
 
 #include "AZUREPlot.h"
 #include "PlotTab.h"

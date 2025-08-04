@@ -10,9 +10,33 @@
 #include <QComboBox>
 #include <QMessageBox>
 #include <vector>
+#include <cmath>
+#include <iomanip>
 
 #include "AddTargetIntDialog.h"
 #include "ElementMap.h"
+
+#ifdef USE_ERYA
+// ERYA SRIM integration - include utilities
+#include "../../erya/include/SRIMUtilities.h"
+#endif
+
+#include <iostream>
+#include <cctype>
+#include <stdexcept>
+
+#ifdef USE_ERYA
+// Global SRIM utilities instance
+static SRIMUtilities* srimUtils = nullptr;
+
+// Initialize SRIM utilities on first use
+static SRIMUtilities* getSRIMUtilities() {
+    if (!srimUtils) {
+        srimUtils = new SRIMUtilities();
+    }
+    return srimUtils;
+}
+#endif
 
 AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent), selectedElement_(13) {
   segmentsListText = new QLineEdit;
@@ -36,10 +60,26 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent), selec
   densityText->setEnabled(false);
   stoppingPowerEqText = new QLineEdit;
   
+  // Energy and deltaE calculation widgets
+  energyText = new QLineEdit;
+  energyText->setPlaceholderText("1000.0");
+  energyText->setEnabled(false);
+  deltaEText = new QLineEdit;
+  deltaEText->setReadOnly(true);
+  deltaEText->setEnabled(false);
+  calculateDeltaEButton = new QPushButton(tr("Calculate ΔE"));
+  calculateDeltaEButton->setEnabled(false);
+  connect(calculateDeltaEButton, SIGNAL(clicked()), this, SLOT(calculateDeltaE()));
+  
   // Element selection for ERYA integration
   elementComboBox = new QComboBox;
   populateElementComboBox();
   connect(elementComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(elementSelectionChanged(int)));
+  
+  // Compound formula input (e.g., CH4, SiO2)
+  compoundText = new QLineEdit;
+  compoundText->setPlaceholderText("Enter compound (e.g., CH4, SiO2)");
+  compoundText->setToolTip("Enter chemical formula for compounds. Leave empty for single elements.");
   
   fetchStoppingPowerButton = new QPushButton(tr("Fetch from ERYA"));
   connect(fetchStoppingPowerButton, SIGNAL(clicked()), this, SLOT(fetchStoppingPowerParameters()));
@@ -48,7 +88,7 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent), selec
   isStraggling->setChecked(false);
   numParametersSpin = new QSpinBox;
   numParametersSpin -> setMinimum(0);
-  numParametersSpin -> setMaximum(10);
+  numParametersSpin -> setMaximum(20);
   numParametersSpin -> setSingleStep(1);
   numParametersSpin -> setValue(0);
   connect(numParametersSpin,SIGNAL(valueChanged(int)),this,SLOT(parameterSpinChanged(int)));
@@ -148,6 +188,18 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent), selec
   checkBoxLayout->addWidget(isTargetIntegrationCheck,1,0);
   checkBoxLayout->addWidget(new QLabel(tr("Active Density [atoms/cm^2]:")),1,1,Qt::AlignRight);
   checkBoxLayout->addWidget(densityText,1,2);
+  
+  // Add energy and deltaE calculation on the same row
+  QHBoxLayout *energyDeltaELayout = new QHBoxLayout;
+  energyDeltaELayout->addWidget(new QLabel(tr("Energy [keV]:")));
+  energyDeltaELayout->addWidget(energyText);
+  energyDeltaELayout->addWidget(new QLabel(tr("ΔE [keV]:")));
+  energyDeltaELayout->addWidget(deltaEText);
+  energyDeltaELayout->addWidget(calculateDeltaEButton);
+  
+  QWidget *energyDeltaEWidget = new QWidget;
+  energyDeltaEWidget->setLayout(energyDeltaELayout);
+  checkBoxLayout->addWidget(energyDeltaEWidget,2,1,1,2); // Span 2 columns
 
   stoppingPowerBox = new QGroupBox(tr("Effective Stopping Cross Section [MeV cm^2/atoms]"));
   QVBoxLayout *stoppingPowerLayout = new QVBoxLayout;
@@ -156,8 +208,14 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent), selec
   QHBoxLayout *elementLayout = new QHBoxLayout;
   elementLayout->addWidget(new QLabel(tr("Target Element:")));
   elementLayout->addWidget(elementComboBox);
-  elementLayout->addWidget(fetchStoppingPowerButton);
   stoppingPowerLayout->addLayout(elementLayout);
+  
+  // Compound input layout
+  QHBoxLayout *compoundLayout = new QHBoxLayout;
+  compoundLayout->addWidget(new QLabel(tr("Or Compound Formula:")));
+  compoundLayout->addWidget(compoundText);
+  compoundLayout->addWidget(fetchStoppingPowerButton);
+  stoppingPowerLayout->addLayout(compoundLayout);
   
   // Straggling checkbox
   stoppingPowerLayout->addWidget(isStraggling);
@@ -230,7 +288,24 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent), selec
 
 void AddTargetIntDialog::createParameterItem(int row, double value) {
   QTableWidgetItem *labelItem = new QTableWidgetItem(QString("a%1").arg(row));
-  QTableWidgetItem *valueItem = new QTableWidgetItem(QString("%1").arg(value));
+  
+  // Use adaptive formatting for SRIM parameters
+  QString valueStr;
+  if (std::abs(value) < 1e-6 || std::abs(value) > 1e6) {
+    // Use scientific notation for very small or very large numbers
+    valueStr = QString::number(value, 'e', 8);
+  } else if (std::abs(value) < 0.001) {
+    // Use scientific notation for small numbers
+    valueStr = QString::number(value, 'e', 6);
+  } else if (std::abs(value) < 1.0) {
+    // Use fixed notation with more decimal places for numbers < 1
+    valueStr = QString::number(value, 'f', 8);
+  } else {
+    // Use fixed notation for normal numbers
+    valueStr = QString::number(value, 'f', 6);
+  }
+  
+  QTableWidgetItem *valueItem = new QTableWidgetItem(valueStr);
   labelItem->setTextAlignment(Qt::AlignCenter);
   labelItem->setFlags(Qt::ItemIsEditable);
   valueItem->setTextAlignment(Qt::AlignCenter);
@@ -275,10 +350,15 @@ void AddTargetIntDialog::targetIntCheckChanged(bool checked) {
   if(checked) {
     stoppingPowerBox->show();
     densityText->setEnabled(true);
+    energyText->setEnabled(true);
+    calculateDeltaEButton->setEnabled(true);
     numPointsSpin->setEnabled(true);
   } else {
     stoppingPowerBox->hide();
     densityText->setEnabled(false);
+    energyText->setEnabled(false);
+    deltaEText->clear();
+    calculateDeltaEButton->setEnabled(false);
     if(!isConvolutionCheck->isChecked()) numPointsSpin->setEnabled(false);
     this->adjustSize();
   }
@@ -372,20 +452,39 @@ void AddTargetIntDialog::convCoefficientChanged(int row, int column) {
 }
 
 void AddTargetIntDialog::populateElementComboBox() {
-  // Populate combo box with elements from ElementMap
+  // Populate combo box with elements from ElementMap, organized by common usage
   elementComboBox->clear();
   
-  // Add common elements relevant for nuclear physics experiments
-  std::vector<int> commonElements = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30};
+  // Most common target elements in nuclear physics, grouped logically
+  struct ElementGroup {
+    QString groupName;
+    std::vector<int> elements;
+  };
   
-  for (int Z : commonElements) {
-    if (elementMap.find(Z) != elementMap.end()) {
-      QString elementText = QString("%1 (%2)").arg(elementMap.at(Z)).arg(Z);
-      elementComboBox->addItem(elementText, Z);
+  std::vector<ElementGroup> elementGroups = {
+    {"Light Elements", {1, 2, 3, 4}},                    // H, He, Li, Be
+    {"Common Targets", {6, 7, 8, 9, 10}},               // C, N, O, F, Ne  
+    {"Metals (Light)", {11, 12, 13, 14, 15, 16}},       // Na, Mg, Al, Si, P, S
+    {"Metals (Medium)", {17, 18, 19, 20, 21, 22, 23, 24, 25, 26}}, // Cl-Fe
+    {"Heavy Metals", {27, 28, 29, 30, 47, 48, 49, 50}}, // Co, Ni, Cu, Zn, Ag, Cd, In, Sn
+    {"Actinides", {90, 92}}                             // Th, U
+  };  
+  // Add elements organized by groups for better user experience
+  for (const auto& group : elementGroups) {
+    // Add separator for visual grouping (except for first group)
+    if (&group != &elementGroups[0]) {
+      elementComboBox->insertSeparator(elementComboBox->count());
+    }
+    
+    for (int Z : group.elements) {
+      if (elementMap.find(Z) != elementMap.end()) {
+        QString elementText = QString("%1 (%2) - %3").arg(elementMap.at(Z)).arg(Z).arg(group.groupName);
+        elementComboBox->addItem(elementText, Z);
+      }
     }
   }
   
-  // Set default to Aluminum (Z=13)
+  // Set default to Aluminum (Z=13) as it's very common in nuclear physics
   int alIndex = elementComboBox->findData(13);
   if (alIndex >= 0) {
     elementComboBox->setCurrentIndex(alIndex);
@@ -399,74 +498,249 @@ void AddTargetIntDialog::elementSelectionChanged(int index) {
 }
 
 void AddTargetIntDialog::fetchStoppingPowerParameters() {
-  // Integrate with ERYA to fetch stopping power parameters
-  updateStoppingPowerFromERYA(selectedElement_);
+#ifdef USE_ERYA
+  // Check if compound formula is provided
+  QString compoundFormula = compoundText->text().trimmed();
+  
+  if (!compoundFormula.isEmpty()) {
+    // Handle compound
+    updateStoppingPowerFromCompound(compoundFormula.toStdString());
+  } else {
+    // Handle single element
+    updateStoppingPowerFromElement(selectedElement_);
+  }
+#else
+  QMessageBox::warning(this, tr("ERYA Not Available"), 
+                      tr("ERYA SRIM utilities are not enabled in this build.\n\n"
+                         "To use ERYA stopping power data, please rebuild with USE_ERYA=ON."));
+#endif
 }
 
-void AddTargetIntDialog::updateStoppingPowerFromERYA(int element) {
-  // This method integrates with ERYA to get stopping power parameters
-  // For now, we'll use simplified Ziegler stopping power formula
+void AddTargetIntDialog::updateStoppingPowerFromElement(int element) {
+#ifdef USE_ERYA
+  SRIMUtilities* srimUtils = getSRIMUtilities();
   
-  QString elementName = elementMap.at(element);
-  
-  // Show information message
-  QMessageBox::information(this, tr("ERYA Integration"), 
-                          tr("Fetching stopping power parameters for %1 (Z=%2) from ERYA database.\n\n"
-                             "Note: This is a simplified implementation. "
-                             "Full ERYA integration would use SRIM tables.").arg(elementName).arg(element));
-  
-  // Set simplified stopping power equation for the selected element
-  // Using Ziegler formula: dE/dx = A * Z / E^n
-  QString equation;
-  double param1, param2;
-  
-  switch (element) {
-    case 13: // Aluminum
-      equation = "a0*13/pow(x,0.8)";
-      param1 = 0.1;  // Simplified coefficient
-      param2 = 0.8;  // Energy dependence
-      break;
-    case 14: // Silicon
-      equation = "a0*14/pow(x,0.8)";
-      param1 = 0.12;
-      param2 = 0.8;
-      break;
-    case 6:  // Carbon
-      equation = "a0*6/pow(x,0.8)";
-      param1 = 0.08;
-      param2 = 0.8;
-      break;
-    case 8:  // Oxygen
-      equation = "a0*8/pow(x,0.8)";
-      param1 = 0.09;
-      param2 = 0.8;
-      break;
-    default:
-      equation = QString("a0*%1/pow(x,0.8)").arg(element);
-      param1 = 0.1 * element / 13.0;  // Scale relative to Al
-      param2 = 0.8;
-      break;
+  if (!srimUtils->isDataLoaded()) {
+    QMessageBox::warning(this, tr("ERYA SRIM Error"), 
+                        tr("Failed to load SRIM data.\n\n"
+                           "Please check that the SRIM2013.xml file is available."));
+    return;
   }
   
-  // Update GUI with the stopping power equation
+  SRIMElementData srimData = srimUtils->readSRIMDataForElement(element);
+  
+  if (!srimData.isValid) {
+    QMessageBox::warning(this, tr("ERYA SRIM Error"), 
+                        tr("Failed to load SRIM data for element Z=%1.\n\n"
+                           "Please check that the element is available in the database.").arg(element));
+    return;
+  }
+  
+  QString elementName = QString::fromStdString(srimData.elementName);
+  
+  // Show detailed information from actual SRIM data
+  QMessageBox::information(this, tr("ERYA SRIM Integration"), 
+                          tr("Loaded SRIM data for %1 (Z=%2):\n\n"
+                             "Atomic mass: %3 u\n"
+                             "Atomic density: %4 g/cm³\n"
+                             "Bloch parameter: %5 eV\n\n"
+                             "Ziegler parameters loaded from SRIM 2013 database.")
+                             .arg(elementName).arg(element)
+                             .arg(srimData.atomicMass, 0, 'f', 4)
+                             .arg(srimData.atomicDensity, 0, 'e', 3)
+                             .arg(srimData.blochParameter, 0, 'f', 1));
+  
+  // Generate AZURE2-compatible stopping power equation
+  std::vector<double> parameters;
+  std::string equation = srimUtils->generateAZUREEquation(element, parameters);
+  
+  if (equation.empty()) {
+    QMessageBox::warning(this, tr("ERYA SRIM Error"), 
+                        tr("Failed to generate stopping power equation for element Z=%1.").arg(element));
+    return;
+  }
+  
+  updateStoppingPowerGUI(QString::fromStdString(equation), parameters, elementName);
+  
+  // Auto-enable straggling for elements heavier than boron
+  if(element >= 6 && !isStraggling->isChecked()) {
+    isStraggling->setChecked(true);
+  }
+#endif
+}
+
+void AddTargetIntDialog::updateStoppingPowerFromCompound(const std::string& formula) {
+#ifdef USE_ERYA
+  SRIMUtilities* srimUtils = getSRIMUtilities();
+  
+  if (!srimUtils->isDataLoaded()) {
+    QMessageBox::warning(this, tr("ERYA SRIM Error"), 
+                        tr("Failed to load SRIM data.\n\n"
+                           "Please check that the SRIM2013.xml file is available."));
+    return;
+  }
+  
+  // Parse compound formula
+  std::vector<CompoundElement> elements = srimUtils->parseCompoundFormula(formula);
+  
+  if (elements.empty()) {
+    QMessageBox::warning(this, tr("Compound Formula Error"), 
+                        tr("Failed to parse compound formula '%1'.\n\n"
+                           "Please use standard chemical notation (e.g., CH4, SiO2).").arg(QString::fromStdString(formula)));
+    return;
+  }
+  
+  // Show compound information
+  QString compoundInfo = tr("Parsed compound '%1':\n\n").arg(QString::fromStdString(formula));
+  for (const auto& element : elements) {
+    SRIMElementData data = srimUtils->readSRIMDataForElement(element.elementNumber);
+    if (data.isValid) {
+      compoundInfo += tr("- %1 (Z=%2): stoichiometry = %3\n")
+                      .arg(QString::fromStdString(data.elementName))
+                      .arg(element.elementNumber)
+                      .arg(element.stoichiometry);
+    }
+  }
+  compoundInfo += tr("\nStopping power will be calculated as weighted average.");
+  
+  QMessageBox::information(this, tr("ERYA Compound Integration"), compoundInfo);
+  
+  // Generate AZURE2-compatible stopping power equation for compound
+  std::vector<double> parameters;
+  std::string equation = srimUtils->generateCompoundAZUREEquation(elements, parameters);
+  
+  if (equation.empty()) {
+    QMessageBox::warning(this, tr("ERYA SRIM Error"), 
+                        tr("Failed to generate stopping power equation for compound '%1'.").arg(QString::fromStdString(formula)));
+    return;
+  }
+  
+  updateStoppingPowerGUI(QString::fromStdString(equation), parameters, QString::fromStdString(formula));
+  
+  // Auto-enable straggling for compounds
+  if (!isStraggling->isChecked()) {
+    isStraggling->setChecked(true);
+  }
+#endif
+}
+
+void AddTargetIntDialog::updateStoppingPowerGUI(const QString& equation, const std::vector<double>& parameters, const QString& materialName) {
+  // Update GUI with the SRIM-based stopping power equation
   stoppingPowerEqText->setText(equation);
   
-  // Set number of parameters to 2 (coefficient and power)
-  numParametersSpin->setValue(2);
+  // Set number of parameters
+  int numParams = parameters.size();
+  numParametersSpin->setValue(numParams);
   
-  // Update parameter table
+  // Update parameter table with actual SRIM values
   parametersTable->clearContents();
-  parametersTable->setRowCount(2);
+  parametersTable->setRowCount(numParams);
   
-  createParameterItem(0, param1);
-  createParameterItem(1, param2);
+  for(int i = 0; i < numParams; i++) {
+    createParameterItem(i, parameters[i]);
+  }
   
   // Update temporary parameters
   tempParameters.clear();
-  tempParameters.append(param1);
-  tempParameters.append(param2);
+  for(int i = 0; i < numParams; i++) {
+    tempParameters.append(parameters[i]);
+  }
   
-  // Set typical density for the element (atoms/cm²)
-  double density = 1e18; // Typical thin film density
-  densityText->setText(QString::number(density, 'e', 2));
+  // Auto-enable target integration checkbox since we have stopping power data
+  if(!isTargetIntegrationCheck->isChecked()) {
+    isTargetIntegrationCheck->setChecked(true);
+    targetIntCheckChanged(true);
+  }
 }
+
+void AddTargetIntDialog::calculateDeltaE() {
+  // Calculate energy loss (deltaE) using stopping power parameters
+  
+  // Get the energy from input field
+  bool ok;
+  double energy_keV = energyText->text().toDouble(&ok);
+  if (!ok || energy_keV <= 0) {
+    QMessageBox::warning(this, tr("Invalid Energy"), 
+                        tr("Please enter a valid energy value in keV (e.g., 1000.0)"));
+    return;
+  }
+  
+  // Get the target density
+  double density_atoms_cm2 = densityText->text().toDouble(&ok);
+  if (!ok || density_atoms_cm2 <= 0) {
+    QMessageBox::warning(this, tr("Invalid Density"), 
+                        tr("Please enter a valid target density in atoms/cm²"));
+    return;
+  }
+  
+  // Get parameters from the table
+  if (tempParameters.size() < 1) {
+    QMessageBox::warning(this, tr("Insufficient Parameters"), 
+                        tr("Please fetch stopping power parameters first using 'Fetch from ERYA'.\n\nCurrent parameters: %1").arg(tempParameters.size()));
+    return;
+  }
+  
+  try {
+#ifdef USE_ERYA
+    // Use ERYA utilities for calculation
+    SRIMUtilities* srimUtils = getSRIMUtilities();
+    
+    // Check if compound formula is provided
+    QString compoundFormula = compoundText->text().trimmed();
+    
+    double stoppingPower = 0.0;
+    
+    if (!compoundFormula.isEmpty()) {
+      // Calculate stopping power for compound
+      std::vector<CompoundElement> elements = srimUtils->parseCompoundFormula(compoundFormula.toStdString());
+      if (!elements.empty()) {
+        stoppingPower = srimUtils->calculateCompoundStoppingPower(energy_keV, elements);
+      }
+    } else {
+      // Calculate stopping power for single element
+      SRIMElementData data = srimUtils->readSRIMDataForElement(selectedElement_);
+      if (data.isValid) {
+        stoppingPower = srimUtils->calculateZieglerStoppingPower(energy_keV, data);
+      }
+    }
+    
+    if (stoppingPower <= 0.0) {
+      QMessageBox::warning(this, tr("Calculation Error"), 
+                          tr("Failed to calculate stopping power. Please check your parameters."));
+      return;
+    }
+    
+    // Calculate energy loss: ΔE = StoppingPower × Density
+    // SRIM stopping power is now converted to MeV⋅cm²/atom in SRIMUtilities
+    double deltaE_keV = stoppingPower * density_atoms_cm2 * 1000.0;  // Convert MeV to keV
+    
+    // Display the result
+    deltaEText->setText(QString::number(deltaE_keV, 'f', 3));
+
+#else
+    // Fallback calculation without ERYA utilities
+    // Use basic stopping power calculation based on parameters
+    if (tempParameters.size() >= 8) {
+      // Use high-energy compound formula for all energies to match equation
+      double stoppingLow = tempParameters[0] * std::pow(energy_keV, tempParameters[1]) +
+                          tempParameters[2] * std::pow(energy_keV, tempParameters[3]);
+      double stoppingHigh = (tempParameters[4] / std::pow(energy_keV, tempParameters[5])) *
+                            std::log((tempParameters[6] / energy_keV) + (tempParameters[7] * energy_keV));
+      double stoppingPower = (stoppingLow * stoppingHigh) / (stoppingHigh + stoppingLow);
+      
+      // Apply unit conversion and calculate energy loss
+      double deltaE_keV = (stoppingPower / 1e+21) * density_atoms_cm2 * 1000.0;  // Convert to keV
+      deltaEText->setText(QString::number(deltaE_keV, 'f', 3));
+    } else {
+      QMessageBox::warning(this, tr("Insufficient Parameters"), 
+                          tr("Need at least 8 parameters for stopping power calculation."));
+      return;
+    }
+#endif
+                            
+  } catch (const std::exception& e) {
+    QMessageBox::critical(this, tr("Calculation Error"), 
+                         tr("Error during ΔE calculation: %1").arg(e.what()));
+  }
+}
+
