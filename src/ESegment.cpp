@@ -443,21 +443,7 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
       
       // Update lab energy
       point->SetLabEnergy(shiftedEnergy);
-      
-      // If we have access to CNuc, perform proper energy conversions
-      if(theCNuc) {
-        PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
-        
-        // Perform the same conversions as in ESegment::Fill()
-        if(entrancePair->GetPType()==20) {
-          PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
-          point->ConvertDecayEnergy(exitPair);
-        } else if (this->IsCMDifferential()) {
-          point->ConvertLabEnergy(entrancePair); 
-        } else if(!this->IsCMDifferential()){
-          point->ConvertLabEnergy(entrancePair);
-        }
-      }
+
     }
   }
 }

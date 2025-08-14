@@ -18,6 +18,11 @@ if(NOT BUILD_GUI)
     list(APPEND AZURE2_SOURCES gui_stub.cpp)
 endif()
 
+# Add MCMC sources when MCMC is enabled
+if(USE_MCMC)
+    list(APPEND AZURE2_SOURCES AZURECalcMCMC.cpp)
+endif()
+
 include_directories(${AZURE2_SOURCE_DIR}/include)
 
 # macOS Bundle properties (set from parent CMakeLists.txt)

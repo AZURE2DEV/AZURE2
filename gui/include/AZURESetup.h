@@ -14,6 +14,9 @@ class FittingTab;
 #ifdef USE_QWT
 class PlotTab;
 #endif
+#ifdef USE_MCMC
+class MCMCTab;
+#endif
 class AZUREMainThread;
 
 QT_BEGIN_NAMESPACE
@@ -41,9 +44,14 @@ class AZURESetup : public QMainWindow {
   AZURESetup();
   Config& GetConfig();
   void open(QString filename);
+  void saveProject() { save(); } // Public wrapper for MCMCTab to use
 
  public slots:
   void SaveAndRun();
+#ifdef USE_MCMC
+  void SaveAndRunMCMC();
+  void DeleteMCMCThread();
+#endif
   void DeleteThread();
 
  private slots:
@@ -111,6 +119,10 @@ class AZURESetup : public QMainWindow {
   AZUREMainThread *azureMain;
 #ifdef USE_QWT
   PlotTab* plotTab;
+#endif
+#ifdef USE_MCMC
+  MCMCTab* mcmcTab;
+  class AZUREMCMCThread* azureMCMC;
 #endif
 };
 

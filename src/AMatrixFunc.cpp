@@ -4,6 +4,7 @@
 #include "EPoint.h"
 #include "MatrixInv.h"
 #include <assert.h>
+#include <iostream>
 
 /*!
  * The AMatrixFunc object is created with reference to a CNuc object.

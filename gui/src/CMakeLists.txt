@@ -84,12 +84,22 @@ if(USE_QWT)
     list(APPEND AZURESETUP_HEADERS ../include/PlotTab.h ../include/AZUREPlot.h)
 endif()
 
+if(USE_MCMC)
+    list(APPEND AZURESETUP_SOURCES MCMCTab.cpp AZUREMCMCThread.cpp)
+    list(APPEND AZURESETUP_HEADERS ../include/MCMCTab.h ../include/AZUREMCMCThread.h)
+endif()
+
 # Add GUI library target
 add_library(AZURESetup
     ${AZURESETUP_SOURCES}
     ${AZURESETUP_HEADERS}
     ${AZURESETUP_RCCS}
 )
+
+# Ensure AUTOMOC can find all necessary headers
+if(USE_MCMC)
+    set_target_properties(AZURESetup PROPERTIES AUTOMOC_MOC_OPTIONS "-I${CMAKE_CURRENT_SOURCE_DIR}/../include")
+endif()
 
 # Include your own project headers
 target_include_directories(AZURESetup PRIVATE

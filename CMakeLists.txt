@@ -17,6 +17,7 @@ option(USE_QWT "Use Qwt to build Plot tab." OFF)
 option(USE_API "Use API version." OFF)
 option(USE_READLINE "Use Readline library for CLI input." ON)
 option(USE_ERYA "Use ERYA SRIM stopping power utilities." ON)
+option(USE_MCMC "Use MCMC Bayesian sampling OFF" OFF)
 option(USE_GCOV "Create a GCov-enabled build." OFF)
 option(CODE_COVERAGE "Enable coverage reporting" ON)
 
@@ -161,6 +162,30 @@ if(USE_ERYA)
     message(STATUS "ERYA SRIM utilities enabled")
 else()
     message(STATUS "ERYA SRIM utilities disabled")
+endif()
+
+# MCMC Bayesian sampling (optional)
+if(USE_MCMC)
+    # Check if numcmc library directory exists
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/numcmc/CMakeLists.txt")
+        # Add numcmc as subdirectory
+        add_subdirectory(numcmc)
+        
+        # Set up include directories
+        include_directories("${CMAKE_CURRENT_SOURCE_DIR}/numcmc/include")
+        
+        # Define USE_MCMC preprocessor macro
+        add_definitions(-DUSE_MCMC)
+        
+        # Add numcmc to extra libs for linking
+        set(EXTRA_LIBS ${EXTRA_LIBS} numcmc)
+        
+        message(STATUS "MCMC Bayesian sampling enabled with numcmc library")
+    else()
+        message(FATAL_ERROR "numcmc library not found. Please clone the numcmc library to the numcmc/ directory")
+    endif()
+else()
+    message(STATUS "MCMC Bayesian sampling disabled")
 endif()
 
 # GUI and core modules

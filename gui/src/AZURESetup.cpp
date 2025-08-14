@@ -24,6 +24,12 @@
 #ifdef USE_QWT
 #include "PlotTab.h"
 #endif
+#ifdef USE_MCMC
+#include "MCMCTab.h"
+#include "AZUREMCMCThread.h"
+#include <QMetaType>
+#include <vector>
+#endif
 #include <iostream>
 
 struct SegPairs {int firstPair; int secondPair;};
@@ -34,6 +40,11 @@ extern void exitMessage(const Config& configure);
 
 
 AZURESetup::AZURESetup() : config(std::cout) {
+#ifdef USE_MCMC
+  // Register meta types for Qt signal/slot system
+  qRegisterMetaType<std::vector<std::vector<double>>>("std::vector<std::vector<double>>");
+#endif
+  
   setMinimumSize(1000,640);
 
   tabWidget=new QTabWidget();  
@@ -63,12 +74,21 @@ AZURESetup::AZURESetup() : config(std::cout) {
   plotTab = new PlotTab(config,segmentsTab->getSegmentsDataModel(),segmentsTab->getSegmentsTestModel());
 #endif 
 
+#ifdef USE_MCMC
+  mcmcTab = new MCMCTab();
+  mcmcTab->setTabReferences(levelsTab, segmentsTab);
+  connect(mcmcTab->runButton, SIGNAL(clicked()), this, SLOT(SaveAndRunMCMC()));
+#endif 
+
   tabWidget->addTab(pairsTab,tr("&Particle Pairs"));
   tabWidget->addTab(levelsTab,tr("&Levels and Channels"));
   tabWidget->addTab(segmentsTab,tr("&Segments"));
   tabWidget->addTab(targetIntTab,tr("&Experimental Effects"));
   tabWidget->addTab(fittingTab,tr("&Fitting Settings"));
   tabWidget->addTab(runTab,tr("&Calculate"));
+#ifdef USE_MCMC
+  tabWidget->addTab(mcmcTab,tr("&MCMC"));
+#endif
 #ifdef USE_QWT
   tabWidget->addTab(plotTab,tr("Pl&ot"));
 #endif
@@ -276,6 +296,15 @@ bool AZURESetup::readFile(QString filename) {
   while(line.trimmed()!=QString("<lastRun>")&&!in.atEnd()) line = in.readLine();
   if(!in.atEnd()) 
     if(!this->readLastRun(in)) return false;
+
+#ifdef USE_MCMC
+  // Try to read MCMC settings if available
+  line=QString("");
+  while(line.trimmed()!=QString("<mcmc>")&&!in.atEnd()) line = in.readLine();
+  if(!in.atEnd() && line.trimmed()==QString("<mcmc>")) {
+    if(!mcmcTab->readMCMCSettings(in)) return false;
+  }
+#endif
 
   file.close();
 
@@ -516,6 +545,10 @@ bool AZURESetup::writeFile(QString filename) {
   out << "<lastRun>" << endl;
   if(!writeLastRun(out)) return false;
   out << "</lastRun>" << endl;
+
+#ifdef USE_MCMC
+  if(!mcmcTab->writeMCMCSettings(out)) return false;
+#endif
 
   GetConfig().configfile=QDir::fromNativeSeparators(info.absoluteFilePath()).toStdString();
   setWindowTitle(QString("AZURE2 -- %1").arg(QString::fromStdString(GetConfig().configfile)));
@@ -988,6 +1021,105 @@ void AZURESetup::DeleteThread() {
   runTab->runtimeText->SetMouseFiltered(false);
   delete azureMain;
 }
+
+#ifdef USE_MCMC
+void AZURESetup::SaveAndRunMCMC() {
+  save();
+  if(GetConfig().configfile.empty()) return;
+  mcmcTab->logTextEdit->clear();
+  QFile file(QString::fromStdString(GetConfig().configfile));
+  QFileInfo info(file);
+  QString directory=info.absolutePath();
+  if(GetConfig().outputdir.empty()) GetConfig().outputdir=QDir::fromNativeSeparators(directory).toStdString()+'/';
+  if(GetConfig().checkdir.empty()) GetConfig().checkdir=QDir::fromNativeSeparators(directory).toStdString()+'/';
+  
+  // Set MCMC-specific config flags (MCMC always fits with data)
+  GetConfig().paramMask |= Config::PERFORM_FIT;
+  GetConfig().paramMask |= Config::CALCULATE_WITH_DATA;
+  GetConfig().paramMask &= ~Config::PERFORM_ERROR_ANALYSIS;
+  GetConfig().paramMask &= ~Config::CALCULATE_REACTION_RATE;
+  
+  // Read segments same way as SaveAndRun
+  std::vector<SegPairs> segPairs;
+  if(!readSegmentFile(GetConfig(),segPairs)) return;
+  
+  if(segPairs.size()==0) {
+    QMessageBox::information(this,tr("Empty Segments"),tr("No active segments have been found."));
+    return;
+  }
+  
+  // Check segments validity (same as SaveAndRun)
+  int maxPairs=pairsTab->getPairsModel()->getPairs().size();
+  for(std::vector<SegPairs>::const_iterator it = segPairs.begin();it<segPairs.end();it++) {
+    if(it->secondPair==-1) {
+      QList<PairsData> pairsList = pairsTab->getPairsModel()->getPairs();
+      int i;
+      for(i = 0; i<pairsList.size();i++) 
+        if(pairsList[i].pairType==10) break;
+      if(i==pairsList.size()) {
+        QMessageBox::information(this,tr("No Capture Pairs"),
+                                 tr("Total capture is specified, but no capture pairs exist."));
+        return;
+      }
+    } else if(it->firstPair>maxPairs||it->secondPair>maxPairs||it->firstPair<1||it->secondPair<1) {
+      QMessageBox::information(this,tr("Undefined Key"),tr("An undefined pair key is specified."));
+      return;
+    }
+  }
+
+  // Check external capture (same as SaveAndRun)
+  GetConfig().paramMask &= ~Config::USE_EXTERNAL_CAPTURE;
+  if(!checkExternalCapture(GetConfig(),segPairs)) return;
+  
+  // Check directories exist
+  if(!QDir(QString::fromStdString(GetConfig().outputdir)).exists()) {
+    QMessageBox::information(this,tr("Directory Doesn't Exist"),
+                             tr("The specified output directory doesn't exist."));
+    return;
+  }
+  if(!QDir(QString::fromStdString(GetConfig().checkdir)).exists()) {
+    QMessageBox::information(this,tr("Directory Doesn't Exist"),
+                             tr("The specified checks directory doesn't exist."));
+    return;
+  }
+  
+  // Create dedicated MCMC thread (simplified like AZUREMainThread)
+  azureMCMC = new AZUREMCMCThread(mcmcTab, GetConfig(), this);
+  connect(azureMCMC, &AZUREMCMCThread::finished, this, &AZURESetup::DeleteMCMCThread);
+  // Note: logMessage, samplingError, and samplingComplete are handled internally by the thread
+  
+  setWindowTitle(QString("AZURE2 -- %1 -- Running MCMC").arg(QString::fromStdString(GetConfig().configfile)));
+  mcmcTab->runButton->setEnabled(false);
+  mcmcTab->stopButton->setEnabled(true);
+  
+  // Connect stop button to thread stop method
+  connect(mcmcTab->stopButton, &QPushButton::clicked, this, [this]() {
+    if(azureMCMC) {
+      azureMCMC->stop();
+      mcmcTab->logTextEdit->append("Stopping MCMC sampling...");
+    }
+  });
+  
+  startMessage(azureMCMC->configure());
+  azureMCMC->start();
+}
+
+void AZURESetup::DeleteMCMCThread() {
+  exitMessage(azureMCMC->configure());
+  QScrollBar *sb = mcmcTab->logTextEdit->verticalScrollBar();
+  sb->setValue(sb->maximum());
+
+  setWindowTitle(QString("AZURE2 -- %1").arg(QString::fromStdString(GetConfig().configfile)));
+  mcmcTab->runButton->setEnabled(true);
+  mcmcTab->stopButton->setEnabled(false);
+  
+  // Call mcmcFinished to reset MCMCTab state
+  mcmcTab->mcmcFinished();
+  
+  delete azureMCMC;
+  azureMCMC = nullptr;
+}
+#endif
 
 void AZURESetup::showAbout() {
   AboutAZURE2Dialog aboutDialog;

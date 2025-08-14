@@ -56,7 +56,8 @@ class Config {
     USE_RMC_FORMALISM         =(1<<11),
     USE_GSL_COULOMB_FUNC      =(1<<12),
     USE_LONGWAVELENGTH_APPROX =(1<<13),
-    USE_API                   =(1<<14)
+    USE_API                   =(1<<14),
+    PERFORM_MCMC              =(1<<15)
   };
   /*!
    * Bit flags for check file control in AZURE2.

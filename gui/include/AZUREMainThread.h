@@ -11,6 +11,7 @@
 #include "AZUREMain.h"
 #include "Config.h"
 #include "ECIntegralCache.h"
+#include "ECAmplitudeCache.h"
 #include <iostream>
 
 class AZUREMainThreadWorker : public QObject {
@@ -23,21 +24,31 @@ Q_OBJECT
   void done();
  public slots:
   void run() {
+    // Initialize and cleanup caches for new calculations
     if (azureMain_.configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {
+      // Cleanup any existing caches
       CleanupECIntegralCache();
+      CleanupECAmplitudeCache();
+      
+      // Initialize ECIntegral cache with proper file
       std::string cacheFile;
       if (azureMain_.configure().paramMask & Config::CALCULATE_WITH_DATA) {
         cacheFile = azureMain_.configure().outputdir + "intEC_cache.dat";
       } else {
         cacheFile = azureMain_.configure().outputdir + "intEC_cache.extrap";
       }
-      InitializeECIntegralCache(cacheFile);    
+      InitializeECIntegralCache(cacheFile);
+      
+      // Initialize ECAmplitude cache
+      InitializeECAmplitudeCache();
     }
     
     azureMain_();
     
+    // Cleanup caches after calculations
     if (azureMain_.configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {
       CleanupECIntegralCache();
+      CleanupECAmplitudeCache();
     }
     
     emit done();

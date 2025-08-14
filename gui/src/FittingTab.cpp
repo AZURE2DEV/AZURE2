@@ -11,6 +11,7 @@
 #include <QSignalMapper>
 #include <QFileDialog>
 #include <QFile>
+#include <QFileInfo>
 #include <QDir>
 #include <QRegExp>
 
@@ -195,21 +196,22 @@ void FittingTab::populateFromCurrentGUIState() {
     fittingParameters.clear();
     int paramIndex = 0;
     
-    // Get level parameters from LevelsModel - same pattern as LevelsTab uses
+    // Get level and channel data
     LevelsModel* levelsModel = levelsTab_->getLevelsModel();
-    if(levelsModel) {
+    ChannelsModel* channelsModel = levelsTab_->getChannelsModel();
+    
+    if(levelsModel && channelsModel) {
         QList<LevelsData> levels = levelsModel->getLevels();
-        for(int i = 0; i < levels.size(); i++) {
-            const LevelsData& level = levels[i];
+        QList<ChannelsData> channels = channelsModel->getChannels();
+        
+        // CORRECT ORDER: For each level, add energy first, then all widths for that level
+        for(int levelIndex = 0; levelIndex < levels.size(); levelIndex++) {
+            const LevelsData& level = levels[levelIndex];
             
             // Add energy parameter if not fixed (isFixed == 0 means not fixed)
             if(level.isFixed == 0) {
                 FittingParameter energyParam;
-                int jValue = static_cast<int>(level.jValue); // Convert to integer for display
-                int lValue = static_cast<int>(level.energy * 1000); // Convert MeV to keV for display
-                // Use same naming as CNuc::FillMnParams: j=%d_la=%d_energy
-                // TODO: Get actual j and la values from nuclear structure  
-                energyParam.name = QString("energy_%1").arg(i+1);
+                energyParam.name = QString("Level %1 Energy (MeV)").arg(levelIndex+1);
                 energyParam.value = level.energy;
                 energyParam.lowerLimit = 0;  // Default limits
                 energyParam.upperLimit = 0;
@@ -217,40 +219,34 @@ void FittingTab::populateFromCurrentGUIState() {
                 energyParam.useAsNuisance = false;
                 energyParam.category = "level";
                 energyParam.minuitIndex = paramIndex++;
-                energyParam.levelIndex = i;
+                energyParam.levelIndex = levelIndex;
                 energyParam.channelIndex = -1;  // Energy parameter
                 
                 fittingParameters.append(energyParam);
             }
-        }
-    }
-    
-    // Get width parameters from ChannelsModel
-    ChannelsModel* channelsModel = levelsTab_->getChannelsModel();
-    if(channelsModel) {
-        QList<ChannelsData> channels = channelsModel->getChannels();
-        for(int i = 0; i < channels.size(); i++) {
-            const ChannelsData& channel = channels[i];
             
-            // Add width parameter if not fixed (isFixed == 0 means not fixed)
-            if(channel.isFixed == 0 && channel.reducedWidth != 0.0) {
-                FittingParameter widthParam;
-                // Get level at index and get the jValue from it
-                const LevelsData& level = levelsModel->getLevels().at(channel.levelIndex);
-                int jValue = static_cast<int>(level.jValue); // Convert to integer for display
-                // Use same naming as CNuc::FillMnParams: j=%d_la=%d_ch=%d_rwa
-                widthParam.name = QString("width_%1_%2").arg(channel.levelIndex+1).arg(i+1);
-                widthParam.value = channel.reducedWidth;
-                widthParam.lowerLimit = 0;
-                widthParam.upperLimit = 0;  // Default upper limit
-                widthParam.error = channel.reducedWidth * 0.1;  // Default 10% error
-                widthParam.useAsNuisance = false;
-                widthParam.category = "level";
-                widthParam.minuitIndex = paramIndex++;
-                widthParam.levelIndex = channel.levelIndex;
-                widthParam.channelIndex = i;
+            // Now add all width parameters for this level
+            for(int channelIndex = 0; channelIndex < channels.size(); channelIndex++) {
+                const ChannelsData& channel = channels[channelIndex];
                 
-                fittingParameters.append(widthParam);
+                // Only add widths that belong to this level
+                if(channel.levelIndex == levelIndex && channel.isFixed == 0 && channel.reducedWidth != 0.0) {
+                    FittingParameter widthParam;
+                    widthParam.name = QString("Level %1 Channel %2 Width (eV)")
+                                     .arg(levelIndex + 1)
+                                     .arg(channelIndex + 1);
+                    widthParam.value = channel.reducedWidth;
+                    widthParam.lowerLimit = 0;
+                    widthParam.upperLimit = 0;  // Default upper limit
+                    widthParam.error = channel.reducedWidth * 0.1;  // Default 10% error
+                    widthParam.useAsNuisance = false;
+                    widthParam.category = "level";
+                    widthParam.minuitIndex = paramIndex++;
+                    widthParam.levelIndex = levelIndex;
+                    widthParam.channelIndex = channelIndex;
+                    
+                    fittingParameters.append(widthParam);
+                }
             }
         }
     }
@@ -265,9 +261,11 @@ void FittingTab::populateFromCurrentGUIState() {
             // Add normalization parameter if varied (varyNorm == 1)
             if(segment.varyNorm == 1) {
                 FittingParameter normParam;
-                // Use same naming as .sav file: segment_%d_norm
-                // TODO: Use actual segment key instead of i+1
-                normParam.name = QString("segment_%1_norm").arg(i+1);
+                // Use data file name if available, otherwise use index
+                QString segmentName = segment.dataFile.isEmpty() ? 
+                                     QString("Segment %1").arg(i + 1) :
+                                     QFileInfo(segment.dataFile).baseName();
+                normParam.name = QString("%1 Normalization").arg(segmentName);
                 normParam.value = segment.dataNorm;
                 normParam.lowerLimit = 0;
                 normParam.upperLimit = 0;
@@ -284,9 +282,11 @@ void FittingTab::populateFromCurrentGUIState() {
             // Add energy shift parameter if varied (varyEnergyShift == 1)
             if(segment.varyEnergyShift == 1) {
                 FittingParameter shiftParam;
-                // Use same naming as .sav file: segment_%d_energy_shift
-                // TODO: Use actual segment key instead of i+1
-                shiftParam.name = QString("segment_%1_energy_shift").arg(i+1);
+                // Use data file name if available, otherwise use index
+                QString segmentName = segment.dataFile.isEmpty() ? 
+                                     QString("Segment %1").arg(i + 1) :
+                                     QFileInfo(segment.dataFile).baseName();
+                shiftParam.name = QString("%1 Energy Shift (keV)").arg(segmentName);
                 shiftParam.value = segment.energyShift;
                 shiftParam.lowerLimit = 0;
                 shiftParam.upperLimit = 0;
