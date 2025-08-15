@@ -245,6 +245,29 @@ if(BUILD_GUI)
             set(QWT_INCLUDE_DIRS "/usr/x86_64-w64-mingw32/sys-root/mingw/include/qt5/qwt")
             set(QWT_LIBRARIES "qwt-qt5")
         endif()
+    else()
+        # Native Linux/macOS QWT configuration
+        if(USE_QWT)
+            # Set the CMake module path to find our custom FindQwt.cmake
+            list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
+            
+            # Find QWT using our custom module
+            find_package(Qwt REQUIRED)
+            
+            if(Qwt_FOUND)
+                message(STATUS "Found QWT: ${QWT_LIBRARIES}")
+                message(STATUS "QWT include directories: ${QWT_INCLUDE_DIR}")
+                
+                # Set variables for use in subdirectories
+                set(QWT_INCLUDE_DIRS ${QWT_INCLUDE_DIR})
+                set(QWT_LIBRARIES ${QWT_LIBRARY})
+                
+                # Add to global include directories
+                include_directories(${QWT_INCLUDE_DIR})
+            else()
+                message(FATAL_ERROR "QWT library not found. Please install libqwt-qt5-dev or disable USE_QWT")
+            endif()
+        endif()
     endif()
     
     add_subdirectory(gui)
