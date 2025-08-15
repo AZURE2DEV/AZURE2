@@ -180,6 +180,11 @@ if(USE_MCMC)
         # Add numcmc to extra libs for linking
         set(EXTRA_LIBS ${EXTRA_LIBS} numcmc)
         
+        # Set RPATH for the executable to find libnumcmc.so at runtime
+        set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+        set(CMAKE_BUILD_RPATH "${CMAKE_CURRENT_BINARY_DIR}/numcmc")
+        set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+        
         message(STATUS "MCMC Bayesian sampling enabled with numcmc library")
     else()
         message(FATAL_ERROR "numcmc library not found. Please clone the numcmc library to the numcmc/ directory")

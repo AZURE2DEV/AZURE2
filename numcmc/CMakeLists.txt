@@ -32,5 +32,26 @@ target_compile_features(numcmc PRIVATE cxx_auto_type)
 # target_compile_options(hitdic PRIVATE -Wall -Wextra -pedantic -Werror)
 target_compile_options(numcmc PRIVATE -Wall -Wno-sign-compare -Wno-unknown-pragmas)
 
-#This is required so that the exported target has the name Hitdic and not hitdic
+#This is required so that the exported target has the name numcmc and not hitdic
 set_target_properties(numcmc PROPERTIES EXPORT_NAME numcmc)
+
+# Set SONAME and version for shared library
+set_target_properties(numcmc PROPERTIES
+    VERSION 1.0.0
+    SOVERSION 1
+)
+
+# Install the library
+install(TARGETS numcmc
+    EXPORT numcmc-targets
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    RUNTIME DESTINATION bin
+    INCLUDES DESTINATION include
+)
+
+# Install headers
+install(DIRECTORY include/
+    DESTINATION include
+    FILES_MATCHING PATTERN "*.h"
+)
