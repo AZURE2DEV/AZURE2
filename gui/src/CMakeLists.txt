@@ -38,18 +38,22 @@ else()
     list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/Modules")
     find_package (Qt5 COMPONENTS Core PrintSupport Gui Widgets REQUIRED)
     set(QT_LIBRARIES Qt5::Core Qt5::Gui Qt5::PrintSupport Qt5::Widgets)
-    # Try to find Qwt using standard CMake find_package
-    find_package(Qwt QUIET)
-	if(NOT Qwt_FOUND) 
-        message(FATAL_ERROR "Could not find QWT library. Please install QWT or set USE_QWT=OFF") 
-    else()
-        message(STATUS "Found QWT using find_package") 
-        # Since the custom FindQwt.cmake module finds the library and include directories,
-        # we need to use those variables to set up our build.
-        # The find_package call will set QWT_LIBRARY and QWT_INCLUDE_DIR.
-        set(QWT_LIBRARIES ${QWT_LIBRARY}) 
-        include_directories(${QWT_INCLUDE_DIR}) 
-        add_definitions(-DUSE_QWT) 
+    
+    # Only try to find QWT if USE_QWT is enabled
+    if(USE_QWT)
+        # Try to find Qwt using standard CMake find_package
+        find_package(Qwt QUIET)
+        if(NOT Qwt_FOUND) 
+            message(FATAL_ERROR "Could not find QWT library. Please install libqwt-qt5-dev or set USE_QWT=OFF") 
+        else()
+            message(STATUS "Found QWT using find_package") 
+            # Since the custom FindQwt.cmake module finds the library and include directories,
+            # we need to use those variables to set up our build.
+            # The find_package call will set QWT_LIBRARY and QWT_INCLUDE_DIR.
+            set(QWT_LIBRARIES ${QWT_LIBRARY}) 
+            include_directories(${QWT_INCLUDE_DIR}) 
+            add_definitions(-DUSE_QWT) 
+        endif()
     endif()
 endif()
 
