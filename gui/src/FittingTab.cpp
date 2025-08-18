@@ -14,11 +14,14 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QRegExp>
+#include <cmath>
+#include <algorithm>
 
 #include "FittingTab.h"
 #include "InfoDialog.h"
 #include "LevelsTab.h"
 #include "SegmentsTab.h"
+#include "AZURESetup.h"
 
 FittingTab::FittingTab(QWidget *parent) : QWidget(parent), 
     levelsTab_(nullptr), segmentsTab_(nullptr) {
@@ -47,11 +50,9 @@ FittingTab::FittingTab(QWidget *parent) : QWidget(parent),
     // Create button group
     QHBoxLayout *buttonLayout = new QHBoxLayout;
     
-    resetButton = new QPushButton("Reset to Defaults");
     refreshButton = new QPushButton("Refresh from Current");
     loadButton = new QPushButton("Load from .sav file");
     
-    buttonLayout->addWidget(resetButton);
     buttonLayout->addWidget(refreshButton);
     buttonLayout->addWidget(loadButton);
     buttonLayout->addStretch();
@@ -70,7 +71,6 @@ FittingTab::FittingTab(QWidget *parent) : QWidget(parent),
     mainLayout->addLayout(buttonLayout);
     
     // Connect signals
-    connect(resetButton, SIGNAL(clicked()), this, SLOT(resetToDefaults()));
     connect(refreshButton, SIGNAL(clicked()), this, SLOT(refreshParameters()));
     connect(loadButton, SIGNAL(clicked()), this, SLOT(loadSettings()));
     
@@ -186,6 +186,26 @@ void FittingTab::refreshParameters() {
 void FittingTab::setTabReferences(LevelsTab* levelsTab, SegmentsTab* segmentsTab) {
     levelsTab_ = levelsTab;
     segmentsTab_ = segmentsTab;
+    
+    // Connect signals from SegmentsDataModel to update FittingTab when values change
+    if(segmentsTab_) {
+        SegmentsDataModel* segmentsModel = segmentsTab_->getSegmentsDataModel();
+        if(segmentsModel) {
+            connect(segmentsModel, SIGNAL(normalizationChanged(int, double)),
+                    this, SLOT(onSegmentNormalizationChanged(int, double)));
+            connect(segmentsModel, SIGNAL(energyShiftChanged(int, double)),
+                    this, SLOT(onSegmentEnergyShiftChanged(int, double)));
+            connect(segmentsModel, SIGNAL(normalizationErrorChanged(int, double)),
+                    this, SLOT(onSegmentNormalizationErrorChanged(int, double)));
+            connect(segmentsModel, SIGNAL(energyShiftErrorChanged(int, double)),
+                    this, SLOT(onSegmentEnergyShiftErrorChanged(int, double)));
+            connect(segmentsModel, SIGNAL(normalizationVaryChanged(int, bool)),
+                    this, SLOT(onSegmentNormalizationVaryChanged(int, bool)));
+            connect(segmentsModel, SIGNAL(energyShiftVaryChanged(int, bool)),
+                    this, SLOT(onSegmentEnergyShiftVaryChanged(int, bool)));
+        }
+    }
+    
     // Populate parameters from current tab state
     populateFromCurrentGUIState();
 }
@@ -235,7 +255,9 @@ void FittingTab::populateFromCurrentGUIState() {
                     widthParam.name = QString("Level %1 Channel %2 Width (eV)")
                                      .arg(levelIndex + 1)
                                      .arg(channelIndex + 1);
-                    widthParam.value = channel.reducedWidth;
+                    
+                    // LevelsTab already stores physical widths, use them directly
+                    widthParam.value = channel.reducedWidth; // This is actually physical width in the GUI
                     widthParam.lowerLimit = 0;
                     widthParam.upperLimit = 0;  // Default upper limit
                     widthParam.error = channel.reducedWidth * 0.1;  // Default 10% error
@@ -258,47 +280,39 @@ void FittingTab::populateFromCurrentGUIState() {
         for(int i = 0; i < segments.size(); i++) {
             const SegmentsDataData& segment = segments[i];
             
-            // Add normalization parameter if varied (varyNorm == 1)
-            if(segment.varyNorm == 1) {
-                FittingParameter normParam;
-                // Use data file name if available, otherwise use index
-                QString segmentName = segment.dataFile.isEmpty() ? 
-                                     QString("Segment %1").arg(i + 1) :
-                                     QFileInfo(segment.dataFile).baseName();
-                normParam.name = QString("%1 Normalization").arg(segmentName);
-                normParam.value = segment.dataNorm;
-                normParam.lowerLimit = 0;
-                normParam.upperLimit = 0;
-                normParam.error = segment.dataNormError;
-                normParam.useAsNuisance = true;  // Norms are typically nuisance parameters
-                normParam.category = "norm";
-                normParam.minuitIndex = paramIndex++;
-                normParam.levelIndex = -1;
-                normParam.channelIndex = -1;
-                
-                fittingParameters.append(normParam);
-            }
+            // Add normalization parameter (always show, but useAsNuisance depends on varyNorm flag)
+            FittingParameter normParam;
+            // Use same naming pattern as MCMC tab
+            QString segmentName = segment.dataFile.isEmpty() ? 
+                                 QString("Segment %1").arg(i + 1) :
+                                 QFileInfo(segment.dataFile).baseName();
+            normParam.name = QString("%1 Normalization").arg(segmentName);
+            normParam.value = segment.dataNorm;
+            normParam.lowerLimit = 0;
+            normParam.upperLimit = 0;
+            normParam.error = segment.dataNormError;
+            normParam.useAsNuisance = (segment.varyNorm == 1);  // Active only when parameter varies
+            normParam.category = "norm";
+            normParam.minuitIndex = paramIndex++;
+            normParam.levelIndex = -1;
+            normParam.channelIndex = i;  // Store segment index for reverse lookup
             
-            // Add energy shift parameter if varied (varyEnergyShift == 1)
-            if(segment.varyEnergyShift == 1) {
-                FittingParameter shiftParam;
-                // Use data file name if available, otherwise use index
-                QString segmentName = segment.dataFile.isEmpty() ? 
-                                     QString("Segment %1").arg(i + 1) :
-                                     QFileInfo(segment.dataFile).baseName();
-                shiftParam.name = QString("%1 Energy Shift (keV)").arg(segmentName);
-                shiftParam.value = segment.energyShift;
-                shiftParam.lowerLimit = 0;
-                shiftParam.upperLimit = 0;
-                shiftParam.error = segment.energyShiftError;
-                shiftParam.useAsNuisance = true;  // Shifts are typically nuisance parameters
-                shiftParam.category = "shift";
-                shiftParam.minuitIndex = paramIndex++;
-                shiftParam.levelIndex = -1;
-                shiftParam.channelIndex = -1;
-                
-                fittingParameters.append(shiftParam);
-            }
+            fittingParameters.append(normParam);
+            
+            // Add energy shift parameter (always show, but useAsNuisance depends on varyEnergyShift flag)
+            FittingParameter shiftParam;
+            shiftParam.name = QString("%1 Energy Shift (keV)").arg(segmentName);
+            shiftParam.value = segment.energyShift;
+            shiftParam.lowerLimit = 0;
+            shiftParam.upperLimit = 0;
+            shiftParam.error = segment.energyShiftError;
+            shiftParam.useAsNuisance = (segment.varyEnergyShift == 1);  // Active only when parameter varies
+            shiftParam.category = "shift";
+            shiftParam.minuitIndex = paramIndex++;
+            shiftParam.levelIndex = -1;
+            shiftParam.channelIndex = i;  // Store segment index for reverse lookup
+            
+            fittingParameters.append(shiftParam);
         }
     }
     
@@ -309,19 +323,57 @@ void FittingTab::populateFromCurrentGUIState() {
 }
 
 double FittingTab::convertReducedToPhysical(double reducedWidth, int levelIndex, int channelIndex) {
-    // Width conversion requires access to the compound nucleus and pair data
-    // which is not available at the GUI level. The actual conversion happens
-    // during calculations when the CNuc object is created.
-    // For display purposes, we return a simplified conversion.
+    // Width conversion: Physical width = reduced_width^2 * penetrability_factor
+    // This is a simplified conversion for GUI display purposes.
+    // The real calculation involves penetrability P(E) and shift S(E) functions
+    // that depend on energy, channel radius, masses, etc.
     
-    // This is a placeholder conversion - the real calculation is complex
-    // and involves penetrability factors, channel radii, etc.
-    return reducedWidth * 100.0; // Simple scaling for display
+    // For typical nuclear physics cases, a reasonable approximation is:
+    // Γ ≈ γ² * P, where P is typically in the range 1-1000 depending on energy and l
+    // We use a simple approximation that converts reduced width (in MeV^1/2) to physical width (in eV)
+    
+    if(reducedWidth == 0.0) return 0.0;
+    
+    // Simple conversion: square the reduced width and apply energy-dependent scaling
+    // This is an approximation - real conversion requires full R-Matrix calculation
+    double physicalWidth = reducedWidth * reducedWidth * 1000.0; // Convert to eV and apply typical scaling
+    
+    return physicalWidth;
 }
 
 double FittingTab::convertPhysicalToReduced(double physicalWidth, int levelIndex, int channelIndex) {
-    // Inverse of the above conversion for display purposes
-    return physicalWidth / 100.0;
+    // Inverse of the above conversion: reduced_width = sqrt(physical_width / scaling_factor)
+    // This converts from physical width (eV) back to reduced width (MeV^1/2)
+    
+    if(physicalWidth <= 0.0) return 0.0;
+    
+    // Inverse of the forward conversion: sqrt(physical_width / 1000.0)
+    double reducedWidth = sqrt(physicalWidth / 1000.0);
+    
+    return reducedWidth;
+}
+
+double FittingTab::transformRWAParameterToPhysical(const QString& paramName, double rwaValue) {
+    // Transform RWA parameter to physical using proper R-Matrix transformation via AZURESetup
+    
+    // Find the parent AZURESetup widget
+    AZURESetup* azureSetup = nullptr;
+    QWidget* parent = this->parentWidget();
+    while(parent != nullptr) {
+        azureSetup = qobject_cast<AZURESetup*>(parent);
+        if(azureSetup != nullptr) {
+            break;
+        }
+        parent = parent->parentWidget();
+    }
+    
+    if(azureSetup != nullptr) {
+        // Use the proper RWA to Physical conversion from AZURESetup
+        return azureSetup->ConvertRWAToPhysical(paramName, rwaValue);
+    } else {
+        // Fallback: return the original value if we can't find AZURESetup
+        return rwaValue;
+    }
 }
 
 void FittingTab::applyParameterSettings() {
@@ -393,23 +445,18 @@ void FittingTab::parameterItemChanged(QTableWidgetItem* item) {
         // Update parameter setting
         if(col == 2) fittingParameters[paramIndex].lowerLimit = value;
         else if(col == 3) fittingParameters[paramIndex].upperLimit = value;
-        else if(col == 4) fittingParameters[paramIndex].error = value;
+        else if(col == 4) {
+            fittingParameters[paramIndex].error = value;
+            // Update the corresponding tab with the new error value
+            updateParameterInOtherTabs(paramName, fittingParameters[paramIndex]);
+        }
         
     } else if(col == 5) { // Nuisance checkbox
         fittingParameters[paramIndex].useAsNuisance = (item->checkState() == Qt::Checked);
+        // Update the corresponding tab with the new useAsNuisance value
+        updateParameterInOtherTabs(paramName, fittingParameters[paramIndex]);
     }
 }
-
-void FittingTab::resetToDefaults() {
-    int ret = QMessageBox::question(this, "Reset Parameters",
-                                   "Are you sure you want to reset all parameter settings to defaults?",
-                                   QMessageBox::Yes | QMessageBox::No);
-    if(ret == QMessageBox::Yes) {
-        updateParameterTables();
-    }
-}
-
-
 
 void FittingTab::loadSettings() {
     QString filename = QFileDialog::getOpenFileName(this, 
@@ -420,9 +467,8 @@ void FittingTab::loadSettings() {
         if(file.open(QIODevice::ReadOnly | QIODevice::Text)) {
             QTextStream in(&file);
             
-            // Parse .sav file format: name value error
-            fittingParameters.clear();
-            int paramIndex = 0;
+            // Parse .sav file and create lookup map
+            QMap<QString, QPair<double, double>> savParams; // paramName -> (value, error)
             
             while(!in.atEnd()) {
                 QString line = in.readLine().trimmed();
@@ -430,54 +476,219 @@ void FittingTab::loadSettings() {
                 
                 QStringList parts = line.split(QRegExp("\\s+"), Qt::SkipEmptyParts);
                 if(parts.size() >= 3) {
-                    FittingParameter param;
-                    param.name = parts[0];
-                    param.value = parts[1].toDouble();
-                    param.error = parts[2].toDouble();
-                    param.minuitIndex = paramIndex++;
-
+                    QString paramName = parts[0];
+                    double value = parts[1].toDouble();
+                    double error = parts[2].toDouble();
+                    
                     // If "_rwa" in param.name, remove it
-                    if(param.name.endsWith("_rwa")) {
-                        param.name.chop(4); // Remove last 4 characters
+                    if(paramName.endsWith("_rwa")) {
+                        paramName.chop(4); // Remove last 4 characters
                     }
                     
-                    // Set default limits (can be adjusted by user)
-                    param.lowerLimit = param.value - 5 * param.error;
-                    param.upperLimit = param.value + 5 * param.error;
-                    param.useAsNuisance = false;
+                    savParams[paramName] = qMakePair(value, error);
+                }
+            }
+            file.close();
+            
+            // Update existing fitting parameters with values from .sav file
+            int updatedCount = 0;
+            
+            for(int i = 0; i < fittingParameters.size(); i++) {
+                FittingParameter& param = fittingParameters[i];
+                QString matchKey = findMatchingParameterKey(param, savParams.keys());
+                
+                if(!matchKey.isEmpty() && savParams.contains(matchKey)) {
+                    QPair<double, double> savData = savParams[matchKey];
                     
-                    // Determine category from parameter name
-                    if(param.name.contains("segment") && param.name.contains("norm")) {
-                        param.category = "norm";
-                        param.useAsNuisance = true; // Norms are typically nuisance parameters
-                        param.levelIndex = -1;
-                        param.channelIndex = -1;
-                    } else if(param.name.contains("segment") && param.name.contains("shift")) {
-                        param.category = "shift";
-                        param.useAsNuisance = true; // Shifts are typically nuisance parameters
-                        param.levelIndex = -1;
-                        param.channelIndex = -1;
-                    } else {
-                        param.category = "level";
-                        param.levelIndex = 0; // TODO: Parse from name
-                        param.channelIndex = 0; // TODO: Parse from name
+                    // Update value and error - .sav values are RWA parameters, need transformation
+                    if(param.category == "level" && param.name.contains("Width") && param.channelIndex >= 0) {
+                        // .sav file contains RWA (reduced widths), transform to physical for display
+                        double rwaValue = savData.first;
+                        double rwaError = savData.second;
                         
-                        // Level width parameters are already in reduced width units
+                        // Transform RWA value to physical
+                        double physicalValue = transformRWAParameterToPhysical(matchKey, rwaValue);
+                        param.value = physicalValue;
+                        
+                        // Transform RWA error to physical error
+                        // Calculate RWA_value ± RWA_error, transform both, then find the physical error
+                        double rwaValuePlusError = rwaValue + rwaError;
+                        double rwaValueMinusError = rwaValue - rwaError;
+                        
+                        double physicalValuePlusError = transformRWAParameterToPhysical(matchKey, rwaValuePlusError);
+                        double physicalValueMinusError = transformRWAParameterToPhysical(matchKey, rwaValueMinusError);
+                        
+                        // Take the larger of the two error estimates for asymmetric transformations
+                        double errorUp = std::abs(physicalValuePlusError - physicalValue);
+                        double errorDown = std::abs(physicalValue - physicalValueMinusError);
+                        param.error = std::max(errorUp, errorDown);
+                        
+                        // Update the underlying ChannelsModel with physical width (GUI stores physical)
+                        if(levelsTab_) {
+                            ChannelsModel* channelsModel = levelsTab_->getChannelsModel();
+                            if(channelsModel) {
+                                QList<ChannelsData> channels = channelsModel->getChannels();
+                                for(int j = 0; j < channels.size(); j++) {
+                                    if(j == param.channelIndex) {
+                                        QModelIndex modelIndex = channelsModel->index(j, 6); // Column 6 is width
+                                        channelsModel->setData(modelIndex, physicalValue, Qt::EditRole);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    } else if(param.category == "level" && param.name.contains("Energy")) {
+                        // For level energy parameters, also transform the error
+                        double rwaValue = savData.first;
+                        double rwaError = savData.second;
+                        
+                        // Transform RWA value to physical
+                        double physicalValue = transformRWAParameterToPhysical(matchKey, rwaValue);
+                        param.value = physicalValue;
+                        
+                        // Transform RWA error to physical error
+                        double rwaValuePlusError = rwaValue + rwaError;
+                        double rwaValueMinusError = rwaValue - rwaError;
+                        
+                        double physicalValuePlusError = transformRWAParameterToPhysical(matchKey, rwaValuePlusError);
+                        double physicalValueMinusError = transformRWAParameterToPhysical(matchKey, rwaValueMinusError);
+                        
+                        // Take the larger of the two error estimates
+                        double errorUp = std::abs(physicalValuePlusError - physicalValue);
+                        double errorDown = std::abs(physicalValue - physicalValueMinusError);
+                        param.error = std::max(errorUp, errorDown);
+                    } else {
+                        // For other parameters (normalizations, etc.), transform value but keep error as-is
+                        // since normalizations and energy shifts are typically already in physical units
+                        param.value = transformRWAParameterToPhysical(matchKey, savData.first);
+                        param.error = savData.second;
                     }
                     
-                    fittingParameters.append(param);
+                    // Do not change limits when loading from .sav file - keep existing limits
+                    
+                    // Propagate changes to other tabs
+                    updateParameterInOtherTabs(param.name, param);
+                    
+                    updatedCount++;
                 }
             }
             
-            file.close();
+            // Refresh the parameter tables
             updateParameterTables();
+            
             QMessageBox::information(this, "Load Settings", 
-                                   QString("Loaded %1 parameters from: %2").arg(fittingParameters.size()).arg(filename));
+                                   QString("Updated %1 of %2 fitting parameters from: %3")
+                                   .arg(updatedCount).arg(fittingParameters.size()).arg(filename));
         } else {
             QMessageBox::warning(this, "Load Error", 
                                "Could not load parameter file.");
         }
     }
+}
+
+QString FittingTab::findMatchingParameterKey(const FittingParameter& param, const QStringList& savKeys) {
+    // Try to match current parameter with .sav file parameter names
+    
+    // First try direct match
+    if(savKeys.contains(param.name)) {
+        return param.name;
+    }
+    
+    if(param.category == "norm") {
+        // For normalization parameters: look for patterns like "segment_1_norm", "norm_1", etc.
+        int segmentIndex = param.channelIndex + 1; // Convert 0-based to 1-based
+        
+        QStringList possibleNames;
+        possibleNames << QString("segment_%1_norm").arg(segmentIndex);
+        possibleNames << QString("norm_%1").arg(segmentIndex);
+        possibleNames << QString("norm%1").arg(segmentIndex);
+        possibleNames << QString("segment%1_norm").arg(segmentIndex);
+        
+        for(const QString& name : possibleNames) {
+            if(savKeys.contains(name)) {
+                return name;
+            }
+        }
+        
+    } else if(param.category == "shift") {
+        // For energy shift parameters: look for patterns like "segment_1_energy_shift", "shift_1", etc.
+        int segmentIndex = param.channelIndex + 1; // Convert 0-based to 1-based
+        
+        QStringList possibleNames;
+        possibleNames << QString("segment_%1_energy_shift").arg(segmentIndex);  // Main pattern from .sav files
+        possibleNames << QString("segment_%1_shift").arg(segmentIndex);
+        possibleNames << QString("shift_%1").arg(segmentIndex);
+        possibleNames << QString("shift%1").arg(segmentIndex);
+        possibleNames << QString("segment%1_energy_shift").arg(segmentIndex);
+        possibleNames << QString("segment%1_shift").arg(segmentIndex);
+        
+        for(const QString& name : possibleNames) {
+            if(savKeys.contains(name)) {
+                return name;
+            }
+        }
+        
+    } else if(param.category == "level") {
+        // For level parameters: match with .sav file patterns like "energy_1", "width_1_2"
+        // Current GUI names are like "Level 1 Energy (MeV)" and "Level 1 Channel 2 Width (eV)"
+        
+        if(param.name.contains("Energy") && param.channelIndex == -1) {
+            // Energy parameter: "Level N Energy (MeV)" -> "energy_N"
+            int levelIndex = param.levelIndex + 1; // Convert 0-based to 1-based
+            
+            QStringList possibleNames;
+            possibleNames << QString("energy_%1").arg(levelIndex);
+            possibleNames << QString("energy%1").arg(levelIndex);
+            possibleNames << QString("level_%1_energy").arg(levelIndex);
+            possibleNames << QString("level%1_energy").arg(levelIndex);
+            
+            for(const QString& name : possibleNames) {
+                if(savKeys.contains(name)) {
+                    return name;
+                }
+            }
+            
+        } else if(param.name.contains("Width") && param.channelIndex >= 0) {
+            // Width parameter: "Level N Channel M Width (eV)" -> "width_N_M"
+            // Need to count channels per level, not global channel index
+            int levelIndex = param.levelIndex + 1; // Convert 0-based to 1-based
+            
+            // Count which channel this is within this specific level
+            int channelWithinLevel = 1; // Start counting from 1 for .sav file format
+            
+            if(levelsTab_ && segmentsTab_) {
+                ChannelsModel* channelsModel = levelsTab_->getChannelsModel();
+                if(channelsModel) {
+                    QList<ChannelsData> channels = channelsModel->getChannels();
+                    for(int i = 0; i < channels.size(); i++) {
+                        const ChannelsData& channel = channels[i];
+                        if(channel.levelIndex == param.levelIndex) {
+                            if(i == param.channelIndex) {
+                                // Found our channel - channelWithinLevel is correct
+                                break;
+                            }
+                            channelWithinLevel++; // Count channels for this level
+                        }
+                    }
+                }
+            }
+            
+            QStringList possibleNames;
+            possibleNames << QString("width_%1_%2").arg(levelIndex).arg(channelWithinLevel);
+            possibleNames << QString("width%1_%2").arg(levelIndex).arg(channelWithinLevel);
+            possibleNames << QString("level_%1_channel_%2_width").arg(levelIndex).arg(channelWithinLevel);
+            possibleNames << QString("level%1_channel%2_width").arg(levelIndex).arg(channelWithinLevel);
+            
+            for(const QString& name : possibleNames) {
+                if(savKeys.contains(name)) {
+                    return name;
+                }
+            }
+        }
+    }
+    
+    // No match found
+    return QString();
 }
 
 void FittingTab::updateParameterInOtherTabs(const QString& paramName, const FittingParameter& param) {
@@ -487,23 +698,30 @@ void FittingTab::updateParameterInOtherTabs(const QString& paramName, const Fitt
         // Update level parameters in LevelsModel - same pattern as LevelsTab::editLevel()
         LevelsModel* levelsModel = levelsTab_->getLevelsModel();
         if(levelsModel) {
-            // Parse level index from parameter name
+            // Parse level index from parameter name using current naming scheme
+            // Parameter names are like "Level 1 Energy (MeV)" and "Level 1 Channel 2 Width (eV)"
             int levelIndex = -1;
             int channelIndex = -1;
             
-            if(paramName.contains("_energy")) {
-                // Energy parameter: j=%d_la=%d_energy
-                QRegExp rx("j=\\d+_la=(\\d+)_energy");
+            if(paramName.contains("Energy") && paramName.contains("Level")) {
+                // Energy parameter: "Level N Energy (MeV)"
+                QRegExp rx("Level (\\d+) Energy");
                 if(rx.indexIn(paramName) != -1) {
                     levelIndex = rx.cap(1).toInt() - 1; // Convert 1-based to 0-based
                 }
-            } else if(paramName.contains("_ch=")) {
-                // Width parameter: j=%d_la=%d_ch=%d
-                QRegExp rx("j=\\d+_la=(\\d+)_ch=(\\d+)");
+            } else if(paramName.contains("Width") && paramName.contains("Level") && paramName.contains("Channel")) {
+                // Width parameter: "Level N Channel M Width (eV)"
+                QRegExp rx("Level (\\d+) Channel (\\d+) Width");
                 if(rx.indexIn(paramName) != -1) {
                     levelIndex = rx.cap(1).toInt() - 1; // Convert 1-based to 0-based
                     channelIndex = rx.cap(2).toInt() - 1; // Convert 1-based to 0-based
                 }
+            }
+            
+            // Alternative: use the stored indices from the FittingParameter structure
+            if(levelIndex == -1 && param.levelIndex >= 0) {
+                levelIndex = param.levelIndex;
+                channelIndex = param.channelIndex;
             }
             
             if(levelIndex >= 0) {
@@ -538,25 +756,64 @@ void FittingTab::updateParameterInOtherTabs(const QString& paramName, const Fitt
         if(segmentsModel) {
             QList<SegmentsDataData> segments = segmentsModel->getLines();
             
-            // Parse segment index from parameter name (e.g., "segment_1_norm" -> index = 0)
-            QRegExp rx("segment_(\\d+)_");
-            if(rx.indexIn(paramName) != -1) {
-                int segmentIndex = rx.cap(1).toInt() - 1; // Convert 1-based to 0-based
+            // Use channelIndex which now stores the segment index
+            int segmentIndex = param.channelIndex;
+            
+            if(segmentIndex >= 0 && segmentIndex < segments.size()) {
+                QModelIndex index;
                 
-                if(segmentIndex >= 0 && segmentIndex < segments.size()) {
-                    QModelIndex index;
-                    
-                    if(param.category == "norm") {
-                        // Update dataNorm column (column 9)
-                        index = segmentsModel->index(segmentIndex, 9);
-                        segmentsModel->setData(index, param.value, Qt::EditRole);
-                    } else if(param.category == "shift") {
-                        // Update energyShift column (column 14)
-                        index = segmentsModel->index(segmentIndex, 14);
-                        segmentsModel->setData(index, param.value, Qt::EditRole);
-                    }
+                if(param.category == "norm") {
+                    // Update dataNorm column (column 9)
+                    index = segmentsModel->index(segmentIndex, 9);
+                    segmentsModel->setData(index, param.value, Qt::EditRole);
+                    // Also update dataNormError column (column 10)
+                    QModelIndex errorIndex = segmentsModel->index(segmentIndex, 10);
+                    segmentsModel->setData(errorIndex, param.error, Qt::EditRole);
+                    // Update varyNorm column (column 11) based on useAsNuisance
+                    QModelIndex varyIndex = segmentsModel->index(segmentIndex, 11);
+                    segmentsModel->setData(varyIndex, param.useAsNuisance ? 1 : 0, Qt::EditRole);
+                } else if(param.category == "shift") {
+                    // Update energyShift column (column 14)
+                    index = segmentsModel->index(segmentIndex, 14);
+                    segmentsModel->setData(index, param.value, Qt::EditRole);
+                    // Also update energyShiftError column (column 15)
+                    QModelIndex errorIndex = segmentsModel->index(segmentIndex, 15);
+                    segmentsModel->setData(errorIndex, param.error, Qt::EditRole);
+                    // Update varyEnergyShift column (column 16) based on useAsNuisance
+                    QModelIndex varyIndex = segmentsModel->index(segmentIndex, 16);
+                    segmentsModel->setData(varyIndex, param.useAsNuisance ? 1 : 0, Qt::EditRole);
                 }
             }
+        }
+    }
+}
+
+void FittingTab::updateParameterTableValue(const QString& paramName, double value) {
+    // Determine which table the parameter belongs to
+    QTableWidget* targetTable = nullptr;
+    if(paramName.contains("Normalization")) {
+        targetTable = normParamsTable;
+    } else if(paramName.contains("Energy Shift")) {
+        targetTable = shiftParamsTable;
+    } else {
+        targetTable = levelParamsTable;
+    }
+    
+    if(!targetTable) return;
+    
+    // Find the row with this parameter name
+    for(int row = 0; row < targetTable->rowCount(); row++) {
+        QTableWidgetItem* nameItem = targetTable->item(row, 0);
+        if(nameItem && nameItem->text() == paramName) {
+            // Update the value column (column 1)
+            QTableWidgetItem* valueItem = targetTable->item(row, 1);
+            if(valueItem) {
+                // Temporarily disconnect signals to avoid recursion
+                targetTable->blockSignals(true);
+                valueItem->setText(QString::number(value, 'g', 6));
+                targetTable->blockSignals(false);
+            }
+            break;
         }
     }
 }
@@ -628,6 +885,144 @@ bool FittingTab::readParameterSettings(QTextStream& inStream) {
     }
     
     return true;
+}
+
+void FittingTab::onSegmentNormalizationChanged(int segmentIndex, double value) {
+    // Find normalization parameter by segment index stored in channelIndex
+    for(int i = 0; i < fittingParameters.size(); i++) {
+        if(fittingParameters[i].category == "norm" && fittingParameters[i].channelIndex == segmentIndex) {
+            fittingParameters[i].value = value;
+            
+            // Update the corresponding table cell
+            updateParameterTableValue(fittingParameters[i].name, value);
+            break;
+        }
+    }
+}
+
+void FittingTab::onSegmentEnergyShiftChanged(int segmentIndex, double value) {
+    // Find energy shift parameter by segment index stored in channelIndex
+    for(int i = 0; i < fittingParameters.size(); i++) {
+        if(fittingParameters[i].category == "shift" && fittingParameters[i].channelIndex == segmentIndex) {
+            fittingParameters[i].value = value;
+            
+            // Update the corresponding table cell
+            updateParameterTableValue(fittingParameters[i].name, value);
+            break;
+        }
+    }
+}
+
+void FittingTab::updateParameterTableError(const QString& paramName, double error) {
+    // Determine which table the parameter belongs to
+    QTableWidget* targetTable = nullptr;
+    if(paramName.contains("Normalization")) {
+        targetTable = normParamsTable;
+    } else if(paramName.contains("Energy Shift")) {
+        targetTable = shiftParamsTable;
+    } else {
+        targetTable = levelParamsTable;
+    }
+    
+    if(!targetTable) return;
+    
+    // Find the row with this parameter name
+    for(int row = 0; row < targetTable->rowCount(); row++) {
+        QTableWidgetItem* nameItem = targetTable->item(row, 0);
+        if(nameItem && nameItem->text() == paramName) {
+            // Update the error column (column 4)
+            QTableWidgetItem* errorItem = targetTable->item(row, 4);
+            if(errorItem) {
+                // Temporarily disconnect signals to avoid recursion
+                targetTable->blockSignals(true);
+                errorItem->setText(QString::number(error, 'g', 6));
+                targetTable->blockSignals(false);
+            }
+            break;
+        }
+    }
+}
+
+void FittingTab::updateParameterTableCheckbox(const QString& paramName, bool checked) {
+    // Determine which table the parameter belongs to
+    QTableWidget* targetTable = nullptr;
+    if(paramName.contains("Normalization")) {
+        targetTable = normParamsTable;
+    } else if(paramName.contains("Energy Shift")) {
+        targetTable = shiftParamsTable;
+    } else {
+        targetTable = levelParamsTable;
+    }
+    
+    if(!targetTable) return;
+    
+    // Find the row with this parameter name
+    for(int row = 0; row < targetTable->rowCount(); row++) {
+        QTableWidgetItem* nameItem = targetTable->item(row, 0);
+        if(nameItem && nameItem->text() == paramName) {
+            // Update the checkbox column (column 5)
+            QTableWidgetItem* checkboxItem = targetTable->item(row, 5);
+            if(checkboxItem) {
+                // Temporarily disconnect signals to avoid recursion
+                targetTable->blockSignals(true);
+                checkboxItem->setCheckState(checked ? Qt::Checked : Qt::Unchecked);
+                targetTable->blockSignals(false);
+            }
+            break;
+        }
+    }
+}
+
+void FittingTab::onSegmentNormalizationErrorChanged(int segmentIndex, double error) {
+    // Find normalization parameter by segment index stored in channelIndex
+    for(int i = 0; i < fittingParameters.size(); i++) {
+        if(fittingParameters[i].category == "norm" && fittingParameters[i].channelIndex == segmentIndex) {
+            fittingParameters[i].error = error;
+            
+            // Update the corresponding table cell (error column is column 4)
+            updateParameterTableError(fittingParameters[i].name, error);
+            break;
+        }
+    }
+}
+
+void FittingTab::onSegmentEnergyShiftErrorChanged(int segmentIndex, double error) {
+    // Find energy shift parameter by segment index stored in channelIndex
+    for(int i = 0; i < fittingParameters.size(); i++) {
+        if(fittingParameters[i].category == "shift" && fittingParameters[i].channelIndex == segmentIndex) {
+            fittingParameters[i].error = error;
+            
+            // Update the corresponding table cell (error column is column 4)
+            updateParameterTableError(fittingParameters[i].name, error);
+            break;
+        }
+    }
+}
+
+void FittingTab::onSegmentNormalizationVaryChanged(int segmentIndex, bool vary) {
+    // Find normalization parameter by segment index stored in channelIndex
+    for(int i = 0; i < fittingParameters.size(); i++) {
+        if(fittingParameters[i].category == "norm" && fittingParameters[i].channelIndex == segmentIndex) {
+            fittingParameters[i].useAsNuisance = vary;
+            
+            // Update the checkbox in the table
+            updateParameterTableCheckbox(fittingParameters[i].name, vary);
+            break;
+        }
+    }
+}
+
+void FittingTab::onSegmentEnergyShiftVaryChanged(int segmentIndex, bool vary) {
+    // Find energy shift parameter by segment index stored in channelIndex
+    for(int i = 0; i < fittingParameters.size(); i++) {
+        if(fittingParameters[i].category == "shift" && fittingParameters[i].channelIndex == segmentIndex) {
+            fittingParameters[i].useAsNuisance = vary;
+            
+            // Update the checkbox in the table
+            updateParameterTableCheckbox(fittingParameters[i].name, vary);
+            break;
+        }
+    }
 }
 
 // Static info text - this would be defined in InTabDocs.cpp in the real implementation

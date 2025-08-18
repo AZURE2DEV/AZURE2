@@ -61,25 +61,34 @@ class FittingTab : public QWidget {
 
  private slots:
   void parameterItemChanged(QTableWidgetItem* item);
-  void resetToDefaults();
   void loadSettings();
   void refreshParameters();
+  void onSegmentNormalizationChanged(int segmentIndex, double value);
+  void onSegmentEnergyShiftChanged(int segmentIndex, double value);
+  void onSegmentNormalizationErrorChanged(int segmentIndex, double error);
+  void onSegmentEnergyShiftErrorChanged(int segmentIndex, double error);
+  void onSegmentNormalizationVaryChanged(int segmentIndex, bool vary);
+  void onSegmentEnergyShiftVaryChanged(int segmentIndex, bool vary);
 
  private:
   void setupParameterTable(QTableWidget* table, const QString& title);
   void addParameterRow(QTableWidget* table, const FittingParameter& param);
   void updateParameterFromTable(const QString& paramName, int column, const QVariant& value);
   void updateParameterInOtherTabs(const QString& paramName, const FittingParameter& param);
+  void updateParameterTableValue(const QString& paramName, double value);
+  void updateParameterTableError(const QString& paramName, double error);
+  void updateParameterTableCheckbox(const QString& paramName, bool checked);
   void applyParameterSettings();
+  QString findMatchingParameterKey(const FittingParameter& param, const QStringList& savKeys);
   double convertReducedToPhysical(double reducedWidth, int levelIndex, int channelIndex);
   double convertPhysicalToReduced(double physicalWidth, int levelIndex, int channelIndex);
+  double transformRWAParameterToPhysical(const QString& paramName, double rwaValue);
 
   QTabWidget* paramTabWidget;
   QTableWidget* levelParamsTable;
   QTableWidget* normParamsTable;
   QTableWidget* shiftParamsTable;
   
-  QPushButton* resetButton;
   QPushButton* refreshButton;
   QPushButton* loadButton;
   

@@ -46,6 +46,14 @@ class SegmentsDataModel : public QAbstractTableModel {
   void setPairsModel(PairsModel* model);
   QString getReactionLabel(const QModelIndex &index);
 
+ signals:
+  void normalizationChanged(int segmentIndex, double value);
+  void energyShiftChanged(int segmentIndex, double value);
+  void normalizationErrorChanged(int segmentIndex, double error);
+  void energyShiftErrorChanged(int segmentIndex, double error);
+  void normalizationVaryChanged(int segmentIndex, bool vary);
+  void energyShiftVaryChanged(int segmentIndex, bool vary);
+
  private:
   QList<SegmentsDataData> segDataLineList;  
   PairsModel* pairsModel;

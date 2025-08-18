@@ -191,14 +191,38 @@ bool SegmentsDataModel::setData(const QModelIndex &index, const QVariant &value,
     else if(index.column() == 6) tempData.highAngle=value.toDouble();
     else if(index.column() == 7) tempData.dataType=value.toInt();
     else if(index.column() == 8) tempData.dataFile=value.toString();
-    else if(index.column() == 9) tempData.dataNorm=value.toDouble();
-    else if(index.column() == 10) tempData.dataNormError=value.toDouble();
-    else if(index.column() == 11) tempData.varyNorm=value.toInt();
+    else if(index.column() == 9) {
+      tempData.dataNorm=value.toDouble();
+      // Emit signal for normalization change
+      emit normalizationChanged(row, value.toDouble());
+    }
+    else if(index.column() == 10) {
+      tempData.dataNormError=value.toDouble();
+      // Emit signal for normalization error change
+      emit normalizationErrorChanged(row, value.toDouble());
+    }
+    else if(index.column() == 11) {
+      tempData.varyNorm=value.toInt();
+      // Emit signal for norm vary flag change
+      emit normalizationVaryChanged(row, value.toInt() == 1);
+    }
     else if(index.column() == 12) tempData.phaseJ=value.toDouble();
     else if(index.column() == 13) tempData.phaseL=value.toInt();
-    else if(index.column() == 14) tempData.energyShift=value.toDouble();
-    else if(index.column() == 15) tempData.energyShiftError=value.toDouble();
-    else if(index.column() == 16) tempData.varyEnergyShift=value.toInt();
+    else if(index.column() == 14) {
+      tempData.energyShift=value.toDouble();
+      // Emit signal for energy shift change
+      emit energyShiftChanged(row, value.toDouble());
+    }
+    else if(index.column() == 15) {
+      tempData.energyShiftError=value.toDouble();
+      // Emit signal for energy shift error change
+      emit energyShiftErrorChanged(row, value.toDouble());
+    }
+    else if(index.column() == 16) {
+      tempData.varyEnergyShift=value.toInt();
+      // Emit signal for energy shift vary flag change
+      emit energyShiftVaryChanged(row, value.toInt() == 1);
+    }
     else return false;
 
     segDataLineList.replace(row,tempData);

@@ -45,6 +45,9 @@ class AZURESetup : public QMainWindow {
   Config& GetConfig();
   void open(QString filename);
   void saveProject() { save(); } // Public wrapper for MCMCTab to use
+  
+  // Convert RWA parameter to physical value using proper R-Matrix transformation
+  double ConvertRWAToPhysical(const QString& paramName, double rwaValue);
 
  public slots:
   void SaveAndRun();

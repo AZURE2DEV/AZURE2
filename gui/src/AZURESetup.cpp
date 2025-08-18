@@ -20,6 +20,9 @@
 #include "EditOptionsDialog.h"
 #include "AZUREMainThread.h"
 #include "AboutAZURE2Dialog.h"
+#include "CNuc.h"
+#include "EData.h"
+#include "AZUREParams.h"
 
 #ifdef USE_QWT
 #include "PlotTab.h"
@@ -1160,4 +1163,86 @@ void AZURESetup::openWebsite() {
 			     tr("AZURE2 could not access your web browser.  "
 				"Please navitgate to https://azure.nd.edu/ "
 				"to visit the website."));
+}
+
+double AZURESetup::ConvertRWAToPhysical(const QString& paramName, double rwaValue) {
+  // Convert RWA parameter to physical value using proper R-Matrix transformation
+  // This is the inverse of ParameterLimitsManager::ConvertPhysicalLimitToReduced
+  
+  try {
+    // Create compound nucleus and data objects
+    CNuc* compound = new CNuc();
+    EData* data = new EData();
+    
+    // Fill compound nucleus from current GUI configuration
+    if(compound->Fill(config) == -1) {
+      delete compound;
+      delete data;
+      return rwaValue; // Return original value if compound creation fails
+    }
+    
+    // Fill data object if needed for parameter context
+    if(config.paramMask & Config::CALCULATE_WITH_DATA) {
+      if(data->Fill(config, compound) == -1) {
+        delete compound;
+        delete data;
+        return rwaValue;
+      }
+    } else {
+      if(data->MakePoints(config, compound) == -1) {
+        delete compound;
+        delete data;
+        return rwaValue;
+      }
+    }
+    
+    // Initialize compound nucleus
+    compound->Initialize(config);
+    
+    // Create parameter objects
+    AZUREParams params;
+    compound->FillMnParams(params.GetMinuitParams());
+    data->FillMnParams(params.GetMinuitParams());
+    
+    // Find the parameter index
+    int paramIndex = -1;
+    std::string paramNameStd = paramName.toStdString();
+    for (int i = 0; i < params.GetMinuitParams().Params().size(); ++i) {
+      if (params.GetMinuitParams().Parameter(i).GetName() == paramNameStd) {
+        paramIndex = i;
+        break;
+      }
+    }
+    
+    if (paramIndex == -1) {
+      delete compound;
+      delete data;
+      return rwaValue; // Parameter not found
+    }
+    
+    // Get current RWA parameters and set our specific value
+    vector_r rwaParams = params.GetMinuitParams().Params();
+    rwaParams[paramIndex] = rwaValue;
+    
+    // Fill compound with RWA parameters and transform to physical
+    compound->FillCompoundFromParams(rwaParams);
+    compound->CalcShiftFunctions(config);
+    compound->TransformOut(config);
+    
+    // Get the transformed (physical) parameters
+    vector_r physicalParams = compound->GetTransformParams(config);
+    
+    double result = rwaValue; // Default fallback
+    if (paramIndex < physicalParams.size()) {
+      result = physicalParams[paramIndex];
+    }
+    
+    delete compound;
+    delete data;
+    
+    return result;
+    
+  } catch(...) {
+    return rwaValue; // Return original value on any error
+  }
 }
