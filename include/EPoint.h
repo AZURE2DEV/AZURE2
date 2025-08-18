@@ -117,6 +117,7 @@ class EPoint {
   void AddECAmplitude(int,int,complex,double);
   void Calculate(CNuc*,const Config &configure,EPoint* parent=NULL, int subPointNum=0);
   void SetMap(int,int);
+  void ClearMapping();
   void AddLocalMappedPoint(EPoint*);
   void ClearLocalMappedPoints();
   void SetTargetEffectNum(int);
@@ -140,6 +141,7 @@ class EPoint {
   bool is_ang_dist_;
   int entrance_key_;
   int exit_key_;
+  int segment_key_;
   int l_value_;
   int targetEffectNum_;
   int max_ang_dist_order_;

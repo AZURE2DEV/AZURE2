@@ -191,8 +191,6 @@ void AddSegDataDialog::dataTypeChanged(int index) {
   } else {
     lowAngleText->setEnabled(false);
     highAngleText->setEnabled(false);
-    lowAngleText->setText("0");
-    highAngleText->setText("180");
   }
   if(index==3) {
     exitPairIndexSpin->setVisible(false);

@@ -4,7 +4,6 @@
 #include "Config.h"
 #include "ReactionRate.h"
 #include "ParameterLimitsManager.h"
-#include "ECIntegralCache.h"
 #include "ECAmplitudeCache.h"
 #include "Minuit2/MnPrint.h"
 #include "GSLException.h"
@@ -92,7 +91,11 @@ int AZUREMain::operator()(){
     // Initialize shared EC amplitude cache for interpolation
     if(configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {
       InitializeECAmplitudeCache();
-      configure().outStream << "Initialized shared EC amplitude cache..." << std::endl;
+      // Clear cache to ensure fresh start for this calculation
+      if(g_ecAmplitudeCache) {
+        g_ecAmplitudeCache->Clear();
+      }
+      configure().outStream << "Initialized and cleared EC amplitude cache..." << std::endl;
     }
     
     //Initialize data object
@@ -101,13 +104,6 @@ int AZUREMain::operator()(){
 			  << "Calculation was aborted." << std::endl;
       return -1;
     }
-
-    // ECIntegral cache pre-population disabled - using simple EC amplitude interpolation instead
-    // The EC amplitudes are cached with their energies and interpolated directly
-    // if((configure().paramMask & Config::USE_EXTERNAL_CAPTURE) && g_ecIntegralCache) {
-    //   configure().outStream << "Pre-populating EC integral cache..." << std::endl;
-    //   g_ecIntegralCache->PopulateCacheForData(data(), compound(), configure());
-    // }
 
     // Create ParameterLimitsManager and apply settings
     configure().outStream << "Applying parameter settings with Parameter Manager..." << std::endl;

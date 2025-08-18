@@ -82,6 +82,7 @@ void ParameterLimitsManager::ApplyParameterSetting(const std::string& paramName,
     
     // Apply limits if they are not both zero (0,0 means free parameter)
     if(setting.lowerLimit != 0.0 || setting.upperLimit != 0.0) {
+      std::cout << "Setting limits to " << setting.lowerLimit << " " << setting.upperLimit << std::endl;
       double lower = setting.lowerLimit;
       double upper = setting.upperLimit;
 

@@ -7,7 +7,6 @@
 #include <chrono>
 #include <thread>
 #include "GSLException.h"
-#include "ECIntegralCache.h"
 #endif
 
 MCMCWorker::MCMCWorker(const MCMCSamplingParameters& params, const Config& config)
@@ -64,14 +63,12 @@ void MCMCWorker::runSampling() {
     try {
         // Initialize EC Integral caching system (like AZUREMainThreadWorker)
         if (config_.paramMask & Config::USE_EXTERNAL_CAPTURE) {
-            CleanupECIntegralCache();
             std::string cacheFile;
             if (config_.paramMask & Config::CALCULATE_WITH_DATA) {
                 cacheFile = config_.outputdir + "intEC_cache.dat";
             } else {
                 cacheFile = config_.outputdir + "intEC_cache.extrap";
-            }
-            InitializeECIntegralCache(cacheFile);    
+            }   
         }
         
         // Initialize CNuc and EData objects (like AZUREAPI::Initialize)
@@ -215,9 +212,9 @@ void MCMCWorker::runSampling() {
         emitLogMessage(QString("MCMC sampling completed successfully. Generated %1 samples.")
                       .arg(samples.size()));
         
-        // Cleanup EC Integral caching system (like AZUREMainThreadWorker)
+        // Cleanup EC Amplitude caching system (like AZUREMainThreadWorker)
         if (config_.paramMask & Config::USE_EXTERNAL_CAPTURE) {
-            CleanupECIntegralCache();
+            CleanupECAmplitudeCache();
         }
         
         emit samplingComplete(samples);

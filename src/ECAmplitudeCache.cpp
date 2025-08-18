@@ -1,17 +1,15 @@
 #include "ECAmplitudeCache.h"
-#include "ECIntegral.h"
-#include "ECIntegralCache.h"
-#include "CNuc.h"
-#include "Config.h"
-#include "CoulFunc.h"
 #include <algorithm>
 #include <iostream>
+#include <fstream>
+#include <iomanip>
 #include <cmath>
 
 // Global cache instance
 ECAmplitudeCache* g_ecAmplitudeCache = nullptr;
 
 void ECAmplitudeCache::AddAmplitude(const AmplitudeKey& key, double energy, complex amplitude) {
+    std::lock_guard<std::mutex> lock(cache_mutex_);
     auto& data = cache_[key];
     data.energies.push_back(energy);
     data.amplitudes.push_back(amplitude);
@@ -27,16 +25,13 @@ void ECAmplitudeCache::AddAmplitude(const AmplitudeKey& key, double energy, comp
         data.energies[i] = combined[i].first;
         data.amplitudes[i] = combined[i].second;
     }
+
 }
 
-complex ECAmplitudeCache::GetInterpolatedAmplitude(const AmplitudeKey& key, double energy, bool calculateIfMissing, 
-                                                  CNuc* theCNuc, const Config* configure) const {
+complex ECAmplitudeCache::GetInterpolatedAmplitude(const AmplitudeKey& key, double energy) const {
+    std::lock_guard<std::mutex> lock(cache_mutex_);
     auto it = cache_.find(key);
     if (it == cache_.end()) {
-        if (calculateIfMissing && theCNuc && configure) {
-            // Calculate and add the missing amplitude
-            return CalculateAndAddAmplitude(key, energy, theCNuc, *configure);
-        }
         return complex(0.0, 0.0);
     }
     
@@ -47,45 +42,78 @@ complex ECAmplitudeCache::GetInterpolatedAmplitude(const AmplitudeKey& key, doub
     
     // If we only have one data point, return it
     if (data.energies.size() == 1) {
-        return data.amplitudes[0];
+        complex result = data.amplitudes[0];
+        
+        // Debug output to file for this key
+        std::string filename = "ec_cache_debug_k" + std::to_string(key.kGroupNum) + 
+                               "_ecm" + std::to_string(key.ecMGroupNum) + 
+                               "_ent" + std::to_string(key.entranceKey) + 
+                               "_exit" + std::to_string(key.exitKey) + 
+                               "_seg" + std::to_string(key.segmentKey) + ".dat";
+        std::ofstream debugFile(filename, std::ios::app);
+        debugFile << std::scientific << std::setprecision(12);
+        debugFile << energy << " " << result.real() << " " << result.imag() 
+                  << " " << "SINGLE_POINT" << std::endl;
+        debugFile.close();
+        
+        return result;
     }
     
     // Find the closest energy points for interpolation
+    // Since energies are sorted, we need to find the bracketing indices
     int lowerIndex = -1;
     int upperIndex = -1;
     
+    // First check for exact match
     for (int i = 0; i < data.energies.size(); i++) {
-        if (data.energies[i] <= energy) {
-            lowerIndex = i;
+        if (std::abs(data.energies[i] - energy) < 1e-10) {
+            // Exact match found
+            complex result = data.amplitudes[i];
+            
+            return result;
         }
-        if (data.energies[i] >= energy && upperIndex == -1) {
-            upperIndex = i;
+    }
+    
+    // Find bracketing indices
+    for (int i = 0; i < data.energies.size(); i++) {
+        if (data.energies[i] < energy) {
+            lowerIndex = i;  // Keep updating to get the highest index < energy
+        } else if (data.energies[i] > energy && upperIndex == -1) {
+            upperIndex = i;  // Take the first index > energy
             break;
         }
     }
     
-    // Handle edge cases
+    // Handle edge cases - simple extrapolation
     if (lowerIndex == -1) {
-        // Energy is below all cached energies
-        if (calculateIfMissing && theCNuc && configure) {
-            // Calculate and add the missing amplitude
-            std::cout << "ECAmplitudeCache: Energy below cached data, calculating amplitude." << std::endl;
-            return CalculateAndAddAmplitude(key, energy, theCNuc, *configure);
-        }
-        return data.amplitudes[0];
+        // Energy is below all cached energies - use first value
+        complex result = data.amplitudes[0];
+        
+        return result;
     }
     if (upperIndex == -1) {
-        // Energy is above all cached energies
-        if (calculateIfMissing && theCNuc && configure) {
-            // Calculate and add the missing amplitude
-            std::cout << "ECAmplitudeCache: Energy above cached data, calculating amplitude." << std::endl;
-            return CalculateAndAddAmplitude(key, energy, theCNuc, *configure);
-        }
-        return data.amplitudes[data.energies.size() - 1];
+        // Energy is above all cached energies - use last value
+        complex result = data.amplitudes[data.energies.size() - 1];
+        
+        return result;
     }
-    if (lowerIndex == upperIndex) {
-        // Exact match
-        return data.amplitudes[lowerIndex];
+    // Check if we have valid bracketing indices for interpolation
+    if (lowerIndex == -1 || upperIndex == -1) {
+        // We should have handled these cases above, but as a safety check
+        complex result;
+        std::string type;
+        if (lowerIndex != -1) {
+            result = data.amplitudes[lowerIndex];  // Use closest lower value
+            type = "FALLBACK_LOWER";
+        } else if (upperIndex != -1) {
+            result = data.amplitudes[upperIndex];  // Use closest upper value
+            type = "FALLBACK_UPPER";
+        } else {
+            result = data.amplitudes[0];  // Fallback
+            type = "FALLBACK_FIRST";
+        }
+        
+        return result;
     }
     
     // Linear interpolation between two points
@@ -94,27 +122,30 @@ complex ECAmplitudeCache::GetInterpolatedAmplitude(const AmplitudeKey& key, doub
     complex amp1 = data.amplitudes[lowerIndex];
     complex amp2 = data.amplitudes[upperIndex];
     
-    return Interpolate(energy, e1, e2, amp1, amp2);
+    complex result = Interpolate(energy, e1, e2, amp1, amp2);
+
+    return result;
 }
 
 bool ECAmplitudeCache::HasData(const AmplitudeKey& key) const {
+    std::lock_guard<std::mutex> lock(cache_mutex_);
     auto it = cache_.find(key);
     return it != cache_.end() && !it->second.energies.empty();
 }
 
 void ECAmplitudeCache::Clear() {
+    std::lock_guard<std::mutex> lock(cache_mutex_);
     cache_.clear();
 }
 
 void ECAmplitudeCache::PrintStats() const {
-    std::cout << "ECAmplitudeCache Statistics:" << std::endl;
-    std::cout << "  Number of cached keys: " << cache_.size() << std::endl;
+    std::lock_guard<std::mutex> lock(cache_mutex_);
     
     int totalPoints = 0;
     for (const auto& pair : cache_) {
         totalPoints += static_cast<int>(pair.second.energies.size());
     }
-    std::cout << "  Total cached amplitude points: " << totalPoints << std::endl;
+
 }
 
 complex ECAmplitudeCache::Interpolate(double energy, double e1, double e2, complex amp1, complex amp2) const {
@@ -127,118 +158,6 @@ complex ECAmplitudeCache::Interpolate(double energy, double e1, double e2, compl
     return amp1 + t * (amp2 - amp1);
 }
 
-complex ECAmplitudeCache::CalculateAndAddAmplitude(const AmplitudeKey& key, double energy, 
-                                                 CNuc* theCNuc, const Config& configure) const {
-    // This is a complex calculation that mirrors what's done in EPoint::CalculateECAmplitudes
-    // We need to find the appropriate parameters and calculate the EC amplitude
-    
-    // Find entrance pair
-    int aa = theCNuc->GetPairNumFromKey(key.entranceKey);
-    if (!theCNuc->GetPair(aa)->IsEntrance()) {
-        return complex(0.0, 0.0);
-    }
-    PPair* entrancePair = theCNuc->GetPair(aa);
-    
-    // Find corresponding EC pathway
-    for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
-        for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
-            if (theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) {
-                ALevel* ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
-                int ir = theCNuc->GetPairNumFromKey(key.exitKey);
-                if (ecLevel->GetECPairNum() == ir) {
-                    // Found matching level, now find the specific pathway
-                    for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
-                        if (k != key.kGroupNum) continue;
-                        
-                        KGroup* theKGroup = entrancePair->GetDecay(ir)->GetKGroup(k);
-                        for (int ecm = 1; ecm <= theKGroup->NumECMGroups(); ecm++) {
-                            if (ecm != key.ecMGroupNum) continue;
-                            
-                            ECMGroup* theECMGroup = theKGroup->GetECMGroup(ecm);
-                            
-                            // Calculate entrance phase
-                            CoulFunc theCoulombFunction(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-                            struct CoulWaves coul = theCoulombFunction(theECMGroup->GetL(), entrancePair->GetChRad(), energy);
-                            
-                            double eta = sqrt(uconv/2.) * fstruc * entrancePair->GetZ(1) * entrancePair->GetZ(2) *
-                                       sqrt(entrancePair->GetRedMass() / energy);
-                            
-                            complex expCP(1.0, 0.0);
-                            for (int ll = 1; ll <= theECMGroup->GetL(); ll++) {
-                                expCP *= complex((double)ll / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)),
-                                               eta / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)));
-                            }
-                            
-                            complex expHSP(coul.G / sqrt(pow(coul.F, 2.0) + pow(coul.G, 2.0)),
-                                         -coul.F / sqrt(pow(coul.F, 2.0) + pow(coul.G, 2.0)));
-                            
-                            double inEnergy = energy + entrancePair->GetSepE() + entrancePair->GetExE();
-                            double levelEnergy = ecLevel->GetE();
-                            double sqrtGammaPene = pow((inEnergy - levelEnergy) / hbarc, theECMGroup->GetMult() + 0.5);
-                            
-                            // Get integral parameters
-                            AChannel* theFinalChannel = theCNuc->GetJGroup(j)->GetChannel(theECMGroup->GetFinalChannel());
-                            PPair* theFinalPair = theCNuc->GetPair(theFinalChannel->GetPairNum());
-                            
-                            int theInitialLValue;
-                            double theInitialSValue;
-                            if (theECMGroup->IsChannelCapture()) {
-                                MGroup* theChanCapMGroup = entrancePair->GetDecay(theECMGroup->GetChanCapDecay())->
-                                    GetKGroup(theECMGroup->GetChanCapKGroup())->GetMGroup(theECMGroup->GetChanCapMGroup());
-                                theInitialLValue = theCNuc->GetJGroup(theChanCapMGroup->GetJNum())->
-                                    GetChannel(theChanCapMGroup->GetChpNum())->GetL();
-                                theInitialSValue = theCNuc->GetJGroup(theChanCapMGroup->GetJNum())->
-                                    GetChannel(theChanCapMGroup->GetChpNum())->GetS();
-                            } else {
-                                theInitialLValue = theECMGroup->GetL();
-                                theInitialSValue = theKGroup->GetS();
-                            }
-                            
-                            // Calculate integral using ECIntegralCache (with forceAdd=true)
-                            complex integrals;
-                            if (g_ecIntegralCache) {
-                                ECIntegralCache::IntegralKey integralKey;
-                                integralKey.liValue = theInitialLValue;
-                                integralKey.lfValue = theFinalChannel->GetL();
-                                integralKey.siValue = theInitialSValue;
-                                integralKey.sfValue = theFinalChannel->GetS();
-                                integralKey.jInitial = theECMGroup->GetJ();
-                                integralKey.jFinal = theCNuc->GetJGroup(j)->GetJ();
-                                integralKey.multL = theECMGroup->GetMult();
-                                integralKey.radType = theECMGroup->GetRadType();
-                                integralKey.bindingEnergy = levelEnergy;
-                                integralKey.isChannelCapture = theECMGroup->IsChannelCapture();
-                                integralKey.separationEnergy = theFinalPair->GetSepE() + theFinalPair->GetExE();
-                                
-                                // Use forceAdd=true to add calculated values to integral cache
-                                integrals = g_ecIntegralCache->GetIntegral(integralKey, inEnergy, theFinalPair, configure, true);
-                            } else {
-                                // Fall back to direct calculation
-                                ECIntegral theECIntegral(theFinalPair, configure);
-                                integrals = theECIntegral(theInitialLValue, theFinalChannel->GetL(),
-                                                        theInitialSValue, theFinalChannel->GetS(),
-                                                        theECMGroup->GetJ(), theCNuc->GetJGroup(j)->GetJ(),
-                                                        theECMGroup->GetMult(), theECMGroup->GetRadType(),
-                                                        inEnergy, levelEnergy,
-                                                        theECMGroup->IsChannelCapture());
-                            }
-                            
-                            // Calculate final EC amplitude
-                            complex ecAmplitude = expCP * expHSP * sqrtGammaPene * integrals;
-                            
-                            // Add to cache
-                            const_cast<ECAmplitudeCache*>(this)->AddAmplitude(key, energy, ecAmplitude);
-                            
-                            return ecAmplitude;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    return complex(0.0, 0.0);
-}
 
 // Global functions
 void InitializeECAmplitudeCache() {
@@ -246,6 +165,9 @@ void InitializeECAmplitudeCache() {
         delete g_ecAmplitudeCache;
     }
     g_ecAmplitudeCache = new ECAmplitudeCache();
+    
+    // Clear any existing cache files to ensure clean start (optional)
+    // std::cout << "ECAmplitudeCache: Initialized fresh cache (no file reading)" << std::endl;
 }
 
 void CleanupECAmplitudeCache() {

@@ -2,7 +2,6 @@
 #include "AZUREParams.h"
 
 #include "GSLException.h"
-#include "ECIntegralCache.h"
 
 #include "Config.h"
 #include "CNuc.h"
@@ -36,7 +35,6 @@ bool AZUREAPI::Initialize( ){
   } else {
     cacheFile = configure().outputdir + "intEC_cache.extrap";
   }
-  InitializeECIntegralCache(cacheFile);
 
   // FIXME: It crashes on Linux (but fine on Mac)
   //if( compound_ != nullptr ) delete compound_;
@@ -489,21 +487,11 @@ void AZUREAPI::SetExtrap( ) {
 // Set radius to a fixed value
 void AZUREAPI::SetRadius( int idx, double r ) {
   
-  CleanupECIntegralCache();
-  
   if( compound_ != nullptr ) delete compound_;
   if( data_ != nullptr ) delete data_;
 
   compound_ = new CNuc;
   data_     = new EData;
-  
-  std::string cacheFile;
-  if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
-    cacheFile = configure().outputdir + "intEC_cache.dat";
-  } else {
-    cacheFile = configure().outputdir + "intEC_cache.extrap";
-  }
-  InitializeECIntegralCache(cacheFile);
 
   std::pair<int,double> pair = std::make_pair( idx, r );
 

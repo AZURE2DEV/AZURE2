@@ -443,6 +443,44 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
       
       // Update lab energy
       point->SetLabEnergy(shiftedEnergy);
+      
+      // Recalculate all energy-dependent parameters to ensure calculations use the shifted energy
+      if(theCNuc && configure) {
+        PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetEntranceKey()));
+        PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetExitKey()));
+        
+        // Convert energies (replicate logic from ESegment::Fill)
+        if(entrancePair->GetPType()==20) {
+          point->ConvertDecayEnergy(exitPair);
+        } else {
+          point->ConvertLabEnergy(entrancePair);
+        }
+        
+        // Convert angles and cross sections if needed (replicate logic from ESegment::Fill)
+        if(exitPair->GetPType()==0 && IsDifferential() && !IsPhase() && !IsCMDifferential()) {
+          if(GetEntranceKey()==GetExitKey()) {
+            point->ConvertLabAngle(entrancePair);
+          } else {
+            point->ConvertLabAngle(entrancePair,exitPair,*configure);
+          }
+          point->ConvertCrossSection(entrancePair,exitPair);
+        }
+        
+        // Convert gamma angles and cross sections if needed (replicate logic from ESegment::Fill) 
+        if(exitPair->GetPType()==10 && IsDifferential() && !IsPhase() && !IsCMDifferential()) {
+          point->ConvertLabAngleGammas(entrancePair);
+          point->ConvertCrossSectionGammas(entrancePair);
+        }
+        
+        // Recalculate energy-dependent physics values for shifted energy  
+        point->CalcEDependentValues(theCNuc, *configure);
+        
+        // After energy shifts, mapped points are no longer at identical energies and must be recalculated
+        if(point->IsMapped()) {
+          point->ClearMapping();
+        }
+
+      }
 
     }
   }

@@ -1,6 +1,5 @@
 #include "AZUREMCMCThread.h"
 #include "MCMCTab.h"
-#include "ECIntegralCache.h"
 #include "ECAmplitudeCache.h"
 
 #ifdef USE_MCMC
@@ -45,17 +44,7 @@ void AZUREMCMCWorker::run() {
         // Initialize caching systems
         if (config_.paramMask & Config::USE_EXTERNAL_CAPTURE) {
             // Cleanup any existing caches
-            CleanupECIntegralCache();
             CleanupECAmplitudeCache();
-            
-            // Initialize ECIntegral cache with proper file
-            std::string cacheFile;
-            if (config_.paramMask & Config::CALCULATE_WITH_DATA) {
-                cacheFile = config_.outputdir + "intEC_cache.dat";
-            } else {
-                cacheFile = config_.outputdir + "intEC_cache.extrap";
-            }
-            InitializeECIntegralCache(cacheFile);
             
             // Initialize ECAmplitude cache
             InitializeECAmplitudeCache();
@@ -254,7 +243,6 @@ void AZUREMCMCWorker::run() {
         
         // Cleanup caching systems
         if (config_.paramMask & Config::USE_EXTERNAL_CAPTURE) {
-            CleanupECIntegralCache();
             CleanupECAmplitudeCache();
         }
         

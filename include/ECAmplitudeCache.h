@@ -3,6 +3,7 @@
 
 #include <map>
 #include <vector>
+#include <mutex>
 #include "Constants.h"
 
 /*!
@@ -19,12 +20,14 @@ public:
         int ecMGroupNum;
         int entranceKey;
         int exitKey;
+        int segmentKey;  // Add segment identifier to prevent cross-segment contamination
         
         bool operator<(const AmplitudeKey& other) const {
             if (kGroupNum != other.kGroupNum) return kGroupNum < other.kGroupNum;
             if (ecMGroupNum != other.ecMGroupNum) return ecMGroupNum < other.ecMGroupNum;
             if (entranceKey != other.entranceKey) return entranceKey < other.entranceKey;
-            return exitKey < other.exitKey;
+            if (exitKey != other.exitKey) return exitKey < other.exitKey;
+            return segmentKey < other.segmentKey;
         }
     };
     
@@ -38,6 +41,7 @@ public:
     
 private:
     std::map<AmplitudeKey, AmplitudeData> cache_;
+    mutable std::mutex cache_mutex_;  // Protect cache from concurrent access
     
 public:
     /*!
@@ -48,10 +52,9 @@ public:
     /*!
      * Get interpolated amplitude at the specified energy
      * Returns complex(0,0) if no data available for the key
-     * If calculateIfMissing is true, will attempt to calculate and cache missing values
+     * Simple interpolation only - no calculation
      */
-    complex GetInterpolatedAmplitude(const AmplitudeKey& key, double energy, bool calculateIfMissing = false, 
-                                   class CNuc* theCNuc = nullptr, const class Config* configure = nullptr) const;
+    complex GetInterpolatedAmplitude(const AmplitudeKey& key, double energy) const;
     
     /*!
      * Check if we have data for a specific key
@@ -67,13 +70,6 @@ public:
      * Get cache statistics
      */
     void PrintStats() const;
-    
-    /*!
-     * Calculate and add a missing amplitude value to cache
-     * This method computes the full EC amplitude including integrals
-     */
-    complex CalculateAndAddAmplitude(const AmplitudeKey& key, double energy, 
-                                   class CNuc* theCNuc, const class Config& configure) const;
     
 private:
     /*!

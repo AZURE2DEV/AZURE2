@@ -1,7 +1,7 @@
 set(AZURE2_SOURCES AChannel.cpp CoulFunc.cpp GenMatrixFunc.cpp
 KLGroup.cpp ALevel.cpp Decay.cpp AngCoeff.cpp MGroup.cpp
 AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
-AZURE2.cpp ECIntegral.cpp ECIntegralCache.cpp ECAmplitudeCache.cpp MatrixInv.cpp PPair.cpp AZURECalc.cpp
+AZURE2.cpp ECIntegral.cpp ECAmplitudeCache.cpp MatrixInv.cpp PPair.cpp AZURECalc.cpp
 ECMGroup.cpp ReactionRate.cpp AZUREMain.cpp EData.cpp ShftFunc.cpp
 RMatrixFunc.cpp AZUREOutput.cpp  EDataIterator.cpp   TargetEffect.cpp
 AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp Equation.cpp

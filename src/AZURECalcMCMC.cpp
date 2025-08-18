@@ -782,7 +782,6 @@ bool AZURECalcMCMC::Initialize( ){
   } else {
     cacheFile = configure().outputdir + "intEC_cache.extrap";
   }
-  //InitializeECIntegralCache(cacheFile);
 
   // FIXME: It crashes on Linux (but fine on Mac)
   //if( compound_ != nullptr ) delete compound_;

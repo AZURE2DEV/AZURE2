@@ -2,6 +2,7 @@
 #include "CNuc.h"
 #include "Config.h"
 #include "EData.h"
+#include "ECAmplitudeCache.h"
 #include "ExtrapLine.h"
 #include "SegLine.h"
 #include "Minuit2/MnUserParameters.h"
@@ -1259,8 +1260,10 @@ void EData::FillNormsFromParams(const vector_r &p) {
 
 void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc* theCNuc, const Config* configure) {
   int i=GetEnergyShiftParamOffset();
+  int k = 0;
   if(data) {
     for(ESegmentIterator segment=data->GetSegments().begin();segment<data->GetSegments().end();segment++) {
+      k++;
       if(segment->IsVaryEnergyShift()) {
         segment->SetEnergyShift(p[i]); 
         segment->UpdatePointEnergiesWithShift(theCNuc, configure);
@@ -1321,7 +1324,8 @@ EData *EData::Clone() const {
       EnergyMap pointMap = data.point()->GetMap();
       dataCopy->GetSegment(pointMap.segment)->GetPoint(pointMap.point)->AddLocalMappedPoint(&*data.point());
     }
-  }  
+  }
+  
   return dataCopy;
 }
 

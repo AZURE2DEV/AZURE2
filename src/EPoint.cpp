@@ -6,7 +6,6 @@
 #include "DataLine.h"
 #include "ECIntegral.h"
 #include "ECAmplitudeCache.h"
-#include "ECIntegralCache.h"
 #include "EData.h"
 #include "ESegment.h"
 #include "RMatrixFunc.h"
@@ -38,6 +37,7 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   lab_energy_=shiftedEnergy;
   excitation_energy_=dataLine.energy();
   parentSegment_=parent;
+  segment_key_=parent->GetSegmentKey();
   cm_crosssection_=dataLine.crossSection();
   cm_dcrosssection_=dataLine.error();
   lab_crosssection_=dataLine.crossSection();
@@ -77,6 +77,7 @@ EPoint::EPoint(double angle, double energy, ESegment* parent) {
   cm_energy_=energy;
   excitation_energy_=energy;
   parentSegment_=parent;
+  segment_key_=parent->GetSegmentKey();
   cm_crosssection_=0.;
   cm_dcrosssection_=0.1;
   lab_crosssection_=0.;
@@ -483,70 +484,39 @@ complex EPoint::GetECAmplitude(int kGroupNum, int ecMGroupNum) const {
 
 /*!
  * Returns the external capture amplitude with current energy (including shifts)
- * This method interpolates between existing cached EC amplitudes based on energy.
+ * This method uses the ECAmplitudeCache to get interpolated values.
  */
 complex EPoint::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *theCNuc, const Config& configure) const {
   // Check if we have valid indices
-  if(kGroupNum < 1 || kGroupNum > ec_amplitudes_.size()) {
-    return complex(0.0, 0.0);
-  }
-  if(ecMGroupNum < 1 || ecMGroupNum > ec_amplitudes_[kGroupNum-1].size()) {
-    return complex(0.0, 0.0);
-  }
-  
-  // Check if we have energy data for interpolation
-  if(ec_energies_.size() < kGroupNum || ec_energies_[kGroupNum-1].size() < ecMGroupNum) {
-    // Fall back to cached amplitude if no energy data
-    std::cout << "ECAmplitudeWithShift: No energy data for kGroupNum: " 
-              << kGroupNum << ", ecMGroupNum: " << ecMGroupNum << std::endl;
-    return GetECAmplitude(kGroupNum, ecMGroupNum);
-  }
+  //if(kGroupNum < 1 || kGroupNum > ec_amplitudes_.size()) {
+  //  return complex(0.0, 0.0);
+  //}
+  //if(ecMGroupNum < 1 || ecMGroupNum > ec_amplitudes_[kGroupNum-1].size()) {
+  //  return complex(0.0, 0.0);
+  //}
   
   // Get current energy including shifts
   double currentEnergy = this->GetCMEnergy();
   
-  // Get the specific energy and amplitude for this (kGroupNum, ecMGroupNum) combination
-  double cachedEnergy = ec_energies_[kGroupNum-1][ecMGroupNum-1];
-  complex cachedAmplitude = ec_amplitudes_[kGroupNum-1][ecMGroupNum-1];
-  
-  // If the current energy is close to the cached energy, use cached amplitude
-  double energyTolerance = 0.001; // 1 keV tolerance
-  if(std::abs(currentEnergy - cachedEnergy) < energyTolerance) {
-    return cachedAmplitude;
-  }
-
-  // Try to get interpolated amplitude from shared cache (with dynamic calculation)
+  // Use ECAmplitudeCache for interpolation at any energy
   if (g_ecAmplitudeCache) {
     ECAmplitudeCache::AmplitudeKey key;
     key.kGroupNum = kGroupNum;
     key.ecMGroupNum = ecMGroupNum;
     key.entranceKey = this->GetEntranceKey();
     key.exitKey = this->GetExitKey();
+    // Use segment key directly - same as used in EData::CalculateECAmplitudes
+    key.segmentKey = segment_key_;
     
-    // First try to get from cache, and if not available, calculate and add
-    complex interpolatedAmplitude = g_ecAmplitudeCache->GetInterpolatedAmplitude(key, currentEnergy, true, theCNuc, &configure);
-
-    // Calculate the exact amplitude if not found in cache
-    //complex interpolatedAmplitude = g_ecAmplitudeCache->CalculateAndAddAmplitude(key, currentEnergy, theCNuc, configure);
-
-    // If we got a non-zero amplitude or we have cached data, use it
-    if (interpolatedAmplitude != complex(0.0, 0.0) || g_ecAmplitudeCache->HasData(key)) {
-      return interpolatedAmplitude;
-    }
-    
-    // TODO: This is where a correct value can be calculated and added to the cache.
-    // The CalculateAndAddAmplitude method in ECAmplitudeCache performs the full
-    // EC amplitude calculation including the external capture integral computation.
-    // When called with calculateIfMissing=true, it will:
-    // 1. Find the appropriate ECMGroup and decay pathway
-    // 2. Calculate entrance phase shifts and penetrabilities  
-    // 3. Compute the external capture integral (using ECIntegralCache with forceAdd=true)
-    // 4. Combine all factors to get the final EC amplitude
-    // 5. Add the result to both caches for future interpolation
+    // Simple interpolation from cache
+    complex interpolatedAmplitude = g_ecAmplitudeCache->GetInterpolatedAmplitude(key, currentEnergy);
+    return interpolatedAmplitude;
   }
   
-  return cachedAmplitude;
+  // Fallback to original cached amplitude if no global cache available
+  return GetECAmplitude(kGroupNum, ecMGroupNum);
 }
+
 
 /*!
  * If a point is mapped, returns an EnergyMap structure containing the point to which it is mapped.
@@ -1265,6 +1235,7 @@ void EPoint::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude,
     key.ecMGroupNum = ecMGroupNum;
     key.entranceKey = this->GetEntranceKey();
     key.exitKey = this->GetExitKey();
+    key.segmentKey = segment_key_;
     g_ecAmplitudeCache->AddAmplitude(key, energy, ecAmplitude);
   }
 }
@@ -1344,6 +1315,18 @@ void EPoint::SetMap(int segmentNum, int pointNum) {
   is_mapped_=true;
   energy_map_.segment=segmentNum;
   energy_map_.point=pointNum;
+}
+
+/*!
+ * Clears the mapping status of the point, forcing it to be recalculated.
+ * Used when energies change (e.g., after energy shifts during fitting) and
+ * mapped points are no longer at identical energies.
+ */
+
+void EPoint::ClearMapping() {
+  is_mapped_=false;
+  energy_map_.segment=0;
+  energy_map_.point=0;
 }
 
 /*!

@@ -10,7 +10,6 @@
 #include "RunTab.h"
 #include "AZUREMain.h"
 #include "Config.h"
-#include "ECIntegralCache.h"
 #include "ECAmplitudeCache.h"
 #include <iostream>
 
@@ -27,7 +26,6 @@ Q_OBJECT
     // Initialize and cleanup caches for new calculations
     if (azureMain_.configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {
       // Cleanup any existing caches
-      CleanupECIntegralCache();
       CleanupECAmplitudeCache();
       
       // Initialize ECIntegral cache with proper file
@@ -37,7 +35,6 @@ Q_OBJECT
       } else {
         cacheFile = azureMain_.configure().outputdir + "intEC_cache.extrap";
       }
-      InitializeECIntegralCache(cacheFile);
       
       // Initialize ECAmplitude cache
       InitializeECAmplitudeCache();
@@ -47,7 +44,6 @@ Q_OBJECT
     
     // Cleanup caches after calculations
     if (azureMain_.configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {
-      CleanupECIntegralCache();
       CleanupECAmplitudeCache();
     }
     
