@@ -1246,3 +1246,114 @@ double AZURESetup::ConvertRWAToPhysical(const QString& paramName, double rwaValu
     return rwaValue; // Return original value on any error
   }
 }
+
+std::vector<double> AZURESetup::BatchConvertRWAToPhysical(const QStringList& paramNames, const std::vector<double>& rwaValues) {
+  std::vector<double> results;
+  
+  if(paramNames.size() != rwaValues.size()) {
+    // Return original values if sizes don't match
+    for(double val : rwaValues) {
+      results.push_back(val);
+    }
+    return results;
+  }
+  
+  try {
+    // Create compound nucleus and data objects ONCE
+    CNuc* compound = new CNuc();
+    EData* data = new EData();
+    
+    // Fill compound nucleus from current GUI configuration
+    if(compound->Fill(config) == -1) {
+      delete compound;
+      delete data;
+      // Return original values if compound creation fails
+      for(double val : rwaValues) {
+        results.push_back(val);
+      }
+      return results;
+    }
+    
+    // Fill data object if needed for parameter context
+    if(config.paramMask & Config::CALCULATE_WITH_DATA) {
+      if(data->Fill(config, compound) == -1) {
+        delete compound;
+        delete data;
+        for(double val : rwaValues) {
+          results.push_back(val);
+        }
+        return results;
+      }
+    } else {
+      if(data->MakePoints(config, compound) == -1) {
+        delete compound;
+        delete data;
+        for(double val : rwaValues) {
+          results.push_back(val);
+        }
+        return results;
+      }
+    }
+    
+    // Initialize compound nucleus
+    compound->Initialize(config);
+    
+    // Create parameter objects
+    AZUREParams params;
+    compound->FillMnParams(params.GetMinuitParams());
+    data->FillMnParams(params.GetMinuitParams());
+    
+    // Get current RWA parameters as base
+    vector_r rwaParams = params.GetMinuitParams().Params();
+    
+    // Find parameter indices and set values
+    std::vector<int> paramIndices;
+    for(int i = 0; i < paramNames.size(); i++) {
+      const QString& paramName = paramNames[i];
+      std::string paramNameStd = paramName.toStdString();
+      
+      int paramIndex = -1;
+      for (int j = 0; j < params.GetMinuitParams().Params().size(); ++j) {
+        if (params.GetMinuitParams().Parameter(j).GetName() == paramNameStd) {
+          paramIndex = j;
+          break;
+        }
+      }
+      
+      paramIndices.push_back(paramIndex);
+      if(paramIndex >= 0 && paramIndex < rwaParams.size()) {
+        rwaParams[paramIndex] = rwaValues[i];
+      }
+    }
+    
+    // Fill compound with ALL RWA parameters and transform to physical ONCE
+    compound->FillCompoundFromParams(rwaParams);
+    compound->CalcShiftFunctions(config);
+    compound->TransformOut(config);
+    
+    // Get the transformed (physical) parameters
+    vector_r physicalParams = compound->GetTransformParams(config);
+    
+    // Extract results for each requested parameter
+    for(int i = 0; i < paramIndices.size(); i++) {
+      int paramIndex = paramIndices[i];
+      if(paramIndex >= 0 && paramIndex < physicalParams.size()) {
+        results.push_back(physicalParams[paramIndex]);
+      } else {
+        results.push_back(rwaValues[i]); // Fallback to original value
+      }
+    }
+    
+    delete compound;
+    delete data;
+    
+    return results;
+    
+  } catch(...) {
+    // Return original values on any error
+    for(double val : rwaValues) {
+      results.push_back(val);
+    }
+    return results;
+  }
+}

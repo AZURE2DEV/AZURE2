@@ -48,6 +48,9 @@ class AZURESetup : public QMainWindow {
   
   // Convert RWA parameter to physical value using proper R-Matrix transformation
   double ConvertRWAToPhysical(const QString& paramName, double rwaValue);
+  
+  // Batch convert multiple RWA parameters to physical values (much more efficient)
+  std::vector<double> BatchConvertRWAToPhysical(const QStringList& paramNames, const std::vector<double>& rwaValues);
 
  public slots:
   void SaveAndRun();

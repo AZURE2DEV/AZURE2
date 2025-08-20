@@ -16,6 +16,7 @@
 #include <QRegExp>
 #include <cmath>
 #include <algorithm>
+#include <iostream>
 
 #include "FittingTab.h"
 #include "InfoDialog.h"
@@ -459,40 +460,80 @@ void FittingTab::loadSettings() {
             }
             file.close();
             
-            // Create lists of parameters and values to convert in batch
-            QStringList paramNamesToConvert;
-            QList<double> rwaValuesToConvert;
-            QList<QPair<int, QString>> parameterMapping; // (fittingParameters index, matchKey)
+            // Separate handling: RWA parameters (levels) vs direct assignment (norms/shifts)
+            QMap<QString, QPair<double, double>> rwaParamMap;
+            QList<QPair<int, QString>> levelParameterMapping; // For level parameters that need RWA conversion
             
-            // First pass: collect all parameters that need conversion
-            for(int i = 0; i < fittingParameters.size(); i++) {
-                FittingParameter& param = fittingParameters[i];
-                QString matchKey = findMatchingParameterKey(param, savParams.keys());
+            // Parse norms and shifts using segment names from .sav file structure
+            QMap<QString, QPair<double, double>> normsFromSav; // segment_name -> (value, error)
+            QMap<QString, QPair<double, double>> shiftsFromSav; // segment_name -> (value, error)
+            
+            // Extract norms and shifts using segment names/numbers from .sav file
+            for(const QString& key : savParams.keys()) {
+                QPair<double, double> savData = savParams[key];
                 
-                if(!matchKey.isEmpty() && savParams.contains(matchKey)) {
-                    QPair<double, double> savData = savParams[matchKey];
-                    double rwaValue = savData.first;
-                    double rwaError = savData.second;
+                // Match norm parameters and extract segment identifier
+                if(key.contains("norm", Qt::CaseInsensitive) && !key.contains("_rwa")) {
+                    // Try multiple patterns to extract segment identifier
+                    QRegExp segmentNumRegex("segment_(\\d+)_norm", Qt::CaseInsensitive);
+                    QRegExp normNumRegex("norm_(\\d+)", Qt::CaseInsensitive);
+                    QRegExp segmentNameRegex("([^_]+)_norm", Qt::CaseInsensitive);
                     
-                    parameterMapping.append(qMakePair(i, matchKey));
+                    QString segmentId;
+                    if(segmentNumRegex.indexIn(key) != -1) {
+                        segmentId = segmentNumRegex.cap(1); // Just the number part
+                    } else if(normNumRegex.indexIn(key) != -1) {
+                        segmentId = normNumRegex.cap(1); // Just the number part  
+                    } else if(segmentNameRegex.indexIn(key) != -1) {
+                        segmentId = segmentNameRegex.cap(1); // Segment name part
+                    }
                     
-                    // Add main value
-                    paramNamesToConvert.append(matchKey);
-                    rwaValuesToConvert.append(rwaValue);
+                    if(!segmentId.isEmpty()) {
+                        normsFromSav[segmentId] = savData;
+                    }
+                }
+                // Match energy shift parameters and extract segment identifier
+                else if(key.contains("shift", Qt::CaseInsensitive) && !key.contains("_rwa")) {
+                    // Try multiple patterns to extract segment identifier
+                    QRegExp segmentNumRegex("segment_(\\d+)_energy_shift", Qt::CaseInsensitive);
+                    QRegExp segmentShiftRegex("segment_(\\d+)_shift", Qt::CaseInsensitive);
+                    QRegExp shiftNumRegex("shift_(\\d+)", Qt::CaseInsensitive);
+                    QRegExp segmentNameRegex("([^_]+)_(?:energy_)?shift", Qt::CaseInsensitive);
                     
-                    // For error calculation, add +/- error values for level parameters
-                    if(param.category == "level") {
-                        paramNamesToConvert.append(matchKey + "_plus");
-                        rwaValuesToConvert.append(rwaValue + rwaError);
-                        paramNamesToConvert.append(matchKey + "_minus");
-                        rwaValuesToConvert.append(rwaValue - rwaError);
+                    QString segmentId;
+                    if(segmentNumRegex.indexIn(key) != -1) {
+                        segmentId = segmentNumRegex.cap(1); // Just the number part
+                    } else if(segmentShiftRegex.indexIn(key) != -1) {
+                        segmentId = segmentShiftRegex.cap(1); // Just the number part
+                    } else if(shiftNumRegex.indexIn(key) != -1) {
+                        segmentId = shiftNumRegex.cap(1); // Just the number part
+                    } else if(segmentNameRegex.indexIn(key) != -1) {
+                        segmentId = segmentNameRegex.cap(1); // Segment name part
+                    }
+                    
+                    if(!segmentId.isEmpty()) {
+                        shiftsFromSav[segmentId] = savData;
                     }
                 }
             }
             
-            // Batch conversion of all RWA parameters to physical
-            QList<double> convertedValues;
-            if(!paramNamesToConvert.isEmpty()) {
+            // First pass: collect level parameters that need RWA conversion
+            for(int i = 0; i < fittingParameters.size(); i++) {
+                FittingParameter& param = fittingParameters[i];
+                
+                if(param.category == "level") {
+                    QString matchKey = findMatchingParameterKey(param, savParams.keys());
+                    if(!matchKey.isEmpty() && savParams.contains(matchKey)) {
+                        QPair<double, double> savData = savParams[matchKey];
+                        levelParameterMapping.append(qMakePair(i, matchKey));
+                        rwaParamMap[matchKey] = savData;
+                    }
+                }
+            }
+            
+            // Perform batch transformation using AZURESetup
+            QMap<QString, QPair<double, double>> physicalParamMap;
+            if(!rwaParamMap.isEmpty()) {
                 // Find the parent AZURESetup widget for batch conversion
                 AZURESetup* azureSetup = nullptr;
                 QWidget* parent = this->parentWidget();
@@ -503,83 +544,483 @@ void FittingTab::loadSettings() {
                 }
                 
                 if(azureSetup != nullptr) {
-                    // Batch convert all parameters at once
-                    for(int i = 0; i < paramNamesToConvert.size(); i++) {
-                        QString paramName = paramNamesToConvert[i];
-                        // Remove suffix markers for error calculation
-                        if(paramName.endsWith("_plus") || paramName.endsWith("_minus")) {
-                            paramName = paramName.left(paramName.lastIndexOf("_"));
-                        }
-                        double physicalValue = azureSetup->ConvertRWAToPhysical(paramName, rwaValuesToConvert[i]);
-                        convertedValues.append(physicalValue);
+                    // Use AZUREAPI-style batch transformation
+                    // Build complete RWA parameter vector
+                    QStringList rwaParamNames = rwaParamMap.keys();
+                    std::vector<double> rwaValues, rwaValuesPlusError, rwaValuesMinusError;
+                    
+                    for(const QString& paramName : rwaParamNames) {
+                        QPair<double, double> rwaData = rwaParamMap[paramName];
+                        rwaValues.push_back(rwaData.first);
+                        rwaValuesPlusError.push_back(rwaData.first + rwaData.second);
+                        rwaValuesMinusError.push_back(rwaData.first - rwaData.second);
+                    }
+                    
+                    // Transform the complete parameter vectors at once
+                    std::vector<double> physicalValues = azureSetup->BatchConvertRWAToPhysical(rwaParamNames, rwaValues);
+                    std::vector<double> physicalValuesPlusError = azureSetup->BatchConvertRWAToPhysical(rwaParamNames, rwaValuesPlusError);
+                    std::vector<double> physicalValuesMinusError = azureSetup->BatchConvertRWAToPhysical(rwaParamNames, rwaValuesMinusError);
+                    
+                    // Store the transformed results
+                    for(int i = 0; i < rwaParamNames.size(); i++) {
+                        QString paramName = rwaParamNames[i];
+                        double physicalValue = physicalValues[i];
+                        double physicalErrorUp = std::abs(physicalValuesPlusError[i] - physicalValue);
+                        double physicalErrorDown = std::abs(physicalValue - physicalValuesMinusError[i]);
+                        double physicalError = std::max(physicalErrorUp, physicalErrorDown);
+                        
+                        physicalParamMap[paramName] = qMakePair(physicalValue, physicalError);
                     }
                 } else {
-                    // Fallback: use original values if conversion unavailable
-                    convertedValues = rwaValuesToConvert;
+                    // Fallback: use RWA values as physical values if transformation unavailable
+                    for(const QString& paramName : rwaParamMap.keys()) {
+                        physicalParamMap[paramName] = rwaParamMap[paramName];
+                    }
                 }
             }
             
-            // Second pass: apply converted values to parameters
+            // Second pass: apply transformed values and direct assignments
             int updatedCount = 0;
-            int valueIndex = 0;
             
-            for(const QPair<int, QString>& mapping : parameterMapping) {
+            // Apply transformed level parameters
+            for(const QPair<int, QString>& mapping : levelParameterMapping) {
                 int paramIndex = mapping.first;
                 QString matchKey = mapping.second;
                 FittingParameter& param = fittingParameters[paramIndex];
-                QPair<double, double> savData = savParams[matchKey];
                 
-                if(param.category == "level" && (param.name.contains("Width") || param.name.contains("Energy"))) {
-                    // Use converted values with error calculation
-                    if(valueIndex + 2 < convertedValues.size()) {
-                        param.value = convertedValues[valueIndex];
-                        double physicalValuePlusError = convertedValues[valueIndex + 1];
-                        double physicalValueMinusError = convertedValues[valueIndex + 2];
-                        
-                        // Calculate error from the converted values
-                        double errorUp = std::abs(physicalValuePlusError - param.value);
-                        double errorDown = std::abs(param.value - physicalValueMinusError);
-                        param.error = std::max(errorUp, errorDown);
-                        
-                        valueIndex += 3; // Move past the three values (main, plus, minus)
+                if(physicalParamMap.contains(matchKey)) {
+                    QPair<double, double> physicalData = physicalParamMap[matchKey];
+                    
+                    // Update parameter value and error
+                    param.value = physicalData.first;
+                    param.error = physicalData.second; // Use transformed error for level parameters
+                    
+                    // Update the underlying models with converted values
+                    if(param.name.contains("Width") && param.channelIndex >= 0) {
+                        if(levelsTab_) {
+                            ChannelsModel* channelsModel = levelsTab_->getChannelsModel();
+                            if(channelsModel) {
+                                QList<ChannelsData> channels = channelsModel->getChannels();
+                                for(int j = 0; j < channels.size(); j++) {
+                                    if(j == param.channelIndex) {
+                                        QModelIndex modelIndex = channelsModel->index(j, 6);
+                                        channelsModel->setData(modelIndex, param.value, Qt::EditRole);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
                     }
-                } else {
-                    // For other parameters, use direct conversion
-                    if(valueIndex < convertedValues.size()) {
-                        param.value = convertedValues[valueIndex];
-                        param.error = savData.second; // Keep original error for non-level parameters
-                        valueIndex += 1;
+                    
+                    // Propagate changes to other tabs
+                    updateParameterInOtherTabs(param.name, param);
+                    updatedCount++;
+                }
+            }
+            
+            // Apply norms directly from .sav file using segment names/identifiers
+            if(segmentsTab_) {
+                SegmentsDataModel* segmentsModel = segmentsTab_->getSegmentsDataModel();
+                if(segmentsModel) {
+                    QList<SegmentsDataData> segments = segmentsModel->getLines();
+                    
+                    // Temporarily disconnect signals to prevent double updates
+                    segmentsModel->blockSignals(true);
+                    
+                    // Match segments by name/identifier from .sav file
+                    for(auto it = normsFromSav.begin(); it != normsFromSav.end(); ++it) {
+                        QString segmentId = it.key(); // Segment identifier from .sav file
+                        QPair<double, double> normData = it.value();
+                        
+                        // Try to find matching segment by different methods
+                        int segmentIndex = -1;
+                        
+                        for(int i = 0; i < segments.size(); i++) {
+                            const SegmentsDataData& segment = segments[i];
+                            
+                            // Method 1: Match by segment number (convert segmentId to number and check 1-based index)
+                            bool segmentIdIsNumber = false;
+                            int segmentNumber = segmentId.toInt(&segmentIdIsNumber);
+                            if(segmentIdIsNumber && (segmentNumber == i + 1)) {
+                                segmentIndex = i;
+                                break;
+                            }
+                            
+                            // Method 2: Match by filename (if segment has a dataFile)
+                            if(!segment.dataFile.isEmpty()) {
+                                QString fileBaseName = QFileInfo(segment.dataFile).baseName();
+                                if(fileBaseName == segmentId) {
+                                    segmentIndex = i;
+                                    break;
+                                }
+                                
+                                // Also try matching with file extension
+                                QString fileName = QFileInfo(segment.dataFile).fileName();
+                                if(fileName == segmentId || fileName.startsWith(segmentId + ".")) {
+                                    segmentIndex = i;
+                                    break;
+                                }
+                            }
+                            
+                            // Method 3: Match by constructed segment name pattern
+                            QString constructedName = segment.dataFile.isEmpty() ? 
+                                                    QString("%1").arg(i + 1) :
+                                                    QFileInfo(segment.dataFile).baseName();
+                            if(constructedName == segmentId) {
+                                segmentIndex = i;
+                                break;
+                            }
+                        }
+                        
+                        if(segmentIndex >= 0 && segmentIndex < segments.size()) {
+                            // Update the segments model directly
+                            QModelIndex normValueIndex = segmentsModel->index(segmentIndex, 9); // dataNorm column
+                            QModelIndex normErrorIndex = segmentsModel->index(segmentIndex, 10); // dataNormError column
+                            segmentsModel->setData(normValueIndex, normData.first, Qt::EditRole);
+                            segmentsModel->setData(normErrorIndex, normData.second, Qt::EditRole);
+                        }
+                    }
+                    
+                    // Re-enable signals
+                    segmentsModel->blockSignals(false);
+                    
+                    // Now manually update ALL FittingParameters from the updated model
+                    // Also update parameter names to match params.sav exactly
+                    for(int j = 0; j < fittingParameters.size(); j++) {
+                        FittingParameter& param = fittingParameters[j];
+                        if(param.category == "norm") {
+                            int segmentIndex = param.channelIndex;
+                            if(segmentIndex >= 0 && segmentIndex < segments.size()) {
+                                // Re-read the updated segments data
+                                QList<SegmentsDataData> updatedSegments = segmentsModel->getLines();
+                                param.value = updatedSegments[segmentIndex].dataNorm;
+                                param.error = updatedSegments[segmentIndex].dataNormError;
+                                
+                                // Find the corresponding params.sav name for this segment
+                                for(auto it = normsFromSav.begin(); it != normsFromSav.end(); ++it) {
+                                    QString segmentId = it.key();
+                                    
+                                    // Check if this segmentId matches this segment
+                                    bool matches = false;
+                                    const SegmentsDataData& segment = updatedSegments[segmentIndex];
+                                    
+                                    // Same matching logic as above
+                                    bool segmentIdIsNumber = false;
+                                    int segmentNumber = segmentId.toInt(&segmentIdIsNumber);
+                                    if(segmentIdIsNumber && (segmentNumber == segmentIndex + 1)) {
+                                        matches = true;
+                                    } else if(!segment.dataFile.isEmpty()) {
+                                        QString fileBaseName = QFileInfo(segment.dataFile).baseName();
+                                        QString fileName = QFileInfo(segment.dataFile).fileName();
+                                        if(fileBaseName == segmentId || fileName == segmentId || fileName.startsWith(segmentId + ".")) {
+                                            matches = true;
+                                        }
+                                    }
+                                    
+                                    if(matches) {
+                                        // Find the exact parameter name from params.sav
+                                        for(const QString& savKey : savParams.keys()) {
+                                            if(savKey.contains("norm", Qt::CaseInsensitive) && !savKey.contains("_rwa")) {
+                                                // Check if this savKey corresponds to this segmentId
+                                                QRegExp segmentNumRegex("segment_(\\d+)_norm", Qt::CaseInsensitive);
+                                                QRegExp normNumRegex("norm_(\\d+)", Qt::CaseInsensitive);
+                                                QRegExp segmentNameRegex("([^_]+)_norm", Qt::CaseInsensitive);
+                                                
+                                                QString extractedId;
+                                                if(segmentNumRegex.indexIn(savKey) != -1) {
+                                                    extractedId = segmentNumRegex.cap(1);
+                                                } else if(normNumRegex.indexIn(savKey) != -1) {
+                                                    extractedId = normNumRegex.cap(1);
+                                                } else if(segmentNameRegex.indexIn(savKey) != -1) {
+                                                    extractedId = segmentNameRegex.cap(1);
+                                                }
+                                                
+                                                if(extractedId == segmentId) {
+                                                    // Update the parameter name to match params.sav exactly
+                                                    param.name = savKey;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        break;
+                                    }
+                                }
+                                
+                                updatedCount++;
+                            }
+                        }
                     }
                 }
-                
-                // Update the underlying models with converted values
-                if(param.category == "level" && param.name.contains("Width") && param.channelIndex >= 0) {
-                    if(levelsTab_) {
-                        ChannelsModel* channelsModel = levelsTab_->getChannelsModel();
-                        if(channelsModel) {
-                            QList<ChannelsData> channels = channelsModel->getChannels();
-                            for(int j = 0; j < channels.size(); j++) {
-                                if(j == param.channelIndex) {
-                                    QModelIndex modelIndex = channelsModel->index(j, 6);
-                                    channelsModel->setData(modelIndex, param.value, Qt::EditRole);
+            }
+            
+            // Apply energy shifts directly from .sav file using segment names/identifiers  
+            if(segmentsTab_) {
+                SegmentsDataModel* segmentsModel = segmentsTab_->getSegmentsDataModel();
+                if(segmentsModel) {
+                    QList<SegmentsDataData> segments = segmentsModel->getLines();
+                    
+                    // Temporarily disconnect signals to prevent double updates
+                    segmentsModel->blockSignals(true);
+                    
+                    // Match segments by name/identifier from .sav file
+                    for(auto it = shiftsFromSav.begin(); it != shiftsFromSav.end(); ++it) {
+                        QString segmentId = it.key(); // Segment identifier from .sav file
+                        QPair<double, double> shiftData = it.value();
+                        
+                        // Try to find matching segment by different methods (same logic as norms)
+                        int segmentIndex = -1;
+                        
+                        for(int i = 0; i < segments.size(); i++) {
+                            const SegmentsDataData& segment = segments[i];
+                            
+                            // Method 1: Match by segment number (convert segmentId to number and check 1-based index)
+                            bool segmentIdIsNumber = false;
+                            int segmentNumber = segmentId.toInt(&segmentIdIsNumber);
+                            if(segmentIdIsNumber && (segmentNumber == i + 1)) {
+                                segmentIndex = i;
+                                break;
+                            }
+                            
+                            // Method 2: Match by filename (if segment has a dataFile)
+                            if(!segment.dataFile.isEmpty()) {
+                                QString fileBaseName = QFileInfo(segment.dataFile).baseName();
+                                if(fileBaseName == segmentId) {
+                                    segmentIndex = i;
                                     break;
+                                }
+                                
+                                // Also try matching with file extension
+                                QString fileName = QFileInfo(segment.dataFile).fileName();
+                                if(fileName == segmentId || fileName.startsWith(segmentId + ".")) {
+                                    segmentIndex = i;
+                                    break;
+                                }
+                            }
+                            
+                            // Method 3: Match by constructed segment name pattern
+                            QString constructedName = segment.dataFile.isEmpty() ? 
+                                                    QString("%1").arg(i + 1) :
+                                                    QFileInfo(segment.dataFile).baseName();
+                            if(constructedName == segmentId) {
+                                segmentIndex = i;
+                                break;
+                            }
+                        }
+                        
+                        if(segmentIndex >= 0 && segmentIndex < segments.size()) {
+                            // Update the segments model directly
+                            QModelIndex shiftValueIndex = segmentsModel->index(segmentIndex, 14); // energyShift column
+                            QModelIndex shiftErrorIndex = segmentsModel->index(segmentIndex, 15); // energyShiftError column
+                            segmentsModel->setData(shiftValueIndex, shiftData.first, Qt::EditRole);
+                            segmentsModel->setData(shiftErrorIndex, shiftData.second, Qt::EditRole);
+                        }
+                    }
+                    
+                    // Re-enable signals
+                    segmentsModel->blockSignals(false);
+                    
+                    // Now manually update ALL FittingParameters from the updated model
+                    // Also update parameter names to match params.sav exactly
+                    for(int j = 0; j < fittingParameters.size(); j++) {
+                        FittingParameter& param = fittingParameters[j];
+                        if(param.category == "shift") {
+                            int segmentIndex = param.channelIndex;
+                            if(segmentIndex >= 0 && segmentIndex < segments.size()) {
+                                // Re-read the updated segments data
+                                QList<SegmentsDataData> updatedSegments = segmentsModel->getLines();
+                                param.value = updatedSegments[segmentIndex].energyShift;
+                                param.error = updatedSegments[segmentIndex].energyShiftError;
+                                
+                                // Find the corresponding params.sav name for this segment
+                                for(auto it = shiftsFromSav.begin(); it != shiftsFromSav.end(); ++it) {
+                                    QString segmentId = it.key();
+                                    
+                                    // Check if this segmentId matches this segment
+                                    bool matches = false;
+                                    const SegmentsDataData& segment = updatedSegments[segmentIndex];
+                                    
+                                    // Same matching logic as above
+                                    bool segmentIdIsNumber = false;
+                                    int segmentNumber = segmentId.toInt(&segmentIdIsNumber);
+                                    if(segmentIdIsNumber && (segmentNumber == segmentIndex + 1)) {
+                                        matches = true;
+                                    } else if(!segment.dataFile.isEmpty()) {
+                                        QString fileBaseName = QFileInfo(segment.dataFile).baseName();
+                                        QString fileName = QFileInfo(segment.dataFile).fileName();
+                                        if(fileBaseName == segmentId || fileName == segmentId || fileName.startsWith(segmentId + ".")) {
+                                            matches = true;
+                                        }
+                                    }
+                                    
+                                    if(matches) {
+                                        // Find the exact parameter name from params.sav
+                                        for(const QString& savKey : savParams.keys()) {
+                                            if(savKey.contains("shift", Qt::CaseInsensitive) && !savKey.contains("_rwa")) {
+                                                // Check if this savKey corresponds to this segmentId
+                                                QRegExp segmentNumRegex("segment_(\\d+)_energy_shift", Qt::CaseInsensitive);
+                                                QRegExp segmentShiftRegex("segment_(\\d+)_shift", Qt::CaseInsensitive);
+                                                QRegExp shiftNumRegex("shift_(\\d+)", Qt::CaseInsensitive);
+                                                QRegExp segmentNameRegex("([^_]+)_(?:energy_)?shift", Qt::CaseInsensitive);
+                                                
+                                                QString extractedId;
+                                                if(segmentNumRegex.indexIn(savKey) != -1) {
+                                                    extractedId = segmentNumRegex.cap(1);
+                                                } else if(segmentShiftRegex.indexIn(savKey) != -1) {
+                                                    extractedId = segmentShiftRegex.cap(1);
+                                                } else if(shiftNumRegex.indexIn(savKey) != -1) {
+                                                    extractedId = shiftNumRegex.cap(1);
+                                                } else if(segmentNameRegex.indexIn(savKey) != -1) {
+                                                    extractedId = segmentNameRegex.cap(1);
+                                                }
+                                                
+                                                if(extractedId == segmentId) {
+                                                    // Update the parameter name to match params.sav exactly
+                                                    param.name = savKey;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        break;
+                                    }
+                                }
+                                
+                                updatedCount++;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Robust verification: Re-read params.sav directly and check assignments
+            QString verificationReport;
+            
+            // Re-read the params.sav file to get exact parameter names from first column
+            QFile verificationFile(filename);
+            QMap<QString, QPair<double, double>> directSavParams;
+            
+            if(verificationFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                QTextStream verificationIn(&verificationFile);
+                
+                while(!verificationIn.atEnd()) {
+                    QString line = verificationIn.readLine().trimmed();
+                    if(line.isEmpty()) continue;
+                    
+                    QStringList parts = line.split(QRegExp("\\s+"), Qt::SkipEmptyParts);
+                    if(parts.size() >= 3) {
+                        QString exactParamName = parts[0]; // Exact parameter name from first column
+                        double value = parts[1].toDouble();
+                        double error = parts[2].toDouble();
+                        directSavParams[exactParamName] = qMakePair(value, error);
+                    }
+                }
+                verificationFile.close();
+            }
+            
+            // Check normalizations against current assignments
+            if(segmentsTab_) {
+                SegmentsDataModel* segmentsModel = segmentsTab_->getSegmentsDataModel();
+                if(segmentsModel) {
+                    QList<SegmentsDataData> segments = segmentsModel->getLines();
+                    verificationReport += "=== ROBUST NORMALIZATION VERIFICATION ===\n";
+                    
+                    // Find all norm parameters in the .sav file
+                    for(const QString& paramName : directSavParams.keys()) {
+                        if(paramName.contains("norm", Qt::CaseInsensitive) && !paramName.contains("_rwa")) {
+                            QPair<double, double> expectedData = directSavParams[paramName];
+                            
+                            // Extract segment number using the same regex as assignment
+                            QRegExp normRegex("(?:segment_|norm_?)(\\d+)(?:_norm)?", Qt::CaseInsensitive);
+                            if(normRegex.indexIn(paramName) != -1) {
+                                int segmentNumber = normRegex.cap(1).toInt();
+                                int segmentIndex = segmentNumber - 1;
+                                
+                                if(segmentIndex >= 0 && segmentIndex < segments.size()) {
+                                    const SegmentsDataData& segment = segments[segmentIndex];
+                                    bool isMatch = (qAbs(expectedData.first - segment.dataNorm) < 1e-10);
+                                    
+                                    verificationReport += QString("%1: %2 → Segment[%3] Expected=%4, Found=%5 %6\n")
+                                                        .arg(paramName)
+                                                        .arg(segmentNumber)
+                                                        .arg(segmentIndex)
+                                                        .arg(expectedData.first, 0, 'e', 6)
+                                                        .arg(segment.dataNorm, 0, 'e', 6)
+                                                        .arg(isMatch ? "✓" : "✗ MISMATCH!");
+                                    
+                                    // If there's a mismatch, try to find where this value actually went
+                                    if(!isMatch) {
+                                        verificationReport += QString("  → Searching for value %1 in other segments...\n")
+                                                            .arg(expectedData.first, 0, 'e', 6);
+                                        for(int i = 0; i < segments.size(); i++) {
+                                            if(qAbs(expectedData.first - segments[i].dataNorm) < 1e-10) {
+                                                verificationReport += QString("  → FOUND at Segment[%1] (should be [%2])!\n")
+                                                                    .arg(i).arg(segmentIndex);
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    verificationReport += QString("%1: Invalid segment index %2 (out of range)\n")
+                                                        .arg(paramName).arg(segmentIndex);
+                                }
+                            } else {
+                                verificationReport += QString("%1: Could not extract segment number from name\n")
+                                                    .arg(paramName);
+                            }
+                        }
+                    }
+                    verificationReport += "\n";
+                    
+                    // Also check energy shifts
+                    verificationReport += "=== ROBUST ENERGY SHIFT VERIFICATION ===\n";
+                    for(const QString& paramName : directSavParams.keys()) {
+                        if(paramName.contains("shift", Qt::CaseInsensitive) && !paramName.contains("_rwa")) {
+                            QPair<double, double> expectedData = directSavParams[paramName];
+                            
+                            // Extract segment number using the same regex as assignment
+                            QRegExp shiftRegex("(?:segment_|shift_?)(\\d+)(?:_(?:energy_)?shift)?", Qt::CaseInsensitive);
+                            if(shiftRegex.indexIn(paramName) != -1) {
+                                int segmentNumber = shiftRegex.cap(1).toInt();
+                                int segmentIndex = segmentNumber - 1;
+                                
+                                if(segmentIndex >= 0 && segmentIndex < segments.size()) {
+                                    const SegmentsDataData& segment = segments[segmentIndex];
+                                    bool isMatch = (qAbs(expectedData.first - segment.energyShift) < 1e-10);
+                                    
+                                    verificationReport += QString("%1: %2 → Segment[%3] Expected=%4, Found=%5 %6\n")
+                                                        .arg(paramName)
+                                                        .arg(segmentNumber)
+                                                        .arg(segmentIndex)
+                                                        .arg(expectedData.first, 0, 'e', 6)
+                                                        .arg(segment.energyShift, 0, 'e', 6)
+                                                        .arg(isMatch ? "✓" : "✗ MISMATCH!");
+                                    
+                                    // If there's a mismatch, try to find where this value actually went
+                                    if(!isMatch) {
+                                        verificationReport += QString("  → Searching for value %1 in other segments...\n")
+                                                            .arg(expectedData.first, 0, 'e', 6);
+                                        for(int i = 0; i < segments.size(); i++) {
+                                            if(qAbs(expectedData.first - segments[i].energyShift) < 1e-10) {
+                                                verificationReport += QString("  → FOUND at Segment[%1] (should be [%2])!\n")
+                                                                    .arg(i).arg(segmentIndex);
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                
-                // Propagate changes to other tabs
-                updateParameterInOtherTabs(param.name, param);
-                updatedCount++;
             }
             
             // Refresh the parameter tables
             updateParameterTables();
             
-            QMessageBox::information(this, "Load Settings", 
-                                   QString("Updated %1 of %2 fitting parameters from: %3")
-                                   .arg(updatedCount).arg(fittingParameters.size()).arg(filename));
+            // Show verification results
+            QMessageBox msgBox;
+            msgBox.setWindowTitle("Load Settings - Verification Report");
+            msgBox.setText(QString("Updated %1 of %2 fitting parameters from: %3")
+                          .arg(updatedCount).arg(fittingParameters.size()).arg(filename));
+            msgBox.setDetailedText(verificationReport);
+            msgBox.exec();
         } else {
             QMessageBox::warning(this, "Load Error", 
                                "Could not load parameter file.");
