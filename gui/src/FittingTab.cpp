@@ -283,11 +283,8 @@ void FittingTab::populateFromCurrentGUIState() {
             
             // Add normalization parameter (always show, but useAsNuisance depends on varyNorm flag)
             FittingParameter normParam;
-            // Use same naming pattern as MCMC tab
-            QString segmentName = segment.dataFile.isEmpty() ? 
-                                 QString("Segment %1").arg(i + 1) :
-                                 QFileInfo(segment.dataFile).baseName();
-            normParam.name = QString("%1 Normalization").arg(segmentName);
+            // Use params.sav naming convention: segment_x_norm
+            normParam.name = QString("segment_%1_norm").arg(i + 1);
             normParam.value = segment.dataNorm;
             normParam.lowerLimit = 0;
             normParam.upperLimit = 0;
@@ -302,7 +299,8 @@ void FittingTab::populateFromCurrentGUIState() {
             
             // Add energy shift parameter (always show, but useAsNuisance depends on varyEnergyShift flag)
             FittingParameter shiftParam;
-            shiftParam.name = QString("%1 Energy Shift (keV)").arg(segmentName);
+            // Use params.sav naming convention: segment_x_energy_shift
+            shiftParam.name = QString("segment_%1_energy_shift").arg(i + 1);
             shiftParam.value = segment.energyShift;
             shiftParam.lowerLimit = 0;
             shiftParam.upperLimit = 0;
