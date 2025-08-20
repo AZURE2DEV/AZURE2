@@ -12,6 +12,7 @@
 #include <fstream>
 #include <limits>
 #include <new>
+#include <cmath>
 
 bool AZUREAPI::Initialize( ){
 
@@ -503,4 +504,161 @@ void AZUREAPI::SetRadius( int idx, double r ) {
   data( )->Initialize( compound( ), configure( ) );
   configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
 
+}
+
+double AZUREAPI::CalculateChi2RWA(const vector_r& rwaParams) const {
+
+  int k = 0;
+  vector_r params_ = all_rwa_;
+  for( int i = 0; i < all_rwa_.size( ); ++i ){
+    if( !fixed_[i] ){
+      params_[i] = rwaParams[k];
+      ++k;
+    }
+  }
+
+  double chiSquared = 0.0;
+  
+  CNuc* localCompound = compound()->Clone();
+  EData* localData = data()->Clone();
+  
+  // Fill compound nucleus and data with RWA parameters
+  localCompound->FillCompoundFromParams(params_);
+  localData->FillNormsFromParams(params_);
+  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
+  if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  
+  // Calculate chi-squared using same logic as AZURECalcMCMC::CalculateLogLikelihood
+  double segmentChiSquared = 0.0;
+  ESegmentIterator firstSumIterator = localData->GetSegments().end();
+  ESegmentIterator lastSumIterator = localData->GetSegments().end();
+  
+  for(EDataIterator dataIt = localData->begin(); dataIt != localData->end(); dataIt++) {
+    if(dataIt.segment()->GetPoints().begin() == dataIt.point()) {
+      segmentChiSquared = 0.0;
+      if(dataIt.segment()->IsTotalCapture()) {
+        firstSumIterator = dataIt.segment();
+        lastSumIterator = dataIt.segment() + dataIt.segment()->IsTotalCapture() - 1;
+      }
+    }
+    
+    if(!dataIt.point()->IsMapped()) dataIt.point()->Calculate(localCompound, configure());
+    if(firstSumIterator != localData->GetSegments().end() &&
+       dataIt.segment() != lastSumIterator) continue;
+       
+    double fitCrossSection = dataIt.point()->GetFitCrossSection();
+    ESegmentIterator thisSegment = dataIt.segment();
+    
+    if(dataIt.segment() == lastSumIterator) {
+      int pointIndex = dataIt.point() - dataIt.segment()->GetPoints().begin() + 1;
+      for(ESegmentIterator it = firstSumIterator; it < dataIt.segment(); it++) {
+        fitCrossSection += it->GetPoint(pointIndex)->GetFitCrossSection();
+      }
+      thisSegment = firstSumIterator;
+    }
+    
+    double dataNorm = thisSegment->GetNorm();
+    double CrossSection = dataIt.point()->GetCMCrossSection() * dataNorm;
+    double CrossSectionError = dataIt.point()->GetCMCrossSectionError() * dataNorm;
+    double chi = (fitCrossSection - CrossSection) / CrossSectionError;
+    double pointChiSquared = pow(chi, 2.0);
+    segmentChiSquared += pointChiSquared;
+    
+    if(dataIt.segment()->GetPoints().end() - 1 == dataIt.point()) {
+      
+      chiSquared += segmentChiSquared;
+      
+      if(dataIt.segment() == lastSumIterator) {
+        firstSumIterator = localData->GetSegments().end();
+        lastSumIterator = localData->GetSegments().end();
+      }
+    }
+  }
+  
+  delete localCompound;
+  delete localData;
+  
+  return chiSquared;
+}
+
+double AZUREAPI::CalculateChi2Physical(const vector_r& physicalParams) const {
+  int k = 0;
+  vector_r params_ = all_;
+  for( int i = 0; i < all_.size( ); ++i ){
+    if( !fixed_[i] ){
+      params_[i] = physicalParams[k];
+      ++k;
+    }
+  }
+
+  double chiSquared = 0.0;
+
+  CNuc* localCompound = NULL;
+  EData* localData = NULL;
+  localCompound = compound()->Clone();
+  localData = data()->Clone();
+
+  AZUREParams params;
+  localCompound->FillCompoundFromParamsPhysical(params_);
+  bool isValid = localCompound->TransformIn( configure( ) );
+
+  if( !isValid ) return 0;
+
+  localCompound->FillMnParams(params.GetMinuitParams());
+  localData->FillMnParams(params.GetMinuitParams());
+  localData->FillEnergyShiftsFromParams(params_,localData,localCompound,&configure());
+  localCompound->FillCompoundFromParams(params.GetMinuitParams( ).Params( ));
+  if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  
+  // Calculate chi-squared using same logic as AZURECalcMCMC::CalculateLogLikelihood
+  double segmentChiSquared = 0.0;
+  ESegmentIterator firstSumIterator = localData->GetSegments().end();
+  ESegmentIterator lastSumIterator = localData->GetSegments().end();
+  
+  for(EDataIterator dataIt = localData->begin(); dataIt != localData->end(); dataIt++) {
+    if(dataIt.segment()->GetPoints().begin() == dataIt.point()) {
+      segmentChiSquared = 0.0;
+      if(dataIt.segment()->IsTotalCapture()) {
+        firstSumIterator = dataIt.segment();
+        lastSumIterator = dataIt.segment() + dataIt.segment()->IsTotalCapture() - 1;
+      }
+    }
+    
+    if(!dataIt.point()->IsMapped()) dataIt.point()->Calculate(localCompound, configure());
+    if(firstSumIterator != localData->GetSegments().end() &&
+       dataIt.segment() != lastSumIterator) continue;
+       
+    double fitCrossSection = dataIt.point()->GetFitCrossSection();
+    ESegmentIterator thisSegment = dataIt.segment();
+    
+    if(dataIt.segment() == lastSumIterator) {
+      int pointIndex = dataIt.point() - dataIt.segment()->GetPoints().begin() + 1;
+      for(ESegmentIterator it = firstSumIterator; it < dataIt.segment(); it++) {
+        fitCrossSection += it->GetPoint(pointIndex)->GetFitCrossSection();
+      }
+      thisSegment = firstSumIterator;
+    }
+    
+    double dataNorm = thisSegment->GetNorm();
+    double CrossSection = dataIt.point()->GetCMCrossSection() * dataNorm;
+    double CrossSectionError = dataIt.point()->GetCMCrossSectionError() * dataNorm;
+    double chi = (fitCrossSection - CrossSection) / CrossSectionError;
+    double pointChiSquared = pow(chi, 2.0);
+    segmentChiSquared += pointChiSquared;
+    
+    if(dataIt.segment()->GetPoints().end() - 1 == dataIt.point()) {
+      
+      chiSquared += segmentChiSquared;
+      
+      if(dataIt.segment() == lastSumIterator) {
+        firstSumIterator = localData->GetSegments().end();
+        lastSumIterator = localData->GetSegments().end();
+      }
+    }
+  }
+  
+  delete localCompound;
+  delete localData;
+  
+  return chiSquared;
 }

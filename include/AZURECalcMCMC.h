@@ -1,17 +1,13 @@
 #ifndef AZURECALCMCMC_H
 #define AZURECALCMCMC_H
 
-#ifdef USE_MCMC
 #include "numcmc/mcmc.h"
-#endif
-#include "Minuit2/FCNBase.h"
 #include "Constants.h"
 #include <vector>
 
 class Config;
 class EData;
 class CNuc;
-class ParameterLimitsManager;
 
 ///A function class to perform MCMC Bayesian calculation of parameters
 
@@ -22,38 +18,31 @@ class ParameterLimitsManager;
  * Bayesian sampling process to explore the parameter space.
  */
 
-class AZURECalcMCMC : public ROOT::Minuit2::FCNBase {
+class AZURECalcMCMC {
  public:
   /*!
    * The AZURECalcMCMC object is created with reference to an EData and CNuc object.
    * The runtime configurations are also passed through a Config structure.
    */
-  AZURECalcMCMC(EData* data, CNuc* compound, const Config& configure, ParameterLimitsManager* limitsManager = nullptr) 
+  AZURECalcMCMC(EData* data, CNuc* compound, const Config& configure) 
     : configure_(configure), parametersInitialized_(false) {
     data_=data;
     compound_=compound;
-    limitsManager_=limitsManager;
   };
   
   ~AZURECalcMCMC() {};
-  /*!
-   * See Minuit2 documentation for an explanation of this function.
-   */
-  virtual double Up() const {return theErrorDef;};
-  /*!
-   * Overloaded operator to make the class instance callable as a function. 
-   * A parameter array is passed as the dependent variable. The function
-   * returns the log-likelihood value for MCMC sampling.
-   */
-  virtual double operator()(const vector_r&) const;
-  
-#ifdef USE_MCMC
   
   /*!
    * Log-likelihood function for MCMC sampler with physical parameters (no priors).
    * Handles physical parameters like AZUREAPI::UpdateSegments.
    */
   double LogLikelihoodPhysical(const std::vector<double>& physicalParams) const;
+  
+  /*!
+   * Log-likelihood function for MCMC sampler with RWA parameters (no priors).
+   * Handles RWA parameters directly.
+   */
+  double LogLikelihood(const std::vector<double>& rwaParams) const;
   
   /*!
    * Log-probability function for MCMC sampler with physical parameters.
@@ -65,7 +54,7 @@ class AZURECalcMCMC : public ROOT::Minuit2::FCNBase {
    * Run MCMC sampling with specified parameters.
    */
   void RunMCMCSampling(int nwalkers, int nsteps, const std::vector<double>& initialParams, 
-                       std::vector<std::vector<double>>& samples, double chainSpreadPercent = 1.0, int nthreads = 1) const;
+                       std::vector<std::vector<double>>& samples, double chainSpreadPercent = 1.0, int nthreads = 1, bool useRWA = false) const;
 
   /*!
    * Set prior information for parameters.
@@ -110,7 +99,6 @@ class AZURECalcMCMC : public ROOT::Minuit2::FCNBase {
    * Set GUI results callback function (called every 100 iterations for results update)
    */
   static void SetGUIResultsCallback(void (*callback)(int, int, const std::vector<std::vector<double>>&));
-#endif
   
   /*!
    * Returns a reference to the Config structure.
@@ -131,11 +119,6 @@ class AZURECalcMCMC : public ROOT::Minuit2::FCNBase {
   void SetErrorDef(double def) {theErrorDef=def;};
   
   /*!
-   * Calculate nuisance parameter chi-squared contribution
-   */
-  double CalculateNuisanceChiSquared(const vector_r& p) const;
-  
-  /*!
    * Calculate log-likelihood from chi-squared
    */
   double CalculateLogLikelihood(const vector_r& p) const;
@@ -151,7 +134,12 @@ class AZURECalcMCMC : public ROOT::Minuit2::FCNBase {
   void UpdateParameterVectors(const vector_r& initialParams) const;
   
   /*!
-   * Reconstruct full parameter array from varying parameters (for output file writing)
+   * Reconstruct full parameter array from varying physical parameters (for output file writing)
+   */
+  vector_r ReconstructFullParametersPhysical(const std::vector<double>& varyingParams) const;
+  
+  /*!
+   * Reconstruct full parameter array from varying RWA parameters (for output file writing)
    */
   vector_r ReconstructFullParameters(const std::vector<double>& varyingParams) const;
 
@@ -160,7 +148,6 @@ class AZURECalcMCMC : public ROOT::Minuit2::FCNBase {
   const Config &configure_;
   EData *data_;
   CNuc *compound_;
-  ParameterLimitsManager *limitsManager_;
   double theErrorDef;
   
   // Parameter vectors for physical parameter handling (mutable for lazy initialization)
@@ -172,12 +159,10 @@ class AZURECalcMCMC : public ROOT::Minuit2::FCNBase {
   mutable std::vector<bool> fixed_;
   mutable bool parametersInitialized_;
   
-#ifdef USE_MCMC
   // Prior information for Bayesian analysis
   mutable std::vector<double> priorMeans_;
   mutable std::vector<double> priorStds_;
   mutable std::vector<bool> usePriors_;
-#endif
 };
 
 #endif

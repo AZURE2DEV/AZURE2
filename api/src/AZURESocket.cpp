@@ -279,6 +279,30 @@ bool AZURESocket::start() {
       sendPacket( transformedParams );
     }
 
+    // Calculate chi2 from RWA parameters
+    else if( buffer[0] == 27 ){
+      vector_r params;
+      for( int i = 0; i < buffer[1]; ++i ){
+        params.push_back( buffer[2+i] );
+      }
+      double chi2 = api_->CalculateChi2RWA( params );
+      std::vector<double> response;
+      response.push_back( chi2 );
+      sendPacket( response );
+    }
+
+    // Calculate chi2 from physical parameters
+    else if( buffer[0] == 28 ){
+      vector_r params;
+      for( int i = 0; i < buffer[1]; ++i ){
+        params.push_back( buffer[2+i] );
+      }
+      double chi2 = api_->CalculateChi2Physical( params );
+      std::vector<double> response;
+      response.push_back( chi2 );
+      sendPacket( response );
+    }
+
     //close(clientSocket_);
 
   }

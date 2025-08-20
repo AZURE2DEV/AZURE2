@@ -22,6 +22,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QHeaderView>
+#include <QFileDialog>
 #include <QTableWidgetItem>
 #include <QSignalMapper>
 #include <QMessageBox>
@@ -51,6 +52,7 @@
 #include "Config.h"
 #include "CNuc.h"
 #include "EData.h"
+#include "AZUREParams.h"
 #endif
 
 // Forward declarations and structure definitions from AZURE2.cpp
@@ -105,10 +107,10 @@ MCMCTab::MCMCTab(QWidget* parent)
     parametersLayout->addWidget(parametersTable);
     
     QHBoxLayout* paramButtonLayout = new QHBoxLayout();
-    resetButton = new QPushButton("Reset to Defaults");
-    loadButton = new QPushButton("Load from Fitting Tab");
-    paramButtonLayout->addWidget(resetButton);
+    loadButton = new QPushButton("Load from Fitting Tab (Physical)");
+    loadSavButton = new QPushButton("Load from .sav file (Reduced)");
     paramButtonLayout->addWidget(loadButton);
+    paramButtonLayout->addWidget(loadSavButton);
     paramButtonLayout->addStretch();
     parametersLayout->addLayout(paramButtonLayout);
     
@@ -159,8 +161,8 @@ MCMCTab::MCMCTab(QWidget* parent)
     mainLayout->addWidget(progressControlsGroup);
     
     // Connect signals
-    connect(resetButton, SIGNAL(clicked()), this, SLOT(resetToDefaults()));
     connect(loadButton, SIGNAL(clicked()), this, SLOT(loadFromFittingTab()));
+    connect(loadSavButton, SIGNAL(clicked()), this, SLOT(loadFromSavFile()));
     // Note: runButton and stopButton are connected by AZURESetup, not here
     
     // Setup info system
@@ -254,6 +256,10 @@ void MCMCTab::setupProgressControls() {
     freshStartCheckBox = new QCheckBox("Fresh Start");
     freshStartCheckBox->setToolTip("When checked, ignores existing samples and starts from iteration 1");
     buttonLayout->addWidget(freshStartCheckBox);
+    
+    useReducedWidthsCheckBox = new QCheckBox("Use Reduced Widths");
+    useReducedWidthsCheckBox->setToolTip("When checked, uses reduced width amplitudes (RWA) for fitting instead of physical parameters");
+    buttonLayout->addWidget(useReducedWidthsCheckBox);
     
     buttonLayout->addWidget(infoButton[2]);
     buttonLayout->addStretch();
@@ -367,6 +373,98 @@ void MCMCTab::mcmcFinished() {
 
 void MCMCTab::resetToDefaults() {
     reset();
+}
+
+void MCMCTab::loadFromSavFile() {
+    QString filename = QFileDialog::getOpenFileName(this, 
+        "Load Parameters from .sav file", "", "AZURE2 Parameter Files (*.sav);;All Files (*)");
+    
+    if(filename.isEmpty()) {
+        return;
+    }
+    
+    QFile file(filename);
+    if(!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QMessageBox::critical(this, "File Error", 
+                             QString("Cannot open file:\n%1\n\nError: %2")
+                             .arg(filename).arg(file.errorString()));
+        return;
+    }
+    
+    QTextStream in(&file);
+    
+    // Parse .sav file and preserve order from file
+    // Skip parameters with error = 0 (these are fixed parameters)
+    QList<QPair<QString, QPair<double, double>>> savParams; // Preserve order from file
+    
+    while(!in.atEnd()) {
+        QString line = in.readLine().trimmed();
+        if(line.isEmpty()) continue;
+        
+        QStringList parts = line.split(QRegExp("\\s+"), Qt::SkipEmptyParts);
+        if(parts.size() >= 3) {
+            QString paramName = parts[0];
+            double value = parts[1].toDouble();
+            double error = parts[2].toDouble();
+            
+            // Only include parameters with non-zero error (non-fixed parameters)
+            if(error != 0.0) {
+                savParams.append(QPair<QString, QPair<double, double>>(paramName, QPair<double, double>(value, error)));
+            }
+        }
+    }
+    
+    file.close();
+    
+    // Since we already filtered out fixed parameters (error = 0), just load all remaining parameters
+    mcmcParameters.clear();
+    int paramIndex = 0;
+    
+    for(const auto& paramData : savParams) {
+        MCMCParameter param;
+        param.name = createPrettyParameterName(paramData.first, nullptr, nullptr, -1);
+        param.value = paramData.second.first;  // Use value from .sav file
+        param.priorMean = paramData.second.first;
+        param.priorStd = paramData.second.second;
+        param.useGaussianPrior = false; // Default to no prior
+        param.category = "sav_loaded";
+        param.minuitIndex = paramIndex++;
+        param.levelIndex = -1;
+        param.channelIndex = -1;
+        
+        mcmcParameters.append(param);
+    }
+    
+    // Update table display
+    parametersTable->setRowCount(mcmcParameters.size());
+    for(int i = 0; i < mcmcParameters.size(); i++) {
+        const MCMCParameter& param = mcmcParameters[i];
+        
+        parametersTable->setItem(i, 0, new QTableWidgetItem(param.name));
+        parametersTable->item(i, 0)->setFlags(Qt::ItemIsEnabled); // Make read-only
+        
+        parametersTable->setItem(i, 1, new QTableWidgetItem(QString::number(param.value, 'g', 6)));
+        parametersTable->item(i, 1)->setFlags(Qt::ItemIsEnabled); // Make read-only
+        
+        parametersTable->setItem(i, 2, new QTableWidgetItem(QString::number(param.priorMean, 'g', 6)));
+        parametersTable->setItem(i, 3, new QTableWidgetItem(QString::number(param.priorStd, 'g', 6)));
+        
+        QTableWidgetItem* checkItem = new QTableWidgetItem();
+        checkItem->setCheckState(param.useGaussianPrior ? Qt::Checked : Qt::Unchecked);
+        checkItem->setFlags(checkItem->flags() | Qt::ItemIsUserCheckable);
+        parametersTable->setItem(i, 4, checkItem);
+        
+        parametersTable->setItem(i, 5, new QTableWidgetItem(param.category));
+        parametersTable->item(i, 5)->setFlags(Qt::ItemIsEnabled); // Make read-only
+    }
+    
+    logTextEdit->append(QString("Loaded %1 non-fixed parameters from %2 (excluded %3 fixed parameters with error=0)").arg(mcmcParameters.size()).arg(QFileInfo(filename).fileName()).arg(savParams.size() - mcmcParameters.size() + savParams.size()));
+    
+    if(mcmcParameters.isEmpty()) {
+        logTextEdit->append("No non-fixed parameters found - all parameters in .sav file have error=0 (fixed).");
+    } else {
+        logTextEdit->append("Parameters loaded as reduced width amplitudes - use 'Use Reduced Widths' checkbox for RWA fitting.");
+    }
 }
 
 void MCMCTab::loadFromFittingTab() {
@@ -626,6 +724,7 @@ bool MCMCTab::writeMCMCSettings(QTextStream& outStream) {
     outStream << "nsteps " << nStepsSpinBox->value() << "\n";
     outStream << "chainspread " << chainSpreadSpinBox->value() << "\n";
     outStream << "nthreads " << nThreadsSpinBox->value() << "\n";
+    outStream << "usereducedwidths " << (useReducedWidthsCheckBox->isChecked() ? "1" : "0") << "\n";
     
     outStream << "<parameters>\n";
     for(const MCMCParameter& param : mcmcParameters) {
@@ -706,6 +805,8 @@ bool MCMCTab::readMCMCSettings(QTextStream& inStream) {
                     chainSpreadSpinBox->setValue(value.toDouble());
                 } else if(key == "nthreads") {
                     nThreadsSpinBox->setValue(value.toInt());
+                } else if(key == "usereducedwidths") {
+                    useReducedWidthsCheckBox->setChecked(value.toInt() == 1);
                 }
             }
         }
@@ -1226,4 +1327,51 @@ void MCMCTab::calculateStatisticsFromSamples(const std::vector<std::vector<doubl
     
     // Add warning if results are incomplete
     addIncompleteResultsWarning();
+}
+
+QString MCMCTab::createPrettyParameterName(const QString& paramName, CNuc* compound, EData* data, int paramIndex) const {
+    // For fallback case when we don't have compound/data structures
+    if(!compound || !data || paramIndex < 0) {
+        QString name = paramName.trimmed();
+        
+        // Try to identify parameter type from the original .sav file name
+        // Common AZURE2 .sav file parameter patterns:
+        
+        // Energy parameters often start with 'E' followed by level number: E1, E2, etc.
+        if(name.startsWith("E") && name.length() > 1 && name.mid(1).toInt() > 0) {
+            int levelNum = name.mid(1).toInt();
+            return QString("Level %1 Energy (MeV)").arg(levelNum);
+        }
+        
+        // Width parameters often start with 'G' followed by level and channel: G11, G12, G21, etc.
+        if(name.startsWith("G") && name.length() > 2) {
+            QString numPart = name.mid(1);
+            if(numPart.length() >= 2) {
+                int levelNum = numPart.left(1).toInt();
+                int channelNum = numPart.mid(1).toInt();
+                if(levelNum > 0 && channelNum > 0) {
+                    return QString("Level %1 Channel %2 Width (eV)").arg(levelNum).arg(channelNum);
+                }
+            }
+        }
+        
+        // Normalization parameters often start with 'N' followed by segment number
+        if(name.startsWith("N") && name.length() > 1 && name.mid(1).toInt() > 0) {
+            int segmentNum = name.mid(1).toInt();
+            return QString("Segment %1 Normalization").arg(segmentNum);
+        }
+        
+        // Energy shift parameters often start with 'S' followed by segment number
+        if(name.startsWith("S") && name.length() > 1 && name.mid(1).toInt() > 0) {
+            int segmentNum = name.mid(1).toInt();
+            return QString("Segment %1 Energy Shift (keV)").arg(segmentNum);
+        }
+        
+        // Generic fallback - keep original name but make it more readable
+        return QString("Parameter (%1)").arg(name);
+    }
+    
+    // If we have compound/data structures, we could do more sophisticated analysis here
+    // but the main logic now uses the GUI models directly so this shouldn't be needed
+    return QString("Parameter (%1)").arg(paramName);
 }

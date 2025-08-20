@@ -7,161 +7,33 @@
 #include <iostream>
 #include <iomanip>
 #include <cmath>
-#ifdef USE_MCMC
 #include <random>
 #include <vector>
 #include <limits>
-#include <cmath>
 #include <fstream>
 #include <sstream>
 #include <string>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+// Global function pointer to access the MCMC calculator instance
+static const AZURECalcMCMC* g_mcmc_calc = nullptr;
+static std::ofstream* g_sample_file = nullptr;
+static int g_sample_count = 0;
+static int g_nwalkers = 0;
+static int g_current_step = 0;
+static volatile int g_samples_written_to_file = 0; // Atomic counter of samples actually written to file
+static volatile bool g_stop_requested = false;
+// Store the last calculated likelihood and prior for progress callbacks
+static double g_last_likelihood = 0.0;
+static double g_last_prior = 0.0;
+static std::vector<double> g_last_params;
+// Mutex for thread-safe file writing
+#ifdef _OPENMP
+#include <omp.h>
+static omp_lock_t g_file_lock;
 #endif
-
-double AZURECalcMCMC::operator()(const vector_r& p) const {
-
-  int thisIteration=data()->Iterations();
-  data()->Iterate();
-  bool isFit=data()->IsFit();
-
-  CNuc * localCompound = NULL;
-  EData *localData = NULL;
-  if(isFit) {
-    localCompound = compound()->Clone();
-    localData = data()->Clone();
-  } else {
-    localCompound = compound();
-    localData = data();
-  }
-
-  //Fill Compound Nucleus From Parameters (MCMC or Minuit)
-  localCompound->FillCompoundFromParams(p);
-  localData->FillNormsFromParams(p);
-  localData->FillEnergyShiftsFromParams(p,localData,localCompound,&configure());
-  if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
-  
-  //loop over segments and points
-  double chiSquared=0.0;
-  double segmentChiSquared=0.0;
-  ESegmentIterator firstSumIterator = localData->GetSegments().end();
-  ESegmentIterator lastSumIterator = localData->GetSegments().end();
-  for(EDataIterator data=localData->begin();data!=localData->end();data++) {
-    if(data.segment()->GetPoints().begin()==data.point()) {
-      segmentChiSquared=0.0;
-      if(data.segment()->IsTotalCapture()) {
-	firstSumIterator=data.segment();
-	lastSumIterator=data.segment()+data.segment()->IsTotalCapture()-1;
-      } 
-    }
-    if(!data.point()->IsMapped()) data.point()->Calculate(localCompound,configure());
-    if(firstSumIterator!=localData->GetSegments().end()&&
-       data.segment()!=lastSumIterator) continue;
-    double fitCrossSection=data.point()->GetFitCrossSection();
-    ESegmentIterator thisSegment = data.segment();
-    if(data.segment()==lastSumIterator) {
-      int pointIndex=data.point()-data.segment()->GetPoints().begin()+1;
-      for(ESegmentIterator it=firstSumIterator;it<data.segment();it++) 
-	fitCrossSection+=it->GetPoint(pointIndex)->GetFitCrossSection();
-      thisSegment = firstSumIterator;
-    }
-    double dataNorm=thisSegment->GetNorm();
-    double CrossSection=data.point()->GetCMCrossSection()*dataNorm;
-    double CrossSectionError=data.point()->GetCMCrossSectionError()*dataNorm;
-    double chi=(fitCrossSection-CrossSection)/CrossSectionError;
-    double pointChiSquared=pow(chi,2.0);
-    segmentChiSquared+=pointChiSquared;
-    if(data.segment()->GetPoints().end()-1==data.point()) {
-      if(!isFit) thisSegment->SetSegmentChiSquared(segmentChiSquared);
-      if(data.segment()==lastSumIterator) {
-	firstSumIterator=localData->GetSegments().end();
-	lastSumIterator=localData->GetSegments().end();
-      }
-      double dataNormNominal=thisSegment->GetNominalNorm();
-      double dataNormError=dataNormNominal/100.*thisSegment->GetNormError();
-      if(dataNormError!=0.)
-	segmentChiSquared += pow((dataNorm-dataNormNominal)/dataNormError,2.0);
-      
-      // Add energy shift chi-squared contribution if energy shift is varied
-      if(thisSegment->IsVaryEnergyShift()) {
-        double energyShift=thisSegment->GetEnergyShift();
-        double energyShiftNominal=thisSegment->GetNominalEnergyShift();
-        double energyShiftError=thisSegment->GetEnergyShiftError();
-        if(energyShiftError!=0.)
-          segmentChiSquared += pow((energyShift-energyShiftNominal)/energyShiftError,2.0);
-      }
-      
-      chiSquared+=segmentChiSquared;
-    }
-  }
-
-  // Add nuisance parameter chi-squared contributions
-  if(limitsManager_) {
-    chiSquared += CalculateNuisanceChiSquared(p);
-  }
-
-  if(!localData->IsErrorAnalysis()&&thisIteration!=0) {
-    if(thisIteration%100==0) configure().outStream
-			       << "\r\tIteration: " << std::setw(6) << thisIteration
-			       << " Chi-Squared: " << chiSquared;  configure().outStream.flush();
-
-    if(thisIteration%1000==0) {
-      localData->WriteOutputFiles(configure(),isFit);
-      localCompound->TransformOut(configure());
-      localCompound->PrintTransformParams(configure());
-    }
-  }
-  if(isFit) {
-    delete localCompound;
-    delete localData;
-  }
-  if(configure().stopFlag&&isFit) return 0.;
-#ifdef USE_MCMC
-  // For MCMC, return log-likelihood
-  else return CalculateLogLikelihood(p);
-#else
-  // For Minuit, return chi-squared
-  else return chiSquared;
-#endif
-}
-
-double AZURECalcMCMC::CalculateNuisanceChiSquared(const vector_r& p) const {
-  double nuisanceChiSquared = 0.0;
-  
-  if (!limitsManager_) return 0.0;
-  
-  // Create temporary AZUREParams to get parameter names
-  AZUREParams tempParams;
-  compound()->FillMnParams(tempParams.GetMinuitParams());
-  data()->FillMnParams(tempParams.GetMinuitParams());
-  
-  // Check each parameter to see if it's marked as nuisance
-  for(int i = 0; i < tempParams.GetMinuitParams().Params().size() && i < p.size(); i++) {
-    std::string paramName = tempParams.GetMinuitParams().Parameter(i).GetName();
-
-    // If norm or shift in param name, skip
-    if(paramName.find("norm") != std::string::npos || paramName.find("shift") != std::string::npos) {
-      continue;
-    }
-    
-    // Check if this parameter is marked as nuisance in ParameterLimitsManager
-    if(limitsManager_->IsNuisanceParameter(paramName)) {
-      double paramValue = p[i];
-      // Use converted nominal value (physical to reduced for width parameters)
-      double nominalValue = limitsManager_->GetConvertedNominalValue(paramName);
-      // Use converted error (physical to reduced for width parameters)
-      double paramError = limitsManager_->GetConvertedError(paramName);
-      
-      if(paramError > 0.0) {
-        double deviation = (paramValue - nominalValue) / paramError;
-        nuisanceChiSquared += deviation * deviation;
-      }
-    }
-  }
-  
-  return nuisanceChiSquared;
-}
 
 double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
   // Calculate chi-squared first
@@ -241,11 +113,6 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
     }
   }
 
-  // Add nuisance parameter chi-squared contributions
-  if(limitsManager_) {
-    chiSquared += CalculateNuisanceChiSquared(p);
-  }
-
   if(isFit) {
     delete localCompound;
     delete localData;
@@ -253,73 +120,6 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
   
   // Convert chi-squared to log-likelihood: ln(L) = -0.5 * chi^2
   return -0.5 * chiSquared;
-}
-
-#ifdef USE_MCMC
-void AZURECalcMCMC::UpdateParameterVectors(const vector_r& physicalParams) const {
-
-  if (parametersInitialized_) return;
-
-  all_indexes.clear();
-  all_physical_.clear();
-  all_rwa_.clear();
-  rwa_.clear();
-  physical_.clear();
-  fixed_.clear();
-  
-  AZUREParams params;
-  compound()->FillMnParams(params.GetMinuitParams());
-  data()->FillMnParams(params.GetMinuitParams());
-  
-  compound()->FillCompoundFromParams(params.GetMinuitParams().Params());
-  compound()->CalcShiftFunctions(configure());
-  compound()->TransformOut(configure());
-  
-  for(int i = 0; i < params.GetMinuitParams().Params().size(); i++){
-    all_rwa_.push_back(params.GetMinuitParams().Parameter(i).Value());
-    fixed_.push_back(params.GetMinuitParams().Parameter(i).IsFixed());
-    // If not fixed, add to rwa
-    if (!params.GetMinuitParams().Parameter(i).IsFixed()) {
-      rwa_.push_back(params.GetMinuitParams().Parameter(i).Value());
-    }
-  }
-  
-  all_physical_ = compound()->GetTransformParams(configure());
-  // Add missing parameters
-  for (size_t i = all_physical_.size(); i < all_rwa_.size(); i++) {
-    all_physical_.push_back(all_rwa_[i]);
-  }
-
-  // Save the not fixed physical parameters
-  int k =0;
-  for (size_t i = 0; i < fixed_.size(); ++i) {
-    if (!fixed_[i]) {
-      physical_.push_back(all_physical_[i]);
-      k++;
-    }
-  }
-
-  const_cast<AZURECalcMCMC*>(this)->parametersInitialized_ = true;
-}
-
-vector_r AZURECalcMCMC::ReconstructFullParameters(const std::vector<double>& varyingParams) const {
-  if (!parametersInitialized_) {
-    return vector_r(); // Return empty if not initialized
-  }
-  
-  // Same logic as LogLikelihoodPhysical
-  int k = 0;
-  vector_r fullParams = all_physical_;  // Start with all parameters
-  for (int i = 0; i < all_physical_.size(); ++i) {
-    if (!fixed_[i]) {
-      if (k < varyingParams.size()) {
-        fullParams[i] = varyingParams[k];  // Only substitute non-fixed parameters
-        ++k;
-      }
-    }
-  }
-  
-  return fullParams;
 }
 
 double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r& params_) const {
@@ -411,6 +211,91 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r& params_) co
   return -0.5 * chiSquared;
 }
 
+void AZURECalcMCMC::UpdateParameterVectors(const vector_r& physicalParams) const {
+
+  if (parametersInitialized_) return;
+
+  all_indexes.clear();
+  all_physical_.clear();
+  all_rwa_.clear();
+  rwa_.clear();
+  physical_.clear();
+  fixed_.clear();
+  
+  AZUREParams params;
+  compound()->FillMnParams(params.GetMinuitParams());
+  data()->FillMnParams(params.GetMinuitParams());
+  
+  compound()->FillCompoundFromParams(params.GetMinuitParams().Params());
+  compound()->CalcShiftFunctions(configure());
+  compound()->TransformOut(configure());
+  
+  for(int i = 0; i < params.GetMinuitParams().Params().size(); i++){
+    all_rwa_.push_back(params.GetMinuitParams().Parameter(i).Value());
+    fixed_.push_back(params.GetMinuitParams().Parameter(i).IsFixed());
+    // If not fixed, add to rwa
+    if (!params.GetMinuitParams().Parameter(i).IsFixed()) {
+      rwa_.push_back(params.GetMinuitParams().Parameter(i).Value());
+    }
+  }
+  
+  all_physical_ = compound()->GetTransformParams(configure());
+  // Add missing parameters
+  for (size_t i = all_physical_.size(); i < all_rwa_.size(); i++) {
+    all_physical_.push_back(all_rwa_[i]);
+  }
+
+  // Save the not fixed physical parameters
+  int k =0;
+  for (size_t i = 0; i < fixed_.size(); ++i) {
+    if (!fixed_[i]) {
+      physical_.push_back(all_physical_[i]);
+      k++;
+    }
+  }
+
+  const_cast<AZURECalcMCMC*>(this)->parametersInitialized_ = true;
+}
+
+vector_r AZURECalcMCMC::ReconstructFullParametersPhysical(const std::vector<double>& varyingParams) const {
+  if (!parametersInitialized_) {
+    return vector_r(); // Return empty if not initialized
+  }
+  
+  // Same logic as LogLikelihoodPhysical
+  int k = 0;
+  vector_r fullParams = all_physical_;  // Start with all parameters
+  for (int i = 0; i < all_physical_.size(); ++i) {
+    if (!fixed_[i]) {
+      if (k < varyingParams.size()) {
+        fullParams[i] = varyingParams[k];  // Only substitute non-fixed parameters
+        ++k;
+      }
+    }
+  }
+  
+  return fullParams;
+}
+
+vector_r AZURECalcMCMC::ReconstructFullParameters(const std::vector<double>& varyingParams) const {
+  if (!parametersInitialized_) {
+    return vector_r(); // Return empty if not initialized
+  }
+  
+  // Same logic but for RWA parameters
+  int k = 0;
+  vector_r fullParams = all_rwa_;  // Start with all RWA parameters
+  for (int i = 0; i < all_rwa_.size(); ++i) {
+    if (!fixed_[i]) {
+      if (k < varyingParams.size()) {
+        fullParams[i] = varyingParams[k];  // Only substitute non-fixed parameters
+        ++k;
+      }
+    }
+  }
+  
+  return fullParams;
+}
 
 double AZURECalcMCMC::LogLikelihoodPhysical(const std::vector<double>& physicalParams) const {
   
@@ -427,6 +312,23 @@ double AZURECalcMCMC::LogLikelihoodPhysical(const std::vector<double>& physicalP
 
   // Calculate log-likelihood from data only (no priors)
   return CalculateLogLikelihoodPhysical(params_);
+}
+
+double AZURECalcMCMC::LogLikelihood(const std::vector<double>& rwaParams) const {
+  
+  int k = 0;
+  vector_r params_ = all_rwa_;  // Start with all RWA parameters
+  for( int i = 0; i < all_rwa_.size( ); ++i ){
+    if( !fixed_[i] ){
+      if(k < rwaParams.size()) {
+        params_[i] = rwaParams[k];  // Only substitute non-fixed parameters
+        ++k;
+      }
+    }
+  }
+
+  // Calculate log-likelihood from data only (no priors) - use standard RWA calculation
+  return CalculateLogLikelihood(params_);
 }
 
 double AZURECalcMCMC::LogProbabilityPhysical(const std::vector<double>& physicalParams) const {
@@ -471,23 +373,46 @@ double AZURECalcMCMC::CalculateLogPrior(const std::vector<double>& params) const
   return logPrior;
 }
 
-// Global function pointer to access the MCMC calculator instance
-static const AZURECalcMCMC* g_mcmc_calc = nullptr;
-static std::ofstream* g_sample_file = nullptr;
-static int g_sample_count = 0;
-static int g_nwalkers = 0;
-static int g_current_step = 0;
-static volatile int g_samples_written_to_file = 0; // Atomic counter of samples actually written to file
-static volatile bool g_stop_requested = false;
-// Store the last calculated likelihood and prior for progress callbacks
-static double g_last_likelihood = 0.0;
-static double g_last_prior = 0.0;
-static std::vector<double> g_last_params;
-// Mutex for thread-safe file writing
+// C-style function wrapper for numcmc library - uses RWA parameters
+double mcmc_log_probability_wrapper_rwa(std::vector<double>& params) {
+  if(g_mcmc_calc) {
+    // Use the new LogLikelihood function for RWA parameters
+    double logLikelihood = g_mcmc_calc->LogLikelihood(params);
+    double logPrior = g_mcmc_calc->CalculateLogPrior(params);
+    double logProbability = logLikelihood + logPrior;
+    
+    // Store for GUI callbacks - these are the EXACT values used
+    g_last_likelihood = logLikelihood;
+    g_last_prior = logPrior;
+    g_last_params = params;
+    
+    // Save sample to file if file is open (thread-safe)
+    if(g_sample_file && g_sample_file->is_open()) {
 #ifdef _OPENMP
-#include <omp.h>
-static omp_lock_t g_file_lock;
+      omp_set_lock(&g_file_lock);
 #endif
+      int walker_id = g_sample_count % g_nwalkers;
+      int step = g_sample_count / g_nwalkers;
+      
+      *g_sample_file << step << "," << walker_id << "," << logProbability << "," << logLikelihood << "," << logPrior;
+      for(const double& param : params) {
+        *g_sample_file << "," << param;
+      }
+      *g_sample_file << "\n";
+      g_sample_file->flush(); // Ensure data is written immediately
+      g_sample_count++;
+      
+      // Increment the atomic counter AFTER the sample is actually written to file
+      g_samples_written_to_file++;
+#ifdef _OPENMP
+      omp_unset_lock(&g_file_lock);
+#endif
+    }
+    
+    return logLikelihood;  // Return only likelihood for MCMC sampler
+  }
+  return -std::numeric_limits<double>::infinity();
+}
 
 // C-style function wrapper for numcmc library - uses physical parameters
 double mcmc_log_probability_wrapper(std::vector<double>& params) {
@@ -536,6 +461,7 @@ static void (*g_gui_iteration_callback)(int, int) = nullptr;
 static void (*g_gui_results_callback)(int, int, const std::vector<std::vector<double>>&) = nullptr;
 static const AZURECalcMCMC* g_mcmc_for_callbacks = nullptr;
 static nu::Mcmc* g_mcmc_sampler = nullptr;
+static bool g_using_rwa_parameters = false;
 
 // Helper function to read last line of file and extract values (thread-safe)
 struct LastSampleInfo {
@@ -665,33 +591,48 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
       // Get the most recent parameter set from the wrapper and reconstruct full parameter array
       if (!g_last_params.empty()) {
         
-        // Reconstruct full parameter array using the new public method
-        vector_r fullParams = g_mcmc_for_callbacks->ReconstructFullParameters(g_last_params);
+        // Reconstruct full parameter array using the appropriate method based on parameter type
+        vector_r fullParams;
+        if (g_using_rwa_parameters) {
+          fullParams = g_mcmc_for_callbacks->ReconstructFullParameters(g_last_params);
+        } else {
+          fullParams = g_mcmc_for_callbacks->ReconstructFullParametersPhysical(g_last_params);
+        }
         
         if (!fullParams.empty()) {
           CNuc* localCompound = g_mcmc_for_callbacks->compound()->Clone();
           EData* localData = g_mcmc_for_callbacks->data()->Clone();
           
-          // Fill parameters with the complete reconstructed parameter array
-          localCompound->FillCompoundFromParamsPhysical(fullParams);
-          bool isValid = localCompound->TransformIn(g_mcmc_for_callbacks->configure());
+          bool isValid = true;
           
-          if (isValid) {
-            // Use same approach as LogProbabilityPhysical to get reduced parameters
-            AZUREParams params;
-            localCompound->FillMnParams(params.GetMinuitParams());
-            localData->FillMnParams(params.GetMinuitParams());
-            
-            // Fill parameters exactly like LogProbabilityPhysical does
+          if (g_using_rwa_parameters) {
+            // For RWA parameters, use the same approach as CalculateLogLikelihood
+            localCompound->FillCompoundFromParams(fullParams);
+            localData->FillNormsFromParams(fullParams);
             localData->FillEnergyShiftsFromParams(fullParams, localData, localCompound, &g_mcmc_for_callbacks->configure());
-            localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
-            
-            // Recalculate shift functions if needed
             if (g_mcmc_for_callbacks->configure().paramMask & Config::USE_BRUNE_FORMALISM) {
               localCompound->CalcShiftFunctions(g_mcmc_for_callbacks->configure());
             }
+          } else {
+            // For physical parameters, use the same approach as CalculateLogLikelihoodPhysical
+            localCompound->FillCompoundFromParamsPhysical(fullParams);
+            isValid = localCompound->TransformIn(g_mcmc_for_callbacks->configure());
             
-            // Calculate cross sections for all data points (like AZURECalc and LogProbabilityPhysical do)
+            if (isValid) {
+              AZUREParams params;
+              localCompound->FillMnParams(params.GetMinuitParams());
+              localData->FillMnParams(params.GetMinuitParams());
+              localData->FillEnergyShiftsFromParams(fullParams, localData, localCompound, &g_mcmc_for_callbacks->configure());
+              localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+              
+              if (g_mcmc_for_callbacks->configure().paramMask & Config::USE_BRUNE_FORMALISM) {
+                localCompound->CalcShiftFunctions(g_mcmc_for_callbacks->configure());
+              }
+            }
+          }
+          
+          if (isValid) {
+            // Calculate cross sections for all data points
             for(EDataIterator data=localData->begin(); data!=localData->end(); data++) {
               if(!data.point()->IsMapped()) {
                 data.point()->Calculate(localCompound, g_mcmc_for_callbacks->configure());
@@ -699,7 +640,10 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
             }
             
             localData->WriteOutputFiles(g_mcmc_for_callbacks->configure(), true);
-            localCompound->TransformOut(g_mcmc_for_callbacks->configure());
+            
+            if (!g_using_rwa_parameters) {
+              localCompound->TransformOut(g_mcmc_for_callbacks->configure());
+            }
             localCompound->PrintTransformParams(g_mcmc_for_callbacks->configure());
           }
           
@@ -846,7 +790,7 @@ bool AZURECalcMCMC::Initialize( ){
 }
 
 void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<double>& initialParams, 
-                                   std::vector<std::vector<double>>& samples, double chainSpreadPercent, int nthreads) const {
+                                   std::vector<std::vector<double>>& samples, double chainSpreadPercent, int nthreads, bool useRWA) const {
   try {
     int ndim = initialParams.size();
 
@@ -857,13 +801,6 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
       configure().outStream << "Error: No parameters provided for MCMC sampling\n";
       return;
     }
-
-    // Print initial params
-    configure().outStream << "Initial parameters: ";
-    for(const double& param : initialParams) {
-      configure().outStream << param << " ";
-    }
-    configure().outStream << std::endl;
 
     // Set up CSV file for saving samples with enhanced format
     std::string samplesFile = configure().outputdir + "samples.mcmc";
@@ -949,6 +886,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     g_stop_requested = false; // Clear stop flag
     g_last_likelihood = 0.0;
     g_last_prior = 0.0;
+    g_using_rwa_parameters = useRWA; // Set parameter type flag
     
     // Initialize OpenMP lock for thread-safe file writing
 #ifdef _OPENMP
@@ -969,10 +907,15 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     int remainingSteps = nsteps - startStep;
     
     // Use enhanced run method with callbacks (parallel or serial based on nthreads)
+    // Choose appropriate wrapper function based on parameter type
+    auto wrapper_func = useRWA ? mcmc_log_probability_wrapper_rwa : mcmc_log_probability_wrapper;
+    
+    configure().outStream << "Using " << (useRWA ? "reduced width amplitudes (RWA)" : "physical parameters") << " for MCMC fitting\n";
+    
     int result;
     if (nthreads > 1) {
         result = mcmc_sampler.run_parallel_with_callback(
-            mcmc_log_probability_wrapper, 
+            wrapper_func, 
             remainingSteps,
             nthreads,
             mcmc_progress_callback,
@@ -981,7 +924,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
         );
     } else {
         result = mcmc_sampler.run_with_callback(
-            mcmc_log_probability_wrapper, 
+            wrapper_func, 
             remainingSteps,
             mcmc_progress_callback,
             mcmc_should_stop,
@@ -998,6 +941,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     g_mcmc_for_callbacks = nullptr;
     g_mcmc_sampler = nullptr;
     g_samples_written_to_file = 0; // Reset sample counter
+    g_using_rwa_parameters = false; // Reset parameter type flag
     
     csvFile.close();
     
@@ -1028,10 +972,12 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     configure().outStream << "Error during MCMC sampling: " << e.what() << "\n";
     g_mcmc_calc = nullptr;
     g_sample_file = nullptr;
+    g_using_rwa_parameters = false;
   } catch(...) {
     configure().outStream << "Unknown error during MCMC sampling\n";
     g_mcmc_calc = nullptr;
     g_sample_file = nullptr;
+    g_using_rwa_parameters = false;
   }
 }
 
@@ -1082,4 +1028,3 @@ void AZURECalcMCMC::LoadExistingSamples(const std::string& filename, std::vector
   
   configure().outStream << "Loaded " << samples.size() << " existing samples from " << filename << "\n";
 }
-#endif

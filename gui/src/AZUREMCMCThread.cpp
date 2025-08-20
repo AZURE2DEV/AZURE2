@@ -136,6 +136,10 @@ void AZUREMCMCWorker::run() {
         emit logMessage("Creating MCMC calculator...");
         AZURECalcMCMC* mcmcCalculator = new AZURECalcMCMC(data, compound, config_);
         
+        // Check if we should use reduced widths (RWA)
+        bool useReducedWidths = mcmcTab_->useReducedWidthsCheckBox->isChecked();
+        emit logMessage(QString("Using %1 for MCMC fitting").arg(useReducedWidths ? "reduced width amplitudes (RWA)" : "physical parameters"));
+        
         // Get MCMC parameters from MCMCTab
         std::vector<double> initialParams;
         std::vector<double> priorMeans;
@@ -218,8 +222,15 @@ void AZUREMCMCWorker::run() {
         });
         
         try {
-            // Run sampling directly with enhanced callbacks
-            mcmcCalculator->RunMCMCSampling(nWalkers, nSteps, initialParams, samples, chainSpread, nThreads);
+            if (useReducedWidths) {
+                // Use reduced width amplitudes (RWA) for fitting
+                emit logMessage("Running MCMC with reduced width amplitudes...");
+                mcmcCalculator->RunMCMCSampling(nWalkers, nSteps, initialParams, samples, chainSpread, nThreads, true);
+            } else {
+                // Use physical parameters for fitting
+                emit logMessage("Running MCMC with physical parameters...");
+                mcmcCalculator->RunMCMCSampling(nWalkers, nSteps, initialParams, samples, chainSpread, nThreads, false);
+            }
             
             emit logMessage(QString("MCMC sampling completed! Generated %1 samples")
                            .arg(samples.size()));

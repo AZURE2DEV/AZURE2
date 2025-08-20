@@ -322,37 +322,6 @@ void FittingTab::populateFromCurrentGUIState() {
     updateParameterTables();
 }
 
-double FittingTab::convertReducedToPhysical(double reducedWidth, int levelIndex, int channelIndex) {
-    // Width conversion: Physical width = reduced_width^2 * penetrability_factor
-    // This is a simplified conversion for GUI display purposes.
-    // The real calculation involves penetrability P(E) and shift S(E) functions
-    // that depend on energy, channel radius, masses, etc.
-    
-    // For typical nuclear physics cases, a reasonable approximation is:
-    // Γ ≈ γ² * P, where P is typically in the range 1-1000 depending on energy and l
-    // We use a simple approximation that converts reduced width (in MeV^1/2) to physical width (in eV)
-    
-    if(reducedWidth == 0.0) return 0.0;
-    
-    // Simple conversion: square the reduced width and apply energy-dependent scaling
-    // This is an approximation - real conversion requires full R-Matrix calculation
-    double physicalWidth = reducedWidth * reducedWidth * 1000.0; // Convert to eV and apply typical scaling
-    
-    return physicalWidth;
-}
-
-double FittingTab::convertPhysicalToReduced(double physicalWidth, int levelIndex, int channelIndex) {
-    // Inverse of the above conversion: reduced_width = sqrt(physical_width / scaling_factor)
-    // This converts from physical width (eV) back to reduced width (MeV^1/2)
-    
-    if(physicalWidth <= 0.0) return 0.0;
-    
-    // Inverse of the forward conversion: sqrt(physical_width / 1000.0)
-    double reducedWidth = sqrt(physicalWidth / 1000.0);
-    
-    return reducedWidth;
-}
-
 double FittingTab::transformRWAParameterToPhysical(const QString& paramName, double rwaValue) {
     // Transform RWA parameter to physical using proper R-Matrix transformation via AZURESetup
     
@@ -490,87 +459,119 @@ void FittingTab::loadSettings() {
             }
             file.close();
             
-            // Update existing fitting parameters with values from .sav file
-            int updatedCount = 0;
+            // Create lists of parameters and values to convert in batch
+            QStringList paramNamesToConvert;
+            QList<double> rwaValuesToConvert;
+            QList<QPair<int, QString>> parameterMapping; // (fittingParameters index, matchKey)
             
+            // First pass: collect all parameters that need conversion
             for(int i = 0; i < fittingParameters.size(); i++) {
                 FittingParameter& param = fittingParameters[i];
                 QString matchKey = findMatchingParameterKey(param, savParams.keys());
                 
                 if(!matchKey.isEmpty() && savParams.contains(matchKey)) {
                     QPair<double, double> savData = savParams[matchKey];
+                    double rwaValue = savData.first;
+                    double rwaError = savData.second;
                     
-                    // Update value and error - .sav values are RWA parameters, need transformation
-                    if(param.category == "level" && param.name.contains("Width") && param.channelIndex >= 0) {
-                        // .sav file contains RWA (reduced widths), transform to physical for display
-                        double rwaValue = savData.first;
-                        double rwaError = savData.second;
+                    parameterMapping.append(qMakePair(i, matchKey));
+                    
+                    // Add main value
+                    paramNamesToConvert.append(matchKey);
+                    rwaValuesToConvert.append(rwaValue);
+                    
+                    // For error calculation, add +/- error values for level parameters
+                    if(param.category == "level") {
+                        paramNamesToConvert.append(matchKey + "_plus");
+                        rwaValuesToConvert.append(rwaValue + rwaError);
+                        paramNamesToConvert.append(matchKey + "_minus");
+                        rwaValuesToConvert.append(rwaValue - rwaError);
+                    }
+                }
+            }
+            
+            // Batch conversion of all RWA parameters to physical
+            QList<double> convertedValues;
+            if(!paramNamesToConvert.isEmpty()) {
+                // Find the parent AZURESetup widget for batch conversion
+                AZURESetup* azureSetup = nullptr;
+                QWidget* parent = this->parentWidget();
+                while(parent != nullptr) {
+                    azureSetup = qobject_cast<AZURESetup*>(parent);
+                    if(azureSetup != nullptr) break;
+                    parent = parent->parentWidget();
+                }
+                
+                if(azureSetup != nullptr) {
+                    // Batch convert all parameters at once
+                    for(int i = 0; i < paramNamesToConvert.size(); i++) {
+                        QString paramName = paramNamesToConvert[i];
+                        // Remove suffix markers for error calculation
+                        if(paramName.endsWith("_plus") || paramName.endsWith("_minus")) {
+                            paramName = paramName.left(paramName.lastIndexOf("_"));
+                        }
+                        double physicalValue = azureSetup->ConvertRWAToPhysical(paramName, rwaValuesToConvert[i]);
+                        convertedValues.append(physicalValue);
+                    }
+                } else {
+                    // Fallback: use original values if conversion unavailable
+                    convertedValues = rwaValuesToConvert;
+                }
+            }
+            
+            // Second pass: apply converted values to parameters
+            int updatedCount = 0;
+            int valueIndex = 0;
+            
+            for(const QPair<int, QString>& mapping : parameterMapping) {
+                int paramIndex = mapping.first;
+                QString matchKey = mapping.second;
+                FittingParameter& param = fittingParameters[paramIndex];
+                QPair<double, double> savData = savParams[matchKey];
+                
+                if(param.category == "level" && (param.name.contains("Width") || param.name.contains("Energy"))) {
+                    // Use converted values with error calculation
+                    if(valueIndex + 2 < convertedValues.size()) {
+                        param.value = convertedValues[valueIndex];
+                        double physicalValuePlusError = convertedValues[valueIndex + 1];
+                        double physicalValueMinusError = convertedValues[valueIndex + 2];
                         
-                        // Transform RWA value to physical
-                        double physicalValue = transformRWAParameterToPhysical(matchKey, rwaValue);
-                        param.value = physicalValue;
-                        
-                        // Transform RWA error to physical error
-                        // Calculate RWA_value ± RWA_error, transform both, then find the physical error
-                        double rwaValuePlusError = rwaValue + rwaError;
-                        double rwaValueMinusError = rwaValue - rwaError;
-                        
-                        double physicalValuePlusError = transformRWAParameterToPhysical(matchKey, rwaValuePlusError);
-                        double physicalValueMinusError = transformRWAParameterToPhysical(matchKey, rwaValueMinusError);
-                        
-                        // Take the larger of the two error estimates for asymmetric transformations
-                        double errorUp = std::abs(physicalValuePlusError - physicalValue);
-                        double errorDown = std::abs(physicalValue - physicalValueMinusError);
+                        // Calculate error from the converted values
+                        double errorUp = std::abs(physicalValuePlusError - param.value);
+                        double errorDown = std::abs(param.value - physicalValueMinusError);
                         param.error = std::max(errorUp, errorDown);
                         
-                        // Update the underlying ChannelsModel with physical width (GUI stores physical)
-                        if(levelsTab_) {
-                            ChannelsModel* channelsModel = levelsTab_->getChannelsModel();
-                            if(channelsModel) {
-                                QList<ChannelsData> channels = channelsModel->getChannels();
-                                for(int j = 0; j < channels.size(); j++) {
-                                    if(j == param.channelIndex) {
-                                        QModelIndex modelIndex = channelsModel->index(j, 6); // Column 6 is width
-                                        channelsModel->setData(modelIndex, physicalValue, Qt::EditRole);
-                                        break;
-                                    }
+                        valueIndex += 3; // Move past the three values (main, plus, minus)
+                    }
+                } else {
+                    // For other parameters, use direct conversion
+                    if(valueIndex < convertedValues.size()) {
+                        param.value = convertedValues[valueIndex];
+                        param.error = savData.second; // Keep original error for non-level parameters
+                        valueIndex += 1;
+                    }
+                }
+                
+                // Update the underlying models with converted values
+                if(param.category == "level" && param.name.contains("Width") && param.channelIndex >= 0) {
+                    if(levelsTab_) {
+                        ChannelsModel* channelsModel = levelsTab_->getChannelsModel();
+                        if(channelsModel) {
+                            QList<ChannelsData> channels = channelsModel->getChannels();
+                            for(int j = 0; j < channels.size(); j++) {
+                                if(j == param.channelIndex) {
+                                    QModelIndex modelIndex = channelsModel->index(j, 6);
+                                    channelsModel->setData(modelIndex, param.value, Qt::EditRole);
+                                    break;
                                 }
                             }
                         }
-                    } else if(param.category == "level" && param.name.contains("Energy")) {
-                        // For level energy parameters, also transform the error
-                        double rwaValue = savData.first;
-                        double rwaError = savData.second;
-                        
-                        // Transform RWA value to physical
-                        double physicalValue = transformRWAParameterToPhysical(matchKey, rwaValue);
-                        param.value = physicalValue;
-                        
-                        // Transform RWA error to physical error
-                        double rwaValuePlusError = rwaValue + rwaError;
-                        double rwaValueMinusError = rwaValue - rwaError;
-                        
-                        double physicalValuePlusError = transformRWAParameterToPhysical(matchKey, rwaValuePlusError);
-                        double physicalValueMinusError = transformRWAParameterToPhysical(matchKey, rwaValueMinusError);
-                        
-                        // Take the larger of the two error estimates
-                        double errorUp = std::abs(physicalValuePlusError - physicalValue);
-                        double errorDown = std::abs(physicalValue - physicalValueMinusError);
-                        param.error = std::max(errorUp, errorDown);
-                    } else {
-                        // For other parameters (normalizations, etc.), transform value but keep error as-is
-                        // since normalizations and energy shifts are typically already in physical units
-                        param.value = transformRWAParameterToPhysical(matchKey, savData.first);
-                        param.error = savData.second;
                     }
-                    
-                    // Do not change limits when loading from .sav file - keep existing limits
-                    
-                    // Propagate changes to other tabs
-                    updateParameterInOtherTabs(param.name, param);
-                    
-                    updatedCount++;
                 }
+                
+                // Propagate changes to other tabs
+                updateParameterInOtherTabs(param.name, param);
+                updatedCount++;
             }
             
             // Refresh the parameter tables

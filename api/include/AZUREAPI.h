@@ -143,6 +143,16 @@ class AZUREAPI {
    * Transform all RWA parameters to physical values
    */
   vector_r TransformAllRWAParameters(const vector_r& p) const;
+
+  /*!
+   * Calculate chi-squared from RWA parameters
+   */
+  double CalculateChi2RWA(const vector_r& rwaParams) const;
+  
+  /*!
+   * Calculate chi-squared from physical parameters
+   */
+  double CalculateChi2Physical(const vector_r& physicalParams) const;
  
  
  private:
