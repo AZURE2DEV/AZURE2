@@ -1,4 +1,5 @@
 #include "CNuc.h"
+#include "Config.h"
 #include "DataLine.h"
 #include "EData.h"
 #include "ESegment.h"
@@ -436,52 +437,55 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
       double originalEnergy = point->GetOriginalEnergy();
       double shiftedEnergy = originalEnergy + energyShift_;
       
-      // Don't allow energies below 0.005 MeV
+      // Don't allow energies below 0.005 MeV (AZURE2 may crash)
       if(shiftedEnergy < 0.005) {
         shiftedEnergy = originalEnergy;
       }
       
-      // Update lab energy
+      // Set the shifted energy
       point->SetLabEnergy(shiftedEnergy);
-      
-      // Recalculate all energy-dependent parameters to ensure calculations use the shifted energy
+
+      // Clear existing mappings
+      if(point->IsMapped()) {
+        point->ClearMapping();
+        point->ClearLocalMappedPoints();
+      }
+
+      // Recalculate energy dependent values
       if(theCNuc && configure) {
-        PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetEntranceKey()));
-        PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetExitKey()));
-        
-        // Convert energies (replicate logic from ESegment::Fill)
+        PPair* entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+        PPair* exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
+
+        // Apply the same conversion functions as in ESegment::Fill
         if(entrancePair->GetPType()==20) {
           point->ConvertDecayEnergy(exitPair);
-        } else {
+        } else if (this->IsCMDifferential()) {
+          point->ConvertLabEnergy(entrancePair); 
+        } else if(!this->IsCMDifferential()){
           point->ConvertLabEnergy(entrancePair);
         }
-        
-        // Convert angles and cross sections if needed (replicate logic from ESegment::Fill)
-        if(exitPair->GetPType()==0 && IsDifferential() && !IsPhase() && !IsCMDifferential()) {
-          if(GetEntranceKey()==GetExitKey()) {
+
+        if(exitPair->GetPType()==0 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
+          if(this->GetEntranceKey()==this->GetExitKey()) {
             point->ConvertLabAngle(entrancePair);
           } else {
             point->ConvertLabAngle(entrancePair,exitPair,*configure);
           }
           point->ConvertCrossSection(entrancePair,exitPair);
         }
-        
-        // Convert gamma angles and cross sections if needed (replicate logic from ESegment::Fill) 
-        if(exitPair->GetPType()==10 && IsDifferential() && !IsPhase() && !IsCMDifferential()) {
+
+        if(exitPair->GetPType()==10 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
           point->ConvertLabAngleGammas(entrancePair);
           point->ConvertCrossSectionGammas(entrancePair);
         }
-        
-        // Recalculate energy-dependent physics values for shifted energy  
-        point->CalcEDependentValues(theCNuc, *configure);
-        
-        // After energy shifts, mapped points are no longer at identical energies and must be recalculated
-        if(point->IsMapped()) {
-          point->ClearMapping();
+
+        if( this->IsDifferential() || this->IsCMDifferential()) {
+          point->ClearLegendrePolynomials();
+          point->CalcLegendreP(configure->maxLOrder, theCNuc, NULL);
         }
-
+        point->RecalcEDependentValues(theCNuc,*configure);
+        point->CalcCoulombAmplitude(theCNuc);
       }
-
     }
   }
 }

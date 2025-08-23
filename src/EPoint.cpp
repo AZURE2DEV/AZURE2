@@ -28,7 +28,7 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   cm_angle_=dataLine.angle();
   lab_angle_=dataLine.angle();
   original_energy_=dataLine.energy();
-  double shiftedEnergy = dataLine.energy() + parent->GetEnergyShift();
+  double shiftedEnergy = dataLine.energy(); //+ parent->GetEnergyShift();
   // Don't allow energies below 0.005 MeV
   if(shiftedEnergy < 0.005) {
     shiftedEnergy = dataLine.energy();
@@ -740,6 +740,15 @@ void EPoint::AddLegendreP(double polynomial) {
 }
 
 /*!
+ * Clears all Legendre polynomials stored in the point.
+ * This is needed when recalculating polynomials after energy shifts.
+ */
+
+void EPoint::ClearLegendrePolynomials() {
+  legendreP_.clear();
+}
+
+/*!
  * Sets the geometrical cross section factor \f$ \frac{\pi}{k^2} \f$.
  */
 
@@ -1257,13 +1266,6 @@ void EPoint::Calculate(CNuc* theCNuc,const Config &configure, EPoint *parent, in
       !this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsTargetIntegration()&&
       !this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsConvCoefficients())) {
     
-    // If using external capture with energy shifts, recalculate energy-dependent values
-    // This ensures that geometrical factors, penetrabilities, phases, etc. are calculated
-    // with the current (possibly shifted) energy rather than the original initialization energy
-    if(configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
-      this->RecalcEDependentValues(theCNuc, configure);
-    }
-    
     GenMatrixFunc *theMatrixFunc;
     if(configure.paramMask & Config::USE_AMATRIX) theMatrixFunc=new AMatrixFunc(theCNuc,configure);
     else theMatrixFunc=new RMatrixFunc(theCNuc,configure);
@@ -1281,10 +1283,6 @@ void EPoint::Calculate(CNuc* theCNuc,const Config &configure, EPoint *parent, in
     } else {
       for(int i=1;i<=this->NumLocalMappedPoints();i++) {
 	EPoint *mappedPoint = this->GetLocalMappedPoint(i);
-	// Recalculate energy-dependent values for mapped points too
-	if(configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
-	  mappedPoint->RecalcEDependentValues(theCNuc, configure);
-	}
 	theMatrixFunc->CalculateCrossSection(mappedPoint);
       }
     }

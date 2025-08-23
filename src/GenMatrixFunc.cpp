@@ -2,6 +2,7 @@
 #include "EPoint.h"
 #include "GenMatrixFunc.h"
 #include <assert.h>
+#include <iostream>
 
 /*!
  * The child classes AMatrixFunc or RMatrixFunc contain functions
@@ -250,6 +251,7 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
       point->SetFitCrossSection(phase);
     }
   }
+  
 }
 
 

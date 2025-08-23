@@ -94,6 +94,7 @@ class EPoint {
   void ConvertLabAngleGammas(PPair*); 
   void ConvertCrossSectionGammas(PPair*);
   void AddLegendreP(double);
+  void ClearLegendrePolynomials();
   void SetGeometricalFactor(double);
   void SetFitCrossSection(double);
   void SetFitE1CrossSection(double);

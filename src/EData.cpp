@@ -1261,25 +1261,40 @@ void EData::FillNormsFromParams(const vector_r &p) {
 void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc* theCNuc, const Config* configure) {
   int i=GetEnergyShiftParamOffset();
   int k = 0;
+  bool anyEnergyShifted = false;
+  
   if(data) {
     for(ESegmentIterator segment=data->GetSegments().begin();segment<data->GetSegments().end();segment++) {
       k++;
       if(segment->IsVaryEnergyShift()) {
         segment->SetEnergyShift(p[i]); 
         segment->UpdatePointEnergiesWithShift(theCNuc, configure);
+        anyEnergyShifted = true;
         i++;
       }
       if(segment->IsTotalCapture()) segment+=segment->IsTotalCapture()-1;
     }
+    
+    // Critical fix: Rebuild energy-based mapping system after energy shifts
+    if(anyEnergyShifted) {
+      data->MapData();
+    }
+    
     return;
   }
   for(ESegmentIterator segment=GetSegments().begin();segment<GetSegments().end();segment++) {
     if(segment->IsVaryEnergyShift()) {
       segment->SetEnergyShift(p[i]); 
       segment->UpdatePointEnergiesWithShift();
+      anyEnergyShifted = true;
       i++;
     }
     if(segment->IsTotalCapture()) segment+=segment->IsTotalCapture()-1;
+  }
+  
+  // Critical fix: Rebuild energy-based mapping system after energy shifts
+  if(anyEnergyShifted) {
+    this->MapData();
   }
 }
 
