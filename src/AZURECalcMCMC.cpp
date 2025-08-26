@@ -40,15 +40,28 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
 
   CNuc* localCompound = NULL;
   EData* localData = NULL;
-  localCompound = compound()->Clone();
-  localData = data()->Clone();
+  
+  try {
+    localCompound = compound()->Clone();
+    localData = data()->Clone();
 
-  //Fill Compound Nucleus From Parameters
-  AZUREParams params;
-  localCompound->FillCompoundFromParams(p);
-  localData->FillNormsFromParams(p);
-  localData->FillEnergyShiftsFromParams(p,localData,localCompound,&configure());
-  if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+    //Fill Compound Nucleus From Parameters
+    AZUREParams params;
+    localCompound->FillCompoundFromParams(p);
+    localData->FillNormsFromParams(p);
+    localData->FillEnergyShiftsFromParams(p,localData,localCompound,&configure());
+    if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  } catch (GSLException& e) {
+    // Clean up and return bad likelihood for GSL errors
+    if(localCompound) delete localCompound;
+    if(localData) delete localData;
+    return -std::numeric_limits<double>::infinity();
+  } catch (...) {
+    // Clean up and return bad likelihood for any other errors
+    if(localCompound) delete localCompound;
+    if(localData) delete localData;
+    return -std::numeric_limits<double>::infinity();
+  }
 
   bool isFit=true;
   
@@ -57,15 +70,24 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
   double segmentChiSquared=0.0;
   ESegmentIterator firstSumIterator = localData->GetSegments().end();
   ESegmentIterator lastSumIterator = localData->GetSegments().end();
-  for(EDataIterator data=localData->begin();data!=localData->end();data++) {
-    if(data.segment()->GetPoints().begin()==data.point()) {
-      segmentChiSquared=0.0;
-      if(data.segment()->IsTotalCapture()) {
-        firstSumIterator=data.segment();
-        lastSumIterator=data.segment()+data.segment()->IsTotalCapture()-1;
-      } 
-    }
-    if(!data.point()->IsMapped()) data.point()->Calculate(localCompound,configure());
+  
+  try {
+    for(EDataIterator data=localData->begin();data!=localData->end();data++) {
+      if(data.segment()->GetPoints().begin()==data.point()) {
+        segmentChiSquared=0.0;
+        if(data.segment()->IsTotalCapture()) {
+          firstSumIterator=data.segment();
+          lastSumIterator=data.segment()+data.segment()->IsTotalCapture()-1;
+        } 
+      }
+      if(!data.point()->IsMapped()) {
+        try {
+          data.point()->Calculate(localCompound,configure());
+        } catch (GSLException& e) {
+          // Skip this point if GSL calculation fails
+          continue;
+        }
+      }
     if(firstSumIterator!=localData->GetSegments().end()&&
        data.segment()!=lastSumIterator) continue;
     double fitCrossSection=data.point()->GetFitCrossSection();
@@ -91,6 +113,17 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
       chiSquared+=segmentChiSquared;
     }
 
+    }
+  } catch (GSLException& e) {
+    // Clean up and return bad likelihood for GSL errors during calculation
+    delete localCompound;
+    delete localData;
+    return -std::numeric_limits<double>::infinity();
+  } catch (...) {
+    // Clean up and return bad likelihood for any other errors during calculation
+    delete localCompound;
+    delete localData;
+    return -std::numeric_limits<double>::infinity();
   }
 
   std::cout << "Chi-squared: " << chiSquared << std::endl;
@@ -107,17 +140,30 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r& params_) co
 
   CNuc * localCompound = NULL;
   EData *localData = NULL;
-  localCompound = compound()->Clone();
-  localData = data()->Clone();
+  
+  try {
+    localCompound = compound()->Clone();
+    localData = data()->Clone();
 
-  AZUREParams params;
-  localCompound->FillCompoundFromParamsPhysical(params_);
-  bool isValid = localCompound->TransformIn( configure( ) );
-
-  if( !isValid ) {
-    delete localCompound;
-    delete localData;
-    return -std::numeric_limits<double>::infinity(); // Invalid parameters for physical space
+    AZUREParams params;
+    localCompound->FillCompoundFromParamsPhysical(params_);
+    bool isValid = localCompound->TransformIn( configure( ) );
+    
+    if(!isValid) {
+      delete localCompound;
+      delete localData;
+      return -std::numeric_limits<double>::infinity();
+    }
+  } catch (GSLException& e) {
+    // Clean up and return bad likelihood for GSL errors
+    if(localCompound) delete localCompound;
+    if(localData) delete localData;
+    return -std::numeric_limits<double>::infinity();
+  } catch (...) {
+    // Clean up and return bad likelihood for any other errors
+    if(localCompound) delete localCompound;
+    if(localData) delete localData;
+    return -std::numeric_limits<double>::infinity();
   }
 
   localCompound->FillMnParams(params.GetMinuitParams());
@@ -135,15 +181,24 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r& params_) co
   double segmentChiSquared=0.0;
   ESegmentIterator firstSumIterator = localData->GetSegments().end();
   ESegmentIterator lastSumIterator = localData->GetSegments().end();
-  for(EDataIterator data=localData->begin();data!=localData->end();data++) {
-    if(data.segment()->GetPoints().begin()==data.point()) {
-      segmentChiSquared=0.0;
-      if(data.segment()->IsTotalCapture()) {
-        firstSumIterator=data.segment();
-        lastSumIterator=data.segment()+data.segment()->IsTotalCapture()-1;
-      } 
-    }
-    if(!data.point()->IsMapped()) data.point()->Calculate(localCompound,configure());
+  
+  try {
+    for(EDataIterator data=localData->begin();data!=localData->end();data++) {
+      if(data.segment()->GetPoints().begin()==data.point()) {
+        segmentChiSquared=0.0;
+        if(data.segment()->IsTotalCapture()) {
+          firstSumIterator=data.segment();
+          lastSumIterator=data.segment()+data.segment()->IsTotalCapture()-1;
+        } 
+      }
+      if(!data.point()->IsMapped()) {
+        try {
+          data.point()->Calculate(localCompound,configure());
+        } catch (GSLException& e) {
+          // Skip this point if GSL calculation fails
+          continue;
+        }
+      }
     if(firstSumIterator!=localData->GetSegments().end()&&
        data.segment()!=lastSumIterator) continue;
     double fitCrossSection=data.point()->GetFitCrossSection();
@@ -169,6 +224,17 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r& params_) co
       chiSquared+=segmentChiSquared;
     }
 
+    }
+  } catch (GSLException& e) {
+    // Clean up and return bad likelihood for GSL errors during calculation
+    delete localCompound;
+    delete localData;
+    return -std::numeric_limits<double>::infinity();
+  } catch (...) {
+    // Clean up and return bad likelihood for any other errors during calculation
+    delete localCompound;
+    delete localData;
+    return -std::numeric_limits<double>::infinity();
   }
 
   delete localCompound;
