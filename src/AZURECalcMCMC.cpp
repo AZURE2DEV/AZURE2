@@ -48,7 +48,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
     //Fill Compound Nucleus From Parameters
     AZUREParams params;
     localCompound->FillCompoundFromParams(p);
-    //localData->FillNormsFromParams(p);
+    localData->FillNormsFromParams(p);
     localData->FillEnergyShiftsFromParams(p,localData,localCompound,&configure());
     if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
   } catch (GSLException& e) {
@@ -125,8 +125,6 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
     delete localData;
     return -std::numeric_limits<double>::infinity();
   }
-
-  std::cout << "Chi-squared: " << chiSquared << std::endl;
 
   delete localCompound;
   delete localData;
@@ -748,101 +746,6 @@ void AZURECalcMCMC::SetGUIResultsCallback(void (*callback)(int, int, const std::
   g_gui_results_callback = callback;
 }
 
-bool AZURECalcMCMC::Initialize( ){
-
-  std::string file;
-  if( configure().paramMask & Config::CALCULATE_WITH_DATA ) file = configure().outputdir + "intEC.dat";
-  else file = configure().outputdir + "intEC.extrap";
-
-  // Initialize EC Integral caching system
-
-  std::string cacheFile;
-  if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
-    cacheFile = configure().outputdir + "intEC_cache.dat";
-  } else {
-    cacheFile = configure().outputdir + "intEC_cache.extrap";
-  }
-
-  // FIXME: It crashes on Linux (but fine on Mac)
-  //if( compound_ != nullptr ) delete compound_;
-  //if( data_ != nullptr ) delete data_;
-
-  delete compound_;
-  delete data_;
-  data_ = new EData( );
-  compound_ = new CNuc( );
-
-  //configure().outStream << "Filling Compound Nucleus..." << std::endl;
-  if(compound()->Fill(configure())==-1) {
-    //configure().outStream << "Could not fill compound nucleus from file." << std::endl;
-    return -1;
-  } else if(compound()->NumPairs()==0 || compound()->NumJGroups()==0) {
-    //configure().outStream << "No nuclear data exists. Calculation not possible." << std::endl; 
-    return -1;
-  } 
-  if((configure().screenCheckMask|configure().fileCheckMask) & 
-     Config::CHECK_COMPOUND_NUCLEUS) compound()->PrintNuc(configure());
-
-  if(!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
-    //Fill the data object from the segments and data file
-    //  Compound object is passed to the function for pair key verification and
-    //  center of mass conversions, s-factor conversions, etc.
-    //configure().outStream << "Filling Data Structures..." << std::endl;
-    if(configure().paramMask & Config::CALCULATE_WITH_DATA) {
-      if(data()->Fill(configure(),compound())==-1) {
-	//configure().outStream << "Could not fill data object from file." << std::endl;
-	return -1;
-      } else if(data()->NumSegments()==0) {
-	//configure().outStream << "There is no data provided." << std::endl;
-	return -1;
-      }
-    } else {
-      if(data()->MakePoints(configure(),compound())==-1) {
-	//configure().outStream << "Could not fill data object from file." << std::endl;
-	return -1;
-      } else if(data()->NumSegments()==0) {
-	//configure().outStream << "Extrapolation segments produce no data." << std::endl;
-	return -1;
-      }
-    } 
-    if((configure().fileCheckMask|configure().screenCheckMask) & Config::CHECK_DATA)
-      data()->PrintData(configure());
-  } else {
-    if(!compound()->IsPairKey(configure().rateParams.entrancePair)||!compound()->IsPairKey(configure().rateParams.exitPair)) {
-      //configure().outStream << "Reaction rate pairs do not exist in compound nucleus." << std::endl;
-      return -1;
-    } else {
-      compound()->GetPair(compound()->GetPairNumFromKey(configure().rateParams.entrancePair))->SetEntrance();
-    }
-  }
-
-  //Initialize compound nucleus object
-  try {
-    compound()->Initialize(configure());
-  } catch (GSLException e) {
-    //configure().outStream << e.what() << std::endl;
-    //configure().outStream << "Calculation was aborted." << std::endl;
-    return -1;
-  }
-
-  // Create new parameters for minuit, fill them from compound nucleus object and data file.
-  AZUREParams params;
-  compound()->FillMnParams(params.GetMinuitParams());
-  data()->FillMnParams(params.GetMinuitParams());
-  if(!(configure().paramMask & Config::USE_PREVIOUS_PARAMETERS)) {
-    //configure().outStream << "Creating New param.par File..." << std::endl;
-    params.WriteUserParameters(configure(),false);
-  } else {
-    //configure().outStream << "Reading User Parameter File..." << std::endl;
-    params.ReadUserParameters(configure());
-  }
-
-  if(data()->Initialize(compound(),configure())==-1) return -1;
-
-  return 0;
-  
-}
-
 void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<double>& initialParams, 
                                    std::vector<std::vector<double>>& samples, double chainSpreadPercent, int nthreads, bool useRWA) const {
   try {
@@ -916,8 +819,6 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     std::vector<std::vector<double>> initial_positions;
     std::default_random_engine generator;
     double spreadFraction = chainSpreadPercent / 100.0;
-
-    std::cout << "Spread Fraction: " << spreadFraction << std::endl;
 
     for(int i = 0; i < nwalkers; i++) {
       std::vector<double> pos = initialParams;

@@ -72,8 +72,6 @@ class AZURECalcMCMC {
    * Load existing samples from CSV file for resume capability.
    */
   void LoadExistingSamples(const std::string& filename, std::vector<std::vector<double>>& samples) const;
-
-  bool Initialize( );
   
   /*!
    * Request stop for currently running MCMC

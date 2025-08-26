@@ -91,8 +91,6 @@ double AZURECalc::operator()(const vector_r& p) const {
     }
   }
 
-  std::cout << "Chi2: " << chiSquared << std::endl;
-
   // Add nuisance parameter chi-squared contributions
   if(limitsManager_) {
     chiSquared += CalculateNuisanceChiSquared(p);
@@ -113,6 +111,7 @@ double AZURECalc::operator()(const vector_r& p) const {
     delete localCompound;
     delete localData;
   }
+
   if(configure().stopFlag&&isFit) return 0.;
   else return chiSquared;
 }
