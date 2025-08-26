@@ -200,7 +200,14 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
     std::vector<double> cross, crossE1, crossE2, energies, angles, conv;
     for( int k = 0; k < data.size( ); ++k ){
 
-      if(!data[k].IsMapped()) data[k].Calculate(localCompound,configure());
+      if(!data[k].IsMapped()) {
+        try {
+          data[k].Calculate(localCompound,configure());
+        } catch (GSLException& e) {
+          // Skip this point if GSL calculation fails
+          continue;
+        }
+      }
 
       cross.push_back( data[k].GetFitCrossSection() );
       crossE1.push_back( data[k].GetFitE1CrossSection() );
@@ -271,7 +278,14 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
     std::vector<double> cross, crossE1, crossE2, energies, angles, conv;
     for( int k = 0; k < data.size( ); ++k ){
 
-      if(!data[k].IsMapped()) data[k].Calculate(localCompound,configure());
+      if(!data[k].IsMapped()) {
+        try {
+          data[k].Calculate(localCompound,configure());
+        } catch (GSLException& e) {
+          // Skip this point if GSL calculation fails
+          continue;
+        }
+      }
 
       cross.push_back( data[k].GetFitCrossSection() );
       crossE1.push_back( data[k].GetFitE1CrossSection() );

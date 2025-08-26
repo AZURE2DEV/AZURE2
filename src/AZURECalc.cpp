@@ -4,6 +4,7 @@
 #include "EData.h"
 #include "ParameterLimitsManager.h"
 #include "AZUREParams.h"
+#include "GSLException.h"
 #include <iostream>
 #include <iomanip>
 
@@ -21,11 +22,6 @@ double AZURECalc::operator()(const vector_r& p) const {
   } else {
     localCompound = compound();
     localData = data();
-  }
-
-  // Dump all parameters values
-  for (size_t i = 0; i < p.size(); ++i) {
-    std::cout << "Parameter " << i << ": " << p[i] << std::endl;
   }
 
   //Fill Compound Nucleus From Minuit Parameters
@@ -47,7 +43,14 @@ double AZURECalc::operator()(const vector_r& p) const {
 	lastSumIterator=data.segment()+data.segment()->IsTotalCapture()-1;
       } 
     }
-    if(!data.point()->IsMapped()) data.point()->Calculate(localCompound,configure());
+    if(!data.point()->IsMapped()) {
+      try {
+        data.point()->Calculate(localCompound,configure());
+      } catch (GSLException& e) {
+        // Skip this point if GSL calculation fails
+        continue;
+      }
+    }
     if(firstSumIterator!=localData->GetSegments().end()&&
        data.segment()!=lastSumIterator) continue;
     double fitCrossSection=data.point()->GetFitCrossSection();

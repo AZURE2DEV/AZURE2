@@ -48,7 +48,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
     //Fill Compound Nucleus From Parameters
     AZUREParams params;
     localCompound->FillCompoundFromParams(p);
-    localData->FillNormsFromParams(p);
+    //localData->FillNormsFromParams(p);
     localData->FillEnergyShiftsFromParams(p,localData,localCompound,&configure());
     if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
   } catch (GSLException& e) {
@@ -140,12 +140,12 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r& params_) co
 
   CNuc * localCompound = NULL;
   EData *localData = NULL;
+  AZUREParams params;
   
   try {
     localCompound = compound()->Clone();
     localData = data()->Clone();
 
-    AZUREParams params;
     localCompound->FillCompoundFromParamsPhysical(params_);
     bool isValid = localCompound->TransformIn( configure( ) );
     
