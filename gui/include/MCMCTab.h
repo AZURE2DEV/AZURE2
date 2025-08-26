@@ -111,6 +111,7 @@ private:
     bool loadSamplesFromFile(std::vector<std::vector<double>>& samples, QString& filePath); // Load samples from samples.mcmc file
     void calculateStatisticsFromSamples(const std::vector<std::vector<double>>& samples, bool isComplete = false); // Calculate and display statistics
     QString createPrettyParameterName(const QString& paramName, class CNuc* compound, class EData* data, int paramIndex) const; // Create user-friendly parameter names
+    void loadFromCurrentAZUREParams(); // Load parameters from current AZUREParams in reduced widths mode
 
     // Control buttons (private ones not accessed by AZURESetup)
     QPushButton* resetButton;

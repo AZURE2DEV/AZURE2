@@ -134,8 +134,10 @@ void AZUREMCMCWorker::run() {
         
         // Create MCMC calculator with freshly initialized objects
         emit logMessage("Creating MCMC calculator...");
-        AZURECalcMCMC* mcmcCalculator = new AZURECalcMCMC(data, compound, config_);
-        
+        AZURECalcMCMC* mcmcCalculator = new AZURECalcMCMC(NULL, NULL, config_);
+        int out = mcmcCalculator->Initialize( );
+        std::cout << "MCMC Calculator initialized with status: " << out << std::endl;
+
         // Check if we should use reduced widths (RWA)
         bool useReducedWidths = mcmcTab_->useReducedWidthsCheckBox->isChecked();
         emit logMessage(QString("Using %1 for MCMC fitting").arg(useReducedWidths ? "reduced width amplitudes (RWA)" : "physical parameters"));

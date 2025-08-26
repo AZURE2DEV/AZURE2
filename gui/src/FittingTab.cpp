@@ -82,7 +82,7 @@ void FittingTab::setupParameterTable(QTableWidget* table, const QString& title) 
     // Set up columns (removed Fixed column - show only unfixed parameters)  
     QStringList headers;
     headers << "Parameter" << "Value" << "Lower Limit" << "Upper Limit" 
-            << "Error" << "Use as Nuisance";
+            << "Error" << "Fit Error" << "Use as Nuisance";
     
     table->setColumnCount(headers.size());
     table->setHorizontalHeaderLabels(headers);
@@ -94,7 +94,8 @@ void FittingTab::setupParameterTable(QTableWidget* table, const QString& title) 
     table->setColumnWidth(2, 100); // Lower limit
     table->setColumnWidth(3, 100); // Upper limit
     table->setColumnWidth(4, 100); // Error
-    table->setColumnWidth(5, 120); // Nuisance checkbox
+    table->setColumnWidth(5, 100); // Fit Error
+    table->setColumnWidth(6, 120); // Nuisance checkbox
     
     table->setAlternatingRowColors(true);
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -122,14 +123,19 @@ void FittingTab::addParameterRow(QTableWidget* table, const FittingParameter& pa
     // Upper limit
     table->setItem(row, 3, new QTableWidgetItem(QString::number(param.upperLimit, 'g', 6)));
     
-    // Error
+    // Error (for nuisance calculations)
     table->setItem(row, 4, new QTableWidgetItem(QString::number(param.error, 'g', 6)));
+    
+    // Fit Error (from fitting results, read-only)
+    QTableWidgetItem* fitErrorItem = new QTableWidgetItem(QString::number(param.fitError, 'g', 6));
+    fitErrorItem->setFlags(fitErrorItem->flags() & ~Qt::ItemIsEditable);
+    table->setItem(row, 5, fitErrorItem);
     
     // Nuisance checkbox
     QTableWidgetItem* nuisanceItem = new QTableWidgetItem();
     nuisanceItem->setCheckState(param.useAsNuisance ? Qt::Checked : Qt::Unchecked);
     nuisanceItem->setFlags(nuisanceItem->flags() & ~Qt::ItemIsEditable);
-    table->setItem(row, 5, nuisanceItem);
+    table->setItem(row, 6, nuisanceItem);
 }
 
 void FittingTab::updateParameterTables() {
@@ -167,10 +173,10 @@ void FittingTab::refreshFromMinuitParameters() {
     
     // Create some example parameters to test the interface
     // In a real implementation, this would read from the current tab models
-    FittingParameter param1 = {"Level_1_Energy", 0.5, 0.0, 2.0, 0.01, false, "level", 0, 0, -1};
-    FittingParameter param2 = {"Level_1_Width_Ch1", 0.1, 0.0, 1.0, 0.005, false, "level", 1, 0, 0};
-    FittingParameter param3 = {"Segment_1_Norm", 1.0, 0.5, 2.0, 0.05, true, "norm", 2, -1, -1};
-    FittingParameter param4 = {"Segment_1_Shift", 0.0, -0.1, 0.1, 0.001, true, "shift", 3, -1, -1};
+    FittingParameter param1 = {"Level_1_Energy", 0.5, 0.0, 2.0, 0.01, 0.01, false, "level", 0, 0, -1};
+    FittingParameter param2 = {"Level_1_Width_Ch1", 0.1, 0.0, 1.0, 0.005, 0.005, false, "level", 1, 0, 0};
+    FittingParameter param3 = {"Segment_1_Norm", 1.0, 0.5, 2.0, 0.05, 0.05, true, "norm", 2, -1, -1};
+    FittingParameter param4 = {"Segment_1_Shift", 0.0, -0.1, 0.1, 0.001, 0.001, true, "shift", 3, -1, -1};
     
     fittingParameters.append(param1);
     fittingParameters.append(param2);
@@ -237,6 +243,7 @@ void FittingTab::populateFromCurrentGUIState() {
                 energyParam.lowerLimit = 0;  // Default limits
                 energyParam.upperLimit = 0;
                 energyParam.error = 0.01;  // Default error
+                energyParam.fitError = 0.0;  // No fit error initially
                 energyParam.useAsNuisance = false;
                 energyParam.category = "level";
                 energyParam.minuitIndex = paramIndex++;
@@ -262,6 +269,7 @@ void FittingTab::populateFromCurrentGUIState() {
                     widthParam.lowerLimit = 0;
                     widthParam.upperLimit = 0;  // Default upper limit
                     widthParam.error = channel.reducedWidth * 0.1;  // Default 10% error
+                    widthParam.fitError = 0.0;  // No fit error initially
                     widthParam.useAsNuisance = false;
                     widthParam.category = "level";
                     widthParam.minuitIndex = paramIndex++;
@@ -289,6 +297,7 @@ void FittingTab::populateFromCurrentGUIState() {
             normParam.lowerLimit = 0;
             normParam.upperLimit = 0;
             normParam.error = segment.dataNormError;
+            normParam.fitError = 0.0;  // No fit error initially
             normParam.useAsNuisance = (segment.varyNorm == 1);  // Active only when parameter varies
             normParam.category = "norm";
             normParam.minuitIndex = paramIndex++;
@@ -305,6 +314,7 @@ void FittingTab::populateFromCurrentGUIState() {
             shiftParam.lowerLimit = 0;
             shiftParam.upperLimit = 0;
             shiftParam.error = segment.energyShiftError;
+            shiftParam.fitError = 0.0;  // No fit error initially
             shiftParam.useAsNuisance = (segment.varyEnergyShift == 1);  // Active only when parameter varies
             shiftParam.category = "shift";
             shiftParam.minuitIndex = paramIndex++;
@@ -352,7 +362,8 @@ void FittingTab::applyParameterSettings() {
                 // Apply saved settings but keep current value from models
                 fittingParameters[i].lowerLimit = saved.lowerLimit;
                 fittingParameters[i].upperLimit = saved.upperLimit;
-                fittingParameters[i].error = saved.error;
+                fittingParameters[i].error = saved.error; // Keep saved error for nuisance calculations
+                // fitError is maintained from fitting results, not overwritten
                 fittingParameters[i].useAsNuisance = saved.useAsNuisance;
                 break;
             }
@@ -383,7 +394,7 @@ void FittingTab::parameterItemChanged(QTableWidgetItem* item) {
     
     if(paramIndex == -1) return; // Parameter not found
     
-    // Column mapping: 0=Name, 1=Value, 2=Lower, 3=Upper, 4=Error, 5=Nuisance
+    // Column mapping: 0=Name, 1=Value, 2=Lower, 3=Upper, 4=Error, 5=Fit Error (read-only), 6=Nuisance
     if(col == 1) { // Value (reduced width) changed
         bool ok;
         double value = item->text().toDouble(&ok);
@@ -419,7 +430,7 @@ void FittingTab::parameterItemChanged(QTableWidgetItem* item) {
             updateParameterInOtherTabs(paramName, fittingParameters[paramIndex]);
         }
         
-    } else if(col == 5) { // Nuisance checkbox
+    } else if(col == 6) { // Nuisance checkbox
         fittingParameters[paramIndex].useAsNuisance = (item->checkState() == Qt::Checked);
         // Update the corresponding tab with the new useAsNuisance value
         updateParameterInOtherTabs(paramName, fittingParameters[paramIndex]);
@@ -589,9 +600,9 @@ void FittingTab::loadSettings() {
                 if(physicalParamMap.contains(matchKey)) {
                     QPair<double, double> physicalData = physicalParamMap[matchKey];
                     
-                    // Update parameter value and error
+                    // Update parameter value and fit error (keep original error for nuisance calculations)
                     param.value = physicalData.first;
-                    param.error = physicalData.second; // Use transformed error for level parameters
+                    param.fitError = physicalData.second; // Store fit error separately from nuisance error
                     
                     // Update the underlying models with converted values
                     if(param.name.contains("Width") && param.channelIndex >= 0) {
@@ -692,7 +703,7 @@ void FittingTab::loadSettings() {
                                 // Re-read the updated segments data
                                 QList<SegmentsDataData> updatedSegments = segmentsModel->getLines();
                                 param.value = updatedSegments[segmentIndex].dataNorm;
-                                param.error = updatedSegments[segmentIndex].dataNormError;
+                                param.fitError = updatedSegments[segmentIndex].dataNormError; // Store as fit error
                                 
                                 // Find the corresponding params.sav name for this segment
                                 for(auto it = normsFromSav.begin(); it != normsFromSav.end(); ++it) {
@@ -827,7 +838,7 @@ void FittingTab::loadSettings() {
                                 // Re-read the updated segments data
                                 QList<SegmentsDataData> updatedSegments = segmentsModel->getLines();
                                 param.value = updatedSegments[segmentIndex].energyShift;
-                                param.error = updatedSegments[segmentIndex].energyShiftError;
+                                param.fitError = updatedSegments[segmentIndex].energyShiftError; // Store as fit error
                                 
                                 // Find the corresponding params.sav name for this segment
                                 for(auto it = shiftsFromSav.begin(); it != shiftsFromSav.end(); ++it) {
@@ -1280,7 +1291,7 @@ void FittingTab::showInfo(int which, QString title) {
 bool FittingTab::writeParameterSettings(QTextStream& outStream) {
     // Write current parameter settings to AZURE2 file
     outStream << "# Fitting parameter settings (only non-fixed parameters shown)\n";
-    outStream << "# Format: name value lower_limit upper_limit error nuisance category minuit_index\n";
+    outStream << "# Format: name value lower_limit upper_limit error fit_error nuisance category minuit_index\n";
     
     for(const FittingParameter& param : fittingParameters) {
         outStream << param.name << " " 
@@ -1288,6 +1299,7 @@ bool FittingTab::writeParameterSettings(QTextStream& outStream) {
                   << param.lowerLimit << " "
                   << param.upperLimit << " "
                   << param.error << " "
+                  << param.fitError << " "
                   << (param.useAsNuisance ? 1 : 0) << " "
                   << param.category << " "
                   << param.minuitIndex << "\n";
@@ -1305,13 +1317,26 @@ bool FittingTab::readParameterSettings(QTextStream& inStream) {
         if(line.isEmpty() || line.startsWith("#")) continue; // Skip empty lines and comments
         
         QStringList parts = line.split(" ", Qt::SkipEmptyParts);
-        if(parts.size() >= 7) {
+        if(parts.size() >= 8) {
             FittingParameter param;
             param.name = parts[0];
             param.value = parts[1].toDouble(); // This will be overridden by current model values
             param.lowerLimit = parts[2].toDouble();
             param.upperLimit = parts[3].toDouble();
             param.error = parts[4].toDouble();
+            param.fitError = parts[5].toDouble();
+            param.useAsNuisance = (parts[6].toInt() == 1);
+            param.category = parts[7];
+            param.minuitIndex = (parts.size() >= 9) ? parts[8].toInt() : -1;
+        } else if(parts.size() >= 7) {
+            // Backward compatibility: old format without fitError
+            FittingParameter param;
+            param.name = parts[0];
+            param.value = parts[1].toDouble();
+            param.lowerLimit = parts[2].toDouble();
+            param.upperLimit = parts[3].toDouble();
+            param.error = parts[4].toDouble();
+            param.fitError = 0.0; // Default for old format
             param.useAsNuisance = (parts[5].toInt() == 1);
             param.category = parts[6];
             param.minuitIndex = (parts.size() >= 8) ? parts[7].toInt() : -1;
@@ -1400,8 +1425,8 @@ void FittingTab::updateParameterTableCheckbox(const QString& paramName, bool che
     for(int row = 0; row < targetTable->rowCount(); row++) {
         QTableWidgetItem* nameItem = targetTable->item(row, 0);
         if(nameItem && nameItem->text() == paramName) {
-            // Update the checkbox column (column 5)
-            QTableWidgetItem* checkboxItem = targetTable->item(row, 5);
+            // Update the checkbox column (column 6)
+            QTableWidgetItem* checkboxItem = targetTable->item(row, 6);
             if(checkboxItem) {
                 // Temporarily disconnect signals to avoid recursion
                 targetTable->blockSignals(true);

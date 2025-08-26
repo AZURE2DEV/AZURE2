@@ -4,6 +4,7 @@
 #include "EData.h"
 #include "ParameterLimitsManager.h"
 #include "AZUREParams.h"
+#include "GSLException.h"
 #include <iostream>
 #include <iomanip>
 #include <cmath>
@@ -36,31 +37,23 @@ static omp_lock_t g_file_lock;
 #endif
 
 double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
-  // Calculate chi-squared first
-  double chiSquared = 0.0;
-  
-  // Run the same calculation logic as the main operator but store chi-squared
-  int thisIteration=data()->Iterations();
-  data()->Iterate();
-  bool isFit=data()->IsFit();
 
-  CNuc * localCompound = NULL;
-  EData *localData = NULL;
-  if(isFit) {
-    localCompound = compound()->Clone();
-    localData = data()->Clone();
-  } else {
-    localCompound = compound();
-    localData = data();
-  }
+  CNuc* localCompound = NULL;
+  EData* localData = NULL;
+  localCompound = compound()->Clone();
+  localData = data()->Clone();
 
   //Fill Compound Nucleus From Parameters
+  AZUREParams params;
   localCompound->FillCompoundFromParams(p);
   localData->FillNormsFromParams(p);
   localData->FillEnergyShiftsFromParams(p,localData,localCompound,&configure());
   if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+
+  bool isFit=true;
   
-  //loop over segments and points
+  // Calculate chi-squared (same logic as original but without parameter filling)
+  double chiSquared=0.0;
   double segmentChiSquared=0.0;
   ESegmentIterator firstSumIterator = localData->GetSegments().end();
   ESegmentIterator lastSumIterator = localData->GetSegments().end();
@@ -68,8 +61,8 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
     if(data.segment()->GetPoints().begin()==data.point()) {
       segmentChiSquared=0.0;
       if(data.segment()->IsTotalCapture()) {
-	firstSumIterator=data.segment();
-	lastSumIterator=data.segment()+data.segment()->IsTotalCapture()-1;
+        firstSumIterator=data.segment();
+        lastSumIterator=data.segment()+data.segment()->IsTotalCapture()-1;
       } 
     }
     if(!data.point()->IsMapped()) data.point()->Calculate(localCompound,configure());
@@ -80,7 +73,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
     if(data.segment()==lastSumIterator) {
       int pointIndex=data.point()-data.segment()->GetPoints().begin()+1;
       for(ESegmentIterator it=firstSumIterator;it<data.segment();it++) 
-	fitCrossSection+=it->GetPoint(pointIndex)->GetFitCrossSection();
+        fitCrossSection+=it->GetPoint(pointIndex)->GetFitCrossSection();
       thisSegment = firstSumIterator;
     }
     double dataNorm=thisSegment->GetNorm();
@@ -92,34 +85,22 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
     if(data.segment()->GetPoints().end()-1==data.point()) {
       if(!isFit) thisSegment->SetSegmentChiSquared(segmentChiSquared);
       if(data.segment()==lastSumIterator) {
-	firstSumIterator=localData->GetSegments().end();
-	lastSumIterator=localData->GetSegments().end();
+        firstSumIterator=localData->GetSegments().end();
+        lastSumIterator=localData->GetSegments().end();
       }
-      double dataNormNominal=thisSegment->GetNominalNorm();
-      double dataNormError=dataNormNominal/100.*thisSegment->GetNormError();
-      if(dataNormError!=0.)
-	segmentChiSquared += pow((dataNorm-dataNormNominal)/dataNormError,2.0);
-      
-      // Add energy shift chi-squared contribution if energy shift is varied
-      if(thisSegment->IsVaryEnergyShift()) {
-        double energyShift=thisSegment->GetEnergyShift();
-        double energyShiftNominal=thisSegment->GetNominalEnergyShift();
-        double energyShiftError=thisSegment->GetEnergyShiftError();
-        if(energyShiftError!=0.)
-          segmentChiSquared += pow((energyShift-energyShiftNominal)/energyShiftError,2.0);
-      }
-      
       chiSquared+=segmentChiSquared;
     }
+
   }
 
-  if(isFit) {
-    delete localCompound;
-    delete localData;
-  }
-  
+  std::cout << "Chi-squared: " << chiSquared << std::endl;
+
+  delete localCompound;
+  delete localData;
+
   // Convert chi-squared to log-likelihood: ln(L) = -0.5 * chi^2
   return -0.5 * chiSquared;
+  
 }
 
 double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r& params_) const {
@@ -185,20 +166,6 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r& params_) co
         firstSumIterator=localData->GetSegments().end();
         lastSumIterator=localData->GetSegments().end();
       }
-      double dataNormNominal=thisSegment->GetNominalNorm();
-      double dataNormError=dataNormNominal/100.*thisSegment->GetNormError();
-      if(dataNormError!=0.)
-        segmentChiSquared += pow((dataNorm-dataNormNominal)/dataNormError,2.0);
-      
-      // Add energy shift chi-squared contribution if energy shift is varied
-      if(thisSegment->IsVaryEnergyShift()) {
-        double energyShift=thisSegment->GetEnergyShift();
-        double energyShiftNominal=thisSegment->GetNominalEnergyShift();
-        double energyShiftError=thisSegment->GetEnergyShiftError();
-        if(energyShiftError!=0.)
-          segmentChiSquared += pow((energyShift-energyShiftNominal)/energyShiftError,2.0);
-      }
-      
       chiSquared+=segmentChiSquared;
     }
 
@@ -225,6 +192,9 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r& physicalParams) const
   AZUREParams params;
   compound()->FillMnParams(params.GetMinuitParams());
   data()->FillMnParams(params.GetMinuitParams());
+  if(configure().paramMask & Config::USE_PREVIOUS_PARAMETERS) {
+    params.ReadUserParameters(configure());
+  }
   
   compound()->FillCompoundFromParams(params.GetMinuitParams().Params());
   compound()->CalcShiftFunctions(configure());
@@ -781,7 +751,25 @@ bool AZURECalcMCMC::Initialize( ){
   }
 
   //Initialize compound nucleus object
+  try {
     compound()->Initialize(configure());
+  } catch (GSLException e) {
+    //configure().outStream << e.what() << std::endl;
+    //configure().outStream << "Calculation was aborted." << std::endl;
+    return -1;
+  }
+
+  // Create new parameters for minuit, fill them from compound nucleus object and data file.
+  AZUREParams params;
+  compound()->FillMnParams(params.GetMinuitParams());
+  data()->FillMnParams(params.GetMinuitParams());
+  if(!(configure().paramMask & Config::USE_PREVIOUS_PARAMETERS)) {
+    //configure().outStream << "Creating New param.par File..." << std::endl;
+    params.WriteUserParameters(configure(),false);
+  } else {
+    //configure().outStream << "Reading User Parameter File..." << std::endl;
+    params.ReadUserParameters(configure());
+  }
 
   if(data()->Initialize(compound(),configure())==-1) return -1;
 
@@ -862,7 +850,9 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     std::vector<std::vector<double>> initial_positions;
     std::default_random_engine generator;
     double spreadFraction = chainSpreadPercent / 100.0;
-    
+
+    std::cout << "Spread Fraction: " << spreadFraction << std::endl;
+
     for(int i = 0; i < nwalkers; i++) {
       std::vector<double> pos = initialParams;
       for(int j = 0; j < ndim; j++) {

@@ -23,6 +23,11 @@ double AZURECalc::operator()(const vector_r& p) const {
     localData = data();
   }
 
+  // Dump all parameters values
+  for (size_t i = 0; i < p.size(); ++i) {
+    std::cout << "Parameter " << i << ": " << p[i] << std::endl;
+  }
+
   //Fill Compound Nucleus From Minuit Parameters
   localCompound->FillCompoundFromParams(p);
   localData->FillNormsFromParams(p);
@@ -82,6 +87,8 @@ double AZURECalc::operator()(const vector_r& p) const {
       chiSquared+=segmentChiSquared;
     }
   }
+
+  std::cout << "Chi2: " << chiSquared << std::endl;
 
   // Add nuisance parameter chi-squared contributions
   if(limitsManager_) {

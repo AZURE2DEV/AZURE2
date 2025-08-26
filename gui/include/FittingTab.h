@@ -20,6 +20,7 @@ struct FittingParameter {
   double lowerLimit;
   double upperLimit;
   double error;
+  double fitError; // NEW: Error from fitting (separate from nuisance calculation error)
   bool useAsNuisance;
   QString category; // "level", "norm", "shift"
   int minuitIndex; // Index in Minuit parameters

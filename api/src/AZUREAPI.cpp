@@ -182,8 +182,6 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
   localData->FillMnParams(params.GetMinuitParams());
   localData->FillEnergyShiftsFromParams(params_,localData,localCompound,&configure());
   localCompound->FillCompoundFromParams(params.GetMinuitParams( ).Params( ));
-
-  //Fill Compound Nucleus From Minuit Parameters
   if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
   int newKey  = -1;
@@ -255,16 +253,6 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
   AZUREParams params;
   localCompound->FillCompoundFromParams(params_);
   localData->FillEnergyShiftsFromParams(params_,localData,localCompound,&configure());
-  //localCompound->CalcShiftFunctions(configure());
-  //bool isValid = localCompound->TransformIn( configure( ) );
-
-  //if( !isValid ) return 0;
-
-  //localCompound->FillMnParams(params.GetMinuitParams());
-  //localData->FillMnParams(params.GetMinuitParams());
-  //localCompound->FillCompoundFromParams(params.GetMinuitParams( ).Params( ));
-
-  //Fill Compound Nucleus From Minuit Parameters
   if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
   int newKey  = -1;

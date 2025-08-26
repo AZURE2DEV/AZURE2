@@ -219,10 +219,10 @@ void MCMCTab::setupSamplingControls(QWidget* samplingWidget) {
     
     basicLayout->addWidget(new QLabel("Initial Chain Spread (%):"), 2, 0);
     chainSpreadSpinBox = new QDoubleSpinBox();
-    chainSpreadSpinBox->setRange(0.1, 50.0);
+    chainSpreadSpinBox->setRange(0.001, 50.0);
     chainSpreadSpinBox->setValue(5.0);
     chainSpreadSpinBox->setSingleStep(0.5);
-    chainSpreadSpinBox->setDecimals(1);
+    chainSpreadSpinBox->setDecimals(3);
     chainSpreadSpinBox->setSuffix("%");
     basicLayout->addWidget(chainSpreadSpinBox, 2, 1);
     
@@ -383,6 +383,13 @@ void MCMCTab::loadFromSavFile() {
         return;
     }
     
+    if (!levelsTab_ || !segmentsTab_) {
+        QMessageBox::warning(this, "Tab References Not Set", 
+                            "Cannot load parameters - tab references not properly set.");
+        return;
+    }
+    
+    // Use the same approach as FittingTab: read .sav file and update underlying models
     QFile file(filename);
     if(!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         QMessageBox::critical(this, "File Error", 
@@ -393,9 +400,8 @@ void MCMCTab::loadFromSavFile() {
     
     QTextStream in(&file);
     
-    // Parse .sav file and preserve order from file
-    // Skip parameters with error = 0 (these are fixed parameters)
-    QList<QPair<QString, QPair<double, double>>> savParams; // Preserve order from file
+    // Parse .sav file and create lookup map (same as FittingTab)
+    QMap<QString, QPair<double, double>> savParams; // paramName -> (value, error)
     
     while(!in.atEnd()) {
         QString line = in.readLine().trimmed();
@@ -407,63 +413,167 @@ void MCMCTab::loadFromSavFile() {
             double value = parts[1].toDouble();
             double error = parts[2].toDouble();
             
-            // Only include parameters with non-zero error (non-fixed parameters)
-            if(error != 0.0) {
-                savParams.append(QPair<QString, QPair<double, double>>(paramName, QPair<double, double>(value, error)));
+            // If "_rwa" in param.name, remove it (same as FittingTab)
+            if(paramName.endsWith("_rwa")) {
+                paramName.chop(4); // Remove last 4 characters
             }
+            
+            savParams[paramName] = qMakePair(value, error);
         }
     }
-    
     file.close();
     
-    // Since we already filtered out fixed parameters (error = 0), just load all remaining parameters
+    if(savParams.isEmpty()) {
+        QMessageBox::information(this, "No Parameters", 
+                               "No parameters found in the .sav file.");
+        return;
+    }
+    
+    // CRITICAL: For MCMC reduced widths mode, we must preserve the exact order from AZUREParams
+    // and use AZUREParams.IsFixed() to determine which parameters to include in MCMC sampling.
+    // This ensures AZURECalcMCMC can correctly substitute parameters back.
+    
     mcmcParameters.clear();
-    int paramIndex = 0;
     
-    for(const auto& paramData : savParams) {
-        MCMCParameter param;
-        param.name = createPrettyParameterName(paramData.first, nullptr, nullptr, -1);
-        param.value = paramData.second.first;  // Use value from .sav file
-        param.priorMean = paramData.second.first;
-        param.priorStd = paramData.second.second;
-        param.useGaussianPrior = false; // Default to no prior
-        param.category = "sav_loaded";
-        param.minuitIndex = paramIndex++;
-        param.levelIndex = -1;
-        param.channelIndex = -1;
-        
-        mcmcParameters.append(param);
+    // Get AZURESetup to access AZUREParams 
+    AZURESetup* setup = qobject_cast<AZURESetup*>(window());
+    if(!setup) {
+        QMessageBox::critical(this, "AZURESetup Error", 
+                             "Cannot access AZURESetup - required for proper parameter ordering.");
+        return;
     }
     
-    // Update table display
-    parametersTable->setRowCount(mcmcParameters.size());
-    for(int i = 0; i < mcmcParameters.size(); i++) {
-        const MCMCParameter& param = mcmcParameters[i];
+    try {
+        // Get current configuration
+        Config& tempConfig = setup->GetConfig();
+        std::string originalParamFile = tempConfig.paramfile;
+        tempConfig.paramfile = filename.toStdString();
         
-        parametersTable->setItem(i, 0, new QTableWidgetItem(param.name));
-        parametersTable->item(i, 0)->setFlags(Qt::ItemIsEnabled); // Make read-only
+        // CRITICAL: Initialize compound nucleus and data objects first
+        // This is required for AZUREParams to properly determine fixed/non-fixed status
+        CNuc* compound = new CNuc();
+        EData* data = new EData();
         
-        parametersTable->setItem(i, 1, new QTableWidgetItem(QString::number(param.value, 'g', 6)));
-        parametersTable->item(i, 1)->setFlags(Qt::ItemIsEnabled); // Make read-only
+        // Fill compound nucleus from current GUI configuration
+        if(compound->Fill(tempConfig) == -1) {
+            delete compound;
+            delete data;
+            tempConfig.paramfile = originalParamFile;
+            QMessageBox::critical(this, "Compound Nucleus Error", 
+                                 "Could not initialize compound nucleus from current configuration.");
+            return;
+        }
         
-        parametersTable->setItem(i, 2, new QTableWidgetItem(QString::number(param.priorMean, 'g', 6)));
-        parametersTable->setItem(i, 3, new QTableWidgetItem(QString::number(param.priorStd, 'g', 6)));
+        // Fill data object if needed for parameter context
+        if(tempConfig.paramMask & Config::CALCULATE_WITH_DATA) {
+            if(data->Fill(tempConfig, compound) == -1) {
+                delete compound;
+                delete data;
+                tempConfig.paramfile = originalParamFile;
+                QMessageBox::critical(this, "Data Structures Error", 
+                                     "Could not initialize data structures from current configuration.");
+                return;
+            }
+        } else {
+            // Create theoretical points if no experimental data
+            if(data->MakePoints(tempConfig, compound) == -1) {
+                delete compound;
+                delete data;
+                tempConfig.paramfile = originalParamFile;
+                QMessageBox::critical(this, "Data Points Error", 
+                                     "Could not create theoretical data points.");
+                return;
+            }
+        }
         
-        QTableWidgetItem* checkItem = new QTableWidgetItem();
-        checkItem->setCheckState(param.useGaussianPrior ? Qt::Checked : Qt::Unchecked);
-        checkItem->setFlags(checkItem->flags() | Qt::ItemIsUserCheckable);
-        parametersTable->setItem(i, 4, checkItem);
+        // Create AZUREParams and populate with compound/data parameters
+        AZUREParams azureParams;
+        compound->FillMnParams(azureParams.GetMinuitParams());
+        data->FillMnParams(azureParams.GetMinuitParams());
         
-        parametersTable->setItem(i, 5, new QTableWidgetItem(param.category));
-        parametersTable->item(i, 5)->setFlags(Qt::ItemIsEnabled); // Make read-only
-    }
-    
-    logTextEdit->append(QString("Loaded %1 non-fixed parameters from %2 (excluded %3 fixed parameters with error=0)").arg(mcmcParameters.size()).arg(QFileInfo(filename).fileName()).arg(savParams.size() - mcmcParameters.size() + savParams.size()));
-    
-    if(mcmcParameters.isEmpty()) {
-        logTextEdit->append("No non-fixed parameters found - all parameters in .sav file have error=0 (fixed).");
-    } else {
-        logTextEdit->append("Parameters loaded as reduced width amplitudes - use 'Use Reduced Widths' checkbox for RWA fitting.");
+        // NOW read the .sav file - this will set the fixed/non-fixed status correctly
+        azureParams.ReadUserParameters(tempConfig);
+        
+        // Clean up temporary objects
+        delete compound;
+        delete data;
+        
+        // Restore original paramfile
+        tempConfig.paramfile = originalParamFile;
+        
+        // Get the Minuit parameters in the correct order
+        const ROOT::Minuit2::MnUserParameters& minuitParams = azureParams.GetMinuitParams();
+        
+        int mcmcParamIndex = 0;
+        
+        // Iterate through ALL parameters in AZUREParams order
+        for(unsigned int i = 0; i < minuitParams.Params().size(); i++) {
+            
+            // ONLY include non-fixed parameters (same logic as AZURECalcMCMC)
+            if(!minuitParams.Parameter(i).IsFixed()) {
+                QString paramName = QString::fromStdString(minuitParams.GetName(i));
+                double value = minuitParams.Value(i);
+                double error = minuitParams.Error(i);
+                
+                MCMCParameter param;
+                param.name = createPrettyParameterName(paramName, nullptr, nullptr, -1);
+                param.value = value;  // Keep RWA value from .sav file
+                param.priorMean = value;
+                param.priorStd = error;
+                param.useGaussianPrior = false;
+                
+                // Determine category based on parameter name
+                if(paramName.contains("norm", Qt::CaseInsensitive)) {
+                    param.category = "norm";
+                } else if(paramName.contains("shift", Qt::CaseInsensitive)) {
+                    param.category = "shift";
+                } else {
+                    param.category = "level_rwa";
+                }
+                
+                param.minuitIndex = mcmcParamIndex++; // Sequential index for MCMC array
+                param.levelIndex = -1;
+                param.channelIndex = -1;
+                
+                mcmcParameters.append(param);
+            }
+        }
+        
+        // Update parameter table display
+        parametersTable->setRowCount(mcmcParameters.size());
+        for(int i = 0; i < mcmcParameters.size(); i++) {
+            const MCMCParameter& param = mcmcParameters[i];
+            
+            parametersTable->setItem(i, 0, new QTableWidgetItem(param.name));
+            parametersTable->item(i, 0)->setFlags(Qt::ItemIsEnabled);
+            
+            parametersTable->setItem(i, 1, new QTableWidgetItem(QString::number(param.value, 'g', 6)));
+            parametersTable->item(i, 1)->setFlags(Qt::ItemIsEnabled);
+            
+            parametersTable->setItem(i, 2, new QTableWidgetItem(QString::number(param.priorMean, 'g', 6)));
+            parametersTable->setItem(i, 3, new QTableWidgetItem(QString::number(param.priorStd, 'g', 6)));
+            
+            QTableWidgetItem* checkItem = new QTableWidgetItem();
+            checkItem->setCheckState(param.useGaussianPrior ? Qt::Checked : Qt::Unchecked);
+            checkItem->setFlags(checkItem->flags() | Qt::ItemIsUserCheckable);
+            parametersTable->setItem(i, 4, checkItem);
+            
+            parametersTable->setItem(i, 5, new QTableWidgetItem(param.category));
+            parametersTable->item(i, 5)->setFlags(Qt::ItemIsEnabled);
+        }
+        
+        logTextEdit->append(QString("Loaded %1 non-fixed parameters from %2 in AZUREParams order (RWA mode)")
+                           .arg(mcmcParameters.size())
+                           .arg(QFileInfo(filename).fileName()));
+                           
+        if(mcmcParameters.isEmpty()) {
+            logTextEdit->append("Warning: No non-fixed parameters found in .sav file.");
+        }
+        
+    } catch(const std::exception& e) {
+        QMessageBox::critical(this, "Parameter Loading Error", 
+                             QString("Error reading parameters with AZUREParams:\n%1")
+                             .arg(QString::fromStdString(e.what())));
     }
 }
 
@@ -477,6 +587,14 @@ void MCMCTab::loadFromFittingTab() {
     mcmcParameters.clear();
     parametersTable->setRowCount(0);
     
+    // If "Use Reduced Widths" is checked, we should use AZUREParams ordering
+    // to match what AZURECalcMCMC expects
+    if(useReducedWidthsCheckBox->isChecked()) {
+        loadFromCurrentAZUREParams();
+        return;
+    }
+    
+    // Otherwise, use the physical parameters approach (existing code)
     int paramIndex = 0;
     
     // Get level and channel data
@@ -632,6 +750,160 @@ void MCMCTab::loadFromFittingTab() {
         
         logTextEdit->append(QString("Found %1 level energies, %2 widths, %3 normalizations, and %4 energy shifts")
                            .arg(energyCount).arg(widthCount).arg(normCount).arg(shiftCount));
+    }
+}
+
+void MCMCTab::loadFromCurrentAZUREParams() {
+    // Load parameters from current AZUREParams in the exact order expected by AZURECalcMCMC
+    // This is used when "Use Reduced Widths" is checked
+    
+    AZURESetup* setup = qobject_cast<AZURESetup*>(window());
+    if(!setup) {
+        logTextEdit->append("Warning: Cannot access AZURESetup - falling back to GUI-based loading");
+        // Fall back to the old method without AZUREParams ordering
+        useReducedWidthsCheckBox->setChecked(false); // Temporarily disable to avoid recursion
+        loadFromFittingTab(); // This will use the physical parameters approach
+        useReducedWidthsCheckBox->setChecked(true); // Re-enable
+        return;
+    }
+    
+    try {
+        // Get current parameters from AZURESetup
+        // This reads from the current .azr file and respects the parameter settings
+        Config& config = setup->GetConfig();
+        
+        // CRITICAL: Initialize compound nucleus and data objects first
+        CNuc* compound = new CNuc();
+        EData* data = new EData();
+        
+        // Fill compound nucleus from current GUI configuration
+        if(compound->Fill(config) == -1) {
+            delete compound;
+            delete data;
+            logTextEdit->append("Error: Could not initialize compound nucleus from current configuration.");
+            // Fall back to the old method
+            useReducedWidthsCheckBox->setChecked(false);
+            loadFromFittingTab();
+            useReducedWidthsCheckBox->setChecked(true);
+            return;
+        }
+        
+        // Fill data object if needed for parameter context
+        if(config.paramMask & Config::CALCULATE_WITH_DATA) {
+            if(data->Fill(config, compound) == -1) {
+                delete compound;
+                delete data;
+                logTextEdit->append("Error: Could not initialize data structures from current configuration.");
+                // Fall back to the old method
+                useReducedWidthsCheckBox->setChecked(false);
+                loadFromFittingTab();
+                useReducedWidthsCheckBox->setChecked(true);
+                return;
+            }
+        } else {
+            // Create theoretical points if no experimental data
+            if(data->MakePoints(config, compound) == -1) {
+                delete compound;
+                delete data;
+                logTextEdit->append("Error: Could not create theoretical data points.");
+                // Fall back to the old method
+                useReducedWidthsCheckBox->setChecked(false);
+                loadFromFittingTab();
+                useReducedWidthsCheckBox->setChecked(true);
+                return;
+            }
+        }
+        
+        // Create AZUREParams and populate with compound/data parameters
+        AZUREParams azureParams;
+        compound->FillMnParams(azureParams.GetMinuitParams());
+        data->FillMnParams(azureParams.GetMinuitParams());
+        
+        // Read current user parameters if they exist
+        if(!config.paramfile.empty()) {
+            azureParams.ReadUserParameters(config);
+        }
+        
+        // Clean up temporary objects
+        delete compound;
+        delete data;
+        
+        const ROOT::Minuit2::MnUserParameters& minuitParams = azureParams.GetMinuitParams();
+        
+        int mcmcParamIndex = 0;
+        
+        // Iterate through ALL parameters in AZUREParams order
+        for(unsigned int i = 0; i < minuitParams.Params().size(); i++) {
+            
+            // ONLY include non-fixed parameters (same logic as AZURECalcMCMC)
+            if(!minuitParams.Parameter(i).IsFixed()) {
+                QString paramName = QString::fromStdString(minuitParams.GetName(i));
+                double value = minuitParams.Value(i);
+                double error = minuitParams.Error(i);
+                
+                MCMCParameter param;
+                param.name = createPrettyParameterName(paramName, nullptr, nullptr, -1);
+                param.value = value;  // Use current RWA value
+                param.priorMean = value;
+                param.priorStd = (error > 0) ? error : value * 0.1; // Use error if available, else 10%
+                param.useGaussianPrior = false;
+                
+                // Determine category based on parameter name
+                if(paramName.contains("norm", Qt::CaseInsensitive)) {
+                    param.category = "norm";
+                } else if(paramName.contains("shift", Qt::CaseInsensitive)) {
+                    param.category = "shift";
+                } else {
+                    param.category = "level_rwa";
+                }
+                
+                param.minuitIndex = mcmcParamIndex++; // Sequential index for MCMC array
+                param.levelIndex = -1;
+                param.channelIndex = -1;
+                
+                mcmcParameters.append(param);
+            }
+        }
+        
+        // Update parameter table display
+        parametersTable->setRowCount(mcmcParameters.size());
+        for(int i = 0; i < mcmcParameters.size(); i++) {
+            const MCMCParameter& param = mcmcParameters[i];
+            
+            parametersTable->setItem(i, 0, new QTableWidgetItem(param.name));
+            parametersTable->item(i, 0)->setFlags(Qt::ItemIsEnabled);
+            
+            parametersTable->setItem(i, 1, new QTableWidgetItem(QString::number(param.value, 'g', 6)));
+            parametersTable->item(i, 1)->setFlags(Qt::ItemIsEnabled);
+            
+            parametersTable->setItem(i, 2, new QTableWidgetItem(QString::number(param.priorMean, 'g', 6)));
+            parametersTable->setItem(i, 3, new QTableWidgetItem(QString::number(param.priorStd, 'g', 6)));
+            
+            QTableWidgetItem* checkItem = new QTableWidgetItem();
+            checkItem->setCheckState(param.useGaussianPrior ? Qt::Checked : Qt::Unchecked);
+            checkItem->setFlags(checkItem->flags() | Qt::ItemIsUserCheckable);
+            parametersTable->setItem(i, 4, checkItem);
+            
+            parametersTable->setItem(i, 5, new QTableWidgetItem(param.category));
+            parametersTable->item(i, 5)->setFlags(Qt::ItemIsEnabled);
+        }
+        
+        logTextEdit->append(QString("Loaded %1 non-fixed parameters from current AZUREParams (RWA mode)")
+                           .arg(mcmcParameters.size()));
+                           
+        if(mcmcParameters.isEmpty()) {
+            logTextEdit->append("Warning: No non-fixed parameters found in current configuration.");
+        }
+        
+    } catch(const std::exception& e) {
+        logTextEdit->append(QString("Error reading current AZUREParams: %1")
+                           .arg(QString::fromStdString(e.what())));
+        logTextEdit->append("Falling back to GUI-based parameter loading");
+        
+        // Fall back to the old method
+        useReducedWidthsCheckBox->setChecked(false); // Temporarily disable to avoid recursion
+        loadFromFittingTab(); // This will use the physical parameters approach  
+        useReducedWidthsCheckBox->setChecked(true); // Re-enable
     }
 }
 
