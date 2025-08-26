@@ -377,7 +377,7 @@ void MCMCTab::resetToDefaults() {
 
 void MCMCTab::loadFromSavFile() {
     QString filename = QFileDialog::getOpenFileName(this, 
-        "Load Parameters from .sav file", "", "AZURE2 Parameter Files (*.sav);;All Files (*)");
+        "Load Parameters from .sav file", "", "AZURE2 Fit Files (*.sav);;AZURE2 Parameter Files (*.par);;All Files (*)");
     
     if(filename.isEmpty()) {
         return;
@@ -1001,6 +1001,7 @@ bool MCMCTab::writeMCMCSettings(QTextStream& outStream) {
     outStream << "<parameters>\n";
     for(const MCMCParameter& param : mcmcParameters) {
         outStream << param.name << " " 
+                 << param.value << " " 
                  << param.priorMean << " " 
                  << param.priorStd << " " 
                  << (param.useGaussianPrior ? "1" : "0") << "\n";
@@ -1038,10 +1039,31 @@ bool MCMCTab::readMCMCSettings(QTextStream& inStream) {
         }
         
         if(inParametersSection) {
-            // Parse parameter line: "name priorMean priorStd useGaussianPrior"
+            // Parse parameter line: "name currentValue priorMean priorStd useGaussianPrior"
             // Parameter names can contain spaces, so we need to parse from the right
             QStringList parts = line.split(' ', Qt::SkipEmptyParts);
-            if(parts.size() >= 4) {
+            if(parts.size() >= 5) {
+                MCMCParameter param;
+                
+                // The last 4 parts are currentValue, priorMean, priorStd, useGaussianPrior
+                int numParts = parts.size();
+                param.value = parts[numParts - 4].toDouble();
+                param.priorMean = parts[numParts - 3].toDouble();
+                param.priorStd = parts[numParts - 2].toDouble();
+                param.useGaussianPrior = (parts[numParts - 1].toInt() == 1);
+                
+                // Everything except the last 4 parts is the parameter name
+                QStringList nameParts = parts.mid(0, numParts - 4);
+                param.name = nameParts.join(" ");
+                
+                param.category = "loaded"; // Will be updated when loaded from fitting tab
+                param.minuitIndex = -1;
+                param.levelIndex = -1;
+                param.channelIndex = -1;
+                
+                mcmcParameters.append(param);
+            } else if(parts.size() >= 4) {
+                // Handle legacy format for backward compatibility
                 MCMCParameter param;
                 
                 // The last 3 parts are priorMean, priorStd, useGaussianPrior
@@ -1054,8 +1076,8 @@ bool MCMCTab::readMCMCSettings(QTextStream& inStream) {
                 QStringList nameParts = parts.mid(0, numParts - 3);
                 param.name = nameParts.join(" ");
                 
-                param.value = param.priorMean; // Default value
-                param.category = "loaded"; // Will be updated when loaded from fitting tab
+                param.value = param.priorMean; // Legacy: set current value to prior mean
+                param.category = "loaded";
                 param.minuitIndex = -1;
                 param.levelIndex = -1;
                 param.channelIndex = -1;
