@@ -1472,9 +1472,26 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc* the
         }
       }
       
+      // CRITICAL FIX: Apply the same energy shift to all total capture segments
+      if(segment->IsTotalCapture()) {
+        int numTotalCaptureSegments = segment->IsTotalCapture();
+        // Apply the energy shift to all additional total capture segments
+        for(int tcSeg = 1; tcSeg < numTotalCaptureSegments; tcSeg++) {
+          ESegmentIterator additionalSegment = segment + tcSeg;
+          if(additionalSegment < data->GetSegments().end()) {
+            if(segment->IsVaryEnergyShift() || p[i] != 0.0) {
+              additionalSegment->SetEnergyShift(p[i]);
+              additionalSegment->UpdatePointEnergiesWithShift(theCNuc, configure);
+              anyEnergyShifted = true;
+            }
+          }
+        }
+        // Skip over the additional total capture segments we just processed
+        segment += numTotalCaptureSegments - 1;
+      }
+      
       // Always increment i since energy shift parameters are now present for ALL segments
       i++;
-      if(segment->IsTotalCapture()) segment+=segment->IsTotalCapture()-1;
     }
     
     // Critical fix: Rebuild energy-based mapping system after energy shifts
@@ -1502,9 +1519,26 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc* the
       }
     }
     
+    // CRITICAL FIX: Apply the same energy shift to all total capture segments
+    if(segment->IsTotalCapture()) {
+      int numTotalCaptureSegments = segment->IsTotalCapture();
+      // Apply the energy shift to all additional total capture segments
+      for(int tcSeg = 1; tcSeg < numTotalCaptureSegments; tcSeg++) {
+        ESegmentIterator additionalSegment = segment + tcSeg;
+        if(additionalSegment < GetSegments().end()) {
+          if(segment->IsVaryEnergyShift() || p[i] != 0.0) {
+            additionalSegment->SetEnergyShift(p[i]);
+            additionalSegment->UpdatePointEnergiesWithShift();
+            anyEnergyShifted = true;
+          }
+        }
+      }
+      // Skip over the additional total capture segments we just processed
+      segment += numTotalCaptureSegments - 1;
+    }
+    
     // Always increment i since energy shift parameters are now present for ALL segments
     i++;
-    if(segment->IsTotalCapture()) segment+=segment->IsTotalCapture()-1;
   }
   
   // Critical fix: Rebuild energy-based mapping system after energy shifts
