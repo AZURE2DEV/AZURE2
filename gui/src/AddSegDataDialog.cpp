@@ -67,6 +67,37 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   energyShiftErrorLabel = new QLabel(tr("Energy Shift Error [MeV]:"));
   varyEnergyShiftCheck = new QCheckBox(tr("Vary Energy Shift?"));
 
+  advancedModeCheck = new QCheckBox(tr("Advanced Settings (Sum or Ratio of Components)"));
+  connect(advancedModeCheck,SIGNAL(stateChanged(int)),this,SLOT(advancedModeChanged(int)));
+
+  advancedModeBox = new QGroupBox(tr("Advanced Segment Definition"));
+  advancedModeBox->setVisible(false);
+  
+  operationCombo = new QComboBox;
+  operationCombo->addItem(tr("Sum"));
+  operationCombo->addItem(tr("Ratio"));
+
+  componentsList = new QListWidget;
+  componentsList->setMaximumHeight(100);
+
+  componentEntranceSpin = new QSpinBox;
+  componentEntranceSpin->setMinimum(1);
+  componentEntranceSpin->setMaximum(100);
+  componentEntranceSpin->setSingleStep(1);
+  componentEntranceSpin->setValue(1);
+  
+  componentExitSpin = new QSpinBox;
+  componentExitSpin->setMinimum(1);
+  componentExitSpin->setMaximum(100);
+  componentExitSpin->setSingleStep(1);
+  componentExitSpin->setValue(1);
+
+  addComponentButton = new QPushButton(tr("Add Component"));
+  connect(addComponentButton,SIGNAL(clicked()),this,SLOT(addComponent()));
+  
+  removeComponentButton = new QPushButton(tr("Remove Component"));
+  connect(removeComponentButton,SIGNAL(clicked()),this,SLOT(removeComponent()));
+
   cancelButton = new QPushButton(tr("Cancel"));
   okButton = new QPushButton(tr("Accept"));
   okButton->setDefault(true);
@@ -146,6 +177,28 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   energyShiftErrorLayout->addWidget(energyShiftErrorLabel,0,1,Qt::AlignRight);
   energyShiftErrorLayout->addWidget(energyShiftErrorText,0,2);
   lowerLayout->addLayout(energyShiftErrorLayout,3,2);
+
+  lowerLayout->addWidget(advancedModeCheck,4,0,1,3);
+  
+  QGridLayout *advancedLayout = new QGridLayout;
+  advancedLayout->addWidget(new QLabel(tr("Operation:")),0,0);
+  advancedLayout->addWidget(operationCombo,0,1);
+  advancedLayout->addWidget(new QLabel(tr("Components:")),1,0);
+  advancedLayout->addWidget(componentsList,1,1,3,1);
+  
+  // Add component entrance/exit spinboxes above buttons
+  advancedLayout->addWidget(new QLabel(tr("Entrance Pair Key:")),1,2);
+  advancedLayout->addWidget(componentEntranceSpin,1,3);
+  advancedLayout->addWidget(new QLabel(tr("Exit Pair Key:")),2,2);
+  advancedLayout->addWidget(componentExitSpin,2,3);
+  
+  QGridLayout *buttonLayout = new QGridLayout;
+  buttonLayout->addWidget(addComponentButton,0,0);
+  buttonLayout->addWidget(removeComponentButton,0,1);
+  advancedLayout->addLayout(buttonLayout,3,2,1,2);
+  advancedModeBox->setLayout(advancedLayout);
+
+  lowerLayout->addWidget(advancedModeBox,5,0,1,3);
   
   valueLayout->addLayout(lowerLayout,2,0,1,2);
   valueBox->setLayout(valueLayout);
@@ -212,5 +265,33 @@ void AddSegDataDialog::varyNormChanged(int state) {
   } else {
     dataNormErrorLabel->setVisible(false);
     dataNormErrorText->setVisible(false);
+  }
+}
+
+void AddSegDataDialog::advancedModeChanged(int state) {
+  if(state==Qt::Checked) {
+    advancedModeBox->setVisible(true);
+    // Keep the spinboxes enabled so users can select pairs to add as components
+    entrancePairIndexSpin->setEnabled(true);
+    exitPairIndexSpin->setEnabled(true);
+  } else {
+    advancedModeBox->setVisible(false);
+    entrancePairIndexSpin->setEnabled(true);
+    exitPairIndexSpin->setEnabled(true);
+  }
+  adjustSize();
+}
+
+void AddSegDataDialog::addComponent() {
+  int entrance = componentEntranceSpin->value();
+  int exit = componentExitSpin->value();
+  QString component = QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit);
+  componentsList->addItem(component);
+}
+
+void AddSegDataDialog::removeComponent() {
+  int currentRow = componentsList->currentRow();
+  if(currentRow >= 0) {
+    delete componentsList->takeItem(currentRow);
   }
 }

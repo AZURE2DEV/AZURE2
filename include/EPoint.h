@@ -104,6 +104,7 @@ class EPoint {
   void SetCMEnergy(double);
   void SetExcitationEnergy(double);
   void SetExitKey(int);
+  void SetEntranceKey(int);
   void CalcLegendreP(int,CNuc*,TargetEffect*);
   void CalcEDependentValues(CNuc*,const Config&);
   void RecalcEDependentValues(CNuc*,const Config&);

@@ -23,21 +23,71 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
   if (role == Qt::DisplayRole) {
     SegmentsDataData line = segDataLineList.at(index.row());
     if(index.column() == 1) {
-      if(line.dataType==3) {
+      if(line.isAdvanced == 1) {
+        // Handle advanced segments (sum/ratio) - show original + components
+        QString result;
+        
+        // First show the original segment
+        if(pairsModel->getPairs().size()>=line.entrancePairIndex && pairsModel->getPairs().size()>=line.exitPairIndex) {
+          PairsData firstPair=pairsModel->getPairs().at(line.entrancePairIndex-1);
+          PairsData secondPair=pairsModel->getPairs().at(line.exitPairIndex-1);
+          result = pairsModel->getReactionLabel(firstPair,secondPair);
+        } else {
+          result = "UNDEFINED";
+        }
+        
+        // Then add the components
+        QStringList components = line.componentsList.split(";", Qt::SkipEmptyParts);
+        
+        if(components.isEmpty()) {
+          result += "<br><font style='color:red;font-weight:bold;'>NO COMPONENTS</font>";
+        } else {
+          for(int i = 0; i < components.size(); i++) {
+            QString component = components[i];
+            // Parse component string like "Entrance: 1, Exit: 2"
+            QStringList parts = component.split(", ");
+            if(parts.size() >= 2) {
+              int entranceKey = parts[0].split(": ")[1].toInt();
+              int exitKey = parts[1].split(": ")[1].toInt();
+              
+              if(pairsModel->getPairs().size() >= entranceKey && pairsModel->getPairs().size() >= exitKey) {
+                PairsData entrancePair = pairsModel->getPairs().at(entranceKey-1);
+                PairsData exitPair = pairsModel->getPairs().at(exitKey-1);
+                QString reactionLabel = pairsModel->getReactionLabel(entrancePair, exitPair);
+                
+                if(line.operationType == 0) { // Sum
+                  result += " +<br>";
+                } else { // Ratio
+                  result += " /<br>";
+                }
+                result += reactionLabel;
+              } else {
+                if(line.operationType == 0) { // Sum
+                  result += " +<br>";
+                } else { // Ratio
+                  result += " /<br>";
+                }
+                result += "UNDEFINED";
+              }
+            }
+          }
+        }
+        return QString("<div align='left'>%1</div>").arg(result);
+      } else if(line.dataType==3) {
 	int i = 0;
 	QList<PairsData> pairsList = pairsModel->getPairs();
 	for(i=0;i<pairsList.size();i++) 
 	  if(pairsList[i].pairType==10) break;
 	if(pairsList.size()>=line.entrancePairIndex&&i<pairsList.size()) {
 	  PairsData firstPair=pairsModel->getPairs().at(line.entrancePairIndex-1);
-	  return QString("<center>%1</center>").arg(pairsModel->getReactionLabelTotalCapture(firstPair));
-	} else return QString("<center><font style='color:red;font-weight:bold;'>UNDEFINED</font></center>");
+	  return QString("<div align='left'>%1</div>").arg(pairsModel->getReactionLabelTotalCapture(firstPair));
+	} else return QString("<div align='left'><font style='color:red;font-weight:bold;'>UNDEFINED</font></div>");
       } else {
 	if(pairsModel->getPairs().size()>=line.entrancePairIndex&&pairsModel->getPairs().size()>=line.exitPairIndex) {
 	  PairsData firstPair=pairsModel->getPairs().at(line.entrancePairIndex-1);
 	  PairsData secondPair=pairsModel->getPairs().at(line.exitPairIndex-1);
-	  return QString("<center>%1</center>").arg(pairsModel->getReactionLabel(firstPair,secondPair));
-	} else return QString("<center><font style='color:red;font-weight:bold;'>UNDEFINED</font></center>");
+	  return QString("<div align='left'>%1</div>").arg(pairsModel->getReactionLabel(firstPair,secondPair));
+	} else return QString("<div align='left'><font style='color:red;font-weight:bold;'>UNDEFINED</font></div>");
       }
     } else if(index.column() == 2) return QVariant();
     else if(index.column() == 3) {
@@ -122,6 +172,9 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
     else if(index.column() == 14) return line.energyShift;
     else if(index.column() == 15) return line.energyShiftError;
     else if(index.column() == 16) return line.varyEnergyShift;
+    else if(index.column() == 17) return line.isAdvanced;
+    else if(index.column() == 18) return line.operationType;
+    else if(index.column() == 19) return line.componentsList;
   } else if (role==Qt::CheckStateRole && index.column()==0) {
     SegmentsDataData line = segDataLineList.at(index.row());
     if(line.isActive==1) return Qt::Checked;
@@ -223,6 +276,9 @@ bool SegmentsDataModel::setData(const QModelIndex &index, const QVariant &value,
       // Emit signal for energy shift vary flag change
       emit energyShiftVaryChanged(row, value.toInt() == 1);
     }
+    else if(index.column() == 17) tempData.isAdvanced=value.toInt();
+    else if(index.column() == 18) tempData.operationType=value.toInt();
+    else if(index.column() == 19) tempData.componentsList=value.toString();
     else return false;
 
     segDataLineList.replace(row,tempData);

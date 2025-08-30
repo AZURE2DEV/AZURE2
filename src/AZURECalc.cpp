@@ -30,6 +30,8 @@ double AZURECalc::operator()(const vector_r& p) const {
   localData->FillEnergyShiftsFromParams(p,localData,localCompound,&configure());
   if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
   
+  // Sub-segments are now integrated into ESegment, no separate initialization needed
+  
   //loop over segments and points
   double chiSquared=0.0;
   double segmentChiSquared=0.0;
@@ -88,6 +90,36 @@ double AZURECalc::operator()(const vector_r& p) const {
       }
       
       chiSquared+=segmentChiSquared;
+    }
+  }
+
+  // Process segments with components - use new integrated calculation method
+  for(int i = 1; i <= localData->NumSegments(); i++) {
+    ESegment* segment = localData->GetSegment(i);
+    if(segment && segment->HasComponents()) {
+      // Recalculate points using the new combined calculation method
+      for(int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
+        double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
+        EPoint* point = segment->GetPoint(pointIdx + 1);
+        if(point) {
+          point->SetFitCrossSection(theoreticalValue);
+        }
+      }
+      
+      // Recalculate chi-squared for this segment with components
+      double segmentChiSquared = 0.0;
+      for(int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
+        EPoint* point = segment->GetPoint(pointIdx + 1);
+        if(point) {
+          double residual = point->GetFitCrossSection() - point->GetCMCrossSection() * segment->GetNorm();
+          double error = point->GetCMCrossSectionError() * segment->GetNorm();
+          if(error != 0.0) {
+            segmentChiSquared += (residual * residual) / (error * error);
+          }
+        }
+      }
+      segment->SetSegmentChiSquared(segmentChiSquared);
+      chiSquared += segmentChiSquared;
     }
   }
 

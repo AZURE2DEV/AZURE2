@@ -2,8 +2,10 @@
 #define EDATA_H
 
 #include "ESegment.h"
+#include "ESegmentsSub.h"
 #include "TargetEffect.h"
 #include "EDataIterator.h"
+#include <deque>
 
 class CNuc;
 namespace ROOT {
@@ -47,6 +49,8 @@ class EData {
   void PrintCoulombAmplitude(const Config&,CNuc*); 
   void WriteOutputFiles(const Config&,bool=false);
   int CalculateECAmplitudes(CNuc*,const Config&);
+  int InitializeComponentSegments(CNuc*,const Config&);
+  ESegment* CreateComponentSegment(const ESegment& baseSegment, int entranceKey, int exitKey);
   void MapData();
   void AddTargetEffect(TargetEffect);
   void SetNormParamOffset(int);
@@ -62,9 +66,11 @@ class EData {
   EDataIterator begin();
   EDataIterator end();
   std::vector<ESegment>& GetSegments();
+  
  private:
   std::vector<TargetEffect> targetEffects_;
   std::vector<ESegment> segments_;
+  std::deque<ESegment> componentSegments_;  // Separate storage for component segments (deque avoids pointer invalidation)
   int iterations_;
   int normParamOffset_;
   int energyShiftParamOffset_;

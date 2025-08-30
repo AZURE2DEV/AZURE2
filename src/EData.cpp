@@ -64,6 +64,7 @@ int EData::Fill(const Config& configure, CNuc *theCNuc) {
       numTotalSegments++;
       if(segment.isActive()==1) {
 	ESegment NewSegment(segment);
+	
 	if(theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
 	  theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()))->SetEntrance();
 	  bool isValidTotal=false;
@@ -78,6 +79,8 @@ int EData::Fill(const Config& configure, CNuc *theCNuc) {
 	  if(isValidTotal||theCNuc->IsPairKey(NewSegment.GetExitKey())) {
 	    NewSegment.SetSegmentKey(numTotalSegments);
 	    this->AddSegment(NewSegment);
+	    
+	    // Fill the segment with data first
 	    if(this->GetSegment(this->NumSegments())->Fill(theCNuc,this,configure)==-1) {
               configure.outStream << "WARNING: Could Not Fill Segment #" << this->NumSegments() 
 			<< " from file." << std::endl;
@@ -87,6 +90,45 @@ int EData::Fill(const Config& configure, CNuc *theCNuc) {
 				  << " is empty and will not be used." << std::endl;
 	      this->DeleteLastSegment();
 	    } else {
+	      // Handle advanced segments - parse components and add them to the segment
+	      // This must be done AFTER the segment is filled with data points
+	      if (NewSegment.IsAdvanced()) {
+	        // Set the operation type from the segment data
+	        OperationType operation = (NewSegment.GetLegacyOperationType() == 0) ? SUM : RATIO;
+	        ESegment* filledSegment = this->GetSegment(this->NumSegments());
+	        filledSegment->SetOperationType(operation);
+	        
+	        // Parse components and create full segment copies
+	        std::string componentsStr = NewSegment.GetComponentsList();
+	        if (!componentsStr.empty()) {
+	          // Components are stored as "Entrance: X, Exit: Y;Entrance: A, Exit: B;..."
+	          std::istringstream stream(componentsStr);
+	          std::string component;
+	          while (std::getline(stream, component, ';')) {
+	            if (!component.empty()) {
+	              // Parse "Entrance: X, Exit: Y" format
+	              size_t entrancePos = component.find("Entrance: ");
+	              size_t exitPos = component.find("Exit: ");
+	              if (entrancePos != std::string::npos && exitPos != std::string::npos) {
+	                entrancePos += 10; // Length of "Entrance: "
+	                size_t commaPos = component.find(", Exit: ");
+	                if (commaPos != std::string::npos) {
+	                  int entranceKey = std::stoi(component.substr(entrancePos, commaPos - entrancePos));
+	                  exitPos += 6; // Length of "Exit: "
+	                  int exitKey = std::stoi(component.substr(exitPos));
+	                  
+	                  // Create a full segment copy with different entrance/exit keys
+	                  ESegment* componentSegment = this->CreateComponentSegment(*filledSegment, entranceKey, exitKey);
+	                  if (componentSegment) {
+	                    filledSegment->AddComponentSegment(componentSegment);
+	                  }
+	                }
+	              }
+	            }
+	          }
+	        }
+	      }
+	      
 	      int thisSegmentNum = this->NumSegments();
 	      if(this->GetSegment(thisSegmentNum)->IsTotalCapture()) {
 		int numCapturePairs=0;
@@ -500,6 +542,11 @@ int EData::Initialize(CNuc *compound,const Config &configure) {
     configure.outStream << "Calculating External Capture Amplitudes..." << std::endl;
     if(this->CalculateECAmplitudes(compound,configure)==-1) return -1;
   }
+  
+  //Initialize component segments - ensure their entrance/exit pairs are properly set up
+  configure.outStream << "Initializing Component Segments..." << std::endl;
+  if(this->InitializeComponentSegments(compound,configure)==-1) return -1;
+  
   return 0;
 }
 
@@ -929,6 +976,8 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit) {
     out<<std::endl<<std::endl;out.flush();
     firstSumIterator=GetSegments().end();
   }
+  
+  
   if(!isFit&&(configure.paramMask & Config::CALCULATE_WITH_DATA)) {
     chiOut << "Total-Chi-Squared: " 
 	      << totalChiSquared
@@ -1138,6 +1187,145 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc,const Config& configure) {
   }
   if(in.is_open()) in.close();
   return 0;
+}
+
+/*!
+ * Initialize component segments by ensuring their entrance/exit pairs are properly set up
+ * in the compound nucleus for calculations.
+ */
+
+int EData::InitializeComponentSegments(CNuc *theCNuc, const Config& configure) {
+  // Initialize all component segments with the same process as regular segments
+  configure.outStream << "Initializing Component Segments (" << componentSegments_.size() << " components)..." << std::endl;
+  
+  // First, ensure entrance/exit pairs are properly set up in the compound nucleus
+  for(auto& componentSegment : componentSegments_) {
+    int entranceKey = componentSegment.GetEntranceKey();
+    int exitKey = componentSegment.GetExitKey();
+    
+    // Ensure entrance pair is set as entrance if it exists
+    if(theCNuc->IsPairKey(entranceKey)) {
+      int pairNum = theCNuc->GetPairNumFromKey(entranceKey);
+      theCNuc->GetPair(pairNum)->SetEntrance();
+    }
+    
+    // Check if exit pair is valid (either -1 for total capture or existing pair)
+    bool isValidExit = false;
+    if(exitKey == -1) {
+      // Check for total capture validity
+      for(int i = 1; i <= theCNuc->NumPairs(); i++) {
+        if(theCNuc->GetPair(i)->GetPType() == 10) {
+          isValidExit = true;
+          break;
+        }
+      }
+    } else {
+      isValidExit = theCNuc->IsPairKey(exitKey);
+    }
+    
+    if(!isValidExit) {
+      configure.outStream << "Warning: Invalid exit key " << exitKey 
+                         << " for component segment" << std::endl;
+    }
+  }
+  
+  // Initialize component segments using the same process as regular segments
+  // CalcEDependentValues for component segments
+  for(auto& componentSegment : componentSegments_) {
+    bool localStop = false;
+    for(int i = 1; i <= componentSegment.NumPoints(); i++) {
+      if(configure.stopFlag || localStop) continue;
+      EPoint *point = componentSegment.GetPoint(i);
+      if(!(point->IsMapped())) {
+        try {
+          point->CalcEDependentValues(theCNuc, configure);
+        } catch(GSLException e) {
+          configure.outStream << "Component segment calculation error: " << e.what() << std::endl;
+          localStop = true;
+        }
+      }
+    }
+    if(configure.stopFlag || localStop) return -1;
+  }
+  
+  // CalcLegendreP for component segments
+  for(auto& componentSegment : componentSegments_) {
+    for(int i = 1; i <= componentSegment.NumPoints(); i++) {
+      EPoint* point = componentSegment.GetPoint(i);
+      point->CalcLegendreP(configure.maxLOrder, theCNuc, NULL);
+    }
+  }
+  
+  // CalcCoulombAmplitude for component segments
+  for(auto& componentSegment : componentSegments_) {
+    for(int i = 1; i <= componentSegment.NumPoints(); i++) {
+      EPoint* point = componentSegment.GetPoint(i);
+      point->CalcCoulombAmplitude(theCNuc);
+    }
+  }
+  
+  // Calculate EC amplitudes for component segments if external capture is enabled
+  if(configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
+    configure.outStream << "Calculating EC Amplitudes for Component Segments..." << std::endl;
+    for(auto& componentSegment : componentSegments_) {
+      int aa = theCNuc->GetPairNumFromKey(componentSegment.GetEntranceKey());
+      if(theCNuc->GetPair(aa)->GetPType() != 20 && theCNuc->GetPair(aa)->IsEntrance()) {
+        PPair *entrancePair = theCNuc->GetPair(aa);
+        for(int j = 1; j <= theCNuc->NumJGroups(); j++) {
+          for(int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
+            if(theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) {
+              ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
+              int ir = theCNuc->GetPairNumFromKey(componentSegment.GetExitKey());
+              if(ecLevel->GetECPairNum() == ir) {
+                for(int i = 1; i <= componentSegment.NumPoints(); i++) {
+                  EPoint *point = componentSegment.GetPoint(i);
+                  if(!(point->IsMapped())) {
+                    try {
+                      point->CalculateECAmplitudes(theCNuc, configure);
+                    } catch(...) {
+                      configure.outStream << "Warning: EC amplitude calculation failed for component segment point" << std::endl;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  return 0;
+}
+
+/*!
+ * Creates a component segment as a full copy of the base segment with different entrance/exit keys
+ */
+ESegment* EData::CreateComponentSegment(const ESegment& baseSegment, int entranceKey, int exitKey) {
+  // Create a copy of the base segment with different entrance/exit keys
+  // Store component segments separately to avoid iterator invalidation
+  
+  // Add a copy of the base segment to the component segments vector
+  this->componentSegments_.push_back(baseSegment);
+  ESegment* componentSegment = &componentSegments_.back();
+  
+  // Set the new entrance/exit keys for the component segment
+  componentSegment->SetEntranceKey(entranceKey);
+  componentSegment->SetExitKey(exitKey);
+  
+  // Set a unique segment key to avoid cache conflicts
+  // Use negative keys for component segments to distinguish from regular segments
+  static int componentSegmentKeyCounter = -1000;
+  componentSegment->SetSegmentKey(componentSegmentKeyCounter--);
+  
+  // Clear any existing components to avoid circular references
+  componentSegment->ClearComponents();
+  
+  // The component segment now has the same data points as the base segment
+  // but with different entrance/exit keys, so it will calculate different
+  // theoretical cross sections when initialized
+  
+  return componentSegment;
 }
 
 /*!
@@ -1380,3 +1568,4 @@ EDataIterator EData::end() {
 std::vector<ESegment>& EData::GetSegments() {
   return segments_;
 }
+

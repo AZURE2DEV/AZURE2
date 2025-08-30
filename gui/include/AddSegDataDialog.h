@@ -7,6 +7,9 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QCheckBox>
+#include <QListWidget>
+#include <QGroupBox>
+#include <QPushButton>
 
 QT_BEGIN_NAMESPACE
 
@@ -42,10 +45,22 @@ class AddSegDataDialog : public QDialog {
   QLabel *energyShiftErrorLabel;
   QCheckBox *varyEnergyShiftCheck;
 
+  QCheckBox *advancedModeCheck;
+  QGroupBox *advancedModeBox;
+  QComboBox *operationCombo;
+  QListWidget *componentsList;
+  QSpinBox *componentEntranceSpin;
+  QSpinBox *componentExitSpin;
+  QPushButton *addComponentButton;
+  QPushButton *removeComponentButton;
+
  public slots:
   void setChooseFile();
   void dataTypeChanged(int);
   void varyNormChanged(int);
+  void advancedModeChanged(int);
+  void addComponent();
+  void removeComponent();
   
  private:
   QPushButton *okButton;

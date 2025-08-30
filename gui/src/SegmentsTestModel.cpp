@@ -22,7 +22,43 @@ QVariant SegmentsTestModel::data(const QModelIndex &index, int role) const {
   if (role == Qt::DisplayRole) {
     SegmentsTestData line = segTestLineList.at(index.row());
     if(index.column() == 1) {
-      if(line.dataType==4) {
+      if(line.isAdvanced == 1) {
+        // Handle advanced segments (sum/ratio)
+        QString result;
+        QStringList components = line.componentsList.split(";", Qt::SkipEmptyParts);
+        
+        if(components.isEmpty()) {
+          return QString("<center><font style='color:red;font-weight:bold;'>NO COMPONENTS</font></center>");
+        }
+        
+        for(int i = 0; i < components.size(); i++) {
+          QString component = components[i];
+          // Parse component string like "Entrance: 1, Exit: 2"
+          QStringList parts = component.split(", ");
+          if(parts.size() >= 2) {
+            int entranceKey = parts[0].split(": ")[1].toInt();
+            int exitKey = parts[1].split(": ")[1].toInt();
+            
+            if(pairsModel->getPairs().size() >= entranceKey && pairsModel->getPairs().size() >= exitKey) {
+              PairsData entrancePair = pairsModel->getPairs().at(entranceKey-1);
+              PairsData exitPair = pairsModel->getPairs().at(exitKey-1);
+              QString reactionLabel = pairsModel->getReactionLabel(entrancePair, exitPair);
+              
+              if(i > 0) {
+                if(line.operationType == 0) { // Sum
+                  result += " +<br>";
+                } else { // Ratio
+                  result += " /<br>";
+                }
+              }
+              result += reactionLabel;
+            } else {
+              result += "UNDEFINED";
+            }
+          }
+        }
+        return QString("<center>%1</center>").arg(result);
+      } else if(line.dataType==4) {
 	int i = 0;
 	QList<PairsData> pairsList = pairsModel->getPairs();
 	for(i=0;i<pairsList.size();i++) 
@@ -104,6 +140,9 @@ QVariant SegmentsTestModel::data(const QModelIndex &index, int role) const {
     else if(index.column() == 10) return line.phaseJ;
     else if(index.column() == 11) return line.phaseL;
     else if(index.column() == 12) return line.maxAngDistOrder;
+    else if(index.column() == 13) return line.isAdvanced;
+    else if(index.column() == 14) return line.operationType;
+    else if(index.column() == 15) return line.componentsList;
   } else if (role==Qt::CheckStateRole && index.column()==0) {
     SegmentsTestData line = segTestLineList.at(index.row());
     if(line.isActive==1) return Qt::Checked;
@@ -169,6 +208,9 @@ bool SegmentsTestModel::setData(const QModelIndex &index, const QVariant &value,
     else if(index.column() == 10) tempData.phaseJ=value.toDouble();
     else if(index.column() == 11) tempData.phaseL=value.toInt();
     else if(index.column() == 12) tempData.maxAngDistOrder=value.toInt();
+    else if(index.column() == 13) tempData.isAdvanced=value.toInt();
+    else if(index.column() == 14) tempData.operationType=value.toInt();
+    else if(index.column() == 15) tempData.componentsList=value.toString();
     else return false;
 
     segTestLineList.replace(row,tempData);

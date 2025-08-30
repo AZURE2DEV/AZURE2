@@ -46,8 +46,14 @@ ESegment::ESegment(SegLine segLine) {
   else varyEnergyShift_=false;
   if(segLine.varyNorm()==1) varyNorm_=true;
   else varyNorm_=false;
+  isAdvanced_=segLine.isAdvanced() == 1;
+  operationType_=segLine.operationType();
+  componentsList_=segLine.componentsList();
   targetEffectNum_=0;
   isTargetEffect_=false;
+  
+  // Initialize advanced segment composition
+  segmentOperationType_ = SUM;  // Default to SUM operation
 }
 
 /*!
@@ -94,8 +100,14 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   energyShiftError_=0.0;
   varyEnergyShift_=false;
   varyNorm_=false;
+  isAdvanced_=false;
+  operationType_=0;
+  componentsList_="";
   targetEffectNum_=0;
   isTargetEffect_=false;
+  
+  // Initialize advanced segment composition
+  segmentOperationType_ = SUM;  // Default to SUM operation
 }
 
 /*!
@@ -419,6 +431,30 @@ bool ESegment::IsVaryEnergyShift() const {
 }
 
 /*!
+ * Returns true if this is an advanced segment (sum/ratio).
+ */
+
+bool ESegment::IsAdvanced() const {
+  return isAdvanced_;
+}
+
+/*!
+ * Returns the operation type (0 for sum, 1 for ratio).
+ */
+
+int ESegment::GetLegacyOperationType() const {
+  return operationType_;
+}
+
+/*!
+ * Returns the semicolon-separated list of components.
+ */
+
+std::string ESegment::GetComponentsList() const {
+  return componentsList_;
+}
+
+/*!
  * Sets the energy shift value for the data segment.
  */
 
@@ -551,6 +587,15 @@ void ESegment::SetExitKey(int key) {
 }
 
 /*!
+ * Sets the entrance key for the segment and all its points
+ */
+void ESegment::SetEntranceKey(int key) {
+  entrancekey_=key;
+  for(int i=1;i<=this->NumPoints();i++) 
+    this->GetPoint(i)->SetEntranceKey(key);
+}
+
+/*!
  * Sets the number of total capture segments to be summed.  Should be zero if the segment is
  * not total capture, otherwise the parameter should be the number of segments in the sum 
  * (inclusive of the current segment).
@@ -583,4 +628,143 @@ EPoint *ESegment::GetPoint(int pointNum) {
 
 std::vector<EPoint>& ESegment::GetPoints() {
   return points_;
+}
+
+// Advanced segment composition methods
+
+/*!
+ * Adds a component segment defined by entrance and exit keys
+ */
+void ESegment::AddComponent(int entranceKey, int exitKey) {
+  // This method is now deprecated - use AddComponentSegment instead
+  // Components should be full ESegment copies, not just entrance/exit keys
+}
+
+/*!
+ * Adds a component segment (full ESegment copy)
+ */
+void ESegment::AddComponentSegment(ESegment* componentSegment) {
+  if (componentSegment) {
+    componentSegments_.push_back(componentSegment);
+  }
+}
+
+/*!
+ * Sets the operation type for combining components (SUM or RATIO)
+ */
+void ESegment::SetOperationType(OperationType operation) {
+  segmentOperationType_ = operation;
+}
+
+/*!
+ * Gets the operation type for combining components
+ */
+OperationType ESegment::GetOperationType() const {
+  return segmentOperationType_;
+}
+
+/*!
+ * Returns true if this segment has additional components
+ */
+bool ESegment::HasComponents() const {
+  return !componentSegments_.empty();
+}
+
+/*!
+ * Returns a reference to the component segments vector
+ */
+const std::vector<ESegment*>& ESegment::GetComponentSegments() const {
+  return componentSegments_;
+}
+
+/*!
+ * Clears all components from the segment
+ */
+void ESegment::ClearComponents() {
+  // Clean up component segments (they are owned by EData, so just clear pointers)
+  componentSegments_.clear();
+}
+
+/*!
+ * Calculates the theoretical cross section for this segment, including 
+ * combination with any additional components according to the operation type
+ */
+double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, const Config& configure, EData* edata) {
+  if (pointIndex < 0 || pointIndex >= NumPoints()) {
+    return 0.0;
+  }
+  
+  // Calculate the base segment's theoretical cross section
+  EPoint* basePoint = GetPoint(pointIndex + 1);
+  if (!basePoint) {
+    return 0.0;
+  }
+  
+  // Calculate base point if not already calculated
+  if (!basePoint->IsMapped()) {
+    try {
+      basePoint->Calculate(cnuc, configure);
+    } catch (...) {
+      return 0.0;
+    }
+  }
+  
+  double baseValue = basePoint->GetFitCrossSection();
+  
+  // If no components, return base value
+  if (!HasComponents()) {
+    return baseValue;
+  }
+  
+  // Calculate component values and combine according to operation type
+  if (segmentOperationType_ == SUM) {
+    double sum = baseValue;
+    for (const auto& componentSegment : componentSegments_) {
+      if (componentSegment && pointIndex < componentSegment->NumPoints()) {
+        EPoint* componentPoint = componentSegment->GetPoint(pointIndex + 1);
+        if (componentPoint) {
+          // Calculate component point if not already calculated
+          if (!componentPoint->IsMapped()) {
+            try {
+              componentPoint->Calculate(cnuc, configure);
+            } catch (...) {
+              continue; // Skip this component if calculation fails
+            }
+          }
+          sum += componentPoint->GetFitCrossSection();
+        }
+      }
+    }
+    return sum;
+  } else if (segmentOperationType_ == RATIO) {
+    if (componentSegments_.empty()) {
+      return baseValue;
+    }
+    
+    // For ratio: base / first_component
+    ESegment* firstComponent = componentSegments_[0];
+    if (firstComponent && pointIndex < firstComponent->NumPoints()) {
+      EPoint* denominatorPoint = firstComponent->GetPoint(pointIndex + 1);
+      if (denominatorPoint) {
+        // Calculate denominator point if not already calculated
+        if (!denominatorPoint->IsMapped()) {
+          try {
+            denominatorPoint->Calculate(cnuc, configure);
+          } catch (...) {
+            return 0.0;
+          }
+        }
+        
+        double denominatorValue = denominatorPoint->GetFitCrossSection();
+        if (denominatorValue == 0.0) {
+          return 0.0;
+        }
+        
+        return baseValue / denominatorValue;
+      }
+    }
+    return 0.0;
+  }
+  
+  return baseValue;
 }

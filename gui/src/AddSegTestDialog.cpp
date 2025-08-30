@@ -52,6 +52,25 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) : QDialog(parent) {
   phaseLValueText->setVisible(false);
   phaseLValueText->setMaximumWidth(50);
 
+  advancedModeCheck = new QCheckBox(tr("Advanced Mode (Sum/Ratio)"));
+  connect(advancedModeCheck,SIGNAL(stateChanged(int)),this,SLOT(advancedModeChanged(int)));
+
+  advancedModeBox = new QGroupBox(tr("Advanced Segment Definition"));
+  advancedModeBox->setVisible(false);
+  
+  operationCombo = new QComboBox;
+  operationCombo->addItem(tr("Sum"));
+  operationCombo->addItem(tr("Ratio"));
+
+  componentsList = new QListWidget;
+  componentsList->setMaximumHeight(100);
+
+  addComponentButton = new QPushButton(tr("Add Component"));
+  connect(addComponentButton,SIGNAL(clicked()),this,SLOT(addComponent()));
+  
+  removeComponentButton = new QPushButton(tr("Remove Component"));
+  connect(removeComponentButton,SIGNAL(clicked()),this,SLOT(removeComponent()));
+
   cancelButton = new QPushButton(tr("Cancel"));
   okButton = new QPushButton(tr("Accept"));
   okButton->setDefault(true);
@@ -113,6 +132,21 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) : QDialog(parent) {
   phaseLayout->addWidget(angDistLabel);
   phaseLayout->addWidget(angDistSpin);
   lowerLayout->addLayout(phaseLayout,0,3);
+
+  lowerLayout->addWidget(advancedModeCheck,1,0,1,4);
+  
+  QGridLayout *advancedLayout = new QGridLayout;
+  advancedLayout->addWidget(new QLabel(tr("Operation:")),0,0);
+  advancedLayout->addWidget(operationCombo,0,1);
+  advancedLayout->addWidget(new QLabel(tr("Components:")),1,0);
+  advancedLayout->addWidget(componentsList,1,1,2,1);
+  QGridLayout *buttonLayout = new QGridLayout;
+  buttonLayout->addWidget(addComponentButton,0,0);
+  buttonLayout->addWidget(removeComponentButton,0,1);
+  advancedLayout->addLayout(buttonLayout,1,2);
+  advancedModeBox->setLayout(advancedLayout);
+
+  lowerLayout->addWidget(advancedModeBox,2,0,1,4);
 
   valueLayout->addLayout(lowerLayout,2,0,1,2);
   valueBox->setLayout(valueLayout);
@@ -176,5 +210,33 @@ void AddSegTestDialog::dataTypeChanged(int index) {
     lowAngleText->setEnabled(true);
     highAngleText->setEnabled(true);
     angleStepText->setEnabled(true);
+  }
+}
+
+void AddSegTestDialog::advancedModeChanged(int state) {
+  if(state==Qt::Checked) {
+    advancedModeBox->setVisible(true);
+    // Keep the spinboxes enabled so users can select pairs to add as components
+    entrancePairIndexSpin->setEnabled(true);
+    exitPairIndexSpin->setEnabled(true);
+  } else {
+    advancedModeBox->setVisible(false);
+    entrancePairIndexSpin->setEnabled(true);
+    exitPairIndexSpin->setEnabled(true);
+  }
+  adjustSize();
+}
+
+void AddSegTestDialog::addComponent() {
+  int entrance = entrancePairIndexSpin->value();
+  int exit = exitPairIndexSpin->value();
+  QString component = QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit);
+  componentsList->addItem(component);
+}
+
+void AddSegTestDialog::removeComponent() {
+  int currentRow = componentsList->currentRow();
+  if(currentRow >= 0) {
+    delete componentsList->takeItem(currentRow);
   }
 }

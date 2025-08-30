@@ -6,6 +6,10 @@
 #include <QSpinBox>
 #include <QComboBox>
 #include <QLabel>
+#include <QCheckBox>
+#include <QListWidget>
+#include <QGroupBox>
+#include <QPushButton>
 
 QT_BEGIN_NAMESPACE
 
@@ -34,9 +38,19 @@ class AddSegTestDialog : public QDialog {
   QLabel *angDistLabel;
   QLabel *totalCaptureLabel;
   QSpinBox *angDistSpin;
+
+  QCheckBox *advancedModeCheck;
+  QGroupBox *advancedModeBox;
+  QComboBox *operationCombo;
+  QListWidget *componentsList;
+  QPushButton *addComponentButton;
+  QPushButton *removeComponentButton;
  
  public slots:
   void dataTypeChanged(int);
+  void advancedModeChanged(int);
+  void addComponent();
+  void removeComponent();
  
  private:
   QPushButton *okButton;

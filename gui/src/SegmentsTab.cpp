@@ -214,6 +214,20 @@ void SegmentsTab::addSegDataLine() {
     newLine.energyShiftError=aDialog.energyShiftErrorText->text().toDouble();
     if(aDialog.varyEnergyShiftCheck->isChecked()) newLine.varyEnergyShift=1;
     else newLine.varyEnergyShift=0;
+    
+    if(aDialog.advancedModeCheck->isChecked()) {
+      newLine.isAdvanced=1;
+      newLine.operationType=aDialog.operationCombo->currentIndex();
+      QStringList components;
+      for(int i = 0; i < aDialog.componentsList->count(); i++) {
+        components.append(aDialog.componentsList->item(i)->text());
+      }
+      newLine.componentsList=components.join(";");
+    } else {
+      newLine.isAdvanced=0;
+      newLine.operationType=0;
+      newLine.componentsList="";
+    }
     addSegDataLine(newLine);
   }
 }
@@ -256,6 +270,12 @@ void SegmentsTab::addSegDataLine(SegmentsDataData line) {
     segmentsDataModel->setData(index,line.energyShiftError,Qt::EditRole);
     index = segmentsDataModel->index(lines.size(),16,QModelIndex());
     segmentsDataModel->setData(index,line.varyEnergyShift,Qt::EditRole);
+    index = segmentsDataModel->index(lines.size(),17,QModelIndex());
+    segmentsDataModel->setData(index,line.isAdvanced,Qt::EditRole);
+    index = segmentsDataModel->index(lines.size(),18,QModelIndex());
+    segmentsDataModel->setData(index,line.operationType,Qt::EditRole);
+    index = segmentsDataModel->index(lines.size(),19,QModelIndex());
+    segmentsDataModel->setData(index,line.componentsList,Qt::EditRole);
     segmentsDataView->resizeRowToContents(lines.size());
     updateSegDataButtons(segmentsDataView->selectionModel()->selection());
   } else {
@@ -282,6 +302,20 @@ void SegmentsTab::addSegTestLine() {
     newLine.phaseJ=aDialog.phaseJValueText->text().toDouble();
     newLine.phaseL=aDialog.phaseLValueText->text().toInt();
     newLine.maxAngDistOrder=aDialog.angDistSpin->value();
+    
+    if(aDialog.advancedModeCheck->isChecked()) {
+      newLine.isAdvanced=1;
+      newLine.operationType=aDialog.operationCombo->currentIndex();
+      QStringList components;
+      for(int i = 0; i < aDialog.componentsList->count(); i++) {
+        components.append(aDialog.componentsList->item(i)->text());
+      }
+      newLine.componentsList=components.join(";");
+    } else {
+      newLine.isAdvanced=0;
+      newLine.operationType=0;
+      newLine.componentsList="";
+    }
     addSegTestLine(newLine);
    }
 }
@@ -316,6 +350,12 @@ void SegmentsTab::addSegTestLine(SegmentsTestData line) {
     segmentsTestModel->setData(index,line.phaseL,Qt::EditRole);
     index = segmentsTestModel->index(lines.size(),12,QModelIndex());
     segmentsTestModel->setData(index,line.maxAngDistOrder,Qt::EditRole);
+    index = segmentsTestModel->index(lines.size(),13,QModelIndex());
+    segmentsTestModel->setData(index,line.isAdvanced,Qt::EditRole);
+    index = segmentsTestModel->index(lines.size(),14,QModelIndex());
+    segmentsTestModel->setData(index,line.operationType,Qt::EditRole);
+    index = segmentsTestModel->index(lines.size(),15,QModelIndex());
+    segmentsTestModel->setData(index,line.componentsList,Qt::EditRole);
     segmentsTestView->resizeRowToContents(lines.size());
     updateSegTestButtons(segmentsTestView->selectionModel()->selection());
   } else {
@@ -376,7 +416,15 @@ void SegmentsTab::editSegDataLine() {
   i=segmentsDataModel->index(index.row(),16,QModelIndex());
   var=segmentsDataModel->data(i,Qt::EditRole);
   int varyEnergyShift=var.toInt();
-
+  i=segmentsDataModel->index(index.row(),17,QModelIndex());
+  var=segmentsDataModel->data(i,Qt::EditRole);
+  int isAdvanced=var.toInt();
+  i=segmentsDataModel->index(index.row(),18,QModelIndex());
+  var=segmentsDataModel->data(i,Qt::EditRole);
+  int operationType=var.toInt();
+  i=segmentsDataModel->index(index.row(),19,QModelIndex());
+  var=segmentsDataModel->data(i,Qt::EditRole);
+  QString componentsList=var.toString();
 
   AddSegDataDialog aDialog;
   aDialog.setWindowTitle(tr("Edit a Segment From Data"));
@@ -398,6 +446,19 @@ void SegmentsTab::editSegDataLine() {
   aDialog.energyShiftErrorText->setText(energyShiftError);
   if(varyEnergyShift==1) aDialog.varyEnergyShiftCheck->setChecked(true);
   else aDialog.varyEnergyShiftCheck->setChecked(false);
+  
+  // Set advanced mode data
+  if(isAdvanced==1) aDialog.advancedModeCheck->setChecked(true);
+  else aDialog.advancedModeCheck->setChecked(false);
+  aDialog.operationCombo->setCurrentIndex(operationType);
+  
+  // Load components list
+  if(!componentsList.isEmpty()) {
+    QStringList components = componentsList.split(";", Qt::SkipEmptyParts);
+    for(const QString& component : components) {
+      aDialog.componentsList->addItem(component);
+    }
+  }
 
   if(aDialog.exec()) {
     int newEntrancePairIndex=aDialog.entrancePairIndexSpin->value();
@@ -483,6 +544,30 @@ void SegmentsTab::editSegDataLine() {
       i=segmentsDataModel->index(index.row(),16,QModelIndex());
       segmentsDataModel->setData(i,newVaryEnergyShift,Qt::EditRole);
     }
+    
+    // Save advanced segment data
+    int newIsAdvanced=0;
+    if(aDialog.advancedModeCheck->isChecked()) newIsAdvanced=1;
+    if(newIsAdvanced!=isAdvanced) {
+      i=segmentsDataModel->index(index.row(),17,QModelIndex());
+      segmentsDataModel->setData(i,newIsAdvanced,Qt::EditRole);
+    }
+    
+    int newOperationType=aDialog.operationCombo->currentIndex();
+    if(newOperationType!=operationType) {
+      i=segmentsDataModel->index(index.row(),18,QModelIndex());
+      segmentsDataModel->setData(i,newOperationType,Qt::EditRole);
+    }
+    
+    QStringList newComponents;
+    for(int j = 0; j < aDialog.componentsList->count(); j++) {
+      newComponents.append(aDialog.componentsList->item(j)->text());
+    }
+    QString newComponentsList=newComponents.join(";");
+    if(newComponentsList!=componentsList) {
+      i=segmentsDataModel->index(index.row(),19,QModelIndex());
+      segmentsDataModel->setData(i,newComponentsList,Qt::EditRole);
+    }
   }
 }
 
@@ -527,6 +612,15 @@ void SegmentsTab::editSegTestLine() {
   i=segmentsTestModel->index(index.row(),12,QModelIndex());
   var=segmentsTestModel->data(i,Qt::EditRole);
   int maxAngDistOrder=var.toInt();
+  i=segmentsTestModel->index(index.row(),13,QModelIndex());
+  var=segmentsTestModel->data(i,Qt::EditRole);
+  int isAdvanced=var.toInt();
+  i=segmentsTestModel->index(index.row(),14,QModelIndex());
+  var=segmentsTestModel->data(i,Qt::EditRole);
+  int operationType=var.toInt();
+  i=segmentsTestModel->index(index.row(),15,QModelIndex());
+  var=segmentsTestModel->data(i,Qt::EditRole);
+  QString componentsList=var.toString();
 
   AddSegTestDialog aDialog;
   aDialog.setWindowTitle(tr("Edit a Segment Without Data"));
@@ -542,7 +636,19 @@ void SegmentsTab::editSegTestLine() {
   aDialog.phaseJValueText->setText(phaseJ);
   aDialog.phaseLValueText->setText(phaseL);
   aDialog.angDistSpin->setValue(maxAngDistOrder);
- 
+  
+  // Set advanced mode data
+  if(isAdvanced==1) aDialog.advancedModeCheck->setChecked(true);
+  else aDialog.advancedModeCheck->setChecked(false);
+  aDialog.operationCombo->setCurrentIndex(operationType);
+  
+  // Load components list
+  if(!componentsList.isEmpty()) {
+    QStringList components = componentsList.split(";", Qt::SkipEmptyParts);
+    for(const QString& component : components) {
+      aDialog.componentsList->addItem(component);
+    }
+  }
  
   if(aDialog.exec()) {
     int newEntrancePairIndex=aDialog.entrancePairIndexSpin->value();
@@ -605,6 +711,30 @@ void SegmentsTab::editSegTestLine() {
     if(newMaxAngDistOrder!=maxAngDistOrder) {
       i=segmentsTestModel->index(index.row(),12,QModelIndex());
       segmentsTestModel->setData(i,newMaxAngDistOrder,Qt::EditRole);      
+    }
+    
+    // Save advanced segment data
+    int newIsAdvanced=0;
+    if(aDialog.advancedModeCheck->isChecked()) newIsAdvanced=1;
+    if(newIsAdvanced!=isAdvanced) {
+      i=segmentsTestModel->index(index.row(),13,QModelIndex());
+      segmentsTestModel->setData(i,newIsAdvanced,Qt::EditRole);
+    }
+    
+    int newOperationType=aDialog.operationCombo->currentIndex();
+    if(newOperationType!=operationType) {
+      i=segmentsTestModel->index(index.row(),14,QModelIndex());
+      segmentsTestModel->setData(i,newOperationType,Qt::EditRole);
+    }
+    
+    QStringList newComponents;
+    for(int j = 0; j < aDialog.componentsList->count(); j++) {
+      newComponents.append(aDialog.componentsList->item(j)->text());
+    }
+    QString newComponentsList=newComponents.join(";");
+    if(newComponentsList!=componentsList) {
+      i=segmentsTestModel->index(index.row(),15,QModelIndex());
+      segmentsTestModel->setData(i,newComponentsList,Qt::EditRole);
     }
   }
 }
@@ -817,8 +947,55 @@ bool SegmentsTab::readSegDataFile(QTextStream& inStream) {
         }
       }
       if(in.status()!=QTextStream::Ok) return false;
+      // Initialize advanced segment data to defaults for backwards compatibility
+      int isAdvanced = 0;
+      int operationType = 0;
+      QString componentsList = "";
+      
+      // Check if there's additional advanced segment data after the file path
+      // The data is appended as: " isAdvanced operationType numComponents entrance1 exit1 entrance2 exit2 ..."
+      QString remainingData = dataFile;
+      QStringList dataParts = remainingData.split(" ", Qt::SkipEmptyParts);
+      
+      if(dataParts.size() > 1) {
+        // Extract the actual file path (first part)
+        dataFile = dataParts[0];
+        
+        // Try to parse advanced segment data from remaining parts
+        if(dataParts.size() >= 2) {
+          bool ok;
+          int advancedFlag = dataParts[1].toInt(&ok);
+          if(ok && advancedFlag == 1) {
+            isAdvanced = 1;
+            if(dataParts.size() >= 3) {
+              operationType = dataParts[2].toInt(&ok);
+              if(ok && dataParts.size() >= 4) {
+                int numComponents = dataParts[3].toInt(&ok);
+                if(ok && dataParts.size() >= 4 + numComponents * 2) {
+                  QStringList components;
+                  for(int i = 0; i < numComponents; i++) {
+                    int entranceIdx = 4 + i * 2;
+                    int exitIdx = 5 + i * 2;
+                    if(entranceIdx < dataParts.size() && exitIdx < dataParts.size()) {
+                      int entrance = dataParts[entranceIdx].toInt(&ok);
+                      if(ok) {
+                        int exit = dataParts[exitIdx].toInt(&ok);
+                        if(ok) {
+                          components.append(QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit));
+                        }
+                      }
+                    }
+                  }
+                  componentsList = components.join(";");
+                }
+              }
+            }
+          }
+        }
+      }
+      
       SegmentsDataData newLine = {isActive,entrancePairIndex,exitPairIndex,lowEnergy,highEnergy,lowAngle,
-				  highAngle,dataType,dataFile,dataNorm,dataNormError,varyNorm,phaseJ,phaseL,energyShift,energyShiftError,varyEnergyShift};
+				  highAngle,dataType,dataFile,dataNorm,dataNormError,varyNorm,phaseJ,phaseL,energyShift,energyShiftError,varyEnergyShift,isAdvanced,operationType,componentsList};
       addSegDataLine(newLine);
     }
   }
@@ -847,7 +1024,40 @@ bool SegmentsTab::writeSegDataFile(QTextStream& outStream) {
 	      << qSetFieldWidth(15) << lines.at(i).energyShift
 	      << qSetFieldWidth(15) << lines.at(i).energyShiftError
 	      << qSetFieldWidth(15) << lines.at(i).varyEnergyShift
-	      << qSetFieldWidth(0) << lines.at(i).dataFile << endl;
+	      << qSetFieldWidth(0) << " " << lines.at(i).dataFile;
+    
+    // Add advanced segment data after the file path for backwards compatibility
+    if(lines.at(i).isAdvanced == 1) {
+      outStream << " " << lines.at(i).isAdvanced << " " << lines.at(i).operationType;
+      
+      // Parse components and write as numbers
+      QStringList components = lines.at(i).componentsList.split(";", Qt::SkipEmptyParts);
+      if(lines.at(i).operationType == 0) { // Sum - can have multiple components
+        outStream << " " << components.size();
+        for(const QString& component : components) {
+          QStringList parts = component.split(", ");
+          if(parts.size() >= 2) {
+            int entrance = parts[0].split(": ")[1].toInt();
+            int exit = parts[1].split(": ")[1].toInt();
+            outStream << " " << entrance << " " << exit;
+          }
+        }
+      } else { // Ratio - only 2 components (numerator and denominator)
+        outStream << " 2"; // Always 2 components for ratio
+        for(int j = 0; j < qMin(2, components.size()); j++) {
+          QStringList parts = components[j].split(", ");
+          if(parts.size() >= 2) {
+            int entrance = parts[0].split(": ")[1].toInt();
+            int exit = parts[1].split(": ")[1].toInt();
+            outStream << " " << entrance << " " << exit;
+          }
+        }
+      }
+    } else {
+      // Write 0 for non-advanced segments for backwards compatibility
+      outStream << " 0";
+    }
+    outStream << endl;
   }
  
   return true;
@@ -889,8 +1099,39 @@ bool SegmentsTab::readSegTestFile(QTextStream& inStream) {
 	maxAngDistOrder=0;
       }
       if(in.status()!=QTextStream::Ok) return false;
+      
+      // Initialize advanced segment data to defaults for backwards compatibility
+      int isAdvanced = 0;
+      int operationType = 0;
+      QString componentsList = "";
+      
+      // Try to read advanced segment parameters (if they exist)
+      // For test segments, the advanced data is appended directly to the line
+      in >> isAdvanced;
+      if(in.status()==QTextStream::Ok && isAdvanced == 1) {
+        in >> operationType;
+        if(in.status()==QTextStream::Ok) {
+          int numComponents = 0;
+          in >> numComponents;
+          if(in.status()==QTextStream::Ok) {
+            QStringList components;
+            for(int i = 0; i < numComponents; i++) {
+              int entrance, exit;
+              in >> entrance >> exit;
+              if(in.status()==QTextStream::Ok) {
+                components.append(QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit));
+              }
+            }
+            componentsList = components.join(";");
+          }
+        }
+      } else {
+        // Reset status if isAdvanced read failed (old file format)
+        isAdvanced = 0;
+      }
+      
       SegmentsTestData newLine = {isActive,entrancePairIndex,exitPairIndex,lowEnergy,highEnergy,energyStep,lowAngle,
-				  highAngle,angleStep,dataType,phaseJ,phaseL,maxAngDistOrder};
+				  highAngle,angleStep,dataType,phaseJ,phaseL,maxAngDistOrder,isAdvanced,operationType,componentsList};
       addSegTestLine(newLine);
     }
   }
@@ -915,14 +1156,44 @@ bool SegmentsTab::writeSegTestFile(QTextStream& outStream) {
     if(lines.at(i).dataType==2) {
       outStream << qSetFieldWidth(15) << lines.at(i).dataType
 		<< qSetFieldWidth(15) << lines.at(i).phaseJ
-		<< qSetFieldWidth(0) << lines.at(i).phaseL 
-		<< endl;	
+		<< qSetFieldWidth(0) << lines.at(i).phaseL;	
     } else if(lines.at(i).dataType==3)  {
       outStream  << qSetFieldWidth(15) << lines.at(i).dataType
-		 << qSetFieldWidth(0) << lines.at(i).maxAngDistOrder
-		 << endl;
-    } else outStream << qSetFieldWidth(0) << lines.at(i).dataType 
-		     << endl;
+		 << qSetFieldWidth(0) << lines.at(i).maxAngDistOrder;
+    } else outStream << qSetFieldWidth(0) << lines.at(i).dataType;
+    
+    // Add advanced segment data after the existing data for backwards compatibility
+    if(lines.at(i).isAdvanced == 1) {
+      outStream << " " << lines.at(i).isAdvanced << " " << lines.at(i).operationType;
+      
+      // Parse components and write as numbers
+      QStringList components = lines.at(i).componentsList.split(";", Qt::SkipEmptyParts);
+      if(lines.at(i).operationType == 0) { // Sum - can have multiple components
+        outStream << " " << components.size();
+        for(const QString& component : components) {
+          QStringList parts = component.split(", ");
+          if(parts.size() >= 2) {
+            int entrance = parts[0].split(": ")[1].toInt();
+            int exit = parts[1].split(": ")[1].toInt();
+            outStream << " " << entrance << " " << exit;
+          }
+        }
+      } else { // Ratio - only 2 components (numerator and denominator)
+        outStream << " 2"; // Always 2 components for ratio
+        for(int j = 0; j < qMin(2, components.size()); j++) {
+          QStringList parts = components[j].split(", ");
+          if(parts.size() >= 2) {
+            int entrance = parts[0].split(": ")[1].toInt();
+            int exit = parts[1].split(": ")[1].toInt();
+            outStream << " " << entrance << " " << exit;
+          }
+        }
+      }
+    } else {
+      // Write 0 for non-advanced segments for backwards compatibility
+      outStream << " 0";
+    }
+    outStream << endl;
   }
 
   return true;

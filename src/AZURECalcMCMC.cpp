@@ -2,6 +2,7 @@
 #include "Config.h"
 #include "CNuc.h"
 #include "EData.h"
+#include "ESegmentsSub.h"
 #include "ParameterLimitsManager.h"
 #include "AZUREParams.h"
 #include "GSLException.h"
@@ -51,6 +52,8 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
     localData->FillNormsFromParams(p);
     localData->FillEnergyShiftsFromParams(p,localData,localCompound,&configure());
     if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+    
+    // Sub-segments are now integrated into ESegment, no separate initialization needed
   } catch (GSLException& e) {
     // Clean up and return bad likelihood for GSL errors
     if(localCompound) delete localCompound;
@@ -126,6 +129,36 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
     return -std::numeric_limits<double>::infinity();
   }
 
+  // Process segments with components - use new integrated calculation method
+  for(int i = 1; i <= localData->NumSegments(); i++) {
+    ESegment* segment = localData->GetSegment(i);
+    if(segment && segment->HasComponents()) {
+      // Recalculate points using the new combined calculation method
+      for(int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
+        double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
+        EPoint* point = segment->GetPoint(pointIdx + 1);
+        if(point) {
+          point->SetFitCrossSection(theoreticalValue);
+        }
+      }
+      
+      // Recalculate chi-squared for this segment with components
+      double segmentChiSquared = 0.0;
+      for(int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
+        EPoint* point = segment->GetPoint(pointIdx + 1);
+        if(point) {
+          double residual = point->GetFitCrossSection() - point->GetCMCrossSection() * segment->GetNorm();
+          double error = point->GetCMCrossSectionError() * segment->GetNorm();
+          if(error != 0.0) {
+            segmentChiSquared += (residual * residual) / (error * error);
+          }
+        }
+      }
+      segment->SetSegmentChiSquared(segmentChiSquared);
+      chiSquared += segmentChiSquared;
+    }
+  }
+
   delete localCompound;
   delete localData;
 
@@ -171,6 +204,8 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r& params_) co
 
   //Fill Compound Nucleus From Minuit Parameters
   if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  
+  // Sub-segments are now integrated into ESegment, no separate initialization needed
   
   bool isFit = true; // For MCMC, we are always fitting
   
@@ -233,6 +268,36 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r& params_) co
     delete localCompound;
     delete localData;
     return -std::numeric_limits<double>::infinity();
+  }
+
+  // Process segments with components - use new integrated calculation method
+  for(int i = 1; i <= localData->NumSegments(); i++) {
+    ESegment* segment = localData->GetSegment(i);
+    if(segment && segment->HasComponents()) {
+      // Recalculate points using the new combined calculation method
+      for(int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
+        double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
+        EPoint* point = segment->GetPoint(pointIdx + 1);
+        if(point) {
+          point->SetFitCrossSection(theoreticalValue);
+        }
+      }
+      
+      // Recalculate chi-squared for this segment with components
+      double segmentChiSquared = 0.0;
+      for(int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
+        EPoint* point = segment->GetPoint(pointIdx + 1);
+        if(point) {
+          double residual = point->GetFitCrossSection() - point->GetCMCrossSection() * segment->GetNorm();
+          double error = point->GetCMCrossSectionError() * segment->GetNorm();
+          if(error != 0.0) {
+            segmentChiSquared += (residual * residual) / (error * error);
+          }
+        }
+      }
+      segment->SetSegmentChiSquared(segmentChiSquared);
+      chiSquared += segmentChiSquared;
+    }
   }
 
   delete localCompound;

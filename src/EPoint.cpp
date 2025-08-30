@@ -813,6 +813,13 @@ void EPoint::SetExitKey(int key) {
 }
 
 /*!
+ * Sets the entrance key for the data point
+ */
+void EPoint::SetEntranceKey(int key) {
+  entrance_key_=key;
+}
+
+/*!
  * Sets the kinematic factor to convert angle from lab to cm angle;
  */
 

@@ -2,10 +2,19 @@
 #define ESEGMENT_H
 
 #include "EPoint.h"
+#include "ESegmentsSub.h"
+#include <vector>
 
 class EData;
 class ExtrapLine;
 class SegLine;
+class CNuc;
+class Config;
+
+enum OperationType {
+    SUM = 0,
+    RATIO = 1
+};
 
 ///An AZURE data segment
 
@@ -49,6 +58,9 @@ class ESegment {
   double GetNominalEnergyShift() const;
   double GetEnergyShiftError() const;
   bool IsVaryEnergyShift() const;
+  bool IsAdvanced() const;
+  int GetLegacyOperationType() const;
+  std::string GetComponentsList() const;
   std::string GetDataFile() const;
   void AddPoint(EPoint);
   void SetSegmentChiSquared(double);
@@ -58,10 +70,23 @@ class ESegment {
   void SetEnergyShift(double);
   void UpdatePointEnergiesWithShift(CNuc* theCNuc = NULL, const Config* configure = NULL);
   void SetExitKey(int);
+  void SetEntranceKey(int);
   void SetIsTotalCapture(int);
   void SetVaryNorm(bool);
   EPoint *GetPoint(int);
   std::vector<EPoint>& GetPoints();
+  
+  // Advanced segment composition methods
+  void AddComponent(int entranceKey, int exitKey);
+  void AddComponentSegment(ESegment* componentSegment);
+  void SetOperationType(OperationType operation);
+  OperationType GetOperationType() const;
+  bool HasComponents() const;
+  const std::vector<ESegment*>& GetComponentSegments() const;
+  void ClearComponents();
+  
+  // Calculate theoretical cross section including components
+  double CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, const Config& configure, EData* edata);
  private:
   bool isdifferential_;
   bool iscmdifferential_;
@@ -91,8 +116,15 @@ class ESegment {
   double energyShiftNominal_;
   double energyShiftError_;
   bool varyEnergyShift_;
+  bool isAdvanced_;
+  int operationType_;
+  std::string componentsList_;
   std::string datafile_;
   std::vector<EPoint> points_;
+  
+  // Advanced segment composition
+  std::vector<ESegment*> componentSegments_;
+  OperationType segmentOperationType_;
 };
 
 #endif

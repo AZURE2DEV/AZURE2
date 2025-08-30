@@ -3,6 +3,8 @@
 
 #include <iostream>
 #include <string>
+#include <sstream>
+#include <vector>
 
 ///A class to read and store a line from the data segments input file.
 
@@ -22,6 +24,11 @@ class SegLine {
     std::string dummyString;
     getline(stream,dummyString);
     
+    // Initialize advanced segment parameters to defaults
+    isAdvanced_ = 0;
+    operationType_ = 0;
+    componentsList_ = "";
+    
     // Try to parse energy shift from the remaining line, default to 0.0 for backward compatibility
     std::istringstream restStream(dummyString);
     double tempEnergyShift;
@@ -38,12 +45,46 @@ class SegLine {
       // Get remaining string after energy shift parameters
       std::string remainingString;
       getline(restStream, remainingString);
-      int p2 = remainingString.find_last_not_of(" \n\t\r");
-      if (p2 != std::string::npos) {  
-        int p1 = remainingString.find_first_not_of(" \n\t\r");
-        if (p1 == std::string::npos) p1 = 0;
-        dataFile_=remainingString.substr(p1,(p2-p1)+1);
-      } else dataFile_=std::string();  
+      
+      // Parse the file path and advanced segment data
+      // Format: "filepath isAdvanced operationType numComponents entrance1 exit1 ..."
+      std::istringstream advancedStream(remainingString);
+      std::string tempDataFile;
+      if(advancedStream >> tempDataFile) {
+        dataFile_ = tempDataFile;
+        
+        // Try to parse advanced segment parameters
+        int tempIsAdvanced;
+        if(advancedStream >> tempIsAdvanced && tempIsAdvanced == 1) {
+          isAdvanced_ = 1;
+          if(advancedStream >> operationType_) {
+            int numComponents;
+            if(advancedStream >> numComponents) {
+              std::vector<std::string> components;
+              for(int i = 0; i < numComponents; i++) {
+                int entrance, exit;
+                if(advancedStream >> entrance >> exit) {
+                  components.push_back("Entrance: " + std::to_string(entrance) + ", Exit: " + std::to_string(exit));
+                }
+              }
+              if(!components.empty()) {
+                componentsList_ = components[0];
+                for(size_t i = 1; i < components.size(); i++) {
+                  componentsList_ += ";" + components[i];
+                }
+              }
+            }
+          }
+        }
+      } else {
+        // If no file path found, use trimmed string
+        int p2 = remainingString.find_last_not_of(" \n\t\r");
+        if (p2 != std::string::npos) {  
+          int p1 = remainingString.find_first_not_of(" \n\t\r");
+          if (p1 == std::string::npos) p1 = 0;
+          dataFile_=remainingString.substr(p1,(p2-p1)+1);
+        } else dataFile_=std::string();  
+      }
     } else {
       // No energy shift found, treat entire dummyString as dataFile (backward compatibility)
       energyShift_ = 0.0;
@@ -129,6 +170,18 @@ class SegLine {
    * Returns non-zero if the energy shift is to be fit.
    */
   int varyEnergyShift() const {return varyEnergyShift_;};
+  /*!
+   * Returns non-zero if this is an advanced segment (sum/ratio).
+   */
+  int isAdvanced() const {return isAdvanced_;};
+  /*!
+   * Returns the operation type (0 for sum, 1 for ratio).
+   */
+  int operationType() const {return operationType_;};
+  /*!
+   * Returns the semicolon-separated list of components.
+   */
+  std::string componentsList() const {return componentsList_;};
  private:
   int isActive_;
   int entranceKey_;
@@ -147,6 +200,9 @@ class SegLine {
   double energyShift_;
   double energyShiftError_;
   int varyEnergyShift_;
+  int isAdvanced_;
+  int operationType_;
+  std::string componentsList_;
 };
 
 #endif

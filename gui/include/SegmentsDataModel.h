@@ -7,7 +7,7 @@
 class PairsModel;
 
 struct SegmentsDataData {
-  static const int SIZE = 17;
+  static const int SIZE = 20;
   int isActive;
   int entrancePairIndex;
   int exitPairIndex;
@@ -25,6 +25,9 @@ struct SegmentsDataData {
   double energyShift;
   double energyShiftError;
   int varyEnergyShift;
+  int isAdvanced;
+  int operationType;
+  QString componentsList;
 };
 
 class SegmentsDataModel : public QAbstractTableModel {
