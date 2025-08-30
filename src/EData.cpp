@@ -1457,7 +1457,6 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc* the
       k++;
       // Always apply energy shift since parameters are always present for all segments
       if(segment->IsVaryEnergyShift() || p[i] != 0.0) {
-        std::cout << p[i] << std::endl;
         segment->SetEnergyShift(p[i]); 
         segment->UpdatePointEnergiesWithShift(theCNuc, configure);
         anyEnergyShifted = true;
