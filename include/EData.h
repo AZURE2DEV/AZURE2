@@ -2,7 +2,6 @@
 #define EDATA_H
 
 #include "ESegment.h"
-#include "ESegmentsSub.h"
 #include "TargetEffect.h"
 #include "EDataIterator.h"
 #include <deque>

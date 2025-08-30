@@ -5,7 +5,7 @@ AZURE2.cpp ECIntegral.cpp ECAmplitudeCache.cpp MatrixInv.cpp PPair.cpp AZURECalc
 ECMGroup.cpp ReactionRate.cpp AZUREMain.cpp EData.cpp ShftFunc.cpp
 RMatrixFunc.cpp AZUREOutput.cpp  EDataIterator.cpp   TargetEffect.cpp
 AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp Equation.cpp
-JGroup.cpp Config.cpp ESegment.cpp ESegmentsSub.cpp KGroup.cpp IntegratedFermiFunc.cpp
+JGroup.cpp Config.cpp ESegment.cpp KGroup.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp Straggling.cpp)
 
 # Add API stub when API is not enabled

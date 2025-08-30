@@ -1404,16 +1404,17 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
     if(segment->IsTotalCapture()) segment+=segment->IsTotalCapture()-1;
   }
   
-  // Add energy shift parameters
+  // Add energy shift parameters FOR ALL SEGMENTS (like normalization)
   SetEnergyShiftParamOffset(p.Params().size());
   for(ESegmentIterator segment=GetSegments().begin();segment<GetSegments().end();segment++) {
-    if(segment->IsVaryEnergyShift()) {
-      sprintf(varname,"segment_%d_energy_shift",segment->GetSegmentKey());
-      double stepSize = (segment->GetEnergyShiftError() > 0.0) ? segment->GetEnergyShiftError() * 0.1 : 0.001;
-      p.Add(varname,segment->GetEnergyShift(),stepSize);
-      
-      // Parameter settings will be applied by ParameterLimitsManager during fit
-    }
+    // Always add energy shift parameter, regardless of IsVaryEnergyShift()
+    sprintf(varname,"segment_%d_energy_shift",segment->GetSegmentKey());
+    double stepSize = (segment->GetEnergyShiftError() > 0.0) ? segment->GetEnergyShiftError() * 0.1 : 0.001;
+    p.Add(varname,segment->GetEnergyShift(),stepSize);
+    
+    // Parameter settings (fixed vs varied) will be applied by ParameterLimitsManager during fit
+    // The IsVaryEnergyShift() flag controls whether the parameter is varied, not whether it exists
+    
     if(segment->IsTotalCapture()) segment+=segment->IsTotalCapture()-1;
   }
 }
@@ -1454,12 +1455,26 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc* the
   if(data) {
     for(ESegmentIterator segment=data->GetSegments().begin();segment<data->GetSegments().end();segment++) {
       k++;
-      if(segment->IsVaryEnergyShift()) {
+      // Always apply energy shift since parameters are always present for all segments
+      if(segment->IsVaryEnergyShift() || p[i] != 0.0) {
+        std::cout << p[i] << std::endl;
         segment->SetEnergyShift(p[i]); 
         segment->UpdatePointEnergiesWithShift(theCNuc, configure);
         anyEnergyShifted = true;
-        i++;
+        
+        // CRITICAL FIX: Apply the same energy shift to ALL component segments of this master segment
+        if(segment->HasComponents()) {
+          for(ESegment* componentSegment : segment->GetComponentSegments()) {
+            if(componentSegment) {
+              componentSegment->SetEnergyShift(segment->GetEnergyShift());
+              componentSegment->UpdatePointEnergiesWithShift(theCNuc, configure);
+            }
+          }
+        }
       }
+      
+      // Always increment i since energy shift parameters are now present for ALL segments
+      i++;
       if(segment->IsTotalCapture()) segment+=segment->IsTotalCapture()-1;
     }
     
@@ -1471,12 +1486,25 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc* the
     return;
   }
   for(ESegmentIterator segment=GetSegments().begin();segment<GetSegments().end();segment++) {
-    if(segment->IsVaryEnergyShift()) {
+    // Always apply energy shift since parameters are always present for all segments
+    if(segment->IsVaryEnergyShift() || p[i] != 0.0) {
       segment->SetEnergyShift(p[i]); 
       segment->UpdatePointEnergiesWithShift();
       anyEnergyShifted = true;
-      i++;
+      
+      // CRITICAL FIX: Apply the same energy shift to ALL component segments of this master segment
+      if(segment->HasComponents()) {
+        for(ESegment* componentSegment : segment->GetComponentSegments()) {
+          if(componentSegment) {
+            componentSegment->SetEnergyShift(segment->GetEnergyShift());
+            componentSegment->UpdatePointEnergiesWithShift();
+          }
+        }
+      }
     }
+    
+    // Always increment i since energy shift parameters are now present for ALL segments
+    i++;
     if(segment->IsTotalCapture()) segment+=segment->IsTotalCapture()-1;
   }
   

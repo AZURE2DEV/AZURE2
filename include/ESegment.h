@@ -2,7 +2,6 @@
 #define ESEGMENT_H
 
 #include "EPoint.h"
-#include "ESegmentsSub.h"
 #include <vector>
 
 class EData;
