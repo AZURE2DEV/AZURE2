@@ -198,24 +198,44 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
     std::vector<EPoint>& data = segments[i].GetPoints();
 
     std::vector<double> cross, crossE1, crossE2, energies, angles, conv;
-    for( int k = 0; k < data.size( ); ++k ){
-
-      if(!data[k].IsMapped()) {
-        try {
-          data[k].Calculate(localCompound,configure());
-        } catch (GSLException& e) {
-          // Skip this point if GSL calculation fails
-          continue;
-        }
+    
+    // Handle component segments using the new integrated calculation method
+    if (segments[i].HasComponents()) {
+      for( int k = 0; k < data.size( ); ++k ){
+        // Use the new component-aware calculation method
+        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);
+        
+        // Update the point's fit cross section with the combined result
+        data[k].SetFitCrossSection(theoreticalValue);
+        
+        cross.push_back( theoreticalValue );
+        crossE1.push_back( data[k].GetFitE1CrossSection() );
+        crossE2.push_back( data[k].GetFitE2CrossSection() );
+        angles.push_back( data[k].GetCMAngle() );
+        energies.push_back( data[k].GetCMEnergy( ) );
+        conv.push_back( data[k].GetSFactorConversion() );
       }
+    } else {
+      // Regular segment calculation (existing logic)
+      for( int k = 0; k < data.size( ); ++k ){
 
-      cross.push_back( data[k].GetFitCrossSection() );
-      crossE1.push_back( data[k].GetFitE1CrossSection() );
-      crossE2.push_back( data[k].GetFitE2CrossSection() );
-      angles.push_back( data[k].GetCMAngle() );
-      energies.push_back( data[k].GetCMEnergy( ) );
-      conv.push_back( data[k].GetSFactorConversion() );
+        if(!data[k].IsMapped()) {
+          try {
+            data[k].Calculate(localCompound,configure());
+          } catch (GSLException& e) {
+            // Skip this point if GSL calculation fails
+            continue;
+          }
+        }
 
+        cross.push_back( data[k].GetFitCrossSection() );
+        crossE1.push_back( data[k].GetFitE1CrossSection() );
+        crossE2.push_back( data[k].GetFitE2CrossSection() );
+        angles.push_back( data[k].GetCMAngle() );
+        energies.push_back( data[k].GetCMEnergy( ) );
+        conv.push_back( data[k].GetSFactorConversion() );
+
+      }
     }
 
     calculatedConv_.push_back( conv );
@@ -276,24 +296,44 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
     std::vector<EPoint>& data = segments[i].GetPoints();
 
     std::vector<double> cross, crossE1, crossE2, energies, angles, conv;
-    for( int k = 0; k < data.size( ); ++k ){
-
-      if(!data[k].IsMapped()) {
-        try {
-          data[k].Calculate(localCompound,configure());
-        } catch (GSLException& e) {
-          // Skip this point if GSL calculation fails
-          continue;
-        }
+    
+    // Handle component segments using the new integrated calculation method
+    if (segments[i].HasComponents()) {
+      for( int k = 0; k < data.size( ); ++k ){
+        // Use the new component-aware calculation method
+        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);
+        
+        // Update the point's fit cross section with the combined result
+        data[k].SetFitCrossSection(theoreticalValue);
+        
+        cross.push_back( theoreticalValue );
+        crossE1.push_back( data[k].GetFitE1CrossSection() );
+        crossE2.push_back( data[k].GetFitE2CrossSection() );
+        angles.push_back( data[k].GetCMAngle() );
+        energies.push_back( data[k].GetCMEnergy( ) );
+        conv.push_back( data[k].GetSFactorConversion() );
       }
+    } else {
+      // Regular segment calculation (existing logic)
+      for( int k = 0; k < data.size( ); ++k ){
 
-      cross.push_back( data[k].GetFitCrossSection() );
-      crossE1.push_back( data[k].GetFitE1CrossSection() );
-      crossE2.push_back( data[k].GetFitE2CrossSection() );
-      angles.push_back( data[k].GetCMAngle() );
-      energies.push_back( data[k].GetCMEnergy( ) );
-      conv.push_back( data[k].GetSFactorConversion() );
+        if(!data[k].IsMapped()) {
+          try {
+            data[k].Calculate(localCompound,configure());
+          } catch (GSLException& e) {
+            // Skip this point if GSL calculation fails
+            continue;
+          }
+        }
 
+        cross.push_back( data[k].GetFitCrossSection() );
+        crossE1.push_back( data[k].GetFitE1CrossSection() );
+        crossE2.push_back( data[k].GetFitE2CrossSection() );
+        angles.push_back( data[k].GetCMAngle() );
+        energies.push_back( data[k].GetCMEnergy( ) );
+        conv.push_back( data[k].GetSFactorConversion() );
+
+      }
     }
 
     calculatedConv_.push_back( conv );
@@ -530,50 +570,34 @@ double AZUREAPI::CalculateChi2RWA(const vector_r& rwaParams) const {
   localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
   
-  // Calculate chi-squared using same logic as AZURECalcMCMC::CalculateLogLikelihood
-  double segmentChiSquared = 0.0;
-  ESegmentIterator firstSumIterator = localData->GetSegments().end();
-  ESegmentIterator lastSumIterator = localData->GetSegments().end();
-  
-  for(EDataIterator dataIt = localData->begin(); dataIt != localData->end(); dataIt++) {
-    if(dataIt.segment()->GetPoints().begin() == dataIt.point()) {
-      segmentChiSquared = 0.0;
-      if(dataIt.segment()->IsTotalCapture()) {
-        firstSumIterator = dataIt.segment();
-        lastSumIterator = dataIt.segment() + dataIt.segment()->IsTotalCapture() - 1;
+  // Process segments with components - use new integrated calculation method
+  for(int i = 1; i <= localData->NumSegments(); i++) {
+    ESegment* segment = localData->GetSegment(i);
+    if(segment) {
+      // Recalculate points using the new combined calculation method
+      for(int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
+        double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
+        EPoint* point = segment->GetPoint(pointIdx + 1);
+        if(point) {
+          point->SetFitCrossSection(theoreticalValue);
+        }
       }
-    }
-    
-    if(!dataIt.point()->IsMapped()) dataIt.point()->Calculate(localCompound, configure());
-    if(firstSumIterator != localData->GetSegments().end() &&
-       dataIt.segment() != lastSumIterator) continue;
-       
-    double fitCrossSection = dataIt.point()->GetFitCrossSection();
-    ESegmentIterator thisSegment = dataIt.segment();
-    
-    if(dataIt.segment() == lastSumIterator) {
-      int pointIndex = dataIt.point() - dataIt.segment()->GetPoints().begin() + 1;
-      for(ESegmentIterator it = firstSumIterator; it < dataIt.segment(); it++) {
-        fitCrossSection += it->GetPoint(pointIndex)->GetFitCrossSection();
-      }
-      thisSegment = firstSumIterator;
-    }
-    
-    double dataNorm = thisSegment->GetNorm();
-    double CrossSection = dataIt.point()->GetCMCrossSection() * dataNorm;
-    double CrossSectionError = dataIt.point()->GetCMCrossSectionError() * dataNorm;
-    double chi = (fitCrossSection - CrossSection) / CrossSectionError;
-    double pointChiSquared = pow(chi, 2.0);
-    segmentChiSquared += pointChiSquared;
-    
-    if(dataIt.segment()->GetPoints().end() - 1 == dataIt.point()) {
       
+      // Recalculate chi-squared for this segment with components
+      double segmentChiSquared = 0.0;
+      for(int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
+        EPoint* point = segment->GetPoint(pointIdx + 1);
+        if(point) {
+          double residual = point->GetFitCrossSection() - point->GetCMCrossSection() * segment->GetNorm();
+          double error = point->GetCMCrossSectionError() * segment->GetNorm();
+          if(error != 0.0) {
+            segmentChiSquared += (residual * residual) / (error * error);
+          }
+        }
+      }
+
+      segment->SetSegmentChiSquared(segmentChiSquared);
       chiSquared += segmentChiSquared;
-      
-      if(dataIt.segment() == lastSumIterator) {
-        firstSumIterator = localData->GetSegments().end();
-        lastSumIterator = localData->GetSegments().end();
-      }
     }
   }
   
@@ -612,50 +636,34 @@ double AZUREAPI::CalculateChi2Physical(const vector_r& physicalParams) const {
   localCompound->FillCompoundFromParams(params.GetMinuitParams( ).Params( ));
   if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
   
-  // Calculate chi-squared using same logic as AZURECalcMCMC::CalculateLogLikelihood
-  double segmentChiSquared = 0.0;
-  ESegmentIterator firstSumIterator = localData->GetSegments().end();
-  ESegmentIterator lastSumIterator = localData->GetSegments().end();
-  
-  for(EDataIterator dataIt = localData->begin(); dataIt != localData->end(); dataIt++) {
-    if(dataIt.segment()->GetPoints().begin() == dataIt.point()) {
-      segmentChiSquared = 0.0;
-      if(dataIt.segment()->IsTotalCapture()) {
-        firstSumIterator = dataIt.segment();
-        lastSumIterator = dataIt.segment() + dataIt.segment()->IsTotalCapture() - 1;
+  // Process segments with components - use new integrated calculation method
+  for(int i = 1; i <= localData->NumSegments(); i++) {
+    ESegment* segment = localData->GetSegment(i);
+    if(segment) {
+      // Recalculate points using the new combined calculation method
+      for(int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
+        double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
+        EPoint* point = segment->GetPoint(pointIdx + 1);
+        if(point) {
+          point->SetFitCrossSection(theoreticalValue);
+        }
       }
-    }
-    
-    if(!dataIt.point()->IsMapped()) dataIt.point()->Calculate(localCompound, configure());
-    if(firstSumIterator != localData->GetSegments().end() &&
-       dataIt.segment() != lastSumIterator) continue;
-       
-    double fitCrossSection = dataIt.point()->GetFitCrossSection();
-    ESegmentIterator thisSegment = dataIt.segment();
-    
-    if(dataIt.segment() == lastSumIterator) {
-      int pointIndex = dataIt.point() - dataIt.segment()->GetPoints().begin() + 1;
-      for(ESegmentIterator it = firstSumIterator; it < dataIt.segment(); it++) {
-        fitCrossSection += it->GetPoint(pointIndex)->GetFitCrossSection();
-      }
-      thisSegment = firstSumIterator;
-    }
-    
-    double dataNorm = thisSegment->GetNorm();
-    double CrossSection = dataIt.point()->GetCMCrossSection() * dataNorm;
-    double CrossSectionError = dataIt.point()->GetCMCrossSectionError() * dataNorm;
-    double chi = (fitCrossSection - CrossSection) / CrossSectionError;
-    double pointChiSquared = pow(chi, 2.0);
-    segmentChiSquared += pointChiSquared;
-    
-    if(dataIt.segment()->GetPoints().end() - 1 == dataIt.point()) {
       
+      // Recalculate chi-squared for this segment with components
+      double segmentChiSquared = 0.0;
+      for(int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
+        EPoint* point = segment->GetPoint(pointIdx + 1);
+        if(point) {
+          double residual = point->GetFitCrossSection() - point->GetCMCrossSection() * segment->GetNorm();
+          double error = point->GetCMCrossSectionError() * segment->GetNorm();
+          if(error != 0.0) {
+            segmentChiSquared += (residual * residual) / (error * error);
+          }
+        }
+      }
+
+      segment->SetSegmentChiSquared(segmentChiSquared);
       chiSquared += segmentChiSquared;
-      
-      if(dataIt.segment() == lastSumIterator) {
-        firstSumIterator = localData->GetSegments().end();
-        lastSumIterator = localData->GetSegments().end();
-      }
     }
   }
   

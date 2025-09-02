@@ -67,71 +67,11 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
 
   bool isFit=true;
   
-  // Calculate chi-squared (same logic as original but without parameter filling)
-  double chiSquared=0.0;
-  double segmentChiSquared=0.0;
-  ESegmentIterator firstSumIterator = localData->GetSegments().end();
-  ESegmentIterator lastSumIterator = localData->GetSegments().end();
-  
-  try {
-    for(EDataIterator data=localData->begin();data!=localData->end();data++) {
-      if(data.segment()->GetPoints().begin()==data.point()) {
-        segmentChiSquared=0.0;
-        if(data.segment()->IsTotalCapture()) {
-          firstSumIterator=data.segment();
-          lastSumIterator=data.segment()+data.segment()->IsTotalCapture()-1;
-        } 
-      }
-      if(!data.point()->IsMapped()) {
-        try {
-          data.point()->Calculate(localCompound,configure());
-        } catch (GSLException& e) {
-          // Skip this point if GSL calculation fails
-          continue;
-        }
-      }
-    if(firstSumIterator!=localData->GetSegments().end()&&
-       data.segment()!=lastSumIterator) continue;
-    double fitCrossSection=data.point()->GetFitCrossSection();
-    ESegmentIterator thisSegment = data.segment();
-    if(data.segment()==lastSumIterator) {
-      int pointIndex=data.point()-data.segment()->GetPoints().begin()+1;
-      for(ESegmentIterator it=firstSumIterator;it<data.segment();it++) 
-        fitCrossSection+=it->GetPoint(pointIndex)->GetFitCrossSection();
-      thisSegment = firstSumIterator;
-    }
-    double dataNorm=thisSegment->GetNorm();
-    double CrossSection=data.point()->GetCMCrossSection()*dataNorm;
-    double CrossSectionError=data.point()->GetCMCrossSectionError()*dataNorm;
-    double chi=(fitCrossSection-CrossSection)/CrossSectionError;
-    double pointChiSquared=pow(chi,2.0);
-    segmentChiSquared+=pointChiSquared;
-    if(data.segment()->GetPoints().end()-1==data.point()) {
-      if(!isFit) thisSegment->SetSegmentChiSquared(segmentChiSquared);
-      if(data.segment()==lastSumIterator) {
-        firstSumIterator=localData->GetSegments().end();
-        lastSumIterator=localData->GetSegments().end();
-      }
-      chiSquared+=segmentChiSquared;
-    }
-
-    }
-  } catch (GSLException& e) {
-    // Clean up and return bad likelihood for GSL errors during calculation
-    delete localCompound;
-    delete localData;
-    return -std::numeric_limits<double>::infinity();
-  } catch (...) {
-    // Clean up and return bad likelihood for any other errors during calculation
-    delete localCompound;
-    delete localData;
-    return -std::numeric_limits<double>::infinity();
-  }
-
   // Process segments with components - use new integrated calculation method
+  double chiSquared=0.0;
   for(int i = 1; i <= localData->NumSegments(); i++) {
     ESegment* segment = localData->GetSegment(i);
-    if(segment && segment->HasComponents()) {
+    if(segment) {
       // Recalculate points using the new combined calculation method
       for(int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
         double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
@@ -153,6 +93,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
           }
         }
       }
+
       segment->SetSegmentChiSquared(segmentChiSquared);
       chiSquared += segmentChiSquared;
     }
@@ -210,69 +151,11 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r& params_) co
   
   // Calculate chi-squared (same logic as original but without parameter filling)
   double chiSquared=0.0;
-  double segmentChiSquared=0.0;
-  ESegmentIterator firstSumIterator = localData->GetSegments().end();
-  ESegmentIterator lastSumIterator = localData->GetSegments().end();
-  
-  try {
-    for(EDataIterator data=localData->begin();data!=localData->end();data++) {
-      if(data.segment()->GetPoints().begin()==data.point()) {
-        segmentChiSquared=0.0;
-        if(data.segment()->IsTotalCapture()) {
-          firstSumIterator=data.segment();
-          lastSumIterator=data.segment()+data.segment()->IsTotalCapture()-1;
-        } 
-      }
-      if(!data.point()->IsMapped()) {
-        try {
-          data.point()->Calculate(localCompound,configure());
-        } catch (GSLException& e) {
-          // Skip this point if GSL calculation fails
-          continue;
-        }
-      }
-    if(firstSumIterator!=localData->GetSegments().end()&&
-       data.segment()!=lastSumIterator) continue;
-    double fitCrossSection=data.point()->GetFitCrossSection();
-    ESegmentIterator thisSegment = data.segment();
-    if(data.segment()==lastSumIterator) {
-      int pointIndex=data.point()-data.segment()->GetPoints().begin()+1;
-      for(ESegmentIterator it=firstSumIterator;it<data.segment();it++) 
-        fitCrossSection+=it->GetPoint(pointIndex)->GetFitCrossSection();
-      thisSegment = firstSumIterator;
-    }
-    double dataNorm=thisSegment->GetNorm();
-    double CrossSection=data.point()->GetCMCrossSection()*dataNorm;
-    double CrossSectionError=data.point()->GetCMCrossSectionError()*dataNorm;
-    double chi=(fitCrossSection-CrossSection)/CrossSectionError;
-    double pointChiSquared=pow(chi,2.0);
-    segmentChiSquared+=pointChiSquared;
-    if(data.segment()->GetPoints().end()-1==data.point()) {
-      if(!isFit) thisSegment->SetSegmentChiSquared(segmentChiSquared);
-      if(data.segment()==lastSumIterator) {
-        firstSumIterator=localData->GetSegments().end();
-        lastSumIterator=localData->GetSegments().end();
-      }
-      chiSquared+=segmentChiSquared;
-    }
-
-    }
-  } catch (GSLException& e) {
-    // Clean up and return bad likelihood for GSL errors during calculation
-    delete localCompound;
-    delete localData;
-    return -std::numeric_limits<double>::infinity();
-  } catch (...) {
-    // Clean up and return bad likelihood for any other errors during calculation
-    delete localCompound;
-    delete localData;
-    return -std::numeric_limits<double>::infinity();
-  }
-
   // Process segments with components - use new integrated calculation method
+  double chiSquared=0.0;
   for(int i = 1; i <= localData->NumSegments(); i++) {
     ESegment* segment = localData->GetSegment(i);
-    if(segment && segment->HasComponents()) {
+    if(segment) {
       // Recalculate points using the new combined calculation method
       for(int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
         double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
@@ -294,6 +177,7 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r& params_) co
           }
         }
       }
+
       segment->SetSegmentChiSquared(segmentChiSquared);
       chiSquared += segmentChiSquared;
     }

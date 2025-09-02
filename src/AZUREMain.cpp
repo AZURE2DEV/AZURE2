@@ -246,7 +246,7 @@ int AZUREMain::operator()(){
 		  << " Chi-Squared/N: "
 		  << segment->GetSegmentChiSquared()/segment->NumPoints()
 		  << std::endl;
-	if(segment->IsTotalCapture()) segment+=segment->IsTotalCapture()-1;
+	// With component segments, no need to skip - total capture is handled within the segment
       }
       configure().outStream << "Total Chi-Squared: " 
 		<< chiSquared << std::endl << std::endl;

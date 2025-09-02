@@ -9,7 +9,17 @@
 EDataIterator::EDataIterator(std::vector<ESegment>* segments) :
   segments_(segments) {
   segmentIterator_=segments_->begin();
-  pointIterator_=(*segmentIterator_).GetPoints().begin();
+  // Skip initial segments with components
+  while(segmentIterator_ < segments_->end() && (*segmentIterator_).HasComponents()) {
+    segmentIterator_++;
+  }
+  if(segmentIterator_ < segments_->end()) {
+    pointIterator_=(*segmentIterator_).GetPoints().begin();
+  } else {
+    // All segments have components, set to end
+    segmentIterator_ = segments_->end()-1;
+    pointIterator_ = (*segmentIterator_).GetPoints().end();
+  }
 }
 
 /*!
@@ -30,7 +40,17 @@ EDataIterator& EDataIterator::operator++() {
     pointIterator_++;
   } else if(segmentIterator_ < segments_->end()-1) {
     segmentIterator_++;
-    pointIterator_=(*segmentIterator_).GetPoints().begin();
+    // Skip segments with components - they should be processed separately
+    while(segmentIterator_ < segments_->end() && (*segmentIterator_).HasComponents()) {
+      segmentIterator_++;
+    }
+    if(segmentIterator_ < segments_->end()) {
+      pointIterator_=(*segmentIterator_).GetPoints().begin();
+    } else {
+      // We've reached the end, set to end position
+      segmentIterator_ = segments_->end()-1;
+      pointIterator_ = (*segmentIterator_).GetPoints().end();
+    }
   } else if ((segmentIterator_ == (segments_->end()-1)) && 
 	     (pointIterator_ == ((*segmentIterator_).GetPoints().end()-1)))
     pointIterator_++;

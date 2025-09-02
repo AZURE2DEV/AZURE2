@@ -3,6 +3,8 @@
 
 #include "EPoint.h"
 #include <vector>
+#include <mutex>
+#include <memory>
 
 class EData;
 class ExtrapLine;
@@ -124,6 +126,7 @@ class ESegment {
   // Advanced segment composition
   std::vector<ESegment*> componentSegments_;
   OperationType segmentOperationType_;
+  mutable std::shared_ptr<std::mutex> componentCalculationMutex_;
 };
 
 #endif

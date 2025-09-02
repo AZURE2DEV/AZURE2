@@ -67,11 +67,21 @@ std::complex<double> log1p (const std::complex<double> &z)
 
 std::complex<double> log_Gamma (const std::complex<double> &z)
 {
-  if (!isfinite (z)) std::cout<<"z is not finite in log_Gamma."<<std::endl, abort ();
+  const double x = real (z), y = imag (z);
+  
+  // Check if both real and imaginary parts are finite
+  if (!std::isfinite(x) || !std::isfinite(y)) {
+    std::cout << "ERROR: z is not finite in log_Gamma: z = " << z 
+              << " (real = " << x << ", imag = " << y << ")" << std::endl;
+    std::cout << "This typically indicates invalid input parameters to Coulomb wave functions." << std::endl;
+    abort();
+  }
 
-  const double x = real (z),y = imag (z);
-
-  if ((z == rint (x)) && (x <= 0)) std::cout<<"z is negative integer in log_Gamma."<<std::endl, abort ();
+  // Check for negative integer real part with zero imaginary part
+  if ((std::abs(y) < 1e-15) && (std::abs(x - std::rint(x)) < 1e-15) && (x <= 0)) {
+    std::cout << "ERROR: z is negative integer in log_Gamma: z = " << z << std::endl;
+    abort();
+  }
 
   if (x > 0.0)
   {
@@ -159,6 +169,17 @@ std::complex<double> sigma_l_calc (const std::complex<double> &l,const std::comp
 
 std::complex<double> log_Cl_eta_calc (const std::complex<double> &l,const std::complex<double> &eta)
 {
+  // Input validation
+  const double l_real = real(l), l_imag = imag(l);
+  const double eta_real = real(eta), eta_imag = imag(eta);
+  
+  if (!std::isfinite(l_real) || !std::isfinite(l_imag) || 
+      !std::isfinite(eta_real) || !std::isfinite(eta_imag)) {
+    std::cout << "ERROR: Non-finite input to log_Cl_eta_calc: l = " << l 
+              << ", eta = " << eta << std::endl;
+    abort();
+  }
+  
   const std::complex<double> Ieta(-imag (eta),real (eta));
   const std::complex<double> arg_plus = 1.0 + l + Ieta, arg_minus = 1.0 + l - Ieta; 
 

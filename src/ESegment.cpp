@@ -54,6 +54,7 @@ ESegment::ESegment(SegLine segLine) {
   
   // Initialize advanced segment composition
   segmentOperationType_ = SUM;  // Default to SUM operation
+  componentCalculationMutex_ = std::make_shared<std::mutex>();
 }
 
 /*!
@@ -108,6 +109,7 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   
   // Initialize advanced segment composition
   segmentOperationType_ = SUM;  // Default to SUM operation
+  componentCalculationMutex_ = std::make_shared<std::mutex>();
 }
 
 /*!
@@ -467,15 +469,19 @@ void ESegment::SetEnergyShift(double energyShift) {
  */
 
 void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configure) {
+  // No lock needed since each thread works on independent EData clones
+  // after fixing EData::Clone to properly remap component segment pointers
+  
   for(int i = 0; i < NumPoints(); i++) {
     EPoint* point = GetPoint(i+1);
     if(point && point->GetOriginalEnergy() > 0) {
       double originalEnergy = point->GetOriginalEnergy();
       double shiftedEnergy = originalEnergy + energyShift_;
       
-      // Don't allow energies below 0.005 MeV (AZURE2 may crash)
-      if(shiftedEnergy < 0.005) {
+      // Don't allow energies below 0.01 MeV (AZURE2 may crash)
+      if(shiftedEnergy < 0.01) {
         shiftedEnergy = originalEnergy;
+        continue;
       }
       
       // Set the shifted energy
@@ -520,7 +526,7 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
           point->CalcLegendreP(configure->maxLOrder, theCNuc, NULL);
         }
         point->RecalcEDependentValues(theCNuc,*configure);
-        point->CalcCoulombAmplitude(theCNuc);
+
       }
     }
   }
@@ -716,6 +722,7 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, co
     return baseValue;
   }
   
+  
   // Calculate component values and combine according to operation type
   if (segmentOperationType_ == SUM) {
     double sum = baseValue;
@@ -723,7 +730,7 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, co
       if (componentSegment && pointIndex < componentSegment->NumPoints()) {
         EPoint* componentPoint = componentSegment->GetPoint(pointIndex + 1);
         if (componentPoint) {
-          // Calculate component point if not already calculated
+          // No lock needed since each thread works on independent EData clones
           if (!componentPoint->IsMapped()) {
             try {
               componentPoint->Calculate(cnuc, configure);
@@ -746,7 +753,8 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, co
     if (firstComponent && pointIndex < firstComponent->NumPoints()) {
       EPoint* denominatorPoint = firstComponent->GetPoint(pointIndex + 1);
       if (denominatorPoint) {
-        // Calculate denominator point if not already calculated
+        
+        // No lock needed since each thread works on independent EData clones
         if (!denominatorPoint->IsMapped()) {
           try {
             denominatorPoint->Calculate(cnuc, configure);

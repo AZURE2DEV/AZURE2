@@ -45,6 +45,7 @@
 #include <complex>
 #include <iostream>
 #include <cstdlib>
+#include <cmath>
 #define SIGN(a) (((a) < 0) ? (-1) : (1))
 const double precision = 1E-10,sqrt_precision = 1E-5;
 

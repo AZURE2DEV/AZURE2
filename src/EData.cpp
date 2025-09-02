@@ -11,6 +11,7 @@
 #include <iomanip>
 #include <omp.h>
 #include <time.h>
+#include <unordered_map>
 
 /*!
  * The EData object has a private attribute containing the number of iterations needed to find the best fit parameters.
@@ -131,22 +132,30 @@ int EData::Fill(const Config& configure, CNuc *theCNuc) {
 	      
 	      int thisSegmentNum = this->NumSegments();
 	      if(this->GetSegment(thisSegmentNum)->IsTotalCapture()) {
-		int numCapturePairs=0;
-		for(int i = 1;i<=theCNuc->NumPairs();i++) {
-		  if(theCNuc->GetPair(i)->GetPType()==10) {
-		    numCapturePairs++;
-		    if(numCapturePairs==1) {
-		      this->GetSegment(thisSegmentNum)->SetExitKey(theCNuc->GetPair(i)->GetPairKey());
-		    } else {
-		      ESegment newSegment(*this->GetSegment(thisSegmentNum));
-		      newSegment.SetExitKey(theCNuc->GetPair(i)->GetPairKey());
-		      newSegment.SetIsTotalCapture(0);
-		      newSegment.SetVaryNorm(false);
-		      this->AddSegment(newSegment);
-		    }
-		  }
-		}
-		this->GetSegment(thisSegmentNum)->SetIsTotalCapture(numCapturePairs);
+	        ESegment* baseSegment = this->GetSegment(thisSegmentNum);
+	        int numCapturePairs=0;
+	        
+	        // Set operation type to SUM for total capture
+	        baseSegment->SetOperationType(SUM);
+	        
+	        for(int i = 1;i<=theCNuc->NumPairs();i++) {
+	          if(theCNuc->GetPair(i)->GetPType()==10) {
+	            numCapturePairs++;
+	            if(numCapturePairs==1) {
+	              // For the first capture pair, set the base segment's exit key
+	              baseSegment->SetExitKey(theCNuc->GetPair(i)->GetPairKey());
+	            } else {
+	              // For additional capture pairs, create component segments instead of separate segments
+	              ESegment* componentSegment = this->CreateComponentSegment(*baseSegment, 
+	                                                                       baseSegment->GetEntranceKey(), 
+	                                                                       theCNuc->GetPair(i)->GetPairKey());
+	              if (componentSegment) {
+	                baseSegment->AddComponentSegment(componentSegment);
+	              }
+	            }
+	          }
+	        }
+	        baseSegment->SetIsTotalCapture(numCapturePairs);
 	      } 
 	    }
 	  } else {
@@ -261,22 +270,30 @@ int EData::MakePoints(const Config& configure, CNuc *theCNuc) {
 	    } else {
 	      int thisSegmentNum = this->NumSegments();
 	      if(this->GetSegment(thisSegmentNum)->IsTotalCapture()) {
-		int numCapturePairs=0;
-		for(int i = 1;i<=theCNuc->NumPairs();i++) {
-		  if(theCNuc->GetPair(i)->GetPType()==10) {
-		    numCapturePairs++;
-		    if(numCapturePairs==1) {
-		      this->GetSegment(thisSegmentNum)->SetExitKey(theCNuc->GetPair(i)->GetPairKey());
-		    } else {
-		      ESegment newSegment(*this->GetSegment(thisSegmentNum));
-		      newSegment.SetExitKey(theCNuc->GetPair(i)->GetPairKey());
-		      newSegment.SetIsTotalCapture(0);
-		      newSegment.SetVaryNorm(false);
-		      this->AddSegment(newSegment);
-		    }
-		  }
-		}
-		this->GetSegment(thisSegmentNum)->SetIsTotalCapture(numCapturePairs);
+	        ESegment* baseSegment = this->GetSegment(thisSegmentNum);
+	        int numCapturePairs=0;
+	        
+	        // Set operation type to SUM for total capture
+	        baseSegment->SetOperationType(SUM);
+	        
+	        for(int i = 1;i<=theCNuc->NumPairs();i++) {
+	          if(theCNuc->GetPair(i)->GetPType()==10) {
+	            numCapturePairs++;
+	            if(numCapturePairs==1) {
+	              // For the first capture pair, set the base segment's exit key
+	              baseSegment->SetExitKey(theCNuc->GetPair(i)->GetPairKey());
+	            } else {
+	              // For additional capture pairs, create component segments instead of separate segments
+	              ESegment* componentSegment = this->CreateComponentSegment(*baseSegment, 
+	                                                                       baseSegment->GetEntranceKey(), 
+	                                                                       theCNuc->GetPair(i)->GetPairKey());
+	              if (componentSegment) {
+	                baseSegment->AddComponentSegment(componentSegment);
+	              }
+	            }
+	          }
+	        }
+	        baseSegment->SetIsTotalCapture(numCapturePairs);
 	      } 
 	    }
 	  } else {
@@ -369,6 +386,12 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
 	for(int i = 1;i<=segmentsList.size();i++) { 
 	  if(this->IsSegmentKey(segmentsList[i-1]))
 	    this->GetSegmentFromKey(segmentsList[i-1])->SetTargetEffectNum(this->NumTargetEffects());
+      // If segment has components, set the target effect to these as well
+      if(this->GetSegmentFromKey(segmentsList[i-1])->HasComponents()) {
+	      for(auto component : this->GetSegmentFromKey(segmentsList[i-1])->GetComponentSegments()) {
+	        component->SetTargetEffectNum(this->NumTargetEffects());
+	      }
+      }
 	}
       }
     }
@@ -435,6 +458,65 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
 	        }
 
 	      }
+      }
+    }
+    if( segment->HasComponents() ) {
+      for(auto component : segment->GetComponentSegments()) {
+        if(component->IsTargetEffect()) {
+          TargetEffect *targetEffect = this->GetTargetEffect(component->GetTargetEffectNum());
+          double sigma = targetEffect->GetSigma();
+          targetEffect->SetSigma(cmConversion*sigma);
+          
+          for(EPointIterator point=component->GetPoints().begin();point<component->GetPoints().end();point++) {
+            point->SetTargetEffectNum(component->GetTargetEffectNum());
+            
+            if(targetEffect->IsTargetIntegration()||targetEffect->IsConvolution()||targetEffect->IsConvCoefficients()) {
+              double forwardDepth=0.0;
+              double backwardDepth=0.0;
+        
+              if(targetEffect->IsTargetIntegration()) {
+                double totalM=entrancePair->GetM(1)+entrancePair->GetM(2);
+                double targetThickness = cmConversion*targetEffect->TargetThickness(point->GetLabEnergy(),configure);
+                point->SetTargetThickness(targetThickness);
+                if(targetEffect->IsConvolution()||targetEffect->IsConvCoefficients()) {
+                  if(targetEffect->IsConvCoefficients()) {
+                    backwardDepth=targetThickness+targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure)*5.0;
+                    forwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure)*5.0;
+                  }
+                  else {
+                    backwardDepth=targetThickness+targetEffect->GetSigma()*5.0;
+                    forwardDepth=targetEffect->GetSigma()*5.0;
+                  }
+                } 
+                else {
+                  backwardDepth=targetThickness;
+                  forwardDepth=0.0;
+                }
+              } 
+      
+              else if(targetEffect->IsConvolution()||targetEffect->IsConvCoefficients()) {
+                if(targetEffect->IsConvCoefficients()){
+                  backwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure);
+                  forwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure);
+                }
+                else {
+                  backwardDepth=targetEffect->convolutionRange*targetEffect->GetSigma();
+                  forwardDepth=targetEffect->convolutionRange*targetEffect->GetSigma();
+                }
+              }
+
+              for(int i=0;i<targetEffect->NumSubPoints();i++) {
+                double subEnergy=point->GetCMEnergy()+forwardDepth-(forwardDepth+backwardDepth)/(targetEffect->NumSubPoints())*i;
+                EPoint subPoint(point->GetCMAngle(),subEnergy,&*component);
+                if(targetEffect->IsTargetIntegration()) {
+                  double stoppingPower=cmConversion*targetEffect->GetStoppingPowerEq()->Evaluate(configure,subEnergy/cmConversion);
+                  subPoint.SetStoppingPower(stoppingPower);
+                }
+                point->AddSubPoint(subPoint);
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -882,7 +964,7 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit) {
       segment<GetSegments().end();segment++) {
     if(segment->IsTotalCapture()) {
       firstSumIterator=segment;
-      segment+=segment->IsTotalCapture()-1;
+      // With component segments, no need to skip - total capture is handled within the segment
     } 
     if(segment->IsVaryNorm()) isVaryNorm=true;
     int aa=segment->GetEntranceKey();
@@ -1077,11 +1159,13 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc,const Config& configure) {
   for(ESegmentIterator segment=GetSegments().begin();segment<GetSegments().end();segment++) {
     if(segment->IsTotalCapture()) {
       numSumSegments = segment->IsTotalCapture();
+      sumSegmentI=1; // Start at 1 since total capture is now handled within the segment
+    } else {
       sumSegmentI=0;
+      numSumSegments=0;
     }
-    if(numSumSegments) sumSegmentI++;
     char segmentKeyOut[256];
-    if(numSumSegments) sprintf(segmentKeyOut,"%d (%d/%d)",segment->GetSegmentKey(),sumSegmentI,numSumSegments);
+    if(segment->IsTotalCapture()) sprintf(segmentKeyOut,"%d (Total: %d)",segment->GetSegmentKey(),numSumSegments);
     else sprintf(segmentKeyOut,"%d",segment->GetSegmentKey());
     int aa=theCNuc->GetPairNumFromKey(segment->GetEntranceKey());
     if(theCNuc->GetPair(aa)->GetPType()==20) continue;
@@ -1401,7 +1485,7 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
       
       // Parameter settings will be applied by ParameterLimitsManager during fit
     }
-    if(segment->IsTotalCapture()) segment+=segment->IsTotalCapture()-1;
+    // With component segments, no need to skip - total capture is handled within the segment
   }
   
   // Add energy shift parameters FOR ALL SEGMENTS (like normalization)
@@ -1415,7 +1499,7 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
     // Parameter settings (fixed vs varied) will be applied by ParameterLimitsManager during fit
     // The IsVaryEnergyShift() flag controls whether the parameter is varied, not whether it exists
     
-    if(segment->IsTotalCapture()) segment+=segment->IsTotalCapture()-1;
+    // With component segments, no need to skip - total capture is handled within the segment
   }
 }
 
@@ -1439,7 +1523,7 @@ void EData::FillNormsFromParams(const vector_r &p) {
       segment->SetNorm(p[i]); 
       i++;
     }
-    if(segment->IsTotalCapture()) segment+=segment->IsTotalCapture()-1;
+    // With component segments, no need to skip - total capture is handled within the segment
   }
 }
 
@@ -1457,11 +1541,18 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc* the
       k++;
       // Always apply energy shift since parameters are always present for all segments
       if(segment->IsVaryEnergyShift() || p[i] != 0.0) {
+
+        // Check if energy is the same, if so, continue
+        if(segment->GetEnergyShift() == p[i]) {
+          i++;
+          continue;
+        }
+
         segment->SetEnergyShift(p[i]); 
         segment->UpdatePointEnergiesWithShift(theCNuc, configure);
         anyEnergyShifted = true;
         
-        // CRITICAL FIX: Apply the same energy shift to ALL component segments of this master segment
+        // Apply the same energy shift to ALL component segments of this master segment
         if(segment->HasComponents()) {
           for(ESegment* componentSegment : segment->GetComponentSegments()) {
             if(componentSegment) {
@@ -1472,22 +1563,19 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc* the
         }
       }
       
-      // CRITICAL FIX: Apply the same energy shift to all total capture segments
-      if(segment->IsTotalCapture()) {
-        int numTotalCaptureSegments = segment->IsTotalCapture();
-        // Apply the energy shift to all additional total capture segments
-        for(int tcSeg = 1; tcSeg < numTotalCaptureSegments; tcSeg++) {
-          ESegmentIterator additionalSegment = segment + tcSeg;
-          if(additionalSegment < data->GetSegments().end()) {
-            if(segment->IsVaryEnergyShift() || p[i] != 0.0) {
-              additionalSegment->SetEnergyShift(p[i]);
-              additionalSegment->UpdatePointEnergiesWithShift(theCNuc, configure);
+      // Apply the same energy shift to all component segments in total capture segments
+      if(segment->IsTotalCapture() && segment->HasComponents()) {
+        if(segment->IsVaryEnergyShift() || p[i] != 0.0) {
+          // Apply energy shift to all component segments
+          const std::vector<ESegment*>& componentSegments = segment->GetComponentSegments();
+          for(ESegment* componentSegment : componentSegments) {
+            if(componentSegment) {
+              componentSegment->SetEnergyShift(p[i]);
+              componentSegment->UpdatePointEnergiesWithShift(theCNuc, configure);
               anyEnergyShifted = true;
             }
           }
         }
-        // Skip over the additional total capture segments we just processed
-        segment += numTotalCaptureSegments - 1;
       }
       
       // Always increment i since energy shift parameters are now present for ALL segments
@@ -1519,22 +1607,19 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc* the
       }
     }
     
-    // CRITICAL FIX: Apply the same energy shift to all total capture segments
-    if(segment->IsTotalCapture()) {
-      int numTotalCaptureSegments = segment->IsTotalCapture();
-      // Apply the energy shift to all additional total capture segments
-      for(int tcSeg = 1; tcSeg < numTotalCaptureSegments; tcSeg++) {
-        ESegmentIterator additionalSegment = segment + tcSeg;
-        if(additionalSegment < GetSegments().end()) {
-          if(segment->IsVaryEnergyShift() || p[i] != 0.0) {
-            additionalSegment->SetEnergyShift(p[i]);
-            additionalSegment->UpdatePointEnergiesWithShift();
+    // CRITICAL FIX: Apply the same energy shift to all component segments in total capture segments
+    if(segment->IsTotalCapture() && segment->HasComponents()) {
+      if(segment->IsVaryEnergyShift() || p[i] != 0.0) {
+        // Apply energy shift to all component segments
+        const std::vector<ESegment*>& componentSegments = segment->GetComponentSegments();
+        for(ESegment* componentSegment : componentSegments) {
+          if(componentSegment) {
+            componentSegment->SetEnergyShift(p[i]);
+            componentSegment->UpdatePointEnergiesWithShift();
             anyEnergyShifted = true;
           }
         }
       }
-      // Skip over the additional total capture segments we just processed
-      segment += numTotalCaptureSegments - 1;
     }
     
     // Always increment i since energy shift parameters are now present for ALL segments
@@ -1578,6 +1663,34 @@ ESegment *EData::GetSegmentFromKey(int segmentKey) {
 
 EData *EData::Clone() const {
   EData *dataCopy = new EData(*this);
+  
+  // Build a mapping from component segment keys to cloned component segments
+  std::unordered_map<int, ESegment*> clonedComponentMap;
+  for (size_t i = 0; i < dataCopy->componentSegments_.size(); i++) {
+    int segmentKey = dataCopy->componentSegments_[i].GetSegmentKey();
+    clonedComponentMap[segmentKey] = &(dataCopy->componentSegments_[i]);
+  }
+  
+  // Update component segment pointers in cloned regular segments
+  // Use positional matching instead of key matching to avoid key mismatch bugs
+  for (size_t i = 0; i < dataCopy->segments_.size() && i < this->segments_.size(); i++) {
+    auto& segment = dataCopy->segments_[i];
+    const auto& originalSegment = this->segments_[i];
+    
+    if (segment.HasComponents()) {
+      // Clear the old component pointers (they point to original EData)
+      segment.ClearComponents();
+      
+      // Add the remapped component segments using positional matching
+      for (const auto& originalComponent : originalSegment.GetComponentSegments()) {
+        int componentKey = originalComponent->GetSegmentKey();
+        auto it = clonedComponentMap.find(componentKey);
+        if (it != clonedComponentMap.end()) {
+          segment.AddComponentSegment(it->second);
+        }
+      }
+    }
+  }
   
   for(EDataIterator data=dataCopy->begin();data!=dataCopy->end();data++) {
     data.point()->SetParentData(dataCopy);

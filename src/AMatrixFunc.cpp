@@ -5,13 +5,18 @@
 #include "MatrixInv.h"
 #include <assert.h>
 #include <iostream>
+#include <vector>
+#include <cmath>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 /*!
  * The AMatrixFunc object is created with reference to a CNuc object.
  */
 
 AMatrixFunc::AMatrixFunc(CNuc* compound, const Config &configure) :
-  compound_(compound), configure_(configure) {}
+  compound_(compound), configure_(configure), a_matrices_index_(0) {}
 
 /*!
  * Returns an A-Matrix element specified by positions in the JGroup and ALevel vectors. 
@@ -39,7 +44,38 @@ void AMatrixFunc::ClearMatrices() {
   a_matrices_.clear();
   tmatrix_.clear();
   ec_tmatrix_.clear();
+
+  const int numJGroups = compound()->NumJGroups();
+  a_inv_matrices_.resize(numJGroups);
+  a_matrices_.resize(numJGroups);
+  level_active_index_.assign(numJGroups, {});   // reset maps
+
+  for (int j = 1; j <= numJGroups; ++j) {
+    if (!compound()->GetJGroup(j)->IsInRMatrix()) {
+      // keep empty placeholders to preserve external indexing
+      level_active_index_[j-1].clear();
+      continue;
+    }
+
+    JGroup* jg = compound()->GetJGroup(j);
+    const int numLevels = jg->NumLevels();
+
+    // Build original->active map (1-based for readability in existing code)
+    std::vector<int> map(numLevels + 1, 0);
+    int act = 0;
+    for (int la = 1; la <= numLevels; ++la) {
+      if (jg->GetLevel(la)->IsInRMatrix()) map[la] = ++act;
+    }
+    level_active_index_[j-1] = std::move(map);
+
+    // Pre-size to dense (act x act) with zeros; no push_backs later
+    matrix_c M;
+    M.resize(act);
+    for (int r = 0; r < act; ++r) M[r].assign(act, complex(0.0, 0.0));
+    a_inv_matrices_[j-1] = std::move(M);
+  }
 }
+
 
 /*!
  * This function creates the inverted A-Matrix from the parameters in the CNuc object.
@@ -62,33 +98,65 @@ void AMatrixFunc::FillMatrices (EPoint *point) {
 	 compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetExE();
   for(int j=1;j<=compound()->NumJGroups();j++) {
     if(compound()->GetJGroup(j)->IsInRMatrix()) {
-      for(int la=1;la<=compound()->GetJGroup(j)->NumLevels();la++) {
-	if(compound()->GetJGroup(j)->GetLevel(la)->IsInRMatrix()) {
-	  ALevel *level=compound()->GetJGroup(j)->GetLevel(la);
-	  for(int lap=1;lap<=compound()->GetJGroup(j)->NumLevels();lap++) {
-	    if(compound()->GetJGroup(j)->GetLevel(lap)->IsInRMatrix()) {
-	      ALevel *levelp=compound()->GetJGroup(j)->GetLevel(lap);
+      // Cache JGroup pointer to avoid repeated calls
+      JGroup *jGroup = compound()->GetJGroup(j);
+      int numLevels = jGroup->NumLevels();
+      int numChannels = jGroup->NumChannels();
+      
+      // Pre-cache gamma values for all levels and channels to avoid repeated function calls
+      std::vector<std::vector<double>> levelGammas(numLevels + 1);
+      std::vector<double> levelEnergies(numLevels + 1);
+      std::vector<std::vector<double>> shiftFunctions(numLevels + 1);
+      
+      for(int la=1; la<=numLevels; la++) {
+        if(jGroup->GetLevel(la)->IsInRMatrix()) {
+          ALevel *level = jGroup->GetLevel(la);
+          levelGammas[la].resize(numChannels + 1);
+          shiftFunctions[la].resize(numChannels + 1);
+          levelEnergies[la] = level->GetFitE();
+          
+          for(int ch=1; ch<=numChannels; ch++) {
+            levelGammas[la][ch] = level->GetFitGamma(ch);
+            shiftFunctions[la][ch] = level->GetShiftFunction(ch);
+          }
+        }
+      }
+      
+      for(int la=1;la<=numLevels;la++) {
+	if(jGroup->GetLevel(la)->IsInRMatrix()) {
+	  ALevel *level=jGroup->GetLevel(la);
+	  for(int lap=1;lap<=numLevels;lap++) {
+	    if(jGroup->GetLevel(lap)->IsInRMatrix()) {
+	      ALevel *levelp=jGroup->GetLevel(lap);
 	      complex sum(0.0,0.0);
-	      for(int ch=1;ch<=compound()->GetJGroup(j)->NumChannels();ch++) {
-		double gammaCh=level->GetFitGamma(ch);
-		double gammaChp=levelp->GetFitGamma(ch);
+	      for(int ch=1;ch<=numChannels;ch++) {
+		double gammaCh=levelGammas[la][ch];
+		double gammaChp=levelGammas[lap][ch];
+		
+		// Early termination for effectively zero gamma values
+		if(fabs(gammaCh) < 1.0e-12 || fabs(gammaChp) < 1.0e-12) continue;
+		
 		complex loElement=point->GetLoElement(j,ch);
 		sum+=gammaCh*gammaChp*loElement;
-		if((compound()->GetJGroup(j)->GetChannel(ch)->GetRadType() == 'M' || 
-		    compound()->GetJGroup(j)->GetChannel(ch)->GetRadType() == 'E' ) && 
+		
+		// Cache channel pointer and radiation type to avoid repeated calls
+		AChannel *channel = jGroup->GetChannel(ch);
+		char radType = channel->GetRadType();
+		
+		if((radType == 'M' || radType == 'E') && 
 		   la==lap &&
 		   (configure().paramMask & Config::USE_RMC_FORMALISM)) 
 		  sum+=complex(0.0,1.0)*gammaCh*gammaChp;
-		if((configure().paramMask & Config::USE_BRUNE_FORMALISM) && compound()->GetJGroup(j)->GetChannel(ch)->GetRadType()=='P') {
-		  sum+=gammaCh*gammaChp*compound()->GetJGroup(j)->GetChannel(ch)->GetBoundaryCondition();
-		  if(la==lap) sum-=gammaCh*gammaChp*level->GetShiftFunction(ch);
+		if((configure().paramMask & Config::USE_BRUNE_FORMALISM) && radType=='P') {
+		  sum+=gammaCh*gammaChp*channel->GetBoundaryCondition();
+		  if(la==lap) sum-=gammaCh*gammaChp*shiftFunctions[la][ch];
 		  else sum-=gammaCh*gammaChp*
-			 (level->GetShiftFunction(ch)*(inEnergy-levelp->GetFitE())-levelp->GetShiftFunction(ch)*(inEnergy-level->GetFitE()))/
-			 (level->GetFitE()-levelp->GetFitE());				
+			 (shiftFunctions[la][ch]*(inEnergy-levelEnergies[lap])-shiftFunctions[lap][ch]*(inEnergy-levelEnergies[la]))/
+			 (levelEnergies[la]-levelEnergies[lap]);				
 		}
 	      }
 	      if(la==lap) {
-		double resenergy=level->GetFitE();
+		double resenergy=levelEnergies[la];
 		this->AddAInvMatrixElement(j,la,lap,resenergy-inEnergy-sum);
 	      } else this->AddAInvMatrixElement(j,la,lap,-sum);
 	    }
@@ -104,11 +172,19 @@ void AMatrixFunc::FillMatrices (EPoint *point) {
  */
 
 void AMatrixFunc::InvertMatrices() {
+  // Sequential processing to avoid race conditions in matrix data access
+  // The matrix inversions themselves are computationally intensive but the data
+  // structures are not thread-safe for concurrent access
   for(int j=1;j<=compound()->NumJGroups();j++) {
     if(compound()->GetJGroup(j)->IsInRMatrix()) {
       matrix_c *theAInvMatrix = this->GetJSpecAInvMatrix(j);
+      // Add validation to catch corrupted matrices before GSL processing
+      if(theAInvMatrix->empty()) {
+        continue; // Skip empty matrices
+      }
       MatrixInv matrixInv(*theAInvMatrix);
-      this->AddAMatrix(matrixInv.inverse());
+      // Use move semantics to avoid matrix copy and assign directly to correct index
+      a_matrices_[j-1] = std::move(matrixInv.inverse());
     }
   }
 }
@@ -118,21 +194,26 @@ void AMatrixFunc::InvertMatrices() {
  */
 
 void AMatrixFunc::CalculateTMatrix(EPoint *point) {
-  int aa=compound()->GetPairNumFromKey(point->GetEntranceKey());
+  // Cache frequently accessed values to avoid repeated function calls
+  int entranceKey = point->GetEntranceKey();
+  int exitKey = point->GetExitKey();
+  int aa = compound()->GetPairNumFromKey(entranceKey);
+  int exitPairNum = compound()->GetPairNumFromKey(exitKey);
+  
   int irEnd;
   int irStart;
   bool isRMC=false;
   if((configure().paramMask & Config::USE_RMC_FORMALISM) && 
-     compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()))->GetPType()==10) {
+     compound()->GetPair(exitPairNum)->GetPType()==10) {
     irStart=1;
     irEnd=compound()->GetPair(aa)->NumDecays();
     isRMC=true;
   } else {
     irStart=0;
-    while(irStart<compound()->GetPair(aa)->NumDecays()) {
+    int numDecays = compound()->GetPair(aa)->NumDecays();
+    while(irStart<numDecays) {
       irStart++;
-      if(compound()->GetPair(aa)->GetDecay(irStart)->GetPairNum()==
-	 compound()->GetPairNumFromKey(point->GetExitKey())) break;
+      if(compound()->GetPair(aa)->GetDecay(irStart)->GetPairNum()==exitPairNum) break;
     }
     irEnd=irStart;
   }
@@ -141,36 +222,56 @@ void AMatrixFunc::CalculateTMatrix(EPoint *point) {
     for(int k=1;k<=theDecay->NumKGroups();k++) {
       for(int m=1;m<=theDecay->GetKGroup(k)->NumMGroups();m++) {
 	MGroup *theMGroup=theDecay->GetKGroup(k)->GetMGroup(m);
-	JGroup *theJGroup=compound()->GetJGroup(theMGroup->GetJNum());
-	AChannel *entranceChannel=theJGroup->GetChannel(theMGroup->GetChNum());
-	AChannel *exitChannel=theJGroup->GetChannel(theMGroup->GetChpNum());
-	complex uphase=point->GetExpCoulombPhase(theMGroup->GetJNum(),theMGroup->GetChNum())*
-	  point->GetExpHardSpherePhase(theMGroup->GetJNum(),theMGroup->GetChNum())*
-	  point->GetExpCoulombPhase(theMGroup->GetJNum(),theMGroup->GetChpNum())*
-	  point->GetExpHardSpherePhase(theMGroup->GetJNum(),theMGroup->GetChpNum());
+	// Cache frequently accessed values to avoid repeated function calls
+	int jNum = theMGroup->GetJNum();
+	int chNum = theMGroup->GetChNum();
+	int chpNum = theMGroup->GetChpNum();
+	
+	JGroup *theJGroup=compound()->GetJGroup(jNum);
+	AChannel *entranceChannel=theJGroup->GetChannel(chNum);
+	AChannel *exitChannel=theJGroup->GetChannel(chpNum);
+	
+	// Cache phase calculations 
+	complex coulombPhaseEn = point->GetExpCoulombPhase(jNum,chNum);
+	complex hardSpherePhaseEn = point->GetExpHardSpherePhase(jNum,chNum);
+	complex coulombPhaseEx = point->GetExpCoulombPhase(jNum,chpNum);
+	complex hardSpherePhaseEx = point->GetExpHardSpherePhase(jNum,chpNum);
+	complex sqrtPenEn = point->GetSqrtPenetrability(jNum,chNum);
+	complex sqrtPenEx = point->GetSqrtPenetrability(jNum,chpNum);
+	
+	complex uphase = coulombPhaseEn * hardSpherePhaseEn * coulombPhaseEx * hardSpherePhaseEx;
 	complex umatrix(0.,0.);
-	for(int la=1;la<=compound()->GetJGroup(theMGroup->GetJNum())->NumLevels();la++) {
-	  if(compound()->GetJGroup(theMGroup->GetJNum())->GetLevel(la)->IsInRMatrix()) {
-	    ALevel *level=compound()->GetJGroup(theMGroup->GetJNum())->GetLevel(la);
-	    for(int lap=1;lap<=compound()->GetJGroup(theMGroup->GetJNum())->NumLevels();lap++) {
-	      if(compound()->GetJGroup(theMGroup->GetJNum())->GetLevel(lap)->IsInRMatrix()) {
-		ALevel *levelp=compound()->GetJGroup(theMGroup->GetJNum())->GetLevel(lap);
+	
+	int numLevels = theJGroup->NumLevels();
+	for(int la=1;la<=numLevels;la++) {
+	  if(theJGroup->GetLevel(la)->IsInRMatrix()) {
+	    ALevel *level=theJGroup->GetLevel(la);
+	    double gammaEn = level->GetFitGamma(chNum);
+	    
+	    // Skip if entrance gamma is effectively zero
+	    if(fabs(gammaEn) < 1.0e-12) continue;
+	    
+	    for(int lap=1;lap<=numLevels;lap++) {
+	      if(theJGroup->GetLevel(lap)->IsInRMatrix()) {
+		ALevel *levelp=theJGroup->GetLevel(lap);
+		double gammaEx = levelp->GetFitGamma(chpNum);
+		
+		// Skip if exit gamma is effectively zero
+		if(fabs(gammaEx) < 1.0e-12) continue;
+		
 		umatrix+=2.0*complex(0.0,1.0)*
-		  point->GetSqrtPenetrability(theMGroup->GetJNum(),theMGroup->GetChNum())*
-		  point->GetSqrtPenetrability(theMGroup->GetJNum(),theMGroup->GetChpNum())*
-		  level->GetFitGamma(theMGroup->GetChNum())*
-		  levelp->GetFitGamma(theMGroup->GetChpNum())*
-		  this->GetAMatrixElement(theMGroup->GetJNum(),la,lap);
+		  sqrtPenEn * sqrtPenEx *
+		  gammaEn * gammaEx *
+		  this->GetAMatrixElement(jNum,la,lap);
 	      }
 	    }
 	  }
 	}
-	complex tphase=point->GetExpCoulombPhase(theMGroup->GetJNum(),theMGroup->GetChNum())*
-	  point->GetExpCoulombPhase(theMGroup->GetJNum(),theMGroup->GetChNum());
+	complex tphase = coulombPhaseEn * coulombPhaseEn;
 	complex tmatrix;
 	if(isRMC) this->AddTMatrixElement(k,m,complex(0.0,-1.0)*umatrix,ir);
 	else {
-	  if(theMGroup->GetChNum()==theMGroup->GetChpNum()) {
+	  if(chNum==chpNum) {
 	    tmatrix=tphase-uphase*(1.0+umatrix);
 	  } else tmatrix=-uphase*umatrix;
 	  this->AddTMatrixElement(k,m,tmatrix);
@@ -233,12 +334,26 @@ void AMatrixFunc::CalculateTMatrix(EPoint *point) {
  */
 
 void AMatrixFunc::AddAInvMatrixElement(int jGroupNum, int lambdaNum, int muNum, complex aMatrixElement) {
-  matrix_c e;
-  vector_c f;
-  while(jGroupNum>a_inv_matrices_.size()) a_inv_matrices_.push_back(e);
-  while(lambdaNum>a_inv_matrices_[jGroupNum-1].size()) a_inv_matrices_[jGroupNum-1].push_back(f);
-  a_inv_matrices_[jGroupNum-1][lambdaNum-1].push_back(aMatrixElement);
-  assert(muNum=a_inv_matrices_[jGroupNum-1][lambdaNum-1].size());
+  // Basic bounds
+  if (jGroupNum < 1 || jGroupNum > (int)a_inv_matrices_.size()) return;
+
+  // If this J-group wasn’t included, skip
+  if (level_active_index_.empty() || level_active_index_[jGroupNum-1].empty()) return;
+
+  // Translate original level indices to compact active indices
+  const auto& map = level_active_index_[jGroupNum-1];
+  if (lambdaNum < 1 || lambdaNum >= (int)map.size()) return;
+  if (muNum     < 1 || muNum     >= (int)map.size()) return;
+
+  const int row = map[lambdaNum];
+  const int col = map[muNum];
+  if (row == 0 || col == 0) return; // either level is inactive; logic says: ignore
+
+  // Validate value
+  if (!std::isfinite(aMatrixElement.real()) || !std::isfinite(aMatrixElement.imag())) return;
+
+  // Direct assignment into pre-sized dense matrix
+  a_inv_matrices_[jGroupNum-1][row-1][col-1] = aMatrixElement;
 }
 
 /*!
@@ -246,5 +361,18 @@ void AMatrixFunc::AddAInvMatrixElement(int jGroupNum, int lambdaNum, int muNum, 
  */
 
 void AMatrixFunc::AddAMatrix(matrix_c aMatrix) {
-  a_matrices_.push_back(aMatrix);
+  // This method is now primarily used for backward compatibility
+  // Direct indexing in InvertMatrices() is preferred for thread safety
+  if(a_matrices_index_ < a_matrices_.size()) {
+    a_matrices_[a_matrices_index_] = aMatrix;
+    a_matrices_index_++;
+  }
+}
+
+void AMatrixFunc::AddAMatrix(matrix_c&& aMatrix) {
+  // Move semantics version - avoids copying large matrices
+  if(a_matrices_index_ < a_matrices_.size()) {
+    a_matrices_[a_matrices_index_] = std::move(aMatrix);
+    a_matrices_index_++;
+  }
 }

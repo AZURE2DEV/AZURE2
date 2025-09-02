@@ -29,74 +29,12 @@ double AZURECalc::operator()(const vector_r& p) const {
   localData->FillNormsFromParams(p);
   localData->FillEnergyShiftsFromParams(p,localData,localCompound,&configure());
   if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
-  
-  // Sub-segments are now integrated into ESegment, no separate initialization needed
-  
-  //loop over segments and points
-  double chiSquared=0.0;
-  double segmentChiSquared=0.0;
-  ESegmentIterator firstSumIterator = localData->GetSegments().end();
-  ESegmentIterator lastSumIterator = localData->GetSegments().end();
-  for(EDataIterator data=localData->begin();data!=localData->end();data++) {
-    if(data.segment()->GetPoints().begin()==data.point()) {
-      segmentChiSquared=0.0;
-      if(data.segment()->IsTotalCapture()) {
-	firstSumIterator=data.segment();
-	lastSumIterator=data.segment()+data.segment()->IsTotalCapture()-1;
-      } 
-    }
-    if(!data.point()->IsMapped()) {
-      try {
-        data.point()->Calculate(localCompound,configure());
-      } catch (GSLException& e) {
-        // Skip this point if GSL calculation fails
-        continue;
-      }
-    }
-    if(firstSumIterator!=localData->GetSegments().end()&&
-       data.segment()!=lastSumIterator) continue;
-    double fitCrossSection=data.point()->GetFitCrossSection();
-    ESegmentIterator thisSegment = data.segment();
-    if(data.segment()==lastSumIterator) {
-      int pointIndex=data.point()-data.segment()->GetPoints().begin()+1;
-      for(ESegmentIterator it=firstSumIterator;it<data.segment();it++) 
-	fitCrossSection+=it->GetPoint(pointIndex)->GetFitCrossSection();
-      thisSegment = firstSumIterator;
-    }
-    double dataNorm=thisSegment->GetNorm();
-    double CrossSection=data.point()->GetCMCrossSection()*dataNorm;
-    double CrossSectionError=data.point()->GetCMCrossSectionError()*dataNorm;
-    double chi=(fitCrossSection-CrossSection)/CrossSectionError;
-    double pointChiSquared=pow(chi,2.0);
-    segmentChiSquared+=pointChiSquared;
-    if(data.segment()->GetPoints().end()-1==data.point()) {
-      if(!isFit) thisSegment->SetSegmentChiSquared(segmentChiSquared);
-      if(data.segment()==lastSumIterator) {
-	firstSumIterator=localData->GetSegments().end();
-	lastSumIterator=localData->GetSegments().end();
-      }
-      double dataNormNominal=thisSegment->GetNominalNorm();
-      double dataNormError=dataNormNominal/100.*thisSegment->GetNormError();
-      if(dataNormError!=0.)
-	segmentChiSquared += pow((dataNorm-dataNormNominal)/dataNormError,2.0);
-      
-      // Add energy shift chi-squared contribution if energy shift is varied
-      if(thisSegment->IsVaryEnergyShift()) {
-        double energyShift=thisSegment->GetEnergyShift();
-        double energyShiftNominal=thisSegment->GetNominalEnergyShift();
-        double energyShiftError=thisSegment->GetEnergyShiftError();
-        if(energyShiftError!=0.)
-          segmentChiSquared += pow((energyShift-energyShiftNominal)/energyShiftError,2.0);
-      }
-      
-      chiSquared+=segmentChiSquared;
-    }
-  }
 
   // Process segments with components - use new integrated calculation method
+  double chiSquared=0.0;
   for(int i = 1; i <= localData->NumSegments(); i++) {
     ESegment* segment = localData->GetSegment(i);
-    if(segment && segment->HasComponents()) {
+    if(segment) {
       // Recalculate points using the new combined calculation method
       for(int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
         double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
@@ -118,6 +56,25 @@ double AZURECalc::operator()(const vector_r& p) const {
           }
         }
       }
+
+      // Add normalization chi-squared contribution
+      double dataNorm=segment->GetNorm();
+      double dataNormNominal=segment->GetNominalNorm();
+      double dataNormError=dataNormNominal/100.*segment->GetNormError();
+      if(dataNormError!=0.){
+	      chiSquared += pow((dataNorm-dataNormNominal)/dataNormError,2.0);
+      }
+
+      // Add energy shift chi-squared contribution
+      if(segment->IsVaryEnergyShift()) {
+        double energyShift=segment->GetEnergyShift();
+        double energyShiftNominal=segment->GetNominalEnergyShift();
+        double energyShiftError=segment->GetEnergyShiftError();
+        if(energyShiftError!=0.){
+          chiSquared += pow((energyShift-energyShiftNominal)/energyShiftError,2.0);
+        }
+      }
+
       segment->SetSegmentChiSquared(segmentChiSquared);
       chiSquared += segmentChiSquared;
     }
@@ -129,7 +86,7 @@ double AZURECalc::operator()(const vector_r& p) const {
   }
 
   if(!localData->IsErrorAnalysis()&&thisIteration!=0) {
-    if(thisIteration%100==0) configure().outStream
+    if(thisIteration%10==0) configure().outStream
 			       << "\r\tIteration: " << std::setw(6) << thisIteration
 			       << " Chi-Squared: " << chiSquared;  configure().outStream.flush();
 

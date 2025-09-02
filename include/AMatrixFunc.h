@@ -36,11 +36,16 @@ class AMatrixFunc : public GenMatrixFunc {
   matrix_c *GetJSpecAInvMatrix(int);
   void AddAInvMatrixElement(int,int,int,complex);
   void AddAMatrix(matrix_c);
+  void AddAMatrix(matrix_c&&);
  private:
   const Config &configure_;
   CNuc *compound_;
   vector_matrix_c a_inv_matrices_;
   vector_matrix_c a_matrices_;
+  int a_matrices_index_;  // Index for thread-safe AddAMatrix calls
+  // private:
+  std::vector<std::vector<int>> level_active_index_; // [jGroup-1][origLevel] -> activeIndex (1..k) or 0 if inactive
+
 };
 
 #endif

@@ -15,6 +15,7 @@
 #include <iostream>
 #include <assert.h>
 #include <fstream>
+#include <mutex>
 
 /*!
  * This constructor is used if the data point is to be created from a line in a data file.
