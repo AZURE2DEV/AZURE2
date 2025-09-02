@@ -1540,18 +1540,13 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc* the
     for(ESegmentIterator segment=data->GetSegments().begin();segment<data->GetSegments().end();segment++) {
       k++;
       // Always apply energy shift since parameters are always present for all segments
-      std::cout << "Updating energy shift for segment " << segment->GetSegmentKey() << ": " << p[i] << std::endl;
       if(segment->IsVaryEnergyShift() || p[i] != 0.0) {
-
-        std::cout << "Updating energy shift for segment " << segment->GetSegmentKey() << ": " << p[i] << std::endl;
 
         // Check if energy is the same, if so, continue
         //if(segment->GetEnergyShift() == p[i]) {
         //  i++;
         //  continue;
         //}
-
-        std::cout << "Updating energy shift for segment " << segment->GetSegmentKey() << ": " << p[i] << std::endl;
 
         segment->SetEnergyShift(p[i]); 
         segment->UpdatePointEnergiesWithShift(theCNuc, configure);
