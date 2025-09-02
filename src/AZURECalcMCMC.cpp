@@ -149,8 +149,6 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r& params_) co
   
   bool isFit = true; // For MCMC, we are always fitting
   
-  // Calculate chi-squared (same logic as original but without parameter filling)
-  double chiSquared=0.0;
   // Process segments with components - use new integrated calculation method
   double chiSquared=0.0;
   for(int i = 1; i <= localData->NumSegments(); i++) {
