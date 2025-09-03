@@ -116,7 +116,7 @@ bool AZUREAPI::UpdateParameters( ) {
   values_rwa_.clear( );
 
   AZUREParams params;
-  compound()->FillMnParams(params.GetMinuitParams());
+  compound()->FillMnParams(params.GetMinuitParams(), &configure());
   data()->FillMnParams(params.GetMinuitParams());
 
   compound()->FillCompoundFromParams(params.GetMinuitParams( ).Params( ));

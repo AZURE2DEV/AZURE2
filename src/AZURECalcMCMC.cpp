@@ -137,7 +137,7 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r& params_) co
     return -std::numeric_limits<double>::infinity();
   }
 
-  localCompound->FillMnParams(params.GetMinuitParams());
+  localCompound->FillMnParams(params.GetMinuitParams(), &configure());
   localData->FillMnParams(params.GetMinuitParams());
   localData->FillEnergyShiftsFromParams(params_,localData,localCompound,&configure());
   localCompound->FillCompoundFromParams(params.GetMinuitParams( ).Params( ));
@@ -200,7 +200,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r& physicalParams) const
   fixed_.clear();
   
   AZUREParams params;
-  compound()->FillMnParams(params.GetMinuitParams());
+  compound()->FillMnParams(params.GetMinuitParams(), &configure());
   data()->FillMnParams(params.GetMinuitParams());
   if(configure().paramMask & Config::USE_PREVIOUS_PARAMETERS) {
     params.ReadUserParameters(configure());
@@ -600,7 +600,7 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
             
             if (isValid) {
               AZUREParams params;
-              localCompound->FillMnParams(params.GetMinuitParams());
+              localCompound->FillMnParams(params.GetMinuitParams(), &g_mcmc_for_callbacks->configure());
               localData->FillMnParams(params.GetMinuitParams());
               localData->FillEnergyShiftsFromParams(fullParams, localData, localCompound, &g_mcmc_for_callbacks->configure());
               localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());

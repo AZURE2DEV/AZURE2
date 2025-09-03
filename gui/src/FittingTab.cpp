@@ -23,6 +23,9 @@
 #include "LevelsTab.h"
 #include "SegmentsTab.h"
 #include "AZURESetup.h"
+#include "CNuc.h"
+#include "Config.h"
+#include "AZUREParams.h"
 
 FittingTab::FittingTab(QWidget *parent) : QWidget(parent), 
     levelsTab_(nullptr), segmentsTab_(nullptr) {
@@ -53,9 +56,13 @@ FittingTab::FittingTab(QWidget *parent) : QWidget(parent),
     
     refreshButton = new QPushButton("Refresh from Current");
     loadButton = new QPushButton("Load from .sav file");
+    populateWignerLimitsButton = new QPushButton("Populate Wigner Limits");
+    clearLimitsButton = new QPushButton("Clear Limits");
     
     buttonLayout->addWidget(refreshButton);
     buttonLayout->addWidget(loadButton);
+    buttonLayout->addWidget(populateWignerLimitsButton);
+    buttonLayout->addWidget(clearLimitsButton);
     buttonLayout->addStretch();
     
     // Info buttons
@@ -74,6 +81,8 @@ FittingTab::FittingTab(QWidget *parent) : QWidget(parent),
     // Connect signals
     connect(refreshButton, SIGNAL(clicked()), this, SLOT(refreshParameters()));
     connect(loadButton, SIGNAL(clicked()), this, SLOT(loadSettings()));
+    connect(populateWignerLimitsButton, SIGNAL(clicked()), this, SLOT(populateWignerLimits()));
+    connect(clearLimitsButton, SIGNAL(clicked()), this, SLOT(clearLimits()));
     
     setLayout(mainLayout);
 }
@@ -1529,6 +1538,226 @@ void FittingTab::onSegmentEnergyShiftVaryChanged(int segmentIndex, bool vary) {
             updateParameterTableCheckbox(fittingParameters[i].name, vary);
             break;
         }
+    }
+}
+
+void FittingTab::populateWignerLimits() {
+    // Get reference to main AZURESetup window to access config
+    AZURESetup* azureSetup = qobject_cast<AZURESetup*>(window());
+    if (!azureSetup) {
+        QMessageBox::warning(this, "Error", "Cannot access AZURE setup configuration.");
+        return;
+    }
+    
+    // Check if Wigner Limits are activated in Runtime Options
+    if (!(azureSetup->GetConfig().paramMask & Config::USE_WIGNER_LIMITS)) {
+        QMessageBox::information(this, "Wigner Limits Not Activated", 
+            "Wigner Limits need to be activated in the Runtime Options before using this feature.\n\n"
+            "Please go to Edit → Runtime Options and enable 'Use Wigner Limits for parameter bounds'.");
+        return;
+    }
+    
+    // First, populate the fittingParameters from current GUI state
+    populateFromCurrentGUIState();
+    
+    try {
+        // Initialize compound objects as in AZUREMain
+        Config config = azureSetup->GetConfig();
+        CNuc compound;
+        if (compound.Fill(config) == -1) {
+            QMessageBox::warning(this, "Error", "Failed to initialize compound nucleus.");
+            return;
+        }
+        compound.Initialize(config);
+        
+        // Create AZUREParams and fill them from compound (same as AZUREMain)
+        AZUREParams params;
+        compound.FillMnParams(params.GetMinuitParams(), &config);
+        
+        // Get current parameter values
+        vector_r currentParams = params.GetMinuitParams().Params();
+        int numParams = currentParams.size();
+        
+        // Initialize arrays for limits
+        std::vector<double> lowerLimits(numParams, 0.0);
+        std::vector<double> upperLimits(numParams, 0.0);
+        std::vector<bool> isWidthParam(numParams, false);
+        int widthCount = 0;
+        
+        // Identify which parameters are widths and get their Wigner limits
+        for (int paramIndex = 0; paramIndex < numParams; paramIndex++) {
+            std::string paramName = params.GetMinuitParams().Parameter(paramIndex).GetName();
+            
+            // Check if this is a width parameter (format: "width_X_Y")
+            if (paramName.find("width_") == 0) {
+                isWidthParam[paramIndex] = true;
+                
+                // Extract level and channel indices from parameter name
+                size_t firstUnderscore = paramName.find("_", 6); // Find underscore after "width_"
+                if (firstUnderscore != std::string::npos) {
+                    int energyIndex = std::stoi(paramName.substr(6, firstUnderscore - 6));
+                    int widthIndex = std::stoi(paramName.substr(firstUnderscore + 1));
+                    
+                    // Find corresponding channel to get Wigner limit
+                    double wignerLimit = 0.0;
+                    bool found = false;
+                    
+                    // Iterate through compound structure to find the right channel
+                    int currentEnergyIndex = 1;
+                    for (int j = 1; j <= compound.NumJGroups() && !found; j++) {
+                        JGroup* jgroup = compound.GetJGroup(j);
+                        if (!jgroup) continue;
+                        
+                        for (int la = 1; la <= jgroup->NumLevels() && !found; la++) {
+                            if (currentEnergyIndex == energyIndex) {
+                                // This is the right level, find the channel
+                                int currentWidthIndex = 1;
+                                for (int ch = 1; ch <= jgroup->NumChannels(); ch++) {
+                                    if (currentWidthIndex == widthIndex) {
+                                        AChannel* channel = jgroup->GetChannel(ch);
+                                        if (channel) {
+                                            wignerLimit = channel->GetWignerLimit();
+                                            found = true;
+                                            break;
+                                        }
+                                    }
+                                    currentWidthIndex++;
+                                }
+                            }
+                            currentEnergyIndex++;
+                        }
+                    }
+                    
+                    if (found && wignerLimit > 0.0) {
+                        // Set parameter to -10 * Wigner_Limit and transform to get lower limit
+                        vector_r lowerParams = currentParams;
+                        lowerParams[paramIndex] = -10.0 * wignerLimit;
+                        compound.FillCompoundFromParams(lowerParams);
+                        compound.CalcShiftFunctions(config);
+                        compound.TransformOut(config);
+                        vector_r lowerPhysical = compound.GetTransformParams(config);
+                        
+                        // Set parameter to +10 * Wigner_Limit and transform to get upper limit  
+                        vector_r upperParams = currentParams;
+                        upperParams[paramIndex] = +10.0 * wignerLimit;
+                        compound.FillCompoundFromParams(upperParams);
+                        compound.CalcShiftFunctions(config);
+                        compound.TransformOut(config);
+                        vector_r upperPhysical = compound.GetTransformParams(config);
+
+                        // Store the physical limits
+                        if (paramIndex < lowerPhysical.size() && paramIndex < upperPhysical.size()) {
+                            lowerLimits[paramIndex] = lowerPhysical[paramIndex];
+                            upperLimits[paramIndex] = upperPhysical[paramIndex];
+
+                            widthCount++;
+                        }
+                        
+                        // Restore original compound state
+                        compound.FillCompoundFromParams(currentParams);
+                        compound.CalcShiftFunctions(config);
+                        compound.TransformOut(config);
+                    }
+                }
+            }
+        }
+        
+        if (widthCount == 0) {
+            QMessageBox::information(this, "No Width Parameters", 
+                "No width parameters found to populate with Wigner limits.");
+            return;
+        }
+        
+        // Apply the limits to our fitting parameters
+        // Need to map Minuit parameter indices to GUI parameter names correctly
+        // In GUI: widths are numbered consecutively across all levels (Level 1 Channel 1, Level 1 Channel 2, Level 2 Channel 1, etc.)
+        // In Minuit: widths are numbered per level (width_1_1, width_1_2, width_2_1, etc.)
+        
+        int consecutiveWidthNumber = 1;  // Track consecutive width numbering for GUI
+        
+        // Iterate through compound structure to build the correct mapping
+        int currentEnergyIndex = 1;
+        for (int j = 1; j <= compound.NumJGroups(); j++) {
+            JGroup* jgroup = compound.GetJGroup(j);
+            if (!jgroup) continue;
+            
+            for (int la = 1; la <= jgroup->NumLevels(); la++) {
+                // Skip energy parameter (currentEnergyIndex)
+                
+                // Process width parameters for this level
+                int currentWidthIndex = 1;
+                for (int ch = 1; ch <= jgroup->NumChannels(); ch++) {
+                    // Construct the Minuit parameter name for this width
+                    std::string minuitParamName = "width_" + std::to_string(currentEnergyIndex) + "_" + std::to_string(currentWidthIndex);
+                    
+                    // Find this parameter in our Minuit parameters
+                    for (int paramIndex = 0; paramIndex < numParams; paramIndex++) {
+                        if (isWidthParam[paramIndex] && 
+                            params.GetMinuitParams().Parameter(paramIndex).GetName() == minuitParamName) {
+                            
+                            // Construct the GUI parameter name using consecutive width numbering
+                            QString guiParamName = QString("Level %1 Channel %2 Width (eV)")
+                                .arg(currentEnergyIndex).arg(consecutiveWidthNumber);
+                            
+                            // Find this parameter in fittingParameters and update its limits
+                            for (int i = 0; i < fittingParameters.size(); i++) {
+                                if (fittingParameters[i].category == "level" && 
+                                    fittingParameters[i].name == guiParamName) {
+                                    
+                                    fittingParameters[i].lowerLimit = lowerLimits[paramIndex];
+                                    fittingParameters[i].upperLimit = upperLimits[paramIndex];
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                    
+                    consecutiveWidthNumber++;  // Increment consecutive width number
+                    currentWidthIndex++;       // Increment width index within this level
+                }
+                
+                currentEnergyIndex++;  // Move to next level
+            }
+        }
+        
+        // Refresh the parameter tables to show the updated limits
+        updateParameterTables();
+        
+        QMessageBox::information(this, "Success", 
+            QString("Applied Wigner limits to %1 width parameters.").arg(widthCount));
+            
+    } catch (const std::exception& e) {
+        QMessageBox::warning(this, "Error", 
+            QString("Error populating Wigner limits: %1").arg(e.what()));
+    } catch (...) {
+        QMessageBox::warning(this, "Error", "Unknown error occurred while populating Wigner limits.");
+    }
+}
+
+void FittingTab::clearLimits() {
+    // First, populate the fittingParameters from current GUI state
+    populateFromCurrentGUIState();
+    
+    // Set all limits to 0 for all parameters
+    int clearedCount = 0;
+    for (int i = 0; i < fittingParameters.size(); i++) {
+        if (fittingParameters[i].lowerLimit != 0.0 || fittingParameters[i].upperLimit != 0.0) {
+            fittingParameters[i].lowerLimit = 0.0;
+            fittingParameters[i].upperLimit = 0.0;
+            clearedCount++;
+        }
+    }
+    
+    // Refresh the parameter tables to show the cleared limits
+    updateParameterTables();
+    
+    if (clearedCount > 0) {
+        QMessageBox::information(this, "Success", 
+            QString("Cleared limits for %1 parameters. All limits are now set to 0 (unlimited).").arg(clearedCount));
+    } else {
+        QMessageBox::information(this, "No Changes", 
+            "All parameter limits were already set to 0.");
     }
 }
 

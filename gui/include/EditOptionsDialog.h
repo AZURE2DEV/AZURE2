@@ -25,6 +25,7 @@ Q_OBJECT
   QCheckBox* ignoreExternalsCheck;
   QCheckBox* useRMCCheck;
   QCheckBox* noTransformCheck;
+  QCheckBox* useWignerLimitsCheck;
   // QCheckBox* noLongWavelengthCheck;
 
  private slots:

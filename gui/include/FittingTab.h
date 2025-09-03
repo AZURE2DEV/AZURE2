@@ -64,6 +64,8 @@ class FittingTab : public QWidget {
   void parameterItemChanged(QTableWidgetItem* item);
   void loadSettings();
   void refreshParameters();
+  void populateWignerLimits();
+  void clearLimits();
   void onSegmentNormalizationChanged(int segmentIndex, double value);
   void onSegmentEnergyShiftChanged(int segmentIndex, double value);
   void onSegmentNormalizationErrorChanged(int segmentIndex, double error);
@@ -97,6 +99,8 @@ class FittingTab : public QWidget {
   
   QPushButton* refreshButton;
   QPushButton* loadButton;
+  QPushButton* populateWignerLimitsButton;
+  QPushButton* clearLimitsButton;
   
   QSignalMapper* mapper;
   QPushButton *infoButton[3];

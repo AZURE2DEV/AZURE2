@@ -150,6 +150,11 @@ int CNuc::Fill(const Config &configure, std::pair<int,double> radii) {
 	  if(this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->GetL()>maxLValue&&
 	     this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->GetRadType()=='P')
 	    maxLValue=this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->GetL();
+	  
+	  // Calculate and set Wigner Limit for the newly created channel
+	  PPair* channelPair = this->GetPair(PairNum);
+	  this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->SetWignerLimit(
+	    channelPair->GetRedMass(), channelPair->GetChRad());
 	}
 	ALevel NewLevel(Line);
 	LevelNum=this->GetJGroup(JGroupNum)->IsLevel(NewLevel);
@@ -240,6 +245,13 @@ void CNuc::ParseExternalCapture(const Config& configure,std::map<int,int>& ecPai
 	      if(fabs(chS-chL)<=jValue&&jValue<=chS+chL&&chPi==parity) {
 		AChannel newChannel(chL,chS,ir,'P');
 		this->GetJGroup(jGroupNum)->AddChannel(newChannel);
+		
+		// Calculate and set Wigner Limit for the newly created channel
+		int newChannelNum = this->GetJGroup(jGroupNum)->NumChannels();
+		PPair* channelPair = this->GetPair(ir);
+		this->GetJGroup(jGroupNum)->GetChannel(newChannelNum)->SetWignerLimit(
+		  channelPair->GetRedMass(), channelPair->GetChRad());
+		
 		this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddGamma(0.1);
 		NFIntegral newNFIntegral(this->GetPair(ir));
 		double nfIntegralValue=newNFIntegral(chL,exitPair->GetExE());
@@ -1198,7 +1210,7 @@ void CNuc::PrintAngularDists(const Config &configure) {
  * Fills the Minuit parameter array from initial values in the CNuc object.
  */
 
-void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
+void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config* config) {
   char varname[50];
   int energyIndex=1;
   for(int j=1;j<=this->NumJGroups();j++) {
@@ -1226,8 +1238,14 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
 	p.Add(varname,level->GetGamma(ch),0.1*level->GetGamma(ch));
 	if(level->GetGamma(ch)==0.0) p.Fix(varname);
 	if(level->ChannelFixed(ch)&&!p.Parameter(p.Index(varname)).IsFixed()) p.Fix(varname);
-	
-	// Parameter settings will be applied by ParameterLimitsManager during fit
+        // Apply Wigner Limit bounds if flag is enabled
+        if(config && (config->paramMask & Config::USE_WIGNER_LIMITS)) {
+          AChannel* channel = this->GetJGroup(j)->GetChannel(ch);
+          double wignerLimit = channel->GetWignerLimit();
+          if(wignerLimit > 0.0) {
+            p.SetLimits(varname, -10.0 * wignerLimit, 10.0 * wignerLimit);
+          }
+        }
       }
 	energyIndex++;
     }

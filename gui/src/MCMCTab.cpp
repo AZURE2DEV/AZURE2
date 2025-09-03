@@ -451,11 +451,11 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
         AZUREParams azureParams;
         if( isRWA ){
             compound->TransformIn(config);
-            compound->FillMnParams(azureParams.GetMinuitParams());
+            compound->FillMnParams(azureParams.GetMinuitParams(), &config);
             data->FillMnParams(azureParams.GetMinuitParams());
         }
         else {
-            compound->FillMnParams(azureParams.GetMinuitParams());
+            compound->FillMnParams(azureParams.GetMinuitParams(), &config);
             data->FillMnParams(azureParams.GetMinuitParams());
         }
 

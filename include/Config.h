@@ -57,7 +57,8 @@ class Config {
     USE_GSL_COULOMB_FUNC      =(1<<12),
     USE_LONGWAVELENGTH_APPROX =(1<<13),
     USE_API                   =(1<<14),
-    PERFORM_MCMC              =(1<<15)
+    PERFORM_MCMC              =(1<<15),
+    USE_WIGNER_LIMITS         =(1<<16)
   };
   /*!
    * Bit flags for check file control in AZURE2.

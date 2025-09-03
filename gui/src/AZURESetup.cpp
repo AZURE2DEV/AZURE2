@@ -392,6 +392,9 @@ bool AZURESetup::readLastRun(QTextStream& inStream) {
 
   if(paramMask & Config::USE_LONGWAVELENGTH_APPROX) GetConfig().paramMask |= Config::USE_LONGWAVELENGTH_APPROX;
   else GetConfig().paramMask &= ~Config::USE_LONGWAVELENGTH_APPROX;
+
+  if(paramMask & Config::USE_WIGNER_LIMITS) GetConfig().paramMask |= Config::USE_WIGNER_LIMITS;
+  else GetConfig().paramMask &= ~Config::USE_WIGNER_LIMITS;
   
   if(rateEntrancePair!=0) runTab->rateEntranceKey->setText(QString("%1").arg(rateEntrancePair));
   if(rateExitPair!=0) runTab->rateExitKey->setText(QString("%1").arg(rateExitPair));
@@ -803,6 +806,9 @@ void AZURESetup::editOptions() {
   if(!(GetConfig().paramMask & Config::TRANSFORM_PARAMETERS)) aDialog.noTransformCheck->setChecked(true);
   else aDialog.noTransformCheck->setChecked(false);
 
+  if(GetConfig().paramMask & Config::USE_WIGNER_LIMITS) aDialog.useWignerLimitsCheck->setChecked(true);
+  else aDialog.useWignerLimitsCheck->setChecked(false);
+
   //if(!(GetConfig().paramMask & Config::USE_LONGWAVELENGTH_APPROX)) aDialog.noLongWavelengthCheck->setChecked(true);
   //else aDialog.noLongWavelengthCheck->setChecked(false);
 
@@ -828,6 +834,9 @@ void AZURESetup::editOptions() {
     
     if(aDialog.noTransformCheck->isChecked()) GetConfig().paramMask &= ~Config::TRANSFORM_PARAMETERS;
     else GetConfig().paramMask |= Config::TRANSFORM_PARAMETERS;
+
+    if(aDialog.useWignerLimitsCheck->isChecked()) GetConfig().paramMask |= Config::USE_WIGNER_LIMITS;
+    else GetConfig().paramMask &= ~Config::USE_WIGNER_LIMITS;
 
     //if(aDialog.noLongWavelengthCheck->isChecked()) GetConfig().paramMask &= ~Config::USE_LONGWAVELENGTH_APPROX;
     //else GetConfig().paramMask |= Config::USE_LONGWAVELENGTH_APPROX;
@@ -1201,7 +1210,7 @@ double AZURESetup::ConvertRWAToPhysical(const QString& paramName, double rwaValu
     
     // Create parameter objects
     AZUREParams params;
-    compound->FillMnParams(params.GetMinuitParams());
+    compound->FillMnParams(params.GetMinuitParams(), &config);
     data->FillMnParams(params.GetMinuitParams());
     
     // Find the parameter index
@@ -1300,7 +1309,7 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysical(const QStringList& par
     
     // Create parameter objects
     AZUREParams params;
-    compound->FillMnParams(params.GetMinuitParams());
+    compound->FillMnParams(params.GetMinuitParams(), &config);
     data->FillMnParams(params.GetMinuitParams());
     
     // Get current RWA parameters as base

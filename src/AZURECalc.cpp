@@ -110,7 +110,7 @@ double AZURECalc::CalculateNuisanceChiSquared(const vector_r& p) const {
   
   // Create temporary AZUREParams to get parameter names
   AZUREParams tempParams;
-  compound()->FillMnParams(tempParams.GetMinuitParams());
+  compound()->FillMnParams(tempParams.GetMinuitParams(), &configure());
   data()->FillMnParams(tempParams.GetMinuitParams());
   
   // Build mapping from non-fixed parameter index to actual parameter index

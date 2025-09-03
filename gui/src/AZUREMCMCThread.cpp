@@ -120,7 +120,7 @@ void AZUREMCMCWorker::run() {
         // Create parameters (same as AZUREMain does after compound initialization)
         emit logMessage("Creating parameters...");
         AZUREParams params;
-        compound->FillMnParams(params.GetMinuitParams());
+        compound->FillMnParams(params.GetMinuitParams(), &config_);
         data->FillMnParams(params.GetMinuitParams());
         
         // Initialize data object (after parameter creation, same as AZUREMain)

@@ -12,6 +12,7 @@ EditOptionsDialog::EditOptionsDialog(QWidget* parent) : QDialog(parent) {
   ignoreExternalsCheck = new QCheckBox(tr("Ignore external width\nif internal width is zeroed"));
   useRMCCheck = new QCheckBox(tr("Use RMC capture formalism\n(neutron capture only)"));
   noTransformCheck = new QCheckBox(tr("Do not perform parameter\ntransformations"));
+  useWignerLimitsCheck = new QCheckBox(tr("Use Wigner Limits for\nparameter bounds (±10×Wigner Limit)"));
   // noLongWavelengthCheck = new QCheckBox(tr("Do not use long wavelength\n"
   //					   "approximation for EL external capture"));
 
@@ -25,6 +26,7 @@ EditOptionsDialog::EditOptionsDialog(QWidget* parent) : QDialog(parent) {
   optionsLayout->addWidget(ignoreExternalsCheck);
   optionsLayout->addWidget(useRMCCheck);
   optionsLayout->addWidget(noTransformCheck);
+  optionsLayout->addWidget(useWignerLimitsCheck);
   //optionsLayout->addWidget(noLongWavelengthCheck);
   optionsBox->setLayout(optionsLayout);
 

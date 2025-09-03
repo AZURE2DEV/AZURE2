@@ -19,12 +19,15 @@ class AChannel {
   double GetBoundaryCondition() const;
   char GetRadType() const;
   void SetBoundaryCondition(double);
+  void SetWignerLimit(double reducedMass, double channelRadius);
+  double GetWignerLimit() const;
  private:
   int l_;
   int pair_;
   double s_;
   char radtype_;
   double boundary_condition_;
+  double wigner_limit_;
 };
 
 #endif

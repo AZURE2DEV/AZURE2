@@ -344,7 +344,7 @@ void ParameterLimitsManager::ApplyParameterSettingByIndex(int nonFixedIndex, int
 
 int ParameterLimitsManager::FindParameterIndex(const std::string& paramName) const {
   AZUREParams tempParams;
-  compound_->FillMnParams(tempParams.GetMinuitParams());
+  compound_->FillMnParams(tempParams.GetMinuitParams(), config_);
   if(data_) data_->FillMnParams(tempParams.GetMinuitParams());
   
   for (int i = 0; i < tempParams.GetMinuitParams().Params().size(); ++i) {
@@ -380,7 +380,7 @@ double ParameterLimitsManager::ConvertPhysicalLimitToReduced(double physicalLimi
     }
 
     AZUREParams tempParams;
-    clone->FillMnParams(tempParams.GetMinuitParams());
+    clone->FillMnParams(tempParams.GetMinuitParams(), config_);
 
     vector_r reducedParams = tempParams.GetMinuitParams().Params();
     delete clone;
@@ -403,7 +403,7 @@ bool ParameterLimitsManager::IsNuisanceParameter(const std::string& paramName) c
   if(actualIndex >= 0) {
     // Convert actual index to non-fixed index
     AZUREParams tempParams;
-    compound_->FillMnParams(tempParams.GetMinuitParams());
+    compound_->FillMnParams(tempParams.GetMinuitParams(), config_);
     if(data_) data_->FillMnParams(tempParams.GetMinuitParams());
     
     int nonFixedIndex = 0;
@@ -474,7 +474,7 @@ double ParameterLimitsManager::GetParameterError(const std::string& paramName) c
   if(actualIndex >= 0) {
     // Convert actual index to non-fixed index
     AZUREParams tempParams;
-    compound_->FillMnParams(tempParams.GetMinuitParams());
+    compound_->FillMnParams(tempParams.GetMinuitParams(), config_);
     if(data_) data_->FillMnParams(tempParams.GetMinuitParams());
     
     int nonFixedIndex = 0;

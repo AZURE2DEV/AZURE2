@@ -44,7 +44,7 @@ public:
   void PrintBoundaryConditions(const Config&);
   void CalcAngularDists(int);
   void PrintAngularDists(const Config&);
-  void FillMnParams(ROOT::Minuit2::MnUserParameters&);
+  void FillMnParams(ROOT::Minuit2::MnUserParameters&, const Config* config = nullptr);
   void FillCompoundFromParamsPhysical(const vector_r &);
   void PrintCompoundFromParams();
   void FillCompoundFromParams(const vector_r &);

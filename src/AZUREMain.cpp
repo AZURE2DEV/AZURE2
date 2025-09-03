@@ -77,7 +77,7 @@ int AZUREMain::operator()(){
 
   //Create new parameters for minuit, fill them from compound nucleus object and data file.
   AZUREParams params;
-  compound()->FillMnParams(params.GetMinuitParams());
+  compound()->FillMnParams(params.GetMinuitParams(), &configure());
   data()->FillMnParams(params.GetMinuitParams());
   if(!(configure().paramMask & Config::USE_PREVIOUS_PARAMETERS)) {
     configure().outStream << "Creating New param.par File..." << std::endl;
