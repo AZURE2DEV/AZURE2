@@ -1574,99 +1574,78 @@ void FittingTab::populateWignerLimits() {
         AZUREParams params;
         compound.FillMnParams(params.GetMinuitParams(), &config);
         
-        // Get current parameter values
+        // Get current parameter values and limits already set by FillMnParams
         vector_r currentParams = params.GetMinuitParams().Params();
         int numParams = currentParams.size();
         
-        // Initialize arrays for limits
+        // Extract lower and upper limit values from parameters that already have Wigner limits set
         std::vector<double> lowerLimits(numParams, 0.0);
         std::vector<double> upperLimits(numParams, 0.0);
-        std::vector<bool> isWidthParam(numParams, false);
+        std::vector<bool> hasLimits(numParams, false);
         int widthCount = 0;
         
-        // Identify which parameters are widths and get their Wigner limits
+        // Check which parameters have limits set (from Wigner limits in FillMnParams)
         for (int paramIndex = 0; paramIndex < numParams; paramIndex++) {
-            std::string paramName = params.GetMinuitParams().Parameter(paramIndex).GetName();
-            
-            // Check if this is a width parameter (format: "width_X_Y")
-            if (paramName.find("width_") == 0) {
-                isWidthParam[paramIndex] = true;
+            const ROOT::Minuit2::MinuitParameter& param = params.GetMinuitParams().Parameter(paramIndex);
+            if (param.HasLimits()) {
+                // This parameter has limits - extract the lower and upper bounds
+                double lowerBound = param.LowerLimit();
+                double upperBound = param.UpperLimit();
                 
-                // Extract level and channel indices from parameter name
-                size_t firstUnderscore = paramName.find("_", 6); // Find underscore after "width_"
-                if (firstUnderscore != std::string::npos) {
-                    int energyIndex = std::stoi(paramName.substr(6, firstUnderscore - 6));
-                    int widthIndex = std::stoi(paramName.substr(firstUnderscore + 1));
-                    
-                    // Find corresponding channel to get Wigner limit
-                    double wignerLimit = 0.0;
-                    bool found = false;
-                    
-                    // Iterate through compound structure to find the right channel
-                    int currentEnergyIndex = 1;
-                    for (int j = 1; j <= compound.NumJGroups() && !found; j++) {
-                        JGroup* jgroup = compound.GetJGroup(j);
-                        if (!jgroup) continue;
-                        
-                        for (int la = 1; la <= jgroup->NumLevels() && !found; la++) {
-                            if (currentEnergyIndex == energyIndex) {
-                                // This is the right level, find the channel
-                                int currentWidthIndex = 1;
-                                for (int ch = 1; ch <= jgroup->NumChannels(); ch++) {
-                                    if (currentWidthIndex == widthIndex) {
-                                        AChannel* channel = jgroup->GetChannel(ch);
-                                        if (channel) {
-                                            wignerLimit = channel->GetWignerLimit();
-                                            found = true;
-                                            break;
-                                        }
-                                    }
-                                    currentWidthIndex++;
-                                }
-                            }
-                            currentEnergyIndex++;
-                        }
-                    }
-                    
-                    if (found && wignerLimit > 0.0) {
-                        // Set parameter to -10 * Wigner_Limit and transform to get lower limit
-                        vector_r lowerParams = currentParams;
-                        lowerParams[paramIndex] = -10.0 * wignerLimit;
-                        compound.FillCompoundFromParams(lowerParams);
-                        compound.CalcShiftFunctions(config);
-                        compound.TransformOut(config);
-                        vector_r lowerPhysical = compound.GetTransformParams(config);
-                        
-                        // Set parameter to +10 * Wigner_Limit and transform to get upper limit  
-                        vector_r upperParams = currentParams;
-                        upperParams[paramIndex] = +10.0 * wignerLimit;
-                        compound.FillCompoundFromParams(upperParams);
-                        compound.CalcShiftFunctions(config);
-                        compound.TransformOut(config);
-                        vector_r upperPhysical = compound.GetTransformParams(config);
-
-                        // Store the physical limits
-                        if (paramIndex < lowerPhysical.size() && paramIndex < upperPhysical.size()) {
-                            lowerLimits[paramIndex] = lowerPhysical[paramIndex];
-                            upperLimits[paramIndex] = upperPhysical[paramIndex];
-
-                            widthCount++;
-                        }
-                        
-                        // Restore original compound state
-                        compound.FillCompoundFromParams(currentParams);
-                        compound.CalcShiftFunctions(config);
-                        compound.TransformOut(config);
-                    }
+                std::string paramName = param.GetName();
+                if (paramName.find("width_") == 0) {
+                    hasLimits[paramIndex] = true;
+                    widthCount++;
                 }
             }
         }
         
         if (widthCount == 0) {
-            QMessageBox::information(this, "No Width Parameters", 
-                "No width parameters found to populate with Wigner limits.");
+            QMessageBox::information(this, "No Wigner Limits Found", 
+                "No width parameters found with Wigner limits set.\n\n"
+                "This might indicate that Wigner limits were not properly calculated during compound initialization.");
             return;
         }
+        
+        // Set all width parameters to their lower limits and transform
+        vector_r lowerParams = currentParams;
+        for (int paramIndex = 0; paramIndex < numParams; paramIndex++) {
+            if (hasLimits[paramIndex] && !params.GetMinuitParams().Parameter(paramIndex).IsFixed()) {
+                lowerParams[paramIndex] = params.GetMinuitParams().Parameter(paramIndex).LowerLimit();
+            }
+        }
+        compound.FillCompoundFromParams(lowerParams);
+        compound.CalcShiftFunctions(config);
+        compound.TransformOut(config);
+        vector_r lowerPhysical = compound.GetTransformParams(config);
+        
+        // Set all width parameters to their upper limits and transform
+        vector_r upperParams = currentParams;
+        for (int paramIndex = 0; paramIndex < numParams; paramIndex++) {
+            if (hasLimits[paramIndex] && !params.GetMinuitParams().Parameter(paramIndex).IsFixed()) {
+                upperParams[paramIndex] = params.GetMinuitParams().Parameter(paramIndex).UpperLimit();
+            }
+        }
+        
+        compound.FillCompoundFromParams(upperParams);
+        compound.CalcShiftFunctions(config);
+        compound.TransformOut(config);
+        vector_r upperPhysical = compound.GetTransformParams(config);
+        
+        // Store the physical limits
+        for (int paramIndex = 0; paramIndex < numParams; paramIndex++) {
+            if (hasLimits[paramIndex] && paramIndex < lowerPhysical.size() && paramIndex < upperPhysical.size()) {
+                lowerLimits[paramIndex] = lowerPhysical[paramIndex];
+                upperLimits[paramIndex] = upperPhysical[paramIndex];
+                
+                std::string paramName = params.GetMinuitParams().Parameter(paramIndex).GetName();
+            }
+        }
+        
+        // Restore original compound state
+        compound.FillCompoundFromParams(currentParams);
+        compound.CalcShiftFunctions(config);
+        compound.TransformOut(config);
         
         // Apply the limits to our fitting parameters
         // Need to map Minuit parameter indices to GUI parameter names correctly
@@ -1692,7 +1671,7 @@ void FittingTab::populateWignerLimits() {
                     
                     // Find this parameter in our Minuit parameters
                     for (int paramIndex = 0; paramIndex < numParams; paramIndex++) {
-                        if (isWidthParam[paramIndex] && 
+                        if (hasLimits[paramIndex] && 
                             params.GetMinuitParams().Parameter(paramIndex).GetName() == minuitParamName) {
                             
                             // Construct the GUI parameter name using consecutive width numbering

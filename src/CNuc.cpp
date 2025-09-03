@@ -1243,7 +1243,7 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config* config
           AChannel* channel = this->GetJGroup(j)->GetChannel(ch);
           double wignerLimit = channel->GetWignerLimit();
           if(wignerLimit > 0.0) {
-            p.SetLimits(varname, -10.0 * wignerLimit, 10.0 * wignerLimit);
+            p.SetLimits(varname, -100.0 * wignerLimit, 100.0 * wignerLimit);
           }
         }
       }
