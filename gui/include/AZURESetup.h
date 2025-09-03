@@ -51,6 +51,9 @@ class AZURESetup : public QMainWindow {
   
   // Batch convert multiple RWA parameters to physical values (much more efficient)
   std::vector<double> BatchConvertRWAToPhysical(const QStringList& paramNames, const std::vector<double>& rwaValues);
+  
+  // Getter for FittingTab (for MCMCTab access)
+  FittingTab* getFittingTab() const { return fittingTab; }
 
  public slots:
   void SaveAndRun();

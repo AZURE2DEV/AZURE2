@@ -40,7 +40,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
 
   CNuc* localCompound = NULL;
   EData* localData = NULL;
-  
+
   try {
     localCompound = compound()->Clone();
     localData = data()->Clone();
@@ -771,7 +771,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
       for(int j = 0; j < ndim; j++) {
         double paramValue = initialParams[j];
         double spread = fabs(paramValue) * spreadFraction;
-        if(spread == 0.0) spread = 0.01;
+        if(spread == 0.0) spread = 1e-6;
         std::normal_distribution<double> init_distribution(0.0, spread);
         pos[j] += init_distribution(generator);
       }

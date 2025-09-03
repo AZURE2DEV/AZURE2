@@ -283,45 +283,66 @@ void FittingTab::populateFromCurrentGUIState() {
     }
     
     // Get normalization and shift parameters from SegmentsDataModel
+    // IMPORTANT: Follow same order as EData::FillMnParams() - ALL norms first, then ALL shifts
     SegmentsDataModel* segmentsModel = segmentsTab_->getSegmentsDataModel();
     if(segmentsModel) {
         QList<SegmentsDataData> segments = segmentsModel->getLines();
+        
+        // First pass: Add normalization parameters (only for ACTIVE segments with varyNorm, like EData::FillMnParams)
         for(int i = 0; i < segments.size(); i++) {
             const SegmentsDataData& segment = segments[i];
             
-            // Add normalization parameter (always show, but useAsNuisance depends on varyNorm flag)
-            FittingParameter normParam;
-            // Use params.sav naming convention: segment_x_norm
-            normParam.name = QString("segment_%1_norm").arg(i + 1);
-            normParam.value = segment.dataNorm;
-            normParam.lowerLimit = 0;
-            normParam.upperLimit = 0;
-            normParam.error = segment.dataNormError;
-            normParam.fitError = 0.0;  // No fit error initially
-            normParam.useAsNuisance = (segment.varyNorm == 1);  // Active only when parameter varies
-            normParam.category = "norm";
-            normParam.minuitIndex = paramIndex++;
-            normParam.levelIndex = -1;
-            normParam.channelIndex = i;  // Store segment index for reverse lookup
+            // Only process active segments
+            if(segment.isActive == 1) {
+                // Always show norm parameter for active segments, but only add to Minuit if varyNorm=1 (like EData)
+                FittingParameter normParam;
+                // Use params.sav naming convention: segment_x_norm
+                normParam.name = QString("segment_%1_norm").arg(i + 1);
+                normParam.value = segment.dataNorm;
+                normParam.lowerLimit = 0;
+                normParam.upperLimit = 0;
+                normParam.error = segment.dataNormError;
+                normParam.fitError = 0.0;  // No fit error initially
+                normParam.useAsNuisance = (segment.varyNorm == 1);
+                normParam.category = "norm";
+                
+                // Only assign Minuit index if this parameter varies (gets added to Minuit)
+                if(segment.varyNorm == 1) {
+                    normParam.minuitIndex = paramIndex++;
+                } else {
+                    normParam.minuitIndex = -1;  // Not in Minuit parameter list
+                }
+                
+                normParam.levelIndex = -1;
+                normParam.channelIndex = i;  // Store segment index for reverse lookup
+                
+                fittingParameters.append(normParam);
+            }
+        }
+        
+        // Second pass: Add energy shift parameters (only for ACTIVE segments, like EData::FillMnParams)
+        for(int i = 0; i < segments.size(); i++) {
+            const SegmentsDataData& segment = segments[i];
             
-            fittingParameters.append(normParam);
-            
-            // Add energy shift parameter (always show, but useAsNuisance depends on varyEnergyShift flag)
-            FittingParameter shiftParam;
-            // Use params.sav naming convention: segment_x_energy_shift
-            shiftParam.name = QString("segment_%1_energy_shift").arg(i + 1);
-            shiftParam.value = segment.energyShift;
-            shiftParam.lowerLimit = 0;
-            shiftParam.upperLimit = 0;
-            shiftParam.error = segment.energyShiftError;
-            shiftParam.fitError = 0.0;  // No fit error initially
-            shiftParam.useAsNuisance = (segment.varyEnergyShift == 1);  // Active only when parameter varies
-            shiftParam.category = "shift";
-            shiftParam.minuitIndex = paramIndex++;
-            shiftParam.levelIndex = -1;
-            shiftParam.channelIndex = i;  // Store segment index for reverse lookup
-            
-            fittingParameters.append(shiftParam);
+            // Only process active segments
+            if(segment.isActive == 1) {
+                // Always add energy shift parameter to GUI and Minuit for active segments (like EData), but useAsNuisance depends on varyEnergyShift
+                FittingParameter shiftParam;
+                // Use params.sav naming convention: segment_x_energy_shift
+                shiftParam.name = QString("segment_%1_energy_shift").arg(i + 1);
+                shiftParam.value = segment.energyShift;
+                shiftParam.lowerLimit = 0;
+                shiftParam.upperLimit = 0;
+                shiftParam.error = segment.energyShiftError;
+                shiftParam.fitError = 0.0;  // No fit error initially
+                shiftParam.useAsNuisance = (segment.varyEnergyShift == 1);  // Active only when parameter varies
+                shiftParam.category = "shift";
+                shiftParam.minuitIndex = paramIndex++;  // Always gets Minuit index for active segments (like EData)
+                shiftParam.levelIndex = -1;
+                shiftParam.channelIndex = i;  // Store segment index for reverse lookup
+                
+                fittingParameters.append(shiftParam);
+            }
         }
     }
     
@@ -1317,7 +1338,7 @@ bool FittingTab::readParameterSettings(QTextStream& inStream) {
         if(line.isEmpty() || line.startsWith("#")) continue; // Skip empty lines and comments
         
         QStringList parts = line.split(" ", Qt::SkipEmptyParts);
-        if(parts.size() >= 8) {
+        if(parts.size() == 9) {
             FittingParameter param;
             param.name = parts[0];
             param.value = parts[1].toDouble(); // This will be overridden by current model values
@@ -1327,26 +1348,47 @@ bool FittingTab::readParameterSettings(QTextStream& inStream) {
             param.fitError = parts[5].toDouble();
             param.useAsNuisance = (parts[6].toInt() == 1);
             param.category = parts[7];
-            param.minuitIndex = (parts.size() >= 9) ? parts[8].toInt() : -1;
-        } else if(parts.size() >= 7) {
+            param.minuitIndex = parts[8].toInt();
+            savedParameterSettings.append(param);
+        }
+        else if(parts.size() == 12) {
             // Backward compatibility: old format without fitError
             FittingParameter param;
-            param.name = parts[0];
-            param.value = parts[1].toDouble();
-            param.lowerLimit = parts[2].toDouble();
-            param.upperLimit = parts[3].toDouble();
-            param.error = parts[4].toDouble();
-            param.fitError = 0.0; // Default for old format
-            param.useAsNuisance = (parts[5].toInt() == 1);
-            param.category = parts[6];
-            param.minuitIndex = (parts.size() >= 8) ? parts[7].toInt() : -1;
-            
+            param.name = parts[0] + " " + parts[1] + " " + parts[2] + " " + parts[3];
+            param.value = parts[4].toDouble();
+            param.lowerLimit = parts[5].toDouble();
+            param.upperLimit = parts[6].toDouble();
+            param.error = parts[7].toDouble();
+            param.fitError = parts[8].toDouble(); // Default for old format
+            param.useAsNuisance = (parts[9].toInt() == 1);
+            param.category = parts[10];
+            param.minuitIndex = parts[11].toInt();
+
             // Set defaults for level-specific parameters
-            param.levelIndex = -1;
+            param.levelIndex = parts[1].toInt();
             param.channelIndex = -1;
             
             savedParameterSettings.append(param);
-        }
+        } 
+        else if(parts.size() == 14) {
+            // Backward compatibility: old format without fitError
+            FittingParameter param;
+            param.name = parts[0] + " " + parts[1] + " " + parts[2] + " " + parts[3] + " " + parts[4] + " " + parts[5];
+            param.value = parts[6].toDouble();
+            param.lowerLimit = parts[7].toDouble();
+            param.upperLimit = parts[8].toDouble();
+            param.error = parts[9].toDouble();
+            param.fitError = parts[10].toDouble(); // Default for old format
+            param.useAsNuisance = (parts[11].toInt() == 1);
+            param.category = parts[12];
+            param.minuitIndex = parts[13].toInt();
+
+            // Set defaults for level-specific parameters
+            param.levelIndex = parts[1].toInt();
+            param.channelIndex = parts[3].toInt();
+            
+            savedParameterSettings.append(param);
+        } 
     }
     
     return true;

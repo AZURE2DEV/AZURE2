@@ -59,6 +59,49 @@ void AZUREParams::ReadUserParameters(const Config& configure) {
   }
 }
 
+void AZUREParams::ReadUserParameters(const std::string& filename) {
+  std::vector<std::string> names;
+  vector_r values;
+  vector_r errors;
+  std::vector<bool> fixed;
+  std::string tempname,tempfixed,tempfixed_nows;
+  double tempvalue,temperror;
+
+  std::ifstream in;
+  in.open(filename.c_str());
+  if(in) {
+    while(!in.eof()) {
+      in >> tempname >> tempvalue >> temperror; getline(in,tempfixed);
+      if(!in.eof()) {
+	names.push_back(tempname);
+	values.push_back(tempvalue);
+	errors.push_back(temperror);
+	tempfixed_nows.clear();
+	for(int i=0;i<tempfixed.length();i++) 
+	  if(tempfixed[i]!=' '&&tempfixed[i]!='\t') 
+	    tempfixed_nows.push_back(tempfixed[i]);
+	if(tempfixed_nows=="fixed") fixed.push_back(true);
+	else fixed.push_back(false);
+      }
+    }
+    in.close();
+  } else std::cout << "Could not read user parameter file." << std::endl;
+  
+  for(int i=0;i<GetMinuitParams().Params().size();i++) {
+    for(int ii=0;ii<names.size();ii++) {
+      if(GetMinuitParams().GetName(i)==names[ii]) {
+	if(GetMinuitParams().Value(i)==0.0&&values[ii]!=0.0&&
+	   GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Release(i);
+	if(GetMinuitParams().Value(i)!=0.0&&values[ii]==0.0&&
+	   !GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Fix(i);
+	GetMinuitParams().SetValue(i,values[ii]);
+	GetMinuitParams().SetError(i,errors[ii]);
+	if(fixed[ii]&&!GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Fix(i);
+      }
+    }
+  }
+}
+
 /*!
  * This function writes the formal R-matrix parameters to a file.
  */

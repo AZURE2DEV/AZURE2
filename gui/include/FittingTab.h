@@ -85,6 +85,11 @@ class FittingTab : public QWidget {
   double convertPhysicalToReduced(double physicalWidth, int levelIndex, int channelIndex);
   double transformRWAParameterToPhysical(const QString& paramName, double rwaValue);
 
+ public:
+  // Getter for fitting parameters (for MCMCTab access)
+  const QList<FittingParameter>& getFittingParameters() const { return fittingParameters; }
+
+ private:
   QTabWidget* paramTabWidget;
   QTableWidget* levelParamsTable;
   QTableWidget* normParamsTable;

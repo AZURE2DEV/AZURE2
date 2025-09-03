@@ -113,27 +113,38 @@ double AZURECalc::CalculateNuisanceChiSquared(const vector_r& p) const {
   compound()->FillMnParams(tempParams.GetMinuitParams());
   data()->FillMnParams(tempParams.GetMinuitParams());
   
-  // Check each parameter to see if it's marked as nuisance
-  for(int i = 0; i < tempParams.GetMinuitParams().Params().size() && i < p.size(); i++) {
-    std::string paramName = tempParams.GetMinuitParams().Parameter(i).GetName();
+  // Build mapping from non-fixed parameter index to actual parameter index
+  std::vector<int> nonFixedToActualIndex;
+  for(int i = 0; i < tempParams.GetMinuitParams().Params().size(); i++) {
+    if(!tempParams.GetMinuitParams().Parameter(i).IsFixed() || tempParams.GetMinuitParams().Parameter(i).GetName().find("segment") != std::string::npos) {
+      nonFixedToActualIndex.push_back(i);
+    }
+  }
+  
+  // Check each non-fixed parameter to see if it's marked as nuisance
+  for(int nonFixedIndex = 0; nonFixedIndex < nonFixedToActualIndex.size() && nonFixedIndex < p.size(); nonFixedIndex++) {
+    int actualIndex = nonFixedToActualIndex[nonFixedIndex];
+    std::string paramName = tempParams.GetMinuitParams().Parameter(actualIndex).GetName();
 
     // If norm or shift in param name, skip
     if(paramName.find("norm") != std::string::npos || paramName.find("shift") != std::string::npos) {
       continue;
     }
     
-    // Check if this parameter is marked as nuisance in ParameterLimitsManager
-    if(limitsManager_->IsNuisanceParameter(paramName)) {
-      double paramValue = p[i];
-      // Use converted nominal value (physical to reduced for width parameters)
-      double nominalValue = limitsManager_->GetConvertedNominalValue(paramName);
-      // Use converted error (physical to reduced for width parameters)
-      double paramError = limitsManager_->GetConvertedError(paramName);
-      
-      if(paramError > 0.0) {
-        double deviation = (paramValue - nominalValue) / paramError;
-        nuisanceChiSquared += deviation * deviation;
-      }
+    // First check if this parameter is marked as nuisance (fast check)
+    if(!limitsManager_->IsNuisanceParameterByIndex(nonFixedIndex)) {
+      continue; // Skip if not a nuisance parameter
+    }
+    
+    // Only do expensive conversions if parameter is marked as nuisance
+    double nominalValue = limitsManager_->GetConvertedNominalValueByIndex(nonFixedIndex);
+    double paramError = limitsManager_->GetConvertedErrorByIndex(nonFixedIndex);
+    
+    // If we got valid values (non-zero error means this parameter has valid nuisance settings)
+    if(paramError > 0.0) {
+      double paramValue = p[nonFixedIndex];      
+      double deviation = (paramValue - nominalValue) / paramError;
+      nuisanceChiSquared += deviation * deviation;
     }
   }
   

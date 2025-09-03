@@ -1,6 +1,7 @@
 #ifndef MCMCTAB_H
 #define MCMCTAB_H
 
+#include <string>
 #include <QWidget>
 #include <QSignalMapper>
 #include <QPointer>
@@ -38,6 +39,7 @@ class QProgressBar;
 class QTextEdit;
 class QTabWidget;
 class QTableWidget;
+class QTableWidgetItem;
 class QCheckBox;
 class QComboBox;
 
@@ -93,10 +95,10 @@ public slots:
 
 private slots:
     void mcmcFinished();
-    void parameterItemChanged();
+    void parameterItemChanged(QTableWidgetItem* item);
     void resetToDefaults();
-    void loadFromFittingTab();
-    void loadFromSavFile(); // Load parameters from .sav file without transformation
+    void loadFromPhysical();
+    void loadFromReduced(); // Load parameters from .sav file without transformation
     void refreshResultsFromFile(); // Load and calculate statistics from samples.mcmc file
 
 private:
@@ -111,7 +113,7 @@ private:
     bool loadSamplesFromFile(std::vector<std::vector<double>>& samples, QString& filePath); // Load samples from samples.mcmc file
     void calculateStatisticsFromSamples(const std::vector<std::vector<double>>& samples, bool isComplete = false); // Calculate and display statistics
     QString createPrettyParameterName(const QString& paramName, class CNuc* compound, class EData* data, int paramIndex) const; // Create user-friendly parameter names
-    void loadFromCurrentAZUREParams(); // Load parameters from current AZUREParams in reduced widths mode
+    void loadFromAZUREParams(bool isRWA, std::string filename=""); // Load parameters from current AZUREParams in reduced widths mode
 
     // Control buttons (private ones not accessed by AZURESetup)
     QPushButton* resetButton;

@@ -5,6 +5,7 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
+#include <string>
 #include "Constants.h"
 
 class Config;
@@ -21,6 +22,7 @@ class AZUREParams {
  public:
   ROOT::Minuit2::MnUserParameters &GetMinuitParams();
   void ReadUserParameters(const Config&);
+  void ReadUserParameters(const std::string&);
   void WriteUserParameters(const Config&,bool);
   void WriteParameterErrors(const std::vector<std::pair<double,double> >&,const Config&);
  private:
