@@ -4,6 +4,9 @@
 #include "Minuit2/FCNBase.h"
 #include "Constants.h"
 #include <vector>
+#include <memory>
+#include <mutex>
+#include <stack>
 
 class Config;
 class EData;
@@ -25,7 +28,7 @@ class AZURECalc : public ROOT::Minuit2::FCNBase {
    * The AZURECalc object is created with reference to an EData and CNuc object.
    *. The runtime configurations are also passed through a Config structure.
    */
-  AZURECalc(EData* data,CNuc* compound, const Config& configure, ParameterLimitsManager* limitsManager = nullptr) : configure_(configure) {
+  AZURECalc(EData* data,CNuc* compound, const Config& configure, ParameterLimitsManager* limitsManager = nullptr) : configure_(configure), pools_initialized_(false) {
     data_=data;
     compound_=compound;
     limitsManager_=limitsManager;
@@ -65,12 +68,28 @@ class AZURECalc : public ROOT::Minuit2::FCNBase {
    * Calculate nuisance parameter chi-squared contribution
    */
   double CalculateNuisanceChiSquared(const vector_r& p) const;
+  
+  /*!
+   * Object pool management methods
+   */
+  void InitializePools() const;
+  CNuc* GetPooledCNuc() const;
+  EData* GetPooledEData() const;
+  void ReturnPooledCNuc(CNuc* obj) const;
+  void ReturnPooledEData(EData* obj) const;
+  
  private:
   const Config &configure_;
   EData *data_;
   CNuc *compound_;
   ParameterLimitsManager *limitsManager_;
   double theErrorDef;
+  
+  // Object pools for memory reuse
+  mutable std::stack<std::unique_ptr<CNuc>> cnuc_pool_;
+  mutable std::stack<std::unique_ptr<EData>> edata_pool_;
+  mutable std::mutex pool_mutex_;
+  mutable bool pools_initialized_;
 };
 
 #endif

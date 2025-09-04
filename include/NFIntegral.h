@@ -4,6 +4,7 @@
 #include "PPair.h"
 #include "WhitFunc.h"
 #include <math.h>
+#include <memory>
 
 ///A function class to calculate the channel integrals in the denominator of the \f$ N_f^{1/2} \f$ term.
 
@@ -18,16 +19,14 @@ class NFIntegral {
    * The NFIntegral object is created with reference to a PPair object. A WhitFunc object is also created.  
    */
   NFIntegral(PPair* pPair) {
-    params_.whitFunc = new WhitFunc(pPair);
+    params_.whitFunc = std::make_unique<WhitFunc>(pPair);
     chanrad_ = pPair->GetChRad();
     total_sep_e_ = pPair->GetSepE()+pPair->GetExE();
   };
   /*!
-   * The WhitFunc object is destroyed with the NFIntegral object.
+   * The WhitFunc object is automatically destroyed with the NFIntegral object.
    */
-  ~NFIntegral() {
-    delete params_.whitFunc;
-  };
+  ~NFIntegral() = default;
   /*!
    * The parenthesis operator is defined so the instance can be callable as
    * a function.  The final channel orbital angular momentum and final state 
@@ -45,7 +44,7 @@ class NFIntegral {
  private:
   static double Integrand(double,void*);
   typedef struct Params {
-    WhitFunc *whitFunc;
+    std::unique_ptr<WhitFunc> whitFunc;
     int lfValue;
     double bindingEnergy;
     double whitChRadSquaredValue;

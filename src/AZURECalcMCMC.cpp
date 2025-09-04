@@ -14,6 +14,8 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <thread>
+#include <algorithm>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -42,8 +44,18 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
   EData* localData = NULL;
 
   try {
-    localCompound = compound()->Clone();
-    localData = data()->Clone();
+    // Initialize pools on first use
+    if (!pools_initialized_) {
+      InitializePools();
+    }
+    
+    // Get objects from pool
+    localCompound = GetPooledCNuc();
+    localData = GetPooledEData();
+    
+    // Copy data instead of deep cloning (reuse existing memory)
+    *localCompound = *compound();
+    *localData = *data();
 
     //Fill Compound Nucleus From Parameters
     AZUREParams params;
@@ -55,13 +67,13 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
     // Sub-segments are now integrated into ESegment, no separate initialization needed
   } catch (GSLException& e) {
     // Clean up and return bad likelihood for GSL errors
-    if(localCompound) delete localCompound;
-    if(localData) delete localData;
+    if(localCompound) ReturnPooledCNuc(localCompound);
+    if(localData) ReturnPooledEData(localData);
     return -std::numeric_limits<double>::infinity();
   } catch (...) {
     // Clean up and return bad likelihood for any other errors
-    if(localCompound) delete localCompound;
-    if(localData) delete localData;
+    if(localCompound) ReturnPooledCNuc(localCompound);
+    if(localData) ReturnPooledEData(localData);
     return -std::numeric_limits<double>::infinity();
   }
 
@@ -99,8 +111,9 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
     }
   }
 
-  delete localCompound;
-  delete localData;
+  // Return objects to pool instead of deleting
+  ReturnPooledCNuc(localCompound);
+  ReturnPooledEData(localData);
 
   // Convert chi-squared to log-likelihood: ln(L) = -0.5 * chi^2
   return -0.5 * chiSquared;
@@ -114,26 +127,36 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r& params_) co
   AZUREParams params;
   
   try {
-    localCompound = compound()->Clone();
-    localData = data()->Clone();
+    // Initialize pools on first use
+    if (!pools_initialized_) {
+      InitializePools();
+    }
+    
+    // Get objects from pool
+    localCompound = GetPooledCNuc();
+    localData = GetPooledEData();
+    
+    // Copy data instead of deep cloning (reuse existing memory)
+    *localCompound = *compound();
+    *localData = *data();
 
     localCompound->FillCompoundFromParamsPhysical(params_);
     bool isValid = localCompound->TransformIn( configure( ) );
     
     if(!isValid) {
-      delete localCompound;
-      delete localData;
+      ReturnPooledCNuc(localCompound);
+      ReturnPooledEData(localData);
       return -std::numeric_limits<double>::infinity();
     }
   } catch (GSLException& e) {
     // Clean up and return bad likelihood for GSL errors
-    if(localCompound) delete localCompound;
-    if(localData) delete localData;
+    if(localCompound) ReturnPooledCNuc(localCompound);
+    if(localData) ReturnPooledEData(localData);
     return -std::numeric_limits<double>::infinity();
   } catch (...) {
     // Clean up and return bad likelihood for any other errors
-    if(localCompound) delete localCompound;
-    if(localData) delete localData;
+    if(localCompound) ReturnPooledCNuc(localCompound);
+    if(localData) ReturnPooledEData(localData);
     return -std::numeric_limits<double>::infinity();
   }
 
@@ -181,8 +204,9 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r& params_) co
     }
   }
 
-  delete localCompound;
-  delete localData;
+  // Return objects to pool instead of deleting
+  ReturnPooledCNuc(localCompound);
+  ReturnPooledEData(localData);
 
   // Convert chi-squared to log-likelihood: ln(L) = -0.5 * chi^2
   return -0.5 * chiSquared;
@@ -930,4 +954,79 @@ void AZURECalcMCMC::LoadExistingSamples(const std::string& filename, std::vector
   }
   
   configure().outStream << "Loaded " << samples.size() << " existing samples from " << filename << "\n";
+}
+
+/*!
+ * Initialize object pools with pre-allocated CNuc and EData objects
+ */
+void AZURECalcMCMC::InitializePools() const {
+  std::lock_guard<std::mutex> lock(pool_mutex_);
+  if (pools_initialized_) return;
+  
+  // Calculate pool size based on available hardware threads
+  const int pool_size = std::max(4, static_cast<int>(std::thread::hardware_concurrency() * 2));
+  
+  // Pre-allocate CNuc objects
+  for (int i = 0; i < pool_size; ++i) {
+    cnuc_pool_.push(std::make_unique<CNuc>(*compound_));
+  }
+  
+  // Pre-allocate EData objects  
+  for (int i = 0; i < pool_size; ++i) {
+    edata_pool_.push(std::make_unique<EData>(*data_));
+  }
+  
+  pools_initialized_ = true;
+}
+
+/*!
+ * Get a CNuc object from the pool, creating new if pool is empty
+ */
+CNuc* AZURECalcMCMC::GetPooledCNuc() const {
+  std::lock_guard<std::mutex> lock(pool_mutex_);
+  
+  if (!cnuc_pool_.empty()) {
+    auto obj = cnuc_pool_.top().release();
+    cnuc_pool_.pop();
+    return obj;
+  }
+  
+  // Fallback: create new if pool is empty (shouldn't happen often)
+  return compound_->Clone();
+}
+
+/*!
+ * Get an EData object from the pool, creating new if pool is empty
+ */
+EData* AZURECalcMCMC::GetPooledEData() const {
+  std::lock_guard<std::mutex> lock(pool_mutex_);
+  
+  if (!edata_pool_.empty()) {
+    auto obj = edata_pool_.top().release();
+    edata_pool_.pop();
+    return obj;
+  }
+  
+  // Fallback: create new if pool is empty (shouldn't happen often)
+  return data_->Clone();
+}
+
+/*!
+ * Return a CNuc object to the pool for reuse
+ */
+void AZURECalcMCMC::ReturnPooledCNuc(CNuc* obj) const {
+  if (!obj) return;
+  
+  std::lock_guard<std::mutex> lock(pool_mutex_);
+  cnuc_pool_.push(std::unique_ptr<CNuc>(obj));
+}
+
+/*!
+ * Return an EData object to the pool for reuse  
+ */
+void AZURECalcMCMC::ReturnPooledEData(EData* obj) const {
+  if (!obj) return;
+  
+  std::lock_guard<std::mutex> lock(pool_mutex_);
+  edata_pool_.push(std::unique_ptr<EData>(obj));
 }

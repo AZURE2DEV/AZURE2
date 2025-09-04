@@ -4,6 +4,7 @@
 #include "CoulFunc.h"
 #include "WhitFunc.h"
 #include "Config.h"
+#include <memory>
 
 class EffectiveCharge;
 
@@ -23,19 +24,16 @@ class ECIntegral {
    * WhitFunc objects.  
    */
   ECIntegral(PPair *pPair, const Config& configure) {
-    params_.coulFunc = new CoulFunc(pPair,!!(configure.paramMask&Config::USE_GSL_COULOMB_FUNC));
-    params_.whitFunc = new WhitFunc(pPair);
+    params_.coulFunc = std::make_unique<CoulFunc>(pPair,!!(configure.paramMask&Config::USE_GSL_COULOMB_FUNC));
+    params_.whitFunc = std::make_unique<WhitFunc>(pPair);
     params_.useLongWavelengthApprox = !!(configure.paramMask&Config::USE_LONGWAVELENGTH_APPROX);
     pair_ = pPair;
     configure_ = &configure;
   };
   /*!
-   * The CoulFunc and WhitFunc objects are destroyed with the object.
+   * The CoulFunc and WhitFunc objects are automatically destroyed with the object.
    */
-  ~ECIntegral() {
-    delete params_.coulFunc;
-    delete params_.whitFunc;
-  };
+  ~ECIntegral() = default;
   complex operator()(int,int,double,double,double,double,int,char,double,double,bool,bool =false);
  private:
   void ResetIntegrals() {FW_=0.;GW_=0.;};
@@ -43,15 +41,15 @@ class ECIntegral {
   static double FWIntegrand(double,void*);
   static double GWIntegrand(double,void*);
   static double WWIntegrand(double,void*);
-  CoulFunc *coulfunction() const {return params_.coulFunc;};
-  WhitFunc *whitfunction() const {return params_.whitFunc;};
+  CoulFunc *coulfunction() const {return params_.coulFunc.get();};
+  WhitFunc *whitfunction() const {return params_.whitFunc.get();};
   PPair *pair() const {return pair_;};
   double FW() const {return FW_;};
   double GW() const {return GW_;};  
   typedef struct Params {
     EffectiveCharge* effectiveCharge;
-    CoulFunc *coulFunc;
-    WhitFunc *whitFunc;
+    std::unique_ptr<CoulFunc> coulFunc;
+    std::unique_ptr<WhitFunc> whitFunc;
     int liValue;
     int lfValue;
     int multLValue;

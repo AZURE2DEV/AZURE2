@@ -4,6 +4,9 @@
 #include "numcmc/mcmc.h"
 #include "Constants.h"
 #include <vector>
+#include <memory>
+#include <mutex>
+#include <stack>
 
 class Config;
 class EData;
@@ -25,7 +28,7 @@ class AZURECalcMCMC {
    * The runtime configurations are also passed through a Config structure.
    */
   AZURECalcMCMC(EData* data, CNuc* compound, const Config& configure) 
-    : configure_(configure), parametersInitialized_(false) {
+    : configure_(configure), parametersInitialized_(false), pools_initialized_(false) {
     data_=data;
     compound_=compound;
   };
@@ -141,6 +144,14 @@ class AZURECalcMCMC {
    */
   vector_r ReconstructFullParameters(const std::vector<double>& varyingParams) const;
 
+  /*!
+   * Object pool management methods
+   */
+  void InitializePools() const;
+  CNuc* GetPooledCNuc() const;
+  EData* GetPooledEData() const;
+  void ReturnPooledCNuc(CNuc* obj) const;
+  void ReturnPooledEData(EData* obj) const;
 
  private:
   const Config &configure_;
@@ -161,6 +172,12 @@ class AZURECalcMCMC {
   mutable std::vector<double> priorMeans_;
   mutable std::vector<double> priorStds_;
   mutable std::vector<bool> usePriors_;
+  
+  // Object pools for memory reuse
+  mutable std::stack<std::unique_ptr<CNuc>> cnuc_pool_;
+  mutable std::stack<std::unique_ptr<EData>> edata_pool_;
+  mutable std::mutex pool_mutex_;
+  mutable bool pools_initialized_;
 };
 
 #endif

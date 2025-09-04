@@ -9,8 +9,8 @@ extern double DoubleFactorial(int);
 
 double ECIntegral::FWIntegrand(double x, void * p) {
   Params *params = (Params*)p;
-  CoulFunc *theCoulFunc=(params->coulFunc);
-  WhitFunc *theWhitFunc=(params->whitFunc);
+  CoulFunc *theCoulFunc=(params->coulFunc.get());
+  WhitFunc *theWhitFunc=(params->whitFunc.get());
   int liValue = (params->liValue);
   int lfValue = (params->lfValue);
   int multLValue = (params->multLValue);
@@ -26,8 +26,8 @@ double ECIntegral::FWIntegrand(double x, void * p) {
 
 double ECIntegral::GWIntegrand(double x, void * p) {
   Params *params = (Params*)p;
-  CoulFunc *theCoulFunc=(params->coulFunc);
-  WhitFunc *theWhitFunc=(params->whitFunc);
+  CoulFunc *theCoulFunc=(params->coulFunc.get());
+  WhitFunc *theWhitFunc=(params->whitFunc.get());
   int liValue = (params->liValue);
   int lfValue = (params->lfValue);
   int multLValue = (params->multLValue);
@@ -43,7 +43,7 @@ double ECIntegral::GWIntegrand(double x, void * p) {
   
 double ECIntegral::WWIntegrand(double x, void * p) {
   Params *params = (Params*)p;
-  WhitFunc *theWhitFunc=(params->whitFunc);
+  WhitFunc *theWhitFunc=(params->whitFunc.get());
   int liValue = (params->liValue);
   int lfValue = (params->lfValue);
   int multLValue = (params->multLValue);

@@ -13,7 +13,7 @@ double ShftFunc::theWhitFunc(double x, void * p) {
   Params *params =(Params *)p;
   int l = (params->lValue);
   double bindingenergy = (params->bindingEnergy);
-  WhitFunc *whitFunc = (params->whitFunc);
+  WhitFunc *whitFunc = (params->whitFunc.get());
   
   return whitFunc->operator()(l,x,bindingenergy);
 }

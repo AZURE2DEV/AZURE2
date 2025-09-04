@@ -169,8 +169,8 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
 
   CNuc* localCompound = NULL;
   EData* localData = NULL;
-  localCompound = compound()->Clone();
-  localData = data()->Clone();
+  localCompound = compound();
+  localData = data();
 
   AZUREParams params;
   localCompound->FillCompoundFromParamsPhysical(params_);
@@ -247,9 +247,6 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
 
   }
 
-  delete localCompound;
-  delete localData;
-
   return calculatedSegments_.size( );
 
 }
@@ -274,8 +271,8 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
 
   CNuc* localCompound = NULL;
   EData* localData = NULL;
-  localCompound = compound()->Clone();
-  localData = data()->Clone();
+  localCompound = compound();
+  localData = data();
 
   AZUREParams params;
   localCompound->FillCompoundFromParams(params_);
@@ -344,9 +341,6 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
     calculatedAngles_.push_back( angles );
 
   }
-
-  delete localCompound;
-  delete localData;
 
   return calculatedSegments_.size( );
 
@@ -444,8 +438,8 @@ int AZUREAPI::UpdateData( ) {
 
   CNuc* localCompound = NULL;
   EData* localData = NULL;
-  localCompound = compound()->Clone();
-  localData = data()->Clone();
+  localCompound = compound();
+  localData = data();
 
   int newKey  = -1;
   int prevKey = -1;
@@ -478,9 +472,6 @@ int AZUREAPI::UpdateData( ) {
     dataConv_.push_back( conv );
 
   }
-
-  delete localCompound;
-  delete localData;
 
   return nSegments;
 

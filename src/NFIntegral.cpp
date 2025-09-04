@@ -3,7 +3,7 @@
 
 double NFIntegral::Integrand(double x, void * p) {
   Params *params = (Params*)p;
-  WhitFunc *whitFunc=(params->whitFunc);
+  WhitFunc *whitFunc=(params->whitFunc.get());
   int lfValue=(params->lfValue);
   double bindingEnergy=(params->bindingEnergy);
   double whitChRadSquaredValue=(params->whitChRadSquaredValue);

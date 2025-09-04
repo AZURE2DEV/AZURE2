@@ -45,6 +45,13 @@ class AMatrixFunc : public GenMatrixFunc {
   int a_matrices_index_;  // Index for thread-safe AddAMatrix calls
   // private:
   std::vector<std::vector<int>> level_active_index_; // [jGroup-1][origLevel] -> activeIndex (1..k) or 0 if inactive
+  
+  // Pre-allocated buffers to prevent memory fragmentation
+  mutable std::vector<std::vector<double>> levelGammas_;
+  mutable std::vector<double> levelEnergies_;
+  mutable std::vector<std::vector<double>> shiftFunctions_;
+  mutable int cached_max_levels_;
+  mutable int cached_max_channels_;
 
 };
 

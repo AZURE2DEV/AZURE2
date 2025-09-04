@@ -16,7 +16,8 @@
  */
 
 AMatrixFunc::AMatrixFunc(CNuc* compound, const Config &configure) :
-  compound_(compound), configure_(configure), a_matrices_index_(0) {}
+  compound_(compound), configure_(configure), a_matrices_index_(0), 
+  cached_max_levels_(0), cached_max_channels_(0) {}
 
 /*!
  * Returns an A-Matrix element specified by positions in the JGroup and ALevel vectors. 
@@ -103,21 +104,30 @@ void AMatrixFunc::FillMatrices (EPoint *point) {
       int numLevels = jGroup->NumLevels();
       int numChannels = jGroup->NumChannels();
       
-      // Pre-cache gamma values for all levels and channels to avoid repeated function calls
-      std::vector<std::vector<double>> levelGammas(numLevels + 1);
-      std::vector<double> levelEnergies(numLevels + 1);
-      std::vector<std::vector<double>> shiftFunctions(numLevels + 1);
+      // Ensure pre-allocated buffers are large enough - resize only when needed
+      if(numLevels > cached_max_levels_ || numChannels > cached_max_channels_) {
+        cached_max_levels_ = std::max(numLevels, cached_max_levels_);
+        cached_max_channels_ = std::max(numChannels, cached_max_channels_);
+        
+        levelGammas_.resize(cached_max_levels_ + 1);
+        levelEnergies_.resize(cached_max_levels_ + 1);
+        shiftFunctions_.resize(cached_max_levels_ + 1);
+        
+        for(int la = 0; la <= cached_max_levels_; la++) {
+          levelGammas_[la].resize(cached_max_channels_ + 1);
+          shiftFunctions_[la].resize(cached_max_channels_ + 1);
+        }
+      }
       
+      // Pre-cache gamma values for all levels and channels using pre-allocated buffers
       for(int la=1; la<=numLevels; la++) {
         if(jGroup->GetLevel(la)->IsInRMatrix()) {
           ALevel *level = jGroup->GetLevel(la);
-          levelGammas[la].resize(numChannels + 1);
-          shiftFunctions[la].resize(numChannels + 1);
-          levelEnergies[la] = level->GetFitE();
+          levelEnergies_[la] = level->GetFitE();
           
           for(int ch=1; ch<=numChannels; ch++) {
-            levelGammas[la][ch] = level->GetFitGamma(ch);
-            shiftFunctions[la][ch] = level->GetShiftFunction(ch);
+            levelGammas_[la][ch] = level->GetFitGamma(ch);
+            shiftFunctions_[la][ch] = level->GetShiftFunction(ch);
           }
         }
       }
@@ -130,8 +140,8 @@ void AMatrixFunc::FillMatrices (EPoint *point) {
 	      ALevel *levelp=jGroup->GetLevel(lap);
 	      complex sum(0.0,0.0);
 	      for(int ch=1;ch<=numChannels;ch++) {
-		double gammaCh=levelGammas[la][ch];
-		double gammaChp=levelGammas[lap][ch];
+		double gammaCh=levelGammas_[la][ch];
+		double gammaChp=levelGammas_[lap][ch];
 		
 		// Early termination for effectively zero gamma values
 		if(fabs(gammaCh) < 1.0e-12 || fabs(gammaChp) < 1.0e-12) continue;
@@ -149,14 +159,14 @@ void AMatrixFunc::FillMatrices (EPoint *point) {
 		  sum+=complex(0.0,1.0)*gammaCh*gammaChp;
 		if((configure().paramMask & Config::USE_BRUNE_FORMALISM) && radType=='P') {
 		  sum+=gammaCh*gammaChp*channel->GetBoundaryCondition();
-		  if(la==lap) sum-=gammaCh*gammaChp*shiftFunctions[la][ch];
+		  if(la==lap) sum-=gammaCh*gammaChp*shiftFunctions_[la][ch];
 		  else sum-=gammaCh*gammaChp*
-			 (shiftFunctions[la][ch]*(inEnergy-levelEnergies[lap])-shiftFunctions[lap][ch]*(inEnergy-levelEnergies[la]))/
-			 (levelEnergies[la]-levelEnergies[lap]);				
+			 (shiftFunctions_[la][ch]*(inEnergy-levelEnergies_[lap])-shiftFunctions_[lap][ch]*(inEnergy-levelEnergies_[la]))/
+			 (levelEnergies_[la]-levelEnergies_[lap]);				
 		}
 	      }
 	      if(la==lap) {
-		double resenergy=levelEnergies[la];
+		double resenergy=levelEnergies_[la];
 		this->AddAInvMatrixElement(j,la,lap,resenergy-inEnergy-sum);
 	      } else this->AddAInvMatrixElement(j,la,lap,-sum);
 	    }

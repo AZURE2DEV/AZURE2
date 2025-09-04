@@ -3,6 +3,7 @@
 
 #include "PPair.h"
 #include "WhitFunc.h"
+#include <memory>
 
 class ShftFunc;
 
@@ -23,14 +24,12 @@ class ShftFunc {
   ShftFunc(PPair* pPair) {
     totalSepE_=pPair->GetSepE()+pPair->GetExE();
     radius_=(double) pPair->GetChRad();
-    params_.whitFunc= new WhitFunc(pPair);
+    params_.whitFunc= std::make_unique<WhitFunc>(pPair);
   };
   /*!
    *
    */
-  ~ShftFunc() {
-    delete params_.whitFunc;
-  };
+  ~ShftFunc() = default;
   /*!
    * The parenthesis operator is defined to make the class instance callable as a function.  The orbital
    * angular momentum and energy in the compound system are the dependent variables.
@@ -50,7 +49,7 @@ class ShftFunc {
   typedef struct Params {
     int lValue;
     double bindingEnergy;
-    WhitFunc *whitFunc;    
+    std::unique_ptr<WhitFunc> whitFunc;    
   } Params;
   Params params_;
   double totalSepE_;
