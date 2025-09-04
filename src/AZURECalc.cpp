@@ -16,21 +16,23 @@ double AZURECalc::operator()(const vector_r& p) const {
   data()->Iterate();
   bool isFit=data()->IsFit();
 
-  CNuc * localCompound = NULL;
+  CNuc *localCompound = NULL;
   EData *localData = NULL;
   if(isFit) {
     // Initialize pools on first use
-    if (!pools_initialized_) {
-      InitializePools();
-    }
+    //if (!pools_initialized_) {
+    //  InitializePools();
+    //}
     
     // Get objects from pool
-    localCompound = GetPooledCNuc();
-    localData = GetPooledEData();
+    //localCompound = GetPooledCNuc();
+    //localData = GetPooledEData();
     
     // Copy data instead of deep cloning (reuse existing memory)
-    *localCompound = *compound();
-    *localData = *data();
+    //*localCompound = *compound();
+    //*localData = *data();
+    localCompound = compound()->Clone();
+    localData = data()->Clone();
   } else {
     localCompound = compound();
     localData = data();
@@ -103,6 +105,10 @@ double AZURECalc::operator()(const vector_r& p) const {
 			       << " Chi-Squared: " << chiSquared;  configure().outStream.flush();
 
     if(thisIteration%1000==0) {
+      //AZUREParams params;
+      //localCompound->FillMnParams(params.GetMinuitParams(), &configure());
+      //localData->FillMnParams(params.GetMinuitParams());
+      //WriteParameters(params,configure());
       localData->WriteOutputFiles(configure(),isFit);
       localCompound->TransformOut(configure());
       localCompound->PrintTransformParams(configure());
@@ -110,8 +116,10 @@ double AZURECalc::operator()(const vector_r& p) const {
   }
   if(isFit) {
     // Return objects to pool instead of deleting
-    ReturnPooledCNuc(localCompound);
-    ReturnPooledEData(localData);
+    //ReturnPooledCNuc(localCompound);
+    //ReturnPooledEData(localData);
+    delete localCompound;
+    delete localData;
   }
 
   // Make a check if chiSquared is NaN
@@ -243,4 +251,24 @@ void AZURECalc::ReturnPooledEData(EData* obj) const {
   
   std::lock_guard<std::mutex> lock(pool_mutex_);
   edata_pool_.push(std::unique_ptr<EData>(obj));
+}
+
+/*!
+ * Write parameters to file
+ */
+void AZURECalc::WriteParameters(AZUREParams& params, const Config& configure) const {
+  char filename[256];
+  sprintf(filename,"%sparam.fit",configure.outputdir.c_str());
+  std::ofstream out;
+  out.open(filename);
+  if(out) {
+    out.precision(7);
+    for(int i=0;i<params.GetMinuitParams().Params().size();i++) {
+      out << std::setw(20) << params.GetMinuitParams().GetName(i)
+	  << std::scientific << std::setw(20) <<  params.GetMinuitParams().Value(i)
+	  << std::scientific << std::setw(20) <<  params.GetMinuitParams().Error(i) << std::endl;
+    }
+    out.flush();
+    out.close();
+  } else configure.outStream << "Could not save param.fit file." << std::endl;
 }

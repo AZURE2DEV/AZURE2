@@ -3,6 +3,7 @@
 
 #include "Minuit2/FCNBase.h"
 #include "Constants.h"
+#include "AZUREParams.h"
 #include <vector>
 #include <memory>
 #include <mutex>
@@ -77,7 +78,12 @@ class AZURECalc : public ROOT::Minuit2::FCNBase {
   EData* GetPooledEData() const;
   void ReturnPooledCNuc(CNuc* obj) const;
   void ReturnPooledEData(EData* obj) const;
-  
+
+  /*!
+   * Write parameters to file
+   */
+  void WriteParameters(AZUREParams& params, const Config& configure) const;
+
  private:
   const Config &configure_;
   EData *data_;
