@@ -754,3 +754,41 @@ double AZUREAPI::CalculateChi2Physical(const vector_r& physicalParams) const {
   
   return chiSquared;
 }
+
+// Function to get indeces of non-fixed normalization parameters
+vector_r AZUREAPI::GetNormalizationIndices( ) {
+
+  int k = 0;
+  vector_r indices;
+  int totalParams = all_rwa_.size();
+  for(int i = 0; i < totalParams; ++i) {
+    if(!fixed_[i]) {
+      // Check if "norm" is in the parameter name
+      if(names_[i].find("norm") != std::string::npos) {
+        indices.push_back(k);
+      }
+      ++k;
+    }
+  }
+
+  return indices;
+}
+
+// Function to get indeces of non-fixed energy shift parameters
+vector_r AZUREAPI::GetEnergyShiftIndices( ) {
+
+  int k = 0;
+  vector_r indices;
+  int totalParams = all_rwa_.size();
+  for(int i = 0; i < totalParams; ++i) {
+    if(!fixed_[i]) {
+      // Check if "Eshift" is in the parameter name
+      if(names_[i].find("shift") != std::string::npos) {
+        indices.push_back(k);
+      }
+      ++k;
+    }
+  }
+
+  return indices;
+}

@@ -316,6 +316,18 @@ bool AZURESocket::start() {
 
     }
 
+    // Get indices of normalization parameters
+    else if( buffer[0] == 30 ){   
+      vector_r response = api_->GetNormalizationIndices( );
+      sendPacket( response );
+    }
+
+    // Get indices of energy shift parameters
+    else if( buffer[0] == 31 ){   
+      vector_r response = api_->GetEnergyShiftIndices( );
+      sendPacket( response );
+    }
+
   }
 
   // Close sockets

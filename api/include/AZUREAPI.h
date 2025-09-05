@@ -52,6 +52,10 @@ class AZUREAPI {
   void SetExtrap( );
   // Set radius to a fixed value
   void SetRadius( int idx, double r );
+  // Get indeces of normalization parameters
+  vector_r GetNormalizationIndices( );
+  // Get indeces of energy shift parameters
+  vector_r GetEnergyShiftIndices( );
   
   /*!
    * Returns a reference to the Config structure.
