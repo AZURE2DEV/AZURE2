@@ -1418,30 +1418,11 @@ ESegment* EData::CreateComponentSegment(const ESegment& baseSegment, int entranc
  */
 
 void EData::MapData() {
-  for(ESegmentIterator segment=GetSegments().end()-1; 
-      segment>=GetSegments().begin(); segment--) {
-    for(EPointIterator point=segment->GetPoints().end()-1;
-	point>=segment->GetPoints().begin();point--) {
-      if(point->NumLocalMappedPoints()==0) {
-	for(ESegmentIterator testSegment=GetSegments().begin();
-	    testSegment<GetSegments().end(); testSegment++) {
-	  if(testSegment->GetEntranceKey()==segment->GetEntranceKey()&&
-	     testSegment->GetExitKey()==segment->GetExitKey()) {
-	    for(EPointIterator testPoint=testSegment->GetPoints().begin();
-		testPoint<testSegment->GetPoints().end();testPoint++) {
-	      if(testPoint->GetCMEnergy()==point->GetCMEnergy()
-		 &&!testPoint->IsMapped()&&point!=testPoint
-		 &&testPoint->GetTargetEffectNum()==point->GetTargetEffectNum()) {
-		point->SetMap(testSegment-GetSegments().begin()+1,
-			      testPoint-testSegment->GetPoints().begin()+1);
-		testPoint->AddLocalMappedPoint(&*point);
-		break;
-	      }
-	    }
-	    if(point->IsMapped()) break;
-	  }
-	}
-      }
+  // Disable all point mapping - just clear existing mappings
+  for(ESegmentIterator segment=GetSegments().begin(); segment<GetSegments().end(); segment++) {
+    for(EPointIterator point=segment->GetPoints().begin(); point<segment->GetPoints().end(); point++) {
+      point->ClearMapping();
+      point->ClearLocalMappedPoints();
     }
   }
 }
@@ -1544,12 +1525,13 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc* the
       if(segment->IsVaryEnergyShift() || p[i] != 0.0) {
 
         // Check if energy is the same, if so, continue
-        //if(segment->GetEnergyShift() == p[i]) {
-        //  i++;
-        //  continue;
-        //}
+        if(segment->GetLastEnergyShift() == p[i]) {
+          i++;
+          continue;
+        }
 
-        segment->SetEnergyShift(p[i]); 
+        segment->SetEnergyShift(p[i]);
+        segment->SetLastEnergyShift(p[i]);
         segment->UpdatePointEnergiesWithShift(theCNuc, configure);
         anyEnergyShifted = true;
         
@@ -1571,7 +1553,15 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc* the
           const std::vector<ESegment*>& componentSegments = segment->GetComponentSegments();
           for(ESegment* componentSegment : componentSegments) {
             if(componentSegment) {
+
+              // Check if energy is the same, if so, continue
+              if(componentSegment->GetLastEnergyShift() == p[i]) {
+                i++;
+                continue;
+              }
+
               componentSegment->SetEnergyShift(p[i]);
+              componentSegment->SetLastEnergyShift(p[i]);
               componentSegment->UpdatePointEnergiesWithShift(theCNuc, configure);
               anyEnergyShifted = true;
             }

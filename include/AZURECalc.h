@@ -91,7 +91,7 @@ class AZURECalc : public ROOT::Minuit2::FCNBase {
   ParameterLimitsManager *limitsManager_;
   double theErrorDef;
   
-  // Object pools for memory reuse
+  // Object pools for memory reuse - store cloned objects directly
   mutable std::stack<std::unique_ptr<CNuc>> cnuc_pool_;
   mutable std::stack<std::unique_ptr<EData>> edata_pool_;
   mutable std::mutex pool_mutex_;

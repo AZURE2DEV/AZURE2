@@ -41,6 +41,7 @@ ESegment::ESegment(SegLine segLine) {
   dataNorm_= dataNormNominal_ = segLine.dataNorm();
   dataNormError_=segLine.dataNormError();
   energyShift_=energyShiftNominal_=segLine.energyShift();
+  lastEnergyShift_=0.0;
   energyShiftError_=segLine.energyShiftError();
   if(segLine.varyEnergyShift()==1) varyEnergyShift_=true;
   else varyEnergyShift_=false;
@@ -99,6 +100,7 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   dataNormError_=0.;
   energyShift_=energyShiftNominal_=0.0;
   energyShiftError_=0.0;
+  lastEnergyShift_=0.0;
   varyEnergyShift_=false;
   varyNorm_=false;
   isAdvanced_=false;
@@ -409,6 +411,13 @@ double ESegment::GetEnergyShift() const {
 }
 
 /*!
+ * Returns the last applied energy shift value for the data segment.
+ */
+double ESegment::GetLastEnergyShift() const {
+  return lastEnergyShift_;
+}
+
+/*!
  * Returns the nominal energy shift value for the data segment.
  */
 
@@ -465,6 +474,13 @@ void ESegment::SetEnergyShift(double energyShift) {
 }
 
 /*!
+ * Sets the last applied energy shift value for the data segment.
+ */
+void ESegment::SetLastEnergyShift(double lastEnergyShift) {
+  lastEnergyShift_=lastEnergyShift;
+}
+
+/*!
  * Updates the energies of all points in this segment based on the current energy shift.
  */
 
@@ -487,12 +503,6 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
       
       // Set the shifted energy
       point->SetLabEnergy(shiftedEnergy);
-
-      // Clear existing mappings
-      if(point->IsMapped()) {
-        point->ClearMapping();
-        point->ClearLocalMappedPoints();
-      }
 
       // Recalculate energy dependent values
       if(theCNuc && configure) {

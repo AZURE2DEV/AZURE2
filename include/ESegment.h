@@ -56,6 +56,7 @@ class ESegment {
   double GetNominalNorm() const;
   double GetNormError() const;
   double GetEnergyShift() const;
+  double GetLastEnergyShift() const;
   double GetNominalEnergyShift() const;
   double GetEnergyShiftError() const;
   bool IsVaryEnergyShift() const;
@@ -69,6 +70,7 @@ class ESegment {
   void SetSegmentKey(int);
   void SetNorm(double);
   void SetEnergyShift(double);
+  void SetLastEnergyShift(double);
   void UpdatePointEnergiesWithShift(CNuc* theCNuc = NULL, const Config* configure = NULL);
   void SetExitKey(int);
   void SetEntranceKey(int);
@@ -114,6 +116,7 @@ class ESegment {
   double dataNormNominal_;
   double dataNormError_;
   double energyShift_;
+  double lastEnergyShift_; // To track last applied energy shift
   double energyShiftNominal_;
   double energyShiftError_;
   bool varyEnergyShift_;

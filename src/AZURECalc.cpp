@@ -19,18 +19,19 @@ double AZURECalc::operator()(const vector_r& p) const {
   CNuc *localCompound = NULL;
   EData *localData = NULL;
   if(isFit) {
+
+    // Uncomment this block to enable object pooling for CNuc and EData
+    // Then comment out the direct cloning lines below
+    /*
     // Initialize pools on first use
-    //if (!pools_initialized_) {
-    //  InitializePools();
-    //}
+    if (!pools_initialized_) {
+      InitializePools();
+    }
     
     // Get objects from pool
-    //localCompound = GetPooledCNuc();
-    //localData = GetPooledEData();
-    
-    // Copy data instead of deep cloning (reuse existing memory)
-    //*localCompound = *compound();
-    //*localData = *data();
+    localCompound = GetPooledCNuc();
+    localData = GetPooledEData();
+    */
 
     localCompound = compound()->Clone();
     localData = data()->Clone();
@@ -116,9 +117,13 @@ double AZURECalc::operator()(const vector_r& p) const {
     }
   }
   if(isFit) {
+
+    // Uncomment this block to enable object pooling for CNuc and EData
+    // Then comment out the direct deletion lines below
     // Return objects to pool instead of deleting
     //ReturnPooledCNuc(localCompound);
     //ReturnPooledEData(localData);
+    
     delete localCompound;
     delete localData;
   }
@@ -189,14 +194,14 @@ void AZURECalc::InitializePools() const {
   // Calculate pool size based on available hardware threads
   const int pool_size = std::max(4, static_cast<int>(std::thread::hardware_concurrency() * 2));
   
-  // Pre-allocate CNuc objects
+  // Pre-allocate CNuc objects by cloning once
   for (int i = 0; i < pool_size; ++i) {
-    cnuc_pool_.push(std::make_unique<CNuc>(*compound_));
+    cnuc_pool_.push(std::unique_ptr<CNuc>(compound()->Clone()));
   }
   
-  // Pre-allocate EData objects  
+  // Pre-allocate EData objects by cloning once
   for (int i = 0; i < pool_size; ++i) {
-    edata_pool_.push(std::make_unique<EData>(*data_));
+    edata_pool_.push(std::unique_ptr<EData>(data()->Clone()));
   }
   
   pools_initialized_ = true;
@@ -209,9 +214,9 @@ CNuc* AZURECalc::GetPooledCNuc() const {
   std::lock_guard<std::mutex> lock(pool_mutex_);
   
   if (!cnuc_pool_.empty()) {
-    auto obj = cnuc_pool_.top().release();
+    auto obj = std::move(cnuc_pool_.top());
     cnuc_pool_.pop();
-    return obj;
+    return obj.release();
   }
   
   // Fallback: create new if pool is empty (shouldn't happen often)
@@ -225,9 +230,9 @@ EData* AZURECalc::GetPooledEData() const {
   std::lock_guard<std::mutex> lock(pool_mutex_);
   
   if (!edata_pool_.empty()) {
-    auto obj = edata_pool_.top().release();
+    auto obj = std::move(edata_pool_.top());
     edata_pool_.pop();
-    return obj;
+    return obj.release();
   }
   
   // Fallback: create new if pool is empty (shouldn't happen often)
