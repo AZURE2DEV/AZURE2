@@ -960,7 +960,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config& configure) {
 	int lValue=theChannel->GetL();
 	double localEnergy=inEnergy-thePair->GetSepE()-thePair->GetExE();
 	if(thePair->GetPType()==0) {
-	  if(localEnergy<0.0) {
+	  if(localEnergy<=0.0) {
 	    ShftFunc theShiftFunction(thePair);
 	    double localShift=theShiftFunction(lValue,inEnergy);
 	    double boundary=theChannel->GetBoundaryCondition();

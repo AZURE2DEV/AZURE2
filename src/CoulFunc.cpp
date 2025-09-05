@@ -1,7 +1,7 @@
 #include "CoulFunc.h"
 #include "PPair.h"
 #include <iostream>
-#include "cwfcomp.H"
+#include "cwfcomp_accurate.H"
 #include <gsl/gsl_sf_coulomb.h>
 #include <gsl/gsl_deriv.h>
  
@@ -115,10 +115,11 @@ CoulWaves CoulFunc::operator()(int l,double radius,double energy) {
       std::complex<double> rho(sqrt(2.*uconv)/hbarc*radius*
 			       sqrt(redmass()*energy),0.);
       std::complex<double> lValue( (double) l, 0.);
-      Coulomb_wave_functions coul(true,lValue,eta);
+      Coulomb_wave_functions_accurate coul(true,lValue,eta);
       std::complex<double> c_F, c_dF, c_G, c_dG;
-      coul.F_dF(rho,c_F,c_dF);
-      coul.G_dG(rho,c_G,c_dG);
+      //coul.F_dF(rho,c_F,c_dF);
+      //coul.G_dG(rho,c_G,c_dG);
+      coul.compute(rho,c_F,c_dF,c_G,c_dG);
       newResult.F=real(c_F);
       newResult.dF=real(c_dF);
       newResult.G=real(c_G);

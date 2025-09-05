@@ -31,6 +31,7 @@ double AZURECalc::operator()(const vector_r& p) const {
     // Copy data instead of deep cloning (reuse existing memory)
     //*localCompound = *compound();
     //*localData = *data();
+
     localCompound = compound()->Clone();
     localData = data()->Clone();
   } else {
@@ -104,11 +105,11 @@ double AZURECalc::operator()(const vector_r& p) const {
 			       << "\r\tIteration: " << std::setw(6) << thisIteration
 			       << " Chi-Squared: " << chiSquared;  configure().outStream.flush();
 
-    if(thisIteration%1000==0) {
-      //AZUREParams params;
-      //localCompound->FillMnParams(params.GetMinuitParams(), &configure());
-      //localData->FillMnParams(params.GetMinuitParams());
-      //WriteParameters(params,configure());
+    if(thisIteration%100==0) {
+      AZUREParams params;
+      localCompound->FillMnParams(params.GetMinuitParams(), &configure());
+      localData->FillMnParams(params.GetMinuitParams());
+      WriteParameters(params,configure());
       localData->WriteOutputFiles(configure(),isFit);
       localCompound->TransformOut(configure());
       localCompound->PrintTransformParams(configure());
