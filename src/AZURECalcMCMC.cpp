@@ -53,9 +53,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
     localCompound = GetPooledCNuc();
     localData = GetPooledEData();
     
-    // Copy data instead of deep cloning (reuse existing memory)
-    *localCompound = *compound();
-    *localData = *data();
+    // Objects are already cloned, no need for deep copying
 
     //Fill Compound Nucleus From Parameters
     AZUREParams params;
@@ -136,9 +134,7 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r& params_) co
     localCompound = GetPooledCNuc();
     localData = GetPooledEData();
     
-    // Copy data instead of deep cloning (reuse existing memory)
-    *localCompound = *compound();
-    *localData = *data();
+    // Objects are already cloned, no need for deep copying
 
     localCompound->FillCompoundFromParamsPhysical(params_);
     bool isValid = localCompound->TransformIn( configure( ) );
@@ -966,14 +962,14 @@ void AZURECalcMCMC::InitializePools() const {
   // Calculate pool size based on available hardware threads
   const int pool_size = std::max(4, static_cast<int>(std::thread::hardware_concurrency() * 2));
   
-  // Pre-allocate CNuc objects
+  // Pre-allocate CNuc objects by cloning once
   for (int i = 0; i < pool_size; ++i) {
-    cnuc_pool_.push(std::make_unique<CNuc>(*compound_));
+    cnuc_pool_.push(std::unique_ptr<CNuc>(compound_->Clone()));
   }
   
-  // Pre-allocate EData objects  
+  // Pre-allocate EData objects by cloning once
   for (int i = 0; i < pool_size; ++i) {
-    edata_pool_.push(std::make_unique<EData>(*data_));
+    edata_pool_.push(std::unique_ptr<EData>(data_->Clone()));
   }
   
   pools_initialized_ = true;
@@ -986,9 +982,9 @@ CNuc* AZURECalcMCMC::GetPooledCNuc() const {
   std::lock_guard<std::mutex> lock(pool_mutex_);
   
   if (!cnuc_pool_.empty()) {
-    auto obj = cnuc_pool_.top().release();
+    auto obj = std::move(cnuc_pool_.top());
     cnuc_pool_.pop();
-    return obj;
+    return obj.release();
   }
   
   // Fallback: create new if pool is empty (shouldn't happen often)
@@ -1002,9 +998,9 @@ EData* AZURECalcMCMC::GetPooledEData() const {
   std::lock_guard<std::mutex> lock(pool_mutex_);
   
   if (!edata_pool_.empty()) {
-    auto obj = edata_pool_.top().release();
+    auto obj = std::move(edata_pool_.top());
     edata_pool_.pop();
-    return obj;
+    return obj.release();
   }
   
   // Fallback: create new if pool is empty (shouldn't happen often)
