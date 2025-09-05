@@ -355,10 +355,15 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
   calculatedSegmentsE1_.clear( );
   calculatedSegmentsE2_.clear( );
 
-  vector_r params_ = all_rwa_;
+  int k = 0;
   for( int i = 0; i < all_rwa_.size( ); ++i ){
-    params_[i] = p[i];
+    all_rwa_[i] = p[i];
+    if( !fixed_[i] ){
+      values_[k] = p[i];
+      ++k;
+    }
   }
+  vector_r params_ = all_rwa_;
 
   CNuc* localCompound = NULL;
   EData* localData = NULL;

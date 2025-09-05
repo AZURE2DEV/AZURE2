@@ -87,7 +87,6 @@ bool AZURESocket::start() {
 
     // Send the parameters
     else if( buffer[0] == 2 ){
-      api_->UpdateParameters( );
       vector_r response = api_->params_values( );
       sendPacket( response );
     }
@@ -95,14 +94,12 @@ bool AZURESocket::start() {
     // Send the parameter name (FIXME)
     else if( buffer[0] == 3 ){
       int idx = (int)buffer[1];
-      api_->UpdateParameters( );
       std::string response = api_->params_names( idx );
       sendPacket( response );
     }
 
     // Send all the parameters
     else if( buffer[0] == 4 ){
-      api_->UpdateParameters( );
       vector_r response = api_->params_all( );
       sendPacket( response );
     }
@@ -242,7 +239,6 @@ bool AZURESocket::start() {
 
     // Get RWA params
     else if( buffer[0] == 23 ){
-      api_->UpdateParameters( );
       vector_r response = api_->params_values_rwa( );
       sendPacket( response );
     }
