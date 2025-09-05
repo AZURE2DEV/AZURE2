@@ -324,6 +324,17 @@ bool AZURESocket::start() {
       sendPacket( response );
     }
 
+    // Get indeces of fixed parameters
+    else if( buffer[0] == 32 ){   
+      std::vector<bool> temp;
+      temp = api_->params_fixed( );
+      vector_r response;
+      for( int i = 0; i < temp.size( ); ++i ){
+        response.push_back( temp[i] ? 1.0 : 0.0 );
+      }
+      sendPacket( response );
+    }
+
   }
 
   // Close sockets

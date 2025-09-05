@@ -90,6 +90,10 @@ class AZUREAPI {
    */
   vector_r params_all_rwa() const {return all_rwa_;};
   /*!
+   * Returns a pointer to the fixed parameters object.
+   */
+  std::vector<bool> params_fixed() const {return fixed_;};
+  /*!
    * Returns a pointer to the calculated segments object.
    */
   vector_r data_energies(int i) const {return dataEnergies_[i];};
