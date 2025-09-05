@@ -346,6 +346,97 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
 
 }
 
+int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
+
+  calculatedConv_.clear( );
+  calculatedEnergies_.clear( );
+  calculatedAngles_.clear( );
+  calculatedSegments_.clear( );
+  calculatedSegmentsE1_.clear( );
+  calculatedSegmentsE2_.clear( );
+
+  vector_r params_ = all_rwa_;
+  for( int i = 0; i < all_rwa_.size( ); ++i ){
+    params_[i] = p[i];
+  }
+
+  CNuc* localCompound = NULL;
+  EData* localData = NULL;
+  localCompound = compound();
+  localData = data();
+
+  AZUREParams params;
+  localCompound->FillCompoundFromParams(params_);
+  localData->FillEnergyShiftsFromParams(params_,localData,localCompound,&configure());
+  if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+
+  int newKey  = -1;
+  int prevKey = -1;
+  int nSegments = 0;
+
+  std::vector<ESegment>& segments = localData->GetSegments( );
+  for( int i = 0; i < segments.size( ); ++i ){
+    
+    newKey = segments[i].GetSegmentKey( );
+    if( prevKey == newKey ) continue;
+    prevKey = newKey; ++nSegments;
+
+    std::vector<EPoint>& data = segments[i].GetPoints();
+
+    std::vector<double> cross, crossE1, crossE2, energies, angles, conv;
+    
+    // Handle component segments using the new integrated calculation method
+    if (segments[i].HasComponents()) {
+      for( int k = 0; k < data.size( ); ++k ){
+        // Use the new component-aware calculation method
+        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);
+        
+        // Update the point's fit cross section with the combined result
+        data[k].SetFitCrossSection(theoreticalValue);
+        
+        cross.push_back( theoreticalValue );
+        crossE1.push_back( data[k].GetFitE1CrossSection() );
+        crossE2.push_back( data[k].GetFitE2CrossSection() );
+        angles.push_back( data[k].GetCMAngle() );
+        energies.push_back( data[k].GetCMEnergy( ) );
+        conv.push_back( data[k].GetSFactorConversion() );
+      }
+    } else {
+      // Regular segment calculation (existing logic)
+      for( int k = 0; k < data.size( ); ++k ){
+
+        if(!data[k].IsMapped()) {
+          try {
+            data[k].Calculate(localCompound,configure());
+          } catch (GSLException& e) {
+            // Skip this point if GSL calculation fails
+            continue;
+          }
+        }
+
+        cross.push_back( data[k].GetFitCrossSection() );
+        crossE1.push_back( data[k].GetFitE1CrossSection() );
+        crossE2.push_back( data[k].GetFitE2CrossSection() );
+        angles.push_back( data[k].GetCMAngle() );
+        energies.push_back( data[k].GetCMEnergy( ) );
+        conv.push_back( data[k].GetSFactorConversion() );
+
+      }
+    }
+
+    calculatedConv_.push_back( conv );
+    calculatedSegments_.push_back( cross );
+    calculatedSegmentsE1_.push_back( crossE1 );
+    calculatedSegmentsE2_.push_back( crossE2 );
+    calculatedEnergies_.push_back( energies );
+    calculatedAngles_.push_back( angles );
+
+  }
+
+  return calculatedSegments_.size( );
+
+}
+
 // Transform RWA parameters to physical values
 vector_r AZUREAPI::TransformRWAParameters(const vector_r& p) const {
 

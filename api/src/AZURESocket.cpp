@@ -303,7 +303,18 @@ bool AZURESocket::start() {
       sendPacket( response );
     }
 
-    //close(clientSocket_);
+    // Calculate segments from params
+    else if( buffer[0] == 29 ){   
+      vector_r params;
+      for( int i = 0; i < buffer[1]; ++i ){
+        params.push_back( buffer[2+i] );
+      }
+      double nSegments = (double)api_->UpdateSegmentsAllRWA( params );
+      std::vector<double> response;
+      response.push_back( nSegments );  
+      sendPacket( response );
+
+    }
 
   }
 

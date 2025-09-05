@@ -38,6 +38,8 @@ class AZUREAPI {
   int UpdateSegments(vector_r& p);
   // Update segments values for RWA
   int UpdateSegmentsRWA(vector_r& p);
+  // Update segments values for all RWA parameters
+  int UpdateSegmentsAllRWA(vector_r& p);
   // Calculate the external capture for data
   bool CalculateExternalCapture( );
   // Reads the parameters values
