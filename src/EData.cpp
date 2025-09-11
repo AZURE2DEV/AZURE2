@@ -384,14 +384,18 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
 	TargetEffect *thisTargetEffect=this->GetTargetEffect(this->NumTargetEffects());
 	std::vector<int> segmentsList = thisTargetEffect->GetSegmentsList();
 	for(int i = 1;i<=segmentsList.size();i++) { 
-	  if(this->IsSegmentKey(segmentsList[i-1]))
-	    this->GetSegmentFromKey(segmentsList[i-1])->SetTargetEffectNum(this->NumTargetEffects());
-      // If segment has components, set the target effect to these as well
-      if(this->GetSegmentFromKey(segmentsList[i-1])->HasComponents()) {
-	      for(auto component : this->GetSegmentFromKey(segmentsList[i-1])->GetComponentSegments()) {
-	        component->SetTargetEffectNum(this->NumTargetEffects());
+	  if(this->IsSegmentKey(segmentsList[i-1])) {
+	    ESegment* segment = this->GetSegmentFromKey(segmentsList[i-1]);
+	    if(segment) {
+	      segment->SetTargetEffectNum(this->NumTargetEffects());
+	      // If segment has components, set the target effect to these as well
+	      if(segment->HasComponents()) {
+	        for(auto component : segment->GetComponentSegments()) {
+	          component->SetTargetEffectNum(this->NumTargetEffects());
+	        }
 	      }
-      }
+	    }
+	  }
 	}
       }
     }
