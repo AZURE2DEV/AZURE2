@@ -5,6 +5,7 @@
 #include "ECAmplitudeCache.h"
 #include "ExtrapLine.h"
 #include "SegLine.h"
+#include "AdaptiveIntegrationGrid.h"
 #include "Minuit2/MnUserParameters.h"
 #include "GSLException.h"
 #include <iostream>
@@ -451,8 +452,49 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
             }
           }
 
-          for(int i=0;i<targetEffect->NumSubPoints();i++) {
-            double subEnergy=point->GetCMEnergy()+forwardDepth-(forwardDepth+backwardDepth)/(targetEffect->NumSubPoints())*i;
+          // Generate adaptive integration grid
+          double startEnergy = point->GetCMEnergy() + forwardDepth;
+          double endEnergy;
+
+          // Check if target thickness is zero (for convolution-only cases)
+          if(targetEffect->IsTargetIntegration()) {
+            double targetThickness = point->GetTargetThickness();
+            if(targetThickness < 1.0e-10) {
+              // Target thickness is effectively zero - integrate down to 0.001 MeV
+              endEnergy = 0.001;
+              // Set density to 1e24 to prevent division issues
+              targetEffect->SetDensity(1.0e24);
+            } else {
+              // Normal case - use backward depth
+              endEnergy = point->GetCMEnergy() - backwardDepth;
+              // Safety check: if backwardDepth > energy, set endEnergy to minimum
+              if(endEnergy < 0.001) {
+                endEnergy = 0.001;
+              }
+            }
+          } else {
+            // Convolution or ConvCoefficients - use backward depth
+            endEnergy = point->GetCMEnergy() - backwardDepth;
+            // Safety check: if backwardDepth > energy, set endEnergy to minimum
+            if(endEnergy < 0.001) {
+              endEnergy = 0.001;
+            }
+          }
+
+          // Configure adaptive grid generator with width-aware parameters
+          AdaptiveIntegrationGrid::GridConfig gridConfig;
+          gridConfig.maxPoints = targetEffect->NumSubPoints();  // Budget for coarse grid
+          gridConfig.entranceKey = segment->GetEntranceKey();
+          gridConfig.baseEnergyStep = (startEnergy - endEnergy) / targetEffect->NumSubPoints();
+          gridConfig.resonanceWidthMultiplier = 5.0; // Integrate ±5Γ around resonances
+          gridConfig.pointsPerWidth = 20.0; // ~20 points per resonance width
+
+          AdaptiveIntegrationGrid gridGenerator(gridConfig);
+          std::vector<double> energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
+
+          // Create sub-points using adaptive grid
+          for(size_t i=0; i<energyGrid.size(); i++) {
+            double subEnergy = energyGrid[i];
             EPoint subPoint(point->GetCMAngle(),subEnergy,&*segment);
             if(targetEffect->IsTargetIntegration()) {
               double stoppingPower=cmConversion*targetEffect->GetStoppingPowerEq()->Evaluate(configure,subEnergy/cmConversion);
@@ -509,8 +551,50 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
                 }
               }
 
-              for(int i=0;i<targetEffect->NumSubPoints();i++) {
-                double subEnergy=point->GetCMEnergy()+forwardDepth-(forwardDepth+backwardDepth)/(targetEffect->NumSubPoints())*i;
+              // Generate adaptive integration grid for component segment
+              double startEnergy = point->GetCMEnergy() + forwardDepth;
+              double endEnergy;
+
+              // Check if target thickness is zero (for convolution-only cases)
+              if(targetEffect->IsTargetIntegration()) {
+                double targetThickness = point->GetTargetThickness();
+                if(targetThickness < 1.0e-10) {
+                  // Target thickness is effectively zero - integrate down to 0.001 MeV
+                  endEnergy = 0.001;
+                  // Set density to 1e24 to prevent division issues
+                  targetEffect->SetDensity(1.0e24);
+                } else {
+                  // Normal case - use backward depth
+                  endEnergy = point->GetCMEnergy() - backwardDepth;
+                  // Safety check: if backwardDepth > energy, set endEnergy to minimum
+                  if(endEnergy < 0.001) {
+                    endEnergy = 0.001;
+                  }
+                }
+              } else {
+                // Convolution or ConvCoefficients - use backward depth
+                endEnergy = point->GetCMEnergy() - backwardDepth;
+                // Safety check: if backwardDepth > energy, set endEnergy to minimum
+                if(endEnergy < 0.001) {
+                  endEnergy = 0.001;
+                }
+              }
+
+              // Configure adaptive grid generator with width-aware parameters
+              // Configure adaptive grid generator with width-aware parameters
+              AdaptiveIntegrationGrid::GridConfig gridConfig;
+              gridConfig.maxPoints = targetEffect->NumSubPoints();  // Budget for coarse grid
+              gridConfig.entranceKey = segment->GetEntranceKey();
+              gridConfig.baseEnergyStep = (startEnergy - endEnergy) / targetEffect->NumSubPoints();
+              gridConfig.resonanceWidthMultiplier = 5.0; // Integrate ±5Γ around resonances
+              gridConfig.pointsPerWidth = 20.0; // ~20 points per resonance width
+
+              AdaptiveIntegrationGrid gridGenerator(gridConfig);
+              std::vector<double> energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
+
+              // Create sub-points using adaptive grid
+              for(size_t i=0; i<energyGrid.size(); i++) {
+                double subEnergy = energyGrid[i];
                 EPoint subPoint(point->GetCMAngle(),subEnergy,&*component);
                 if(targetEffect->IsTargetIntegration()) {
                   double stoppingPower=cmConversion*targetEffect->GetStoppingPowerEq()->Evaluate(configure,subEnergy/cmConversion);

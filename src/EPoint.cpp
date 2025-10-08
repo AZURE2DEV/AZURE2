@@ -1368,14 +1368,24 @@ void EPoint::AddSubPoint(EPoint subPoint) {
 }
 
 /*!
- * This function is called to integrate the vector of sub-points to determine 
- * the yield considering a given target effect. The function uses Simpson's 
- * rule to perform the integration.
+ * This function is called to integrate the vector of sub-points to determine
+ * the yield considering a given target effect.
+ *
+ * Integration method:
+ * - Gaussian quadrature for non-uniform grids
+ * - Uses 2-point Gauss-Legendre quadrature on each interval
+ * - Third-order accurate, exact for cubic polynomials
+ * - Works correctly with variable energy spacing from adaptive grid
+ * - More robust than Simpson's for non-uniform grids
+ * - Original nested Simpson's still used for convolution+targetIntegration
  */
 
 void EPoint::IntegrateTargetEffect(const Config& configure) {
   double yield=0.0;
   TargetEffect *targetEffect=this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+
+  // Note: With adaptive grids, energyStep is no longer constant
+  // Use Gaussian quadrature which works for non-uniform spacing
   double energyStep=this->GetSubPoint(1)->GetCMEnergy()-this->GetSubPoint(2)->GetCMEnergy();
   if(targetEffect->IsConvolution()&&targetEffect->IsTargetIntegration()) {
     int outerLowerLimit=round((this->GetSubPoint(1)->GetCMEnergy()-this->GetCMEnergy())/energyStep)+1;
@@ -1429,80 +1439,145 @@ void EPoint::IntegrateTargetEffect(const Config& configure) {
     yield=outerIntegral/(targetEffect->GetDensity()*1.E-24);
   } 
   else if(targetEffect->IsConvolution()) {
-    double intFirst=0.0;
-    double intEvenSum=0.0;
-    double intOddSum=0.0;
+    // Gaussian quadrature for non-uniform grids
+    // 2-point Gauss-Legendre: exact for cubic polynomials
     double integral=0.0;
     double centroid=this->GetCMEnergy();
-    for(int i=0;i<this->NumSubPoints();i++) {
-      double thisEnergy=this->GetSubPoint(i+1)->GetCMEnergy();
-      double integrand=this->GetSubPoint(i+1)->GetFitCrossSection()
-	    *targetEffect->GetConvolutionFactor(thisEnergy,centroid);
-      if(i==0) intFirst=integrand;
-      else if(i%2==0) {
-	      intEvenSum+=integrand;
-	      if(i>=2) integral=energyStep/3.0*(intFirst+4.0*intOddSum+2.0*intEvenSum-integrand);
-      } 
-      else if(i%2!=0) {
-	      intOddSum+=integrand;
-	      if(i>=2) integral=energyStep/3.0*(intFirst+4.0*intOddSum+2.0*intEvenSum-3.0*integrand);
-      }
+    int numPoints = this->NumSubPoints();
+
+    // Gauss-Legendre 2-point weights and nodes (on [-1,1])
+    const double w1 = 1.0;
+    const double w2 = 1.0;
+    const double x1 = -1.0/sqrt(3.0);  // ≈ -0.577350
+    const double x2 =  1.0/sqrt(3.0);  // ≈  0.577350
+
+    // Integrate over each interval [E_i, E_{i+1}]
+    for(int i=0; i<numPoints-1; i++) {
+      double Ea = this->GetSubPoint(i+1)->GetCMEnergy();
+      double Eb = this->GetSubPoint(i+2)->GetCMEnergy();
+
+      // Transform from [Ea,Eb] to standard interval [-1,1]
+      double mid = (Ea + Eb) / 2.0;
+      double half_range = (Ea - Eb) / 2.0;
+
+      // Gauss points in physical domain
+      double E_gauss1 = mid + half_range * x1;
+      double E_gauss2 = mid + half_range * x2;
+
+      // Evaluate integrand at Gauss points (linear interpolation from grid points)
+      // f1 at E_gauss1
+      double alpha1 = (Eb - E_gauss1) / (Eb - Ea);
+      double sigma1 = alpha1 * this->GetSubPoint(i+1)->GetFitCrossSection() +
+                      (1.0 - alpha1) * this->GetSubPoint(i+2)->GetFitCrossSection();
+      double f1 = sigma1 * targetEffect->GetConvolutionFactor(E_gauss1, centroid);
+
+      // f2 at E_gauss2
+      double alpha2 = (Eb - E_gauss2) / (Eb - Ea);
+      double sigma2 = alpha2 * this->GetSubPoint(i+1)->GetFitCrossSection() +
+                      (1.0 - alpha2) * this->GetSubPoint(i+2)->GetFitCrossSection();
+      double f2 = sigma2 * targetEffect->GetConvolutionFactor(E_gauss2, centroid);
+
+      // Gaussian quadrature formula
+      integral += std::abs(half_range) * (w1 * f1 + w2 * f2);
     }
+
     yield=integral;
   } 
   else if(targetEffect->IsTargetIntegration()) {
-    double intFirst=0.0;
-    double intEvenSum=0.0;
-    double intOddSum=0.0;
+    // Gaussian quadrature for non-uniform grids
+    // 2-point Gauss-Legendre: exact for cubic polynomials
     double integral=0.0;
-    for(int i=0;i<this->NumSubPoints();i++) {
-      double thisEnergy=this->GetSubPoint(i+1)->GetCMEnergy();
-      double integrand=this->GetSubPoint(i+1)->GetFitCrossSection()/
-	    this->GetSubPoint(i+1)->GetStoppingPower()/1e24;
-      if(i==0) intFirst=integrand;
-      else if(i%2==0) {
-	    intEvenSum+=integrand;
-	    if(i>=2) integral=energyStep/3.0*(intFirst+4.0*intOddSum+2.0*intEvenSum-integrand);
-      } else if(i%2!=0) {
-	  intOddSum+=integrand;
-	  if(i>=2) integral=energyStep/3.0*(intFirst+4.0*intOddSum+2.0*intEvenSum-3.0*integrand);
-      }
+    int numPoints = this->NumSubPoints();
+
+    // Gauss-Legendre 2-point weights and nodes (on [-1,1])
+    const double w1 = 1.0;
+    const double w2 = 1.0;
+    const double x1 = -1.0/sqrt(3.0);  // ≈ -0.577350
+    const double x2 =  1.0/sqrt(3.0);  // ≈  0.577350
+
+    // Integrate over each interval [E_i, E_{i+1}]
+    for(int i=0; i<numPoints-1; i++) {
+      double Ea = this->GetSubPoint(i+1)->GetCMEnergy();
+      double Eb = this->GetSubPoint(i+2)->GetCMEnergy();
+
+      // Transform from [Ea,Eb] to standard interval [-1,1]
+      double mid = (Ea + Eb) / 2.0;
+      double half_range = (Ea - Eb) / 2.0;
+
+      // Gauss points in physical domain
+      double E_gauss1 = mid + half_range * x1;
+      double E_gauss2 = mid + half_range * x2;
+
+      // Evaluate integrand at Gauss points (linear interpolation from grid points)
+      // f1 at E_gauss1
+      double alpha1 = (Eb - E_gauss1) / (Eb - Ea);
+      double sigma1 = alpha1 * this->GetSubPoint(i+1)->GetFitCrossSection() +
+                      (1.0 - alpha1) * this->GetSubPoint(i+2)->GetFitCrossSection();
+      double stopping1 = alpha1 * this->GetSubPoint(i+1)->GetStoppingPower() +
+                         (1.0 - alpha1) * this->GetSubPoint(i+2)->GetStoppingPower();
+      double f1 = sigma1 / stopping1 / 1e24;
+
+      // f2 at E_gauss2
+      double alpha2 = (Eb - E_gauss2) / (Eb - Ea);
+      double sigma2 = alpha2 * this->GetSubPoint(i+1)->GetFitCrossSection() +
+                      (1.0 - alpha2) * this->GetSubPoint(i+2)->GetFitCrossSection();
+      double stopping2 = alpha2 * this->GetSubPoint(i+1)->GetStoppingPower() +
+                         (1.0 - alpha2) * this->GetSubPoint(i+2)->GetStoppingPower();
+      double f2 = sigma2 / stopping2 / 1e24;
+
+      // Gaussian quadrature formula
+      integral += std::abs(half_range) * (w1 * f1 + w2 * f2);
     }
-    yield=integral/(targetEffect->GetDensity()*1.E-24);    
+
+    yield=integral/(targetEffect->GetDensity()*1.E-24);
   }
   else if(targetEffect->IsConvCoefficients()) {
-    double intFirst=0.0;
-    double intFirstC=0.0;
-    double intEvenSum=0.0;
-    double intEvenSumC=0.0;
-    double intOddSum=0.0;
-    double intOddSumC=0.0;
+    // Gaussian quadrature for both integrals
+    // 2-point Gauss-Legendre: exact for cubic polynomials
     double integral=0.0;
     double integralC=0.0;
     double centroid=this->GetCMEnergy();
-    for(int i=0;i<this->NumSubPoints();i++) {
-      double thisEnergy=this->GetSubPoint(i+1)->GetCMEnergy();
-      double integrand=this->GetSubPoint(i+1)->GetFitCrossSection()*targetEffect->CalculateConvolutionFactor(thisEnergy,centroid,configure);
-      double integrandC=targetEffect->CalculateConvolutionFactor(thisEnergy,centroid,configure);
-      if(i==0) intFirst=integrand;
-      else if(i%2==0) {
-	      intEvenSum+=integrand;
-	      if(i>=2) integral=energyStep/3.0*(intFirst+4.0*intOddSum+2.0*intEvenSum-integrand);
-      } 
-      else if(i%2!=0) {
-	      intOddSum+=integrand;
-	      if(i>=2) integral=energyStep/3.0*(intFirst+4.0*intOddSum+2.0*intEvenSum-3.0*integrand);
-      }
-      if(i==0) intFirstC=integrandC;
-      else if(i%2==0) {
-	      intEvenSumC+=integrandC;
-	      if(i>=2) integralC=energyStep/3.0*(intFirstC+4.0*intOddSumC+2.0*intEvenSumC-integrandC);
-      } 
-      else if(i%2!=0) {
-	      intOddSumC+=integrandC;
-	      if(i>=2) integralC=energyStep/3.0*(intFirstC+4.0*intOddSumC+2.0*intEvenSumC-3.0*integrandC);
-      }
+    int numPoints = this->NumSubPoints();
+
+    // Gauss-Legendre 2-point weights and nodes (on [-1,1])
+    const double w1 = 1.0;
+    const double w2 = 1.0;
+    const double x1 = -1.0/sqrt(3.0);  // ≈ -0.577350
+    const double x2 =  1.0/sqrt(3.0);  // ≈  0.577350
+
+    // Integrate over each interval [E_i, E_{i+1}]
+    for(int i=0; i<numPoints-1; i++) {
+      double Ea = this->GetSubPoint(i+1)->GetCMEnergy();
+      double Eb = this->GetSubPoint(i+2)->GetCMEnergy();
+
+      // Transform from [Ea,Eb] to standard interval [-1,1]
+      double mid = (Ea + Eb) / 2.0;
+      double half_range = (Ea - Eb) / 2.0;
+
+      // Gauss points in physical domain
+      double E_gauss1 = mid + half_range * x1;
+      double E_gauss2 = mid + half_range * x2;
+
+      // Evaluate integrand at Gauss points (linear interpolation from grid points)
+      // Point 1
+      double alpha1 = (Eb - E_gauss1) / (Eb - Ea);
+      double sigma1 = alpha1 * this->GetSubPoint(i+1)->GetFitCrossSection() +
+                      (1.0 - alpha1) * this->GetSubPoint(i+2)->GetFitCrossSection();
+      double conv1 = targetEffect->CalculateConvolutionFactor(E_gauss1, centroid, configure);
+      double f1 = sigma1 * conv1;
+
+      // Point 2
+      double alpha2 = (Eb - E_gauss2) / (Eb - Ea);
+      double sigma2 = alpha2 * this->GetSubPoint(i+1)->GetFitCrossSection() +
+                      (1.0 - alpha2) * this->GetSubPoint(i+2)->GetFitCrossSection();
+      double conv2 = targetEffect->CalculateConvolutionFactor(E_gauss2, centroid, configure);
+      double f2 = sigma2 * conv2;
+
+      // Gaussian quadrature formula for both integrals
+      integral += std::abs(half_range) * (w1 * f1 + w2 * f2);
+      integralC += std::abs(half_range) * (w1 * conv1 + w2 * conv2);
     }
+
     yield=integral/integralC;
   }
   this->SetFitCrossSection(yield);

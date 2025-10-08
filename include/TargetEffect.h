@@ -37,6 +37,7 @@ class TargetEffect {
   double GetQCoefficient(int) const;
   double GetConvCoefficient(int) const;
   void SetSigma(double);
+  void SetDensity(double);
   void SetNumSubPoints(int);
   std::vector<int> GetSegmentsList() const;
   Equation *GetStoppingPowerEq();

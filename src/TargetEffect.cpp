@@ -235,6 +235,14 @@ void TargetEffect::SetSigma(double sigma) {
 }
 
 /*!
+ * Sets the target density to a new value.
+ */
+
+void TargetEffect::SetDensity(double density) {
+  density_=density;
+}
+
+/*!
  * Sets the number of sub-points for the TargetEffect object.
  */
 
