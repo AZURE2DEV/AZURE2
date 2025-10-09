@@ -26,6 +26,7 @@ void Config::Reset() {
   stopFlag=false;
   outputdir="";
   checkdir="";
+  nloptAlgorithm=0; // Default to SBPLX
 }
 
 /*!

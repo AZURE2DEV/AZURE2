@@ -56,7 +56,7 @@ Q_OBJECT
 class AZUREMainThread : public QThread {
   Q_OBJECT
  public:
-  AZUREMainThread(RunTab *tab, const Config& configure) : 
+  AZUREMainThread(RunTab *tab, const Config& configure) :
   stream_(&buffer_), configure_(stream_), worker_(configure_) {
     configure_.configfile = configure.configfile;
     configure_.paramMask = configure.paramMask;
@@ -67,7 +67,8 @@ class AZUREMainThread : public QThread {
     configure_.checkdir = configure.checkdir;
     configure_.paramfile = configure.paramfile;
     configure_.integralsfile = configure.integralsfile;
-    configure_.rateParams = configure.rateParams;    
+    configure_.rateParams = configure.rateParams;
+    configure_.nloptAlgorithm = configure.nloptAlgorithm;
     connect(&buffer_,SIGNAL(updateLog(QString)),tab->runtimeText,SLOT(write(QString)));
     connect(tab->stopAZUREButton,SIGNAL(clicked()),this,SLOT(stopAZURE()));
     connect(this,SIGNAL(readyToRun()),&worker_,SLOT(run()));

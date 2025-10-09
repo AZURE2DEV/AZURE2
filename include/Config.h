@@ -58,7 +58,8 @@ class Config {
     USE_LONGWAVELENGTH_APPROX =(1<<13),
     USE_API                   =(1<<14),
     PERFORM_MCMC              =(1<<15),
-    USE_WIGNER_LIMITS         =(1<<16)
+    USE_WIGNER_LIMITS         =(1<<16),
+    USE_NLOPT_MINIMIZER       =(1<<17)
   };
   /*!
    * Bit flags for check file control in AZURE2.
@@ -97,6 +98,8 @@ class Config {
   std::string integralsfile;
   ///Parameters for calculating reaction rate.
   RateParams  rateParams;
+  ///NLopt algorithm selection (0=SBPLX, 1=COBYLA, 2=BOBYQA, 3=NEWUOA, 4=PRAXIS, 5=Nelder-Mead)
+  int nloptAlgorithm;
   ///A constant indicating the maximum order of the Legendre polynomials to calculate.
   static const int maxLOrder=20;
   int ReadConfigFile();

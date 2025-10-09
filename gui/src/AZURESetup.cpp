@@ -375,6 +375,17 @@ bool AZURESetup::readLastRun(QTextStream& inStream) {
     else  runTab->calcType->setCurrentIndex(2);
   }
 
+  // Set minimizer selection
+#ifdef USE_NLOPT
+  if(paramMask & Config::USE_NLOPT_MINIMIZER) {
+    runTab->minimizerType->setCurrentIndex(GetConfig().nloptAlgorithm + 1);
+  } else {
+    runTab->minimizerType->setCurrentIndex(0); // Minuit2
+  }
+#else
+  runTab->minimizerType->setCurrentIndex(0); // Minuit2
+#endif
+
   if(paramMask & Config::USE_GSL_COULOMB_FUNC) GetConfig().paramMask |= Config::USE_GSL_COULOMB_FUNC;
   else GetConfig().paramMask &= ~Config::USE_GSL_COULOMB_FUNC;
 
@@ -865,6 +876,23 @@ void AZURESetup::SaveAndRun() {
   else GetConfig().paramMask &= ~Config::PERFORM_ERROR_ANALYSIS;
   if(runTab->calcType->currentIndex()==4) GetConfig().paramMask |= Config::CALCULATE_REACTION_RATE;
   else GetConfig().paramMask &= ~Config::CALCULATE_REACTION_RATE;
+
+  // Handle minimizer selection (only for fitting operations)
+  if(runTab->calcType->currentIndex()==1 || runTab->calcType->currentIndex()==3) {
+#ifdef USE_NLOPT
+    if(runTab->minimizerType->currentIndex() > 0) {
+      GetConfig().paramMask |= Config::USE_NLOPT_MINIMIZER;
+      // Store the algorithm choice (will be handled in AZUREMain)
+      GetConfig().nloptAlgorithm = runTab->minimizerType->currentIndex() - 1;
+    } else {
+      GetConfig().paramMask &= ~Config::USE_NLOPT_MINIMIZER;
+    }
+#else
+    GetConfig().paramMask &= ~Config::USE_NLOPT_MINIMIZER;
+#endif
+  } else {
+    GetConfig().paramMask &= ~Config::USE_NLOPT_MINIMIZER;
+  }
 
   if(runTab->oldParamFileButton->isChecked()) {
     GetConfig().paramMask |= Config::USE_PREVIOUS_PARAMETERS;

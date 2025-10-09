@@ -80,9 +80,17 @@ endif (BUILD_LIBRARY)
 # Handle different linking for Windows cross-compilation
 if(CROSS_COMPILE_WINDOWS)
     # For Windows, link normally and let CMake flags handle static/dynamic behavior
-    target_link_libraries (AZURE2 ${GSL_LIBRARIES} Minuit2::Minuit2 ${AZURESETUP_LIBRARIES} ${AZUREAPI_LIBRARIES} ${EXTRA_LIBS})
+    if(USE_NLOPT)
+        target_link_libraries (AZURE2 ${GSL_LIBRARIES} Minuit2::Minuit2 nlopt ${AZURESETUP_LIBRARIES} ${AZUREAPI_LIBRARIES} ${EXTRA_LIBS})
+    else()
+        target_link_libraries (AZURE2 ${GSL_LIBRARIES} Minuit2::Minuit2 ${AZURESETUP_LIBRARIES} ${AZUREAPI_LIBRARIES} ${EXTRA_LIBS})
+    endif()
 else()
-    target_link_libraries (AZURE2 ${GSL_LIBRARIES} Minuit2::Minuit2 ${AZURESETUP_LIBRARIES} ${AZUREAPI_LIBRARIES} ${BLAS_LIBRARIES} ${EXTRA_LIBS})
+    if(USE_NLOPT)
+        target_link_libraries (AZURE2 ${GSL_LIBRARIES} Minuit2::Minuit2 nlopt ${AZURESETUP_LIBRARIES} ${AZUREAPI_LIBRARIES} ${BLAS_LIBRARIES} ${EXTRA_LIBS})
+    else()
+        target_link_libraries (AZURE2 ${GSL_LIBRARIES} Minuit2::Minuit2 ${AZURESETUP_LIBRARIES} ${AZUREAPI_LIBRARIES} ${BLAS_LIBRARIES} ${EXTRA_LIBS})
+    endif()
 endif()
 
 # Apply macOS bundle properties if building bundle

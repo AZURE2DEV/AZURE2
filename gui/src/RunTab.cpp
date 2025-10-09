@@ -12,7 +12,7 @@
 #include "FilteredTextEdit.h"
 #include "InfoDialog.h"
 
-RunTab::RunTab(QWidget* parent) : QWidget(parent) { 
+RunTab::RunTab(QWidget* parent) : QWidget(parent) {
   calcType = new QComboBox;
   calcType->addItem(tr("Calculate Segments From Data"));
   calcType->addItem(tr("Fit Segments From Data"));
@@ -21,12 +21,24 @@ RunTab::RunTab(QWidget* parent) : QWidget(parent) {
   calcType->addItem(tr("Calculate Reaction Rate"));
   connect(calcType,SIGNAL(currentIndexChanged(int)),this,SLOT(calculationTypeChanged(int)));
 
+  minimizerType = new QComboBox;
+  minimizerType->addItem(tr("Minuit2"));
+#ifdef USE_NLOPT
+  minimizerType->addItem(tr("NLopt (SBPLX)"));
+  minimizerType->addItem(tr("NLopt (COBYLA)"));
+  minimizerType->addItem(tr("NLopt (BOBYQA)"));
+  minimizerType->addItem(tr("NLopt (NEWUOA)"));
+  minimizerType->addItem(tr("NLopt (PRAXIS)"));
+  minimizerType->addItem(tr("NLopt (Nelder-Mead)"));
+#endif
+  minimizerType->setEnabled(false);
+
   chiVarianceText = new QLineEdit;
   chiVarianceText->setText("1.0");
   chiVarianceText->setEnabled(false);
   chiVarianceText->setMinimumWidth(50);
   chiVarianceText->setMaximumWidth(50);
- 
+
   calcButton = new QPushButton(tr("Save and &Run"));
   stopAZUREButton = new QPushButton(tr("Stop AZURE2"));
   stopAZUREButton->setEnabled(false);
@@ -37,13 +49,16 @@ RunTab::RunTab(QWidget* parent) : QWidget(parent) {
   calcLayout->setColumnStretch(1,0);
   calcLayout->addItem(new QSpacerItem(28,28),0,2);
   calcLayout->setColumnStretch(2,1);
-  calcLayout->addWidget(new QLabel(tr("Chi-Squared Variance:")),0,3,Qt::AlignRight);
-  calcLayout->addWidget(chiVarianceText,0,4);
+  calcLayout->addWidget(new QLabel(tr("Minimizer:")),0,3,Qt::AlignRight);
+  calcLayout->addWidget(minimizerType,0,4);
   calcLayout->setColumnStretch(4,0);
-  calcLayout->addWidget(calcButton,0,5);
-  calcLayout->setColumnStretch(5,0);
-  calcLayout->addWidget(stopAZUREButton,0,6);
+  calcLayout->addWidget(new QLabel(tr("Chi-Sq Variance:")),0,5,Qt::AlignRight);
+  calcLayout->addWidget(chiVarianceText,0,6);
   calcLayout->setColumnStretch(6,0);
+  calcLayout->addWidget(calcButton,0,7);
+  calcLayout->setColumnStretch(7,0);
+  calcLayout->addWidget(stopAZUREButton,0,8);
+  calcLayout->setColumnStretch(8,0);
 
   paramFileText = new QLineEdit;
   paramFileText->setEnabled(false);
@@ -167,7 +182,7 @@ RunTab::RunTab(QWidget* parent) : QWidget(parent) {
 void RunTab::calculationTypeChanged(int index) {
   if(index==4) {
     integralsFileGroup->hide();
-    rateParamsGroup->show();  
+    rateParamsGroup->show();
   } else {
     rateParamsGroup->hide();
     integralsFileGroup->show();
@@ -176,6 +191,13 @@ void RunTab::calculationTypeChanged(int index) {
   else {
     chiVarianceText->setText("1.0");
     chiVarianceText->setEnabled(false);
+  }
+  // Enable minimizer selection for "Fit Segments" (index 1) and "Perform MINOS Error Analysis" (index 3)
+  if(index==1 || index==3) {
+    minimizerType->setEnabled(true);
+  } else {
+    minimizerType->setEnabled(false);
+    minimizerType->setCurrentIndex(0); // Reset to Minuit2
   }
 }
 

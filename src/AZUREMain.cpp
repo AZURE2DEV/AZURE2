@@ -14,7 +14,41 @@
 #include <sstream>
 #include <map>
 
+#ifdef USE_NLOPT
+#include <nlopt.h>
 
+// Structure to pass data to the nlopt objective function
+struct NLoptData {
+  const AZURECalc* theFunc;
+  std::vector<double>* full_params;        // Full parameter vector (includes fixed params)
+  std::vector<unsigned>* variable_indices; // Indices of variable parameters
+};
+
+// NLopt objective function wrapper
+// This wrapper receives only the VARIABLE parameters from nlopt,
+// reconstructs the full parameter vector with fixed parameters,
+// and passes it to AZURECalc
+double nlopt_objective(unsigned n, const double* x, double* grad, void* f_data) {
+  NLoptData* data = static_cast<NLoptData*>(f_data);
+
+  // Reconstruct full parameter vector by inserting variable params at correct positions
+  for(unsigned j = 0; j < n; j++) {
+    unsigned i = (*data->variable_indices)[j];
+    (*data->full_params)[i] = x[j];
+  }
+
+  // Calculate chi-squared with full parameter vector
+  double chi_squared = (*data->theFunc)(*data->full_params);
+
+  // Gradient computation not implemented (using derivative-free algorithms)
+  if (grad) {
+    // NLopt requires gradient to be set to NULL or computed
+    // For derivative-free algorithms, this won't be called
+  }
+
+  return chi_squared;
+}
+#endif
 
 int AZUREMain::operator()(){
   //Fill compound nucleus from nucfile
@@ -116,12 +150,129 @@ int AZUREMain::operator()(){
     theFunc.SetErrorDef(1.0);
     
     if(configure().paramMask & Config::PERFORM_FIT) {
-      //Call Minuit for function minimization, write minimized parameters to params
-      if(configure().paramMask & Config::USE_AMATRIX) configure().outStream << "Performing A-Matrix Fit..." << std::endl; 
+      //Call minimizer for function minimization, write minimized parameters to params
+      if(configure().paramMask & Config::USE_AMATRIX) configure().outStream << "Performing A-Matrix Fit..." << std::endl;
       else configure().outStream << "Performing R-Matrix Fit..." << std::endl;
       data()->SetFit(true);
-      ROOT::Minuit2::MnMigrad migrad(theFunc,params.GetMinuitParams());
-      ROOT::Minuit2::FunctionMinimum min=migrad(50000);
+
+#ifdef USE_NLOPT
+      if(configure().paramMask & Config::USE_NLOPT_MINIMIZER) {
+        // Use NLopt for minimization
+        configure().outStream << "Using NLopt minimizer..." << std::endl;
+
+        // Build full parameter vector and identify variable parameters
+        unsigned n_total = params.GetMinuitParams().Params().size();
+        std::vector<double> full_params(n_total);
+        std::vector<unsigned> variable_indices;
+
+        // Extract all parameters and identify which are variable
+        for(unsigned i = 0; i < n_total; i++) {
+          full_params[i] = params.GetMinuitParams().Value(i);
+          if(!params.GetMinuitParams().Parameter(i).IsFixed()) {
+            variable_indices.push_back(i);
+          }
+        }
+
+        // Only pass variable parameters to nlopt
+        unsigned n_variable = variable_indices.size();
+        std::vector<double> x(n_variable);
+        std::vector<double> lb(n_variable);
+        std::vector<double> ub(n_variable);
+
+        // Extract initial values and bounds for variable parameters only
+        for(unsigned j = 0; j < n_variable; j++) {
+          unsigned i = variable_indices[j];
+          x[j] = params.GetMinuitParams().Value(i);
+
+          if(params.GetMinuitParams().Parameter(i).HasLowerLimit())
+            lb[j] = params.GetMinuitParams().Parameter(i).LowerLimit();
+          else
+            lb[j] = -1e10; // Large negative number for unbounded
+
+          if(params.GetMinuitParams().Parameter(i).HasUpperLimit())
+            ub[j] = params.GetMinuitParams().Parameter(i).UpperLimit();
+          else
+            ub[j] = 1e10; // Large positive number for unbounded
+        }
+
+        configure().outStream << "Optimizing " << n_variable << " parameters (out of "
+                              << n_total << " total)..." << std::endl;
+
+        // Map algorithm index to nlopt algorithm enum
+        nlopt_algorithm algorithms[] = {
+          NLOPT_LN_SBPLX,       // 0: SBPLX (Subplex)
+          NLOPT_LN_COBYLA,      // 1: COBYLA
+          NLOPT_LN_BOBYQA,      // 2: BOBYQA
+          NLOPT_LN_NEWUOA,      // 3: NEWUOA
+          NLOPT_LN_PRAXIS,      // 4: PRAXIS
+          NLOPT_LN_NELDERMEAD   // 5: Nelder-Mead
+        };
+        const char* algorithm_names[] = {
+          "SBPLX", "COBYLA", "BOBYQA", "NEWUOA", "PRAXIS", "Nelder-Mead"
+        };
+
+        int alg_index = configure().nloptAlgorithm;
+
+        configure().outStream << "Using NLopt " << algorithm_names[alg_index]
+                              << " algorithm..." << std::endl;
+
+        // Create NLopt optimizer with selected algorithm
+        nlopt_opt opt = nlopt_create(algorithms[alg_index], n_variable);
+
+        // Set up objective function with wrapper data
+        NLoptData nlopt_data;
+        nlopt_data.theFunc = &theFunc;
+        nlopt_data.full_params = &full_params;
+        nlopt_data.variable_indices = &variable_indices;
+        nlopt_set_min_objective(opt, nlopt_objective, &nlopt_data);
+
+        // Set bounds
+        nlopt_set_lower_bounds(opt, lb.data());
+        nlopt_set_upper_bounds(opt, ub.data());
+
+        // Set stopping criteria
+        nlopt_set_maxeval(opt, 50000);
+        nlopt_set_ftol_rel(opt, 1e-8);
+        nlopt_set_xtol_rel(opt, 1e-8);
+
+        // Perform optimization
+        double minf;
+        nlopt_result result = nlopt_optimize(opt, x.data(), &minf);
+
+        if(result < 0) {
+          configure().outStream << std::endl;
+          configure().outStream << "NLopt optimization failed: "
+                                << nlopt_result_to_string(result) << std::endl;
+        } else {
+          configure().outStream << std::endl;
+          configure().outStream << "NLopt optimization succeeded: "
+                                << nlopt_result_to_string(result) << std::endl;
+          configure().outStream << "Final chi-squared: " << minf << std::endl;
+        }
+
+        // Update only the variable parameters with optimized values
+        // Fixed parameters remain unchanged in full_params
+        for(unsigned j = 0; j < n_variable; j++) {
+          unsigned i = variable_indices[j];
+          params.GetMinuitParams().SetValue(i, x[j]);
+        }
+
+        nlopt_destroy(opt);
+
+        // Note: Error analysis with NLopt is not directly available
+        // Skip Minos error analysis for NLopt
+        if(configure().paramMask & Config::PERFORM_ERROR_ANALYSIS) {
+          configure().outStream << std::endl
+                    << "Error analysis is not available with NLopt minimizer." << std::endl;
+          configure().outStream << "Please use Minuit2 for error analysis." << std::endl;
+        }
+
+        params.WriteUserParameters(configure(),true);
+      } else {
+#endif
+        // Use Minuit2 for minimization (default)
+        ROOT::Minuit2::MnMigrad migrad(theFunc,params.GetMinuitParams());
+        ROOT::Minuit2::FunctionMinimum min=migrad(50000);
       if(configure().paramMask & Config::PERFORM_ERROR_ANALYSIS) {
 	configure().outStream << std::endl 
 		  << "Performing parameter error analysis with Up=" <<  configure().chiVariance << "." << std::endl;
@@ -228,8 +379,11 @@ int AZUREMain::operator()(){
 	params.WriteParameterErrors(errors,configure());
 
       }
-      params.GetMinuitParams()=min.UserParameters();
-      params.WriteUserParameters(configure(),true);
+        params.GetMinuitParams()=min.UserParameters();
+        params.WriteUserParameters(configure(),true);
+#ifdef USE_NLOPT
+      }
+#endif
     } else {
       if(configure().paramMask & Config::USE_AMATRIX) configure().outStream << "Performing A-Matrix Calculation..." << std::endl; 
       else configure().outStream << "Performing R-Matrix Calculation..." << std::endl; 

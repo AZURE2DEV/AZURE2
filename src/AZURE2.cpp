@@ -78,7 +78,11 @@ void printHelp() {
 	     << std::setw(25) << std::left << "\t--use-brune:" << std::setw(0) << "Use the alternative level matrix of C.R. Brune." << std::endl
 	     << std::setw(25) << std::left << "\t--ignore-externals:" << std::setw(0) << "Ignore external resonant capture amplitude if internal width is zero." << std::endl
 	     << std::setw(25) << std::left << "\t--use-rmc:" << std::setw(0) << "Use Reich-Moore approximation for capture (neutron capture only)." << std::endl
-	     << std::setw(25) << std::left << "\t--gsl-coul:" << std::setw(0) << "Use GSL Coulomb functions (faster, but less accurate)." << std::endl;
+	     << std::setw(25) << std::left << "\t--gsl-coul:" << std::setw(0) << "Use GSL Coulomb functions (faster, but less accurate)." << std::endl
+#ifdef USE_NLOPT
+	     << std::setw(25) << std::left << "\t--use-nlopt:" << std::setw(0) << "Use NLopt minimizer (BOBYQA) instead of Minuit2." << std::endl
+#endif
+	     ;
 }
 
 /*!
@@ -131,6 +135,9 @@ bool parseOptions(int argc, char *argv[], Config& configure) {
     else if(*it=="--ignore-externals") configure.paramMask |= Config::IGNORE_ZERO_WIDTHS;
     else if(*it=="--use-rmc") configure.paramMask |= Config::USE_RMC_FORMALISM;
     else if(*it=="--use-api") configure.paramMask |= Config::USE_API;
+#ifdef USE_NLOPT
+    else if(*it=="--use-nlopt") configure.paramMask |= Config::USE_NLOPT_MINIMIZER;
+#endif
     else if(*it=="--no-gui") continue;
     else configure.outStream << "WARNING: Unknown option " << *it << '.' << std::endl;
   }

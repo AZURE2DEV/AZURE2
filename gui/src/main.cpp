@@ -15,6 +15,9 @@ int start_gui(int argc, char *argv[]) {
         // https://bugreports.qt-project.org/browse/QTBUG-32789
         QFont::insertSubstitution(".Lucida Grande UI", "Lucida Grande");
     }
+    // Fix for macOS font warnings with .AppleSystemUIFont
+    QFont::insertSubstitution(".AppleSystemUIFont", "Helvetica Neue");
+    QFont::insertSubstitution(".SF NS Text", "Helvetica Neue");
 #endif
 
   QApplication app(argc, argv);
