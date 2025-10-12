@@ -10,6 +10,7 @@ IF(CROSS_COMPILE_WINDOWS)
     include_directories(${MINGW_PREFIX}/include/qt5/QtGui)
     include_directories(${MINGW_PREFIX}/include/qt5/QtWidgets)
     include_directories(${MINGW_PREFIX}/include/qt5/QtPrintSupport)
+    include_directories(${MINGW_PREFIX}/include/qt5/QtNetwork)
 
     # Qt-specific macros and MOC support
     set(CMAKE_AUTOMOC ON)
@@ -22,6 +23,7 @@ IF(CROSS_COMPILE_WINDOWS)
         ${MINGW_PREFIX}/lib/libQt5Gui.dll.a
         ${MINGW_PREFIX}/lib/libQt5Widgets.dll.a
         ${MINGW_PREFIX}/lib/libQt5PrintSupport.dll.a
+        ${MINGW_PREFIX}/lib/libQt5Network.dll.a
     )
 
     if(USE_QWT)
@@ -36,8 +38,8 @@ else()
     set(CMAKE_AUTOUIC ON)
      
     list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/Modules")
-    find_package (Qt5 COMPONENTS Core PrintSupport Gui Widgets REQUIRED)
-    set(QT_LIBRARIES Qt5::Core Qt5::Gui Qt5::PrintSupport Qt5::Widgets)
+    find_package (Qt5 COMPONENTS Core PrintSupport Gui Widgets Network REQUIRED)
+    set(QT_LIBRARIES Qt5::Core Qt5::Gui Qt5::PrintSupport Qt5::Widgets Qt5::Network)
     
     # Only try to find QWT if USE_QWT is enabled
     if(USE_QWT)
@@ -66,6 +68,7 @@ set(AZURESETUP_SOURCES
     LevelsModel.cpp SegmentsTestModel.cpp ChannelDetails.cpp LevelsTab.cpp
     TargetIntModel.cpp ChannelsModel.cpp main.cpp TargetIntTab.cpp FittingTab.cpp
     AboutAZURE2Dialog.cpp InfoDialog.cpp InTabDocs.cpp
+    IAEALevelData.cpp IAEALevelDialog.cpp
 )
 
 set(AZURESETUP_HEADERS
@@ -79,6 +82,7 @@ set(AZURESETUP_HEADERS
     ../include/SegmentsDataModel.h ../include/SegmentsTab.h ../include/SegmentsTestModel.h
     ../include/TargetIntModel.h ../include/TargetIntTab.h ../include/FittingTab.h
     ../include/TextEditBuffer.h ../include/AboutAZURE2Dialog.h ../include/InfoDialog.h
+    ../include/IAEALevelData.h ../include/IAEALevelDialog.h
 )
 
 set(AZURESETUP_RCCS AZURESetup.qrc)

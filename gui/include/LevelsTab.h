@@ -38,6 +38,7 @@ class LevelsTab : public QWidget {
   void addLevel(LevelsData level, bool fromFile);
   void removeLevel();
   void editLevel();
+  void addLevelsFromIAEA();
   void updateButtons(const QItemSelection &selection);
   void updateFilter(const QItemSelection &selection);
   void updateChannelsPairAddedEdited();
@@ -50,12 +51,15 @@ class LevelsTab : public QWidget {
   void readNewPair(PairsData,int,bool);
   void readExistingPair(PairsData,int,bool);
 
- private:  
+ private:
+  int calculateCompoundNucleus(int &massNumber, int &atomicNumber);
+
   QSpinBox *maxLSpin;
   QSpinBox *maxMultSpin;
   QSpinBox *maxNumMultSpin;
   QPushButton *addLevelButton;
   QPushButton *removeLevelButton;
+  QPushButton *iaeaQueryButton;
   PairsModel *pairsModel;
   LevelsModel *levelsModel;
   ChannelsModel *channelsModel;

@@ -1,8 +1,10 @@
 #include <QHeaderView>
+#include <QMessageBox>
 
 #include "LevelsTab.h"
 #include "LevelsHeaderView.h"
 #include "AddLevelDialog.h"
+#include "IAEALevelDialog.h"
 #include "RichTextDelegate.h"
 #include "InfoDialog.h"
 #include <iostream>
@@ -96,6 +98,10 @@ LevelsTab::LevelsTab(QWidget *parent) : QWidget(parent) {
   removeLevelButton->setMaximumSize(28,28);
   removeLevelButton->setEnabled(false);
   connect(removeLevelButton,SIGNAL(clicked()),this,SLOT(removeLevel()));
+  iaeaQueryButton = new QPushButton(tr("IAEA"));
+  iaeaQueryButton->setMaximumSize(50,28);
+  iaeaQueryButton->setToolTip(tr("Query IAEA database for level schemes"));
+  connect(iaeaQueryButton,SIGNAL(clicked()),this,SLOT(addLevelsFromIAEA()));
 
   /*
   mapper = new QSignalMapper(this);
@@ -111,15 +117,17 @@ LevelsTab::LevelsTab(QWidget *parent) : QWidget(parent) {
   QGridLayout *buttonBox = new QGridLayout;
   buttonBox->addWidget(addLevelButton,0,0);
   buttonBox->addWidget(removeLevelButton,0,1);
-  buttonBox->addItem(new QSpacerItem(28,28),0,2);
-  //buttonBox->addWidget(infoButton[0],0,3);
+  buttonBox->addWidget(iaeaQueryButton,0,2);
+  buttonBox->addItem(new QSpacerItem(28,28),0,3);
+  //buttonBox->addWidget(infoButton[0],0,4);
   buttonBox->setColumnStretch(0,0);
   buttonBox->setColumnStretch(1,0);
-  buttonBox->setColumnStretch(2,1);
-  buttonBox->setColumnStretch(3,0);
+  buttonBox->setColumnStretch(2,0);
+  buttonBox->setColumnStretch(3,1);
+  buttonBox->setColumnStretch(4,0);
 #ifdef MACX_SPACING
   buttonBox->setHorizontalSpacing(11);
-#else 
+#else
   buttonBox->setHorizontalSpacing(0);
 #endif
 
@@ -837,5 +845,80 @@ void LevelsTab::showInfo(int which,QString title) {
       infoDialog[which]->setAttribute(Qt:: WA_DeleteOnClose);
       infoDialog[which]->show();
     } else infoDialog[which]->raise();
+  }
+}
+
+int LevelsTab::calculateCompoundNucleus(int &massNumber, int &atomicNumber) {
+  // Get the first pair (entrance channel)
+  QList<PairsData> pairs = pairsModel->getPairs();
+  if (pairs.isEmpty()) {
+    return -1; // No pairs defined
+  }
+
+  const PairsData &entrancePair = pairs.first();
+
+  // Calculate compound nucleus as sum of light + heavy particles
+  // Mass number A = A_light + A_heavy
+  // Atomic number Z = Z_light + Z_heavy
+
+  // Mass numbers are approximated from the particle masses
+  // For nuclear physics: M(A,Z) ≈ A * u where u is atomic mass unit
+  int lightA = static_cast<int>(entrancePair.lightM + 0.5);
+  int heavyA = static_cast<int>(entrancePair.heavyM + 0.5);
+
+  massNumber = lightA + heavyA;
+  atomicNumber = entrancePair.lightZ + entrancePair.heavyZ;
+
+  return 0; // Success
+}
+
+void LevelsTab::addLevelsFromIAEA() {
+  // Check if pairs are defined
+  if (pairsModel->getPairs().isEmpty()) {
+    QMessageBox::warning(this, tr("No Pairs Defined"),
+                        tr("Please define at least one particle pair before querying IAEA database.\n"
+                           "The compound nucleus is calculated from the entrance channel."));
+    return;
+  }
+
+  // Calculate compound nucleus from pairs
+  int massNumber = 0;
+  int atomicNumber = 0;
+  if (calculateCompoundNucleus(massNumber, atomicNumber) != 0) {
+    QMessageBox::warning(this, tr("Error"),
+                        tr("Could not determine compound nucleus from pairs."));
+    return;
+  }
+
+  // Create and show the IAEA dialog
+  IAEALevelDialog dialog(this);
+  dialog.setCompoundNucleus(massNumber, atomicNumber);
+
+  if (dialog.exec() == QDialog::Accepted) {
+    QList<LevelsData> newLevels = dialog.getSelectedLevels();
+
+    int addedCount = 0;
+    int duplicateCount = 0;
+
+    for (const LevelsData &level : newLevels) {
+      if (levelsModel->isLevel(level) == -1) {
+        addLevel(level, false);
+        addedCount++;
+      } else {
+        duplicateCount++;
+      }
+    }
+
+    QString message;
+    if (addedCount > 0) {
+      message = tr("Added %1 level(s) from IAEA database.").arg(addedCount);
+      if (duplicateCount > 0) {
+        message += tr("\n%1 duplicate level(s) were skipped.").arg(duplicateCount);
+      }
+      QMessageBox::information(this, tr("Levels Added"), message);
+    } else if (duplicateCount > 0) {
+      QMessageBox::information(this, tr("No Levels Added"),
+                              tr("All selected levels already exist."));
+    }
   }
 }
