@@ -20,10 +20,7 @@ double AZURECalc::operator()(const vector_r& p) const {
   EData *localData = NULL;
   if(isFit) {
 
-    // Uncomment this block to enable object pooling for CNuc and EData
-    // Then comment out the direct cloning lines below
-    /*
-    // Initialize pools on first use
+    // New multithreading with object pools
     if (!pools_initialized_) {
       InitializePools();
     }
@@ -31,10 +28,10 @@ double AZURECalc::operator()(const vector_r& p) const {
     // Get objects from pool
     localCompound = GetPooledCNuc();
     localData = GetPooledEData();
-    */
 
-    localCompound = compound()->Clone();
-    localData = data()->Clone();
+    // Old multithreading
+    //localCompound = compound()->Clone();
+    //localData = data()->Clone();
   } else {
     localCompound = compound();
     localData = data();
@@ -118,14 +115,13 @@ double AZURECalc::operator()(const vector_r& p) const {
   }
   if(isFit) {
 
-    // Uncomment this block to enable object pooling for CNuc and EData
-    // Then comment out the direct deletion lines below
-    // Return objects to pool instead of deleting
-    //ReturnPooledCNuc(localCompound);
-    //ReturnPooledEData(localData);
+    // New multithreading with object pools
+    ReturnPooledCNuc(localCompound);
+    ReturnPooledEData(localData);
     
-    delete localCompound;
-    delete localData;
+    // Old multithreading
+    //delete localCompound;
+    //delete localData;
   }
 
   // Make a check if chiSquared is NaN
