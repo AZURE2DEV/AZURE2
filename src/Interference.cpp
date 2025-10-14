@@ -9,7 +9,14 @@
  */
 
 Interference::Interference(int mGroupNum1, int mGroupNum2, double z1z2Coeff, std::string interferenceType) :
-  m1_(mGroupNum1), m2_(mGroupNum2),z1z2_(z1z2Coeff),intertype_(interferenceType) {};
+  m1_(mGroupNum1), m2_(mGroupNum2),z1z2_(z1z2Coeff),z1z2_upos_(0.0),intertype_(interferenceType) {};
+
+/*!
+ * Constructor with UPOS coefficient for unobserved primary, observed secondary reactions.
+ */
+
+Interference::Interference(int mGroupNum1, int mGroupNum2, double z1z2Coeff, double z1z2UposCoeff, std::string interferenceType) :
+  m1_(mGroupNum1), m2_(mGroupNum2),z1z2_(z1z2Coeff),z1z2_upos_(z1z2UposCoeff),intertype_(interferenceType) {};
 
 /*!
  * Returns the interference type.
@@ -41,5 +48,13 @@ int Interference::GetM2() const {
 
 double Interference::GetZ1Z2() const {
   return z1z2_;
+}
+
+/*!
+ * Returns the corresponding UPOS \f$ Z_1 Z_2 \f$ coefficient for unobserved primary, observed secondary reactions.
+ */
+
+double Interference::GetZ1Z2_UPOS() const {
+  return z1z2_upos_;
 }
 

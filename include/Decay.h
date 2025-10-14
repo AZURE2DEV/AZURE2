@@ -18,6 +18,7 @@ class Decay {
   int NumKGroups() const;
   int NumKLGroups() const;
   int IsKGroup(KGroup);
+  int IsKGroup(KGroup,bool);
   int IsKLGroup(KLGroup) ; 
   void AddKGroup(KGroup);
   void AddKLGroup(KLGroup);

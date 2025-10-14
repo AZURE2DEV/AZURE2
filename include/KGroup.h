@@ -16,11 +16,13 @@
 class KGroup {
  public:
   KGroup(double, double);
+  KGroup(double, double, double);
   int NumMGroups() const;
   int NumECMGroups() const;
   int IsMGroup(MGroup);
   double GetS() const;
   double GetSp() const;
+  double GetSp2() const;
   void AddMGroup(MGroup);
   void AddECMGroup(ECMGroup);
   MGroup *GetMGroup(int);
@@ -28,6 +30,7 @@ class KGroup {
  private:
   double s_;
   double sp_;
+  double sp2_;
   std::vector<MGroup> mgroups_;
   std::vector<ECMGroup> ec_mgroups_;
 };

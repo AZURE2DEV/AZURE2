@@ -60,8 +60,12 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   stoppingPower_=0.0;
   angleKinFactor_=1.0;
   crossSectionKinFactor_=1.0;
+  isUPOS_=parent->IsUPOS();
+  secondaryDecayL_=parent->GetSecondaryDecayL();
+  Ic_=parent->GetIc();
+  delta_=parent->GetDelta();
 }
- 
+
 /*!
  * This constructor is used if the data point is to be created with no experimental data.
  * A pointer to the parent segment is passed to the constructor for the intialization of
@@ -100,8 +104,12 @@ EPoint::EPoint(double angle, double energy, ESegment* parent) {
   stoppingPower_=0.0;
   angleKinFactor_=1.0;
   crossSectionKinFactor_=1.0;
+  isUPOS_=parent->IsUPOS();
+  secondaryDecayL_=parent->GetSecondaryDecayL();
+  Ic_=parent->GetIc();
+  delta_=parent->GetDelta();
 }
-  
+
 /*!
  * This constructor is used if the data point is to be created with no experimental data
  * and no parent segment.  Such a point is used if AZURE is to be called as an energy-
@@ -139,7 +147,11 @@ EPoint::EPoint(double angle, double energy, int entranceKey,
   targetEffectNum_=0;
   parentData_=NULL;
   stoppingPower_=0.0;
-}    
+  isUPOS_=false;
+  secondaryDecayL_=0;
+  Ic_=0.0;
+  delta_=0.0;
+}
 
 /*!
  * Returns true if the point is differential cross section, otherwise returns false.
@@ -183,6 +195,14 @@ bool EPoint::IsMapped() const {
 bool EPoint::IsTargetEffect() const {
   if(GetTargetEffectNum()!=0) return true;
   else return false;
+}
+
+/*!
+ * Returns true if this point is an unobserved primary observed secondary reaction, otherwise it returns false.
+ */
+
+bool EPoint::IsUPOS() const {
+  return isUPOS_;
 }
 
 /*!
@@ -262,7 +282,15 @@ int EPoint::GetNumAngularDists() const {
   return angularDists_.size();
 }
 
-/*! 
+/*!
+ * Returns the angular momentum of the secondary decay for UPOS reactions.
+ */
+
+int EPoint::GetSecondaryDecayL() const {
+  return secondaryDecayL_;
+}
+
+/*!
  * Returns the angle of the data point in the laboratory frame.
  */
 
@@ -435,6 +463,22 @@ double EPoint::GetAngleKinFactor() const {
 
 double EPoint::GetCrossSectionKinFactor() const {
   return crossSectionKinFactor_;
+}
+
+/*!
+ * Returns the spin of the final state for UPOS reactions.
+ */
+
+double EPoint::GetIc() const {
+  return Ic_;
+}
+
+/*!
+ * Returns the multipole mixing ratio for UPOS reactions.
+ */
+
+double EPoint::GetDelta() const {
+  return delta_;
 }
 
 /*!

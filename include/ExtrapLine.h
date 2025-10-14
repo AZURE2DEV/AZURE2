@@ -16,11 +16,11 @@ class ExtrapLine {
    * Constructor fill the ExtrapLine object from an input stream.
    */
   ExtrapLine(std::istream &stream) {
-    stream >> isActive_ >> entranceKey_ >> exitKey_ >> minE_ 
+    stream >> isActive_ >> entranceKey_ >> exitKey_ >> minE_
 	   >> maxE_ >> eStep_ >> minA_ >> maxA_ >> aStep_ >> isDiff_;
     if(isDiff_==2) stream >> phaseJ_ >> phaseL_;
     else if(isDiff_==3) stream >> maxAngDistOrder_;
-
+    stream >> isUPOS_ >> secondaryDecayL_ >> Ic_ >> delta_;
   };
   /*!
    * Returns non-zero if the line is to be included in the calculation.
@@ -80,6 +80,26 @@ class ExtrapLine {
    * angular distribution.
    */
   int maxAngDistOrder() const {return maxAngDistOrder_;};
+  /*!
+   * Returns flag for if the segment is for an unobserved primary,
+   * observed secondary.
+   */
+  int isUPOS() const {return isUPOS_;};
+  /*!
+   * Returns the angular momentum of the decay for unobserved particle
+   * observed secondary decay
+   */
+  int secondaryDecayL() const {return secondaryDecayL_;};
+  /*!
+   * Returns the spin of the final state of the decay for unobserved particle
+   * observed secondary decay
+   */
+  double Ic() const {return Ic_;};
+  /*!
+   * Returns the multipolarity mixing ratio for unobserved particle
+   * observed secondary decay
+   */
+  double delta() const {return delta_;};
  private:
   int isActive_;
   int entranceKey_;
@@ -94,6 +114,10 @@ class ExtrapLine {
   double phaseJ_;
   int phaseL_;
   int maxAngDistOrder_;
+  int isUPOS_;
+  int secondaryDecayL_;
+  double Ic_;
+  double delta_;
 };
 
 #endif

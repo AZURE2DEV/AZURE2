@@ -228,6 +228,13 @@ void SegmentsTab::addSegDataLine() {
       newLine.operationType=0;
       newLine.componentsList="";
     }
+
+    if(aDialog.uposCheck->isChecked()) newLine.isUPOS=1;
+    else newLine.isUPOS=0;
+    newLine.secondaryL=aDialog.secondaryLText->text().toInt();
+    newLine.finalJ=aDialog.finalJText->text().toDouble();
+    newLine.delta=aDialog.deltaText->text().toDouble();
+
     addSegDataLine(newLine);
   }
 }
@@ -276,6 +283,14 @@ void SegmentsTab::addSegDataLine(SegmentsDataData line) {
     segmentsDataModel->setData(index,line.operationType,Qt::EditRole);
     index = segmentsDataModel->index(lines.size(),19,QModelIndex());
     segmentsDataModel->setData(index,line.componentsList,Qt::EditRole);
+    index = segmentsDataModel->index(lines.size(),20,QModelIndex());
+    segmentsDataModel->setData(index,line.isUPOS,Qt::EditRole);
+    index = segmentsDataModel->index(lines.size(),21,QModelIndex());
+    segmentsDataModel->setData(index,line.secondaryL,Qt::EditRole);
+    index = segmentsDataModel->index(lines.size(),22,QModelIndex());
+    segmentsDataModel->setData(index,line.finalJ,Qt::EditRole);
+    index = segmentsDataModel->index(lines.size(),23,QModelIndex());
+    segmentsDataModel->setData(index,line.delta,Qt::EditRole);
     segmentsDataView->resizeRowToContents(lines.size());
     updateSegDataButtons(segmentsDataView->selectionModel()->selection());
   } else {

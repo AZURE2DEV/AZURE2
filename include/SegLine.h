@@ -21,9 +21,22 @@ class SegLine {
     stream >> isActive_ >>  entranceKey_ >> exitKey_ >> minE_ >> maxE_ >> minA_ >> maxA_ >> isDiff_;
     if(isDiff_==2) stream >> phaseJ_ >> phaseL_;
     stream >> dataNorm_ >> varyNorm_ >> dataNormError_;
+
+    // Try to read UPOS parameters for backward compatibility
+    if(stream >> isUPOS_ >> secondaryDecayL_ >> Ic_ >> delta_) {
+      // Successfully read UPOS parameters
+    } else {
+      // Old format without UPOS parameters
+      isUPOS_ = 0;
+      secondaryDecayL_ = 0;
+      Ic_ = 0.0;
+      delta_ = 0.0;
+      stream.clear(); // Clear error flags if read failed
+    }
+
     std::string dummyString;
     getline(stream,dummyString);
-    
+
     // Initialize advanced segment parameters to defaults
     isAdvanced_ = 0;
     operationType_ = 0;
@@ -182,6 +195,25 @@ class SegLine {
    * Returns the semicolon-separated list of components.
    */
   std::string componentsList() const {return componentsList_;};
+  /*!
+   * Returns flag for if this segment is an unobserved primary transition (1 = is, 0 = not).
+   */
+  int isUPOS() const {return isUPOS_;};
+  /*!
+   * Returns the angular momentum of the decay for unobserved particle
+   * observed secondary decay
+   */
+  int secondaryDecayL() const {return secondaryDecayL_;};
+  /*!
+   * Returns the spin of the final state of the decay for unobserved particle
+   * observed secondary decay
+   */
+  double Ic() const {return Ic_;};
+  /*!
+   * Returns the multipole mixing ratio of the decay for unobserved particle
+   * observed secondary decay
+   */
+  double delta() const {return delta_;};
  private:
   int isActive_;
   int entranceKey_;
@@ -203,6 +235,10 @@ class SegLine {
   int isAdvanced_;
   int operationType_;
   std::string componentsList_;
+  int isUPOS_;
+  int secondaryDecayL_;
+  double Ic_;
+  double delta_;
 };
 
 #endif

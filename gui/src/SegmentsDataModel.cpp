@@ -153,7 +153,13 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
       return line.energyShiftError;
     } else if(index.column() == 16) {
       return line.varyEnergyShift;
-    }
+    } else if(index.column() == 17) return QVariant();
+    else if(index.column() == 18) return QVariant();
+    else if(index.column() == 19) return QVariant();
+    else if(index.column() == 20) return line.isUPOS;
+    else if(index.column() == 21) return line.secondaryL;
+    else if(index.column() == 22) return line.finalJ;
+    else if(index.column() == 23) return line.delta;
   } else if (role == Qt::EditRole) {
     SegmentsDataData line = segDataLineList.at(index.row());
     if(index.column() == 1) return line.entrancePairIndex;
@@ -175,6 +181,10 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
     else if(index.column() == 17) return line.isAdvanced;
     else if(index.column() == 18) return line.operationType;
     else if(index.column() == 19) return line.componentsList;
+    else if(index.column() == 20) return line.isUPOS;
+    else if(index.column() == 21) return line.secondaryL;
+    else if(index.column() == 22) return line.finalJ;
+    else if(index.column() == 23) return line.delta;
   } else if (role==Qt::CheckStateRole && index.column()==0) {
     SegmentsDataData line = segDataLineList.at(index.row());
     if(line.isActive==1) return Qt::Checked;
@@ -279,6 +289,10 @@ bool SegmentsDataModel::setData(const QModelIndex &index, const QVariant &value,
     else if(index.column() == 17) tempData.isAdvanced=value.toInt();
     else if(index.column() == 18) tempData.operationType=value.toInt();
     else if(index.column() == 19) tempData.componentsList=value.toString();
+    else if(index.column() == 20) tempData.isUPOS=value.toInt();
+    else if(index.column() == 21) tempData.secondaryL=value.toInt();
+    else if(index.column() == 22) tempData.finalJ=value.toDouble();
+    else if(index.column() == 23) tempData.delta=value.toDouble();
     else return false;
 
     segDataLineList.replace(row,tempData);
@@ -348,7 +362,11 @@ int SegmentsDataModel::isSegDataLine(const SegmentsDataData &line) const {
        tempLine.phaseL==line.phaseL&&
        tempLine.energyShift==line.energyShift&&
        tempLine.energyShiftError==line.energyShiftError&&
-       tempLine.varyEnergyShift==line.varyEnergyShift) {
+       tempLine.varyEnergyShift==line.varyEnergyShift&&
+       tempLine.isUPOS==line.isUPOS&&
+       tempLine.secondaryL==line.secondaryL&&
+       tempLine.finalJ==line.finalJ&&
+       tempLine.delta==line.delta) {
       foundLine=i;
       break;
     }

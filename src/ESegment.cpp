@@ -52,7 +52,12 @@ ESegment::ESegment(SegLine segLine) {
   componentsList_=segLine.componentsList();
   targetEffectNum_=0;
   isTargetEffect_=false;
-  
+  if(segLine.isUPOS()==1) isUPOS_=true;
+  else isUPOS_=false;
+  secondaryDecayL_ = segLine.secondaryDecayL();
+  Ic_ = segLine.Ic();
+  delta_ = segLine.delta();
+
   // Initialize advanced segment composition
   segmentOperationType_ = SUM;  // Default to SUM operation
   componentCalculationMutex_ = std::make_shared<std::mutex>();
@@ -108,7 +113,12 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   componentsList_="";
   targetEffectNum_=0;
   isTargetEffect_=false;
-  
+  if(extrapLine.isUPOS()==1) isUPOS_=true;
+  else isUPOS_=false;
+  secondaryDecayL_ = extrapLine.secondaryDecayL();
+  Ic_ = extrapLine.Ic();
+  delta_ = extrapLine.delta();
+
   // Initialize advanced segment composition
   segmentOperationType_ = SUM;  // Default to SUM operation
   componentCalculationMutex_ = std::make_shared<std::mutex>();
@@ -171,6 +181,14 @@ int ESegment::IsTotalCapture() const {
 
 bool ESegment::IsAngularDist() const {
   return isAngDist_;
+}
+
+/*!
+ * Returns true if this segment is an unobserved primary observed secondary reaction, otherwise it returns false.
+ */
+
+bool ESegment::IsUPOS() const {
+  return isUPOS_;
 }
 
 /*!
@@ -299,6 +317,14 @@ int ESegment::GetMaxAngDistOrder() const {
 }
 
 /*!
+ * Returns the angular momentum of the secondary decay for UPOS reactions.
+ */
+
+int ESegment::GetSecondaryDecayL() const {
+  return secondaryDecayL_;
+}
+
+/*!
  * Returns the minimum energy of the segment (lab frame).
  */
 
@@ -392,6 +418,22 @@ double ESegment::GetNominalNorm() const {
 
 double ESegment::GetNormError() const {
   return dataNormError_;
+}
+
+/*!
+ * Returns the spin of the final state for UPOS reactions.
+ */
+
+double ESegment::GetIc() const {
+  return Ic_;
+}
+
+/*!
+ * Returns the multipole mixing ratio for UPOS reactions.
+ */
+
+double ESegment::GetDelta() const {
+  return delta_;
 }
 
 /*!

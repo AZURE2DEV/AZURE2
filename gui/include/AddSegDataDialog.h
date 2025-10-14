@@ -45,6 +45,14 @@ class AddSegDataDialog : public QDialog {
   QLabel *energyShiftErrorLabel;
   QCheckBox *varyEnergyShiftCheck;
 
+  QCheckBox *uposCheck;
+  QLineEdit *secondaryLText;
+  QLabel *secondaryLLabel;
+  QLineEdit *finalJText;
+  QLabel *finalJLabel;
+  QLineEdit *deltaText;
+  QLabel *deltaLabel;
+
   QCheckBox *advancedModeCheck;
   QGroupBox *advancedModeBox;
   QComboBox *operationCombo;
@@ -61,6 +69,7 @@ class AddSegDataDialog : public QDialog {
   void advancedModeChanged(int);
   void addComponent();
   void removeComponent();
+  void uposChanged(int);
   
  private:
   QPushButton *okButton;
