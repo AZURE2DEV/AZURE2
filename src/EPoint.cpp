@@ -1068,6 +1068,7 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config& configure) {
   
   // Also recalculate Coulomb amplitude with current energy
   this->CalcCoulombAmplitude(theCNuc);
+
 }
 
 /*!

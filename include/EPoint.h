@@ -136,6 +136,8 @@ class EPoint {
   EPoint* GetSubPoint(int);
   std::vector<EPoint>& GetSubPoints();
   std::vector<EPoint*>& GetMappedPoints();
+  void StoreSubpointOffsets();  // Store offsets for adaptive grid preservation
+  void ApplySubpointShift(double energyShift, CNuc* theCNuc, const Config& configure);  // Intelligent shift preserving resonance structure
  private:
   bool is_differential_;
   bool is_phase_;

@@ -179,7 +179,8 @@ void IAEALevelDialog::populateTable(const QList<IAEALevel> &levels) {
         } else {
             // If parsing failed, allow manual input
             jCombo->setEditable(true);
-            jCombo->setPlaceholderText(tr("Enter J"));
+            jCombo->lineEdit()->setPlaceholderText(tr("Enter J"));
+            jCombo->lineEdit()->setReadOnly(false); // prevents typing if you want it non-editable
         }
         levelsTable_->setCellWidget(i, 3, jCombo);
 

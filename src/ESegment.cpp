@@ -487,20 +487,23 @@ void ESegment::SetLastEnergyShift(double lastEnergyShift) {
 void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configure) {
   // No lock needed since each thread works on independent EData clones
   // after fixing EData::Clone to properly remap component segment pointers
-  
+
   for(int i = 0; i < NumPoints(); i++) {
     EPoint* point = GetPoint(i+1);
     if(point && point->GetOriginalEnergy() > 0) {
       double originalEnergy = point->GetOriginalEnergy();
       double shiftedEnergy = originalEnergy + energyShift_;
-      
+
       // Don't allow energies below 0.01 MeV (AZURE2 may crash)
       if(shiftedEnergy < 0.01) {
+        std::cerr << "Warning: Energy shift in segment " << GetSegmentKey()
+                  << " would result in point energy below 0.01 MeV. "
+                  << "Setting point energy to 0.01 MeV instead." << std::endl;
         // FIX: we do not want to change the energy so abruptly, so leave the last shifted energy
         //shiftedEnergy = originalEnergy;
         continue;
       }
-      
+
       // Set the shifted energy
       point->SetLabEnergy(shiftedEnergy);
 
@@ -513,7 +516,7 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
         if(entrancePair->GetPType()==20) {
           point->ConvertDecayEnergy(exitPair);
         } else if (this->IsCMDifferential()) {
-          point->ConvertLabEnergy(entrancePair); 
+          point->ConvertLabEnergy(entrancePair);
         } else if(!this->IsCMDifferential()){
           point->ConvertLabEnergy(entrancePair);
         }
@@ -538,6 +541,51 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
         }
         point->RecalcEDependentValues(theCNuc,*configure);
 
+        // IMPORTANT: Also apply energy shift to all subpoints (used in convolution/target integration)
+        for(int j = 1; j <= point->NumSubPoints(); j++) {
+          EPoint* subPoint = point->GetSubPoint(j);
+          if(subPoint && subPoint->GetOriginalEnergy() > 0) {
+            double subOriginalEnergy = subPoint->GetOriginalEnergy();
+            double subShiftedEnergy = subOriginalEnergy + energyShift_;
+
+            // Apply same energy limit check
+            if(subShiftedEnergy < 0.01) {
+              continue;
+            }
+
+            // Set the shifted energy for subpoint
+            subPoint->SetLabEnergy(subShiftedEnergy);
+
+            // Recalculate energy dependent values for subpoint
+            if(entrancePair->GetPType()==20) {
+              subPoint->ConvertDecayEnergy(exitPair);
+            } else if (this->IsCMDifferential()) {
+              subPoint->ConvertLabEnergy(entrancePair);
+            } else if(!this->IsCMDifferential()){
+              subPoint->ConvertLabEnergy(entrancePair);
+            }
+
+            if(exitPair->GetPType()==0 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
+              if(this->GetEntranceKey()==this->GetExitKey()) {
+                subPoint->ConvertLabAngle(entrancePair);
+              } else {
+                subPoint->ConvertLabAngle(entrancePair,exitPair,*configure);
+              }
+              subPoint->ConvertCrossSection(entrancePair,exitPair);
+            }
+
+            if(exitPair->GetPType()==10 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
+              subPoint->ConvertLabAngleGammas(entrancePair);
+              subPoint->ConvertCrossSectionGammas(entrancePair);
+            }
+
+            if( this->IsDifferential() || this->IsCMDifferential()) {
+              subPoint->ClearLegendrePolynomials();
+              subPoint->CalcLegendreP(configure->maxLOrder, theCNuc, NULL);
+            }
+            subPoint->RecalcEDependentValues(theCNuc,*configure);
+          }
+        }
       }
     }
   }

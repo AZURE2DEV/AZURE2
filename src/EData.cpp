@@ -454,7 +454,7 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
 
           // Generate adaptive integration grid
           double startEnergy = point->GetCMEnergy() + forwardDepth;
-          double endEnergy;
+          double endEnergy ;
 
           // Check if target thickness is zero (for convolution-only cases)
           if(targetEffect->IsTargetIntegration()) {
@@ -481,16 +481,25 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
             }
           }
 
-          // Configure adaptive grid generator with width-aware parameters
-          AdaptiveIntegrationGrid::GridConfig gridConfig;
-          gridConfig.maxPoints = targetEffect->NumSubPoints();  // Budget for coarse grid
-          gridConfig.entranceKey = segment->GetEntranceKey();
-          gridConfig.baseEnergyStep = (startEnergy - endEnergy) / targetEffect->NumSubPoints();
-          gridConfig.resonanceWidthMultiplier = 5.0; // Integrate ±5Γ around resonances
-          gridConfig.pointsPerWidth = 20.0; // ~20 points per resonance width
+          std::vector<double> energyGrid;
+          if(targetEffect->GetDensity()==1.0e24){
+            // Configure adaptive grid generator with width-aware parameters
+            AdaptiveIntegrationGrid::GridConfig gridConfig;
+            gridConfig.maxPoints = targetEffect->NumSubPoints();  // Budget for coarse grid
+            gridConfig.entranceKey = segment->GetEntranceKey();
+            gridConfig.baseEnergyStep = (startEnergy - endEnergy) / targetEffect->NumSubPoints();
+            gridConfig.resonanceWidthMultiplier = 5.0; // Integrate ±5Γ around resonances
+            gridConfig.pointsPerWidth = 20.0; // ~20 points per resonance width
 
-          AdaptiveIntegrationGrid gridGenerator(gridConfig);
-          std::vector<double> energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
+            AdaptiveIntegrationGrid gridGenerator(gridConfig);
+            energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
+          } else {
+            // Make uniform grid based on target thickness and number of subpoints
+            double step = (startEnergy - endEnergy) / (targetEffect->NumSubPoints() - 1);
+            for(int i = 0; i < targetEffect->NumSubPoints(); i++) {
+              energyGrid.push_back(startEnergy - i * step);
+            }
+          }
 
           // Create sub-points using adaptive grid
           for(size_t i=0; i<energyGrid.size(); i++) {
@@ -581,16 +590,24 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
               }
 
               // Configure adaptive grid generator with width-aware parameters
-              // Configure adaptive grid generator with width-aware parameters
-              AdaptiveIntegrationGrid::GridConfig gridConfig;
-              gridConfig.maxPoints = targetEffect->NumSubPoints();  // Budget for coarse grid
-              gridConfig.entranceKey = segment->GetEntranceKey();
-              gridConfig.baseEnergyStep = (startEnergy - endEnergy) / targetEffect->NumSubPoints();
-              gridConfig.resonanceWidthMultiplier = 5.0; // Integrate ±5Γ around resonances
-              gridConfig.pointsPerWidth = 20.0; // ~20 points per resonance width
+              std::vector<double> energyGrid;
+              if(targetEffect->GetDensity()==1.0e24){
+                AdaptiveIntegrationGrid::GridConfig gridConfig;
+                gridConfig.maxPoints = targetEffect->NumSubPoints();  // Budget for coarse grid
+                gridConfig.entranceKey = segment->GetEntranceKey();
+                gridConfig.baseEnergyStep = (startEnergy - endEnergy) / targetEffect->NumSubPoints();
+                gridConfig.resonanceWidthMultiplier = 5.0; // Integrate ±5Γ around resonances
+                gridConfig.pointsPerWidth = 20.0; // ~20 points per resonance width
 
-              AdaptiveIntegrationGrid gridGenerator(gridConfig);
-              std::vector<double> energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
+                AdaptiveIntegrationGrid gridGenerator(gridConfig);
+                energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
+              } else {
+                // Make uniform grid based on target thickness and number of subpoints
+                double step = (startEnergy - endEnergy) / (targetEffect->NumSubPoints() - 1);
+                for(int i = 0; i < targetEffect->NumSubPoints(); i++) {
+                  energyGrid.push_back(startEnergy - i * step);
+                }
+              }
 
               // Create sub-points using adaptive grid
               for(size_t i=0; i<energyGrid.size(); i++) {
