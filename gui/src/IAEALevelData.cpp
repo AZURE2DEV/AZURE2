@@ -119,7 +119,7 @@ void IAEALevelData::queryLevels(const QString &nuclide) {
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
-    qDebug() << "Querying IAEA API:" << urlString;
+    //qDebug() << "Querying IAEA API:" << urlString;
     networkManager_->get(request);
 }
 
@@ -137,7 +137,7 @@ void IAEALevelData::handleNetworkReply(QNetworkReply *reply) {
     QByteArray responseData = reply->readAll();
     reply->deleteLater();
 
-    qDebug() << "Received response:" << responseData.left(500); // Log first 500 chars
+    //qDebug() << "Received response:" << responseData.left(500); // Log first 500 chars
 
     if (parseJsonResponse(responseData)) {
         emit levelsRetrieved(levels_);
@@ -226,6 +226,6 @@ bool IAEALevelData::parseJsonResponse(const QByteArray &data) {
         return false;
     }
 
-    qDebug() << "Parsed" << levels_.size() << "levels";
+    //qDebug() << "Parsed" << levels_.size() << "levels";
     return true;
 }

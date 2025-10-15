@@ -10,6 +10,10 @@
 #include <thread>
 #include <algorithm>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 double AZURECalc::operator()(const vector_r& p) const {
 
   int thisIteration=data()->Iterations();
@@ -21,9 +25,9 @@ double AZURECalc::operator()(const vector_r& p) const {
   if(isFit) {
 
     // New multithreading with object pools
-    if (!pools_initialized_) {
-      InitializePools();
-    }
+    //if (!pools_initialized_) {
+    //  InitializePools();
+    //}
     
     // Get objects from pool
     localCompound = GetPooledCNuc();
@@ -187,8 +191,13 @@ void AZURECalc::InitializePools() const {
   std::lock_guard<std::mutex> lock(pool_mutex_);
   if (pools_initialized_) return;
   
-  // Calculate pool size based on available hardware threads
-  const int pool_size = std::max(4, static_cast<int>(std::thread::hardware_concurrency() * 2));
+  // Calculate pool size based on OpenMP threads (fixes interaction with OpenMP)
+  int pool_size = 4; // default minimum
+#ifdef _OPENMP
+  pool_size = std::max(4, omp_get_max_threads());
+#else
+  pool_size = std::max(4, static_cast<int>(std::thread::hardware_concurrency()));
+#endif
   
   // Pre-allocate CNuc objects by cloning once
   for (int i = 0; i < pool_size; ++i) {
