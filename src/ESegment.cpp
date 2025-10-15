@@ -496,9 +496,11 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
 
       // Don't allow energies below 0.01 MeV (AZURE2 may crash)
       if(shiftedEnergy < 0.01) {
+        /*
         std::cerr << "Warning: Energy shift in segment " << GetSegmentKey()
                   << " would result in point energy below 0.01 MeV. "
                   << "Setting point energy to 0.01 MeV instead." << std::endl;
+                  */
         // FIX: we do not want to change the energy so abruptly, so leave the last shifted energy
         //shiftedEnergy = originalEnergy;
         continue;
