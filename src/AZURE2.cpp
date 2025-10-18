@@ -15,11 +15,16 @@
 #include "SegLine.h"
 #include "ExtrapLine.h"
 #include "GSLException.h"
+#include "CoulFuncCache.h"
+#include "ECAmplitudeCache.h"
 #include <stdlib.h>
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#include <sstream>
 #include <vector>
+#include <map>
+#include <tuple>
 #include <gsl/gsl_errno.h>
 #ifndef NO_READLINE
 #include <readline/readline.h>
@@ -158,21 +163,34 @@ int commandShell(const Config& configure) {
 	    << "\t3. Calculate Segments Without Data" << std::endl
 	    << "\t4. Perform MINOS Error Analysis" << std::endl
 	    << "\t5. Calculate Reaction Rate" << std::endl
+#ifdef USE_MCMC
+	    << "\t6. Perform MCMC Bayesian Sampling" << std::endl
+	    << "\t7. Exit" << std::endl;
+#else
 	    << "\t6. Exit" << std::endl;
+#endif
 
+#ifdef USE_MCMC
+  while(command<1||command>7) {
+#else
   while(command<1||command>6) {
+#endif
     configure.outStream << "azure2: ";
     std::string inString;
     getline(std::cin,inString);
     if(inString.empty()) continue;
     std::istringstream in;
     in.str(inString);
-    if(!(in>>command)) 
+    if(!(in>>command))
       configure.outStream << "Please enter an integer." << std::endl;
-    else if(command<1||command>6) 
+#ifdef USE_MCMC
+    else if(command<1||command>7)
+#else
+    else if(command<1||command>6)
+#endif
       configure.outStream << "Invalid option.  Please try again."
 		<< std::endl;
-  } 
+  }
   return command;
 }
 
@@ -192,7 +210,7 @@ void processCommand(int command, Config& configure) {
       getline(std::cin,inString);
       std::istringstream stm;
       stm.str(inString);
-      if(!(stm>>configure.chiVariance) || configure.chiVariance<0.) 
+      if(!(stm>>configure.chiVariance) || configure.chiVariance<0.)
 	configure.outStream << "Please enter a positive number." << std::endl;
       else goodAnswer=true;
     }
@@ -201,10 +219,19 @@ void processCommand(int command, Config& configure) {
   } else if(command==5) {
     configure.paramMask &= ~Config::CALCULATE_WITH_DATA;
     configure.paramMask |= Config::CALCULATE_REACTION_RATE;
+#ifdef USE_MCMC
+  } else if(command==6) {
+    configure.paramMask |= Config::PERFORM_MCMC;
+  } else if(command==7) {
+    exitMessage(configure);
+    exit(0);
+  }
+#else
   } else if(command==6) {
     exitMessage(configure);
     exit(0);
   }
+#endif
 }
 
 /*!
@@ -353,7 +380,125 @@ void getTemperatureFile(bool useReadline, Config& configure) {
 }
 
 /*!
- * This function  prompts the user for the required parameters if reaction rate is 
+ * This function prompts the user for MCMC sampling parameters.
+ */
+
+#ifdef USE_MCMC
+struct MCMCParams {
+  int nwalkers;
+  int nsteps;
+  double chainSpread;
+  int nthreads;
+  bool useRWA;
+  bool overwriteSamples;
+};
+
+void getMCMCParams(Config& configure, MCMCParams& mcmcParams) {
+  mcmcParams.nwalkers = 0;
+  mcmcParams.nsteps = 0;
+  mcmcParams.chainSpread = -1.0;  // Will be prompted
+  mcmcParams.nthreads = 1;
+  mcmcParams.useRWA = false;
+
+  // Get number of walkers
+  while(mcmcParams.nwalkers < 2 || mcmcParams.nwalkers > 1000) {
+    configure.outStream << std::setw(38) << "Number of Walkers (2-1000): ";
+    std::string inString;
+    getline(std::cin, inString);
+    std::istringstream stm;
+    stm.str(inString);
+    if(!(stm >> mcmcParams.nwalkers) || mcmcParams.nwalkers < 2 || mcmcParams.nwalkers > 1000)
+      configure.outStream << "Please enter an integer between 2 and 1000." << std::endl;
+  }
+
+  // Get number of steps
+  while(mcmcParams.nsteps < 100 || mcmcParams.nsteps > 10000000) {
+    configure.outStream << std::setw(38) << "Number of Steps (100-10000000): ";
+    std::string inString;
+    getline(std::cin, inString);
+    std::istringstream stm;
+    stm.str(inString);
+    if(!(stm >> mcmcParams.nsteps) || mcmcParams.nsteps < 100 || mcmcParams.nsteps > 10000000)
+      configure.outStream << "Please enter an integer between 100 and 10000000." << std::endl;
+  }
+
+  // Get initial parameter spread percentage
+  while(mcmcParams.chainSpread <= 0.0 || mcmcParams.chainSpread > 50.0) {
+    configure.outStream << std::setw(38) << "Initial Parameter Spread % (0.001-50) [default=5]: ";
+    std::string inString;
+    getline(std::cin, inString);
+
+    // Allow empty input for default
+    if(inString.empty() || inString.find_first_not_of(" \t\n") == std::string::npos) {
+      mcmcParams.chainSpread = 5.0;
+      break;
+    }
+
+    std::istringstream stm;
+    stm.str(inString);
+    if(!(stm >> mcmcParams.chainSpread) || mcmcParams.chainSpread <= 0.0 || mcmcParams.chainSpread > 50.0)
+      configure.outStream << "Please enter a number between 0.001 and 50, or press Enter for default (5%)." << std::endl;
+  }
+
+  // Get number of threads
+  while(mcmcParams.nthreads < 1) {
+    configure.outStream << std::setw(38) << "Number of Threads (1 or more): ";
+    std::string inString;
+    getline(std::cin, inString);
+    std::istringstream stm;
+    stm.str(inString);
+    if(!(stm >> mcmcParams.nthreads) || mcmcParams.nthreads < 1)
+      configure.outStream << "Please enter a positive integer." << std::endl;
+  }
+
+  // Ask if using RWA parameters
+  bool goodAnswer = false;
+  std::string rwaAnswer = "";
+  while(!goodAnswer) {
+    configure.outStream << std::setw(38) << "Use Reduced Width Amplitudes (yes/no): ";
+    getline(std::cin, rwaAnswer);
+    std::string trimmedAnswer;
+    for(int i = 0; i < rwaAnswer.length(); i++)
+      if(rwaAnswer[i] != ' ' && rwaAnswer[i] != '\t' && rwaAnswer[i] != '\n')
+        trimmedAnswer += rwaAnswer[i];
+    if(trimmedAnswer != "yes" && trimmedAnswer != "no")
+      configure.outStream << "Please type 'yes' or 'no'." << std::endl;
+    else {
+      goodAnswer = true;
+      rwaAnswer = trimmedAnswer;
+    }
+  }
+  mcmcParams.useRWA = (rwaAnswer == "yes");
+
+  // Ask if overwriting existing samples.mcmc file
+  goodAnswer = false;
+  std::string overwriteAnswer = "";
+  while(!goodAnswer) {
+    configure.outStream << std::setw(38) << "Overwrite existing samples.mcmc? (yes/no) [default=no]: ";
+    getline(std::cin, overwriteAnswer);
+
+    // Allow empty input for default (no)
+    if(overwriteAnswer.empty() || overwriteAnswer.find_first_not_of(" \t\n") == std::string::npos) {
+      mcmcParams.overwriteSamples = false;
+      break;
+    }
+
+    std::string trimmedAnswer;
+    for(int i = 0; i < overwriteAnswer.length(); i++)
+      if(overwriteAnswer[i] != ' ' && overwriteAnswer[i] != '\t' && overwriteAnswer[i] != '\n')
+        trimmedAnswer += overwriteAnswer[i];
+    if(trimmedAnswer != "yes" && trimmedAnswer != "no")
+      configure.outStream << "Please type 'yes' or 'no', or press Enter for default (no)." << std::endl;
+    else {
+      goodAnswer = true;
+      mcmcParams.overwriteSamples = (trimmedAnswer == "yes");
+    }
+  }
+}
+#endif
+
+/*!
+ * This function  prompts the user for the required parameters if reaction rate is
  * to be calculated.
  */
 
@@ -543,16 +688,537 @@ void getExternalCaptureFile(bool useReadline, Config& configure) {
  */
 
 void startMessage(const Config& configure) {
-  if(configure.paramMask & Config::PERFORM_ERROR_ANALYSIS) 
+  if(configure.paramMask & Config::PERFORM_ERROR_ANALYSIS)
     configure.outStream << "Calling AZURE2 for MINOS Error Analysis..." << std::endl;
-  else if(configure.paramMask & Config::CALCULATE_REACTION_RATE) 
-    configure.outStream << "Calling AZURE2 for reaction rate calculation..." << std::endl;  
-  else if(!(configure.paramMask & Config::CALCULATE_WITH_DATA)) 
-    configure.outStream << "Calling AZURE2 for calculation of segments without data..." << std::endl; 
-  else if(configure.paramMask & Config::PERFORM_FIT) 
+#ifdef USE_MCMC
+  else if(configure.paramMask & Config::PERFORM_MCMC)
+    configure.outStream << "Calling AZURE2 for MCMC Bayesian sampling..." << std::endl;
+#endif
+  else if(configure.paramMask & Config::CALCULATE_REACTION_RATE)
+    configure.outStream << "Calling AZURE2 for reaction rate calculation..." << std::endl;
+  else if(!(configure.paramMask & Config::CALCULATE_WITH_DATA))
+    configure.outStream << "Calling AZURE2 for calculation of segments without data..." << std::endl;
+  else if(configure.paramMask & Config::PERFORM_FIT)
     configure.outStream << "Calling AZURE2 for fitting of segments from data..." << std::endl;
   else  configure.outStream << "Calling AZURE2 for calculation of segments from data..." << std::endl;
 }
+
+/*!
+ * This function runs the MCMC sampling procedure.
+ */
+
+#ifdef USE_MCMC
+#include "CNuc.h"
+#include "EData.h"
+#include "AZUREParams.h"
+#include "AZURECalcMCMC.h"
+#include <iomanip>
+#include <ctime>
+
+// CLI progress callback - prints progress to stdout
+static int g_last_printed_step = -1;
+static time_t g_start_time = 0;
+
+void cli_progress_callback(int current_step, int total_steps, double logprob, double loglikelihood, double logprior) {
+  // Print progress every step (but the iteration callback controls frequency)
+  if(current_step != g_last_printed_step) {
+    g_last_printed_step = current_step;
+
+    // Calculate time estimates
+    time_t current_time = time(NULL);
+    double elapsed_seconds = difftime(current_time, g_start_time);
+    double steps_per_second = (elapsed_seconds > 0) ? current_step / elapsed_seconds : 0;
+    double remaining_steps = total_steps - current_step;
+    double estimated_remaining_seconds = (steps_per_second > 0) ? remaining_steps / steps_per_second : 0;
+
+    // Format time
+    int hours = (int)(estimated_remaining_seconds / 3600);
+    int minutes = (int)((estimated_remaining_seconds - hours * 3600) / 60);
+    int seconds = (int)(estimated_remaining_seconds - hours * 3600 - minutes * 60);
+
+    std::cout << "\rStep " << std::setw(6) << current_step << "/" << total_steps
+              << " (" << std::fixed << std::setprecision(1)
+              << (100.0 * current_step / total_steps) << "%)"
+              << " | logP=" << std::setprecision(2) << logprob
+              << " | logL=" << loglikelihood
+              << " | logPrior=" << logprior
+              << " | ETA: " << std::setfill('0') << std::setw(2) << hours << ":"
+              << std::setw(2) << minutes << ":" << std::setw(2) << seconds
+              << std::setfill(' ') << std::flush;
+  }
+}
+
+void cli_iteration_callback(int current_iteration, int total_iterations) {
+  // This gets called every iteration - we only print every 10 steps to avoid too much output
+  if(current_iteration % 10 == 0 || current_iteration == total_iterations) {
+    // The progress callback will handle the actual printing
+  }
+}
+
+// Helper function to create pretty parameter names (same logic as MCMCTab::createPrettyParameterName)
+std::string createPrettyParameterName(const std::string& paramName) {
+  // Handle different parameter naming conventions from AZURE2
+
+  // Convention 1: Short form (from .sav files)
+  // Energy parameters: E1, E2, etc. -> "Level X Energy (MeV)"
+  if(paramName.length() > 1 && paramName[0] == 'E' && std::isdigit(paramName[1])) {
+    try {
+      int levelNum = std::stoi(paramName.substr(1));
+      if(levelNum > 0) {
+        return "Level " + std::to_string(levelNum) + " Energy (MeV)";
+      }
+    } catch(...) {}
+  }
+
+  // Width parameters: G11, G12, G21, etc. -> "Level X Channel Y Width (eV)"
+  if(paramName.length() > 2 && paramName[0] == 'G' && std::isdigit(paramName[1])) {
+    try {
+      std::string numPart = paramName.substr(1);
+      if(numPart.length() >= 2) {
+        int levelNum = std::stoi(numPart.substr(0, 1));
+        int channelNum = std::stoi(numPart.substr(1));
+        if(levelNum > 0 && channelNum > 0) {
+          return "Level " + std::to_string(levelNum) + " Channel " + std::to_string(channelNum) + " Width (eV)";
+        }
+      }
+    } catch(...) {}
+  }
+
+  // Normalization: N1, N2, etc. -> "Segment X Normalization"
+  if(paramName.length() > 1 && paramName[0] == 'N' && std::isdigit(paramName[1])) {
+    try {
+      int segmentNum = std::stoi(paramName.substr(1));
+      if(segmentNum > 0) {
+        return "Segment " + std::to_string(segmentNum) + " Normalization";
+      }
+    } catch(...) {}
+  }
+
+  // Energy shift: S1, S2, etc. -> "Segment X Energy Shift (keV)"
+  if(paramName.length() > 1 && paramName[0] == 'S' && std::isdigit(paramName[1])) {
+    try {
+      int segmentNum = std::stoi(paramName.substr(1));
+      if(segmentNum > 0) {
+        return "Segment " + std::to_string(segmentNum) + " Energy Shift (keV)";
+      }
+    } catch(...) {}
+  }
+
+  // Convention 2: Descriptive form (from Minuit parameter names)
+  // Width parameters: "width_X_Y" -> "Level X Channel Y Width (eV)"
+  if(paramName.find("width_") == 0) {
+    try {
+      size_t firstUnderscore = paramName.find('_');
+      size_t secondUnderscore = paramName.find('_', firstUnderscore + 1);
+      if(secondUnderscore != std::string::npos) {
+        int levelNum = std::stoi(paramName.substr(firstUnderscore + 1, secondUnderscore - firstUnderscore - 1));
+        int channelNum = std::stoi(paramName.substr(secondUnderscore + 1));
+        return "Level " + std::to_string(levelNum) + " Channel " + std::to_string(channelNum) + " Width (eV)";
+      }
+    } catch(...) {}
+  }
+
+  // Energy parameters: "energy_X" -> "Level X Energy (MeV)"
+  if(paramName.find("energy_") == 0) {
+    try {
+      int levelNum = std::stoi(paramName.substr(7)); // Skip "energy_"
+      return "Level " + std::to_string(levelNum) + " Energy (MeV)";
+    } catch(...) {}
+  }
+
+  // Segment normalization: "segment_X_norm" -> "Segment X Normalization"
+  if(paramName.find("segment_") == 0 && paramName.find("_norm") != std::string::npos) {
+    try {
+      size_t firstUnderscore = paramName.find('_');
+      size_t secondUnderscore = paramName.find('_', firstUnderscore + 1);
+      if(secondUnderscore != std::string::npos) {
+        int segmentNum = std::stoi(paramName.substr(firstUnderscore + 1, secondUnderscore - firstUnderscore - 1));
+        return "Segment " + std::to_string(segmentNum) + " Normalization";
+      }
+    } catch(...) {}
+  }
+
+  // Segment energy shift: "segment_X_energy_shift" -> "Segment X Energy Shift (keV)"
+  if(paramName.find("segment_") == 0 && paramName.find("_energy_shift") != std::string::npos) {
+    try {
+      size_t firstUnderscore = paramName.find('_');
+      size_t secondUnderscore = paramName.find('_', firstUnderscore + 1);
+      if(secondUnderscore != std::string::npos) {
+        int segmentNum = std::stoi(paramName.substr(firstUnderscore + 1, secondUnderscore - firstUnderscore - 1));
+        return "Segment " + std::to_string(segmentNum) + " Energy Shift (keV)";
+      }
+    } catch(...) {}
+  }
+
+  // Generic fallback - keep original name
+  return paramName;
+}
+
+int runMCMC(Config& configure, const MCMCParams& mcmcParams) {
+  try {
+    // Create compound nucleus and experimental data objects
+    CNuc* compound = new CNuc();
+    EData* data = new EData();
+
+    // Fill compound nucleus from configuration file
+    configure.outStream << "Filling Compound Nucleus..." << std::endl;
+    if(compound->Fill(configure) == -1) {
+      configure.outStream << "Could not fill compound nucleus from file." << std::endl;
+      delete compound;
+      delete data;
+      return -1;
+    } else if(compound->NumPairs() == 0 || compound->NumJGroups() == 0) {
+      configure.outStream << "No nuclear data exists. Calculation not possible." << std::endl;
+      delete compound;
+      delete data;
+      return -1;
+    }
+
+    // Fill the data object from segments and data file
+    configure.outStream << "Filling Data Structures..." << std::endl;
+    if(configure.paramMask & Config::CALCULATE_WITH_DATA) {
+      if(data->Fill(configure, compound) == -1) {
+        configure.outStream << "Could not fill data object from file." << std::endl;
+        delete compound;
+        delete data;
+        return -1;
+      } else if(data->NumSegments() == 0) {
+        configure.outStream << "There is no data provided." << std::endl;
+        delete compound;
+        delete data;
+        return -1;
+      }
+    } else {
+      if(data->MakePoints(configure, compound) == -1) {
+        configure.outStream << "Could not fill data object from file." << std::endl;
+        delete compound;
+        delete data;
+        return -1;
+      } else if(data->NumSegments() == 0) {
+        configure.outStream << "Extrapolation segments produce no data." << std::endl;
+        delete compound;
+        delete data;
+        return -1;
+      }
+    }
+
+    // Initialize compound nucleus
+    try {
+      compound->Initialize(configure);
+    } catch(GSLException e) {
+      configure.outStream << e.what() << std::endl;
+      configure.outStream << "Calculation was aborted." << std::endl;
+      delete compound;
+      delete data;
+      return -1;
+    }
+
+    // Initialize EC amplitude cache if using external capture
+    if(configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
+      InitializeECAmplitudeCache();
+      // Clear cache to ensure fresh start for this calculation
+      if(g_ecAmplitudeCache) {
+        g_ecAmplitudeCache->Clear();
+      }
+      configure.outStream << "Initialized and cleared EC amplitude cache..." << std::endl;
+    }
+
+    // Initialize data object
+    if(data->Initialize(compound, configure) == -1) {
+      configure.outStream << "Calculation was aborted." << std::endl;
+      delete compound;
+      delete data;
+      return -1;
+    }
+
+    // Create parameter structure
+    AZUREParams params;
+    compound->FillMnParams(params.GetMinuitParams(), &configure);
+    data->FillMnParams(params.GetMinuitParams());
+
+    // Read existing parameters if provided
+    if(configure.paramMask & Config::USE_PREVIOUS_PARAMETERS) {
+      configure.outStream << "Reading User Parameter File..." << std::endl;
+      params.ReadUserParameters(configure);
+    } else {
+      configure.outStream << "Creating New param.par File..." << std::endl;
+      params.WriteUserParameters(configure, false);
+    }
+
+    // Setup compound nucleus from parameters
+    compound->FillCompoundFromParams(params.GetMinuitParams().Params());
+    if(configure.paramMask & Config::USE_BRUNE_FORMALISM) {
+      compound->CalcShiftFunctions(configure);
+    }
+
+    // Extract initial parameter values (only non-fixed parameters)
+    std::vector<double> initialParams;
+    if(mcmcParams.useRWA) {
+      // Use RWA parameters directly
+      for(int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
+        if(!params.GetMinuitParams().Parameter(i).IsFixed()) {
+          initialParams.push_back(params.GetMinuitParams().Parameter(i).Value());
+        }
+      }
+    } else {
+      // Use physical parameters
+      compound->TransformOut(configure);
+      vector_r physicalParams = compound->GetTransformParams(configure);
+
+      // Extend with data parameters if needed
+      for(size_t i = physicalParams.size(); i < params.GetMinuitParams().Params().size(); i++) {
+        physicalParams.push_back(params.GetMinuitParams().Parameter(i).Value());
+      }
+
+      // Extract non-fixed parameters
+      for(int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
+        if(!params.GetMinuitParams().Parameter(i).IsFixed()) {
+          initialParams.push_back(physicalParams[i]);
+        }
+      }
+    }
+
+    if(initialParams.empty()) {
+      configure.outStream << "Error: No free parameters found for MCMC sampling." << std::endl;
+      configure.outStream << "Please ensure at least one parameter is not fixed." << std::endl;
+      delete compound;
+      delete data;
+      return -1;
+    }
+
+    // Read priors from AZURE2 file if they exist
+    std::map<std::string, std::tuple<double, double, bool>> priorMap; // paramName -> (priorMean, priorStd, usePrior)
+    std::ifstream priorFile(configure.configfile.c_str());
+    if(priorFile.good()) {
+      std::string line;
+      bool inMCMCSection = false;
+      bool inParametersSection = false;
+
+      while(std::getline(priorFile, line)) {
+        // Trim whitespace
+        size_t start = line.find_first_not_of(" \t\r\n");
+        if(start != std::string::npos) {
+          line = line.substr(start);
+          size_t end = line.find_last_not_of(" \t\r\n");
+          if(end != std::string::npos) line = line.substr(0, end + 1);
+        }
+
+        if(line == "<mcmc>") {
+          inMCMCSection = true;
+          continue;
+        } else if(line == "</mcmc>") {
+          inMCMCSection = false;
+          break;
+        }
+
+        if(inMCMCSection) {
+          if(line == "<parameters>") {
+            inParametersSection = true;
+            continue;
+          } else if(line == "</parameters>") {
+            inParametersSection = false;
+            continue;
+          }
+
+          if(inParametersSection && !line.empty()) {
+            // Parse: "Parameter (raw_param_name) currentValue priorMean priorStd useGaussianPrior"
+            std::istringstream iss(line);
+            std::vector<std::string> parts;
+            std::string part;
+            while(iss >> part) parts.push_back(part);
+
+            if(parts.size() >= 5) {
+              // Last 4 parts are: currentValue, priorMean, priorStd, useGaussianPrior
+              // Everything before that is the parameter name (possibly "Parameter (raw_name)")
+              std::string fileParamName;
+              for(size_t i = 0; i < parts.size() - 4; i++) {
+                if(i > 0) fileParamName += " ";
+                fileParamName += parts[i];
+              }
+
+              // Extract raw parameter name from "Parameter (raw_name)" format
+              std::string rawParamName;
+              size_t openParen = fileParamName.find('(');
+              size_t closeParen = fileParamName.find(')');
+              if(openParen != std::string::npos && closeParen != std::string::npos && closeParen > openParen) {
+                // Extract the raw name from inside parentheses
+                rawParamName = fileParamName.substr(openParen + 1, closeParen - openParen - 1);
+              } else {
+                // No parentheses - use the whole name
+                rawParamName = fileParamName;
+              }
+
+              // Transform raw name to pretty name
+              std::string prettyParamName = createPrettyParameterName(rawParamName);
+
+              double priorMean = std::atof(parts[parts.size() - 3].c_str());
+              double priorStd = std::atof(parts[parts.size() - 2].c_str());
+              bool usePrior = (std::atoi(parts[parts.size() - 1].c_str()) == 1);
+
+              // Store using the pretty parameter name for lookup
+              priorMap[prettyParamName] = std::make_tuple(priorMean, priorStd, usePrior);
+            }
+          }
+        }
+      }
+      priorFile.close();
+    }
+
+    // Build prior vectors for MCMC calculator (matching GUI approach)
+    std::vector<double> priorMeans;
+    std::vector<double> priorStds;
+    std::vector<bool> usePriors;
+
+    // Print parameter information
+    configure.outStream << std::endl;
+    configure.outStream << "Free Parameters for MCMC:" << std::endl;
+    configure.outStream << std::setw(40) << std::left << "Parameter Name"
+                       << std::setw(15) << "Current Value"
+                       << std::setw(15) << "Prior Mean"
+                       << std::setw(15) << "Prior Std"
+                       << std::setw(20) << "Use Prior" << std::endl;
+    configure.outStream << std::string(105, '-') << std::endl;
+
+    int paramIndex = 0;
+    int priorsFound = 0;
+    for(int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
+      if(!params.GetMinuitParams().Parameter(i).IsFixed()) {
+        std::string rawParamName = params.GetMinuitParams().GetName(i);
+        std::string paramName = createPrettyParameterName(rawParamName);
+        double currentValue = initialParams[paramIndex];
+
+        // Check if prior exists for this parameter
+        std::string priorMeanStr = "N/A";
+        std::string priorStdStr = "N/A";
+        std::string usePriorStr = "No (uniform)";
+
+        double priorMean = 0.0;
+        double priorStd = 0.0;
+        bool usePrior = false;
+
+        if(priorMap.find(paramName) != priorMap.end()) {
+          priorMean = std::get<0>(priorMap[paramName]);
+          priorStd = std::get<1>(priorMap[paramName]);
+          usePrior = std::get<2>(priorMap[paramName]);
+
+          // Only mark as found if usePrior is true AND std is positive
+          if(usePrior && priorStd > 0.0) {
+            std::ostringstream meanStream, stdStream;
+            meanStream << std::scientific << std::setprecision(4) << priorMean;
+            stdStream << std::scientific << std::setprecision(4) << priorStd;
+            priorMeanStr = meanStream.str();
+            priorStdStr = stdStream.str();
+            usePriorStr = "Yes (Gaussian)";
+            priorsFound++;
+          } else {
+            // Found in map but usePrior is false or std is invalid - reset to defaults
+            priorMean = 0.0;
+            priorStd = 0.0;
+            usePrior = false;
+          }
+        }
+
+        // Add to prior vectors - these must be added for ALL parameters to maintain index alignment
+        priorMeans.push_back(priorMean);
+        priorStds.push_back(priorStd);
+        usePriors.push_back(usePrior);
+
+        configure.outStream << std::setw(40) << std::left << paramName
+                           << std::setw(15) << std::scientific << std::setprecision(6) << currentValue
+                           << std::setw(15) << priorMeanStr
+                           << std::setw(15) << priorStdStr
+                           << std::setw(20) << usePriorStr << std::endl;
+        paramIndex++;
+      }
+    }
+    configure.outStream << std::endl;
+    if(priorsFound > 0) {
+      configure.outStream << "Found " << priorsFound << " Gaussian prior(s) in AZURE2 file." << std::endl;
+      configure.outStream << "Priors will be applied during MCMC sampling." << std::endl;
+    } else {
+      configure.outStream << "No priors found in AZURE2 file. Using uniform priors for all parameters." << std::endl;
+      configure.outStream << "To use Gaussian priors, use the GUI to configure them and save the .azr file." << std::endl;
+    }
+    configure.outStream << std::endl;
+
+    // Handle overwriting existing samples.mcmc file if requested
+    if(mcmcParams.overwriteSamples) {
+      std::string samplesFile = configure.outputdir + "samples.mcmc";
+      std::ifstream checkFile(samplesFile.c_str());
+      if(checkFile.good()) {
+        checkFile.close();
+        if(std::remove(samplesFile.c_str()) == 0) {
+          configure.outStream << "Removed existing samples.mcmc file." << std::endl;
+        } else {
+          configure.outStream << "Warning: Could not remove existing samples.mcmc file." << std::endl;
+        }
+      }
+    }
+
+    configure.outStream << std::endl;
+    configure.outStream << "MCMC Configuration:" << std::endl;
+    configure.outStream << "  Number of walkers: " << mcmcParams.nwalkers << std::endl;
+    configure.outStream << "  Number of steps: " << mcmcParams.nsteps << std::endl;
+    configure.outStream << "  Initial parameter spread: " << mcmcParams.chainSpread << "%" << std::endl;
+    configure.outStream << "  Number of threads: " << mcmcParams.nthreads << std::endl;
+    configure.outStream << "  Parameter mode: " << (mcmcParams.useRWA ? "RWA" : "Physical") << std::endl;
+    configure.outStream << "  Number of free parameters: " << initialParams.size() << std::endl;
+    configure.outStream << std::endl;
+
+    // Create MCMC calculator
+    AZURECalcMCMC mcmcCalc(data, compound, configure);
+
+    // Set priors in MCMC calculator (same as GUI does in AZUREMCMCThread.cpp)
+    if(priorsFound > 0) {
+      mcmcCalc.SetPriors(priorMeans, priorStds, usePriors);
+      configure.outStream << "Applied " << priorsFound << " Gaussian prior(s) to MCMC calculator." << std::endl;
+      configure.outStream << std::endl;
+    }
+
+    // Register CLI progress callbacks for console output
+    g_start_time = time(NULL);
+    g_last_printed_step = -1;
+    AZURECalcMCMC::SetGUIProgressCallback(cli_progress_callback);
+    AZURECalcMCMC::SetGUIIterationCallback(cli_iteration_callback);
+
+    // Run MCMC sampling
+    std::vector<std::vector<double>> samples;
+    mcmcCalc.RunMCMCSampling(mcmcParams.nwalkers, mcmcParams.nsteps, initialParams,
+                             samples, mcmcParams.chainSpread, mcmcParams.nthreads, mcmcParams.useRWA);
+
+    // Clear callbacks
+    AZURECalcMCMC::SetGUIProgressCallback(nullptr);
+    AZURECalcMCMC::SetGUIIterationCallback(nullptr);
+
+    configure.outStream << std::endl << std::endl;
+    configure.outStream << "MCMC sampling completed successfully!" << std::endl;
+    configure.outStream << "Results saved to: " << configure.outputdir << "samples.mcmc" << std::endl;
+    configure.outStream << "Total samples generated: " << samples.size() << std::endl;
+
+    // Cleanup EC amplitude cache if it was used
+    if(configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
+      if(g_ecAmplitudeCache) {
+        configure.outStream << "EC amplitude cache statistics:" << std::endl;
+        // Optionally print cache statistics if available
+        // g_ecAmplitudeCache->PrintStats();
+      }
+      CleanupECAmplitudeCache();
+    }
+
+    // Cleanup
+    delete compound;
+    delete data;
+
+    return 0;
+  } catch(const std::exception& e) {
+    configure.outStream << "Error during MCMC sampling: " << e.what() << std::endl;
+    return -1;
+  } catch(...) {
+    configure.outStream << "Unknown error during MCMC sampling." << std::endl;
+    return -1;
+  }
+}
+#endif
 
 /*!
  * This is the main function. All the above initialization functions are called from here.
@@ -560,9 +1226,9 @@ void startMessage(const Config& configure) {
  */
 
 int main(int argc,char *argv[]){
-  
+
   //Check for --help option first.  If set, print help and exit.
-  for(int i=1;i<argc;i++) 
+  for(int i=1;i<argc;i++)
     if(strcmp(argv[i],"--help")==0) {
       printHelp();
       return 0;
@@ -570,6 +1236,10 @@ int main(int argc,char *argv[]){
 
   //Set GSL Error Handler
   gsl_set_error_handler (&GSLException::GSLErrorHandler);
+
+  //Initialize caches for performance optimization
+  InitializeCoulFuncCache();
+  InitializeECAmplitudeCache();
   
   //If GUI is built, look for --no-gui option.  If not set, hand control to GUI.
 #ifdef GUI_BUILD
@@ -635,23 +1305,52 @@ int main(int argc,char *argv[]){
   
     //Parse the segment files for entrance,exit pairs
     std::vector<SegPairs> segPairs;
-    if(!(configure.paramMask & Config::CALCULATE_REACTION_RATE)) {
+#ifdef USE_MCMC
+    // For MCMC, we still need to check for external capture but use segments from config file
+    if(configure.paramMask & Config::PERFORM_MCMC) {
       if(!readSegmentFile(configure,segPairs)) exit(1);
-    } else getRateParams(configure,segPairs,useReadline);
+      if(!checkExternalCapture(configure,segPairs)) exit(1);
+      getExternalCaptureFile(useReadline,configure);
+    } else {
+#endif
+      if(!(configure.paramMask & Config::CALCULATE_REACTION_RATE)) {
+        if(!readSegmentFile(configure,segPairs)) exit(1);
+      } else getRateParams(configure,segPairs,useReadline);
 
-    //Check if the entrance,exit pairs are in the external capture file
-    // If so, external capture will be needed
-    if(!checkExternalCapture(configure,segPairs)) exit(1);
-  
-    //Read the external capture file name to be used, if any
-    getExternalCaptureFile(useReadline,configure);
-   
-    //Create instance of main AZURE function, print start message,
-    // and execute
-    AZUREMain azureMain(configure);
-    configure.outStream << std::endl; startMessage(configure);
-    int returnValue = azureMain();
-  
+      //Check if the entrance,exit pairs are in the external capture file
+      // If so, external capture will be needed
+      if(!checkExternalCapture(configure,segPairs)) exit(1);
+
+      //Read the external capture file name to be used, if any
+      getExternalCaptureFile(useReadline,configure);
+#ifdef USE_MCMC
+    }
+#endif
+
+#ifdef USE_MCMC
+    // Handle MCMC separately
+    if(configure.paramMask & Config::PERFORM_MCMC) {
+      MCMCParams mcmcParams;
+      getMCMCParams(configure, mcmcParams);
+
+      configure.outStream << std::endl;
+      startMessage(configure);
+      int returnValue = runMCMC(configure, mcmcParams);
+
+      if(returnValue != 0) {
+        configure.outStream << "MCMC sampling failed." << std::endl;
+      }
+    } else {
+#endif
+      //Create instance of main AZURE function, print start message,
+      // and execute
+      AZUREMain azureMain(configure);
+      configure.outStream << std::endl; startMessage(configure);
+      int returnValue = azureMain();
+#ifdef USE_MCMC
+    }
+#endif
+
     //Print exit message
     exitMessage(configure);
 
@@ -661,6 +1360,10 @@ int main(int argc,char *argv[]){
 #ifndef NO_READLINE
   if(useReadline) write_history("./.azure_history");
 #endif
-  
+
+  //Cleanup caches
+  CleanupCoulFuncCache();
+  CleanupECAmplitudeCache();
+
   return 0;
 }

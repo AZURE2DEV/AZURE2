@@ -380,12 +380,12 @@ double mcmc_log_probability_wrapper_rwa(std::vector<double>& params) {
     double logLikelihood = g_mcmc_calc->LogLikelihood(params);
     double logPrior = g_mcmc_calc->CalculateLogPrior(params);
     double logProbability = logLikelihood + logPrior;
-    
+
     // Store for GUI callbacks - these are the EXACT values used
     g_last_likelihood = logLikelihood;
     g_last_prior = logPrior;
     g_last_params = params;
-    
+
     // Save sample to file if file is open (thread-safe)
     if(g_sample_file && g_sample_file->is_open()) {
 #ifdef _OPENMP
@@ -393,22 +393,25 @@ double mcmc_log_probability_wrapper_rwa(std::vector<double>& params) {
 #endif
       int walker_id = g_sample_count % g_nwalkers;
       int step = g_sample_count / g_nwalkers;
-      
-      *g_sample_file << step << "," << walker_id << "," << logProbability << "," << logLikelihood << "," << logPrior;
+
+      // Write with full double precision (17 digits) to preserve accuracy
+      *g_sample_file << step << "," << walker_id << ","
+                     << std::scientific << std::setprecision(17)
+                     << logProbability << "," << logLikelihood << "," << logPrior;
       for(const double& param : params) {
         *g_sample_file << "," << param;
       }
-      *g_sample_file << "\n";
+      *g_sample_file << std::defaultfloat << "\n";
       g_sample_file->flush(); // Ensure data is written immediately
       g_sample_count++;
-      
+
       // Increment the atomic counter AFTER the sample is actually written to file
       g_samples_written_to_file++;
 #ifdef _OPENMP
       omp_unset_lock(&g_file_lock);
 #endif
     }
-    
+
     return logLikelihood;  // Return only likelihood for MCMC sampler
   }
   return -std::numeric_limits<double>::infinity();
@@ -421,12 +424,12 @@ double mcmc_log_probability_wrapper(std::vector<double>& params) {
     double logLikelihood = g_mcmc_calc->LogLikelihoodPhysical(params);
     double logPrior = g_mcmc_calc->CalculateLogPrior(params);
     double logProbability = logLikelihood + logPrior;
-    
+
     // Store for GUI callbacks - these are the EXACT values used
     g_last_likelihood = logLikelihood;
     g_last_prior = logPrior;
     g_last_params = params;
-    
+
     // Save sample to file if file is open (thread-safe)
     if(g_sample_file && g_sample_file->is_open()) {
 #ifdef _OPENMP
@@ -434,22 +437,25 @@ double mcmc_log_probability_wrapper(std::vector<double>& params) {
 #endif
       int walker_id = g_sample_count % g_nwalkers;
       int step = g_sample_count / g_nwalkers;
-      
-      *g_sample_file << step << "," << walker_id << "," << logProbability << "," << logLikelihood << "," << logPrior;
+
+      // Write with full double precision (17 digits) to preserve accuracy
+      *g_sample_file << step << "," << walker_id << ","
+                     << std::scientific << std::setprecision(17)
+                     << logProbability << "," << logLikelihood << "," << logPrior;
       for(const double& param : params) {
         *g_sample_file << "," << param;
       }
-      *g_sample_file << "\n";
+      *g_sample_file << std::defaultfloat << "\n";
       g_sample_file->flush(); // Ensure data is written immediately
       g_sample_count++;
-      
+
       // Increment the atomic counter AFTER the sample is actually written to file
       g_samples_written_to_file++;
 #ifdef _OPENMP
       omp_unset_lock(&g_file_lock);
 #endif
     }
-    
+
     return logLikelihood;  // Return only likelihood for MCMC sampler
   }
   return -std::numeric_limits<double>::infinity();
@@ -472,6 +478,30 @@ struct LastSampleInfo {
   double logprior;
   bool valid;
 };
+
+// Custom robust string-to-double parser for scientific notation
+double robust_stod(const std::string& str) {
+    // Temporarily set numeric locale to "C"
+    std::string old_locale = std::setlocale(LC_NUMERIC, nullptr);
+    std::setlocale(LC_NUMERIC, "C");
+
+    const char* cstr = str.c_str();
+    char* end = nullptr;
+
+    double value = std::strtod(cstr, &end);
+
+    // Restore previous locale
+    std::setlocale(LC_NUMERIC, old_locale.c_str());
+
+    // Skip trailing spaces
+    while (*end && std::isspace(static_cast<unsigned char>(*end))) ++end;
+
+    if (end == cstr || *end != '\0') {
+        throw std::invalid_argument("Invalid double format: '" + str + "'");
+    }
+
+    return value;
+}
 
 LastSampleInfo read_last_sample_from_file(const std::string& filename) {
   LastSampleInfo info = {0, 0, 0.0, 0.0, 0.0, false};
@@ -539,9 +569,9 @@ LastSampleInfo read_last_sample_from_file(const std::string& filename) {
         switch (field) {
           case 0: info.step = std::stoi(token); break;
           case 1: info.walker = std::stoi(token); break;
-          case 2: info.logprob = std::stod(token); break;
-          case 3: info.loglikelihood = std::stod(token); break;
-          case 4: info.logprior = std::stod(token); break;
+          case 2: info.logprob = robust_stod(token); break;
+          case 3: info.loglikelihood = robust_stod(token); break;
+          case 4: info.logprior = robust_stod(token); break;
         }
       } catch (...) {
         return info; // Invalid format
@@ -934,7 +964,7 @@ void AZURECalcMCMC::LoadExistingSamples(const std::string& filename, std::vector
     while(std::getline(ss, cell, ',')) {
       if(colIndex >= 3) { // Skip step, walker, logprob columns
         try {
-          double value = std::stod(cell);
+          double value = robust_stod(cell);
           sample.push_back(value);
         } catch(const std::exception&) {
           // Skip malformed lines

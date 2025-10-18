@@ -2,6 +2,7 @@
 #define COULFUNC_H
 
 class PPair;
+class CoulFuncCache;
 
 ///The return structure of the CoulFunc function class.
 

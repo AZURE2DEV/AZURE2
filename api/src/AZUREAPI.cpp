@@ -2,6 +2,8 @@
 #include "AZUREParams.h"
 
 #include "GSLException.h"
+#include "CoulFuncCache.h"
+#include "ECAmplitudeCache.h"
 
 #include "Config.h"
 #include "CNuc.h"
@@ -15,6 +17,10 @@
 #include <cmath>
 
 bool AZUREAPI::Initialize( ){
+
+  // Initialize caches for performance
+  InitializeCoulFuncCache();
+  InitializeECAmplitudeCache();
 
   configure().paramMask |= Config::USE_EXTERNAL_CAPTURE;
 

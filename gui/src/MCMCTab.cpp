@@ -453,7 +453,36 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
             compound->TransformIn(config);
             compound->FillMnParams(azureParams.GetMinuitParams(), &config);
             data->FillMnParams(azureParams.GetMinuitParams());
-        }
+            // Read the param.par file to get RWA parameters
+            if(filename.empty()) {
+                filename = config.outputdir + "param.par";
+            }
+            // Open and read param.par file
+            std::ifstream paramFile(filename);
+            // The second column contains the RWA values
+            if(!paramFile) {
+                delete compound;
+                delete data;
+                logTextEdit->append(QString("Error: Could not open RWA parameter file: %1")
+                                   .arg(QString::fromStdString(filename)));
+                return;
+            }
+            // The second column contains the RWA values
+            std::string line;
+            int i = 0;
+            while (std::getline(paramFile, line)) {
+                std::istringstream iss(line);
+                std::string paramName;
+                double rwaValue;
+                if (!(iss >> paramName >> rwaValue)) {
+                    logTextEdit->append(QString("Error: Invalid line in RWA parameter file: %1")
+                                       .arg(QString::fromStdString(line)));
+                    continue;
+                }
+                azureParams.GetMinuitParams().SetValue(i, rwaValue);
+                i++;
+            }
+        } 
         else {
             compound->FillMnParams(azureParams.GetMinuitParams(), &config);
             data->FillMnParams(azureParams.GetMinuitParams());
@@ -863,13 +892,15 @@ void MCMCTab::onMCMCProgressUpdated(int currentStep, int totalSteps, double logP
     // Update current iteration display
     currentIterationLabel->setText(QString::number(displayCurrentStep));
     
-    // Update log probability displays
-    logProbLabel->setText(QString::number(logProbability, 'f', 6));
-    logLikelihoodLabel->setText(QString::number(logLikelihood, 'f', 6));
-    logPriorLabel->setText(QString::number(logPrior, 'f', 6));
+    // Update log probability displays with exponential notation for better precision
+    // Use 'e' format for scientific notation with 6 decimal places
+
+    logProbLabel->setText(QString::number(logProbability, 'e', 6));
+    logLikelihoodLabel->setText(QString::number(logLikelihood, 'e', 6));
+    logPriorLabel->setText(QString::number(logPrior, 'e', 6));
     
     // Update log with periodic messages
-    if(currentStep % 500 == 0 || currentStep == totalSteps) {
+    if(currentStep % 10 == 0 || currentStep == totalSteps) {
         logTextEdit->append(QString("Step %1: LogProb=%.3f (LogL=%.3f, LogPrior=%.3f)")
                            .arg(currentStep)
                            .arg(logProbability, 0, 'f', 3)

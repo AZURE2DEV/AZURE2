@@ -1,4 +1,5 @@
 #include "CoulFunc.h"
+#include "CoulFuncCache.h"
 #include "PPair.h"
 #include <iostream>
 #include "cwfcomp_accurate.H"
@@ -105,42 +106,75 @@ void CoulFunc::setLast(int lLast, double rLast, double eLast, CoulWaves coulLast
 
 CoulWaves CoulFunc::operator()(int l,double radius,double energy) {
   struct CoulWaves result={0.0,0.0,0.0,0.0};
+
+  // First check the local cache (last calculated value)
   if(l==lLast()&&radius==radiusLast()&&energy==energyLast()) {
     result=coulLast();
-  } else {
-    struct CoulWaves newResult;
-    if(!useGSLFunctions_) {
-      std::complex<double> eta(sqrt(uconv/2.)*fstruc*z1()*z2()*
-			       sqrt(redmass()/energy),0.);
-      std::complex<double> rho(sqrt(2.*uconv)/hbarc*radius*
-			       sqrt(redmass()*energy),0.);
-      std::complex<double> lValue( (double) l, 0.);
-      Coulomb_wave_functions_accurate coul(true,lValue,eta);
-      std::complex<double> c_F, c_dF, c_G, c_dG;
-      //coul.F_dF(rho,c_F,c_dF);
-      //coul.G_dG(rho,c_G,c_dG);
-      coul.compute(rho,c_F,c_dF,c_G,c_dG);
-      newResult.F=real(c_F);
-      newResult.dF=real(c_dF);
-      newResult.G=real(c_G);
-      newResult.dG=real(c_dG);      
-    } else {
-      double eta=sqrt(uconv/2.)*fstruc*z1()*z2()*
-	sqrt(redmass()/energy);
-      double rho=sqrt(2.*uconv)/hbarc*radius*
-	sqrt(redmass()*energy);
-      double lValue=double(l);
-      double eF,eG;
-      gsl_sf_result F,Fp,G,Gp;
-      gsl_sf_coulomb_wave_FG_e(eta,rho,lValue,0,&F,&Fp,&G,&Gp,&eF,&eG);
-      newResult.F=F.val*exp(eF);
-      newResult.dF=Fp.val*exp(eF);
-      newResult.G=G.val*exp(eG);
-      newResult.dG=Gp.val*exp(eG);            
-    }
-    setLast(l,radius,energy,newResult);
-    result=newResult;
+    return result;
   }
+
+  // Try to use the global cache if available
+  if(g_coulFuncCache) {
+    CoulFuncCache::CoulFuncKey key;
+    key.z1 = z1();
+    key.z2 = z2();
+    key.redmass = redmass();
+    key.l = l;
+    key.radius = radius;
+
+    // Check if we have cached data for this parameter set
+    if(g_coulFuncCache->IsInRange(key, energy)) {
+      result = g_coulFuncCache->GetInterpolatedCoulWaves(key, energy);
+      setLast(l, radius, energy, result);
+      return result;
+    }
+  }
+
+  // If cache miss, compute directly
+  struct CoulWaves newResult;
+  if(!useGSLFunctions_) {
+    std::complex<double> eta(sqrt(uconv/2.)*fstruc*z1()*z2()*
+			     sqrt(redmass()/energy),0.);
+    std::complex<double> rho(sqrt(2.*uconv)/hbarc*radius*
+			     sqrt(redmass()*energy),0.);
+    std::complex<double> lValue( (double) l, 0.);
+    Coulomb_wave_functions_accurate coul(true,lValue,eta);
+    std::complex<double> c_F, c_dF, c_G, c_dG;
+    //coul.F_dF(rho,c_F,c_dF);
+    //coul.G_dG(rho,c_G,c_dG);
+    coul.compute(rho,c_F,c_dF,c_G,c_dG);
+    newResult.F=real(c_F);
+    newResult.dF=real(c_dF);
+    newResult.G=real(c_G);
+    newResult.dG=real(c_dG);
+  } else {
+    double eta=sqrt(uconv/2.)*fstruc*z1()*z2()*
+      sqrt(redmass()/energy);
+    double rho=sqrt(2.*uconv)/hbarc*radius*
+      sqrt(redmass()*energy);
+    double lValue=double(l);
+    double eF,eG;
+    gsl_sf_result F,Fp,G,Gp;
+    gsl_sf_coulomb_wave_FG_e(eta,rho,lValue,0,&F,&Fp,&G,&Gp,&eF,&eG);
+    newResult.F=F.val*exp(eF);
+    newResult.dF=Fp.val*exp(eF);
+    newResult.G=G.val*exp(eG);
+    newResult.dG=Gp.val*exp(eG);
+  }
+  setLast(l,radius,energy,newResult);
+  result=newResult;
+
+  // Add computed result to global cache for future use
+  if(g_coulFuncCache) {
+    CoulFuncCache::CoulFuncKey key;
+    key.z1 = z1();
+    key.z2 = z2();
+    key.redmass = redmass();
+    key.l = l;
+    key.radius = radius;
+    g_coulFuncCache->AddCoulWaves(key, energy, newResult);
+  }
+
   return result;
 }
 
