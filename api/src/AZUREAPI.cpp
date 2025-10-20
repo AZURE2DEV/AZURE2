@@ -142,6 +142,12 @@ bool AZUREAPI::UpdateParameters( ) {
   }
 
   all_ = compound()->GetTransformParams( configure() );
+
+  // Norms and shifts are missing from all_ and need to be added using the all_rwa_ values
+  for( int i = all_.size(); i < all_rwa_.size(); ++i ){
+    all_.push_back( all_rwa_[i] );
+  }
+
   for (int i = 0; i < all_.size(); ++i) {
     //std::cout << "all_[" << i << "] = " << all_[i] << std::endl;
     //std::cout << "fixed_[" << i << "] = " << fixed_[i] << std::endl;
