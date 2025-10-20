@@ -4,6 +4,7 @@
 #include <map>
 #include <vector>
 #include <mutex>
+#include <math.h>
 #include "CoulFunc.h"
 
 /*!
