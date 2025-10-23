@@ -556,15 +556,15 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
             }
 
             // Set the shifted energy for subpoint
-            subPoint->SetLabEnergy(subShiftedEnergy);
+            subPoint->SetCMEnergy(subShiftedEnergy);
 
             // Recalculate energy dependent values for subpoint
             if(entrancePair->GetPType()==20) {
               subPoint->ConvertDecayEnergy(exitPair);
             } else if (this->IsCMDifferential()) {
-              subPoint->ConvertLabEnergy(entrancePair);
+              //subPoint->ConvertLabEnergy(entrancePair);
             } else if(!this->IsCMDifferential()){
-              subPoint->ConvertLabEnergy(entrancePair);
+              //subPoint->ConvertLabEnergy(entrancePair);
             }
 
             if(exitPair->GetPType()==0 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
