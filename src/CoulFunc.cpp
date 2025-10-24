@@ -114,7 +114,6 @@ CoulWaves CoulFunc::operator()(int l,double radius,double energy) {
   }
 
   // Try to use the global cache if available
-  /*
   if(g_coulFuncCache) {
     CoulFuncCache::CoulFuncKey key;
     key.z1 = z1();
@@ -130,7 +129,6 @@ CoulWaves CoulFunc::operator()(int l,double radius,double energy) {
       return result;
     }
   }
-  */
 
   // If cache miss, compute directly
   struct CoulWaves newResult;
@@ -167,7 +165,6 @@ CoulWaves CoulFunc::operator()(int l,double radius,double energy) {
   result=newResult;
 
   // Add computed result to global cache for future use
-  /*
   if(g_coulFuncCache) {
     CoulFuncCache::CoulFuncKey key;
     key.z1 = z1();
@@ -177,7 +174,6 @@ CoulWaves CoulFunc::operator()(int l,double radius,double energy) {
     key.radius = radius;
     g_coulFuncCache->AddCoulWaves(key, energy, newResult);
   }
-  */
 
   return result;
 }
