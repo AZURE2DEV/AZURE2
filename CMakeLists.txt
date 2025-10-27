@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 2.8)
+cmake_minimum_required (VERSION 4.0)
 project (AZURE2)
 
 set(AZURE2_SOURCE_DIR ${CMAKE_BUILD_DIRECTORY})
