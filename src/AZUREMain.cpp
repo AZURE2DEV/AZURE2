@@ -5,6 +5,7 @@
 #include "ReactionRate.h"
 #include "ParameterLimitsManager.h"
 #include "ECAmplitudeCache.h"
+#include "CoulFuncCache.h"
 #include "Minuit2/MnPrint.h"
 #include "GSLException.h"
 #include <Minuit2/FunctionMinimum.h>
@@ -51,6 +52,14 @@ double nlopt_objective(unsigned n, const double* x, double* grad, void* f_data) 
 #endif
 
 int AZUREMain::operator()(){
+  // Clear Coulomb function cache at the start of each new calculation
+  // This ensures the cache doesn't retain stale data from previous calculations
+  // or nuclear potential changes from the GUI
+  if(g_coulFuncCache) {
+    g_coulFuncCache->Clear();
+    configure().outStream << "Cleared Coulomb function cache." << std::endl;
+  }
+
   //Fill compound nucleus from nucfile
   configure().outStream << "Filling Compound Nucleus..." << std::endl;
   if(compound()->Fill(configure())==-1) {

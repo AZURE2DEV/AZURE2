@@ -550,6 +550,24 @@ void EPoint::Initialize(CNuc *compound,const Config &configure) {
 }
 
 /*!
+ * Calculates lab frame value from center of mass value.
+ */
+
+double EPoint::ConvertCMValue(double value, PPair *pPair) {
+  value=value*(pPair->GetM(1)+pPair->GetM(2))/(pPair->GetM(2));
+  return value;
+}
+
+/*!
+ * Calculates center of mass energy for a given lab energy.
+ */
+
+double EPoint::ConvertLabValue(double value, PPair *pPair) {
+  value=value*(pPair->GetM(2))/(pPair->GetM(1)+pPair->GetM(2));
+  return value;
+}
+
+/*!
  * Calculates center of mass energy.  When a data point is initialized, the same energy is copied into
  * the attributes for center of mass and lab energy.  If this function is called, the center of mass energy
  * attribute is overwritten with the value calculated from the lab energy attribute.

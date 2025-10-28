@@ -11,6 +11,7 @@
 
 class RunTab;
 class FittingTab;
+class NuclearPotentialTab;
 #ifdef USE_QWT
 class PlotTab;
 #endif
@@ -88,6 +89,7 @@ class AZURESetup : public QMainWindow {
   void createActions();
   void createMenus();
   void updateRecent();
+  void updateNuclearPotentialTabVisibility(); // Show/hide Nuclear Potential tab based on config
 
   Config config;
 
@@ -123,6 +125,8 @@ class AZURESetup : public QMainWindow {
   LevelsTab *levelsTab;
   SegmentsTab *segmentsTab;
   TargetIntTab *targetIntTab;
+  NuclearPotentialTab *nuclearPotentialTab;
+  int nuclearPotentialTabIndex; // Store tab index for show/hide
   FittingTab *fittingTab;
   RunTab *runTab;
   AZUREMainThread *azureMain;

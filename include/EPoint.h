@@ -84,6 +84,8 @@ class EPoint {
   complex GetECAmplitudeWithShift(int,int,CNuc*,const Config&) const;
   EnergyMap GetMap() const;
   void Initialize(CNuc*,const Config&);
+  double ConvertLabValue(double, PPair*);
+  double ConvertCMValue(double, PPair*);
   void ConvertLabEnergy(PPair*);
   void ConvertExcitationEnergy(PPair*);
   void ConvertDecayEnergy(PPair*);

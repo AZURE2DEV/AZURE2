@@ -20,6 +20,7 @@
 #include "EditOptionsDialog.h"
 #include "AZUREMainThread.h"
 #include "AboutAZURE2Dialog.h"
+#include "NuclearPotentialTab.h"
 #include "CNuc.h"
 #include "EData.h"
 #include "AZUREParams.h"
@@ -43,11 +44,15 @@ extern void exitMessage(const Config& configure);
 
 
 AZURESetup::AZURESetup() : config(std::cout) {
+  // Set global Config pointer for use across codebase
+  extern Config* g_config;
+  g_config = &config;
+
 #ifdef USE_MCMC
   // Register meta types for Qt signal/slot system
   qRegisterMetaType<std::vector<std::vector<double>>>("std::vector<std::vector<double>>");
 #endif
-  
+
   setMinimumSize(1000,640);
 
   tabWidget=new QTabWidget();  
@@ -66,6 +71,8 @@ AZURESetup::AZURESetup() : config(std::cout) {
   segmentsTab->setPairsModel(pairsTab->getPairsModel());
 
   targetIntTab=new TargetIntTab;
+
+  nuclearPotentialTab = new NuclearPotentialTab();
 
   fittingTab = new FittingTab();
   fittingTab->setTabReferences(levelsTab, segmentsTab);
@@ -87,6 +94,7 @@ AZURESetup::AZURESetup() : config(std::cout) {
   tabWidget->addTab(levelsTab,tr("&Levels and Channels"));
   tabWidget->addTab(segmentsTab,tr("&Segments"));
   tabWidget->addTab(targetIntTab,tr("&Experimental Effects"));
+  nuclearPotentialTabIndex = tabWidget->addTab(nuclearPotentialTab,tr("&Nuclear Potential"));
   tabWidget->addTab(fittingTab,tr("&Fitting Settings"));
   tabWidget->addTab(runTab,tr("&Calculate"));
 #ifdef USE_MCMC
@@ -95,6 +103,9 @@ AZURESetup::AZURESetup() : config(std::cout) {
 #ifdef USE_QWT
   tabWidget->addTab(plotTab,tr("Pl&ot"));
 #endif
+
+  // Initially hide Nuclear Potential tab if hybrid method is disabled
+  updateNuclearPotentialTabVisibility();
 
   setCentralWidget(tabWidget);
 
@@ -269,8 +280,17 @@ bool AZURESetup::readFile(QString filename) {
   if(in.atEnd()) return false;
   if(!this->readConfig(in)) return false;
 
+  // Read potential section if available (after config, before levels)
   line=QString("");
-  while(line.trimmed()!=QString("<levels>")&&!in.atEnd()) line = in.readLine();
+  while(line.trimmed()!=QString("<potential>")&&line.trimmed()!=QString("<levels>")&&!in.atEnd()) line = in.readLine();
+  if(!in.atEnd() && line.trimmed()==QString("<potential>")) {
+    if(!nuclearPotentialTab->readPotentialSettings(in, GetConfig())) {
+      // Continue even if reading fails (old format without potential section)
+    }
+    // Look for levels section
+    line=QString("");
+    while(line.trimmed()!=QString("<levels>")&&!in.atEnd()) line = in.readLine();
+  }
   if(in.atEnd()) return false;
   if(!levelsTab->readNuclearFile(in)) return false;
   
@@ -308,6 +328,9 @@ bool AZURESetup::readFile(QString filename) {
     if(!mcmcTab->readMCMCSettings(in)) return false;
   }
 #endif
+
+  // Update tab visibility based on useHybridMethod setting (was read in readConfig)
+  updateNuclearPotentialTabVisibility();
 
   file.close();
 
@@ -469,7 +492,7 @@ bool AZURESetup::readConfig(QTextStream& inStream) {
   inStream >> angDistsCheck;dummyString=inStream.readLine();
  
   QString line("");
-  while(line.trimmed()!=QString("</config>")&&!inStream.atEnd()) 
+  while(line.trimmed()!=QString("</config>")&&!inStream.atEnd())
     line=inStream.readLine();
   if(line.trimmed()!=QString("</config>")) return false;
 
@@ -538,7 +561,13 @@ bool AZURESetup::writeFile(QString filename) {
   out << "<config>" << endl;
   if(!this->writeConfig(out,directory)) return false;
   out << "</config>" << endl;
-  
+
+  // Write potential section after config
+  out << "<potential>" << endl;
+  out << "useHybridPotential=" << (GetConfig().useHybridMethod ? "1" : "0") << endl;
+  nuclearPotentialTab->writePotentialSettings(out);
+  out << "</potential>" << endl;
+
   out << "<levels>" << endl;
   if(!levelsTab->writeNuclearFile(out)) return false;
   out << "</levels>" << endl;
@@ -820,6 +849,9 @@ void AZURESetup::editOptions() {
   if(GetConfig().paramMask & Config::USE_WIGNER_LIMITS) aDialog.useWignerLimitsCheck->setChecked(true);
   else aDialog.useWignerLimitsCheck->setChecked(false);
 
+  if(GetConfig().useHybridMethod) aDialog.useHybridMethodCheck->setChecked(true);
+  else aDialog.useHybridMethodCheck->setChecked(false);
+
   //if(!(GetConfig().paramMask & Config::USE_LONGWAVELENGTH_APPROX)) aDialog.noLongWavelengthCheck->setChecked(true);
   //else aDialog.noLongWavelengthCheck->setChecked(false);
 
@@ -849,8 +881,38 @@ void AZURESetup::editOptions() {
     if(aDialog.useWignerLimitsCheck->isChecked()) GetConfig().paramMask |= Config::USE_WIGNER_LIMITS;
     else GetConfig().paramMask &= ~Config::USE_WIGNER_LIMITS;
 
+    if(aDialog.useHybridMethodCheck->isChecked()) {
+      GetConfig().useHybridMethod = true;
+    } else {
+      GetConfig().useHybridMethod = false;
+    }
+
+    // Update tab visibility based on hybrid method setting
+    updateNuclearPotentialTabVisibility();
+
     //if(aDialog.noLongWavelengthCheck->isChecked()) GetConfig().paramMask &= ~Config::USE_LONGWAVELENGTH_APPROX;
     //else GetConfig().paramMask |= Config::USE_LONGWAVELENGTH_APPROX;
+  }
+}
+
+void AZURESetup::updateNuclearPotentialTabVisibility() {
+  if(GetConfig().useHybridMethod) {
+    // Make sure the tab is visible
+    if(tabWidget->indexOf(nuclearPotentialTab) == -1) {
+      // Tab was removed, insert it back at its original position
+      // Insert before Fitting Settings tab
+      int fittingTabIndex = tabWidget->indexOf(fittingTab);
+      if(fittingTabIndex != -1) {
+        tabWidget->insertTab(fittingTabIndex, nuclearPotentialTab, tr("&Nuclear Potential"));
+        nuclearPotentialTabIndex = tabWidget->indexOf(nuclearPotentialTab);
+      }
+    }
+  } else {
+    // Hide the tab by removing it from the tab widget
+    int index = tabWidget->indexOf(nuclearPotentialTab);
+    if(index != -1) {
+      tabWidget->removeTab(index);
+    }
   }
 }
 

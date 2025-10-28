@@ -27,6 +27,7 @@ void Config::Reset() {
   outputdir="";
   checkdir="";
   nloptAlgorithm=0; // Default to SBPLX
+  useHybridMethod=false; // Default to disabled
 }
 
 /*!
