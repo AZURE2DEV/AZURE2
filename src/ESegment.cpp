@@ -548,7 +548,8 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
           EPoint* subPoint = point->GetSubPoint(j);
           if(subPoint && subPoint->GetOriginalEnergy() > 0) {
             double subOriginalEnergy = subPoint->GetOriginalEnergy();
-            double subShiftedEnergy = subOriginalEnergy + energyShift_;
+            double energyShiftCM = (entrancePair->GetM(2))/(entrancePair->GetM(1)+entrancePair->GetM(2)) * energyShift_;
+            double subShiftedEnergy = subOriginalEnergy + energyShiftCM;
 
             // Apply same energy limit check
             if(subShiftedEnergy < 0.01) {

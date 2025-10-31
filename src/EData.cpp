@@ -246,6 +246,7 @@ int EData::MakePoints(const Config& configure, CNuc *theCNuc) {
 		thePoint->SetParentData(this);
 		if(entrancePair->GetPType()==20) thePoint->ConvertDecayEnergy(exitPair);
 		else if(!theSegment->IsCMDifferential()) thePoint->ConvertLabEnergy(entrancePair);
+    else if(theSegment->IsCMDifferential()) thePoint->ConvertLabEnergy(entrancePair);
 		if(exitPair->GetPType()==0&&theSegment->IsDifferential()&&
 		   !theSegment->IsPhase()&&!theSegment->IsAngularDist()&&!theSegment->IsCMDifferential()) {
 		  if(theSegment->GetEntranceKey()==theSegment->GetExitKey()) {
