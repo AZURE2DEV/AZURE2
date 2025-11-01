@@ -23,41 +23,55 @@ QVariant SegmentsTestModel::data(const QModelIndex &index, int role) const {
     SegmentsTestData line = segTestLineList.at(index.row());
     if(index.column() == 1) {
       if(line.isAdvanced == 1) {
-        // Handle advanced segments (sum/ratio)
+        // Handle advanced segments (sum/ratio) - show original + components
         QString result;
-        QStringList components = line.componentsList.split(";", Qt::SkipEmptyParts);
-        
-        if(components.isEmpty()) {
-          return QString("<center><font style='color:red;font-weight:bold;'>NO COMPONENTS</font></center>");
+
+        // First show the original segment
+        if(pairsModel->getPairs().size()>=line.entrancePairIndex && pairsModel->getPairs().size()>=line.exitPairIndex) {
+          PairsData firstPair=pairsModel->getPairs().at(line.entrancePairIndex-1);
+          PairsData secondPair=pairsModel->getPairs().at(line.exitPairIndex-1);
+          result = pairsModel->getReactionLabel(firstPair,secondPair);
+        } else {
+          result = "UNDEFINED";
         }
-        
-        for(int i = 0; i < components.size(); i++) {
-          QString component = components[i];
-          // Parse component string like "Entrance: 1, Exit: 2"
-          QStringList parts = component.split(", ");
-          if(parts.size() >= 2) {
-            int entranceKey = parts[0].split(": ")[1].toInt();
-            int exitKey = parts[1].split(": ")[1].toInt();
-            
-            if(pairsModel->getPairs().size() >= entranceKey && pairsModel->getPairs().size() >= exitKey) {
-              PairsData entrancePair = pairsModel->getPairs().at(entranceKey-1);
-              PairsData exitPair = pairsModel->getPairs().at(exitKey-1);
-              QString reactionLabel = pairsModel->getReactionLabel(entrancePair, exitPair);
-              
-              if(i > 0) {
+
+        // Then add the components
+        QStringList components = line.componentsList.split(";", Qt::SkipEmptyParts);
+
+        if(components.isEmpty()) {
+          result += "<br><font style='color:red;font-weight:bold;'>NO COMPONENTS</font>";
+        } else {
+          for(int i = 0; i < components.size(); i++) {
+            QString component = components[i];
+            // Parse component string like "Entrance: 1, Exit: 2"
+            QStringList parts = component.split(", ");
+            if(parts.size() >= 2) {
+              int entranceKey = parts[0].split(": ")[1].toInt();
+              int exitKey = parts[1].split(": ")[1].toInt();
+
+              if(pairsModel->getPairs().size() >= entranceKey && pairsModel->getPairs().size() >= exitKey) {
+                PairsData entrancePair = pairsModel->getPairs().at(entranceKey-1);
+                PairsData exitPair = pairsModel->getPairs().at(exitKey-1);
+                QString reactionLabel = pairsModel->getReactionLabel(entrancePair, exitPair);
+
                 if(line.operationType == 0) { // Sum
                   result += " +<br>";
                 } else { // Ratio
                   result += " /<br>";
                 }
+                result += reactionLabel;
+              } else {
+                if(line.operationType == 0) { // Sum
+                  result += " +<br>";
+                } else { // Ratio
+                  result += " /<br>";
+                }
+                result += "UNDEFINED";
               }
-              result += reactionLabel;
-            } else {
-              result += "UNDEFINED";
             }
           }
         }
-        return QString("<center>%1</center>").arg(result);
+        return QString("<div align='left'>%1</div>").arg(result);
       } else if(line.dataType==4) {
 	int i = 0;
 	QList<PairsData> pairsList = pairsModel->getPairs();

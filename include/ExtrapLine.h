@@ -3,6 +3,8 @@
 
 #include <iostream>
 #include <string>
+#include <sstream>
+#include <vector>
 
 ///A class to read and store a line from the extrapolation input file.
 
@@ -16,10 +18,45 @@ class ExtrapLine {
    * Constructor fill the ExtrapLine object from an input stream.
    */
   ExtrapLine(std::istream &stream) {
-    stream >> isActive_ >> entranceKey_ >> exitKey_ >> minE_ 
+    stream >> isActive_ >> entranceKey_ >> exitKey_ >> minE_
 	   >> maxE_ >> eStep_ >> minA_ >> maxA_ >> aStep_ >> isDiff_;
     if(isDiff_==2) stream >> phaseJ_ >> phaseL_;
     else if(isDiff_==3) stream >> maxAngDistOrder_;
+
+    // Initialize advanced segment parameters to defaults
+    isAdvanced_ = 0;
+    operationType_ = 0;
+    componentsList_ = "";
+
+    // Try to read advanced segment data from the remaining line
+    std::string dummyString;
+    getline(stream, dummyString);
+
+    if(!dummyString.empty()) {
+      std::istringstream advancedStream(dummyString);
+      int tempIsAdvanced;
+      if(advancedStream >> tempIsAdvanced && tempIsAdvanced == 1) {
+        isAdvanced_ = 1;
+        if(advancedStream >> operationType_) {
+          int numComponents;
+          if(advancedStream >> numComponents) {
+            std::vector<std::string> components;
+            for(int i = 0; i < numComponents; i++) {
+              int entrance, exit;
+              if(advancedStream >> entrance >> exit) {
+                components.push_back("Entrance: " + std::to_string(entrance) + ", Exit: " + std::to_string(exit));
+              }
+            }
+            if(!components.empty()) {
+              componentsList_ = components[0];
+              for(size_t i = 1; i < components.size(); i++) {
+                componentsList_ += ";" + components[i];
+              }
+            }
+          }
+        }
+      }
+    }
 
   };
   /*!
@@ -80,6 +117,18 @@ class ExtrapLine {
    * angular distribution.
    */
   int maxAngDistOrder() const {return maxAngDistOrder_;};
+  /*!
+   * Returns non-zero if this is an advanced segment (sum/ratio).
+   */
+  int isAdvanced() const {return isAdvanced_;};
+  /*!
+   * Returns the operation type (0 for sum, 1 for ratio).
+   */
+  int operationType() const {return operationType_;};
+  /*!
+   * Returns the semicolon-separated list of components.
+   */
+  std::string componentsList() const {return componentsList_;};
  private:
   int isActive_;
   int entranceKey_;
@@ -94,6 +143,9 @@ class ExtrapLine {
   double phaseJ_;
   int phaseL_;
   int maxAngDistOrder_;
+  int isAdvanced_;
+  int operationType_;
+  std::string componentsList_;
 };
 
 #endif

@@ -65,6 +65,18 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) : QDialog(parent) {
   componentsList = new QListWidget;
   componentsList->setMaximumHeight(100);
 
+  componentEntranceSpin = new QSpinBox;
+  componentEntranceSpin->setMinimum(1);
+  componentEntranceSpin->setMaximum(100);
+  componentEntranceSpin->setSingleStep(1);
+  componentEntranceSpin->setValue(1);
+
+  componentExitSpin = new QSpinBox;
+  componentExitSpin->setMinimum(1);
+  componentExitSpin->setMaximum(100);
+  componentExitSpin->setSingleStep(1);
+  componentExitSpin->setValue(1);
+
   addComponentButton = new QPushButton(tr("Add Component"));
   connect(addComponentButton,SIGNAL(clicked()),this,SLOT(addComponent()));
   
@@ -139,11 +151,18 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) : QDialog(parent) {
   advancedLayout->addWidget(new QLabel(tr("Operation:")),0,0);
   advancedLayout->addWidget(operationCombo,0,1);
   advancedLayout->addWidget(new QLabel(tr("Components:")),1,0);
-  advancedLayout->addWidget(componentsList,1,1,2,1);
+  advancedLayout->addWidget(componentsList,1,1,3,1);
+
+  // Add component entrance/exit spinboxes above buttons
+  advancedLayout->addWidget(new QLabel(tr("Entrance Pair Key:")),1,2);
+  advancedLayout->addWidget(componentEntranceSpin,1,3);
+  advancedLayout->addWidget(new QLabel(tr("Exit Pair Key:")),2,2);
+  advancedLayout->addWidget(componentExitSpin,2,3);
+
   QGridLayout *buttonLayout = new QGridLayout;
   buttonLayout->addWidget(addComponentButton,0,0);
   buttonLayout->addWidget(removeComponentButton,0,1);
-  advancedLayout->addLayout(buttonLayout,1,2);
+  advancedLayout->addLayout(buttonLayout,3,2,1,2);
   advancedModeBox->setLayout(advancedLayout);
 
   lowerLayout->addWidget(advancedModeBox,2,0,1,4);
@@ -228,8 +247,8 @@ void AddSegTestDialog::advancedModeChanged(int state) {
 }
 
 void AddSegTestDialog::addComponent() {
-  int entrance = entrancePairIndexSpin->value();
-  int exit = exitPairIndexSpin->value();
+  int entrance = componentEntranceSpin->value();
+  int exit = componentExitSpin->value();
   QString component = QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit);
   componentsList->addItem(component);
 }

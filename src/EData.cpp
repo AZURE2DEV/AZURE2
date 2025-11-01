@@ -231,6 +231,7 @@ int EData::MakePoints(const Config& configure, CNuc *theCNuc) {
 	    NewSegment.SetSegmentKey(numTotalSegments);
 	    this->AddSegment(NewSegment);
 	    ESegment *theSegment=this->GetSegment(this->NumSegments());
+
 	    theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()))->SetEntrance();
 	    PPair *entrancePair=theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()));
 	    PPair *exitPair=theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetExitKey()));
@@ -264,6 +265,45 @@ int EData::MakePoints(const Config& configure, CNuc *theCNuc) {
 		if(eStep==0.0) break;
 	      }
 	      if(aStep==0.0) break;
+	    }
+
+	    // Handle advanced segments (sum/ratio of components) - AFTER points are added
+	    if(NewSegment.IsAdvanced()) {
+	      int operation = NewSegment.GetOperationType();
+	      theSegment->SetOperationType((OperationType)operation);
+
+	      // Parse components and create full segment copies
+	      std::string componentsStr = NewSegment.GetComponentsList();
+	      if (!componentsStr.empty()) {
+	        // Components are stored as "Entrance: X, Exit: Y;Entrance: A, Exit: B;..."
+	        std::istringstream stream(componentsStr);
+	        std::string component;
+	        int componentCount = 0;
+	        while (std::getline(stream, component, ';')) {
+	          if (!component.empty()) {
+	            // Parse "Entrance: X, Exit: Y" format
+	            size_t entrancePos = component.find("Entrance: ");
+	            size_t exitPos = component.find("Exit: ");
+	            if (entrancePos != std::string::npos && exitPos != std::string::npos) {
+	              entrancePos += 10; // Length of "Entrance: "
+	              size_t commaPos = component.find(", Exit: ");
+	              if (commaPos != std::string::npos) {
+	                int entranceKey = std::stoi(component.substr(entrancePos, commaPos - entrancePos));
+	                exitPos += 6; // Length of "Exit: "
+	                int exitKey = std::stoi(component.substr(exitPos));
+
+	                // Create a full segment copy with different entrance/exit keys
+	                ESegment* componentSegment = this->CreateComponentSegment(*theSegment, entranceKey, exitKey);
+	                if (componentSegment) {
+	                  theSegment->AddComponentSegment(componentSegment);
+	                  componentCount++;
+	                }
+	              }
+	            }
+	          }
+	        }
+	      } else {
+	      }
 	    }
 	    if(theSegment->NumPoints()==0) {
 	      configure.outStream << "WARNING: Extrapolation segment #" << numTotalSegments 
@@ -1420,6 +1460,53 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config& configure) {
   }
   
   // Initialize component segments using the same process as regular segments
+  // Apply pair-dependent conversions for component segments
+  for(auto& componentSegment : componentSegments_) {
+    int entranceKey = componentSegment.GetEntranceKey();
+    int exitKey = componentSegment.GetExitKey();
+
+    PPair *entrancePair = nullptr;
+    PPair *exitPair = nullptr;
+
+    if(theCNuc->IsPairKey(entranceKey)) {
+      entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(entranceKey));
+    }
+    if(theCNuc->IsPairKey(exitKey)) {
+      exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(exitKey));
+    }
+
+    // Apply the same conversions that are done for test segment points
+    for(int i = 1; i <= componentSegment.NumPoints(); i++) {
+      EPoint *point = componentSegment.GetPoint(i);
+
+      if(entrancePair && exitPair) {
+        if(entrancePair->GetPType()==20) {
+          point->ConvertDecayEnergy(exitPair);
+        } else if(!componentSegment.IsCMDifferential()) {
+          point->ConvertLabEnergy(entrancePair);
+        } else if(componentSegment.IsCMDifferential()) {
+          point->ConvertLabEnergy(entrancePair);
+        }
+
+        if(exitPair->GetPType()==0 && componentSegment.IsDifferential() &&
+           !componentSegment.IsPhase() && !componentSegment.IsAngularDist() && !componentSegment.IsCMDifferential()) {
+          if(entranceKey == exitKey) {
+            point->ConvertLabAngle(entrancePair);
+          } else {
+            point->ConvertLabAngle(entrancePair, exitPair, configure);
+          }
+          point->ConvertCrossSection(entrancePair, exitPair);
+        }
+
+        if(exitPair->GetPType()==10 && componentSegment.IsDifferential() &&
+           !componentSegment.IsPhase() && !componentSegment.IsAngularDist() && !componentSegment.IsCMDifferential()) {
+          point->ConvertLabAngleGammas(entrancePair);
+          point->ConvertCrossSectionGammas(entrancePair);
+        }
+      }
+    }
+  }
+
   // CalcEDependentValues for component segments
   for(auto& componentSegment : componentSegments_) {
     bool localStop = false;

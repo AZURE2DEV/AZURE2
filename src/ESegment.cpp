@@ -69,7 +69,7 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   exitkey_=extrapLine.exitKey();
   min_e_=extrapLine.minE();
   max_e_=extrapLine.maxE();
-  min_a_=extrapLine.minA(); 
+  min_a_=extrapLine.minA();
   max_a_=extrapLine.maxA();
   e_step_=extrapLine.eStep();
   a_step_=extrapLine.aStep();
@@ -103,14 +103,23 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   lastEnergyShift_=0.0;
   varyEnergyShift_=false;
   varyNorm_=false;
-  isAdvanced_=false;
-  operationType_=0;
-  componentsList_="";
+
+  // Read advanced segment data from ExtrapLine
+  isAdvanced_=(extrapLine.isAdvanced()==1);
+  operationType_=extrapLine.operationType();
+  componentsList_=extrapLine.componentsList();
+
   targetEffectNum_=0;
   isTargetEffect_=false;
-  
-  // Initialize advanced segment composition
-  segmentOperationType_ = SUM;  // Default to SUM operation
+
+  // Initialize advanced segment composition based on operation type
+  if(extrapLine.operationType() == 0) {
+    segmentOperationType_ = SUM;
+  } else if(extrapLine.operationType() == 1) {
+    segmentOperationType_ = RATIO;
+  } else {
+    segmentOperationType_ = SUM;  // Default to SUM operation
+  }
   componentCalculationMutex_ = std::make_shared<std::mutex>();
 }
 
@@ -761,13 +770,13 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, co
   if (pointIndex < 0 || pointIndex >= NumPoints()) {
     return 0.0;
   }
-  
+
   // Calculate the base segment's theoretical cross section
   EPoint* basePoint = GetPoint(pointIndex + 1);
   if (!basePoint) {
     return 0.0;
   }
-  
+
   // Calculate base point if not already calculated
   if (!basePoint->IsMapped()) {
     try {
@@ -776,18 +785,19 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, co
       return 0.0;
     }
   }
-  
+
   double baseValue = basePoint->GetFitCrossSection();
-  
+
   // If no components, return base value
   if (!HasComponents()) {
     return baseValue;
   }
-  
-  
+
+
   // Calculate component values and combine according to operation type
   if (segmentOperationType_ == SUM) {
     double sum = baseValue;
+    int compIdx = 0;
     for (const auto& componentSegment : componentSegments_) {
       if (componentSegment && pointIndex < componentSegment->NumPoints()) {
         EPoint* componentPoint = componentSegment->GetPoint(pointIndex + 1);
@@ -800,7 +810,9 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, co
               continue; // Skip this component if calculation fails
             }
           }
-          sum += componentPoint->GetFitCrossSection();
+          double compValue = componentPoint->GetFitCrossSection();
+          sum += compValue;
+          compIdx++;
         }
       }
     }
@@ -809,13 +821,13 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, co
     if (componentSegments_.empty()) {
       return baseValue;
     }
-    
+
     // For ratio: base / first_component
     ESegment* firstComponent = componentSegments_[0];
     if (firstComponent && pointIndex < firstComponent->NumPoints()) {
       EPoint* denominatorPoint = firstComponent->GetPoint(pointIndex + 1);
       if (denominatorPoint) {
-        
+
         // No lock needed since each thread works on independent EData clones
         if (!denominatorPoint->IsMapped()) {
           try {
@@ -824,17 +836,18 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, co
             return 0.0;
           }
         }
-        
+
         double denominatorValue = denominatorPoint->GetFitCrossSection();
         if (denominatorValue == 0.0) {
           return 0.0;
         }
-        
-        return baseValue / denominatorValue;
+
+        double ratioValue = baseValue / denominatorValue;
+        return ratioValue;
       }
     }
     return 0.0;
   }
-  
+
   return baseValue;
 }

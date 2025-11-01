@@ -751,7 +751,7 @@ void SegmentsTab::moveSegDataLine(unsigned int upDown) {
   QItemSelectionModel *selectionModel = segmentsDataView->selectionModel();
   QModelIndexList selectionList = selectionModel->selectedRows();
   QModelIndex selectionIndex=selectionList.at(0);
-  
+
   int previous = selectionIndex.row();
   int future;
   if(upDown==0) future = previous+1;
@@ -793,6 +793,12 @@ void SegmentsTab::moveSegDataLine(unsigned int upDown) {
   segmentsDataModel->setData(index,line.energyShiftError,Qt::EditRole);
   index = segmentsDataModel->index(future,16,QModelIndex());
   segmentsDataModel->setData(index,line.varyEnergyShift,Qt::EditRole);
+  index = segmentsDataModel->index(future,17,QModelIndex());
+  segmentsDataModel->setData(index,line.isAdvanced,Qt::EditRole);
+  index = segmentsDataModel->index(future,18,QModelIndex());
+  segmentsDataModel->setData(index,line.operationType,Qt::EditRole);
+  index = segmentsDataModel->index(future,19,QModelIndex());
+  segmentsDataModel->setData(index,line.componentsList,Qt::EditRole);
   segmentsDataView->resizeRowToContents(future);
 
   selectionModel->select(segmentsDataModel->index(future,0,QModelIndex()),
@@ -811,7 +817,7 @@ void SegmentsTab::moveSegTestLine(unsigned int upDown) {
   QItemSelectionModel *selectionModel = segmentsTestView->selectionModel();
   QModelIndexList selectionList = selectionModel->selectedRows();
   QModelIndex selectionIndex=selectionList.at(0);
-  
+
   int previous = selectionIndex.row();
   int future;
   if(upDown==0) future = previous+1;
@@ -846,8 +852,14 @@ void SegmentsTab::moveSegTestLine(unsigned int upDown) {
   segmentsTestModel->setData(index,line.phaseL,Qt::EditRole);
   index = segmentsTestModel->index(future,12,QModelIndex());
   segmentsTestModel->setData(index,line.maxAngDistOrder,Qt::EditRole);
+  index = segmentsTestModel->index(future,13,QModelIndex());
+  segmentsTestModel->setData(index,line.isAdvanced,Qt::EditRole);
+  index = segmentsTestModel->index(future,14,QModelIndex());
+  segmentsTestModel->setData(index,line.operationType,Qt::EditRole);
+  index = segmentsTestModel->index(future,15,QModelIndex());
+  segmentsTestModel->setData(index,line.componentsList,Qt::EditRole);
   segmentsTestView->resizeRowToContents(future);
-  
+
   selectionModel->select(segmentsTestModel->index(future,0,QModelIndex()),
 			 QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
 }

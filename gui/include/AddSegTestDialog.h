@@ -43,6 +43,8 @@ class AddSegTestDialog : public QDialog {
   QGroupBox *advancedModeBox;
   QComboBox *operationCombo;
   QListWidget *componentsList;
+  QSpinBox *componentEntranceSpin;
+  QSpinBox *componentExitSpin;
   QPushButton *addComponentButton;
   QPushButton *removeComponentButton;
  
