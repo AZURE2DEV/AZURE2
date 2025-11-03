@@ -130,6 +130,14 @@ class AZUREAPI {
    */
   vector_r calculated_angles(int i) const {return calculatedAngles_[i];};
   /*!
+   * Returns a pointer to the data excitation energies.
+   */
+  vector_r data_excitation_energies(int i) const {return dataExcitationEnergies_[i];};
+  /*!
+   * Returns a pointer to the calculated excitation energies.
+   */
+  vector_r calculated_excitation_energies(int i) const {return calculatedExcitationEnergies_[i];};
+  /*!
    * Returns a pointer to the segments norms.
    */
   vector_r norms( ) const {return norms_;};
@@ -183,13 +191,15 @@ class AZUREAPI {
   std::vector<vector_r> dataAngles_;
   std::vector<vector_r> dataSegments_;
   std::vector<vector_r> dataSegmentsErrors_;
-  
+  std::vector<vector_r> dataExcitationEnergies_;
+
   std::vector<vector_r> calculatedConv_;
   std::vector<vector_r> calculatedEnergies_;
   std::vector<vector_r> calculatedAngles_;
   std::vector<vector_r> calculatedSegments_;
   std::vector<vector_r> calculatedSegmentsE1_;
   std::vector<vector_r> calculatedSegmentsE2_;
+  std::vector<vector_r> calculatedExcitationEnergies_;
 
 };
 

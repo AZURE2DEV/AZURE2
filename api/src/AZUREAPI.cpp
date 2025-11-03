@@ -169,6 +169,7 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
   calculatedSegments_.clear( );
   calculatedSegmentsE1_.clear( );
   calculatedSegmentsE2_.clear( );
+  calculatedExcitationEnergies_.clear( );
 
   int k = 0;
   vector_r params_ = all_;
@@ -202,30 +203,31 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
 
   std::vector<ESegment>& segments = localData->GetSegments( );
   for( int i = 0; i < segments.size( ); ++i ){
-    
+
     newKey = segments[i].GetSegmentKey( );
     if( prevKey == newKey ) continue;
     prevKey = newKey; ++nSegments;
 
     std::vector<EPoint>& data = segments[i].GetPoints();
 
-    std::vector<double> cross, crossE1, crossE2, energies, angles, conv;
-    
+    std::vector<double> cross, crossE1, crossE2, energies, angles, conv, excitationEnergies;
+
     // Handle component segments using the new integrated calculation method
     if (segments[i].HasComponents()) {
       for( int k = 0; k < data.size( ); ++k ){
         // Use the new component-aware calculation method
         double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);
-        
+
         // Update the point's fit cross section with the combined result
         data[k].SetFitCrossSection(theoreticalValue);
-        
+
         cross.push_back( theoreticalValue );
         crossE1.push_back( data[k].GetFitE1CrossSection() );
         crossE2.push_back( data[k].GetFitE2CrossSection() );
         angles.push_back( data[k].GetCMAngle() );
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
+        excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -246,6 +248,7 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
         angles.push_back( data[k].GetCMAngle() );
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
+        excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
 
       }
     }
@@ -256,6 +259,7 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
     calculatedSegmentsE2_.push_back( crossE2 );
     calculatedEnergies_.push_back( energies );
     calculatedAngles_.push_back( angles );
+    calculatedExcitationEnergies_.push_back( excitationEnergies );
 
   }
 
@@ -271,6 +275,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
   calculatedSegments_.clear( );
   calculatedSegmentsE1_.clear( );
   calculatedSegmentsE2_.clear( );
+  calculatedExcitationEnergies_.clear( );
 
   int k = 0;
   vector_r params_ = all_rwa_;
@@ -297,30 +302,31 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
 
   std::vector<ESegment>& segments = localData->GetSegments( );
   for( int i = 0; i < segments.size( ); ++i ){
-    
+
     newKey = segments[i].GetSegmentKey( );
     if( prevKey == newKey ) continue;
     prevKey = newKey; ++nSegments;
 
     std::vector<EPoint>& data = segments[i].GetPoints();
 
-    std::vector<double> cross, crossE1, crossE2, energies, angles, conv;
-    
+    std::vector<double> cross, crossE1, crossE2, energies, angles, conv, excitationEnergies;
+
     // Handle component segments using the new integrated calculation method
     if (segments[i].HasComponents()) {
       for( int k = 0; k < data.size( ); ++k ){
         // Use the new component-aware calculation method
         double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);
-        
+
         // Update the point's fit cross section with the combined result
         data[k].SetFitCrossSection(theoreticalValue);
-        
+
         cross.push_back( theoreticalValue );
         crossE1.push_back( data[k].GetFitE1CrossSection() );
         crossE2.push_back( data[k].GetFitE2CrossSection() );
         angles.push_back( data[k].GetCMAngle() );
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
+        excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -341,6 +347,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
         angles.push_back( data[k].GetCMAngle() );
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
+        excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
 
       }
     }
@@ -351,6 +358,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
     calculatedSegmentsE2_.push_back( crossE2 );
     calculatedEnergies_.push_back( energies );
     calculatedAngles_.push_back( angles );
+    calculatedExcitationEnergies_.push_back( excitationEnergies );
 
   }
 
@@ -366,6 +374,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
   calculatedSegments_.clear( );
   calculatedSegmentsE1_.clear( );
   calculatedSegmentsE2_.clear( );
+  calculatedExcitationEnergies_.clear( );
 
   int k = 0;
   for( int i = 0; i < all_rwa_.size( ); ++i ){
@@ -393,30 +402,31 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
 
   std::vector<ESegment>& segments = localData->GetSegments( );
   for( int i = 0; i < segments.size( ); ++i ){
-    
+
     newKey = segments[i].GetSegmentKey( );
     if( prevKey == newKey ) continue;
     prevKey = newKey; ++nSegments;
 
     std::vector<EPoint>& data = segments[i].GetPoints();
 
-    std::vector<double> cross, crossE1, crossE2, energies, angles, conv;
-    
+    std::vector<double> cross, crossE1, crossE2, energies, angles, conv, excitationEnergies;
+
     // Handle component segments using the new integrated calculation method
     if (segments[i].HasComponents()) {
       for( int k = 0; k < data.size( ); ++k ){
         // Use the new component-aware calculation method
         double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);
-        
+
         // Update the point's fit cross section with the combined result
         data[k].SetFitCrossSection(theoreticalValue);
-        
+
         cross.push_back( theoreticalValue );
         crossE1.push_back( data[k].GetFitE1CrossSection() );
         crossE2.push_back( data[k].GetFitE2CrossSection() );
         angles.push_back( data[k].GetCMAngle() );
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
+        excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -437,6 +447,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
         angles.push_back( data[k].GetCMAngle() );
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
+        excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
 
       }
     }
@@ -447,6 +458,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
     calculatedSegmentsE2_.push_back( crossE2 );
     calculatedEnergies_.push_back( energies );
     calculatedAngles_.push_back( angles );
+    calculatedExcitationEnergies_.push_back( excitationEnergies );
 
   }
 
@@ -543,6 +555,7 @@ int AZUREAPI::UpdateData( ) {
   dataSegments_.clear( );
   dataSegmentsErrors_.clear( );
   dataConv_.clear( );
+  dataExcitationEnergies_.clear( );
 
   CNuc* localCompound = NULL;
   EData* localData = NULL;
@@ -555,14 +568,14 @@ int AZUREAPI::UpdateData( ) {
 
   std::vector<ESegment>& segments = localData->GetSegments( );
   for( int i = 0; i < segments.size( ); ++i ){
-    
+
     newKey = segments[i].GetSegmentKey( );
     if( prevKey == newKey ) continue;
     prevKey = newKey; ++nSegments;
 
     std::vector<EPoint>& data = segments[i].GetPoints();
 
-    std::vector<double> energies, angles, cross, crossErr, conv;
+    std::vector<double> energies, angles, cross, crossErr, conv, excitationEnergies;
     for( int k = 0; k < data.size( ); ++k ){
 
       energies.push_back( data[k].GetCMEnergy( ) );
@@ -570,6 +583,7 @@ int AZUREAPI::UpdateData( ) {
       cross.push_back( data[k].GetCMCrossSection() );
       crossErr.push_back( data[k].GetCMCrossSectionError() );
       conv.push_back( data[k].GetSFactorConversion() );
+      excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
 
     }
 
@@ -578,6 +592,7 @@ int AZUREAPI::UpdateData( ) {
     dataAngles_.push_back( angles );
     dataSegmentsErrors_.push_back( crossErr );
     dataConv_.push_back( conv );
+    dataExcitationEnergies_.push_back( excitationEnergies );
 
   }
 

@@ -325,13 +325,27 @@ bool AZURESocket::start() {
     }
 
     // Get indeces of fixed parameters
-    else if( buffer[0] == 32 ){   
+    else if( buffer[0] == 32 ){
       std::vector<bool> temp;
       temp = api_->params_fixed( );
       vector_r response;
       for( int i = 0; i < temp.size( ); ++i ){
         response.push_back( temp[i] ? 1.0 : 0.0 );
       }
+      sendPacket( response );
+    }
+
+    // Get data excitation energies
+    else if( buffer[0] == 33 ){
+      int idx = (int)buffer[2];
+      vector_r response = api_->data_excitation_energies( idx );
+      sendPacket( response );
+    }
+
+    // Get calculated excitation energies
+    else if( buffer[0] == 34 ){
+      int idx = (int)buffer[2];
+      vector_r response = api_->calculated_excitation_energies( idx );
       sendPacket( response );
     }
 
