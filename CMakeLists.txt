@@ -265,8 +265,8 @@ if(BUILD_GUI)
         
         # Handle QWT for Windows if enabled
         if(USE_QWT)
-            set(QWT_INCLUDE_DIRS "/usr/x86_64-w64-mingw32/sys-root/mingw/include/qt5/qwt")
-            set(QWT_LIBRARIES "qwt-qt5")
+            set(QWT_INCLUDE_DIRS "opt/homebrew/opt/qwt/include")
+            set(QWT_LIBRARIES "/opt/homebrew/opt/qwt/lib/qwt.framework/qwt")
         endif()
     else()
         # Native Linux/macOS QWT configuration
@@ -282,8 +282,8 @@ if(BUILD_GUI)
                 message(STATUS "QWT include directories: ${QWT_INCLUDE_DIR}")
                 
                 # Set variables for use in subdirectories
-                set(QWT_INCLUDE_DIRS ${QWT_INCLUDE_DIR})
-                set(QWT_LIBRARIES ${QWT_LIBRARY})
+                set(QWT_INCLUDE_DIRS "opt/homebrew/opt/qwt/include")
+                set(QWT_LIBRARIES "/opt/homebrew/opt/qwt/lib/qwt.framework/qwt")# changed akhil
                 
                 # Add to global include directories
                 include_directories(${QWT_INCLUDE_DIR})
