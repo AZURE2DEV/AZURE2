@@ -19,7 +19,7 @@ Scripts for building the docker container for AZURE2 and running the container f
 ```
 $ cd /path/to/AZURE2
 $ bash scripts/build_docker.sh
-$ bash scripts/run_gui_mac.sh
+$ bash examples/run_gui_mac.sh
 ```
 
 ## Building a Singularity/Apptainer container
