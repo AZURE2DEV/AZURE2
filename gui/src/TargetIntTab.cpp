@@ -356,7 +356,7 @@ bool TargetIntTab::writeFile(QTextStream& outStream) {
     else outStream << qSetFieldWidth(0) << "              0";
     outStream << qSetFieldWidth(0) << "              " <<  " \""+lines[i].convolutionEq.remove(' ')+"\" " << qSetFieldWidth(0) << lines.at(i).convCoefficients.size() << ' ';
     for(int j=0;j<lines.at(i).convCoefficients.size();j++) outStream << qSetFieldWidth(0) <<  lines.at(i).convCoefficients.at(j) << ' ';
-    outStream<<endl;
+    outStream<<Qt::endl;
 
   }
 

@@ -30,13 +30,13 @@ QwtText AZUREZoomer::trackerTextF( const QPointF &pos ) const
     QString text;
     switch (rubberBand()) {
         case HLineRubberBand:
-            text.sprintf( "%.4g", pos.y() );
+            text.asprintf( "%.4g", pos.y() );
             break;
         case VLineRubberBand:
-            text.sprintf( "%.4g", pos.x() );
+            text.asprintf( "%.4g", pos.x() );
             break;
         default:
-            text.sprintf( "%.4g, %.4g", pos.x(), pos.y() );
+            text.asprintf( "%.4g, %.4g", pos.x(), pos.y() );
     }
     return QwtText( text );
 }
@@ -259,7 +259,7 @@ AZUREPlot::AZUREPlot(PlotTab* plotTab,QWidget* parent) :
 			   Qt::RightButton );
   
   QwtPlotPanner *panner = new QwtPlotPanner( canvas() );
-  panner->setMouseButton( Qt::MidButton );
+  panner->setMouseButton( Qt::MiddleButton );
 
 }
 
@@ -390,7 +390,7 @@ void AZUREPlot::print()
     printer.setDocName (docName);
 
     printer.setCreator("AZURE2");
-    printer.setOrientation(QPrinter::Landscape);
+    printer.setPageOrientation(QPageLayout::Landscape);
 
     QPrintDialog dialog(&printer);
     if (dialog.exec()) {

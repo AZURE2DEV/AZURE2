@@ -151,7 +151,7 @@ bool IAEALevelData::parseJsonResponse(const QByteArray &data) {
     // Parse CSV with format: z,n,symbol,idx,energy_shift,energy,unc_e,ripl_shift,jp,...
 
     QString csvData = QString::fromUtf8(data);
-    QStringList lines = csvData.split('\n', QString::SkipEmptyParts);
+    QStringList lines = csvData.split('\n', Qt::SkipEmptyParts);
 
     if (lines.isEmpty()) {
         lastError_ = "Empty response from IAEA";
