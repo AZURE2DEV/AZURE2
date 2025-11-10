@@ -4,6 +4,7 @@
     FROM ubuntu:22.04
 
     SHELL ["/bin/bash", "-c"]
+
     WORKDIR /workspace/
     
     # Non-interactive install
@@ -52,9 +53,8 @@
     RUN tar -xzvf root_v6.30.06.Linux-ubuntu22.04-x86_64-gcc11.4.tar.gz
     
     # ----------------------------
-    # Set LD_LIBRARY_PATH for ROOT and QWT
-    # ----------------------------
-    ENV LD_LIBRARY_PATH=/workspace/app/install/root/lib:/usr/lib:$LD_LIBRARY_PATH
+    # Set LD_LIBRARY_PATH for ROOT
+    ENV LD_LIBRARY_PATH=/workspace/app/install/root/lib:/usr/lib
     
     # ----------------------------
     # Copy AZURE2 source
@@ -74,8 +74,13 @@
         make -j$(nproc) && \
         make install
     
+
+    # Ensure proper Qt runtime directory
+    RUN mkdir -p /tmp/runtime-root && chmod 700 /tmp/runtime-root
+    ENV XDG_RUNTIME_DIR=/tmp/runtime-root
+    
     # Optional: move built AZURE2 to /bin
-    RUN mv /workspace/app/install/AZURE2 /bin/
+    #RUN mv /workspace/app/install/AZURE2 /bin/
     
     WORKDIR /workspace/
 # ----------------------------    
