@@ -28,6 +28,7 @@ mkdir -p "$HOST_OUTPUT" # ensure output directory exists
 
 # --- Check for XQuartz ---
 if ! command -v xquartz >/dev/null 2>&1; then
+    echo " run brew install --cask xquartz"
     echo " XQuartz not found. Install it from https://www.xquartz.org/"
     exit 1
 fi
