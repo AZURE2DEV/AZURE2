@@ -44,18 +44,6 @@ complex ECAmplitudeCache::GetInterpolatedAmplitude(const AmplitudeKey& key, doub
     if (data.energies.size() == 1) {
         complex result = data.amplitudes[0];
         
-        // Debug output to file for this key
-        std::string filename = "ec_cache_debug_k" + std::to_string(key.kGroupNum) + 
-                               "_ecm" + std::to_string(key.ecMGroupNum) + 
-                               "_ent" + std::to_string(key.entranceKey) + 
-                               "_exit" + std::to_string(key.exitKey) + 
-                               "_seg" + std::to_string(key.segmentKey) + ".dat";
-        std::ofstream debugFile(filename, std::ios::app);
-        debugFile << std::scientific << std::setprecision(12);
-        debugFile << energy << " " << result.real() << " " << result.imag() 
-                  << " " << "SINGLE_POINT" << std::endl;
-        debugFile.close();
-        
         return result;
     }
     
