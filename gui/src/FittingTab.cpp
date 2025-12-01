@@ -557,9 +557,26 @@ void FittingTab::loadSettings() {
             }
             
             // First pass: collect level parameters that need RWA conversion
+            // CRITICAL FIX: Extract OLD level structure from .sav RWA parameter names
+            // This maps: energyIndex -> number of channels in that level from the .sav file
+            QMap<int, int> oldLevelChannelCounts; // energyIndex -> channelCount
+            for(const QString& key : savParams.keys()) {
+                // Match width parameters like "width_1_1", "width_1_2", "width_2_1", etc.
+                QRegExp widthRegex("^width_(\\d+)_(\\d+)$");
+                if(widthRegex.indexIn(key) != -1) {
+                    int energyIndex = widthRegex.cap(1).toInt();
+                    int widthIndex = widthRegex.cap(2).toInt();
+
+                    // Track the maximum width index for each energy level
+                    if(!oldLevelChannelCounts.contains(energyIndex) || oldLevelChannelCounts[energyIndex] < widthIndex) {
+                        oldLevelChannelCounts[energyIndex] = widthIndex;
+                    }
+                }
+            }
+
             for(int i = 0; i < fittingParameters.size(); i++) {
                 FittingParameter& param = fittingParameters[i];
-                
+
                 if(param.category == "level") {
                     QString matchKey = findMatchingParameterKey(param, savParams.keys());
                     if(!matchKey.isEmpty() && savParams.contains(matchKey)) {
@@ -569,7 +586,7 @@ void FittingTab::loadSettings() {
                     }
                 }
             }
-            
+
             // Perform batch transformation using AZURESetup
             QMap<QString, QPair<double, double>> physicalParamMap;
             if(!rwaParamMap.isEmpty()) {
@@ -581,25 +598,29 @@ void FittingTab::loadSettings() {
                     if(azureSetup != nullptr) break;
                     parent = parent->parentWidget();
                 }
-                
+
                 if(azureSetup != nullptr) {
-                    // Use AZUREAPI-style batch transformation
+                    // Use AZUREAPI-style batch transformation with OLD compound structure
                     // Build complete RWA parameter vector
                     QStringList rwaParamNames = rwaParamMap.keys();
                     std::vector<double> rwaValues, rwaValuesPlusError, rwaValuesMinusError;
-                    
+
                     for(const QString& paramName : rwaParamNames) {
                         QPair<double, double> rwaData = rwaParamMap[paramName];
                         rwaValues.push_back(rwaData.first);
                         rwaValuesPlusError.push_back(rwaData.first + rwaData.second);
                         rwaValuesMinusError.push_back(rwaData.first - rwaData.second);
                     }
-                    
-                    // Transform the complete parameter vectors at once
-                    std::vector<double> physicalValues = azureSetup->BatchConvertRWAToPhysical(rwaParamNames, rwaValues);
-                    std::vector<double> physicalValuesPlusError = azureSetup->BatchConvertRWAToPhysical(rwaParamNames, rwaValuesPlusError);
-                    std::vector<double> physicalValuesMinusError = azureSetup->BatchConvertRWAToPhysical(rwaParamNames, rwaValuesMinusError);
-                    
+
+                    // CRITICAL FIX: Use the OLD level structure for transformation
+                    // Pass the old level channel counts to ensure correct RWA-to-physical conversion
+                    std::vector<double> physicalValues = azureSetup->BatchConvertRWAToPhysicalWithOldStructure(
+                        rwaParamNames, rwaValues, oldLevelChannelCounts);
+                    std::vector<double> physicalValuesPlusError = azureSetup->BatchConvertRWAToPhysicalWithOldStructure(
+                        rwaParamNames, rwaValuesPlusError, oldLevelChannelCounts);
+                    std::vector<double> physicalValuesMinusError = azureSetup->BatchConvertRWAToPhysicalWithOldStructure(
+                        rwaParamNames, rwaValuesMinusError, oldLevelChannelCounts);
+
                     // Store the transformed results
                     for(int i = 0; i < rwaParamNames.size(); i++) {
                         QString paramName = rwaParamNames[i];
@@ -607,7 +628,7 @@ void FittingTab::loadSettings() {
                         double physicalErrorUp = std::abs(physicalValuesPlusError[i] - physicalValue);
                         double physicalErrorDown = std::abs(physicalValue - physicalValuesMinusError[i]);
                         double physicalError = std::max(physicalErrorUp, physicalErrorDown);
-                        
+
                         physicalParamMap[paramName] = qMakePair(physicalValue, physicalError);
                     }
                 } else {

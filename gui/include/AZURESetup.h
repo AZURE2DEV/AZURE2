@@ -48,9 +48,14 @@ class AZURESetup : public QMainWindow {
   
   // Convert RWA parameter to physical value using proper R-Matrix transformation
   double ConvertRWAToPhysical(const QString& paramName, double rwaValue);
-  
+
   // Batch convert multiple RWA parameters to physical values (much more efficient)
   std::vector<double> BatchConvertRWAToPhysical(const QStringList& paramNames, const std::vector<double>& rwaValues);
+
+  // Batch convert RWA to physical using OLD compound structure (for loading old param files)
+  // oldLevelChannelCounts maps energyIndex -> number of channels in that level from the old structure
+  std::vector<double> BatchConvertRWAToPhysicalWithOldStructure(
+      const QStringList& paramNames, const std::vector<double>& rwaValues, const QMap<int, int>& oldLevelChannelCounts);
   
   // Getter for FittingTab (for MCMCTab access)
   FittingTab* getFittingTab() const { return fittingTab; }

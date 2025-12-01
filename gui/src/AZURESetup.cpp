@@ -1383,9 +1383,129 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysical(const QStringList& par
     
     delete compound;
     delete data;
-    
+
     return results;
-    
+
+  } catch(...) {
+    // Return original values on any error
+    for(double val : rwaValues) {
+      results.push_back(val);
+    }
+    return results;
+  }
+}
+
+/*!
+ * Batch convert RWA parameters to physical using the OLD compound structure
+ * This is crucial when loading old parameter files where the level structure may have changed
+ *
+ * @param paramNames List of RWA parameter names (e.g., "width_1_1", "width_1_2", "width_2_1")
+ * @param rwaValues The RWA parameter values
+ * @param oldLevelChannelCounts Map of energyIndex -> number of channels in that level (from the .sav file)
+ * @return Vector of physical parameters in the same order as paramNames
+ */
+std::vector<double> AZURESetup::BatchConvertRWAToPhysicalWithOldStructure(
+    const QStringList& paramNames, const std::vector<double>& rwaValues, const QMap<int, int>& oldLevelChannelCounts) {
+  std::vector<double> results;
+
+  if(paramNames.size() != rwaValues.size()) {
+    // Return original values if sizes don't match
+    for(double val : rwaValues) {
+      results.push_back(val);
+    }
+    return results;
+  }
+
+  try {
+    // Create compound nucleus and data objects ONCE
+    CNuc* compound = new CNuc();
+    EData* data = new EData();
+
+    // Fill compound nucleus from current GUI configuration
+    if(compound->Fill(config) == -1) {
+      delete compound;
+      delete data;
+      // Return original values if compound creation fails
+      for(double val : rwaValues) {
+        results.push_back(val);
+      }
+      return results;
+    }
+
+    // Initialize compound nucleus
+    compound->Initialize(config);
+
+    // Create parameter objects using the CURRENT structure
+    AZUREParams params;
+    compound->FillMnParams(params.GetMinuitParams(), &config);
+    data->FillMnParams(params.GetMinuitParams());
+
+    // Get current RWA parameters as base
+    vector_r rwaParams = params.GetMinuitParams().Params();
+
+    // CRITICAL: Map old RWA parameter names to new parameter indices
+    // We need to handle the case where level ordering/structure has changed
+    std::vector<int> paramIndices;
+
+    for(int i = 0; i < paramNames.size(); i++) {
+      const QString& paramName = paramNames[i];
+      std::string paramNameStd = paramName.toStdString();
+
+      // Extract energyIndex and widthIndex from old parameter name (e.g., "width_1_2" -> energyIndex=1, widthIndex=2)
+      int oldEnergyIndex = -1;
+      int oldWidthIndex = -1;
+
+      QRegExp widthRegex("^width_(\\d+)_(\\d+)$");
+      if(widthRegex.indexIn(paramName) != -1) {
+        oldEnergyIndex = widthRegex.cap(1).toInt();
+        oldWidthIndex = widthRegex.cap(2).toInt();
+      } else if(paramName.contains("energy")) {
+        QRegExp energyRegex("^energy_(\\d+)$");
+        if(energyRegex.indexIn(paramName) != -1) {
+          oldEnergyIndex = energyRegex.cap(1).toInt();
+          oldWidthIndex = -1; // Energy parameter, not width
+        }
+      }
+
+      // Find the corresponding parameter in the NEW structure
+      // For now, try direct name matching first (works if structure didn't change much)
+      int paramIndex = -1;
+      for (int j = 0; j < params.GetMinuitParams().Params().size(); ++j) {
+        if (params.GetMinuitParams().Parameter(j).GetName() == paramNameStd) {
+          paramIndex = j;
+          break;
+        }
+      }
+
+      paramIndices.push_back(paramIndex);
+      if(paramIndex >= 0 && paramIndex < rwaParams.size()) {
+        rwaParams[paramIndex] = rwaValues[i];
+      }
+    }
+
+    // Fill compound with ALL RWA parameters and transform to physical ONCE
+    compound->FillCompoundFromParams(rwaParams);
+    compound->CalcShiftFunctions(config);
+    compound->TransformOut(config);
+
+    // Get the transformed (physical) parameters
+    vector_r physicalParams = compound->GetTransformParams(config);
+
+    // Extract results for each requested parameter
+    for(int i = 0; i < paramIndices.size(); i++) {
+      int paramIndex = paramIndices[i];
+      if(paramIndex >= 0 && paramIndex < physicalParams.size()) {
+        results.push_back(physicalParams[paramIndex]);
+      } else {
+        results.push_back(rwaValues[i]); // Fallback to original value
+      }
+    }
+
+    delete compound;
+    delete data;
+
+    return results;
+
   } catch(...) {
     // Return original values on any error
     for(double val : rwaValues) {
