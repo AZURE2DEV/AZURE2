@@ -243,7 +243,12 @@ void FittingTab::populateFromCurrentGUIState() {
         // CORRECT ORDER: For each level, add energy first, then all widths for that level
         for(int levelIndex = 0; levelIndex < levels.size(); levelIndex++) {
             const LevelsData& level = levels[levelIndex];
-            
+
+            // Skip levels that are not included in the calculation
+            if(level.isActive == 0) {
+                continue;
+            }
+
             // Add energy parameter if not fixed (isFixed == 0 means not fixed)
             if(level.isFixed == 0) {
                 FittingParameter energyParam;
@@ -468,36 +473,169 @@ void FittingTab::parameterItemChanged(QTableWidgetItem* item) {
 }
 
 void FittingTab::loadSettings() {
-    QString filename = QFileDialog::getOpenFileName(this, 
+    QString filename = QFileDialog::getOpenFileName(this,
         "Load Parameters from .sav file", "", "AZURE2 Parameter Files (*.sav);;All Files (*)");
-    
+
     if(!filename.isEmpty()) {
         QFile file(filename);
         if(file.open(QIODevice::ReadOnly | QIODevice::Text)) {
             QTextStream in(&file);
-            
+
             // Parse .sav file and create lookup map
             QMap<QString, QPair<double, double>> savParams; // paramName -> (value, error)
-            
+
             while(!in.atEnd()) {
                 QString line = in.readLine().trimmed();
                 if(line.isEmpty()) continue;
-                
+
                 QStringList parts = line.split(QRegExp("\\s+"), Qt::SkipEmptyParts);
                 if(parts.size() >= 3) {
                     QString paramName = parts[0];
                     double value = parts[1].toDouble();
                     double error = parts[2].toDouble();
-                    
+
                     // If "_rwa" in param.name, remove it
                     if(paramName.endsWith("_rwa")) {
                         paramName.chop(4); // Remove last 4 characters
                     }
-                    
+
                     savParams[paramName] = qMakePair(value, error);
                 }
             }
             file.close();
+
+            // Now populate ALL parameters from the current GUI state (including fixed/non-varying)
+            // This is needed for proper RWA conversion of all level parameters
+            if(levelsTab_ && segmentsTab_) {
+                fittingParameters.clear();
+                int paramIndex = 0;
+
+                // Get level and channel data
+                LevelsModel* levelsModel = levelsTab_->getLevelsModel();
+                ChannelsModel* channelsModel = levelsTab_->getChannelsModel();
+
+                if(levelsModel && channelsModel) {
+                    QList<LevelsData> levels = levelsModel->getLevels();
+                    QList<ChannelsData> channels = channelsModel->getChannels();
+
+                    // Add ALL level parameters (including fixed)
+                    for(int levelIndex = 0; levelIndex < levels.size(); levelIndex++) {
+                        const LevelsData& level = levels[levelIndex];
+
+                        // Add ALL energy parameters
+                        FittingParameter energyParam;
+                        energyParam.name = QString("Level %1 Energy (MeV)").arg(levelIndex+1);
+                        energyParam.value = level.energy;
+                        energyParam.lowerLimit = 0;
+                        energyParam.upperLimit = 0;
+                        energyParam.error = 0.01;
+                        energyParam.fitError = 0.0;
+                        energyParam.useAsNuisance = false;
+                        energyParam.category = "level";
+                        if(level.isFixed == 0) {
+                            energyParam.minuitIndex = paramIndex++;
+                        } else {
+                            energyParam.minuitIndex = -1;
+                        }
+                        energyParam.levelIndex = levelIndex;
+                        energyParam.channelIndex = -1;
+
+                        fittingParameters.append(energyParam);
+
+                        // Add ALL width parameters for this level (including those with zero width or fixed)
+                        for(int channelIndex = 0; channelIndex < channels.size(); channelIndex++) {
+                            const ChannelsData& channel = channels[channelIndex];
+
+                            // Add ALL widths that belong to this level (including fixed and zero-width)
+                            if(channel.levelIndex == levelIndex) {
+                                FittingParameter widthParam;
+                                widthParam.name = QString("Level %1 Channel %2 Width (eV)")
+                                                 .arg(levelIndex + 1)
+                                                 .arg(channelIndex + 1);
+
+                                widthParam.value = channel.reducedWidth;
+                                widthParam.lowerLimit = 0;
+                                widthParam.upperLimit = 0;
+                                widthParam.error = (channel.reducedWidth != 0.0) ? channel.reducedWidth * 0.1 : 0.01;
+                                widthParam.fitError = 0.0;
+                                widthParam.useAsNuisance = false;
+                                widthParam.category = "level";
+                                if(channel.isFixed == 0) {
+                                    widthParam.minuitIndex = paramIndex++;
+                                } else {
+                                    widthParam.minuitIndex = -1;
+                                }
+                                widthParam.levelIndex = levelIndex;
+                                widthParam.channelIndex = channelIndex;
+
+                                fittingParameters.append(widthParam);
+                            }
+                        }
+                    }
+                }
+
+                // Add ALL normalization and shift parameters from all active segments
+                SegmentsDataModel* segmentsModel = segmentsTab_->getSegmentsDataModel();
+                if(segmentsModel) {
+                    QList<SegmentsDataData> segments = segmentsModel->getLines();
+
+                    // Add ALL norm parameters for active segments
+                    for(int i = 0; i < segments.size(); i++) {
+                        const SegmentsDataData& segment = segments[i];
+
+                        if(segment.isActive == 1) {
+                            FittingParameter normParam;
+                            normParam.name = QString("segment_%1_norm").arg(i + 1);
+                            normParam.value = segment.dataNorm;
+                            normParam.lowerLimit = 0;
+                            normParam.upperLimit = 0;
+                            normParam.error = segment.dataNormError;
+                            normParam.fitError = 0.0;
+                            normParam.useAsNuisance = (segment.varyNorm == 1);
+                            normParam.category = "norm";
+
+                            if(segment.varyNorm == 1) {
+                                normParam.minuitIndex = paramIndex++;
+                            } else {
+                                normParam.minuitIndex = -1;
+                            }
+
+                            normParam.levelIndex = -1;
+                            normParam.channelIndex = i;
+
+                            fittingParameters.append(normParam);
+                        }
+                    }
+
+                    // Add ALL energy shift parameters for active segments
+                    for(int i = 0; i < segments.size(); i++) {
+                        const SegmentsDataData& segment = segments[i];
+
+                        if(segment.isActive == 1) {
+                            FittingParameter shiftParam;
+                            shiftParam.name = QString("segment_%1_energy_shift").arg(i + 1);
+                            shiftParam.value = segment.energyShift;
+                            shiftParam.lowerLimit = 0;
+                            shiftParam.upperLimit = 0;
+                            shiftParam.error = segment.energyShiftError;
+                            shiftParam.fitError = 0.0;
+                            shiftParam.useAsNuisance = (segment.varyEnergyShift == 1);
+                            shiftParam.category = "shift";
+
+                            if(segment.varyEnergyShift == 1) {
+                                shiftParam.minuitIndex = paramIndex++;
+                            } else {
+                                shiftParam.minuitIndex = -1;
+                            }
+
+                            shiftParam.levelIndex = -1;
+                            shiftParam.channelIndex = i;
+
+                            fittingParameters.append(shiftParam);
+                        }
+                    }
+                }
+            }
             
             // Separate handling: RWA parameters (levels) vs direct assignment (norms/shifts)
             QMap<QString, QPair<double, double>> rwaParamMap;
@@ -629,6 +767,17 @@ void FittingTab::loadSettings() {
                         double physicalErrorDown = std::abs(physicalValue - physicalValuesMinusError[i]);
                         double physicalError = std::max(physicalErrorUp, physicalErrorDown);
 
+                        // Check for NaN and replace with 0 if found
+                        if(std::isnan(physicalValue)) {
+                            physicalValue = 0.0;
+                            QMessageBox::warning(this, "Invalid Value",
+                                                 QString("Transformed physical value for parameter '%1' is NaN. Setting to 0.")
+                                                 .arg(paramName));
+                        }
+                        if(std::isnan(physicalError)) {
+                            physicalError = 0.0;
+                        }
+
                         physicalParamMap[paramName] = qMakePair(physicalValue, physicalError);
                     }
                 } else {
@@ -650,10 +799,24 @@ void FittingTab::loadSettings() {
                 
                 if(physicalParamMap.contains(matchKey)) {
                     QPair<double, double> physicalData = physicalParamMap[matchKey];
-                    
+
+                    // Check for NaN and replace with 0 if found
+                    double physicalValue = physicalData.first;
+                    double physicalError = physicalData.second;
+                    if(std::isnan(physicalValue)) {
+                        physicalValue = 0.0;
+                        // Output a warning if needed
+                        QMessageBox::warning(this, "Invalid Value",
+                                             QString("Transformed physical value for parameter '%1' is NaN. Setting to 0.")
+                                             .arg(param.name));
+                    }
+                    if(std::isnan(physicalError)) {
+                        physicalError = 0.0;
+                    }
+
                     // Update parameter value and fit error (keep original error for nuisance calculations)
-                    param.value = physicalData.first;
-                    param.fitError = physicalData.second; // Store fit error separately from nuisance error
+                    param.value = physicalValue;
+                    param.fitError = physicalError; // Store fit error separately from nuisance error
                     
                     // Update the underlying models with converted values
                     if(param.name.contains("Width") && param.channelIndex >= 0) {
@@ -734,10 +897,20 @@ void FittingTab::loadSettings() {
                         
                         if(segmentIndex >= 0 && segmentIndex < segments.size()) {
                             // Update the segments model directly
+                            // Check for NaN and replace with 0 if found
+                            double normValue = normData.first;
+                            double normError = normData.second;
+                            if(std::isnan(normValue)) {
+                                normValue = 0.0;
+                            }
+                            if(std::isnan(normError)) {
+                                normError = 0.0;
+                            }
+
                             QModelIndex normValueIndex = segmentsModel->index(segmentIndex, 9); // dataNorm column
                             QModelIndex normErrorIndex = segmentsModel->index(segmentIndex, 10); // dataNormError column
-                            segmentsModel->setData(normValueIndex, normData.first, Qt::EditRole);
-                            segmentsModel->setData(normErrorIndex, normData.second, Qt::EditRole);
+                            segmentsModel->setData(normValueIndex, normValue, Qt::EditRole);
+                            segmentsModel->setData(normErrorIndex, normError, Qt::EditRole);
                         }
                     }
                     
@@ -869,10 +1042,20 @@ void FittingTab::loadSettings() {
                         
                         if(segmentIndex >= 0 && segmentIndex < segments.size()) {
                             // Update the segments model directly
+                            // Check for NaN and replace with 0 if found
+                            double shiftValue = shiftData.first;
+                            double shiftError = shiftData.second;
+                            if(std::isnan(shiftValue)) {
+                                shiftValue = 0.0;
+                            }
+                            if(std::isnan(shiftError)) {
+                                shiftError = 0.0;
+                            }
+
                             QModelIndex shiftValueIndex = segmentsModel->index(segmentIndex, 14); // energyShift column
                             QModelIndex shiftErrorIndex = segmentsModel->index(segmentIndex, 15); // energyShiftError column
-                            segmentsModel->setData(shiftValueIndex, shiftData.first, Qt::EditRole);
-                            segmentsModel->setData(shiftErrorIndex, shiftData.second, Qt::EditRole);
+                            segmentsModel->setData(shiftValueIndex, shiftValue, Qt::EditRole);
+                            segmentsModel->setData(shiftErrorIndex, shiftError, Qt::EditRole);
                         }
                     }
                     
@@ -1070,19 +1253,25 @@ void FittingTab::loadSettings() {
                     }
                 }
             }
-            
-            // Refresh the parameter tables
+
+            // CRITICAL: Ensure ALL parameters (including fixed and non-varying) are written to their models
+            // This guarantees that when the .azr file is saved, it has the updated values from the .sav file
+            for(const FittingParameter& param : fittingParameters) {
+                updateParameterInOtherTabs(param.name, param);
+            }
+
+            // Refresh the parameter tables with ALL parameters (including fixed and non-varying)
             updateParameterTables();
-            
+
             // Show verification results
             QMessageBox msgBox;
             msgBox.setWindowTitle("Load Settings - Verification Report");
-            msgBox.setText(QString("Updated %1 of %2 fitting parameters from: %3")
-                          .arg(updatedCount).arg(fittingParameters.size()).arg(filename));
+            msgBox.setText(QString("Updated %1 fitting parameters from: %2")
+                          .arg(updatedCount).arg(filename));
             msgBox.setDetailedText(verificationReport);
             msgBox.exec();
         } else {
-            QMessageBox::warning(this, "Load Error", 
+            QMessageBox::warning(this, "Load Error",
                                "Could not load parameter file.");
         }
     }
@@ -1669,63 +1858,45 @@ void FittingTab::populateWignerLimits() {
         compound.TransformOut(config);
         
         // Apply the limits to our fitting parameters
-        // Need to map Minuit parameter indices to GUI parameter names correctly
-        // In GUI: widths are numbered consecutively across all levels (Level 1 Channel 1, Level 1 Channel 2, Level 2 Channel 1, etc.)
-        // In Minuit: widths are numbered per level (width_1_1, width_1_2, width_2_1, etc.)
-        
-        int consecutiveWidthNumber = 1;  // Track consecutive width numbering for GUI
-        
-        // Iterate through compound structure to build the correct mapping
-        int currentEnergyIndex = 1;
-        for (int j = 1; j <= compound.NumJGroups(); j++) {
-            JGroup* jgroup = compound.GetJGroup(j);
-            if (!jgroup) continue;
-            
-            for (int la = 1; la <= jgroup->NumLevels(); la++) {
-                // Skip energy parameter (currentEnergyIndex)
-                
-                // Process width parameters for this level
-                int currentWidthIndex = 1;
-                for (int ch = 1; ch <= jgroup->NumChannels(); ch++) {
-                    // Construct the Minuit parameter name for this width
-                    std::string minuitParamName = "width_" + std::to_string(currentEnergyIndex) + "_" + std::to_string(currentWidthIndex);
-                    
-                    // Find this parameter in our Minuit parameters
-                    for (int paramIndex = 0; paramIndex < numParams; paramIndex++) {
-                        if (hasLimits[paramIndex] && 
-                            params.GetMinuitParams().Parameter(paramIndex).GetName() == minuitParamName) {
-                            
-                            // Construct the GUI parameter name using consecutive width numbering
-                            QString guiParamName = QString("Level %1 Channel %2 Width (eV)")
-                                .arg(currentEnergyIndex).arg(consecutiveWidthNumber);
-                            
-                            // Find this parameter in fittingParameters and update its limits
-                            for (int i = 0; i < fittingParameters.size(); i++) {
-                                if (fittingParameters[i].category == "level" && 
-                                    fittingParameters[i].name == guiParamName) {
-                                    
-                                    fittingParameters[i].lowerLimit = lowerLimits[paramIndex];
-                                    fittingParameters[i].upperLimit = upperLimits[paramIndex];
-                                    break;
-                                }
-                            }
-                            break;
-                        }
-                    }
-                    
-                    consecutiveWidthNumber++;  // Increment consecutive width number
-                    currentWidthIndex++;       // Increment width index within this level
-                }
-                
-                currentEnergyIndex++;  // Move to next level
+        // Map non-fixed Minuit parameters to fittingParameters in order
+        // fittingParameters contains only non-fixed parameters, in the same order as non-fixed Minuit parameters
+
+        int limitsApplied = 0;
+        int fittingParamIndex = 0;
+
+        // Iterate through Minuit parameters in order
+        for (int paramIndex = 0; paramIndex < numParams; paramIndex++) {
+            const ROOT::Minuit2::MinuitParameter& minuitParam = params.GetMinuitParams().Parameter(paramIndex);
+
+            // Skip fixed parameters
+            if (minuitParam.IsFixed()) {
+                continue;
             }
+
+            // Check if we've run out of fitting parameters
+            if (fittingParamIndex >= fittingParameters.size()) {
+                break;
+            }
+
+            // This non-fixed Minuit parameter corresponds to fittingParameters[fittingParamIndex]
+            FittingParameter& param = fittingParameters[fittingParamIndex];
+
+            // Only apply limits to width parameters that have Wigner limits set
+            if (hasLimits[paramIndex] && param.category == "level" && param.channelIndex >= 0) {
+                param.lowerLimit = lowerLimits[paramIndex];
+                param.upperLimit = upperLimits[paramIndex];
+                limitsApplied++;
+            }
+
+            // Move to next fitting parameter
+            fittingParamIndex++;
         }
         
         // Refresh the parameter tables to show the updated limits
         updateParameterTables();
-        
-        QMessageBox::information(this, "Success", 
-            QString("Applied Wigner limits to %1 width parameters.").arg(widthCount));
+
+        QMessageBox::information(this, "Success",
+            QString("Applied Wigner limits to %1 width parameters.").arg(limitsApplied));
             
     } catch (const std::exception& e) {
         QMessageBox::warning(this, "Error", 
