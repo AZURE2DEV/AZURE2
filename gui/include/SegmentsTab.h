@@ -41,6 +41,8 @@ class SegmentsTab : public QWidget {
   void moveSegTestLineDown();
   void updateSegDataButtons(const QItemSelection &selection);
   void updateSegTestButtons(const QItemSelection &selection);
+  void checkAllSegData();
+  void uncheckAllSegData();
   /*void openSegDataFile();
   void openSegDataFile(QString filename);
   void saveSegDataFile();
@@ -75,6 +77,8 @@ class SegmentsTab : public QWidget {
   QPushButton *segDataDeleteButton;
   QPushButton *segDataUpButton;
   QPushButton *segDataDownButton;
+  QPushButton *segDataCheckAllButton;
+  QPushButton *segDataUncheckAllButton;
   /*QLineEdit *segTestFileText;*/
   SegmentsTestModel *segmentsTestModel;
   QTableView *segmentsTestView;

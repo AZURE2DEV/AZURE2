@@ -46,6 +46,8 @@ class LevelsTab : public QWidget {
   void updateDetails(const QItemSelection &selection);
   void updateReducedWidth(const QString &string);
   void showInfo(int which=0,QString title="");
+  void fixAllWidths();
+  void fixAllEnergies();
 
  signals:
   void readNewPair(PairsData,int,bool);
@@ -60,6 +62,8 @@ class LevelsTab : public QWidget {
   QPushButton *addLevelButton;
   QPushButton *removeLevelButton;
   QPushButton *iaeaQueryButton;
+  QPushButton *fixAllWidthsButton;
+  QPushButton *fixAllEnergiesButton;
   PairsModel *pairsModel;
   LevelsModel *levelsModel;
   ChannelsModel *channelsModel;

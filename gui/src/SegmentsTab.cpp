@@ -94,6 +94,13 @@ SegmentsTab::SegmentsTab(QWidget *parent) : QWidget(parent) {
   connect(segDataUpButton,SIGNAL(clicked()),this,SLOT(moveSegDataLineUp()));
   connect(segDataDownButton,SIGNAL(clicked()),this,SLOT(moveSegDataLineDown()));
 
+  segDataCheckAllButton = new QPushButton(tr("Check All"));
+  segDataCheckAllButton->setMaximumHeight(28);
+  connect(segDataCheckAllButton,SIGNAL(clicked()),this,SLOT(checkAllSegData()));
+  segDataUncheckAllButton = new QPushButton(tr("Uncheck All"));
+  segDataUncheckAllButton->setMaximumHeight(28);
+  connect(segDataUncheckAllButton,SIGNAL(clicked()),this,SLOT(uncheckAllSegData()));
+
   segTestAddButton=new QPushButton(tr("+"));
   segTestAddButton->setMaximumSize(28,28);
   segTestDeleteButton = new QPushButton(tr("-"));
@@ -128,10 +135,23 @@ SegmentsTab::SegmentsTab(QWidget *parent) : QWidget(parent) {
   segDataButtonBox->setColumnStretch(4,0);
 #ifdef MACX_SPACING
   segDataButtonBox->setHorizontalSpacing(11);
-#else 
+#else
   segDataButtonBox->setHorizontalSpacing(0);
 #endif
   segDataLayout->addLayout(segDataButtonBox,1,0);
+  QGridLayout *segDataCheckButtonBox = new QGridLayout;
+  segDataCheckButtonBox->addWidget(segDataCheckAllButton,0,0);
+  segDataCheckButtonBox->addWidget(segDataUncheckAllButton,0,1);
+  segDataCheckButtonBox->addItem(new QSpacerItem(28,28),0,2);
+  segDataCheckButtonBox->setColumnStretch(0,0);
+  segDataCheckButtonBox->setColumnStretch(1,0);
+  segDataCheckButtonBox->setColumnStretch(2,1);
+#ifdef MACX_SPACING
+  segDataCheckButtonBox->setHorizontalSpacing(11);
+#else
+  segDataCheckButtonBox->setHorizontalSpacing(0);
+#endif
+  segDataLayout->addLayout(segDataCheckButtonBox,2,0);
   segDataBox->setLayout(segDataLayout);
 
   QGroupBox *segTestBox = new QGroupBox(tr("Segments Without Data"));
@@ -882,7 +902,7 @@ void SegmentsTab::updateSegDataButtons(const QItemSelection &selection) {
 
 void SegmentsTab::updateSegTestButtons(const QItemSelection &selection) {
   QModelIndexList indexes=selection.indexes();
-  
+
   if(indexes.isEmpty()) {
     segTestDeleteButton->setEnabled(false);
     segTestUpButton->setEnabled(false);
@@ -893,6 +913,22 @@ void SegmentsTab::updateSegTestButtons(const QItemSelection &selection) {
     else segTestUpButton->setEnabled(true);
     if(indexes.at(0).row()==segmentsTestModel->rowCount(QModelIndex())-1) segTestDownButton->setEnabled(false);
     else segTestDownButton->setEnabled(true);
+  }
+}
+
+void SegmentsTab::checkAllSegData() {
+  QList<SegmentsDataData> lines = segmentsDataModel->getLines();
+  for(int i = 0; i < lines.size(); i++) {
+    QModelIndex index = segmentsDataModel->index(i, 0, QModelIndex());
+    segmentsDataModel->setData(index, 1, Qt::EditRole);
+  }
+}
+
+void SegmentsTab::uncheckAllSegData() {
+  QList<SegmentsDataData> lines = segmentsDataModel->getLines();
+  for(int i = 0; i < lines.size(); i++) {
+    QModelIndex index = segmentsDataModel->index(i, 0, QModelIndex());
+    segmentsDataModel->setData(index, 0, Qt::EditRole);
   }
 }
 

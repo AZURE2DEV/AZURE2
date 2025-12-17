@@ -103,6 +103,14 @@ LevelsTab::LevelsTab(QWidget *parent) : QWidget(parent) {
   iaeaQueryButton->setToolTip(tr("Query IAEA database for level schemes"));
   connect(iaeaQueryButton,SIGNAL(clicked()),this,SLOT(addLevelsFromIAEA()));
 
+  fixAllWidthsButton = new QPushButton(tr("Fix All Widths"));
+  fixAllWidthsButton->setMaximumHeight(28);
+  connect(fixAllWidthsButton,SIGNAL(clicked()),this,SLOT(fixAllWidths()));
+
+  fixAllEnergiesButton = new QPushButton(tr("Fix All Energies"));
+  fixAllEnergiesButton->setMaximumHeight(28);
+  connect(fixAllEnergiesButton,SIGNAL(clicked()),this,SLOT(fixAllEnergies()));
+
   /*
   mapper = new QSignalMapper(this);
   connect(mapper,SIGNAL(mapped(int)),this,SLOT(showInfo(int)));
@@ -131,11 +139,25 @@ LevelsTab::LevelsTab(QWidget *parent) : QWidget(parent) {
   buttonBox->setHorizontalSpacing(0);
 #endif
 
+  QGridLayout *fixButtonBox = new QGridLayout;
+  fixButtonBox->addWidget(fixAllWidthsButton,0,0);
+  fixButtonBox->addWidget(fixAllEnergiesButton,0,1);
+  fixButtonBox->addItem(new QSpacerItem(28,28),0,2);
+  fixButtonBox->setColumnStretch(0,0);
+  fixButtonBox->setColumnStretch(1,0);
+  fixButtonBox->setColumnStretch(2,1);
+#ifdef MACX_SPACING
+  fixButtonBox->setHorizontalSpacing(11);
+#else
+  fixButtonBox->setHorizontalSpacing(0);
+#endif
+
   QGroupBox *levelsBox=new QGroupBox(tr("Compound Nucleus Levels"));
   QGridLayout *levelsLayout=new QGridLayout;
   levelsLayout->setContentsMargins(6,6,6,6);
   levelsLayout->addWidget(levelsView,0,0);
   levelsLayout->addLayout(buttonBox,1,0);
+  levelsLayout->addLayout(fixButtonBox,2,0);
 #ifdef MACX_SPACING
   levelsLayout->setVerticalSpacing(0);
 #endif
@@ -870,6 +892,22 @@ int LevelsTab::calculateCompoundNucleus(int &massNumber, int &atomicNumber) {
   atomicNumber = entrancePair.lightZ + entrancePair.heavyZ;
 
   return 0; // Success
+}
+
+void LevelsTab::fixAllWidths() {
+  QList<ChannelsData> channels = channelsModel->getChannels();
+  for(int i = 0; i < channels.size(); i++) {
+    QModelIndex index = channelsModel->index(i, 0, QModelIndex());
+    channelsModel->setData(index, 1, Qt::EditRole);
+  }
+}
+
+void LevelsTab::fixAllEnergies() {
+  QList<LevelsData> levels = levelsModel->getLevels();
+  for(int i = 0; i < levels.size(); i++) {
+    QModelIndex index = levelsModel->index(i, 1, QModelIndex());
+    levelsModel->setData(index, 1, Qt::EditRole);
+  }
 }
 
 void LevelsTab::addLevelsFromIAEA() {
