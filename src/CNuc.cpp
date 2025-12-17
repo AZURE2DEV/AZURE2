@@ -539,10 +539,10 @@ bool CNuc::TransformIn(const Config& configure) {
 	    }
 	  }
 	  // FIXME
-	  if(denom<0.){ //configure.outStream << "WARNING: Denominator less than zero in E=" 
-					//   << theLevel->GetE() << " MeV resonance transformation.  "
-					//   <<  "Tranformation may not have been successful." 
-					//   << std::endl;
+	  if(denom<0.){ configure.outStream << "WARNING: Denominator less than zero in E=" 
+					   << theLevel->GetE() << " MeV resonance transformation.  "
+					   <<  "Tranformation may not have been successful." 
+					   << std::endl;
 					return true;
 	  }
 	  double nFSum=1.0;
@@ -611,8 +611,8 @@ bool CNuc::TransformIn(const Config& configure) {
 								 pow(imag(externalWidth),2.0))-real(externalWidth);
 		} else {
 			// FIXME
-		  //configure.outStream << "**WARNING: Imaginary portion of external width \n\tfor j=" << j << " la=" 
-			//    << la << " ch=" << ch << " is greater than total width." << std::endl;
+		  configure.outStream << "**WARNING: Imaginary portion of external width \n\tfor j=" << j << " la=" 
+			    << la << " ch=" << ch << " is greater than total width." << std::endl;
 		  tempGammas[levelKeys.size()-1][ch-1]=-real(externalWidth);
 		  return true;
 		}
@@ -1226,7 +1226,7 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config* config
 	   level->GetE()>(pair->GetSepE()+pair->GetExE())) isUnbound=true;
       }
 	  // Jakub's Fix: it can create problems with the fit with pyazr and brick
-      //if(!isUnbound) p.Fix(varname);
+      if(!isUnbound) p.Fix(varname);
       if(level->EnergyFixed()&&!p.Parameter(p.Index(varname)).IsFixed()) p.Fix(varname); 
       
       // Parameter settings will be applied by ParameterLimitsManager during fit
@@ -1366,8 +1366,8 @@ void CNuc::TransformOut(const Config& configure) {
 	    }
 	    if(!done) {
 	      if(iteration==maxIterations) {
-		//configure.outStream << "**WARNING: Could Not Transform J = " 
-		//	  << this->GetJGroup(j)->GetJ();
+		configure.outStream << "**WARNING: Could Not Transform J = " 
+			  << this->GetJGroup(j)->GetJ();
 		if(this->GetJGroup(j)->GetPi()==-1) configure.outStream << '-';
 		else configure.outStream << '+';
 		configure.outStream << " E = " << theLevel->GetFitE() << " MeV**" << std::endl;
