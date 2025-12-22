@@ -51,6 +51,9 @@ class AddSegDataDialog : public QDialog {
   QListWidget *componentsList;
   QSpinBox *componentEntranceSpin;
   QSpinBox *componentExitSpin;
+  QCheckBox *useFixedAngleCheck;
+  QLineEdit *fixedAngleText;
+  QLabel *fixedAngleLabel;
   QPushButton *addComponentButton;
   QPushButton *removeComponentButton;
 
@@ -59,6 +62,8 @@ class AddSegDataDialog : public QDialog {
   void dataTypeChanged(int);
   void varyNormChanged(int);
   void advancedModeChanged(int);
+  void operationTypeChanged(int);
+  void useFixedAngleChanged(int);
   void addComponent();
   void removeComponent();
   

@@ -103,6 +103,8 @@ class EPoint {
   void SetLabEnergy(double);
   void SetCMEnergy(double);
   void SetExcitationEnergy(double);
+  void SetLabAngle(double);
+  void SetCMAngle(double);
   void SetExitKey(int);
   void SetEntranceKey(int);
   void CalcLegendreP(int,CNuc*,TargetEffect*);

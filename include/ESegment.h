@@ -76,6 +76,8 @@ class ESegment {
   void SetEntranceKey(int);
   void SetIsTotalCapture(int);
   void SetVaryNorm(bool);
+  void SetMinAngle(double);
+  void SetMaxAngle(double);
   EPoint *GetPoint(int);
   std::vector<EPoint>& GetPoints();
   

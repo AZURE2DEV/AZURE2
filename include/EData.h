@@ -50,6 +50,7 @@ class EData {
   int CalculateECAmplitudes(CNuc*,const Config&);
   int InitializeComponentSegments(CNuc*,const Config&);
   ESegment* CreateComponentSegment(const ESegment& baseSegment, int entranceKey, int exitKey);
+  ESegment* CreateComponentSegment(const ESegment& baseSegment, int entranceKey, int exitKey, double fixedAngle);
   void MapData();
   void AddTargetEffect(TargetEffect);
   void SetNormParamOffset(int);

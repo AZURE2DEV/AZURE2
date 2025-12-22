@@ -688,8 +688,22 @@ void ESegment::SetIsTotalCapture(int num) {
 
 void ESegment::SetVaryNorm(bool varyNorm) {
   varyNorm_=varyNorm;
-
 }
+
+/*!
+ * Sets the minimum angle for the segment.
+ */
+void ESegment::SetMinAngle(double minAngle) {
+  min_a_ = minAngle;
+}
+
+/*!
+ * Sets the maximum angle for the segment.
+ */
+void ESegment::SetMaxAngle(double maxAngle) {
+  max_a_ = maxAngle;
+}
+
 /*!
  * Returns a pointer to the data point object specified by a position in the EPoint vector.
  */

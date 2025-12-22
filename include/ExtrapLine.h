@@ -43,8 +43,20 @@ class ExtrapLine {
             std::vector<std::string> components;
             for(int i = 0; i < numComponents; i++) {
               int entrance, exit;
-              if(advancedStream >> entrance >> exit) {
-                components.push_back("Entrance: " + std::to_string(entrance) + ", Exit: " + std::to_string(exit));
+              double angle;
+              if(advancedStream >> entrance >> exit >> angle) {
+                // New format with angle
+                if(angle > -900.0) { // Check if angle is not the sentinel value
+                  components.push_back("Entrance: " + std::to_string(entrance) + ", Exit: " + std::to_string(exit) + ", Angle: " + std::to_string(angle));
+                } else {
+                  components.push_back("Entrance: " + std::to_string(entrance) + ", Exit: " + std::to_string(exit));
+                }
+              } else {
+                // Fallback to old format (entrance, exit only) for backward compatibility
+                advancedStream.clear();
+                if(advancedStream >> entrance >> exit) {
+                  components.push_back("Entrance: " + std::to_string(entrance) + ", Exit: " + std::to_string(exit));
+                }
               }
             }
             if(!components.empty()) {

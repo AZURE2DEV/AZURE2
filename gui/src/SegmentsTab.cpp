@@ -1019,7 +1019,54 @@ bool SegmentsTab::readSegDataFile(QTextStream& inStream) {
               operationType = dataParts[2].toInt(&ok);
               if(ok && dataParts.size() >= 4) {
                 int numComponents = dataParts[3].toInt(&ok);
-                if(ok && dataParts.size() >= 4 + numComponents * 2) {
+
+                // Try new format first (3 values per component: entrance, exit, angle)
+                if(ok && dataParts.size() >= 4 + numComponents * 3) {
+                  QStringList components;
+                  bool newFormatSuccess = true;
+
+                  for(int i = 0; i < numComponents; i++) {
+                    int entranceIdx = 4 + i * 3;
+                    int exitIdx = 5 + i * 3;
+                    int angleIdx = 6 + i * 3;
+                    if(entranceIdx < dataParts.size() && exitIdx < dataParts.size() && angleIdx < dataParts.size()) {
+                      int entrance = dataParts[entranceIdx].toInt(&ok);
+                      if(ok) {
+                        int exit = dataParts[exitIdx].toInt(&ok);
+                        if(ok) {
+                          double angle = dataParts[angleIdx].toDouble(&ok);
+                          if(ok) {
+                            QString component;
+                            if(angle > -900.0) { // Check if angle is not the sentinel value
+                              component = QString("Entrance: %1, Exit: %2, Angle: %3").arg(entrance).arg(exit).arg(angle);
+                            } else {
+                              component = QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit);
+                            }
+                            components.append(component);
+                          } else {
+                            newFormatSuccess = false;
+                            break;
+                          }
+                        } else {
+                          newFormatSuccess = false;
+                          break;
+                        }
+                      } else {
+                        newFormatSuccess = false;
+                        break;
+                      }
+                    } else {
+                      newFormatSuccess = false;
+                      break;
+                    }
+                  }
+
+                  if(newFormatSuccess) {
+                    componentsList = components.join(";");
+                  }
+                }
+                // Fallback to old format (2 values per component: entrance, exit)
+                else if(ok && dataParts.size() >= 4 + numComponents * 2) {
                   QStringList components;
                   for(int i = 0; i < numComponents; i++) {
                     int entranceIdx = 4 + i * 2;
@@ -1077,27 +1124,52 @@ bool SegmentsTab::writeSegDataFile(QTextStream& outStream) {
     // Add advanced segment data after the file path for backwards compatibility
     if(lines.at(i).isAdvanced == 1) {
       outStream << " " << lines.at(i).isAdvanced << " " << lines.at(i).operationType;
-      
-      // Parse components and write as numbers
+
+      // Parse components and write as numbers (with optional angle)
       QStringList components = lines.at(i).componentsList.split(";", Qt::SkipEmptyParts);
       if(lines.at(i).operationType == 0) { // Sum - can have multiple components
         outStream << " " << components.size();
         for(const QString& component : components) {
           QStringList parts = component.split(", ");
           if(parts.size() >= 2) {
-            int entrance = parts[0].split(": ")[1].toInt();
-            int exit = parts[1].split(": ")[1].toInt();
-            outStream << " " << entrance << " " << exit;
+            int entrance = parts[0].split(": ")[1].trimmed().toInt();
+            int exit = parts[1].split(": ")[1].trimmed().toInt();
+            // Check for optional angle (parts[2] would be "Angle: X")
+            double angle = -999.0; // Sentinel value for "no angle"
+            if(parts.size() >= 3) {
+              QString anglePart = parts[2].trimmed();
+              if(anglePart.contains("Angle:")) {
+                QStringList angleSplit = anglePart.split(":");
+                if(angleSplit.size() >= 2) {
+                  angle = angleSplit[1].trimmed().toDouble();
+                }
+              }
+            }
+            outStream << " " << entrance << " " << exit << " " << angle;
           }
         }
-      } else { // Ratio - only 2 components (numerator and denominator)
-        outStream << " 2"; // Always 2 components for ratio
-        for(int j = 0; j < qMin(2, components.size()); j++) {
-          QStringList parts = components[j].split(", ");
+      } else { // Ratio - only 1 component (denominator, main segment is numerator)
+        // For ratio, always write exactly 1 component (only the first one)
+        int numComponentsToWrite = qMin(1, components.size());
+        outStream << " " << numComponentsToWrite;
+
+        if(numComponentsToWrite > 0) {
+          QStringList parts = components[0].split(", "); // Only use first component
           if(parts.size() >= 2) {
-            int entrance = parts[0].split(": ")[1].toInt();
-            int exit = parts[1].split(": ")[1].toInt();
-            outStream << " " << entrance << " " << exit;
+            int entrance = parts[0].split(": ")[1].trimmed().toInt();
+            int exit = parts[1].split(": ")[1].trimmed().toInt();
+            // Check for optional angle (parts[2] would be "Angle: X")
+            double angle = -999.0; // Sentinel value for "no angle"
+            if(parts.size() >= 3) {
+              QString anglePart = parts[2].trimmed();
+              if(anglePart.contains("Angle:")) {
+                QStringList angleSplit = anglePart.split(":");
+                if(angleSplit.size() >= 2) {
+                  angle = angleSplit[1].trimmed().toDouble();
+                }
+              }
+            }
+            outStream << " " << entrance << " " << exit << " " << angle;
           }
         }
       }
@@ -1107,7 +1179,7 @@ bool SegmentsTab::writeSegDataFile(QTextStream& outStream) {
     }
     outStream << endl;
   }
- 
+
   return true;
 }
 
@@ -1163,13 +1235,48 @@ bool SegmentsTab::readSegTestFile(QTextStream& inStream) {
           in >> numComponents;
           if(in.status()==QTextStream::Ok) {
             QStringList components;
+
+            // Try reading new format (entrance, exit, angle)
+            bool newFormatSuccess = true;
+            QTextStream::Status initialStatus = in.status();
+            qint64 initialPos = in.pos();
+
             for(int i = 0; i < numComponents; i++) {
               int entrance, exit;
-              in >> entrance >> exit;
+              double angle;
+              in >> entrance >> exit >> angle;
               if(in.status()==QTextStream::Ok) {
-                components.append(QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit));
+                QString component;
+                if(angle > -900.0) { // Check if angle is not the sentinel value
+                  component = QString("Entrance: %1, Exit: %2, Angle: %3").arg(entrance).arg(exit).arg(angle);
+                } else {
+                  component = QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit);
+                }
+                components.append(component);
+              } else {
+                newFormatSuccess = false;
+                break;
               }
             }
+
+            // If new format failed, try old format (entrance, exit only)
+            if(!newFormatSuccess) {
+              // Reset stream position to before we tried to read components
+              in.seek(initialPos);
+              in.resetStatus();
+              components.clear();
+
+              for(int i = 0; i < numComponents; i++) {
+                int entrance, exit;
+                in >> entrance >> exit;
+                if(in.status()==QTextStream::Ok) {
+                  components.append(QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit));
+                } else {
+                  break;
+                }
+              }
+            }
+
             componentsList = components.join(";");
           }
         }
@@ -1209,31 +1316,56 @@ bool SegmentsTab::writeSegTestFile(QTextStream& outStream) {
       outStream  << qSetFieldWidth(15) << lines.at(i).dataType
 		 << qSetFieldWidth(0) << lines.at(i).maxAngDistOrder;
     } else outStream << qSetFieldWidth(0) << lines.at(i).dataType;
-    
+
     // Add advanced segment data after the existing data for backwards compatibility
     if(lines.at(i).isAdvanced == 1) {
       outStream << " " << lines.at(i).isAdvanced << " " << lines.at(i).operationType;
-      
-      // Parse components and write as numbers
+
+      // Parse components and write as numbers (with optional angle)
       QStringList components = lines.at(i).componentsList.split(";", Qt::SkipEmptyParts);
       if(lines.at(i).operationType == 0) { // Sum - can have multiple components
         outStream << " " << components.size();
         for(const QString& component : components) {
           QStringList parts = component.split(", ");
           if(parts.size() >= 2) {
-            int entrance = parts[0].split(": ")[1].toInt();
-            int exit = parts[1].split(": ")[1].toInt();
-            outStream << " " << entrance << " " << exit;
+            int entrance = parts[0].split(": ")[1].trimmed().toInt();
+            int exit = parts[1].split(": ")[1].trimmed().toInt();
+            // Check for optional angle (parts[2] would be "Angle: X")
+            double angle = -999.0; // Sentinel value for "no angle"
+            if(parts.size() >= 3) {
+              QString anglePart = parts[2].trimmed();
+              if(anglePart.contains("Angle:")) {
+                QStringList angleSplit = anglePart.split(":");
+                if(angleSplit.size() >= 2) {
+                  angle = angleSplit[1].trimmed().toDouble();
+                }
+              }
+            }
+            outStream << " " << entrance << " " << exit << " " << angle;
           }
         }
-      } else { // Ratio - only 2 components (numerator and denominator)
-        outStream << " 2"; // Always 2 components for ratio
-        for(int j = 0; j < qMin(2, components.size()); j++) {
-          QStringList parts = components[j].split(", ");
+      } else { // Ratio - only 1 component (denominator, main segment is numerator)
+        // For ratio, always write exactly 1 component (only the first one)
+        int numComponentsToWrite = qMin(1, components.size());
+        outStream << " " << numComponentsToWrite;
+
+        if(numComponentsToWrite > 0) {
+          QStringList parts = components[0].split(", "); // Only use first component
           if(parts.size() >= 2) {
-            int entrance = parts[0].split(": ")[1].toInt();
-            int exit = parts[1].split(": ")[1].toInt();
-            outStream << " " << entrance << " " << exit;
+            int entrance = parts[0].split(": ")[1].trimmed().toInt();
+            int exit = parts[1].split(": ")[1].trimmed().toInt();
+            // Check for optional angle (parts[2] would be "Angle: X")
+            double angle = -999.0; // Sentinel value for "no angle"
+            if(parts.size() >= 3) {
+              QString anglePart = parts[2].trimmed();
+              if(anglePart.contains("Angle:")) {
+                QStringList angleSplit = anglePart.split(":");
+                if(angleSplit.size() >= 2) {
+                  angle = angleSplit[1].trimmed().toDouble();
+                }
+              }
+            }
+            outStream << " " << entrance << " " << exit << " " << angle;
           }
         }
       }

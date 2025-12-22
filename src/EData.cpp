@@ -103,24 +103,42 @@ int EData::Fill(const Config& configure, CNuc *theCNuc) {
 	        // Parse components and create full segment copies
 	        std::string componentsStr = NewSegment.GetComponentsList();
 	        if (!componentsStr.empty()) {
-	          // Components are stored as "Entrance: X, Exit: Y;Entrance: A, Exit: B;..."
+	          // Components are stored as "Entrance: X, Exit: Y;Entrance: A, Exit: B;..." or with optional "Angle: Z"
 	          std::istringstream stream(componentsStr);
 	          std::string component;
 	          while (std::getline(stream, component, ';')) {
 	            if (!component.empty()) {
-	              // Parse "Entrance: X, Exit: Y" format
+	              // Parse "Entrance: X, Exit: Y" format (with optional ", Angle: Z")
 	              size_t entrancePos = component.find("Entrance: ");
 	              size_t exitPos = component.find("Exit: ");
+	              size_t anglePos = component.find("Angle: ");
+
 	              if (entrancePos != std::string::npos && exitPos != std::string::npos) {
 	                entrancePos += 10; // Length of "Entrance: "
 	                size_t commaPos = component.find(", Exit: ");
 	                if (commaPos != std::string::npos) {
 	                  int entranceKey = std::stoi(component.substr(entrancePos, commaPos - entrancePos));
 	                  exitPos += 6; // Length of "Exit: "
-	                  int exitKey = std::stoi(component.substr(exitPos));
-	                  
-	                  // Create a full segment copy with different entrance/exit keys
-	                  ESegment* componentSegment = this->CreateComponentSegment(*filledSegment, entranceKey, exitKey);
+
+	                  // Check if there's an angle specification
+	                  ESegment* componentSegment = nullptr;
+	                  if (anglePos != std::string::npos) {
+	                    // Parse the exit key up to ", Angle:"
+	                    size_t angleCommaPos = component.find(", Angle: ");
+	                    int exitKey = std::stoi(component.substr(exitPos, angleCommaPos - exitPos));
+
+	                    // Parse the angle value
+	                    anglePos += 7; // Length of "Angle: "
+	                    double fixedAngle = std::stod(component.substr(anglePos));
+
+	                    // Create component segment with fixed angle
+	                    componentSegment = this->CreateComponentSegment(*filledSegment, entranceKey, exitKey, fixedAngle);
+	                  } else {
+	                    // No angle specified, use standard method
+	                    int exitKey = std::stoi(component.substr(exitPos));
+	                    componentSegment = this->CreateComponentSegment(*filledSegment, entranceKey, exitKey);
+	                  }
+
 	                  if (componentSegment) {
 	                    filledSegment->AddComponentSegment(componentSegment);
 	                  }
@@ -275,25 +293,43 @@ int EData::MakePoints(const Config& configure, CNuc *theCNuc) {
 	      // Parse components and create full segment copies
 	      std::string componentsStr = NewSegment.GetComponentsList();
 	      if (!componentsStr.empty()) {
-	        // Components are stored as "Entrance: X, Exit: Y;Entrance: A, Exit: B;..."
+	        // Components are stored as "Entrance: X, Exit: Y;Entrance: A, Exit: B;..." or with optional "Angle: Z"
 	        std::istringstream stream(componentsStr);
 	        std::string component;
 	        int componentCount = 0;
 	        while (std::getline(stream, component, ';')) {
 	          if (!component.empty()) {
-	            // Parse "Entrance: X, Exit: Y" format
+	            // Parse "Entrance: X, Exit: Y" format (with optional ", Angle: Z")
 	            size_t entrancePos = component.find("Entrance: ");
 	            size_t exitPos = component.find("Exit: ");
+	            size_t anglePos = component.find("Angle: ");
+
 	            if (entrancePos != std::string::npos && exitPos != std::string::npos) {
 	              entrancePos += 10; // Length of "Entrance: "
 	              size_t commaPos = component.find(", Exit: ");
 	              if (commaPos != std::string::npos) {
 	                int entranceKey = std::stoi(component.substr(entrancePos, commaPos - entrancePos));
 	                exitPos += 6; // Length of "Exit: "
-	                int exitKey = std::stoi(component.substr(exitPos));
 
-	                // Create a full segment copy with different entrance/exit keys
-	                ESegment* componentSegment = this->CreateComponentSegment(*theSegment, entranceKey, exitKey);
+	                // Check if there's an angle specification
+	                ESegment* componentSegment = nullptr;
+	                if (anglePos != std::string::npos) {
+	                  // Parse the exit key up to ", Angle:"
+	                  size_t angleCommaPos = component.find(", Angle: ");
+	                  int exitKey = std::stoi(component.substr(exitPos, angleCommaPos - exitPos));
+
+	                  // Parse the angle value
+	                  anglePos += 7; // Length of "Angle: "
+	                  double fixedAngle = std::stod(component.substr(anglePos));
+
+	                  // Create component segment with fixed angle
+	                  componentSegment = this->CreateComponentSegment(*theSegment, entranceKey, exitKey, fixedAngle);
+	                } else {
+	                  // No angle specified, use standard method
+	                  int exitKey = std::stoi(component.substr(exitPos));
+	                  componentSegment = this->CreateComponentSegment(*theSegment, entranceKey, exitKey);
+	                }
+
 	                if (componentSegment) {
 	                  theSegment->AddComponentSegment(componentSegment);
 	                  componentCount++;
@@ -1581,27 +1617,61 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config& configure) {
 ESegment* EData::CreateComponentSegment(const ESegment& baseSegment, int entranceKey, int exitKey) {
   // Create a copy of the base segment with different entrance/exit keys
   // Store component segments separately to avoid iterator invalidation
-  
+
   // Add a copy of the base segment to the component segments vector
   this->componentSegments_.push_back(baseSegment);
   ESegment* componentSegment = &componentSegments_.back();
-  
+
   // Set the new entrance/exit keys for the component segment
   componentSegment->SetEntranceKey(entranceKey);
   componentSegment->SetExitKey(exitKey);
-  
+
   // Set a unique segment key to avoid cache conflicts
   // Use negative keys for component segments to distinguish from regular segments
   static int componentSegmentKeyCounter = -1000;
   componentSegment->SetSegmentKey(componentSegmentKeyCounter--);
-  
+
   // Clear any existing components to avoid circular references
   componentSegment->ClearComponents();
-  
+
   // The component segment now has the same data points as the base segment
   // but with different entrance/exit keys, so it will calculate different
   // theoretical cross sections when initialized
-  
+
+  return componentSegment;
+}
+
+/*!
+ * Creates a component segment with a fixed angle for ratio denominators
+ */
+ESegment* EData::CreateComponentSegment(const ESegment& baseSegment, int entranceKey, int exitKey, double fixedAngle) {
+  // Create a copy of the base segment with different entrance/exit keys
+  this->componentSegments_.push_back(baseSegment);
+  ESegment* componentSegment = &componentSegments_.back();
+
+  // Set the new entrance/exit keys for the component segment
+  componentSegment->SetEntranceKey(entranceKey);
+  componentSegment->SetExitKey(exitKey);
+
+  // Set the fixed angle by constraining min and max to the same value
+  componentSegment->SetMinAngle(fixedAngle);
+  componentSegment->SetMaxAngle(fixedAngle);
+
+  // CRITICAL: Override all point angles to the fixed angle
+  // This ensures calculations use the fixed angle, not the original data angles
+  std::vector<EPoint>& points = componentSegment->GetPoints();
+  for(auto& point : points) {
+    point.SetCMAngle(fixedAngle);
+    point.SetLabAngle(fixedAngle); // Also set lab angle to be consistent
+  }
+
+  // Set a unique segment key to avoid cache conflicts
+  static int componentSegmentKeyCounter = -1000;
+  componentSegment->SetSegmentKey(componentSegmentKeyCounter--);
+
+  // Clear any existing components to avoid circular references
+  componentSegment->ClearComponents();
+
   return componentSegment;
 }
 

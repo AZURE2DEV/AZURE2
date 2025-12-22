@@ -138,7 +138,8 @@ bool AZUREAPI::UpdateParameters( ) {
     fixed_.push_back( params.GetMinuitParams().Parameter(i).IsFixed() );
     if( !fixed_.back() ) {
       values_rwa_.push_back( params.GetMinuitParams().Parameter(i).Value() );
-    } 
+    }
+
   }
 
   all_ = compound()->GetTransformParams( configure() );

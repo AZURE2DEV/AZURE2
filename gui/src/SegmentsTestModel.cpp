@@ -23,50 +23,86 @@ QVariant SegmentsTestModel::data(const QModelIndex &index, int role) const {
     SegmentsTestData line = segTestLineList.at(index.row());
     if(index.column() == 1) {
       if(line.isAdvanced == 1) {
-        // Handle advanced segments (sum/ratio) - show original + components
+        // Handle advanced segments (sum/ratio)
         QString result;
 
-        // First show the original segment
-        if(pairsModel->getPairs().size()>=line.entrancePairIndex && pairsModel->getPairs().size()>=line.exitPairIndex) {
-          PairsData firstPair=pairsModel->getPairs().at(line.entrancePairIndex-1);
-          PairsData secondPair=pairsModel->getPairs().at(line.exitPairIndex-1);
-          result = pairsModel->getReactionLabel(firstPair,secondPair);
-        } else {
-          result = "UNDEFINED";
-        }
+        // For RATIO: main segment is numerator, component is denominator
+        // For SUM: show all components being added
 
-        // Then add the components
-        QStringList components = line.componentsList.split(";", Qt::SkipEmptyParts);
+        if(line.operationType == 1) { // RATIO
+          // Show main segment as numerator
+          if(pairsModel->getPairs().size()>=line.entrancePairIndex && pairsModel->getPairs().size()>=line.exitPairIndex) {
+            PairsData firstPair=pairsModel->getPairs().at(line.entrancePairIndex-1);
+            PairsData secondPair=pairsModel->getPairs().at(line.exitPairIndex-1);
+            result = pairsModel->getReactionLabel(firstPair,secondPair);
+          } else {
+            result = "UNDEFINED";
+          }
 
-        if(components.isEmpty()) {
-          result += "<br><font style='color:red;font-weight:bold;'>NO COMPONENTS</font>";
-        } else {
-          for(int i = 0; i < components.size(); i++) {
-            QString component = components[i];
-            // Parse component string like "Entrance: 1, Exit: 2"
+          // Then add the denominator component
+          QStringList components = line.componentsList.split(";", Qt::SkipEmptyParts);
+
+          if(components.isEmpty()) {
+            result += "<br><font style='color:red;font-weight:bold;'>NO DENOMINATOR</font>";
+          } else {
+            // For ratio, only use the first component as denominator
+            QString component = components[0];
             QStringList parts = component.split(", ");
             if(parts.size() >= 2) {
               int entranceKey = parts[0].split(": ")[1].toInt();
               int exitKey = parts[1].split(": ")[1].toInt();
+
+              // Check if there's an angle specification
+              QString angleInfo = "";
+              if(parts.size() >= 3 && parts[2].contains("Angle: ")) {
+                double angle = parts[2].split(": ")[1].toDouble();
+                angleInfo = QString(" (%1°)").arg(angle, 0, 'f', 1);
+              }
 
               if(pairsModel->getPairs().size() >= entranceKey && pairsModel->getPairs().size() >= exitKey) {
                 PairsData entrancePair = pairsModel->getPairs().at(entranceKey-1);
                 PairsData exitPair = pairsModel->getPairs().at(exitKey-1);
                 QString reactionLabel = pairsModel->getReactionLabel(entrancePair, exitPair);
 
-                if(line.operationType == 0) { // Sum
-                  result += " +<br>";
-                } else { // Ratio
-                  result += " /<br>";
-                }
-                result += reactionLabel;
+                result += " /<br>";
+                result += reactionLabel + angleInfo;
               } else {
-                if(line.operationType == 0) { // Sum
+                result += " /<br>UNDEFINED";
+              }
+            }
+          }
+        } else { // SUM
+          // For sum, show the original segment first
+          if(pairsModel->getPairs().size()>=line.entrancePairIndex && pairsModel->getPairs().size()>=line.exitPairIndex) {
+            PairsData firstPair=pairsModel->getPairs().at(line.entrancePairIndex-1);
+            PairsData secondPair=pairsModel->getPairs().at(line.exitPairIndex-1);
+            result = pairsModel->getReactionLabel(firstPair,secondPair);
+          } else {
+            result = "UNDEFINED";
+          }
+
+          QStringList components = line.componentsList.split(";", Qt::SkipEmptyParts);
+
+          if(components.isEmpty()) {
+            result += "<br><font style='color:red;font-weight:bold;'>NO COMPONENTS</font>";
+          } else {
+            for(int i = 0; i < components.size(); i++) {
+              QString component = components[i];
+              QStringList parts = component.split(", ");
+              if(parts.size() >= 2) {
+                int entranceKey = parts[0].split(": ")[1].toInt();
+                int exitKey = parts[1].split(": ")[1].toInt();
+
+                if(pairsModel->getPairs().size() >= entranceKey && pairsModel->getPairs().size() >= exitKey) {
+                  PairsData entrancePair = pairsModel->getPairs().at(entranceKey-1);
+                  PairsData exitPair = pairsModel->getPairs().at(exitKey-1);
+                  QString reactionLabel = pairsModel->getReactionLabel(entrancePair, exitPair);
+
                   result += " +<br>";
-                } else { // Ratio
-                  result += " /<br>";
+                  result += reactionLabel;
+                } else {
+                  result += " +<br>UNDEFINED";
                 }
-                result += "UNDEFINED";
               }
             }
           }

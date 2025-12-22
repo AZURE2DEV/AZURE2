@@ -77,6 +77,17 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) : QDialog(parent) {
   componentExitSpin->setSingleStep(1);
   componentExitSpin->setValue(1);
 
+  useFixedAngleCheck = new QCheckBox(tr("Use fixed angle for denominator"));
+  useFixedAngleCheck->setVisible(false);
+  connect(useFixedAngleCheck,SIGNAL(stateChanged(int)),this,SLOT(useFixedAngleChanged(int)));
+
+  fixedAngleLabel = new QLabel(tr("Angle [degrees]:"));
+  fixedAngleLabel->setVisible(false);
+  fixedAngleText = new QLineEdit;
+  fixedAngleText->setText("90.0");
+  fixedAngleText->setVisible(false);
+  fixedAngleText->setMaximumWidth(80);
+
   addComponentButton = new QPushButton(tr("Add Component"));
   connect(addComponentButton,SIGNAL(clicked()),this,SLOT(addComponent()));
   
@@ -150,8 +161,10 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) : QDialog(parent) {
   QGridLayout *advancedLayout = new QGridLayout;
   advancedLayout->addWidget(new QLabel(tr("Operation:")),0,0);
   advancedLayout->addWidget(operationCombo,0,1);
+  connect(operationCombo,SIGNAL(currentIndexChanged(int)),this,SLOT(operationTypeChanged(int)));
+
   advancedLayout->addWidget(new QLabel(tr("Components:")),1,0);
-  advancedLayout->addWidget(componentsList,1,1,3,1);
+  advancedLayout->addWidget(componentsList,1,1,4,1);
 
   // Add component entrance/exit spinboxes above buttons
   advancedLayout->addWidget(new QLabel(tr("Entrance Pair Key:")),1,2);
@@ -159,10 +172,15 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) : QDialog(parent) {
   advancedLayout->addWidget(new QLabel(tr("Exit Pair Key:")),2,2);
   advancedLayout->addWidget(componentExitSpin,2,3);
 
+  // Add fixed angle checkbox and input
+  advancedLayout->addWidget(useFixedAngleCheck,3,2,1,2);
+  advancedLayout->addWidget(fixedAngleLabel,4,2);
+  advancedLayout->addWidget(fixedAngleText,4,3);
+
   QGridLayout *buttonLayout = new QGridLayout;
   buttonLayout->addWidget(addComponentButton,0,0);
   buttonLayout->addWidget(removeComponentButton,0,1);
-  advancedLayout->addLayout(buttonLayout,3,2,1,2);
+  advancedLayout->addLayout(buttonLayout,5,2,1,2);
   advancedModeBox->setLayout(advancedLayout);
 
   lowerLayout->addWidget(advancedModeBox,2,0,1,4);
@@ -230,6 +248,9 @@ void AddSegTestDialog::dataTypeChanged(int index) {
     highAngleText->setEnabled(true);
     angleStepText->setEnabled(true);
   }
+
+  // Update fixed angle visibility when data type changes
+  operationTypeChanged(operationCombo->currentIndex());
 }
 
 void AddSegTestDialog::advancedModeChanged(int state) {
@@ -246,10 +267,51 @@ void AddSegTestDialog::advancedModeChanged(int state) {
   adjustSize();
 }
 
+void AddSegTestDialog::operationTypeChanged(int index) {
+  // Show fixed angle option only when Ratio is selected AND segment is differential
+  bool isRatio = (index == 1);
+  bool isDifferential = (dataTypeCombo->currentIndex() == 1) || (dataTypeCombo->currentIndex() == 5); // Differential or CM Differential
+
+  if(isRatio && isDifferential) {
+    useFixedAngleCheck->setVisible(true);
+  } else {
+    useFixedAngleCheck->setVisible(false);
+    useFixedAngleCheck->setChecked(false); // Uncheck if hidden
+  }
+}
+
+void AddSegTestDialog::useFixedAngleChanged(int state) {
+  if(state == Qt::Checked) {
+    fixedAngleLabel->setVisible(true);
+    fixedAngleText->setVisible(true);
+  } else {
+    fixedAngleLabel->setVisible(false);
+    fixedAngleText->setVisible(false);
+  }
+}
+
 void AddSegTestDialog::addComponent() {
   int entrance = componentEntranceSpin->value();
   int exit = componentExitSpin->value();
   QString component = QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit);
+
+  // For ratio, only allow one component (the denominator)
+  bool isRatio = (operationCombo->currentIndex() == 1);
+  bool useFixedAngle = useFixedAngleCheck->isChecked();
+
+  if(isRatio) {
+    // For ratio, this is the denominator (only one component needed)
+    if(useFixedAngle) {
+      double angle = fixedAngleText->text().toDouble();
+      component += QString(", Angle: %1").arg(angle);
+    }
+
+    // Only allow one component for ratio
+    if(componentsList->count() >= 1) {
+      return; // Don't add more than one component for ratio
+    }
+  }
+
   componentsList->addItem(component);
 }
 

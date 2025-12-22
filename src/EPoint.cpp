@@ -806,6 +806,22 @@ void EPoint::SetExcitationEnergy(double energy) {
 }
 
 /*!
+ * Sets the lab angle to the given value;
+ */
+
+void EPoint::SetLabAngle(double angle) {
+  lab_angle_=angle;
+}
+
+/*!
+ * Sets the CM angle to the given value;
+ */
+
+void EPoint::SetCMAngle(double angle) {
+  cm_angle_=angle;
+}
+
+/*!
  * Sets the exit key to the given value;
  */
 
