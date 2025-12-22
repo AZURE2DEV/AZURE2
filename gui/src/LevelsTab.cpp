@@ -98,9 +98,9 @@ LevelsTab::LevelsTab(QWidget *parent) : QWidget(parent) {
   removeLevelButton->setMaximumSize(28,28);
   removeLevelButton->setEnabled(false);
   connect(removeLevelButton,SIGNAL(clicked()),this,SLOT(removeLevel()));
-  iaeaQueryButton = new QPushButton(tr("IAEA"));
+  iaeaQueryButton = new QPushButton(tr("NDS"));
   iaeaQueryButton->setMaximumSize(50,28);
-  iaeaQueryButton->setToolTip(tr("Query IAEA database for level schemes"));
+  iaeaQueryButton->setToolTip(tr("Query NDS database for level schemes"));
   connect(iaeaQueryButton,SIGNAL(clicked()),this,SLOT(addLevelsFromIAEA()));
 
   fixAllWidthsButton = new QPushButton(tr("Fix All Widths"));
@@ -141,15 +141,17 @@ LevelsTab::LevelsTab(QWidget *parent) : QWidget(parent) {
 
   QGridLayout *fixButtonBox = new QGridLayout;
   fixButtonBox->addWidget(fixAllWidthsButton,0,0);
-  fixButtonBox->addWidget(fixAllEnergiesButton,0,1);
-  fixButtonBox->addItem(new QSpacerItem(28,28),0,2);
+  fixButtonBox->addItem(new QSpacerItem(10,28),0,1);
+  fixButtonBox->addWidget(fixAllEnergiesButton,0,2);
+  fixButtonBox->addItem(new QSpacerItem(28,28),0,3);
   fixButtonBox->setColumnStretch(0,0);
   fixButtonBox->setColumnStretch(1,0);
-  fixButtonBox->setColumnStretch(2,1);
+  fixButtonBox->setColumnStretch(2,0);
+  fixButtonBox->setColumnStretch(3,1);
 #ifdef MACX_SPACING
   fixButtonBox->setHorizontalSpacing(11);
 #else
-  fixButtonBox->setHorizontalSpacing(0);
+  fixButtonBox->setHorizontalSpacing(5);
 #endif
 
   QGroupBox *levelsBox=new QGroupBox(tr("Compound Nucleus Levels"));

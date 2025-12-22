@@ -8,12 +8,15 @@
 #include <QPushButton>
 #include <QSignalMapper>
 #include <QPointer>
+#include <QComboBox>
+#include <QSortFilterProxyModel>
 #include "SegmentsDataModel.h"
 #include "SegmentsTestModel.h"
 #include "AddSegDataDialog.h"
 #include "AddSegTestDialog.h"
 
 class InfoDialog;
+class PairsModel;
 
 class SegmentsTab : public QWidget {
   Q_OBJECT
@@ -43,6 +46,7 @@ class SegmentsTab : public QWidget {
   void updateSegTestButtons(const QItemSelection &selection);
   void checkAllSegData();
   void uncheckAllSegData();
+  void filterSegDataByPairs();
   /*void openSegDataFile();
   void openSegDataFile(QString filename);
   void saveSegDataFile();
@@ -59,10 +63,9 @@ class SegmentsTab : public QWidget {
   bool readSegTestFile(QTextStream& inStream);
   /*bool writeSegTestFile(QString filename);*/
   bool writeSegTestFile(QTextStream& outStream);
-  void setPairsModel(PairsModel* model) {
-    segmentsDataModel->setPairsModel(model);
-    segmentsTestModel->setPairsModel(model);
-  }
+  void setPairsModel(PairsModel* model);
+  void updateFilterComboboxes(PairsModel* model);
+  void updateFilterComboboxes(); // Update filters using stored model
   void showInfo(int which=0,QString title="");
 
  private:
@@ -70,6 +73,7 @@ class SegmentsTab : public QWidget {
   void moveSegTestLine(unsigned int upDown);
 
   /*QLineEdit *segDataFileText;*/
+  PairsModel *pairsModel;
   SegmentsDataModel *segmentsDataModel;
   QTableView *segmentsDataView;
   QPushButton *segDataAddButton;
@@ -79,6 +83,8 @@ class SegmentsTab : public QWidget {
   QPushButton *segDataDownButton;
   QPushButton *segDataCheckAllButton;
   QPushButton *segDataUncheckAllButton;
+  QComboBox *segDataEntranceFilter;
+  QComboBox *segDataExitFilter;
   /*QLineEdit *segTestFileText;*/
   SegmentsTestModel *segmentsTestModel;
   QTableView *segmentsTestView;

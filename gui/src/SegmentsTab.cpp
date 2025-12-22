@@ -4,13 +4,25 @@
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QTextStream>
+#include <QLabel>
+#include <QSet>
+#include <QTextDocument>
+#include <algorithm>
 
 #include "SegmentsTab.h"
 #include "RichTextDelegate.h"
 #include "InfoDialog.h"
+#include "PairsModel.h"
 
 SegmentsTab::SegmentsTab(QWidget *parent) : QWidget(parent) {
+  pairsModel = nullptr;
   segmentsDataModel = new SegmentsDataModel;
+
+  // Connect model signals to update filters when data changes
+  connect(segmentsDataModel,SIGNAL(dataChanged(QModelIndex,QModelIndex)),this,SLOT(updateFilterComboboxes()));
+  connect(segmentsDataModel,SIGNAL(rowsInserted(QModelIndex,int,int)),this,SLOT(updateFilterComboboxes()));
+  connect(segmentsDataModel,SIGNAL(rowsRemoved(QModelIndex,int,int)),this,SLOT(updateFilterComboboxes()));
+
   segmentsDataView = new QTableView;
   segmentsDataView->setModel(segmentsDataModel);
   RichTextDelegate *rt = new RichTextDelegate();
@@ -101,6 +113,17 @@ SegmentsTab::SegmentsTab(QWidget *parent) : QWidget(parent) {
   segDataUncheckAllButton->setMaximumHeight(28);
   connect(segDataUncheckAllButton,SIGNAL(clicked()),this,SLOT(uncheckAllSegData()));
 
+  // Add filter comboboxes
+  segDataEntranceFilter = new QComboBox;
+  segDataEntranceFilter->addItem(tr("All Entrance Pairs"));
+  segDataEntranceFilter->setMaximumHeight(28);
+  connect(segDataEntranceFilter,SIGNAL(currentIndexChanged(int)),this,SLOT(filterSegDataByPairs()));
+
+  segDataExitFilter = new QComboBox;
+  segDataExitFilter->addItem(tr("All Exit Pairs"));
+  segDataExitFilter->setMaximumHeight(28);
+  connect(segDataExitFilter,SIGNAL(currentIndexChanged(int)),this,SLOT(filterSegDataByPairs()));
+
   segTestAddButton=new QPushButton(tr("+"));
   segTestAddButton->setMaximumSize(28,28);
   segTestDeleteButton = new QPushButton(tr("-"));
@@ -122,36 +145,40 @@ SegmentsTab::SegmentsTab(QWidget *parent) : QWidget(parent) {
   QGroupBox *segDataBox = new QGroupBox(tr("Segments From Data"));
   QGridLayout *segDataLayout = new QGridLayout;
   segDataLayout->addWidget(segmentsDataView,0,0);
+
+  // Reorganized button layout: [+] [-] [spacer] [Check All] [Uncheck All] [spacer] [↑] [↓] [spacer] [Filter:] [Entrance] [Exit]
   QGridLayout *segDataButtonBox = new QGridLayout;
   segDataButtonBox->addWidget(segDataAddButton,0,0);
   segDataButtonBox->addWidget(segDataDeleteButton,0,1);
-  segDataButtonBox->addItem(new QSpacerItem(28,28),0,2);
-  segDataButtonBox->addWidget(segDataUpButton,0,3);
-  segDataButtonBox->addWidget(segDataDownButton,0,4);
+  segDataButtonBox->addItem(new QSpacerItem(10,28),0,2);
+  segDataButtonBox->addWidget(segDataCheckAllButton,0,3);
+  segDataButtonBox->addWidget(segDataUncheckAllButton,0,4);
+  segDataButtonBox->addItem(new QSpacerItem(10,28),0,5);
+  segDataButtonBox->addWidget(segDataUpButton,0,6);
+  segDataButtonBox->addWidget(segDataDownButton,0,7);
+  segDataButtonBox->addItem(new QSpacerItem(10,28),0,8);
+  segDataButtonBox->addWidget(new QLabel(tr("Filter:")),0,9);
+  segDataButtonBox->addWidget(segDataEntranceFilter,0,10);
+  segDataButtonBox->addWidget(segDataExitFilter,0,11);
   segDataButtonBox->setColumnStretch(0,0);
   segDataButtonBox->setColumnStretch(1,0);
-  segDataButtonBox->setColumnStretch(2,1);
+  segDataButtonBox->setColumnStretch(2,0);
   segDataButtonBox->setColumnStretch(3,0);
   segDataButtonBox->setColumnStretch(4,0);
+  segDataButtonBox->setColumnStretch(5,0);
+  segDataButtonBox->setColumnStretch(6,0);
+  segDataButtonBox->setColumnStretch(7,0);
+  segDataButtonBox->setColumnStretch(8,1); // Spacer before Filter takes remaining space
+  segDataButtonBox->setColumnStretch(9,0);
+  segDataButtonBox->setColumnStretch(10,0);
+  segDataButtonBox->setColumnStretch(11,0);
 #ifdef MACX_SPACING
   segDataButtonBox->setHorizontalSpacing(11);
 #else
-  segDataButtonBox->setHorizontalSpacing(0);
+  segDataButtonBox->setHorizontalSpacing(5);
 #endif
   segDataLayout->addLayout(segDataButtonBox,1,0);
-  QGridLayout *segDataCheckButtonBox = new QGridLayout;
-  segDataCheckButtonBox->addWidget(segDataCheckAllButton,0,0);
-  segDataCheckButtonBox->addWidget(segDataUncheckAllButton,0,1);
-  segDataCheckButtonBox->addItem(new QSpacerItem(28,28),0,2);
-  segDataCheckButtonBox->setColumnStretch(0,0);
-  segDataCheckButtonBox->setColumnStretch(1,0);
-  segDataCheckButtonBox->setColumnStretch(2,1);
-#ifdef MACX_SPACING
-  segDataCheckButtonBox->setHorizontalSpacing(11);
-#else
-  segDataCheckButtonBox->setHorizontalSpacing(0);
-#endif
-  segDataLayout->addLayout(segDataCheckButtonBox,2,0);
+
   segDataBox->setLayout(segDataLayout);
 
   QGroupBox *segTestBox = new QGroupBox(tr("Segments Without Data"));
@@ -919,16 +946,55 @@ void SegmentsTab::updateSegTestButtons(const QItemSelection &selection) {
 void SegmentsTab::checkAllSegData() {
   QList<SegmentsDataData> lines = segmentsDataModel->getLines();
   for(int i = 0; i < lines.size(); i++) {
-    QModelIndex index = segmentsDataModel->index(i, 0, QModelIndex());
-    segmentsDataModel->setData(index, 1, Qt::EditRole);
+    // Only check visible (non-hidden) rows
+    if(!segmentsDataView->isRowHidden(i)) {
+      QModelIndex index = segmentsDataModel->index(i, 0, QModelIndex());
+      segmentsDataModel->setData(index, 1, Qt::EditRole);
+    }
   }
 }
 
 void SegmentsTab::uncheckAllSegData() {
   QList<SegmentsDataData> lines = segmentsDataModel->getLines();
   for(int i = 0; i < lines.size(); i++) {
-    QModelIndex index = segmentsDataModel->index(i, 0, QModelIndex());
-    segmentsDataModel->setData(index, 0, Qt::EditRole);
+    // Only uncheck visible (non-hidden) rows
+    if(!segmentsDataView->isRowHidden(i)) {
+      QModelIndex index = segmentsDataModel->index(i, 0, QModelIndex());
+      segmentsDataModel->setData(index, 0, Qt::EditRole);
+    }
+  }
+}
+
+void SegmentsTab::filterSegDataByPairs() {
+  int entranceFilterIndex = segDataEntranceFilter->currentIndex();
+  int exitFilterIndex = segDataExitFilter->currentIndex();
+
+  // Get actual pair indices from item data (0 = "All", >0 = specific pair)
+  int entranceFilter = -1;
+  int exitFilter = -1;
+  if(entranceFilterIndex > 0) {
+    entranceFilter = segDataEntranceFilter->itemData(entranceFilterIndex).toInt();
+  }
+  if(exitFilterIndex > 0) {
+    exitFilter = segDataExitFilter->itemData(exitFilterIndex).toInt();
+  }
+
+  QList<SegmentsDataData> lines = segmentsDataModel->getLines();
+  for(int i = 0; i < lines.size(); i++) {
+    bool showRow = true;
+
+    // Check entrance pair filter
+    if(entranceFilter > 0 && lines[i].entrancePairIndex != entranceFilter) {
+      showRow = false;
+    }
+
+    // Check exit pair filter
+    if(exitFilter > 0 && lines[i].exitPairIndex != exitFilter) {
+      showRow = false;
+    }
+
+    // Show or hide the row
+    segmentsDataView->setRowHidden(i, !showRow);
   }
 }
 
@@ -1377,6 +1443,83 @@ bool SegmentsTab::writeSegTestFile(QTextStream& outStream) {
   }
 
   return true;
+}
+
+void SegmentsTab::setPairsModel(PairsModel* model) {
+  pairsModel = model;
+  segmentsDataModel->setPairsModel(model);
+  segmentsTestModel->setPairsModel(model);
+  updateFilterComboboxes(model);
+}
+
+void SegmentsTab::updateFilterComboboxes(PairsModel* model) {
+  pairsModel = model;
+  updateFilterComboboxes();
+}
+
+void SegmentsTab::updateFilterComboboxes() {
+  // Clear existing items except "All"
+  while(segDataEntranceFilter->count() > 1) {
+    segDataEntranceFilter->removeItem(1);
+  }
+  while(segDataExitFilter->count() > 1) {
+    segDataExitFilter->removeItem(1);
+  }
+
+  // Extract unique entrance and exit pairs from actual segment data
+  QList<SegmentsDataData> lines = segmentsDataModel->getLines();
+  QSet<int> entrancePairs;
+  QSet<int> exitPairs;
+
+  for(int i = 0; i < lines.size(); i++) {
+    // Only add valid pair indices (skip -1 and other negative values)
+    if(lines[i].entrancePairIndex > 0) {
+      entrancePairs.insert(lines[i].entrancePairIndex);
+    }
+    if(lines[i].exitPairIndex > 0) {
+      exitPairs.insert(lines[i].exitPairIndex);
+    }
+  }
+
+  // Convert to sorted lists
+  QList<int> sortedEntrancePairs = entrancePairs.toList();
+  QList<int> sortedExitPairs = exitPairs.toList();
+  std::sort(sortedEntrancePairs.begin(), sortedEntrancePairs.end());
+  std::sort(sortedExitPairs.begin(), sortedExitPairs.end());
+
+  // Add entrance pairs to filter
+  for(int i = 0; i < sortedEntrancePairs.size(); i++) {
+    int pairIndex = sortedEntrancePairs[i];
+    QString label;
+    if(pairsModel && pairIndex > 0 && pairIndex <= pairsModel->numPairs()) {
+      QList<PairsData> pairs = pairsModel->getPairs();
+      QString rawLabel = pairsModel->getParticleLabel(pairs[pairIndex-1]);
+      // Strip HTML tags for display
+      QTextDocument doc;
+      doc.setHtml(rawLabel);
+      label = doc.toPlainText();
+      segDataEntranceFilter->addItem(QString("Pair %1: %2").arg(pairIndex).arg(label), pairIndex);
+    } else {
+      segDataEntranceFilter->addItem(QString("Pair %1").arg(pairIndex), pairIndex);
+    }
+  }
+
+  // Add exit pairs to filter
+  for(int i = 0; i < sortedExitPairs.size(); i++) {
+    int pairIndex = sortedExitPairs[i];
+    QString label;
+    if(pairsModel && pairIndex > 0 && pairIndex <= pairsModel->numPairs()) {
+      QList<PairsData> pairs = pairsModel->getPairs();
+      QString rawLabel = pairsModel->getParticleLabel(pairs[pairIndex-1]);
+      // Strip HTML tags for display
+      QTextDocument doc;
+      doc.setHtml(rawLabel);
+      label = doc.toPlainText();
+      segDataExitFilter->addItem(QString("Pair %1: %2").arg(pairIndex).arg(label), pairIndex);
+    } else {
+      segDataExitFilter->addItem(QString("Pair %1").arg(pairIndex), pairIndex);
+    }
+  }
 }
 
 void SegmentsTab::reset() {
