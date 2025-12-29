@@ -1271,6 +1271,18 @@ void EPoint::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude,
     key.exitKey = this->GetExitKey();
     key.segmentKey = segment_key_;
     g_ecAmplitudeCache->AddAmplitude(key, energy, ecAmplitude);
+
+    // Now get the interpolated amplitude from the cache to replace the stored value if ecAmplitudes is 0 or NaN
+    if(std::isnan(std::real(ecAmplitude)) || std::isnan(std::imag(ecAmplitude)) ||
+       (std::real(ecAmplitude) == 0.0 && std::imag(ecAmplitude) == 0.0)) {
+        std::cout << "WARNING: Replacing EC Amplitude with interpolated value from cache for kGroup " 
+                  << kGroupNum << ", ecMGroup " << ecMGroupNum 
+                  << " at energy " << energy << " MeV." << std::endl;
+      complex interpAmplitude = g_ecAmplitudeCache->GetInterpolatedAmplitude(key, energy);
+      std::cout << "         Original Amplitude: " << ecAmplitude 
+                << ", Interpolated Amplitude: " << interpAmplitude << std::endl;
+      ec_amplitudes_[kGroupNum-1].back() = interpAmplitude;
+       }
   }
 }
 

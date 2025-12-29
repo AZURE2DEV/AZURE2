@@ -10,6 +10,12 @@ ECAmplitudeCache* g_ecAmplitudeCache = nullptr;
 
 void ECAmplitudeCache::AddAmplitude(const AmplitudeKey& key, double energy, complex amplitude) {
     std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    // If amplitude 0 or NaN, do not cache
+    if (amplitude == complex(0.0, 0.0) || std::isnan(amplitude.real()) || std::isnan(amplitude.imag())) {
+        return;
+    }
+
     auto& data = cache_[key];
     data.energies.push_back(energy);
     data.amplitudes.push_back(amplitude);
