@@ -31,6 +31,11 @@ double ShftFunc::operator()(int l, double energy) {
  
   gsl_deriv_central (&F, radius(), 1e-4, &result, &error);
 
+  //std::cout << "DEBUG: " << radius()*result/theWhitFunc(radius(),&params_) << " " << radius() << " " << result << "  " << theWhitFunc(radius(),&params_) << std::endl;
+
+  // Prevent division by zero
+  if(theWhitFunc(radius(),&params_)==0.) return 0.0;
+
   return radius()*result/theWhitFunc(radius(),&params_);
 }
 

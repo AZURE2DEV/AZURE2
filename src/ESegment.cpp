@@ -257,14 +257,22 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config& configure) {
 	  } else {
 	    this->GetPoint(this->NumPoints())->ConvertLabAngle(entrancePair,exitPair,configure);
 	  }
-	  this->GetPoint(this->NumPoints())->ConvertCrossSection(entrancePair,exitPair);
+	  // Skip cross section conversion for ratio segments (ratios are dimensionless)
+	  // Use IsAdvanced() and GetLegacyOperationType() since components aren't added yet during Fill()
+	  if(!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
+	    this->GetPoint(this->NumPoints())->ConvertCrossSection(entrancePair,exitPair);
+	  }
 	}
 //        if(exitPair->GetPType()==0&&!this->IsDifferential()&&!this->IsPhase()&&this->IsCMDifferential()) {
 //          this->GetPoint(this->NumPoints())->ConvertCMAngle(entrancePair,exitPair,configure);
 //        }
 	if(exitPair->GetPType()==10&&this->IsDifferential()&&!this->IsPhase()&&!this->IsCMDifferential()) {
 	  this->GetPoint(this->NumPoints())->ConvertLabAngleGammas(entrancePair);
-	  this->GetPoint(this->NumPoints())->ConvertCrossSectionGammas(entrancePair);
+	  // Skip cross section conversion for ratio segments (ratios are dimensionless)
+	  // Use IsAdvanced() and GetLegacyOperationType() since components aren't added yet during Fill()
+	  if(!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
+	    this->GetPoint(this->NumPoints())->ConvertCrossSectionGammas(entrancePair);
+	  }
 	}
       }
     }
@@ -538,12 +546,18 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
           } else {
             point->ConvertLabAngle(entrancePair,exitPair,*configure);
           }
-          point->ConvertCrossSection(entrancePair,exitPair);
+          // Skip cross section conversion for ratio segments (ratios are dimensionless)
+          if(!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
+            point->ConvertCrossSection(entrancePair,exitPair);
+          }
         }
 
         if(exitPair->GetPType()==10 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
           point->ConvertLabAngleGammas(entrancePair);
-          point->ConvertCrossSectionGammas(entrancePair);
+          // Skip cross section conversion for ratio segments (ratios are dimensionless)
+          if(!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
+            point->ConvertCrossSectionGammas(entrancePair);
+          }
         }
 
         if( this->IsDifferential() || this->IsCMDifferential()) {
@@ -583,12 +597,18 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
               } else {
                 subPoint->ConvertLabAngle(entrancePair,exitPair,*configure);
               }
-              subPoint->ConvertCrossSection(entrancePair,exitPair);
+              // Skip cross section conversion for ratio segments (ratios are dimensionless)
+              if(!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
+                subPoint->ConvertCrossSection(entrancePair,exitPair);
+              }
             }
 
             if(exitPair->GetPType()==10 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
               subPoint->ConvertLabAngleGammas(entrancePair);
-              subPoint->ConvertCrossSectionGammas(entrancePair);
+              // Skip cross section conversion for ratio segments (ratios are dimensionless)
+              if(!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
+                subPoint->ConvertCrossSectionGammas(entrancePair);
+              }
             }
 
             if( this->IsDifferential() || this->IsCMDifferential()) {
