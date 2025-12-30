@@ -876,7 +876,22 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, co
           return 0.0;
         }
 
-        double ratioValue = baseValue / denominatorValue;
+        // Calculate the conversion factors for baseValue and denominatorValue
+        PPair* entrancePair = cnuc->GetPair(cnuc->GetPairNumFromKey(this->GetEntranceKey()));
+        PPair* exitPair = cnuc->GetPair(cnuc->GetPairNumFromKey(this->GetExitKey()));
+
+        // If not a gamma exit, calculate conversion factors
+        double baseConversionFactor;
+        double denominatorConversionFactor;
+        if(exitPair->GetPType() != 10) {
+          baseConversionFactor = basePoint->CalculateCrossSectionConversionFactor(entrancePair, exitPair);
+          denominatorConversionFactor = denominatorPoint->CalculateCrossSectionConversionFactor(entrancePair, exitPair);
+        } else {
+          baseConversionFactor = basePoint->CalculateCrossSectionGammaConversionFactor(entrancePair);
+          denominatorConversionFactor = denominatorPoint->CalculateCrossSectionGammaConversionFactor(entrancePair);
+        }
+
+        double ratioValue = baseValue / denominatorValue * (denominatorConversionFactor / baseConversionFactor);
         return ratioValue;
       }
     }
