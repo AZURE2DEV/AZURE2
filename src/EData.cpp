@@ -1916,8 +1916,18 @@ ESegment *EData::GetSegmentFromKey(int segmentKey) {
  */
 
 EData *EData::Clone() const {
-  EData *dataCopy = new EData(*this);
-  
+  EData *dataCopy = new EData();
+
+  // Explicitly copy all member variables
+  dataCopy->iterations_ = this->iterations_;
+  dataCopy->normParamOffset_ = this->normParamOffset_;
+  dataCopy->energyShiftParamOffset_ = this->energyShiftParamOffset_;
+  dataCopy->isFit_ = this->isFit_;
+  dataCopy->isErrorAnalysis_ = this->isErrorAnalysis_;
+  dataCopy->targetEffects_ = this->targetEffects_;
+  dataCopy->segments_ = this->segments_;
+  dataCopy->componentSegments_ = this->componentSegments_;
+
   // Build a mapping from component segment keys to cloned component segments
   std::unordered_map<int, ESegment*> clonedComponentMap;
   for (size_t i = 0; i < dataCopy->componentSegments_.size(); i++) {
@@ -1926,21 +1936,31 @@ EData *EData::Clone() const {
   }
   
   // Update component segment pointers in cloned regular segments
-  // Use positional matching instead of key matching to avoid key mismatch bugs
-  for (size_t i = 0; i < dataCopy->segments_.size() && i < this->segments_.size(); i++) {
+  for (size_t i = 0; i < dataCopy->segments_.size(); i++) {
     auto& segment = dataCopy->segments_[i];
     const auto& originalSegment = this->segments_[i];
-    
-    if (segment.HasComponents()) {
+
+    if (originalSegment.HasComponents()) {
       // Clear the old component pointers (they point to original EData)
       segment.ClearComponents();
-      
-      // Add the remapped component segments using positional matching
+
+      // Preserve the operation type
+      segment.SetOperationType(originalSegment.GetOperationType());
+
+      // Add the remapped component segments by finding them in the cloned componentSegments_
       for (const auto& originalComponent : originalSegment.GetComponentSegments()) {
-        int componentKey = originalComponent->GetSegmentKey();
-        auto it = clonedComponentMap.find(componentKey);
-        if (it != clonedComponentMap.end()) {
-          segment.AddComponentSegment(it->second);
+        // Find this component in the original componentSegments_ to get its position
+        int componentIndex = -1;
+        for (size_t j = 0; j < this->componentSegments_.size(); j++) {
+          if (&this->componentSegments_[j] == originalComponent) {
+            componentIndex = j;
+            break;
+          }
+        }
+
+        // Add the corresponding cloned component
+        if (componentIndex >= 0 && componentIndex < (int)dataCopy->componentSegments_.size()) {
+          segment.AddComponentSegment(&dataCopy->componentSegments_[componentIndex]);
         }
       }
     }
@@ -1949,6 +1969,15 @@ EData *EData::Clone() const {
   for(EDataIterator data=dataCopy->begin();data!=dataCopy->end();data++) {
     data.point()->SetParentData(dataCopy);
     data.point()->ClearLocalMappedPoints();
+    data.point()->ClearECAmplitudes();
+  }
+  // Also fix parentData for component segment points
+  for (size_t i = 0; i < dataCopy->componentSegments_.size(); i++) {
+    for (int j = 1; j <= dataCopy->componentSegments_[i].NumPoints(); j++) {
+      dataCopy->componentSegments_[i].GetPoint(j)->SetParentData(dataCopy);
+      dataCopy->componentSegments_[i].GetPoint(j)->ClearLocalMappedPoints();
+      dataCopy->componentSegments_[i].GetPoint(j)->ClearECAmplitudes();
+    }
   }
   for(EDataIterator data=dataCopy->begin();data!=dataCopy->end();data++) {
     if(data.point()->IsMapped()) {
@@ -1956,7 +1985,7 @@ EData *EData::Clone() const {
       dataCopy->GetSegment(pointMap.segment)->GetPoint(pointMap.point)->AddLocalMappedPoint(&*data.point());
     }
   }
-  
+
   return dataCopy;
 }
 

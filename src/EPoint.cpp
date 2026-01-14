@@ -1311,8 +1311,7 @@ void EPoint::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude,
     g_ecAmplitudeCache->AddAmplitude(key, energy, ecAmplitude);
 
     // Now get the interpolated amplitude from the cache to replace the stored value if ecAmplitudes is 0 or NaN
-    if(std::isnan(std::real(ecAmplitude)) || std::isnan(std::imag(ecAmplitude)) ||
-       (std::real(ecAmplitude) == 0.0 && std::imag(ecAmplitude) == 0.0)) {
+    if(std::isnan(std::real(ecAmplitude)) || std::isnan(std::imag(ecAmplitude))) {
         std::cout << "WARNING: Replacing EC Amplitude with interpolated value from cache for kGroup " 
                   << kGroupNum << ", ecMGroup " << ecMGroupNum 
                   << " at energy " << energy << " MeV." << std::endl;
@@ -1328,6 +1327,14 @@ void EPoint::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude)
   // Default behavior - use current CM energy
   double currentEnergy = this->GetCMEnergy();
   AddECAmplitude(kGroupNum, ecMGroupNum, ecAmplitude, currentEnergy);
+}
+
+/*!
+ * Clears all EC amplitudes and energies. Used when cloning to avoid duplicate accumulation.
+ */
+void EPoint::ClearECAmplitudes() {
+  ec_amplitudes_.clear();
+  ec_energies_.clear();
 }
 
 /*!

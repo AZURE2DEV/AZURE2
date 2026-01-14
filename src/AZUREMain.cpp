@@ -147,7 +147,7 @@ int AZUREMain::operator()(){
   
     //Declare a new instance of FCNBase
     AZURECalc theFunc(data(),compound(),configure(),&limitsManager);
-    theFunc.InitializePools();
+    //theFunc.InitializePools();
     theFunc.SetErrorDef(1.0);
     
     if(configure().paramMask & Config::PERFORM_FIT) {

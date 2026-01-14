@@ -121,6 +121,7 @@ class EPoint {
   void CalculateECAmplitudes(CNuc*,const Config&);
   void AddECAmplitude(int,int,complex);
   void AddECAmplitude(int,int,complex,double);
+  void ClearECAmplitudes();
   void Calculate(CNuc*,const Config &configure,EPoint* parent=NULL, int subPointNum=0);
   void SetMap(int,int);
   void ClearMapping();

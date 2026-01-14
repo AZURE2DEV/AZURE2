@@ -25,9 +25,9 @@ double AZURECalc::operator()(const vector_r& p) const {
   if(isFit) {
 
     // New multithreading with object pools
-    //if (!pools_initialized_) {
-    //  InitializePools();
-    //}
+    if (!pools_initialized_) {
+      InitializePools();
+    }
     
     // Get objects from pool
     localCompound = GetPooledCNuc();

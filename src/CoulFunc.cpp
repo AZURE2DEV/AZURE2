@@ -108,6 +108,7 @@ CoulWaves CoulFunc::operator()(int l,double radius,double energy) {
   struct CoulWaves result={0.0,0.0,0.0,0.0};
 
   // FIXME: Cross section might be discontinuous at 0 energy, so set a minimum
+  // 12C(a,g) has problem with this
   if(energy<=0.001) {
     energy = 0.001;
   }
