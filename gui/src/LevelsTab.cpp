@@ -538,53 +538,53 @@ void LevelsTab::updateDetails(const QItemSelection &selection) {
     QString details="";
     QTextStream stm(&details,QIODevice::Append);
     stm << QString("%1 MeV level with spin %2\n   transitioning via pair key #%3").arg(level.energy).arg(levelsModel->getSpinLabel(level)).arg(pairIndex+1) 
-	<< endl;
+	<< Qt::endl;
     if(channel.radType=='P') {
       stm << QString("Channel configuration is\n   s = %1, l = %2").arg(channelsModel->getSpinLabel(channel)).arg(channel.lValue) 
-	  << endl << endl;
-      stm << qSetFieldWidth(21) << right << "Light Particle Spin: " 
-	  << qSetFieldWidth(0) << left << QString("%1").arg(pairsModel->getSpinLabel(pair,0)) << endl;
-      stm << qSetFieldWidth(21) << right << "Light Particle Z: " 
-	  << qSetFieldWidth(0) << left << QString("%1").arg(pair.lightZ) << endl;
-      stm << qSetFieldWidth(21) << right << "Light Particle M: " 
-	  << qSetFieldWidth(0) << left << QString("%1").arg(pair.lightM) << endl;
-      stm << qSetFieldWidth(21) << right << "Light Particle G: " 
-	  << qSetFieldWidth(0) << left << QString("%1").arg(pair.lightG) << endl;
+	  << Qt::endl << Qt::endl;
+      stm << qSetFieldWidth(21) << Qt::right << "Light Particle Spin: " 
+	  << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pairsModel->getSpinLabel(pair,0)) << Qt::endl;
+      stm << qSetFieldWidth(21) << Qt::right << "Light Particle Z: " 
+	  << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pair.lightZ) << Qt::endl;
+      stm << qSetFieldWidth(21) << Qt::right << "Light Particle M: " 
+	  << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pair.lightM) << Qt::endl;
+      stm << qSetFieldWidth(21) << Qt::right << "Light Particle G: " 
+	  << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pair.lightG) << Qt::endl;
     } else if(channel.radType=='G' || channel.radType=='F') {
       if(channel.radType=='G') 
-	stm << QString("Channel is Gamow-Teller beta decay") << endl << endl;
+	stm << QString("Channel is Gamow-Teller beta decay") << Qt::endl << Qt::endl;
       else 
-	stm << QString("Channel is Fermi beta decay") << endl << endl;
-      stm << qSetFieldWidth(21) << right << "Fermion Charge: " 
-	  << qSetFieldWidth(0) << left << QString("%1").arg(pair.lightZ) << endl;
+	stm << QString("Channel is Fermi beta decay") << Qt::endl << Qt::endl;
+      stm << qSetFieldWidth(21) << Qt::right << "Fermion Charge: " 
+	  << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pair.lightZ) << Qt::endl;
     } else {
-      stm << QString("Capture gamma is %1%2 radiation").arg(channel.radType).arg(channel.lValue) << endl;
+      stm << QString("Capture gamma is %1%2 radiation").arg(channel.radType).arg(channel.lValue) << Qt::endl;
       if(((channel.radType=='E'&&channel.lValue==1)&&
 	  (pair.ecMultMask & (1<<0)))||
 	 ((channel.radType=='M'&&channel.lValue==1)&&
 	  (pair.ecMultMask & (1<<1)))||
 	 ((channel.radType=='E'&&channel.lValue==2)&&
 	  (pair.ecMultMask & (1<<2)))) 
-	stm << "Capture is internal and external" << endl;
-      else stm << "Capture is internal only" << endl;
-      stm << endl;
+	stm << "Capture is internal and external" << Qt::endl;
+      else stm << "Capture is internal only" << Qt::endl;
+      stm << Qt::endl;
     }
-    stm << qSetFieldWidth(21) << right << "Heavy Particle Spin: "
-	<< qSetFieldWidth(0) << left <<QString("%1").arg(pairsModel->getSpinLabel(pair,1)) << endl;
-    stm << qSetFieldWidth(21) << right << "Heavy Particle Z: "
-	<< qSetFieldWidth(0) << left <<QString("%1").arg(pair.heavyZ) << endl;
-    stm << qSetFieldWidth(21) << right << "Heavy Particle M: "
-	<< qSetFieldWidth(0) << left <<QString("%1").arg(pair.heavyM) << endl;
-    stm << qSetFieldWidth(21) << right << "Heavy Particle G: "
-	<< qSetFieldWidth(0) << left <<QString("%1").arg(pair.heavyG) << endl;
+    stm << qSetFieldWidth(21) << Qt::right << "Heavy Particle Spin: "
+	<< qSetFieldWidth(0) << Qt::left <<QString("%1").arg(pairsModel->getSpinLabel(pair,1)) << Qt::endl;
+    stm << qSetFieldWidth(21) << Qt::right << "Heavy Particle Z: "
+	<< qSetFieldWidth(0) << Qt::left <<QString("%1").arg(pair.heavyZ) << Qt::endl;
+    stm << qSetFieldWidth(21) << Qt::right << "Heavy Particle M: "
+	<< qSetFieldWidth(0) << Qt::left <<QString("%1").arg(pair.heavyM) << Qt::endl;
+    stm << qSetFieldWidth(21) << Qt::right << "Heavy Particle G: "
+	<< qSetFieldWidth(0) << Qt::left <<QString("%1").arg(pair.heavyG) << Qt::endl;
     if(channel.radType!='G'&&channel.radType!='F')
-      stm << qSetFieldWidth(21) << right << "Excitation Energy: "
-	  << qSetFieldWidth(0) << left <<QString("%1").arg(pair.excitationEnergy) << endl;
+      stm << qSetFieldWidth(21) << Qt::right << "Excitation Energy: "
+	  << qSetFieldWidth(0) << Qt::left <<QString("%1").arg(pair.excitationEnergy) << Qt::endl;
     if(channel.radType!='M'&&channel.radType!='E') {
-      stm << qSetFieldWidth(21) << right << "Separation Energy: "
-	  << qSetFieldWidth(0) << left <<QString("%1").arg(pair.seperationEnergy) << endl;
-      stm << qSetFieldWidth(21) << right << "Channel Radius: "
-	  << qSetFieldWidth(0) << left <<QString("%1").arg(pair.channelRadius) << endl;
+      stm << qSetFieldWidth(21) << Qt::right << "Separation Energy: "
+	  << qSetFieldWidth(0) << Qt::left <<QString("%1").arg(pair.seperationEnergy) << Qt::endl;
+      stm << qSetFieldWidth(21) << Qt::right << "Channel Radius: "
+	  << qSetFieldWidth(0) << Qt::left <<QString("%1").arg(pair.channelRadius) << Qt::endl;
     }
     stm.flush();
     channelDetails->details->setText(details);
@@ -696,15 +696,15 @@ bool LevelsTab::writeNuclearFile(QTextStream& outStream) {
 		    << qSetFieldWidth(13)  << pairs.at(channels.at(ch).pairIndex).lightG 
 		    << qSetFieldWidth(13)  << pairs.at(channels.at(ch).pairIndex).heavyG 
 		    << qSetFieldWidth(8)  << pairs.at(channels.at(ch).pairIndex).ecMultMask
-		    << qSetFieldWidth(0)  << endl;
+		    << qSetFieldWidth(0)  << Qt::endl;
 	}
       }  
-      outStream << endl;
+      outStream << Qt::endl;
       levelId++;
     }
   }
 
-  outStream.setFieldAlignment(QTextStream::AlignLeft);
+  outStream.setFieldAlignment(QTextStream::AlignRight);
 
   return true;
 }

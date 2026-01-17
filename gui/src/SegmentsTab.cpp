@@ -1243,7 +1243,7 @@ bool SegmentsTab::writeSegDataFile(QTextStream& outStream) {
       // Write 0 for non-advanced segments for backwards compatibility
       outStream << " 0";
     }
-    outStream << endl;
+    outStream << Qt::endl;
   }
 
   return true;
@@ -1439,7 +1439,7 @@ bool SegmentsTab::writeSegTestFile(QTextStream& outStream) {
       // Write 0 for non-advanced segments for backwards compatibility
       outStream << " 0";
     }
-    outStream << endl;
+    outStream << Qt::endl;
   }
 
   return true;
