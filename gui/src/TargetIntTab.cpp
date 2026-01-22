@@ -25,6 +25,8 @@ TargetIntTab::TargetIntTab(QWidget *parent) : QWidget(parent) {
   targetIntView->setColumnHidden(11,true);
   targetIntView->setColumnHidden(13,true);
   targetIntView->setColumnHidden(14,true);
+  targetIntView->setColumnHidden(15,true);
+  targetIntView->setColumnHidden(16,true);
 
   targetIntView->setColumnWidth(0,27);
   targetIntView->horizontalHeader()->setSectionResizeMode(0,QHeaderView::Fixed);
@@ -99,7 +101,10 @@ void TargetIntTab::addLine() {
     newLine.isConvCoefficients = (aDialog.isConvolutionDependentCheck->isChecked()) ? (true) : (false);
     for(int i=0;i<aDialog.numConvCoefficientSpin->value();i++) newLine.convCoefficients.append(aDialog.tempConvCoefficients.at(i));
     newLine.convolutionEq=aDialog.convolutionEqText->text();
-    
+
+    newLine.isStraggling = aDialog.isStraggling->isChecked();
+    newLine.stragglingCoefficient = aDialog.stragglingCoefficientText->text().toDouble();
+
     addLine(newLine);
   }
 }
@@ -139,6 +144,10 @@ void TargetIntTab::addLine(TargetIntData line) {
   targetIntModel->setData(index,QVariant::fromValue<QList<double> >(line.convCoefficients),Qt::EditRole);
   index = targetIntModel->index(lines.size(),14,QModelIndex());
   targetIntModel->setData(index,line.convolutionEq,Qt::EditRole);
+  index = targetIntModel->index(lines.size(),15,QModelIndex());
+  targetIntModel->setData(index,line.isStraggling,Qt::EditRole);
+  index = targetIntModel->index(lines.size(),16,QModelIndex());
+  targetIntModel->setData(index,line.stragglingCoefficient,Qt::EditRole);
 
   targetIntView->resizeRowsToContents();
 }
@@ -194,6 +203,12 @@ void TargetIntTab::editLine() {
   i=targetIntModel->index(index.row(),14,QModelIndex());
   var=targetIntModel->data(i,Qt::EditRole);
   QString convolutionEq = var.toString();
+  i=targetIntModel->index(index.row(),15,QModelIndex());
+  var=targetIntModel->data(i,Qt::EditRole);
+  bool isStraggling = var.toBool();
+  i=targetIntModel->index(index.row(),16,QModelIndex());
+  var=targetIntModel->data(i,Qt::EditRole);
+  double stragglingCoefficient = var.toDouble();
 
   AddTargetIntDialog aDialog;
   aDialog.setWindowTitle(tr("Edit an Experimental Effect Line"));
@@ -221,6 +236,9 @@ void TargetIntTab::editLine() {
   aDialog.tempConvCoefficients=convCoefficients;
   aDialog.numConvCoefficientSpin->setValue(convCoefficients.size());
   aDialog.convolutionEqText->setText(convolutionEq);
+
+  aDialog.isStraggling->setChecked(isStraggling);
+  aDialog.stragglingCoefficientText->setText(QString::number(stragglingCoefficient));
 
   if(aDialog.exec()) {
     QString newSegmentsList = aDialog.segmentsListText->text();
@@ -310,6 +328,18 @@ void TargetIntTab::editLine() {
       i=targetIntModel->index(index.row(),14,QModelIndex());
       targetIntModel->setData(i,newconvolutionEq,Qt::EditRole);
     }
+
+    bool newIsStraggling = aDialog.isStraggling->isChecked();
+    if(isStraggling!=newIsStraggling) {
+      i=targetIntModel->index(index.row(),15,QModelIndex());
+      targetIntModel->setData(i,newIsStraggling,Qt::EditRole);
+    }
+
+    double newStragglingCoefficient = aDialog.stragglingCoefficientText->text().toDouble();
+    if(stragglingCoefficient!=newStragglingCoefficient) {
+      i=targetIntModel->index(index.row(),16,QModelIndex());
+      targetIntModel->setData(i,newStragglingCoefficient,Qt::EditRole);
+    }
   }
 }
 
@@ -356,6 +386,11 @@ bool TargetIntTab::writeFile(QTextStream& outStream) {
     else outStream << qSetFieldWidth(0) << "              0";
     outStream << qSetFieldWidth(0) << "              " <<  " \""+lines[i].convolutionEq.remove(' ')+"\" " << qSetFieldWidth(0) << lines.at(i).convCoefficients.size() << ' ';
     for(int j=0;j<lines.at(i).convCoefficients.size();j++) outStream << qSetFieldWidth(0) <<  lines.at(i).convCoefficients.at(j) << ' ';
+
+    // Write straggling flag and coefficient (appended at end for backward compatibility)
+    if(lines.at(i).isStraggling) outStream << qSetFieldWidth(0) << "              1";
+    else outStream << qSetFieldWidth(0) << "              0";
+    outStream << " " << lines.at(i).stragglingCoefficient;
     outStream<<endl;
 
   }
@@ -384,6 +419,8 @@ bool TargetIntTab::readFile(QTextStream& inStream) {
   QList<double> convCoefficients;
   int isConvCoefficient;
   QString convolutionEq;
+  int isStraggling;
+  double stragglingCoefficient;
 
   QString line("");
   while(!inStream.atEnd()&&line.trimmed()!=QString("</targetInt>")) {
@@ -444,14 +481,28 @@ bool TargetIntTab::readFile(QTextStream& inStream) {
       else isConvCoefficient=0;
       
       bool tempIsConvCoefficient=false;
-      if(isConvCoefficient==1) tempIsConvCoefficient=true; 
-      
+      if(isConvCoefficient==1) tempIsConvCoefficient=true;
+
+      // Try to read straggling flag and coefficient (optional for backward compatibility)
+      isStraggling = 0;  // Default to false
+      stragglingCoefficient = 0.04;  // Default coefficient
+
+      // Check if there's more data to read (not at end of line)
+      QString remaining = in.readAll().trimmed();
+      if(!remaining.isEmpty()) {
+        QTextStream remainingStream(&remaining);
+        remainingStream >> isStraggling >> stragglingCoefficient;
+      }
+
+      bool tempIsStraggling=false;
+      if(isStraggling==1) tempIsStraggling=true;
+
       bool tempIsConvolution=false;
       if(isConvolution==1) tempIsConvolution=true;
       bool tempIsTargetIntegration=false;
       if(isTargetIntegration==1) tempIsTargetIntegration=true;
-      
-      TargetIntData newLine = {isActive,segmentsList.remove('\"'),numPoints,tempIsConvolution,sigma,tempIsTargetIntegration,density,stoppingPowerEq.remove('\"'),numParameters,parameters,tempIsQCoefficient,qCoefficients,tempIsConvCoefficient,convCoefficients,convolutionEq.remove('\"')};
+
+      TargetIntData newLine = {isActive,segmentsList.remove('\"'),numPoints,tempIsConvolution,sigma,tempIsTargetIntegration,density,stoppingPowerEq.remove('\"'),numParameters,parameters,tempIsQCoefficient,qCoefficients,tempIsConvCoefficient,convCoefficients,convolutionEq.remove('\"'),tempIsStraggling,stragglingCoefficient};
       addLine(newLine);
     }
   }

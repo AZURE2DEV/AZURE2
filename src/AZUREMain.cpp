@@ -315,8 +315,8 @@ int AZUREMain::operator()(){
 
 	  std::vector <double> CovarianceData;
           CovarianceData=min.UserCovariance().Data();
-          int parameterTable[100];
-          int size=0;
+          std::vector<int> parameterTable;
+          parameterTable.reserve(params.GetMinuitParams().Params().size());
 
           // Header for Covariance Matrix
           out << std::endl <<  "Covariance Matrix" << std::endl << std::endl;
@@ -324,11 +324,11 @@ int AZUREMain::operator()(){
           for(int i = 0; i<params.GetMinuitParams().Params().size(); i++) {
             if(!params.GetMinuitParams().Parameter(i).IsFixed()) {
               out << std::setw(15) << i ;
-              parameterTable[size]=i;
-              size=size+1;
+              parameterTable.push_back(i);
             }
           }
           out << std::endl;
+          int size = parameterTable.size();
 
 	  std::cout << "covariance length " << CovarianceData.size() << std::endl;
 

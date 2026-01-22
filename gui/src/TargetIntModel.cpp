@@ -46,9 +46,14 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
     else if(index.column() == 12) {
       if(targetInt.isConvCoefficients) return QString(tr("YES"));
       else return QString(tr("NO"));
-    } 
+    }
     else if(index.column() == 13) return QVariant();
     else if(index.column() == 14) return targetInt.convolutionEq;
+    else if(index.column() == 15) {
+      if(targetInt.isStraggling) return QString(tr("YES"));
+      else return QString(tr("NO"));
+    }
+    else if(index.column() == 16) return targetInt.stragglingCoefficient;
   } else if(role == Qt::EditRole) {
     TargetIntData targetInt=targetIntList.at(index.row());
     if(index.column()==1) return targetInt.segmentsList;
@@ -63,8 +68,10 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
     if(index.column()==10) return targetInt.isQCoefficients;
     if(index.column()==11) return QVariant::fromValue<QList<double> >(targetInt.qCoefficients);  
     if(index.column()==12) return targetInt.isConvCoefficients;
-    if(index.column()==13) return QVariant::fromValue<QList<double> >(targetInt.convCoefficients); 
+    if(index.column()==13) return QVariant::fromValue<QList<double> >(targetInt.convCoefficients);
     if(index.column()==14) return targetInt.convolutionEq;
+    if(index.column()==15) return targetInt.isStraggling;
+    if(index.column()==16) return targetInt.stragglingCoefficient;
   } else if (role==Qt::CheckStateRole && index.column()==0) {
     TargetIntData targetInt=targetIntList.at(index.row());
     if(targetInt.isActive==1) return Qt::Checked;
@@ -105,7 +112,13 @@ QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, in
       return tr("Use Energy Dependant Convolution?");
     case 13:
       return tr("Convolution Parameters");
-    default: 
+    case 14:
+      return tr("Convolution Equation");
+    case 15:
+      return tr("Straggling Active?");
+    case 16:
+      return tr("Straggling Coefficient");
+    default:
       return QVariant();
     }
   } else if(orientation == Qt::Vertical) return section+1;
@@ -131,6 +144,8 @@ bool TargetIntModel::setData(const QModelIndex &index, const QVariant &value, in
     else if(index.column() == 12) tempData.isConvCoefficients = value.toBool();
     else if(index.column() == 13) tempData.convCoefficients = value.value<QList<double> >();
     else if(index.column() == 14) tempData.convolutionEq = value.toString();
+    else if(index.column() == 15) tempData.isStraggling = value.toBool();
+    else if(index.column() == 16) tempData.stragglingCoefficient = value.toDouble();
     else return false;
     targetIntList.replace(row,tempData);
     emit(dataChanged(index,index));

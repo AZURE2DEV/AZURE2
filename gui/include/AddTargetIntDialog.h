@@ -39,6 +39,7 @@ class AddTargetIntDialog : public QDialog {
   QLineEdit *compoundText;
   QPushButton *fetchStoppingPowerButton;
   QCheckBox *isStraggling;
+  QLineEdit *stragglingCoefficientText;
   QLineEdit *energyText;
   QLineEdit *deltaEText;
   QPushButton *calculateDeltaEButton;

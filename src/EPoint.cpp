@@ -11,6 +11,7 @@
 #include "RMatrixFunc.h"
 #include "ShftFunc.h"
 #include "TargetEffect.h"
+#include "Straggling.h"
 #include "IntegratedFermiFunc.h"
 #include <iostream>
 #include <assert.h>
@@ -1469,14 +1470,52 @@ void EPoint::IntegrateTargetEffect(const Config& configure) {
     double outerIntOddSum=0.0;
     double outerIntegral=0.0;
     int outerCounter=0;
+
+    // Get beam sigma and straggling coefficient
+    double beamSigma = targetEffect->GetSigma();
+    bool useStraggling = targetEffect->IsStraggling();
+    double stragglingCoeff = targetEffect->GetStragglingCoefficient();  // keV^0.5 per keV^0.5
+    double initialEnergy = this->GetSubPoint(1)->GetCMEnergy();  // Energy at surface
+
+    // Debug output for straggling
+    //if(useStraggling && outerCounter == 0) {
+    //  std::cout << "=== Straggling Debug ===" << std::endl;
+    //  std::cout << "Initial energy: " << initialEnergy * 1000.0 << " keV" << std::endl;
+    //  std::cout << "Beam sigma: " << beamSigma * 1000.0 << " keV" << std::endl;
+    //  std::cout << "Straggling coefficient: " << stragglingCoeff << " keV^0.5 / keV^0.5" << std::endl;
+    //}
+
     for(int i=outerLowerLimit;i<=outerUpperLimit;i++) {
+      // Calculate energy loss (deltaE) at this depth
+      double currentEnergy = this->GetSubPoint(i)->GetCMEnergy();
+      double deltaE = initialEnergy - currentEnergy;  // Energy loss in MeV
+      double deltaE_keV = deltaE * 1000.0;  // Convert to keV for straggling calc
+
+      // Calculate effective sigma including straggling
+      double effectiveSigma = beamSigma;
+      if(useStraggling && deltaE_keV > 0) {
+        // Straggling sigma = coefficient * sqrt(deltaE) [in keV]
+        double stragglingSigma_keV = stragglingCoeff * std::sqrt(deltaE_keV);
+        double stragglingSigma = stragglingSigma_keV / 1000.0;  // Convert back to MeV
+
+        // Total sigma is quadrature sum of beam and straggling
+        effectiveSigma = std::sqrt(beamSigma * beamSigma + stragglingSigma * stragglingSigma);
+
+        // Debug output every 10 points
+        //if(outerCounter % 10 == 0) {
+        //  std::cout << "Depth " << outerCounter << ": deltaE = " << deltaE_keV << " keV, "
+        //            << "straggling_sigma = " << stragglingSigma_keV << " keV, "
+        //            << "total_sigma = " << effectiveSigma * 1000.0 << " keV" << std::endl;
+        //}
+      }
+
       int innerLowerLimit;
-      if(i-round(targetEffect->convolutionRange*targetEffect->GetSigma()/energyStep)>1) 
-	innerLowerLimit=i-round(targetEffect->convolutionRange*targetEffect->GetSigma()/energyStep);
+      if(i-round(targetEffect->convolutionRange*effectiveSigma/energyStep)>1)
+        innerLowerLimit=i-round(targetEffect->convolutionRange*effectiveSigma/energyStep);
       else innerLowerLimit=1;
       int innerUpperLimit;
-      if(i+round(targetEffect->convolutionRange*targetEffect->GetSigma()/energyStep)-1<targetEffect->NumSubPoints())
-	innerUpperLimit=i+round(targetEffect->convolutionRange*targetEffect->GetSigma()/energyStep)-1;
+      if(i+round(targetEffect->convolutionRange*effectiveSigma/energyStep)-1<targetEffect->NumSubPoints())
+        innerUpperLimit=i+round(targetEffect->convolutionRange*effectiveSigma/energyStep)-1;
       else innerUpperLimit=targetEffect->NumSubPoints();
       double innerIntFirst=0.0;
       double innerIntEvenSum=0.0;
@@ -1485,31 +1524,41 @@ void EPoint::IntegrateTargetEffect(const Config& configure) {
       double centroid=this->GetSubPoint(i)->GetCMEnergy();
       int innerCounter=0;
       for(int ii=innerLowerLimit;ii<=innerUpperLimit;ii++) {
-	double thisEnergy=this->GetSubPoint(ii)->GetCMEnergy();
-	double innerIntegrand=this->GetSubPoint(ii)->GetFitCrossSection()/
-	  this->GetSubPoint(ii)->GetStoppingPower()/1e24*targetEffect->GetConvolutionFactor(thisEnergy,centroid);
-	if(innerCounter==0) innerIntFirst=innerIntegrand;
-	else if(innerCounter%2==0) {
-	  innerIntEvenSum+=innerIntegrand;
-	  if(innerCounter>=2) innerIntegral=energyStep/3.0*(innerIntFirst+4.0*innerIntOddSum+2.0*innerIntEvenSum-innerIntegrand);
-	} else if(innerCounter%2!=0) {
-	  innerIntOddSum+=innerIntegrand;
-	  if(innerCounter>=2) innerIntegral=energyStep/3.0*(innerIntFirst+4.0*innerIntOddSum+2.0*innerIntEvenSum-3.0*innerIntegrand);
-	}
-	innerCounter++;
+        double thisEnergy=this->GetSubPoint(ii)->GetCMEnergy();
+        // Use effective sigma for convolution factor when straggling is active
+        double convFactor;
+        if(useStraggling) {
+          // Custom convolution factor with effective sigma
+          convFactor = std::pow(2.0*pi,-0.5)/effectiveSigma*
+                       std::exp(-std::pow(thisEnergy-centroid,2.0)/2.0/std::pow(effectiveSigma,2.0));
+        } else {
+          convFactor = targetEffect->GetConvolutionFactor(thisEnergy, centroid);
+        }
+        double innerIntegrand=this->GetSubPoint(ii)->GetFitCrossSection()/
+          this->GetSubPoint(ii)->GetStoppingPower()/1e24*convFactor;
+        if(innerCounter==0) innerIntFirst=innerIntegrand;
+        else if(innerCounter%2==0) {
+          innerIntEvenSum+=innerIntegrand;
+          if(innerCounter>=2) innerIntegral=energyStep/3.0*(innerIntFirst+4.0*innerIntOddSum+2.0*innerIntEvenSum-innerIntegrand);
+        } else if(innerCounter%2!=0) {
+          innerIntOddSum+=innerIntegrand;
+          if(innerCounter>=2) innerIntegral=energyStep/3.0*(innerIntFirst+4.0*innerIntOddSum+2.0*innerIntEvenSum-3.0*innerIntegrand);
+        }
+        innerCounter++;
       }
       if(outerCounter==0) outerIntFirst=innerIntegral;
       else if(outerCounter%2==0) {
-	outerIntEvenSum+=innerIntegral;
-	if(outerCounter>=2) outerIntegral=energyStep/3.0*
-		   (outerIntFirst+4.0*outerIntOddSum+2.0*outerIntEvenSum-innerIntegral);
+        outerIntEvenSum+=innerIntegral;
+        if(outerCounter>=2) outerIntegral=energyStep/3.0*
+                   (outerIntFirst+4.0*outerIntOddSum+2.0*outerIntEvenSum-innerIntegral);
       } else if(outerCounter%2!=0) {
-	outerIntOddSum+=innerIntegral;
-	if(outerCounter>=2) outerIntegral=energyStep/3.0*
-		   (outerIntFirst+4.0*outerIntOddSum+2.0*outerIntEvenSum-3.0*innerIntegral);
+        outerIntOddSum+=innerIntegral;
+        if(outerCounter>=2) outerIntegral=energyStep/3.0*
+                   (outerIntFirst+4.0*outerIntOddSum+2.0*outerIntEvenSum-3.0*innerIntegral);
       }
       outerCounter++;
     }
+
     yield=outerIntegral/(targetEffect->GetDensity()*1.E-24);
   } 
   else if(targetEffect->IsConvolution()) {

@@ -1,7 +1,8 @@
 #include "TargetEffect.h"
 #include <sstream>
 #include <iostream>
-// #include "Straggling.h"  // ERYA straggling integration - commented for now
+#include <cctype>
+#include "Straggling.h"
 
 /*!
  * Constructor reads directly from an std::ifstream pointing to the target
@@ -10,6 +11,10 @@
  */
 
 TargetEffect::TargetEffect(std::istream &stream,const Config& configure) {
+  // Initialize straggling to safe defaults
+  isStraggling_ = false;
+  stragglingCoefficient_ = 0.04;
+
   int isActive;
   std::string segmentList;
   int numIntegrationPoints;
@@ -19,7 +24,7 @@ TargetEffect::TargetEffect(std::istream &stream,const Config& configure) {
   double density;
   std::string stoppingPowerEq;
   int numParameters;
-  vector_r parameters; 
+  vector_r parameters;
   int isQCoefficients;
   int numQCoefficients;
   vector_r qCoefficients;
@@ -54,22 +59,22 @@ TargetEffect::TargetEffect(std::istream &stream,const Config& configure) {
     isConvCoefficients_ = (isConvCoefficients==1) ? true : false;
     convCoefficients_=convCoefficients;
 
-    // ERYA straggling integration initialization (commented for now)
-    /*
-    // Read straggling flag and target element for ERYA integration
-    int isStraggling;
-    int targetElement;
-    stream >> isStraggling >> targetElement;
-    
-    isStraggling_ = (isStraggling == 1);
-    targetElement_ = targetElement;
-    
-    // Initialize straggling calculator if needed
-    if (isStraggling_ && isTargetIntegration_) {
-        stragglingCalculator_ = std::make_unique<Straggling>(targetElement_, 1000.0); // 1 MeV default
-        stragglingCalculator_->setOxideLayer(true, 0.15); // Default oxide layer
+    // Read straggling flag and coefficient (optional for backward compatibility)
+    // Skip whitespace and check if there's a digit (not a '<' which would be </targetInt>)
+    stream >> std::ws;  // Skip whitespace
+    if(!stream.eof() && stream.peek() != '<' && std::isdigit(stream.peek())) {
+      int isStraggling = 0;
+      stream >> isStraggling;
+      isStraggling_ = (isStraggling == 1);
+
+      // Try to read coefficient if available
+      stream >> std::ws;
+      if(!stream.eof() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.' || stream.peek() == '-')) {
+        double stragglingCoeff = 0.04;
+        stream >> stragglingCoeff;
+        stragglingCoefficient_ = stragglingCoeff;
+      }
     }
-    */
 
     size_t found=0;
     while(found!=std::string::npos) {
@@ -339,60 +344,20 @@ double TargetEffect::CalculateConvolutionFactor(double energy, double centroid, 
   return pow(2.*pi,-0.5)/sigma*exp(-pow(energy-centroid,2.0)/2.0/pow(sigma,2.0));
 }
 
-// ERYA straggling integration methods (commented for now)
-/*
+/*!
+ * Returns true if the target effect includes energy straggling,
+ * otherwise returns false.
+ */
+
 bool TargetEffect::IsStraggling() const {
   return isStraggling_;
 }
 
-int TargetEffect::GetTargetElement() const {
-  return targetElement_;
-}
+/*!
+ * Returns the straggling coefficient for the target effect.
+ * Typical value is 0.04 keV^0.5 per keV^0.5 of energy loss.
+ */
 
-void TargetEffect::SetTargetElement(int element) {
-  targetElement_ = element;
-  
-  // Reinitialize straggling calculator if needed
-  if (isStraggling_ && isTargetIntegration_) {
-    stragglingCalculator_ = std::make_unique<Straggling>(element, 1000.0);
-    stragglingCalculator_->setOxideLayer(true, 0.15);
-  }
+double TargetEffect::GetStragglingCoefficient() const {
+  return stragglingCoefficient_;
 }
-
-double TargetEffect::CalculateDoubleConvolution(double energy, double centroid, const Config& configure) {
-  // This method implements the double convolution approach from ERYA notebook
-  // It combines Gaussian beam convolution with energy straggling
-  
-  if (!isStraggling_ || !stragglingCalculator_) {
-    // Fall back to regular convolution if straggling is not enabled
-    return CalculateConvolutionFactor(energy, centroid, configure);
-  }
-  
-  // Calculate energy loss in target
-  double deltaE = centroid - energy;
-  if (deltaE < 0.0) deltaE = 0.0;
-  
-  // Get beam sigma
-  double beamSigma = CalculateSigma(energy, configure);
-  
-  // Calculate double convolution using ERYA methodology
-  std::vector<double> resultEnergy, resultIntensity;
-  stragglingCalculator_->calculateDoubleConvolution(centroid, beamSigma, deltaE, 
-                                                  resultEnergy, resultIntensity);
-  
-  // Find the intensity at the requested energy point
-  // This is a simplified lookup - full implementation would use interpolation
-  double convolutionFactor = 0.0;
-  double minDistance = 1e10;
-  
-  for (size_t i = 0; i < resultEnergy.size(); ++i) {
-    double distance = std::abs(resultEnergy[i] - energy);
-    if (distance < minDistance) {
-      minDistance = distance;
-      convolutionFactor = resultIntensity[i];
-    }
-  }
-  
-  return convolutionFactor;
-}
-*/

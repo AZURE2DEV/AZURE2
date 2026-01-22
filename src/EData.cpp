@@ -511,7 +511,16 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
                 backwardDepth=targetThickness+targetEffect->convolutionRange*targetEffect->GetSigma()*5.0;
                 forwardDepth=targetEffect->convolutionRange*targetEffect->GetSigma()*5.0;
               }
-            } 
+              // Add straggling range extension at the deepest layer
+              if(targetEffect->IsStraggling()) {
+                double targetThickness_keV = targetThickness * 1000.0;  // Convert MeV to keV
+                double stragglingCoeff = targetEffect->GetStragglingCoefficient();
+                double stragglingSigma_keV = stragglingCoeff * std::sqrt(targetThickness_keV);
+                double stragglingSigma = stragglingSigma_keV / 1000.0;  // Convert back to MeV
+                double stragglingRange = targetEffect->convolutionRange * stragglingSigma;
+                backwardDepth += stragglingRange;
+              }
+            }
             else {
               backwardDepth=targetThickness;
               forwardDepth=0.0;
@@ -616,10 +625,19 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
                     forwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure)*5.0;
                   }
                   else {
-                    backwardDepth=targetThickness+targetEffect->GetSigma()*5.0;
-                    forwardDepth=targetEffect->GetSigma()*5.0;
+                    backwardDepth=targetThickness+targetEffect->convolutionRange*targetEffect->GetSigma()*5.0;
+                    forwardDepth=targetEffect->convolutionRange*targetEffect->GetSigma()*5.0;
                   }
-                } 
+                  // Add straggling range extension at the deepest layer (component segments)
+                  if(targetEffect->IsStraggling()) {
+                    double targetThickness_keV = targetThickness * 1000.0;  // Convert MeV to keV
+                    double stragglingCoeff = targetEffect->GetStragglingCoefficient();
+                    double stragglingSigma_keV = stragglingCoeff * std::sqrt(targetThickness_keV);
+                    double stragglingSigma = stragglingSigma_keV / 1000.0;  // Convert back to MeV
+                    double stragglingRange = targetEffect->convolutionRange * stragglingSigma;
+                    backwardDepth += stragglingRange;
+                  }
+                }
                 else {
                   backwardDepth=targetThickness;
                   forwardDepth=0.0;

@@ -86,6 +86,11 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent), selec
   
   isStraggling = new QCheckBox(tr("Include Energy Straggling"));
   isStraggling->setChecked(false);
+  stragglingCoefficientText = new QLineEdit;
+  stragglingCoefficientText->setText("0.04");  // Default straggling coefficient
+  stragglingCoefficientText->setToolTip("Straggling coefficient (keV^0.5 per keV^0.5 of energy loss). Typical value: 0.04 for protons in Al.");
+  stragglingCoefficientText->setEnabled(false);
+  connect(isStraggling, SIGNAL(toggled(bool)), stragglingCoefficientText, SLOT(setEnabled(bool)));
   numParametersSpin = new QSpinBox;
   numParametersSpin -> setMinimum(0);
   numParametersSpin -> setMaximum(20);
@@ -217,9 +222,14 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent), selec
   compoundLayout->addWidget(fetchStoppingPowerButton);
   stoppingPowerLayout->addLayout(compoundLayout);
   
-  // Straggling checkbox
-  stoppingPowerLayout->addWidget(isStraggling);
-  
+  // Straggling checkbox and coefficient
+  QHBoxLayout *stragglingLayout = new QHBoxLayout;
+  stragglingLayout->addWidget(isStraggling);
+  stragglingLayout->addWidget(new QLabel(tr("Coefficient:")));
+  stragglingLayout->addWidget(stragglingCoefficientText);
+  stragglingLayout->addStretch();
+  stoppingPowerLayout->addLayout(stragglingLayout);
+
   QHBoxLayout *stoppingPowerTopLayout = new QHBoxLayout;
   QHBoxLayout *equationLayout = new QHBoxLayout;
   equationLayout->addWidget(new QLabel(tr("y=")));
