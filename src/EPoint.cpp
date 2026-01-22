@@ -1459,107 +1459,134 @@ void EPoint::IntegrateTargetEffect(const Config& configure) {
   double yield=0.0;
   TargetEffect *targetEffect=this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
 
-  // Note: With adaptive grids, energyStep is no longer constant
-  // Use Gaussian quadrature which works for non-uniform spacing
-  double energyStep=this->GetSubPoint(1)->GetCMEnergy()-this->GetSubPoint(2)->GetCMEnergy();
+  // All integration now uses Gaussian quadrature which works for non-uniform (adaptive) grids
   if(targetEffect->IsConvolution()&&targetEffect->IsTargetIntegration()) {
-    int outerLowerLimit=round((this->GetSubPoint(1)->GetCMEnergy()-this->GetCMEnergy())/energyStep)+1;
-    int outerUpperLimit=outerLowerLimit-1+round(this->GetTargetThickness()/energyStep);
-    double outerIntFirst=0.0;
-    double outerIntEvenSum=0.0;
-    double outerIntOddSum=0.0;
-    double outerIntegral=0.0;
-    int outerCounter=0;
+    // Gaussian quadrature for convolution + target integration
+    // Uses 2-point Gauss-Legendre for both outer (depth) and inner (convolution) integrals
 
-    // Get beam sigma and straggling coefficient
-    double beamSigma = targetEffect->GetSigma();
-    bool useStraggling = targetEffect->IsStraggling();
-    double stragglingCoeff = targetEffect->GetStragglingCoefficient();  // keV^0.5 per keV^0.5
-    double initialEnergy = this->GetSubPoint(1)->GetCMEnergy();  // Energy at surface
-
-    // Debug output for straggling
-    //if(useStraggling && outerCounter == 0) {
-    //  std::cout << "=== Straggling Debug ===" << std::endl;
-    //  std::cout << "Initial energy: " << initialEnergy * 1000.0 << " keV" << std::endl;
-    //  std::cout << "Beam sigma: " << beamSigma * 1000.0 << " keV" << std::endl;
-    //  std::cout << "Straggling coefficient: " << stragglingCoeff << " keV^0.5 / keV^0.5" << std::endl;
-    //}
-
-    for(int i=outerLowerLimit;i<=outerUpperLimit;i++) {
-      // Calculate energy loss (deltaE) at this depth
-      double currentEnergy = this->GetSubPoint(i)->GetCMEnergy();
-      double deltaE = initialEnergy - currentEnergy;  // Energy loss in MeV
-      double deltaE_keV = deltaE * 1000.0;  // Convert to keV for straggling calc
-
-      // Calculate effective sigma including straggling
-      double effectiveSigma = beamSigma;
-      if(useStraggling && deltaE_keV > 0) {
-        // Straggling sigma = coefficient * sqrt(deltaE) [in keV]
-        double stragglingSigma_keV = stragglingCoeff * std::sqrt(deltaE_keV);
-        double stragglingSigma = stragglingSigma_keV / 1000.0;  // Convert back to MeV
-
-        // Total sigma is quadrature sum of beam and straggling
-        effectiveSigma = std::sqrt(beamSigma * beamSigma + stragglingSigma * stragglingSigma);
-
-        // Debug output every 10 points
-        //if(outerCounter % 10 == 0) {
-        //  std::cout << "Depth " << outerCounter << ": deltaE = " << deltaE_keV << " keV, "
-        //            << "straggling_sigma = " << stragglingSigma_keV << " keV, "
-        //            << "total_sigma = " << effectiveSigma * 1000.0 << " keV" << std::endl;
-        //}
-      }
-
-      int innerLowerLimit;
-      if(i-round(targetEffect->convolutionRange*effectiveSigma/energyStep)>1)
-        innerLowerLimit=i-round(targetEffect->convolutionRange*effectiveSigma/energyStep);
-      else innerLowerLimit=1;
-      int innerUpperLimit;
-      if(i+round(targetEffect->convolutionRange*effectiveSigma/energyStep)-1<targetEffect->NumSubPoints())
-        innerUpperLimit=i+round(targetEffect->convolutionRange*effectiveSigma/energyStep)-1;
-      else innerUpperLimit=targetEffect->NumSubPoints();
-      double innerIntFirst=0.0;
-      double innerIntEvenSum=0.0;
-      double innerIntOddSum=0.0;
-      double innerIntegral=0.0;
-      double centroid=this->GetSubPoint(i)->GetCMEnergy();
-      int innerCounter=0;
-      for(int ii=innerLowerLimit;ii<=innerUpperLimit;ii++) {
-        double thisEnergy=this->GetSubPoint(ii)->GetCMEnergy();
-        // Use effective sigma for convolution factor when straggling is active
-        double convFactor;
-        if(useStraggling) {
-          // Custom convolution factor with effective sigma
-          convFactor = std::pow(2.0*pi,-0.5)/effectiveSigma*
-                       std::exp(-std::pow(thisEnergy-centroid,2.0)/2.0/std::pow(effectiveSigma,2.0));
-        } else {
-          convFactor = targetEffect->GetConvolutionFactor(thisEnergy, centroid);
-        }
-        double innerIntegrand=this->GetSubPoint(ii)->GetFitCrossSection()/
-          this->GetSubPoint(ii)->GetStoppingPower()/1e24*convFactor;
-        if(innerCounter==0) innerIntFirst=innerIntegrand;
-        else if(innerCounter%2==0) {
-          innerIntEvenSum+=innerIntegrand;
-          if(innerCounter>=2) innerIntegral=energyStep/3.0*(innerIntFirst+4.0*innerIntOddSum+2.0*innerIntEvenSum-innerIntegrand);
-        } else if(innerCounter%2!=0) {
-          innerIntOddSum+=innerIntegrand;
-          if(innerCounter>=2) innerIntegral=energyStep/3.0*(innerIntFirst+4.0*innerIntOddSum+2.0*innerIntEvenSum-3.0*innerIntegrand);
-        }
-        innerCounter++;
-      }
-      if(outerCounter==0) outerIntFirst=innerIntegral;
-      else if(outerCounter%2==0) {
-        outerIntEvenSum+=innerIntegral;
-        if(outerCounter>=2) outerIntegral=energyStep/3.0*
-                   (outerIntFirst+4.0*outerIntOddSum+2.0*outerIntEvenSum-innerIntegral);
-      } else if(outerCounter%2!=0) {
-        outerIntOddSum+=innerIntegral;
-        if(outerCounter>=2) outerIntegral=energyStep/3.0*
-                   (outerIntFirst+4.0*outerIntOddSum+2.0*outerIntEvenSum-3.0*innerIntegral);
-      }
-      outerCounter++;
+    int numPoints = this->NumSubPoints();
+    if(numPoints < 2) {
+      this->SetFitCrossSection(0.0);
+      return;
     }
 
-    yield=outerIntegral/(targetEffect->GetDensity()*1.E-24);
+    // Get beam sigma and straggling parameters
+    double beamSigma = targetEffect->GetSigma();
+    bool useStraggling = targetEffect->IsStraggling();
+    double stragglingCoeff = targetEffect->GetStragglingCoefficient();
+    double convRange = targetEffect->convolutionRange;
+
+    // Gauss-Legendre 2-point weights and nodes
+    const double w1 = 1.0;
+    const double w2 = 1.0;
+    const double x1 = -1.0/sqrt(3.0);
+    const double x2 =  1.0/sqrt(3.0);
+
+    // Target depth integration range: from surface to back of target
+    double surfaceEnergy = this->GetCMEnergy();
+    double backEnergy = surfaceEnergy - this->GetTargetThickness();
+
+    // Available energy range from subpoints
+    double minEnergy = this->GetSubPoint(numPoints)->GetCMEnergy();
+    double maxEnergy = this->GetSubPoint(1)->GetCMEnergy();
+
+    double outerIntegral = 0.0;
+
+    // Outer integral: over target depth using Gaussian quadrature
+    // Loop over all subpoint intervals and integrate those within target range
+    for(int i = 1; i < numPoints; i++) {
+      double Ea_outer = this->GetSubPoint(i)->GetCMEnergy();
+      double Eb_outer = this->GetSubPoint(i+1)->GetCMEnergy();
+
+      // Skip intervals completely outside target range [backEnergy, surfaceEnergy]
+      // Note: Ea_outer > Eb_outer (energy decreases with index)
+      if(Eb_outer > surfaceEnergy || Ea_outer < backEnergy) continue;
+
+      // Clip interval to target range
+      double Ea_clipped = std::min(Ea_outer, surfaceEnergy);
+      double Eb_clipped = std::max(Eb_outer, backEnergy);
+
+      double mid_outer = (Ea_clipped + Eb_clipped) / 2.0;
+      double half_range_outer = (Ea_clipped - Eb_clipped) / 2.0;
+
+      if(half_range_outer < 1.0e-10) continue;  // Skip tiny intervals
+
+      // Evaluate at two Gauss points
+      for(int gp = 0; gp < 2; gp++) {
+        double xi = (gp == 0) ? x1 : x2;
+        double wi = (gp == 0) ? w1 : w2;
+
+        double E_depth = mid_outer + half_range_outer * xi;
+
+        // Calculate energy loss and effective sigma at this depth
+        // Use distance from surface (surfaceEnergy) for straggling calculation
+        double deltaE = surfaceEnergy - E_depth;
+        double deltaE_keV = deltaE * 1000.0;
+
+        double effectiveSigma = beamSigma;
+        if(useStraggling && deltaE_keV > 0) {
+          double stragglingSigma_keV = stragglingCoeff * std::sqrt(deltaE_keV);
+          double stragglingSigma = stragglingSigma_keV / 1000.0;
+          effectiveSigma = std::sqrt(beamSigma * beamSigma + stragglingSigma * stragglingSigma);
+        }
+
+        // Inner integral: convolution at this depth
+        // Integration range: E_depth ± convRange * effectiveSigma
+        double convLow = E_depth - convRange * effectiveSigma;
+        double convHigh = E_depth + convRange * effectiveSigma;
+
+        // Clamp to available energy range
+        if(convLow < minEnergy) convLow = minEnergy;
+        if(convHigh > maxEnergy) convHigh = maxEnergy;
+
+        double innerIntegral = 0.0;
+
+        // Inner integral: convolution over energy distribution
+        for(int j = 1; j < numPoints; j++) {
+          double Ea_inner = this->GetSubPoint(j)->GetCMEnergy();
+          double Eb_inner = this->GetSubPoint(j+1)->GetCMEnergy();
+
+          // Skip intervals completely outside convolution range
+          if(Eb_inner > convHigh || Ea_inner < convLow) continue;
+
+          // Clip interval to convolution range
+          double Ea_inner_clipped = std::min(Ea_inner, convHigh);
+          double Eb_inner_clipped = std::max(Eb_inner, convLow);
+
+          double mid_inner = (Ea_inner_clipped + Eb_inner_clipped) / 2.0;
+          double half_range_inner = (Ea_inner_clipped - Eb_inner_clipped) / 2.0;
+
+          if(half_range_inner < 1.0e-10) continue;  // Skip tiny intervals
+
+          // Inner Gauss points
+          for(int gp_inner = 0; gp_inner < 2; gp_inner++) {
+            double xi_inner = (gp_inner == 0) ? x1 : x2;
+            double wi_inner = (gp_inner == 0) ? w1 : w2;
+
+            double E_conv = mid_inner + half_range_inner * xi_inner;
+
+            // Interpolate cross-section and stopping power at E_conv
+            // Use the original (unclipped) interval for interpolation
+            double alpha = (Ea_inner - E_conv) / (Ea_inner - Eb_inner);
+            double sigma = (1.0 - alpha) * this->GetSubPoint(j)->GetFitCrossSection() +
+                          alpha * this->GetSubPoint(j+1)->GetFitCrossSection();
+            double stopping = (1.0 - alpha) * this->GetSubPoint(j)->GetStoppingPower() +
+                             alpha * this->GetSubPoint(j+1)->GetStoppingPower();
+
+            // Convolution factor (Gaussian centered at E_depth)
+            double convFactor = std::pow(2.0*pi, -0.5) / effectiveSigma *
+                               std::exp(-std::pow(E_conv - E_depth, 2.0) / (2.0 * effectiveSigma * effectiveSigma));
+
+            double integrand = sigma / stopping / 1e24 * convFactor;
+            innerIntegral += std::abs(half_range_inner) * wi_inner * integrand;
+          }
+        }
+
+        outerIntegral += std::abs(half_range_outer) * wi * innerIntegral;
+      }
+    }
+
+    yield = outerIntegral / (targetEffect->GetDensity() * 1.0e-24);
   } 
   else if(targetEffect->IsConvolution()) {
     // Gaussian quadrature for non-uniform grids
@@ -1607,52 +1634,192 @@ void EPoint::IntegrateTargetEffect(const Config& configure) {
     yield=integral;
   } 
   else if(targetEffect->IsTargetIntegration()) {
-    // Gaussian quadrature for non-uniform grids
-    // 2-point Gauss-Legendre: exact for cubic polynomials
-    double integral=0.0;
+    // Target integration with optional straggling
     int numPoints = this->NumSubPoints();
-
-    // Gauss-Legendre 2-point weights and nodes (on [-1,1])
-    const double w1 = 1.0;
-    const double w2 = 1.0;
-    const double x1 = -1.0/sqrt(3.0);  // ≈ -0.577350
-    const double x2 =  1.0/sqrt(3.0);  // ≈  0.577350
-
-    // Integrate over each interval [E_i, E_{i+1}]
-    for(int i=0; i<numPoints-1; i++) {
-      double Ea = this->GetSubPoint(i+1)->GetCMEnergy();
-      double Eb = this->GetSubPoint(i+2)->GetCMEnergy();
-
-      // Transform from [Ea,Eb] to standard interval [-1,1]
-      double mid = (Ea + Eb) / 2.0;
-      double half_range = (Ea - Eb) / 2.0;
-
-      // Gauss points in physical domain
-      double E_gauss1 = mid + half_range * x1;
-      double E_gauss2 = mid + half_range * x2;
-
-      // Evaluate integrand at Gauss points (linear interpolation from grid points)
-      // f1 at E_gauss1
-      double alpha1 = (Eb - E_gauss1) / (Eb - Ea);
-      double sigma1 = alpha1 * this->GetSubPoint(i+1)->GetFitCrossSection() +
-                      (1.0 - alpha1) * this->GetSubPoint(i+2)->GetFitCrossSection();
-      double stopping1 = alpha1 * this->GetSubPoint(i+1)->GetStoppingPower() +
-                         (1.0 - alpha1) * this->GetSubPoint(i+2)->GetStoppingPower();
-      double f1 = sigma1 / stopping1 / 1e24;
-
-      // f2 at E_gauss2
-      double alpha2 = (Eb - E_gauss2) / (Eb - Ea);
-      double sigma2 = alpha2 * this->GetSubPoint(i+1)->GetFitCrossSection() +
-                      (1.0 - alpha2) * this->GetSubPoint(i+2)->GetFitCrossSection();
-      double stopping2 = alpha2 * this->GetSubPoint(i+1)->GetStoppingPower() +
-                         (1.0 - alpha2) * this->GetSubPoint(i+2)->GetStoppingPower();
-      double f2 = sigma2 / stopping2 / 1e24;
-
-      // Gaussian quadrature formula
-      integral += std::abs(half_range) * (w1 * f1 + w2 * f2);
+    if(numPoints < 2) {
+      this->SetFitCrossSection(0.0);
+      return;
     }
 
-    yield=integral/(targetEffect->GetDensity()*1.E-24);
+    bool useStraggling = targetEffect->IsStraggling();
+
+    if(useStraggling) {
+      // Target integration with straggling: convolve with straggling-induced energy spread
+      // Similar to convolution+targetIntegration but sigma is only from straggling (no beam sigma)
+
+      double stragglingCoeff = targetEffect->GetStragglingCoefficient();
+      double convRange = targetEffect->convolutionRange;
+
+      // Target depth integration range: from surface to back of target
+      double surfaceEnergy = this->GetCMEnergy();
+      double backEnergy = surfaceEnergy - this->GetTargetThickness();
+
+      // Energy at the highest subpoint (used for straggling calculation)
+      double initialEnergy = this->GetSubPoint(1)->GetCMEnergy();
+
+      // Available energy range from subpoints
+      double minEnergy = this->GetSubPoint(numPoints)->GetCMEnergy();
+      double maxEnergy = this->GetSubPoint(1)->GetCMEnergy();
+
+      // Gauss-Legendre 2-point weights and nodes
+      const double w1 = 1.0;
+      const double w2 = 1.0;
+      const double x1 = -1.0/sqrt(3.0);
+      const double x2 =  1.0/sqrt(3.0);
+
+      double outerIntegral = 0.0;
+
+      // Outer integral: over target depth using Gaussian quadrature
+      // Loop over all subpoint intervals and integrate those within target range
+      for(int i = 1; i < numPoints; i++) {
+        double Ea_outer = this->GetSubPoint(i)->GetCMEnergy();
+        double Eb_outer = this->GetSubPoint(i+1)->GetCMEnergy();
+
+        // Skip intervals completely outside target range [backEnergy, surfaceEnergy]
+        // Note: Ea_outer > Eb_outer (energy decreases with index)
+        if(Eb_outer > surfaceEnergy || Ea_outer < backEnergy) continue;
+
+        // Clip interval to target range
+        double Ea_clipped = std::min(Ea_outer, surfaceEnergy);
+        double Eb_clipped = std::max(Eb_outer, backEnergy);
+
+        double mid_outer = (Ea_clipped + Eb_clipped) / 2.0;
+        double half_range_outer = (Ea_clipped - Eb_clipped) / 2.0;
+
+        if(half_range_outer < 1.0e-10) continue;
+
+        // Evaluate at two Gauss points
+        for(int gp = 0; gp < 2; gp++) {
+          double xi = (gp == 0) ? x1 : x2;
+          double wi = (gp == 0) ? w1 : w2;
+
+          double E_depth = mid_outer + half_range_outer * xi;
+
+          // Calculate straggling sigma at this depth
+          // Use distance from surface (surfaceEnergy), not from first subpoint
+          double deltaE = surfaceEnergy - E_depth;
+          double deltaE_keV = deltaE * 1000.0;
+
+          double stragglingSigma = 0.0;
+          if(deltaE_keV > 0) {
+            double stragglingSigma_keV = stragglingCoeff * std::sqrt(deltaE_keV);
+            stragglingSigma = stragglingSigma_keV / 1000.0;
+          }
+
+          double innerIntegral = 0.0;
+
+          if(stragglingSigma > 1.0e-10) {
+            // Convolve with straggling distribution
+            double convLow = E_depth - convRange * stragglingSigma;
+            double convHigh = E_depth + convRange * stragglingSigma;
+            if(convLow < minEnergy) convLow = minEnergy;
+            if(convHigh > maxEnergy) convHigh = maxEnergy;
+
+            for(int j = 1; j < numPoints; j++) {
+              double Ea_inner = this->GetSubPoint(j)->GetCMEnergy();
+              double Eb_inner = this->GetSubPoint(j+1)->GetCMEnergy();
+
+              if(Eb_inner > convHigh || Ea_inner < convLow) continue;
+
+              double Ea_inner_clipped = std::min(Ea_inner, convHigh);
+              double Eb_inner_clipped = std::max(Eb_inner, convLow);
+
+              double mid_inner = (Ea_inner_clipped + Eb_inner_clipped) / 2.0;
+              double half_range_inner = (Ea_inner_clipped - Eb_inner_clipped) / 2.0;
+
+              if(half_range_inner < 1.0e-10) continue;
+
+              for(int gp_inner = 0; gp_inner < 2; gp_inner++) {
+                double xi_inner = (gp_inner == 0) ? x1 : x2;
+                double wi_inner = (gp_inner == 0) ? w1 : w2;
+
+                double E_conv = mid_inner + half_range_inner * xi_inner;
+
+                // Interpolate cross-section and stopping power
+                double alpha = (Ea_inner - E_conv) / (Ea_inner - Eb_inner);
+                double sigma = (1.0 - alpha) * this->GetSubPoint(j)->GetFitCrossSection() +
+                              alpha * this->GetSubPoint(j+1)->GetFitCrossSection();
+                double stopping = (1.0 - alpha) * this->GetSubPoint(j)->GetStoppingPower() +
+                                 alpha * this->GetSubPoint(j+1)->GetStoppingPower();
+
+                // Straggling convolution factor
+                double convFactor = std::pow(2.0*pi, -0.5) / stragglingSigma *
+                                   std::exp(-std::pow(E_conv - E_depth, 2.0) / (2.0 * stragglingSigma * stragglingSigma));
+
+                double integrand = sigma / stopping / 1e24 * convFactor;
+                innerIntegral += std::abs(half_range_inner) * wi_inner * integrand;
+              }
+            }
+          } else {
+            // No straggling at surface - just use the cross-section directly
+            // Interpolate at E_depth
+            for(int j = 1; j < numPoints; j++) {
+              double Ea = this->GetSubPoint(j)->GetCMEnergy();
+              double Eb = this->GetSubPoint(j+1)->GetCMEnergy();
+              if(E_depth <= Ea && E_depth >= Eb) {
+                double alpha = (Ea - E_depth) / (Ea - Eb);
+                double sigma = (1.0 - alpha) * this->GetSubPoint(j)->GetFitCrossSection() +
+                              alpha * this->GetSubPoint(j+1)->GetFitCrossSection();
+                double stopping = (1.0 - alpha) * this->GetSubPoint(j)->GetStoppingPower() +
+                                 alpha * this->GetSubPoint(j+1)->GetStoppingPower();
+                innerIntegral = sigma / stopping / 1e24;
+                break;
+              }
+            }
+          }
+
+          outerIntegral += std::abs(half_range_outer) * wi * innerIntegral;
+        }
+      }
+
+      yield = outerIntegral / (targetEffect->GetDensity() * 1.0e-24);
+    } else {
+      // Standard target integration without straggling
+      // Gaussian quadrature for non-uniform grids
+      double integral=0.0;
+
+      // Gauss-Legendre 2-point weights and nodes (on [-1,1])
+      const double w1 = 1.0;
+      const double w2 = 1.0;
+      const double x1 = -1.0/sqrt(3.0);
+      const double x2 =  1.0/sqrt(3.0);
+
+      // Integrate over each interval [E_i, E_{i+1}]
+      for(int i=0; i<numPoints-1; i++) {
+        double Ea = this->GetSubPoint(i+1)->GetCMEnergy();
+        double Eb = this->GetSubPoint(i+2)->GetCMEnergy();
+
+        // Transform from [Ea,Eb] to standard interval [-1,1]
+        double mid = (Ea + Eb) / 2.0;
+        double half_range = (Ea - Eb) / 2.0;
+
+        // Gauss points in physical domain
+        double E_gauss1 = mid + half_range * x1;
+        double E_gauss2 = mid + half_range * x2;
+
+        // Evaluate integrand at Gauss points (linear interpolation from grid points)
+        // f1 at E_gauss1
+        double alpha1 = (Eb - E_gauss1) / (Eb - Ea);
+        double sigma1 = alpha1 * this->GetSubPoint(i+1)->GetFitCrossSection() +
+                        (1.0 - alpha1) * this->GetSubPoint(i+2)->GetFitCrossSection();
+        double stopping1 = alpha1 * this->GetSubPoint(i+1)->GetStoppingPower() +
+                           (1.0 - alpha1) * this->GetSubPoint(i+2)->GetStoppingPower();
+        double f1 = sigma1 / stopping1 / 1e24;
+
+        // f2 at E_gauss2
+        double alpha2 = (Eb - E_gauss2) / (Eb - Ea);
+        double sigma2 = alpha2 * this->GetSubPoint(i+1)->GetFitCrossSection() +
+                        (1.0 - alpha2) * this->GetSubPoint(i+2)->GetFitCrossSection();
+        double stopping2 = alpha2 * this->GetSubPoint(i+1)->GetStoppingPower() +
+                           (1.0 - alpha2) * this->GetSubPoint(i+2)->GetStoppingPower();
+        double f2 = sigma2 / stopping2 / 1e24;
+
+        // Gaussian quadrature formula
+        integral += std::abs(half_range) * (w1 * f1 + w2 * f2);
+      }
+
+      yield=integral/(targetEffect->GetDensity()*1.E-24);
+    }
   }
   else if(targetEffect->IsConvCoefficients()) {
     // Gaussian quadrature for both integrals

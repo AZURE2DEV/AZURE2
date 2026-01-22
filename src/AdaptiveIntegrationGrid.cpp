@@ -46,109 +46,50 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
   // Identify resonances in the energy range with their widths
   std::vector<ResonanceInfo> resonances = IdentifyResonances(startEnergy, endEnergy, compound);
 
-  // PASS 1: Add fine symmetric grids around each resonance FIRST
-  // Create a list of resonance regions to exclude from coarse grid
-  std::vector<std::pair<double, double>> resonanceRegions;
+  // Use smooth adaptive stepping - step size varies continuously based on distance to resonances
+  // This avoids sharp boundaries that cause integration artifacts
 
-  for (const ResonanceInfo& res : resonances) {
-    double resonanceEnergy = res.energy;
-    double resonanceWidth = res.totalWidth;
-
-    // Integration region: ±(multiplier × Γ) around resonance
-    double regionHalfWidth = config_.resonanceWidthMultiplier * resonanceWidth / 2;
-
-    // Calculate ideal symmetric grid limits
-    double idealLowerLimit = resonanceEnergy - regionHalfWidth;
-    double idealUpperLimit = resonanceEnergy + regionHalfWidth;
-
-    // Fine step size based on desired points per width
-    double fineStep = (idealUpperLimit - idealLowerLimit) / (config_.pointsPerWidth);
-
-    // Clip to actual integration range
-    double actualLowerLimit = std::max(idealLowerLimit, endEnergy);
-    double actualUpperLimit = std::min(idealUpperLimit, startEnergy);
-
-    // Store this region to exclude from coarse grid
-    if (actualUpperLimit >= actualLowerLimit) {
-      resonanceRegions.push_back(std::make_pair(actualLowerLimit, actualUpperLimit));
-    }
-
-    // Check if resonance is within range
-    if (resonanceEnergy < endEnergy || resonanceEnergy > startEnergy) {
-      // Resonance center is outside range - still add partial coverage
-      if (actualUpperLimit >= actualLowerLimit) {
-        // Some part of resonance region overlaps with integration range
-        double currentEnergy = actualLowerLimit;
-        while (currentEnergy <= actualUpperLimit) {
-          grid.push_back(currentEnergy);
-          currentEnergy += fineStep;
-        }
-      }
-    } else {
-      // Resonance center is within range - add symmetric grid
-
-      // Add point at resonance center
-      grid.push_back(resonanceEnergy);
-
-      // Add symmetric points on both sides
-      int maxSteps = static_cast<int>(regionHalfWidth / fineStep);
-
-      for (int i = 1; i <= maxSteps; i++) {
-        double offset = i * fineStep;
-
-        // Point above resonance
-        double upperPoint = resonanceEnergy + offset;
-        if (upperPoint <= actualUpperLimit) {
-          grid.push_back(upperPoint);
-        }
-
-        // Point below resonance (symmetric)
-        double lowerPoint = resonanceEnergy - offset;
-        if (lowerPoint >= actualLowerLimit) {
-          grid.push_back(lowerPoint);
-        }
-
-        // Stop if we've reached the boundaries on both sides
-        if (upperPoint > actualUpperLimit && lowerPoint < actualLowerLimit) {
-          break;
-        }
-      }
-    }
-  }
-
-  // PASS 2: Add coarse grid points ONLY in smooth regions (outside resonance regions)
-  // This respects maxPoints limit
-  double coarseStep = config_.baseEnergyStep;
-
-  // Helper function to check if energy is in any resonance region
-  auto isInResonanceRegion = [&resonanceRegions](double energy) -> bool {
-    for (const auto& region : resonanceRegions) {
-      if (energy >= region.first && energy <= region.second) {
-        return true;
-      }
-    }
-    return false;
-  };
-
-  // Add coarse points, skipping those in resonance regions
-  double currentEnergy = startEnergy;
-  while (currentEnergy >= endEnergy) {
-    if (!isInResonanceRegion(currentEnergy)) {
-      grid.push_back(currentEnergy);
-    }
-    currentEnergy -= coarseStep;
-  }
-
-  // Ensure endpoints
   grid.push_back(startEnergy);
-  grid.push_back(endEnergy);
+  double currentEnergy = startEnergy;
+
+  while (currentEnergy > endEnergy) {
+    // Calculate adaptive step size at current energy
+    double stepSize = CalculateAdaptiveStep(currentEnergy, resonances);
+
+    // Ensure we don't overshoot the end
+    double nextEnergy = currentEnergy - stepSize;
+    if (nextEnergy < endEnergy) {
+      nextEnergy = endEnergy;
+    }
+
+    // Add the next point
+    grid.push_back(nextEnergy);
+    currentEnergy = nextEnergy;
+
+    // Safety check to avoid infinite loops
+    if (stepSize < 1.0e-10) {
+      break;
+    }
+  }
+
+  // Ensure endpoint is included
+  if (std::abs(grid.back() - endEnergy) > 1.0e-10) {
+    grid.push_back(endEnergy);
+  }
+
+  // Also ensure resonance centers are included as grid points for accuracy
+  for (const ResonanceInfo& res : resonances) {
+    if (res.energy >= endEnergy && res.energy <= startEnergy) {
+      grid.push_back(res.energy);
+    }
+  }
 
   // Sort grid in descending order (high to low energy)
   std::sort(grid.begin(), grid.end(), std::greater<double>());
 
   // Remove duplicates (keep points that are sufficiently different)
   std::vector<double> uniqueGrid;
-  double tolerance = 1.0e-6; // 1 eV tolerance
+  double tolerance = 1.0e-8; // 0.01 eV tolerance
 
   if (!grid.empty()) {
     uniqueGrid.push_back(grid[0]);
@@ -348,40 +289,32 @@ double AdaptiveIntegrationGrid::CalculateAdaptiveStep(double energy, const std::
     return config_.baseEnergyStep;
   }
 
-  // Determine the resonant region extent for this particular resonance
-  double resonantRegionWidth = nearestRes->totalWidth * config_.resonanceWidthMultiplier;
+  // Fine step at resonance center
+  double fineStep = nearestRes->totalWidth / config_.pointsPerWidth;
 
-  double stepSize;
+  // Use Gaussian-like falloff for smooth transition
+  // The step size increases smoothly from fineStep at the resonance center
+  // to baseEnergyStep far from the resonance
+  //
+  // We use: stepSize = fineStep + (baseStep - fineStep) * (1 - exp(-distance²/(2*sigma²)))
+  // where sigma = resonanceWidth * multiplier / 2
+  // This gives a smooth, continuous transition with no discontinuities
 
-  // Debug output
-  //std::cout << "DEBUG: Energy = " << energy << " MeV,"
-  //          << " Nearest Resonance = " << nearestRes->energy << " MeV,"
-  //          << " Distance = " << distance << " MeV,"
-  //          << " Resonant Region Width = " << resonantRegionWidth << " MeV" << std::endl;
+  double sigma = nearestRes->totalWidth * config_.resonanceWidthMultiplier / 2.0;
 
+  // Gaussian falloff factor: 1 at center, approaches 0 far away
+  double gaussianFactor = std::exp(-distance * distance / (2.0 * sigma * sigma));
 
-  if (distance <= resonantRegionWidth) {
-    // Inside resonant region - step size based on resonance width
-    // Fine step = Γ / pointsPerWidth
-    double fineStep = nearestRes->totalWidth / config_.pointsPerWidth;
+  // Step size: fine at center, coarse far away
+  double stepSize = fineStep * gaussianFactor + config_.baseEnergyStep * (1.0 - gaussianFactor);
 
-    // Smooth transition from fine step at resonance center to base step at edge
-    // blendFactor = 0 at resonance center, = 1 at edge of resonant region
-    double blendFactor = distance / resonantRegionWidth;
+  // For very narrow resonances, ensure we don't go below a reasonable limit
+  if (stepSize < 1.0e-5) {
+    stepSize = 1.0e-5; // 0.01 keV absolute minimum
+  }
 
-    // Cubic interpolation for smoother transition
-    double smoothBlend = blendFactor * blendFactor * (3.0 - 2.0 * blendFactor);
-
-    stepSize = fineStep + (config_.baseEnergyStep - fineStep) * smoothBlend;
-
-    // For very narrow resonances, ensure we don't go below a reasonable limit
-    // (avoid numerical issues with extremely small steps)
-    if (stepSize < 1.0e-5) {
-      stepSize = 1.0e-5; // 0.01 keV absolute minimum
-    }
-
-  } else {
-    // Outside resonant regions - use base step
+  // Also cap at baseEnergyStep to avoid overly large steps
+  if (stepSize > config_.baseEnergyStep) {
     stepSize = config_.baseEnergyStep;
   }
 

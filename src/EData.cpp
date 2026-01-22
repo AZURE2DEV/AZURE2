@@ -524,6 +524,15 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
             else {
               backwardDepth=targetThickness;
               forwardDepth=0.0;
+              // Add straggling range extension for target integration only
+              if(targetEffect->IsStraggling()) {
+                double targetThickness_keV = targetThickness * 1000.0;
+                double stragglingCoeff = targetEffect->GetStragglingCoefficient();
+                double stragglingSigma_keV = stragglingCoeff * std::sqrt(targetThickness_keV);
+                double stragglingSigma = stragglingSigma_keV / 1000.0;
+                double stragglingRange = targetEffect->convolutionRange * stragglingSigma;
+                backwardDepth += stragglingRange;
+              }
             }
 	        } 
     
@@ -567,25 +576,15 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
             }
           }
 
-          std::vector<double> energyGrid;
-          if(targetEffect->GetDensity()==1.0e24){
-            // Configure adaptive grid generator with width-aware parameters
-            AdaptiveIntegrationGrid::GridConfig gridConfig;
-            gridConfig.maxPoints = targetEffect->NumSubPoints();  // Budget for coarse grid
-            gridConfig.entranceKey = segment->GetEntranceKey();
-            gridConfig.baseEnergyStep = (startEnergy - endEnergy) / targetEffect->NumSubPoints();
-            gridConfig.resonanceWidthMultiplier = 5.0; // Integrate ±5Γ around resonances
-            gridConfig.pointsPerWidth = 20.0; // ~20 points per resonance width
+          // Configure adaptive grid generator with width-aware parameters
+          // All integration now uses Gaussian quadrature which handles non-uniform grids
+          AdaptiveIntegrationGrid::GridConfig gridConfig;
+          gridConfig.maxPoints = targetEffect->NumSubPoints();
+          gridConfig.entranceKey = segment->GetEntranceKey();
+          gridConfig.baseEnergyStep = (startEnergy - endEnergy) / targetEffect->NumSubPoints();
 
-            AdaptiveIntegrationGrid gridGenerator(gridConfig);
-            energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
-          } else {
-            // Make uniform grid based on target thickness and number of subpoints
-            double step = (startEnergy - endEnergy) / (targetEffect->NumSubPoints() - 1);
-            for(int i = 0; i < targetEffect->NumSubPoints(); i++) {
-              energyGrid.push_back(startEnergy - i * step);
-            }
-          }
+          AdaptiveIntegrationGrid gridGenerator(gridConfig);
+          std::vector<double> energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
 
           // Create sub-points using adaptive grid
           for(size_t i=0; i<energyGrid.size(); i++) {
@@ -641,9 +640,18 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
                 else {
                   backwardDepth=targetThickness;
                   forwardDepth=0.0;
+                  // Add straggling range extension for target integration only (component segments)
+                  if(targetEffect->IsStraggling()) {
+                    double targetThickness_keV = targetThickness * 1000.0;
+                    double stragglingCoeff = targetEffect->GetStragglingCoefficient();
+                    double stragglingSigma_keV = stragglingCoeff * std::sqrt(targetThickness_keV);
+                    double stragglingSigma = stragglingSigma_keV / 1000.0;
+                    double stragglingRange = targetEffect->convolutionRange * stragglingSigma;
+                    backwardDepth += stragglingRange;
+                  }
                 }
-              } 
-      
+              }
+
               else if(targetEffect->IsConvolution()||targetEffect->IsConvCoefficients()) {
                 if(targetEffect->IsConvCoefficients()){
                   backwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure);
@@ -685,24 +693,14 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
               }
 
               // Configure adaptive grid generator with width-aware parameters
-              std::vector<double> energyGrid;
-              if(targetEffect->GetDensity()==1.0e24){
-                AdaptiveIntegrationGrid::GridConfig gridConfig;
-                gridConfig.maxPoints = targetEffect->NumSubPoints();  // Budget for coarse grid
-                gridConfig.entranceKey = segment->GetEntranceKey();
-                gridConfig.baseEnergyStep = (startEnergy - endEnergy) / targetEffect->NumSubPoints();
-                gridConfig.resonanceWidthMultiplier = 5.0; // Integrate ±5Γ around resonances
-                gridConfig.pointsPerWidth = 20.0; // ~20 points per resonance width
+              // All integration now uses Gaussian quadrature which handles non-uniform grids
+              AdaptiveIntegrationGrid::GridConfig gridConfig;
+              gridConfig.maxPoints = targetEffect->NumSubPoints();
+              gridConfig.entranceKey = segment->GetEntranceKey();
+              gridConfig.baseEnergyStep = (startEnergy - endEnergy) / targetEffect->NumSubPoints();
 
-                AdaptiveIntegrationGrid gridGenerator(gridConfig);
-                energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
-              } else {
-                // Make uniform grid based on target thickness and number of subpoints
-                double step = (startEnergy - endEnergy) / (targetEffect->NumSubPoints() - 1);
-                for(int i = 0; i < targetEffect->NumSubPoints(); i++) {
-                  energyGrid.push_back(startEnergy - i * step);
-                }
-              }
+              AdaptiveIntegrationGrid gridGenerator(gridConfig);
+              std::vector<double> energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
 
               // Create sub-points using adaptive grid
               for(size_t i=0; i<energyGrid.size(); i++) {

@@ -35,9 +35,9 @@ public:
     // Default constructor with sensible defaults
     GridConfig()
       : maxPoints(1000),
-        baseEnergyStep(0.05),
-        resonanceWidthMultiplier(3.0),
-        pointsPerWidth(10.0),
+        baseEnergyStep(0.01),
+        resonanceWidthMultiplier(50.0),
+        pointsPerWidth(20.0),
         entranceKey(0) {}
   };
 
