@@ -562,7 +562,16 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
 
         if( this->IsDifferential() || this->IsCMDifferential()) {
           point->ClearLegendrePolynomials();
-          point->CalcLegendreP(configure->maxLOrder, theCNuc, NULL);
+          // Get TargetEffect with Q-coefficients if applicable
+          TargetEffect* effect = NULL;
+          EData* parentData = point->GetParentData();
+          if(parentData && this->IsTargetEffect()) {
+            TargetEffect* te = parentData->GetTargetEffect(this->GetTargetEffectNum());
+            if(te && te->IsQCoefficients()) {
+              effect = te;
+            }
+          }
+          point->CalcLegendreP(configure->maxLOrder, theCNuc, effect);
         }
         point->RecalcEDependentValues(theCNuc,*configure);
 
@@ -580,7 +589,9 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
             }
 
             // Set the shifted energy for subpoint
+            // Must set both CM and Lab energy since CalcLegendreP uses GetLabEnergy() for Q-coefficients
             subPoint->SetCMEnergy(subShiftedEnergy);
+            subPoint->SetLabEnergy(subShiftedEnergy);
 
             // Recalculate energy dependent values for subpoint
             if(entrancePair->GetPType()==20) {
@@ -613,7 +624,17 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
 
             if( this->IsDifferential() || this->IsCMDifferential()) {
               subPoint->ClearLegendrePolynomials();
-              subPoint->CalcLegendreP(configure->maxLOrder, theCNuc, NULL);
+              // Get TargetEffect with Q-coefficients if applicable
+              // Note: Use point->GetParentData() since subpoints don't have parentData_ set
+              TargetEffect* subEffect = NULL;
+              EData* parentData = point->GetParentData();
+              if(parentData && this->IsTargetEffect()) {
+                TargetEffect* te = parentData->GetTargetEffect(this->GetTargetEffectNum());
+                if(te && te->IsQCoefficients()) {
+                  subEffect = te;
+                }
+              }
+              subPoint->CalcLegendreP(configure->maxLOrder, theCNuc, subEffect);
             }
             subPoint->RecalcEDependentValues(theCNuc,*configure);
           }

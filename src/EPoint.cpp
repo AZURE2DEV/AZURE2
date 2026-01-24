@@ -544,8 +544,18 @@ EnergyMap EPoint::GetMap() const {
 
 void EPoint::Initialize(CNuc *compound,const Config &configure) {
   this->CalcEDependentValues(compound,configure);
-  if(this->IsDifferential()) 
-    this->CalcLegendreP(configure.maxLOrder,compound,NULL);
+  if(this->IsDifferential()) {
+    // Get TargetEffect with Q-coefficients if applicable
+    TargetEffect* effect = NULL;
+    EData* parentData = this->GetParentData();
+    if(parentData && this->IsTargetEffect()) {
+      TargetEffect* te = parentData->GetTargetEffect(this->GetTargetEffectNum());
+      if(te && te->IsQCoefficients()) {
+        effect = te;
+      }
+    }
+    this->CalcLegendreP(configure.maxLOrder,compound,effect);
+  }
   this->CalcCoulombAmplitude(compound);
   if(configure.paramMask & Config::USE_EXTERNAL_CAPTURE) this->CalculateECAmplitudes(compound,configure);
 }

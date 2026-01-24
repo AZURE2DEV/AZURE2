@@ -1579,9 +1579,17 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config& configure) {
   
   // CalcLegendreP for component segments
   for(auto& componentSegment : componentSegments_) {
+    // Get TargetEffect with Q-coefficients if applicable
+    TargetEffect* effect = NULL;
+    if(componentSegment.IsTargetEffect()) {
+      TargetEffect* te = this->GetTargetEffect(componentSegment.GetTargetEffectNum());
+      if(te && te->IsQCoefficients()) {
+        effect = te;
+      }
+    }
     for(int i = 1; i <= componentSegment.NumPoints(); i++) {
       EPoint* point = componentSegment.GetPoint(i);
-      point->CalcLegendreP(configure.maxLOrder, theCNuc, NULL);
+      point->CalcLegendreP(configure.maxLOrder, theCNuc, effect);
     }
   }
   
