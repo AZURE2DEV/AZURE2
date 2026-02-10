@@ -10,6 +10,9 @@
 #include <QSortFilterProxyModel>
 #include <QSignalMapper>
 #include <QPointer>
+#include <QFileDialog>
+#include <QClipboard>
+#include <QApplication>
 #include "PairsModel.h"
 #include "LevelsModel.h"
 #include "ChannelsModel.h"
@@ -48,6 +51,7 @@ class LevelsTab : public QWidget {
   void showInfo(int which=0,QString title="");
   void fixAllWidths();
   void fixAllEnergies();
+  void exportLatexTable();
 
  signals:
   void readNewPair(PairsData,int,bool);
@@ -64,6 +68,7 @@ class LevelsTab : public QWidget {
   QPushButton *iaeaQueryButton;
   QPushButton *fixAllWidthsButton;
   QPushButton *fixAllEnergiesButton;
+  QPushButton *exportLatexButton;
   PairsModel *pairsModel;
   LevelsModel *levelsModel;
   ChannelsModel *channelsModel;

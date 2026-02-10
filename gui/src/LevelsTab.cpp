@@ -1,5 +1,6 @@
 #include <QHeaderView>
 #include <QMessageBox>
+#include <QFile>
 
 #include "LevelsTab.h"
 #include "LevelsHeaderView.h"
@@ -7,7 +8,10 @@
 #include "IAEALevelDialog.h"
 #include "RichTextDelegate.h"
 #include "InfoDialog.h"
+#include "ElementMap.h"
 #include <iostream>
+#include <algorithm>
+#include <cmath>
 
 LevelsTab::LevelsTab(QWidget *parent) : QWidget(parent) {
   levelsModel=new LevelsModel(this);
@@ -111,6 +115,11 @@ LevelsTab::LevelsTab(QWidget *parent) : QWidget(parent) {
   fixAllEnergiesButton->setMaximumHeight(28);
   connect(fixAllEnergiesButton,SIGNAL(clicked()),this,SLOT(fixAllEnergies()));
 
+  exportLatexButton = new QPushButton(tr("Export LaTeX"));
+  exportLatexButton->setMaximumHeight(28);
+  exportLatexButton->setToolTip(tr("Export levels and widths to LaTeX table"));
+  connect(exportLatexButton,SIGNAL(clicked()),this,SLOT(exportLatexTable()));
+
   /*
   mapper = new QSignalMapper(this);
   connect(mapper,SIGNAL(mapped(int)),this,SLOT(showInfo(int)));
@@ -143,11 +152,15 @@ LevelsTab::LevelsTab(QWidget *parent) : QWidget(parent) {
   fixButtonBox->addWidget(fixAllWidthsButton,0,0);
   fixButtonBox->addItem(new QSpacerItem(10,28),0,1);
   fixButtonBox->addWidget(fixAllEnergiesButton,0,2);
-  fixButtonBox->addItem(new QSpacerItem(28,28),0,3);
+  fixButtonBox->addItem(new QSpacerItem(10,28),0,3);
+  fixButtonBox->addWidget(exportLatexButton,0,4);
+  fixButtonBox->addItem(new QSpacerItem(28,28),0,5);
   fixButtonBox->setColumnStretch(0,0);
   fixButtonBox->setColumnStretch(1,0);
   fixButtonBox->setColumnStretch(2,0);
-  fixButtonBox->setColumnStretch(3,1);
+  fixButtonBox->setColumnStretch(3,0);
+  fixButtonBox->setColumnStretch(4,0);
+  fixButtonBox->setColumnStretch(5,1);
 #ifdef MACX_SPACING
   fixButtonBox->setHorizontalSpacing(11);
 #else
@@ -959,6 +972,215 @@ void LevelsTab::addLevelsFromIAEA() {
     } else if (duplicateCount > 0) {
       QMessageBox::information(this, tr("No Levels Added"),
                               tr("All selected levels already exist."));
+    }
+  }
+}
+
+void LevelsTab::exportLatexTable() {
+  QList<LevelsData> levels = levelsModel->getLevels();
+  QList<ChannelsData> channels = channelsModel->getChannels();
+  QList<PairsData> pairs = pairsModel->getPairs();
+
+  if (levels.isEmpty()) {
+    QMessageBox::warning(this, tr("No Levels"),
+                        tr("There are no levels to export."));
+    return;
+  }
+
+  // Helper lambda to get LaTeX particle label (no HTML)
+  auto getLatexParticleLabel = [](const PairsData &pair, int which) -> QString {
+    if (which != -1) {
+      if (pair.pairType == 10 && which == 0) return "$\\gamma$";
+      else if (pair.pairType == 20 && which == 0) {
+        if (pair.lightZ < 0) return "$\\beta^-$";
+        else return "$\\beta^+$";
+      } else {
+        int tempZ = (which == 0) ? pair.lightZ : pair.heavyZ;
+        int tempM = (which == 0) ? (int)round(pair.lightM) : (int)round(pair.heavyM);
+        std::map<int, QString>::const_iterator it = elementMap.find(tempZ);
+        if (it != elementMap.end()) {
+          if (tempM == 1) {
+            if (tempZ == 1) return "$p$";
+            else return QString("$%1$").arg(it->second);
+          } else if (tempZ == 2 && tempM == 4) return "$\\alpha$";
+          else return QString("$^{%1}$%2").arg(tempM).arg(it->second);
+        } else return "?";
+      }
+    }
+    return "?";
+  };
+
+  // Helper lambda to format spin label for LaTeX
+  auto formatSpinLabel = [](double spin) -> QString {
+    if (spin == (int)spin) {
+      return QString::number((int)spin);
+    } else {
+      return QString("%1/2").arg((int)(spin * 2));
+    }
+  };
+
+  // Build unique channel types (pair+s+l+radType combinations)
+  struct ChannelType {
+    int pairIndex;
+    double sValue;
+    int lValue;
+    QChar radType;
+    bool operator==(const ChannelType &other) const {
+      return pairIndex == other.pairIndex && sValue == other.sValue &&
+             lValue == other.lValue && radType == other.radType;
+    }
+  };
+  QList<ChannelType> channelTypes;
+
+  for (const ChannelsData &ch : channels) {
+    ChannelType ct = {ch.pairIndex, ch.sValue, ch.lValue, ch.radType};
+    bool found = false;
+    for (const ChannelType &existing : channelTypes) {
+      if (existing == ct) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      channelTypes.append(ct);
+    }
+  }
+
+  // Sort levels by energy - create index mapping
+  QList<int> sortedIndices;
+  for (int i = 0; i < levels.size(); i++) {
+    sortedIndices.append(i);
+  }
+  std::sort(sortedIndices.begin(), sortedIndices.end(), [&levels](int a, int b) {
+    return levels.at(a).energy < levels.at(b).energy;
+  });
+
+  // Generate LaTeX
+  QString latex;
+  QTextStream out(&latex);
+
+  // Build column specification
+  QString colSpec = "c|c|";
+  for (int i = 0; i < channelTypes.size(); i++) {
+    colSpec += "c";
+  }
+
+  out << "\\begin{table}[htbp]\n";
+  out << "\\centering\n";
+  out << "\\caption{R-Matrix levels and reduced width amplitudes}\n";
+  out << "\\begin{tabular}{" << colSpec << "}\n";
+  out << "\\hline\\hline\n";
+
+  // First header row: J^pi, E (MeV), then channel names
+  out << "$J^\\pi$ & $E$ (MeV)";
+  for (const ChannelType &ct : channelTypes) {
+    QString channelLabel;
+    if (ct.radType == 'P') {
+      // Particle channel: show light+heavy particle
+      const PairsData &pair = pairs.at(ct.pairIndex);
+      QString lightLabel = getLatexParticleLabel(pair, 0);
+      QString heavyLabel = getLatexParticleLabel(pair, 1);
+      channelLabel = QString("%1+%2").arg(lightLabel).arg(heavyLabel);
+    } else if (ct.radType == 'E' || ct.radType == 'M') {
+      // Gamma channel: show multipolarity and final state
+      const PairsData &pair = pairs.at(ct.pairIndex);
+      QString heavyLabel = getLatexParticleLabel(pair, 1);
+      channelLabel = QString("$%1%2$ $\\to$ %3").arg(ct.radType).arg(ct.lValue).arg(heavyLabel);
+    } else if (ct.radType == 'G') {
+      channelLabel = "GT";
+    } else if (ct.radType == 'F') {
+      channelLabel = "Fermi";
+    } else {
+      channelLabel = QString("%1").arg(ct.radType);
+    }
+    out << " & " << channelLabel;
+  }
+  out << " \\\\\n";
+
+  // Second header row: empty for J^pi and E, then s,l or excitation energy
+  out << " & ";
+  for (const ChannelType &ct : channelTypes) {
+    QString subLabel;
+    if (ct.radType == 'P') {
+      // Particle channel: show s, l
+      subLabel = QString("$s=%1$, $\\ell=%2$").arg(formatSpinLabel(ct.sValue)).arg(ct.lValue);
+    } else if (ct.radType == 'E' || ct.radType == 'M') {
+      // Gamma channel: show excitation energy (final state)
+      const PairsData &pair = pairs.at(ct.pairIndex);
+      subLabel = QString("$E_x=%1$ MeV").arg(pair.excitationEnergy, 0, 'f', 3);
+    } else if (ct.radType == 'G' || ct.radType == 'F') {
+      const PairsData &pair = pairs.at(ct.pairIndex);
+      subLabel = QString("$E_x=%1$ MeV").arg(pair.excitationEnergy, 0, 'f', 3);
+    } else {
+      subLabel = "";
+    }
+    out << " & " << subLabel;
+  }
+  out << " \\\\\n";
+  out << "\\hline\n";
+
+  // Data rows: one per level, sorted by energy
+  for (int sortedIdx = 0; sortedIdx < sortedIndices.size(); sortedIdx++) {
+    int li = sortedIndices.at(sortedIdx);
+    const LevelsData &level = levels.at(li);
+
+    // Format J^pi
+    QString jLabel = formatSpinLabel(level.jValue);
+    QString piLabel = (level.piValue == -1) ? "-" : "+";
+
+    out << "$" << jLabel << "^{" << piLabel << "}$ & "
+        << QString::number(level.energy, 'f', 4);
+
+    // Find width for each channel type
+    for (const ChannelType &ct : channelTypes) {
+      QString widthStr = "---";
+      for (const ChannelsData &ch : channels) {
+        if (ch.levelIndex == li && ch.pairIndex == ct.pairIndex &&
+            ch.sValue == ct.sValue && ch.lValue == ct.lValue &&
+            ch.radType == ct.radType) {
+          widthStr = QString::number(ch.reducedWidth, 'g', 5);
+          break;
+        }
+      }
+      out << " & " << widthStr;
+    }
+    out << " \\\\\n";
+  }
+
+  out << "\\hline\\hline\n";
+  out << "\\end{tabular}\n";
+  out << "\\end{table}\n";
+
+  // Ask user what to do with the LaTeX
+  QMessageBox msgBox(this);
+  msgBox.setWindowTitle(tr("Export LaTeX Table"));
+  msgBox.setText(tr("LaTeX table generated successfully."));
+  msgBox.setInformativeText(tr("Choose an action:"));
+  QPushButton *copyButton = msgBox.addButton(tr("Copy to Clipboard"), QMessageBox::ActionRole);
+  QPushButton *saveButton = msgBox.addButton(tr("Save to File"), QMessageBox::ActionRole);
+  msgBox.addButton(QMessageBox::Cancel);
+  msgBox.exec();
+
+  if (msgBox.clickedButton() == copyButton) {
+    QApplication::clipboard()->setText(latex);
+    QMessageBox::information(this, tr("Copied"),
+                            tr("LaTeX table copied to clipboard."));
+  } else if (msgBox.clickedButton() == saveButton) {
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Save LaTeX Table"),
+                                                    "levels_table.tex",
+                                                    tr("LaTeX files (*.tex);;All files (*)"));
+    if (!fileName.isEmpty()) {
+      QFile file(fileName);
+      if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream fileOut(&file);
+        fileOut << latex;
+        file.close();
+        QMessageBox::information(this, tr("Saved"),
+                                tr("LaTeX table saved to %1").arg(fileName));
+      } else {
+        QMessageBox::warning(this, tr("Error"),
+                            tr("Could not save file: %1").arg(file.errorString()));
+      }
     }
   }
 }
