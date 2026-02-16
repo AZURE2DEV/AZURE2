@@ -3,12 +3,6 @@ name: Deploy Documentation
 on:
   push:
     branches: [fft]
-    paths:
-      - 'docs/**'
-  pull_request:
-    branches: [qt5]
-    paths:
-      - 'docs/**'
   workflow_dispatch:
 
 permissions:
