@@ -1,8 +1,12 @@
 #ifndef COULFUNC_H
 #define COULFUNC_H
 
+#include <memory>
+#include <gsl/gsl_sf_coulomb.h>
+
 class PPair;
 class CoulFuncCache;
+class NuclearPotential;
 
 ///The return structure of the CoulFunc function class.
 
@@ -44,8 +48,22 @@ class CoulFunc {
   CoulWaves operator()(int,double,double);
   double Penetrability(int,double,double);
   double PEShift(int,double,double);
-  double PEShift_dE(int,double,double);;
+  double PEShift_dE(int,double,double);
+
+  // Hybrid method support
+  void setNuclearPotential(std::shared_ptr<NuclearPotential> potential);
+  std::shared_ptr<NuclearPotential> getNuclearPotential() const;
+  void setMatchingRadius(double r_match);
+  double getMatchingRadius() const;
+  void setNumerovGridStep(double dr);
+  double getNumerovGridStep() const;
+  void setUseHybridMethod(bool useHybrid);
+  bool getUseHybridMethod() const;
+
  private:
+  // Hybrid method calculation
+  CoulWaves computeHybrid(int l, double radius, double energy);
+
   static double thisPEShift(double,void*);
   typedef struct DEShiftParams {
     CoulFunc *coulFunc;
@@ -54,6 +72,7 @@ class CoulFunc {
   } DEShiftParams;
   DEShiftParams dEShiftParams_;
   bool useGSLFunctions_;
+  bool useHybridMethod_;
   int z1_;
   int z2_;
   int lLast_;
@@ -61,6 +80,11 @@ class CoulFunc {
   double radiusLast_;
   double energyLast_;
   struct CoulWaves coulLast_;
+
+  // Hybrid method parameters
+  std::shared_ptr<NuclearPotential> nuclearPotential_;
+  double rMatch_;      // Matching radius for boundary conditions
+  double drNumerov_;   // Numerov grid step
 };
 
 #endif

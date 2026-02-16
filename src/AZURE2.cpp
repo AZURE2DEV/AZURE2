@@ -32,6 +32,9 @@
 #endif
 #include <string.h>
 
+// Global Config pointer for use across the codebase
+Config* g_config = nullptr;
+
 #ifdef GUI_BUILD
 extern int start_gui(int argc, char *argv[]);
 #endif
@@ -1251,6 +1254,7 @@ int main(int argc,char *argv[]){
 
   //Create new configuration structure, and parse the command line parameters
   Config configure(std::cout);
+  g_config = &configure; // Set global Config pointer for use across codebase
   bool useReadline = parseOptions(argc,argv,configure);
 
   //Read the parameters from the runtime configuration file

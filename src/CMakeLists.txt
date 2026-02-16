@@ -7,7 +7,7 @@ RMatrixFunc.cpp AZUREOutput.cpp  EDataIterator.cpp   TargetEffect.cpp
 AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp Equation.cpp
 JGroup.cpp Config.cpp ESegment.cpp KGroup.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp Straggling.cpp
-AdaptiveIntegrationGrid.cpp)
+AdaptiveIntegrationGrid.cpp NuclearPotentialManager.cpp)
 
 # Add API stub when API is not enabled
 if(NOT USE_API)

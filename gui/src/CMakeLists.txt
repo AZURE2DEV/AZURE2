@@ -68,7 +68,7 @@ set(AZURESETUP_SOURCES
     LevelsModel.cpp SegmentsTestModel.cpp ChannelDetails.cpp LevelsTab.cpp
     TargetIntModel.cpp ChannelsModel.cpp main.cpp TargetIntTab.cpp FittingTab.cpp
     AboutAZURE2Dialog.cpp InfoDialog.cpp InTabDocs.cpp
-    IAEALevelData.cpp IAEALevelDialog.cpp
+    IAEALevelData.cpp IAEALevelDialog.cpp NuclearPotentialTab.cpp
 )
 
 set(AZURESETUP_HEADERS
@@ -82,7 +82,7 @@ set(AZURESETUP_HEADERS
     ../include/SegmentsDataModel.h ../include/SegmentsTab.h ../include/SegmentsTestModel.h
     ../include/TargetIntModel.h ../include/TargetIntTab.h ../include/FittingTab.h
     ../include/TextEditBuffer.h ../include/AboutAZURE2Dialog.h ../include/InfoDialog.h
-    ../include/IAEALevelData.h ../include/IAEALevelDialog.h
+    ../include/IAEALevelData.h ../include/IAEALevelDialog.h ../include/NuclearPotentialTab.h
 )
 
 set(AZURESETUP_RCCS AZURESetup.qrc)

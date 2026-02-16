@@ -59,7 +59,8 @@ class Config {
     USE_API                   =(1<<14),
     PERFORM_MCMC              =(1<<15),
     USE_WIGNER_LIMITS         =(1<<16),
-    USE_NLOPT_MINIMIZER       =(1<<17)
+    USE_NLOPT_MINIMIZER       =(1<<17),
+    USE_HYBRID_COULOMB        =(1<<18)
   };
   /*!
    * Bit flags for check file control in AZURE2.
@@ -100,6 +101,8 @@ class Config {
   RateParams  rateParams;
   ///NLopt algorithm selection (0=SBPLX, 1=COBYLA, 2=BOBYQA, 3=NEWUOA, 4=PRAXIS, 5=Nelder-Mead)
   int nloptAlgorithm;
+  ///Use hybrid Coulomb method with nuclear potential
+  bool useHybridMethod;
   ///A constant indicating the maximum order of the Legendre polynomials to calculate.
   static const int maxLOrder=20;
   int ReadConfigFile();
@@ -107,5 +110,8 @@ class Config {
   int CheckForInputFiles();
 #endif
 };
+
+// Global Config instance pointer for use across the codebase
+extern Config* g_config;
 
 #endif

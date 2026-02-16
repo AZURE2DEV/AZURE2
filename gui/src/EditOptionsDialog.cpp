@@ -13,6 +13,7 @@ EditOptionsDialog::EditOptionsDialog(QWidget* parent) : QDialog(parent) {
   useRMCCheck = new QCheckBox(tr("Use RMC capture formalism\n(neutron capture only)"));
   noTransformCheck = new QCheckBox(tr("Do not perform parameter\ntransformations"));
   useWignerLimitsCheck = new QCheckBox(tr("Use Wigner Limits for\nparameter limits"));
+  useHybridMethodCheck = new QCheckBox(tr("Use Hybrid Coulomb method\n(with nuclear potential)"));
   // noLongWavelengthCheck = new QCheckBox(tr("Do not use long wavelength\n"
   //					   "approximation for EL external capture"));
 
@@ -27,6 +28,7 @@ EditOptionsDialog::EditOptionsDialog(QWidget* parent) : QDialog(parent) {
   optionsLayout->addWidget(useRMCCheck);
   optionsLayout->addWidget(noTransformCheck);
   optionsLayout->addWidget(useWignerLimitsCheck);
+  optionsLayout->addWidget(useHybridMethodCheck);
   //optionsLayout->addWidget(noLongWavelengthCheck);
   optionsBox->setLayout(optionsLayout);
 
