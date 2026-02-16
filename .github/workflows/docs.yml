@@ -2,7 +2,7 @@ name: Deploy Documentation
 
 on:
   push:
-    branches: [qt5, api]
+    branches: [fft]
     paths:
       - 'docs/**'
   pull_request:
