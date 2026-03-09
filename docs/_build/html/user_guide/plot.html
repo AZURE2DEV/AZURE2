@@ -1,0 +1,431 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plot Tab &mdash; AZURE2 Documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=969e2abc" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=60dbed4a"></script>
+      <script src="../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="MCMC Tab" href="mcmc.html" />
+    <link rel="prev" title="Calculate Tab" href="calculate.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            AZURE2
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started/installation.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/installation.html#dependencies">Dependencies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/installation.html#building-from-source">Building from Source</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../getting_started/installation.html#cmake-options">CMake Options</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/installation.html#docker">Docker</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started/overview.html">Overview</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/overview.html#gui-organization">GUI Organization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/overview.html#menus">Menus</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/overview.html#project-files">Project Files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/overview.html#workflow-summary">Workflow Summary</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="file_menu.html">File Menu</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configure_menu.html">Configure Menu</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="configure_menu.html#formalism">Formalism</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configure_menu.html#check-files">Check Files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configure_menu.html#directories">Directories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configure_menu.html#runtime-options">Runtime Options</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="particle_pairs.html">Particle Pairs Tab</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="particle_pairs.html#managing-particle-pairs">Managing Particle Pairs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="particle_pairs.html#particle-pair-types">Particle Pair Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="particle_pairs.html#add-particle-pair-dialog">Add Particle Pair Dialog</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="particle_pairs.html#particle-properties">Particle Properties</a></li>
+<li class="toctree-l3"><a class="reference internal" href="particle_pairs.html#pair-properties">Pair Properties</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="levels_channels.html">Levels and Channels Tab</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="levels_channels.html#tab-layout">Tab Layout</a></li>
+<li class="toctree-l2"><a class="reference internal" href="levels_channels.html#managing-levels">Managing Levels</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="levels_channels.html#adding-a-level">Adding a Level</a></li>
+<li class="toctree-l3"><a class="reference internal" href="levels_channels.html#importing-levels-from-iaea-database">Importing Levels from IAEA Database</a></li>
+<li class="toctree-l3"><a class="reference internal" href="levels_channels.html#editing-a-level">Editing a Level</a></li>
+<li class="toctree-l3"><a class="reference internal" href="levels_channels.html#level-controls">Level Controls</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="levels_channels.html#channels">Channels</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="levels_channels.html#width-parameters">Width Parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="levels_channels.html#channel-configuration">Channel Configuration</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="levels_channels.html#dummy-levels">Dummy Levels</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="levels_channels.html#gamma-ray-calculations">Gamma-Ray Calculations</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="segments.html">Segments Tab</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="segments.html#segments-from-data">Segments From Data</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="segments.html#creating-a-data-segment">Creating a Data Segment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="segments.html#editing-and-managing-data-segments">Editing and Managing Data Segments</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="segments.html#segments-without-data">Segments Without Data</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="segments.html#creating-a-test-segment">Creating a Test Segment</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="experimental_effects.html">Experimental Effects Tab</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="experimental_effects.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="experimental_effects.html#managing-experimental-effects">Managing Experimental Effects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="experimental_effects.html#add-experimental-effect-dialog">Add Experimental Effect Dialog</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="experimental_effects.html#associated-segments">Associated Segments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="experimental_effects.html#integration-points">Integration Points</a></li>
+<li class="toctree-l3"><a class="reference internal" href="experimental_effects.html#gaussian-energy-convolution">Gaussian Energy Convolution</a></li>
+<li class="toctree-l3"><a class="reference internal" href="experimental_effects.html#target-integration">Target Integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="experimental_effects.html#straggling">Straggling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="experimental_effects.html#attenuation-coefficients-q-coefficients">Attenuation Coefficients (Q-Coefficients)</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="fitting.html">Fitting Tab</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="fitting.html#parameter-tables">Parameter Tables</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="fitting.html#level-parameters">Level Parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fitting.html#normalization-parameters">Normalization Parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fitting.html#energy-shift-parameters">Energy Shift Parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="fitting.html#controls">Controls</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="calculate.html">Calculate Tab</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="calculate.html#calculation-types">Calculation Types</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="calculate.html#calculate-with-data">Calculate With Data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="calculate.html#fit-with-data">Fit With Data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="calculate.html#extrapolate-without-data">Extrapolate Without Data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="calculate.html#perform-minos-error-analysis">Perform MINOS Error Analysis</a></li>
+<li class="toctree-l3"><a class="reference internal" href="calculate.html#calculate-reaction-rate">Calculate Reaction Rate</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="calculate.html#minimizer-selection">Minimizer Selection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="calculate.html#parameter-and-integral-files">Parameter and Integral Files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="calculate.html#execution-controls">Execution Controls</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Plot Tab</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#selecting-segments">Selecting Segments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#drawing-plots">Drawing Plots</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#axis-configuration">Axis Configuration</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#x-axis">X-Axis</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#y-axis">Y-Axis</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#interacting-with-plots">Interacting with Plots</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#exporting-and-printing">Exporting and Printing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mcmc.html">MCMC Tab</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mcmc.html#parameters">Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mcmc.html#sampling-settings">Sampling Settings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mcmc.html#running-mcmc">Running MCMC</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mcmc.html#results">Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mcmc.html#output">Output</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../reference/data_formats.html">Data Formats</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/data_formats.html#input-data-files">Input Data Files</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/data_formats.html#notes-on-data-files">Notes on Data Files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/data_formats.html#phase-shift-data">Phase Shift Data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/data_formats.html#temperature-files">Temperature Files</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/data_formats.html#project-files-azr">Project Files (.azr)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../reference/output_files.html">Output Files</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/output_files.html#parameter-files">Parameter Files</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#param-par">param.par</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#param-sav">param.sav</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#parameters-out">parameters.out</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#normalizations-out">normalizations.out</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/output_files.html#cross-section-output">Cross Section Output</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#azureout-aa-r-out">AZUREOut_aa=*_R=*.out</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#azureout-aa-r-extrap">AZUREOut_aa=*_R=*.extrap</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/output_files.html#uncertainty-and-statistics">Uncertainty and Statistics</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#chisquared-out">chiSquared.out</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#param-errors">param.errors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#covariance-matrix-out">covariance_matrix.out</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/output_files.html#other-files">Other Files</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#intec-dat">intEC.dat</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#intec-extrap">intEC.extrap</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#reactionrates-dat">reactionrates.dat</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#samples-mcmc">samples.mcmc</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../reference/command_line.html">Command-Line Usage</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command_line.html#launching-the-gui">Launching the GUI</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command_line.html#command-line-mode">Command-Line Mode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command_line.html#available-options">Available Options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command_line.html#examples">Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../reference/troubleshooting.html">Troubleshooting</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/troubleshooting.html#common-issues">Common Issues</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/troubleshooting.html#kinematic-limits">Kinematic Limits</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/troubleshooting.html#threshold-effects">Threshold Effects</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/troubleshooting.html#unconstrained-parameters">Unconstrained Parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/troubleshooting.html#minos-crashes">MINOS Crashes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/troubleshooting.html#reaction-rate-integration-failures">Reaction Rate Integration Failures</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/troubleshooting.html#hanging-calculations">Hanging Calculations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/troubleshooting.html#missing-channels">Missing Channels</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/troubleshooting.html#getting-help">Getting Help</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../developer/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../developer/level_matrix.html">Level Matrix Construction and Inversion</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../developer/level_matrix.html#class-hierarchy">Class Hierarchy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer/level_matrix.html#computation-pipeline">Computation Pipeline</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer/level_matrix.html#a-matrix-formalism">A-Matrix Formalism</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../developer/level_matrix.html#matrix-construction-amatrixfunc-fillmatrices">Matrix Construction: <code class="docutils literal notranslate"><span class="pre">AMatrixFunc::FillMatrices()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../developer/level_matrix.html#matrix-inversion-matrixinv">Matrix Inversion: <code class="docutils literal notranslate"><span class="pre">MatrixInv</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../developer/level_matrix.html#t-matrix-calculation-amatrixfunc-calculatetmatrix">T-Matrix Calculation: <code class="docutils literal notranslate"><span class="pre">AMatrixFunc::CalculateTMatrix()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../developer/level_matrix.html#r-matrix-formalism">R-Matrix Formalism</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer/level_matrix.html#cross-section-calculation">Cross Section Calculation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer/level_matrix.html#type-definitions">Type Definitions</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../developer/edata_and_target_effects.html">EData, Data Points, and Target Effects</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../developer/edata_and_target_effects.html#data-structure-overview">Data Structure Overview</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer/edata_and_target_effects.html#data-loading-and-initialization">Data Loading and Initialization</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../developer/edata_and_target_effects.html#edata-fill">EData::Fill()</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../developer/edata_and_target_effects.html#sub-point-creation">Sub-Point Creation</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../developer/edata_and_target_effects.html#energy-range-determination">Energy Range Determination</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../developer/edata_and_target_effects.html#adaptive-grid-generation">Adaptive Grid Generation</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../developer/edata_and_target_effects.html#calculation-flow-for-target-effects">Calculation Flow for Target Effects</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer/edata_and_target_effects.html#integration-methods">Integration Methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../developer/edata_and_target_effects.html#convolution-only">Convolution Only</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../developer/edata_and_target_effects.html#target-integration-only">Target Integration Only</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../developer/edata_and_target_effects.html#target-integration-convolution">Target Integration + Convolution</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../developer/edata_and_target_effects.html#target-integration-straggling-no-beam-convolution">Target Integration + Straggling (no beam convolution)</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../developer/edata_and_target_effects.html#key-helper-functions">Key Helper Functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer/edata_and_target_effects.html#summary-data-flow-diagram">Summary: Data Flow Diagram</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../developer/architecture.html">Code Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer/physics_core.html">Physics Core</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer/gui_structure.html">GUI Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer/api.html">API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer/contributing.html">Contributing</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">AZURE2</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content style-external-links">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Plot Tab</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/user_guide/plot.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="plot-tab">
+<h1>Plot Tab<a class="headerlink" href="#plot-tab" title="Link to this heading"></a></h1>
+<p>The <strong>Plot</strong> tab provides a built-in plotting utility for visualizing cross
+sections, S-factors, and calculation results. This tab requires the QWT library
+to be enabled at compile time (<code class="docutils literal notranslate"><span class="pre">-DUSE_QWT=ON</span></code>).</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The built-in plotter is intended as a quick visualization tool during
+analysis. For publication-quality figures, use the output files
+(<code class="docutils literal notranslate"><span class="pre">AZUREOut_aa=*_R=*.out</span></code> and <code class="docutils literal notranslate"><span class="pre">AZUREOut_aa=*_R=*.extrap</span></code>) with an
+external plotting program.</p>
+</div>
+<section id="selecting-segments">
+<h2>Selecting Segments<a class="headerlink" href="#selecting-segments" title="Link to this heading"></a></h2>
+<p>The tab displays two lists of segments, corresponding to the segments defined
+in the <strong>Segments</strong> tab:</p>
+<ul class="simple">
+<li><p><strong>Segments From Data</strong> – data-driven calculation segments.</p></li>
+<li><p><strong>Segments Without Data</strong> – pure calculation segments.</p></li>
+</ul>
+<p>Click a segment to select it (the background color changes). Click again to
+deselect. Multiple segments can be selected simultaneously.</p>
+</section>
+<section id="drawing-plots">
+<h2>Drawing Plots<a class="headerlink" href="#drawing-plots" title="Link to this heading"></a></h2>
+<p>After selecting one or more segments, click the <strong>Draw</strong> button in the
+lower-left corner to render the plot.</p>
+<ul class="simple">
+<li><p><strong>R-matrix calculations</strong> are shown as red lines.</p></li>
+<li><p><strong>Data points</strong> are shown in black with different marker shapes for different
+segments.</p></li>
+</ul>
+</section>
+<section id="axis-configuration">
+<h2>Axis Configuration<a class="headerlink" href="#axis-configuration" title="Link to this heading"></a></h2>
+<section id="x-axis">
+<h3>X-Axis<a class="headerlink" href="#x-axis" title="Link to this heading"></a></h3>
+<p>Choose the horizontal axis quantity:</p>
+<ul class="simple">
+<li><p><strong>CoM Energy</strong> – center-of-mass energy</p></li>
+<li><p><strong>Excitation Energy</strong> – excitation energy of the compound nucleus</p></li>
+<li><p><strong>CoM Angle</strong> – center-of-mass angle</p></li>
+</ul>
+</section>
+<section id="y-axis">
+<h3>Y-Axis<a class="headerlink" href="#y-axis" title="Link to this heading"></a></h3>
+<p>Choose the vertical axis quantity:</p>
+<ul class="simple">
+<li><p><strong>Cross Section</strong> – cross section (barns or barns/sr)</p></li>
+<li><p><strong>S-Factor</strong> – astrophysical S-factor (MeV b or MeV b/sr)</p></li>
+</ul>
+<p>Both axes have a <strong>Log</strong> checkbox to switch to logarithmic scale.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Plotting with <strong>Excitation Energy</strong> on the x-axis is very useful for
+comparing data from different entrance and exit particle channels, since
+all channels share the same excitation energy scale.</p>
+</div>
+</section>
+</section>
+<section id="interacting-with-plots">
+<h2>Interacting with Plots<a class="headerlink" href="#interacting-with-plots" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><strong>Zoom in</strong></dt><dd><p>Click and hold the left mouse button, then drag to highlight a region.</p>
+</dd>
+<dt><strong>Zoom out</strong></dt><dd><p>Right-click anywhere on the plot.</p>
+</dd>
+<dt><strong>Pan</strong></dt><dd><p>Hold the center mouse button and drag to shift the view.</p>
+</dd>
+</dl>
+<p>When first plotted, axes are automatically scaled to fit all data.</p>
+</section>
+<section id="exporting-and-printing">
+<h2>Exporting and Printing<a class="headerlink" href="#exporting-and-printing" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><strong>Export…</strong></dt><dd><p>Save the current plot to an image file. Most standard image formats are
+supported.</p>
+</dd>
+<dt><strong>Print…</strong></dt><dd><p>Send the current plot to a printer.</p>
+</dd>
+</dl>
+<p>Both export and print use the currently displayed view, so you can zoom in
+before exporting to customize the plotted area.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="calculate.html" class="btn btn-neutral float-left" title="Calculate Tab" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="mcmc.html" class="btn btn-neutral float-right" title="MCMC Tab" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2015-2026, E. Uberseder and R. J. deBoer.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

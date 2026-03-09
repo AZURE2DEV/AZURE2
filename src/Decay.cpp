@@ -51,6 +51,25 @@ int Decay::IsKGroup(KGroup a) {
 }
 
 /*!
+ * Overloaded version that also checks sp2 for UPOS KGroups.
+ */
+
+int Decay::IsKGroup(KGroup a, bool checkSp2) {
+  if(!checkSp2) return this->IsKGroup(a);
+  bool b=false;
+  int c=0;
+  while(!b&&c<this->NumKGroups())
+    {
+      if(a.GetS()==this->GetKGroup(c+1)->GetS()&&
+	 a.GetSp()==this->GetKGroup(c+1)->GetSp()&&
+	 a.GetSp2()==this->GetKGroup(c+1)->GetSp2()) b=true;
+	 c++;
+    }
+  if(b) return c;
+  else return 0;
+}
+
+/*!
  * Tests a specific \f$ k,L \f$ combination to determine if it exists in the KLGroup vector.
  * If the combination exists, the position of the combination in the vector is returned.  Otherwise, the function returns 0.
  */

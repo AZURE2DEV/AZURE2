@@ -67,6 +67,29 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   energyShiftErrorLabel = new QLabel(tr("Energy Shift Error [MeV]:"));
   varyEnergyShiftCheck = new QCheckBox(tr("Vary Energy Shift?"));
 
+  // UPOS (Unobserved Primary, Observed Secondary) widgets
+  uposCheck = new QCheckBox(tr("Unobserved Primary, Observed Secondary (UPOS)"));
+  connect(uposCheck, SIGNAL(stateChanged(int)), this, SLOT(uposChanged(int)));
+  secondaryLLabel = new QLabel(tr("Secondary Decay L:"));
+  secondaryLLabel->setVisible(false);
+  secondaryLSpin = new QSpinBox;
+  secondaryLSpin->setMinimum(0);
+  secondaryLSpin->setMaximum(10);
+  secondaryLSpin->setValue(1);
+  secondaryLSpin->setVisible(false);
+  finalJLabel = new QLabel(tr("Final State J (Ic):"));
+  finalJLabel->setVisible(false);
+  finalJText = new QLineEdit;
+  finalJText->setText("0.0");
+  finalJText->setVisible(false);
+  finalJText->setMaximumWidth(60);
+  deltaLabel = new QLabel(tr("Mixing Ratio (δ):"));
+  deltaLabel->setVisible(false);
+  deltaText = new QLineEdit;
+  deltaText->setText("0.0");
+  deltaText->setVisible(false);
+  deltaText->setMaximumWidth(60);
+
   advancedModeCheck = new QCheckBox(tr("Advanced Settings (Sum or Ratio of Components)"));
   connect(advancedModeCheck,SIGNAL(stateChanged(int)),this,SLOT(advancedModeChanged(int)));
 
@@ -189,7 +212,20 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   energyShiftErrorLayout->addWidget(energyShiftErrorText,0,2);
   lowerLayout->addLayout(energyShiftErrorLayout,3,2);
 
-  lowerLayout->addWidget(advancedModeCheck,4,0,1,3);
+  // UPOS row
+  lowerLayout->addWidget(uposCheck,4,0,1,3);
+  QGridLayout *uposParamLayout = new QGridLayout;
+  uposParamLayout->addItem(new QSpacerItem(1,5),0,0);
+  uposParamLayout->setColumnStretch(0,1);
+  uposParamLayout->addWidget(secondaryLLabel,0,1,Qt::AlignRight);
+  uposParamLayout->addWidget(secondaryLSpin,0,2);
+  uposParamLayout->addWidget(finalJLabel,0,3,Qt::AlignRight);
+  uposParamLayout->addWidget(finalJText,0,4);
+  uposParamLayout->addWidget(deltaLabel,0,5,Qt::AlignRight);
+  uposParamLayout->addWidget(deltaText,0,6);
+  lowerLayout->addLayout(uposParamLayout,5,0,1,3);
+
+  lowerLayout->addWidget(advancedModeCheck,6,0,1,3);
   
   QGridLayout *advancedLayout = new QGridLayout;
   advancedLayout->addWidget(new QLabel(tr("Operation:")),0,0);
@@ -216,7 +252,7 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   advancedLayout->addLayout(buttonLayout,5,2,1,2);
   advancedModeBox->setLayout(advancedLayout);
 
-  lowerLayout->addWidget(advancedModeBox,5,0,1,3);
+  lowerLayout->addWidget(advancedModeBox,7,0,1,3);
   
   valueLayout->addLayout(lowerLayout,2,0,1,2);
   valueBox->setLayout(valueLayout);
@@ -356,4 +392,15 @@ void AddSegDataDialog::removeComponent() {
   if(currentRow >= 0) {
     delete componentsList->takeItem(currentRow);
   }
+}
+
+void AddSegDataDialog::uposChanged(int state) {
+  bool visible = (state == Qt::Checked);
+  secondaryLLabel->setVisible(visible);
+  secondaryLSpin->setVisible(visible);
+  finalJLabel->setVisible(visible);
+  finalJText->setVisible(visible);
+  deltaLabel->setVisible(visible);
+  deltaText->setVisible(visible);
+  adjustSize();
 }

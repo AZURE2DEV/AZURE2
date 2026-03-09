@@ -78,6 +78,7 @@ class GenMatrixFunc {
   TempTMatrix *GetTempTMatrixE2(int);
   complex GetTMatrixElement(int,int,int decayNum=1) const;
   complex GetECTMatrixElement(int,int) const;
+  double GetRk(double, double, double, double, int);
 
   /*!
    *This virtual function in implemented in the child class.

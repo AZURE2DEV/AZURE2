@@ -1,0 +1,27 @@
+/* Custom styles for AZURE2 documentation */
+
+.wy-nav-content {
+    max-width: 900px;
+}
+
+/* Style admonitions nicely */
+.admonition.tip .admonition-title,
+.admonition.hint .admonition-title {
+    background-color: #1abc9c;
+}
+
+/* Table styling */
+table.docutils td, table.docutils th {
+    padding: 8px 12px;
+}
+
+/* Code block styling */
+div.highlight pre {
+    padding: 12px;
+}
+
+/* Definition list styling */
+dl.simple dt {
+    font-weight: bold;
+    margin-top: 10px;
+}

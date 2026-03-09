@@ -15,15 +15,18 @@
 
 class Interference {
  public:
- Interference(int, int, double, std::string);
+  Interference(int, int, double, std::string);
+  Interference(int, int, double, double, std::string);
   std::string GetInterferenceType() const;
   int GetM1() const;
   int GetM2() const;
   double GetZ1Z2() const;
+  double GetZ1Z2_UPOS() const;
  private:
   int m1_;
   int m2_;
   double z1z2_;
+  double z1z2_upos_;
   std::string intertype_;
 };
 

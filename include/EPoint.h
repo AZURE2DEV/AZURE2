@@ -44,6 +44,7 @@ class EPoint {
   bool IsMapped() const;
   bool IsTargetEffect() const;
   bool IsAngularDist() const;
+  bool IsUPOS() const;
   int GetEntranceKey() const;
   int GetExitKey() const;
   int GetMaxLOrder() const;
@@ -53,6 +54,7 @@ class EPoint {
   int GetTargetEffectNum() const;
   int GetMaxAngDistOrder() const;
   int GetNumAngularDists() const;
+  int GetSecondaryDecayL() const;
   double GetLabAngle() const;
   double GetCMAngle() const;
   double GetLabEnergy() const;
@@ -76,6 +78,8 @@ class EPoint {
   double GetAngularDist(int) const;
   double GetAngleKinFactor() const;
   double GetCrossSectionKinFactor() const;
+  double GetIc() const;
+  double GetDelta() const;
   complex GetLoElement(int,int) const;
   complex GetExpCoulombPhase(int,int) const;
   complex GetExpHardSpherePhase(int,int) const;
@@ -176,6 +180,10 @@ class EPoint {
   double targetThickness_;
   double angleKinFactor_;
   double crossSectionKinFactor_;
+  bool isUPOS_;
+  int secondaryDecayL_;
+  double Ic_;
+  double delta_;
   struct EnergyMap energy_map_;
   complex coulombamplitude_;
   vector_r legendreP_;

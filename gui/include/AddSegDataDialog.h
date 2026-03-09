@@ -57,6 +57,15 @@ class AddSegDataDialog : public QDialog {
   QPushButton *addComponentButton;
   QPushButton *removeComponentButton;
 
+  // UPOS (Unobserved Primary, Observed Secondary) widgets
+  QCheckBox *uposCheck;
+  QLabel *secondaryLLabel;
+  QSpinBox *secondaryLSpin;
+  QLabel *finalJLabel;
+  QLineEdit *finalJText;
+  QLabel *deltaLabel;
+  QLineEdit *deltaText;
+
  public slots:
   void setChooseFile();
   void dataTypeChanged(int);
@@ -66,6 +75,7 @@ class AddSegDataDialog : public QDialog {
   void useFixedAngleChanged(int);
   void addComponent();
   void removeComponent();
+  void uposChanged(int);
   
  private:
   QPushButton *okButton;

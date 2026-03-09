@@ -50,9 +50,14 @@ ESegment::ESegment(SegLine segLine) {
   isAdvanced_=segLine.isAdvanced() == 1;
   operationType_=segLine.operationType();
   componentsList_=segLine.componentsList();
+  if(segLine.isUPOS()==1) isUPOS_=true;
+  else isUPOS_=false;
+  secondaryDecayL_=segLine.secondaryDecayL();
+  Ic_=segLine.Ic();
+  delta_=segLine.delta();
   targetEffectNum_=0;
   isTargetEffect_=false;
-  
+
   // Initialize advanced segment composition
   segmentOperationType_ = SUM;  // Default to SUM operation
   componentCalculationMutex_ = std::make_shared<std::mutex>();
@@ -109,6 +114,10 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   operationType_=extrapLine.operationType();
   componentsList_=extrapLine.componentsList();
 
+  isUPOS_=false;
+  secondaryDecayL_=0;
+  Ic_=0.0;
+  delta_=0.0;
   targetEffectNum_=0;
   isTargetEffect_=false;
 
@@ -180,6 +189,38 @@ int ESegment::IsTotalCapture() const {
 
 bool ESegment::IsAngularDist() const {
   return isAngDist_;
+}
+
+/*!
+ * Returns true if this segment is an Unobserved Primary, Observed Secondary (UPOS) segment.
+ */
+
+bool ESegment::IsUPOS() const {
+  return isUPOS_;
+}
+
+/*!
+ * Returns the angular momentum of the secondary decay for a UPOS segment.
+ */
+
+int ESegment::GetSecondaryDecayL() const {
+  return secondaryDecayL_;
+}
+
+/*!
+ * Returns the spin of the final state for a UPOS segment.
+ */
+
+double ESegment::GetIc() const {
+  return Ic_;
+}
+
+/*!
+ * Returns the multipole mixing ratio for a UPOS segment.
+ */
+
+double ESegment::GetDelta() const {
+  return delta_;
 }
 
 /*!

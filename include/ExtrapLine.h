@@ -27,6 +27,11 @@ class ExtrapLine {
     isAdvanced_ = 0;
     operationType_ = 0;
     componentsList_ = "";
+    // Initialize UPOS parameters to defaults
+    isUPOS_ = 0;
+    secondaryDecayL_ = 0;
+    Ic_ = 0.0;
+    delta_ = 0.0;
 
     // Try to read advanced segment data from the remaining line
     std::string dummyString;
@@ -141,6 +146,22 @@ class ExtrapLine {
    * Returns the semicolon-separated list of components.
    */
   std::string componentsList() const {return componentsList_;};
+  /*!
+   * Returns flag for if this segment is an unobserved primary transition (1 = is, 0 = not).
+   */
+  int isUPOS() const {return isUPOS_;};
+  /*!
+   * Returns the angular momentum of the decay for unobserved primary, observed secondary.
+   */
+  int secondaryDecayL() const {return secondaryDecayL_;};
+  /*!
+   * Returns the spin of the final state for unobserved primary, observed secondary.
+   */
+  double Ic() const {return Ic_;};
+  /*!
+   * Returns the multipole mixing ratio for unobserved primary, observed secondary.
+   */
+  double delta() const {return delta_;};
  private:
   int isActive_;
   int entranceKey_;
@@ -158,6 +179,10 @@ class ExtrapLine {
   int isAdvanced_;
   int operationType_;
   std::string componentsList_;
+  int isUPOS_;
+  int secondaryDecayL_;
+  double Ic_;
+  double delta_;
 };
 
 #endif

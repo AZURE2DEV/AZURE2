@@ -211,6 +211,10 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
     else if(index.column() == 17) return line.isAdvanced;
     else if(index.column() == 18) return line.operationType;
     else if(index.column() == 19) return line.componentsList;
+    else if(index.column() == 20) return line.isUPOS;
+    else if(index.column() == 21) return line.secondaryDecayL;
+    else if(index.column() == 22) return line.finalJ;
+    else if(index.column() == 23) return line.delta;
   } else if (role==Qt::CheckStateRole && index.column()==0) {
     SegmentsDataData line = segDataLineList.at(index.row());
     if(line.isActive==1) return Qt::Checked;
@@ -315,6 +319,10 @@ bool SegmentsDataModel::setData(const QModelIndex &index, const QVariant &value,
     else if(index.column() == 17) tempData.isAdvanced=value.toInt();
     else if(index.column() == 18) tempData.operationType=value.toInt();
     else if(index.column() == 19) tempData.componentsList=value.toString();
+    else if(index.column() == 20) tempData.isUPOS=value.toInt();
+    else if(index.column() == 21) tempData.secondaryDecayL=value.toInt();
+    else if(index.column() == 22) tempData.finalJ=value.toDouble();
+    else if(index.column() == 23) tempData.delta=value.toDouble();
     else return false;
 
     segDataLineList.replace(row,tempData);

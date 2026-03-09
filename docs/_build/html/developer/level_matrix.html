@@ -1,0 +1,529 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Level Matrix Construction and Inversion &mdash; AZURE2 Documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=969e2abc" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=60dbed4a"></script>
+      <script src="../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="EData, Data Points, and Target Effects" href="edata_and_target_effects.html" />
+    <link rel="prev" title="Developer Guide" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            AZURE2
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started/installation.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/installation.html#dependencies">Dependencies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/installation.html#building-from-source">Building from Source</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../getting_started/installation.html#cmake-options">CMake Options</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/installation.html#docker">Docker</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started/overview.html">Overview</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/overview.html#gui-organization">GUI Organization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/overview.html#menus">Menus</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/overview.html#project-files">Project Files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/overview.html#workflow-summary">Workflow Summary</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../user_guide/file_menu.html">File Menu</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../user_guide/configure_menu.html">Configure Menu</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/configure_menu.html#formalism">Formalism</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/configure_menu.html#check-files">Check Files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/configure_menu.html#directories">Directories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/configure_menu.html#runtime-options">Runtime Options</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../user_guide/particle_pairs.html">Particle Pairs Tab</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/particle_pairs.html#managing-particle-pairs">Managing Particle Pairs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/particle_pairs.html#particle-pair-types">Particle Pair Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/particle_pairs.html#add-particle-pair-dialog">Add Particle Pair Dialog</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/particle_pairs.html#particle-properties">Particle Properties</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/particle_pairs.html#pair-properties">Pair Properties</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../user_guide/levels_channels.html">Levels and Channels Tab</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/levels_channels.html#tab-layout">Tab Layout</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/levels_channels.html#managing-levels">Managing Levels</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/levels_channels.html#adding-a-level">Adding a Level</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/levels_channels.html#importing-levels-from-iaea-database">Importing Levels from IAEA Database</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/levels_channels.html#editing-a-level">Editing a Level</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/levels_channels.html#level-controls">Level Controls</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/levels_channels.html#channels">Channels</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/levels_channels.html#width-parameters">Width Parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/levels_channels.html#channel-configuration">Channel Configuration</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/levels_channels.html#dummy-levels">Dummy Levels</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/levels_channels.html#gamma-ray-calculations">Gamma-Ray Calculations</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../user_guide/segments.html">Segments Tab</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/segments.html#segments-from-data">Segments From Data</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/segments.html#creating-a-data-segment">Creating a Data Segment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/segments.html#editing-and-managing-data-segments">Editing and Managing Data Segments</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/segments.html#segments-without-data">Segments Without Data</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/segments.html#creating-a-test-segment">Creating a Test Segment</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../user_guide/experimental_effects.html">Experimental Effects Tab</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/experimental_effects.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/experimental_effects.html#managing-experimental-effects">Managing Experimental Effects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/experimental_effects.html#add-experimental-effect-dialog">Add Experimental Effect Dialog</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/experimental_effects.html#associated-segments">Associated Segments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/experimental_effects.html#integration-points">Integration Points</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/experimental_effects.html#gaussian-energy-convolution">Gaussian Energy Convolution</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/experimental_effects.html#target-integration">Target Integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/experimental_effects.html#straggling">Straggling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/experimental_effects.html#attenuation-coefficients-q-coefficients">Attenuation Coefficients (Q-Coefficients)</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../user_guide/fitting.html">Fitting Tab</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/fitting.html#parameter-tables">Parameter Tables</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/fitting.html#level-parameters">Level Parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/fitting.html#normalization-parameters">Normalization Parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/fitting.html#energy-shift-parameters">Energy Shift Parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/fitting.html#controls">Controls</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../user_guide/calculate.html">Calculate Tab</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/calculate.html#calculation-types">Calculation Types</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/calculate.html#calculate-with-data">Calculate With Data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/calculate.html#fit-with-data">Fit With Data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/calculate.html#extrapolate-without-data">Extrapolate Without Data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/calculate.html#perform-minos-error-analysis">Perform MINOS Error Analysis</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/calculate.html#calculate-reaction-rate">Calculate Reaction Rate</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/calculate.html#minimizer-selection">Minimizer Selection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/calculate.html#parameter-and-integral-files">Parameter and Integral Files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/calculate.html#execution-controls">Execution Controls</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../user_guide/plot.html">Plot Tab</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/plot.html#selecting-segments">Selecting Segments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/plot.html#drawing-plots">Drawing Plots</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/plot.html#axis-configuration">Axis Configuration</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/plot.html#x-axis">X-Axis</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_guide/plot.html#y-axis">Y-Axis</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/plot.html#interacting-with-plots">Interacting with Plots</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/plot.html#exporting-and-printing">Exporting and Printing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../user_guide/mcmc.html">MCMC Tab</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/mcmc.html#parameters">Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/mcmc.html#sampling-settings">Sampling Settings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/mcmc.html#running-mcmc">Running MCMC</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/mcmc.html#results">Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/mcmc.html#output">Output</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../reference/data_formats.html">Data Formats</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/data_formats.html#input-data-files">Input Data Files</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/data_formats.html#notes-on-data-files">Notes on Data Files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/data_formats.html#phase-shift-data">Phase Shift Data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/data_formats.html#temperature-files">Temperature Files</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/data_formats.html#project-files-azr">Project Files (.azr)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../reference/output_files.html">Output Files</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/output_files.html#parameter-files">Parameter Files</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#param-par">param.par</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#param-sav">param.sav</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#parameters-out">parameters.out</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#normalizations-out">normalizations.out</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/output_files.html#cross-section-output">Cross Section Output</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#azureout-aa-r-out">AZUREOut_aa=*_R=*.out</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#azureout-aa-r-extrap">AZUREOut_aa=*_R=*.extrap</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/output_files.html#uncertainty-and-statistics">Uncertainty and Statistics</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#chisquared-out">chiSquared.out</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#param-errors">param.errors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#covariance-matrix-out">covariance_matrix.out</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/output_files.html#other-files">Other Files</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#intec-dat">intEC.dat</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#intec-extrap">intEC.extrap</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#reactionrates-dat">reactionrates.dat</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/output_files.html#samples-mcmc">samples.mcmc</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../reference/command_line.html">Command-Line Usage</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command_line.html#launching-the-gui">Launching the GUI</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command_line.html#command-line-mode">Command-Line Mode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command_line.html#available-options">Available Options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command_line.html#examples">Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../reference/troubleshooting.html">Troubleshooting</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/troubleshooting.html#common-issues">Common Issues</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/troubleshooting.html#kinematic-limits">Kinematic Limits</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/troubleshooting.html#threshold-effects">Threshold Effects</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/troubleshooting.html#unconstrained-parameters">Unconstrained Parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/troubleshooting.html#minos-crashes">MINOS Crashes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/troubleshooting.html#reaction-rate-integration-failures">Reaction Rate Integration Failures</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/troubleshooting.html#hanging-calculations">Hanging Calculations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/troubleshooting.html#missing-channels">Missing Channels</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/troubleshooting.html#getting-help">Getting Help</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer Guide</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Developer Guide</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Level Matrix Construction and Inversion</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#class-hierarchy">Class Hierarchy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#computation-pipeline">Computation Pipeline</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#a-matrix-formalism">A-Matrix Formalism</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#matrix-construction-amatrixfunc-fillmatrices">Matrix Construction: <code class="docutils literal notranslate"><span class="pre">AMatrixFunc::FillMatrices()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#matrix-inversion-matrixinv">Matrix Inversion: <code class="docutils literal notranslate"><span class="pre">MatrixInv</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#t-matrix-calculation-amatrixfunc-calculatetmatrix">T-Matrix Calculation: <code class="docutils literal notranslate"><span class="pre">AMatrixFunc::CalculateTMatrix()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#r-matrix-formalism">R-Matrix Formalism</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cross-section-calculation">Cross Section Calculation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#type-definitions">Type Definitions</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="edata_and_target_effects.html">EData, Data Points, and Target Effects</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="edata_and_target_effects.html#data-structure-overview">Data Structure Overview</a></li>
+<li class="toctree-l3"><a class="reference internal" href="edata_and_target_effects.html#data-loading-and-initialization">Data Loading and Initialization</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="edata_and_target_effects.html#edata-fill">EData::Fill()</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="edata_and_target_effects.html#sub-point-creation">Sub-Point Creation</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="edata_and_target_effects.html#energy-range-determination">Energy Range Determination</a></li>
+<li class="toctree-l4"><a class="reference internal" href="edata_and_target_effects.html#adaptive-grid-generation">Adaptive Grid Generation</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="edata_and_target_effects.html#calculation-flow-for-target-effects">Calculation Flow for Target Effects</a></li>
+<li class="toctree-l3"><a class="reference internal" href="edata_and_target_effects.html#integration-methods">Integration Methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="edata_and_target_effects.html#convolution-only">Convolution Only</a></li>
+<li class="toctree-l4"><a class="reference internal" href="edata_and_target_effects.html#target-integration-only">Target Integration Only</a></li>
+<li class="toctree-l4"><a class="reference internal" href="edata_and_target_effects.html#target-integration-convolution">Target Integration + Convolution</a></li>
+<li class="toctree-l4"><a class="reference internal" href="edata_and_target_effects.html#target-integration-straggling-no-beam-convolution">Target Integration + Straggling (no beam convolution)</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="edata_and_target_effects.html#key-helper-functions">Key Helper Functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="edata_and_target_effects.html#summary-data-flow-diagram">Summary: Data Flow Diagram</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html">Code Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="physics_core.html">Physics Core</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gui_structure.html">GUI Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html">API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contributing.html">Contributing</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">AZURE2</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content style-external-links">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Developer Guide</a></li>
+      <li class="breadcrumb-item active">Level Matrix Construction and Inversion</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/developer/level_matrix.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="level-matrix-construction-and-inversion">
+<h1>Level Matrix Construction and Inversion<a class="headerlink" href="#level-matrix-construction-and-inversion" title="Link to this heading"></a></h1>
+<p>This page describes how AZURE2 constructs and inverts the level matrix
+(A-matrix) or channel matrix (R-matrix) to compute cross sections. The
+two formalisms are mathematically equivalent but differ in computational
+efficiency depending on the number of levels vs. channels.</p>
+<section id="class-hierarchy">
+<h2>Class Hierarchy<a class="headerlink" href="#class-hierarchy" title="Link to this heading"></a></h2>
+<p>The matrix calculation is organized through an inheritance hierarchy:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">GenMatrixFunc</span></code> (abstract base)</dt><dd><p>Defines the interface and implements the cross section calculation from
+T-matrix elements.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">AMatrixFunc</span></code> (level matrix formalism)</dt><dd><p>Works with the A-matrix, a level-by-level matrix. Preferred when the
+number of channels exceeds the number of levels.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">RMatrixFunc</span></code> (channel matrix formalism)</dt><dd><p>Works with the R-matrix, a channel-by-channel matrix. Preferred when the
+number of levels exceeds the number of channels.</p>
+</dd>
+</dl>
+<p><strong>Key files:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">include/GenMatrixFunc.h</span></code>, <code class="docutils literal notranslate"><span class="pre">src/GenMatrixFunc.cpp</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">include/AMatrixFunc.h</span></code>, <code class="docutils literal notranslate"><span class="pre">src/AMatrixFunc.cpp</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">include/RMatrixFunc.h</span></code>, <code class="docutils literal notranslate"><span class="pre">src/RMatrixFunc.cpp</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">include/MatrixInv.h</span></code>, <code class="docutils literal notranslate"><span class="pre">src/MatrixInv.cpp</span></code></p></li>
+</ul>
+</section>
+<section id="computation-pipeline">
+<h2>Computation Pipeline<a class="headerlink" href="#computation-pipeline" title="Link to this heading"></a></h2>
+<p>For every data point, the following sequence is executed:</p>
+<ol class="arabic simple">
+<li><p><strong>ClearMatrices()</strong> – allocate and zero the matrices for each <span class="math notranslate nohighlight">\(J^\pi\)</span> group.</p></li>
+<li><p><strong>FillMatrices(EPoint*)</strong> – compute the matrix elements from the R-matrix parameters.</p></li>
+<li><p><strong>InvertMatrices()</strong> – invert the matrix using LU decomposition.</p></li>
+<li><p><strong>CalculateTMatrix(EPoint*)</strong> – compute the T-matrix (transition matrix) from the inverted matrix.</p></li>
+<li><p><strong>CalculateCrossSection(EPoint*)</strong> – compute the cross section from the T-matrix.</p></li>
+</ol>
+</section>
+<section id="a-matrix-formalism">
+<h2>A-Matrix Formalism<a class="headerlink" href="#a-matrix-formalism" title="Link to this heading"></a></h2>
+<section id="matrix-construction-amatrixfunc-fillmatrices">
+<h3>Matrix Construction: <code class="docutils literal notranslate"><span class="pre">AMatrixFunc::FillMatrices()</span></code><a class="headerlink" href="#matrix-construction-amatrixfunc-fillmatrices" title="Link to this heading"></a></h3>
+<p>The code constructs the <strong>inverse</strong> A-matrix (<span class="math notranslate nohighlight">\(A^{-1}\)</span>) directly, then
+inverts it in the next step. The matrix is indexed by level pairs
+<span class="math notranslate nohighlight">\((\lambda, \lambda')\)</span> within each <span class="math notranslate nohighlight">\(J^\pi\)</span> group.</p>
+<p>The input energy in the center-of-mass frame is:</p>
+<div class="math notranslate nohighlight">
+\[E_\text{in} = E_\text{CM} + E_\text{sep} + E_\text{exc}\]</div>
+<p>where <span class="math notranslate nohighlight">\(E_\text{sep}\)</span> and <span class="math notranslate nohighlight">\(E_\text{exc}\)</span> are the separation and
+excitation energies of the entrance pair.</p>
+<p><strong>Standard R-matrix parameterization:</strong></p>
+<div class="math notranslate nohighlight">
+\[A^{-1}_{\lambda\lambda'} = (E_\lambda - E_\text{in})\,\delta_{\lambda\lambda'}
+- \sum_c \gamma_{\lambda c}\,\gamma_{\lambda' c}\,L_c\]</div>
+<p>where:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(E_\lambda\)</span> is the resonance energy of level <span class="math notranslate nohighlight">\(\lambda\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(\gamma_{\lambda c}\)</span> is the reduced width amplitude of level <span class="math notranslate nohighlight">\(\lambda\)</span> in channel <span class="math notranslate nohighlight">\(c\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(L_c = L_0(c)\)</span> is the shift function (Blatt-Biedenharn) evaluated at the data point energy</p></li>
+<li><p>The sum runs over all channels in the <span class="math notranslate nohighlight">\(J^\pi\)</span> group</p></li>
+</ul>
+<p><strong>Brune parameterization</strong> (<code class="docutils literal notranslate"><span class="pre">USE_BRUNE_FORMALISM</span></code>):</p>
+<p>When the Brune parameterization is enabled, additional terms modify the
+channel sum for penetrability-type channels (<code class="docutils literal notranslate"><span class="pre">radType</span> <span class="pre">==</span> <span class="pre">'P'</span></code>):</p>
+<div class="math notranslate nohighlight">
+\[A^{-1}_{\lambda\lambda'} = (E_\lambda - E_\text{in})\,\delta_{\lambda\lambda'}
+- \sum_c \gamma_{\lambda c}\,\gamma_{\lambda' c}
+\left[L_c + B_c - S_c(\lambda, \lambda')\right]\]</div>
+<p>where:</p>
+<ul>
+<li><p><span class="math notranslate nohighlight">\(B_c\)</span> is the boundary condition for channel <span class="math notranslate nohighlight">\(c\)</span></p></li>
+<li><p>For diagonal elements (<span class="math notranslate nohighlight">\(\lambda = \lambda'\)</span>):
+<span class="math notranslate nohighlight">\(S_c(\lambda, \lambda) = S_c^\lambda\)</span> (the shift function at level <span class="math notranslate nohighlight">\(\lambda\)</span>)</p></li>
+<li><p>For off-diagonal elements (<span class="math notranslate nohighlight">\(\lambda \neq \lambda'\)</span>):</p>
+<div class="math notranslate nohighlight">
+\[S_c(\lambda, \lambda') = \frac{S_c^\lambda (E_\text{in} - E_{\lambda'})
+- S_c^{\lambda'} (E_\text{in} - E_\lambda)}{E_\lambda - E_{\lambda'}}\]</div>
+</li>
+</ul>
+<p><strong>RMC formalism</strong> (<code class="docutils literal notranslate"><span class="pre">USE_RMC_FORMALISM</span></code>):</p>
+<p>For radiative channels (<code class="docutils literal notranslate"><span class="pre">radType</span> <span class="pre">==</span> <span class="pre">'M'</span></code> or <code class="docutils literal notranslate"><span class="pre">'E'</span></code>), an imaginary term is
+added to the diagonal elements:</p>
+<div class="math notranslate nohighlight">
+\[A^{-1}_{\lambda\lambda} \mathrel{+}= i\,\gamma_{\lambda c}^2\]</div>
+<p><strong>Implementation detail:</strong> Only active levels are stored in the matrix.
+An index map (<code class="docutils literal notranslate"><span class="pre">level_active_index_</span></code>) translates original level indices to
+compact, zero-based indices for dense matrix storage. Gamma values and shift
+functions are pre-cached in buffers to avoid repeated lookups. Channel
+contributions with <span class="math notranslate nohighlight">\(|\gamma| &lt; 10^{-12}\)</span> are skipped for efficiency.</p>
+</section>
+<section id="matrix-inversion-matrixinv">
+<h3>Matrix Inversion: <code class="docutils literal notranslate"><span class="pre">MatrixInv</span></code><a class="headerlink" href="#matrix-inversion-matrixinv" title="Link to this heading"></a></h3>
+<p>The matrix inversion is performed by the <code class="docutils literal notranslate"><span class="pre">MatrixInv</span></code> class using <strong>GSL
+complex LU decomposition</strong>:</p>
+<ol class="arabic simple">
+<li><p>The <span class="math notranslate nohighlight">\(A^{-1}\)</span> matrix (stored as <code class="docutils literal notranslate"><span class="pre">std::vector&lt;std::vector&lt;complex&gt;&gt;</span></code>)
+is copied into a <code class="docutils literal notranslate"><span class="pre">gsl_matrix_complex</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">gsl_linalg_complex_LU_decomp()</span></code> performs the LU factorization with
+partial pivoting.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">gsl_linalg_complex_LU_invert()</span></code> computes the inverse from the LU factors.</p></li>
+<li><p>The result is copied back into a <code class="docutils literal notranslate"><span class="pre">matrix_c</span></code> (<code class="docutils literal notranslate"><span class="pre">std::vector&lt;std::vector&lt;complex&gt;&gt;</span></code>).</p></li>
+</ol>
+<p>This is done independently for each <span class="math notranslate nohighlight">\(J^\pi\)</span> group. The inversion runs
+<strong>sequentially</strong> (not parallelized) to avoid race conditions on the shared
+matrix data structures. Move semantics are used to avoid copying the result
+matrices.</p>
+</section>
+<section id="t-matrix-calculation-amatrixfunc-calculatetmatrix">
+<h3>T-Matrix Calculation: <code class="docutils literal notranslate"><span class="pre">AMatrixFunc::CalculateTMatrix()</span></code><a class="headerlink" href="#t-matrix-calculation-amatrixfunc-calculatetmatrix" title="Link to this heading"></a></h3>
+<p>The collision matrix element <span class="math notranslate nohighlight">\(U\)</span> is computed from the A-matrix:</p>
+<div class="math notranslate nohighlight">
+\[U_{cc'} = 2i\,\sqrt{P_c}\,\sqrt{P_{c'}} \sum_{\lambda,\lambda'}
+\gamma_{\lambda c}\,\gamma_{\lambda' c'}\,A_{\lambda\lambda'}\]</div>
+<p>where <span class="math notranslate nohighlight">\(P_c\)</span> is the penetrability of channel <span class="math notranslate nohighlight">\(c\)</span>.</p>
+<p>The T-matrix is then:</p>
+<ul>
+<li><p><strong>Elastic scattering</strong> (<span class="math notranslate nohighlight">\(c = c'\)</span>):</p>
+<div class="math notranslate nohighlight">
+\[T_{cc} = e^{2i\omega_c} - e^{i\omega_c}\,e^{i\phi_c}\,(1 + U_{cc})\]</div>
+</li>
+<li><p><strong>Transfer reactions</strong> (<span class="math notranslate nohighlight">\(c \neq c'\)</span>):</p>
+<div class="math notranslate nohighlight">
+\[T_{cc'} = -e^{i\omega_c}\,e^{i\phi_{c'}}\,U_{cc'}\]</div>
+</li>
+</ul>
+<p>where <span class="math notranslate nohighlight">\(\omega_c = \sigma_l\)</span> is the Coulomb phase shift and
+<span class="math notranslate nohighlight">\(\phi_c\)</span> is the hard-sphere phase shift.</p>
+<p>Phase factors, penetrabilities, and Coulomb amplitudes are pre-computed and
+cached on the <code class="docutils literal notranslate"><span class="pre">EPoint</span></code> object.</p>
+</section>
+</section>
+<section id="r-matrix-formalism">
+<h2>R-Matrix Formalism<a class="headerlink" href="#r-matrix-formalism" title="Link to this heading"></a></h2>
+<p>The R-matrix formalism (<code class="docutils literal notranslate"><span class="pre">RMatrixFunc</span></code>) works with the channel matrix instead.</p>
+<p><strong>R-matrix construction:</strong></p>
+<div class="math notranslate nohighlight">
+\[R_{cc'} = \sum_\lambda \frac{\gamma_{\lambda c}\,\gamma_{\lambda c'}}
+{E_\lambda - E_\text{in}}\]</div>
+<p><strong>The [1 - RL] matrix</strong> is then constructed:</p>
+<div class="math notranslate nohighlight">
+\[[1 - RL]_{cc'} = \delta_{cc'} - i\,R_{cc'}\,P_{c'}\]</div>
+<p>This matrix is inverted using the same GSL LU decomposition, and then
+multiplied by the R-matrix to obtain <span class="math notranslate nohighlight">\([1-RL]^{-1}R\)</span>, which enters
+the T-matrix calculation.</p>
+<p>When the Brune formalism is enabled, an intermediate Q-matrix inversion is
+performed at the level stage before building the R-matrix from the result.</p>
+</section>
+<section id="cross-section-calculation">
+<h2>Cross Section Calculation<a class="headerlink" href="#cross-section-calculation" title="Link to this heading"></a></h2>
+<p>The cross section is computed in <code class="docutils literal notranslate"><span class="pre">GenMatrixFunc::CalculateCrossSection()</span></code>
+from the T-matrix elements. The calculation depends on the data type:</p>
+<p><strong>Angle-integrated cross section:</strong></p>
+<p>T-matrix elements from pathways with the same <span class="math notranslate nohighlight">\((J, l, l')\)</span> values are
+coherently summed (via the <code class="docutils literal notranslate"><span class="pre">TempTMatrix</span></code> structure), enabling interference
+between internal and external capture pathways:</p>
+<div class="math notranslate nohighlight">
+\[\sigma = \frac{1}{100} \sum_{J,l,l'} g\,(2J+1)\,I_{12}\,|T_{J,l,l'}|^2\]</div>
+<p>where <span class="math notranslate nohighlight">\(g\)</span> is the geometrical factor and <span class="math notranslate nohighlight">\(I_{12}\)</span> is the channel
+spin statistical factor.</p>
+<p><strong>Differential cross section (with Coulomb):</strong></p>
+<p>When the entrance and exit channels are the same particle pair, the full
+Coulomb + nuclear + interference cross section is computed:</p>
+<div class="math notranslate nohighlight">
+\[\frac{d\sigma}{d\Omega} = |f_C|^2 + |f_N|^2
++ \frac{i}{\sqrt{\pi}}\,g\,f_C^* \cdot T \cdot P_l(\cos\theta) + \text{c.c.}\]</div>
+</section>
+<section id="type-definitions">
+<h2>Type Definitions<a class="headerlink" href="#type-definitions" title="Link to this heading"></a></h2>
+<p>The matrix types used throughout the code are defined in <code class="docutils literal notranslate"><span class="pre">Constants.h</span></code>:</p>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="k">typedef</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">complex</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="w"> </span><span class="n">complex</span><span class="p">;</span>
+<span class="k">typedef</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">complex</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;&gt;&gt;</span><span class="w"> </span><span class="n">matrix_c</span><span class="p">;</span>
+<span class="k">typedef</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">complex</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;&gt;&gt;&gt;</span><span class="w"> </span><span class="n">vector_matrix_c</span><span class="p">;</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">matrix_c</span></code> – a 2D complex matrix (dense storage as nested vectors)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">vector_matrix_c</span></code> – a collection of matrices, one per <span class="math notranslate nohighlight">\(J^\pi\)</span> group</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="Developer Guide" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="edata_and_target_effects.html" class="btn btn-neutral float-right" title="EData, Data Points, and Target Effects" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2015-2026, E. Uberseder and R. J. deBoer.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

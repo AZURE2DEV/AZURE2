@@ -55,6 +55,10 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   max_ang_dist_order_=parent->GetMaxAngDistOrder();
   j_value_=parent->GetJ();
   l_value_=parent->GetL();
+  isUPOS_=parent->IsUPOS();
+  secondaryDecayL_=parent->GetSecondaryDecayL();
+  Ic_=parent->GetIc();
+  delta_=parent->GetDelta();
   is_mapped_=false;
   targetEffectNum_=0;
   parentData_=NULL;
@@ -62,7 +66,7 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   angleKinFactor_=1.0;
   crossSectionKinFactor_=1.0;
 }
- 
+
 /*!
  * This constructor is used if the data point is to be created with no experimental data.
  * A pointer to the parent segment is passed to the constructor for the intialization of
@@ -95,6 +99,10 @@ EPoint::EPoint(double angle, double energy, ESegment* parent) {
   max_ang_dist_order_=parent->GetMaxAngDistOrder();
   j_value_=parent->GetJ();
   l_value_=parent->GetL();
+  isUPOS_=parent->IsUPOS();
+  secondaryDecayL_=parent->GetSecondaryDecayL();
+  Ic_=parent->GetIc();
+  delta_=parent->GetDelta();
   is_mapped_=false;
   targetEffectNum_=0;
   parentData_=NULL;
@@ -102,7 +110,7 @@ EPoint::EPoint(double angle, double energy, ESegment* parent) {
   angleKinFactor_=1.0;
   crossSectionKinFactor_=1.0;
 }
-  
+
 /*!
  * This constructor is used if the data point is to be created with no experimental data
  * and no parent segment.  Such a point is used if AZURE is to be called as an energy-
@@ -136,11 +144,15 @@ EPoint::EPoint(double angle, double energy, int entranceKey,
   max_ang_dist_order_=maxAngDistOrder;
   j_value_=jValue;
   l_value_=lValue;
+  isUPOS_=false;
+  secondaryDecayL_=0;
+  Ic_=0.0;
+  delta_=0.0;
   is_mapped_=false;
   targetEffectNum_=0;
   parentData_=NULL;
   stoppingPower_=0.0;
-}    
+}
 
 /*!
  * Returns true if the point is differential cross section, otherwise returns false.
@@ -184,6 +196,38 @@ bool EPoint::IsMapped() const {
 bool EPoint::IsTargetEffect() const {
   if(GetTargetEffectNum()!=0) return true;
   else return false;
+}
+
+/*!
+ * Returns true if this is an Unobserved Primary, Observed Secondary (UPOS) point.
+ */
+
+bool EPoint::IsUPOS() const {
+  return isUPOS_;
+}
+
+/*!
+ * Returns the secondary decay angular momentum for a UPOS point.
+ */
+
+int EPoint::GetSecondaryDecayL() const {
+  return secondaryDecayL_;
+}
+
+/*!
+ * Returns the final state spin for a UPOS point.
+ */
+
+double EPoint::GetIc() const {
+  return Ic_;
+}
+
+/*!
+ * Returns the multipole mixing ratio for a UPOS point.
+ */
+
+double EPoint::GetDelta() const {
+  return delta_;
 }
 
 /*!

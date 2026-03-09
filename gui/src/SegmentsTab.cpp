@@ -275,6 +275,17 @@ void SegmentsTab::addSegDataLine() {
       newLine.operationType=0;
       newLine.componentsList="";
     }
+    if(aDialog.uposCheck->isChecked()) {
+      newLine.isUPOS=1;
+      newLine.secondaryDecayL=aDialog.secondaryLSpin->value();
+      newLine.finalJ=aDialog.finalJText->text().toDouble();
+      newLine.delta=aDialog.deltaText->text().toDouble();
+    } else {
+      newLine.isUPOS=0;
+      newLine.secondaryDecayL=0;
+      newLine.finalJ=0.0;
+      newLine.delta=0.0;
+    }
     addSegDataLine(newLine);
   }
 }
@@ -323,6 +334,14 @@ void SegmentsTab::addSegDataLine(SegmentsDataData line) {
     segmentsDataModel->setData(index,line.operationType,Qt::EditRole);
     index = segmentsDataModel->index(lines.size(),19,QModelIndex());
     segmentsDataModel->setData(index,line.componentsList,Qt::EditRole);
+    index = segmentsDataModel->index(lines.size(),20,QModelIndex());
+    segmentsDataModel->setData(index,line.isUPOS,Qt::EditRole);
+    index = segmentsDataModel->index(lines.size(),21,QModelIndex());
+    segmentsDataModel->setData(index,line.secondaryDecayL,Qt::EditRole);
+    index = segmentsDataModel->index(lines.size(),22,QModelIndex());
+    segmentsDataModel->setData(index,line.finalJ,Qt::EditRole);
+    index = segmentsDataModel->index(lines.size(),23,QModelIndex());
+    segmentsDataModel->setData(index,line.delta,Qt::EditRole);
     segmentsDataView->resizeRowToContents(lines.size());
     updateSegDataButtons(segmentsDataView->selectionModel()->selection());
   } else {
@@ -472,6 +491,18 @@ void SegmentsTab::editSegDataLine() {
   i=segmentsDataModel->index(index.row(),19,QModelIndex());
   var=segmentsDataModel->data(i,Qt::EditRole);
   QString componentsList=var.toString();
+  i=segmentsDataModel->index(index.row(),20,QModelIndex());
+  var=segmentsDataModel->data(i,Qt::EditRole);
+  int isUPOS=var.toInt();
+  i=segmentsDataModel->index(index.row(),21,QModelIndex());
+  var=segmentsDataModel->data(i,Qt::EditRole);
+  int secondaryDecayL=var.toInt();
+  i=segmentsDataModel->index(index.row(),22,QModelIndex());
+  var=segmentsDataModel->data(i,Qt::EditRole);
+  QString finalJ=var.toString();
+  i=segmentsDataModel->index(index.row(),23,QModelIndex());
+  var=segmentsDataModel->data(i,Qt::EditRole);
+  QString delta=var.toString();
 
   AddSegDataDialog aDialog;
   aDialog.setWindowTitle(tr("Edit a Segment From Data"));
@@ -506,6 +537,13 @@ void SegmentsTab::editSegDataLine() {
       aDialog.componentsList->addItem(component);
     }
   }
+
+  // Set UPOS data
+  if(isUPOS==1) aDialog.uposCheck->setChecked(true);
+  else aDialog.uposCheck->setChecked(false);
+  aDialog.secondaryLSpin->setValue(secondaryDecayL);
+  aDialog.finalJText->setText(finalJ);
+  aDialog.deltaText->setText(delta);
 
   if(aDialog.exec()) {
     int newEntrancePairIndex=aDialog.entrancePairIndexSpin->value();
@@ -614,6 +652,28 @@ void SegmentsTab::editSegDataLine() {
     if(newComponentsList!=componentsList) {
       i=segmentsDataModel->index(index.row(),19,QModelIndex());
       segmentsDataModel->setData(i,newComponentsList,Qt::EditRole);
+    }
+
+    int newIsUPOS=0;
+    if(aDialog.uposCheck->isChecked()) newIsUPOS=1;
+    if(newIsUPOS!=isUPOS) {
+      i=segmentsDataModel->index(index.row(),20,QModelIndex());
+      segmentsDataModel->setData(i,newIsUPOS,Qt::EditRole);
+    }
+    int newSecondaryDecayL=aDialog.secondaryLSpin->value();
+    if(newSecondaryDecayL!=secondaryDecayL) {
+      i=segmentsDataModel->index(index.row(),21,QModelIndex());
+      segmentsDataModel->setData(i,newSecondaryDecayL,Qt::EditRole);
+    }
+    QString newFinalJ=aDialog.finalJText->text();
+    if(newFinalJ!=finalJ) {
+      i=segmentsDataModel->index(index.row(),22,QModelIndex());
+      segmentsDataModel->setData(i,newFinalJ,Qt::EditRole);
+    }
+    QString newDelta=aDialog.deltaText->text();
+    if(newDelta!=delta) {
+      i=segmentsDataModel->index(index.row(),23,QModelIndex());
+      segmentsDataModel->setData(i,newDelta,Qt::EditRole);
     }
   }
 }
@@ -1065,7 +1125,13 @@ bool SegmentsTab::readSegDataFile(QTextStream& inStream) {
       int isAdvanced = 0;
       int operationType = 0;
       QString componentsList = "";
-      
+      // Initialize UPOS segment data to defaults
+      int isUPOS = 0;
+      int secondaryDecayL = 0;
+      double finalJ = 0.0;
+      double delta = 0.0;
+      int uposIdx = -1; // tracks where UPOS data starts in dataParts
+
       // Check if there's additional advanced segment data after the file path
       // The data is appended as: " isAdvanced operationType numComponents entrance1 exit1 entrance2 exit2 ..."
       QString remainingData = dataFile;
@@ -1129,6 +1195,7 @@ bool SegmentsTab::readSegDataFile(QTextStream& inStream) {
 
                   if(newFormatSuccess) {
                     componentsList = components.join(";");
+                    uposIdx = 4 + numComponents * 3;
                   }
                 }
                 // Fallback to old format (2 values per component: entrance, exit)
@@ -1148,15 +1215,33 @@ bool SegmentsTab::readSegDataFile(QTextStream& inStream) {
                     }
                   }
                   componentsList = components.join(";");
+                  uposIdx = 4 + numComponents * 2;
                 }
               }
             }
+          } else {
+            // Non-advanced: UPOS data starts right after the "0" flag
+            uposIdx = 2;
           }
         }
       }
-      
+
+      // Parse UPOS data if available
+      if(uposIdx >= 0 && dataParts.size() > uposIdx) {
+        bool ok;
+        int uposFlag = dataParts[uposIdx].toInt(&ok);
+        if(ok && uposFlag == 1) {
+          isUPOS = 1;
+          if(dataParts.size() >= uposIdx + 4) {
+            secondaryDecayL = dataParts[uposIdx+1].toInt(&ok);
+            if(ok) finalJ = dataParts[uposIdx+2].toDouble(&ok);
+            if(ok) delta = dataParts[uposIdx+3].toDouble(&ok);
+          }
+        }
+      }
+
       SegmentsDataData newLine = {isActive,entrancePairIndex,exitPairIndex,lowEnergy,highEnergy,lowAngle,
-				  highAngle,dataType,dataFile,dataNorm,dataNormError,varyNorm,phaseJ,phaseL,energyShift,energyShiftError,varyEnergyShift,isAdvanced,operationType,componentsList};
+				  highAngle,dataType,dataFile,dataNorm,dataNormError,varyNorm,phaseJ,phaseL,energyShift,energyShiftError,varyEnergyShift,isAdvanced,operationType,componentsList,isUPOS,secondaryDecayL,finalJ,delta};
       addSegDataLine(newLine);
     }
   }
@@ -1241,6 +1326,14 @@ bool SegmentsTab::writeSegDataFile(QTextStream& outStream) {
       }
     } else {
       // Write 0 for non-advanced segments for backwards compatibility
+      outStream << " 0";
+    }
+    // Write UPOS data after advanced segment data
+    if(lines.at(i).isUPOS == 1) {
+      outStream << " 1 " << lines.at(i).secondaryDecayL
+                << " " << lines.at(i).finalJ
+                << " " << lines.at(i).delta;
+    } else {
       outStream << " 0";
     }
     outStream << endl;

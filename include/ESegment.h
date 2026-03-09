@@ -35,6 +35,7 @@ class ESegment {
   bool IsTargetEffect() const;
   bool IsVaryNorm() const;
   bool IsAngularDist() const;
+  bool IsUPOS() const;
   int IsTotalCapture() const;
   int NumPoints() const;
   int GetEntranceKey() const;
@@ -44,6 +45,7 @@ class ESegment {
   int GetTargetEffectNum() const;
   int GetSegmentKey() const;
   int GetMaxAngDistOrder() const;
+  int GetSecondaryDecayL() const;
   double GetMinEnergy() const;
   double GetMaxEnergy() const;
   double GetMinAngle() const;
@@ -55,6 +57,8 @@ class ESegment {
   double GetNorm() const;
   double GetNominalNorm() const;
   double GetNormError() const;
+  double GetIc() const;
+  double GetDelta() const;
   double GetEnergyShift() const;
   double GetLastEnergyShift() const;
   double GetNominalEnergyShift() const;
@@ -99,6 +103,10 @@ class ESegment {
   bool isTargetEffect_;
   bool varyNorm_;
   bool isAngDist_;
+  bool isUPOS_;
+  int secondaryDecayL_;
+  double Ic_;
+  double delta_;
   int isTotalCapture_;
   int entrancekey_;
   int exitkey_;

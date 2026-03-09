@@ -719,7 +719,7 @@ void CNuc::SortPathways(const Config& configure) {
 	    }
 	  }	  
 	}
-      } else if(this->GetPair(ir)->GetPType()==0) {
+      } else if(this->GetPair(ir)->GetPType()==0&&aa==ir) {
 	for(double s=fabs(this->GetPair(aa)->GetJ(1)-this->GetPair(aa)->GetJ(2));
 	    s<=(this->GetPair(aa)->GetJ(1)+this->GetPair(aa)->GetJ(2));s+=1.) {
 	  for(double sp=fabs(this->GetPair(ir)->GetJ(1)-this->GetPair(ir)->GetJ(2));
@@ -736,7 +736,7 @@ void CNuc::SortPathways(const Config& configure) {
 		  DecayNum=this->GetPair(aa)->IsDecay(NewDecay);
 		  if(!DecayNum) {
 		    this->GetPair(aa)->AddDecay(NewDecay);
-		    DecayNum=this->GetPair(aa)->IsDecay(NewDecay);		  
+		    DecayNum=this->GetPair(aa)->IsDecay(NewDecay);
 		  }
 		  KGroup NewKGroup(s,sp);
 		  KGroupNum=this->GetPair(aa)->GetDecay(DecayNum)->IsKGroup(NewKGroup);
@@ -754,6 +754,51 @@ void CNuc::SortPathways(const Config& configure) {
 		    this->GetPair(this->GetJGroup(j)->GetChannel(chp)->GetPairNum())->GetI1I2Factor();
 		  this->GetPair(aa)->GetDecay(DecayNum)->GetKGroup(KGroupNum)->
 		    GetMGroup(MGroupNum)->SetStatSpinFactor(statspinfactor);
+		}
+	      }
+	    }
+	  }
+	}
+      } else if(this->GetPair(ir)->GetPType()==0&&aa!=ir) {
+	// Unobserved Primary, Observed Secondary (UPOS): create 3-param KGroups with sp2 for
+	// secondary gamma angular distribution calculations
+	for(double s=fabs(this->GetPair(aa)->GetJ(1)-this->GetPair(aa)->GetJ(2));
+	    s<=(this->GetPair(aa)->GetJ(1)+this->GetPair(aa)->GetJ(2));s+=1.) {
+	  for(double sp=fabs(this->GetPair(ir)->GetJ(1)-this->GetPair(ir)->GetJ(2));
+	      sp<=(this->GetPair(ir)->GetJ(1)+this->GetPair(ir)->GetJ(2));sp+=1.) {
+	    for(double sp2=fabs(this->GetPair(ir)->GetJ(1)-this->GetPair(ir)->GetJ(2));
+		sp2<=(this->GetPair(ir)->GetJ(1)+this->GetPair(ir)->GetJ(2));sp2+=1.) {
+	      for(int j=1;j<=this->NumJGroups();j++) {
+		if(!this->GetJGroup(j)->IsInRMatrix()) continue;
+		for(int ch=1;ch<=this->GetJGroup(j)->NumChannels();ch++) {
+		  if(this->GetJGroup(j)->GetChannel(ch)->GetPairNum()!=aa) continue;
+		  for(int chp=1;chp<=this->GetJGroup(j)->NumChannels();chp++) {
+		    if(this->GetJGroup(j)->GetChannel(chp)->GetPairNum()!=ir||
+		       this->GetJGroup(j)->GetChannel(ch)->GetS()!=s||
+		       this->GetJGroup(j)->GetChannel(chp)->GetS()!=sp) continue;
+		    Decay NewDecay(ir);
+		    DecayNum=this->GetPair(aa)->IsDecay(NewDecay);
+		    if(!DecayNum) {
+		      this->GetPair(aa)->AddDecay(NewDecay);
+		      DecayNum=this->GetPair(aa)->IsDecay(NewDecay);
+		    }
+		    KGroup NewKGroup(s,sp,sp2);
+		    KGroupNum=this->GetPair(aa)->GetDecay(DecayNum)->IsKGroup(NewKGroup,true);
+		    if(!KGroupNum) {
+		      this->GetPair(aa)->GetDecay(DecayNum)->AddKGroup(NewKGroup);
+		      KGroupNum=this->GetPair(aa)->GetDecay(DecayNum)->IsKGroup(NewKGroup,true);
+		    }
+		    MGroup NewMGroup(j,ch,chp);
+		    MGroupNum=this->GetPair(aa)->GetDecay(DecayNum)->GetKGroup(KGroupNum)->IsMGroup(NewMGroup);
+		    if(!MGroupNum) {
+		      this->GetPair(aa)->GetDecay(DecayNum)->GetKGroup(KGroupNum)->AddMGroup(NewMGroup);
+		      MGroupNum=this->GetPair(aa)->GetDecay(DecayNum)->GetKGroup(KGroupNum)->IsMGroup(NewMGroup);
+		    }
+		    double statspinfactor=(2.*this->GetJGroup(j)->GetJ()+1.)*
+		      this->GetPair(this->GetJGroup(j)->GetChannel(chp)->GetPairNum())->GetI1I2Factor();
+		    this->GetPair(aa)->GetDecay(DecayNum)->GetKGroup(KGroupNum)->
+		      GetMGroup(MGroupNum)->SetStatSpinFactor(statspinfactor);
+		  }
 		}
 	      }
 	    }
@@ -1131,18 +1176,42 @@ void CNuc::CalcAngularDists(int maxL) {
 		    *AngCoeff::ClebGord(l1p,l2p,lOrder,1.,-1.,0)*AngCoeff::Racah(l1p,j1,l2p,j2,jf,lOrder);
 		  z1z2=pow(-1.,1.+s-jf)/4.*z1*z2;
 		}
-		if(fabs(z1z2)>1e-10) {
+		// Calculate z1z2_upos for Unobserved Primary, Observed Secondary (UPOS) case
+		double z1z2_upos=0.;
+		if(this->GetPair(theDecay->GetPairNum())->GetPType()==0&&aa!=ir) {
+		  double sp2=theDecay->GetKGroup(k)->GetSp2();
+		  double j1f=this->GetPair(theDecay->GetPairNum())->GetJ(1);
+		  double j2f=this->GetPair(theDecay->GetPairNum())->GetJ(2);
+		  z1z2_upos=pow(-1.,lOrder+sp2-sp)*(2.*j1+1.)*(2.*j2+1.)*
+		    pow((2.*l1+1.)*(2.*j2f+1.)*(2.*sp+1.)*(2.*sp2+1.),0.5)*
+		    AngCoeff::ClebGord(lOrder,l1,l2,0.,0.,0.)*
+		    AngCoeff::Racah(lOrder,j2f,sp2,j1f,j2f,sp)*
+		    AngCoeff::Racah(lOrder,sp,j2,l1p,sp2,j1)*
+		    AngCoeff::Racah(lOrder,j1,l2,s,j2,l1);
+		}
+		if(fabs(z1z2)>1e-10||fabs(z1z2_upos)>1e-10) {
 		  KLGroup NewKLGroup(k,lOrder);
 		  int KLGroupNum=theDecay->IsKLGroup(NewKLGroup);
 		  if(!KLGroupNum) {
 		    theDecay->AddKLGroup(NewKLGroup);
 		    KLGroupNum=theDecay->IsKLGroup(NewKLGroup);
 		  }
-		  Interference NewInterference(path1,path2,z1z2,interferenceType);
-		  int InterNum=theDecay->GetKLGroup(KLGroupNum)->IsInterference(NewInterference);
-		  if(!InterNum) {
-		    theDecay->GetKLGroup(KLGroupNum)->AddInterference(NewInterference);
-		    InterNum=theDecay->GetKLGroup(KLGroupNum)->IsInterference(NewInterference);
+		  if(aa==ir||this->GetPair(theDecay->GetPairNum())->GetPType()==10) {
+		    // Standard interference (elastic or gamma capture)
+		    Interference NewInterference(path1,path2,z1z2,interferenceType);
+		    int InterNum=theDecay->GetKLGroup(KLGroupNum)->IsInterference(NewInterference);
+		    if(!InterNum) {
+		      theDecay->GetKLGroup(KLGroupNum)->AddInterference(NewInterference);
+		      InterNum=theDecay->GetKLGroup(KLGroupNum)->IsInterference(NewInterference);
+		    }
+		  } else {
+		    // UPOS interference (particle exit, different entrance/exit pair)
+		    Interference NewInterference(path1,path2,z1z2,z1z2_upos,interferenceType);
+		    int InterNum=theDecay->GetKLGroup(KLGroupNum)->IsInterference(NewInterference);
+		    if(!InterNum) {
+		      theDecay->GetKLGroup(KLGroupNum)->AddInterference(NewInterference);
+		      InterNum=theDecay->GetKLGroup(KLGroupNum)->IsInterference(NewInterference);
+		    }
 		  }
 		}
 	      }
