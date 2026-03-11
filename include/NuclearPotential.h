@@ -4,6 +4,7 @@
 #include <functional>
 #include <string>
 #include <stdexcept>
+#include <cmath>
 
 /**
  * @brief Base class for nuclear potentials
