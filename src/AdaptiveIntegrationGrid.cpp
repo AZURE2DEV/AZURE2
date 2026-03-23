@@ -2,9 +2,9 @@
 #include "JGroup.h"
 #include "ALevel.h"
 #include "PPair.h"
+#include "CoulFunc.h"
 #include <cmath>
 #include <algorithm>
-#include <iostream>
 
 /*!
  * \brief Constructor
@@ -195,11 +195,21 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
       // Convert to CM energy: E_cm = E_excitation - S - E_ex
       double levelCMEnergy = levelExcitationEnergy - separationEnergy - excitationEnergy;
 
-      // Calculate total width by summing all partial widths
+      // Calculate total width: Γ_total = Σ Γᵢ = Σ 2Pᵢγᵢ²
+      // Follows the same convention as CNuc::TransformIn: γ̃ = GetGamma(ch)/1e6
       double totalWidth = 0.0;
       for (int ch = 1; ch <= numChannels; ch++) {
-        double gamma = level->GetGamma(ch) / 1e6; // Convert eV to MeV
-        totalWidth = sqrt(totalWidth * totalWidth + gamma * gamma);
+        AChannel* channel = jgroup->GetChannel(ch);
+        if (channel->GetRadType() != 'P') continue; // particle channels only
+        double localEnergy = level->GetE()
+          - compound->GetPair(channel->GetPairNum())->GetExE()
+          - compound->GetPair(channel->GetPairNum())->GetSepE();
+        if (localEnergy <= 0.0) continue; // sub-threshold channels
+        double gamma = std::abs(level->GetGamma(ch)) / 1e6;
+        double radius = compound->GetPair(channel->GetPairNum())->GetChRad();
+        CoulFunc coulFunc(compound->GetPair(channel->GetPairNum()), false);
+        double pene = coulFunc.Penetrability(channel->GetL(), radius, localEnergy);
+        totalWidth += 2.0 * gamma * gamma * pene;
       }
 
       // If width is zero or very small, use a minimum value

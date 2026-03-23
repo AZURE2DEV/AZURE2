@@ -576,17 +576,21 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
             }
           }
 
-          // Configure adaptive grid generator with width-aware parameters
-          // All integration now uses Gaussian quadrature which handles non-uniform grids
-          AdaptiveIntegrationGrid::GridConfig gridConfig;
-          gridConfig.maxPoints = targetEffect->NumSubPoints();
-          gridConfig.entranceKey = segment->GetEntranceKey();
-          gridConfig.baseEnergyStep = (startEnergy - endEnergy) / targetEffect->NumSubPoints();
+          std::vector<double> energyGrid;
+          int numPoints = targetEffect->NumSubPoints();
+          if(configure.useAdaptiveGrid) {
+            AdaptiveIntegrationGrid::GridConfig gridConfig;
+            gridConfig.maxPoints = numPoints;
+            gridConfig.entranceKey = segment->GetEntranceKey();
+            gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
+            AdaptiveIntegrationGrid gridGenerator(gridConfig);
+            energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
+          } else {
+            double step = (startEnergy - endEnergy) / numPoints;
+            for(int i = 0; i <= numPoints; i++)
+              energyGrid.push_back(startEnergy - i * step);
+          }
 
-          AdaptiveIntegrationGrid gridGenerator(gridConfig);
-          std::vector<double> energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
-
-          // Create sub-points using adaptive grid
           for(size_t i=0; i<energyGrid.size(); i++) {
             double subEnergy = energyGrid[i];
             EPoint subPoint(point->GetCMAngle(),subEnergy,&*segment);
@@ -595,7 +599,7 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
               subPoint.SetStoppingPower(stoppingPower);
             }
             point->AddSubPoint(subPoint);
-	        }
+          }
 
 	      }
       }
@@ -692,17 +696,21 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
                 }
               }
 
-              // Configure adaptive grid generator with width-aware parameters
-              // All integration now uses Gaussian quadrature which handles non-uniform grids
-              AdaptiveIntegrationGrid::GridConfig gridConfig;
-              gridConfig.maxPoints = targetEffect->NumSubPoints();
-              gridConfig.entranceKey = segment->GetEntranceKey();
-              gridConfig.baseEnergyStep = (startEnergy - endEnergy) / targetEffect->NumSubPoints();
+              std::vector<double> energyGrid;
+              int numPoints = targetEffect->NumSubPoints();
+              if(configure.useAdaptiveGrid) {
+                AdaptiveIntegrationGrid::GridConfig gridConfig;
+                gridConfig.maxPoints = numPoints;
+                gridConfig.entranceKey = segment->GetEntranceKey();
+                gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
+                AdaptiveIntegrationGrid gridGenerator(gridConfig);
+                energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
+              } else {
+                double step = (startEnergy - endEnergy) / numPoints;
+                for(int i = 0; i <= numPoints; i++)
+                  energyGrid.push_back(startEnergy - i * step);
+              }
 
-              AdaptiveIntegrationGrid gridGenerator(gridConfig);
-              std::vector<double> energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
-
-              // Create sub-points using adaptive grid
               for(size_t i=0; i<energyGrid.size(); i++) {
                 double subEnergy = energyGrid[i];
                 EPoint subPoint(point->GetCMAngle(),subEnergy,&*component);

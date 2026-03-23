@@ -103,6 +103,8 @@ class Config {
   int nloptAlgorithm;
   ///Use hybrid Coulomb method with nuclear potential
   bool useHybridMethod;
+  ///Use adaptive integration grid for target effects (false = uniform grid)
+  bool useAdaptiveGrid;
   ///A constant indicating the maximum order of the Legendre polynomials to calculate.
   static const int maxLOrder=20;
   int ReadConfigFile();

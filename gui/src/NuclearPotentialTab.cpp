@@ -267,6 +267,9 @@ bool NuclearPotentialTab::readPotentialSettings(QTextStream& inStream, Config& c
     if(trimmedLine.startsWith("useHybridPotential=")) {
       int value = trimmedLine.mid(19).trimmed().toInt();
       config.useHybridMethod = (value == 1);
+    } else if(trimmedLine.startsWith("useAdaptiveGrid=")) {
+      int value = trimmedLine.mid(16).trimmed().toInt();
+      config.useAdaptiveGrid = (value == 1);
     } else if(trimmedLine.startsWith("potentialType=")) {
       typeCode = trimmedLine.mid(14).trimmed().toInt();
       hasType = true;

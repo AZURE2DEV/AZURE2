@@ -565,6 +565,7 @@ bool AZURESetup::writeFile(QString filename) {
   // Write potential section after config
   out << "<potential>" << endl;
   out << "useHybridPotential=" << (GetConfig().useHybridMethod ? "1" : "0") << endl;
+  out << "useAdaptiveGrid=" << (GetConfig().useAdaptiveGrid ? "1" : "0") << endl;
   nuclearPotentialTab->writePotentialSettings(out);
   out << "</potential>" << endl;
 
@@ -852,6 +853,8 @@ void AZURESetup::editOptions() {
   if(GetConfig().useHybridMethod) aDialog.useHybridMethodCheck->setChecked(true);
   else aDialog.useHybridMethodCheck->setChecked(false);
 
+  aDialog.useAdaptiveGridCheck->setChecked(GetConfig().useAdaptiveGrid);
+
   //if(!(GetConfig().paramMask & Config::USE_LONGWAVELENGTH_APPROX)) aDialog.noLongWavelengthCheck->setChecked(true);
   //else aDialog.noLongWavelengthCheck->setChecked(false);
 
@@ -886,6 +889,8 @@ void AZURESetup::editOptions() {
     } else {
       GetConfig().useHybridMethod = false;
     }
+
+    GetConfig().useAdaptiveGrid = aDialog.useAdaptiveGridCheck->isChecked();
 
     // Update tab visibility based on hybrid method setting
     updateNuclearPotentialTabVisibility();

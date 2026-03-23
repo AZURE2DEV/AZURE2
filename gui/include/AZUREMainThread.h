@@ -69,6 +69,8 @@ class AZUREMainThread : public QThread {
     configure_.integralsfile = configure.integralsfile;
     configure_.rateParams = configure.rateParams;
     configure_.nloptAlgorithm = configure.nloptAlgorithm;
+    configure_.useHybridMethod = configure.useHybridMethod;
+    configure_.useAdaptiveGrid = configure.useAdaptiveGrid;
     connect(&buffer_,SIGNAL(updateLog(QString)),tab->runtimeText,SLOT(write(QString)));
     connect(tab->stopAZUREButton,SIGNAL(clicked()),this,SLOT(stopAZURE()));
     connect(this,SIGNAL(readyToRun()),&worker_,SLOT(run()));

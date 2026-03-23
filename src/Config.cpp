@@ -28,6 +28,7 @@ void Config::Reset() {
   checkdir="";
   nloptAlgorithm=0; // Default to SBPLX
   useHybridMethod=false; // Default to disabled
+  useAdaptiveGrid=true; // Default to adaptive grid
 }
 
 /*!
