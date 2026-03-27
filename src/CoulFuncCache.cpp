@@ -217,7 +217,7 @@ bool CoulFuncCache::IsInRange(const CoulFuncKey& key, double energy) const {
     }
 
     // Check distances to nearest grid points
-    const double maxDistance = 0.001; // Maximum distance in MeV for interpolation
+    const double maxDistance = 0.00001; // Maximum distance in MeV for interpolation
 
     if (upper_it == data.energies.begin()) {
         // Return false

@@ -122,9 +122,9 @@ CoulWaves CoulFunc::operator()(int l,double radius,double energy) {
 
   // FIXME: Cross section might be discontinuous at 0 energy, so set a minimum
   // 12C(a,g) has problem with this
-  if(energy<=0.001) {
-    energy = 0.001;
-  }
+  //if(energy<=0.001) {
+  //  energy = 0.001;
+  //}
 
   // First check the local cache (last calculated value)
   if(l==lLast()&&radius==radiusLast()&&energy==energyLast()) {
