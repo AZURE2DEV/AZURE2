@@ -15,6 +15,10 @@ TargetEffect::TargetEffect(std::istream &stream,const Config& configure) {
   isStraggling_ = false;
   stragglingCoefficient_ = 0.04;
 
+  // Initialize adaptive grid parameters to defaults
+  resonanceWidthMultiplier_ = 5.0;
+  pointsPerWidth_ = 50.0;
+
   int isActive;
   std::string segmentList;
   int numIntegrationPoints;
@@ -73,6 +77,22 @@ TargetEffect::TargetEffect(std::istream &stream,const Config& configure) {
         double stragglingCoeff = 0.04;
         stream >> stragglingCoeff;
         stragglingCoefficient_ = stragglingCoeff;
+
+        // Try to read adaptive grid params (optional for backward compatibility)
+        stream >> std::ws;
+        if(!stream.eof() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.' || stream.peek() == '-')) {
+          double rwm;
+          stream >> rwm;
+          if(stream) {
+            resonanceWidthMultiplier_ = rwm;
+            stream >> std::ws;
+            if(!stream.eof() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.' || stream.peek() == '-')) {
+              double ppw;
+              stream >> ppw;
+              if(stream) pointsPerWidth_ = ppw;
+            }
+          }
+        }
       }
     }
 
@@ -360,4 +380,21 @@ bool TargetEffect::IsStraggling() const {
 
 double TargetEffect::GetStragglingCoefficient() const {
   return stragglingCoefficient_;
+}
+
+/*!
+ * Returns the resonance width multiplier for the adaptive integration grid.
+ * This controls how many total widths Γ are covered on each side of a resonance.
+ */
+
+double TargetEffect::GetResonanceWidthMultiplier() const {
+  return resonanceWidthMultiplier_;
+}
+
+/*!
+ * Returns the number of integration points per resonance width for the adaptive grid.
+ */
+
+double TargetEffect::GetPointsPerWidth() const {
+  return pointsPerWidth_;
 }

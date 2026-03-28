@@ -47,6 +47,10 @@ class TargetEffect {
   bool IsStraggling() const;
   double GetStragglingCoefficient() const;
 
+  // Adaptive integration grid parameters
+  double GetResonanceWidthMultiplier() const;
+  double GetPointsPerWidth() const;
+
   ///The multiple of sigma above and below centroid energy to use as integration range
   static constexpr double convolutionRange=3.;
  private:
@@ -67,6 +71,10 @@ class TargetEffect {
   // ERYA straggling integration variables
   bool isStraggling_;
   double stragglingCoefficient_;
+
+  // Adaptive integration grid parameters
+  double resonanceWidthMultiplier_;
+  double pointsPerWidth_;
 };
 
 #endif

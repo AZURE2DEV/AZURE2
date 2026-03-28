@@ -27,6 +27,8 @@ TargetIntTab::TargetIntTab(QWidget *parent) : QWidget(parent) {
   targetIntView->setColumnHidden(14,true);
   targetIntView->setColumnHidden(15,true);
   targetIntView->setColumnHidden(16,true);
+  targetIntView->setColumnHidden(17,true);
+  targetIntView->setColumnHidden(18,true);
 
   targetIntView->setColumnWidth(0,27);
   targetIntView->horizontalHeader()->setSectionResizeMode(0,QHeaderView::Fixed);
@@ -104,6 +106,8 @@ void TargetIntTab::addLine() {
 
     newLine.isStraggling = aDialog.isStraggling->isChecked();
     newLine.stragglingCoefficient = aDialog.stragglingCoefficientText->text().toDouble();
+    newLine.resonanceWidthMultiplier = aDialog.resonanceWidthMultiplierSpin->value();
+    newLine.pointsPerWidth = aDialog.pointsPerWidthSpin->value();
 
     addLine(newLine);
   }
@@ -148,6 +152,10 @@ void TargetIntTab::addLine(TargetIntData line) {
   targetIntModel->setData(index,line.isStraggling,Qt::EditRole);
   index = targetIntModel->index(lines.size(),16,QModelIndex());
   targetIntModel->setData(index,line.stragglingCoefficient,Qt::EditRole);
+  index = targetIntModel->index(lines.size(),17,QModelIndex());
+  targetIntModel->setData(index,line.resonanceWidthMultiplier,Qt::EditRole);
+  index = targetIntModel->index(lines.size(),18,QModelIndex());
+  targetIntModel->setData(index,line.pointsPerWidth,Qt::EditRole);
 
   targetIntView->resizeRowsToContents();
 }
@@ -209,6 +217,12 @@ void TargetIntTab::editLine() {
   i=targetIntModel->index(index.row(),16,QModelIndex());
   var=targetIntModel->data(i,Qt::EditRole);
   double stragglingCoefficient = var.toDouble();
+  i=targetIntModel->index(index.row(),17,QModelIndex());
+  var=targetIntModel->data(i,Qt::EditRole);
+  double resonanceWidthMultiplier = var.toDouble();
+  i=targetIntModel->index(index.row(),18,QModelIndex());
+  var=targetIntModel->data(i,Qt::EditRole);
+  double pointsPerWidth = var.toDouble();
 
   AddTargetIntDialog aDialog;
   aDialog.setWindowTitle(tr("Edit an Experimental Effect Line"));
@@ -239,6 +253,8 @@ void TargetIntTab::editLine() {
 
   aDialog.isStraggling->setChecked(isStraggling);
   aDialog.stragglingCoefficientText->setText(QString::number(stragglingCoefficient));
+  aDialog.resonanceWidthMultiplierSpin->setValue(resonanceWidthMultiplier > 0.0 ? resonanceWidthMultiplier : 5.0);
+  aDialog.pointsPerWidthSpin->setValue(pointsPerWidth > 0.0 ? pointsPerWidth : 50.0);
 
   if(aDialog.exec()) {
     QString newSegmentsList = aDialog.segmentsListText->text();
@@ -340,6 +356,18 @@ void TargetIntTab::editLine() {
       i=targetIntModel->index(index.row(),16,QModelIndex());
       targetIntModel->setData(i,newStragglingCoefficient,Qt::EditRole);
     }
+
+    double newResonanceWidthMultiplier = aDialog.resonanceWidthMultiplierSpin->value();
+    if(resonanceWidthMultiplier!=newResonanceWidthMultiplier) {
+      i=targetIntModel->index(index.row(),17,QModelIndex());
+      targetIntModel->setData(i,newResonanceWidthMultiplier,Qt::EditRole);
+    }
+
+    double newPointsPerWidth = aDialog.pointsPerWidthSpin->value();
+    if(pointsPerWidth!=newPointsPerWidth) {
+      i=targetIntModel->index(index.row(),18,QModelIndex());
+      targetIntModel->setData(i,newPointsPerWidth,Qt::EditRole);
+    }
   }
 }
 
@@ -391,6 +419,8 @@ bool TargetIntTab::writeFile(QTextStream& outStream) {
     if(lines.at(i).isStraggling) outStream << qSetFieldWidth(0) << "              1";
     else outStream << qSetFieldWidth(0) << "              0";
     outStream << " " << lines.at(i).stragglingCoefficient;
+    // Write adaptive grid params (appended at end for backward compatibility)
+    outStream << " " << lines.at(i).resonanceWidthMultiplier << " " << lines.at(i).pointsPerWidth;
     outStream<<endl;
 
   }
@@ -486,12 +516,26 @@ bool TargetIntTab::readFile(QTextStream& inStream) {
       // Try to read straggling flag and coefficient (optional for backward compatibility)
       isStraggling = 0;  // Default to false
       stragglingCoefficient = 0.04;  // Default coefficient
+      double resonanceWidthMultiplier = 5.0;  // Default
+      double pointsPerWidth = 50.0;  // Default
 
       // Check if there's more data to read (not at end of line)
       QString remaining = in.readAll().trimmed();
       if(!remaining.isEmpty()) {
         QTextStream remainingStream(&remaining);
         remainingStream >> isStraggling >> stragglingCoefficient;
+        // Try to read adaptive grid params
+        if(remainingStream.status() == QTextStream::Ok) {
+          double tempRWM;
+          remainingStream >> tempRWM;
+          if(remainingStream.status() == QTextStream::Ok) {
+            resonanceWidthMultiplier = tempRWM;
+            double tempPPW;
+            remainingStream >> tempPPW;
+            if(remainingStream.status() == QTextStream::Ok)
+              pointsPerWidth = tempPPW;
+          }
+        }
       }
 
       bool tempIsStraggling=false;
@@ -502,7 +546,7 @@ bool TargetIntTab::readFile(QTextStream& inStream) {
       bool tempIsTargetIntegration=false;
       if(isTargetIntegration==1) tempIsTargetIntegration=true;
 
-      TargetIntData newLine = {isActive,segmentsList.remove('\"'),numPoints,tempIsConvolution,sigma,tempIsTargetIntegration,density,stoppingPowerEq.remove('\"'),numParameters,parameters,tempIsQCoefficient,qCoefficients,tempIsConvCoefficient,convCoefficients,convolutionEq.remove('\"'),tempIsStraggling,stragglingCoefficient};
+      TargetIntData newLine = {isActive,segmentsList.remove('\"'),numPoints,tempIsConvolution,sigma,tempIsTargetIntegration,density,stoppingPowerEq.remove('\"'),numParameters,parameters,tempIsQCoefficient,qCoefficients,tempIsConvCoefficient,convCoefficients,convolutionEq.remove('\"'),tempIsStraggling,stragglingCoefficient,resonanceWidthMultiplier,pointsPerWidth};
       addLine(newLine);
     }
   }

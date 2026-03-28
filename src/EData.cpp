@@ -583,6 +583,8 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
             gridConfig.maxPoints = numPoints;
             gridConfig.entranceKey = segment->GetEntranceKey();
             gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
+            gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
+            gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth();
             AdaptiveIntegrationGrid gridGenerator(gridConfig);
             energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
           } else {
@@ -703,6 +705,8 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
                 gridConfig.maxPoints = numPoints;
                 gridConfig.entranceKey = segment->GetEntranceKey();
                 gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
+                gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
+                gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth();
                 AdaptiveIntegrationGrid gridGenerator(gridConfig);
                 energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
               } else {

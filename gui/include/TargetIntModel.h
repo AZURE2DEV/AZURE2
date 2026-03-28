@@ -7,7 +7,7 @@
 Q_DECLARE_METATYPE(QList<double>);
 
 struct TargetIntData {
-  static const int SIZE = 17;
+  static const int SIZE = 19;
   int isActive;
   QString segmentsList;
   int numPoints;
@@ -25,6 +25,8 @@ struct TargetIntData {
   QString convolutionEq;
   bool isStraggling;
   double stragglingCoefficient;
+  double resonanceWidthMultiplier;
+  double pointsPerWidth;
 };
 
 class TargetIntModel : public QAbstractTableModel {

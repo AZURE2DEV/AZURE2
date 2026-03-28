@@ -54,6 +54,8 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
       else return QString(tr("NO"));
     }
     else if(index.column() == 16) return targetInt.stragglingCoefficient;
+    else if(index.column() == 17) return targetInt.resonanceWidthMultiplier;
+    else if(index.column() == 18) return targetInt.pointsPerWidth;
   } else if(role == Qt::EditRole) {
     TargetIntData targetInt=targetIntList.at(index.row());
     if(index.column()==1) return targetInt.segmentsList;
@@ -72,6 +74,8 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
     if(index.column()==14) return targetInt.convolutionEq;
     if(index.column()==15) return targetInt.isStraggling;
     if(index.column()==16) return targetInt.stragglingCoefficient;
+    if(index.column()==17) return targetInt.resonanceWidthMultiplier;
+    if(index.column()==18) return targetInt.pointsPerWidth;
   } else if (role==Qt::CheckStateRole && index.column()==0) {
     TargetIntData targetInt=targetIntList.at(index.row());
     if(targetInt.isActive==1) return Qt::Checked;
@@ -118,6 +122,10 @@ QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, in
       return tr("Straggling Active?");
     case 16:
       return tr("Straggling Coefficient");
+    case 17:
+      return tr("Resonance Width Multiplier");
+    case 18:
+      return tr("Points Per Width");
     default:
       return QVariant();
     }
@@ -146,6 +154,8 @@ bool TargetIntModel::setData(const QModelIndex &index, const QVariant &value, in
     else if(index.column() == 14) tempData.convolutionEq = value.toString();
     else if(index.column() == 15) tempData.isStraggling = value.toBool();
     else if(index.column() == 16) tempData.stragglingCoefficient = value.toDouble();
+    else if(index.column() == 17) tempData.resonanceWidthMultiplier = value.toDouble();
+    else if(index.column() == 18) tempData.pointsPerWidth = value.toDouble();
     else return false;
     targetIntList.replace(row,tempData);
     emit(dataChanged(index,index));

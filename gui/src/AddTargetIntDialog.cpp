@@ -1,5 +1,6 @@
 #include <QLineEdit>
 #include <QSpinBox>
+#include <QDoubleSpinBox>
 #include <QCheckBox>
 #include <QTableWidget>
 #include <QHBoxLayout>
@@ -91,6 +92,25 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent), selec
   stragglingCoefficientText->setToolTip("Straggling coefficient (keV^0.5 per keV^0.5 of energy loss). Typical value: 0.04 for protons in Al.");
   stragglingCoefficientText->setEnabled(false);
   connect(isStraggling, SIGNAL(toggled(bool)), stragglingCoefficientText, SLOT(setEnabled(bool)));
+
+  resonanceWidthMultiplierSpin = new QDoubleSpinBox;
+  resonanceWidthMultiplierSpin->setEnabled(false);
+  resonanceWidthMultiplierSpin->setMinimum(1.0);
+  resonanceWidthMultiplierSpin->setMaximum(50.0);
+  resonanceWidthMultiplierSpin->setSingleStep(0.5);
+  resonanceWidthMultiplierSpin->setDecimals(1);
+  resonanceWidthMultiplierSpin->setValue(5.0);
+  resonanceWidthMultiplierSpin->setToolTip("Half-width of the resonance region covered on each side (in units of total resonance width Γ).");
+
+  pointsPerWidthSpin = new QDoubleSpinBox;
+  pointsPerWidthSpin->setEnabled(false);
+  pointsPerWidthSpin->setMinimum(5.0);
+  pointsPerWidthSpin->setMaximum(500.0);
+  pointsPerWidthSpin->setSingleStep(5.0);
+  pointsPerWidthSpin->setDecimals(1);
+  pointsPerWidthSpin->setValue(50.0);
+  pointsPerWidthSpin->setToolTip("Number of integration points placed within one resonance width Γ.");
+
   numParametersSpin = new QSpinBox;
   numParametersSpin -> setMinimum(0);
   numParametersSpin -> setMaximum(20);
@@ -181,6 +201,13 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent), selec
   numPointsLayout->addWidget(new QLabel(tr("Number of Integration Points:")));
   numPointsLayout->addWidget(numPointsSpin);
   
+  QHBoxLayout *adaptiveGridLayout = new QHBoxLayout;
+  adaptiveGridLayout->addWidget(new QLabel(tr("Resonance Width Multiplier:")));
+  adaptiveGridLayout->addWidget(resonanceWidthMultiplierSpin);
+  adaptiveGridLayout->addSpacing(12);
+  adaptiveGridLayout->addWidget(new QLabel(tr("Points Per Width:")));
+  adaptiveGridLayout->addWidget(pointsPerWidthSpin);
+
   QHBoxLayout *topLayout = new QHBoxLayout;
   topLayout->addLayout(segListLayout);
   topLayout->addLayout(numPointsLayout);
@@ -280,6 +307,7 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) : QDialog(parent), selec
 
   QVBoxLayout *mainLayout = new QVBoxLayout;
   mainLayout->addLayout(topLayout);
+  mainLayout->addLayout(adaptiveGridLayout);
   mainLayout->addLayout(checkBoxLayout);
   mainLayout->addWidget(stoppingPowerBox);
   mainLayout->addLayout(qCoefficientCheckBoxLayout);
@@ -363,6 +391,8 @@ void AddTargetIntDialog::targetIntCheckChanged(bool checked) {
     energyText->setEnabled(true);
     calculateDeltaEButton->setEnabled(true);
     numPointsSpin->setEnabled(true);
+    resonanceWidthMultiplierSpin->setEnabled(true);
+    pointsPerWidthSpin->setEnabled(true);
   } else {
     stoppingPowerBox->hide();
     densityText->setEnabled(false);
@@ -370,6 +400,8 @@ void AddTargetIntDialog::targetIntCheckChanged(bool checked) {
     deltaEText->clear();
     calculateDeltaEButton->setEnabled(false);
     if(!isConvolutionCheck->isChecked()) numPointsSpin->setEnabled(false);
+    resonanceWidthMultiplierSpin->setEnabled(false);
+    pointsPerWidthSpin->setEnabled(false);
     this->adjustSize();
   }
 }

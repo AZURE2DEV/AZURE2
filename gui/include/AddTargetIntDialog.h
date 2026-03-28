@@ -9,6 +9,7 @@ QT_BEGIN_NAMESPACE
 
 class QLineEdit;
 class QSpinBox;
+class QDoubleSpinBox;
 class QCheckBox;
 class QTableWidget;
 class QGroupBox;
@@ -40,6 +41,8 @@ class AddTargetIntDialog : public QDialog {
   QPushButton *fetchStoppingPowerButton;
   QCheckBox *isStraggling;
   QLineEdit *stragglingCoefficientText;
+  QDoubleSpinBox *resonanceWidthMultiplierSpin;
+  QDoubleSpinBox *pointsPerWidthSpin;
   QLineEdit *energyText;
   QLineEdit *deltaEText;
   QPushButton *calculateDeltaEButton;
