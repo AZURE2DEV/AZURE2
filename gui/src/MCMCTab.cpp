@@ -479,6 +479,12 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
                                        .arg(QString::fromStdString(line)));
                     continue;
                 }
+                if(i >= (int)azureParams.GetMinuitParams().Params().size()) {
+                    logTextEdit->append(QString("Warning: param.par has more entries than expected parameters (%1). Stopping at line %2.")
+                                       .arg(azureParams.GetMinuitParams().Params().size())
+                                       .arg(i));
+                    break;
+                }
                 azureParams.GetMinuitParams().SetValue(i, rwaValue);
                 i++;
             }
@@ -901,7 +907,7 @@ void MCMCTab::onMCMCProgressUpdated(int currentStep, int totalSteps, double logP
     
     // Update log with periodic messages
     if(currentStep % 10 == 0 || currentStep == totalSteps) {
-        logTextEdit->append(QString("Step %1: LogProb=%.3f (LogL=%.3f, LogPrior=%.3f)")
+        logTextEdit->append(QString("Step %1: LogProb=%2 (LogL=%3, LogPrior=%4)")
                            .arg(currentStep)
                            .arg(logProbability, 0, 'f', 3)
                            .arg(logLikelihood, 0, 'f', 3)
