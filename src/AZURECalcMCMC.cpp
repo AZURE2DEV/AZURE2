@@ -32,6 +32,7 @@ static volatile bool g_stop_requested = false;
 static double g_last_likelihood = 0.0;
 static double g_last_prior = 0.0;
 static std::vector<double> g_last_params;
+static std::vector<std::string> g_param_names;
 // Mutex for thread-safe file writing
 #ifdef _OPENMP
 #include <omp.h>
@@ -218,6 +219,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r& physicalParams) const
   rwa_.clear();
   physical_.clear();
   fixed_.clear();
+  g_param_names.clear();
   
   AZUREParams params;
   compound()->FillMnParams(params.GetMinuitParams(), &configure());
@@ -233,6 +235,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r& physicalParams) const
   for(int i = 0; i < params.GetMinuitParams().Params().size(); i++){
     all_rwa_.push_back(params.GetMinuitParams().Parameter(i).Value());
     fixed_.push_back(params.GetMinuitParams().Parameter(i).IsFixed());
+    g_param_names.push_back(params.GetMinuitParams().GetName(i));
     // If not fixed, add to rwa
     if (!params.GetMinuitParams().Parameter(i).IsFixed()) {
       rwa_.push_back(params.GetMinuitParams().Parameter(i).Value());
@@ -632,9 +635,10 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
         if (!fullParams.empty()) {
           CNuc* localCompound = g_mcmc_for_callbacks->compound()->Clone();
           EData* localData = g_mcmc_for_callbacks->data()->Clone();
-          
+
           bool isValid = true;
-          
+          vector_r rwaFullParams; // full RWA parameter set for param.mcmc
+
           if (g_using_rwa_parameters) {
             // For RWA parameters, use the same approach as CalculateLogLikelihood
             localCompound->FillCompoundFromParams(fullParams);
@@ -643,24 +647,26 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
             if (g_mcmc_for_callbacks->configure().paramMask & Config::USE_BRUNE_FORMALISM) {
               localCompound->CalcShiftFunctions(g_mcmc_for_callbacks->configure());
             }
+            rwaFullParams = fullParams; // already RWA
           } else {
             // For physical parameters, use the same approach as CalculateLogLikelihoodPhysical
             localCompound->FillCompoundFromParamsPhysical(fullParams);
             isValid = localCompound->TransformIn(g_mcmc_for_callbacks->configure());
-            
+
             if (isValid) {
               AZUREParams params;
               localCompound->FillMnParams(params.GetMinuitParams(), &g_mcmc_for_callbacks->configure());
               localData->FillMnParams(params.GetMinuitParams());
               localData->FillEnergyShiftsFromParams(fullParams, localData, localCompound, &g_mcmc_for_callbacks->configure());
               localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
-              
+              rwaFullParams = params.GetMinuitParams().Params(); // RWA params after TransformIn
+
               if (g_mcmc_for_callbacks->configure().paramMask & Config::USE_BRUNE_FORMALISM) {
                 localCompound->CalcShiftFunctions(g_mcmc_for_callbacks->configure());
               }
             }
           }
-          
+
           if (isValid) {
             // Calculate cross sections for all data points
             for(EDataIterator data=localData->begin(); data!=localData->end(); data++) {
@@ -668,15 +674,29 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
                 data.point()->Calculate(localCompound, g_mcmc_for_callbacks->configure());
               }
             }
-            
+
             localData->WriteOutputFiles(g_mcmc_for_callbacks->configure(), true);
-            
+
             if (!g_using_rwa_parameters) {
               localCompound->TransformOut(g_mcmc_for_callbacks->configure());
             }
             localCompound->PrintTransformParams(g_mcmc_for_callbacks->configure());
+
+            // Write param.mcmc snapshot: all RWA parameters (including fixed), analogous to param.sav
+            if (!rwaFullParams.empty() && rwaFullParams.size() == g_param_names.size()) {
+              std::string paramMCMCFile = g_mcmc_for_callbacks->configure().outputdir + "param.mcmc";
+              std::ofstream paramOut(paramMCMCFile);
+              if (paramOut) {
+                paramOut.precision(7);
+                for (size_t i = 0; i < rwaFullParams.size(); i++) {
+                  paramOut << std::setw(20) << g_param_names[i]
+                           << std::scientific << std::setw(20) << rwaFullParams[i]
+                           << std::scientific << std::setw(20) << 0.0 << std::endl;
+                }
+              }
+            }
           }
-          
+
           delete localCompound;
           delete localData;
         }
