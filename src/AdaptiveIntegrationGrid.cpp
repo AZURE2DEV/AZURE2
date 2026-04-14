@@ -199,7 +199,7 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
       double totalWidth = 0.0;
       for (int ch = 1; ch <= numChannels; ch++) {
         double gamma = level->GetGamma(ch) / 1e6; // Convert eV to MeV
-        totalWidth = sqrt(totalWidth * totalWidth + gamma * gamma);
+        totalWidth += gamma;
       }
 
       // If width is zero or very small, use a minimum value
