@@ -209,7 +209,13 @@ void MCMCTab::setupSamplingControls(QWidget* samplingWidget) {
     nWalkersSpinBox->setRange(2, 1000);
     nWalkersSpinBox->setValue(50);
     basicLayout->addWidget(nWalkersSpinBox, 0, 1);
-    basicLayout->addWidget(infoButton[1], 0, 2);
+    // Som Paneru's Patch
+    if (infoButton[1]) {
+        basicLayout->addWidget(infoButton[1], 0, 2);
+    } 
+    else {
+        qDebug() << "infoButton[1] is null!";
+    }
     
     basicLayout->addWidget(new QLabel("Number of Steps:"), 1, 0);
     nStepsSpinBox = new QSpinBox();
