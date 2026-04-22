@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.0)
+cmake_minimum_required(VERSION 3.0)
 project(AZURE2)
 
 # Version info
@@ -39,7 +39,7 @@ if(CROSS_COMPILE_WINDOWS)
     
     # Use advanced static linking approach for winpthread while allowing dynamic Qt5
     set(CMAKE_CXX_STANDARD_LIBRARIES "-static-libgcc -static-libstdc++ -lwsock32 -lws2_32 ${CMAKE_CXX_STANDARD_LIBRARIES}")
-    set(CMAKE_EXE_LINKER_FLAGS "-Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive")
+    set(CMAKE_EXE_LINKER_FLAGS "-Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,-Bdynamic")
     set(CMAKE_SHARED_LINKER_FLAGS "-static-libgcc -static-libstdc++")
 
     set(USE_STAT OFF CACHE BOOL "Disable stat() for Windows" FORCE)

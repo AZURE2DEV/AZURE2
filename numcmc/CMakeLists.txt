@@ -8,7 +8,11 @@ find_package(OpenMP REQUIRED)
 ##############################################
 # Create target and set properties
 
-add_library(numcmc SHARED src/ensemble.cpp src/mcmc.cpp src/walker.cpp)
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    add_library(numcmc STATIC src/ensemble.cpp src/mcmc.cpp src/walker.cpp)
+else()
+    add_library(numcmc SHARED src/ensemble.cpp src/mcmc.cpp src/walker.cpp)
+endif()
 
 #Add an alias so that library can be used inside the build tree, e.g. when testing
 add_library(numcmc::numcmc ALIAS numcmc)
@@ -35,11 +39,13 @@ target_compile_options(numcmc PRIVATE -Wall -Wno-sign-compare -Wno-unknown-pragm
 #This is required so that the exported target has the name numcmc and not hitdic
 set_target_properties(numcmc PROPERTIES EXPORT_NAME numcmc)
 
-# Set SONAME and version for shared library
-set_target_properties(numcmc PROPERTIES
-    VERSION 1.0.0
-    SOVERSION 1
-)
+# Set SONAME and version for shared library (Linux/macOS only)
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set_target_properties(numcmc PROPERTIES
+        VERSION 1.0.0
+        SOVERSION 1
+    )
+endif()
 
 # Install the library
 install(TARGETS numcmc

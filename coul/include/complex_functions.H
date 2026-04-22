@@ -1,5 +1,6 @@
 #ifndef COMPLEX_FUNCTIONS_H
 #define COMPLEX_FUNCTIONS_H
+#define _USE_MATH_DEFINES
 #include<complex>
 #include<string>
 // Remove external dependencies - define locally
@@ -9,7 +10,7 @@ namespace sammy {
         ResonanceException(const std::string& msg) : std::runtime_error(msg) {}
     };
 }
-#include<math.h>
+#include<cmath>
 
 
 

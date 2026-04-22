@@ -1,10 +1,10 @@
 #ifndef COULOMB_WF_COMPLEX_H
 #define COULOMB_WF_COMPLEX_H
-
+#define _USE_MATH_DEFINES
 #include<complex>
 #include<algorithm>
 #include <vector>
-#include<math.h>
+#include<cmath>
 
 #include "complex_functions.H"
 

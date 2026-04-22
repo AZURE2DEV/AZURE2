@@ -33,6 +33,7 @@ RUN dnf install -y \
         mingw64-freetype \
         mingw64-fontconfig \
         mingw64-gettext \
+        mingw64-openssl \
     && dnf clean all
 
 # Set up MinGW environment
@@ -86,6 +87,28 @@ RUN rm -rf build-windows && mkdir build-windows && cd build-windows && \
         -DCMAKE_BUILD_TYPE=Release && \
     echo "=== Starting compilation ===" && \
     make -j6
+
+# Copy required Qt5, Qwt, and MinGW runtime DLLs into the build output next to the exe
+RUN MINGW_BIN=/usr/x86_64-w64-mingw32/sys-root/mingw/bin && \
+    DEST=/workspace/build-windows/src && \
+    for dll in \
+        Qt5Core.dll Qt5Gui.dll Qt5Widgets.dll Qt5PrintSupport.dll Qt5Network.dll Qt5OpenGL.dll Qt5Svg.dll \
+        qwt-qt5.dll \
+        libgsl-0.dll libgslcblas-0.dll \
+        libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll libgomp-1.dll \
+        libcrypto-3-x64.dll libssl-3-x64.dll \
+        libpcre2-16-0.dll libpcre2-8-0.dll \
+        zlib1.dll libharfbuzz-0.dll libpng16-16.dll libfreetype-6.dll \
+        libglib-2.0-0.dll libintl-8.dll libgraphite2.dll libbz2-1.dll \
+        libiconv-2.dll; \
+    do \
+        [ -f "$MINGW_BIN/$dll" ] && cp -v "$MINGW_BIN/$dll" "$DEST/" || echo "WARNING: $dll not found in $MINGW_BIN"; \
+    done && \
+    # Copy Qt5 platform plugins \
+    mkdir -p "$DEST/platforms" && \
+    [ -d "$MINGW_BIN/../lib/qt5/plugins/platforms" ] && \
+        cp -v "$MINGW_BIN/../lib/qt5/plugins/platforms/qwindows.dll" "$DEST/platforms/" || \
+        echo "WARNING: qwindows.dll platform plugin not found"
 
 # Make it sleep to keep the container running
 CMD ["sleep", "infinity"]

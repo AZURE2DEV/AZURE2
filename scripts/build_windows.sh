@@ -112,7 +112,7 @@ fi
 echo -e "${YELLOW}Copying DLL files...${NC}"
 
 # List specific DLL files that should be copied
-EXPECTED_DLLS="libgsl-0.dll libgslcblas-0.dll libreadline8.dll libhistory8.dll Qt5Core.dll Qt5Gui.dll Qt5Widgets.dll Qt5PrintSupport.dll Qt5OpenGL.dll Qt5Svg.dll qwt-qt5.dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll iconv.dll libiconv-2.dll libpcre2-16-0.dll libpcre2-8-0.dll zlib1.dll libharfbuzz-0.dll libpng16-16.dll libfreetype-6.dll libglib-2.0-0.dll libintl-8.dll libgraphite2.dll libbz2-1.dll libtermcap-0.dll"
+EXPECTED_DLLS="libgsl-0.dll libgslcblas-0.dll libreadline8.dll libhistory8.dll Qt5Core.dll Qt5Gui.dll Qt5Widgets.dll Qt5PrintSupport.dll Qt5OpenGL.dll Qt5Svg.dll Qt5Network.dll qwt-qt5.dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll libgomp-1.dll libcrypto-3-x64.dll libssl-3-x64.dll iconv.dll libiconv-2.dll libpcre2-16-0.dll libpcre2-8-0.dll zlib1.dll libharfbuzz-0.dll libpng16-16.dll libfreetype-6.dll libglib-2.0-0.dll libintl-8.dll libgraphite2.dll libbz2-1.dll libtermcap-0.dll"
 
 for dll in $EXPECTED_DLLS; do
     DLL_FOUND=false
