@@ -195,11 +195,18 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
       // Convert to CM energy: E_cm = E_excitation - S - E_ex
       double levelCMEnergy = levelExcitationEnergy - separationEnergy - excitationEnergy;
 
-      // Calculate total width by summing all partial widths
+      // Calculate total width by summing all partial widths.
+      // Use BigGamma (physical BW width, MeV) when TransformOut has been called,
+      // otherwise fall back to the original input gammas (eV -> MeV) as a rough estimate.
       double totalWidth = 0.0;
       for (int ch = 1; ch <= numChannels; ch++) {
-        double gamma = level->GetGamma(ch) / 1e6; // Convert eV to MeV
-        totalWidth += gamma;
+        totalWidth += fabs(level->GetBigGamma(ch));
+        //std::cout << level->GetInputGamma(ch) << " " << level->GetBigGamma(ch) << " " << level->GetGamma(ch) << std::endl;
+      }
+      if (totalWidth < 1.0e-15) {
+        for (int ch = 1; ch <= numChannels; ch++) {
+          totalWidth += fabs(level->GetInputGamma(ch)) / 1e6;
+        }
       }
 
       // If width is zero or very small, use a minimum value

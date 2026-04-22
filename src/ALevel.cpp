@@ -6,7 +6,9 @@
  */
 
 ALevel::ALevel(NucLine nucLine) :
-  level_e_(nucLine.levelE()),fitlevel_e_(0.0), isinrmatrix_(true), sqrt_nf_factor_(1.0), isECLevel_(false),
+  level_e_(nucLine.levelE()), input_e_(nucLine.levelE()), fitlevel_e_(0.0),
+  transform_e_(0.0), transform_iter_(0),
+  isinrmatrix_(true), sqrt_nf_factor_(1.0), isECLevel_(false),
   ecMultMask_(0), ecPairNum_(0) {
   if(nucLine.levelFix()==1) energyfixed_=true;
   else energyfixed_=false;
@@ -17,7 +19,9 @@ ALevel::ALevel(NucLine nucLine) :
  */
 
 ALevel::ALevel(double energy) :
-  energyfixed_(true),level_e_(energy),fitlevel_e_(0.0), isinrmatrix_(false), sqrt_nf_factor_(1.0), isECLevel_(false),
+  energyfixed_(true), level_e_(energy), input_e_(energy), fitlevel_e_(0.0),
+  transform_e_(0.0), transform_iter_(0),
+  isinrmatrix_(false), sqrt_nf_factor_(1.0), isECLevel_(false),
   ecMultMask_(0), ecPairNum_(0) {};
 
 /*!
@@ -95,11 +99,28 @@ double ALevel::GetE() const {
 }
 
 /*!
+ * Returns the original level energy from the input file, unchanged by TransformIn.
+ */
+
+double ALevel::GetInputE() const {
+  return input_e_;
+}
+
+/*!
  * Returns the internal reduced width amplitude for a given channel number.
  */
 
 double ALevel::GetGamma(int channelNum) const {
   return gammas_[channelNum-1];
+}
+
+/*!
+ * Returns the original reduced width amplitude from the input file for a given channel number,
+ * unchanged by TransformIn.
+ */
+
+double ALevel::GetInputGamma(int channelNum) const {
+  return input_gammas_[channelNum-1];
 }
 
 /*!
@@ -191,6 +212,7 @@ complex ALevel::GetExternalGamma(int channelNum) const {
 void ALevel::AddGamma(NucLine nucLine) {
   double b=nucLine.gamma();
   gammas_.push_back(b);
+  input_gammas_.push_back(b);
   fitgammas_.push_back(0.0);
   transform_gammas_.push_back(0.0);
   big_gammas_.push_back(0.0);
@@ -207,6 +229,7 @@ void ALevel::AddGamma(NucLine nucLine) {
 
 void ALevel::AddGamma(double reducedWidth) {
   gammas_.push_back(reducedWidth);
+  input_gammas_.push_back(reducedWidth);
   fitgammas_.push_back(0.0);
   transform_gammas_.push_back(0.0);
   big_gammas_.push_back(0.0);

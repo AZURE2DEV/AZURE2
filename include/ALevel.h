@@ -24,7 +24,9 @@ class ALevel {
   int GetECPairNum() const;
   unsigned char GetECMultMask() const;
   double GetE() const;
+  double GetInputE() const;
   double GetGamma(int) const;
+  double GetInputGamma(int) const;
   double GetFitGamma(int) const;
   double GetFitE() const;
   double GetNFIntegral(int) const;
@@ -59,11 +61,13 @@ class ALevel {
   int ecPairNum_;
   unsigned char ecMultMask_;
   double level_e_;
+  double input_e_;
   double fitlevel_e_;
   double sqrt_nf_factor_;
   double transform_e_;
   std::vector<bool> channelfixed_;
   vector_r gammas_;
+  vector_r input_gammas_;
   vector_r fitgammas_;
   vector_r nf_integrals_;
   vector_r ec_conv_factors_;
