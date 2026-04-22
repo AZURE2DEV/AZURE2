@@ -212,10 +212,10 @@ void MCMCTab::setupSamplingControls(QWidget* samplingWidget) {
     // Som Paneru's Patch
     if (infoButton[1]) {
         basicLayout->addWidget(infoButton[1], 0, 2);
-    } 
+    } 
     else {
         qDebug() << "infoButton[1] is null!";
-    }
+    }
     
     basicLayout->addWidget(new QLabel("Number of Steps:"), 1, 0);
     nStepsSpinBox = new QSpinBox();
