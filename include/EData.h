@@ -2,6 +2,7 @@
 #define EDATA_H
 
 #include "ESegment.h"
+#include "ESpectrum.h"
 #include "TargetEffect.h"
 #include "EDataIterator.h"
 #include <deque>
@@ -38,6 +39,12 @@ class EData {
   void Iterate();
   void ResetIterations();
   int Initialize(CNuc*,const Config&);
+  void BuildSpectra(CNuc*,const Config&);
+  void InitializeSpectra(CNuc*,const Config&);
+  void CalculateSpectra(CNuc*,const Config&);
+  int NumSpectra() const;
+  ESpectrum* GetSpectrum(int);
+  ESpectrum* FindSpectrum(const ESpectrum::Key&);
   void AddSegment(ESegment);
   void PrintData(const Config&);
   void CalcLegendreP(int,CNuc*);
@@ -68,6 +75,7 @@ class EData {
   std::vector<ESegment>& GetSegments();
   
  private:
+  std::vector<ESpectrum> spectra_;
   std::vector<TargetEffect> targetEffects_;
   std::vector<ESegment> segments_;
   std::deque<ESegment> componentSegments_;  // Separate storage for component segments (deque avoids pointer invalidation)

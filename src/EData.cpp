@@ -12,6 +12,7 @@
 #include <iomanip>
 #include <omp.h>
 #include <time.h>
+#include <map>
 #include <unordered_map>
 
 /*!
@@ -826,8 +827,104 @@ int EData::Initialize(CNuc *compound,const Config &configure) {
   //Initialize component segments - ensure their entrance/exit pairs are properly set up
   configure.outStream << "Initializing Component Segments..." << std::endl;
   if(this->InitializeComponentSegments(compound,configure)==-1) return -1;
-  
+
+  //Build resonance-aware interpolation spectra
+  configure.outStream << "Building Interpolation Spectra..." << std::endl;
+  this->BuildSpectra(compound,configure);
+  this->InitializeSpectra(compound,configure);
+
   return 0;
+}
+
+/*!
+ * Scans all non-target-effect segments to determine unique channel/observable
+ * combinations, merges their CM energy ranges, and builds one resonance-aware
+ * ESpectrum per combination.
+ */
+
+void EData::BuildSpectra(CNuc* compound, const Config& configure) {
+  // Collect [minCME, maxCME] per unique spectrum key.
+  std::map<ESpectrum::Key, std::pair<double,double>> ranges;
+
+  for(auto& segment : segments_) {
+    if(segment.IsTargetEffect() || segment.NumPoints() == 0) continue;
+
+    // Use the first point's CM angle so the key reflects the actual CM frame.
+    double cmAngle = segment.GetPoint(1)->GetCMAngle();
+    ESpectrum::Key key = ESpectrum::Key::FromSegment(segment, cmAngle);
+
+    double minE = segment.GetPoint(1)->GetCMEnergy();
+    double maxE = minE;
+    for(int p = 2; p <= segment.NumPoints(); ++p) {
+      double e = segment.GetPoint(p)->GetCMEnergy();
+      if(e < minE) minE = e;
+      if(e > maxE) maxE = e;
+    }
+
+    auto it = ranges.find(key);
+    if(it == ranges.end()) {
+      ranges[key] = {minE, maxE};
+    } else {
+      if(minE < it->second.first)  it->second.first  = minE;
+      if(maxE > it->second.second) it->second.second = maxE;
+    }
+  }
+
+  spectra_.clear();
+  spectra_.reserve(ranges.size());
+  for(auto& kv : ranges) {
+    spectra_.emplace_back(kv.first);
+    spectra_.back().BuildGrid(kv.second.first, kv.second.second,
+                              compound, configure);
+  }
+}
+
+/*!
+ * Pre-computes energy-dependent quantities (Lo-matrix elements, Legendre
+ * polynomials, Coulomb amplitudes) for all spectrum grid points.
+ * Must be called once after BuildSpectra.
+ */
+
+void EData::InitializeSpectra(CNuc* compound, const Config& configure) {
+  for(auto& spectrum : spectra_)
+    spectrum.InitializePoints(compound, configure);
+}
+
+/*!
+ * Computes cross-sections at all spectrum grid points using the current
+ * parameter set.  Call this after CNuc::TransformOut each fit iteration.
+ */
+
+void EData::CalculateSpectra(CNuc* compound, const Config& configure) {
+  for(auto& spectrum : spectra_)
+    spectrum.Calculate(compound, configure);
+}
+
+/*!
+ * Returns the number of interpolation spectra.
+ */
+
+int EData::NumSpectra() const {
+  return static_cast<int>(spectra_.size());
+}
+
+/*!
+ * Returns the spectrum at 1-based index i.
+ */
+
+ESpectrum* EData::GetSpectrum(int i) {
+  return &spectra_[i - 1];
+}
+
+/*!
+ * Returns a pointer to the spectrum whose key matches, or nullptr if not found.
+ * The number of spectra is typically small (O(10)), so linear search is fine.
+ */
+
+ESpectrum* EData::FindSpectrum(const ESpectrum::Key& key) {
+  for(auto& s : spectra_)
+    if(s.GetKey() == key) return &s;
+  return nullptr;
 }
 
 /*!
