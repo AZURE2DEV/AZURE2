@@ -1,0 +1,18 @@
+segment_key_#, file_name, low_angle_bound, high_angle_bound, aframe, low_energy_bound, high_energy_bound, eframe, norm, shift
+1,data/seagrave.dat,0.0000e+00,1.8000e+02,Lab,0.0000e+00,5.0000e+00,Lab,9.5000e-01,0.0000e+00
+2,data/artemov.dat,0.0000e+00,1.8000e+02,Lab,0.0000e+00,5.0000e+00,Lab,1.0000e+00,0.0000e+00
+3,data/skowronski_fels_yield.dat,0.0000e+00,1.8000e+02,Lab,0.0000e+00,5.0000e+00,Lab,1.0000e+00,0.0000e+00
+4,data/meyer_84.dat,8.4300e+01,8.4300e+01,Lab,0.0000e+00,5.0000e+00,Lab,1.0000e+00,0.0000e+00
+5,data/meyer_114.dat,1.1450e+02,1.1450e+02,Lab,0.0000e+00,5.0000e+00,Lab,1.0000e+00,0.0000e+00
+6,data/meyer_144.dat,1.4410e+02,1.4410e+02,Lab,0.0000e+00,5.0000e+00,Lab,1.0000e+00,0.0000e+00
+7,data/skowronski_luna_hpge.dat,0.0000e+00,1.8000e+02,Lab,0.0000e+00,5.0000e+00,Lab,1.0000e+00,0.0000e+00
+8,data/skowronski_luna_bgo.dat,0.0000e+00,1.8000e+02,Lab,0.0000e+00,5.0000e+00,Lab,1.0000e+00,0.0000e+00
+9,data/skowronski_fels.dat,0.0000e+00,1.8000e+02,Lab,0.0000e+00,5.0000e+00,Lab,1.0000e+00,0.0000e+00
+10,data/gyurky.dat,0.0000e+00,1.8000e+02,Lab,0.0000e+00,5.0000e+00,Lab,1.0000e+00,0.0000e+00
+11,data/kettner_0.dat,0.0000e+00,0.0000e+00,Lab,0.0000e+00,5.0000e+00,Lab,1.0000e+00,0.0000e+00
+12,data/kettner_55.dat,5.5000e+01,5.5000e+01,Lab,0.0000e+00,5.0000e+00,Lab,1.0000e+00,0.0000e+00
+13,data/vogl.dat,0.0000e+00,1.8000e+02,Lab,0.0000e+00,5.0000e+00,Lab,1.0000e+00,0.0000e+00
+14,data/rolfs_0_le.dat,0.0000e+00,1.8000e+02,Lab,0.0000e+00,5.0000e+00,Lab,1.0000e+00,0.0000e+00
+15,data/rolfs_0_he.dat,0.0000e+00,1.8000e+02,Lab,0.0000e+00,5.0000e+00,Lab,1.0000e+00,0.0000e+00
+16,data/rolfs_90_le.dat,0.0000e+00,1.8000e+02,Lab,0.0000e+00,5.0000e+00,Lab,1.0000e+00,0.0000e+00
+17,data/rolfs_90_he.dat,0.0000e+00,1.8000e+02,Lab,0.0000e+00,5.0000e+00,Lab,1.0000e+00,0.0000e+00

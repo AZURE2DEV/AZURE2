@@ -11,6 +11,8 @@
 #include "AZUREMain.h"
 #include "Config.h"
 #include "ECAmplitudeCache.h"
+#include <chrono>
+#include <cstdio>
 #include <iostream>
 
 class AZUREMainThreadWorker : public QObject {
@@ -40,8 +42,16 @@ Q_OBJECT
       InitializeECAmplitudeCache();
     }
     
+    auto calcStart = std::chrono::steady_clock::now();
     azureMain_();
-    
+    int totalSec = (int)std::chrono::duration_cast<std::chrono::seconds>(
+                         std::chrono::steady_clock::now() - calcStart).count();
+    char timeStr[16];
+    std::snprintf(timeStr, sizeof(timeStr), "%d:%02d:%02d",
+                  totalSec / 3600, (totalSec % 3600) / 60, totalSec % 60);
+    azureMain_.configure().outStream << std::endl
+        << "Calculation completed in " << timeStr << "." << std::endl;
+
     // Cleanup caches after calculations
     if (azureMain_.configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {
       CleanupECAmplitudeCache();

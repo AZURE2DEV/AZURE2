@@ -17,6 +17,8 @@
 #include "GSLException.h"
 #include "CoulFuncCache.h"
 #include "ECAmplitudeCache.h"
+#include <chrono>
+#include <cstdio>
 #include <stdlib.h>
 #include <iostream>
 #include <iomanip>
@@ -1350,7 +1352,15 @@ int main(int argc,char *argv[]){
       // and execute
       AZUREMain azureMain(configure);
       configure.outStream << std::endl; startMessage(configure);
+      auto calcStart = std::chrono::steady_clock::now();
       int returnValue = azureMain();
+      int totalSec = (int)std::chrono::duration_cast<std::chrono::seconds>(
+                           std::chrono::steady_clock::now() - calcStart).count();
+      char timeStr[16];
+      std::snprintf(timeStr, sizeof(timeStr), "%d:%02d:%02d",
+                    totalSec / 3600, (totalSec % 3600) / 60, totalSec % 60);
+      configure.outStream << std::endl
+                          << "Calculation completed in " << timeStr << "." << std::endl;
 #ifdef USE_MCMC
     }
 #endif
