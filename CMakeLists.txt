@@ -97,9 +97,14 @@ if(CROSS_COMPILE_WINDOWS)
 else()
     # Native compilation uses pkg-config
     find_package(PkgConfig REQUIRED)
+
     pkg_check_modules(GSL REQUIRED gsl)
     include_directories(${GSL_INCLUDE_DIRS})
     link_directories(${GSL_LIBRARY_DIRS})
+
+    pkg_check_modules(FFTW REQUIRED fftw3)
+    include_directories(${FFTW_INCLUDE_DIRS})
+    link_directories(${FFTW_LIBRARY_DIRS})
 endif()
 
 # OpenMP setup
@@ -124,7 +129,7 @@ endif()
 # Extra includes/libs
 set(AZURE2_SOURCE_DIR ${CMAKE_BUILD_DIRECTORY})
 include_directories(${AZURE2_SOURCE_DIR}/coul/include)
-set(EXTRA_LIBS coul pugixml ${OpenMP_LIBRARIES})
+set(EXTRA_LIBS coul pugixml ${OpenMP_LIBRARIES} ${FFTW_LIBRARIES})
 
 # Windows DLL bundling function (define before subdirectories)
 function(copy_dll_if_exists target_name dll_name dll_path)
@@ -271,22 +276,23 @@ if(BUILD_GUI)
     else()
         # Native Linux/macOS QWT configuration
         if(USE_QWT)
-            # Set the CMake module path to find our custom FindQwt.cmake
             list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
-            
-            # Find QWT using our custom module
             find_package(Qwt REQUIRED)
-            
+
             if(Qwt_FOUND)
                 message(STATUS "Found QWT: ${QWT_LIBRARIES}")
                 message(STATUS "QWT include directories: ${QWT_INCLUDE_DIR}")
-                
-                # Set variables for use in subdirectories
+
                 set(QWT_INCLUDE_DIRS ${QWT_INCLUDE_DIR})
                 set(QWT_LIBRARIES ${QWT_LIBRARY})
-                
-                # Add to global include directories
+
                 include_directories(${QWT_INCLUDE_DIR})
+
+                if(APPLE)
+                    include_directories("/opt/homebrew/Cellar/qwt-qt5/6.3.0/lib/qwt.framework/Versions/6/Headers")
+                    link_directories("/opt/homebrew/Cellar/qwt-qt5/6.3.0/lib")
+                    set(QWT_LIBRARIES "-F/opt/homebrew/Cellar/qwt-qt5/6.3.0/lib -framework qwt")
+                endif()
             else()
                 message(FATAL_ERROR "QWT library not found. Please install libqwt-qt5-dev or disable USE_QWT")
             endif()

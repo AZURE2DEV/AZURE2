@@ -1,4 +1,4 @@
-set(AZURE2_SOURCES AChannel.cpp CoulFunc.cpp CoulFuncCache.cpp GenMatrixFunc.cpp
+set(AZURE2_SOURCES AChannel.cpp Convolution.cpp CoulFunc.cpp CoulFuncCache.cpp GenMatrixFunc.cpp
 KLGroup.cpp ALevel.cpp Decay.cpp AngCoeff.cpp MGroup.cpp
 AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
 AZURE2.cpp ECIntegral.cpp ECAmplitudeCache.cpp MatrixInv.cpp PPair.cpp AZURECalc.cpp
