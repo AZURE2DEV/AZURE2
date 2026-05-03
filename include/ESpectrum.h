@@ -1,7 +1,11 @@
 #ifndef ESPECTRUM_H
 #define ESPECTRUM_H
 
+#include "Convolution.h"
 #include "EPoint.h"
+
+#include <functional>
+#include <memory>
 #include <vector>
 
 class CNuc;
@@ -54,33 +58,76 @@ public:
     };
 
     explicit ESpectrum(const Key& key);
+    const Key& GetKey() const { return key_; }
+
+    void Setup(
+        CNuc* compound,
+        const Config& configure,
+        Convolution::Range intrinsicEvaluationRange,
+        std::vector<std::function<double(double)>> kernelFunctions);
+
+    std::size_t DetermineConvolutionGridSize(Convolution::Range intrinsicEvaluationRange) const;
+
+    void SetMaximumConvolutionStepSize(double stepSize);
+    double MaximumConvolutionStepSize() const;
 
     /// Build the resonance-aware energy grid and populate the EPoint vector.
     /// Called once during EData::BuildSpectra.
-    void BuildGrid(double minCMEnergy, double maxCMEnergy,
-                   CNuc* compound, const Config& configure);
+    // void BuildGrid(double minCMEnergy, double maxCMEnergy,
+    //                CNuc* compound, const Config& configure);
 
     /// Pre-compute Lo-matrix elements, Legendre polynomials, Coulomb amplitudes
     /// and (optionally) EC amplitudes for every grid point.
     /// Called once per run from EData::InitializeSpectra.
-    void InitializePoints(CNuc* compound, const Config& configure);
+    // void InitializePoints(CNuc* compound, const Config& configure);
 
     /// Compute cross-sections at all grid points using the current parameter set.
     /// Must be called after CNuc::TransformOut each fit iteration.
-    void Calculate(CNuc* compound, const Config& configure);
+    // void Calculate(CNuc* compound, const Config& configure);
 
     /// Linear interpolation of the fit cross-section at an arbitrary CM energy.
     /// Clamps to the boundary value when energy is outside the grid range.
-    double Interpolate(double cmEnergy) const;
+    // double Interpolate(double cmEnergy) const;
 
-    const Key& GetKey() const { return key_; }
-    int NumPoints() const     { return static_cast<int>(points_.size()); }
-    EPoint*       GetPoint(int i);       ///< 1-based
-    const EPoint* GetPoint(int i) const; ///< 1-based
+    // int NumPoints() const     { return static_cast<int>(points_.size()); }
+    // EPoint*       GetPoint(int i);       ///< 1-based
+    // const EPoint* GetPoint(int i) const; ///< 1-based
+
+    //------------------------------------------------
+    void SetCalculationContext(CNuc* compound, const Config& configure);
+
+    double CalculateIntrinsic(double cmEnergy) const;
+
+    void EnableConvolution(std::size_t n,
+                           Convolution::Range inputRange,
+                           std::vector<std::function<double(double)>> kernelFunctions);
+
+    void DisableConvolution();
+
+    bool HasConvolution() const;
+
+    void MarkConvolutionDirty();
+
+    void UpdateConvolution();
+
+    double Evaluate(double cmEnergy) const;
 
 private:
+
+    CNuc* compound_{nullptr};
+    const Config* configure_{nullptr};
+
     Key               key_;
-    std::vector<EPoint> points_; ///< sorted ascending by CM energy
+    // std::vector<EPoint> points_; ///< sorted ascending by CM energy
+
+    //------------------------------------------------
+    std::unique_ptr<Convolution> convolution_;
+    bool convolutionDirty_{true};
+
+    // This is currently hardcoded. With cell-averaged sampling for the FFT,
+    // it can typically be left with a small default value.
+    double maximumConvolutionStepSize_{0.001};
+
 };
 
 #endif
