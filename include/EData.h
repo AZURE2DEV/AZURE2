@@ -73,7 +73,8 @@ class EData {
   EDataIterator begin();
   EDataIterator end();
   std::vector<ESegment>& GetSegments();
-  
+  void SetMaximumConvolutionStepSize(double stepSize);
+  double MaximumConvolutionStepSize() const;
  private:
   std::vector<ESpectrum> spectra_;
   std::vector<TargetEffect> targetEffects_;
@@ -84,6 +85,7 @@ class EData {
   int energyShiftParamOffset_;
   bool isFit_;
   bool isErrorAnalysis_;
+  double maximumConvolutionStepSize_{0.001};
 };
 
 #endif

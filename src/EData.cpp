@@ -831,7 +831,9 @@ int EData::Initialize(CNuc *compound,const Config &configure) {
   //Build resonance-aware interpolation spectra
   configure.outStream << "Building Interpolation Spectra..." << std::endl;
   this->BuildSpectra(compound,configure);
-  this->InitializeSpectra(compound,configure);
+
+  // Deprecated, kept temporarily for explanation
+  // this->InitializeSpectra(compound,configure);
 
   return 0;
 }
@@ -844,7 +846,7 @@ int EData::Initialize(CNuc *compound,const Config &configure) {
 
 void EData::BuildSpectra(CNuc* compound, const Config& configure) {
   // Collect [minCME, maxCME] per unique spectrum key.
-  std::map<ESpectrum::Key, std::pair<double,double>> ranges;
+  std::map<ESpectrum::Key, std::pair<double,double>> intrinsicEvaluationRanges;
 
   for(auto& segment : segments_) {
     if(segment.IsTargetEffect() || segment.NumPoints() == 0) continue;
@@ -861,9 +863,9 @@ void EData::BuildSpectra(CNuc* compound, const Config& configure) {
       if(e > maxE) maxE = e;
     }
 
-    auto it = ranges.find(key);
-    if(it == ranges.end()) {
-      ranges[key] = {minE, maxE};
+    auto it = intrinsicEvaluationRanges.find(key);
+    if(it == intrinsicEvaluationRanges.end()) {
+      intrinsicEvaluationRanges[key] = {minE, maxE};
     } else {
       if(minE < it->second.first)  it->second.first  = minE;
       if(maxE > it->second.second) it->second.second = maxE;
@@ -871,11 +873,29 @@ void EData::BuildSpectra(CNuc* compound, const Config& configure) {
   }
 
   spectra_.clear();
-  spectra_.reserve(ranges.size());
-  for(auto& kv : ranges) {
-    spectra_.emplace_back(kv.first);
-    spectra_.back().BuildGrid(kv.second.first, kv.second.second,
-                              compound, configure);
+  spectra_.reserve(intrinsicEvaluationRanges.size());
+
+  for(const auto& rangeEntry : intrinsicEvaluationRanges) {
+    const ESpectrum::Key& key = rangeEntry.first;
+    const Convolution::Range& intrinsicEvaluationRange = rangeEntry.second;
+
+    spectra_.emplace_back(key);
+
+    ESpectrum& spectrum = spectra_.back();
+    spectrum.Setup(compound, configure, intrinsicEvaluationRange, {});
+
+    // Example of kernel function usage
+    // std::vector<std::function<double(double)>> kernelFunctions = {
+    //     [&resolutionSigma](double x) {
+    //         const double sigma = resolutionSigma.Get();
+    //         const double pi = std::acos(-1.0);
+
+    //         return std::exp(-0.5 * x * x / (sigma * sigma))
+    //              / (sigma * std::sqrt(2.0 * pi));
+    //     }
+    // };
+    // spectrum.Setup(compound, configure, intrinsicEvaluationRange, kernelFunctions);
+
   }
 }
 
@@ -885,10 +905,11 @@ void EData::BuildSpectra(CNuc* compound, const Config& configure) {
  * Must be called once after BuildSpectra.
  */
 
-void EData::InitializeSpectra(CNuc* compound, const Config& configure) {
-  for(auto& spectrum : spectra_)
-    spectrum.InitializePoints(compound, configure);
-}
+// This should no longer be done
+// void EData::InitializeSpectra(CNuc* compound, const Config& configure) {
+//   for(auto& spectrum : spectra_)
+//     spectrum.InitializePoints(compound, configure);
+// }
 
 /*!
  * Computes cross-sections at all spectrum grid points using the current
@@ -896,8 +917,10 @@ void EData::InitializeSpectra(CNuc* compound, const Config& configure) {
  */
 
 void EData::CalculateSpectra(CNuc* compound, const Config& configure) {
-  for(auto& spectrum : spectra_)
-    spectrum.Calculate(compound, configure);
+  for(auto& spectrum : spectra_) {
+    spectrum.MarkConvolutionDirty();
+    spectrum.UpdateConvolution();
+  }
 }
 
 /*!
