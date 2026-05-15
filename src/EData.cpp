@@ -1626,16 +1626,52 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config& configure) {
               ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
               int ir = theCNuc->GetPairNumFromKey(componentSegment.GetExitKey());
               if(ecLevel->GetECPairNum() == ir) {
-                for(int i = 1; i <= componentSegment.NumPoints(); i++) {
+                char segmentKeyOut[256];
+                sprintf(segmentKeyOut,"%d",componentSegment.GetSegmentKey());
+                configure.outStream << "\tSegment #" << std::setw(12) << segmentKeyOut
+                                    << std::setw(0) << " [                         ] 0%";configure.outStream.flush();
+                int numPoints=componentSegment.NumPoints();
+                int pointIndex=0;
+                time_t startTime = time(NULL);
+                bool localStop = false;
+#pragma omp parallel for shared(configure,localStop)
+                for(int i = 1; i <= numPoints; i++) {
+                  if(configure.stopFlag||localStop) continue;
                   EPoint *point = componentSegment.GetPoint(i);
                   if(!(point->IsMapped())) {
                     try {
                       point->CalculateECAmplitudes(theCNuc, configure);
+                    } catch(GSLException e) {
+#pragma omp critical
+                      {
+                        configure.outStream << e.what() << std::endl;
+                        localStop=true;
+                      }
                     } catch(...) {
-                      configure.outStream << "Warning: EC amplitude calculation failed for component segment point" << std::endl;
+#pragma omp critical
+                      {
+                        configure.outStream << "Warning: EC amplitude calculation failed for component segment point" << std::endl;
+                      }
                     }
                   }
+                  ++pointIndex;
+                  if(difftime(time(NULL),startTime)>0.25) {
+                    startTime=time(NULL);
+                    std::string progress=" [";
+                    double percent=0.;
+                    for(int k = 1;k<=25;k++) {
+                      if(pointIndex>=percent*numPoints&&percent<1.) {
+                        percent+=0.04;
+                        progress+='*';
+                      } else progress+=' ';
+                    } progress+="] ";
+                    configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
+                                        << std::setw(0) << progress << percent*100 << '%';configure.outStream.flush();
+                  }
                 }
+                if(configure.stopFlag||localStop) return -1;
+                configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
+                                    << std::setw(0) << " [*************************] 100%" << std::endl;
               }
             }
           }

@@ -907,7 +907,10 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, co
             }
           }
           double compValue = componentPoint->GetFitCrossSection();
-          sum += compValue;
+          // Check if NaN or infinite and skip if so
+          if (!std::isnan(compValue) && !std::isinf(compValue)) {
+            sum += compValue;
+          }
           compIdx++;
         }
       }

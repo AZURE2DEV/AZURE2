@@ -120,8 +120,7 @@ void CoulFunc::setLast(int lLast, double rLast, double eLast, CoulWaves coulLast
 CoulWaves CoulFunc::operator()(int l,double radius,double energy) {
   struct CoulWaves result={0.0,0.0,0.0,0.0};
 
-  // FIXME: Cross section might be discontinuous at 0 energy, so set a minimum
-  // 12C(a,g) has problem with this
+  // fix: 12C(a,g) has problems under 1 keV, so we put a limit
   //if(energy<=0.001) {
   //  energy = 0.001;
   //}

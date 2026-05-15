@@ -192,6 +192,16 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
       // Get level energy (in compound excitation energy)
       double levelExcitationEnergy = level->GetE();
 
+      // Check if level has widths (Γ > 0) to be considered a resonance
+      bool hasWidth = false;
+      for (int ch = 1; ch <= numChannels; ch++) {
+        if (std::abs(level->GetGamma(ch)) > 1.0e-6) {
+          hasWidth = true;
+          break;
+        }
+      }
+      if (!hasWidth) continue; // skip levels with no widths
+
       // Convert to CM energy: E_cm = E_excitation - S - E_ex
       double levelCMEnergy = levelExcitationEnergy - separationEnergy - excitationEnergy;
 
