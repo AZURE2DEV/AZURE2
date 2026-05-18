@@ -33,12 +33,21 @@ public:
   void   SetChRad(double);
   double GetRedMass() const;
   double GetI1I2Factor() const;
+  /// Returns true if the two particles in the pair are identical
+  /// (same Z, mass, intrinsic spin, parity, and excitation energy).
+  /// Detected automatically in the constructor.
+  bool IsIdentical() const;
+  /// Boson/fermion sign: +1 for identical bosons (2j even), -1 for
+  /// identical fermions. Returns +1 when IsIdentical() is false.
+  int GetIdenticalSign() const;
   void AddDecay(Decay);
   void SetEntrance();
   Decay *GetDecay(int);
 private:
   bool entrance_;
   bool ec_entrance_;
+  bool is_identical_;
+  int identical_sign_;
   int pair_z_[2];
   int pair_pi_[2];
   int pair_ptype_;

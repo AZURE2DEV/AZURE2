@@ -1,6 +1,7 @@
 #include "NucLine.h"
 #include "PPair.h"
 #include <assert.h>
+#include <cmath>
 
 /*!
  * A particle pair object is created from and entry in the nuclear input file.
@@ -27,6 +28,24 @@ PPair::PPair(NucLine nucLine)
   i1i2factor_=1.0/(2.*nucLine.j1()+1.0)/(2.*nucLine.j2()+1.0);
   entrance_=false;
   ec_entrance_=false;
+
+  // Auto-detect identical-particle pair. Two particles are treated as
+  // identical when Z, mass, intrinsic spin, parity, and excitation energy
+  // (e2 of the heavy partner — the light partner is implicitly in its g.s.)
+  // all match. The boson/fermion sign is +1 for integer 2j (bosons) and
+  // -1 for half-integer 2j (fermions).
+  is_identical_ = (pair_z_[0]==pair_z_[1]) &&
+                  (std::fabs(pair_m_[0]-pair_m_[1])<1.0e-6) &&
+                  (std::fabs(pair_j_[0]-pair_j_[1])<1.0e-6) &&
+                  (pair_pi_[0]==pair_pi_[1]) &&
+                  (std::fabs(pair_ex_e_)<1.0e-9) &&
+                  (pair_ptype_==0);
+  if(is_identical_) {
+    int two_j = static_cast<int>(2.0*pair_j_[0] + 0.5);
+    identical_sign_ = (two_j%2==0) ? +1 : -1;
+  } else {
+    identical_sign_ = +1;
+  }
 }
 
 /*!
@@ -182,6 +201,14 @@ double PPair::GetRedMass() const {
 
 double PPair::GetI1I2Factor() const {
   return i1i2factor_;
+}
+
+bool PPair::IsIdentical() const {
+  return is_identical_;
+}
+
+int PPair::GetIdenticalSign() const {
+  return identical_sign_;
 }
 
 /*!

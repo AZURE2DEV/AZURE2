@@ -239,9 +239,17 @@ void CNuc::ParseExternalCapture(const Config& configure,std::map<int,int>& ecPai
 	  double s1=this->GetPair(ir)->GetJ(1);
 	  double s2=this->GetPair(ir)->GetJ(2);
 	  int sPi=this->GetPair(ir)->GetPi(1)*this->GetPair(ir)->GetPi(2);
+	  bool identicalPair=this->GetPair(ir)->IsIdentical();
+	  int identicalSign=this->GetPair(ir)->GetIdenticalSign();
 	  for(double chS=fabs(s1-s2);chS<=s1+s2;chS+=1.) {
 	    for(int chL=0;chL<=this->GetMaxLValue();chL++) {
 	      int chPi=sPi*(int)pow(-1,chL);
+	      // Bose/Fermi symmetry for identical pair: only keep
+	      // channels with (-1)^(L+S) equal to the identical sign.
+	      if(identicalPair) {
+		int parityLS=((chL+(int)(chS+0.5))%2==0)?+1:-1;
+		if(parityLS!=identicalSign) continue;
+	      }
 	      if(fabs(chS-chL)<=jValue&&jValue<=chS+chL&&chPi==parity) {
 		AChannel newChannel(chL,chS,ir,'P');
 		this->GetJGroup(jGroupNum)->AddChannel(newChannel);
@@ -286,6 +294,39 @@ int CNuc::GetMaxLValue() const {
  */
 
 void CNuc::Initialize(const Config &configure) {
+  // Validate channels associated with identical-particle pairs:
+  // Bose/Fermi symmetry requires (-1)^(L+S) == identicalSign. Warn on any
+  // violation; such channels still contribute to the calculation but the
+  // result will not respect identical-particle symmetry.
+  for(int j=1;j<=this->NumJGroups();j++) {
+    JGroup *jg=this->GetJGroup(j);
+    for(int ch=1;ch<=jg->NumChannels();ch++) {
+      AChannel *channel=jg->GetChannel(ch);
+      if(channel->GetRadType()!='P') continue;
+      PPair *pp=this->GetPair(channel->GetPairNum());
+      if(!pp->IsIdentical()) continue;
+      int chL=channel->GetL();
+      int chS_twice=(int)(2.0*channel->GetS()+0.5);
+      if(chS_twice%2!=0) {
+        // Half-integer S in an identical pair would only arise for half-
+        // integer-spin particles in an asymmetric coupling; skip the
+        // even/odd test in that case to avoid false positives.
+        continue;
+      }
+      int parityLS=((chL+chS_twice/2)%2==0)?+1:-1;
+      if(parityLS!=pp->GetIdenticalSign()) {
+        configure.outStream << "**WARNING: Identical-particle pair (Z="
+                            << pp->GetZ(1) << ", A=" << pp->GetM(1)
+                            << ") has channel with L=" << chL
+                            << ", S=" << channel->GetS()
+                            << " violating Bose/Fermi symmetry "
+                            << "((-1)^(L+S) != " << pp->GetIdenticalSign()
+                            << "). This channel should be removed from the input."
+                            << std::endl;
+      }
+    }
+  }
+
   //Calculate Boundary Conditions
   if( !(configure.paramMask & Config::USE_API) )
   	configure.outStream << "Calculating Boundary Conditions..." << std::endl;

@@ -1263,6 +1263,15 @@ void EPoint::CalcCoulombAmplitude(CNuc *theCNuc) {
     double cal=(1.0/(2.0*sqrt(pi)))*eta*(1.0/pow(sin(angle*pi/360.0),2.));
     double cex=2.0*eta*log(sin(angle*pi/360.0));
     complex calpha(cal*cos(cex),-cal*sin(cex));
+    // Identical-particle Mott amplitude: add f_C(pi - theta) with the
+    // boson/fermion sign. For two identical 0+ bosons the sign is +1 and
+    // the resulting |C|^2 reproduces the Mott Coulomb cross section.
+    if(entrancePair->IsIdentical()) {
+      double cal_p=(1.0/(2.0*sqrt(pi)))*eta*(1.0/pow(cos(angle*pi/360.0),2.));
+      double cex_p=2.0*eta*log(cos(angle*pi/360.0));
+      complex calpha_p(cal_p*cos(cex_p),-cal_p*sin(cex_p));
+      calpha = calpha + double(entrancePair->GetIdenticalSign())*calpha_p;
+    }
     this->SetCoulombAmplitude(calpha);
   } else this->SetCoulombAmplitude(complex(0.,0.));
   for(int i=1;i<=this->NumSubPoints();i++) {

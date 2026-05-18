@@ -269,40 +269,55 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
 	point->SetAngularDists(angularCoeff);
 	return;
       }
+      // Identical-particle symmetrization (elastic, aa==ir):
+      //   |F|^2 = |F_C|^2 + |F_N|^2 + 2 Re[F_C* F_N]
+      // with F_X = f_X(theta) + eps f_X(pi-theta). For two identical 0+
+      // bosons the only contributing partial waves have L even, so
+      // f_N(pi-theta) = f_N(theta), giving |F_N|^2 = 4|f_N|^2 and
+      // 2 Re[F_C* F_N] = 4 Re[F_C* f_N]. The Coulomb piece is already
+      // built as F_C in EPoint::CalcCoulombAmplitude. Here we apply the
+      // remaining factors 4 to RT and 2 to IT.
+      double rtFactor = 1.0;
+      double itFactor = 1.0;
+      if(aa==ir && compound()->GetPair(aa)->IsIdentical()) {
+	rtFactor = 4.0;
+	itFactor = 2.0;
+      }
       complex RT=sum/pi*point->GetGeometricalFactor()*
-	compound()->GetPair(aa)->GetI1I2Factor();
-      
+	compound()->GetPair(aa)->GetI1I2Factor()*rtFactor;
+
       complex CT(0.,0.), IT(0.,0.);
       if(aa==ir) {
 	complex coulombAmplitude=point->GetCoulombAmplitude();
 	CT=coulombAmplitude*conj(coulombAmplitude)*point->GetGeometricalFactor();
-	
+
 	sum=complex(0.,0.);
 	for(int k=1;k<=theDecay->NumKGroups();k++) {
 	  for(int m=1;m<=theDecay->GetKGroup(k)->NumMGroups();m++) {
-	    MGroup *theMGroup=theDecay->GetKGroup(k)->GetMGroup(m);	
+	    MGroup *theMGroup=theDecay->GetKGroup(k)->GetMGroup(m);
 	    AChannel *entranceChannel=compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChNum());
 	    AChannel *exitChannel=compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChpNum());
-	    if(entranceChannel==exitChannel) 
+	    if(entranceChannel==exitChannel)
 	      sum+=theMGroup->GetStatSpinFactor()*
 		coulombAmplitude*conj(this->GetTMatrixElement(k,m))*
 		point->GetLegendreP(compound()->GetJGroup(theMGroup->GetJNum())->
 				    GetChannel(theMGroup->GetChNum())->GetL());
 	  }
 	}
-	IT=complex(0.,1.)/sqrt(pi)*sum*point->GetGeometricalFactor();
+	IT=complex(0.,1.)/sqrt(pi)*sum*point->GetGeometricalFactor()*itFactor;
       }
       point->SetFitCrossSection((real(CT)+real(RT)+real(IT))/100.);
     } else if(aa==ir) {
       double segmentJ=point->GetJ();
       int segmentL=point->GetL();
+      PPair *entrancePair=compound()->GetPair(aa);
       this->ClearTempTMatrices();
       for(int k=1;k<=theDecay->NumKGroups();k++) {
 	for(int m=1;m<=theDecay->GetKGroup(k)->NumMGroups();m++) {
 	  MGroup *theMGroup=theDecay->GetKGroup(k)->GetMGroup(m);
 	  double jValue=compound()->GetJGroup(theMGroup->GetJNum())->GetJ();
 	  AChannel *entranceChannel=compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChNum());
-	  int lValue=entranceChannel->GetL();	
+	  int lValue=entranceChannel->GetL();
 	  AChannel *exitChannel=compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChpNum());
 	  if(jValue==segmentJ&&lValue==segmentL&&entranceChannel==exitChannel) {
 	    complex expCoulPhaseSquared=point->GetExpCoulombPhase(theMGroup->GetJNum(),theMGroup->GetChNum())*
@@ -317,10 +332,24 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
 	}
       }
       assert(this->NumTempTMatrices()<=1);
+      // The U-matrix accumulated above is S_L = exp(2 i delta_L); the nuclear
+      // phase shift delta_L is half its argument. For identical particles the
+      // physical partial-wave amplitude is symmetrised by [1 + eps (-1)^(L+S)],
+      // which doubles allowed waves and removes forbidden ones, but delta_L
+      // per allowed wave has the same meaning as in the distinguishable case.
       double phase=0.0;
-      if(this->NumTempTMatrices()==1) phase = 180.0/pi/2.0*
-					atan2(imag(this->GetTempTMatrix(1)->TMatrix),real(this->GetTempTMatrix(1)->TMatrix)); 
-      //if(segmentL%2!=0&&phase<0) phase+=180.0;
+      if(this->NumTempTMatrices()==1) {
+	phase = 180.0/pi/2.0*
+	  atan2(imag(this->GetTempTMatrix(1)->TMatrix),
+		real(this->GetTempTMatrix(1)->TMatrix));
+	// atan2 returns (-pi, pi], so phase lives in (-90, 90]. For
+	// identical-particle pairs we wrap to [0, 180), the standard
+	// convention in partial-wave phase-shift analyses (e^{2 i delta}
+	// is pi-periodic, and delta_L grows monotonically through a
+	// resonance in this range). Left untouched for distinguishable
+	// pairs to preserve existing fit conventions.
+	if(entrancePair->IsIdentical() && phase<0.0) phase+=180.0;
+      }
       point->SetFitCrossSection(phase);
     }
   }

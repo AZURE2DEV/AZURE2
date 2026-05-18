@@ -811,6 +811,44 @@ void EData::ResetIterations(){
  */
 
 int EData::Initialize(CNuc *compound,const Config &configure) {
+  //Identical-particle phase-shift segment validation: warn once per segment
+  //if the requested L is forbidden by Bose/Fermi symmetry on an identical
+  //pair. The phase branch in GenMatrixFunc would silently report delta = 0
+  //for these (no matching channel), which is easy to misread as "no nuclear
+  //interaction" rather than "this partial wave does not exist".
+  for(int s=1;s<=this->NumSegments();s++) {
+    ESegment *seg=this->GetSegment(s);
+    if(!seg->IsPhase()) continue;
+    int aa=compound->GetPairNumFromKey(seg->GetEntranceKey());
+    if(aa==0) continue;
+    PPair *pp=compound->GetPair(aa);
+    if(!pp->IsIdentical()) continue;
+    int segL=seg->GetL();
+    bool allowedFound=false;
+    for(int j=1;j<=compound->NumJGroups() && !allowedFound;j++) {
+      JGroup *jg=compound->GetJGroup(j);
+      if(jg->GetJ()!=seg->GetJ()) continue;
+      for(int ch=1;ch<=jg->NumChannels() && !allowedFound;ch++) {
+	AChannel *channel=jg->GetChannel(ch);
+	if(channel->GetRadType()!='P') continue;
+	if(channel->GetPairNum()!=aa) continue;
+	if(channel->GetL()==segL) allowedFound=true;
+      }
+    }
+    if(!allowedFound) {
+      configure.outStream << "**WARNING: Phase-shift segment #" << s
+			  << " requests J=" << seg->GetJ()
+			  << ", L=" << segL
+			  << " for identical pair (Z=" << pp->GetZ(1)
+			  << ", A=" << pp->GetM(1)
+			  << "); no matching partial wave exists "
+			  << "(likely forbidden by (-1)^(L+S) = "
+			  << pp->GetIdenticalSign()
+			  << "). The fit will report delta = 0 at every energy."
+			  << std::endl;
+    }
+  }
+
   //Calculate channel lo-matrix and channel penetrability for each channel at each local energy
   configure.outStream << "Calculating Lo-Matrix, Phases, and Penetrabilities..." << std::endl;
   if(this->CalcEDependentValues(compound,configure)==-1) return -1;
