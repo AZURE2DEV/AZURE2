@@ -94,15 +94,26 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
                 int entranceKey = parts[0].split(": ")[1].toInt();
                 int exitKey = parts[1].split(": ")[1].toInt();
 
+                // Pick up optional scaling factor so it shows in the table
+                QString scalingInfo;
+                for(int p = 2; p < parts.size(); p++) {
+                  QString tok = parts[p].trimmed();
+                  if(tok.startsWith("Scaling:")) {
+                    double s = tok.section(":",1).trimmed().toDouble();
+                    scalingInfo = QString("%1 × ").arg(s, 0, 'g', 3);
+                    break;
+                  }
+                }
+
                 if(pairsModel->getPairs().size() >= entranceKey && pairsModel->getPairs().size() >= exitKey) {
                   PairsData entrancePair = pairsModel->getPairs().at(entranceKey-1);
                   PairsData exitPair = pairsModel->getPairs().at(exitKey-1);
                   QString reactionLabel = pairsModel->getReactionLabel(entrancePair, exitPair);
 
                   result += " +<br>";
-                  result += reactionLabel;
+                  result += scalingInfo + reactionLabel;
                 } else {
-                  result += " +<br>UNDEFINED";
+                  result += " +<br>" + scalingInfo + "UNDEFINED";
                 }
               }
             }

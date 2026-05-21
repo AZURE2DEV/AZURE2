@@ -103,15 +103,25 @@ int EData::Fill(const Config& configure, CNuc *theCNuc) {
 	        // Parse components and create full segment copies
 	        std::string componentsStr = NewSegment.GetComponentsList();
 	        if (!componentsStr.empty()) {
-	          // Components are stored as "Entrance: X, Exit: Y;Entrance: A, Exit: B;..." or with optional "Angle: Z"
+	          // Components are stored as "Entrance: X, Exit: Y;Entrance: A, Exit: B;..." or with optional "Angle: Z" and "Scaling: S"
 	          std::istringstream stream(componentsStr);
 	          std::string component;
 	          while (std::getline(stream, component, ';')) {
 	            if (!component.empty()) {
-	              // Parse "Entrance: X, Exit: Y" format (with optional ", Angle: Z")
+	              // Parse "Entrance: X, Exit: Y" format (with optional ", Angle: Z" and ", Scaling: S")
 	              size_t entrancePos = component.find("Entrance: ");
 	              size_t exitPos = component.find("Exit: ");
 	              size_t anglePos = component.find("Angle: ");
+	              size_t scalingPos = component.find("Scaling: ");
+
+	              double componentScaling = 1.0;
+	              if (scalingPos != std::string::npos) {
+	                try {
+	                  componentScaling = std::stod(component.substr(scalingPos + 9));
+	                } catch (...) {
+	                  componentScaling = 1.0;
+	                }
+	              }
 
 	              if (entrancePos != std::string::npos && exitPos != std::string::npos) {
 	                entrancePos += 10; // Length of "Entrance: "
@@ -127,7 +137,7 @@ int EData::Fill(const Config& configure, CNuc *theCNuc) {
 	                    size_t angleCommaPos = component.find(", Angle: ");
 	                    int exitKey = std::stoi(component.substr(exitPos, angleCommaPos - exitPos));
 
-	                    // Parse the angle value
+	                    // Parse the angle value (std::stod stops at the trailing ", Scaling: ...")
 	                    anglePos += 7; // Length of "Angle: "
 	                    double fixedAngle = std::stod(component.substr(anglePos));
 
@@ -140,6 +150,7 @@ int EData::Fill(const Config& configure, CNuc *theCNuc) {
 	                  }
 
 	                  if (componentSegment) {
+	                    componentSegment->SetComponentScaling(componentScaling);
 	                    filledSegment->AddComponentSegment(componentSegment);
 	                  }
 	                }
@@ -293,16 +304,26 @@ int EData::MakePoints(const Config& configure, CNuc *theCNuc) {
 	      // Parse components and create full segment copies
 	      std::string componentsStr = NewSegment.GetComponentsList();
 	      if (!componentsStr.empty()) {
-	        // Components are stored as "Entrance: X, Exit: Y;Entrance: A, Exit: B;..." or with optional "Angle: Z"
+	        // Components are stored as "Entrance: X, Exit: Y;Entrance: A, Exit: B;..." or with optional "Angle: Z" and "Scaling: S"
 	        std::istringstream stream(componentsStr);
 	        std::string component;
 	        int componentCount = 0;
 	        while (std::getline(stream, component, ';')) {
 	          if (!component.empty()) {
-	            // Parse "Entrance: X, Exit: Y" format (with optional ", Angle: Z")
+	            // Parse "Entrance: X, Exit: Y" format (with optional ", Angle: Z" and ", Scaling: S")
 	            size_t entrancePos = component.find("Entrance: ");
 	            size_t exitPos = component.find("Exit: ");
 	            size_t anglePos = component.find("Angle: ");
+	            size_t scalingPos = component.find("Scaling: ");
+
+	            double componentScaling = 1.0;
+	            if (scalingPos != std::string::npos) {
+	              try {
+	                componentScaling = std::stod(component.substr(scalingPos + 9));
+	              } catch (...) {
+	                componentScaling = 1.0;
+	              }
+	            }
 
 	            if (entrancePos != std::string::npos && exitPos != std::string::npos) {
 	              entrancePos += 10; // Length of "Entrance: "
@@ -318,7 +339,7 @@ int EData::MakePoints(const Config& configure, CNuc *theCNuc) {
 	                  size_t angleCommaPos = component.find(", Angle: ");
 	                  int exitKey = std::stoi(component.substr(exitPos, angleCommaPos - exitPos));
 
-	                  // Parse the angle value
+	                  // Parse the angle value (std::stod stops at the trailing ", Scaling: ...")
 	                  anglePos += 7; // Length of "Angle: "
 	                  double fixedAngle = std::stod(component.substr(anglePos));
 
@@ -331,6 +352,7 @@ int EData::MakePoints(const Config& configure, CNuc *theCNuc) {
 	                }
 
 	                if (componentSegment) {
+	                  componentSegment->SetComponentScaling(componentScaling);
 	                  theSegment->AddComponentSegment(componentSegment);
 	                  componentCount++;
 	                }

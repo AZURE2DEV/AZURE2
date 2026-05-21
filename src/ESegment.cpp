@@ -60,6 +60,7 @@ ESegment::ESegment(SegLine segLine) {
 
   // Initialize advanced segment composition
   segmentOperationType_ = SUM;  // Default to SUM operation
+  componentScaling_ = 1.0;
   componentCalculationMutex_ = std::make_shared<std::mutex>();
 }
 
@@ -129,6 +130,7 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   } else {
     segmentOperationType_ = SUM;  // Default to SUM operation
   }
+  componentScaling_ = 1.0;
   componentCalculationMutex_ = std::make_shared<std::mutex>();
 }
 
@@ -859,6 +861,22 @@ void ESegment::ClearComponents() {
 }
 
 /*!
+ * Sets the per-component scaling factor applied to this segment when it is
+ * combined as a component of a parent advanced (SUM) segment.
+ */
+void ESegment::SetComponentScaling(double scaling) {
+  componentScaling_ = scaling;
+}
+
+/*!
+ * Returns the per-component scaling factor. Defaults to 1.0 for segments that
+ * are not used as a scaled component.
+ */
+double ESegment::GetComponentScaling() const {
+  return componentScaling_;
+}
+
+/*!
  * Calculates the theoretical cross section for this segment, including 
  * combination with any additional components according to the operation type
  */
@@ -909,7 +927,7 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, co
           double compValue = componentPoint->GetFitCrossSection();
           // Check if NaN or infinite and skip if so
           if (!std::isnan(compValue) && !std::isinf(compValue)) {
-            sum += compValue;
+            sum += componentSegment->GetComponentScaling() * compValue;
           }
           compIdx++;
         }

@@ -1,20 +1,23 @@
 #include <QCheckBox>
 #include <QDialog>
 #include <QFileDialog>
-#include <QCheckBox>
 #include <QListView>
 #include <QPushButton>
 #include <QMessageBox>
-#include <QCheckBox>
 #include <QImageWriter>
 #include <QtPrintSupport/QPrinter>
 #include <QtPrintSupport/QPrintDialog>
 #include <QTextStream>
+#include <QFileInfo>
 
 #include "AZUREPlot.h"
 #include "PlotTab.h"
+#include "LevelsModel.h"
 #include <qwt_text.h>
 #include "qwt_plot_curve.h"
+#include "qwt_plot_grid.h"
+#include "qwt_plot_marker.h"
+#include "qwt_legend.h"
 #include "qwt_plot_intervalcurve.h"
 #include "qwt_interval_symbol.h"
 #include "qwt_scale_engine.h"
@@ -41,16 +44,58 @@ QwtText AZUREZoomer::trackerTextF( const QPointF &pos ) const
     return QwtText( text );
 }
 
+static const QColor kDefaultPalette[] = {
+  QColor(0x1f,0x77,0xb4), // blue
+  QColor(0xd6,0x27,0x28), // red
+  QColor(0x2c,0xa0,0x2c), // green
+  QColor(0xff,0x7f,0x0e), // orange
+  QColor(0x94,0x67,0xbd), // purple
+  QColor(0x8c,0x56,0x4b), // brown
+  QColor(0xe3,0x77,0xc2), // pink
+  QColor(0x7f,0x7f,0x7f), // gray
+  QColor(0xbc,0xbd,0x22), // olive
+  QColor(0x17,0xbe,0xcf)  // cyan
+};
+static const int kDefaultPaletteSize = sizeof(kDefaultPalette)/sizeof(QColor);
+
+static const QwtSymbol::Style kSymbolCycle[] = {
+  QwtSymbol::Ellipse,
+  QwtSymbol::Rect,
+  QwtSymbol::Diamond,
+  QwtSymbol::Triangle,
+  QwtSymbol::DTriangle,
+  QwtSymbol::UTriangle,
+  QwtSymbol::Cross,
+  QwtSymbol::XCross,
+  QwtSymbol::Hexagon,
+  QwtSymbol::Star1
+};
+static const int kSymbolCycleSize = sizeof(kSymbolCycle)/sizeof(QwtSymbol::Style);
+
+QString PlotEntry::labelFromFilename(const QString& filename) {
+  int slash = filename.lastIndexOf('/');
+  if(slash<0) return filename;
+  return filename.mid(slash+1);
+}
 
 PlotEntry::PlotEntry(int type, int entranceKey, int exitKey, int index, QString filename) :
   type_(type), entranceKey_(entranceKey), exitKey_(exitKey), index_(index), filename_(filename),
+  color_(Qt::black), symbolStyle_(QwtSymbol::Ellipse), symbolSize_(6), lineWidth_(2),
   dataCurve_(NULL), dataErrorCurve_(NULL), fitCurve_(NULL) {
+  label_ = labelFromFilename(filename);
 }
 
 PlotEntry::~PlotEntry() {
     if(dataCurve_) delete dataCurve_;
-    if(dataErrorCurve_) delete dataErrorCurve_;	
+    if(dataErrorCurve_) delete dataErrorCurve_;
     if(fitCurve_) delete fitCurve_;
+}
+
+static bool isFiniteAndPositive(double v) {
+  if(v!=v) return false;          // NaN
+  if(!std::isfinite(v)) return false; // +/-inf
+  if(v<=0.) return false;
+  return true;
 }
 
 bool PlotEntry::readData() {
@@ -84,13 +129,25 @@ bool PlotEntry::readData() {
       QTextStream in(&line);
       PlotPoint newPoint = {0.,0.,0.,0.,0.,0.,0.,0.,0.};
       if(type_==0) {
-	in >> newPoint.energy >> newPoint.excitationEnergy >> newPoint.angle >> newPoint.fitCrossSection >> newPoint.fitSFactor 
-	   >> newPoint.dataCrossSection >> newPoint.dataErrorCrossSection >> newPoint.dataSFactor 
+	in >> newPoint.energy >> newPoint.excitationEnergy >> newPoint.angle >> newPoint.fitCrossSection >> newPoint.fitSFactor
+	   >> newPoint.dataCrossSection >> newPoint.dataErrorCrossSection >> newPoint.dataSFactor
 	   >> newPoint.dataErrorSFactor;
       } else {
-	in >> newPoint.energy >> newPoint.excitationEnergy >> newPoint.angle >> newPoint.fitCrossSection >> newPoint.fitSFactor; 
+	in >> newPoint.energy >> newPoint.excitationEnergy >> newPoint.angle >> newPoint.fitCrossSection >> newPoint.fitSFactor;
       }
-      points_.push_back(newPoint);
+      // Discard points that would break log scale: NaN, inf, zero, negative,
+      // or (for data points) error bars that drop the lower bound to <= 0.
+      bool valid = isFiniteAndPositive(newPoint.fitCrossSection) &&
+                   isFiniteAndPositive(newPoint.fitSFactor);
+      if(valid && type_==0) {
+        valid = isFiniteAndPositive(newPoint.dataCrossSection) &&
+                isFiniteAndPositive(newPoint.dataSFactor) &&
+                std::isfinite(newPoint.dataErrorCrossSection) &&
+                std::isfinite(newPoint.dataErrorSFactor) &&
+                (newPoint.dataCrossSection - newPoint.dataErrorCrossSection) > 0. &&
+                (newPoint.dataSFactor - newPoint.dataErrorSFactor) > 0.;
+      }
+      if(valid) points_.push_back(newPoint);
     }
   }
   inStream.flush();
@@ -98,35 +155,21 @@ bool PlotEntry::readData() {
   if(!foundBlock) {
     return false;
   }
-  hasNegative_=false;
-  for(QVector<PlotPoint>::const_iterator it=points_.begin();
-      it<points_.end();it++) {
-    if(it->fitCrossSection<=0.||
-       (type_==0&&
-	(it->dataCrossSection<=0.||
-	 (fabs(it->dataCrossSection)-
-	  fabs(it->dataErrorCrossSection))<=0.))) {
-      hasNegative_=true;
-      break;
-    }
-  }
-  return true;
+  return !points_.isEmpty();
 }
 
-// Helper function to sort plot points by x-axis value
 void PlotEntry::sortPointsByXAxis(int xAxisType) {
   std::sort(points_.begin(), points_.end(), [xAxisType](const PlotPoint& a, const PlotPoint& b) {
     switch(xAxisType) {
-      case 0: return a.energy < b.energy;           // CoM Energy
-      case 1: return a.excitationEnergy < b.excitationEnergy; // Excitation Energy  
-      case 2: return a.angle < b.angle;             // CoM Angle
+      case 0: return a.energy < b.energy;
+      case 1: return a.excitationEnergy < b.excitationEnergy;
+      case 2: return a.angle < b.angle;
       default: return a.energy < b.energy;
     }
   });
 }
 
-void PlotEntry::attach(QwtPlot* plot, int xAxisType, int yAxisType, QwtSymbol::Style style) {
-  // Sort points by x-axis value to ensure proper plotting order
+void PlotEntry::attach(QwtPlot* plot, int xAxisType, int yAxisType) {
   sortPointsByXAxis(xAxisType);
   QVector<QPointF> fit(points_.size());
   if(type_==0) {
@@ -184,52 +227,61 @@ void PlotEntry::attach(QwtPlot* plot, int xAxisType, int yAxisType, QwtSymbol::S
     }
 
     dataCurve_ = new QwtPlotCurve;
+    dataCurve_->setTitle(label_);
     dataCurve_->setRenderHint( QwtPlotItem::RenderAntialiased );
     dataCurve_->setStyle( QwtPlotCurve::NoCurve );
-    QwtSymbol *symbol = new QwtSymbol(style);
-    symbol->setSize( 6 );
-    symbol->setPen( QPen( Qt::black ) );
-    symbol->setColor( QColor( Qt::black ) );
+    QwtSymbol *symbol = new QwtSymbol(symbolStyle_);
+    symbol->setSize( symbolSize_ );
+    symbol->setPen( QPen( color_ ) );
+    symbol->setColor( color_ );
 
     dataErrorCurve_ = new QwtPlotIntervalCurve;
     dataErrorCurve_->setRenderHint( QwtPlotItem::RenderAntialiased );
     dataErrorCurve_->setStyle( QwtPlotIntervalCurve::NoCurve );
+    dataErrorCurve_->setItemAttribute( QwtPlotItem::Legend, false );
     QwtIntervalSymbol *errorBar =
       new QwtIntervalSymbol( QwtIntervalSymbol::Bar );
-    errorBar->setWidth( 8 ); 
-    errorBar->setPen( QPen( Qt::black ) );
+    errorBar->setWidth( 8 );
+    errorBar->setPen( QPen( color_ ) );
 
     dataCurve_->setSymbol( symbol );
     dataCurve_->setSamples(data);
 
     dataErrorCurve_->setSymbol(errorBar);
-    dataErrorCurve_->setSamples(error);  
+    dataErrorCurve_->setSamples(error);
   } else {
     if(xAxisType==0&&yAxisType==0) {
-      for(int i=0;i<points_.size();i++) 
+      for(int i=0;i<points_.size();i++)
 	fit[i]=QPointF(points_[i].energy,points_[i].fitCrossSection);
     } else if(xAxisType==0&&yAxisType==1) {
-      for(int i=0;i<points_.size();i++) 
+      for(int i=0;i<points_.size();i++)
 	fit[i]=QPointF(points_[i].energy,points_[i].fitSFactor);
     } else if(xAxisType==1&&yAxisType==0) {
-      for(int i=0;i<points_.size();i++) 
+      for(int i=0;i<points_.size();i++)
 	fit[i]=QPointF(points_[i].excitationEnergy,points_[i].fitCrossSection);
     } else if(xAxisType==1&&yAxisType==1) {
-      for(int i=0;i<points_.size();i++) 
+      for(int i=0;i<points_.size();i++)
 	fit[i]=QPointF(points_[i].excitationEnergy,points_[i].fitSFactor);
     } else if(xAxisType==2&&yAxisType==0) {
-      for(int i=0;i<points_.size();i++) 
+      for(int i=0;i<points_.size();i++)
 	fit[i]=QPointF(points_[i].angle,points_[i].fitCrossSection);
     } else if(xAxisType==2&&yAxisType==1) {
-      for(int i=0;i<points_.size();i++) 
+      for(int i=0;i<points_.size();i++)
 	fit[i]=QPointF(points_[i].angle,points_[i].fitSFactor);
     }
   }
-  
+
   fitCurve_ = new QwtPlotCurve;
   fitCurve_->setRenderHint( QwtPlotItem::RenderAntialiased );
   fitCurve_->setStyle( QwtPlotCurve::Lines );
-  fitCurve_->setPen( QPen( Qt::red , 2 ) );
+  fitCurve_->setPen( QPen( color_ , lineWidth_ ) );
+
+  if(type_==0) {
+    // Avoid duplicate legend entries: keep only the data curve entry.
+    fitCurve_->setItemAttribute( QwtPlotItem::Legend, false );
+  } else {
+    fitCurve_->setTitle(label_);
+  }
 
   fitCurve_->setSymbol(new QwtSymbol(QwtSymbol::NoSymbol));
   fitCurve_->setSamples(fit);
@@ -240,15 +292,28 @@ void PlotEntry::attach(QwtPlot* plot, int xAxisType, int yAxisType, QwtSymbol::S
 }
 
 void PlotEntry::detach() {
-  if(dataCurve_) dataCurve_->detach();
-  if(dataErrorCurve_) dataErrorCurve_->detach();
-  if(fitCurve_) fitCurve_->detach();
+  if(dataCurve_) { dataCurve_->detach(); delete dataCurve_; dataCurve_=NULL; }
+  if(dataErrorCurve_) { dataErrorCurve_->detach(); delete dataErrorCurve_; dataErrorCurve_=NULL; }
+  if(fitCurve_) { fitCurve_->detach(); delete fitCurve_; fitCurve_=NULL; }
 }
 
 AZUREPlot::AZUREPlot(PlotTab* plotTab,QWidget* parent) :
-  containingTab(plotTab), QwtPlot(parent) {
+  QwtPlot(parent), xAxisType(0), yAxisType(0), containingTab(plotTab),
+  levelsModel(NULL), levelsVisible(false) {
   setCanvasBackground(QColor(Qt::white));
   setAutoReplot(true);
+
+  grid = new QwtPlotGrid;
+  grid->setMajorPen(QPen(QColor(220,220,220),0,Qt::SolidLine));
+  grid->setMinorPen(QPen(QColor(240,240,240),0,Qt::DotLine));
+  grid->enableXMin(true);
+  grid->enableYMin(true);
+  grid->attach(this);
+  grid->setVisible(false);
+
+  legend = new QwtLegend;
+  legend->setDefaultItemMode(QwtLegendData::ReadOnly);
+  insertLegend(legend, QwtPlot::RightLegend);
 
   zoomer = new AZUREZoomer( canvas() );
   zoomer->setRubberBandPen( QColor( Qt::black ) );
@@ -257,10 +322,9 @@ AZUREPlot::AZUREPlot(PlotTab* plotTab,QWidget* parent) :
 			   Qt::RightButton, Qt::ControlModifier );
   zoomer->setMousePattern( QwtEventPattern::MouseSelect3,
 			   Qt::RightButton );
-  
+
   QwtPlotPanner *panner = new QwtPlotPanner( canvas() );
   panner->setMouseButton( Qt::MidButton );
-
 }
 
 
@@ -301,45 +365,147 @@ void AZUREPlot::setYAxisType(unsigned int type) {
   update();
 }
 
+void AZUREPlot::setGridVisible(bool visible) {
+  grid->setVisible(visible);
+  replot();
+}
+
+void AZUREPlot::setLevelsModel(LevelsModel* model) {
+  levelsModel = model;
+}
+
+void AZUREPlot::setLevelsVisible(bool visible) {
+  levelsVisible = visible;
+  refreshLevelMarkers();
+}
+
+void AZUREPlot::clearLevelMarkers() {
+  for(int i=0; i<levelMarkers.size(); i++) {
+    levelMarkers[i]->detach();
+    delete levelMarkers[i];
+  }
+  levelMarkers.clear();
+}
+
+void AZUREPlot::refreshLevelMarkers() {
+  clearLevelMarkers();
+  if(!levelsVisible || !levelsModel) { replot(); return; }
+  // Levels are not meaningful when plotting against an angle.
+  if(xAxisType==2) { replot(); return; }
+
+  // Collect (entranceKey -> threshold) for CoM-energy axis.
+  // threshold = excitationEnergy - CoM energy, taken from the first plot point
+  // of any loaded entry with that entrance pair.
+  QMap<int,double> thresholdByEntrance;
+  if(xAxisType==0) {
+    for(int i=0; i<entries.size(); i++) {
+      PlotEntry* e = entries[i];
+      if(e->points_.isEmpty()) continue;
+      const PlotPoint& p = e->points_.first();
+      double thr = p.excitationEnergy - p.energy;
+      if(!thresholdByEntrance.contains(e->entranceKey())) {
+        thresholdByEntrance.insert(e->entranceKey(), thr);
+      }
+    }
+    // If no entries are loaded yet, fall back to threshold=0 so the user still
+    // sees something at the excitation-energy values.
+    if(thresholdByEntrance.isEmpty()) thresholdByEntrance.insert(-1, 0.);
+  }
+
+  QList<LevelsData> levels = levelsModel->getLevels();
+  for(int i=0; i<levels.size(); i++) {
+    const LevelsData& lvl = levels[i];
+    QString jpi = levelsModel->getSpinLabel(lvl);
+
+    QList<double> xPositions;
+    if(xAxisType==1) {
+      xPositions.append(lvl.energy);
+    } else { // xAxisType==0
+      QMap<int,double>::const_iterator it = thresholdByEntrance.constBegin();
+      for(; it!=thresholdByEntrance.constEnd(); ++it) {
+        xPositions.append(lvl.energy - it.value());
+      }
+    }
+
+    for(int k=0; k<xPositions.size(); k++) {
+      QwtPlotMarker* m = new QwtPlotMarker;
+      m->setLineStyle(QwtPlotMarker::VLine);
+      QPen pen(QColor(80,80,80));
+      pen.setStyle(Qt::DashLine);
+      m->setLinePen(pen);
+      m->setXValue(xPositions[k]);
+      QwtText t(jpi);
+      t.setColor(QColor(40,40,40));
+      QFont f = t.font();
+      f.setPointSize(f.pointSize()>0 ? f.pointSize() : 9);
+      f.setBold(true);
+      t.setFont(f);
+      m->setLabel(t);
+      m->setLabelAlignment(Qt::AlignRight | Qt::AlignTop);
+      m->setLabelOrientation(Qt::Vertical);
+      m->setItemAttribute(QwtPlotItem::Legend, false);
+      m->attach(this);
+      levelMarkers.append(m);
+    }
+  }
+  replot();
+}
+
+void AZUREPlot::setLegendVisible(bool visible) {
+  if(visible) {
+    if(!legend) {
+      legend = new QwtLegend;
+      legend->setDefaultItemMode(QwtLegendData::ReadOnly);
+    }
+    insertLegend(legend, QwtPlot::RightLegend);
+  } else {
+    insertLegend(NULL);
+    legend = NULL;
+  }
+  replot();
+}
+
 void AZUREPlot::draw(QList<PlotEntry*> newEntries) {
   clearEntries();
 
-  int numDataEntries=0;
-  bool hasNegative=false;
+  int paletteIndex = 0;
+  int symbolIndex = 0;
   for(int i = 0; i<newEntries.size(); i++) {
     if(newEntries[i]->readData()) {
-      QwtSymbol::Style style = (newEntries[i]->type()==0) ? (QwtSymbol::Style) 
-	numDataEntries++ : QwtSymbol::NoSymbol;
-      newEntries[i]->attach(this,xAxisType,yAxisType,style);
+      // Assign default color/symbol if not already customized.
+      if(!newEntries[i]->color().isValid() || newEntries[i]->color()==Qt::black) {
+        newEntries[i]->setColor(kDefaultPalette[paletteIndex % kDefaultPaletteSize]);
+        paletteIndex++;
+      }
+      if(newEntries[i]->type()==0) {
+        newEntries[i]->setSymbolStyle(kSymbolCycle[symbolIndex % kSymbolCycleSize]);
+        symbolIndex++;
+      }
+      newEntries[i]->attach(this,xAxisType,yAxisType);
       entries.push_back(newEntries[i]);
-      if(newEntries[i]->hasNegative_) hasNegative=true;
     } else delete newEntries[i];
-  }   
+  }
   setAxisAutoScale(QwtPlot::xBottom,true);
   setAxisAutoScale(QwtPlot::yLeft,true);
+  refreshLevelMarkers();
   replot();
   zoomer->setZoomBase(false);
-  if(hasNegative) {
-    containingTab->yAxisIsLogCheck->setChecked(false);
-    containingTab->yAxisIsLogCheck->setEnabled(false);
-    QMessageBox::information(this,
-			     tr("Negative or Zero Values"),
-			     tr("Negative or zero values were detected in a dataset. "
-				"Log plotting is not available."));
+}
+
+void AZUREPlot::redrawEntries() {
+  for(int i=0; i<entries.size(); i++) {
+    entries[i]->detach();
+    entries[i]->attach(this, xAxisType, yAxisType);
   }
+  refreshLevelMarkers();
+  replot();
+  zoomer->setZoomBase(false);
 }
 
 void AZUREPlot::update() {
   setAxisAutoScale(QwtPlot::xBottom,true);
   setAxisAutoScale(QwtPlot::yLeft,true);
-  int numDataEntries=0;
-  for(int i = 0; i<entries.size(); i++) {
-    entries[i]->detach();
-    QwtSymbol::Style style = (entries[i]->type()==0) ? (QwtSymbol::Style) numDataEntries++ : QwtSymbol::NoSymbol;
-    entries[i]->attach(this,xAxisType,yAxisType,style);
-  }
-  replot();
-  zoomer->setZoomBase(false);
+  redrawEntries();
 }
 
 void AZUREPlot::exportPlot()
@@ -353,14 +519,14 @@ void AZUREPlot::exportPlot()
 #ifndef QT_NO_FILEDIALOG
     const QList<QByteArray> imageFormats =
       QImageWriter::supportedImageFormats();
-    
+
     QStringList filter;
     filter += "PDF Documents (*.pdf)";
 #ifndef QWT_NO_SVG
     filter += "SVG Documents (*.svg)";
 #endif
     filter += "Postscript Documents (*.ps)";
-    
+
     if (imageFormats.size()>0) {
       QString imageFilter("Images (");
       for (int i=0;i<imageFormats.size();i++) {
@@ -369,12 +535,12 @@ void AZUREPlot::exportPlot()
 	  imageFilter += imageFormats[i];
         }
       imageFilter += ")";
-  
+
       filter += imageFilter;
     }
     fileName = QFileDialog::getSaveFileName(
-					    this, "Export File Name", fileName,
-					    filter.join(";;"), NULL, QFileDialog::DontConfirmOverwrite);
+						    this, "Export File Name", fileName,
+						    filter.join(";;"), NULL, QFileDialog::DontConfirmOverwrite);
 #endif
     if(!fileName.isEmpty()) {
       QwtPlotRenderer renderer;
@@ -402,9 +568,9 @@ void AZUREPlot::print()
 void AZUREPlot::clearEntries() {
   for(int i = 0; i<entries.size(); i++) {
     entries[i]->detach();
-    delete entries[i]; 
+    delete entries[i];
   }
-  if(entries.size()>0) entries.clear();
-  containingTab->yAxisIsLogCheck->setEnabled(true);
-  update();
+  entries.clear();
+  refreshLevelMarkers();
+  replot();
 }

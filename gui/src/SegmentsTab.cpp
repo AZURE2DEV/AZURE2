@@ -1152,8 +1152,41 @@ bool SegmentsTab::readSegDataFile(QTextStream& inStream) {
               if(ok && dataParts.size() >= 4) {
                 int numComponents = dataParts[3].toInt(&ok);
 
-                // Try new format first (3 values per component: entrance, exit, angle)
-                if(ok && dataParts.size() >= 4 + numComponents * 3) {
+                // A leading -1 marker means the newer format: components carry an extra
+                // scaling token (4 per component instead of 3). After the marker the
+                // actual component count follows at index 4.
+                bool hasScalingToken = false;
+                int componentsBase = 4; // index of first component token
+                if(ok && numComponents == -1 && dataParts.size() >= 5) {
+                  hasScalingToken = true;
+                  numComponents = dataParts[4].toInt(&ok);
+                  componentsBase = 5;
+                }
+                int tokensPerComponent = hasScalingToken ? 4 : 3;
+                bool tried4 = false;
+                if(hasScalingToken && ok && dataParts.size() >= componentsBase + numComponents * tokensPerComponent) {
+                  QStringList components;
+                  bool fourTokenOk = true;
+                  for(int i = 0; i < numComponents; i++) {
+                    bool okE=true, okX=true, okA=true, okS=true;
+                    int entrance = dataParts[componentsBase + i*4].toInt(&okE);
+                    int exit     = dataParts[componentsBase + i*4 + 1].toInt(&okX);
+                    double angle = dataParts[componentsBase + i*4 + 2].toDouble(&okA);
+                    double scaling = dataParts[componentsBase + i*4 + 3].toDouble(&okS);
+                    if(!okE || !okX || !okA || !okS) { fourTokenOk = false; break; }
+                    QString component = QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit);
+                    if(angle > -900.0) component += QString(", Angle: %1").arg(angle);
+                    if(scaling > -900.0) component += QString(", Scaling: %1").arg(scaling);
+                    components.append(component);
+                  }
+                  if(fourTokenOk) {
+                    componentsList = components.join(";");
+                    uposIdx = componentsBase + numComponents * 4;
+                    tried4 = true;
+                  }
+                }
+                // Legacy 3-tokens-per-component format
+                if(!tried4 && ok && !hasScalingToken && dataParts.size() >= 4 + numComponents * 3) {
                   QStringList components;
                   bool newFormatSuccess = true;
 
@@ -1199,7 +1232,7 @@ bool SegmentsTab::readSegDataFile(QTextStream& inStream) {
                   }
                 }
                 // Fallback to old format (2 values per component: entrance, exit)
-                else if(ok && dataParts.size() >= 4 + numComponents * 2) {
+                else if(!tried4 && !hasScalingToken && ok && dataParts.size() >= 4 + numComponents * 2) {
                   QStringList components;
                   for(int i = 0; i < numComponents; i++) {
                     int entranceIdx = 4 + i * 2;
@@ -1276,8 +1309,27 @@ bool SegmentsTab::writeSegDataFile(QTextStream& outStream) {
     if(lines.at(i).isAdvanced == 1) {
       outStream << " " << lines.at(i).isAdvanced << " " << lines.at(i).operationType;
 
-      // Parse components and write as numbers (with optional angle)
+      // Parse components and write as numbers (with optional angle and scaling)
       QStringList components = lines.at(i).componentsList.split(";", Qt::SkipEmptyParts);
+      // If any component carries a scaling factor, upgrade the on-disk format
+      // by writing a -1 marker before numComponents and 4 tokens per component
+      // (entrance, exit, angle, scaling). Otherwise keep the legacy 3-token
+      // format so older AZURE2 builds can still parse the file.
+      bool anyScaling = false;
+      for(const QString& component : components) {
+        if(component.contains("Scaling:")) { anyScaling = true; break; }
+      }
+      auto extractAngleScaling = [&](const QString& component, double& angle, double& scaling) {
+        angle = -999.0;
+        scaling = -999.0;
+        QStringList parts = component.split(", ");
+        for(int p = 2; p < parts.size(); p++) {
+          QString tok = parts[p].trimmed();
+          if(tok.startsWith("Angle:")) angle = tok.section(":",1).trimmed().toDouble();
+          else if(tok.startsWith("Scaling:")) scaling = tok.section(":",1).trimmed().toDouble();
+        }
+      };
+      if(anyScaling) outStream << " -1";
       if(lines.at(i).operationType == 0) { // Sum - can have multiple components
         outStream << " " << components.size();
         for(const QString& component : components) {
@@ -1285,18 +1337,10 @@ bool SegmentsTab::writeSegDataFile(QTextStream& outStream) {
           if(parts.size() >= 2) {
             int entrance = parts[0].split(": ")[1].trimmed().toInt();
             int exit = parts[1].split(": ")[1].trimmed().toInt();
-            // Check for optional angle (parts[2] would be "Angle: X")
-            double angle = -999.0; // Sentinel value for "no angle"
-            if(parts.size() >= 3) {
-              QString anglePart = parts[2].trimmed();
-              if(anglePart.contains("Angle:")) {
-                QStringList angleSplit = anglePart.split(":");
-                if(angleSplit.size() >= 2) {
-                  angle = angleSplit[1].trimmed().toDouble();
-                }
-              }
-            }
+            double angle, scaling;
+            extractAngleScaling(component, angle, scaling);
             outStream << " " << entrance << " " << exit << " " << angle;
+            if(anyScaling) outStream << " " << scaling;
           }
         }
       } else { // Ratio - only 1 component (denominator, main segment is numerator)
@@ -1309,18 +1353,10 @@ bool SegmentsTab::writeSegDataFile(QTextStream& outStream) {
           if(parts.size() >= 2) {
             int entrance = parts[0].split(": ")[1].trimmed().toInt();
             int exit = parts[1].split(": ")[1].trimmed().toInt();
-            // Check for optional angle (parts[2] would be "Angle: X")
-            double angle = -999.0; // Sentinel value for "no angle"
-            if(parts.size() >= 3) {
-              QString anglePart = parts[2].trimmed();
-              if(anglePart.contains("Angle:")) {
-                QStringList angleSplit = anglePart.split(":");
-                if(angleSplit.size() >= 2) {
-                  angle = angleSplit[1].trimmed().toDouble();
-                }
-              }
-            }
+            double angle, scaling;
+            extractAngleScaling(components[0], angle, scaling);
             outStream << " " << entrance << " " << exit << " " << angle;
+            if(anyScaling) outStream << " " << scaling;
           }
         }
       }
@@ -1392,12 +1428,17 @@ bool SegmentsTab::readSegTestFile(QTextStream& inStream) {
         if(in.status()==QTextStream::Ok) {
           int numComponents = 0;
           in >> numComponents;
+          // A leading -1 marker means the newer format adds a scaling token
+          bool hasScalingToken = false;
+          if(in.status()==QTextStream::Ok && numComponents == -1) {
+            hasScalingToken = true;
+            in >> numComponents;
+          }
           if(in.status()==QTextStream::Ok) {
             QStringList components;
 
-            // Try reading new format (entrance, exit, angle)
+            // Try reading new format (entrance, exit, angle [, scaling])
             bool newFormatSuccess = true;
-            QTextStream::Status initialStatus = in.status();
             qint64 initialPos = in.pos();
 
             for(int i = 0; i < numComponents; i++) {
@@ -1405,11 +1446,21 @@ bool SegmentsTab::readSegTestFile(QTextStream& inStream) {
               double angle;
               in >> entrance >> exit >> angle;
               if(in.status()==QTextStream::Ok) {
+                double scaling = 1.0;
+                bool scalingOk = true;
+                if(hasScalingToken) {
+                  in >> scaling;
+                  scalingOk = (in.status()==QTextStream::Ok);
+                }
+                if(!scalingOk) { newFormatSuccess = false; break; }
                 QString component;
                 if(angle > -900.0) { // Check if angle is not the sentinel value
                   component = QString("Entrance: %1, Exit: %2, Angle: %3").arg(entrance).arg(exit).arg(angle);
                 } else {
                   component = QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit);
+                }
+                if(hasScalingToken && scaling > -900.0) {
+                  component += QString(", Scaling: %1").arg(scaling);
                 }
                 components.append(component);
               } else {
@@ -1419,7 +1470,7 @@ bool SegmentsTab::readSegTestFile(QTextStream& inStream) {
             }
 
             // If new format failed, try old format (entrance, exit only)
-            if(!newFormatSuccess) {
+            if(!newFormatSuccess && !hasScalingToken) {
               // Reset stream position to before we tried to read components
               in.seek(initialPos);
               in.resetStatus();
@@ -1480,8 +1531,24 @@ bool SegmentsTab::writeSegTestFile(QTextStream& outStream) {
     if(lines.at(i).isAdvanced == 1) {
       outStream << " " << lines.at(i).isAdvanced << " " << lines.at(i).operationType;
 
-      // Parse components and write as numbers (with optional angle)
+      // Parse components and write as numbers (with optional angle and scaling)
       QStringList components = lines.at(i).componentsList.split(";", Qt::SkipEmptyParts);
+      bool anyScaling = false;
+      for(const QString& component : components) {
+        if(component.contains("Scaling:")) { anyScaling = true; break; }
+      }
+      auto extractAngleScaling = [&](const QString& component, double& angle, double& scaling) {
+        angle = -999.0;
+        scaling = -999.0;
+        QStringList parts = component.split(", ");
+        for(int p = 2; p < parts.size(); p++) {
+          QString tok = parts[p].trimmed();
+          if(tok.startsWith("Angle:")) angle = tok.section(":",1).trimmed().toDouble();
+          else if(tok.startsWith("Scaling:")) scaling = tok.section(":",1).trimmed().toDouble();
+        }
+      };
+      // -1 marker selects the newer "with scaling" format (see SegLine.h)
+      if(anyScaling) outStream << " -1";
       if(lines.at(i).operationType == 0) { // Sum - can have multiple components
         outStream << " " << components.size();
         for(const QString& component : components) {
@@ -1489,18 +1556,10 @@ bool SegmentsTab::writeSegTestFile(QTextStream& outStream) {
           if(parts.size() >= 2) {
             int entrance = parts[0].split(": ")[1].trimmed().toInt();
             int exit = parts[1].split(": ")[1].trimmed().toInt();
-            // Check for optional angle (parts[2] would be "Angle: X")
-            double angle = -999.0; // Sentinel value for "no angle"
-            if(parts.size() >= 3) {
-              QString anglePart = parts[2].trimmed();
-              if(anglePart.contains("Angle:")) {
-                QStringList angleSplit = anglePart.split(":");
-                if(angleSplit.size() >= 2) {
-                  angle = angleSplit[1].trimmed().toDouble();
-                }
-              }
-            }
+            double angle, scaling;
+            extractAngleScaling(component, angle, scaling);
             outStream << " " << entrance << " " << exit << " " << angle;
+            if(anyScaling) outStream << " " << scaling;
           }
         }
       } else { // Ratio - only 1 component (denominator, main segment is numerator)
@@ -1513,18 +1572,10 @@ bool SegmentsTab::writeSegTestFile(QTextStream& outStream) {
           if(parts.size() >= 2) {
             int entrance = parts[0].split(": ")[1].trimmed().toInt();
             int exit = parts[1].split(": ")[1].trimmed().toInt();
-            // Check for optional angle (parts[2] would be "Angle: X")
-            double angle = -999.0; // Sentinel value for "no angle"
-            if(parts.size() >= 3) {
-              QString anglePart = parts[2].trimmed();
-              if(anglePart.contains("Angle:")) {
-                QStringList angleSplit = anglePart.split(":");
-                if(angleSplit.size() >= 2) {
-                  angle = angleSplit[1].trimmed().toDouble();
-                }
-              }
-            }
+            double angle, scaling;
+            extractAngleScaling(components[0], angle, scaling);
             outStream << " " << entrance << " " << exit << " " << angle;
+            if(anyScaling) outStream << " " << scaling;
           }
         }
       }

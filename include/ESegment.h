@@ -93,6 +93,11 @@ class ESegment {
   bool HasComponents() const;
   const std::vector<ESegment*>& GetComponentSegments() const;
   void ClearComponents();
+
+  // Per-component scaling factor applied when this segment is combined as a
+  // component of a parent advanced segment. Defaults to 1.0 (no scaling).
+  void SetComponentScaling(double scaling);
+  double GetComponentScaling() const;
   
   // Calculate theoretical cross section including components
   double CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, const Config& configure, EData* edata);
@@ -139,6 +144,7 @@ class ESegment {
   // Advanced segment composition
   std::vector<ESegment*> componentSegments_;
   OperationType segmentOperationType_;
+  double componentScaling_;
   mutable std::shared_ptr<std::mutex> componentCalculationMutex_;
 };
 

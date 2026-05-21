@@ -48,6 +48,8 @@ class AddSegTestDialog : public QDialog {
   QCheckBox *useFixedAngleCheck;
   QLineEdit *fixedAngleText;
   QLabel *fixedAngleLabel;
+  QLabel *componentScalingLabel;
+  QLineEdit *componentScalingText;
   QPushButton *addComponentButton;
   QPushButton *removeComponentButton;
 

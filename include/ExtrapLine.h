@@ -45,17 +45,29 @@ class ExtrapLine {
         if(advancedStream >> operationType_) {
           int numComponents;
           if(advancedStream >> numComponents) {
+            // Marker -1 selects the newer "with scaling" format (see SegLine.h)
+            bool hasScalingToken = false;
+            if(numComponents == -1) {
+              hasScalingToken = true;
+              if(!(advancedStream >> numComponents)) numComponents = 0;
+            }
             std::vector<std::string> components;
             for(int i = 0; i < numComponents; i++) {
               int entrance, exit;
               double angle;
               if(advancedStream >> entrance >> exit >> angle) {
-                // New format with angle
-                if(angle > -900.0) { // Check if angle is not the sentinel value
-                  components.push_back("Entrance: " + std::to_string(entrance) + ", Exit: " + std::to_string(exit) + ", Angle: " + std::to_string(angle));
-                } else {
-                  components.push_back("Entrance: " + std::to_string(entrance) + ", Exit: " + std::to_string(exit));
+                double scaling = 1.0;
+                if(hasScalingToken) {
+                  if(!(advancedStream >> scaling)) scaling = 1.0;
                 }
+                std::string componentStr = "Entrance: " + std::to_string(entrance) + ", Exit: " + std::to_string(exit);
+                if(angle > -900.0) {
+                  componentStr += ", Angle: " + std::to_string(angle);
+                }
+                if(hasScalingToken && scaling > -900.0) {
+                  componentStr += ", Scaling: " + std::to_string(scaling);
+                }
+                components.push_back(componentStr);
               } else {
                 // Fallback to old format (entrance, exit only) for backward compatibility
                 advancedStream.clear();

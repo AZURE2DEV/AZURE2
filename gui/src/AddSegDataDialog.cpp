@@ -126,6 +126,11 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   fixedAngleText->setVisible(false);
   fixedAngleText->setMaximumWidth(80);
 
+  componentScalingLabel = new QLabel(tr("Scaling:"));
+  componentScalingText = new QLineEdit;
+  componentScalingText->setText("1.0");
+  componentScalingText->setMaximumWidth(80);
+
   addComponentButton = new QPushButton(tr("Add Component"));
   connect(addComponentButton,SIGNAL(clicked()),this,SLOT(addComponent()));
   
@@ -246,10 +251,14 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   advancedLayout->addWidget(fixedAngleLabel,4,2);
   advancedLayout->addWidget(fixedAngleText,4,3);
 
+  // Per-component scaling input (multiplies this component before sum)
+  advancedLayout->addWidget(componentScalingLabel,5,2);
+  advancedLayout->addWidget(componentScalingText,5,3);
+
   QGridLayout *buttonLayout = new QGridLayout;
   buttonLayout->addWidget(addComponentButton,0,0);
   buttonLayout->addWidget(removeComponentButton,0,1);
-  advancedLayout->addLayout(buttonLayout,5,2,1,2);
+  advancedLayout->addLayout(buttonLayout,6,2,1,2);
   advancedModeBox->setLayout(advancedLayout);
 
   lowerLayout->addWidget(advancedModeBox,7,0,1,3);
@@ -350,6 +359,10 @@ void AddSegDataDialog::operationTypeChanged(int index) {
     useFixedAngleCheck->setVisible(false);
     useFixedAngleCheck->setChecked(false); // Uncheck if hidden
   }
+
+  // Per-component scaling factor only applies to Sum mode
+  componentScalingLabel->setVisible(!isRatio);
+  componentScalingText->setVisible(!isRatio);
 }
 
 void AddSegDataDialog::useFixedAngleChanged(int state) {
@@ -381,6 +394,15 @@ void AddSegDataDialog::addComponent() {
     // Only allow one component for ratio
     if(componentsList->count() >= 1) {
       return; // Don't add more than one component for ratio
+    }
+  } else {
+    // Only sums benefit from a scaling factor (applied to the component before
+    // it is added to the base segment). Skip when the value is exactly 1.0 so
+    // legacy files keep their existing component-string format.
+    bool scalingOk = false;
+    double scaling = componentScalingText->text().toDouble(&scalingOk);
+    if(scalingOk && scaling != 1.0) {
+      component += QString(", Scaling: %1").arg(scaling);
     }
   }
 

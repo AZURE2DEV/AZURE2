@@ -81,7 +81,7 @@ AZURESetup::AZURESetup() : config(std::cout) {
   connect(runTab->calcButton,SIGNAL(clicked()),this,SLOT(SaveAndRun()));
 
 #ifdef USE_QWT
-  plotTab = new PlotTab(config,segmentsTab->getSegmentsDataModel(),segmentsTab->getSegmentsTestModel());
+  plotTab = new PlotTab(config,segmentsTab->getSegmentsDataModel(),segmentsTab->getSegmentsTestModel(),levelsTab->getLevelsModel());
 #endif 
 
 #ifdef USE_MCMC
