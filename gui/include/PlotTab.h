@@ -66,15 +66,19 @@ class CurveStyleDialog : public QDialog {
 
  private slots:
   void chooseColor();
+  void chooseFitColor();
   void accept() override;
 
  private:
   void updateColorButton();
+  void updateFitColorButton();
 
   PlotEntry* entry_;
   QLineEdit* labelEdit_;
   QPushButton* colorButton_;
+  QPushButton* fitColorButton_;
   QColor color_;
+  QColor fitColor_;
   QComboBox* symbolCombo_;
   QSpinBox* symbolSizeSpin_;
   QSpinBox* lineWidthSpin_;

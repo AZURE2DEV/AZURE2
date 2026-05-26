@@ -80,7 +80,12 @@ QString PlotEntry::labelFromFilename(const QString& filename) {
 
 PlotEntry::PlotEntry(int type, int entranceKey, int exitKey, int index, QString filename) :
   type_(type), entranceKey_(entranceKey), exitKey_(exitKey), index_(index), filename_(filename),
-  color_(Qt::black), symbolStyle_(QwtSymbol::Ellipse), symbolSize_(6), lineWidth_(2),
+  color_(Qt::black),
+  // For type==0 (data + fit) default the fit/calculation line to red so it
+  // stands out from the data points. For type==1 (fit-only) the fitColor_
+  // gets initialized to match color_ later in AZUREPlot::draw().
+  fitColor_(type==0 ? QColor(0xd6,0x27,0x28) : QColor()),
+  symbolStyle_(QwtSymbol::Ellipse), symbolSize_(6), lineWidth_(2),
   dataCurve_(NULL), dataErrorCurve_(NULL), fitCurve_(NULL) {
   label_ = labelFromFilename(filename);
 }
@@ -274,7 +279,11 @@ void PlotEntry::attach(QwtPlot* plot, int xAxisType, int yAxisType) {
   fitCurve_ = new QwtPlotCurve;
   fitCurve_->setRenderHint( QwtPlotItem::RenderAntialiased );
   fitCurve_->setStyle( QwtPlotCurve::Lines );
-  fitCurve_->setPen( QPen( color_ , lineWidth_ ) );
+  // For type==0 (data + calculation), use the dedicated fit color so the
+  // calculation is visually separated from the data points. For type==1
+  // (calculation-only) the entry has a single color_, which is the fit color.
+  QColor lineColor = (type_==0 && fitColor_.isValid()) ? fitColor_ : color_;
+  fitCurve_->setPen( QPen( lineColor , lineWidth_ ) );
 
   if(type_==0) {
     // Avoid duplicate legend entries: keep only the data curve entry.
@@ -285,6 +294,11 @@ void PlotEntry::attach(QwtPlot* plot, int xAxisType, int yAxisType) {
 
   fitCurve_->setSymbol(new QwtSymbol(QwtSymbol::NoSymbol));
   fitCurve_->setSamples(fit);
+
+  // Draw the calculation line on top of the data points and error bars.
+  if(dataErrorCurve_) dataErrorCurve_->setZ(10);
+  if(dataCurve_)      dataCurve_->setZ(20);
+  fitCurve_->setZ(30);
 
   if(dataCurve_) dataCurve_->attach(plot);
   if(dataErrorCurve_) dataErrorCurve_->attach(plot);
@@ -480,6 +494,12 @@ void AZUREPlot::draw(QList<PlotEntry*> newEntries) {
       if(newEntries[i]->type()==0) {
         newEntries[i]->setSymbolStyle(kSymbolCycle[symbolIndex % kSymbolCycleSize]);
         symbolIndex++;
+      } else {
+        // For calculation-only entries, the fit takes color_ (no separate
+        // data color exists). Mirror it into fitColor_ so attach() works
+        // uniformly and the dialog can edit it via the data-color field.
+        if(!newEntries[i]->fitColor().isValid())
+          newEntries[i]->setFitColor(newEntries[i]->color());
       }
       newEntries[i]->attach(this,xAxisType,yAxisType);
       entries.push_back(newEntries[i]);

@@ -51,6 +51,9 @@ class PlotEntry {
   QColor color() const {return color_;};
   void setColor(const QColor& c) {color_ = c;};
 
+  QColor fitColor() const {return fitColor_;};
+  void setFitColor(const QColor& c) {fitColor_ = c;};
+
   QwtSymbol::Style symbolStyle() const {return symbolStyle_;};
   void setSymbolStyle(QwtSymbol::Style s) {symbolStyle_ = s;};
 
@@ -78,6 +81,7 @@ class PlotEntry {
   QString filename_;
   QString label_;
   QColor color_;
+  QColor fitColor_;
   QwtSymbol::Style symbolStyle_;
   int symbolSize_;
   int lineWidth_;

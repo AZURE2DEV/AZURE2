@@ -96,7 +96,9 @@ static QIcon colorSwatch(const QColor& c, int size = 16) {
 }
 
 CurveStyleDialog::CurveStyleDialog(PlotEntry* entry, QWidget* parent) :
-  QDialog(parent), entry_(entry), color_(entry ? entry->color() : QColor(Qt::black)) {
+  QDialog(parent), entry_(entry),
+  color_(entry ? entry->color() : QColor(Qt::black)),
+  fitColor_(entry && entry->fitColor().isValid() ? entry->fitColor() : color_) {
   setWindowTitle(tr("Curve Style"));
 
   QFormLayout* form = new QFormLayout;
@@ -104,11 +106,23 @@ CurveStyleDialog::CurveStyleDialog(PlotEntry* entry, QWidget* parent) :
   labelEdit_ = new QLineEdit(entry_ ? entry_->label() : QString());
   form->addRow(tr("Label:"), labelEdit_);
 
+  // For data entries (type==0) the first color controls the data points and
+  // the second controls the calculation/fit line. For calculation-only
+  // entries (type==1) only a single color is shown.
+  const bool hasFitColor = entry_ && entry_->type()==0;
+
   colorButton_ = new QPushButton;
   colorButton_->setMinimumWidth(80);
   connect(colorButton_, SIGNAL(clicked()), this, SLOT(chooseColor()));
   updateColorButton();
-  form->addRow(tr("Color:"), colorButton_);
+  form->addRow(hasFitColor ? tr("Data color:") : tr("Color:"), colorButton_);
+
+  fitColorButton_ = new QPushButton;
+  fitColorButton_->setMinimumWidth(80);
+  connect(fitColorButton_, SIGNAL(clicked()), this, SLOT(chooseFitColor()));
+  updateFitColorButton();
+  if(hasFitColor) form->addRow(tr("Calculation color:"), fitColorButton_);
+  else fitColorButton_->hide();
 
   symbolCombo_ = new QComboBox;
   symbolCombo_->addItem(tr("Circle"), QwtSymbol::Ellipse);
@@ -163,6 +177,11 @@ void CurveStyleDialog::updateColorButton() {
   colorButton_->setText(color_.name());
 }
 
+void CurveStyleDialog::updateFitColorButton() {
+  fitColorButton_->setIcon(colorSwatch(fitColor_, 20));
+  fitColorButton_->setText(fitColor_.name());
+}
+
 void CurveStyleDialog::chooseColor() {
   QColor chosen = QColorDialog::getColor(color_, this, tr("Select Curve Color"));
   if(chosen.isValid()) {
@@ -171,11 +190,23 @@ void CurveStyleDialog::chooseColor() {
   }
 }
 
+void CurveStyleDialog::chooseFitColor() {
+  QColor chosen = QColorDialog::getColor(fitColor_, this, tr("Select Calculation Color"));
+  if(chosen.isValid()) {
+    fitColor_ = chosen;
+    updateFitColorButton();
+  }
+}
+
 void CurveStyleDialog::accept() {
   if(entry_) {
     QString trimmed = labelEdit_->text().trimmed();
     if(!trimmed.isEmpty()) entry_->setLabel(trimmed);
     entry_->setColor(color_);
+    // For calculation-only entries (type==1) the fit follows color_; keep
+    // fitColor_ in sync. For type==0 store the user-selected fit color.
+    if(entry_->type()==0) entry_->setFitColor(fitColor_);
+    else entry_->setFitColor(color_);
     entry_->setSymbolStyle(static_cast<QwtSymbol::Style>(symbolCombo_->currentData().toInt()));
     entry_->setSymbolSize(symbolSizeSpin_->value());
     entry_->setLineWidth(lineWidthSpin_->value());
