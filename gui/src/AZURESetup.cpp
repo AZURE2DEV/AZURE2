@@ -852,6 +852,9 @@ void AZURESetup::editOptions() {
   if(GetConfig().useHybridMethod) aDialog.useHybridMethodCheck->setChecked(true);
   else aDialog.useHybridMethodCheck->setChecked(false);
 
+  if(GetConfig().paramMask & Config::USE_ESPECTRUM) aDialog.useESpectrumCheck->setChecked(true);
+  else aDialog.useESpectrumCheck->setChecked(false);
+
   //if(!(GetConfig().paramMask & Config::USE_LONGWAVELENGTH_APPROX)) aDialog.noLongWavelengthCheck->setChecked(true);
   //else aDialog.noLongWavelengthCheck->setChecked(false);
 
@@ -886,6 +889,9 @@ void AZURESetup::editOptions() {
     } else {
       GetConfig().useHybridMethod = false;
     }
+
+    if(aDialog.useESpectrumCheck->isChecked()) GetConfig().paramMask |= Config::USE_ESPECTRUM;
+    else GetConfig().paramMask &= ~Config::USE_ESPECTRUM;
 
     // Update tab visibility based on hybrid method setting
     updateNuclearPotentialTabVisibility();

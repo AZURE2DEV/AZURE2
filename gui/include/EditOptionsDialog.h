@@ -27,6 +27,7 @@ Q_OBJECT
   QCheckBox* noTransformCheck;
   QCheckBox* useWignerLimitsCheck;
   QCheckBox* useHybridMethodCheck;
+  QCheckBox* useESpectrumCheck;
   // QCheckBox* noLongWavelengthCheck;
 
  private slots:

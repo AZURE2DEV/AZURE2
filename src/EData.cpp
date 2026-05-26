@@ -828,9 +828,11 @@ int EData::Initialize(CNuc *compound,const Config &configure) {
   configure.outStream << "Initializing Component Segments..." << std::endl;
   if(this->InitializeComponentSegments(compound,configure)==-1) return -1;
 
-  //Build resonance-aware interpolation spectra
-  configure.outStream << "Building Interpolation Spectra..." << std::endl;
-  this->BuildSpectra(compound,configure);
+  //Build resonance-aware interpolation spectra (if enabled)
+  if(configure.paramMask & Config::USE_ESPECTRUM) {
+    configure.outStream << "Building Interpolation Spectra..." << std::endl;
+    this->BuildSpectra(compound,configure);
+  }
 
   // Deprecated, kept temporarily for explanation
   // this->InitializeSpectra(compound,configure);
@@ -882,6 +884,7 @@ void EData::BuildSpectra(CNuc* compound, const Config& configure) {
     spectra_.emplace_back(key);
 
     ESpectrum& spectrum = spectra_.back();
+    spectrum.SetMaximumConvolutionStepSize(maximumConvolutionStepSize_);
     spectrum.Setup(compound, configure, intrinsicEvaluationRange, {});
 
     // Example of kernel function usage
@@ -918,6 +921,7 @@ void EData::BuildSpectra(CNuc* compound, const Config& configure) {
 
 void EData::CalculateSpectra(CNuc* compound, const Config& configure) {
   for(auto& spectrum : spectra_) {
+    spectrum.RecalculateGrid(compound, configure);
     spectrum.MarkConvolutionDirty();
     spectrum.UpdateConvolution();
   }
@@ -2071,6 +2075,8 @@ EData *EData::Clone() const {
   dataCopy->targetEffects_ = this->targetEffects_;
   dataCopy->segments_ = this->segments_;
   dataCopy->componentSegments_ = this->componentSegments_;
+  dataCopy->maximumConvolutionStepSize_ = this->maximumConvolutionStepSize_;
+  dataCopy->spectra_ = this->spectra_;
 
   // Build a mapping from component segment keys to cloned component segments
   std::unordered_map<int, ESegment*> clonedComponentMap;

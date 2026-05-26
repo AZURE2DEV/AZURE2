@@ -2,8 +2,6 @@
 #include "ESegment.h"
 #include "CNuc.h"
 #include "Config.h"
-#include "AdaptiveIntegrationGrid.h"
-#include <algorithm>
 #include <cmath>
 
 // ─── Key ─────────────────────────────────────────────────────────────────────
@@ -48,8 +46,6 @@ ESpectrum::Key ESpectrum::Key::FromSegment(const ESegment& seg, double cmAngle) 
     k.lValue          = seg.GetL();
     k.jValue          = seg.GetJ();
     k.maxAngDistOrder = seg.GetMaxAngDistOrder();
-    // Angular-distribution observables are characterised by the full Legendre
-    // expansion, not a single angle; collapse all to angle = 0.
     k.angle = seg.IsAngularDist() ? 0.0
                                   : std::round(cmAngle * 1000.0) / 1000.0;
     return k;
@@ -59,6 +55,27 @@ ESpectrum::Key ESpectrum::Key::FromSegment(const ESegment& seg, double cmAngle) 
 
 ESpectrum::ESpectrum(const Key& key) : key_(key) {}
 
+ESpectrum::ESpectrum(const ESpectrum& other)
+    : key_(other.key_),
+      gridPoints_(other.gridPoints_),
+      gridRange_(other.gridRange_),
+      convolution_(nullptr),
+      convolutionDirty_(true),
+      maximumConvolutionStepSize_(other.maximumConvolutionStepSize_)
+{}
+
+ESpectrum& ESpectrum::operator=(const ESpectrum& other) {
+    if (this != &other) {
+        key_                        = other.key_;
+        gridPoints_                 = other.gridPoints_;
+        gridRange_                  = other.gridRange_;
+        convolution_.reset();
+        convolutionDirty_           = true;
+        maximumConvolutionStepSize_ = other.maximumConvolutionStepSize_;
+    }
+    return *this;
+}
+
 //------------------------------------------------
 void ESpectrum::Setup(
     CNuc* compound,
@@ -66,15 +83,15 @@ void ESpectrum::Setup(
     Convolution::Range intrinsicEvaluationRange,
     std::vector<std::function<double(double)>> kernelFunctions)
 {
-    SetCalculationContext(compound, configure);
+    const std::size_t n = DetermineConvolutionGridSize(intrinsicEvaluationRange);
+
+    gridRange_ = intrinsicEvaluationRange;
+    BuildGrid(compound, configure, n);
 
     if (kernelFunctions.empty()) {
         DisableConvolution();
         return;
     }
-
-    const std::size_t n =
-        DetermineConvolutionGridSize(intrinsicEvaluationRange);
 
     EnableConvolution(
         n,
@@ -104,37 +121,79 @@ std::size_t ESpectrum::DetermineConvolutionGridSize(
 }
 
 //------------------------------------------------
-void ESpectrum::SetCalculationContext(CNuc* compound, const Config& configure)
+void ESpectrum::SetMaximumConvolutionStepSize(double stepSize) {
+    maximumConvolutionStepSize_ = stepSize;
+}
+
+double ESpectrum::MaximumConvolutionStepSize() const {
+    return maximumConvolutionStepSize_;
+}
+
+//------------------------------------------------
+void ESpectrum::BuildGrid(CNuc* compound, const Config& configure, std::size_t n)
 {
-    compound_ = compound;
-    configure_ = &configure;
-    MarkConvolutionDirty();
+    gridPoints_.clear();
+    if (!compound || n < 2) return;
+
+    const double eMin = gridRange_.first;
+    const double eMax = gridRange_.second;
+    if (!(eMax > eMin)) return;
+
+    gridPoints_.reserve(n);
+
+    const double dx = (eMax - eMin) / static_cast<double>(n - 1);
+    for (std::size_t i = 0; i < n; ++i) {
+        const double e = eMin + dx * static_cast<double>(i);
+        gridPoints_.emplace_back(key_.angle, e,
+                                 key_.entranceKey, key_.exitKey,
+                                 key_.isDifferential, key_.isPhase,
+                                 key_.isAngDist, key_.jValue,
+                                 key_.lValue, key_.maxAngDistOrder);
+    }
+
+    for (auto& point : gridPoints_) {
+        point.CalcEDependentValues(compound, configure);
+        point.CalcLegendreP(Config::maxLOrder, compound, nullptr);
+        point.CalcCoulombAmplitude(compound);
+        if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
+            point.CalculateECAmplitudes(compound, configure);
+        }
+    }
+}
+
+//------------------------------------------------
+void ESpectrum::RecalculateGrid(CNuc* compound, const Config& configure)
+{
+    if (!compound) return;
+    for (auto& point : gridPoints_) {
+        point.Calculate(compound, configure);
+    }
 }
 
 //------------------------------------------------
 double ESpectrum::CalculateIntrinsic(double cmEnergy) const
 {
-    if (!compound_ || !configure_) {
-        return 0.0;
-    }
+    if (gridPoints_.empty()) return 0.0;
+    if (gridPoints_.size() == 1) return gridPoints_.front().GetFitCrossSection();
 
-    EPoint point(key_.angle, cmEnergy,
-                 key_.entranceKey, key_.exitKey,
-                 key_.isDifferential, key_.isPhase,
-                 key_.isAngDist, key_.jValue,
-                 key_.lValue, key_.maxAngDistOrder);
+    const double eMin = gridRange_.first;
+    const double eMax = gridRange_.second;
+    const std::size_t n = gridPoints_.size();
 
-    point.CalcEDependentValues(compound_, *configure_);
-    point.CalcLegendreP(Config::maxLOrder, compound_, nullptr);
-    point.CalcCoulombAmplitude(compound_);
+    if (cmEnergy <= eMin) return gridPoints_.front().GetFitCrossSection();
+    if (cmEnergy >= eMax) return gridPoints_.back().GetFitCrossSection();
 
-    if (configure_->paramMask & Config::USE_EXTERNAL_CAPTURE) {
-        point.CalculateECAmplitudes(compound_, *configure_);
-    }
+    const double dx = (eMax - eMin) / static_cast<double>(n - 1);
+    const double fIndex = (cmEnergy - eMin) / dx;
 
-    point.Calculate(compound_, *configure_);
+    std::size_t i = static_cast<std::size_t>(fIndex);
+    if (i >= n - 1) i = n - 2;
 
-    return point.GetFitCrossSection();
+    const double t = fIndex - static_cast<double>(i);
+    const double a = gridPoints_[i].GetFitCrossSection();
+    const double b = gridPoints_[i + 1].GetFitCrossSection();
+
+    return a + t * (b - a);
 }
 
 //------------------------------------------------
@@ -148,11 +207,6 @@ void ESpectrum::EnableConvolution(
     std::vector<Convolution::Factor> factors;
     factors.reserve(kernelFunctions.size() + 1);
 
-    // By design of Convolution class, the 0th factor is treated
-    // specially as the intrinsic signal/function.
-    // All subsequent factors are treated as convolution kernels,
-    // which are shifted to zero and scaled by dx for the discrete
-    // convolution integral
     factors.push_back(
         Convolution::Factor::MakeIntrinsic(
             [this](double e) {
@@ -161,8 +215,6 @@ void ESpectrum::EnableConvolution(
         )
     );
 
-    // Here, the kernelFunctions (more than one can be applied)
-    // will be passed to the Convolution pointer
     for (auto& kernelFunction : kernelFunctions) {
         factors.push_back(
             Convolution::Factor::MakeKernel(std::move(kernelFunction))
@@ -200,8 +252,6 @@ void ESpectrum::UpdateConvolution()
         return;
     }
 
-    // If not marked as dirty:
-    // don't progress to convolution rebuild
     if (!convolutionDirty_) {
         return;
     }
@@ -217,9 +267,6 @@ void ESpectrum::UpdateConvolution()
 }
 
 //------------------------------------------------
-// To be called when comparing the calculation (prediction)
-// to the data. If the user wishes to ensure any assigned experimental
-// effects are bypassed, CalculateIntrinsic should be called.
 double ESpectrum::Evaluate(double cmEnergy) const
 {
     if (convolution_) {
@@ -228,86 +275,3 @@ double ESpectrum::Evaluate(double cmEnergy) const
 
     return CalculateIntrinsic(cmEnergy);
 }
-
-//------------------------------------------------
-// void ESpectrum::BuildGrid(double minCMEnergy, double maxCMEnergy,
-//                           CNuc* compound, const Config& configure) {
-//     points_.clear();
-
-//     // 2 % margin so resonances sitting exactly at a segment boundary are
-//     // still covered by the fine grid on both sides.
-//     const double range  = maxCMEnergy - minCMEnergy;
-//     const double margin = range > 0.0 ? 0.02 * range : 0.001;
-//     const double lo     = std::max(minCMEnergy - margin, 1.0e-4);
-//     const double hi     = maxCMEnergy + margin;
-
-//     AdaptiveIntegrationGrid::GridConfig cfg;
-//     cfg.entranceKey           = key_.entranceKey;
-//     cfg.maxPoints             = 2000;
-//     cfg.baseEnergyStep        = range > 0.0 ? range / 100.0 : 0.01;
-//     cfg.resonanceWidthMultiplier = 5.0;
-//     cfg.pointsPerWidth        = 20.0;
-
-//     AdaptiveIntegrationGrid grid(cfg);
-//     // GenerateGrid returns energies in descending order.
-//     std::vector<double> energies = grid.GenerateGrid(hi, lo, compound);
-
-//     std::sort(energies.begin(), energies.end());
-//     energies.erase(std::unique(energies.begin(), energies.end()), energies.end());
-
-//     points_.reserve(energies.size());
-//     for (double e : energies) {
-//         points_.emplace_back(key_.angle, e,
-//                              key_.entranceKey, key_.exitKey,
-//                              key_.isDifferential, key_.isPhase,
-//                              key_.isAngDist, key_.jValue,
-//                              key_.lValue, key_.maxAngDistOrder);
-//     }
-// }
-
-// void ESpectrum::InitializePoints(CNuc* compound, const Config& configure) {
-//     for (auto& pt : points_) {
-//         pt.CalcEDependentValues(compound, configure);
-//         pt.CalcLegendreP(Config::maxLOrder, compound, nullptr);
-//         pt.CalcCoulombAmplitude(compound);
-//         if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE)
-//             pt.CalculateECAmplitudes(compound, configure);
-//     }
-// }
-
-// void ESpectrum::Calculate(CNuc* compound, const Config& configure) {
-//     for (auto& pt : points_)
-//         pt.Calculate(compound, configure);
-// }
-
-// double ESpectrum::Interpolate(double cmEnergy) const {
-//     if (points_.empty()) return 0.0;
-
-//     // Binary search: first point whose energy >= cmEnergy.
-//     auto it = std::lower_bound(points_.begin(), points_.end(), cmEnergy,
-//                                [](const EPoint& p, double e) {
-//                                    return p.GetCMEnergy() < e;
-//                                });
-
-//     if (it == points_.end())   return points_.back().GetFitCrossSection();
-//     if (it == points_.begin()) return points_.front().GetFitCrossSection();
-
-//     const EPoint& hi = *it;
-//     const EPoint& lo = *std::prev(it);
-
-//     const double eLo   = lo.GetCMEnergy();
-//     const double eHi   = hi.GetCMEnergy();
-//     const double span  = eHi - eLo;
-//     if (span < 1.0e-15) return lo.GetFitCrossSection();
-
-//     const double t = (cmEnergy - eLo) / span;
-//     return lo.GetFitCrossSection() + t * (hi.GetFitCrossSection() - lo.GetFitCrossSection());
-// }
-
-// EPoint* ESpectrum::GetPoint(int i) {
-//     return &points_[i - 1];
-// }
-
-// const EPoint* ESpectrum::GetPoint(int i) const {
-//     return &points_[i - 1];
-// }

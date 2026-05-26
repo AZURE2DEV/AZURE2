@@ -14,6 +14,7 @@ EditOptionsDialog::EditOptionsDialog(QWidget* parent) : QDialog(parent) {
   noTransformCheck = new QCheckBox(tr("Do not perform parameter\ntransformations"));
   useWignerLimitsCheck = new QCheckBox(tr("Use Wigner Limits for\nparameter limits"));
   useHybridMethodCheck = new QCheckBox(tr("Use Hybrid Coulomb method\n(with nuclear potential)"));
+  useESpectrumCheck = new QCheckBox(tr("Use ESpectrum"));
   // noLongWavelengthCheck = new QCheckBox(tr("Do not use long wavelength\n"
   //					   "approximation for EL external capture"));
 
@@ -29,6 +30,7 @@ EditOptionsDialog::EditOptionsDialog(QWidget* parent) : QDialog(parent) {
   optionsLayout->addWidget(noTransformCheck);
   optionsLayout->addWidget(useWignerLimitsCheck);
   optionsLayout->addWidget(useHybridMethodCheck);
+  optionsLayout->addWidget(useESpectrumCheck);
   //optionsLayout->addWidget(noLongWavelengthCheck);
   optionsBox->setLayout(optionsLayout);
 

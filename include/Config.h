@@ -60,7 +60,8 @@ class Config {
     PERFORM_MCMC              =(1<<15),
     USE_WIGNER_LIMITS         =(1<<16),
     USE_NLOPT_MINIMIZER       =(1<<17),
-    USE_HYBRID_COULOMB        =(1<<18)
+    USE_HYBRID_COULOMB        =(1<<18),
+    USE_ESPECTRUM             =(1<<19)
   };
   /*!
    * Bit flags for check file control in AZURE2.

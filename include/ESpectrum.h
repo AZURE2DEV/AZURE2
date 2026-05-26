@@ -4,6 +4,7 @@
 #include "Convolution.h"
 #include "EPoint.h"
 
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -13,51 +14,49 @@ class Config;
 class ESegment;
 
 /*!
- * A pre-computed cross-section spectrum on a resonance-aware energy grid.
+ * A pre-computed cross-section spectrum on a uniform CM energy grid.
  *
- * One ESpectrum covers a unique combination of reaction channel and observable
- * type (entrance/exit pair, angle, data-type flags).  Multiple ESegments that
- * share the same combination but span different energy ranges are merged into
- * one ESpectrum whose grid covers the union of those ranges.
+ * Each ESpectrum caches a vector of EPoints over its energy range. The
+ * energy-dependent quantities that depend only on the channel structure
+ * (Lo matrix, Legendre polynomials, Coulomb amplitudes) are computed
+ * once during BuildGrid. Each fit iteration only needs to call
+ * RecalculateGrid which performs the cheap R-matrix step per point.
  *
- * Workflow:
- *   1. EData::BuildSpectra   – creates grids (called once from Initialize)
- *   2. EData::InitializeSpectra – pre-computes Lo-matrix, Legendre P, Coulomb
- *   3. EData::CalculateSpectra  – computes cross-sections (call each fit iter)
- *   4. ESpectrum::Interpolate   – fast O(log N) linear interpolation
+ * Evaluation at an arbitrary CM energy is done by linear interpolation
+ * (CalculateIntrinsic). When a convolution is active, Evaluate applies it
+ * on top of the interpolated intrinsic.
  */
 class ESpectrum {
 public:
 
-    /*!
-     * Uniquely identifies a spectrum: reaction channel + observable type.
-     * Angle is rounded to 3 decimal places so that nominally identical angles
-     * from different segments map to the same ESpectrum.
-     * For angular-distribution segments, angle is set to 0 because the full
-     * Legendre expansion, not a single angle, characterises the observable.
-     */
     struct Key {
         int    entranceKey;
         int    exitKey;
-        double angle;           ///< CM angle in degrees (0 for ang-dist segments)
+        double angle;
         bool   isDifferential;
         bool   isCMDifferential;
         bool   isPhase;
         bool   isAngDist;
         int    isTotalCapture;
-        int    lValue;          ///< partial-wave L (meaningful for phase shifts)
-        double jValue;          ///< partial-wave J (meaningful for phase shifts)
+        int    lValue;
+        double jValue;
         int    maxAngDistOrder;
 
         bool operator==(const Key& o) const;
         bool operator<(const Key& o) const;
 
-        /// Build a Key from segment metadata; cmAngle is the CM angle of the
-        /// first data point in the segment (ignored for ang-dist segments).
         static Key FromSegment(const ESegment& seg, double cmAngle = 0.0);
     };
 
     explicit ESpectrum(const Key& key);
+
+    // Custom copy semantics: grid is copied, convolution is reset (it owns
+    // FFTW plans which are not safe to share / copy).
+    ESpectrum(const ESpectrum& other);
+    ESpectrum& operator=(const ESpectrum& other);
+    ESpectrum(ESpectrum&&) noexcept = default;
+    ESpectrum& operator=(ESpectrum&&) noexcept = default;
+
     const Key& GetKey() const { return key_; }
 
     void Setup(
@@ -66,36 +65,23 @@ public:
         Convolution::Range intrinsicEvaluationRange,
         std::vector<std::function<double(double)>> kernelFunctions);
 
+    /// Allocate the grid and pre-compute everything that depends only on
+    /// channel structure (NOT on the current fit parameters).
+    void BuildGrid(CNuc* compound, const Config& configure, std::size_t n);
+
+    /// Recompute the fit cross section at every grid point. Cheap; only
+    /// performs the R-matrix step that depends on level parameters.
+    void RecalculateGrid(CNuc* compound, const Config& configure);
+
+    std::size_t NumGridPoints() const { return gridPoints_.size(); }
+    Convolution::Range GridRange() const { return gridRange_; }
+
     std::size_t DetermineConvolutionGridSize(Convolution::Range intrinsicEvaluationRange) const;
 
     void SetMaximumConvolutionStepSize(double stepSize);
     double MaximumConvolutionStepSize() const;
 
-    /// Build the resonance-aware energy grid and populate the EPoint vector.
-    /// Called once during EData::BuildSpectra.
-    // void BuildGrid(double minCMEnergy, double maxCMEnergy,
-    //                CNuc* compound, const Config& configure);
-
-    /// Pre-compute Lo-matrix elements, Legendre polynomials, Coulomb amplitudes
-    /// and (optionally) EC amplitudes for every grid point.
-    /// Called once per run from EData::InitializeSpectra.
-    // void InitializePoints(CNuc* compound, const Config& configure);
-
-    /// Compute cross-sections at all grid points using the current parameter set.
-    /// Must be called after CNuc::TransformOut each fit iteration.
-    // void Calculate(CNuc* compound, const Config& configure);
-
-    /// Linear interpolation of the fit cross-section at an arbitrary CM energy.
-    /// Clamps to the boundary value when energy is outside the grid range.
-    // double Interpolate(double cmEnergy) const;
-
-    // int NumPoints() const     { return static_cast<int>(points_.size()); }
-    // EPoint*       GetPoint(int i);       ///< 1-based
-    // const EPoint* GetPoint(int i) const; ///< 1-based
-
-    //------------------------------------------------
-    void SetCalculationContext(CNuc* compound, const Config& configure);
-
+    /// Interpolated intrinsic cross section at an arbitrary CM energy.
     double CalculateIntrinsic(double cmEnergy) const;
 
     void EnableConvolution(std::size_t n,
@@ -114,18 +100,15 @@ public:
 
 private:
 
-    CNuc* compound_{nullptr};
-    const Config* configure_{nullptr};
+    Key key_;
 
-    Key               key_;
-    // std::vector<EPoint> points_; ///< sorted ascending by CM energy
+    std::vector<EPoint> gridPoints_;
+    Convolution::Range gridRange_{0.0, 0.0};
 
-    //------------------------------------------------
     std::unique_ptr<Convolution> convolution_;
     bool convolutionDirty_{true};
 
-    // This is currently hardcoded. With cell-averaged sampling for the FFT,
-    // it can typically be left with a small default value.
+    // Hardcoded for now; with cell-averaged FFT sampling a small value is fine.
     double maximumConvolutionStepSize_{0.001};
 
 };

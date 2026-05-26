@@ -47,6 +47,10 @@ double AZURECalc::operator()(const vector_r& p) const {
   localData->FillEnergyShiftsFromParams(p,localData,localCompound,&configure());
   if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
+  // Refresh interpolation spectra for the current parameter set (if enabled).
+  if(configure().paramMask & Config::USE_ESPECTRUM)
+    localData->CalculateSpectra(localCompound, configure());
+
   // Process segments with components - use new integrated calculation method
   double chiSquared=0.0;
   for(int i = 1; i <= localData->NumSegments(); i++) {

@@ -3,6 +3,7 @@
 #include "DataLine.h"
 #include "EData.h"
 #include "ESegment.h"
+#include "ESpectrum.h"
 #include "ExtrapLine.h"
 #include "SegLine.h"
 
@@ -830,6 +831,18 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, co
   EPoint* basePoint = GetPoint(pointIndex + 1);
   if (!basePoint) {
     return 0.0;
+  }
+
+  // Fast path: interpolate from the pre-computed ESpectrum grid for simple
+  // segments. Gated by the USE_ESPECTRUM runtime option.
+  if ((configure.paramMask & Config::USE_ESPECTRUM) &&
+      edata && !HasComponents() && !IsTargetEffect() && !IsAngularDist()) {
+    ESpectrum::Key key = ESpectrum::Key::FromSegment(*this, basePoint->GetCMAngle());
+    if (ESpectrum* spectrum = edata->FindSpectrum(key)) {
+      double value = spectrum->Evaluate(basePoint->GetCMEnergy());
+      basePoint->SetFitCrossSection(value);
+      return value;
+    }
   }
 
   // Calculate base point if not already calculated
