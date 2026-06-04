@@ -4,6 +4,8 @@
 #include <iostream>
 #include <string>
 #include <cstring>
+#include <cstdint>
+#include <vector>
 // Check if Windows or Linux
 #ifdef _WIN32
 #include <winsock2.h>
@@ -34,7 +36,11 @@ using socket_t = int;
 
 #include "AZUREAPI.h"
 
-const int BUFFER_SIZE = 10000;
+// Upper bound on the number of doubles accepted in a single frame.  This is a
+// sanity guard against a corrupt/garbage length prefix causing a runaway
+// allocation; it is NOT a hard limit on legitimate payloads in the way the old
+// fixed BUFFER_SIZE was.  ~1e8 doubles == 800 MB, far above any real payload.
+const std::uint64_t MAX_FRAME_DOUBLES = 100000000ULL;
 
 class AZURESocket {
 
@@ -47,6 +53,20 @@ private:
 
     AZUREAPI* api_;
 
+    // Low-level, loop-until-complete socket helpers.  recv/send may transfer
+    // fewer bytes than requested, so we must loop.  Return false on
+    // error/disconnect.
+    bool recvAll( void* buffer, size_t length );
+    bool sendAll( const void* buffer, size_t length );
+
+    // Length-prefixed framing: [uint64 count][count * double].
+    // readMessage returns false on a clean disconnect or fatal error.
+    bool readMessage( vector_r& out );
+    bool writeMessage( const double* values, std::uint64_t count );
+
+    // Dispatch a single decoded request frame.
+    void handle( const vector_r& request );
+
 public:
     AZURESocket(int port, AZUREAPI* api): port_(port), api_( api ) {
       serverSocket_ = -1;
@@ -54,15 +74,15 @@ public:
     };
 
     ~AZURESocket(){
-      close(serverSocket_);
-      close(clientSocket_);
+      if( clientSocket_ != -1 ) close(clientSocket_);
+      if( serverSocket_ != -1 ) close(serverSocket_);
     };
 
     bool start( );
 
-    bool sendPacket( vector_r response );
-    bool sendPacket( std::string );
-    bool sendPacket( std::vector<bool> response );
+    bool sendPacket( const vector_r& response );
+    bool sendPacket( const std::string& response );
+    bool sendPacket( const std::vector<bool>& response );
 
 };
 
