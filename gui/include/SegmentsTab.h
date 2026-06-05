@@ -46,6 +46,7 @@ class SegmentsTab : public QWidget {
   void updateSegTestButtons(const QItemSelection &selection);
   void checkAllSegData();
   void uncheckAllSegData();
+  void getDataFromExfor();
   void filterSegDataByPairs();
   /*void openSegDataFile();
   void openSegDataFile(QString filename);
@@ -83,6 +84,7 @@ class SegmentsTab : public QWidget {
   QPushButton *segDataDownButton;
   QPushButton *segDataCheckAllButton;
   QPushButton *segDataUncheckAllButton;
+  QPushButton *segDataExforButton;
   QComboBox *segDataEntranceFilter;
   QComboBox *segDataExitFilter;
   /*QLineEdit *segTestFileText;*/

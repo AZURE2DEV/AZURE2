@@ -13,6 +13,7 @@
 #include "RichTextDelegate.h"
 #include "InfoDialog.h"
 #include "PairsModel.h"
+#include "ExforDialog.h"
 
 SegmentsTab::SegmentsTab(QWidget *parent) : QWidget(parent) {
   pairsModel = nullptr;
@@ -113,6 +114,11 @@ SegmentsTab::SegmentsTab(QWidget *parent) : QWidget(parent) {
   segDataUncheckAllButton->setMaximumHeight(28);
   connect(segDataUncheckAllButton,SIGNAL(clicked()),this,SLOT(uncheckAllSegData()));
 
+  segDataExforButton = new QPushButton(tr("EXFOR"));
+  segDataExforButton->setMaximumHeight(28);
+  segDataExforButton->setToolTip(tr("Retrieve experimental data from the EXFOR database"));
+  connect(segDataExforButton,SIGNAL(clicked()),this,SLOT(getDataFromExfor()));
+
   // Add filter comboboxes
   segDataEntranceFilter = new QComboBox;
   segDataEntranceFilter->addItem(tr("All Entrance Pairs"));
@@ -160,6 +166,8 @@ SegmentsTab::SegmentsTab(QWidget *parent) : QWidget(parent) {
   segDataButtonBox->addWidget(new QLabel(tr("Filter:")),0,9);
   segDataButtonBox->addWidget(segDataEntranceFilter,0,10);
   segDataButtonBox->addWidget(segDataExitFilter,0,11);
+  segDataButtonBox->addItem(new QSpacerItem(10,28),0,12);
+  segDataButtonBox->addWidget(segDataExforButton,0,13);
   segDataButtonBox->setColumnStretch(0,0);
   segDataButtonBox->setColumnStretch(1,0);
   segDataButtonBox->setColumnStretch(2,0);
@@ -1023,6 +1031,17 @@ void SegmentsTab::uncheckAllSegData() {
       segmentsDataModel->setData(index, 0, Qt::EditRole);
     }
   }
+}
+
+void SegmentsTab::getDataFromExfor() {
+  if(!pairsModel || pairsModel->numPairs() == 0) {
+    QMessageBox::warning(this, tr("No Pairs Defined"),
+                         tr("Please define at least one particle pair before "
+                            "retrieving data from EXFOR."));
+    return;
+  }
+  ExforDialog dialog(pairsModel, this);
+  dialog.exec();
 }
 
 void SegmentsTab::filterSegDataByPairs() {
