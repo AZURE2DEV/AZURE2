@@ -196,6 +196,58 @@ class azure2:
     def calculate_chi2(self, params, proc=0):
         return self.clients[proc].communicate("CALCULATE_CHI2", params).tolist()
 
+    def calculate_lnl_rwa(self, params, error_inflation, proc=0):
+        """Gaussian log-likelihood from RWA params with per-segment error inflation.
+
+        Parameters
+        ----------
+        params : the non-fixed RWA parameters (these include the segment
+            normalizations), in the same order as ``self.params_rwa``.
+        error_inflation : one fractional error-inflation factor per segment, in
+            the same order as ``self.norms`` / ``self.cross`` (length
+            ``self.nsegments``).  For each data point the variance becomes
+            ``(dataErr*norm)**2 + (f*model)**2`` where ``model`` is the
+            theoretical cross section.
+        proc : which AZURE2 instance to dispatch to.
+
+        Returns
+        -------
+        float
+            ``lnL = -0.5 * sum[ (fit - data*norm)**2 / var + ln(2*pi*var) ]``,
+            including the error-normalization term so the inflation factors are
+            self-regulating.
+        """
+        payload = np.concatenate([
+            np.asarray(params, dtype=float).ravel(),
+            np.asarray(error_inflation, dtype=float).ravel(),
+        ])
+        return float(self.clients[proc].communicate("CALCULATE_LNL_RWA", payload)[0])
+
+    def calculate_lnl_cov_rwa(self, params, error_inflation, proc=0):
+        """Log-likelihood with a correlated per-segment covariance matrix.
+
+        Same arguments and packing as :meth:`calculate_lnl_rwa`, but the points
+        within each segment are treated as 100% correlated in the inflation
+        term (they share one normalization).  The covariance block for a
+        segment is
+
+            C_ij = (dataErr_i*norm)**2 * delta_ij + f**2 * model_i * model_j
+
+        (statistical-plus-inflation on the diagonal, only the fully-correlated
+        inflation off-diagonal), and segments are mutually uncorrelated.
+
+        Returns
+        -------
+        float
+            ``lnL = -0.5 * [ r^T C^{-1} r + ln det(2*pi*C) ]`` summed over the
+            segment blocks, with ``r_i = fit_i - data_i*norm``.
+        """
+        payload = np.concatenate([
+            np.asarray(params, dtype=float).ravel(),
+            np.asarray(error_inflation, dtype=float).ravel(),
+        ])
+        return float(self.clients[proc].communicate("CALCULATE_LNL_COV_RWA", payload)[0])
+
     # -- calculations ---------------------------------------------------------
 
     def calculate_excitation_energy(self, params, proc=0):

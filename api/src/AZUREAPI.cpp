@@ -784,8 +784,185 @@ double AZUREAPI::CalculateChi2Physical(const vector_r& physicalParams) const {
   
   delete localCompound;
   delete localData;
-  
+
   return chiSquared;
+}
+
+double AZUREAPI::CalculateLnLRWA(const vector_r& params) const {
+
+  // ln(2*pi), used in the Gaussian error-normalization term. Defined as a
+  // literal so it does not depend on M_PI being available on every platform.
+  static const double kLn2Pi = 1.8378770664093453;
+
+  // The input vector packs the non-fixed RWA parameters first, followed by one
+  // error-inflation factor per segment. Split it on the number of non-fixed
+  // parameters.
+  int nRwa = 0;
+  for( size_t i = 0; i < fixed_.size( ); ++i ) if( !fixed_[i] ) ++nRwa;
+
+  vector_r rwaParams( params.begin( ), params.begin( ) + nRwa );
+  vector_r inflation( params.begin( ) + nRwa, params.end( ) );
+
+  // Map the non-fixed RWA values back into the full parameter vector.
+  int k = 0;
+  vector_r params_ = all_rwa_;
+  for( int i = 0; i < all_rwa_.size( ); ++i ){
+    if( !fixed_[i] ){
+      params_[i] = rwaParams[k];
+      ++k;
+    }
+  }
+
+  CNuc* localCompound = compound()->Clone();
+  EData* localData = data()->Clone();
+
+  // Fill compound nucleus and data with RWA parameters (norms included).
+  localCompound->FillCompoundFromParams(params_);
+  localData->FillNormsFromParams(params_);
+  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
+  if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+
+  double lnL = 0.0;
+
+  // Walk the raw segments so every point contributes, but advance the
+  // inflation index only when the segment key changes, keeping it aligned with
+  // the norms() / UpdateData() ordering (one inflation factor per segment).
+  int prevKey = -1;
+  int segIdx  = -1;
+
+  for(int i = 1; i <= localData->NumSegments(); i++) {
+    ESegment* segment = localData->GetSegment(i);
+    if(!segment) continue;
+
+    int key = segment->GetSegmentKey();
+    if( key != prevKey ){ ++segIdx; prevKey = key; }
+
+    double f = ( segIdx >= 0 && segIdx < (int)inflation.size( ) ) ? inflation[segIdx] : 0.0;
+    double norm = segment->GetNorm();
+
+    for(int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
+      double model = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
+      EPoint* point = segment->GetPoint(pointIdx + 1);
+      if(!point) continue;
+      point->SetFitCrossSection(model);
+
+      double residual  = model - point->GetCMCrossSection() * norm;
+      double baseError = point->GetCMCrossSectionError() * norm;
+      double inflTerm  = f * model;
+      double var = baseError * baseError + inflTerm * inflTerm;
+
+      if( var > 0.0 ) {
+        lnL += -0.5 * ( residual * residual / var + std::log( var ) + kLn2Pi );
+      }
+    }
+  }
+
+  delete localCompound;
+  delete localData;
+
+  return lnL;
+}
+
+double AZUREAPI::CalculateLnLCovRWA(const vector_r& params) const {
+
+  // ln(2*pi) literal (see CalculateLnLRWA).
+  static const double kLn2Pi = 1.8378770664093453;
+
+  // Split the input into non-fixed RWA parameters and per-segment inflation.
+  int nRwa = 0;
+  for( size_t i = 0; i < fixed_.size( ); ++i ) if( !fixed_[i] ) ++nRwa;
+
+  vector_r rwaParams( params.begin( ), params.begin( ) + nRwa );
+  vector_r inflation( params.begin( ) + nRwa, params.end( ) );
+
+  int k = 0;
+  vector_r params_ = all_rwa_;
+  for( int i = 0; i < all_rwa_.size( ); ++i ){
+    if( !fixed_[i] ){
+      params_[i] = rwaParams[k];
+      ++k;
+    }
+  }
+
+  CNuc* localCompound = compound()->Clone();
+  EData* localData = data()->Clone();
+
+  localCompound->FillCompoundFromParams(params_);
+  localData->FillNormsFromParams(params_);
+  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
+  if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+
+  double lnL = 0.0;
+
+  int prevKey = -1;
+  int segIdx  = -1;
+
+  for(int i = 1; i <= localData->NumSegments(); i++) {
+    ESegment* segment = localData->GetSegment(i);
+    if(!segment) continue;
+
+    int key = segment->GetSegmentKey();
+    if( key != prevKey ){ ++segIdx; prevKey = key; }
+
+    double f = ( segIdx >= 0 && segIdx < (int)inflation.size( ) ) ? inflation[segIdx] : 0.0;
+    double norm = segment->GetNorm();
+
+    // The covariance block is diagonal-plus-rank-1:
+    //   C = D + v v^T,   D = diag(sv_i),   v_i = f * model_i
+    // so its inverse (Sherman-Morrison) and determinant (matrix-determinant
+    // lemma) are available in closed form. This needs only the running sums
+    //   A  = sum_i r_i^2 / sv_i              (= r^T D^{-1} r)
+    //   W  = sum_i model_i r_i / sv_i        (-> v^T D^{-1} r = f * W)
+    //   Mm = sum_i model_i^2 / sv_i          (-> v^T D^{-1} v = f^2 * Mm)
+    //   lnDetD = sum_i ln(sv_i)              (= ln det D)
+    // computed in a single O(n) pass, instead of forming and factorizing the
+    // n x n matrix.
+    int n = 0;
+    double A = 0.0, W = 0.0, Mm = 0.0, lnDetD = 0.0;
+    bool degenerate = false;
+
+    for(int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
+      double m = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
+      EPoint* point = segment->GetPoint(pointIdx + 1);
+      if(!point) continue;
+      point->SetFitCrossSection(m);
+
+      double baseError = point->GetCMCrossSectionError() * norm;
+      double sv = baseError * baseError;
+      if( sv <= 0.0 ){
+        // Zero statistical error makes D (and, for >1 such point, C) singular:
+        // the closed form is undefined. Reject rather than divide by zero.
+        degenerate = true;
+        break;
+      }
+
+      double resid = m - point->GetCMCrossSection() * norm;
+      double inv = 1.0 / sv;
+      A      += resid * resid * inv;
+      W      += m * resid * inv;
+      Mm     += m * m * inv;
+      lnDetD += std::log( sv );
+      ++n;
+    }
+
+    if( degenerate ){
+      lnL = -std::numeric_limits<double>::infinity();
+      break;
+    }
+    if( n == 0 ) continue;
+
+    double f2 = f * f;
+    double denom = 1.0 + f2 * Mm;                 // 1 + v^T D^{-1} v
+    double chi2  = A - ( f2 * W * W ) / denom;     // r^T C^{-1} r
+    double lnDet = lnDetD + std::log( denom );     // ln det C
+
+    lnL += -0.5 * ( chi2 + lnDet + n * kLn2Pi );
+  }
+
+  delete localCompound;
+  delete localData;
+
+  return lnL;
 }
 
 // Function to get indeces of non-fixed normalization parameters

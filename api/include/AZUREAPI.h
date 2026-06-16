@@ -171,8 +171,44 @@ class AZUREAPI {
    * Calculate chi-squared from physical parameters
    */
   double CalculateChi2Physical(const vector_r& physicalParams) const;
- 
- 
+
+  /*!
+   * Calculate the Gaussian log-likelihood from RWA parameters with per-segment
+   * error inflation.
+   *
+   * The input vector is the concatenation of the non-fixed RWA parameters
+   * (which include the normalizations) followed by one error-inflation factor
+   * per segment, in the same segment order as norms() / UpdateData(). For each
+   * data point the variance is inflated as
+   *   var = (dataErr * norm)^2 + (f * model)^2
+   * where model is the theoretical (fit) cross section and f is the segment's
+   * inflation factor. The returned value is
+   *   lnL = -0.5 * sum_i [ (fit - data*norm)^2 / var_i + ln(2*pi*var_i) ]
+   * i.e. it includes the error-normalization term so the inflation factors are
+   * self-regulating.
+   */
+  double CalculateLnLRWA(const vector_r& params) const;
+
+  /*!
+   * Calculate the Gaussian log-likelihood from RWA parameters using a full
+   * per-segment covariance matrix with correlated error inflation.
+   *
+   * The input vector is packed identically to CalculateLnLRWA: the non-fixed
+   * RWA parameters (including normalizations) followed by one error-inflation
+   * factor per segment. Within each segment the data share a single
+   * normalization, so the inflation is treated as 100% correlated. The
+   * covariance block for a segment is
+   *   C_ij = (dataErr_i * norm)^2 * delta_ij + f^2 * model_i * model_j
+   * i.e. the diagonal carries statistical-plus-inflation variance while the
+   * off-diagonal carries only the (fully-correlated) inflation term. Different
+   * segments are uncorrelated (block-diagonal C). The returned value is the
+   * multivariate Gaussian log-likelihood
+   *   lnL = -0.5 * [ r^T C^{-1} r + ln det(2*pi*C) ]
+   * with r_i = fit_i - data_i*norm, summed over the segment blocks.
+   */
+  double CalculateLnLCovRWA(const vector_r& params) const;
+
+
  private:
 
   // Configuration

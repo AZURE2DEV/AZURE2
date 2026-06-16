@@ -381,6 +381,17 @@ void AZURESocket::handle( const vector_r& request ) {
       sendPacket( api_->calculated_excitation_energies( idx ) );
       break;
 
+    // Calculate log-likelihood from RWA params with per-segment error inflation
+    case 35:
+      sendPacket( vector_r{ api_->CalculateLnLRWA( params ) } );
+      break;
+
+    // Calculate log-likelihood from RWA params with a correlated per-segment
+    // covariance matrix
+    case 36:
+      sendPacket( vector_r{ api_->CalculateLnLCovRWA( params ) } );
+      break;
+
     default:
       std::cerr << "AZURESocket: unknown command " << cmd << "." << std::endl;
       // Reply with an empty frame so the client does not block forever.

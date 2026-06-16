@@ -63,6 +63,8 @@ class client:
         'GET_PARAMS_FIXED': 32,
         'GET_DATA_EXCITATION_ENERGY': 33,
         'GET_EXCITATION_ENERGY': 34,
+        'CALCULATE_LNL_RWA': 35,
+        'CALCULATE_LNL_COV_RWA': 36,
     }
 
     def __init__(self, server='localhost', port=20000,
