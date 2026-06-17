@@ -37,6 +37,8 @@ class ESegment {
   bool IsAngularDist() const;
   bool IsUPOS() const;
   int IsTotalCapture() const;
+  ///Returns the cross section component this segment is compared against (0 = full, 1 = E1 only, 2 = E2 only).
+  int GetCrossSectionComponent() const;
   int NumPoints() const;
   int GetEntranceKey() const;
   int GetExitKey() const;
@@ -105,6 +107,8 @@ class ESegment {
   bool isdifferential_;
   bool iscmdifferential_;
   bool isphase_;
+  ///Which cross section component to compare against: 0 = full, 1 = E1 only, 2 = E2 only.
+  int crossSectionComponent_;
   bool isTargetEffect_;
   bool varyNorm_;
   bool isAngDist_;

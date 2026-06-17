@@ -35,6 +35,11 @@ ESegment::ESegment(SegLine segLine) {
     l_=0;
   }
   isTotalCapture_ =  (segLine.isDiff()==3) ? 1 : 0;
+  // isDiff 5/6 are angle-integrated capture segments compared only against the
+  // E1 or E2 component of the cross section, respectively.
+  if(segLine.isDiff()==5) crossSectionComponent_=1;
+  else if(segLine.isDiff()==6) crossSectionComponent_=2;
+  else crossSectionComponent_=0;
   isAngDist_=false;
   maxAngDistOrder_=0;
   datafile_=segLine.dataFile();
@@ -101,6 +106,7 @@ ESegment::ESegment(ExtrapLine extrapLine) {
     maxAngDistOrder_=0;
   }
   isTotalCapture_ =  (extrapLine.isDiff()==4) ? 1 : 0;
+  crossSectionComponent_=0;
   datafile_="";
   dataNorm_= dataNormNominal_ = 1.;
   dataNormError_=0.;
@@ -173,6 +179,16 @@ bool ESegment::IsCMDifferential() const {
 
 bool ESegment::IsPhase() const {
   return isphase_;
+}
+
+/*!
+ * Returns which cross section component the segment is compared against:
+ * 0 for the full cross section, 1 for the E1 component only, and 2 for the
+ * E2 component only.
+ */
+
+int ESegment::GetCrossSectionComponent() const {
+  return crossSectionComponent_;
 }
 
 /*!
@@ -900,7 +916,12 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, co
     }
   }
 
-  double baseValue = basePoint->GetFitCrossSection();
+  // For E1/E2-only segments compare against the corresponding component of the
+  // (angle-integrated capture) cross section instead of the full cross section.
+  double baseValue;
+  if (crossSectionComponent_ == 1) baseValue = basePoint->GetFitE1CrossSection();
+  else if (crossSectionComponent_ == 2) baseValue = basePoint->GetFitE2CrossSection();
+  else baseValue = basePoint->GetFitCrossSection();
 
   // If no components, return base value
   if (!HasComponents()) {
