@@ -7,10 +7,12 @@ evaluations across a worker pool).
 """
 
 import socket
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
 from .client import client
+from .parameters import Parameter, ParameterSet
 from .server import server
 
 
@@ -88,19 +90,42 @@ class azure2:
     # -- lifecycle ------------------------------------------------------------
 
     def spawn(self):
-        """Start the subprocesses, connect clients, and initialize them."""
+        """Start the subprocesses, connect clients, and initialize them.
+
+        Connecting and (especially) the ``INITIALIZE`` step are run
+        concurrently across all instances.  ``INITIALIZE`` triggers the heavy
+        R-matrix setup inside each AZURE2 process; done sequentially the total
+        cost grows linearly with ``nprocs``.  Because ``communicate`` blocks on
+        socket I/O -- which releases the GIL -- dispatching it from a thread per
+        instance lets every AZURE2 process initialize in parallel, so the wall
+        time stays close to a single instance's setup time.
+        """
+        # Launch every subprocess first; Popen is non-blocking, so all the
+        # AZURE2 processes start booting concurrently.
         for p in self.ports:
             self.servers.append(
                 server(p, self.file, binary=self.binary, verbose=self.verbose)
             )
 
-        # client.connect() polls until the port is accepting connections, so
-        # no fixed sleep is needed here.
-        for p in self.ports:
-            self.clients.append(client(port=p))
+        if self.nprocs == 1:
+            # Avoid thread-pool overhead in the common single-instance case.
+            # client.connect() polls until the port is accepting connections,
+            # so no fixed sleep is needed here.
+            self.clients = [client(port=p) for p in self.ports]
+            for c in self.clients:
+                c.communicate("INITIALIZE", [0])
+            return
 
-        for c in self.clients:
-            c.communicate("INITIALIZE", [0])
+        with ThreadPoolExecutor(max_workers=self.nprocs) as pool:
+            # connect() polls until each server's port is accepting
+            # connections; running the polls in parallel overlaps the
+            # subprocesses' startup latency.  map preserves order, so
+            # self.clients stays aligned with self.ports (and thus `proc`).
+            self.clients = list(pool.map(lambda p: client(port=p), self.ports))
+
+            # Fan out the heavy INITIALIZE so the processes set up in parallel.
+            list(pool.map(lambda c: c.communicate("INITIALIZE", [0]),
+                          self.clients))
 
     def close(self):
         """Disconnect all clients and terminate all subprocesses."""
@@ -138,6 +163,61 @@ class azure2:
         self.params = c.communicate("GET_PARAMS", [0])
         self.params_rwa = c.communicate("GET_PARAMS_RWA", [0])
         self.fixed_params = c.communicate("GET_PARAMS_FIXED", [0])
+        self._parameters = None
+
+    # -- parameter metadata ---------------------------------------------------
+
+    @property
+    def parameters(self):
+        """A :class:`ParameterSet` describing every fit parameter.
+
+        Each entry says what the parameter is: for R-matrix parameters which
+        level (J^pi, energy) it belongs to, and for widths which channel (L, S,
+        particle pair, radiation type).  Built lazily and cached; call
+        :meth:`refresh_parameters` to rebuild after the model changes.
+
+        Examples
+        --------
+        >>> azr.parameters.widths                 # all width parameters
+        >>> azr.parameters.free                    # only the non-fixed ones
+        >>> azr.parameters.by_level(jgroup=1)      # one level's energy + widths
+        >>> print(azr.parameters.table())          # readable overview
+        """
+        if self._parameters is None:
+            self._parameters = self._build_parameters()
+        return self._parameters
+
+    def refresh_parameters(self, proc=0):
+        """Re-fetch and rebuild the cached :attr:`parameters`."""
+        self._parameters = self._build_parameters(proc=proc)
+        return self._parameters
+
+    def _build_parameters(self, proc=0):
+        c = self.clients[proc]
+        n = len(self.fixed_params)
+
+        flat = c.communicate("GET_PARAMS_INFO", [0])
+        nfields = Parameter._NFIELDS
+        records = np.asarray(flat, dtype=float).reshape(-1, nfields)
+        if records.shape[0] != n:
+            raise RuntimeError(
+                f"GET_PARAMS_INFO returned {records.shape[0]} parameters but "
+                f"GET_PARAMS_FIXED reported {n}."
+            )
+
+        params = ParameterSet()
+        free_counter = 0
+        for i in range(n):
+            raw_name = c.communicate("GET_PARAMS_NAMES", [i])
+            name = "".join(chr(int(round(x))) for x in raw_name)
+            fixed = bool(round(self.fixed_params[i]))
+            free_index = None if fixed else free_counter
+            if not fixed:
+                free_counter += 1
+            params.append(
+                Parameter.from_record(i, name, records[i], free_index)
+            )
+        return params
 
     # -- index queries --------------------------------------------------------
 
@@ -298,12 +378,25 @@ class azure2:
 
     # -- modes ----------------------------------------------------------------
 
-    def extrap_mode(self):
-        for c in self.clients:
-            c.communicate("SET_EXTRAP_MODE", [0])
+    def _set_mode(self, mode_cmd):
+        """Switch every instance to ``mode_cmd`` and re-INITIALIZE in parallel.
+
+        Like spawn(), the INITIALIZE re-run is the expensive part and is fanned
+        out across threads so all instances re-initialize concurrently.
+        """
+        def switch(c):
+            c.communicate(mode_cmd, [0])
             c.communicate("INITIALIZE", [0])
 
+        if self.nprocs == 1:
+            switch(self.clients[0])
+            return
+
+        with ThreadPoolExecutor(max_workers=self.nprocs) as pool:
+            list(pool.map(switch, self.clients))
+
+    def extrap_mode(self):
+        self._set_mode("SET_EXTRAP_MODE")
+
     def data_mode(self):
-        for c in self.clients:
-            c.communicate("SET_DATA_MODE", [0])
-            c.communicate("INITIALIZE", [0])
+        self._set_mode("SET_DATA_MODE")

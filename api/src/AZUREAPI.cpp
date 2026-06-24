@@ -1002,3 +1002,71 @@ vector_r AZUREAPI::GetEnergyShiftIndices( ) {
 
   return indices;
 }
+
+// Structured metadata for every parameter.  The parameters are walked in the
+// exact order CNuc::FillMnParams (energies + widths) then EData::FillMnParams
+// (norms then energy shifts) emit them, so the records line up one-to-one with
+// names_ / all_ / fixed_.  See AZUREAPI.h for the field layout.
+vector_r AZUREAPI::GetParameterInfo( ) const {
+
+  vector_r info;
+
+  // Running global parameter index; reads the fixed flag and physical value
+  // that UpdateParameters() already cached.
+  int gi = 0;
+  auto push = [&]( double type, double jgroup, double J, double parity,
+                   double level, double levelE, double channel, double L,
+                   double S, double pair, double radtype, double segKey ) {
+    info.push_back( type );
+    info.push_back( jgroup );
+    info.push_back( J );
+    info.push_back( parity );
+    info.push_back( level );
+    info.push_back( levelE );
+    info.push_back( channel );
+    info.push_back( L );
+    info.push_back( S );
+    info.push_back( pair );
+    info.push_back( radtype );
+    info.push_back( ( gi < (int)fixed_.size() && fixed_[gi] ) ? 1.0 : 0.0 );
+    info.push_back( gi < (int)all_.size() ? all_[gi] : 0.0 );
+    info.push_back( segKey );
+    ++gi;
+  };
+
+  // R-matrix parameters: one energy then one width per channel, per level.
+  CNuc* nuc = compound();
+  for( int j = 1; j <= nuc->NumJGroups(); ++j ) {
+    JGroup* jg = nuc->GetJGroup( j );
+    double J = jg->GetJ();
+    double parity = jg->GetPi();
+    for( int la = 1; la <= jg->NumLevels(); ++la ) {
+      ALevel* level = jg->GetLevel( la );
+      double levelE = level->GetE();
+      // energy parameter
+      push( 0, j, J, parity, la, levelE, -1, -1, -1, -1, -1, -1 );
+      // width parameters (one per channel)
+      for( int ch = 1; ch <= jg->NumChannels(); ++ch ) {
+        AChannel* chan = jg->GetChannel( ch );
+        push( 1, j, J, parity, la, levelE, ch, chan->GetL(), chan->GetS(),
+              chan->GetPairNum(), (double)chan->GetRadType(), -1 );
+      }
+    }
+  }
+
+  // Normalization parameters: one per segment with IsVaryNorm().
+  std::vector<ESegment>& segments = data()->GetSegments();
+  for( size_t s = 0; s < segments.size(); ++s ) {
+    if( segments[s].IsVaryNorm() )
+      push( 2, -1, -1, 0, -1, 0, -1, -1, -1, -1, -1,
+            segments[s].GetSegmentKey() );
+  }
+
+  // Energy-shift parameters: one per segment (always emitted).
+  for( size_t s = 0; s < segments.size(); ++s ) {
+    push( 3, -1, -1, 0, -1, 0, -1, -1, -1, -1, -1,
+          segments[s].GetSegmentKey() );
+  }
+
+  return info;
+}

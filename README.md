@@ -1,111 +1,213 @@
 # AZURE2
 
-[![Build Status](https://travis-ci.com/phScholz/AZURE2.svg?token=Pqu1U2LEwBHgCJpiVM1f&branch=master)](https://travis-ci.com/phScholz/AZURE2) 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/8150ba411b2445fbbf9cffb9b61909cd)](https://www.codacy.com?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=phScholz/AZURE2&amp;utm_campaign=Badge_Grade)
-[![codecov](https://codecov.io/gh/phScholz/AZURE2/branch/master/graph/badge.svg?token=WfVDllGHjP)](https://codecov.io/gh/phScholz/AZURE2)
+AZURE2 is a software package for performing multi-channel, multi-level
+[R-matrix](https://en.wikipedia.org/wiki/R-matrix) analyses of low-energy
+nuclear reaction and scattering data. It provides a Qt graphical setup utility,
+a fast C++ calculation engine, parameter fitting via Minuit2, optional Bayesian
+(MCMC) sampling, and a socket API with a Python client (`pyazr`) for scripting
+and external samplers.
 
+Upstream project: <https://azure.nd.edu/> · Source:
+<https://github.com/rdeboer1/AZURE2>
 
-Thank you for choosing AZURE2 to for all your R-Matrix needs.
+---
 
-This file contains a brief description of how to compile the AZURE2 package.  
+## What's in this repository
 
-## Building a Docker container
+| Path        | Description |
+|-------------|-------------|
+| `src/`      | Core C++ R-matrix engine (`CNuc`, `EData`, cross-section/χ² calculation, output). |
+| `include/`  | Public headers for the core engine. |
+| `gui/`      | Qt5 graphical setup utility (`AZURESetup`). |
+| `api/`      | Socket API server (`--use-api`) used by the Python client. |
+| `pyazr/`    | Python package that drives AZURE2 over the socket API. |
+| `coul/`     | Coulomb wave-function library. |
+| `minuit2/`  | **Bundled** ROOT Minuit2 minimizer — built in-tree, no external install needed. |
+| `numcmc/`   | **Bundled** MCMC Bayesian sampling library (`USE_MCMC`). |
+| `erya/`     | **Bundled** SRIM stopping-power utilities + pugixml (`USE_ERYA`). |
+| `cmake/`    | Custom CMake find-modules (e.g. `FindQwt.cmake`) and toolchains. |
+| `scripts/`  | Convenience build scripts (Linux, macOS, Windows, Docker, snap). |
+| `docker/`   | Dockerfiles for Linux and Windows builds. |
+| `examples/` | Example run scripts (GUI / MCMC via Docker). |
+| `doc/`      | Doxygen configuration and generated API docs. |
+| `snap/`     | Snapcraft packaging definition. |
 
-Docker provides a way to create a portable ``container" for your software.  This is particularly useful if you would like to avoid installing the software from scratch or need to run your software in a High-Performance Computing environment.
+> **Note:** Minuit2, the Coulomb library, the SRIM utilities, pugixml, and the
+> MCMC sampler are all vendored in this repository and compiled as part of the
+> build. They no longer need to be downloaded or installed separately, unlike in
+> older versions of AZURE2.
 
-Scripts for building the docker container for AZURE2 and running the container for AZURE2 are in the `scripts` directory.  To build and then run the docker container, 
-
-```
-$ cd /path/to/AZURE2
-$ source scripts/build.sh
-$ source scripts/run_gui.sh
-```
-
-## Building a Singularity/Apptainer container
-
-Docker containers can be run on your local machine but are not usable in HPC environments.  HPC environments require you to use Singularity (which has recently been renamed Apptainer).  To create a singularity image file (.sif) that you can use on an HPC resource, you can convert your Docker image with apptainer:
-
-```
-sudo apptainer build AZURE2.sif docker-daemon://azure2:latest
-```
-
-This will create a file, `AZURE2.sif`, that you can copy to your HPC resource.
-
-# Building AZURE2 from source
+---
 
 ## Dependencies
 
-**CMake**
+These are the only components you need to install yourself; everything else is
+bundled in-tree.
 
-AZURE2 is compiled using the CMake package.  Version 2.8 or higher of CMake is (probably) required to build AZURE2.  CMake can be downloaded from http://www.cmake.org. 
+**Build tools**
+- A C++ compiler with OpenMP support (GCC or Clang)
+- [CMake](https://cmake.org/) ≥ 4.0 (see `cmake_minimum_required` in `CMakeLists.txt`)
 
-**GNU Scientific Library**
+**Libraries**
+- [GSL](https://www.gnu.org/software/gsl/) — GNU Scientific Library (math routines)
+- [Qt5](https://www.qt.io/) — `Core`, `Widgets`, `Svg`, `Script` (for the GUI; `BUILD_GUI`)
+- [Qwt](https://qwt.sourceforge.io/) (Qt5 build) — for the in-app plotting tab (`USE_QWT`)
+- [Readline](https://tiswww.case.edu/php/chet/readline/rltop.html) — for CLI input (`USE_READLINE`)
 
-Additionally, much of the mathematics in AZURE2 uses the GSL routines.  This library can be obtained from http://www.gnu.org/software/gsl/.  
+**For the Python client (`pyazr`)**
+- Python 3 with [NumPy](https://numpy.org/)
 
-**ROOT, MINUIT2, and OpenMP**
+### Installing dependencies
 
-The minimization routines utilized by AZURE are from the Minuit2 package, distributed as part of the ROOT distribution.  If ROOT is compiled from source, the --enable-minuit2 flag must be set when running the configure script.  The libraries are available as a stand-alone package from http://seal.web.cern.ch/seal/snapshot/work-packages/mathlibs/minuit/release/download.html.  It is important to note that the ROOT library DOES NOT build Minuit2 with OpenMP support by default, while the stand-alone version does.  On a multi-core machine the fit process will be much slower without OpenMP.  To build ROOT with OpenMP support for Minuit2, set the enviromnet variables USE_PARALLEL_MINUIT2 and USE_OPENMP prior to building.  
+**Ubuntu / Debian**
+```bash
+sudo apt-get update
+sudo apt-get install build-essential cmake libgsl-dev libreadline-dev \
+    qtscript5-dev libqwt-qt5-dev libqt5svg5-dev qtwebengine5-dev \
+    python3 python3-numpy
+```
 
-**Readline Development Libraries**
+**macOS (Homebrew)**
+```bash
+brew install cmake gsl readline qt@5 qwt libomp
+```
 
-If not already available on your system, you can obtain the readline development libraries via your package manager. For instance, on ubuntu you can run:
+---
+
+## Building from source
 
 ```bash
-sudo apt-get install libreadline-dev
+git clone https://github.com/rdeboer1/AZURE2.git
+cd AZURE2
+mkdir build && cd build
+cmake ..
+make -j$(nproc)          # use $(sysctl -n hw.ncpu) on macOS
 ```
 
-**Qt4.X**
+The resulting executable is `build/src/AZURE2`.
 
-The final compile time dependency is Qt.  Qt is a cross-platform interface API, and required to compile the graphical setup program.  While AZURE2 can be compiled without the graphical setup program, this is not recommended. Qt is available from http://qt.nokia.com. Qt 4.4 or greater is required to build AZURE2.
+### Convenience scripts
 
-Qt4 can also be obtained via package managers of some Linux distributions. For instance, on ubuntu you can simply run:
+Platform build scripts that auto-detect Qwt and set sensible options live in
+`scripts/`:
 
-``` bash
-sudo apt-get install qt4-dev-tools
+```bash
+source scripts/build_linux.sh     # Linux       -> build-linux/
+source scripts/build_macos.sh     # macOS .app  -> build-macos/
+source scripts/build_windows.sh   # Windows cross-compile (MinGW)
+source scripts/build_docker.sh    # Docker image
 ```
 
-## Build
+### Build options
 
-### Basic Building
+Pass options to CMake with `-D<OPTION>=ON|OFF` (or edit them interactively with
+`ccmake ..`).
 
-The following steps should be performed to build the AZURE2 package:
+| Option                  | Default | Description |
+|-------------------------|:-------:|-------------|
+| `BUILD_GUI`             | ON      | Build and link the Qt graphical setup utility. |
+| `USE_QWT`               | ON      | Include the built-in plotting tab (needs Qwt). |
+| `USE_API`               | ON      | Build the socket API server (required for `pyazr`). |
+| `USE_MCMC`              | ON      | Enable MCMC Bayesian sampling via the bundled `numcmc`. |
+| `USE_ERYA`              | ON      | Enable the SRIM stopping-power utilities. |
+| `USE_READLINE`          | ON      | Use Readline for console input. |
+| `USE_STAT`              | ON      | Use `stat()` for directory checks (turn OFF on Windows). |
+| `USE_NLOPT`             | OFF     | Use NLopt as an alternative minimizer (expects an `nlopt/` tree). |
+| `BUILD_LIBRARY`         | OFF     | Build AZURE2 as a library. |
+| `BUILD_MACOS_BUNDLE`    | OFF     | Produce a macOS `.app` bundle / DMG. |
+| `CROSS_COMPILE_WINDOWS` | OFF     | Cross-compile a Windows binary with MinGW. |
 
-1.  Create a subdirectory of the AZURE2 root named build [mkdir build], and change to that directory [cd build].
+If GSL or Qwt are installed in a non-standard location, point CMake at them with
+`-DCMAKE_PREFIX_PATH=/path/to/prefix`.
 
-2.  Run CMake to generate Makefiles from AZURE2 root [cmake ..].  The reference to the parent directory tells CMake where the root of the source tree is located.  
+---
 
-3.  Build the package [make && make install].  The resulting binary will be created in the current directory.
+## Running AZURE2
 
-Alternatively, run the *build.sh* script.
+AZURE2 reads a `.azr` configuration file describing the compound nucleus,
+channels, levels, and data segments.
 
-### Options
+**Graphical mode** (default — opens the setup utility):
+```bash
+./build/src/AZURE2 path/to/config.azr
+```
 
-Compiling options (i.e. switching compilers, etc.) are available with flags to CMake.  See the CMake documentation for more details.
+**Console mode** (no GUI):
+```bash
+./build/src/AZURE2 --no-gui path/to/config.azr
+```
 
-A few options are available to the user when building AZURE2.  The can be passed to cmake using the -D[OPTION]=[VALUE] syntax.  CMake also provides a utility to switch these options ON/OFF.   After an initial configuration of the build directory (step 2 above), the command [ccmake ..] can be run to view and edit the configured options. 
+Useful flags (`AZURE2 --help` for the full list):
 
-These are:
+| Flag                  | Effect |
+|-----------------------|--------|
+| `--no-gui`            | Run without the graphical setup utility. |
+| `--use-brune`         | Use the alternative level matrix of C. R. Brune. |
+| `--gsl-coul`          | Use GSL Coulomb functions (faster, less accurate). |
+| `--use-rmc`           | Reich–Moore approximation for capture (neutron capture). |
+| `--ignore-externals`  | Ignore external resonant capture when the internal width is zero. |
+| `--no-transform`      | Skip the initial parameter transformations. |
 
-BUILD_GUI [ON/OFF] - Toggles whether the graphical setup utility is built and linked to AZURE2.  This is ON by default, and it is not recommended to turn it OFF.
+---
 
-USE_QWT [ON/OFF] - Toggles whether the built-in plotting tab is added to AZURE2.  This is OFF by default. The plotting features are recommended but require the additional QWT libraries to be installed on the build system.  
+## Python interface (`pyazr`)
 
-USE_STAT [ON/OFF] - Toggles whether the stat() function should be used to test for properly set directories at start.  This only applied when running AZURE2 in console (--no-gui) mode, and is ON by default.  This function has been seen to not work properly for Windows, and it is recommended to select OFF if building on/for a Windows system.
+`pyazr` drives one or more headless AZURE2 processes over the socket API
+(`AZURE2 --no-gui --use-api <port> <file>`), making it easy to script fits and
+plug AZURE2 into external samplers such as [`emcee`](https://emcee.readthedocs.io/)
+or [`brick`](https://github.com/odell/brick).
 
-MINUIT_PATH [dir] - If Minuit2 is in a non-standard path, this will add the directory to the search path.
+```python
+from pyazr import azure2
 
-GSL_PATH [dir] - If GSL is in a non-standard path, this will add the directory to the search path.
+# Spawn an AZURE2 instance bound to a configuration file.
+azr = azure2("config.azr")
 
-After changing options, execute [make clean] and then step 3 above to build/rebuild AZURE2.  
+# Experimental data, grouped by segment.
+energies = azr.energies
+cross    = azr.cross
 
+# Evaluate the model for a set of (free) parameters.
+fit = azr.calculate(azr.params)
 
+# Inspect the fit parameters with full physics metadata.
+print(azr.parameters.table())          # readable overview
+for w in azr.parameters.widths.free:   # free reduced-width amplitudes
+    print(w.name, "J^pi", w.jpi, "L", w.L, "S", w.S)
 
-**Qt5**
+azr.close()
+```
 
-Install libqwt-qt5-dev libqt5svg5-dev
+The `parameters` view returns a `ParameterSet` of `Parameter` objects, each
+carrying what the parameter *is* — for R-matrix parameters the level it belongs
+to (`J`, `parity`, `level_energy`) and for widths the channel (`L`, `S`, `pair`,
+`radiation_type`) — plus filtered views (`.free`, `.energies`, `.widths`,
+`.norms`, `.shifts`) and lookups (`.by_level(...)`, `.by_name(...)`).
 
-Probably only some of the below are required...
+Set `AZURE2_BINARY` (or pass `binary=...`) if the executable is not at
+`build/src/AZURE2`.
 
-Install qt5-default qtscript5-dev
+---
+
+## Containers
+
+**Docker** — a self-contained image (Ubuntu 22.04 + ROOT + Python tooling) is
+defined in `docker/Dockerfile.azure2`:
+```bash
+source scripts/build_docker.sh
+source examples/run_gui.sh      # run the GUI from the container
+```
+
+**Singularity / Apptainer** — for HPC environments, convert the Docker image:
+```bash
+sudo apptainer build AZURE2.sif docker-daemon://azure2:latest
+```
+Copy the resulting `AZURE2.sif` to your HPC resource.
+
+---
+
+## License
+
+AZURE2 is distributed under the terms of the GNU General Public License v3.
+See the upstream project at <https://azure.nd.edu/> for details and citation
+information.

@@ -392,6 +392,11 @@ void AZURESocket::handle( const vector_r& request ) {
       sendPacket( vector_r{ api_->CalculateLnLCovRWA( params ) } );
       break;
 
+    // Get structured per-parameter metadata (level, J, L, S, ...)
+    case 37:
+      sendPacket( api_->GetParameterInfo( ) );
+      break;
+
     default:
       std::cerr << "AZURESocket: unknown command " << cmd << "." << std::endl;
       // Reply with an empty frame so the client does not block forever.

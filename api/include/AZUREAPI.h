@@ -56,6 +56,31 @@ class AZUREAPI {
   vector_r GetNormalizationIndices( );
   // Get indeces of energy shift parameters
   vector_r GetEnergyShiftIndices( );
+  // Number of numeric fields packed per parameter by GetParameterInfo().
+  // Keep this in sync with pyazr/azure2.py (Parameter._NFIELDS).
+  static const int kParamInfoFields = 14;
+  /*!
+   * Returns structured metadata describing every parameter, in the same order
+   * as params_names() / params_all() / params_fixed().
+   *
+   * The result is a flat vector of kParamInfoFields doubles per parameter; the
+   * fields (and -1 for "not applicable") are:
+   *   0  type          0=energy, 1=width, 2=norm, 3=energy-shift
+   *   1  jgroup        1-based J-group index (R-matrix params only)
+   *   2  J             total spin of the J-group / level
+   *   3  parity        +1 / -1
+   *   4  level         1-based level index within the J-group
+   *   5  level_energy  level energy (MeV)
+   *   6  channel       1-based channel index (width params only)
+   *   7  L             channel orbital angular momentum
+   *   8  S             channel spin
+   *   9  pair          channel particle-pair number
+   *   10 radtype       ASCII code of the channel radiation type ('P','E','M')
+   *   11 fixed         1 if the parameter is fixed, 0 if free
+   *   12 value         current (physical) parameter value
+   *   13 segment_key   data-segment key (norm / energy-shift params only)
+   */
+  vector_r GetParameterInfo( ) const;
   
   /*!
    * Returns a reference to the Config structure.
