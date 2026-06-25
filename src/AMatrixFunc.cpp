@@ -3,6 +3,16 @@
 #include "Config.h"
 #include "EPoint.h"
 #include "MatrixInv.h"
+#include "AZUREGrad.h"
+#include "Decay.h"
+#include "KGroup.h"
+#include "KLGroup.h"
+#include "MGroup.h"
+#include "Interference.h"
+#include "JGroup.h"
+#include "ALevel.h"
+#include "AChannel.h"
+#include "PPair.h"
 #include <assert.h>
 #include <iostream>
 #include <vector>
@@ -385,4 +395,575 @@ void AMatrixFunc::AddAMatrix(matrix_c&& aMatrix) {
     a_matrices_[a_matrices_index_] = std::move(aMatrix);
     a_matrices_index_++;
   }
+}
+
+/*!
+ * Reverse-mode adjoint of one energy point's cross section (angle-integrated or
+ * differential), accumulating dlnL/dE and dlnL/dgamma into `accum`.
+ *
+ * Adjoint convention (consistent throughout, see PLAN.md "Gotchas"):
+ *   For a complex intermediate z and the real scalar lnL we store the cotangent
+ *     zbar := dlnL/dRe(z) + i dlnL/dIm(z).
+ *   - A linear map z = c * a (c complex constant) back-propagates as
+ *         abar += conj(c) * zbar.
+ *   - The contribution of z to a *real* parameter p is
+ *         dlnL/dp += Re( conj(zbar) * dz/dp ).
+ *   - The holomorphic inverse A = M^{-1} back-propagates as
+ *         Mbar = -A^H * Abar * A^H.
+ *
+ * Forward chain reproduced here (per point, standard A-matrix):
+ *   T(k,m) = [tphase] - uphase ( [1] + umatrix )         ([..] only if chNum==chpNum)
+ *   umatrix = sum_{l,l'} 2i sqrtP_en sqrtP_ex gamma_en,l gamma_ex,l' A_j[l][l']
+ *   A_j = M_j^{-1},   M_j[r][c] = (E_r - inE) delta_rc - sum_ch gamma_r,ch gamma_c,ch L_ch
+ * with the cross-section -> T step depending on whether the point is
+ * angle-integrated (quadratic |T_temp|^2 sum) or differential (Legendre
+ * interference sum + elastic Coulomb interference).  Returns false (touching
+ * nothing) for configurations outside the supported standard path.
+ */
+bool AMatrixFunc::PointAdjoint(EPoint* point, double fitBar, GradAccum& accum,
+                              const vector_matrix_r* shiftDeriv, int xsComponent) {
+  const complex I(0.0, 1.0);
+
+  // --- Common gating. ---
+  if(configure().paramMask & Config::USE_RMC_FORMALISM) return false;
+  if(point->IsAngularDist()) return false;        // angular-dist coefficients
+  // E1/E2 component selection only applies to the angle-integrated capture XS.
+  if(xsComponent != 0 && (point->IsDifferential() || point->IsPhase())) return false;
+
+  // Brune formalism: the boundary/shift terms change the M-construction kernel
+  // (handled in the structural gamma step via cached shift values) and add
+  // explicit E_lambda dependence through S(E_lambda) (handled in the structural
+  // energy step using shiftDeriv = dS/dE).
+  const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
+
+  int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
+  int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
+  if(compound()->GetPair(aa)->GetPType() == 20) return false;  // 25|T|^2 branch
+
+  // Active-level compaction unsupported here: require every level of every
+  // in-R-matrix JGroup to itself be in the R matrix (so original idx == active).
+  for(int j = 1; j <= compound()->NumJGroups(); j++) {
+    JGroup* jg = compound()->GetJGroup(j);
+    if(!jg->IsInRMatrix()) continue;
+    for(int la = 1; la <= jg->NumLevels(); la++)
+      if(!jg->GetLevel(la)->IsInRMatrix()) return false;
+  }
+
+  // Locate the decay matching the exit pair (mirror CalculateCrossSection).
+  int ir = 0;
+  while(ir < compound()->GetPair(aa)->NumDecays()) {
+    ir++;
+    if(compound()->GetPair(aa)->GetDecay(ir)->GetPairNum() == exitPairNum) break;
+  }
+  Decay* theDecay = compound()->GetPair(aa)->GetDecay(ir);
+
+  // External capture (both direct and channel-capture) is supported.
+  bool hasEC = false;
+  for(int k = 1; k <= theDecay->NumKGroups(); k++)
+    if(theDecay->GetKGroup(k)->NumECMGroups() > 0) { hasEC = true; break; }
+
+  // Beam energy in the compound system (mirrors FillMatrices); needed for the
+  // Brune off-diagonal boundary/shift kernel.
+  double inEnergy;
+  if(compound()->GetPair(aa)->GetPType()==20) {
+    int ep = compound()->GetPairNumFromKey(point->GetExitKey());
+    inEnergy = point->GetCMEnergy() + compound()->GetPair(ep)->GetSepE()
+             + compound()->GetPair(ep)->GetExE();
+  } else {
+    inEnergy = point->GetCMEnergy() + compound()->GetPair(aa)->GetSepE()
+             + compound()->GetPair(aa)->GetExE();
+  }
+
+  const double geom = point->GetGeometricalFactor();
+  const double i1i2 = compound()->GetPair(aa)->GetI1I2Factor();
+  const bool isDiff = point->IsDifferential();
+  const bool isPhase = point->IsPhase();
+  if(isPhase && aa != ir) return false;  // phase output is for elastic only
+
+  // === Cross-section -> T:  build the T-matrix cotangents. ===
+  // tBar  : cotangents of the internal T(k,m).
+  // ecBar : cotangents of the external-capture T(k,ecm).
+  int nK = theDecay->NumKGroups();
+  std::vector<vector_c> tBar(nK), ecBar(nK);
+  for(int k = 1; k <= nK; k++) {
+    tBar[k-1].assign(theDecay->GetKGroup(k)->NumMGroups(), complex(0.0,0.0));
+    ecBar[k-1].assign(theDecay->GetKGroup(k)->NumECMGroups(), complex(0.0,0.0));
+  }
+
+  // Keep only the contributions feeding the requested cross-section component
+  // (0 = full, 1 = E1, 2 = E2); E1/E2 select electric channels of that L.
+  auto includeInternal = [&](MGroup* mg) -> bool {
+    if(xsComponent == 0) return true;
+    AChannel* ex = compound()->GetJGroup(mg->GetJNum())->GetChannel(mg->GetChpNum());
+    return ex->GetRadType() == 'E' && ex->GetL() == xsComponent;
+  };
+  auto includeEC = [&](ECMGroup* ecg) -> bool {
+    if(xsComponent == 0) return true;
+    return ecg->GetRadType() == 'E' && ecg->GetMult() == xsComponent;
+  };
+
+  if(isPhase) {
+    // ---- Phase shift: model = (90/pi) * arg(U) [+ const for identical pairs],
+    //      U = sum_{matching k,m} (expCP^2 - T(k,m)) / expCP^2, matched by
+    //      (J, l, elastic channel) = (segment J, segment L). ----
+    double segJ = point->GetJ();
+    int segL = point->GetL();
+    struct PM { int k; int m; complex invExpCP2; };
+    std::vector<PM> matches;
+    complex U(0.0,0.0);
+    for(int k = 1; k <= nK; k++) {
+      for(int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+        MGroup* mg = theDecay->GetKGroup(k)->GetMGroup(m);
+        JGroup* jg = compound()->GetJGroup(mg->GetJNum());
+        AChannel* en = jg->GetChannel(mg->GetChNum());
+        AChannel* ex = jg->GetChannel(mg->GetChpNum());
+        if(jg->GetJ() == segJ && en->GetL() == segL && en == ex) {
+          complex expCP = point->GetExpCoulombPhase(mg->GetJNum(), mg->GetChNum());
+          complex expCP2 = expCP * expCP;
+          U += (expCP2 - this->GetTMatrixElement(k, m)) / expCP2;
+          matches.push_back(PM{k, m, 1.0 / expCP2});
+        }
+      }
+    }
+    double absU2 = std::norm(U);
+    if(absU2 > 0.0) {
+      // phase = (90/pi) arg(U) -> Ubar = fitBar (90/pi)(-Im U + i Re U)/|U|^2.
+      complex Ubar = fitBar * (90.0 / pi) *
+                     complex(-std::imag(U), std::real(U)) / absU2;
+      // U = sum [1 - T/expCP^2]  ->  dU/dT = -1/expCP^2.
+      for(const PM& pm : matches)
+        tBar[pm.k-1][pm.m-1] += conj(-pm.invExpCP2) * Ubar;
+    }
+  } else if(!isDiff) {
+    // ---- Angle-integrated: model = (1/100) sum_k sum_temp w_temp |T_temp|^2,
+    //      w_temp = geom (2J+1) I1I2,  T_temp = sum_m T(k,m) sharing (J,l,l'). ----
+    for(int k = 1; k <= nK; k++) {
+      // Mirror the angle-integrated UPOS over-counting guard.
+      if(aa != ir && compound()->GetPair(exitPairNum)->GetPType() == 0) {
+        if(theDecay->GetKGroup(k)->GetSp() != theDecay->GetKGroup(k)->GetSp2()) continue;
+      }
+      int numM = theDecay->GetKGroup(k)->NumMGroups();
+      int numEC = theDecay->GetKGroup(k)->NumECMGroups();
+      struct Group { double j; int l; int lp; complex tsum; };
+      std::vector<Group> groups;
+      std::vector<int> mGroupIdx(numM + 1, -1);
+      std::vector<int> ecGroupIdx(numEC + 1, -1);
+      auto findGroup = [&](double jv, int lv, int lpv) -> int {
+        for(int g = 0; g < (int)groups.size(); g++)
+          if(groups[g].j == jv && groups[g].l == lv && groups[g].lp == lpv) return g;
+        groups.push_back(Group{jv, lv, lpv, complex(0.0,0.0)});
+        return (int)groups.size() - 1;
+      };
+      // Internal pathways T(k,m), grouped by (J,l,l').
+      for(int m = 1; m <= numM; m++) {
+        MGroup* mg = theDecay->GetKGroup(k)->GetMGroup(m);
+        if(!includeInternal(mg)) continue;
+        JGroup* jg = compound()->GetJGroup(mg->GetJNum());
+        int gi = findGroup(jg->GetJ(),
+                           jg->GetChannel(mg->GetChNum())->GetL(),
+                           jg->GetChannel(mg->GetChpNum())->GetL());
+        groups[gi].tsum += this->GetTMatrixElement(k, m);
+        mGroupIdx[m] = gi;
+      }
+      // External-capture pathways T(k,ecm), grouped by (J, L, mult) and merged
+      // with the matching internal group (forward: same temp T-matrix list).
+      for(int m = 1; m <= numEC; m++) {
+        ECMGroup* ecg = theDecay->GetKGroup(k)->GetECMGroup(m);
+        if(!includeEC(ecg)) continue;
+        int gi = findGroup(ecg->GetJ(), ecg->GetL(), ecg->GetMult());
+        groups[gi].tsum += this->GetECTMatrixElement(k, m);
+        ecGroupIdx[m] = gi;
+      }
+      std::vector<complex> tBarGroup(groups.size());
+      for(int g = 0; g < (int)groups.size(); g++) {
+        double w = geom * (2.0 * groups[g].j + 1.0) * i1i2;
+        tBarGroup[g] = fitBar * (2.0 / 100.0) * w * groups[g].tsum;
+      }
+      for(int m = 1; m <= numM; m++)  if(mGroupIdx[m]  >= 0) tBar[k-1][m-1]  = tBarGroup[mGroupIdx[m]];
+      for(int m = 1; m <= numEC; m++) if(ecGroupIdx[m] >= 0) ecBar[k-1][m-1] = tBarGroup[ecGroupIdx[m]];
+    }
+  } else {
+    // ---- Differential: model = (Re(CT)+Re(RT)+Re(IT))/100. ----
+    //   RT = (geom I1I2 rtFactor/pi) Re( sum_{kL,inter} weight T1 conj(T2) P_L )
+    //   IT = (geom itFactor/sqrt(pi)) Re( i sum_{k,m: en==ex} statSpin coulombAmp conj(T) P_l )  (elastic)
+    //   CT = const (no T dependence).
+    // Supports the standard case (entrance==exit pair, or gamma exit) with
+    // external-capture interferences (RR/ER/RE/EE), and the inelastic-particle
+    // UPOS / normal-angular-distribution case.
+    PPair* exitPairDiff = compound()->GetPair(exitPairNum);
+    double rtFactor = 1.0, itFactor = 1.0;
+    if(aa == ir && compound()->GetPair(aa)->IsIdentical()) { rtFactor = 4.0; itFactor = 2.0; }
+    double cR = geom * i1i2 * rtFactor / (pi * 100.0);
+
+    // Fetch a T value (internal 'R' or external-capture 'E') and route a
+    // cotangent contribution to the right accumulator.
+    auto Tval = [&](int K, int idx, char rad) -> complex {
+      return (rad == 'E') ? this->GetECTMatrixElement(K, idx)
+                          : this->GetTMatrixElement(K, idx);
+    };
+    auto Tadd = [&](int K, int idx, char rad, complex v) {
+      if(rad == 'E') ecBar[K-1][idx-1] += v; else tBar[K-1][idx-1] += v;
+    };
+    // model += W Re(T1 conj T2)  ->  T1bar += fitBar W T2 ;  T2bar += fitBar W T1.
+    auto addQuad = [&](int K, int m1, char r1, int m2, char r2, double W) {
+      complex T1 = Tval(K, m1, r1), T2 = Tval(K, m2, r2);
+      Tadd(K, m1, r1, fitBar * W * T2);
+      Tadd(K, m2, r2, fitBar * W * T1);
+    };
+
+    const bool inelasticParticle = (aa != ir && exitPairDiff->GetPType() == 0);
+    for(int kL = 1; kL <= theDecay->NumKLGroups(); kL++) {
+      int K = theDecay->GetKLGroup(kL)->GetK();
+      int lOrder = theDecay->GetKLGroup(kL)->GetLOrder();
+      double legP = point->GetLegendreP(lOrder);
+      KGroup* kg = theDecay->GetKGroup(K);
+      for(int inter = 1; inter <= theDecay->GetKLGroup(kL)->NumInterferences(); inter++) {
+        Interference* itf = theDecay->GetKLGroup(kL)->GetInterference(inter);
+        std::string type = itf->GetInterferenceType();  // "RR","ER","RE","EE"
+        if(type.size() != 2) return false;
+        char rad1 = type[0], rad2 = type[1];            // 'R' internal, 'E' external
+        int m1 = itf->GetM1(), m2 = itf->GetM2();
+
+        if(inelasticParticle) {
+          // Inelastic particle exit: pick the normal or UPOS sub-case.
+          double sp1 = kg->GetSp(), sp2 = kg->GetSp2();
+          int lp1 = compound()->GetJGroup(kg->GetMGroup(m1)->GetJNum())
+                      ->GetChannel(kg->GetMGroup(m1)->GetChpNum())->GetL();
+          int lp2 = compound()->GetJGroup(kg->GetMGroup(m2)->GetJNum())
+                      ->GetChannel(kg->GetMGroup(m2)->GetChpNum())->GetL();
+          if(sp1 == sp2 && !point->IsUPOS()) {
+            addQuad(K, m1, rad1, m2, rad2, cR * itf->GetZ1Z2() * legP);
+          }
+          if(lp1 == lp2 && point->IsUPOS() && type == "RR") {
+            // R_L coefficient (constant w.r.t. parameters), even lOrder only.
+            double finalL = (double)point->GetSecondaryDecayL();
+            double Ic = point->GetIc();
+            double j2f = compound()->GetPair(ir)->GetJ(2);
+            double delta = point->GetDelta();
+            double R_L = 0.0;
+            if((int)lOrder % 2 == 0) {
+              R_L = this->GetRk(j2f, finalL, finalL, Ic, lOrder);
+              if(delta != 0.0) {
+                double finalLp = finalL + 1.0;
+                double R_LLp  = this->GetRk(j2f, finalL, finalLp, Ic, lOrder);
+                double R_LpLp = this->GetRk(j2f, finalLp, finalLp, Ic, lOrder);
+                if(R_LpLp != 0.0)
+                  R_L = (R_L + 2.0*delta*R_LLp + delta*delta*R_LpLp) / (1.0 + delta*delta);
+              }
+            }
+            double W = cR * itf->GetZ1Z2_UPOS() * std::pow(2.0*lOrder+1.0, 0.5) / 4.0 * R_L * legP;
+            addQuad(K, m1, 'R', m2, 'R', W);
+          }
+        } else {
+          // Standard case (entrance==exit pair, or gamma exit).
+          addQuad(K, m1, rad1, m2, rad2, cR * itf->GetZ1Z2() * legP);
+        }
+      }
+    }
+
+    if(aa == ir) {  // elastic Coulomb-nuclear interference
+      complex coulombAmp = point->GetCoulombAmplitude();
+      complex cI = I * geom * itFactor / (std::sqrt(pi) * 100.0);
+      for(int k = 1; k <= nK; k++) {
+        for(int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+          MGroup* mg = theDecay->GetKGroup(k)->GetMGroup(m);
+          AChannel* en = compound()->GetJGroup(mg->GetJNum())->GetChannel(mg->GetChNum());
+          AChannel* ex = compound()->GetJGroup(mg->GetJNum())->GetChannel(mg->GetChpNum());
+          if(en == ex) {
+            int l = en->GetL();
+            complex B = cI * mg->GetStatSpinFactor() * coulombAmp * point->GetLegendreP(l);
+            // model += Re(B conj T)  ->  Tbar += fitBar B.
+            tBar[k-1][m-1] += fitBar * B;
+          }
+        }
+      }
+    }
+  }
+
+  // Per-JGroup A-matrix cotangent accumulators (active == original indexing).
+  std::vector<matrix_c> aBar(compound()->NumJGroups());
+  std::vector<bool> aBarUsed(compound()->NumJGroups(), false);
+  const complex I2 = 2.0 * I;
+  auto ensureABar = [&](int jNum, int numLevels) {
+    if(!aBarUsed[jNum-1]) {
+      aBar[jNum-1].assign(numLevels, vector_c(numLevels, complex(0.0,0.0)));
+      aBarUsed[jNum-1] = true;
+    }
+  };
+
+  // === External-capture T -> parameters. ===
+  // Forward:  T_ec(k,ecm) = gamma_fc * sqrtNF * conv * ecAmplitude  [* umatrix_cc],
+  //   gamma_fc = final level's reduced width for the final channel (explicit),
+  //   sqrtNF   = final level's 1/sqrt(NF) factor (depends on its gammas),
+  //   conv     = EC conversion factor (constant),
+  //   ecAmplitude treated constant w.r.t. E/gamma (energy shifts handled by FD).
+  // For channel capture an extra factor umatrix_cc = sum 2i sqrtP gamma gamma A
+  // over an internal pathway multiplies T_ec; it back-propagates to that
+  // pathway's A-matrix and gammas just like the standard umatrix.
+  if(hasEC) {
+    const bool useEC = (configure().paramMask & Config::USE_EXTERNAL_CAPTURE);
+    const bool ignoreZero = (configure().paramMask & Config::IGNORE_ZERO_WIDTHS);
+    for(int k = 1; k <= nK; k++) {
+      int numEC = theDecay->GetKGroup(k)->NumECMGroups();
+      for(int m = 1; m <= numEC; m++) {
+        complex eb = ecBar[k-1][m-1];
+        if(eb == complex(0.0,0.0)) continue;
+        ECMGroup* ecg = theDecay->GetKGroup(k)->GetECMGroup(m);
+        int jf = ecg->GetJGroupNum();
+        int lf = ecg->GetLevelNum();
+        int fc = ecg->GetFinalChannel();
+        ALevel* finalLevel = compound()->GetJGroup(jf)->GetLevel(lf);
+        JGroup* jgf = compound()->GetJGroup(jf);
+        double sqrtNF = finalLevel->GetSqrtNFFactor();
+        double conv = finalLevel->GetECConversionFactor(fc);
+        complex ecAmp = useEC ? point->GetECAmplitudeWithShift(k, m, compound(), configure())
+                              : point->GetECAmplitude(k, m);
+
+        // base = gamma_fc * sqrtNF * conv * ecAmp  (the part without umatrix_cc).
+        double gamma_fc = finalLevel->GetFitGamma(fc);
+        complex base = gamma_fc * sqrtNF * conv * ecAmp;
+
+        // "effective amplitude" carrying the umatrix_cc factor for the
+        // gamma_fc / sqrtNF derivatives (= ecAmp for direct capture).
+        complex effAmp = ecAmp;
+
+        if(ecg->IsChannelCapture()) {
+          int internalChannel = ecg->GetIntChannelNum();
+          MGroup* ccMg = compound()->GetPair(aa)->GetDecay(ecg->GetChanCapDecay())
+                           ->GetKGroup(ecg->GetChanCapKGroup())->GetMGroup(ecg->GetChanCapMGroup());
+          int jcc = ccMg->GetJNum();
+          int ccChN = ccMg->GetChNum();
+          int ccChpN = ccMg->GetChpNum();
+          JGroup* jgcc = compound()->GetJGroup(jcc);
+          int ccLevels = jgcc->NumLevels();
+          complex sqrtPcc = point->GetSqrtPenetrability(jcc, ccChN);  // single sqrtP
+
+          // Forward umatrix_cc (mirrors the IGNORE_ZERO_WIDTHS skips).
+          complex umatrix_cc(0.0,0.0);
+          for(int la = 1; la <= ccLevels; la++) {
+            if(!jgcc->GetLevel(la)->IsInRMatrix()) continue;
+            if(internalChannel && ignoreZero &&
+               std::fabs(jgcc->GetLevel(la)->GetFitGamma(internalChannel)) < 1.0e-8) continue;
+            for(int lap = 1; lap <= ccLevels; lap++) {
+              if(!jgcc->GetLevel(lap)->IsInRMatrix()) continue;
+              if(internalChannel && ignoreZero &&
+                 std::fabs(jgcc->GetLevel(lap)->GetFitGamma(internalChannel)) < 1.0e-8) continue;
+              umatrix_cc += I2 * sqrtPcc *
+                jgcc->GetLevel(la)->GetFitGamma(ccChN) *
+                jgcc->GetLevel(lap)->GetFitGamma(ccChpN) *
+                this->GetAMatrixElement(jcc, la, lap);
+            }
+          }
+          effAmp = ecAmp * umatrix_cc;
+
+          // umatrix_cc cotangent:  T_ec = base * umatrix_cc -> ubar = conj(base)*eb.
+          complex uBarcc = conj(base) * eb;
+          ensureABar(jcc, ccLevels);
+          for(int la = 1; la <= ccLevels; la++) {
+            if(!jgcc->GetLevel(la)->IsInRMatrix()) continue;
+            if(internalChannel && ignoreZero &&
+               std::fabs(jgcc->GetLevel(la)->GetFitGamma(internalChannel)) < 1.0e-8) continue;
+            double gEn = jgcc->GetLevel(la)->GetFitGamma(ccChN);
+            for(int lap = 1; lap <= ccLevels; lap++) {
+              if(!jgcc->GetLevel(lap)->IsInRMatrix()) continue;
+              if(internalChannel && ignoreZero &&
+                 std::fabs(jgcc->GetLevel(lap)->GetFitGamma(internalChannel)) < 1.0e-8) continue;
+              double gEx = jgcc->GetLevel(lap)->GetFitGamma(ccChpN);
+              complex Aval = this->GetAMatrixElement(jcc, la, lap);
+              complex w = I2 * sqrtPcc * gEn * gEx;          // weight of A[la][lap]
+              aBar[jcc-1][la-1][lap-1] += conj(w) * uBarcc;
+              accum.AddGamma(jcc, la,  ccChN,  std::real(conj(uBarcc) * (I2 * sqrtPcc * gEx * Aval)));
+              accum.AddGamma(jcc, lap, ccChpN, std::real(conj(uBarcc) * (I2 * sqrtPcc * gEn * Aval)));
+            }
+          }
+        }
+
+        // Explicit gamma_fc:  d T_ec / d gamma_fc = sqrtNF * conv * effAmp.
+        accum.AddGamma(jf, lf, fc, std::real(conj(eb) * (sqrtNF * conv * effAmp)));
+
+        // sqrtNF couples to every NF channel d of the final level:
+        //   nFSum = 1 + sum_d A_d gamma_d^2,  A_d = 2 chRad redMass uconv/hbarc^2 NF_d,
+        //   sqrtNF = nFSum^{-1/2},  d sqrtNF / d gamma_d = -A_d gamma_d sqrtNF^3.
+        complex pre = gamma_fc * conv * effAmp;  // d T_ec / d sqrtNF
+        int numNF = finalLevel->NumNFIntegrals();
+        double sqrtNF3 = sqrtNF * sqrtNF * sqrtNF;
+        for(int d = 1; d <= numNF; d++) {
+          PPair* pd = compound()->GetPair(jgf->GetChannel(d)->GetPairNum());
+          double Ad = 2.0 * pd->GetChRad() * pd->GetRedMass() * uconv / (hbarc * hbarc)
+                    * finalLevel->GetNFIntegral(d);
+          double gd = finalLevel->GetFitGamma(d);
+          double dSqrtNF = -Ad * gd * sqrtNF3;
+          accum.AddGamma(jf, lf, d, std::real(conj(eb) * (pre * dSqrtNF)));
+        }
+      }
+    }
+  }
+
+  // === T -> U -> A (+ explicit gamma), back-propagating tBar over all pathways. ===
+  for(int k = 1; k <= nK; k++) {
+    int numM = theDecay->GetKGroup(k)->NumMGroups();
+    for(int m = 1; m <= numM; m++) {
+      complex tb = tBar[k-1][m-1];
+      if(tb == complex(0.0,0.0)) continue;
+      MGroup* mg = theDecay->GetKGroup(k)->GetMGroup(m);
+      int jNum = mg->GetJNum();
+      int chNum = mg->GetChNum();
+      int chpNum = mg->GetChpNum();
+      JGroup* jg = compound()->GetJGroup(jNum);
+
+      complex uphase = point->GetExpCoulombPhase(jNum, chNum) *
+                       point->GetExpHardSpherePhase(jNum, chNum) *
+                       point->GetExpCoulombPhase(jNum, chpNum) *
+                       point->GetExpHardSpherePhase(jNum, chpNum);
+      complex sqrtPenEn = point->GetSqrtPenetrability(jNum, chNum);
+      complex sqrtPenEx = point->GetSqrtPenetrability(jNum, chpNum);
+
+      // d T / d umatrix = -uphase  ->  ubar = conj(-uphase) * tBar.
+      complex uBar = conj(-uphase) * tb;
+
+      int numLevels = jg->NumLevels();
+      if(!aBarUsed[jNum-1]) {
+        aBar[jNum-1].assign(numLevels, vector_c(numLevels, complex(0.0,0.0)));
+        aBarUsed[jNum-1] = true;
+      }
+      complex pen2 = 2.0 * I * sqrtPenEn * sqrtPenEx;  // common factor of w_{l,l'}
+
+      for(int la = 1; la <= numLevels; la++) {
+        if(!jg->GetLevel(la)->IsInRMatrix()) continue;
+        double gammaEn = jg->GetLevel(la)->GetFitGamma(chNum);
+        for(int lap = 1; lap <= numLevels; lap++) {
+          if(!jg->GetLevel(lap)->IsInRMatrix()) continue;
+          double gammaEx = jg->GetLevel(lap)->GetFitGamma(chpNum);
+          complex Aval = this->GetAMatrixElement(jNum, la, lap);
+          complex w = pen2 * gammaEn * gammaEx;          // weight of A[la][lap]
+
+          // A cotangent:  Abar += conj(w) * ubar.
+          aBar[jNum-1][la-1][lap-1] += conj(w) * uBar;
+
+          // Explicit gamma paths (umatrix depends on gamma_en and gamma_ex too):
+          //   d umatrix / d gamma_en,la += pen2 * gamma_ex * A
+          //   d umatrix / d gamma_ex,lap += pen2 * gamma_en * A
+          accum.AddGamma(jNum, la,  chNum,  std::real(conj(uBar) * (pen2 * gammaEx * Aval)));
+          accum.AddGamma(jNum, lap, chpNum, std::real(conj(uBar) * (pen2 * gammaEn * Aval)));
+        }
+      }
+    }
+  }
+
+  // === A -> M lemma + structural E / gamma, once per JGroup. ===
+  for(int jNum = 1; jNum <= compound()->NumJGroups(); jNum++) {
+    if(!aBarUsed[jNum-1]) continue;
+    JGroup* jg = compound()->GetJGroup(jNum);
+    const matrix_c& A = a_matrices_[jNum-1];
+    const matrix_c& Ab = aBar[jNum-1];
+    int n = (int)A.size();
+    if(n == 0) continue;
+
+    // Conjugate transpose A^H.
+    matrix_c Ah(n, vector_c(n, complex(0.0,0.0)));
+    for(int r = 0; r < n; r++)
+      for(int c = 0; c < n; c++)
+        Ah[r][c] = conj(A[c][r]);
+
+    // Mbar = -A^H * Abar * A^H.
+    matrix_c tmp(n, vector_c(n, complex(0.0,0.0)));  // tmp = Abar * A^H
+    for(int r = 0; r < n; r++)
+      for(int c = 0; c < n; c++) {
+        complex s(0.0,0.0);
+        for(int t = 0; t < n; t++) s += Ab[r][t] * Ah[t][c];
+        tmp[r][c] = s;
+      }
+    matrix_c Mbar(n, vector_c(n, complex(0.0,0.0)));
+    for(int r = 0; r < n; r++)
+      for(int c = 0; c < n; c++) {
+        complex s(0.0,0.0);
+        for(int t = 0; t < n; t++) s += Ah[r][t] * tmp[t][c];
+        Mbar[r][c] = -s;
+      }
+
+    // Structural energy gradient.  The (E_r - inE) delta term gives
+    //   d M[a][a]/d E_a = 1  ->  dlnL/dE_a += Re(Mbar[a][a]).
+    for(int la = 1; la <= n; la++)
+      accum.AddE(jNum, la, std::real(Mbar[la-1][la-1]));
+
+    // Brune adds explicit E_lambda dependence through the boundary/shift kernel
+    //   M[r][c] = ... - sum_{ch P} g_r,ch g_c,ch K_ch[r][c],
+    //   K_ch[r][c] = L + B - D_ch[r][c],  D diagonal = S_r,  off-diag = Q_{rc}.
+    // so dlnL/dE_nu += sum_{r,c} Re(conj(Mbar[r][c]) * sum_ch g_r g_c dD/dE_nu).
+    // dD/dE only couples to E_r and E_c; using S'(E) = shiftDeriv.
+    if(brune && shiftDeriv) {
+      const std::vector<std::vector<double>>& sd = (*shiftDeriv)[jNum-1];
+      int numChannels = jg->NumChannels();
+      for(int ch = 1; ch <= numChannels; ch++) {
+        if(jg->GetChannel(ch)->GetRadType() != 'P') continue;
+        for(int r = 1; r <= n; r++) {
+          double gr  = jg->GetLevel(r)->GetFitGamma(ch);
+          if(gr == 0.0) continue;
+          double Sr  = jg->GetLevel(r)->GetShiftFunction(ch);
+          double dSr = sd[r-1][ch-1];
+          double Er  = jg->GetLevel(r)->GetFitE();
+          for(int c = 1; c <= n; c++) {
+            double gc = jg->GetLevel(c)->GetFitGamma(ch);
+            double g = gr * gc;
+            if(g == 0.0) continue;
+            if(r == c) {
+              // D = S_r ;  dD/dE_r = S'_r.
+              accum.AddE(jNum, r, std::real(Mbar[r-1][r-1]) * g * dSr);
+            } else {
+              double Sc  = jg->GetLevel(c)->GetShiftFunction(ch);
+              double dSc = sd[c-1][ch-1];
+              double Ec  = jg->GetLevel(c)->GetFitE();
+              double den = Er - Ec;
+              double Q   = (Sr * (inEnergy - Ec) - Sc * (inEnergy - Er)) / den;
+              double dQdEr = (dSr * (inEnergy - Ec) + Sc - Q) / den;
+              double dQdEc = (-Sr - dSc * (inEnergy - Er) + Q) / den;
+              double reM = std::real(Mbar[r-1][c-1]);
+              accum.AddE(jNum, r, reM * g * dQdEr);
+              accum.AddE(jNum, c, reM * g * dQdEc);
+            }
+          }
+        }
+      }
+    }
+
+    // Structural gamma gradient.  M[r][c] = (E_r-inE) delta - sum_ch g_r,ch g_c,ch K_ch[r][c],
+    // so  dlnL/d gamma_{a,d} += -sum_c Re( conj(Mbar[a][c]+Mbar[c][a]) * K_d[a][c] ) * gamma_{c,d}.
+    // The kernel K_d[r][c] is the channel-d contribution to the level matrix:
+    //   non-Brune (or non-'P'):  K_d = L_d  (the Lo-matrix element, indep. of r,c)
+    //   Brune 'P' channel:       K_d[r][c] = L_d + B_d - D_d[r][c],
+    //     D_d[r][c] = (r==c) ? S_r,d
+    //                        : (S_r,d (inE-E_c) - S_c,d (inE-E_r)) / (E_r - E_c)
+    // exactly mirroring FillMatrices.
+    int numChannels = jg->NumChannels();
+    for(int d = 1; d <= numChannels; d++) {
+      complex Ld = point->GetLoElement(jNum, d);
+      AChannel* channel = jg->GetChannel(d);
+      bool bruneP = brune && (channel->GetRadType() == 'P');
+      double Bd = bruneP ? channel->GetBoundaryCondition() : 0.0;
+      for(int a = 1; a <= n; a++) {
+        double g = 0.0;
+        for(int c = 1; c <= n; c++) {
+          complex Kd = Ld;
+          if(bruneP) {
+            double Sa = jg->GetLevel(a)->GetShiftFunction(d);
+            double Sc = jg->GetLevel(c)->GetShiftFunction(d);
+            double Dd;
+            if(a == c) Dd = Sa;
+            else {
+              double Ea = jg->GetLevel(a)->GetFitE();
+              double Ec = jg->GetLevel(c)->GetFitE();
+              Dd = (Sa * (inEnergy - Ec) - Sc * (inEnergy - Ea)) / (Ea - Ec);
+            }
+            Kd = Ld + Bd - Dd;
+          }
+          complex sym = Mbar[a-1][c-1] + Mbar[c-1][a-1];
+          double gammaCd = jg->GetLevel(c)->GetFitGamma(d);
+          g += -std::real(conj(sym) * Kd) * gammaCd;
+        }
+        accum.AddGamma(jNum, a, d, g);
+      }
+    }
+  }
+
+  return true;
 }

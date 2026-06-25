@@ -381,20 +381,21 @@ void AZURESocket::handle( const vector_r& request ) {
       sendPacket( api_->calculated_excitation_energies( idx ) );
       break;
 
-    // Calculate log-likelihood from RWA params with per-segment error inflation
-    case 35:
-      sendPacket( vector_r{ api_->CalculateLnLRWA( params ) } );
-      break;
-
-    // Calculate log-likelihood from RWA params with a correlated per-segment
-    // covariance matrix
-    case 36:
-      sendPacket( vector_r{ api_->CalculateLnLCovRWA( params ) } );
-      break;
-
     // Get structured per-parameter metadata (level, J, L, S, ...)
     case 37:
       sendPacket( api_->GetParameterInfo( ) );
+      break;
+
+    // Value + analytic gradient of the (data) chi-squared.
+    // Response: [chi2, d(chi2)/dp_0, ..., d(chi2)/dp_{n-1}].
+    case 41:
+      sendPacket( api_->CalculateChi2GradRWA( params ) );
+      break;
+
+    // Residuals + analytic residual Jacobian (Gauss-Newton / Levenberg-Marquardt).
+    // Response: [nRes, nCols, residuals..., J row-major].
+    case 42:
+      sendPacket( api_->CalculateResidualJacobianRWA( params ) );
       break;
 
     default:

@@ -280,9 +280,37 @@ int AZUREMain::operator()(){
         params.WriteUserParameters(configure(),true);
       } else {
 #endif
-        // Use Minuit2 for minimization (default)
-        ROOT::Minuit2::MnMigrad migrad(theFunc,params.GetMinuitParams());
-        ROOT::Minuit2::FunctionMinimum min=migrad(50000);
+      if(configure().paramMask & Config::USE_LM_MINIMIZER) {
+        // Levenberg-Marquardt / Gauss-Newton using the analytic residual
+        // Jacobian (selected as an alternative to MIGRAD).
+        configure().outStream << "Using Levenberg-Marquardt minimizer (analytic Jacobian)." << std::endl;
+        double lmChi2 = theFunc.RunLevenbergMarquardt(params, 200);
+        if(lmChi2 < 0.0) {
+          // The analytic Jacobian is not available for this model -> MIGRAD.
+          configure().outStream << "Analytic Jacobian unsupported for this model; "
+                                   "falling back to MIGRAD." << std::endl;
+          const ROOT::Minuit2::FCNBase& fb = theFunc;
+          ROOT::Minuit2::MnMigrad migrad(fb, params.GetMinuitParams());
+          ROOT::Minuit2::FunctionMinimum min = migrad(50000);
+          params.GetMinuitParams() = min.UserParameters();
+        }
+        params.WriteUserParameters(configure(), true);
+      } else {
+        // Use Minuit2 MIGRAD for minimization (default).  When the analytic-
+        // gradient runtime option is on, pass theFunc as an FCNGradientBase so
+        // Migrad uses AZURECalc::Gradient; otherwise pass it as a plain FCNBase
+        // so Minuit falls back to its own numerical gradient.
+        ROOT::Minuit2::FunctionMinimum min = [&]() {
+          if(configure().paramMask & Config::USE_ANALYTIC_GRADIENT) {
+            configure().outStream << "Using analytic gradient for Minuit2." << std::endl;
+            ROOT::Minuit2::MnMigrad migrad(theFunc, params.GetMinuitParams());
+            return migrad(50000);
+          } else {
+            const ROOT::Minuit2::FCNBase& fb = theFunc;
+            ROOT::Minuit2::MnMigrad migrad(fb, params.GetMinuitParams());
+            return migrad(50000);
+          }
+        }();
       if(configure().paramMask & Config::PERFORM_ERROR_ANALYSIS) {
 	configure().outStream << std::endl 
 		  << "Performing parameter error analysis with Up=" <<  configure().chiVariance << "." << std::endl;
@@ -391,6 +419,7 @@ int AZUREMain::operator()(){
       }
         params.GetMinuitParams()=min.UserParameters();
         params.WriteUserParameters(configure(),true);
+      }   // end MIGRAD (else of Levenberg-Marquardt selector)
 #ifdef USE_NLOPT
       }
 #endif

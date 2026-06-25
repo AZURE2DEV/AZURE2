@@ -9,6 +9,8 @@
 class Config;
 class EData;
 class CNuc;
+class EPoint;
+struct GradAccum;
 
 ///A function class to perform the calculation of the chi-squared value
 
@@ -198,43 +200,38 @@ class AZUREAPI {
   double CalculateChi2Physical(const vector_r& physicalParams) const;
 
   /*!
-   * Calculate the Gaussian log-likelihood from RWA parameters with per-segment
-   * error inflation.
-   *
-   * The input vector is the concatenation of the non-fixed RWA parameters
-   * (which include the normalizations) followed by one error-inflation factor
-   * per segment, in the same segment order as norms() / UpdateData(). For each
-   * data point the variance is inflated as
-   *   var = (dataErr * norm)^2 + (f * model)^2
-   * where model is the theoretical (fit) cross section and f is the segment's
-   * inflation factor. The returned value is
-   *   lnL = -0.5 * sum_i [ (fit - data*norm)^2 / var_i + ln(2*pi*var_i) ]
-   * i.e. it includes the error-normalization term so the inflation factors are
-   * self-regulating.
+   * Value and analytic gradient of the (data) chi-squared with respect to the
+   * non-fixed RWA parameters.  Input: the non-fixed RWA parameters (energies,
+   * reduced widths, normalizations), as for CalculateChi2RWA.  Returns
+   *   [ chi2, d(chi2)/dp_0, ..., d(chi2)/dp_{n-1} ].
+   * Energies / reduced widths / normalizations are analytic; energy shifts are
+   * finite-differenced.  (For a log-likelihood use lnL = -0.5*(chi2 + const),
+   * grad lnL = -0.5*grad chi2.)
    */
-  double CalculateLnLRWA(const vector_r& params) const;
+  vector_r CalculateChi2GradRWA(const vector_r& params) const;
 
   /*!
-   * Calculate the Gaussian log-likelihood from RWA parameters using a full
-   * per-segment covariance matrix with correlated error inflation.
-   *
-   * The input vector is packed identically to CalculateLnLRWA: the non-fixed
-   * RWA parameters (including normalizations) followed by one error-inflation
-   * factor per segment. Within each segment the data share a single
-   * normalization, so the inflation is treated as 100% correlated. The
-   * covariance block for a segment is
-   *   C_ij = (dataErr_i * norm)^2 * delta_ij + f^2 * model_i * model_j
-   * i.e. the diagonal carries statistical-plus-inflation variance while the
-   * off-diagonal carries only the (fully-correlated) inflation term. Different
-   * segments are uncorrelated (block-diagonal C). The returned value is the
-   * multivariate Gaussian log-likelihood
-   *   lnL = -0.5 * [ r^T C^{-1} r + ln det(2*pi*C) ]
-   * with r_i = fit_i - data_i*norm, summed over the segment blocks.
+   * Standardized residuals r_i = (fit_i - data_i*n)/(cmErr_i*n) (so sum r_i^2 =
+   * chi2) and their analytic Jacobian J_{ij} = d r_i / d theta_j, for
+   * Gauss-Newton / Levenberg-Marquardt.  Columns are the non-fixed parameters
+   * (input order).  Returns
+   *   [ nRes, nCols, r_0..r_{nRes-1}, J row-major (nRes x nCols) ],
+   * or [ -1 ] if a point is outside the supported analytic path.  Energy-shift
+   * columns are left zero.
    */
-  double CalculateLnLCovRWA(const vector_r& params) const;
+  vector_r CalculateResidualJacobianRWA(const vector_r& params) const;
 
 
  private:
+
+  /*!
+   * Analytic reverse-mode gradient of the data chi-squared w.r.t. the energy and
+   * reduced-width (gamma) parameters, accumulated into the energy/gamma entries
+   * of gradFull; the data-term normalization gradient is accumulated into the
+   * norm entries.  Returns false (touching nothing) if any data point is outside
+   * the supported analytic path, so the caller falls back to finite differences.
+   */
+  bool Chi2GradEGammaNorm(const vector_r& fullParams, vector_r& gradFull) const;
 
   // Configuration
   Config &configure_;

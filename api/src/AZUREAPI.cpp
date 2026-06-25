@@ -8,6 +8,11 @@
 #include "Config.h"
 #include "CNuc.h"
 #include "EData.h"
+#include "ESegment.h"
+#include "EPoint.h"
+#include "TargetEffect.h"
+#include "AMatrixFunc.h"
+#include "AZUREGrad.h"
 
 #include <iostream>
 #include <iomanip>
@@ -788,181 +793,138 @@ double AZUREAPI::CalculateChi2Physical(const vector_r& physicalParams) const {
   return chiSquared;
 }
 
-double AZUREAPI::CalculateLnLRWA(const vector_r& params) const {
-
-  // ln(2*pi), used in the Gaussian error-normalization term. Defined as a
-  // literal so it does not depend on M_PI being available on every platform.
-  static const double kLn2Pi = 1.8378770664093453;
-
-  // The input vector packs the non-fixed RWA parameters first, followed by one
-  // error-inflation factor per segment. Split it on the number of non-fixed
-  // parameters.
-  int nRwa = 0;
-  for( size_t i = 0; i < fixed_.size( ); ++i ) if( !fixed_[i] ) ++nRwa;
-
-  vector_r rwaParams( params.begin( ), params.begin( ) + nRwa );
-  vector_r inflation( params.begin( ) + nRwa, params.end( ) );
-
-  // Map the non-fixed RWA values back into the full parameter vector.
+// Map a packed non-fixed RWA parameter vector into the full all_rwa_ layout.
+static vector_r MapPackedToFull(const vector_r& packed, const vector_r& all_rwa,
+                                const std::vector<bool>& fixed) {
+  vector_r full = all_rwa;
   int k = 0;
-  vector_r params_ = all_rwa_;
-  for( int i = 0; i < all_rwa_.size( ); ++i ){
-    if( !fixed_[i] ){
-      params_[i] = rwaParams[k];
-      ++k;
-    }
-  }
-
-  CNuc* localCompound = compound()->Clone();
-  EData* localData = data()->Clone();
-
-  // Fill compound nucleus and data with RWA parameters (norms included).
-  localCompound->FillCompoundFromParams(params_);
-  localData->FillNormsFromParams(params_);
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
-  if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
-
-  double lnL = 0.0;
-
-  // Walk the raw segments so every point contributes, but advance the
-  // inflation index only when the segment key changes, keeping it aligned with
-  // the norms() / UpdateData() ordering (one inflation factor per segment).
-  int prevKey = -1;
-  int segIdx  = -1;
-
-  for(int i = 1; i <= localData->NumSegments(); i++) {
-    ESegment* segment = localData->GetSegment(i);
-    if(!segment) continue;
-
-    int key = segment->GetSegmentKey();
-    if( key != prevKey ){ ++segIdx; prevKey = key; }
-
-    double f = ( segIdx >= 0 && segIdx < (int)inflation.size( ) ) ? inflation[segIdx] : 0.0;
-    double norm = segment->GetNorm();
-
-    for(int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-      double model = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
-      EPoint* point = segment->GetPoint(pointIdx + 1);
-      if(!point) continue;
-      point->SetFitCrossSection(model);
-
-      double residual  = model - point->GetCMCrossSection() * norm;
-      double baseError = point->GetCMCrossSectionError() * norm;
-      double inflTerm  = f * model;
-      double var = baseError * baseError + inflTerm * inflTerm;
-
-      if( var > 0.0 ) {
-        lnL += -0.5 * ( residual * residual / var + std::log( var ) + kLn2Pi );
-      }
-    }
-  }
-
-  delete localCompound;
-  delete localData;
-
-  return lnL;
+  for( int i = 0; i < (int)all_rwa.size( ); ++i )
+    if( !fixed[i] && k < (int)packed.size() ) full[i] = packed[k++];
+  return full;
 }
 
-double AZUREAPI::CalculateLnLCovRWA(const vector_r& params) const {
+bool AZUREAPI::Chi2GradEGammaNorm(const vector_r& full, vector_r& gradFull) const {
+  const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
+  CNuc* lc = compound()->Clone();
+  EData* ld = data()->Clone();
+  lc->FillCompoundFromParams(full);
+  ld->FillNormsFromParams(full);
+  ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
 
-  // ln(2*pi) literal (see CalculateLnLRWA).
-  static const double kLn2Pi = 1.8378770664093453;
-
-  // Split the input into non-fixed RWA parameters and per-segment inflation.
-  int nRwa = 0;
-  for( size_t i = 0; i < fixed_.size( ); ++i ) if( !fixed_[i] ) ++nRwa;
-
-  vector_r rwaParams( params.begin( ), params.begin( ) + nRwa );
-  vector_r inflation( params.begin( ) + nRwa, params.end( ) );
-
-  int k = 0;
-  vector_r params_ = all_rwa_;
-  for( int i = 0; i < all_rwa_.size( ); ++i ){
-    if( !fixed_[i] ){
-      params_[i] = rwaParams[k];
-      ++k;
-    }
+  vector_matrix_r shiftDeriv;
+  const vector_matrix_r* sdp = nullptr;
+  if(brune) {
+    lc->CalcShiftFunctions(configure());
+    shiftDeriv = BuildShiftDerivTable(lc, configure());
+    sdp = &shiftDeriv;
   }
 
-  CNuc* localCompound = compound()->Clone();
-  EData* localData = data()->Clone();
+  ParamIndexMap pmap = BuildParamIndexMap(lc, ld, fixed_);
+  GradAccum accum;
+  accum.Init(lc);
 
-  localCompound->FillCompoundFromParams(params_);
-  localData->FillNormsFromParams(params_);
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
-  if(configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
-
-  double lnL = 0.0;
-
-  int prevKey = -1;
-  int segIdx  = -1;
-
-  for(int i = 1; i <= localData->NumSegments(); i++) {
-    ESegment* segment = localData->GetSegment(i);
-    if(!segment) continue;
-
-    int key = segment->GetSegmentKey();
-    if( key != prevKey ){ ++segIdx; prevKey = key; }
-
-    double f = ( segIdx >= 0 && segIdx < (int)inflation.size( ) ) ? inflation[segIdx] : 0.0;
-    double norm = segment->GetNorm();
-
-    // The covariance block is diagonal-plus-rank-1:
-    //   C = D + v v^T,   D = diag(sv_i),   v_i = f * model_i
-    // so its inverse (Sherman-Morrison) and determinant (matrix-determinant
-    // lemma) are available in closed form. This needs only the running sums
-    //   A  = sum_i r_i^2 / sv_i              (= r^T D^{-1} r)
-    //   W  = sum_i model_i r_i / sv_i        (-> v^T D^{-1} r = f * W)
-    //   Mm = sum_i model_i^2 / sv_i          (-> v^T D^{-1} v = f^2 * Mm)
-    //   lnDetD = sum_i ln(sv_i)              (= ln det D)
-    // computed in a single O(n) pass, instead of forming and factorizing the
-    // n x n matrix.
-    int n = 0;
-    double A = 0.0, W = 0.0, Mm = 0.0, lnDetD = 0.0;
-    bool degenerate = false;
-
-    for(int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-      double m = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
-      EPoint* point = segment->GetPoint(pointIdx + 1);
-      if(!point) continue;
-      point->SetFitCrossSection(m);
-
-      double baseError = point->GetCMCrossSectionError() * norm;
-      double sv = baseError * baseError;
-      if( sv <= 0.0 ){
-        // Zero statistical error makes D (and, for >1 such point, C) singular:
-        // the closed form is undefined. Reject rather than divide by zero.
-        degenerate = true;
-        break;
-      }
-
-      double resid = m - point->GetCMCrossSection() * norm;
-      double inv = 1.0 / sv;
-      A      += resid * resid * inv;
-      W      += m * resid * inv;
-      Mm     += m * m * inv;
-      lnDetD += std::log( sv );
-      ++n;
+  // chi2 = sum (fit - data*n)^2/(cmErr*n)^2.  d(chi2)/d(model) = 2 r / err^2;
+  // the same model gives the data-term norm gradient, accumulated per segment.
+  std::vector<double> normData(ld->NumSegments() + 1, 0.0);
+  FitBarFn fb = [&](ESegment* seg, int i, int pid, double model) -> double {
+    EPoint* pt = seg->GetPoint(pid + 1);
+    if(!pt) return 0.0;
+    double norm = seg->GetNorm();
+    double dataval = pt->GetCMCrossSection();
+    double cmErr = pt->GetCMCrossSectionError();
+    double r = model - dataval * norm;
+    double err = cmErr * norm;
+    if(err == 0.0) return 0.0;
+    if(seg->IsVaryNorm() && norm != 0.0 && i >= 1 && i < (int)normData.size()) {
+      double e2 = cmErr * cmErr;
+      normData[i] += -2.0 * r * dataval / (e2 * norm * norm)
+                     - 2.0 * r * r / (e2 * norm * norm * norm);
     }
+    return 2.0 * r / (err * err);
+  };
 
-    if( degenerate ){
-      lnL = -std::numeric_limits<double>::infinity();
-      break;
+  bool ok = AccumulateEGammaGradient(lc, ld, configure(), pmap, sdp, fb, accum);
+  if(ok) {
+    accum.Scatter(pmap, gradFull);
+    for(int s = 1; s <= ld->NumSegments(); s++) {
+      ESegment* seg = ld->GetSegment(s);
+      if(!seg || !seg->IsVaryNorm()) continue;
+      int idx = pmap.NormIndex(s);
+      if(idx >= 0 && idx < (int)gradFull.size()) gradFull[idx] = normData[s];
     }
-    if( n == 0 ) continue;
+  }
+  delete lc;
+  delete ld;
+  return ok;
+}
 
-    double f2 = f * f;
-    double denom = 1.0 + f2 * Mm;                 // 1 + v^T D^{-1} v
-    double chi2  = A - ( f2 * W * W ) / denom;     // r^T C^{-1} r
-    double lnDet = lnDetD + std::log( denom );     // ln det C
+vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r& params) const {
+  vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
 
-    lnL += -0.5 * ( chi2 + lnDet + n * kLn2Pi );
+  double chi2 = CalculateChi2RWA(params);
+
+  vector_r gradFull(all_rwa_.size(), 0.0);
+  bool eg = Chi2GradEGammaNorm(full, gradFull);
+
+  // Finite differences for energy shifts (and the whole block if the analytic
+  // path bailed), using the scalar chi-squared.
+  ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), fixed_);
+  for(int f = 0; f < (int)full.size() && f < pmap.NumFull(); f++) {
+    if(fixed_[f]) continue;
+    ParamKind kind = pmap.Desc(f).kind;
+    if(eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma ||
+              kind == ParamKind::Norm)) continue;
+    int packed = pmap.FullToPacked(f);
+    if(packed < 0 || packed >= (int)params.size()) continue;
+    double x0 = params[packed];
+    double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+    vector_r pp = params; pp[packed] = x0 + h;
+    vector_r pm = params; pm[packed] = x0 - h;
+    gradFull[f] = (CalculateChi2RWA(pp) - CalculateChi2RWA(pm)) / (2.0 * h);
   }
 
-  delete localCompound;
-  delete localData;
+  vector_r out;
+  out.reserve(1 + params.size());
+  out.push_back(chi2);
+  for(int i = 0; i < (int)all_rwa_.size(); i++)
+    if(!fixed_[i]) out.push_back(gradFull[i]);
+  return out;
+}
 
-  return lnL;
+vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r& params) const {
+  vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
+
+  CNuc* lc = compound()->Clone();
+  EData* ld = data()->Clone();
+  lc->FillCompoundFromParams(full);
+  ld->FillNormsFromParams(full);
+  ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+
+  vector_matrix_r shiftDeriv;
+  const vector_matrix_r* sdp = nullptr;
+  if(configure().paramMask & Config::USE_BRUNE_FORMALISM) {
+    lc->CalcShiftFunctions(configure());
+    shiftDeriv = BuildShiftDerivTable(lc, configure());
+    sdp = &shiftDeriv;
+  }
+
+  ParamIndexMap pmap = BuildParamIndexMap(lc, ld, fixed_);
+  vector_r residuals, jacobian;
+  int nCols = 0;
+  bool ok = ComputeResidualJacobian(lc, ld, configure(), pmap, sdp, residuals, jacobian, nCols);
+
+  delete lc;
+  delete ld;
+
+  if(!ok) return vector_r{ -1.0 };
+
+  vector_r out;
+  out.reserve(2 + residuals.size() + jacobian.size());
+  out.push_back((double)residuals.size());
+  out.push_back((double)nCols);
+  out.insert(out.end(), residuals.begin(), residuals.end());
+  out.insert(out.end(), jacobian.begin(), jacobian.end());
+  return out;
 }
 
 // Function to get indeces of non-fixed normalization parameters

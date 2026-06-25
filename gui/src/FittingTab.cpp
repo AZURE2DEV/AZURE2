@@ -9,6 +9,7 @@
 #include <QHeaderView>
 #include <QMessageBox>
 #include <QSignalMapper>
+#include <QCheckBox>
 #include <QFileDialog>
 #include <QFile>
 #include <QFileInfo>
@@ -77,13 +78,13 @@ FittingTab::FittingTab(QWidget *parent) : QWidget(parent),
     connect(mapper, SIGNAL(mapped(int)), this, SLOT(showInfo(int)));
     
     mainLayout->addLayout(buttonLayout);
-    
+
     // Connect signals
     connect(refreshButton, SIGNAL(clicked()), this, SLOT(refreshParameters()));
     connect(loadButton, SIGNAL(clicked()), this, SLOT(loadSettings()));
     connect(populateWignerLimitsButton, SIGNAL(clicked()), this, SLOT(populateWignerLimits()));
     connect(clearLimitsButton, SIGNAL(clicked()), this, SLOT(clearLimits()));
-    
+
     setLayout(mainLayout);
 }
 
@@ -228,7 +229,7 @@ void FittingTab::setTabReferences(LevelsTab* levelsTab, SegmentsTab* segmentsTab
 
 void FittingTab::populateFromCurrentGUIState() {
     if(!levelsTab_ || !segmentsTab_) return;
-    
+
     fittingParameters.clear();
     int paramIndex = 0;
     

@@ -276,57 +276,49 @@ class azure2:
     def calculate_chi2(self, params, proc=0):
         return self.clients[proc].communicate("CALCULATE_CHI2", params).tolist()
 
-    def calculate_lnl_rwa(self, params, error_inflation, proc=0):
-        """Gaussian log-likelihood from RWA params with per-segment error inflation.
+    def chi2_and_grad(self, params, proc=0):
+        """Value and analytic gradient of the (data) chi-squared.
 
         Parameters
         ----------
-        params : the non-fixed RWA parameters (these include the segment
+        params : the non-fixed RWA parameters (energies, reduced widths,
             normalizations), in the same order as ``self.params_rwa``.
-        error_inflation : one fractional error-inflation factor per segment, in
-            the same order as ``self.norms`` / ``self.cross`` (length
-            ``self.nsegments``).  For each data point the variance becomes
-            ``(dataErr*norm)**2 + (f*model)**2`` where ``model`` is the
-            theoretical cross section.
         proc : which AZURE2 instance to dispatch to.
 
         Returns
         -------
-        float
-            ``lnL = -0.5 * sum[ (fit - data*norm)**2 / var + ln(2*pi*var) ]``,
-            including the error-normalization term so the inflation factors are
-            self-regulating.
+        (float, numpy.ndarray)
+            ``(chi2, grad)`` with one gradient entry per input parameter.
+            Energies / reduced widths / normalizations are analytic; energy
+            shifts are finite-differenced.  (For a Gaussian log-likelihood use
+            ``lnL = -0.5*(chi2 + const)`` and ``grad_lnL = -0.5*grad``.)
         """
-        payload = np.concatenate([
-            np.asarray(params, dtype=float).ravel(),
-            np.asarray(error_inflation, dtype=float).ravel(),
-        ])
-        return float(self.clients[proc].communicate("CALCULATE_LNL_RWA", payload)[0])
+        resp = self.clients[proc].communicate(
+            "CALCULATE_CHI2_GRAD_RWA", np.asarray(params, float).ravel())
+        return float(resp[0]), np.asarray(resp[1:], dtype=float)
 
-    def calculate_lnl_cov_rwa(self, params, error_inflation, proc=0):
-        """Log-likelihood with a correlated per-segment covariance matrix.
+    def residual_jacobian(self, params, proc=0):
+        """Standardized residuals and their analytic Jacobian.
 
-        Same arguments and packing as :meth:`calculate_lnl_rwa`, but the points
-        within each segment are treated as 100% correlated in the inflation
-        term (they share one normalization).  The covariance block for a
-        segment is
+        ``r_i = (fit_i - data_i*n)/(cmErr_i*n)`` so ``sum(r_i**2) == chi2``.
 
-            C_ij = (dataErr_i*norm)**2 * delta_ij + f**2 * model_i * model_j
-
-        (statistical-plus-inflation on the diagonal, only the fully-correlated
-        inflation off-diagonal), and segments are mutually uncorrelated.
-
-        Returns
-        -------
-        float
-            ``lnL = -0.5 * [ r^T C^{-1} r + ln det(2*pi*C) ]`` summed over the
-            segment blocks, with ``r_i = fit_i - data_i*norm``.
+        Returns ``(r, J)`` with ``r`` shape ``(n_res,)`` and ``J`` shape
+        ``(n_res, n_params)``; columns match the non-fixed RWA parameters (the
+        input ordering).  Built from the reverse-mode adjoint, so the whole
+        Jacobian costs ~2 forward evaluations regardless of the parameter count
+        -- for Gauss-Newton / Levenberg-Marquardt.  Energy-shift columns are
+        returned as zero.
         """
-        payload = np.concatenate([
-            np.asarray(params, dtype=float).ravel(),
-            np.asarray(error_inflation, dtype=float).ravel(),
-        ])
-        return float(self.clients[proc].communicate("CALCULATE_LNL_COV_RWA", payload)[0])
+        resp = self.clients[proc].communicate(
+            "CALCULATE_RESIDUAL_JACOBIAN_RWA", np.asarray(params, float).ravel())
+        if resp.size == 1 and resp[0] == -1.0:
+            raise RuntimeError("residual_jacobian: an analytically-unsupported "
+                               "segment/config is present.")
+        n_res = int(round(resp[0]))
+        n_cols = int(round(resp[1]))
+        r = resp[2:2 + n_res]
+        J = resp[2 + n_res:].reshape(n_res, n_cols)
+        return r, J
 
     # -- calculations ---------------------------------------------------------
 

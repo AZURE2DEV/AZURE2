@@ -2,6 +2,7 @@
 #define AZURECALC_H
 
 #include "Minuit2/FCNBase.h"
+#include "Minuit2/FCNGradientBase.h"
 #include "Constants.h"
 #include "AZUREParams.h"
 #include <vector>
@@ -23,7 +24,7 @@ class ParameterLimitsManager;
  * process to perform the minimization.
  */
 
-class AZURECalc : public ROOT::Minuit2::FCNBase {
+class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
  public:
   /*!
    * The AZURECalc object is created with reference to an EData and CNuc object.
@@ -46,7 +47,46 @@ class AZURECalc : public ROOT::Minuit2::FCNBase {
    * returns the total chi-squared value.
    */
   virtual double operator()(const vector_r&) const;
-  
+
+  /*!
+   * Analytic gradient of the total chi-squared with respect to the (external)
+   * Minuit parameters, for Minuit2's FCNGradientBase interface.  The energy /
+   * reduced-width block is computed by the shared reverse-mode adjoint
+   * (AccumulateEGammaGradient -- the same engine AZUREAPI uses); norms, energy
+   * shifts and any analytically-unsupported configuration fall back to central
+   * finite differences of the chi-squared.
+   */
+  std::vector<double> Gradient(const std::vector<double>&) const override;
+  /*!
+   * Skip Minuit's start-up numerical check of the analytic gradient (trusted,
+   * separately validated).
+   */
+  bool CheckGradient() const override { return false; }
+  /*!
+   * Side-effect-free chi-squared evaluation (no iteration counter / file output
+   * / object pools), used by the finite-difference part of Gradient().
+   */
+  double Chi2Value(const vector_r& p) const;
+
+  /*!
+   * Standardized residuals and analytic residual Jacobian at the full parameter
+   * vector `full`.  `residuals` is N_res; `jac` is row-major N_res x nFree;
+   * `packedToFull[a]` is the full-vector index of Jacobian column a (the a-th
+   * non-fixed parameter).  Returns false if the analytic path is unsupported.
+   */
+  bool ResidualJacobian(const vector_r& full, vector_r& residuals,
+                        vector_r& jac, std::vector<int>& packedToFull) const;
+
+  /*!
+   * Levenberg-Marquardt / Gauss-Newton minimization of the total chi-squared
+   * using the analytic residual Jacobian.  Converges in far fewer iterations
+   * than MIGRAD for least-squares problems.  Updates `params` in place with the
+   * best-fit values and (J^T J)^{-1} parameter errors, respecting parameter
+   * limits.  Returns the final chi-squared, or a negative value if the analytic
+   * Jacobian is unsupported (caller should fall back to MIGRAD).
+   */
+  double RunLevenbergMarquardt(AZUREParams& params, int maxIter = 200) const;
+
   /*!
    * Returns a reference to the Config structure.
    */
@@ -69,6 +109,14 @@ class AZURECalc : public ROOT::Minuit2::FCNBase {
    * Calculate nuisance parameter chi-squared contribution
    */
   double CalculateNuisanceChiSquared(const vector_r& p) const;
+
+  /*!
+   * Add the analytic gradient of the nuisance-parameter penalty to `grad`,
+   * mirroring CalculateNuisanceChiSquared exactly (so it is consistent with the
+   * objective).  Used when the energy/gamma block is taken analytically (which
+   * covers only the data chi-squared).
+   */
+  void AddNuisanceGradient(const vector_r& p, std::vector<double>& grad) const;
   
   /*!
    * Object pool management methods

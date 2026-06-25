@@ -40,6 +40,7 @@ class QVBoxLayout;
 class QHBoxLayout;
 class QGroupBox;
 class QLabel;
+class QCheckBox;
 
 QT_END_NAMESPACE
 

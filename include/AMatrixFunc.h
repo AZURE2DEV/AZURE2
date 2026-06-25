@@ -3,6 +3,8 @@
 
 #include "GenMatrixFunc.h"
 
+struct GradAccum;
+
 ///A function class to calculate the T-Matrix using the A-Matrix
 
 /*!
@@ -34,6 +36,31 @@ class AMatrixFunc : public GenMatrixFunc {
 
   complex GetAMatrixElement(int,int,int) const;
   matrix_c *GetJSpecAInvMatrix(int);
+
+  /*!
+   * Reverse-mode (adjoint) gradient of one energy point's cross section
+   * (angle-integrated or differential).  Assumes FillMatrices/InvertMatrices/
+   * CalculateTMatrix have already been run for `point`.  `fitBar` is the
+   * cotangent dlnL/dmodel; the resulting dlnL/dE and dlnL/dgamma are
+   * accumulated into `accum`.
+   *
+   * Under the Brune formalism the level-energy gradient acquires explicit terms
+   * through S(E_lambda); pass `shiftDeriv` (from BuildShiftDerivTable) to have
+   * them included analytically.  If `shiftDeriv` is null the energy gradient
+   * omits those terms (only valid for non-Brune models).
+   *
+   * Handles angle-integrated, differential (incl. UPOS) and phase-shift cross
+   * sections.  `xsComponent` selects which cross-section component the cotangent
+   * refers to (0 = full, 1 = E1, 2 = E2), used for E1/E2 component segments.
+   *
+   * Returns false (accumulating nothing) when the point's configuration is
+   * outside the supported path (RMC / active-level compaction / angular-dist
+   * coefficients), so the caller can fall back to finite differences.  See
+   * PLAN.md Phases 2-4, 6.
+   */
+  bool PointAdjoint(EPoint* point, double fitBar, GradAccum& accum,
+                    const vector_matrix_r* shiftDeriv = nullptr,
+                    int xsComponent = 0);
   void AddAInvMatrixElement(int,int,int,complex);
   void AddAMatrix(matrix_c);
   void AddAMatrix(matrix_c&&);

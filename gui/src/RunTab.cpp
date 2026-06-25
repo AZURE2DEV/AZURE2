@@ -22,15 +22,19 @@ RunTab::RunTab(QWidget* parent) : QWidget(parent) {
   connect(calcType,SIGNAL(currentIndexChanged(int)),this,SLOT(calculationTypeChanged(int)));
 
   minimizerType = new QComboBox;
-  minimizerType->addItem(tr("Minuit2"));
+  minimizerType->addItem(tr("Minuit2"));                  // 0: MIGRAD, numerical grad
+  minimizerType->addItem(tr("Minuit2 (analytic grad.)")); // 1: MIGRAD, analytic grad
+  minimizerType->addItem(tr("Levenberg-Marquardt"));      // 2: LM (analytic Jacobian)
 #ifdef USE_NLOPT
-  minimizerType->addItem(tr("NLopt (SBPLX)"));
+  minimizerType->addItem(tr("NLopt (SBPLX)"));            // 3+: NLopt
   minimizerType->addItem(tr("NLopt (COBYLA)"));
   minimizerType->addItem(tr("NLopt (BOBYQA)"));
   minimizerType->addItem(tr("NLopt (NEWUOA)"));
   minimizerType->addItem(tr("NLopt (PRAXIS)"));
   minimizerType->addItem(tr("NLopt (Nelder-Mead)"));
 #endif
+  minimizerType->setMinimumWidth(170);
+  minimizerType->setCurrentIndex(0);   // default: Minuit2 (MIGRAD)
   minimizerType->setEnabled(false);
 
   chiVarianceText = new QLineEdit;
