@@ -14,6 +14,9 @@
 #include "ShftFunc.h"
 #include <cmath>
 #include <algorithm>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 /*!
  * Precompute dS_ch/dE_level for every (jGroup, level, channel).  Mirrors the
@@ -77,6 +80,19 @@ void GradAccum::Zero() {
   for (auto& row : e) std::fill(row.begin(), row.end(), 0.0);
   for (auto& lev : gamma)
     for (auto& row : lev) std::fill(row.begin(), row.end(), 0.0);
+}
+
+/*!
+ * Adds another (same-dimension) accumulator into this one, term by term.
+ */
+void GradAccum::Add(const GradAccum& o) {
+  for (int j = 0; j < (int)e.size(); j++) {
+    for (int la = 0; la < (int)e[j].size(); la++) {
+      e[j][la] += o.e[j][la];
+      for (int ch = 0; ch < (int)gamma[j][la].size(); ch++)
+        gamma[j][la][ch] += o.gamma[j][la][ch];
+    }
+  }
 }
 
 /*!
@@ -359,16 +375,49 @@ bool AccumulateEGammaGradient(CNuc* compound, EData* data, const Config& config,
                               const vector_matrix_r* shiftDeriv,
                               const FitBarFn& fitBarFn,
                               GradAccum& accum) {
+  // Each point's forward+adjoint solve is independent and only reads the shared
+  // `compound`, exactly like the forward cross-section loops in EData.cpp, so we
+  // parallelize each segment's point loop the same way.  The one shared write is
+  // the per-point accumulation into `accum`, so each thread accumulates into its
+  // OWN GradAccum and they are summed once at the end (a reduction).  The norm
+  // gradient is accumulated through `fitBarFn`'s side effect, which the callers
+  // guard with `#pragma omp atomic`.
+#ifdef _OPENMP
+  const int nThreads = std::max(1, omp_get_max_threads());
+#else
+  const int nThreads = 1;
+#endif
+  std::vector<GradAccum> threadAccum(nThreads);
+  for(GradAccum& ta : threadAccum) ta.Init(compound);
+
   bool ok = true;
   for(int i = 1; i <= data->NumSegments() && ok; i++) {
     ESegment* segment = data->GetSegment(i);
     if(!segment) continue;
-    for(int pointIdx = 0; pointIdx < segment->NumPoints() && ok; pointIdx++) {
+    const int nPoints = segment->NumPoints();
+    bool bail = false;
+#pragma omp parallel for shared(bail)
+    for(int pointIdx = 0; pointIdx < nPoints; pointIdx++) {
+      if(bail) continue;
+#ifdef _OPENMP
+      GradAccum& local = threadAccum[omp_get_thread_num()];
+#else
+      GradAccum& local = threadAccum[0];
+#endif
       double model;
       if(!GradOnePoint(segment, data, i, pointIdx, compound, config, shiftDeriv,
-                       fitBarFn, accum, model)) { ok = false; break; }
+                       fitBarFn, local, model)) {
+#pragma omp critical
+        bail = true;
+      }
     }
+    if(bail) { ok = false; break; }
   }
+
+  // Reduce the per-thread partials only on success; on bail the caller ignores
+  // `accum` and falls back to finite differences, so leave it untouched.
+  if(ok)
+    for(const GradAccum& ta : threadAccum) accum.Add(ta);
   return ok;
 }
 
@@ -381,52 +430,82 @@ bool ComputeResidualJacobian(CNuc* compound, EData* data, const Config& config,
   residuals.clear();
   jacobian.clear();
 
-  GradAccum accum;
-  accum.Init(compound);
-  vector_r fullRow(pmap.NumFull(), 0.0);
-
-  bool ok = true;
-  for(int i = 1; i <= data->NumSegments() && ok; i++) {
+  // Each (non-null) point is one independent row, so pre-assign every point a
+  // global row index (mirroring the serial null-skip) and pre-size the outputs.
+  // Rows can then be filled in parallel with no contention -- each thread owns
+  // its own accumulator and scatter buffer and writes only its own rows.
+  const int nSeg = data->NumSegments();
+  std::vector<std::vector<int>> rowOf(nSeg + 1);
+  int totalRows = 0;
+  for(int i = 1; i <= nSeg; i++) {
     ESegment* segment = data->GetSegment(i);
     if(!segment) continue;
-    double norm = segment->GetNorm();
-    int normFull = segment->IsVaryNorm() ? pmap.NormIndex(i) : -1;
+    const int nPoints = segment->NumPoints();
+    rowOf[i].assign(nPoints, -1);
+    for(int pointIdx = 0; pointIdx < nPoints; pointIdx++)
+      if(segment->GetPoint(pointIdx + 1)) rowOf[i][pointIdx] = totalRows++;
+  }
+  residuals.assign(totalRows, 0.0);
+  jacobian.assign((size_t)totalRows * nCols, 0.0);
 
-    for(int pointIdx = 0; pointIdx < segment->NumPoints() && ok; pointIdx++) {
-      EPoint* pt = segment->GetPoint(pointIdx + 1);
-      if(!pt) continue;
-      double cmErr = pt->GetCMCrossSectionError();
-      double dataval = pt->GetCMCrossSection();
+  bool ok = true;
+  for(int i = 1; i <= nSeg && ok; i++) {
+    ESegment* segment = data->GetSegment(i);
+    if(!segment) continue;
+    const double norm = segment->GetNorm();
+    const int normFull = segment->IsVaryNorm() ? pmap.NormIndex(i) : -1;
+    const int nPoints = segment->NumPoints();
+    bool bail = false;
 
-      // Residual r = (model - data*n)/(cmErr*n);  d r / d model = 1/(cmErr*n).
-      // PointAdjoint with this cotangent yields d r / d(E,gamma) directly.
-      double denom = cmErr * norm;
-      FitBarFn resFitBar = [denom](ESegment*, int, int, double) -> double {
-        return (denom != 0.0) ? 1.0 / denom : 0.0;
-      };
+#pragma omp parallel
+    {
+      GradAccum accum;                       // per-thread, reused across its rows
+      accum.Init(compound);
+      vector_r fullRow(pmap.NumFull(), 0.0);
+#pragma omp for
+      for(int pointIdx = 0; pointIdx < nPoints; pointIdx++) {
+        if(bail) continue;
+        const int row = rowOf[i][pointIdx];
+        if(row < 0) continue;
+        EPoint* pt = segment->GetPoint(pointIdx + 1);
+        double cmErr = pt->GetCMCrossSectionError();
+        double dataval = pt->GetCMCrossSection();
 
-      accum.Zero();
-      double model = 0.0;
-      if(!GradOnePoint(segment, data, i, pointIdx, compound, config, shiftDeriv,
-                       resFitBar, accum, model)) { ok = false; break; }
+        // Residual r = (model - data*n)/(cmErr*n);  d r / d model = 1/(cmErr*n).
+        // PointAdjoint with this cotangent yields d r / d(E,gamma) directly.
+        double denom = cmErr * norm;
+        FitBarFn resFitBar = [denom](ESegment*, int, int, double) -> double {
+          return (denom != 0.0) ? 1.0 / denom : 0.0;
+        };
 
-      double r = (denom != 0.0) ? (model - dataval * norm) / denom : 0.0;
-      residuals.push_back(r);
+        accum.Zero();
+        double model = 0.0;
+        if(!GradOnePoint(segment, data, i, pointIdx, compound, config, shiftDeriv,
+                         resFitBar, accum, model)) {
+#pragma omp critical
+          bail = true;
+          continue;
+        }
 
-      // Scatter this row's d r / d(E,gamma) into the packed columns.
-      std::fill(fullRow.begin(), fullRow.end(), 0.0);
-      accum.Scatter(pmap, fullRow);
-      // Norm column:  d r / d n = -model/(cmErr*n^2).
-      if(normFull >= 0 && cmErr != 0.0 && norm != 0.0)
-        fullRow[normFull] += -model / (cmErr * norm * norm);
+        residuals[row] = (denom != 0.0) ? (model - dataval * norm) / denom : 0.0;
 
-      const int base = (int)jacobian.size();
-      jacobian.resize(base + nCols, 0.0);
-      for(int f = 0; f < pmap.NumFull(); f++) {
-        int packed = pmap.FullToPacked(f);
-        if(packed >= 0 && packed < nCols) jacobian[base + packed] = fullRow[f];
+        // Scatter this row's d r / d(E,gamma) into the packed columns.
+        std::fill(fullRow.begin(), fullRow.end(), 0.0);
+        accum.Scatter(pmap, fullRow);
+        // Norm column:  d r / d n = -model/(cmErr*n^2).
+        if(normFull >= 0 && cmErr != 0.0 && norm != 0.0)
+          fullRow[normFull] += -model / (cmErr * norm * norm);
+
+        const size_t base = (size_t)row * nCols;
+        for(int f = 0; f < pmap.NumFull(); f++) {
+          int packed = pmap.FullToPacked(f);
+          if(packed >= 0 && packed < nCols) jacobian[base + packed] = fullRow[f];
+        }
       }
     }
+    if(bail) ok = false;
   }
+
+  if(!ok) { residuals.clear(); jacobian.clear(); }
   return ok;
 }

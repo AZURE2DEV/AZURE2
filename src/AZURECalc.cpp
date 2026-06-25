@@ -230,8 +230,13 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double>& p) const {
     if(err == 0.0) return 0.0;
     if(seg->IsVaryNorm() && norm != 0.0 && i >= 1 && i < (int)normData.size()) {
       double e2 = cmErr * cmErr;
-      normData[i] += -2.0 * r * dataval / (e2 * norm * norm)
+      // fitBarFn runs inside the parallel point loop of AccumulateEGammaGradient,
+      // and all points of a segment share the same normData[i], so guard the
+      // accumulation.
+      double dNorm = -2.0 * r * dataval / (e2 * norm * norm)
                      - 2.0 * r * r / (e2 * norm * norm * norm);
+#pragma omp atomic
+      normData[i] += dNorm;
     }
     return 2.0 * r / (err * err);
   };

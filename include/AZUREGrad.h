@@ -120,6 +120,9 @@ struct GradAccum {
   void Init(CNuc* compound);
   /// Reset all accumulators to zero (without reallocating).
   void Zero();
+  /// Add another accumulator (same compound dimensions) into this one.  Used to
+  /// reduce per-thread partial gradients after a parallel point loop.
+  void Add(const GradAccum& o);
   /// Add an energy contribution (1-based indices).
   void AddE(int jGroup, int level, double v) { e[jGroup-1][level-1] += v; }
   /// Add a gamma contribution (1-based indices).
