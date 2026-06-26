@@ -133,6 +133,19 @@ bool AZURESocket::start() {
     return false;
   }
 
+  // Report the actually-bound port.  When started with port 0 the OS assigns a
+  // guaranteed-unique free port; querying it here and printing it on stdout lets
+  // the pyazr client connect to the real port with no probe/bind race.  The
+  // fixed "AZURE2_API_LISTENING <port>" form is parsed by pyazr/server.py;
+  // std::endl flushes so the line reaches the pipe immediately.
+  struct sockaddr_in boundAddress;
+  socklen_t boundAddressSize = sizeof(boundAddress);
+  if (getsockname(serverSocket_, (struct sockaddr *)&boundAddress,
+                  &boundAddressSize) == 0) {
+    port_ = ntohs(boundAddress.sin_port);
+  }
+  std::cout << "AZURE2_API_LISTENING " << port_ << std::endl;
+
   socklen_t clientAddressSize = sizeof(clientAddress_);
 
   // Outer loop: accept clients.  Surviving a client disconnect and waiting for

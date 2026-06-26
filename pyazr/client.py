@@ -173,11 +173,23 @@ class client:
         body = payload.tobytes()
         self._send_all(_LEN.pack(len(payload)) + body)
 
+    # No legitimate AZURE2 response is anywhere near this large; a bigger count
+    # means the stream is desynchronized (e.g. two clients sharing one server),
+    # in which case `count` is really float64 payload bytes misread as a length.
+    _MAX_COUNT = 1 << 32
+
     def receive(self):
         """Read a response frame and return it as a float64 numpy array."""
         (count,) = _LEN.unpack(self._recv_exactly(_LEN.size))
         if count == 0:
             return np.empty(0, dtype=_F8)
+        if count > self._MAX_COUNT:
+            # Guard against OverflowError ("int too large to convert to C
+            # ssize_t") from recv() and surface the real problem instead.
+            raise ClientError(
+                f"AZURE2 API framing desync: implausible response length "
+                f"{count}.  This usually means two clients are sharing one "
+                f"server (port collision).")
         raw = self._recv_exactly(count * _F8.itemsize)
         # Copy so the returned array owns its memory (frombuffer is read-only).
         return np.frombuffer(raw, dtype=_F8).copy()

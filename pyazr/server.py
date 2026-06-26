@@ -10,6 +10,12 @@ import os
 import shutil
 import signal
 import subprocess
+import sys
+import threading
+
+# Printed by AZURESocket.cpp once the server is bound and listening; the trailing
+# token is the actual (possibly OS-assigned) port.
+_LISTENING_MARKER = "AZURE2_API_LISTENING"
 
 
 def _default_binary():
@@ -51,19 +57,23 @@ class server:
 
         Parameters
         ----------
-        port : TCP port the server listens on.
+        port : TCP port to request.  Pass ``0`` to let the OS assign a
+            guaranteed-unique free port; the actual port is read back from the
+            server and exposed as :attr:`port` (see :meth:`wait_until_listening`).
         file : the ``.azr`` configuration file to load.
         binary : path to the AZURE2 executable (auto-detected if ``None``).
-        verbose : if ``False`` (default) the subprocess' stdout/stderr are
-            discarded; if ``True`` they are inherited from this process.
+        verbose : if ``False`` (default) the subprocess' output is discarded; if
+            ``True`` it is echoed to this process' stdout.
         extra_args : optional list of additional command-line arguments.
         """
-        self.port = port
+        self.port = port                      # updated to the real port on bind
         self.file = file
         self.binary = binary or _default_binary()
         self.verbose = verbose
         self.extra_args = list(extra_args) if extra_args else []
         self.process = None
+        self._listening = threading.Event()   # set once the port is known
+        self._reader = None
         self.start()
 
     def __del__(self):
@@ -79,8 +89,6 @@ class server:
         cmd = [self.binary, "--no-gui", "--use-api",
                str(self.port), self.file, *self.extra_args]
 
-        out = None if self.verbose else subprocess.DEVNULL
-
         # start_new_session lets us signal the whole group on POSIX, ensuring
         # no orphaned children survive.
         kwargs = {}
@@ -88,11 +96,45 @@ class server:
             kwargs["start_new_session"] = True
 
         try:
+            # Capture stdout (with stderr merged in) so we can read the
+            # "AZURE2_API_LISTENING <port>" line; a reader thread drains the pipe
+            # continuously so a chatty subprocess can never fill it and deadlock.
             self.process = subprocess.Popen(
-                cmd, stdout=out, stderr=out, **kwargs
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, bufsize=1, **kwargs
             )
         except OSError as err:
             raise ServerError(f"Failed to launch AZURE2: {err}") from err
+
+        self._reader = threading.Thread(target=self._drain_output, daemon=True)
+        self._reader.start()
+
+    def _drain_output(self):
+        """Read the subprocess' output, capturing the listening port."""
+        try:
+            for line in self.process.stdout:
+                if not self._listening.is_set() and _LISTENING_MARKER in line:
+                    try:
+                        self.port = int(line.split()[-1])
+                    except (ValueError, IndexError):
+                        pass
+                    self._listening.set()
+                if self.verbose:
+                    sys.stdout.write(line)
+        finally:
+            # On EOF (process exited) unblock any waiter so it can detect death.
+            self._listening.set()
+
+    def wait_until_listening(self, timeout=60.0):
+        """Block until the server reports its bound port; return that port."""
+        if not self._listening.wait(timeout):
+            raise ServerError(
+                f"AZURE2 did not report a listening port within {timeout}s.")
+        if self.process.poll() is not None:
+            raise ServerError(
+                f"AZURE2 exited (code {self.process.returncode}) before "
+                "listening; check the .azr file and binary.")
+        return self.port
 
     def is_alive(self):
         return self.process is not None and self.process.poll() is None
@@ -123,4 +165,10 @@ class server:
                     self.process.wait(timeout=timeout)
                 except subprocess.TimeoutExpired:
                     pass
+        # Closing stdout ends the reader thread (it's a daemon, but tidy up).
+        if self.process.stdout is not None:
+            try:
+                self.process.stdout.close()
+            except OSError:
+                pass
         self.process = None

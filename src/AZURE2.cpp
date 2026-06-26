@@ -90,6 +90,8 @@ void printHelp() {
 #ifdef USE_NLOPT
 	     << std::setw(25) << std::left << "\t--use-nlopt:" << std::setw(0) << "Use NLopt minimizer (BOBYQA) instead of Minuit2." << std::endl
 #endif
+	     << std::setw(25) << std::left << "\t--use-gradient:" << std::setw(0) << "Use Minuit2 (MIGRAD) with the analytic gradient (default: numerical)." << std::endl
+	     << std::setw(25) << std::left << "\t--use-lm:" << std::setw(0) << "Use the Levenberg-Marquardt minimizer (analytic Jacobian; falls back to MIGRAD)." << std::endl
 	     ;
 }
 
@@ -146,6 +148,8 @@ bool parseOptions(int argc, char *argv[], Config& configure) {
 #ifdef USE_NLOPT
     else if(*it=="--use-nlopt") configure.paramMask |= Config::USE_NLOPT_MINIMIZER;
 #endif
+    else if(*it=="--use-lm") configure.paramMask |= Config::USE_LM_MINIMIZER;
+    else if(*it=="--use-gradient") configure.paramMask |= Config::USE_ANALYTIC_GRADIENT;
     else if(*it=="--no-gui") continue;
     else configure.outStream << "WARNING: Unknown option " << *it << '.' << std::endl;
   }

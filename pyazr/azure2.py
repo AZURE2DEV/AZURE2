@@ -6,7 +6,6 @@ caller dispatch work to a specific instance (e.g. for parallel chi-squared
 evaluations across a worker pool).
 """
 
-import socket
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -14,28 +13,6 @@ import numpy as np
 from .client import client
 from .parameters import Parameter, ParameterSet
 from .server import server
-
-
-def _find_free_port(start, count):
-    """Return a list of ``count`` free TCP ports starting near ``start``.
-
-    Probing avoids the silent failures that happen when a requested port is
-    already in use by a stale instance.
-    """
-    ports = []
-    candidate = start
-    while len(ports) < count:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            try:
-                s.bind(("", candidate))
-                ports.append(candidate)
-            except OSError:
-                pass
-        candidate += 1
-        if candidate > start + count + 1000:
-            raise RuntimeError("Could not find enough free ports for AZURE2.")
-    return ports
 
 
 class azure2:
@@ -48,11 +25,14 @@ class azure2:
         ----------
         file : the ``.azr`` configuration file.
         nprocs : number of parallel AZURE2 instances to spawn.
-        port : base TCP port; instance ``i`` uses ``port + i`` (or the next
-            free ports when ``auto_port`` is set).
+        port : base TCP port used only when ``auto_port=False`` (instance ``i``
+            then binds ``port + i``).  Ignored when ``auto_port`` is set.
         binary : path to the AZURE2 executable (auto-detected if ``None``).
         verbose : forward subprocess output to the console.
-        auto_port : probe for free ports instead of assuming they are free.
+        auto_port : let the OS assign each instance a unique free port (bind
+            port 0; the server reports back the port it got).  This is race-free,
+            unlike probing, so concurrent instances can never collide.  The
+            actual ports are available as :attr:`ports` after construction.
         """
         self.file = file
         self.nprocs = nprocs
@@ -65,10 +45,16 @@ class azure2:
         self.servers = []
         self.clients = []
 
+        # With auto_port we no longer *probe* for free ports (which raced: the
+        # probe released the port before the server bound it).  Instead we ask
+        # the OS to assign one via port 0; each server reports the port it
+        # actually got, so two instances can never collide.  Explicit ports
+        # (auto_port=False) are still honored verbatim for callers who pin them.
         if auto_port:
-            self.ports = _find_free_port(port, nprocs)
+            self.requested_ports = [0] * nprocs
         else:
-            self.ports = [port + i for i in range(nprocs)]
+            self.requested_ports = [port + i for i in range(nprocs)]
+        self.ports = list(self.requested_ports)   # filled in with real ports
 
         self._closed = False
         try:
@@ -102,25 +88,29 @@ class azure2:
         """
         # Launch every subprocess first; Popen is non-blocking, so all the
         # AZURE2 processes start booting concurrently.
-        for p in self.ports:
+        for p in self.requested_ports:
             self.servers.append(
                 server(p, self.file, binary=self.binary, verbose=self.verbose)
             )
 
         if self.nprocs == 1:
             # Avoid thread-pool overhead in the common single-instance case.
-            # client.connect() polls until the port is accepting connections,
-            # so no fixed sleep is needed here.
-            self.clients = [client(port=p) for p in self.ports]
-            for c in self.clients:
-                c.communicate("INITIALIZE", [0])
+            # Wait for the server to report its actual (OS-assigned) port, then
+            # connect to exactly that port -- no probing, no race.
+            self.ports = [self.servers[0].wait_until_listening()]
+            self.clients = [client(port=self.ports[0])]
+            self.clients[0].communicate("INITIALIZE", [0])
             return
 
         with ThreadPoolExecutor(max_workers=self.nprocs) as pool:
-            # connect() polls until each server's port is accepting
-            # connections; running the polls in parallel overlaps the
-            # subprocesses' startup latency.  map preserves order, so
-            # self.clients stays aligned with self.ports (and thus `proc`).
+            # Wait for every server's bound port in parallel (each blocks on the
+            # heavy startup), keeping order so self.ports/clients stay aligned
+            # with `proc`.
+            self.ports = list(pool.map(lambda s: s.wait_until_listening(),
+                                       self.servers))
+
+            # connect() still polls until the port is accepting, run in parallel
+            # to overlap any residual latency.
             self.clients = list(pool.map(lambda p: client(port=p), self.ports))
 
             # Fan out the heavy INITIALIZE so the processes set up in parallel.
