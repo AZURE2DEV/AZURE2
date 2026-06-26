@@ -171,4 +171,9 @@ class server:
                 self.process.stdout.close()
             except OSError:
                 pass
+        # Join the reader so no background thread is left alive -- important if
+        # the caller later forks (a live thread at fork can deadlock the child).
+        if self._reader is not None:
+            self._reader.join(timeout=2.0)
+            self._reader = None
         self.process = None
