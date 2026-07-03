@@ -901,8 +901,13 @@ void CNuc::SortPathways(const Config& configure) {
 	    if(this->GetPair(finalChannel->GetPairNum())->GetPType()!=0) continue;  //ensure the configuration is a particle pair
 	    int chDecayNum=entrancePair->IsDecay(finalChannel->GetPairNum());
 	    if(!chDecayNum) continue; //if it is actually a resonance decay...
-	    for(int kp=1;kp<=entrancePair->GetDecay(chDecayNum)->NumKGroups();kp++) { 
+	    for(int kp=1;kp<=entrancePair->GetDecay(chDecayNum)->NumKGroups();kp++) {
 	      if(entrancePair->GetDecay(chDecayNum)->GetKGroup(kp)->GetS()!=theKGroup->GetS()) continue;
+	      // The intermediate (channel-capture) decay is a particle decay (aa!=ir),
+	      // so its KGroups are the 3-parameter UPOS variety: for each (s,sp) there is
+	      // one KGroup per secondary-channel spin sp2, all holding identical MGroups.
+	      if(entrancePair->GetDecay(chDecayNum)->GetKGroup(kp)->GetSp()!=
+		 entrancePair->GetDecay(chDecayNum)->GetKGroup(kp)->GetSp2()) continue;
 	      for(int mp=1;mp<=entrancePair->GetDecay(chDecayNum)->GetKGroup(kp)->NumMGroups();mp++) {
 		MGroup *chMGroup=entrancePair->GetDecay(chDecayNum)->GetKGroup(kp)->GetMGroup(mp);
 		AChannel *chChannel=this->GetJGroup(chMGroup->GetJNum())->GetChannel(chMGroup->GetChNum());
