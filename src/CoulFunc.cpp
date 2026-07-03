@@ -132,7 +132,7 @@ CoulWaves CoulFunc::operator()(int l,double radius,double energy) {
   }
 
   // Try to use the global cache if available
-  if(g_coulFuncCache) {
+  if(g_coulFuncCache && useGlobalCache_) {
     CoulFuncCache::CoulFuncKey key;
     key.z1 = z1();
     key.z2 = z2();
@@ -140,9 +140,8 @@ CoulWaves CoulFunc::operator()(int l,double radius,double energy) {
     key.l = l;
     key.radius = radius;
 
-    // Check if we have cached data for this parameter set
-    if(g_coulFuncCache->IsInRange(key, energy)) {
-      result = g_coulFuncCache->GetInterpolatedCoulWaves(key, energy);
+    // Single-pass cached lookup (acceptance + interpolation in one map traversal)
+    if(g_coulFuncCache->TryGetCoulWaves(key, energy, result)) {
       setLast(l, radius, energy, result);
       return result;
     }
@@ -187,7 +186,7 @@ CoulWaves CoulFunc::operator()(int l,double radius,double energy) {
   result=newResult;
 
   // Add computed result to global cache for future use
-  if(g_coulFuncCache) {
+  if(g_coulFuncCache && useGlobalCache_) {
     CoulFuncCache::CoulFuncKey key;
     key.z1 = z1();
     key.z2 = z2();

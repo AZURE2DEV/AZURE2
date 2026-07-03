@@ -2,10 +2,13 @@
 #define REACTIONRATE_H
 
 #include "Constants.h"
+#include <vector>
 
 class CNuc;
 
-extern double gsl_reactionrate_integration(double,CNuc*,const Config&,int,int);
+extern std::vector<double> gsl_reactionrate_breakpoints(CNuc*,int);
+extern double gsl_reactionrate_integration(double,CNuc*,const Config&,int,int,
+					   const std::vector<double>&);
 
 ///A container structure for a reaction rate.
 

@@ -95,6 +95,22 @@ public:
   int GetExpectedPointCount(double startEnergy, double endEnergy, CNuc* compound);
 
   /*!
+   * \brief Get the resonances (CM energy + total width) within an energy range.
+   *
+   * Thin public accessor around the internal resonance finder so that other
+   * integrators (e.g. the reaction-rate integration) can place integration
+   * breakpoints at the resonance energies.
+   *
+   * \param startEnergy Highest energy of the range (CM frame)
+   * \param endEnergy   Lowest energy of the range (CM frame)
+   * \param compound    Pointer to compound nucleus for level information
+   * \return Vector of ResonanceInfo (energy, totalWidth), sorted by energy
+   */
+  std::vector<ResonanceInfo> GetResonances(double startEnergy, double endEnergy, CNuc* compound) {
+    return IdentifyResonances(startEnergy, endEnergy, compound);
+  }
+
+  /*!
    * \brief Set grid configuration
    * \param config New configuration parameters
    */

@@ -2,9 +2,39 @@
 #include <algorithm>
 #include <iostream>
 #include <cmath>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 // Global cache instance
 CoulFuncCache* g_coulFuncCache = nullptr;
+
+// Maximum distance (MeV) between an energy grid point and the requested energy
+// for the cached value to be considered usable for interpolation.
+static const double kCacheMaxDistance = 0.00001;
+
+CoulFuncCache::CoulFuncCache() {
+#ifdef _OPENMP
+    int n = omp_get_max_threads();
+#else
+    int n = 1;
+#endif
+    if (n < 1) n = 1;
+    threadCaches_.resize(n);
+}
+
+/*!
+ * Returns the calling thread's private cache map (no locking required).
+ */
+std::map<CoulFuncCache::CoulFuncKey, CoulFuncCache::CoulFuncData>& CoulFuncCache::localCache() const {
+#ifdef _OPENMP
+    int tid = omp_get_thread_num();
+#else
+    int tid = 0;
+#endif
+    if (tid < 0 || tid >= (int)threadCaches_.size()) tid = 0;
+    return threadCaches_[tid];
+}
 
 /*!
  * Initialize the global Coulomb function cache
@@ -30,10 +60,8 @@ void CleanupCoulFuncCache() {
  * Inserts in sorted order to maintain energy grid ordering
  */
 void CoulFuncCache::AddCoulWaves(const CoulFuncKey& key, double energy, const CoulWaves& waves) {
-    std::lock_guard<std::mutex> lock(cache_mutex_);
-
     // Get or create the data structure for this key
-    CoulFuncData& data = cache_[key];
+    CoulFuncData& data = localCache()[key];
 
     // Find insertion point to keep energies sorted
     auto it = std::lower_bound(data.energies.begin(), data.energies.end(), energy);
@@ -66,9 +94,7 @@ void CoulFuncCache::AddCoulWaves(const CoulFuncKey& key, double energy, const Co
  * This sorts the energy grids and computes min/max for efficient lookups
  */
 void CoulFuncCache::Finalize() {
-    std::lock_guard<std::mutex> lock(cache_mutex_);
-
-    for (auto& entry : cache_) {
+    for (auto& entry : localCache()) {
         CoulFuncData& data = entry.second;
 
         // Create paired vector for sorting
@@ -106,14 +132,13 @@ void CoulFuncCache::Finalize() {
  * Get interpolated Coulomb functions at the specified energy
  */
 CoulWaves CoulFuncCache::GetInterpolatedCoulWaves(const CoulFuncKey& key, double energy) const {
-    std::lock_guard<std::mutex> lock(cache_mutex_);
-
     // Default return value
     CoulWaves result = {0.0, 0.0, 0.0, 0.0};
 
     // Check if we have data for this key
-    auto it = cache_.find(key);
-    if (it == cache_.end()) {
+    const std::map<CoulFuncKey, CoulFuncData>& cache = localCache();
+    auto it = cache.find(key);
+    if (it == cache.end()) {
         return result;
     }
 
@@ -181,80 +206,68 @@ CoulWaves CoulFuncCache::InterpolateCoulWaves(double energy, double e1, double e
 }
 
 /*!
+ * Single-pass lookup: combines the old IsInRange (acceptance test) and
+ * GetInterpolatedCoulWaves (value computation) so the cache map is traversed
+ * only once per query.  Preserves the original acceptance rules exactly.
+ */
+bool CoulFuncCache::TryGetCoulWaves(const CoulFuncKey& key, double energy, CoulWaves& out) const {
+    const std::map<CoulFuncKey, CoulFuncData>& cache = localCache();
+    auto it = cache.find(key);
+    if (it == cache.end()) return false;
+
+    const CoulFuncData& data = it->second;
+    if (data.energies.empty() || energy < data.minEnergy || energy > data.maxEnergy) return false;
+
+    auto upper_it = std::lower_bound(data.energies.begin(), data.energies.end(), energy);
+
+    // Exact grid point only.  We deliberately do NOT interpolate between nearby
+    // energies: for a fixed channel radius the cache is queried while sweeping
+    // energy (adaptive reaction-rate / cross-section integrals), and returning an
+    // interpolated value for an energy that is merely *close* to a cached one
+    // makes sigma(E) inconsistent from one quadrature evaluation to the next.
+    // That inconsistency defeats adaptive integrators (gsl reports "divergent")
+    // and made the reaction rate depend on cache/thread history.  Exact-match
+    // memoization is self-consistent and still fast for repeated evaluations.
+    if (upper_it != data.energies.end() && fabs(*upper_it - energy) < 1e-12) {
+        out = data.coulwaves[std::distance(data.energies.begin(), upper_it)];
+        return true;
+    }
+    return false;
+}
+
+/*!
  * Check if we have cached data for a specific parameter set
  */
 bool CoulFuncCache::HasData(const CoulFuncKey& key) const {
-    std::lock_guard<std::mutex> lock(cache_mutex_);
-    return cache_.find(key) != cache_.end();
+    const std::map<CoulFuncKey, CoulFuncData>& cache = localCache();
+    return cache.find(key) != cache.end();
 }
 
 /*!
  * Check if a specific energy is within the cached energy range
- * and that nearby grid points are close enough (within 0.001 MeV) for reliable interpolation
+ * and that nearby grid points are close enough for reliable interpolation
  */
 bool CoulFuncCache::IsInRange(const CoulFuncKey& key, double energy) const {
-    std::lock_guard<std::mutex> lock(cache_mutex_);
-
-    auto it = cache_.find(key);
-    if (it == cache_.end()) {
-        return false;
-    }
-
-    const CoulFuncData& data = it->second;
-
-    // Check if energy is within overall range
-    if (energy < data.minEnergy || energy > data.maxEnergy) {
-        return false;
-    }
-
-    // Check if we have data points close enough for interpolation
-    // Find the surrounding energy points
-    auto upper_it = std::lower_bound(data.energies.begin(), data.energies.end(), energy);
-
-    // Check for exact match
-    if (upper_it != data.energies.end() && fabs(*upper_it - energy) < 1e-12) {
-        return true;
-    }
-
-    // Check distances to nearest grid points
-    const double maxDistance = 0.00001; // Maximum distance in MeV for interpolation
-
-    if (upper_it == data.energies.begin()) {
-        // Return false
-        return false;
-    }
-
-    if (upper_it == data.energies.end()) {
-        // Energy is after last point, check distance to last point
-        return false;
-    }
-
-    // Energy is between two points, check distances to both
-    auto lower_it = upper_it - 1;
-    double distToLower = energy - *lower_it;
-    double distToUpper = *upper_it - energy;
-
-    return (distToLower <= maxDistance && distToUpper <= maxDistance);
+    CoulWaves dummy;
+    return TryGetCoulWaves(key, energy, dummy);
 }
 
 /*!
- * Clear all cached data
+ * Clear all cached data (all per-thread caches)
  */
 void CoulFuncCache::Clear() {
-    std::lock_guard<std::mutex> lock(cache_mutex_);
-    cache_.clear();
+    for (auto& c : threadCaches_) c.clear();
 }
 
 /*!
  * Print cache statistics for debugging
  */
 void CoulFuncCache::PrintStats() const {
-    std::lock_guard<std::mutex> lock(cache_mutex_);
-
+    const std::map<CoulFuncKey, CoulFuncData>& cache = localCache();
     std::cout << "=== CoulFunc Cache Statistics ===" << std::endl;
-    std::cout << "Number of cached parameter sets: " << cache_.size() << std::endl;
+    std::cout << "Number of cached parameter sets (this thread): " << cache.size() << std::endl;
 
-    for (const auto& entry : cache_) {
+    for (const auto& entry : cache) {
         const CoulFuncKey& key = entry.first;
         const CoulFuncData& data = entry.second;
 

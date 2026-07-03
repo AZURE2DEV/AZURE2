@@ -3,7 +3,6 @@
 
 #include <map>
 #include <vector>
-#include <mutex>
 #include <math.h>
 #include "CoulFunc.h"
 
@@ -49,15 +48,29 @@ public:
     };
 
 private:
-    std::map<CoulFuncKey, CoulFuncData> cache_;
-    mutable std::mutex cache_mutex_;  // Protect cache from concurrent access
+    // Per-thread caches.  The cache is a lazily-filled performance
+    // approximation, so giving each OpenMP thread its own map removes all
+    // locking from the hot path (the previous single mutex-protected map
+    // serialized every Coulomb lookup across threads).
+    mutable std::vector<std::map<CoulFuncKey, CoulFuncData>> threadCaches_;
+    std::map<CoulFuncKey, CoulFuncData>& localCache() const;
 
 public:
+    CoulFuncCache();
+
     /*!
      * Add pre-computed Coulomb functions for a specific parameter set
      * Called during cache initialization to populate the grid
      */
     void AddCoulWaves(const CoulFuncKey& key, double energy, const CoulWaves& waves);
+
+    /*!
+     * Look up cached Coulomb functions at the specified energy in a single pass.
+     * Returns true and fills \p out only if an exact grid point exists or the
+     * bracketing grid points are close enough for reliable interpolation
+     * (combines the old IsInRange + GetInterpolatedCoulWaves lookups).
+     */
+    bool TryGetCoulWaves(const CoulFuncKey& key, double energy, CoulWaves& out) const;
 
     /*!
      * Get interpolated Coulomb functions at the specified energy

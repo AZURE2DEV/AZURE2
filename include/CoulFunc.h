@@ -60,6 +60,14 @@ class CoulFunc {
   void setUseHybridMethod(bool useHybrid);
   bool getUseHybridMethod() const;
 
+  // The global (radius-keyed, mutex-protected) Coulomb cache only helps when the
+  // same radius is queried across many energies (e.g. penetrabilities at the
+  // channel radius).  For external-capture integrals the radius is the
+  // integration variable, so the cache never hits and its per-call mutex lock
+  // serializes the OpenMP threads.  Disable it for those instances.
+  void SetUseGlobalCache(bool use) { useGlobalCache_ = use; }
+  bool GetUseGlobalCache() const { return useGlobalCache_; }
+
  private:
   // Hybrid method calculation
   CoulWaves computeHybrid(int l, double radius, double energy);
@@ -73,6 +81,7 @@ class CoulFunc {
   DEShiftParams dEShiftParams_;
   bool useGSLFunctions_;
   bool useHybridMethod_;
+  bool useGlobalCache_ = true;
   int z1_;
   int z2_;
   int lLast_;

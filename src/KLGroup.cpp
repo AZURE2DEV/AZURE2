@@ -37,17 +37,11 @@ int KLGroup::NumInterferences() const {
  */
 
 int KLGroup::IsInterference(Interference interference) {
-  bool b=false;
-  int c=0;
-  while(!b&&c<this->NumInterferences())
-    {
-      if(interference.GetM1()==this->GetInterference(c+1)->GetM1()&&
-	 interference.GetM2()==this->GetInterference(c+1)->GetM2()&&
-	 interference.GetInterferenceType()==this->GetInterference(c+1)->GetInterferenceType()) b=true;
-	 c++;
-    }
-  if(b) return c;
-  else return 0;
+  std::tuple<int,int,std::string> key(interference.GetM1(),interference.GetM2(),
+				      interference.GetInterferenceType());
+  std::map<std::tuple<int,int,std::string>,int>::const_iterator it=interferenceIndex_.find(key);
+  if(it!=interferenceIndex_.end()) return it->second;
+  return 0;
 }
 
 /*!
@@ -56,6 +50,10 @@ int KLGroup::IsInterference(Interference interference) {
 
 void KLGroup::AddInterference(Interference interference) {
   interferences_.push_back(interference);
+  std::tuple<int,int,std::string> key(interference.GetM1(),interference.GetM2(),
+				      interference.GetInterferenceType());
+  // Store the 1-based position, matching the previous IsInterference() return value.
+  interferenceIndex_[key]=(int)interferences_.size();
 }
 
 /*!
