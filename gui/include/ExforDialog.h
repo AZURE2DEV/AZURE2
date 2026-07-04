@@ -58,6 +58,7 @@ class ExforDialog : public QDialog {
   QLabel* statusLabel_;
 
   QTableWidget* resultsTable_;
+  QLabel* datasetInfoLabel_;
   QPushButton* downloadButton_;
 
   QPlainTextEdit* rawView_;

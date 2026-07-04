@@ -150,21 +150,39 @@ static QStringList splitCsvLine(const QString& line) {
   return fields;
 }
 
+// Extract the unit string enclosed in parentheses from a CSV header.
+static QString extractUnit(const QString& header) {
+  int start = header.indexOf('(');
+  int end = header.indexOf(')', start);
+  if (start >= 0 && end > start) {
+    return header.mid(start + 1, end - start - 1).trimmed().toUpper();
+  }
+  return QString();
+}
+
 // Multiplier to convert an energy column to MeV based on its unit token.
 static double energyToMeV(const QString& header) {
-  QString h = header.toUpper();
-  if (h.contains("(MEV)")) return 1.0;
-  if (h.contains("(KEV)")) return 1.0e-3;
-  if (h.contains("(EV)"))  return 1.0e-6;
+  QString unit = extractUnit(header);
+  if (unit.isEmpty()) unit = header.toUpper();
+  if (unit.contains("GEV")) return 1e3;
+  if (unit.contains("MEV")) return 1.0;
+  if (unit.contains("KEV")) return 1.0e-3;
+  if (unit.contains("MILLI-EV") || unit.contains("MILLIEV")) return 1.0e-9;
+  if (unit.contains("EV"))  return 1.0e-6;
   return 1.0e-6;  // EXFOR computational default is eV
 }
 
 // Multiplier to convert a cross-section column to barn (or barn/sr).
 static double crossToBarn(const QString& header) {
-  QString h = header.toUpper();
-  if (h.contains("(MICRO-B")) return 1.0e-6;
-  if (h.contains("(MB"))      return 1.0e-3;  // MB or MB/SR
-  if (h.contains("(B"))       return 1.0;     // B or B/SR
+  QString unit = extractUnit(header);
+  if (unit.isEmpty()) unit = header.toUpper();
+  if (unit.startsWith("MICRO-B") || unit.startsWith("MU-B") || unit.startsWith("MUB")) return 1.0e-6;
+  if (unit.startsWith("MB")) return 1.0e-3;
+  if (unit.startsWith("KB")) return 1.0e3;
+  if (unit.startsWith("B")) return 1.0;
+  if (unit.startsWith("NB")) return 1.0e-9;
+  if (unit.startsWith("PB")) return 1.0e-12;
+  if (unit.startsWith("FB")) return 1.0e-15;
   return 1.0;
 }
 
@@ -176,17 +194,24 @@ static double crossToBarn(const QString& header) {
 // energy axis as well (see parseCsv).
 static bool sFactorBarnMeV(const QString& header, double& factor,
                            double& energyFactor) {
-  QString h = header.toUpper();
+  QString unit = extractUnit(header);
+  if (unit.isEmpty()) unit = header.toUpper();
   // Must look like cross-section * energy.
-  if (!h.contains("*") || !h.contains("EV")) return false;
+  if (!unit.contains("*") || !unit.contains("EV")) return false;
+  
   double barn = 1.0;
-  if (h.contains("MICRO-B")) barn = 1.0e-6;
-  else if (h.contains("MB")) barn = 1.0e-3;
-  else if (h.contains("B"))  barn = 1.0;
+  if (unit.startsWith("MICRO-B") || unit.startsWith("MU-B") || unit.startsWith("MUB")) barn = 1.0e-6;
+  else if (unit.startsWith("MB")) barn = 1.0e-3;
+  else if (unit.startsWith("NB")) barn = 1.0e-9;
+  else if (unit.startsWith("B"))  barn = 1.0;
+  
   double energy = 1.0e-6;  // EV -> MeV by default
-  if (h.contains("MEV"))      energy = 1.0;
-  else if (h.contains("KEV")) energy = 1.0e-3;
-  else if (h.contains("EV"))  energy = 1.0e-6;
+  if (unit.contains("GEV")) energy = 1e3;
+  else if (unit.contains("MEV")) energy = 1.0;
+  else if (unit.contains("KEV")) energy = 1.0e-3;
+  else if (unit.contains("MILLI-EV") || unit.contains("MILLIEV")) energy = 1.0e-9;
+  else if (unit.contains("EV")) energy = 1.0e-6;
+  
   factor = barn * energy;  // -> barn*MeV
   energyFactor = energy;
   return true;
@@ -224,15 +249,16 @@ bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
   for (int i = 0; i < headers.size(); ++i) {
     QString h = headers.at(i).trimmed();
     QString up = h.toUpper();
+    QString unit = extractUnit(up);
 
     // Incident energy column. Prefer the lab energy "EN", but also accept a
     // centre-of-mass energy "EN-CM" (converted to lab below). Skip EN-RSL,
     // EN-ERR, ... The unit may be EV, KEV or MEV - energyToMeV() reads it.
     if (eCol < 0 && (up.startsWith("EN ") || up.startsWith("EN(")) &&
-        up.contains("EV")) {
+        unit.contains("EV")) {
       eCol = i;
       eFactor = energyToMeV(h);
-    } else if (eCmCol < 0 && up.startsWith("EN-CM") && up.contains("EV")) {
+    } else if (eCmCol < 0 && up.startsWith("EN-CM") && unit.contains("EV")) {
       eCmCol = i;
       eCmFactor = energyToMeV(h);
     }
@@ -249,7 +275,7 @@ bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
     }
 
     // Angle column.
-    if (angCol < 0 && up.startsWith("ANG") && up.contains("ADEG")) {
+    if (angCol < 0 && up.startsWith("ANG") && unit.contains("DEG")) {
       angCol = i;
       angIsCosine = false;
     } else if (angCol < 0 && up.startsWith("COS")) {
@@ -261,9 +287,9 @@ bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
     // preferring the total error (ERR-T) over partial components.
     if (up.startsWith("ERR")) {
       bool isTotal = up.startsWith("ERR-T");
-      bool isPct = up.contains("PER-CENT") || up.contains("PERCENT") ||
-                   up.contains("(PER");
-      bool isAbs = up.contains("(B");  // matches (B), (B/SR), (MB), ...
+      bool isPct = unit.contains("PER-CENT") || unit.contains("PERCENT") ||
+                   unit.contains("PER");
+      bool isAbs = !unit.isEmpty() && !isPct && unit.contains("B"); 
       if (isAbs && (errAbsCol < 0 || (isTotal && !absIsTotal))) {
         errAbsCol = i;
         errAbsFactor = crossToBarn(h);

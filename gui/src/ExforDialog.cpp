@@ -63,15 +63,21 @@ ExforDialog::ExforDialog(PairsModel* pairsModel, QWidget* parent)
 
   // ---- Results table -------------------------------------------------------
   resultsTable_ = new QTableWidget;
-  resultsTable_->setColumnCount(5);
+  resultsTable_->setColumnCount(6);
   resultsTable_->setHorizontalHeaderLabels(
       QStringList() << tr("Author / Year") << tr("Reaction") << tr("Points")
-                    << tr("E range (MeV, lab)") << tr("DatasetID"));
+                    << tr("E range (MeV, lab)") << tr("DatasetID") << tr("Reference"));
   resultsTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
   resultsTable_->setSelectionMode(QAbstractItemView::SingleSelection);
   resultsTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
   resultsTable_->horizontalHeader()->setStretchLastSection(true);
   resultsTable_->verticalHeader()->setVisible(false);
+
+  datasetInfoLabel_ = new QLabel(tr("<i>Select a dataset to view details...</i>"));
+  datasetInfoLabel_->setWordWrap(true);
+  datasetInfoLabel_->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::LinksAccessibleByMouse);
+  datasetInfoLabel_->setFrameStyle(QFrame::StyledPanel | QFrame::Sunken);
+  datasetInfoLabel_->setContentsMargins(5, 5, 5, 5);
 
   downloadButton_ = new QPushButton(tr("Show / Preview Dataset"));
   downloadButton_->setEnabled(false);
@@ -109,6 +115,7 @@ ExforDialog::ExforDialog(PairsModel* pairsModel, QWidget* parent)
   QVBoxLayout* main = new QVBoxLayout(this);
   main->addWidget(queryBox);
   main->addWidget(resultsTable_, 1);
+  main->addWidget(datasetInfoLabel_);
   main->addWidget(downloadButton_);
   main->addWidget(previewSplit, 2);
   main->addLayout(bottom);
@@ -228,13 +235,34 @@ void ExforDialog::onSearchFinished(const QList<ExforDataset>& datasets) {
     resultsTable_->setItem(i, 2, new QTableWidgetItem(QString::number(d.npts)));
     resultsTable_->setItem(i, 3, new QTableWidgetItem(erange));
     resultsTable_->setItem(i, 4, new QTableWidgetItem(d.id));
+    resultsTable_->setItem(i, 5, new QTableWidgetItem(d.reference));
   }
   resultsTable_->resizeColumnsToContents();
   statusLabel_->setText(tr("Found %1 dataset(s).").arg(datasets.size()));
 }
 
 void ExforDialog::onDatasetSelectionChanged() {
-  downloadButton_->setEnabled(!resultsTable_->selectedItems().isEmpty());
+  QList<QTableWidgetItem*> selected = resultsTable_->selectedItems();
+  downloadButton_->setEnabled(!selected.isEmpty());
+  if (!selected.isEmpty()) {
+    int row = selected.first()->row();
+    if (row >= 0 && row < exfor_->datasets().size()) {
+      const ExforDataset& d = exfor_->datasets().at(row);
+      QString info = QString("<b>Dataset ID:</b> %1 &nbsp;&nbsp;|&nbsp;&nbsp; "
+                             "<b>Reaction:</b> %2 &nbsp;&nbsp;|&nbsp;&nbsp; "
+                             "<b>Points:</b> %3<br>"
+                             "<b>Author / Year:</b> %4<br>"
+                             "<b>Reference:</b> %5")
+                         .arg(d.id)
+                         .arg(d.reactionCode)
+                         .arg(d.npts)
+                         .arg(d.author)
+                         .arg(d.reference);
+      datasetInfoLabel_->setText(info);
+    }
+  } else {
+    datasetInfoLabel_->setText(tr("<i>Select a dataset to view details...</i>"));
+  }
 }
 
 void ExforDialog::downloadSelected() {
