@@ -217,6 +217,19 @@ class azure2:
     def shift_indices(self, proc=0):
         return self.clients[proc].communicate("GET_SHIFT_INDICES", [0])
 
+    def energy_indices(self, proc=0):
+        """Packed indices of the free R-matrix level-energy parameters.
+
+        Returns the positions of the level-energy parameters within
+        ``params_rwa`` (the non-fixed parameter vector), the same convention
+        as :meth:`norm_indices` and :meth:`shift_indices`.  Unlike those --
+        which the C++ side derives by substring-matching parameter names --
+        this uses the structured ``type`` code from ``GET_PARAMS_INFO``
+        (``kind == "energy"``), so it never depends on how energies are named.
+        """
+        return [p.free_index for p in self.parameters
+                if p.kind == "energy" and not p.fixed]
+
     # -- param.sav helpers ----------------------------------------------------
 
     def update_rwa_params_from_sav(self):
