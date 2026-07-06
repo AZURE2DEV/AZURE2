@@ -59,8 +59,8 @@ class AZUREAPI {
   // Get indeces of energy shift parameters
   vector_r GetEnergyShiftIndices( );
   // Number of numeric fields packed per parameter by GetParameterInfo().
-  // Keep this in sync with pyazr/azure2.py (Parameter._NFIELDS).
-  static const int kParamInfoFields = 14;
+  // Keep this in sync with pyazr/parameters.py (Parameter._NFIELDS).
+  static const int kParamInfoFields = 15;
   /*!
    * Returns structured metadata describing every parameter, in the same order
    * as params_names() / params_all() / params_fixed().
@@ -81,6 +81,8 @@ class AZUREAPI {
    *   11 fixed         1 if the parameter is fixed, 0 if free
    *   12 value         current (physical) parameter value
    *   13 segment_key   data-segment key (norm / energy-shift params only)
+   *   14 wigner_limit  Wigner limit of the channel reduced width, i.e. the
+   *                    bound on |reduced-width amplitude| (width params only)
    */
   vector_r GetParameterInfo( ) const;
   

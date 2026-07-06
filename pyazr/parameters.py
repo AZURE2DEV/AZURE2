@@ -37,7 +37,7 @@ class Parameter:
 
     # Number of doubles per record emitted by AZUREAPI::GetParameterInfo.
     # Must match AZUREAPI::kParamInfoFields.
-    _NFIELDS = 14
+    _NFIELDS = 15
 
     index: int                      # position among *all* parameters
     name: str                       # raw AZURE2 parameter name
@@ -60,6 +60,12 @@ class Parameter:
     pair: Optional[int] = None
     radiation_type: Optional[str] = None   # 'P' (particle), 'E', 'M', ...
 
+    # Wigner limit of the channel's reduced width (width parameters only).
+    # This is the bound AZURE2 places on the reduced-width amplitude when the
+    # Wigner-limit constraint is enabled, in the same units as ``value`` for a
+    # width parameter; ``None`` for non-width parameters.
+    wigner_limit: Optional[float] = None
+
     # Data-segment information (norm / shift parameters).
     segment_key: Optional[int] = None
 
@@ -79,7 +85,7 @@ class Parameter:
         returned by ``GET_PARAMS_INFO``.
         """
         (type_code, jgroup, J, parity, level, level_energy, channel, L, S,
-         pair, radtype, fixed, value, segment_key) = record
+         pair, radtype, fixed, value, segment_key, wigner_limit) = record
 
         rad = chr(int(round(radtype))) if radtype != -1 else None
 
@@ -100,6 +106,7 @@ class Parameter:
             S=_opt(S),
             pair=_opt(pair, integer=True),
             radiation_type=rad,
+            wigner_limit=_opt(wigner_limit),
             segment_key=_opt(segment_key, integer=True),
         )
 
@@ -114,6 +121,8 @@ class Parameter:
             bits.append(f"S={self.S}")
             bits.append(f"pair={self.pair}")
             bits.append(f"rad={self.radiation_type}")
+            if self.wigner_limit is not None:
+                bits.append(f"wigner={self.wigner_limit:.4g}")
         if self.kind in ("norm", "shift"):
             bits.append(f"segment={self.segment_key}")
         return "Parameter(" + ", ".join(bits) + ")"
@@ -182,6 +191,18 @@ class ParameterSet(list):
         src = self.free if free_only else self
         return [p.value for p in src]
 
+    def wigner_limits(self, free_only=False):
+        """Per-parameter Wigner limits, aligned one-to-one with the set.
+
+        Each entry is the Wigner limit of the corresponding width parameter's
+        reduced width (the bound on the reduced-width amplitude), or ``None``
+        for parameters that are not widths.  The list lines up index-for-index
+        with :meth:`values`, so ``zip(params.values(), params.wigner_limits())``
+        pairs every parameter with its limit.
+        """
+        src = self.free if free_only else self
+        return [p.wigner_limit for p in src]
+
     def to_records(self):
         """Every parameter as a plain ``dict`` (e.g. for a DataFrame)."""
         keys = [f.name for f in fields(Parameter) if not f.name.startswith("_")]
@@ -190,7 +211,7 @@ class ParameterSet(list):
     def table(self):
         """A human-readable, aligned text table of the parameters."""
         rows = [("idx", "name", "kind", "free", "J^pi", "E(MeV)",
-                 "L", "S", "pair", "rad", "seg", "value")]
+                 "L", "S", "pair", "rad", "seg", "value", "wigner")]
         for p in self:
             rows.append((
                 str(p.index),
@@ -205,6 +226,7 @@ class ParameterSet(list):
                 p.radiation_type or "",
                 "" if p.segment_key is None else str(p.segment_key),
                 f"{p.value:.6g}",
+                "" if p.wigner_limit is None else f"{p.wigner_limit:.4g}",
             ))
         widths = [max(len(r[c]) for r in rows) for c in range(len(rows[0]))]
         lines = []
