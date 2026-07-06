@@ -1,6 +1,8 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <set>
+#include <tuple>
 #include "AngCoeff.h"
 #include "CNuc.h"
 #include "Config.h"
@@ -901,15 +903,20 @@ void CNuc::SortPathways(const Config& configure) {
 	    if(this->GetPair(finalChannel->GetPairNum())->GetPType()!=0) continue;  //ensure the configuration is a particle pair
 	    int chDecayNum=entrancePair->IsDecay(finalChannel->GetPairNum());
 	    if(!chDecayNum) continue; //if it is actually a resonance decay...
+		// The intermediate (channel-capture) decay may carry the 3-parameter UPOS KGroups,
+	    // where for each (s,sp) there is one KGroup per secondary-channel spin sp2, all
+	    // holding identical MGroups.  Summing over all of them would double count the
+	    // channel-capture pathway.  Deduplicate on the physical MGroup channel triple
+	    // (JNum,ChNum,ChpNum) -- which uniquely determines (s,sp) -- so genuine sp2
+	    // duplicates are collapsed while distinct spin channels are all retained.
+	    std::set<std::tuple<int,int,int> > seenChMGroups;
 	    for(int kp=1;kp<=entrancePair->GetDecay(chDecayNum)->NumKGroups();kp++) {
 	      if(entrancePair->GetDecay(chDecayNum)->GetKGroup(kp)->GetS()!=theKGroup->GetS()) continue;
-	      // The intermediate (channel-capture) decay is a particle decay (aa!=ir),
-	      // so its KGroups are the 3-parameter UPOS variety: for each (s,sp) there is
-	      // one KGroup per secondary-channel spin sp2, all holding identical MGroups.
-	      if(entrancePair->GetDecay(chDecayNum)->GetKGroup(kp)->GetSp()!=
-		 entrancePair->GetDecay(chDecayNum)->GetKGroup(kp)->GetSp2()) continue;
 	      for(int mp=1;mp<=entrancePair->GetDecay(chDecayNum)->GetKGroup(kp)->NumMGroups();mp++) {
 		MGroup *chMGroup=entrancePair->GetDecay(chDecayNum)->GetKGroup(kp)->GetMGroup(mp);
+		if(!seenChMGroups.insert(std::make_tuple(chMGroup->GetJNum(),
+							 chMGroup->GetChNum(),
+							 chMGroup->GetChpNum())).second) continue;
 		AChannel *chChannel=this->GetJGroup(chMGroup->GetJNum())->GetChannel(chMGroup->GetChNum());
 		AChannel *chChannelp=this->GetJGroup(chMGroup->GetJNum())->GetChannel(chMGroup->GetChpNum());
 		for(int multL=1;multL<=maxECMult;multL++) { //loop over all allowed gamma parities
