@@ -174,6 +174,13 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   QGridLayout* lowerLayout = new QGridLayout;
   lowerLayout->addWidget(new QLabel(tr("Data Type:")),0,0,Qt::AlignRight);
   lowerLayout->addWidget(dataTypeCombo,0,1);
+  thmCheck = new QCheckBox(tr("THM (modified R-matrix)"));
+  thmCheck->setToolTip(tr("Treat this segment as a Trojan Horse Method "
+                          "(half-off-shell) measurement: the entrance vertex "
+                          "uses the transfer form factor instead of the "
+                          "penetrability. Requires the entrance pair's THM "
+                          "binding energy to be set."));
+  lowerLayout->addWidget(thmCheck,0,2);
 
   QGridLayout* phaseLayout = new QGridLayout;
   phaseLayout->addItem(new QSpacerItem(1,25),0,0);

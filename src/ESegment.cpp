@@ -21,11 +21,17 @@ ESegment::ESegment(SegLine segLine) {
   e_step_=0.0;
   a_step_=0.0;
   segment_chi_squared_=0.0;
-  if(segLine.isDiff()==1 || segLine.isDiff()==4) isdifferential_=true;
+  // A THM (modified R-matrix / half-off-shell) segment is flagged by an isDiff
+  // offset of 10: THM is orthogonal to the underlying observable type, so
+  // isDiff>=10 means "THM", and (isDiff-10) is the ordinary observable code
+  // (0 angle-integrated, 1 differential, ...). See docs/THM_IMPLEMENTATION.md.
+  isTHM_ = (segLine.isDiff()>=10);
+  int diff = isTHM_ ? segLine.isDiff()-10 : segLine.isDiff();
+  if(diff==1 || diff==4) isdifferential_=true;
   else isdifferential_=false;
-  if(segLine.isDiff()==4) iscmdifferential_=true;
+  if(diff==4) iscmdifferential_=true;
   else iscmdifferential_=false;
-  if(segLine.isDiff()==2) {
+  if(diff==2) {
     isphase_=true;
     j_=segLine.phaseJ();
     l_=segLine.phaseL();
@@ -34,11 +40,11 @@ ESegment::ESegment(SegLine segLine) {
     j_=0.0;
     l_=0;
   }
-  isTotalCapture_ =  (segLine.isDiff()==3) ? 1 : 0;
+  isTotalCapture_ =  (diff==3) ? 1 : 0;
   // isDiff 5/6 are angle-integrated capture segments compared only against the
   // E1 or E2 component of the cross section, respectively.
-  if(segLine.isDiff()==5) crossSectionComponent_=1;
-  else if(segLine.isDiff()==6) crossSectionComponent_=2;
+  if(diff==5) crossSectionComponent_=1;
+  else if(diff==6) crossSectionComponent_=2;
   else crossSectionComponent_=0;
   isAngDist_=false;
   maxAngDistOrder_=0;
@@ -85,11 +91,15 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   e_step_=extrapLine.eStep();
   a_step_=extrapLine.aStep();
   segment_chi_squared_=0.0;
-  if(extrapLine.isDiff()==1 || extrapLine.isDiff()==5) isdifferential_=true;
+  // THM (modified R-matrix) extrapolation segment: isDiff offset of 10 (see the
+  // SegLine constructor above and docs/THM_IMPLEMENTATION.md).
+  isTHM_ = (extrapLine.isDiff()>=10);
+  int diff = isTHM_ ? extrapLine.isDiff()-10 : extrapLine.isDiff();
+  if(diff==1 || diff==5) isdifferential_=true;
   else isdifferential_=false;
-  if(extrapLine.isDiff()==5) iscmdifferential_=true;
+  if(diff==5) iscmdifferential_=true;
   else iscmdifferential_=false;
-  if(extrapLine.isDiff()==2) {
+  if(diff==2) {
     isphase_=true;
     j_=extrapLine.phaseJ();
     l_=extrapLine.phaseL();
@@ -98,14 +108,14 @@ ESegment::ESegment(ExtrapLine extrapLine) {
     j_=0.0;
     l_=0;
   }
-  if(extrapLine.isDiff()==3) {
+  if(diff==3) {
     isAngDist_=true;
     maxAngDistOrder_=extrapLine.maxAngDistOrder();
   } else {
     isAngDist_=false;
     maxAngDistOrder_=0;
   }
-  isTotalCapture_ =  (extrapLine.isDiff()==4) ? 1 : 0;
+  isTotalCapture_ =  (diff==4) ? 1 : 0;
   crossSectionComponent_=0;
   datafile_="";
   dataNorm_= dataNormNominal_ = 1.;
@@ -179,6 +189,16 @@ bool ESegment::IsCMDifferential() const {
 
 bool ESegment::IsPhase() const {
   return isphase_;
+}
+
+/*!
+ * Returns true if this is a THM (modified R-matrix, half-off-shell) segment,
+ * whose entrance vertex uses the transfer form factor instead of the
+ * penetrability and whose cross section is the HOES formula (arbitrary units).
+ */
+
+bool ESegment::IsTHM() const {
+  return isTHM_;
 }
 
 /*!

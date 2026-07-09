@@ -22,6 +22,7 @@ PPair::PPair(NucLine nucLine)
   pair_ex_e_=nucLine.e2();
   pair_sep_e_=nucLine.sepE();
   pair_ch_rad_=nucLine.chRad();
+  binding_energy_=nucLine.bindingE();
   pair_ptype_=nucLine.pType();
   pair_key_=nucLine.ir();
   red_mass_=nucLine.m1()*nucLine.m2()/(nucLine.m1()+nucLine.m2());
@@ -185,6 +186,24 @@ double PPair::GetChRad()  const {
 
 void PPair::SetChRad( double radius ) {
   pair_ch_rad_ = radius;
+}
+
+/*!
+ * Returns the THM binding energy (MeV) of the transferred particle in the
+ * Trojan-Horse nucleus for the particle pair.
+ */
+
+double PPair::GetBindingEnergy() const {
+  return binding_energy_;
+}
+
+/*!
+ * Sets the THM binding energy (MeV) of the transferred particle in the
+ * Trojan-Horse nucleus for the particle pair.
+ */
+
+void PPair::SetBindingEnergy( double bindingEnergy ) {
+  binding_energy_ = bindingEnergy;
 }
 
 /*!

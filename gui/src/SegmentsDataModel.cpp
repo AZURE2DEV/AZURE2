@@ -228,6 +228,7 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
     else if(index.column() == 21) return line.secondaryDecayL;
     else if(index.column() == 22) return line.finalJ;
     else if(index.column() == 23) return line.delta;
+    else if(index.column() == 24) return line.isTHM;
   } else if (role==Qt::CheckStateRole && index.column()==0) {
     SegmentsDataData line = segDataLineList.at(index.row());
     if(line.isActive==1) return Qt::Checked;
@@ -336,6 +337,7 @@ bool SegmentsDataModel::setData(const QModelIndex &index, const QVariant &value,
     else if(index.column() == 21) tempData.secondaryDecayL=value.toInt();
     else if(index.column() == 22) tempData.finalJ=value.toDouble();
     else if(index.column() == 23) tempData.delta=value.toDouble();
+    else if(index.column() == 24) tempData.isTHM=value.toInt();
     else return false;
 
     segDataLineList.replace(row,tempData);

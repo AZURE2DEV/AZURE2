@@ -31,6 +31,11 @@ public:
   double GetSepE() const;
   double GetChRad() const;
   void   SetChRad(double);
+  /// THM binding energy B_xs (MeV) of the transferred particle in the
+  /// Trojan-Horse nucleus; enters the half-off-shell momentum of the
+  /// entrance transfer form factor. 0 for a conventional pair.
+  double GetBindingEnergy() const;
+  void   SetBindingEnergy(double);
   double GetRedMass() const;
   double GetI1I2Factor() const;
   /// Returns true if the two particles in the pair are identical
@@ -58,6 +63,7 @@ private:
   double pair_ex_e_;
   double pair_sep_e_;
   double pair_ch_rad_;
+  double binding_energy_;
   double red_mass_;
   double i1i2factor_;
   std::vector<Decay> decays_;

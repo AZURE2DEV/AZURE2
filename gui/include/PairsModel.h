@@ -5,7 +5,7 @@
 #include <QList>
 
 struct PairsData {
-  static const int SIZE = 15;
+  static const int SIZE = 16;
   double lightJ;
   int lightPi;
   int lightZ;
@@ -21,6 +21,7 @@ struct PairsData {
   double channelRadius;
   int pairType;
   int ecMultMask;
+  double bindingEnergy;  // THM: transferred-particle binding energy (MeV)
 };
 
 class PairsModel : public QAbstractTableModel {

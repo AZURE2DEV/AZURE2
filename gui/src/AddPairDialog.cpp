@@ -23,6 +23,9 @@ AddPairDialog::AddPairDialog(QWidget *parent) : QDialog(parent) {
   seperationEnergyText = new QLineEdit;
   channelRadiusLabel = new QLabel(tr("Channel Radius [fm]:"));
   channelRadiusText = new QLineEdit;
+  bindingEnergyLabel = new QLabel(tr("THM Binding Energy [MeV]:"));
+  bindingEnergyText = new QLineEdit;
+  bindingEnergyText->setText("0");
   pairTypeLabel = new QLabel(tr("Particle Pair Type:"));
   pairTypeCombo = new QComboBox;
   pairTypeCombo->addItem(tr("Particle, Particle"));
@@ -85,6 +88,8 @@ AddPairDialog::AddPairDialog(QWidget *parent) : QDialog(parent) {
   channelLayout->addWidget(seperationEnergyText,1,1);
   channelLayout->addWidget(channelRadiusLabel,2,0,Qt::AlignRight);
   channelLayout->addWidget(channelRadiusText,2,1);
+  channelLayout->addWidget(bindingEnergyLabel,3,0,Qt::AlignRight);
+  channelLayout->addWidget(bindingEnergyText,3,1);
   channelGroup->setLayout(channelLayout);
   
   QGroupBox *lightGroup = new QGroupBox(tr("Light Particle"));

@@ -709,6 +709,7 @@ bool LevelsTab::writeNuclearFile(QTextStream& outStream) {
 		    << qSetFieldWidth(13)  << pairs.at(channels.at(ch).pairIndex).lightG 
 		    << qSetFieldWidth(13)  << pairs.at(channels.at(ch).pairIndex).heavyG 
 		    << qSetFieldWidth(8)  << pairs.at(channels.at(ch).pairIndex).ecMultMask
+		    << qSetFieldWidth(9)  << pairs.at(channels.at(ch).pairIndex).bindingEnergy
 		    << qSetFieldWidth(0)  << endl;
 	}
       }  
@@ -783,6 +784,10 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
       if(in.status()!=QTextStream::Ok) return false;
       in >> ecMultMask;
       if(in.status()!=QTextStream::Ok) ecMultMask=0;
+      // Optional trailing THM binding energy (per pair), default 0 in legacy files.
+      double bindingEnergy;
+      in >> bindingEnergy;
+      if(in.status()!=QTextStream::Ok) bindingEnergy=0.0;
       if(firstLine) {
 	lastPair=ir;
 	firstLine=false;
@@ -798,7 +803,8 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
       }
       
       PairsData newPair={lightJ,lightPi,lightZ,lightM,lightG,heavyJ,heavyPi,heavyZ,heavyM,
-			 heavyG,excitationEnergy,seperationEnergyOut,channelRadius,pairType,ecMultMask};
+			 heavyG,excitationEnergy,seperationEnergyOut,channelRadius,pairType,ecMultMask,
+			 bindingEnergy};
       int pairIndex=ir-1;
       if(pairsModel->numPairs()<ir) {
 	emit(readNewPair(newPair,pairIndex,true));

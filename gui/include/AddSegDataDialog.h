@@ -29,6 +29,7 @@ class AddSegDataDialog : public QDialog {
   QLineEdit *lowAngleText;
   QLineEdit *highAngleText;
   QComboBox *dataTypeCombo;
+  QCheckBox *thmCheck;
   QLineEdit *dataFileText;
   QLineEdit *dataNormText;
   QLineEdit *dataNormErrorText;

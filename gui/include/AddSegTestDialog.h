@@ -31,6 +31,7 @@ class AddSegTestDialog : public QDialog {
   QLineEdit *highAngleText;
   QLineEdit *angleStepText;
   QComboBox *dataTypeCombo;
+  QCheckBox *thmCheck;
   QLineEdit *phaseJValueText;
   QLineEdit *phaseLValueText;
   QLabel *phaseJValueLabel;

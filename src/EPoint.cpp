@@ -10,6 +10,8 @@
 #include "ESegment.h"
 #include "RMatrixFunc.h"
 #include "ShftFunc.h"
+#include "ThmFunc.h"
+#include "THMMatrixFunc.h"
 #include "TargetEffect.h"
 #include "Straggling.h"
 #include "IntegratedFermiFunc.h"
@@ -51,6 +53,7 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   sfactorconv_=0.;
   is_differential_=parent->IsDifferential();
   is_phase_=parent->IsPhase();
+  is_thm_=parent->IsTHM();
   is_ang_dist_=parent->IsAngularDist();
   max_ang_dist_order_=parent->GetMaxAngDistOrder();
   j_value_=parent->GetJ();
@@ -95,6 +98,7 @@ EPoint::EPoint(double angle, double energy, ESegment* parent) {
   sfactorconv_=0.;
   is_differential_=parent->IsDifferential();
   is_phase_=parent->IsPhase();
+  is_thm_=parent->IsTHM();
   is_ang_dist_=parent->IsAngularDist();
   max_ang_dist_order_=parent->GetMaxAngDistOrder();
   j_value_=parent->GetJ();
@@ -140,6 +144,7 @@ EPoint::EPoint(double angle, double energy, int entranceKey,
   sfactorconv_=0.;
   is_differential_=isDifferential;
   is_phase_=isPhase;
+  is_thm_=false;
   is_ang_dist_=isAngularDist;
   max_ang_dist_order_=maxAngDistOrder;
   j_value_=jValue;
@@ -168,6 +173,14 @@ bool EPoint::IsDifferential() const {
 
 bool EPoint::IsPhase() const {
   return is_phase_;
+}
+
+/*!
+ * Returns true if the point belongs to a THM (modified R-matrix) segment.
+ */
+
+bool EPoint::IsTHM() const {
+  return is_thm_;
 }
 
 /*!
@@ -431,6 +444,18 @@ double EPoint::GetSFactorConversion() const {
 
 double EPoint::GetSqrtPenetrability(int jGroupNum, int channelNum) const {
   return penetrabilities_[jGroupNum-1][channelNum-1];
+}
+
+/*!
+ * Returns the THM entrance transfer form factor M_l for the channel specified
+ * by positions in the JGroup and AChannel vectors. Returns 0 if not stored
+ * (e.g. non-entrance channels, or non-THM points).
+ */
+
+double EPoint::GetThmFormFactor(int jGroupNum, int channelNum) const {
+  if(jGroupNum-1 >= (int)thm_formfactors_.size()) return 0.0;
+  if(channelNum-1 >= (int)thm_formfactors_[jGroupNum-1].size()) return 0.0;
+  return thm_formfactors_[jGroupNum-1][channelNum-1];
 }
 
 /*!
@@ -1153,6 +1178,19 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config& configure) {
 	  this->AddExpCoulombPhase(j,ch,1.0);
 	  this->AddExpHardSpherePhase(j,ch,1.0);
 	}
+	// THM entrance transfer form factor M_l (mrmpy _form_factor). Stored for
+	// every channel (0 for non-entrance channels) so it stays index-aligned
+	// with the penetrabilities. The interior LoElement above is unchanged --
+	// the form factor replaces only the entrance *vertex*, not the interior.
+	double thmFF=0.0;
+	if(this->IsTHM() && thePair==entrancePair && thePair->GetPType()==0) {
+	  double bcond=theChannel->GetBoundaryCondition();
+	  double muMeV=thePair->GetRedMass()*uconv;
+	  double bindingE=thePair->GetBindingEnergy();
+	  if(localEnergy+bindingE>0.0)
+	    thmFF=ThmFormFactor(lValue,bcond,muMeV,localEnergy,bindingE,thePair->GetChRad());
+	}
+	this->AddThmFormFactor(j,ch,thmFF);
       }
     }
   }
@@ -1165,6 +1203,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config& configure) {
     mappedPoint->sfactorconv_=sfactorconv_;
     mappedPoint->lo_elements_=lo_elements_;
     mappedPoint->penetrabilities_=penetrabilities_;
+    mappedPoint->thm_formfactors_=thm_formfactors_;
     mappedPoint->coulombphase_=coulombphase_;
     mappedPoint->hardspherephase_=hardspherephase_;
     for(int ii=1;ii<=this->NumSubPoints();ii++) {
@@ -1173,6 +1212,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config& configure) {
       subMappedPoint->sfactorconv_=this->GetSubPoint(ii)->sfactorconv_;
       subMappedPoint->lo_elements_=this->GetSubPoint(ii)->lo_elements_;
       subMappedPoint->penetrabilities_=this->GetSubPoint(ii)->penetrabilities_;
+      subMappedPoint->thm_formfactors_=this->GetSubPoint(ii)->thm_formfactors_;
       subMappedPoint->coulombphase_=this->GetSubPoint(ii)->coulombphase_;
       subMappedPoint->hardspherephase_=this->GetSubPoint(ii)->hardspherephase_;
     }
@@ -1187,6 +1227,7 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config& configure) {
   // Clear existing energy-dependent values first
   lo_elements_.clear();
   penetrabilities_.clear();
+  thm_formfactors_.clear();
   coulombphase_.clear();
   hardspherephase_.clear();
   
@@ -1220,6 +1261,19 @@ void EPoint::AddSqrtPenetrability(int jGroupNum, int channelNum, double sqrtPene
   while(jGroupNum>penetrabilities_.size()) penetrabilities_.push_back(d);
   penetrabilities_[jGroupNum-1].push_back(sqrtPene);
   assert(channelNum=penetrabilities_[jGroupNum-1].size());
+}
+
+/*!
+ * Adds a THM entrance transfer form factor M_l with reference to positions in
+ * the JGroup and subsequent AChannel vectors. Filled in lockstep with the
+ * penetrabilities (one entry per channel), so a non-entrance channel stores 0.
+ */
+
+void EPoint::AddThmFormFactor(int jGroupNum, int channelNum, double formFactor) {
+  vector_r d;
+  while(jGroupNum>thm_formfactors_.size()) thm_formfactors_.push_back(d);
+  thm_formfactors_[jGroupNum-1].push_back(formFactor);
+  assert(channelNum=thm_formfactors_[jGroupNum-1].size());
 }
 
 /*!
@@ -1430,6 +1484,29 @@ void EPoint::Calculate(CNuc* theCNuc,const Config &configure, EPoint *parent, in
       !this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsTargetIntegration()&&
       !this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsConvCoefficients())) {
     
+    // THM (modified R-matrix) segments: reuse the shared interior (A-matrix)
+    // but assemble the half-off-shell cross section instead of the standard
+    // T-matrix cross section. Kept fully per-segment so a project may mix THM
+    // and conventional data against the same levels.
+    if(this->IsTHM()) {
+      THMMatrixFunc thmFunc(theCNuc,configure);
+      thmFunc.ClearMatrices();
+      thmFunc.FillMatrices(this);
+      thmFunc.InvertMatrices();
+      thmFunc.CalculateTHMCrossSection(this);
+      if(subPointNum&&parent) {
+        for(int i=1;i<=parent->NumLocalMappedPoints();i++) {
+          EPoint *mappedSubPoint = parent->GetLocalMappedPoint(i)->
+            GetSubPoint(subPointNum);
+          thmFunc.CalculateTHMCrossSection(mappedSubPoint);
+        }
+      } else {
+        for(int i=1;i<=this->NumLocalMappedPoints();i++)
+          thmFunc.CalculateTHMCrossSection(this->GetLocalMappedPoint(i));
+      }
+      return;
+    }
+
     GenMatrixFunc *theMatrixFunc;
     if(configure.paramMask & Config::USE_AMATRIX) theMatrixFunc=new AMatrixFunc(theCNuc,configure);
     else theMatrixFunc=new RMatrixFunc(theCNuc,configure);

@@ -55,6 +55,7 @@ SegmentsTab::SegmentsTab(QWidget *parent) : QWidget(parent) {
   segmentsDataView->setItemDelegateForColumn(14,rt);
   segmentsDataView->setColumnHidden(15,true);
   segmentsDataView->setColumnHidden(16,true);
+  segmentsDataView->setColumnHidden(24,true);  // isTHM (internal flag)
   connect(segmentsDataView->selectionModel(),SIGNAL(selectionChanged(QItemSelection,QItemSelection)),this,SLOT(updateSegDataButtons(QItemSelection)));
   connect(segmentsDataView,SIGNAL(doubleClicked(QModelIndex)),this,SLOT(editSegDataLine()));
 
@@ -84,6 +85,7 @@ SegmentsTab::SegmentsTab(QWidget *parent) : QWidget(parent) {
   segmentsTestView->setColumnHidden(10,true);
   segmentsTestView->setColumnHidden(11,true);
   segmentsTestView->setColumnHidden(12,true);
+  segmentsTestView->setColumnHidden(16,true);  // isTHM (internal flag)
   connect(segmentsTestView->selectionModel(),SIGNAL(selectionChanged(QItemSelection,QItemSelection)),this,SLOT(updateSegTestButtons(QItemSelection)));
   connect(segmentsTestView,SIGNAL(doubleClicked(QModelIndex)),this,SLOT(editSegTestLine()));
 
@@ -258,6 +260,7 @@ void SegmentsTab::addSegDataLine() {
     newLine.lowAngle=aDialog.lowAngleText->text().toDouble();
     newLine.highAngle=aDialog.highAngleText->text().toDouble();
     newLine.dataType=aDialog.dataTypeCombo->currentIndex();
+    newLine.isTHM=aDialog.thmCheck->isChecked() ? 1 : 0;
     newLine.dataFile=aDialog.dataFileText->text();
     newLine.dataNorm=aDialog.dataNormText->text().toDouble();
     newLine.dataNormError=aDialog.dataNormErrorText->text().toDouble();
@@ -350,6 +353,8 @@ void SegmentsTab::addSegDataLine(SegmentsDataData line) {
     segmentsDataModel->setData(index,line.finalJ,Qt::EditRole);
     index = segmentsDataModel->index(lines.size(),23,QModelIndex());
     segmentsDataModel->setData(index,line.delta,Qt::EditRole);
+    index = segmentsDataModel->index(lines.size(),24,QModelIndex());
+    segmentsDataModel->setData(index,line.isTHM,Qt::EditRole);
     segmentsDataView->resizeRowToContents(lines.size());
     updateSegDataButtons(segmentsDataView->selectionModel()->selection());
   } else {
@@ -373,6 +378,7 @@ void SegmentsTab::addSegTestLine() {
     newLine.highAngle=aDialog.highAngleText->text().toDouble();
     newLine.angleStep=aDialog.angleStepText->text().toDouble();
     newLine.dataType=aDialog.dataTypeCombo->currentIndex();
+    newLine.isTHM=aDialog.thmCheck->isChecked() ? 1 : 0;
     newLine.phaseJ=aDialog.phaseJValueText->text().toDouble();
     newLine.phaseL=aDialog.phaseLValueText->text().toInt();
     newLine.maxAngDistOrder=aDialog.angDistSpin->value();
@@ -430,6 +436,8 @@ void SegmentsTab::addSegTestLine(SegmentsTestData line) {
     segmentsTestModel->setData(index,line.operationType,Qt::EditRole);
     index = segmentsTestModel->index(lines.size(),15,QModelIndex());
     segmentsTestModel->setData(index,line.componentsList,Qt::EditRole);
+    index = segmentsTestModel->index(lines.size(),16,QModelIndex());
+    segmentsTestModel->setData(index,line.isTHM,Qt::EditRole);
     segmentsTestView->resizeRowToContents(lines.size());
     updateSegTestButtons(segmentsTestView->selectionModel()->selection());
   } else {
@@ -441,7 +449,10 @@ void SegmentsTab::editSegDataLine() {
   QItemSelectionModel *selectionModel = segmentsDataView->selectionModel();
   QModelIndexList indexes = selectionModel->selectedRows();
   QModelIndex index=indexes[0];
-  
+
+  // isTHM is not a table column; fetch it from the full struct.
+  int isTHM=segmentsDataModel->getLines().at(index.row()).isTHM;
+
   QModelIndex i=segmentsDataModel->index(index.row(),1,QModelIndex());
   QVariant var=segmentsDataModel->data(i,Qt::EditRole);
   int entrancePairIndex=var.toInt();
@@ -521,6 +532,7 @@ void SegmentsTab::editSegDataLine() {
   aDialog.lowAngleText->setText(lowAngle);
   aDialog.highAngleText->setText(highAngle);
   aDialog.dataTypeCombo->setCurrentIndex(dataType);
+  aDialog.thmCheck->setChecked(isTHM==1);
   aDialog.dataFileText->setText(dataFile);
   aDialog.dataNormText->setText(dataNorm);
   aDialog.dataNormErrorText->setText(dataNormError);
@@ -589,6 +601,11 @@ void SegmentsTab::editSegDataLine() {
     if(newDataType!=dataType) {
       i=segmentsDataModel->index(index.row(),7,QModelIndex());
       segmentsDataModel->setData(i,newDataType,Qt::EditRole);
+    }
+    int newIsTHM=aDialog.thmCheck->isChecked() ? 1 : 0;
+    if(newIsTHM!=isTHM) {
+      i=segmentsDataModel->index(index.row(),24,QModelIndex());
+      segmentsDataModel->setData(i,newIsTHM,Qt::EditRole);
     }
     QString newDataFile=aDialog.dataFileText->text();
     if(newDataFile!=dataFile) {
@@ -690,7 +707,10 @@ void SegmentsTab::editSegTestLine() {
   QItemSelectionModel *selectionModel = segmentsTestView->selectionModel();
   QModelIndexList indexes = selectionModel->selectedRows();
   QModelIndex index=indexes[0];
-  
+
+  // isTHM is not a table column; fetch it from the full struct.
+  int isTHM=segmentsTestModel->getLines().at(index.row()).isTHM;
+
   QModelIndex i=segmentsTestModel->index(index.row(),1,QModelIndex());
   QVariant var=segmentsTestModel->data(i,Qt::EditRole);
   int entrancePairIndex=var.toInt();
@@ -748,6 +768,7 @@ void SegmentsTab::editSegTestLine() {
   aDialog.highAngleText->setText(highAngle);
   aDialog.angleStepText->setText(angleStep);
   aDialog.dataTypeCombo->setCurrentIndex(dataType);
+  aDialog.thmCheck->setChecked(isTHM==1);
   aDialog.phaseJValueText->setText(phaseJ);
   aDialog.phaseLValueText->setText(phaseL);
   aDialog.angDistSpin->setValue(maxAngDistOrder);
@@ -811,6 +832,11 @@ void SegmentsTab::editSegTestLine() {
     if(newDataType!=dataType) {
       i=segmentsTestModel->index(index.row(),9,QModelIndex());
       segmentsTestModel->setData(i,newDataType,Qt::EditRole);
+    }
+    int newIsTHM=aDialog.thmCheck->isChecked() ? 1 : 0;
+    if(newIsTHM!=isTHM) {
+      i=segmentsTestModel->index(index.row(),16,QModelIndex());
+      segmentsTestModel->setData(i,newIsTHM,Qt::EditRole);
     }
     QString newPhaseJ=aDialog.phaseJValueText->text();
     if(newPhaseJ!=phaseJ) {
@@ -1106,6 +1132,9 @@ bool SegmentsTab::readSegDataFile(QTextStream& inStream) {
       QTextStream in(&line);
       in >> isActive >> entrancePairIndex >> exitPairIndex >> lowEnergy >> highEnergy >> lowAngle >> highAngle
 	 >> dataType;
+      // THM segments carry an isDiff offset of +10; strip it into isTHM.
+      int isTHM = (dataType>=10) ? 1 : 0;
+      if(isTHM) dataType-=10;
       if(dataType==2) in>>phaseJ>>phaseL;
       else {
 	phaseJ=0.;
@@ -1293,7 +1322,7 @@ bool SegmentsTab::readSegDataFile(QTextStream& inStream) {
       }
 
       SegmentsDataData newLine = {isActive,entrancePairIndex,exitPairIndex,lowEnergy,highEnergy,lowAngle,
-				  highAngle,dataType,dataFile,dataNorm,dataNormError,varyNorm,phaseJ,phaseL,energyShift,energyShiftError,varyEnergyShift,isAdvanced,operationType,componentsList,isUPOS,secondaryDecayL,finalJ,delta};
+				  highAngle,dataType,dataFile,dataNorm,dataNormError,varyNorm,phaseJ,phaseL,energyShift,energyShiftError,varyEnergyShift,isAdvanced,operationType,componentsList,isUPOS,secondaryDecayL,finalJ,delta,isTHM};
       addSegDataLine(newLine);
     }
   }
@@ -1313,7 +1342,7 @@ bool SegmentsTab::writeSegDataFile(QTextStream& outStream) {
 	      << qSetFieldWidth(15) << lines.at(i).highEnergy
 	      << qSetFieldWidth(15) << lines.at(i).lowAngle
 	      << qSetFieldWidth(15) << lines.at(i).highAngle
-	      << qSetFieldWidth(15) << lines.at(i).dataType;
+	      << qSetFieldWidth(15) << (lines.at(i).dataType + (lines.at(i).isTHM ? 10 : 0));
     if(lines.at(i).dataType == 2) outStream  << qSetFieldWidth(15) << lines.at(i).phaseJ
 					     << qSetFieldWidth(15) << lines.at(i).phaseL;
     outStream << qSetFieldWidth(15) << lines.at(i).dataNorm
@@ -1421,6 +1450,9 @@ bool SegmentsTab::readSegTestFile(QTextStream& inStream) {
       QTextStream in(&line);
       in >> isActive >> entrancePairIndex >> exitPairIndex >> lowEnergy >> highEnergy >> energyStep >> lowAngle >> highAngle >> angleStep
 	 >> dataType;
+      // THM segments carry an isDiff offset of +10; strip it into isTHM.
+      int isTHM = (dataType>=10) ? 1 : 0;
+      if(isTHM) dataType-=10;
       if(dataType==2) {
 	in >> phaseJ >> phaseL;
       } else {
@@ -1515,7 +1547,7 @@ bool SegmentsTab::readSegTestFile(QTextStream& inStream) {
       }
       
       SegmentsTestData newLine = {isActive,entrancePairIndex,exitPairIndex,lowEnergy,highEnergy,energyStep,lowAngle,
-				  highAngle,angleStep,dataType,phaseJ,phaseL,maxAngDistOrder,isAdvanced,operationType,componentsList};
+				  highAngle,angleStep,dataType,phaseJ,phaseL,maxAngDistOrder,isAdvanced,operationType,componentsList,isTHM};
       addSegTestLine(newLine);
     }
   }
@@ -1544,7 +1576,8 @@ bool SegmentsTab::writeSegTestFile(QTextStream& outStream) {
     } else if(lines.at(i).dataType==3)  {
       outStream  << qSetFieldWidth(15) << lines.at(i).dataType
 		 << qSetFieldWidth(0) << lines.at(i).maxAngDistOrder;
-    } else outStream << qSetFieldWidth(0) << lines.at(i).dataType;
+    } else outStream << qSetFieldWidth(0)
+		     << (lines.at(i).dataType + (lines.at(i).isTHM ? 10 : 0));
 
     // Add advanced segment data after the existing data for backwards compatibility
     if(lines.at(i).isAdvanced == 1) {

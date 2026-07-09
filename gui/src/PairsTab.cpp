@@ -103,6 +103,7 @@ void PairsTab::addPair() {
       newPair.seperationEnergy=(aDialog.seperationEnergyText->text()).toDouble();
       newPair.excitationEnergy=(aDialog.excitationEnergyText->text()).toDouble();
       newPair.channelRadius=(aDialog.channelRadiusText->text()).toDouble();
+      newPair.bindingEnergy=(aDialog.bindingEnergyText->text()).toDouble();
       if(aDialog.pairTypeCombo->currentIndex() == 1) newPair.pairType=10;
       else if(aDialog.pairTypeCombo->currentIndex() == 2) newPair.pairType=20;
       else newPair.pairType=0;
@@ -153,6 +154,8 @@ void PairsTab::addPair(PairsData pair,int pairIndex,bool fromFile) {
     pairsModel->setData(index,pair.pairType,Qt::EditRole);
     index = pairsModel->index(pairIndex,14,QModelIndex());
     pairsModel->setData(index,pair.ecMultMask,Qt::EditRole);
+    index = pairsModel->index(pairIndex,15,QModelIndex());
+    pairsModel->setData(index,pair.bindingEnergy,Qt::EditRole);
 
     pairsView->resizeRowsToContents();
     if(!fromFile) emit(pairAdded(pairIndex));
@@ -231,8 +234,11 @@ void PairsTab::editPair() {
   i = pairsModel->index(index.row(), 14, QModelIndex());
   var = pairsModel->data(i, Qt::EditRole);
   int ecMultMask = var.toInt();
+  i = pairsModel->index(index.row(), 15, QModelIndex());
+  var = pairsModel->data(i, Qt::EditRole);
+  QString bindingEnergy = var.toString();
 
-  
+
   AddPairDialog aDialog;
   aDialog.setWindowTitle(tr("Edit a Particle Pair"));
   aDialog.lightJText->setText(lightJ);
@@ -250,6 +256,7 @@ void PairsTab::editPair() {
   aDialog.excitationEnergyText->setText(excitationEnergy);
   aDialog.seperationEnergyText->setText(seperationEnergy);
   aDialog.channelRadiusText->setText(channelRadius);
+  aDialog.bindingEnergyText->setText(bindingEnergy);
   if(pairType == 10) aDialog.pairTypeCombo->setCurrentIndex(1);
   else if(pairType == 20) aDialog.pairTypeCombo->setCurrentIndex(2);
   else aDialog.pairTypeCombo->setCurrentIndex(0);
@@ -278,6 +285,7 @@ void PairsTab::editPair() {
       pair.excitationEnergy = aDialog.excitationEnergyText->text().toDouble();
       pair.seperationEnergy = aDialog.seperationEnergyText->text().toDouble();
       pair.channelRadius = aDialog.channelRadiusText->text().toDouble();
+      pair.bindingEnergy = aDialog.bindingEnergyText->text().toDouble();
       if(aDialog.pairTypeCombo->currentIndex()==1) pair.pairType=10;
       else if(aDialog.pairTypeCombo->currentIndex()==2) pair.pairType=20;
       else pair.pairType=0;
@@ -340,6 +348,9 @@ void PairsTab::editPair(PairsData pair,int pairIndex,bool fromFile) {
   i = pairsModel->index(pairIndex,14,QModelIndex());
   var = pairsModel->data(i, Qt::EditRole);
   if (pair.pairType != var.toInt()) pairsModel->setData(i,pair.ecMultMask, Qt::EditRole);
+  i = pairsModel->index(pairIndex,15,QModelIndex());
+  var = pairsModel->data(i, Qt::EditRole);
+  if (pair.bindingEnergy != var.toDouble()) pairsModel->setData(i,pair.bindingEnergy, Qt::EditRole);
 
   if(!fromFile) emit(pairEdited(pairIndex));
 }

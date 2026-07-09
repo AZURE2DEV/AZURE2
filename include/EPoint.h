@@ -41,6 +41,7 @@ class EPoint {
   EPoint(double, double, int, int, bool, bool, bool, double, int, int);
   bool IsDifferential() const;
   bool IsPhase() const;
+  bool IsTHM() const;
   bool IsMapped() const;
   bool IsTargetEffect() const;
   bool IsAngularDist() const;
@@ -72,6 +73,8 @@ class EPoint {
   double GetFitE2CrossSection() const;
   double GetSFactorConversion() const;
   double GetSqrtPenetrability(int,int) const;
+  ///THM entrance transfer form factor M_l for JGroup/channel (0 if not stored).
+  double GetThmFormFactor(int,int) const;
   double GetJ() const;
   double GetStoppingPower() const;
   double GetTargetThickness() const;
@@ -120,6 +123,7 @@ class EPoint {
   void RecalcEDependentValues(CNuc*,const Config&);
   void AddLoElement(int,int,complex);
   void AddSqrtPenetrability(int,int,double);
+  void AddThmFormFactor(int,int,double);
   void AddExpCoulombPhase(int,int,complex);
   void AddExpHardSpherePhase(int,int,complex);
   void CalcCoulombAmplitude(CNuc*);
@@ -152,6 +156,7 @@ class EPoint {
  private:
   bool is_differential_;
   bool is_phase_;
+  bool is_thm_;
   bool is_mapped_;
   bool is_ang_dist_;
   int entrance_key_;
@@ -190,6 +195,8 @@ class EPoint {
   vector_r angularDists_;
   matrix_c lo_elements_;
   matrix_r penetrabilities_;
+  ///THM entrance transfer form factors M_l, indexed [jGroup-1][channel-1].
+  matrix_r thm_formfactors_;
   matrix_c coulombphase_;
   matrix_c hardspherephase_;
   matrix_c ec_amplitudes_;

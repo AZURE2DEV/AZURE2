@@ -40,6 +40,7 @@ QVariant PairsModel::data(const QModelIndex &index, int role) const {
       else if(pair.pairType == 20) return "Beta Decay";
       else return "Particle, Particle";
     } else if(index.column() == 14) return pair.ecMultMask;
+    else if(index.column() == 15) return pair.bindingEnergy;
   } else if (role == Qt::EditRole) {
     PairsData pair = pairsList.at(index.row());
     if(index.column() == 0) return pair.lightJ;
@@ -56,7 +57,8 @@ QVariant PairsModel::data(const QModelIndex &index, int role) const {
     else if(index.column() == 11) return pair.seperationEnergy;
     else if(index.column() == 12) return pair.channelRadius;
     else if(index.column() == 13) return pair.pairType; 
-    else if(index.column() == 14) return pair.ecMultMask;   
+    else if(index.column() == 14) return pair.ecMultMask;
+    else if(index.column() == 15) return pair.bindingEnergy;
   } else if(role == Qt::TextAlignmentRole) return Qt::AlignCenter;
 
   return QVariant();
@@ -96,7 +98,9 @@ QVariant PairsModel::headerData(int section, Qt::Orientation orientation, int ro
       return tr("Pair\nType");
     case 14:
       return tr("EC\nMultipolarities");
-    default: 
+    case 15:
+      return tr("THM\nBinding");
+    default:
       return QVariant();
     }
   } else if(orientation == Qt::Vertical) {
@@ -124,6 +128,7 @@ bool PairsModel::setData(const QModelIndex &index, const QVariant &value, int ro
     else if(index.column() == 12) tempData.channelRadius=value.toDouble();
     else if(index.column() == 13) tempData.pairType=value.toInt();
     else if(index.column() == 14) tempData.ecMultMask=value.toInt();
+    else if(index.column() == 15) tempData.bindingEnergy=value.toDouble();
     else return false;
 
     pairsList.replace(row,tempData);

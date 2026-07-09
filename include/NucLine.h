@@ -16,11 +16,22 @@ class NucLine {
    * Constructor fills the NucLine object from an input stream.
    */
   NucLine(std::istream &stream) {
-    stream >> levelJ_ >> levelPi_ >> levelE_ >> levelFix_ >> aa_ >> ir_ 
+    stream >> levelJ_ >> levelPi_ >> levelE_ >> levelFix_ >> aa_ >> ir_
 	   >> s_ >> l_ >> levelID_ >> isActive_ >> channelFix_ >> gamma_ >> j1_ >> pi1_
 	   >> j2_ >> pi2_ >> e2_ >> m1_ >> m2_ >> z1_ >> z2_
-	   >> entranceSepE_ >> sepE_ >> j3_ >> pi3_ >> e3_ 
+	   >> entranceSepE_ >> sepE_ >> j3_ >> pi3_ >> e3_
 	   >> pType_ >> chRad_ >> g1_ >> g2_ >> ecMultMask_;
+    // Optional trailing THM binding energy (binding of the transferred
+    // particle in the Trojan-Horse nucleus, MeV). Absent in legacy files, so
+    // read it only if present and clear the resulting fail/eof state so the
+    // caller's stream-state check (which gates on the mandatory tokens) is
+    // unaffected.
+    bindingE_ = 0.0;
+    if(stream.good()) {
+      double tmpBindingE;
+      if(stream >> tmpBindingE) bindingE_ = tmpBindingE;
+      else stream.clear();
+    }
     s_/=2.;
     l_/=2;
   };
@@ -153,9 +164,14 @@ class NucLine {
    */
   double g2() const {return g2_;};
   /*!
-   * Returns the external capture multiplicity mask for the corresponding pair. 
+   * Returns the external capture multiplicity mask for the corresponding pair.
    */
   double ecMultMask() const {return ecMultMask_;};
+  /*!
+   * Returns the THM binding energy (MeV) of the transferred particle in the
+   * Trojan-Horse nucleus for the corresponding pair (0 if not specified).
+   */
+  double bindingE() const {return bindingE_;};
  private:
   double levelJ_;
   int levelPi_;
@@ -188,6 +204,7 @@ class NucLine {
   double g1_;
   double g2_;
   unsigned int ecMultMask_;
+  double bindingE_;
 };
 
 #endif

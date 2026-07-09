@@ -7,7 +7,7 @@
 class PairsModel;
 
 struct SegmentsDataData {
-  static const int SIZE = 24;
+  static const int SIZE = 25;  // last column (24) is isTHM
   int isActive;
   int entrancePairIndex;
   int exitPairIndex;
@@ -33,6 +33,9 @@ struct SegmentsDataData {
   int secondaryDecayL;
   double finalJ;
   double delta;
+  // THM (modified R-matrix / half-off-shell) flag; written as isDiff offset +10.
+  // Last field so existing brace-initializers (which omit it) default it to 0.
+  int isTHM;
 };
 
 class SegmentsDataModel : public QAbstractTableModel {

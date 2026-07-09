@@ -204,6 +204,7 @@ QVariant SegmentsTestModel::data(const QModelIndex &index, int role) const {
     else if(index.column() == 13) return line.isAdvanced;
     else if(index.column() == 14) return line.operationType;
     else if(index.column() == 15) return line.componentsList;
+    else if(index.column() == 16) return line.isTHM;
   } else if (role==Qt::CheckStateRole && index.column()==0) {
     SegmentsTestData line = segTestLineList.at(index.row());
     if(line.isActive==1) return Qt::Checked;
@@ -272,6 +273,7 @@ bool SegmentsTestModel::setData(const QModelIndex &index, const QVariant &value,
     else if(index.column() == 13) tempData.isAdvanced=value.toInt();
     else if(index.column() == 14) tempData.operationType=value.toInt();
     else if(index.column() == 15) tempData.componentsList=value.toString();
+    else if(index.column() == 16) tempData.isTHM=value.toInt();
     else return false;
 
     segTestLineList.replace(row,tempData);

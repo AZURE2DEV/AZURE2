@@ -7,7 +7,7 @@
 class PairsModel;
 
 struct SegmentsTestData {
-  static const int SIZE = 16;
+  static const int SIZE = 17;  // last column (16) is isTHM
   int isActive;
   int entrancePairIndex;
   int exitPairIndex;
@@ -24,6 +24,7 @@ struct SegmentsTestData {
   int isAdvanced;
   int operationType;
   QString componentsList;
+  int isTHM;  // THM (modified R-matrix) flag; written as isDiff offset +10.
 };
 
 class SegmentsTestModel : public QAbstractTableModel {
