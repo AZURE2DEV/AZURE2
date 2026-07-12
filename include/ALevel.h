@@ -18,6 +18,7 @@ class ALevel {
   bool IsInRMatrix() const;
   bool EnergyFixed() const;
   bool ChannelFixed(int) const;
+  bool GammaIsRWA(int) const;
   bool IsECLevel() const;
   int NumNFIntegrals() const;
   int GetTransformIterations() const;
@@ -63,6 +64,9 @@ class ALevel {
   double sqrt_nf_factor_;
   double transform_e_;
   std::vector<bool> channelfixed_;
+  ///Per-channel input convention: true = gamma column was a reduced width
+  ///amplitude (MeV^(1/2)), false = physical partial width/ANC (legacy default).
+  std::vector<bool> gamma_is_rwa_;
   vector_r gammas_;
   vector_r fitgammas_;
   vector_r nf_integrals_;

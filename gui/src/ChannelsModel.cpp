@@ -51,6 +51,7 @@ QVariant ChannelsModel::data(const QModelIndex &index, int role) const {
       }
     } else if(index.column() == 5) return channel.radType;
     else if(index.column() == 6) return channel.reducedWidth;
+    else if(index.column() == 7) return channel.gammaIsRWA;
   } else if(role==Qt::EditRole) {
     ChannelsData channel = channelsList.at(index.row());
     if(index.column() == 1) return channel.levelIndex;
@@ -59,6 +60,7 @@ QVariant ChannelsModel::data(const QModelIndex &index, int role) const {
     else if(index.column() == 4) return channel.lValue;
     else if(index.column() == 5) return channel.radType;
     else if(index.column() == 6) return channel.reducedWidth;
+    else if(index.column() == 7) return channel.gammaIsRWA;
   } else if(role==Qt::TextAlignmentRole) return Qt::AlignCenter;
   else if (role==Qt::CheckStateRole && index.column()==0) {
     ChannelsData channel = channelsList.at(index.row());
@@ -86,7 +88,9 @@ QVariant ChannelsModel::headerData(int section, Qt::Orientation orientation, int
       return tr("radiation type");
     case 6:
       return tr("reduced width");
-    default: 
+    case 7:
+      return tr("RWA input?");
+    default:
       return QVariant();
     }
   } else if(orientation == Qt::Vertical) {
@@ -107,8 +111,9 @@ bool ChannelsModel::setData(const QModelIndex &index, const QVariant &value, int
       else if(index.column() == 4) tempData.lValue=value.toInt();
       else if(index.column() == 5) tempData.radType=value.toChar();
       else if(index.column() == 6) tempData.reducedWidth=value.toDouble();
+      else if(index.column() == 7) tempData.gammaIsRWA=value.toInt();
       else return false;
-      
+
       channelsList.replace(row,tempData);
       if(index.column()!=6) emit(dataChanged(index,index));
       return true;
@@ -133,7 +138,7 @@ bool ChannelsModel::insertRows(int position, int rows, const QModelIndex &index)
   if(rows>0) {
     beginInsertRows(QModelIndex(),position,position+rows-1);
     for(int row=0; row<rows; row++) {
-      ChannelsData tempData={0,-1,-1,0.0,0,'P',0.0};
+      ChannelsData tempData={0,-1,-1,0.0,0,'P',0.0,0};
       channelsList.insert(position,tempData);
     }
     endInsertRows();

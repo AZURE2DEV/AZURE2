@@ -21,15 +21,23 @@ class NucLine {
 	   >> j2_ >> pi2_ >> e2_ >> m1_ >> m2_ >> z1_ >> z2_
 	   >> entranceSepE_ >> sepE_ >> j3_ >> pi3_ >> e3_
 	   >> pType_ >> chRad_ >> g1_ >> g2_ >> ecMultMask_;
-    // Optional trailing THM binding energy (binding of the transferred
-    // particle in the Trojan-Horse nucleus, MeV). Absent in legacy files, so
-    // read it only if present and clear the resulting fail/eof state so the
-    // caller's stream-state check (which gates on the mandatory tokens) is
-    // unaffected.
+    
+     // Optional trailing columns, absent in legacy files: the Trojan Horse binding
+    // energy (MeV) and the width input flag (0 = physical width/ANC,
+    // 1 = reduced width in MeV^(1/2)), applies to particle channels only).
+    // Those get read only if present and any resulting fail/eof state gets cleared so the caller's
+    // stream-state check (which gates on the mandatory tokens) is
+    // unaffected. The flag can only follow a present binding energy.
     bindingE_ = 0.0;
+    gammaIsRWA_ = 0;
     if(stream.good()) {
       double tmpBindingE;
-      if(stream >> tmpBindingE) bindingE_ = tmpBindingE;
+      if(stream >> tmpBindingE) {
+	bindingE_ = tmpBindingE;
+	int tmpIsRWA;
+	if(stream >> tmpIsRWA) gammaIsRWA_ = tmpIsRWA;
+	else stream.clear();
+      }
       else stream.clear();
     }
     s_/=2.;
@@ -172,6 +180,11 @@ class NucLine {
    * Trojan-Horse nucleus for the corresponding pair (0 if not specified).
    */
   double bindingE() const {return bindingE_;};
+  /*!
+   * Returns 1 if the gamma column of this channel line is already a reduced
+   * width amplitude (MeV^(1/2)) rather than a physical partial width/ANC.
+   */
+  int gammaIsRWA() const {return gammaIsRWA_;};
  private:
   double levelJ_;
   int levelPi_;
@@ -205,6 +218,7 @@ class NucLine {
   double g2_;
   unsigned int ecMultMask_;
   double bindingE_;
+  int gammaIsRWA_;
 };
 
 #endif

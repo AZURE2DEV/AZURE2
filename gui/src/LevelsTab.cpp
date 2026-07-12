@@ -82,6 +82,7 @@ LevelsTab::LevelsTab(QWidget *parent) : QWidget(parent) {
   channelsView->setColumnHidden(1,true);
   channelsView->setColumnHidden(5,true);
   channelsView->setColumnHidden(6,true);
+  channelsView->setColumnHidden(7,true);
   channelsView->setItemDelegateForColumn(2,new RichTextDelegate());
   channelsView->setItemDelegateForColumn(3,new RichTextDelegate());
   channelsView->setItemDelegateForColumn(4,new RichTextDelegate());
@@ -94,6 +95,7 @@ LevelsTab::LevelsTab(QWidget *parent) : QWidget(parent) {
   channelDetails=new ChannelDetails(this);
   channelDetails->hide();
   connect(channelDetails->reducedWidthText,SIGNAL(textEdited(const QString&)),this,SLOT(updateReducedWidth(const QString&)));
+  connect(channelDetails->rwaButton,SIGNAL(toggled(bool)),this,SLOT(updateGammaIsRWA(bool)));
 
   addLevelButton = new QPushButton(tr("+"));
   addLevelButton->setMaximumSize(28,28);
@@ -396,11 +398,14 @@ void LevelsTab::updateChannelsLevelEdited(int levelIndex) {
 	 channels.at(ii).radType==newChannels.at(i).radType) {
 	newChannels[i].isFixed=channels.at(ii).isFixed;
 	newChannels[i].reducedWidth=channels.at(ii).reducedWidth;
+	newChannels[i].gammaIsRWA=channels.at(ii).gammaIsRWA;
 	break;
       }
     }
     index = channelsModel->index(i,6,QModelIndex());
     channelsModel->setData(index,newChannels.at(i).reducedWidth,Qt::EditRole);
+    index = channelsModel->index(i,7,QModelIndex());
+    channelsModel->setData(index,newChannels.at(i).gammaIsRWA,Qt::EditRole);
     index = channelsModel->index(i,0,QModelIndex());
     channelsModel->setData(index,newChannels.at(i).isFixed,Qt::EditRole);
   }
@@ -422,19 +427,19 @@ QList<ChannelsData> LevelsTab::calculateChannels(int levelIndex) {
       for(double s=fabs(pair.heavyJ-pair.lightJ);s<=pair.heavyJ+pair.lightJ;s+=1.0) {
 	for(double l=fabs(s-level.jValue);l<=s+level.jValue;l+=1.0) {
 	  if(int(l*2.0)%2==0&&pair.lightPi*pair.heavyPi*pow(-1,int(l))==level.piValue&&int(l)<=maxL) {
-	    ChannelsData channel={0,levelIndex,i,s,int(l),'P',0.0};
+	    ChannelsData channel={0,levelIndex,i,s,int(l),'P',0.0,0};
 	    channels.push_back(channel);
 	  }
 	}
       }
     } else if(pair.pairType==20) {
       if(fabs(pair.heavyJ-level.jValue)==0.&&pair.heavyPi==level.piValue) {
-	ChannelsData gtChannel = {0,levelIndex,i,0.,1,'G',0.0};
-	ChannelsData fChannel = {0,levelIndex,i,0.,0,'F',0.0}; 
+	ChannelsData gtChannel = {0,levelIndex,i,0.,1,'G',0.0,0};
+	ChannelsData fChannel = {0,levelIndex,i,0.,0,'F',0.0,0};
 	channels.push_back(gtChannel);
 	channels.push_back(fChannel);
       } else if(fabs(pair.heavyJ-level.jValue)==1.&&pair.heavyPi==level.piValue) {
-	ChannelsData gtChannel = {0,levelIndex,i,1.,1,'G',0.0};
+	ChannelsData gtChannel = {0,levelIndex,i,1.,1,'G',0.0,0};
 	channels.push_back(gtChannel);
       }
     } else {
@@ -450,7 +455,7 @@ QList<ChannelsData> LevelsTab::calculateChannels(int levelIndex) {
 	    if(parityChange==-1) radType='M';
 	    else radType='E';
 	  }
-	  ChannelsData channel={0,levelIndex,i,pair.heavyJ,l,radType,0.0};
+	  ChannelsData channel={0,levelIndex,i,pair.heavyJ,l,radType,0.0,0};
 	  channels.push_back(channel);
 	  numMult++;
 	}
@@ -498,11 +503,14 @@ void LevelsTab::updateChannelsPairAddedEdited() {
 	   channels.at(ii).radType==newChannels.at(i).radType) {
 	  newChannels[i].reducedWidth=channels.at(ii).reducedWidth;
 	  newChannels[i].isFixed=channels.at(ii).isFixed;
+	  newChannels[i].gammaIsRWA=channels.at(ii).gammaIsRWA;
 	  break;
 	}
       }
       index = channelsModel->index(i,6,QModelIndex());
       channelsModel->setData(index,newChannels.at(i).reducedWidth,Qt::EditRole);
+      index = channelsModel->index(i,7,QModelIndex());
+      channelsModel->setData(index,newChannels.at(i).gammaIsRWA,Qt::EditRole);
       index = channelsModel->index(i,0,QModelIndex());
       channelsModel->setData(index,newChannels.at(i).isFixed,Qt::EditRole);
     }
@@ -608,10 +616,26 @@ void LevelsTab::updateDetails(const QItemSelection &selection) {
     else if (pair.pairType==10&&level.energy==pair.excitationEnergy&&level.jValue==pair.heavyJ&&
 	     level.piValue==pair.heavyPi&&channel.radType=='E'&&channel.lValue==2) 
       channelDetails->setNormParam(3);    
-    else if(pair.pairType==20) channelDetails->setNormParam(4); 
+    else if(pair.pairType==20) channelDetails->setNormParam(4);
     else channelDetails->setNormParam(0);
+    // Input-convention radios (particle channels only): seed from the model
+    // and override the label if the stored value is a reduced width amplitude.
+    channelDetails->setConventionChoice(channel.radType=='P',channel.gammaIsRWA==1);
     channelDetails->reducedWidthText->setText(QString("%1").arg(channel.reducedWidth));
     channelDetails->show();
+  }
+}
+
+void LevelsTab::updateGammaIsRWA(bool isRWA) {
+  QItemSelectionModel *selectionModel=channelsView->selectionModel();
+  if(selectionModel->selectedRows().isEmpty()) return;
+  QModelIndex index=proxyModel->mapToSource(selectionModel->selectedRows().at(0));
+
+  if(index.isValid()) {
+    QModelIndex i = channelsModel->index(index.row(),7,QModelIndex());
+    channelsModel->setData(i,isRWA ? 1 : 0,Qt::EditRole);
+    // refresh the value field's label/units; the value itself is NOT converted
+    channelDetails->setConventionChoice(true,isRWA);
   }
 }
 
@@ -710,6 +734,7 @@ bool LevelsTab::writeNuclearFile(QTextStream& outStream) {
 		    << qSetFieldWidth(13)  << pairs.at(channels.at(ch).pairIndex).heavyG 
 		    << qSetFieldWidth(8)  << pairs.at(channels.at(ch).pairIndex).ecMultMask
 		    << qSetFieldWidth(9)  << pairs.at(channels.at(ch).pairIndex).bindingEnergy
+		    << qSetFieldWidth(4)  << (channels.at(ch).radType=='P' ? channels.at(ch).gammaIsRWA : 0)
 		    << qSetFieldWidth(0)  << endl;
 	}
       }  
@@ -788,6 +813,11 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
       double bindingEnergy;
       in >> bindingEnergy;
       if(in.status()!=QTextStream::Ok) bindingEnergy=0.0;
+      // Optional trailing width input-convention flag (per channel):
+      // 1 = the gamma column is a reduced width amplitude, 0 = physical (legacy).
+      int gammaIsRWA;
+      in >> gammaIsRWA;
+      if(in.status()!=QTextStream::Ok) gammaIsRWA=0;
       if(firstLine) {
 	lastPair=ir;
 	firstLine=false;
@@ -850,6 +880,8 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
       channelsModel->setData(index,radType,Qt::EditRole);
       index = channelsModel->index(channelIndex,6,QModelIndex());
       channelsModel->setData(index,channelReducedWidth,Qt::EditRole);
+      index = channelsModel->index(channelIndex,7,QModelIndex());
+      channelsModel->setData(index,gammaIsRWA,Qt::EditRole);
       channelsView->resizeRowsToContents();
     }
   }
@@ -1071,9 +1103,19 @@ void LevelsTab::exportLatexTable() {
     colSpec += "c";
   }
 
+  // Any channel entered as a reduced width amplitude gets marked in the
+  // table, since a column can mix conventions across levels.
+  bool anyRWA = false;
+  for (const ChannelsData &ch : channels)
+    if (ch.gammaIsRWA == 1 && ch.radType == 'P') anyRWA = true;
+
   out << "\\begin{table}[htbp]\n";
   out << "\\centering\n";
-  out << "\\caption{R-Matrix levels and reduced width amplitudes}\n";
+  out << "\\caption{R-Matrix levels and channel widths";
+  if (anyRWA)
+    out << ". Values marked $(\\gamma)$ are reduced width amplitudes in"
+        << " MeV$^{1/2}$; unmarked values are partial widths (eV) or ANCs";
+  out << "}\n";
   out << "\\begin{tabular}{" << colSpec << "}\n";
   out << "\\hline\\hline\n";
 
@@ -1145,6 +1187,8 @@ void LevelsTab::exportLatexTable() {
             ch.sValue == ct.sValue && ch.lValue == ct.lValue &&
             ch.radType == ct.radType) {
           widthStr = QString::number(ch.reducedWidth, 'g', 5);
+          if (ch.gammaIsRWA == 1 && ch.radType == 'P')
+            widthStr += "$^{(\\gamma)}$";
           break;
         }
       }

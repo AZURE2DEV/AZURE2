@@ -5,7 +5,7 @@
 #include <QList>
 
 struct ChannelsData {
-  static const int SIZE = 7;
+  static const int SIZE = 8;
   int isFixed;
   int levelIndex;
   int pairIndex;
@@ -13,6 +13,7 @@ struct ChannelsData {
   int lValue;
   QChar radType;
   double reducedWidth;
+  int gammaIsRWA;
 };
 
 class PairsModel;

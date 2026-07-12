@@ -48,6 +48,7 @@ class LevelsTab : public QWidget {
   void updateChannelsPairRemoved(int pairIndex);
   void updateDetails(const QItemSelection &selection);
   void updateReducedWidth(const QString &string);
+  void updateGammaIsRWA(bool isRWA);
   void showInfo(int which=0,QString title="");
   void fixAllWidths();
   void fixAllEnergies();

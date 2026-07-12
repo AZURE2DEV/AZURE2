@@ -46,6 +46,16 @@ bool ALevel::ChannelFixed(int channelNum) const {
   return channelfixed_[channelNum-1];
 }
 
+/*!
+ * Returns true if the input width for the given channel was specified as a
+ * reduced width amplitude (MeV^(1/2)) rather than a physical partial
+ * width/ANC, so the parameter transformations must not convert it.
+ */
+
+bool ALevel::GammaIsRWA(int channelNum) const {
+  return gamma_is_rwa_[channelNum-1];
+}
+
 /*! 
  * Returns true if the level is a final state for external capture, otherwise returns false.
  */
@@ -197,6 +207,7 @@ void ALevel::AddGamma(NucLine nucLine) {
   external_gammas_.push_back(complex(0.0,0.0));
   if(nucLine.channelFix()==1) channelfixed_.push_back(true);
   else channelfixed_.push_back(false);
+  gamma_is_rwa_.push_back(nucLine.gammaIsRWA()==1);
   shifts_.push_back(0.0);
 }
 
@@ -212,6 +223,7 @@ void ALevel::AddGamma(double reducedWidth) {
   big_gammas_.push_back(0.0);
   external_gammas_.push_back(complex(0.0,0.0));
   channelfixed_.push_back(false);
+  gamma_is_rwa_.push_back(false);
 }
 
 /*!

@@ -7,6 +7,8 @@ QT_BEGIN_NAMESPACE
 
 class QLineEdit;
 class QLabel;
+class QRadioButton;
+class QButtonGroup;
 
 QT_END_NAMESPACE
 
@@ -16,11 +18,16 @@ class ChannelDetails : public QWidget {
  public:
   ChannelDetails(QWidget *parent = 0);
   void setNormParam(int which);
+  void setConventionChoice(bool isParticle, bool isRWA);
   QLineEdit *reducedWidthText;
   QLabel *details;
+  QRadioButton *physicalButton;
+  QRadioButton *rwaButton;
  private:
   QLabel *normParam;
   QLabel *normUnits;
+  QButtonGroup *conventionGroup;
+  int normParamWhich_;
 };
 
 #endif

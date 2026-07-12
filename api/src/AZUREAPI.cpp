@@ -984,7 +984,7 @@ vector_r AZUREAPI::GetParameterInfo( ) const {
   auto push = [&]( double type, double jgroup, double J, double parity,
                    double level, double levelE, double channel, double L,
                    double S, double pair, double radtype, double segKey,
-                   double wignerLimit ) {
+                   double wignerLimit, double inputIsRWA ) {
     info.push_back( type );
     info.push_back( jgroup );
     info.push_back( J );
@@ -1000,6 +1000,7 @@ vector_r AZUREAPI::GetParameterInfo( ) const {
     info.push_back( gi < (int)all_.size() ? all_[gi] : 0.0 );
     info.push_back( segKey );
     info.push_back( wignerLimit );
+    info.push_back( inputIsRWA );
     ++gi;
   };
 
@@ -1013,13 +1014,14 @@ vector_r AZUREAPI::GetParameterInfo( ) const {
       ALevel* level = jg->GetLevel( la );
       double levelE = level->GetE();
       // energy parameter
-      push( 0, j, J, parity, la, levelE, -1, -1, -1, -1, -1, -1, -1 );
+      push( 0, j, J, parity, la, levelE, -1, -1, -1, -1, -1, -1, -1, -1 );
       // width parameters (one per channel)
       for( int ch = 1; ch <= jg->NumChannels(); ++ch ) {
         AChannel* chan = jg->GetChannel( ch );
         push( 1, j, J, parity, la, levelE, ch, chan->GetL(), chan->GetS(),
               chan->GetPairNum(), (double)chan->GetRadType(), -1,
-              chan->GetWignerLimit() );
+              chan->GetWignerLimit(),
+              level->GammaIsRWA( ch ) ? 1.0 : 0.0 );
       }
     }
   }
@@ -1029,13 +1031,13 @@ vector_r AZUREAPI::GetParameterInfo( ) const {
   for( size_t s = 0; s < segments.size(); ++s ) {
     if( segments[s].IsVaryNorm() )
       push( 2, -1, -1, 0, -1, 0, -1, -1, -1, -1, -1,
-            segments[s].GetSegmentKey(), -1 );
+            segments[s].GetSegmentKey(), -1, -1 );
   }
 
   // Energy-shift parameters: one per segment (always emitted).
   for( size_t s = 0; s < segments.size(); ++s ) {
     push( 3, -1, -1, 0, -1, 0, -1, -1, -1, -1, -1,
-          segments[s].GetSegmentKey(), -1 );
+          segments[s].GetSegmentKey(), -1, -1 );
   }
 
   return info;

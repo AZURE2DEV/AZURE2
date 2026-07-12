@@ -512,15 +512,43 @@ bool CNuc::TransformIn(const Config& configure) {
 	if(theLevel->IsInRMatrix()) {
 	  vector_r tempGammas;
 	  std::vector<bool> isNegative;
+	  std::vector<bool> passThrough;
 	  vector_r penes;
 	  double denom=2.0;
+	  // channels whose input is already a reduced width amplitude
+	  // drop out of denom but their gamma^2 dS/dE still renormalizes
+	  // the physical-width channels of the same level
+	  // (gamma_b^2 = (Gamma_b/P_b)*numer/denom)
+	  double numer=1.0;
 	  for(int ch=1;ch<=theJGroup->NumChannels();ch++) {
 	    AChannel *theChannel=theJGroup->GetChannel(ch);
 	    double localEnergy=theLevel->GetE()-this->GetPair(theChannel->GetPairNum())->GetExE()
 	      -this->GetPair(theChannel->GetPairNum())->GetSepE();
 	    double radius=this->GetPair(theChannel->GetPairNum())->GetChRad();
+	    if(theChannel->GetRadType()!='P'&&theLevel->GammaIsRWA(ch))
+	      configure.outStream << "WARNING: Reduced width amplitude input flag is only "
+				  << "supported for particle channels; ignored for J = "
+				  << theJGroup->GetJ() << " E = " << theLevel->GetE()
+				  << " MeV channel " << ch << "." << std::endl;
 	    if(theChannel->GetRadType()=='P') {
-	      if(localEnergy>0.0) {
+	      if(theLevel->GammaIsRWA(ch)) {
+		if(theLevel->GetGamma(ch)<0.0) isNegative.push_back(true);
+		else isNegative.push_back(false);
+		tempGammas.push_back(fabs(theLevel->GetGamma(ch)));
+		penes.push_back(1.0);
+		passThrough.push_back(true);
+		double gammaSq=pow(theLevel->GetGamma(ch),2.0);
+		if(localEnergy>0.0) {
+		  CoulFunc theCoulombFunction(this->GetPair(theChannel->GetPairNum()),
+					      !!(configure.paramMask&Config::USE_GSL_COULOMB_FUNC));
+		  numer+=gammaSq*
+		    theCoulombFunction.PEShift_dE(theChannel->GetL(),radius,localEnergy);
+		} else {
+		  ShftFunc theShiftFunction(this->GetPair(theChannel->GetPairNum()));
+		  numer+=gammaSq*
+		    theShiftFunction.EnergyDerivative(theChannel->GetL(),theLevel->GetE());
+		}
+	      } else if(localEnergy>0.0) {
 		if(theLevel->GetGamma(ch)<0.0) isNegative.push_back(true);
 		else isNegative.push_back(false);
 		tempGammas.push_back(fabs(theLevel->GetGamma(ch))/1e6);
@@ -532,7 +560,8 @@ bool CNuc::TransformIn(const Config& configure) {
 		denom-=tempGammas[ch-1]/tempPene*
 		  theCoulombFunction.PEShift_dE(theChannel->GetL(),radius,localEnergy);
 		penes.push_back(tempPene);
-	      } else {	     
+		passThrough.push_back(false);
+	      } else {
 		if(theLevel->GetGamma(ch)<0.0) isNegative.push_back(true);
 		else isNegative.push_back(false);
 		tempGammas.push_back(pow(theLevel->GetGamma(ch),2.0));
@@ -544,6 +573,7 @@ bool CNuc::TransformIn(const Config& configure) {
 		denom-=tempGammas[ch-1]/tempPene*
 		  theShiftFunction.EnergyDerivative(theChannel->GetL(),theLevel->GetE());
 		penes.push_back(tempPene);
+		passThrough.push_back(false);
 		}
 	    } else if(theChannel->GetRadType()=='E'||theChannel->GetRadType()=='M') {
 	      if(fabs(theLevel->GetE()-this->GetPair(theChannel->GetPairNum())->GetExE())<1.e-3&&
@@ -566,6 +596,7 @@ bool CNuc::TransformIn(const Config& configure) {
 		penes.push_back(tempPene);
 		if(tempSign<0) isNegative.push_back(true);
 		else isNegative.push_back(false);
+		passThrough.push_back(false);
 	      } else {
 		if(theLevel->GetGamma(ch)<0.0) isNegative.push_back(true);
 		else isNegative.push_back(false);
@@ -573,12 +604,14 @@ bool CNuc::TransformIn(const Config& configure) {
 		double tempPene = (configure.paramMask & Config::USE_RMC_FORMALISM) ? 1.0 : pow(fabs(localEnergy)/hbarc,2.0*theChannel->GetL()+1);
 		if(tempPene<1e-16) tempPene=1e-16;
 		penes.push_back(tempPene);
+		passThrough.push_back(false);
 	      }
 	    } else if(theChannel->GetRadType()=='F'||theChannel->GetRadType()=='G') {
 	      if(theLevel->GetGamma(ch)<0.0) isNegative.push_back(true);
 	      else isNegative.push_back(false);
 	      tempGammas.push_back(fabs(theLevel->GetGamma(ch)));
 	      penes.push_back(1.0);
+	      passThrough.push_back(false);
 	    }
 	  }
 	  // FIXME
@@ -591,8 +624,9 @@ bool CNuc::TransformIn(const Config& configure) {
 	  double nFSum=1.0;
 	  for(int ch=1;ch<=theJGroup->NumChannels();ch++) {
 	    AChannel *theChannel=theJGroup->GetChannel(ch);
-	    if(theChannel->GetRadType()!='F'&&theChannel->GetRadType()!='G')
-	      tempGammas[ch-1]=sqrt(fabs(tempGammas[ch-1]/penes[ch-1]/denom));
+	    if(theChannel->GetRadType()!='F'&&theChannel->GetRadType()!='G'&&
+	       !passThrough[ch-1])
+	      tempGammas[ch-1]=sqrt(fabs(tempGammas[ch-1]/penes[ch-1]*numer/denom));
 	    if(isNegative[ch-1]) tempGammas[ch-1]=-tempGammas[ch-1];
 	    theLevel->SetGamma(ch,tempGammas[ch-1]);
 	    if(ch<=theLevel->NumNFIntegrals()) nFSum+=2.0*
@@ -1699,7 +1733,13 @@ vector_r CNuc::GetTransformParams(const Config& configure) {
 	  			AChannel *theChannel=this->GetJGroup(j)->GetChannel(ch);
 	  			PPair *exitPair=this->GetPair(theChannel->GetPairNum());
 	  			double localEnergy=theLevel->GetTransformE()-exitPair->GetSepE()-exitPair->GetExE();
-	  			if(localEnergy<0.0&&theChannel->GetRadType()=='P') {
+	  			if(theChannel->GetRadType()=='P'&&theLevel->GammaIsRWA(ch)) {
+					// Input convention for this channel is the reduced width
+					// amplitude: return it as-is (physical-convention internal
+					// amplitude; equals the fit amplitude under Brune) so
+					// saving fitted values never flips the input convention.
+					params.push_back( theLevel->GetTransformGamma(ch) );
+	  			} else if(localEnergy<0.0&&theChannel->GetRadType()=='P') {
 					int tempSign = (theLevel->GetBigGamma(ch)<0) ? (-1) : (1);
 	    			params.push_back( tempSign*sqrt(fabs(theLevel->GetBigGamma(ch))) );
 	  			} else if(fabs(theLevel->GetE()-this->GetPair(theChannel->GetPairNum())->GetExE())<1.e-3&&

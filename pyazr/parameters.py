@@ -37,7 +37,7 @@ class Parameter:
 
     # Number of doubles per record emitted by AZUREAPI::GetParameterInfo.
     # Must match AZUREAPI::kParamInfoFields.
-    _NFIELDS = 15
+    _NFIELDS = 16
 
     index: int                      # position among *all* parameters
     name: str                       # raw AZURE2 parameter name
@@ -66,6 +66,11 @@ class Parameter:
     # width parameter; ``None`` for non-width parameters.
     wigner_limit: Optional[float] = None
 
+    # True if this width's .azr input value was declared as a reduced width
+    # amplitude (MeV^(1/2)) and thus AZURE2 should treat it accordingly.
+    # ``None`` for non-width parameters.
+    input_is_rwa: Optional[bool] = None
+
     # Data-segment information (norm / shift parameters).
     segment_key: Optional[int] = None
 
@@ -85,7 +90,8 @@ class Parameter:
         returned by ``GET_PARAMS_INFO``.
         """
         (type_code, jgroup, J, parity, level, level_energy, channel, L, S,
-         pair, radtype, fixed, value, segment_key, wigner_limit) = record
+         pair, radtype, fixed, value, segment_key, wigner_limit,
+         input_is_rwa) = record
 
         rad = chr(int(round(radtype))) if radtype != -1 else None
 
@@ -107,6 +113,8 @@ class Parameter:
             pair=_opt(pair, integer=True),
             radiation_type=rad,
             wigner_limit=_opt(wigner_limit),
+            input_is_rwa=(bool(round(input_is_rwa))
+                          if input_is_rwa != -1 else None),
             segment_key=_opt(segment_key, integer=True),
         )
 
@@ -123,6 +131,8 @@ class Parameter:
             bits.append(f"rad={self.radiation_type}")
             if self.wigner_limit is not None:
                 bits.append(f"wigner={self.wigner_limit:.4g}")
+            if self.input_is_rwa:
+                bits.append("input=RWA")
         if self.kind in ("norm", "shift"):
             bits.append(f"segment={self.segment_key}")
         return "Parameter(" + ", ".join(bits) + ")"

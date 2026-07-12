@@ -275,12 +275,16 @@ void FittingTab::populateFromCurrentGUIState() {
                 // Only add widths that belong to this level
                 if(channel.levelIndex == levelIndex && channel.isFixed == 0 && channel.reducedWidth != 0.0) {
                     FittingParameter widthParam;
-                    widthParam.name = QString("Level %1 Channel %2 Width (eV)")
+                    // Keep "Width" in the name (parameter matching keys on it);
+                    // the unit reflects the channel's input convention.
+                    widthParam.name = QString("Level %1 Channel %2 Width (%3)")
                                      .arg(levelIndex + 1)
-                                     .arg(channelIndex + 1);
-                    
-                    // LevelsTab already stores physical widths, use them directly
-                    widthParam.value = channel.reducedWidth; // This is actually physical width in the GUI
+                                     .arg(channelIndex + 1)
+                                     .arg(channel.gammaIsRWA==1 ? "MeV^(1/2)" : "eV");
+
+                    // LevelsTab stores the value in the channel's input convention:
+                    // physical width/ANC, or the reduced width amplitude if flagged
+                    widthParam.value = channel.reducedWidth;
                     widthParam.lowerLimit = 0;
                     widthParam.upperLimit = 0;  // Default upper limit
                     widthParam.error = channel.reducedWidth * 0.1;  // Default 10% error
@@ -550,9 +554,10 @@ void FittingTab::loadSettings() {
                             // Add ALL widths that belong to this level (including fixed and zero-width)
                             if(channel.levelIndex == levelIndex) {
                                 FittingParameter widthParam;
-                                widthParam.name = QString("Level %1 Channel %2 Width (eV)")
+                                widthParam.name = QString("Level %1 Channel %2 Width (%3)")
                                                  .arg(levelIndex + 1)
-                                                 .arg(channelIndex + 1);
+                                                 .arg(channelIndex + 1)
+                                                 .arg(channel.gammaIsRWA==1 ? "MeV^(1/2)" : "eV");
 
                                 widthParam.value = channel.reducedWidth;
                                 widthParam.lowerLimit = 0;
