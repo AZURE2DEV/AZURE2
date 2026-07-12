@@ -447,15 +447,18 @@ double EPoint::GetSqrtPenetrability(int jGroupNum, int channelNum) const {
 }
 
 /*!
- * Returns the THM entrance transfer form factor M_l for the channel specified
- * by positions in the JGroup and AChannel vectors. Returns 0 if not stored
- * (e.g. non-entrance channels, or non-THM points).
+ * Returns the THM entrance transfer form factor M_l = (b-1) j_l - rho dj_l/drho
+ * for the channel specified by positions in the JGroup and AChannel vectors,
+ * assembled with the given boundary b (the per-level shift function under the
+ * Brune formalism, or the channel boundary constant otherwise). Returns 0 if
+ * not stored (e.g. non-entrance channels, or non-THM points).
  */
 
-double EPoint::GetThmFormFactor(int jGroupNum, int channelNum) const {
-  if(jGroupNum-1 >= (int)thm_formfactors_.size()) return 0.0;
-  if(channelNum-1 >= (int)thm_formfactors_[jGroupNum-1].size()) return 0.0;
-  return thm_formfactors_[jGroupNum-1][channelNum-1];
+double EPoint::GetThmFormFactor(int jGroupNum, int channelNum, double boundary) const {
+  if(jGroupNum-1 >= (int)thm_jl_.size()) return 0.0;
+  if(channelNum-1 >= (int)thm_jl_[jGroupNum-1].size()) return 0.0;
+  return (boundary-1.0)*thm_jl_[jGroupNum-1][channelNum-1]
+         -thm_rhodjl_[jGroupNum-1][channelNum-1];
 }
 
 /*!
@@ -1178,19 +1181,23 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config& configure) {
 	  this->AddExpCoulombPhase(j,ch,1.0);
 	  this->AddExpHardSpherePhase(j,ch,1.0);
 	}
-	// THM entrance transfer form factor M_l (mrmpy _form_factor). Stored for
-	// every channel (0 for non-entrance channels) so it stays index-aligned
-	// with the penetrabilities. The interior LoElement above is unchanged --
-	// the form factor replaces only the entrance *vertex*, not the interior.
-	double thmFF=0.0;
+	// Boundary-independent pieces of the THM entrance transfer form factor
+	// M_l (mrmpy _form_factor). Stored for every channel (0 for non-entrance
+	// channels) so they stay index-aligned with the penetrabilities. M_l
+	// itself is assembled at the entrance vertex (THMMatrixFunc) with the
+	// per-level boundary, which floats with the fit under Brune. The interior
+	// LoElement above is unchanged -- the form factor replaces only the
+	// entrance *vertex*, not the interior.
+	double thmJl=0.0;
+	double thmRhoDjl=0.0;
 	if(this->IsTHM() && thePair==entrancePair && thePair->GetPType()==0) {
-	  double bcond=theChannel->GetBoundaryCondition();
 	  double muMeV=thePair->GetRedMass()*uconv;
 	  double bindingE=thePair->GetBindingEnergy();
 	  if(localEnergy+bindingE>0.0)
-	    thmFF=ThmFormFactor(lValue,bcond,muMeV,localEnergy,bindingE,thePair->GetChRad());
+	    ThmBesselParts(lValue,muMeV,localEnergy,bindingE,thePair->GetChRad(),
+			   thmJl,thmRhoDjl);
 	}
-	this->AddThmFormFactor(j,ch,thmFF);
+	this->AddThmFormFactor(j,ch,thmJl,thmRhoDjl);
       }
     }
   }
@@ -1203,7 +1210,8 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config& configure) {
     mappedPoint->sfactorconv_=sfactorconv_;
     mappedPoint->lo_elements_=lo_elements_;
     mappedPoint->penetrabilities_=penetrabilities_;
-    mappedPoint->thm_formfactors_=thm_formfactors_;
+    mappedPoint->thm_jl_=thm_jl_;
+    mappedPoint->thm_rhodjl_=thm_rhodjl_;
     mappedPoint->coulombphase_=coulombphase_;
     mappedPoint->hardspherephase_=hardspherephase_;
     for(int ii=1;ii<=this->NumSubPoints();ii++) {
@@ -1212,7 +1220,8 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config& configure) {
       subMappedPoint->sfactorconv_=this->GetSubPoint(ii)->sfactorconv_;
       subMappedPoint->lo_elements_=this->GetSubPoint(ii)->lo_elements_;
       subMappedPoint->penetrabilities_=this->GetSubPoint(ii)->penetrabilities_;
-      subMappedPoint->thm_formfactors_=this->GetSubPoint(ii)->thm_formfactors_;
+      subMappedPoint->thm_jl_=this->GetSubPoint(ii)->thm_jl_;
+      subMappedPoint->thm_rhodjl_=this->GetSubPoint(ii)->thm_rhodjl_;
       subMappedPoint->coulombphase_=this->GetSubPoint(ii)->coulombphase_;
       subMappedPoint->hardspherephase_=this->GetSubPoint(ii)->hardspherephase_;
     }
@@ -1227,7 +1236,8 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config& configure) {
   // Clear existing energy-dependent values first
   lo_elements_.clear();
   penetrabilities_.clear();
-  thm_formfactors_.clear();
+  thm_jl_.clear();
+  thm_rhodjl_.clear();
   coulombphase_.clear();
   hardspherephase_.clear();
   
@@ -1264,16 +1274,19 @@ void EPoint::AddSqrtPenetrability(int jGroupNum, int channelNum, double sqrtPene
 }
 
 /*!
- * Adds a THM entrance transfer form factor M_l with reference to positions in
- * the JGroup and subsequent AChannel vectors. Filled in lockstep with the
- * penetrabilities (one entry per channel), so a non-entrance channel stores 0.
+ * Adds the boundary-independent pieces j_l(rho) and rho dj_l/drho of the THM
+ * entrance transfer form factor with reference to positions in the JGroup and
+ * subsequent AChannel vectors. Filled in lockstep with the penetrabilities
+ * (one entry per channel), so a non-entrance channel stores 0.
  */
 
-void EPoint::AddThmFormFactor(int jGroupNum, int channelNum, double formFactor) {
+void EPoint::AddThmFormFactor(int jGroupNum, int channelNum, double jl, double rhoDjl) {
   vector_r d;
-  while(jGroupNum>thm_formfactors_.size()) thm_formfactors_.push_back(d);
-  thm_formfactors_[jGroupNum-1].push_back(formFactor);
-  assert(channelNum=thm_formfactors_[jGroupNum-1].size());
+  while(jGroupNum>thm_jl_.size()) thm_jl_.push_back(d);
+  while(jGroupNum>thm_rhodjl_.size()) thm_rhodjl_.push_back(d);
+  thm_jl_[jGroupNum-1].push_back(jl);
+  thm_rhodjl_[jGroupNum-1].push_back(rhoDjl);
+  assert(channelNum=thm_jl_[jGroupNum-1].size());
 }
 
 /*!

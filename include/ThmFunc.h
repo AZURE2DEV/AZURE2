@@ -32,6 +32,18 @@ double ThmSphericalBessel(int l, double x);
  */
 double ThmRho(double mu, double E, double B, double radius);
 
+///Boundary-independent pieces of M_l: jl = j_l(rho) and rhoDjl = rho dj_l/drho.
+/*!
+ * These depend only on the point energy, binding energy, reduced mass and
+ * channel radius, so they can be cached per point.  The boundary-dependent
+ * assembly M_l = (b - 1) jl - rhoDjl happens at the entrance vertex, where b
+ * is the per-level shift function S_c(E_lambda) under the Brune formalism
+ * (mrmpy vertex_boundary="per_level") or the fixed channel boundary constant
+ * otherwise.  Parameters as in ThmRho, plus the orbital angular momentum l.
+ */
+void ThmBesselParts(int l, double mu, double E, double B, double radius,
+                    double& jl, double& rhoDjl);
+
 ///THM transfer form factor M_l(E).
 /*!
  * \param l      orbital angular momentum of the entrance channel

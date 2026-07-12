@@ -73,8 +73,9 @@ class EPoint {
   double GetFitE2CrossSection() const;
   double GetSFactorConversion() const;
   double GetSqrtPenetrability(int,int) const;
-  ///THM entrance transfer form factor M_l for JGroup/channel (0 if not stored).
-  double GetThmFormFactor(int,int) const;
+  ///THM entrance transfer form factor M_l = (b-1) j_l - rho dj_l/drho for
+  ///JGroup/channel, assembled with the given boundary b (0 if not stored).
+  double GetThmFormFactor(int,int,double) const;
   double GetJ() const;
   double GetStoppingPower() const;
   double GetTargetThickness() const;
@@ -123,7 +124,7 @@ class EPoint {
   void RecalcEDependentValues(CNuc*,const Config&);
   void AddLoElement(int,int,complex);
   void AddSqrtPenetrability(int,int,double);
-  void AddThmFormFactor(int,int,double);
+  void AddThmFormFactor(int,int,double,double);
   void AddExpCoulombPhase(int,int,complex);
   void AddExpHardSpherePhase(int,int,complex);
   void CalcCoulombAmplitude(CNuc*);
@@ -195,8 +196,11 @@ class EPoint {
   vector_r angularDists_;
   matrix_c lo_elements_;
   matrix_r penetrabilities_;
-  ///THM entrance transfer form factors M_l, indexed [jGroup-1][channel-1].
-  matrix_r thm_formfactors_;
+  ///Boundary-independent THM form-factor pieces j_l(rho) and rho dj_l/drho,
+  ///indexed [jGroup-1][channel-1]. M_l is assembled at the entrance vertex
+  ///with the per-level boundary (Brune) or the channel boundary constant.
+  matrix_r thm_jl_;
+  matrix_r thm_rhodjl_;
   matrix_c coulombphase_;
   matrix_c hardspherephase_;
   matrix_c ec_amplitudes_;

@@ -55,19 +55,28 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint* point) {
 
     // Entrance vertices: v_s[la] = sum_{c_in in spin s} gamma_{la,c_in} M_l,
     // coherent over entrance partial waves of the same channel spin, kept in
-    // separate (incoherent) buckets per channel spin s.
+    // separate (incoherent) buckets per channel spin s. Under the Brune
+    // formalism the boundary in M_l is the per-level shift function
+    // S_c(E_lambda) at the current fit energy (mrmpy
+    // vertex_boundary="per_level"), refreshed each evaluation by
+    // CNuc::CalcShiftFunctions; otherwise it is the fixed channel boundary
+    // constant (first-level convention).
+    bool brune = !!(configure().paramMask & Config::USE_BRUNE_FORMALISM);
     std::map<double, std::vector<complex> > vbys;
     bool hasEntrance = false;
     for(int ch = 1; ch <= numChannels; ch++) {
       AChannel* c = jg->GetChannel(ch);
       if(c->GetPairNum() != aa) continue;
       hasEntrance = true;
-      double ml = point->GetThmFormFactor(j, ch);
       std::vector<complex>& vertex = vbys[c->GetS()];
       if(vertex.empty()) vertex.assign(numLevels + 1, complex(0.0, 0.0));
       for(int la = 1; la <= numLevels; la++) {
-        if(!jg->GetLevel(la)->IsInRMatrix()) continue;
-        vertex[la] += jg->GetLevel(la)->GetFitGamma(ch) * ml;
+        ALevel* level = jg->GetLevel(la);
+        if(!level->IsInRMatrix()) continue;
+        double boundary = brune ? level->GetShiftFunction(ch)
+                                : c->GetBoundaryCondition();
+        vertex[la] += level->GetFitGamma(ch)
+                      * point->GetThmFormFactor(j, ch, boundary);
       }
     }
     if(!hasEntrance) continue;   // this J group does not couple the entrance pair

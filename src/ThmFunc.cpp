@@ -15,11 +15,17 @@ double ThmRho(double mu, double E, double B, double radius) {
   return std::sqrt(2.0 * mu * (E + B)) * radius / hbarc;
 }
 
+void ThmBesselParts(int l, double mu, double E, double B, double radius,
+                    double& jl, double& rhoDjl) {
+  double rho = ThmRho(mu, E, B, radius);
+  jl = gsl_sf_bessel_jl(l, rho);
+  // dj_l/drho by forward finite difference (matches mrmpy), then rho*dj_l/drho.
+  rhoDjl = rho * (gsl_sf_bessel_jl(l, rho + kThmFDStep) - jl) / kThmFDStep;
+}
+
 double ThmFormFactor(int l, double b, double mu, double E, double B,
                      double radius) {
-  double rho = ThmRho(mu, E, B, radius);
-  double jl = gsl_sf_bessel_jl(l, rho);
-  // dj_l/drho by forward finite difference (matches mrmpy), then rho*dj_l/drho.
-  double rho_djl = rho * (gsl_sf_bessel_jl(l, rho + kThmFDStep) - jl) / kThmFDStep;
-  return (b - 1.0) * jl - rho_djl;
+  double jl, rhoDjl;
+  ThmBesselParts(l, mu, E, B, radius, jl, rhoDjl);
+  return (b - 1.0) * jl - rhoDjl;
 }
