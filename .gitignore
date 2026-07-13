@@ -1,12 +1,7 @@
-build/**
-build-windows/**
-build-linux/**
-build-macos/**
-build-gui/**
+build*/**
 .DS_Store
 .cache/**
 .vscode/**
-.vscode/settings.json
 azure2
 CLAUDE.md
 build.log
