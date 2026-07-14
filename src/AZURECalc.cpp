@@ -681,11 +681,15 @@ double AZURECalc::RunLevenbergMarquardt(AZUREParams& params, int maxIter,
         for(int i = 0; i < nMn; i++) fixed[i] = tp.GetMinuitParams().Parameter(i).IsFixed();
         ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), fixed);
         if(pmap.NumPacked() == nFree) {
-          bandCovOut->cols.resize(nFree);
-          for(int a = 0; a < nFree; a++) bandCovOut->cols[a] = pmap.Desc(pmap.PackedToFull(a));
-          bandCovOut->M.assign(nFree, std::vector<double>(nFree, 0.0));
-          for(int a = 0; a < nFree; a++)
-            for(int b = 0; b < nFree; b++) bandCovOut->M[a][b] = gsl_matrix_get(A, a, b);
+          // Keep only the R-matrix sub-block: the band is insensitive to norms
+          // and energy shifts, so they are dropped from the saved covariance.
+          const std::vector<int> rc = RMatrixPackedColumns(pmap);
+          const int m = (int)rc.size();
+          bandCovOut->cols.resize(m);
+          for(int a = 0; a < m; a++) bandCovOut->cols[a] = pmap.Desc(pmap.PackedToFull(rc[a]));
+          bandCovOut->M.assign(m, std::vector<double>(m, 0.0));
+          for(int a = 0; a < m; a++)
+            for(int b = 0; b < m; b++) bandCovOut->M[a][b] = gsl_matrix_get(A, rc[a], rc[b]);
         }
       }
     }

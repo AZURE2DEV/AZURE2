@@ -165,7 +165,7 @@ int AZUREMain::operator()(){
     // extrapolation runs.  Any fit (MIGRAD or LM) yields it; MINOS is not needed.
     BandCovariance bandCov;
     bool haveBandCov=false;
-    std::string covPath=configure().outputdir+"parameter_covariance.band";
+    std::string covPath=configure().outputdir+"covariance.dat";
 
     // Build the band covariance from a Minuit covariance (MIGRAD paths).
     auto captureMinuitCov=[&](const std::vector<double>& covData){
@@ -517,7 +517,13 @@ int AZUREMain::operator()(){
             chi2data+=seg->GetSegmentChiSquared();
             nData+=seg->NumPoints();
           }
-          int nFree=bandCov.size();
+          // Degrees of freedom use the total number of free fit parameters
+          // (including norms/shifts), even though the covariance matrix itself
+          // holds only the R-matrix sub-block (bandCov.size()).
+          int nFree=0;
+          const int nMnAll=params.GetMinuitParams().Params().size();
+          for(int i=0;i<nMnAll;i++)
+            if(!params.GetMinuitParams().Parameter(i).IsFixed()) nFree++;
           int ndf=nData-nFree;
           double redChi2=(ndf>0)?chi2data/ndf:1.0;
           double factor=(redChi2>1.0)?redChi2:1.0;   // inflate only
@@ -525,7 +531,8 @@ int AZUREMain::operator()(){
                                 << ", N = " << nData << ", free params = " << nFree
                                 << ", nu = " << ndf << ", reduced chi-squared = " << redChi2 << "." << std::endl;
           if(factor>1.0) {
-            for(int a=0;a<nFree;a++) for(int b=0;b<nFree;b++) bandCov.M[a][b]*=factor;
+            const int nMat=bandCov.size();
+            for(int a=0;a<nMat;a++) for(int b=0;b<nMat;b++) bandCov.M[a][b]*=factor;
             configure().outStream << "Covariance scaled by " << factor << "." << std::endl;
           } else {
             configure().outStream << "Reduced chi-squared <= 1; covariance left unscaled."
