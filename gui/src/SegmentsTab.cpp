@@ -154,27 +154,37 @@ SegmentsTab::SegmentsTab(QWidget *parent) : QWidget(parent) {
 
   // Button row: [+] [-]   [Check All] [Uncheck All]   [up] [down]   <stretch>   Filter: [Entrance] [Exit]   [EXFOR]
   // A horizontal box vertically centers every widget so the buttons, filter
-  // comboboxes and label all line up.
+  // comboboxes and label all line up.  On macOS native push-button bezels are
+  // drawn slightly outside the widget geometry, so adjacent buttons overlap
+  // unless the gap between them is widened (matches setHorizontalSpacing(11)
+  // used by the other tabs' button rows).
+#ifdef MACX_SPACING
+  const int kBtnGap = 11;    // gap between neighbouring buttons
+  const int kGroupGap = 20;  // gap between logical button groups
+#else
+  const int kBtnGap = 6;
+  const int kGroupGap = 14;
+#endif
   QHBoxLayout *segDataButtonBox = new QHBoxLayout;
   segDataButtonBox->setSpacing(0);   // all gaps set explicitly below
   segDataButtonBox->addWidget(segDataAddButton);
-  segDataButtonBox->addSpacing(6);
+  segDataButtonBox->addSpacing(kBtnGap);
   segDataButtonBox->addWidget(segDataDeleteButton);
-  segDataButtonBox->addSpacing(14);
+  segDataButtonBox->addSpacing(kGroupGap);
   segDataButtonBox->addWidget(segDataCheckAllButton);
-  segDataButtonBox->addSpacing(8);
+  segDataButtonBox->addSpacing(kBtnGap);
   segDataButtonBox->addWidget(segDataUncheckAllButton);
-  segDataButtonBox->addSpacing(14);
+  segDataButtonBox->addSpacing(kGroupGap);
   segDataButtonBox->addWidget(segDataUpButton);
-  segDataButtonBox->addSpacing(6);
+  segDataButtonBox->addSpacing(kBtnGap);
   segDataButtonBox->addWidget(segDataDownButton);
   segDataButtonBox->addStretch(1);
   segDataButtonBox->addWidget(new QLabel(tr("Filter:")));
-  segDataButtonBox->addSpacing(6);
+  segDataButtonBox->addSpacing(kBtnGap);
   segDataButtonBox->addWidget(segDataEntranceFilter);
-  segDataButtonBox->addSpacing(6);
+  segDataButtonBox->addSpacing(kBtnGap);
   segDataButtonBox->addWidget(segDataExitFilter);
-  segDataButtonBox->addSpacing(14);
+  segDataButtonBox->addSpacing(kGroupGap);
   segDataButtonBox->addWidget(segDataExforButton);
   segDataLayout->addLayout(segDataButtonBox,1,0);
 
