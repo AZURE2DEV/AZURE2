@@ -26,8 +26,9 @@ RunTab::RunTab(QWidget* parent) : QWidget(parent) {
   minimizerType->addItem(tr("Minuit2"));                  // 0: MIGRAD, numerical grad
   minimizerType->addItem(tr("Minuit2 (analytic grad.)")); // 1: MIGRAD, analytic grad
   minimizerType->addItem(tr("Levenberg-Marquardt"));      // 2: LM (analytic Jacobian)
+  minimizerType->addItem(tr("GSL Trust-Region")); // 3: GSL nlinear (analytic Jacobian)
 #ifdef USE_NLOPT
-  minimizerType->addItem(tr("NLopt (SBPLX)"));            // 3+: NLopt
+  minimizerType->addItem(tr("NLopt (SBPLX)"));            // 4+: NLopt
   minimizerType->addItem(tr("NLopt (COBYLA)"));
   minimizerType->addItem(tr("NLopt (BOBYQA)"));
   minimizerType->addItem(tr("NLopt (NEWUOA)"));

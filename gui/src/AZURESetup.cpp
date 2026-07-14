@@ -406,13 +406,15 @@ bool AZURESetup::readLastRun(QTextStream& inStream) {
   runTab->wignerLimitsCheck->setChecked(paramMask & Config::USE_WIGNER_LIMITS);
 
   // Set minimizer selection (0 Minuit2, 1 Minuit2+analytic grad, 2 Levenberg-
-  // Marquardt, 3+ NLopt).
+  // Marquardt, 3 GSL trust-region, 4+ NLopt).
 #ifdef USE_NLOPT
   if(paramMask & Config::USE_NLOPT_MINIMIZER) {
-    runTab->minimizerType->setCurrentIndex(GetConfig().nloptAlgorithm + 3);
+    runTab->minimizerType->setCurrentIndex(GetConfig().nloptAlgorithm + 4);
   } else
 #endif
-  if(paramMask & Config::USE_LM_MINIMIZER) {
+  if(paramMask & Config::USE_GSL_LM_MINIMIZER) {
+    runTab->minimizerType->setCurrentIndex(3);
+  } else if(paramMask & Config::USE_LM_MINIMIZER) {
     runTab->minimizerType->setCurrentIndex(2);
   } else if(paramMask & Config::USE_ANALYTIC_GRADIENT) {
     runTab->minimizerType->setCurrentIndex(1);
@@ -967,21 +969,25 @@ void AZURESetup::SaveAndRun() {
   else GetConfig().paramMask &= ~Config::USE_WIGNER_LIMITS;
 
   // Handle minimizer selection (only for fitting operations).  Combo layout:
-  //   0 Minuit2, 1 Minuit2 + analytic gradient, 2 Levenberg-Marquardt, 3+ NLopt.
+  //   0 Minuit2, 1 Minuit2 + analytic gradient, 2 Levenberg-Marquardt,
+  //   3 GSL trust-region (geodesic), 4+ NLopt.
   GetConfig().paramMask &= ~(Config::USE_NLOPT_MINIMIZER |
                              Config::USE_ANALYTIC_GRADIENT |
-                             Config::USE_LM_MINIMIZER);
+                             Config::USE_LM_MINIMIZER |
+                             Config::USE_GSL_LM_MINIMIZER);
   if(runTab->calcType->currentIndex()==1 || runTab->calcType->currentIndex()==3) {
     int mIdx = runTab->minimizerType->currentIndex();
     if(mIdx == 1) {
       GetConfig().paramMask |= Config::USE_ANALYTIC_GRADIENT;
     } else if(mIdx == 2) {
       GetConfig().paramMask |= Config::USE_LM_MINIMIZER;
+    } else if(mIdx == 3) {
+      GetConfig().paramMask |= Config::USE_GSL_LM_MINIMIZER;
     }
 #ifdef USE_NLOPT
-    else if(mIdx >= 3) {
+    else if(mIdx >= 4) {
       GetConfig().paramMask |= Config::USE_NLOPT_MINIMIZER;
-      GetConfig().nloptAlgorithm = mIdx - 3;
+      GetConfig().nloptAlgorithm = mIdx - 4;
     }
 #endif
   }

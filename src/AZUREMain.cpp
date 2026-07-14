@@ -313,7 +313,26 @@ int AZUREMain::operator()(){
         params.WriteUserParameters(configure(),true);
       } else {
 #endif
-      if(configure().paramMask & Config::USE_LM_MINIMIZER) {
+      if(configure().paramMask & Config::USE_GSL_LM_MINIMIZER) {
+        // GSL trust-region least-squares (geodesic-accelerated); same analytic
+        // Jacobian as the LM path, but factorizes J directly (QR).
+        configure().outStream << "Using GSL trust-region least-squares minimizer with analytic Jacobian." << std::endl;
+        bool wantBand = configure().paramMask & Config::CALCULATE_COVARIANCE_BAND;
+        double gslChi2 = theFunc.RunGSLNonlinear(params, 200, wantBand ? &bandCov : nullptr);
+        if(gslChi2 < 0.0) {
+          // The analytic Jacobian is not available for this model -> MIGRAD.
+          configure().outStream << "Analytic Jacobian unsupported for this model; "
+                                   "falling back to MIGRAD." << std::endl;
+          const ROOT::Minuit2::FCNBase& fb = theFunc;
+          ROOT::Minuit2::MnMigrad migrad(fb, params.GetMinuitParams());
+          ROOT::Minuit2::FunctionMinimum min = migrad(50000);
+          params.GetMinuitParams() = min.UserParameters();
+          captureMinuitCov(min.UserCovariance().Data());
+        } else if(wantBand && !bandCov.empty()) {
+          haveBandCov=true;   // saved later, after optional reduced-chi^2 scaling
+        }
+        params.WriteUserParameters(configure(), true);
+      } else if(configure().paramMask & Config::USE_LM_MINIMIZER) {
         // Levenberg-Marquardt / Gauss-Newton using the analytic residual
         // Jacobian (selected as an alternative to MIGRAD).
         configure().outStream << "Using Levenberg-Marquardt minimizer with analytic Jacobian." << std::endl;

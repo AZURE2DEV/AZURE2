@@ -78,6 +78,13 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
                         vector_r& jac, std::vector<int>& packedToFull) const;
 
   /*!
+   * Standardized residuals only (no Jacobian) at `full`, in the same row order
+   * as ResidualJacobian.  A plain forward pass, used for the trust-region trial
+   * evaluations of the GSL solver.  Returns false if the evaluation fails.
+   */
+  bool ResidualsOnly(const vector_r& full, vector_r& residuals) const;
+
+  /*!
    * Levenberg-Marquardt / Gauss-Newton minimization of the total chi-squared
    * using the analytic residual Jacobian.  Converges in far fewer iterations
    * than MIGRAD for least-squares problems.  Updates `params` in place with the
@@ -87,6 +94,18 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    */
   double RunLevenbergMarquardt(AZUREParams& params, int maxIter = 200,
                                struct BandCovariance* bandCovOut = nullptr) const;
+
+  /*!
+   * Nonlinear least-squares minimization via GSL's trust-region solver
+   * (gsl_multifit_nlinear, geodesic-accelerated).  Uses the same analytic
+   * residual Jacobian as RunLevenbergMarquardt but factorizes J directly (QR).
+   * Gaussian priors enter as extra residual rows; parameter limits are enforced
+   * by projection.  Updates `params` in place with the best-fit values and
+   * (J^T J + priors)^{-1} errors.  Returns the final chi-squared, or a negative
+   * value if the analytic Jacobian is unsupported (caller falls back to MIGRAD).
+   */
+  double RunGSLNonlinear(AZUREParams& params, int maxIter = 200,
+                         struct BandCovariance* bandCovOut = nullptr) const;
 
   /*!
    * Returns a reference to the Config structure.
@@ -134,6 +153,33 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   void WriteParameters(AZUREParams& params, const Config& configure) const;
 
  private:
+  /*!
+   * Shared setup for the least-squares solvers.  Runs one ResidualJacobian at
+   * `full` (returned in `r`/`J`/`p2f`) to fix the packed column order, and fills
+   * the free-parameter start values `x`, projection limits `lo`/`hi`, and the
+   * Gaussian priors `pen_nom` / `pen_inv2` (zero where a param has no prior).
+   * Returns the number of free parameters, or -1 if the Jacobian is unsupported.
+   */
+  int PrepareFreeParams(const vector_r& full,
+                        const ROOT::Minuit2::MnUserParameters& mp,
+                        vector_r& r, vector_r& J, std::vector<int>& p2f,
+                        vector_r& x, std::vector<double>& lo,
+                        std::vector<double>& hi, std::vector<double>& pen_nom,
+                        std::vector<double>& pen_inv2) const;
+
+  /*!
+   * Shared covariance / error finalization for the least-squares solvers.  At
+   * the best-fit `full`, builds H = J^T J (+ priors), inverts it (ridge fallback
+   * if singular), writes the errors into `mp`, reports poorly-constrained
+   * directions, and, if `bandCovOut` is set, exports the R-matrix sub-block
+   * covariance for the uncertainty band.
+   */
+  void FinalizeLeastSquaresCovariance(const vector_r& full,
+                                      const std::vector<int>& p2f,
+                                      const std::vector<double>& pen_inv2,
+                                      ROOT::Minuit2::MnUserParameters& mp,
+                                      struct BandCovariance* bandCovOut) const;
+
   const Config &configure_;
   EData *data_;
   CNuc *compound_;

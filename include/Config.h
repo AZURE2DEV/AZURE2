@@ -64,7 +64,8 @@ class Config {
     USE_ANALYTIC_GRADIENT     =(1<<19),
     USE_LM_MINIMIZER          =(1<<20),
     CALCULATE_COVARIANCE_BAND =(1<<21),
-    SCALE_COVARIANCE_BY_CHI2  =(1<<22)
+    SCALE_COVARIANCE_BY_CHI2  =(1<<22),
+    USE_GSL_LM_MINIMIZER      =(1<<23)
   };
   /*!
    * Bit flags for check file control in AZURE2.

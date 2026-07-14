@@ -93,6 +93,7 @@ void printHelp() {
 #endif
 	     << std::setw(25) << std::left << "\t--use-gradient:" << std::setw(0) << "Use Minuit2 (MIGRAD) with the analytic gradient (default: numerical)." << std::endl
 	     << std::setw(25) << std::left << "\t--use-lm:" << std::setw(0) << "Use the Levenberg-Marquardt minimizer (analytic Jacobian; falls back to MIGRAD)." << std::endl
+	     << std::setw(25) << std::left << "\t--use-gsl-lm:" << std::setw(0) << "Use the GSL trust-region least-squares minimizer with geodesic acceleration (analytic Jacobian; falls back to MIGRAD)." << std::endl
 	     ;
 }
 
@@ -150,6 +151,7 @@ bool parseOptions(int argc, char *argv[], Config& configure) {
     else if(*it=="--use-nlopt") configure.paramMask |= Config::USE_NLOPT_MINIMIZER;
 #endif
     else if(*it=="--use-lm") configure.paramMask |= Config::USE_LM_MINIMIZER;
+    else if(*it=="--use-gsl-lm") configure.paramMask |= Config::USE_GSL_LM_MINIMIZER;
     else if(*it=="--use-gradient") configure.paramMask |= Config::USE_ANALYTIC_GRADIENT;
     else if(*it=="--covariance-band") configure.paramMask |= Config::CALCULATE_COVARIANCE_BAND;
     else if(*it=="--scale-covariance") configure.paramMask |= Config::SCALE_COVARIANCE_BY_CHI2;
