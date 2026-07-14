@@ -680,10 +680,12 @@ double AZUREAPI::CalculateChi2RWA(const vector_r& rwaParams) const {
   }
 
   double chiSquared = 0.0;
-  
-  CNuc* localCompound = compound()->Clone();
-  EData* localData = data()->Clone();
-  
+
+  // One request at a time: operate on the canonical compound/data in place
+  // (re-filled below from these parameters) instead of cloning.
+  CNuc* localCompound = compound();
+  EData* localData = data();
+
   // Fill compound nucleus and data with RWA parameters
   localCompound->FillCompoundFromParams(params_);
   localData->FillNormsFromParams(params_);
@@ -720,10 +722,7 @@ double AZUREAPI::CalculateChi2RWA(const vector_r& rwaParams) const {
       chiSquared += segmentChiSquared;
     }
   }
-  
-  delete localCompound;
-  delete localData;
-  
+
   return chiSquared;
 }
 
@@ -739,10 +738,10 @@ double AZUREAPI::CalculateChi2Physical(const vector_r& physicalParams) const {
 
   double chiSquared = 0.0;
 
-  CNuc* localCompound = NULL;
-  EData* localData = NULL;
-  localCompound = compound()->Clone();
-  localData = data()->Clone();
+  // One request at a time: operate on the canonical compound/data in place
+  // (re-filled below from these parameters) instead of cloning.
+  CNuc* localCompound = compound();
+  EData* localData = data();
 
   AZUREParams params;
   localCompound->FillCompoundFromParamsPhysical(params_);
@@ -786,9 +785,6 @@ double AZUREAPI::CalculateChi2Physical(const vector_r& physicalParams) const {
       chiSquared += segmentChiSquared;
     }
   }
-  
-  delete localCompound;
-  delete localData;
 
   return chiSquared;
 }
@@ -803,10 +799,14 @@ static vector_r MapPackedToFull(const vector_r& packed, const vector_r& all_rwa,
   return full;
 }
 
-bool AZUREAPI::Chi2GradEGammaNorm(const vector_r& full, vector_r& gradFull) const {
+bool AZUREAPI::Chi2GradEGammaNorm(const vector_r& full, vector_r& gradFull,
+                                  double& chi2Out) const {
   const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
-  CNuc* lc = compound()->Clone();
-  EData* ld = data()->Clone();
+  // Only one API request runs at a time, so operate on the canonical
+  // compound/data in place (like UpdateSegments) rather than cloning; every
+  // entry point re-fills from its own parameters before use.
+  CNuc* lc = compound();
+  EData* ld = data();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
   ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
@@ -826,6 +826,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r& full, vector_r& gradFull) cons
   // chi2 = sum (fit - data*n)^2/(cmErr*n)^2.  d(chi2)/d(model) = 2 r / err^2;
   // the same model gives the data-term norm gradient, accumulated per segment.
   std::vector<double> normData(ld->NumSegments() + 1, 0.0);
+  double chi2 = 0.0;
   FitBarFn fb = [&](ESegment* seg, int i, int pid, double model) -> double {
     EPoint* pt = seg->GetPoint(pid + 1);
     if(!pt) return 0.0;
@@ -835,6 +836,10 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r& full, vector_r& gradFull) cons
     double r = model - dataval * norm;
     double err = cmErr * norm;
     if(err == 0.0) return 0.0;
+    // chi2 falls out of the same residual the gradient uses (so value and
+    // gradient stay consistent). Runs in the parallel point loop, so guard it.
+#pragma omp atomic
+    chi2 += (r * r) / (err * err);
     if(seg->IsVaryNorm() && norm != 0.0 && i >= 1 && i < (int)normData.size()) {
       double e2 = cmErr * cmErr;
       // fitBarFn runs inside the parallel point loop of AccumulateEGammaGradient,
@@ -857,19 +862,21 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r& full, vector_r& gradFull) cons
       int idx = pmap.NormIndex(s);
       if(idx >= 0 && idx < (int)gradFull.size()) gradFull[idx] = normData[s];
     }
+    chi2Out = chi2;
   }
-  delete lc;
-  delete ld;
   return ok;
 }
 
 vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r& params) const {
   vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
 
-  double chi2 = CalculateChi2RWA(params);
-
+  // The analytic gradient pass runs the full forward model at every point, so
+  // chi2 comes out as a byproduct -- no separate forward pass. Only fall back to
+  // a standalone chi2 evaluation if the analytic path bails.
   vector_r gradFull(all_rwa_.size(), 0.0);
-  bool eg = Chi2GradEGammaNorm(full, gradFull);
+  double chi2 = 0.0;
+  bool eg = Chi2GradEGammaNorm(full, gradFull, chi2);
+  if(!eg) chi2 = CalculateChi2RWA(params);
 
   // Finite differences for energy shifts (and the whole block if the analytic
   // path bailed), using the scalar chi-squared.
@@ -899,8 +906,10 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r& params) const {
 vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r& params) const {
   vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
 
-  CNuc* lc = compound()->Clone();
-  EData* ld = data()->Clone();
+  // One request at a time: operate on the canonical compound/data in place
+  // (re-filled here from these parameters) instead of cloning.
+  CNuc* lc = compound();
+  EData* ld = data();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
   ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
@@ -917,9 +926,6 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r& params) const {
   vector_r residuals, jacobian;
   int nCols = 0;
   bool ok = ComputeResidualJacobian(lc, ld, configure(), pmap, sdp, residuals, jacobian, nCols);
-
-  delete lc;
-  delete ld;
 
   if(!ok) return vector_r{ -1.0 };
 

@@ -232,8 +232,14 @@ class AZUREAPI {
    * of gradFull; the data-term normalization gradient is accumulated into the
    * norm entries.  Returns false (touching nothing) if any data point is outside
    * the supported analytic path, so the caller falls back to finite differences.
+   *
+   * On success also returns, via chi2Out, the data chi-squared -- a free
+   * byproduct of the forward model the adjoint already evaluates at every point,
+   * consistent with the gradient (same per-point residual). Left untouched when
+   * the analytic path bails.
    */
-  bool Chi2GradEGammaNorm(const vector_r& fullParams, vector_r& gradFull) const;
+  bool Chi2GradEGammaNorm(const vector_r& fullParams, vector_r& gradFull,
+                          double& chi2Out) const;
 
   // Configuration
   Config &configure_;
