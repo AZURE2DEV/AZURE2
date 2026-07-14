@@ -1382,7 +1382,7 @@ bool SegmentsTab::writeSegDataFile(QTextStream& outStream) {
     } else {
       outStream << " 0";
     }
-    outStream << endl;
+    outStream << Qt::endl;
   }
 
   return true;
@@ -1593,7 +1593,7 @@ bool SegmentsTab::writeSegTestFile(QTextStream& outStream) {
       // Write 0 for non-advanced segments for backwards compatibility
       outStream << " 0";
     }
-    outStream << endl;
+    outStream << Qt::endl;
   }
 
   return true;
@@ -1646,8 +1646,8 @@ void SegmentsTab::updateFilterComboboxes() {
   }
 
   // Convert to sorted lists
-  QList<int> sortedEntrancePairs = entrancePairs.toList();
-  QList<int> sortedExitPairs = exitPairs.toList();
+  QList<int> sortedEntrancePairs = entrancePairs.values();
+  QList<int> sortedExitPairs = exitPairs.values();
   std::sort(sortedEntrancePairs.begin(), sortedEntrancePairs.end());
   std::sort(sortedExitPairs.begin(), sortedExitPairs.end());
 

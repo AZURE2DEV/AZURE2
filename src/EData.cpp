@@ -979,7 +979,7 @@ void EData::PrintData(const Config &configure) {
       if(data.point()->IsMapped()){
 	EnergyMap map=data.point()->GetMap();
 	char tempMap[25];
-	sprintf(tempMap,"(%d,%d)",map.segment,map.point);
+	snprintf(tempMap, sizeof(tempMap),"(%d,%d)",map.segment,map.point);
 	out << std::setw(12) <<  tempMap << std::endl;
       } else
 	out << std::setw(12) << "Not Mapped"
@@ -1511,8 +1511,8 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc,const Config& configure) {
       numSumSegments=0;
     }
     char segmentKeyOut[256];
-    if(segment->IsTotalCapture()) sprintf(segmentKeyOut,"%d (Total: %d)",segment->GetSegmentKey(),numSumSegments);
-    else sprintf(segmentKeyOut,"%d",segment->GetSegmentKey());
+    if(segment->IsTotalCapture()) snprintf(segmentKeyOut, sizeof(segmentKeyOut),"%d (Total: %d)",segment->GetSegmentKey(),numSumSegments);
+    else snprintf(segmentKeyOut, sizeof(segmentKeyOut),"%d",segment->GetSegmentKey());
     int aa=theCNuc->GetPairNumFromKey(segment->GetEntranceKey());
     if(theCNuc->GetPair(aa)->GetPType()==20) continue;
     if(theCNuc->GetPair(aa)->IsEntrance()) {
@@ -1763,7 +1763,7 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config& configure) {
               int ir = theCNuc->GetPairNumFromKey(componentSegment.GetExitKey());
               if(ecLevel->GetECPairNum() == ir) {
                 char segmentKeyOut[256];
-                sprintf(segmentKeyOut,"%d",componentSegment.GetSegmentKey());
+                snprintf(segmentKeyOut, sizeof(segmentKeyOut),"%d",componentSegment.GetSegmentKey());
                 configure.outStream << "\tSegment #" << std::setw(12) << segmentKeyOut
                                     << std::setw(0) << " [                         ] 0%";configure.outStream.flush();
                 int numPoints=componentSegment.NumPoints();
@@ -1931,7 +1931,7 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
   char varname[50];
   for(ESegmentIterator segment=GetSegments().begin();segment<GetSegments().end();segment++) {
     if(segment->IsVaryNorm()) {
-      sprintf(varname,"segment_%d_norm",segment->GetSegmentKey());
+      snprintf(varname, sizeof(varname),"segment_%d_norm",segment->GetSegmentKey());
       p.Add(varname,segment->GetNorm(),segment->GetNorm()*0.05);
       p.SetLowerLimit(varname,0.0);
       
@@ -1944,8 +1944,8 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
   SetEnergyShiftParamOffset(p.Params().size());
   for(ESegmentIterator segment=GetSegments().begin();segment<GetSegments().end();segment++) {
     // Always add energy shift parameter, regardless of IsVaryEnergyShift()
-    sprintf(varname,"segment_%d_energy_shift",segment->GetSegmentKey());
-    double stepSize = (segment->GetEnergyShiftError() > 0.0) ? segment->GetEnergyShiftError() * 0.1 : 0.001;
+    snprintf(varname, sizeof(varname),"segment_%d_energy_shift",segment->GetSegmentKey());
+    double stepSize = (segment->GetEnergyShiftError() > 0.0) ? segment->GetEnergyShiftError() * 0.01 : 0.0005;
     p.Add(varname,segment->GetEnergyShift(),stepSize);
 
     if(!segment->IsVaryEnergyShift()) {

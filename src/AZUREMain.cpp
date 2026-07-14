@@ -383,7 +383,7 @@ int AZUREMain::operator()(){
 
         // New output of the covariance matrix
         char filename[256];
-        sprintf(filename,"%scovariance_matrix.out",configure().outputdir.c_str());
+        snprintf(filename, sizeof(filename),"%scovariance_matrix.out",configure().outputdir.c_str());
         std::ofstream out;
         out.open(filename);
         if(out) {

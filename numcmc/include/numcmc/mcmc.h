@@ -24,7 +24,7 @@ class Mcmc {
 
     // Cumulative Inverse of g(z)
     double F(double z) { return 0.5 * (z * z + 2 * z + 1); };
-    bool constrained = true;
+    [[maybe_unused]] bool constrained = true;
 
     std::vector<std::vector<double>> load_state(char *file_name);
 

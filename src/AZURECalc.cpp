@@ -449,7 +449,7 @@ double AZURECalc::RunLevenbergMarquardt(AZUREParams& params, int maxIter,
       for(int s = 1; s <= data()->NumSegments(); s++) {
         ESegment* seg = data()->GetSegment(s);
         if(!seg || !seg->IsVaryNorm()) continue;
-        char vn[64]; sprintf(vn, "segment_%d_norm", seg->GetSegmentKey());
+        char vn[64]; snprintf(vn, sizeof(vn), "segment_%d_norm", seg->GetSegmentKey());
         if(name == vn) {
           double n0 = seg->GetNominalNorm();
           double sig = n0 / 100.0 * seg->GetNormError();
@@ -461,7 +461,7 @@ double AZURECalc::RunLevenbergMarquardt(AZUREParams& params, int maxIter,
       for(int s = 1; s <= data()->NumSegments(); s++) {
         ESegment* seg = data()->GetSegment(s);
         if(!seg || !seg->IsVaryEnergyShift()) continue;
-        char vn[64]; sprintf(vn, "segment_%d_energy_shift", seg->GetSegmentKey());
+        char vn[64]; snprintf(vn, sizeof(vn), "segment_%d_energy_shift", seg->GetSegmentKey());
         if(name == vn) {
           double sig = seg->GetEnergyShiftError();
           if(sig != 0.0) { pen_nom[a] = seg->GetNominalEnergyShift(); pen_inv2[a] = 1.0/(sig*sig); }
@@ -855,7 +855,7 @@ void AZURECalc::ReturnPooledEData(EData* obj) const {
  */
 void AZURECalc::WriteParameters(AZUREParams& params, const Config& configure) const {
   char filename[256];
-  sprintf(filename,"%sparam.fit",configure.outputdir.c_str());
+  snprintf(filename, sizeof(filename),"%sparam.fit",configure.outputdir.c_str());
   std::ofstream out;
   out.open(filename);
   if(out) {

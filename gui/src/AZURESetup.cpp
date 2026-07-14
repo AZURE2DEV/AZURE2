@@ -572,40 +572,40 @@ bool AZURESetup::writeFile(QString filename) {
   QString directory=info.absolutePath();
 
   QTextStream out(&file);
-  out << "<config>" << endl;
+  out << "<config>" << Qt::endl;
   if(!this->writeConfig(out,directory)) return false;
-  out << "</config>" << endl;
+  out << "</config>" << Qt::endl;
 
   // Write potential section after config
-  out << "<potential>" << endl;
-  out << "useHybridPotential=" << (GetConfig().useHybridMethod ? "1" : "0") << endl;
-  out << "useAdaptiveGrid=" << (GetConfig().useAdaptiveGrid ? "1" : "0") << endl;
+  out << "<potential>" << Qt::endl;
+  out << "useHybridPotential=" << (GetConfig().useHybridMethod ? "1" : "0") << Qt::endl;
+  out << "useAdaptiveGrid=" << (GetConfig().useAdaptiveGrid ? "1" : "0") << Qt::endl;
   nuclearPotentialTab->writePotentialSettings(out);
-  out << "</potential>" << endl;
+  out << "</potential>" << Qt::endl;
 
-  out << "<levels>" << endl;
+  out << "<levels>" << Qt::endl;
   if(!levelsTab->writeNuclearFile(out)) return false;
-  out << "</levels>" << endl;
+  out << "</levels>" << Qt::endl;
 
-  out << "<segmentsData>" << endl;
+  out << "<segmentsData>" << Qt::endl;
   if(!segmentsTab->writeSegDataFile(out)) return false;
-  out << "</segmentsData>" << endl;
+  out << "</segmentsData>" << Qt::endl;
 
-  out << "<segmentsTest>" << endl;
+  out << "<segmentsTest>" << Qt::endl;
   if(!segmentsTab->writeSegTestFile(out)) return false;
-  out << "</segmentsTest>" << endl;
+  out << "</segmentsTest>" << Qt::endl;
 
-  out << "<targetInt>" << endl;
+  out << "<targetInt>" << Qt::endl;
   if(!targetIntTab->writeFile(out)) return false;
-  out << "</targetInt>" << endl;  
+  out << "</targetInt>" << Qt::endl;  
  
-  out << "<parameterSettings>" << endl;
+  out << "<parameterSettings>" << Qt::endl;
   if(!fittingTab->writeParameterSettings(out)) return false;
-  out << "</parameterSettings>" << endl;
+  out << "</parameterSettings>" << Qt::endl;
   
-  out << "<lastRun>" << endl;
+  out << "<lastRun>" << Qt::endl;
   if(!writeLastRun(out)) return false;
-  out << "</lastRun>" << endl;
+  out << "</lastRun>" << Qt::endl;
 
 #ifdef USE_MCMC
   if(!mcmcTab->writeMCMCSettings(out)) return false;
@@ -690,17 +690,17 @@ bool AZURESetup::writeConfig(QTextStream& outStream, QString directory) {
   else angDistsCheck="none";
 
   outStream.setFieldAlignment(QTextStream::AlignLeft);
-  outStream << qSetFieldWidth(100) << isAMatrix << qSetFieldWidth(0) << "#Perform A-Matrix Calculation" << endl;
-  outStream << qSetFieldWidth(100) << outputDirectory << qSetFieldWidth(0) << "#Full Path to Output Directory" << endl;
-  outStream << qSetFieldWidth(100) << checksDirectory << qSetFieldWidth(0) << "#Full Path to Checks Directory" << endl;
-  outStream << qSetFieldWidth(100) << compoundCheck << qSetFieldWidth(0) << "#Compond Nucleus Check" << endl;
-  outStream << qSetFieldWidth(100) << boundaryCheck << qSetFieldWidth(0) << "#Boundary Condition Check" << endl;
-  outStream << qSetFieldWidth(100) << dataCheck << qSetFieldWidth(0) << "#Data Check" << endl;
-  outStream << qSetFieldWidth(100) << lMatrixCheck << qSetFieldWidth(0) << "#Lo-Matrix and Penetrability Check" << endl;
-  outStream << qSetFieldWidth(100) << legendreCheck << qSetFieldWidth(0) << "#Legendre Polynomial Check" << endl;
-  outStream << qSetFieldWidth(100) << coulAmpCheck << qSetFieldWidth(0) << "#Coulomb Amplitudes Check" << endl;
-  outStream << qSetFieldWidth(100) << pathwaysCheck << qSetFieldWidth(0) << "#Reaction Pathway Check" << endl;
-  outStream << qSetFieldWidth(100) << angDistsCheck << qSetFieldWidth(0) << "#Angular Distributions Check" << endl;
+  outStream << qSetFieldWidth(100) << isAMatrix << qSetFieldWidth(0) << "#Perform A-Matrix Calculation" << Qt::endl;
+  outStream << qSetFieldWidth(100) << outputDirectory << qSetFieldWidth(0) << "#Full Path to Output Directory" << Qt::endl;
+  outStream << qSetFieldWidth(100) << checksDirectory << qSetFieldWidth(0) << "#Full Path to Checks Directory" << Qt::endl;
+  outStream << qSetFieldWidth(100) << compoundCheck << qSetFieldWidth(0) << "#Compond Nucleus Check" << Qt::endl;
+  outStream << qSetFieldWidth(100) << boundaryCheck << qSetFieldWidth(0) << "#Boundary Condition Check" << Qt::endl;
+  outStream << qSetFieldWidth(100) << dataCheck << qSetFieldWidth(0) << "#Data Check" << Qt::endl;
+  outStream << qSetFieldWidth(100) << lMatrixCheck << qSetFieldWidth(0) << "#Lo-Matrix and Penetrability Check" << Qt::endl;
+  outStream << qSetFieldWidth(100) << legendreCheck << qSetFieldWidth(0) << "#Legendre Polynomial Check" << Qt::endl;
+  outStream << qSetFieldWidth(100) << coulAmpCheck << qSetFieldWidth(0) << "#Coulomb Amplitudes Check" << Qt::endl;
+  outStream << qSetFieldWidth(100) << pathwaysCheck << qSetFieldWidth(0) << "#Reaction Pathway Check" << Qt::endl;
+  outStream << qSetFieldWidth(100) << angDistsCheck << qSetFieldWidth(0) << "#Angular Distributions Check" << Qt::endl;
 
   return true;
 }
@@ -734,24 +734,24 @@ bool AZURESetup::writeLastRun(QTextStream& outStream) {
     paramMask |= Config::USE_PREVIOUS_INTEGRALS;
   else paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
 
-  outStream << paramMask << endl;
-  outStream << '"' << runTab->paramFileText->text() << '"' << endl;
-  outStream << '"' << runTab->integralsFileText->text() << '"' << endl;
+  outStream << paramMask << Qt::endl;
+  outStream << '"' << runTab->paramFileText->text() << '"' << Qt::endl;
+  outStream << '"' << runTab->integralsFileText->text() << '"' << Qt::endl;
   if(!runTab->rateEntranceKey->text().isEmpty()) outStream << runTab->rateEntranceKey->text() << ' ';
   else outStream << "0 "; 
   if(!runTab->rateExitKey->text().isEmpty()) outStream << runTab->rateExitKey->text();
   else outStream << 0; 
-  outStream << endl;
+  outStream << Qt::endl;
   if(runTab->fileTempButton->isChecked()) outStream << "1 "; 
   else outStream << "0 "; 
-  outStream << '"' << runTab->fileTempText->text() << '"' << endl;
+  outStream << '"' << runTab->fileTempText->text() << '"' << Qt::endl;
   if(!runTab->minTempText->text().isEmpty()) outStream << runTab->minTempText->text() << ' ';
   else outStream << "-1. ";
   if(!runTab->maxTempText->text().isEmpty()) outStream << runTab->maxTempText->text() << ' ';
   else outStream << "-1. ";
   if(!runTab->tempStepText->text().isEmpty()) outStream << runTab->tempStepText->text();
   else outStream << "-1.";
-  outStream << endl;
+  outStream << Qt::endl;
 	 
   return true;
 }

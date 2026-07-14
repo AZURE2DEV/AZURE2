@@ -968,8 +968,7 @@ void EPoint::SetCrossSectionKinFactor(double crosssectionkinfactor) {
  */
 
 void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect* targetEffect) {
-  double Qcm[maxL];
-  memset( Qcm, 1, maxL*sizeof(double) );
+  std::vector<double> Qcm(maxL, 0.0);
   //double Qcm[maxL]={1.0};
   if(targetEffect && targetEffect->NumQCoefficients()>0 && theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()))->GetPType()==0){
     PPair *entrancePair=theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
@@ -982,8 +981,7 @@ void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect* targetEffect) 
     double qValue=entrancePair->GetSepE()+entrancePair->GetExE()-exitPair->GetSepE()-exitPair->GetExE();
     double gamma = m1*m3/m2/m4*e1/(e1+qValue);
     int numQ = targetEffect->NumQCoefficients();
-    double U[numQ][numQ];
-    memset( U, 0.0, numQ*numQ*sizeof(double) );
+    std::vector<std::vector<double> > U(numQ, std::vector<double>(numQ, 0.0));
     //double U[numQ][numQ]={0.0};
     for (int lOrder=0;lOrder<numQ;lOrder++){    
       for (int lOrder_p=0;lOrder_p<numQ;lOrder_p++){
@@ -998,8 +996,7 @@ void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect* targetEffect) 
 //        std::cout<<"test"<<std::endl;              
       }    
     }
-    double B[numQ];
-    memset( B, 0.0, numQ*sizeof(double) );
+    std::vector<double> B(numQ, 0.0);
     //double B[numQ] = {0.0};
     for (int lOrder=0;lOrder<numQ;lOrder++){    
       for (int lOrder_p=0;lOrder_p<numQ;lOrder_p++){

@@ -40,13 +40,13 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   /*!
    * See Minuit2 documentation for an explanation of this function.
    */
-  virtual double Up() const {return theErrorDef;};
+  virtual double Up() const override {return theErrorDef;};
   /*!
    * Overloaded operator to make the class instance callable as a function. 
    * A Minuit parameter array is passed as the dependent variable.  The function
    * returns the total chi-squared value.
    */
-  virtual double operator()(const vector_r&) const;
+  virtual double operator()(const vector_r&) const override;
 
   /*!
    * Analytic gradient of the total chi-squared with respect to the (external)
@@ -104,7 +104,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   /*!
    * See Minuit2 documentation for an explanation of this function.
    */
-  void SetErrorDef(double def) {theErrorDef=def;};
+  void SetErrorDef(double def) override {theErrorDef=def;};
   
   /*!
    * Calculate nuisance parameter chi-squared contribution

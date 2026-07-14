@@ -421,7 +421,7 @@ bool TargetIntTab::writeFile(QTextStream& outStream) {
     outStream << " " << lines.at(i).stragglingCoefficient;
     // Write adaptive grid params (appended at end for backward compatibility)
     outStream << " " << lines.at(i).resonanceWidthMultiplier << " " << lines.at(i).pointsPerWidth;
-    outStream<<endl;
+    outStream<<Qt::endl;
 
   }
 
