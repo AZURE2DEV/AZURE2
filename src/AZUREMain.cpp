@@ -566,6 +566,13 @@ int AZUREMain::operator()(){
           configure().outStream << "Cross-section bands unavailable: the analytic model "
                                    "sensitivities are not supported for this configuration." << std::endl;
         }
+        // BuildBandData computes the per-point sensitivities on the real
+        // compound/data objects (its gradient map is keyed by the real EPoint*),
+        // and that forward+adjoint solve overwrites each point's stored best-fit
+        // cross section.  Re-run the best-fit forward pass so the plotted and
+        // written segments are the best fit, not the last gradient probe; the
+        // band itself lives in bandData and is unaffected.
+        theFunc(params.GetMinuitParams().Params());
       }
     }
     data()->WriteOutputFiles(configure(),false,bandPtr);
