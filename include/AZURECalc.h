@@ -85,7 +85,8 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * limits.  Returns the final chi-squared, or a negative value if the analytic
    * Jacobian is unsupported (caller should fall back to MIGRAD).
    */
-  double RunLevenbergMarquardt(AZUREParams& params, int maxIter = 200) const;
+  double RunLevenbergMarquardt(AZUREParams& params, int maxIter = 200,
+                               struct BandCovariance* bandCovOut = nullptr) const;
 
   /*!
    * Returns a reference to the Config structure.

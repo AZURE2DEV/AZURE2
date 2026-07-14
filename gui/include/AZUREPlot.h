@@ -25,6 +25,9 @@ struct PlotPoint {
   double dataErrorCrossSection;
   double dataSFactor;
   double dataErrorSFactor;
+  // 1-sigma analytic uncertainty band on the calculation (0 if no band file).
+  double fitCrossSectionError;
+  double fitSFactorError;
 };
 
 class AZUREZoomer : public QwtPlotZoomer {
@@ -64,7 +67,8 @@ class PlotEntry {
   void setLineWidth(int w) {lineWidth_ = w;};
 
   bool readData();
-  void attach(QwtPlot*, int xAxisType, int yAxisType);
+  bool hasBand() const {return hasBand_;};
+  void attach(QwtPlot*, int xAxisType, int yAxisType, bool showBand=false);
   void detach();
 
   static QString labelFromFilename(const QString& filename);
@@ -74,6 +78,7 @@ class PlotEntry {
 
  private:
   void sortPointsByXAxis(int xAxisType);
+  bool readBandData(QVector<double>& xsErr, QVector<double>& sErr);
   int type_;
   int entranceKey_;
   int exitKey_;
@@ -85,9 +90,11 @@ class PlotEntry {
   QwtSymbol::Style symbolStyle_;
   int symbolSize_;
   int lineWidth_;
+  bool hasBand_;
   QwtPlotCurve* dataCurve_;
   QwtPlotIntervalCurve* dataErrorCurve_;
   QwtPlotCurve* fitCurve_;
+  QwtPlotIntervalCurve* bandCurve_;
   QVector<PlotPoint> points_;
 };
 
@@ -103,15 +110,17 @@ class AZUREPlot : public QwtPlot {
   void setYAxisType(unsigned int type);
   void setGridVisible(bool visible);
   void setLegendVisible(bool visible);
+  void setBandVisible(bool visible);
+  bool isBandVisible() const {return bandVisible;};
   void setLevelsModel(LevelsModel* model);
   void setLevelsVisible(bool visible);
   void refreshLevelMarkers();
-  void clearEntries();
 
   const QList<PlotEntry*>& getEntries() const {return entries;};
   void redrawEntries();
 
  public slots:
+  void clearEntries();
   void draw(QList<PlotEntry*> newEntries);
   void update();
   void exportPlot();
@@ -129,6 +138,7 @@ class AZUREPlot : public QwtPlot {
   QwtLegend* legend;
   LevelsModel* levelsModel;
   bool levelsVisible;
+  bool bandVisible;
   QList<QwtPlotMarker*> levelMarkers;
 };
 

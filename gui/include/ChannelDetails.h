@@ -7,6 +7,7 @@ QT_BEGIN_NAMESPACE
 
 class QLineEdit;
 class QLabel;
+class QPushButton;
 
 QT_END_NAMESPACE
 
@@ -18,6 +19,8 @@ class ChannelDetails : public QWidget {
   void setNormParam(int which);
   QLineEdit *reducedWidthText;
   QLabel *details;
+  QPushButton *wignerButton;
+  QLineEdit *wignerLimitText;
  private:
   QLabel *normParam;
   QLabel *normUnits;

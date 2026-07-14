@@ -1,6 +1,6 @@
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QMessageBox>
-#include <QGridLayout>
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QTextStream>
@@ -152,39 +152,30 @@ SegmentsTab::SegmentsTab(QWidget *parent) : QWidget(parent) {
   QGridLayout *segDataLayout = new QGridLayout;
   segDataLayout->addWidget(segmentsDataView,0,0);
 
-  // Reorganized button layout: [+] [-] [spacer] [Check All] [Uncheck All] [spacer] [↑] [↓] [spacer] [Filter:] [Entrance] [Exit]
-  QGridLayout *segDataButtonBox = new QGridLayout;
-  segDataButtonBox->addWidget(segDataAddButton,0,0);
-  segDataButtonBox->addWidget(segDataDeleteButton,0,1);
-  segDataButtonBox->addItem(new QSpacerItem(10,28),0,2);
-  segDataButtonBox->addWidget(segDataCheckAllButton,0,3);
-  segDataButtonBox->addWidget(segDataUncheckAllButton,0,4);
-  segDataButtonBox->addItem(new QSpacerItem(10,28),0,5);
-  segDataButtonBox->addWidget(segDataUpButton,0,6);
-  segDataButtonBox->addWidget(segDataDownButton,0,7);
-  segDataButtonBox->addItem(new QSpacerItem(10,28),0,8);
-  segDataButtonBox->addWidget(new QLabel(tr("Filter:")),0,9);
-  segDataButtonBox->addWidget(segDataEntranceFilter,0,10);
-  segDataButtonBox->addWidget(segDataExitFilter,0,11);
-  segDataButtonBox->addItem(new QSpacerItem(10,28),0,12);
-  segDataButtonBox->addWidget(segDataExforButton,0,13);
-  segDataButtonBox->setColumnStretch(0,0);
-  segDataButtonBox->setColumnStretch(1,0);
-  segDataButtonBox->setColumnStretch(2,0);
-  segDataButtonBox->setColumnStretch(3,0);
-  segDataButtonBox->setColumnStretch(4,0);
-  segDataButtonBox->setColumnStretch(5,0);
-  segDataButtonBox->setColumnStretch(6,0);
-  segDataButtonBox->setColumnStretch(7,0);
-  segDataButtonBox->setColumnStretch(8,1); // Spacer before Filter takes remaining space
-  segDataButtonBox->setColumnStretch(9,0);
-  segDataButtonBox->setColumnStretch(10,0);
-  segDataButtonBox->setColumnStretch(11,0);
-#ifdef MACX_SPACING
-  segDataButtonBox->setHorizontalSpacing(11);
-#else
-  segDataButtonBox->setHorizontalSpacing(5);
-#endif
+  // Button row: [+] [-]   [Check All] [Uncheck All]   [up] [down]   <stretch>   Filter: [Entrance] [Exit]   [EXFOR]
+  // A horizontal box vertically centers every widget so the buttons, filter
+  // comboboxes and label all line up.
+  QHBoxLayout *segDataButtonBox = new QHBoxLayout;
+  segDataButtonBox->setSpacing(0);   // all gaps set explicitly below
+  segDataButtonBox->addWidget(segDataAddButton);
+  segDataButtonBox->addSpacing(6);
+  segDataButtonBox->addWidget(segDataDeleteButton);
+  segDataButtonBox->addSpacing(14);
+  segDataButtonBox->addWidget(segDataCheckAllButton);
+  segDataButtonBox->addSpacing(8);
+  segDataButtonBox->addWidget(segDataUncheckAllButton);
+  segDataButtonBox->addSpacing(14);
+  segDataButtonBox->addWidget(segDataUpButton);
+  segDataButtonBox->addSpacing(6);
+  segDataButtonBox->addWidget(segDataDownButton);
+  segDataButtonBox->addStretch(1);
+  segDataButtonBox->addWidget(new QLabel(tr("Filter:")));
+  segDataButtonBox->addSpacing(6);
+  segDataButtonBox->addWidget(segDataEntranceFilter);
+  segDataButtonBox->addSpacing(6);
+  segDataButtonBox->addWidget(segDataExitFilter);
+  segDataButtonBox->addSpacing(14);
+  segDataButtonBox->addWidget(segDataExforButton);
   segDataLayout->addLayout(segDataButtonBox,1,0);
 
   segDataBox->setLayout(segDataLayout);
@@ -1621,6 +1612,16 @@ void SegmentsTab::updateFilterComboboxes(PairsModel* model) {
 }
 
 void SegmentsTab::updateFilterComboboxes() {
+  // Preserve the current filter selection across the rebuild, and block signals
+  // so removing/re-adding items does not fire filterSegDataByPairs() with a
+  // transient "All" selection (which would clear the filter on any checkbox toggle).
+  int savedEntrance = segDataEntranceFilter->currentIndex() > 0
+                      ? segDataEntranceFilter->currentData().toInt() : -1;
+  int savedExit = segDataExitFilter->currentIndex() > 0
+                  ? segDataExitFilter->currentData().toInt() : -1;
+  segDataEntranceFilter->blockSignals(true);
+  segDataExitFilter->blockSignals(true);
+
   // Clear existing items except "All"
   while(segDataEntranceFilter->count() > 1) {
     segDataEntranceFilter->removeItem(1);
@@ -1683,6 +1684,16 @@ void SegmentsTab::updateFilterComboboxes() {
       segDataExitFilter->addItem(QString("Pair %1").arg(pairIndex), pairIndex);
     }
   }
+
+  // Restore the previous selection (fall back to "All" if that pair is gone),
+  // then re-apply the filter once to the current rows.
+  int ei = savedEntrance > 0 ? segDataEntranceFilter->findData(savedEntrance) : 0;
+  segDataEntranceFilter->setCurrentIndex(ei >= 0 ? ei : 0);
+  int xi = savedExit > 0 ? segDataExitFilter->findData(savedExit) : 0;
+  segDataExitFilter->setCurrentIndex(xi >= 0 ? xi : 0);
+  segDataEntranceFilter->blockSignals(false);
+  segDataExitFilter->blockSignals(false);
+  filterSegDataByPairs();
 }
 
 void SegmentsTab::reset() {

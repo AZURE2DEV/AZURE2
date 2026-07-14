@@ -76,6 +76,7 @@ AZURESetup::AZURESetup() : config(std::cout) {
 
   fittingTab = new FittingTab();
   fittingTab->setTabReferences(levelsTab, segmentsTab);
+  fittingTab->setConfig(&GetConfig());
   
   runTab = new RunTab();
   connect(runTab->calcButton,SIGNAL(clicked()),this,SLOT(SaveAndRun()));
@@ -398,6 +399,12 @@ bool AZURESetup::readLastRun(QTextStream& inStream) {
     else  runTab->calcType->setCurrentIndex(2);
   }
 
+  // Restore the uncertainty-band checkboxes (after calcType, so their enabled
+  // state is already set).  Band first, then scaling (which depends on it).
+  runTab->uncertaintyBandCheck->setChecked(paramMask & Config::CALCULATE_COVARIANCE_BAND);
+  runTab->scaleCovarianceCheck->setChecked(paramMask & Config::SCALE_COVARIANCE_BY_CHI2);
+  runTab->wignerLimitsCheck->setChecked(paramMask & Config::USE_WIGNER_LIMITS);
+
   // Set minimizer selection (0 Minuit2, 1 Minuit2+analytic grad, 2 Levenberg-
   // Marquardt, 3+ NLopt).
 #ifdef USE_NLOPT
@@ -433,7 +440,10 @@ bool AZURESetup::readLastRun(QTextStream& inStream) {
 
   if(paramMask & Config::USE_WIGNER_LIMITS) GetConfig().paramMask |= Config::USE_WIGNER_LIMITS;
   else GetConfig().paramMask &= ~Config::USE_WIGNER_LIMITS;
-  
+
+  if(paramMask & Config::SCALE_COVARIANCE_BY_CHI2) GetConfig().paramMask |= Config::SCALE_COVARIANCE_BY_CHI2;
+  else GetConfig().paramMask &= ~Config::SCALE_COVARIANCE_BY_CHI2;
+
   if(rateEntrancePair!=0) runTab->rateEntranceKey->setText(QString("%1").arg(rateEntrancePair));
   if(rateExitPair!=0) runTab->rateExitKey->setText(QString("%1").arg(rateExitPair));
 
@@ -708,6 +718,14 @@ bool AZURESetup::writeLastRun(QTextStream& outStream) {
   else paramMask &= ~Config::PERFORM_ERROR_ANALYSIS;
   if(runTab->calcType->currentIndex()==4) paramMask |= Config::CALCULATE_REACTION_RATE;
   else paramMask &= ~Config::CALCULATE_REACTION_RATE;
+  // Analytic cross-section uncertainty band: user-selected via the Run-tab
+  // checkboxes (enabled only for fit / extrapolation / MINOS modes).
+  if(runTab->uncertaintyBandCheck->isChecked()) paramMask |= Config::CALCULATE_COVARIANCE_BAND;
+  else paramMask &= ~Config::CALCULATE_COVARIANCE_BAND;
+  if(runTab->scaleCovarianceCheck->isChecked()) paramMask |= Config::SCALE_COVARIANCE_BY_CHI2;
+  else paramMask &= ~Config::SCALE_COVARIANCE_BY_CHI2;
+  if(runTab->wignerLimitsCheck->isChecked()) paramMask |= Config::USE_WIGNER_LIMITS;
+  else paramMask &= ~Config::USE_WIGNER_LIMITS;
 
   if(runTab->oldParamFileButton->isChecked())
     paramMask |= Config::USE_PREVIOUS_PARAMETERS;
@@ -851,9 +869,6 @@ void AZURESetup::editOptions() {
   if(!(GetConfig().paramMask & Config::TRANSFORM_PARAMETERS)) aDialog.noTransformCheck->setChecked(true);
   else aDialog.noTransformCheck->setChecked(false);
 
-  if(GetConfig().paramMask & Config::USE_WIGNER_LIMITS) aDialog.useWignerLimitsCheck->setChecked(true);
-  else aDialog.useWignerLimitsCheck->setChecked(false);
-
   if(GetConfig().useHybridMethod) aDialog.useHybridMethodCheck->setChecked(true);
   else aDialog.useHybridMethodCheck->setChecked(false);
 
@@ -884,9 +899,6 @@ void AZURESetup::editOptions() {
     
     if(aDialog.noTransformCheck->isChecked()) GetConfig().paramMask &= ~Config::TRANSFORM_PARAMETERS;
     else GetConfig().paramMask |= Config::TRANSFORM_PARAMETERS;
-
-    if(aDialog.useWignerLimitsCheck->isChecked()) GetConfig().paramMask |= Config::USE_WIGNER_LIMITS;
-    else GetConfig().paramMask &= ~Config::USE_WIGNER_LIMITS;
 
     if(aDialog.useHybridMethodCheck->isChecked()) {
       GetConfig().useHybridMethod = true;
@@ -947,6 +959,12 @@ void AZURESetup::SaveAndRun() {
   else GetConfig().paramMask &= ~Config::PERFORM_ERROR_ANALYSIS;
   if(runTab->calcType->currentIndex()==4) GetConfig().paramMask |= Config::CALCULATE_REACTION_RATE;
   else GetConfig().paramMask &= ~Config::CALCULATE_REACTION_RATE;
+  if(runTab->uncertaintyBandCheck->isChecked()) GetConfig().paramMask |= Config::CALCULATE_COVARIANCE_BAND;
+  else GetConfig().paramMask &= ~Config::CALCULATE_COVARIANCE_BAND;
+  if(runTab->scaleCovarianceCheck->isChecked()) GetConfig().paramMask |= Config::SCALE_COVARIANCE_BY_CHI2;
+  else GetConfig().paramMask &= ~Config::SCALE_COVARIANCE_BY_CHI2;
+  if(runTab->wignerLimitsCheck->isChecked()) GetConfig().paramMask |= Config::USE_WIGNER_LIMITS;
+  else GetConfig().paramMask &= ~Config::USE_WIGNER_LIMITS;
 
   // Handle minimizer selection (only for fitting operations).  Combo layout:
   //   0 Minuit2, 1 Minuit2 + analytic gradient, 2 Levenberg-Marquardt, 3+ NLopt.

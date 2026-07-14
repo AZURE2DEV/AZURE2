@@ -62,7 +62,9 @@ class Config {
     USE_NLOPT_MINIMIZER       =(1<<17),
     USE_HYBRID_COULOMB        =(1<<18),
     USE_ANALYTIC_GRADIENT     =(1<<19),
-    USE_LM_MINIMIZER          =(1<<20)
+    USE_LM_MINIMIZER          =(1<<20),
+    CALCULATE_COVARIANCE_BAND =(1<<21),
+    SCALE_COVARIANCE_BY_CHI2  =(1<<22)
   };
   /*!
    * Bit flags for check file control in AZURE2.

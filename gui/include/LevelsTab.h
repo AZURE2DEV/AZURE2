@@ -48,6 +48,7 @@ class LevelsTab : public QWidget {
   void updateChannelsPairRemoved(int pairIndex);
   void updateDetails(const QItemSelection &selection);
   void updateReducedWidth(const QString &string);
+  void calculateWignerLimit();
   void showInfo(int which=0,QString title="");
   void fixAllWidths();
   void fixAllEnergies();
@@ -77,6 +78,11 @@ class LevelsTab : public QWidget {
   QSortFilterProxyModel *levelsModelProxy;
   QSortFilterProxyModel *proxyModel;
   ChannelDetails *channelDetails;
+  // Inputs for the physical Wigner-limit calculation of the selected channel.
+  bool wignerApplicable_ = false;
+  double wignerZ1_ = 0., wignerZ2_ = 0., wignerRedMass_ = 0.;
+  double wignerRadius_ = 0., wignerEcm_ = 0.;
+  int wignerL_ = 0;
   QSignalMapper* mapper;
   QPushButton *infoButton[5];
   static const std::vector<QString> infoText;

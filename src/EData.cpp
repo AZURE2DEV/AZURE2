@@ -1,6 +1,7 @@
 #include "AZUREOutput.h"
 #include "CNuc.h"
 #include "Config.h"
+#include "CovarianceBand.h"
 #include "EData.h"
 #include "ECAmplitudeCache.h"
 #include "ExtrapLine.h"
@@ -1206,7 +1207,20 @@ void EData::PrintCoulombAmplitude(const Config &configure,CNuc *theCNuc) {
  * and experimental s-factor and error.
  */
 
-void EData::WriteOutputFiles(const Config &configure, bool isFit) {
+// One ".band" line: energy, excitation, angle, xs, d(xs), S-factor, d(S-factor).
+static void WriteBandLine(std::ostream& o, double energy, double excitation,
+                          double angle, double xs, double dxs, double conv) {
+  o << std::setw(18) << std::scientific << energy
+    << std::setw(18) << std::scientific << excitation
+    << std::setw(18) << std::scientific << angle
+    << std::setw(18) << std::scientific << xs
+    << std::setw(18) << std::scientific << dxs
+    << std::setw(18) << std::scientific << xs*conv
+    << std::setw(18) << std::scientific << dxs*conv
+    << std::endl;
+}
+
+void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData* band) {
   AZUREOutput output(configure.outputdir);
   std::ofstream chiOut;
   if(!isFit&&(configure.paramMask & Config::CALCULATE_WITH_DATA)) {
@@ -1229,6 +1243,28 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit) {
     kinoption.close();
   }
   if(kinflag!=0) configure.outStream<<"Using alternate output format..."<<std::endl;
+
+  // When a covariance is available, write a sibling ".band" file per output file,
+  // with the same block/point structure so the GUI can pair them.
+  bool writeBand = band && (configure.paramMask & Config::CALCULATE_COVARIANCE_BAND)
+                        && !band->grad.empty();
+  std::map<std::string,std::ofstream> bandFiles;
+  auto bandStreamFor = [&](int aa, int ir)->std::ofstream* {
+    std::string name = configure.outputdir + "AZUREOut_aa=" + std::to_string(aa);
+    if(ir==-1) name += "_TOTAL_CAPTURE";
+    else name += "_R=" + std::to_string(ir);
+    name += output.IsExtrap() ? ".extrap.band" : ".out.band";
+    std::ofstream& f = bandFiles[name];
+    if(!f.is_open()) { f.open(name.c_str()); f.precision(10); }
+    return f.is_open() ? &f : nullptr;
+  };
+  // Look up a point's parameter-sensitivity row, or nullptr if absent.
+  auto gradFor = [&](EPoint* p)->const std::vector<double>* {
+    if(!band) return nullptr;
+    std::map<EPoint*,std::vector<double> >::const_iterator it = band->grad.find(p);
+    return (it==band->grad.end()) ? nullptr : &it->second;
+  };
+
   ESegmentIterator firstSumIterator = GetSegments().end();
   for(ESegmentIterator segment=GetSegments().begin();
       segment<GetSegments().end();segment++) {
@@ -1246,10 +1282,32 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit) {
 	 !(configure.paramMask & Config::CALCULATE_WITH_DATA)) buf=output(aa,ir,true);
       else buf=output(aa,ir);
     }
-    std::ostream out(buf);	
+    std::ostream out(buf);
     ESegmentIterator thisSegment = segment;
     if(firstSumIterator!=GetSegments().end()) thisSegment = firstSumIterator;
-     
+
+    // Band stream for this segment (skip angular-coefficient extrap files, which
+    // have no scalar cross section; other segments get a block for alignment).
+    bool bandThisSegment = writeBand && !(segment->IsAngularDist() && output.IsExtrap());
+    std::ofstream* bandOut = bandThisSegment ?
+      bandStreamFor(aa, (firstSumIterator!=GetSegments().end()) ? -1 : ir) : nullptr;
+    // Point gradient, summed across total-capture components like the value is.
+    auto pointBandGrad = [&](EPointIterator point)->std::vector<double> {
+      std::vector<double> g;
+      const std::vector<double>* g0 = gradFor(&*point);
+      if(g0) g = *g0;
+      if(firstSumIterator!=GetSegments().end()) {
+        int pointIndex=point-segment->GetPoints().begin()+1;
+        for(ESegmentIterator it=firstSumIterator;it<segment;it++) {
+          const std::vector<double>* gi = gradFor(it->GetPoint(pointIndex));
+          if(!gi) continue;
+          if(g.empty()) g=*gi;
+          else for(size_t k=0;k<g.size()&&k<gi->size();k++) g[k]+=(*gi)[k];
+        }
+      }
+      return g;
+    };
+
     if(kinflag==0){
       for(EPointIterator point=segment->GetPoints().begin();point<segment->GetPoints().end();point++) {
         out.precision(10);
@@ -1257,6 +1315,8 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit) {
 	  out << std::setw(18) << std::scientific << point->GetCMEnergy();
 	  for(int i = 0;i<point->GetNumAngularDists();i++) out << std::setw(18) << point->GetAngularDist(i);
 	  out << std::endl;
+	  if(bandOut) WriteBandLine(*bandOut,point->GetCMEnergy(),point->GetExcitationEnergy(),
+	                            point->GetCMAngle(),0.,0.,0.);
         } else {
 	  double fitCrossSection=point->GetFitCrossSection();
 	  if(firstSumIterator!=GetSegments().end()) {
@@ -1277,6 +1337,12 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit) {
 	        << std::setw(18) << std::scientific << point->GetCMCrossSectionError()*dataNorm*point->GetSFactorConversion()
 	        << std::endl;
 	  } else out << std::endl;
+	  if(bandOut) {
+	    std::vector<double> g=pointBandGrad(point);
+	    double dxs=g.empty()?0.:band->dXS(g);
+	    WriteBandLine(*bandOut,point->GetCMEnergy(),point->GetExcitationEnergy(),
+	                  point->GetCMAngle(),fitCrossSection,dxs,point->GetSFactorConversion());
+	  }
         }
       }
     }
@@ -1287,6 +1353,8 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit) {
 	  out << std::setw(18) << std::scientific << point->GetCMEnergy();
 	  for(int i = 0;i<point->GetNumAngularDists();i++) out << std::setw(18) << point->GetAngularDist(i);
 	  out << std::endl;
+	  if(bandOut) WriteBandLine(*bandOut,point->GetLabEnergy(),point->GetExcitationEnergy(),
+	                            point->GetLabAngle(),0.,0.,0.);
         } else {
 	  double fitCrossSection=point->GetFitCrossSection()/point->GetCrossSectionKinFactor();
 	  if(firstSumIterator!=GetSegments().end()) {
@@ -1307,6 +1375,13 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit) {
 	        << std::setw(18) << std::scientific << point->GetLabCrossSectionError()*dataNorm*point->GetSFactorConversion()
 	        << std::endl;
 	  } else out << std::endl;
+	  if(bandOut) {
+	    std::vector<double> g=pointBandGrad(point);
+	    double kin=point->GetCrossSectionKinFactor();
+	    double dxs=g.empty()?0.:band->dXS(g)/kin;
+	    WriteBandLine(*bandOut,point->GetLabEnergy(),point->GetExcitationEnergy(),
+	                  point->GetLabAngle(),fitCrossSection,dxs,point->GetSFactorConversion());
+	  }
         }
       }
     }
@@ -1326,6 +1401,7 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit) {
 	     << std::endl;
     }
     out<<std::endl<<std::endl;out.flush();
+    if(bandOut) { *bandOut<<std::endl<<std::endl; bandOut->flush(); }
     firstSumIterator=GetSegments().end();
   }
   
@@ -1949,9 +2025,13 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc* the
           for(ESegment* componentSegment : componentSegments) {
             if(componentSegment) {
 
-              // Check if energy is the same, if so, continue
+              // Check if energy is the same, if so, skip the recompute.
+              // NOTE: do NOT advance i here. All components of a total-capture
+              // segment share this segment's single energy-shift parameter p[i];
+              // i is advanced exactly once per segment at the end of the loop.
+              // Advancing it inside the component loop desyncs the
+              // parameter-to-segment mapping for every subsequent segment.
               if(componentSegment->GetLastEnergyShift() == p[i]) {
-                i++;
                 continue;
               }
 

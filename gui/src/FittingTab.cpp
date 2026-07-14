@@ -15,6 +15,7 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QRegExp>
+#include <QShowEvent>
 #include <cmath>
 #include <algorithm>
 #include <iostream>
@@ -57,32 +58,18 @@ FittingTab::FittingTab(QWidget *parent) : QWidget(parent),
     
     refreshButton = new QPushButton("Refresh from Current");
     loadButton = new QPushButton("Load from .sav file");
-    populateWignerLimitsButton = new QPushButton("Populate Wigner Limits");
     clearLimitsButton = new QPushButton("Clear Limits");
-    
+
     buttonLayout->addWidget(refreshButton);
     buttonLayout->addWidget(loadButton);
-    buttonLayout->addWidget(populateWignerLimitsButton);
     buttonLayout->addWidget(clearLimitsButton);
     buttonLayout->addStretch();
-    
-    // Info buttons
-    mapper = new QSignalMapper(this);
-    for(int i = 0; i < 3; i++) {
-        infoButton[i] = new QPushButton("?");
-        infoButton[i]->setMaximumSize(20, 20);
-        buttonLayout->addWidget(infoButton[i]);
-        mapper->setMapping(infoButton[i], i);
-        connect(infoButton[i], SIGNAL(clicked()), mapper, SLOT(map()));
-    }
-    connect(mapper, SIGNAL(mapped(int)), this, SLOT(showInfo(int)));
-    
+
     mainLayout->addLayout(buttonLayout);
 
     // Connect signals
     connect(refreshButton, SIGNAL(clicked()), this, SLOT(refreshParameters()));
     connect(loadButton, SIGNAL(clicked()), this, SLOT(loadSettings()));
-    connect(populateWignerLimitsButton, SIGNAL(clicked()), this, SLOT(populateWignerLimits()));
     connect(clearLimitsButton, SIGNAL(clicked()), this, SLOT(clearLimits()));
 
     setLayout(mainLayout);
@@ -363,8 +350,37 @@ void FittingTab::populateFromCurrentGUIState() {
     
     // Apply parameter settings from saved configuration (limits, errors, etc.)
     applyParameterSettings();
-    
+
     updateParameterTables();
+}
+
+void FittingTab::showEvent(QShowEvent* event) {
+    QWidget::showEvent(event);
+    // Reflect free/fix changes to normalizations or energy shifts made in the
+    // Segments tab while this tab was hidden.
+    syncSegmentVaryStates();
+}
+
+// Sync the "Use as Nuisance" state of the norm/shift parameters to the segments'
+// current vary flags, updating the tables in place (no rebuild, so any Fitting-tab
+// limit edits are preserved).
+void FittingTab::syncSegmentVaryStates() {
+    if(!segmentsTab_) return;
+    SegmentsDataModel* segmentsModel = segmentsTab_->getSegmentsDataModel();
+    if(!segmentsModel) return;
+    QList<SegmentsDataData> segments = segmentsModel->getLines();
+    for(int i = 0; i < fittingParameters.size(); i++) {
+        FittingParameter& p = fittingParameters[i];
+        if(p.category != "norm" && p.category != "shift") continue;
+        int seg = p.channelIndex;   // segment index is stored in channelIndex
+        if(seg < 0 || seg >= segments.size()) continue;
+        bool vary = (p.category == "norm") ? (segments[seg].varyNorm == 1)
+                                           : (segments[seg].varyEnergyShift == 1);
+        if(p.useAsNuisance != vary) {
+            p.useAsNuisance = vary;
+            updateParameterTableCheckbox(p.name, vary);
+        }
+    }
 }
 
 double FittingTab::transformRWAParameterToPhysical(const QString& paramName, double rwaValue) {
@@ -474,10 +490,26 @@ void FittingTab::parameterItemChanged(QTableWidgetItem* item) {
 }
 
 void FittingTab::loadSettings() {
+    // The RWA<->physical transformation uses the current GUI state (levels,
+    // channels), so refresh from it first -- a stale state gives a wrong result.
+    populateFromCurrentGUIState();
+
     QString filename = QFileDialog::getOpenFileName(this,
         "Load Parameters from .sav file", "", "AZURE2 Parameter Files (*.sav);;All Files (*)");
 
     if(!filename.isEmpty()) {
+        // Back up the current .azr before applying the transformation.
+        QString backupNote;
+        if(config_ && !config_->configfile.empty()) {
+            QString azr = QString::fromStdString(config_->configfile);
+            QString bk = azr + ".bk";
+            QFile::remove(bk);
+            if(QFile::copy(azr, bk))
+                backupNote = QString("\n\nThe original file was backed up as:\n%1\n\n"
+                    "The parameter transformation can be unstable when the parameters are "
+                    "unphysical; restore this backup if the loaded values look wrong.").arg(bk);
+        }
+
         QFile file(filename);
         if(file.open(QIODevice::ReadOnly | QIODevice::Text)) {
             QTextStream in(&file);
@@ -1267,10 +1299,14 @@ void FittingTab::loadSettings() {
             // Show verification results
             QMessageBox msgBox;
             msgBox.setWindowTitle("Load Settings - Verification Report");
-            msgBox.setText(QString("Updated %1 fitting parameters from: %2")
-                          .arg(updatedCount).arg(filename));
+            msgBox.setText(QString("Updated %1 fitting parameters from: %2%3")
+                          .arg(updatedCount).arg(filename).arg(backupNote));
             msgBox.setDetailedText(verificationReport);
             msgBox.exec();
+
+            // Re-read everything from the (now updated) GUI models, i.e. the same
+            // "Refresh from Current" behaviour, so the tables end up fully in sync.
+            populateFromCurrentGUIState();
         } else {
             QMessageBox::warning(this, "Load Error",
                                "Could not load parameter file.");
@@ -1671,12 +1707,14 @@ void FittingTab::updateParameterTableError(const QString& paramName, double erro
 }
 
 void FittingTab::updateParameterTableCheckbox(const QString& paramName, bool checked) {
-    // Determine which table the parameter belongs to
+    // Route to the table by parameter name.  Norm/shift parameters are named
+    // "segment_N_norm" / "segment_N_energy_shift"; check "shift" before "norm"
+    // so the energy-shift name is not mistaken for a normalization.
     QTableWidget* targetTable = nullptr;
-    if(paramName.contains("Normalization")) {
-        targetTable = normParamsTable;
-    } else if(paramName.contains("Energy Shift")) {
+    if(paramName.contains("shift", Qt::CaseInsensitive)) {
         targetTable = shiftParamsTable;
+    } else if(paramName.contains("norm", Qt::CaseInsensitive)) {
+        targetTable = normParamsTable;
     } else {
         targetTable = levelParamsTable;
     }
@@ -1749,161 +1787,6 @@ void FittingTab::onSegmentEnergyShiftVaryChanged(int segmentIndex, bool vary) {
             updateParameterTableCheckbox(fittingParameters[i].name, vary);
             break;
         }
-    }
-}
-
-void FittingTab::populateWignerLimits() {
-    // Get reference to main AZURESetup window to access config
-    AZURESetup* azureSetup = qobject_cast<AZURESetup*>(window());
-    if (!azureSetup) {
-        QMessageBox::warning(this, "Error", "Cannot access AZURE setup configuration.");
-        return;
-    }
-    
-    // Check if Wigner Limits are activated in Runtime Options
-    if (!(azureSetup->GetConfig().paramMask & Config::USE_WIGNER_LIMITS)) {
-        QMessageBox::information(this, "Wigner Limits Not Activated", 
-            "Wigner Limits need to be activated in the Runtime Options before using this feature.\n\n"
-            "Please go to Edit → Runtime Options and enable 'Use Wigner Limits for parameter bounds'.");
-        return;
-    }
-    
-    // First, populate the fittingParameters from current GUI state
-    populateFromCurrentGUIState();
-    
-    try {
-        // Initialize compound objects as in AZUREMain
-        Config config = azureSetup->GetConfig();
-        CNuc compound;
-        if (compound.Fill(config) == -1) {
-            QMessageBox::warning(this, "Error", "Failed to initialize compound nucleus.");
-            return;
-        }
-        compound.Initialize(config);
-        
-        // Create AZUREParams and fill them from compound (same as AZUREMain)
-        AZUREParams params;
-        compound.FillMnParams(params.GetMinuitParams(), &config);
-        
-        // Get current parameter values and limits already set by FillMnParams
-        vector_r currentParams = params.GetMinuitParams().Params();
-        int numParams = currentParams.size();
-        
-        // Extract lower and upper limit values from parameters that already have Wigner limits set
-        std::vector<double> lowerLimits(numParams, 0.0);
-        std::vector<double> upperLimits(numParams, 0.0);
-        std::vector<bool> hasLimits(numParams, false);
-        int widthCount = 0;
-        
-        // Check which parameters have limits set (from Wigner limits in FillMnParams)
-        for (int paramIndex = 0; paramIndex < numParams; paramIndex++) {
-            const ROOT::Minuit2::MinuitParameter& param = params.GetMinuitParams().Parameter(paramIndex);
-            if (param.HasLimits()) {
-                // This parameter has limits - extract the lower and upper bounds
-                double lowerBound = param.LowerLimit();
-                double upperBound = param.UpperLimit();
-                
-                std::string paramName = param.GetName();
-                if (paramName.find("width_") == 0) {
-                    hasLimits[paramIndex] = true;
-                    widthCount++;
-                }
-            }
-        }
-        
-        if (widthCount == 0) {
-            QMessageBox::information(this, "No Wigner Limits Found", 
-                "No width parameters found with Wigner limits set.\n\n"
-                "This might indicate that Wigner limits were not properly calculated during compound initialization.");
-            return;
-        }
-        
-        // Set all width parameters to their lower limits and transform
-        vector_r lowerParams = currentParams;
-        for (int paramIndex = 0; paramIndex < numParams; paramIndex++) {
-            if (hasLimits[paramIndex] && !params.GetMinuitParams().Parameter(paramIndex).IsFixed()) {
-                lowerParams[paramIndex] = params.GetMinuitParams().Parameter(paramIndex).LowerLimit();
-            }
-        }
-        compound.FillCompoundFromParams(lowerParams);
-        compound.CalcShiftFunctions(config);
-        compound.TransformOut(config);
-        vector_r lowerPhysical = compound.GetTransformParams(config);
-        
-        // Set all width parameters to their upper limits and transform
-        vector_r upperParams = currentParams;
-        for (int paramIndex = 0; paramIndex < numParams; paramIndex++) {
-            if (hasLimits[paramIndex] && !params.GetMinuitParams().Parameter(paramIndex).IsFixed()) {
-                upperParams[paramIndex] = params.GetMinuitParams().Parameter(paramIndex).UpperLimit();
-            }
-        }
-        
-        compound.FillCompoundFromParams(upperParams);
-        compound.CalcShiftFunctions(config);
-        compound.TransformOut(config);
-        vector_r upperPhysical = compound.GetTransformParams(config);
-        
-        // Store the physical limits
-        for (int paramIndex = 0; paramIndex < numParams; paramIndex++) {
-            if (hasLimits[paramIndex] && paramIndex < lowerPhysical.size() && paramIndex < upperPhysical.size()) {
-                lowerLimits[paramIndex] = lowerPhysical[paramIndex];
-                upperLimits[paramIndex] = upperPhysical[paramIndex];
-                
-                std::string paramName = params.GetMinuitParams().Parameter(paramIndex).GetName();
-            }
-        }
-        
-        // Restore original compound state
-        compound.FillCompoundFromParams(currentParams);
-        compound.CalcShiftFunctions(config);
-        compound.TransformOut(config);
-        
-        // Apply the limits to our fitting parameters
-        // Map non-fixed Minuit parameters to fittingParameters in order
-        // fittingParameters contains only non-fixed parameters, in the same order as non-fixed Minuit parameters
-
-        int limitsApplied = 0;
-        int fittingParamIndex = 0;
-
-        // Iterate through Minuit parameters in order
-        for (int paramIndex = 0; paramIndex < numParams; paramIndex++) {
-            const ROOT::Minuit2::MinuitParameter& minuitParam = params.GetMinuitParams().Parameter(paramIndex);
-
-            // Skip fixed parameters
-            if (minuitParam.IsFixed()) {
-                continue;
-            }
-
-            // Check if we've run out of fitting parameters
-            if (fittingParamIndex >= fittingParameters.size()) {
-                break;
-            }
-
-            // This non-fixed Minuit parameter corresponds to fittingParameters[fittingParamIndex]
-            FittingParameter& param = fittingParameters[fittingParamIndex];
-
-            // Only apply limits to width parameters that have Wigner limits set
-            if (hasLimits[paramIndex] && param.category == "level" && param.channelIndex >= 0) {
-                param.lowerLimit = lowerLimits[paramIndex];
-                param.upperLimit = upperLimits[paramIndex];
-                limitsApplied++;
-            }
-
-            // Move to next fitting parameter
-            fittingParamIndex++;
-        }
-        
-        // Refresh the parameter tables to show the updated limits
-        updateParameterTables();
-
-        QMessageBox::information(this, "Success",
-            QString("Applied Wigner limits to %1 width parameters.").arg(limitsApplied));
-            
-    } catch (const std::exception& e) {
-        QMessageBox::warning(this, "Error", 
-            QString("Error populating Wigner limits: %1").arg(e.what()));
-    } catch (...) {
-        QMessageBox::warning(this, "Error", "Unknown error occurred while populating Wigner limits.");
     }
 }
 

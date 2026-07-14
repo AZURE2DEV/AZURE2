@@ -209,13 +209,7 @@ void MCMCTab::setupSamplingControls(QWidget* samplingWidget) {
     nWalkersSpinBox->setRange(2, 1000);
     nWalkersSpinBox->setValue(50);
     basicLayout->addWidget(nWalkersSpinBox, 0, 1);
-    // Som Paneru's Patch
-    if (infoButton[1]) {
-        basicLayout->addWidget(infoButton[1], 0, 2);
-    } 
-    else {
-        qDebug() << "infoButton[1] is null!";
-    }
+    if (infoButton[1]) basicLayout->addWidget(infoButton[1], 0, 2);
     
     basicLayout->addWidget(new QLabel("Number of Steps:"), 1, 0);
     nStepsSpinBox = new QSpinBox();
@@ -268,7 +262,7 @@ void MCMCTab::setupProgressControls() {
     useReducedWidthsCheckBox->setToolTip("When checked, uses reduced width amplitudes (RWA) for fitting instead of physical parameters");
     buttonLayout->addWidget(useReducedWidthsCheckBox);
     
-    buttonLayout->addWidget(infoButton[2]);
+    if(infoButton[2]) buttonLayout->addWidget(infoButton[2]);
     buttonLayout->addStretch();
     
     progressLayout->addLayout(buttonLayout);
@@ -318,7 +312,7 @@ void MCMCTab::setupProgressControls() {
     logTextEdit->setReadOnly(true);
     logTextEdit->setFont(QFont("Courier", 8));
     logLayout->addWidget(logTextEdit);
-    logLayout->addWidget(infoButton[3]);
+    if(infoButton[3]) logLayout->addWidget(infoButton[3]);
     
     progressLayout->addWidget(logGroup);
 }

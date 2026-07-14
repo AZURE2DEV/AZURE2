@@ -7,6 +7,7 @@
 #include "ParameterLimitsManager.h"
 #include "AZUREParams.h"
 #include "AZUREGrad.h"
+#include "CovarianceBand.h"
 #include "GSLException.h"
 #include <iostream>
 #include <iomanip>
@@ -22,6 +23,41 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+
+namespace {
+
+// chi^2 contribution of a single segment: its data term plus its own
+// energy-shift nuisance penalty, evaluated at the segment's current shift.
+// Mirrors exactly the per-segment math in AZURECalc::Chi2Value (data term +
+// lines guarded by IsVaryEnergyShift), so a finite difference of this over the
+// segment's shift equals a finite difference of the whole chi^2 -- *provided*
+// no other segment's contribution depends on this shift.  That holds when the
+// segment is self-contained: no components and no cross-segment energy mapping
+// (see the eligibility guard in Gradient()).  All other segments then produce
+// identical +h/-h contributions that cancel in the central difference.
+double SegmentLocalChi2(ESegment* segment, CNuc* lc, const Config& config,
+                        EData* ld) {
+  double chi = 0.0;
+  const double norm = segment->GetNorm();
+  for(int pid = 0; pid < segment->NumPoints(); pid++) {
+    double th = segment->CalculateTheoreticalCrossSection(pid, lc, config, ld);
+    EPoint* pt = segment->GetPoint(pid + 1);
+    if(!pt) continue;
+    pt->SetFitCrossSection(th);
+    double r = th - pt->GetCMCrossSection() * norm;
+    double err = pt->GetCMCrossSectionError() * norm;
+    if(err != 0.0) chi += (r * r) / (err * err);
+  }
+  if(segment->IsVaryEnergyShift()) {
+    double sh = segment->GetEnergyShift();
+    double shn = segment->GetNominalEnergyShift();
+    double she = segment->GetEnergyShiftError();
+    if(she != 0.0) chi += pow((sh - shn) / she, 2.0);
+  }
+  return chi;
+}
+
+}  // namespace
 
 double AZURECalc::operator()(const vector_r& p) const {
 
@@ -263,15 +299,29 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double>& p) const {
     }
   }
 
-  delete lc;
-  delete ld;
-
   // Fixed-parameter mask: Minuit ignores the gradient of fixed parameters, so
   // do not waste finite differences on them (large fits fix most energy shifts).
   AZUREParams fp;
   compound()->FillMnParams(fp.GetMinuitParams(), &configure());
   data()->FillMnParams(fp.GetMinuitParams());
   const int nMn = fp.GetMinuitParams().Params().size();
+
+  // Segment-local energy-shift gradient is exact only when a shift's effect is
+  // confined to its own segment's data term.  A dataset that maps points across
+  // segments breaks that confinement, so detect any mapping once and, if
+  // present, keep every shift on the (correct) full-dataset finite difference.
+  // Likewise, nuisance penalties handled by the limits manager can couple a
+  // shift to the global chi^2, so disable the local path when one is active.
+  bool datasetHasMapping = false;
+  for(int s = 1; s <= ld->NumSegments() && !datasetHasMapping; s++) {
+    ESegment* seg = ld->GetSegment(s);
+    if(!seg) continue;
+    for(int pid = 0; pid < seg->NumPoints(); pid++) {
+      EPoint* pt = seg->GetPoint(pid + 1);
+      if(pt && pt->IsMapped()) { datasetHasMapping = true; break; }
+    }
+  }
+  const bool localShiftOk = !datasetHasMapping && (limitsManager_ == nullptr);
 
   // --- Finite differences only for what is left: non-fixed energy shifts, and
   //     (if the analytic path bailed) the energy/gamma and norm blocks too. ---
@@ -282,10 +332,50 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double>& p) const {
               kind == ParamKind::Norm)) continue;  // analytic
     double x0 = p[idx];
     double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+
+    // Fast path: a free energy shift on a self-contained segment only moves that
+    // segment's points, so finite-difference just that segment's chi^2 on the
+    // already-filled clone instead of re-solving the entire dataset twice.
+    if(kind == ParamKind::EnergyShift && localShiftOk) {
+      int s = pmap.Desc(idx).segment;
+      ESegment* seg = (s >= 1) ? ld->GetSegment(s) : nullptr;
+      if(seg && !seg->HasComponents() && !seg->IsTotalCapture()) {
+        double d0 = seg->GetEnergyShift();
+        seg->SetEnergyShift(x0 + h);
+        seg->UpdatePointEnergiesWithShift(lc, &configure());
+        double chiP = SegmentLocalChi2(seg, lc, configure(), ld);
+        seg->SetEnergyShift(x0 - h);
+        seg->UpdatePointEnergiesWithShift(lc, &configure());
+        double chiM = SegmentLocalChi2(seg, lc, configure(), ld);
+        seg->SetEnergyShift(d0);                 // restore base state on the clone
+        seg->UpdatePointEnergiesWithShift(lc, &configure());
+        grad[idx] = (chiP - chiM) / (2.0 * h);
+
+        // Optional self-check: compare against the exact full-dataset finite
+        // difference for this shift.  Enable with AZURE_SHIFT_GRAD_CHECK=1 to
+        // validate the fast path on real data (one gradient evaluation), then
+        // disable it for the actual fit.
+        if(std::getenv("AZURE_SHIFT_GRAD_CHECK")) {
+          vector_r pp = p; pp[idx] = x0 + h;
+          vector_r pm = p; pm[idx] = x0 - h;
+          double gFull = (Chi2Value(pp) - Chi2Value(pm)) / (2.0 * h);
+          double denom = std::max(1.0, std::fabs(gFull));
+          std::cerr << "[shift-grad-check] seg " << s << " param " << idx
+                    << ": local=" << grad[idx] << " full=" << gFull
+                    << " reldiff=" << std::fabs(grad[idx] - gFull) / denom
+                    << std::endl;
+        }
+        continue;
+      }
+    }
+
     vector_r pp = p; pp[idx] = x0 + h;
     vector_r pm = p; pm[idx] = x0 - h;
     grad[idx] = (Chi2Value(pp) - Chi2Value(pm)) / (2.0 * h);
   }
+
+  delete lc;
+  delete ld;
 
   return grad;
 }
@@ -326,7 +416,8 @@ bool AZURECalc::ResidualJacobian(const vector_r& full, vector_r& residuals,
   return ok;
 }
 
-double AZURECalc::RunLevenbergMarquardt(AZUREParams& params, int maxIter) const {
+double AZURECalc::RunLevenbergMarquardt(AZUREParams& params, int maxIter,
+                                        BandCovariance* bandCovOut) const {
   ROOT::Minuit2::MnUserParameters& mp = params.GetMinuitParams();
   const int nFull = mp.Params().size();
   vector_r full(nFull);
@@ -481,18 +572,121 @@ double AZURECalc::RunLevenbergMarquardt(AZUREParams& params, int maxIter) const 
         for(int b = a; b < nFree; b++) Ha[b] += Ji[a] * Ji[b];
       }
     }
+    // Pure J^T J diagonal = each parameter's data sensitivity (column-norm^2 in
+    // J), captured before priors are folded into H.  Near zero => unconstrained.
+    std::vector<double> jtjDiag(nFree);
     for(int a = 0; a < nFree; a++) {
       for(int b = 0; b < a; b++) H[(size_t)a*nFree + b] = H[(size_t)b*nFree + a];
+      jtjDiag[a] = H[(size_t)a*nFree + a];
       if(pen_inv2[a] != 0.0) H[(size_t)a*nFree + a] += pen_inv2[a];
     }
+
+    // Name the free parameters the data barely constrain (near-zero J column).
+    auto reportInsensitive = [&]() {
+      double mx = 0.0;
+      for(int a = 0; a < nFree; a++) mx = std::max(mx, jtjDiag[a]);
+      std::string names;
+      int nInsensitive = 0;
+      for(int a = 0; a < nFree; a++) {
+        if(mx <= 0.0 || jtjDiag[a] <= 1.e-10 * mx) {
+          if(nInsensitive) names += ", ";
+          names += mp.GetName(p2f[a]);
+          nInsensitive++;
+        }
+      }
+      if(nInsensitive)
+        configure().outStream << "  Data-insensitive parameter(s): " << names
+                              << " -- fix, constrain, or add a prior to one of these." << std::endl;
+      else
+        configure().outStream << "No single parameter is insensitive; the flat direction is a "
+                                 "degeneracy between two or more correlated parameters." << std::endl;
+    };
+
+    // Covariance = (J^T J + priors)^{-1}.  If it is singular (unconstrained or
+    // degenerate parameter), retry with a small ridge so the flat direction gets
+    // a large finite variance instead of losing the errors and band; warn.
+    double maxDiag = 0.0;
+    for(int a = 0; a < nFree; a++) maxDiag = std::max(maxDiag, H[(size_t)a*nFree + a]);
+    const double ridges[4] = {0.0, maxDiag*1.e-9, maxDiag*1.e-6, maxDiag*1.e-3};
     gsl_matrix* A = gsl_matrix_alloc(nFree, nFree);
-    for(int a = 0; a < nFree; a++)
-      for(int b = 0; b < nFree; b++) gsl_matrix_set(A, a, b, H[(size_t)a*nFree + b]);
     gsl_set_error_handler_off();
-    if(gsl_linalg_cholesky_decomp1(A) == 0 && gsl_linalg_cholesky_invert(A) == 0) {
+    int used = -1;
+    for(int t = 0; t < 4; t++) {
+      for(int a = 0; a < nFree; a++)
+        for(int b = 0; b < nFree; b++)
+          gsl_matrix_set(A, a, b, H[(size_t)a*nFree + b] + (a==b ? ridges[t] : 0.0));
+      if(gsl_linalg_cholesky_decomp1(A) == 0 && gsl_linalg_cholesky_invert(A) == 0) { used = t; break; }
+    }
+    if(used < 0) {
+      configure().outStream << "Warning: the fit curvature matrix (J^T J) is singular; parameter errors "
+                               "and the uncertainty band are unavailable." << std::endl;
+      reportInsensitive();
+    } else {
+      if(used > 0) {
+        configure().outStream << "Warning: the fit curvature matrix was near-singular; regularized it "
+                                 "with a small ridge to obtain the covariance. Uncertainties along the "
+                                 "poorly-constrained direction(s) are large and approximate." << std::endl;
+        reportInsensitive();
+        // Strongly correlated pairs (|rho| near 1) are the degenerate combinations.
+        struct CorrPair { double c; int a, b; };
+        std::vector<CorrPair> pairs;
+        for(int a = 0; a < nFree; a++) {
+          double va = gsl_matrix_get(A, a, a);
+          if(va <= 0.0) continue;
+          for(int b = a+1; b < nFree; b++) {
+            double vb = gsl_matrix_get(A, b, b);
+            if(vb <= 0.0) continue;
+            double c = gsl_matrix_get(A, a, b) / std::sqrt(va*vb);
+            if(std::fabs(c) > 0.95) pairs.push_back({c, a, b});
+          }
+        }
+        std::sort(pairs.begin(), pairs.end(),
+                  [](const CorrPair& x, const CorrPair& y){ return std::fabs(x.c) > std::fabs(y.c); });
+        for(size_t k = 0; k < pairs.size() && k < 5; k++)
+          configure().outStream << "  Correlated (rho=" << pairs[k].c << "): "
+                                << mp.GetName(p2f[pairs[k].a]) << " <-> "
+                                << mp.GetName(p2f[pairs[k].b]) << std::endl;
+      }
       for(int a = 0; a < nFree; a++) {
         double v = gsl_matrix_get(A, a, a);
         if(v > 0.0) mp.SetError(p2f[a], std::sqrt(v));
+      }
+      // Name free parameters whose error dwarfs their value (they dominate the band).
+      {
+        std::string names; int n = 0;
+        for(int a = 0; a < nFree; a++) {
+          double v = gsl_matrix_get(A, a, a);
+          if(v <= 0.0) continue;
+          double val = mp.Value(p2f[a]);
+          if(std::sqrt(v) > 10.0 * std::max(std::fabs(val), 1.e-30)) {
+            if(n) names += ", ";
+            names += mp.GetName(p2f[a]);
+            n++;
+          }
+        }
+        if(n)
+          configure().outStream << "Note: weakly-determined parameter(s) (error > 1000% of value) that "
+                                   "dominate the uncertainty band: " << names
+                                << ". Constrain or fix these to tighten the band." << std::endl;
+      }
+      // Export the full covariance for cross-section bands.  Columns are the
+      // packed free parameters, in the same order as p2f, so we tag them with
+      // their parameter identities via a matching index map.
+      if(bandCovOut) {
+        AZUREParams tp;
+        compound()->FillMnParams(tp.GetMinuitParams(), &configure());
+        data()->FillMnParams(tp.GetMinuitParams());
+        int nMn = tp.GetMinuitParams().Params().size();
+        std::vector<bool> fixed(nMn);
+        for(int i = 0; i < nMn; i++) fixed[i] = tp.GetMinuitParams().Parameter(i).IsFixed();
+        ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), fixed);
+        if(pmap.NumPacked() == nFree) {
+          bandCovOut->cols.resize(nFree);
+          for(int a = 0; a < nFree; a++) bandCovOut->cols[a] = pmap.Desc(pmap.PackedToFull(a));
+          bandCovOut->M.assign(nFree, std::vector<double>(nFree, 0.0));
+          for(int a = 0; a < nFree; a++)
+            for(int b = 0; b < nFree; b++) bandCovOut->M[a][b] = gsl_matrix_get(A, a, b);
+        }
       }
     }
     gsl_matrix_free(A);

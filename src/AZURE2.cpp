@@ -22,6 +22,7 @@
 #include <iomanip>
 #include <fstream>
 #include <sstream>
+#include <cctype>
 #include <vector>
 #include <map>
 #include <tuple>
@@ -150,6 +151,8 @@ bool parseOptions(int argc, char *argv[], Config& configure) {
 #endif
     else if(*it=="--use-lm") configure.paramMask |= Config::USE_LM_MINIMIZER;
     else if(*it=="--use-gradient") configure.paramMask |= Config::USE_ANALYTIC_GRADIENT;
+    else if(*it=="--covariance-band") configure.paramMask |= Config::CALCULATE_COVARIANCE_BAND;
+    else if(*it=="--scale-covariance") configure.paramMask |= Config::SCALE_COVARIANCE_BY_CHI2;
     else if(*it=="--no-gui") continue;
     else configure.outStream << "WARNING: Unknown option " << *it << '.' << std::endl;
   }
@@ -206,9 +209,40 @@ int commandShell(const Config& configure) {
  * sets the appropriate flags in the Config structure.
  */
 
+// Read a yes/no answer from stdin; empty/unrecognized input counts as "no".
+static bool askYesNo(Config& configure, const std::string& prompt) {
+  configure.outStream << prompt << " (y/n): ";
+  std::string in;
+  getline(std::cin, in);
+  size_t a = in.find_first_not_of(" \t\r\n");
+  if(a == std::string::npos) return false;
+  char c = (char)std::tolower(in[a]);
+  return (c=='y' || c=='1' || c=='t');
+}
+
+// Offer the cross-section uncertainty band (and, for fit modes, the reduced-chi^2
+// covariance scaling).  If --covariance-band was passed the choice is already
+// made non-interactively, so no prompt appears -- this keeps scripted/headless
+// runs deterministic while interactive runs are asked.
+static void promptBandOptions(Config& configure, bool fitMode) {
+  if(configure.paramMask & Config::CALCULATE_COVARIANCE_BAND) return;   // set via flag
+  if(!askYesNo(configure, "Calculate cross-section uncertainty band?")) return;
+  configure.paramMask |= Config::CALCULATE_COVARIANCE_BAND;
+  if(fitMode && !(configure.paramMask & Config::SCALE_COVARIANCE_BY_CHI2)) {
+    if(askYesNo(configure, "Scale covariance to reduced chi-squared = 1?"))
+      configure.paramMask |= Config::SCALE_COVARIANCE_BY_CHI2;
+  }
+}
+
 void processCommand(int command, Config& configure) {
-  if(command==2) configure.paramMask |= Config::PERFORM_FIT;
-  else if(command==3) configure.paramMask &= ~Config::CALCULATE_WITH_DATA;
+  if(command==2) {
+    configure.paramMask |= Config::PERFORM_FIT;
+    promptBandOptions(configure, true);
+  }
+  else if(command==3) {
+    configure.paramMask &= ~Config::CALCULATE_WITH_DATA;
+    promptBandOptions(configure, false);   // extrapolation reuses a saved covariance
+  }
   else if(command==4) {
     bool goodAnswer=false;
     while (!goodAnswer) {
@@ -223,6 +257,7 @@ void processCommand(int command, Config& configure) {
     }
     configure.paramMask |= Config::PERFORM_FIT;
     configure.paramMask |= Config::PERFORM_ERROR_ANALYSIS;
+    promptBandOptions(configure, true);
   } else if(command==5) {
     configure.paramMask &= ~Config::CALCULATE_WITH_DATA;
     configure.paramMask |= Config::CALCULATE_REACTION_RATE;

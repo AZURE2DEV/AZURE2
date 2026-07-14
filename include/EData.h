@@ -7,6 +7,7 @@
 #include <deque>
 
 class CNuc;
+struct BandData;
 namespace ROOT {
   namespace Minuit2 {
     class MnUserParameters;
@@ -46,7 +47,7 @@ class EData {
   void PrintEDependentValues(const Config&,CNuc*);
   void CalcCoulombAmplitude(CNuc*);
   void PrintCoulombAmplitude(const Config&,CNuc*); 
-  void WriteOutputFiles(const Config&,bool=false);
+  void WriteOutputFiles(const Config&,bool=false,const BandData* =nullptr);
   int CalculateECAmplitudes(CNuc*,const Config&);
   int InitializeComponentSegments(CNuc*,const Config&);
   ESegment* CreateComponentSegment(const ESegment& baseSegment, int entranceKey, int exitKey);

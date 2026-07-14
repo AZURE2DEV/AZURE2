@@ -9,9 +9,12 @@
 #include "RichTextDelegate.h"
 #include "InfoDialog.h"
 #include "ElementMap.h"
+#include "Constants.h"
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <gsl/gsl_sf_coulomb.h>
+#include <gsl/gsl_errno.h>
 
 LevelsTab::LevelsTab(QWidget *parent) : QWidget(parent) {
   levelsModel=new LevelsModel(this);
@@ -94,6 +97,7 @@ LevelsTab::LevelsTab(QWidget *parent) : QWidget(parent) {
   channelDetails=new ChannelDetails(this);
   channelDetails->hide();
   connect(channelDetails->reducedWidthText,SIGNAL(textEdited(const QString&)),this,SLOT(updateReducedWidth(const QString&)));
+  connect(channelDetails->wignerButton,SIGNAL(clicked()),this,SLOT(calculateWignerLimit()));
 
   addLevelButton = new QPushButton(tr("+"));
   addLevelButton->setMaximumSize(28,28);
@@ -608,9 +612,25 @@ void LevelsTab::updateDetails(const QItemSelection &selection) {
     else if (pair.pairType==10&&level.energy==pair.excitationEnergy&&level.jValue==pair.heavyJ&&
 	     level.piValue==pair.heavyPi&&channel.radType=='E'&&channel.lValue==2) 
       channelDetails->setNormParam(3);    
-    else if(pair.pairType==20) channelDetails->setNormParam(4); 
+    else if(pair.pairType==20) channelDetails->setNormParam(4);
     else channelDetails->setNormParam(0);
     channelDetails->reducedWidthText->setText(QString("%1").arg(channel.reducedWidth));
+
+    // Store the inputs for the physical Wigner-limit calculation.  It applies to
+    // unbound particle channels only (not radiative capture / beta decay, and not
+    // bound states, whose physical quantity is an ANC rather than a width).
+    double reducedMass = (pair.lightM + pair.heavyM != 0.)
+                         ? pair.lightM * pair.heavyM / (pair.lightM + pair.heavyM) : 0.;
+    double eCm = level.energy - pair.seperationEnergy - pair.excitationEnergy;
+    wignerApplicable_ = (channel.radType == 'P') && (eCm > 0.) && (pair.channelRadius > 0.)
+                        && (reducedMass > 0.);
+    wignerZ1_ = pair.lightZ;  wignerZ2_ = pair.heavyZ;
+    wignerRedMass_ = reducedMass;  wignerRadius_ = pair.channelRadius;
+    wignerEcm_ = eCm;  wignerL_ = channel.lValue;
+    channelDetails->wignerButton->setEnabled(wignerApplicable_);
+    channelDetails->wignerLimitText->clear();
+    channelDetails->wignerLimitText->setPlaceholderText(
+        wignerApplicable_ ? QString() : tr("N/A"));
     channelDetails->show();
   }
 }
@@ -624,6 +644,34 @@ void LevelsTab::updateReducedWidth(const QString &string) {
     QModelIndex i = channelsModel->index(index.row(),6,QModelIndex());
     channelsModel->setData(i,reducedWidth,Qt::EditRole);
   }
+}
+
+// Physical Wigner limit (single-particle partial width) of the selected channel:
+// Gamma_W = 2 P(E) gamma^2_W, with the reduced limit gamma^2_W = hbar^2/(mu a^2)
+// and the penetrability P computed as in CoulFunc.  Result in eV, so it matches
+// the partial-width box.  Only meaningful for unbound particle channels.
+void LevelsTab::calculateWignerLimit() {
+  if(!wignerApplicable_) { channelDetails->wignerLimitText->setText(tr("N/A")); return; }
+
+  double eta = std::sqrt(uconv/2.)*fstruc*wignerZ1_*wignerZ2_*std::sqrt(wignerRedMass_/wignerEcm_);
+  double rho = std::sqrt(2.*uconv)/hbarc*wignerRadius_*std::sqrt(wignerRedMass_*wignerEcm_);
+
+  gsl_sf_result F,Fp,G,Gp;
+  double eF,eG;
+  gsl_set_error_handler_off();
+  int status = gsl_sf_coulomb_wave_FG_e(eta, rho, (double)wignerL_, 0, &F,&Fp,&G,&Gp,&eF,&eG);
+  double Fv = F.val*std::exp(eF), Gv = G.val*std::exp(eG);
+  double denom = Fv*Fv + Gv*Gv;
+  if(status != 0 || denom <= 0.) { channelDetails->wignerLimitText->setText(tr("error")); return; }
+
+  double P = rho/denom;
+  double gamma2W = hbarc*hbarc/(wignerRedMass_*uconv*wignerRadius_*wignerRadius_);  // MeV
+  double gammaW_eV = 2.0*P*gamma2W*1.0e6;                                           // eV
+  double av = std::fabs(gammaW_eV);
+  QString text = (av != 0. && (av >= 1.e4 || av < 1.e-4))
+                 ? QString::number(gammaW_eV, 'e', 4)
+                 : QString::number(gammaW_eV, 'f', 4);
+  channelDetails->wignerLimitText->setText(text);
 }
 
 bool LevelsTab::writeNuclearFile(QTextStream& outStream) {

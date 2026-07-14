@@ -570,16 +570,14 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
       double originalEnergy = point->GetOriginalEnergy();
       double shiftedEnergy = originalEnergy + energyShift_;
 
-      // Don't allow energies below 0.01 MeV (AZURE2 may crash)
+      // Don't allow energies below 0.01 MeV (AZURE2 may crash). Clamp to the
+      // floor and still recompute, rather than `continue`-ing: skipping the
+      // update left the point at whatever energy the *previous* evaluation set,
+      // making its contribution depend on the fit history. That hysteresis
+      // produces a discontinuous chi^2 surface for low-energy points and
+      // defeats the minimizer. Clamping is deterministic in the current shift.
       if(shiftedEnergy < 0.01) {
-        /*
-        std::cerr << "Warning: Energy shift in segment " << GetSegmentKey()
-                  << " would result in point energy below 0.01 MeV. "
-                  << "Setting point energy to 0.01 MeV instead." << std::endl;
-                  */
-        // FIX: we do not want to change the energy so abruptly, so leave the last shifted energy
-        //shiftedEnergy = originalEnergy;
-        continue;
+        shiftedEnergy = 0.01;
       }
 
       // Set the shifted energy
@@ -642,9 +640,11 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
             double energyShiftCM = (entrancePair->GetM(2))/(entrancePair->GetM(1)+entrancePair->GetM(2)) * energyShift_;
             double subShiftedEnergy = subOriginalEnergy + energyShiftCM;
 
-            // Apply same energy limit check
+            // Apply same energy limit check. Clamp rather than skip, so the
+            // subpoint stays consistent with the current shift (see the
+            // main-point clamp above for the hysteresis rationale).
             if(subShiftedEnergy < 0.01) {
-              continue;
+              subShiftedEnergy = 0.01;
             }
 
             // Set the shifted energy for subpoint

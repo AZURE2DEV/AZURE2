@@ -16,7 +16,8 @@ class QPushButton;
 class QRadioButton;
 class QLineEdit;
 class QTextEdit;
-class QGroupBox; 
+class QGroupBox;
+class QCheckBox;
 
 QT_END_NAMESPACE
 
@@ -34,6 +35,7 @@ class RunTab : public QWidget {
 
  private slots:
   void calculationTypeChanged(int index);
+  void updateUncertaintyControls();
   void paramFileButtonChanged(bool checked);
   void integralsFileButtonChanged(bool checked);
   void fileTempButtonChanged(bool checked);
@@ -42,6 +44,9 @@ class RunTab : public QWidget {
  private:
   QComboBox* calcType;
   QComboBox* minimizerType;
+  QCheckBox* uncertaintyBandCheck;
+  QCheckBox* scaleCovarianceCheck;
+  QCheckBox* wignerLimitsCheck;
   QPushButton* calcButton;
   QPushButton* stopAZUREButton;
   QLineEdit* paramFileText;

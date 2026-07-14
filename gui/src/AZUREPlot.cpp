@@ -1,3 +1,4 @@
+#include <QBrush>
 #include <QCheckBox>
 #include <QDialog>
 #include <QFileDialog>
@@ -85,8 +86,8 @@ PlotEntry::PlotEntry(int type, int entranceKey, int exitKey, int index, QString 
   // stands out from the data points. For type==1 (fit-only) the fitColor_
   // gets initialized to match color_ later in AZUREPlot::draw().
   fitColor_(type==0 ? QColor(0xd6,0x27,0x28) : QColor()),
-  symbolStyle_(QwtSymbol::Ellipse), symbolSize_(6), lineWidth_(2),
-  dataCurve_(NULL), dataErrorCurve_(NULL), fitCurve_(NULL) {
+  symbolStyle_(QwtSymbol::Ellipse), symbolSize_(6), lineWidth_(2), hasBand_(false),
+  dataCurve_(NULL), dataErrorCurve_(NULL), fitCurve_(NULL), bandCurve_(NULL) {
   label_ = labelFromFilename(filename);
 }
 
@@ -94,6 +95,7 @@ PlotEntry::~PlotEntry() {
     if(dataCurve_) delete dataCurve_;
     if(dataErrorCurve_) delete dataErrorCurve_;
     if(fitCurve_) delete fitCurve_;
+    if(bandCurve_) delete bandCurve_;
 }
 
 static bool isFiniteAndPositive(double v) {
@@ -113,6 +115,14 @@ bool PlotEntry::readData() {
   bool previousLineBreak=false;
   bool foundBlock=false;
   int blockNumber=0;
+
+  // Read the sibling ".band" file (analytic uncertainty band) for this block, if
+  // present.  bandXsErr[n]/bandSErr[n] correspond to raw line n of this block,
+  // so they are assigned before the (order-preserving) validity filtering below.
+  QVector<double> bandXsErr, bandSErr;
+  hasBand_ = readBandData(bandXsErr, bandSErr);
+  int rawLine=0;
+
   while(!inStream.atEnd()&&!foundBlock) {
     line=inStream.readLine();
     if(line.trimmed().isEmpty()) {
@@ -127,12 +137,13 @@ bool PlotEntry::readData() {
 	blockNumber++;
 	previousLineBreak=false;
 	points_.clear();
+	rawLine=0;
 	continue;
       }
     }
     if(!inStream.atEnd()&&!foundBlock) {
       QTextStream in(&line);
-      PlotPoint newPoint = {0.,0.,0.,0.,0.,0.,0.,0.,0.};
+      PlotPoint newPoint = {0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.};
       if(type_==0) {
 	in >> newPoint.energy >> newPoint.excitationEnergy >> newPoint.angle >> newPoint.fitCrossSection >> newPoint.fitSFactor
 	   >> newPoint.dataCrossSection >> newPoint.dataErrorCrossSection >> newPoint.dataSFactor
@@ -140,6 +151,12 @@ bool PlotEntry::readData() {
       } else {
 	in >> newPoint.energy >> newPoint.excitationEnergy >> newPoint.angle >> newPoint.fitCrossSection >> newPoint.fitSFactor;
       }
+      // Attach this raw line's band uncertainty (in file order, before filtering).
+      if(blockNumber==index_ && rawLine<bandXsErr.size()) {
+        newPoint.fitCrossSectionError = bandXsErr[rawLine];
+        newPoint.fitSFactorError = bandSErr[rawLine];
+      }
+      rawLine++;
       // Discard points that would break log scale: NaN, inf, zero, negative,
       // or (for data points) error bars that drop the lower bound to <= 0.
       bool valid = isFiniteAndPositive(newPoint.fitCrossSection) &&
@@ -163,6 +180,44 @@ bool PlotEntry::readData() {
   return !points_.isEmpty();
 }
 
+// Read the sibling "<primary>.band" file for this entry's block index.  The band
+// file has the same block/line structure as the primary output file, with
+// columns: energy, excitation, angle, xs, dXS, S, dS.  Fills xsErr/sErr (the dXS
+// and dS columns) for every raw line of the block, in file order.  Returns true
+// if a band file existed and yielded a non-empty block.
+bool PlotEntry::readBandData(QVector<double>& xsErr, QVector<double>& sErr) {
+  xsErr.clear();
+  sErr.clear();
+  QFile file(filename_ + ".band");
+  if(!file.open(QIODevice::ReadOnly)) return false;
+  QTextStream inStream(&file);
+  QString line("");
+  bool previousLineBreak=false;
+  bool foundBlock=false;
+  int blockNumber=0;
+  while(!inStream.atEnd()&&!foundBlock) {
+    line=inStream.readLine();
+    if(line.trimmed().isEmpty()) {
+      if(!previousLineBreak) { previousLineBreak=true; continue; }
+      if(blockNumber==index_) { foundBlock=true; break; }
+      blockNumber++;
+      previousLineBreak=false;
+      xsErr.clear();
+      sErr.clear();
+      continue;
+    }
+    if(blockNumber==index_) {
+      QTextStream in(&line);
+      double e,ex,ang,xs,dxs,s,ds;
+      in >> e >> ex >> ang >> xs >> dxs >> s >> ds;
+      xsErr.push_back(dxs);
+      sErr.push_back(ds);
+    }
+  }
+  file.close();
+  return (foundBlock || blockNumber==index_) && !xsErr.isEmpty();
+}
+
 void PlotEntry::sortPointsByXAxis(int xAxisType) {
   std::sort(points_.begin(), points_.end(), [xAxisType](const PlotPoint& a, const PlotPoint& b) {
     switch(xAxisType) {
@@ -174,7 +229,7 @@ void PlotEntry::sortPointsByXAxis(int xAxisType) {
   });
 }
 
-void PlotEntry::attach(QwtPlot* plot, int xAxisType, int yAxisType) {
+void PlotEntry::attach(QwtPlot* plot, int xAxisType, int yAxisType, bool showBand) {
   sortPointsByXAxis(xAxisType);
   QVector<QPointF> fit(points_.size());
   if(type_==0) {
@@ -276,6 +331,36 @@ void PlotEntry::attach(QwtPlot* plot, int xAxisType, int yAxisType) {
     }
   }
 
+  // Analytic 1-sigma uncertainty band: a translucent tube around the
+  // calculation curve, drawn behind everything else.  The band half-width is the
+  // cross-section or S-factor uncertainty depending on the current y axis.
+  if(showBand && hasBand_) {
+    QVector<QwtIntervalSample> band(points_.size());
+    bool any=false;
+    for(int i=0;i<points_.size();i++) {
+      double err = (yAxisType==0) ? points_[i].fitCrossSectionError
+                                  : points_[i].fitSFactorError;
+      double yc = fit[i].y();
+      double lo = yc-err, hi = yc+err;
+      if(err>0.) any=true;
+      if(lo<=0.) lo = yc*1.e-6;   // keep the tube positive on log-scale axes
+      band[i]=QwtIntervalSample(fit[i].x(), QwtInterval(lo,hi));
+    }
+    if(any) {
+      bandCurve_ = new QwtPlotIntervalCurve;
+      bandCurve_->setRenderHint( QwtPlotItem::RenderAntialiased );
+      bandCurve_->setStyle( QwtPlotIntervalCurve::Tube );
+      bandCurve_->setItemAttribute( QwtPlotItem::Legend, false );
+      QColor bandColor = (type_==0 && fitColor_.isValid()) ? fitColor_ : color_;
+      bandColor.setAlpha(60);
+      bandCurve_->setBrush( QBrush(bandColor) );
+      bandCurve_->setPen( QPen(Qt::NoPen) );
+      bandCurve_->setSamples(band);
+      bandCurve_->setZ(5);        // behind data (10/20) and calculation (30)
+      bandCurve_->attach(plot);
+    }
+  }
+
   fitCurve_ = new QwtPlotCurve;
   fitCurve_->setRenderHint( QwtPlotItem::RenderAntialiased );
   fitCurve_->setStyle( QwtPlotCurve::Lines );
@@ -309,11 +394,12 @@ void PlotEntry::detach() {
   if(dataCurve_) { dataCurve_->detach(); delete dataCurve_; dataCurve_=NULL; }
   if(dataErrorCurve_) { dataErrorCurve_->detach(); delete dataErrorCurve_; dataErrorCurve_=NULL; }
   if(fitCurve_) { fitCurve_->detach(); delete fitCurve_; fitCurve_=NULL; }
+  if(bandCurve_) { bandCurve_->detach(); delete bandCurve_; bandCurve_=NULL; }
 }
 
 AZUREPlot::AZUREPlot(PlotTab* plotTab,QWidget* parent) :
   QwtPlot(parent), xAxisType(0), yAxisType(0), containingTab(plotTab),
-  levelsModel(NULL), levelsVisible(false) {
+  levelsModel(NULL), levelsVisible(false), bandVisible(false) {
   setCanvasBackground(QColor(Qt::white));
   setAutoReplot(true);
 
@@ -479,6 +565,11 @@ void AZUREPlot::setLegendVisible(bool visible) {
   replot();
 }
 
+void AZUREPlot::setBandVisible(bool visible) {
+  bandVisible = visible;
+  redrawEntries();
+}
+
 void AZUREPlot::draw(QList<PlotEntry*> newEntries) {
   clearEntries();
 
@@ -501,7 +592,7 @@ void AZUREPlot::draw(QList<PlotEntry*> newEntries) {
         if(!newEntries[i]->fitColor().isValid())
           newEntries[i]->setFitColor(newEntries[i]->color());
       }
-      newEntries[i]->attach(this,xAxisType,yAxisType);
+      newEntries[i]->attach(this,xAxisType,yAxisType,bandVisible);
       entries.push_back(newEntries[i]);
     } else delete newEntries[i];
   }
@@ -515,7 +606,7 @@ void AZUREPlot::draw(QList<PlotEntry*> newEntries) {
 void AZUREPlot::redrawEntries() {
   for(int i=0; i<entries.size(); i++) {
     entries[i]->detach();
-    entries[i]->attach(this, xAxisType, yAxisType);
+    entries[i]->attach(this, xAxisType, yAxisType, bandVisible);
   }
   refreshLevelMarkers();
   replot();

@@ -280,20 +280,27 @@ PlotTab::PlotTab(Config& config, SegmentsDataModel* dataModel, SegmentsTestModel
   connect(legendCheck, SIGNAL(toggled(bool)), this, SLOT(legendToggled(bool)));
   levelsCheck = new QCheckBox(tr("Levels"));
   connect(levelsCheck, SIGNAL(toggled(bool)), this, SLOT(levelsToggled(bool)));
+  bandCheck = new QCheckBox(tr("Uncertainty"));
+  bandCheck->setToolTip(tr("Shade the 1-sigma analytic uncertainty band around the "
+                           "calculation. Requires that the run was performed with the "
+                           "Run-tab \"Uncertainty band\" option enabled (which writes the "
+                           ".band files this reads)."));
+  connect(bandCheck, SIGNAL(toggled(bool)), this, SLOT(bandToggled(bool)));
   QHBoxLayout* displayLayout = new QHBoxLayout;
   displayLayout->setContentsMargins(8,4,8,4);
   displayLayout->addWidget(gridCheck);
   displayLayout->addWidget(legendCheck);
   displayLayout->addWidget(levelsCheck);
-  displayLayout->addStretch();
+  displayLayout->addWidget(bandCheck);
   displayBox->setLayout(displayLayout);
+  displayBox->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
 
+  // Axis boxes on the first row; Display on its own row below, left-aligned.
   topLayout->addWidget(xAxisBox,0,0);
   topLayout->addWidget(yAxisBox,0,1);
-  topLayout->addWidget(displayBox,0,2);
+  topLayout->addWidget(displayBox,1,0,1,2,Qt::AlignLeft);
   topLayout->setColumnStretch(0,1);
   topLayout->setColumnStretch(1,1);
-  topLayout->setColumnStretch(2,1);
 
   rightLayout->addLayout(topLayout);
   rightLayout->addWidget(azurePlot, 1);
@@ -580,6 +587,10 @@ void PlotTab::levelsToggled(bool checked) {
   azurePlot->setLevelsVisible(checked);
 }
 
+void PlotTab::bandToggled(bool checked) {
+  azurePlot->setBandVisible(checked);
+}
+
 void PlotTab::reset() {
   azurePlot->clearEntries();
   rebuildCurveList();
@@ -590,6 +601,7 @@ void PlotTab::reset() {
   gridCheck->setChecked(false);
   legendCheck->setChecked(true);
   levelsCheck->setChecked(false);
+  bandCheck->setChecked(false);
 }
 
 void PlotTab::showInfo(int which,QString title) {

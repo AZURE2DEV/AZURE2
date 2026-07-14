@@ -4,6 +4,7 @@
 #include <QLabel>
 #include <QSpacerItem>
 #include <QRadioButton>
+#include <QCheckBox>
 #include <QGroupBox>
 #include <QFileDialog>
 
@@ -42,6 +43,27 @@ RunTab::RunTab(QWidget* parent) : QWidget(parent) {
   chiVarianceText->setEnabled(false);
   chiVarianceText->setMinimumWidth(50);
   chiVarianceText->setMaximumWidth(50);
+  chiVarianceText->setToolTip(tr("MINOS error definition (Up): the increase in chi-squared that defines "
+                                 "the parameter uncertainty interval. 1.0 gives 1-sigma errors; use e.g. "
+                                 "2.71 for 90% or 4.0 for 2-sigma."));
+
+  uncertaintyBandCheck = new QCheckBox(tr("Uncertainty"));
+  uncertaintyBandCheck->setToolTip(tr("Compute the analytic cross-section uncertainty band from the "
+                                      "fitted-parameter covariance. "
+                                      "For fits it is written at the data energies; for \"Calculate "
+                                      "Segments Without Data\" it reuses the covariance saved by a "
+                                      "previous fit and spans the extrapolation grid."));
+  uncertaintyBandCheck->setEnabled(false);
+  connect(uncertaintyBandCheck,SIGNAL(toggled(bool)),this,SLOT(updateUncertaintyControls()));
+
+  scaleCovarianceCheck = new QCheckBox(tr("Scale covariance"));
+  scaleCovarianceCheck->setToolTip(tr("When the fit's reduced chi-squared exceeds 1, inflate the parameter "
+                                      "covariance by that factor so the band is not underestimated."));
+  scaleCovarianceCheck->setEnabled(false);
+
+  wignerLimitsCheck = new QCheckBox(tr("Set Wigner limits"));
+  wignerLimitsCheck->setToolTip(tr("Constrain each reduced-width parameter to +/- its Wigner "
+                                   "(single-particle) limit during the fit."));
 
   calcButton = new QPushButton(tr("Save and &Run"));
   stopAZUREButton = new QPushButton(tr("Stop AZURE2"));
@@ -56,13 +78,21 @@ RunTab::RunTab(QWidget* parent) : QWidget(parent) {
   calcLayout->addWidget(new QLabel(tr("Minimizer:")),0,3,Qt::AlignRight);
   calcLayout->addWidget(minimizerType,0,4);
   calcLayout->setColumnStretch(4,0);
-  calcLayout->addWidget(new QLabel(tr("Chi-Sq Variance:")),0,5,Qt::AlignRight);
-  calcLayout->addWidget(chiVarianceText,0,6);
+  calcLayout->addWidget(calcButton,0,5);
+  calcLayout->setColumnStretch(5,0);
+  calcLayout->addWidget(stopAZUREButton,0,6);
   calcLayout->setColumnStretch(6,0);
-  calcLayout->addWidget(calcButton,0,7);
-  calcLayout->setColumnStretch(7,0);
-  calcLayout->addWidget(stopAZUREButton,0,8);
-  calcLayout->setColumnStretch(8,0);
+  // Second row: uncertainty-band options and the MINOS chi-squared variance.
+  QHBoxLayout* bandOptsLayout = new QHBoxLayout;
+  bandOptsLayout->setContentsMargins(0,0,0,0);
+  bandOptsLayout->addWidget(uncertaintyBandCheck);
+  bandOptsLayout->addWidget(scaleCovarianceCheck);
+  bandOptsLayout->addWidget(wignerLimitsCheck);
+  bandOptsLayout->addSpacing(20);
+  bandOptsLayout->addWidget(new QLabel(tr("Chi-Sq Variance:")));
+  bandOptsLayout->addWidget(chiVarianceText);
+  bandOptsLayout->addStretch();
+  calcLayout->addLayout(bandOptsLayout,1,1,1,6);
 
   paramFileText = new QLineEdit;
   paramFileText->setEnabled(false);
@@ -196,13 +226,31 @@ void RunTab::calculationTypeChanged(int index) {
     chiVarianceText->setText("1.0");
     chiVarianceText->setEnabled(false);
   }
-  // Enable minimizer selection for "Fit Segments" (index 1) and "Perform MINOS Error Analysis" (index 3)
-  if(index==1 || index==3) {
+  // Minimizer selection is available only for a plain fit (index 1).  MINOS error
+  // analysis (index 3) requires Minuit2, so the selector is forced to Minuit2 and
+  // disabled; the non-fitting modes have no minimizer.
+  if(index==1) {
     minimizerType->setEnabled(true);
   } else {
+    if(index==3) minimizerType->setCurrentIndex(0); // MINOS: force Minuit2
+    else minimizerType->setCurrentIndex(0);
     minimizerType->setEnabled(false);
-    minimizerType->setCurrentIndex(0); // Reset to Minuit2
   }
+  updateUncertaintyControls();
+}
+
+// Enable the uncertainty-band checkbox for fits (1), extrapolation (2), and MINOS
+// (3); enable the covariance-scaling checkbox only for fit modes (1,3) when the
+// band itself is enabled.  Disabled checkboxes are also unchecked so a stale
+// selection cannot leak into a mode where it does not apply.
+void RunTab::updateUncertaintyControls() {
+  int index = calcType->currentIndex();
+  bool bandApplicable = (index==1 || index==2 || index==3);
+  uncertaintyBandCheck->setEnabled(bandApplicable);
+  if(!bandApplicable) uncertaintyBandCheck->setChecked(false);
+  bool scaleApplicable = (index==1 || index==3) && uncertaintyBandCheck->isChecked();
+  scaleCovarianceCheck->setEnabled(scaleApplicable);
+  if(!scaleApplicable) scaleCovarianceCheck->setChecked(false);
 }
 
 void RunTab::paramFileButtonChanged(bool checked) {
@@ -250,6 +298,9 @@ void RunTab::setChooseFile(QLineEdit *lineEdit) {
 
 void RunTab::reset() {
   calcType->setCurrentIndex(0);
+  uncertaintyBandCheck->setChecked(false);
+  scaleCovarianceCheck->setChecked(false);
+  wignerLimitsCheck->setChecked(false);
   newParamFileButton->setChecked(true);
   paramFileText->setText("");
   newIntegralsFileButton->setChecked(true);

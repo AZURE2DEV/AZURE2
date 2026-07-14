@@ -103,6 +103,7 @@ class PlotTab : public QWidget {
   void gridToggled(bool);
   void legendToggled(bool);
   void levelsToggled(bool);
+  void bandToggled(bool);
   void dataChannelFilterChanged();
   void testChannelFilterChanged();
   void rebuildChannelFilterOptions();
@@ -133,6 +134,7 @@ class PlotTab : public QWidget {
   QCheckBox* gridCheck;
   QCheckBox* legendCheck;
   QCheckBox* levelsCheck;
+  QCheckBox* bandCheck;
   SegTestProxyModel* segTestProxyModel;
   SegDataProxyModel* segDataProxyModel;
   QPushButton* refreshButton;

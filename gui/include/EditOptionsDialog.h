@@ -25,7 +25,6 @@ Q_OBJECT
   QCheckBox* ignoreExternalsCheck;
   QCheckBox* useRMCCheck;
   QCheckBox* noTransformCheck;
-  QCheckBox* useWignerLimitsCheck;
   QCheckBox* useHybridMethodCheck;
   QCheckBox* useAdaptiveGridCheck;
   // QCheckBox* noLongWavelengthCheck;
