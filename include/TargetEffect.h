@@ -53,6 +53,18 @@ class TargetEffect {
 
   ///The multiple of sigma above and below centroid energy to use as integration range
   static constexpr double convolutionRange=3.;
+  /*Wider window for THM (HOES) segments: their extremely narrow resonances make
+  the smeared curve in the valleys a pure Gaussian tail of a neighboring spike,
+  so a +-3 sigma cutoff loses up to ~25% there; +-5 sigma keeps the truncation
+  error below ~1e-3.*/
+  static constexpr double thmConvolutionRange=5.;
+  /*Numerical floor (in MeV) kept between a target-effect sub-point energy and the
+  channel threshold, since Coulomb functions and penetrabilities are singular at
+  E=0. For ordinary segments this bounds the channel CM energy directly; for THM
+  (HOES) segments, which legitimately probe negative channel CM energies, it
+  instead bounds the compound-system energy (CMEnergy+SepE+ExE) so the floor is
+  applied relative to the physical threshold rather than an arbitrary channel origin.*/
+  static constexpr double minIntegrationEnergy=0.001;
  private:
   bool isConvolution_;
   bool isTargetIntegration_;

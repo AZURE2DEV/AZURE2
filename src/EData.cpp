@@ -559,13 +559,15 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
 	        } 
     
           else if(targetEffect->IsConvolution()||targetEffect->IsConvCoefficients()) {
+            double convRange = segment->IsTHM() ? targetEffect->thmConvolutionRange
+                                                : targetEffect->convolutionRange;
             if(targetEffect->IsConvCoefficients()){
-              backwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure);
-              forwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure);
+              backwardDepth=convRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure);
+              forwardDepth=convRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure);
             }
             else {
-              backwardDepth=targetEffect->convolutionRange*targetEffect->GetSigma();
-              forwardDepth=targetEffect->convolutionRange*targetEffect->GetSigma();
+              backwardDepth=convRange*targetEffect->GetSigma();
+              forwardDepth=convRange*targetEffect->GetSigma();
             }
           }
 
@@ -573,28 +575,36 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
           double startEnergy = point->GetCMEnergy() + forwardDepth;
           double endEnergy ;
 
+          /*
+          THM (HOES) segments carry data below the entrance threshold, so their
+          sub-point grids may extend to negative energies as long as the
+          compound-system energy Ecm+SepE+ExE stays positive.
+          */
+          double minSubEnergy = segment->IsTHM() ?
+            TargetEffect::minIntegrationEnergy-(entrancePair->GetSepE()+entrancePair->GetExE()) : TargetEffect::minIntegrationEnergy;
+
           // Check if target thickness is zero (for convolution-only cases)
           if(targetEffect->IsTargetIntegration()) {
             double targetThickness = point->GetTargetThickness();
             if(targetThickness < 1.0e-10) {
-              // Target thickness is effectively zero - integrate down to 0.001 MeV
-              endEnergy = 0.001;
+              // Target thickness is effectively zero - integrate down to the floor energy
+              endEnergy = minSubEnergy;
               // Set density to 1e24 to prevent division issues
               targetEffect->SetDensity(1.0e24);
             } else {
               // Normal case - use backward depth
               endEnergy = point->GetCMEnergy() - backwardDepth;
               // Safety check: if backwardDepth > energy, set endEnergy to minimum
-              if(endEnergy < 0.001) {
-                endEnergy = 0.001;
+              if(endEnergy < minSubEnergy) {
+                endEnergy = minSubEnergy;
               }
             }
           } else {
             // Convolution or ConvCoefficients - use backward depth
             endEnergy = point->GetCMEnergy() - backwardDepth;
             // Safety check: if backwardDepth > energy, set endEnergy to minimum
-            if(endEnergy < 0.001) {
-              endEnergy = 0.001;
+            if(endEnergy < minSubEnergy) {
+              endEnergy = minSubEnergy;
             }
           }
 
@@ -681,13 +691,15 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
               }
 
               else if(targetEffect->IsConvolution()||targetEffect->IsConvCoefficients()) {
+                double convRange = component->IsTHM() ? targetEffect->thmConvolutionRange
+                                                      : targetEffect->convolutionRange;
                 if(targetEffect->IsConvCoefficients()){
-                  backwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure);
-                  forwardDepth=targetEffect->convolutionRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure);
+                  backwardDepth=convRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure);
+                  forwardDepth=convRange*targetEffect->CalculateSigma(point->GetLabEnergy(),configure);
                 }
                 else {
-                  backwardDepth=targetEffect->convolutionRange*targetEffect->GetSigma();
-                  forwardDepth=targetEffect->convolutionRange*targetEffect->GetSigma();
+                  backwardDepth=convRange*targetEffect->GetSigma();
+                  forwardDepth=convRange*targetEffect->GetSigma();
                 }
               }
 
@@ -695,28 +707,39 @@ int EData::ReadTargetEffectsFile(const Config& configure, CNuc *compound) {
               double startEnergy = point->GetCMEnergy() + forwardDepth;
               double endEnergy;
 
+              /*
+              THM (HOES) segments carry data below the entrance threshold, so their
+              sub-point grids may extend to negative energies as long as the
+              compound-system energy Ecm+SepE+ExE stays positive. Note this uses the
+              component's own entrance pair, since an advanced (sum/ratio) component
+              can have a different entrance channel than its master segment.
+              */
+              PPair *componentEntrancePair = compound->GetPair(compound->GetPairNumFromKey(component->GetEntranceKey()));
+              double minSubEnergy = component->IsTHM() ?
+                TargetEffect::minIntegrationEnergy-(componentEntrancePair->GetSepE()+componentEntrancePair->GetExE()) : TargetEffect::minIntegrationEnergy;
+
               // Check if target thickness is zero (for convolution-only cases)
               if(targetEffect->IsTargetIntegration()) {
                 double targetThickness = point->GetTargetThickness();
                 if(targetThickness < 1.0e-10) {
-                  // Target thickness is effectively zero - integrate down to 0.001 MeV
-                  endEnergy = 0.001;
+                  // Target thickness is effectively zero - integrate down to the floor energy
+                  endEnergy = minSubEnergy;
                   // Set density to 1e24 to prevent division issues
                   targetEffect->SetDensity(1.0e24);
                 } else {
                   // Normal case - use backward depth
                   endEnergy = point->GetCMEnergy() - backwardDepth;
                   // Safety check: if backwardDepth > energy, set endEnergy to minimum
-                  if(endEnergy < 0.001) {
-                    endEnergy = 0.001;
+                  if(endEnergy < minSubEnergy) {
+                    endEnergy = minSubEnergy;
                   }
                 }
               } else {
                 // Convolution or ConvCoefficients - use backward depth
                 endEnergy = point->GetCMEnergy() - backwardDepth;
                 // Safety check: if backwardDepth > energy, set endEnergy to minimum
-                if(endEnergy < 0.001) {
-                  endEnergy = 0.001;
+                if(endEnergy < minSubEnergy) {
+                  endEnergy = minSubEnergy;
                 }
               }
 

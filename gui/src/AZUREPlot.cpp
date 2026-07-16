@@ -132,7 +132,7 @@ bool PlotEntry::readData() {
     }
     if(!inStream.atEnd()&&!foundBlock) {
       QTextStream in(&line);
-      PlotPoint newPoint = {0.,0.,0.,0.,0.,0.,0.,0.,0.};
+      PlotPoint newPoint = {0.,0.,0.,0.,0.,0.,0.,0.,0.,false,false};
       if(type_==0) {
 	in >> newPoint.energy >> newPoint.excitationEnergy >> newPoint.angle >> newPoint.fitCrossSection >> newPoint.fitSFactor
 	   >> newPoint.dataCrossSection >> newPoint.dataErrorCrossSection >> newPoint.dataSFactor
@@ -140,19 +140,24 @@ bool PlotEntry::readData() {
       } else {
 	in >> newPoint.energy >> newPoint.excitationEnergy >> newPoint.angle >> newPoint.fitCrossSection >> newPoint.fitSFactor;
       }
-      // Discard points that would break log scale: NaN, inf, zero, negative,
-      // or (for data points) error bars that drop the lower bound to <= 0.
-      bool valid = isFiniteAndPositive(newPoint.fitCrossSection) &&
-                   isFiniteAndPositive(newPoint.fitSFactor);
-      if(valid && type_==0) {
-        valid = isFiniteAndPositive(newPoint.dataCrossSection) &&
-                isFiniteAndPositive(newPoint.dataSFactor) &&
+      // Flag, per quantity, points that would break log scale: NaN, inf, zero,
+      // negative, or (for data points) error bars that drop the lower bound to
+      // <= 0.  The two quantities are validated independently so a point with
+      // an undefined S factor (THM data below threshold) still shows up in the
+      // cross-section view; attach() filters on the flag of the plotted view.
+      newPoint.validXSec = isFiniteAndPositive(newPoint.fitCrossSection);
+      newPoint.validSFactor = isFiniteAndPositive(newPoint.fitSFactor);
+      if(type_==0) {
+        newPoint.validXSec = newPoint.validXSec &&
+                isFiniteAndPositive(newPoint.dataCrossSection) &&
                 std::isfinite(newPoint.dataErrorCrossSection) &&
+                (newPoint.dataCrossSection - newPoint.dataErrorCrossSection) > 0.;
+        newPoint.validSFactor = newPoint.validSFactor &&
+                isFiniteAndPositive(newPoint.dataSFactor) &&
                 std::isfinite(newPoint.dataErrorSFactor) &&
-                (newPoint.dataCrossSection - newPoint.dataErrorCrossSection) > 0. &&
                 (newPoint.dataSFactor - newPoint.dataErrorSFactor) > 0.;
       }
-      if(valid) points_.push_back(newPoint);
+      if(newPoint.validXSec || newPoint.validSFactor) points_.push_back(newPoint);
     }
   }
   inStream.flush();
@@ -176,61 +181,37 @@ void PlotEntry::sortPointsByXAxis(int xAxisType) {
 
 void PlotEntry::attach(QwtPlot* plot, int xAxisType, int yAxisType) {
   sortPointsByXAxis(xAxisType);
-  QVector<QPointF> fit(points_.size());
-  if(type_==0) {
-    QVector<QPointF> data(points_.size());
-    QVector<QwtIntervalSample> error(points_.size());
-
-    if(xAxisType==0&&yAxisType==0) {
-      for(int i=0;i<points_.size();i++) {
-	data[i]=QPointF(points_[i].energy,points_[i].dataCrossSection);
-	fit[i]=QPointF(points_[i].energy,points_[i].fitCrossSection);
-	error[i]=QwtIntervalSample(points_[i].energy,
-				   QwtInterval(points_[i].dataCrossSection-points_[i].dataErrorCrossSection,
-					       points_[i].dataCrossSection+points_[i].dataErrorCrossSection));
+  // Build the samples for the plotted quantity, skipping points that are not
+  // valid for it (each point carries per-quantity validity flags from
+  // readData, so a THM point below threshold shows as a cross section even
+  // though its S factor is undefined).
+  QVector<QPointF> fit;
+  QVector<QPointF> data;
+  QVector<QwtIntervalSample> error;
+  for(int i=0;i<points_.size();i++) {
+    const PlotPoint& p = points_[i];
+    if(yAxisType==0 ? !p.validXSec : !p.validSFactor) continue;
+    double x = (xAxisType==0) ? p.energy :
+               (xAxisType==1) ? p.excitationEnergy : p.angle;
+    if(yAxisType==0) {
+      fit.append(QPointF(x,p.fitCrossSection));
+      if(type_==0) {
+	data.append(QPointF(x,p.dataCrossSection));
+	error.append(QwtIntervalSample(x,
+		QwtInterval(p.dataCrossSection-p.dataErrorCrossSection,
+			    p.dataCrossSection+p.dataErrorCrossSection)));
       }
-    } else if(xAxisType==0&&yAxisType==1) {
-      for(int i=0;i<points_.size();i++) {
-	data[i]=QPointF(points_[i].energy,points_[i].dataSFactor);
-	fit[i]=QPointF(points_[i].energy,points_[i].fitSFactor);
-	error[i]=QwtIntervalSample(points_[i].energy,
-				   QwtInterval(points_[i].dataSFactor-points_[i].dataErrorSFactor,
-					       points_[i].dataSFactor+points_[i].dataErrorSFactor));
-      }
-    } else if(xAxisType==1&&yAxisType==0) {
-      for(int i=0;i<points_.size();i++) {
-	data[i]=QPointF(points_[i].excitationEnergy,points_[i].dataCrossSection);
-	fit[i]=QPointF(points_[i].excitationEnergy,points_[i].fitCrossSection);
-	error[i]=QwtIntervalSample(points_[i].excitationEnergy,
-				   QwtInterval(points_[i].dataCrossSection-points_[i].dataErrorCrossSection,
-					       points_[i].dataCrossSection+points_[i].dataErrorCrossSection));
-      }
-    } else if(xAxisType==1&&yAxisType==1) {
-      for(int i=0;i<points_.size();i++) {
-	data[i]=QPointF(points_[i].excitationEnergy,points_[i].dataSFactor);
-	fit[i]=QPointF(points_[i].excitationEnergy,points_[i].fitSFactor);
-	error[i]=QwtIntervalSample(points_[i].excitationEnergy,
-				   QwtInterval(points_[i].dataSFactor-points_[i].dataErrorSFactor,
-					       points_[i].dataSFactor+points_[i].dataErrorSFactor));
-      }
-    } else if(xAxisType==2&&yAxisType==0) {
-      for(int i=0;i<points_.size();i++) {
-	data[i]=QPointF(points_[i].angle,points_[i].dataCrossSection);
-	fit[i]=QPointF(points_[i].angle,points_[i].fitCrossSection);
-	error[i]=QwtIntervalSample(points_[i].angle,
-		QwtInterval(points_[i].dataCrossSection-points_[i].dataErrorCrossSection,
-		points_[i].dataCrossSection+points_[i].dataErrorCrossSection));
-      }
-    } else if(xAxisType==2&&yAxisType==1) {
-      for(int i=0;i<points_.size();i++) {
-	data[i]=QPointF(points_[i].angle,points_[i].dataSFactor);
-	fit[i]=QPointF(points_[i].angle,points_[i].fitSFactor);
-	error[i]=QwtIntervalSample(points_[i].angle,
-		QwtInterval(points_[i].dataSFactor-points_[i].dataErrorSFactor,
-		points_[i].dataSFactor+points_[i].dataErrorSFactor));
+    } else {
+      fit.append(QPointF(x,p.fitSFactor));
+      if(type_==0) {
+	data.append(QPointF(x,p.dataSFactor));
+	error.append(QwtIntervalSample(x,
+		QwtInterval(p.dataSFactor-p.dataErrorSFactor,
+			    p.dataSFactor+p.dataErrorSFactor)));
       }
     }
-
+  }
+  if(type_==0) {
     dataCurve_ = new QwtPlotCurve;
     dataCurve_->setTitle(label_);
     dataCurve_->setRenderHint( QwtPlotItem::RenderAntialiased );
@@ -254,26 +235,6 @@ void PlotEntry::attach(QwtPlot* plot, int xAxisType, int yAxisType) {
 
     dataErrorCurve_->setSymbol(errorBar);
     dataErrorCurve_->setSamples(error);
-  } else {
-    if(xAxisType==0&&yAxisType==0) {
-      for(int i=0;i<points_.size();i++)
-	fit[i]=QPointF(points_[i].energy,points_[i].fitCrossSection);
-    } else if(xAxisType==0&&yAxisType==1) {
-      for(int i=0;i<points_.size();i++)
-	fit[i]=QPointF(points_[i].energy,points_[i].fitSFactor);
-    } else if(xAxisType==1&&yAxisType==0) {
-      for(int i=0;i<points_.size();i++)
-	fit[i]=QPointF(points_[i].excitationEnergy,points_[i].fitCrossSection);
-    } else if(xAxisType==1&&yAxisType==1) {
-      for(int i=0;i<points_.size();i++)
-	fit[i]=QPointF(points_[i].excitationEnergy,points_[i].fitSFactor);
-    } else if(xAxisType==2&&yAxisType==0) {
-      for(int i=0;i<points_.size();i++)
-	fit[i]=QPointF(points_[i].angle,points_[i].fitCrossSection);
-    } else if(xAxisType==2&&yAxisType==1) {
-      for(int i=0;i<points_.size();i++)
-	fit[i]=QPointF(points_[i].angle,points_[i].fitSFactor);
-    }
   }
 
   fitCurve_ = new QwtPlotCurve;

@@ -394,6 +394,9 @@ bool AccumulateEGammaGradient(CNuc* compound, EData* data, const Config& config,
   for(int i = 1; i <= data->NumSegments() && ok; i++) {
     ESegment* segment = data->GetSegment(i);
     if(!segment) continue;
+    // THM (HOES) segments are computed by THMMatrixFunc, not the T-matrix
+    // observable this adjoint differentiates; fall back to finite differences.
+    if(segment->IsTHM()) return false;
     const int nPoints = segment->NumPoints();
     bool bail = false;
 #pragma omp parallel for shared(bail)

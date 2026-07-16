@@ -1103,6 +1103,9 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config& configure) {
 					entrancePair->GetZ(2)*sqrt(entrancePair->GetRedMass()
 								   /this->GetCMEnergy()));
   }
+  // THM (HOES) cross sections are in arbitrary units and extend below the
+  // entrance threshold, where the Gamow conversion is undefined (NaN).
+  if(this->IsTHM()) sfactorconv=1.;
   this->SetGeometricalFactor(geofactor);
   this->SetSFactorConversion(sfactorconv);
 
