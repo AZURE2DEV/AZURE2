@@ -26,6 +26,7 @@ EData::EData() {
   energyShiftParamOffset_=0;
   isFit_=true;
   isErrorAnalysis_=false;
+  ecReadPos_=std::streampos(0);
 }
 
 /*!
@@ -1615,7 +1616,12 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc,const Config& configure) {
     out.flush();
     out.close();
   }
-  if(in.is_open()) in.close();
+  // Remember where the regular-segment integrals end so the component-segment
+  // integrals (appended to the same file) can be resumed from here on read.
+  if(in.is_open()) {
+    ecReadPos_ = in.tellg();
+    in.close();
+  }
   return 0;
 }
 
@@ -1749,9 +1755,28 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config& configure) {
     }
   }
   
-  // Calculate EC amplitudes for component segments if external capture is enabled
+  // Calculate EC amplitudes for component segments if external capture is enabled.
+  // The integrals are saved to (or read back from) the same intEC.dat/intEC.extrap
+  // file as the regular segments.  When previously calculated integrals are reused,
+  // the (expensive) component-segment EC calculation is skipped entirely, which is
+  // what makes subsequent calculations much faster.
   if(configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
-    configure.outStream << "Calculating EC Amplitudes for Component Segments..." << std::endl;
+    bool usePrevious = (configure.paramMask & Config::USE_PREVIOUS_INTEGRALS);
+    std::ifstream in;
+    std::ofstream out;
+    if(usePrevious) {
+      in.open(configure.integralsfile.c_str());
+      // Resume reading right after the regular-segment integrals recorded earlier.
+      if(in.is_open() && ecReadPos_ > std::streampos(0)) in.seekg(ecReadPos_);
+    } else {
+      std::string outputfile;
+      if(configure.paramMask & Config::CALCULATE_WITH_DATA) outputfile=configure.outputdir+"intEC.dat";
+      else outputfile=configure.outputdir+"intEC.extrap";
+      // Append the component-segment integrals after the regular-segment ones.
+      out.open(outputfile.c_str(), std::ios::app);
+      if(!out) configure.outStream << "Could not append to EC Amplitude File." << std::endl;
+      configure.outStream << "Calculating EC Amplitudes for Component Segments..." << std::endl;
+    }
     for(auto& componentSegment : componentSegments_) {
       int aa = theCNuc->GetPairNumFromKey(componentSegment.GetEntranceKey());
       if(theCNuc->GetPair(aa)->GetPType() != 20 && theCNuc->GetPair(aa)->IsEntrance()) {
@@ -1762,60 +1787,107 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config& configure) {
               ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
               int ir = theCNuc->GetPairNumFromKey(componentSegment.GetExitKey());
               if(ecLevel->GetECPairNum() == ir) {
-                char segmentKeyOut[256];
-                snprintf(segmentKeyOut, sizeof(segmentKeyOut),"%d",componentSegment.GetSegmentKey());
-                configure.outStream << "\tSegment #" << std::setw(12) << segmentKeyOut
-                                    << std::setw(0) << " [                         ] 0%";configure.outStream.flush();
-                int numPoints=componentSegment.NumPoints();
-                int pointIndex=0;
-                time_t startTime = time(NULL);
-                bool localStop = false;
+                if(!usePrevious) {
+                  char segmentKeyOut[256];
+                  snprintf(segmentKeyOut, sizeof(segmentKeyOut),"%d",componentSegment.GetSegmentKey());
+                  configure.outStream << "\tSegment #" << std::setw(12) << segmentKeyOut
+                                      << std::setw(0) << " [                         ] 0%";configure.outStream.flush();
+                  int numPoints=componentSegment.NumPoints();
+                  int pointIndex=0;
+                  time_t startTime = time(NULL);
+                  bool localStop = false;
 #pragma omp parallel for shared(configure,localStop)
-                for(int i = 1; i <= numPoints; i++) {
-                  if(configure.stopFlag||localStop) continue;
-                  EPoint *point = componentSegment.GetPoint(i);
-                  if(!(point->IsMapped())) {
-                    try {
-                      point->CalculateECAmplitudes(theCNuc, configure);
-                    } catch(GSLException e) {
+                  for(int i = 1; i <= numPoints; i++) {
+                    if(configure.stopFlag||localStop) continue;
+                    EPoint *point = componentSegment.GetPoint(i);
+                    if(!(point->IsMapped())) {
+                      try {
+                        point->CalculateECAmplitudes(theCNuc, configure);
+                      } catch(GSLException e) {
 #pragma omp critical
-                      {
-                        configure.outStream << e.what() << std::endl;
-                        localStop=true;
+                        {
+                          configure.outStream << e.what() << std::endl;
+                          localStop=true;
+                        }
+                      } catch(...) {
+#pragma omp critical
+                        {
+                          configure.outStream << "Warning: EC amplitude calculation failed for component segment point" << std::endl;
+                        }
                       }
-                    } catch(...) {
-#pragma omp critical
-                      {
-                        configure.outStream << "Warning: EC amplitude calculation failed for component segment point" << std::endl;
+                    }
+                    ++pointIndex;
+                    if(difftime(time(NULL),startTime)>0.25) {
+                      startTime=time(NULL);
+                      std::string progress=" [";
+                      double percent=0.;
+                      for(int k = 1;k<=25;k++) {
+                        if(pointIndex>=percent*numPoints&&percent<1.) {
+                          percent+=0.04;
+                          progress+='*';
+                        } else progress+=' ';
+                      } progress+="] ";
+                      configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
+                                          << std::setw(0) << progress << percent*100 << '%';configure.outStream.flush();
+                    }
+                  }
+                  if(configure.stopFlag||localStop) {
+                    if(out.is_open()) out.close();
+                    if(in.is_open()) in.close();
+                    return -1;
+                  }
+                  configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
+                                      << std::setw(0) << " [*************************] 100%" << std::endl;
+                }
+                // Write the freshly calculated amplitudes to the file, or read the
+                // previously saved ones back in.  The iteration order matches the
+                // regular-segment loop in CalculateECAmplitudes exactly.
+                for(EPointIterator point=componentSegment.GetPoints().begin();
+                    point<componentSegment.GetPoints().end();point++) {
+                  if(!(point->IsMapped())) {
+                    for(int k=1;k<=entrancePair->GetDecay(ir)->NumKGroups();k++) {
+                      for(int ecm=1;ecm<=entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups();ecm++) {
+                        if(!usePrevious) {
+                          if(out.is_open()) out << point->GetECAmplitude(k,ecm) << std::endl;
+                          for(EPointIterator subPoint=point->GetSubPoints().begin();
+                              subPoint<point->GetSubPoints().end();subPoint++)
+                            if(out.is_open()) out << subPoint->GetECAmplitude(k,ecm) << std::endl;
+                        } else {
+                          complex ecAmplitude(0.0,0.0);
+                          in >> ecAmplitude;
+                          point->AddECAmplitude(k,ecm,ecAmplitude);
+                          for(EPointIterator subPoint=point->GetSubPoints().begin();
+                              subPoint<point->GetSubPoints().end();subPoint++) {
+                            ecAmplitude=complex(0.0,0.0);
+                            in >> ecAmplitude;
+                            subPoint->AddECAmplitude(k,ecm,ecAmplitude);
+                          }
+                        }
+                        for(EPointMapIterator mappedPoint=point->GetMappedPoints().begin();
+                            mappedPoint<point->GetMappedPoints().begin();mappedPoint++) {
+                          (*mappedPoint)->AddECAmplitude(k,ecm,point->GetECAmplitude(k,ecm));
+                          for(int i=1;i<=point->NumSubPoints();i++) {
+                            (*mappedPoint)->GetSubPoint(i)->
+                              AddECAmplitude(k,ecm,point->GetSubPoint(i)->GetECAmplitude(k,ecm));
+                          }
+                        }
                       }
                     }
                   }
-                  ++pointIndex;
-                  if(difftime(time(NULL),startTime)>0.25) {
-                    startTime=time(NULL);
-                    std::string progress=" [";
-                    double percent=0.;
-                    for(int k = 1;k<=25;k++) {
-                      if(pointIndex>=percent*numPoints&&percent<1.) {
-                        percent+=0.04;
-                        progress+='*';
-                      } else progress+=' ';
-                    } progress+="] ";
-                    configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
-                                        << std::setw(0) << progress << percent*100 << '%';configure.outStream.flush();
-                  }
                 }
-                if(configure.stopFlag||localStop) return -1;
-                configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
-                                    << std::setw(0) << " [*************************] 100%" << std::endl;
               }
             }
           }
         }
       }
     }
+    if(out.is_open()) {
+      out.flush();
+      out.close();
+    }
+    if(in.is_open()) in.close();
   }
-  
+
   return 0;
 }
 

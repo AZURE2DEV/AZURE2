@@ -5,6 +5,7 @@
 #include "TargetEffect.h"
 #include "EDataIterator.h"
 #include <deque>
+#include <ios>
 
 class CNuc;
 struct BandData;
@@ -77,6 +78,7 @@ class EData {
   int energyShiftParamOffset_;
   bool isFit_;
   bool isErrorAnalysis_;
+  std::streampos ecReadPos_;  // File offset where component-segment EC integrals begin in the intEC file
 };
 
 #endif
