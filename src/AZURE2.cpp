@@ -485,6 +485,7 @@ void getMCMCParams(Config& configure, MCMCParams& mcmcParams) {
   }
 
   // Get number of threads
+  mcmcParams.nthreads = 0;
   while(mcmcParams.nthreads < 1) {
     configure.outStream << std::setw(38) << "Number of Threads (1 or more): ";
     std::string inString;

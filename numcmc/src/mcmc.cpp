@@ -1,6 +1,33 @@
 #include "numcmc/mcmc.h"
 
+#include <algorithm>
+#include <cstdint>
+#include <random>
+
 namespace nu {
+namespace {
+
+// Maximum proposals drawn for one walker before giving up and rejecting. A
+// walker that cannot reach the support of the posterior would otherwise spin
+// in the redraw loop forever.
+const int kMaxProposalAttempts = 1000;
+
+// rand() is not reentrant. Sharing it across OpenMP threads serialises the
+// sampler at best and corrupts its internal state at worst, so give every
+// thread its own generator.
+std::mt19937& tls_rng() {
+    static thread_local std::mt19937 gen(
+        std::random_device{}() +
+        static_cast<unsigned>(reinterpret_cast<std::uintptr_t>(&gen)));
+    return gen;
+}
+
+// Same 1/5001 discretisation the serial path uses.
+double tls_uniform() { return double(tls_rng()() % 5001) / 5001.; }
+
+int tls_index(int n) { return int(tls_rng()() % static_cast<unsigned>(n)); }
+
+}  // namespace
 Mcmc::Mcmc(int K, int N, std::vector<std::vector<double>> init_sample) {
     std::vector<Walker> walkers;
     for (int k_walk = 0; k_walk < K; k_walk++) {
@@ -211,73 +238,8 @@ int Mcmc::run(double (*func)(std::vector<double> &), int steps) {
 
 int Mcmc::run_parallel(double (*func)(std::vector<double>&), int steps,
                        int threads) {
-    std::vector<Ensemble> samples;
-    samples = sample.divideEnsemble();
-
-    for (int i = 1; i <= steps; i++) {
-#pragma omp parallel
-        {
-#pragma omp for
-            for (int ip = 0; ip <= 1; ip++) {
-// 1:
-#pragma omp parallel for num_threads(threads)
-                for (int k = 1; k <= nwalkers / 2; k++) {
-                    Walker walker, walker_aux;
-                    double logPY, logPX, q, z, r;
-                    std::vector<double> Y;
-                    std::vector<double> Xj;
-                    std::vector<double> Xk;
-
-                    int ic = (ip - 1) * (-1);
-
-                    walker = samples[ip].getWalker(1);
-
-                    // 2:
-                    // The loop constraint some region
-                    do {
-                        Xj.clear();
-                        Xk.clear();
-                        Y.clear();
-                        walker_aux = samples[ic].getRandomWalkerCopy();
-                        // 3:
-                        double uniform_rand = double((rand() % 5001)) / 5001.;
-                        z = F(uniform_rand);
-
-                        // 4:
-                        for (int l = 0; l < this->ndim; l++) {
-                            Xj.push_back(walker_aux.getPos()[l]);
-                            Xk.push_back(walker.getPos()[l]);
-                            Y.push_back(Xj[l] + z * (Xk[l] - Xj[l]));
-                        };
-                        // 5:
-                        logPY = func(Y);
-                    } while (logPY == -std::numeric_limits<double>::infinity());
-
-                    logPX = func(Xk);
-                    q = pow(z, ndim - 1) * exp(logPY - logPX);
-                    // 6:
-                    r = double((rand() % 5001)) / 5001.;
-                    // 7:"
-                    if (r <= q) {  // 8:
-                        walker.setPos(Y);
-                    }  // 9:
-                    else {
-                        // 10:
-                        walker.setPos(Xk);
-                    }
-                    samples[ip].includeWalker(walker);
-                };
-            };
-        }
-    };
-
-    std::vector<Walker> aux_walkers1, aux_walkers2;
-    aux_walkers1 = samples[0].getWalkers();
-    aux_walkers2 = samples[1].getWalkers();
-    aux_walkers1.insert(aux_walkers1.end(), aux_walkers2.begin(),
-                        aux_walkers2.end());
-    this->sample.setWalkers(aux_walkers1);
-    return 0;
+    return run_parallel_with_callback(func, steps, threads, nullptr, nullptr,
+                                      nullptr);
 }
 
 int Mcmc::run_notlog(double (*func)(std::vector<double>&), int steps) {
@@ -406,99 +368,92 @@ int Mcmc::run_parallel_with_callback(double (*func)(std::vector<double> &), int 
                                      bool (*should_stop_callback)(),
                                      void (*iteration_callback)(int current_step, int total_steps)) {
     this->should_stop = false;
-    std::vector<Ensemble> samples;
-    samples = sample.divideEnsemble();
+
+    // Address the walkers by index in one flat vector. The previous version
+    // pushed and erased walkers on two shared Ensembles while several threads
+    // were reading them, which reallocated the underlying storage under other
+    // threads' feet and corrupted the heap.
+    std::vector<Walker> walkers = this->sample.getWalkers();
+    const int half = nwalkers / 2;
 
     for (int i = 1; i <= steps; i++) {
         double current_log_prob = -std::numeric_limits<double>::infinity();
-        
+
         // Check stop condition at beginning of each step
         if (this->should_stop || (should_stop_callback && should_stop_callback())) {
-            // Recombine ensembles before returning
-            std::vector<Walker> aux_walkers1, aux_walkers2;
-            aux_walkers1 = samples[0].getWalkers();
-            aux_walkers2 = samples[1].getWalkers();
-            aux_walkers1.insert(aux_walkers1.end(), aux_walkers2.begin(), aux_walkers2.end());
-            this->sample.setWalkers(aux_walkers1);
+            this->sample.setWalkers(walkers);
             return 1; // Stopped early
         }
-        
-#pragma omp parallel
-        {
-#pragma omp for
-            for (int ip = 0; ip <= 1; ip++) {
-                // Parallel processing for each ensemble half
-#pragma omp parallel for num_threads(threads)
-                for (int k = 1; k <= nwalkers / 2; k++) {
-                    Walker walker, walker_aux;
-                    double logPY, logPX, q, z, r;
-                    std::vector<double> Y;
-                    std::vector<double> Xj;
-                    std::vector<double> Xk;
 
-                    int ic = (ip - 1) * (-1);
-                    walker = samples[ip].getWalker(1);
+        // Goodman & Weare stretch move: the two halves are updated one after
+        // the other, never simultaneously. While half [lo,hi) moves, the
+        // complementary half [clo,chi) is strictly read-only, so every walker
+        // in the moving half can be updated concurrently without sharing state.
+        for (int ip = 0; ip <= 1; ip++) {
+            const int lo = (ip == 0) ? 0 : half;
+            const int hi = (ip == 0) ? half : nwalkers;
+            const int clo = (ip == 0) ? half : 0;
+            const int chi = (ip == 0) ? nwalkers : half;
+            const int csize = chi - clo;
+            if (csize <= 0 || hi <= lo) continue;
 
-                    // The sampling loop
-                    do {
-                        Xj.clear();
-                        Xk.clear();
-                        Y.clear();
-                        walker_aux = samples[ic].getRandomWalkerCopy();
-                        double uniform_rand = double((rand() % 5001)) / 5001.;
-                        z = F(uniform_rand);
+#pragma omp parallel for num_threads(threads) schedule(dynamic)
+            for (int k = lo; k < hi; k++) {
+                std::vector<double> Xk = walkers[k].getPos();
+                std::vector<double> Y(this->ndim);
+                double logPY = -std::numeric_limits<double>::infinity();
+                double z = 1.0;
 
-                        for (int l = 0; l < this->ndim; l++) {
-                            Xj.push_back(walker_aux.getPos()[l]);
-                            Xk.push_back(walker.getPos()[l]);
-                            Y.push_back(Xj[l] + z * (Xk[l] - Xj[l]));
-                        };
-                        
-                        logPY = func(Y);
-                    } while (logPY == -std::numeric_limits<double>::infinity());
+                // Redraw while the proposal lands outside the support, but
+                // give up eventually rather than looping forever.
+                for (int attempt = 0; attempt < kMaxProposalAttempts; attempt++) {
+                    std::vector<double> Xj = walkers[clo + tls_index(csize)].getPos();
+                    z = F(tls_uniform());
 
-                    logPX = func(Xk);
-                    q = pow(z, ndim - 1) * exp(logPY - logPX);
-                    r = double((rand() % 5001)) / 5001.;
-                    
-                    if (r <= q) {
-                        walker.setPos(Y);
-                        // Thread-safe update of current_log_prob
+                    for (int l = 0; l < this->ndim; l++) {
+                        Y[l] = Xj[l] + z * (Xk[l] - Xj[l]);
+                    };
+
+                    logPY = func(Y);
+                    if (logPY != -std::numeric_limits<double>::infinity()) break;
+                }
+
+                double logPX = func(Xk);
+                double q = pow(z, ndim - 1) * exp(logPY - logPX);
+                double r = tls_uniform();
+
+                // The logPY guard matters when every proposal was rejected:
+                // q is then 0, and r can legitimately draw 0 as well.
+                double accepted_log_prob;
+                if (r <= q && logPY != -std::numeric_limits<double>::infinity()) {
+                    walkers[k].setPos(Y);
+                    accepted_log_prob = logPY;
+                } else {
+                    walkers[k].setPos(Xk);
+                    accepted_log_prob = logPX;
+                }
+
+                // Thread-safe update of current_log_prob
 #pragma omp critical
-                        {
-                            current_log_prob = std::max(current_log_prob, logPY);
-                        }
-                    } else {
-                        walker.setPos(Xk);
-                        // Thread-safe update of current_log_prob
-#pragma omp critical
-                        {
-                            current_log_prob = std::max(current_log_prob, logPX);
-                        }
-                    }
-                    samples[ip].includeWalker(walker);
-                };
+                {
+                    current_log_prob = std::max(current_log_prob, accepted_log_prob);
+                }
             };
-        }
-        
+        };
+
         // Call iteration callback every step
         if (iteration_callback) {
             iteration_callback(i, steps);
         }
-        
+
         // Call progress callback every step or on last step
         if (progress_callback && (i % 1 == 0 || i == steps)) {
             progress_callback(i, steps, current_log_prob);
         }
     };
 
-    // Recombine the ensembles
-    std::vector<Walker> aux_walkers1, aux_walkers2;
-    aux_walkers1 = samples[0].getWalkers();
-    aux_walkers2 = samples[1].getWalkers();
-    aux_walkers1.insert(aux_walkers1.end(), aux_walkers2.begin(), aux_walkers2.end());
-    this->sample.setWalkers(aux_walkers1);
-    
+    this->sample.setWalkers(walkers);
+
     return 0;
 }
 

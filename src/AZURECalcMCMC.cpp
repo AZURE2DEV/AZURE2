@@ -384,16 +384,18 @@ double mcmc_log_probability_wrapper_rwa(std::vector<double>& params) {
     double logPrior = g_mcmc_calc->CalculateLogPrior(params);
     double logProbability = logLikelihood + logPrior;
 
-    // Store for GUI callbacks - these are the EXACT values used
+    // Store for GUI callbacks - these are the EXACT values used. Assigning
+    // g_last_params reallocates a shared std::vector, so these updates take
+    // the same lock as the sample write below rather than racing on it.
+#ifdef _OPENMP
+    omp_set_lock(&g_file_lock);
+#endif
     g_last_likelihood = logLikelihood;
     g_last_prior = logPrior;
     g_last_params = params;
 
-    // Save sample to file if file is open (thread-safe)
+    // Save sample to file if file is open
     if(g_sample_file && g_sample_file->is_open()) {
-#ifdef _OPENMP
-      omp_set_lock(&g_file_lock);
-#endif
       int walker_id = g_sample_count % g_nwalkers;
       int step = g_sample_count / g_nwalkers;
 
@@ -410,10 +412,10 @@ double mcmc_log_probability_wrapper_rwa(std::vector<double>& params) {
 
       // Increment the atomic counter AFTER the sample is actually written to file
       g_samples_written_to_file++;
-#ifdef _OPENMP
-      omp_unset_lock(&g_file_lock);
-#endif
     }
+#ifdef _OPENMP
+    omp_unset_lock(&g_file_lock);
+#endif
 
     return logLikelihood;  // Return only likelihood for MCMC sampler
   }
@@ -428,16 +430,18 @@ double mcmc_log_probability_wrapper(std::vector<double>& params) {
     double logPrior = g_mcmc_calc->CalculateLogPrior(params);
     double logProbability = logLikelihood + logPrior;
 
-    // Store for GUI callbacks - these are the EXACT values used
+    // Store for GUI callbacks - these are the EXACT values used. Assigning
+    // g_last_params reallocates a shared std::vector, so these updates take
+    // the same lock as the sample write below rather than racing on it.
+#ifdef _OPENMP
+    omp_set_lock(&g_file_lock);
+#endif
     g_last_likelihood = logLikelihood;
     g_last_prior = logPrior;
     g_last_params = params;
 
-    // Save sample to file if file is open (thread-safe)
+    // Save sample to file if file is open
     if(g_sample_file && g_sample_file->is_open()) {
-#ifdef _OPENMP
-      omp_set_lock(&g_file_lock);
-#endif
       int walker_id = g_sample_count % g_nwalkers;
       int step = g_sample_count / g_nwalkers;
 
@@ -454,10 +458,10 @@ double mcmc_log_probability_wrapper(std::vector<double>& params) {
 
       // Increment the atomic counter AFTER the sample is actually written to file
       g_samples_written_to_file++;
-#ifdef _OPENMP
-      omp_unset_lock(&g_file_lock);
-#endif
     }
+#ifdef _OPENMP
+    omp_unset_lock(&g_file_lock);
+#endif
 
     return logLikelihood;  // Return only likelihood for MCMC sampler
   }
