@@ -15,6 +15,7 @@
 #include "TargetEffect.h"
 #include "Straggling.h"
 #include "IntegratedFermiFunc.h"
+#include <atomic>
 #include <iostream>
 #include <assert.h>
 #include <fstream>
@@ -1199,6 +1200,21 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config& configure) {
 	  if(localEnergy+bindingE>0.0)
 	    ThmBesselParts(lValue,muMeV,localEnergy,bindingE,thePair->GetChRad(),
 			   thmJl,thmRhoDjl);
+	  else {
+	    /* Below E = -B the half-off-shell momentum is imaginary and the form
+	    factor (hence the HOES cross section) is left identically zero.
+	    Physically the QF relative energy satisfies E + B > 0, so points
+	    here should only be far Gaussian-tail sub-points.
+      Emit a warning once so a wrong binding energy cannot silently null a whole segment.*/
+	    static std::atomic_flag thmBelowBWarned = ATOMIC_FLAG_INIT;
+	    if(!thmBelowBWarned.test_and_set())
+	      std::cout << "WARNING: THM point at E_cm = " << localEnergy
+			<< " MeV lies below E = -B (B = " << bindingE
+			<< " MeV); the transfer form factor and HOES cross "
+			<< "section are set to zero there. Check the binding "
+			<< "energy if this is unexpected. (warning shown once)"
+			<< std::endl;
+	  }
 	}
 	this->AddThmFormFactor(j,ch,thmJl,thmRhoDjl);
       }
