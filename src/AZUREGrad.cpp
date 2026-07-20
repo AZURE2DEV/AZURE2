@@ -395,8 +395,11 @@ bool AccumulateEGammaGradient(CNuc* compound, EData* data, const Config& config,
     ESegment* segment = data->GetSegment(i);
     if(!segment) continue;
     // THM (HOES) segments are computed by THMMatrixFunc, not the T-matrix
-    // observable this adjoint differentiates; fall back to finite differences.
-    if(segment->IsTHM()) return false;
+    // observable this adjoint differentiates; skip them here. Their
+    // contribution to the gradient is added in AZURECalc::Gradient by finite
+    // differences of a chi^2 restricted to THM segments, so mixed THM+direct
+    // datasets keep the analytic speed-up on the direct part.
+    if(segment->IsTHM()) continue;
     const int nPoints = segment->NumPoints();
     bool bail = false;
 #pragma omp parallel for shared(bail)
@@ -455,6 +458,11 @@ bool ComputeResidualJacobian(CNuc* compound, EData* data, const Config& config,
   for(int i = 1; i <= nSeg && ok; i++) {
     ESegment* segment = data->GetSegment(i);
     if(!segment) continue;
+    // THM (HOES) segments are not supported here: the adjoint differentiates
+    // the T-matrix observable and the fast forward path computes the standard
+    // cross section, both wrong for HOES. Bail so the LM caller falls back to
+    // MIGRAD (which handles THM through Gradient()'s hybrid path).
+    if(segment->IsTHM()) return false;
     const double norm = segment->GetNorm();
     const int normFull = segment->IsVaryNorm() ? pmap.NormIndex(i) : -1;
     const int nPoints = segment->NumPoints();

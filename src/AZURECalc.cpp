@@ -147,8 +147,12 @@ double AZURECalc::operator()(const vector_r& p) const {
   else return chiSquared;
 }
 
-double AZURECalc::Chi2Value(const vector_r& p) const {
+double AZURECalc::Chi2Value(const vector_r& p, bool thmOnly) const {
   // Side-effect-free chi-squared (mirrors the chi-squared math of operator()).
+  // With thmOnly=true, only THM (HOES) segments are computed and summed; this is
+  // used when invoking Gradient() to finite-difference the THM contribution (in this
+  // way the computing cost scales with the number of THM points alone, rather than the whole dataset).
+  // The nuisance penalty is excluded there because it is per-parameter and it is analitically treated by Gradient().
   CNuc* lc = compound()->Clone();
   EData* ld = data()->Clone();
   lc->FillCompoundFromParams(p);
@@ -160,6 +164,7 @@ double AZURECalc::Chi2Value(const vector_r& p) const {
   for(int i = 1; i <= ld->NumSegments(); i++) {
     ESegment* segment = ld->GetSegment(i);
     if(!segment) continue;
+    if(thmOnly && !segment->IsTHM()) continue;
     double segChi = 0.0;
     for(int pid = 0; pid < segment->NumPoints(); pid++) {
       double th = segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld);
@@ -183,7 +188,7 @@ double AZURECalc::Chi2Value(const vector_r& p) const {
     }
     chiSquared += segChi;
   }
-  if(limitsManager_) chiSquared += CalculateNuisanceChiSquared(p);
+  if(!thmOnly && limitsManager_) chiSquared += CalculateNuisanceChiSquared(p);
 
   delete lc;
   delete ld;
@@ -253,6 +258,10 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double>& p) const {
     for(int s = 1; s <= ld->NumSegments(); s++) {   // normalizations
       ESegment* seg = ld->GetSegment(s);
       if(!seg || !seg->IsVaryNorm()) continue;
+      // THM segments never enter the analytic accumulation (their normData
+      // stays 0); their norm gradient -- data term AND penalty -- comes from
+      // the THM-only finite differences below.
+      if(seg->IsTHM()) continue;
       int idx = pmap.NormIndex(s);
       if(idx < 0 || idx >= (int)grad.size()) continue;
       double g = normData[s];
@@ -273,18 +282,70 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double>& p) const {
   data()->FillMnParams(fp.GetMinuitParams());
   const int nMn = fp.GetMinuitParams().Params().size();
 
-  // --- Finite differences only for what is left: non-fixed energy shifts, and
-  //     (if the analytic path bailed) the energy/gamma and norm blocks too. ---
+  // THM (HOES) segments are excluded from the analytic adjoint (it
+  // differentiates the T-matrix observable, not HOES); their energy/gamma/norm
+  // contribution is added below by central differences of the THM-only chi^2.
+  bool haveTHM = false;
+  for(int s = 1; s <= data()->NumSegments() && !haveTHM; s++) {
+    ESegment* seg = data()->GetSegment(s);
+    if(seg && seg->IsTHM()) haveTHM = true;
+  }
+
+  // --- Finite differences only for what is left: non-fixed energy shifts, the
+  //     THM-segment contribution to energies/gammas/norms, and (if the
+  //     analytic path bailed) the full energy/gamma and norm blocks too. ---
   for(int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
     if(idx < nMn && fp.GetMinuitParams().Parameter(idx).IsFixed()) continue;
     ParamKind kind = pmap.Desc(idx).kind;
     if(eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma ||
-              kind == ParamKind::Norm)) continue;  // analytic
+              kind == ParamKind::Norm)) {
+      if(!haveTHM) continue;                   // fully analytic
+      if(kind == ParamKind::Norm) {
+        // A norm belongs to exactly one segment: non-THM norms are fully
+        // analytic (handled above); THM norms are fully finite-difference.
+        ESegment* seg = data()->GetSegment(pmap.Desc(idx).segment);
+        if(!seg || !seg->IsTHM()) continue;
+      }
+      double x0 = p[idx];
+      double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+      vector_r pp = p; pp[idx] = x0 + h;
+      vector_r pm = p; pm[idx] = x0 - h;
+      // += : energies/gammas already carry the analytic non-THM part (a THM
+      // norm's grad entry is still 0). Penalty terms inside the THM-only chi^2
+      // that do not depend on p[idx] cancel in the central difference.
+      grad[idx] += (Chi2Value(pp, true) - Chi2Value(pm, true)) / (2.0 * h);
+      continue;
+    }
     double x0 = p[idx];
     double h = 1.0e-6 * (std::fabs(x0) + 1.0);
     vector_r pp = p; pp[idx] = x0 + h;
     vector_r pm = p; pm[idx] = x0 - h;
     grad[idx] = (Chi2Value(pp) - Chi2Value(pm)) / (2.0 * h);
+  }
+
+  // Env-gated self-check (first call only): compare the assembled gradient
+  // against full central finite differences of the chi-squared. Slow;
+  // diagnostics for the analytic/THM-hybrid path only.
+  if(std::getenv("AZURE_GRAD_CHECK")) {
+    static bool checked = false;
+    if(!checked) {
+      checked = true;
+      double worst = 0.0; int worstIdx = -1; double worstGrad = 0.0, worstFd = 0.0;
+      for(int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
+        if(idx < nMn && fp.GetMinuitParams().Parameter(idx).IsFixed()) continue;
+        double x0 = p[idx];
+        double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+        vector_r pp = p; pp[idx] = x0 + h;
+        vector_r pm = p; pm[idx] = x0 - h;
+        double fd = (Chi2Value(pp) - Chi2Value(pm)) / (2.0 * h);
+        double d = std::fabs(grad[idx] - fd) / (std::fabs(fd) + 1.0);
+        if(d > worst) { worst = d; worstIdx = idx; worstGrad = grad[idx]; worstFd = fd; }
+      }
+      std::cerr << "[grad-check] worst |grad-fd|/(|fd|+1) = " << worst
+                << " at param " << worstIdx << " (grad " << worstGrad
+                << ", fd " << worstFd << "), analytic path "
+                << (eg ? "ACTIVE" : "BAILED") << std::endl;
+    }
   }
 
   return grad;

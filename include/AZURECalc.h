@@ -66,7 +66,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * Side-effect-free chi-squared evaluation (no iteration counter / file output
    * / object pools), used by the finite-difference part of Gradient().
    */
-  double Chi2Value(const vector_r& p) const;
+  double Chi2Value(const vector_r& p, bool thmOnly = false) const;
 
   /*!
    * Standardized residuals and analytic residual Jacobian at the full parameter
