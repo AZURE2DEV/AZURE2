@@ -1,0 +1,2 @@
+segment_key_#, file_name, low_angle_bound, high_angle_bound, aframe, low_energy_bound, high_energy_bound, eframe, norm, shift
+1,data/o17_guardo.dat,0.0000e+00,0.0000e+00,Lab,-6.0000e-02,3.1000e-01,Lab,1.8370e-05,0.0000e+00
