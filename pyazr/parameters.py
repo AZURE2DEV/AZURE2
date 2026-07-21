@@ -128,6 +128,99 @@ class Parameter:
         return "Parameter(" + ", ".join(bits) + ")"
 
 
+@dataclass
+class Pair:
+    """One AZURE2 particle pair (a reaction channel's two constituents).
+
+    Built from the numeric records emitted by ``AZUREAPI::GetPairsInfo``
+    (command ``GET_PAIRS_INFO``); see ``api/include/AZUREAPI.h`` for the field
+    layout, which :meth:`from_record` mirrors.  A width :class:`Parameter`'s
+    ``pair`` attribute is this object's :attr:`number`.
+    """
+
+    # Number of doubles per record emitted by AZUREAPI::GetPairsInfo.
+    # Must match AZUREAPI::kPairInfoFields.
+    _NFIELDS = 16
+
+    number: int             # 1-based pair number (matches Parameter.pair)
+    key: int                # user pair key from the .azr file
+    ptype: int              # 0 = particle channel, otherwise photon
+    is_entrance: bool       # the reaction's entrance pair?
+    J1: float               # intrinsic spin of particle 1
+    parity1: int
+    Z1: int
+    M1: float               # mass of particle 1 (amu)
+    J2: float               # intrinsic spin of particle 2
+    parity2: int
+    Z2: int
+    M2: float
+    sep_energy: float       # separation energy (MeV)
+    excitation: float       # pair excitation energy (MeV)
+    channel_radius: float   # channel radius (fm)
+    i1i2factor: float       # 1 / ((2 J1 + 1)(2 J2 + 1))
+
+    @property
+    def is_photon(self) -> bool:
+        """True for the capture / radiative (gamma) pair."""
+        return self.ptype != 0
+
+    @classmethod
+    def from_record(cls, record):
+        """Build a :class:`Pair` from one ``GET_PAIRS_INFO`` record."""
+        (number, key, ptype, is_entrance, J1, parity1, Z1, M1, J2, parity2,
+         Z2, M2, sepE, exE, chRad, i1i2factor) = record
+        return cls(
+            number=int(round(number)),
+            key=int(round(key)),
+            ptype=int(round(ptype)),
+            is_entrance=bool(round(is_entrance)),
+            J1=float(J1), parity1=int(round(parity1)), Z1=int(round(Z1)),
+            M1=float(M1),
+            J2=float(J2), parity2=int(round(parity2)), Z2=int(round(Z2)),
+            M2=float(M2),
+            sep_energy=float(sepE), excitation=float(exE),
+            channel_radius=float(chRad), i1i2factor=float(i1i2factor),
+        )
+
+    def __repr__(self):
+        return (f"Pair(#{self.number}"
+                f"{' entrance' if self.is_entrance else ''}"
+                f"{' photon' if self.is_photon else ''}, "
+                f"J1={self.J1:g}, J2={self.J2:g}, "
+                f"i1i2factor={self.i1i2factor:g})")
+
+
+class PairSet(list):
+    """An ordered collection of :class:`Pair` (1-based number == index+1)."""
+
+    @property
+    def entrance(self):
+        """The entrance :class:`Pair` (or ``None`` if none is flagged)."""
+        for p in self:
+            if p.is_entrance:
+                return p
+        return None
+
+    @property
+    def photons(self):
+        """All radiative (capture) pairs."""
+        return PairSet(p for p in self if p.is_photon)
+
+    @property
+    def particles(self):
+        """All particle pairs."""
+        return PairSet(p for p in self if not p.is_photon)
+
+    def by_number(self, number):
+        for p in self:
+            if p.number == number:
+                return p
+        raise KeyError(number)
+
+    def __repr__(self):
+        return f"PairSet({len(self)} pairs)"
+
+
 class ParameterSet(list):
     """An ordered collection of :class:`Parameter` with convenient views.
 

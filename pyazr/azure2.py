@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 
 from .client import client
-from .parameters import Parameter, ParameterSet
+from .parameters import Pair, PairSet, Parameter, ParameterSet
 from .server import server
 
 
@@ -154,6 +154,7 @@ class azure2:
         self.params_rwa = c.communicate("GET_PARAMS_RWA", [0])
         self.fixed_params = c.communicate("GET_PARAMS_FIXED", [0])
         self._parameters = None
+        self._pairs = None
 
     # -- parameter metadata ---------------------------------------------------
 
@@ -181,6 +182,55 @@ class azure2:
         """Re-fetch and rebuild the cached :attr:`parameters`."""
         self._parameters = self._build_parameters(proc=proc)
         return self._parameters
+
+    @property
+    def pairs(self):
+        """A :class:`PairSet` describing every particle pair (channel).
+
+        Each :class:`Pair` carries the two constituents' spins and parities and
+        a flag for the reaction entrance pair.  A width parameter's ``pair``
+        attribute is the :attr:`Pair.number`.  Built lazily and cached.
+        """
+        if self._pairs is None:
+            self._pairs = self._build_pairs()
+        return self._pairs
+
+    def refresh_pairs(self, proc=0):
+        """Re-fetch and rebuild the cached :attr:`pairs`."""
+        self._pairs = self._build_pairs(proc=proc)
+        return self._pairs
+
+    def _build_pairs(self, proc=0):
+        flat = self.clients[proc].communicate("GET_PAIRS_INFO", [0])
+        nfields = Pair._NFIELDS
+        records = np.asarray(flat, dtype=float).reshape(-1, nfields)
+        return PairSet(Pair.from_record(rec) for rec in records)
+
+    @property
+    def level_scheme(self):
+        """A structured, printable :class:`~pyazr.scheme.LevelScheme`.
+
+        Groups the model the way it reads physically -- particle pairs, then
+        J-groups, then levels and their channels (L, S, radiation type, partial
+        width, fixed flag, Wigner limit).  ``print(azr.level_scheme)`` gives a
+        human-readable overview.  Read-only; to add/remove levels and write the
+        result to a file see :class:`pyazr.AzrModel`.
+        """
+        from .scheme import LevelScheme
+        return LevelScheme.from_azr(self)
+
+    @property
+    def datasets(self):
+        """Per-segment dataset provenance parsed from the ``.azr`` file.
+
+        A :class:`~pyazr.datasets.SegmentSet`: for each data segment, the data
+        file it came from, the reaction channel (entrance/exit pairs), energy /
+        angle range, observable type, and normalization systematic error.
+        ``print(azr.datasets.table())`` gives an overview; ``azr.datasets
+        .sys_errors()`` returns the per-segment systematics the fits use.
+        """
+        from .datasets import SegmentSet
+        return SegmentSet.from_file(self.file)
 
     def _build_parameters(self, proc=0):
         c = self.clients[proc]

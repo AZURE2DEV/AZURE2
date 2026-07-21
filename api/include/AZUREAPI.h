@@ -85,6 +85,37 @@ class AZUREAPI {
    *                    bound on |reduced-width amplitude| (width params only)
    */
   vector_r GetParameterInfo( ) const;
+
+  // Number of numeric fields packed per particle pair by GetPairsInfo().
+  // Keep this in sync with pyazr/parameters.py (Pair._NFIELDS).
+  static const int kPairInfoFields = 16;
+  /*!
+   * Returns structured metadata describing every particle pair, in 1-based
+   * pair-number order (the same number stored in field 9 -- "pair" -- of
+   * GetParameterInfo(), so a width parameter can be matched to its pair).
+   *
+   * The result is a flat vector of kPairInfoFields doubles per pair; the fields
+   * are:
+   *   0  pair          1-based pair number (matches Parameter "pair")
+   *   1  pair_key      user pair key from the .azr file
+   *   2  ptype         particle type (0 = particle channel, otherwise photon)
+   *   3  is_entrance   1 if this is the entrance pair, else 0
+   *   4  J1            intrinsic spin of particle 1
+   *   5  parity1       parity of particle 1 (+1 / -1)
+   *   6  Z1            charge number of particle 1
+   *   7  M1            mass of particle 1 (amu)
+   *   8  J2            intrinsic spin of particle 2
+   *   9  parity2       parity of particle 2 (+1 / -1)
+   *   10 Z2            charge number of particle 2
+   *   11 M2            mass of particle 2 (amu)
+   *   12 sepE          separation energy (MeV)
+   *   13 exE           excitation energy of the pair (MeV)
+   *   14 chRad         channel radius (fm)
+   *   15 i1i2factor    1 / ((2 J1 + 1)(2 J2 + 1)); the entrance pair's value is
+   *                    the denominator of the statistical spin factor
+   *                    omega = (2 J + 1) * i1i2factor
+   */
+  vector_r GetPairsInfo( ) const;
   
   /*!
    * Returns a reference to the Config structure.

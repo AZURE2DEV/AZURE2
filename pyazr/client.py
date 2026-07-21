@@ -64,6 +64,7 @@ class client:
         'GET_DATA_EXCITATION_ENERGY': 33,
         'GET_EXCITATION_ENERGY': 34,
         'GET_PARAMS_INFO': 37,
+        'GET_PAIRS_INFO': 38,
         'CALCULATE_CHI2_GRAD_RWA': 41,
         'CALCULATE_RESIDUAL_JACOBIAN_RWA': 42,
     }

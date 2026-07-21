@@ -399,6 +399,11 @@ void AZURESocket::handle( const vector_r& request ) {
       sendPacket( api_->GetParameterInfo( ) );
       break;
 
+    // Get structured per-pair metadata (spins, parities, entrance flag, ...)
+    case 38:
+      sendPacket( api_->GetPairsInfo( ) );
+      break;
+
     // Value + analytic gradient of the (data) chi-squared.
     // Response: [chi2, d(chi2)/dp_0, ..., d(chi2)/dp_{n-1}].
     case 41:

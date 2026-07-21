@@ -1046,3 +1046,33 @@ vector_r AZUREAPI::GetParameterInfo( ) const {
 
   return info;
 }
+
+vector_r AZUREAPI::GetPairsInfo( ) const {
+
+  vector_r info;
+  CNuc* nuc = compound();
+
+  // One record per pair, in 1-based pair-number order so field "pair" of
+  // GetParameterInfo() indexes directly into this list.
+  for( int p = 1; p <= nuc->NumPairs(); ++p ) {
+    PPair* pair = nuc->GetPair( p );
+    info.push_back( p );
+    info.push_back( pair->GetPairKey() );
+    info.push_back( pair->GetPType() );
+    info.push_back( pair->IsEntrance() ? 1.0 : 0.0 );
+    info.push_back( pair->GetJ( 1 ) );
+    info.push_back( pair->GetPi( 1 ) );
+    info.push_back( pair->GetZ( 1 ) );
+    info.push_back( pair->GetM( 1 ) );
+    info.push_back( pair->GetJ( 2 ) );
+    info.push_back( pair->GetPi( 2 ) );
+    info.push_back( pair->GetZ( 2 ) );
+    info.push_back( pair->GetM( 2 ) );
+    info.push_back( pair->GetSepE() );
+    info.push_back( pair->GetExE() );
+    info.push_back( pair->GetChRad() );
+    info.push_back( pair->GetI1I2Factor() );
+  }
+
+  return info;
+}
