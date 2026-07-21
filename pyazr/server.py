@@ -52,7 +52,8 @@ class ServerError(RuntimeError):
 
 class server:
 
-    def __init__(self, port, file, binary=None, verbose=False, extra_args=None):
+    def __init__(self, port, file, binary=None, verbose=False, extra_args=None,
+                 cwd=None):
         """Start an AZURE2 API server.
 
         Parameters
@@ -65,12 +66,29 @@ class server:
         verbose : if ``False`` (default) the subprocess' output is discarded; if
             ``True`` it is echoed to this process' stdout.
         extra_args : optional list of additional command-line arguments.
+        cwd : working directory for the subprocess.  A ``.azr`` file names its
+            output and checks directories *relative to the process' cwd* (e.g.
+            ``output/``), so a caller running a model that lives elsewhere must
+            set this to the model's directory or AZURE2 will scatter its results
+            into the caller's cwd.  Defaults to the ``.azr`` file's own
+            directory, which is what that relative convention means.
         """
         self.port = port                      # updated to the real port on bind
         self.file = file
         self.binary = binary or _default_binary()
         self.verbose = verbose
         self.extra_args = list(extra_args) if extra_args else []
+        self.cwd = cwd if cwd is not None else (
+            os.path.dirname(os.path.abspath(file)) or None)
+
+        # Popen resolves a *relative* executable path against the child's cwd,
+        # not ours -- so once cwd is set, a caller's relative binary (the
+        # documented ``binary='../../build/src/AZURE2'`` form) would silently
+        # resolve against the model directory and fail to launch.  Anchor it to
+        # the caller's cwd now, while that is still what it means.  A bare name
+        # with no separator is left alone so $PATH lookup keeps working.
+        if os.sep in self.binary and not os.path.isabs(self.binary):
+            self.binary = os.path.abspath(self.binary)
         self.process = None
         self._listening = threading.Event()   # set once the port is known
         self._reader = None
@@ -86,14 +104,19 @@ class server:
                 "AZURE2_BINARY environment variable or pass binary=..."
             )
 
+        # The file is passed absolute: we hand the subprocess a cwd of its own
+        # (the model's directory), so a relative path would resolve against the
+        # wrong root.
         cmd = [self.binary, "--no-gui", "--use-api",
-               str(self.port), self.file, *self.extra_args]
+               str(self.port), os.path.abspath(self.file), *self.extra_args]
 
         # start_new_session lets us signal the whole group on POSIX, ensuring
         # no orphaned children survive.
         kwargs = {}
         if os.name == "posix":
             kwargs["start_new_session"] = True
+        if self.cwd is not None:
+            kwargs["cwd"] = self.cwd
 
         try:
             # Capture stdout (with stderr merged in) so we can read the

@@ -18,7 +18,7 @@ from .server import server
 class azure2:
 
     def __init__(self, file, nprocs=1, port=20000, binary=None,
-                 verbose=False, auto_port=True):
+                 verbose=False, auto_port=True, cwd=None):
         """Launch ``nprocs`` AZURE2 instances bound to ``file``.
 
         Parameters
@@ -33,11 +33,15 @@ class azure2:
             port 0; the server reports back the port it got).  This is race-free,
             unlike probing, so concurrent instances can never collide.  The
             actual ports are available as :attr:`ports` after construction.
+        cwd : working directory for the subprocesses.  Defaults to the ``.azr``
+            file's directory, since a model names its ``output/`` and ``checks/``
+            directories relative to the running process.
         """
         self.file = file
         self.nprocs = nprocs
         self.binary = binary
         self.verbose = verbose
+        self.cwd = cwd
 
         # Instance-level lists.  (The original code declared `servers` as a
         # *class* attribute, so every azure2 object shared -- and leaked into
@@ -90,7 +94,8 @@ class azure2:
         # AZURE2 processes start booting concurrently.
         for p in self.requested_ports:
             self.servers.append(
-                server(p, self.file, binary=self.binary, verbose=self.verbose)
+                server(p, self.file, binary=self.binary, verbose=self.verbose,
+                       cwd=self.cwd)
             )
 
         if self.nprocs == 1:
@@ -231,6 +236,19 @@ class azure2:
         """
         from .datasets import SegmentSet
         return SegmentSet.from_file(self.file)
+
+    @property
+    def extrapolations(self):
+        """Per-segment extrapolation grids parsed from the ``.azr`` file.
+
+        A :class:`~pyazr.datasets.TestSegmentSet`: for each ``<segmentsTest>``
+        entry, the reaction channel, the energy / angle grid, and the observable
+        type.  These describe the segments AZURE2 reports in extrapolation mode
+        (:meth:`extrap_mode`), in the same order, so segment ``i`` of this set
+        corresponds to index ``i`` of ``calculate``/``calculate_energies``.
+        """
+        from .datasets import TestSegmentSet
+        return TestSegmentSet.from_file(self.file)
 
     def _build_parameters(self, proc=0):
         c = self.clients[proc]
@@ -381,7 +399,21 @@ class azure2:
         return [c.communicate("GET_EXCITATION_ENERGY", [i]) for i in range(nsegments)]
 
     def calculate_angles(self, params, proc=0):
-        return self.clients[proc].communicate("GET_DATA_ANGLES", params)
+        """Per-segment angles of the calculated points, one array per segment.
+
+        The companion to :meth:`calculate_energies`: for a differential segment
+        the returned angles are AZURE2's own (center-of-mass) values, which
+        differ from the lab angles declared in the ``.azr`` file.
+
+        (The underlying command is spelled ``GET_CALCUALTED_ANGLES`` -- the typo
+        is in AZURE2's opcode table, not here.  This previously issued
+        ``GET_DATA_ANGLES`` with the *parameter vector* in place of a segment
+        index, which returned one arbitrary segment's data angles.)
+        """
+        c = self.clients[proc]
+        nsegments = int(c.communicate("UPDATE_SEGMENTS", params)[0])
+        return [c.communicate("GET_CALCUALTED_ANGLES", [i])
+                for i in range(nsegments)]
 
     def calculate(self, params, proc=0):
         c = self.clients[proc]

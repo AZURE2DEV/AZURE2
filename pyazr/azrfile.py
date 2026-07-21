@@ -108,6 +108,28 @@ class AzrChannel:
     @property
     def active(self):      return self._get("isActive", lambda v: int(float(v))) != 0
 
+    # pair physics -- the same quantities GET_PAIRS_INFO reports at runtime, but
+    # readable straight from the file, so a caller can identify a model's
+    # channels without launching AZURE2.
+    @property
+    def Z1(self):          return self._get("z1", lambda v: int(float(v)))
+    @property
+    def Z2(self):          return self._get("z2", lambda v: int(float(v)))
+    @property
+    def M1(self):          return self._get("m1", float)
+    @property
+    def M2(self):          return self._get("m2", float)
+    @property
+    def excitation(self):
+        """Excitation energy of the pair's residual nucleus (MeV).
+
+        Zero for a ground-state pair; this is what distinguishes the capture
+        channels of a multi-transition model (gamma_0, gamma_1, ...).
+        """
+        return self._get("e2", float)
+    @property
+    def sep_energy(self):  return self._get("sepE", float)
+
     # level fields (shared across a level's channel lines)
     @property
     def levelJ(self):      return self._get("levelJ", float)
