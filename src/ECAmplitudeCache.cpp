@@ -17,21 +17,15 @@ void ECAmplitudeCache::AddAmplitude(const AmplitudeKey& key, double energy, comp
     }
 
     auto& data = cache_[key];
-    data.energies.push_back(energy);
-    data.amplitudes.push_back(amplitude);
-    // Ensure energies and amplitudes are sorted together
-    auto combined = std::vector<std::pair<double, complex>>(data.energies.size());
-    for (size_t i = 0; i < data.energies.size(); ++i) {
-        combined[i] = std::make_pair(data.energies[i], data.amplitudes[i]);
-    }
-    std::sort(combined.begin(), combined.end(), [](const auto& a, const auto& b) {
-        return a.first < b.first;
-    });
-    for (size_t i = 0; i < combined.size(); ++i) {
-        data.energies[i] = combined[i].first;
-        data.amplitudes[i] = combined[i].second;
-    }
-
+    // The energy vector is kept sorted, so insert at the right position rather
+    // than appending and re-sorting the whole table.  Re-sorting made every
+    // insert O(n log n) -- and since this runs under the global cache mutex,
+    // it also serialized every thread on a cost that grew with the number of
+    // cached energies.  Insertion keeps a single add O(log n) + memmove.
+    auto it = std::lower_bound(data.energies.begin(), data.energies.end(), energy);
+    size_t idx = std::distance(data.energies.begin(), it);
+    data.energies.insert(it, energy);
+    data.amplitudes.insert(data.amplitudes.begin() + idx, amplitude);
 }
 
 complex ECAmplitudeCache::GetInterpolatedAmplitude(const AmplitudeKey& key, double energy) const {

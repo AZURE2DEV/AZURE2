@@ -53,8 +53,9 @@ public:
    * \brief Resonance information extracted from CNuc
    */
   struct ResonanceInfo {
-    double energy;      ///< Resonance energy (CM frame)
-    double totalWidth;  ///< Total width Γ_total = Σ Γ_i (MeV)
+    double energy;         ///< Resonance energy (CM frame, MeV)
+    double totalWidth;     ///< Gamma_particle + Gamma_radiative (MeV)
+    double particleWidth;  ///< Gamma_particle only (MeV); shapes sigma(E) in non-RMC
   };
 
   /*!

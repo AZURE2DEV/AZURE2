@@ -155,7 +155,11 @@ int AZUREMain::operator()(){
     ParameterLimitsManager limitsManager(&configure(), compound(), data(), &params);
     limitsManager.ReadParameterSettings();
     limitsManager.ApplyAllParameterSettings(params.GetMinuitParams());
-  
+
+    //Warn once if a level has a radiative width comparable to its particle width,
+    //where the R-Matrix treatment of capture breaks down.
+    compound()->CheckRadiativeWidths(configure(),params.GetMinuitParams().Params());
+
     //Declare a new instance of FCNBase
     AZURECalc theFunc(data(),compound(),configure(),&limitsManager);
     //theFunc.InitializePools();
@@ -605,7 +609,10 @@ int AZUREMain::operator()(){
     configure().outStream << "Performing reaction rate calculation..." << std::endl;
     ReactionRate reactionRate(compound(),params.GetMinuitParams().Params(),configure(),
 			      configure().rateParams.entrancePair,configure().rateParams.exitPair);
-    if(configure().paramMask & Config::USE_BRUNE_FORMALISM) 
+    //Warn once if a level has a radiative width comparable to its particle width,
+    //where the R-Matrix treatment of capture breaks down.
+    compound()->CheckRadiativeWidths(configure(),params.GetMinuitParams().Params());
+    if(configure().paramMask & Config::USE_BRUNE_FORMALISM)
       compound()->CalcShiftFunctions(configure());
     if(configure().rateParams.useFile)
       reactionRate.CalculateFileRates();

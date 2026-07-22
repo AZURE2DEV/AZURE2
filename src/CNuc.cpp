@@ -9,6 +9,7 @@
 #include "CoulFunc.h"
 #include "EigenFunc.h"
 #include "ECIntegral.h"
+#include "GSLException.h"
 #include "NucLine.h"
 #include "Minuit2/MnUserParameters.h"
 #include "NFIntegral.h"
@@ -1606,7 +1607,120 @@ void CNuc::TransformOut(const Config& configure) {
 }
 
 /*!
- * Writes the final transformed parameters to "parameters.out" file. 
+ * Checks every R-Matrix level for a radiative width that is not small compared to
+ * its particle width, and writes a single warning to the output stream if any is
+ * found.  The R-Matrix description of radiative capture treats the photon channels
+ * perturbatively (the gamma widths are assumed to make a negligible contribution to
+ * the total width entering the level matrix), so a level with
+ * \f$ \Gamma_\gamma \gtrsim 0.1 \Gamma_{particle} \f$ is outside the range in which
+ * the calculated cross section can be trusted.
+ *
+ * The widths are estimated from the parameters passed in (the same vector that is
+ * handed to the calculation), following CNuc::TransformOut: the particle widths are
+ * \f$ 2\gamma^2 P_l \f$ level-shift normalised by \f$ 1+\sum\gamma^2 dS/dE \f$, and
+ * the radiative widths are \f$ 2\gamma^2 (E_\gamma/\hbar c)^{2L+1} \f$.  External
+ * capture contributions are not included, so the ratio is indicative only -- the
+ * exact widths are those written to parameters.out.  Channels of a level that are
+ * closed (and levels with no open particle channel, e.g. subthreshold states) carry
+ * no observed width and are skipped.
+ */
+
+void CNuc::CheckRadiativeWidths(const Config& configure, const vector_r& params) {
+  static const double warningRatio=0.1;
+
+  this->FillCompoundFromParams(params);
+
+  int numFlagged=0;
+  double worstRatio=0.0;
+  double worstJ=0.0;
+  int worstPi=1;
+  double worstEnergy=0.0;
+  double worstRadWidth=0.0;
+  double worstParticleWidth=0.0;
+
+  for(int j=1;j<=this->NumJGroups();j++) {
+    JGroup *theJGroup=this->GetJGroup(j);
+    if(!theJGroup->IsInRMatrix()) continue;
+    for(int la=1;la<=theJGroup->NumLevels();la++) {
+      ALevel *theLevel=theJGroup->GetLevel(la);
+      if(!theLevel->IsInRMatrix()) continue;
+      double levelEnergy=theLevel->GetFitE();
+
+      double particleWidth=0.0;
+      double radiativeWidth=0.0;
+      double normSum=0.0;
+      try {
+	for(int ch=1;ch<=theJGroup->NumChannels();ch++) {
+	  AChannel *theChannel=theJGroup->GetChannel(ch);
+	  PPair *thePair=this->GetPair(theChannel->GetPairNum());
+	  double gamma=theLevel->GetFitGamma(ch);
+	  if(gamma==0.0) continue;
+	  double localEnergy=levelEnergy-thePair->GetSepE()-thePair->GetExE();
+	  if(theChannel->GetRadType()=='P') {
+	    if(localEnergy<=0.0) continue;
+	    CoulFunc theCoulombFunction(thePair,!!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+	    double radius=thePair->GetChRad();
+	    particleWidth+=2.0*pow(gamma,2.0)*
+	      theCoulombFunction.Penetrability(theChannel->GetL(),radius,localEnergy);
+	    normSum+=theCoulombFunction.PEShift_dE(theChannel->GetL(),radius,localEnergy)*
+	      pow(gamma,2.0);
+	  } else if(theChannel->GetRadType()=='M'||theChannel->GetRadType()=='E') {
+	    //Ground state transitions parametrize a moment, not a width.
+	    if(fabs(theLevel->GetE()-thePair->GetExE())<1.e-3&&
+	       theJGroup->GetJ()==thePair->GetJ(2)&&
+	       theJGroup->GetPi()==thePair->GetPi(2)) continue;
+	    double pene=(configure.paramMask & Config::USE_RMC_FORMALISM) ? 1.0 :
+	      pow(fabs(localEnergy)/hbarc,2.0*theChannel->GetL()+1.0);
+	    radiativeWidth+=2.0*pow(gamma,2.0)*pene;
+	  }
+	}
+      } catch (GSLException e) {
+	//The widths are only needed for this diagnostic: skip the level rather
+	//than abort the calculation.
+	continue;
+      }
+      if(1.0+normSum>0.0) particleWidth/=(1.0+normSum);
+      if(particleWidth<=0.0||radiativeWidth<=0.0) continue;
+
+      double ratio=radiativeWidth/particleWidth;
+      if(ratio>warningRatio) {
+	numFlagged++;
+	if(ratio>worstRatio) {
+	  worstRatio=ratio;
+	  worstJ=theJGroup->GetJ();
+	  worstPi=theJGroup->GetPi();
+	  worstEnergy=levelEnergy;
+	  worstRadWidth=radiativeWidth;
+	  worstParticleWidth=particleWidth;
+	}
+      }
+    }
+  }
+
+  if(numFlagged>0) {
+    std::ostringstream levelText;
+    levelText.precision(4);
+    levelText << std::fixed << "J = " << worstJ << ((worstPi==-1) ? '-' : '+')
+	      << ", E_level = " << worstEnergy << " MeV";
+    configure.outStream << std::endl
+			<< "**WARNING: " << numFlagged << " level"
+			<< ((numFlagged==1) ? " has" : "s have")
+			<< " a radiative width larger than " << warningRatio*100.
+			<< "% of the particle width." << std::endl
+			<< "  Largest ratio: " << levelText.str() << ", G_gamma/G_particle = "
+			<< std::scientific << std::setprecision(2) << worstRatio
+			<< " (G_gamma = " << worstRadWidth*1e6 << " eV, G_particle = "
+			<< worstParticleWidth*1e6 << " eV)." << std::endl
+			<< "  R-Matrix capture assumes G_gamma << G_particle, so the calculated"
+			<< " cross section may be incorrect for such levels." << std::endl
+			<< std::endl;
+    configure.outStream.unsetf(std::ios::scientific);
+    configure.outStream.precision(6);
+  }
+}
+
+/*!
+ * Writes the final transformed parameters to "parameters.out" file.
  */
 
 void CNuc::PrintTransformParams(const Config& configure) {

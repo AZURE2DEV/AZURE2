@@ -49,6 +49,7 @@ public:
   void PrintCompoundFromParams();
   void FillCompoundFromParams(const vector_r &);
   void TransformOut(const Config&);
+  void CheckRadiativeWidths(const Config&, const vector_r&);
   vector_r GetTransformParams(const Config& configure);
   void PrintTransformParams(const Config&);
   void SetMaxLValue(int);
