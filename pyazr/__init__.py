@@ -1,13 +1,13 @@
 from .client import client, ClientError
 from .server import server, ServerError
 from .azure2 import azure2
-from .parameters import Pair, PairSet, Parameter, ParameterSet
+from .parameters import Pair, PairSet, Parameter, ParameterSet, LevelKey
 from .scheme import LevelScheme, SchemeLevel, SchemeChannel
 from .azrfile import AzrModel, AzrLevel, AzrChannel
 from .datasets import Segment, SegmentSet, TestSegment, TestSegmentSet
 
 __all__ = ["azure2", "client", "server", "ClientError", "ServerError",
-           "Pair", "PairSet", "Parameter", "ParameterSet",
+           "Pair", "PairSet", "Parameter", "ParameterSet", "LevelKey",
            "LevelScheme", "SchemeLevel", "SchemeChannel",
            "AzrModel", "AzrLevel", "AzrChannel",
            "Segment", "SegmentSet", "TestSegment", "TestSegmentSet"]

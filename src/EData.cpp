@@ -1387,18 +1387,26 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
       }
     }
     if(!isFit&&(configure.paramMask & Config::CALCULATE_WITH_DATA)) {
+      //The normalization penalty as the fit sees it (AZURECalc::operator()):
+      //the deviation from the nominal normalization in units of its uncertainty,
+      //which the segment stores as a percentage.  This used to add a literal 1
+      //per segment, so the reported total was just the number of segments.
+      double normChiSquared=0.;
+      double normError=thisSegment->GetNominalNorm()/100.*thisSegment->GetNormError();
+      if(normError!=0.) normChiSquared=
+	pow((thisSegment->GetNorm()-thisSegment->GetNominalNorm())/normError,2.0);
       totalChiSquared+=(thisSegment->GetSegmentChiSquared());
-      totalNormChiSquared+=1;
+      totalNormChiSquared+=normChiSquared;
       totalN+=thisSegment->NumPoints();
       chiOut << thisSegment->GetSegmentKey()
-             << "," 
+             << ","
 	     << thisSegment->GetSegmentChiSquared()
              << ","
              << thisSegment->NumPoints()
              << ","
              << thisSegment->GetNorm()
              << ","
-             //<< thisSegment->GetNormChiSquared()
+             << normChiSquared
 	     << std::endl;
     }
     out<<std::endl<<std::endl;out.flush();

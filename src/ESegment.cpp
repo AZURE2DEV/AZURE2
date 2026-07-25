@@ -556,6 +556,35 @@ void ESegment::SetLastEnergyShift(double lastEnergyShift) {
   lastEnergyShift_=lastEnergyShift;
 }
 
+namespace {
+
+/*!
+ * Applies an energy shift to a point energy.
+ *
+ * The only thing guarded here is that the result stays strictly positive: the
+ * lab->CM conversions and the Coulomb functions are undefined at or below zero.
+ * The floor is a fixed fraction of the point's own energy, so it can only ever
+ * engage for a shift large enough to push the point through threshold -- for
+ * every physically meaningful shift the mapping is the exact identity plus the
+ * shift, and therefore continuous in it.
+ *
+ * This used to be an absolute 0.01 MeV floor, which silently snapped *every*
+ * data point below 10 keV onto the same energy the moment a segment's shift
+ * became non-zero.  Since the update is skipped entirely while the shift is
+ * still zero, that turned chi^2 into a step function of the shift for any data
+ * set reaching below 10 keV (3H+d, 3He+d, ...): an infinitesimal shift moved
+ * chi^2 by thousands, the finite-difference gradient was meaningless, and the
+ * fit either froze at its starting point or ran away.
+ */
+double ShiftedEnergy(double originalEnergy, double shift) {
+  static const double kMinEnergyFraction = 1.e-6;
+  double shifted = originalEnergy + shift;
+  double floorEnergy = originalEnergy*kMinEnergyFraction;
+  return (shifted < floorEnergy) ? floorEnergy : shifted;
+}
+
+}  // namespace
+
 /*!
  * Updates the energies of all points in this segment based on the current energy shift.
  */
@@ -568,17 +597,7 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
     EPoint* point = GetPoint(i+1);
     if(point && point->GetOriginalEnergy() > 0) {
       double originalEnergy = point->GetOriginalEnergy();
-      double shiftedEnergy = originalEnergy + energyShift_;
-
-      // Don't allow energies below 0.01 MeV (AZURE2 may crash). Clamp to the
-      // floor and still recompute, rather than `continue`-ing: skipping the
-      // update left the point at whatever energy the *previous* evaluation set,
-      // making its contribution depend on the fit history. That hysteresis
-      // produces a discontinuous chi^2 surface for low-energy points and
-      // defeats the minimizer. Clamping is deterministic in the current shift.
-      if(shiftedEnergy < 0.01) {
-        shiftedEnergy = 0.01;
-      }
+      double shiftedEnergy = ShiftedEnergy(originalEnergy, energyShift_);
 
       // Set the shifted energy
       point->SetLabEnergy(shiftedEnergy);
@@ -638,14 +657,7 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
           if(subPoint && subPoint->GetOriginalEnergy() > 0) {
             double subOriginalEnergy = subPoint->GetOriginalEnergy();
             double energyShiftCM = (entrancePair->GetM(2))/(entrancePair->GetM(1)+entrancePair->GetM(2)) * energyShift_;
-            double subShiftedEnergy = subOriginalEnergy + energyShiftCM;
-
-            // Apply same energy limit check. Clamp rather than skip, so the
-            // subpoint stays consistent with the current shift (see the
-            // main-point clamp above for the hysteresis rationale).
-            if(subShiftedEnergy < 0.01) {
-              subShiftedEnergy = 0.01;
-            }
+            double subShiftedEnergy = ShiftedEnergy(subOriginalEnergy, energyShiftCM);
 
             // Set the shifted energy for subpoint
             // Must set both CM and Lab energy since CalcLegendreP uses GetLabEnergy() for Q-coefficients

@@ -277,6 +277,85 @@ class azure2:
             )
         return params
 
+    # -- physical levels (turn a resonance on/off) ----------------------------
+
+    def physical_levels(self):
+        """The model's physical levels (resonances / poles) as
+        :class:`~pyazr.parameters.LevelKey` objects, ordered ``(jgroup, level)``.
+
+        Each key is a handle you can pass to :meth:`without_level` /
+        :meth:`only_level` to switch that resonance off or isolate it.
+        """
+        return list(self.parameters.by_physical_level().keys())
+
+    def _match_level(self, level=None, jpi=None, energy=None, tol=1e-2):
+        """Resolve a level selector to a single :class:`LevelKey`.
+
+        Accepts a ``LevelKey`` directly (``level=``), or a ``jpi`` string
+        (e.g. ``"5/2-"``) and/or an ``energy`` (MeV, matched within ``tol``).
+        Raises if the selector is ambiguous or matches nothing.
+        """
+        keys = self.physical_levels()
+        if level is not None:
+            if level in keys:
+                return level
+            raise KeyError(f"{level!r} is not a level of this model.")
+        hits = [k for k in keys
+                if (jpi is None or k.jpi == jpi)
+                and (energy is None or (k.energy is not None
+                                        and abs(k.energy - energy) <= tol))]
+        if not hits:
+            raise KeyError(f"no level matches jpi={jpi} energy={energy}.")
+        if len(hits) > 1:
+            raise KeyError(f"ambiguous selector jpi={jpi} energy={energy}: "
+                           f"matches {[str(h) for h in hits]}.")
+        return hits[0]
+
+    def level_free_width_indices(self, level=None, jpi=None, energy=None,
+                                 tol=1e-2):
+        """``free_index`` list of a level's non-fixed reduced-width parameters.
+
+        These are the positions, within the free-parameter vector
+        (:attr:`params_rwa` order), of the reduced-width amplitudes that carry
+        the level's coupling to its channels.  Zeroing them removes the level
+        from the calculation (its fixed widths, if any, are already inert).
+        """
+        key = self._match_level(level=level, jpi=jpi, energy=energy, tol=tol)
+        ps = self.parameters.by_physical_level()[key]
+        return [p.free_index for p in ps
+                if p.kind == "width" and not p.fixed and p.free_index is not None]
+
+    def without_level(self, params, level=None, jpi=None, energy=None,
+                      tol=1e-2):
+        """A copy of the free-parameter vector with one level switched OFF.
+
+        The level's reduced widths are set to zero, decoupling it from every
+        channel; all other parameters are untouched.  ``params`` is a free
+        (``params_rwa``-order) vector.  Use with :meth:`calculate_rwa` /
+        :meth:`residual_jacobian` to see the model *without* that resonance.
+        """
+        import numpy as _np
+        out = _np.array(params, dtype=float)
+        out[self.level_free_width_indices(level, jpi, energy, tol)] = 0.0
+        return out
+
+    def only_level(self, params, level=None, jpi=None, energy=None, tol=1e-2):
+        """A copy of the free-parameter vector with ONLY one level active.
+
+        Every *other* level's reduced widths are zeroed, leaving the target
+        level's widths (and all energies / normalizations) in place -- the bare
+        contribution of one resonance on top of the non-resonant (Coulomb /
+        hard-sphere) background.  Compare against :meth:`without_level` and the
+        full model to read off interference.
+        """
+        import numpy as _np
+        keep = set(self.level_free_width_indices(level, jpi, energy, tol))
+        out = _np.array(params, dtype=float)
+        for p in self.parameters.widths:
+            if not p.fixed and p.free_index is not None and p.free_index not in keep:
+                out[p.free_index] = 0.0
+        return out
+
     # -- index queries --------------------------------------------------------
 
     def norm_indices(self, proc=0):

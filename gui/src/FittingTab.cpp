@@ -218,8 +218,7 @@ void FittingTab::populateFromCurrentGUIState() {
     if(!levelsTab_ || !segmentsTab_) return;
 
     fittingParameters.clear();
-    int paramIndex = 0;
-    
+
     // Get level and channel data
     LevelsModel* levelsModel = levelsTab_->getLevelsModel();
     ChannelsModel* channelsModel = levelsTab_->getChannelsModel();
@@ -248,7 +247,6 @@ void FittingTab::populateFromCurrentGUIState() {
                 energyParam.fitError = 0.0;  // No fit error initially
                 energyParam.useAsNuisance = false;
                 energyParam.category = "level";
-                energyParam.minuitIndex = paramIndex++;
                 energyParam.levelIndex = levelIndex;
                 energyParam.channelIndex = -1;  // Energy parameter
                 
@@ -274,7 +272,6 @@ void FittingTab::populateFromCurrentGUIState() {
                     widthParam.fitError = 0.0;  // No fit error initially
                     widthParam.useAsNuisance = false;
                     widthParam.category = "level";
-                    widthParam.minuitIndex = paramIndex++;
                     widthParam.levelIndex = levelIndex;
                     widthParam.channelIndex = channelIndex;
                     
@@ -307,14 +304,6 @@ void FittingTab::populateFromCurrentGUIState() {
                 normParam.fitError = 0.0;  // No fit error initially
                 normParam.useAsNuisance = (segment.varyNorm == 1);
                 normParam.category = "norm";
-                
-                // Only assign Minuit index if this parameter varies (gets added to Minuit)
-                if(segment.varyNorm == 1) {
-                    normParam.minuitIndex = paramIndex++;
-                } else {
-                    normParam.minuitIndex = -1;  // Not in Minuit parameter list
-                }
-                
                 normParam.levelIndex = -1;
                 normParam.channelIndex = i;  // Store segment index for reverse lookup
                 
@@ -339,7 +328,6 @@ void FittingTab::populateFromCurrentGUIState() {
                 shiftParam.fitError = 0.0;  // No fit error initially
                 shiftParam.useAsNuisance = (segment.varyEnergyShift == 1);  // Active only when parameter varies
                 shiftParam.category = "shift";
-                shiftParam.minuitIndex = paramIndex++;  // Always gets Minuit index for active segments (like EData)
                 shiftParam.levelIndex = -1;
                 shiftParam.channelIndex = i;  // Store segment index for reverse lookup
                 
@@ -348,6 +336,8 @@ void FittingTab::populateFromCurrentGUIState() {
         }
     }
     
+    assignMinuitIndices();
+
     // Apply parameter settings from saved configuration (limits, errors, etc.)
     applyParameterSettings();
 
@@ -359,6 +349,56 @@ void FittingTab::showEvent(QShowEvent* event) {
     // Reflect free/fix changes to normalizations or energy shifts made in the
     // Segments tab while this tab was hidden.
     syncSegmentVaryStates();
+}
+
+// Number the parameters exactly the way AZURE2 does, so the minuit_index written
+// into <parameterSettings> names the parameter it was meant for.
+//
+// AZURE2 builds its Minuit vector as CNuc::FillMnParams() followed by
+// EData::FillMnParams(), then enumerates the entries it will apply settings to as
+// "not fixed, or a segment parameter".  That means: a level energy or width counts
+// only when it is free, a normalization exists at all only when its segment varies
+// it, and an energy shift is always present (fixed when not varied) and always
+// counted.  Anything else -- in particular skipping the shifts of segments that do
+// not vary theirs -- shifts every later index by one and silently applies one
+// parameter's limits and nuisance prior to another.
+void FittingTab::assignMinuitIndices() {
+    QList<LevelsData> levels;
+    QList<ChannelsData> channels;
+    if(levelsTab_) {
+        if(LevelsModel* m = levelsTab_->getLevelsModel()) levels = m->getLevels();
+        if(ChannelsModel* m = levelsTab_->getChannelsModel()) channels = m->getChannels();
+    }
+    QList<SegmentsDataData> segments;
+    if(segmentsTab_) {
+        if(SegmentsDataModel* m = segmentsTab_->getSegmentsDataModel()) segments = m->getLines();
+    }
+
+    int paramIndex = 0;
+    for(int i = 0; i < fittingParameters.size(); i++) {
+        FittingParameter& param = fittingParameters[i];
+        bool counted = false;
+        if(param.category == "level") {
+            // Levels excluded from the calculation never reach CNuc, so they
+            // occupy no parameter slot at all.
+            bool levelActive = (param.levelIndex >= 0 && param.levelIndex < levels.size() &&
+                                levels[param.levelIndex].isActive != 0);
+            if(!levelActive) counted = false;
+            else if(param.channelIndex < 0) {
+                counted = (levels[param.levelIndex].isFixed == 0);
+            } else {
+                counted = (param.channelIndex < channels.size() &&
+                           channels[param.channelIndex].isFixed == 0 &&
+                           channels[param.channelIndex].reducedWidth != 0.0);
+            }
+        } else if(param.category == "norm" || param.category == "shift") {
+            bool segmentActive = (param.channelIndex >= 0 && param.channelIndex < segments.size() &&
+                                  segments[param.channelIndex].isActive == 1);
+            counted = segmentActive &&
+                      (param.category == "shift" || segments[param.channelIndex].varyNorm == 1);
+        }
+        param.minuitIndex = counted ? paramIndex++ : -1;
+    }
 }
 
 // Sync the "Use as Nuisance" state of the norm/shift parameters to the segments'
@@ -381,6 +421,9 @@ void FittingTab::syncSegmentVaryStates() {
             updateParameterTableCheckbox(p.name, vary);
         }
     }
+    // Freeing or fixing a normalization changes which parameters AZURE2 puts in
+    // its Minuit vector, so the recorded indices have to be renumbered with it.
+    assignMinuitIndices();
 }
 
 double FittingTab::transformRWAParameterToPhysical(const QString& paramName, double rwaValue) {
@@ -541,7 +584,6 @@ void FittingTab::loadSettings() {
             // This is needed for proper RWA conversion of all level parameters
             if(levelsTab_ && segmentsTab_) {
                 fittingParameters.clear();
-                int paramIndex = 0;
 
                 // Get level and channel data
                 LevelsModel* levelsModel = levelsTab_->getLevelsModel();
@@ -565,11 +607,6 @@ void FittingTab::loadSettings() {
                         energyParam.fitError = 0.0;
                         energyParam.useAsNuisance = false;
                         energyParam.category = "level";
-                        if(level.isFixed == 0) {
-                            energyParam.minuitIndex = paramIndex++;
-                        } else {
-                            energyParam.minuitIndex = -1;
-                        }
                         energyParam.levelIndex = levelIndex;
                         energyParam.channelIndex = -1;
 
@@ -593,11 +630,6 @@ void FittingTab::loadSettings() {
                                 widthParam.fitError = 0.0;
                                 widthParam.useAsNuisance = false;
                                 widthParam.category = "level";
-                                if(channel.isFixed == 0) {
-                                    widthParam.minuitIndex = paramIndex++;
-                                } else {
-                                    widthParam.minuitIndex = -1;
-                                }
                                 widthParam.levelIndex = levelIndex;
                                 widthParam.channelIndex = channelIndex;
 
@@ -626,13 +658,6 @@ void FittingTab::loadSettings() {
                             normParam.fitError = 0.0;
                             normParam.useAsNuisance = (segment.varyNorm == 1);
                             normParam.category = "norm";
-
-                            if(segment.varyNorm == 1) {
-                                normParam.minuitIndex = paramIndex++;
-                            } else {
-                                normParam.minuitIndex = -1;
-                            }
-
                             normParam.levelIndex = -1;
                             normParam.channelIndex = i;
 
@@ -654,13 +679,6 @@ void FittingTab::loadSettings() {
                             shiftParam.fitError = 0.0;
                             shiftParam.useAsNuisance = (segment.varyEnergyShift == 1);
                             shiftParam.category = "shift";
-
-                            if(segment.varyEnergyShift == 1) {
-                                shiftParam.minuitIndex = paramIndex++;
-                            } else {
-                                shiftParam.minuitIndex = -1;
-                            }
-
                             shiftParam.levelIndex = -1;
                             shiftParam.channelIndex = i;
 
@@ -668,8 +686,9 @@ void FittingTab::loadSettings() {
                         }
                     }
                 }
+                assignMinuitIndices();
             }
-            
+
             // Separate handling: RWA parameters (levels) vs direct assignment (norms/shifts)
             QMap<QString, QPair<double, double>> rwaParamMap;
             QList<QPair<int, QString>> levelParameterMapping; // For level parameters that need RWA conversion
@@ -1775,6 +1794,9 @@ void FittingTab::onSegmentNormalizationVaryChanged(int segmentIndex, bool vary) 
             break;
         }
     }
+    // A normalization enters or leaves AZURE2's Minuit vector with this flag, so
+    // every recorded index after it moves.
+    assignMinuitIndices();
 }
 
 void FittingTab::onSegmentEnergyShiftVaryChanged(int segmentIndex, bool vary) {

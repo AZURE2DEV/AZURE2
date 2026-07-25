@@ -16,6 +16,7 @@
 #include <iostream>
 #include <assert.h>
 #include <fstream>
+#include <memory>
 #include <mutex>
 
 /*!
@@ -1428,8 +1429,21 @@ void EPoint::Calculate(CNuc* theCNuc,const Config &configure, EPoint *parent, in
       !this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsConvCoefficients())) {
     
     GenMatrixFunc *theMatrixFunc;
-    if(configure.paramMask & Config::USE_AMATRIX) theMatrixFunc=new AMatrixFunc(theCNuc,configure);
-    else theMatrixFunc=new RMatrixFunc(theCNuc,configure);
+    // The A-matrix function object is reused across the points calculated by
+    // this thread.  Its per-JGroup buffers and the level-matrix factorization
+    // workspace are sized once and then only refilled, which removes the
+    // allocation traffic that dominated the old per-point construction.
+    // Recursion is not a concern: the branch that recurses into sub-points does
+    // not use theMatrixFunc.
+    static thread_local AMatrixFunc reusableAMatrixFunc(theCNuc,configure);
+    std::unique_ptr<RMatrixFunc> ownedRMatrixFunc;
+    if(configure.paramMask & Config::USE_AMATRIX) {
+      reusableAMatrixFunc.Reset(theCNuc,configure);
+      theMatrixFunc=&reusableAMatrixFunc;
+    } else {
+      ownedRMatrixFunc.reset(new RMatrixFunc(theCNuc,configure));
+      theMatrixFunc=ownedRMatrixFunc.get();
+    }
     theMatrixFunc->ClearMatrices();
     theMatrixFunc->FillMatrices(this);
     theMatrixFunc->InvertMatrices();
@@ -1447,8 +1461,7 @@ void EPoint::Calculate(CNuc* theCNuc,const Config &configure, EPoint *parent, in
 	theMatrixFunc->CalculateCrossSection(mappedPoint);
       }
     }
-    delete theMatrixFunc;
-  } 
+  }
   else {
     for(int i = 1; i<=this->NumSubPoints();i++) {
       EPoint *subPoint=this->GetSubPoint(i);

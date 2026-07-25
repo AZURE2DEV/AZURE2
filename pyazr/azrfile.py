@@ -415,6 +415,119 @@ class AzrModel:
         level.channels.append(ch)
         return ch
 
+    # -- level activation -----------------------------------------------------
+
+    def deactivate_level(self, jpi=None, energy=None, index=None, tol=1e-3):
+        """Switch off the matching level(s) without removing them.
+
+        Every channel of a matched level has its reduced width (``gamma``) set
+        to zero and is fixed, so the level stays in the file (and in its
+        J-group's shared channel set) but couples to nothing -- it contributes
+        exactly nothing to the calculation.  This is the file-level counterpart
+        of :meth:`azure2.without_level`; use it when you want to persist a
+        "level removed" model and refit it.  Returns the affected levels.
+        """
+        victims = self.find(jpi=jpi, energy=energy, index=index, tol=tol)
+        if not victims:
+            raise KeyError(f"no level matches jpi={jpi} energy={energy} "
+                           f"index={index}.")
+        for lv in victims:
+            for c in lv.channels:
+                c.gamma = 0.0
+                c.channel_fixed = True
+        return victims
+
+    # -- extrapolations (edits the <segmentsTest> block) ----------------------
+
+    # observable name -> isDiff code for a <segmentsTest> line
+    # (ESegment::ESegment(ExtrapLine); mirrors datasets._EXTRAP_OBSERVABLE).
+    _EXTRAP_CODE = {
+        "angle-integrated": 0, "differential": 1, "phase-shift": 2,
+        "angular-distribution": 3, "total-capture": 4, "differential-cm": 5,
+    }
+
+    def _splice_segments_test(self, new_lines):
+        """Replace the body of the <segmentsTest> block in the verbatim tail.
+
+        ``new_lines`` is a list of pre-formatted extrapolation lines (no
+        trailing newline).  Creates the block if the file has none.
+        """
+        lines = self._suffix.splitlines()
+        try:
+            start = lines.index("<segmentsTest>")
+            end = lines.index("</segmentsTest>")
+        except ValueError:
+            # No block yet: append one at the end of the tail.
+            self._suffix = (self._suffix.rstrip("\n") + "\n\n<segmentsTest>\n"
+                            + "\n".join(new_lines) + "\n</segmentsTest>\n")
+            return
+        self._suffix = "\n".join(lines[:start + 1] + new_lines
+                                 + lines[end:])
+
+    def clear_extrapolations(self):
+        """Remove every ``<segmentsTest>`` line (leave the block empty)."""
+        self._splice_segments_test([])
+        return self
+
+    def add_extrapolation(self, entrance, exit, e_min, e_max, e_step,
+                          observable="angle-integrated", angle=None,
+                          angle_min=0.0, angle_max=0.0, angle_step=0.0,
+                          phase_J=None, phase_L=None, order=None, active=True):
+        """Append one extrapolation segment (a grid to evaluate the model on).
+
+        ``entrance`` / ``exit`` are particle-pair keys (``exit=-1`` for a summed
+        / total observable such as capture).  The model is evaluated on the
+        energy grid ``e_min : e_max : e_step`` (entrance-channel c.m. MeV).
+
+        ``observable`` is one of ``angle-integrated``, ``differential``,
+        ``differential-cm``, ``total-capture``, ``angular-distribution``,
+        ``phase-shift``.  For a single-angle differential give ``angle=`` (sets
+        min=max, step 0); for an angular grid give ``angle_min/max/step``.
+        ``phase_J``/``phase_L`` are required for a phase-shift, ``order`` for an
+        angular distribution.
+        """
+        if observable not in self._EXTRAP_CODE:
+            raise ValueError(f"unknown observable {observable!r}; expected one "
+                             f"of {sorted(self._EXTRAP_CODE)}.")
+        isDiff = self._EXTRAP_CODE[observable]
+        if angle is not None:
+            angle_min = angle_max = angle
+            angle_step = 0.0
+        toks = [1 if active else 0, int(entrance), int(exit),
+                _fmt(e_min), _fmt(e_max), _fmt(e_step),
+                _fmt(angle_min), _fmt(angle_max), _fmt(angle_step), isDiff]
+        if isDiff == 2:                       # phase shift carries J, L
+            if phase_J is None or phase_L is None:
+                raise ValueError("a phase-shift extrapolation needs phase_J "
+                                 "and phase_L.")
+            toks += [_fmt(phase_J), int(phase_L)]
+        elif isDiff == 3:                     # angular distribution carries order
+            if order is None:
+                raise ValueError("an angular-distribution extrapolation needs "
+                                 "order.")
+            toks += [int(order)]
+        toks += [0]                           # trailing isAdvanced flag
+        line = "  ".join(_fmt(t) if not isinstance(t, str) else t for t in toks)
+        lines = self._suffix.splitlines()
+        if "<segmentsTest>" in lines:
+            end = lines.index("</segmentsTest>")
+            self._suffix = "\n".join(lines[:end] + [line] + lines[end:])
+        else:
+            self._splice_segments_test([line])
+        return self
+
+    def set_extrapolations(self, specs):
+        """Replace the whole ``<segmentsTest>`` block with ``specs``.
+
+        ``specs`` is an iterable of dicts, each a keyword bundle for
+        :meth:`add_extrapolation` (e.g. ``dict(entrance=1, exit=-1, e_min=0.05,
+        e_max=5, e_step=0.05, observable="total-capture")``).
+        """
+        self.clear_extrapolations()
+        for spec in specs:
+            self.add_extrapolation(**spec)
+        return self
+
     # -- segment normalizations (edits the <segmentsData> block) --------------
 
     def set_segment_norm(self, file_substr, vary=None, sys_error=None):

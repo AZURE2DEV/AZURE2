@@ -279,6 +279,43 @@ void processCommand(int command, Config& configure) {
 }
 
 /*!
+ * Reads one line of user input, either through readline or from std::cin.
+ *
+ * Returns false once the input stream is exhausted (end of a piped script, or
+ * Ctrl-D at the terminal) and leaves \p inFile empty.  Callers must honour that:
+ * readline() hands back a null pointer at EOF, and assigning it to a std::string
+ * used to dereference null, so any scripted run that fell one line short of the
+ * prompts crashed instead of stopping.  The plain std::cin branch had the mirror
+ * problem -- getline() simply kept failing, so a prompt that insists on a
+ * non-empty answer spun forever.
+ */
+
+static bool getInputLine(bool useReadline, const char* prompt, std::string& inFile) {
+  inFile.clear();
+#ifndef NO_READLINE
+  if(useReadline) {
+    char *line = readline(prompt);
+    if(!line) return false;
+    inFile=line;
+    size_t endpos = inFile.find_last_not_of(" \t");
+    if( std::string::npos != endpos ) inFile = inFile.substr( 0, endpos+1 );
+    else inFile.clear();
+    if(*line) add_history(line);
+    free(line);
+    return true;
+  }
+#else
+  (void)prompt;
+  (void)useReadline;
+#endif
+  if(!getline(std::cin,inFile)) {
+    inFile.clear();
+    return false;
+  }
+  return true;
+}
+
+/*!
  * This function prompts for a parameter file and sets the corresponding configure
  * flags and variables based on the user response.
  */
@@ -289,17 +326,8 @@ void getParameterFile(bool useReadline, Config& configure) {
   if(!useReadline) configure.outStream << "External Parameter File (leave blank for new file): ";
   while(!validInfile) {
     std::string inFile;
-    if(!useReadline) getline(std::cin,inFile);
-#ifndef NO_READLINE
-    else {
-      char *line = readline("External Parameter File (leave blank for new file): ");
-      inFile=line;
-      size_t endpos = inFile.find_last_not_of(" \t");
-      if( std::string::npos != endpos ) inFile = inFile.substr( 0, endpos+1 );
-      if(line && *line) add_history(line);
-      free(line);
-    }
-#endif
+    //At EOF fall back to the "leave blank" behaviour: build a new parameter file.
+    if(!getInputLine(useReadline,"External Parameter File (leave blank for new file): ",inFile)) return;
     if(!inFile.empty()) {
       std::ifstream in;
       in.open(inFile.c_str());
@@ -394,17 +422,8 @@ void getTemperatureFile(bool useReadline, Config& configure) {
   if(!useReadline) configure.outStream << std::setw(38) << "Temperature File Name: ";
   while(!validInfile) {
     std::string inFile;
-    if(!useReadline) getline(std::cin,inFile);
-#ifndef NO_READLINE
-    else {
-      char *line = readline("               Temperature File Name: ");
-      inFile=line;
-      size_t endpos = inFile.find_last_not_of(" \t");
-      if( std::string::npos != endpos ) inFile = inFile.substr( 0, endpos+1 );
-      if(line && *line) add_history(line);
-      free(line);
-    }
-#endif
+    //No file name can be obtained at EOF; give up rather than reprompt forever.
+    if(!getInputLine(useReadline,"               Temperature File Name: ",inFile)) return;
     if(!inFile.empty()) {
       std::ifstream in;
       in.open(inFile.c_str());
@@ -698,17 +717,8 @@ void getExternalCaptureFile(bool useReadline, Config& configure) {
     bool validInfile=false;
     while(!validInfile) {
       std::string inFile;
-      if(!useReadline) getline(std::cin,inFile);
-#ifndef NO_READLINE
-      else {
-		char *line = readline("External Capture Amplitude File (leave blank for new file): ");
-		inFile=line;
-		size_t endpos = inFile.find_last_not_of(" \t");	
-		if( std::string::npos != endpos ) inFile = inFile.substr( 0, endpos+1 );
-		if(line && *line) add_history(line);
-		free(line);
-      }
-#endif
+      //At EOF fall back to the "leave blank" behaviour: build a new integrals file.
+      if(!getInputLine(useReadline,"External Capture Amplitude File (leave blank for new file): ",inFile)) return;
       if(!inFile.empty()) {
 	std::ifstream in;
 	in.open(inFile.c_str());

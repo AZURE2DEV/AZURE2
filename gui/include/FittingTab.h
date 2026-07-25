@@ -83,6 +83,7 @@ class FittingTab : public QWidget {
   void addParameterRow(QTableWidget* table, const FittingParameter& param);
   void updateParameterFromTable(const QString& paramName, int column, const QVariant& value);
   void syncSegmentVaryStates();
+  void assignMinuitIndices();
   void updateParameterInOtherTabs(const QString& paramName, const FittingParameter& param);
   void updateParameterTableValue(const QString& paramName, double value);
   void updateParameterTableError(const QString& paramName, double error);
