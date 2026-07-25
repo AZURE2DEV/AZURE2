@@ -2,6 +2,7 @@
 #define AMATRIXFUNC_H
 
 #include "GenMatrixFunc.h"
+#include "LevelMatrixSolver.h"
 
 struct GradAccum;
 
@@ -23,10 +24,22 @@ class AMatrixFunc : public GenMatrixFunc {
   /*!
    * Returns a reference to the Config structure.
    */
-  const Config &configure() const {return configure_;};
-  
+  const Config &configure() const {return *configure_;};
+  /*!
+   * Repoints the object at a compound nucleus and configuration so that one
+   * instance can serve many energy points without reallocating its scratch
+   * storage.  ClearMatrices() must still be called before each point.
+   */
+  void Reset(CNuc *compound, const Config &configure)
+    {compound_=compound; configure_=&configure;};
+
   void ClearMatrices();
   void FillMatrices(EPoint*);
+  /*!
+   * Factors the level matrix of every J-group.  The full inverse is no longer
+   * formed here: the T-matrix needs only bilinear forms of it, and Inverse() is
+   * materialized lazily for the callers that need individual elements.
+   */
   void InvertMatrices();
   void CalculateTMatrix(EPoint*);
   /*!
@@ -35,7 +48,24 @@ class AMatrixFunc : public GenMatrixFunc {
   void CalculateCrossSection();
 
   complex GetAMatrixElement(int,int,int) const;
+  const matrix_c &GetAMatrix(int) const;
   matrix_c *GetJSpecAInvMatrix(int);
+
+  /*!
+   * Returns \f$ \sum_{\lambda\mu} \gamma_{\lambda c} \gamma_{\mu c'}
+   * A_{\lambda\mu} \f$ for a J-group, the only way the A-matrix enters the
+   * internal T-matrix.  Reduced widths below 1e-12 are dropped, reproducing the
+   * cutoff the explicit double loop over levels applied.
+   */
+  complex GetUBilinear(int jGroupNum, int chNum, int chpNum);
+  /*!
+   * The same bilinear form for the channel-capture pathway, where levels whose
+   * reduced width in `maskChannel` is negligible are excluded from both indices.
+   * Pass maskChannel = 0 to include every level.  No cutoff is applied to the
+   * entrance and exit widths themselves.
+   */
+  complex GetChannelCaptureBilinear(int jGroupNum, int chNum, int chpNum,
+                                    int maskChannel);
 
   /*!
    * Reverse-mode (adjoint) gradient of one energy point's cross section
@@ -62,17 +92,40 @@ class AMatrixFunc : public GenMatrixFunc {
                     const vector_matrix_r* shiftDeriv = nullptr,
                     int xsComponent = 0);
   void AddAInvMatrixElement(int,int,int,complex);
-  void AddAMatrix(matrix_c);
-  void AddAMatrix(matrix_c&&);
  private:
-  const Config &configure_;
+  ///One memoized channel-capture bilinear form, keyed by its pathway.
+  struct ChanCapEntry {
+    int jGroupNum;
+    int chNum;
+    int chpNum;
+    int maskChannel;
+    complex value;
+  };
+
+  const vector_r &GetGammaVector(int jGroupNum, int chNum);
+  const vector_c &GetChannelSolve(int jGroupNum, int chNum);
+
+  const Config *configure_;
   CNuc *compound_;
   vector_matrix_c a_inv_matrices_;
-  vector_matrix_c a_matrices_;
-  int a_matrices_index_;  // Index for thread-safe AddAMatrix calls
+  ///Factored level matrix of each J-group.
+  std::vector<LevelMatrixSolver> solvers_;
+  ///Whether the corresponding solver holds a usable factorization.
+  std::vector<char> solver_valid_;
   // private:
   std::vector<std::vector<int>> level_active_index_; // [jGroup-1][origLevel] -> activeIndex (1..k) or 0 if inactive
-  
+
+  // Per-point caches over active levels, indexed [jGroup-1][channel-1].
+  ///Reduced widths of a channel, with the 1e-12 cutoff applied.
+  std::vector<std::vector<vector_r>> gamma_vectors_;
+  std::vector<std::vector<char>> gamma_valid_;
+  ///A times the reduced-width vector of a channel.
+  std::vector<std::vector<vector_c>> channel_solves_;
+  std::vector<std::vector<char>> channel_solve_valid_;
+  std::vector<ChanCapEntry> chan_cap_cache_;
+  vector_c chan_cap_entrance_;
+  vector_c chan_cap_exit_;
+
   // Pre-allocated buffers to prevent memory fragmentation
   mutable std::vector<std::vector<double>> levelGammas_;
   mutable std::vector<double> levelEnergies_;
