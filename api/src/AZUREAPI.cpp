@@ -13,6 +13,7 @@
 #include "TargetEffect.h"
 #include "AMatrixFunc.h"
 #include "AZUREGrad.h"
+#include "CovarianceBand.h"
 
 #include <iostream>
 #include <iomanip>
@@ -475,11 +476,17 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
 // Transform RWA parameters to physical values
 vector_r AZUREAPI::TransformRWAParameters(const vector_r& p) const {
 
+  // p holds the non-fixed parameters only, so the loop has to run over the
+  // full parameter array -- running it to p.size() leaves every parameter
+  // beyond that index at its .azr value, which silently returns stale widths
+  // for the levels at the end of the file.  A shorter p (e.g. only the
+  // leading R-matrix block, with the norm/shift tail sliced off) is still
+  // accepted: the free parameters it does not cover keep their all_rwa_ value.
   vector_r params = all_rwa_;
   int k = 0;
-  for( int i = 0; i < p.size( ); ++i ){
+  for( int i = 0; i < params.size( ); ++i ){
     if( !fixed_[i] ){
-      params[i] = p[k];
+      if( k < p.size( ) ) params[i] = p[k];
       ++k;
     }
   }
@@ -512,11 +519,10 @@ vector_r AZUREAPI::TransformRWAParameters(const vector_r& p) const {
 // Transform RWA parameters to physical values
 vector_r AZUREAPI::TransformAllRWAParameters(const vector_r& p) const {
 
+  // p holds every parameter, fixed ones included; a short p updates a prefix.
   vector_r params = all_rwa_;
-  int k = 0;
-  for( int i = 0; i < p.size( ); ++i ){
-    params[i] = p[k];
-    ++k;
+  for( int i = 0; i < p.size( ) && i < params.size( ); ++i ){
+    params[i] = p[i];
   }
 
   CNuc* localCompound = NULL;
@@ -532,11 +538,9 @@ vector_r AZUREAPI::TransformAllRWAParameters(const vector_r& p) const {
 
   // Get only non fixed parameters
   vector_r transformed;
-  k = 0;
   for( int i = 0; i < transformedParams.size( ); ++i ){
     if( !fixed_[i] ){
       transformed.push_back( transformedParams[i] );
-      ++k;
     }
   }
 
@@ -647,9 +651,18 @@ void AZUREAPI::SetExtrap( ) {
   configure().paramMask &= ~Config::CALCULATE_WITH_DATA; 
 }
 
-// Set radius to a fixed value
-void AZUREAPI::SetRadius( int idx, double r ) {
-  
+// Set the channel radius of one particle pair (1-based) and rebuild.
+//
+// The radius enters the penetrabilities, shift functions, boundary conditions,
+// Wigner limits, the ANC <-> reduced-width conversion and the lower limit of
+// every external-capture integral, so nothing can be reused: the compound
+// nucleus and data objects are rebuilt from the .azr with the override, the
+// EC-integral cache is bypassed (USE_PREVIOUS_INTEGRALS cleared) so the
+// integrals are recomputed on the new radius rather than read back from
+// output/intEC*, and the parameter bookkeeping -- values, names, fixed flags
+// and the transformed physical parameters -- is refilled to match.
+bool AZUREAPI::SetRadius( int idx, double r ) {
+
   if( compound_ != nullptr ) delete compound_;
   if( data_ != nullptr ) delete data_;
 
@@ -658,13 +671,37 @@ void AZUREAPI::SetRadius( int idx, double r ) {
 
   std::pair<int,double> pair = std::make_pair( idx, r );
 
-  compound()->Fill( configure( ), pair  );
-  data()->Fill(configure(),compound());
+  if( compound()->Fill( configure( ), pair ) == -1 ) return false;
+  if( compound()->NumPairs() == 0 || compound()->NumJGroups() == 0 ) return false;
+
+  // Mirror the branch taken at startup: data mode reads the data segments,
+  // extrapolation mode builds its points from <segmentsTest>.
+  if( configure().paramMask & Config::CALCULATE_WITH_DATA ) {
+    if( data()->Fill( configure( ), compound( ) ) == -1 ) return false;
+  } else {
+    if( data()->MakePoints( configure( ), compound( ) ) == -1 ) return false;
+  }
+  if( data()->NumSegments() == 0 ) return false;
 
   configure().paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
-  compound( )->Initialize( configure( ) );
-  data( )->Initialize( compound( ), configure( ) );
+  try {
+    compound( )->Initialize( configure( ) );
+  } catch (GSLException e) {
+    configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
+    configure().outStream << e.what() << std::endl;
+    return false;
+  }
+  if( data( )->Initialize( compound( ), configure( ) ) == -1 ) {
+    configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
+    return false;
+  }
   configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
+
+  // Without this the client keeps the pre-change parameter vector, names,
+  // fixed flags and Wigner limits -- silently mismatched with the new model.
+  UpdateParameters( );
+
+  return true;
 
 }
 
@@ -935,6 +972,71 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r& params) const {
   out.push_back((double)nCols);
   out.insert(out.end(), residuals.begin(), residuals.end());
   out.insert(out.end(), jacobian.begin(), jacobian.end());
+  return out;
+}
+
+vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r& params) const {
+  vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
+
+  // Same preparation as CalculateResidualJacobianRWA: one request at a time, so
+  // the canonical compound/data are re-filled in place from these parameters.
+  CNuc* lc = compound();
+  EData* ld = data();
+  lc->FillCompoundFromParams(full);
+  ld->FillNormsFromParams(full);
+  ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+
+  vector_matrix_r shiftDeriv;
+  const vector_matrix_r* sdp = nullptr;
+  if(configure().paramMask & Config::USE_BRUNE_FORMALISM) {
+    lc->CalcShiftFunctions(configure());
+    shiftDeriv = BuildShiftDerivTable(lc, configure());
+    sdp = &shiftDeriv;
+  }
+
+  ParamIndexMap pmap = BuildParamIndexMap(lc, ld, fixed_);
+
+  // A band is sensitive only to the R-matrix parameters, and covariance.dat
+  // spans exactly those columns -- so reduce each full packed row to them here
+  // rather than shipping zero columns for every normalization.
+  const std::vector<int> rc = RMatrixPackedColumns(pmap);
+  const int nCols = (int)rc.size();
+
+  std::map<EPoint*, vector_r> grad;
+  if(!ComputeModelGradients(lc, ld, configure(), pmap, sdp, grad))
+    return vector_r{ -1.0 };
+
+  // Walk the segments exactly as UpdateSegments does, so row k of segment s
+  // lines up with GET_CALCULATED_SEGMENT's point k: segments sharing a segment
+  // key collapse to one calculated segment, and only the first of them is used.
+  std::vector<int> counts;
+  vector_r rows;
+  int prevKey = -1;
+  std::vector<ESegment>& segments = ld->GetSegments();
+  for( int i = 0; i < (int)segments.size( ); ++i ) {
+    const int newKey = segments[i].GetSegmentKey( );
+    if( prevKey == newKey ) continue;
+    prevKey = newKey;
+
+    std::vector<EPoint>& points = segments[i].GetPoints( );
+    int n = 0;
+    for( int k = 0; k < (int)points.size( ); ++k ) {
+      std::map<EPoint*, vector_r>::const_iterator it = grad.find( &points[k] );
+      if( it == grad.end( ) ) continue;
+      const vector_r& f = it->second;
+      for( int c = 0; c < nCols; ++c )
+        rows.push_back( rc[c] < (int)f.size( ) ? f[rc[c]] : 0.0 );
+      ++n;
+    }
+    counts.push_back( n );
+  }
+
+  vector_r out;
+  out.reserve( 2 + counts.size( ) + rows.size( ) );
+  out.push_back( (double)counts.size( ) );
+  out.push_back( (double)nCols );
+  for( int i = 0; i < (int)counts.size( ); ++i ) out.push_back( (double)counts[i] );
+  out.insert( out.end( ), rows.begin( ), rows.end( ) );
   return out;
 }
 

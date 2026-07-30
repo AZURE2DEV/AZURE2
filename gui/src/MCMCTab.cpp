@@ -92,7 +92,7 @@ const std::vector<QString> MCMCTab::infoText = {
 
 MCMCTab::MCMCTab(QWidget* parent) 
     : QWidget(parent), levelsTab_(nullptr), segmentsTab_(nullptr), 
-      isRunning(false), stepOffset(0), mcmcCompletedSuccessfully(false), mcmcWorkerThread(nullptr)
+      isRunning(false), stepOffset(0), mcmcCompletedSuccessfully(false)
 {
     // Create main layout
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
@@ -181,6 +181,73 @@ MCMCTab::MCMCTab(QWidget* parent)
     reset();
 }
 
+bool MCMCTab::isAutoPriorCategory(const QString& category) {
+    // Normalizations and energy shifts carry an experimental error in the
+    // segment definition, so AZURECalcMCMC::BuildAutoPriors() derives their
+    // priors from the data and overrides whatever this table holds.
+    return category == "norm" || category == "shift";
+}
+
+QString MCMCTab::categoryFromStoredName(const QString& name) {
+    // Names persisted in the .azr file have been through
+    // createPrettyParameterName(), which either produces "Segment N
+    // Normalization"/"... Energy Shift" or falls through to
+    // "Parameter (segment_N_norm)". Both forms are recognised here.
+    if(name.contains("norm", Qt::CaseInsensitive)) return "norm";
+    if(name.contains("shift", Qt::CaseInsensitive)) return "shift";
+    return "loaded";
+}
+
+int MCMCTab::paramIndexForRow(int row) const {
+    if(row < 0 || row >= tableRowToParam.size()) return -1;
+    return tableRowToParam[row];
+}
+
+void MCMCTab::refreshParameterTable() {
+    // Suppress itemChanged while rebuilding, or the handler writes the
+    // half-populated row back into mcmcParameters.
+    const bool wasBlocked = parametersTable->blockSignals(true);
+
+    // Only the parameters whose priors the user is responsible for: the level
+    // energies and widths. Normalizations and energy shifts are still sampled --
+    // AZURECalcMCMC derives their priors from the errors quoted in the segment
+    // definitions -- so there is nothing here for the user to fill in and a row
+    // for them would just be read-only clutter.
+    tableRowToParam.clear();
+    for(int i = 0; i < mcmcParameters.size(); i++) {
+        if(!mcmcParameters[i].autoPrior) tableRowToParam.append(i);
+    }
+
+    parametersTable->setRowCount(tableRowToParam.size());
+    for(int row = 0; row < tableRowToParam.size(); row++) {
+        const int i = tableRowToParam[row];
+        const MCMCParameter& param = mcmcParameters[i];
+
+        parametersTable->setItem(row, 0, new QTableWidgetItem(param.name));
+        parametersTable->item(row, 0)->setFlags(Qt::ItemIsEnabled);
+
+        parametersTable->setItem(row, 1, new QTableWidgetItem(QString::number(param.value, 'g', 6)));
+        parametersTable->item(row, 1)->setFlags(Qt::ItemIsEnabled);
+
+        QTableWidgetItem* meanItem = new QTableWidgetItem(QString::number(param.priorMean, 'g', 6));
+        QTableWidgetItem* stdItem = new QTableWidgetItem(QString::number(param.priorStd, 'g', 6));
+
+        QTableWidgetItem* checkItem = new QTableWidgetItem();
+        checkItem->setCheckState(param.useGaussianPrior ? Qt::Checked : Qt::Unchecked);
+
+        checkItem->setFlags(checkItem->flags() | Qt::ItemIsUserCheckable);
+
+        parametersTable->setItem(row, 2, meanItem);
+        parametersTable->setItem(row, 3, stdItem);
+        parametersTable->setItem(row, 4, checkItem);
+
+        parametersTable->setItem(row, 5, new QTableWidgetItem(param.category));
+        parametersTable->item(row, 5)->setFlags(Qt::ItemIsEnabled);
+    }
+
+    parametersTable->blockSignals(wasBlocked);
+}
+
 void MCMCTab::setupParameterTable() {
     parametersTable = new QTableWidget();
     parametersTable->setColumnCount(6);
@@ -225,14 +292,31 @@ void MCMCTab::setupSamplingControls(QWidget* samplingWidget) {
     chainSpreadSpinBox->setSingleStep(0.5);
     chainSpreadSpinBox->setDecimals(3);
     chainSpreadSpinBox->setSuffix("%");
+    chainSpreadSpinBox->setToolTip("Initial walker spread as a percentage of each parameter's value.\n"
+                                   "Applies to widths; level energies use the absolute spread below.");
     basicLayout->addWidget(chainSpreadSpinBox, 2, 1);
-    
-    basicLayout->addWidget(new QLabel("Number of Threads:"), 3, 0);
+
+    basicLayout->addWidget(new QLabel("Level Energy Spread:"), 3, 0);
+    energySpreadSpinBox = new QDoubleSpinBox();
+    energySpreadSpinBox->setRange(0.001, kMaxEnergySpreadKeV);
+    energySpreadSpinBox->setValue(kMaxEnergySpreadKeV);
+    energySpreadSpinBox->setSingleStep(0.1);
+    energySpreadSpinBox->setDecimals(3);
+    energySpreadSpinBox->setSuffix(" keV");
+    energySpreadSpinBox->setToolTip(
+        QString("Initial walker spread of the level energies, as an absolute\n"
+                "energy rather than a percentage. Capped at %1 keV: a percentage\n"
+                "of a several-MeV level energy scatters walkers across unrelated\n"
+                "resonance structures and the chain does not converge.")
+            .arg(kMaxEnergySpreadKeV));
+    basicLayout->addWidget(energySpreadSpinBox, 3, 1);
+
+    basicLayout->addWidget(new QLabel("Number of Threads:"), 4, 0);
     nThreadsSpinBox = new QSpinBox();
     nThreadsSpinBox->setRange(1, std::thread::hardware_concurrency());
     nThreadsSpinBox->setValue(std::min(4, (int)std::thread::hardware_concurrency())); // Default to 4 or max available
     nThreadsSpinBox->setToolTip(QString("Number of parallel threads (1-%1 available)").arg(std::thread::hardware_concurrency()));
-    basicLayout->addWidget(nThreadsSpinBox, 3, 1);
+    basicLayout->addWidget(nThreadsSpinBox, 4, 1);
     
     samplingLayout->addWidget(basicGroup);
     
@@ -330,6 +414,7 @@ void MCMCTab::reset() {
     nWalkersSpinBox->setValue(50);
     nStepsSpinBox->setValue(10000);
     chainSpreadSpinBox->setValue(5.0);
+    energySpreadSpinBox->setValue(kMaxEnergySpreadKeV);
     nThreadsSpinBox->setValue(std::min(4, (int)std::thread::hardware_concurrency()));
     
     statusLabel->setText("Ready to run MCMC sampling");
@@ -494,30 +579,51 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
             data->FillMnParams(azureParams.GetMinuitParams());
         }
 
+        // Automatic priors for the normalizations and energy shifts, keyed by
+        // segment. These mirror exactly what AZURECalcMCMC::BuildAutoPriors()
+        // derives at run time -- and the chi-squared penalties AZURECalc adds
+        // during a Minuit fit -- so what the table shows is what gets sampled.
+        // Collected before `data` is released.
+        QMap<int, QPair<double, double> > autoNormPrior;   // key -> (mean, sigma)
+        QMap<int, QPair<double, double> > autoShiftPrior;
+        {
+            std::vector<ESegment>& segments = data->GetSegments();
+            for(size_t s = 0; s < segments.size(); s++) {
+                const int key = segments[s].GetSegmentKey();
+                // GetNormError() is a percentage of the nominal normalization.
+                const double nominalNorm = segments[s].GetNominalNorm();
+                autoNormPrior[key] = qMakePair(
+                    nominalNorm, nominalNorm / 100.0 * segments[s].GetNormError());
+                autoShiftPrior[key] = qMakePair(
+                    segments[s].GetNominalEnergyShift(),
+                    segments[s].GetEnergyShiftError());
+            }
+        }
+
         // Clean up temporary objects
         delete compound;
         delete data;
-        
+
         const ROOT::Minuit2::MnUserParameters& minuitParams = azureParams.GetMinuitParams();
-        
+
         int mcmcParamIndex = 0;
-        
+
         // Iterate through ALL parameters in AZUREParams order
         for(unsigned int i = 0; i < minuitParams.Params().size(); i++) {
-            
+
             // ONLY include non-fixed parameters (same logic as AZURECalcMCMC)
             if(!minuitParams.Parameter(i).IsFixed()) {
                 QString paramName = QString::fromStdString(minuitParams.GetName(i));
                 double value = minuitParams.Value(i);
-                double error = minuitParams.Error(i);
-                
+
                 MCMCParameter param;
                 param.name = createPrettyParameterName(paramName, nullptr, nullptr, -1);
                 param.value = value;  // Use current RWA value
                 param.priorMean = value;
                 param.priorStd = std::abs(value) * 0.1; // Use error if available, else 10%
                 param.useGaussianPrior = false;
-                
+                param.autoPrior = false;
+
                 // Determine category based on parameter name
                 if(paramName.contains("norm", Qt::CaseInsensitive)) {
                     param.category = "norm";
@@ -531,37 +637,55 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
                         param.category = "level";
                     }
                 }
-                
+
+                // Parameter names are "segment_<key>_norm" and
+                // "segment_<key>_energy_shift" (see EData::FillMnParams).
+                if(isAutoPriorCategory(param.category)) {
+                    const QStringList tokens = paramName.split('_');
+                    bool haveKey = false;
+                    int segmentKey = tokens.size() > 1 ? tokens[1].toInt(&haveKey) : 0;
+
+                    const QMap<int, QPair<double, double> >& source =
+                        (param.category == "norm") ? autoNormPrior : autoShiftPrior;
+
+                    if(haveKey && source.contains(segmentKey)) {
+                        param.priorMean = source[segmentKey].first;
+                        param.priorStd = source[segmentKey].second;
+                        // A segment with no quoted error gets no prior rather
+                        // than an invented width.
+                        param.useGaussianPrior = (param.priorStd > 0.0);
+                        param.autoPrior = true;
+                    }
+                }
+
                 param.minuitIndex = mcmcParamIndex++; // Sequential index for MCMC array
                 param.levelIndex = -1;
                 param.channelIndex = -1;
-                
+
                 mcmcParameters.append(param);
             }
         }
+
+        // Tell the user which parameters are still their responsibility.
+        int nAuto = 0, nUserNeeded = 0, nUserSet = 0;
+        for(const MCMCParameter& param : mcmcParameters) {
+            if(param.autoPrior) {
+                nAuto++;
+            } else {
+                nUserNeeded++;
+                if(param.useGaussianPrior && param.priorStd > 0.0) nUserSet++;
+            }
+        }
+        logTextEdit->append(QString("Automatic priors set for %1 normalization/energy-shift "
+                                    "parameter(s) from the quoted experimental errors").arg(nAuto));
+        if(nUserSet < nUserNeeded) {
+            logTextEdit->append(QString("Note: %1 of %2 level-energy/width parameter(s) have no "
+                                        "prior. Define them in this table if the chain wanders.")
+                                    .arg(nUserNeeded - nUserSet).arg(nUserNeeded));
+        }
         
         // Update parameter table display
-        parametersTable->setRowCount(mcmcParameters.size());
-        for(int i = 0; i < mcmcParameters.size(); i++) {
-            const MCMCParameter& param = mcmcParameters[i];
-            
-            parametersTable->setItem(i, 0, new QTableWidgetItem(param.name));
-            parametersTable->item(i, 0)->setFlags(Qt::ItemIsEnabled);
-            
-            parametersTable->setItem(i, 1, new QTableWidgetItem(QString::number(param.value, 'g', 6)));
-            parametersTable->item(i, 1)->setFlags(Qt::ItemIsEnabled);
-            
-            parametersTable->setItem(i, 2, new QTableWidgetItem(QString::number(param.priorMean, 'g', 6)));
-            parametersTable->setItem(i, 3, new QTableWidgetItem(QString::number(param.priorStd, 'g', 6)));
-            
-            QTableWidgetItem* checkItem = new QTableWidgetItem();
-            checkItem->setCheckState(param.useGaussianPrior ? Qt::Checked : Qt::Unchecked);
-            checkItem->setFlags(checkItem->flags() | Qt::ItemIsUserCheckable);
-            parametersTable->setItem(i, 4, checkItem);
-            
-            parametersTable->setItem(i, 5, new QTableWidgetItem(param.category));
-            parametersTable->item(i, 5)->setFlags(Qt::ItemIsEnabled);
-        }
+        refreshParameterTable();
         
         logTextEdit->append(QString("Loaded %1 non-fixed parameters from current AZUREParams (RWA mode)")
                            .arg(mcmcParameters.size()));
@@ -642,17 +766,15 @@ void MCMCTab::parameterItemChanged(QTableWidgetItem* item) {
     // Handle parameter table changes - use the actual changed item
     if(!item) return;
     
-    int row = parametersTable->row(item);
-    if(row >= 0 && row < mcmcParameters.size()) {
-        updateParameterFromTable(row);
-    }
+    updateParameterFromTable(parametersTable->row(item));
 }
 
 void MCMCTab::updateParameterFromTable(int row) {
-    if(row < 0 || row >= mcmcParameters.size()) return;
-    
-    MCMCParameter& param = mcmcParameters[row];
-    
+    const int index = paramIndexForRow(row);
+    if(index < 0 || index >= mcmcParameters.size()) return;
+
+    MCMCParameter& param = mcmcParameters[index];
+
     // Update prior mean (column 2) if item exists
     QTableWidgetItem* priorMeanItem = parametersTable->item(row, 2);
     if(priorMeanItem) {
@@ -681,6 +803,7 @@ bool MCMCTab::writeMCMCSettings(QTextStream& outStream) {
     outStream << "nwalkers " << nWalkersSpinBox->value() << "\n";
     outStream << "nsteps " << nStepsSpinBox->value() << "\n";
     outStream << "chainspread " << chainSpreadSpinBox->value() << "\n";
+    outStream << "energyspread " << energySpreadSpinBox->value() << "\n";
     outStream << "nthreads " << nThreadsSpinBox->value() << "\n";
     outStream << "usereducedwidths " << (useReducedWidthsCheckBox->isChecked() ? "1" : "0") << "\n";
     
@@ -742,7 +865,12 @@ bool MCMCTab::readMCMCSettings(QTextStream& inStream) {
                 QStringList nameParts = parts.mid(0, numParts - 4);
                 param.name = nameParts.join(" ");
                 
-                param.category = "loaded"; // Will be updated when loaded from fitting tab
+                // The stored name still identifies norm/shift parameters, whose
+                // priors come from the data rather than from the user. The
+                // values stored here are the automatic ones written at save
+                // time; a run re-derives them from the segments regardless.
+                param.category = categoryFromStoredName(param.name);
+                param.autoPrior = isAutoPriorCategory(param.category);
                 param.minuitIndex = -1;
                 param.levelIndex = -1;
                 param.channelIndex = -1;
@@ -763,7 +891,8 @@ bool MCMCTab::readMCMCSettings(QTextStream& inStream) {
                 param.name = nameParts.join(" ");
                 
                 param.value = param.priorMean; // Legacy: set current value to prior mean
-                param.category = "loaded";
+                param.category = categoryFromStoredName(param.name);
+                param.autoPrior = isAutoPriorCategory(param.category);
                 param.minuitIndex = -1;
                 param.levelIndex = -1;
                 param.channelIndex = -1;
@@ -783,6 +912,11 @@ bool MCMCTab::readMCMCSettings(QTextStream& inStream) {
                     nStepsSpinBox->setValue(value.toInt());
                 } else if(key == "chainspread") {
                     chainSpreadSpinBox->setValue(value.toDouble());
+                } else if(key == "energyspread") {
+                    // Older .azr files predate this setting; the spin box keeps
+                    // its default in that case.
+                    energySpreadSpinBox->setValue(
+                        std::min(value.toDouble(), kMaxEnergySpreadKeV));
                 } else if(key == "nthreads") {
                     nThreadsSpinBox->setValue(value.toInt());
                 } else if(key == "usereducedwidths") {
@@ -793,27 +927,7 @@ bool MCMCTab::readMCMCSettings(QTextStream& inStream) {
     }
     
     // Update the parameters table display
-    parametersTable->setRowCount(mcmcParameters.size());
-    for(int i = 0; i < mcmcParameters.size(); i++) {
-        const MCMCParameter& param = mcmcParameters[i];
-        
-        parametersTable->setItem(i, 0, new QTableWidgetItem(param.name));
-        parametersTable->item(i, 0)->setFlags(Qt::ItemIsEnabled);
-        
-        parametersTable->setItem(i, 1, new QTableWidgetItem(QString::number(param.value, 'g', 6)));
-        parametersTable->item(i, 1)->setFlags(Qt::ItemIsEnabled);
-        
-        parametersTable->setItem(i, 2, new QTableWidgetItem(QString::number(param.priorMean, 'g', 6)));
-        parametersTable->setItem(i, 3, new QTableWidgetItem(QString::number(param.priorStd, 'g', 6)));
-        
-        QTableWidgetItem* checkItem = new QTableWidgetItem();
-        checkItem->setCheckState(param.useGaussianPrior ? Qt::Checked : Qt::Unchecked);
-        checkItem->setFlags(checkItem->flags() | Qt::ItemIsUserCheckable);
-        parametersTable->setItem(i, 4, checkItem);
-        
-        parametersTable->setItem(i, 5, new QTableWidgetItem(param.category));
-        parametersTable->item(i, 5)->setFlags(Qt::ItemIsEnabled);
-    }
+    refreshParameterTable();
     
     // After reading MCMC settings, update parameter values from fitting tab
     // This ensures we have the most recent parameter values from the parameterSettings section
@@ -1015,13 +1129,9 @@ bool MCMCTab::readParameterValuesFromConfigFile(const QString& configFilePath) {
     
     if(updatedParameters > 0) {
         logTextEdit->append(QString("Updated %1 parameter values from config file").arg(updatedParameters));
-        // Update the parameter table display
-        for(int i = 0; i < mcmcParameters.size(); i++) {
-            const MCMCParameter& param = mcmcParameters[i];
-            if(parametersTable->rowCount() > i) {
-                parametersTable->setItem(i, 1, new QTableWidgetItem(QString::number(param.value, 'g', 6)));
-            }
-        }
+        // Update the parameter table display. Rebuilding is simpler and keeps the
+        // row-to-parameter mapping in one place.
+        refreshParameterTable();
         return true;
     } else {
         logTextEdit->append("No matching parameters found in config file");

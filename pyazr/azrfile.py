@@ -106,6 +106,10 @@ class AzrChannel:
     @property
     def is_photon(self):   return self.ptype != 0
     @property
+    def channel_radius(self): return self._get("chRad", float)
+    @channel_radius.setter
+    def channel_radius(self, v): self._set("chRad", float(v))
+    @property
     def active(self):      return self._get("isActive", lambda v: int(float(v))) != 0
 
     # pair physics -- the same quantities GET_PAIRS_INFO reports at runtime, but
@@ -244,6 +248,33 @@ class AzrModel:
         if cur:
             levels.append(AzrLevel(cur))
         return cls(prefix, levels, suffix, source=path)
+
+    def set_output_dir(self, path):
+        """Point the model's ``<config>`` output directory somewhere else.
+
+        AZURE2 writes its results *and* its external-capture integral caches
+        (``intEC.dat`` / ``intEC.extrap``) here.  Giving an edited model its own
+        directory keeps it from overwriting the main run's outputs -- and, since
+        the cache is only valid for the grid it was built on, keeps a variant's
+        integrals from being read back into a run with different segments.
+
+        The directory is created if it does not exist; AZURE2 does not create it
+        and fails quietly otherwise.
+        """
+        path = str(path)
+        if not path.endswith("/"):
+            path += "/"
+        os.makedirs(path, exist_ok=True)
+        lines = self._prefix.splitlines(keepends=True)
+        for i, line in enumerate(lines):
+            if line.rstrip().endswith("#Full Path to Output Directory"):
+                comment = line[line.index("#"):]
+                lines[i] = f"{path:<100}{comment}"
+                break
+        else:
+            raise ValueError("no output-directory line in the <config> block.")
+        self._prefix = "".join(lines)
+        return self
 
     def to_text(self):
         self._renumber()
@@ -415,6 +446,55 @@ class AzrModel:
         level.channels.append(ch)
         return ch
 
+    # -- channel radius -------------------------------------------------------
+
+    def channel_radii(self):
+        """``{pair: radius}`` in fm, for every particle pair in the file."""
+        out = {}
+        for lv in self.levels:
+            for c in lv.channels:
+                if not c.is_photon:
+                    out[c.pair] = c.channel_radius
+        return dict(sorted(out.items()))
+
+    def set_channel_radius(self, pair, radius):
+        """Set the channel radius (fm) of one particle pair, on every line.
+
+        AZURE2 stores the radius per channel line, so it must be written to all
+        of them or the model is inconsistent; this does that and returns the
+        number of lines changed.
+
+        The radius is the matching surface between the internal R-matrix region
+        and the external Coulomb solutions, so changing it changes the
+        penetrabilities, shift functions, boundary conditions, Wigner limits and
+        the lower limit of every external-capture integral. A reduced width
+        therefore *means* something different afterwards, and the level scheme
+        is no longer fitted -- **refit before reading anything off the result**.
+        Delete ``output/intEC.dat`` / ``output/intEC.extrap`` (or write the new
+        model into its own output directory) so the cached external-capture
+        integrals, which belong to the old radius, cannot be reused.
+
+        >>> mdl = AzrModel.from_file("7Be.azr")
+        >>> mdl.channel_radii()                 # {1: 4.24151, 2: 3.94396, 3: 3.94396}
+        >>> mdl.set_channel_radius(1, 5.0)      # 3He+alpha
+        >>> path = mdl.write("a5.0.azr")
+        """
+        radius = float(radius)
+        if not radius > 0:
+            raise ValueError(f"channel radius must be positive, got {radius}.")
+        pair = int(pair)
+        changed = 0
+        for lv in self.levels:
+            for c in lv.channels:
+                if c.pair == pair and not c.is_photon:
+                    c.channel_radius = radius
+                    changed += 1
+        if not changed:
+            raise KeyError(
+                f"pair {pair} has no particle channel in this model "
+                f"(radii: {self.channel_radii()}).")
+        return changed
+
     # -- level activation -----------------------------------------------------
 
     def deactivate_level(self, jpi=None, energy=None, index=None, tol=1e-3):
@@ -528,6 +608,35 @@ class AzrModel:
             self.add_extrapolation(**spec)
         return self
 
+    def keep_extrapolations(self, keys):
+        """Drop every ``<segmentsTest>`` line except the given 1-based ``keys``,
+        in the order they are listed here.
+
+        The surviving lines are copied verbatim, so the grids are exactly the
+        ones the file declares.  AZURE2 re-evaluates *every* active segment on
+        each forward pass, so trimming the block to the handful you actually
+        want is what makes a finite-difference uncertainty band affordable --
+        see :func:`pyazr.bands.extrapolation_bands`.
+
+        Note this invalidates ``output/intEC.extrap``: AZURE2 caches the
+        external-capture integrals there and reuses them on a changed grid,
+        silently corrupting the result.  Delete it before running the edited
+        model.
+        """
+        lines = self._suffix.splitlines()
+        try:
+            start = lines.index("<segmentsTest>") + 1
+            end = lines.index("</segmentsTest>")
+        except ValueError:
+            raise ValueError("no <segmentsTest> block to trim.")
+        body = [ln for ln in lines[start:end] if ln.strip()]
+        missing = [k for k in keys if not 1 <= k <= len(body)]
+        if missing:
+            raise KeyError(f"<segmentsTest> has {len(body)} segments; no "
+                           f"{missing}.")
+        self._splice_segments_test([body[k - 1] for k in keys])
+        return self
+
     # -- segment normalizations (edits the <segmentsData> block) --------------
 
     def set_segment_norm(self, file_substr, vary=None, sys_error=None):
@@ -564,25 +673,63 @@ class AzrModel:
             raise KeyError(f"no <segmentsData> line matches {file_substr!r}.")
         return changed
 
-    def apply_fit(self, parameters, x):
-        """Write a fitted free-parameter vector into the levels block.
+    def apply_fit(self, parameters, x, transform=None, physical=False):
+        """Write a fitted parameter vector into the levels block.
 
-        ``parameters`` is a model's ``azure2.parameters`` (metadata) and ``x`` is
-        the fitted free-parameter vector (``params_rwa`` order).  Each free
-        level energy and reduced width is written into the matching level /
-        channel (matched by 2J, parity, input energy, and channel pair/L/S), so
-        the file becomes a snapshot of the fit -- the reference to reuse.
+        **The ``gamma`` field of a ``<levels>`` line is not a reduced-width
+        amplitude.**  It holds the same *physical* value AZURE2 prints in
+        ``parameters.out`` and shows in the GUI: a partial width in eV for an
+        open particle channel, an ANC in fm^-1/2 for a closed (sub-threshold)
+        one, and a partial width in eV for a photon channel.  Writing an rwa
+        there produces a file that loads without complaint and is wrong -- for
+        the 7Be model the two differ by factors of 10^2 to 10^7.
+
+        So ``x`` (a free vector in ``params_rwa`` order) must be converted
+        first.  Either hand over the transform and let this do it:
+
+        >>> mdl.apply_fit(m.parameters, x_best, transform=m.transform_rwa)
+
+        or convert yourself and say so:
+
+        >>> mdl.apply_fit(m.parameters, m.transform_rwa(x_best), physical=True)
+
+        Passing neither raises, rather than silently writing an rwa.  Level
+        energies need no conversion (the transform leaves them alone) and are
+        written straight through.  Matching is by 2J, parity, the level's input
+        energy, and the channel's pair/L/S.
+
+        Note this covers ``<levels>`` only -- normalizations are not in the
+        levels block, so a fit that moved them needs its ``param.sav`` too.
+        The number of values written is left in :attr:`applied`.
         """
+        if transform is None and not physical:
+            raise ValueError(
+                "apply_fit needs physical values, not reduced-width amplitudes: "
+                "pass transform=m.transform_rwa, or convert with "
+                "m.transform_rwa(x) yourself and pass physical=True.")
+        if transform is not None:
+            if physical:
+                raise ValueError("pass transform= or physical=True, not both.")
+            x = transform(x)
+
         def key(J, parity, E):
             return (int(round(2 * J)), int(parity),
                     round(E, 2) if E is not None else None)
 
         lvlmap = {}
         for lv in self.levels:
-            lvlmap.setdefault(key(lv.J, lv.parity, lv.energy), lv)
+            # a level at Ex = 0 comes back with level_energy None from the API
+            # (its sentinel), so index it under both spellings
+            k = key(lv.J, lv.parity, lv.energy)
+            lvlmap.setdefault(k, lv)
+            if k[2] == 0.0:
+                lvlmap.setdefault((k[0], k[1], None), lv)
 
+        written = 0
         for p in parameters:
             if p.fixed or p.free_index is None or p.J is None:
+                continue
+            if p.free_index >= len(x):
                 continue
             lv = lvlmap.get(key(p.J, p.parity, p.level_energy))
             if lv is None:
@@ -590,12 +737,15 @@ class AzrModel:
             v = float(x[p.free_index])
             if p.kind == "energy":
                 lv.set_energy(v)
+                written += 1
             elif p.kind == "width":
                 for c in lv.channels:
                     if (c.pair == p.pair and c.L == p.L
                             and abs(c.S - (p.S or 0.0)) < 1e-6):
                         c.gamma = v
+                        written += 1
                         break
+        self.applied = written
         return self
 
     def set_segment_datafile(self, file_substr, new_path):

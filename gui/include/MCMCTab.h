@@ -22,8 +22,6 @@ class EData;
 class LevelsModel;
 class ChannelsModel;
 class SegmentsDataModel;
-class MCMCWorkerThread;
-struct MCMCSamplingParameters;
 
 QT_BEGIN_NAMESPACE
 
@@ -45,18 +43,28 @@ class QComboBox;
 
 QT_END_NAMESPACE
 
+// Upper bound on the initial spread of a level-energy parameter, in keV. Level
+// energies cannot be scattered by a percentage of their value the way widths
+// are: tens of keV of scatter puts walkers on unrelated resonance structures
+// and the ensemble never contracts.
+const double kMaxEnergySpreadKeV = 1.0;
+
 struct MCMCParameter {
     QString name;
-    double value;
-    double priorMean;
-    double priorStd;
-    bool useGaussianPrior;
-    QString category; // "level", "norm", "shift"
-    int minuitIndex;
-    
+    double value = 0.0;
+    double priorMean = 0.0;
+    double priorStd = 0.0;
+    bool useGaussianPrior = false;
+    QString category; // "level", "level_rwa", "norm", "shift"
+    int minuitIndex = -1;
+
+    // Normalizations and energy shifts carry a prior derived from the error
+    // quoted in the segment definition, so the user does not edit theirs.
+    bool autoPrior = false;
+
     // For level parameters
-    int levelIndex;
-    int channelIndex;
+    int levelIndex = -1;
+    int channelIndex = -1;
 };
 
 class MCMCTab : public QWidget {
@@ -74,6 +82,7 @@ public:
     QSpinBox* nWalkersSpinBox;
     QSpinBox* nStepsSpinBox;
     QDoubleSpinBox* chainSpreadSpinBox;
+    QDoubleSpinBox* energySpreadSpinBox;
     QSpinBox* nThreadsSpinBox;
     QPushButton* runButton;
     QPushButton* stopButton;
@@ -82,6 +91,16 @@ public:
     QTableWidget* parametersTable;
     QTextEdit* logTextEdit;
     QLabel* currentIterationLabel;
+
+    /*! Every varying parameter, in AZUREParams order.
+     *
+     * This -- not the table -- is the parameter list. The table shows only the
+     * level energies and widths, the ones whose priors the user sets; the
+     * normalizations and energy shifts are still sampled, with priors that
+     * AZURECalcMCMC derives from the segment errors. The sampled vector has to
+     * cover *all* varying parameters in order, so anything building it must read
+     * this list rather than counting table rows. */
+    const QList<MCMCParameter>& parameters() const {return mcmcParameters;};
 
 public slots:
     void showInfo(int which = 0, QString title = "");
@@ -103,6 +122,10 @@ private slots:
 
 private:
     void setupParameterTable();
+    void refreshParameterTable(); // Rebuild the table rows from mcmcParameters
+    int paramIndexForRow(int row) const; // Table row -> index into mcmcParameters
+    static bool isAutoPriorCategory(const QString& category); // norm / shift
+    static QString categoryFromStoredName(const QString& name); // for .azr reload
     void setupSamplingControls(QWidget* samplingWidget);
     void setupProgressControls();
     void updateParameterFromTable(int row);
@@ -143,6 +166,9 @@ private:
     
     // Data storage
     QList<MCMCParameter> mcmcParameters;
+    // Table row -> mcmcParameters index. The table omits the auto-prior
+    // (normalization / energy shift) parameters, so the two are not 1:1.
+    QList<int> tableRowToParam;
     
     // Tab references
     LevelsTab* levelsTab_;
@@ -156,9 +182,6 @@ private:
     // Timing for estimated time remaining
     std::chrono::steady_clock::time_point startTime;
     std::chrono::steady_clock::time_point lastUpdateTime;
-    
-    // MCMC worker thread
-    MCMCWorkerThread* mcmcWorkerThread;
     
 #ifdef USE_MCMC
     // MCMC results storage

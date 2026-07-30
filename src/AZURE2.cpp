@@ -447,10 +447,16 @@ void getTemperatureFile(bool useReadline, Config& configure) {
  */
 
 #ifdef USE_MCMC
+// Upper bound on the initial spread of a level-energy parameter, in keV.
+// Scattering level energies by a percentage of their value puts walkers on
+// unrelated resonance structures and the ensemble never contracts.
+static const double kMaxEnergySpreadKeV = 1.0;
+
 struct MCMCParams {
   int nwalkers;
   int nsteps;
   double chainSpread;
+  double energySpreadKeV;
   int nthreads;
   bool useRWA;
   bool overwriteSamples;
@@ -460,6 +466,7 @@ void getMCMCParams(Config& configure, MCMCParams& mcmcParams) {
   mcmcParams.nwalkers = 0;
   mcmcParams.nsteps = 0;
   mcmcParams.chainSpread = -1.0;  // Will be prompted
+  mcmcParams.energySpreadKeV = -1.0;  // Will be prompted
   mcmcParams.nthreads = 1;
   mcmcParams.useRWA = false;
 
@@ -501,6 +508,27 @@ void getMCMCParams(Config& configure, MCMCParams& mcmcParams) {
     stm.str(inString);
     if(!(stm >> mcmcParams.chainSpread) || mcmcParams.chainSpread <= 0.0 || mcmcParams.chainSpread > 50.0)
       configure.outStream << "Please enter a number between 0.001 and 50, or press Enter for default (5%)." << std::endl;
+  }
+
+  // Get the initial spread of the level energies, which is absolute rather than
+  // a percentage of the level energy.
+  while(mcmcParams.energySpreadKeV <= 0.0 || mcmcParams.energySpreadKeV > kMaxEnergySpreadKeV) {
+    configure.outStream << std::setw(38) << "Level Energy Spread keV (0.001-1) [default=1]: ";
+    std::string inString;
+    getline(std::cin, inString);
+
+    // Allow empty input for default
+    if(inString.empty() || inString.find_first_not_of(" \t\n") == std::string::npos) {
+      mcmcParams.energySpreadKeV = kMaxEnergySpreadKeV;
+      break;
+    }
+
+    std::istringstream stm;
+    stm.str(inString);
+    if(!(stm >> mcmcParams.energySpreadKeV) || mcmcParams.energySpreadKeV <= 0.0 ||
+       mcmcParams.energySpreadKeV > kMaxEnergySpreadKeV)
+      configure.outStream << "Please enter a number between 0.001 and " << kMaxEnergySpreadKeV
+                          << ", or press Enter for default (1 keV)." << std::endl;
   }
 
   // Get number of threads
@@ -1215,6 +1243,7 @@ int runMCMC(Config& configure, const MCMCParams& mcmcParams) {
     configure.outStream << "  Number of walkers: " << mcmcParams.nwalkers << std::endl;
     configure.outStream << "  Number of steps: " << mcmcParams.nsteps << std::endl;
     configure.outStream << "  Initial parameter spread: " << mcmcParams.chainSpread << "%" << std::endl;
+    configure.outStream << "  Level energy spread: " << mcmcParams.energySpreadKeV << " keV" << std::endl;
     configure.outStream << "  Number of threads: " << mcmcParams.nthreads << std::endl;
     configure.outStream << "  Parameter mode: " << (mcmcParams.useRWA ? "RWA" : "Physical") << std::endl;
     configure.outStream << "  Number of free parameters: " << initialParams.size() << std::endl;
@@ -1239,7 +1268,8 @@ int runMCMC(Config& configure, const MCMCParams& mcmcParams) {
     // Run MCMC sampling
     std::vector<std::vector<double>> samples;
     mcmcCalc.RunMCMCSampling(mcmcParams.nwalkers, mcmcParams.nsteps, initialParams,
-                             samples, mcmcParams.chainSpread, mcmcParams.nthreads, mcmcParams.useRWA);
+                             samples, mcmcParams.chainSpread, mcmcParams.nthreads, mcmcParams.useRWA,
+                             mcmcParams.energySpreadKeV);
 
     // Clear callbacks
     AZURECalcMCMC::SetGUIProgressCallback(nullptr);

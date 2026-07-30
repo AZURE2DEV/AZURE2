@@ -54,18 +54,54 @@ class AZURECalcMCMC {
   double LogProbabilityPhysical(const std::vector<double>& physicalParams) const;
   
   /*!
-   * Run MCMC sampling with specified parameters.
+   * Kind of a fit parameter, mirroring the type codes of
+   * AZUREAPI::GetParameterInfo.
    */
-  void RunMCMCSampling(int nwalkers, int nsteps, const std::vector<double>& initialParams, 
-                       std::vector<std::vector<double>>& samples, double chainSpreadPercent = 1.0, int nthreads = 1, bool useRWA = false) const;
+  enum ParamKind { PARAM_ENERGY = 0, PARAM_WIDTH = 1, PARAM_NORM = 2, PARAM_SHIFT = 3 };
+
+  /*!
+   * Run MCMC sampling with specified parameters.
+   *
+   * energySpreadKeV bounds the initial walker spread of the level-energy
+   * parameters in keV.  Level energies must not be scattered by a percentage of
+   * their value the way widths are: a few tens of keV of scatter puts walkers on
+   * completely different resonance structures and the ensemble never contracts.
+   */
+  void RunMCMCSampling(int nwalkers, int nsteps, const std::vector<double>& initialParams,
+                       std::vector<std::vector<double>>& samples, double chainSpreadPercent = 1.0, int nthreads = 1, bool useRWA = false,
+                       double energySpreadKeV = 1.0) const;
 
   /*!
    * Set prior information for parameters.
+   *
+   * Indexed over the *varying* (non-fixed) parameters, in AZUREParams order.
+   * Entries belonging to normalizations and energy shifts are subsequently
+   * overwritten by BuildAutoPriors(), which derives them from the data.
    */
-  void SetPriors(const std::vector<double>& priorMeans, 
+  void SetPriors(const std::vector<double>& priorMeans,
                  const std::vector<double>& priorStds,
                  const std::vector<bool>& usePriors);
-  
+
+  /*!
+   * Classify every varying parameter and derive the automatic Gaussian priors
+   * for normalizations and energy shifts from the experimental errors quoted in
+   * the segment definitions.
+   *
+   * The priors reproduce exactly the chi-squared penalties that AZURECalc adds
+   * during a Minuit fit -- ((norm - nominal)/(nominal/100 * normError))^2 and
+   * ((shift - nominal)/shiftError)^2 -- so a posterior mode coincides with a
+   * fit minimum.  Level energies and widths are left to the user, since no
+   * error on them is implied by the data.
+   *
+   * Requires UpdateParameterVectors() to have run first.
+   */
+  void BuildAutoPriors() const;
+
+  /*!
+   * Parameter kind of each varying parameter; empty until BuildAutoPriors().
+   */
+  const std::vector<int>& VaryingParamKinds() const {return freeKinds_;};
+
   /*!
    * Calculate log-prior contribution for given parameters.
    */
@@ -168,10 +204,13 @@ class AZURECalcMCMC {
   mutable std::vector<bool> fixed_;
   mutable bool parametersInitialized_;
   
-  // Prior information for Bayesian analysis
+  // Prior information for Bayesian analysis, indexed over varying parameters
   mutable std::vector<double> priorMeans_;
   mutable std::vector<double> priorStds_;
   mutable std::vector<bool> usePriors_;
+
+  // ParamKind of each varying parameter, filled by BuildAutoPriors()
+  mutable std::vector<int> freeKinds_;
   
   // Object pools for memory reuse
   mutable std::stack<std::unique_ptr<CNuc>> cnuc_pool_;

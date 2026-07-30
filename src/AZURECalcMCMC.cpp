@@ -28,15 +28,17 @@ static int g_nwalkers = 0;
 static int g_current_step = 0;
 static volatile int g_samples_written_to_file = 0; // Atomic counter of samples actually written to file
 static volatile bool g_stop_requested = false;
-// Store the last calculated likelihood and prior for progress callbacks
+// Step index this run started from, so a resumed run keeps numbering the chain
+// where the previous one stopped.
+static int g_step_offset = 0;
+// Best-walker values of the most recent completed step, for progress callbacks
 static double g_last_likelihood = 0.0;
 static double g_last_prior = 0.0;
+static double g_last_logprob = 0.0;
 static std::vector<double> g_last_params;
 static std::vector<std::string> g_param_names;
-// Mutex for thread-safe file writing
 #ifdef _OPENMP
 #include <omp.h>
-static omp_lock_t g_file_lock;
 #endif
 
 double AZURECalcMCMC::CalculateLogLikelihood(const vector_r& p) const {
@@ -345,12 +347,142 @@ double AZURECalcMCMC::LogProbabilityPhysical(const std::vector<double>& physical
   return logLikelihood + logPrior;
 }
 
-void AZURECalcMCMC::SetPriors(const std::vector<double>& priorMeans, 
+void AZURECalcMCMC::SetPriors(const std::vector<double>& priorMeans,
                               const std::vector<double>& priorStds,
                               const std::vector<bool>& usePriors) {
   priorMeans_ = priorMeans;
   priorStds_ = priorStds;
   usePriors_ = usePriors;
+}
+
+void AZURECalcMCMC::BuildAutoPriors() const {
+
+  if(!parametersInitialized_) {
+    configure().outStream << "Warning: BuildAutoPriors() called before parameters were "
+                          << "initialized; automatic priors skipped.\n";
+    return;
+  }
+
+  // Walk the parameters in exactly the order CNuc::FillMnParams and then
+  // EData::FillMnParams add them, which is the order fixed_ is indexed in:
+  //   per J-group, per level: one energy, then one width per channel
+  //   one norm per segment with IsVaryNorm()
+  //   one energy shift per segment (all segments)
+  // AZUREAPI::GetParameterInfo() walks the same sequence.
+  std::vector<int> allKinds;
+  std::vector<double> allAutoMean;
+  std::vector<double> allAutoStd;   // <= 0 means "no automatic prior available"
+
+  CNuc* nuc = compound();
+  for(int j = 1; j <= nuc->NumJGroups(); ++j) {
+    JGroup* jgroup = nuc->GetJGroup(j);
+    for(int la = 1; la <= jgroup->NumLevels(); ++la) {
+      allKinds.push_back(PARAM_ENERGY);
+      allAutoMean.push_back(0.0);
+      allAutoStd.push_back(-1.0);
+      for(int ch = 1; ch <= jgroup->NumChannels(); ++ch) {
+        allKinds.push_back(PARAM_WIDTH);
+        allAutoMean.push_back(0.0);
+        allAutoStd.push_back(-1.0);
+      }
+    }
+  }
+
+  std::vector<ESegment>& segments = data()->GetSegments();
+
+  // Normalizations. GetNormError() is a percentage of the nominal norm; this
+  // reproduces the penalty AZURECalc::operator() adds during a Minuit fit.
+  for(size_t s = 0; s < segments.size(); ++s) {
+    if(segments[s].IsVaryNorm()) {
+      double nominal = segments[s].GetNominalNorm();
+      allKinds.push_back(PARAM_NORM);
+      allAutoMean.push_back(nominal);
+      allAutoStd.push_back(nominal / 100.0 * segments[s].GetNormError());
+    }
+  }
+
+  // Energy shifts, one per segment whether it varies or not.
+  for(size_t s = 0; s < segments.size(); ++s) {
+    allKinds.push_back(PARAM_SHIFT);
+    allAutoMean.push_back(segments[s].GetNominalEnergyShift());
+    allAutoStd.push_back(segments[s].GetEnergyShiftError());
+  }
+
+  if(allKinds.size() != fixed_.size()) {
+    configure().outStream << "Warning: parameter classification produced "
+                          << allKinds.size() << " entries but there are "
+                          << fixed_.size() << " parameters; automatic priors "
+                          << "skipped to avoid mis-assigning them.\n";
+    freeKinds_.clear();
+    return;
+  }
+
+  // Compress to the varying parameters, which is how the priors and the
+  // sampled vector are indexed.
+  freeKinds_.clear();
+  std::vector<double> freeAutoMean;
+  std::vector<double> freeAutoStd;
+  for(size_t i = 0; i < fixed_.size(); ++i) {
+    if(!fixed_[i]) {
+      freeKinds_.push_back(allKinds[i]);
+      freeAutoMean.push_back(allAutoMean[i]);
+      freeAutoStd.push_back(allAutoStd[i]);
+    }
+  }
+
+  const size_t nfree = freeKinds_.size();
+
+  // Any priors the caller set cover the varying parameters; grow them to the
+  // full length so the loop below can index them unconditionally.
+  priorMeans_.resize(nfree, 0.0);
+  priorStds_.resize(nfree, 0.0);
+  usePriors_.resize(nfree, false);
+
+  int nAutoNorm = 0, nAutoShift = 0, nNoError = 0, nUserNeeded = 0, nUserSet = 0;
+
+  for(size_t i = 0; i < nfree; ++i) {
+    const int kind = freeKinds_[i];
+
+    if(kind == PARAM_NORM || kind == PARAM_SHIFT) {
+      // Derived from the data, so it always wins over whatever the GUI holds.
+      if(freeAutoStd[i] > 0.0) {
+        priorMeans_[i] = freeAutoMean[i];
+        priorStds_[i] = freeAutoStd[i];
+        usePriors_[i] = true;
+        if(kind == PARAM_NORM) nAutoNorm++; else nAutoShift++;
+      } else {
+        // No experimental error quoted: nothing to build a prior from, so the
+        // parameter stays uniform rather than getting an invented width.
+        usePriors_[i] = false;
+        nNoError++;
+      }
+    } else {
+      // Level energies and widths: the user's business.
+      nUserNeeded++;
+      if(usePriors_[i] && priorStds_[i] > 0.0) nUserSet++;
+    }
+  }
+
+  configure().outStream << "Automatic priors: " << nAutoNorm << " normalization"
+                        << (nAutoNorm == 1 ? "" : "s") << ", " << nAutoShift
+                        << " energy shift" << (nAutoShift == 1 ? "" : "s")
+                        << " taken from the quoted experimental errors\n";
+  if(nNoError > 0) {
+    configure().outStream << "  " << nNoError << " normalization/energy-shift "
+                          << "parameter" << (nNoError == 1 ? " has" : "s have")
+                          << " no quoted error and " << (nNoError == 1 ? "is" : "are")
+                          << " sampled with a uniform prior\n";
+  }
+  configure().outStream << "  " << nUserSet << " of " << nUserNeeded
+                        << " level-energy/width parameters have a user-defined prior\n";
+  if(nUserSet < nUserNeeded) {
+    configure().outStream << "  Warning: " << (nUserNeeded - nUserSet)
+                          << " level-energy/width parameter"
+                          << ((nUserNeeded - nUserSet) == 1 ? " is" : "s are")
+                          << " sampled with an unbounded uniform prior. Define "
+                          << "priors for them in the MCMC tab if the chain wanders.\n";
+  }
+  configure().outStream.flush();
 }
 
 double AZURECalcMCMC::CalculateLogPrior(const std::vector<double>& params) const {
@@ -376,48 +508,30 @@ double AZURECalcMCMC::CalculateLogPrior(const std::vector<double>& params) const
   return logPrior;
 }
 
+/* The log-probability wrappers below must stay free of side effects.
+ *
+ * They are called for every *proposal*, several times per walker per step and
+ * from several threads at once.  Recording the chain here -- as an earlier
+ * version did -- writes rejected proposals into the samples file with the same
+ * weight as accepted ones and omits the repeats that a rejection contributes,
+ * so the file is a log of evaluations rather than a Markov chain and posterior
+ * summaries taken from it are wrong.  The chain is written once per step by
+ * mcmc_sample_callback() instead.
+ */
+
 // C-style function wrapper for numcmc library - uses RWA parameters
 double mcmc_log_probability_wrapper_rwa(std::vector<double>& params) {
   if(g_mcmc_calc) {
-    // Use the new LogLikelihood function for RWA parameters
-    double logLikelihood = g_mcmc_calc->LogLikelihood(params);
+    // Priors are analytic and cheap; evaluating them first lets a point that
+    // the prior already excludes skip the chi-squared entirely.
     double logPrior = g_mcmc_calc->CalculateLogPrior(params);
-    double logProbability = logLikelihood + logPrior;
+    if(!std::isfinite(logPrior)) return -std::numeric_limits<double>::infinity();
 
-    // Store for GUI callbacks - these are the EXACT values used. Assigning
-    // g_last_params reallocates a shared std::vector, so these updates take
-    // the same lock as the sample write below rather than racing on it.
-#ifdef _OPENMP
-    omp_set_lock(&g_file_lock);
-#endif
-    g_last_likelihood = logLikelihood;
-    g_last_prior = logPrior;
-    g_last_params = params;
+    double logLikelihood = g_mcmc_calc->LogLikelihood(params);
 
-    // Save sample to file if file is open
-    if(g_sample_file && g_sample_file->is_open()) {
-      int walker_id = g_sample_count % g_nwalkers;
-      int step = g_sample_count / g_nwalkers;
-
-      // Write with full double precision (17 digits) to preserve accuracy
-      *g_sample_file << step << "," << walker_id << ","
-                     << std::scientific << std::setprecision(17)
-                     << logProbability << "," << logLikelihood << "," << logPrior;
-      for(const double& param : params) {
-        *g_sample_file << "," << param;
-      }
-      *g_sample_file << std::defaultfloat << "\n";
-      g_sample_file->flush(); // Ensure data is written immediately
-      g_sample_count++;
-
-      // Increment the atomic counter AFTER the sample is actually written to file
-      g_samples_written_to_file++;
-    }
-#ifdef _OPENMP
-    omp_unset_lock(&g_file_lock);
-#endif
-
-    return logLikelihood;  // Return only likelihood for MCMC sampler
+    // The posterior, not the likelihood: returning the likelihood alone made
+    // the sampler ignore every prior the user set.
+    return logLikelihood + logPrior;
   }
   return -std::numeric_limits<double>::infinity();
 }
@@ -425,47 +539,126 @@ double mcmc_log_probability_wrapper_rwa(std::vector<double>& params) {
 // C-style function wrapper for numcmc library - uses physical parameters
 double mcmc_log_probability_wrapper(std::vector<double>& params) {
   if(g_mcmc_calc) {
+    double logPrior = g_mcmc_calc->CalculateLogPrior(params);
+    if(!std::isfinite(logPrior)) return -std::numeric_limits<double>::infinity();
 
     double logLikelihood = g_mcmc_calc->LogLikelihoodPhysical(params);
-    double logPrior = g_mcmc_calc->CalculateLogPrior(params);
-    double logProbability = logLikelihood + logPrior;
 
-    // Store for GUI callbacks - these are the EXACT values used. Assigning
-    // g_last_params reallocates a shared std::vector, so these updates take
-    // the same lock as the sample write below rather than racing on it.
-#ifdef _OPENMP
-    omp_set_lock(&g_file_lock);
-#endif
-    g_last_likelihood = logLikelihood;
-    g_last_prior = logPrior;
-    g_last_params = params;
+    return logLikelihood + logPrior;
+  }
+  return -std::numeric_limits<double>::infinity();
+}
 
-    // Save sample to file if file is open
+double robust_stod(const std::string& str);
+
+/* Walker-position persistence.
+ *
+ * The chain file records where the walkers have been; these two functions
+ * record where they *are*, so that resuming continues the same ensemble. Without
+ * them a resumed run re-scatters the walkers around the starting parameters and
+ * splices a fresh burn-in into the middle of the chain file, which quietly
+ * corrupts any posterior summary taken over the whole file.
+ */
+static bool load_walker_state(const std::string& filename, int nwalkers, int ndim,
+                              std::vector<std::vector<double>>& positions) {
+  std::ifstream file(filename);
+  if(!file.is_open()) return false;
+
+  std::vector<std::vector<double>> loaded;
+  std::string line;
+  while(std::getline(file, line)) {
+    if(line.empty()) continue;
+    std::stringstream ss(line);
+    std::string token;
+    std::vector<double> row;
+    while(std::getline(ss, token, ',')) {
+      try {
+        row.push_back(robust_stod(token));
+      } catch(...) {
+        return false;
+      }
+    }
+    if((int)row.size() != ndim) return false;
+    loaded.push_back(row);
+  }
+
+  // A state saved for a different walker count or model cannot be reused.
+  if((int)loaded.size() != nwalkers) return false;
+
+  positions = loaded;
+  return true;
+}
+
+static bool save_walker_state(const std::string& filename,
+                              const std::vector<std::vector<double>>& positions) {
+  std::ofstream file(filename);
+  if(!file.is_open()) return false;
+
+  for(size_t k = 0; k < positions.size(); k++) {
+    for(size_t j = 0; j < positions[k].size(); j++) {
+      // Full precision: a rounded restart position is a different model.
+      file << std::scientific << std::setprecision(17) << positions[k][j];
+      if(j + 1 != positions[k].size()) file << ",";
+    }
+    file << "\n";
+  }
+  return true;
+}
+
+// Records one completed MCMC step: every walker's accepted position, exactly
+// once. Called from the sampler's serial section, so it needs no locking.
+void mcmc_sample_callback(int current_step,
+                          const std::vector<std::vector<double>>& positions,
+                          const std::vector<double>& logps) {
+  if(!g_mcmc_calc) return;
+
+  // Absolute, 0-based step index, continuing an earlier run when resuming.
+  const int absStep = g_step_offset + current_step - 1;
+
+  int bestWalker = -1;
+  double bestLogProb = -std::numeric_limits<double>::infinity();
+
+  for(size_t k = 0; k < positions.size(); k++) {
+    // Splitting the sampled log-posterior back into likelihood and prior is
+    // exact: the prior is analytic, so this reports the very values the
+    // sampler used rather than a re-evaluation.
+    const double logProbability = logps[k];
+    const double logPrior = g_mcmc_calc->CalculateLogPrior(positions[k]);
+    const double logLikelihood = logProbability - logPrior;
+
+    if(logProbability > bestLogProb) {
+      bestLogProb = logProbability;
+      bestWalker = (int)k;
+      g_last_likelihood = logLikelihood;
+      g_last_prior = logPrior;
+    }
+
     if(g_sample_file && g_sample_file->is_open()) {
-      int walker_id = g_sample_count % g_nwalkers;
-      int step = g_sample_count / g_nwalkers;
-
       // Write with full double precision (17 digits) to preserve accuracy
-      *g_sample_file << step << "," << walker_id << ","
+      *g_sample_file << absStep << "," << k << ","
                      << std::scientific << std::setprecision(17)
                      << logProbability << "," << logLikelihood << "," << logPrior;
-      for(const double& param : params) {
+      for(const double& param : positions[k]) {
         *g_sample_file << "," << param;
       }
       *g_sample_file << std::defaultfloat << "\n";
-      g_sample_file->flush(); // Ensure data is written immediately
-      g_sample_count++;
-
-      // Increment the atomic counter AFTER the sample is actually written to file
-      g_samples_written_to_file++;
     }
-#ifdef _OPENMP
-    omp_unset_lock(&g_file_lock);
-#endif
-
-    return logLikelihood;  // Return only likelihood for MCMC sampler
   }
-  return -std::numeric_limits<double>::infinity();
+
+  if(g_sample_file && g_sample_file->is_open()) {
+    g_sample_file->flush(); // Ensure data is written immediately
+    g_samples_written_to_file += (int)positions.size();
+    g_sample_count += (int)positions.size();
+  }
+
+  // Best walker of the step drives the GUI readouts and the periodic output
+  // files, which is more informative than whichever proposal happened to be
+  // evaluated last.
+  if(bestWalker >= 0) {
+    g_last_params = positions[bestWalker];
+    g_last_logprob = bestLogProb;
+  }
+  g_current_step = absStep + 1;
 }
 
 // Global pointer to the GUI progress handler
@@ -475,16 +668,6 @@ static void (*g_gui_results_callback)(int, int, const std::vector<std::vector<do
 static const AZURECalcMCMC* g_mcmc_for_callbacks = nullptr;
 static nu::Mcmc* g_mcmc_sampler = nullptr;
 static bool g_using_rwa_parameters = false;
-
-// Helper function to read last line of file and extract values (thread-safe)
-struct LastSampleInfo {
-  int step;
-  int walker;
-  double logprob;
-  double loglikelihood;
-  double logprior;
-  bool valid;
-};
 
 // Custom robust string-to-double parser for scientific notation
 double robust_stod(const std::string& str) {
@@ -510,115 +693,22 @@ double robust_stod(const std::string& str) {
     return value;
 }
 
-LastSampleInfo read_last_sample_from_file(const std::string& filename) {
-  LastSampleInfo info = {0, 0, 0.0, 0.0, 0.0, false};
-  
-#ifdef _OPENMP
-  omp_set_lock(&g_file_lock);
-#endif
-  
-  std::ifstream file(filename);
-  if (!file.is_open()) {
-#ifdef _OPENMP
-    omp_unset_lock(&g_file_lock);
-#endif
-    return info;
-  }
-  
-  // Seek to end and read backwards to find last line
-  file.seekg(-1, std::ios::end);
-  if (file.tellg() <= 0) {
-    file.close();
-#ifdef _OPENMP
-    omp_unset_lock(&g_file_lock);
-#endif
-    return info;
-  }
-  
-  // Skip any trailing newlines
-  char ch;
-  while (file.tellg() > 0) {
-    file.get(ch);
-    if (ch != '\n' && ch != '\r') {
-      file.seekg(-1, std::ios::cur);
-      break;
-    }
-    file.seekg(-2, std::ios::cur);
-  }
-  
-  // Read backwards to find start of last line
-  while (file.tellg() > 0) {
-    file.seekg(-1, std::ios::cur);
-    file.get(ch);
-    if (ch == '\n') {
-      break;
-    }
-    file.seekg(-1, std::ios::cur);
-  }
-  
-  // Read the last line
-  std::string lastLine;
-  std::getline(file, lastLine);
-  file.close();
-  
-#ifdef _OPENMP
-  omp_unset_lock(&g_file_lock);
-#endif
-  
-  // Parse CSV: step,walker,logprob,loglikelihood,logprior,param1,param2,...
-  if (!lastLine.empty() && lastLine.find("step,walker") == std::string::npos) { // Skip header
-    std::stringstream ss(lastLine);
-    std::string token;
-    int field = 0;
-    
-    while (std::getline(ss, token, ',') && field < 5) {
-      try {
-        switch (field) {
-          case 0: info.step = std::stoi(token); break;
-          case 1: info.walker = std::stoi(token); break;
-          case 2: info.logprob = robust_stod(token); break;
-          case 3: info.loglikelihood = robust_stod(token); break;
-          case 4: info.logprior = robust_stod(token); break;
-        }
-      } catch (...) {
-        return info; // Invalid format
-      }
-      field++;
-    }
-    
-    if (field >= 5) {
-      info.valid = true;
-    }
-  }
-  
-  return info;
-}
-
 // Iteration callback for GUI updates (called every iteration)
 void mcmc_iteration_callback(int current_step, int total_steps) {
   if (g_gui_iteration_callback) {
-    // Read the last line from the file to get current step and probability values
-    std::string samplesFile = "";
-    if (g_mcmc_for_callbacks) {
-      samplesFile = g_mcmc_for_callbacks->configure().outputdir + "samples.mcmc";
-    }
-    
-    LastSampleInfo lastSample = {0, 0, 0.0, 0.0, 0.0, false};
-    if (!samplesFile.empty()) {
-      lastSample = read_last_sample_from_file(samplesFile);
-    }
-    
-    // Use the step from the file for iteration display
-    int current_iteration = lastSample.valid ? lastSample.step : current_step;
+    // The values come from mcmc_sample_callback(), which has just recorded this
+    // step. An earlier version re-opened samples.mcmc and parsed its last line
+    // on every iteration, which cost a file read per step and reported whichever
+    // proposal was written last rather than an accepted state.
     int total_expected_samples = total_steps * g_nwalkers;
-    
-    g_gui_iteration_callback(current_iteration, total_expected_samples);
-    
+
+    g_gui_iteration_callback(g_current_step, total_expected_samples);
+
     // For progress callback (time estimation), use the original numcmc step values
     // This keeps the time estimation logic working correctly
-    if (g_gui_progress_callback && lastSample.valid) {
-      g_gui_progress_callback(current_step, total_steps, 
-                              lastSample.logprob, lastSample.loglikelihood, lastSample.logprior);
+    if (g_gui_progress_callback) {
+      g_gui_progress_callback(current_step, total_steps,
+                              g_last_logprob, g_last_likelihood, g_last_prior);
     }
   }
   
@@ -766,13 +856,19 @@ void AZURECalcMCMC::SetGUIResultsCallback(void (*callback)(int, int, const std::
   g_gui_results_callback = callback;
 }
 
-void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<double>& initialParams, 
-                                   std::vector<std::vector<double>>& samples, double chainSpreadPercent, int nthreads, bool useRWA) const {
+void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<double>& initialParams,
+                                   std::vector<std::vector<double>>& samples, double chainSpreadPercent, int nthreads, bool useRWA,
+                                   double energySpreadKeV) const {
   try {
     int ndim = initialParams.size();
 
     // Update parameter vectors if needed
     const_cast<AZURECalcMCMC*>(this)->UpdateParameterVectors(initialParams);
+
+    // Classify the varying parameters and derive the normalization and
+    // energy-shift priors from the data. Must follow UpdateParameterVectors()
+    // (it needs fixed_) and precede any log-probability evaluation.
+    BuildAutoPriors();
 
     if(ndim == 0) {
       configure().outStream << "Error: No parameters provided for MCMC sampling\n";
@@ -840,16 +936,69 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     std::default_random_engine generator;
     double spreadFraction = chainSpreadPercent / 100.0;
 
-    for(int i = 0; i < nwalkers; i++) {
-      std::vector<double> pos = initialParams;
-      for(int j = 0; j < ndim; j++) {
-        double paramValue = initialParams[j];
-        double spread = fabs(paramValue) * spreadFraction;
-        if(spread == 0.0) spread = 1e-6;
-        std::normal_distribution<double> init_distribution(0.0, spread);
-        pos[j] += init_distribution(generator);
+    // Per-parameter initial spread. A single percentage cannot serve every
+    // parameter kind: 1% of a 5 MeV level energy is 50 keV, which scatters the
+    // walkers across unrelated resonance structures and the ensemble never
+    // contracts. Level energies therefore get an absolute spread in keV, and
+    // norms/shifts are held inside their own prior width.
+    const double energySpreadMeV = std::max(0.0, energySpreadKeV) / 1000.0;
+    std::vector<double> paramSpread(ndim, 0.0);
+    int nEnergyCapped = 0, nPriorCapped = 0;
+
+    for(int j = 0; j < ndim; j++) {
+      double relative = fabs(initialParams[j]) * spreadFraction;
+      double spread = relative;
+
+      const int kind = (j < (int)freeKinds_.size()) ? freeKinds_[j] : -1;
+
+      if(kind == PARAM_ENERGY) {
+        spread = energySpreadMeV;
+        nEnergyCapped++;
+      } else if(kind == PARAM_NORM || kind == PARAM_SHIFT) {
+        // Starting outside the prior only wastes steps walking back into it.
+        if(j < (int)priorStds_.size() && j < (int)usePriors_.size() &&
+           usePriors_[j] && priorStds_[j] > 0.0 && priorStds_[j] < spread) {
+          spread = priorStds_[j];
+          nPriorCapped++;
+        }
       }
-      initial_positions.push_back(pos);
+
+      if(spread <= 0.0) spread = 1e-6;
+      paramSpread[j] = spread;
+    }
+
+    // Resuming continues the ensemble where it stopped, when that state is
+    // available and matches this model; otherwise fall back to a fresh ball.
+    const std::string walkerStateFile = configure().outputdir + "walkers.mcmc";
+    if(resuming && load_walker_state(walkerStateFile, nwalkers, ndim, initial_positions)) {
+      configure().outStream << "Resumed walker positions from " << walkerStateFile << "\n";
+    } else {
+      if(resuming) {
+        configure().outStream << "Warning: no usable walker state in " << walkerStateFile
+                              << "; the walkers restart from a fresh spread, so the "
+                              << "steps that follow are a new burn-in rather than a "
+                              << "continuation of the earlier chain.\n";
+      }
+      if(nEnergyCapped > 0) {
+        configure().outStream << "Initial spread: " << nEnergyCapped
+                              << " level-energy parameter" << (nEnergyCapped == 1 ? "" : "s")
+                              << " limited to " << energySpreadKeV << " keV";
+        if(nPriorCapped > 0) {
+          configure().outStream << ", " << nPriorCapped
+                                << " norm/shift parameter" << (nPriorCapped == 1 ? "" : "s")
+                                << " limited to their prior width";
+        }
+        configure().outStream << "\n";
+      }
+
+      for(int i = 0; i < nwalkers; i++) {
+        std::vector<double> pos = initialParams;
+        for(int j = 0; j < ndim; j++) {
+          std::normal_distribution<double> init_distribution(0.0, paramSpread[j]);
+          pos[j] += init_distribution(generator);
+        }
+        initial_positions.push_back(pos);
+      }
     }
     
     // Set up global variables for sampling
@@ -863,17 +1012,17 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     g_stop_requested = false; // Clear stop flag
     g_last_likelihood = 0.0;
     g_last_prior = 0.0;
+    g_last_logprob = -std::numeric_limits<double>::infinity();
+    g_step_offset = startStep; // Continue the chain numbering when resuming
     g_using_rwa_parameters = useRWA; // Set parameter type flag
-    
-    // Initialize OpenMP lock for thread-safe file writing
-#ifdef _OPENMP
-    omp_init_lock(&g_file_lock);
-#endif
-    
+
     // Create numcmc sampler
     nu::Mcmc mcmc_sampler(nwalkers, ndim, initial_positions);
+    // Deterministic given the starting step, so a run is reproducible while a
+    // resumed run still draws a fresh stretch of the random stream.
+    mcmc_sampler.set_seed(0x9E3779B97F4A7C15ull ^ (std::uint64_t)(startStep + 1));
     g_mcmc_sampler = &mcmc_sampler;
-    
+
     configure().outStream << "Starting MCMC sampling with enhanced progress tracking";
     if (nthreads > 1) {
         configure().outStream << " using " << nthreads << " parallel threads";
@@ -892,27 +1041,59 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     int result;
     if (nthreads > 1) {
         result = mcmc_sampler.run_parallel_with_callback(
-            wrapper_func, 
+            wrapper_func,
             remainingSteps,
             nthreads,
             mcmc_progress_callback,
             mcmc_should_stop,
-            mcmc_iteration_callback
+            mcmc_iteration_callback,
+            mcmc_sample_callback
         );
     } else {
         result = mcmc_sampler.run_with_callback(
-            wrapper_func, 
+            wrapper_func,
             remainingSteps,
             mcmc_progress_callback,
             mcmc_should_stop,
-            mcmc_iteration_callback
+            mcmc_iteration_callback,
+            mcmc_sample_callback
         );
     }
-    
-    // Clean up global pointers and OpenMP lock
-#ifdef _OPENMP
-    omp_destroy_lock(&g_file_lock);
-#endif
+
+    // Save the ensemble so a later run resumes it rather than re-scattering.
+    // Also written when the user stopped early: that is precisely the case where
+    // continuing from the same positions matters.
+    {
+      std::vector<nu::Walker> finalWalkers = mcmc_sampler.get_walkers();
+      std::vector<std::vector<double>> finalPositions;
+      for(size_t k = 0; k < finalWalkers.size(); k++) {
+        finalPositions.push_back(finalWalkers[k].getPos());
+      }
+      if(!save_walker_state(walkerStateFile, finalPositions)) {
+        configure().outStream << "Warning: could not write walker state to "
+                              << walkerStateFile << "; a later resume will restart "
+                              << "the walkers instead of continuing them.\n";
+      }
+    }
+
+    if(mcmc_sampler.num_invalid_initial() > 0) {
+      configure().outStream << "Warning: " << mcmc_sampler.num_invalid_initial()
+                            << " of " << nwalkers << " walkers started at a position "
+                            << "with zero posterior probability and can never move. "
+                            << "Reduce the initial spread or check the priors.\n";
+    }
+    configure().outStream << "Acceptance fraction: "
+                          << std::fixed << std::setprecision(3)
+                          << mcmc_sampler.acceptance_fraction()
+                          << std::defaultfloat << "\n";
+    if(mcmc_sampler.acceptance_fraction() < 0.05) {
+      configure().outStream << "  Warning: a very low acceptance fraction means the "
+                            << "chain is barely moving; the samples are not yet a "
+                            << "usable posterior.\n";
+    }
+    configure().outStream.flush();
+
+    // Clean up global pointers
     g_mcmc_calc = nullptr;
     g_sample_file = nullptr;
     g_mcmc_for_callbacks = nullptr;

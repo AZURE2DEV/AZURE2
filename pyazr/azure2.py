@@ -18,7 +18,7 @@ from .server import server
 class azure2:
 
     def __init__(self, file, nprocs=1, port=20000, binary=None,
-                 verbose=False, auto_port=True, cwd=None):
+                 verbose=False, auto_port=True, cwd=None, timeout=1800.0):
         """Launch ``nprocs`` AZURE2 instances bound to ``file``.
 
         Parameters
@@ -36,12 +36,23 @@ class azure2:
         cwd : working directory for the subprocesses.  Defaults to the ``.azr``
             file's directory, since a model names its ``output/`` and ``checks/``
             directories relative to the running process.
+        timeout : seconds to wait for any one API response.  The default is
+            generous because ``INITIALIZE`` on a capture model builds every
+            external-capture integral from scratch when the cache is cold,
+            which runs for many minutes on a fine extrapolation grid; the
+            previous 5-minute limit killed such a session mid-build.  ``None``
+            waits indefinitely.
         """
         self.file = file
         self.nprocs = nprocs
         self.binary = binary
         self.verbose = verbose
         self.cwd = cwd
+        self.timeout = timeout
+        # Which segments the instances calculate: 'data' (the <segmentsData>
+        # blocks, the startup state) or 'extrap' (<segmentsTest>).  There is no
+        # API query for it, so it is tracked here -- see extrap_mode/data_mode.
+        self.mode = "data"
 
         # Instance-level lists.  (The original code declared `servers` as a
         # *class* attribute, so every azure2 object shared -- and leaked into
@@ -103,7 +114,7 @@ class azure2:
             # Wait for the server to report its actual (OS-assigned) port, then
             # connect to exactly that port -- no probing, no race.
             self.ports = [self.servers[0].wait_until_listening()]
-            self.clients = [client(port=self.ports[0])]
+            self.clients = [client(port=self.ports[0], timeout=self.timeout)]
             self.clients[0].communicate("INITIALIZE", [0])
             return
 
@@ -116,7 +127,8 @@ class azure2:
 
             # connect() still polls until the port is accepting, run in parallel
             # to overlap any residual latency.
-            self.clients = list(pool.map(lambda p: client(port=p), self.ports))
+            self.clients = list(pool.map(
+                lambda p: client(port=p, timeout=self.timeout), self.ports))
 
             # Fan out the heavy INITIALIZE so the processes set up in parallel.
             list(pool.map(lambda c: c.communicate("INITIALIZE", [0]),
@@ -204,6 +216,47 @@ class azure2:
         """Re-fetch and rebuild the cached :attr:`pairs`."""
         self._pairs = self._build_pairs(proc=proc)
         return self._pairs
+
+    # -- channel radius -------------------------------------------------------
+
+    def set_channel_radius(self, pair, radius):
+        """Change one particle pair's channel radius, on every instance.
+
+        ``pair`` is the 1-based :attr:`Pair.number`, ``radius`` is in fm.  This
+        is not a light edit: the radius sets the matching surface, so AZURE2
+        rebuilds the compound nucleus and the data from the ``.azr``, redoes the
+        penetrabilities, shift functions, boundary conditions and Wigner limits,
+        and **recomputes every external-capture integral** rather than reading
+        back ``output/intEC*`` (which belong to the old radius).  Expect it to
+        cost about as much as starting a fresh instance.
+
+        Everything cached on the Python side is re-read afterwards, so
+        :attr:`params_rwa`, :attr:`parameters` (including ``wigner_limit``),
+        :attr:`pairs` and the data arrays are consistent with the new radius.
+
+        The reduced widths keep their numerical values, but a reduced width
+        means something different at a different radius -- **the model is no
+        longer fitted**.  Refit before reading anything off it.
+
+        Note this changes only the running instance; the ``.azr`` on disk is
+        untouched.  To persist a radius (and to scan several radii from
+        separate processes, which is the safer pattern) use
+        :meth:`pyazr.AzrModel.set_channel_radius` and write a new file.
+        """
+        pair = int(pair)
+        if not any(p.number == pair for p in self.pairs):
+            raise KeyError(f"no pair {pair} in this model "
+                           f"(have {[p.number for p in self.pairs]}).")
+        if not radius > 0:
+            raise ValueError(f"channel radius must be positive, got {radius}.")
+        for c in self.clients:
+            ok = c.communicate("SET_CHANNEL_RADIUS", [pair, float(radius)])
+            if not bool(np.asarray(ok).ravel()[0]):
+                raise RuntimeError(
+                    f"AZURE2 could not rebuild with pair {pair} at "
+                    f"{radius} fm; the instance is no longer usable.")
+        self.configure()
+        return self.pairs.by_number(pair).channel_radius
 
     def _build_pairs(self, proc=0):
         flat = self.clients[proc].communicate("GET_PAIRS_INFO", [0])
@@ -418,6 +471,138 @@ class azure2:
     def transform_all_rwa(self, params, proc=0):
         return self.clients[proc].communicate("TRANSFORM_ALL_RWA", params)
 
+    # -- dimensionless widths -------------------------------------------------
+
+    @property
+    def mass_number(self):
+        """Mass number A of the compound nucleus, from the particle pairs."""
+        for p in self.pairs:
+            if not p.is_photon:
+                return int(round(p.M1 + p.M2))
+        raise ValueError("no particle pair to take the compound mass from.")
+
+    def wigner_widths(self, params=None, eps=1e-4, proc=0):
+        """``{free_index: Gamma_W}`` in eV -- the GUI's Wigner width per channel.
+
+        ``Gamma_W = 2 P_l(E_r) gamma^2_W`` is what the AZURE2 GUI shows next to
+        each particle channel, and ``theta^2 = Gamma_c / Gamma_W``.  It needs
+        the penetrability at the level energy, which the API does not expose, so
+        this asks AZURE2 for it: every reduced-width amplitude is set to a tiny
+        ``eps`` and the model transformed, which makes the level-shift
+        denominator 1 and the J-group level mixing vanish to O(eps^2), leaving
+        ``Gamma_c(eps) = 2 P_c eps^2``.  One extra transform, evaluated with
+        AZURE2's own radii, boundary conditions and Coulomb functions.
+
+        Only *free* channels appear: the transform returns non-fixed parameters
+        only.  Closed (sub-threshold) channels are omitted -- there
+        ``P_l = 0`` and AZURE2 reports an ANC rather than a width.  Level
+        energies are taken from ``params`` (default: the current
+        :attr:`params_rwa`), so the limits sit at the fitted resonance energies.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        probe = x.copy()
+        for p in self.parameters.widths:
+            if p.fixed or p.free_index is None or p.free_index >= probe.size:
+                continue
+            # photon channels are linear in the amplitude (external capture),
+            # so they must not pollute the probe
+            probe[p.free_index] = 0.0 if p.radiation_type in ("E", "M") else eps
+        probed = np.asarray(self.transform_rwa(probe, proc=proc), float)
+
+        out = {}
+        for p in self.parameters.widths:
+            if (p.fixed or p.free_index is None or p.free_index >= probed.size
+                    or p.radiation_type in ("E", "M") or p.wigner_limit is None):
+                continue
+            pair = self.pairs.by_number(p.pair)
+            if not self._channel_open(p, x, pair):
+                continue
+            two_p = abs(float(probed[p.free_index])) / eps ** 2
+            out[p.free_index] = two_p * p.wigner_limit
+        return out
+
+    def _level_energies(self, params=None, proc=0):
+        """``{(jgroup, level): Ex}`` -- level energies at ``params`` (MeV)."""
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        energies = {}
+        for p in self.parameters:
+            if p.kind != "energy":
+                continue
+            key = (p.jgroup, p.level)
+            if not p.fixed and p.free_index is not None and p.free_index < x.size:
+                energies[key] = float(x[p.free_index])
+            else:
+                # Parameter.level_energy carries None for a level at Ex = 0
+                # (the API's sentinel); as an energy that is a real 0.0 MeV.
+                energies[key] = 0.0 if p.level_energy is None else p.level_energy
+        return energies
+
+    def _channel_open(self, param, x, pair, energies=None):
+        """Is ``param``'s channel above threshold at the level's energy?"""
+        energies = energies or self._level_energies(x)
+        ex = energies.get((param.jgroup, param.level), param.level_energy)
+        if ex is None:
+            return False
+        return ex > pair.sep_energy + pair.excitation
+
+    def dimensionless_widths(self, params=None, eps=1e-4, proc=0):
+        """Every channel's width made dimensionless -- a :class:`WidthTable`.
+
+        Particle channels get the Wigner limit and ``theta^2 = Gamma/Gamma_W``
+        (plus ``theta^2_formal = gamma^2/gamma^2_W``); photon channels get the
+        Weisskopf single-particle estimate and the strength in W.u.  ``params``
+        is a free (``params_rwa``-order) vector -- pass a fit result to report
+        the fitted widths, or leave it out for the ``.azr``'s own values.
+
+        >>> t = m.dimensionless_widths(best)
+        >>> print(t.photons.nonzero.table())
+        >>> max(c.theta2 for c in t.particles if c.theta2)
+        """
+        from .widths import ChannelWidth, WidthTable, weisskopf_width
+
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        phys = np.asarray(self.transform_rwa(x, proc=proc), float)
+        gamma_w = self.wigner_widths(x, eps=eps, proc=proc)
+        energies = self._level_energies(x, proc=proc)
+        A = self.mass_number
+
+        table = WidthTable()
+        for p in self.parameters.widths:
+            pair = self.pairs.by_number(p.pair)
+            ex = energies.get((p.jgroup, p.level), p.level_energy)
+            free = p.free_index if (not p.fixed and p.free_index is not None) else None
+            # the rwa of a fixed channel is not exposed by the API; its physical
+            # value does not move with the fit, so report that and leave gamma out
+            g = float(x[free]) if free is not None and free < x.size else None
+            value = (float(phys[free]) if free is not None and free < phys.size
+                     else p.value)
+            photon = p.radiation_type in ("E", "M")
+            row = ChannelWidth(
+                name=p.name, index=p.index, free_index=p.free_index,
+                fixed=p.fixed, jgroup=p.jgroup, level=p.level, jpi=p.jpi,
+                level_energy=ex, pair=p.pair, L=p.L, S=p.S,
+                radiation_type=p.radiation_type or "P",
+                gamma=g, value=value, is_photon=photon,
+                threshold=None if photon else pair.sep_energy + pair.excitation,
+            )
+            if photon:
+                row.is_open = True
+                row.e_gamma = None if ex is None else ex - pair.excitation
+                row.weisskopf = weisskopf_width(p.radiation_type, p.L,
+                                                row.e_gamma, A)
+                if row.weisskopf and value is not None:
+                    row.wu = abs(value) / row.weisskopf
+            else:
+                row.is_open = self._channel_open(p, x, pair, energies)
+                row.wigner_gamma2 = p.wigner_limit
+                if p.wigner_limit and g is not None:
+                    row.theta2_formal = g ** 2 / p.wigner_limit
+                row.wigner_width = gamma_w.get(free)
+                if row.wigner_width and value is not None and row.is_open:
+                    row.theta2 = abs(value) / row.wigner_width
+            table.append(row)
+        return table
+
     # -- chi-squared ----------------------------------------------------------
 
     def calculate_chi2_rwa(self, params, proc=0):
@@ -469,6 +654,49 @@ class azure2:
         r = resp[2:2 + n_res]
         J = resp[2 + n_res:].reshape(n_res, n_cols)
         return r, J
+
+    def model_gradients(self, params, proc=0):
+        """Analytic ``d(observable)/d(parameter)`` for every calculated point.
+
+        Returns a list with one ``(npoints, ncols)`` array per calculated
+        segment, in the order and point ordering of :meth:`calculate_rwa`.  The
+        columns are the free **R-matrix** parameters -- level energies and
+        reduced-width amplitudes, in ``params_rwa`` order -- which is exactly
+        what ``output/covariance.dat`` spans; normalizations and energy shifts
+        are omitted because no calculated observable depends on them.
+
+        This is the sensitivity matrix an uncertainty band needs
+        (``sigma^2 = g^T C g``).  Each row comes from one reverse-mode adjoint,
+        so the whole thing costs about two forward evaluations no matter how
+        many parameters the model has -- as against the ``2 * ncols`` forward
+        passes a finite-difference estimate would take.  See
+        :func:`pyazr.bands.uncertainty_bands`.
+
+        Raises ``RuntimeError`` if the model contains a segment outside the
+        supported analytic path, or if the AZURE2 binary predates the command.
+        """
+        resp = self.clients[proc].communicate(
+            "CALCULATE_MODEL_GRADIENTS_RWA", np.asarray(params, float).ravel())
+        if resp.size == 0:
+            raise RuntimeError(
+                "the AZURE2 binary does not implement CALCULATE_MODEL_GRADIENTS_RWA "
+                "(command 43); rebuild it from a source tree that has it.")
+        if resp.size == 1 and resp[0] == -1.0:
+            raise RuntimeError("model_gradients: an analytically-unsupported "
+                               "segment/config is present.")
+        nseg = int(round(resp[0]))
+        ncols = int(round(resp[1]))
+        counts = [int(round(x)) for x in resp[2:2 + nseg]]
+        flat = resp[2 + nseg:]
+        if flat.size != sum(counts) * ncols:
+            raise RuntimeError(
+                f"model_gradients: got {flat.size} values, expected "
+                f"{sum(counts) * ncols}.")
+        out, start = [], 0
+        for n in counts:
+            out.append(flat[start:start + n * ncols].reshape(n, ncols))
+            start += n * ncols
+        return out
 
     # -- calculations ---------------------------------------------------------
 
@@ -534,7 +762,7 @@ class azure2:
 
     # -- modes ----------------------------------------------------------------
 
-    def _set_mode(self, mode_cmd):
+    def _set_mode(self, mode_cmd, mode):
         """Switch every instance to ``mode_cmd`` and re-INITIALIZE in parallel.
 
         Like spawn(), the INITIALIZE re-run is the expensive part and is fanned
@@ -546,13 +774,13 @@ class azure2:
 
         if self.nprocs == 1:
             switch(self.clients[0])
-            return
-
-        with ThreadPoolExecutor(max_workers=self.nprocs) as pool:
-            list(pool.map(switch, self.clients))
+        else:
+            with ThreadPoolExecutor(max_workers=self.nprocs) as pool:
+                list(pool.map(switch, self.clients))
+        self.mode = mode
 
     def extrap_mode(self):
-        self._set_mode("SET_EXTRAP_MODE")
+        self._set_mode("SET_EXTRAP_MODE", "extrap")
 
     def data_mode(self):
-        self._set_mode("SET_DATA_MODE")
+        self._set_mode("SET_DATA_MODE", "data")

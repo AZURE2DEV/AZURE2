@@ -52,8 +52,10 @@ class AZUREAPI {
   void SetData( );
   // Set AZURE2 to calculate extrapolations
   void SetExtrap( );
-  // Set radius to a fixed value
-  void SetRadius( int idx, double r );
+  // Set the channel radius of particle pair idx (1-based) to r fm and rebuild
+  // the compound nucleus, data and parameters.  Returns false if the rebuild
+  // failed, in which case the instance is no longer usable.
+  bool SetRadius( int idx, double r );
   // Get indeces of normalization parameters
   vector_r GetNormalizationIndices( );
   // Get indeces of energy shift parameters
@@ -253,6 +255,28 @@ class AZUREAPI {
    * columns are left zero.
    */
   vector_r CalculateResidualJacobianRWA(const vector_r& params) const;
+
+  /*!
+   * Per-point sensitivities d(model)/d(theta) of the calculated segments, for
+   * covariance uncertainty bands: sigma^2 = g^T C g (SAMMY Eq. IV E4.2).
+   *
+   * Columns are the free *R-matrix* parameters -- level energies and reduced
+   * width amplitudes, in packed order -- which is exactly what
+   * output/covariance.dat spans; normalizations and energy shifts are omitted
+   * because no calculated observable depends on them.  Rows follow the segment
+   * and point order of UpdateSegments / GET_CALCULATED_SEGMENT, so row k of
+   * segment s belongs to calculated point k of segment s.
+   *
+   * Input: the non-fixed RWA parameters, as for UpdateSegmentsRWA.  Returns
+   *   [ nSegments, nCols, nPoints_0 .. nPoints_{nSeg-1}, G row-major ],
+   * with G holding sum(nPoints) rows of nCols, or [ -1 ] if a point is outside
+   * the supported analytic path.
+   *
+   * One reverse-mode adjoint per point gives that point's whole row, so this
+   * costs about two forward evaluations regardless of the parameter count --
+   * against the 2*nCols forward passes a finite-difference band would need.
+   */
+  vector_r CalculateModelGradientsRWA(const vector_r& params) const;
 
 
  private:

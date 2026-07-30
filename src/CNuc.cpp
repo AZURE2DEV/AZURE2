@@ -174,7 +174,21 @@ int CNuc::Fill(const Config &configure, std::pair<int,double> radii) {
 
   in.close();
 
-  if( radii.first != 0 ) this->GetPair(radii.first)->SetChRad(radii.second);
+  if( radii.first != 0 ) {
+    this->GetPair(radii.first)->SetChRad(radii.second);
+    // The Wigner limits above were computed inside the parse loop, i.e. with
+    // the radius as written in the .azr.  Redo them for the overridden pair,
+    // or every theta^2 reported after a radius change is against the old limit.
+    PPair* changedPair = this->GetPair(radii.first);
+    for(int j=1;j<=this->NumJGroups();j++) {
+      for(int ch=1;ch<=this->GetJGroup(j)->NumChannels();ch++) {
+	AChannel* theChannel = this->GetJGroup(j)->GetChannel(ch);
+	if(theChannel->GetPairNum()==radii.first)
+	  theChannel->SetWignerLimit(changedPair->GetRedMass(),
+				     changedPair->GetChRad());
+      }
+    }
+  }
 
   this->SetMaxLValue(maxLValue);
   if((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) && this->NumJGroups()>0 && this->NumPairs()>0)

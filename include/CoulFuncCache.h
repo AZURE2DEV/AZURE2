@@ -43,8 +43,15 @@ public:
     struct CoulFuncData {
         std::vector<double> energies;       // Energy grid points
         std::vector<CoulWaves> coulwaves;   // Coulomb functions at each energy
-        double minEnergy;                   // Minimum energy in grid
-        double maxEnergy;                   // Maximum energy in grid
+        double minEnergy = 0.0;             // Minimum energy in grid
+        double maxEnergy = 0.0;             // Maximum energy in grid
+
+        // Measured usefulness of this key's memo, and whether it has been given
+        // up on.  See AddCoulWaves() for why an exact-energy memo has to be able
+        // to switch itself off.
+        long queries = 0;
+        long hits = 0;
+        bool disabled = false;
     };
 
 private:
@@ -66,52 +73,16 @@ public:
 
     /*!
      * Look up cached Coulomb functions at the specified energy in a single pass.
-     * Returns true and fills \p out only if an exact grid point exists or the
-     * bracketing grid points are close enough for reliable interpolation
-     * (combines the old IsInRange + GetInterpolatedCoulWaves lookups).
+     * Returns true and fills \p out only if this exact energy was memoized
+     * earlier; nearby energies are deliberately not interpolated (see the
+     * implementation).
      */
     bool TryGetCoulWaves(const CoulFuncKey& key, double energy, CoulWaves& out) const;
-
-    /*!
-     * Get interpolated Coulomb functions at the specified energy
-     * Uses linear interpolation between grid points
-     * Returns empty CoulWaves {0,0,0,0} if no data available or out of range
-     */
-    CoulWaves GetInterpolatedCoulWaves(const CoulFuncKey& key, double energy) const;
-
-    /*!
-     * Check if we have cached data for a specific parameter set
-     */
-    bool HasData(const CoulFuncKey& key) const;
-
-    /*!
-     * Check if a specific energy is within the cached energy range
-     */
-    bool IsInRange(const CoulFuncKey& key, double energy) const;
 
     /*!
      * Clear all cached data
      */
     void Clear();
-
-    /*!
-     * Finalize cache data structure after all energies have been added
-     * This sorts the energy grid and computes min/max for efficient lookups
-     */
-    void Finalize();
-
-    /*!
-     * Get cache statistics for debugging
-     */
-    void PrintStats() const;
-
-private:
-    /*!
-     * Perform linear interpolation of CoulWaves structures
-     * Interpolates each component (F, dF, G, dG) separately
-     */
-    CoulWaves InterpolateCoulWaves(double energy, double e1, double e2,
-                                    const CoulWaves& waves1, const CoulWaves& waves2) const;
 };
 
 // Global shared cache instance

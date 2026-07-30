@@ -67,6 +67,7 @@ class client:
         'GET_PAIRS_INFO': 38,
         'CALCULATE_CHI2_GRAD_RWA': 41,
         'CALCULATE_RESIDUAL_JACOBIAN_RWA': 42,
+        'CALCULATE_MODEL_GRADIENTS_RWA': 43,
     }
 
     def __init__(self, server='localhost', port=20000,

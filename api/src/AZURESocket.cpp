@@ -287,8 +287,7 @@ void AZURESocket::handle( const vector_r& request ) {
     case 14: {
       // params = [idx, radius]
       double radius = ( nargs >= 2 ) ? request[2] : 0.0;
-      api_->SetRadius( idx, radius );
-      sendPacket( std::vector<bool>{ true } );
+      sendPacket( std::vector<bool>{ api_->SetRadius( idx, radius ) } );
       break;
     }
 
@@ -414,6 +413,13 @@ void AZURESocket::handle( const vector_r& request ) {
     // Response: [nRes, nCols, residuals..., J row-major].
     case 42:
       sendPacket( api_->CalculateResidualJacobianRWA( params ) );
+      break;
+
+    // Per-point d(model)/d(theta) for covariance uncertainty bands, over the
+    // free R-matrix parameters (the columns covariance.dat spans).
+    // Response: [nSegments, nCols, nPoints per segment..., G row-major].
+    case 43:
+      sendPacket( api_->CalculateModelGradientsRWA( params ) );
       break;
 
     default:
