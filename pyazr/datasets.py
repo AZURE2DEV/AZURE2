@@ -87,6 +87,9 @@ class Segment:
     vary_norm: bool                # is the normalization a fit parameter?
     norm_error: float              # normalization systematic, fractional
     data_file: str                 # path the data came from  <-- provenance
+    energy_shift: float = 0.0      # applied beam-energy shift (MeV)
+    energy_shift_error: float = 0.0    # its systematic (MeV)
+    vary_shift: bool = False       # is the energy shift a fit parameter?
 
     @property
     def name(self) -> str:
@@ -141,6 +144,12 @@ class SegmentSet(list):
         norm = float(t[i]); vary_norm = int(float(t[i + 1])) == 1
         norm_error = float(t[i + 2]); i += 3
         # optional energy-shift triple, then the (non-numeric) data file
+        shift = shift_error = 0.0
+        vary_shift = False
+        if i + 2 < len(t) and all(_isfloat(tok) for tok in t[i:i + 3]):
+            shift, shift_error = float(t[i]), float(t[i + 1])
+            vary_shift = int(float(t[i + 2])) == 1
+            i += 3
         while i < len(t) and _isfloat(t[i]):
             i += 1
         data_file = t[i] if i < len(t) else ""
@@ -150,7 +159,9 @@ class SegmentSet(list):
             angle_min=aMin, angle_max=aMax,
             observable=_OBSERVABLE.get(isDiff, f"code{isDiff}"),
             norm=norm, vary_norm=vary_norm,
-            norm_error=norm_error, data_file=data_file)
+            norm_error=norm_error, data_file=data_file,
+            energy_shift=shift, energy_shift_error=shift_error,
+            vary_shift=vary_shift)
 
     # -- views ----------------------------------------------------------------
 
@@ -176,6 +187,19 @@ class SegmentSet(list):
             src = SegmentSet(s for s in src if s.vary_norm)
         f = 1e-2 if fractional else 1.0
         return [s.norm_error * f for s in src]
+
+    def shift_errors(self, active_only=True, vary_only=False):
+        """Per-segment beam-energy-shift errors (MeV), in file order.
+
+        The energy-shift counterpart of :meth:`sys_errors`; ``vary_only``
+        restricts to segments whose shift is actually a fit parameter.  Unlike
+        the normalization systematic, the file value is already absolute (MeV),
+        so there is nothing to convert.
+        """
+        src = self.active if active_only else self
+        if vary_only:
+            src = SegmentSet(s for s in src if s.vary_shift)
+        return [s.energy_shift_error for s in src]
 
     def files(self):
         return [s.data_file for s in self]

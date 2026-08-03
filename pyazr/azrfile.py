@@ -124,6 +124,14 @@ class AzrChannel:
     @property
     def M2(self):          return self._get("m2", float)
     @property
+    def J1(self):          return self._get("j1", float)
+    @property
+    def parity1(self):     return self._get("pi1", lambda v: int(float(v)))
+    @property
+    def J2(self):          return self._get("j2", float)
+    @property
+    def parity2(self):     return self._get("pi2", lambda v: int(float(v)))
+    @property
     def excitation(self):
         """Excitation energy of the pair's residual nucleus (MeV).
 
