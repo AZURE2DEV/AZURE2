@@ -13,7 +13,8 @@ build.log
 
 # Claude Code: skills are shared, local settings are personal
 .claude/settings.local.json
-# Duplicate skill tree kept by other agent tooling; .claude/skills is canonical
+# Not a Claude Code skills location -- it reads ~/.claude/skills and
+# .claude/skills only. Ignored so a stray copy is never committed.
 .agents/
 
 # Generated documentation (Doxygen and Sphinx output)
