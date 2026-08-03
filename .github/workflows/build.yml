@@ -82,6 +82,17 @@ jobs:
           echo "QWT_PREFIX=$(brew --prefix qwt-qt5)" >> "$GITHUB_ENV"
           echo "$(brew --prefix qt@5)/bin" >> "$GITHUB_PATH"
           echo "PKG_CONFIG_PATH=$(brew --prefix qwt-qt5)/lib/pkgconfig:$(brew --prefix qt@5)/lib/pkgconfig" >> "$GITHUB_ENV"
+          # Locate the Qwt header rather than assuming a layout -- Homebrew may
+          # install it as a framework, under include/qwt, or directly in
+          # include/, and guessing wrong only shows up as a build error later.
+          QWT_HDR="$(find "$(brew --prefix qwt-qt5)" -name qwt_plot.h -print -quit 2>/dev/null || true)"
+          if [ -z "$QWT_HDR" ]; then
+            echo "Could not locate qwt_plot.h under $(brew --prefix qwt-qt5); tree follows:"
+            find "$(brew --prefix qwt-qt5)" -maxdepth 3 | head -50
+            exit 1
+          fi
+          echo "Qwt headers: $(dirname "$QWT_HDR")"
+          echo "QWT_INCLUDE_DIR=$(dirname "$QWT_HDR")" >> "$GITHUB_ENV"
 
       # -------------------------------------------------------------- windows
       # MSYS2/mingw-w64 rather than MSVC: the project already targets mingw (see
@@ -122,6 +133,8 @@ jobs:
             EXTRA+=(-DOpenMP_omp_LIBRARY="$LIBOMP/lib/libomp.dylib")
             # Keg-only formulae need their prefixes on CMAKE_PREFIX_PATH.
             EXTRA+=(-DCMAKE_PREFIX_PATH="$QT5_PREFIX;$QWT_PREFIX")
+            # Located above, so FindQwt does not have to guess the layout.
+            EXTRA+=(-DQWT_INCLUDE_DIR="$QWT_INCLUDE_DIR")
           fi
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
