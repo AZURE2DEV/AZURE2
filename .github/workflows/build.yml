@@ -160,11 +160,18 @@ jobs:
           cp build/src/AZURE2.exe dist/
           # MSYS2 names the Qt5 deploy tool windeployqt-qt5; plain windeployqt
           # only exists in a Qt6 install.
-          if command -v windeployqt-qt5 >/dev/null 2>&1; then
-            windeployqt-qt5 dist/AZURE2.exe
-          else
-            windeployqt dist/AZURE2.exe
-          fi
+          DEPLOY=windeployqt
+          command -v windeployqt-qt5 >/dev/null 2>&1 && DEPLOY=windeployqt-qt5
+          # It exits 1 when it cannot find ANGLE's libGLESv2.dll, which a
+          # desktop-OpenGL Qt build does not ship, even though it has deployed
+          # everything correctly. Check what it produced instead of its status.
+          "$DEPLOY" dist/AZURE2.exe || echo "$DEPLOY exited non-zero; verifying its output instead"
+          for dll in Qt5Core.dll Qt5Gui.dll Qt5Widgets.dll; do
+            if [ ! -f "dist/$dll" ]; then
+              echo "Qt deployment failed: dist/$dll is missing"
+              exit 1
+            fi
+          done
           # mingw runtime + the non-Qt dependencies
           ldd dist/AZURE2.exe | awk '/ucrt64/ {print $3}' | xargs -r -I{} cp -n {} dist/ || true
 
