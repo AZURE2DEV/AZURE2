@@ -155,15 +155,7 @@ double AZURECalc::operator()(const vector_r& p) const {
 			       << "\r\tIteration: " << std::setw(6) << thisIteration
 			       << " Chi-Squared: " << chiSquared;  configure().outStream.flush();
 
-    if(thisIteration%100==0) {
-      AZUREParams params;
-      localCompound->FillMnParams(params.GetMinuitParams(), &configure());
-      localData->FillMnParams(params.GetMinuitParams());
-      WriteParameters(params,configure());
-      localData->WriteOutputFiles(configure(),isFit);
-      localCompound->TransformOut(configure());
-      localCompound->PrintTransformParams(configure());
-    }
+    if(thisIteration%kOutputInterval==0) WriteIterationOutput(p);
   }
   if(isFit) {
 
@@ -184,6 +176,43 @@ double AZURECalc::operator()(const vector_r& p) const {
 
   if(configure().stopFlag&&isFit) return 0.;
   else return chiSquared;
+}
+
+void AZURECalc::WriteIterationOutput(const vector_r& p) const {
+  // Work on clones: this runs in the middle of a fit and must not disturb the
+  // objects the minimizer is stepping.
+  CNuc* lc = compound()->Clone();
+  EData* ld = data()->Clone();
+
+  try {
+    lc->FillCompoundFromParams(p);
+    ld->FillNormsFromParams(p);
+    ld->FillEnergyShiftsFromParams(p, ld, lc, &configure());
+    if(configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
+
+    for(int i = 1; i <= ld->NumSegments(); i++) {
+      ESegment* segment = ld->GetSegment(i);
+      if(!segment) continue;
+      for(int pid = 0; pid < segment->NumPoints(); pid++) {
+        EPoint* pt = segment->GetPoint(pid + 1);
+        if(pt) pt->SetFitCrossSection(
+            segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld));
+      }
+    }
+
+    AZUREParams params;
+    lc->FillMnParams(params.GetMinuitParams(), &configure());
+    ld->FillMnParams(params.GetMinuitParams());
+    WriteParameters(params, configure());
+    ld->WriteOutputFiles(configure(), true);
+    lc->TransformOut(configure());
+    lc->PrintTransformParams(configure());
+  } catch(...) {
+    // An intermediate snapshot is a convenience, never a reason to abort a fit.
+  }
+
+  delete lc;
+  delete ld;
 }
 
 double AZURECalc::Chi2Value(const vector_r& p) const {
@@ -442,6 +471,10 @@ double AZURECalc::RunLevenbergMarquardt(AZUREParams& params, int maxIter,
 
   for(int iter = 0; iter < maxIter; iter++) {
     if(iter > 0 && !ResidualJacobian(full, r, J, p2f)) break;
+    // MIGRAD reaches WriteIterationOutput through operator(); this path
+    // evaluates through the side-effect-free Chi2Value and so must drive the
+    // snapshots itself.
+    if(iter > 0 && iter % kIterationOutputInterval == 0) WriteIterationOutput(full);
     const int nRes = (int)r.size();
 
     // Gauss-Newton normal equations: H = J^T J (+ penalty diag), g = J^T r (+ penalty grad).
@@ -837,6 +870,15 @@ void gslProgress(const size_t iter, void* params,
   d->self->configure().outStream << "\r\tGSL-LM iteration: " << std::setw(4) << iter
                                  << "  Chi-Squared: " << chi2 << "        ";
   d->self->configure().outStream.flush();
+
+  // Intermediate output, so a long GSL fit also leaves usable files behind
+  // before it converges rather than only at the end.
+  if(iter > 0 && iter % AZURECalc::kIterationOutputInterval == 0) {
+    vector_r full = d->baseFull;
+    const gsl_vector* x = gsl_multifit_nlinear_position(w);
+    for(int a = 0; a < d->nFree; a++) full[(*d->p2f)[a]] = gsl_vector_get(x, a);
+    d->self->WriteIterationOutput(full);
+  }
 }
 
 }  // namespace

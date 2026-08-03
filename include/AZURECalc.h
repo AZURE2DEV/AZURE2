@@ -69,6 +69,30 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   double Chi2Value(const vector_r& p) const;
 
   /*!
+   * Write the intermediate output files -- parameters, calculated segments and
+   * the transformed physical parameters -- for the parameter vector \p p.
+   *
+   * Called periodically during a fit so a long run leaves usable output behind
+   * before it finishes, and so a fit that is stopped or crashes is not a total
+   * loss. MIGRAD reaches this through operator(); the analytic-Jacobian
+   * minimizers call it directly, since they evaluate through the
+   * side-effect-free Chi2Value and would otherwise write nothing until the end.
+   */
+  void WriteIterationOutput(const vector_r& p) const;
+
+  //! Chi-squared evaluations between intermediate writes (MIGRAD, NLopt, LM).
+  static const int kOutputInterval = 100;
+
+  /*! Solver iterations between intermediate writes for the analytic-Jacobian
+   *  minimizers (LM, GSL trust-region).
+   *
+   *  Their iterations are whole Gauss-Newton steps, not single function
+   *  evaluations, and they converge in tens of them -- a converged LM fit runs
+   *  11 to 30 iterations, well under a hundred evaluations. Counting
+   *  evaluations here would mean the snapshot never fired at all. */
+  static const int kIterationOutputInterval = 10;
+
+  /*!
    * Standardized residuals and analytic residual Jacobian at the full parameter
    * vector `full`.  `residuals` is N_res; `jac` is row-major N_res x nFree;
    * `packedToFull[a]` is the full-vector index of Jacobian column a (the a-th
