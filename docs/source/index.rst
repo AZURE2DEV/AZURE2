@@ -23,6 +23,7 @@ A. M. Lane and R. G. Thomas, *Reviews of Modern Physics* **30**, 257 (1958).
 
    getting_started/installation
    getting_started/overview
+   getting_started/capabilities
 
 .. toctree::
    :maxdepth: 2
@@ -35,9 +36,11 @@ A. M. Lane and R. G. Thomas, *Reviews of Modern Physics* **30**, 257 (1958).
    user_guide/segments
    user_guide/experimental_effects
    user_guide/fitting
+   user_guide/chi_squared
    user_guide/calculate
    user_guide/plot
    user_guide/mcmc
+   user_guide/pyazr
 
 .. toctree::
    :maxdepth: 2

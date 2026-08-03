@@ -104,8 +104,19 @@ Uncertainty and Statistics
 chiSquared.out
 ^^^^^^^^^^^^^^
 
-Contains the :math:`\chi^2/N` values for each data segment after a calculation
-or fit. The final line gives the total :math:`\chi^2`.
+One line per data segment, then a total::
+
+    Segment#, Chi-Squared,  N,  Norm,  Norm-Chi-Squared
+    1,823.88,17,1,0
+    ...
+    Total-Chi-Squared: 107456 Total-Norm-Chi-Squared: 0 Total-N: 415
+
+``Chi-Squared`` and ``Total-Chi-Squared`` are the **data** term only;
+``Norm-Chi-Squared`` is the separate penalty on a varied normalization, and
+``N`` counts data points (not degrees of freedom). The quantity a fit actually
+minimises is the sum of both — see :doc:`../user_guide/chi_squared`.
+
+This file is the quickest scalar check that a run succeeded.
 
 param.errors
 ^^^^^^^^^^^^
@@ -150,5 +161,20 @@ Rate** mode.
 samples.mcmc
 ^^^^^^^^^^^^
 
-Contains the MCMC chain samples from Bayesian parameter inference (if the MCMC
-module is enabled).
+The MCMC chain, as CSV, one row per walker per step::
+
+    step,walker,logprob,loglikelihood,logprior,param0,param1,...
+
+Every accepted state appears exactly once, including the repeated states a
+rejected proposal contributes — that repetition is how a Markov chain carries
+probability mass, so the file must not be deduplicated. ``logprob`` equals
+``loglikelihood + logprior`` exactly. See :doc:`../user_guide/mcmc` for how to
+load it and what to check before using it.
+
+walkers.mcmc
+^^^^^^^^^^^^
+
+The final position of every walker, written at the end of an MCMC run and when
+one is stopped early. Its purpose is resuming: with it, a continued run picks
+the ensemble up where it left off instead of re-scattering the walkers and
+splicing a fresh burn-in into the middle of the chain.
