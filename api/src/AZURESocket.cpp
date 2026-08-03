@@ -106,6 +106,19 @@ bool AZURESocket::sendPacket( const std::string& response ) {
 // ---------------------------------------------------------------------------
 
 bool AZURESocket::start() {
+#ifdef _WIN32
+  // Winsock has to be initialised before any socket call; without this every
+  // call fails with WSANOTINITIALISED. Reference-counted by the OS, so the
+  // matching WSACleanup() below balances it.
+  WSADATA wsaData;
+  int wsaResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+  if (wsaResult != 0) {
+    std::cerr << "Error initializing Winsock (WSAStartup returned "
+              << wsaResult << ")." << std::endl;
+    return false;
+  }
+#endif
+
   // Create socket
   serverSocket_ = socket(AF_INET, SOCK_STREAM, 0);
   if (serverSocket_ == -1) {
@@ -174,6 +187,10 @@ bool AZURESocket::start() {
 
   close(serverSocket_);
   serverSocket_ = -1;
+
+#ifdef _WIN32
+  WSACleanup();
+#endif
 
   return true;
 }

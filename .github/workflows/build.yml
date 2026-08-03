@@ -71,9 +71,14 @@ jobs:
             libqwt-qt5-dev
 
       # ---------------------------------------------------------------- macos
+      # Apple clang has no OpenMP runtime of its own, so FindOpenMP fails
+      # outright without Homebrew's libomp; the flags below are what CMake
+      # cannot infer for AppleClang on its own.
       - name: Install dependencies (macos)
         if: matrix.name == 'macos'
-        run: brew install ninja gsl readline
+        run: |
+          brew install ninja gsl readline libomp
+          echo "LIBOMP=$(brew --prefix libomp)" >> "$GITHUB_ENV"
 
       - name: Install Qt (macos)
         if: matrix.name == 'macos'
@@ -107,13 +112,27 @@ jobs:
       # --------------------------------------------------------------- build
       - name: Configure
         run: |
+          # An array, so the spaces inside the OpenMP flags survive intact.
+          EXTRA=()
+          if [ "${{ matrix.name }}" = "macos" ]; then
+            # FindOpenMP cannot infer any of this for AppleClang: the compiler
+            # needs -Xpreprocessor -fopenmp and the runtime lives in Homebrew's
+            # libomp rather than beside the compiler.
+            EXTRA+=(-DOpenMP_ROOT="$LIBOMP")
+            EXTRA+=(-DOpenMP_C_FLAGS="-Xpreprocessor -fopenmp -I$LIBOMP/include")
+            EXTRA+=(-DOpenMP_CXX_FLAGS="-Xpreprocessor -fopenmp -I$LIBOMP/include")
+            EXTRA+=(-DOpenMP_C_LIB_NAMES=omp)
+            EXTRA+=(-DOpenMP_CXX_LIB_NAMES=omp)
+            EXTRA+=(-DOpenMP_omp_LIBRARY="$LIBOMP/lib/libomp.dylib")
+          fi
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_GUI=ON \
             -DUSE_API=ON \
             -DUSE_MCMC=ON \
             -DUSE_QWT=${{ matrix.use_qwt }} \
-            -DUSE_READLINE=${{ matrix.use_readline }}
+            -DUSE_READLINE=${{ matrix.use_readline }} \
+            "${EXTRA[@]}"
 
       - name: Build
         run: cmake --build build --parallel
