@@ -1,4 +1,5 @@
 build/**
+build-release/**
 build-windows/**
 build-linux/**
 build-macos/**
@@ -9,3 +10,12 @@ build-macos/**
 azure2
 CLAUDE.md
 build.log
+
+# Claude Code: skills are shared, local settings are personal
+.claude/settings.local.json
+# Duplicate skill tree kept by other agent tooling; .claude/skills is canonical
+.agents/
+
+# Generated documentation (Doxygen and Sphinx output)
+docs/_build/
+docs/api/

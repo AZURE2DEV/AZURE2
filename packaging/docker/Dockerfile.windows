@@ -1,0 +1,114 @@
+# Multi-stage Docker build for AZURE2 Windows compilation
+# This builds AZURE2 for Windows using MSYS2/MinGW-w64 environment
+
+FROM fedora:39 AS builder
+
+# Install build dependencies
+RUN dnf update -y && \
+    dnf install -y \
+        mingw64-gcc-c++ \
+        mingw64-pkg-config \
+        mingw64-qt5-qtbase-devel \
+        mingw64-qt5-qmake \
+        mingw64-qt5-qtsvg \
+        mingw64-qwt-qt5 \
+        mingw64-gsl \
+        mingw64-readline \
+        mingw64-libgomp \
+        mingw64-lcms \
+        mingw64-pcre2 \
+        cmake make git wget \
+        wine \
+        pkg-config \
+        which \
+        tar \
+        bzip2 \
+    && dnf clean all
+
+# Install additional Windows libraries that might be missing
+RUN dnf install -y \
+        mingw64-zlib \
+        mingw64-libpng \
+        mingw64-libjpeg-turbo \
+        mingw64-freetype \
+        mingw64-fontconfig \
+        mingw64-gettext \
+        mingw64-openssl \
+    && dnf clean all
+
+# Set up MinGW environment
+ENV MINGW_PREFIX=/usr/x86_64-w64-mingw32
+ENV PKG_CONFIG_PATH=${MINGW_PREFIX}/sys-root/mingw/lib/pkgconfig
+ENV CMAKE_TOOLCHAIN_FILE=/workspace/cmake/Toolchains/fedora-mingw64.cmake
+ENV PKG_CONFIG_LIBDIR=${MINGW_PREFIX}/sys-root/mingw/lib/pkgconfig
+ENV PKG_CONFIG_ALLOW_CROSS=1
+
+# Create workspace
+WORKDIR /workspace
+
+# Copy source code
+COPY . .
+
+# Create Fedora-specific MinGW toolchain file
+RUN mkdir -p cmake/Toolchains && \
+    echo 'set(CMAKE_SYSTEM_NAME Windows)' > cmake/Toolchains/fedora-mingw64.cmake && \
+    echo 'set(CMAKE_SYSTEM_PROCESSOR x86_64)' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo '' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo '# Specify the cross compiler' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo 'set(CMAKE_C_COMPILER x86_64-w64-mingw32-gcc)' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo 'set(CMAKE_CXX_COMPILER x86_64-w64-mingw32-g++)' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo 'set(CMAKE_RC_COMPILER x86_64-w64-mingw32-windres)' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo '' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo '# Where is the target environment located' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo 'set(CMAKE_FIND_ROOT_PATH /usr/x86_64-w64-mingw32/sys-root/mingw)' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo '' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo '# Adjust the default behavior of the FIND_XXX() commands' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo 'set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo 'set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo 'set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo '' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo '# Static linking and Windows-specific flags' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo 'set(CMAKE_EXE_LINKER_FLAGS_INIT "-static-libgcc -static-libstdc++")' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo 'set(CMAKE_C_FLAGS_INIT "-D_WIN32_WINNT=0x0600")' >> cmake/Toolchains/fedora-mingw64.cmake && \
+    echo 'set(CMAKE_CXX_FLAGS_INIT "-D_WIN32_WINNT=0x0600")' >> cmake/Toolchains/fedora-mingw64.cmake
+
+# Build AZURE2 for Windows with GUI and QWT enabled
+RUN rm -rf build-windows && mkdir build-windows && cd build-windows && \
+    echo "=== Starting CMake configuration ===" && \
+    cmake .. \
+        -DCMAKE_TOOLCHAIN_FILE=../cmake/Toolchains/fedora-mingw64.cmake \
+        -DCROSS_COMPILE_WINDOWS=ON \
+        -DBUILD_GUI=ON \
+        -DUSE_QWT=ON \
+        -DUSE_API=OFF \
+        -DUSE_STAT=OFF \
+        -DUSE_READLINE=OFF \
+        -DCODE_COVERAGE=OFF \
+        -DCMAKE_BUILD_TYPE=Release && \
+    echo "=== Starting compilation ===" && \
+    make -j6
+
+# Copy required Qt5, Qwt, and MinGW runtime DLLs into the build output next to the exe
+RUN MINGW_BIN=/usr/x86_64-w64-mingw32/sys-root/mingw/bin && \
+    DEST=/workspace/build-windows/src && \
+    for dll in \
+        Qt5Core.dll Qt5Gui.dll Qt5Widgets.dll Qt5PrintSupport.dll Qt5Network.dll Qt5OpenGL.dll Qt5Svg.dll \
+        qwt-qt5.dll \
+        libgsl-0.dll libgslcblas-0.dll \
+        libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll libgomp-1.dll \
+        libcrypto-3-x64.dll libssl-3-x64.dll \
+        libpcre2-16-0.dll libpcre2-8-0.dll \
+        zlib1.dll libharfbuzz-0.dll libpng16-16.dll libfreetype-6.dll \
+        libglib-2.0-0.dll libintl-8.dll libgraphite2.dll libbz2-1.dll \
+        libiconv-2.dll; \
+    do \
+        [ -f "$MINGW_BIN/$dll" ] && cp -v "$MINGW_BIN/$dll" "$DEST/" || echo "WARNING: $dll not found in $MINGW_BIN"; \
+    done && \
+    # Copy Qt5 platform plugins \
+    mkdir -p "$DEST/platforms" && \
+    [ -d "$MINGW_BIN/../lib/qt5/plugins/platforms" ] && \
+        cp -v "$MINGW_BIN/../lib/qt5/plugins/platforms/qwindows.dll" "$DEST/platforms/" || \
+        echo "WARNING: qwindows.dll platform plugin not found"
+
+# Make it sleep to keep the container running
+CMD ["sleep", "infinity"]

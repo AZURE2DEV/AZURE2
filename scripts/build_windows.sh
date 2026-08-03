@@ -44,7 +44,7 @@ if [ "$SKIP_BUILD" = false ]; then
     # Build image (targeting builder stage to get build environment)
     echo -e "${GREEN}Building Windows compilation Docker image...${NC}"
     echo -e "${YELLOW}Building with GUI and QWT support for Windows${NC}"
-    docker build -f docker/Dockerfile.windows --target builder -t azure2-windows-builder --label dockerfile_hash="$DOCKERFILE_HASH" . 2>&1 | tee build.log
+    docker build -f packaging/docker/Dockerfile.windows --target builder -t azure2-windows-builder --label dockerfile_hash="$DOCKERFILE_HASH" . 2>&1 | tee build.log
 
     if [ ${PIPESTATUS[0]} -ne 0 ]; then
         echo -e "${RED}Docker build failed! Check build.log for details.${NC}"

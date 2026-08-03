@@ -1,7 +1,7 @@
 # Range form: needs at least 3.16, and opts in to the current behaviour of
 # anything up to 4.0.  Requiring 4.0 outright kept the project from configuring
 # anywhere but a very recent toolchain -- Ubuntu 22.04 ships CMake 3.22 and
-# 24.04 ships 3.28, so distro builds and the snap could never get past line 1.
+# 24.04 ships 3.28, so distro builds could never get past line 1.
 cmake_minimum_required(VERSION 3.16...4.0)
 project(AZURE2)
 
@@ -147,7 +147,7 @@ endif()
 
 # Extra includes/libs
 set(AZURE2_SOURCE_DIR ${CMAKE_BUILD_DIRECTORY})
-include_directories(${AZURE2_SOURCE_DIR}/coul/include)
+include_directories(${AZURE2_SOURCE_DIR}/external/coul/include)
 set(EXTRA_LIBS coul pugixml ${OpenMP_LIBRARIES})
 
 # Windows DLL bundling function (define before subdirectories)
@@ -167,10 +167,10 @@ function(copy_dll_if_exists target_name dll_name dll_path)
 endfunction()
 
 # Minuit2 build
-add_subdirectory(minuit2)
+add_subdirectory(external/minuit2)
 
 # Add Minuit2 to include directories
-include_directories(${AZURE2_SOURCE_DIR}/minuit2/inc)
+include_directories(${AZURE2_SOURCE_DIR}/external/minuit2/inc)
 
 # NLopt build (optional minimizer)
 option(USE_NLOPT "Use NLopt library for minimization" OFF)
@@ -197,8 +197,8 @@ endif()
 
 # ERYA SRIM utilities (optional)
 if(USE_ERYA)
-    # Add ERYA subdirectory (pugixml is handled inside erya/CMakeLists.txt)
-    add_subdirectory(erya)
+    # Add ERYA subdirectory (pugixml is handled inside external/erya/CMakeLists.txt)
+    add_subdirectory(external/erya)
     
     # Add include directories from ERYA module
     include_directories(${SRIM_UTILITIES_INCLUDE_DIRS})
@@ -321,15 +321,15 @@ if(BUILD_GUI)
     add_definitions(-DGUI_BUILD)
 endif()
 
-add_subdirectory(coul)
+add_subdirectory(external/coul)
 add_subdirectory(src)
 
 # Install and copy SRIM data file (only if ERYA is enabled)
 if(USE_ERYA)
-    install(FILES erya/data/SRIM2013.xml DESTINATION share/azure2/ COMPONENT Runtime)
+    install(FILES external/erya/data/SRIM2013.xml DESTINATION share/azure2/ COMPONENT Runtime)
     
     # Copy SRIM data file to build directory for development
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/erya/data/SRIM2013.xml
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/external/erya/data/SRIM2013.xml
                    ${CMAKE_CURRENT_BINARY_DIR}/SRIM2013.xml COPYONLY)
 endif()
 
