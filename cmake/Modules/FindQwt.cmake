@@ -11,7 +11,34 @@ pkg_check_modules(PC_QWT QUIET Qt5Qwt6)
  
 if (PC_QWT_FOUND)
   message(STATUS "Found Qwt via pkg-config")
-  set(QWT_INCLUDE_DIR ${PC_QWT_INCLUDE_DIRS})
+
+  # pkg-config's include directory is not necessarily the one the headers are
+  # actually in. Homebrew's qwt-qt5 reports <prefix>/include while qwt_plot.h
+  # sits in <prefix>/include/qwt, so taking the reported path verbatim produced
+  # a configure that "found" Qwt and a build that could not open qwt_plot.h.
+  # Accept pkg-config's answer only if the header is really there, and
+  # otherwise search beneath it with the usual suffixes.
+  set(_qwt_pc_include "")
+  foreach(_dir IN LISTS PC_QWT_INCLUDE_DIRS)
+    if (EXISTS "${_dir}/qwt_plot.h")
+      set(_qwt_pc_include "${_dir}")
+      break()
+    endif()
+  endforeach()
+
+  if (_qwt_pc_include)
+    set(QWT_INCLUDE_DIR "${_qwt_pc_include}")
+  else()
+    find_path (QWT_INCLUDE_DIR
+      NAMES qwt_plot.h
+      HINTS ${PC_QWT_INCLUDE_DIRS} ${QT_INCLUDE_DIR}
+      PATH_SUFFIXES qwt qwt-qt5 qwt-qt4 qwt-qt3
+    )
+    if (QWT_INCLUDE_DIR)
+      message(STATUS "pkg-config include dir has no qwt_plot.h; using ${QWT_INCLUDE_DIR}")
+    endif()
+  endif()
+  unset(_qwt_pc_include)
   
   # Extract only the qwt library, filtering out Qt libraries since they're handled separately
   set(QWT_LIBRARIES "")
