@@ -70,8 +70,13 @@ jobs:
           path: docs/_build/html
 
   deploy:
-    # Pull requests build the docs but must not publish them.
-    if: github.event_name == 'push'
+    # Publishing happens from the default branch only. The github-pages
+    # environment restricts deployments to qt5, so a push to dev builds the
+    # documentation (catching breakage early) without attempting to publish it;
+    # the site updates when the work reaches qt5. Allowing dev to publish as
+    # well is a repository setting -- Settings, Environments, github-pages,
+    # deployment branches -- and needs admin rights.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/qt5'
     needs: build
     runs-on: ubuntu-latest
     environment:

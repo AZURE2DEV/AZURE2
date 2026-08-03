@@ -251,8 +251,9 @@ one exactly — a change there means data was dropped or misread).
 
 ## Documentation
 
-The site at <https://rdeboer1.github.io/AZURE2/> is rebuilt and published by
-CI on every push. Sources live in `docs/`; the generated output is not tracked.
+The site at <https://rdeboer1.github.io/AZURE2/> is published by CI from the
+default branch (`qt5`); pushes to other branches build the documentation to
+catch breakage but do not publish. Sources live in `docs/`; the generated output is not tracked.
 To build it locally:
 
 ```bash
