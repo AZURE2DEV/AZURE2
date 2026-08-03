@@ -722,6 +722,57 @@ class azure2:
         return [c.communicate("GET_CALCUALTED_ANGLES", [i])
                 for i in range(nsegments)]
 
+    @staticmethod
+    def _unpack_angular_dists(flat):
+        """Split the self-describing angular-distribution frame into per-point rows.
+
+        The wire format is a count followed by that many Legendre coefficients,
+        repeated once per point, so segments whose points carry different orders
+        survive the round trip.
+        """
+        import numpy as _np
+        rows, i, n = [], 0, len(flat)
+        while i < n:
+            count = int(round(float(flat[i]))); i += 1
+            if count < 0 or i + count > n:      # malformed frame; stop rather than guess
+                break
+            rows.append(_np.asarray(flat[i:i + count], dtype=float))
+            i += count
+        return rows
+
+    def calculate_angular_dists(self, params, proc=0):
+        r"""Legendre coefficients of the angular distribution, per segment.
+
+        Returns one entry per segment; each is a list with one array of
+        coefficients per calculated point. Points that do not belong to an
+        angular-distribution segment give an empty array, so the outer shape
+        always matches :meth:`calculate_energies`.
+
+        AZURE2 computes these only for segments declared as angular
+        distributions -- ``observable="angular-distribution"`` with an ``order``
+        in ``<segmentsTest>``. Everything else returns empty arrays. Use
+        :meth:`angular_dist_at` to obtain them at one chosen energy.
+
+        The coefficients are the :math:`a_k` of
+
+        .. math:: W(\theta) = \sum_k a_k P_k(\cos\theta)
+
+        normalised as AZURE2 writes them into ``AZUREOut_*`` files.
+        """
+        c = self.clients[proc]
+        nsegments = int(c.communicate("UPDATE_SEGMENTS", params)[0])
+        return [self._unpack_angular_dists(
+                    c.communicate("GET_CALCULATED_ANGULAR_DISTS", [i]))
+                for i in range(nsegments)]
+
+    def calculate_angular_dists_rwa(self, params, proc=0):
+        """:meth:`calculate_angular_dists` from reduced-width amplitudes."""
+        c = self.clients[proc]
+        nsegments = int(c.communicate("UPDATE_SEGMENTS_RWA", params)[0])
+        return [self._unpack_angular_dists(
+                    c.communicate("GET_CALCULATED_ANGULAR_DISTS", [i]))
+                for i in range(nsegments)]
+
     def calculate(self, params, proc=0):
         c = self.clients[proc]
         nsegments = int(c.communicate("UPDATE_SEGMENTS", params)[0])

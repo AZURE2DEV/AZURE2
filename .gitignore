@@ -24,3 +24,7 @@ docs/api/
 # Python bytecode
 __pycache__/
 *.py[cod]
+
+# Python packaging artefacts
+*.egg-info/
+dist/

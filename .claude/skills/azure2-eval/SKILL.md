@@ -511,3 +511,10 @@ model's known total (record it whenever the `.azr` changes; a jump concentrated
 in the capture datasets almost always means a stale `intEC.extrap`). After a
 fit, check `param.sav` updated and compare `parameters.out` widths — and their
 θ² — against expectations.
+
+## Examples shipped with pyazr
+
+In `pyazr/examples/`: `angular_distribution.py`, `print_scheme.py`,
+`edit_scheme.py`, `deactivate_level.py`, `transform_widths.py`,
+`dimensionless_widths.py`, `save_fit_to_azr.py`, `uncertainty_band.py`,
+`fit_emcee.py`, `fit_zeus.py`.

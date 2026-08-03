@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyazr"
+description = "Python interface to the AZURE2 R-matrix code"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "AZURE2 developers" }]
+keywords = ["nuclear physics", "R-matrix", "AZURE2", "nuclear astrophysics"]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Programming Language :: Python :: 3",
+    "Operating System :: POSIX",
+    "Operating System :: MacOS",
+]
+
+# mpmath is imported at module load by pyazr.transform, and scipy is needed by
+# the width transformation (hyperu, CubicSpline); without both declared, a
+# pip-installed pyazr fails on "import pyazr". The samplers and plotting
+# libraries the examples use stay optional -- see optional-dependencies.
+dependencies = [
+    "numpy>=1.20",
+    "mpmath>=1.2",
+    "scipy>=1.7",
+]
+
+# The version is read from pyazr/__init__.py so it is stated in exactly one
+# place; bumping it there is enough.
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://azure.nd.edu/"
+Documentation = "https://rdeboer1.github.io/AZURE2/"
+Source = "https://github.com/rdeboer1/AZURE2"
+
+[project.optional-dependencies]
+# What the worked examples in pyazr/examples/ need, beyond the core.
+examples = ["matplotlib", "emcee", "multiprocess"]
+zeus = ["zeus-mcmc"]
+all = ["matplotlib", "emcee", "multiprocess", "zeus-mcmc"]
+
+[project.scripts]
+# Reap AZURE2 API instances left behind by an interpreter that died before it
+# could clean up. Safe by default: prints what it would do unless given --kill.
+pyazr-cleanup = "pyazr.cleanup:main"
+
+[tool.setuptools]
+# pyazr is a plain package in the repository root; AZURE2 itself is C++ and is
+# not installed by pip. The binary is located at runtime via $AZURE2_BINARY,
+# then build/src/AZURE2, then $PATH.
+packages = ["pyazr"]
+
+[tool.setuptools.dynamic]
+version = { attr = "pyazr.__version__" }

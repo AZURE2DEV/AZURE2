@@ -6,12 +6,14 @@ detached thread and never killed it -- this uses :class:`subprocess.Popen` so
 the process can be terminated deterministically and probed for liveness.
 """
 
+import atexit
 import os
 import shutil
 import signal
 import subprocess
 import sys
 import threading
+import weakref
 
 # Printed by AZURESocket.cpp once the server is bound and listening; the trailing
 # token is the actual (possibly OS-assigned) port.
@@ -48,6 +50,26 @@ def _default_binary():
 
 class ServerError(RuntimeError):
     """Raised when the AZURE2 subprocess cannot be started."""
+
+
+# Every live server, so interpreter exit can stop them all. __del__ alone is not
+# enough: it may not run at shutdown, and it certainly does not run when a
+# notebook kernel is restarted or the interpreter is killed outright, which is
+# how stray AZURE2 processes accumulate. A WeakSet keeps this from holding
+# servers alive past their natural lifetime.
+_LIVE_SERVERS = weakref.WeakSet()
+
+
+def _stop_all_servers():
+    """Stop every server this interpreter started. Registered with atexit."""
+    for srv in list(_LIVE_SERVERS):
+        try:
+            srv.stop()
+        except Exception:      # never let cleanup raise during shutdown
+            pass
+
+
+atexit.register(_stop_all_servers)
 
 
 class server:
@@ -93,6 +115,7 @@ class server:
         self._listening = threading.Event()   # set once the port is known
         self._reader = None
         self.start()
+        _LIVE_SERVERS.add(self)
 
     def __del__(self):
         self.stop()

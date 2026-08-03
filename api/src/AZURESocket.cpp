@@ -439,6 +439,11 @@ void AZURESocket::handle( const vector_r& request ) {
       sendPacket( api_->CalculateModelGradientsRWA( params ) );
       break;
 
+    // Get the angular-distribution (Legendre) coefficients of a segment
+    case 44:
+      sendPacket( api_->calculated_angular_dists( idx ) );
+      break;
+
     default:
       std::cerr << "AZURESocket: unknown command " << cmd << "." << std::endl;
       // Reply with an empty frame so the client does not block forever.

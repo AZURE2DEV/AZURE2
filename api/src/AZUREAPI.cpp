@@ -173,6 +173,7 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
   calculatedConv_.clear( );
   calculatedEnergies_.clear( );
   calculatedAngles_.clear( );
+  calculatedAngularDists_.clear( );
   calculatedSegments_.clear( );
   calculatedSegmentsE1_.clear( );
   calculatedSegmentsE2_.clear( );
@@ -218,6 +219,10 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
     std::vector<EPoint>& data = segments[i].GetPoints();
 
     std::vector<double> cross, crossE1, crossE2, energies, angles, conv, excitationEnergies;
+    // Angular-distribution coefficients, self-describing per point:
+    // a count followed by that many Legendre coefficients. Points that
+    // are not part of an angular-distribution segment contribute a zero.
+    std::vector<double> angularDists;
 
     // Handle component segments using the new integrated calculation method
     if (segments[i].HasComponents()) {
@@ -235,6 +240,9 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
         excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
+        angularDists.push_back( (double)data[k].GetNumAngularDists( ) );
+        for( int a = 0; a < data[k].GetNumAngularDists( ); ++a )
+          angularDists.push_back( data[k].GetAngularDist( a ) );
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -256,6 +264,9 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
         excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
+        angularDists.push_back( (double)data[k].GetNumAngularDists( ) );
+        for( int a = 0; a < data[k].GetNumAngularDists( ); ++a )
+          angularDists.push_back( data[k].GetAngularDist( a ) );
 
       }
     }
@@ -266,6 +277,7 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
     calculatedSegmentsE2_.push_back( crossE2 );
     calculatedEnergies_.push_back( energies );
     calculatedAngles_.push_back( angles );
+    calculatedAngularDists_.push_back( angularDists );
     calculatedExcitationEnergies_.push_back( excitationEnergies );
 
   }
@@ -279,6 +291,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
   calculatedConv_.clear( );
   calculatedEnergies_.clear( );
   calculatedAngles_.clear( );
+  calculatedAngularDists_.clear( );
   calculatedSegments_.clear( );
   calculatedSegmentsE1_.clear( );
   calculatedSegmentsE2_.clear( );
@@ -317,6 +330,10 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
     std::vector<EPoint>& data = segments[i].GetPoints();
 
     std::vector<double> cross, crossE1, crossE2, energies, angles, conv, excitationEnergies;
+    // Angular-distribution coefficients, self-describing per point:
+    // a count followed by that many Legendre coefficients. Points that
+    // are not part of an angular-distribution segment contribute a zero.
+    std::vector<double> angularDists;
 
     // Handle component segments using the new integrated calculation method
     if (segments[i].HasComponents()) {
@@ -334,6 +351,9 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
         excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
+        angularDists.push_back( (double)data[k].GetNumAngularDists( ) );
+        for( int a = 0; a < data[k].GetNumAngularDists( ); ++a )
+          angularDists.push_back( data[k].GetAngularDist( a ) );
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -355,6 +375,9 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
         excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
+        angularDists.push_back( (double)data[k].GetNumAngularDists( ) );
+        for( int a = 0; a < data[k].GetNumAngularDists( ); ++a )
+          angularDists.push_back( data[k].GetAngularDist( a ) );
 
       }
     }
@@ -365,6 +388,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
     calculatedSegmentsE2_.push_back( crossE2 );
     calculatedEnergies_.push_back( energies );
     calculatedAngles_.push_back( angles );
+    calculatedAngularDists_.push_back( angularDists );
     calculatedExcitationEnergies_.push_back( excitationEnergies );
 
   }
@@ -378,6 +402,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
   calculatedConv_.clear( );
   calculatedEnergies_.clear( );
   calculatedAngles_.clear( );
+  calculatedAngularDists_.clear( );
   calculatedSegments_.clear( );
   calculatedSegmentsE1_.clear( );
   calculatedSegmentsE2_.clear( );
@@ -417,6 +442,10 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
     std::vector<EPoint>& data = segments[i].GetPoints();
 
     std::vector<double> cross, crossE1, crossE2, energies, angles, conv, excitationEnergies;
+    // Angular-distribution coefficients, self-describing per point:
+    // a count followed by that many Legendre coefficients. Points that
+    // are not part of an angular-distribution segment contribute a zero.
+    std::vector<double> angularDists;
 
     // Handle component segments using the new integrated calculation method
     if (segments[i].HasComponents()) {
@@ -434,6 +463,9 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
         excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
+        angularDists.push_back( (double)data[k].GetNumAngularDists( ) );
+        for( int a = 0; a < data[k].GetNumAngularDists( ); ++a )
+          angularDists.push_back( data[k].GetAngularDist( a ) );
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -455,6 +487,9 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
         excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
+        angularDists.push_back( (double)data[k].GetNumAngularDists( ) );
+        for( int a = 0; a < data[k].GetNumAngularDists( ); ++a )
+          angularDists.push_back( data[k].GetAngularDist( a ) );
 
       }
     }
@@ -465,6 +500,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
     calculatedSegmentsE2_.push_back( crossE2 );
     calculatedEnergies_.push_back( energies );
     calculatedAngles_.push_back( angles );
+    calculatedAngularDists_.push_back( angularDists );
     calculatedExcitationEnergies_.push_back( excitationEnergies );
 
   }

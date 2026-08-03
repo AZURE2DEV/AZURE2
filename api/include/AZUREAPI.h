@@ -191,6 +191,21 @@ class AZUREAPI {
    * Returns a pointer to the calculated energies object.
    */
   vector_r calculated_angles(int i) const {return calculatedAngles_[i];};
+
+  /*!
+   * Legendre coefficients of the angular distribution for segment \p i, one
+   * group per point and each group self-describing, so a segment whose points
+   * carry different orders still round-trips:
+   *
+   *   [ n_0, c_0_0 ... c_0_(n_0-1), n_1, c_1_0 ... c_1_(n_1-1), ... ]
+   *
+   * Read a count, consume that many coefficients, repeat until the array is
+   * exhausted; the number of groups is the number of points.
+   *
+   * Only points belonging to an angular-distribution segment carry any; every
+   * other point contributes a count of zero.
+   */
+  vector_r calculated_angular_dists(int i) const {return calculatedAngularDists_[i];};
   /*!
    * Returns a pointer to the data excitation energies.
    */
@@ -317,6 +332,7 @@ class AZUREAPI {
   std::vector<vector_r> calculatedConv_;
   std::vector<vector_r> calculatedEnergies_;
   std::vector<vector_r> calculatedAngles_;
+  std::vector<vector_r> calculatedAngularDists_;
   std::vector<vector_r> calculatedSegments_;
   std::vector<vector_r> calculatedSegmentsE1_;
   std::vector<vector_r> calculatedSegmentsE2_;

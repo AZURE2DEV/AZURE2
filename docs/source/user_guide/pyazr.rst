@@ -10,9 +10,21 @@ minimizers, external samplers, parameter scans, systematic studies over many
 model variants, and publication figures built from the model rather than from
 exported files.
 
-Requirements: Python 3 with NumPy, and AZURE2 built with ``USE_API=ON`` (the
-default). ``pyazr`` finds the binary via ``$AZURE2_BINARY``, then
-``build/src/AZURE2``, then ``$PATH``.
+Installation
+------------
+
+.. code-block:: bash
+
+   pip install -e .          # from the repository root
+   pip install -e ".[all]"   # plus what the examples need
+
+Core dependencies are NumPy, mpmath and SciPy. mpmath is imported when
+``pyazr.transform`` loads, so it is required rather than optional; the samplers
+and plotting libraries the examples use are the extras.
+
+AZURE2 itself is C++ and is not installed by pip. ``pyazr`` finds the binary
+via ``$AZURE2_BINARY``, then ``build/src/AZURE2``, then ``$PATH``, and needs it
+built with ``USE_API=ON`` (the default).
 
 First steps
 -----------
@@ -167,6 +179,67 @@ difference between them is pure interference, which is block-diagonal in
 J\ :sup:`π` — only same-J\ :sup:`π` levels interfere, and that is a useful
 check on any decomposition.
 
+Angular distributions
+---------------------
+
+AZURE2 writes an angular distribution as
+
+.. math:: W(\theta) = \sum_k a_k P_k(\cos\theta)
+
+and computes the :math:`a_k` **only** for segments declared as angular
+distributions -- ``observable="angular-distribution"`` with an ``order``.
+Everything else yields empty arrays.
+
+For the grids a model already declares, on a live instance:
+
+.. code-block:: python
+
+   dists = azr.calculate_angular_dists_rwa(x)
+   # one entry per segment; each a list with one array of coefficients per point
+
+For arbitrary energies, which is usually what is wanted:
+
+.. code-block:: python
+
+   from pyazr import angular_distribution
+
+   e_cm, coeffs = angular_distribution("model.azr", [0.05, 0.1, 0.2],
+                                       entrance=1, exit=2, order=4)
+
+``coeffs[i, k]`` is :math:`a_k` at energy *i*. Input energies are **lab** by
+default (``lab=False`` for centre-of-mass); the returned energies are always
+centre-of-mass. Energies AZURE2 could not evaluate come back as ``NaN`` rather
+than being dropped, so the rows always line up with the input.
+
+Each call writes a temporary model requesting exactly those energies and starts
+one AZURE2 process, so pass every energy in a single call rather than looping.
+
+Reading the result: :math:`a_0` is the normalisation, so :math:`a_0 = 1` with
+everything else zero means isotropic. That is the correct answer for a
+resonance formed in an s-wave -- the compound nucleus has no preferred
+direction -- and is what :sup:`3`\ H+d gives at low energy. Anisotropy shows
+as the higher orders departing from zero.
+
+Worked example: ``pyazr/examples/angular_distribution.py``.
+
+Cleaning up stray processes
+---------------------------
+
+A session stops the instances it started, and an :mod:`atexit` hook covers a
+script that forgets to ``close()``. What nothing can cover is the interpreter
+dying outright -- ``kill -9``, or a notebook kernel restarting -- which leaves
+AZURE2 processes running with nobody to talk to them.
+
+.. code-block:: bash
+
+   python -m pyazr.cleanup          # list what would be reaped
+   python -m pyazr.cleanup --kill   # reap it
+   pyazr-cleanup --kill             # same, when pip-installed
+
+Only instances whose **parent process has died** are candidates, so a
+concurrently running script's instances are never touched, however many it has.
+``pyazr.find_orphans()`` and ``pyazr.kill_orphans()`` are the API equivalents.
+
 Dimensionless widths
 --------------------
 
@@ -209,6 +282,8 @@ Worked scripts ship in ``pyazr/examples/``:
      - MCMC sampling with ``emcee``, one AZURE2 instance per pool worker.
    * - ``fit_zeus.py``
      - The same with ``zeus``.
+   * - ``angular_distribution.py``
+     - Legendre coefficients at chosen energies, with an optional plot.
 
 Running several instances
 -------------------------

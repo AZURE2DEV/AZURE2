@@ -68,6 +68,7 @@ class client:
         'CALCULATE_CHI2_GRAD_RWA': 41,
         'CALCULATE_RESIDUAL_JACOBIAN_RWA': 42,
         'CALCULATE_MODEL_GRADIENTS_RWA': 43,
+        'GET_CALCULATED_ANGULAR_DISTS': 44,
     }
 
     def __init__(self, server='localhost', port=20000,
