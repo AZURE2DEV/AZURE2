@@ -34,30 +34,32 @@ find_path (QWT_INCLUDE_DIR
 )
 
 # --- library ---------------------------------------------------------------
-if (PC_QWT_FOUND)
-  message(STATUS "Found Qwt via pkg-config")
-
-  # Only the Qwt library itself; the Qt libraries pkg-config also reports are
-  # handled separately by find_package(Qt5).
-  find_library (QWT_LIBRARY_FOUND
-    NAMES qwt qwt-qt5 libqwt libqwt-qt5
-    HINTS ${PC_QWT_LIBRARY_DIRS}
-    NO_DEFAULT_PATH
-  )
-
-  if(QWT_LIBRARY_FOUND)
-    set(QWT_LIBRARY ${QWT_LIBRARY_FOUND})
-    message(STATUS "Found Qwt library: ${QWT_LIBRARY}")
+# An explicitly supplied QWT_LIBRARY wins. Otherwise search, without
+# NO_DEFAULT_PATH so that CMake's framework handling applies: Homebrew ships
+# Qwt on macOS as qwt.framework rather than libqwt.dylib, and restricting the
+# search to pkg-config's library directories missed it, leaving a bare -lqwt
+# that the linker could not resolve.
+if (NOT QWT_LIBRARY)
+  if (PC_QWT_FOUND)
+    message(STATUS "Found Qwt via pkg-config")
+    find_library (QWT_LIBRARY
+      NAMES qwt qwt-qt5 qwt-qt4 qwt-qt3
+      HINTS ${PC_QWT_LIBRARY_DIRS} ${PC_QWT_PREFIX}/lib ${PC_QWT_PREFIX}
+    )
+    set(QWT_VERSION_STRING ${PC_QWT_VERSION})
   else()
-    # Fallback: let the linker find it.
-    set(QWT_LIBRARY qwt)
-    message(STATUS "Using fallback Qwt library: qwt")
+    message(STATUS "pkg-config failed, falling back to path search...")
+    find_library (QWT_LIBRARY NAMES qwt qwt-qt5 qwt-qt4 qwt-qt3)
   endif()
+endif()
 
-  set(QWT_VERSION_STRING ${PC_QWT_VERSION})
+if (QWT_LIBRARY)
+  message(STATUS "Found Qwt library: ${QWT_LIBRARY}")
 else()
-  message(STATUS "pkg-config failed, falling back to path search...")
-  find_library (QWT_LIBRARY NAMES qwt qwt-qt3 qwt-qt4 qwt-qt5)
+  # Last resort: let the linker try. This is what used to happen silently on
+  # every miss, and it turns a detection failure into a link error much later.
+  message(WARNING "Qwt library not located; falling back to -lqwt")
+  set(QWT_LIBRARY qwt)
 endif()
 
 set(QWT_LIBRARIES ${QWT_LIBRARY})

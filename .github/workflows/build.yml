@@ -96,6 +96,17 @@ jobs:
           fi
           echo "Qwt headers: $(dirname "$QWT_HDR")"
           echo "QWT_INCLUDE_DIR=$(dirname "$QWT_HDR")" >> "$GITHUB_ENV"
+          # Homebrew ships Qwt as a framework here, not a dylib. CMake links a
+          # framework correctly when given the .framework directory itself.
+          QWT_LIB="$(find -L "$(brew --prefix qwt-qt5)/lib" -maxdepth 1 \
+            \( -name 'qwt.framework' -o -name 'libqwt*.dylib' \) -print -quit 2>/dev/null || true)"
+          if [ -z "$QWT_LIB" ]; then
+            echo "Could not locate the Qwt library; lib/ contains:"
+            find -L "$(brew --prefix qwt-qt5)/lib" -maxdepth 1 | head -20
+            exit 1
+          fi
+          echo "Qwt library: $QWT_LIB"
+          echo "QWT_LIBRARY=$QWT_LIB" >> "$GITHUB_ENV"
 
       # -------------------------------------------------------------- windows
       # MSYS2/mingw-w64 rather than MSVC: the project already targets mingw (see
@@ -138,6 +149,7 @@ jobs:
             EXTRA+=(-DCMAKE_PREFIX_PATH="$QT5_PREFIX;$QWT_PREFIX")
             # Located above, so FindQwt does not have to guess the layout.
             EXTRA+=(-DQWT_INCLUDE_DIR="$QWT_INCLUDE_DIR")
+            EXTRA+=(-DQWT_LIBRARY="$QWT_LIBRARY")
           fi
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
