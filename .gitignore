@@ -20,3 +20,7 @@ build.log
 # Generated documentation (Doxygen and Sphinx output)
 docs/_build/
 docs/api/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
