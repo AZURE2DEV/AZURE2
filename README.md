@@ -7,6 +7,10 @@ a fast C++ calculation engine, parameter fitting via Minuit2, optional Bayesian
 (MCMC) sampling, and a socket API with a Python client (`pyazr`) for scripting
 and external samplers.
 
+**Documentation:** <https://rdeboer1.github.io/AZURE2/> — user guide, the
+physics and conventions, and the C++ API reference at
+[`/api/`](https://rdeboer1.github.io/AZURE2/api/).
+
 Upstream project: <https://azure.nd.edu/> · Source:
 <https://github.com/rdeboer1/AZURE2>
 
@@ -247,7 +251,9 @@ one exactly — a change there means data was dropped or misread).
 
 ## Documentation
 
-Sources live in `docs/`; the generated output is not tracked.
+The site at <https://rdeboer1.github.io/AZURE2/> is rebuilt and published by
+CI on every push. Sources live in `docs/`; the generated output is not tracked.
+To build it locally:
 
 ```bash
 pip install -r docs/requirements.txt
