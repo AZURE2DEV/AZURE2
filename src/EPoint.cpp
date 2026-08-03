@@ -1473,10 +1473,50 @@ void EPoint::Calculate(CNuc* theCNuc,const Config &configure, EPoint *parent, in
 	    subPoint->Calculate(theCNuc,configure,this,i);
       else subPoint->Calculate(theCNuc,configure);
     }
-    this->IntegrateTargetEffect(configure);
+    this->IntegrateTargetEffectForObservable(configure);
     for(int i=1;i<=this->NumLocalMappedPoints();i++)
-      this->GetLocalMappedPoint(i)->IntegrateTargetEffect(configure);
+      this->GetLocalMappedPoint(i)->IntegrateTargetEffectForObservable(configure);
   }
+}
+
+/*!
+ * Integrates the observable over the target, which is not the same operation
+ * for an analyzing power as for a cross section.
+ *
+ * A_y is a ratio, so averaging it over the target thickness with equal weights
+ * is wrong: the parts of the target where the cross section is large must
+ * count for more. The physically meaningful quantity is the ratio of the
+ * integrated polarized and unpolarized yields,
+ *
+ *   <A_y> = Int A_y(E) sigma(E) dE / Int sigma(E) dE
+ *
+ * which is what a measurement actually returns. Both integrals are done with
+ * the existing yield integrator -- once on sigma, once on the product -- so the
+ * quadrature, straggling and energy-loss treatment stay identical and there is
+ * only one integration scheme to maintain.
+ */
+void EPoint::IntegrateTargetEffectForObservable(const Config& configure) {
+  if(!this->IsAnalyzingPower()) {
+    this->IntegrateTargetEffect(configure);
+    return;
+  }
+
+  const int n = this->NumSubPoints();
+  std::vector<double> sigma(n);
+  for(int i=1;i<=n;i++) sigma[i-1] = this->GetSubPoint(i)->GetFitCrossSection();
+
+  this->IntegrateTargetEffect(configure);
+  const double denominator = this->GetFitCrossSection();
+
+  for(int i=1;i<=n;i++)
+    this->GetSubPoint(i)->SetFitCrossSection(sigma[i-1] *
+                                             this->GetSubPoint(i)->GetAnalyzingPower());
+  this->IntegrateTargetEffect(configure);
+  const double numerator = this->GetFitCrossSection();
+
+  for(int i=1;i<=n;i++) this->GetSubPoint(i)->SetFitCrossSection(sigma[i-1]);
+
+  this->SetFitCrossSection(std::fabs(denominator) > 0.0 ? numerator/denominator : 0.0);
 }
 
 /*!
@@ -1530,6 +1570,12 @@ void EPoint::SetTargetEffectNum(int targetEffectNum) {
  */
 
 void EPoint::AddSubPoint(EPoint subPoint) {
+  // A sub-point is a copy made before the observable was stamped on the parent,
+  // so it has to inherit it here. Without this an analyzing-power segment that
+  // also carries target effects is integrated as though it were a cross
+  // section, and A_y is never computed at all.
+  subPoint.is_analyzing_power_ = this->is_analyzing_power_;
+  subPoint.is_sub_point_ = true;
   integrationPoints_.push_back(subPoint);
 }
 

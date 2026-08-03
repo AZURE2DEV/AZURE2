@@ -360,15 +360,15 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
   // An analyzing-power segment reports A_y in place of the cross section, so
   // the rest of AZURE2 -- output files, chi-squared, plotting -- needs no
   // special case.
-  if (std::getenv("AZURE2_POL_DEBUG3"))
-    std::printf("AYFLAG E=%.4f th=%.1f isAy=%d\n", point->GetCMEnergy(),
-                point->GetCMAngle(), (int)point->IsAnalyzingPower());
   if (point->IsAnalyzingPower()) {
     double spinSum = 0.0, ay = 0.0;
-    if (this->CalculateAmplitudeMatrix(point, &spinSum, &ay))
-      point->SetFitCrossSection(ay);
-    else
-      point->SetFitCrossSection(0.0);
+    if (!this->CalculateAmplitudeMatrix(point, &spinSum, &ay)) ay = 0.0;
+    point->SetAnalyzingPower(ay);
+    // A sub-point of a target-effect integration must keep the cross section
+    // in place, because A_y is averaged over the target weighted by it. Every
+    // other point reports A_y directly, so nothing downstream needs a special
+    // case.
+    if (!point->IsSubPoint()) point->SetFitCrossSection(ay);
   }
 
   // Temporary validation hook: compare the Seyler amplitude-matrix route
