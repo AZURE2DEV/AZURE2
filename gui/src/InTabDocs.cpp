@@ -3,7 +3,12 @@
 #include "SegmentsTab.h"
 #include "TargetIntTab.h"
 #include "RunTab.h"
+// PlotTab exists only in a Qwt build; without the guard this pulls in
+// qwt_symbol.h and a USE_QWT=OFF build fails on any machine that does not
+// happen to have Qwt headers installed anyway.
+#ifdef USE_QWT
 #include "PlotTab.h"
+#endif
 
 std::vector<QString> setInfoStrings(QString infoString1 = "",
 				    QString infoString2 = "",
@@ -60,5 +65,7 @@ const std::vector<QString> RunTab::infoText =
 "<ul><li><p>Results of the MINOS uncertainty analysis are output in the files <code>param.errors</code> and <code>covariance_matrix.out</code>.</p></ul>"
 "<ul><li><p>Results of the reaction rate calculation are output in <code>reactionrates.out</code>. The reaction rate calculation uses GSL adaptive step size integration. For calculations that involve external capture, this means that the code must also calculate external capture integrals for each of the energy points ``on the fly'' since these points are not determined in advance. This may result in very long computation times for these reaction rates. Instead, the user may wish to create an array of finely energy spaced data points using the Segments Without Data section of the <i>Segments</i> tab and perform the numerical integration on their own. It should also be noted that numerical integration of narrow resonances may not be performed properly even with adaptive step size integration. For this reason, reaction rate calculations using the code should only be performed for broad structures. Narrow resonance contributions should be added separately using the usual narrow resonance reaction rate approximation. </p></ul>");
 
+#ifdef USE_QWT
 const std::vector<QString> PlotTab::infoText = 
   setInfoStrings("<ul><li><p>This tab is used to plot cross sections (or corresponding S-factors) using the segments defined in the <i>Segments</i> tab. A segment can be plotted by clicking on the short segment label from the list on the left and then clicking the <b>Draw</b> button in the lower left corner. The segment is unselected by clicking on it a second time. Multiple segments may be plotted at once by clicking on each a single time and then clicking the <b>Draw</b> button. A segment is selected when the background color changes.</p></ul>");
+#endif

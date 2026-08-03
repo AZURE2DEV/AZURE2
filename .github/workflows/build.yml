@@ -158,7 +158,13 @@ jobs:
         run: |
           mkdir -p dist
           cp build/src/AZURE2.exe dist/
-          windeployqt dist/AZURE2.exe
+          # MSYS2 names the Qt5 deploy tool windeployqt-qt5; plain windeployqt
+          # only exists in a Qt6 install.
+          if command -v windeployqt-qt5 >/dev/null 2>&1; then
+            windeployqt-qt5 dist/AZURE2.exe
+          else
+            windeployqt dist/AZURE2.exe
+          fi
           # mingw runtime + the non-Qt dependencies
           ldd dist/AZURE2.exe | awk '/ucrt64/ {print $3}' | xargs -r -I{} cp -n {} dist/ || true
 
