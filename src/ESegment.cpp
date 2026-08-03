@@ -3,6 +3,8 @@
 #include "DataLine.h"
 #include "EData.h"
 #include "ESegment.h"
+#include <cstdio>
+#include <cstdlib>
 #include "ExtrapLine.h"
 #include "SegLine.h"
 
