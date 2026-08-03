@@ -1,0 +1,187 @@
+name: build
+
+# Every push and pull request, so a platform breaking is visible immediately
+# rather than at release time. Tags additionally publish a draft release.
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  QT_VERSION: '5.15.2'
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    # Never cancel the other platforms when one fails: the point of the matrix
+    # is to see every platform's errors in one run.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            os: ubuntu-latest
+            use_qwt: 'ON'
+            use_readline: 'ON'
+          - name: macos
+            # Intel runner on purpose: Qt 5.15.2 has no Apple Silicon binaries,
+            # so install-qt-action cannot provide an arm64 Qt5. The x86_64
+            # artifact still runs on Apple Silicon under Rosetta. A native arm64
+            # build needs Qt5 built from source, or the Qt6 migration.
+            os: macos-13
+            # Homebrew dropped qt@5, so there is no packaged Qt5 build of Qwt to
+            # link against here. The Plot tab is off on macOS until Qwt is built
+            # from source in this workflow.
+            use_qwt: 'OFF'
+            use_readline: 'ON'
+          - name: windows
+            os: windows-latest
+            use_qwt: 'ON'
+            use_readline: 'ON'
+
+    defaults:
+      run:
+        shell: ${{ matrix.name == 'windows' && 'msys2 {0}' || 'bash' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------- linux
+      - name: Install dependencies (linux)
+        if: matrix.name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config \
+            libgsl-dev libreadline-dev \
+            qtbase5-dev qtbase5-dev-tools qttools5-dev libqt5svg5-dev \
+            libqwt-qt5-dev
+
+      # ---------------------------------------------------------------- macos
+      - name: Install dependencies (macos)
+        if: matrix.name == 'macos'
+        run: brew install ninja gsl readline
+
+      - name: Install Qt (macos)
+        if: matrix.name == 'macos'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+
+      # -------------------------------------------------------------- windows
+      # MSYS2/mingw-w64 rather than MSVC: the project already targets mingw (see
+      # docker/Dockerfile.windows and CROSS_COMPILE_WINDOWS), and the same
+      # package set exists natively here.
+      - name: Set up MSYS2 (windows)
+        if: matrix.name == 'windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkg-config
+            mingw-w64-ucrt-x86_64-gsl
+            mingw-w64-ucrt-x86_64-readline
+            mingw-w64-ucrt-x86_64-qt5-base
+            mingw-w64-ucrt-x86_64-qt5-svg
+            mingw-w64-ucrt-x86_64-qt5-tools
+            mingw-w64-ucrt-x86_64-qwt-qt5
+
+      # --------------------------------------------------------------- build
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_GUI=ON \
+            -DUSE_API=ON \
+            -DUSE_MCMC=ON \
+            -DUSE_QWT=${{ matrix.use_qwt }} \
+            -DUSE_READLINE=${{ matrix.use_readline }}
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      # Catches link errors and libraries the binary cannot resolve at runtime.
+      # --help exits 0 and needs no display, so it works on a headless runner.
+      - name: Smoke test
+        run: |
+          set -e
+          BIN=build/src/AZURE2
+          [ -x "$BIN" ] || BIN=build/src/AZURE2.exe
+          "$BIN" --help > help.txt
+          test -s help.txt
+          grep -q "Syntax: AZURE2" help.txt
+          echo "smoke test passed"
+
+      # ------------------------------------------------------------- package
+      # Qt's own deploy tools pull the Qt runtime in beside the binary. This is
+      # not yet a signed .app or an AppImage -- it is enough to make the artifact
+      # runnable on a machine that has the system libraries.
+      - name: Package (windows)
+        if: matrix.name == 'windows'
+        run: |
+          mkdir -p dist
+          cp build/src/AZURE2.exe dist/
+          windeployqt dist/AZURE2.exe
+          # mingw runtime + the non-Qt dependencies
+          ldd dist/AZURE2.exe | awk '/ucrt64/ {print $3}' | xargs -r -I{} cp -n {} dist/ || true
+
+      - name: Package (macos)
+        if: matrix.name == 'macos'
+        run: |
+          mkdir -p dist
+          cp build/src/AZURE2 dist/
+          otool -L dist/AZURE2 > dist/linked-libraries.txt
+          cat > dist/README-packaging.txt <<'EOF'
+          This is the bare binary, not a redistributable .app bundle.
+
+          It resolves Qt, GSL and readline through the paths they had on the
+          build machine, so it will only run where those exist. Making it
+          redistributable needs macdeployqt for the Qt frameworks, the non-Qt
+          dylibs copied into Contents/Frameworks with their install names
+          rewritten to @executable_path/../Frameworks, and codesigning plus
+          notarization for Gatekeeper. See linked-libraries.txt for what it
+          currently depends on.
+          EOF
+
+      - name: Package (linux)
+        if: matrix.name == 'linux'
+        run: |
+          mkdir -p dist
+          cp build/src/AZURE2 dist/
+          ldd dist/AZURE2 > dist/linked-libraries.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AZURE2-${{ matrix.name }}
+          path: dist/
+          if-no-files-found: error
+
+  # Tags promote the same artifacts to a draft release, so nothing is published
+  # without a human looking at it first.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Zip per platform
+        run: |
+          cd artifacts
+          for d in */; do zip -r "${d%/}.zip" "$d"; done
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: artifacts/*.zip

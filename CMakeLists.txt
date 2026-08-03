@@ -1,5 +1,19 @@
-cmake_minimum_required(VERSION 4.0)
+# Range form: needs at least 3.16, and opts in to the current behaviour of
+# anything up to 4.0.  Requiring 4.0 outright kept the project from configuring
+# anywhere but a very recent toolchain -- Ubuntu 22.04 ships CMake 3.22 and
+# 24.04 ships 3.28, so distro builds and the snap could never get past line 1.
+cmake_minimum_required(VERSION 3.16...4.0)
 project(AZURE2)
+
+# Default to an optimized build.  With no CMAKE_BUILD_TYPE, CMake passes no
+# optimization flags at all, which for a numerical code means an interpreter-
+# speed binary that looks like a normal one.  Multi-config generators (Visual
+# Studio, Xcode) pick the configuration at build time, so leave those alone.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+                 Debug Release RelWithDebInfo MinSizeRel)
+endif()
 
 # Version info
 set(AZURE2_VERSION_MAJOR 1)
@@ -19,7 +33,7 @@ option(USE_READLINE "Use Readline library for CLI input." ON)
 option(USE_ERYA "Use ERYA SRIM stopping power utilities." ON)
 option(USE_MCMC "Use MCMC Bayesian sampling OFF" ON)
 option(USE_GCOV "Create a GCov-enabled build." OFF)
-option(CODE_COVERAGE "Enable coverage reporting" ON)
+option(CODE_COVERAGE "Enable coverage reporting" OFF)
 
 # Cross-compilation settings
 if(CROSS_COMPILE_WINDOWS)
@@ -322,16 +336,6 @@ else()
 endif()
 
 # Code coverage
-add_library(coverage_config INTERFACE)
-if(CODE_COVERAGE AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(coverage_config INTERFACE -O3 -g --coverage -std=c++11)
-    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.13)
-        target_link_options(coverage_config INTERFACE --coverage)
-    else()
-        target_link_libraries(coverage_config INTERFACE --coverage)
-    endif()
-endif()
-
 if(USE_GCOV)
     set(GCC_COVERAGE_COMPILE_FLAGS "-fprofile-arcs -ftest-coverage")
     set(GCC_COVERAGE_LINK_FLAGS "-lgcov")
