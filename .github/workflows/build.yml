@@ -9,6 +9,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# A newer push supersedes an in-flight run for the same ref, so a queued job
+# cannot outlive the commit that started it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   QT_VERSION: '5.15.2'
 
@@ -28,10 +34,14 @@ jobs:
             use_readline: 'ON'
           - name: macos
             # Intel runner on purpose: Qt 5.15.2 has no Apple Silicon binaries,
-            # so install-qt-action cannot provide an arm64 Qt5. The x86_64
-            # artifact still runs on Apple Silicon under Rosetta. A native arm64
-            # build needs Qt5 built from source, or the Qt6 migration.
-            os: macos-13
+            # so install-qt-action cannot provide an arm64 Qt5, and Homebrew's
+            # gsl/readline on an arm64 host would not link against an x86_64 Qt.
+            # The x86_64 artifact runs on Apple Silicon under Rosetta; a native
+            # arm64 build needs Qt5 from source, or the Qt6 migration.
+            # macos-15-intel is a standard runner, free on public repositories.
+            # (macos-13 was retired, and a label with no runners behind it queues
+            # forever rather than failing.)
+            os: macos-15-intel
             # Homebrew dropped qt@5, so there is no packaged Qt5 build of Qwt to
             # link against here. The Plot tab is off on macOS until Qwt is built
             # from source in this workflow.

@@ -21,6 +21,16 @@ set(AZURE2_VERSION_MINOR 1)
 set(AZURE2_VERSION_PATCH 0)
 set(AZURE2_VERSION "${AZURE2_VERSION_MAJOR}.${AZURE2_VERSION_MINOR}.${AZURE2_VERSION_PATCH}")
 
+# M_PI and friends are not ISO C++, so MinGW's headers hide them whenever
+# __STRICT_ANSI__ is set -- which -std=c++17 (as opposed to -std=gnu++17) does.
+# _USE_MATH_DEFINES is the MSVC-originated convention for asking for them back,
+# honoured by both MSVC and mingw-w64. It has to be visible before any header
+# reaches <cmath>, hence a command-line definition rather than a #define in a
+# source file. Also covers CROSS_COMPILE_WINDOWS, which sets CMAKE_SYSTEM_NAME.
+if(WIN32)
+    add_compile_definitions(_USE_MATH_DEFINES)
+endif()
+
 # Options
 option(CROSS_COMPILE_WINDOWS "Cross-compile for Windows" OFF)
 option(BUILD_MACOS_BUNDLE "Build macOS application bundle" OFF)
