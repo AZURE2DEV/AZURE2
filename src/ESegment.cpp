@@ -21,9 +21,13 @@ ESegment::ESegment(SegLine segLine) {
   e_step_=0.0;
   a_step_=0.0;
   segment_chi_squared_=0.0;
-  if(segLine.isDiff()==1 || segLine.isDiff()==4) isdifferential_=true;
+  // isDiff 7 is the vector analyzing power: differential in the centre-of-mass
+  // frame, so it needs the same angular machinery as a differential cross
+  // section even though the quantity itself is a dimensionless ratio.
+  isAnalyzingPower_ = (segLine.isDiff()==7);
+  if(segLine.isDiff()==1 || segLine.isDiff()==4 || segLine.isDiff()==7) isdifferential_=true;
   else isdifferential_=false;
-  if(segLine.isDiff()==4) iscmdifferential_=true;
+  if(segLine.isDiff()==4 || segLine.isDiff()==7) iscmdifferential_=true;
   else iscmdifferential_=false;
   if(segLine.isDiff()==2) {
     isphase_=true;
@@ -85,9 +89,10 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   e_step_=extrapLine.eStep();
   a_step_=extrapLine.aStep();
   segment_chi_squared_=0.0;
-  if(extrapLine.isDiff()==1 || extrapLine.isDiff()==5) isdifferential_=true;
+  isAnalyzingPower_ = (extrapLine.isDiff()==7);
+  if(extrapLine.isDiff()==1 || extrapLine.isDiff()==5 || extrapLine.isDiff()==7) isdifferential_=true;
   else isdifferential_=false;
-  if(extrapLine.isDiff()==5) iscmdifferential_=true;
+  if(extrapLine.isDiff()==5 || extrapLine.isDiff()==7) iscmdifferential_=true;
   else iscmdifferential_=false;
   if(extrapLine.isDiff()==2) {
     isphase_=true;
@@ -720,6 +725,9 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
  */
 
 void ESegment::AddPoint(EPoint point) {
+  // The observable is a property of the segment; stamp it on the point so the
+  // calculation does not have to look back up.
+  point.SetIsAnalyzingPower(this->IsAnalyzingPower());
   points_.push_back(point);
 }
 

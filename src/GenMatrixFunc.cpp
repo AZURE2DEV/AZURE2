@@ -357,6 +357,20 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
   }
     }
   
+  // An analyzing-power segment reports A_y in place of the cross section, so
+  // the rest of AZURE2 -- output files, chi-squared, plotting -- needs no
+  // special case.
+  if (std::getenv("AZURE2_POL_DEBUG3"))
+    std::printf("AYFLAG E=%.4f th=%.1f isAy=%d\n", point->GetCMEnergy(),
+                point->GetCMAngle(), (int)point->IsAnalyzingPower());
+  if (point->IsAnalyzingPower()) {
+    double spinSum = 0.0, ay = 0.0;
+    if (this->CalculateAmplitudeMatrix(point, &spinSum, &ay))
+      point->SetFitCrossSection(ay);
+    else
+      point->SetFitCrossSection(0.0);
+  }
+
   // Temporary validation hook: compare the Seyler amplitude-matrix route
   // against the Blatt-Biedenharn one. At fixed energy the ratio must be
   // constant in angle.

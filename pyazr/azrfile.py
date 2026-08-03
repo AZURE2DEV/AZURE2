@@ -532,6 +532,10 @@ class AzrModel:
     _EXTRAP_CODE = {
         "angle-integrated": 0, "differential": 1, "phase-shift": 2,
         "angular-distribution": 3, "total-capture": 4, "differential-cm": 5,
+        # Vector analyzing power A_y. Differential in the centre-of-mass frame
+        # like code 5, but the quantity is a dimensionless ratio, not a cross
+        # section.
+        "analyzing-power": 7,
     }
 
     def _splice_segments_test(self, new_lines):

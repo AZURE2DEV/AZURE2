@@ -35,6 +35,12 @@ class ESegment {
   bool IsTargetEffect() const;
   bool IsVaryNorm() const;
   bool IsAngularDist() const;
+  /*!
+   * Vector analyzing power segment (isDiff = 7). The comparison quantity is
+   * A_y rather than a cross section, so the values in the data file are
+   * dimensionless and bounded by one.
+   */
+  bool IsAnalyzingPower() const {return isAnalyzingPower_;};
   bool IsUPOS() const;
   int IsTotalCapture() const;
   ///Returns the cross section component this segment is compared against (0 = full, 1 = E1 only, 2 = E2 only).
@@ -112,6 +118,7 @@ class ESegment {
   bool isTargetEffect_;
   bool varyNorm_;
   bool isAngDist_;
+  bool isAnalyzingPower_;
   bool isUPOS_;
   int secondaryDecayL_;
   double Ic_;

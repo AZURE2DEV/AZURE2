@@ -44,6 +44,9 @@ class EPoint {
   bool IsMapped() const;
   bool IsTargetEffect() const;
   bool IsAngularDist() const;
+  //! Vector analyzing power point; the fit value is A_y, not a cross section.
+  bool IsAnalyzingPower() const {return is_analyzing_power_;};
+  void SetIsAnalyzingPower(bool v) {is_analyzing_power_ = v;};
   bool IsUPOS() const;
   int GetEntranceKey() const;
   int GetExitKey() const;
@@ -154,6 +157,7 @@ class EPoint {
   bool is_phase_;
   bool is_mapped_;
   bool is_ang_dist_;
+  bool is_analyzing_power_ = false;
   int entrance_key_;
   int exit_key_;
   int segment_key_;

@@ -740,6 +740,28 @@ class azure2:
             i += count
         return rows
 
+    def calculate_analyzing_power(self, params, proc=0):
+        """Vector analyzing power A_y per segment, for analyzing-power segments.
+
+        A_y is returned in the slot a cross section would occupy, because
+        AZURE2 treats it as another observable rather than a separate quantity:
+        declare a segment with ``observable="analyzing-power"`` and it comes
+        back from :meth:`calculate` like any other. This is a named alias for
+        that, so the intent is visible at the call site.
+
+        Segments that are not analyzing-power segments return their cross
+        section as usual, so check what you asked for.
+
+        Defined for a spin-1/2 projectile on a spin-0 target, in the Madison
+        convention with y along k_in x k_out. Bounded by one in magnitude, zero
+        in the pure-Coulomb limit, and zero at 0 and 180 degrees.
+        """
+        return self.calculate(params, proc=proc)
+
+    def calculate_analyzing_power_rwa(self, params, proc=0):
+        """:meth:`calculate_analyzing_power` from reduced-width amplitudes."""
+        return self.calculate_rwa(params, proc=proc)
+
     def calculate_angular_dists(self, params, proc=0):
         r"""Legendre coefficients of the angular distribution, per segment.
 
