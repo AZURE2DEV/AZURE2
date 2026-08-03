@@ -1,5 +1,6 @@
 #include "AZURECalc.h"
 #include "AZUREMain.h"
+#include "ParameterLabel.h"
 #include "AZUREParams.h"
 #include "Config.h"
 #include "CovarianceBand.h"
@@ -171,6 +172,35 @@ int AZUREMain::operator()(){
     bool haveBandCov=false;
     std::string covPath=configure().outputdir+"covariance.dat";
 
+    // A parameter pinned against one of its limits is the most common reason a
+    // fit cannot produce a covariance, and the one the user can act on. Name any
+    // such parameter physically -- the Minuit name alone does not say which
+    // level or channel it belongs to.
+    auto reportParametersAtLimits=[&](){
+      const ROOT::Minuit2::MnUserParameters& mp=params.GetMinuitParams();
+      int nAtLimit=0;
+      for(unsigned int i=0;i<mp.Params().size();i++) {
+        const ROOT::Minuit2::MinuitParameter& par=mp.Parameter(i);
+        if(par.IsFixed()||!par.HasLimits()) continue;
+        const double value=mp.Value(i);
+        const double scale=std::max(std::fabs(value),1.e-30);
+        bool atLimit=false;
+        if(par.HasLowerLimit()&&std::fabs(value-par.LowerLimit())<=1.e-6*scale) atLimit=true;
+        if(par.HasUpperLimit()&&std::fabs(value-par.UpperLimit())<=1.e-6*scale) atLimit=true;
+        if(!atLimit) continue;
+        if(!nAtLimit)
+          configure().outStream << "  Parameter(s) sitting at a limit:" << std::endl;
+        std::string text=mp.GetName(i);
+        const std::string label=AZURELabel::Parameter(compound(),data(),(int)i);
+        if(!label.empty()) text+="  =  "+label;
+        configure().outStream << "    " << text << " = " << value << std::endl;
+        nAtLimit++;
+      }
+      if(!nAtLimit)
+        configure().outStream << "  No parameter is at a limit, so the flat direction is a "
+                                 "degeneracy between correlated parameters." << std::endl;
+    };
+
     // Build the band covariance from a Minuit covariance (MIGRAD paths).
     auto captureMinuitCov=[&](const std::vector<double>& covData){
       if(!(configure().paramMask & Config::CALCULATE_COVARIANCE_BAND)) return;
@@ -183,11 +213,13 @@ int AZUREMain::operator()(){
       if(!bandCov.empty()) haveBandCov=true;
       else {
         const int np=pmap.NumPacked();
-        if(covData.empty())
+        if(covData.empty()) {
           configure().outStream << "Note: no covariance available for the uncertainty band -- the fit "
                                    "did not produce one. This usually means the minimum is not well "
                                    "determined (the fit did not fully converge, a parameter is sitting "
                                    "at a limit, or two parameters are degenerate)." << std::endl;
+          reportParametersAtLimits();
+        }
         else
           configure().outStream << "Note: covariance/parameter size mismatch for the uncertainty band ("
                                 << covData.size() << " covariance entries vs " << np*(np+1)/2
@@ -386,6 +418,7 @@ int AZUREMain::operator()(){
         } else {
           configure().outStream << "HESSE did not return a valid covariance; using the MIGRAD "
                                    "error matrix (uncertainties may be approximate)." << std::endl;
+          reportParametersAtLimits();
           captureMinuitCov(migradCov);
         }
       }

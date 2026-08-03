@@ -1,4 +1,5 @@
 #include "AZURECalcMCMC.h"
+#include "ParameterLabel.h"
 #include "Config.h"
 #include "CNuc.h"
 #include "EData.h"
@@ -422,11 +423,13 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   freeKinds_.clear();
   std::vector<double> freeAutoMean;
   std::vector<double> freeAutoStd;
+  std::vector<int> freeAllIndex;   // varying index -> index among all parameters
   for(size_t i = 0; i < fixed_.size(); ++i) {
     if(!fixed_[i]) {
       freeKinds_.push_back(allKinds[i]);
       freeAutoMean.push_back(allAutoMean[i]);
       freeAutoStd.push_back(allAutoStd[i]);
+      freeAllIndex.push_back((int)i);
     }
   }
 
@@ -439,6 +442,8 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   usePriors_.resize(nfree, false);
 
   int nAutoNorm = 0, nAutoShift = 0, nNoError = 0, nUserNeeded = 0, nUserSet = 0;
+  std::vector<std::string> noErrorLabels;
+  std::vector<std::string> noPriorLabels;
 
   for(size_t i = 0; i < nfree; ++i) {
     const int kind = freeKinds_[i];
@@ -455,11 +460,13 @@ void AZURECalcMCMC::BuildAutoPriors() const {
         // parameter stays uniform rather than getting an invented width.
         usePriors_[i] = false;
         nNoError++;
+        noErrorLabels.push_back(AZURELabel::Parameter(compound(), data(), freeAllIndex[i]));
       }
     } else {
       // Level energies and widths: the user's business.
       nUserNeeded++;
       if(usePriors_[i] && priorStds_[i] > 0.0) nUserSet++;
+      else noPriorLabels.push_back(AZURELabel::Parameter(compound(), data(), freeAllIndex[i]));
     }
   }
 
@@ -471,7 +478,9 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     configure().outStream << "  " << nNoError << " normalization/energy-shift "
                           << "parameter" << (nNoError == 1 ? " has" : "s have")
                           << " no quoted error and " << (nNoError == 1 ? "is" : "are")
-                          << " sampled with a uniform prior\n";
+                          << " sampled with a uniform prior:\n";
+    for(size_t i = 0; i < noErrorLabels.size(); ++i)
+      configure().outStream << "      " << noErrorLabels[i] << "\n";
   }
   configure().outStream << "  " << nUserSet << " of " << nUserNeeded
                         << " level-energy/width parameters have a user-defined prior\n";
@@ -480,7 +489,14 @@ void AZURECalcMCMC::BuildAutoPriors() const {
                           << " level-energy/width parameter"
                           << ((nUserNeeded - nUserSet) == 1 ? " is" : "s are")
                           << " sampled with an unbounded uniform prior. Define "
-                          << "priors for them in the MCMC tab if the chain wanders.\n";
+                          << "priors for them in the MCMC tab if the chain wanders:\n";
+    // Cap the list so a large model cannot bury the rest of the log.
+    const size_t maxListed = 10;
+    for(size_t i = 0; i < noPriorLabels.size() && i < maxListed; ++i)
+      configure().outStream << "      " << noPriorLabels[i] << "\n";
+    if(noPriorLabels.size() > maxListed)
+      configure().outStream << "      ...and " << (noPriorLabels.size() - maxListed)
+                            << " more\n";
   }
   configure().outStream.flush();
 }

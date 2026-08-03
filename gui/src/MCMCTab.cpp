@@ -50,6 +50,7 @@
 
 #ifdef USE_MCMC
 #include "AZURECalcMCMC.h"
+#include "ParameterLabel.h"
 #include "Config.h"
 #include "CNuc.h"
 #include "EData.h"
@@ -189,10 +190,10 @@ bool MCMCTab::isAutoPriorCategory(const QString& category) {
 }
 
 QString MCMCTab::categoryFromStoredName(const QString& name) {
-    // Names persisted in the .azr file have been through
-    // createPrettyParameterName(), which either produces "Segment N
-    // Normalization"/"... Energy Shift" or falls through to
-    // "Parameter (segment_N_norm)". Both forms are recognised here.
+    // Names persisted in the .azr file describe the parameter physically
+    // ("normalization of segment 3 (data/x.dat)"). Older files carry the
+    // previous forms, "Segment N Normalization" or "Parameter
+    // (segment_N_norm)"; all of them are recognised here.
     if(name.contains("norm", Qt::CaseInsensitive)) return "norm";
     if(name.contains("shift", Qt::CaseInsensitive)) return "shift";
     return "loaded";
@@ -586,6 +587,14 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
         // Collected before `data` is released.
         QMap<int, QPair<double, double> > autoNormPrior;   // key -> (mean, sigma)
         QMap<int, QPair<double, double> > autoShiftPrior;
+
+        // Physical descriptions of every parameter, gathered here because the
+        // compound nucleus and data are released a few lines below.
+        QVector<QString> paramLabels;
+        for(unsigned int i = 0; i < azureParams.GetMinuitParams().Params().size(); i++) {
+            paramLabels.append(QString::fromStdString(
+                AZURELabel::Parameter(compound, data, (int)i)));
+        }
         {
             std::vector<ESegment>& segments = data->GetSegments();
             for(size_t s = 0; s < segments.size(); s++) {
@@ -617,7 +626,11 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
                 double value = minuitParams.Value(i);
 
                 MCMCParameter param;
-                param.name = createPrettyParameterName(paramName, nullptr, nullptr, -1);
+                // Real quantum numbers rather than a name like "width_1_2":
+                // which level (J^pi, energy) and which channel (pair, L, S).
+                param.name = (i < (unsigned int)paramLabels.size() && !paramLabels[i].isEmpty())
+                                 ? paramLabels[i]
+                                 : paramName;
                 param.value = value;  // Use current RWA value
                 param.priorMean = value;
                 param.priorStd = std::abs(value) * 0.1; // Use error if available, else 10%
@@ -1421,49 +1434,3 @@ void MCMCTab::calculateStatisticsFromSamples(const std::vector<std::vector<doubl
     addIncompleteResultsWarning();
 }
 
-QString MCMCTab::createPrettyParameterName(const QString& paramName, CNuc* compound, EData* data, int paramIndex) const {
-    // For fallback case when we don't have compound/data structures
-    if(!compound || !data || paramIndex < 0) {
-        QString name = paramName.trimmed();
-        
-        // Try to identify parameter type from the original .sav file name
-        // Common AZURE2 .sav file parameter patterns:
-        
-        // Energy parameters often start with 'E' followed by level number: E1, E2, etc.
-        if(name.startsWith("E") && name.length() > 1 && name.mid(1).toInt() > 0) {
-            int levelNum = name.mid(1).toInt();
-            return QString("Level %1 Energy (MeV)").arg(levelNum);
-        }
-        
-        // Width parameters often start with 'G' followed by level and channel: G11, G12, G21, etc.
-        if(name.startsWith("G") && name.length() > 2) {
-            QString numPart = name.mid(1);
-            if(numPart.length() >= 2) {
-                int levelNum = numPart.left(1).toInt();
-                int channelNum = numPart.mid(1).toInt();
-                if(levelNum > 0 && channelNum > 0) {
-                    return QString("Level %1 Channel %2 Width (eV)").arg(levelNum).arg(channelNum);
-                }
-            }
-        }
-        
-        // Normalization parameters often start with 'N' followed by segment number
-        if(name.startsWith("N") && name.length() > 1 && name.mid(1).toInt() > 0) {
-            int segmentNum = name.mid(1).toInt();
-            return QString("Segment %1 Normalization").arg(segmentNum);
-        }
-        
-        // Energy shift parameters often start with 'S' followed by segment number
-        if(name.startsWith("S") && name.length() > 1 && name.mid(1).toInt() > 0) {
-            int segmentNum = name.mid(1).toInt();
-            return QString("Segment %1 Energy Shift (keV)").arg(segmentNum);
-        }
-        
-        // Generic fallback - keep original name but make it more readable
-        return QString("Parameter (%1)").arg(name);
-    }
-    
-    // If we have compound/data structures, we could do more sophisticated analysis here
-    // but the main logic now uses the GUI models directly so this shouldn't be needed
-    return QString("Parameter (%1)").arg(paramName);
-}

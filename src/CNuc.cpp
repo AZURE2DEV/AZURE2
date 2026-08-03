@@ -1,10 +1,12 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <algorithm>
 #include <set>
 #include <tuple>
 #include "AngCoeff.h"
 #include "CNuc.h"
+#include "ParameterLabel.h"
 #include "Config.h"
 #include "CoulFunc.h"
 #include "EigenFunc.h"
@@ -596,12 +598,12 @@ bool CNuc::TransformIn(const Config& configure) {
 	      penes.push_back(1.0);
 	    }
 	  }
-	  // FIXME
-	  if(denom<0.){ configure.outStream << "WARNING: Denominator less than zero in E=" 
-					   << theLevel->GetE() << " MeV resonance transformation.  "
-					   <<  "Tranformation may not have been successful." 
-					   << std::endl;
-					//return true;
+	  if(denom<0.){
+	    configure.outStream << "**WARNING: Denominator less than zero while transforming"
+				<< std::endl
+				<< "    " << AZURELabel::Level(theJGroup,theLevel,j,la) << std::endl
+				<< "  The transformation may not have been successful for this level."
+				<< std::endl;
 	  }
 	  double nFSum=1.0;
 	  for(int ch=1;ch<=theJGroup->NumChannels();ch++) {
@@ -668,11 +670,14 @@ bool CNuc::TransformIn(const Config& configure) {
 		  else tempGammas[levelKeys.size()-1][ch-1]=sqrt(pow(tempGammas[levelKeys.size()-1][ch-1],2.0)-
 								 pow(imag(externalWidth),2.0))-real(externalWidth);
 		} else {
-			// FIXME
-		  configure.outStream << "**WARNING: Imaginary portion of external width \n\tfor j=" << j << " la=" 
-			    << la << " ch=" << ch << " is greater than total width." << std::endl;
+		  configure.outStream << "**WARNING: Imaginary portion of the external width is greater "
+				      << "than the total width" << std::endl
+				      << "    "
+				      << AZURELabel::LevelAndChannel(this,theJGroup,theLevel,j,la,ch)
+				      << std::endl
+				      << "    [j=" << j << " la=" << la << " ch=" << ch << "]"
+				      << std::endl;
 		  tempGammas[levelKeys.size()-1][ch-1]=-real(externalWidth);
-		  //return true;
 		}
 	      }
 	      shifts[levelKeys.size()-1].push_back(shifts[levelKeys.size()-1][0]);
@@ -1503,11 +1508,36 @@ void CNuc::TransformOut(const Config& configure) {
 	    }
 	    if(!done) {
 	      if(iteration==maxIterations) {
-		configure.outStream << "**WARNING: Could Not Transform J = " 
-			  << this->GetJGroup(j)->GetJ();
-		if(this->GetJGroup(j)->GetPi()==-1) configure.outStream << '-';
-		else configure.outStream << '+';
-		configure.outStream << " E = " << theLevel->GetFitE() << " MeV**" << std::endl;
+		// The iteration chases the energy eigenvalue while each channel's
+		// boundary condition moves with it, so the channel whose boundary
+		// condition is still shifting most is the one holding up
+		// convergence -- name it, since that is the width to look at.
+		int worstChannel=0;
+		double worstDiff=0.0;
+		for(int ch=1;ch<=(int)boundaryDiff.size();ch++) {
+		  if(fabs(boundaryDiff[ch-1])>=worstDiff) {
+		    worstDiff=fabs(boundaryDiff[ch-1]);
+		    worstChannel=ch;
+		  }
+		}
+
+		configure.outStream << "**WARNING: Could not transform level after "
+				    << maxIterations << " iterations" << std::endl
+				    << "    "
+				    << AZURELabel::Level(this->GetJGroup(j),theLevel,j,la)
+				    << std::endl
+				    << "  Energy residual "
+				    << fabs(eigenFunc.eigenvalues()[thisLevel]-tempE[thisLevel])
+				    << " MeV, tolerance " << energyTolerance << " MeV."
+				    << std::endl;
+		if(worstChannel>0)
+		  configure.outStream << "  Least converged channel (largest boundary-condition shift, "
+				      << worstDiff << "):" << std::endl
+				      << "    "
+				      << AZURELabel::Channel(this,this->GetJGroup(j),worstChannel)
+				      << std::endl;
+		configure.outStream << "  The input energy and widths are kept for this level; its "
+				    << "transformed values are unreliable." << std::endl;
 		tempE[thisLevel]=theLevel->GetFitE();
 		for(int ch=1;ch<=this->GetJGroup(j)->NumChannels();ch++) 
 		  tempGamma[thisLevel][ch-1]=theLevel->GetFitGamma(ch);
@@ -1644,13 +1674,15 @@ void CNuc::CheckRadiativeWidths(const Config& configure, const vector_r& params)
 
   this->FillCompoundFromParams(params);
 
-  int numFlagged=0;
-  double worstRatio=0.0;
-  double worstJ=0.0;
-  int worstPi=1;
-  double worstEnergy=0.0;
-  double worstRadWidth=0.0;
-  double worstParticleWidth=0.0;
+  // Every flagged level, worst first. Reporting only the worst one hid how many
+  // levels were affected and which they were.
+  struct FlaggedLevel {
+    double ratio;
+    double radWidth;
+    double particleWidth;
+    std::string label;
+  };
+  std::vector<FlaggedLevel> flagged;
 
   for(int j=1;j<=this->NumJGroups();j++) {
     JGroup *theJGroup=this->GetJGroup(j);
@@ -1698,38 +1730,48 @@ void CNuc::CheckRadiativeWidths(const Config& configure, const vector_r& params)
 
       double ratio=radiativeWidth/particleWidth;
       if(ratio>warningRatio) {
-	numFlagged++;
-	if(ratio>worstRatio) {
-	  worstRatio=ratio;
-	  worstJ=theJGroup->GetJ();
-	  worstPi=theJGroup->GetPi();
-	  worstEnergy=levelEnergy;
-	  worstRadWidth=radiativeWidth;
-	  worstParticleWidth=particleWidth;
-	}
+	FlaggedLevel entry;
+	entry.ratio=ratio;
+	entry.radWidth=radiativeWidth;
+	entry.particleWidth=particleWidth;
+	entry.label=AZURELabel::Level(theJGroup,theLevel,j,la);
+	flagged.push_back(entry);
       }
     }
   }
 
-  if(numFlagged>0) {
-    std::ostringstream levelText;
-    levelText.precision(4);
-    levelText << std::fixed << "J = " << worstJ << ((worstPi==-1) ? '-' : '+')
-	      << ", E_level = " << worstEnergy << " MeV";
+  if(!flagged.empty()) {
+    std::sort(flagged.begin(),flagged.end(),
+	      [](const FlaggedLevel& a,const FlaggedLevel& b){return a.ratio>b.ratio;});
+
+    const int numFlagged=(int)flagged.size();
     configure.outStream << std::endl
 			<< "**WARNING: " << numFlagged << " level"
 			<< ((numFlagged==1) ? " has" : "s have")
 			<< " a radiative width larger than " << warningRatio*100.
 			<< "% of the particle width." << std::endl
-			<< "  Largest ratio: " << levelText.str() << ", G_gamma/G_particle = "
-			<< std::scientific << std::setprecision(2) << worstRatio
-			<< " (G_gamma = " << worstRadWidth*1e6 << " eV, G_particle = "
-			<< worstParticleWidth*1e6 << " eV)." << std::endl
 			<< "  R-Matrix capture assumes G_gamma << G_particle, so the calculated"
-			<< " cross section may be incorrect for such levels." << std::endl
-			<< std::endl;
-    configure.outStream.unsetf(std::ios::scientific);
-    configure.outStream.precision(6);
+			<< " cross section may be incorrect for "
+			<< ((numFlagged==1) ? "this level." : "these levels.") << std::endl;
+
+    // Cap the list so a badly-configured model cannot bury the rest of the log.
+    const int maxListed=10;
+    const int listed=std::min(numFlagged,maxListed);
+    for(int i=0;i<listed;i++) {
+      configure.outStream << "    " << flagged[i].label << std::endl
+			  << "      G_gamma/G_particle = "
+			  << std::scientific << std::setprecision(2) << flagged[i].ratio
+			  << " (G_gamma = " << flagged[i].radWidth*1e6
+			  << " eV, G_particle = " << flagged[i].particleWidth*1e6 << " eV)"
+			  << std::endl;
+      configure.outStream.unsetf(std::ios::scientific);
+      configure.outStream.precision(6);
+    }
+    if(numFlagged>listed)
+      configure.outStream << "    ...and " << (numFlagged-listed)
+			  << " more level" << (((numFlagged-listed)==1) ? "" : "s")
+			  << " with a smaller ratio." << std::endl;
+    configure.outStream << std::endl;
   }
 }
 

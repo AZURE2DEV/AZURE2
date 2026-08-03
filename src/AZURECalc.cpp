@@ -1,4 +1,5 @@
 #include "AZURECalc.h"
+#include "ParameterLabel.h"
 #include "Config.h"
 #include "CNuc.h"
 #include "EData.h"
@@ -611,23 +612,32 @@ void AZURECalc::FinalizeLeastSquaresCovariance(const vector_r& full,
     if(pen_inv2[a] != 0.0) H[(size_t)a*nFree + a] += pen_inv2[a];
   }
 
+  // The Minuit name alone ("width_1_2") does not say which level or channel is
+  // meant, so pair it with the level's J^pi and energy and the channel's pair,
+  // L and S.
+  auto describe = [&](int a) {
+    const int minuitIndex = p2f[a];
+    std::string text = mp.GetName(minuitIndex);
+    const std::string label = AZURELabel::Parameter(compound(), data(), minuitIndex);
+    if(!label.empty()) text += "  =  " + label;
+    return text;
+  };
+
   // Name the free parameters the data barely constrain (near-zero J column).
   auto reportInsensitive = [&]() {
     double mx = 0.0;
     for(int a = 0; a < nFree; a++) mx = std::max(mx, jtjDiag[a]);
-    std::string names;
     int nInsensitive = 0;
     for(int a = 0; a < nFree; a++) {
       if(mx <= 0.0 || jtjDiag[a] <= 1.e-10 * mx) {
-        if(nInsensitive) names += ", ";
-        names += mp.GetName(p2f[a]);
+        if(!nInsensitive)
+          configure().outStream << "  Data-insensitive parameter(s) -- fix, constrain, or add "
+                                   "a prior to one of these:" << std::endl;
+        configure().outStream << "    " << describe(a) << std::endl;
         nInsensitive++;
       }
     }
-    if(nInsensitive)
-      configure().outStream << "  Data-insensitive parameter(s): " << names
-                            << " -- fix, constrain, or add a prior to one of these." << std::endl;
-    else
+    if(!nInsensitive)
       configure().outStream << "No single parameter is insensitive; the flat direction is a "
                                "degeneracy between two or more correlated parameters." << std::endl;
   };
@@ -673,9 +683,9 @@ void AZURECalc::FinalizeLeastSquaresCovariance(const vector_r& full,
       std::sort(pairs.begin(), pairs.end(),
                 [](const CorrPair& x, const CorrPair& y){ return std::fabs(x.c) > std::fabs(y.c); });
       for(size_t k = 0; k < pairs.size() && k < 5; k++)
-        configure().outStream << "  Correlated (rho=" << pairs[k].c << "): "
-                              << mp.GetName(p2f[pairs[k].a]) << " <-> "
-                              << mp.GetName(p2f[pairs[k].b]) << std::endl;
+        configure().outStream << "  Correlated (rho=" << pairs[k].c << "):" << std::endl
+                              << "    " << describe(pairs[k].a) << std::endl
+                              << "    " << describe(pairs[k].b) << std::endl;
     }
     for(int a = 0; a < nFree; a++) {
       double v = gsl_matrix_get(A, a, a);
@@ -683,21 +693,20 @@ void AZURECalc::FinalizeLeastSquaresCovariance(const vector_r& full,
     }
     // Name free parameters whose error dwarfs their value (they dominate the band).
     {
-      std::string names; int n = 0;
+      int n = 0;
       for(int a = 0; a < nFree; a++) {
         double v = gsl_matrix_get(A, a, a);
         if(v <= 0.0) continue;
         double val = mp.Value(p2f[a]);
         if(std::sqrt(v) > 10.0 * std::max(std::fabs(val), 1.e-30)) {
-          if(n) names += ", ";
-          names += mp.GetName(p2f[a]);
+          if(!n)
+            configure().outStream << "Note: weakly-determined parameter(s) (error > 1000% of value) "
+                                     "dominate the uncertainty band. Constrain or fix these to "
+                                     "tighten it:" << std::endl;
+          configure().outStream << "    " << describe(a) << std::endl;
           n++;
         }
       }
-      if(n)
-        configure().outStream << "Note: weakly-determined parameter(s) (error > 1000% of value) that "
-                                 "dominate the uncertainty band: " << names
-                              << ". Constrain or fix these to tighten the band." << std::endl;
     }
     // Export the full covariance for cross-section bands.  Columns are the
     // packed free parameters, in the same order as p2f, so we tag them with
