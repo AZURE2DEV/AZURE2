@@ -85,10 +85,13 @@ jobs:
           # Locate the Qwt header rather than assuming a layout -- Homebrew may
           # install it as a framework, under include/qwt, or directly in
           # include/, and guessing wrong only shows up as a build error later.
-          QWT_HDR="$(find "$(brew --prefix qwt-qt5)" -name qwt_plot.h -print -quit 2>/dev/null || true)"
+          # -L matters: brew --prefix returns /usr/local/opt/<name>, a symlink
+          # into the Cellar, and find will not descend into a symlinked starting
+          # point without it.
+          QWT_HDR="$(find -L "$(brew --prefix qwt-qt5)" -name qwt_plot.h -print -quit 2>/dev/null || true)"
           if [ -z "$QWT_HDR" ]; then
             echo "Could not locate qwt_plot.h under $(brew --prefix qwt-qt5); tree follows:"
-            find "$(brew --prefix qwt-qt5)" -maxdepth 3 | head -50
+            find -L "$(brew --prefix qwt-qt5)" -maxdepth 3 | head -50
             exit 1
           fi
           echo "Qwt headers: $(dirname "$QWT_HDR")"
