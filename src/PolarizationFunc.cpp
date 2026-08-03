@@ -1,6 +1,7 @@
 #include "PolarizationFunc.h"
 
 #include <cmath>
+#include <cstdio>
 
 #include "AChannel.h"
 #include "AngCoeff.h"
@@ -123,6 +124,31 @@ double AmplitudeMatrix::UnpolarizedCrossSection() const {
   for (std::size_t i = 0; i < amplitudes_.size(); i++)
     total += std::norm(amplitudes_[i].value);
   return total / nEntrance;
+}
+
+void AmplitudeMatrix::DumpSpinHalf() const {
+  // For spin-1/2 on spin-0 the matrix should read
+  //   M = g + h sigma.n  =  [[g, -i h], [i h, g]]
+  // so the two flip elements must be equal and opposite in phase. If instead
+  // they come out equal, the sigma.n structure is absent and A_y vanishes by
+  // construction rather than by physics.
+  const complex pp = Get(0.5,  0.5, 0.5,  0.5);
+  const complex pm = Get(0.5, -0.5, 0.5,  0.5);   // exit +1/2 from entrance -1/2
+  const complex mp = Get(0.5,  0.5, 0.5, -0.5);   // exit -1/2 from entrance +1/2
+  const complex mm = Get(0.5, -0.5, 0.5, -0.5);
+  std::printf("MDUMP nonflip(++)=(%.4e,%.4e) nonflip(--)=(%.4e,%.4e) "
+              "flip(+-)=(%.4e,%.4e) flip(-+)=(%.4e,%.4e)\n",
+              pp.real(), pp.imag(), mm.real(), mm.imag(),
+              pm.real(), pm.imag(), mp.real(), mp.imag());
+}
+
+double AmplitudeMatrix::MaxSpinFlip() const {
+  double m = 0.0;
+  for (std::size_t i = 0; i < amplitudes_.size(); i++) {
+    const Amplitude& a = amplitudes_[i];
+    if (!Same(a.v, a.vp)) m = std::max(m, std::abs(a.value));
+  }
+  return m;
 }
 
 double AmplitudeMatrix::AnalyzingPowerAy() const {

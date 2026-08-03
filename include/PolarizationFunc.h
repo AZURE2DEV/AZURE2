@@ -87,6 +87,11 @@ class AmplitudeMatrix {
    */
   double AnalyzingPowerAy() const;
 
+  //! Largest |M| with v != v' -- the spin-flip strength, which is what makes
+  //! a vector analyzing power non-zero. Diagnostic.
+  double MaxSpinFlip() const;
+  void DumpSpinHalf() const;
+
   //! Number of amplitudes accumulated; zero means no pathway contributed.
   std::size_t size() const {return amplitudes_.size();};
 

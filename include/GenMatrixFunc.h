@@ -56,6 +56,23 @@ class GenMatrixFunc {
    */
   virtual void CalculateTMatrix(EPoint*)=0;
   void CalculateCrossSection(EPoint*);
+
+  /*!
+   * Spin-summed |M|^2 from the channel-spin amplitude matrix, and the vector
+   * analyzing power, for one point.
+   *
+   * Built from the same T-matrix elements CalculateCrossSection uses, by the
+   * independent route of Seyler Eq. (4) rather than the Blatt-Biedenharn
+   * contraction. Returns false when the point has no pathway, or when the
+   * entrance is not a particle channel.
+   *
+   * The spin sum is returned without AZURE2's geometrical and unit factors, so
+   * it is proportional to the differential cross section rather than equal to
+   * it. That is enough for the check that matters: at fixed energy the ratio to
+   * the existing cross section has to be constant in angle, which is what pins
+   * down the coupling order and the choice of l versus l'.
+   */
+  bool CalculateAmplitudeMatrix(EPoint* point, double* spinSum, double* analyzingPower);
   void NewTempTMatrix(TempTMatrix);
   void NewTempTMatrixE1(TempTMatrix);
   void NewTempTMatrixE2(TempTMatrix);
