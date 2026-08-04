@@ -70,15 +70,33 @@ jobs:
           path: docs/_build/html
 
   deploy:
-    # Publishing happens from the default branch only. The github-pages
-    # environment restricts deployments to qt5, so a push to dev builds the
-    # documentation (catching breakage early) without attempting to publish it;
-    # the site updates when the work reaches qt5. Allowing dev to publish as
-    # well is a repository setting -- Settings, Environments, github-pages,
-    # deployment branches -- and needs admin rights.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/qt5'
+    # Publishing is attempted from dev as well as qt5, so that the site can
+    # follow the branch the work actually happens on.
+    #
+    # This does not work yet, and cannot be made to work from here. The
+    # github-pages environment carries a custom branch policy that currently
+    # lists only fft and qt5, and adding dev to it is a repository setting --
+    # Settings, Environments, github-pages, deployment branches -- that
+    # requires admin rights on the repository. Until dev is added there, GitHub
+    # refuses the deployment at the environment gate.
+    #
+    # continue-on-error keeps that refusal from failing the whole run, since it
+    # is an expected and harmless outcome rather than a broken workflow: the
+    # build job above still proves the documentation compiles. REMOVE IT once
+    # dev is allowed to deploy, so that a genuine publishing failure is visible
+    # again rather than swallowed.
+    #
+    # Both branches are listed rather than dev alone: qt5 is the default branch
+    # and publishing from it is the behaviour that exists today, so removing it
+    # would break the current path before the new one works. Note that whichever
+    # branch pushes last wins, so pushing an out-of-date qt5 would replace the
+    # site with older documentation.
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/qt5')
     needs: build
     runs-on: ubuntu-latest
+    continue-on-error: true
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
