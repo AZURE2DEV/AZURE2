@@ -1605,6 +1605,18 @@ bool FittingTab::writeParameterSettings(QTextStream& outStream) {
 
 bool FittingTab::readParameterSettings(QTextStream& inStream) {
     savedParameterSettings.clear();
+
+    // Settings for normalizations and energy shifts are keyed by segment number,
+    // so an entry that outlives the segment it described will silently attach
+    // itself to whatever segment later takes that number -- handing a new data
+    // set someone else's nuisance prior and freeing a normalization the user
+    // never freed. An entry numbered beyond the segments that actually exist is
+    // provably stale, so drop it here rather than carry it forward. Segments are
+    // read before this point, so the count is already known.
+    int numSegments = 0;
+    if(segmentsTab_ && segmentsTab_->getSegmentsDataModel())
+        numSegments = segmentsTab_->getSegmentsDataModel()->getLines().size();
+    QRegExp segmentEntry("^segment_(\\d+)_(norm|energy_shift)$");
     
     QString line;
     while(!inStream.atEnd()) {
@@ -1624,6 +1636,8 @@ bool FittingTab::readParameterSettings(QTextStream& inStream) {
             param.useAsNuisance = (parts[6].toInt() == 1);
             param.category = parts[7];
             param.minuitIndex = parts[8].toInt();
+            if(numSegments > 0 && segmentEntry.indexIn(param.name) != -1 &&
+               segmentEntry.cap(1).toInt() > numSegments) continue;
             savedParameterSettings.append(param);
         }
         else if(parts.size() == 12) {

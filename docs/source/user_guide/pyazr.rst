@@ -246,7 +246,7 @@ do not use them on analyzing-power segments.
 
 See :doc:`../theory/polarization_theory` for the formalism,
 :doc:`../theory/polarization_implementation` for the implementation, and
-``tests/12C_pp_ay`` for a worked comparison against measured data.
+``tests/13N`` (segments 11--16) for a worked comparison against measured data.
 
 Cleaning up stray processes
 ---------------------------

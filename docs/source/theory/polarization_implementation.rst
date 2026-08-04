@@ -279,7 +279,7 @@ plots, plus six angular distributions in fig. 1 at
 :math:`E_p = 1.618, 1.658, 1.708, 1.738, 1.758` and 1.779 MeV. Those six panels
 are the only numerically recoverable data in the paper, so they were digitized.
 
-The procedure (``tests/12C_pp_ay/digitize_fig1.py``) is:
+The procedure (``tests/13N/digitize_fig1.py``) is:
 
 #. Render page 3 at 600 dpi with ``pdftoppm``.
 #. Locate the six panel frames by finding long horizontal and vertical dark runs.
@@ -312,11 +312,12 @@ observable 7 expects; energies are laboratory.
 Fitting it
 ----------
 
-``tests/12C_pp_ay`` is the ``tests/13N`` evaluation with its own data segments
-switched off and the :math:`A_y` set added. Every level parameter is fixed except
-the excitation energy and proton width of the two resonances the energy range is
-sensitive to. Fitting those four parameters to the 71 points takes
-:math:`\chi^2` from 236.8 to 85.2 — 1.20 per point, 1.27 per degree of freedom:
+The analyzing-power data live in ``tests/13N`` as segments 11--16, one per
+energy, beside the capture and scattering data of the same compound nucleus.
+Fitting :math:`A_y` *alone* -- every level fixed except the excitation energy and
+proton width of the two resonances the energy range is sensitive to -- takes
+:math:`\chi^2` from 236.8 to 85.2, or 1.20 per point and 1.27 per degree of
+freedom (``tests/13N/README.md`` gives the recipe):
 
 .. list-table::
    :header-rows: 1
@@ -374,7 +375,7 @@ The data file carries ``E_lab  theta_cm  A_y  dA_y``. From Python:
 .. code-block:: python
 
    from pyazr import azure2
-   with azure2("12C_pp_ay.azr") as azr:
+   with azure2("13N.azr") as azr:
        ay = azr.calculate_analyzing_power_rwa(azr.params_rwa)
 
 Because :math:`A_y` is reported in place of the cross section, everything
