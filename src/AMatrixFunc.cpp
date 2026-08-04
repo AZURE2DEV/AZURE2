@@ -522,7 +522,11 @@ bool AMatrixFunc::PointAdjoint(EPoint* point, double fitBar, GradAccum& accum,
 
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
   int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
-  if(compound()->GetPair(aa)->GetPType() == 20) return false;  // 25|T|^2 branch
+  // Beta-delayed particle emission is supported below; its observable is a plain
+  // incoherent sum over pathways, so only the T cotangents differ from the
+  // cross-section case. E1/E2 component selection has no meaning for it.
+  const bool isBetaDelayed = (compound()->GetPair(aa)->GetPType() == 20);
+  if(isBetaDelayed && xsComponent != 0) return false;
 
   // Active-level compaction unsupported here: require every level of every
   // in-R-matrix JGroup to itself be in the R matrix (so original idx == active).
@@ -586,7 +590,17 @@ bool AMatrixFunc::PointAdjoint(EPoint* point, double fitBar, GradAccum& accum,
     return ecg->GetRadType() == 'E' && ecg->GetMult() == xsComponent;
   };
 
-  if(point->IsAnalyzingPower()) {
+  if(isBetaDelayed) {
+    // ---- Beta-delayed particle emission. GenMatrixFunc forms
+    //        sum = sum_{k,m} 25 |T(k,m)|^2 ,   model = Re(sum)/100
+    //      with no geometrical or spin factor and no external-capture term --
+    //      an incoherent sum over pathways, with no interference between them.
+    //      Hence d(model)/dT*(k,m) = (25/100) T(k,m), and the factor of two is
+    //      the cotangent convention used throughout this function. ----
+    for(int k = 1; k <= nK; k++)
+      for(int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++)
+        tBar[k-1][m-1] += fitBar * (2.0 * 25.0 / 100.0) * this->GetTMatrixElement(k, m);
+  } else if(point->IsAnalyzingPower()) {
     // ---- Vector analyzing power. A_y is built from the channel-spin amplitude
     //      matrix, which is linear in T(k,m) with the coefficients AddPathway
     //      applies, so the whole derivative is a contraction against those same
@@ -601,7 +615,7 @@ bool AMatrixFunc::PointAdjoint(EPoint* point, double fitBar, GradAccum& accum,
       for(int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
         MGroup* mg = theDecay->GetKGroup(k)->GetMGroup(m);
         M.AddPathway(mg->GetJNum(), mg->GetChNum(), mg->GetChpNum(),
-                     this->GetTMatrixElement(k, m, ir));
+                     this->GetTMatrixElement(k, m));
       }
     }
     if(aa == exitPairNum) M.AddCoulomb(point->GetCoulombAmplitude());
