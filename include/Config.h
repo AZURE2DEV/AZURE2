@@ -113,6 +113,8 @@ class Config {
   ///A constant indicating the maximum order of the Legendre polynomials to calculate.
   static const int maxLOrder=20;
   int ReadConfigFile();
+  ///Reads the <potential> block of the configuration file, if it has one.
+  int ReadPotentialBlock();
 #ifndef NO_STAT
   int CheckForInputFiles();
 #endif
