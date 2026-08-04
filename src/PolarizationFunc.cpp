@@ -138,42 +138,72 @@ int AmplitudeMatrix::IndexOf(double s, double v, double sp, double vp) const {
 std::vector<complex> AmplitudeMatrix::AnalyzingPowerBar() const {
   std::vector<complex> bar(amplitudes_.size(), complex(0.0, 0.0));
 
-  // A_y = N/D with N = 2 sum Im[u d*] and D = sum (|u|^2 + |d|^2), where u and
-  // d are the amplitudes reached from the two entrance projections. Both are
-  // needed before any slot can be differentiated, so N and D come first.
-  bool haveHalf = false;
-  for (std::size_t i = 0; i < entranceSpins_.size(); i++)
-    if (Same(entranceSpins_[i], 0.5)) haveHalf = true;
-  if (!haveHalf) return bar;
+  PPair* entrance = compound_->GetPair(aa_);
+  const double j1 = entrance->GetJ(1);
+  const double j2 = entrance->GetJ(2);
+  if (std::fabs(j1 - 0.5) > 1.e-6) return bar;
 
+  // N and D are needed in full before any slot can be differentiated, so the
+  // projectile/target decomposition is walked twice: once to accumulate them,
+  // once to distribute the derivative back onto the channel-spin amplitudes.
   complex interference(0.0, 0.0);
   double denominator = 0.0;
   for (std::size_t j = 0; j < exitSpins_.size(); j++) {
     const double sp = exitSpins_[j];
     for (double vp = -sp; vp <= sp + 1.e-6; vp += 1.0) {
-      const complex up = Get(0.5, 0.5, sp, vp);
-      const complex down = Get(0.5, -0.5, sp, vp);
-      interference += up * std::conj(down);
-      denominator += std::norm(up) + std::norm(down);
+      for (double m2 = -j2; m2 <= j2 + 1.e-6; m2 += 1.0) {
+        complex up(0.0, 0.0), down(0.0, 0.0);
+        for (std::size_t i = 0; i < entranceSpins_.size(); i++) {
+          const double s = entranceSpins_[i];
+          const double nuUp = 0.5 + m2, nuDn = -0.5 + m2;
+          if (std::fabs(nuUp) <= s + 1.e-6)
+            up   += AngCoeff::ClebGord(j1, j2, s,  0.5, m2, nuUp) * Get(s, nuUp, sp, vp);
+          if (std::fabs(nuDn) <= s + 1.e-6)
+            down += AngCoeff::ClebGord(j1, j2, s, -0.5, m2, nuDn) * Get(s, nuDn, sp, vp);
+        }
+        interference += up * std::conj(down);
+        denominator  += std::norm(up) + std::norm(down);
+      }
     }
   }
   if (denominator <= 0.0) return bar;
   const double N = 2.0 * std::imag(interference);
   const double D = denominator;
-
-  // dN/du* = i d,  dN/dd* = -i u,  dD/du* = u,  dD/dd* = d, so that
-  // dA/du* = i d/D - (N/D^2) u and dA/dd* = -i u/D - (N/D^2) d. The factor of
-  // two is the cotangent convention, not part of the derivative.
   const complex I(0.0, 1.0);
+
   for (std::size_t j = 0; j < exitSpins_.size(); j++) {
     const double sp = exitSpins_[j];
     for (double vp = -sp; vp <= sp + 1.e-6; vp += 1.0) {
-      const complex up = Get(0.5, 0.5, sp, vp);
-      const complex down = Get(0.5, -0.5, sp, vp);
-      const int iu = IndexOf(0.5, 0.5, sp, vp);
-      const int id = IndexOf(0.5, -0.5, sp, vp);
-      if (iu >= 0) bar[iu] = 2.0 * (I * down / D - (N / (D * D)) * up);
-      if (id >= 0) bar[id] = 2.0 * (-I * up / D - (N / (D * D)) * down);
+      for (double m2 = -j2; m2 <= j2 + 1.e-6; m2 += 1.0) {
+        const double nuUp = 0.5 + m2, nuDn = -0.5 + m2;
+        complex up(0.0, 0.0), down(0.0, 0.0);
+        for (std::size_t i = 0; i < entranceSpins_.size(); i++) {
+          const double s = entranceSpins_[i];
+          if (std::fabs(nuUp) <= s + 1.e-6)
+            up   += AngCoeff::ClebGord(j1, j2, s,  0.5, m2, nuUp) * Get(s, nuUp, sp, vp);
+          if (std::fabs(nuDn) <= s + 1.e-6)
+            down += AngCoeff::ClebGord(j1, j2, s, -0.5, m2, nuDn) * Get(s, nuDn, sp, vp);
+        }
+        // dA/du* and dA/dd*, with u and d the decomposed amplitudes.
+        const complex dA_du =  I * down / D - (N / (D * D)) * up;
+        const complex dA_dd = -I * up   / D - (N / (D * D)) * down;
+        // u and d are holomorphic in M, so du*/dM* is just the (real)
+        // Clebsch-Gordan coefficient. The factor of two is the cotangent
+        // convention AMatrixFunc uses, not part of the derivative.
+        for (std::size_t i = 0; i < entranceSpins_.size(); i++) {
+          const double s = entranceSpins_[i];
+          if (std::fabs(nuUp) <= s + 1.e-6) {
+            const int idx = IndexOf(s, nuUp, sp, vp);
+            if (idx >= 0)
+              bar[idx] += 2.0 * AngCoeff::ClebGord(j1, j2, s, 0.5, m2, nuUp) * dA_du;
+          }
+          if (std::fabs(nuDn) <= s + 1.e-6) {
+            const int idx = IndexOf(s, nuDn, sp, vp);
+            if (idx >= 0)
+              bar[idx] += 2.0 * AngCoeff::ClebGord(j1, j2, s, -0.5, m2, nuDn) * dA_dd;
+          }
+        }
+      }
     }
   }
   return bar;
@@ -240,27 +270,44 @@ double AmplitudeMatrix::MaxSpinFlip() const {
 }
 
 double AmplitudeMatrix::AnalyzingPowerAy() const {
-  // For a spin-1/2 projectile on a spin-0 target the channel spin is 1/2 and
-  // the projections are the projectile's own. A_y then follows from the
-  // interference between the two projections:
+  // A_y is defined with respect to the polarization of the *projectile*, so the
+  // Pauli matrix acts on the projectile spin alone and the target spin is
+  // traced over. The amplitudes are held in the channel-spin basis, in which
+  // projectile and target spin are coupled, so the entrance index has to be
+  // decomposed before the projectile can be addressed on its own:
   //
-  //   A_y = 2 Im[ sum_{s'v'} M(v=+1/2) conj(M(v=-1/2)) ] / sum |M|^2
+  //   M_{out; m1 m2} = sum_s <j1 m1 j2 m2 | s, m1+m2> M_{out; s, m1+m2}
   //
-  // with y along k_in x k_out, which is the Madison convention.
-  bool haveHalf = false;
-  for (std::size_t i = 0; i < entranceSpins_.size(); i++)
-    if (Same(entranceSpins_[i], 0.5)) haveHalf = true;
-  if (!haveHalf) return 0.0;
+  // For a spin-0 target this collapses to the channel spin being the
+  // projectile's own, which is the only case that needs no decomposition -- and
+  // was the only case the first implementation handled. With a spin-1/2 target
+  // such as 15N the channel spins are 0 and 1, never 1/2, and looking for a
+  // channel spin of 1/2 finds nothing and returns zero for what is a perfectly
+  // well defined and non-zero observable.
+  PPair* entrance = compound_->GetPair(aa_);
+  const double j1 = entrance->GetJ(1);   // projectile
+  const double j2 = entrance->GetJ(2);   // target
+  // The vector analyzing power is a spin-1/2 beam observable.
+  if (std::fabs(j1 - 0.5) > 1.e-6) return 0.0;
 
   complex interference(0.0, 0.0);
   double denominator = 0.0;
   for (std::size_t j = 0; j < exitSpins_.size(); j++) {
     const double sp = exitSpins_[j];
     for (double vp = -sp; vp <= sp + 1.e-6; vp += 1.0) {
-      const complex up = Get(0.5, 0.5, sp, vp);
-      const complex down = Get(0.5, -0.5, sp, vp);
-      interference += up * std::conj(down);
-      denominator += std::norm(up) + std::norm(down);
+      for (double m2 = -j2; m2 <= j2 + 1.e-6; m2 += 1.0) {
+        complex up(0.0, 0.0), down(0.0, 0.0);
+        for (std::size_t i = 0; i < entranceSpins_.size(); i++) {
+          const double s = entranceSpins_[i];
+          const double nuUp = 0.5 + m2, nuDn = -0.5 + m2;
+          if (std::fabs(nuUp) <= s + 1.e-6)
+            up   += AngCoeff::ClebGord(j1, j2, s,  0.5, m2, nuUp) * Get(s, nuUp, sp, vp);
+          if (std::fabs(nuDn) <= s + 1.e-6)
+            down += AngCoeff::ClebGord(j1, j2, s, -0.5, m2, nuDn) * Get(s, nuDn, sp, vp);
+        }
+        interference += up * std::conj(down);
+        denominator  += std::norm(up) + std::norm(down);
+      }
     }
   }
   if (denominator <= 0.0) return 0.0;

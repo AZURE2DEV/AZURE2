@@ -233,6 +233,13 @@ need no special handling.
 ay = m.calculate_analyzing_power_rwa(m.params_rwa)
 ```
 
+Works for a spin-1/2 **projectile** on a target of any spin. The amplitudes come
+out of the R-matrix in the channel-spin basis, so for a target with spin the
+entrance index is decomposed into projectile and target projections before
+`sigma_y` is applied to the projectile alone. For a spin-0 target (¹²C) the
+channel spin *is* the projectile's and no decomposition is needed; for a
+spin-1/2 target (¹⁵N) the channel spins are 0 and 1 and never 1/2.
+
 Four things that will bite:
 
 - **Angles are centre-of-mass** in the data file, unlike an ordinary

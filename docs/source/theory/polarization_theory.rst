@@ -267,9 +267,9 @@ analyzing-power measurements use thin targets — Baumann's were 85 nm of
 Scope
 -----
 
-What is implemented covers particle channels with a spin-1/2 projectile, which
-is what the vector analyzing power :math:`A_y` requires. Two extensions are not
-implemented and should not be assumed to work:
+What is implemented covers particle channels with a spin-1/2 projectile and a
+target of **any** spin, which is what the vector analyzing power :math:`A_y`
+requires. Two extensions are not implemented and should not be assumed to work:
 
 *Tensor observables* (:math:`T_{20}`, :math:`T_{22}`, and the rest) need a
 spin-1 projectile and the corresponding rank-2 operators. The amplitude matrix
