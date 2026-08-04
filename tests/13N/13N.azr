@@ -67,19 +67,19 @@ a=0.6
 1              1              2              0              5              0              180            0              1              0              0              0              0              0               data/artemov.dat 0 0
 1              1              2              0              5              0              180            0              1              0              0              0              0              0               data/seagrave.dat 0 0
 1              1              1              0              5              84.3           84.3           1              1              0              5              0              0.005          0               data/meyer_84.dat 0 0
-1              1              1              0              5              114.5          114.5          1              1              0              5              0              0.005          0               data/meyer_114.dat 0 0
-1              1              1              0              5              144.1          144.1          1              1              0              5              0              0.005          0               data/meyer_144.dat 0 0
-1              1              2              0              5              0              180            0              1              0              6.9            0              0.001          0               data/skowronski_luna_hpge.dat 0 0
-1              1              2              0              5              0              180            0              1              0              7.9            0              0.001          0               data/skowronski_luna_bgo.dat 0 0
-1              1              2              0              5              0              180            0              1              0              8.5            0              0.001          0               data/skowronski_fels.dat 0 0
-1              1              2              0              5              0              0              1              1              0              10             0              0.001          0               data/kettner_0.dat 0 0
+1              1              1              0              5              114.5          114.5          1              1              0              0              0              0              0               data/meyer_114.dat 0 0
+1              1              1              0              5              144.1          144.1          1              1              0              0              0              0              0               data/meyer_144.dat 0 0
+1              1              2              0              5              0              180            0              1              0              0              0              0              0               data/skowronski_luna_hpge.dat 0 0
+1              1              2              0              5              0              180            0              1              0              0              0              0              0               data/skowronski_luna_bgo.dat 0 0
+1              1              2              0              5              0              180            0              1              0              0              0              0              0               data/skowronski_fels.dat 0 0
+1              1              2              0              5              0              0              1              1              0              0              0              0              0               data/kettner_0.dat 0 0
 1              1              2              0              5              55             55             1              1              0              10             0              0.001          0               data/kettner_55.dat 0 0
-1  1  1  1.617  1.619  40  160  7  1  0  0  0  0  0  data/baumann_ay.dat 0 0
-1  1  1  1.657  1.659  40  160  7  1  0  0  0  0  0  data/baumann_ay.dat 0 0
-1  1  1  1.707  1.709  40  160  7  1  0  0  0  0  0  data/baumann_ay.dat 0 0
-1  1  1  1.737  1.739  40  160  7  1  0  0  0  0  0  data/baumann_ay.dat 0 0
-1  1  1  1.757  1.759  40  160  7  1  0  0  0  0  0  data/baumann_ay.dat 0 0
-1  1  1  1.778  1.780  40  160  7  1  0  0  0  0  0  data/baumann_ay.dat 0 0
+1              1              1              1.617          1.619          0              180            7              1              0              0              0              0              0               data/baumann_1618.dat 0 0
+1              1              1              1.657          1.659          0              180            7              1              0              0              0              0              0               data/baumann_1658.dat 0 0
+1              1              1              1.707          1.709          0              180            7              1              0              0              0              0              0               data/baumann_1708.dat 0 0
+1              1              1              1.737          1.739          0              180            7              1              0              0              0              0              0               data/baumann_1738.dat 0 0
+1              1              1              1.757          1.759          0              180            7              1              0              0              0              0              0               data/baumann_1758.dat 0 0
+1              1              1              1.778          1.78           0              180            7              1              0              0              0              0              0               data/baumann_1779.dat 0 0
 </segmentsData>
 <segmentsTest>
 </segmentsTest>
@@ -104,23 +104,43 @@ Level 6 Channel 14 Width (eV) 1100 0 0 110 0 0 level 10
 Level 9 Energy (MeV) 3.5453 0 0 0.01 0 0 level 11
 Level 9 Channel 21 Width (eV) 49000 0 0 4900 0 0 level 12
 Level 9 Channel 22 Width (eV) 1e-05 0 0 1e-06 0 0 level 13
+segment_1_norm 1 0 0 0 0 0 norm -1
+segment_2_norm 1 0 0 0 0 0 norm -1
+segment_3_norm 1 0 0 5 0 0 norm -1
 segment_4_norm 1 0 0 0 0 0 norm -1
 segment_5_norm 1 0 0 0 0 0 norm -1
 segment_6_norm 1 0 0 0 0 0 norm -1
 segment_7_norm 1 0 0 0 0 0 norm -1
 segment_8_norm 1 0 0 0 0 0 norm -1
 segment_9_norm 1 0 0 0 0 0 norm -1
-segment_4_energy_shift 0 0 0 0 0 0 shift 14
-segment_5_energy_shift 0 0 0 0 0 0 shift 15
-segment_6_energy_shift 0 0 0 0 0 0 shift 16
-segment_7_energy_shift 0 0 0 0 0 0 shift 17
-segment_8_energy_shift 0 0 0 0 0 0 shift 18
-segment_9_energy_shift 0 0 0 0 0 0 shift 19
+segment_10_norm 1 0 0 10 0 0 norm -1
+segment_11_norm 1 0 0 0 0 0 norm -1
+segment_12_norm 1 0 0 0 0 0 norm -1
+segment_13_norm 1 0 0 0 0 0 norm -1
+segment_14_norm 1 0 0 0 0 0 norm -1
+segment_15_norm 1 0 0 0 0 0 norm -1
+segment_16_norm 1 0 0 0 0 0 norm -1
+segment_1_energy_shift 0 0 0 0 0 0 shift 14
+segment_2_energy_shift 0 0 0 0 0 0 shift 15
+segment_3_energy_shift 0 0 0 0.005 0 0 shift 16
+segment_4_energy_shift 0 0 0 0 0 0 shift 17
+segment_5_energy_shift 0 0 0 0 0 0 shift 18
+segment_6_energy_shift 0 0 0 0 0 0 shift 19
+segment_7_energy_shift 0 0 0 0 0 0 shift 20
+segment_8_energy_shift 0 0 0 0 0 0 shift 21
+segment_9_energy_shift 0 0 0 0 0 0 shift 22
+segment_10_energy_shift 0 0 0 0.001 0 0 shift 23
+segment_11_energy_shift 0 0 0 0 0 0 shift 24
+segment_12_energy_shift 0 0 0 0 0 0 shift 25
+segment_13_energy_shift 0 0 0 0 0 0 shift 26
+segment_14_energy_shift 0 0 0 0 0 0 shift 27
+segment_15_energy_shift 0 0 0 0 0 0 shift 28
+segment_16_energy_shift 0 0 0 0 0 0 shift 29
 </parameterSettings>
 <lastRun>
-10025
+10089
 "output/param.sav"
-""
+"output/intEC.dat"
 1 2
 1 "temperatures.dat"
 0.07 10 -1.
@@ -129,6 +149,7 @@ segment_9_energy_shift 0 0 0 0 0 0 shift 19
 nwalkers 50
 nsteps 10000
 chainspread 5
+energyspread 1
 nthreads 4
 usereducedwidths 0
 <parameters>

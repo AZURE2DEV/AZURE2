@@ -66,7 +66,18 @@ class PlotEntry {
   int lineWidth() const {return lineWidth_;};
   void setLineWidth(int w) {lineWidth_ = w;};
 
+  /*! Whether this entry may hold non-positive values.
+
+      readData otherwise discards anything that is zero or negative, which is a
+      guard for the logarithmic axis. An analyzing power is a ratio in [-1,1]
+      and is negative over much of its range, so for it that guard silently
+      deletes half the physics -- the data and the curve alike. */
+  bool allowNonPositive() const {return allowNonPositive_;};
+  void setAllowNonPositive(bool v) {allowNonPositive_ = v;};
+
   bool readData();
+  //! Number of points kept by the last readData(). Diagnostic.
+  int numPoints() const {return points_.size();};
   bool hasBand() const {return hasBand_;};
   void attach(QwtPlot*, int xAxisType, int yAxisType, bool showBand=false);
   void detach();
@@ -90,6 +101,7 @@ class PlotEntry {
   QwtSymbol::Style symbolStyle_;
   int symbolSize_;
   int lineWidth_;
+  bool allowNonPositive_ = false;
   bool hasBand_;
   QwtPlotCurve* dataCurve_;
   QwtPlotIntervalCurve* dataErrorCurve_;

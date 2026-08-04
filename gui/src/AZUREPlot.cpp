@@ -160,15 +160,29 @@ bool PlotEntry::readData() {
       rawLine++;
       // Discard points that would break log scale: NaN, inf, zero, negative,
       // or (for data points) error bars that drop the lower bound to <= 0.
-      bool valid = isFiniteAndPositive(newPoint.fitCrossSection) &&
-                   isFiniteAndPositive(newPoint.fitSFactor);
-      if(valid && type_==0) {
-        valid = isFiniteAndPositive(newPoint.dataCrossSection) &&
-                isFiniteAndPositive(newPoint.dataSFactor) &&
-                std::isfinite(newPoint.dataErrorCrossSection) &&
-                std::isfinite(newPoint.dataErrorSFactor) &&
-                (newPoint.dataCrossSection - newPoint.dataErrorCrossSection) > 0. &&
-                (newPoint.dataSFactor - newPoint.dataErrorSFactor) > 0.;
+      // A quantity that is legitimately negative -- an analyzing power -- is
+      // exempt from everything but the finiteness test, since for it the
+      // positivity guard would delete the negative half of the distribution.
+      bool valid;
+      if(allowNonPositive_) {
+        valid = std::isfinite(newPoint.fitCrossSection) &&
+                std::isfinite(newPoint.fitSFactor);
+        if(valid && type_==0)
+          valid = std::isfinite(newPoint.dataCrossSection) &&
+                  std::isfinite(newPoint.dataSFactor) &&
+                  std::isfinite(newPoint.dataErrorCrossSection) &&
+                  std::isfinite(newPoint.dataErrorSFactor);
+      } else {
+        valid = isFiniteAndPositive(newPoint.fitCrossSection) &&
+                isFiniteAndPositive(newPoint.fitSFactor);
+        if(valid && type_==0) {
+          valid = isFiniteAndPositive(newPoint.dataCrossSection) &&
+                  isFiniteAndPositive(newPoint.dataSFactor) &&
+                  std::isfinite(newPoint.dataErrorCrossSection) &&
+                  std::isfinite(newPoint.dataErrorSFactor) &&
+                  (newPoint.dataCrossSection - newPoint.dataErrorCrossSection) > 0. &&
+                  (newPoint.dataSFactor - newPoint.dataErrorSFactor) > 0.;
+        }
       }
       if(valid) points_.push_back(newPoint);
     }

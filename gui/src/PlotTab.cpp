@@ -489,6 +489,7 @@ QList<PlotEntry*> PlotTab::getDataSegments() {
       if(previousEntranceKey==entranceKey&&previousExitKey==exitKey) numPreviousInBlock++;
     }
     PlotEntry* newPlotEntry = new PlotEntry(0,entranceKey,exitKey,numPreviousInBlock,filename);
+    newPlotEntry->setAllowNonPositive(dataType==7);
     if(!segmentDataFile.isEmpty()) {
       newPlotEntry->setLabel(PlotEntry::labelFromFilename(segmentDataFile));
     }
@@ -521,6 +522,7 @@ QList<PlotEntry*> PlotTab::getTestSegments() {
       if(previousEntranceKey==entranceKey&&previousExitKey==exitKey) numPreviousInBlock++;
     }
     PlotEntry* newPlotEntry = new PlotEntry(1,entranceKey,exitKey,numPreviousInBlock,filename);
+    newPlotEntry->setAllowNonPositive(dataType==7);
     testSegmentPlotEntries.push_back(newPlotEntry);
   }
   return testSegmentPlotEntries;
