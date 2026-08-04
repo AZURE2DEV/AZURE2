@@ -284,9 +284,18 @@ double AmplitudeMatrix::AnalyzingPowerAy() const {
   // such as 15N the channel spins are 0 and 1, never 1/2, and looking for a
   // channel spin of 1/2 finds nothing and returns zero for what is a perfectly
   // well defined and non-zero observable.
+  // The coupling order follows Lane and Thomas, on whose formalism AZURE2 is
+  // built: "this channel spin s is formed by coupling I1 and I2 together:
+  // s = I1 + I2", with coefficients "(I1 I2 i1 i2 | s v) ... from the
+  // (I1 i1, I2 i2) scheme to the (I1 I2, s v) scheme ... as discussed by
+  // Condon and Shortley" (RMP 30 (1958) 257, sec. III.2a). So particle 1 comes
+  // first and the phases are Condon-Shortley, which is what AngCoeff::ClebGord
+  // provides. Nothing else in AZURE2 fixes this order -- the unpolarized cross
+  // section adds channel spins incoherently and is blind to it -- so it is
+  // recorded here rather than left implicit.
   PPair* entrance = compound_->GetPair(aa_);
-  const double j1 = entrance->GetJ(1);   // projectile
-  const double j2 = entrance->GetJ(2);   // target
+  const double j1 = entrance->GetJ(1);   // particle 1, the light one
+  const double j2 = entrance->GetJ(2);   // particle 2, the heavy one
   // The vector analyzing power is a spin-1/2 beam observable.
   if (std::fabs(j1 - 0.5) > 1.e-6) return 0.0;
 

@@ -175,14 +175,39 @@ kinematics — heavy beam on light target — it is not, and the number returned
 would be the analyzing power of the *target* rather than the beam. Nothing warns
 about this.
 
-**The sign for a target with spin** is inherited through the reduction argument
-of (e), not measured. If the Clebsch–Gordan ordering in the decomposition were
-transposed, the reduction to `j2 = 0` would still hold (only one term survives)
-while a spin-carrying target could pick up a wrong relative phase between the
-`s = 0` and `s = 1` contributions. Check (a) would not catch it, because it tests
-`Σ|M|²`, which is insensitive to how the entrance index is later recombined.
-**This is the most plausible remaining error, and the ¹⁵N data is what would
-expose it.**
+**The Clebsch–Gordan ordering — resolved, and worth recording how.** The concern
+was that if the ordering in the decomposition were transposed, the reduction to
+`j2 = 0` would still hold (only one term survives), while a spin-carrying target
+would pick up a wrong relative phase between the `s = 0` and `s = 1`
+contributions. Check (a) cannot catch this: it tests `Σ|M|²`, which is blind to
+how the entrance index is recombined afterwards. Three steps settled it.
+
+*It matters, but modestly.* Computing both orderings side by side on p + ¹⁵N,
+the difference is 1e-3 to 1e-2 in absolute `A_y` — around 5–7% where `A_y` is
+largest, and 100% only where it is near zero anyway. On a spin-0 target the two
+are identical to the last bit, as the reduction argument predicts. So this is a
+real effect, but **it cannot explain a factor of 2–6**, and the ¹⁵N data
+disagreement (i) is therefore a separate matter.
+
+*Nothing inside AZURE2 fixes the order.* `CNuc.cpp:258` only enumerates the
+allowed `s` values; every other `ClebGord` call in the engine involves orbital
+momenta. The unpolarized cross section adds channel spins incoherently, so no
+existing calculation is sensitive to it. The convention is one this code
+introduces.
+
+*Lane and Thomas fix it.* AZURE2's formalism is theirs, and they are explicit
+(RMP **30** (1958) 257, sec. III.2a): *"this channel spin s is formed by coupling
+I₁ and I₂ together: s = I₁ + I₂"*, with coefficients *"(I₁I₂i₁i₂|sν) … elements
+of the matrix of the orthogonal transformation from the (I₁i₁, I₂i₂) scheme to
+the (I₁I₂, sν) scheme … as discussed by Condon and Shortley."* Particle 1 first,
+Condon–Shortley phases. `AngCoeff::ClebGord` was verified against the singlet and
+triplet decompositions to be exactly `⟨j₁m₁j₂m₂|JM⟩` in that convention, and the
+implementation calls it with particle 1 — which AZURE2 defines as the light
+particle — first. **The implementation matches its own stated formalism.**
+
+One residual caveat, which is a modelling matter rather than a code one: the
+signs of the user's reduced width amplitudes for `(l, s)` channels must have been
+taken in the same convention. Nothing can check that from inside the code.
 
 **Not implemented, and gated rather than approximated:** tensor observables
 (need spin-1 projectile and rank-2 operators); capture channels (need Seyler &
@@ -212,4 +237,6 @@ and sign. Candidates:
 
 Until one of those is done, the honest position is: **the spin-0 target case is
 verified end to end; the spin-carrying target case is verified up to the
-amplitudes, and correct by construction thereafter, but unconfirmed.**
+amplitudes, its coupling convention is now pinned to the formalism the code is
+built on, and what remains unconfirmed is the result itself against a
+measurement.**
