@@ -209,6 +209,22 @@ One residual caveat, which is a modelling matter rather than a code one: the
 signs of the user's reduced width amplitudes for `(l, s)` channels must have been
 taken in the same convention. Nothing can check that from inside the code.
 
+**Identical particles are not handled, and this one is not gated.** For an
+identical pair the amplitude must be symmetrised. The Coulomb side already is --
+`EPoint::GetCoulombAmplitude` returns the Mott amplitude
+`f_C(θ) + ε f_C(π−θ)` (`EPoint.cpp:1267`) and the polarization code consumes it
+unchanged. The nuclear side is not: `PolarizationFunc.cpp` contains no reference
+to `IsIdentical`, while the cross-section path multiplies the resonant term by 4
+and the interference term by 2 (`GenMatrixFunc.cpp:285`) -- equivalent to
+doubling the nuclear amplitude. So for an identical pair the nuclear amplitude
+sits a factor of two low against the Coulomb one and `A_y` comes out wrong
+rather than zero, which is worse, because it looks plausible. For α+α it is
+harmless (`I₁ = 0`, so `A_y = 0` regardless); for polarized p+p elastic
+scattering it is not. The fix appears to be one line, but is deliberately not
+applied while untested — and the test that would settle it already exists, since
+check (a) should currently *fail* for an identical pair and pass once the factor
+is right.
+
 **Not implemented, and gated rather than approximated:** tensor observables
 (need spin-1 projectile and rank-2 operators); capture channels (need Seyler &
 Weller, *PRC* **20** (1979) 453); and the analytic derivative of a
