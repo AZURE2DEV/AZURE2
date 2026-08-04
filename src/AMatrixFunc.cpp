@@ -1,4 +1,5 @@
 #include "AMatrixFunc.h"
+#include "PolarizationFunc.h"
 #include "CNuc.h"
 #include "Config.h"
 #include "EPoint.h"
@@ -585,7 +586,37 @@ bool AMatrixFunc::PointAdjoint(EPoint* point, double fitBar, GradAccum& accum,
     return ecg->GetRadType() == 'E' && ecg->GetMult() == xsComponent;
   };
 
-  if(isPhase) {
+  if(point->IsAnalyzingPower()) {
+    // ---- Vector analyzing power. A_y is built from the channel-spin amplitude
+    //      matrix, which is linear in T(k,m) with the coefficients AddPathway
+    //      applies, so the whole derivative is a contraction against those same
+    //      coefficients. The Coulomb amplitude carries no parameter dependence
+    //      and drops out. ----
+    if(point->NumSubPoints() > 0) return false;   // see the note below
+    if(compound()->GetPair(aa)->GetPType() != 0 ||
+       compound()->GetPair(exitPairNum)->GetPType() != 0) return false;
+
+    Polarization::AmplitudeMatrix M(compound(), point, aa, exitPairNum);
+    for(int k = 1; k <= nK; k++) {
+      for(int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+        MGroup* mg = theDecay->GetKGroup(k)->GetMGroup(m);
+        M.AddPathway(mg->GetJNum(), mg->GetChNum(), mg->GetChpNum(),
+                     this->GetTMatrixElement(k, m, ir));
+      }
+    }
+    if(aa == exitPairNum) M.AddCoulomb(point->GetCoulombAmplitude());
+    if(M.size() == 0) return false;
+
+    const std::vector<complex> bar = M.AnalyzingPowerBar();
+    for(int k = 1; k <= nK; k++) {
+      for(int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+        MGroup* mg = theDecay->GetKGroup(k)->GetMGroup(m);
+        if(!includeInternal(mg)) continue;
+        tBar[k-1][m-1] += fitBar * M.PathwayAdjoint(mg->GetJNum(), mg->GetChNum(),
+                                                    mg->GetChpNum(), bar);
+      }
+    }
+  } else if(isPhase) {
     // ---- Phase shift: model = (90/pi) * arg(U) [+ const for identical pairs],
     //      U = sum_{matching k,m} (expCP^2 - T(k,m)) / expCP^2, matched by
     //      (J, l, elastic channel) = (segment J, segment L). ----

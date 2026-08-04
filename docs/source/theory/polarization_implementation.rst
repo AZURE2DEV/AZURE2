@@ -351,6 +351,80 @@ be expected to recover the published parameters more tightly. The point of the
 exercise is that an R-matrix model fitted to :math:`A_y` alone lands on the same
 two resonances, from the correct side, with sensible widths.
 
+Differentiating it
+------------------
+
+The analyzing power has an exact adjoint, which matters because without one a
+fit either falls back to numerical derivatives or -- worse -- uses the wrong
+ones. Before this was written, an analyzing-power point fell through
+``AMatrixFunc::PointAdjoint`` into the differential-cross-section branch, since
+:math:`A_y` segments are flagged differential. It silently returned
+:math:`\partial\sigma/\partial p` where :math:`\partial A_y/\partial p` was
+wanted.
+
+One structural fact makes the derivative easy. ``AddPathway`` is called in a
+loop over exactly the ``(k, m)`` K-group and M-group indices that
+``PointAdjoint`` uses for its T-matrix cotangents ``tBar``, so the forward and
+reverse passes are the same loop and no index mapping is needed. And since
+:math:`M` is *linear* in :math:`T`, the coefficient that ``AddPathway``
+multiplies :math:`T` by **is** the derivative:
+
+.. math::
+
+   M_{s'\nu' s\nu} = \sum_{k,m} c^{(k,m)}_{s'\nu' s\nu}\, T_{k,m}
+                     + \text{(Coulomb)},
+   \qquad
+   \frac{\partial A_y}{\partial T^{*}_{k,m}}
+     = \sum_{s'\nu' s\nu} \overline{c^{(k,m)}_{s'\nu' s\nu}}\;
+       \frac{\partial A_y}{\partial M^{*}_{s'\nu' s\nu}} .
+
+The Coulomb amplitude depends only on energy, so it drops out.
+
+With :math:`u_i = M_{s'\nu',+1/2}` and :math:`d_i = M_{s'\nu',-1/2}`, and
+:math:`A_y = N/D` as in :eq:`ay`, the Wirtinger derivatives are
+
+.. math::
+
+   \frac{\partial N}{\partial u_i^{*}} = i\, d_i, \quad
+   \frac{\partial N}{\partial d_i^{*}} = -i\, u_i, \quad
+   \frac{\partial D}{\partial u_i^{*}} = u_i, \quad
+   \frac{\partial D}{\partial d_i^{*}} = d_i,
+
+so that
+
+.. math::
+
+   \frac{\partial A_y}{\partial u_i^{*}} = \frac{i\, d_i}{D}
+       - \frac{N}{D^{2}}\, u_i ,
+   \qquad
+   \frac{\partial A_y}{\partial d_i^{*}} = -\frac{i\, u_i}{D}
+       - \frac{N}{D^{2}}\, d_i .
+
+``AmplitudeMatrix::AnalyzingPowerBar`` returns twice these, matching the
+cotangent convention the rest of ``AMatrixFunc`` uses -- it finally takes
+``Re(conj(bar) * dz/dp)`` with no further factor, so the bar must carry the
+:math:`2` that a real function of a complex variable requires.
+``PathwayAdjoint`` then walks the ``AddPathway`` loop and contracts. Everything
+downstream -- T to :math:`U`, :math:`U` to the level matrix, level matrix to
+:math:`E_\lambda` and :math:`\gamma` -- is the machinery that already existed.
+
+Verified against central differences on all 71 analyzing-power rows of
+``tests/13N`` and all 14 free parameters. Agreement is at :math:`10^{-9}` to
+:math:`10^{-10}` for twelve of them. The two level-energy parameters, whose
+derivatives are the largest, show :math:`4\times10^{-6}` at a step of
+:math:`10^{-5}` -- and that residue falls as :math:`h^2`
+(:math:`1.5\times10^{-5}`, :math:`1.5\times10^{-7}`, :math:`1.7\times10^{-9}`
+for :math:`h = 10^{-4}, 10^{-5}, 10^{-6}`), which is finite-difference
+truncation rather than an error in the adjoint. The capture-channel widths give
+identically zero, correctly: they cannot affect elastic scattering.
+
+A point whose :math:`A_y` is averaged over a target is deliberately not
+supported. That quantity is a ratio of two integrals (Eq. :eq:`aytarget`), so
+its derivative needs the quotient rule across sub-points and both integrals
+differentiated. Rather than approximate it, such a point reports itself
+unsupported, which makes the whole Jacobian unavailable and returns the fit to
+numerical derivatives.
+
 Using it
 --------
 
@@ -393,10 +467,9 @@ What is not done
   amplitude matrix carries all channel spins and projections already, so the
   missing part is the observable side, but it is not written.
 * **Capture channels** need Seyler and Weller rather than Seyler.
-* **Analytic derivatives** do not know about :math:`A_y`: ``src/AZUREGrad.cpp``
-  has no analyzing-power branch and differentiates the cross section. Anything
-  that relies on it — ``residual_jacobian``, ``chi2_and_grad``, and the
-  analytic-gradient fit paths — should not be used on analyzing-power segments
-  until that is addressed. The fit reported above did converge without them, and
-  the minimum is stable: restarting the fit from it returns :math:`\chi^2 =
-  85.226` rather than drifting.
+* **Analytic derivatives through a target integration.** :math:`A_y` itself now
+  has an exact adjoint (see below), but a point whose :math:`A_y` is averaged
+  over a target is a ratio of two integrals and is not differentiated
+  analytically. Such a point returns *unsupported*, which makes the whole
+  Jacobian unavailable and falls the fit back to numerical derivatives -- coarse,
+  but never wrong.

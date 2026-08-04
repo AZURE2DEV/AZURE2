@@ -126,6 +126,94 @@ double AmplitudeMatrix::UnpolarizedCrossSection() const {
   return total / nEntrance;
 }
 
+int AmplitudeMatrix::IndexOf(double s, double v, double sp, double vp) const {
+  for (std::size_t i = 0; i < amplitudes_.size(); i++) {
+    const Amplitude& a = amplitudes_[i];
+    if (Same(a.s, s) && Same(a.v, v) && Same(a.sp, sp) && Same(a.vp, vp))
+      return (int)i;
+  }
+  return -1;
+}
+
+std::vector<complex> AmplitudeMatrix::AnalyzingPowerBar() const {
+  std::vector<complex> bar(amplitudes_.size(), complex(0.0, 0.0));
+
+  // A_y = N/D with N = 2 sum Im[u d*] and D = sum (|u|^2 + |d|^2), where u and
+  // d are the amplitudes reached from the two entrance projections. Both are
+  // needed before any slot can be differentiated, so N and D come first.
+  bool haveHalf = false;
+  for (std::size_t i = 0; i < entranceSpins_.size(); i++)
+    if (Same(entranceSpins_[i], 0.5)) haveHalf = true;
+  if (!haveHalf) return bar;
+
+  complex interference(0.0, 0.0);
+  double denominator = 0.0;
+  for (std::size_t j = 0; j < exitSpins_.size(); j++) {
+    const double sp = exitSpins_[j];
+    for (double vp = -sp; vp <= sp + 1.e-6; vp += 1.0) {
+      const complex up = Get(0.5, 0.5, sp, vp);
+      const complex down = Get(0.5, -0.5, sp, vp);
+      interference += up * std::conj(down);
+      denominator += std::norm(up) + std::norm(down);
+    }
+  }
+  if (denominator <= 0.0) return bar;
+  const double N = 2.0 * std::imag(interference);
+  const double D = denominator;
+
+  // dN/du* = i d,  dN/dd* = -i u,  dD/du* = u,  dD/dd* = d, so that
+  // dA/du* = i d/D - (N/D^2) u and dA/dd* = -i u/D - (N/D^2) d. The factor of
+  // two is the cotangent convention, not part of the derivative.
+  const complex I(0.0, 1.0);
+  for (std::size_t j = 0; j < exitSpins_.size(); j++) {
+    const double sp = exitSpins_[j];
+    for (double vp = -sp; vp <= sp + 1.e-6; vp += 1.0) {
+      const complex up = Get(0.5, 0.5, sp, vp);
+      const complex down = Get(0.5, -0.5, sp, vp);
+      const int iu = IndexOf(0.5, 0.5, sp, vp);
+      const int id = IndexOf(0.5, -0.5, sp, vp);
+      if (iu >= 0) bar[iu] = 2.0 * (I * down / D - (N / (D * D)) * up);
+      if (id >= 0) bar[id] = 2.0 * (-I * up / D - (N / (D * D)) * down);
+    }
+  }
+  return bar;
+}
+
+complex AmplitudeMatrix::PathwayAdjoint(int jNum, int chNum, int chpNum,
+                                        const std::vector<complex>& bar) const {
+  JGroup* jgroup = compound_->GetJGroup(jNum);
+  AChannel* entrance = jgroup->GetChannel(chNum);
+  AChannel* exitCh = jgroup->GetChannel(chpNum);
+
+  const double jValue = jgroup->GetJ();
+  const int l = entrance->GetL();
+  const int lp = exitCh->GetL();
+  const double s = entrance->GetS();
+  const double sp = exitCh->GetS();
+
+  // The mirror of AddPathway: same loop, same coefficients, contracted against
+  // the cotangents instead of multiplied by T. M is linear in T, so the
+  // coefficient is the entire derivative and nothing has to be re-derived.
+  complex tbar(0.0, 0.0);
+  for (double v = -s; v <= s + 1.e-6; v += 1.0) {
+    const double cg1 = AngCoeff::ClebGord(s, (double)l, jValue, v, 0.0, v);
+    if (std::fabs(cg1) < 1.e-12) continue;
+    for (double vp = -sp; vp <= sp + 1.e-6; vp += 1.0) {
+      const double mu = v - vp;
+      if (std::fabs(mu) > lp + 1.e-6) continue;
+      const double cg2 = AngCoeff::ClebGord(sp, (double)lp, jValue, vp, mu, v);
+      if (std::fabs(cg2) < 1.e-12) continue;
+      const int idx = IndexOf(s, v, sp, vp);
+      if (idx < 0) continue;
+      const complex y = AngCoeff::SphericalHarmonic(lp, (int)std::lround(mu), theta_);
+      const complex coeff = complex(0.0, 1.0) * std::sqrt(2.0 * l + 1.0) *
+                            cg1 * cg2 * y;
+      tbar += std::conj(coeff) * bar[idx];
+    }
+  }
+  return tbar;
+}
+
 void AmplitudeMatrix::DumpSpinHalf() const {
   // For spin-1/2 on spin-0 the matrix should read
   //   M = g + h sigma.n  =  [[g, -i h], [i h, g]]

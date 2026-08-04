@@ -87,6 +87,21 @@ class AmplitudeMatrix {
    */
   double AnalyzingPowerAy() const;
 
+  /*!
+   * Reverse mode for A_y. \c AnalyzingPowerBar returns, per amplitude slot,
+   * 2 dA_y/dM* -- the factor of two matching the convention AMatrixFunc uses
+   * for its cotangents, where the parameter gradient is finally taken as
+   * Re(conj(bar) dz/dp) with no further factor.
+   *
+   * \c PathwayAdjoint then walks exactly the loop \c AddPathway walks and
+   * contracts those cotangents with the same coefficients, returning
+   * dA_y/dT* for that one (J-group, entrance channel, exit channel). Since
+   * M is linear in T, that contraction is the whole derivative.
+   */
+  std::vector<complex> AnalyzingPowerBar() const;
+  complex PathwayAdjoint(int jNum, int chNum, int chpNum,
+                         const std::vector<complex>& bar) const;
+
   //! Largest |M| with v != v' -- the spin-flip strength, which is what makes
   //! a vector analyzing power non-zero. Diagnostic.
   double MaxSpinFlip() const;
@@ -97,6 +112,7 @@ class AmplitudeMatrix {
 
  private:
   complex& At(double s, double v, double sp, double vp);
+  int IndexOf(double s, double v, double sp, double vp) const;
   complex Get(double s, double v, double sp, double vp) const;
 
   CNuc* compound_;

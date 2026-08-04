@@ -237,12 +237,16 @@ Data files carry ``E_lab  theta_cm  A_y  dA_y`` -- angles are centre-of-mass,
 unlike an ordinary differential segment. Leave ``vary_norm`` off: a
 normalization factor is meaningless for a ratio.
 
-Two traps are worth knowing about. Comparing against thin-target data requires
+One trap is worth knowing about: comparing against thin-target data requires
 segments with **no target integration**, because :math:`A_y` averaged over a
 thick target is weighted by the cross section and Rutherford scattering drives
-that average towards zero. And the analytic-derivative paths
-(``residual_jacobian``, ``chi2_and_grad``) do not know about :math:`A_y` yet, so
-do not use them on analyzing-power segments.
+that average towards zero.
+
+``residual_jacobian`` and ``chi2_and_grad`` do differentiate :math:`A_y`
+exactly. The one exception is an analyzing-power point that also carries target
+integration: that is a ratio of two integrals, is not differentiated
+analytically, and makes the analytic Jacobian unavailable for the whole fit
+rather than returning something approximate.
 
 See :doc:`../theory/polarization_theory` for the formalism,
 :doc:`../theory/polarization_implementation` for the implementation, and
