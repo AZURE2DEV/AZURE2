@@ -1,402 +1,423 @@
-# How AZURE2 computes polarization observables
+# Polarization observables in R-matrix theory
 
-An R-matrix code produces a collision matrix. An experiment with a polarized beam
-measures a spin asymmetry. This note explains what sits between the two, why each
-step has the form it does, and how the treatment adapts to the spins of the
-particles involved — worked through for two real cases.
-
----
-
-## 1. The object in the middle
-
-Everything hinges on one quantity, the **amplitude matrix**
-
-$$M_{s'\nu'\,s\nu}(\theta),$$
-
-the amplitude to enter with channel spin $s$ and projection $\nu$ and leave with
-$s'$, $\nu'$. Why this object and not something else:
-
-- **Below it**, the R-matrix machinery ends at the collision matrix
-  $U^J_{s'l'sl}$, which knows about total angular momentum $J$ and orbital
-  motion $l$ but is not an amplitude for anything you can point a detector at.
-- **Above it**, every observable — cross section, analyzing power, spin
-  correlation, tensor moment — is a trace of $M\rho M^{\dagger}$ against some
-  operator. No further angular-momentum algebra is needed once $M$ exists.
-
-So $M$ is the natural waist of the calculation: build it once, and the observables
-are bookkeeping. This is why the implementation is organized around
-`Polarization::AmplitudeMatrix` rather than around $A_y$ specifically.
-
-### The chain, and where it lives
-
-| step | quantity | code |
-|---|---|---|
-| level energies, reduced widths | $E_\lambda,\ \gamma_{\lambda c}$ | the `.azr` file |
-| level matrix inversion | $A_{\lambda\mu}$ | `AMatrixFunc::InvertMatrices` |
-| collision matrix | $U^J_{s'l'sl}$ | `AMatrixFunc::CalculateTMatrix` |
-| transition matrix | $\delta-U$, with Coulomb phases | the same, as `tmatrix` |
-| **amplitude matrix** | $M_{s'\nu' s\nu}(\theta)$ | `Polarization::AmplitudeMatrix` |
-| observable | $A_y$ | `AnalyzingPowerAy` |
-
-One design decision is worth stating because it is load-bearing. AZURE2 already
-forms
-
-$$\texttt{tmatrix} \;=\; e^{i(\omega_l+\omega_{l'})}\big(\delta_{ss'}\delta_{ll'}-U^J_{s'l'sl}\big),$$
-
-which is exactly the bracket the amplitude needs, Coulomb phases included. The
-polarization code consumes that rather than rebuilding $U$, so it is guaranteed to
-see the same collision matrix as the cross section — including every
-boundary-condition and Brune-parametrization subtlety. Two independent
-constructions of $U$ could disagree with neither being obviously wrong.
+What a polarized beam measures, why it carries information no cross section can,
+and how the calculation adapts to the spins of the particles involved. Two worked
+examples at the end.
 
 ---
 
-## 2. Channel spin: the basis, and why the code uses it
+## 1. The idea, before any formulas
 
-A reaction channel in R-matrix theory is labelled by the pair of nuclei, their
-relative orbital angular momentum $l$, and the **channel spin**
+Fire an unpolarized beam at a target and count what comes out at angle theta. You
+measure a cross section, and you learn how *much* scattering happens.
 
-$$\mathbf s \;=\; \mathbf I_1 + \mathbf I_2, \qquad
-  |I_1-I_2| \le s \le I_1+I_2 ,$$
-
-the vector sum of the two intrinsic spins. Channels are then grouped by total
-angular momentum and parity,
-
-$$\mathbf J = \mathbf l + \mathbf s, \qquad \pi = \pi_1\pi_2(-1)^l .$$
-
-The reason this is the useful basis is that the nuclear Hamiltonian conserves
-$J$ and $\pi$, so the R matrix is block-diagonal in $J^\pi$, and within a block
-the channels are exactly the allowed $(l,s)$ combinations. Every level in the
-`.azr` file carries one reduced width amplitude per such channel. So the
-channel-spin basis is not a convenience — it is the basis in which the model
-parameters are defined.
-
-The coupling order follows Lane and Thomas, whose formalism AZURE2 implements
-(*Rev. Mod. Phys.* **30** (1958) 257, §III.2a): the channel spin is *"formed by
-coupling $I_1$ and $I_2$ together"*, with vector-addition coefficients
-$(I_1I_2i_1i_2|s\nu)$ transforming *"from the $(I_1i_1, I_2i_2)$ scheme to the
-$(I_1I_2, s\nu)$ scheme … as discussed by Condon and Shortley"*. Particle 1 —
-which AZURE2 defines as the lighter of the pair — comes first.
-
----
-
-## 3. Building the amplitude matrix
-
-The bridge from $U$ to $M$ is Seyler's Eq. (4)
-(*Nucl. Phys.* **A124** (1969) 253):
+Now spin-polarize the beam, so every projectile enters with its spin pointing the
+same way. Count again — and count separately on the left and on the right of the
+beam. In general **the two counts differ**. The asymmetry between them is the
+analyzing power:
 
 $$
-M_{s'\nu' s\nu}(\theta) = \frac{\sqrt{\pi}}{k}\Bigg[
+A_y = \frac{N_{\mathrm{left}} - N_{\mathrm{right}}}{N_{\mathrm{left}} + N_{\mathrm{right}}}
+\Big/ P_{\mathrm{beam}}
+$$
+
+where the division by the beam polarization normalizes to a perfectly polarized
+beam. It runs from $-1$ to $+1$.
+
+Why should there be an asymmetry at all? Because the nuclear force depends on
+spin. A projectile whose spin points "up" relative to its orbital motion feels a
+different potential than one pointing "down" — this is the spin–orbit force, the
+same one that splits nuclear shells. Left and right correspond to opposite
+relative orientations, so they scatter differently.
+
+**The reason this is worth measuring** is subtler and more valuable. A cross
+section is a sum of squared amplitudes. Squaring destroys phase information. An
+analyzing power is a *ratio*, whose numerator is an interference between two
+amplitudes and whose denominator is the cross section — so the overall size and
+the overall phase both cancel, and what survives is the **relative phase**
+between amplitudes. Where a cross section shows a smooth bump, an analyzing power
+can swing from $+1$ to $-1$ in a few tens of keV. That is why a single
+analyzing-power measurement can settle a spin-parity assignment that a great deal
+of cross-section data leaves open.
+
+---
+
+## 2. What the calculation must keep track of
+
+With spin, a single complex amplitude is no longer enough. The scattering must
+say what it does to the spins as well as where it sends the particle, so the
+amplitude becomes a **matrix in spin space**. Everything below is bookkeeping for
+that matrix.
+
+### The symbols, and what they actually mean
+
+| Symbol | Name | What it means, plainly | Values it takes |
+|---|---|---|---|
+| $\theta$ | scattering angle | where the detector sits, measured from the beam | $0$ to $180$ degrees |
+| $I_1$ | projectile spin | intrinsic spin of the incoming particle | $1/2$ for a proton |
+| $I_2$ | target spin | intrinsic spin of the target nucleus | $0$ for carbon-12, $1/2$ for nitrogen-15 |
+| $m_1, m_2$ | spin projections | which way each spin points along the chosen axis | $-I$ to $+I$ in steps of 1 |
+| $s$ | **channel spin** | the two intrinsic spins added together as vectors | $\lvert I_1-I_2\rvert$ to $I_1+I_2$ |
+| $\nu$ | its projection | which way the combined spin points | $-s$ to $+s$ |
+| $l$ | orbital angular momentum | how much the pair is "swinging around" each other on the way in | $0, 1, 2, \ldots$ (s-wave, p-wave, …) |
+| $l'$ | the same, on the way out | | |
+| $\mu = \nu - \nu'$ | orbital projection, outgoing | the angular momentum the *motion* must absorb if the spins flipped | $-l'$ to $+l'$ |
+| $J$ | total angular momentum | orbital plus channel spin; conserved, so it labels resonances | $\lvert l-s\rvert$ to $l+s$ |
+| $\pi$ | parity | conserved; decides which $l$ can appear | $+$ or $-$ |
+| $U$ | collision matrix | what the R-matrix calculation produces: how much of each entrance channel turns into each exit channel | complex, one per $(J, \text{in}, \text{out})$ |
+| $M$ | **amplitude matrix** | the amplitude to come in with one spin state and leave with another | complex, one per (in state, out state) |
+| $C(\theta)$ | Coulomb amplitude | pure electrostatic (Rutherford) scattering | complex |
+| $\omega_l$ | Coulomb phase | the phase the long-range electric field adds | real |
+| $Y_{l'}^{\mu}$ | spherical harmonic | the angular pattern of the outgoing motion | function of $\theta$ |
+| $k$ | wave number | momentum of relative motion | $1/\mathrm{fm}$ |
+| $\hat{n}$ | normal to the scattering plane | the only direction a polarization can point (see §5) | unit vector |
+
+A prime always means "on the way out". So $M_{s'\nu' s\nu}$ reads: *the amplitude
+to enter with combined spin $s$ pointing $\nu$, and leave with combined spin $s'$
+pointing $\nu'$.*
+
+### Why we add the spins together first
+
+It would seem simpler to track the projectile and target spins separately. The
+reason not to is that **the nuclear force conserves total angular momentum $J$ and
+parity**, and $J$ is built from the orbital motion plus the *combined* spin:
+
+$$\mathbf{J} = \mathbf{l} + \mathbf{s}, \qquad \mathbf{s} = \mathbf{I}_1 + \mathbf{I}_2 .$$
+
+Resonances have definite $J$ and parity. So if you organize the calculation by
+$(l, s)$, each resonance couples to a small, definite set of channels, and the
+whole problem block-diagonalizes. Organized by $(m_1, m_2)$ instead, every
+resonance would smear across everything. The channel spin is the basis in which
+the physics is simple — and, not coincidentally, the basis in which the model
+parameters (level energies and reduced widths) are defined.
+
+This choice has one consequence that dominates everything in §6 and §8: **the
+channel spin is not the projectile's spin**, except in the special case where the
+target has none.
+
+---
+
+## 3. The master formula
+
+The amplitude matrix follows from the collision matrix as
+
+$$
+M_{s'\nu' s\nu}(\theta) = \frac{\sqrt{\pi}}{k}\left[
   -C(\theta)\,\delta_{ss'}\delta_{\nu\nu'}
-  + i\sum_{J l l'} \sqrt{2l+1}\;
-    (s\,l\,\nu\,0|J\nu)\,
-    (s'\,l'\,\nu'\,\nu{-}\nu'|J\nu)\,
-    e^{i(\omega_l+\omega_{l'})}
-    \big(\delta_{ss'}\delta_{ll'}-U^J_{s'l'sl}\big)\,
-    Y_{l'}^{\nu-\nu'}(\theta,0)
-\Bigg]
+  + i\sum_{J,l,l'} \sqrt{2l+1}\;
+    \langle s\,\nu\,l\,0 \mid J\,\nu \rangle\;
+    \langle s'\,\nu'\,l'\,\mu \mid J\,\nu \rangle\;
+    e^{i(\omega_l+\omega_{l'})}\,
+    \left(\delta_{ss'}\delta_{ll'}-U^J_{s'l' sl}\right)
+    Y_{l'}^{\mu}(\theta)
+\right]
 $$
 
-Every factor is forced by something:
+It looks forbidding, but every piece is forced by something physical:
 
-**$C(\theta)\,\delta_{ss'}\delta_{\nu\nu'}$** — the Coulomb amplitude. A pure
-Coulomb field is spin-independent, so it cannot change $s$ or $\nu$; and it
-exists only when the entrance and exit pairs are the same. In the code,
-`AddCoulomb` is called only for elastic scattering.
+**The Coulomb term** $C(\theta)$ carries the deltas $\delta_{ss'}\delta_{\nu\nu'}$
+because an electric field does not touch spin: whatever spin state goes in comes
+out unchanged. It appears only in elastic scattering, since Rutherford scattering
+cannot transmute one nucleus into another.
 
-**$(s\,l\,\nu\,0|J\nu)$** — the entrance coupling, with the orbital projection
-fixed at zero. This is the choice of quantization axis: take $\hat z$ along the
-beam, and the incoming plane wave has no angular momentum about its own
-direction, so $m_l=0$. The total projection is therefore $\nu$ alone.
+**The first bracket** $\langle s\,\nu\,l\,0 \mid J\,\nu \rangle$ says how the
+entrance channel spin and orbital motion combine into $J$. Its orbital projection
+is fixed at **zero** — that is not an approximation but a choice of axis. Point
+the $z$-axis along the beam; a plane wave carries no angular momentum about its
+own direction of travel, so the incoming orbital projection vanishes and the
+total projection is $\nu$ alone.
 
-**$(s'\,l'\,\nu'\,\nu-\nu'|J\nu)$** — the exit coupling. $J$ and its projection
-are conserved, so whatever the exit channel spin takes as $\nu'$, the outgoing
-orbital motion must carry the remainder $\mu=\nu-\nu'$.
+**The second bracket** does the same on the way out, and enforces conservation:
+whatever the exit spins take as $\nu'$, the orbital motion must carry the
+remainder $\mu = \nu - \nu'$.
 
-**$Y_{l'}^{\nu-\nu'}(\theta,0)$** — the angular function of that outgoing orbital
-motion, evaluated at azimuth zero because we chose the scattering plane.
+**The collision matrix term** $\delta_{ss'}\delta_{ll'} - U$ is the part that
+actually scatters: subtracting the identity removes the piece of the wave that
+went straight through.
 
-### Why this needs machinery a cross-section code does not have
+**The spherical harmonic** $Y_{l'}^{\mu}(\theta)$ is the angular pattern of the
+outgoing motion.
 
-Look at the spherical harmonic. For an unpolarized cross section only $\mu=0$
-survives the spin averaging, and $Y_l^0 \propto P_l(\cos\theta)$ — plain Legendre
-polynomials, which is all AZURE2 had. A spin-flip amplitude has $\nu\neq\nu'$,
-hence $\mu\neq0$, hence **associated** Legendre functions.
+### The one line that explains why polarization needs new machinery
 
-That is a structural statement, not a missing feature: a code whose angular basis
-is $\{P_l\}$ cannot represent the amplitudes whose interference *is* the analyzing
-power. Adding $Y_l^m$ (`AngCoeff::SphericalHarmonic`, on GSL's
-`gsl_sf_legendre_sphPlm`) was the one genuinely new ingredient.
+Look at $\mu = \nu - \nu'$ in that spherical harmonic.
+
+If the spins do not flip, $\nu = \nu'$, so $\mu = 0$, and $Y_l^{0}$ is just a
+Legendre polynomial $P_l(\cos\theta)$ — the familiar angular distributions of
+ordinary cross sections.
+
+If the spins **do** flip, $\mu \neq 0$, and you need the *associated* Legendre
+functions, which describe angular patterns that are not symmetric about the beam
+axis in the same way.
+
+So a calculation equipped only with $P_l(\cos\theta)$ cannot produce an analyzing
+power at all — not for want of an option, but because the amplitudes whose
+interference *is* the analyzing power cannot be written down in that angular
+basis. Spin flip is inseparable from sideways angular momentum.
 
 ---
 
-## 4. From the amplitude matrix to an observable
+## 4. From amplitudes to what is measured
 
-Given a beam described by a spin density matrix $\rho_{\rm in}$,
+Describe the beam by a spin density matrix $\rho_{\mathrm{in}}$ — a compact way of
+saying "this fraction of the beam has its spin here, that fraction there". Then
+the outgoing spin state is
 
-$$\rho_{\rm out} = M\,\rho_{\rm in}\,M^{\dagger},$$
+$$\rho_{\mathrm{out}} = M\,\rho_{\mathrm{in}}\,M^{\dagger},$$
 
-and any observable is a trace of $\rho_{\rm out}$ against the operator the
-apparatus measures. Two examples:
+and every observable is a trace of $\rho_{\mathrm{out}}$ against whatever operator
+the apparatus is sensitive to. Two cases:
 
-$$\frac{d\sigma}{d\Omega} = \frac{1}{(2I_1+1)(2I_2+1)}\,\mathrm{Tr}\big(MM^{\dagger}\big),
+$$
+\frac{d\sigma}{d\Omega} = \frac{\mathrm{Tr}\left(M M^{\dagger}\right)}{(2I_1+1)(2I_2+1)},
 \qquad
-A_y = \frac{\mathrm{Tr}\big(M\,\sigma_y\,M^{\dagger}\big)}{\mathrm{Tr}\big(MM^{\dagger}\big)} .$$
-
-The averaging factor in the cross section counts the entrance spin states an
-unpolarized beam populates equally. In $A_y$ it cancels between numerator and
-denominator — which is the formal reason **a normalization factor cannot affect
-an analyzing power**, and why the GUI disables *Vary Norm?* for it.
-
-**Why $\sigma_y$ and nothing else.** $M$ is a matrix in spin space, so it can be
-expanded in the identity and the Pauli matrices, with coefficients built from the
-only vectors available, $\mathbf k_{\rm in}$ and $\mathbf k_{\rm out}$. Under
-parity, $\boldsymbol\sigma$ is a pseudovector while $\mathbf k$ is a vector, so
-the coefficient of $\boldsymbol\sigma$ must be a pseudovector — and the only one
-available is $\mathbf k_{\rm in}\times\mathbf k_{\rm out}$. Hence
-
-$$\hat{\mathbf n}=\frac{\mathbf k_{\rm in}\times\mathbf k_{\rm out}}{|\mathbf k_{\rm in}\times\mathbf k_{\rm out}|},
-\qquad A_x=A_z=0 \ \text{identically}.$$
-
-$A_y$ *is* the vector analyzing power; the Madison convention just fixes the sign
-of $\hat{\mathbf n}$.
-
-### The one place the particles' spins enter the recipe
-
-$\sigma_y$ acts on the **beam**. The matrix $M$ is indexed by **channel** spin.
-These are the same thing only when the target has no spin. In general the
-entrance index must be un-coupled before the Pauli matrix can be applied:
-
-$$
-M_{\text{out};\,m_1 m_2} \;=\; \sum_{s}
-  \big\langle I_1 m_1\, I_2 m_2 \,\big|\, s,\, m_1{+}m_2 \big\rangle\;
-  M_{\text{out};\,s,\,m_1+m_2},
+A_y = \frac{\mathrm{Tr}\left(M\,\sigma_y\,M^{\dagger}\right)}{\mathrm{Tr}\left(M M^{\dagger}\right)} .
 $$
 
-with $m_1$ the projectile projection and $m_2$ the target's. The observable is
-then
+The denominator in the cross section counts the spin states an unpolarized beam
+populates equally. In $A_y$ that factor cancels top and bottom — which is the
+formal reason **an overall normalization cannot change an analyzing power**. It is
+already a ratio.
+
+### Why the polarization can only point one way
+
+$M$ is a matrix in spin space, so it can be written as a piece proportional to
+the identity plus a piece proportional to the Pauli matrices, with coefficients
+built from the only two vectors in the problem, the incoming and outgoing momenta.
+
+Now apply parity. The Pauli matrices form a *pseudovector* (they do not change
+sign under reflection), while momenta are ordinary vectors (they do). For the
+whole expression to have definite parity, the coefficient multiplying the Pauli
+matrices must itself be a pseudovector. Out of two ordinary vectors there is
+exactly one pseudovector available: their cross product.
+
+$$\hat{n} = \frac{\mathbf{k}_{\mathrm{in}} \times \mathbf{k}_{\mathrm{out}}}
+                 {\lvert \mathbf{k}_{\mathrm{in}} \times \mathbf{k}_{\mathrm{out}}\rvert}$$
+
+So a vector polarization can only point along the normal to the scattering plane.
+The components in the plane vanish identically, which is why there is one vector
+analyzing power and not three. Writing $\sigma_y$ above is shorthand for
+"the Pauli matrix along $\hat n$".
+
+### What the numerator is really doing
+
+Write $u$ for the amplitude when the beam spin is up, $d$ for spin down, at the
+same outgoing configuration. The trace works out to
 
 $$
-A_y = \frac{2\sum_{\text{out}}\sum_{m_2}
-   \mathrm{Im}\!\big[\,M_{\text{out};+\frac12,m_2}\;M^{*}_{\text{out};-\frac12,m_2}\big]}
-  {\sum_{\text{out}}\sum_{m_1 m_2}\big|M_{\text{out};m_1m_2}\big|^{2}} .
+A_y = \frac{2\,\sum \mathrm{Im}\left[\, u\, d^{*} \,\right]}
+           {\sum \left( \lvert u \rvert^{2} + \lvert d \rvert^{2} \right)} ,
 $$
 
-The sum over $m_2$ is **incoherent**: nobody prepared or measured the target
-spin, so its projections are averaged over, not added as amplitudes. The sum over
-exit configurations is incoherent for the same reason. Only the two beam
-projections are kept coherent, because that is the pair the polarization
-distinguishes.
+summed over everything not measured. Read it slowly, because it contains the
+whole phenomenology:
 
-Two structural readings of that formula, both useful in the laboratory:
+- if spin-up and spin-down scatter **identically**, then $u = d$, the product
+  $u d^{*}$ is real, and $A_y = 0$;
+- if they scatter differently but **in phase**, the product is still real, and
+  $A_y = 0$ again;
+- a non-zero analyzing power needs **both** a spin dependence **and** a relative
+  phase between the two.
 
-- The numerator is an **interference** between the two beam spin states. If they
-  scatter identically it vanishes; if they scatter differently but *in phase*,
-  the imaginary part vanishes and it is still zero. A non-zero analyzing power
-  requires **both** spin dependence and a relative phase — which is why $A_y$ is
-  large near resonances, where phases move fast, and why it is such a sharp
-  discriminator of interference that a cross section cannot see.
-- $A_y$ must vanish at $\theta=0^\circ$ and $180^\circ$, where $\hat{\mathbf n}$ is
-  undefined — formally because $Y_l^{\mu}(0)=0$ for every $\mu\neq0$ — and in the
-  pure Coulomb limit, where the scattering is spin-independent.
+That is why analyzing powers are large near resonances — a resonance sweeps its
+phase through 180 degrees — and why they are such sharp probes of interference
+between overlapping levels.
+
+### Four places it must vanish
+
+| Where | Why |
+|---|---|
+| exactly forward or backward | there is no scattering plane, so $\hat n$ is undefined; the sideways angular functions vanish there |
+| far below any resonance | scattering is pure Coulomb, which is spin-blind, so up and down are identical |
+| if there were no spin–orbit force | nothing would distinguish the two orientations |
+| a single isolated resonance with no background | one common phase, which cancels in the ratio |
+
+The second is a trap when checking a calculation: at low energy, zero is the
+*correct* answer, so agreement there proves nothing.
 
 ---
 
-## 5. Example A — $^{12}\mathrm{C}(\vec p,p)$: spin-½ on spin-0
+## 5. Example A — protons on carbon-12
 
-The simplest case, and the one where the channel-spin basis needs no unpacking.
+Carbon-12 has spin **zero**. This is the case where the bookkeeping of §2
+collapses to nothing.
 
-**Channel spins.** $I_1=\tfrac12$ (proton), $I_2=0$ ($^{12}$C ground state), so
+**The channel spin.** With $I_1 = 1/2$ and $I_2 = 0$, the only possible value is
 
-$$s = \left|\tfrac12-0\right|\ldots\tfrac12+0 = \tfrac12 \quad\text{only}.$$
+$$s = 1/2 .$$
 
-There is one channel spin, its projections are $\nu=\pm\tfrac12$, and because
-$I_2=0$ the Clebsch–Gordan coefficient in §4 is $\langle\tfrac12 m_1\,0\,0|\tfrac12 m_1\rangle=1$.
-**The channel spin projection is the proton's own spin projection.** No
-decomposition is needed.
+Its projection $\nu$ is then simply the proton's own spin projection: with a
+spinless target there is nothing else to combine with. **Channel spin and beam
+spin coincide.**
 
-**Size of the problem.** Entrance states: 2. Exit states: 2. So $M$ has
-$2\times2 = 4$ elements — confirmed by the code, which reports `n=4` amplitudes.
+**Size of the problem.** Two entrance spin states, two exit states, so the
+amplitude matrix has $2 \times 2 = 4$ entries.
 
-**Structure.** Being a $2\times2$ matrix in the proton spin, $M$ must take the
-Wolfenstein form allowed by parity (§4):
-
-$$M = g(\theta)\,\mathbb{1} + h(\theta)\,\boldsymbol\sigma\!\cdot\!\hat{\mathbf n}
-    = \begin{pmatrix} g & -ih \\ ih & g \end{pmatrix},$$
-
-so the two **non-flip** elements must be equal, and the two **flip** elements
-equal and opposite. The code's diagnostic dump confirms exactly this:
-
-```
-nonflip(++) = (-1.9508e+03, -1.9546e+03)
-nonflip(--) = (-1.9508e+03, -1.9546e+03)      <- equal
-flip(+-)    = (-2.7472e-03,  7.9561e-03)
-flip(-+)    = (+2.7472e-03, -7.9561e-03)      <- equal and opposite
-```
-
-This is a strong statement about the whole construction: the Clebsch–Gordan
-ordering, the spherical-harmonic indices and the phases all have to be right for
-that symmetry to come out of a sum over many $(J,l,l')$ pathways.
-
-Substituting the matrix into the trace gives the classical result
-
-$$A_y = \frac{2\,\mathrm{Re}\!\left(g\,h^{*}\right)}{|g|^2+|h|^2}$$
-
-(texts that write $M=g+ih\,\boldsymbol\sigma\!\cdot\!\hat{\mathbf n}$ get
-$\mathrm{Im}$ instead; the difference is only where the $i$ is put). Note that
-$|h|\ll|g|$ in the numbers above — the spin-flip amplitude is tiny compared with
-the Coulomb-dominated non-flip one — yet $A_y$ can still be large, because it is
-a *ratio of an interference to a magnitude*, not a ratio of magnitudes.
-
-**Result.** At $E_p = 1.75$ MeV, between the $3/2^-$ resonance at
-$E_x = 3.503$ MeV and the $5/2^+$ at 3.545 MeV:
-
-| $\theta_{\rm c.m.}$ | 20° | 40° | 60° | 80° | 100° | 120° | 140° | 160° |
-|---|---|---|---|---|---|---|---|---|
-| $A_y$ | +0.178 | +0.207 | −0.254 | **−0.992** | −0.054 | +0.793 | +0.909 | +0.401 |
-
-The value at 80° is one of the four points Baumann *et al.* (1992) mark where
-$|A_y|$ reaches unity — they quote $(1.750\ \mathrm{MeV},\,80^\circ,\,\text{negative})$.
-Reaching $-0.99$ means the two proton spin states are scattering almost perfectly
-*out of phase* at that angle: nearly all of the cross section there is spin
-asymmetry. That is only possible because two resonances of opposite parity and
-different $J$ overlap, giving the interference somewhere to come from.
-
----
-
-## 6. Example B — $^{15}\mathrm{N}(\vec p,p)$: spin-½ on spin-½
-
-Now the target carries spin, and the machinery of §4 is needed in full.
-
-**Channel spins.** $I_1=\tfrac12$, $I_2=\tfrac12$ ($^{15}$N is $\tfrac12^-$), so
-
-$$s = 0 \ \text{or}\ 1 \qquad\text{— and \emph{never} } \tfrac12 .$$
-
-This is the crucial difference. The channel spin is no longer the proton's spin;
-it is the total spin of the proton–nucleus system, and a polarized proton is not
-a state of definite channel spin at all.
-
-**Size of the problem.** Entrance states: $s=0$ contributes 1 ($\nu=0$), $s=1$
-contributes 3 ($\nu=0,\pm1$) — four in total, as expected for
-$2\times2$ spin states. Same on the exit side, so $M$ has $4\times4=16$ elements.
-The code reports `n=16`.
-
-**The decomposition, explicitly.** For two spin-½ particles the Condon–Shortley
-coupling is
+**Its structure.** From the parity argument of §4, a $2\times2$ amplitude matrix
+for a spin-1/2 particle on a spinless target must have the form
 
 $$
-\begin{aligned}
-|1,+1\rangle &= |{\uparrow\uparrow}\rangle, &
-|1,0\rangle &= \tfrac{1}{\sqrt2}\big(|{\uparrow\downarrow}\rangle+|{\downarrow\uparrow}\rangle\big), \\
-|1,-1\rangle &= |{\downarrow\downarrow}\rangle, &
-|0,0\rangle &= \tfrac{1}{\sqrt2}\big(|{\uparrow\downarrow}\rangle-|{\downarrow\uparrow}\rangle\big),
-\end{aligned}
+M = g(\theta)\,\mathbf{1} + h(\theta)\,\boldsymbol{\sigma}\cdot\hat{n}
+  = \begin{pmatrix} g & -ih \\ ih & g \end{pmatrix},
 $$
 
-where the first arrow is the proton. Inverting, a proton with $m_1=+\tfrac12$ on a
-target with $m_2=-\tfrac12$ is
+with $g$ the non-flip amplitude and $h$ the spin-flip one. So the two diagonal
+entries must be **equal**, and the two off-diagonal entries **equal and
+opposite**. Calculating the four amplitudes independently, at 1.75 MeV and 80
+degrees, gives
 
-$$\big|{\uparrow\downarrow}\big\rangle = \tfrac{1}{\sqrt2}\Big(|1,0\rangle+|0,0\rangle\Big).$$
-
-So the polarized beam probes a **coherent superposition of the singlet and
-triplet channels**, and $A_y$ is sensitive to their relative phase. This is worth
-dwelling on, because it explains why a cross section can never substitute: in an
-unpolarized cross section the entrance projections are *averaged*, which destroys
-exactly those cross terms. The relative phase between $s=0$ and $s=1$ is
-invisible to every cross section AZURE2 computes and becomes observable only with
-a polarized beam.
-
-Working through §4 for this case, the four $(m_1,m_2)$ amplitudes are built from
-the channel-spin ones as
-
-$$
-\begin{aligned}
-M_{\uparrow\uparrow} &= M_{s=1,\nu=+1}, &
-M_{\uparrow\downarrow} &= \tfrac{1}{\sqrt2}\big(M_{1,0}+M_{0,0}\big), \\
-M_{\downarrow\downarrow} &= M_{s=1,\nu=-1}, &
-M_{\downarrow\uparrow} &= \tfrac{1}{\sqrt2}\big(M_{1,0}-M_{0,0}\big),
-\end{aligned}
-$$
-
-for each exit configuration, and then $A_y$ pairs $m_1=+\tfrac12$ against
-$m_1=-\tfrac12$ at fixed $m_2$, summing $m_2$ incoherently.
-
-**Result.** At $E_p = 3.0$ MeV, elastic:
-
-| $\theta_{\rm c.m.}$ | 20° | 40° | 60° | 80° | 100° | 120° | 140° | 160° |
-|---|---|---|---|---|---|---|---|---|
-| $A_y$ | −0.002 | +0.002 | −0.008 | −0.081 | −0.158 | **−0.199** | −0.175 | −0.091 |
-
-Smaller than the $^{12}$C example, but that comparison is not a like-for-like
-one: the $^{12}$C numbers sit deliberately on top of two overlapping resonances,
-while 3.0 MeV in $^{16}$O is not a comparably resonant place. There is,
-nonetheless, a genuine systematic effect — with a spin-carrying target the
-denominator collects $(2I_2+1)$ times as many amplitudes while the numerator only
-collects the beam-spin interferences at fixed $m_2$, so a target with spin tends
-to dilute $A_y$ relative to an otherwise identical spin-0 case.
-
----
-
-## 7. What changes with other particles
-
-The recipe above is general in the *target*. What varies is the projectile and
-the channel type.
-
-| entrance | how it is handled | status |
+| | leave spin up | leave spin down |
 |---|---|---|
-| **spin-½ projectile, target of any spin** (0, ½, 1, 3/2, …) | §4 in full: decompose the entrance index, trace over $m_2$ | works; the decomposition was checked to be norm-preserving to $10^{-16}$ for $I_2 = 0,\tfrac12,1,\tfrac32,2,\tfrac52$ |
-| **any parity, any $J^\pi$** | parity never enters the formulas; it decides only which $(l,s)$ channels exist, which the channel enumeration already handles | works |
-| **inelastic and rearrangement**, $(\vec p,p')$, $(\vec p,\alpha)$ | entrance and exit pairs are independent throughout; the Coulomb term is added only when they coincide | works |
-| **spin-1 projectile** (deuteron) | a spin-1 beam is described by a $3\times3$ density matrix, so it carries a *vector* moment $iT_{11}$ and three *tensor* moments $T_{2q}$. These need rank-2 spherical operators, not $\sigma_y$ | returns 0 — a deliberate refusal, not a silent gap |
-| **capture**, $(\vec p,\gamma)$ | the photon channel needs its own multipole expansion; the reference is Seyler & Weller, *PRC* **20** (1979) 453 | refused |
-| **identical particles**, $p+p$ | the amplitude must be symmetrised. The Coulomb side already is — `GetCoulombAmplitude` returns the Mott amplitude $f_C(\theta)+\epsilon f_C(\pi-\theta)$ — but the nuclear side is not | **not handled; see below** |
+| **enter spin up** | $-1951 - 1955\,i$ | $+0.0027 - 0.0080\,i$ |
+| **enter spin down** | $-0.0027 + 0.0080\,i$ | $-1951 - 1955\,i$ |
 
-### The identical-particle case
+exactly the required symmetry, recovered from a sum over many different $J$, $l$
+and $l'$ pathways that had no reason to conspire unless the couplings and phases
+are right.
 
-When the two particles are identical the detector cannot distinguish "projectile
-scattered through $\theta$" from "target recoiled at $\pi-\theta$", so the
-amplitude must be symmetrised. AZURE2 does this for the cross section by
-restricting which $(l,s)$ channels exist and then multiplying the resonant term by
-4 and the interference term by 2 — which is algebraically the same as doubling the
-nuclear amplitude, since $|2M|^2=4|M|^2$ and
-$2\,\mathrm{Re}(C^*\!\cdot\!2M)=2\times 2\,\mathrm{Re}(C^*M)$.
+Substituting into the trace gives the classical result
 
-The amplitude matrix consumes the already-symmetrised Coulomb amplitude but never
-applies that doubling to the nuclear part. For an identical pair the two are
-therefore mismatched by a factor of two and $A_y$ would be wrong — not zero,
-which is the more dangerous kind of wrong. It is harmless for $\alpha+\alpha$,
-where the spin-0 projectile makes $A_y$ vanish anyway, but polarized $p+p$
-elastic scattering is a real measurement and is not currently supported. The
-correction looks like a single factor; it is not applied because it is untested,
-and the test that would settle it already exists (the angle-independence gate of
-the amplitude matrix should fail for an identical pair today and pass once the
-factor is right).
+$$A_y = \frac{2\,\mathrm{Re}\left(g\,h^{*}\right)}{\lvert g\rvert^{2}+\lvert h\rvert^{2}} .$$
+
+Notice how small the flip amplitude is — around $10^{-2}$ against $2\times10^{3}$,
+because the non-flip amplitude is dominated by Rutherford scattering. And yet:
+
+**Result at 1.75 MeV**, between the $3/2^-$ level at 3.503 MeV excitation and the
+$5/2^+$ at 3.545 MeV:
+
+| angle | 20 | 40 | 60 | 80 | 100 | 120 | 140 | 160 |
+|---|---|---|---|---|---|---|---|---|
+| $A_y$ | +0.18 | +0.21 | −0.25 | **−0.99** | −0.05 | +0.79 | +0.91 | +0.40 |
+
+At 80 degrees the analyzing power reaches $-0.99$: essentially every scattered
+proton goes to one side. A spin-flip amplitude four orders of magnitude smaller
+than the non-flip one produces a nearly complete asymmetry — because $A_y$
+measures an *interference*, not a magnitude, and interference is first order in
+the small amplitude while the cross section is second order. Two overlapping
+resonances of different $J$ and opposite parity supply the phase difference that
+makes it possible.
+
+(This point is one of four where Baumann and co-workers measured $\lvert A_y\rvert$
+reaching unity in this system, and they place it at the same energy and angle.)
 
 ---
 
-## 8. Two consequences for setting up a calculation
+## 6. Example B — protons on nitrogen-15
 
-**A ratio cannot be averaged over a target.** A cross section on a thick target is
-an integral over the energy loss; an analyzing power is not, because it is a
-ratio. What the experiment returns is the ratio of the polarized and unpolarized
-*yields*,
+Nitrogen-15 has spin **1/2**. Now the bookkeeping matters.
 
-$$\langle A_y\rangle=\frac{\int A_y(E)\,\sigma(E)\,dE}{\int\sigma(E)\,dE},$$
+**The channel spin.** With $I_1 = I_2 = 1/2$,
 
-so the depths where the reaction is likely count for more. AZURE2 performs this
-cross-section-weighted average automatically, using the same yield integrator,
-quadrature and straggling treatment as the cross section.
+$$s = 0 \quad \text{or} \quad s = 1, \qquad \text{but never } 1/2 .$$
 
-The consequence is severe for charged-particle elastic scattering: Rutherford
-scattering makes $\sigma\propto E^{-2}$ diverge at low energy, exactly where
-$A_y\to0$, so a thick target drowns the asymmetry. For the gas target in
-`tests/13N` a resonant $A_y\approx0.8$ averages down to $\sim10^{-6}$. This is
-physics, and it is why analyzing powers are measured on thin targets — Baumann's
-were 85 nm of $^{12}$C, about 3.1 keV of energy loss. **A segment compared against
-thin-target data should carry no target integration.**
+Two spin-1/2 particles combine into a singlet and a triplet. **The channel spin is
+no longer the proton's spin**, and a polarized proton is not a state of definite
+channel spin at all.
 
-**Uncertainties should be absolute, not relative.** $A_y$ passes through zero at
-several angles and energies, and a point sitting near a zero crossing does not
-have a correspondingly small uncertainty. Assigning a fixed percentage of the
-value gives those points enormous statistical weight and the fit will chase them.
-A roughly constant absolute uncertainty is the physically sensible choice.
+**Size of the problem.** Entrance states: one from $s=0$, three from $s=1$, so
+four — as it must be, since two spin-1/2 particles have $2\times2$ orientations.
+Same on the way out, so the amplitude matrix has $4 \times 4 = 16$ entries,
+against 4 for carbon.
+
+**The translation between the two languages.** The singlet and triplet states, in
+terms of the individual spins (first arrow the proton, second the nitrogen), are
+
+$$
+\lvert 1,+1\rangle = \lvert \uparrow\uparrow \rangle, \qquad
+\lvert 1,-1\rangle = \lvert \downarrow\downarrow \rangle,
+$$
+
+$$
+\lvert 1,0\rangle = \frac{1}{\sqrt{2}}\left( \lvert \uparrow\downarrow \rangle + \lvert \downarrow\uparrow \rangle \right),
+\qquad
+\lvert 0,0\rangle = \frac{1}{\sqrt{2}}\left( \lvert \uparrow\downarrow \rangle - \lvert \downarrow\uparrow \rangle \right).
+$$
+
+Turn that around. A proton with spin up, on a target nucleus with spin down, is
+
+$$
+\lvert \uparrow\downarrow \rangle = \frac{1}{\sqrt{2}}\left( \lvert 1,0\rangle + \lvert 0,0\rangle \right).
+$$
+
+**This is the physical heart of the general case.** The polarized beam prepares a
+*coherent superposition of singlet and triplet channels*, and the analyzing power
+is sensitive to the relative phase between them. To compute it you must first
+translate the amplitudes out of the channel-spin language and back into
+"which way is the proton pointing", which for each outgoing configuration reads
+
+$$
+\begin{aligned}
+M_{\uparrow\uparrow} &= M_{s=1,\,\nu=+1}, &
+M_{\uparrow\downarrow} &= \frac{1}{\sqrt{2}}\left(M_{1,0} + M_{0,0}\right), \\[2pt]
+M_{\downarrow\uparrow} &= \frac{1}{\sqrt{2}}\left(M_{1,0} - M_{0,0}\right), &
+M_{\downarrow\downarrow} &= M_{s=1,\,\nu=-1}.
+\end{aligned}
+$$
+
+The two beam orientations are then compared at fixed *target* orientation, and the
+target orientations are summed **incoherently** — nobody prepared or measured
+them, so they are averaged over rather than added as amplitudes.
+
+**Why a cross section could never substitute.** In an unpolarized cross section
+the entrance orientations are averaged, and that average destroys precisely the
+cross terms between $s=0$ and $s=1$. Their relative phase is invisible to *every*
+cross section one can measure on this system. It becomes observable only with a
+polarized beam. This is not a statement about a particular code — it is why the
+measurement exists.
+
+**Result at 3.0 MeV**, elastic:
+
+| angle | 20 | 40 | 60 | 80 | 100 | 120 | 140 | 160 |
+|---|---|---|---|---|---|---|---|---|
+| $A_y$ | −0.00 | +0.00 | −0.01 | −0.08 | −0.16 | **−0.20** | −0.17 | −0.09 |
+
+Smaller than the carbon example — though the comparison is not fair, since the
+carbon numbers sit deliberately on top of two overlapping resonances. There is
+nonetheless a real systematic effect: with a spin-carrying target the denominator
+collects amplitudes from every target orientation, while the numerator only
+collects the beam-spin interference at each fixed orientation. Averaging over
+something you did not measure dilutes the asymmetry.
+
+---
+
+## 7. How the treatment changes with other particles
+
+| Situation | What happens | Why |
+|---|---|---|
+| spin-1/2 beam, **target of any spin** (0, 1/2, 1, 3/2, …) | works exactly as in §6 | the translation between channel spin and individual spins is general |
+| **any parity, any resonance spin** | no change at all | parity and $J$ only decide which $(l,s)$ channels exist; the spin algebra is untouched |
+| **inelastic or rearrangement**, such as $(\vec p, p')$ or $(\vec p, \alpha)$ | works | entrance and exit are independent throughout; only the Coulomb term is restricted to elastic scattering |
+| **spin-1 beam** (a polarized deuteron) | needs different observables | a spin-1 particle has a $3\times3$ density matrix, so besides a vector polarization it can be *aligned* — stretched along an axis without pointing. That carries tensor moments, which need rank-2 operators, not a Pauli matrix |
+| **capture**, $(\vec p, \gamma)$ | needs a separate treatment | the outgoing photon is described by multipole radiation rather than by orbital angular momentum in a channel |
+| **identical particles**, such as $p+p$ | needs symmetrization | you cannot tell "beam scattered by $\theta$" from "target recoiled at $180-\theta$", so the two possibilities must be added as amplitudes before squaring |
+
+---
+
+## 8. Two practical consequences
+
+**A thick target destroys an analyzing power.** A cross section measured on a
+thick target is an integral: the beam loses energy as it goes, and every depth
+contributes. An analyzing power is a ratio, so it cannot be integrated that way.
+What the experiment returns is the ratio of the two integrated yields,
+
+$$
+\langle A_y \rangle = \frac{\int A_y(E)\,\sigma(E)\,dE}{\int \sigma(E)\,dE},
+$$
+
+weighted by the cross section, so the depths where the reaction is likely count
+for more.
+
+For charged-particle scattering this is severe. Rutherford scattering makes the
+cross section blow up as the beam slows down, exactly where the analyzing power
+goes to zero — so the low-energy tail of the target dominates the weighting and
+drowns the asymmetry. A resonant $A_y$ of $0.8$ can average down to $10^{-6}$
+through a thick gas target. This is why analyzing powers are measured on thin
+foils: Baumann's carbon targets were 85 nm, about 3 keV of energy loss.
+
+**Uncertainties should be absolute, not a percentage.** An analyzing power passes
+through zero at many angles and energies. A point sitting near a zero crossing
+does not have a correspondingly small uncertainty — the measurement is a
+difference of two counts, and its error depends on the counts, not on how close
+their difference happens to be to zero. Quoting a fixed percentage of the value
+gives those points an enormous and entirely artificial statistical weight, and
+any fit will chase them at the expense of everything else.
