@@ -44,6 +44,13 @@ A. M. Lane and R. G. Thomas, *Reviews of Modern Physics* **30**, 257 (1958).
 
 .. toctree::
    :maxdepth: 2
+   :caption: Theory
+
+   theory/polarization_theory
+   theory/polarization_implementation
+
+.. toctree::
+   :maxdepth: 2
    :caption: Reference
 
    reference/data_formats

@@ -222,6 +222,32 @@ as the higher orders departing from zero.
 
 Worked example: ``pyazr/examples/angular_distribution.py``.
 
+Analyzing power
+---------------
+
+The vector analyzing power :math:`A_y` is observable code 7. Declare a segment
+with ``observable="analyzing-power"`` and it is reported in place of the cross
+section, so :math:`\chi^2`, fitting and plotting need no special handling:
+
+.. code-block:: python
+
+   ay = azr.calculate_analyzing_power_rwa(azr.params_rwa)
+
+Data files carry ``E_lab  theta_cm  A_y  dA_y`` -- angles are centre-of-mass,
+unlike an ordinary differential segment. Leave ``vary_norm`` off: a
+normalization factor is meaningless for a ratio.
+
+Two traps are worth knowing about. Comparing against thin-target data requires
+segments with **no target integration**, because :math:`A_y` averaged over a
+thick target is weighted by the cross section and Rutherford scattering drives
+that average towards zero. And the analytic-derivative paths
+(``residual_jacobian``, ``chi2_and_grad``) do not know about :math:`A_y` yet, so
+do not use them on analyzing-power segments.
+
+See :doc:`../theory/polarization_theory` for the formalism,
+:doc:`../theory/polarization_implementation` for the implementation, and
+``tests/12C_pp_ay`` for a worked comparison against measured data.
+
 Cleaning up stray processes
 ---------------------------
 

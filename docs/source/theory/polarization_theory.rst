@@ -1,0 +1,289 @@
+Polarization Observables in R-Matrix Theory
+===========================================
+
+This chapter develops the theory behind the vector analyzing power as AZURE2
+computes it. It assumes the R-matrix formalism of Lane and Thomas but nothing
+about spin algebra beyond angular-momentum coupling.
+
+Why an analyzing power is worth measuring
+-----------------------------------------
+
+A differential cross section is a sum of squared amplitudes. Squaring destroys
+phase, and phase is where much of the physics lives: whether two levels
+interfere constructively or destructively, whether a resonance is a
+:math:`3/2^-` or a :math:`5/2^+`, whether a broad background amplitude has the
+sign that a direct-capture calculation predicts. A cross section constrains
+these things only weakly, because a fit can usually trade a phase against a
+width and land on the same curve.
+
+A polarization observable is different. It is built from an *interference*
+between amplitudes that differ in the spin projection of the projectile, and it
+appears in the numerator of a ratio whose denominator is the cross section. The
+normalization cancels, the overall phase cancels, and what survives is precisely
+the relative phase. Where a cross section has a smooth maximum, an analyzing
+power can swing from :math:`+1` to :math:`-1` over a few tens of keV.
+
+This is why the elastic scattering of polarized protons from :sup:`12`\ C is used
+as a beam polarimeter, and why the analyzing power of :sup:`9`\ Be(p,d) or
+:sup:`9`\ Be(p,\ :math:`\alpha`) adds information that no amount of cross-section
+data supplies. For astrophysics the payoff is indirect but real: a spin and
+parity assignment that a polarization measurement settles is one fewer degree
+of freedom in the extrapolation of an S-factor to stellar energies.
+
+The spin structure of the scattering amplitude
+----------------------------------------------
+
+For spinless particles a single complex function :math:`f(\theta)` carries all
+the information, and :math:`d\sigma/d\Omega = |f|^2`. With spin, the amplitude
+becomes a matrix in spin space. Write the entrance channel spin as :math:`s`
+with projection :math:`\nu`, and the exit channel spin as :math:`s'` with
+projection :math:`\nu'`. The object we need is
+
+.. math::
+
+   M_{s'\nu' s\nu}(\theta),
+
+the amplitude for the system to enter with spin projection :math:`\nu` and leave
+with :math:`\nu'`. The channel spin is the vector sum of the two intrinsic
+spins, :math:`\mathbf{s} = \mathbf{j}_1 + \mathbf{j}_2`, so for a spin-1/2
+projectile on a spin-0 target :math:`s = 1/2` and :math:`\nu = \pm 1/2` is just
+the projectile's own spin projection.
+
+Every observable follows from :math:`M` by a density-matrix construction. If the
+beam is described by a spin density matrix :math:`\rho_{\text{in}}`, the outgoing
+state is
+
+.. math::
+
+   \rho_{\text{out}} = M \rho_{\text{in}} M^{\dagger},
+
+and any observable is a trace of :math:`\rho_{\text{out}}` against the operator
+that the detector measures. The unpolarized cross section is the trace with the
+identity,
+
+.. math::
+
+   \frac{d\sigma}{d\Omega} = \frac{1}{2s+1}\sum_{s'\nu'}\sum_{\nu}
+                             \left| M_{s'\nu' s\nu} \right|^2,
+
+averaging over entrance projections and summing over exit ones. The vector
+analyzing power is the trace with a Pauli matrix. Once :math:`M` exists there is
+no further angular-momentum algebra to do; this is the reason for organizing the
+calculation around it.
+
+Seyler's expression for the transition matrix
+---------------------------------------------
+
+The step that makes this practical for an R-matrix code is due to
+R. G. Seyler [Seyler1969]_, whose Eq. (4) writes :math:`M` directly in terms of
+the Lane–Thomas collision matrix :math:`U` — the very object an R-matrix code
+already builds:
+
+.. math::
+   :label: seyler
+
+   M_{s'\nu' s\nu}(\theta) = \frac{\sqrt{\pi}}{k}\Bigg[
+     -\,C(\theta)\,\delta_{ss'}\delta_{\nu\nu'}
+     + i \sum_{J l l'} \sqrt{2l+1}\;
+       (s\,l\,\nu\,0 | J\,\nu)\;
+       (s'\,l'\,\nu'\,\nu-\nu' | J\,\nu)\\
+       \times\; e^{i(\omega_l + \omega_{l'})}
+       \left( \delta_{ss'}\delta_{ll'} - U^J_{s'l' sl} \right)
+       Y_{l'}^{\nu-\nu'}(\theta,0)
+   \Bigg].
+
+Each piece earns its place:
+
+*The Coulomb term* :math:`C(\theta)` is the Rutherford amplitude. It is diagonal
+in channel spin and its projection, since a pure Coulomb field does not touch
+spin, and it exists only when the entrance and exit pairs are the same.
+
+*The first Clebsch–Gordan coefficient* :math:`(s\,l\,\nu\,0|J\nu)` has the
+entrance orbital projection fixed at zero. This is the choice of quantization
+axis: the beam travels along :math:`\hat z`, so :math:`\mathbf{l}\cdot\hat z = 0`
+for the incoming wave, and the total projection is therefore :math:`\nu`, the
+channel-spin projection alone.
+
+*The second Clebsch–Gordan coefficient* :math:`(s'\,l'\,\nu'\,\nu-\nu'|J\nu)`
+enforces conservation of the total projection: whatever the exit channel spin
+takes as :math:`\nu'`, the exit orbital motion must carry
+:math:`\mu = \nu - \nu'`.
+
+*The spherical harmonic* :math:`Y_{l'}^{\nu-\nu'}` is the angular function of
+that outgoing orbital motion. This is the crucial structural point. For an
+unpolarized cross section only :math:`\mu = 0` ever appears and Legendre
+polynomials suffice — which is why AZURE2, like most R-matrix codes, had
+:math:`P_L(\cos\theta)` and nothing else. **Spin flip means**
+:math:`\nu \neq \nu'`, **which means** :math:`\mu \neq 0`, **which requires the
+associated Legendre functions.** No amount of rearrangement avoids this: a code
+that has only :math:`P_L` cannot produce a non-zero analyzing power, because the
+amplitudes that would interfere are not representable in it.
+
+*The bracket* :math:`\delta_{ss'}\delta_{ll'} - U^J_{s'l'sl}`, dressed with the
+Coulomb phases :math:`e^{i(\omega_l+\omega_{l'})}`, is the transition matrix.
+Section :doc:`polarization_implementation` shows that AZURE2 already forms
+exactly this quantity, phases included, so nothing has to be reconstructed.
+
+The vector analyzing power
+--------------------------
+
+Specialize to a spin-1/2 projectile on a spin-0 target, which covers
+:math:`{}^{12}\mathrm{C}(\vec p, p)`. The channel spin is :math:`1/2`, and
+:math:`M` is a :math:`2\times 2` matrix in the projectile's spin projection for
+each exit configuration.
+
+Take the quantization axis for the polarization along
+
+.. math::
+
+   \hat{\mathbf{n}} = \frac{\mathbf{k}_{\text{in}} \times \mathbf{k}_{\text{out}}}
+                           {|\mathbf{k}_{\text{in}} \times \mathbf{k}_{\text{out}}|},
+
+the normal to the scattering plane. This is the Madison convention, and it is
+the only sensible choice: parity conservation forbids a vector polarization
+along any other direction, so :math:`A_x = A_z = 0` identically and
+:math:`A_y` is the whole of the vector analyzing power.
+
+The observable is the trace of the outgoing density matrix against
+:math:`\sigma_y` acting in the *entrance* spin space,
+
+.. math::
+
+   A_y = \frac{\mathrm{Tr}\left( M \sigma_y M^{\dagger} \right)}
+              {\mathrm{Tr}\left( M M^{\dagger} \right)}.
+
+Writing this out with :math:`(\sigma_y)_{+-} = -i` and
+:math:`(\sigma_y)_{-+} = +i` gives the form the code evaluates:
+
+.. math::
+   :label: ay
+
+   A_y = \frac{2 \displaystyle\sum_{s'\nu'}
+                \mathrm{Im}\!\left[\,
+                  M_{s'\nu',\,s\,+\frac{1}{2}}\;
+                  M^{*}_{s'\nu',\,s\,-\frac{1}{2}} \right]}
+             {\displaystyle\sum_{s'\nu'}
+                \left( \left|M_{s'\nu',\,s\,+\frac{1}{2}}\right|^2
+                     + \left|M_{s'\nu',\,s\,-\frac{1}{2}}\right|^2 \right)}.
+
+The structure is worth pausing on. The numerator is an interference between the
+two entrance projections; the denominator is the cross section. If the two
+projections scatter identically the numerator vanishes. If they scatter
+differently but *in phase*, the imaginary part vanishes and :math:`A_y` is still
+zero. **A non-zero analyzing power requires both spin dependence and a relative
+phase**, which is exactly why it is a sharp probe of interference and why it
+peaks near resonances, where phases move fast.
+
+Four places where the analyzing power must vanish
+--------------------------------------------------
+
+These are the checks that tell you an implementation is right, and each one
+fails differently when it is wrong.
+
+**At** :math:`\theta = 0` **and** :math:`\theta = 180^\circ`. The normal
+:math:`\hat{\mathbf{n}}` is undefined when :math:`\mathbf{k}_{\text{out}}` is
+parallel or antiparallel to :math:`\mathbf{k}_{\text{in}}`, so there is no
+direction for the polarization to point along. Formally, the spherical harmonic
+:math:`Y_{l'}^{\mu}` vanishes at :math:`\theta = 0` for every
+:math:`\mu \neq 0`, so no spin-flip amplitude survives. Every curve in Baumann's
+fig. 1 goes to zero at both ends.
+
+**In the pure Coulomb limit.** Rutherford scattering is spin-independent: the
+Coulomb term in :eq:`seyler` is diagonal in :math:`\nu`, so both projections
+acquire the same amplitude and the same phase. At energies well below any
+resonance :math:`A_y \to 0`. This is a useful trap — checking an implementation
+only at low energy will show a perfectly correct zero and prove nothing.
+
+**Without spin-orbit splitting.** If the nuclear interaction did not distinguish
+:math:`j = l + 1/2` from :math:`j = l - 1/2`, the sum over :math:`J` in
+:eq:`seyler` would collapse and the spin-flip amplitude would cancel. The
+analyzing power in :sup:`12`\ C(:math:`\vec p`,p) is large precisely because the
+:math:`p_{3/2}` and :math:`d_{5/2}` resonances are spin-orbit partners of states
+that lie elsewhere.
+
+**When only one partial wave contributes.** A single resonance with no
+background produces a common phase, which cancels in the ratio. The structure in
+:math:`A_y` between 1.6 and 1.8 MeV comes from the :math:`3/2^-` and
+:math:`5/2^+` resonances interfering *with each other* and with the non-resonant
+:math:`s_{1/2}` and :math:`p_{1/2}` phases.
+
+The bound :math:`|A_y| \le 1` follows from the Cauchy–Schwarz inequality applied
+to :eq:`ay` and is the cheapest sanity check available; a value outside
+:math:`[-1,1]` means the amplitude matrix is not a consistent set of amplitudes.
+
+The sign, and why it cannot be checked internally
+--------------------------------------------------
+
+Every check listed above is invariant under :math:`A_y \to -A_y`. The bound
+holds, the zeros stay zeros, the Coulomb limit is still zero. The overall sign
+depends on a chain of conventions — the direction assigned to
+:math:`\hat{\mathbf{n}}`, the Condon–Shortley phase in the spherical harmonics,
+the ordering of the coupling in the Clebsch–Gordan coefficients — and getting
+any one of them backwards flips it without disturbing anything else.
+
+The sign therefore has to be fixed against measurement. The comparison used here
+is described in the next chapter: Baumann *et al.* mark four points where
+:math:`|A_y|` reaches unity, three positive and one negative, and reproducing
+that pattern — not merely the positions — is what pins the convention down.
+
+Analyzing power through a target of finite thickness
+-----------------------------------------------------
+
+One subtlety has no analogue in cross-section work and is easy to get wrong.
+
+A cross section measured on a target of finite thickness is an integral: the
+beam loses energy as it goes, and the yield is
+
+.. math::
+
+   Y = \int_{E_{\text{back}}}^{E_{\text{surface}}}
+        \frac{\sigma(E)}{\varepsilon(E)}\, dE
+
+with :math:`\varepsilon` the stopping power. An analyzing power is not an
+integral of this kind, because it is a *ratio*. Averaging :math:`A_y(E)` along
+the target with equal weight has no physical meaning. What the experiment
+returns is the ratio of the polarized and unpolarized yields, so the correct
+average is weighted by the cross section:
+
+.. math::
+   :label: aytarget
+
+   \langle A_y \rangle =
+      \frac{\displaystyle\int A_y(E)\,\sigma(E)\,dE}
+           {\displaystyle\int \sigma(E)\,dE}.
+
+The depths where the reaction is likely contribute more, as they must.
+
+The consequence is quantitative and severe. In the :sup:`12`\ C + p system below
+2 MeV the cross section is dominated by Rutherford scattering, which diverges as
+:math:`E^{-2}` at low energy, while :math:`A_y` there is essentially zero. A
+thick target therefore dilutes the analyzing power towards zero: for the gas
+target in the ``tests/13N`` evaluation, whose integration grid runs from 0.42 to
+1.54 MeV, the weighted average of a resonant :math:`A_y \approx 0.8` comes out
+around :math:`10^{-6}`. This is physics, not a numerical artefact, and it is why
+analyzing-power measurements use thin targets — Baumann's were 85 nm of
+:sup:`12`\ C, about 3.1 keV of energy loss at 1.7 MeV.
+
+Scope
+-----
+
+What is implemented covers particle channels with a spin-1/2 projectile, which
+is what the vector analyzing power :math:`A_y` requires. Two extensions are not
+implemented and should not be assumed to work:
+
+*Tensor observables* (:math:`T_{20}`, :math:`T_{22}`, and the rest) need a
+spin-1 projectile and the corresponding rank-2 operators. The amplitude matrix
+built here is general enough in principle — it carries all channel spins and
+projections — but the observable side would have to be written.
+
+*Capture channels* need the photon analogue of :eq:`seyler`, for which the
+reference is Seyler and Weller [SeylerWeller1979]_. Their Eq. (12) carries a
+:math:`(-1)^M` phase that several earlier treatments drop, which is a warning
+about how delicate this bookkeeping is.
+
+.. [Seyler1969] R. G. Seyler, *Nuclear Physics* **A124** (1969) 253.
+
+.. [SeylerWeller1979] R. G. Seyler and H. R. Weller,
+   *Physical Review C* **20** (1979) 453.
+
+.. [Baumann1992] R. Baumann *et al.*, *Nuclear Physics* **A542** (1992) 53.

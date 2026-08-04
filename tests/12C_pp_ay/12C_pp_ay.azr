@@ -1,0 +1,141 @@
+<config>
+true                                                                                                #Perform A-Matrix Calculation
+output/                                                                                             #Full Path to Output Directory
+checks/                                                                                             #Full Path to Checks Directory
+none                                                                                                #Compond Nucleus Check
+none                                                                                                #Boundary Condition Check
+none                                                                                                #Data Check
+none                                                                                                #Lo-Matrix and Penetrability Check
+none                                                                                                #Legendre Polynomial Check
+none                                                                                                #Coulomb Amplitudes Check
+none                                                                                                #Reaction Pathway Check
+none                                                                                                #Angular Distributions Check
+</config>
+<potential>
+useHybridPotential=0
+useAdaptiveGrid=1
+potentialType=0
+V0=150
+R=3.6
+a=0.6
+</potential>
+<levels>
+0.5  -1  0  1  1  1  1  2  1  1  1  1.62  0.5  1  0  1  0  1.00728  12  1  6  1.94351  1.94351  0  0  0.0  0  3.6  0  0  0
+0.5  -1  0  1  1  2  1  2  1  1  1  0  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+
+0.5  -1  20  1  1  1  1  2  2  1  1  5e+06  0.5  1  0  1  0  1.00728  12  1  6  1.94351  1.94351  0  0  0.0  0  3.6  0  0  0
+0.5  -1  20  1  1  2  1  2  2  1  1  0  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+
+0.5  1  2.3682  1  1  1  1  0  3  1  1  34000  0.5  1  0  1  0  1.00728  12  1  6  1.94351  1.94351  0  0  0.0  0  3.6  0  0  0
+0.5  1  2.3682  1  1  2  1  2  3  1  1  -0.48  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+
+0.5  1  20  1  1  1  1  0  4  1  1  5e+06  0.5  1  0  1  0  1.00728  12  1  6  1.94351  1.94351  0  0  0.0  0  3.6  0  0  0
+0.5  1  20  1  1  2  1  2  4  1  1  5400  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+
+1.5  -1  3.4954  0  1  1  1  2  5  1  0  50497.289  0.5  1  0  1  0  1.00728  12  1  6  1.94351  1.94351  0  0  0.0  0  3.6  0  0  0
+1.5  -1  3.4954  0  1  2  1  2  5  1  1  -0.49  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+1.5  -1  3.4954  0  1  2  1  4  5  1  1  0.00072  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+
+1.5  -1  20  1  1  1  1  2  6  1  1  5e+06  0.5  1  0  1  0  1.00728  12  1  6  1.94351  1.94351  0  0  0.0  0  3.6  0  0  0
+1.5  -1  20  1  1  2  1  2  6  1  1  -120  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+1.5  -1  20  1  1  2  1  4  6  1  1  1100  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+
+1.5  1  20  1  1  1  1  4  7  1  1  5e+06  0.5  1  0  1  0  1.00728  12  1  6  1.94351  1.94351  0  0  0.0  0  3.6  0  0  0
+1.5  1  20  1  1  2  1  2  7  1  1  0  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+1.5  1  20  1  1  2  1  4  7  1  1  0  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+
+2.5  -1  20  1  1  1  1  6  8  1  1  5e+06  0.5  1  0  1  0  1.00728  12  1  6  1.94351  1.94351  0  0  0.0  0  3.6  0  0  0
+2.5  -1  20  1  1  2  1  4  8  1  1  0  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+2.5  -1  20  1  1  2  1  6  8  1  1  0  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+
+2.5  1  3.5430  0  1  1  1  4  9  1  0  53611.886  0.5  1  0  1  0  1.00728  12  1  6  1.94351  1.94351  0  0  0.0  0  3.6  0  0  0
+2.5  1  3.5430  0  1  2  1  4  9  1  1  1e-05  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+2.5  1  3.5430  0  1  2  1  6  9  1  1  0  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+
+2.5  1  20  1  1  1  1  4  10  1  1  5e+06  0.5  1  0  1  0  1.00728  12  1  6  1.94351  1.94351  0  0  0.0  0  3.6  0  0  0
+2.5  1  20  1  1  2  1  4  10  1  1  0  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+2.5  1  20  1  1  2  1  6  10  1  1  0  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+
+3.5  -1  20  1  1  1  1  6  11  1  1  0  0.5  1  0  1  0  1.00728  12  1  6  1.94351  1.94351  0  0  0.0  0  3.6  0  0  0
+3.5  -1  20  1  1  2  1  6  11  1  1  0  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+
+3.5  1  20  1  1  1  1  8  12  1  1  0  0.5  1  0  1  0  1.00728  12  1  6  1.94351  1.94351  0  0  0.0  0  3.6  0  0  0
+3.5  1  20  1  1  2  1  6  12  1  1  0  1  1  0.5  -1  0  0  13.0057  0  7  1.94351  0  0  0  0.0  10  0  0  0  5
+
+</levels>
+<segmentsData>
+0  1  2  0  5  0  180  0  1  0  0  0  0  0  data/artemov.dat  0  0
+0  1  2  0  5  0  180  0  1  0  0  0  0  0  data/seagrave.dat  0  0
+0  1  1  0  5  84.3  84.3  1  1  0  5  0  0.005  0  data/meyer_84.dat  0  0
+0  1  1  0  5  114.5  114.5  1  1  0  5  0  0.005  0  data/meyer_114.dat  0  0
+0  1  1  0  5  144.1  144.1  1  1  0  5  0  0.005  0  data/meyer_144.dat  0  0
+0  1  2  0  5  0  180  0  1  0  6.9  0  0.001  0  data/skowronski_luna_hpge.dat  0  0
+0  1  2  0  5  0  180  0  1  0  7.9  0  0.001  0  data/skowronski_luna_bgo.dat  0  0
+0  1  2  0  5  0  180  0  1  0  8.5  0  0.001  0  data/skowronski_fels.dat  0  0
+0  1  2  0  5  0  0  1  1  0  10  0  0.001  0  data/kettner_0.dat  0  0
+0  1  2  0  5  55  55  1  1  0  10  0  0.001  0  data/kettner_55.dat  0  0
+1  1  1  1.5  1.9  40  160  7  1  0  5  0  0.005  0  data/baumann_ay.dat 0 0
+</segmentsData>
+<segmentsTest>
+</segmentsTest>
+<targetInt>
+1              "8,9"          10             0              0              0              0               "" 0               1              5 1 0.943 0.834 0.688 0.517               0               "" 0               0 0.04 5 50
+1              "1,2"          10             0              0              1              0               "((a0*(x*1e3)^a1+a2*(x*1e3)^a3)*(a4/((x*1e3)^a5)*ln(a6/(x*1e3)+a7*(x*1e3))))/((a4/((x*1e3)^a5)*ln(a6/(x*1e3)+a7*(x*1e3)))+(a0*(x*1e3)^a1+a2*(x*1e3)^a3))/1e+21" 8 2.40289 0.00491497 2.49101 0.414939 1858.36 1.01581 2504.17 0.0181984               0              0               0               "" 0               0 0.04 5 50
+</targetInt>
+<parameterSettings>
+# Fitting parameter settings (only non-fixed parameters shown)
+# Format: name value lower_limit upper_limit error fit_error nuisance category minuit_index
+Level 1 Channel 1 Width (eV) 1.62 0 0 0.162 0 0 level 0
+Level 3 Energy (MeV) 2.3682 0 0 0.01 0 0 level 1
+Level 3 Channel 5 Width (eV) 34000 0 0 3400 0 0 level 2
+Level 3 Channel 6 Width (eV) -0.48 0 0 -0.048 0 0 level 3
+Level 4 Channel 8 Width (eV) 5400 0 0 540 0 0 level 4
+Level 5 Energy (MeV) 3.5032 0 0 0.01 0 0 level 5
+Level 5 Channel 9 Width (eV) 55200 0 0 5520 0 0 level 6
+Level 5 Channel 10 Width (eV) -0.49 0 0 -0.049 0 0 level 7
+Level 5 Channel 11 Width (eV) 0.00072 0 0 7.2e-05 0 0 level 8
+Level 6 Channel 13 Width (eV) -120 0 0 -12 0 0 level 9
+Level 6 Channel 14 Width (eV) 1100 0 0 110 0 0 level 10
+Level 9 Energy (MeV) 3.5453 0 0 0.01 0 0 level 11
+Level 9 Channel 21 Width (eV) 49000 0 0 4900 0 0 level 12
+Level 9 Channel 22 Width (eV) 1e-05 0 0 1e-06 0 0 level 13
+segment_4_norm 1 0 0 0 0 0 norm -1
+segment_5_norm 1 0 0 0 0 0 norm -1
+segment_6_norm 1 0 0 0 0 0 norm -1
+segment_7_norm 1 0 0 0 0 0 norm -1
+segment_8_norm 1 0 0 0 0 0 norm -1
+segment_9_norm 1 0 0 0 0 0 norm -1
+segment_11_norm 1 0 0 10 0 1 norm -1
+segment_12_norm 1 0 0 10 0 1 norm -1
+segment_16_norm 1 0 0 0 0 1 norm -1
+segment_17_norm 1 0 0 0 0 1 norm -1
+segment_18_norm 1 0 0 0 0 1 norm -1
+segment_4_energy_shift 0 0 0 0 0 0 shift 14
+segment_5_energy_shift 0 0 0 0 0 0 shift 15
+segment_6_energy_shift 0 0 0 0 0 0 shift 16
+segment_7_energy_shift 0 0 0 0 0 0 shift 17
+segment_8_energy_shift 0 0 0 0 0 0 shift 18
+segment_9_energy_shift 0 0 0 0 0 0 shift 19
+segment_11_energy_shift 0 0 0 0.001 0 1 shift -1
+segment_12_energy_shift 0 0 0 0.001 0 1 shift -1
+segment_16_energy_shift 0 0 0 0 0 0 shift -1
+segment_17_energy_shift 0 0 0 0 0 1 shift -1
+segment_18_energy_shift 0 0 0 0 0 1 shift -1
+</parameterSettings>
+<lastRun>
+10025
+"output/param.sav"
+""
+1 2
+1 "temperatures.dat"
+0.07 10 -1.
+</lastRun>
+<mcmc>
+nwalkers 50
+nsteps 10000
+chainspread 5
+nthreads 4
+usereducedwidths 0
+<parameters>
+</parameters>
+</mcmc>
