@@ -293,6 +293,46 @@ class AZUREAPI {
    */
   vector_r CalculateModelGradientsRWA(const vector_r& params) const;
 
+  /*!
+   * Coulomb wave functions on a requested energy grid.
+   *
+   * Request: [pairKey, l, radius, nE, E_1 ... E_nE], energies in MeV (centre of
+   * mass), radius in fm.  A radius of zero means "use the pair's own channel
+   * radius", which is where a penetrability or a hard-sphere phase is wanted.
+   *
+   * Response: [nE, then per energy: F, dF, G, dG, P, S, deltaHS], with P the
+   * penetrability, S the shift function and deltaHS the hard-sphere phase shift
+   * in radians.  Whether the values come from the accurate Coulomb routine,
+   * from GSL, or from Numerov integration through a nuclear potential follows
+   * the run's own configuration -- so this is also how one sees what the hybrid
+   * model does to the external region.
+   */
+  vector_r GetCoulombFunctions(const vector_r& request) const;
+
+  /*!
+   * External-capture integrals on a requested energy grid.
+   *
+   * Request: [pairKey, nE, E_1 ... E_nE].  Every external-capture pathway the
+   * compound nucleus generates from that entrance pair is evaluated at every
+   * energy.
+   *
+   * Response: [nPathways, nE, then per pathway six descriptors
+   * (li, lf, 2*si, 2*sf, multipolarity, radiationType) followed by 2*nE numbers
+   * (real, imaginary part of the integral at each energy).
+   *
+   * These are the integrals the capture cross section is built from, and they
+   * are the most expensive thing in a capture calculation --- which is why they
+   * are cached.  Exposing them makes both facts checkable from a script.
+   */
+  vector_r GetECIntegrals(const vector_r& request) const;
+
+  /*!
+   * Coulomb-function cache counters, aggregated over threads.
+   *
+   * Response: [queries, hits, entries, keys, disabledKeys, threads].
+   */
+  vector_r GetCacheStats( ) const;
+
 
  private:
 

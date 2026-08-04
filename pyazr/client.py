@@ -69,6 +69,9 @@ class client:
         'CALCULATE_RESIDUAL_JACOBIAN_RWA': 42,
         'CALCULATE_MODEL_GRADIENTS_RWA': 43,
         'GET_CALCULATED_ANGULAR_DISTS': 44,
+        'GET_COULOMB_FUNCTIONS': 45,
+        'GET_EC_INTEGRALS': 46,
+        'GET_CACHE_STATS': 47,
     }
 
     def __init__(self, server='localhost', port=20000,
