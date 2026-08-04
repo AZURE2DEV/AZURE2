@@ -277,47 +277,38 @@ Getting data to test against
 Baumann *et al.* publish no table of :math:`A_y`. Their results are contour
 plots, plus six angular distributions in fig. 1 at
 :math:`E_p = 1.618, 1.658, 1.708, 1.738, 1.758` and 1.779 MeV. Those six panels
-are the only numerically recoverable data in the paper, so they were digitized.
+are the only numerically recoverable data in the paper, so they were digitised:
+the six files under ``tests/13N/data/`` hold 178 points in all, 24 to 38 per
+energy, spanning 1 to 177 degrees. Angles are centre-of-mass, as printed on the
+figure axis, which is what observable 7 expects; energies are laboratory.
 
-The procedure (``tests/13N/digitize_fig1.py``) is:
+Two properties of that data matter when reading any fit against it, and are
+repeated in ``tests/13N/README.md`` so they cannot be lost.
 
-#. Render page 3 at 600 dpi with ``pdftoppm``.
-#. Locate the six panel frames by finding long horizontal and vertical dark runs.
-#. Calibrate the axes on the *printed tick labels* rather than on the frame — the
-   frame does not coincide with the axis limits. The x labels 0 and 150 degrees
-   give 6.827 px/degree; the y ticks turn out to be spaced by 0.2 in
-   :math:`A_y`, not the 0.25 one would guess from the 1.0 / 0. / −1.0 labels,
-   and this was checked by locating the label glyphs themselves.
-#. Remove the thin dashed :math:`A_y = 0` rule with a vertical morphological
-   opening — the curve is about 12 px thick and survives, the rule is not.
-#. Keep every elongated connected component, discarding compact ones, which
-   drops the ``1.618 MeV`` label glyphs while keeping a curve that has
-   fragmented.
-#. Trace the curve column by column with a continuity constraint, and sample at
-   10-degree intervals from 40° to 160°.
+**They are samples of the drawn curve, not the measured points.** Baumann
+measured at ten angles between 40 and 160 degrees; the files span 1 to 177
+degrees with up to 38 points per energy. What is sampled is the curve of the
+paper's phase-shift analysis, which is smooth and defined over the whole
+angular range. Neighbouring points are therefore strongly correlated, and there
+are many more of them than there were measurements -- so a :math:`\chi^2`
+computed from them counts the same information repeatedly.
 
-Two honest caveats attach to the result. First, what is traced is the *fitted
-curve* of the paper's phase-shift analysis, which the plotted points lie on;
-these are the published analysis sampled on a grid, not the raw measurements.
-Second, the quoted uncertainty of 0.04 is **digitization error, not the
-experiment's**. Baumann quote statistical errors below 0.004 — ten times smaller.
-The 0.04 is roughly the drawn line width, 12 px against 466 px per unit of
-:math:`A_y`, plus the calibration residual. Points where the trace could not
-follow a steep section were dropped rather than interpolated, leaving 71 of a
-possible 78.
-
-Angles are centre-of-mass, as printed on the figure axis, which is what
-observable 7 expects; energies are laboratory.
+**The uncertainties are relative, which is the wrong model here.** They are 10%
+of the value with its sign, so 50 of the 178 are negative and the smallest is
+:math:`1.6\times10^{-5}`. A point where :math:`A_y` passes through zero does
+not have a vanishing uncertainty. Those near-zero errors dominate everything
+else. Until they are re-quoted as a roughly constant absolute value, of order
+the digitisation precision, a fit against this set is not describing the data
+within its stated errors.
 
 Fitting it
 ----------
 
 The analyzing-power data live in ``tests/13N`` as segments 11--16, one per
 energy, beside the capture and scattering data of the same compound nucleus.
-Fitting :math:`A_y` *alone* -- every level fixed except the excitation energy and
-proton width of the two resonances the energy range is sensitive to -- takes
-:math:`\chi^2` from 236.8 to 85.2, or 1.20 per point and 1.27 per degree of
-freedom (``tests/13N/README.md`` gives the recipe):
+Fitting :math:`A_y` *alone* -- every level fixed except the excitation energy
+and proton width of the two resonances the energy range is sensitive to --
+finds both of them (``tests/13N/README.md`` gives the recipe):
 
 .. list-table::
    :header-rows: 1
@@ -328,28 +319,32 @@ freedom (``tests/13N/README.md`` gives the recipe):
      - Baumann table 1
      - start
    * - :math:`3/2^-`  :math:`E_x`
-     - 3.4954 MeV
+     - 3.5079 MeV
      - 3.499 MeV
      - 3.5032 MeV
    * - :math:`3/2^-`  :math:`\Gamma_p`
-     - 50.5 keV
+     - 41.9 keV
      - 57 keV
      - 55.2 keV
    * - :math:`5/2^+`  :math:`E_x`
-     - 3.5430 MeV
+     - 3.5444 MeV
      - 3.546 MeV
      - 3.5453 MeV
    * - :math:`5/2^+`  :math:`\Gamma_p`
-     - 53.6 keV
+     - 45.8 keV
      - 50 keV
      - 49.0 keV
 
-Excitation energies agree to 3–4 keV and widths to about 10%. That is what
-digitized data can support, and no more should be claimed from it: with
-uncertainties an order of magnitude looser than the measurement, the fit cannot
-be expected to recover the published parameters more tightly. The point of the
-exercise is that an R-matrix model fitted to :math:`A_y` alone lands on the same
-two resonances, from the correct side, with sensible widths.
+The excitation energies come out 9 keV and 2 keV from the published values,
+which is the result worth having: an R-matrix model fitted to :math:`A_y` alone
+lands on the same two states, from the correct side, knowing nothing about the
+cross section.
+
+The widths do not, and the reason is the uncertainty model rather than the
+physics. :math:`\chi^2` per point is 40.6 -- the fit is not describing the data
+within its stated errors, because the points near :math:`A_y = 0` carry
+uncertainties of order :math:`10^{-5}` and outweigh everything else, pulling
+both widths low.
 
 Differentiating it
 ------------------

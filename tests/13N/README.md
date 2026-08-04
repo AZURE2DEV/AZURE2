@@ -31,27 +31,29 @@ Nucl. Phys. **A542** (1992) 53.
 
 The paper publishes no table of A_y — its results are contour plots (figs. 3
 and 4) plus six angular distributions in fig. 1, at E_p = 1.618, 1.658, 1.708,
-1.738, 1.758 and 1.779 MeV. `data/baumann_ay.dat` is fig. 1 **digitised**: the
-page rendered at 600 dpi, the axes calibrated on the printed tick labels, and
-the drawn curve traced column by column. `digitize_fig1.py` regenerates it from
-the PDF, which is not redistributed here.
+1.738, 1.758 and 1.779 MeV. The six `data/baumann_*.dat` files are those panels
+digitised: 178 points in all, 24 to 38 per energy, spanning 1° to 177°.
 
-Two things this data is not:
+Two things this data is not, both of which matter when reading a fit:
 
-* What is traced is the **fitted curve** of the paper's phase-shift analysis,
-  which the plotted points lie on. These are the published analysis sampled at
-  10-degree intervals, not the raw measurements.
-* The quoted uncertainty of 0.04 is **digitisation error, not the
-  experiment's**. Baumann quote statistical errors below 0.004 — ten times
-  smaller. 0.04 is roughly the drawn line width (12 px against 466 px per unit
-  of A_y) plus the axis calibration residual.
+* **These are samples of the drawn curve, not the measured points.** Baumann
+  measured at ten angles between 40° and 160°; the files span 1° to 177° with up
+  to 38 points per energy. What is sampled is therefore the curve of the paper's
+  phase-shift analysis, which is smooth and defined over the full angular range.
+  Neighbouring points are strongly correlated, and there are far more of them
+  than there were measurements.
 
-Points where the automatic trace could not follow a steep section were dropped
-rather than interpolated, so 71 of a possible 78 survive. One segment per energy
-keeps each angular distribution separately plottable, as in the paper's figure.
+* **The uncertainties are 10% of the value, sign included.** 50 of the 178 are
+  therefore negative, and the smallest is 1.6e-5. A relative uncertainty is the
+  wrong model for an analyzing power: a point where A_y passes through zero does
+  not have a vanishing uncertainty. This is what drives the chi-squared to
+  336516 for the evaluation as a whole, and to 40.6 per point in the fit below.
+  A roughly constant absolute uncertainty, of order the digitisation precision,
+  would be the physical choice.
 
 Angles are centre-of-mass, as printed on the figure axis, which is what
-observable 7 expects; energies are laboratory.
+observable 7 expects; energies are laboratory. One segment per energy keeps each
+angular distribution separately plottable, as in the paper's figure.
 
 ## Reproducing the analyzing-power fit
 
@@ -96,21 +98,25 @@ pathlib.Path("_ay_only.azr").write_text(s)
 
 Then `printf '2\n\nn\n\n' | AZURE2 --no-gui --no-readline _ay_only.azr`.
 
-Chi-squared goes from 236.8 to 85.2 — 1.20 per point, 1.27 per degree of
-freedom with four free parameters:
+This finds both resonances:
 
 | parameter | fitted | Baumann table 1 | start |
 |---|---|---|---|
-| 3/2⁻ E_x | 3.4954 MeV | 3.499 MeV | 3.5032 MeV |
-| 3/2⁻ Γ_p | 50.5 keV | 57 keV | 55.2 keV |
-| 5/2⁺ E_x | 3.5430 MeV | 3.546 MeV | 3.5453 MeV |
-| 5/2⁺ Γ_p | 53.6 keV | 50 keV | 49.0 keV |
+| 3/2⁻ E_x | 3.5079 MeV | 3.499 MeV | 3.5032 MeV |
+| 3/2⁻ Γ_p | 41.9 keV | 57 keV | 55.2 keV |
+| 5/2⁺ E_x | 3.5444 MeV | 3.546 MeV | 3.5453 MeV |
+| 5/2⁺ Γ_p | 45.8 keV | 50 keV | 49.0 keV |
 
-Excitation energies agree to 3–4 keV and widths to about 10%, which is what
-data this loose can support: the 0.04 uncertainty is an order of magnitude
-looser than the measurement, so the fit cannot be expected to recover the
-published parameters more tightly. Restarting the fit from the minimum returns
-85.226 rather than drifting.
+The excitation energies come out well — 9 keV and 2 keV from the published
+values — which is the real result: an R-matrix model fitted to A_y alone lands
+on the same two states from the correct side.
+
+The widths do not, and the reason is the uncertainty model rather than the
+physics. Chi-squared per point is 40.6, so the fit is not describing the data
+within its stated errors at all; the points where A_y passes near zero carry
+uncertainties of order 1e-5 and dominate everything else, pulling both widths
+low. Re-quoting the uncertainties as a constant absolute value should be done
+before these numbers are taken seriously.
 
 ## Two traps this evaluation illustrates
 
