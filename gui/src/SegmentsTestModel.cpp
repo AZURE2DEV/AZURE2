@@ -182,6 +182,7 @@ QVariant SegmentsTestModel::data(const QModelIndex &index, int role) const {
       } else if(line.dataType==1) return QString(tr("<center>Differential</center>"));
       else if(line.dataType==4) return QString(tr("<center>Total Capture</center>"));
       else if(line.dataType==5) return QString(tr("<center>C.M. Differential</center>"));
+      else if(line.dataType==7) return QString(tr("<center>Analyzing Power</center>"));
       else return QString(tr("<center>Angle Integrated</center>"));
     } 
     else if(index.column() == 10) return QVariant();

@@ -29,6 +29,13 @@ class AddSegDataDialog : public QDialog {
   QLineEdit *lowAngleText;
   QLineEdit *highAngleText;
   QComboBox *dataTypeCombo;
+
+  /*! The observable code written to the .azr. It is not the combo box index:
+   *  the analyzing power is code 7 in both segment kinds, but the two lists
+   *  have different lengths, so the code is carried as item data instead. */
+  int dataTypeCode() const;
+  void setDataTypeCode(int code);
+
   QLineEdit *dataFileText;
   QLineEdit *dataNormText;
   QLineEdit *dataNormErrorText;

@@ -131,6 +131,9 @@ class PlotTab : public QWidget {
   QComboBox* xAxisTypeCombo;
   QCheckBox* xAxisIsLogCheck;
   QCheckBox* yAxisIsLogCheck;
+  //! Set while collecting the current selection: an analyzing power cannot
+  //! be drawn on a logarithmic axis, nor converted to an S-factor.
+  bool selectionHasAnalyzingPower_ = false;
   QCheckBox* gridCheck;
   QCheckBox* legendCheck;
   QCheckBox* levelsCheck;

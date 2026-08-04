@@ -353,8 +353,15 @@ two resonances, from the correct side, with sensible widths.
 Using it
 --------
 
-Declare a segment with observable code 7. Angles are centre-of-mass and
-energies laboratory, as for any differential segment:
+In the GUI, choose *Analyzing Power* from the **Data Type** menu when adding a
+data or test segment. It behaves like a centre-of-mass differential segment:
+the angle fields are enabled, **Vary Norm?** is disabled because a
+normalization factor means nothing for a ratio, and the Plot tab switches the
+y-axis to linear and to *Cross Section* when such a segment is drawn, since a
+logarithmic axis cannot show a quantity that goes negative.
+
+By hand, the observable is code 7. Angles are centre-of-mass and energies
+laboratory, as for any differential segment:
 
 .. code-block:: text
 
@@ -385,8 +392,6 @@ What is not done
   amplitude matrix carries all channel spins and projections already, so the
   missing part is the observable side, but it is not written.
 * **Capture channels** need Seyler and Weller rather than Seyler.
-* **The GUI** has no entry for observable 7; a segment must be declared by
-  editing the ``.azr`` or from ``pyazr``.
 * **Analytic derivatives** do not know about :math:`A_y`: ``src/AZUREGrad.cpp``
   has no analyzing-power branch and differentiates the cross section. Anything
   that relies on it — ``residual_jacobian``, ``chi2_and_grad``, and the

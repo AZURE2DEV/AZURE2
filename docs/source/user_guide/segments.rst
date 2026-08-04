@@ -59,6 +59,14 @@ appears with the following fields:
           defined as a separate particle pair.
       * - **C.M. Differential**
         - Differential cross section data given in the center-of-mass frame.
+      * - **Analyzing Power**
+        - Vector analyzing power :math:`A_y` for a spin-1/2 projectile, in the
+          Madison convention. Angles are centre-of-mass, as for **C.M.
+          Differential**, and the data file carries
+          ``E_lab  theta_cm  A_y  dA_y``. Because :math:`A_y` is a ratio,
+          **Vary Norm?** is disabled for it -- a normalization factor has no
+          meaning for a quantity that is already normalized. See
+          :doc:`../theory/polarization_theory`.
 
 **Data Normalization**
    A normalization factor applied to the data yield. Default is ``1.0``.
@@ -143,9 +151,25 @@ segment dialog but includes:
 
    - **Angular Distribution Coefficient** -- output Legendre polynomial
      coefficients. Requires specifying the polynomial order.
+   - **Analyzing Power** -- the vector analyzing power on the chosen energy and
+     angle grid, in the centre-of-mass frame.
 
 .. warning::
 
    Errors may occur if you specify an energy or angular range that is not
    kinematically allowed, or if the energy is too low and the penetrability
    becomes vanishingly small.
+
+.. note::
+
+   An analyzing power measured on a **thin** target should be given a segment
+   with no target integration. :math:`A_y` averaged over a thick target is
+   weighted by the cross section, and since Rutherford scattering diverges at
+   low energy where :math:`A_y` is essentially zero, a thick target drives the
+   average towards zero. This is physical, and it is explained in
+   :doc:`../theory/polarization_implementation`.
+
+   When an analyzing-power segment is plotted, the Plot tab switches the
+   y-axis to a linear scale and to *Cross Section* automatically: a logarithmic
+   axis cannot display a quantity that goes negative, and an S-factor
+   conversion is meaningless for a ratio.

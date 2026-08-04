@@ -34,6 +34,10 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   dataTypeCombo->addItem(tr("C.M. Differential"));
   dataTypeCombo->addItem(tr("Angle Integrated (E1 only)"));
   dataTypeCombo->addItem(tr("Angle Integrated (E2 only)"));
+  dataTypeCombo->addItem(tr("Analyzing Power"));
+  // Codes 0-6 happen to equal their position; the analyzing power is 7.
+  for(int i=0;i<dataTypeCombo->count();i++) dataTypeCombo->setItemData(i,i);
+  dataTypeCombo->setItemData(dataTypeCombo->count()-1,7);
   connect(dataTypeCombo,SIGNAL(currentIndexChanged(int)),this,SLOT(dataTypeChanged(int)));
   QRegExp spinRX("^\\d{0,2}(\\.[05]{0,1})?$");
   QValidator *spinValidator = new QRegExpValidator(spinRX, this);
@@ -291,6 +295,16 @@ void AddSegDataDialog::setChooseFile() {
   }
 }
 
+int AddSegDataDialog::dataTypeCode() const {
+  const QVariant code = dataTypeCombo->currentData();
+  return code.isValid() ? code.toInt() : dataTypeCombo->currentIndex();
+}
+
+void AddSegDataDialog::setDataTypeCode(int code) {
+  const int i = dataTypeCombo->findData(code);
+  dataTypeCombo->setCurrentIndex(i >= 0 ? i : code);
+}
+
 void AddSegDataDialog::dataTypeChanged(int index) {
   if(index==2) {
     phaseJValueLabel->setVisible(true);
@@ -317,10 +331,13 @@ void AddSegDataDialog::dataTypeChanged(int index) {
     totalCaptureLabel->setVisible(false);
     exitPairIndexSpin->setVisible(true);
   }
-  if(index==4) {
+  if(index==4||index==7) {
     lowAngleText->setEnabled(true);
     highAngleText->setEnabled(true);
   }
+  // A_y is a ratio: a normalization factor has no meaning for it.
+  varyNormCheck->setEnabled(index!=7);
+  if(index==7) varyNormCheck->setChecked(false);
 
   // Update fixed angle visibility when data type changes
   operationTypeChanged(operationCombo->currentIndex());

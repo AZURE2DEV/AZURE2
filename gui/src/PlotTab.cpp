@@ -474,6 +474,7 @@ QList<PlotEntry*> PlotTab::getDataSegments() {
     int exitKey = segDataProxyModel->sourceModel()->data(sourceIndex,Qt::EditRole).toInt();
     sourceIndex = segDataProxyModel->mapToSource(segDataProxyModel->index(indexes[i].row(),7,QModelIndex()));
     int dataType = segDataProxyModel->sourceModel()->data(sourceIndex,Qt::EditRole).toInt();
+    if(dataType==7) selectionHasAnalyzingPower_ = true;
     QString filename = (dataType==3) ?
       QString::fromStdString(configure.outputdir)+QString("AZUREOut_aa=%1_TOTAL_CAPTURE.out").arg(entranceKey) :
       QString::fromStdString(configure.outputdir)+QString("AZUREOut_aa=%1_R=%2.out").arg(entranceKey).arg(exitKey);
@@ -507,6 +508,7 @@ QList<PlotEntry*> PlotTab::getTestSegments() {
     int exitKey = segTestProxyModel->sourceModel()->data(sourceIndex,Qt::EditRole).toInt();
     sourceIndex = segTestProxyModel->mapToSource(segTestProxyModel->index(indexes[i].row(),9,QModelIndex()));
     int dataType = segTestProxyModel->sourceModel()->data(sourceIndex,Qt::EditRole).toInt();
+    if(dataType==7) selectionHasAnalyzingPower_ = true;
     QString filename = (dataType==4) ?
       QString::fromStdString(configure.outputdir)+QString("AZUREOut_aa=%1_TOTAL_CAPTURE.extrap").arg(entranceKey) :
       QString::fromStdString(configure.outputdir)+QString("AZUREOut_aa=%1_R=%2.extrap").arg(entranceKey).arg(exitKey);
@@ -525,8 +527,17 @@ QList<PlotEntry*> PlotTab::getTestSegments() {
 }
 
 void PlotTab::draw() {
+  selectionHasAnalyzingPower_ = false;
   QList<PlotEntry*> entries = getDataSegments();
   entries.append(getTestSegments());
+  // An analyzing power is a ratio lying in [-1,1] and negative over much of its
+  // range. A logarithmic axis -- the default here -- simply cannot show it, and
+  // an S-factor conversion has no meaning for it. Switch both off rather than
+  // leave the user with a plot that looks empty.
+  if(selectionHasAnalyzingPower_) {
+    if(yAxisIsLogCheck->isChecked()) yAxisIsLogCheck->setChecked(false);
+    if(yAxisSFButton->isChecked()) yAxisXSButton->setChecked(true);
+  }
   azurePlot->draw(entries);
   rebuildCurveList();
 }
