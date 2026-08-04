@@ -56,6 +56,16 @@ Choose the vertical axis quantity:
 
 Both axes have a **Log** checkbox to switch to logarithmic scale.
 
+.. note::
+
+   Drawing an analyzing-power segment switches the y-axis to a linear
+   **Cross Section** scale automatically, overriding both settings. This is a
+   necessity rather than a preference: :math:`A_y` is a dimensionless ratio
+   that is negative over much of its range, so a logarithmic axis cannot
+   represent it and an S-factor conversion has no meaning for it. Negative
+   points are drawn; for every other observable the non-positive values that a
+   logarithmic axis cannot show are still filtered out.
+
 .. tip::
 
    Plotting with **Excitation Energy** on the x-axis is very useful for

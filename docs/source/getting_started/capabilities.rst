@@ -90,6 +90,30 @@ parameter scans, cross-section decomposition into individual level and
 interference contributions, dimensionless widths, and programmatic editing of
 the model itself.
 
+Performance
+-----------
+
+Two things make repeated evaluation cheap, and both matter most where it hurts
+most — a long fit or an MCMC run.
+
+**Derivatives are analytic.** The gradient of :math:`\chi^2`, and the full
+residual Jacobian, are obtained by reverse accumulation through the same chain
+the forward calculation uses, at roughly the cost of two forward evaluations
+regardless of how many parameters are free. Finite differences would cost one
+evaluation per parameter per iteration. This covers cross sections, S-factors,
+phase shifts and analyzing powers; the one case still done numerically is an
+analyzing power averaged over a target, which is a ratio of two integrals.
+
+**Coulomb functions are cached, and the cache knows when to give up.** These are
+among the most expensive quantities in an R-matrix calculation, and during a fit
+the data energies stay fixed while the parameters move, so the same values are
+wanted repeatedly. There is one situation where that stops being true: if an
+energy shift is free, the energies move every iteration and a stored value is
+never asked for twice. A cache that simply accumulated would grow without bound
+and get slower as it grew. Each cache therefore watches its own hit rate and,
+if too few of its entries are earning their keep, stops storing and releases
+what it holds — degrading to the uncached speed rather than past it.
+
 Interfaces
 ----------
 
