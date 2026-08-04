@@ -89,6 +89,21 @@ the y/n prompts. Other flags: `--use-brune`, `--gsl-coul`, `--ignore-externals`,
 pyazr spawns headless `AZURE2 --no-gui --use-api` processes and talks to them
 over a socket. A session is a context manager; always close it.
 
+Install it from the repository root (it is not on PyPI):
+
+```bash
+pip install -e .                # core: numpy, mpmath, scipy
+pip install -e ".[examples]"    # + matplotlib, emcee, multiprocess
+pip install -e ".[all]"         # + zeus-mcmc
+```
+
+`-e` is the useful form, since the package lives in the checkout. AZURE2 itself
+is C++ and is **not** installed by pip — build it separately. pyazr locates the
+binary via `$AZURE2_BINARY`, then `build/src/AZURE2`, then `$PATH`, and it must
+be built with `USE_API=ON` (the default). Installing also puts `pyazr-cleanup`
+on the path, which reaps API instances orphaned by an interpreter that died
+before it could close them.
+
 ```python
 import os
 os.environ.setdefault("OMP_NUM_THREADS", "4")   # set BEFORE importing numpy
@@ -200,10 +215,45 @@ m.calculate_sfactor_rwa(x)          # S-factor per segment (MeV b)
 m.calculate_energies(x)             # c.m. energies of the calculated points
 m.calculate_excitation_energy(x)    # compound-nucleus Ex — the common axis across channels
 m.calculate_angles(x)               # c.m. angles (differ from the lab angles in the .azr)
+m.calculate_analyzing_power_rwa(x)  # vector A_y, for analyzing-power segments
+m.calculate_angular_dists_rwa(x)    # Legendre coefficients, for ang-dist segments
 ```
 
 Plot different reaction channels against **excitation energy**; it is the only
 axis shared by all entrance pairs. `E_cm = Ex − threshold`.
+
+### Analyzing power (observable 7)
+
+The vector analyzing power `A_y` for a spin-1/2 projectile. Declare a segment
+with `observable="analyzing-power"` (code 7 in the raw `.azr`); it is reported
+**in place of** the cross section, so χ², fitting, plotting and output files
+need no special handling.
+
+```python
+ay = m.calculate_analyzing_power_rwa(m.params_rwa)
+```
+
+Four things that will bite:
+
+- **Angles are centre-of-mass** in the data file, unlike an ordinary
+  differential segment. Columns are `E_lab · theta_cm · A_y · dA_y`.
+- **A_y is a dimensionless ratio in [-1,1] and is often negative.** Do not put a
+  relative uncertainty on it — a point near a zero crossing does not have a
+  small uncertainty, and doing so gives those points enormous weight and wrecks
+  the fit. Use a roughly constant absolute uncertainty.
+- **Leave `vary_norm` off.** A normalization factor is meaningless for a ratio.
+- **Use segments with no target integration** when comparing against
+  thin-target data. `A_y` averaged over a target is cross-section weighted,
+  `<A_y> = ∫A_y σ dE / ∫σ dE`, and since Rutherford σ diverges at low energy
+  where A_y ≈ 0, a thick target drives the average to ~1e-6. That is physics,
+  not a bug.
+
+Analytic derivatives cover A_y, *except* for a point that also carries target
+integration — that one reports itself unsupported, which drops the analytic
+Jacobian for the whole fit back to numerical. Never wrong, just slower.
+
+Worked comparison against measured data: `tests/13N`, segments 11–16 (Baumann
+1992). Formalism and implementation: `docs/source/theory/polarization_*.rst`.
 
 ## Editing the model: adding and removing levels
 
@@ -486,11 +536,14 @@ Four whitespace-delimited columns, **lab frame, forward kinematics**:
 energy (MeV) · angle (deg) · cross section (b, or b/sr if differential) ·
 uncertainty. The angle column is required even for angle-integrated data (dummy
 value). Phase-shift data uses the same layout with the phase (deg) in column 3.
+Analyzing-power data uses it with `A_y` (dimensionless, signed) in column 3 —
+and its **angle column is centre-of-mass**, not lab.
 
 ## Output files (all center-of-mass)
 
 - `AZUREOut_aa=<in>_R=<out>.out` — 9 cols: cm E, excitation E, cm angle, **fit**
-  σ, fit S, **data** σ, data σ err, data S, data S err. `TOTAL_CAPTURE` in place
+  σ, fit S, **data** σ, data σ err, data S, data S err. For an analyzing-power
+  segment, cols 4 and 6 hold `A_y` instead of σ (dimensionless, may be negative). `TOTAL_CAPTURE` in place
   of `R=<out>` for summed capture. `.band` files carry the covariance band.
 - `AZUREOut_*.extrap` — 5 cols: cm E, excitation E, cm angle, σ, S (mode 3).
 - `chiSquared.out` — per-segment χ²/N and norms; last line total χ². **The
