@@ -633,16 +633,29 @@ class azure2:
         return float(resp[0]), np.asarray(resp[1:], dtype=float)
 
     def residual_jacobian(self, params, proc=0):
-        """Standardized residuals and their analytic Jacobian.
+        """Standardized residuals and their Jacobian.
 
         ``r_i = (fit_i - data_i*n)/(cmErr_i*n)`` so ``sum(r_i**2) == chi2``.
 
         Returns ``(r, J)`` with ``r`` shape ``(n_res,)`` and ``J`` shape
         ``(n_res, n_params)``; columns match the non-fixed RWA parameters (the
-        input ordering).  Built from the reverse-mode adjoint, so the whole
-        Jacobian costs ~2 forward evaluations regardless of the parameter count
-        -- for Gauss-Newton / Levenberg-Marquardt.  Energy-shift columns are
-        returned as zero.
+        input ordering).
+
+        Level-energy, reduced-width and normalization columns come from the
+        reverse-mode adjoint, so that block costs ~2 forward evaluations
+        regardless of the parameter count -- for Gauss-Newton /
+        Levenberg-Marquardt.
+
+        Energy-shift columns are finite-differenced, at two extra residual
+        evaluations each.  A shift translates the energy axis of a whole
+        segment, so the derivative wanted is d(model)/dE, and AZURE2 applies a
+        shift by rebuilding every energy-dependent quantity of the affected
+        points; there is no cheap analytic route through the forward code.  A
+        model with many free shifts is dominated by those columns.
+
+        (Before pyazr 2.7 these columns came back as zero, which a
+        least-squares driver accepts silently by never moving those
+        parameters.)
         """
         resp = self.clients[proc].communicate(
             "CALCULATE_RESIDUAL_JACOBIAN_RWA", np.asarray(params, float).ravel())
