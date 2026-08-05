@@ -84,7 +84,7 @@ void ChannelDetails::setNormParam(int which) {
     normParam->setText("B:");
     normUnits->setText("");
   } else {
-    normParam->setText("Partial Width:");
+    normParam->setText("Width:");
     normUnits->setText("eV");
   }
 }
@@ -101,7 +101,10 @@ void ChannelDetails::setConventionChoice(bool isParticle, bool isRWA) {
   physicalButton->blockSignals(false);
   rwaButton->blockSignals(false);
   if(isParticle&&isRWA) {
-    normParam->setText("Reduced Width Amplitude:");
+    // Just "Width": the convention is already stated by the radio buttons above
+    // and by the units beside the field, and the full name is wide enough to
+    // stretch the whole panel.
+    normParam->setText("Width:");
     normUnits->setText("MeV^(1/2)");
   } else setNormParam(normParamWhich_);
 }
