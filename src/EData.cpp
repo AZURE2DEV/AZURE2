@@ -1493,6 +1493,44 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
 }
 
 /*!
+ * Counts the external-capture amplitudes this model expects to read from, or
+ * write to, an intEC file.  The loop structure mirrors CalculateECAmplitudes
+ * exactly; if that routine changes, this one must change with it.
+ *
+ * The point of counting is that the intEC file records amplitudes evaluated at
+ * the sub-point energies of one particular data grid, and carries no record of
+ * which grid that was.  Reading a file built for a different segment selection
+ * returns amplitudes belonging to other energies, silently, and the result
+ * looks like physics.
+ */
+
+long long EData::CountECAmplitudes(CNuc *theCNuc, const Config& configure) {
+  long long count = 0;
+  for(ESegmentIterator segment=GetSegments().begin();segment<GetSegments().end();segment++) {
+    int aa=theCNuc->GetPairNumFromKey(segment->GetEntranceKey());
+    if(theCNuc->GetPair(aa)->GetPType()==20) continue;
+    if(!theCNuc->GetPair(aa)->IsEntrance()) continue;
+    PPair *entrancePair=theCNuc->GetPair(aa);
+    for(int j=1;j<=theCNuc->NumJGroups();j++) {
+      for(int la=1;la<=theCNuc->GetJGroup(j)->NumLevels();la++) {
+        if(!theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) continue;
+        ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
+        int ir=theCNuc->GetPairNumFromKey(segment->GetExitKey());
+        if(ecLevel->GetECPairNum()!=ir) continue;
+        for(EPointIterator point=segment->GetPoints().begin();
+            point<segment->GetPoints().end();point++) {
+          if(point->IsMapped()) continue;
+          for(int k=1;k<=entrancePair->GetDecay(ir)->NumKGroups();k++)
+            for(int ecm=1;ecm<=entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups();ecm++)
+              count += 1 + (long long)point->NumSubPoints();
+        }
+      }
+    }
+  }
+  return count;
+}
+
+/*!
  * If external capture amplitudes are to be calculated, EPoint::CalculateECAmplitudes is
  * called for each point with a corresponding external capture component in the EData object.
  * Otherwise, the amplitudes are read from the specified file.
@@ -1504,7 +1542,40 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc,const Config& configure) {
   std::string outputfile;
   if(configure.paramMask & Config::CALCULATE_WITH_DATA) outputfile=configure.outputdir+"intEC.dat";
   else outputfile=configure.outputdir+"intEC.extrap";
-  if(configure.paramMask & Config::USE_PREVIOUS_INTEGRALS) in.open(configure.integralsfile.c_str());
+
+  // An intEC file records amplitudes at the sub-point energies of the grid it
+  // was built for and carries no record of which grid that was.  Reusing one
+  // across a changed segment selection returns amplitudes belonging to other
+  // energies -- silently, and with a result that looks like physics.  Count
+  // what this model needs and what the file actually holds; on a mismatch,
+  // say so and recompute rather than proceed.
+  bool usePrevious = (configure.paramMask & Config::USE_PREVIOUS_INTEGRALS) != 0;
+  if(usePrevious) {
+    long long expected = CountECAmplitudes(theCNuc,configure);
+    std::ifstream check(configure.integralsfile.c_str());
+    if(!check) {
+      configure.outStream << "Could not open external capture file '"
+                          << configure.integralsfile
+                          << "'; the integrals will be recalculated." << std::endl;
+      usePrevious = false;
+    } else {
+      long long found = 0;
+      complex dummy(0.0,0.0);
+      while(check >> dummy) ++found;
+      check.close();
+      if(found != expected) {
+        configure.outStream << "WARNING: '" << configure.integralsfile
+                            << "' holds " << found << " external capture amplitudes but this"
+                            << " calculation needs " << expected << "." << std::endl
+                            << "         The file belongs to a different set of data segments or"
+                            << " integration points." << std::endl
+                            << "         Recalculating the integrals." << std::endl;
+        usePrevious = false;
+      }
+    }
+  }
+
+  if(usePrevious) in.open(configure.integralsfile.c_str());
   else {
     out.open(outputfile.c_str());
     if(!out) configure.outStream << "Could not write to EC Amplitude File." << std::endl;
@@ -1532,7 +1603,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc,const Config& configure) {
 	    ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
 	    int ir=theCNuc->GetPairNumFromKey(segment->GetExitKey());
 	    if(ecLevel->GetECPairNum()==ir) {
-	      if(!(configure.paramMask & Config::USE_PREVIOUS_INTEGRALS)) {
+	      if(!usePrevious) {
 		configure.outStream << "\tSegment #" << std::setw(12) << segmentKeyOut 
 		          << std::setw(0) << " [                         ] 0%";configure.outStream.flush();
 		int numPoints=segment->NumPoints();
@@ -1582,7 +1653,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc,const Config& configure) {
 		if(!(point->IsMapped())) {
 		  for(int k=1;k<=entrancePair->GetDecay(ir)->NumKGroups();k++) {
 		    for(int ecm=1;ecm<=entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups();ecm++) {
-		      if(!(configure.paramMask & Config::USE_PREVIOUS_INTEGRALS)) {
+		      if(!usePrevious) {
 			if(out.is_open()) out << point->GetECAmplitude(k,ecm) << std::endl;
 			for(EPointIterator subPoint=point->GetSubPoints().begin();
 			    subPoint<point->GetSubPoints().end();subPoint++)

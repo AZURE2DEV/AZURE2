@@ -50,6 +50,7 @@ class EData {
   void PrintCoulombAmplitude(const Config&,CNuc*); 
   void WriteOutputFiles(const Config&,bool=false,const BandData* =nullptr);
   int CalculateECAmplitudes(CNuc*,const Config&);
+  long long CountECAmplitudes(CNuc*,const Config&);
   int InitializeComponentSegments(CNuc*,const Config&);
   ESegment* CreateComponentSegment(const ESegment& baseSegment, int entranceKey, int exitKey);
   ESegment* CreateComponentSegment(const ESegment& baseSegment, int entranceKey, int exitKey, double fixedAngle);
