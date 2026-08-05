@@ -57,6 +57,7 @@ _OBSERVABLE = {
     4: "differential-cm",
     5: "angle-integrated-E1",
     6: "angle-integrated-E2",
+    7: "analyzing-power",
 }
 
 # isDiff codes for <segmentsTest> -- ESegment::ESegment(ExtrapLine).
@@ -67,7 +68,22 @@ _EXTRAP_OBSERVABLE = {
     3: "angular-distribution",
     4: "total-capture",
     5: "differential-cm",
+    7: "analyzing-power",
 }
+
+
+# A Trojan Horse (modified R-matrix, half-off-shell) segment flags itself by
+# adding 10 to whatever observable code it would otherwise carry, so THM is
+# orthogonal to the observable rather than a value of it -- see
+# ESegment::ESegment and docs/THM_IMPLEMENTATION.md.
+_THM_OFFSET = 10
+
+
+def _decode_observable(isDiff, table):
+    """Split a raw isDiff into (observable name, is_thm)."""
+    thm = isDiff >= _THM_OFFSET
+    code = isDiff - _THM_OFFSET if thm else isDiff
+    return table.get(code, f"code{code}"), thm
 
 
 @dataclass
@@ -90,6 +106,7 @@ class Segment:
     energy_shift: float = 0.0      # applied beam-energy shift (MeV)
     energy_shift_error: float = 0.0    # its systematic (MeV)
     vary_shift: bool = False       # is the energy shift a fit parameter?
+    thm: bool = False              # Trojan Horse (half-off-shell) segment?
 
     @property
     def name(self) -> str:
@@ -157,11 +174,12 @@ class SegmentSet(list):
             key=key, active=active, entrance_key=entrance_key,
             exit_key=exit_key, energy_min=eMin, energy_max=eMax,
             angle_min=aMin, angle_max=aMax,
-            observable=_OBSERVABLE.get(isDiff, f"code{isDiff}"),
+            observable=_decode_observable(isDiff, _OBSERVABLE)[0],
             norm=norm, vary_norm=vary_norm,
             norm_error=norm_error, data_file=data_file,
             energy_shift=shift, energy_shift_error=shift_error,
-            vary_shift=vary_shift)
+            vary_shift=vary_shift,
+            thm=_decode_observable(isDiff, _OBSERVABLE)[1])
 
     # -- views ----------------------------------------------------------------
 
@@ -209,7 +227,8 @@ class SegmentSet(list):
                  "norm_err%", "vary")]
         for s in self:
             rows.append((
-                str(s.key), s.name, s.reaction(pairs), s.observable,
+                str(s.key), s.name, s.reaction(pairs),
+                s.observable + (" [THM]" if s.thm else ""),
                 f"{s.energy_min:g}-{s.energy_max:g}",
                 f"{s.norm_error:g}", "*" if s.vary_norm else ""))
         w = [max(len(r[c]) for r in rows) for c in range(len(rows[0]))]
@@ -244,6 +263,7 @@ class TestSegment:
     phase_J: Optional[float] = None        # isDiff == 2 only
     phase_L: Optional[int] = None          # isDiff == 2 only
     max_ang_dist_order: Optional[int] = None   # isDiff == 3 only
+    thm: bool = False                      # Trojan Horse (half-off-shell)?
 
     @property
     def name(self) -> str:
@@ -315,8 +335,9 @@ class TestSegmentSet(list):
             exit_key=exit_key,
             energy_min=eMin, energy_max=eMax, energy_step=eStep,
             angle_min=aMin, angle_max=aMax, angle_step=aStep,
-            observable=_EXTRAP_OBSERVABLE.get(isDiff, f"code{isDiff}"),
-            phase_J=phase_J, phase_L=phase_L, max_ang_dist_order=max_order)
+            observable=_decode_observable(isDiff, _EXTRAP_OBSERVABLE)[0],
+            phase_J=phase_J, phase_L=phase_L, max_ang_dist_order=max_order,
+            thm=_decode_observable(isDiff, _EXTRAP_OBSERVABLE)[1])
 
     # -- views ----------------------------------------------------------------
 
