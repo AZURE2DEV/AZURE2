@@ -657,6 +657,9 @@ void LevelsTab::updateGammaIsRWA(bool isRWA) {
     // refresh the value field's label/units; the value itself is NOT converted
     channelDetails->setConventionChoice(true,isRWA);
   }
+  // The limit is quoted in the selected convention, so a value already on
+  // screen would otherwise be left in the wrong units.
+  if(!channelDetails->wignerLimitText->text().isEmpty()) calculateWignerLimit();
 }
 
 void LevelsTab::updateReducedWidth(const QString &string) {
@@ -690,11 +693,21 @@ void LevelsTab::calculateWignerLimit() {
 
   double P = rho/denom;
   double gamma2W = hbarc*hbarc/(wignerRedMass_*uconv*wignerRadius_*wignerRadius_);  // MeV
-  double gammaW_eV = 2.0*P*gamma2W*1.0e6;                                           // eV
-  double av = std::fabs(gammaW_eV);
+
+  // Report the limit in whichever convention the channel's width is entered in,
+  // so the number can be compared with the value in the table directly. The
+  // stored quantity is gamma^2_W, the limit on the reduced width *squared*: for
+  // an amplitude that means its square root, and for a partial width the usual
+  // Gamma_W = 2 P gamma^2_W.
+  const bool asAmplitude = channelDetails->rwaButton->isVisible() &&
+                           channelDetails->rwaButton->isChecked();
+  double value = asAmplitude ? std::sqrt(gamma2W)      // MeV^(1/2)
+                             : 2.0*P*gamma2W*1.0e6;    // eV
+  double av = std::fabs(value);
   QString text = (av != 0. && (av >= 1.e4 || av < 1.e-4))
-                 ? QString::number(gammaW_eV, 'e', 4)
-                 : QString::number(gammaW_eV, 'f', 4);
+                 ? QString::number(value, 'e', 4)
+                 : QString::number(value, 'f', 4);
+  text += asAmplitude ? tr(" MeV^1/2") : tr(" eV");
   channelDetails->wignerLimitText->setText(text);
 }
 

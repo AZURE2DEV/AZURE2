@@ -1,3 +1,4 @@
+#include <cmath>
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -1417,9 +1418,16 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config* config
         // Apply Wigner Limit bounds if flag is enabled
         if(config && (config->paramMask & Config::USE_WIGNER_LIMITS)) {
           AChannel* channel = this->GetJGroup(j)->GetChannel(ch);
+          // GetWignerLimit returns gamma^2_W = hbar^2/(mu a^2) in MeV -- the
+          // limit on the reduced width *squared*.  The fit parameter is the
+          // reduced width *amplitude* in MeV^(1/2), so the bound is its square
+          // root; using gamma^2_W directly bounds a MeV^(1/2) quantity by a MeV
+          // number and lets theta^2 = gamma^2/gamma^2_W run past 1 by a factor
+          // of gamma^2_W itself.
           double wignerLimit = channel->GetWignerLimit();
           if(wignerLimit > 0.0) {
-            p.SetLimits(varname, -wignerLimit, wignerLimit);
+            double amplitudeLimit = std::sqrt(wignerLimit);
+            p.SetLimits(varname, -amplitudeLimit, amplitudeLimit);
           }
         }
       }

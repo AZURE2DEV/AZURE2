@@ -87,8 +87,11 @@ class Parameter:
 
     # Wigner limit of the channel's reduced width (width parameters only).
     # This is the bound AZURE2 places on the reduced-width amplitude when the
-    # Wigner-limit constraint is enabled, in the same units as ``value`` for a
-    # width parameter; ``None`` for non-width parameters.
+    # gamma^2_W = hbar^2/(mu a^2) in MeV -- the limit on the reduced width
+    # *squared*, not on ``value``.  It matches neither convention ``value`` can
+    # be in: a partial width in eV, nor a reduced width amplitude in MeV^(1/2).
+    # Form theta^2 with pyazr.widths rather than dividing ``value`` by this.
+    # ``None`` for non-width parameters.
     wigner_limit: Optional[float] = None
 
     # True if this width's .azr input value was declared as a reduced width

@@ -30,19 +30,24 @@ ChannelDetails::ChannelDetails(QWidget *parent) : QWidget(parent) {
   conventionGroup->addButton(physicalButton,0);
   conventionGroup->addButton(rwaButton,1);
 
-  QHBoxLayout *conventionLayout=new QHBoxLayout;
+  // Stacked rather than side by side: the two labels together are wider than
+  // the dialog wants to be, and stacking costs one row instead of forcing the
+  // whole channel panel wider.
+  QVBoxLayout *conventionLayout=new QVBoxLayout;
+  conventionLayout->setSpacing(2);
   conventionLayout->addWidget(physicalButton);
   conventionLayout->addWidget(rwaButton);
-  conventionLayout->addStretch(1);
 
   // Wigner-limit calculator: a button with its read-only, selectable result
   // field immediately to its right (so the user can copy the value).
   wignerButton = new QPushButton(tr("Wigner Limit"));
-  wignerButton->setToolTip(tr("Physical Wigner limit (single-particle width) for this channel. "
+  wignerButton->setToolTip(tr("Wigner limit (single-particle width) for this channel, quoted in "
+                              "whichever convention is selected above: the reduced width "
+                              "amplitude limit in MeV^1/2, or the partial width limit in eV. "
                               "Available for particle channels only, not radiative capture."));
   wignerLimitText = new QLineEdit;
   wignerLimitText->setReadOnly(true);
-  wignerLimitText->setMaximumWidth(140);
+  wignerLimitText->setMaximumWidth(170);
 
   QGridLayout *reducedWidthLayout=new QGridLayout;
   reducedWidthLayout->addWidget(normParam,0,0);
