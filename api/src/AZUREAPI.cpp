@@ -1004,6 +1004,70 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r& params) const {
 
   if(!ok) return vector_r{ -1.0 };
 
+  // ---- Energy-shift columns, by central differences -----------------------
+  //
+  // The adjoint covers level energies, reduced widths and normalizations. An
+  // energy shift is a different derivative: it translates the energy axis of a
+  // whole segment, so what is wanted is d(model)/dE rather than d(model)/d(a
+  // parameter). Every energy-dependent quantity moves with it --- the level
+  // matrix, the penetrabilities and shift functions, the Coulomb and
+  // hard-sphere phases, the external-capture amplitudes, and, where a segment
+  // carries target integration, the sub-point grid itself (which brings
+  // boundary terms with it). AZURE2 applies a shift by rebuilding all of that
+  // in UpdatePointEnergiesWithShift, so there is no cheap analytic route
+  // through the existing forward code.
+  //
+  // Returning these columns as zero, which is what this function used to do,
+  // is the worst of the options: a least-squares driver handed a zero column
+  // simply never moves that parameter, converges, and reports success. Finite
+  // differences cost two residual evaluations per free shift and are correct.
+  //
+  // This mirrors what CalculateChi2GradRWA already does for the scalar
+  // gradient. Differencing the residual vector that ComputeResidualJacobian
+  // itself returns guarantees the rows line up, since it is the same function
+  // that assigned them.
+  {
+    const size_t nRes = residuals.size();
+    vector_r rPlus, rMinus, jTmp;
+    int nc = 0;
+    for(int f = 0; f < pmap.NumFull(); f++) {
+      if(fixed_[f]) continue;
+      if(pmap.Desc(f).kind != ParamKind::EnergyShift) continue;
+      const int packed = pmap.FullToPacked(f);
+      if(packed < 0 || packed >= (int)params.size()) continue;
+
+      const double x0 = params[packed];
+      // A few eV: far inside any quoted beam-energy calibration uncertainty,
+      // far outside the noise of the forward model.
+      const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+
+      auto residualsAt = [&](double value, vector_r& out) -> bool {
+        vector_r pk = params;
+        pk[packed] = value;
+        vector_r fullk = MapPackedToFull(pk, all_rwa_, fixed_);
+        lc->FillCompoundFromParams(fullk);
+        ld->FillNormsFromParams(fullk);
+        ld->FillEnergyShiftsFromParams(fullk, ld, lc, &configure());
+        out.clear();
+        jTmp.clear();
+        return ComputeResidualJacobian(lc, ld, configure(), pmap, sdp,
+                                       out, jTmp, nc);
+      };
+
+      const bool okp = residualsAt(x0 + h, rPlus);
+      const bool okm = residualsAt(x0 - h, rMinus);
+      if(okp && okm && rPlus.size() == nRes && rMinus.size() == nRes) {
+        for(size_t r = 0; r < nRes; r++)
+          jacobian[r * (size_t)nCols + (size_t)packed] =
+            (rPlus[r] - rMinus[r]) / (2.0 * h);
+      }
+    }
+    // Leave the model at the parameters that were asked for.
+    lc->FillCompoundFromParams(full);
+    ld->FillNormsFromParams(full);
+    ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+  }
+
   vector_r out;
   out.reserve(2 + residuals.size() + jacobian.size());
   out.push_back((double)residuals.size());

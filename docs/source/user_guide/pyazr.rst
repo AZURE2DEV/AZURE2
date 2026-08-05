@@ -118,10 +118,19 @@ Chi-squared and derivatives
    val, g = azr.chi2_and_grad(x)          # analytic gradient
    r, J   = azr.residual_jacobian(x)      # sum(r**2) == chi2
 
-``residual_jacobian`` computes the whole Jacobian for roughly the cost of two
-forward evaluations, which makes Gauss-Newton and Levenberg-Marquardt fits
-cheap. It also yields the per-segment χ² the API does not expose directly, by
-slicing the residuals by segment length.
+``residual_jacobian`` computes the level-energy, reduced-width and
+normalization columns for roughly the cost of two forward evaluations, which
+makes Gauss-Newton and Levenberg-Marquardt fits cheap. It also yields the
+per-segment χ² the API does not expose directly, by slicing the residuals by
+segment length.
+
+Energy-shift columns are finite-differenced instead, at two extra residual
+evaluations each. A shift translates the energy axis of a whole segment, so
+what is wanted is :math:`\partial\,\mathrm{model}/\partial E`, and AZURE2
+applies a shift by rebuilding every energy-dependent quantity of the affected
+points --- level matrix, penetrabilities, Coulomb and hard-sphere phases,
+external-capture amplitudes, and the target-integration sub-point grid. A fit
+with many free shifts is dominated by their columns.
 
 .. warning::
 

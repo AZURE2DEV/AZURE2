@@ -195,8 +195,10 @@ bool AccumulateEGammaGradient(CNuc* compound, EData* data, const Config& config,
  *
  * `compound`/`data` must already be filled.  `residuals` gets N_res entries;
  * `jacobian` is row-major N_res x nCols (nCols = number of non-fixed params).
- * Energy shifts (rare) are not included as analytic columns here.  Returns false
- * if any point is outside the supported analytic path.
+ * Energy shifts are not included as analytic columns here; the API adds them by
+ * finite differences on the residual vector this function returns (see
+ * AZUREAPI::CalculateResidualJacobianRWA).  Returns false if any point is
+ * outside the supported analytic path.
  */
 bool ComputeResidualJacobian(CNuc* compound, EData* data, const Config& config,
                              const ParamIndexMap& pmap,
