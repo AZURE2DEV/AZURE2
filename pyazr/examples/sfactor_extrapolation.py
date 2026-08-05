@@ -87,10 +87,14 @@ def main() -> int:
 
     with azure2(str(out)) as azr:
         x = np.asarray(azr.params_rwa, float)
-        if args.params and args.params.exists():
-            saved = np.loadtxt(args.params, usecols=1)
-            if saved.shape == x.shape:
-                x = saved
+        if args.params:
+            # param.sav has one line per parameter, fixed ones included, while
+            # params_rwa holds only the free ones -- so a length comparison
+            # never matches and would silently leave x at the .azr's values.
+            # best_fit_params does the mapping (and the extrapolation-mode
+            # case) properly.
+            from pyazr.bands import best_fit_params
+            x = np.asarray(best_fit_params(azr, str(args.params)), float)
 
         azr.extrap_mode()
         e = np.asarray(azr.calculate_energies(x)[0], float)
