@@ -18,6 +18,25 @@ class EffectiveCharge;
 
 class ECIntegral {
  public:
+  /// Public only so the file-local FW/GW memo helper in ECIntegral.cpp can name
+  /// the type; the params_ instance itself stays private.
+  typedef struct Params {
+    EffectiveCharge* effectiveCharge;
+    std::unique_ptr<CoulFunc> coulFunc;
+    std::unique_ptr<WhitFunc> whitFunc;
+    int liValue;
+    int lfValue;
+    int multLValue;
+    double pairEnergy;
+    double bindingEnergy;
+    bool useLongWavelengthApprox;
+    /// Reference decades subtracted from the Whittaker-Whittaker integrand, so
+    /// that a sub-threshold channel (where each factor is ~1e-500) integrates
+    /// as O(1) numbers instead of underflowing to zero.  See WhitFunc::Scaled.
+    double log10RefIn;
+    double log10RefOut;
+    bool   useScaledWhittaker;
+  } Params;
   /*!
    * The ECIntegral object is created with reference to a PPair object. 
    * The PPair object is used to create new instances of the CoulFunc and 
@@ -25,6 +44,13 @@ class ECIntegral {
    */
   ECIntegral(PPair *pPair, const Config& configure) {
     params_.coulFunc = std::make_unique<CoulFunc>(pPair,!!(configure.paramMask&Config::USE_GSL_COULOMB_FUNC));
+    // Disable the global Coulomb cache ONLY for the reaction rate.  There the
+    // energies never recur, so the radial-integral lookups (keyed on radius,
+    // the integration variable) only miss and grow the cache without bound.
+    // In normal fit/extrapolation calculations the energies recur at fixed
+    // channel radii and the cache is a large speed-up, so it stays enabled.
+    if(configure.paramMask & Config::CALCULATE_REACTION_RATE)
+      params_.coulFunc->SetUseGlobalCache(false);
     params_.whitFunc = std::make_unique<WhitFunc>(pPair);
     params_.useLongWavelengthApprox = !!(configure.paramMask&Config::USE_LONGWAVELENGTH_APPROX);
     pair_ = pPair;
@@ -41,22 +67,14 @@ class ECIntegral {
   static double FWIntegrand(double,void*);
   static double GWIntegrand(double,void*);
   static double WWIntegrand(double,void*);
+  /// Clears the per-x FW/GW memo (see ECIntegral.cpp); called before the
+  /// FW/GW pair so the two integrands share their expensive evaluations.
+  static void ClearFGMemo();
   CoulFunc *coulfunction() const {return params_.coulFunc.get();};
   WhitFunc *whitfunction() const {return params_.whitFunc.get();};
   PPair *pair() const {return pair_;};
   double FW() const {return FW_;};
   double GW() const {return GW_;};  
-  typedef struct Params {
-    EffectiveCharge* effectiveCharge;
-    std::unique_ptr<CoulFunc> coulFunc;
-    std::unique_ptr<WhitFunc> whitFunc;
-    int liValue;
-    int lfValue;
-    int multLValue;
-    double pairEnergy;
-    double bindingEnergy;
-    bool useLongWavelengthApprox;
-  } Params;
   Params params_;
   PPair *pair_;
   const Config *configure_;

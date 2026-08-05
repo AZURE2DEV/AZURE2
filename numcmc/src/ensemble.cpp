@@ -32,6 +32,7 @@ Walker Ensemble::getRandomWalker() {
     int k = rand() % nwalkers + 1;
     Walker walker = walkers[k - 1];
     walkers.erase(walkers.begin() + k - 1);
+    this->nwalkers--;
     return walker;
 };
 

@@ -5,8 +5,10 @@
 #include "TargetEffect.h"
 #include "EDataIterator.h"
 #include <deque>
+#include <ios>
 
 class CNuc;
+struct BandData;
 namespace ROOT {
   namespace Minuit2 {
     class MnUserParameters;
@@ -46,7 +48,7 @@ class EData {
   void PrintEDependentValues(const Config&,CNuc*);
   void CalcCoulombAmplitude(CNuc*);
   void PrintCoulombAmplitude(const Config&,CNuc*); 
-  void WriteOutputFiles(const Config&,bool=false);
+  void WriteOutputFiles(const Config&,bool=false,const BandData* =nullptr);
   int CalculateECAmplitudes(CNuc*,const Config&);
   int InitializeComponentSegments(CNuc*,const Config&);
   ESegment* CreateComponentSegment(const ESegment& baseSegment, int entranceKey, int exitKey);
@@ -76,6 +78,7 @@ class EData {
   int energyShiftParamOffset_;
   bool isFit_;
   bool isErrorAnalysis_;
+  std::streampos ecReadPos_;  // File offset where component-segment EC integrals begin in the intEC file
 };
 
 #endif

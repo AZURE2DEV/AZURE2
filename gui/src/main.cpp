@@ -1,6 +1,7 @@
 #include <QMainWindow>
 #include <QApplication>
 #include <QResource>
+#include <QOperatingSystemVersion>
 #include <iostream>
 #include "AZURESetup.h"
 
@@ -9,7 +10,7 @@ inline void initResource() { Q_INIT_RESOURCE(AZURESetup); }
 int start_gui(int argc, char *argv[]) {
 
 #ifdef Q_OS_MACX
-    if ( QSysInfo::MacintoshVersion > QSysInfo::MV_10_8 )
+    if ( QOperatingSystemVersion::current() > QOperatingSystemVersion(QOperatingSystemVersion::MacOS, 10, 8) )
     {
         // fix Mac OS X 10.9 (mavericks) font issue
         // https://bugreports.qt-project.org/browse/QTBUG-32789

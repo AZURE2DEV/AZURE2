@@ -219,7 +219,7 @@ static bool sFactorBarnMeV(const QString& header, double& factor,
 
 bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
                          bool& differential, QString& error) const {
-  QStringList lines = csv.split('\n', QString::SkipEmptyParts);
+  QStringList lines = csv.split('\n', Qt::SkipEmptyParts);
   if (lines.isEmpty()) {
     error = "Empty dataset returned by EXFOR server.";
     return false;

@@ -520,3 +520,74 @@ bool ComputeResidualJacobian(CNuc* compound, EData* data, const Config& config,
   if(!ok) { residuals.clear(); jacobian.clear(); }
   return ok;
 }
+
+bool ComputeModelGradients(CNuc* compound, EData* data, const Config& config,
+                           const ParamIndexMap& pmap,
+                           const vector_matrix_r* shiftDeriv,
+                           std::map<EPoint*, vector_r>& gradByPoint) {
+  gradByPoint.clear();
+  const int nCols = pmap.NumPacked();
+  const int nSeg = data->NumSegments();
+
+  // Pre-create every point's (zero-initialized) packed row so the parallel loop
+  // only writes into slots that already exist -- std::map insertion is not
+  // thread-safe, so all keys must be present before the parallel region.
+  std::vector<std::vector<EPoint*>> ptsOf(nSeg + 1);
+  for(int i = 1; i <= nSeg; i++) {
+    ESegment* segment = data->GetSegment(i);
+    if(!segment) continue;
+    const int nPoints = segment->NumPoints();
+    ptsOf[i].assign(nPoints, nullptr);
+    for(int pointIdx = 0; pointIdx < nPoints; pointIdx++) {
+      EPoint* pt = segment->GetPoint(pointIdx + 1);
+      ptsOf[i][pointIdx] = pt;
+      if(pt) gradByPoint[pt] = vector_r(nCols, 0.0);
+    }
+  }
+
+  bool ok = true;
+  for(int i = 1; i <= nSeg && ok; i++) {
+    ESegment* segment = data->GetSegment(i);
+    if(!segment) continue;
+    const int nPoints = segment->NumPoints();
+    bool bail = false;
+
+#pragma omp parallel
+    {
+      GradAccum accum;                       // per-thread, reused across its rows
+      accum.Init(compound);
+      vector_r fullRow(pmap.NumFull(), 0.0);
+#pragma omp for
+      for(int pointIdx = 0; pointIdx < nPoints; pointIdx++) {
+        if(bail) continue;
+        EPoint* pt = ptsOf[i][pointIdx];
+        if(!pt) continue;
+
+        // fitBar = d(model)/d(model) = 1 gives d(model)/d(E,gamma) directly.
+        FitBarFn oneFitBar = [](ESegment*, int, int, double) -> double { return 1.0; };
+
+        accum.Zero();
+        double model = 0.0;
+        if(!GradOnePoint(segment, data, i, pointIdx, compound, config, shiftDeriv,
+                         oneFitBar, accum, model)) {
+#pragma omp critical
+          bail = true;
+          continue;
+        }
+
+        std::fill(fullRow.begin(), fullRow.end(), 0.0);
+        accum.Scatter(pmap, fullRow);
+
+        vector_r& row = gradByPoint[pt];       // key pre-inserted above
+        for(int f = 0; f < pmap.NumFull(); f++) {
+          int packed = pmap.FullToPacked(f);
+          if(packed >= 0 && packed < nCols) row[packed] = fullRow[f];
+        }
+      }
+    }
+    if(bail) ok = false;
+  }
+
+  if(!ok) gradByPoint.clear();
+  return ok;
+}

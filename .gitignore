@@ -5,3 +5,22 @@ build*/**
 azure2
 CLAUDE.md
 build.log
+
+# Claude Code: skills are shared, local settings are personal
+.claude/settings.local.json
+# Not a Claude Code skills location -- it reads ~/.claude/skills and
+# .claude/skills only. Ignored so a stray copy is never committed.
+.agents/
+
+# Generated documentation (Doxygen and Sphinx output)
+docs/_build/
+docs/api/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Python packaging artefacts
+*.egg-info/
+dist/
+build-api/

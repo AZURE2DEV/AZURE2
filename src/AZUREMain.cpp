@@ -1,7 +1,9 @@
 #include "AZURECalc.h"
 #include "AZUREMain.h"
+#include "ParameterLabel.h"
 #include "AZUREParams.h"
 #include "Config.h"
+#include "CovarianceBand.h"
 #include "ReactionRate.h"
 #include "ParameterLimitsManager.h"
 #include "ECAmplitudeCache.h"
@@ -11,6 +13,7 @@
 #include <Minuit2/FunctionMinimum.h>
 #include <Minuit2/MnMigrad.h>
 #include <Minuit2/MnMinos.h>
+#include <Minuit2/MnHesse.h>
 #include <fstream>
 #include <sstream>
 #include <map>
@@ -153,12 +156,78 @@ int AZUREMain::operator()(){
     ParameterLimitsManager limitsManager(&configure(), compound(), data(), &params);
     limitsManager.ReadParameterSettings();
     limitsManager.ApplyAllParameterSettings(params.GetMinuitParams());
-  
+
+    //Warn once if a level has a radiative width comparable to its particle width,
+    //where the R-Matrix treatment of capture breaks down.
+    compound()->CheckRadiativeWidths(configure(),params.GetMinuitParams().Params());
+
     //Declare a new instance of FCNBase
     AZURECalc theFunc(data(),compound(),configure(),&limitsManager);
     //theFunc.InitializePools();
     theFunc.SetErrorDef(1.0);
-    
+
+    // Parameter covariance for the cross-section band, saved for reuse by later
+    // extrapolation runs.  Any fit (MIGRAD or LM) yields it; MINOS is not needed.
+    BandCovariance bandCov;
+    bool haveBandCov=false;
+    std::string covPath=configure().outputdir+"covariance.dat";
+
+    // A parameter pinned against one of its limits is the most common reason a
+    // fit cannot produce a covariance, and the one the user can act on. Name any
+    // such parameter physically -- the Minuit name alone does not say which
+    // level or channel it belongs to.
+    auto reportParametersAtLimits=[&](){
+      const ROOT::Minuit2::MnUserParameters& mp=params.GetMinuitParams();
+      int nAtLimit=0;
+      for(unsigned int i=0;i<mp.Params().size();i++) {
+        const ROOT::Minuit2::MinuitParameter& par=mp.Parameter(i);
+        if(par.IsFixed()||!par.HasLimits()) continue;
+        const double value=mp.Value(i);
+        const double scale=std::max(std::fabs(value),1.e-30);
+        bool atLimit=false;
+        if(par.HasLowerLimit()&&std::fabs(value-par.LowerLimit())<=1.e-6*scale) atLimit=true;
+        if(par.HasUpperLimit()&&std::fabs(value-par.UpperLimit())<=1.e-6*scale) atLimit=true;
+        if(!atLimit) continue;
+        if(!nAtLimit)
+          configure().outStream << "  Parameter(s) sitting at a limit:" << std::endl;
+        std::string text=mp.GetName(i);
+        const std::string label=AZURELabel::Parameter(compound(),data(),(int)i);
+        if(!label.empty()) text+="  =  "+label;
+        configure().outStream << "    " << text << " = " << value << std::endl;
+        nAtLimit++;
+      }
+      if(!nAtLimit)
+        configure().outStream << "  No parameter is at a limit, so the flat direction is a "
+                                 "degeneracy between correlated parameters." << std::endl;
+    };
+
+    // Build the band covariance from a Minuit covariance (MIGRAD paths).
+    auto captureMinuitCov=[&](const std::vector<double>& covData){
+      if(!(configure().paramMask & Config::CALCULATE_COVARIANCE_BAND)) return;
+      const int nMn=params.GetMinuitParams().Params().size();
+      std::vector<bool> fixedMask(nMn);
+      for(int fi=0; fi<nMn; fi++) fixedMask[fi]=params.GetMinuitParams().Parameter(fi).IsFixed();
+      ParamIndexMap pmap=BuildParamIndexMap(compound(),data(),fixedMask);
+      bandCov=BuildBandCovarianceFromMinuit(covData,pmap);
+      // Saved later (after the optional reduced-chi^2 scaling) in the band block.
+      if(!bandCov.empty()) haveBandCov=true;
+      else {
+        const int np=pmap.NumPacked();
+        if(covData.empty()) {
+          configure().outStream << "Note: no covariance available for the uncertainty band -- the fit "
+                                   "did not produce one. This usually means the minimum is not well "
+                                   "determined (the fit did not fully converge, a parameter is sitting "
+                                   "at a limit, or two parameters are degenerate)." << std::endl;
+          reportParametersAtLimits();
+        }
+        else
+          configure().outStream << "Note: covariance/parameter size mismatch for the uncertainty band ("
+                                << covData.size() << " covariance entries vs " << np*(np+1)/2
+                                << " expected for " << np << " free parameters); band skipped." << std::endl;
+      }
+    };
+
+
     if(configure().paramMask & Config::PERFORM_FIT) {
       //Call minimizer for function minimization, write minimized parameters to params
       if(configure().paramMask & Config::USE_AMATRIX) configure().outStream << "Performing A-Matrix Fit..." << std::endl;
@@ -280,11 +349,32 @@ int AZUREMain::operator()(){
         params.WriteUserParameters(configure(),true);
       } else {
 #endif
-      if(configure().paramMask & Config::USE_LM_MINIMIZER) {
+      if(configure().paramMask & Config::USE_GSL_LM_MINIMIZER) {
+        // GSL trust-region least-squares (geodesic-accelerated); same analytic
+        // Jacobian as the LM path, but factorizes J directly (QR).
+        configure().outStream << "Using GSL trust-region least-squares minimizer with analytic Jacobian." << std::endl;
+        bool wantBand = configure().paramMask & Config::CALCULATE_COVARIANCE_BAND;
+        double gslChi2 = theFunc.RunGSLNonlinear(params, 200, wantBand ? &bandCov : nullptr);
+        if(gslChi2 < 0.0) {
+          // The analytic Jacobian is not available for this model -> MIGRAD.
+          configure().outStream << "Analytic Jacobian unsupported for this model; "
+                                   "falling back to MIGRAD." << std::endl;
+          const ROOT::Minuit2::FCNBase& fb = theFunc;
+          ROOT::Minuit2::MnMigrad migrad(fb, params.GetMinuitParams());
+          ROOT::Minuit2::FunctionMinimum min = migrad(50000);
+          params.GetMinuitParams() = min.UserParameters();
+          captureMinuitCov(min.UserCovariance().Data());
+        } else if(wantBand && !bandCov.empty()) {
+          haveBandCov=true;   // saved later, after optional reduced-chi^2 scaling
+        }
+        params.WriteUserParameters(configure(), true);
+      } else if(configure().paramMask & Config::USE_LM_MINIMIZER) {
         // Levenberg-Marquardt / Gauss-Newton using the analytic residual
         // Jacobian (selected as an alternative to MIGRAD).
-        configure().outStream << "Using Levenberg-Marquardt minimizer (analytic Jacobian)." << std::endl;
-        double lmChi2 = theFunc.RunLevenbergMarquardt(params, 200);
+        configure().outStream << "Using Levenberg-Marquardt minimizer with analytic Jacobian." << std::endl;
+        // LM yields the covariance (J^T J + priors)^{-1} directly for the band.
+        bool wantBand = configure().paramMask & Config::CALCULATE_COVARIANCE_BAND;
+        double lmChi2 = theFunc.RunLevenbergMarquardt(params, 200, wantBand ? &bandCov : nullptr);
         if(lmChi2 < 0.0) {
           // The analytic Jacobian is not available for this model -> MIGRAD.
           configure().outStream << "Analytic Jacobian unsupported for this model; "
@@ -293,6 +383,9 @@ int AZUREMain::operator()(){
           ROOT::Minuit2::MnMigrad migrad(fb, params.GetMinuitParams());
           ROOT::Minuit2::FunctionMinimum min = migrad(50000);
           params.GetMinuitParams() = min.UserParameters();
+          captureMinuitCov(min.UserCovariance().Data());
+        } else if(wantBand && !bandCov.empty()) {
+          haveBandCov=true;   // saved later, after optional reduced-chi^2 scaling
         }
         params.WriteUserParameters(configure(), true);
       } else {
@@ -311,6 +404,24 @@ int AZUREMain::operator()(){
             return migrad(50000);
           }
         }();
+      // MIGRAD's error matrix is approximate; refine it with HESSE for the band,
+      // falling back to the MIGRAD matrix if HESSE gives no valid covariance.
+      if(configure().paramMask & Config::CALCULATE_COVARIANCE_BAND) {
+        std::vector<double> migradCov = min.UserCovariance().Data();
+        configure().outStream << std::endl
+                              << "Computing accurate covariance (HESSE) for the uncertainty band..."
+                              << std::endl;
+        ROOT::Minuit2::MnHesse hesse;
+        try { hesse(theFunc, min); } catch(...) {}
+        if(min.HasValidCovariance()) {
+          captureMinuitCov(min.UserCovariance().Data());
+        } else {
+          configure().outStream << "HESSE did not return a valid covariance; using the MIGRAD "
+                                   "error matrix (uncertainties may be approximate)." << std::endl;
+          reportParametersAtLimits();
+          captureMinuitCov(migradCov);
+        }
+      }
       if(configure().paramMask & Config::PERFORM_ERROR_ANALYSIS) {
 	configure().outStream << std::endl 
 		  << "Performing parameter error analysis with Up=" <<  configure().chiVariance << "." << std::endl;
@@ -328,7 +439,7 @@ int AZUREMain::operator()(){
 
         // New output of the covariance matrix
         char filename[256];
-        sprintf(filename,"%scovariance_matrix.out",configure().outputdir.c_str());
+        snprintf(filename, sizeof(filename),"%scovariance_matrix.out",configure().outputdir.c_str());
         std::ofstream out;
         out.open(filename);
         if(out) {
@@ -409,8 +520,8 @@ int AZUREMain::operator()(){
 
           out.flush();
           out.close();
-        } else std::cout << "Could not save " << configure().outputdir.c_str() 
-                         << "covariance_matrix.out file." << std::endl;   
+        } else std::cout << "Could not save " << configure().outputdir.c_str()
+                         << "covariance_matrix.out file." << std::endl;
 
         // ECS this line added to set the azure variables to the minimised fit parameters
         params.GetMinuitParams()=min.UserParameters();
@@ -447,7 +558,80 @@ int AZUREMain::operator()(){
 
     //Write Output Files
     configure().outStream << "Writing output files..." << std::endl;
-    data()->WriteOutputFiles(configure());
+    // Band covariance: this run's fit if available, else one saved by a prior fit.
+    BandData bandData;
+    const BandData* bandPtr=nullptr;
+    if(configure().paramMask & Config::CALCULATE_COVARIANCE_BAND) {
+      // Optionally inflate to reduced chi^2 = 1 (Birge ratio), then persist.
+      if(haveBandCov) {
+        if((configure().paramMask & Config::SCALE_COVARIANCE_BY_CHI2) &&
+           (configure().paramMask & Config::CALCULATE_WITH_DATA)) {
+          double chi2data=0.; int nData=0;
+          for(int s=1; s<=data()->NumSegments(); s++) {
+            ESegment* seg=data()->GetSegment(s);
+            if(!seg) continue;
+            chi2data+=seg->GetSegmentChiSquared();
+            nData+=seg->NumPoints();
+          }
+          // Degrees of freedom use the total number of free fit parameters
+          // (including norms/shifts), even though the covariance matrix itself
+          // holds only the R-matrix sub-block (bandCov.size()).
+          int nFree=0;
+          const int nMnAll=params.GetMinuitParams().Params().size();
+          for(int i=0;i<nMnAll;i++)
+            if(!params.GetMinuitParams().Parameter(i).IsFixed()) nFree++;
+          int ndf=nData-nFree;
+          double redChi2=(ndf>0)?chi2data/ndf:1.0;
+          double factor=(redChi2>1.0)?redChi2:1.0;   // inflate only
+          configure().outStream << "Calculating covariance scaling: chi-Squared = " << chi2data
+                                << ", N = " << nData << ", free params = " << nFree
+                                << ", nu = " << ndf << ", reduced chi-squared = " << redChi2 << "." << std::endl;
+          if(factor>1.0) {
+            const int nMat=bandCov.size();
+            for(int a=0;a<nMat;a++) for(int b=0;b<nMat;b++) bandCov.M[a][b]*=factor;
+            configure().outStream << "Covariance scaled by " << factor << "." << std::endl;
+          } else {
+            configure().outStream << "Reduced chi-squared <= 1; covariance left unscaled."
+                                  << std::endl;
+          }
+        }
+        if(SaveBandCovariance(covPath,bandCov))
+          configure().outStream << "Saved parameter covariance for cross-section bands." << std::endl;
+      }
+      BandCovariance cov;
+      bool fitRun = configure().paramMask & Config::PERFORM_FIT;  // fit or MINOS
+      if(haveBandCov) cov=bandCov;
+      else if(fitRun) {
+        // The fit ran but produced no usable covariance (already reported above);
+        // don't fall back to a stale saved file.
+        configure().outStream << "Uncertainty band skipped: this fit produced no usable covariance."
+                              << std::endl;
+      } else if(!LoadBandCovariance(covPath,cov)) {
+        // Extrapolation / no-fit run: the band needs a covariance from a prior fit.
+        configure().outStream << "No saved parameter covariance found (" << covPath
+                              << "); writing the normal output without an uncertainty band. "
+                                 "To get a band here, first run a fit (or MINOS) with the "
+                                 "\"Uncertainty band\" option enabled, then rerun this extrapolation."
+                              << std::endl;
+      }
+      if(!cov.empty()) {
+        if(BuildBandData(compound(),data(),configure(),cov,bandData)) {
+          bandPtr=&bandData;
+          configure().outStream << "Writing cross-section uncertainty bands..." << std::endl;
+        } else {
+          configure().outStream << "Cross-section bands unavailable: the analytic model "
+                                   "sensitivities are not supported for this configuration." << std::endl;
+        }
+        // BuildBandData computes the per-point sensitivities on the real
+        // compound/data objects (its gradient map is keyed by the real EPoint*),
+        // and that forward+adjoint solve overwrites each point's stored best-fit
+        // cross section.  Re-run the best-fit forward pass so the plotted and
+        // written segments are the best fit, not the last gradient probe; the
+        // band itself lives in bandData and is unaffected.
+        theFunc(params.GetMinuitParams().Params());
+      }
+    }
+    data()->WriteOutputFiles(configure(),false,bandPtr);
   } else {
     //Calculate Reaction Rate
     // This uses the adaptive integration routines of GSL.  As the energy stepsize is 
@@ -458,7 +642,10 @@ int AZUREMain::operator()(){
     configure().outStream << "Performing reaction rate calculation..." << std::endl;
     ReactionRate reactionRate(compound(),params.GetMinuitParams().Params(),configure(),
 			      configure().rateParams.entrancePair,configure().rateParams.exitPair);
-    if(configure().paramMask & Config::USE_BRUNE_FORMALISM) 
+    //Warn once if a level has a radiative width comparable to its particle width,
+    //where the R-Matrix treatment of capture breaks down.
+    compound()->CheckRadiativeWidths(configure(),params.GetMinuitParams().Params());
+    if(configure().paramMask & Config::USE_BRUNE_FORMALISM)
       compound()->CalcShiftFunctions(configure());
     if(configure().rateParams.useFile)
       reactionRate.CalculateFileRates();

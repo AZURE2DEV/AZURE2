@@ -185,7 +185,72 @@ bool ParameterLimitsManager::ReadParameterSettings() {
   return true;
 }
 
-void ParameterLimitsManager::ApplyAllParameterSettings(ROOT::Minuit2::MnUserParameters& p) {  
+std::string ParameterLimitsManager::SettingNameForMinuitName(const std::string& minuitName) {
+  if(minuitName.compare(0, 7, "energy_") == 0)
+    return "Level " + minuitName.substr(7) + " Energy (MeV)";
+  if(minuitName.compare(0, 6, "width_") == 0) {
+    size_t sep = minuitName.find('_', 6);
+    if(sep != std::string::npos)
+      return "Level " + minuitName.substr(6, sep - 6) +
+             " Channel " + minuitName.substr(sep + 1) + " Width (eV)";
+  }
+  //Normalizations and energy shifts are stored under their Minuit names already.
+  return minuitName;
+}
+
+/*!
+ * Associates every enumerated non-fixed parameter with the settings entry that
+ * describes it.
+ *
+ * The names are authoritative: the minuit_index recorded in the file is written
+ * by the GUI from its own view of which parameters are free, and goes stale as
+ * soon as a normalization or energy shift is freed or fixed in the Segments tab
+ * without the Fitting tab rebuilding its list.  Trusting it then hands one
+ * parameter's limits and nuisance prior to a different parameter.  The index is
+ * still honoured, but only for entries whose name matched nothing -- which keeps
+ * older files working without letting a stale index override a name match.
+ */
+
+void ParameterLimitsManager::BuildIndexMap(const ROOT::Minuit2::MnUserParameters& p) {
+  std::vector<int> nonFixedToActualIndex;
+  for(int i = 0; i < (int)p.Params().size(); i++) {
+    if(!p.Parameter(i).IsFixed() || p.Parameter(i).GetName().find("segment") != std::string::npos) {
+      nonFixedToActualIndex.push_back(i);
+    }
+  }
+
+  indexToSetting_.assign(nonFixedToActualIndex.size(), NULL);
+  std::map<const ParameterSetting*, bool> claimed;
+
+  for(size_t nonFixedIndex = 0; nonFixedIndex < nonFixedToActualIndex.size(); nonFixedIndex++) {
+    std::string settingName =
+      SettingNameForMinuitName(p.Parameter(nonFixedToActualIndex[nonFixedIndex]).GetName());
+    std::map<std::string, ParameterSetting>::iterator it = parameterSettings_.find(settingName);
+    if(it != parameterSettings_.end()) {
+      indexToSetting_[nonFixedIndex] = &it->second;
+      claimed[&it->second] = true;
+    }
+  }
+
+  for(size_t nonFixedIndex = 0; nonFixedIndex < nonFixedToActualIndex.size(); nonFixedIndex++) {
+    if(indexToSetting_[nonFixedIndex]) continue;
+    for(std::map<std::string, ParameterSetting>::iterator it = parameterSettings_.begin();
+        it != parameterSettings_.end(); ++it) {
+      if(it->second.minuitIndex == (int)nonFixedIndex && !claimed.count(&it->second)) {
+        indexToSetting_[nonFixedIndex] = &it->second;
+        claimed[&it->second] = true;
+        break;
+      }
+    }
+  }
+}
+
+ParameterSetting* ParameterLimitsManager::SettingForIndex(int nonFixedIndex) const {
+  if(nonFixedIndex < 0 || nonFixedIndex >= (int)indexToSetting_.size()) return NULL;
+  return indexToSetting_[nonFixedIndex];
+}
+
+void ParameterLimitsManager::ApplyAllParameterSettings(ROOT::Minuit2::MnUserParameters& p) {
   // Build mapping from non-fixed parameter index to actual parameter index
   std::vector<int> nonFixedToActualIndex;
   for(int i = 0; i < p.Params().size(); i++) {
@@ -193,7 +258,9 @@ void ParameterLimitsManager::ApplyAllParameterSettings(ROOT::Minuit2::MnUserPara
       nonFixedToActualIndex.push_back(i);
     }
   }
-  
+
+  BuildIndexMap(p);
+
   // Apply settings using non-fixed parameter indices
   for(int nonFixedIndex = 0; nonFixedIndex < nonFixedToActualIndex.size(); nonFixedIndex++) {
     int actualIndex = nonFixedToActualIndex[nonFixedIndex];
@@ -289,22 +356,13 @@ void ParameterLimitsManager::ApplyParameterSetting(const std::string& paramName,
 }
 
 void ParameterLimitsManager::ApplyParameterSettingByIndex(int nonFixedIndex, int actualIndex, ROOT::Minuit2::MnUserParameters& p) {
-  // Find parameter settings by matching Minuit2 non-fixed index
-  ParameterSetting* setting = nullptr;
-  std::string matchedName = "";
-  
-  for(auto& entry : parameterSettings_) {
-    if(entry.second.minuitIndex == nonFixedIndex) {
-      setting = &entry.second;
-      matchedName = entry.first;
-      break;
-    }
-  }
+  ParameterSetting* setting = SettingForIndex(nonFixedIndex);
 
   if(!setting) {
     return; // No settings found for this parameter index
   }
-      
+  const std::string& matchedName = setting->name;
+
   // Apply limits if they are not both zero (0,0 means free parameter)
   if(setting->lowerLimit != 0.0 || setting->upperLimit != 0.0) {
     double lower = setting->lowerLimit;
@@ -459,13 +517,8 @@ bool ParameterLimitsManager::IsNuisanceParameter(const std::string& paramName) c
 }
 
 bool ParameterLimitsManager::IsNuisanceParameterByIndex(int nonFixedIndex) const {
-  // Find parameter settings by matching Minuit2 non-fixed index
-  for(const auto& entry : parameterSettings_) {
-    if(entry.second.minuitIndex == nonFixedIndex) {
-      return entry.second.useAsNuisance;
-    }
-  }
-  return false;
+  const ParameterSetting* setting = SettingForIndex(nonFixedIndex);
+  return setting ? setting->useAsNuisance : false;
 }
 
 double ParameterLimitsManager::GetParameterError(const std::string& paramName) const {
@@ -564,36 +617,24 @@ double ParameterLimitsManager::GetConvertedError(const std::string& paramName) c
 
 double ParameterLimitsManager::GetConvertedNominalValueByIndex(int nonFixedIndex) const {
   // Find parameter settings by matching Minuit2 non-fixed index
-  for(const auto& entry : parameterSettings_) {
-    if(entry.second.minuitIndex == nonFixedIndex) {
-      const ParameterSetting& setting = entry.second;
+  const ParameterSetting* setting = SettingForIndex(nonFixedIndex);
+  if(!setting) return 0.0;
 
-      // For width parameters (physical values need conversion to reduced)
-      if((entry.first.find("width") != std::string::npos || entry.first.find("Width") != std::string::npos) && setting.category == "level") {
-        return setting.nominalValueReduced; // Return reduced nominal value for width parameters
-      } else {
-        // For non-width parameters, use nominal value as-is
-        return setting.nominalValue;
-      }
-    }
-  }
-  return 0.0;
+  // For width parameters (physical values need conversion to reduced)
+  if((setting->name.find("width") != std::string::npos || setting->name.find("Width") != std::string::npos) && setting->category == "level")
+    return setting->nominalValueReduced; // Return reduced nominal value for width parameters
+  // For non-width parameters, use nominal value as-is
+  return setting->nominalValue;
 }
 
 double ParameterLimitsManager::GetConvertedErrorByIndex(int nonFixedIndex) const {
   // Find parameter settings by matching Minuit2 non-fixed index
-  for(const auto& entry : parameterSettings_) {
-    if(entry.second.minuitIndex == nonFixedIndex) {
-      const ParameterSetting& setting = entry.second;
-      
-      // For width parameters (physical values need conversion to reduced)
-      if((entry.first.find("width") != std::string::npos || entry.first.find("Width") != std::string::npos) && setting.category == "level") {
-        return setting.errorReduced; // Return reduced error for width parameters
-      } else {
-        // For non-width parameters, use error as-is
-        return setting.error;
-      }
-    }
-  }
-  return 0.0;
+  const ParameterSetting* setting = SettingForIndex(nonFixedIndex);
+  if(!setting) return 0.0;
+
+  // For width parameters (physical values need conversion to reduced)
+  if((setting->name.find("width") != std::string::npos || setting->name.find("Width") != std::string::npos) && setting->category == "level")
+    return setting->errorReduced; // Return reduced error for width parameters
+  // For non-width parameters, use error as-is
+  return setting->error;
 }

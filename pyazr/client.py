@@ -64,8 +64,14 @@ class client:
         'GET_DATA_EXCITATION_ENERGY': 33,
         'GET_EXCITATION_ENERGY': 34,
         'GET_PARAMS_INFO': 37,
+        'GET_PAIRS_INFO': 38,
         'CALCULATE_CHI2_GRAD_RWA': 41,
         'CALCULATE_RESIDUAL_JACOBIAN_RWA': 42,
+        'CALCULATE_MODEL_GRADIENTS_RWA': 43,
+        'GET_CALCULATED_ANGULAR_DISTS': 44,
+        'GET_COULOMB_FUNCTIONS': 45,
+        'GET_EC_INTEGRALS': 46,
+        'GET_CACHE_STATS': 47,
     }
 
     def __init__(self, server='localhost', port=20000,

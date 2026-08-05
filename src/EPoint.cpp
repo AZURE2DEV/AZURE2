@@ -19,6 +19,7 @@
 #include <iostream>
 #include <assert.h>
 #include <fstream>
+#include <memory>
 #include <mutex>
 
 /*!
@@ -997,8 +998,7 @@ void EPoint::SetCrossSectionKinFactor(double crosssectionkinfactor) {
  */
 
 void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect* targetEffect) {
-  double Qcm[maxL];
-  memset( Qcm, 1, maxL*sizeof(double) );
+  std::vector<double> Qcm(maxL, 0.0);
   //double Qcm[maxL]={1.0};
   if(targetEffect && targetEffect->NumQCoefficients()>0 && theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()))->GetPType()==0){
     PPair *entrancePair=theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
@@ -1011,8 +1011,7 @@ void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect* targetEffect) 
     double qValue=entrancePair->GetSepE()+entrancePair->GetExE()-exitPair->GetSepE()-exitPair->GetExE();
     double gamma = m1*m3/m2/m4*e1/(e1+qValue);
     int numQ = targetEffect->NumQCoefficients();
-    double U[numQ][numQ];
-    memset( U, 0.0, numQ*numQ*sizeof(double) );
+    std::vector<std::vector<double> > U(numQ, std::vector<double>(numQ, 0.0));
     //double U[numQ][numQ]={0.0};
     for (int lOrder=0;lOrder<numQ;lOrder++){    
       for (int lOrder_p=0;lOrder_p<numQ;lOrder_p++){
@@ -1027,8 +1026,7 @@ void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect* targetEffect) 
 //        std::cout<<"test"<<std::endl;              
       }    
     }
-    double B[numQ];
-    memset( B, 0.0, numQ*sizeof(double) );
+    std::vector<double> B(numQ, 0.0);
     //double B[numQ] = {0.0};
     for (int lOrder=0;lOrder<numQ;lOrder++){    
       for (int lOrder_p=0;lOrder_p<numQ;lOrder_p++){
@@ -1540,8 +1538,21 @@ void EPoint::Calculate(CNuc* theCNuc,const Config &configure, EPoint *parent, in
     }
 
     GenMatrixFunc *theMatrixFunc;
-    if(configure.paramMask & Config::USE_AMATRIX) theMatrixFunc=new AMatrixFunc(theCNuc,configure);
-    else theMatrixFunc=new RMatrixFunc(theCNuc,configure);
+    // The A-matrix function object is reused across the points calculated by
+    // this thread.  Its per-JGroup buffers and the level-matrix factorization
+    // workspace are sized once and then only refilled, which removes the
+    // allocation traffic that dominated the old per-point construction.
+    // Recursion is not a concern: the branch that recurses into sub-points does
+    // not use theMatrixFunc.
+    static thread_local AMatrixFunc reusableAMatrixFunc(theCNuc,configure);
+    std::unique_ptr<RMatrixFunc> ownedRMatrixFunc;
+    if(configure.paramMask & Config::USE_AMATRIX) {
+      reusableAMatrixFunc.Reset(theCNuc,configure);
+      theMatrixFunc=&reusableAMatrixFunc;
+    } else {
+      ownedRMatrixFunc.reset(new RMatrixFunc(theCNuc,configure));
+      theMatrixFunc=ownedRMatrixFunc.get();
+    }
     theMatrixFunc->ClearMatrices();
     theMatrixFunc->FillMatrices(this);
     theMatrixFunc->InvertMatrices();
@@ -1559,8 +1570,7 @@ void EPoint::Calculate(CNuc* theCNuc,const Config &configure, EPoint *parent, in
 	theMatrixFunc->CalculateCrossSection(mappedPoint);
       }
     }
-    delete theMatrixFunc;
-  } 
+  }
   else {
     for(int i = 1; i<=this->NumSubPoints();i++) {
       EPoint *subPoint=this->GetSubPoint(i);
@@ -1572,10 +1582,50 @@ void EPoint::Calculate(CNuc* theCNuc,const Config &configure, EPoint *parent, in
 	    subPoint->Calculate(theCNuc,configure,this,i);
       else subPoint->Calculate(theCNuc,configure);
     }
-    this->IntegrateTargetEffect(configure);
+    this->IntegrateTargetEffectForObservable(configure);
     for(int i=1;i<=this->NumLocalMappedPoints();i++)
-      this->GetLocalMappedPoint(i)->IntegrateTargetEffect(configure);
+      this->GetLocalMappedPoint(i)->IntegrateTargetEffectForObservable(configure);
   }
+}
+
+/*!
+ * Integrates the observable over the target, which is not the same operation
+ * for an analyzing power as for a cross section.
+ *
+ * A_y is a ratio, so averaging it over the target thickness with equal weights
+ * is wrong: the parts of the target where the cross section is large must
+ * count for more. The physically meaningful quantity is the ratio of the
+ * integrated polarized and unpolarized yields,
+ *
+ *   <A_y> = Int A_y(E) sigma(E) dE / Int sigma(E) dE
+ *
+ * which is what a measurement actually returns. Both integrals are done with
+ * the existing yield integrator -- once on sigma, once on the product -- so the
+ * quadrature, straggling and energy-loss treatment stay identical and there is
+ * only one integration scheme to maintain.
+ */
+void EPoint::IntegrateTargetEffectForObservable(const Config& configure) {
+  if(!this->IsAnalyzingPower()) {
+    this->IntegrateTargetEffect(configure);
+    return;
+  }
+
+  const int n = this->NumSubPoints();
+  std::vector<double> sigma(n);
+  for(int i=1;i<=n;i++) sigma[i-1] = this->GetSubPoint(i)->GetFitCrossSection();
+
+  this->IntegrateTargetEffect(configure);
+  const double denominator = this->GetFitCrossSection();
+
+  for(int i=1;i<=n;i++)
+    this->GetSubPoint(i)->SetFitCrossSection(sigma[i-1] *
+                                             this->GetSubPoint(i)->GetAnalyzingPower());
+  this->IntegrateTargetEffect(configure);
+  const double numerator = this->GetFitCrossSection();
+
+  for(int i=1;i<=n;i++) this->GetSubPoint(i)->SetFitCrossSection(sigma[i-1]);
+
+  this->SetFitCrossSection(std::fabs(denominator) > 0.0 ? numerator/denominator : 0.0);
 }
 
 /*!
@@ -1629,6 +1679,12 @@ void EPoint::SetTargetEffectNum(int targetEffectNum) {
  */
 
 void EPoint::AddSubPoint(EPoint subPoint) {
+  // A sub-point is a copy made before the observable was stamped on the parent,
+  // so it has to inherit it here. Without this an analyzing-power segment that
+  // also carries target effects is integrated as though it were a cross
+  // section, and A_y is never computed at all.
+  subPoint.is_analyzing_power_ = this->is_analyzing_power_;
+  subPoint.is_sub_point_ = true;
   integrationPoints_.push_back(subPoint);
 }
 

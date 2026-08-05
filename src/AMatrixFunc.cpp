@@ -1,8 +1,8 @@
 #include "AMatrixFunc.h"
+#include "PolarizationFunc.h"
 #include "CNuc.h"
 #include "Config.h"
 #include "EPoint.h"
-#include "MatrixInv.h"
 #include "AZUREGrad.h"
 #include "Decay.h"
 #include "KGroup.h"
@@ -26,15 +26,38 @@
  */
 
 AMatrixFunc::AMatrixFunc(CNuc* compound, const Config &configure) :
-  compound_(compound), configure_(configure), a_matrices_index_(0), 
+  configure_(&configure), compound_(compound),
   cached_max_levels_(0), cached_max_channels_(0) {}
 
 /*!
- * Returns an A-Matrix element specified by positions in the JGroup and ALevel vectors. 
+ * Returns the A-Matrix of a J-Group, materializing it from the stored
+ * factorization on first use.  Returns an empty matrix if the J-Group has no
+ * usable factorization.
+ */
+
+const matrix_c &AMatrixFunc::GetAMatrix(int jGroupNum) const {
+  static const matrix_c emptyMatrix;
+  if(jGroupNum<1||jGroupNum>(int)solvers_.size()) return emptyMatrix;
+  if(!solver_valid_[jGroupNum-1]) return emptyMatrix;
+  return solvers_[jGroupNum-1].Inverse();
+}
+
+/*!
+ * Returns an A-Matrix element specified by positions in the JGroup and ALevel vectors.
+ * The level numbers are the original ones; they are mapped onto the compacted
+ * indices of the levels actually included in the R-Matrix.
  */
 
 complex AMatrixFunc::GetAMatrixElement(int jGroupNum, int lambdaNum, int muNum) const {
-  return a_matrices_[jGroupNum-1][lambdaNum-1][muNum-1];
+  if(jGroupNum<1||jGroupNum>(int)solvers_.size()) return complex(0.0,0.0);
+  if(!solver_valid_[jGroupNum-1]) return complex(0.0,0.0);
+  const std::vector<int> &map = level_active_index_[jGroupNum-1];
+  if(lambdaNum<1||lambdaNum>=(int)map.size()) return complex(0.0,0.0);
+  if(muNum<1||muNum>=(int)map.size()) return complex(0.0,0.0);
+  const int row=map[lambdaNum];
+  const int col=map[muNum];
+  if(row==0||col==0) return complex(0.0,0.0);
+  return solvers_[jGroupNum-1].Inverse()[row-1][col-1];
 }
 
 /*!
@@ -51,39 +74,57 @@ matrix_c *AMatrixFunc::GetJSpecAInvMatrix(int jGroupNum) {
  */
 
 void AMatrixFunc::ClearMatrices() {
-  a_inv_matrices_.clear();
-  a_matrices_.clear();
   tmatrix_.clear();
   ec_tmatrix_.clear();
+  chan_cap_cache_.clear();
 
   const int numJGroups = compound()->NumJGroups();
-  a_inv_matrices_.resize(numJGroups);
-  a_matrices_.resize(numJGroups);
-  level_active_index_.assign(numJGroups, {});   // reset maps
+
+  // Grow the per-JGroup storage rather than rebuilding it, so an instance reused
+  // across energy points reallocates nothing after its first point.
+  if ((int)a_inv_matrices_.size() != numJGroups) {
+    a_inv_matrices_.resize(numJGroups);
+    solvers_.resize(numJGroups);
+    solver_valid_.resize(numJGroups);
+    level_active_index_.resize(numJGroups);
+    gamma_vectors_.resize(numJGroups);
+    gamma_valid_.resize(numJGroups);
+    channel_solves_.resize(numJGroups);
+    channel_solve_valid_.resize(numJGroups);
+  }
 
   for (int j = 1; j <= numJGroups; ++j) {
+    solver_valid_[j-1] = 0;
     if (!compound()->GetJGroup(j)->IsInRMatrix()) {
       // keep empty placeholders to preserve external indexing
       level_active_index_[j-1].clear();
+      a_inv_matrices_[j-1].clear();
+      gamma_valid_[j-1].clear();
+      channel_solve_valid_[j-1].clear();
       continue;
     }
 
     JGroup* jg = compound()->GetJGroup(j);
     const int numLevels = jg->NumLevels();
+    const int numChannels = jg->NumChannels();
 
     // Build original->active map (1-based for readability in existing code)
-    std::vector<int> map(numLevels + 1, 0);
+    std::vector<int>& map = level_active_index_[j-1];
+    map.assign(numLevels + 1, 0);
     int act = 0;
     for (int la = 1; la <= numLevels; ++la) {
       if (jg->GetLevel(la)->IsInRMatrix()) map[la] = ++act;
     }
-    level_active_index_[j-1] = std::move(map);
 
     // Pre-size to dense (act x act) with zeros; no push_backs later
-    matrix_c M;
+    matrix_c& M = a_inv_matrices_[j-1];
     M.resize(act);
     for (int r = 0; r < act; ++r) M[r].assign(act, complex(0.0, 0.0));
-    a_inv_matrices_[j-1] = std::move(M);
+
+    gamma_vectors_[j-1].resize(numChannels);
+    gamma_valid_[j-1].assign(numChannels, 0);
+    channel_solves_[j-1].resize(numChannels);
+    channel_solve_valid_[j-1].assign(numChannels, 0);
   }
 }
 
@@ -188,25 +229,131 @@ void AMatrixFunc::FillMatrices (EPoint *point) {
 }
 
 /*!
- * This function inverts the inverse A-Matrix to yeild the A-Matrix.
+ * This function factors the inverse A-Matrix of each J-Group.  The A-Matrix
+ * itself is not formed: CalculateTMatrix needs only bilinear forms of it, which
+ * the factorization supplies with one triangular solve per channel, and the
+ * callers that do need individual elements get them from GetAMatrixElement,
+ * which materializes the inverse on demand.
  */
 
 void AMatrixFunc::InvertMatrices() {
-  // Sequential processing to avoid race conditions in matrix data access
-  // The matrix inversions themselves are computationally intensive but the data
-  // structures are not thread-safe for concurrent access
   for(int j=1;j<=compound()->NumJGroups();j++) {
     if(compound()->GetJGroup(j)->IsInRMatrix()) {
       matrix_c *theAInvMatrix = this->GetJSpecAInvMatrix(j);
-      // Add validation to catch corrupted matrices before GSL processing
+      // Add validation to catch corrupted matrices before processing
       if(theAInvMatrix->empty()) {
         continue; // Skip empty matrices
       }
-      MatrixInv matrixInv(*theAInvMatrix);
-      // Use move semantics to avoid matrix copy and assign directly to correct index
-      a_matrices_[j-1] = std::move(matrixInv.inverse());
+      solver_valid_[j-1] = solvers_[j-1].Decompose(*theAInvMatrix) ? 1 : 0;
+      // Anything derived from the previous factorization is now stale.
+      gamma_valid_[j-1].assign(gamma_valid_[j-1].size(),0);
+      channel_solve_valid_[j-1].assign(channel_solve_valid_[j-1].size(),0);
     }
   }
+  chan_cap_cache_.clear();
+}
+
+/*!
+ * Returns the reduced widths of one channel over the active levels of a J-Group.
+ * Widths below 1e-12 are zeroed so that the bilinear form reproduces, term for
+ * term, the level pairs the explicit double loop used to skip.
+ */
+
+const vector_r &AMatrixFunc::GetGammaVector(int jGroupNum, int chNum) {
+  vector_r &gammas = gamma_vectors_[jGroupNum-1][chNum-1];
+  if(!gamma_valid_[jGroupNum-1][chNum-1]) {
+    JGroup *jGroup = compound()->GetJGroup(jGroupNum);
+    const std::vector<int> &map = level_active_index_[jGroupNum-1];
+    gammas.assign(solvers_[jGroupNum-1].size(),0.0);
+    for(int la=1;la<(int)map.size();la++) {
+      const int row=map[la];
+      if(row==0) continue;
+      double gamma=jGroup->GetLevel(la)->GetFitGamma(chNum);
+      if(fabs(gamma)<1.0e-12) continue;
+      gammas[row-1]=gamma;
+    }
+    gamma_valid_[jGroupNum-1][chNum-1]=1;
+  }
+  return gammas;
+}
+
+/*!
+ * Returns A times the reduced-width vector of one channel, cached for the
+ * duration of the energy point.  Every pathway sharing an exit channel reuses
+ * the same solve, which is what replaces the old per-pathway double loop.
+ */
+
+const vector_c &AMatrixFunc::GetChannelSolve(int jGroupNum, int chNum) {
+  vector_c &solve = channel_solves_[jGroupNum-1][chNum-1];
+  if(!channel_solve_valid_[jGroupNum-1][chNum-1]) {
+    const vector_r &gammas = this->GetGammaVector(jGroupNum,chNum);
+    const int n = (int)gammas.size();
+    solve.resize(n);
+    for(int i=0;i<n;i++) solve[i]=gammas[i];
+    if(n>0) solvers_[jGroupNum-1].Solve(&solve[0]);
+    channel_solve_valid_[jGroupNum-1][chNum-1]=1;
+  }
+  return solve;
+}
+
+/*!
+ * The level matrix is complex symmetric, so A is too and the bilinear form may
+ * contract either index with the cached solve.
+ */
+
+complex AMatrixFunc::GetUBilinear(int jGroupNum, int chNum, int chpNum) {
+  if(jGroupNum<1||jGroupNum>(int)solvers_.size()) return complex(0.0,0.0);
+  if(!solver_valid_[jGroupNum-1]) return complex(0.0,0.0);
+  // Fill the solve cache first: it populates the gamma cache for chpNum, so
+  // taking the chNum reference afterwards keeps it clear that nothing can move
+  // out from under it.
+  const vector_c &solve = this->GetChannelSolve(jGroupNum,chpNum);
+  const vector_r &gammas = this->GetGammaVector(jGroupNum,chNum);
+  complex sum(0.0,0.0);
+  for(size_t i=0;i<solve.size();i++) sum+=gammas[i]*solve[i];
+  return sum;
+}
+
+/*!
+ * Channel capture excludes levels with a negligible width in the internal
+ * channel from both indices, which is a mask on the level set rather than the
+ * per-channel cutoff, so this path builds its vectors fresh.  Results are
+ * memoized because the same pathway recurs across k-groups.
+ */
+
+complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chpNum,
+                                               int maskChannel) {
+  if(jGroupNum<1||jGroupNum>(int)solvers_.size()) return complex(0.0,0.0);
+  for(size_t i=0;i<chan_cap_cache_.size();i++) {
+    const ChanCapEntry &entry = chan_cap_cache_[i];
+    if(entry.jGroupNum==jGroupNum&&entry.chNum==chNum&&
+       entry.chpNum==chpNum&&entry.maskChannel==maskChannel) return entry.value;
+  }
+  complex value(0.0,0.0);
+  if(solver_valid_[jGroupNum-1]) {
+    JGroup *jGroup = compound()->GetJGroup(jGroupNum);
+    const std::vector<int> &map = level_active_index_[jGroupNum-1];
+    const int n = solvers_[jGroupNum-1].size();
+    chan_cap_entrance_.assign(n,complex(0.0,0.0));
+    chan_cap_exit_.assign(n,complex(0.0,0.0));
+    for(int la=1;la<(int)map.size();la++) {
+      const int row=map[la];
+      if(row==0) continue;
+      ALevel *level=jGroup->GetLevel(la);
+      if(maskChannel&&fabs(level->GetFitGamma(maskChannel))<1.0e-8) continue;
+      chan_cap_entrance_[row-1]=level->GetFitGamma(chNum);
+      chan_cap_exit_[row-1]=level->GetFitGamma(chpNum);
+    }
+    value=solvers_[jGroupNum-1].Bilinear(chan_cap_entrance_,chan_cap_exit_);
+  }
+  ChanCapEntry entry;
+  entry.jGroupNum=jGroupNum;
+  entry.chNum=chNum;
+  entry.chpNum=chpNum;
+  entry.maskChannel=maskChannel;
+  entry.value=value;
+  chan_cap_cache_.push_back(entry);
+  return value;
 }
 
 /*!
@@ -260,33 +407,9 @@ void AMatrixFunc::CalculateTMatrix(EPoint *point) {
 	complex sqrtPenEx = point->GetSqrtPenetrability(jNum,chpNum);
 	
 	complex uphase = coulombPhaseEn * hardSpherePhaseEn * coulombPhaseEx * hardSpherePhaseEx;
-	complex umatrix(0.,0.);
-	
-	int numLevels = theJGroup->NumLevels();
-	for(int la=1;la<=numLevels;la++) {
-	  if(theJGroup->GetLevel(la)->IsInRMatrix()) {
-	    ALevel *level=theJGroup->GetLevel(la);
-	    double gammaEn = level->GetFitGamma(chNum);
-	    
-	    // Skip if entrance gamma is effectively zero
-	    if(fabs(gammaEn) < 1.0e-12) continue;
-	    
-	    for(int lap=1;lap<=numLevels;lap++) {
-	      if(theJGroup->GetLevel(lap)->IsInRMatrix()) {
-		ALevel *levelp=theJGroup->GetLevel(lap);
-		double gammaEx = levelp->GetFitGamma(chpNum);
-		
-		// Skip if exit gamma is effectively zero
-		if(fabs(gammaEx) < 1.0e-12) continue;
-		
-		umatrix+=2.0*complex(0.0,1.0)*
-		  sqrtPenEn * sqrtPenEx *
-		  gammaEn * gammaEx *
-		  this->GetAMatrixElement(jNum,la,lap);
-	      }
-	    }
-	  }
-	}
+	complex umatrix = 2.0*complex(0.0,1.0) * sqrtPenEn * sqrtPenEx *
+	  this->GetUBilinear(jNum,chNum,chpNum);
+
 	complex tphase = coulombPhaseEn * coulombPhaseEn;
 	complex tmatrix;
 	if(isRMC) this->AddTMatrixElement(k,m,complex(0.0,-1.0)*umatrix,ir);
@@ -317,30 +440,12 @@ void AMatrixFunc::CalculateTMatrix(EPoint *point) {
 	  int internalChannel=theECMGroup->GetIntChannelNum();
 	  MGroup *chanMGroup=compound()->GetPair(aa)->GetDecay(theECMGroup->GetChanCapDecay())
 	    ->GetKGroup(theECMGroup->GetChanCapKGroup())->GetMGroup(theECMGroup->GetChanCapMGroup());
-	  AChannel *chanEntranceChannel=compound()->GetJGroup(chanMGroup->GetJNum())
-	    ->GetChannel(chanMGroup->GetChNum());
-	  AChannel *chanExitChannel=compound()->GetJGroup(chanMGroup->GetJNum())
-	    ->GetChannel(chanMGroup->GetChpNum());
-	  complex umatrix(0.,0.);
-	  for(int la=1;la<=compound()->GetJGroup(chanMGroup->GetJNum())->NumLevels();la++) {
-	    if(compound()->GetJGroup(chanMGroup->GetJNum())->GetLevel(la)->IsInRMatrix()) {
-	      ALevel *level=compound()->GetJGroup(chanMGroup->GetJNum())->GetLevel(la);
-	      if(internalChannel && (configure().paramMask & Config::IGNORE_ZERO_WIDTHS))
-		if(fabs(level->GetFitGamma(internalChannel))<1.0e-8) continue;
-	      for(int lap=1;lap<=compound()->GetJGroup(chanMGroup->GetJNum())->NumLevels();lap++) {
-		if(compound()->GetJGroup(chanMGroup->GetJNum())->GetLevel(lap)->IsInRMatrix()) {
-		  ALevel *levelp=compound()->GetJGroup(chanMGroup->GetJNum())->GetLevel(lap);
-		  if(internalChannel && (configure().paramMask & Config::IGNORE_ZERO_WIDTHS))
-		    if(fabs(levelp->GetFitGamma(internalChannel))<1.0e-8) continue;
-		  umatrix+=2.0*complex(0.0,1.0)*
-		    point->GetSqrtPenetrability(chanMGroup->GetJNum(),chanMGroup->GetChNum())*
-		    level->GetFitGamma(chanMGroup->GetChNum())*
-		    levelp->GetFitGamma(chanMGroup->GetChpNum())*
-		    this->GetAMatrixElement(chanMGroup->GetJNum(),la,lap);
-		}
-	      }
-	    }
-	  }
+	  int maskChannel = (configure().paramMask & Config::IGNORE_ZERO_WIDTHS) ?
+	    internalChannel : 0;
+	  complex umatrix=2.0*complex(0.0,1.0)*
+	    point->GetSqrtPenetrability(chanMGroup->GetJNum(),chanMGroup->GetChNum())*
+	    this->GetChannelCaptureBilinear(chanMGroup->GetJNum(),chanMGroup->GetChNum(),
+	                                    chanMGroup->GetChpNum(),maskChannel);
 	  tmatrix=tmatrix*umatrix;
 	}
 	this->AddECTMatrixElement(k,m,tmatrix);
@@ -374,27 +479,6 @@ void AMatrixFunc::AddAInvMatrixElement(int jGroupNum, int lambdaNum, int muNum, 
 
   // Direct assignment into pre-sized dense matrix
   a_inv_matrices_[jGroupNum-1][row-1][col-1] = aMatrixElement;
-}
-
-/*!
- * This function adds an entire A-Matrix to a vector.
- */
-
-void AMatrixFunc::AddAMatrix(matrix_c aMatrix) {
-  // This method is now primarily used for backward compatibility
-  // Direct indexing in InvertMatrices() is preferred for thread safety
-  if(a_matrices_index_ < a_matrices_.size()) {
-    a_matrices_[a_matrices_index_] = aMatrix;
-    a_matrices_index_++;
-  }
-}
-
-void AMatrixFunc::AddAMatrix(matrix_c&& aMatrix) {
-  // Move semantics version - avoids copying large matrices
-  if(a_matrices_index_ < a_matrices_.size()) {
-    a_matrices_[a_matrices_index_] = std::move(aMatrix);
-    a_matrices_index_++;
-  }
 }
 
 /*!
@@ -438,7 +522,11 @@ bool AMatrixFunc::PointAdjoint(EPoint* point, double fitBar, GradAccum& accum,
 
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
   int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
-  if(compound()->GetPair(aa)->GetPType() == 20) return false;  // 25|T|^2 branch
+  // Beta-delayed particle emission is supported below; its observable is a plain
+  // incoherent sum over pathways, so only the T cotangents differ from the
+  // cross-section case. E1/E2 component selection has no meaning for it.
+  const bool isBetaDelayed = (compound()->GetPair(aa)->GetPType() == 20);
+  if(isBetaDelayed && xsComponent != 0) return false;
 
   // Active-level compaction unsupported here: require every level of every
   // in-R-matrix JGroup to itself be in the R matrix (so original idx == active).
@@ -502,7 +590,47 @@ bool AMatrixFunc::PointAdjoint(EPoint* point, double fitBar, GradAccum& accum,
     return ecg->GetRadType() == 'E' && ecg->GetMult() == xsComponent;
   };
 
-  if(isPhase) {
+  if(isBetaDelayed) {
+    // ---- Beta-delayed particle emission. GenMatrixFunc forms
+    //        sum = sum_{k,m} 25 |T(k,m)|^2 ,   model = Re(sum)/100
+    //      with no geometrical or spin factor and no external-capture term --
+    //      an incoherent sum over pathways, with no interference between them.
+    //      Hence d(model)/dT*(k,m) = (25/100) T(k,m), and the factor of two is
+    //      the cotangent convention used throughout this function. ----
+    for(int k = 1; k <= nK; k++)
+      for(int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++)
+        tBar[k-1][m-1] += fitBar * (2.0 * 25.0 / 100.0) * this->GetTMatrixElement(k, m);
+  } else if(point->IsAnalyzingPower()) {
+    // ---- Vector analyzing power. A_y is built from the channel-spin amplitude
+    //      matrix, which is linear in T(k,m) with the coefficients AddPathway
+    //      applies, so the whole derivative is a contraction against those same
+    //      coefficients. The Coulomb amplitude carries no parameter dependence
+    //      and drops out. ----
+    if(point->NumSubPoints() > 0) return false;   // see the note below
+    if(compound()->GetPair(aa)->GetPType() != 0 ||
+       compound()->GetPair(exitPairNum)->GetPType() != 0) return false;
+
+    Polarization::AmplitudeMatrix M(compound(), point, aa, exitPairNum);
+    for(int k = 1; k <= nK; k++) {
+      for(int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+        MGroup* mg = theDecay->GetKGroup(k)->GetMGroup(m);
+        M.AddPathway(mg->GetJNum(), mg->GetChNum(), mg->GetChpNum(),
+                     this->GetTMatrixElement(k, m));
+      }
+    }
+    if(aa == exitPairNum) M.AddCoulomb(point->GetCoulombAmplitude());
+    if(M.size() == 0) return false;
+
+    const std::vector<complex> bar = M.AnalyzingPowerBar();
+    for(int k = 1; k <= nK; k++) {
+      for(int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+        MGroup* mg = theDecay->GetKGroup(k)->GetMGroup(m);
+        if(!includeInternal(mg)) continue;
+        tBar[k-1][m-1] += fitBar * M.PathwayAdjoint(mg->GetJNum(), mg->GetChNum(),
+                                                    mg->GetChpNum(), bar);
+      }
+    }
+  } else if(isPhase) {
     // ---- Phase shift: model = (90/pi) * arg(U) [+ const for identical pairs],
     //      U = sum_{matching k,m} (expCP^2 - T(k,m)) / expCP^2, matched by
     //      (J, l, elastic channel) = (segment J, segment L). ----
@@ -854,7 +982,7 @@ bool AMatrixFunc::PointAdjoint(EPoint* point, double fitBar, GradAccum& accum,
   for(int jNum = 1; jNum <= compound()->NumJGroups(); jNum++) {
     if(!aBarUsed[jNum-1]) continue;
     JGroup* jg = compound()->GetJGroup(jNum);
-    const matrix_c& A = a_matrices_[jNum-1];
+    const matrix_c& A = this->GetAMatrix(jNum);
     const matrix_c& Ab = aBar[jNum-1];
     int n = (int)A.size();
     if(n == 0) continue;

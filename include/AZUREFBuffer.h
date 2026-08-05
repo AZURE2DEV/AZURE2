@@ -24,13 +24,13 @@ class AZUREFBuffer {
     entrancekey_=entranceKey;
     exitkey_=exitKey;
     if(exitkey_==-1) {
-      if(!isExtrap) sprintf(filename,"%sAZUREOut_aa=%d_TOTAL_CAPTURE.out",outputdir.c_str(),entranceKey);
-      else sprintf(filename,"%sAZUREOut_aa=%d_TOTAL_CAPTURE.extrap",outputdir.c_str(),entranceKey);
+      if(!isExtrap) snprintf(filename, sizeof(filename),"%sAZUREOut_aa=%d_TOTAL_CAPTURE.out",outputdir.c_str(),entranceKey);
+      else snprintf(filename, sizeof(filename),"%sAZUREOut_aa=%d_TOTAL_CAPTURE.extrap",outputdir.c_str(),entranceKey);
     } else {
-      if(!isExtrap) sprintf(filename,"%sAZUREOut_aa=%d_R=%d.out",outputdir.c_str(),entranceKey,exitKey);
+      if(!isExtrap) snprintf(filename, sizeof(filename),"%sAZUREOut_aa=%d_R=%d.out",outputdir.c_str(),entranceKey,exitKey);
       else {
-	if(!isAngDist) sprintf(filename,"%sAZUREOut_aa=%d_R=%d.extrap",outputdir.c_str(),entranceKey,exitKey);
-	else sprintf(filename,"%sAZUREOut_aa=%d_R=%d.acoeff",outputdir.c_str(),entranceKey,exitKey);
+	if(!isAngDist) snprintf(filename, sizeof(filename),"%sAZUREOut_aa=%d_R=%d.extrap",outputdir.c_str(),entranceKey,exitKey);
+	else snprintf(filename, sizeof(filename),"%sAZUREOut_aa=%d_R=%d.acoeff",outputdir.c_str(),entranceKey,exitKey);
       }
     }
     fbuffer_=new std::filebuf;

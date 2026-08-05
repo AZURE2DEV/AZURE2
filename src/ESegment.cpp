@@ -3,6 +3,8 @@
 #include "DataLine.h"
 #include "EData.h"
 #include "ESegment.h"
+#include <cstdio>
+#include <cstdlib>
 #include "ExtrapLine.h"
 #include "SegLine.h"
 
@@ -27,9 +29,15 @@ ESegment::ESegment(SegLine segLine) {
   // (0 angle-integrated, 1 differential, ...). See docs/THM_IMPLEMENTATION.md.
   isTHM_ = (segLine.isDiff()>=10);
   int diff = isTHM_ ? segLine.isDiff()-10 : segLine.isDiff();
-  if(diff==1 || diff==4) isdifferential_=true;
+  // isDiff 7 is the vector analyzing power: differential in the centre-of-mass
+  // frame, so it needs the same angular machinery as a differential cross
+  // section even though the quantity itself is a dimensionless ratio. It is
+  // tested against the offset-stripped code, so it composes with THM the way
+  // every other observable does.
+  isAnalyzingPower_ = (diff==7);
+  if(diff==1 || diff==4 || diff==7) isdifferential_=true;
   else isdifferential_=false;
-  if(diff==4) iscmdifferential_=true;
+  if(diff==4 || diff==7) iscmdifferential_=true;
   else iscmdifferential_=false;
   if(diff==2) {
     isphase_=true;
@@ -95,9 +103,10 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   // SegLine constructor above and docs/THM_IMPLEMENTATION.md).
   isTHM_ = (extrapLine.isDiff()>=10);
   int diff = isTHM_ ? extrapLine.isDiff()-10 : extrapLine.isDiff();
-  if(diff==1 || diff==5) isdifferential_=true;
+  isAnalyzingPower_ = (diff==7);
+  if(diff==1 || diff==5 || diff==7) isdifferential_=true;
   else isdifferential_=false;
-  if(diff==5) iscmdifferential_=true;
+  if(diff==5 || diff==7) iscmdifferential_=true;
   else iscmdifferential_=false;
   if(diff==2) {
     isphase_=true;
@@ -576,6 +585,35 @@ void ESegment::SetLastEnergyShift(double lastEnergyShift) {
   lastEnergyShift_=lastEnergyShift;
 }
 
+namespace {
+
+/*!
+ * Applies an energy shift to a point energy.
+ *
+ * The only thing guarded here is that the result stays strictly positive: the
+ * lab->CM conversions and the Coulomb functions are undefined at or below zero.
+ * The floor is a fixed fraction of the point's own energy, so it can only ever
+ * engage for a shift large enough to push the point through threshold -- for
+ * every physically meaningful shift the mapping is the exact identity plus the
+ * shift, and therefore continuous in it.
+ *
+ * This used to be an absolute 0.01 MeV floor, which silently snapped *every*
+ * data point below 10 keV onto the same energy the moment a segment's shift
+ * became non-zero.  Since the update is skipped entirely while the shift is
+ * still zero, that turned chi^2 into a step function of the shift for any data
+ * set reaching below 10 keV (3H+d, 3He+d, ...): an infinitesimal shift moved
+ * chi^2 by thousands, the finite-difference gradient was meaningless, and the
+ * fit either froze at its starting point or ran away.
+ */
+double ShiftedEnergy(double originalEnergy, double shift) {
+  static const double kMinEnergyFraction = 1.e-6;
+  double shifted = originalEnergy + shift;
+  double floorEnergy = originalEnergy*kMinEnergyFraction;
+  return (shifted < floorEnergy) ? floorEnergy : shifted;
+}
+
+}  // namespace
+
 /*!
  * Updates the energies of all points in this segment based on the current energy shift.
  */
@@ -588,19 +626,7 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
     EPoint* point = GetPoint(i+1);
     if(point && point->GetOriginalEnergy() > 0) {
       double originalEnergy = point->GetOriginalEnergy();
-      double shiftedEnergy = originalEnergy + energyShift_;
-
-      // Don't allow energies below 0.01 MeV (AZURE2 may crash)
-      if(shiftedEnergy < 0.01) {
-        /*
-        std::cerr << "Warning: Energy shift in segment " << GetSegmentKey()
-                  << " would result in point energy below 0.01 MeV. "
-                  << "Setting point energy to 0.01 MeV instead." << std::endl;
-                  */
-        // FIX: we do not want to change the energy so abruptly, so leave the last shifted energy
-        //shiftedEnergy = originalEnergy;
-        continue;
-      }
+      double shiftedEnergy = ShiftedEnergy(originalEnergy, energyShift_);
 
       // Set the shifted energy
       point->SetLabEnergy(shiftedEnergy);
@@ -660,12 +686,7 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
           if(subPoint && subPoint->GetOriginalEnergy() > 0) {
             double subOriginalEnergy = subPoint->GetOriginalEnergy();
             double energyShiftCM = (entrancePair->GetM(2))/(entrancePair->GetM(1)+entrancePair->GetM(2)) * energyShift_;
-            double subShiftedEnergy = subOriginalEnergy + energyShiftCM;
-
-            // Apply same energy limit check
-            if(subShiftedEnergy < 0.01) {
-              continue;
-            }
+            double subShiftedEnergy = ShiftedEnergy(subOriginalEnergy, energyShiftCM);
 
             // Set the shifted energy for subpoint
             // Must set both CM and Lab energy since CalcLegendreP uses GetLabEnergy() for Q-coefficients
@@ -728,6 +749,9 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
  */
 
 void ESegment::AddPoint(EPoint point) {
+  // The observable is a property of the segment; stamp it on the point so the
+  // calculation does not have to look back up.
+  point.SetIsAnalyzingPower(this->IsAnalyzingPower());
   points_.push_back(point);
 }
 

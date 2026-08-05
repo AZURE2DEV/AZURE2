@@ -106,6 +106,19 @@ bool AZURESocket::sendPacket( const std::string& response ) {
 // ---------------------------------------------------------------------------
 
 bool AZURESocket::start() {
+#ifdef _WIN32
+  // Winsock has to be initialised before any socket call; without this every
+  // call fails with WSANOTINITIALISED. Reference-counted by the OS, so the
+  // matching WSACleanup() below balances it.
+  WSADATA wsaData;
+  int wsaResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+  if (wsaResult != 0) {
+    std::cerr << "Error initializing Winsock (WSAStartup returned "
+              << wsaResult << ")." << std::endl;
+    return false;
+  }
+#endif
+
   // Create socket
   serverSocket_ = socket(AF_INET, SOCK_STREAM, 0);
   if (serverSocket_ == -1) {
@@ -174,6 +187,10 @@ bool AZURESocket::start() {
 
   close(serverSocket_);
   serverSocket_ = -1;
+
+#ifdef _WIN32
+  WSACleanup();
+#endif
 
   return true;
 }
@@ -287,8 +304,7 @@ void AZURESocket::handle( const vector_r& request ) {
     case 14: {
       // params = [idx, radius]
       double radius = ( nargs >= 2 ) ? request[2] : 0.0;
-      api_->SetRadius( idx, radius );
-      sendPacket( std::vector<bool>{ true } );
+      sendPacket( std::vector<bool>{ api_->SetRadius( idx, radius ) } );
       break;
     }
 
@@ -399,6 +415,11 @@ void AZURESocket::handle( const vector_r& request ) {
       sendPacket( api_->GetParameterInfo( ) );
       break;
 
+    // Get structured per-pair metadata (spins, parities, entrance flag, ...)
+    case 38:
+      sendPacket( api_->GetPairsInfo( ) );
+      break;
+
     // Value + analytic gradient of the (data) chi-squared.
     // Response: [chi2, d(chi2)/dp_0, ..., d(chi2)/dp_{n-1}].
     case 41:
@@ -409,6 +430,38 @@ void AZURESocket::handle( const vector_r& request ) {
     // Response: [nRes, nCols, residuals..., J row-major].
     case 42:
       sendPacket( api_->CalculateResidualJacobianRWA( params ) );
+      break;
+
+    // Per-point d(model)/d(theta) for covariance uncertainty bands, over the
+    // free R-matrix parameters (the columns covariance.dat spans).
+    // Response: [nSegments, nCols, nPoints per segment..., G row-major].
+    case 43:
+      sendPacket( api_->CalculateModelGradientsRWA( params ) );
+      break;
+
+    // Get the angular-distribution (Legendre) coefficients of a segment
+    case 44:
+      sendPacket( api_->calculated_angular_dists( idx ) );
+      break;
+
+    // Coulomb wave functions on a requested energy grid.
+    // Request:  [pairKey, l, radius, nE, E...]
+    // Response: [nE, then per energy F, dF, G, dG, P, S, deltaHS].
+    case 45:
+      sendPacket( api_->GetCoulombFunctions( params ) );
+      break;
+
+    // External-capture radial integrals on a requested energy grid.
+    // Request:  [pairKey, nE, E...]
+    // Response: [nPathways, nE, then per pathway 6 descriptors + 2*nE values].
+    case 46:
+      sendPacket( api_->GetECIntegrals( params ) );
+      break;
+
+    // Coulomb-function cache counters.
+    // Response: [queries, hits, entries, keys, disabledKeys, threads].
+    case 47:
+      sendPacket( api_->GetCacheStats( ) );
       break;
 
     default:

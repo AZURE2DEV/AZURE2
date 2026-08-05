@@ -33,9 +33,13 @@ class ExtrapLine {
     Ic_ = 0.0;
     delta_ = 0.0;
 
-    // Try to read advanced segment data from the remaining line
+    // Try to read advanced segment data from the remaining line. The fields
+    // above are the whole line for a plain segment, so the stream is already at
+    // eof here; getline would then set failbit and the caller reads that as a
+    // malformed line, silently rejecting a perfectly valid segment. Only read
+    // when something is actually left.
     std::string dummyString;
-    getline(stream, dummyString);
+    if(!stream.eof()) getline(stream, dummyString);
 
     if(!dummyString.empty()) {
       std::istringstream advancedStream(dummyString);

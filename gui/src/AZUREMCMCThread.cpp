@@ -146,19 +146,26 @@ void AZUREMCMCWorker::run() {
         std::vector<double> priorStds;
         std::vector<bool> usePriors;
         
-        for(int i = 0; i < mcmcTab_->parametersTable->rowCount(); i++) {
-            // Get parameter value
-            double value = mcmcTab_->parametersTable->item(i, 1)->text().toDouble();
-            initialParams.push_back(value);
-            
-            // Get prior information
-            double priorMean = mcmcTab_->parametersTable->item(i, 2)->text().toDouble();
-            double priorStd = mcmcTab_->parametersTable->item(i, 3)->text().toDouble();
-            bool usePrior = (mcmcTab_->parametersTable->item(i, 4)->checkState() == Qt::Checked);
-            
-            priorMeans.push_back(priorMean);
-            priorStds.push_back(priorStd);
-            usePriors.push_back(usePrior);
+        // Read the parameter list, not the table. The table shows only the level
+        // energies and widths; the sampled vector must cover every varying
+        // parameter in AZUREParams order, normalizations and energy shifts
+        // included, or the mapping onto the model silently shifts. The priors
+        // supplied here for norms and shifts are placeholders -- BuildAutoPriors()
+        // replaces them with values derived from the segment errors.
+        for(const MCMCParameter& param : mcmcTab_->parameters()) {
+            initialParams.push_back(param.value);
+            priorMeans.push_back(param.priorMean);
+            priorStds.push_back(param.priorStd);
+            usePriors.push_back(param.useGaussianPrior);
+        }
+
+        if(initialParams.empty()) {
+            emit samplingError("No parameters loaded. Use \"Load Physical Parameters\" or "
+                               "\"Load RWA Parameters\" in the MCMC tab first.");
+            delete mcmcCalculator;
+            delete data;
+            delete compound;
+            return;
         }
         
         // Set priors in MCMC calculator
@@ -168,6 +175,7 @@ void AZUREMCMCWorker::run() {
         int nWalkers = mcmcTab_->nWalkersSpinBox->value();
         int nSteps = mcmcTab_->nStepsSpinBox->value();
         double chainSpread = mcmcTab_->chainSpreadSpinBox->value();
+        double energySpreadKeV = mcmcTab_->energySpreadSpinBox->value();
         int nThreads = mcmcTab_->nThreadsSpinBox->value();
         bool freshStart = mcmcTab_->freshStartCheckBox->isChecked();
         
@@ -181,8 +189,10 @@ void AZUREMCMCWorker::run() {
             }
         }
         
-        emit logMessage(QString("Starting MCMC sampling with %1 walkers, %2 steps, %3 threads")
-                       .arg(nWalkers).arg(nSteps).arg(nThreads));
+        emit logMessage(QString("Starting MCMC sampling with %1 walkers, %2 steps, %3 threads, "
+                                "%4%5 spread (%6 keV for level energies)")
+                       .arg(nWalkers).arg(nSteps).arg(nThreads)
+                       .arg(chainSpread).arg("%").arg(energySpreadKeV));
         
         // Run MCMC sampling using existing method with progress monitoring
         emit logMessage("Starting MCMC sampling...");
@@ -225,11 +235,11 @@ void AZUREMCMCWorker::run() {
             if (useReducedWidths) {
                 // Use reduced width amplitudes (RWA) for fitting
                 emit logMessage("Running MCMC with reduced width amplitudes...");
-                mcmcCalculator->RunMCMCSampling(nWalkers, nSteps, initialParams, samples, chainSpread, nThreads, true);
+                mcmcCalculator->RunMCMCSampling(nWalkers, nSteps, initialParams, samples, chainSpread, nThreads, true, energySpreadKeV);
             } else {
                 // Use physical parameters for fitting
                 emit logMessage("Running MCMC with physical parameters...");
-                mcmcCalculator->RunMCMCSampling(nWalkers, nSteps, initialParams, samples, chainSpread, nThreads, false);
+                mcmcCalculator->RunMCMCSampling(nWalkers, nSteps, initialParams, samples, chainSpread, nThreads, false, energySpreadKeV);
             }
             
             emit logMessage(QString("MCMC sampling completed! Generated %1 samples")

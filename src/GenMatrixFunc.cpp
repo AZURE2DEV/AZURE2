@@ -1,7 +1,10 @@
 #include "AngCoeff.h"
 #include "CNuc.h"
 #include "EPoint.h"
+#include <cstdio>
+#include <cstdlib>
 #include "GenMatrixFunc.h"
+#include "PolarizationFunc.h"
 #include <assert.h>
 #include <iostream>
 
@@ -351,8 +354,34 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
 	if(entrancePair->IsIdentical() && phase<0.0) phase+=180.0;
       }
       point->SetFitCrossSection(phase);
-    }
   }
+    }
+  
+  // An analyzing-power segment reports A_y in place of the cross section, so
+  // the rest of AZURE2 -- output files, chi-squared, plotting -- needs no
+  // special case.
+  if (point->IsAnalyzingPower()) {
+    double spinSum = 0.0, ay = 0.0;
+    if (!this->CalculateAmplitudeMatrix(point, &spinSum, &ay)) ay = 0.0;
+    point->SetAnalyzingPower(ay);
+    // A sub-point of a target-effect integration must keep the cross section
+    // in place, because A_y is averaged over the target weighted by it. Every
+    // other point reports A_y directly, so nothing downstream needs a special
+    // case.
+    if (!point->IsSubPoint()) point->SetFitCrossSection(ay);
+  }
+
+  // Temporary validation hook: compare the Seyler amplitude-matrix route
+  // against the Blatt-Biedenharn one. At fixed energy the ratio must be
+  // constant in angle.
+  if (std::getenv("AZURE2_POL_DEBUG")) {
+    double spinSum = 0.0, ay = 0.0;
+    if (this->CalculateAmplitudeMatrix(point, &spinSum, &ay)) {
+      std::printf("POLDEBUG %.6f %.6f %.10e %.10e %.6f\n",
+                  point->GetCMEnergy(), point->GetCMAngle(),
+                  point->GetFitCrossSection(), spinSum, ay);
+    }
+}
   
 }
 
@@ -542,4 +571,46 @@ double GenMatrixFunc::GetRk(double j2f, double finalL, double finalLp, double Ic
     pow(-1.,j2f-Ic+finalL-finalLp+lOrder+1)*
     angCoeff.ClebGord(finalLp,finalL,lOrder,1.,-1.,0.)*
     angCoeff.Racah(finalL,finalLp,j2f,j2f,lOrder,Ic);
+}
+
+
+bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint* point, double* spinSum,
+                                             double* analyzingPower) {
+  if (spinSum) *spinSum = 0.0;
+  if (analyzingPower) *analyzingPower = 0.0;
+
+  const int aaPair = compound()->GetPairNumFromKey(point->GetEntranceKey());
+  const int irPair = compound()->GetPairNumFromKey(point->GetExitKey());
+  // Particle channels only; capture needs Seyler and Weller instead.
+  if (compound()->GetPair(aaPair)->GetPType() != 0 ||
+      compound()->GetPair(irPair)->GetPType() != 0) return false;
+
+  int ir = 0;
+  while (ir < compound()->GetPair(aaPair)->NumDecays()) {
+    ir++;
+    if (compound()->GetPair(aaPair)->GetDecay(ir)->GetPairNum() == irPair) break;
+  }
+  if (ir > compound()->GetPair(aaPair)->NumDecays()) return false;
+  Decay* theDecay = compound()->GetPair(aaPair)->GetDecay(ir);
+
+  Polarization::AmplitudeMatrix M(compound(), point, aaPair, irPair);
+
+  for (int k = 1; k <= theDecay->NumKGroups(); k++) {
+    for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+      MGroup* g = theDecay->GetKGroup(k)->GetMGroup(m);
+      M.AddPathway(g->GetJNum(), g->GetChNum(), g->GetChpNum(),
+                   this->GetTMatrixElement(k, m));
+    }
+  }
+
+  // Coulomb only contributes to elastic scattering.
+  if (aaPair == irPair) M.AddCoulomb(point->GetCoulombAmplitude());
+
+  if (M.size() == 0) return false;
+  if (std::getenv("AZURE2_POL_DEBUG2")) M.DumpSpinHalf();
+  if (std::getenv("AZURE2_POL_DEBUG2"))
+    std::printf("FLIP n=%zu maxflip=%.6e\n", M.size(), M.MaxSpinFlip());
+  if (spinSum) *spinSum = M.UnpolarizedCrossSection();
+  if (analyzingPower) *analyzingPower = M.AnalyzingPowerAy();
+  return true;
 }

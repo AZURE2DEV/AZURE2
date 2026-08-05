@@ -13,6 +13,7 @@
 class InfoDialog;
 class LevelsTab;
 class SegmentsTab;
+class Config;
 
 struct FittingParameter {
   QString name;
@@ -58,6 +59,10 @@ class FittingTab : public QWidget {
   void populateFromCurrentGUIState();
   void setTabReferences(LevelsTab* levelsTab, SegmentsTab* segmentsTab);
 
+ protected:
+  void showEvent(QShowEvent* event) override;
+  void setConfig(Config* config) { config_ = config; }
+
  public slots:
   void showInfo(int which=0, QString title="");
 
@@ -65,7 +70,6 @@ class FittingTab : public QWidget {
   void parameterItemChanged(QTableWidgetItem* item);
   void loadSettings();
   void refreshParameters();
-  void populateWignerLimits();
   void clearLimits();
   void onSegmentNormalizationChanged(int segmentIndex, double value);
   void onSegmentEnergyShiftChanged(int segmentIndex, double value);
@@ -78,6 +82,8 @@ class FittingTab : public QWidget {
   void setupParameterTable(QTableWidget* table, const QString& title);
   void addParameterRow(QTableWidget* table, const FittingParameter& param);
   void updateParameterFromTable(const QString& paramName, int column, const QVariant& value);
+  void syncSegmentVaryStates();
+  void assignMinuitIndices();
   void updateParameterInOtherTabs(const QString& paramName, const FittingParameter& param);
   void updateParameterTableValue(const QString& paramName, double value);
   void updateParameterTableError(const QString& paramName, double error);
@@ -100,7 +106,6 @@ class FittingTab : public QWidget {
   
   QPushButton* refreshButton;
   QPushButton* loadButton;
-  QPushButton* populateWignerLimitsButton;
   QPushButton* clearLimitsButton;
   
   QSignalMapper* mapper;
@@ -114,6 +119,7 @@ class FittingTab : public QWidget {
   // Tab references for reading current GUI state
   LevelsTab* levelsTab_;
   SegmentsTab* segmentsTab_;
+  Config* config_ = nullptr;   // for the current .azr path (backup on load)
 };
 
 #endif

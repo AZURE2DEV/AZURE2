@@ -1,14 +1,15 @@
 set(AZURE2_SOURCES AChannel.cpp CoulFunc.cpp CoulFuncCache.cpp GenMatrixFunc.cpp
 KLGroup.cpp ALevel.cpp Decay.cpp AngCoeff.cpp MGroup.cpp
 AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
-AZURE2.cpp ECIntegral.cpp ECAmplitudeCache.cpp MatrixInv.cpp PPair.cpp AZURECalc.cpp
+AZURE2.cpp ECIntegral.cpp ECAmplitudeCache.cpp MatrixInv.cpp LevelMatrixSolver.cpp
+PPair.cpp AZURECalc.cpp
 ECMGroup.cpp ReactionRate.cpp AZUREMain.cpp EData.cpp ShftFunc.cpp
 RMatrixFunc.cpp AZUREOutput.cpp  EDataIterator.cpp   TargetEffect.cpp
 AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp Equation.cpp
 JGroup.cpp Config.cpp ESegment.cpp KGroup.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp Straggling.cpp
 AdaptiveIntegrationGrid.cpp NuclearPotentialManager.cpp AZUREGrad.cpp ThmFunc.cpp
-THMMatrixFunc.cpp)
+THMMatrixFunc.cpp CovarianceBand.cpp ParameterLabel.cpp PolarizationFunc.cpp)
 
 # Add API stub when API is not enabled
 if(NOT USE_API)

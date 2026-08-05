@@ -29,6 +29,8 @@ class Ensemble {
     Walker getRandomWalkerCopy();
     Walker getWalker(int k);
     Walker getWalkerCopy(int k);
+    /*! Read-only access to walker k (1-based), without copying its history. */
+    const Walker &getWalkerRef(int k) const { return this->walkers[k - 1]; };
     std::vector<Walker> getWalkers();
     void setWalkers(std::vector<Walker> walkers) { this->walkers = walkers; };
 

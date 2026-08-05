@@ -52,8 +52,10 @@ class AZUREAPI {
   void SetData( );
   // Set AZURE2 to calculate extrapolations
   void SetExtrap( );
-  // Set radius to a fixed value
-  void SetRadius( int idx, double r );
+  // Set the channel radius of particle pair idx (1-based) to r fm and rebuild
+  // the compound nucleus, data and parameters.  Returns false if the rebuild
+  // failed, in which case the instance is no longer usable.
+  bool SetRadius( int idx, double r );
   // Get indeces of normalization parameters
   vector_r GetNormalizationIndices( );
   // Get indeces of energy shift parameters
@@ -90,6 +92,37 @@ class AZUREAPI {
    *                    (width params only, -1 otherwise)
    */
   vector_r GetParameterInfo( ) const;
+
+  // Number of numeric fields packed per particle pair by GetPairsInfo().
+  // Keep this in sync with pyazr/parameters.py (Pair._NFIELDS).
+  static const int kPairInfoFields = 16;
+  /*!
+   * Returns structured metadata describing every particle pair, in 1-based
+   * pair-number order (the same number stored in field 9 -- "pair" -- of
+   * GetParameterInfo(), so a width parameter can be matched to its pair).
+   *
+   * The result is a flat vector of kPairInfoFields doubles per pair; the fields
+   * are:
+   *   0  pair          1-based pair number (matches Parameter "pair")
+   *   1  pair_key      user pair key from the .azr file
+   *   2  ptype         particle type (0 = particle channel, otherwise photon)
+   *   3  is_entrance   1 if this is the entrance pair, else 0
+   *   4  J1            intrinsic spin of particle 1
+   *   5  parity1       parity of particle 1 (+1 / -1)
+   *   6  Z1            charge number of particle 1
+   *   7  M1            mass of particle 1 (amu)
+   *   8  J2            intrinsic spin of particle 2
+   *   9  parity2       parity of particle 2 (+1 / -1)
+   *   10 Z2            charge number of particle 2
+   *   11 M2            mass of particle 2 (amu)
+   *   12 sepE          separation energy (MeV)
+   *   13 exE           excitation energy of the pair (MeV)
+   *   14 chRad         channel radius (fm)
+   *   15 i1i2factor    1 / ((2 J1 + 1)(2 J2 + 1)); the entrance pair's value is
+   *                    the denominator of the statistical spin factor
+   *                    omega = (2 J + 1) * i1i2factor
+   */
+  vector_r GetPairsInfo( ) const;
   
   /*!
    * Returns a reference to the Config structure.
@@ -163,6 +196,21 @@ class AZUREAPI {
    * Returns a pointer to the calculated energies object.
    */
   vector_r calculated_angles(int i) const {return calculatedAngles_[i];};
+
+  /*!
+   * Legendre coefficients of the angular distribution for segment \p i, one
+   * group per point and each group self-describing, so a segment whose points
+   * carry different orders still round-trips:
+   *
+   *   [ n_0, c_0_0 ... c_0_(n_0-1), n_1, c_1_0 ... c_1_(n_1-1), ... ]
+   *
+   * Read a count, consume that many coefficients, repeat until the array is
+   * exhausted; the number of groups is the number of points.
+   *
+   * Only points belonging to an angular-distribution segment carry any; every
+   * other point contributes a count of zero.
+   */
+  vector_r calculated_angular_dists(int i) const {return calculatedAngularDists_[i];};
   /*!
    * Returns a pointer to the data excitation energies.
    */
@@ -228,6 +276,68 @@ class AZUREAPI {
    */
   vector_r CalculateResidualJacobianRWA(const vector_r& params) const;
 
+  /*!
+   * Per-point sensitivities d(model)/d(theta) of the calculated segments, for
+   * covariance uncertainty bands: sigma^2 = g^T C g (SAMMY Eq. IV E4.2).
+   *
+   * Columns are the free *R-matrix* parameters -- level energies and reduced
+   * width amplitudes, in packed order -- which is exactly what
+   * output/covariance.dat spans; normalizations and energy shifts are omitted
+   * because no calculated observable depends on them.  Rows follow the segment
+   * and point order of UpdateSegments / GET_CALCULATED_SEGMENT, so row k of
+   * segment s belongs to calculated point k of segment s.
+   *
+   * Input: the non-fixed RWA parameters, as for UpdateSegmentsRWA.  Returns
+   *   [ nSegments, nCols, nPoints_0 .. nPoints_{nSeg-1}, G row-major ],
+   * with G holding sum(nPoints) rows of nCols, or [ -1 ] if a point is outside
+   * the supported analytic path.
+   *
+   * One reverse-mode adjoint per point gives that point's whole row, so this
+   * costs about two forward evaluations regardless of the parameter count --
+   * against the 2*nCols forward passes a finite-difference band would need.
+   */
+  vector_r CalculateModelGradientsRWA(const vector_r& params) const;
+
+  /*!
+   * Coulomb wave functions on a requested energy grid.
+   *
+   * Request: [pairKey, l, radius, nE, E_1 ... E_nE], energies in MeV (centre of
+   * mass), radius in fm.  A radius of zero means "use the pair's own channel
+   * radius", which is where a penetrability or a hard-sphere phase is wanted.
+   *
+   * Response: [nE, then per energy: F, dF, G, dG, P, S, deltaHS], with P the
+   * penetrability, S the shift function and deltaHS the hard-sphere phase shift
+   * in radians.  Whether the values come from the accurate Coulomb routine,
+   * from GSL, or from Numerov integration through a nuclear potential follows
+   * the run's own configuration -- so this is also how one sees what the hybrid
+   * model does to the external region.
+   */
+  vector_r GetCoulombFunctions(const vector_r& request) const;
+
+  /*!
+   * External-capture integrals on a requested energy grid.
+   *
+   * Request: [pairKey, nE, E_1 ... E_nE].  Every external-capture pathway the
+   * compound nucleus generates from that entrance pair is evaluated at every
+   * energy.
+   *
+   * Response: [nPathways, nE, then per pathway six descriptors
+   * (li, lf, 2*si, 2*sf, multipolarity, radiationType) followed by 2*nE numbers
+   * (real, imaginary part of the integral at each energy).
+   *
+   * These are the integrals the capture cross section is built from, and they
+   * are the most expensive thing in a capture calculation --- which is why they
+   * are cached.  Exposing them makes both facts checkable from a script.
+   */
+  vector_r GetECIntegrals(const vector_r& request) const;
+
+  /*!
+   * Coulomb-function cache counters, aggregated over threads.
+   *
+   * Response: [queries, hits, entries, keys, disabledKeys, threads].
+   */
+  vector_r GetCacheStats( ) const;
+
 
  private:
 
@@ -237,8 +347,14 @@ class AZUREAPI {
    * of gradFull; the data-term normalization gradient is accumulated into the
    * norm entries.  Returns false (touching nothing) if any data point is outside
    * the supported analytic path, so the caller falls back to finite differences.
+   *
+   * On success also returns, via chi2Out, the data chi-squared -- a free
+   * byproduct of the forward model the adjoint already evaluates at every point,
+   * consistent with the gradient (same per-point residual). Left untouched when
+   * the analytic path bails.
    */
-  bool Chi2GradEGammaNorm(const vector_r& fullParams, vector_r& gradFull) const;
+  bool Chi2GradEGammaNorm(const vector_r& fullParams, vector_r& gradFull,
+                          double& chi2Out) const;
 
   // Configuration
   Config &configure_;
@@ -261,6 +377,7 @@ class AZUREAPI {
   std::vector<vector_r> calculatedConv_;
   std::vector<vector_r> calculatedEnergies_;
   std::vector<vector_r> calculatedAngles_;
+  std::vector<vector_r> calculatedAngularDists_;
   std::vector<vector_r> calculatedSegments_;
   std::vector<vector_r> calculatedSegmentsE1_;
   std::vector<vector_r> calculatedSegmentsE2_;

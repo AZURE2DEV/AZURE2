@@ -9,9 +9,12 @@
 #include "RichTextDelegate.h"
 #include "InfoDialog.h"
 #include "ElementMap.h"
+#include "Constants.h"
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <gsl/gsl_sf_coulomb.h>
+#include <gsl/gsl_errno.h>
 
 LevelsTab::LevelsTab(QWidget *parent) : QWidget(parent) {
   levelsModel=new LevelsModel(this);
@@ -96,6 +99,7 @@ LevelsTab::LevelsTab(QWidget *parent) : QWidget(parent) {
   channelDetails->hide();
   connect(channelDetails->reducedWidthText,SIGNAL(textEdited(const QString&)),this,SLOT(updateReducedWidth(const QString&)));
   connect(channelDetails->rwaButton,SIGNAL(toggled(bool)),this,SLOT(updateGammaIsRWA(bool)));
+  connect(channelDetails->wignerButton,SIGNAL(clicked()),this,SLOT(calculateWignerLimit()));
 
   addLevelButton = new QPushButton(tr("+"));
   addLevelButton->setMaximumSize(28,28);
@@ -559,53 +563,53 @@ void LevelsTab::updateDetails(const QItemSelection &selection) {
     QString details="";
     QTextStream stm(&details,QIODevice::Append);
     stm << QString("%1 MeV level with spin %2\n   transitioning via pair key #%3").arg(level.energy).arg(levelsModel->getSpinLabel(level)).arg(pairIndex+1) 
-	<< endl;
+	<< Qt::endl;
     if(channel.radType=='P') {
       stm << QString("Channel configuration is\n   s = %1, l = %2").arg(channelsModel->getSpinLabel(channel)).arg(channel.lValue) 
-	  << endl << endl;
-      stm << qSetFieldWidth(21) << right << "Light Particle Spin: " 
-	  << qSetFieldWidth(0) << left << QString("%1").arg(pairsModel->getSpinLabel(pair,0)) << endl;
-      stm << qSetFieldWidth(21) << right << "Light Particle Z: " 
-	  << qSetFieldWidth(0) << left << QString("%1").arg(pair.lightZ) << endl;
-      stm << qSetFieldWidth(21) << right << "Light Particle M: " 
-	  << qSetFieldWidth(0) << left << QString("%1").arg(pair.lightM) << endl;
-      stm << qSetFieldWidth(21) << right << "Light Particle G: " 
-	  << qSetFieldWidth(0) << left << QString("%1").arg(pair.lightG) << endl;
+	  << Qt::endl << Qt::endl;
+      stm << qSetFieldWidth(21) << Qt::right << "Light Particle Spin: " 
+	  << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pairsModel->getSpinLabel(pair,0)) << Qt::endl;
+      stm << qSetFieldWidth(21) << Qt::right << "Light Particle Z: " 
+	  << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pair.lightZ) << Qt::endl;
+      stm << qSetFieldWidth(21) << Qt::right << "Light Particle M: " 
+	  << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pair.lightM) << Qt::endl;
+      stm << qSetFieldWidth(21) << Qt::right << "Light Particle G: " 
+	  << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pair.lightG) << Qt::endl;
     } else if(channel.radType=='G' || channel.radType=='F') {
       if(channel.radType=='G') 
-	stm << QString("Channel is Gamow-Teller beta decay") << endl << endl;
+	stm << QString("Channel is Gamow-Teller beta decay") << Qt::endl << Qt::endl;
       else 
-	stm << QString("Channel is Fermi beta decay") << endl << endl;
-      stm << qSetFieldWidth(21) << right << "Fermion Charge: " 
-	  << qSetFieldWidth(0) << left << QString("%1").arg(pair.lightZ) << endl;
+	stm << QString("Channel is Fermi beta decay") << Qt::endl << Qt::endl;
+      stm << qSetFieldWidth(21) << Qt::right << "Fermion Charge: " 
+	  << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pair.lightZ) << Qt::endl;
     } else {
-      stm << QString("Capture gamma is %1%2 radiation").arg(channel.radType).arg(channel.lValue) << endl;
+      stm << QString("Capture gamma is %1%2 radiation").arg(channel.radType).arg(channel.lValue) << Qt::endl;
       if(((channel.radType=='E'&&channel.lValue==1)&&
 	  (pair.ecMultMask & (1<<0)))||
 	 ((channel.radType=='M'&&channel.lValue==1)&&
 	  (pair.ecMultMask & (1<<1)))||
 	 ((channel.radType=='E'&&channel.lValue==2)&&
 	  (pair.ecMultMask & (1<<2)))) 
-	stm << "Capture is internal and external" << endl;
-      else stm << "Capture is internal only" << endl;
-      stm << endl;
+	stm << "Capture is internal and external" << Qt::endl;
+      else stm << "Capture is internal only" << Qt::endl;
+      stm << Qt::endl;
     }
-    stm << qSetFieldWidth(21) << right << "Heavy Particle Spin: "
-	<< qSetFieldWidth(0) << left <<QString("%1").arg(pairsModel->getSpinLabel(pair,1)) << endl;
-    stm << qSetFieldWidth(21) << right << "Heavy Particle Z: "
-	<< qSetFieldWidth(0) << left <<QString("%1").arg(pair.heavyZ) << endl;
-    stm << qSetFieldWidth(21) << right << "Heavy Particle M: "
-	<< qSetFieldWidth(0) << left <<QString("%1").arg(pair.heavyM) << endl;
-    stm << qSetFieldWidth(21) << right << "Heavy Particle G: "
-	<< qSetFieldWidth(0) << left <<QString("%1").arg(pair.heavyG) << endl;
+    stm << qSetFieldWidth(21) << Qt::right << "Heavy Particle Spin: "
+	<< qSetFieldWidth(0) << Qt::left <<QString("%1").arg(pairsModel->getSpinLabel(pair,1)) << Qt::endl;
+    stm << qSetFieldWidth(21) << Qt::right << "Heavy Particle Z: "
+	<< qSetFieldWidth(0) << Qt::left <<QString("%1").arg(pair.heavyZ) << Qt::endl;
+    stm << qSetFieldWidth(21) << Qt::right << "Heavy Particle M: "
+	<< qSetFieldWidth(0) << Qt::left <<QString("%1").arg(pair.heavyM) << Qt::endl;
+    stm << qSetFieldWidth(21) << Qt::right << "Heavy Particle G: "
+	<< qSetFieldWidth(0) << Qt::left <<QString("%1").arg(pair.heavyG) << Qt::endl;
     if(channel.radType!='G'&&channel.radType!='F')
-      stm << qSetFieldWidth(21) << right << "Excitation Energy: "
-	  << qSetFieldWidth(0) << left <<QString("%1").arg(pair.excitationEnergy) << endl;
+      stm << qSetFieldWidth(21) << Qt::right << "Excitation Energy: "
+	  << qSetFieldWidth(0) << Qt::left <<QString("%1").arg(pair.excitationEnergy) << Qt::endl;
     if(channel.radType!='M'&&channel.radType!='E') {
-      stm << qSetFieldWidth(21) << right << "Separation Energy: "
-	  << qSetFieldWidth(0) << left <<QString("%1").arg(pair.seperationEnergy) << endl;
-      stm << qSetFieldWidth(21) << right << "Channel Radius: "
-	  << qSetFieldWidth(0) << left <<QString("%1").arg(pair.channelRadius) << endl;
+      stm << qSetFieldWidth(21) << Qt::right << "Separation Energy: "
+	  << qSetFieldWidth(0) << Qt::left <<QString("%1").arg(pair.seperationEnergy) << Qt::endl;
+      stm << qSetFieldWidth(21) << Qt::right << "Channel Radius: "
+	  << qSetFieldWidth(0) << Qt::left <<QString("%1").arg(pair.channelRadius) << Qt::endl;
     }
     stm.flush();
     channelDetails->details->setText(details);
@@ -622,6 +626,22 @@ void LevelsTab::updateDetails(const QItemSelection &selection) {
     // and override the label if the stored value is a reduced width amplitude.
     channelDetails->setConventionChoice(channel.radType=='P',channel.gammaIsRWA==1);
     channelDetails->reducedWidthText->setText(QString("%1").arg(channel.reducedWidth));
+
+    // Store the inputs for the physical Wigner-limit calculation.  It applies to
+    // unbound particle channels only (not radiative capture / beta decay, and not
+    // bound states, whose physical quantity is an ANC rather than a width).
+    double reducedMass = (pair.lightM + pair.heavyM != 0.)
+                         ? pair.lightM * pair.heavyM / (pair.lightM + pair.heavyM) : 0.;
+    double eCm = level.energy - pair.seperationEnergy - pair.excitationEnergy;
+    wignerApplicable_ = (channel.radType == 'P') && (eCm > 0.) && (pair.channelRadius > 0.)
+                        && (reducedMass > 0.);
+    wignerZ1_ = pair.lightZ;  wignerZ2_ = pair.heavyZ;
+    wignerRedMass_ = reducedMass;  wignerRadius_ = pair.channelRadius;
+    wignerEcm_ = eCm;  wignerL_ = channel.lValue;
+    channelDetails->wignerButton->setEnabled(wignerApplicable_);
+    channelDetails->wignerLimitText->clear();
+    channelDetails->wignerLimitText->setPlaceholderText(
+        wignerApplicable_ ? QString() : tr("N/A"));
     channelDetails->show();
   }
 }
@@ -648,6 +668,34 @@ void LevelsTab::updateReducedWidth(const QString &string) {
     QModelIndex i = channelsModel->index(index.row(),6,QModelIndex());
     channelsModel->setData(i,reducedWidth,Qt::EditRole);
   }
+}
+
+// Physical Wigner limit (single-particle partial width) of the selected channel:
+// Gamma_W = 2 P(E) gamma^2_W, with the reduced limit gamma^2_W = hbar^2/(mu a^2)
+// and the penetrability P computed as in CoulFunc.  Result in eV, so it matches
+// the partial-width box.  Only meaningful for unbound particle channels.
+void LevelsTab::calculateWignerLimit() {
+  if(!wignerApplicable_) { channelDetails->wignerLimitText->setText(tr("N/A")); return; }
+
+  double eta = std::sqrt(uconv/2.)*fstruc*wignerZ1_*wignerZ2_*std::sqrt(wignerRedMass_/wignerEcm_);
+  double rho = std::sqrt(2.*uconv)/hbarc*wignerRadius_*std::sqrt(wignerRedMass_*wignerEcm_);
+
+  gsl_sf_result F,Fp,G,Gp;
+  double eF,eG;
+  gsl_set_error_handler_off();
+  int status = gsl_sf_coulomb_wave_FG_e(eta, rho, (double)wignerL_, 0, &F,&Fp,&G,&Gp,&eF,&eG);
+  double Fv = F.val*std::exp(eF), Gv = G.val*std::exp(eG);
+  double denom = Fv*Fv + Gv*Gv;
+  if(status != 0 || denom <= 0.) { channelDetails->wignerLimitText->setText(tr("error")); return; }
+
+  double P = rho/denom;
+  double gamma2W = hbarc*hbarc/(wignerRedMass_*uconv*wignerRadius_*wignerRadius_);  // MeV
+  double gammaW_eV = 2.0*P*gamma2W*1.0e6;                                           // eV
+  double av = std::fabs(gammaW_eV);
+  QString text = (av != 0. && (av >= 1.e4 || av < 1.e-4))
+                 ? QString::number(gammaW_eV, 'e', 4)
+                 : QString::number(gammaW_eV, 'f', 4);
+  channelDetails->wignerLimitText->setText(text);
 }
 
 bool LevelsTab::writeNuclearFile(QTextStream& outStream) {
@@ -735,10 +783,10 @@ bool LevelsTab::writeNuclearFile(QTextStream& outStream) {
 		    << qSetFieldWidth(8)  << pairs.at(channels.at(ch).pairIndex).ecMultMask
 		    << qSetFieldWidth(9)  << pairs.at(channels.at(ch).pairIndex).bindingEnergy
 		    << qSetFieldWidth(4)  << (channels.at(ch).radType=='P' ? channels.at(ch).gammaIsRWA : 0)
-		    << qSetFieldWidth(0)  << endl;
+		    << qSetFieldWidth(0)  << Qt::endl;
 	}
       }  
-      outStream << endl;
+      outStream << Qt::endl;
       levelId++;
     }
   }

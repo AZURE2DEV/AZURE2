@@ -1,8 +1,11 @@
 #include "Config.h"
+#include "NuclearPotentialManager.h"
 #ifndef NO_STAT
 #include <sys/stat.h>
 #endif
 #include <iostream>
+#include <sstream>
+#include <stdexcept>
 
 /*!
  * The constructor of the Config class sets defaults and the 
@@ -93,11 +96,103 @@ int Config::ReadConfigFile() {
   while(line!="</config>"&&!in.eof()) getline(in,line);
   if(line!="</config>") return -1;
   in.close();
+  return this->ReadPotentialBlock();
+}
+
+/*!
+ * Reads the <potential> block of the configuration file and configures the
+ * hybrid Coulomb method accordingly.
+ *
+ * The block is optional -- a file without one, or one with
+ * useHybridPotential=0, leaves the defaults set by Reset() untouched, so this
+ * is a no-op for every existing project.  The format is the one written by the
+ * setup utility (gui/src/AZURESetup.cpp) and read back by
+ * NuclearPotentialTab::readPotentialSettings:
+ *
+ *   <potential>
+ *   useHybridPotential=1
+ *   useAdaptiveGrid=1
+ *   potentialType=0        # 0 = Woods-Saxon, 1 = Gaussian
+ *   V0=80                  # depth, MeV
+ *   R=3.6                  # radius, fm      (Woods-Saxon)
+ *   a=0.6                  # diffuseness, fm (Woods-Saxon)
+ *   r0=5.0                 # width, fm       (Gaussian)
+ *   </potential>
+ *
+ * Parsing it here rather than in the setup utility is what makes the hybrid
+ * model reachable from --no-gui and from the socket API: this function is on
+ * the path both of them take.
+ *
+ * Returns 0 on success (including "no block present") and -1 if the block is
+ * present but malformed.
+ */
+
+int Config::ReadPotentialBlock() {
+  std::ifstream in(configfile.c_str());
+  if(!in) return -1;
+
+  std::string line="";
+  while(line!="<potential>"&&!in.eof()) getline(in,line);
+  if(line!="<potential>") return 0;               // optional block, absent
+
+  int typeCode=0;
+  double v0=150.0, r=3.6, a=0.6, r0=5.0;
+  bool hasType=false, useHybrid=false, closed=false;
+
+  while(!in.eof()) {
+    getline(in,line);
+    size_t b=line.find_first_not_of(" \t\r\n");
+    if(b==std::string::npos) continue;
+    size_t e=line.find_last_not_of(" \t\r\n");
+    std::string trimmed=line.substr(b,e-b+1);
+    if(trimmed=="</potential>") { closed=true; break; }
+
+    size_t eq=trimmed.find('=');
+    if(eq==std::string::npos) continue;
+    std::string key=trimmed.substr(0,eq);
+    std::istringstream value(trimmed.substr(eq+1));
+
+    if(key=="useHybridPotential") { int v=0; value >> v; useHybrid=(v==1); }
+    else if(key=="useAdaptiveGrid") { int v=1; value >> v; useAdaptiveGrid=(v==1); }
+    else if(key=="potentialType") { value >> typeCode; hasType=true; }
+    else if(key=="V0") value >> v0;
+    else if(key=="R") value >> r;
+    else if(key=="a") value >> a;
+    else if(key=="r0") value >> r0;
+  }
+  in.close();
+
+  if(!closed) return -1;                          // unterminated block
+
+  useHybridMethod=useHybrid;
+  if(!useHybrid) return 0;
+  if(!hasType) {
+    outStream << "WARNING: <potential> requests the hybrid method but gives no "
+                 "potentialType; the hybrid method is disabled." << std::endl;
+    useHybridMethod=false;
+    return 0;
+  }
+
+  try {
+    NuclearPotentialManager& manager=NuclearPotentialManager::instance();
+    if(typeCode==0) manager.setWoodsSaxonPotential(v0,r,a);
+    else if(typeCode==1) manager.setGaussianPotential(v0,r0);
+    else {
+      outStream << "WARNING: unknown potentialType " << typeCode
+                << " in <potential>; the hybrid method is disabled." << std::endl;
+      useHybridMethod=false;
+      return 0;
+    }
+  } catch(const std::invalid_argument& e) {
+    outStream << "WARNING: invalid potential parameters (" << e.what()
+              << "); the hybrid method is disabled." << std::endl;
+    useHybridMethod=false;
+  }
   return 0;
 }
 
 /*!
- * If stat() is enabled, this function checks for the output and checks 
+ * If stat() is enabled, this function checks for the output and checks
  * directories at runtime.
  */
 

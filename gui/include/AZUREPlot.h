@@ -31,6 +31,9 @@ struct PlotPoint {
   // undefined), so each view filters on its own flag.
   bool validXSec;
   bool validSFactor;
+  // 1-sigma analytic uncertainty band on the calculation (0 if no band file).
+  double fitCrossSectionError;
+  double fitSFactorError;
 };
 
 class AZUREZoomer : public QwtPlotZoomer {
@@ -69,8 +72,20 @@ class PlotEntry {
   int lineWidth() const {return lineWidth_;};
   void setLineWidth(int w) {lineWidth_ = w;};
 
+  /*! Whether this entry may hold non-positive values.
+
+      readData otherwise discards anything that is zero or negative, which is a
+      guard for the logarithmic axis. An analyzing power is a ratio in [-1,1]
+      and is negative over much of its range, so for it that guard silently
+      deletes half the physics -- the data and the curve alike. */
+  bool allowNonPositive() const {return allowNonPositive_;};
+  void setAllowNonPositive(bool v) {allowNonPositive_ = v;};
+
   bool readData();
-  void attach(QwtPlot*, int xAxisType, int yAxisType);
+  //! Number of points kept by the last readData(). Diagnostic.
+  int numPoints() const {return points_.size();};
+  bool hasBand() const {return hasBand_;};
+  void attach(QwtPlot*, int xAxisType, int yAxisType, bool showBand=false);
   void detach();
 
   static QString labelFromFilename(const QString& filename);
@@ -80,6 +95,7 @@ class PlotEntry {
 
  private:
   void sortPointsByXAxis(int xAxisType);
+  bool readBandData(QVector<double>& xsErr, QVector<double>& sErr);
   int type_;
   int entranceKey_;
   int exitKey_;
@@ -91,9 +107,12 @@ class PlotEntry {
   QwtSymbol::Style symbolStyle_;
   int symbolSize_;
   int lineWidth_;
+  bool allowNonPositive_ = false;
+  bool hasBand_;
   QwtPlotCurve* dataCurve_;
   QwtPlotIntervalCurve* dataErrorCurve_;
   QwtPlotCurve* fitCurve_;
+  QwtPlotIntervalCurve* bandCurve_;
   QVector<PlotPoint> points_;
 };
 
@@ -109,15 +128,17 @@ class AZUREPlot : public QwtPlot {
   void setYAxisType(unsigned int type);
   void setGridVisible(bool visible);
   void setLegendVisible(bool visible);
+  void setBandVisible(bool visible);
+  bool isBandVisible() const {return bandVisible;};
   void setLevelsModel(LevelsModel* model);
   void setLevelsVisible(bool visible);
   void refreshLevelMarkers();
-  void clearEntries();
 
   const QList<PlotEntry*>& getEntries() const {return entries;};
   void redrawEntries();
 
  public slots:
+  void clearEntries();
   void draw(QList<PlotEntry*> newEntries);
   void update();
   void exportPlot();
@@ -135,6 +156,7 @@ class AZUREPlot : public QwtPlot {
   QwtLegend* legend;
   LevelsModel* levelsModel;
   bool levelsVisible;
+  bool bandVisible;
   QList<QwtPlotMarker*> levelMarkers;
 };
 

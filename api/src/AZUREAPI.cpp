@@ -13,6 +13,9 @@
 #include "TargetEffect.h"
 #include "AMatrixFunc.h"
 #include "AZUREGrad.h"
+#include "CovarianceBand.h"
+#include "CoulFunc.h"
+#include "ECIntegral.h"
 
 #include <iostream>
 #include <iomanip>
@@ -172,6 +175,7 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
   calculatedConv_.clear( );
   calculatedEnergies_.clear( );
   calculatedAngles_.clear( );
+  calculatedAngularDists_.clear( );
   calculatedSegments_.clear( );
   calculatedSegmentsE1_.clear( );
   calculatedSegmentsE2_.clear( );
@@ -217,6 +221,10 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
     std::vector<EPoint>& data = segments[i].GetPoints();
 
     std::vector<double> cross, crossE1, crossE2, energies, angles, conv, excitationEnergies;
+    // Angular-distribution coefficients, self-describing per point:
+    // a count followed by that many Legendre coefficients. Points that
+    // are not part of an angular-distribution segment contribute a zero.
+    std::vector<double> angularDists;
 
     // Handle component segments using the new integrated calculation method
     if (segments[i].HasComponents()) {
@@ -234,6 +242,9 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
         excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
+        angularDists.push_back( (double)data[k].GetNumAngularDists( ) );
+        for( int a = 0; a < data[k].GetNumAngularDists( ); ++a )
+          angularDists.push_back( data[k].GetAngularDist( a ) );
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -255,6 +266,9 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
         excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
+        angularDists.push_back( (double)data[k].GetNumAngularDists( ) );
+        for( int a = 0; a < data[k].GetNumAngularDists( ); ++a )
+          angularDists.push_back( data[k].GetAngularDist( a ) );
 
       }
     }
@@ -265,6 +279,7 @@ int AZUREAPI::UpdateSegments(vector_r& p) {
     calculatedSegmentsE2_.push_back( crossE2 );
     calculatedEnergies_.push_back( energies );
     calculatedAngles_.push_back( angles );
+    calculatedAngularDists_.push_back( angularDists );
     calculatedExcitationEnergies_.push_back( excitationEnergies );
 
   }
@@ -278,6 +293,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
   calculatedConv_.clear( );
   calculatedEnergies_.clear( );
   calculatedAngles_.clear( );
+  calculatedAngularDists_.clear( );
   calculatedSegments_.clear( );
   calculatedSegmentsE1_.clear( );
   calculatedSegmentsE2_.clear( );
@@ -316,6 +332,10 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
     std::vector<EPoint>& data = segments[i].GetPoints();
 
     std::vector<double> cross, crossE1, crossE2, energies, angles, conv, excitationEnergies;
+    // Angular-distribution coefficients, self-describing per point:
+    // a count followed by that many Legendre coefficients. Points that
+    // are not part of an angular-distribution segment contribute a zero.
+    std::vector<double> angularDists;
 
     // Handle component segments using the new integrated calculation method
     if (segments[i].HasComponents()) {
@@ -333,6 +353,9 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
         excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
+        angularDists.push_back( (double)data[k].GetNumAngularDists( ) );
+        for( int a = 0; a < data[k].GetNumAngularDists( ); ++a )
+          angularDists.push_back( data[k].GetAngularDist( a ) );
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -354,6 +377,9 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
         excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
+        angularDists.push_back( (double)data[k].GetNumAngularDists( ) );
+        for( int a = 0; a < data[k].GetNumAngularDists( ); ++a )
+          angularDists.push_back( data[k].GetAngularDist( a ) );
 
       }
     }
@@ -364,6 +390,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r& p) {
     calculatedSegmentsE2_.push_back( crossE2 );
     calculatedEnergies_.push_back( energies );
     calculatedAngles_.push_back( angles );
+    calculatedAngularDists_.push_back( angularDists );
     calculatedExcitationEnergies_.push_back( excitationEnergies );
 
   }
@@ -377,6 +404,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
   calculatedConv_.clear( );
   calculatedEnergies_.clear( );
   calculatedAngles_.clear( );
+  calculatedAngularDists_.clear( );
   calculatedSegments_.clear( );
   calculatedSegmentsE1_.clear( );
   calculatedSegmentsE2_.clear( );
@@ -416,6 +444,10 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
     std::vector<EPoint>& data = segments[i].GetPoints();
 
     std::vector<double> cross, crossE1, crossE2, energies, angles, conv, excitationEnergies;
+    // Angular-distribution coefficients, self-describing per point:
+    // a count followed by that many Legendre coefficients. Points that
+    // are not part of an angular-distribution segment contribute a zero.
+    std::vector<double> angularDists;
 
     // Handle component segments using the new integrated calculation method
     if (segments[i].HasComponents()) {
@@ -433,6 +465,9 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
         excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
+        angularDists.push_back( (double)data[k].GetNumAngularDists( ) );
+        for( int a = 0; a < data[k].GetNumAngularDists( ); ++a )
+          angularDists.push_back( data[k].GetAngularDist( a ) );
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -454,6 +489,9 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
         energies.push_back( data[k].GetCMEnergy( ) );
         conv.push_back( data[k].GetSFactorConversion() );
         excitationEnergies.push_back( data[k].GetExcitationEnergy( ) );
+        angularDists.push_back( (double)data[k].GetNumAngularDists( ) );
+        for( int a = 0; a < data[k].GetNumAngularDists( ); ++a )
+          angularDists.push_back( data[k].GetAngularDist( a ) );
 
       }
     }
@@ -464,6 +502,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
     calculatedSegmentsE2_.push_back( crossE2 );
     calculatedEnergies_.push_back( energies );
     calculatedAngles_.push_back( angles );
+    calculatedAngularDists_.push_back( angularDists );
     calculatedExcitationEnergies_.push_back( excitationEnergies );
 
   }
@@ -475,11 +514,17 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r& p) {
 // Transform RWA parameters to physical values
 vector_r AZUREAPI::TransformRWAParameters(const vector_r& p) const {
 
+  // p holds the non-fixed parameters only, so the loop has to run over the
+  // full parameter array -- running it to p.size() leaves every parameter
+  // beyond that index at its .azr value, which silently returns stale widths
+  // for the levels at the end of the file.  A shorter p (e.g. only the
+  // leading R-matrix block, with the norm/shift tail sliced off) is still
+  // accepted: the free parameters it does not cover keep their all_rwa_ value.
   vector_r params = all_rwa_;
   int k = 0;
-  for( int i = 0; i < p.size( ); ++i ){
+  for( int i = 0; i < params.size( ); ++i ){
     if( !fixed_[i] ){
-      params[i] = p[k];
+      if( k < p.size( ) ) params[i] = p[k];
       ++k;
     }
   }
@@ -512,11 +557,10 @@ vector_r AZUREAPI::TransformRWAParameters(const vector_r& p) const {
 // Transform RWA parameters to physical values
 vector_r AZUREAPI::TransformAllRWAParameters(const vector_r& p) const {
 
+  // p holds every parameter, fixed ones included; a short p updates a prefix.
   vector_r params = all_rwa_;
-  int k = 0;
-  for( int i = 0; i < p.size( ); ++i ){
-    params[i] = p[k];
-    ++k;
+  for( int i = 0; i < p.size( ) && i < params.size( ); ++i ){
+    params[i] = p[i];
   }
 
   CNuc* localCompound = NULL;
@@ -532,11 +576,9 @@ vector_r AZUREAPI::TransformAllRWAParameters(const vector_r& p) const {
 
   // Get only non fixed parameters
   vector_r transformed;
-  k = 0;
   for( int i = 0; i < transformedParams.size( ); ++i ){
     if( !fixed_[i] ){
       transformed.push_back( transformedParams[i] );
-      ++k;
     }
   }
 
@@ -647,9 +689,18 @@ void AZUREAPI::SetExtrap( ) {
   configure().paramMask &= ~Config::CALCULATE_WITH_DATA; 
 }
 
-// Set radius to a fixed value
-void AZUREAPI::SetRadius( int idx, double r ) {
-  
+// Set the channel radius of one particle pair (1-based) and rebuild.
+//
+// The radius enters the penetrabilities, shift functions, boundary conditions,
+// Wigner limits, the ANC <-> reduced-width conversion and the lower limit of
+// every external-capture integral, so nothing can be reused: the compound
+// nucleus and data objects are rebuilt from the .azr with the override, the
+// EC-integral cache is bypassed (USE_PREVIOUS_INTEGRALS cleared) so the
+// integrals are recomputed on the new radius rather than read back from
+// output/intEC*, and the parameter bookkeeping -- values, names, fixed flags
+// and the transformed physical parameters -- is refilled to match.
+bool AZUREAPI::SetRadius( int idx, double r ) {
+
   if( compound_ != nullptr ) delete compound_;
   if( data_ != nullptr ) delete data_;
 
@@ -658,13 +709,37 @@ void AZUREAPI::SetRadius( int idx, double r ) {
 
   std::pair<int,double> pair = std::make_pair( idx, r );
 
-  compound()->Fill( configure( ), pair  );
-  data()->Fill(configure(),compound());
+  if( compound()->Fill( configure( ), pair ) == -1 ) return false;
+  if( compound()->NumPairs() == 0 || compound()->NumJGroups() == 0 ) return false;
+
+  // Mirror the branch taken at startup: data mode reads the data segments,
+  // extrapolation mode builds its points from <segmentsTest>.
+  if( configure().paramMask & Config::CALCULATE_WITH_DATA ) {
+    if( data()->Fill( configure( ), compound( ) ) == -1 ) return false;
+  } else {
+    if( data()->MakePoints( configure( ), compound( ) ) == -1 ) return false;
+  }
+  if( data()->NumSegments() == 0 ) return false;
 
   configure().paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
-  compound( )->Initialize( configure( ) );
-  data( )->Initialize( compound( ), configure( ) );
+  try {
+    compound( )->Initialize( configure( ) );
+  } catch (GSLException e) {
+    configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
+    configure().outStream << e.what() << std::endl;
+    return false;
+  }
+  if( data( )->Initialize( compound( ), configure( ) ) == -1 ) {
+    configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
+    return false;
+  }
   configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
+
+  // Without this the client keeps the pre-change parameter vector, names,
+  // fixed flags and Wigner limits -- silently mismatched with the new model.
+  UpdateParameters( );
+
+  return true;
 
 }
 
@@ -680,10 +755,12 @@ double AZUREAPI::CalculateChi2RWA(const vector_r& rwaParams) const {
   }
 
   double chiSquared = 0.0;
-  
-  CNuc* localCompound = compound()->Clone();
-  EData* localData = data()->Clone();
-  
+
+  // One request at a time: operate on the canonical compound/data in place
+  // (re-filled below from these parameters) instead of cloning.
+  CNuc* localCompound = compound();
+  EData* localData = data();
+
   // Fill compound nucleus and data with RWA parameters
   localCompound->FillCompoundFromParams(params_);
   localData->FillNormsFromParams(params_);
@@ -720,10 +797,7 @@ double AZUREAPI::CalculateChi2RWA(const vector_r& rwaParams) const {
       chiSquared += segmentChiSquared;
     }
   }
-  
-  delete localCompound;
-  delete localData;
-  
+
   return chiSquared;
 }
 
@@ -739,10 +813,10 @@ double AZUREAPI::CalculateChi2Physical(const vector_r& physicalParams) const {
 
   double chiSquared = 0.0;
 
-  CNuc* localCompound = NULL;
-  EData* localData = NULL;
-  localCompound = compound()->Clone();
-  localData = data()->Clone();
+  // One request at a time: operate on the canonical compound/data in place
+  // (re-filled below from these parameters) instead of cloning.
+  CNuc* localCompound = compound();
+  EData* localData = data();
 
   AZUREParams params;
   localCompound->FillCompoundFromParamsPhysical(params_);
@@ -786,9 +860,6 @@ double AZUREAPI::CalculateChi2Physical(const vector_r& physicalParams) const {
       chiSquared += segmentChiSquared;
     }
   }
-  
-  delete localCompound;
-  delete localData;
 
   return chiSquared;
 }
@@ -803,10 +874,14 @@ static vector_r MapPackedToFull(const vector_r& packed, const vector_r& all_rwa,
   return full;
 }
 
-bool AZUREAPI::Chi2GradEGammaNorm(const vector_r& full, vector_r& gradFull) const {
+bool AZUREAPI::Chi2GradEGammaNorm(const vector_r& full, vector_r& gradFull,
+                                  double& chi2Out) const {
   const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
-  CNuc* lc = compound()->Clone();
-  EData* ld = data()->Clone();
+  // Only one API request runs at a time, so operate on the canonical
+  // compound/data in place (like UpdateSegments) rather than cloning; every
+  // entry point re-fills from its own parameters before use.
+  CNuc* lc = compound();
+  EData* ld = data();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
   ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
@@ -826,6 +901,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r& full, vector_r& gradFull) cons
   // chi2 = sum (fit - data*n)^2/(cmErr*n)^2.  d(chi2)/d(model) = 2 r / err^2;
   // the same model gives the data-term norm gradient, accumulated per segment.
   std::vector<double> normData(ld->NumSegments() + 1, 0.0);
+  double chi2 = 0.0;
   FitBarFn fb = [&](ESegment* seg, int i, int pid, double model) -> double {
     EPoint* pt = seg->GetPoint(pid + 1);
     if(!pt) return 0.0;
@@ -835,6 +911,10 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r& full, vector_r& gradFull) cons
     double r = model - dataval * norm;
     double err = cmErr * norm;
     if(err == 0.0) return 0.0;
+    // chi2 falls out of the same residual the gradient uses (so value and
+    // gradient stay consistent). Runs in the parallel point loop, so guard it.
+#pragma omp atomic
+    chi2 += (r * r) / (err * err);
     if(seg->IsVaryNorm() && norm != 0.0 && i >= 1 && i < (int)normData.size()) {
       double e2 = cmErr * cmErr;
       // fitBarFn runs inside the parallel point loop of AccumulateEGammaGradient,
@@ -857,19 +937,21 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r& full, vector_r& gradFull) cons
       int idx = pmap.NormIndex(s);
       if(idx >= 0 && idx < (int)gradFull.size()) gradFull[idx] = normData[s];
     }
+    chi2Out = chi2;
   }
-  delete lc;
-  delete ld;
   return ok;
 }
 
 vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r& params) const {
   vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
 
-  double chi2 = CalculateChi2RWA(params);
-
+  // The analytic gradient pass runs the full forward model at every point, so
+  // chi2 comes out as a byproduct -- no separate forward pass. Only fall back to
+  // a standalone chi2 evaluation if the analytic path bails.
   vector_r gradFull(all_rwa_.size(), 0.0);
-  bool eg = Chi2GradEGammaNorm(full, gradFull);
+  double chi2 = 0.0;
+  bool eg = Chi2GradEGammaNorm(full, gradFull, chi2);
+  if(!eg) chi2 = CalculateChi2RWA(params);
 
   // Finite differences for energy shifts (and the whole block if the analytic
   // path bailed), using the scalar chi-squared.
@@ -899,8 +981,10 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r& params) const {
 vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r& params) const {
   vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
 
-  CNuc* lc = compound()->Clone();
-  EData* ld = data()->Clone();
+  // One request at a time: operate on the canonical compound/data in place
+  // (re-filled here from these parameters) instead of cloning.
+  CNuc* lc = compound();
+  EData* ld = data();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
   ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
@@ -918,10 +1002,71 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r& params) const {
   int nCols = 0;
   bool ok = ComputeResidualJacobian(lc, ld, configure(), pmap, sdp, residuals, jacobian, nCols);
 
-  delete lc;
-  delete ld;
-
   if(!ok) return vector_r{ -1.0 };
+
+  // ---- Energy-shift columns, by central differences -----------------------
+  //
+  // The adjoint covers level energies, reduced widths and normalizations. An
+  // energy shift is a different derivative: it translates the energy axis of a
+  // whole segment, so what is wanted is d(model)/dE rather than d(model)/d(a
+  // parameter). Every energy-dependent quantity moves with it --- the level
+  // matrix, the penetrabilities and shift functions, the Coulomb and
+  // hard-sphere phases, the external-capture amplitudes, and, where a segment
+  // carries target integration, the sub-point grid itself (which brings
+  // boundary terms with it). AZURE2 applies a shift by rebuilding all of that
+  // in UpdatePointEnergiesWithShift, so there is no cheap analytic route
+  // through the existing forward code.
+  //
+  // Returning these columns as zero, which is what this function used to do,
+  // is the worst of the options: a least-squares driver handed a zero column
+  // simply never moves that parameter, converges, and reports success. Finite
+  // differences cost two residual evaluations per free shift and are correct.
+  //
+  // This mirrors what CalculateChi2GradRWA already does for the scalar
+  // gradient. Differencing the residual vector that ComputeResidualJacobian
+  // itself returns guarantees the rows line up, since it is the same function
+  // that assigned them.
+  {
+    const size_t nRes = residuals.size();
+    vector_r rPlus, rMinus, jTmp;
+    int nc = 0;
+    for(int f = 0; f < pmap.NumFull(); f++) {
+      if(fixed_[f]) continue;
+      if(pmap.Desc(f).kind != ParamKind::EnergyShift) continue;
+      const int packed = pmap.FullToPacked(f);
+      if(packed < 0 || packed >= (int)params.size()) continue;
+
+      const double x0 = params[packed];
+      // A few eV: far inside any quoted beam-energy calibration uncertainty,
+      // far outside the noise of the forward model.
+      const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+
+      auto residualsAt = [&](double value, vector_r& out) -> bool {
+        vector_r pk = params;
+        pk[packed] = value;
+        vector_r fullk = MapPackedToFull(pk, all_rwa_, fixed_);
+        lc->FillCompoundFromParams(fullk);
+        ld->FillNormsFromParams(fullk);
+        ld->FillEnergyShiftsFromParams(fullk, ld, lc, &configure());
+        out.clear();
+        jTmp.clear();
+        return ComputeResidualJacobian(lc, ld, configure(), pmap, sdp,
+                                       out, jTmp, nc);
+      };
+
+      const bool okp = residualsAt(x0 + h, rPlus);
+      const bool okm = residualsAt(x0 - h, rMinus);
+      if(okp && okm && rPlus.size() == nRes && rMinus.size() == nRes) {
+        for(size_t r = 0; r < nRes; r++)
+          jacobian[r * (size_t)nCols + (size_t)packed] =
+            (rPlus[r] - rMinus[r]) / (2.0 * h);
+      }
+    }
+    // Leave the model at the parameters that were asked for.
+    lc->FillCompoundFromParams(full);
+    ld->FillNormsFromParams(full);
+    ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+  }
 
   vector_r out;
   out.reserve(2 + residuals.size() + jacobian.size());
@@ -929,6 +1074,71 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r& params) const {
   out.push_back((double)nCols);
   out.insert(out.end(), residuals.begin(), residuals.end());
   out.insert(out.end(), jacobian.begin(), jacobian.end());
+  return out;
+}
+
+vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r& params) const {
+  vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
+
+  // Same preparation as CalculateResidualJacobianRWA: one request at a time, so
+  // the canonical compound/data are re-filled in place from these parameters.
+  CNuc* lc = compound();
+  EData* ld = data();
+  lc->FillCompoundFromParams(full);
+  ld->FillNormsFromParams(full);
+  ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+
+  vector_matrix_r shiftDeriv;
+  const vector_matrix_r* sdp = nullptr;
+  if(configure().paramMask & Config::USE_BRUNE_FORMALISM) {
+    lc->CalcShiftFunctions(configure());
+    shiftDeriv = BuildShiftDerivTable(lc, configure());
+    sdp = &shiftDeriv;
+  }
+
+  ParamIndexMap pmap = BuildParamIndexMap(lc, ld, fixed_);
+
+  // A band is sensitive only to the R-matrix parameters, and covariance.dat
+  // spans exactly those columns -- so reduce each full packed row to them here
+  // rather than shipping zero columns for every normalization.
+  const std::vector<int> rc = RMatrixPackedColumns(pmap);
+  const int nCols = (int)rc.size();
+
+  std::map<EPoint*, vector_r> grad;
+  if(!ComputeModelGradients(lc, ld, configure(), pmap, sdp, grad))
+    return vector_r{ -1.0 };
+
+  // Walk the segments exactly as UpdateSegments does, so row k of segment s
+  // lines up with GET_CALCULATED_SEGMENT's point k: segments sharing a segment
+  // key collapse to one calculated segment, and only the first of them is used.
+  std::vector<int> counts;
+  vector_r rows;
+  int prevKey = -1;
+  std::vector<ESegment>& segments = ld->GetSegments();
+  for( int i = 0; i < (int)segments.size( ); ++i ) {
+    const int newKey = segments[i].GetSegmentKey( );
+    if( prevKey == newKey ) continue;
+    prevKey = newKey;
+
+    std::vector<EPoint>& points = segments[i].GetPoints( );
+    int n = 0;
+    for( int k = 0; k < (int)points.size( ); ++k ) {
+      std::map<EPoint*, vector_r>::const_iterator it = grad.find( &points[k] );
+      if( it == grad.end( ) ) continue;
+      const vector_r& f = it->second;
+      for( int c = 0; c < nCols; ++c )
+        rows.push_back( rc[c] < (int)f.size( ) ? f[rc[c]] : 0.0 );
+      ++n;
+    }
+    counts.push_back( n );
+  }
+
+  vector_r out;
+  out.reserve( 2 + counts.size( ) + rows.size( ) );
+  out.push_back( (double)counts.size( ) );
+  out.push_back( (double)nCols );
+  for( int i = 0; i < (int)counts.size( ); ++i ) out.push_back( (double)counts[i] );
+  out.insert( out.end( ), rows.begin( ), rows.end( ) );
   return out;
 }
 
@@ -1041,4 +1251,205 @@ vector_r AZUREAPI::GetParameterInfo( ) const {
   }
 
   return info;
+}
+
+vector_r AZUREAPI::GetPairsInfo( ) const {
+
+  vector_r info;
+  CNuc* nuc = compound();
+
+  // One record per pair, in 1-based pair-number order so field "pair" of
+  // GetParameterInfo() indexes directly into this list.
+  for( int p = 1; p <= nuc->NumPairs(); ++p ) {
+    PPair* pair = nuc->GetPair( p );
+    info.push_back( p );
+    info.push_back( pair->GetPairKey() );
+    info.push_back( pair->GetPType() );
+    info.push_back( pair->IsEntrance() ? 1.0 : 0.0 );
+    info.push_back( pair->GetJ( 1 ) );
+    info.push_back( pair->GetPi( 1 ) );
+    info.push_back( pair->GetZ( 1 ) );
+    info.push_back( pair->GetM( 1 ) );
+    info.push_back( pair->GetJ( 2 ) );
+    info.push_back( pair->GetPi( 2 ) );
+    info.push_back( pair->GetZ( 2 ) );
+    info.push_back( pair->GetM( 2 ) );
+    info.push_back( pair->GetSepE() );
+    info.push_back( pair->GetExE() );
+    info.push_back( pair->GetChRad() );
+    info.push_back( pair->GetI1I2Factor() );
+  }
+
+  return info;
+}
+// ---------------------------------------------------------------------------
+//  Diagnostics: the external region, and the caches that make it affordable
+// ---------------------------------------------------------------------------
+
+/*!
+ * Coulomb wave functions, penetrability, shift function and hard-sphere phase
+ * on a requested energy grid.
+ *
+ * These are ordinary R-matrix quantities that AZURE2 has always computed
+ * internally; what is new is being able to ask for them.  The values follow the
+ * run's own configuration, so the same call returns the accurate Coulomb
+ * routine's answer, GSL's, or the Numerov solution through a nuclear potential,
+ * according to how the calculation was set up -- which is how one sees what the
+ * hybrid model actually does to the external region.
+ */
+vector_r AZUREAPI::GetCoulombFunctions(const vector_r& request) const {
+  vector_r out;
+  if(request.size() < 4) return out;
+
+  int pairKey = static_cast<int>(std::lround(request[0]));
+  int lValue  = static_cast<int>(std::lround(request[1]));
+  double radius = request[2];
+  int nE = static_cast<int>(std::lround(request[3]));
+  if(nE < 0 || request.size() < static_cast<size_t>(4 + nE)) return out;
+
+  if(!compound_ || !compound_->IsPairKey(pairKey)) return out;
+  PPair* pair = compound_->GetPair(compound_->GetPairNumFromKey(pairKey));
+  if(!pair) return out;
+  if(radius <= 0.0) radius = pair->GetChRad();   // the channel radius by default
+
+  CoulFunc coul(pair, !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC));
+
+  out.push_back(static_cast<double>(nE));
+  for(int i = 0; i < nE; ++i) {
+    double energy = request[4 + i];
+    double F = 0., dF = 0., G = 0., dG = 0., P = 0., S = 0., delta = 0.;
+    if(energy > 0.0) {
+      try {
+        CoulWaves w = coul(lValue, radius, energy);
+        F = w.F; dF = w.dF; G = w.G; dG = w.dG;
+        P = coul.Penetrability(lValue, radius, energy);
+        S = coul.PEShift(lValue, radius, energy);
+        delta = -std::atan2(w.F, w.G);
+      } catch(...) {
+        // A failed evaluation returns zeros for that energy rather than
+        // aborting the whole grid; the caller can see which points are missing.
+        F = dF = G = dG = P = S = delta = 0.;
+      }
+    }
+    out.push_back(F);   out.push_back(dF);
+    out.push_back(G);   out.push_back(dG);
+    out.push_back(P);   out.push_back(S);
+    out.push_back(delta);
+  }
+  return out;
+}
+
+/*!
+ * External-capture radial integrals on a requested energy grid.
+ *
+ * Walks exactly the pathway structure EPoint::CalculateECAmplitudes walks --
+ * every EC level whose final pair matches, every KGroup of the entrance pair's
+ * decay, every ECMGroup within it -- and evaluates the integral at each
+ * requested energy instead of at a data point's energy.  The quantum numbers of
+ * each pathway come back with it, so no bookkeeping is needed on the caller's
+ * side.
+ */
+vector_r AZUREAPI::GetECIntegrals(const vector_r& request) const {
+  vector_r out;
+  if(request.size() < 2) return out;
+
+  int pairKey = static_cast<int>(std::lround(request[0]));
+  int nE = static_cast<int>(std::lround(request[1]));
+  if(nE <= 0 || request.size() < static_cast<size_t>(2 + nE)) return out;
+  std::vector<double> energies(request.begin() + 2, request.begin() + 2 + nE);
+
+  if(!compound_ || !compound_->IsPairKey(pairKey)) return out;
+  int aa = compound_->GetPairNumFromKey(pairKey);
+  PPair* entrancePair = compound_->GetPair(aa);
+  if(!entrancePair || !entrancePair->IsEntrance()) return out;
+
+  // One block per pathway: 6 descriptors then 2*nE numbers.
+  std::vector<vector_r> blocks;
+
+  for(int j = 1; j <= compound_->NumJGroups(); j++) {
+    for(int la = 1; la <= compound_->GetJGroup(j)->NumLevels(); la++) {
+      ALevel* ecLevel = compound_->GetJGroup(j)->GetLevel(la);
+      if(!ecLevel->IsECLevel()) continue;
+      int ir = ecLevel->GetECPairNum();
+      if(ir < 1 || ir > compound_->NumPairs()) continue;
+
+      for(int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
+        KGroup* theKGroup = entrancePair->GetDecay(ir)->GetKGroup(k);
+        for(int ecm = 1; ecm <= theKGroup->NumECMGroups(); ecm++) {
+          ECMGroup* g = theKGroup->GetECMGroup(ecm);
+
+          AChannel* finalChannel =
+            compound_->GetJGroup(j)->GetChannel(g->GetFinalChannel());
+          PPair* finalPair = compound_->GetPair(finalChannel->GetPairNum());
+
+          int liValue;
+          double siValue;
+          if(g->IsChannelCapture()) {
+            MGroup* cc = entrancePair->GetDecay(g->GetChanCapDecay())
+                           ->GetKGroup(g->GetChanCapKGroup())
+                           ->GetMGroup(g->GetChanCapMGroup());
+            liValue = compound_->GetJGroup(cc->GetJNum())
+                        ->GetChannel(cc->GetChpNum())->GetL();
+            siValue = compound_->GetJGroup(cc->GetJNum())
+                        ->GetChannel(cc->GetChpNum())->GetS();
+          } else {
+            liValue = g->GetL();
+            siValue = theKGroup->GetS();
+          }
+
+          vector_r block;
+          block.push_back(static_cast<double>(liValue));
+          block.push_back(static_cast<double>(finalChannel->GetL()));
+          block.push_back(2.0 * siValue);
+          block.push_back(2.0 * finalChannel->GetS());
+          block.push_back(static_cast<double>(g->GetMult()));
+          block.push_back(g->GetRadType() == 'E' ? 1.0 : 0.0);
+
+          ECIntegral theECIntegral(finalPair, configure());
+          double levelEnergy = ecLevel->GetE();
+          for(int i = 0; i < nE; ++i) {
+            double inEnergy = energies[i] + entrancePair->GetSepE()
+                                          + entrancePair->GetExE();
+            complex v(0., 0.);
+            if(energies[i] > 0.0) {
+              try {
+                v = theECIntegral(liValue, finalChannel->GetL(),
+                                  siValue, finalChannel->GetS(),
+                                  g->GetJ(), compound_->GetJGroup(j)->GetJ(),
+                                  g->GetMult(), g->GetRadType(),
+                                  inEnergy, levelEnergy,
+                                  g->IsChannelCapture());
+              } catch(...) {
+                v = complex(0., 0.);
+              }
+            }
+            block.push_back(real(v));
+            block.push_back(imag(v));
+          }
+          blocks.push_back(std::move(block));
+        }
+      }
+    }
+  }
+
+  out.push_back(static_cast<double>(blocks.size()));
+  out.push_back(static_cast<double>(nE));
+  for(const vector_r& b : blocks) out.insert(out.end(), b.begin(), b.end());
+  return out;
+}
+
+/*!
+ * Coulomb-function cache counters, aggregated over threads.
+ */
+vector_r AZUREAPI::GetCacheStats( ) const {
+  vector_r out(6, 0.0);
+  if(!g_coulFuncCache) return out;
+  CoulFuncCache::Stats s = g_coulFuncCache->GetStats();
+  out[0] = static_cast<double>(s.queries);
+  out[1] = static_cast<double>(s.hits);
+  out[2] = static_cast<double>(s.entries);
+  out[3] = static_cast<double>(s.keys);
+  out[4] = static_cast<double>(s.disabledKeys);
+  out[5] = static_cast<double>(s.threads);
+  return out;
 }

@@ -62,7 +62,10 @@ class Config {
     USE_NLOPT_MINIMIZER       =(1<<17),
     USE_HYBRID_COULOMB        =(1<<18),
     USE_ANALYTIC_GRADIENT     =(1<<19),
-    USE_LM_MINIMIZER          =(1<<20)
+    USE_LM_MINIMIZER          =(1<<20),
+    CALCULATE_COVARIANCE_BAND =(1<<21),
+    SCALE_COVARIANCE_BY_CHI2  =(1<<22),
+    USE_GSL_LM_MINIMIZER      =(1<<23)
   };
   /*!
    * Bit flags for check file control in AZURE2.
@@ -110,6 +113,8 @@ class Config {
   ///A constant indicating the maximum order of the Legendre polynomials to calculate.
   static const int maxLOrder=20;
   int ReadConfigFile();
+  ///Reads the <potential> block of the configuration file, if it has one.
+  int ReadPotentialBlock();
 #ifndef NO_STAT
   int CheckForInputFiles();
 #endif

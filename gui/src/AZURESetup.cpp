@@ -76,6 +76,7 @@ AZURESetup::AZURESetup() : config(std::cout) {
 
   fittingTab = new FittingTab();
   fittingTab->setTabReferences(levelsTab, segmentsTab);
+  fittingTab->setConfig(&GetConfig());
   
   runTab = new RunTab();
   connect(runTab->calcButton,SIGNAL(clicked()),this,SLOT(SaveAndRun()));
@@ -398,14 +399,22 @@ bool AZURESetup::readLastRun(QTextStream& inStream) {
     else  runTab->calcType->setCurrentIndex(2);
   }
 
+  // Restore the uncertainty-band checkboxes (after calcType, so their enabled
+  // state is already set).  Band first, then scaling (which depends on it).
+  runTab->uncertaintyBandCheck->setChecked(paramMask & Config::CALCULATE_COVARIANCE_BAND);
+  runTab->scaleCovarianceCheck->setChecked(paramMask & Config::SCALE_COVARIANCE_BY_CHI2);
+  runTab->wignerLimitsCheck->setChecked(paramMask & Config::USE_WIGNER_LIMITS);
+
   // Set minimizer selection (0 Minuit2, 1 Minuit2+analytic grad, 2 Levenberg-
-  // Marquardt, 3+ NLopt).
+  // Marquardt, 3 GSL trust-region, 4+ NLopt).
 #ifdef USE_NLOPT
   if(paramMask & Config::USE_NLOPT_MINIMIZER) {
-    runTab->minimizerType->setCurrentIndex(GetConfig().nloptAlgorithm + 3);
+    runTab->minimizerType->setCurrentIndex(GetConfig().nloptAlgorithm + 4);
   } else
 #endif
-  if(paramMask & Config::USE_LM_MINIMIZER) {
+  if(paramMask & Config::USE_GSL_LM_MINIMIZER) {
+    runTab->minimizerType->setCurrentIndex(3);
+  } else if(paramMask & Config::USE_LM_MINIMIZER) {
     runTab->minimizerType->setCurrentIndex(2);
   } else if(paramMask & Config::USE_ANALYTIC_GRADIENT) {
     runTab->minimizerType->setCurrentIndex(1);
@@ -433,7 +442,10 @@ bool AZURESetup::readLastRun(QTextStream& inStream) {
 
   if(paramMask & Config::USE_WIGNER_LIMITS) GetConfig().paramMask |= Config::USE_WIGNER_LIMITS;
   else GetConfig().paramMask &= ~Config::USE_WIGNER_LIMITS;
-  
+
+  if(paramMask & Config::SCALE_COVARIANCE_BY_CHI2) GetConfig().paramMask |= Config::SCALE_COVARIANCE_BY_CHI2;
+  else GetConfig().paramMask &= ~Config::SCALE_COVARIANCE_BY_CHI2;
+
   if(rateEntrancePair!=0) runTab->rateEntranceKey->setText(QString("%1").arg(rateEntrancePair));
   if(rateExitPair!=0) runTab->rateExitKey->setText(QString("%1").arg(rateExitPair));
 
@@ -562,40 +574,40 @@ bool AZURESetup::writeFile(QString filename) {
   QString directory=info.absolutePath();
 
   QTextStream out(&file);
-  out << "<config>" << endl;
+  out << "<config>" << Qt::endl;
   if(!this->writeConfig(out,directory)) return false;
-  out << "</config>" << endl;
+  out << "</config>" << Qt::endl;
 
   // Write potential section after config
-  out << "<potential>" << endl;
-  out << "useHybridPotential=" << (GetConfig().useHybridMethod ? "1" : "0") << endl;
-  out << "useAdaptiveGrid=" << (GetConfig().useAdaptiveGrid ? "1" : "0") << endl;
+  out << "<potential>" << Qt::endl;
+  out << "useHybridPotential=" << (GetConfig().useHybridMethod ? "1" : "0") << Qt::endl;
+  out << "useAdaptiveGrid=" << (GetConfig().useAdaptiveGrid ? "1" : "0") << Qt::endl;
   nuclearPotentialTab->writePotentialSettings(out);
-  out << "</potential>" << endl;
+  out << "</potential>" << Qt::endl;
 
-  out << "<levels>" << endl;
+  out << "<levels>" << Qt::endl;
   if(!levelsTab->writeNuclearFile(out)) return false;
-  out << "</levels>" << endl;
+  out << "</levels>" << Qt::endl;
 
-  out << "<segmentsData>" << endl;
+  out << "<segmentsData>" << Qt::endl;
   if(!segmentsTab->writeSegDataFile(out)) return false;
-  out << "</segmentsData>" << endl;
+  out << "</segmentsData>" << Qt::endl;
 
-  out << "<segmentsTest>" << endl;
+  out << "<segmentsTest>" << Qt::endl;
   if(!segmentsTab->writeSegTestFile(out)) return false;
-  out << "</segmentsTest>" << endl;
+  out << "</segmentsTest>" << Qt::endl;
 
-  out << "<targetInt>" << endl;
+  out << "<targetInt>" << Qt::endl;
   if(!targetIntTab->writeFile(out)) return false;
-  out << "</targetInt>" << endl;  
+  out << "</targetInt>" << Qt::endl;  
  
-  out << "<parameterSettings>" << endl;
+  out << "<parameterSettings>" << Qt::endl;
   if(!fittingTab->writeParameterSettings(out)) return false;
-  out << "</parameterSettings>" << endl;
+  out << "</parameterSettings>" << Qt::endl;
   
-  out << "<lastRun>" << endl;
+  out << "<lastRun>" << Qt::endl;
   if(!writeLastRun(out)) return false;
-  out << "</lastRun>" << endl;
+  out << "</lastRun>" << Qt::endl;
 
 #ifdef USE_MCMC
   if(!mcmcTab->writeMCMCSettings(out)) return false;
@@ -680,17 +692,17 @@ bool AZURESetup::writeConfig(QTextStream& outStream, QString directory) {
   else angDistsCheck="none";
 
   outStream.setFieldAlignment(QTextStream::AlignLeft);
-  outStream << qSetFieldWidth(100) << isAMatrix << qSetFieldWidth(0) << "#Perform A-Matrix Calculation" << endl;
-  outStream << qSetFieldWidth(100) << outputDirectory << qSetFieldWidth(0) << "#Full Path to Output Directory" << endl;
-  outStream << qSetFieldWidth(100) << checksDirectory << qSetFieldWidth(0) << "#Full Path to Checks Directory" << endl;
-  outStream << qSetFieldWidth(100) << compoundCheck << qSetFieldWidth(0) << "#Compond Nucleus Check" << endl;
-  outStream << qSetFieldWidth(100) << boundaryCheck << qSetFieldWidth(0) << "#Boundary Condition Check" << endl;
-  outStream << qSetFieldWidth(100) << dataCheck << qSetFieldWidth(0) << "#Data Check" << endl;
-  outStream << qSetFieldWidth(100) << lMatrixCheck << qSetFieldWidth(0) << "#Lo-Matrix and Penetrability Check" << endl;
-  outStream << qSetFieldWidth(100) << legendreCheck << qSetFieldWidth(0) << "#Legendre Polynomial Check" << endl;
-  outStream << qSetFieldWidth(100) << coulAmpCheck << qSetFieldWidth(0) << "#Coulomb Amplitudes Check" << endl;
-  outStream << qSetFieldWidth(100) << pathwaysCheck << qSetFieldWidth(0) << "#Reaction Pathway Check" << endl;
-  outStream << qSetFieldWidth(100) << angDistsCheck << qSetFieldWidth(0) << "#Angular Distributions Check" << endl;
+  outStream << qSetFieldWidth(100) << isAMatrix << qSetFieldWidth(0) << "#Perform A-Matrix Calculation" << Qt::endl;
+  outStream << qSetFieldWidth(100) << outputDirectory << qSetFieldWidth(0) << "#Full Path to Output Directory" << Qt::endl;
+  outStream << qSetFieldWidth(100) << checksDirectory << qSetFieldWidth(0) << "#Full Path to Checks Directory" << Qt::endl;
+  outStream << qSetFieldWidth(100) << compoundCheck << qSetFieldWidth(0) << "#Compond Nucleus Check" << Qt::endl;
+  outStream << qSetFieldWidth(100) << boundaryCheck << qSetFieldWidth(0) << "#Boundary Condition Check" << Qt::endl;
+  outStream << qSetFieldWidth(100) << dataCheck << qSetFieldWidth(0) << "#Data Check" << Qt::endl;
+  outStream << qSetFieldWidth(100) << lMatrixCheck << qSetFieldWidth(0) << "#Lo-Matrix and Penetrability Check" << Qt::endl;
+  outStream << qSetFieldWidth(100) << legendreCheck << qSetFieldWidth(0) << "#Legendre Polynomial Check" << Qt::endl;
+  outStream << qSetFieldWidth(100) << coulAmpCheck << qSetFieldWidth(0) << "#Coulomb Amplitudes Check" << Qt::endl;
+  outStream << qSetFieldWidth(100) << pathwaysCheck << qSetFieldWidth(0) << "#Reaction Pathway Check" << Qt::endl;
+  outStream << qSetFieldWidth(100) << angDistsCheck << qSetFieldWidth(0) << "#Angular Distributions Check" << Qt::endl;
 
   return true;
 }
@@ -708,6 +720,14 @@ bool AZURESetup::writeLastRun(QTextStream& outStream) {
   else paramMask &= ~Config::PERFORM_ERROR_ANALYSIS;
   if(runTab->calcType->currentIndex()==4) paramMask |= Config::CALCULATE_REACTION_RATE;
   else paramMask &= ~Config::CALCULATE_REACTION_RATE;
+  // Analytic cross-section uncertainty band: user-selected via the Run-tab
+  // checkboxes (enabled only for fit / extrapolation / MINOS modes).
+  if(runTab->uncertaintyBandCheck->isChecked()) paramMask |= Config::CALCULATE_COVARIANCE_BAND;
+  else paramMask &= ~Config::CALCULATE_COVARIANCE_BAND;
+  if(runTab->scaleCovarianceCheck->isChecked()) paramMask |= Config::SCALE_COVARIANCE_BY_CHI2;
+  else paramMask &= ~Config::SCALE_COVARIANCE_BY_CHI2;
+  if(runTab->wignerLimitsCheck->isChecked()) paramMask |= Config::USE_WIGNER_LIMITS;
+  else paramMask &= ~Config::USE_WIGNER_LIMITS;
 
   if(runTab->oldParamFileButton->isChecked())
     paramMask |= Config::USE_PREVIOUS_PARAMETERS;
@@ -716,24 +736,24 @@ bool AZURESetup::writeLastRun(QTextStream& outStream) {
     paramMask |= Config::USE_PREVIOUS_INTEGRALS;
   else paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
 
-  outStream << paramMask << endl;
-  outStream << '"' << runTab->paramFileText->text() << '"' << endl;
-  outStream << '"' << runTab->integralsFileText->text() << '"' << endl;
+  outStream << paramMask << Qt::endl;
+  outStream << '"' << runTab->paramFileText->text() << '"' << Qt::endl;
+  outStream << '"' << runTab->integralsFileText->text() << '"' << Qt::endl;
   if(!runTab->rateEntranceKey->text().isEmpty()) outStream << runTab->rateEntranceKey->text() << ' ';
   else outStream << "0 "; 
   if(!runTab->rateExitKey->text().isEmpty()) outStream << runTab->rateExitKey->text();
   else outStream << 0; 
-  outStream << endl;
+  outStream << Qt::endl;
   if(runTab->fileTempButton->isChecked()) outStream << "1 "; 
   else outStream << "0 "; 
-  outStream << '"' << runTab->fileTempText->text() << '"' << endl;
+  outStream << '"' << runTab->fileTempText->text() << '"' << Qt::endl;
   if(!runTab->minTempText->text().isEmpty()) outStream << runTab->minTempText->text() << ' ';
   else outStream << "-1. ";
   if(!runTab->maxTempText->text().isEmpty()) outStream << runTab->maxTempText->text() << ' ';
   else outStream << "-1. ";
   if(!runTab->tempStepText->text().isEmpty()) outStream << runTab->tempStepText->text();
   else outStream << "-1.";
-  outStream << endl;
+  outStream << Qt::endl;
 	 
   return true;
 }
@@ -851,9 +871,6 @@ void AZURESetup::editOptions() {
   if(!(GetConfig().paramMask & Config::TRANSFORM_PARAMETERS)) aDialog.noTransformCheck->setChecked(true);
   else aDialog.noTransformCheck->setChecked(false);
 
-  if(GetConfig().paramMask & Config::USE_WIGNER_LIMITS) aDialog.useWignerLimitsCheck->setChecked(true);
-  else aDialog.useWignerLimitsCheck->setChecked(false);
-
   if(GetConfig().useHybridMethod) aDialog.useHybridMethodCheck->setChecked(true);
   else aDialog.useHybridMethodCheck->setChecked(false);
 
@@ -884,9 +901,6 @@ void AZURESetup::editOptions() {
     
     if(aDialog.noTransformCheck->isChecked()) GetConfig().paramMask &= ~Config::TRANSFORM_PARAMETERS;
     else GetConfig().paramMask |= Config::TRANSFORM_PARAMETERS;
-
-    if(aDialog.useWignerLimitsCheck->isChecked()) GetConfig().paramMask |= Config::USE_WIGNER_LIMITS;
-    else GetConfig().paramMask &= ~Config::USE_WIGNER_LIMITS;
 
     if(aDialog.useHybridMethodCheck->isChecked()) {
       GetConfig().useHybridMethod = true;
@@ -947,23 +961,33 @@ void AZURESetup::SaveAndRun() {
   else GetConfig().paramMask &= ~Config::PERFORM_ERROR_ANALYSIS;
   if(runTab->calcType->currentIndex()==4) GetConfig().paramMask |= Config::CALCULATE_REACTION_RATE;
   else GetConfig().paramMask &= ~Config::CALCULATE_REACTION_RATE;
+  if(runTab->uncertaintyBandCheck->isChecked()) GetConfig().paramMask |= Config::CALCULATE_COVARIANCE_BAND;
+  else GetConfig().paramMask &= ~Config::CALCULATE_COVARIANCE_BAND;
+  if(runTab->scaleCovarianceCheck->isChecked()) GetConfig().paramMask |= Config::SCALE_COVARIANCE_BY_CHI2;
+  else GetConfig().paramMask &= ~Config::SCALE_COVARIANCE_BY_CHI2;
+  if(runTab->wignerLimitsCheck->isChecked()) GetConfig().paramMask |= Config::USE_WIGNER_LIMITS;
+  else GetConfig().paramMask &= ~Config::USE_WIGNER_LIMITS;
 
   // Handle minimizer selection (only for fitting operations).  Combo layout:
-  //   0 Minuit2, 1 Minuit2 + analytic gradient, 2 Levenberg-Marquardt, 3+ NLopt.
+  //   0 Minuit2, 1 Minuit2 + analytic gradient, 2 Levenberg-Marquardt,
+  //   3 GSL trust-region (geodesic), 4+ NLopt.
   GetConfig().paramMask &= ~(Config::USE_NLOPT_MINIMIZER |
                              Config::USE_ANALYTIC_GRADIENT |
-                             Config::USE_LM_MINIMIZER);
+                             Config::USE_LM_MINIMIZER |
+                             Config::USE_GSL_LM_MINIMIZER);
   if(runTab->calcType->currentIndex()==1 || runTab->calcType->currentIndex()==3) {
     int mIdx = runTab->minimizerType->currentIndex();
     if(mIdx == 1) {
       GetConfig().paramMask |= Config::USE_ANALYTIC_GRADIENT;
     } else if(mIdx == 2) {
       GetConfig().paramMask |= Config::USE_LM_MINIMIZER;
+    } else if(mIdx == 3) {
+      GetConfig().paramMask |= Config::USE_GSL_LM_MINIMIZER;
     }
 #ifdef USE_NLOPT
-    else if(mIdx >= 3) {
+    else if(mIdx >= 4) {
       GetConfig().paramMask |= Config::USE_NLOPT_MINIMIZER;
-      GetConfig().nloptAlgorithm = mIdx - 3;
+      GetConfig().nloptAlgorithm = mIdx - 4;
     }
 #endif
   }

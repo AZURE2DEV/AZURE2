@@ -1,11 +1,35 @@
-cmake_minimum_required(VERSION 4.0)
+# Range form: needs at least 3.16, and opts in to the current behaviour of
+# anything up to 4.0.  Requiring 4.0 outright kept the project from configuring
+# anywhere but a very recent toolchain -- Ubuntu 22.04 ships CMake 3.22 and
+# 24.04 ships 3.28, so distro builds could never get past line 1.
+cmake_minimum_required(VERSION 3.16...4.0)
 project(AZURE2)
+
+# Default to an optimized build.  With no CMAKE_BUILD_TYPE, CMake passes no
+# optimization flags at all, which for a numerical code means an interpreter-
+# speed binary that looks like a normal one.  Multi-config generators (Visual
+# Studio, Xcode) pick the configuration at build time, so leave those alone.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+                 Debug Release RelWithDebInfo MinSizeRel)
+endif()
 
 # Version info
 set(AZURE2_VERSION_MAJOR 1)
 set(AZURE2_VERSION_MINOR 1)
 set(AZURE2_VERSION_PATCH 0)
 set(AZURE2_VERSION "${AZURE2_VERSION_MAJOR}.${AZURE2_VERSION_MINOR}.${AZURE2_VERSION_PATCH}")
+
+# M_PI and friends are not ISO C++, so MinGW's headers hide them whenever
+# __STRICT_ANSI__ is set -- which -std=c++17 (as opposed to -std=gnu++17) does.
+# _USE_MATH_DEFINES is the MSVC-originated convention for asking for them back,
+# honoured by both MSVC and mingw-w64. It has to be visible before any header
+# reaches <cmath>, hence a command-line definition rather than a #define in a
+# source file. Also covers CROSS_COMPILE_WINDOWS, which sets CMAKE_SYSTEM_NAME.
+if(WIN32)
+    add_compile_definitions(_USE_MATH_DEFINES)
+endif()
 
 # Options
 option(CROSS_COMPILE_WINDOWS "Cross-compile for Windows" OFF)
@@ -19,7 +43,7 @@ option(USE_READLINE "Use Readline library for CLI input." ON)
 option(USE_ERYA "Use ERYA SRIM stopping power utilities." ON)
 option(USE_MCMC "Use MCMC Bayesian sampling OFF" ON)
 option(USE_GCOV "Create a GCov-enabled build." OFF)
-option(CODE_COVERAGE "Enable coverage reporting" ON)
+option(CODE_COVERAGE "Enable coverage reporting" OFF)
 
 # Cross-compilation settings
 if(CROSS_COMPILE_WINDOWS)
@@ -123,7 +147,7 @@ endif()
 
 # Extra includes/libs
 set(AZURE2_SOURCE_DIR ${CMAKE_BUILD_DIRECTORY})
-include_directories(${AZURE2_SOURCE_DIR}/coul/include)
+include_directories(${AZURE2_SOURCE_DIR}/external/coul/include)
 set(EXTRA_LIBS coul pugixml ${OpenMP_LIBRARIES})
 
 # Windows DLL bundling function (define before subdirectories)
@@ -143,10 +167,10 @@ function(copy_dll_if_exists target_name dll_name dll_path)
 endfunction()
 
 # Minuit2 build
-add_subdirectory(minuit2)
+add_subdirectory(external/minuit2)
 
 # Add Minuit2 to include directories
-include_directories(${AZURE2_SOURCE_DIR}/minuit2/inc)
+include_directories(${AZURE2_SOURCE_DIR}/external/minuit2/inc)
 
 # NLopt build (optional minimizer)
 option(USE_NLOPT "Use NLopt library for minimization" OFF)
@@ -173,8 +197,8 @@ endif()
 
 # ERYA SRIM utilities (optional)
 if(USE_ERYA)
-    # Add ERYA subdirectory (pugixml is handled inside erya/CMakeLists.txt)
-    add_subdirectory(erya)
+    # Add ERYA subdirectory (pugixml is handled inside external/erya/CMakeLists.txt)
+    add_subdirectory(external/erya)
     
     # Add include directories from ERYA module
     include_directories(${SRIM_UTILITIES_INCLUDE_DIRS})
@@ -297,15 +321,15 @@ if(BUILD_GUI)
     add_definitions(-DGUI_BUILD)
 endif()
 
-add_subdirectory(coul)
+add_subdirectory(external/coul)
 add_subdirectory(src)
 
 # Install and copy SRIM data file (only if ERYA is enabled)
 if(USE_ERYA)
-    install(FILES erya/data/SRIM2013.xml DESTINATION share/azure2/ COMPONENT Runtime)
+    install(FILES external/erya/data/SRIM2013.xml DESTINATION share/azure2/ COMPONENT Runtime)
     
     # Copy SRIM data file to build directory for development
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/erya/data/SRIM2013.xml
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/external/erya/data/SRIM2013.xml
                    ${CMAKE_CURRENT_BINARY_DIR}/SRIM2013.xml COPYONLY)
 endif()
 
@@ -322,16 +346,6 @@ else()
 endif()
 
 # Code coverage
-add_library(coverage_config INTERFACE)
-if(CODE_COVERAGE AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(coverage_config INTERFACE -O3 -g --coverage -std=c++11)
-    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.13)
-        target_link_options(coverage_config INTERFACE --coverage)
-    else()
-        target_link_libraries(coverage_config INTERFACE --coverage)
-    endif()
-endif()
-
 if(USE_GCOV)
     set(GCC_COVERAGE_COMPILE_FLAGS "-fprofile-arcs -ftest-coverage")
     set(GCC_COVERAGE_LINK_FLAGS "-lgcov")

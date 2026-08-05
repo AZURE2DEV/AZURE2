@@ -108,8 +108,8 @@ void AZUREParams::ReadUserParameters(const std::string& filename) {
 
 void AZUREParams::WriteUserParameters(const Config& configure, bool fitParameters) {
   char filename[256];
-  if(fitParameters) sprintf(filename,"%sparam.sav",configure.outputdir.c_str());
-  else sprintf(filename,"%sparam.par",configure.outputdir.c_str());
+  if(fitParameters) snprintf(filename, sizeof(filename),"%sparam.sav",configure.outputdir.c_str());
+  else snprintf(filename, sizeof(filename),"%sparam.par",configure.outputdir.c_str());
   std::ofstream out;
   out.open(filename);
   if(out) {
@@ -130,7 +130,7 @@ void AZUREParams::WriteUserParameters(const Config& configure, bool fitParameter
 
 void AZUREParams::WriteParameterErrors(const std::vector<std::pair<double,double> > &errors,const Config& configure) {
   char filename[256];
-  sprintf(filename,"%sparam.errors",configure.outputdir.c_str());
+  snprintf(filename, sizeof(filename),"%sparam.errors",configure.outputdir.c_str());
   std::ofstream out;
   out.open(filename);
   if(out) {

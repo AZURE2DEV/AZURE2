@@ -7,6 +7,10 @@ a fast C++ calculation engine, parameter fitting via Minuit2, optional Bayesian
 (MCMC) sampling, and a socket API with a Python client (`pyazr`) for scripting
 and external samplers.
 
+**Documentation:** <https://rdeboer1.github.io/AZURE2/> — user guide, the
+physics and conventions, and the C++ API reference at
+[`/api/`](https://rdeboer1.github.io/AZURE2/api/).
+
 Upstream project: <https://azure.nd.edu/> · Source:
 <https://github.com/rdeboer1/AZURE2>
 
@@ -14,28 +18,28 @@ Upstream project: <https://azure.nd.edu/> · Source:
 
 ## What's in this repository
 
-| Path        | Description |
-|-------------|-------------|
-| `src/`      | Core C++ R-matrix engine (`CNuc`, `EData`, cross-section/χ² calculation, output). |
-| `include/`  | Public headers for the core engine. |
-| `gui/`      | Qt5 graphical setup utility (`AZURESetup`). |
-| `api/`      | Socket API server (`--use-api`) used by the Python client. |
-| `pyazr/`    | Python package that drives AZURE2 over the socket API. |
-| `coul/`     | Coulomb wave-function library. |
-| `minuit2/`  | **Bundled** ROOT Minuit2 minimizer — built in-tree, no external install needed. |
-| `numcmc/`   | **Bundled** MCMC Bayesian sampling library (`USE_MCMC`). |
-| `erya/`     | **Bundled** SRIM stopping-power utilities + pugixml (`USE_ERYA`). |
-| `cmake/`    | Custom CMake find-modules (e.g. `FindQwt.cmake`) and toolchains. |
-| `scripts/`  | Convenience build scripts (Linux, macOS, Windows, Docker, snap). |
-| `docker/`   | Dockerfiles for Linux and Windows builds. |
-| `examples/` | Example run scripts (GUI / MCMC via Docker). |
-| `doc/`      | Doxygen configuration and generated API docs. |
-| `snap/`     | Snapcraft packaging definition. |
+| Path           | Description |
+|----------------|-------------|
+| `src/`         | Core C++ R-matrix engine (`CNuc`, `EData`, cross-section/χ² calculation, output). |
+| `include/`     | Public headers for the core engine. |
+| `gui/`         | Qt5 graphical setup utility (`AZURESetup`). |
+| `api/`         | Socket API server (`--use-api`) used by the Python client. |
+| `numcmc/`      | Affine-invariant ensemble MCMC sampler (`USE_MCMC`). |
+| `pyazr/`       | Python package that drives AZURE2 over the socket API. |
+| `external/`    | Vendored third-party code, built in-tree: `minuit2/` (ROOT Minuit2), `coul/` (Coulomb wave functions), `erya/` (SRIM stopping powers + pugixml). |
+| `tests/`       | Physics regression suite — reference evaluations and the runner. |
+| `cmake/`       | Custom CMake find-modules (e.g. `FindQwt.cmake`) and toolchains. |
+| `packaging/`   | Distribution: `docker/` images; the AppImage, Windows and macOS packaging live in the CI workflow. |
+| `scripts/`     | Convenience build scripts (Linux, macOS, Windows, Docker). |
+| `examples/`    | Example run scripts (GUI / MCMC via Docker). |
+| `docs/`        | Documentation sources: Sphinx under `source/`, Doxygen via `Doxyfile`. |
+| `.github/`     | Continuous integration. |
+| `.claude/`     | [Claude Code](https://claude.com/claude-code) project skills (see below). |
 
-> **Note:** Minuit2, the Coulomb library, the SRIM utilities, pugixml, and the
-> MCMC sampler are all vendored in this repository and compiled as part of the
-> build. They no longer need to be downloaded or installed separately, unlike in
-> older versions of AZURE2.
+> **Note:** Minuit2, the Coulomb library, the SRIM utilities and pugixml are
+> vendored under `external/` and compiled as part of the build, and the MCMC
+> sampler in `numcmc/` is built alongside them. None of these need to be
+> downloaded or installed separately, unlike in older versions of AZURE2.
 
 ---
 
@@ -46,7 +50,7 @@ bundled in-tree.
 
 **Build tools**
 - A C++ compiler with OpenMP support (GCC or Clang)
-- [CMake](https://cmake.org/) ≥ 4.0 (see `cmake_minimum_required` in `CMakeLists.txt`)
+- [CMake](https://cmake.org/) ≥ 3.16
 
 **Libraries**
 - [GSL](https://www.gnu.org/software/gsl/) — GNU Scientific Library (math routines)
@@ -79,12 +83,13 @@ brew install cmake gsl readline qt@5 qwt libomp
 ```bash
 git clone https://github.com/rdeboer1/AZURE2.git
 cd AZURE2
-mkdir build && cd build
-cmake ..
-make -j$(nproc)          # use $(sysctl -n hw.ncpu) on macOS
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
 ```
 
-The resulting executable is `build/src/AZURE2`.
+The resulting executable is `build/src/AZURE2`. `CMAKE_BUILD_TYPE` defaults to
+`Release`; set it to `Debug` explicitly if you want an unoptimized build with
+symbols.
 
 ### Convenience scripts
 
@@ -192,7 +197,7 @@ Set `AZURE2_BINARY` (or pass `binary=...`) if the executable is not at
 ## Containers
 
 **Docker** — a self-contained image (Ubuntu 22.04 + ROOT + Python tooling) is
-defined in `docker/Dockerfile.azure2`:
+defined in `packaging/docker/Dockerfile.azure2`:
 ```bash
 source scripts/build_docker.sh
 source examples/run_gui.sh      # run the GUI from the container
@@ -203,6 +208,72 @@ source examples/run_gui.sh      # run the GUI from the container
 sudo apptainer build AZURE2.sif docker-daemon://azure2:latest
 ```
 Copy the resulting `AZURE2.sif` to your HPC resource.
+
+---
+
+## Downloads
+
+Every push builds AZURE2 on Linux, macOS and Windows and attaches the results
+to the run under **Actions → build → Artifacts**. Tagging a commit `v*`
+collects the same artifacts into a draft GitHub release.
+
+| Platform | Artifact | Notes |
+|----------|----------|-------|
+| Linux    | `AZURE2-x86_64.AppImage` | Self-contained; `chmod +x` and run. No installation, no root. |
+| Windows  | `AZURE2.exe` + Qt runtime | Built with MSYS2/mingw-w64. |
+| macOS    | `AZURE2` (x86_64) | Not yet a signed `.app` bundle — see `dist/README-packaging.txt` in the artifact. |
+
+---
+
+## Tests
+
+`tests/` holds reference evaluations. Each is run through AZURE2 and its
+χ² compared against a recorded result, which catches a change that still
+compiles and still runs but moves the physics:
+
+```bash
+./tests/run_tests.sh                  # uses build/src/AZURE2
+./tests/run_tests.sh path/to/AZURE2   # or an explicit binary
+TOL=1e-4 ./tests/run_tests.sh         # tighter tolerance
+```
+
+The suite runs on all three platforms in CI. AZURE2 currently agrees to within
+about 1×10⁻⁵ across GCC, Clang and MinGW, so the default relative tolerance is
+1×10⁻³ — loose enough for that spread, far tighter than any real regression.
+
+**Adding an evaluation.** Create `tests/<name>/` containing `<name>.azr`, its
+`data/`, and `expected/chiSquared.out` taken from a run you trust. Cases are
+discovered automatically; nothing in the runner needs editing. The comparison
+covers the total χ², each segment's χ², and each segment's point count (that
+one exactly — a change there means data was dropped or misread).
+
+---
+
+## Documentation
+
+The site at <https://rdeboer1.github.io/AZURE2/> is published by CI from the
+default branch (`qt5`); pushes to other branches build the documentation to
+catch breakage but do not publish. Sources live in `docs/`; the generated output is not tracked.
+To build it locally:
+
+```bash
+pip install -r docs/requirements.txt
+make -C docs html     # user guide  -> docs/_build/html/index.html
+make -C docs api      # C++ internals via Doxygen -> docs/api/html/index.html
+```
+
+---
+
+## Claude Code skill
+
+`.claude/skills/azure2-eval/SKILL.md` is a project-scoped
+[Claude Code](https://claude.com/claude-code) skill describing how to drive
+AZURE2 — the CLI menu modes, the `pyazr` API, adding and removing levels,
+decomposing cross sections, and the conventions that are easy to get wrong
+(lab vs. centre-of-mass frames, segment indexing, the external-capture integral
+caches). It is picked up automatically when Claude Code runs in this
+repository; no setup is needed. Editing it is the way to teach Claude something
+new about the project.
 
 ---
 

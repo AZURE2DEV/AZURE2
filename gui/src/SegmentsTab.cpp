@@ -1,6 +1,6 @@
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QMessageBox>
-#include <QGridLayout>
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QTextStream>
@@ -154,39 +154,40 @@ SegmentsTab::SegmentsTab(QWidget *parent) : QWidget(parent) {
   QGridLayout *segDataLayout = new QGridLayout;
   segDataLayout->addWidget(segmentsDataView,0,0);
 
-  // Reorganized button layout: [+] [-] [spacer] [Check All] [Uncheck All] [spacer] [↑] [↓] [spacer] [Filter:] [Entrance] [Exit]
-  QGridLayout *segDataButtonBox = new QGridLayout;
-  segDataButtonBox->addWidget(segDataAddButton,0,0);
-  segDataButtonBox->addWidget(segDataDeleteButton,0,1);
-  segDataButtonBox->addItem(new QSpacerItem(10,28),0,2);
-  segDataButtonBox->addWidget(segDataCheckAllButton,0,3);
-  segDataButtonBox->addWidget(segDataUncheckAllButton,0,4);
-  segDataButtonBox->addItem(new QSpacerItem(10,28),0,5);
-  segDataButtonBox->addWidget(segDataUpButton,0,6);
-  segDataButtonBox->addWidget(segDataDownButton,0,7);
-  segDataButtonBox->addItem(new QSpacerItem(10,28),0,8);
-  segDataButtonBox->addWidget(new QLabel(tr("Filter:")),0,9);
-  segDataButtonBox->addWidget(segDataEntranceFilter,0,10);
-  segDataButtonBox->addWidget(segDataExitFilter,0,11);
-  segDataButtonBox->addItem(new QSpacerItem(10,28),0,12);
-  segDataButtonBox->addWidget(segDataExforButton,0,13);
-  segDataButtonBox->setColumnStretch(0,0);
-  segDataButtonBox->setColumnStretch(1,0);
-  segDataButtonBox->setColumnStretch(2,0);
-  segDataButtonBox->setColumnStretch(3,0);
-  segDataButtonBox->setColumnStretch(4,0);
-  segDataButtonBox->setColumnStretch(5,0);
-  segDataButtonBox->setColumnStretch(6,0);
-  segDataButtonBox->setColumnStretch(7,0);
-  segDataButtonBox->setColumnStretch(8,1); // Spacer before Filter takes remaining space
-  segDataButtonBox->setColumnStretch(9,0);
-  segDataButtonBox->setColumnStretch(10,0);
-  segDataButtonBox->setColumnStretch(11,0);
+  // Button row: [+] [-]   [Check All] [Uncheck All]   [up] [down]   <stretch>   Filter: [Entrance] [Exit]   [EXFOR]
+  // A horizontal box vertically centers every widget so the buttons, filter
+  // comboboxes and label all line up.  On macOS native push-button bezels are
+  // drawn slightly outside the widget geometry, so adjacent buttons overlap
+  // unless the gap between them is widened (matches setHorizontalSpacing(11)
+  // used by the other tabs' button rows).
 #ifdef MACX_SPACING
-  segDataButtonBox->setHorizontalSpacing(11);
+  const int kBtnGap = 11;    // gap between neighbouring buttons
+  const int kGroupGap = 20;  // gap between logical button groups
 #else
-  segDataButtonBox->setHorizontalSpacing(5);
+  const int kBtnGap = 6;
+  const int kGroupGap = 14;
 #endif
+  QHBoxLayout *segDataButtonBox = new QHBoxLayout;
+  segDataButtonBox->setSpacing(0);   // all gaps set explicitly below
+  segDataButtonBox->addWidget(segDataAddButton);
+  segDataButtonBox->addSpacing(kBtnGap);
+  segDataButtonBox->addWidget(segDataDeleteButton);
+  segDataButtonBox->addSpacing(kGroupGap);
+  segDataButtonBox->addWidget(segDataCheckAllButton);
+  segDataButtonBox->addSpacing(kBtnGap);
+  segDataButtonBox->addWidget(segDataUncheckAllButton);
+  segDataButtonBox->addSpacing(kGroupGap);
+  segDataButtonBox->addWidget(segDataUpButton);
+  segDataButtonBox->addSpacing(kBtnGap);
+  segDataButtonBox->addWidget(segDataDownButton);
+  segDataButtonBox->addStretch(1);
+  segDataButtonBox->addWidget(new QLabel(tr("Filter:")));
+  segDataButtonBox->addSpacing(kBtnGap);
+  segDataButtonBox->addWidget(segDataEntranceFilter);
+  segDataButtonBox->addSpacing(kBtnGap);
+  segDataButtonBox->addWidget(segDataExitFilter);
+  segDataButtonBox->addSpacing(kGroupGap);
+  segDataButtonBox->addWidget(segDataExforButton);
   segDataLayout->addLayout(segDataButtonBox,1,0);
 
   segDataBox->setLayout(segDataLayout);
@@ -252,14 +253,14 @@ void SegmentsTab::addSegDataLine() {
     SegmentsDataData newLine;
     newLine.isActive=1;
     newLine.entrancePairIndex=aDialog.entrancePairIndexSpin->value();
-    if(aDialog.dataTypeCombo->currentIndex()==3)
+    if(aDialog.dataTypeCode()==3)
       newLine.exitPairIndex=-1;
     else newLine.exitPairIndex=aDialog.exitPairIndexSpin->value();
     newLine.lowEnergy=aDialog.lowEnergyText->text().toDouble();
     newLine.highEnergy=aDialog.highEnergyText->text().toDouble();
     newLine.lowAngle=aDialog.lowAngleText->text().toDouble();
     newLine.highAngle=aDialog.highAngleText->text().toDouble();
-    newLine.dataType=aDialog.dataTypeCombo->currentIndex();
+    newLine.dataType=aDialog.dataTypeCode();
     newLine.isTHM=aDialog.thmCheck->isChecked() ? 1 : 0;
     newLine.dataFile=aDialog.dataFileText->text();
     newLine.dataNorm=aDialog.dataNormText->text().toDouble();
@@ -368,7 +369,7 @@ void SegmentsTab::addSegTestLine() {
     SegmentsTestData newLine;
     newLine.isActive=1;
     newLine.entrancePairIndex=aDialog.entrancePairIndexSpin->value();
-    if(aDialog.dataTypeCombo->currentIndex()==4)
+    if(aDialog.dataTypeCode()==4)
       newLine.exitPairIndex=-1;
     else newLine.exitPairIndex=aDialog.exitPairIndexSpin->value();
     newLine.lowEnergy=aDialog.lowEnergyText->text().toDouble();
@@ -377,7 +378,7 @@ void SegmentsTab::addSegTestLine() {
     newLine.lowAngle=aDialog.lowAngleText->text().toDouble();
     newLine.highAngle=aDialog.highAngleText->text().toDouble();
     newLine.angleStep=aDialog.angleStepText->text().toDouble();
-    newLine.dataType=aDialog.dataTypeCombo->currentIndex();
+    newLine.dataType=aDialog.dataTypeCode();
     newLine.isTHM=aDialog.thmCheck->isChecked() ? 1 : 0;
     newLine.phaseJ=aDialog.phaseJValueText->text().toDouble();
     newLine.phaseL=aDialog.phaseLValueText->text().toInt();
@@ -531,7 +532,7 @@ void SegmentsTab::editSegDataLine() {
   aDialog.highEnergyText->setText(highEnergy);
   aDialog.lowAngleText->setText(lowAngle);
   aDialog.highAngleText->setText(highAngle);
-  aDialog.dataTypeCombo->setCurrentIndex(dataType);
+  aDialog.setDataTypeCode(dataType);
   aDialog.thmCheck->setChecked(isTHM==1);
   aDialog.dataFileText->setText(dataFile);
   aDialog.dataNormText->setText(dataNorm);
@@ -571,7 +572,7 @@ void SegmentsTab::editSegDataLine() {
       i=segmentsDataModel->index(index.row(),1,QModelIndex());
       segmentsDataModel->setData(i,newEntrancePairIndex,Qt::EditRole);
     }
-    int newExitPairIndex= (aDialog.dataTypeCombo->currentIndex()==3) ? -1 :
+    int newExitPairIndex= (aDialog.dataTypeCode()==3) ? -1 :
       aDialog.exitPairIndexSpin->value();
     if(newExitPairIndex!=exitPairIndex) {
       i=segmentsDataModel->index(index.row(),2,QModelIndex());
@@ -597,7 +598,7 @@ void SegmentsTab::editSegDataLine() {
       i=segmentsDataModel->index(index.row(),6,QModelIndex());
       segmentsDataModel->setData(i,newHighAngle,Qt::EditRole);
     }
-    int newDataType=aDialog.dataTypeCombo->currentIndex();
+    int newDataType=aDialog.dataTypeCode();
     if(newDataType!=dataType) {
       i=segmentsDataModel->index(index.row(),7,QModelIndex());
       segmentsDataModel->setData(i,newDataType,Qt::EditRole);
@@ -767,7 +768,7 @@ void SegmentsTab::editSegTestLine() {
   aDialog.lowAngleText->setText(lowAngle);
   aDialog.highAngleText->setText(highAngle);
   aDialog.angleStepText->setText(angleStep);
-  aDialog.dataTypeCombo->setCurrentIndex(dataType);
+  aDialog.setDataTypeCode(dataType);
   aDialog.thmCheck->setChecked(isTHM==1);
   aDialog.phaseJValueText->setText(phaseJ);
   aDialog.phaseLValueText->setText(phaseL);
@@ -792,7 +793,7 @@ void SegmentsTab::editSegTestLine() {
       i=segmentsTestModel->index(index.row(),1,QModelIndex());
       segmentsTestModel->setData(i,newEntrancePairIndex,Qt::EditRole);
     }
-    int newExitPairIndex= (aDialog.dataTypeCombo->currentIndex()==4) ? -1 :
+    int newExitPairIndex= (aDialog.dataTypeCode()==4) ? -1 :
       aDialog.exitPairIndexSpin->value();
     if(newExitPairIndex!=exitPairIndex) {
       i=segmentsTestModel->index(index.row(),2,QModelIndex());
@@ -828,7 +829,7 @@ void SegmentsTab::editSegTestLine() {
       i=segmentsTestModel->index(index.row(),8,QModelIndex());
       segmentsTestModel->setData(i,newAngleStep,Qt::EditRole);
     }
-    int newDataType = aDialog.dataTypeCombo->currentIndex();
+    int newDataType = aDialog.dataTypeCode();
     if(newDataType!=dataType) {
       i=segmentsTestModel->index(index.row(),9,QModelIndex());
       segmentsTestModel->setData(i,newDataType,Qt::EditRole);
@@ -1420,7 +1421,7 @@ bool SegmentsTab::writeSegDataFile(QTextStream& outStream) {
     } else {
       outStream << " 0";
     }
-    outStream << endl;
+    outStream << Qt::endl;
   }
 
   return true;
@@ -1635,7 +1636,7 @@ bool SegmentsTab::writeSegTestFile(QTextStream& outStream) {
       // Write 0 for non-advanced segments for backwards compatibility
       outStream << " 0";
     }
-    outStream << endl;
+    outStream << Qt::endl;
   }
 
   return true;
@@ -1654,6 +1655,16 @@ void SegmentsTab::updateFilterComboboxes(PairsModel* model) {
 }
 
 void SegmentsTab::updateFilterComboboxes() {
+  // Preserve the current filter selection across the rebuild, and block signals
+  // so removing/re-adding items does not fire filterSegDataByPairs() with a
+  // transient "All" selection (which would clear the filter on any checkbox toggle).
+  int savedEntrance = segDataEntranceFilter->currentIndex() > 0
+                      ? segDataEntranceFilter->currentData().toInt() : -1;
+  int savedExit = segDataExitFilter->currentIndex() > 0
+                  ? segDataExitFilter->currentData().toInt() : -1;
+  segDataEntranceFilter->blockSignals(true);
+  segDataExitFilter->blockSignals(true);
+
   // Clear existing items except "All"
   while(segDataEntranceFilter->count() > 1) {
     segDataEntranceFilter->removeItem(1);
@@ -1678,8 +1689,8 @@ void SegmentsTab::updateFilterComboboxes() {
   }
 
   // Convert to sorted lists
-  QList<int> sortedEntrancePairs = entrancePairs.toList();
-  QList<int> sortedExitPairs = exitPairs.toList();
+  QList<int> sortedEntrancePairs = entrancePairs.values();
+  QList<int> sortedExitPairs = exitPairs.values();
   std::sort(sortedEntrancePairs.begin(), sortedEntrancePairs.end());
   std::sort(sortedExitPairs.begin(), sortedExitPairs.end());
 
@@ -1716,6 +1727,16 @@ void SegmentsTab::updateFilterComboboxes() {
       segDataExitFilter->addItem(QString("Pair %1").arg(pairIndex), pairIndex);
     }
   }
+
+  // Restore the previous selection (fall back to "All" if that pair is gone),
+  // then re-apply the filter once to the current rows.
+  int ei = savedEntrance > 0 ? segDataEntranceFilter->findData(savedEntrance) : 0;
+  segDataEntranceFilter->setCurrentIndex(ei >= 0 ? ei : 0);
+  int xi = savedExit > 0 ? segDataExitFilter->findData(savedExit) : 0;
+  segDataExitFilter->setCurrentIndex(xi >= 0 ? xi : 0);
+  segDataEntranceFilter->blockSignals(false);
+  segDataExitFilter->blockSignals(false);
+  filterSegDataByPairs();
 }
 
 void SegmentsTab::reset() {

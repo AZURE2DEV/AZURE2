@@ -1,5 +1,6 @@
 #include <QLabel>
 #include <QLineEdit>
+#include <QPushButton>
 #include <QGridLayout>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -34,6 +35,15 @@ ChannelDetails::ChannelDetails(QWidget *parent) : QWidget(parent) {
   conventionLayout->addWidget(rwaButton);
   conventionLayout->addStretch(1);
 
+  // Wigner-limit calculator: a button with its read-only, selectable result
+  // field immediately to its right (so the user can copy the value).
+  wignerButton = new QPushButton(tr("Wigner Limit"));
+  wignerButton->setToolTip(tr("Physical Wigner limit (single-particle width) for this channel. "
+                              "Available for particle channels only, not radiative capture."));
+  wignerLimitText = new QLineEdit;
+  wignerLimitText->setReadOnly(true);
+  wignerLimitText->setMaximumWidth(140);
+
   QGridLayout *reducedWidthLayout=new QGridLayout;
   reducedWidthLayout->addWidget(normParam,0,0);
   reducedWidthLayout->addWidget(reducedWidthText,0,1);
@@ -41,9 +51,15 @@ ChannelDetails::ChannelDetails(QWidget *parent) : QWidget(parent) {
   reducedWidthLayout->addItem(new QSpacerItem(20,20),0,3);
   reducedWidthLayout->setColumnStretch(3,1);
 
+  QHBoxLayout *wignerButtonRow = new QHBoxLayout;
+  wignerButtonRow->addWidget(wignerButton);
+  wignerButtonRow->addWidget(wignerLimitText);
+  wignerButtonRow->addStretch();
+
   QVBoxLayout *mainLayout = new QVBoxLayout;
   mainLayout->addWidget(details);
   mainLayout->addLayout(conventionLayout);
+  mainLayout->addLayout(wignerButtonRow);
   mainLayout->addLayout(reducedWidthLayout);
   setLayout(mainLayout);
 }

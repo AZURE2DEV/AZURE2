@@ -1,14 +1,17 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <algorithm>
 #include <set>
 #include <tuple>
 #include "AngCoeff.h"
 #include "CNuc.h"
+#include "ParameterLabel.h"
 #include "Config.h"
 #include "CoulFunc.h"
 #include "EigenFunc.h"
 #include "ECIntegral.h"
+#include "GSLException.h"
 #include "NucLine.h"
 #include "Minuit2/MnUserParameters.h"
 #include "NFIntegral.h"
@@ -173,7 +176,21 @@ int CNuc::Fill(const Config &configure, std::pair<int,double> radii) {
 
   in.close();
 
-  if( radii.first != 0 ) this->GetPair(radii.first)->SetChRad(radii.second);
+  if( radii.first != 0 ) {
+    this->GetPair(radii.first)->SetChRad(radii.second);
+    // The Wigner limits above were computed inside the parse loop, i.e. with
+    // the radius as written in the .azr.  Redo them for the overridden pair,
+    // or every theta^2 reported after a radius change is against the old limit.
+    PPair* changedPair = this->GetPair(radii.first);
+    for(int j=1;j<=this->NumJGroups();j++) {
+      for(int ch=1;ch<=this->GetJGroup(j)->NumChannels();ch++) {
+	AChannel* theChannel = this->GetJGroup(j)->GetChannel(ch);
+	if(theChannel->GetPairNum()==radii.first)
+	  theChannel->SetWignerLimit(changedPair->GetRedMass(),
+				     changedPair->GetChRad());
+      }
+    }
+  }
 
   this->SetMaxLValue(maxLValue);
   if((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) && this->NumJGroups()>0 && this->NumPairs()>0)
@@ -614,12 +631,12 @@ bool CNuc::TransformIn(const Config& configure) {
 	      passThrough.push_back(false);
 	    }
 	  }
-	  // FIXME
-	  if(denom<0.){ configure.outStream << "WARNING: Denominator less than zero in E=" 
-					   << theLevel->GetE() << " MeV resonance transformation.  "
-					   <<  "Tranformation may not have been successful." 
-					   << std::endl;
-					//return true;
+	  if(denom<0.){
+	    configure.outStream << "**WARNING: Denominator less than zero while transforming"
+				<< std::endl
+				<< "    " << AZURELabel::Level(theJGroup,theLevel,j,la) << std::endl
+				<< "  The transformation may not have been successful for this level."
+				<< std::endl;
 	  }
 	  double nFSum=1.0;
 	  for(int ch=1;ch<=theJGroup->NumChannels();ch++) {
@@ -687,11 +704,14 @@ bool CNuc::TransformIn(const Config& configure) {
 		  else tempGammas[levelKeys.size()-1][ch-1]=sqrt(pow(tempGammas[levelKeys.size()-1][ch-1],2.0)-
 								 pow(imag(externalWidth),2.0))-real(externalWidth);
 		} else {
-			// FIXME
-		  configure.outStream << "**WARNING: Imaginary portion of external width \n\tfor j=" << j << " la=" 
-			    << la << " ch=" << ch << " is greater than total width." << std::endl;
+		  configure.outStream << "**WARNING: Imaginary portion of the external width is greater "
+				      << "than the total width" << std::endl
+				      << "    "
+				      << AZURELabel::LevelAndChannel(this,theJGroup,theLevel,j,la,ch)
+				      << std::endl
+				      << "    [j=" << j << " la=" << la << " ch=" << ch << "]"
+				      << std::endl;
 		  tempGammas[levelKeys.size()-1][ch-1]=-real(externalWidth);
-		  //return true;
 		}
 	      }
 	      shifts[levelKeys.size()-1].push_back(shifts[levelKeys.size()-1][0]);
@@ -1372,8 +1392,8 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config* config
   for(int j=1;j<=this->NumJGroups();j++) {
     for(int la=1;la<=this->GetJGroup(j)->NumLevels();la++) {
       ALevel *level=this->GetJGroup(j)->GetLevel(la);
-      sprintf(varname,"j=%d_la=%d_energy",j,la);
-	  sprintf(varname,"energy_%d",energyIndex);
+      snprintf(varname, sizeof(varname),"j=%d_la=%d_energy",j,la);
+	  snprintf(varname, sizeof(varname),"energy_%d",energyIndex);
       p.Add(varname,level->GetE(),0.1*level->GetE());
       bool isUnbound=false;
       for(int ir=1;ir<=this->NumPairs();ir++) {
@@ -1388,8 +1408,8 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config* config
       // Parameter settings will be applied by ParameterLimitsManager during fit
       int widthIndex=1;
       for(int ch=1;ch<=this->GetJGroup(j)->NumChannels();ch++) {
-	sprintf(varname,"j=%d_la=%d_ch=%d_rwa",j,la,ch);
-	sprintf(varname,"width_%d_%d",energyIndex,widthIndex);
+	snprintf(varname, sizeof(varname),"j=%d_la=%d_ch=%d_rwa",j,la,ch);
+	snprintf(varname, sizeof(varname),"width_%d_%d",energyIndex,widthIndex);
 	widthIndex++;
 	p.Add(varname,level->GetGamma(ch),0.1*level->GetGamma(ch));
 	if(level->GetGamma(ch)==0.0) p.Fix(varname);
@@ -1522,11 +1542,36 @@ void CNuc::TransformOut(const Config& configure) {
 	    }
 	    if(!done) {
 	      if(iteration==maxIterations) {
-		configure.outStream << "**WARNING: Could Not Transform J = " 
-			  << this->GetJGroup(j)->GetJ();
-		if(this->GetJGroup(j)->GetPi()==-1) configure.outStream << '-';
-		else configure.outStream << '+';
-		configure.outStream << " E = " << theLevel->GetFitE() << " MeV**" << std::endl;
+		// The iteration chases the energy eigenvalue while each channel's
+		// boundary condition moves with it, so the channel whose boundary
+		// condition is still shifting most is the one holding up
+		// convergence -- name it, since that is the width to look at.
+		int worstChannel=0;
+		double worstDiff=0.0;
+		for(int ch=1;ch<=(int)boundaryDiff.size();ch++) {
+		  if(fabs(boundaryDiff[ch-1])>=worstDiff) {
+		    worstDiff=fabs(boundaryDiff[ch-1]);
+		    worstChannel=ch;
+		  }
+		}
+
+		configure.outStream << "**WARNING: Could not transform level after "
+				    << maxIterations << " iterations" << std::endl
+				    << "    "
+				    << AZURELabel::Level(this->GetJGroup(j),theLevel,j,la)
+				    << std::endl
+				    << "  Energy residual "
+				    << fabs(eigenFunc.eigenvalues()[thisLevel]-tempE[thisLevel])
+				    << " MeV, tolerance " << energyTolerance << " MeV."
+				    << std::endl;
+		if(worstChannel>0)
+		  configure.outStream << "  Least converged channel (largest boundary-condition shift, "
+				      << worstDiff << "):" << std::endl
+				      << "    "
+				      << AZURELabel::Channel(this,this->GetJGroup(j),worstChannel)
+				      << std::endl;
+		configure.outStream << "  The input energy and widths are kept for this level; its "
+				    << "transformed values are unreliable." << std::endl;
 		tempE[thisLevel]=theLevel->GetFitE();
 		for(int ch=1;ch<=this->GetJGroup(j)->NumChannels();ch++) 
 		  tempGamma[thisLevel][ch-1]=theLevel->GetFitGamma(ch);
@@ -1640,12 +1685,137 @@ void CNuc::TransformOut(const Config& configure) {
 }
 
 /*!
- * Writes the final transformed parameters to "parameters.out" file. 
+ * Checks every R-Matrix level for a radiative width that is not small compared to
+ * its particle width, and writes a single warning to the output stream if any is
+ * found.  The R-Matrix description of radiative capture treats the photon channels
+ * perturbatively (the gamma widths are assumed to make a negligible contribution to
+ * the total width entering the level matrix), so a level with
+ * \f$ \Gamma_\gamma \gtrsim 0.1 \Gamma_{particle} \f$ is outside the range in which
+ * the calculated cross section can be trusted.
+ *
+ * The widths are estimated from the parameters passed in (the same vector that is
+ * handed to the calculation), following CNuc::TransformOut: the particle widths are
+ * \f$ 2\gamma^2 P_l \f$ level-shift normalised by \f$ 1+\sum\gamma^2 dS/dE \f$, and
+ * the radiative widths are \f$ 2\gamma^2 (E_\gamma/\hbar c)^{2L+1} \f$.  External
+ * capture contributions are not included, so the ratio is indicative only -- the
+ * exact widths are those written to parameters.out.  Channels of a level that are
+ * closed (and levels with no open particle channel, e.g. subthreshold states) carry
+ * no observed width and are skipped.
+ */
+
+void CNuc::CheckRadiativeWidths(const Config& configure, const vector_r& params) {
+  static const double warningRatio=0.1;
+
+  this->FillCompoundFromParams(params);
+
+  // Every flagged level, worst first. Reporting only the worst one hid how many
+  // levels were affected and which they were.
+  struct FlaggedLevel {
+    double ratio;
+    double radWidth;
+    double particleWidth;
+    std::string label;
+  };
+  std::vector<FlaggedLevel> flagged;
+
+  for(int j=1;j<=this->NumJGroups();j++) {
+    JGroup *theJGroup=this->GetJGroup(j);
+    if(!theJGroup->IsInRMatrix()) continue;
+    for(int la=1;la<=theJGroup->NumLevels();la++) {
+      ALevel *theLevel=theJGroup->GetLevel(la);
+      if(!theLevel->IsInRMatrix()) continue;
+      double levelEnergy=theLevel->GetFitE();
+
+      double particleWidth=0.0;
+      double radiativeWidth=0.0;
+      double normSum=0.0;
+      try {
+	for(int ch=1;ch<=theJGroup->NumChannels();ch++) {
+	  AChannel *theChannel=theJGroup->GetChannel(ch);
+	  PPair *thePair=this->GetPair(theChannel->GetPairNum());
+	  double gamma=theLevel->GetFitGamma(ch);
+	  if(gamma==0.0) continue;
+	  double localEnergy=levelEnergy-thePair->GetSepE()-thePair->GetExE();
+	  if(theChannel->GetRadType()=='P') {
+	    if(localEnergy<=0.0) continue;
+	    CoulFunc theCoulombFunction(thePair,!!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+	    double radius=thePair->GetChRad();
+	    particleWidth+=2.0*pow(gamma,2.0)*
+	      theCoulombFunction.Penetrability(theChannel->GetL(),radius,localEnergy);
+	    normSum+=theCoulombFunction.PEShift_dE(theChannel->GetL(),radius,localEnergy)*
+	      pow(gamma,2.0);
+	  } else if(theChannel->GetRadType()=='M'||theChannel->GetRadType()=='E') {
+	    //Ground state transitions parametrize a moment, not a width.
+	    if(fabs(theLevel->GetE()-thePair->GetExE())<1.e-3&&
+	       theJGroup->GetJ()==thePair->GetJ(2)&&
+	       theJGroup->GetPi()==thePair->GetPi(2)) continue;
+	    double pene=(configure.paramMask & Config::USE_RMC_FORMALISM) ? 1.0 :
+	      pow(fabs(localEnergy)/hbarc,2.0*theChannel->GetL()+1.0);
+	    radiativeWidth+=2.0*pow(gamma,2.0)*pene;
+	  }
+	}
+      } catch (GSLException e) {
+	//The widths are only needed for this diagnostic: skip the level rather
+	//than abort the calculation.
+	continue;
+      }
+      if(1.0+normSum>0.0) particleWidth/=(1.0+normSum);
+      if(particleWidth<=0.0||radiativeWidth<=0.0) continue;
+
+      double ratio=radiativeWidth/particleWidth;
+      if(ratio>warningRatio) {
+	FlaggedLevel entry;
+	entry.ratio=ratio;
+	entry.radWidth=radiativeWidth;
+	entry.particleWidth=particleWidth;
+	entry.label=AZURELabel::Level(theJGroup,theLevel,j,la);
+	flagged.push_back(entry);
+      }
+    }
+  }
+
+  if(!flagged.empty()) {
+    std::sort(flagged.begin(),flagged.end(),
+	      [](const FlaggedLevel& a,const FlaggedLevel& b){return a.ratio>b.ratio;});
+
+    const int numFlagged=(int)flagged.size();
+    configure.outStream << std::endl
+			<< "**WARNING: " << numFlagged << " level"
+			<< ((numFlagged==1) ? " has" : "s have")
+			<< " a radiative width larger than " << warningRatio*100.
+			<< "% of the particle width." << std::endl
+			<< "  R-Matrix capture assumes G_gamma << G_particle, so the calculated"
+			<< " cross section may be incorrect for "
+			<< ((numFlagged==1) ? "this level." : "these levels.") << std::endl;
+
+    // Cap the list so a badly-configured model cannot bury the rest of the log.
+    const int maxListed=10;
+    const int listed=std::min(numFlagged,maxListed);
+    for(int i=0;i<listed;i++) {
+      configure.outStream << "    " << flagged[i].label << std::endl
+			  << "      G_gamma/G_particle = "
+			  << std::scientific << std::setprecision(2) << flagged[i].ratio
+			  << " (G_gamma = " << flagged[i].radWidth*1e6
+			  << " eV, G_particle = " << flagged[i].particleWidth*1e6 << " eV)"
+			  << std::endl;
+      configure.outStream.unsetf(std::ios::scientific);
+      configure.outStream.precision(6);
+    }
+    if(numFlagged>listed)
+      configure.outStream << "    ...and " << (numFlagged-listed)
+			  << " more level" << (((numFlagged-listed)==1) ? "" : "s")
+			  << " with a smaller ratio." << std::endl;
+    configure.outStream << std::endl;
+  }
+}
+
+/*!
+ * Writes the final transformed parameters to "parameters.out" file.
  */
 
 void CNuc::PrintTransformParams(const Config& configure) {
   char filename[256];;
-  sprintf(filename,"%sparameters.out",configure.outputdir.c_str());
+  snprintf(filename, sizeof(filename),"%sparameters.out",configure.outputdir.c_str());
   std::ofstream out;
   out.open(filename);
   if(out) {

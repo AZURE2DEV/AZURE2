@@ -1,6 +1,7 @@
 #include "AZUREOutput.h"
 #include "CNuc.h"
 #include "Config.h"
+#include "CovarianceBand.h"
 #include "EData.h"
 #include "ECAmplitudeCache.h"
 #include "ExtrapLine.h"
@@ -25,6 +26,7 @@ EData::EData() {
   energyShiftParamOffset_=0;
   isFit_=true;
   isErrorAnalysis_=false;
+  ecReadPos_=std::streampos(0);
 }
 
 /*!
@@ -1001,7 +1003,7 @@ void EData::PrintData(const Config &configure) {
       if(data.point()->IsMapped()){
 	EnergyMap map=data.point()->GetMap();
 	char tempMap[25];
-	sprintf(tempMap,"(%d,%d)",map.segment,map.point);
+	snprintf(tempMap, sizeof(tempMap),"(%d,%d)",map.segment,map.point);
 	out << std::setw(12) <<  tempMap << std::endl;
       } else
 	out << std::setw(12) << "Not Mapped"
@@ -1229,7 +1231,20 @@ void EData::PrintCoulombAmplitude(const Config &configure,CNuc *theCNuc) {
  * and experimental s-factor and error.
  */
 
-void EData::WriteOutputFiles(const Config &configure, bool isFit) {
+// One ".band" line: energy, excitation, angle, xs, d(xs), S-factor, d(S-factor).
+static void WriteBandLine(std::ostream& o, double energy, double excitation,
+                          double angle, double xs, double dxs, double conv) {
+  o << std::setw(18) << std::scientific << energy
+    << std::setw(18) << std::scientific << excitation
+    << std::setw(18) << std::scientific << angle
+    << std::setw(18) << std::scientific << xs
+    << std::setw(18) << std::scientific << dxs
+    << std::setw(18) << std::scientific << xs*conv
+    << std::setw(18) << std::scientific << dxs*conv
+    << std::endl;
+}
+
+void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData* band) {
   AZUREOutput output(configure.outputdir);
   std::ofstream chiOut;
   if(!isFit&&(configure.paramMask & Config::CALCULATE_WITH_DATA)) {
@@ -1252,6 +1267,28 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit) {
     kinoption.close();
   }
   if(kinflag!=0) configure.outStream<<"Using alternate output format..."<<std::endl;
+
+  // When a covariance is available, write a sibling ".band" file per output file,
+  // with the same block/point structure so the GUI can pair them.
+  bool writeBand = band && (configure.paramMask & Config::CALCULATE_COVARIANCE_BAND)
+                        && !band->grad.empty();
+  std::map<std::string,std::ofstream> bandFiles;
+  auto bandStreamFor = [&](int aa, int ir)->std::ofstream* {
+    std::string name = configure.outputdir + "AZUREOut_aa=" + std::to_string(aa);
+    if(ir==-1) name += "_TOTAL_CAPTURE";
+    else name += "_R=" + std::to_string(ir);
+    name += output.IsExtrap() ? ".extrap.band" : ".out.band";
+    std::ofstream& f = bandFiles[name];
+    if(!f.is_open()) { f.open(name.c_str()); f.precision(10); }
+    return f.is_open() ? &f : nullptr;
+  };
+  // Look up a point's parameter-sensitivity row, or nullptr if absent.
+  auto gradFor = [&](EPoint* p)->const std::vector<double>* {
+    if(!band) return nullptr;
+    std::map<EPoint*,std::vector<double> >::const_iterator it = band->grad.find(p);
+    return (it==band->grad.end()) ? nullptr : &it->second;
+  };
+
   ESegmentIterator firstSumIterator = GetSegments().end();
   for(ESegmentIterator segment=GetSegments().begin();
       segment<GetSegments().end();segment++) {
@@ -1269,10 +1306,32 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit) {
 	 !(configure.paramMask & Config::CALCULATE_WITH_DATA)) buf=output(aa,ir,true);
       else buf=output(aa,ir);
     }
-    std::ostream out(buf);	
+    std::ostream out(buf);
     ESegmentIterator thisSegment = segment;
     if(firstSumIterator!=GetSegments().end()) thisSegment = firstSumIterator;
-     
+
+    // Band stream for this segment (skip angular-coefficient extrap files, which
+    // have no scalar cross section; other segments get a block for alignment).
+    bool bandThisSegment = writeBand && !(segment->IsAngularDist() && output.IsExtrap());
+    std::ofstream* bandOut = bandThisSegment ?
+      bandStreamFor(aa, (firstSumIterator!=GetSegments().end()) ? -1 : ir) : nullptr;
+    // Point gradient, summed across total-capture components like the value is.
+    auto pointBandGrad = [&](EPointIterator point)->std::vector<double> {
+      std::vector<double> g;
+      const std::vector<double>* g0 = gradFor(&*point);
+      if(g0) g = *g0;
+      if(firstSumIterator!=GetSegments().end()) {
+        int pointIndex=point-segment->GetPoints().begin()+1;
+        for(ESegmentIterator it=firstSumIterator;it<segment;it++) {
+          const std::vector<double>* gi = gradFor(it->GetPoint(pointIndex));
+          if(!gi) continue;
+          if(g.empty()) g=*gi;
+          else for(size_t k=0;k<g.size()&&k<gi->size();k++) g[k]+=(*gi)[k];
+        }
+      }
+      return g;
+    };
+
     if(kinflag==0){
       for(EPointIterator point=segment->GetPoints().begin();point<segment->GetPoints().end();point++) {
         out.precision(10);
@@ -1280,6 +1339,8 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit) {
 	  out << std::setw(18) << std::scientific << point->GetCMEnergy();
 	  for(int i = 0;i<point->GetNumAngularDists();i++) out << std::setw(18) << point->GetAngularDist(i);
 	  out << std::endl;
+	  if(bandOut) WriteBandLine(*bandOut,point->GetCMEnergy(),point->GetExcitationEnergy(),
+	                            point->GetCMAngle(),0.,0.,0.);
         } else {
 	  double fitCrossSection=point->GetFitCrossSection();
 	  if(firstSumIterator!=GetSegments().end()) {
@@ -1300,6 +1361,12 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit) {
 	        << std::setw(18) << std::scientific << point->GetCMCrossSectionError()*dataNorm*point->GetSFactorConversion()
 	        << std::endl;
 	  } else out << std::endl;
+	  if(bandOut) {
+	    std::vector<double> g=pointBandGrad(point);
+	    double dxs=g.empty()?0.:band->dXS(g);
+	    WriteBandLine(*bandOut,point->GetCMEnergy(),point->GetExcitationEnergy(),
+	                  point->GetCMAngle(),fitCrossSection,dxs,point->GetSFactorConversion());
+	  }
         }
       }
     }
@@ -1310,6 +1377,8 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit) {
 	  out << std::setw(18) << std::scientific << point->GetCMEnergy();
 	  for(int i = 0;i<point->GetNumAngularDists();i++) out << std::setw(18) << point->GetAngularDist(i);
 	  out << std::endl;
+	  if(bandOut) WriteBandLine(*bandOut,point->GetLabEnergy(),point->GetExcitationEnergy(),
+	                            point->GetLabAngle(),0.,0.,0.);
         } else {
 	  double fitCrossSection=point->GetFitCrossSection()/point->GetCrossSectionKinFactor();
 	  if(firstSumIterator!=GetSegments().end()) {
@@ -1330,25 +1399,41 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit) {
 	        << std::setw(18) << std::scientific << point->GetLabCrossSectionError()*dataNorm*point->GetSFactorConversion()
 	        << std::endl;
 	  } else out << std::endl;
+	  if(bandOut) {
+	    std::vector<double> g=pointBandGrad(point);
+	    double kin=point->GetCrossSectionKinFactor();
+	    double dxs=g.empty()?0.:band->dXS(g)/kin;
+	    WriteBandLine(*bandOut,point->GetLabEnergy(),point->GetExcitationEnergy(),
+	                  point->GetLabAngle(),fitCrossSection,dxs,point->GetSFactorConversion());
+	  }
         }
       }
     }
     if(!isFit&&(configure.paramMask & Config::CALCULATE_WITH_DATA)) {
+      //The normalization penalty as the fit sees it (AZURECalc::operator()):
+      //the deviation from the nominal normalization in units of its uncertainty,
+      //which the segment stores as a percentage.  This used to add a literal 1
+      //per segment, so the reported total was just the number of segments.
+      double normChiSquared=0.;
+      double normError=thisSegment->GetNominalNorm()/100.*thisSegment->GetNormError();
+      if(normError!=0.) normChiSquared=
+	pow((thisSegment->GetNorm()-thisSegment->GetNominalNorm())/normError,2.0);
       totalChiSquared+=(thisSegment->GetSegmentChiSquared());
-      totalNormChiSquared+=1;
+      totalNormChiSquared+=normChiSquared;
       totalN+=thisSegment->NumPoints();
       chiOut << thisSegment->GetSegmentKey()
-             << "," 
+             << ","
 	     << thisSegment->GetSegmentChiSquared()
              << ","
              << thisSegment->NumPoints()
              << ","
              << thisSegment->GetNorm()
              << ","
-             //<< thisSegment->GetNormChiSquared()
+             << normChiSquared
 	     << std::endl;
     }
     out<<std::endl<<std::endl;out.flush();
+    if(bandOut) { *bandOut<<std::endl<<std::endl; bandOut->flush(); }
     firstSumIterator=GetSegments().end();
   }
   
@@ -1458,8 +1543,8 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc,const Config& configure) {
       numSumSegments=0;
     }
     char segmentKeyOut[256];
-    if(segment->IsTotalCapture()) sprintf(segmentKeyOut,"%d (Total: %d)",segment->GetSegmentKey(),numSumSegments);
-    else sprintf(segmentKeyOut,"%d",segment->GetSegmentKey());
+    if(segment->IsTotalCapture()) snprintf(segmentKeyOut, sizeof(segmentKeyOut),"%d (Total: %d)",segment->GetSegmentKey(),numSumSegments);
+    else snprintf(segmentKeyOut, sizeof(segmentKeyOut),"%d",segment->GetSegmentKey());
     int aa=theCNuc->GetPairNumFromKey(segment->GetEntranceKey());
     if(theCNuc->GetPair(aa)->GetPType()==20) continue;
     if(theCNuc->GetPair(aa)->IsEntrance()) {
@@ -1562,7 +1647,12 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc,const Config& configure) {
     out.flush();
     out.close();
   }
-  if(in.is_open()) in.close();
+  // Remember where the regular-segment integrals end so the component-segment
+  // integrals (appended to the same file) can be resumed from here on read.
+  if(in.is_open()) {
+    ecReadPos_ = in.tellg();
+    in.close();
+  }
   return 0;
 }
 
@@ -1696,9 +1786,28 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config& configure) {
     }
   }
   
-  // Calculate EC amplitudes for component segments if external capture is enabled
+  // Calculate EC amplitudes for component segments if external capture is enabled.
+  // The integrals are saved to (or read back from) the same intEC.dat/intEC.extrap
+  // file as the regular segments.  When previously calculated integrals are reused,
+  // the (expensive) component-segment EC calculation is skipped entirely, which is
+  // what makes subsequent calculations much faster.
   if(configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
-    configure.outStream << "Calculating EC Amplitudes for Component Segments..." << std::endl;
+    bool usePrevious = (configure.paramMask & Config::USE_PREVIOUS_INTEGRALS);
+    std::ifstream in;
+    std::ofstream out;
+    if(usePrevious) {
+      in.open(configure.integralsfile.c_str());
+      // Resume reading right after the regular-segment integrals recorded earlier.
+      if(in.is_open() && ecReadPos_ > std::streampos(0)) in.seekg(ecReadPos_);
+    } else {
+      std::string outputfile;
+      if(configure.paramMask & Config::CALCULATE_WITH_DATA) outputfile=configure.outputdir+"intEC.dat";
+      else outputfile=configure.outputdir+"intEC.extrap";
+      // Append the component-segment integrals after the regular-segment ones.
+      out.open(outputfile.c_str(), std::ios::app);
+      if(!out) configure.outStream << "Could not append to EC Amplitude File." << std::endl;
+      configure.outStream << "Calculating EC Amplitudes for Component Segments..." << std::endl;
+    }
     for(auto& componentSegment : componentSegments_) {
       int aa = theCNuc->GetPairNumFromKey(componentSegment.GetEntranceKey());
       if(theCNuc->GetPair(aa)->GetPType() != 20 && theCNuc->GetPair(aa)->IsEntrance()) {
@@ -1709,60 +1818,107 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config& configure) {
               ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
               int ir = theCNuc->GetPairNumFromKey(componentSegment.GetExitKey());
               if(ecLevel->GetECPairNum() == ir) {
-                char segmentKeyOut[256];
-                sprintf(segmentKeyOut,"%d",componentSegment.GetSegmentKey());
-                configure.outStream << "\tSegment #" << std::setw(12) << segmentKeyOut
-                                    << std::setw(0) << " [                         ] 0%";configure.outStream.flush();
-                int numPoints=componentSegment.NumPoints();
-                int pointIndex=0;
-                time_t startTime = time(NULL);
-                bool localStop = false;
+                if(!usePrevious) {
+                  char segmentKeyOut[256];
+                  snprintf(segmentKeyOut, sizeof(segmentKeyOut),"%d",componentSegment.GetSegmentKey());
+                  configure.outStream << "\tSegment #" << std::setw(12) << segmentKeyOut
+                                      << std::setw(0) << " [                         ] 0%";configure.outStream.flush();
+                  int numPoints=componentSegment.NumPoints();
+                  int pointIndex=0;
+                  time_t startTime = time(NULL);
+                  bool localStop = false;
 #pragma omp parallel for shared(configure,localStop)
-                for(int i = 1; i <= numPoints; i++) {
-                  if(configure.stopFlag||localStop) continue;
-                  EPoint *point = componentSegment.GetPoint(i);
-                  if(!(point->IsMapped())) {
-                    try {
-                      point->CalculateECAmplitudes(theCNuc, configure);
-                    } catch(GSLException e) {
+                  for(int i = 1; i <= numPoints; i++) {
+                    if(configure.stopFlag||localStop) continue;
+                    EPoint *point = componentSegment.GetPoint(i);
+                    if(!(point->IsMapped())) {
+                      try {
+                        point->CalculateECAmplitudes(theCNuc, configure);
+                      } catch(GSLException e) {
 #pragma omp critical
-                      {
-                        configure.outStream << e.what() << std::endl;
-                        localStop=true;
+                        {
+                          configure.outStream << e.what() << std::endl;
+                          localStop=true;
+                        }
+                      } catch(...) {
+#pragma omp critical
+                        {
+                          configure.outStream << "Warning: EC amplitude calculation failed for component segment point" << std::endl;
+                        }
                       }
-                    } catch(...) {
-#pragma omp critical
-                      {
-                        configure.outStream << "Warning: EC amplitude calculation failed for component segment point" << std::endl;
+                    }
+                    ++pointIndex;
+                    if(difftime(time(NULL),startTime)>0.25) {
+                      startTime=time(NULL);
+                      std::string progress=" [";
+                      double percent=0.;
+                      for(int k = 1;k<=25;k++) {
+                        if(pointIndex>=percent*numPoints&&percent<1.) {
+                          percent+=0.04;
+                          progress+='*';
+                        } else progress+=' ';
+                      } progress+="] ";
+                      configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
+                                          << std::setw(0) << progress << percent*100 << '%';configure.outStream.flush();
+                    }
+                  }
+                  if(configure.stopFlag||localStop) {
+                    if(out.is_open()) out.close();
+                    if(in.is_open()) in.close();
+                    return -1;
+                  }
+                  configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
+                                      << std::setw(0) << " [*************************] 100%" << std::endl;
+                }
+                // Write the freshly calculated amplitudes to the file, or read the
+                // previously saved ones back in.  The iteration order matches the
+                // regular-segment loop in CalculateECAmplitudes exactly.
+                for(EPointIterator point=componentSegment.GetPoints().begin();
+                    point<componentSegment.GetPoints().end();point++) {
+                  if(!(point->IsMapped())) {
+                    for(int k=1;k<=entrancePair->GetDecay(ir)->NumKGroups();k++) {
+                      for(int ecm=1;ecm<=entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups();ecm++) {
+                        if(!usePrevious) {
+                          if(out.is_open()) out << point->GetECAmplitude(k,ecm) << std::endl;
+                          for(EPointIterator subPoint=point->GetSubPoints().begin();
+                              subPoint<point->GetSubPoints().end();subPoint++)
+                            if(out.is_open()) out << subPoint->GetECAmplitude(k,ecm) << std::endl;
+                        } else {
+                          complex ecAmplitude(0.0,0.0);
+                          in >> ecAmplitude;
+                          point->AddECAmplitude(k,ecm,ecAmplitude);
+                          for(EPointIterator subPoint=point->GetSubPoints().begin();
+                              subPoint<point->GetSubPoints().end();subPoint++) {
+                            ecAmplitude=complex(0.0,0.0);
+                            in >> ecAmplitude;
+                            subPoint->AddECAmplitude(k,ecm,ecAmplitude);
+                          }
+                        }
+                        for(EPointMapIterator mappedPoint=point->GetMappedPoints().begin();
+                            mappedPoint<point->GetMappedPoints().begin();mappedPoint++) {
+                          (*mappedPoint)->AddECAmplitude(k,ecm,point->GetECAmplitude(k,ecm));
+                          for(int i=1;i<=point->NumSubPoints();i++) {
+                            (*mappedPoint)->GetSubPoint(i)->
+                              AddECAmplitude(k,ecm,point->GetSubPoint(i)->GetECAmplitude(k,ecm));
+                          }
+                        }
                       }
                     }
                   }
-                  ++pointIndex;
-                  if(difftime(time(NULL),startTime)>0.25) {
-                    startTime=time(NULL);
-                    std::string progress=" [";
-                    double percent=0.;
-                    for(int k = 1;k<=25;k++) {
-                      if(pointIndex>=percent*numPoints&&percent<1.) {
-                        percent+=0.04;
-                        progress+='*';
-                      } else progress+=' ';
-                    } progress+="] ";
-                    configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
-                                        << std::setw(0) << progress << percent*100 << '%';configure.outStream.flush();
-                  }
                 }
-                if(configure.stopFlag||localStop) return -1;
-                configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
-                                    << std::setw(0) << " [*************************] 100%" << std::endl;
               }
             }
           }
         }
       }
     }
+    if(out.is_open()) {
+      out.flush();
+      out.close();
+    }
+    if(in.is_open()) in.close();
   }
-  
+
   return 0;
 }
 
@@ -1878,7 +2034,7 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
   char varname[50];
   for(ESegmentIterator segment=GetSegments().begin();segment<GetSegments().end();segment++) {
     if(segment->IsVaryNorm()) {
-      sprintf(varname,"segment_%d_norm",segment->GetSegmentKey());
+      snprintf(varname, sizeof(varname),"segment_%d_norm",segment->GetSegmentKey());
       p.Add(varname,segment->GetNorm(),segment->GetNorm()*0.05);
       p.SetLowerLimit(varname,0.0);
       
@@ -1891,8 +2047,8 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
   SetEnergyShiftParamOffset(p.Params().size());
   for(ESegmentIterator segment=GetSegments().begin();segment<GetSegments().end();segment++) {
     // Always add energy shift parameter, regardless of IsVaryEnergyShift()
-    sprintf(varname,"segment_%d_energy_shift",segment->GetSegmentKey());
-    double stepSize = (segment->GetEnergyShiftError() > 0.0) ? segment->GetEnergyShiftError() * 0.1 : 0.001;
+    snprintf(varname, sizeof(varname),"segment_%d_energy_shift",segment->GetSegmentKey());
+    double stepSize = (segment->GetEnergyShiftError() > 0.0) ? segment->GetEnergyShiftError() * 0.01 : 0.0005;
     p.Add(varname,segment->GetEnergyShift(),stepSize);
 
     if(!segment->IsVaryEnergyShift()) {
@@ -1972,9 +2128,13 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc* the
           for(ESegment* componentSegment : componentSegments) {
             if(componentSegment) {
 
-              // Check if energy is the same, if so, continue
+              // Check if energy is the same, if so, skip the recompute.
+              // NOTE: do NOT advance i here. All components of a total-capture
+              // segment share this segment's single energy-shift parameter p[i];
+              // i is advanced exactly once per segment at the end of the loop.
+              // Advancing it inside the component loop desyncs the
+              // parameter-to-segment mapping for every subsequent segment.
               if(componentSegment->GetLastEnergyShift() == p[i]) {
-                i++;
                 continue;
               }
 

@@ -205,35 +205,76 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
       // Convert to CM energy: E_cm = E_excitation - S - E_ex
       double levelCMEnergy = levelExcitationEnergy - separationEnergy - excitationEnergy;
 
-      // Calculate total width: Γ_total = Σ Γᵢ = Σ 2Pᵢγᵢ²
-      // Follows the same convention as CNuc::TransformIn: γ̃ = GetGamma(ch)/1e6
+      // Total width Gamma_total = Gamma_particle + Gamma_radiative, in MeV.
+      // The Breit-Wigner cross section carries the total width in its
+      // denominator -- every open decay channel broadens the resonance -- so
+      // this is the width that shapes sigma(E) and that the grid must resolve.
+      // For radiative capture Gamma_gamma can dominate (Gamma_gamma >>
+      // Gamma_p); leaving it out makes the resonance look far narrower than it
+      // is in the extrapolated cross section.
+      //
+      // GetGamma() returns the reduced width amplitude gamma (MeV^1/2) after
+      // CNuc::TransformIn, so it is used directly -- NOT divided by 1e6.  That
+      // 1e6 belongs to the pre-transformation convention (input widths in eV);
+      // applying it here made every width 1e12 too small.  The particle sum is
+      // level-shift normalised by (1 + sum gamma^2 dS/dE) so the result is the
+      // *observed* width, matching CNuc::TransformOut / parameters.out.
       double totalWidth = 0.0;
+      double normSum = 0.0;
       for (int ch = 1; ch <= numChannels; ch++) {
         AChannel* channel = jgroup->GetChannel(ch);
-        if (channel->GetRadType() != 'P') continue; // particle channels only
-        double localEnergy = level->GetE()
-          - compound->GetPair(channel->GetPairNum())->GetExE()
-          - compound->GetPair(channel->GetPairNum())->GetSepE();
-        if (localEnergy <= 0.0) continue; // sub-threshold channels
-        double gamma = std::abs(level->GetGamma(ch)) / 1e6;
-        double radius = compound->GetPair(channel->GetPairNum())->GetChRad();
-        CoulFunc coulFunc(compound->GetPair(channel->GetPairNum()), false);
+        if (channel->GetRadType() != 'P') continue;   // particle channels
+        PPair* chPair = compound->GetPair(channel->GetPairNum());
+        double localEnergy = level->GetE() - chPair->GetExE() - chPair->GetSepE();
+        if (localEnergy <= 0.0) continue;             // sub-threshold channel
+        double gamma = std::abs(level->GetGamma(ch));
+        if (gamma <= 0.0) continue;
+        double radius = chPair->GetChRad();
+        CoulFunc coulFunc(chPair, false);
         double pene = coulFunc.Penetrability(channel->GetL(), radius, localEnergy);
         totalWidth += 2.0 * gamma * gamma * pene;
+        normSum += coulFunc.PEShift_dE(channel->GetL(), radius, localEnergy)
+                   * gamma * gamma;
+      }
+      if (1.0 + normSum > 0.0) totalWidth /= (1.0 + normSum);
+
+      double particleWidth = totalWidth;   // before radiative channels
+
+      // Radiative channels (M/E): Gamma = 2 gamma^2 P_rad, with the radiation
+      // penetrability following CNuc::TransformOut (the same special cases for a
+      // ground-state transition and the RMC formalism).
+      for (int ch = 1; ch <= numChannels; ch++) {
+        AChannel* channel = jgroup->GetChannel(ch);
+        char radType = channel->GetRadType();
+        if (radType != 'M' && radType != 'E') continue;
+        PPair* chPair = compound->GetPair(channel->GetPairNum());
+        double gamma = std::abs(level->GetGamma(ch));
+        if (gamma <= 0.0) continue;
+        double localEnergy = level->GetE() - chPair->GetExE() - chPair->GetSepE();
+        double pene;
+        if (std::abs(level->GetE() - chPair->GetExE()) < 1.0e-3 &&
+            jgroup->GetJ() == chPair->GetJ(2) &&
+            jgroup->GetPi() == chPair->GetPi(2)) {
+          double jValue = jgroup->GetJ();
+          pene = 1.0e-10;
+          if (radType == 'M' && channel->GetL() == 1)
+            pene = 3.0*jValue/4.0/(jValue+1.)/nuclearMagneton/nuclearMagneton;
+          else if (radType == 'E' && channel->GetL() == 2)
+            pene = 60.0*jValue*(2.*jValue-1.)/(jValue+1.)/(2.*jValue+3.);
+        } else {
+          pene = pow(std::abs(localEnergy)/hbarc, 2.0*channel->GetL()+1.0);
+        }
+        totalWidth += 2.0 * gamma * gamma * std::abs(pene);
       }
 
-      // If width is zero or very small, use a minimum value
-      if (totalWidth < 1.0e-6) {
-        totalWidth = 0.001; // 1 keV default for very narrow resonances
-      }
-
-      // Check if this resonance falls within our integration range
-      // Account for margin based on the resonance width
-      double margin = totalWidth * config_.resonanceWidthMultiplier;
+      // The resonance in sigma(E) is shaped by the particle width, so the grid
+      // is sized by it (see CalculateAdaptiveStep / IsInResonantRegion).
+      double margin = particleWidth * config_.resonanceWidthMultiplier;
       if (levelCMEnergy >= endEnergy - margin && levelCMEnergy <= startEnergy + margin) {
         ResonanceInfo resInfo;
         resInfo.energy = levelCMEnergy;
         resInfo.totalWidth = totalWidth;
+        resInfo.particleWidth = particleWidth;
         resonances.push_back(resInfo);
       }
     }
@@ -253,7 +294,7 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
  */
 bool AdaptiveIntegrationGrid::IsInResonantRegion(double energy, const std::vector<ResonanceInfo>& resonances) const {
   for (const ResonanceInfo& resonance : resonances) {
-    double resonantRegionWidth = resonance.totalWidth * config_.resonanceWidthMultiplier;
+    double resonantRegionWidth = resonance.particleWidth * config_.resonanceWidthMultiplier;
     if (std::abs(energy - resonance.energy) <= resonantRegionWidth) {
       return true;
     }
@@ -309,18 +350,15 @@ double AdaptiveIntegrationGrid::CalculateAdaptiveStep(double energy, const std::
     return config_.baseEnergyStep;
   }
 
-  // Fine step at resonance center
-  double fineStep = nearestRes->totalWidth / config_.pointsPerWidth;
+  // Fine step at resonance center (particle width shapes sigma(E)).
+  double fineStep = nearestRes->particleWidth / config_.pointsPerWidth;
 
-  // Use Gaussian-like falloff for smooth transition
-  // The step size increases smoothly from fineStep at the resonance center
-  // to baseEnergyStep far from the resonance
-  //
-  // We use: stepSize = fineStep + (baseStep - fineStep) * (1 - exp(-distance²/(2*sigma²)))
-  // where sigma = resonanceWidth * multiplier / 2
-  // This gives a smooth, continuous transition with no discontinuities
+  double sigma = nearestRes->particleWidth * config_.resonanceWidthMultiplier / 2.0;
 
-  double sigma = nearestRes->totalWidth * config_.resonanceWidthMultiplier / 2.0;
+  // A zero width (e.g. a level whose channels are all sub-threshold) would make
+  // the falloff below 0/0.  Such a level has no resonant structure to resolve,
+  // so fall back to the base step.
+  if (!(sigma > 0.0)) return config_.baseEnergyStep;
 
   // Gaussian falloff factor: 1 at center, approaches 0 far away
   double gaussianFactor = std::exp(-distance * distance / (2.0 * sigma * sigma));

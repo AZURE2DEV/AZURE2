@@ -19,7 +19,7 @@
 
 #ifdef USE_ERYA
 // ERYA SRIM integration - include utilities
-#include "../../erya/include/SRIMUtilities.h"
+#include "../../external/erya/include/SRIMUtilities.h"
 #endif
 
 #include <iostream>

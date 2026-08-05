@@ -9,6 +9,7 @@ class QLineEdit;
 class QLabel;
 class QRadioButton;
 class QButtonGroup;
+class QPushButton;
 
 QT_END_NAMESPACE
 
@@ -23,6 +24,8 @@ class ChannelDetails : public QWidget {
   QLabel *details;
   QRadioButton *physicalButton;
   QRadioButton *rwaButton;
+  QPushButton *wignerButton;
+  QLineEdit *wignerLimitText;
  private:
   QLabel *normParam;
   QLabel *normUnits;

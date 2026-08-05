@@ -1,0 +1,310 @@
+name: build
+
+# Every push and pull request, so a platform breaking is visible immediately
+# rather than at release time. Tags additionally publish a draft release.
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+# A newer push supersedes an in-flight run for the same ref, so a queued job
+# cannot outlive the commit that started it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    # Never cancel the other platforms when one fails: the point of the matrix
+    # is to see every platform's errors in one run.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            os: ubuntu-latest
+            use_qwt: 'ON'
+            use_readline: 'ON'
+          - name: macos
+            # Intel runner on purpose: Homebrew's qt@5 and qwt-qt5 bottles are
+            # x86_64 here, and an arm64 build could not link against them. The
+            # artifact runs on Apple Silicon under Rosetta; a native arm64 build
+            # means the Qt6 migration. macos-15-intel is a standard runner, free
+            # on public repositories. (macos-13 was retired, and a label with no
+            # runners behind it queues forever rather than failing.)
+            os: macos-15-intel
+            use_qwt: 'ON'
+            use_readline: 'ON'
+          - name: windows
+            os: windows-latest
+            use_qwt: 'ON'
+            use_readline: 'ON'
+
+    defaults:
+      run:
+        shell: ${{ matrix.name == 'windows' && 'msys2 {0}' || 'bash' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------- linux
+      - name: Install dependencies (linux)
+        if: matrix.name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config \
+            libgsl-dev libreadline-dev \
+            qtbase5-dev qtbase5-dev-tools qttools5-dev libqt5svg5-dev \
+            libqwt-qt5-dev
+
+      # ---------------------------------------------------------------- macos
+      # Qt5 and Qwt come from Homebrew rather than install-qt-action, because
+      # Homebrew is the only source that also provides a Qt5 build of Qwt -- and
+      # without it the Plot tab cannot be built. Both formulae are deprecated
+      # upstream and Homebrew will disable them on 2027-05-19, which is the real
+      # deadline for the Qt6 migration.
+      #
+      # Apple clang also ships no OpenMP runtime, so FindOpenMP fails outright
+      # without libomp; the flags for it are passed at configure time, since
+      # CMake cannot infer them for AppleClang.
+      - name: Install dependencies (macos)
+        if: matrix.name == 'macos'
+        run: |
+          brew install ninja gsl readline libomp qt@5 qwt-qt5
+          echo "LIBOMP=$(brew --prefix libomp)" >> "$GITHUB_ENV"
+          # Both are keg-only, so they are not on the default search paths.
+          echo "QT5_PREFIX=$(brew --prefix qt@5)" >> "$GITHUB_ENV"
+          echo "QWT_PREFIX=$(brew --prefix qwt-qt5)" >> "$GITHUB_ENV"
+          echo "$(brew --prefix qt@5)/bin" >> "$GITHUB_PATH"
+          echo "PKG_CONFIG_PATH=$(brew --prefix qwt-qt5)/lib/pkgconfig:$(brew --prefix qt@5)/lib/pkgconfig" >> "$GITHUB_ENV"
+          # Locate the Qwt header rather than assuming a layout -- Homebrew may
+          # install it as a framework, under include/qwt, or directly in
+          # include/, and guessing wrong only shows up as a build error later.
+          # -L matters: brew --prefix returns /usr/local/opt/<name>, a symlink
+          # into the Cellar, and find will not descend into a symlinked starting
+          # point without it.
+          QWT_HDR="$(find -L "$(brew --prefix qwt-qt5)" -name qwt_plot.h -print -quit 2>/dev/null || true)"
+          if [ -z "$QWT_HDR" ]; then
+            echo "Could not locate qwt_plot.h under $(brew --prefix qwt-qt5); tree follows:"
+            find -L "$(brew --prefix qwt-qt5)" -maxdepth 3 | head -50
+            exit 1
+          fi
+          echo "Qwt headers: $(dirname "$QWT_HDR")"
+          echo "QWT_INCLUDE_DIR=$(dirname "$QWT_HDR")" >> "$GITHUB_ENV"
+          # Homebrew ships Qwt as a framework here, not a dylib. CMake links a
+          # framework correctly when given the .framework directory itself.
+          QWT_LIB="$(find -L "$(brew --prefix qwt-qt5)/lib" -maxdepth 1 \
+            \( -name 'qwt.framework' -o -name 'libqwt*.dylib' \) -print -quit 2>/dev/null || true)"
+          if [ -z "$QWT_LIB" ]; then
+            echo "Could not locate the Qwt library; lib/ contains:"
+            find -L "$(brew --prefix qwt-qt5)/lib" -maxdepth 1 | head -20
+            exit 1
+          fi
+          echo "Qwt library: $QWT_LIB"
+          echo "QWT_LIBRARY=$QWT_LIB" >> "$GITHUB_ENV"
+
+      # -------------------------------------------------------------- windows
+      # MSYS2/mingw-w64 rather than MSVC: the project already targets mingw (see
+      # docker/Dockerfile.windows and CROSS_COMPILE_WINDOWS), and the same
+      # package set exists natively here.
+      - name: Set up MSYS2 (windows)
+        if: matrix.name == 'windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkg-config
+            mingw-w64-ucrt-x86_64-gsl
+            mingw-w64-ucrt-x86_64-readline
+            mingw-w64-ucrt-x86_64-qt5-base
+            mingw-w64-ucrt-x86_64-qt5-svg
+            mingw-w64-ucrt-x86_64-qt5-tools
+            mingw-w64-ucrt-x86_64-qwt-qt5
+
+      # --------------------------------------------------------------- build
+      - name: Configure
+        run: |
+          # An array, so the spaces inside the OpenMP flags survive intact.
+          EXTRA=()
+          if [ "${{ matrix.name }}" = "macos" ]; then
+            # FindOpenMP cannot infer any of this for AppleClang: the compiler
+            # needs -Xpreprocessor -fopenmp and the runtime lives in Homebrew's
+            # libomp rather than beside the compiler.
+            EXTRA+=(-DOpenMP_ROOT="$LIBOMP")
+            EXTRA+=(-DOpenMP_C_FLAGS="-Xpreprocessor -fopenmp -I$LIBOMP/include")
+            EXTRA+=(-DOpenMP_CXX_FLAGS="-Xpreprocessor -fopenmp -I$LIBOMP/include")
+            EXTRA+=(-DOpenMP_C_LIB_NAMES=omp)
+            EXTRA+=(-DOpenMP_CXX_LIB_NAMES=omp)
+            EXTRA+=(-DOpenMP_omp_LIBRARY="$LIBOMP/lib/libomp.dylib")
+            # Keg-only formulae need their prefixes on CMAKE_PREFIX_PATH.
+            EXTRA+=(-DCMAKE_PREFIX_PATH="$QT5_PREFIX;$QWT_PREFIX")
+            # Located above, so FindQwt does not have to guess the layout.
+            EXTRA+=(-DQWT_INCLUDE_DIR="$QWT_INCLUDE_DIR")
+            EXTRA+=(-DQWT_LIBRARY="$QWT_LIBRARY")
+          fi
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_GUI=ON \
+            -DUSE_API=ON \
+            -DUSE_MCMC=ON \
+            -DUSE_QWT=${{ matrix.use_qwt }} \
+            -DUSE_READLINE=${{ matrix.use_readline }} \
+            "${EXTRA[@]}"
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      # Catches link errors and libraries the binary cannot resolve at runtime.
+      # --help exits 0 and needs no display, so it works on a headless runner.
+      - name: Smoke test
+        run: |
+          set -e
+          BIN=build/src/AZURE2
+          [ -x "$BIN" ] || BIN=build/src/AZURE2.exe
+          "$BIN" --help > help.txt
+          test -s help.txt
+          grep -q "Syntax: AZURE2" help.txt
+          echo "smoke test passed"
+
+      # The smoke test only proves the binary starts. This runs the evaluations
+      # in tests/ and compares chi-squared against recorded references, so a
+      # change that still builds but moves the physics fails here -- on every
+      # platform, which is also how cross-platform numerical drift shows up.
+      - name: Physics regression tests
+        run: ./tests/run_tests.sh
+
+      # ------------------------------------------------------------- package
+      # Qt's own deploy tools pull the Qt runtime in beside the binary. This is
+      # not yet a signed .app or an AppImage -- it is enough to make the artifact
+      # runnable on a machine that has the system libraries.
+      - name: Package (windows)
+        if: matrix.name == 'windows'
+        run: |
+          mkdir -p dist
+          cp build/src/AZURE2.exe dist/
+          # MSYS2 names the Qt5 deploy tool windeployqt-qt5; plain windeployqt
+          # only exists in a Qt6 install.
+          DEPLOY=windeployqt
+          command -v windeployqt-qt5 >/dev/null 2>&1 && DEPLOY=windeployqt-qt5
+          # It exits 1 when it cannot find ANGLE's libGLESv2.dll, which a
+          # desktop-OpenGL Qt build does not ship, even though it has deployed
+          # everything correctly. Check what it produced instead of its status.
+          "$DEPLOY" dist/AZURE2.exe || echo "$DEPLOY exited non-zero; verifying its output instead"
+          for dll in Qt5Core.dll Qt5Gui.dll Qt5Widgets.dll; do
+            if [ ! -f "dist/$dll" ]; then
+              echo "Qt deployment failed: dist/$dll is missing"
+              exit 1
+            fi
+          done
+          # mingw runtime + the non-Qt dependencies
+          ldd dist/AZURE2.exe | awk '/ucrt64/ {print $3}' | xargs -r -I{} cp -n {} dist/ || true
+
+      - name: Package (macos)
+        if: matrix.name == 'macos'
+        run: |
+          mkdir -p dist
+          cp build/src/AZURE2 dist/
+          otool -L dist/AZURE2 > dist/linked-libraries.txt
+          cat > dist/README-packaging.txt <<'EOF'
+          This is the bare binary, not a redistributable .app bundle.
+
+          It resolves Qt, GSL and readline through the paths they had on the
+          build machine, so it will only run where those exist. Making it
+          redistributable needs macdeployqt for the Qt frameworks, the non-Qt
+          dylibs copied into Contents/Frameworks with their install names
+          rewritten to @executable_path/../Frameworks, and codesigning plus
+          notarization for Gatekeeper. See linked-libraries.txt for what it
+          currently depends on.
+          EOF
+
+      # A single self-contained file that runs on any reasonably current distro
+      # without root, which suits a Qt desktop application far better than a
+      # snap: strict confinement fights the arbitrary data paths an .azr project
+      # points at. linuxdeploy's Qt plugin pulls in the platform plugins and
+      # the Qt runtime.
+      - name: Package (linux)
+        if: matrix.name == 'linux'
+        run: |
+          mkdir -p dist AppDir/usr/bin AppDir/usr/share/applications \
+                   AppDir/usr/share/icons/hicolor/128x128/apps
+
+          cmake --install build --prefix AppDir/usr 2>/dev/null || \
+            cp build/src/AZURE2 AppDir/usr/bin/
+          [ -f AppDir/usr/bin/AZURE2 ] || cp build/src/AZURE2 AppDir/usr/bin/
+
+          cp gui/images/azure2_icon.png \
+            AppDir/usr/share/icons/hicolor/128x128/apps/azure2.png
+
+          cat > AppDir/usr/share/applications/azure2.desktop <<'DESKTOP'
+          [Desktop Entry]
+          Type=Application
+          Name=AZURE2
+          Comment=R-Matrix Analysis Software
+          Exec=AZURE2
+          Icon=azure2
+          Terminal=false
+          Categories=Science;Physics;Education;
+          Keywords=nuclear;physics;rmatrix;analysis;
+          StartupWMClass=AZURE2
+          DESKTOP
+
+          BASE=https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous
+          PLUGIN=https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous
+          curl -fsSL -o linuxdeploy "$BASE/linuxdeploy-x86_64.AppImage"
+          curl -fsSL -o linuxdeploy-plugin-qt "$PLUGIN/linuxdeploy-plugin-qt-x86_64.AppImage"
+          chmod +x linuxdeploy linuxdeploy-plugin-qt
+
+          # The runner has no FUSE, so the AppImage tools have to be unpacked
+          # rather than executed directly.
+          ./linuxdeploy --appimage-extract-and-run \
+            --appdir AppDir \
+            --plugin qt \
+            --output appimage \
+            --desktop-file AppDir/usr/share/applications/azure2.desktop \
+            --icon-file AppDir/usr/share/icons/hicolor/128x128/apps/azure2.png
+
+          mv AZURE2*.AppImage dist/ 2>/dev/null || mv ./*.AppImage dist/
+          chmod +x dist/*.AppImage
+
+          # Prove it actually runs, self-contained, before shipping it.
+          ./dist/*.AppImage --appimage-extract-and-run --help > appimage-help.txt
+          grep -q "Syntax: AZURE2" appimage-help.txt
+          echo "AppImage smoke test passed"
+          ls -lh dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AZURE2-${{ matrix.name }}
+          path: dist/
+          if-no-files-found: error
+
+  # Tags promote the same artifacts to a draft release, so nothing is published
+  # without a human looking at it first.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Zip per platform
+        run: |
+          cd artifacts
+          for d in */; do zip -r "${d%/}.zip" "$d"; done
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: artifacts/*.zip

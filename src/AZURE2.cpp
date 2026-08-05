@@ -22,6 +22,7 @@
 #include <iomanip>
 #include <fstream>
 #include <sstream>
+#include <cctype>
 #include <vector>
 #include <map>
 #include <tuple>
@@ -92,6 +93,7 @@ void printHelp() {
 #endif
 	     << std::setw(25) << std::left << "\t--use-gradient:" << std::setw(0) << "Use Minuit2 (MIGRAD) with the analytic gradient (default: numerical)." << std::endl
 	     << std::setw(25) << std::left << "\t--use-lm:" << std::setw(0) << "Use the Levenberg-Marquardt minimizer (analytic Jacobian; falls back to MIGRAD)." << std::endl
+	     << std::setw(25) << std::left << "\t--use-gsl-lm:" << std::setw(0) << "Use the GSL trust-region least-squares minimizer with geodesic acceleration (analytic Jacobian; falls back to MIGRAD)." << std::endl
 	     ;
 }
 
@@ -149,7 +151,10 @@ bool parseOptions(int argc, char *argv[], Config& configure) {
     else if(*it=="--use-nlopt") configure.paramMask |= Config::USE_NLOPT_MINIMIZER;
 #endif
     else if(*it=="--use-lm") configure.paramMask |= Config::USE_LM_MINIMIZER;
+    else if(*it=="--use-gsl-lm") configure.paramMask |= Config::USE_GSL_LM_MINIMIZER;
     else if(*it=="--use-gradient") configure.paramMask |= Config::USE_ANALYTIC_GRADIENT;
+    else if(*it=="--covariance-band") configure.paramMask |= Config::CALCULATE_COVARIANCE_BAND;
+    else if(*it=="--scale-covariance") configure.paramMask |= Config::SCALE_COVARIANCE_BY_CHI2;
     else if(*it=="--no-gui") continue;
     else configure.outStream << "WARNING: Unknown option " << *it << '.' << std::endl;
   }
@@ -206,9 +211,40 @@ int commandShell(const Config& configure) {
  * sets the appropriate flags in the Config structure.
  */
 
+// Read a yes/no answer from stdin; empty/unrecognized input counts as "no".
+static bool askYesNo(Config& configure, const std::string& prompt) {
+  configure.outStream << prompt << " (y/n): ";
+  std::string in;
+  getline(std::cin, in);
+  size_t a = in.find_first_not_of(" \t\r\n");
+  if(a == std::string::npos) return false;
+  char c = (char)std::tolower(in[a]);
+  return (c=='y' || c=='1' || c=='t');
+}
+
+// Offer the cross-section uncertainty band (and, for fit modes, the reduced-chi^2
+// covariance scaling).  If --covariance-band was passed the choice is already
+// made non-interactively, so no prompt appears -- this keeps scripted/headless
+// runs deterministic while interactive runs are asked.
+static void promptBandOptions(Config& configure, bool fitMode) {
+  if(configure.paramMask & Config::CALCULATE_COVARIANCE_BAND) return;   // set via flag
+  if(!askYesNo(configure, "Calculate cross-section uncertainty band?")) return;
+  configure.paramMask |= Config::CALCULATE_COVARIANCE_BAND;
+  if(fitMode && !(configure.paramMask & Config::SCALE_COVARIANCE_BY_CHI2)) {
+    if(askYesNo(configure, "Scale covariance to reduced chi-squared = 1?"))
+      configure.paramMask |= Config::SCALE_COVARIANCE_BY_CHI2;
+  }
+}
+
 void processCommand(int command, Config& configure) {
-  if(command==2) configure.paramMask |= Config::PERFORM_FIT;
-  else if(command==3) configure.paramMask &= ~Config::CALCULATE_WITH_DATA;
+  if(command==2) {
+    configure.paramMask |= Config::PERFORM_FIT;
+    promptBandOptions(configure, true);
+  }
+  else if(command==3) {
+    configure.paramMask &= ~Config::CALCULATE_WITH_DATA;
+    promptBandOptions(configure, false);   // extrapolation reuses a saved covariance
+  }
   else if(command==4) {
     bool goodAnswer=false;
     while (!goodAnswer) {
@@ -223,6 +259,7 @@ void processCommand(int command, Config& configure) {
     }
     configure.paramMask |= Config::PERFORM_FIT;
     configure.paramMask |= Config::PERFORM_ERROR_ANALYSIS;
+    promptBandOptions(configure, true);
   } else if(command==5) {
     configure.paramMask &= ~Config::CALCULATE_WITH_DATA;
     configure.paramMask |= Config::CALCULATE_REACTION_RATE;
@@ -242,6 +279,43 @@ void processCommand(int command, Config& configure) {
 }
 
 /*!
+ * Reads one line of user input, either through readline or from std::cin.
+ *
+ * Returns false once the input stream is exhausted (end of a piped script, or
+ * Ctrl-D at the terminal) and leaves \p inFile empty.  Callers must honour that:
+ * readline() hands back a null pointer at EOF, and assigning it to a std::string
+ * used to dereference null, so any scripted run that fell one line short of the
+ * prompts crashed instead of stopping.  The plain std::cin branch had the mirror
+ * problem -- getline() simply kept failing, so a prompt that insists on a
+ * non-empty answer spun forever.
+ */
+
+static bool getInputLine(bool useReadline, const char* prompt, std::string& inFile) {
+  inFile.clear();
+#ifndef NO_READLINE
+  if(useReadline) {
+    char *line = readline(prompt);
+    if(!line) return false;
+    inFile=line;
+    size_t endpos = inFile.find_last_not_of(" \t");
+    if( std::string::npos != endpos ) inFile = inFile.substr( 0, endpos+1 );
+    else inFile.clear();
+    if(*line) add_history(line);
+    free(line);
+    return true;
+  }
+#else
+  (void)prompt;
+  (void)useReadline;
+#endif
+  if(!getline(std::cin,inFile)) {
+    inFile.clear();
+    return false;
+  }
+  return true;
+}
+
+/*!
  * This function prompts for a parameter file and sets the corresponding configure
  * flags and variables based on the user response.
  */
@@ -252,17 +326,8 @@ void getParameterFile(bool useReadline, Config& configure) {
   if(!useReadline) configure.outStream << "External Parameter File (leave blank for new file): ";
   while(!validInfile) {
     std::string inFile;
-    if(!useReadline) getline(std::cin,inFile);
-#ifndef NO_READLINE
-    else {
-      char *line = readline("External Parameter File (leave blank for new file): ");
-      inFile=line;
-      size_t endpos = inFile.find_last_not_of(" \t");
-      if( std::string::npos != endpos ) inFile = inFile.substr( 0, endpos+1 );
-      if(line && *line) add_history(line);
-      free(line);
-    }
-#endif
+    //At EOF fall back to the "leave blank" behaviour: build a new parameter file.
+    if(!getInputLine(useReadline,"External Parameter File (leave blank for new file): ",inFile)) return;
     if(!inFile.empty()) {
       std::ifstream in;
       in.open(inFile.c_str());
@@ -357,17 +422,8 @@ void getTemperatureFile(bool useReadline, Config& configure) {
   if(!useReadline) configure.outStream << std::setw(38) << "Temperature File Name: ";
   while(!validInfile) {
     std::string inFile;
-    if(!useReadline) getline(std::cin,inFile);
-#ifndef NO_READLINE
-    else {
-      char *line = readline("               Temperature File Name: ");
-      inFile=line;
-      size_t endpos = inFile.find_last_not_of(" \t");
-      if( std::string::npos != endpos ) inFile = inFile.substr( 0, endpos+1 );
-      if(line && *line) add_history(line);
-      free(line);
-    }
-#endif
+    //No file name can be obtained at EOF; give up rather than reprompt forever.
+    if(!getInputLine(useReadline,"               Temperature File Name: ",inFile)) return;
     if(!inFile.empty()) {
       std::ifstream in;
       in.open(inFile.c_str());
@@ -391,10 +447,16 @@ void getTemperatureFile(bool useReadline, Config& configure) {
  */
 
 #ifdef USE_MCMC
+// Upper bound on the initial spread of a level-energy parameter, in keV.
+// Scattering level energies by a percentage of their value puts walkers on
+// unrelated resonance structures and the ensemble never contracts.
+static const double kMaxEnergySpreadKeV = 1.0;
+
 struct MCMCParams {
   int nwalkers;
   int nsteps;
   double chainSpread;
+  double energySpreadKeV;
   int nthreads;
   bool useRWA;
   bool overwriteSamples;
@@ -404,6 +466,7 @@ void getMCMCParams(Config& configure, MCMCParams& mcmcParams) {
   mcmcParams.nwalkers = 0;
   mcmcParams.nsteps = 0;
   mcmcParams.chainSpread = -1.0;  // Will be prompted
+  mcmcParams.energySpreadKeV = -1.0;  // Will be prompted
   mcmcParams.nthreads = 1;
   mcmcParams.useRWA = false;
 
@@ -447,7 +510,29 @@ void getMCMCParams(Config& configure, MCMCParams& mcmcParams) {
       configure.outStream << "Please enter a number between 0.001 and 50, or press Enter for default (5%)." << std::endl;
   }
 
+  // Get the initial spread of the level energies, which is absolute rather than
+  // a percentage of the level energy.
+  while(mcmcParams.energySpreadKeV <= 0.0 || mcmcParams.energySpreadKeV > kMaxEnergySpreadKeV) {
+    configure.outStream << std::setw(38) << "Level Energy Spread keV (0.001-1) [default=1]: ";
+    std::string inString;
+    getline(std::cin, inString);
+
+    // Allow empty input for default
+    if(inString.empty() || inString.find_first_not_of(" \t\n") == std::string::npos) {
+      mcmcParams.energySpreadKeV = kMaxEnergySpreadKeV;
+      break;
+    }
+
+    std::istringstream stm;
+    stm.str(inString);
+    if(!(stm >> mcmcParams.energySpreadKeV) || mcmcParams.energySpreadKeV <= 0.0 ||
+       mcmcParams.energySpreadKeV > kMaxEnergySpreadKeV)
+      configure.outStream << "Please enter a number between 0.001 and " << kMaxEnergySpreadKeV
+                          << ", or press Enter for default (1 keV)." << std::endl;
+  }
+
   // Get number of threads
+  mcmcParams.nthreads = 0;
   while(mcmcParams.nthreads < 1) {
     configure.outStream << std::setw(38) << "Number of Threads (1 or more): ";
     std::string inString;
@@ -660,17 +745,8 @@ void getExternalCaptureFile(bool useReadline, Config& configure) {
     bool validInfile=false;
     while(!validInfile) {
       std::string inFile;
-      if(!useReadline) getline(std::cin,inFile);
-#ifndef NO_READLINE
-      else {
-		char *line = readline("External Capture Amplitude File (leave blank for new file): ");
-		inFile=line;
-		size_t endpos = inFile.find_last_not_of(" \t");	
-		if( std::string::npos != endpos ) inFile = inFile.substr( 0, endpos+1 );
-		if(line && *line) add_history(line);
-		free(line);
-      }
-#endif
+      //At EOF fall back to the "leave blank" behaviour: build a new integrals file.
+      if(!getInputLine(useReadline,"External Capture Amplitude File (leave blank for new file): ",inFile)) return;
       if(!inFile.empty()) {
 	std::ifstream in;
 	in.open(inFile.c_str());
@@ -1167,6 +1243,7 @@ int runMCMC(Config& configure, const MCMCParams& mcmcParams) {
     configure.outStream << "  Number of walkers: " << mcmcParams.nwalkers << std::endl;
     configure.outStream << "  Number of steps: " << mcmcParams.nsteps << std::endl;
     configure.outStream << "  Initial parameter spread: " << mcmcParams.chainSpread << "%" << std::endl;
+    configure.outStream << "  Level energy spread: " << mcmcParams.energySpreadKeV << " keV" << std::endl;
     configure.outStream << "  Number of threads: " << mcmcParams.nthreads << std::endl;
     configure.outStream << "  Parameter mode: " << (mcmcParams.useRWA ? "RWA" : "Physical") << std::endl;
     configure.outStream << "  Number of free parameters: " << initialParams.size() << std::endl;
@@ -1191,7 +1268,8 @@ int runMCMC(Config& configure, const MCMCParams& mcmcParams) {
     // Run MCMC sampling
     std::vector<std::vector<double>> samples;
     mcmcCalc.RunMCMCSampling(mcmcParams.nwalkers, mcmcParams.nsteps, initialParams,
-                             samples, mcmcParams.chainSpread, mcmcParams.nthreads, mcmcParams.useRWA);
+                             samples, mcmcParams.chainSpread, mcmcParams.nthreads, mcmcParams.useRWA,
+                             mcmcParams.energySpreadKeV);
 
     // Clear callbacks
     AZURECalcMCMC::SetGUIProgressCallback(nullptr);

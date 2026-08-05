@@ -280,20 +280,27 @@ PlotTab::PlotTab(Config& config, SegmentsDataModel* dataModel, SegmentsTestModel
   connect(legendCheck, SIGNAL(toggled(bool)), this, SLOT(legendToggled(bool)));
   levelsCheck = new QCheckBox(tr("Levels"));
   connect(levelsCheck, SIGNAL(toggled(bool)), this, SLOT(levelsToggled(bool)));
+  bandCheck = new QCheckBox(tr("Uncertainty"));
+  bandCheck->setToolTip(tr("Shade the 1-sigma analytic uncertainty band around the "
+                           "calculation. Requires that the run was performed with the "
+                           "Run-tab \"Uncertainty band\" option enabled (which writes the "
+                           ".band files this reads)."));
+  connect(bandCheck, SIGNAL(toggled(bool)), this, SLOT(bandToggled(bool)));
   QHBoxLayout* displayLayout = new QHBoxLayout;
   displayLayout->setContentsMargins(8,4,8,4);
   displayLayout->addWidget(gridCheck);
   displayLayout->addWidget(legendCheck);
   displayLayout->addWidget(levelsCheck);
-  displayLayout->addStretch();
+  displayLayout->addWidget(bandCheck);
   displayBox->setLayout(displayLayout);
+  displayBox->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
 
+  // Axis boxes on the first row; Display on its own row below, left-aligned.
   topLayout->addWidget(xAxisBox,0,0);
   topLayout->addWidget(yAxisBox,0,1);
-  topLayout->addWidget(displayBox,0,2);
+  topLayout->addWidget(displayBox,1,0,1,2,Qt::AlignLeft);
   topLayout->setColumnStretch(0,1);
   topLayout->setColumnStretch(1,1);
-  topLayout->setColumnStretch(2,1);
 
   rightLayout->addLayout(topLayout);
   rightLayout->addWidget(azurePlot, 1);
@@ -467,6 +474,7 @@ QList<PlotEntry*> PlotTab::getDataSegments() {
     int exitKey = segDataProxyModel->sourceModel()->data(sourceIndex,Qt::EditRole).toInt();
     sourceIndex = segDataProxyModel->mapToSource(segDataProxyModel->index(indexes[i].row(),7,QModelIndex()));
     int dataType = segDataProxyModel->sourceModel()->data(sourceIndex,Qt::EditRole).toInt();
+    if(dataType==7) selectionHasAnalyzingPower_ = true;
     QString filename = (dataType==3) ?
       QString::fromStdString(configure.outputdir)+QString("AZUREOut_aa=%1_TOTAL_CAPTURE.out").arg(entranceKey) :
       QString::fromStdString(configure.outputdir)+QString("AZUREOut_aa=%1_R=%2.out").arg(entranceKey).arg(exitKey);
@@ -481,6 +489,7 @@ QList<PlotEntry*> PlotTab::getDataSegments() {
       if(previousEntranceKey==entranceKey&&previousExitKey==exitKey) numPreviousInBlock++;
     }
     PlotEntry* newPlotEntry = new PlotEntry(0,entranceKey,exitKey,numPreviousInBlock,filename);
+    newPlotEntry->setAllowNonPositive(dataType==7);
     if(!segmentDataFile.isEmpty()) {
       newPlotEntry->setLabel(PlotEntry::labelFromFilename(segmentDataFile));
     }
@@ -500,6 +509,7 @@ QList<PlotEntry*> PlotTab::getTestSegments() {
     int exitKey = segTestProxyModel->sourceModel()->data(sourceIndex,Qt::EditRole).toInt();
     sourceIndex = segTestProxyModel->mapToSource(segTestProxyModel->index(indexes[i].row(),9,QModelIndex()));
     int dataType = segTestProxyModel->sourceModel()->data(sourceIndex,Qt::EditRole).toInt();
+    if(dataType==7) selectionHasAnalyzingPower_ = true;
     QString filename = (dataType==4) ?
       QString::fromStdString(configure.outputdir)+QString("AZUREOut_aa=%1_TOTAL_CAPTURE.extrap").arg(entranceKey) :
       QString::fromStdString(configure.outputdir)+QString("AZUREOut_aa=%1_R=%2.extrap").arg(entranceKey).arg(exitKey);
@@ -512,14 +522,24 @@ QList<PlotEntry*> PlotTab::getTestSegments() {
       if(previousEntranceKey==entranceKey&&previousExitKey==exitKey) numPreviousInBlock++;
     }
     PlotEntry* newPlotEntry = new PlotEntry(1,entranceKey,exitKey,numPreviousInBlock,filename);
+    newPlotEntry->setAllowNonPositive(dataType==7);
     testSegmentPlotEntries.push_back(newPlotEntry);
   }
   return testSegmentPlotEntries;
 }
 
 void PlotTab::draw() {
+  selectionHasAnalyzingPower_ = false;
   QList<PlotEntry*> entries = getDataSegments();
   entries.append(getTestSegments());
+  // An analyzing power is a ratio lying in [-1,1] and negative over much of its
+  // range. A logarithmic axis -- the default here -- simply cannot show it, and
+  // an S-factor conversion has no meaning for it. Switch both off rather than
+  // leave the user with a plot that looks empty.
+  if(selectionHasAnalyzingPower_) {
+    if(yAxisIsLogCheck->isChecked()) yAxisIsLogCheck->setChecked(false);
+    if(yAxisSFButton->isChecked()) yAxisXSButton->setChecked(true);
+  }
   azurePlot->draw(entries);
   rebuildCurveList();
 }
@@ -580,6 +600,10 @@ void PlotTab::levelsToggled(bool checked) {
   azurePlot->setLevelsVisible(checked);
 }
 
+void PlotTab::bandToggled(bool checked) {
+  azurePlot->setBandVisible(checked);
+}
+
 void PlotTab::reset() {
   azurePlot->clearEntries();
   rebuildCurveList();
@@ -590,6 +614,7 @@ void PlotTab::reset() {
   gridCheck->setChecked(false);
   legendCheck->setChecked(true);
   levelsCheck->setChecked(false);
+  bandCheck->setChecked(false);
 }
 
 void PlotTab::showInfo(int which,QString title) {

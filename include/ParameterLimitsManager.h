@@ -3,6 +3,7 @@
 
 #include <string>
 #include <map>
+#include <vector>
 #include <Minuit2/MnUserParameters.h>
 #include "AZUREParams.h"
 
@@ -63,12 +64,31 @@ private:
   EData* data_;
   AZUREParams* params_;
   std::map<std::string, ParameterSetting> parameterSettings_;
-  
+  /// Settings entry that governs each enumerated non-fixed parameter, or NULL.
+  /// Built by BuildIndexMap() and consulted by every ...ByIndex() lookup, so
+  /// that a stale minuit_index in the file cannot attach one parameter's
+  /// settings to a different parameter.
+  std::vector<ParameterSetting*> indexToSetting_;
+
   // Internal functions
   int FindParameterIndex(const std::string& paramName) const;
   double ConvertPhysicalLimitToReduced(double physicalLimit, const std::string& paramName) const;
   void ApplyParameterSetting(const std::string& paramName, ROOT::Minuit2::MnUserParameters& p);
   void ApplyParameterSettingByIndex(int nonFixedIndex, int actualIndex, ROOT::Minuit2::MnUserParameters& p);
+  /*!
+   * Translates a Minuit parameter name into the name the GUI writes into the
+   * <parameterSettings> block ("energy_2" -> "Level 2 Energy (MeV)",
+   * "width_2_3" -> "Level 2 Channel 3 Width (eV)"; segment norms and energy
+   * shifts already share their names).
+   */
+  static std::string SettingNameForMinuitName(const std::string& minuitName);
+  /*!
+   * Resolves each enumerated non-fixed parameter to its settings entry, by name
+   * where possible and by the stored minuit_index only for entries no name
+   * matched.  Must be called before any ...ByIndex() lookup.
+   */
+  void BuildIndexMap(const ROOT::Minuit2::MnUserParameters& p);
+  ParameterSetting* SettingForIndex(int nonFixedIndex) const;
 };
 
 #endif

@@ -12,6 +12,7 @@ class EData;
 class Config;
 class EPoint;
 class ESegment;
+class ParamIndexMap;
 
 /*!
  * \brief Reverse-mode (adjoint) gradient support for the AZURE2 forward model.
@@ -194,12 +195,27 @@ bool AccumulateEGammaGradient(CNuc* compound, EData* data, const Config& config,
  *
  * `compound`/`data` must already be filled.  `residuals` gets N_res entries;
  * `jacobian` is row-major N_res x nCols (nCols = number of non-fixed params).
- * Energy shifts (rare) are not included as analytic columns here.  Returns false
- * if any point is outside the supported analytic path.
+ * Energy shifts are not included as analytic columns here; the API adds them by
+ * finite differences on the residual vector this function returns (see
+ * AZUREAPI::CalculateResidualJacobianRWA).  Returns false if any point is
+ * outside the supported analytic path.
  */
 bool ComputeResidualJacobian(CNuc* compound, EData* data, const Config& config,
                              const ParamIndexMap& pmap,
                              const vector_matrix_r* shiftDeriv,
                              vector_r& residuals, vector_r& jacobian, int& nCols);
+
+/*!
+ * \brief Per-point d(model)/d(theta) for analytic covariance bands, keyed by
+ *        EPoint*.  Columns are the packed parameters of `pmap`; only the R-matrix
+ *        (E, gamma) columns are populated (dT/dn = dT/dshift = 0).  Each row is
+ *        one adjoint with cotangent 1.  `compound`/`data` must be best-fit-filled.
+ *        Returns false (clearing the output) if any point is outside the analytic
+ *        path, so the caller can skip the band.
+ */
+bool ComputeModelGradients(CNuc* compound, EData* data, const Config& config,
+                           const ParamIndexMap& pmap,
+                           const vector_matrix_r* shiftDeriv,
+                           std::map<EPoint*, vector_r>& gradByPoint);
 
 #endif

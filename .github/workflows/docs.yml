@@ -1,0 +1,105 @@
+name: docs
+
+# The documentation is built on every push and pull request, so a broken
+# cross-reference or an unbuildable page fails like any other regression.
+# Only pushes to the published branches deploy.
+on:
+  push:
+    branches: [qt5, dev]
+  pull_request:
+  workflow_dispatch:
+
+# Required by actions/deploy-pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and never cancel one midway: a half-published site
+# is worse than a stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: docs/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r docs/requirements.txt
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends doxygen
+
+      # -W turns warnings into errors: a broken :doc: reference or a page
+      # missing from a toctree is a defect, and silently shipping it defeats
+      # the point of publishing.
+      - name: Build the user guide
+        run: sphinx-build -W --keep-going -b html docs/source docs/_build/html
+
+      # The C++ internals, published alongside at /api/.
+      - name: Build the API reference
+        run: |
+          cd docs
+          doxygen Doxyfile
+          if [ ! -f api/html/index.html ]; then
+            echo "Doxygen produced no HTML"
+            exit 1
+          fi
+
+      - name: Assemble the site
+        run: |
+          mkdir -p docs/_build/html/api
+          cp -r docs/api/html/* docs/_build/html/api/
+          # Sphinx marks the tree with .nojekyll already; make sure of it, or
+          # GitHub Pages will drop the _static and _sources directories.
+          touch docs/_build/html/.nojekyll
+          echo "pages: $(find docs/_build/html -name '*.html' | wc -l)"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/_build/html
+
+  deploy:
+    # Publishing is attempted from dev as well as qt5, so that the site can
+    # follow the branch the work actually happens on.
+    #
+    # This does not work yet, and cannot be made to work from here. The
+    # github-pages environment carries a custom branch policy that currently
+    # lists only fft and qt5, and adding dev to it is a repository setting --
+    # Settings, Environments, github-pages, deployment branches -- that
+    # requires admin rights on the repository. Until dev is added there, GitHub
+    # refuses the deployment at the environment gate.
+    #
+    # continue-on-error keeps that refusal from failing the whole run, since it
+    # is an expected and harmless outcome rather than a broken workflow: the
+    # build job above still proves the documentation compiles. REMOVE IT once
+    # dev is allowed to deploy, so that a genuine publishing failure is visible
+    # again rather than swallowed.
+    #
+    # Both branches are listed rather than dev alone: qt5 is the default branch
+    # and publishing from it is the behaviour that exists today, so removing it
+    # would break the current path before the new one works. Note that whichever
+    # branch pushes last wins, so pushing an out-of-date qt5 would replace the
+    # site with older documentation.
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/qt5')
+    needs: build
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
