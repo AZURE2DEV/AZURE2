@@ -107,6 +107,13 @@ class Segment:
     energy_shift_error: float = 0.0    # its systematic (MeV)
     vary_shift: bool = False       # is the energy shift a fit parameter?
     thm: bool = False              # Trojan Horse (half-off-shell) segment?
+    operation: Optional[str] = None    # 'sum' | 'ratio' for a composite segment
+    components: tuple = ()             # (entrance, exit, angle, scaling) each
+
+    @property
+    def composite(self) -> bool:
+        """True if this segment is a sum or ratio of several pathways."""
+        return bool(self.components)
 
     @property
     def name(self) -> str:
@@ -119,11 +126,35 @@ class Segment:
         ex = "total" if self.exit_key == -1 else f"pair{self.exit_key}"
         return f"pair{self.entrance_key} -> {ex}"
 
+    def describe(self) -> str:
+        """The reaction, spelled out for a composite segment.
+
+        The segment's own entrance/exit pair is the first term: for a ratio it
+        is the numerator and the components are the denominator, for a sum it is
+        simply the first addend.
+        """
+        def term(e, x, a=-999.0, s=1.0):
+            out = f"pair{e}->" + ("total" if x == -1 else f"pair{x}")
+            if a > -900:
+                out += f"@{a:g}deg"
+            if s not in (1.0, None):
+                out += f" x{s:g}"
+            return out
+
+        head = term(self.entrance_key, self.exit_key)
+        if not self.composite:
+            return head
+        rest = [term(*c) for c in self.components]
+        if self.operation == "ratio":
+            return head + " / " + " / ".join(rest)
+        return " + ".join([head] + rest)
+
     def __repr__(self):
+        extra = f", {self.operation} of {len(self.components)}" if self.composite else ""
         return (f"Segment(#{self.key} {self.name!r}, "
                 f"{self.entrance_key}->{self.exit_key}, {self.observable}, "
                 f"E={self.energy_min:g}-{self.energy_max:g}, "
-                f"norm_err={self.norm_error:g})")
+                f"norm_err={self.norm_error:g}{extra})")
 
 
 class SegmentSet(list):
@@ -170,6 +201,37 @@ class SegmentSet(list):
         while i < len(t) and _isfloat(t[i]):
             i += 1
         data_file = t[i] if i < len(t) else ""
+
+        # A composite ("advanced") segment continues after the data file with
+        #   isAdvanced operationType nComponents [entrance exit angle [scaling]]*
+        # and a leading -1 in the count position marks the newer layout that
+        # carries a per-component scaling factor.  See SegLine.h.
+        operation, components = None, []
+        tail = t[i + 1:]
+        if tail and _isfloat(tail[0]) and int(float(tail[0])) == 1:
+            operation = "ratio" if (len(tail) > 1 and
+                                    int(float(tail[1])) == 1) else "sum"
+            j, scaled = 2, False
+            n = int(float(tail[j])) if len(tail) > j else 0
+            j += 1
+            if n == -1:                      # marker: per-component scaling
+                scaled = True
+                n = int(float(tail[j])) if len(tail) > j else 0
+                j += 1
+            for _ in range(n):
+                if j + 2 >= len(tail) + 1 and not scaled:
+                    break
+                try:
+                    e, x, a = (int(float(tail[j])), int(float(tail[j + 1])),
+                               float(tail[j + 2]))
+                except (IndexError, ValueError):
+                    break
+                j += 3
+                s = 1.0
+                if scaled and j < len(tail) and _isfloat(tail[j]):
+                    s = float(tail[j]); j += 1
+                components.append((e, x, a, s))
+
         return Segment(
             key=key, active=active, entrance_key=entrance_key,
             exit_key=exit_key, energy_min=eMin, energy_max=eMax,
@@ -179,7 +241,8 @@ class SegmentSet(list):
             norm_error=norm_error, data_file=data_file,
             energy_shift=shift, energy_shift_error=shift_error,
             vary_shift=vary_shift,
-            thm=_decode_observable(isDiff, _OBSERVABLE)[1])
+            thm=_decode_observable(isDiff, _OBSERVABLE)[1],
+            operation=operation, components=tuple(components))
 
     # -- views ----------------------------------------------------------------
 
