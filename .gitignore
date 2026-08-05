@@ -28,3 +28,4 @@ __pycache__/
 # Python packaging artefacts
 *.egg-info/
 dist/
+build-api/

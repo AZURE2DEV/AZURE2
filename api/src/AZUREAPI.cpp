@@ -14,6 +14,8 @@
 #include "AMatrixFunc.h"
 #include "AZUREGrad.h"
 #include "CovarianceBand.h"
+#include "CoulFunc.h"
+#include "ECIntegral.h"
 
 #include <iostream>
 #include <iomanip>
@@ -1213,4 +1215,175 @@ vector_r AZUREAPI::GetPairsInfo( ) const {
   }
 
   return info;
+}
+// ---------------------------------------------------------------------------
+//  Diagnostics: the external region, and the caches that make it affordable
+// ---------------------------------------------------------------------------
+
+/*!
+ * Coulomb wave functions, penetrability, shift function and hard-sphere phase
+ * on a requested energy grid.
+ *
+ * These are ordinary R-matrix quantities that AZURE2 has always computed
+ * internally; what is new is being able to ask for them.  The values follow the
+ * run's own configuration, so the same call returns the accurate Coulomb
+ * routine's answer, GSL's, or the Numerov solution through a nuclear potential,
+ * according to how the calculation was set up -- which is how one sees what the
+ * hybrid model actually does to the external region.
+ */
+vector_r AZUREAPI::GetCoulombFunctions(const vector_r& request) const {
+  vector_r out;
+  if(request.size() < 4) return out;
+
+  int pairKey = static_cast<int>(std::lround(request[0]));
+  int lValue  = static_cast<int>(std::lround(request[1]));
+  double radius = request[2];
+  int nE = static_cast<int>(std::lround(request[3]));
+  if(nE < 0 || request.size() < static_cast<size_t>(4 + nE)) return out;
+
+  if(!compound_ || !compound_->IsPairKey(pairKey)) return out;
+  PPair* pair = compound_->GetPair(compound_->GetPairNumFromKey(pairKey));
+  if(!pair) return out;
+  if(radius <= 0.0) radius = pair->GetChRad();   // the channel radius by default
+
+  CoulFunc coul(pair, !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC));
+
+  out.push_back(static_cast<double>(nE));
+  for(int i = 0; i < nE; ++i) {
+    double energy = request[4 + i];
+    double F = 0., dF = 0., G = 0., dG = 0., P = 0., S = 0., delta = 0.;
+    if(energy > 0.0) {
+      try {
+        CoulWaves w = coul(lValue, radius, energy);
+        F = w.F; dF = w.dF; G = w.G; dG = w.dG;
+        P = coul.Penetrability(lValue, radius, energy);
+        S = coul.PEShift(lValue, radius, energy);
+        delta = -std::atan2(w.F, w.G);
+      } catch(...) {
+        // A failed evaluation returns zeros for that energy rather than
+        // aborting the whole grid; the caller can see which points are missing.
+        F = dF = G = dG = P = S = delta = 0.;
+      }
+    }
+    out.push_back(F);   out.push_back(dF);
+    out.push_back(G);   out.push_back(dG);
+    out.push_back(P);   out.push_back(S);
+    out.push_back(delta);
+  }
+  return out;
+}
+
+/*!
+ * External-capture radial integrals on a requested energy grid.
+ *
+ * Walks exactly the pathway structure EPoint::CalculateECAmplitudes walks --
+ * every EC level whose final pair matches, every KGroup of the entrance pair's
+ * decay, every ECMGroup within it -- and evaluates the integral at each
+ * requested energy instead of at a data point's energy.  The quantum numbers of
+ * each pathway come back with it, so no bookkeeping is needed on the caller's
+ * side.
+ */
+vector_r AZUREAPI::GetECIntegrals(const vector_r& request) const {
+  vector_r out;
+  if(request.size() < 2) return out;
+
+  int pairKey = static_cast<int>(std::lround(request[0]));
+  int nE = static_cast<int>(std::lround(request[1]));
+  if(nE <= 0 || request.size() < static_cast<size_t>(2 + nE)) return out;
+  std::vector<double> energies(request.begin() + 2, request.begin() + 2 + nE);
+
+  if(!compound_ || !compound_->IsPairKey(pairKey)) return out;
+  int aa = compound_->GetPairNumFromKey(pairKey);
+  PPair* entrancePair = compound_->GetPair(aa);
+  if(!entrancePair || !entrancePair->IsEntrance()) return out;
+
+  // One block per pathway: 6 descriptors then 2*nE numbers.
+  std::vector<vector_r> blocks;
+
+  for(int j = 1; j <= compound_->NumJGroups(); j++) {
+    for(int la = 1; la <= compound_->GetJGroup(j)->NumLevels(); la++) {
+      ALevel* ecLevel = compound_->GetJGroup(j)->GetLevel(la);
+      if(!ecLevel->IsECLevel()) continue;
+      int ir = ecLevel->GetECPairNum();
+      if(ir < 1 || ir > compound_->NumPairs()) continue;
+
+      for(int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
+        KGroup* theKGroup = entrancePair->GetDecay(ir)->GetKGroup(k);
+        for(int ecm = 1; ecm <= theKGroup->NumECMGroups(); ecm++) {
+          ECMGroup* g = theKGroup->GetECMGroup(ecm);
+
+          AChannel* finalChannel =
+            compound_->GetJGroup(j)->GetChannel(g->GetFinalChannel());
+          PPair* finalPair = compound_->GetPair(finalChannel->GetPairNum());
+
+          int liValue;
+          double siValue;
+          if(g->IsChannelCapture()) {
+            MGroup* cc = entrancePair->GetDecay(g->GetChanCapDecay())
+                           ->GetKGroup(g->GetChanCapKGroup())
+                           ->GetMGroup(g->GetChanCapMGroup());
+            liValue = compound_->GetJGroup(cc->GetJNum())
+                        ->GetChannel(cc->GetChpNum())->GetL();
+            siValue = compound_->GetJGroup(cc->GetJNum())
+                        ->GetChannel(cc->GetChpNum())->GetS();
+          } else {
+            liValue = g->GetL();
+            siValue = theKGroup->GetS();
+          }
+
+          vector_r block;
+          block.push_back(static_cast<double>(liValue));
+          block.push_back(static_cast<double>(finalChannel->GetL()));
+          block.push_back(2.0 * siValue);
+          block.push_back(2.0 * finalChannel->GetS());
+          block.push_back(static_cast<double>(g->GetMult()));
+          block.push_back(g->GetRadType() == 'E' ? 1.0 : 0.0);
+
+          ECIntegral theECIntegral(finalPair, configure());
+          double levelEnergy = ecLevel->GetE();
+          for(int i = 0; i < nE; ++i) {
+            double inEnergy = energies[i] + entrancePair->GetSepE()
+                                          + entrancePair->GetExE();
+            complex v(0., 0.);
+            if(energies[i] > 0.0) {
+              try {
+                v = theECIntegral(liValue, finalChannel->GetL(),
+                                  siValue, finalChannel->GetS(),
+                                  g->GetJ(), compound_->GetJGroup(j)->GetJ(),
+                                  g->GetMult(), g->GetRadType(),
+                                  inEnergy, levelEnergy,
+                                  g->IsChannelCapture());
+              } catch(...) {
+                v = complex(0., 0.);
+              }
+            }
+            block.push_back(real(v));
+            block.push_back(imag(v));
+          }
+          blocks.push_back(std::move(block));
+        }
+      }
+    }
+  }
+
+  out.push_back(static_cast<double>(blocks.size()));
+  out.push_back(static_cast<double>(nE));
+  for(const vector_r& b : blocks) out.insert(out.end(), b.begin(), b.end());
+  return out;
+}
+
+/*!
+ * Coulomb-function cache counters, aggregated over threads.
+ */
+vector_r AZUREAPI::GetCacheStats( ) const {
+  vector_r out(6, 0.0);
+  if(!g_coulFuncCache) return out;
+  CoulFuncCache::Stats s = g_coulFuncCache->GetStats();
+  out[0] = static_cast<double>(s.queries);
+  out[1] = static_cast<double>(s.hits);
+  out[2] = static_cast<double>(s.entries);
+  out[3] = static_cast<double>(s.keys);
+  out[4] = static_cast<double>(s.disabledKeys);
+  out[5] = static_cast<double>(s.threads);
+  return out;
 }

@@ -698,6 +698,113 @@ class azure2:
             start += n * ncols
         return out
 
+    # -- the external region, and the caches that make it affordable ----------
+
+    def coulomb_functions(self, pair, energies, L=0, radius=0.0, proc=0):
+        """Coulomb wave functions on an energy grid.
+
+        Parameters
+        ----------
+        pair : particle-pair key (1-based, as in the .azr).
+        energies : centre-of-mass energies in MeV.
+        L : orbital angular momentum.
+        radius : evaluation radius in fm; 0 means the pair's channel radius,
+            which is where penetrabilities and hard-sphere phases are wanted.
+
+        Returns
+        -------
+        dict of arrays, all the same length as `energies`:
+        ``F``, ``dF``, ``G``, ``dG`` (the Coulomb functions and their
+        derivatives with respect to rho), ``P`` (penetrability), ``S`` (shift
+        function) and ``delta_hs`` (hard-sphere phase shift, radians).
+
+        The values follow the run's own configuration, so the same call returns
+        the accurate Coulomb routine's answer, GSL's (``--gsl-coul``), or the
+        Numerov solution through a nuclear potential (the hybrid model), and
+        comparing them is how one sees what those options do.
+        """
+        e = np.asarray(energies, float).ravel()
+        req = np.concatenate([[pair, L, radius, e.size], e])
+        resp = self.clients[proc].communicate("GET_COULOMB_FUNCTIONS", req)
+        if resp.size == 0:
+            raise RuntimeError(
+                "the AZURE2 binary does not implement GET_COULOMB_FUNCTIONS "
+                "(command 45); rebuild it from a source tree that has it.")
+        n = int(round(resp[0]))
+        block = resp[1:].reshape(n, 7)
+        keys = ("F", "dF", "G", "dG", "P", "S", "delta_hs")
+        out = {k: block[:, i] for i, k in enumerate(keys)}
+        out["energy"] = e[:n]
+        return out
+
+    def ec_integrals(self, pair, energies, proc=0):
+        """External-capture radial integrals on an energy grid.
+
+        Every external-capture pathway the compound nucleus generates from this
+        entrance pair is evaluated at every energy.  Returns a list of dicts,
+        one per pathway, each carrying its quantum numbers (``li``, ``lf``,
+        ``si``, ``sf``, ``multipolarity``, ``radiation``) and the complex
+        integral as ``value``.
+
+        These integrals are the most expensive part of a capture calculation --
+        which is why AZURE3 caches them.  Asking for them twice and watching
+        :meth:`cache_stats` is the direct way to see that.
+        """
+        e = np.asarray(energies, float).ravel()
+        req = np.concatenate([[pair, e.size], e])
+        resp = self.clients[proc].communicate("GET_EC_INTEGRALS", req)
+        if resp.size == 0:
+            raise RuntimeError(
+                "the AZURE2 binary does not implement GET_EC_INTEGRALS "
+                "(command 46); rebuild it from a source tree that has it.")
+        npath = int(round(resp[0]))
+        nE = int(round(resp[1]))
+        stride = 6 + 2 * nE
+        body = resp[2:]
+        if body.size != npath * stride:
+            raise RuntimeError(
+                f"ec_integrals: got {body.size} values, expected {npath * stride}.")
+        out = []
+        for p in range(npath):
+            b = body[p * stride:(p + 1) * stride]
+            vals = b[6:].reshape(nE, 2)
+            out.append({
+                "li": int(round(b[0])),
+                "lf": int(round(b[1])),
+                "si": b[2] / 2.0,
+                "sf": b[3] / 2.0,
+                "multipolarity": int(round(b[4])),
+                "radiation": "E" if b[5] > 0.5 else "M",
+                "energy": e[:nE],
+                "value": vals[:, 0] + 1j * vals[:, 1],
+            })
+        return out
+
+    def cache_stats(self, proc=0):
+        """Coulomb-function cache counters, summed over threads.
+
+        Returns a dict with ``queries``, ``hits``, ``hit_rate``, ``entries``,
+        ``keys``, ``disabled_keys`` and ``threads``.  ``disabled_keys`` counts
+        the keys that gave up on their memo because too few of their entries
+        were being asked for twice -- which is what happens when a free energy
+        shift moves every point energy at every iteration.
+        """
+        resp = self.clients[proc].communicate("GET_CACHE_STATS", [])
+        if resp.size == 0:
+            raise RuntimeError(
+                "the AZURE2 binary does not implement GET_CACHE_STATS "
+                "(command 47); rebuild it from a source tree that has it.")
+        q, h = float(resp[0]), float(resp[1])
+        return {
+            "queries": int(q),
+            "hits": int(h),
+            "hit_rate": (h / q) if q else 0.0,
+            "entries": int(resp[2]),
+            "keys": int(resp[3]),
+            "disabled_keys": int(resp[4]),
+            "threads": int(resp[5]),
+        }
+
     # -- calculations ---------------------------------------------------------
 
     def calculate_excitation_energy(self, params, proc=0):

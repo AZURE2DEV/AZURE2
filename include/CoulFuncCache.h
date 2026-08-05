@@ -83,6 +83,24 @@ public:
      * Clear all cached data
      */
     void Clear();
+
+    /*!
+     * Aggregate hit statistics over every thread's cache.
+     *
+     * The cache is the main reason a fit is cheaper than a cold calculation, and
+     * it is also the thing that quietly switches itself off when a free energy
+     * shift makes the memo useless.  Both are invisible from outside unless the
+     * counters are exposed, so they are.
+     */
+    struct Stats {
+        long queries = 0;      ///< lookups attempted
+        long hits = 0;         ///< lookups that found an exact stored energy
+        long entries = 0;      ///< memoized (key, energy) pairs currently held
+        long keys = 0;         ///< distinct (Z1,Z2,mu,l,a) keys
+        long disabledKeys = 0; ///< keys that gave up and released their memo
+        int threads = 0;       ///< per-thread caches in existence
+    };
+    Stats GetStats() const;
 };
 
 // Global shared cache instance

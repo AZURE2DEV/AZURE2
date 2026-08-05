@@ -168,3 +168,28 @@ bool CoulFuncCache::TryGetCoulWaves(const CoulFuncKey& key, double energy, CoulW
 void CoulFuncCache::Clear() {
     for (auto& c : threadCaches_) c.clear();
 }
+
+/*!
+ * Aggregate hit statistics over every thread's cache.
+ *
+ * Summed rather than per-thread: which thread served a lookup is an accident of
+ * scheduling, and the quantity of interest -- what fraction of the Coulomb
+ * evaluations the memo saved -- is a property of the run.  `disabledKeys`
+ * counts the keys whose measured hit rate never justified the memo and which
+ * therefore handed their memory back; a run with a free energy shift should
+ * show most of its keys there.
+ */
+CoulFuncCache::Stats CoulFuncCache::GetStats() const {
+    Stats s;
+    s.threads = static_cast<int>(threadCaches_.size());
+    for (const auto& cache : threadCaches_) {
+        s.keys += static_cast<long>(cache.size());
+        for (const auto& kv : cache) {
+            s.queries += kv.second.queries;
+            s.hits += kv.second.hits;
+            s.entries += static_cast<long>(kv.second.energies.size());
+            if (kv.second.disabled) ++s.disabledKeys;
+        }
+    }
+    return s;
+}

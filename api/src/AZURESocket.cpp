@@ -444,6 +444,26 @@ void AZURESocket::handle( const vector_r& request ) {
       sendPacket( api_->calculated_angular_dists( idx ) );
       break;
 
+    // Coulomb wave functions on a requested energy grid.
+    // Request:  [pairKey, l, radius, nE, E...]
+    // Response: [nE, then per energy F, dF, G, dG, P, S, deltaHS].
+    case 45:
+      sendPacket( api_->GetCoulombFunctions( params ) );
+      break;
+
+    // External-capture radial integrals on a requested energy grid.
+    // Request:  [pairKey, nE, E...]
+    // Response: [nPathways, nE, then per pathway 6 descriptors + 2*nE values].
+    case 46:
+      sendPacket( api_->GetECIntegrals( params ) );
+      break;
+
+    // Coulomb-function cache counters.
+    // Response: [queries, hits, entries, keys, disabledKeys, threads].
+    case 47:
+      sendPacket( api_->GetCacheStats( ) );
+      break;
+
     default:
       std::cerr << "AZURESocket: unknown command " << cmd << "." << std::endl;
       // Reply with an empty frame so the client does not block forever.
