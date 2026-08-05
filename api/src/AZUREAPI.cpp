@@ -1278,6 +1278,7 @@ vector_r AZUREAPI::GetPairsInfo( ) const {
     info.push_back( pair->GetExE() );
     info.push_back( pair->GetChRad() );
     info.push_back( pair->GetI1I2Factor() );
+    info.push_back( pair->GetBindingEnergy() );
   }
 
   return info;

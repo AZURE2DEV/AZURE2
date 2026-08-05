@@ -1300,17 +1300,48 @@ void AZURESetup::openWebsite() {
 				"to visit the website."));
 }
 
+/*!
+ * A Config whose configfile is a snapshot of the *current* GUI state.
+ *
+ * CNuc::Fill reads the .azr from disk, so any conversion built on it sees the
+ * last saved file rather than what the user is looking at.  That is wrong for
+ * anything the conversion depends on -- channel radii, spins -- and badly wrong
+ * for the per-channel "Reduced Width Amplitude" flag, since CNuc::GetTransformParams
+ * uses it to decide whether to convert an amplitude at all.  Toggling that
+ * button and loading a param.sav without saving first would otherwise convert a
+ * value that should have passed through, or pass through one that should have
+ * been converted, changing it by orders of magnitude.
+ *
+ * The snapshot is written to a temporary file that is removed when the returned
+ * guard goes out of scope.  If writing fails the original Config is returned
+ * unchanged, so the conversion degrades to the old behaviour rather than
+ * failing outright.
+ */
+AZURESetup::GuiStateSnapshot::GuiStateSnapshot(AZURESetup* setup)
+  : config(setup->GetConfig()), ok(false) {
+  file.setFileTemplate(QDir::tempPath() + "/azure2_gui_state_XXXXXX.azr");
+  if(!file.open()) return;
+  file.close();
+  if(!setup->writeFile(file.fileName())) return;
+  config.configfile = file.fileName().toStdString();
+  ok = true;
+}
+
 double AZURESetup::ConvertRWAToPhysical(const QString& paramName, double rwaValue) {
   // Convert RWA parameter to physical value using proper R-Matrix transformation
   // This is the inverse of ParameterLimitsManager::ConvertPhysicalLimitToReduced
   
   try {
+    // Convert against a snapshot of the current GUI state, not the last saved
+    // file -- see GuiStateSnapshot.
+    GuiStateSnapshot snap(this);
+    const Config& cfg = snap.ok ? snap.config : config;
+
     // Create compound nucleus and data objects
     CNuc* compound = new CNuc();
     EData* data = new EData();
     
-    // Fill compound nucleus from current GUI configuration
-    if(compound->Fill(config) == -1) {
+    if(compound->Fill(cfg) == -1) {
       delete compound;
       delete data;
       return rwaValue; // Return original value if compound creation fails
@@ -1318,13 +1349,13 @@ double AZURESetup::ConvertRWAToPhysical(const QString& paramName, double rwaValu
     
     // Fill data object if needed for parameter context
     if(config.paramMask & Config::CALCULATE_WITH_DATA) {
-      if(data->Fill(config, compound) == -1) {
+      if(data->Fill(cfg, compound) == -1) {
         delete compound;
         delete data;
         return rwaValue;
       }
     } else {
-      if(data->MakePoints(config, compound) == -1) {
+      if(data->MakePoints(cfg, compound) == -1) {
         delete compound;
         delete data;
         return rwaValue;
@@ -1332,11 +1363,11 @@ double AZURESetup::ConvertRWAToPhysical(const QString& paramName, double rwaValu
     }
     
     // Initialize compound nucleus
-    compound->Initialize(config);
+    compound->Initialize(cfg);
     
     // Create parameter objects
     AZUREParams params;
-    compound->FillMnParams(params.GetMinuitParams(), &config);
+    compound->FillMnParams(params.GetMinuitParams(), &cfg);
     data->FillMnParams(params.GetMinuitParams());
     
     // Find the parameter index
@@ -1361,11 +1392,11 @@ double AZURESetup::ConvertRWAToPhysical(const QString& paramName, double rwaValu
     
     // Fill compound with RWA parameters and transform to physical
     compound->FillCompoundFromParams(rwaParams);
-    compound->CalcShiftFunctions(config);
-    compound->TransformOut(config);
+    compound->CalcShiftFunctions(cfg);
+    compound->TransformOut(cfg);
     
     // Get the transformed (physical) parameters
-    vector_r physicalParams = compound->GetTransformParams(config);
+    vector_r physicalParams = compound->GetTransformParams(cfg);
     
     double result = rwaValue; // Default fallback
     if (paramIndex < physicalParams.size()) {
@@ -1394,12 +1425,15 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysical(const QStringList& par
   }
   
   try {
+    // Convert against a snapshot of the current GUI state -- see GuiStateSnapshot.
+    GuiStateSnapshot snap(this);
+    const Config& cfg = snap.ok ? snap.config : config;
+
     // Create compound nucleus and data objects ONCE
     CNuc* compound = new CNuc();
     EData* data = new EData();
     
-    // Fill compound nucleus from current GUI configuration
-    if(compound->Fill(config) == -1) {
+    if(compound->Fill(cfg) == -1) {
       delete compound;
       delete data;
       // Return original values if compound creation fails
@@ -1411,7 +1445,7 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysical(const QStringList& par
     
     // Fill data object if needed for parameter context
     if(config.paramMask & Config::CALCULATE_WITH_DATA) {
-      if(data->Fill(config, compound) == -1) {
+      if(data->Fill(cfg, compound) == -1) {
         delete compound;
         delete data;
         for(double val : rwaValues) {
@@ -1420,7 +1454,7 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysical(const QStringList& par
         return results;
       }
     } else {
-      if(data->MakePoints(config, compound) == -1) {
+      if(data->MakePoints(cfg, compound) == -1) {
         delete compound;
         delete data;
         for(double val : rwaValues) {
@@ -1431,11 +1465,11 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysical(const QStringList& par
     }
     
     // Initialize compound nucleus
-    compound->Initialize(config);
+    compound->Initialize(cfg);
     
     // Create parameter objects
     AZUREParams params;
-    compound->FillMnParams(params.GetMinuitParams(), &config);
+    compound->FillMnParams(params.GetMinuitParams(), &cfg);
     data->FillMnParams(params.GetMinuitParams());
     
     // Get current RWA parameters as base
@@ -1463,11 +1497,11 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysical(const QStringList& par
     
     // Fill compound with ALL RWA parameters and transform to physical ONCE
     compound->FillCompoundFromParams(rwaParams);
-    compound->CalcShiftFunctions(config);
-    compound->TransformOut(config);
+    compound->CalcShiftFunctions(cfg);
+    compound->TransformOut(cfg);
     
     // Get the transformed (physical) parameters
-    vector_r physicalParams = compound->GetTransformParams(config);
+    vector_r physicalParams = compound->GetTransformParams(cfg);
     
     // Extract results for each requested parameter
     for(int i = 0; i < paramIndices.size(); i++) {
@@ -1515,12 +1549,15 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysicalWithOldStructure(
   }
 
   try {
+    // Convert against a snapshot of the current GUI state -- see GuiStateSnapshot.
+    GuiStateSnapshot snap(this);
+    const Config& cfg = snap.ok ? snap.config : config;
+
     // Create compound nucleus and data objects ONCE
     CNuc* compound = new CNuc();
     EData* data = new EData();
 
-    // Fill compound nucleus from current GUI configuration
-    if(compound->Fill(config) == -1) {
+    if(compound->Fill(cfg) == -1) {
       delete compound;
       delete data;
       // Return original values if compound creation fails
@@ -1531,11 +1568,11 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysicalWithOldStructure(
     }
 
     // Initialize compound nucleus
-    compound->Initialize(config);
+    compound->Initialize(cfg);
 
     // Create parameter objects using the CURRENT structure
     AZUREParams params;
-    compound->FillMnParams(params.GetMinuitParams(), &config);
+    compound->FillMnParams(params.GetMinuitParams(), &cfg);
     data->FillMnParams(params.GetMinuitParams());
 
     // Get current RWA parameters as base
@@ -1583,11 +1620,11 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysicalWithOldStructure(
 
     // Fill compound with ALL RWA parameters and transform to physical ONCE
     compound->FillCompoundFromParams(rwaParams);
-    compound->CalcShiftFunctions(config);
-    compound->TransformOut(config);
+    compound->CalcShiftFunctions(cfg);
+    compound->TransformOut(cfg);
 
     // Get the transformed (physical) parameters
-    vector_r physicalParams = compound->GetTransformParams(config);
+    vector_r physicalParams = compound->GetTransformParams(cfg);
 
     // Extract results for each requested parameter
     for(int i = 0; i < paramIndices.size(); i++) {

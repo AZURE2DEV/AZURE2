@@ -121,6 +121,8 @@ class AZUREAPI {
    *   15 i1i2factor    1 / ((2 J1 + 1)(2 J2 + 1)); the entrance pair's value is
    *                    the denominator of the statistical spin factor
    *                    omega = (2 J + 1) * i1i2factor
+   *   16 bindingE      Trojan Horse binding energy of the pair (MeV); 0 unless
+   *                    the pair is used as a THM entrance channel
    */
   vector_r GetPairsInfo( ) const;
   

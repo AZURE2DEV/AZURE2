@@ -178,7 +178,7 @@ class Pair:
 
     # Number of doubles per record emitted by AZUREAPI::GetPairsInfo.
     # Must match AZUREAPI::kPairInfoFields.
-    _NFIELDS = 16
+    _NFIELDS = 17
 
     number: int             # 1-based pair number (matches Parameter.pair)
     key: int                # user pair key from the .azr file
@@ -196,6 +196,8 @@ class Pair:
     excitation: float       # pair excitation energy (MeV)
     channel_radius: float   # channel radius (fm)
     i1i2factor: float       # 1 / ((2 J1 + 1)(2 J2 + 1))
+    binding_energy: float = 0.0   # Trojan Horse binding energy (MeV); 0 unless
+                                  # the pair is a THM entrance channel
 
     @property
     def is_photon(self) -> bool:
@@ -206,7 +208,7 @@ class Pair:
     def from_record(cls, record):
         """Build a :class:`Pair` from one ``GET_PAIRS_INFO`` record."""
         (number, key, ptype, is_entrance, J1, parity1, Z1, M1, J2, parity2,
-         Z2, M2, sepE, exE, chRad, i1i2factor) = record
+         Z2, M2, sepE, exE, chRad, i1i2factor, bindingE) = record
         return cls(
             number=int(round(number)),
             key=int(round(key)),
@@ -218,6 +220,7 @@ class Pair:
             M2=float(M2),
             sep_energy=float(sepE), excitation=float(exE),
             channel_radius=float(chRad), i1i2factor=float(i1i2factor),
+            binding_energy=float(bindingE),
         )
 
     def __repr__(self):

@@ -2,6 +2,7 @@
 #define AZURESETUP_H
 
 #include <QMainWindow>
+#include <QTemporaryFile>
 
 #include "PairsTab.h"
 #include "LevelsTab.h"
@@ -48,6 +49,22 @@ class AZURESetup : public QMainWindow {
   void saveProject() { save(); } // Public wrapper for MCMCTab to use
   
   // Convert RWA parameter to physical value using proper R-Matrix transformation
+  /*! A Config whose configfile is a snapshot of the current GUI state.
+
+      CNuc::Fill reads the .azr from disk, so a conversion built straight on the
+      live Config sees the last *saved* file.  That matters most for the
+      per-channel reduced-width-amplitude flag, which decides whether a width is
+      converted at all: toggling it without saving would otherwise change the
+      value by orders of magnitude.  Falls back to the unsnapshotted Config if
+      the temporary file cannot be written, so conversion degrades rather than
+      fails. */
+  struct GuiStateSnapshot {
+    explicit GuiStateSnapshot(AZURESetup* setup);
+    QTemporaryFile file;   // removed when this goes out of scope
+    Config config;
+    bool ok;
+  };
+
   double ConvertRWAToPhysical(const QString& paramName, double rwaValue);
 
   // Batch convert multiple RWA parameters to physical values (much more efficient)
