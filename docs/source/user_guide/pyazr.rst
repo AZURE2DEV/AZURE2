@@ -360,6 +360,18 @@ Worked scripts ship in ``pyazr/examples/``:
      - The same with ``zeus``.
    * - ``angular_distribution.py``
      - Legendre coefficients at chosen energies, with an optional plot.
+   * - ``per_dataset_chi2.py``
+     - Slicing the residual vector to get the χ² of each experiment.
+   * - ``decompose_cross_section.py``
+     - Separating resonance, interference and background contributions at
+       the fitted parameters.
+   * - ``sfactor_extrapolation.py``
+     - An S factor below the measured range, and S(0).
+   * - ``channel_radius_scan.py``
+     - χ² against the channel radius, one process per radius.
+   * - ``reaction_rate.py``
+     - N\ :sub:`A`\ ⟨σv⟩ by integrating the extrapolated cross section
+       over a Maxwell--Boltzmann distribution.
 
 Running several instances
 -------------------------
