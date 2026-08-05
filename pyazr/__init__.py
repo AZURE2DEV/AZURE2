@@ -33,4 +33,4 @@ __all__ = ["azure2", "client", "server", "ClientError", "ServerError",
            "Band", "load_covariance", "rmatrix_columns", "best_fit_params",
            "live_parameters", "step_sizes", "sensitivities", "trimmed_model",
            "uncertainty_bands", "extrapolation_bands"]
-__version__ = '2.6.0'
+__version__ = '2.7.0'

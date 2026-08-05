@@ -283,6 +283,38 @@ Dimensionless widths
 θ² > 1 exceeds the Wigner limit and is unphysical; γ-ray strengths in Weisskopf
 units are the corresponding sanity check for capture.
 
+The external region, and the caches
+-----------------------------------
+
+The quantities that describe everything outside the channel radius can be asked
+for directly. They are what the penetrabilities in the level matrix are built
+from, what sets the hard-sphere phase, and what the external-capture integrals
+integrate.
+
+.. code-block:: python
+
+   c = azr.coulomb_functions(pair=1, energies=E, L=0)   # radius=0 -> channel radius
+   c["F"], c["G"], c["P"], c["S"], c["delta_hs"]
+
+   paths = azr.ec_integrals(pair=1, energies=E)         # one entry per EC pathway
+   paths[0]["li"], paths[0]["lf"], paths[0]["radiation"], paths[0]["value"]
+
+   azr.cache_stats()   # queries, hits, hit_rate, entries, keys, disabled_keys
+
+The Coulomb functions follow the run's own configuration, so the same call
+returns the accurate routine's values, GSL's (``--gsl-coul``), or the Numerov
+solution through a nuclear potential (the hybrid model of the
+``<potential>`` block). Comparing them is how one sees what those options do to
+the external region.
+
+External-capture integrals are the most expensive part of a capture
+calculation, which is why the Coulomb functions they need are memoized.
+``cache_stats`` makes that visible: asking for the same integrals twice on
+``16O(p,gamma)17F`` takes 14.9 s and then 0.44 s, with the hit rate rising from
+82% to 91%. ``disabled_keys`` counts the memos that have given up because too
+few of their entries were being asked for twice --- which is what a *varying*
+energy shift produces, since it moves every point energy at every iteration.
+
 Examples
 --------
 
@@ -304,6 +336,11 @@ Worked scripts ship in ``pyazr/examples/``:
      - Reduced width amplitudes to physical partial widths.
    * - ``dimensionless_widths.py``
      - θ² and Weisskopf units for a whole fit.
+   * - ``coulomb_functions.py``
+     - Coulomb functions, penetrability and hard-sphere phase over an
+       energy grid.
+   * - ``ec_integrals.py``
+     - External-capture integrals per pathway, and what caching them buys.
    * - ``save_fit_to_azr.py``
      - Writing a fit back into a ``.azr``, verifying it round-trips.
    * - ``uncertainty_band.py``
