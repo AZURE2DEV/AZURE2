@@ -37,8 +37,16 @@ _FIELDS = [
     "e2", "m1", "m2", "z1", "z2", "entranceSepE", "sepE", "j3", "pi3", "e3",
     "pType", "chRad", "g1", "g2", "ecMultMask",
 ]
-_IDX = {name: i for i, name in enumerate(_FIELDS)}
+# Two fields were appended later (binding energy, and a flag saying the gamma
+# column holds a reduced width amplitude rather than a partial width or ANC).
+# Files written before they existed have 31 fields and must keep loading, so
+# they are optional and a short line is padded on read rather than rejected.
+_OPTIONAL_FIELDS = ["bindingEnergy", "gammaIsRWA"]
+_FIELDS_ALL = _FIELDS + _OPTIONAL_FIELDS
+_IDX = {name: i for i, name in enumerate(_FIELDS_ALL)}
 _NFIELDS = len(_FIELDS)
+_NFIELDS_MAX = len(_FIELDS_ALL)
+_OPTIONAL_DEFAULTS = ["0", "0"]
 
 
 def _isnum(tok):
@@ -67,11 +75,16 @@ class AzrChannel:
     """
 
     def __init__(self, tokens):
-        if len(tokens) != _NFIELDS:
+        if not (_NFIELDS <= len(tokens) <= _NFIELDS_MAX):
             raise ValueError(
-                f"a <levels> line needs {_NFIELDS} fields, got {len(tokens)}: "
-                f"{tokens}")
+                f"a <levels> line needs {_NFIELDS} to {_NFIELDS_MAX} fields, "
+                f"got {len(tokens)}: {tokens}")
         self.tokens = list(tokens)
+        # Remember whether the line carried the optional fields, so a file that
+        # did not have them is written back without them.
+        self._n_written = len(tokens)
+        while len(self.tokens) < _NFIELDS_MAX:
+            self.tokens.append(_OPTIONAL_DEFAULTS[len(self.tokens) - _NFIELDS])
 
     # -- typed field access ---------------------------------------------------
     def _get(self, name, cast):
@@ -162,10 +175,35 @@ class AzrChannel:
         self._set("levelID", int(level_id))
 
     def clone(self):
-        return AzrChannel(self.tokens)
+        c = AzrChannel(self.tokens)
+        c._n_written = self._n_written
+        return c
 
     def to_line(self):
-        return " ".join(self.tokens)
+        # Emit exactly as many fields as the line arrived with, so a file
+        # predating the optional columns round-trips unchanged.
+        return " ".join(self.tokens[:self._n_written])
+
+    # -- the optional trailing fields ----------------------------------------
+    @property
+    def gamma_is_rwa(self):
+        """True when the ``gamma`` column is a reduced width amplitude
+        (MeV^(1/2)) rather than a partial width in eV or an ANC.
+
+        AZURE2 keeps this convention on output as well: ``CNuc::TransformOut``
+        returns the amplitude unchanged for such a channel, so a fit written
+        back through :meth:`AzrModel.apply_fit` does not flip the convention.
+        """
+        return self._get("gammaIsRWA", lambda v: int(float(v))) == 1
+
+    @gamma_is_rwa.setter
+    def gamma_is_rwa(self, v):
+        self._set("gammaIsRWA", 1 if v else 0)
+        self._n_written = _NFIELDS_MAX      # the field must now be emitted
+
+    @property
+    def binding_energy(self):
+        return self._get("bindingEnergy", float)
 
     @classmethod
     def from_line(cls, line):

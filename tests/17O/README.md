@@ -1,4 +1,4 @@
-# o17_guardo — Trojan Horse (THM) regression
+# 17O — Trojan Horse (THM) regression
 
 Guards the modified R-matrix / half-off-shell path, which nothing else in
 `tests/` touches. Without it, a change to the ordinary on-shell machinery can
@@ -44,14 +44,28 @@ type in the suite.
 chi-squared against `expected/chiSquared.out`:
 
 ```
-1, 469.236, N = 23,  norm = 6.3529e-05
+1, 12.3193, N = 23,  norm = 2.63145e-05
 ```
 
-The normalization is small because the THM cross section is in arbitrary units —
-a Trojan Horse measurement gives the *shape* and its scale is fixed by matching
-to direct data, so the fitted norm absorbs the unit conversion. It is a fitted
-quantity here, not a physical cross-section scale.
+The file is stored **at its fitted minimum**. The eight reduced width
+amplitudes come from `output/param.sav` of a fit by JS; refitting from them
+moves chi-squared by less than 0.02, so they sit in a genuine minimum.
 
-The case is deliberately kept at the parameters it ships with rather than
-refitted, so the number is a fixed reference. A change to it means the THM path
+Two things about this case are worth knowing before changing it.
+
+**The widths are reduced width amplitudes, not partial widths.** Every channel
+line carries the `gammaIsRWA` flag, so the `gamma` column holds an amplitude in
+MeV^(1/2) rather than a width in eV or an ANC. AZURE2 keeps that convention on
+output too — `CNuc::TransformOut` returns the amplitude unchanged for such a
+channel — so a fit written back does not silently flip the convention. This
+matters when editing the file by hand or through `pyazr`: converting rwa to
+physical before writing would corrupt it.
+
+**The normalization is small because the THM cross section is in arbitrary
+units.** A Trojan Horse measurement determines the *shape*; its scale is fixed
+by matching to direct data, so the fitted norm absorbs the unit conversion. It
+is a fitted quantity, not a physical cross-section scale.
+
+The case is deliberately left at these parameters rather than refitted on every
+run, so the number is a fixed reference. A change to it means the THM path
 moved.
