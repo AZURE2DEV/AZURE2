@@ -14,10 +14,27 @@ static const char* kExforBase = "https://nds.iaea.org/exfor";
 
 // Physical constants kept identical to AZURE2's include/Constants.h so the
 // astrophysical S-factor <-> cross-section conversion matches what AZURE2 does
-// internally (EPoint::CalcEDependentValues / AZUREPlot).
+// internally (EPoint::CalcEDependentValues / AZUREPlot). kHbarc is needed for
+// the Rutherford-ratio conversion below; AZURE2 itself has no native "ratio
+// to Rutherford" data mode, so that conversion is new functionality here,
+// not a port of existing behaviour.
 static const double kPi     = 3.141592650;
 static const double kUconv  = 931.4940880;
 static const double kFstruc = 1.00 / 137.0359996790;
+static const double kHbarc  = 197.32696310;
+
+// Coulomb (Rutherford) differential cross section in the c.m. frame, for
+// point charges z1/z2 at c.m. energy eCm (MeV) and c.m. angle angleDeg
+// (degrees). Returns barn/sr, or NaN if undefined (angle 0/180 or eCm<=0).
+static double rutherfordBarnPerSr(double z1, double z2, double eCm, double angleDeg) {
+  double theta = angleDeg * kPi / 180.0;
+  double sinHalf = std::sin(theta / 2.0);
+  if (eCm <= 0.0 || sinHalf == 0.0) return std::nan("");
+  double e2 = kFstruc * kHbarc;  // MeV*fm
+  double amplitudeFm = (z1 * z2 * e2) / (4.0 * eCm);
+  double dsdoFm2 = (amplitudeFm * amplitudeFm) / (sinHalf * sinHalf * sinHalf * sinHalf);
+  return dsdoFm2 * 1.0e-2;  // fm^2 -> barn
+}
 
 ExforData::ExforData(QObject* parent)
     : QObject(parent),
@@ -105,8 +122,18 @@ void ExforData::handleReply(QNetworkReply* reply) {
 
 bool ExforData::parseSearch(const QByteArray& data, QList<ExforDataset>& out,
                             QString& error) {
+  // The live x4list service occasionally emits a syntactically invalid
+  // value for zero-point datasets, e.g. `"enMin":,"A1":...` (no value
+  // before the comma). QJsonDocument::fromJson is RFC-strict and rejects
+  // this outright, which would otherwise make *any* search whose result
+  // set happens to include such a dataset fail completely. Repair it by
+  // substituting `null` for the missing value before parsing.
+  QByteArray repaired = data;
+  repaired.replace(QByteArray("\":,"), QByteArray("\":null,"));
+  repaired.replace(QByteArray("\":}"), QByteArray("\":null}"));
+
   QJsonParseError jsonError;
-  QJsonDocument doc = QJsonDocument::fromJson(data, &jsonError);
+  QJsonDocument doc = QJsonDocument::fromJson(repaired, &jsonError);
   if (doc.isNull() || !doc.isObject()) {
     QString snippet = QString::fromUtf8(data).trimmed().left(200);
     error = QString("Unexpected response from EXFOR server: %1").arg(snippet);
@@ -240,6 +267,8 @@ bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
   bool angIsCosine = false;
   bool absIsTotal = false, pctIsTotal = false;
   bool isSFactor = false;    // data column is an astrophysical S-factor
+  bool isRTH = false;        // data column is a ratio to Rutherford scattering
+  bool errAbsIsRatio = false;  // error column is itself a ratio to Rutherford
   bool energyIsCM = false;   // energy column is centre-of-mass (EN-CM)
   double eFactor = 1.0e-6, eCmFactor = 1.0e-6;
   double crossFactor = 1.0, errAbsFactor = 1.0;
@@ -264,11 +293,23 @@ bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
     }
 
     // Cross-section (or S-factor) value column "DATA (B)" / "DATA (B/SR)" /
-    // "DATA (B*MEV)" / ... (exclude "DATA-ERR ...").
-    if (dataCol < 0 && (up.startsWith("DATA ") || up.startsWith("DATA("))) {
+    // "DATA (B*MEV)" / ... . A differential cross section already in the
+    // centre-of-mass frame is instead named "DATA-CM (...)" in the x4get
+    // CSV (this is the common case for DA datasets, which have no separate
+    // plain "DATA" column at all) -- but never match "DATA-ERR ...", which
+    // is an error column, not a value.
+    if (dataCol < 0 &&
+        (up.startsWith("DATA ") || up.startsWith("DATA(") || up.startsWith("DATA-CM")) &&
+        !up.contains("ERR")) {
       dataCol = i;
       if (sFactorBarnMeV(h, sFactor, sFactorEnergyFactor)) {
         isSFactor = true;
+      } else if (unit == "NO-DIM") {
+        // A dimensionless differential-data column is a ratio to the
+        // Rutherford cross section (EXFOR quantity code ...,,RTH), not an
+        // absolute cross section in some unrecognised unit -- crossFactor=1
+        // would silently be wrong here.
+        isRTH = true;
       } else {
         crossFactor = crossToBarn(h);
       }
@@ -284,15 +325,17 @@ bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
     }
 
     // Error columns: keep the best absolute (in barn) and percent candidate,
-    // preferring the total error (ERR-T) over partial components.
-    if (up.startsWith("ERR")) {
+    // preferring the total error (ERR-T) over partial components. The error
+    // of a "DATA-CM" value is named "DATA-ERR" rather than "ERR-...".
+    if (up.startsWith("ERR") || up.startsWith("DATA-ERR")) {
       bool isTotal = up.startsWith("ERR-T");
       bool isPct = unit.contains("PER-CENT") || unit.contains("PERCENT") ||
                    unit.contains("PER");
-      bool isAbs = !unit.isEmpty() && !isPct && unit.contains("B"); 
+      bool isAbs = !unit.isEmpty() && !isPct && (unit.contains("B") || unit == "NO-DIM");
       if (isAbs && (errAbsCol < 0 || (isTotal && !absIsTotal))) {
         errAbsCol = i;
-        errAbsFactor = crossToBarn(h);
+        errAbsIsRatio = (unit == "NO-DIM");
+        errAbsFactor = errAbsIsRatio ? 1.0 : crossToBarn(h);
         absIsTotal = isTotal;
       } else if (isPct && (errPctCol < 0 || (isTotal && !pctIsTotal))) {
         errPctCol = i;
@@ -323,6 +366,13 @@ bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
                     "Headers: %1").arg(headers.join(", "));
     return false;
   }
+  if (isRTH && (cz1_ == 0.0 || cz2_ == 0.0)) {
+    error = "This dataset is a ratio to the Rutherford cross section "
+            "(quantity code ...,,RTH) -- set the entrance-channel charges "
+            "(projectile 1 / target 2) to convert it to an absolute cross "
+            "section.";
+    return false;
+  }
   differential = (angCol >= 0);
 
   for (int li = 1; li < lines.size(); ++li) {
@@ -351,10 +401,22 @@ bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
     }
     p.energy = eLab;
 
+    // Angle is needed before the cross section itself for RTH data (the
+    // Rutherford formula depends on the c.m. angle), so extract it first.
+    if (angCol >= 0) {
+      bool okA = false;
+      double a = f.at(angCol).trimmed().toDouble(&okA);
+      if (okA) {
+        p.angle = angIsCosine ? std::acos(qBound(-1.0, a, 1.0)) * 180.0 / M_PI
+                              : a;
+      }
+    }
+
     // Conversion factor applied to the data value (and to an absolute error in
     // the same units). For a plain cross section this is just the unit factor;
     // for an S-factor it also undoes the astrophysical parametrisation:
-    //   sigma(E) = S(E)/E_cm * exp(-2*pi*eta).
+    //   sigma(E) = S(E)/E_cm * exp(-2*pi*eta); for a Rutherford ratio it
+    // multiplies by the Rutherford cross section itself.
     double crossConv = crossFactor;
     double errConv = errAbsFactor;
     if (isSFactor) {
@@ -370,6 +432,11 @@ bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
       double sigmaPerS = std::exp(-twoPiEta) / eCm;  // (barn*MeV) -> barn
       crossConv = sFactor * sigmaPerS;
       errConv = sFactor * sigmaPerS;  // abs error assumed in same S-factor units
+    } else if (isRTH) {
+      double rutherford = rutherfordBarnPerSr(cz1_, cz2_, eCm, p.angle);
+      if (std::isnan(rutherford)) continue;
+      crossConv = rutherford;
+      if (errAbsIsRatio) errConv = rutherford;  // error column is itself a ratio
     }
     p.cross = d * crossConv;
 
@@ -391,14 +458,6 @@ bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
     }
     if (!haveErr) p.error = kDefaultRelError * std::fabs(p.cross);
 
-    if (angCol >= 0) {
-      bool okA = false;
-      double a = f.at(angCol).trimmed().toDouble(&okA);
-      if (okA) {
-        p.angle = angIsCosine ? std::acos(qBound(-1.0, a, 1.0)) * 180.0 / M_PI
-                              : a;
-      }
-    }
     out.append(p);
   }
 
