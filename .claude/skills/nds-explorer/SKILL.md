@@ -8,7 +8,13 @@ description: Navigate the IAEA EXFOR database and NDS nuclear-data services to f
 This skill covers the two IAEA services that supply the experimental data for
 R-matrix evaluations and how to get that data into AZURE2. Everything is
 wrapped in **`pyazr.nds`** (imported as `from pyazr import nds`), which talks
-straight to the web APIs — no local database, needs a network connection.
+straight to the web APIs — no local database, needs a network connection, and
+no dependency beyond NumPy and the standard library.
+
+`pyazr.nds` is the *only* EXFOR client in the package. `gui/src/ExforData.cpp`
+is its counterpart inside the Qt setup utility; the two are independent
+implementations of the same Web-API, so a parsing rule learned by either
+belongs in both.
 
 - **EXFOR** — the experimental reaction database: cross sections, differential
   cross sections, analyzing powers, yields, etc., one entry per measurement,
@@ -77,8 +83,20 @@ the CSV header):
   `to_azr` scales `NB/SR → b/sr` (÷1e9) and passes angles through.
 - **Analyzing power** (`POL/DA`): `DATA (NO-DIM)`, error column is `DATA-ERR`
   (not `ERR-S`), `ANG-CM (ADEG)`. Dimensionless; `to_azr` leaves values alone.
+- **Ratio to Rutherford** (`DA,,RTH`): also `DATA (NO-DIM)` with an angle
+  column — *indistinguishable from an analyzing power once fetched*, because
+  `x4get` drops the `,,RTH` suffix that `x4list` reports. `to_azr` warns and
+  passes the values through; pass `rutherford=True` to multiply by the Coulomb
+  cross section (→ b/sr), or `rutherford=False` to accept the ratio and
+  silence the warning. **Check the search result's reaction code** — that is
+  the only place the marker survives.
 - `plus=1` gives computational units (eV, `B*EV`, `B/SR`); `plus=2` the
   universal grid. Not needed for AZURE2; `plus=0` is the default.
+
+Units are read by prefix, not from a fixed table, so the many spellings EXFOR
+uses for the same quantity (`B`, `MB`, `MICRO-B`, `MU-B`, `UB/SR`, `NB/SR`,
+`KB`, `B*KEV`, …) all convert. An unrecognised unit no longer falls through to
+"assume it is already right", which was silently wrong by powers of ten.
 
 The parsed object exposes `reaction`, `year`, `author`, `projectile`,
 `target`, `exit`, `arrays` (the numeric columns keyed by plain name: `DATA`,
@@ -115,6 +133,13 @@ Choose `observable` from the data's frame:
 converted points and folds the EXFOR `ERR-SYS` percent into `norm_error` when
 present. If `observable` is omitted it guesses from the reaction code
 (capture → `total-capture`, `POL` → `analyzing-power`, angular → `differential-cm`).
+
+**Uncertainties.** The per-point error is taken from `ERR-S`, `DATA-ERR` or
+`ERR-T`, whichever is present, and a column marked `PER-CENT` is applied as a
+percentage of the value rather than as an absolute one — getting that backwards
+turns "6 per cent" into "6 millibarn/sr". A point EXFOR gives no error for is
+assigned 5% of its value, because a zero error reaches AZURE2 as an infinitely
+precise measurement and would dominate the χ².
 
 ```python
 d = N.fetch_exfor("O2599004")
@@ -181,7 +206,11 @@ copies often live on arXiv — searching the title there is a good follow-up.
 ## See also
 
 - `pyazr/examples/exfor_fetch.py` — the whole flow end to end.
-- `pyazr/nds.py` — source of the wrappers (units tables, DOI logic).
+- `pyazr/nds.py` — source of the wrappers (unit rules, DOI logic). Also a
+  command line for a quick look: `python -m pyazr.nds search --target C-13
+  --reaction p,g --quantity SIG`, `… download <DatasetID> -o file.dat`,
+  `… reference <DatasetID>`.
+- `gui/src/ExforData.cpp` — the GUI's own client for the same service.
 - EXFOR Web-API manual: `https://nds.iaea.org/exfor/x4guide/API/`.
 - For turning fetched data into fitted resonances, levels, χ²: load
   `azure2-eval`.

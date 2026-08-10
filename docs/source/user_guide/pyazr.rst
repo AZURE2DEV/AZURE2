@@ -246,6 +246,24 @@ differentials to b/sr.  Pick ``observable`` to match the data's angle frame
 ``ANG`` → ``"differential"``).  See the ``nds-explorer`` skill for the full
 quantity/unit reference and failure modes.
 
+One case cannot be decided automatically. Ratio-to-Rutherford data
+(``,,RTH``) is dimensionless with an angle column, which is exactly what an
+analyzing power looks like — and ``x4get`` drops the quantity suffix that
+distinguishes them, so only the *search* result knows. ``to_azr`` warns and
+passes such values through; give it ``rutherford=True`` to multiply by the
+Coulomb cross section, or ``rutherford=False`` once you have checked.
+
+The module needs nothing beyond NumPy and the standard library, and doubles as
+a command-line tool::
+
+   python -m pyazr.nds search --target C-13 --reaction p,g --quantity SIG
+   python -m pyazr.nds download O2599004 -o data/skowronski.dat
+   python -m pyazr.nds reference O2599004
+
+The Qt setup utility has its own EXFOR dialog, backed by
+``gui/src/ExforData.cpp``. The two are independent implementations of the same
+Web-API, so a parsing rule learned by either belongs in both.
+
 Angular distributions
 ---------------------
 

@@ -196,6 +196,41 @@ Build the `_azure2` module with CMake (`USE_API=ON`, the default) — it lands i
 `pyazr/`, so `import pyazr` picks it up from the repository root; a `pip install`
 ships it as package data.
 
+### Fetching experimental data (`pyazr.nds`)
+
+`pyazr.nds` is the package's client for the IAEA data services: **EXFOR** for
+measured cross sections, differential cross sections, analyzing powers and
+yields, and **LiveChart/ENSDF** for evaluated level schemes and gamma
+transitions. It converts what it fetches into AZURE2's own conventions — lab
+energies, barns or barns/sr — so a published dataset becomes a data segment
+without hand editing:
+
+```python
+from pyazr import nds, AzrModel
+
+hits = nds.search_exfor(target="C-13", reaction="p,g", quantity="SIG")
+data = nds.fetch_exfor("O2599004")                # S-factor, reported in b·keV
+kw   = data.to_azr("run/data", entrance=1, exit=2,   # -> barns, lab energies
+                   observable="total-capture")
+AzrModel.from_file("13N.azr").add_data_segment(**kw).write("13N_new.azr")
+
+nds.fetch_levels("14n")                           # ENSDF level scheme
+nds.resolve_doi(nds.reference("O2599004"))        # the paper behind the data
+```
+
+Units and frames are handled from the column headers (`EN-CM` → lab, `B*KEV`
+S-factors → barns, `NB/SR` → b/sr, ratio-to-Rutherford → b/sr). It needs only
+the standard library beyond NumPy, and works from the shell too:
+
+```bash
+python -m pyazr.nds search --target C-13 --reaction p,g --quantity SIG
+python -m pyazr.nds download O2599004 -o data/skowronski.dat
+```
+
+The Qt setup utility has its own EXFOR dialog backed by `gui/src/ExforData.cpp`;
+the two are independent implementations of the same Web-API, so a parsing rule
+learned by either belongs in both. See `pyazr/examples/exfor_fetch.py`.
+
 ---
 
 ## Containers

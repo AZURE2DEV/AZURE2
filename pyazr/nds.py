@@ -23,30 +23,61 @@ dropped straight into an evaluation::
 
 References resolve to a DOI through the CrossRef API, so the paper behind any
 dataset can be pulled up (``reference`` + ``resolve_doi``).
+
+This is the one EXFOR client in the package.  ``gui/src/ExforData.cpp`` is its
+counterpart inside AZURESetup; the two are independent implementations of the
+same Web-API, and a parsing rule learned by either belongs in both.
+
+Command line, for a quick look without writing a script::
+
+    python -m pyazr.nds search --target C-13 --reaction p,g --quantity SIG
+    python -m pyazr.nds download O2599004 -o data/roughton.dat
 """
 
 import csv
 import dataclasses
 import io
+import json
+import math
 import re
+import urllib.parse
+import urllib.request
 import warnings
 
 import numpy as np
-import requests
 
 EXFOR_URL = "https://nds.iaea.org/exfor/"
 LIVECHART_URL = "https://www-nds.iaea.org/relnsd/v1/data"
 CROSSREF_URL = "https://api.crossref.org/works"
 UA = {"User-Agent": "pyazr/nds (research tool)"}
 
-#: EXFOR energy-unit string -> factor to lab MeV (after the frame conversion).
-_ENERGY_FACTOR = {"EV": 1e-6, "KEV": 1e-3, "MEV": 1.0, "GEV": 1e3}
-#: EXFOR data-unit string -> factor to barns (or barns/sr for differential).
-_DATA_FACTOR = {"B": 1.0, "MB": 1e-3, "B/SR": 1.0, "MB/SR": 1e-3,
-                "NB/SR": 1e-9, "UB/SR": 1e-12, "NO-DIM": 1.0, "ARB": 1.0}
 #: Projectile shorthand used by EXFOR reaction strings -> mass number.
 _PROJ_MASS = {"P": 1, "N": 1, "D": 2, "T": 3, "3-HE": 3, "4-HE": 4,
               "ALPHA": 4, "G": 0}
+
+#: Assumed relative uncertainty for a point EXFOR gives no error for.  A zero
+#: error would be read by AZURE2 as an infinitely precise measurement.
+_DEFAULT_REL_ERROR = 0.05
+
+# Constants matching include/Constants.h, so a converted S-factor or Rutherford
+# ratio reproduces what AZURE2 computes internally.
+_UCONV = 931.4940880
+_FSTRUC = 1.00 / 137.0359996790
+_HBARC = 197.32696310
+
+
+def _http_get(url, params=None, timeout=60):
+    """GET ``url`` and return the body as text.
+
+    urllib rather than requests: pyazr declares numpy, mpmath and scipy, and a
+    data-fetching convenience is not worth adding a dependency the rest of the
+    package does not need.
+    """
+    if params:
+        url = f"{url}?{urllib.parse.urlencode(params)}"
+    request = urllib.request.Request(url, headers=UA)
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return response.read().decode("utf-8", errors="replace")
 
 
 @dataclasses.dataclass
@@ -140,7 +171,7 @@ class ExforData:
     def to_azr(self, data_dir, entrance, exit, observable=None,
                target_mass=None, projectile_mass=None,
                cross_section_scale=1.0, energy_scale=1.0, angle_scale=1.0,
-               file_name=None):
+               file_name=None, rutherford=None):
         """Write the dataset as an AZURE2 data file and return
         :meth:`~pyazr.AzrModel.add_data_segment` keyword arguments.
 
@@ -164,6 +195,12 @@ class ExforData:
         Set ``observable`` to ``total-capture`` for a radiative-capture
         reaction.
 
+        **Ratio-to-Rutherford data** (EXFOR ``,,RTH``) is dimensionless and
+        indistinguishable from an analyzing power once fetched, because
+        ``x4get`` drops the quantity suffix that says which.  ``rutherford=True``
+        multiplies by the Coulomb cross section to give barn/sr; ``False``
+        passes the values through; the default warns when the choice matters.
+
         Other unit conversions (``MB``, ``NB/SR``, ...) are applied from the
         column unit; ``cross_section_scale`` / ``energy_scale`` / ``angle_scale``
         multiply on top for any manual fix-up.
@@ -172,7 +209,8 @@ class ExforData:
         data = _azr_columns(self, target_mass=target_mass,
                             projectile_mass=projectile_mass,
                             cross_section_scale=cross_section_scale,
-                            energy_scale=energy_scale, angle_scale=angle_scale)
+                            energy_scale=energy_scale, angle_scale=angle_scale,
+                            rutherford=rutherford)
         os.makedirs(data_dir, exist_ok=True)
         if file_name is None:
             file_name = _safe_name(self.dataset_id, self.author, self.year)
@@ -235,6 +273,68 @@ def _safe_name(dataset_id, author, year):
     return f"{stem}_{year}_{dataset_id}" if stem else f"{dataset_id}"
 
 
+# -- units ------------------------------------------------------------------
+#
+# EXFOR spells its units many ways for the same quantity (B, MB, MICRO-B, MU-B,
+# NB/SR, B*KEV, ...), so these match on prefix rather than looking a fixed
+# string up in a table: an unlisted spelling used to fall through to "assume
+# it is already in the right unit", which is silently wrong by orders of
+# magnitude.
+
+def _energy_factor(unit):
+    """EXFOR energy unit -> factor to MeV.  eV is the computational default."""
+    unit = (unit or "").upper()
+    if "GEV" in unit:
+        return 1e3
+    if "MEV" in unit:
+        return 1.0
+    if "KEV" in unit:
+        return 1e-3
+    if "MILLI-EV" in unit or "MILLIEV" in unit:
+        return 1e-9
+    return 1e-6
+
+
+def _barn_factor(unit):
+    """EXFOR cross-section unit -> factor to barn (or barn/sr)."""
+    unit = (unit or "").upper()
+    # Longest-first, so MICRO-B is not read as M-then-B.  A microbarn is 1e-6
+    # barn however it is spelled -- the old table had UB/SR at 1e-12, which is
+    # a factor of a million.
+    for prefix, factor in (("MICRO-B", 1e-6), ("MU-B", 1e-6), ("MUB", 1e-6),
+                           ("UB", 1e-6), ("MB", 1e-3), ("KB", 1e3),
+                           ("NB", 1e-9), ("PB", 1e-12), ("FB", 1e-15),
+                           ("B", 1.0)):
+        if unit.startswith(prefix):
+            return factor
+    return 1.0
+
+
+def _sfactor_factors(unit):
+    """``(factor to barn*MeV, energy factor to MeV)`` for an S-factor unit.
+
+    ``None`` when ``unit`` is not an S-factor (barn times energy) unit.
+    """
+    unit = (unit or "").upper()
+    if "*" not in unit or "EV" not in unit:
+        return None
+    return _barn_factor(unit) * _energy_factor(unit), _energy_factor(unit)
+
+
+def _rutherford_barn_per_sr(z1, z2, e_cm_mev, angle_deg):
+    """Rutherford differential cross section, c.m. frame, in barn/sr.
+
+    ``dsigma/dOmega = (Z1 Z2 e^2 / 4E)^2 / sin^4(theta/2)`` with
+    ``e^2 = alpha hbar c`` in MeV fm, giving fm^2/sr; 1 fm^2 = 1e-2 barn.
+    """
+    e_cm_mev = np.asarray(e_cm_mev, float)
+    sin_half = np.sin(np.radians(np.asarray(angle_deg, float)) / 2.0)
+    amplitude = (z1 * z2 * _FSTRUC * _HBARC) / (4.0 * e_cm_mev)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        out = (amplitude ** 2) / (sin_half ** 4) * 1e-2
+    return np.where((e_cm_mev > 0) & (sin_half != 0), out, np.nan)
+
+
 def _parse_columns(header):
     columns = []
     for raw in header:
@@ -270,12 +370,15 @@ def search_exfor(target=None, reaction=None, quantity=None, author=None,
         params["Author"] = author
     if accnum:
         params["AccessNumber"] = accnum
-    r = requests.get(EXFOR_URL + "x4list", params=params, headers=UA, timeout=60)
-    r.raise_for_status()
+    body = _http_get(EXFOR_URL + "x4list", params)
+    # x4list emits a missing value for zero-point datasets -- `"enMin":,` --
+    # which a strict parser rejects, failing the whole search because of one
+    # bad entry.  Substituting null salvages the rest.
+    repaired = re.sub(r'":\s*(?=[,}])', '":null', body)
     try:
-        payload = r.json()
+        payload = json.loads(repaired)
     except ValueError:
-        raise ValueError(f"EXFOR x4list returned non-JSON:\n{r.text[:300]}")
+        raise ValueError(f"EXFOR x4list returned non-JSON:\n{body[:300]}")
     out = []
     for d in payload.get("x4Datasets", []):
         out.append(ExforDataset(
@@ -306,9 +409,7 @@ def fetch_exfor(dataset_id, plus=0):
     params = {"DatasetID": dataset_id, "op": "csv"}
     if plus:
         params["plus"] = int(plus)
-    r = requests.get(EXFOR_URL + "x4get", params=params, headers=UA, timeout=60)
-    r.raise_for_status()
-    text = r.text
+    text = _http_get(EXFOR_URL + "x4get", params)
     if text.strip().startswith("Error"):
         raise ValueError(f"EXFOR x4get {dataset_id}: {text.strip()[:200]}")
     reader = csv.reader(io.StringIO(text))
@@ -371,14 +472,16 @@ def sfactor_to_cross_section(S, E_cm_kev, z1, z2, mu):
 
 
 def _azr_columns(data, target_mass=None, projectile_mass=None,
-                 cross_section_scale=1.0, energy_scale=1.0, angle_scale=1.0):
+                 cross_section_scale=1.0, energy_scale=1.0, angle_scale=1.0,
+                 rutherford=None):
     """Build the ``(lab E_MeV, angle_deg, cs, err)`` array for a dataset."""
     m_t, m_p = data.masses(target_mass, projectile_mass)
     cols = {c.name: c.unit for c in data.columns}
     energy = _energy_column(data, cols, m_t, m_p) * energy_scale
     angle = _angle_column(data, cols) * angle_scale
     cs, err = _data_column(data, cols, m_t, m_p,
-                           cross_section_scale=cross_section_scale)
+                           cross_section_scale=cross_section_scale,
+                           rutherford=rutherford)
     return np.column_stack([energy, angle, cs, err])
 
 
@@ -390,57 +493,145 @@ def _energy_column(data, cols, m_t, m_p):
     if name is None:
         raise ValueError(f"{data.dataset_id}: no EN / EN-CM energy column in "
                          f"{list(cols)}.")
-    unit = cols[name]
-    E = data.arrays[name].astype(float)
-    factor = _ENERGY_FACTOR.get(unit)
-    if factor is None:
-        warnings.warn(f"{data.dataset_id}: unknown energy unit {unit!r}; "
-                      f"assuming MeV.")
-        factor = 1.0
-    E = E * factor
+    factor = _energy_factor(cols[name])
+    # EXFOR sometimes mislabels the incident-energy unit of an S-factor
+    # dataset.  The S-factor's own energy unit describes the same axis, so it
+    # is the self-consistent choice and wins -- but say so, because the two
+    # disagreeing is a factor of 1000 in the energies either way.
+    sf = _sfactor_factors(cols.get("DATA-CM") or cols.get("DATA"))
+    if sf is not None and sf[1] != factor:
+        warnings.warn(
+            f"{data.dataset_id}: the {name} column says {cols[name]!r} but the "
+            f"S-factor unit implies {sf[1]:g} MeV per unit; trusting the "
+            f"S-factor, as EXFOR mislabels the incident energy of these "
+            f"datasets more often than the S-factor itself.")
+        factor = sf[1]
+    E = data.arrays[name].astype(float) * factor
     if name == "EN-CM":
         E = cm_to_lab(E, m_t, m_p)
     return E
 
 
 def _angle_column(data, cols):
+    """Angle of each point in degrees; zeros for angle-integrated data."""
     for c in data.columns:
         if c.name in ("ANG-CM", "ANG"):
             return data.arrays[c.name].astype(float)
-    if "EN" not in cols and "EN-CM" not in cols:
-        return np.zeros(len(data.arrays["DATA"]))
-    return np.zeros(len(data.arrays["DATA"]))
+        if c.name.startswith("COS"):
+            # A cosine grid is the same axis in another variable.
+            cosine = np.clip(data.arrays[c.name].astype(float), -1.0, 1.0)
+            return np.degrees(np.arccos(cosine))
+    return np.zeros(len(_values(data)))
 
 
-def _data_column(data, cols, m_t, m_p, cross_section_scale=1.0):
+def _values(data):
+    return data.arrays["DATA-CM" if "DATA-CM" in data.arrays else "DATA"]
+
+
+def _error_column(data, cols, raw, data_unit):
+    """Uncertainty per point, expressed in the *raw* units of ``raw``.
+
+    Raw, not barns: the caller converts the data column afterwards -- and for
+    an S-factor or a Rutherford ratio that conversion is per-point and
+    non-linear -- so the error has to go through exactly the same steps.
+
+    EXFOR gives the uncertainty absolutely (``ERR-S``, ``DATA-ERR``) or as a
+    percentage (often ``ERR-T``), and sometimes not at all.  A point with no
+    error must not reach AZURE2 as zero, which reads as an infinitely precise
+    measurement and would dominate the chi-squared.
+    """
+    for name in ("ERR-S", "DATA-ERR", "ERR-T"):
+        arr = data.arrays.get(name)
+        if arr is None:
+            continue
+        unit = (cols.get(name) or "").upper()
+        err = arr.astype(float)
+        if "PER-CENT" in unit or "PERCENT" in unit:
+            err = np.abs(raw) * err / 100.0
+        elif unit and unit != data_unit and "NO-DIM" not in unit:
+            # Quoted in a different unit from the data; restate it in the
+            # data's, so the one conversion below serves both.
+            err = err * _barn_factor(unit) / (_barn_factor(data_unit) or 1.0)
+        if np.any(err != 0.0):
+            return np.where(err != 0.0, err, _DEFAULT_REL_ERROR * np.abs(raw))
+    return _DEFAULT_REL_ERROR * np.abs(raw)
+
+
+def _is_rutherford_ratio(data, cols, rutherford=None):
+    """Is this dimensionless differential data a ratio to Rutherford?
+
+    ``rutherford=True``/``False`` answers it outright.  Left at ``None`` the
+    reaction code decides -- but only ``x4list`` reports the ``,,RTH`` suffix;
+    ``x4get`` drops it, so a dataset fetched by ID alone can be a Rutherford
+    ratio with nothing in it to say so.  A dimensionless *differential* is then
+    genuinely ambiguous -- an analyzing power looks exactly the same -- and
+    guessing either way is silently wrong for the other, so this warns and
+    leaves the values alone.
+    """
+    if rutherford is not None:
+        return bool(rutherford)
+    unit = (cols.get("DATA-CM") or cols.get("DATA") or "").upper()
+    if "NO-DIM" not in unit:
+        return False
+    if "RTH" in data.reaction.upper():
+        return True
+    is_polarization = "POL" in data.reaction.upper()
+    has_angles = any(c.name.startswith(("ANG", "COS")) for c in data.columns)
+    if has_angles and not is_polarization:
+        warnings.warn(
+            f"{data.dataset_id}: dimensionless differential data, which is "
+            f"either a ratio to Rutherford or an analyzing power -- x4get does "
+            f"not say which (x4list does: check the reaction code for ',,RTH'). "
+            f"Values passed through unconverted; pass rutherford=True to "
+            f"multiply by the Coulomb cross section, or rutherford=False to "
+            f"silence this.")
+    return False
+
+
+def _data_column(data, cols, m_t, m_p, cross_section_scale=1.0,
+                 rutherford=None):
     dname = "DATA-CM" if "DATA-CM" in cols else "DATA"
     if dname not in data.arrays:
         raise ValueError(f"{data.dataset_id}: no DATA / DATA-CM column in "
                          f"{list(cols)}.")
-    unit = cols[dname]
+    unit = (cols[dname] or "").upper()
     cs = data.arrays[dname].astype(float)
-    ename = "ERR-S" if "ERR-S" in data.arrays else \
-            ("DATA-ERR" if "DATA-ERR" in data.arrays else None)
-    stat = data.arrays[ename].astype(float) if ename else \
-        np.zeros_like(cs)
-    if unit in ("B*KEV", "B*EV"):
+    stat = _error_column(data, cols, cs, unit)
+
+    sf = _sfactor_factors(unit)
+    if sf is not None:
+        # S-factor (an SFC reaction) -> cross section.
         E_cm_kev = _cm_kev(data, cols, m_t, m_p)
-        if unit == "B*EV":              # S in b·eV -> b·keV, E stays in keV
-            cs = cs * 1e-3
-            stat = stat * 1e-3
-        za_t = data.za(data.target)
-        za_p = data.za(data.projectile)
+        to_barn_kev = sf[0] * 1e3           # b*MeV -> b*keV, to match E_cm_kev
+        za_t, za_p = data.za(data.target), data.za(data.projectile)
         z2 = za_t[0] if za_t else 6
         z1 = za_p[0] if za_p else 1
         mu = m_t * m_p / (m_t + m_p)
-        cs = sfactor_to_cross_section(cs, E_cm_kev, z1, z2, mu)
-        stat = sfactor_to_cross_section(stat, E_cm_kev, z1, z2, mu)
-    elif unit in _DATA_FACTOR:
-        cs = cs * _DATA_FACTOR[unit]
-        stat = stat * _DATA_FACTOR[unit]
+        cs = sfactor_to_cross_section(cs * to_barn_kev, E_cm_kev, z1, z2, mu)
+        stat = sfactor_to_cross_section(stat * to_barn_kev, E_cm_kev, z1, z2, mu)
+    elif _is_rutherford_ratio(data, cols, rutherford):
+        # Ratio to Rutherford (EXFOR quantity code ...,,RTH): dimensionless,
+        # but not a cross section -- passing it through as barns would be
+        # wrong by the Coulomb cross section itself.
+        za_t, za_p = data.za(data.target), data.za(data.projectile)
+        z2 = za_t[0] if za_t else 0
+        z1 = za_p[0] if za_p else 0
+        if not (z1 and z2):
+            raise ValueError(
+                f"{data.dataset_id}: ratio-to-Rutherford data needs the "
+                f"entrance-channel charges, which could not be read from "
+                f"{data.reaction!r}.")
+        coulomb = _rutherford_barn_per_sr(
+            z1, z2, _cm_kev(data, cols, m_t, m_p) / 1e3,
+            _angle_column(data, cols))
+        cs = cs * coulomb
+        stat = stat * coulomb
+    elif "NO-DIM" in unit or "ARB" in unit:
+        pass                                 # analyzing power, yield ratio, ...
     else:
-        warnings.warn(f"{data.dataset_id}: unknown data unit {unit!r}; "
-                      f"leaving values unchanged.")
+        factor = _barn_factor(unit)
+        cs = cs * factor
+        stat = stat * factor
     return cs * cross_section_scale, stat * cross_section_scale
 
 
@@ -448,10 +639,7 @@ def _cm_kev(data, cols, m_t, m_p):
     """Center-of-mass energy of each point in keV."""
     for c in data.columns:
         if c.name == "EN-CM":
-            E = data.arrays["EN-CM"].astype(float)
-            unit = c.unit
-            if unit in _ENERGY_FACTOR:
-                E = E * _ENERGY_FACTOR[unit]
+            E = data.arrays["EN-CM"].astype(float) * _energy_factor(c.unit)
             return E * 1e3
     E_lab = _energy_column(data, cols, m_t, m_p)
     return E_lab * m_t / (m_t + m_p) * 1e3
@@ -536,11 +724,8 @@ class GroundState:
 def _livechart(fields, nuclides):
     if not re.match(r"^[0-9]+[a-z]+$", nuclides):
         raise ValueError(f"nuclides must be like '14n', got {nuclides!r}.")
-    r = requests.get(LIVECHART_URL,
-                     params={"fields": fields, "nuclides": nuclides},
-                     headers=UA, timeout=60)
-    r.raise_for_status()
-    return list(csv.DictReader(io.StringIO(r.text)))
+    text = _http_get(LIVECHART_URL, {"fields": fields, "nuclides": nuclides})
+    return list(csv.DictReader(io.StringIO(text)))
 
 
 def fetch_levels(nuclide):
@@ -633,10 +818,7 @@ def reference(entry_or_dataset_id):
     entry's EXFOR BIB section; ``doi`` is left blank (use :func:`resolve_doi`).
     """
     entry = entry_or_dataset_id[:5]
-    r = requests.get(EXFOR_URL + "x4get", params={"sub": entry}, headers=UA,
-                     timeout=60)
-    r.raise_for_status()
-    text = r.text
+    text = _http_get(EXFOR_URL + "x4get", {"sub": entry})
     title = _bib_field(text, "TITLE")
     authors = _bib_field(text, "AUTHOR")
     ref_line = _bib_field(text, "REFERENCE")
@@ -696,12 +878,10 @@ def resolve_doi(reference_or_title, year=None, preferred_doi=None):
             journal, volume, page = x4[1], x4[2], x4[3]
             doi = aps_doi(journal, volume, page)
             if doi:
-                try:
-                    r = requests.get(f"{CROSSREF_URL}/{doi}",
-                                     headers=UA, timeout=30)
-                    if r.ok:
-                        return doi
-                except requests.RequestException:
+                try:                        # confirm the guess resolves
+                    _http_get(f"{CROSSREF_URL}/{doi}", timeout=30)
+                    return doi
+                except OSError:
                     pass
         title = ref.title or ref.reference
         y = ref.year or year
@@ -714,9 +894,8 @@ def resolve_doi(reference_or_title, year=None, preferred_doi=None):
     if y:
         params["filter"] = (f"from-pub-date:{y}-01-01,"
                             f"until-pub-date:{y}-12-31")
-    r = requests.get(CROSSREF_URL, params=params, headers=UA, timeout=60)
-    r.raise_for_status()
-    items = r.json().get("message", {}).get("items", [])
+    body = _http_get(CROSSREF_URL, params)
+    items = json.loads(body).get("message", {}).get("items", [])
     if not items:
         return None
     return items[0].get("DOI")
@@ -728,3 +907,74 @@ def aps_doi(journal, volume, page):
              "PRD": "physrevd", "PR": "physrev", "P": "physrev"}
     prefix = names.get(journal)
     return f"10.1103/{prefix}.{volume}.{page}" if prefix else None
+
+
+# -- command line -------------------------------------------------------------
+
+def _main(argv=None):
+    """``python -m pyazr.nds`` -- search EXFOR, or fetch one dataset.
+
+    The scripted path is the module API; this is for looking something up
+    without opening an editor.
+    """
+    import argparse
+    import sys
+
+    ap = argparse.ArgumentParser(
+        prog="python -m pyazr.nds",
+        description="Search the IAEA EXFOR database, or convert one dataset "
+                    "into an AZURE2 data file.")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    s = sub.add_parser("search", help="search by target / reaction / quantity")
+    s.add_argument("--target", help='EXFOR nucleus, e.g. "C-13"')
+    s.add_argument("--reaction", help='projectile,exit -- "p,g", "p,el"')
+    s.add_argument("--quantity", help='"SIG", "DA", "POL", ...')
+    s.add_argument("--author")
+    s.add_argument("--limit", type=int, default=50)
+
+    d = sub.add_parser("download", help="fetch a dataset by its DatasetID")
+    d.add_argument("dataset_id")
+    d.add_argument("-o", "--output", help="write the AZURE2 data file here "
+                                          "(default: stdout)")
+
+    r = sub.add_parser("reference", help="the paper behind an entry, with DOI")
+    r.add_argument("entry_or_dataset_id")
+
+    args = ap.parse_args(argv)
+
+    if args.cmd == "search":
+        hits = search_exfor(target=args.target, reaction=args.reaction,
+                            quantity=args.quantity, author=args.author,
+                            limit=args.limit)
+        for h in hits:
+            print(f"{h.dataset_id}\t{h.npoints:>5} pts\t"
+                  f"{h.en_min / 1e6:.4g}-{h.en_max / 1e6:.4g} MeV\t"
+                  f"{h.author} {h.year}\t{h.reaction}")
+        if not hits:
+            print("no datasets matched.", file=sys.stderr)
+            return 1
+        return 0
+
+    if args.cmd == "download":
+        data = fetch_exfor(args.dataset_id)
+        rows = _azr_columns(data)
+        text = "".join("  ".join(f"{v:.8g}" for v in row) + "\n" for row in rows)
+        print(f"# {args.dataset_id}: {len(rows)} points, "
+              f"observable {data._guess_observable()}", file=sys.stderr)
+        if args.output:
+            with open(args.output, "w") as f:
+                f.write(text)
+        else:
+            sys.stdout.write(text)
+        return 0
+
+    ref = reference(args.entry_or_dataset_id)
+    print(ref)
+    doi = resolve_doi(ref)
+    print(f"DOI: {doi}" if doi else "DOI: not found")
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(_main())
