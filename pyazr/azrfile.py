@@ -808,6 +808,108 @@ class AzrModel:
             raise KeyError(f"no <segmentsData> line matches {file_substr!r}.")
         return changed
 
+    # -- adding / removing whole data segments --------------------------------
+
+    # observable name -> isDiff code for a <segmentsData> line
+    # (ESegment::ESegment(SegLine); mirrors datasets._OBSERVABLE).
+    _DATA_CODE = {
+        "angle-integrated": 0, "differential": 1, "phase-shift": 2,
+        "total-capture": 3, "differential-cm": 4, "angle-integrated-E1": 5,
+        "angle-integrated-E2": 6, "analyzing-power": 7,
+    }
+
+    def add_data_segment(self, data_file, entrance, exit,
+                         observable="angle-integrated",
+                         energy_min=0.0, energy_max=5.0,
+                         angle_min=0.0, angle_max=180.0,
+                         norm=1.0, vary_norm=False, norm_error=0.0,
+                         energy_shift=0.0, energy_shift_error=0.0,
+                         vary_shift=False, phase_J=None, phase_L=None,
+                         active=True):
+        """Append one data segment (a ``<segmentsData>`` line).
+
+        ``data_file`` is the data file path (relative to the run directory,
+        which for a model living in its own folder is usually ``data/...``).
+        ``entrance`` / ``exit`` are particle-pair keys (``exit=-1`` for a
+        summed/total observable).  ``observable`` is one of
+        ``angle-integrated``, ``differential``, ``differential-cm``,
+        ``total-capture``, ``phase-shift``, ``angle-integrated-E1``,
+        ``angle-integrated-E2``.
+
+        ``norm`` is the normalization applied to the data, ``norm_error`` its
+        systematic error (percent, as stored in the file), ``energy_shift``
+        the beam-energy shift (MeV) with its ``_error``.  ``vary_norm`` /
+        ``vary_shift`` free the corresponding parameter.
+
+        Returns ``self`` so calls chain.
+        """
+        if observable not in self._DATA_CODE:
+            raise ValueError(f"unknown observable {observable!r}; expected one "
+                             f"of {sorted(self._DATA_CODE)}.")
+        isDiff = self._DATA_CODE[observable]
+        toks = [1 if active else 0, int(entrance), int(exit),
+                _fmt(energy_min), _fmt(energy_max),
+                _fmt(angle_min), _fmt(angle_max), isDiff]
+        if isDiff == 2:                       # phase shift carries J, L
+            if phase_J is None or phase_L is None:
+                raise ValueError("a phase-shift data segment needs phase_J "
+                                 "and phase_L.")
+            toks += [_fmt(phase_J), int(phase_L)]
+        toks += [_fmt(norm), 1 if vary_norm else 0, _fmt(norm_error),
+                 _fmt(energy_shift), _fmt(energy_shift_error),
+                 1 if vary_shift else 0, str(data_file), 0, 0]
+        line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
+        lines = self._suffix.splitlines()
+        if "<segmentsData>" not in lines:
+            raise ValueError("no <segmentsData> block to add to.")
+        end = lines.index("</segmentsData>")
+        self._suffix = "\n".join(lines[:end] + [line] + lines[end:])
+        return self
+
+    def remove_data_segments(self, file_substr):
+        """Remove every ``<segmentsData>`` line whose text matches
+        ``file_substr`` (e.g. a data-file name).  Returns the number of
+        segments removed.  Raises if nothing matches.
+
+        Removing data changes which energies AZURE2 evaluates, so the
+        external-capture integrals must be recalculated before the next run --
+        delete ``output/intEC.dat`` / ``output/intEC.extrap`` (or write the
+        model into its own output directory) so the stale cache cannot be
+        reused.
+        """
+        if "<segmentsData>" not in self._suffix:
+            raise ValueError("no <segmentsData> block to edit.")
+        out, removed, inside = [], 0, False
+        for line in self._suffix.splitlines():
+            s = line.strip()
+            if s == "<segmentsData>":
+                inside = True
+            elif s == "</segmentsData>":
+                inside = False
+            elif inside and s and file_substr in line:
+                removed += 1
+                continue
+            out.append(line)
+        self._suffix = "\n".join(out)
+        if removed == 0:
+            raise KeyError(f"no <segmentsData> line matches {file_substr!r}.")
+        return removed
+
+    def clear_data_segments(self):
+        """Remove every ``<segmentsData>`` line (leave the block empty).
+
+        The external-capture caches ``output/intEC.dat`` / ``output/intEC.extrap``
+        belong to the removed grids and must be deleted before the next run.
+        """
+        lines = self._suffix.splitlines()
+        try:
+            start = lines.index("<segmentsData>")
+            end = lines.index("</segmentsData>")
+        except ValueError:
+            raise ValueError("no <segmentsData> block to clear.")
+        self._suffix = "\n".join(lines[:start + 1] + lines[end:])
+        return self
+
     # -- rendering ------------------------------------------------------------
 
     def __str__(self):

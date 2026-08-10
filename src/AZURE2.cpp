@@ -41,8 +41,6 @@ extern int start_gui(int argc, char *argv[]);
 #endif
 struct SegPairs {int firstPair; int secondPair;};
 
-extern int start_api(int port, Config& configure);
-
 /*!
  * This function displays the welcome banner.
  */
@@ -1339,6 +1337,15 @@ int main(int argc,char *argv[]){
   g_config = &configure; // Set global Config pointer for use across codebase
   bool useReadline = parseOptions(argc,argv,configure);
 
+  // The TCP/IP API server is gone; Python access is the in-process _azure2
+  // module.  Refuse rather than fall through to the interactive shell, which
+  // an old script's closed stdin would spin in forever.
+  if(configure.paramMask & Config::USE_API) {
+    configure.outStream << "ERROR: --use-api has been removed.  AZURE2 no longer serves a socket API;" << std::endl
+                        << "       drive it from Python instead:  from pyazr import azure2" << std::endl;
+    return 1;
+  }
+
   //Read the parameters from the runtime configuration file
   if(configure.configfile.empty()) {
     configure.outStream << "A valid configuration file must be specified." << std::endl
@@ -1364,16 +1371,7 @@ int main(int argc,char *argv[]){
     configure.paramMask |= Config::USE_AMATRIX;
   }
 
-  int port;
-  bool useAPI=false;
-  for(int i=1;i<argc;i++){ 
-    if(strcmp(argv[i],"--use-api")==0){ useAPI=true;
-      port = atoi(argv[i+1]);
-    }
-  }
-  if(useAPI) start_api(port, configure);
-
-  else{
+  {
 
     //Print welcome message
     welcomeMessage(configure);

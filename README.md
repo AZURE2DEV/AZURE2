@@ -4,8 +4,8 @@ AZURE2 is a software package for performing multi-channel, multi-level
 [R-matrix](https://en.wikipedia.org/wiki/R-matrix) analyses of low-energy
 nuclear reaction and scattering data. It provides a Qt graphical setup utility,
 a fast C++ calculation engine, parameter fitting via Minuit2, optional Bayesian
-(MCMC) sampling, and a socket API with a Python client (`pyazr`) for scripting
-and external samplers.
+(MCMC) sampling, and an in-process Python interface (`pyazr`, built on pybind11)
+for scripting and external samplers.
 
 **Documentation:** <https://rdeboer1.github.io/AZURE2/> — user guide, the
 physics and conventions, and the C++ API reference at
@@ -23,9 +23,9 @@ Upstream project: <https://azure.nd.edu/> · Source:
 | `src/`         | Core C++ R-matrix engine (`CNuc`, `EData`, cross-section/χ² calculation, output). |
 | `include/`     | Public headers for the core engine. |
 | `gui/`         | Qt5 graphical setup utility (`AZURESetup`). |
-| `api/`         | Socket API server (`--use-api`) used by the Python client. |
+| `api/`         | Python bindings: `AZUREAPI` C++ API + the pybind11 `_azure2` module. |
 | `numcmc/`      | Affine-invariant ensemble MCMC sampler (`USE_MCMC`). |
-| `pyazr/`       | Python package that drives AZURE2 over the socket API. |
+| `pyazr/`       | Python package that drives AZURE2 in-process via the `_azure2` module. |
 | `external/`    | Vendored third-party code, built in-tree: `minuit2/` (ROOT Minuit2), `coul/` (Coulomb wave functions), `erya/` (SRIM stopping powers + pugixml). |
 | `tests/`       | Physics regression suite — reference evaluations and the runner. |
 | `cmake/`       | Custom CMake find-modules (e.g. `FindQwt.cmake`) and toolchains. |
@@ -60,6 +60,7 @@ bundled in-tree.
 
 **For the Python client (`pyazr`)**
 - Python 3 with [NumPy](https://numpy.org/)
+- [pybind11](https://pybind11.readthedocs.io/) ≥ 2.6 (to build the `_azure2` module)
 
 ### Installing dependencies
 
@@ -112,7 +113,7 @@ Pass options to CMake with `-D<OPTION>=ON|OFF` (or edit them interactively with
 |-------------------------|:-------:|-------------|
 | `BUILD_GUI`             | ON      | Build and link the Qt graphical setup utility. |
 | `USE_QWT`               | ON      | Include the built-in plotting tab (needs Qwt). |
-| `USE_API`               | ON      | Build the socket API server (required for `pyazr`). |
+| `USE_API`               | ON      | Build the `AZUREAPI` library and the pybind11 `_azure2` module (required for `pyazr`). |
 | `USE_MCMC`              | ON      | Enable MCMC Bayesian sampling via the bundled `numcmc`. |
 | `USE_ERYA`              | ON      | Enable the SRIM stopping-power utilities. |
 | `USE_READLINE`          | ON      | Use Readline for console input. |
@@ -157,15 +158,17 @@ Useful flags (`AZURE2 --help` for the full list):
 
 ## Python interface (`pyazr`)
 
-`pyazr` drives one or more headless AZURE2 processes over the socket API
-(`AZURE2 --no-gui --use-api <port> <file>`), making it easy to script fits and
-plug AZURE2 into external samplers such as [`emcee`](https://emcee.readthedocs.io/)
+`pyazr` embeds the AZURE2 engine in-process: the R-matrix code is compiled into
+a pybind11 extension module (`_azure2`), and an `azure2()` object is a real
+`AZUREAPI` session living in the interpreter. No subprocesses, no sockets, no
+port bookkeeping — which also makes it easy to plug AZURE2 into external
+samplers such as [`emcee`](https://emcee.readthedocs.io/)
 or [`brick`](https://github.com/odell/brick).
 
 ```python
 from pyazr import azure2
 
-# Spawn an AZURE2 instance bound to a configuration file.
+# Build the in-process engine bound to a configuration file.
 azr = azure2("config.azr")
 
 # Experimental data, grouped by segment.
@@ -189,8 +192,9 @@ to (`J`, `parity`, `level_energy`) and for widths the channel (`L`, `S`, `pair`,
 `radiation_type`) — plus filtered views (`.free`, `.energies`, `.widths`,
 `.norms`, `.shifts`) and lookups (`.by_level(...)`, `.by_name(...)`).
 
-Set `AZURE2_BINARY` (or pass `binary=...`) if the executable is not at
-`build/src/AZURE2`.
+Build the `_azure2` module with CMake (`USE_API=ON`, the default) — it lands in
+`pyazr/`, so `import pyazr` picks it up from the repository root; a `pip install`
+ships it as package data.
 
 ---
 

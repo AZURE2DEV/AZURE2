@@ -29,3 +29,10 @@ __pycache__/
 *.egg-info/
 dist/
 build-api/
+build-py/
+
+# The engine extension module: CMake builds it straight into pyazr/ so that
+# `import pyazr` works from the checkout, but it is a build artefact.
+pyazr/_azure2*.so
+pyazr/_azure2*.dylib
+pyazr/_azure2*.pyd

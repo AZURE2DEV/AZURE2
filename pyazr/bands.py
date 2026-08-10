@@ -21,7 +21,9 @@ Two entry points:
 
 ``uncertainty_bands(model, segments, ...)``
     band for selected segments of a *live* :class:`~pyazr.azure2.azure2`
-    session, in whichever mode it is in (data or extrapolation).
+    session, in whichever mode it is in (data or extrapolation).  The session
+    is the in-process engine itself -- one ``_azure2.Session``, no subprocess
+    or instance pool to talk to.
 
 ``extrapolation_bands(azr_file, keys=..., grids=..., ...)``
     band on an extrapolation grid, computed in a **dedicated session whose
@@ -43,7 +45,6 @@ import os
 import shutil
 import sys
 import warnings
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -104,9 +105,9 @@ class Band:
 def _model_dir(model):
     """The directory a session's ``output/`` lives in.
 
-    ``azure2`` runs its subprocesses in the ``.azr``'s directory unless told
-    otherwise, and AZURE2 names ``output/`` relative to the running process --
-    so that is where ``param.sav`` and ``covariance.dat`` are.
+    ``azure2`` switches the process into the ``.azr``'s directory for the
+    session's lifetime, and AZURE2 names ``output/`` relative to that -- so
+    that is where ``param.sav`` and ``covariance.dat`` are.
     """
     return os.path.abspath(model.cwd or os.path.dirname(model.file) or ".")
 
@@ -136,8 +137,8 @@ _RMATRIX_KINDS = (0, 1)      # GET_PARAMS_INFO type codes: 0 energy, 1 width
 _NFIELDS = 15                # doubles per parameter record
 
 
-def live_parameters(model, proc=0):
-    """``(free_kinds, free_identities)`` queried from the running instance.
+def live_parameters(model):
+    """``(free_kinds, free_identities)`` queried from the running session.
 
     ``model.parameters`` is built once, from whatever mode the session was in
     at the time -- but the parameter vector is **not** the same in the two
@@ -145,17 +146,18 @@ def live_parameters(model, proc=0):
     the fixed R-matrix parameters its grids cannot reach, so a model with 483
     parameters (197 free) in data mode can report 234 (72 free) in
     extrapolation mode.  The free R-matrix block survives, in order, and it is
-    that block the covariance describes.
+    that block the covariance describes.  This queries the engine's *current*
+    parameter bookkeeping (``params_fixed`` / ``parameter_info``), which is
+    rebuilt on every ``initialize()``, so it is right for the mode the session
+    is in now.
 
     Returns the per-free-parameter ``kind`` codes and their identity tuples
     ``(kind, jgroup, level, channel)`` -- the same key AZURE2 uses to match
     covariance columns across runs.
     """
-    c = model.clients[proc]
-    fixed = np.asarray(c.communicate("GET_PARAMS_FIXED", [0]),
-                       float).round().astype(bool)
-    info = np.asarray(c.communicate("GET_PARAMS_INFO", [0]),
-                      float).reshape(len(fixed), _NFIELDS)
+    s = model.sess
+    fixed = np.asarray(s.params_fixed(), float).round().astype(bool)
+    info = np.asarray(s.parameter_info(), float).reshape(len(fixed), _NFIELDS)
     kinds, ids = [], []
     for i in range(len(fixed)):
         if fixed[i]:
@@ -167,7 +169,7 @@ def live_parameters(model, proc=0):
     return kinds, ids
 
 
-def rmatrix_columns(model, proc=0):
+def rmatrix_columns(model):
     """Packed indices of the free R-matrix parameters, in ``params_rwa`` order.
 
     These are the columns ``covariance.dat`` spans: level energies and reduced
@@ -175,14 +177,14 @@ def rmatrix_columns(model, proc=0):
     calculated observable depends on them.  Queried live, so the answer is
     right for the mode the session is in now.
     """
-    kinds, _ = live_parameters(model, proc)
+    kinds, _ = live_parameters(model)
     cols = [j for j, k in enumerate(kinds) if k in _RMATRIX_KINDS]
     if not cols:
         raise RuntimeError("the model has no free R-matrix parameters.")
     return cols
 
 
-def best_fit_params(model, path=None, proc=0):
+def best_fit_params(model, path=None):
     """The best-fit free parameter vector, read from ``output/param.sav``.
 
     A model's ``.azr`` file need not carry the fitted values -- ``param.sav``
@@ -191,9 +193,9 @@ def best_fit_params(model, path=None, proc=0):
     ``.azr``'s own parameters give chi2 = 173006, ``param.sav`` gives 4130.
 
     ``param.sav`` is written in the *data*-mode layout (one line per parameter,
-    fixed ones included).  In extrapolation mode the instance holds a shorter
+    fixed ones included).  In extrapolation mode the session holds a shorter
     vector -- see :func:`live_parameters` -- so the leading R-matrix block is
-    taken, after checking that it is what the running instance expects.
+    taken, after checking that it is what the running session expects.
     """
     if path is None:
         path = os.path.join(_model_dir(model), "output", "param.sav")
@@ -209,7 +211,7 @@ def best_fit_params(model, path=None, proc=0):
                          f"{fixed.size}.")
     free = full[~fixed]
 
-    kinds, _ = live_parameters(model, proc)
+    kinds, _ = live_parameters(model)
     if len(kinds) == free.size:
         return free
     # Fewer parameters live than param.sav describes: extrapolation mode.  The
@@ -219,32 +221,127 @@ def best_fit_params(model, path=None, proc=0):
     if len(kinds) < free.size and all(k in _RMATRIX_KINDS for k in kinds):
         return free[:len(kinds)]
     raise ValueError(
-        f"{path} gives {free.size} free parameters but the running instance "
+        f"{path} gives {free.size} free parameters but the running session "
         f"expects {len(kinds)}, and they are not the leading R-matrix block.  "
         f"Pass params= explicitly.")
 
 
 # -- sensitivities ------------------------------------------------------------
 
-def _fetch(client, segments, quantity):
+def _fetch(sess, segments, quantity):
     """Observable values for ``segments`` from the last UPDATE_SEGMENTS call."""
     out = []
     for i in segments:
-        v = client.communicate("GET_CALCULATED_SEGMENT", [i])
+        v = sess.calculated_segments(i)
         if quantity == "sfactor":
-            v = v * client.communicate("GET_CALCULATED_CONV", [i])
+            v = v * sess.calculated_conv(i)
         out.append(v)
     return out
 
 
-def _evaluate(model, params, segments, quantity, proc):
-    c = model.clients[proc]
-    n = int(c.communicate("UPDATE_SEGMENTS_RWA", np.asarray(params, float))[0])
+def _evaluate(model, params, segments, quantity):
+    s = model.sess
+    n = int(s.update_segments_rwa(np.asarray(params, float)))
     bad = [i for i in segments if i < 0 or i >= n]
     if bad:
         raise IndexError(f"segment index/indices {bad} out of range: the model "
                          f"calculates {n} (active) segments.")
-    return _fetch(c, segments, quantity)
+    return _fetch(s, segments, quantity)
+
+
+# -- finite differences across processes ---------------------------------------
+#
+# The engine is one non-reentrant C++ object per process, so threads cannot
+# spread the columns the way the socket API's instance pool did -- each worker
+# needs an engine of its own, which means a process of its own.  The pieces
+# below are module-level because a "spawn" pool has to import them by name.
+
+_WORKER = {}
+
+
+def _worker_setup(spec):
+    """Build this worker's own session, with an output directory of its own.
+
+    Workers must not share ``output/``: AZURE2 writes its external-capture
+    cache there, and several processes deciding at once that the cache is
+    stale would write over each other.  Each gets a private directory seeded
+    from the parent's caches, so the integrals are reused rather than rebuilt
+    -- the same trick :func:`trimmed_model` uses.
+    """
+    from .azrfile import AzrModel
+    from .azure2 import azure2
+
+    cwd, workdir = spec["cwd"], os.path.join(spec["workdir"], str(os.getpid()))
+    os.makedirs(workdir, exist_ok=True)
+    # Best effort: a missing seed only means this worker rebuilds its own
+    # integrals, which is correct, just slower.
+    for cache in ("intEC.dat", "intEC.extrap"):
+        seed = os.path.join(cwd, "output", cache)
+        if os.path.exists(seed):
+            shutil.copyfile(seed, os.path.join(workdir, cache))
+
+    # The edited .azr lives in the private directory too, so the parent removing
+    # that directory takes the temporary file with it.
+    edited = AzrModel.from_file(spec["file"])
+    edited.set_output_dir(os.path.relpath(workdir, cwd))
+    path = edited.to_tempfile(dir=workdir)
+
+    model = azure2(path, cwd=cwd, **spec["options"])
+    if spec["mode"] == "extrap":
+        model.extrap_mode()
+    _WORKER.update(model=model, base=None)
+
+
+def _worker_column(task):
+    """One finite-difference column, evaluated in this worker's own engine."""
+    k, j, h_k, p0, segments, quantity, method = task
+    model = _WORKER["model"]
+    p0 = np.asarray(p0, float)
+
+    pp = p0.copy(); pp[j] += h_k
+    plus = _evaluate(model, pp, segments, quantity)
+    if method == "central":
+        pm = p0.copy(); pm[j] -= h_k
+        minus = _evaluate(model, pm, segments, quantity)
+        return k, [(a - b) / (2.0 * h_k) for a, b in zip(plus, minus)]
+
+    if _WORKER["base"] is None:                    # forward: one shared baseline
+        _WORKER["base"] = _evaluate(model, p0, segments, quantity)
+    return k, [(a - b) / h_k for a, b in zip(plus, _WORKER["base"])]
+
+
+def _parallel_columns(model, cols, h, p0, segments, quantity, method,
+                      nprocs, progress):
+    """Finite-difference columns spread over ``nprocs`` worker processes."""
+    import multiprocessing
+
+    spec = {
+        "file": model.file,
+        "cwd": model.cwd,
+        "options": dict(getattr(model, "options", {})),
+        "mode": getattr(model, "mode", "data"),
+        "workdir": os.path.join(model.cwd, "output", "sensitivities"),
+    }
+    tasks = [(k, cols[k], float(h[k]), p0, segments, quantity, method)
+             for k in range(len(cols))]
+
+    columns = [None] * len(cols)
+    # "spawn", not "fork": forking a live engine would duplicate a C++ object
+    # graph and its OpenMP runtime into a child that never asked for it.
+    ctx = multiprocessing.get_context("spawn")
+    try:
+        with ctx.Pool(nprocs, initializer=_worker_setup, initargs=(spec,)) as pool:
+            for done, (k, column) in enumerate(
+                    pool.imap_unordered(_worker_column, tasks), start=1):
+                columns[k] = column
+                if progress:
+                    print(f"\r  sensitivities: {done}/{len(cols)} columns "
+                          f"({nprocs} processes)", end="", flush=True)
+        if progress:
+            print()
+    finally:
+        shutil.rmtree(spec["workdir"], ignore_errors=True)
+    return columns
 
 
 def step_sizes(p0, cols, step=1e-4):
@@ -268,7 +365,7 @@ def step_sizes(p0, cols, step=1e-4):
 
 
 def sensitivities(model, segments, params=None, quantity="cross", step=1e-4,
-                  method="analytic", cols=None, progress=False):
+                  method="analytic", cols=None, progress=False, nprocs=1):
     """``d(observable)/d(parameter)`` for selected segments.
 
     Parameters
@@ -292,6 +389,16 @@ def sensitivities(model, segments, params=None, quantity="cross", step=1e-4,
         defaults to :func:`rmatrix_columns`.  Ignored by ``'analytic'``, which
         always returns the free R-matrix columns.
     progress : print a one-line counter as columns are evaluated.
+    nprocs : worker processes to spread the finite-difference columns over
+        (ignored by ``'analytic'``, which is one call).  The engine is one
+        non-reentrant object per process, so each worker builds its own
+        session: a fixed cost of one model initialization -- and, in
+        extrapolation mode, one grid rebuild -- before it evaluates anything.
+        The columns have to be worth more than that.  As a rule of thumb it
+        needs ``len(cols)`` in the hundreds: on the 14-parameter ``tests/13N``
+        model it is a net loss at any ``nprocs``, in data mode (0.8 s serial)
+        and on an 1845-point extrapolation grid (53 s serial) alike.  Measure
+        on your own model rather than assuming.
 
     Returns
     -------
@@ -309,10 +416,8 @@ def sensitivities(model, segments, params=None, quantity="cross", step=1e-4,
         if quantity == "sfactor":
             # S = conv * sigma with conv fixed by the kinematics, so the
             # sensitivities scale by the same factor, row by row.
-            c = model.clients[0]
-            _evaluate(model, p0, segments, quantity, 0)
-            return {seg: G[seg] * c.communicate(
-                        "GET_CALCULATED_CONV", [seg])[:, None]
+            _evaluate(model, p0, segments, quantity)
+            return {seg: G[seg] * model.sess.calculated_conv(seg)[:, None]
                     for seg in segments}
         return {seg: G[seg] for seg in segments}
 
@@ -322,27 +427,24 @@ def sensitivities(model, segments, params=None, quantity="cross", step=1e-4,
     if h.size != len(cols):
         raise ValueError(f"step has {h.size} entries, expected {len(cols)}.")
 
-    base = None if method == "central" else _evaluate(
-        model, p0, segments, quantity, 0)
-
-    def column(k):
-        j = cols[k]
-        proc = k % model.nprocs
-        pp = p0.copy(); pp[j] += h[k]
-        plus = _evaluate(model, pp, segments, quantity, proc)
-        if method == "central":
-            pm = p0.copy(); pm[j] -= h[k]
-            minus = _evaluate(model, pm, segments, quantity, proc)
-            return [(a - b) / (2.0 * h[k]) for a, b in zip(plus, minus)]
-        return [(a - b) / h[k] for a, b in zip(plus, base)]
-
-    if model.nprocs > 1:
-        with ThreadPoolExecutor(max_workers=model.nprocs) as pool:
-            columns = list(pool.map(column, range(len(cols))))
+    if nprocs > 1 and len(cols) > 1:
+        columns = _parallel_columns(model, cols, h, p0, segments, quantity,
+                                    method, min(nprocs, len(cols)), progress)
     else:
+        base = None if method == "central" else _evaluate(
+            model, p0, segments, quantity)
+
         columns = []
         for k in range(len(cols)):
-            columns.append(column(k))
+            j = cols[k]
+            pp = p0.copy(); pp[j] += h[k]
+            plus = _evaluate(model, pp, segments, quantity)
+            if method == "central":
+                pm = p0.copy(); pm[j] -= h[k]
+                minus = _evaluate(model, pm, segments, quantity)
+                columns.append([(a - b) / (2.0 * h[k]) for a, b in zip(plus, minus)])
+            else:
+                columns.append([(a - b) / h[k] for a, b in zip(plus, base)])
             if progress:
                 print(f"\r  sensitivities: {k + 1}/{len(cols)} columns",
                       end="", flush=True)
@@ -373,7 +475,7 @@ def active_indices(segments):
 
 def uncertainty_bands(model, segments=None, keys=None, params=None,
                       covariance=None, quantity="cross",
-                      step=1e-4, method="analytic", progress=False):
+                      step=1e-4, method="analytic", progress=False, nprocs=1):
     """Covariance uncertainty bands for selected segments of a live session.
 
     Parameters
@@ -399,6 +501,9 @@ def uncertainty_bands(model, segments=None, keys=None, params=None,
         :func:`sensitivities`.  ``'analytic'`` falls back to ``'central'``,
         with a warning, on an AZURE2 that lacks the sensitivity command.
     progress : print a progress counter (finite differences only).
+    nprocs : worker processes for the finite-difference columns -- see
+        :func:`sensitivities`.  Worth setting when the analytic method is
+        unavailable and the model has many free R-matrix parameters.
 
     Returns
     -------
@@ -447,7 +552,7 @@ def uncertainty_bands(model, segments=None, keys=None, params=None,
     try:
         G = sensitivities(model, segments, params=p0, quantity=quantity,
                           step=step, method=method, cols=cols,
-                          progress=progress)
+                          progress=progress, nprocs=nprocs)
     except RuntimeError as err:
         if method != "analytic" or "MODEL_GRADIENTS" not in str(err):
             raise
@@ -460,31 +565,31 @@ def uncertainty_bands(model, segments=None, keys=None, params=None,
         warnings.warn(note, RuntimeWarning, stacklevel=2)
         G = sensitivities(model, segments, params=p0, quantity=quantity,
                           step=step, method="central", cols=cols,
-                          progress=progress)
+                          progress=progress, nprocs=nprocs)
 
-    # Leave the instance holding the best fit again, and take the central
+    # Leave the session holding the best fit again, and take the central
     # values from that same pass.
-    values = _evaluate(model, p0, segments, quantity, 0)
-    c = model.clients[0]
+    values = _evaluate(model, p0, segments, quantity)
+    s = model.sess
 
     out = {}
-    for s, seg in enumerate(segments):
+    for s_, seg in enumerate(segments):
         g = G[seg]
         if g.shape[1] != C.shape[0]:
             raise RuntimeError(
                 f"segment {seg}: {g.shape[1]} sensitivity columns against a "
                 f"{C.shape[0]}x{C.shape[0]} covariance.")
-        if g.shape[0] != len(values[s]):
+        if g.shape[0] != len(values[s_]):
             raise RuntimeError(
                 f"segment {seg}: {g.shape[0]} sensitivity rows for "
-                f"{len(values[s])} calculated points.")
+                f"{len(values[s_])} calculated points.")
         var = np.einsum("ij,jk,ik->i", g, C, g)
         out[key_of[seg]] = Band(
             segment=seg, key=key_of[seg],
-            energy=c.communicate("GET_CALCULATED_ENERGIES", [seg]),
-            angle=c.communicate("GET_CALCUALTED_ANGLES", [seg]),
-            excitation=c.communicate("GET_EXCITATION_ENERGY", [seg]),
-            value=values[s], sigma=np.sqrt(np.clip(var, 0.0, None)),
+            energy=s.calculated_energies(seg),
+            angle=s.calculated_angles(seg),
+            excitation=s.calculated_excitation_energies(seg),
+            value=values[s_], sigma=np.sqrt(np.clip(var, 0.0, None)),
             quantity=quantity, sensitivity=g)
     return out
 
@@ -546,8 +651,8 @@ def trimmed_model(azr_file, keys=None, grids=None, cwd=None, workdir=None):
 
 def extrapolation_bands(azr_file, keys=None, grids=None, params=None,
                         covariance=None, quantity="cross",
-                        step=1e-4, method="analytic", nprocs=1, cwd=None,
-                        progress=False, keep_tempfile=False):
+                        step=1e-4, method="analytic", cwd=None,
+                        progress=False, keep_tempfile=False, nprocs=1):
     """Uncertainty bands on extrapolation grids, in a dedicated session.
 
     Writes a temporary ``.azr`` whose ``<segmentsTest>`` block holds **only**
@@ -566,10 +671,8 @@ def extrapolation_bands(azr_file, keys=None, grids=None, params=None,
         :meth:`~pyazr.AzrModel.add_extrapolation` -- a grid the file does not
         contain.  Keyed 1, 2, ... in the order given.
     params : defaults to ``output/param.sav`` beside the model.
-    covariance, quantity, step, method, progress : see
+    covariance, quantity, step, method, progress, nprocs : see
         :func:`uncertainty_bands`.
-    nprocs : AZURE2 instances; the finite-difference columns are spread across
-        them.
     cwd : working directory for the session; defaults to the ``.azr``'s.
     keep_tempfile : leave the trimmed ``.azr`` on disk (for debugging).
 
@@ -590,7 +693,7 @@ def extrapolation_bands(azr_file, keys=None, grids=None, params=None,
     tmp, workdir = trimmed_model(azr_file, keys=keys, grids=grids, cwd=cwd)
 
     try:
-        with azure2(tmp, nprocs=nprocs, cwd=cwd) as m:
+        with azure2(tmp, cwd=cwd) as m:
             m.extrap_mode()
             if params is None:
                 params = best_fit_params(
@@ -600,7 +703,7 @@ def extrapolation_bands(azr_file, keys=None, grids=None, params=None,
             bands = uncertainty_bands(
                 m, keys=list(range(1, len(out_keys) + 1)), params=params,
                 covariance=covariance, quantity=quantity, step=step,
-                method=method, progress=progress)
+                method=method, progress=progress, nprocs=nprocs)
     finally:
         if not keep_tempfile and os.path.exists(tmp):
             os.remove(tmp)

@@ -9,7 +9,9 @@ standard way of choosing it.
 
 The scan is a loop over *files*: the radius lives in the <levels> block, and a
 session reads its model once at startup, so each radius is a new .azr and a new
-process.  `AzrModel.set_channel_radius` rewrites every channel line of that pair.
+session.  `AzrModel.set_channel_radius` rewrites every channel line of that pair.
+Every session is in-process (``pyazr.azure2`` owns the engine directly), so the
+loop just opens and closes one ``azure2()`` per radius -- no subprocesses.
 
 The external-capture caches are keyed on the grid, not on the radius, so
 `output/intEC.dat` and `intEC.extrap` must go with each change -- keeping them
@@ -23,7 +25,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -31,19 +32,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "4")
 
 import numpy as np
 
-from pyazr import AzrModel
-
-SCAN = """
-import os, sys, json
-os.environ.setdefault("OMP_NUM_THREADS", "4")
-import numpy as np
-from pyazr import azure2
-with azure2(sys.argv[1]) as m:
-    x = np.asarray(m.params_rwa, float)
-    print(json.dumps({"chi2": float(np.sum(m.calculate_chi2_rwa(x))),
-                      "n": int(sum(len(m.energies[i])
-                                   for i in range(m.nsegments)))}))
-"""
+from pyazr import AzrModel, azure2
 
 
 def main() -> int:
@@ -56,8 +45,6 @@ def main() -> int:
     args = ap.parse_args()
 
     here = args.azr.parent
-    runner = here / "_scan_one.py"
-    runner.write_text(SCAN)
     out = here / "output"
 
     mdl = AzrModel.from_file(args.azr)
@@ -73,21 +60,19 @@ def main() -> int:
             f = out / cache
             if f.exists():
                 f.unlink()
-        # A separate process per radius: one AZURE2 session per interpreter.
-        p = subprocess.run([sys.executable, str(runner), str(path)],
-                           cwd=here, capture_output=True, text=True)
-        line = p.stdout.strip().splitlines()[-1] if p.stdout.strip() else ""
         try:
-            import json
-            r = json.loads(line)
-        except Exception:
-            print(f"{a:9.2f}   failed: {p.stderr.strip().splitlines()[-1:]}")
+            with azure2(str(path), cwd=str(here)) as m:
+                x = np.asarray(m.params_rwa, float)
+                n = int(sum(len(m.energies[i]) for i in range(m.nsegments)))
+                chi2 = float(np.sum(m.calculate_chi2_rwa(x)))
+        except Exception as err:
+            print(f"{a:9.2f}   failed: {err}")
+            Path(path).unlink()
             continue
-        rows.append((a, r["chi2"], r["chi2"] / max(r["n"], 1)))
-        print(f"{a:9.2f} {r['chi2']:12.1f} {r['chi2']/max(r['n'],1):9.3f}")
         Path(path).unlink()
+        rows.append((a, chi2, chi2 / max(n, 1)))
+        print(f"{a:9.2f} {chi2:12.1f} {chi2 / max(n, 1):9.3f}")
 
-    runner.unlink()
     if rows:
         best = min(rows, key=lambda t: t[1])
         span = max(r[1] for r in rows) - min(r[1] for r in rows)

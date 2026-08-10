@@ -86,8 +86,11 @@ the y/n prompts. Other flags: `--use-brune`, `--gsl-coul`, `--ignore-externals`,
 
 ## Workflow B — pyazr
 
-pyazr spawns headless `AZURE2 --no-gui --use-api` processes and talks to them
-over a socket. A session is a context manager; always close it.
+pyazr embeds the AZURE2 engine in-process: the R-matrix code is compiled into
+the pybind11 extension module `pyazr/_azure2`, and an `azure2()` object is a
+real `AZUREAPI` session living in the interpreter. No subprocesses, no sockets,
+no instance pool. A session is a context manager; always close it — that frees
+the compound nucleus and data, which are several MB per model.
 
 Install it from the repository root (it is not on PyPI):
 
@@ -97,12 +100,11 @@ pip install -e ".[examples]"    # + matplotlib, emcee, multiprocess
 pip install -e ".[all]"         # + zeus-mcmc
 ```
 
-`-e` is the useful form, since the package lives in the checkout. AZURE2 itself
-is C++ and is **not** installed by pip — build it separately. pyazr locates the
-binary via `$AZURE2_BINARY`, then `build/src/AZURE2`, then `$PATH`, and it must
-be built with `USE_API=ON` (the default). Installing also puts `pyazr-cleanup`
-on the path, which reaps API instances orphaned by an interpreter that died
-before it could close them.
+`-e` is the useful form, since the package lives in the checkout. The engine is
+C++ and is **not** installed by pip — build the `_azure2` module with CMake
+(`USE_API=ON`, the default), which lands it in `pyazr/`; a `pip install` ships
+it as package data. `import pyazr` from the repository root picks up the built
+module.
 
 ```python
 import os
@@ -110,14 +112,16 @@ os.environ.setdefault("OMP_NUM_THREADS", "4")   # set BEFORE importing numpy
 import numpy as np
 from pyazr import azure2, AzrModel
 
-with azure2("7Be.azr", nprocs=1, cwd=HERE) as m:
+with azure2("7Be.azr", cwd=HERE) as m:
     best = np.asarray(m.params_rwa, float)      # free parameter vector
     chi2 = np.sum(m.calculate_chi2_rwa(best))
 ```
 
-`nprocs=N` spawns N independent instances (`proc=i` selects one) — for one χ²
-per walker in emcee/zeus. Ports are OS-assigned, so parallel sessions never
-collide.
+Every `azure2()` object is an independent engine, and several can be open at
+once — each enters its own directory per call, so they never disturb each other
+or your cwd. The engine is *not* thread-safe, so parallelism is per process:
+construct the session at module level of the worker module and every pool
+worker gets its own, under either `spawn` or `fork`.
 
 ### Two parameter conventions
 
@@ -327,9 +331,26 @@ mdl.set_channel_radius(1, 5.0)                           # 3He+alpha, all its li
 mdl.set_segment_norm("Toth", vary=True, sys_error=8.0)   # percent, as stored
 mdl.set_segment_active("Spiger", False)                  # drop a dataset from the fit
 mdl.set_segment_datafile("Elwyn-F0012002", "data/new.dat")
+mdl.add_data_segment("data/roughton.dat", entrance=1, exit=2,
+                     observable="total-capture", energy_min=0.3,
+                     energy_max=2.3, norm_error=5.0)     # brand-new dataset
+mdl.remove_data_segments("artemov.dat")                  # or clear_data_segments()
 mdl.set_extrapolations([...]) / add_extrapolation(...) / clear_extrapolations()
 mdl.apply_fit(m.parameters, x_best, transform=m.transform_rwa)   # fit -> <levels>
 ```
+
+`add_data_segment` observables include `analyzing-power` (code 7), and
+`pyazr/examples/exfor_fetch.py` + the `nds-explorer` skill show how to fetch
+real datasets from EXFOR/NDS and feed them into `add_data_segment`.
+
+**Adding/removing data segments invalidates the EC integral cache.** After any
+`add_data_segment` / `remove_data_segments` / `clear_data_segments` /
+`set_extrapolations` edit, delete `output/intEC.dat` and `output/intEC.extrap`
+before the next run, or give the edited model its own output dir
+(`mdl.set_output_dir(...)`); otherwise AZURE2 silently reuses integrals
+computed for the *old* grids. In a live session,
+`azr.recalculate_external_capture()` forces a recompute. See
+`pyazr/examples/edit_model.py`.
 
 `apply_fit` turns a fit result into a real `.azr` snapshot — the reference to
 reuse and hand to the GUI. Matching is by (2J, parity, input energy, pair/L/S).
@@ -409,7 +430,8 @@ Sanity-check the fit space: `transform_rwa(best[:nR])[p.free_index]` must equal
 `p.value` for every width.
 
 For MCMC, `pyazr/examples/fit_emcee.py` and `fit_zeus.py` show the pattern —
-`nprocs` instances, one per pool worker, priors chosen per `p.kind`, and
+one in-process engine per pool worker (constructed at module level), priors
+chosen per `p.kind`, and
 `log_prob = -0.5*(chi2 + offset) + log_prior` with
 `offset = Σ log(2π σ²)`.
 
@@ -575,6 +597,6 @@ fit, check `param.sav` updated and compare `parameters.out` widths — and their
 ## Examples shipped with pyazr
 
 In `pyazr/examples/`: `angular_distribution.py`, `print_scheme.py`,
-`edit_scheme.py`, `deactivate_level.py`, `transform_widths.py`,
-`dimensionless_widths.py`, `save_fit_to_azr.py`, `uncertainty_band.py`,
-`fit_emcee.py`, `fit_zeus.py`.
+`edit_scheme.py`, `edit_model.py`, `exfor_fetch.py`, `deactivate_level.py`,
+`transform_widths.py`, `dimensionless_widths.py`, `save_fit_to_azr.py`,
+`uncertainty_band.py`, `fit_emcee.py`, `fit_zeus.py`.

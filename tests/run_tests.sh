@@ -30,10 +30,18 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 AZURE2_BIN="${1:-}"
 TOL="${TOL:-1e-3}"
 
+# Several build directories may coexist (build/, build-py/, ...) and an old one
+# testing green while the source has moved on is worse than no test at all, so
+# take the newest binary rather than the first one found.
 if [ -z "$AZURE2_BIN" ]; then
-  for candidate in "$REPO_ROOT/build/src/AZURE2" "$REPO_ROOT/build/src/AZURE2.exe"; do
-    [ -x "$candidate" ] && AZURE2_BIN="$candidate" && break
+  newest=""
+  for candidate in "$REPO_ROOT"/build*/src/AZURE2 "$REPO_ROOT"/build*/src/AZURE2.exe; do
+    [ -x "$candidate" ] || continue
+    if [ -z "$newest" ] || [ "$candidate" -nt "$newest" ]; then
+      newest="$candidate"
+    fi
   done
+  AZURE2_BIN="$newest"
 fi
 
 if [ -z "$AZURE2_BIN" ] || [ ! -x "$AZURE2_BIN" ]; then

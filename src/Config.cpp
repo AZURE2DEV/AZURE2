@@ -120,8 +120,8 @@ int Config::ReadConfigFile() {
  *   </potential>
  *
  * Parsing it here rather than in the setup utility is what makes the hybrid
- * model reachable from --no-gui and from the socket API: this function is on
- * the path both of them take.
+ * model reachable from --no-gui and from pyazr: this function is on the path
+ * both of them take.
  *
  * Returns 0 on success (including "no block present") and -1 if the block is
  * present but malformed.

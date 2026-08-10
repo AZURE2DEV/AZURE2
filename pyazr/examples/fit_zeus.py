@@ -5,13 +5,17 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 import zeus
 import numpy as np
 from scipy import stats
-from multiprocess import Pool, current_process
+from multiprocess import Pool
 
 from pyazr import azure2
 
 NPROCS, NSTEPS = 8, 2000
 
-azr = azure2("13N.azr", nprocs=NPROCS)
+# One engine per worker process.  Building it at module scope is what makes
+# that happen either way a Pool starts: under "spawn" each worker re-imports
+# this module and constructs its own, under "fork" each inherits a copy.  The
+# engine is not thread-safe, so process-level parallelism is the only kind.
+azr = azure2("13N.azr")
 best = np.asarray(azr.params_rwa, float)
 ndim = len(best)
 nwalkers = 2 * ndim
@@ -35,18 +39,11 @@ for p in azr.parameters:
 offset = sum(np.sum(np.log(2 * np.pi * e ** 2)) for e in azr.cross_err)
 
 
-def proc():
-    try:
-        return (int(current_process().name.split("-")[-1]) - 1) % NPROCS
-    except (ValueError, IndexError):
-        return 0
-
-
 def log_prob(theta):
     lp = np.sum([pr.logpdf(t) for pr, t in zip(priors, theta)])
     if not np.isfinite(lp):
         return -np.inf
-    chi2 = np.sum(azr.calculate_chi2_rwa(theta, proc=proc()))
+    chi2 = np.sum(azr.calculate_chi2_rwa(theta))
     return -0.5 * (chi2 + offset) + lp
 
 

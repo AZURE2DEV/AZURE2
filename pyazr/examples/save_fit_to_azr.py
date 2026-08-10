@@ -130,7 +130,7 @@ def main():
     # same radii, same channels -- or the parameter metadata will not line up.
     src = mdl.to_tempfile() if args.radius else os.path.abspath(args.azr)
 
-    with azure2(src, nprocs=1, cwd=here) as m:
+    with azure2(src, cwd=here) as m:
         x = load_params(m, args.params)
         chi2 = float(np.sum(m.calculate_chi2_rwa(x)))
         print(f"loaded {len(x)} free parameters, chi2(data) = {chi2:.4f}")
@@ -148,7 +148,7 @@ def main():
         physical = np.asarray(m.transform_rwa(x), float)
 
     # Verify: a file that does not reproduce the fit is not a snapshot of it.
-    with azure2(out, nprocs=1, cwd=here) as m2:
+    with azure2(out, cwd=here) as m2:
         free = sorted((p for p in m2.parameters if not p.fixed),
                       key=lambda p: p.free_index)
         back = np.asarray(m2.transform_rwa(np.asarray(m2.params_rwa, float)), float)

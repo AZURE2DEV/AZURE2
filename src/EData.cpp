@@ -874,18 +874,21 @@ int EData::Initialize(CNuc *compound,const Config &configure) {
   }
 
   //Calculate channel lo-matrix and channel penetrability for each channel at each local energy
-  configure.outStream << "Calculating Lo-Matrix, Phases, and Penetrabilities..." << std::endl;
+  if(!(configure.paramMask & Config::USE_API))
+    configure.outStream << "Calculating Lo-Matrix, Phases, and Penetrabilities..." << std::endl;
   if(this->CalcEDependentValues(compound,configure)==-1) return -1;
   if((configure.fileCheckMask|configure.screenCheckMask) & Config::CHECK_ENERGY_DEP) 
     this->PrintEDependentValues(configure,compound); 
   //Calculate legendre polynomials for each data point
-  configure.outStream << "Calculating Legendre Polynomials..." << std::endl;
+  if(!(configure.paramMask & Config::USE_API))
+    configure.outStream << "Calculating Legendre Polynomials..." << std::endl;
   this->CalcLegendreP(configure.maxLOrder,compound);
   if((configure.fileCheckMask|configure.screenCheckMask) & Config::CHECK_LEGENDRE) 
     this->PrintLegendreP(configure);
 
   //Calculate Coulomb Amplitudes
-  configure.outStream << "Calculating Coulomb Amplitudes..." << std::endl;
+  if(!(configure.paramMask & Config::USE_API))
+    configure.outStream << "Calculating Coulomb Amplitudes..." << std::endl;
   this->CalcCoulombAmplitude(compound);
   if((configure.fileCheckMask|configure.screenCheckMask) & Config::CHECK_COUL_AMPLITUDES) {
     this->PrintCoulombAmplitude(configure,compound);
@@ -893,12 +896,14 @@ int EData::Initialize(CNuc *compound,const Config &configure) {
 
   //Calculate new ec amplitudes
   if(configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
-    configure.outStream << "Calculating External Capture Amplitudes..." << std::endl;
+    if(!(configure.paramMask & Config::USE_API))
+      configure.outStream << "Calculating External Capture Amplitudes..." << std::endl;
     if(this->CalculateECAmplitudes(compound,configure)==-1) return -1;
   }
   
   //Initialize component segments - ensure their entrance/exit pairs are properly set up
-  configure.outStream << "Initializing Component Segments..." << std::endl;
+  if(!(configure.paramMask & Config::USE_API))
+    configure.outStream << "Initializing Component Segments..." << std::endl;
   if(this->InitializeComponentSegments(compound,configure)==-1) return -1;
   
   return 0;
@@ -1604,8 +1609,10 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc,const Config& configure) {
 	    int ir=theCNuc->GetPairNumFromKey(segment->GetExitKey());
 	    if(ecLevel->GetECPairNum()==ir) {
 	      if(!usePrevious) {
+		if(!(configure.paramMask & Config::USE_API)) {
 		configure.outStream << "\tSegment #" << std::setw(12) << segmentKeyOut 
 		          << std::setw(0) << " [                         ] 0%";configure.outStream.flush();
+		}
 		int numPoints=segment->NumPoints();
 		int pointIndex=0;
 		time_t startTime = time(NULL);
@@ -1636,6 +1643,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc,const Config& configure) {
 			progress+='*';
 		      } else progress+=' ';
 		    } progress+="] ";
+		    if(!(configure.paramMask & Config::USE_API))
 		    configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut 
 					<< std::setw(0) << progress << percent*100 << '%';configure.outStream.flush();
 		  }
@@ -1645,6 +1653,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc,const Config& configure) {
 		  if(in.is_open()) in.close();
 		  return -1;
 		}
+		if(!(configure.paramMask & Config::USE_API))
 		configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut 
 				    << std::setw(0) << " [*************************] 100%" << std::endl;
 	      }
@@ -1711,7 +1720,8 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc,const Config& configure) {
 
 int EData::InitializeComponentSegments(CNuc *theCNuc, const Config& configure) {
   // Initialize all component segments with the same process as regular segments
-  configure.outStream << "Initializing Component Segments (" << componentSegments_.size() << " components)..." << std::endl;
+  if(!(configure.paramMask & Config::USE_API))
+    configure.outStream << "Initializing Component Segments (" << componentSegments_.size() << " components)..." << std::endl;
   
   // First, ensure entrance/exit pairs are properly set up in the compound nucleus
   for(auto& componentSegment : componentSegments_) {
@@ -1854,7 +1864,8 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config& configure) {
       // Append the component-segment integrals after the regular-segment ones.
       out.open(outputfile.c_str(), std::ios::app);
       if(!out) configure.outStream << "Could not append to EC Amplitude File." << std::endl;
-      configure.outStream << "Calculating EC Amplitudes for Component Segments..." << std::endl;
+      if(!(configure.paramMask & Config::USE_API))
+        configure.outStream << "Calculating EC Amplitudes for Component Segments..." << std::endl;
     }
     for(auto& componentSegment : componentSegments_) {
       int aa = theCNuc->GetPairNumFromKey(componentSegment.GetEntranceKey());
@@ -1869,8 +1880,10 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config& configure) {
                 if(!usePrevious) {
                   char segmentKeyOut[256];
                   snprintf(segmentKeyOut, sizeof(segmentKeyOut),"%d",componentSegment.GetSegmentKey());
+                  if(!(configure.paramMask & Config::USE_API)) {
                   configure.outStream << "\tSegment #" << std::setw(12) << segmentKeyOut
                                       << std::setw(0) << " [                         ] 0%";configure.outStream.flush();
+                  }
                   int numPoints=componentSegment.NumPoints();
                   int pointIndex=0;
                   time_t startTime = time(NULL);
@@ -1906,6 +1919,7 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config& configure) {
                           progress+='*';
                         } else progress+=' ';
                       } progress+="] ";
+                      if(!(configure.paramMask & Config::USE_API))
                       configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
                                           << std::setw(0) << progress << percent*100 << '%';configure.outStream.flush();
                     }
@@ -1915,6 +1929,7 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config& configure) {
                     if(in.is_open()) in.close();
                     return -1;
                   }
+                  if(!(configure.paramMask & Config::USE_API))
                   configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
                                       << std::setw(0) << " [*************************] 100%" << std::endl;
                 }

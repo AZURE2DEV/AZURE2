@@ -24,7 +24,14 @@
 #include <new>
 #include <cmath>
 
-bool AZUREAPI::Initialize( ){
+AZUREAPI::~AZUREAPI( ){
+  // A session used to be a process, so the OS reclaimed these; in-process the
+  // compound nucleus and its data are ~10 MB per model and must be returned.
+  if( compound_ != nullptr ) delete compound_;
+  if( data_ != nullptr ) delete data_;
+}
+
+int AZUREAPI::Initialize( ){
 
   // Initialize caches for performance
   InitializeCoulFuncCache();
@@ -51,9 +58,12 @@ bool AZUREAPI::Initialize( ){
     cacheFile = configure().outputdir + "intEC_cache.extrap";
   }
 
-  // FIXME: It crashes on Linux (but fine on Mac)
-  //if( compound_ != nullptr ) delete compound_;
-  //if( data_ != nullptr ) delete data_;
+  // Initialize() is called again on every mode switch, so the previous model
+  // has to go or it is leaked.  (This used to crash: the constructor left
+  // data_/compound_ uninitialized, so the first call deleted a garbage
+  // pointer.  They are null-initialized now.)  Same order as SetRadius.
+  if( compound_ != nullptr ) { delete compound_; compound_ = nullptr; }
+  if( data_ != nullptr ) { delete data_; data_ = nullptr; }
 
   data_ = new EData( );
   compound_ = new CNuc( );
