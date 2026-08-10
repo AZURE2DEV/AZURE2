@@ -84,25 +84,28 @@ else (BUILD_LIBRARY)
 add_executable (AZURE2 ${AZURE2_PROPERTIES} ${AZURE2_EXEC_SOURCES})
 endif (BUILD_LIBRARY)
 
-# AZUREAPI references the core engine, so it must appear before AZURE2Core on
-# the static link line for the linker to resolve its symbols.
-set(AZURE2_LINK_ORDER ${AZUREAPI_LIBRARIES} AZURE2Core)
-
-# Handle different linking for Windows cross-compilation
-if(CROSS_COMPILE_WINDOWS)
-    # For Windows, link normally and let CMake flags handle static/dynamic behavior
-    if(USE_NLOPT)
-        target_link_libraries (AZURE2 ${GSL_LIBRARIES} Minuit2::Minuit2 nlopt ${AZURESETUP_LIBRARIES} ${AZURE2_LINK_ORDER} ${EXTRA_LIBS})
-    else()
-        target_link_libraries (AZURE2 ${GSL_LIBRARIES} Minuit2::Minuit2 ${AZURESETUP_LIBRARIES} ${AZURE2_LINK_ORDER} ${EXTRA_LIBS})
-    endif()
-else()
-    if(USE_NLOPT)
-        target_link_libraries (AZURE2 ${GSL_LIBRARIES} Minuit2::Minuit2 nlopt ${AZURESETUP_LIBRARIES} ${AZURE2_LINK_ORDER} ${BLAS_LIBRARIES} ${EXTRA_LIBS})
-    else()
-        target_link_libraries (AZURE2 ${GSL_LIBRARIES} Minuit2::Minuit2 ${AZURESETUP_LIBRARIES} ${AZURE2_LINK_ORDER} ${BLAS_LIBRARIES} ${EXTRA_LIBS})
-    endif()
+# The engine's own dependencies, declared on the engine and PUBLIC so that
+# everything linking it -- the executable, the GUI, the Python module -- gets
+# them placed *after* it automatically.
+#
+# This has to be derived rather than hand-written.  A static archive only
+# supplies the symbols already demanded when the linker reaches it, so listing
+# Minuit2 or GSL before AZURE2Core leaves the engine's references to them
+# unresolved on GNU ld (Linux and MinGW).  macOS's linker rescans archives and
+# hides the mistake, which is why the hand-written order looked fine.
+target_link_libraries(AZURE2Core PUBLIC
+    Minuit2::Minuit2
+    ${GSL_LIBRARIES}
+    ${BLAS_LIBRARIES}
+    ${EXTRA_LIBS})
+if(USE_NLOPT)
+    target_link_libraries(AZURE2Core PUBLIC nlopt)
 endif()
+
+# AZURESetup (the GUI) calls into the engine, so it precedes it; AZUREAPI in
+# turn pulls AZURE2Core in as a PUBLIC dependency of its own.  Everything else
+# follows from the graph above.
+target_link_libraries(AZURE2 ${AZURESETUP_LIBRARIES} ${AZUREAPI_LIBRARIES} AZURE2Core)
 
 # Apply macOS bundle properties if building bundle
 if(BUILD_MACOS_BUNDLE AND APPLE AND DEFINED AZURE2_BUNDLE_PROPERTIES)

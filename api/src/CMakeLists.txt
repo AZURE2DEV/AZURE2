@@ -32,17 +32,10 @@ if(NOT pybind11_FOUND)
                     "so `pyazr` can drive AZURE2 in-process.")
 else()
     pybind11_add_module(_azure2 pybind_api.cpp)
-    target_link_libraries(_azure2 PRIVATE
-        AZUREAPI
-        AZURE2Core
-        ${GSL_LIBRARIES}
-        Minuit2::Minuit2
-        ${EXTRA_LIBS}
-        ${BLAS_LIBRARIES}
-        ${OpenMP_LIBRARIES})
-    if(USE_NLOPT)
-        target_link_libraries(_azure2 PRIVATE nlopt)
-    endif()
+    # AZUREAPI carries AZURE2Core, which carries the engine's own dependencies
+    # (Minuit2, GSL, BLAS, coul, OpenMP) in the right link order -- see
+    # src/CMakeLists.txt.  Repeating them here would only risk contradicting it.
+    target_link_libraries(_azure2 PRIVATE AZUREAPI)
 
     # Build directly into the pyazr package so ``import pyazr._azure2`` resolves
     # without any path fiddling.
