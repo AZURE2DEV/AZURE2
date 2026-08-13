@@ -106,9 +106,27 @@ MCMCTab::MCMCTab(QWidget* parent)
     : QWidget(parent), levelsTab_(nullptr), segmentsTab_(nullptr), 
       isRunning(false), stepOffset(0), mcmcCompletedSuccessfully(false)
 {
+    // The info system comes first: setupSamplingControls() and
+    // setupProgressControls() below add these buttons to their layouts, and a
+    // raw pointer array has no default constructor to null it.  Built after
+    // those calls, as it used to be, the "if(infoButton[n])" guards read
+    // indeterminate memory -- zero on most machines, so the buttons silently
+    // never appeared, and a non-zero pattern on others, which handed Qt a
+    // garbage QWidget* and segfaulted before the window was ever shown.
+    mapper = new QSignalMapper(this);
+    connect(mapper, SIGNAL(mapped(int)), this, SLOT(showInfo(int)));
+
+    for(int i = 0; i < 4; i++) {
+        infoDialog[i] = 0;
+        infoButton[i] = new QPushButton("?");
+        infoButton[i]->setMaximumSize(30, 30);
+        mapper->setMapping(infoButton[i], i);
+        connect(infoButton[i], SIGNAL(clicked()), mapper, SLOT(map()));
+    }
+
     // Create main layout
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
-    
+
     // Create tab widget for organization
     QTabWidget* tabWidget = new QTabWidget();
     
@@ -177,18 +195,6 @@ MCMCTab::MCMCTab(QWidget* parent)
     connect(loadButton, SIGNAL(clicked()), this, SLOT(loadFromPhysical()));
     connect(loadSavButton, SIGNAL(clicked()), this, SLOT(loadFromReduced()));
     // Note: runButton and stopButton are connected by AZURESetup, not here
-    
-    // Setup info system
-    mapper = new QSignalMapper(this);
-    connect(mapper, SIGNAL(mapped(int)), this, SLOT(showInfo(int)));
-    
-    for(int i = 0; i < 4; i++) {
-        infoDialog[i] = 0;
-        infoButton[i] = new QPushButton("?");
-        infoButton[i]->setMaximumSize(30, 30);
-        mapper->setMapping(infoButton[i], i);
-        connect(infoButton[i], SIGNAL(clicked()), mapper, SLOT(map()));
-    }
     
     reset();
 }

@@ -259,9 +259,23 @@ jobs:
 
           BASE=https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous
           PLUGIN=https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous
-          curl -fsSL -o linuxdeploy "$BASE/linuxdeploy-x86_64.AppImage"
-          curl -fsSL -o linuxdeploy-plugin-qt "$PLUGIN/linuxdeploy-plugin-qt-x86_64.AppImage"
+          RUNTIME=https://github.com/AppImage/type2-runtime/releases/download/continuous
+
+          # These are fetched from GitHub releases on every run, so a bad minute
+          # upstream fails the build with nothing wrong in the tree.  Retry
+          # rather than take the first 5xx as final.
+          fetch() { curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o "$1" "$2"; }
+
+          fetch linuxdeploy "$BASE/linuxdeploy-x86_64.AppImage"
+          fetch linuxdeploy-plugin-qt "$PLUGIN/linuxdeploy-plugin-qt-x86_64.AppImage"
           chmod +x linuxdeploy linuxdeploy-plugin-qt
+
+          # The appimage output plugin downloads this itself, unretried, at the
+          # very end of packaging -- a 503 there discards a build that has
+          # already compiled and passed its tests.  Fetch it up front and hand
+          # it over instead.
+          fetch runtime-x86_64 "$RUNTIME/runtime-x86_64"
+          export LDAI_RUNTIME_FILE="$PWD/runtime-x86_64"
 
           # The runner has no FUSE, so the AppImage tools have to be unpacked
           # rather than executed directly.
