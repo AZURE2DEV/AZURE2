@@ -521,14 +521,18 @@ void FittingTab::parameterItemChanged(QTableWidgetItem* item) {
         else if(col == 3) fittingParameters[paramIndex].upperLimit = value;
         else if(col == 4) {
             fittingParameters[paramIndex].error = value;
-            // Update the corresponding tab with the new error value
-            updateParameterInOtherTabs(paramName, fittingParameters[paramIndex]);
+            // The user edited the uncertainty itself, so write that column and
+            // nothing else: dataNormError (10) or energyShiftError (15).
+            const FittingParameter& p = fittingParameters[paramIndex];
+            writeSegmentColumn(p, p.category == "norm" ? 10 : 15, value);
         }
-        
+
     } else if(col == 6) { // Nuisance checkbox
         fittingParameters[paramIndex].useAsNuisance = (item->checkState() == Qt::Checked);
-        // Update the corresponding tab with the new useAsNuisance value
-        updateParameterInOtherTabs(paramName, fittingParameters[paramIndex]);
+        // Likewise, the user changed the fit freedom, so write only the vary
+        // column: varyNorm (11) or varyEnergyShift (16).
+        const FittingParameter& p = fittingParameters[paramIndex];
+        writeSegmentColumn(p, p.category == "norm" ? 11 : 16, p.useAsNuisance ? 1 : 0);
     }
 }
 
@@ -1454,6 +1458,20 @@ QString FittingTab::findMatchingParameterKey(const FittingParameter& param, cons
     return QString();
 }
 
+// Write one column of one segment, for the two fields that only a deliberate
+// user edit may change: the assumed systematic uncertainty and the vary flag.
+// Kept separate from updateParameterInOtherTabs so that propagating a value can
+// never carry either of them along with it.
+void FittingTab::writeSegmentColumn(const FittingParameter& param, int column, const QVariant& value) {
+    if(param.category != "norm" && param.category != "shift") return;
+    if(!segmentsTab_) return;
+    SegmentsDataModel* segmentsModel = segmentsTab_->getSegmentsDataModel();
+    if(!segmentsModel) return;
+    const int segmentIndex = param.channelIndex;   // segment index is stored in channelIndex
+    if(segmentIndex < 0 || segmentIndex >= segmentsModel->getLines().size()) return;
+    segmentsModel->setData(segmentsModel->index(segmentIndex, column), value, Qt::EditRole);
+}
+
 void FittingTab::updateParameterInOtherTabs(const QString& paramName, const FittingParameter& param) {
     if(!levelsTab_ || !segmentsTab_) return;
     
@@ -1522,29 +1540,20 @@ void FittingTab::updateParameterInOtherTabs(const QString& paramName, const Fitt
             // Use channelIndex which now stores the segment index
             int segmentIndex = param.channelIndex;
             
+            // Only the value.  The segment's uncertainty is the experimental
+            // systematic the user entered to constrain the normalization, and its
+            // vary flag is their choice of what the fit may move; neither is
+            // implied by a new value, so neither is written here.  Both have a
+            // single deliberate editing path -- the Segments tab dialog, and the
+            // Error / Nuisance cells of this tab, which write them directly (see
+            // parameterItemChanged) -- and nothing else may touch them.
             if(segmentIndex >= 0 && segmentIndex < segments.size()) {
-                QModelIndex index;
-                
                 if(param.category == "norm") {
-                    // Update dataNorm column (column 9)
-                    index = segmentsModel->index(segmentIndex, 9);
-                    segmentsModel->setData(index, param.value, Qt::EditRole);
-                    // Also update dataNormError column (column 10)
-                    QModelIndex errorIndex = segmentsModel->index(segmentIndex, 10);
-                    segmentsModel->setData(errorIndex, param.error, Qt::EditRole);
-                    // Update varyNorm column (column 11) based on useAsNuisance
-                    QModelIndex varyIndex = segmentsModel->index(segmentIndex, 11);
-                    segmentsModel->setData(varyIndex, param.useAsNuisance ? 1 : 0, Qt::EditRole);
+                    // dataNorm column (column 9)
+                    segmentsModel->setData(segmentsModel->index(segmentIndex, 9), param.value, Qt::EditRole);
                 } else if(param.category == "shift") {
-                    // Update energyShift column (column 14)
-                    index = segmentsModel->index(segmentIndex, 14);
-                    segmentsModel->setData(index, param.value, Qt::EditRole);
-                    // Also update energyShiftError column (column 15)
-                    QModelIndex errorIndex = segmentsModel->index(segmentIndex, 15);
-                    segmentsModel->setData(errorIndex, param.error, Qt::EditRole);
-                    // Update varyEnergyShift column (column 16) based on useAsNuisance
-                    QModelIndex varyIndex = segmentsModel->index(segmentIndex, 16);
-                    segmentsModel->setData(varyIndex, param.useAsNuisance ? 1 : 0, Qt::EditRole);
+                    // energyShift column (column 14)
+                    segmentsModel->setData(segmentsModel->index(segmentIndex, 14), param.value, Qt::EditRole);
                 }
             }
         }

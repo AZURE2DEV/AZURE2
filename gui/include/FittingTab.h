@@ -85,6 +85,7 @@ class FittingTab : public QWidget {
   void syncSegmentVaryStates();
   void assignMinuitIndices();
   void updateParameterInOtherTabs(const QString& paramName, const FittingParameter& param);
+  void writeSegmentColumn(const FittingParameter& param, int column, const QVariant& value);
   void updateParameterTableValue(const QString& paramName, double value);
   void updateParameterTableError(const QString& paramName, double error);
   void updateParameterTableCheckbox(const QString& paramName, bool checked);
