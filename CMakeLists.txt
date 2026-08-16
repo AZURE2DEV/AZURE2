@@ -39,6 +39,14 @@ option(BUILD_GUI "Build AZURE2 with graphical setup program" ON)
 option(USE_STAT "Use stat() function (not for Windows)" ON)
 option(USE_QWT "Use Qwt to build Plot tab." ON)
 option(USE_API "Use API version." ON)
+if(USE_API)
+    # The _azure2 pybind11 module (api/src/CMakeLists.txt) is a shared object
+    # that statically links AZUREAPI plus its dependencies (AZURE2Core,
+    # Minuit2, coul). All of those must be position-independent for the
+    # link to succeed, so default every target to PIC before their
+    # subdirectories are added.
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
 option(USE_READLINE "Use Readline library for CLI input." ON)
 option(USE_ERYA "Use ERYA SRIM stopping power utilities." ON)
 option(USE_MCMC "Use MCMC Bayesian sampling OFF" ON)
