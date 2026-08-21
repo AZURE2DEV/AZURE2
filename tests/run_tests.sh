@@ -18,6 +18,11 @@
 # vectorise and contract differently, and libm results differ in the last bits --
 # while still catching a real physics regression, which moves chi-squared by
 # far more than a tenth of a percent.
+#
+# A project whose numbers are legitimately less reproducible than that can put
+# its own relative tolerance in tests/<name>/tolerance, one number, which
+# overrides TOL for that project alone. Use it only with a reason written next
+# to it: the point of the suite is that the numbers do not move.
 
 set -uo pipefail
 
@@ -64,12 +69,24 @@ for project_dir in "$REPO_ROOT"/tests/*/; do
   name="$(basename "$project_dir")"
   expected="$project_dir/expected/chiSquared.out"
 
+  # Per-project tolerance, if it declares one.  Blank lines and # comments are
+  # allowed so the reason can live in the file.
+  project_tol="$TOL"
+  if [ -f "$project_dir/tolerance" ]; then
+    project_tol="$(grep -vE '^[[:space:]]*(#|$)' "$project_dir/tolerance" | head -1 | tr -d '[:space:]')"
+    if [ -z "$project_tol" ]; then
+      echo "  WARNING: $name/tolerance holds no number; using $TOL"
+      project_tol="$TOL"
+    fi
+  fi
+
   if [ ! -f "$expected" ]; then
     echo "SKIP $name: no expected/chiSquared.out"
     continue
   fi
 
   echo "=== $name ==="
+  [ "$project_tol" = "$TOL" ] || echo "  (tolerance $project_tol, from $name/tolerance)"
 
   # The .azr stores output/, checks/ and data paths relative to itself, so the
   # run has to happen from the project directory.
@@ -101,7 +118,7 @@ for project_dir in "$REPO_ROOT"/tests/*/; do
   # Compare the total, the per-segment chi-squared, and the per-segment point
   # counts. The point counts are integers and must match exactly: a change there
   # means data was dropped or misread, not a rounding difference.
-  if awk -v tol="$TOL" '
+  if awk -v tol="$project_tol" '
     function relerr(a, b) { return (b == 0) ? ((a == 0) ? 0 : 1) : ((a - b) / b < 0 ? -(a - b) / b : (a - b) / b) }
     FNR == NR {
       if ($0 ~ /^Total-Chi-Squared:/) { split($0, t, " "); exp_total = t[2]; next }

@@ -50,6 +50,15 @@ number discriminates three ways:
 | the per-pair override ignored, default used | the `V0 = 40` answer |
 | the hybrid model not reaching the CLI at all | 4.3549e6 |
 
+## Tolerance
+
+This project carries its own `tolerance` file (2e-2) instead of the suite's
+default 1e-3, because the hybrid model's Numerov integration is far more
+floating-point sensitive than the plain Coulomb path -- the same compiler at
+`-O0` instead of `-O3` moves segment 2 by 1.1e-3, and the CI runners spread to
+2.2e-3, while `13N` moves by 3e-6 under the same comparison. The reasoning and
+the measurements are written out in `tolerance` itself.
+
 ## check_per_pair.py
 
 One project yields one number, which cannot show that the *per-pair* rules are

@@ -1,0 +1,27 @@
+# Relative tolerance on chi-squared for this project, overriding the suite's
+# default of 1e-3.
+#
+# The hybrid model integrates the radial wave functions outward through the
+# nuclear potential by Numerov -- some 545 steps of dr = 0.0275 fm out to the
+# 15 fm matching radius -- and then matches to the Coulomb functions. That
+# accumulates far more floating-point sensitivity than the plain Coulomb path,
+# which libm computes in one go: the same compiler on the same machine, built
+# -O0 instead of -O3, moves this project's segment 2 by 1.1e-3 and its total by
+# 6.9e-4, while 13N and 13N_capture_ay move by 3e-6 under the same comparison.
+#
+# 1e-3 therefore pins nothing but the toolchain that recorded the reference,
+# which is how this test failed on all three CI platforms while passing on the
+# machine it was written on.
+#
+# 2e-2 is chosen against what the test actually has to catch, all of which are
+# an order of magnitude larger than the noise:
+#
+#     correct (pair 1 overrides the default with V0 = 20)   3.6598e6
+#     the per-pair override ignored, default V0 = 40 used   4.1257e6   +12.7%
+#     the hybrid model not reaching the CLI at all          4.3549e6   +19.0%
+#
+# So: ~18x above the observed numerical spread, ~6x below the smallest real
+# regression. Widen it only with a measurement, not a guess -- and if a change
+# ever needs it widened past a few percent, the right answer is a less
+# sensitive test project, not a looser bound.
+2e-2
