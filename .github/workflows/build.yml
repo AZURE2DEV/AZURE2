@@ -195,12 +195,12 @@ jobs:
             exit 1
           fi
 
-      # The physics suite drives the engine, never the widgets, so a GUI
-      # regression passes straight through it -- the Nuclear Potential tab
-      # once shipped with a selector that could never list a channel. These
-      # drive the widgets directly and need no display.
-      - name: GUI tests
-        run: ctest --test-dir build --output-on-failure -R nuclear_potential_tab
+      # Everything the physics suite cannot see, because it drives the engine
+      # and nothing else: the GUI widgets (the Nuclear Potential tab once
+      # shipped with a selector that could never list a channel) and the .azr
+      # round-trip. Neither needs a display.
+      - name: Unit tests
+        run: ctest --test-dir build --output-on-failure
 
       # Keeps the whole picture -- every project's run.log and the chi-squared
       # it produced -- for a failure the annotations above do not explain.

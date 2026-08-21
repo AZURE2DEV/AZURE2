@@ -27,6 +27,7 @@ which the ``S`` / ``L`` properties convert.
 """
 
 import os
+import re
 import tempfile
 from typing import List, Optional
 
@@ -39,6 +40,11 @@ _FIELDS = [
 ]
 _IDX = {name: i for i, name in enumerate(_FIELDS)}
 _NFIELDS = len(_FIELDS)
+
+
+def _token_spans(line):
+    """(start, end) of every whitespace-separated token in ``line``."""
+    return [m.span() for m in re.finditer(r"\S+", line)]
 
 
 def _isnum(tok):
@@ -61,17 +67,21 @@ def _fmt(x):
 class AzrChannel:
     """One channel line (31 fields).  Level fields are shared by a level's lines.
 
-    Stores the raw string tokens so untouched channels round-trip exactly;
-    typed accessors parse on demand and mutators re-format only the field they
-    change.
+    Keeps the line exactly as it was read, so an untouched channel round-trips
+    byte for byte; typed accessors parse on demand and mutators rewrite only the
+    field they change, in place, keeping the column the file had it in.
     """
 
-    def __init__(self, tokens):
+    def __init__(self, tokens, raw=None):
         if len(tokens) != _NFIELDS:
             raise ValueError(
                 f"a <levels> line needs {_NFIELDS} fields, got {len(tokens)}: "
                 f"{tokens}")
         self.tokens = list(tokens)
+        #: The line as read, or None for a channel built from tokens alone.
+        self._raw = raw
+        #: Field names whose token no longer matches ``_raw``.
+        self._dirty = set()
 
     # -- typed field access ---------------------------------------------------
 
@@ -79,7 +89,11 @@ class AzrChannel:
         return cast(self.tokens[_IDX[name]])
 
     def _set(self, name, value):
-        self.tokens[_IDX[name]] = _fmt(value)
+        formatted = _fmt(value)
+        if self.tokens[_IDX[name]] == formatted:
+            return                      # unchanged: do not disturb the raw line
+        self.tokens[_IDX[name]] = formatted
+        self._dirty.add(name)
 
     # channel identity
 
@@ -241,17 +255,43 @@ class AzrChannel:
         self._set("levelID", int(level_id))
 
     def clone(self):
-        """A copy of this channel line, sharing nothing with the original."""
-        return AzrChannel(self.tokens)
+        """A copy of this channel line, sharing nothing with the original.
+
+        The raw line comes with it, so a cloned channel whose couplings are then
+        changed keeps the column layout of the one it was cloned from.
+        """
+        copy = AzrChannel(self.tokens, self._raw)
+        copy._dirty = set(self._dirty)
+        return copy
 
     def to_line(self):
-        """The channel as its whitespace-separated .azr line."""
-        return " ".join(self.tokens)
+        """The channel as one line of the ``<levels>`` block.
+
+        An untouched line is returned exactly as it was read.  An edited one is
+        the same line with the changed fields substituted in place, right
+        aligned in the width the file used, so a single edit does not reflow the
+        whole block.  A channel with no raw line behind it -- built from tokens,
+        not parsed -- falls back to single spaces.
+        """
+        if self._raw is None:
+            return " ".join(self.tokens)
+        if not self._dirty:
+            return self._raw
+        spans = _token_spans(self._raw)
+        if len(spans) != _NFIELDS:      # not the line we parsed; do not guess
+            return " ".join(self.tokens)
+        out = self._raw
+        for name in sorted(self._dirty, key=lambda n: -_IDX[n]):
+            start, end = spans[_IDX[name]]
+            new = self.tokens[_IDX[name]]
+            width = end - start
+            out = out[:start] + (new.rjust(width) if len(new) <= width else new) + out[end:]
+        return out
 
     @classmethod
     def from_line(cls, line):
-        """Parse one .azr channel line."""
-        return cls(line.split())
+        """Parse one .azr channel line, keeping it verbatim for round-tripping."""
+        return cls(line.split(), raw=line)
 
 
 class AzrLevel:
