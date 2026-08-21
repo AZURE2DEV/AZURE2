@@ -67,6 +67,9 @@ struct MCMCParameter {
   int channelIndex = -1;
 };
 
+/*!
+ * The MCMC tab: walkers, steps and priors for a Bayesian sampling run, and the live log while it runs.
+ */
 class MCMCTab : public QWidget {
   Q_OBJECT
 

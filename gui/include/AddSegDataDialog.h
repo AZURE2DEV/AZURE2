@@ -17,6 +17,9 @@ class QLabel;
 
 QT_END_NAMESPACE
 
+/*!
+ * Dialog for adding or editing one data segment, including the sum/ratio components of a composite one.
+ */
 class AddSegDataDialog : public QDialog {
   Q_OBJECT
 

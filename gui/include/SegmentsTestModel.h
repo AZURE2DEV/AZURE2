@@ -26,6 +26,9 @@ struct SegmentsTestData {
   QString componentsList;
 };
 
+/*!
+ * Table model for <segmentsTest> -- energy and angle grids evaluated without data.
+ */
 class SegmentsTestModel : public QAbstractTableModel {
   Q_OBJECT
 

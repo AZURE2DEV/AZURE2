@@ -35,6 +35,9 @@ struct SegmentsDataData {
   double delta;
 };
 
+/*!
+ * Table model for <segmentsData> -- the segments that carry a data file and contribute to chi-squared.
+ */
 class SegmentsDataModel : public QAbstractTableModel {
   Q_OBJECT
 

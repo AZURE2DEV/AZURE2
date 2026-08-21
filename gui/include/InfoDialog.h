@@ -3,6 +3,9 @@
 
 #include <QDialog>
 
+/*!
+ * Per-tab help shown by the info button.
+ */
 class InfoDialog : public QDialog {
   Q_OBJECT
 

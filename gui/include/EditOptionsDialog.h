@@ -14,6 +14,9 @@ QT_END_NAMESPACE
 
 QT_END_NAMESPACE
 
+/*!
+ * Dialog for the Runtime Options -- the formalism switches that become the paramMask bits.
+ */
 class EditOptionsDialog : public QDialog {
   Q_OBJECT
 

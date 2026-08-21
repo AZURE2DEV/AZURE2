@@ -111,6 +111,9 @@ class PlotEntry {
   QVector<PlotPoint> points_;
 };
 
+/*!
+ * The Qwt plot itself: draws the AZUREOut_* files a run produced, with zooming and a cursor readout.
+ */
 class AZUREPlot : public QwtPlot {
   Q_OBJECT
 

@@ -20,6 +20,9 @@ QT_END_NAMESPACE
 
 class InfoDialog;
 
+/*!
+ * The Particle Pairs tab: the pairs of the compound nucleus, and the source every other tab takes its pair list from.
+ */
 class PairsTab : public QWidget {
   Q_OBJECT
 

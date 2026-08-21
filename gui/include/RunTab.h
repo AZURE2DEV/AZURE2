@@ -21,6 +21,9 @@ class QCheckBox;
 
 QT_END_NAMESPACE
 
+/*!
+ * The Run tab: which calculation to perform, which parameter and external-capture files to start from, and the uncertainty-band options.
+ */
 class RunTab : public QWidget {
   Q_OBJECT
 

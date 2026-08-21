@@ -5,6 +5,9 @@
 
 #include <iostream>
 
+/*!
+ * Read-only text view used for run output, with mouse interaction optionally filtered out so it cannot steal focus mid-run.
+ */
 class FilteredTextEdit : public QTextEdit {
   Q_OBJECT
 

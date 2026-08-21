@@ -18,6 +18,9 @@
 class InfoDialog;
 class PairsModel;
 
+/*!
+ * The Segments tab: the data segments the fit runs against and the test segments an extrapolation is evaluated on, held in two separate models.
+ */
 class SegmentsTab : public QWidget {
   Q_OBJECT
 

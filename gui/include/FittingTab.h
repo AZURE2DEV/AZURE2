@@ -45,6 +45,11 @@ class QCheckBox;
 
 QT_END_NAMESPACE
 
+/*!
+ * The Fitting tab: the parameter list Minuit will minimize, and its results.
+ *
+ * The tables mirror the level scheme, so they are rebuilt whenever the levels or pairs change; refreshFromMinuitParameters brings the fitted values back afterwards.
+ */
 class FittingTab : public QWidget {
   Q_OBJECT
 

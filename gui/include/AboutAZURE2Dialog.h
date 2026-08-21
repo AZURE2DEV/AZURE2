@@ -6,6 +6,9 @@
 QT_BEGIN_NAMESPACE
 QT_END_NAMESPACE
 
+/*!
+ * The About box.
+ */
 class AboutAZURE2Dialog : public QDialog {
   Q_OBJECT
 

@@ -88,6 +88,9 @@ class CurveStyleDialog : public QDialog {
   QSpinBox *lineWidthSpin_;
 };
 
+/*!
+ * The Plot tab: chooses which calculated reactions to draw, filtered by entrance and exit pair.
+ */
 class PlotTab : public QWidget {
   Q_OBJECT
 

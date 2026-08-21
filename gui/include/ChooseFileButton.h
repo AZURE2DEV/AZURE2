@@ -6,6 +6,9 @@
 #include <QLineEdit>
 #include <QString>
 
+/*!
+ * Push button that opens a file dialog and writes the chosen path into an associated line edit.
+ */
 class ChooseFileButton : public QPushButton {
   Q_OBJECT;
 

@@ -5,6 +5,9 @@
 
 class QPainter;
 
+/*!
+ * Item delegate that renders a cell's rich text -- the superscripts and subscripts the pair and channel labels use.
+ */
 class RichTextDelegate : public QStyledItemDelegate {
  protected:
   void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const;

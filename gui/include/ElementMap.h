@@ -4,6 +4,8 @@
 #include <QString>
 #include <map>
 
+/// Charge number to element symbol, indexed from Z = 0 ("n") upwards, so that
+/// elements[Z].second is the symbol.  Used to label particle pairs and levels.
 static const std::pair<int, QString> elements[] = {
     std::pair<int, QString>(0, "n"),
     std::pair<int, QString>(1, "H"),

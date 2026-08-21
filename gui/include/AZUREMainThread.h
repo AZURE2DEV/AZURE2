@@ -54,6 +54,9 @@ class AZUREMainThreadWorker : public QObject {
   AZUREMain azureMain_;
 };
 
+/*!
+ * Runs a calculation off the GUI thread, so a long fit does not freeze the window. Owns its own Config copy.
+ */
 class AZUREMainThread : public QThread {
   Q_OBJECT
  public:

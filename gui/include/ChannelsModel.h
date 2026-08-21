@@ -17,6 +17,9 @@ struct ChannelsData {
 
 class PairsModel;
 
+/*!
+ * Table model for the channels of the selected level: pair, l, s and the reduced width or ANC.
+ */
 class ChannelsModel : public QAbstractTableModel {
   Q_OBJECT
 

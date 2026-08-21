@@ -14,6 +14,9 @@ class QPushButton;
 
 QT_END_NAMESPACE
 
+/*!
+ * Dialog for adding or editing one particle pair.
+ */
 class AddPairDialog : public QDialog {
   Q_OBJECT
 

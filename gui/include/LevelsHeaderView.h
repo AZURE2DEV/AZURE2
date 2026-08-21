@@ -4,6 +4,9 @@
 #include <QHeaderView>
 #include <QMouseEvent>
 
+/*!
+ * Header for the levels table that lets a column be clicked to toggle every fixed flag in it.
+ */
 class LevelsHeaderView : public QHeaderView {
  public:
   LevelsHeaderView(Qt::Orientation orientation, QWidget *parent) :

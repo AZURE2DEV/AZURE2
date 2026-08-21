@@ -11,6 +11,9 @@ class QLabel;
 
 QT_END_NAMESPACE
 
+/*!
+ * Dialog for adding or editing one level.
+ */
 class AddLevelDialog : public QDialog {
   Q_OBJECT
 

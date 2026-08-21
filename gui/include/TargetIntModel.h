@@ -29,6 +29,9 @@ struct TargetIntData {
   double pointsPerWidth;
 };
 
+/*!
+ * Table model behind the Target Integration tab.
+ */
 class TargetIntModel : public QAbstractTableModel {
   Q_OBJECT
 

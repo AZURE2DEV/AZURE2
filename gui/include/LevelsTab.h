@@ -20,6 +20,9 @@
 
 class InfoDialog;
 
+/*!
+ * The Levels tab: the level scheme, and the channels each J^pi group carries. Channels are derived from the levels and the pair list rather than entered directly.
+ */
 class LevelsTab : public QWidget {
   Q_OBJECT
 

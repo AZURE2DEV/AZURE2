@@ -10,6 +10,9 @@
 
 class QTextEdit;
 
+/*!
+ * A std::streambuf that appends to a QTextEdit, so the engine's output stream can be shown in the window unchanged.
+ */
 class TextEditBuffer : public QWidget, public std::streambuf {
   Q_OBJECT
 
