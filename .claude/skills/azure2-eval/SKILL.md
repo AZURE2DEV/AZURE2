@@ -18,9 +18,9 @@ repo); pyazr resolves it via `$AZURE2_BINARY` → `<repo>/build/src/AZURE2` →
 `$PATH`, so `binary=` is usually unnecessary. **The two can drift**:
 `/usr/local/bin/AZURE2` is a copy, not a symlink, so a `make AZURE2` in the
 source repo does not reach it — `sudo cp build/src/AZURE2 /usr/local/bin/` after
-every rebuild, or export `$AZURE2_BINARY`. `pyazr/` lives at the repo root
-(`/Users/kuba/Desktop/R-Matrix/Codes/AZURE2/pyazr`, v2.3.0) and is mirrored into
-evaluation directories, so `from pyazr import ...` works when cwd is either.
+every rebuild, or export `$AZURE2_BINARY`. `pyazr/` lives at the repo root and is mirrored into evaluation directories, so
+`from pyazr import ...` works when cwd is either. Its version is
+`pyazr.__version__`; do not assume one.
 
 Full reference docs: `docs/_build/html/_sources/` — `reference/` covers
 command_line, data_formats, output_files; `user_guide/` covers levels_channels,
@@ -171,45 +171,47 @@ m.datasets.sys_errors(vary_only=True)   # per-segment normalization systematics 
 A `LevelKey` prints as `5/2-#2@6.588MeV`; `(jgroup, level)` is its identity
 (AZURE2 restarts level numbering inside every J-group).
 
-### χ², residuals, per-dataset χ²
+### χ², residuals, and AZURE2's objective
 
 ```python
-chi2  = np.sum(m.calculate_chi2_rwa(x))     # total only
+chi2   = np.sum(m.calculate_chi2_rwa(x))    # total DATA chi-squared
 val, g = m.chi2_and_grad(x)                 # analytic gradient (energies/widths/norms)
 r, J   = m.residual_jacobian(x)             # r_i standardized: sum(r**2) == chi2
+
+m.segment_chi2(x)      # one entry per <segmentsData> segment; sums to chi2
+m.dataset_chi2(x)      # {name: (chi2, points, segments)} -- per experiment
+m.penalties(x)         # {"norm": array, "shift": array}, per segment
+m.objective(x)         # chi2 + penalties: what AZURE2's own fit minimizes
 ```
 
 `residual_jacobian` costs ~2 forward evaluations for the whole Jacobian
-(reverse-mode adjoint) — use it for Gauss-Newton/LM fits *and* to get the
-**per-segment χ² the API does not expose**:
+(reverse-mode adjoint) — that is what makes a Gauss-Newton / LM fit in Python
+cheaper than Minuit's numerical gradients. Energy-shift columns come back zero;
+an analytically unsupported segment raises.
+
+**Fit against `objective`, not `calculate_chi2_rwa`.** The latter is the *data*
+χ² only. `AZURECalc::operator()` also adds, per segment,
+`((norm − nominal)/(nominal/100 · norm_error))²` and, for a free energy shift,
+`((shift − nominal)/shift_error)²`. Minimize the bare χ² and the normalizations
+drift to absorb every discrepancy — a "better" number AZURE2 would never have
+found (−480 on the 7Be model). Note the denominator uses the **nominal**
+normalization, and that `norm_error` is a **percentage**.
+
+`m.objective(x)` is exactly what `chiSquared.out` reports as
+`Total-Chi-Squared` + `Total-Norm-Chi-Squared`; `tests/pyazr/objective_test.py`
+cross-checks it against the engine rather than against the formula.
+
+For a least-squares fit that needs the penalties as residual *rows* (so LM sees
+their Jacobian), append them with their constant derivatives:
 
 ```python
-seglens = [len(m.energies[i]) for i in range(m.nsegments)]   # data mode
-idx = np.cumsum([0] + seglens)
-seg_chi2 = np.array([np.sum(r[idx[i]:idx[i+1]]**2) for i in range(m.nsegments)])
-# aggregate by experiment: m.datasets[i].name
-```
-
-Energy-shift columns come back zero; an analytically unsupported segment raises.
-
-**`chi2`/`residual_jacobian` are the DATA χ² only.** AZURE2's own fit objective
-(`AZURECalc::operator()`) also carries a penalty per free normalization,
-`((norm − nominal)/(nominal·sys_err))²`, and one per free energy shift. Minimize
-the API's residuals alone and the norms drift to absorb every discrepancy — a
-"better" χ² that AZURE2 would never have found (−480 on the 7Be model). Append
-the penalty rows, with their constant Jacobian rows:
-
-```python
-pen = [(p.free_index, d.norm, d.norm * d.norm_error / 100.0)
+pen = [(p.free_index, d.norm, d.norm / 100.0 * d.norm_error)
        for p in m.parameters.norms
-       for d in [m.datasets[p.segment_key - 1]] if d.norm_error > 0]
+       for d in [m.datasets.by_key(p.segment_key)] if d.norm_error > 0]
 Jpen = np.zeros((len(pen), nfree))
 for k, (fi, _, s) in enumerate(pen): Jpen[k, fi] = 1.0 / s
-resid = np.concatenate([r, [(z[fi] - n0)/s for fi, n0, s in pen]])
+resid = np.concatenate([r, [(z[fi] - n0) / s for fi, n0, s in pen]])
 ```
-
-`chiSquared.out`'s `Total-Chi-Squared` is likewise the data part; the penalty is
-the separate `Total-Norm-Chi-Squared`.
 
 ### Calculating observables
 
@@ -515,9 +517,25 @@ penalty rows, the dead-column filter and the exception guard already in place.
 
 ## Fitting from Python
 
-Minuit (CLI mode 2) fits everything free in the `.azr`. For evaluation work you
-usually want to fit a **subset** at frozen everything-else, which pyazr does with
-`scipy.optimize.least_squares` and the analytic Jacobian:
+**pyazr does not fit.** It gives you the model, the χ², the objective and an
+analytic Jacobian; the minimizer is yours. That is deliberate rather than a
+gap: `residual_jacobian` returns the whole Jacobian for ~2 forward evaluations
+(reverse-mode adjoint), which beats Minuit's numerical gradients on this
+problem, and binding `MnMigrad`/`MnMinos` would mean mirroring AZURE2's
+objective, parameter limits and Wigner bounds inside the API — two "AZURE2
+fits" that can silently disagree. The CLI (modes 2 and 4) remains the reference
+implementation.
+
+Two things a hand-rolled fit must do to match AZURE2:
+
+- **Minimize `m.objective(x)`**, not `calculate_chi2_rwa` — see the χ² section
+  above. Bare χ² lets the normalizations absorb everything.
+- **Respect the Wigner limits** if you care about them; `m.wigner_widths()`
+  gives the bound per channel. The engine's `ParameterLimitsManager` enforces
+  them, a Python fit will not unless you add them as bounds.
+
+`scipy.optimize.least_squares` with the analytic Jacobian, fitting a **subset**
+at frozen everything-else — the usual evaluation move:
 
 ```python
 from scipy.optimize import least_squares
@@ -538,13 +556,19 @@ sol = least_squares(resid, best[fit], jac=jac, method="lm",
 x = np.array(best, float); x[fit] = sol.x
 ```
 
+For asymmetric (MINOS-style) errors, point `iminuit` at `m.objective` and
+`m.chi2_and_grad` — it gives you `minos()` against the same objective the CLI
+uses, without a second implementation of it inside AZURE2.
+
 Fit in **rwa space** (that is where the Jacobian is exact) and convert for
 reporting with `transform_rwa`. Free the relevant normalizations too
-(`m.parameters.norms`, `p.segment_key - 1` indexes `m.datasets`) when a subset
-fit would otherwise be absorbed by them.
+(`m.parameters.norms`; `m.datasets.by_key(p.segment_key)` is the segment) when
+a subset fit would otherwise be absorbed by them.
 
 Sanity-check the fit space: `transform_rwa(best[:nR])[p.free_index]` must equal
 `p.value` for every width.
+
+Save the result with `m.save_fit("fitted.azr", x)` — see the editing section.
 
 For MCMC, `pyazr/examples/fit_emcee.py` and `fit_zeus.py` show the pattern —
 one in-process engine per pool worker (constructed at module level), priors

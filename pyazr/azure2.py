@@ -848,6 +848,96 @@ class azure2:
         """As calculate_chi2_rwa, taking the physical parameter vector instead."""
         return [float(self.sess.calculate_chi2_physical(params))]
 
+    # -- chi-squared, per segment and per dataset -----------------------------
+
+    def segment_chi2(self, params=None):
+        """Chi-squared per data segment, in ``<segmentsData>`` order.
+
+        ``calculate_chi2_rwa`` returns only the total, but the standardized
+        residuals carry the split: they come back in segment order, so summing
+        their squares between the segment boundaries recovers each one.  The
+        sum of this equals ``calculate_chi2_rwa`` exactly.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        r = np.asarray(self.residual_jacobian(x)[0], float)
+        edges = np.cumsum([0] + [len(self.energies[i]) for i in range(self.nsegments)])
+        return np.array([float(np.sum(r[edges[i]:edges[i + 1]] ** 2))
+                         for i in range(self.nsegments)])
+
+    def dataset_chi2(self, params=None):
+        """Chi-squared per *dataset*, which is how a fit is usually judged.
+
+        An experiment often owns several segments -- one per angle, or one per
+        final state -- so the per-segment split is finer than the question
+        being asked.  Returns ``{name: (chi2, points, segments)}`` keyed by the
+        data file's name, in first-appearance order.
+        """
+        seg = self.segment_chi2(params)
+        out = {}
+        for i in range(self.nsegments):
+            name = self.datasets[i].name
+            chi2, n, k = out.get(name, (0.0, 0, 0))
+            out[name] = (chi2 + float(seg[i]), n + len(self.energies[i]), k + 1)
+        return out
+
+    # -- AZURE2's own objective -----------------------------------------------
+
+    def penalties(self, params=None):
+        """The prior terms AZURE2 adds to chi-squared, per segment.
+
+        ``AZURECalc::operator()`` does not minimize the data chi-squared alone.
+        For every segment it also adds
+
+            ((norm - nominal) / (nominal/100 * norm_error))^2
+
+        and, for a segment whose energy shift is free,
+
+            ((shift - nominal_shift) / shift_error)^2
+
+        Minimize the bare chi-squared instead and the normalizations drift to
+        absorb every discrepancy -- a "better" number AZURE2 would never have
+        found, worth -480 on the 7Be model.  Roll your own Minuit or
+        least-squares fit against :meth:`objective`, not
+        :meth:`calculate_chi2_rwa`.
+
+        Note the denominator uses the *nominal* normalization, and that
+        ``norm_error`` is a percentage.  Returns ``{"norm": array, "shift":
+        array}``, one entry per segment.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        norm = np.zeros(self.nsegments)
+        shift = np.zeros(self.nsegments)
+        current = {p.segment_key: p for p in self.parameters.norms}
+        shifting = {p.segment_key: p for p in self.parameters.shifts}
+        for i in range(self.nsegments):
+            d = self.datasets[i]
+            p = current.get(d.key)
+            value = (float(x[p.free_index])
+                     if p is not None and not p.fixed and p.free_index is not None
+                     and p.free_index < x.size else d.norm)
+            sigma = d.norm / 100.0 * d.norm_error
+            if sigma:
+                norm[i] = ((value - d.norm) / sigma) ** 2
+            if d.vary_shift and d.energy_shift_error:
+                q = shifting.get(d.key)
+                sval = (float(x[q.free_index])
+                        if q is not None and not q.fixed and q.free_index is not None
+                        and q.free_index < x.size else d.energy_shift)
+                shift[i] = ((sval - d.energy_shift) / d.energy_shift_error) ** 2
+        return {"norm": norm, "shift": shift}
+
+    def objective(self, params=None):
+        """What AZURE2's own fit minimizes: chi-squared plus the penalties.
+
+        This is the number to hand a minimizer.  ``chiSquared.out`` reports the
+        two halves separately, as ``Total-Chi-Squared`` and
+        ``Total-Norm-Chi-Squared``.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        pen = self.penalties(x)
+        return (float(np.sum(self.calculate_chi2_rwa(x)))
+                + float(np.sum(pen["norm"])) + float(np.sum(pen["shift"])))
+
     def chi2_and_grad(self, params):
         """Value and analytic gradient of the (data) chi-squared.
 

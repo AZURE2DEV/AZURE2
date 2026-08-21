@@ -23,3 +23,10 @@ add_test(NAME pyazr_channel_order
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/channel_order_test.py)
 set_tests_properties(pyazr_channel_order PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Per-segment / per-dataset chi-squared, and AZURE2's own objective -- the
+# penalty is cross-checked against the engine's Total-Norm-Chi-Squared.
+add_test(NAME pyazr_objective
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/objective_test.py)
+set_tests_properties(pyazr_objective PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
