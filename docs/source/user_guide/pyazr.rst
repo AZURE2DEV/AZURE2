@@ -388,7 +388,7 @@ solution through a nuclear potential (the hybrid model of the
 the external region.
 
 The hybrid nuclear potential, per particle pair
-----------------------------------------------
+-----------------------------------------------
 
 A nuclear potential belongs to a **particle pair**: it bends the radial wave
 functions of that channel and no other. Each pair therefore carries its own

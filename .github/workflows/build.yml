@@ -302,6 +302,78 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  # The Windows build of the newest dev commit, behind a stable download link.
+  #
+  # The matrix already uploads dist/ as a run artifact, but that is only
+  # reachable by a signed-in GitHub user, from the run page, and it expires with
+  # the run's retention. Windows users want a URL they can just click, so the
+  # same package is also published to a rolling pre-release whose tag is moved
+  # to each new dev commit:
+  #
+  #   https://github.com/AZURE2DEV/AZURE2/releases/download/continuous-windows/AZURE2-windows-x86_64.zip
+  #
+  # It is a pre-release on purpose: it is whatever dev currently builds, not a
+  # version anyone should cite. Tagged releases still go through the draft
+  # release below, untouched by this.
+  continuous-windows:
+    # !cancelled() rather than plain success(): needs waits for the whole
+    # matrix, so without it a macOS breakage -- Homebrew's qt@5 is deprecated
+    # and will be disabled -- would also stop Windows users getting builds.
+    # A failure of the Windows entry itself still stops publication, because
+    # then there is no artifact to download and the step below fails.
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: AZURE2-windows
+          path: dist
+
+      - name: Zip it
+        run: |
+          set -e
+          # Fail loudly rather than publishing an empty archive if the packaging
+          # step above ever stops producing the executable.
+          test -f dist/AZURE2.exe
+          {
+            echo "AZURE2 for Windows (x86_64), built from dev@${GITHUB_SHA}"
+            date -u +'%Y-%m-%d %H:%M UTC'
+            echo
+            echo "Unzip anywhere and run AZURE2.exe. The Qt runtime and the"
+            echo "mingw libraries it needs are in the same folder, so nothing"
+            echo "else has to be installed."
+          } > dist/BUILD-INFO.txt
+          cd dist && zip -r ../AZURE2-windows-x86_64.zip .
+
+      # The tag has to move to the new commit, which is why this is not just an
+      # asset upload: a release keeps whatever commit its tag pointed at when it
+      # was created.
+      - name: Publish the rolling pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          TAG=continuous-windows
+          git push -f origin "HEAD:refs/tags/$TAG"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --prerelease \
+              --title "Windows continuous build" \
+              --notes "Rolling build of the latest dev commit. Replaced on every push."
+          fi
+          # --clobber so the stable filename is overwritten rather than
+          # accumulating AZURE2-windows-x86_64-1.zip and friends.
+          gh release upload "$TAG" AZURE2-windows-x86_64.zip --clobber
+          gh release edit "$TAG" \
+            --prerelease \
+            --title "Windows continuous build" \
+            --notes "Rolling build of the latest dev commit (\`${GITHUB_SHA:0:7}\`), replaced on every push to dev. Not a released version -- for a citable build use a tagged release."
+
   # Tags promote the same artifacts to a draft release, so nothing is published
   # without a human looking at it first.
   release:
