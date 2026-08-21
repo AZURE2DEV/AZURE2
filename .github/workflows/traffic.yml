@@ -20,6 +20,10 @@ name: traffic
 # open issues, and the download count of every release asset -- and says
 # plainly which series it could not collect, rather than failing.
 
+# NOTE: a schedule only fires from the workflow file on the repository's
+# DEFAULT branch. This one has to live there, or the cron is a silent no-op and
+# the Run workflow button never appears -- which is exactly what happened when
+# it was added to dev while qt5 was still the default.
 on:
   schedule:
     # 03:17 UTC daily. Off the hour on purpose: GitHub's scheduler is heavily
