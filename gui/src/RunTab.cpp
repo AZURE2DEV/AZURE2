@@ -13,22 +13,23 @@
 #include "FilteredTextEdit.h"
 #include "InfoDialog.h"
 
-RunTab::RunTab(QWidget* parent) : QWidget(parent) {
+RunTab::RunTab(QWidget *parent) :
+  QWidget(parent) {
   calcType = new QComboBox;
   calcType->addItem(tr("Calculate Segments From Data"));
   calcType->addItem(tr("Fit Segments From Data"));
   calcType->addItem(tr("Calculate Segments Without Data"));
   calcType->addItem(tr("Perform MINOS Error Analysis"));
   calcType->addItem(tr("Calculate Reaction Rate"));
-  connect(calcType,SIGNAL(currentIndexChanged(int)),this,SLOT(calculationTypeChanged(int)));
+  connect(calcType, SIGNAL(currentIndexChanged(int)), this, SLOT(calculationTypeChanged(int)));
 
   minimizerType = new QComboBox;
-  minimizerType->addItem(tr("Minuit2"));                  // 0: MIGRAD, numerical grad
-  minimizerType->addItem(tr("Minuit2 (analytic grad.)")); // 1: MIGRAD, analytic grad
-  minimizerType->addItem(tr("Levenberg-Marquardt"));      // 2: LM (analytic Jacobian)
-  minimizerType->addItem(tr("GSL Trust-Region")); // 3: GSL nlinear (analytic Jacobian)
+  minimizerType->addItem(tr("Minuit2"));                   // 0: MIGRAD, numerical grad
+  minimizerType->addItem(tr("Minuit2 (analytic grad.)"));  // 1: MIGRAD, analytic grad
+  minimizerType->addItem(tr("Levenberg-Marquardt"));       // 2: LM (analytic Jacobian)
+  minimizerType->addItem(tr("GSL Trust-Region"));          // 3: GSL nlinear (analytic Jacobian)
 #ifdef USE_NLOPT
-  minimizerType->addItem(tr("NLopt (SBPLX)"));            // 4+: NLopt
+  minimizerType->addItem(tr("NLopt (SBPLX)"));  // 4+: NLopt
   minimizerType->addItem(tr("NLopt (COBYLA)"));
   minimizerType->addItem(tr("NLopt (BOBYQA)"));
   minimizerType->addItem(tr("NLopt (NEWUOA)"));
@@ -36,7 +37,7 @@ RunTab::RunTab(QWidget* parent) : QWidget(parent) {
   minimizerType->addItem(tr("NLopt (Nelder-Mead)"));
 #endif
   minimizerType->setMinimumWidth(170);
-  minimizerType->setCurrentIndex(0);   // default: Minuit2 (MIGRAD)
+  minimizerType->setCurrentIndex(0);  // default: Minuit2 (MIGRAD)
   minimizerType->setEnabled(false);
 
   chiVarianceText = new QLineEdit;
@@ -55,7 +56,7 @@ RunTab::RunTab(QWidget* parent) : QWidget(parent) {
                                       "Segments Without Data\" it reuses the covariance saved by a "
                                       "previous fit and spans the extrapolation grid."));
   uncertaintyBandCheck->setEnabled(false);
-  connect(uncertaintyBandCheck,SIGNAL(toggled(bool)),this,SLOT(updateUncertaintyControls()));
+  connect(uncertaintyBandCheck, SIGNAL(toggled(bool)), this, SLOT(updateUncertaintyControls()));
 
   scaleCovarianceCheck = new QCheckBox(tr("Scale covariance"));
   scaleCovarianceCheck->setToolTip(tr("When the fit's reduced chi-squared exceeds 1, inflate the parameter "
@@ -70,22 +71,22 @@ RunTab::RunTab(QWidget* parent) : QWidget(parent) {
   stopAZUREButton = new QPushButton(tr("Stop AZURE2"));
   stopAZUREButton->setEnabled(false);
 
-  QGridLayout* calcLayout = new QGridLayout;
-  calcLayout->addWidget(new QLabel(tr("Calculation Type:")),0,0,Qt::AlignRight);
-  calcLayout->addWidget(calcType,0,1);
-  calcLayout->setColumnStretch(1,0);
-  calcLayout->addItem(new QSpacerItem(28,28),0,2);
-  calcLayout->setColumnStretch(2,1);
-  calcLayout->addWidget(new QLabel(tr("Minimizer:")),0,3,Qt::AlignRight);
-  calcLayout->addWidget(minimizerType,0,4);
-  calcLayout->setColumnStretch(4,0);
-  calcLayout->addWidget(calcButton,0,5);
-  calcLayout->setColumnStretch(5,0);
-  calcLayout->addWidget(stopAZUREButton,0,6);
-  calcLayout->setColumnStretch(6,0);
+  QGridLayout *calcLayout = new QGridLayout;
+  calcLayout->addWidget(new QLabel(tr("Calculation Type:")), 0, 0, Qt::AlignRight);
+  calcLayout->addWidget(calcType, 0, 1);
+  calcLayout->setColumnStretch(1, 0);
+  calcLayout->addItem(new QSpacerItem(28, 28), 0, 2);
+  calcLayout->setColumnStretch(2, 1);
+  calcLayout->addWidget(new QLabel(tr("Minimizer:")), 0, 3, Qt::AlignRight);
+  calcLayout->addWidget(minimizerType, 0, 4);
+  calcLayout->setColumnStretch(4, 0);
+  calcLayout->addWidget(calcButton, 0, 5);
+  calcLayout->setColumnStretch(5, 0);
+  calcLayout->addWidget(stopAZUREButton, 0, 6);
+  calcLayout->setColumnStretch(6, 0);
   // Second row: uncertainty-band options and the MINOS chi-squared variance.
-  QHBoxLayout* bandOptsLayout = new QHBoxLayout;
-  bandOptsLayout->setContentsMargins(0,0,0,0);
+  QHBoxLayout *bandOptsLayout = new QHBoxLayout;
+  bandOptsLayout->setContentsMargins(0, 0, 0, 0);
   bandOptsLayout->addWidget(uncertaintyBandCheck);
   bandOptsLayout->addWidget(scaleCovarianceCheck);
   bandOptsLayout->addWidget(wignerLimitsCheck);
@@ -93,7 +94,7 @@ RunTab::RunTab(QWidget* parent) : QWidget(parent) {
   bandOptsLayout->addWidget(new QLabel(tr("Chi-Sq Variance:")));
   bandOptsLayout->addWidget(chiVarianceText);
   bandOptsLayout->addStretch();
-  calcLayout->addLayout(bandOptsLayout,1,1,1,6);
+  calcLayout->addLayout(bandOptsLayout, 1, 1, 1, 6);
 
   paramFileText = new QLineEdit;
   paramFileText->setEnabled(false);
@@ -101,19 +102,19 @@ RunTab::RunTab(QWidget* parent) : QWidget(parent) {
   newParamFileButton->setMinimumWidth(200);
   newParamFileButton->setMaximumWidth(200);
   oldParamFileButton = new QRadioButton(tr("Use: "));
-  connect(oldParamFileButton,SIGNAL(toggled(bool)),this,SLOT(paramFileButtonChanged(bool)));
+  connect(oldParamFileButton, SIGNAL(toggled(bool)), this, SLOT(paramFileButtonChanged(bool)));
   newParamFileButton->setChecked(true);
-  
-  QGroupBox* paramFileGroup = new QGroupBox(tr("Parameters File"));
-  QHBoxLayout* paramFileLayout = new QHBoxLayout;
-  paramFileLayout->setContentsMargins(5,5,5,5);
+
+  QGroupBox *paramFileGroup = new QGroupBox(tr("Parameters File"));
+  QHBoxLayout *paramFileLayout = new QHBoxLayout;
+  paramFileLayout->setContentsMargins(5, 5, 5, 5);
   paramFileLayout->addWidget(newParamFileButton);
   paramFileLayout->addWidget(oldParamFileButton);
   paramFileLayout->addWidget(paramFileText);
-  paramFileChoose=new ChooseFileButton(tr("Choose..."));
+  paramFileChoose = new ChooseFileButton(tr("Choose..."));
   paramFileChoose->setEnabled(false);
   paramFileChoose->setLineEdit(paramFileText);
-  connect(paramFileChoose,SIGNAL(clicked(QLineEdit*)),this,SLOT(setChooseFile(QLineEdit*)));
+  connect(paramFileChoose, SIGNAL(clicked(QLineEdit *)), this, SLOT(setChooseFile(QLineEdit *)));
   paramFileLayout->addWidget(paramFileChoose);
   paramFileGroup->setLayout(paramFileLayout);
 
@@ -123,19 +124,19 @@ RunTab::RunTab(QWidget* parent) : QWidget(parent) {
   newIntegralsFileButton->setMinimumWidth(200);
   newIntegralsFileButton->setMaximumWidth(200);
   oldIntegralsFileButton = new QRadioButton(tr("Use: "));
-  connect(oldIntegralsFileButton,SIGNAL(toggled(bool)),this,SLOT(integralsFileButtonChanged(bool)));
+  connect(oldIntegralsFileButton, SIGNAL(toggled(bool)), this, SLOT(integralsFileButtonChanged(bool)));
   newIntegralsFileButton->setChecked(true);
- 
+
   integralsFileGroup = new QGroupBox(tr("External Capture Integrals File"));
-  QHBoxLayout* integralsFileLayout = new QHBoxLayout;
-  integralsFileLayout->setContentsMargins(5,5,5,5);
+  QHBoxLayout *integralsFileLayout = new QHBoxLayout;
+  integralsFileLayout->setContentsMargins(5, 5, 5, 5);
   integralsFileLayout->addWidget(newIntegralsFileButton);
   integralsFileLayout->addWidget(oldIntegralsFileButton);
   integralsFileLayout->addWidget(integralsFileText);
-  integralsFileChoose=new ChooseFileButton(tr("Choose..."));
+  integralsFileChoose = new ChooseFileButton(tr("Choose..."));
   integralsFileChoose->setEnabled(false);
   integralsFileChoose->setLineEdit(integralsFileText);
-  connect(integralsFileChoose,SIGNAL(clicked(QLineEdit*)),this,SLOT(setChooseFile(QLineEdit*)));
+  connect(integralsFileChoose, SIGNAL(clicked(QLineEdit *)), this, SLOT(setChooseFile(QLineEdit *)));
   integralsFileLayout->addWidget(integralsFileChoose);
   integralsFileGroup->setLayout(integralsFileLayout);
 
@@ -156,45 +157,45 @@ RunTab::RunTab(QWidget* parent) : QWidget(parent) {
   tempStepText->setMinimumWidth(50);
   tempStepText->setMaximumWidth(50);
   fileTempButton = new QRadioButton(tr("Use Temperature File: "));
-  connect(fileTempButton,SIGNAL(toggled(bool)),this,SLOT(fileTempButtonChanged(bool)));
+  connect(fileTempButton, SIGNAL(toggled(bool)), this, SLOT(fileTempButtonChanged(bool)));
   fileTempText = new QLineEdit;
   fileTempText->setEnabled(false);
   gridTempButton->setChecked(true);
 
   rateParamsGroup = new QGroupBox(tr("Reaction Rate Parameters"));
   rateParamsGroup->hide();
-  QGridLayout* keyLayout = new QGridLayout;
-  keyLayout->addWidget(new QLabel(tr("Entrance Key:")),0,0,Qt::AlignRight);
-  keyLayout->addWidget(rateEntranceKey,0,1);
-  keyLayout->addWidget(new QLabel(tr("Exit Key:")),0,2,Qt::AlignRight);
-  keyLayout->addWidget(rateExitKey,0,3);
-  keyLayout->addItem(new QSpacerItem(28,28),0,4);
-  keyLayout->setColumnStretch(4,1);
-  QGridLayout* gridTempLayout = new QGridLayout;
-  gridTempLayout->addWidget(gridTempButton,0,0);
-  gridTempLayout->setColumnStretch(0,0);
-  gridTempLayout->addItem(new QSpacerItem(28,28),0,1);
-  gridTempLayout->setColumnStretch(1,1);
-  gridTempLayout->addWidget(new QLabel(tr("Minimum Temperature (GK):")),0,2,Qt::AlignRight);
-  gridTempLayout->addWidget(minTempText,0,3);
-  gridTempLayout->setColumnStretch(3,0);
-  gridTempLayout->addWidget(new QLabel(tr("Maximum Temperature (GK):")),0,4,Qt::AlignRight);
-  gridTempLayout->addWidget(maxTempText,0,5);
-  gridTempLayout->setColumnStretch(5,0);
-  gridTempLayout->addWidget(new QLabel(tr("Temperature Step (GK):")),0,6,Qt::AlignRight);
-  gridTempLayout->addWidget(tempStepText,0,7);
-  gridTempLayout->setColumnStretch(7,0);
+  QGridLayout *keyLayout = new QGridLayout;
+  keyLayout->addWidget(new QLabel(tr("Entrance Key:")), 0, 0, Qt::AlignRight);
+  keyLayout->addWidget(rateEntranceKey, 0, 1);
+  keyLayout->addWidget(new QLabel(tr("Exit Key:")), 0, 2, Qt::AlignRight);
+  keyLayout->addWidget(rateExitKey, 0, 3);
+  keyLayout->addItem(new QSpacerItem(28, 28), 0, 4);
+  keyLayout->setColumnStretch(4, 1);
+  QGridLayout *gridTempLayout = new QGridLayout;
+  gridTempLayout->addWidget(gridTempButton, 0, 0);
+  gridTempLayout->setColumnStretch(0, 0);
+  gridTempLayout->addItem(new QSpacerItem(28, 28), 0, 1);
+  gridTempLayout->setColumnStretch(1, 1);
+  gridTempLayout->addWidget(new QLabel(tr("Minimum Temperature (GK):")), 0, 2, Qt::AlignRight);
+  gridTempLayout->addWidget(minTempText, 0, 3);
+  gridTempLayout->setColumnStretch(3, 0);
+  gridTempLayout->addWidget(new QLabel(tr("Maximum Temperature (GK):")), 0, 4, Qt::AlignRight);
+  gridTempLayout->addWidget(maxTempText, 0, 5);
+  gridTempLayout->setColumnStretch(5, 0);
+  gridTempLayout->addWidget(new QLabel(tr("Temperature Step (GK):")), 0, 6, Qt::AlignRight);
+  gridTempLayout->addWidget(tempStepText, 0, 7);
+  gridTempLayout->setColumnStretch(7, 0);
   QHBoxLayout *fileTempLayout = new QHBoxLayout;
   fileTempLayout->addWidget(fileTempButton);
   fileTempLayout->addWidget(fileTempText);
-  rateParamsChoose=new ChooseFileButton(tr("Choose..."));
+  rateParamsChoose = new ChooseFileButton(tr("Choose..."));
   rateParamsChoose->setEnabled(false);
   rateParamsChoose->setLineEdit(fileTempText);
-  connect(rateParamsChoose,SIGNAL(clicked(QLineEdit*)),this,SLOT(setChooseFile(QLineEdit*)));
+  connect(rateParamsChoose, SIGNAL(clicked(QLineEdit *)), this, SLOT(setChooseFile(QLineEdit *)));
   fileTempLayout->addWidget(rateParamsChoose);
 
-  QVBoxLayout* rateParamsLayout = new QVBoxLayout;
-  rateParamsLayout->setContentsMargins(5,5,5,5);
+  QVBoxLayout *rateParamsLayout = new QVBoxLayout;
+  rateParamsLayout->setContentsMargins(5, 5, 5, 5);
   rateParamsLayout->addLayout(keyLayout);
   rateParamsLayout->addLayout(gridTempLayout);
   rateParamsLayout->addLayout(fileTempLayout);
@@ -204,7 +205,7 @@ RunTab::RunTab(QWidget* parent) : QWidget(parent) {
   runtimeText->setReadOnly(true);
   runtimeText->setAcceptRichText(false);
 
-  QVBoxLayout* mainLayout = new QVBoxLayout;
+  QVBoxLayout *mainLayout = new QVBoxLayout;
   mainLayout->addLayout(calcLayout);
   mainLayout->addWidget(paramFileGroup);
   mainLayout->addWidget(integralsFileGroup);
@@ -215,14 +216,15 @@ RunTab::RunTab(QWidget* parent) : QWidget(parent) {
 
 
 void RunTab::calculationTypeChanged(int index) {
-  if(index==4) {
+  if (index == 4) {
     integralsFileGroup->hide();
     rateParamsGroup->show();
   } else {
     rateParamsGroup->hide();
     integralsFileGroup->show();
   }
-  if(index==3) chiVarianceText->setEnabled(true);
+  if (index == 3)
+    chiVarianceText->setEnabled(true);
   else {
     chiVarianceText->setText("1.0");
     chiVarianceText->setEnabled(false);
@@ -230,11 +232,13 @@ void RunTab::calculationTypeChanged(int index) {
   // Minimizer selection is available only for a plain fit (index 1).  MINOS error
   // analysis (index 3) requires Minuit2, so the selector is forced to Minuit2 and
   // disabled; the non-fitting modes have no minimizer.
-  if(index==1) {
+  if (index == 1) {
     minimizerType->setEnabled(true);
   } else {
-    if(index==3) minimizerType->setCurrentIndex(0); // MINOS: force Minuit2
-    else minimizerType->setCurrentIndex(0);
+    if (index == 3)
+      minimizerType->setCurrentIndex(0);  // MINOS: force Minuit2
+    else
+      minimizerType->setCurrentIndex(0);
     minimizerType->setEnabled(false);
   }
   updateUncertaintyControls();
@@ -246,16 +250,16 @@ void RunTab::calculationTypeChanged(int index) {
 // selection cannot leak into a mode where it does not apply.
 void RunTab::updateUncertaintyControls() {
   int index = calcType->currentIndex();
-  bool bandApplicable = (index==1 || index==2 || index==3);
+  bool bandApplicable = (index == 1 || index == 2 || index == 3);
   uncertaintyBandCheck->setEnabled(bandApplicable);
-  if(!bandApplicable) uncertaintyBandCheck->setChecked(false);
-  bool scaleApplicable = (index==1 || index==3) && uncertaintyBandCheck->isChecked();
+  if (!bandApplicable) uncertaintyBandCheck->setChecked(false);
+  bool scaleApplicable = (index == 1 || index == 3) && uncertaintyBandCheck->isChecked();
   scaleCovarianceCheck->setEnabled(scaleApplicable);
-  if(!scaleApplicable) scaleCovarianceCheck->setChecked(false);
+  if (!scaleApplicable) scaleCovarianceCheck->setChecked(false);
 }
 
 void RunTab::paramFileButtonChanged(bool checked) {
-  if(checked) {
+  if (checked) {
     paramFileText->setEnabled(true);
     paramFileChoose->setEnabled(true);
   } else {
@@ -265,7 +269,7 @@ void RunTab::paramFileButtonChanged(bool checked) {
 }
 
 void RunTab::integralsFileButtonChanged(bool checked) {
-  if(checked) {
+  if (checked) {
     integralsFileText->setEnabled(true);
     integralsFileChoose->setEnabled(true);
   } else {
@@ -275,7 +279,7 @@ void RunTab::integralsFileButtonChanged(bool checked) {
 }
 
 void RunTab::fileTempButtonChanged(bool checked) {
-  if(checked) {
+  if (checked) {
     fileTempText->setEnabled(true);
     rateParamsChoose->setEnabled(true);
     minTempText->setEnabled(false);
@@ -292,7 +296,7 @@ void RunTab::fileTempButtonChanged(bool checked) {
 
 void RunTab::setChooseFile(QLineEdit *lineEdit) {
   QString filename = QFileDialog::getOpenFileName(this);
-  if(!filename.isEmpty()) {
+  if (!filename.isEmpty()) {
     lineEdit->setText(QDir::fromNativeSeparators(filename));
   }
 }
@@ -317,11 +321,12 @@ void RunTab::reset() {
 }
 
 void RunTab::showInfo(int which, QString title) {
-  if(which<infoText.size()) {
-    if(!infoDialog[which]) {
-      infoDialog[which] = new InfoDialog(infoText[which],this,title);
-      infoDialog[which]->setAttribute(Qt:: WA_DeleteOnClose);
+  if (which < infoText.size()) {
+    if (!infoDialog[which]) {
+      infoDialog[which] = new InfoDialog(infoText[which], this, title);
+      infoDialog[which]->setAttribute(Qt::WA_DeleteOnClose);
       infoDialog[which]->show();
-    } else infoDialog[which]->raise();
+    } else
+      infoDialog[which]->raise();
   }
 }

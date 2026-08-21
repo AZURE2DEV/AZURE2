@@ -32,12 +32,13 @@ namespace py = pybind11;
 
 // Defined by AZURE2.cpp for the CLI/GUI executable; here the module owns it,
 // because the binding links only the core library, not the executable.
-Config* g_config = nullptr;
+Config *g_config = nullptr;
 
 // Raised when the .azr cannot be loaded or the model will not initialize.
 class AZURE2Error : public std::runtime_error {
  public:
-  explicit AZURE2Error(const std::string& what) : std::runtime_error(what) {}
+  explicit AZURE2Error(const std::string &what) :
+    std::runtime_error(what) {}
 };
 
 namespace {
@@ -48,23 +49,25 @@ namespace {
 // calling session's Config for the duration of the call and puts back whatever
 // was there before, so sessions cannot silently reconfigure each other.
 struct ConfigScope {
-  explicit ConfigScope(Config* c) : previous_(g_config) { g_config = c; }
+  explicit ConfigScope(Config *c) :
+    previous_(g_config) { g_config = c; }
   ~ConfigScope() { g_config = previous_; }
-  ConfigScope(const ConfigScope&) = delete;
-  ConfigScope& operator=(const ConfigScope&) = delete;
+  ConfigScope(const ConfigScope &) = delete;
+  ConfigScope &operator=(const ConfigScope &) = delete;
+
  private:
-  Config* previous_;
+  Config *previous_;
 };
 
 // Convert a std::vector<double> to a new float64 numpy array (a copy, so the
 // array owns its memory and outlives the C++ object).
-py::array_t<double> to_array(const vector_r& v) {
+py::array_t<double> to_array(const vector_r &v) {
   return py::array_t<double>(static_cast<py::ssize_t>(v.size()), v.data());
 }
 
 // The mirror image: a flat copy of any float64-coercible array.  The engine
 // takes vector_r&, so it needs its own buffer either way.
-vector_r to_vector(const py::array_t<double, py::array::forcecast>& a) {
+vector_r to_vector(const py::array_t<double, py::array::forcecast> &a) {
   vector_r v(a.size());
   if (a.size() > 0) std::memcpy(v.data(), a.data(), v.size() * sizeof(double));
   return v;
@@ -73,41 +76,56 @@ vector_r to_vector(const py::array_t<double, py::array::forcecast>& a) {
 // The runtime options the CLI used to carry as command-line flags.  Defaults
 // mirror Config::Reset() plus the CLI's defaults (--no-transform off, etc.).
 struct RuntimeOptions {
-  bool data_mode = true;          // CALCULATE_WITH_DATA
-  bool use_brune = true;          // USE_BRUNE_FORMALISM
-  bool ignore_externals = true;   // IGNORE_ZERO_WIDTHS
-  bool transform = true;          // TRANSFORM_PARAMETERS
-  bool use_long_wavelength = true;// USE_LONGWAVELENGTH_APPROX
-  bool use_gsl_coul = false;      // USE_GSL_COULOMB_FUNC
-  bool use_rmc = false;           // USE_RMC_FORMALISM
+  bool data_mode = true;            // CALCULATE_WITH_DATA
+  bool use_brune = true;            // USE_BRUNE_FORMALISM
+  bool ignore_externals = true;     // IGNORE_ZERO_WIDTHS
+  bool transform = true;            // TRANSFORM_PARAMETERS
+  bool use_long_wavelength = true;  // USE_LONGWAVELENGTH_APPROX
+  bool use_gsl_coul = false;        // USE_GSL_COULOMB_FUNC
+  bool use_rmc = false;             // USE_RMC_FORMALISM
 };
 
-void apply_options(Config& config, const RuntimeOptions& opt) {
-  if (opt.data_mode) config.paramMask |= Config::CALCULATE_WITH_DATA;
-  else config.paramMask &= ~Config::CALCULATE_WITH_DATA;
-  if (opt.use_brune) config.paramMask |= Config::USE_BRUNE_FORMALISM;
-  else config.paramMask &= ~Config::USE_BRUNE_FORMALISM;
-  if (opt.ignore_externals) config.paramMask |= Config::IGNORE_ZERO_WIDTHS;
-  else config.paramMask &= ~Config::IGNORE_ZERO_WIDTHS;
-  if (opt.transform) config.paramMask |= Config::TRANSFORM_PARAMETERS;
-  else config.paramMask &= ~Config::TRANSFORM_PARAMETERS;
-  if (opt.use_long_wavelength) config.paramMask |= Config::USE_LONGWAVELENGTH_APPROX;
-  else config.paramMask &= ~Config::USE_LONGWAVELENGTH_APPROX;
-  if (opt.use_gsl_coul) config.paramMask |= Config::USE_GSL_COULOMB_FUNC;
-  else config.paramMask &= ~Config::USE_GSL_COULOMB_FUNC;
-  if (opt.use_rmc) config.paramMask |= Config::USE_RMC_FORMALISM;
-  else config.paramMask &= ~Config::USE_RMC_FORMALISM;
+void apply_options(Config &config, const RuntimeOptions &opt) {
+  if (opt.data_mode)
+    config.paramMask |= Config::CALCULATE_WITH_DATA;
+  else
+    config.paramMask &= ~Config::CALCULATE_WITH_DATA;
+  if (opt.use_brune)
+    config.paramMask |= Config::USE_BRUNE_FORMALISM;
+  else
+    config.paramMask &= ~Config::USE_BRUNE_FORMALISM;
+  if (opt.ignore_externals)
+    config.paramMask |= Config::IGNORE_ZERO_WIDTHS;
+  else
+    config.paramMask &= ~Config::IGNORE_ZERO_WIDTHS;
+  if (opt.transform)
+    config.paramMask |= Config::TRANSFORM_PARAMETERS;
+  else
+    config.paramMask &= ~Config::TRANSFORM_PARAMETERS;
+  if (opt.use_long_wavelength)
+    config.paramMask |= Config::USE_LONGWAVELENGTH_APPROX;
+  else
+    config.paramMask &= ~Config::USE_LONGWAVELENGTH_APPROX;
+  if (opt.use_gsl_coul)
+    config.paramMask |= Config::USE_GSL_COULOMB_FUNC;
+  else
+    config.paramMask &= ~Config::USE_GSL_COULOMB_FUNC;
+  if (opt.use_rmc)
+    config.paramMask |= Config::USE_RMC_FORMALISM;
+  else
+    config.paramMask &= ~Config::USE_RMC_FORMALISM;
 }
 
 }  // namespace
 
 class Session {
  public:
-  Session(const std::string& configfile, const RuntimeOptions& opt)
-      : config_(nullptr), api_(nullptr) {
+  Session(const std::string &configfile, const RuntimeOptions &opt) :
+    config_(nullptr),
+    api_(nullptr) {
     config_ = new Config(std::cout);
     config_->configfile = configfile;
-    config_->paramMask |= Config::USE_API;   // silence the "Calculating ..." chatter
+    config_->paramMask |= Config::USE_API;  // silence the "Calculating ..." chatter
     apply_options(*config_, opt);
 
     ConfigScope guard(config_);
@@ -125,7 +143,7 @@ class Session {
     api_ = new AZUREAPI(*config_);
     if (api_->Initialize() != 0) {
       std::string msg = "AZURE2 could not initialize " + configfile +
-                        "; check the output above.";
+          "; check the output above.";
       fail(msg);
     }
   }
@@ -138,13 +156,19 @@ class Session {
     if (config_ != nullptr) delete config_;
   }
 
-  Session(const Session&) = delete;
-  Session& operator=(const Session&) = delete;
+  Session(const Session &) = delete;
+  Session &operator=(const Session &) = delete;
 
-  [[noreturn]] void fail(const std::string& msg) {
-    if (api_ != nullptr) { delete api_; api_ = nullptr; }
+  [[noreturn]] void fail(const std::string &msg) {
+    if (api_ != nullptr) {
+      delete api_;
+      api_ = nullptr;
+    }
     if (g_config == config_) g_config = nullptr;
-    if (config_ != nullptr) { delete config_; config_ = nullptr; }
+    if (config_ != nullptr) {
+      delete config_;
+      config_ = nullptr;
+    }
     throw AZURE2Error(msg);
   }
 
@@ -185,7 +209,7 @@ class Session {
   // once it is rebuilt, which is what reinitializing does.
 
   // pair = 0 addresses the default that every unnamed pair falls back to.
-  void set_potential(int pair, const std::string& type, bool enabled,
+  void set_potential(int pair, const std::string &type, bool enabled,
                      double V0, double R, double a, double r0) {
     NuclearPotentialSetting s;
     s.enabled = enabled;
@@ -194,33 +218,41 @@ class Session {
     s.R = R;
     s.a = a;
     s.r0 = r0;
-    NuclearPotentialManager& mgr = NuclearPotentialManager::instance();
+    NuclearPotentialManager &mgr = NuclearPotentialManager::instance();
     try {
-      if (pair) mgr.setSetting(pair, s);
-      else mgr.setDefaultSetting(s);
-    } catch (const std::exception& e) {
+      if (pair)
+        mgr.setSetting(pair, s);
+      else
+        mgr.setDefaultSetting(s);
+    } catch (const std::exception &e) {
       throw AZURE2Error(e.what());
     }
     // The master switch follows the pairs: with no pair enabled the hybrid
     // model is off, and CoulFunc short-circuits on it.
     config_->useHybridMethod = mgr.isAnyEnabled();
-    if (config_->useHybridMethod) config_->paramMask |= Config::USE_HYBRID_COULOMB;
-    else config_->paramMask &= ~Config::USE_HYBRID_COULOMB;
+    if (config_->useHybridMethod)
+      config_->paramMask |= Config::USE_HYBRID_COULOMB;
+    else
+      config_->paramMask &= ~Config::USE_HYBRID_COULOMB;
   }
 
   void clear_potential(int pair) {
-    NuclearPotentialManager& mgr = NuclearPotentialManager::instance();
-    if (pair) mgr.clearPairSetting(pair);
-    else mgr.resetToDefault();
+    NuclearPotentialManager &mgr = NuclearPotentialManager::instance();
+    if (pair)
+      mgr.clearPairSetting(pair);
+    else
+      mgr.resetToDefault();
     config_->useHybridMethod = mgr.isAnyEnabled();
-    if (config_->useHybridMethod) config_->paramMask |= Config::USE_HYBRID_COULOMB;
-    else config_->paramMask &= ~Config::USE_HYBRID_COULOMB;
+    if (config_->useHybridMethod)
+      config_->paramMask |= Config::USE_HYBRID_COULOMB;
+    else
+      config_->paramMask &= ~Config::USE_HYBRID_COULOMB;
   }
 
   // (enabled, type, V0, R, a, r0, has_own_setting) for the given pair,
   // resolved against the default.
   py::tuple get_potential(int pair) const {
-    const NuclearPotentialManager& mgr = NuclearPotentialManager::instance();
+    const NuclearPotentialManager &mgr = NuclearPotentialManager::instance();
     NuclearPotentialSetting s = pair ? mgr.getSetting(pair) : mgr.getDefaultSetting();
     bool own = pair ? mgr.hasPairSetting(pair) : true;
     return py::make_tuple(s.enabled, s.type, s.V0, s.R, s.a, s.r0, own);
@@ -263,8 +295,14 @@ class Session {
   py::array_t<double> data_segments_errors(int i) const { return to_array(api_->data_segments_errors(i)); }
   py::array_t<double> data_excitation_energies(int i) const { return to_array(api_->data_excitation_energies(i)); }
   py::array_t<double> data_conv(int i) const { return to_array(api_->data_conv(i)); }
-  py::array_t<double> norms() { api_->UpdateNorms(); return to_array(api_->norms()); }
-  py::array_t<double> norms_errors() { api_->UpdateNorms(); return to_array(api_->norms_errors()); }
+  py::array_t<double> norms() {
+    api_->UpdateNorms();
+    return to_array(api_->norms());
+  }
+  py::array_t<double> norms_errors() {
+    api_->UpdateNorms();
+    return to_array(api_->norms_errors());
+  }
 
   // -- calculated arrays -----------------------------------------------------
 
@@ -299,14 +337,20 @@ class Session {
 
   py::array_t<double> transform_rwa(py::array_t<double, py::array::forcecast> p) {
     vector_r v = to_vector(p), out;
-    { py::gil_scoped_release release; ConfigScope guard(config_);
-      out = api_->TransformRWAParameters(v); }
+    {
+      py::gil_scoped_release release;
+      ConfigScope guard(config_);
+      out = api_->TransformRWAParameters(v);
+    }
     return to_array(out);
   }
   py::array_t<double> transform_all_rwa(py::array_t<double, py::array::forcecast> p) {
     vector_r v = to_vector(p), out;
-    { py::gil_scoped_release release; ConfigScope guard(config_);
-      out = api_->TransformAllRWAParameters(v); }
+    {
+      py::gil_scoped_release release;
+      ConfigScope guard(config_);
+      out = api_->TransformAllRWAParameters(v);
+    }
     return to_array(out);
   }
 
@@ -324,20 +368,29 @@ class Session {
   }
   py::array_t<double> calculate_chi2_grad_rwa(py::array_t<double, py::array::forcecast> p) {
     vector_r v = to_vector(p), out;
-    { py::gil_scoped_release release; ConfigScope guard(config_);
-      out = api_->CalculateChi2GradRWA(v); }
+    {
+      py::gil_scoped_release release;
+      ConfigScope guard(config_);
+      out = api_->CalculateChi2GradRWA(v);
+    }
     return to_array(out);
   }
   py::array_t<double> calculate_residual_jacobian_rwa(py::array_t<double, py::array::forcecast> p) {
     vector_r v = to_vector(p), out;
-    { py::gil_scoped_release release; ConfigScope guard(config_);
-      out = api_->CalculateResidualJacobianRWA(v); }
+    {
+      py::gil_scoped_release release;
+      ConfigScope guard(config_);
+      out = api_->CalculateResidualJacobianRWA(v);
+    }
     return to_array(out);
   }
   py::array_t<double> calculate_model_gradients_rwa(py::array_t<double, py::array::forcecast> p) {
     vector_r v = to_vector(p), out;
-    { py::gil_scoped_release release; ConfigScope guard(config_);
-      out = api_->CalculateModelGradientsRWA(v); }
+    {
+      py::gil_scoped_release release;
+      ConfigScope guard(config_);
+      out = api_->CalculateModelGradientsRWA(v);
+    }
     return to_array(out);
   }
 
@@ -345,25 +398,34 @@ class Session {
 
   py::array_t<double> coulomb_functions(py::array_t<double, py::array::forcecast> request) {
     vector_r v = to_vector(request), out;
-    { py::gil_scoped_release release; ConfigScope guard(config_);
-      out = api_->GetCoulombFunctions(v); }
+    {
+      py::gil_scoped_release release;
+      ConfigScope guard(config_);
+      out = api_->GetCoulombFunctions(v);
+    }
     return to_array(out);
   }
   py::array_t<double> ec_integrals(py::array_t<double, py::array::forcecast> request) {
     vector_r v = to_vector(request), out;
-    { py::gil_scoped_release release; ConfigScope guard(config_);
-      out = api_->GetECIntegrals(v); }
+    {
+      py::gil_scoped_release release;
+      ConfigScope guard(config_);
+      out = api_->GetECIntegrals(v);
+    }
     return to_array(out);
   }
   py::array_t<double> cache_stats() const {
     vector_r out;
-    { py::gil_scoped_release release; out = api_->GetCacheStats(); }
+    {
+      py::gil_scoped_release release;
+      out = api_->GetCacheStats();
+    }
     return to_array(out);
   }
 
  private:
-  Config* config_;
-  AZUREAPI* api_;
+  Config *config_;
+  AZUREAPI *api_;
 };
 
 PYBIND11_MODULE(_azure2, m) {
@@ -389,7 +451,7 @@ PYBIND11_MODULE(_azure2, m) {
       .def_readwrite("use_rmc", &RuntimeOptions::use_rmc);
 
   py::class_<Session>(m, "Session")
-      .def(py::init<const std::string&, const RuntimeOptions&>(),
+      .def(py::init<const std::string &, const RuntimeOptions &>(),
            py::arg("configfile"), py::arg("options") = RuntimeOptions(),
            "Load ``configfile`` and build the model.  Raises AZURE2Error if "
            "the file is missing or the model will not initialize.")

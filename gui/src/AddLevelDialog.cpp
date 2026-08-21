@@ -1,9 +1,9 @@
 #include "AddLevelDialog.h"
 
-AddLevelDialog::AddLevelDialog(QWidget *parent) : QDialog(parent) {
-
-  this->setMaximumSize(250,150);
-  //this->setMinimumSize(220,110);
+AddLevelDialog::AddLevelDialog(QWidget *parent) :
+  QDialog(parent) {
+  this->setMaximumSize(250, 150);
+  // this->setMinimumSize(220,110);
 
   QRegExp rx("^\\d{0,2}(\\.[05]{0,1})?$");
   QValidator *validator = new QRegExpValidator(rx, this);
@@ -24,12 +24,12 @@ AddLevelDialog::AddLevelDialog(QWidget *parent) : QDialog(parent) {
   QHBoxLayout *energyLayout = new QHBoxLayout;
   energyLayout->addWidget(energyLabel);
   energyLayout->addWidget(energyText);
-  
+
   QGridLayout *spinLayout = new QGridLayout;
-  spinLayout->addWidget(jValueLabel,0,0);
-  spinLayout->addWidget(jValueText,0,1);
-  spinLayout->addWidget(piValueCombo,0,2);
-  spinLayout->setColumnStretch(1,1);
+  spinLayout->addWidget(jValueLabel, 0, 0);
+  spinLayout->addWidget(jValueText, 0, 1);
+  spinLayout->addWidget(piValueCombo, 0, 2);
+  spinLayout->setColumnStretch(1, 1);
 
   QHBoxLayout *buttonBox = new QHBoxLayout;
   buttonBox->addWidget(cancelButton);
@@ -42,8 +42,8 @@ AddLevelDialog::AddLevelDialog(QWidget *parent) : QDialog(parent) {
 
   setLayout(mainLayout);
 
-  connect(okButton, SIGNAL(clicked()),this,SLOT(accept()));
-  connect(cancelButton,SIGNAL(clicked()),this,SLOT(reject()));
+  connect(okButton, SIGNAL(clicked()), this, SLOT(accept()));
+  connect(cancelButton, SIGNAL(clicked()), this, SLOT(reject()));
 
   setWindowTitle(tr("Add a Level"));
 }

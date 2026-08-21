@@ -25,16 +25,16 @@ class LevelsTab : public QWidget {
 
  public:
   LevelsTab(QWidget *parent = 0);
-  void setPairsModel(PairsModel*);
+  void setPairsModel(PairsModel *);
   void updateChannelsLevelAdded(int levelIndex);
   void updateChannelsLevelDeleted(int levelIndex);
   void updateChannelsLevelEdited(int levelIndex);
   QList<ChannelsData> calculateChannels(int levelIndex);
-  bool writeNuclearFile(QTextStream& outStream);
-  bool readNuclearFile(QTextStream& inStream);
+  bool writeNuclearFile(QTextStream &outStream);
+  bool readNuclearFile(QTextStream &inStream);
   void reset();
-  LevelsModel* getLevelsModel() { return levelsModel; }
-  ChannelsModel* getChannelsModel() { return channelsModel; }
+  LevelsModel *getLevelsModel() { return levelsModel; }
+  ChannelsModel *getChannelsModel() { return channelsModel; }
 
  public slots:
   void addLevel();
@@ -49,14 +49,14 @@ class LevelsTab : public QWidget {
   void updateDetails(const QItemSelection &selection);
   void updateReducedWidth(const QString &string);
   void calculateWignerLimit();
-  void showInfo(int which=0,QString title="");
+  void showInfo(int which = 0, QString title = "");
   void fixAllWidths();
   void fixAllEnergies();
   void exportLatexTable();
 
  signals:
-  void readNewPair(PairsData,int,bool);
-  void readExistingPair(PairsData,int,bool);
+  void readNewPair(PairsData, int, bool);
+  void readExistingPair(PairsData, int, bool);
 
  private:
   int calculateCompoundNucleus(int &massNumber, int &atomicNumber);
@@ -83,7 +83,7 @@ class LevelsTab : public QWidget {
   double wignerZ1_ = 0., wignerZ2_ = 0., wignerRedMass_ = 0.;
   double wignerRadius_ = 0., wignerEcm_ = 0.;
   int wignerL_ = 0;
-  QSignalMapper* mapper;
+  QSignalMapper *mapper;
   QPushButton *infoButton[5];
   static const std::vector<QString> infoText;
   QPointer<InfoDialog> infoDialog[5];

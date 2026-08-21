@@ -23,9 +23,9 @@ class TargetIntTab : public QWidget {
 
  public:
   TargetIntTab(QWidget *parent = 0);
-  TargetIntModel* getTargetIntModel();
-  bool writeFile(QTextStream& outStream);
-  bool readFile(QTextStream& inStream);
+  TargetIntModel *getTargetIntModel();
+  bool writeFile(QTextStream &outStream);
+  bool readFile(QTextStream &inStream);
   void reset();
 
  public slots:
@@ -34,14 +34,14 @@ class TargetIntTab : public QWidget {
   void editLine();
   void deleteLine();
   void updateButtons(const QItemSelection &selection);
-  void showInfo(int which=0,QString title="");
+  void showInfo(int which = 0, QString title = "");
 
  private:
   TargetIntModel *targetIntModel;
   QTableView *targetIntView;
   QPushButton *addButton;
   QPushButton *deleteButton;
-  QSignalMapper* mapper;
+  QSignalMapper *mapper;
   QPushButton *infoButton[5];
   static const std::vector<QString> infoText;
   QPointer<InfoDialog> infoDialog[5];

@@ -20,20 +20,20 @@
 #include <vector>
 #include <iostream>
 
-NuclearPotentialTab::NuclearPotentialTab(QWidget* parent)
-    : QWidget(parent) {
+NuclearPotentialTab::NuclearPotentialTab(QWidget *parent) :
+  QWidget(parent) {
   createUI();
   loadCurrentSettings();
   setWindowTitle(tr("Nuclear Potential"));
 }
 
 void NuclearPotentialTab::createUI() {
-  QVBoxLayout* mainLayout = new QVBoxLayout(this);
+  QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
   // Which pair is being edited.  A potential belongs to a pair, so the tab
   // shows one pair at a time; "Default" is what a pair inherits when it has no
   // setting of its own.
-  QHBoxLayout* pairLayout = new QHBoxLayout;
+  QHBoxLayout *pairLayout = new QHBoxLayout;
   pairLabel_ = new QLabel(tr("Applies to:"));
   pairCombo_ = new QComboBox;
   enabledCheck_ = new QCheckBox(tr("Use hybrid potential here"));
@@ -56,7 +56,7 @@ void NuclearPotentialTab::createUI() {
   mainLayout->addSpacing(10);
 
   // Potential Type Section
-  QHBoxLayout* typeLayout = new QHBoxLayout;
+  QHBoxLayout *typeLayout = new QHBoxLayout;
   potentialTypeLabel_ = new QLabel(tr("Potential Type:"));
   potentialTypeCombo_ = new QComboBox;
   potentialTypeCombo_->addItem(tr("Woods-Saxon"));
@@ -73,7 +73,7 @@ void NuclearPotentialTab::createUI() {
 
   // Woods-Saxon Group
   woodsSaxonGroup_ = new QGroupBox(tr("Woods-Saxon Potential Parameters"));
-  QGridLayout* wsLayout = new QGridLayout(woodsSaxonGroup_);
+  QGridLayout *wsLayout = new QGridLayout(woodsSaxonGroup_);
 
   v0Label_ = new QLabel(tr("Depth (V₀):"));
   v0Input_ = new QLineEdit;
@@ -110,7 +110,7 @@ void NuclearPotentialTab::createUI() {
   // Gaussian Group
   gaussianGroup_ = new QGroupBox(tr("Gaussian Potential Parameters"));
   gaussianGroup_->setVisible(false);
-  QGridLayout* gaussLayout = new QGridLayout(gaussianGroup_);
+  QGridLayout *gaussLayout = new QGridLayout(gaussianGroup_);
 
   gaussV0Label_ = new QLabel(tr("Depth (V₀):"));
   gaussV0Input_ = new QLineEdit;
@@ -138,7 +138,7 @@ void NuclearPotentialTab::createUI() {
   mainLayout->addSpacing(15);
 
   // Control Buttons
-  QHBoxLayout* buttonLayout = new QHBoxLayout;
+  QHBoxLayout *buttonLayout = new QHBoxLayout;
   applyButton_ = new QPushButton(tr("Apply Settings"));
   resetButton_ = new QPushButton(tr("Reset to Default"));
 
@@ -161,28 +161,28 @@ void NuclearPotentialTab::createUI() {
 // PairsModel::getParticleLabel returns rich text -- <center>, <sup> and the
 // rest -- because the pairs table renders it through a delegate.  A combo box
 // item is plain text and would show the markup verbatim, so flatten it.
-static QString plainLabel(const QString& rich) {
+static QString plainLabel(const QString &rich) {
   QString plain = QTextDocumentFragment::fromHtml(rich).toPlainText();
   return plain.simplified();
 }
 
-void NuclearPotentialTab::setPairsModel(PairsModel* model) {
-  if(pairsModel_) pairsModel_->disconnect(this);
+void NuclearPotentialTab::setPairsModel(PairsModel *model) {
+  if (pairsModel_) pairsModel_->disconnect(this);
   pairsModel_ = model;
-  if(pairsModel_) {
+  if (pairsModel_) {
     // A project's pairs are built while <levels> is read, which is after the
     // <potential> block and long after this tab is constructed, so the selector
     // has to follow the model rather than be filled once.  Rebuilding on a bare
     // dataChanged also keeps the labels right when a pair is renamed or its
     // particles are edited.
     connect(pairsModel_, &QAbstractItemModel::rowsInserted,
-            this, [this](const QModelIndex&, int, int) { refreshPairCombo(false); });
+            this, [this](const QModelIndex &, int, int) { refreshPairCombo(false); });
     connect(pairsModel_, &QAbstractItemModel::rowsRemoved,
-            this, [this](const QModelIndex&, int, int) { refreshPairCombo(false); });
+            this, [this](const QModelIndex &, int, int) { refreshPairCombo(false); });
     connect(pairsModel_, &QAbstractItemModel::modelReset,
             this, [this]() { refreshPairCombo(false); });
     connect(pairsModel_, &QAbstractItemModel::dataChanged,
-            this, [this](const QModelIndex&, const QModelIndex&, const QVector<int>&) {
+            this, [this](const QModelIndex &, const QModelIndex &, const QVector<int> &) {
               refreshPairCombo(false);
             });
     connect(pairsModel_, &QObject::destroyed,
@@ -191,41 +191,43 @@ void NuclearPotentialTab::setPairsModel(PairsModel* model) {
   refreshPairCombo();
 }
 
-void NuclearPotentialTab::showEvent(QShowEvent* event) {
+void NuclearPotentialTab::showEvent(QShowEvent *event) {
   QWidget::showEvent(event);
   refreshPairCombo(false);
 }
 
 void NuclearPotentialTab::onPairRemoved(int pairKey) {
-  NuclearPotentialManager& manager = NuclearPotentialManager::instance();
+  NuclearPotentialManager &manager = NuclearPotentialManager::instance();
   // Keys are positional, so the pairs above the deleted one shift down and
   // their settings have to shift with them.  Collect first, then reinstall:
   // editing the manager while walking it would read half-moved state.
   std::vector<int> keys = manager.configuredPairs();
-  std::vector<std::pair<int, NuclearPotentialSetting> > moved;
-  for(size_t i = 0; i < keys.size(); i++) {
-    if(keys[i] == pairKey) continue;                 // goes with the pair
+  std::vector<std::pair<int, NuclearPotentialSetting>> moved;
+  for (size_t i = 0; i < keys.size(); i++) {
+    if (keys[i] == pairKey) continue;  // goes with the pair
     int target = keys[i] > pairKey ? keys[i] - 1 : keys[i];
     moved.push_back(std::make_pair(target, manager.getSetting(keys[i])));
   }
-  for(size_t i = 0; i < keys.size(); i++) manager.clearPairSetting(keys[i]);
-  for(size_t i = 0; i < moved.size(); i++)
+  for (size_t i = 0; i < keys.size(); i++) manager.clearPairSetting(keys[i]);
+  for (size_t i = 0; i < moved.size(); i++)
     manager.setSetting(moved[i].first, moved[i].second);
 
-  if(currentPairKey_ == pairKey) currentPairKey_ = 0;
-  else if(currentPairKey_ > pairKey) currentPairKey_--;
+  if (currentPairKey_ == pairKey)
+    currentPairKey_ = 0;
+  else if (currentPairKey_ > pairKey)
+    currentPairKey_--;
   refreshPairCombo();
 }
 
 void NuclearPotentialTab::refreshPairCombo(bool reloadFields) {
-  NuclearPotentialManager& manager = NuclearPotentialManager::instance();
+  NuclearPotentialManager &manager = NuclearPotentialManager::instance();
   loading_ = true;
   int keep = currentPairKey_;
   pairCombo_->clear();
   pairCombo_->addItem(tr("Default (every pair without its own)"), 0);
-  if(pairsModel_) {
+  if (pairsModel_) {
     QList<PairsData> pairs = pairsModel_->getPairs();
-    for(int i = 0; i < pairs.size(); i++) {
+    for (int i = 0; i < pairs.size(); i++) {
       // A pair's key is its 1-based position, matching the .azr and
       // PPair::GetPairKey().  Only one pair is on screen at a time, so the
       // label carries its state -- otherwise there is no way to see which
@@ -234,39 +236,39 @@ void NuclearPotentialTab::refreshPairCombo(bool reloadFields) {
       QString state = manager.isPairEnabled(key)
           ? (manager.hasPairSetting(key) ? tr("on") : tr("on, inherited"))
           : tr("off");
-      pairCombo_->addItem(tr("Pair %1: %2  [%3]").arg(key)
-                            .arg(plainLabel(pairsModel_->getParticleLabel(pairs.at(i))))
-                            .arg(state),
+      pairCombo_->addItem(tr("Pair %1: %2  [%3]").arg(key).arg(plainLabel(pairsModel_->getParticleLabel(pairs.at(i)))).arg(state),
                           key);
     }
   }
   int index = pairCombo_->findData(keep);
   // A pair that has gone needs the fields reloaded whatever the caller asked,
   // since what is on screen belongs to something that no longer exists.
-  if(index < 0) reloadFields = true;
+  if (index < 0) reloadFields = true;
   pairCombo_->setCurrentIndex(index >= 0 ? index : 0);
   currentPairKey_ = pairCombo_->currentData().toInt();
   bool hasPairs = pairsModel_ && !pairsModel_->getPairs().isEmpty();
   pairCombo_->setEnabled(hasPairs);
   enabledCheck_->setEnabled(true);
   pairCombo_->setToolTip(hasPairs
-      ? tr("Which particle pair these settings apply to.")
-      : tr("No particle pairs yet -- open or build a project first; the pairs "
-           "appear once its levels are read."));
+                             ? tr("Which particle pair these settings apply to.")
+                             : tr("No particle pairs yet -- open or build a project first; the pairs "
+                                  "appear once its levels are read."));
   loading_ = false;
-  if(reloadFields) loadSettingsFor(currentPairKey_);
-  else refreshSummary();
+  if (reloadFields)
+    loadSettingsFor(currentPairKey_);
+  else
+    refreshSummary();
 }
 
 void NuclearPotentialTab::onPairSelectionChanged(int index) {
-  if(loading_ || index < 0) return;
+  if (loading_ || index < 0) return;
   int next = pairCombo_->itemData(index).toInt();
-  if(next == currentPairKey_) return;
+  if (next == currentPairKey_) return;
   // Commit what is on screen to the pair being left, so switching the selector
   // never silently throws typing away -- but only if it was actually edited,
   // or just visiting a pair would give it a setting of its own.  If it does
   // not validate, stay put.
-  if(dirty_ && !commitCurrent()) {
+  if (dirty_ && !commitCurrent()) {
     loading_ = true;
     pairCombo_->setCurrentIndex(pairCombo_->findData(currentPairKey_));
     loading_ = false;
@@ -277,13 +279,13 @@ void NuclearPotentialTab::onPairSelectionChanged(int index) {
 }
 
 void NuclearPotentialTab::onEnabledToggled(bool) {
-  if(loading_) return;
+  if (loading_) return;
   commitCurrent();
   refreshSummary();
 }
 
 void NuclearPotentialTab::onUseDefaultForPair() {
-  if(currentPairKey_ == 0) {
+  if (currentPairKey_ == 0) {
     QMessageBox::information(this, tr("Nuclear Potential"),
                              tr("This is the default; the pairs follow it."));
     return;
@@ -295,11 +297,11 @@ void NuclearPotentialTab::onUseDefaultForPair() {
 
 void NuclearPotentialTab::loadSettingsFor(int pairKey) {
   loading_ = true;
-  NuclearPotentialManager& manager = NuclearPotentialManager::instance();
+  NuclearPotentialManager &manager = NuclearPotentialManager::instance();
   NuclearPotentialSetting s = pairKey ? manager.getSetting(pairKey)
                                       : manager.getDefaultSetting();
   enabledCheck_->setChecked(s.enabled);
-  if(s.type == "Gaussian") {
+  if (s.type == "Gaussian") {
     potentialTypeCombo_->setCurrentIndex(1);
     gaussV0Input_->setText(QString::number(s.V0, 'f', 3));
     gaussR0Input_->setText(QString::number(s.r0, 'f', 3));
@@ -320,7 +322,7 @@ void NuclearPotentialTab::loadSettingsFor(int pairKey) {
 NuclearPotentialSetting NuclearPotentialTab::settingFromWidgets() const {
   NuclearPotentialSetting s;
   s.enabled = enabledCheck_->isChecked();
-  if(potentialTypeCombo_->currentIndex() == 1) {
+  if (potentialTypeCombo_->currentIndex() == 1) {
     s.type = "Gaussian";
     s.V0 = gaussV0Input_->text().toDouble();
     s.r0 = gaussR0Input_->text().toDouble();
@@ -334,17 +336,19 @@ NuclearPotentialSetting NuclearPotentialTab::settingFromWidgets() const {
 }
 
 bool NuclearPotentialTab::commitCurrent() {
-  if(!validateParameters()) return false;
+  if (!validateParameters()) return false;
   try {
-    NuclearPotentialManager& manager = NuclearPotentialManager::instance();
+    NuclearPotentialManager &manager = NuclearPotentialManager::instance();
     NuclearPotentialSetting s = settingFromWidgets();
-    if(currentPairKey_) manager.setSetting(currentPairKey_, s);
-    else manager.setDefaultSetting(s);
+    if (currentPairKey_)
+      manager.setSetting(currentPairKey_, s);
+    else
+      manager.setDefaultSetting(s);
     useDefaultButton_->setEnabled(currentPairKey_ != 0);
     dirty_ = false;
     updateCurrentPairLabel();
     return true;
-  } catch(const std::exception& e) {
+  } catch (const std::exception &e) {
     QMessageBox::critical(this, tr("Error"),
                           tr("Failed to apply settings: %1").arg(e.what()));
     return false;
@@ -355,34 +359,32 @@ void NuclearPotentialTab::updateCurrentPairLabel() {
   // Only the item on screen can have changed, so retitle that one rather than
   // rebuilding the selector -- a rebuild here would reload the widgets and
   // undo the edit that just got committed.
-  if(currentPairKey_ == 0 || !pairsModel_) return;
+  if (currentPairKey_ == 0 || !pairsModel_) return;
   int index = pairCombo_->findData(currentPairKey_);
-  if(index < 0) return;
+  if (index < 0) return;
   QList<PairsData> pairs = pairsModel_->getPairs();
-  if(currentPairKey_ > pairs.size()) return;
-  NuclearPotentialManager& manager = NuclearPotentialManager::instance();
+  if (currentPairKey_ > pairs.size()) return;
+  NuclearPotentialManager &manager = NuclearPotentialManager::instance();
   QString state = manager.isPairEnabled(currentPairKey_)
       ? (manager.hasPairSetting(currentPairKey_) ? tr("on") : tr("on, inherited"))
       : tr("off");
   loading_ = true;
-  pairCombo_->setItemText(index, tr("Pair %1: %2  [%3]").arg(currentPairKey_)
-                            .arg(plainLabel(pairsModel_->getParticleLabel(pairs.at(currentPairKey_ - 1))))
-                            .arg(state));
+  pairCombo_->setItemText(index, tr("Pair %1: %2  [%3]").arg(currentPairKey_).arg(plainLabel(pairsModel_->getParticleLabel(pairs.at(currentPairKey_ - 1)))).arg(state));
   loading_ = false;
 }
 
 void NuclearPotentialTab::refreshSummary() {
-  NuclearPotentialManager& manager = NuclearPotentialManager::instance();
+  NuclearPotentialManager &manager = NuclearPotentialManager::instance();
   QStringList on;
-  if(pairsModel_) {
+  if (pairsModel_) {
     QList<PairsData> pairs = pairsModel_->getPairs();
-    for(int i = 0; i < pairs.size(); i++)
-      if(manager.isPairEnabled(i + 1)) on << QString::number(i + 1);
+    for (int i = 0; i < pairs.size(); i++)
+      if (manager.isPairEnabled(i + 1)) on << QString::number(i + 1);
   }
   QString text;
-  if(!pairsModel_ || pairsModel_->getPairs().isEmpty())
+  if (!pairsModel_ || pairsModel_->getPairs().isEmpty())
     text = tr("Default is %1.").arg(manager.getDefaultEnabled() ? tr("on") : tr("off"));
-  else if(on.isEmpty())
+  else if (on.isEmpty())
     text = tr("The hybrid potential is off for every pair.");
   else
     text = tr("Hybrid potential active for pair(s): %1.").arg(on.join(", "));
@@ -390,14 +392,14 @@ void NuclearPotentialTab::refreshSummary() {
 }
 
 void NuclearPotentialTab::onPotentialTypeChanged(int index) {
-  if(index == 0) { // Woods-Saxon
+  if (index == 0) {  // Woods-Saxon
     woodsSaxonGroup_->setVisible(true);
     gaussianGroup_->setVisible(false);
-  } else { // Gaussian
+  } else {  // Gaussian
     woodsSaxonGroup_->setVisible(false);
     gaussianGroup_->setVisible(true);
   }
-  if(!loading_) dirty_ = true;
+  if (!loading_) dirty_ = true;
 }
 
 void NuclearPotentialTab::updateParameterLabels() {
@@ -405,21 +407,21 @@ void NuclearPotentialTab::updateParameterLabels() {
 }
 
 void NuclearPotentialTab::loadCurrentSettings() {
-  auto& manager = NuclearPotentialManager::instance();
+  auto &manager = NuclearPotentialManager::instance();
   std::string potentialType = manager.getCurrentPotentialType();
 
-  if(potentialType == "WoodsSaxon") {
+  if (potentialType == "WoodsSaxon") {
     potentialTypeCombo_->setCurrentIndex(0);
     double V0, R, a;
-    if(manager.getWoodsSaxonParameters(V0, R, a)) {
+    if (manager.getWoodsSaxonParameters(V0, R, a)) {
       v0Input_->setText(QString::number(V0, 'f', 3));
       rInput_->setText(QString::number(R, 'f', 3));
       aInput_->setText(QString::number(a, 'f', 3));
     }
-  } else if(potentialType == "Gaussian") {
+  } else if (potentialType == "Gaussian") {
     potentialTypeCombo_->setCurrentIndex(1);
     double V0, r0;
-    if(manager.getGaussianParameters(V0, r0)) {
+    if (manager.getGaussianParameters(V0, r0)) {
       gaussV0Input_->setText(QString::number(V0, 'f', 3));
       gaussR0Input_->setText(QString::number(r0, 'f', 3));
     }
@@ -427,37 +429,37 @@ void NuclearPotentialTab::loadCurrentSettings() {
 }
 
 bool NuclearPotentialTab::validateParameters() {
-  if(potentialTypeCombo_->currentIndex() == 0) { // Woods-Saxon
+  if (potentialTypeCombo_->currentIndex() == 0) {  // Woods-Saxon
     bool ok1, ok2, ok3;
     double v0 = v0Input_->text().toDouble(&ok1);
     double r = rInput_->text().toDouble(&ok2);
     double a = aInput_->text().toDouble(&ok3);
 
-    if(!ok1 || !ok2 || !ok3) {
+    if (!ok1 || !ok2 || !ok3) {
       QMessageBox::warning(this, tr("Invalid Input"),
-                          tr("Please enter valid numbers for all parameters."));
+                           tr("Please enter valid numbers for all parameters."));
       return false;
     }
 
-    if(v0 <= 0.0 || r <= 0.0 || a <= 0.0) {
+    if (v0 <= 0.0 || r <= 0.0 || a <= 0.0) {
       QMessageBox::warning(this, tr("Invalid Parameters"),
-                          tr("All parameters must be positive values."));
+                           tr("All parameters must be positive values."));
       return false;
     }
-  } else { // Gaussian
+  } else {  // Gaussian
     bool ok1, ok2;
     double v0 = gaussV0Input_->text().toDouble(&ok1);
     double r0 = gaussR0Input_->text().toDouble(&ok2);
 
-    if(!ok1 || !ok2) {
+    if (!ok1 || !ok2) {
       QMessageBox::warning(this, tr("Invalid Input"),
-                          tr("Please enter valid numbers for all parameters."));
+                           tr("Please enter valid numbers for all parameters."));
       return false;
     }
 
-    if(v0 <= 0.0 || r0 <= 0.0) {
+    if (v0 <= 0.0 || r0 <= 0.0) {
       QMessageBox::warning(this, tr("Invalid Parameters"),
-                          tr("All parameters must be positive values."));
+                           tr("All parameters must be positive values."));
       return false;
     }
   }
@@ -466,32 +468,32 @@ bool NuclearPotentialTab::validateParameters() {
 }
 
 void NuclearPotentialTab::onApplySettings() {
-  if(commitCurrent()) refreshSummary();
+  if (commitCurrent()) refreshSummary();
 }
 
 void NuclearPotentialTab::onResetToDefault() {
   try {
-    auto& manager = NuclearPotentialManager::instance();
-    manager.resetToDefault();          // also drops every per-pair setting
+    auto &manager = NuclearPotentialManager::instance();
+    manager.resetToDefault();  // also drops every per-pair setting
     currentPairKey_ = 0;
     refreshPairCombo();
-  } catch(const std::exception& e) {
+  } catch (const std::exception &e) {
     QMessageBox::critical(this, tr("Error"),
-                         tr("Failed to reset: %1").arg(e.what()));
+                          tr("Failed to reset: %1").arg(e.what()));
   }
 }
 
 void NuclearPotentialTab::onParameterChanged() {
-  if(!loading_) dirty_ = true;
+  if (!loading_) dirty_ = true;
 }
 
-bool NuclearPotentialTab::readPotentialSettings(QTextStream& inStream, Config& config) {
+bool NuclearPotentialTab::readPotentialSettings(QTextStream &inStream, Config &config) {
   // Read the body of the <potential> section.  Keys before the first pair= are
   // the default that unnamed pairs inherit; a pair= line opens a section that
   // starts from that default and only states what differs.  A file with no
   // pair= line therefore reads exactly as it did when the model was global.
   // Config::ReadPotentialBlock parses the same format for --no-gui and pyazr.
-  NuclearPotentialManager& manager = NuclearPotentialManager::instance();
+  NuclearPotentialManager &manager = NuclearPotentialManager::instance();
   manager.resetToDefault();
 
   NuclearPotentialSetting current = manager.getDefaultSetting();
@@ -499,28 +501,32 @@ bool NuclearPotentialTab::readPotentialSettings(QTextStream& inStream, Config& c
   bool currentHasType = false, defaultHasType = false, sawAny = false;
 
   auto flush = [&]() {
-    if(current.enabled && !currentHasType) current.enabled = false;
+    if (current.enabled && !currentHasType) current.enabled = false;
     try {
-      if(currentPair) manager.setSetting(currentPair, current);
-      else manager.setDefaultSetting(current);
-    } catch(...) {
-      if(currentPair) manager.clearPairSetting(currentPair);
-      else manager.setDefaultEnabled(false);
+      if (currentPair)
+        manager.setSetting(currentPair, current);
+      else
+        manager.setDefaultSetting(current);
+    } catch (...) {
+      if (currentPair)
+        manager.clearPairSetting(currentPair);
+      else
+        manager.setDefaultEnabled(false);
     }
   };
 
-  while(!inStream.atEnd()) {
+  while (!inStream.atEnd()) {
     QString trimmedLine = inStream.readLine().trimmed();
-    if(trimmedLine == "</potential>") break;
+    if (trimmedLine == "</potential>") break;
 
     int eq = trimmedLine.indexOf('=');
-    if(eq < 0) continue;
+    if (eq < 0) continue;
     QString key = trimmedLine.left(eq);
     QString value = trimmedLine.mid(eq + 1).trimmed();
 
-    if(key == "pair") {
+    if (key == "pair") {
       int next = value.toInt();
-      if(next <= 0) continue;
+      if (next <= 0) continue;
       flush();
       currentPair = next;
       current = manager.getDefaultSetting();
@@ -528,47 +534,58 @@ bool NuclearPotentialTab::readPotentialSettings(QTextStream& inStream, Config& c
       continue;
     }
 
-    if(key == "useHybridPotential") {
+    if (key == "useHybridPotential") {
       current.enabled = (value.toInt() == 1);
       // The default section's flag is also the master switch the Runtime
       // Options checkbox shows.
-      if(!currentPair) config.useHybridMethod = current.enabled;
-    } else if(key == "useAdaptiveGrid") {
+      if (!currentPair) config.useHybridMethod = current.enabled;
+    } else if (key == "useAdaptiveGrid") {
       config.useAdaptiveGrid = (value.toInt() == 1);
-    } else if(key == "potentialType") {
+    } else if (key == "potentialType") {
       int typeCode = value.toInt();
-      if(typeCode == 0) { current.type = "WoodsSaxon"; currentHasType = true; }
-      else if(typeCode == 1) { current.type = "Gaussian"; currentHasType = true; }
-      else { current.enabled = false; currentHasType = true; }
-      if(!currentPair) defaultHasType = currentHasType;
+      if (typeCode == 0) {
+        current.type = "WoodsSaxon";
+        currentHasType = true;
+      } else if (typeCode == 1) {
+        current.type = "Gaussian";
+        currentHasType = true;
+      } else {
+        current.enabled = false;
+        currentHasType = true;
+      }
+      if (!currentPair) defaultHasType = currentHasType;
       sawAny = true;
-    } else if(key == "V0") current.V0 = value.toDouble();
-    else if(key == "R") current.R = value.toDouble();
-    else if(key == "a") current.a = value.toDouble();
-    else if(key == "r0") current.r0 = value.toDouble();
+    } else if (key == "V0")
+      current.V0 = value.toDouble();
+    else if (key == "R")
+      current.R = value.toDouble();
+    else if (key == "a")
+      current.a = value.toDouble();
+    else if (key == "r0")
+      current.r0 = value.toDouble();
   }
   flush();
 
   // A pair may be on while the default is off, so the master switch has to
   // follow the pairs as well as its own flag.
-  if(manager.isAnyEnabled()) config.useHybridMethod = true;
+  if (manager.isAnyEnabled()) config.useHybridMethod = true;
 
   currentPairKey_ = 0;
   refreshPairCombo();
   return sawAny;
 }
 
-bool NuclearPotentialTab::writePotentialSettings(QTextStream& outStream) {
-  NuclearPotentialManager& manager = NuclearPotentialManager::instance();
+bool NuclearPotentialTab::writePotentialSettings(QTextStream &outStream) {
+  NuclearPotentialManager &manager = NuclearPotentialManager::instance();
 
   // The default section first -- AZURESetup has already written this block's
   // useHybridPotential= and useAdaptiveGrid= lines -- then one section per pair
   // that carries a setting of its own.  A project where nobody touched a
   // single pair writes exactly the block it always did.
-  auto writeShape = [&outStream](const NuclearPotentialSetting& s) {
+  auto writeShape = [&outStream](const NuclearPotentialSetting &s) {
     outStream << "potentialType=" << (s.type == "Gaussian" ? 1 : 0) << "\n";
     outStream << "V0=" << s.V0 << "\n";
-    if(s.type == "Gaussian") {
+    if (s.type == "Gaussian") {
       outStream << "r0=" << s.r0 << "\n";
     } else {
       outStream << "R=" << s.R << "\n";
@@ -579,7 +596,7 @@ bool NuclearPotentialTab::writePotentialSettings(QTextStream& outStream) {
   writeShape(manager.getDefaultSetting());
 
   std::vector<int> pairs = manager.configuredPairs();
-  for(size_t i = 0; i < pairs.size(); i++) {
+  for (size_t i = 0; i < pairs.size(); i++) {
     NuclearPotentialSetting s = manager.getSetting(pairs[i]);
     outStream << "pair=" << pairs[i] << "\n";
     outStream << "useHybridPotential=" << (s.enabled ? 1 : 0) << "\n";

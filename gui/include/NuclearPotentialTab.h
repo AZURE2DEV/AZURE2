@@ -35,11 +35,11 @@ class QTextStream;
 class NuclearPotentialTab : public QWidget {
   Q_OBJECT
 
-public:
+ public:
   /*!
    * @brief Constructor
    */
-  NuclearPotentialTab(QWidget* parent = nullptr);
+  NuclearPotentialTab(QWidget *parent = nullptr);
 
   /*!
    * @brief Give the tab the pair list it offers in the selector.
@@ -51,9 +51,9 @@ public:
    * which happens after the <potential> block -- so a selector filled once at
    * construction would never show anything but the default.
    */
-  void setPairsModel(PairsModel* model);
+  void setPairsModel(PairsModel *model);
 
-public slots:
+ public slots:
   /*!
    * @brief A particle pair was deleted; drop its potential and renumber.
    *
@@ -64,26 +64,25 @@ public slots:
    */
   void onPairRemoved(int pairKey);
 
-public:
-
+ public:
   /*!
    * @brief Read nuclear potential settings from text stream
    * Used for loading configuration from file
    */
-  bool readPotentialSettings(QTextStream& inStream, Config& config);
+  bool readPotentialSettings(QTextStream &inStream, Config &config);
 
   /*!
    * @brief Write nuclear potential settings to text stream
    * Used for saving configuration to file
    */
-  bool writePotentialSettings(QTextStream& outStream);
+  bool writePotentialSettings(QTextStream &outStream);
 
-protected:
-  ///Refresh on the way in: cheap, and it covers any path that changes the
-  ///pairs without the model saying so.
-  void showEvent(QShowEvent* event) override;
+ protected:
+  /// Refresh on the way in: cheap, and it covers any path that changes the
+  /// pairs without the model saying so.
+  void showEvent(QShowEvent *event) override;
 
-private slots:
+ private slots:
   /*!
    * @brief Handle potential type selection change
    */
@@ -120,7 +119,7 @@ private slots:
    */
   void onParameterChanged();
 
-private:
+ private:
   /*!
    * @brief Create UI components
    */
@@ -179,50 +178,50 @@ private:
   bool validateParameters();
 
   // Which pair is being edited
-  PairsModel* pairsModel_ = nullptr;
-  QLabel* pairLabel_;
-  QComboBox* pairCombo_;
-  QCheckBox* enabledCheck_;
-  QLabel* summaryLabel_;
-  QPushButton* useDefaultButton_;
-  ///The pair key on screen; 0 is the default every unnamed pair inherits.
+  PairsModel *pairsModel_ = nullptr;
+  QLabel *pairLabel_;
+  QComboBox *pairCombo_;
+  QCheckBox *enabledCheck_;
+  QLabel *summaryLabel_;
+  QPushButton *useDefaultButton_;
+  /// The pair key on screen; 0 is the default every unnamed pair inherits.
   int currentPairKey_ = 0;
-  ///Set while the widgets are being filled, so the change slots stay quiet.
+  /// Set while the widgets are being filled, so the change slots stay quiet.
   bool loading_ = false;
-  ///Has the user actually edited what is on screen?  Switching pairs commits
-  ///only when this is set: otherwise merely looking at a pair would give it a
-  ///setting of its own, quietly pinning a copy of the default to it so that
-  ///later editing the default no longer reached it.
+  /// Has the user actually edited what is on screen?  Switching pairs commits
+  /// only when this is set: otherwise merely looking at a pair would give it a
+  /// setting of its own, quietly pinning a copy of the default to it so that
+  /// later editing the default no longer reached it.
   bool dirty_ = false;
 
   // Potential type selection
-  QLabel* potentialTypeLabel_;
-  QComboBox* potentialTypeCombo_;
+  QLabel *potentialTypeLabel_;
+  QComboBox *potentialTypeCombo_;
 
   // Woods-Saxon parameters
-  QGroupBox* woodsSaxonGroup_;
-  QLabel* v0Label_;
-  QLineEdit* v0Input_;
-  QLabel* rLabel_;
-  QLineEdit* rInput_;
-  QLabel* aLabel_;
-  QLineEdit* aInput_;
-  QLabel* v0UnitLabel_;
-  QLabel* rUnitLabel_;
-  QLabel* aUnitLabel_;
+  QGroupBox *woodsSaxonGroup_;
+  QLabel *v0Label_;
+  QLineEdit *v0Input_;
+  QLabel *rLabel_;
+  QLineEdit *rInput_;
+  QLabel *aLabel_;
+  QLineEdit *aInput_;
+  QLabel *v0UnitLabel_;
+  QLabel *rUnitLabel_;
+  QLabel *aUnitLabel_;
 
   // Gaussian parameters
-  QGroupBox* gaussianGroup_;
-  QLabel* gaussV0Label_;
-  QLineEdit* gaussV0Input_;
-  QLabel* gaussR0Label_;
-  QLineEdit* gaussR0Input_;
-  QLabel* gaussV0UnitLabel_;
-  QLabel* gaussR0UnitLabel_;
+  QGroupBox *gaussianGroup_;
+  QLabel *gaussV0Label_;
+  QLineEdit *gaussV0Input_;
+  QLabel *gaussR0Label_;
+  QLineEdit *gaussR0Input_;
+  QLabel *gaussV0UnitLabel_;
+  QLabel *gaussR0UnitLabel_;
 
   // Control buttons
-  QPushButton* applyButton_;
-  QPushButton* resetButton_;
+  QPushButton *applyButton_;
+  QPushButton *resetButton_;
 };
 
-#endif // NUCLEARPOTENTIALTAB_H
+#endif  // NUCLEARPOTENTIALTAB_H

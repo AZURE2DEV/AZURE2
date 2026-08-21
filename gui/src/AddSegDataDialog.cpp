@@ -5,8 +5,8 @@
 #include <QGridLayout>
 #include <QFileDialog>
 
-AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
-
+AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
+  QDialog(parent) {
   //  this->setMaximumSize(370,420);
   //  this->setMinimumSize(370,420);
 
@@ -36,9 +36,9 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   dataTypeCombo->addItem(tr("Angle Integrated (E2 only)"));
   dataTypeCombo->addItem(tr("Analyzing Power"));
   // Codes 0-6 happen to equal their position; the analyzing power is 7.
-  for(int i=0;i<dataTypeCombo->count();i++) dataTypeCombo->setItemData(i,i);
-  dataTypeCombo->setItemData(dataTypeCombo->count()-1,7);
-  connect(dataTypeCombo,SIGNAL(currentIndexChanged(int)),this,SLOT(dataTypeChanged(int)));
+  for (int i = 0; i < dataTypeCombo->count(); i++) dataTypeCombo->setItemData(i, i);
+  dataTypeCombo->setItemData(dataTypeCombo->count() - 1, 7);
+  connect(dataTypeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(dataTypeChanged(int)));
   QRegExp spinRX("^\\d{0,2}(\\.[05]{0,1})?$");
   QValidator *spinValidator = new QRegExpValidator(spinRX, this);
   phaseJValueText = new QLineEdit;
@@ -53,7 +53,7 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   phaseLValueText->setMaximumWidth(50);
   dataFileText = new QLineEdit;
   QPushButton *chooseFileButton = new QPushButton(tr("Choose..."));
-  connect(chooseFileButton,SIGNAL(clicked()),this,SLOT(setChooseFile()));
+  connect(chooseFileButton, SIGNAL(clicked()), this, SLOT(setChooseFile()));
   dataNormText = new QLineEdit;
   dataNormText->setText("1.0");
   dataNormErrorLabel = new QLabel(tr("Norm. Error [%]:"));
@@ -63,8 +63,8 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   dataNormErrorText->setText("0.0");
   dataNormErrorText->setMaximumWidth(50);
   varyNormCheck = new QCheckBox(tr("Vary Norm?"));
-  //connect(varyNormCheck,SIGNAL(stateChanged(int)),this,SLOT(varyNormChanged(int)));
-  
+  // connect(varyNormCheck,SIGNAL(stateChanged(int)),this,SLOT(varyNormChanged(int)));
+
   energyShiftText = new QLineEdit;
   energyShiftText->setText("0.0");
   energyShiftLabel = new QLabel(tr("Energy Shift [MeV]:"));
@@ -97,11 +97,11 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   deltaText->setMaximumWidth(60);
 
   advancedModeCheck = new QCheckBox(tr("Advanced Settings (Sum or Ratio of Components)"));
-  connect(advancedModeCheck,SIGNAL(stateChanged(int)),this,SLOT(advancedModeChanged(int)));
+  connect(advancedModeCheck, SIGNAL(stateChanged(int)), this, SLOT(advancedModeChanged(int)));
 
   advancedModeBox = new QGroupBox(tr("Advanced Segment Definition"));
   advancedModeBox->setVisible(false);
-  
+
   operationCombo = new QComboBox;
   operationCombo->addItem(tr("Sum"));
   operationCombo->addItem(tr("Ratio"));
@@ -114,7 +114,7 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   componentEntranceSpin->setMaximum(100);
   componentEntranceSpin->setSingleStep(1);
   componentEntranceSpin->setValue(1);
-  
+
   componentExitSpin = new QSpinBox;
   componentExitSpin->setMinimum(1);
   componentExitSpin->setMaximum(100);
@@ -123,7 +123,7 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
 
   useFixedAngleCheck = new QCheckBox(tr("Use fixed angle for denominator"));
   useFixedAngleCheck->setVisible(false);
-  connect(useFixedAngleCheck,SIGNAL(stateChanged(int)),this,SLOT(useFixedAngleChanged(int)));
+  connect(useFixedAngleCheck, SIGNAL(stateChanged(int)), this, SLOT(useFixedAngleChanged(int)));
 
   fixedAngleLabel = new QLabel(tr("Angle [degrees]:"));
   fixedAngleLabel->setVisible(false);
@@ -138,10 +138,10 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   componentScalingText->setMaximumWidth(80);
 
   addComponentButton = new QPushButton(tr("Add Component"));
-  connect(addComponentButton,SIGNAL(clicked()),this,SLOT(addComponent()));
-  
+  connect(addComponentButton, SIGNAL(clicked()), this, SLOT(addComponent()));
+
   removeComponentButton = new QPushButton(tr("Remove Component"));
-  connect(removeComponentButton,SIGNAL(clicked()),this,SLOT(removeComponent()));
+  connect(removeComponentButton, SIGNAL(clicked()), this, SLOT(removeComponent()));
 
   cancelButton = new QPushButton(tr("Cancel"));
   okButton = new QPushButton(tr("Accept"));
@@ -150,126 +150,126 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
   QGroupBox *valueBox = new QGroupBox;
   QGridLayout *valueLayout = new QGridLayout;
   QGridLayout *pairLayout = new QGridLayout;
-  pairLayout->addWidget(new QLabel(tr("Entrance Pair Key:")),0,0,Qt::AlignRight);
-  pairLayout->addWidget(entrancePairIndexSpin,0,1);
-  pairLayout->addWidget(new QLabel(tr("Exit Pair Key:")),0,2,Qt::AlignRight);
-  pairLayout->addWidget(exitPairIndexSpin,0,3);
+  pairLayout->addWidget(new QLabel(tr("Entrance Pair Key:")), 0, 0, Qt::AlignRight);
+  pairLayout->addWidget(entrancePairIndexSpin, 0, 1);
+  pairLayout->addWidget(new QLabel(tr("Exit Pair Key:")), 0, 2, Qt::AlignRight);
+  pairLayout->addWidget(exitPairIndexSpin, 0, 3);
   totalCaptureLabel = new QLabel(tr("Total Capture"));
   totalCaptureLabel->setVisible(false);
-  pairLayout->addWidget(totalCaptureLabel,0,4);
-  valueLayout->addLayout(pairLayout,0,0,1,2);
-  QGroupBox* energyBox = new QGroupBox(tr("Lab Energy [MeV]"));
+  pairLayout->addWidget(totalCaptureLabel, 0, 4);
+  valueLayout->addLayout(pairLayout, 0, 0, 1, 2);
+  QGroupBox *energyBox = new QGroupBox(tr("Lab Energy [MeV]"));
   QGridLayout *energyLayout = new QGridLayout;
-  energyLayout->addWidget(new QLabel(tr("Low Energy:")),0,0,Qt::AlignRight);
-  energyLayout->addWidget(lowEnergyText,0,1);
-  energyLayout->addWidget(new QLabel(tr("High Energy:")),1,0,Qt::AlignRight);
-  energyLayout->addWidget(highEnergyText,1,1);
+  energyLayout->addWidget(new QLabel(tr("Low Energy:")), 0, 0, Qt::AlignRight);
+  energyLayout->addWidget(lowEnergyText, 0, 1);
+  energyLayout->addWidget(new QLabel(tr("High Energy:")), 1, 0, Qt::AlignRight);
+  energyLayout->addWidget(highEnergyText, 1, 1);
   energyBox->setLayout(energyLayout);
-  valueLayout->addWidget(energyBox,1,0);
-  QGroupBox* angleBox = new QGroupBox(tr("Lab Angle [degrees]"));
+  valueLayout->addWidget(energyBox, 1, 0);
+  QGroupBox *angleBox = new QGroupBox(tr("Lab Angle [degrees]"));
   QGridLayout *angleLayout = new QGridLayout;
-  angleLayout->addWidget(new QLabel(tr("Low Angle:")),0,0,Qt::AlignRight);
-  angleLayout->addWidget(lowAngleText,0,1);
-  angleLayout->addWidget(new QLabel(tr("High Angle:")),1,0,Qt::AlignRight);
-  angleLayout->addWidget(highAngleText,1,1);
+  angleLayout->addWidget(new QLabel(tr("Low Angle:")), 0, 0, Qt::AlignRight);
+  angleLayout->addWidget(lowAngleText, 0, 1);
+  angleLayout->addWidget(new QLabel(tr("High Angle:")), 1, 0, Qt::AlignRight);
+  angleLayout->addWidget(highAngleText, 1, 1);
   angleBox->setLayout(angleLayout);
-  valueLayout->addWidget(angleBox,1,1);
+  valueLayout->addWidget(angleBox, 1, 1);
 
-  QGridLayout* lowerLayout = new QGridLayout;
-  lowerLayout->addWidget(new QLabel(tr("Data Type:")),0,0,Qt::AlignRight);
-  lowerLayout->addWidget(dataTypeCombo,0,1);
+  QGridLayout *lowerLayout = new QGridLayout;
+  lowerLayout->addWidget(new QLabel(tr("Data Type:")), 0, 0, Qt::AlignRight);
+  lowerLayout->addWidget(dataTypeCombo, 0, 1);
 
-  QGridLayout* phaseLayout = new QGridLayout;
-  phaseLayout->addItem(new QSpacerItem(1,25),0,0);
-  phaseLayout->setColumnStretch(0,1);
+  QGridLayout *phaseLayout = new QGridLayout;
+  phaseLayout->addItem(new QSpacerItem(1, 25), 0, 0);
+  phaseLayout->setColumnStretch(0, 1);
   phaseJValueLabel = new QLabel(tr("J:"));
   phaseJValueLabel->setVisible(false);
-  phaseLayout->addWidget(phaseJValueLabel,0,1);
-  phaseLayout->addWidget(phaseJValueText,0,2);
+  phaseLayout->addWidget(phaseJValueLabel, 0, 1);
+  phaseLayout->addWidget(phaseJValueText, 0, 2);
   phaseLValueLabel = new QLabel(tr("l:"));
   phaseLValueLabel->setVisible(false);
-  phaseLayout->addWidget(phaseLValueLabel,0,3);
-  phaseLayout->addWidget(phaseLValueText,0,4);
-  lowerLayout->addLayout(phaseLayout,0,2);
+  phaseLayout->addWidget(phaseLValueLabel, 0, 3);
+  phaseLayout->addWidget(phaseLValueText, 0, 4);
+  lowerLayout->addLayout(phaseLayout, 0, 2);
 
-  lowerLayout->addWidget(new QLabel(tr("Data Norm.:")),1,0,Qt::AlignRight);
+  lowerLayout->addWidget(new QLabel(tr("Data Norm.:")), 1, 0, Qt::AlignRight);
   QHBoxLayout *normLayout = new QHBoxLayout;
   normLayout->addWidget(dataNormText);
   normLayout->addWidget(varyNormCheck);
-  lowerLayout->addLayout(normLayout,1,1);
+  lowerLayout->addLayout(normLayout, 1, 1);
   QGridLayout *normErrorLayout = new QGridLayout;
-  normErrorLayout->addItem(new QSpacerItem(1,25),0,0);
-  normErrorLayout->setColumnStretch(0,1);
-  normErrorLayout->addWidget(dataNormErrorLabel,0,1,Qt::AlignRight);
-  normErrorLayout->addWidget(dataNormErrorText,0,2);
-  lowerLayout->addLayout(normErrorLayout,1,2);  
-  
-  lowerLayout->addWidget(new QLabel(tr("Data File:")),2,0,Qt::AlignRight);
+  normErrorLayout->addItem(new QSpacerItem(1, 25), 0, 0);
+  normErrorLayout->setColumnStretch(0, 1);
+  normErrorLayout->addWidget(dataNormErrorLabel, 0, 1, Qt::AlignRight);
+  normErrorLayout->addWidget(dataNormErrorText, 0, 2);
+  lowerLayout->addLayout(normErrorLayout, 1, 2);
+
+  lowerLayout->addWidget(new QLabel(tr("Data File:")), 2, 0, Qt::AlignRight);
   QGridLayout *fileLayout = new QGridLayout;
-  fileLayout->addWidget(dataFileText,0,0);
-  fileLayout->addWidget(chooseFileButton,0,1);
-  fileLayout->setColumnStretch(0,1);
-  lowerLayout->addLayout(fileLayout,2,1,1,2);
-  
-  lowerLayout->addWidget(energyShiftLabel,3,0,Qt::AlignRight);
+  fileLayout->addWidget(dataFileText, 0, 0);
+  fileLayout->addWidget(chooseFileButton, 0, 1);
+  fileLayout->setColumnStretch(0, 1);
+  lowerLayout->addLayout(fileLayout, 2, 1, 1, 2);
+
+  lowerLayout->addWidget(energyShiftLabel, 3, 0, Qt::AlignRight);
   QHBoxLayout *energyShiftLayout = new QHBoxLayout;
   energyShiftLayout->addWidget(energyShiftText);
   energyShiftLayout->addWidget(varyEnergyShiftCheck);
-  lowerLayout->addLayout(energyShiftLayout,3,1);
+  lowerLayout->addLayout(energyShiftLayout, 3, 1);
   QGridLayout *energyShiftErrorLayout = new QGridLayout;
-  energyShiftErrorLayout->addItem(new QSpacerItem(1,25),0,0);
-  energyShiftErrorLayout->setColumnStretch(0,1);
-  energyShiftErrorLayout->addWidget(energyShiftErrorLabel,0,1,Qt::AlignRight);
-  energyShiftErrorLayout->addWidget(energyShiftErrorText,0,2);
-  lowerLayout->addLayout(energyShiftErrorLayout,3,2);
+  energyShiftErrorLayout->addItem(new QSpacerItem(1, 25), 0, 0);
+  energyShiftErrorLayout->setColumnStretch(0, 1);
+  energyShiftErrorLayout->addWidget(energyShiftErrorLabel, 0, 1, Qt::AlignRight);
+  energyShiftErrorLayout->addWidget(energyShiftErrorText, 0, 2);
+  lowerLayout->addLayout(energyShiftErrorLayout, 3, 2);
 
   // UPOS row
-  lowerLayout->addWidget(uposCheck,4,0,1,3);
+  lowerLayout->addWidget(uposCheck, 4, 0, 1, 3);
   QGridLayout *uposParamLayout = new QGridLayout;
-  uposParamLayout->addItem(new QSpacerItem(1,5),0,0);
-  uposParamLayout->setColumnStretch(0,1);
-  uposParamLayout->addWidget(secondaryLLabel,0,1,Qt::AlignRight);
-  uposParamLayout->addWidget(secondaryLSpin,0,2);
-  uposParamLayout->addWidget(finalJLabel,0,3,Qt::AlignRight);
-  uposParamLayout->addWidget(finalJText,0,4);
-  uposParamLayout->addWidget(deltaLabel,0,5,Qt::AlignRight);
-  uposParamLayout->addWidget(deltaText,0,6);
-  lowerLayout->addLayout(uposParamLayout,5,0,1,3);
+  uposParamLayout->addItem(new QSpacerItem(1, 5), 0, 0);
+  uposParamLayout->setColumnStretch(0, 1);
+  uposParamLayout->addWidget(secondaryLLabel, 0, 1, Qt::AlignRight);
+  uposParamLayout->addWidget(secondaryLSpin, 0, 2);
+  uposParamLayout->addWidget(finalJLabel, 0, 3, Qt::AlignRight);
+  uposParamLayout->addWidget(finalJText, 0, 4);
+  uposParamLayout->addWidget(deltaLabel, 0, 5, Qt::AlignRight);
+  uposParamLayout->addWidget(deltaText, 0, 6);
+  lowerLayout->addLayout(uposParamLayout, 5, 0, 1, 3);
 
-  lowerLayout->addWidget(advancedModeCheck,6,0,1,3);
-  
+  lowerLayout->addWidget(advancedModeCheck, 6, 0, 1, 3);
+
   QGridLayout *advancedLayout = new QGridLayout;
-  advancedLayout->addWidget(new QLabel(tr("Operation:")),0,0);
-  advancedLayout->addWidget(operationCombo,0,1);
-  connect(operationCombo,SIGNAL(currentIndexChanged(int)),this,SLOT(operationTypeChanged(int)));
+  advancedLayout->addWidget(new QLabel(tr("Operation:")), 0, 0);
+  advancedLayout->addWidget(operationCombo, 0, 1);
+  connect(operationCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(operationTypeChanged(int)));
 
-  advancedLayout->addWidget(new QLabel(tr("Components:")),1,0);
-  advancedLayout->addWidget(componentsList,1,1,4,1);
+  advancedLayout->addWidget(new QLabel(tr("Components:")), 1, 0);
+  advancedLayout->addWidget(componentsList, 1, 1, 4, 1);
 
   // Add component entrance/exit spinboxes above buttons
-  advancedLayout->addWidget(new QLabel(tr("Entrance Pair Key:")),1,2);
-  advancedLayout->addWidget(componentEntranceSpin,1,3);
-  advancedLayout->addWidget(new QLabel(tr("Exit Pair Key:")),2,2);
-  advancedLayout->addWidget(componentExitSpin,2,3);
+  advancedLayout->addWidget(new QLabel(tr("Entrance Pair Key:")), 1, 2);
+  advancedLayout->addWidget(componentEntranceSpin, 1, 3);
+  advancedLayout->addWidget(new QLabel(tr("Exit Pair Key:")), 2, 2);
+  advancedLayout->addWidget(componentExitSpin, 2, 3);
 
   // Add fixed angle checkbox and input
-  advancedLayout->addWidget(useFixedAngleCheck,3,2,1,2);
-  advancedLayout->addWidget(fixedAngleLabel,4,2);
-  advancedLayout->addWidget(fixedAngleText,4,3);
+  advancedLayout->addWidget(useFixedAngleCheck, 3, 2, 1, 2);
+  advancedLayout->addWidget(fixedAngleLabel, 4, 2);
+  advancedLayout->addWidget(fixedAngleText, 4, 3);
 
   // Per-component scaling input (multiplies this component before sum)
-  advancedLayout->addWidget(componentScalingLabel,5,2);
-  advancedLayout->addWidget(componentScalingText,5,3);
+  advancedLayout->addWidget(componentScalingLabel, 5, 2);
+  advancedLayout->addWidget(componentScalingText, 5, 3);
 
   QGridLayout *buttonLayout = new QGridLayout;
-  buttonLayout->addWidget(addComponentButton,0,0);
-  buttonLayout->addWidget(removeComponentButton,0,1);
-  advancedLayout->addLayout(buttonLayout,6,2,1,2);
+  buttonLayout->addWidget(addComponentButton, 0, 0);
+  buttonLayout->addWidget(removeComponentButton, 0, 1);
+  advancedLayout->addLayout(buttonLayout, 6, 2, 1, 2);
   advancedModeBox->setLayout(advancedLayout);
 
-  lowerLayout->addWidget(advancedModeBox,7,0,1,3);
-  
-  valueLayout->addLayout(lowerLayout,2,0,1,2);
+  lowerLayout->addWidget(advancedModeBox, 7, 0, 1, 3);
+
+  valueLayout->addLayout(lowerLayout, 2, 0, 1, 2);
   valueBox->setLayout(valueLayout);
 
   QHBoxLayout *buttonBox = new QHBoxLayout;
@@ -282,15 +282,15 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) : QDialog(parent) {
 
   setLayout(mainLayout);
 
-  connect(okButton, SIGNAL(clicked()),this,SLOT(accept()));
-  connect(cancelButton,SIGNAL(clicked()),this,SLOT(reject()));
+  connect(okButton, SIGNAL(clicked()), this, SLOT(accept()));
+  connect(cancelButton, SIGNAL(clicked()), this, SLOT(reject()));
 
   setWindowTitle(tr("Add a Segment From Data"));
 }
 
 void AddSegDataDialog::setChooseFile() {
   QString filename = QFileDialog::getOpenFileName(this);
-  if(!filename.isEmpty()) {
+  if (!filename.isEmpty()) {
     dataFileText->setText(QDir::fromNativeSeparators(filename));
   }
 }
@@ -306,7 +306,7 @@ void AddSegDataDialog::setDataTypeCode(int code) {
 }
 
 void AddSegDataDialog::dataTypeChanged(int index) {
-  if(index==2) {
+  if (index == 2) {
     phaseJValueLabel->setVisible(true);
     phaseLValueLabel->setVisible(true);
     phaseJValueText->setVisible(true);
@@ -317,34 +317,34 @@ void AddSegDataDialog::dataTypeChanged(int index) {
     phaseJValueText->setVisible(false);
     phaseLValueText->setVisible(false);
   }
-  if(index==1) {
+  if (index == 1) {
     lowAngleText->setEnabled(true);
     highAngleText->setEnabled(true);
   } else {
     lowAngleText->setEnabled(false);
     highAngleText->setEnabled(false);
   }
-  if(index==3) {
+  if (index == 3) {
     exitPairIndexSpin->setVisible(false);
     totalCaptureLabel->setVisible(true);
   } else {
     totalCaptureLabel->setVisible(false);
     exitPairIndexSpin->setVisible(true);
   }
-  if(index==4||index==7) {
+  if (index == 4 || index == 7) {
     lowAngleText->setEnabled(true);
     highAngleText->setEnabled(true);
   }
   // A_y is a ratio: a normalization factor has no meaning for it.
-  varyNormCheck->setEnabled(index!=7);
-  if(index==7) varyNormCheck->setChecked(false);
+  varyNormCheck->setEnabled(index != 7);
+  if (index == 7) varyNormCheck->setChecked(false);
 
   // Update fixed angle visibility when data type changes
   operationTypeChanged(operationCombo->currentIndex());
 }
 
 void AddSegDataDialog::varyNormChanged(int state) {
-  if(state==Qt::Checked) {
+  if (state == Qt::Checked) {
     dataNormErrorLabel->setVisible(true);
     dataNormErrorText->setVisible(true);
   } else {
@@ -354,7 +354,7 @@ void AddSegDataDialog::varyNormChanged(int state) {
 }
 
 void AddSegDataDialog::advancedModeChanged(int state) {
-  if(state==Qt::Checked) {
+  if (state == Qt::Checked) {
     advancedModeBox->setVisible(true);
     // Keep the spinboxes enabled so users can select pairs to add as components
     entrancePairIndexSpin->setEnabled(true);
@@ -370,13 +370,13 @@ void AddSegDataDialog::advancedModeChanged(int state) {
 void AddSegDataDialog::operationTypeChanged(int index) {
   // Show fixed angle option only when Ratio is selected AND segment is differential
   bool isRatio = (index == 1);
-  bool isDifferential = (dataTypeCombo->currentIndex() == 1) || (dataTypeCombo->currentIndex() == 4); // Differential or CM Differential
+  bool isDifferential = (dataTypeCombo->currentIndex() == 1) || (dataTypeCombo->currentIndex() == 4);  // Differential or CM Differential
 
-  if(isRatio && isDifferential) {
+  if (isRatio && isDifferential) {
     useFixedAngleCheck->setVisible(true);
   } else {
     useFixedAngleCheck->setVisible(false);
-    useFixedAngleCheck->setChecked(false); // Uncheck if hidden
+    useFixedAngleCheck->setChecked(false);  // Uncheck if hidden
   }
 
   // Per-component scaling factor only applies to Sum mode
@@ -385,7 +385,7 @@ void AddSegDataDialog::operationTypeChanged(int index) {
 }
 
 void AddSegDataDialog::useFixedAngleChanged(int state) {
-  if(state == Qt::Checked) {
+  if (state == Qt::Checked) {
     fixedAngleLabel->setVisible(true);
     fixedAngleText->setVisible(true);
   } else {
@@ -403,16 +403,16 @@ void AddSegDataDialog::addComponent() {
   bool isRatio = (operationCombo->currentIndex() == 1);
   bool useFixedAngle = useFixedAngleCheck->isChecked();
 
-  if(isRatio) {
+  if (isRatio) {
     // For ratio, this is the denominator (only one component needed)
-    if(useFixedAngle) {
+    if (useFixedAngle) {
       double angle = fixedAngleText->text().toDouble();
       component += QString(", Angle: %1").arg(angle);
     }
 
     // Only allow one component for ratio
-    if(componentsList->count() >= 1) {
-      return; // Don't add more than one component for ratio
+    if (componentsList->count() >= 1) {
+      return;  // Don't add more than one component for ratio
     }
   } else {
     // Only sums benefit from a scaling factor (applied to the component before
@@ -420,7 +420,7 @@ void AddSegDataDialog::addComponent() {
     // legacy files keep their existing component-string format.
     bool scalingOk = false;
     double scaling = componentScalingText->text().toDouble(&scalingOk);
-    if(scalingOk && scaling != 1.0) {
+    if (scalingOk && scaling != 1.0) {
       component += QString(", Scaling: %1").arg(scaling);
     }
   }
@@ -430,7 +430,7 @@ void AddSegDataDialog::addComponent() {
 
 void AddSegDataDialog::removeComponent() {
   int currentRow = componentsList->currentRow();
-  if(currentRow >= 0) {
+  if (currentRow >= 0) {
     delete componentsList->takeItem(currentRow);
   }
 }

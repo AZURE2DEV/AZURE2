@@ -12,8 +12,7 @@ class QComboBox;
 QT_END_NAMESPACE
 
 class EditChecksDialog : public QDialog {
-
-Q_OBJECT
+  Q_OBJECT
 
  public:
   EditChecksDialog(QWidget *parent = 0);
@@ -30,7 +29,6 @@ Q_OBJECT
   QPushButton *okButton;
   QPushButton *cancelButton;
   QGroupBox *stoppingPowerBox;
-
 };
 
 #endif

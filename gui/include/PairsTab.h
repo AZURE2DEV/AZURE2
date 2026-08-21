@@ -26,16 +26,16 @@ class PairsTab : public QWidget {
  public:
   PairsTab(QWidget *parent = 0);
   PairsModel *getPairsModel();
-  bool parseOldECSection(QTextStream&);
+  bool parseOldECSection(QTextStream &);
 
  public slots:
   void addPair();
-  void addPair(PairsData pair,int pairIndex,bool fromFile);
+  void addPair(PairsData pair, int pairIndex, bool fromFile);
   void editPair();
-  void editPair(PairsData pair,int pairIndex,bool fromFile);
+  void editPair(PairsData pair, int pairIndex, bool fromFile);
   void removePair();
   void updateButtons(const QItemSelection &selection);
-  void showInfo(int which=0,QString title="");
+  void showInfo(int which = 0, QString title = "");
 
  signals:
   void pairAdded(int);
@@ -47,7 +47,7 @@ class PairsTab : public QWidget {
   QTableView *pairsView;
   QPushButton *addButton;
   QPushButton *deleteButton;
-  QSignalMapper* mapper;
+  QSignalMapper *mapper;
   QPushButton *infoButton[5];
   static const std::vector<QString> infoText;
   QPointer<InfoDialog> infoDialog[5];

@@ -23,7 +23,7 @@ class AddTargetIntDialog : public QDialog {
   Q_OBJECT
 
  public:
-  AddTargetIntDialog(QWidget *parent=0);
+  AddTargetIntDialog(QWidget *parent = 0);
   QCheckBox *isConvolutionCheck;
   QCheckBox *isConvolutionDependentCheck;
   QCheckBox *isTargetIntegrationCheck;
@@ -56,7 +56,7 @@ class AddTargetIntDialog : public QDialog {
   void createParameterItem(int row, double value = 0.0);
   void createQCoefficientItem(int row, double value = 1.0);
   void createConvCoefficientItem(int row, double value = 1.0);
-  
+
  public slots:
   void convolutionCheckChanged(bool checked);
 
@@ -82,12 +82,12 @@ class AddTargetIntDialog : public QDialog {
   QGroupBox *stoppingPowerBox;
   QGroupBox *qCoefficientBox;
   QGroupBox *convCoefficientBox;
-  
+
   int selectedElement_;
   void populateElementComboBox();
   void updateStoppingPowerFromElement(int element);
-  void updateStoppingPowerFromCompound(const std::string& formula);
-  void updateStoppingPowerGUI(const QString& equation, const std::vector<double>& parameters, const QString& materialName);
+  void updateStoppingPowerFromCompound(const std::string &formula);
+  void updateStoppingPowerGUI(const QString &equation, const std::vector<double> &parameters, const QString &materialName);
 };
 
 #endif

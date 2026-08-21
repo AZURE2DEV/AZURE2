@@ -15,18 +15,17 @@ QT_END_NAMESPACE
 QT_END_NAMESPACE
 
 class EditOptionsDialog : public QDialog {
-
-Q_OBJECT
+  Q_OBJECT
 
  public:
-  EditOptionsDialog(QWidget *parent =0);
-  QCheckBox* useBruneCheck;
-  QCheckBox* useGSLCoulCheck;
-  QCheckBox* ignoreExternalsCheck;
-  QCheckBox* useRMCCheck;
-  QCheckBox* noTransformCheck;
-  QCheckBox* useHybridMethodCheck;
-  QCheckBox* useAdaptiveGridCheck;
+  EditOptionsDialog(QWidget *parent = 0);
+  QCheckBox *useBruneCheck;
+  QCheckBox *useGSLCoulCheck;
+  QCheckBox *ignoreExternalsCheck;
+  QCheckBox *useRMCCheck;
+  QCheckBox *noTransformCheck;
+  QCheckBox *useHybridMethodCheck;
+  QCheckBox *useAdaptiveGridCheck;
   // QCheckBox* noLongWavelengthCheck;
 
  private slots:
@@ -36,7 +35,6 @@ Q_OBJECT
  private:
   QPushButton *okButton;
   QPushButton *cancelButton;
-
 };
 
 #endif

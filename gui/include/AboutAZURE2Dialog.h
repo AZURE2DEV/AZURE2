@@ -10,8 +10,7 @@ class AboutAZURE2Dialog : public QDialog {
   Q_OBJECT
 
  public:
-  AboutAZURE2Dialog(QWidget *parent=0);
-  
+  AboutAZURE2Dialog(QWidget *parent = 0);
 };
 
 #endif
