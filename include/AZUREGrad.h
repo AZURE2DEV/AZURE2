@@ -31,10 +31,10 @@ class ParamIndexMap;
 
 /// Kinds of fit parameter, in their flat-vector ordering.
 enum class ParamKind {
-  LevelEnergy,   ///< E_lambda  for a (jGroup, level)
-  Gamma,         ///< gamma_lambda,c for a (jGroup, level, channel)
-  Norm,          ///< dataset normalization n_k for a segment
-  EnergyShift    ///< per-segment energy shift
+  LevelEnergy,  ///< E_lambda  for a (jGroup, level)
+  Gamma,        ///< gamma_lambda,c for a (jGroup, level, channel)
+  Norm,         ///< dataset normalization n_k for a segment
+  EnergyShift   ///< per-segment energy shift
 };
 
 /// Description of one entry in the full (unfiltered) flat parameter vector.
@@ -79,7 +79,7 @@ class ParamIndexMap {
   int NumPacked() const { return numPacked_; }
 
   /// Description of full-index i.
-  const ParamDesc& Desc(int fullIndex) const { return desc_[fullIndex]; }
+  const ParamDesc &Desc(int fullIndex) const { return desc_[fullIndex]; }
 
   /// Packed index for a full index, or -1 if that parameter is fixed.
   int FullToPacked(int fullIndex) const { return fullToPacked_[fullIndex]; }
@@ -89,14 +89,14 @@ class ParamIndexMap {
   int NormOffset() const { return normOffset_; }
   int EnergyShiftOffset() const { return energyShiftOffset_; }
 
-  friend ParamIndexMap BuildParamIndexMap(CNuc*, EData*, const std::vector<bool>&);
+  friend ParamIndexMap BuildParamIndexMap(CNuc *, EData *, const std::vector<bool> &);
 
  private:
-  std::vector<ParamDesc> desc_;            ///< per full index
-  std::map<std::pair<int,int>, int> eIndex_;            ///< (j,la) -> full idx
-  std::map<std::tuple<int,int,int>, int> gammaIndex_;   ///< (j,la,ch) -> full idx
-  std::map<int, int> normIndex_;                        ///< segment -> full idx
-  std::map<int, int> shiftIndex_;                       ///< segment -> full idx
+  std::vector<ParamDesc> desc_;                          ///< per full index
+  std::map<std::pair<int, int>, int> eIndex_;            ///< (j,la) -> full idx
+  std::map<std::tuple<int, int, int>, int> gammaIndex_;  ///< (j,la,ch) -> full idx
+  std::map<int, int> normIndex_;                         ///< segment -> full idx
+  std::map<int, int> shiftIndex_;                        ///< segment -> full idx
   std::vector<int> fullToPacked_;
   std::vector<int> packedToFull_;
   int numPacked_ = 0;
@@ -118,20 +118,20 @@ struct GradAccum {
   std::vector<std::vector<std::vector<double>>> gamma;
 
   /// Allocate (and zero) the accumulators to match the compound's dimensions.
-  void Init(CNuc* compound);
+  void Init(CNuc *compound);
   /// Reset all accumulators to zero (without reallocating).
   void Zero();
   /// Add another accumulator (same compound dimensions) into this one.  Used to
   /// reduce per-thread partial gradients after a parallel point loop.
-  void Add(const GradAccum& o);
+  void Add(const GradAccum &o);
   /// Add an energy contribution (1-based indices).
-  void AddE(int jGroup, int level, double v) { e[jGroup-1][level-1] += v; }
+  void AddE(int jGroup, int level, double v) { e[jGroup - 1][level - 1] += v; }
   /// Add a gamma contribution (1-based indices).
   void AddGamma(int jGroup, int level, int channel, double v) {
-    gamma[jGroup-1][level-1][channel-1] += v;
+    gamma[jGroup - 1][level - 1][channel - 1] += v;
   }
   /// Scatter into the flat (full) gradient vector using the index map.
-  void Scatter(const ParamIndexMap& map, vector_r& gradFull) const;
+  void Scatter(const ParamIndexMap &map, vector_r &gradFull) const;
 };
 
 /*!
@@ -142,8 +142,8 @@ struct GradAccum {
  * \param fixed     the per-full-index fixed mask (same as AZUREAPI::fixed_).
  *                  If empty, all parameters are treated as non-fixed.
  */
-ParamIndexMap BuildParamIndexMap(CNuc* compound, EData* data,
-                                 const std::vector<bool>& fixed);
+ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
+                                 const std::vector<bool> &fixed);
 
 /*!
  * \brief Precompute the energy derivative of the Brune shift function S(E_lambda)
@@ -156,7 +156,7 @@ ParamIndexMap BuildParamIndexMap(CNuc* compound, EData* data,
  * and channel radii, so they are computed once per gradient evaluation and
  * reused across all data points.  See PLAN.md Phase 6.
  */
-vector_matrix_r BuildShiftDerivTable(CNuc* compound, const Config& configure);
+vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure);
 
 /*!
  * \brief Shared analytic gradient engine used by both AZUREAPI (log-likelihood)
@@ -176,13 +176,13 @@ vector_matrix_r BuildShiftDerivTable(CNuc* compound, const Config& configure);
  * fitBarFn arguments: (segment, 1-based segment index, 0-based point index,
  * combined model value).
  */
-using FitBarFn = std::function<double(ESegment*, int, int, double)>;
+using FitBarFn = std::function<double(ESegment *, int, int, double)>;
 
-bool AccumulateEGammaGradient(CNuc* compound, EData* data, const Config& config,
-                              const ParamIndexMap& pmap,
-                              const vector_matrix_r* shiftDeriv,
-                              const FitBarFn& fitBarFn,
-                              GradAccum& accum);
+bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
+                              const ParamIndexMap &pmap,
+                              const vector_matrix_r *shiftDeriv,
+                              const FitBarFn &fitBarFn,
+                              GradAccum &accum);
 
 /*!
  * \brief Residual vector and its Jacobian for Gauss-Newton / Levenberg-Marquardt.
@@ -200,10 +200,10 @@ bool AccumulateEGammaGradient(CNuc* compound, EData* data, const Config& config,
  * AZUREAPI::CalculateResidualJacobianRWA).  Returns false if any point is
  * outside the supported analytic path.
  */
-bool ComputeResidualJacobian(CNuc* compound, EData* data, const Config& config,
-                             const ParamIndexMap& pmap,
-                             const vector_matrix_r* shiftDeriv,
-                             vector_r& residuals, vector_r& jacobian, int& nCols);
+bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
+                             const ParamIndexMap &pmap,
+                             const vector_matrix_r *shiftDeriv,
+                             vector_r &residuals, vector_r &jacobian, int &nCols);
 
 /*!
  * \brief Per-point d(model)/d(theta) for analytic covariance bands, keyed by
@@ -213,9 +213,9 @@ bool ComputeResidualJacobian(CNuc* compound, EData* data, const Config& config,
  *        Returns false (clearing the output) if any point is outside the analytic
  *        path, so the caller can skip the band.
  */
-bool ComputeModelGradients(CNuc* compound, EData* data, const Config& config,
-                           const ParamIndexMap& pmap,
-                           const vector_matrix_r* shiftDeriv,
-                           std::map<EPoint*, vector_r>& gradByPoint);
+bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
+                           const ParamIndexMap &pmap,
+                           const vector_matrix_r *shiftDeriv,
+                           std::map<EPoint *, vector_r> &gradByPoint);
 
 #endif

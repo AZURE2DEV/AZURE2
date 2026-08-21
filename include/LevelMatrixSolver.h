@@ -4,7 +4,7 @@
 #include "Constants.h"
 #include <vector>
 
-///A reusable dense complex LU factorization of the level matrix.
+/// A reusable dense complex LU factorization of the level matrix.
 
 /*!
  * The level matrix of one J-group is small (a handful of levels) but is rebuilt
@@ -27,51 +27,54 @@
 
 class LevelMatrixSolver {
  public:
-  LevelMatrixSolver() : n_(0), singular_(false), inverse_valid_(false) {};
+  LevelMatrixSolver() :
+    n_(0),
+    singular_(false),
+    inverse_valid_(false) {};
 
   /*!
    * Factors the matrix \f$ A \f$, which must be square.  Returns false if a
    * pivot is zero or non-finite, in which case the factorization is unusable
    * and singular() is set.
    */
-  bool Decompose(const matrix_c& A);
+  bool Decompose(const matrix_c &A);
 
   /*!
    * Returns the dimension of the factored matrix.
    */
-  int size() const {return n_;};
+  int size() const { return n_; };
   /*!
    * Returns true if Decompose() encountered a zero or non-finite pivot.
    */
-  bool singular() const {return singular_;};
+  bool singular() const { return singular_; };
 
   /*!
    * Replaces the length-size() vector \f$ b \f$ with \f$ M^{-1} b \f$.
    */
-  void Solve(complex* b) const;
+  void Solve(complex *b) const;
 
   /*!
    * Writes \f$ M^{-1} b \f$ into \f$ x \f$, resizing it as needed.
    */
-  void SolveInto(const vector_c& b, vector_c& x) const;
+  void SolveInto(const vector_c &b, vector_c &x) const;
 
   /*!
    * Returns \f$ u^T M^{-1} v \f$ using a single triangular solve.
    */
-  complex Bilinear(const vector_c& u, const vector_c& v) const;
+  complex Bilinear(const vector_c &u, const vector_c &v) const;
 
   /*!
    * Returns the full inverse, computed on the first call following Decompose()
    * and cached thereafter.
    */
-  const matrix_c& Inverse() const;
+  const matrix_c &Inverse() const;
 
  private:
   int n_;
   bool singular_;
-  ///LU factors of the level matrix, row-major, n_ by n_.
+  /// LU factors of the level matrix, row-major, n_ by n_.
   std::vector<complex> lu_;
-  ///Row interchanges chosen by partial pivoting.
+  /// Row interchanges chosen by partial pivoting.
   std::vector<int> piv_;
   mutable bool inverse_valid_;
   mutable matrix_c inverse_;

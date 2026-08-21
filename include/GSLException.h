@@ -14,25 +14,26 @@ class GSLException : public std::exception {
  public:
   GSLException(std::string message, std::string line = "", std::string file = "") {
     std::ostringstream stm;
-    if(line != "" && file != "") {
+    if (line != "" && file != "") {
       stm << "Exception thrown from line " << line << " of file " << file << " with message: " << std::endl
-	  << message;
+          << message;
     } else {
       stm << "Exception thrown with message: " << std::endl
-	  << message;
+          << message;
     }
-    messageString_=stm.str();
-    message_=messageString_.c_str();
-  }; 
+    messageString_ = stm.str();
+    message_ = messageString_.c_str();
+  };
   ~GSLException() throw() {
   };
-  virtual const char* what() const throw() {
+  virtual const char *what() const throw() {
     return message_;
   };
-  static void GSLErrorHandler(const char*, const char*, int, int);
+  static void GSLErrorHandler(const char *, const char *, int, int);
+
  private:
   std::string messageString_;
-  const char* message_;
+  const char *message_;
 };
 
 #endif

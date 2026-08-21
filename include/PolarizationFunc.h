@@ -48,8 +48,8 @@ namespace Polarization {
  * and exit channel spins and their projections.
  */
 struct Amplitude {
-  double s, v;      //!< entrance channel spin and projection
-  double sp, vp;    //!< exit channel spin and projection
+  double s, v;    //!< entrance channel spin and projection
+  double sp, vp;  //!< exit channel spin and projection
   complex value;
 };
 
@@ -64,7 +64,7 @@ struct Amplitude {
  */
 class AmplitudeMatrix {
  public:
-  AmplitudeMatrix(CNuc* compound, EPoint* point, int aa, int ir);
+  AmplitudeMatrix(CNuc *compound, EPoint *point, int aa, int ir);
 
   //! Add the contribution of one pathway: T element for (jNum, ch, chp).
   void AddPathway(int jNum, int chNum, int chpNum, complex tMatrixElement);
@@ -103,7 +103,7 @@ class AmplitudeMatrix {
    */
   std::vector<complex> AnalyzingPowerBar() const;
   complex PathwayAdjoint(int jNum, int chNum, int chpNum,
-                         const std::vector<complex>& bar) const;
+                         const std::vector<complex> &bar) const;
 
   //! Largest |M| with v != v' -- the spin-flip strength, which is what makes
   //! a vector analyzing power non-zero. Diagnostic.
@@ -111,15 +111,15 @@ class AmplitudeMatrix {
   void DumpSpinHalf() const;
 
   //! Number of amplitudes accumulated; zero means no pathway contributed.
-  std::size_t size() const {return amplitudes_.size();};
+  std::size_t size() const { return amplitudes_.size(); };
 
  private:
-  complex& At(double s, double v, double sp, double vp);
+  complex &At(double s, double v, double sp, double vp);
   int IndexOf(double s, double v, double sp, double vp) const;
   complex Get(double s, double v, double sp, double vp) const;
 
-  CNuc* compound_;
-  EPoint* point_;
+  CNuc *compound_;
+  EPoint *point_;
   int aa_, ir_;
   double theta_;
   std::vector<double> entranceSpins_, exitSpins_;

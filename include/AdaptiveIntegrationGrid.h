@@ -21,7 +21,7 @@
  * - Compatible: Designed as a drop-in replacement for uniform grids
  */
 class AdaptiveIntegrationGrid {
-public:
+ public:
   /*!
    * \brief Configuration parameters for adaptive grid generation
    */
@@ -33,20 +33,20 @@ public:
     int entranceKey;                  ///< Entrance channel key for separation energy calculation
 
     // Default constructor with sensible defaults
-    GridConfig()
-      : maxPoints(1000),
-        baseEnergyStep(0.001),
-        resonanceWidthMultiplier(5.0),
-        pointsPerWidth(50.0),
-        entranceKey(0) {}
+    GridConfig() :
+      maxPoints(1000),
+      baseEnergyStep(0.001),
+      resonanceWidthMultiplier(5.0),
+      pointsPerWidth(50.0),
+      entranceKey(0) {}
   };
 
   /*!
    * \brief Grid point information
    */
   struct GridPoint {
-    double energy;      ///< Energy of the point (CM frame)
-    bool isResonant;    ///< Flag indicating if point is in resonant region
+    double energy;    ///< Energy of the point (CM frame)
+    bool isResonant;  ///< Flag indicating if point is in resonant region
   };
 
   /*!
@@ -62,7 +62,7 @@ public:
    * \brief Constructor
    * \param config Grid generation configuration
    */
-  AdaptiveIntegrationGrid(const GridConfig& config);
+  AdaptiveIntegrationGrid(const GridConfig &config);
 
   /*!
    * \brief Generate adaptive grid for a given energy range
@@ -75,7 +75,7 @@ public:
    * \param compound Pointer to compound nucleus for level information
    * \return Vector of grid points (energies in descending order)
    */
-  std::vector<double> GenerateGrid(double startEnergy, double endEnergy, CNuc* compound);
+  std::vector<double> GenerateGrid(double startEnergy, double endEnergy, CNuc *compound);
 
   /*!
    * \brief Generate grid with detailed point information
@@ -84,7 +84,7 @@ public:
    * \param compound Pointer to compound nucleus for level information
    * \return Vector of GridPoint structures with energy and resonance flags
    */
-  std::vector<GridPoint> GenerateGridWithInfo(double startEnergy, double endEnergy, CNuc* compound);
+  std::vector<GridPoint> GenerateGridWithInfo(double startEnergy, double endEnergy, CNuc *compound);
 
   /*!
    * \brief Get the actual number of points that would be generated
@@ -93,7 +93,7 @@ public:
    * \param compound Pointer to compound nucleus
    * \return Number of points in the adaptive grid
    */
-  int GetExpectedPointCount(double startEnergy, double endEnergy, CNuc* compound);
+  int GetExpectedPointCount(double startEnergy, double endEnergy, CNuc *compound);
 
   /*!
    * \brief Get the resonances (CM energy + total width) within an energy range.
@@ -107,7 +107,7 @@ public:
    * \param compound    Pointer to compound nucleus for level information
    * \return Vector of ResonanceInfo (energy, totalWidth), sorted by energy
    */
-  std::vector<ResonanceInfo> GetResonances(double startEnergy, double endEnergy, CNuc* compound) {
+  std::vector<ResonanceInfo> GetResonances(double startEnergy, double endEnergy, CNuc *compound) {
     return IdentifyResonances(startEnergy, endEnergy, compound);
   }
 
@@ -115,7 +115,7 @@ public:
    * \brief Set grid configuration
    * \param config New configuration parameters
    */
-  void SetConfig(const GridConfig& config);
+  void SetConfig(const GridConfig &config);
 
   /*!
    * \brief Get current grid configuration
@@ -123,7 +123,7 @@ public:
    */
   GridConfig GetConfig() const;
 
-private:
+ private:
   GridConfig config_;  ///< Grid generation configuration
 
   /*!
@@ -133,7 +133,7 @@ private:
    * \param compound Pointer to compound nucleus
    * \return Vector of ResonanceInfo structures with energies and widths
    */
-  std::vector<ResonanceInfo> IdentifyResonances(double startEnergy, double endEnergy, CNuc* compound);
+  std::vector<ResonanceInfo> IdentifyResonances(double startEnergy, double endEnergy, CNuc *compound);
 
   /*!
    * \brief Check if an energy is within a resonant region
@@ -141,7 +141,7 @@ private:
    * \param resonances Vector of resonance information
    * \return True if energy is near a resonance
    */
-  bool IsInResonantRegion(double energy, const std::vector<ResonanceInfo>& resonances) const;
+  bool IsInResonantRegion(double energy, const std::vector<ResonanceInfo> &resonances) const;
 
   /*!
    * \brief Calculate appropriate step size at a given energy
@@ -149,7 +149,7 @@ private:
    * \param resonances Vector of resonance information
    * \return Adaptive step size based on local resonance width
    */
-  double CalculateAdaptiveStep(double energy, const std::vector<ResonanceInfo>& resonances) const;
+  double CalculateAdaptiveStep(double energy, const std::vector<ResonanceInfo> &resonances) const;
 
   /*!
    * \brief Find the nearest resonance to a given energy
@@ -158,9 +158,9 @@ private:
    * \param distance Output parameter for distance to nearest resonance
    * \return Pointer to nearest ResonanceInfo, or nullptr if no resonances
    */
-  const ResonanceInfo* FindNearestResonance(double energy,
-                                            const std::vector<ResonanceInfo>& resonances,
-                                            double& distance) const;
+  const ResonanceInfo *FindNearestResonance(double energy,
+                                            const std::vector<ResonanceInfo> &resonances,
+                                            double &distance) const;
 };
 
-#endif // ADAPTIVEINTEGRATIONGRID_H
+#endif  // ADAPTIVEINTEGRATIONGRID_H

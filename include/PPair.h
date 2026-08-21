@@ -5,7 +5,7 @@
 
 class NucLine;
 
-///An AZURE Particle Pair
+/// An AZURE Particle Pair
 
 /*!
  * In R-Matrix theory, the configuration space in the external region is decomposed into combinations of particle
@@ -14,7 +14,7 @@ class NucLine;
  */
 
 class PPair {
-public:
+ public:
   PPair(NucLine);
   bool IsEntrance() const;
   int GetZ(int) const;
@@ -30,7 +30,7 @@ public:
   double GetExE() const;
   double GetSepE() const;
   double GetChRad() const;
-  void   SetChRad(double);
+  void SetChRad(double);
   double GetRedMass() const;
   double GetI1I2Factor() const;
   /// Returns true if the two particles in the pair are identical
@@ -43,7 +43,8 @@ public:
   void AddDecay(Decay);
   void SetEntrance();
   Decay *GetDecay(int);
-private:
+
+ private:
   bool entrance_;
   bool ec_entrance_;
   bool is_identical_;

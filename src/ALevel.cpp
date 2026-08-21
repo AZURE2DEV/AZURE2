@@ -6,10 +6,17 @@
  */
 
 ALevel::ALevel(NucLine nucLine) :
-  level_e_(nucLine.levelE()),fitlevel_e_(0.0), isinrmatrix_(true), sqrt_nf_factor_(1.0), isECLevel_(false),
-  ecMultMask_(0), ecPairNum_(0) {
-  if(nucLine.levelFix()==1) energyfixed_=true;
-  else energyfixed_=false;
+  level_e_(nucLine.levelE()),
+  fitlevel_e_(0.0),
+  isinrmatrix_(true),
+  sqrt_nf_factor_(1.0),
+  isECLevel_(false),
+  ecMultMask_(0),
+  ecPairNum_(0) {
+  if (nucLine.levelFix() == 1)
+    energyfixed_ = true;
+  else
+    energyfixed_ = false;
 }
 
 /*!
@@ -17,8 +24,14 @@ ALevel::ALevel(NucLine nucLine) :
  */
 
 ALevel::ALevel(double energy) :
-  energyfixed_(true),level_e_(energy),fitlevel_e_(0.0), isinrmatrix_(false), sqrt_nf_factor_(1.0), isECLevel_(false),
-  ecMultMask_(0), ecPairNum_(0) {};
+  energyfixed_(true),
+  level_e_(energy),
+  fitlevel_e_(0.0),
+  isinrmatrix_(false),
+  sqrt_nf_factor_(1.0),
+  isECLevel_(false),
+  ecMultMask_(0),
+  ecPairNum_(0) {};
 
 /*!
  * Returns true if the level energy is to be fixed in the fitting process, otherwise returns false.
@@ -43,10 +56,10 @@ bool ALevel::IsInRMatrix() const {
  */
 
 bool ALevel::ChannelFixed(int channelNum) const {
-  return channelfixed_[channelNum-1];
+  return channelfixed_[channelNum - 1];
 }
 
-/*! 
+/*!
  * Returns true if the level is a final state for external capture, otherwise returns false.
  */
 
@@ -80,7 +93,7 @@ int ALevel::GetECPairNum() const {
 
 /*!
  * Returns the multipolarity mask of external capture gammas to the level.
- */ 
+ */
 
 unsigned char ALevel::GetECMultMask() const {
   return ecMultMask_;
@@ -99,7 +112,7 @@ double ALevel::GetE() const {
  */
 
 double ALevel::GetGamma(int channelNum) const {
-  return gammas_[channelNum-1];
+  return gammas_[channelNum - 1];
 }
 
 /*!
@@ -107,7 +120,7 @@ double ALevel::GetGamma(int channelNum) const {
  */
 
 double ALevel::GetFitGamma(int channelNum) const {
-  return fitgammas_[channelNum-1];
+  return fitgammas_[channelNum - 1];
 }
 
 /*!
@@ -123,7 +136,7 @@ double ALevel::GetFitE() const {
  */
 
 double ALevel::GetNFIntegral(int channelNum) const {
-  return nf_integrals_[channelNum-1];
+  return nf_integrals_[channelNum - 1];
 }
 
 /*!
@@ -140,7 +153,7 @@ double ALevel::GetSqrtNFFactor() const {
 
 
 double ALevel::GetECConversionFactor(int channelNum) const {
-  return ec_conv_factors_[channelNum-1];
+  return ec_conv_factors_[channelNum - 1];
 }
 
 /*!
@@ -148,7 +161,7 @@ double ALevel::GetECConversionFactor(int channelNum) const {
  */
 
 double ALevel::GetTransformGamma(int channelNum) const {
-  return transform_gammas_[channelNum-1];
+  return transform_gammas_[channelNum - 1];
 }
 
 /*!
@@ -164,7 +177,7 @@ double ALevel::GetTransformE() const {
  */
 
 double ALevel::GetBigGamma(int channelNum) const {
-  return big_gammas_[channelNum-1];
+  return big_gammas_[channelNum - 1];
 }
 
 /*!
@@ -172,7 +185,7 @@ double ALevel::GetBigGamma(int channelNum) const {
  */
 
 double ALevel::GetShiftFunction(int channelNum) const {
-  return shifts_[channelNum-1];
+  return shifts_[channelNum - 1];
 }
 
 /*!
@@ -180,28 +193,30 @@ double ALevel::GetShiftFunction(int channelNum) const {
  */
 
 complex ALevel::GetExternalGamma(int channelNum) const {
-  return external_gammas_[channelNum-1];
+  return external_gammas_[channelNum - 1];
 }
 
 /*!
- * This function adds a position in the width vectors corresponding to a new channel.  
+ * This function adds a position in the width vectors corresponding to a new channel.
  * The initial reduced width amplitude is set from an entry in the nuclear input file.
  */
 
 void ALevel::AddGamma(NucLine nucLine) {
-  double b=nucLine.gamma();
+  double b = nucLine.gamma();
   gammas_.push_back(b);
   fitgammas_.push_back(0.0);
   transform_gammas_.push_back(0.0);
   big_gammas_.push_back(0.0);
-  external_gammas_.push_back(complex(0.0,0.0));
-  if(nucLine.channelFix()==1) channelfixed_.push_back(true);
-  else channelfixed_.push_back(false);
+  external_gammas_.push_back(complex(0.0, 0.0));
+  if (nucLine.channelFix() == 1)
+    channelfixed_.push_back(true);
+  else
+    channelfixed_.push_back(false);
   shifts_.push_back(0.0);
 }
 
 /*!
- * This function adds a position in the width vectors corresponding to a new channel.  
+ * This function adds a position in the width vectors corresponding to a new channel.
  * The initial reduced width amplitude is set directly.
  */
 
@@ -210,7 +225,7 @@ void ALevel::AddGamma(double reducedWidth) {
   fitgammas_.push_back(0.0);
   transform_gammas_.push_back(0.0);
   big_gammas_.push_back(0.0);
-  external_gammas_.push_back(complex(0.0,0.0));
+  external_gammas_.push_back(complex(0.0, 0.0));
   channelfixed_.push_back(false);
 }
 
@@ -219,7 +234,7 @@ void ALevel::AddGamma(double reducedWidth) {
  */
 
 void ALevel::SetGamma(int channelNum, double reducedWidth) {
-  gammas_[channelNum-1]=reducedWidth;
+  gammas_[channelNum - 1] = reducedWidth;
 }
 
 /*!
@@ -227,15 +242,15 @@ void ALevel::SetGamma(int channelNum, double reducedWidth) {
  */
 
 void ALevel::SetE(double energy) {
-  level_e_=energy;
+  level_e_ = energy;
 }
 
 /*!
  * This function sets the fitted internal reduced width amplitude for a given channel number.
  */
 
-void ALevel::SetFitGamma(int channelNum,double reducedWidth) {
-  fitgammas_[channelNum-1]=reducedWidth;
+void ALevel::SetFitGamma(int channelNum, double reducedWidth) {
+  fitgammas_[channelNum - 1] = reducedWidth;
 }
 
 /*!
@@ -243,7 +258,7 @@ void ALevel::SetFitGamma(int channelNum,double reducedWidth) {
  */
 
 void ALevel::SetFitE(double energy) {
-  fitlevel_e_=energy;
+  fitlevel_e_ = energy;
 }
 
 /*!
@@ -261,7 +276,7 @@ void ALevel::AddNFIntegral(double integral) {
  */
 
 void ALevel::SetSqrtNFFactor(double term) {
-  sqrt_nf_factor_=term;
+  sqrt_nf_factor_ = term;
 }
 
 /*!
@@ -276,8 +291,8 @@ void ALevel::AddECConversionFactor(double conversionFactor) {
  * This function sets the physical reduced width amplitude for a given channel number.
  */
 
-void ALevel::SetTransformGamma(int channelNum,double reducedWidth) {
-  transform_gammas_[channelNum-1]=reducedWidth;
+void ALevel::SetTransformGamma(int channelNum, double reducedWidth) {
+  transform_gammas_[channelNum - 1] = reducedWidth;
 }
 
 /*!
@@ -285,7 +300,7 @@ void ALevel::SetTransformGamma(int channelNum,double reducedWidth) {
  */
 
 void ALevel::SetTransformE(double energy) {
-  transform_e_=energy;
+  transform_e_ = energy;
 }
 
 /*!
@@ -293,7 +308,7 @@ void ALevel::SetTransformE(double energy) {
  */
 
 void ALevel::SetBigGamma(int channelNum, double partialWidth) {
-  big_gammas_[channelNum-1]=partialWidth;
+  big_gammas_[channelNum - 1] = partialWidth;
 }
 
 /*!
@@ -301,7 +316,7 @@ void ALevel::SetBigGamma(int channelNum, double partialWidth) {
  */
 
 void ALevel::SetTransformIterations(int iterations) {
-  transform_iter_=iterations;
+  transform_iter_ = iterations;
 }
 
 /*!
@@ -309,7 +324,7 @@ void ALevel::SetTransformIterations(int iterations) {
  */
 
 void ALevel::SetExternalGamma(int channelNum, complex reducedWidth) {
-  external_gammas_[channelNum-1]=reducedWidth;
+  external_gammas_[channelNum - 1] = reducedWidth;
 }
 
 /*!
@@ -317,15 +332,15 @@ void ALevel::SetExternalGamma(int channelNum, complex reducedWidth) {
  */
 
 void ALevel::SetShiftFunction(int channelNum, double shiftFunction) {
-  shifts_[channelNum-1]=shiftFunction;
+  shifts_[channelNum - 1] = shiftFunction;
 }
 
 /*!
  * Sets the external capture parameters for the level.
- */ 
+ */
 
 void ALevel::SetECParams(int pairNum, unsigned char multMask) {
-  isECLevel_=true;
-  ecPairNum_=pairNum;
-  ecMultMask_=multMask;
+  isECLevel_ = true;
+  ecPairNum_ = pairNum;
+  ecMultMask_ = multMask;
 }

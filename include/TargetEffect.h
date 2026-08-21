@@ -2,24 +2,24 @@
 #define TARGETEFFECT_H
 
 #include <string>
-#include <fstream>			       
+#include <fstream>
 #include <vector>
 #include "Constants.h"
 #include "Equation.h"
 #include "Straggling.h"
 
-///An AZURE target effect entry
+/// An AZURE target effect entry
 
 /*!
- * Experimential effects including gaussian beam convolution, target 
+ * Experimential effects including gaussian beam convolution, target
  * integration, and a combination of the two are grouped under the TargetEffect
- * class. An object is created corresponding to each corresponding entry in 
+ * class. An object is created corresponding to each corresponding entry in
  * AZURESetup2.
  */
 
 class TargetEffect {
  public:
-  TargetEffect(std::istream &, const Config&);
+  TargetEffect(std::istream &, const Config &);
   bool IsActive() const;
   bool IsConvolution() const;
   bool IsTargetIntegration() const;
@@ -29,11 +29,11 @@ class TargetEffect {
   int NumQCoefficients() const;
   int NumConvCoefficients() const;
   double GetSigma() const;
-  double CalculateSigma(double,const Config&);
+  double CalculateSigma(double, const Config &);
   double GetDensity() const;
-  double TargetThickness(double,const Config&);
+  double TargetThickness(double, const Config &);
   double GetConvolutionFactor(double, double) const;
-  double CalculateConvolutionFactor(double, double, const Config&);
+  double CalculateConvolutionFactor(double, double, const Config &);
   double GetQCoefficient(int) const;
   double GetConvCoefficient(int) const;
   void SetSigma(double);
@@ -51,8 +51,9 @@ class TargetEffect {
   double GetResonanceWidthMultiplier() const;
   double GetPointsPerWidth() const;
 
-  ///The multiple of sigma above and below centroid energy to use as integration range
-  static constexpr double convolutionRange=3.;
+  /// The multiple of sigma above and below centroid energy to use as integration range
+  static constexpr double convolutionRange = 3.;
+
  private:
   bool isConvolution_;
   bool isTargetIntegration_;

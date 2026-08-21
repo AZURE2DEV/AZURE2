@@ -6,8 +6,19 @@
  * is specified, as well as the position of the final state in the ECLevel vector.  The final channel number is also specified.
  */
 ECMGroup::ECMGroup(char radType, int multipolarity, int lInitial, double jInitial, int finalChannelNum, int ecJGroupNum, int ecLevelNum) :
-  radtype_(radType), mult_(multipolarity), li_(lInitial), ji_(jInitial), chf_(finalChannelNum), jGroupNum_(ecJGroupNum), levelNum_(ecLevelNum),
-   ischancap_(false), chdecay_(0), chkgroup_(0), chmgroup_(0), internalChannel_(0), statspinfactor_(0.0){
+  radtype_(radType),
+  mult_(multipolarity),
+  li_(lInitial),
+  ji_(jInitial),
+  chf_(finalChannelNum),
+  jGroupNum_(ecJGroupNum),
+  levelNum_(ecLevelNum),
+  ischancap_(false),
+  chdecay_(0),
+  chkgroup_(0),
+  chmgroup_(0),
+  internalChannel_(0),
+  statspinfactor_(0.0) {
 }
 
 /*!
@@ -17,8 +28,19 @@ ECMGroup::ECMGroup(char radType, int multipolarity, int lInitial, double jInitia
  */
 
 ECMGroup::ECMGroup(char radType, int multipolarity, int lInitial, double jInitial, int finalChannelNum, int ecJGroupNum, int ecLevelNum, int decayNum, int kGroupNum, int mGroupNum, int internalChannel) :
-  radtype_(radType), mult_(multipolarity), li_(lInitial), ji_(jInitial), chf_(finalChannelNum), jGroupNum_(ecJGroupNum), levelNum_(ecLevelNum), 
-  ischancap_(true), chdecay_(decayNum), chkgroup_(kGroupNum), chmgroup_(mGroupNum), internalChannel_(internalChannel), statspinfactor_(0.0){
+  radtype_(radType),
+  mult_(multipolarity),
+  li_(lInitial),
+  ji_(jInitial),
+  chf_(finalChannelNum),
+  jGroupNum_(ecJGroupNum),
+  levelNum_(ecLevelNum),
+  ischancap_(true),
+  chdecay_(decayNum),
+  chkgroup_(kGroupNum),
+  chmgroup_(mGroupNum),
+  internalChannel_(internalChannel),
+  statspinfactor_(0.0) {
 }
 
 /*!
@@ -130,5 +152,5 @@ double ECMGroup::GetStatSpinFactor() const {
  */
 
 void ECMGroup::SetStatSpinFactor(double a) {
-  statspinfactor_=a;
+  statspinfactor_ = a;
 }

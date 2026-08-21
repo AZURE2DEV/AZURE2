@@ -1,0 +1,61 @@
+# Formatting for the AZURE2 core, API and GUI sources.  external/ is vendored
+# (Minuit2, coul, erya, pugixml) and is left exactly as upstream wrote it.
+#
+# The settings follow what the majority of the existing code already did, so
+# the reformat fixes what was inconsistent instead of imposing a new house
+# style: two-space indent, spaces rather than tabs, `public:` outdented by one,
+# pointers bound to the name.
+#
+# ColumnLimit: 0 is deliberate. It stops clang-format re-wrapping lines, so the
+# diff is indentation and spacing only and the author's line structure -- which
+# in this codebase often groups the terms of a formula one per line -- survives.
+# Long lines stay long; that is a separate judgement call, made per line by a
+# person who knows what the expression means.
+---
+Language: Cpp
+BasedOnStyle: LLVM
+
+IndentWidth: 2
+UseTab: Never
+ColumnLimit: 0
+
+# `class Foo {` then ` public:` -- one space, as the existing headers have it.
+AccessModifierOffset: -1
+
+# `PPair *pPair`, the prevailing form in the core.
+PointerAlignment: Right
+ReferenceAlignment: Pointer
+
+# Preserve one-line accessors like `int z1() const { return z1_; }`, which the
+# headers use throughout.
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: true
+
+# Keep `} else {` on one line, as the code already does.
+BreakBeforeBraces: Attach
+
+# Constructor initializers one per line, indented, rather than packed onto the
+# signature line and aligned under a column-60 colon -- which is what
+# ColumnLimit: 0 does otherwise, and it reads far worse than what was there.
+BreakConstructorInitializers: AfterColon
+PackConstructorInitializers: Never
+ConstructorInitializerIndentWidth: 2
+
+# Indent a wrapped expression rather than aligning it under the operator above.
+# Alignment drifts far to the right in the long physics expressions here, and
+# re-aligns every following line when one name changes.
+AlignOperands: DontAlign
+ContinuationIndentWidth: 4
+
+# Do not reorder includes: several translation units here depend on an include
+# arriving before a macro-bearing header, and sorting them silently breaks that.
+SortIncludes: Never
+
+IndentCaseLabels: true
+SpaceAfterCStyleCast: false
+SpacesBeforeTrailingComments: 2
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 2

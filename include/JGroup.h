@@ -17,7 +17,7 @@ class NucLine;
 class JGroup {
  public:
   JGroup(NucLine);
-  JGroup(double,int);
+  JGroup(double, int);
   bool IsInRMatrix() const;
   int IsLevel(ALevel);
   int GetPi() const;
@@ -29,6 +29,7 @@ class JGroup {
   void AddChannel(AChannel);
   AChannel *GetChannel(int);
   ALevel *GetLevel(int);
+
  private:
   bool isinrmatrix_;
   int pi_;

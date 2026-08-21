@@ -7,7 +7,7 @@
 #include <string>
 #include "Interference.h"
 
-///An AZURE \f$ s,s',L \f$ group
+/// An AZURE \f$ s,s',L \f$ group
 
 /*!
  * Differential cross sections in R-Matrix theory contains terms nested inside a sum over entrance and exit spins
@@ -18,13 +18,14 @@
 
 class KLGroup {
  public:
-  KLGroup(int,int);
+  KLGroup(int, int);
   int GetK() const;
   int GetLOrder() const;
   int NumInterferences() const;
   int IsInterference(Interference);
   void AddInterference(Interference);
   Interference *GetInterference(int);
+
  private:
   int k_;
   int lorder_;
@@ -34,7 +35,7 @@ class KLGroup {
   // angular-distribution setup is O(M^4) in the number of pathways and stalls
   // for external-capture channels with many EC pathways (e.g. capture to
   // excited states).
-  std::map<std::tuple<int,int,std::string>,int> interferenceIndex_;
+  std::map<std::tuple<int, int, std::string>, int> interferenceIndex_;
 };
 
 #endif

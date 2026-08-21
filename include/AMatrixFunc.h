@@ -6,7 +6,7 @@
 
 struct GradAccum;
 
-///A function class to calculate the T-Matrix using the A-Matrix
+/// A function class to calculate the T-Matrix using the A-Matrix
 
 /*!
  * The AMatrixFunc function class calculates the T-Matrix for a given energy point using the compound
@@ -16,38 +16,40 @@ struct GradAccum;
 
 class AMatrixFunc : public GenMatrixFunc {
  public:
-  AMatrixFunc(CNuc*, const Config &configure);
+  AMatrixFunc(CNuc *, const Config &configure);
   /*!
    * Returns a pointer to the compound nucleus object.
    */
-  CNuc *compound() const {return compound_;};
+  CNuc *compound() const { return compound_; };
   /*!
    * Returns a reference to the Config structure.
    */
-  const Config &configure() const {return *configure_;};
+  const Config &configure() const { return *configure_; };
   /*!
    * Repoints the object at a compound nucleus and configuration so that one
    * instance can serve many energy points without reallocating its scratch
    * storage.  ClearMatrices() must still be called before each point.
    */
-  void Reset(CNuc *compound, const Config &configure)
-    {compound_=compound; configure_=&configure;};
+  void Reset(CNuc *compound, const Config &configure) {
+    compound_ = compound;
+    configure_ = &configure;
+  };
 
   void ClearMatrices();
-  void FillMatrices(EPoint*);
+  void FillMatrices(EPoint *);
   /*!
    * Factors the level matrix of every J-group.  The full inverse is no longer
    * formed here: the T-matrix needs only bilinear forms of it, and Inverse() is
    * materialized lazily for the callers that need individual elements.
    */
   void InvertMatrices();
-  void CalculateTMatrix(EPoint*);
+  void CalculateTMatrix(EPoint *);
   /*!
    * Instantiated in the parent class.
    */
   void CalculateCrossSection();
 
-  complex GetAMatrixElement(int,int,int) const;
+  complex GetAMatrixElement(int, int, int) const;
   const matrix_c &GetAMatrix(int) const;
   matrix_c *GetJSpecAInvMatrix(int);
 
@@ -88,12 +90,13 @@ class AMatrixFunc : public GenMatrixFunc {
    * coefficients), so the caller can fall back to finite differences.  See
    * PLAN.md Phases 2-4, 6.
    */
-  bool PointAdjoint(EPoint* point, double fitBar, GradAccum& accum,
-                    const vector_matrix_r* shiftDeriv = nullptr,
+  bool PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
+                    const vector_matrix_r *shiftDeriv = nullptr,
                     int xsComponent = 0);
-  void AddAInvMatrixElement(int,int,int,complex);
+  void AddAInvMatrixElement(int, int, int, complex);
+
  private:
-  ///One memoized channel-capture bilinear form, keyed by its pathway.
+  /// One memoized channel-capture bilinear form, keyed by its pathway.
   struct ChanCapEntry {
     int jGroupNum;
     int chNum;
@@ -108,18 +111,18 @@ class AMatrixFunc : public GenMatrixFunc {
   const Config *configure_;
   CNuc *compound_;
   vector_matrix_c a_inv_matrices_;
-  ///Factored level matrix of each J-group.
+  /// Factored level matrix of each J-group.
   std::vector<LevelMatrixSolver> solvers_;
-  ///Whether the corresponding solver holds a usable factorization.
+  /// Whether the corresponding solver holds a usable factorization.
   std::vector<char> solver_valid_;
   // private:
-  std::vector<std::vector<int>> level_active_index_; // [jGroup-1][origLevel] -> activeIndex (1..k) or 0 if inactive
+  std::vector<std::vector<int>> level_active_index_;  // [jGroup-1][origLevel] -> activeIndex (1..k) or 0 if inactive
 
   // Per-point caches over active levels, indexed [jGroup-1][channel-1].
-  ///Reduced widths of a channel, with the 1e-12 cutoff applied.
+  /// Reduced widths of a channel, with the 1e-12 cutoff applied.
   std::vector<std::vector<vector_r>> gamma_vectors_;
   std::vector<std::vector<char>> gamma_valid_;
-  ///A times the reduced-width vector of a channel.
+  /// A times the reduced-width vector of a channel.
   std::vector<std::vector<vector_c>> channel_solves_;
   std::vector<std::vector<char>> channel_solve_valid_;
   std::vector<ChanCapEntry> chan_cap_cache_;
@@ -132,7 +135,6 @@ class AMatrixFunc : public GenMatrixFunc {
   mutable std::vector<std::vector<double>> shiftFunctions_;
   mutable int cached_max_levels_;
   mutable int cached_max_channels_;
-
 };
 
 #endif

@@ -5,16 +5,16 @@
  */
 
 AZUREOutput::AZUREOutput(std::string outputdir) {
-  outputdir_=outputdir;
-  is_extrap_=false;
+  outputdir_ = outputdir;
+  is_extrap_ = false;
 }
 
-/*! 
+/*!
  * On destruction of the AZUREOutput instance, each AZUREFBuffer object is also destroyed.
  */
 
 AZUREOutput::~AZUREOutput() {
-  for(int i=0;i<azurefbuffers_.size();i++) delete azurefbuffers_[i];
+  for (int i = 0; i < azurefbuffers_.size(); i++) delete azurefbuffers_[i];
 }
 
 /*!
@@ -26,8 +26,8 @@ bool AZUREOutput::IsExtrap() const {
 }
 
 /*!
- * The parenthesis operator is defined so that the instance of AZUREOutput can be called as a function.  
- * The instance is called using a reference to an entrance and exit pair key combination.  The function 
+ * The parenthesis operator is defined so that the instance of AZUREOutput can be called as a function.
+ * The instance is called using a reference to an entrance and exit pair key combination.  The function
  * tests if there is a pointer to an AZUREFBuffer object in a vector.  If such a pointer exists,
  * the pointer to the actual file buffer contained in the corresponding AZUREFBuffer object is returned.
  * Otherwise, a new AZUREFBuffer object is created with the entrance and exit key, a pointer to that object
@@ -35,11 +35,11 @@ bool AZUREOutput::IsExtrap() const {
  */
 
 std::filebuf *AZUREOutput::operator()(int entranceKey, int exitKey, bool isAngDist) {
-  int c=this->IsAZUREFBuffer(entranceKey,exitKey,isAngDist);
-  if(!c) {
-    AZUREFBuffer *d = new AZUREFBuffer(entranceKey,exitKey,this->GetOutputDir(),this->IsExtrap(),isAngDist);
+  int c = this->IsAZUREFBuffer(entranceKey, exitKey, isAngDist);
+  if (!c) {
+    AZUREFBuffer *d = new AZUREFBuffer(entranceKey, exitKey, this->GetOutputDir(), this->IsExtrap(), isAngDist);
     this->AddAZUREFBuffer(d);
-    c=this->IsAZUREFBuffer(entranceKey,exitKey,isAngDist);
+    c = this->IsAZUREFBuffer(entranceKey, exitKey, isAngDist);
   }
   return this->GetAZUREFBuffer(c)->GetFBuffer();
 }
@@ -59,16 +59,18 @@ int AZUREOutput::NumAZUREFBuffers() const {
  */
 
 int AZUREOutput::IsAZUREFBuffer(int entranceKey, int exitKey, bool isAngDist) {
-  bool c=false;
-  int d=0;
-  while(!c&&d<this->NumAZUREFBuffers()) {
-    if(this->GetAZUREFBuffer(d+1)->IsAngDist()==isAngDist&&
-       this->GetAZUREFBuffer(d+1)->GetEntranceKey()==entranceKey&&
-       this->GetAZUREFBuffer(d+1)->GetExitKey()==exitKey) c=true;
+  bool c = false;
+  int d = 0;
+  while (!c && d < this->NumAZUREFBuffers()) {
+    if (this->GetAZUREFBuffer(d + 1)->IsAngDist() == isAngDist &&
+        this->GetAZUREFBuffer(d + 1)->GetEntranceKey() == entranceKey &&
+        this->GetAZUREFBuffer(d + 1)->GetExitKey() == exitKey) c = true;
     d++;
   }
-  if(c) return d;
-  else return 0;
+  if (c)
+    return d;
+  else
+    return 0;
 }
 
 /*!
@@ -92,7 +94,7 @@ void AZUREOutput::AddAZUREFBuffer(AZUREFBuffer *azureFBuffer) {
  */
 
 void AZUREOutput::SetExtrap() {
-  is_extrap_=true;
+  is_extrap_ = true;
 }
 
 /*!
@@ -100,8 +102,6 @@ void AZUREOutput::SetExtrap() {
  */
 
 AZUREFBuffer *AZUREOutput::GetAZUREFBuffer(int fBufferNum) {
-  AZUREFBuffer *b=azurefbuffers_[fBufferNum-1];
+  AZUREFBuffer *b = azurefbuffers_[fBufferNum - 1];
   return b;
 }
-
-

@@ -4,7 +4,7 @@
 #include <cstring>
 #include "Constants.h"
 
-///A container structure for a reference to a data point.
+/// A container structure for a reference to a data point.
 
 /*!
  * If a point is mapped back to another in the calculation, this structure
@@ -12,9 +12,9 @@
  */
 
 struct EnergyMap {
-  ///The segment index for the map
+  /// The segment index for the map
   int segment;
-  ///The point index for the map
+  /// The point index for the map
   int point;
 };
 
@@ -26,7 +26,7 @@ class TargetEffect;
 class DataLine;
 class Config;
 
-///An AZURE data point
+/// An AZURE data point
 
 /*!
  * A data point object in AZURE consists of a defined entrance and exit pair, an energy, an angle,
@@ -36,8 +36,8 @@ class Config;
 
 class EPoint {
  public:
-  EPoint(DataLine, ESegment*);
-  EPoint(double, double, ESegment*);
+  EPoint(DataLine, ESegment *);
+  EPoint(double, double, ESegment *);
   EPoint(double, double, int, int, bool, bool, bool, double, int, int);
   bool IsDifferential() const;
   bool IsPhase() const;
@@ -45,13 +45,13 @@ class EPoint {
   bool IsTargetEffect() const;
   bool IsAngularDist() const;
   //! Vector analyzing power point; the fit value is A_y, not a cross section.
-  bool IsAnalyzingPower() const {return is_analyzing_power_;};
-  void SetIsAnalyzingPower(bool v) {is_analyzing_power_ = v;};
+  bool IsAnalyzingPower() const { return is_analyzing_power_; };
+  void SetIsAnalyzingPower(bool v) { is_analyzing_power_ = v; };
   //! A_y is kept beside the cross section rather than replacing it, because
   //! target-effect integration needs the cross section as the weight.
-  double GetAnalyzingPower() const {return analyzing_power_;};
-  void SetAnalyzingPower(double v) {analyzing_power_ = v;};
-  bool IsSubPoint() const {return is_sub_point_;};
+  double GetAnalyzingPower() const { return analyzing_power_; };
+  void SetAnalyzingPower(double v) { analyzing_power_ = v; };
+  bool IsSubPoint() const { return is_sub_point_; };
   bool IsUPOS() const;
   int GetEntranceKey() const;
   int GetExitKey() const;
@@ -79,7 +79,7 @@ class EPoint {
   double GetFitE1CrossSection() const;
   double GetFitE2CrossSection() const;
   double GetSFactorConversion() const;
-  double GetSqrtPenetrability(int,int) const;
+  double GetSqrtPenetrability(int, int) const;
   double GetJ() const;
   double GetStoppingPower() const;
   double GetTargetThickness() const;
@@ -88,27 +88,27 @@ class EPoint {
   double GetCrossSectionKinFactor() const;
   double GetIc() const;
   double GetDelta() const;
-  complex GetLoElement(int,int) const;
-  complex GetExpCoulombPhase(int,int) const;
-  complex GetExpHardSpherePhase(int,int) const;
+  complex GetLoElement(int, int) const;
+  complex GetExpCoulombPhase(int, int) const;
+  complex GetExpHardSpherePhase(int, int) const;
   complex GetCoulombAmplitude() const;
-  complex GetECAmplitude(int,int) const;
-  complex GetECAmplitudeWithShift(int,int,CNuc*,const Config&) const;
+  complex GetECAmplitude(int, int) const;
+  complex GetECAmplitudeWithShift(int, int, CNuc *, const Config &) const;
   EnergyMap GetMap() const;
-  void Initialize(CNuc*,const Config&);
-  double ConvertLabValue(double, PPair*);
-  double ConvertCMValue(double, PPair*);
-  void ConvertLabEnergy(PPair*);
-  void ConvertExcitationEnergy(PPair*);
-  void ConvertDecayEnergy(PPair*);
-  void ConvertLabAngle(PPair*);
-  void ConvertLabAngle(PPair*,PPair*,const Config&);
-  void ConvertCMAngle(PPair*,PPair*,const Config&);
-  void ConvertCrossSection(PPair*,PPair*);
-  void ConvertLabAngleGammas(PPair*); 
-  void ConvertCrossSectionGammas(PPair*);
-  double CalculateCrossSectionConversionFactor(PPair*, PPair*);
-  double CalculateCrossSectionGammaConversionFactor(PPair*);
+  void Initialize(CNuc *, const Config &);
+  double ConvertLabValue(double, PPair *);
+  double ConvertCMValue(double, PPair *);
+  void ConvertLabEnergy(PPair *);
+  void ConvertExcitationEnergy(PPair *);
+  void ConvertDecayEnergy(PPair *);
+  void ConvertLabAngle(PPair *);
+  void ConvertLabAngle(PPair *, PPair *, const Config &);
+  void ConvertCMAngle(PPair *, PPair *, const Config &);
+  void ConvertCrossSection(PPair *, PPair *);
+  void ConvertLabAngleGammas(PPair *);
+  void ConvertCrossSectionGammas(PPair *);
+  double CalculateCrossSectionConversionFactor(PPair *, PPair *);
+  double CalculateCrossSectionGammaConversionFactor(PPair *);
   void AddLegendreP(double);
   void ClearLegendrePolynomials();
   void SetGeometricalFactor(double);
@@ -123,41 +123,41 @@ class EPoint {
   void SetCMAngle(double);
   void SetExitKey(int);
   void SetEntranceKey(int);
-  void CalcLegendreP(int,CNuc*,TargetEffect*);
-  void CalcEDependentValues(CNuc*,const Config&);
-  void RecalcEDependentValues(CNuc*,const Config&);
-  void AddLoElement(int,int,complex);
-  void AddSqrtPenetrability(int,int,double);
-  void AddExpCoulombPhase(int,int,complex);
-  void AddExpHardSpherePhase(int,int,complex);
-  void CalcCoulombAmplitude(CNuc*);
+  void CalcLegendreP(int, CNuc *, TargetEffect *);
+  void CalcEDependentValues(CNuc *, const Config &);
+  void RecalcEDependentValues(CNuc *, const Config &);
+  void AddLoElement(int, int, complex);
+  void AddSqrtPenetrability(int, int, double);
+  void AddExpCoulombPhase(int, int, complex);
+  void AddExpHardSpherePhase(int, int, complex);
+  void CalcCoulombAmplitude(CNuc *);
   void SetCoulombAmplitude(complex);
-  void CalculateECAmplitudes(CNuc*,const Config&);
-  void AddECAmplitude(int,int,complex);
-  void AddECAmplitude(int,int,complex,double);
+  void CalculateECAmplitudes(CNuc *, const Config &);
+  void AddECAmplitude(int, int, complex);
+  void AddECAmplitude(int, int, complex, double);
   void ClearECAmplitudes();
-  void Calculate(CNuc*,const Config &configure,EPoint* parent=NULL, int subPointNum=0);
-  void SetMap(int,int);
+  void Calculate(CNuc *, const Config &configure, EPoint *parent = NULL, int subPointNum = 0);
+  void SetMap(int, int);
   void ClearMapping();
-  void AddLocalMappedPoint(EPoint*);
+  void AddLocalMappedPoint(EPoint *);
   void ClearLocalMappedPoints();
   void SetTargetEffectNum(int);
   void AddSubPoint(EPoint);
-  void IntegrateTargetEffect(const Config&);
-  void IntegrateTargetEffectForObservable(const Config&);
-  void SetParentData(EData*);
+  void IntegrateTargetEffect(const Config &);
+  void IntegrateTargetEffectForObservable(const Config &);
+  void SetParentData(EData *);
   void SetStoppingPower(double);
   void SetTargetThickness(double);
   void SetAngularDists(vector_r);
   void SetAngleKinFactor(double);
   void SetCrossSectionKinFactor(double);
   EData *GetParentData() const;
-  EPoint* GetLocalMappedPoint(int) const;
-  EPoint* GetSubPoint(int);
-  std::vector<EPoint>& GetSubPoints();
-  std::vector<EPoint*>& GetMappedPoints();
-  void StoreSubpointOffsets();  // Store offsets for adaptive grid preservation
-  void ApplySubpointShift(double energyShift, CNuc* theCNuc, const Config& configure);  // Intelligent shift preserving resonance structure
+  EPoint *GetLocalMappedPoint(int) const;
+  EPoint *GetSubPoint(int);
+  std::vector<EPoint> &GetSubPoints();
+  std::vector<EPoint *> &GetMappedPoints();
+  void StoreSubpointOffsets();                                                          // Store offsets for adaptive grid preservation
+  void ApplySubpointShift(double energyShift, CNuc *theCNuc, const Config &configure);  // Intelligent shift preserving resonance structure
  private:
   bool is_differential_;
   bool is_phase_;
@@ -206,10 +206,10 @@ class EPoint {
   matrix_c hardspherephase_;
   matrix_c ec_amplitudes_;
   matrix_r ec_energies_;  // Energies at which EC amplitudes were calculated
-  std::vector<EPoint*> local_mapped_points_;
+  std::vector<EPoint *> local_mapped_points_;
   std::vector<EPoint> integrationPoints_;
-  EData* parentData_;
-  ESegment* parentSegment_;
+  EData *parentData_;
+  ESegment *parentSegment_;
 };
 
 #endif

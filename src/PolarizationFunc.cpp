@@ -20,12 +20,15 @@ inline bool Same(double a, double b) { return std::fabs(a - b) < 1.e-6; }
 
 // ---------------------------------------------------------------------------
 
-AmplitudeMatrix::AmplitudeMatrix(CNuc* compound, EPoint* point, int aa, int ir)
-    : compound_(compound), point_(point), aa_(aa), ir_(ir),
-      theta_(point->GetCMAngle() * pi / 180.0) {
+AmplitudeMatrix::AmplitudeMatrix(CNuc *compound, EPoint *point, int aa, int ir) :
+  compound_(compound),
+  point_(point),
+  aa_(aa),
+  ir_(ir),
+  theta_(point->GetCMAngle() * pi / 180.0) {
   // Channel spins available in the entrance and exit pairs: |j1-j2| .. j1+j2.
-  PPair* entrance = compound_->GetPair(aa_);
-  PPair* exit = compound_->GetPair(ir_);
+  PPair *entrance = compound_->GetPair(aa_);
+  PPair *exit = compound_->GetPair(ir_);
   for (double s = std::fabs(entrance->GetJ(1) - entrance->GetJ(2));
        s <= entrance->GetJ(1) + entrance->GetJ(2) + 1.e-6; s += 1.0)
     entranceSpins_.push_back(s);
@@ -48,9 +51,9 @@ AmplitudeMatrix::AmplitudeMatrix(CNuc* compound, EPoint* point, int aa, int ir)
   }
 }
 
-complex& AmplitudeMatrix::At(double s, double v, double sp, double vp) {
+complex &AmplitudeMatrix::At(double s, double v, double sp, double vp) {
   for (std::size_t i = 0; i < amplitudes_.size(); i++) {
-    Amplitude& a = amplitudes_[i];
+    Amplitude &a = amplitudes_[i];
     if (Same(a.s, s) && Same(a.v, v) && Same(a.sp, sp) && Same(a.vp, vp))
       return a.value;
   }
@@ -61,7 +64,7 @@ complex& AmplitudeMatrix::At(double s, double v, double sp, double vp) {
 
 complex AmplitudeMatrix::Get(double s, double v, double sp, double vp) const {
   for (std::size_t i = 0; i < amplitudes_.size(); i++) {
-    const Amplitude& a = amplitudes_[i];
+    const Amplitude &a = amplitudes_[i];
     if (Same(a.s, s) && Same(a.v, v) && Same(a.sp, sp) && Same(a.vp, vp))
       return a.value;
   }
@@ -70,9 +73,9 @@ complex AmplitudeMatrix::Get(double s, double v, double sp, double vp) const {
 
 void AmplitudeMatrix::AddPathway(int jNum, int chNum, int chpNum,
                                  complex tMatrixElement) {
-  JGroup* jgroup = compound_->GetJGroup(jNum);
-  AChannel* entrance = jgroup->GetChannel(chNum);
-  AChannel* exitCh = jgroup->GetChannel(chpNum);
+  JGroup *jgroup = compound_->GetJGroup(jNum);
+  AChannel *entrance = jgroup->GetChannel(chNum);
+  AChannel *exitCh = jgroup->GetChannel(chpNum);
 
   const double jValue = jgroup->GetJ();
   const int l = entrance->GetL();
@@ -88,14 +91,14 @@ void AmplitudeMatrix::AddPathway(int jNum, int chNum, int chpNum,
     const double cg1 = AngCoeff::ClebGord(s, (double)l, jValue, v, 0.0, v);
     if (std::fabs(cg1) < 1.e-12) continue;
     for (double vp = -sp; vp <= sp + 1.e-6; vp += 1.0) {
-      const double mu = v - vp;                 // outgoing orbital projection
+      const double mu = v - vp;  // outgoing orbital projection
       if (std::fabs(mu) > lp + 1.e-6) continue;
       const double cg2 = AngCoeff::ClebGord(sp, (double)lp, jValue, vp, mu, v);
       if (std::fabs(cg2) < 1.e-12) continue;
 
       const complex y = AngCoeff::SphericalHarmonic(lp, (int)std::lround(mu), theta_);
       At(s, v, sp, vp) += complex(0.0, 1.0) * std::sqrt(2.0 * l + 1.0) *
-                          cg1 * cg2 * tMatrixElement * y;
+          cg1 * cg2 * tMatrixElement * y;
     }
   }
 }
@@ -128,7 +131,7 @@ double AmplitudeMatrix::UnpolarizedCrossSection() const {
 
 int AmplitudeMatrix::IndexOf(double s, double v, double sp, double vp) const {
   for (std::size_t i = 0; i < amplitudes_.size(); i++) {
-    const Amplitude& a = amplitudes_[i];
+    const Amplitude &a = amplitudes_[i];
     if (Same(a.s, s) && Same(a.v, v) && Same(a.sp, sp) && Same(a.vp, vp))
       return (int)i;
   }
@@ -138,7 +141,7 @@ int AmplitudeMatrix::IndexOf(double s, double v, double sp, double vp) const {
 std::vector<complex> AmplitudeMatrix::AnalyzingPowerBar() const {
   std::vector<complex> bar(amplitudes_.size(), complex(0.0, 0.0));
 
-  PPair* entrance = compound_->GetPair(aa_);
+  PPair *entrance = compound_->GetPair(aa_);
   const double j1 = entrance->GetJ(1);
   const double j2 = entrance->GetJ(2);
   if (std::fabs(j1 - 0.5) > 1.e-6) return bar;
@@ -157,12 +160,12 @@ std::vector<complex> AmplitudeMatrix::AnalyzingPowerBar() const {
           const double s = entranceSpins_[i];
           const double nuUp = 0.5 + m2, nuDn = -0.5 + m2;
           if (std::fabs(nuUp) <= s + 1.e-6)
-            up   += AngCoeff::ClebGord(j1, j2, s,  0.5, m2, nuUp) * Get(s, nuUp, sp, vp);
+            up += AngCoeff::ClebGord(j1, j2, s, 0.5, m2, nuUp) * Get(s, nuUp, sp, vp);
           if (std::fabs(nuDn) <= s + 1.e-6)
             down += AngCoeff::ClebGord(j1, j2, s, -0.5, m2, nuDn) * Get(s, nuDn, sp, vp);
         }
         interference += up * std::conj(down);
-        denominator  += std::norm(up) + std::norm(down);
+        denominator += std::norm(up) + std::norm(down);
       }
     }
   }
@@ -180,13 +183,13 @@ std::vector<complex> AmplitudeMatrix::AnalyzingPowerBar() const {
         for (std::size_t i = 0; i < entranceSpins_.size(); i++) {
           const double s = entranceSpins_[i];
           if (std::fabs(nuUp) <= s + 1.e-6)
-            up   += AngCoeff::ClebGord(j1, j2, s,  0.5, m2, nuUp) * Get(s, nuUp, sp, vp);
+            up += AngCoeff::ClebGord(j1, j2, s, 0.5, m2, nuUp) * Get(s, nuUp, sp, vp);
           if (std::fabs(nuDn) <= s + 1.e-6)
             down += AngCoeff::ClebGord(j1, j2, s, -0.5, m2, nuDn) * Get(s, nuDn, sp, vp);
         }
         // dA/du* and dA/dd*, with u and d the decomposed amplitudes.
-        const complex dA_du =  I * down / D - (N / (D * D)) * up;
-        const complex dA_dd = -I * up   / D - (N / (D * D)) * down;
+        const complex dA_du = I * down / D - (N / (D * D)) * up;
+        const complex dA_dd = -I * up / D - (N / (D * D)) * down;
         // u and d are holomorphic in M, so du*/dM* is just the (real)
         // Clebsch-Gordan coefficient. The factor of two is the cotangent
         // convention AMatrixFunc uses, not part of the derivative.
@@ -210,10 +213,10 @@ std::vector<complex> AmplitudeMatrix::AnalyzingPowerBar() const {
 }
 
 complex AmplitudeMatrix::PathwayAdjoint(int jNum, int chNum, int chpNum,
-                                        const std::vector<complex>& bar) const {
-  JGroup* jgroup = compound_->GetJGroup(jNum);
-  AChannel* entrance = jgroup->GetChannel(chNum);
-  AChannel* exitCh = jgroup->GetChannel(chpNum);
+                                        const std::vector<complex> &bar) const {
+  JGroup *jgroup = compound_->GetJGroup(jNum);
+  AChannel *entrance = jgroup->GetChannel(chNum);
+  AChannel *exitCh = jgroup->GetChannel(chpNum);
 
   const double jValue = jgroup->GetJ();
   const int l = entrance->GetL();
@@ -237,7 +240,7 @@ complex AmplitudeMatrix::PathwayAdjoint(int jNum, int chNum, int chpNum,
       if (idx < 0) continue;
       const complex y = AngCoeff::SphericalHarmonic(lp, (int)std::lround(mu), theta_);
       const complex coeff = complex(0.0, 1.0) * std::sqrt(2.0 * l + 1.0) *
-                            cg1 * cg2 * y;
+          cg1 * cg2 * y;
       tbar += std::conj(coeff) * bar[idx];
     }
   }
@@ -250,9 +253,9 @@ void AmplitudeMatrix::DumpSpinHalf() const {
   // so the two flip elements must be equal and opposite in phase. If instead
   // they come out equal, the sigma.n structure is absent and A_y vanishes by
   // construction rather than by physics.
-  const complex pp = Get(0.5,  0.5, 0.5,  0.5);
-  const complex pm = Get(0.5, -0.5, 0.5,  0.5);   // exit +1/2 from entrance -1/2
-  const complex mp = Get(0.5,  0.5, 0.5, -0.5);   // exit -1/2 from entrance +1/2
+  const complex pp = Get(0.5, 0.5, 0.5, 0.5);
+  const complex pm = Get(0.5, -0.5, 0.5, 0.5);  // exit +1/2 from entrance -1/2
+  const complex mp = Get(0.5, 0.5, 0.5, -0.5);  // exit -1/2 from entrance +1/2
   const complex mm = Get(0.5, -0.5, 0.5, -0.5);
   std::printf("MDUMP nonflip(++)=(%.4e,%.4e) nonflip(--)=(%.4e,%.4e) "
               "flip(+-)=(%.4e,%.4e) flip(-+)=(%.4e,%.4e)\n",
@@ -263,7 +266,7 @@ void AmplitudeMatrix::DumpSpinHalf() const {
 double AmplitudeMatrix::MaxSpinFlip() const {
   double m = 0.0;
   for (std::size_t i = 0; i < amplitudes_.size(); i++) {
-    const Amplitude& a = amplitudes_[i];
+    const Amplitude &a = amplitudes_[i];
     if (!Same(a.v, a.vp)) m = std::max(m, std::abs(a.value));
   }
   return m;
@@ -293,9 +296,9 @@ double AmplitudeMatrix::AnalyzingPowerAy() const {
   // provides. Nothing else in AZURE2 fixes this order -- the unpolarized cross
   // section adds channel spins incoherently and is blind to it -- so it is
   // recorded here rather than left implicit.
-  PPair* entrance = compound_->GetPair(aa_);
-  const double j1 = entrance->GetJ(1);   // particle 1, the light one
-  const double j2 = entrance->GetJ(2);   // particle 2, the heavy one
+  PPair *entrance = compound_->GetPair(aa_);
+  const double j1 = entrance->GetJ(1);  // particle 1, the light one
+  const double j2 = entrance->GetJ(2);  // particle 2, the heavy one
   // The vector analyzing power is a spin-1/2 beam observable.
   if (std::fabs(j1 - 0.5) > 1.e-6) return 0.0;
 
@@ -310,12 +313,12 @@ double AmplitudeMatrix::AnalyzingPowerAy() const {
           const double s = entranceSpins_[i];
           const double nuUp = 0.5 + m2, nuDn = -0.5 + m2;
           if (std::fabs(nuUp) <= s + 1.e-6)
-            up   += AngCoeff::ClebGord(j1, j2, s,  0.5, m2, nuUp) * Get(s, nuUp, sp, vp);
+            up += AngCoeff::ClebGord(j1, j2, s, 0.5, m2, nuUp) * Get(s, nuUp, sp, vp);
           if (std::fabs(nuDn) <= s + 1.e-6)
             down += AngCoeff::ClebGord(j1, j2, s, -0.5, m2, nuDn) * Get(s, nuDn, sp, vp);
         }
         interference += up * std::conj(down);
-        denominator  += std::norm(up) + std::norm(down);
+        denominator += std::norm(up) + std::norm(down);
       }
     }
   }

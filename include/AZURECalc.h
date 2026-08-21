@@ -15,10 +15,10 @@ class EData;
 class CNuc;
 class ParameterLimitsManager;
 
-///A function class to perform the calculation of the chi-squared value
+/// A function class to perform the calculation of the chi-squared value
 
 /*!
- * The AZURECalc function class calculates the cross section based on a 
+ * The AZURECalc function class calculates the cross section based on a
  * parameter set for all available data, and returns a chi-squared value.
  * This function class is what Minuit calls repeatedly during the fitting
  * process to perform the minimization.
@@ -30,23 +30,25 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * The AZURECalc object is created with reference to an EData and CNuc object.
    *. The runtime configurations are also passed through a Config structure.
    */
-  AZURECalc(EData* data,CNuc* compound, const Config& configure, ParameterLimitsManager* limitsManager = nullptr) : configure_(configure), pools_initialized_(false) {
-    data_=data;
-    compound_=compound;
-    limitsManager_=limitsManager;
+  AZURECalc(EData *data, CNuc *compound, const Config &configure, ParameterLimitsManager *limitsManager = nullptr) :
+    configure_(configure),
+    pools_initialized_(false) {
+    data_ = data;
+    compound_ = compound;
+    limitsManager_ = limitsManager;
   };
-  
+
   ~AZURECalc() {};
   /*!
    * See Minuit2 documentation for an explanation of this function.
    */
-  virtual double Up() const override {return theErrorDef;};
+  virtual double Up() const override { return theErrorDef; };
   /*!
-   * Overloaded operator to make the class instance callable as a function. 
+   * Overloaded operator to make the class instance callable as a function.
    * A Minuit parameter array is passed as the dependent variable.  The function
    * returns the total chi-squared value.
    */
-  virtual double operator()(const vector_r&) const override;
+  virtual double operator()(const vector_r &) const override;
 
   /*!
    * Analytic gradient of the total chi-squared with respect to the (external)
@@ -56,7 +58,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * shifts and any analytically-unsupported configuration fall back to central
    * finite differences of the chi-squared.
    */
-  std::vector<double> Gradient(const std::vector<double>&) const override;
+  std::vector<double> Gradient(const std::vector<double> &) const override;
   /*!
    * Skip Minuit's start-up numerical check of the analytic gradient (trusted,
    * separately validated).
@@ -66,7 +68,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * Side-effect-free chi-squared evaluation (no iteration counter / file output
    * / object pools), used by the finite-difference part of Gradient().
    */
-  double Chi2Value(const vector_r& p) const;
+  double Chi2Value(const vector_r &p) const;
 
   /*!
    * Write the intermediate output files -- parameters, calculated segments and
@@ -78,7 +80,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * minimizers call it directly, since they evaluate through the
    * side-effect-free Chi2Value and would otherwise write nothing until the end.
    */
-  void WriteIterationOutput(const vector_r& p) const;
+  void WriteIterationOutput(const vector_r &p) const;
 
   //! Chi-squared evaluations between intermediate writes (MIGRAD, NLopt, LM).
   static const int kOutputInterval = 100;
@@ -98,15 +100,15 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * `packedToFull[a]` is the full-vector index of Jacobian column a (the a-th
    * non-fixed parameter).  Returns false if the analytic path is unsupported.
    */
-  bool ResidualJacobian(const vector_r& full, vector_r& residuals,
-                        vector_r& jac, std::vector<int>& packedToFull) const;
+  bool ResidualJacobian(const vector_r &full, vector_r &residuals,
+                        vector_r &jac, std::vector<int> &packedToFull) const;
 
   /*!
    * Standardized residuals only (no Jacobian) at `full`, in the same row order
    * as ResidualJacobian.  A plain forward pass, used for the trust-region trial
    * evaluations of the GSL solver.  Returns false if the evaluation fails.
    */
-  bool ResidualsOnly(const vector_r& full, vector_r& residuals) const;
+  bool ResidualsOnly(const vector_r &full, vector_r &residuals) const;
 
   /*!
    * Levenberg-Marquardt / Gauss-Newton minimization of the total chi-squared
@@ -116,8 +118,8 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * limits.  Returns the final chi-squared, or a negative value if the analytic
    * Jacobian is unsupported (caller should fall back to MIGRAD).
    */
-  double RunLevenbergMarquardt(AZUREParams& params, int maxIter = 200,
-                               struct BandCovariance* bandCovOut = nullptr) const;
+  double RunLevenbergMarquardt(AZUREParams &params, int maxIter = 200,
+                               struct BandCovariance *bandCovOut = nullptr) const;
 
   /*!
    * Nonlinear least-squares minimization via GSL's trust-region solver
@@ -128,31 +130,31 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * (J^T J + priors)^{-1} errors.  Returns the final chi-squared, or a negative
    * value if the analytic Jacobian is unsupported (caller falls back to MIGRAD).
    */
-  double RunGSLNonlinear(AZUREParams& params, int maxIter = 200,
-                         struct BandCovariance* bandCovOut = nullptr) const;
+  double RunGSLNonlinear(AZUREParams &params, int maxIter = 200,
+                         struct BandCovariance *bandCovOut = nullptr) const;
 
   /*!
    * Returns a reference to the Config structure.
    */
-  const Config &configure() const {return configure_;};
+  const Config &configure() const { return configure_; };
   /*!
    * Returns a pointer to the EData object.
    */
-  EData *data() const {return data_;};
+  EData *data() const { return data_; };
   /*!
    * Returns a pointer to the CNuc object.
    */
-  CNuc *compound() const {return compound_;};
- 
+  CNuc *compound() const { return compound_; };
+
   /*!
    * See Minuit2 documentation for an explanation of this function.
    */
-  void SetErrorDef(double def) override {theErrorDef=def;};
-  
+  void SetErrorDef(double def) override { theErrorDef = def; };
+
   /*!
    * Calculate nuisance parameter chi-squared contribution
    */
-  double CalculateNuisanceChiSquared(const vector_r& p) const;
+  double CalculateNuisanceChiSquared(const vector_r &p) const;
 
   /*!
    * Add the analytic gradient of the nuisance-parameter penalty to `grad`,
@@ -160,21 +162,21 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * objective).  Used when the energy/gamma block is taken analytically (which
    * covers only the data chi-squared).
    */
-  void AddNuisanceGradient(const vector_r& p, std::vector<double>& grad) const;
-  
+  void AddNuisanceGradient(const vector_r &p, std::vector<double> &grad) const;
+
   /*!
    * Object pool management methods
    */
   void InitializePools() const;
-  CNuc* GetPooledCNuc() const;
-  EData* GetPooledEData() const;
-  void ReturnPooledCNuc(CNuc* obj) const;
-  void ReturnPooledEData(EData* obj) const;
+  CNuc *GetPooledCNuc() const;
+  EData *GetPooledEData() const;
+  void ReturnPooledCNuc(CNuc *obj) const;
+  void ReturnPooledEData(EData *obj) const;
 
   /*!
    * Write parameters to file
    */
-  void WriteParameters(AZUREParams& params, const Config& configure) const;
+  void WriteParameters(AZUREParams &params, const Config &configure) const;
 
  private:
   /*!
@@ -184,12 +186,12 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * Gaussian priors `pen_nom` / `pen_inv2` (zero where a param has no prior).
    * Returns the number of free parameters, or -1 if the Jacobian is unsupported.
    */
-  int PrepareFreeParams(const vector_r& full,
-                        const ROOT::Minuit2::MnUserParameters& mp,
-                        vector_r& r, vector_r& J, std::vector<int>& p2f,
-                        vector_r& x, std::vector<double>& lo,
-                        std::vector<double>& hi, std::vector<double>& pen_nom,
-                        std::vector<double>& pen_inv2) const;
+  int PrepareFreeParams(const vector_r &full,
+                        const ROOT::Minuit2::MnUserParameters &mp,
+                        vector_r &r, vector_r &J, std::vector<int> &p2f,
+                        vector_r &x, std::vector<double> &lo,
+                        std::vector<double> &hi, std::vector<double> &pen_nom,
+                        std::vector<double> &pen_inv2) const;
 
   /*!
    * Shared covariance / error finalization for the least-squares solvers.  At
@@ -198,18 +200,18 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * directions, and, if `bandCovOut` is set, exports the R-matrix sub-block
    * covariance for the uncertainty band.
    */
-  void FinalizeLeastSquaresCovariance(const vector_r& full,
-                                      const std::vector<int>& p2f,
-                                      const std::vector<double>& pen_inv2,
-                                      ROOT::Minuit2::MnUserParameters& mp,
-                                      struct BandCovariance* bandCovOut) const;
+  void FinalizeLeastSquaresCovariance(const vector_r &full,
+                                      const std::vector<int> &p2f,
+                                      const std::vector<double> &pen_inv2,
+                                      ROOT::Minuit2::MnUserParameters &mp,
+                                      struct BandCovariance *bandCovOut) const;
 
   const Config &configure_;
   EData *data_;
   CNuc *compound_;
   ParameterLimitsManager *limitsManager_;
   double theErrorDef;
-  
+
   // Object pools for memory reuse - store cloned objects directly
   mutable std::stack<std::unique_ptr<CNuc>> cnuc_pool_;
   mutable std::stack<std::unique_ptr<EData>> edata_pool_;

@@ -2,7 +2,7 @@
 
 /*!
  * The Decay object is created with a reference to a particle pair number, which represents
- * a position in the PPair vector.  
+ * a position in the PPair vector.
  */
 
 Decay::Decay(int pairNum) :
@@ -38,16 +38,17 @@ int Decay::NumKLGroups() const {
  */
 
 int Decay::IsKGroup(KGroup a) {
-  bool b=false;
-  int c=0;
-  while(!b&&c<this->NumKGroups())
-    {
-      if(a.GetS()==this->GetKGroup(c+1)->GetS()&&
-	 a.GetSp()==this->GetKGroup(c+1)->GetSp()) b=true;
-	 c++;
-    }
-  if(b) return c;
-  else return 0;
+  bool b = false;
+  int c = 0;
+  while (!b && c < this->NumKGroups()) {
+    if (a.GetS() == this->GetKGroup(c + 1)->GetS() &&
+        a.GetSp() == this->GetKGroup(c + 1)->GetSp()) b = true;
+    c++;
+  }
+  if (b)
+    return c;
+  else
+    return 0;
 }
 
 /*!
@@ -55,18 +56,19 @@ int Decay::IsKGroup(KGroup a) {
  */
 
 int Decay::IsKGroup(KGroup a, bool checkSp2) {
-  if(!checkSp2) return this->IsKGroup(a);
-  bool b=false;
-  int c=0;
-  while(!b&&c<this->NumKGroups())
-    {
-      if(a.GetS()==this->GetKGroup(c+1)->GetS()&&
-	 a.GetSp()==this->GetKGroup(c+1)->GetSp()&&
-	 a.GetSp2()==this->GetKGroup(c+1)->GetSp2()) b=true;
-	 c++;
-    }
-  if(b) return c;
-  else return 0;
+  if (!checkSp2) return this->IsKGroup(a);
+  bool b = false;
+  int c = 0;
+  while (!b && c < this->NumKGroups()) {
+    if (a.GetS() == this->GetKGroup(c + 1)->GetS() &&
+        a.GetSp() == this->GetKGroup(c + 1)->GetSp() &&
+        a.GetSp2() == this->GetKGroup(c + 1)->GetSp2()) b = true;
+    c++;
+  }
+  if (b)
+    return c;
+  else
+    return 0;
 }
 
 /*!
@@ -75,16 +77,17 @@ int Decay::IsKGroup(KGroup a, bool checkSp2) {
  */
 
 int Decay::IsKLGroup(KLGroup a) {
-  bool b=false;
-  int c=0;
-  while(!b&&c<this->NumKLGroups())
-    {
-      if(a.GetK()==this->GetKLGroup(c+1)->GetK()&&
-	 a.GetLOrder()==this->GetKLGroup(c+1)->GetLOrder()) b=true;
-	 c++;
-    }
-  if(b) return c;
-  else return 0;
+  bool b = false;
+  int c = 0;
+  while (!b && c < this->NumKLGroups()) {
+    if (a.GetK() == this->GetKLGroup(c + 1)->GetK() &&
+        a.GetLOrder() == this->GetKLGroup(c + 1)->GetLOrder()) b = true;
+    c++;
+  }
+  if (b)
+    return c;
+  else
+    return 0;
 }
 
 /*!
@@ -108,7 +111,7 @@ void Decay::AddKLGroup(KLGroup klGroup) {
  */
 
 KGroup *Decay::GetKGroup(int kGroupNum) {
-  KGroup *b=&kgroups_[kGroupNum-1];
+  KGroup *b = &kgroups_[kGroupNum - 1];
   return b;
 }
 
@@ -117,7 +120,7 @@ KGroup *Decay::GetKGroup(int kGroupNum) {
  */
 
 KLGroup *Decay::GetKLGroup(int klGroupNum) {
-  KLGroup *b=&klgroups_[klGroupNum-1];
+  KLGroup *b = &klgroups_[klGroupNum - 1];
   return b;
 }
 
@@ -133,7 +136,7 @@ int Decay::NumCaptureAyTerms() const {
  * Adds one \f$(t,t')\f$ pathway pair to the capture analyzing-power table.
  */
 
-void Decay::AddCaptureAyTerm(const CaptureAyTerm& term) {
+void Decay::AddCaptureAyTerm(const CaptureAyTerm &term) {
   captureAy_.push_back(term);
 }
 
@@ -142,7 +145,7 @@ void Decay::AddCaptureAyTerm(const CaptureAyTerm& term) {
  */
 
 const CaptureAyTerm *Decay::GetCaptureAyTerm(int termNum) const {
-  return &captureAy_[termNum-1];
+  return &captureAy_[termNum - 1];
 }
 
 /*!

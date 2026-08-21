@@ -5,7 +5,9 @@
  */
 
 KGroup::KGroup(double s, double sPrime) :
-    s_(s), sp_(sPrime), sp2_(0.) {};
+  s_(s),
+  sp_(sPrime),
+  sp2_(0.) {};
 
 /*!
  * Overloaded constructor to accommodate multiple final spin combinations for
@@ -13,7 +15,9 @@ KGroup::KGroup(double s, double sPrime) :
  */
 
 KGroup::KGroup(double s, double sPrime, double sPrime2) :
-    s_(s), sp_(sPrime), sp2_(sPrime2) {};
+  s_(s),
+  sp_(sPrime),
+  sp2_(sPrime2) {};
 
 /*!
  * Returns the number of internal reaction pathways in the MGroup vector.
@@ -32,23 +36,24 @@ int KGroup::NumECMGroups() const {
 }
 
 /*!
- * Tests a specific internal reaction pathway to see if it already exists in the MGroup vector. 
+ * Tests a specific internal reaction pathway to see if it already exists in the MGroup vector.
  * If the pathway exists, its position in the vector is returned.  Otherwise, the function
  * returns 0.
  */
 
 int KGroup::IsMGroup(MGroup mGroup) {
-  bool b=false;
-  int c=0;
-  while(!b&&c<this->NumMGroups())
-    {
-      if(mGroup.GetChNum()==this->GetMGroup(c+1)->GetChNum()&&
-	 mGroup.GetChpNum()==this->GetMGroup(c+1)->GetChpNum()&&
-	 mGroup.GetJNum()==this->GetMGroup(c+1)->GetJNum()) b=true;
-      c++;
-    }
-  if(b) return c;
-  else return 0;
+  bool b = false;
+  int c = 0;
+  while (!b && c < this->NumMGroups()) {
+    if (mGroup.GetChNum() == this->GetMGroup(c + 1)->GetChNum() &&
+        mGroup.GetChpNum() == this->GetMGroup(c + 1)->GetChpNum() &&
+        mGroup.GetJNum() == this->GetMGroup(c + 1)->GetJNum()) b = true;
+    c++;
+  }
+  if (b)
+    return c;
+  else
+    return 0;
 }
 
 /*!
@@ -92,18 +97,18 @@ void KGroup::AddECMGroup(ECMGroup ecMGroup) {
 }
 
 /*!
- * Returns a pointer to the internal reaction pathway specified by a position in the MGroup vector. 
+ * Returns a pointer to the internal reaction pathway specified by a position in the MGroup vector.
  */
 
 MGroup *KGroup::GetMGroup(int mGroupNum) {
-  MGroup *b=&mgroups_[mGroupNum-1];
+  MGroup *b = &mgroups_[mGroupNum - 1];
   return b;
 }
 /*!
- * Returns a pointer to the external reaction pathway specified by a position in the ECMGroup vector. 
+ * Returns a pointer to the external reaction pathway specified by a position in the ECMGroup vector.
  */
 
 ECMGroup *KGroup::GetECMGroup(int ecMGroupNum) {
-  ECMGroup *b=&ec_mgroups_[ecMGroupNum-1];
+  ECMGroup *b = &ec_mgroups_[ecMGroupNum - 1];
   return b;
 }

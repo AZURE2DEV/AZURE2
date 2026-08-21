@@ -1,7 +1,7 @@
 #ifndef CAPTUREAYTERM_H
 #define CAPTUREAYTERM_H
 
-///One \f$(t,t')\f$ pathway pair of a capture angular distribution.
+/// One \f$(t,t')\f$ pathway pair of a capture angular distribution.
 
 /*!
  * The Legendre coefficients of a particle-capture-\f$\gamma\f$ angular
@@ -29,15 +29,15 @@
  */
 
 struct CaptureAyTerm {
-  int kOrder;      //!< Legendre order \f$k\f$
-  int kGroup1;     //!< KGroup of the first pathway (1-based)
-  int path1;       //!< MGroup (isEC1 false) or ECMGroup (true) index, 1-based
-  bool isEC1;      //!< first pathway is external capture
-  int kGroup2;     //!< KGroup of the second pathway (1-based)
-  int path2;       //!< MGroup or ECMGroup index, 1-based
-  bool isEC2;      //!< second pathway is external capture
-  double ak;       //!< Eq. (20) coefficient, multiplying \f$\mathrm{Re}\,T T'^*\f$
-  double bk;       //!< Eq. (21) coefficient, multiplying \f$\mathrm{Re}\,(i T T'^*)\f$
+  int kOrder;   //!< Legendre order \f$k\f$
+  int kGroup1;  //!< KGroup of the first pathway (1-based)
+  int path1;    //!< MGroup (isEC1 false) or ECMGroup (true) index, 1-based
+  bool isEC1;   //!< first pathway is external capture
+  int kGroup2;  //!< KGroup of the second pathway (1-based)
+  int path2;    //!< MGroup or ECMGroup index, 1-based
+  bool isEC2;   //!< second pathway is external capture
+  double ak;    //!< Eq. (20) coefficient, multiplying \f$\mathrm{Re}\,T T'^*\f$
+  double bk;    //!< Eq. (21) coefficient, multiplying \f$\mathrm{Re}\,(i T T'^*)\f$
 };
 
 #endif

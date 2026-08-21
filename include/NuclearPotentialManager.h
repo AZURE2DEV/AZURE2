@@ -15,17 +15,17 @@
  * without touching the manager's own state.
  */
 struct NuclearPotentialSetting {
-  ///Is the hybrid model active for this pair?
+  /// Is the hybrid model active for this pair?
   bool enabled = false;
   ///"WoodsSaxon" or "Gaussian".
   std::string type = "WoodsSaxon";
-  ///Depth (MeV), shared by both shapes.
+  /// Depth (MeV), shared by both shapes.
   double V0 = 150.0;
-  ///Woods-Saxon radius (fm).
+  /// Woods-Saxon radius (fm).
   double R = 3.6;
-  ///Woods-Saxon surface diffuseness (fm).
+  /// Woods-Saxon surface diffuseness (fm).
   double a = 0.6;
-  ///Gaussian width (fm).
+  /// Gaussian width (fm).
   double r0 = 5.0;
 };
 
@@ -50,17 +50,17 @@ struct NuclearPotentialSetting {
  *   auto potential = manager.getPotential(2);
  */
 class NuclearPotentialManager {
-public:
+ public:
   /*!
    * @brief Get the singleton instance of the nuclear potential manager
    */
-  static NuclearPotentialManager& instance();
+  static NuclearPotentialManager &instance();
 
   /*!
    * @brief Prevent copying
    */
-  NuclearPotentialManager(const NuclearPotentialManager&) = delete;
-  NuclearPotentialManager& operator=(const NuclearPotentialManager&) = delete;
+  NuclearPotentialManager(const NuclearPotentialManager &) = delete;
+  NuclearPotentialManager &operator=(const NuclearPotentialManager &) = delete;
 
   // -- default (every pair without an override) -----------------------------
 
@@ -85,7 +85,7 @@ public:
   /*!
    * @brief Get the default Woods-Saxon parameters
    */
-  bool getWoodsSaxonParameters(double& V0, double& R, double& a) const;
+  bool getWoodsSaxonParameters(double &V0, double &R, double &a) const;
 
   /*!
    * @brief Set the default Gaussian potential
@@ -97,7 +97,7 @@ public:
   /*!
    * @brief Get the default Gaussian parameters
    */
-  bool getGaussianParameters(double& V0, double& r0) const;
+  bool getGaussianParameters(double &V0, double &r0) const;
 
   /*!
    * @brief Reset to default Woods-Saxon potential (V=150, R=3.6, a=0.6) and
@@ -133,13 +133,13 @@ public:
    * @brief Get the Woods-Saxon parameters that apply to a pair.  False if the
    * potential in force for it is not a Woods-Saxon.
    */
-  bool getWoodsSaxonParameters(int pairKey, double& V0, double& R, double& a) const;
+  bool getWoodsSaxonParameters(int pairKey, double &V0, double &R, double &a) const;
 
   /*!
    * @brief Get the Gaussian parameters that apply to a pair.  False if the
    * potential in force for it is not a Gaussian.
    */
-  bool getGaussianParameters(int pairKey, double& V0, double& r0) const;
+  bool getGaussianParameters(int pairKey, double &V0, double &r0) const;
 
   // -- activation -----------------------------------------------------------
 
@@ -186,12 +186,12 @@ public:
   /*!
    * @brief Install a setting for one pair
    */
-  void setSetting(int pairKey, const NuclearPotentialSetting& setting);
+  void setSetting(int pairKey, const NuclearPotentialSetting &setting);
 
   /*!
    * @brief Install the default setting
    */
-  void setDefaultSetting(const NuclearPotentialSetting& setting);
+  void setDefaultSetting(const NuclearPotentialSetting &setting);
 
   /*!
    * @brief Does this pair carry a setting of its own?
@@ -218,23 +218,23 @@ public:
    */
   long tagFor(int pairKey) const;
 
-private:
+ private:
   /*!
    * @brief Private constructor for singleton pattern
    */
   NuclearPotentialManager();
 
-  ///Build the potential object a setting describes.
-  static std::shared_ptr<NuclearPotential> build(const NuclearPotentialSetting&);
+  /// Build the potential object a setting describes.
+  static std::shared_ptr<NuclearPotential> build(const NuclearPotentialSetting &);
 
   NuclearPotentialSetting defaultSetting_;
   std::shared_ptr<NuclearPotential> potential_;
   std::string currentType_;
   std::map<int, NuclearPotentialSetting> pairSettings_;
-  std::map<int, std::shared_ptr<NuclearPotential> > pairPotentials_;
+  std::map<int, std::shared_ptr<NuclearPotential>> pairPotentials_;
   std::map<int, long> pairTags_;
   long defaultTag_;
   long tagCounter_;
 };
 
-#endif // NUCLEARPOTENTIALMANAGER_H
+#endif  // NUCLEARPOTENTIALMANAGER_H

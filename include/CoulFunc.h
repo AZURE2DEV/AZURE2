@@ -8,30 +8,30 @@ class PPair;
 class CoulFuncCache;
 class NuclearPotential;
 
-///The return structure of the CoulFunc function class.
+/// The return structure of the CoulFunc function class.
 
-/*! 
+/*!
  * The CoulWaves structure contains both the irregular and regular solutions to the
  * Coulomb equation, as well as their derivatives with respect to \f$ \rho \f$.
  */
 
 struct CoulWaves {
-  ///Regular solution
-  double F; 
-  ///Derivative of regular solution with respect to \f$ \rho \f$
+  /// Regular solution
+  double F;
+  /// Derivative of regular solution with respect to \f$ \rho \f$
   double dF;
-  ///Irregular solution
+  /// Irregular solution
   double G;
-  ///Derivative of irregular solution with respect to \f$ \rho \f$
+  /// Derivative of irregular solution with respect to \f$ \rho \f$
   double dG;
 };
 
-///A function class to calculate Coulomb functions for positive energy channels
+/// A function class to calculate Coulomb functions for positive energy channels
 
-/*! 
- * The CoulFunc function class calculates the solutions to the Coulomb equation, 
+/*!
+ * The CoulFunc function class calculates the solutions to the Coulomb equation,
  * as well as other useful quantities such as shift functions and their energy
- * derivative and penetrabilities. 
+ * derivative and penetrabilities.
  */
 
 class CoulFunc {
@@ -45,10 +45,10 @@ class CoulFunc {
   double energyLast() const;
   struct CoulWaves coulLast() const;
   void setLast(int, double, double, CoulWaves);
-  CoulWaves operator()(int,double,double);
-  double Penetrability(int,double,double);
-  double PEShift(int,double,double);
-  double PEShift_dE(int,double,double);
+  CoulWaves operator()(int, double, double);
+  double Penetrability(int, double, double);
+  double PEShift(int, double, double);
+  double PEShift_dE(int, double, double);
 
   // Hybrid method support
   void setNuclearPotential(std::shared_ptr<NuclearPotential> potential);
@@ -59,8 +59,8 @@ class CoulFunc {
   double getNumerovGridStep() const;
   void setUseHybridMethod(bool useHybrid);
   bool getUseHybridMethod() const;
-  ///The key of the pair this object was built for, which is what selects
-  ///its nuclear potential out of NuclearPotentialManager.
+  /// The key of the pair this object was built for, which is what selects
+  /// its nuclear potential out of NuclearPotentialManager.
   int pairKey() const { return pairKey_; }
 
   // The global (radius-keyed, mutex-protected) Coulomb cache only helps when the
@@ -75,7 +75,7 @@ class CoulFunc {
   // Hybrid method calculation
   CoulWaves computeHybrid(int l, double radius, double energy);
 
-  static double thisPEShift(double,void*);
+  static double thisPEShift(double, void *);
   typedef struct DEShiftParams {
     CoulFunc *coulFunc;
     int lValue;
@@ -86,8 +86,8 @@ class CoulFunc {
   bool useHybridMethod_;
   bool useGlobalCache_ = true;
   int pairKey_;
-  ///Identifies the nuclear potential these waves were computed under; part of
-  ///the Coulomb memo key.  0 means the plain Coulomb solution.
+  /// Identifies the nuclear potential these waves were computed under; part of
+  /// the Coulomb memo key.  0 means the plain Coulomb solution.
   long hybridTag_;
   int z1_;
   int z2_;
@@ -99,8 +99,8 @@ class CoulFunc {
 
   // Hybrid method parameters
   std::shared_ptr<NuclearPotential> nuclearPotential_;
-  double rMatch_;      // Matching radius for boundary conditions
-  double drNumerov_;   // Numerov grid step
+  double rMatch_;     // Matching radius for boundary conditions
+  double drNumerov_;  // Numerov grid step
 };
 
 #endif

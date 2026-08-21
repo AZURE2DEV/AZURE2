@@ -7,59 +7,60 @@
 #include "PPair.h"
 
 namespace ROOT {
-  namespace Minuit2 {
-    class MnUserParameters;
-  }
+namespace Minuit2 {
+class MnUserParameters;
 }
+}  // namespace ROOT
 class Config;
 
-///An AZURE compound nucleus
+/// An AZURE compound nucleus
 
 /*!
  * The compound nucleus is the fundamental concept of R-Matrix theory.  As such, the CNuc object
  * in AZURE is the top level container object for all structure and reaction objects.  Specifically,
- * the CNuc object is the container object for vectors of PPair and JGroup objects, within which all other 
+ * the CNuc object is the container object for vectors of PPair and JGroup objects, within which all other
  * nuclear data objects are contained.
  */
 
 class CNuc {
-public:
+ public:
   bool IsPairKey(int);
   int NumPairs() const;
   int NumJGroups() const;
   int IsPair(PPair);
   int IsJGroup(JGroup);
   int GetPairNumFromKey(int);
-  int Fill(const Config&, std::pair<int,double> radii = std::pair<int,double>(0,0.0) );
-  void ParseExternalCapture(const Config&,std::map<int,int>&);
+  int Fill(const Config &, std::pair<int, double> radii = std::pair<int, double>(0, 0.0));
+  void ParseExternalCapture(const Config &, std::map<int, int> &);
   int GetMaxLValue() const;
-  void Initialize(const Config&);
+  void Initialize(const Config &);
   void AddPair(PPair);
   void AddJGroup(JGroup);
-  void PrintNuc(const Config&);
-  bool TransformIn(const Config&);
-  void SortPathways(const Config&);
-  void PrintPathways(const Config&);
-  void CalcBoundaryConditions(const Config&);
-  void PrintBoundaryConditions(const Config&);
+  void PrintNuc(const Config &);
+  bool TransformIn(const Config &);
+  void SortPathways(const Config &);
+  void PrintPathways(const Config &);
+  void CalcBoundaryConditions(const Config &);
+  void PrintBoundaryConditions(const Config &);
   void CalcAngularDists(int);
-  void CalcCaptureAnalyzingPower(int,int,int);
-  void PrintAngularDists(const Config&);
-  void FillMnParams(ROOT::Minuit2::MnUserParameters&, const Config* config = nullptr);
+  void CalcCaptureAnalyzingPower(int, int, int);
+  void PrintAngularDists(const Config &);
+  void FillMnParams(ROOT::Minuit2::MnUserParameters &, const Config *config = nullptr);
   void FillCompoundFromParamsPhysical(const vector_r &);
   void PrintCompoundFromParams();
   void FillCompoundFromParams(const vector_r &);
-  void TransformOut(const Config&);
-  void CheckRadiativeWidths(const Config&, const vector_r&);
-  vector_r GetTransformParams(const Config& configure);
-  void PrintTransformParams(const Config&);
+  void TransformOut(const Config &);
+  void CheckRadiativeWidths(const Config &, const vector_r &);
+  vector_r GetTransformParams(const Config &configure);
+  void PrintTransformParams(const Config &);
   void SetMaxLValue(int);
-  void CalcShiftFunctions(const Config&);
-  complex CalcExternalWidth(JGroup*, ALevel*,AChannel*,bool,const Config&);
+  void CalcShiftFunctions(const Config &);
+  complex CalcExternalWidth(JGroup *, ALevel *, AChannel *, bool, const Config &);
   PPair *GetPair(int);
   JGroup *GetJGroup(int);
   CNuc *Clone() const;
-private:
+
+ private:
   std::vector<PPair> pairs_;
   std::vector<JGroup> jgroups_;
   int maxLValue_;

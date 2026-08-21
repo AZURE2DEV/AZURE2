@@ -5,7 +5,10 @@
  */
 
 MGroup::MGroup(int jGroupNum, int channelNum, int channelPrimeNum) :
-  jnum_(jGroupNum), ch_(channelNum), chp_(channelPrimeNum), statspinfactor_(0.0) {
+  jnum_(jGroupNum),
+  ch_(channelNum),
+  chp_(channelPrimeNum),
+  statspinfactor_(0.0) {
 }
 
 /*!
@@ -24,7 +27,7 @@ int MGroup::GetChpNum() const {
   return chp_;
 }
 
-/*! 
+/*!
  * Returns the position of the \f$ J^\pi \f$ group in the JGroup vector.
  */
 
@@ -45,5 +48,5 @@ double MGroup::GetStatSpinFactor() const {
  */
 
 void MGroup::SetStatSpinFactor(double spinFactor) {
-  statspinfactor_=spinFactor;
+  statspinfactor_ = spinFactor;
 }

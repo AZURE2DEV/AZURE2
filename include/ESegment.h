@@ -13,21 +13,21 @@ class CNuc;
 class Config;
 
 enum OperationType {
-    SUM = 0,
-    RATIO = 1
+  SUM = 0,
+  RATIO = 1
 };
 
-///An AZURE data segment
+/// An AZURE data segment
 
 /*!
- * An AZURE data segment is specified by an entrance and exit particle pair key, as well as a range of 
+ * An AZURE data segment is specified by an entrance and exit particle pair key, as well as a range of
  * energy and angle value and a data file name. The segment also contains flags specifing they type of data point it contains. The ESegment object is the container object for a vector of EData objects.
  */
 
 class ESegment {
  public:
-  ESegment(SegLine); 
-  ESegment(ExtrapLine); 
+  ESegment(SegLine);
+  ESegment(ExtrapLine);
   bool IsInSegment(EPoint);
   bool IsDifferential() const;
   bool IsCMDifferential() const;
@@ -40,15 +40,15 @@ class ESegment {
    * A_y rather than a cross section, so the values in the data file are
    * dimensionless and bounded by one.
    */
-  bool IsAnalyzingPower() const {return isAnalyzingPower_;};
+  bool IsAnalyzingPower() const { return isAnalyzingPower_; };
   bool IsUPOS() const;
   int IsTotalCapture() const;
-  ///Returns the cross section component this segment is compared against (0 = full, 1 = E1 only, 2 = E2 only).
+  /// Returns the cross section component this segment is compared against (0 = full, 1 = E1 only, 2 = E2 only).
   int GetCrossSectionComponent() const;
   int NumPoints() const;
   int GetEntranceKey() const;
   int GetExitKey() const;
-  int Fill(CNuc*,EData*,const Config&);
+  int Fill(CNuc *, EData *, const Config &);
   int GetL() const;
   int GetTargetEffectNum() const;
   int GetSegmentKey() const;
@@ -83,7 +83,7 @@ class ESegment {
   void SetNorm(double);
   void SetEnergyShift(double);
   void SetLastEnergyShift(double);
-  void UpdatePointEnergiesWithShift(CNuc* theCNuc = NULL, const Config* configure = NULL);
+  void UpdatePointEnergiesWithShift(CNuc *theCNuc = NULL, const Config *configure = NULL);
   void SetExitKey(int);
   void SetEntranceKey(int);
   void SetIsTotalCapture(int);
@@ -91,29 +91,30 @@ class ESegment {
   void SetMinAngle(double);
   void SetMaxAngle(double);
   EPoint *GetPoint(int);
-  std::vector<EPoint>& GetPoints();
-  
+  std::vector<EPoint> &GetPoints();
+
   // Advanced segment composition methods
   void AddComponent(int entranceKey, int exitKey);
-  void AddComponentSegment(ESegment* componentSegment);
+  void AddComponentSegment(ESegment *componentSegment);
   void SetOperationType(OperationType operation);
   OperationType GetOperationType() const;
   bool HasComponents() const;
-  const std::vector<ESegment*>& GetComponentSegments() const;
+  const std::vector<ESegment *> &GetComponentSegments() const;
   void ClearComponents();
 
   // Per-component scaling factor applied when this segment is combined as a
   // component of a parent advanced segment. Defaults to 1.0 (no scaling).
   void SetComponentScaling(double scaling);
   double GetComponentScaling() const;
-  
+
   // Calculate theoretical cross section including components
-  double CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, const Config& configure, EData* edata);
+  double CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, const Config &configure, EData *edata);
+
  private:
   bool isdifferential_;
   bool iscmdifferential_;
   bool isphase_;
-  ///Which cross section component to compare against: 0 = full, 1 = E1 only, 2 = E2 only.
+  /// Which cross section component to compare against: 0 = full, 1 = E1 only, 2 = E2 only.
   int crossSectionComponent_;
   bool isTargetEffect_;
   bool varyNorm_;
@@ -142,7 +143,7 @@ class ESegment {
   double dataNormNominal_;
   double dataNormError_;
   double energyShift_;
-  double lastEnergyShift_; // To track last applied energy shift
+  double lastEnergyShift_;  // To track last applied energy shift
   double energyShiftNominal_;
   double energyShiftError_;
   bool varyEnergyShift_;
@@ -151,9 +152,9 @@ class ESegment {
   std::string componentsList_;
   std::string datafile_;
   std::vector<EPoint> points_;
-  
+
   // Advanced segment composition
-  std::vector<ESegment*> componentSegments_;
+  std::vector<ESegment *> componentSegments_;
   OperationType segmentOperationType_;
   double componentScaling_;
   mutable std::shared_ptr<std::mutex> componentCalculationMutex_;
