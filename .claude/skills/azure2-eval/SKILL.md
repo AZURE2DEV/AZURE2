@@ -237,12 +237,31 @@ need no special handling.
 ay = m.calculate_analyzing_power_rwa(m.params_rwa)
 ```
 
-Works for a spin-1/2 **projectile** on a target of any spin. The amplitudes come
+Works for a spin-1/2 **projectile** on a target of any spin, in **both particle
+and capture** exit channels — by two different routes.
+
+*Particle exits* use Seyler's channel-spin amplitude matrix. The amplitudes come
 out of the R-matrix in the channel-spin basis, so for a target with spin the
 entrance index is decomposed into projectile and target projections before
 `sigma_y` is applied to the projectile alone. For a spin-0 target (¹²C) the
 channel spin *is* the projectile's and no decomposition is needed; for a
 spin-1/2 target (¹⁵N) the channel spins are 0 and 1 and never 1/2.
+
+*Capture exits* have no such amplitude matrix and use the Legendre coefficients
+of Seyler & Weller, PRC 20 (1979) 453, Eqs. (20) and (21):
+`A_y = sum_k b_k P_k^1(cos t) / sum_k a_k P_k(cos t)`, built by
+`CNuc::CalcCaptureAnalyzingPower` (lazily, on first use — the 9-j symbols cost
+time) and evaluated by `GenMatrixFunc::CalculateCaptureAnalyzingPower`. External
+capture is included; a term may pair two internal pathways, two external ones or
+one of each. The analytic adjoint is in `AMatrixFunc::PointAdjoint`.
+
+The reason capture needs its own pathway table: `a_k` forces `s = s'`, so
+`CalcAngularDists` only ever pairs pathways inside one KGroup. `b_k` does not,
+and those channel-spin off-diagonal terms are exactly what the polarization
+observable adds. `AZURE2_CAPPOL_DEBUG=1` prints, per point, the check that
+`sum_k a_k P_k` reproduces AZURE2's own differential capture cross section, up
+to `400*pi/(geom*I1I2)` — it agrees to machine precision. Reference case and the
+validation against the paper's worked example: `tests/13N_capture_ay`.
 
 Four things that will bite:
 
@@ -259,12 +278,16 @@ Four things that will bite:
   where A_y ≈ 0, a thick target drives the average to ~1e-6. That is physics,
   not a bug.
 
-Analytic derivatives cover A_y, *except* for a point that also carries target
-integration — that one reports itself unsupported, which drops the analytic
-Jacobian for the whole fit back to numerical. Never wrong, just slower.
+Analytic derivatives cover A_y in both channels, *except* for a point that also
+carries target integration — that one reports itself unsupported, which drops
+the analytic Jacobian for the whole fit back to numerical. Never wrong, just
+slower. For capture there is a second reason to avoid target integration: the
+geometric attenuation coefficients AZURE2 folds into `P_k` have no counterpart
+for the `P_k^1` of the numerator.
 
 Worked comparison against measured data: `tests/13N`, segments 11–16 (Baumann
-1992). Formalism and implementation: `docs/source/theory/polarization_*.rst`.
+1992). Capture: `tests/13N_capture_ay`. Formalism and implementation:
+`docs/source/theory/polarization_*.rst`.
 
 ## Editing the model: adding and removing levels
 
@@ -395,6 +418,79 @@ Note the `isDiff` codes differ between the two blocks: in `<segmentsData>` 3 is
 total-capture and 4 is differential-cm; in `<segmentsTest>` 3 is angular
 distribution, 4 total-capture, 5 differential-cm. pyazr handles this — hand-edits
 must not.
+
+## Three traps that cost a whole evaluation
+
+Found while building the BBN/pp-chain campaign in `IAEA/AI-R/evaluations`;
+each one produced a wrong answer *silently*.
+
+### 1. `intEC.extrap` must be deleted before every extrapolation run
+
+The golden rule above says to delete it "whenever the `<segmentsTest>` grid
+changes". **That is not sufficient.** A session that initialises in data mode
+and then calls `extrap_mode()` reuses whatever `intEC.extrap` is on disk, and
+those amplitudes do not match the combined data+test integration set the second
+INITIALIZE builds. Three identical runs of the same 7Be analysis script:
+
+| run | caches | S₃₄(10 keV) | S(p,γ)(10 keV) | S(p,α)(10 keV) |
+|---|---|---|---|---|
+| 1 | deleted | 0.5402 keV b | 0.0912 keV b | 3254 keV b |
+| 2 | deleted | 0.5402 keV b | 0.0912 keV b | 3254 keV b |
+| 3 | reused | **1.055** keV b | **2.4e8** keV b | 3254 keV b |
+
+The particle-exit grid is identical in all three — that is the signature, since
+only capture reads these integrals. Rebuilding costs seconds. Put the deletion
+in the script, not in your memory:
+
+```python
+for f in ("intEC.dat", "intEC.extrap"):
+    p = os.path.join(eval_dir, "output", f)
+    if os.path.exists(p): os.remove(p)
+```
+
+(`evaluations/_tools/uq.py:clear_ec_cache`.)
+
+### 2. A zero Jacobian column freezes `scipy.least_squares`
+
+`residual_jacobian` returns an identically zero column for any parameter no
+active dataset can see — a γ width in a model with no capture data, a channel
+of a level that nothing populates. With `x_scale="jac"` that column's scale is
+zero, and TRF reports convergence after **one** function evaluation while the
+gradient at other parameters is still in the hundreds. On the 8Be model this
+froze every normalization at exactly 1.0 for the entire run and left
+χ²/N = 5.6; dropping the dead columns first gave χ²/N = 1.01 from the same
+seeds.
+
+```python
+J = fitter.jacobian(x0)[:, cols]
+cols = cols[np.max(np.abs(J), axis=0) > 0]      # before least_squares
+```
+
+A norm-penalty χ² of *exactly* 0.0 alongside free normalizations is the tell.
+
+### 3. `residual_jacobian` raises, and the exception aborts the fit
+
+A trust-region step can put a reduced width where the Coulomb functions
+overflow (`RuntimeError: z is not finite in log_Gamma`) or where the level
+matrix is singular. Catch it and return a large residual with a zero Jacobian:
+the optimiser then shrinks the region, which is what it would have concluded
+from a finite but terrible χ². Letting it propagate loses the whole fit.
+
+### Fitting a model built from hand-chosen seeds
+
+A fresh `.azr` is far from any minimum and a single global fit over sixty
+parameters walks into a bad one. Free the parameters in the order the data
+constrain them, warm-starting each stage, and run the sequence two or three
+times:
+
+1. the particle widths of the pair that carries the dominant reaction;
+2. the other particle pairs;
+3. the γ widths, at fixed particle widths;
+4. the background poles;
+5. everything, including level energies and normalizations.
+
+`evaluations/_tools/fitting.py` (`Fitter.stages`) implements this with the
+penalty rows, the dead-column filter and the exception guard already in place.
 
 ## Fitting from Python
 
@@ -600,3 +696,33 @@ In `pyazr/examples/`: `angular_distribution.py`, `print_scheme.py`,
 `edit_scheme.py`, `edit_model.py`, `exfor_fetch.py`, `deactivate_level.py`,
 `transform_widths.py`, `dimensionless_widths.py`, `save_fit_to_azr.py`,
 `uncertainty_band.py`, `fit_emcee.py`, `fit_zeus.py`.
+
+## `apply_fit` does not always round-trip — always check
+
+`AzrModel.apply_fit` matches parameters to levels by `(2J, parity, input
+energy, pair/L/S)`. **A level at `Ex = 0` reports `level_energy = None` through
+the API**, so that key is incomplete, and when the same J-group also holds a
+background pole the written value reloads *scaled* rather than misassigned. On
+the 8B model the two ground-state ANCs came back a factor 1.91 different; on
+8Be one width did. Seven systems were snapshotted and two failed this way.
+
+The skill already tells you to verify. Do it, and delete the file if it fails:
+
+```python
+with azure2(original, cwd=d) as m:
+    want = np.asarray(m.transform_rwa(x), float)
+with azure2(written, cwd=d) as m2:
+    got = np.asarray(m2.transform_rwa(m2.params_rwa), float)
+assert np.allclose(got, want, rtol=1e-4)
+```
+
+Two further things a snapshot cannot carry:
+
+- **Normalizations do not live in `<levels>`.** A calculate run on a snapshot
+  uses 1.0 for every dataset, so its `chiSquared.out` sits *above* the fit's by
+  whatever the normalizations were absorbing — 3He: 166 fitted, 769 from the
+  snapshot. Write them alongside (`output/normalizations.txt`) or supply a
+  `param.sav`.
+- **The check dumps are keywords, not filenames.** `<config>` accepts only
+  `none`, `screen` or `file` (`src/Config.cpp:72`); anything else silently
+  leaves the check off and `checks/` stays empty. Write `file`.

@@ -187,11 +187,76 @@ title search. For non-APS journals give it the title and year and it does its
 best; the `reference()` string is always there to cite manually. Unpaywalled
 copies often live on arXiv — searching the title there is a good follow-up.
 
+## Frames: EXFOR's target is not always AZURE2's target
+
+AZURE2 converts lab to c.m. with `E_cm = E_lab · m2/(m1+m2)`, where `m1` is the
+**light** member of the pair (`EPoint.cpp:622`), and its angle transform
+`asin(m1/m2 · sin θ)` is only defined for `m1 < m2`. EXFOR names target and
+projectile by how the experiment was run, which is often the other way round —
+`3He(α,γ)7Be` is compiled as `2-HE-3(A,G)4-BE-7`, target ³He, projectile α.
+Letting `to_azr` infer the masses there writes lab energies too large by
+`(3+4)/3 ÷ (3+4)/4 = 4/3`.
+
+**State the pair's light/heavy assignment on every fetch**, not only when it
+looks reversed:
+
+```python
+d.to_azr(data_dir, entrance=1, exit=-1, observable="total-capture",
+         projectile_mass=nuclear_mass("3He"),   # AZURE2's m1
+         target_mass=nuclear_mass("4He"))       # AZURE2's m2
+```
+
+The masses do not change the S-factor→barn conversion (the reduced mass is
+symmetric), only the energy axis. Getting it wrong displaces a dataset by tens
+of per cent in energy and shows up as a resonance that will not sit still.
+
+## Two conversion bugs fixed here (August 2026)
+
+Both were silent and both changed data by orders of magnitude. They are fixed
+in `pyazr/nds.py`; the reasoning is recorded because the same traps exist in
+any hand-rolled EXFOR reader, including `gui/src/ExforData.cpp`.
+
+**1. The S-factor unit does not name the abscissa's unit.** `_energy_column`
+used to override the declared `EN`/`EN-CM` unit whenever the `DATA` unit was an
+S-factor unit with a different energy part — reading `B*KEV` as "the energies
+are in keV". But `B*KEV` is a unit of the *product* barn × energy, chosen so
+the tabulated S values read well, and it says nothing about the energy column.
+Checked against the independent lab ranges `x4list` reports, the declared
+column unit was right and the S-factor unit different in every case that fired:
+`C1610002` (Brown 2007, `EN-CM/MEV` with `DATA/B*KEV`), `O2521002` (Piatti
+2020, `EN-CM/KEV` with `DATA/B*EV`), `O1590003` (Cruz 2008, `EN/KEV` with
+`DATA/B*MEV`). The declared unit now wins and the disagreement is a warning.
+
+**2. `za()` could not read a light-particle projectile, and the charge fell
+back silently.** `za()` matched only `Z-SYM-A` codes, so the `A`, `HE3`, `D`,
+`T` shorthands EXFOR writes inside the reaction parentheses returned `None`,
+and `_data_column` then assumed `z1 = 1`, `z2 = 6` — p + ¹²C. Since
+`σ = S·exp(−2πη)/E` with `η ∝ Z₁Z₂`, halving `Z₁Z₂` for ³He+α multiplies the
+cross section by **≈5000** at 93 keV. The LUNA `3He(α,γ)7Be` S-factor set
+`O15160021` came out 5000× above the `O17090021` cross sections from the same
+measurement; after the fix the two agree to 0.3%. `za()` now resolves the
+shorthands and the S-factor path raises rather than assuming a charge.
+
+**The lesson generalises: cross-check every converted dataset against an
+independent one.** A capture measurement compiled twice, once as `SIG` and once
+as `SIG,,SFC`, is the cheapest possible check and catches both bugs at once.
+
 ## Common failure modes
 
 - **`x4list` returns the HTML "Select" page, not JSON** — the request was
   malformed (e.g. `quantity="AP"` instead of `pol`). `search_exfor` raises with
   the HTML text; re-check the quantity/reaction codes.
+- **`x4list` energies are LAB, `x4get` energies are whatever the column says**
+  — usually `EN-CM`. The search result's `en_min`/`en_max` and the fetched
+  `EN-CM` array therefore differ by the kinematic factor, which is not a bug
+  but is a good consistency check on a fetch.
+- **Missing uncertainties are invented.** A point with no error column gets 5%
+  of its value (`_DEFAULT_REL_ERROR`), because zero would reach AZURE2 as an
+  infinitely precise measurement. Datasets that trigger this must be reported
+  as such — see the `diagnose()` helper in
+  `evaluations/_tools/exfor_to_azr.py`, which also flags an `ERR-SYS` given in
+  absolute units instead of per cent (`C2032002`, Kontos 2013) and points with
+  non-positive values.
 - **Wrong frame silently** — mixing a CM-angle dataset with
   `observable="differential"` makes AZURE2 convert the angle a second time.
   Use `differential-cm` for `ANG-CM` EXFOR data, `differential` for lab `ANG`.
