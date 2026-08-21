@@ -17,3 +17,9 @@ add_test(NAME pyazr_apply_fit
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/apply_fit_test.py)
 set_tests_properties(pyazr_apply_fit PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Channel order within a level must not change a result -- and used to segfault.
+add_test(NAME pyazr_channel_order
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/channel_order_test.py)
+set_tests_properties(pyazr_channel_order PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

@@ -701,7 +701,14 @@ bool CNuc::TransformIn(const Config &configure) {
                   tempGammas[levelKeys.size() - 1][ch - 1] = -real(externalWidth);
                 }
               }
-              shifts[levelKeys.size() - 1].push_back(shifts[levelKeys.size() - 1][0]);
+              // A radiative or beta channel has no shift function.  This entry
+              // exists only to keep `shifts` indexed by channel number, and
+              // every reader of it is guarded by RadType == 'P', so the value
+              // is never used.  It used to copy channel 1's shift, which read
+              // off the end of an empty vector whenever channel 1 was itself
+              // not a particle channel -- a segfault on a file whose <levels>
+              // simply lists its photon channel first.
+              shifts[levelKeys.size() - 1].push_back(0.0);
             }
           }
         }
@@ -1658,8 +1665,16 @@ void CNuc::TransformOut(const Config &configure) {
                 }
                 boundaryDiff.push_back(newBoundary - tempBoundary[ch - 1]);
                 tempBoundary[ch - 1] = newBoundary;
-              } else
-                boundaryDiff.push_back(boundaryDiff[0]);
+              } else {
+                // Same as in TransformIn: a non-particle channel has no
+                // boundary condition, the entry only keeps `boundaryDiff`
+                // indexed by channel, and every reader is guarded by
+                // RadType == 'P'.  Copying channel 1's value read off the end
+                // of an empty vector when channel 1 was not a particle
+                // channel.  Reached only with the Brune formalism off, which
+                // is why it has not been seen.
+                boundaryDiff.push_back(0.0);
+              }
             }
             matrix_r cMatrix;
             for (int mu = 0; mu < tempE.size(); mu++) {
