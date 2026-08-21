@@ -232,14 +232,50 @@ jobs:
           # desktop-OpenGL Qt build does not ship, even though it has deployed
           # everything correctly. Check what it produced instead of its status.
           "$DEPLOY" dist/AZURE2.exe || echo "$DEPLOY exited non-zero; verifying its output instead"
-          for dll in Qt5Core.dll Qt5Gui.dll Qt5Widgets.dll; do
-            if [ ! -f "dist/$dll" ]; then
-              echo "Qt deployment failed: dist/$dll is missing"
+
+          # Qt loads its platform plugin at startup from platforms/ next to the
+          # executable. Without it a Widgets application dies before main() with
+          # "no Qt platform plugin could be initialized" -- so this, not the Qt
+          # DLLs, is what says the deployment is usable. windeployqt has been
+          # seen to copy the libraries and then stop short of the plugins, and
+          # the old check could not tell the two apart because the ldd sweep
+          # below produces those same DLLs anyway.
+          if [ ! -f dist/platforms/qwindows.dll ]; then
+            echo "$DEPLOY produced no platforms/qwindows.dll; copying the plugins directly"
+            PLUGINS=""
+            if command -v qmake-qt5 >/dev/null 2>&1; then
+              PLUGINS="$(qmake-qt5 -query QT_INSTALL_PLUGINS 2>/dev/null || true)"
+            fi
+            [ -d "$PLUGINS" ] || PLUGINS="$MINGW_PREFIX/share/qt5/plugins"
+            [ -d "$PLUGINS" ] || PLUGINS="$(dirname "$(find "$MINGW_PREFIX" -name qwindows.dll -print -quit 2>/dev/null || true)" 2>/dev/null || true)/.."
+            echo "Qt plugins: $PLUGINS"
+            # platforms is what it cannot start without; the others are what it
+            # looks wrong without -- no native style, no PNG icons.
+            for d in platforms styles imageformats iconengines printsupport; do
+              [ -d "$PLUGINS/$d" ] || continue
+              mkdir -p "dist/$d"
+              cp -n "$PLUGINS/$d"/*.dll "dist/$d/" 2>/dev/null || true
+            done
+          fi
+
+          for f in Qt5Core.dll Qt5Gui.dll Qt5Widgets.dll platforms/qwindows.dll; do
+            if [ ! -f "dist/$f" ]; then
+              echo "Qt deployment failed: dist/$f is missing"
+              ls -R dist | head -60
               exit 1
             fi
           done
-          # mingw runtime + the non-Qt dependencies
+
+          # mingw runtime + the non-Qt dependencies, for the executable and for
+          # every plugin copied above (a plugin can pull in a library the
+          # executable itself never references).
           ldd dist/AZURE2.exe | awk '/ucrt64/ {print $3}' | xargs -r -I{} cp -n {} dist/ || true
+          find dist -name '*.dll' -path '*/*/*' -print0 2>/dev/null \
+            | xargs -0 -r -I{} sh -c 'ldd "{}" | awk "/ucrt64/ {print \$3}"' \
+            | sort -u | xargs -r -I{} cp -n {} dist/ || true
+
+          echo "--- packaged ---"
+          ls -R dist | head -60
 
       - name: Package (macos)
         if: matrix.name == 'macos'
