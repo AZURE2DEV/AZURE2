@@ -359,7 +359,7 @@ mdl.add_data_segment("data/roughton.dat", entrance=1, exit=2,
                      energy_max=2.3, norm_error=5.0)     # brand-new dataset
 mdl.remove_data_segments("artemov.dat")                  # or clear_data_segments()
 mdl.set_extrapolations([...]) / add_extrapolation(...) / clear_extrapolations()
-mdl.apply_fit(m.parameters, x_best, transform=m.transform_rwa)   # fit -> <levels>
+m.save_fit("fitted.azr", x_best)   # fit -> a .azr + its param.sav, verified
 ```
 
 `add_data_segment` observables include `analyzing-power` (code 7), and
@@ -375,22 +375,43 @@ computed for the *old* grids. In a live session,
 `azr.recalculate_external_capture()` forces a recompute. See
 `pyazr/examples/edit_model.py`.
 
-`apply_fit` turns a fit result into a real `.azr` snapshot — the reference to
-reuse and hand to the GUI. Matching is by (2J, parity, input energy, pair/L/S).
+**`m.save_fit(path, x=None)` is how you snapshot a fit.** It writes the `.azr`,
+writes the companion `param.sav`, and verifies the result — reopening what it
+wrote and comparing every R-matrix value against the fit. If they disagree it
+removes both files and raises, so a snapshot you still have is one that reads
+back as the fit it came from. `path` is always explicit; nothing is written in
+place. Returns `(azr_path, sav_path)`.
+
+```python
+azr, sav = m.save_fit("7Be_fit.azr")          # current parameters
+azr, sav = m.save_fit("7Be_fit.azr", x_best)  # or an explicit free vector
+```
+
+Three things it handles that used to be the caller's problem:
 
 **The `<levels>` `gamma` field is NOT a reduced-width amplitude.** It holds the
 physical value `parameters.out` prints: Γ in **eV** for an open particle
 channel, an **ANC in fm^-1/2** for a closed (sub-threshold) one, Γ_γ in eV for a
 photon channel — i.e. exactly `transform_rwa(x)`. In the 7Be model the two
 differ by factors of 10² to 10⁷, and a file written with the rwa loads without
-complaint and is wrong. So `apply_fit` requires the conversion to be explicit —
-`transform=m.transform_rwa`, or `physical=True` if you converted already — and
-raises if given neither. Level energies need no conversion.
+complaint and is wrong.
 
-`apply_fit` covers `<levels>` only: normalizations do not live there, so a fit
-that moved them needs its `param.sav` alongside. Verify a written file by
-reloading it and comparing `transform_rwa(m.params_rwa)` against the fit's
-physical vector — every R-matrix entry must match.
+**A `Parameter`'s `pair` is not the file's pair key.** It is the *engine's*
+number, which counts particle pairs in the order `<levels>` first mentions them.
+On the 8Be model engine pair 1 is file key 2 and file key 1 is engine pair 6 —
+match one against the other and every width lands on the wrong channel. Calling
+`AzrModel.apply_fit` directly? Pass `pairs=m.pairs`, or it cannot translate.
+
+**Normalizations and energy shifts are not in `<levels>`.** A calculate run on a
+bare `.azr` uses 1.0 for every dataset, so its χ² sits *above* the fit's by
+whatever they were absorbing (3He: 166 fitted, 769 from the snapshot). That is
+what the companion `param.sav` carries — hand it to AZURE2 as the external
+parameter file and the model is whole.
+
+`AzrModel.apply_fit` is the lower-level half if you need it: it takes
+`pairs=`, matches levels on the engine's own `(jgroup, level)` via
+`engine_level_keys()`, and refuses (rather than silently skipping) any parameter
+it cannot place. It does not verify — `save_fit` does that.
 
 `pyazr/examples/save_fit_to_azr.py` does the whole thing — loads a fit from
 `param.sav` or an `.npz`, optionally re-radiuses it (`--radius 1=4.70`, dropping
@@ -697,26 +718,11 @@ In `pyazr/examples/`: `angular_distribution.py`, `print_scheme.py`,
 `transform_widths.py`, `dimensionless_widths.py`, `save_fit_to_azr.py`,
 `uncertainty_band.py`, `fit_emcee.py`, `fit_zeus.py`.
 
-## `apply_fit` does not always round-trip — always check
+## What a snapshot still cannot carry
 
-`AzrModel.apply_fit` matches parameters to levels by `(2J, parity, input
-energy, pair/L/S)`. **A level at `Ex = 0` reports `level_energy = None` through
-the API**, so that key is incomplete, and when the same J-group also holds a
-background pole the written value reloads *scaled* rather than misassigned. On
-the 8B model the two ground-state ANCs came back a factor 1.91 different; on
-8Be one width did. Seven systems were snapshotted and two failed this way.
-
-The skill already tells you to verify. Do it, and delete the file if it fails:
-
-```python
-with azure2(original, cwd=d) as m:
-    want = np.asarray(m.transform_rwa(x), float)
-with azure2(written, cwd=d) as m2:
-    got = np.asarray(m2.transform_rwa(m2.params_rwa), float)
-assert np.allclose(got, want, rtol=1e-4)
-```
-
-Two further things a snapshot cannot carry:
+`save_fit` verifies the `.azr` it writes, so a mismatched snapshot no longer
+reaches you silently — it raises and removes the file. Two things remain true
+of the `.azr` itself:
 
 - **Normalizations do not live in `<levels>`.** A calculate run on a snapshot
   uses 1.0 for every dataset, so its `chiSquared.out` sits *above* the fit's by

@@ -178,8 +178,21 @@ the group.
 Also available: ``set_channel_radius``, ``set_segment_norm``,
 ``set_segment_active``, ``set_segment_datafile``, ``add_data_segment``,
 ``remove_data_segments``, ``clear_data_segments``, ``set_extrapolations`` and
-``apply_fit``, which writes a fit result back into a ``.azr`` you can reopen in
-the GUI.
+``apply_fit``.
+
+To snapshot a fit, prefer :meth:`~pyazr.azure2.azure2.save_fit`, which wraps
+``apply_fit``:
+
+.. code-block:: python
+
+   azr, sav = m.save_fit("7Be_fit.azr")        # or save_fit(path, x_best)
+
+It converts the fit to the physical values a ``<levels>`` line holds, writes
+the companion ``param.sav`` carrying the normalizations and energy shifts that
+block cannot hold, and then reopens what it wrote and checks it against the fit
+--- removing both files and raising if they disagree.  ``path`` is always
+explicit; nothing is written in place.  Note a ``.azr`` names its data files
+relative to itself, so a snapshot runs from the directory the original did.
 
 .. warning::
 
