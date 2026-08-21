@@ -173,4 +173,14 @@ jobs:
             exit 0
           fi
           git commit -m "traffic: $(date -u +%Y-%m-%d)"
-          git push origin HEAD:traffic-data
+
+          # checkout is shallow, so a push whose history the remote cannot
+          # connect to is refused with "shallow update not allowed". It should
+          # not arise -- the parent is the tip just fetched -- but this runs
+          # unattended every day, and a daily failure is a daily notification.
+          # Deepen and retry once rather than let that happen.
+          if ! git push origin HEAD:traffic-data; then
+            echo "push refused; unshallowing and retrying"
+            git fetch --unshallow origin 2>/dev/null || true
+            git push origin HEAD:traffic-data
+          fi
