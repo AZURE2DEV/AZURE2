@@ -73,6 +73,18 @@ class GenMatrixFunc {
    * down the coupling order and the choice of l versus l'.
    */
   bool CalculateAmplitudeMatrix(EPoint* point, double* spinSum, double* analyzingPower);
+  /*!
+   * Vector analyzing power of a capture reaction, from the Legendre
+   * coefficients of R. G. Seyler and H. R. Weller, Phys. Rev. C \b 20 (1979)
+   * 453, Eqs. (20) and (21):
+   * \f$A_y = \sum_k b_k P_k^1(\cos\theta) / \sum_k a_k P_k(\cos\theta)\f$.
+   * The coefficient table is built on first use by
+   * CNuc::CalcCaptureAnalyzingPower; the T-matrix elements are the ones this
+   * object has already computed, external capture included.
+   * Returns false for anything that is not a photon exit channel.
+   */
+  bool CalculateCaptureAnalyzingPower(EPoint* point, double* unpolarized,
+                                      double* analyzingPower);
   void NewTempTMatrix(TempTMatrix);
   void NewTempTMatrixE1(TempTMatrix);
   void NewTempTMatrixE2(TempTMatrix);

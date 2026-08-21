@@ -120,3 +120,41 @@ KLGroup *Decay::GetKLGroup(int klGroupNum) {
   KLGroup *b=&klgroups_[klGroupNum-1];
   return b;
 }
+
+/*!
+ * Returns the number of capture analyzing-power terms.
+ */
+
+int Decay::NumCaptureAyTerms() const {
+  return captureAy_.size();
+}
+
+/*!
+ * Adds one \f$(t,t')\f$ pathway pair to the capture analyzing-power table.
+ */
+
+void Decay::AddCaptureAyTerm(const CaptureAyTerm& term) {
+  captureAy_.push_back(term);
+}
+
+/*!
+ * Returns a pointer to a capture analyzing-power term by position (1-based).
+ */
+
+const CaptureAyTerm *Decay::GetCaptureAyTerm(int termNum) const {
+  return &captureAy_[termNum-1];
+}
+
+/*!
+ * Whether the capture analyzing-power table has been built. The table is filled
+ * on first use rather than at initialization, because it costs 9-j symbols that
+ * a run without polarization segments would never look at.
+ */
+
+bool Decay::IsCaptureAyBuilt() const {
+  return captureAyBuilt_;
+}
+
+void Decay::SetCaptureAyBuilt() {
+  captureAyBuilt_ = true;
+}

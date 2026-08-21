@@ -32,8 +32,11 @@ class EPoint;
  * rho_out = M rho_in M^dagger, with no further angular-momentum algebra.
  *
  * Scope: particle channels with a spin-1/2 projectile, which covers the
- * vector analyzing power A_y. Tensor observables and capture channels (the
- * latter needing Seyler and Weller, PRC 20 (1979) 453) are not implemented.
+ * vector analyzing power A_y. Capture channels have no amplitude matrix of this
+ * form and take the other route -- the Legendre coefficients of Seyler and
+ * Weller, PRC 20 (1979) 453, built by CNuc::CalcCaptureAnalyzingPower and
+ * evaluated by GenMatrixFunc::CalculateCaptureAnalyzingPower. Tensor
+ * observables are not implemented on either side.
  */
 namespace Polarization {
 

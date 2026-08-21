@@ -57,6 +57,7 @@ _OBSERVABLE = {
     4: "differential-cm",
     5: "angle-integrated-E1",
     6: "angle-integrated-E2",
+    7: "analyzing-power",
 }
 
 # isDiff codes for <segmentsTest> -- ESegment::ESegment(ExtrapLine).
@@ -67,6 +68,7 @@ _EXTRAP_OBSERVABLE = {
     3: "angular-distribution",
     4: "total-capture",
     5: "differential-cm",
+    7: "analyzing-power",
 }
 
 

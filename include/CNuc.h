@@ -43,6 +43,7 @@ public:
   void CalcBoundaryConditions(const Config&);
   void PrintBoundaryConditions(const Config&);
   void CalcAngularDists(int);
+  void CalcCaptureAnalyzingPower(int,int,int);
   void PrintAngularDists(const Config&);
   void FillMnParams(ROOT::Minuit2::MnUserParameters&, const Config* config = nullptr);
   void FillCompoundFromParamsPhysical(const vector_r &);

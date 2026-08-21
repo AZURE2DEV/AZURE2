@@ -1296,6 +1296,159 @@ void CNuc::CalcAngularDists(int maxL) {
   }
 }
 
+namespace {
+
+//! (-1)^n for an expression that is an integer but arrives as a double.
+inline double PhaseM1(double n) {
+  return (std::labs(std::lround(n)) % 2) ? -1.0 : 1.0;
+}
+
+inline double Hat(double j) { return sqrt(2.0*j + 1.0); }
+
+/*!
+ * Quantum numbers of one capture pathway, t = {p L b l s} in the notation of
+ * Seyler and Weller: photon mode p (1 electric, 0 magnetic) and multipolarity
+ * L, compound spin b, entrance orbital angular momentum l, channel spin s.
+ */
+struct AyPathway {
+  int kGroup, path;
+  bool isEC;
+  double l, L, b, s;
+  int p;
+};
+
+}  // namespace
+
+/*!
+ * Builds the capture analyzing-power coefficient table for one decay.
+ *
+ * The Legendre coefficients of a particle-capture-\f$\gamma\f$ angular
+ * distribution are R. G. Seyler and H. R. Weller, Phys. Rev. C \b 20 (1979)
+ * 453, Eqs. (20) and (21) in the channel-spin representation -- the
+ * representation AZURE2 already works in, so no recoupling is needed and the
+ * \f$R\f$ of that paper is the T-matrix element the code already forms.
+ *
+ * \f$a_k\f$ (Eq. 20) reproduces the coefficients CalcAngularDists already
+ * builds as \c z1z2, up to a factor 4; it is recomputed here so that the ratio
+ * \f$A_y = \sum_k b_k P_k^1 / \sum_k a_k P_k\f$ is formed from two coefficients
+ * in one convention, and so that the agreement with \c z1z2 is available as a
+ * check.
+ *
+ * The essential difference from the unpolarized case is that \f$a_k\f$ requires
+ * \f$s = s'\f$ while \f$b_k\f$ (Eq. 21) does not: the channel-spin off-diagonal
+ * terms are precisely what an analyzing power is sensitive to and a cross
+ * section is not. Pathways are therefore paired across KGroups, not within one.
+ *
+ * Called on first use rather than from Initialize, since the 9-j symbols cost
+ * time a run without polarization segments should not pay.
+ */
+
+void CNuc::CalcCaptureAnalyzingPower(int aa, int decayNum, int maxL) {
+  Decay *theDecay = this->GetPair(aa)->GetDecay(decayNum);
+  if(theDecay->IsCaptureAyBuilt()) return;
+  theDecay->SetCaptureAyBuilt();
+
+  PPair *entrancePair = this->GetPair(aa);
+  PPair *exitPair = this->GetPair(theDecay->GetPairNum());
+  if(exitPair->GetPType() != 10) return;      // photon exit channels only
+
+  const double xSpin = entrancePair->GetJ(1);   // projectile, the light one
+  const double aSpin = entrancePair->GetJ(2);   // target
+  const double cSpin = exitPair->GetJ(2);       // residual nucleus
+  if(xSpin <= 0.0) return;                      // no vector polarization to have
+
+  // --- Flatten every pathway of the decay, internal and external. ---
+  std::vector<AyPathway> paths;
+  for(int k=1;k<=theDecay->NumKGroups();k++) {
+    KGroup *theKGroup = theDecay->GetKGroup(k);
+    for(int m=1;m<=theKGroup->NumMGroups();m++) {
+      MGroup *theMGroup = theKGroup->GetMGroup(m);
+      JGroup *jgroup = this->GetJGroup(theMGroup->GetJNum());
+      AChannel *entranceChannel = jgroup->GetChannel(theMGroup->GetChNum());
+      AChannel *exitChannel = jgroup->GetChannel(theMGroup->GetChpNum());
+      AyPathway t;
+      t.kGroup=k; t.path=m; t.isEC=false;
+      t.l=(double)entranceChannel->GetL();
+      t.L=(double)exitChannel->GetL();
+      t.b=jgroup->GetJ();
+      t.s=theKGroup->GetS();
+      t.p=(exitChannel->GetRadType()=='E') ? 1 : 0;
+      paths.push_back(t);
+    }
+    for(int m=1;m<=theKGroup->NumECMGroups();m++) {
+      ECMGroup *theECMGroup = theKGroup->GetECMGroup(m);
+      AyPathway t;
+      t.kGroup=k; t.path=m; t.isEC=true;
+      t.l=(double)theECMGroup->GetL();
+      t.L=(double)theECMGroup->GetMult();
+      t.b=theECMGroup->GetJ();
+      t.s=theKGroup->GetS();
+      t.p=(theECMGroup->GetRadType()=='E') ? 1 : 0;
+      paths.push_back(t);
+    }
+  }
+  if(paths.empty()) return;
+
+  // --- Eq. (21) prefactor, common to every term at a given k. ---
+  // 3 sqrt(x) xhat khat / [(x+1) k (k+1)]^{1/2}
+  std::vector<double> bPrefactor(maxL+1, 0.0);
+  for(int k=1;k<=maxL;k++)
+    bPrefactor[k] = 3.0*sqrt(xSpin)*Hat(xSpin)*Hat((double)k)
+                  / sqrt((xSpin+1.0)*(double)k*((double)k+1.0));
+
+  for(size_t i1=0;i1<paths.size();i1++) {
+    const AyPathway& t1 = paths[i1];
+    for(size_t i2=0;i2<paths.size();i2++) {
+      const AyPathway& t2 = paths[i2];
+      for(int k=0;k<=maxL;k++) {
+        // Eq. (15): the empty bracket, [ ] = 1/2 [1 + (-1)^{L+p+L'+p'+k}].
+        if((int)(t1.L+t1.p+t2.L+t2.p+k)%2 != 0) continue;
+        // Both coefficients carry (l 0, l' 0 | k 0) and (L 1, L' -1 | k 0);
+        // testing them first prunes almost everything before any 6-j or 9-j.
+        double cgL = AngCoeff::ClebGord(t1.l,t2.l,(double)k,0.,0.,0.);
+        if(fabs(cgL)<1.e-12) continue;
+        double cgG = AngCoeff::ClebGord(t1.L,t2.L,(double)k,1.,-1.,0.);
+        if(fabs(cgG)<1.e-12) continue;
+        double wG = AngCoeff::Racah(t1.L,t1.b,t2.L,t2.b,cSpin,(double)k);
+        if(fabs(wG)<1.e-12) continue;
+
+        double common = cgL*cgG*wG
+          * Hat(t1.l)*Hat(t2.l)*Hat(t1.L)*Hat(t2.L)
+          * (2.*t1.b+1.)*(2.*t2.b+1.);
+
+        // --- Eq. (20). Only the channel-spin diagonal contributes. ---
+        double ak = 0.0;
+        if(fabs(t1.s-t2.s)<1.e-6) {
+          double wL = AngCoeff::Racah(t1.l,t1.b,t2.l,t2.b,t1.s,(double)k);
+          ak = PhaseM1(t1.s-cSpin+1.0)*common*wL;
+        }
+
+        // --- Eq. (21). Channel-spin off-diagonal terms are kept. ---
+        double bk = 0.0;
+        if(k>=1) {
+          double wS = AngCoeff::Racah(xSpin,t1.s,xSpin,t2.s,aSpin,1.0);
+          if(fabs(wS)>=1.e-12) {
+            double x9j = AngCoeff::Wigner9j(t1.l,t1.s,t1.b,
+                                            t2.l,t2.s,t2.b,
+                                            (double)k,1.0,(double)k);
+            if(fabs(x9j)>=1.e-14)
+              bk = bPrefactor[k]*common*Hat(t1.s)*Hat(t2.s)*wS*x9j
+                 * PhaseM1(aSpin-xSpin+cSpin-t1.b-t1.s+t1.l);
+          }
+        }
+
+        if(fabs(ak)<1.e-10&&fabs(bk)<1.e-10) continue;
+        CaptureAyTerm term;
+        term.kOrder=k;
+        term.kGroup1=t1.kGroup; term.path1=t1.path; term.isEC1=t1.isEC;
+        term.kGroup2=t2.kGroup; term.path2=t2.path; term.isEC2=t2.isEC;
+        term.ak=ak; term.bk=bk;
+        theDecay->AddCaptureAyTerm(term);
+      }
+    }
+  }
+}
+
 /*!
  * Prints the KLGroup and Interference object structure as well as the calculated coefficients.
  */

@@ -362,7 +362,16 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
   // special case.
   if (point->IsAnalyzingPower()) {
     double spinSum = 0.0, ay = 0.0;
-    if (!this->CalculateAmplitudeMatrix(point, &spinSum, &ay)) ay = 0.0;
+    // Two routes, chosen by the exit channel: the channel-spin amplitude matrix
+    // (Seyler 1969) for particle pairs, the Legendre coefficients of Seyler and
+    // Weller (1979) for capture. Both consume the same T-matrix elements.
+    const int exitPType =
+        compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()))
+            ->GetPType();
+    const bool ok = (exitPType == 10)
+        ? this->CalculateCaptureAnalyzingPower(point, &spinSum, &ay)
+        : this->CalculateAmplitudeMatrix(point, &spinSum, &ay);
+    if (!ok) ay = 0.0;
     point->SetAnalyzingPower(ay);
     // A sub-point of a target-effect integration must keep the cross section
     // in place, because A_y is averaged over the target weighted by it. Every
@@ -581,7 +590,8 @@ bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint* point, double* spinSum,
 
   const int aaPair = compound()->GetPairNumFromKey(point->GetEntranceKey());
   const int irPair = compound()->GetPairNumFromKey(point->GetExitKey());
-  // Particle channels only; capture needs Seyler and Weller instead.
+  // Particle channels only. A photon exit has no amplitude matrix of this form
+  // and goes through CalculateCaptureAnalyzingPower instead.
   if (compound()->GetPair(aaPair)->GetPType() != 0 ||
       compound()->GetPair(irPair)->GetPType() != 0) return false;
 
@@ -612,5 +622,79 @@ bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint* point, double* spinSum,
     std::printf("FLIP n=%zu maxflip=%.6e\n", M.size(), M.MaxSpinFlip());
   if (spinSum) *spinSum = M.UnpolarizedCrossSection();
   if (analyzingPower) *analyzingPower = M.AnalyzingPowerAy();
+  return true;
+}
+
+bool GenMatrixFunc::CalculateCaptureAnalyzingPower(EPoint* point,
+                                                   double* unpolarized,
+                                                   double* analyzingPower) {
+  if (unpolarized) *unpolarized = 0.0;
+  if (analyzingPower) *analyzingPower = 0.0;
+
+  const int aaPair = compound()->GetPairNumFromKey(point->GetEntranceKey());
+  const int irPair = compound()->GetPairNumFromKey(point->GetExitKey());
+  if (compound()->GetPair(aaPair)->GetPType() != 0) return false;   // particle in
+  if (compound()->GetPair(irPair)->GetPType() != 10) return false;  // photon out
+
+  int ir = 0;
+  while (ir < compound()->GetPair(aaPair)->NumDecays()) {
+    ir++;
+    if (compound()->GetPair(aaPair)->GetDecay(ir)->GetPairNum() == irPair) break;
+  }
+  if (ir > compound()->GetPair(aaPair)->NumDecays()) return false;
+
+  const int maxL = point->GetMaxLOrder();
+  compound()->CalcCaptureAnalyzingPower(aaPair, ir, maxL);
+  Decay* theDecay = compound()->GetPair(aaPair)->GetDecay(ir);
+  const int nTerms = theDecay->NumCaptureAyTerms();
+  if (nTerms == 0) return false;
+
+  // P_k^1 is not among the polynomials the point caches, so it is evaluated
+  // here at the same centre-of-mass angle EPoint::CalcLegendreP uses.
+  const double x = cos(point->GetCMAngle() * pi / 180.0);
+  std::vector<double> assocP(maxL + 1, 0.0);
+  for (int k = 1; k <= maxL; k++) assocP[k] = AngCoeff::LegendreP1(k, x);
+
+  double num = 0.0, den = 0.0;
+  for (int i = 1; i <= nTerms; i++) {
+    const CaptureAyTerm* term = theDecay->GetCaptureAyTerm(i);
+    if (term->kOrder > maxL) continue;
+    complex T1 = term->isEC1
+        ? this->GetECTMatrixElement(term->kGroup1, term->path1)
+        : this->GetTMatrixElement(term->kGroup1, term->path1);
+    complex T2 = term->isEC2
+        ? this->GetECTMatrixElement(term->kGroup2, term->path2)
+        : this->GetTMatrixElement(term->kGroup2, term->path2);
+    const complex prod = T1 * conj(T2);
+    if (term->ak != 0.0)
+      den += term->ak * real(prod) * point->GetLegendreP(term->kOrder);
+    if (term->bk != 0.0)
+      num += term->bk * (-imag(prod)) * assocP[term->kOrder];   // Re(i T T'*)
+  }
+
+  // Validation hook. The denominator is Seyler and Weller's sum_k a_k P_k,
+  // which must be AZURE2's own differential capture cross section up to the
+  // energy-dependent, angle-independent factor
+  //     den / sigma(theta) = 400 pi / (geometrical factor * I1I2 factor),
+  // since CalcAngularDists builds the same coefficients as z1z2 = a_k / 4 and
+  // GenMatrixFunc forms sigma = Re(sum)/pi * geom * I1I2 / 100. A ratio that
+  // moves with angle means the pathway enumeration or a coupling order is
+  // wrong. The point still holds the cross section here; the analyzing power
+  // overwrites it only after this returns.
+  if (std::getenv("AZURE2_CAPPOL_DEBUG")) {
+    const double xs = point->GetFitCrossSection();
+    const double expect = 400.0 * pi
+        / (point->GetGeometricalFactor()
+           * compound()->GetPair(aaPair)->GetI1I2Factor());
+    std::printf("CAPPOL %10.6f %8.3f  den %14.7e  xs %14.7e  ratio %14.7e"
+                "  expect %14.7e  Ay %12.6e\n",
+                point->GetCMEnergy(), point->GetCMAngle(), den, xs,
+                (xs != 0.0) ? den / xs : 0.0, expect,
+                (den != 0.0) ? num / den : 0.0);
+  }
+
+  if (unpolarized) *unpolarized = den;
+  if (fabs(den) < 1.e-300) return false;
+  if (analyzingPower) *analyzingPower = num / den;
   return true;
 }

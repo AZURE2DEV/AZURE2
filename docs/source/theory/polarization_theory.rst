@@ -267,19 +267,51 @@ analyzing-power measurements use thin targets — Baumann's were 85 nm of
 Scope
 -----
 
-What is implemented covers particle channels with a spin-1/2 projectile and a
-target of **any** spin, which is what the vector analyzing power :math:`A_y`
-requires. Two extensions are not implemented and should not be assumed to work:
+What is implemented covers the vector analyzing power :math:`A_y` for a
+spin-1/2 projectile on a target of **any** spin, in **both** particle and
+capture exit channels — the two by different routes, since the photon exit has
+no amplitude matrix of the form of :eq:`seyler`.
 
-*Tensor observables* (:math:`T_{20}`, :math:`T_{22}`, and the rest) need a
-spin-1 projectile and the corresponding rank-2 operators. The amplitude matrix
-built here is general enough in principle — it carries all channel spins and
-projections — but the observable side would have to be written.
+*Capture channels* use Seyler and Weller [SeylerWeller1979]_, who give the
+Legendre coefficients of the angular distribution directly in the channel-spin
+representation — the representation AZURE2 already works in, so their
+:math:`R` is the T-matrix element the code already forms. Writing
 
-*Capture channels* need the photon analogue of :eq:`seyler`, for which the
-reference is Seyler and Weller [SeylerWeller1979]_. Their Eq. (12) carries a
-:math:`(-1)^M` phase that several earlier treatments drop, which is a warning
-about how delicate this bookkeeping is.
+.. math::
+   :label: swcapture
+
+   \sigma(\theta,\phi) = N \sum_k \Bigl[ a_k P_k(\cos\theta)
+                       + b_k P_k^1(\cos\theta)\, p_y \Bigr]
+
+their Eqs. (20) and (21) give :math:`a_k` and :math:`b_k` as sums over pairs of
+reaction pathways :math:`t = \{p L b l s\}` weighted by
+:math:`\mathrm{Re}\,R R'^*` and :math:`\mathrm{Re}\,(i R R'^*)`, so that
+
+.. math::
+
+   A_y(\theta) = \frac{\sum_k b_k P_k^1(\cos\theta)}
+                      {\sum_k a_k P_k(\cos\theta)} .
+
+The structural point is that :math:`a_k` requires :math:`s = s'` while
+:math:`b_k` does not. The channel-spin off-diagonal terms are exactly the
+information a polarization measurement adds and a cross section cannot carry,
+and they are why the pathway pairs have to be enumerated across channel-spin
+groups rather than within one.
+
+Their Eq. (12) carries a :math:`(-1)^M` phase that several earlier treatments
+drop — so their :math:`P_L^M` is the associated Legendre function *without* the
+Condon-Shortley phase, and for :math:`M = 1` that is a sign. Two further
+conventions had to be settled numerically against their worked example; see
+:doc:`polarization_implementation`.
+
+One extension remains unimplemented and should not be assumed to work:
+*tensor observables* (:math:`T_{20}`, :math:`T_{22}`, and the rest) need a
+spin-1 projectile and the corresponding rank-2 operators. For particle channels
+the amplitude matrix built here is general enough in principle — it carries all
+channel spins and projections — but the observable side would have to be
+written; for capture, Seyler and Weller's Eqs. (22)–(25) give the
+:math:`c_k`, :math:`d_k` and :math:`e_k` coefficients that would be needed, in
+the same notation as the :math:`b_k` already coded.
 
 .. [Seyler1969] R. G. Seyler, *Nuclear Physics* **A124** (1969) 253.
 

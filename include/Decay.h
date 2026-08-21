@@ -3,6 +3,7 @@
 
 #include "KGroup.h"
 #include "KLGroup.h"
+#include "CaptureAyTerm.h"
 
 ///An AZURE decay pair.
 
@@ -24,10 +25,18 @@ class Decay {
   void AddKLGroup(KLGroup);
   KGroup *GetKGroup(int);
   KLGroup *GetKLGroup(int);
+  //! Capture analyzing-power terms, filled by CNuc::CalcCaptureAnalyzingPower.
+  int NumCaptureAyTerms() const;
+  void AddCaptureAyTerm(const CaptureAyTerm&);
+  const CaptureAyTerm *GetCaptureAyTerm(int) const;
+  bool IsCaptureAyBuilt() const;
+  void SetCaptureAyBuilt();
  private:
   int pair_;
   std::vector<KGroup> kgroups_;
   std::vector<KLGroup> klgroups_;
+  std::vector<CaptureAyTerm> captureAy_;
+  bool captureAyBuilt_ = false;
 };
 
 
