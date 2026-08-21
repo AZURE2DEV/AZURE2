@@ -182,6 +182,11 @@ class Session {
     return api_->Rebuild();
   }
 
+  bool write_output_files() {
+    ConfigScope guard(config_);
+    return api_->WriteOutputFiles();
+  }
+
   bool initialize() {
     ConfigScope guard(config_);
     return api_->Initialize() == 0;
@@ -455,6 +460,10 @@ PYBIND11_MODULE(_azure2, m) {
            py::arg("configfile"), py::arg("options") = RuntimeOptions(),
            "Load ``configfile`` and build the model.  Raises AZURE2Error if "
            "the file is missing or the model will not initialize.")
+      .def("write_output_files", &Session::write_output_files,
+           py::call_guard<py::gil_scoped_release>(),
+           "Write AZUREOut_*, chiSquared.out and the rest into the output "
+           "directory, from the cross sections currently on the points.")
       .def("rebuild", &Session::rebuild,
            py::call_guard<py::gil_scoped_release>(),
            "Rebuild the model from the .azr, recomputing the external-capture "

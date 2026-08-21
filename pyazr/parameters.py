@@ -296,6 +296,49 @@ class ParameterSet(list):
     about, e.g. ``params.free``, ``params.widths``, ``params.by_level(2, +1)``.
     """
 
+    # -- the free vector ------------------------------------------------------
+    #
+    # A calculation takes a flat vector of the *free* parameters, and a
+    # Parameter's free_index is its position in it.  Threading that by hand is
+    # the usual source of silent misalignment, so these do it.
+
+    def indices(self):
+        """Free-vector positions of these parameters, in this set's order.
+
+        Fixed parameters have no position and are dropped, so
+        ``len(indices()) <= len(self)``.
+        """
+        return [p.free_index for p in self
+                if not p.fixed and p.free_index is not None]
+
+    def take(self, x):
+        """The entries of the free vector ``x`` belonging to these parameters."""
+        import numpy as _np
+        x = _np.asarray(x, float)
+        return x[_np.asarray(self.indices(), int)] if self.indices() else _np.empty(0)
+
+    def put(self, x, values):
+        """A *copy* of the free vector ``x`` with these parameters set.
+
+        ``values`` is either one number for all of them or one per parameter,
+        in this set's order:
+
+        >>> x = m.parameters.widths.put(m.params_rwa, 0.0)   # zero every width
+        """
+        import numpy as _np
+        out = _np.array(x, float, copy=True)
+        idx = _np.asarray(self.indices(), int)
+        values = _np.asarray(values, float)
+        if values.ndim == 0:
+            out[idx] = float(values)
+        elif values.size == idx.size:
+            out[idx] = values
+        else:
+            raise ValueError(
+                f"put() got {values.size} value(s) for {idx.size} free "
+                f"parameter(s) in this set.")
+        return out
+
     # -- filtered views -------------------------------------------------------
 
     @property

@@ -689,6 +689,12 @@ bool AZUREAPI::SetRadius(int idx, double r) {
   return RebuildImpl(&idx, &r);
 }
 
+bool AZUREAPI::WriteOutputFiles() {
+  if (data_ == nullptr) return false;
+  data()->WriteOutputFiles(configure(), false, nullptr);
+  return true;
+}
+
 bool AZUREAPI::Rebuild() {
   return RebuildImpl(nullptr, nullptr);
 }

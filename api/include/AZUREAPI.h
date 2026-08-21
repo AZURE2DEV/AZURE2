@@ -73,6 +73,16 @@ class AZUREAPI {
    * the old one.  SetRadius() is this with a radius override.
    */
   bool Rebuild();
+  /*!
+   * Write the run's standard output files -- AZUREOut_*, chiSquared.out and
+   * the rest -- into the configured output directory.
+   *
+   * The CLI does this at the end of a calculation; a Python session had no way
+   * to, and had to re-run the binary to get them.  The files are written from
+   * the cross sections stored on the points, so run a forward pass first or
+   * they report whatever parameters were last evaluated.
+   */
+  bool WriteOutputFiles();
   // Get indeces of normalization parameters
   vector_r GetNormalizationIndices();
   // Get indeces of energy shift parameters

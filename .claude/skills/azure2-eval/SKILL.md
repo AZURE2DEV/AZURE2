@@ -213,6 +213,41 @@ for k, (fi, _, s) in enumerate(pen): Jpen[k, fi] = 1.0 / s
 resid = np.concatenate([r, [(z[fi] - n0) / s for fi, n0, s in pen]])
 ```
 
+### Writing the run's output files
+
+```python
+m.write_output_files()        # AZUREOut_*, chiSquared.out, into output/
+m.write_output_files(x_best)  # at a particular parameter vector
+```
+
+The files a colleague or the GUI's plot tab expects, without re-running the
+binary. `output/` must already exist. In data mode this runs the χ²
+evaluation first — `chiSquared.out` reports the per-segment χ² *stored on each
+segment*, and only that evaluation sets it, so writing after a bare forward
+pass gives a well-formed file full of zeros.
+
+`param.par` and `parameters.out` do not come from this call: the first is
+written at initialization, the second by `CNuc::PrintTransformParams` at the
+end of a CLI run. Use `m.transform_rwa(x)` for the numbers `parameters.out`
+would carry.
+
+### Free-vector helpers
+
+`Parameter.free_index` is a parameter's position in the free vector; threading
+that by hand is the usual source of silent misalignment.
+
+```python
+m.n_rmatrix                       # where the R-matrix block ends: x[:m.n_rmatrix]
+w = m.parameters.widths
+w.indices()                       # their free-vector positions
+w.take(x)                         # their entries of x
+w.put(x, 0.0)                     # a copy of x with every width zeroed
+m.datasets.by_key(p.segment_key)  # the segment a norm/shift belongs to
+```
+
+`by_key` rather than `datasets[key - 1]`: a segment key counts the *inactive*
+segments too, so it is not an index.
+
 ### Calculating observables
 
 ```python

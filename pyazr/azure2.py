@@ -202,6 +202,22 @@ class azure2:
             self._parameters = self._build_parameters()
         return self._parameters
 
+    @property
+    def n_rmatrix(self):
+        """How many leading entries of the free vector are R-matrix parameters.
+
+        The vector is laid out with the level energies and reduced widths
+        first, then the normalizations and energy shifts.  ``transform_rwa``
+        accepts either the whole thing or just this leading block, so this is
+        the slice point:
+
+        >>> physical = m.transform_rwa(x[:m.n_rmatrix])
+        """
+        idx = [p.free_index for p in self.parameters
+               if p.kind in ("energy", "width") and not p.fixed
+               and p.free_index is not None]
+        return 1 + max(idx) if idx else 0
+
     def refresh_parameters(self):
         """Re-fetch and rebuild the cached :attr:`parameters`."""
         self._parameters = self._build_parameters()
@@ -847,6 +863,38 @@ class azure2:
     def calculate_chi2(self, params):
         """As calculate_chi2_rwa, taking the physical parameter vector instead."""
         return [float(self.sess.calculate_chi2_physical(params))]
+
+    def write_output_files(self, params=None):
+        """Write the run's standard output files, as the CLI does at the end.
+
+        ``AZUREOut_*``, ``chiSquared.out`` and the rest land in the ``.azr``'s
+        output directory, which must already exist.  Without this a Python
+        session could compute everything and still had to re-run the binary to
+        get the files a colleague or the GUI expects.
+
+        A forward pass is run first at ``params`` (the current parameters by
+        default), so the files describe the parameters you asked about rather
+        than whatever was evaluated last.
+
+        Returns the output directory.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float).ravel()
+        with _in_dir(self.cwd):
+            if self.mode == "data":
+                # chiSquared.out reports the per-segment chi-squared *stored on
+                # each segment*, and only the chi-squared evaluation sets it --
+                # a bare forward pass leaves it at zero and the file comes out
+                # full of zeros.  This populates both that and the point cross
+                # sections AZUREOut_* is written from.
+                self.sess.calculate_chi2_rwa(x)
+            else:
+                # No data to compare against; chiSquared.out is meaningless in
+                # extrapolation mode, and the forward pass is all AZUREOut_*
+                # needs.
+                self.sess.update_segments_rwa(x)
+            if not self.sess.write_output_files():
+                raise RuntimeError("AZURE2 has no data object to write from.")
+        return os.path.join(self.cwd, "output")
 
     # -- chi-squared, per segment and per dataset -----------------------------
 

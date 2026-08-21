@@ -30,3 +30,9 @@ add_test(NAME pyazr_objective
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/objective_test.py)
 set_tests_properties(pyazr_objective PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# write_output_files must produce the same files the binary does.
+add_test(NAME pyazr_output_files
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/output_files_test.py)
+set_tests_properties(pyazr_output_files PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
