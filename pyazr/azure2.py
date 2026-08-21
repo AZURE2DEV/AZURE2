@@ -9,6 +9,8 @@ independent; drive them from one thread, as the engine is not reentrant.
 """
 
 import os
+import shutil
+import tempfile
 from contextlib import contextmanager
 
 import numpy as np
@@ -24,6 +26,10 @@ except ImportError as err:                            # pragma: no cover
 
 from .parameters import (NuclearPotential, Pair, PairSet, Parameter,
                          ParameterSet)
+# Imported inside the module rather than at package level: azrfile does not
+# depend on the compiled engine, and this keeps that direction of the
+# dependency one-way.
+from .azrfile import AzrModel
 
 
 @contextmanager
@@ -584,6 +590,105 @@ class azure2:
             with open('output/param.sav.new', 'w') as f:
                 for param in params_full:
                     f.write(f"{param[0]} {param[1]} {param[2]}\n")
+
+    def save_fit(self, path, x=None, param_sav=True, verify=True):
+        """Snapshot a fit as a ``.azr`` you can reopen, plot, or hand over.
+
+        ``path`` is required and is written to explicitly -- nothing is ever
+        saved in place over the model you loaded.
+
+        ``x`` is a free vector in :attr:`params_rwa` order; it defaults to the
+        session's current parameters. The conversion to the physical values a
+        ``<levels>`` line holds (partial widths in eV, ANCs in fm^-1/2) is done
+        here, so a caller cannot forget it.
+
+        Two things a ``<levels>`` block cannot carry, which is why this is not
+        just :meth:`~pyazr.azrfile.AzrModel.apply_fit`:
+
+        - **Normalizations and energy shifts are not in it.** A calculate run
+          on a bare snapshot uses 1.0 for every dataset, so its chi-squared sits
+          above the fit's by whatever the normalizations were absorbing. With
+          ``param_sav`` (the default) a companion ``<name>.sav`` is written
+          beside the file carrying every parameter, free and fixed; hand that to
+          AZURE2 as the external parameter file and the model is whole.
+        - **A written file is not a fit until it reads back as one.** With
+          ``verify`` (the default) the result is reopened and its own
+          parameters transformed back; if any R-matrix value disagrees the
+          files are removed and this raises, rather than leaving a snapshot
+          that is quietly a mixture.
+
+        A ``.azr`` names its data files and its output directory *relative to
+        itself*, so a snapshot only runs from the directory the original did.
+        Write it beside the model, or move its ``data/`` with it.
+
+        Returns ``(azr_path, sav_path_or_None)``.
+        """
+        x = np.asarray(self.params_rwa if x is None else x, float).ravel()
+        want = np.asarray(self.transform_rwa(x), float)
+
+        path = os.path.abspath(path)
+        model = AzrModel.from_file(self.file)
+        model.apply_fit(self.parameters, x, transform=self.transform_rwa,
+                        pairs=self.pairs)
+        model.write(path)
+
+        sav = None
+        if param_sav:
+            sav = os.path.splitext(path)[0] + ".sav"
+            allrwa = list(np.asarray(self.sess.params_all_rwa(), float))
+            free = iter(range(len(x)))
+            with open(sav, "w") as fh:
+                for i, p in enumerate(self.parameters):
+                    v = x[next(free)] if not self.fixed_params[i] else allrwa[i]
+                    fh.write(f"{p.name:>28s} {float(v): .7e} {0.0: .7e}\n")
+
+        if verify:
+            # Verify a *copy*, in the session's own directory and with its
+            # output redirected. A .azr resolves its data files and output
+            # directory relative to itself, so the snapshot only loads where
+            # the original did -- and opening it there would otherwise
+            # overwrite the real run's output/param.par.
+            probe = tmpdir = None
+            try:
+                tmpdir = tempfile.mkdtemp(prefix=".azr_verify_", dir=self.cwd)
+                copy = AzrModel.from_file(path)
+                copy.set_output_dir(tmpdir)
+                fd, probe = tempfile.mkstemp(suffix=".azr", dir=self.cwd)
+                os.close(fd)
+                copy.write(probe)
+                with azure2(probe, cwd=self.cwd,
+                            **{k: v for k, v in self.options.items()
+                               if k != "data_mode"},
+                            data_mode=(self.mode == "data")) as check:
+                    got = np.asarray(check.transform_rwa(check.params_rwa), float)
+            except Exception as err:
+                self._discard(path, sav)
+                raise RuntimeError(
+                    f"the snapshot was written but would not load back "
+                    f"({err}); it has been removed.") from err
+            finally:
+                if probe and os.path.exists(probe):
+                    os.remove(probe)
+                if tmpdir and os.path.isdir(tmpdir):
+                    shutil.rmtree(tmpdir, ignore_errors=True)
+            if got.shape != want.shape or not np.allclose(got, want, rtol=1e-4,
+                                                          atol=0.0):
+                n = (0 if got.shape != want.shape
+                     else int(np.sum(~np.isclose(got, want, rtol=1e-4))))
+                self._discard(path, sav)
+                raise RuntimeError(
+                    "the snapshot does not read back as the fit it was made "
+                    f"from ({n or 'a different number of'} parameter(s) "
+                    "disagree); it has been removed. This means the .azr and "
+                    "the parameter set do not describe the same model.")
+        return path, sav
+
+    @staticmethod
+    def _discard(*paths):
+        """Remove a snapshot that failed verification, so nothing bad survives."""
+        for f in paths:
+            if f and os.path.exists(f):
+                os.remove(f)
 
     # -- transforms -----------------------------------------------------------
 

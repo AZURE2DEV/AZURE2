@@ -10,3 +10,10 @@ endif()
 add_test(NAME pyazr_roundtrip
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/roundtrip_test.py)
+
+# apply_fit needs the engine for its last section, and skips it when the
+# module is not built -- so it is registered unconditionally like the above.
+add_test(NAME pyazr_apply_fit
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/apply_fit_test.py)
+set_tests_properties(pyazr_apply_fit PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

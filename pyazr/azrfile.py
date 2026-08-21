@@ -826,7 +826,31 @@ class AzrModel:
             raise KeyError(f"no <segmentsData> line matches {file_substr!r}.")
         return changed
 
-    def apply_fit(self, parameters, x, transform=None, physical=False):
+    def engine_level_keys(self):
+        """``{(jgroup, level): AzrLevel}`` -- the numbering AZURE2 itself uses.
+
+        The engine builds a J-group the first time it meets a ``(J, parity)``
+        while reading ``<levels>``, and numbers levels within a group in file
+        order.  Reproducing that here gives the same ``(jgroup, level)`` a
+        :class:`~pyazr.parameters.Parameter` reports, which is the only reliable
+        way to say *which* level a fitted value belongs to: a level at
+        ``Ex = 0`` comes back from the API with ``level_energy = None``, so an
+        energy-based key cannot identify it.
+
+        Both indices are 1-based, as the API reports them.
+        """
+        order, seen, out = [], {}, {}
+        for lv in self.levels:
+            k = (int(round(2 * lv.J)), int(lv.parity))
+            if k not in seen:
+                order.append(k)
+                seen[k] = 0
+            seen[k] += 1
+            out[(order.index(k) + 1, seen[k])] = lv
+        return out
+
+    def apply_fit(self, parameters, x, transform=None, physical=False,
+                  pairs=None, strict=True):
         """Write a fitted parameter vector into the levels block.
 
         **The ``gamma`` field of a ``<levels>`` line is not a reduced-width
@@ -846,14 +870,30 @@ class AzrModel:
 
         >>> mdl.apply_fit(m.parameters, m.transform_rwa(x_best), physical=True)
 
-        Passing neither raises, rather than silently writing an rwa.  Level
-        energies need no conversion (the transform leaves them alone) and are
-        written straight through.  Matching is by 2J, parity, the level's input
-        energy, and the channel's pair/L/S.
+        Passing neither raises, rather than silently writing an rwa.
 
-        Note this covers ``<levels>`` only -- normalizations are not in the
-        levels block, so a fit that moved them needs its ``param.sav`` too.
-        The number of values written is left in :attr:`applied`.
+        Levels are matched on the ``(jgroup, level)`` the engine reports, via
+        :meth:`engine_level_keys`, and channels on ``(pair, L, S)`` within the
+        matched level.
+
+        **Pass ``pairs=m.pairs``.**  A ``Parameter``'s ``pair`` is the engine's
+        number, which counts particle pairs in the order ``<levels>`` first
+        mentions them -- not the pair key the file writes.  The two differ
+        whenever the levels do not introduce the pairs in key order: on the 8Be
+        model engine pair 1 is file key 2, and file key 1 is engine pair 6, so
+        matching one against the other writes every width to the wrong channel.
+        The :class:`~pyazr.parameters.PairSet` carries both, and is the only
+        thing that can translate.
+
+        ``strict`` (the default) raises if any free parameter finds no home,
+        rather than skipping it: a partial write produces a file that loads
+        cleanly and is a mixture of two fits.
+
+        Note this covers ``<levels>`` only -- normalizations and energy shifts
+        are not in that block, so a fit that moved them is only half saved.
+        :meth:`pyazr.azure2.azure2.save_fit` writes the companion
+        ``param.sav`` and verifies the result; prefer it to calling this
+        directly.  The number of values written is left in :attr:`applied`.
         """
         if transform is None and not physical:
             raise ValueError(
@@ -865,41 +905,52 @@ class AzrModel:
                 raise ValueError("pass transform= or physical=True, not both.")
             x = transform(x)
 
-        def key(J, parity, E):
-            """The channel's identity, (pair, L, S)."""
-            return (int(round(2 * J)), int(parity),
-                    round(E, 2) if E is not None else None)
-
-        lvlmap = {}
-        for lv in self.levels:
-            # a level at Ex = 0 comes back with level_energy None from the API
-            # (its sentinel), so index it under both spellings
-            k = key(lv.J, lv.parity, lv.energy)
-            lvlmap.setdefault(k, lv)
-            if k[2] == 0.0:
-                lvlmap.setdefault((k[0], k[1], None), lv)
-
-        written = 0
+        lvlmap = self.engine_level_keys()
+        # engine pair number -> the pair key the file writes
+        pairkey = {p.number: p.key for p in pairs} if pairs is not None else {}
+        written, unplaced = 0, []
         for p in parameters:
-            if p.fixed or p.free_index is None or p.J is None:
+            if p.fixed or p.free_index is None:
                 continue
+            if p.kind not in ("energy", "width"):
+                continue            # norms and shifts do not live in <levels>
             if p.free_index >= len(x):
+                unplaced.append(f"{p.name} (free_index {p.free_index} beyond the vector)")
                 continue
-            lv = lvlmap.get(key(p.J, p.parity, p.level_energy))
+            lv = lvlmap.get((p.jgroup, p.level))
             if lv is None:
+                unplaced.append(f"{p.name} (no level at jgroup {p.jgroup}, level {p.level})")
                 continue
             v = float(x[p.free_index])
             if p.kind == "energy":
                 lv.set_energy(v)
                 written += 1
-            elif p.kind == "width":
-                for c in lv.channels:
-                    if (c.pair == p.pair and c.L == p.L
-                            and abs(c.S - (p.S or 0.0)) < 1e-6):
-                        c.gamma = v
-                        written += 1
-                        break
+                continue
+            want_pair = pairkey.get(p.pair, p.pair)
+            for c in lv.channels:
+                if (c.pair == want_pair and c.L == p.L
+                        and abs(c.S - (p.S or 0.0)) < 1e-6):
+                    c.gamma = v
+                    written += 1
+                    break
+            else:
+                unplaced.append(
+                    f"{p.name} (no channel pair={want_pair} L={p.L} S={p.S} "
+                    f"in {lv.jpi} at {lv.energy} MeV)")
+
+        if unplaced and strict:
+            raise ValueError(
+                f"apply_fit could not place {len(unplaced)} of the free "
+                f"parameters, so the result would be a mixture of two fits:\n  "
+                + "\n  ".join(unplaced[:8])
+                + (f"\n  ... and {len(unplaced) - 8} more" if len(unplaced) > 8 else "")
+                + "\nThe .azr and the parameter set do not describe the same model. "
+                  "Pass strict=False to write the rest anyway."
+                + ("\nNote apply_fit was given no pairs=, so it assumed the "
+                   "engine's pair numbers are the file's pair keys. Pass "
+                   "pairs=m.pairs if they are not." if pairs is None else ""))
         self.applied = written
+        self.unplaced = unplaced
         return self
 
     def set_segment_datafile(self, file_substr, new_path):
