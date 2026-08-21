@@ -43,9 +43,13 @@ class ShftFunc {
   double EnergyDerivative(int l, double energy);
 
  private:
+  /// Separation plus excitation energy of the pair, the threshold this is measured from.
   double totalSepE() const { return totalSepE_; };
+  /// Channel radius, fm.
   double radius() const { return radius_; };
+  /// GSL adaptor for the shift function, for differentiation.
   static double thisShftFunc(double, void *);
+  /// GSL adaptor for the Whittaker function.
   static double theWhitFunc(double, void *);
   typedef struct Params {
     int lValue;

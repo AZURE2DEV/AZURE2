@@ -19,22 +19,39 @@
 
 class TargetEffect {
  public:
+  /// Read one target effect from the target-effects input file.
   TargetEffect(std::istream &, const Config &);
+  /// Was this effect marked active in the input file?
   bool IsActive() const;
+  /// Does it include Gaussian beam convolution?
   bool IsConvolution() const;
+  /// Does it integrate over the target thickness?
   bool IsTargetIntegration() const;
+  /// Does it carry angular attenuation coefficients?
   bool IsQCoefficients() const;
+  /// Does it carry convolution coefficients?
   bool IsConvCoefficients() const;
+  /// Sub-points the integral is sampled on.
   int NumSubPoints() const;
+  /// Number of attenuation coefficients.
   int NumQCoefficients() const;
+  /// Number of convolution coefficients.
   int NumConvCoefficients() const;
+  /// Gaussian beam-spread sigma.
   double GetSigma() const;
+  /// Beam sigma at a given energy, where it is energy dependent.
   double CalculateSigma(double, const Config &);
+  /// Target density in atoms/cm^2. Target integration only.
   double GetDensity() const;
+  /// Energy loss across the target at a given energy, from the stopping cross section and the density.
   double TargetThickness(double, const Config &);
+  /// Weight of one sub-point in the convolution integrand.
   double GetConvolutionFactor(double, double) const;
+  /// As above with an energy-dependent sigma.
   double CalculateConvolutionFactor(double, double, const Config &);
+  /// Attenuation coefficient of the given order.
   double GetQCoefficient(int) const;
+  /// Convolution coefficient of the given order.
   double GetConvCoefficient(int) const;
   void SetSigma(double);
   void SetDensity(double);

@@ -15,15 +15,24 @@
 
 class AZUREOutput {
  public:
+  /// Write output files into this directory.
   AZUREOutput(std::string);
   ~AZUREOutput();
+  /// Are these extrapolation outputs (AZUREOut_*.extrap) rather than data ones?
   bool IsExtrap() const;
+  /// Buffer for one reaction's output file, opening it on first use.
   std::filebuf *operator()(int entranceKey, int exitKey, bool isAngDist = false);
+  /// Number of open output buffers.
   int NumAZUREFBuffers() const;
+  /// 1-based position of the buffer for this reaction, or 0 if not open.
   int IsAZUREFBuffer(int, int, bool);
+  /// Directory the files are written to.
   std::string GetOutputDir() const;
+  /// Append a buffer.
   void AddAZUREFBuffer(AZUREFBuffer *);
+  /// Mark the output as extrapolation, changing the file suffix.
   void SetExtrap();
+  /// Buffer \p i, 1-based.
   AZUREFBuffer *GetAZUREFBuffer(int);
 
  private:

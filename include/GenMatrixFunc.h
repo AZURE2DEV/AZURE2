@@ -55,6 +55,7 @@ class GenMatrixFunc {
    *This virtual function in implemented in the child class.
    */
   virtual void CalculateTMatrix(EPoint *) = 0;
+  /// Cross section at a point from the T-matrix the subclass built.
   void CalculateCrossSection(EPoint *);
 
   /*!
@@ -85,28 +86,48 @@ class GenMatrixFunc {
    */
   bool CalculateCaptureAnalyzingPower(EPoint *point, double *unpolarized,
                                       double *analyzingPower);
+  /// Start a temporary T-matrix element for a \f$J,l,l'\f$ combination.
   void NewTempTMatrix(TempTMatrix);
+  /// As NewTempTMatrix, for the E1 component kept separately.
   void NewTempTMatrixE1(TempTMatrix);
+  /// As NewTempTMatrix, for the E2 component.
   void NewTempTMatrixE2(TempTMatrix);
+  /// Accumulate into temporary element \p i, 1-based.
   void AddToTempTMatrix(int, complex);
+  /// Accumulate into an E1 temporary element.
   void AddToTempTMatrixE1(int, complex);
+  /// Accumulate into an E2 temporary element.
   void AddToTempTMatrixE2(int, complex);
+  /// Drop the temporary elements.
   void ClearTempTMatrices();
+  /// Drop the E1 temporaries.
   void ClearTempTMatricesE1();
+  /// Drop the E2 temporaries.
   void ClearTempTMatricesE2();
+  /// Store an internal T-matrix element for a resonant pathway.
   void AddTMatrixElement(int, int, complex, int decayNum = 1);
+  /// Store an external T-matrix element for an external-capture pathway.
   void AddECTMatrixElement(int, int, complex);
+  /// 1-based position of the \f$J,l,l'\f$ temporary element, or 0 if absent.
   int IsTempTMatrix(double, int, int);
+  /// 1-based position of the E1 temporary, or 0.
   int IsTempTMatrixE1(double, int, int);
+  /// 1-based position of the E2 temporary, or 0.
   int IsTempTMatrixE2(double, int, int);
+  /// Number of temporary elements.
   int NumTempTMatrices() const;
+  /// Number of E1 temporaries.
   int NumTempTMatricesE1() const;
+  /// Number of E2 temporaries.
   int NumTempTMatricesE2() const;
   TempTMatrix *GetTempTMatrix(int);
   TempTMatrix *GetTempTMatrixE1(int);
   TempTMatrix *GetTempTMatrixE2(int);
+  /// Internal T-matrix element for a resonant pathway.
   complex GetTMatrixElement(int, int, int decayNum = 1) const;
+  /// External T-matrix element for an external-capture pathway.
   complex GetECTMatrixElement(int, int) const;
+  /// Racah coefficient \f$R_k\f$ of the angular-distribution algebra.
   double GetRk(double, double, double, double, int);
 
   /*!

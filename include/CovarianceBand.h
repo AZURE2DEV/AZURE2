@@ -39,6 +39,7 @@ BandCovariance BuildBandCovarianceFromMinuit(const std::vector<double> &covData,
 /// loaded covariance therefore has no column identities (cov.cols is empty), so
 /// its columns are taken to be in the current packed parameter order.
 bool SaveBandCovariance(const std::string &path, const BandCovariance &cov);
+/// Read a covariance matrix from file; false if it cannot be read.
 bool LoadBandCovariance(const std::string &path, BandCovariance &cov);
 
 /// Project a saved covariance onto pmap's R-matrix columns (RMatrixPackedColumns
@@ -57,6 +58,7 @@ struct BandData {
   CNuc *compound;
   std::vector<std::vector<double>> M;
   std::map<EPoint *, std::vector<double>> grad;
+  /// One-sigma cross-section uncertainty from a gradient vector, \f$\sqrt{g^T M g}\f$.
   double dXS(const std::vector<double> &g) const;
 };
 

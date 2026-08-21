@@ -37,6 +37,7 @@ struct RateParams {
 class Config {
  public:
   Config(std::ostream &stream);
+  /// Restore every option to its default, as a fresh run starts.
   void Reset();
   /*!
    * Bit flags for various options in AZURE2.
@@ -112,10 +113,12 @@ class Config {
   bool useAdaptiveGrid;
   /// A constant indicating the maximum order of the Legendre polynomials to calculate.
   static const int maxLOrder = 20;
+  /// Read the <config> block, then the optional <potential> block. -1 if the file cannot be read.
   int ReadConfigFile();
   /// Reads the <potential> block of the configuration file, if it has one.
   int ReadPotentialBlock();
 #ifndef NO_STAT
+  /// Check that the output and checks directories exist.
   int CheckForInputFiles();
 #endif
 };

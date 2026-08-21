@@ -29,6 +29,7 @@ class GSLException : public std::exception {
   virtual const char *what() const throw() {
     return message_;
   };
+  /// GSL error handler that throws a GSLException instead of calling abort().
   static void GSLErrorHandler(const char *, const char *, int, int);
 
  private:

@@ -23,21 +23,27 @@ class ALevel;
 namespace AZURELabel {
 
 /*! Spin as a fraction: 1.5 -> "3/2", 2.0 -> "2". */
+/// Spin as text, half-integers as "3/2".
 std::string Spin(double j);
 
 /*! Spin-parity: (1.5, +1) -> "3/2+". */
+/// \f$J^\pi\f$ as text, e.g. "3/2-".
 std::string JPi(double j, int parity);
 
 /*! Nuclide from charge and mass: (0,1) -> "n", (1,2) -> "d", (2,4) -> "4He". */
+/// Nuclide as text, e.g. "7Li".
 std::string Nuclide(int z, double mass);
 
 /*! Particle pair by 1-based pair number: "d+t".  Photon pairs give "gamma". */
+/// Particle pair as text, e.g. "p + 7Li".
 std::string Pair(CNuc *compound, int pairNum);
 
 /*! e.g. "J^pi=3/2+, E=16.9285 MeV (J-group 1, level 1)". */
+/// Level as text, with its \f$J^\pi\f$, energy and position -- the form the warnings use.
 std::string Level(JGroup *jgroup, ALevel *level, int jgroupIndex, int levelIndex);
 
 /*! e.g. "channel 2: d+t, L=0, S=3/2", or "channel 5: E1 gamma to n+4He". */
+/// Channel as text, with its pair, l and s.
 std::string Channel(CNuc *compound, JGroup *jgroup, int channelIndex);
 
 /*! Level and channel together, for a width. */

@@ -28,13 +28,17 @@ class JGroup {
   int IsLevel(ALevel);
   /// Parity of the group, \f$\pm1\f$.
   int GetPi() const;
+  /// Number of levels in the group.
   int NumLevels() const;
+  /// Number of channels shared by every level of the group.
   int NumChannels();
   /// 1-based position of the channel in the group, or 0 if it is not there.
   int IsChannel(AChannel);
   /// Total angular momentum of the group.
   double GetJ() const;
+  /// Append a level.
   void AddLevel(ALevel);
+  /// Append a channel; it applies to every level in the group.
   void AddChannel(AChannel);
   /// Channel \p i, 1-based. Every level of the group shares this channel set.
   AChannel *GetChannel(int);

@@ -13,6 +13,7 @@
 class IntegratedFermiFunc {
  public:
   IntegratedFermiFunc(int, double V0 = 0.);
+  /// Fermi function integrated over the beta spectrum.
   double operator()(double, double, double);
 
  private:
@@ -20,6 +21,7 @@ class IntegratedFermiFunc {
   static const double pi_;
   static const double electronMass_;
   static const double hbarc_;
+  /// GSL integrand behind it.
   static double Integrand(double, void *);
   typedef struct Params_ {
     int charge;

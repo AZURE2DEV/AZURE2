@@ -35,7 +35,9 @@ class AMatrixFunc : public GenMatrixFunc {
     configure_ = &configure;
   };
 
+  /// Drop the stored level matrices.
   void ClearMatrices();
+  /// Build \f$A^{-1}\f$ per J-group from the level parameters at this point.
   void FillMatrices(EPoint *);
   /*!
    * Factors the level matrix of every J-group.  The full inverse is no longer
@@ -43,12 +45,14 @@ class AMatrixFunc : public GenMatrixFunc {
    * materialized lazily for the callers that need individual elements.
    */
   void InvertMatrices();
+  /// T-matrix per pathway from the inverted level matrix.
   void CalculateTMatrix(EPoint *);
   /*!
    * Instantiated in the parent class.
    */
   void CalculateCrossSection();
 
+  /// Level-matrix element at (J-group, level, level'), all 1-based.
   complex GetAMatrixElement(int, int, int) const;
   const matrix_c &GetAMatrix(int) const;
   matrix_c *GetJSpecAInvMatrix(int);
@@ -93,6 +97,7 @@ class AMatrixFunc : public GenMatrixFunc {
   bool PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
                     const vector_matrix_r *shiftDeriv = nullptr,
                     int xsComponent = 0);
+  /// Store an \f$A^{-1}\f$ element.
   void AddAInvMatrixElement(int, int, int, complex);
 
  private:
