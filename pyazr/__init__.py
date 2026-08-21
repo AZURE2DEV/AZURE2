@@ -1,5 +1,6 @@
 from .azure2 import azure2
-from .parameters import Pair, PairSet, Parameter, ParameterSet, LevelKey
+from .parameters import (Pair, PairSet, Parameter, ParameterSet, LevelKey,
+                         NuclearPotential)
 from .scheme import LevelScheme, SchemeLevel, SchemeChannel
 from .azrfile import AzrModel, AzrLevel, AzrChannel
 from .datasets import (Segment, SegmentSet, TestSegment, TestSegmentSet,
@@ -24,6 +25,7 @@ from .bands import (Band, load_covariance, rmatrix_columns, best_fit_params,
 __all__ = ["azure2",
            "angular_distribution",
            "Pair", "PairSet", "Parameter", "ParameterSet", "LevelKey",
+           "NuclearPotential",
            "LevelScheme", "SchemeLevel", "SchemeChannel",
            "AzrModel", "AzrLevel", "AzrChannel",
            "Segment", "SegmentSet", "TestSegment", "TestSegmentSet",
@@ -40,4 +42,4 @@ __all__ = ["azure2",
            "Band", "load_covariance", "rmatrix_columns", "best_fit_params",
            "live_parameters", "step_sizes", "sensitivities", "trimmed_model",
            "uncertainty_bands", "extrapolation_bands"]
-__version__ = '2.7.0'
+__version__ = '2.8.0'

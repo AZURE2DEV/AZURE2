@@ -710,6 +710,16 @@ void AZUREAPI::SetExtrap( ) {
 // output/intEC*, and the parameter bookkeeping -- values, names, fixed flags
 // and the transformed physical parameters -- is refilled to match.
 bool AZUREAPI::SetRadius( int idx, double r ) {
+  return RebuildImpl( &idx, &r );
+}
+
+bool AZUREAPI::Rebuild( ) {
+  return RebuildImpl( nullptr, nullptr );
+}
+
+// Shared body of SetRadius and Rebuild.  Everything the two do is identical
+// apart from whether CNuc::Fill is handed a radius override.
+bool AZUREAPI::RebuildImpl( const int* idx, const double* r ) {
 
   if( compound_ != nullptr ) delete compound_;
   if( data_ != nullptr ) delete data_;
@@ -717,9 +727,12 @@ bool AZUREAPI::SetRadius( int idx, double r ) {
   compound_ = new CNuc;
   data_     = new EData;
 
-  std::pair<int,double> pair = std::make_pair( idx, r );
-
-  if( compound()->Fill( configure( ), pair ) == -1 ) return false;
+  if( idx && r ) {
+    std::pair<int,double> pair = std::make_pair( *idx, *r );
+    if( compound()->Fill( configure( ), pair ) == -1 ) return false;
+  } else {
+    if( compound()->Fill( configure( ) ) == -1 ) return false;
+  }
   if( compound()->NumPairs() == 0 || compound()->NumJGroups() == 0 ) return false;
 
   // Mirror the branch taken at startup: data mode reads the data segments,

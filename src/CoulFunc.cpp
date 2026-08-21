@@ -19,9 +19,20 @@
 
 CoulFunc::CoulFunc(PPair *pPair, bool useGSLFunctions) :
   useGSLFunctions_(useGSLFunctions),
-  useHybridMethod_(g_config ? g_config->useHybridMethod : false), // Read from global Config
+  useHybridMethod_(false),
   rMatch_(15.0),
   drNumerov_(0.0275) {
+  // The hybrid model is selected per particle pair.  The global switch stays
+  // the master -- it is what the Runtime Options checkbox and the paramMask
+  // bit control -- and NuclearPotentialManager then decides which pairs it
+  // actually applies to.  A project that names no pair leaves every pair on
+  // the manager's default, which is the behaviour from when the model was
+  // global.
+  pairKey_=pPair->GetPairKey();
+  useHybridMethod_=(g_config ? g_config->useHybridMethod : false) &&
+    NuclearPotentialManager::instance().isPairEnabled(pairKey_);
+  hybridTag_=useHybridMethod_ ?
+    NuclearPotentialManager::instance().tagFor(pairKey_) : 0;
   z1_=pPair->GetZ(1);
   z2_=pPair->GetZ(2);
   redmass_=(double)pPair->GetRedMass();
@@ -34,8 +45,9 @@ CoulFunc::CoulFunc(PPair *pPair, bool useGSLFunctions) :
   coulLast_.dG=0.0;
   dEShiftParams_.coulFunc=this;
 
-  // Get nuclear potential from the global manager (always synchronized with GUI)
-  nuclearPotential_ = NuclearPotentialManager::instance().getPotential();
+  // This pair's potential, falling back to the manager's default when the pair
+  // has no setting of its own.
+  nuclearPotential_ = NuclearPotentialManager::instance().getPotential(pairKey_);
 }
 
 /*!
@@ -139,6 +151,7 @@ CoulWaves CoulFunc::operator()(int l,double radius,double energy) {
     key.redmass = redmass();
     key.l = l;
     key.radius = radius;
+    key.hybridTag = hybridTag_;
 
     // Single-pass cached lookup (acceptance + interpolation in one map traversal)
     if(g_coulFuncCache->TryGetCoulWaves(key, energy, result)) {
@@ -193,6 +206,7 @@ CoulWaves CoulFunc::operator()(int l,double radius,double energy) {
     key.redmass = redmass();
     key.l = l;
     key.radius = radius;
+    key.hybridTag = hybridTag_;
     g_coulFuncCache->AddCoulWaves(key, energy, newResult);
   }
 

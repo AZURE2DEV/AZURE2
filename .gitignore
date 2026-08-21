@@ -30,6 +30,7 @@ __pycache__/
 dist/
 build-api/
 build-py/
+build-gui/
 
 # The engine extension module: CMake builds it straight into pyazr/ so that
 # `import pyazr` works from the checkout, but it is a build artefact.

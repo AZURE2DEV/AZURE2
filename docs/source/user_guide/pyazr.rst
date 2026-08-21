@@ -387,6 +387,65 @@ solution through a nuclear potential (the hybrid model of the
 ``<potential>`` block). Comparing them is how one sees what those options do to
 the external region.
 
+The hybrid nuclear potential, per particle pair
+----------------------------------------------
+
+A nuclear potential belongs to a **particle pair**: it bends the radial wave
+functions of that channel and no other. Each pair therefore carries its own
+setting, and ``pair=0`` is the default that a pair without one inherits.
+
+.. code-block:: python
+
+   azr.nuclear_potentials()          # {0: default, 1: ..., 2: ...}, resolved
+   azr.nuclear_potential(1)          # one pair; .own says if it is its own
+
+   azr.set_nuclear_potential(1, type="WoodsSaxon", enabled=True,
+                             V0=20.0, R=3.6, a=0.6)
+   azr.set_nuclear_potential(2, type="Gaussian", enabled=True, V0=60.0, r0=4.0)
+   azr.set_nuclear_potential(2, enabled=False)   # off for pair 2 alone
+   azr.clear_nuclear_potential(1)                # follow the default again
+
+Anything left at ``None`` keeps what the pair already resolves to, so switching
+one pair off is just ``set_nuclear_potential(2, enabled=False)``. Setting
+several pairs is cheaper with ``reinitialize=False`` on all but the last: the
+potential is read when ``CoulFunc`` is constructed, deep inside a calculation,
+so it only reaches the model when the model is rebuilt.
+
+Two things that will bite:
+
+- **Re-read the parameter vector afterwards.** The potential moves the
+  penetrabilities and shift functions, and those are what map physical widths
+  to reduced-width amplitudes --- so ``params_rwa`` is re-derived by the
+  rebuild, and a vector captured beforehand no longer describes the same model.
+  Feed the old one back and the chi-squared is quietly wrong. This is the same
+  caveat as :meth:`~pyazr.azure2.set_channel_radius`, for the same reason.
+- **A fit made without the potential is not a fit made with it.** Refit before
+  reading anything off the model.
+
+The equivalent in a ``.azr`` is the ``<potential>`` block, where keys before the
+first ``pair=`` are the default and a ``pair=`` line opens a section that starts
+from it:
+
+.. code-block:: text
+
+   <potential>
+   useHybridPotential=1
+   potentialType=0        # 0 = Woods-Saxon, 1 = Gaussian
+   V0=40
+   R=3.6
+   a=0.6
+   pair=1                 # pair 1 alone, starting from the default above
+   V0=20
+   pair=2
+   useHybridPotential=0
+   </potential>
+
+A file with no ``pair=`` line reads exactly as it did when the model was
+global. The GUI's Nuclear Potential tab edits one pair at a time and writes
+the same block, and ``--no-gui`` reads it through the same parser, so the three
+cannot drift. Worked example: ``pyazr/examples/nuclear_potential.py``;
+``tests/hybrid_potential`` pins the behaviour.
+
 External-capture integrals are the most expensive part of a capture
 calculation, which is why the Coulomb functions they need are memoized.
 ``cache_stats`` makes that visible: asking for the same integrals twice on

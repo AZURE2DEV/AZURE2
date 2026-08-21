@@ -59,6 +59,18 @@ class AZUREAPI {
   // the compound nucleus, data and parameters.  Returns false if the rebuild
   // failed, in which case the instance is no longer usable.
   bool SetRadius( int idx, double r );
+  /*!
+   * Rebuild the compound nucleus and the data from the .azr and re-initialize,
+   * recomputing the external-capture integrals rather than reading back
+   * output/intEC.dat.
+   *
+   * Initialize() decides whether to reuse those integrals by looking for the
+   * file, which is right at startup and wrong afterwards: a model whose
+   * Coulomb functions have changed -- a different channel radius, a different
+   * hybrid nuclear potential -- would silently reuse integrals belonging to
+   * the old one.  SetRadius() is this with a radius override.
+   */
+  bool Rebuild( );
   // Get indeces of normalization parameters
   vector_r GetNormalizationIndices( );
   // Get indeces of energy shift parameters
@@ -338,6 +350,9 @@ class AZUREAPI {
 
 
  private:
+  ///Shared body of SetRadius and Rebuild; idx/r are null for a plain rebuild.
+  bool RebuildImpl( const int* idx, const double* r );
+
 
   /*!
    * Analytic reverse-mode gradient of the data chi-squared w.r.t. the energy and

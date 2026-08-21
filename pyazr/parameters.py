@@ -154,6 +154,45 @@ class Parameter:
 
 
 @dataclass
+class NuclearPotential:
+    """The hybrid Coulomb model's setting for one particle pair.
+
+    A nuclear potential belongs to a pair: it bends the radial wave functions
+    of that channel and no other.  ``pair`` is the 1-based :attr:`Pair.number`,
+    or ``0`` for the default that every pair without one of its own falls back
+    to.
+
+    ``own`` distinguishes a pair that carries its own setting from one merely
+    reporting the default -- the values are the same either way, but clearing a
+    pair that has none is a no-op.
+    """
+
+    pair: int
+    enabled: bool
+    type: str
+    V0: float
+    R: float
+    a: float
+    r0: float
+    own: bool
+
+    @property
+    def is_woods_saxon(self):
+        return self.type == "WoodsSaxon"
+
+    def __repr__(self):
+        who = "default" if self.pair == 0 else f"pair {self.pair}"
+        if not self.enabled:
+            return f"NuclearPotential({who}, off)"
+        if self.is_woods_saxon:
+            shape = f"WoodsSaxon V0={self.V0:g} R={self.R:g} a={self.a:g}"
+        else:
+            shape = f"Gaussian V0={self.V0:g} r0={self.r0:g}"
+        return (f"NuclearPotential({who}, {shape}"
+                f"{'' if self.own or self.pair == 0 else ', inherited'})")
+
+
+@dataclass
 class Pair:
     """One AZURE2 particle pair (a reaction channel's two constituents).
 

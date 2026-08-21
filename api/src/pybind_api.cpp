@@ -25,6 +25,8 @@
 #include "GSLException.h"
 #include "CoulFuncCache.h"
 #include "ECAmplitudeCache.h"
+#include "NuclearPotentialManager.h"
+#include <gsl/gsl_errno.h>
 
 namespace py = pybind11;
 
@@ -151,6 +153,11 @@ class Session {
 
   // -- lifecycle -----------------------------------------------------------
 
+  bool rebuild() {
+    ConfigScope guard(config_);
+    return api_->Rebuild();
+  }
+
   bool initialize() {
     ConfigScope guard(config_);
     return api_->Initialize() == 0;
@@ -167,6 +174,60 @@ class Session {
   bool set_radius(int idx, double radius) {
     ConfigScope guard(config_);
     return api_->SetRadius(idx, radius);
+  }
+
+  // -- hybrid nuclear potential, per particle pair ---------------------------
+  //
+  // A potential belongs to a pair: it bends that channel's radial wave
+  // functions and no other.  NuclearPotentialManager holds one setting per
+  // pair plus a default for the pairs that name none, and CoulFunc reads its
+  // own pair's setting at construction -- so a change only reaches the model
+  // once it is rebuilt, which is what reinitializing does.
+
+  // pair = 0 addresses the default that every unnamed pair falls back to.
+  void set_potential(int pair, const std::string& type, bool enabled,
+                     double V0, double R, double a, double r0) {
+    NuclearPotentialSetting s;
+    s.enabled = enabled;
+    s.type = type;
+    s.V0 = V0;
+    s.R = R;
+    s.a = a;
+    s.r0 = r0;
+    NuclearPotentialManager& mgr = NuclearPotentialManager::instance();
+    try {
+      if (pair) mgr.setSetting(pair, s);
+      else mgr.setDefaultSetting(s);
+    } catch (const std::exception& e) {
+      throw AZURE2Error(e.what());
+    }
+    // The master switch follows the pairs: with no pair enabled the hybrid
+    // model is off, and CoulFunc short-circuits on it.
+    config_->useHybridMethod = mgr.isAnyEnabled();
+    if (config_->useHybridMethod) config_->paramMask |= Config::USE_HYBRID_COULOMB;
+    else config_->paramMask &= ~Config::USE_HYBRID_COULOMB;
+  }
+
+  void clear_potential(int pair) {
+    NuclearPotentialManager& mgr = NuclearPotentialManager::instance();
+    if (pair) mgr.clearPairSetting(pair);
+    else mgr.resetToDefault();
+    config_->useHybridMethod = mgr.isAnyEnabled();
+    if (config_->useHybridMethod) config_->paramMask |= Config::USE_HYBRID_COULOMB;
+    else config_->paramMask &= ~Config::USE_HYBRID_COULOMB;
+  }
+
+  // (enabled, type, V0, R, a, r0, has_own_setting) for the given pair,
+  // resolved against the default.
+  py::tuple get_potential(int pair) const {
+    const NuclearPotentialManager& mgr = NuclearPotentialManager::instance();
+    NuclearPotentialSetting s = pair ? mgr.getSetting(pair) : mgr.getDefaultSetting();
+    bool own = pair ? mgr.hasPairSetting(pair) : true;
+    return py::make_tuple(s.enabled, s.type, s.V0, s.R, s.a, s.r0, own);
+  }
+
+  std::vector<int> configured_potential_pairs() const {
+    return NuclearPotentialManager::instance().configuredPairs();
   }
 
   // -- data bookkeeping ------------------------------------------------------
@@ -308,7 +369,14 @@ class Session {
 PYBIND11_MODULE(_azure2, m) {
   m.doc() = "In-process bindings for the AZURE2 R-matrix engine.";
 
+  // AZURE2.cpp installs this for the executable; the module has to do it for
+  // itself, and it matters more here.  GSL's default handler calls abort(), so
+  // an integral that will not converge -- which the hybrid nuclear potential
+  // can produce -- would take the whole interpreter down instead of raising.
+  gsl_set_error_handler(&GSLException::GSLErrorHandler);
+
   py::register_exception<AZURE2Error>(m, "AZURE2Error", PyExc_RuntimeError);
+  py::register_exception<GSLException>(m, "GSLError", PyExc_ArithmeticError);
 
   py::class_<RuntimeOptions>(m, "RuntimeOptions")
       .def(py::init<>())
@@ -325,6 +393,11 @@ PYBIND11_MODULE(_azure2, m) {
            py::arg("configfile"), py::arg("options") = RuntimeOptions(),
            "Load ``configfile`` and build the model.  Raises AZURE2Error if "
            "the file is missing or the model will not initialize.")
+      .def("rebuild", &Session::rebuild,
+           py::call_guard<py::gil_scoped_release>(),
+           "Rebuild the model from the .azr, recomputing the external-capture "
+           "integrals instead of reading back intEC.dat.  Needed after "
+           "anything that changes the Coulomb functions.")
       .def("initialize", &Session::initialize,
            py::call_guard<py::gil_scoped_release>(),
            "Re-run the (expensive) model initialization; needed after a mode "
@@ -337,6 +410,19 @@ PYBIND11_MODULE(_azure2, m) {
       .def("set_radius", &Session::set_radius, py::arg("pair"), py::arg("radius"),
            py::call_guard<py::gil_scoped_release>(),
            "Rebuild the model with one pair's channel radius changed (fm).")
+      .def("set_potential", &Session::set_potential, py::arg("pair"),
+           py::arg("type"), py::arg("enabled"), py::arg("V0"), py::arg("R"),
+           py::arg("a"), py::arg("r0"),
+           "Set the hybrid nuclear potential for one particle pair; pair=0 "
+           "sets the default the unnamed pairs fall back to.  Call "
+           "initialize() afterwards for it to reach the model.")
+      .def("clear_potential", &Session::clear_potential, py::arg("pair"),
+           "Drop a pair's own potential so it follows the default again; "
+           "pair=0 resets the default and every pair.")
+      .def("get_potential", &Session::get_potential, py::arg("pair"),
+           "(enabled, type, V0, R, a, r0, has_own_setting) for a pair.")
+      .def("configured_potential_pairs", &Session::configured_potential_pairs,
+           "The pair keys carrying a potential of their own.")
       .def("update_data", &Session::update_data, py::call_guard<py::gil_scoped_release>(),
            "Refill the data arrays; returns the number of segments.")
       .def("update_norms", &Session::update_norms, "Refill the normalization arrays.")

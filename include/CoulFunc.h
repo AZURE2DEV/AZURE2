@@ -59,6 +59,9 @@ class CoulFunc {
   double getNumerovGridStep() const;
   void setUseHybridMethod(bool useHybrid);
   bool getUseHybridMethod() const;
+  ///The key of the pair this object was built for, which is what selects
+  ///its nuclear potential out of NuclearPotentialManager.
+  int pairKey() const { return pairKey_; }
 
   // The global (radius-keyed, mutex-protected) Coulomb cache only helps when the
   // same radius is queried across many energies (e.g. penetrabilities at the
@@ -82,6 +85,10 @@ class CoulFunc {
   bool useGSLFunctions_;
   bool useHybridMethod_;
   bool useGlobalCache_ = true;
+  int pairKey_;
+  ///Identifies the nuclear potential these waves were computed under; part of
+  ///the Coulomb memo key.  0 means the plain Coulomb solution.
+  long hybridTag_;
   int z1_;
   int z2_;
   int lLast_;
