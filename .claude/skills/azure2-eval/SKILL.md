@@ -1,6 +1,6 @@
 ---
 name: azure2-eval
-description: Run AZURE2 R-matrix evaluations of nuclear reaction/scattering data — calculate cross sections & chi-squared, fit levels/widths, add/remove levels, decompose a cross section into level/interference/external contributions, extrapolate, compute reaction rates, or drive AZURE2 from Python via pyazr. Use whenever the task involves an .azr project file, AZURE2 levels/channels/segments, R-matrix fitting, S-factors, resonance significance tests, or the o17_guardo (THM) example in this repo.
+description: Run AZURE2 R-matrix evaluations of nuclear reaction/scattering data — calculate cross sections & chi-squared, fit levels/widths, add/remove levels, decompose a cross section into level/interference/external contributions, extrapolate, compute reaction rates, or drive AZURE2 from Python via pyazr. Use whenever the task involves an .azr project file, AZURE2 levels/channels/segments, R-matrix fitting, S-factors, resonance significance tests, or the worked examples in pyazr/examples/.
 ---
 
 # Running AZURE2 evaluations
@@ -13,18 +13,20 @@ one-shot calculate/fit/extrapolate/rate that writes the standard output files;
 use **pyazr for all evaluation work** — χ², parameter scans, level add/remove
 tests, cross-section decomposition, custom fitters and samplers.
 
-The binary is on `$PATH` as `AZURE2` (also `build/src/AZURE2` in the source
-repo); pyazr resolves it via `$AZURE2_BINARY` → `<repo>/build/src/AZURE2` →
-`$PATH`, so `binary=` is usually unnecessary. **The two can drift**:
-`/usr/local/bin/AZURE2` is a copy, not a symlink, so a `make AZURE2` in the
-source repo does not reach it — `sudo cp build/src/AZURE2 /usr/local/bin/` after
-every rebuild, or export `$AZURE2_BINARY`. `pyazr/` lives at the repo root and is mirrored into evaluation directories, so
+**pyazr does not run the binary.** The engine is compiled into the extension
+module `pyazr/_azure2` and runs in your interpreter, so there is no path to
+resolve and nothing to keep in step — a rebuild of `_azure2` *is* the update.
+The CLI binary (`build/src/AZURE2`) is a separate artefact, used only for
+Workflow A.
+
+`pyazr/` lives at the repo root and is mirrored into evaluation directories, so
 `from pyazr import ...` works when cwd is either. Its version is
 `pyazr.__version__`; do not assume one.
 
-Full reference docs: `docs/_build/html/_sources/` — `reference/` covers
-command_line, data_formats, output_files; `user_guide/` covers levels_channels,
-segments, particle_pairs, fitting, mcmc. Worked example: `examples/o17_guardo/`.
+Reference docs: `docs/source/` — `reference/` covers command_line,
+data_formats, output_files; `user_guide/` covers levels_channels, segments,
+particle_pairs, fitting, mcmc, pyazr. Worked examples: `pyazr/examples/`;
+runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`.
 
 ## Golden rules
 
@@ -43,16 +45,24 @@ segments, particle_pairs, fitting, mcmc. Worked example: `examples/o17_guardo/`.
   (integrals for data and test segments are built together at INITIALIZE).
   `intEC.dat` is the data-segment equivalent and is safe while `<segmentsData>`
   is untouched. Both are safe to delete; they just cost time to rebuild.
-- **One AZURE2 session per process.** Opening a second `azure2()` in the same
-  interpreter desyncs `GET_PARAMS_INFO`. Sweep variants from a shell loop, or
-  build one temp `.azr` that carries everything the run needs.
+- **Several sessions can be open at once**, each an independent engine that
+  enters its own directory per call — that is how `save_fit` verifies what it
+  wrote. The engine is not *thread*-safe, so parallelism is one session per
+  process, not per thread.
 - CLI mode does **not** read Runtime Options from the `.azr` — pass them as
-  flags every time (`--use-brune`, `--gsl-coul`, …).
+  flags every time (`--gsl-coul`, `--ignore-externals`, …). Note the Brune
+  parameterization is **on by default** and there is no flag to turn it off;
+  `--use-rmc` selects the mutually exclusive RMC formalism, and pyazr takes
+  `use_brune=False` directly.
 
 ## Workflow A — interactive CLI (one-shot runs)
 
-Prompt order: **(1) menu choice → (2) external parameter file → (3) mode-specific
-prompts**. Pipe stdin to run non-interactively.
+Prompt order: **(1) menu choice → (2) external parameter file → (3) external
+capture amplitude file → (4) mode-specific prompts**, then `7` to exit. Both
+file prompts appear whether or not the model has capture, and a recipe that
+feeds only one leaves the rest of the answers off by a line. Pipe stdin to run
+non-interactively, and pass `--no-readline` so readline does not fight the
+pipe. `tests/run_tests.sh` is the working reference.
 
 | # | Mode |
 |---|------|
@@ -69,15 +79,18 @@ from those best-fit formal parameters, or leave **blank** to build fresh from
 the `.azr` levels.
 
 ```bash
-# Calculate with saved best-fit params; writes chiSquared.out + AZUREOut_*.out
-printf '1\noutput/param.sav\n' | AZURE2 --no-gui 7Be.azr
+# Calculate from the .azr's own parameters: menu, both file prompts blank, exit.
+printf '1\n\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
+
+# Calculate with saved best-fit params (parameter file given, EC file blank):
+printf '1\noutput/param.sav\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 
 # Fit fresh from the .azr levels. Mode 2 then asks about the cross-section
 # uncertainty band (y/n) and, if yes, reduced-chi2 scaling (y/n):
-printf '2\n\nn\n' | AZURE2 --no-gui 7Be.azr
+printf '2\n\n\nn\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 
 # Extrapolate (no data) using saved params:
-printf '3\noutput/param.sav\nn\n' | AZURE2 --no-gui 7Be.azr
+printf '3\noutput/param.sav\n\nn\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 ```
 
 Non-interactive band control: `--covariance-band` (+ `--scale-covariance`) skips
@@ -455,6 +468,21 @@ it cannot place. It does not verify — `save_fit` does that.
 the stale `intEC` caches), writes the `.azr` plus a companion `param.sav` with
 the norms, and fails loudly if the result does not round-trip.
 
+### What a snapshot still cannot carry
+
+`save_fit` verifies the `.azr` it writes, so a mismatched snapshot no longer
+reaches you silently — it raises and removes the file. Two things remain true
+of the `.azr` itself:
+
+- **Normalizations do not live in `<levels>`.** A calculate run on a snapshot
+  uses 1.0 for every dataset, so its `chiSquared.out` sits *above* the fit's by
+  whatever the normalizations were absorbing — 3He: 166 fitted, 769 from the
+  snapshot. Write them alongside (`output/normalizations.out`) or supply a
+  `param.sav`.
+- **The check dumps are keywords, not filenames.** `<config>` accepts only
+  `none`, `screen` or `file` (`Config::ReadConfigFile`); anything else silently
+  leaves the check off and `checks/` stays empty. Write `file`.
+
 ### Defining extrapolation grids
 
 ```python
@@ -476,79 +504,6 @@ Note the `isDiff` codes differ between the two blocks: in `<segmentsData>` 3 is
 total-capture and 4 is differential-cm; in `<segmentsTest>` 3 is angular
 distribution, 4 total-capture, 5 differential-cm. pyazr handles this — hand-edits
 must not.
-
-## Three traps that cost a whole evaluation
-
-Found while building the BBN/pp-chain campaign in `IAEA/AI-R/evaluations`;
-each one produced a wrong answer *silently*.
-
-### 1. `intEC.extrap` must be deleted before every extrapolation run
-
-The golden rule above says to delete it "whenever the `<segmentsTest>` grid
-changes". **That is not sufficient.** A session that initialises in data mode
-and then calls `extrap_mode()` reuses whatever `intEC.extrap` is on disk, and
-those amplitudes do not match the combined data+test integration set the second
-INITIALIZE builds. Three identical runs of the same 7Be analysis script:
-
-| run | caches | S₃₄(10 keV) | S(p,γ)(10 keV) | S(p,α)(10 keV) |
-|---|---|---|---|---|
-| 1 | deleted | 0.5402 keV b | 0.0912 keV b | 3254 keV b |
-| 2 | deleted | 0.5402 keV b | 0.0912 keV b | 3254 keV b |
-| 3 | reused | **1.055** keV b | **2.4e8** keV b | 3254 keV b |
-
-The particle-exit grid is identical in all three — that is the signature, since
-only capture reads these integrals. Rebuilding costs seconds. Put the deletion
-in the script, not in your memory:
-
-```python
-for f in ("intEC.dat", "intEC.extrap"):
-    p = os.path.join(eval_dir, "output", f)
-    if os.path.exists(p): os.remove(p)
-```
-
-(`evaluations/_tools/uq.py:clear_ec_cache`.)
-
-### 2. A zero Jacobian column freezes `scipy.least_squares`
-
-`residual_jacobian` returns an identically zero column for any parameter no
-active dataset can see — a γ width in a model with no capture data, a channel
-of a level that nothing populates. With `x_scale="jac"` that column's scale is
-zero, and TRF reports convergence after **one** function evaluation while the
-gradient at other parameters is still in the hundreds. On the 8Be model this
-froze every normalization at exactly 1.0 for the entire run and left
-χ²/N = 5.6; dropping the dead columns first gave χ²/N = 1.01 from the same
-seeds.
-
-```python
-J = fitter.jacobian(x0)[:, cols]
-cols = cols[np.max(np.abs(J), axis=0) > 0]      # before least_squares
-```
-
-A norm-penalty χ² of *exactly* 0.0 alongside free normalizations is the tell.
-
-### 3. `residual_jacobian` raises, and the exception aborts the fit
-
-A trust-region step can put a reduced width where the Coulomb functions
-overflow (`RuntimeError: z is not finite in log_Gamma`) or where the level
-matrix is singular. Catch it and return a large residual with a zero Jacobian:
-the optimiser then shrinks the region, which is what it would have concluded
-from a finite but terrible χ². Letting it propagate loses the whole fit.
-
-### Fitting a model built from hand-chosen seeds
-
-A fresh `.azr` is far from any minimum and a single global fit over sixty
-parameters walks into a bad one. Free the parameters in the order the data
-constrain them, warm-starting each stage, and run the sequence two or three
-times:
-
-1. the particle widths of the pair that carries the dominant reaction;
-2. the other particle pairs;
-3. the γ widths, at fixed particle widths;
-4. the background poles;
-5. everything, including level energies and normalizations.
-
-`evaluations/_tools/fitting.py` (`Fitter.stages`) implements this with the
-penalty rows, the dead-column filter and the exception guard already in place.
 
 ## Fitting from Python
 
@@ -611,6 +566,81 @@ chosen per `p.kind`, and
 `log_prob = -0.5*(chi2 + offset) + log_prior` with
 `offset = Σ log(2π σ²)`.
 
+### Three traps that cost a whole evaluation
+
+Found while building a BBN/pp-chain campaign; each produced a wrong answer
+*silently*. The `evaluations/_tools/...` files cited below live in that analysis
+repository, not in this one — the descriptions stand without them.
+
+#### 1. `intEC.extrap` must be deleted before every extrapolation run
+
+The golden rule above says to delete it "whenever the `<segmentsTest>` grid
+changes". **That is not sufficient.** A session that initialises in data mode
+and then calls `extrap_mode()` reuses whatever `intEC.extrap` is on disk, and
+those amplitudes do not match the combined data+test integration set the second
+INITIALIZE builds. Three identical runs of the same 7Be analysis script:
+
+| run | caches | S₃₄(10 keV) | S(p,γ)(10 keV) | S(p,α)(10 keV) |
+|---|---|---|---|---|
+| 1 | deleted | 0.5402 keV b | 0.0912 keV b | 3254 keV b |
+| 2 | deleted | 0.5402 keV b | 0.0912 keV b | 3254 keV b |
+| 3 | reused | **1.055** keV b | **2.4e8** keV b | 3254 keV b |
+
+The particle-exit grid is identical in all three — that is the signature, since
+only capture reads these integrals. Rebuilding costs seconds. Put the deletion
+in the script, not in your memory:
+
+```python
+for f in ("intEC.dat", "intEC.extrap"):
+    p = os.path.join(eval_dir, "output", f)
+    if os.path.exists(p): os.remove(p)
+```
+
+(`evaluations/_tools/uq.py:clear_ec_cache`.)
+
+#### 2. A zero Jacobian column freezes `scipy.least_squares`
+
+`residual_jacobian` returns an identically zero column for any parameter no
+active dataset can see — a γ width in a model with no capture data, a channel
+of a level that nothing populates. With `x_scale="jac"` that column's scale is
+zero, and TRF reports convergence after **one** function evaluation while the
+gradient at other parameters is still in the hundreds. On the 8Be model this
+froze every normalization at exactly 1.0 for the entire run and left
+χ²/N = 5.6; dropping the dead columns first gave χ²/N = 1.01 from the same
+seeds.
+
+```python
+J = fitter.jacobian(x0)[:, cols]
+cols = cols[np.max(np.abs(J), axis=0) > 0]      # before least_squares
+```
+
+A norm penalty of *exactly* 0.0 alongside free normalizations is the tell:
+`m.penalties(x)["norm"].sum()` says so directly.
+
+#### 3. `residual_jacobian` raises, and the exception aborts the fit
+
+A trust-region step can put a reduced width where the Coulomb functions
+overflow (`RuntimeError: z is not finite in log_Gamma`) or where the level
+matrix is singular. Catch it and return a large residual with a zero Jacobian:
+the optimiser then shrinks the region, which is what it would have concluded
+from a finite but terrible χ². Letting it propagate loses the whole fit.
+
+### Fitting a model built from hand-chosen seeds
+
+A fresh `.azr` is far from any minimum and a single global fit over sixty
+parameters walks into a bad one. Free the parameters in the order the data
+constrain them, warm-starting each stage, and run the sequence two or three
+times:
+
+1. the particle widths of the pair that carries the dominant reaction;
+2. the other particle pairs;
+3. the γ widths, at fixed particle widths;
+4. the background poles;
+5. everything, including level energies and normalizations.
+
+`evaluations/_tools/fitting.py` (`Fitter.stages`) implements this with the
+penalty rows, the dead-column filter and the exception guard already in place.
+
 ## Decomposing a cross section
 
 Everything below is done at the **fitted point, without refitting**, so each
@@ -670,8 +700,7 @@ than from the original fit; starting them all from one point biases the ends.
 **Is a new level/channel warranted?** Add it (`add_level`, or free one more
 channel of an existing level), refit the subset it can affect, and weigh Δχ²
 against the parameters spent and against physical bounds: θ² ≤ 1 for particle
-channels, a few W.u. for γ channels. Sweep candidates from a shell loop — one
-session per process.
+channels, a few W.u. for γ channels. Sweep candidates in a loop; several sessions may be open at once.
 
 **Dimensionless widths.** `m.dimensionless_widths(x)` (pyazr ≥ 2.4) does the
 whole job — θ² for every particle channel, W.u. for every γ channel, at any
@@ -772,22 +801,15 @@ fit, check `param.sav` updated and compare `parameters.out` widths — and their
 
 ## Examples shipped with pyazr
 
-In `pyazr/examples/`: `angular_distribution.py`, `print_scheme.py`,
-`edit_scheme.py`, `edit_model.py`, `exfor_fetch.py`, `deactivate_level.py`,
-`transform_widths.py`, `dimensionless_widths.py`, `save_fit_to_azr.py`,
-`uncertainty_band.py`, `fit_emcee.py`, `fit_zeus.py`.
+In `pyazr/examples/` — run `ls` there rather than trusting this list to stay
+complete:
 
-## What a snapshot still cannot carry
-
-`save_fit` verifies the `.azr` it writes, so a mismatched snapshot no longer
-reaches you silently — it raises and removes the file. Two things remain true
-of the `.azr` itself:
-
-- **Normalizations do not live in `<levels>`.** A calculate run on a snapshot
-  uses 1.0 for every dataset, so its `chiSquared.out` sits *above* the fit's by
-  whatever the normalizations were absorbing — 3He: 166 fitted, 769 from the
-  snapshot. Write them alongside (`output/normalizations.txt`) or supply a
-  `param.sav`.
-- **The check dumps are keywords, not filenames.** `<config>` accepts only
-  `none`, `screen` or `file` (`src/Config.cpp:72`); anything else silently
-  leaves the check off and `checks/` stays empty. Write `file`.
+| | |
+|---|---|
+| model & scheme | `print_scheme.py`, `edit_scheme.py`, `edit_model.py`, `deactivate_level.py` |
+| widths | `transform_widths.py`, `dimensionless_widths.py` |
+| observables | `angular_distribution.py`, `sfactor_extrapolation.py`, `decompose_cross_section.py`, `reaction_rate.py` |
+| fitting & UQ | `fit_emcee.py`, `fit_zeus.py`, `per_dataset_chi2.py`, `sensitivities.py`, `uncertainty_band.py` |
+| snapshots | `save_fit_to_azr.py` |
+| model internals | `coulomb_functions.py`, `ec_integrals.py`, `channel_radius_scan.py`, `nuclear_potential.py` |
+| data | `exfor_fetch.py` |
