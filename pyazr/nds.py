@@ -52,8 +52,20 @@ CROSSREF_URL = "https://api.crossref.org/works"
 UA = {"User-Agent": "pyazr/nds (research tool)"}
 
 #: Projectile shorthand used by EXFOR reaction strings -> mass number.
-_PROJ_MASS = {"P": 1, "N": 1, "D": 2, "T": 3, "3-HE": 3, "4-HE": 4,
-              "ALPHA": 4, "G": 0}
+#: ``(Z, A)`` of the light particles EXFOR names with a shorthand instead of a
+#: ``Z-SYM-A`` code.  The charge matters as much as the mass: an S-factor
+#: conversion divides by ``exp(2 pi eta)`` with ``eta ~ Z1 Z2``, so guessing
+#: ``Z1`` wrong by a factor of two is wrong by ``exp(2 pi eta)`` -- a factor of
+#: 5000 on 3He(a,g)7Be at 93 keV, verified against the Costantini 2008 cross
+#: sections for the same LUNA measurement.
+_PROJ_ZA = {
+    "P": (1, 1), "N": (0, 1), "D": (1, 2), "T": (1, 3), "G": (0, 0),
+    "A": (2, 4), "ALPHA": (2, 4), "4-HE": (2, 4), "HE4": (2, 4),
+    "HE3": (2, 3), "3-HE": (2, 3), "H1": (1, 1), "H2": (1, 2), "H3": (1, 3),
+    "E": (-1, 0), "E-": (-1, 0), "E+": (1, 0),
+}
+
+_PROJ_MASS = {k: v[1] for k, v in _PROJ_ZA.items()}
 
 #: Assumed relative uncertainty for a point EXFOR gives no error for.  A zero
 #: error would be read by AZURE2 as an infinitely precise measurement.
@@ -141,13 +153,19 @@ class ExforData:
         return parts[1] if len(parts) > 1 else ""
 
     def za(self, name):
-        """``(Z, A)`` of a nucleus named like ``6-C-13`` / ``1-H-1``, or None."""
+        """``(Z, A)`` of a nucleus named like ``6-C-13`` / ``1-H-1``.
+
+        Also resolves the light-particle shorthands EXFOR uses in the reaction
+        parentheses -- ``P``, ``N``, ``D``, ``T``, ``A``, ``HE3``, ``G`` --
+        which the ``Z-SYM-A`` pattern does not match.  Returns ``None`` only
+        for a name that is neither.
+        """
         if not name:
             return None
         m = re.match(r"([0-9]+)-([A-Z]+)-([0-9]+)", name)
         if m:
             return int(m.group(1)), int(m.group(3))
-        return None
+        return _PROJ_ZA.get(name.strip().upper())
 
     def masses(self, target_mass=None, projectile_mass=None):
         """Mass numbers for the entrance pair, in ``(m_target, m_proj)`` u."""
@@ -494,18 +512,23 @@ def _energy_column(data, cols, m_t, m_p):
         raise ValueError(f"{data.dataset_id}: no EN / EN-CM energy column in "
                          f"{list(cols)}.")
     factor = _energy_factor(cols[name])
-    # EXFOR sometimes mislabels the incident-energy unit of an S-factor
-    # dataset.  The S-factor's own energy unit describes the same axis, so it
-    # is the self-consistent choice and wins -- but say so, because the two
-    # disagreeing is a factor of 1000 in the energies either way.
+    # An S-factor unit such as B*KEV is a unit of the *product* barn x energy,
+    # and its energy part is chosen so the tabulated S values read well.  It
+    # says nothing about the unit of the abscissa, so it must not override it.
+    # Checked against the independent lab ranges x4list reports: C1610002
+    # (Brown 2007, EN-CM/MEV with DATA/B*KEV), O2521002 (Piatti 2020,
+    # EN-CM/KEV with DATA/B*EV) and O1590003 (Cruz 2008, EN/KEV) all have the
+    # declared column unit right and the S-factor unit different.  Disagreement
+    # is still worth a warning, because a genuine EXFOR mislabel is a factor of
+    # 1000 either way; pass energy_scale= to correct one.
     sf = _sfactor_factors(cols.get("DATA-CM") or cols.get("DATA"))
     if sf is not None and sf[1] != factor:
         warnings.warn(
-            f"{data.dataset_id}: the {name} column says {cols[name]!r} but the "
-            f"S-factor unit implies {sf[1]:g} MeV per unit; trusting the "
-            f"S-factor, as EXFOR mislabels the incident energy of these "
-            f"datasets more often than the S-factor itself.")
-        factor = sf[1]
+            f"{data.dataset_id}: the {name} column says {cols[name]!r} while "
+            f"the S-factor unit's energy part implies {sf[1]:g} MeV per unit. "
+            f"Using the declared {name} unit, which is the authority for this "
+            f"column; check the energies against the reference if the dataset "
+            f"looks displaced.")
     E = data.arrays[name].astype(float) * factor
     if name == "EN-CM":
         E = cm_to_lab(E, m_t, m_p)
@@ -604,8 +627,16 @@ def _data_column(data, cols, m_t, m_p, cross_section_scale=1.0,
         E_cm_kev = _cm_kev(data, cols, m_t, m_p)
         to_barn_kev = sf[0] * 1e3           # b*MeV -> b*keV, to match E_cm_kev
         za_t, za_p = data.za(data.target), data.za(data.projectile)
-        z2 = za_t[0] if za_t else 6
-        z1 = za_p[0] if za_p else 1
+        # No silent default here.  The penetrability factor exp(-2 pi eta) is
+        # exponential in Z1 Z2, so an assumed charge is not a small error: the
+        # old p + 12C fallback turned the LUNA 3He(a,g)7Be S factor into a
+        # cross section 5000 times too large at 93 keV.
+        if not (za_t and za_p):
+            raise ValueError(
+                f"{data.dataset_id}: cannot read the entrance-channel charges "
+                f"from {data.reaction!r}, and an S-factor cannot be converted "
+                f"without them (sigma = S exp(-2 pi eta)/E, eta ~ Z1 Z2).")
+        z2, z1 = za_t[0], za_p[0]
         mu = m_t * m_p / (m_t + m_p)
         cs = sfactor_to_cross_section(cs * to_barn_kev, E_cm_kev, z1, z2, mu)
         stat = sfactor_to_cross_section(stat * to_barn_kev, E_cm_kev, z1, z2, mu)
