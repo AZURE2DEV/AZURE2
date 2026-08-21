@@ -179,8 +179,21 @@ jobs:
       # in tests/ and compares chi-squared against recorded references, so a
       # change that still builds but moves the physics fails here -- on every
       # platform, which is also how cross-platform numerical drift shows up.
+      # The script prints the offending chi-squared and segment counts, but a
+      # failure only reaches the run summary as "exit code 1" -- and the job log
+      # itself needs a token to read, which the person debugging may not have.
+      # Echoing the salient lines as ::error:: puts them in the run's
+      # annotations, which are public.
       - name: Physics regression tests
-        run: ./tests/run_tests.sh
+        run: |
+          set -o pipefail
+          if ! ./tests/run_tests.sh 2>&1 | tee physics-tests.log; then
+            echo "::error::physics regression tests failed on ${{ matrix.name }}"
+            grep -nE "^===|FAIL|SKIP|ERROR|chi2|segment|expected" physics-tests.log \
+              | head -40 \
+              | while IFS= read -r line; do echo "::error::${{ matrix.name }}: $line"; done
+            exit 1
+          fi
 
       # The physics suite drives the engine, never the widgets, so a GUI
       # regression passes straight through it -- the Nuclear Potential tab
@@ -188,6 +201,19 @@ jobs:
       # drive the widgets directly and need no display.
       - name: GUI tests
         run: ctest --test-dir build --output-on-failure -R nuclear_potential_tab
+
+      # Keeps the whole picture -- every project's run.log and the chi-squared
+      # it produced -- for a failure the annotations above do not explain.
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ matrix.name }}
+          path: |
+            physics-tests.log
+            tests/*/run.log
+            tests/*/output/chiSquared.out
+          if-no-files-found: warn
 
       # ------------------------------------------------------------- package
       # Qt's own deploy tools pull the Qt runtime in beside the binary. This is
