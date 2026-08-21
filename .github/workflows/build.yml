@@ -182,6 +182,13 @@ jobs:
       - name: Physics regression tests
         run: ./tests/run_tests.sh
 
+      # The physics suite drives the engine, never the widgets, so a GUI
+      # regression passes straight through it -- the Nuclear Potential tab
+      # once shipped with a selector that could never list a channel. These
+      # drive the widgets directly and need no display.
+      - name: GUI tests
+        run: ctest --test-dir build --output-on-failure -R nuclear_potential_tab
+
       # ------------------------------------------------------------- package
       # Qt's own deploy tools pull the Qt runtime in beside the binary. This is
       # not yet a signed .app or an AppImage -- it is enough to make the artifact

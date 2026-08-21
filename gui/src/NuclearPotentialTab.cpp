@@ -14,6 +14,10 @@
 #include <QMessageBox>
 #include <QDoubleValidator>
 #include <QCheckBox>
+#include <QShowEvent>
+#include <QTextDocumentFragment>
+#include <utility>
+#include <vector>
 #include <iostream>
 
 NuclearPotentialTab::NuclearPotentialTab(QWidget* parent)
@@ -154,12 +158,67 @@ void NuclearPotentialTab::createUI() {
   mainLayout->addStretch();
 }
 
+// PairsModel::getParticleLabel returns rich text -- <center>, <sup> and the
+// rest -- because the pairs table renders it through a delegate.  A combo box
+// item is plain text and would show the markup verbatim, so flatten it.
+static QString plainLabel(const QString& rich) {
+  QString plain = QTextDocumentFragment::fromHtml(rich).toPlainText();
+  return plain.simplified();
+}
+
 void NuclearPotentialTab::setPairsModel(PairsModel* model) {
+  if(pairsModel_) pairsModel_->disconnect(this);
   pairsModel_ = model;
+  if(pairsModel_) {
+    // A project's pairs are built while <levels> is read, which is after the
+    // <potential> block and long after this tab is constructed, so the selector
+    // has to follow the model rather than be filled once.  Rebuilding on a bare
+    // dataChanged also keeps the labels right when a pair is renamed or its
+    // particles are edited.
+    connect(pairsModel_, &QAbstractItemModel::rowsInserted,
+            this, [this](const QModelIndex&, int, int) { refreshPairCombo(false); });
+    connect(pairsModel_, &QAbstractItemModel::rowsRemoved,
+            this, [this](const QModelIndex&, int, int) { refreshPairCombo(false); });
+    connect(pairsModel_, &QAbstractItemModel::modelReset,
+            this, [this]() { refreshPairCombo(false); });
+    connect(pairsModel_, &QAbstractItemModel::dataChanged,
+            this, [this](const QModelIndex&, const QModelIndex&, const QVector<int>&) {
+              refreshPairCombo(false);
+            });
+    connect(pairsModel_, &QObject::destroyed,
+            this, [this]() { pairsModel_ = nullptr; refreshPairCombo(false); });
+  }
   refreshPairCombo();
 }
 
-void NuclearPotentialTab::refreshPairCombo() {
+void NuclearPotentialTab::showEvent(QShowEvent* event) {
+  QWidget::showEvent(event);
+  refreshPairCombo(false);
+}
+
+void NuclearPotentialTab::onPairRemoved(int pairKey) {
+  NuclearPotentialManager& manager = NuclearPotentialManager::instance();
+  // Keys are positional, so the pairs above the deleted one shift down and
+  // their settings have to shift with them.  Collect first, then reinstall:
+  // editing the manager while walking it would read half-moved state.
+  std::vector<int> keys = manager.configuredPairs();
+  std::vector<std::pair<int, NuclearPotentialSetting> > moved;
+  for(size_t i = 0; i < keys.size(); i++) {
+    if(keys[i] == pairKey) continue;                 // goes with the pair
+    int target = keys[i] > pairKey ? keys[i] - 1 : keys[i];
+    moved.push_back(std::make_pair(target, manager.getSetting(keys[i])));
+  }
+  for(size_t i = 0; i < keys.size(); i++) manager.clearPairSetting(keys[i]);
+  for(size_t i = 0; i < moved.size(); i++)
+    manager.setSetting(moved[i].first, moved[i].second);
+
+  if(currentPairKey_ == pairKey) currentPairKey_ = 0;
+  else if(currentPairKey_ > pairKey) currentPairKey_--;
+  refreshPairCombo();
+}
+
+void NuclearPotentialTab::refreshPairCombo(bool reloadFields) {
+  NuclearPotentialManager& manager = NuclearPotentialManager::instance();
   loading_ = true;
   int keep = currentPairKey_;
   pairCombo_->clear();
@@ -168,17 +227,35 @@ void NuclearPotentialTab::refreshPairCombo() {
     QList<PairsData> pairs = pairsModel_->getPairs();
     for(int i = 0; i < pairs.size(); i++) {
       // A pair's key is its 1-based position, matching the .azr and
-      // PPair::GetPairKey().
-      pairCombo_->addItem(tr("Pair %1: %2").arg(i + 1)
-                            .arg(pairsModel_->getParticleLabel(pairs.at(i))),
-                          i + 1);
+      // PPair::GetPairKey().  Only one pair is on screen at a time, so the
+      // label carries its state -- otherwise there is no way to see which
+      // pairs are switched on without clicking through all of them.
+      int key = i + 1;
+      QString state = manager.isPairEnabled(key)
+          ? (manager.hasPairSetting(key) ? tr("on") : tr("on, inherited"))
+          : tr("off");
+      pairCombo_->addItem(tr("Pair %1: %2  [%3]").arg(key)
+                            .arg(plainLabel(pairsModel_->getParticleLabel(pairs.at(i))))
+                            .arg(state),
+                          key);
     }
   }
   int index = pairCombo_->findData(keep);
+  // A pair that has gone needs the fields reloaded whatever the caller asked,
+  // since what is on screen belongs to something that no longer exists.
+  if(index < 0) reloadFields = true;
   pairCombo_->setCurrentIndex(index >= 0 ? index : 0);
   currentPairKey_ = pairCombo_->currentData().toInt();
+  bool hasPairs = pairsModel_ && !pairsModel_->getPairs().isEmpty();
+  pairCombo_->setEnabled(hasPairs);
+  enabledCheck_->setEnabled(true);
+  pairCombo_->setToolTip(hasPairs
+      ? tr("Which particle pair these settings apply to.")
+      : tr("No particle pairs yet -- open or build a project first; the pairs "
+           "appear once its levels are read."));
   loading_ = false;
-  loadSettingsFor(currentPairKey_);
+  if(reloadFields) loadSettingsFor(currentPairKey_);
+  else refreshSummary();
 }
 
 void NuclearPotentialTab::onPairSelectionChanged(int index) {
@@ -186,8 +263,10 @@ void NuclearPotentialTab::onPairSelectionChanged(int index) {
   int next = pairCombo_->itemData(index).toInt();
   if(next == currentPairKey_) return;
   // Commit what is on screen to the pair being left, so switching the selector
-  // never silently throws typing away.  If it does not validate, stay put.
-  if(!commitCurrent()) {
+  // never silently throws typing away -- but only if it was actually edited,
+  // or just visiting a pair would give it a setting of its own.  If it does
+  // not validate, stay put.
+  if(dirty_ && !commitCurrent()) {
     loading_ = true;
     pairCombo_->setCurrentIndex(pairCombo_->findData(currentPairKey_));
     loading_ = false;
@@ -234,6 +313,7 @@ void NuclearPotentialTab::loadSettingsFor(int pairKey) {
   bool own = pairKey && manager.hasPairSetting(pairKey);
   useDefaultButton_->setEnabled(own);
   loading_ = false;
+  dirty_ = false;
   refreshSummary();
 }
 
@@ -261,12 +341,34 @@ bool NuclearPotentialTab::commitCurrent() {
     if(currentPairKey_) manager.setSetting(currentPairKey_, s);
     else manager.setDefaultSetting(s);
     useDefaultButton_->setEnabled(currentPairKey_ != 0);
+    dirty_ = false;
+    updateCurrentPairLabel();
     return true;
   } catch(const std::exception& e) {
     QMessageBox::critical(this, tr("Error"),
                           tr("Failed to apply settings: %1").arg(e.what()));
     return false;
   }
+}
+
+void NuclearPotentialTab::updateCurrentPairLabel() {
+  // Only the item on screen can have changed, so retitle that one rather than
+  // rebuilding the selector -- a rebuild here would reload the widgets and
+  // undo the edit that just got committed.
+  if(currentPairKey_ == 0 || !pairsModel_) return;
+  int index = pairCombo_->findData(currentPairKey_);
+  if(index < 0) return;
+  QList<PairsData> pairs = pairsModel_->getPairs();
+  if(currentPairKey_ > pairs.size()) return;
+  NuclearPotentialManager& manager = NuclearPotentialManager::instance();
+  QString state = manager.isPairEnabled(currentPairKey_)
+      ? (manager.hasPairSetting(currentPairKey_) ? tr("on") : tr("on, inherited"))
+      : tr("off");
+  loading_ = true;
+  pairCombo_->setItemText(index, tr("Pair %1: %2  [%3]").arg(currentPairKey_)
+                            .arg(plainLabel(pairsModel_->getParticleLabel(pairs.at(currentPairKey_ - 1))))
+                            .arg(state));
+  loading_ = false;
 }
 
 void NuclearPotentialTab::refreshSummary() {
@@ -295,6 +397,7 @@ void NuclearPotentialTab::onPotentialTypeChanged(int index) {
     woodsSaxonGroup_->setVisible(false);
     gaussianGroup_->setVisible(true);
   }
+  if(!loading_) dirty_ = true;
 }
 
 void NuclearPotentialTab::updateParameterLabels() {
@@ -379,6 +482,7 @@ void NuclearPotentialTab::onResetToDefault() {
 }
 
 void NuclearPotentialTab::onParameterChanged() {
+  if(!loading_) dirty_ = true;
 }
 
 bool NuclearPotentialTab::readPotentialSettings(QTextStream& inStream, Config& config) {

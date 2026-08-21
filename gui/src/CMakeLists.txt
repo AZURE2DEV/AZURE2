@@ -137,3 +137,8 @@ endif()
 
 # Export to parent
 set(AZURESETUP_LIBRARIES AZURESetup PARENT_SCOPE)
+# The Qt (and Qwt) link lists are resolved here -- imported targets on a
+# native build, import libraries when cross-compiling.  tests/gui needs the
+# same ones, so hand them up rather than repeat the detection.
+set(QT_LIBRARIES ${QT_LIBRARIES} PARENT_SCOPE)
+set(QWT_LIBRARIES ${QWT_LIBRARIES} PARENT_SCOPE)

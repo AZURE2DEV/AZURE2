@@ -332,6 +332,12 @@ endif()
 add_subdirectory(external/coul)
 add_subdirectory(src)
 
+# Headless GUI tests. After src/, because they link the same libraries the
+# AZURE2 executable does; the subdirectory returns immediately unless the GUI
+# is being built.
+enable_testing()
+add_subdirectory(tests/gui)
+
 # Install and copy SRIM data file (only if ERYA is enabled)
 if(USE_ERYA)
     install(FILES external/erya/data/SRIM2013.xml DESTINATION share/azure2/ COMPONENT Runtime)

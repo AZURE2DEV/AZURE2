@@ -74,8 +74,13 @@ AZURESetup::AZURESetup() : config(std::cout) {
   targetIntTab=new TargetIntTab;
 
   nuclearPotentialTab = new NuclearPotentialTab();
-  // The tab edits one particle pair at a time, so it needs the pair list.
+  // The tab edits one particle pair at a time, so it needs the pair list.  The
+  // pairs do not exist yet -- they are built while <levels> is read -- so the
+  // tab follows the model from here rather than taking a snapshot.
   nuclearPotentialTab->setPairsModel(pairsTab->getPairsModel());
+  // Pair keys are positional: deleting one shifts the rest down, and the
+  // potentials have to move with them or they end up on the wrong channels.
+  connect(pairsTab,SIGNAL(pairRemoved(int)),nuclearPotentialTab,SLOT(onPairRemoved(int)));
 
   fittingTab = new FittingTab();
   fittingTab->setTabReferences(levelsTab, segmentsTab);

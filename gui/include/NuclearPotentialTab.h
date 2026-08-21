@@ -13,6 +13,7 @@
 
 class Config;
 class PairsModel;
+class QShowEvent;
 class QTextStream;
 
 /*!
@@ -44,8 +45,26 @@ public:
    * @brief Give the tab the pair list it offers in the selector.
    * A pair's key is its 1-based position, which is what the .azr stores and
    * what PPair::GetPairKey() reports.
+   *
+   * The tab follows the model from here on.  It has to: the pairs of a project
+   * do not exist when this is called -- they are built while <levels> is read,
+   * which happens after the <potential> block -- so a selector filled once at
+   * construction would never show anything but the default.
    */
   void setPairsModel(PairsModel* model);
+
+public slots:
+  /*!
+   * @brief A particle pair was deleted; drop its potential and renumber.
+   *
+   * Pair keys are positional, so deleting pair 2 of 4 makes the old pairs 3
+   * and 4 into 2 and 3.  Without shifting the settings down with them, their
+   * potentials would silently start applying to the wrong channels.
+   * ``pairKey`` is 1-based, as PairsTab::pairRemoved reports it.
+   */
+  void onPairRemoved(int pairKey);
+
+public:
 
   /*!
    * @brief Read nuclear potential settings from text stream
@@ -58,6 +77,11 @@ public:
    * Used for saving configuration to file
    */
   bool writePotentialSettings(QTextStream& outStream);
+
+protected:
+  ///Refresh on the way in: cheap, and it covers any path that changes the
+  ///pairs without the model saying so.
+  void showEvent(QShowEvent* event) override;
 
 private slots:
   /*!
@@ -113,9 +137,14 @@ private:
   void loadCurrentSettings();
 
   /*!
-   * @brief Rebuild the pair selector from the pairs model
+   * @brief Rebuild the pair selector from the pairs model.
+   *
+   * ``reloadFields`` refills the parameter widgets from the manager.  It is
+   * false when the model changed under us -- the pair on screen is still the
+   * pair on screen, and reloading would throw away whatever the user had just
+   * typed into it.
    */
-  void refreshPairCombo();
+  void refreshPairCombo(bool reloadFields = true);
 
   /*!
    * @brief Load the setting for one pair key (0 = the default) into the widgets
@@ -132,6 +161,12 @@ private:
    * @brief Restate, under the buttons, which pairs are switched on
    */
   void refreshSummary();
+
+  /*!
+   * @brief Retitle just the selector entry for the pair on screen, so its
+   * on/off marker follows a commit without a full rebuild
+   */
+  void updateCurrentPairLabel();
 
   /*!
    * @brief The setting currently on screen
@@ -154,6 +189,11 @@ private:
   int currentPairKey_ = 0;
   ///Set while the widgets are being filled, so the change slots stay quiet.
   bool loading_ = false;
+  ///Has the user actually edited what is on screen?  Switching pairs commits
+  ///only when this is set: otherwise merely looking at a pair would give it a
+  ///setting of its own, quietly pinning a copy of the default to it so that
+  ///later editing the default no longer reached it.
+  bool dirty_ = false;
 
   // Potential type selection
   QLabel* potentialTypeLabel_;
