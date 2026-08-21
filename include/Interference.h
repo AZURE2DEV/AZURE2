@@ -15,12 +15,20 @@
 
 class Interference {
  public:
+  /// Build from two pathway positions, their \\f$Z_1Z_2\\f$ coefficient and the type.
   Interference(int, int, double, std::string);
+  /// As above with a second coefficient, for UPOS reactions.
   Interference(int, int, double, double, std::string);
+  /// "RR", "ER", "RE" or "EE" -- which vector each index refers to,
+  /// MGroup (R, resonant) or ECMGroup (E, external).
   std::string GetInterferenceType() const;
+  /// 1-based position of the first pathway, in the vector the type names.
   int GetM1() const;
+  /// 1-based position of the second pathway.
   int GetM2() const;
+  /// Angular-distribution coefficient \\f$Z_1Z_2\\f$ for this pathway pair.
   double GetZ1Z2() const;
+  /// The same coefficient for UPOS reactions.
   double GetZ1Z2_UPOS() const;
 
  private:

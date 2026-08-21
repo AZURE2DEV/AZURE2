@@ -12,10 +12,15 @@
 
 class MGroup {
  public:
+  /// Build from entrance channel, exit channel and J-group positions.
   MGroup(int, int, int);
+  /// 1-based entrance channel, within the J-group's AChannel vector.
   int GetChNum() const;
+  /// 1-based exit channel, within the same vector.
   int GetChpNum() const;
+  /// 1-based J-group this pathway runs through.
   int GetJNum() const;
+  /// Statistical spin factor \\f$g_J = (2J+1)/[(2I_1+1)(2I_2+1)]\\f$.
   double GetStatSpinFactor() const;
   void SetStatSpinFactor(double);
 
