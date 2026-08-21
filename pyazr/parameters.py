@@ -37,6 +37,7 @@ class LevelKey:
 
     @property
     def jpi(self) -> str:
+        """The level's J^pi as text, e.g. "3/2-"."""
         j = int(self.J) if float(self.J).is_integer() else f"{int(round(2*self.J))}/2"
         return f"{j}{'+' if self.parity > 0 else '-'}"
 
@@ -178,6 +179,7 @@ class NuclearPotential:
 
     @property
     def is_woods_saxon(self):
+        """Is the potential a Woods-Saxon rather than a Gaussian?"""
         return self.type == "WoodsSaxon"
 
     def __repr__(self):
@@ -276,6 +278,7 @@ class PairSet(list):
         return PairSet(p for p in self if not p.is_photon)
 
     def by_number(self, number):
+        """The pair with this 1-based number."""
         for p in self:
             if p.number == number:
                 return p
@@ -297,31 +300,38 @@ class ParameterSet(list):
 
     @property
     def free(self):
+        """The parameters the fit varies."""
         return ParameterSet(p for p in self if not p.fixed)
 
     @property
     def fixed(self):
+        """The parameters held fixed."""
         return ParameterSet(p for p in self if p.fixed)
 
     @property
     def energies(self):
+        """The level-energy parameters."""
         return ParameterSet(p for p in self if p.kind == "energy")
 
     @property
     def widths(self):
+        """The reduced-width parameters."""
         return ParameterSet(p for p in self if p.kind == "width")
 
     @property
     def norms(self):
+        """The data-normalization parameters."""
         return ParameterSet(p for p in self if p.kind == "norm")
 
     @property
     def shifts(self):
+        """The energy-shift parameters."""
         return ParameterSet(p for p in self if p.kind == "shift")
 
     # -- lookups --------------------------------------------------------------
 
     def by_name(self, name):
+        """The parameter with this name."""
         for p in self:
             if p.name == name:
                 return p
@@ -353,6 +363,7 @@ class ParameterSet(list):
     def by_level(self, jgroup=None, parity=None, level=None):
         """All R-matrix parameters (energy + widths) for a level / J-group."""
         def match(p):
+            """The parameters matching every keyword given, e.g. match(jpi="1-", pair=2)."""
             if p.jgroup is None:
                 return False
             if jgroup is not None and p.jgroup != jgroup:

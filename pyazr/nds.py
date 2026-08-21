@@ -134,6 +134,7 @@ class ExforData:
     # -- reaction parsing ----------------------------------------------------
     @property
     def projectile(self):
+        """Projectile of the reaction, as EXFOR names it."""
         m = re.search(r"\(([^)]+)\)", self.reaction)
         if not m:
             return ""
@@ -141,11 +142,13 @@ class ExforData:
 
     @property
     def target(self):
+        """Target nucleus."""
         m = re.match(r"([0-9]+-[A-Z]+-[0-9]+)", self.reaction)
         return m.group(1) if m else ""
 
     @property
     def exit(self):
+        """Outgoing particle."""
         m = re.search(r"\(([^)]+)\)", self.reaction)
         if not m:
             return ""
@@ -698,6 +701,7 @@ class Level:
 
     @property
     def energy_mev(self):
+        """Level energy in MeV."""
         return self.energy / 1e3
 
     @property
@@ -716,6 +720,7 @@ class Level:
 
     @property
     def parity(self):
+        """Parity as +1 or -1, or None when EXFOR gives none."""
         if not self.jp:
             return None
         return +1 if self.jp.endswith("+") else -1

@@ -74,6 +74,7 @@ class AzrChannel:
         self.tokens = list(tokens)
 
     # -- typed field access ---------------------------------------------------
+
     def _get(self, name, cast):
         return cast(self.tokens[_IDX[name]])
 
@@ -81,56 +82,116 @@ class AzrChannel:
         self.tokens[_IDX[name]] = _fmt(value)
 
     # channel identity
+
     @property
-    def pair(self):        return self._get("ir", lambda v: int(float(v)))
+    def pair(self):
+        """1-based particle-pair number this channel decays to."""
+        return self._get("ir", lambda v: int(float(v)))
+
     @property
-    def entrance_key(self): return self._get("aa", lambda v: int(float(v)))
+    def entrance_key(self):
+        """Entrance-pair key stored on the line."""
+        return self._get("aa", lambda v: int(float(v)))
+
     @property
-    def L(self):           return self._get("l2", lambda v: int(float(v))) // 2
+    def L(self):
+        """Orbital angular momentum of the channel."""
+        return self._get("l2", lambda v: int(float(v))) // 2
+
     @L.setter
     def L(self, v):        self._set("l2", int(2 * v))
+
     @property
-    def S(self):           return self._get("s2", lambda v: int(float(v))) / 2.0
+    def S(self):
+        """Channel spin."""
+        return self._get("s2", lambda v: int(float(v))) / 2.0
+
     @S.setter
     def S(self, v):        self._set("s2", int(round(2 * v)))
+
     @property
-    def gamma(self):       return self._get("gamma", float)
+    def gamma(self):
+        """The <levels> width field: a partial width in eV for an open channel, an ANC in fm^-1/2 for a closed one -- not a reduced-width amplitude."""
+        return self._get("gamma", float)
+
     @gamma.setter
     def gamma(self, v):    self._set("gamma", float(v))
+
     @property
-    def channel_fixed(self): return self._get("channelFix", lambda v: int(float(v))) != 0
+    def channel_fixed(self):
+        """Is this channel's width held fixed in the fit?"""
+        return self._get("channelFix", lambda v: int(float(v))) != 0
+
     @channel_fixed.setter
     def channel_fixed(self, v): self._set("channelFix", 1 if v else 0)
+
     @property
-    def ptype(self):       return self._get("pType", lambda v: int(float(v)))
+    def ptype(self):
+        """Particle type code: 0 for a particle channel, nonzero for a photon."""
+        return self._get("pType", lambda v: int(float(v)))
+
     @property
-    def is_photon(self):   return self.ptype != 0
+    def is_photon(self):
+        """Is this a photon channel?"""
+        return self.ptype != 0
+
     @property
-    def channel_radius(self): return self._get("chRad", float)
+    def channel_radius(self):
+        """Channel radius in fm."""
+        return self._get("chRad", float)
+
     @channel_radius.setter
     def channel_radius(self, v): self._set("chRad", float(v))
+
     @property
-    def active(self):      return self._get("isActive", lambda v: int(float(v))) != 0
+    def active(self):
+        """Is the level active?"""
+        return self._get("isActive", lambda v: int(float(v))) != 0
 
     # pair physics -- the same quantities GET_PAIRS_INFO reports at runtime, but
     # readable straight from the file, so a caller can identify a model's
     # channels without launching AZURE2.
+
     @property
-    def Z1(self):          return self._get("z1", lambda v: int(float(v)))
+    def Z1(self):
+        """Charge number of the light particle."""
+        return self._get("z1", lambda v: int(float(v)))
+
     @property
-    def Z2(self):          return self._get("z2", lambda v: int(float(v)))
+    def Z2(self):
+        """Charge number of the heavy particle."""
+        return self._get("z2", lambda v: int(float(v)))
+
     @property
-    def M1(self):          return self._get("m1", float)
+    def M1(self):
+        """Mass of the light particle, in u."""
+        return self._get("m1", float)
+
     @property
-    def M2(self):          return self._get("m2", float)
+    def M2(self):
+        """Mass of the heavy particle, in u."""
+        return self._get("m2", float)
+
     @property
-    def J1(self):          return self._get("j1", float)
+    def J1(self):
+        """Intrinsic spin of the light particle."""
+        return self._get("j1", float)
+
     @property
-    def parity1(self):     return self._get("pi1", lambda v: int(float(v)))
+    def parity1(self):
+        """Parity of the light particle."""
+        return self._get("pi1", lambda v: int(float(v)))
+
     @property
-    def J2(self):          return self._get("j2", float)
+    def J2(self):
+        """Intrinsic spin of the heavy particle."""
+        return self._get("j2", float)
+
     @property
-    def parity2(self):     return self._get("pi2", lambda v: int(float(v)))
+    def parity2(self):
+        """Parity of the heavy particle."""
+        return self._get("pi2", lambda v: int(float(v)))
+
     @property
     def excitation(self):
         """Excitation energy of the pair's residual nucleus (MeV).
@@ -139,20 +200,38 @@ class AzrChannel:
         channels of a multi-transition model (gamma_0, gamma_1, ...).
         """
         return self._get("e2", float)
+
     @property
-    def sep_energy(self):  return self._get("sepE", float)
+    def sep_energy(self):
+        """Separation energy of the pair, in MeV."""
+        return self._get("sepE", float)
 
     # level fields (shared across a level's channel lines)
+
     @property
-    def levelJ(self):      return self._get("levelJ", float)
+    def levelJ(self):
+        """Total angular momentum of the level."""
+        return self._get("levelJ", float)
+
     @property
-    def levelPi(self):     return self._get("levelPi", lambda v: int(float(v)))
+    def levelPi(self):
+        """Parity of the level."""
+        return self._get("levelPi", lambda v: int(float(v)))
+
     @property
-    def levelE(self):      return self._get("levelE", float)
+    def levelE(self):
+        """Level energy in MeV -- an excitation energy of the compound nucleus."""
+        return self._get("levelE", float)
+
     @property
-    def levelID(self):     return self._get("levelID", lambda v: int(float(v)))
+    def levelID(self):
+        """The level's number, shared by all of its channel lines."""
+        return self._get("levelID", lambda v: int(float(v)))
+
     @property
-    def level_fixed(self): return self._get("levelFix", lambda v: int(float(v))) != 0
+    def level_fixed(self):
+        """Is the level energy held fixed in the fit?"""
+        return self._get("levelFix", lambda v: int(float(v))) != 0
 
     def _set_level(self, J, parity, energy, level_fixed, level_id):
         self._set("levelJ", float(J))
@@ -162,13 +241,16 @@ class AzrChannel:
         self._set("levelID", int(level_id))
 
     def clone(self):
+        """A copy of this channel line, sharing nothing with the original."""
         return AzrChannel(self.tokens)
 
     def to_line(self):
+        """The channel as its whitespace-separated .azr line."""
         return " ".join(self.tokens)
 
     @classmethod
     def from_line(cls, line):
+        """Parse one .azr channel line."""
         return cls(line.split())
 
 
@@ -181,26 +263,43 @@ class AzrLevel:
         self.channels = list(channels)
 
     @property
-    def J(self):        return self.channels[0].levelJ
+    def J(self):
+        """Total angular momentum of the level."""
+        return self.channels[0].levelJ
+
     @property
-    def parity(self):   return self.channels[0].levelPi
+    def parity(self):
+        """Parity of the level."""
+        return self.channels[0].levelPi
+
     @property
-    def energy(self):   return self.channels[0].levelE
+    def energy(self):
+        """Level energy in MeV."""
+        return self.channels[0].levelE
+
     @property
-    def level_id(self): return self.channels[0].levelID
+    def level_id(self):
+        """The level's number."""
+        return self.channels[0].levelID
+
     @property
-    def fixed(self):    return self.channels[0].level_fixed
+    def fixed(self):
+        """Is the level energy held fixed?"""
+        return self.channels[0].level_fixed
 
     @property
     def jpi(self):
+        """J^pi as text, e.g. "3/2-"."""
         j = int(self.J) if float(self.J).is_integer() else f"{int(round(2*self.J))}/2"
         return f"{j}{'+' if self.parity > 0 else '-'}"
 
     def set_energy(self, energy):
+        """Set the level energy on every channel line of the level."""
         for c in self.channels:
             c._set("levelE", float(energy))
 
     def set_fixed(self, fixed):
+        """Fix or free the level energy on every channel line."""
         for c in self.channels:
             c._set("levelFix", 1 if fixed else 0)
 
@@ -231,6 +330,7 @@ class AzrModel:
 
     @classmethod
     def from_file(cls, path):
+        """Parse a .azr file; only <levels> is interpreted, the rest is kept verbatim."""
         with open(path) as f:
             text = f.read()
         start = text.find("<levels>")
@@ -285,6 +385,7 @@ class AzrModel:
         return self
 
     def to_text(self):
+        """The whole file as text, with <levels> re-emitted and everything else unchanged."""
         self._renumber()
         blocks = ["\n".join(c.to_line() for c in lv.channels)
                   for lv in self.levels]
@@ -725,6 +826,7 @@ class AzrModel:
             x = transform(x)
 
         def key(J, parity, E):
+            """The channel's identity, (pair, L, S)."""
             return (int(round(2 * J)), int(parity),
                     round(E, 2) if E is not None else None)
 

@@ -233,9 +233,11 @@ class SegmentSet(list):
 
     @property
     def active(self):
+        """Only the active data segments."""
         return SegmentSet(s for s in self if s.active)
 
     def by_reaction(self, entrance_key=None, exit_key=None):
+        """The data segments for one entrance and exit pair."""
         return SegmentSet(
             s for s in self
             if (entrance_key is None or s.entrance_key == entrance_key)
@@ -268,9 +270,11 @@ class SegmentSet(list):
         return [s.energy_shift_error for s in src]
 
     def files(self):
+        """The data files the segments read."""
         return [s.data_file for s in self]
 
     def table(self, pairs=None):
+        """A printable table of the data segments."""
         rows = [("#", "data file", "reaction", "observable", "E range",
                  "norm_err%", "vary")]
         for s in self:
@@ -319,6 +323,7 @@ class TestSegment:
 
     @property
     def is_angle_integrated(self) -> bool:
+        """Is the observable angle-integrated rather than differential?"""
         return self.observable in ("angle-integrated", "total-capture")
 
     @property
@@ -388,15 +393,18 @@ class TestSegmentSet(list):
 
     @property
     def active(self):
+        """Only the active test segments."""
         return TestSegmentSet(s for s in self if s.active)
 
     def by_reaction(self, entrance_key=None, exit_key=None):
+        """The test segments for one entrance and exit pair."""
         return TestSegmentSet(
             s for s in self
             if (entrance_key is None or s.entrance_key == entrance_key)
             and (exit_key is None or s.exit_key == exit_key))
 
     def table(self, pairs=None):
+        """A printable table of the test segments."""
         rows = [("#", "reaction", "observable", "E range", "E step",
                  "angle", "active")]
         for s in self:

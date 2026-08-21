@@ -152,9 +152,11 @@ class azure2:
         self._sess = None
 
     def is_alive(self):
+        """Is the engine still open? False once close() has run."""
         return self._sess is not None
 
     def configure(self):
+        """Re-read the parameter, pair and dataset metadata from the engine, after anything that rebuilt the model."""
         s = self.sess
         self.nsegments = int(s.update_data())
         rng = range(self.nsegments)
@@ -526,9 +528,11 @@ class azure2:
     # -- index queries --------------------------------------------------------
 
     def norm_indices(self):
+        """Free-vector positions of the normalization parameters."""
         return self.sess.normalization_indices()
 
     def shift_indices(self):
+        """Free-vector positions of the energy-shift parameters."""
         return self.sess.energy_shift_indices()
 
     def energy_indices(self):
@@ -550,6 +554,7 @@ class azure2:
     # session's directory rather than wherever the caller happens to be.
 
     def update_rwa_params_from_sav(self):
+        """Reload params_rwa from the run's param.sav."""
         with _in_dir(self.cwd):
             all_rwa_params = np.loadtxt('output/param.sav', usecols=(1,))
         self.params_rwa = []
@@ -560,6 +565,7 @@ class azure2:
                 self.params_rwa.append(all_rwa_params[i])
 
     def update_sav_from_rwa_params(self, best):
+        """Write a free RWA vector back out to param.sav."""
         params_full = []
         with _in_dir(self.cwd):
             with open('output/param.sav', 'r') as f:
@@ -582,12 +588,15 @@ class azure2:
     # -- transforms -----------------------------------------------------------
 
     def transform_rwa(self, params):
+        """Map a reduced-width-amplitude vector to physical parameters: level energies in MeV, partial widths in eV, ANCs in fm^-1/2."""
         return self.sess.transform_rwa(params)
 
     def transform_all_rwa(self, params):
+        """As transform_rwa, over every parameter rather than the free ones."""
         return self.sess.transform_all_rwa(params)
 
     def transform_physical(self, params):
+        """The inverse of transform_rwa: physical parameters back to reduced-width amplitudes."""
         raise NotImplementedError(
             "AZURE2 exposes no physical->RWA transform; only RWA->physical "
             "is available (transform_rwa / transform_all_rwa).")
@@ -727,9 +736,11 @@ class azure2:
     # -- chi-squared ----------------------------------------------------------
 
     def calculate_chi2_rwa(self, params):
+        """Total data chi-squared at a free RWA vector, as a one-element list. Excludes the normalization and energy-shift penalties AZURE2's own objective adds."""
         return [float(self.sess.calculate_chi2_rwa(params))]
 
     def calculate_chi2(self, params):
+        """As calculate_chi2_rwa, taking the physical parameter vector instead."""
         return [float(self.sess.calculate_chi2_physical(params))]
 
     def chi2_and_grad(self, params):
@@ -950,6 +961,7 @@ class azure2:
     # -- calculations ---------------------------------------------------------
 
     def calculate_excitation_energy(self, params):
+        """Compound-nucleus excitation energy per segment -- the one axis every entrance pair shares."""
         s = self.sess
         nsegments = int(s.update_segments(params))
         return [s.calculated_excitation_energies(i) for i in range(nsegments)]
@@ -1037,26 +1049,31 @@ class azure2:
                 for i in range(nsegments)]
 
     def calculate(self, params):
+        """Calculated observable per segment, from a physical parameter vector. Cross sections are centre-of-mass, in b or b/sr."""
         s = self.sess
         nsegments = int(s.update_segments(params))
         return [s.calculated_segments(i) for i in range(nsegments)]
 
     def calculate_rwa(self, params):
+        """As calculate, from a free RWA vector. This is the usual entry point."""
         s = self.sess
         nsegments = int(s.update_segments_rwa(params))
         return [s.calculated_segments(i) for i in range(nsegments)]
 
     def calculate_all_rwa(self, params):
+        """As calculate_rwa, taking every parameter rather than the free ones."""
         s = self.sess
         nsegments = int(s.update_segments_all_rwa(params))
         return [s.calculated_segments(i) for i in range(nsegments)]
 
     def calculate_energies(self, params):
+        """Centre-of-mass energies of the calculated points, per segment."""
         s = self.sess
         nsegments = int(s.update_segments(params))
         return [s.calculated_energies(i) for i in range(nsegments)]
 
     def calculate_sfactor(self, params):
+        """Astrophysical S-factor per segment (MeV b), from a physical parameter vector."""
         s = self.sess
         nsegments = int(s.update_segments(params))
         segments = [s.calculated_segments(i) for i in range(nsegments)]
@@ -1066,6 +1083,7 @@ class azure2:
         return segments
 
     def calculate_sfactor_rwa(self, params):
+        """As calculate_sfactor, from a free RWA vector."""
         s = self.sess
         nsegments = int(s.update_segments_rwa(params))
         segments = [s.calculated_segments(i) for i in range(nsegments)]
@@ -1086,7 +1104,9 @@ class azure2:
         self.mode = "extrap" if extrap else "data"
 
     def extrap_mode(self):
+        """Switch to the <segmentsTest> grids. Re-initializes the engine."""
         self._set_mode(True)
 
     def data_mode(self):
+        """Switch back to the <segmentsData> segments, which is what chi-squared uses. Re-initializes the engine."""
         self._set_mode(False)
