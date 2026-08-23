@@ -74,10 +74,12 @@ calculation around it.
 Seyler's expression for the transition matrix
 ---------------------------------------------
 
-The step that makes this practical for an R-matrix code is due to
-R. G. Seyler [Seyler1969]_, whose Eq. (4) writes :math:`M` directly in terms of
-the Lane–Thomas collision matrix :math:`U` — the very object an R-matrix code
-already builds:
+The step that makes this practical for an R-matrix code is that the amplitude
+can be written directly in terms of the collision matrix :math:`U` — the very
+object an R-matrix code already builds. The expression is Lane and Thomas's
+[LaneThomas1958]_; we follow the form in which Seyler [Seyler1969]_ quotes it
+as his Eq. (4), which is the one AZURE2's channel-spin bookkeeping matches
+term for term:
 
 .. math::
    :label: seyler
@@ -352,7 +354,13 @@ written; for capture, Seyler and Weller's Eqs. (22)–(25) give the
 :math:`c_k`, :math:`d_k` and :math:`e_k` coefficients that would be needed, in
 the same notation as the :math:`b_k` already coded.
 
-.. [Seyler1969] R. G. Seyler, *Nuclear Physics* **A124** (1969) 253.
+.. [LaneThomas1958] A. M. Lane and R. G. Thomas, *Reviews of Modern Physics*
+   **30** (1958) 257. The formalism AZURE2 is built on; the source of
+   :eq:`seyler` and of the channel-spin coupling convention used throughout.
+
+.. [Seyler1969] R. G. Seyler, *Nuclear Physics* **A124** (1969) 253. Quotes
+   the Lane–Thomas amplitude as its Eq. (4) before specialising to spin-1/2
+   on spin-1; only that general equation is used here.
 
 .. [SeylerWeller1979] R. G. Seyler and H. R. Weller,
    *Physical Review C* **20** (1979) 453.
