@@ -373,11 +373,24 @@ Four things that will bite:
 
 - **Angles are centre-of-mass** in the data file, unlike an ordinary
   differential segment. Columns are `E_lab · theta_cm · A_y · dA_y`.
-- **A_y is a dimensionless ratio in [-1,1] and is often negative.** Do not put a
-  relative uncertainty on it — a point near a zero crossing does not have a
-  small uncertainty, and doing so gives those points enormous weight and wrecks
-  the fit. Use a roughly constant absolute uncertainty.
-- **Leave `vary_norm` off.** A normalization factor is meaningless for a ratio.
+- **A_y is a dimensionless ratio in [-1,1] and is often negative.** Take the
+  point-to-point uncertainties from the experimenters — for `A_y` these are
+  statistical and background-subtraction errors and are quoted as *absolute*
+  values, not percentages. Do not convert them to a relative error: a point
+  near a zero crossing does not thereby have a small uncertainty, and treating
+  it as though it does gives those points enormous weight and wrecks the fit.
+- **Do use a normalization, and free it.** The dominant systematic in an
+  analyzing-power measurement is the absolute calibration of the beam
+  polarization, and it scales `A_y` multiplicatively — the experiment reports
+  `A_y ∝ (N⁺−N⁻)/(P·(N⁺+N⁻))`, so an error in `P` is a scale error on `A_y`.
+  That is exactly a normalization, and it is meaningful however small `A_y`
+  is. AZURE2 already treats it correctly: an analyzing-power point stores
+  `A_y` in the cross-section slot, and the χ² compares the calculated value
+  against `data × norm`, so `set_segment_norm(name, vary=True,
+  sys_error=<beam-polarization uncertainty in %>)` does the right thing.
+  (Earlier guidance here said to leave `vary_norm` off on the grounds that a
+  normalization is meaningless for a ratio. That was wrong — the ratio is of
+  yields at fixed `P`, not of quantities that both scale with it.)
 - **Use segments with no target integration** when comparing against
   thin-target data. `A_y` averaged over a target is cross-section weighted,
   `<A_y> = ∫A_y σ dE / ∫σ dE`, and since Rutherford σ diverges at low energy

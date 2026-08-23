@@ -110,14 +110,22 @@ takes as :math:`\nu'`, the exit orbital motion must carry
 :math:`\mu = \nu - \nu'`.
 
 *The spherical harmonic* :math:`Y_{l'}^{\nu-\nu'}` is the angular function of
-that outgoing orbital motion. This is the crucial structural point. For an
-unpolarized cross section only :math:`\mu = 0` ever appears and Legendre
-polynomials suffice — which is why AZURE2, like most R-matrix codes, had
-:math:`P_L(\cos\theta)` and nothing else. **Spin flip means**
-:math:`\nu \neq \nu'`, **which means** :math:`\mu \neq 0`, **which requires the
-associated Legendre functions.** No amount of rearrangement avoids this: a code
-that has only :math:`P_L` cannot produce a non-zero analyzing power, because the
-amplitudes that would interfere are not representable in it.
+that outgoing orbital motion, and it is the structural reason this observable
+needed new machinery rather than a new formula on top of the old.
+
+An unpolarized cross section sums over spin projections, and only the
+:math:`\mu = \nu - \nu' = 0` terms survive that sum. Its angular dependence is
+therefore carried entirely by :math:`Y_{l'}^{0} \propto P_{l'}(\cos\theta)`,
+which is why an R-matrix code written for cross sections — AZURE2 included —
+computes Legendre polynomials and stores nothing else.
+
+A non-zero analyzing power comes precisely from the spin-flip amplitudes,
+:math:`\nu \neq \nu'`, hence :math:`\mu \neq 0`, hence
+:math:`Y_{l'}^{\mu \neq 0}`, which needs the *associated* Legendre functions
+:math:`P_{l'}^{\mu}`. Those terms are not merely absent from a
+Legendre-only code; they are not representable in it. This is why the
+implementation adds an angular basis rather than post-processing the existing
+one — see :doc:`polarization_implementation`.
 
 *The bracket* :math:`\delta_{ss'}\delta_{ll'} - U^J_{s'l'sl}`, dressed with the
 Coulomb phases :math:`e^{i(\omega_l+\omega_{l'})}`, is the transition matrix.
@@ -127,10 +135,37 @@ exactly this quantity, phases included, so nothing has to be reconstructed.
 The vector analyzing power
 --------------------------
 
-Specialize to a spin-1/2 projectile on a spin-0 target, which covers
-:math:`{}^{12}\mathrm{C}(\vec p, p)`. The channel spin is :math:`1/2`, and
-:math:`M` is a :math:`2\times 2` matrix in the projectile's spin projection for
-each exit configuration.
+The restriction that matters is on the **projectile**: the vector analyzing
+power is a spin-1/2 beam observable, so :math:`j_1 = 1/2` throughout. The
+*target* spin is unrestricted, and the target is taken unpolarized, so its
+projection is traced over.
+
+That trace is the one subtlety. :math:`A_y` is defined with respect to the
+polarization of the projectile alone, but :eq:`seyler` delivers amplitudes in
+the **channel-spin** basis, in which projectile and target spin are already
+coupled. The entrance index must therefore be decomposed before a Pauli matrix
+can act on the projectile:
+
+.. math::
+   :label: decompose
+
+   M_{\text{out};\,m_1 m_2} =
+     \sum_s \left( j_1\, j_2\, m_1\, m_2 \,\middle|\, s,\, m_1{+}m_2 \right)
+     M_{\text{out};\, s,\, m_1+m_2}.
+
+The coupling order and phases follow Lane and Thomas — :math:`\mathbf{s} =
+\mathbf{I}_1 + \mathbf{I}_2` with Condon–Shortley coefficients — since that is
+the convention the rest of AZURE2 is built on. Nothing in the unpolarized cross
+section fixes this order, because it adds channel spins incoherently and is
+blind to it; the analyzing power is not.
+
+For a spin-0 target the sum collapses to a single term, the channel spin *is*
+the projectile's spin, and :math:`M` is a plain :math:`2\times 2` matrix in the
+projectile projection — the case of
+:math:`{}^{12}\mathrm{C}(\vec p, p)`. For a spin-1/2 target such as
+:sup:`15`\ N the channel spins are 0 and 1 and never 1/2, so a code that looks
+for a channel spin of 1/2 finds nothing and reports zero for a perfectly well
+defined, non-zero observable.
 
 Take the quantization axis for the polarization along
 
@@ -144,13 +179,17 @@ the only sensible choice: parity conservation forbids a vector polarization
 along any other direction, so :math:`A_x = A_z = 0` identically and
 :math:`A_y` is the whole of the vector analyzing power.
 
-The observable is the trace of the outgoing density matrix against
-:math:`\sigma_y` acting in the *entrance* spin space,
+The observable is a ratio of traces: the outgoing density matrix against
+:math:`\sigma_y` acting in the projectile's spin space, over the same trace
+against the identity,
 
 .. math::
 
    A_y = \frac{\mathrm{Tr}\left( M \sigma_y M^{\dagger} \right)}
-              {\mathrm{Tr}\left( M M^{\dagger} \right)}.
+              {\mathrm{Tr}\left( M M^{\dagger} \right)},
+
+both traces running over the exit configuration and over the target projection
+:math:`m_2`, which is where the unpolarized target is averaged away.
 
 Writing this out with :math:`(\sigma_y)_{+-} = -i` and
 :math:`(\sigma_y)_{-+} = +i` gives the form the code evaluates:
