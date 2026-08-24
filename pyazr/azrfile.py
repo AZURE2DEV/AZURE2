@@ -1066,7 +1066,7 @@ class AzrModel:
                          observable="angle-integrated",
                          energy_min=0.0, energy_max=5.0,
                          angle_min=0.0, angle_max=180.0,
-                         norm=1.0, vary_norm=False, norm_error=0.0,
+                         norm=1.0, vary_norm=False, norm_error=0.0, thm=False,
                          energy_shift=0.0, energy_shift_error=0.0,
                          vary_shift=False, phase_J=None, phase_L=None,
                          active=True):
@@ -1091,6 +1091,15 @@ class AzrModel:
             raise ValueError(f"unknown observable {observable!r}; expected one "
                              f"of {sorted(self._DATA_CODE)}.")
         isDiff = self._DATA_CODE[observable]
+        if thm:
+            # A Trojan-Horse (half-off-shell) segment is its ordinary
+            # observable with an isDiff offset of +10 -- the flag the engine
+            # reads in ESegment::ESegment(SegLine).  The data are the
+            # THM-extracted two-body cross section, whose scale is arbitrary:
+            # give the segment a free normalization (vary_norm=True) and no
+            # penalty (norm_error=0), so the fit sets the scale and nothing
+            # pulls it back.
+            isDiff += 10
         toks = [1 if active else 0, int(entrance), int(exit),
                 _fmt(energy_min), _fmt(energy_max),
                 _fmt(angle_min), _fmt(angle_max), isDiff]
