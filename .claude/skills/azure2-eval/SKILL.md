@@ -641,6 +641,49 @@ times:
 `evaluations/_tools/fitting.py` (`Fitter.stages`) implements this with the
 penalty rows, the dead-column filter and the exception guard already in place.
 
+#### Fits with interfering channels can get stuck on the wrong branch
+
+This is general to any R-matrix fit with more than one amplitude feeding the
+same final channel — background poles interfering with a real resonance,
+two resonances of the same J^π, internal vs. external capture, several
+background poles against each other — in any channel type, particle or γ.
+Interference is not a convex function of the interfering amplitudes' signs
+and relative magnitudes, so there can be more than one distinct,
+well-separated local minimum ("branch"), each a genuinely different
+combination of constructive/destructive interference. A least-squares fit
+(LM/TRF) starting every free amplitude from a small, same-sign seed can
+only walk downhill toward the *nearest* branch. If a better branch needs a
+much larger magnitude and/or a sign flip, reaching it means crossing
+through *worse* χ² first — which gradient descent will not do, and which a
+revert-on-out-of-bound guard (built to catch genuine numerical runaway)
+cannot tell apart from real progress: it just sees a parameter heading
+somewhere large and stops it.
+
+The tell: if independent fit attempts — different seeds, different subsets
+of parameters freed, different guard bounds — keep reverting with the
+*same* parameter(s) pushing toward the *same* large value, that recurrence
+is itself diagnostic. It is not noise to suppress with a tighter bound; it
+is the optimizer repeatedly trying to point at where the other branch is.
+
+The fix is not a better guard, it is a better starting point: hand-seed the
+interfering amplitudes at a large-magnitude, sign-varied point (from a
+previous fit of the same or a similar reaction, or by trying several
+sign/magnitude combinations) and let the fit *descend* into that branch
+rather than climb into it from near zero. Worked example (background γ
+channels, but the mechanism is identical for particle widths or any other
+interfering amplitude): a 12C(p,γ) fit repeatedly reverted trying to push
+two background γ widths to ~4–7×10⁵ eV across three independent attempts
+(different channel subsets, different seeds); recalculating — no fitting
+yet — from a hand-picked starting point with those same channels at
+~200–1300 eV and one sign flipped immediately dropped one
+previously-terrible data segment's χ²/N from 79.8 to 17.2.
+
+Practical guidance: when standing up any set of interfering amplitudes for
+a new reaction (background poles, near-degenerate resonances, internal vs.
+external capture), do not assume the small-positive-seed branch is the only
+or the best one — if a prior fit of the same or a similar reaction exists,
+seed from its converged values (signs included) rather than from scratch.
+
 ## Decomposing a cross section
 
 Everything below is done at the **fitted point, without refitting**, so each
