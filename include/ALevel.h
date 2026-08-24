@@ -5,7 +5,7 @@
 
 class NucLine;
 
-///An AZURE level object.
+/// An AZURE level object.
 
 /*!
  * An R-matrix level  represents a specific eigenstate of the compound nucleus.
@@ -36,22 +36,23 @@ class ALevel {
   double GetBigGamma(int) const;
   double GetShiftFunction(int) const;
   complex GetExternalGamma(int) const;
-  void AddGamma( NucLine);
+  void AddGamma(NucLine);
   void AddGamma(double);
-  void SetGamma(int,double);
+  void SetGamma(int, double);
   void SetE(double);
-  void SetFitGamma(int,double);
+  void SetFitGamma(int, double);
   void SetFitE(double);
   void AddNFIntegral(double);
   void SetSqrtNFFactor(double);
   void AddECConversionFactor(double);
-  void SetTransformGamma(int,double);
+  void SetTransformGamma(int, double);
   void SetTransformE(double);
-  void SetBigGamma(int,double);
+  void SetBigGamma(int, double);
   void SetTransformIterations(int);
-  void SetExternalGamma(int,complex);
-  void SetShiftFunction(int,double);
-  void SetECParams(int,unsigned char);
+  void SetExternalGamma(int, complex);
+  void SetShiftFunction(int, double);
+  void SetECParams(int, unsigned char);
+
  private:
   bool isinrmatrix_;
   bool energyfixed_;
@@ -64,8 +65,8 @@ class ALevel {
   double sqrt_nf_factor_;
   double transform_e_;
   std::vector<bool> channelfixed_;
-  ///Per-channel input convention: true = gamma column was a reduced width
-  ///amplitude (MeV^(1/2)), false = physical partial width/ANC (legacy default).
+  /// Per-channel input convention: true = gamma column was a reduced width
+  /// amplitude (MeV^(1/2)), false = physical partial width/ANC (legacy default).
   std::vector<bool> gamma_is_rwa_;
   vector_r gammas_;
   vector_r fitgammas_;

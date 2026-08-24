@@ -17,17 +17,17 @@
  *   auto potential = manager.getPotential();
  */
 class NuclearPotentialManager {
-public:
+ public:
   /*!
    * @brief Get the singleton instance of the nuclear potential manager
    */
-  static NuclearPotentialManager& instance();
+  static NuclearPotentialManager &instance();
 
   /*!
    * @brief Prevent copying
    */
-  NuclearPotentialManager(const NuclearPotentialManager&) = delete;
-  NuclearPotentialManager& operator=(const NuclearPotentialManager&) = delete;
+  NuclearPotentialManager(const NuclearPotentialManager &) = delete;
+  NuclearPotentialManager &operator=(const NuclearPotentialManager &) = delete;
 
   /*!
    * @brief Get the current nuclear potential
@@ -51,7 +51,7 @@ public:
   /*!
    * @brief Get Woods-Saxon potential parameters
    */
-  bool getWoodsSaxonParameters(double& V0, double& R, double& a) const;
+  bool getWoodsSaxonParameters(double &V0, double &R, double &a) const;
 
   // Gaussian Potential Methods
   /*!
@@ -64,14 +64,14 @@ public:
   /*!
    * @brief Get Gaussian potential parameters
    */
-  bool getGaussianParameters(double& V0, double& r0) const;
+  bool getGaussianParameters(double &V0, double &r0) const;
 
   /*!
    * @brief Reset to default Woods-Saxon potential (V=150, R=3.6, a=0.6)
    */
   void resetToDefault();
 
-private:
+ private:
   /*!
    * @brief Private constructor for singleton pattern
    */
@@ -81,4 +81,4 @@ private:
   std::string currentType_;
 };
 
-#endif // NUCLEARPOTENTIALMANAGER_H
+#endif  // NUCLEARPOTENTIALMANAGER_H

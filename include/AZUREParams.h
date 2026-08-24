@@ -10,21 +10,22 @@
 
 class Config;
 
-///A container class to hold Minuit parameters in AZURE
+/// A container class to hold Minuit parameters in AZURE
 
 /*!
  * The AZUREParams class holds the Minuit parameters determined in the fit.
- * The class also has member functions corresponding to reading and writing of 
+ * The class also has member functions corresponding to reading and writing of
  * the parameters and their errors.
  */
 
 class AZUREParams {
  public:
   ROOT::Minuit2::MnUserParameters &GetMinuitParams();
-  void ReadUserParameters(const Config&);
-  void ReadUserParameters(const std::string&);
-  void WriteUserParameters(const Config&,bool);
-  void WriteParameterErrors(const std::vector<std::pair<double,double> >&,const Config&);
+  void ReadUserParameters(const Config &);
+  void ReadUserParameters(const std::string &);
+  void WriteUserParameters(const Config &, bool);
+  void WriteParameterErrors(const std::vector<std::pair<double, double>> &, const Config &);
+
  private:
   ROOT::Minuit2::MnUserParameters params_;
 };

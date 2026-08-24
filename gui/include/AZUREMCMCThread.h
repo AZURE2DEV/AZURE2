@@ -12,61 +12,60 @@ class MCMCTab;
 
 // Simple worker class like AZUREMainThreadWorker
 class AZUREMCMCWorker : public QObject {
-    Q_OBJECT
+  Q_OBJECT
 
-public:
-    AZUREMCMCWorker(MCMCTab* mcmcTab, const Config& configure);
-    const Config& configure() const { return config_; }
-    void requestStop() { 
-        stopRequested_ = true; 
-        AZURECalcMCMC::RequestStop();
-    }
-    bool isStopRequested() const { return stopRequested_; }
+ public:
+  AZUREMCMCWorker(MCMCTab *mcmcTab, const Config &configure);
+  const Config &configure() const { return config_; }
+  void requestStop() {
+    stopRequested_ = true;
+    AZURECalcMCMC::RequestStop();
+  }
+  bool isStopRequested() const { return stopRequested_; }
 
-signals:
-    void done();
-    void logMessage(const QString& message);
-    void samplingError(const QString& errorMessage);
-    void samplingComplete(const std::vector<std::vector<double>>& samples);
-    void progressUpdated(int currentStep, int totalSteps, double logProbability, double logLikelihood, double logPrior);
-    void iterationUpdated(int currentStep, int totalSteps);
-    void resultsUpdated(int currentStep, int totalSteps, const std::vector<std::vector<double>>& samples);
+ signals:
+  void done();
+  void logMessage(const QString &message);
+  void samplingError(const QString &errorMessage);
+  void samplingComplete(const std::vector<std::vector<double>> &samples);
+  void progressUpdated(int currentStep, int totalSteps, double logProbability, double logLikelihood, double logPrior);
+  void iterationUpdated(int currentStep, int totalSteps);
+  void resultsUpdated(int currentStep, int totalSteps, const std::vector<std::vector<double>> &samples);
 
-public slots:
-    void run();
+ public slots:
+  void run();
 
-private:
-    
-    Config config_;
-    MCMCTab* mcmcTab_;
-    bool stopRequested_;
+ private:
+  Config config_;
+  MCMCTab *mcmcTab_;
+  bool stopRequested_;
 };
 
 // Simple thread class like AZUREMainThread
 class AZUREMCMCThread : public QThread {
-    Q_OBJECT
+  Q_OBJECT
 
-public:
-    AZUREMCMCThread(MCMCTab* mcmcTab, const Config& config, QObject* parent = nullptr);
-    
-    const Config& configure() const { return worker_.configure(); }
-    void stop();
-    AZUREMCMCWorker* getWorker() { return &worker_; }
+ public:
+  AZUREMCMCThread(MCMCTab *mcmcTab, const Config &config, QObject *parent = nullptr);
 
-signals:
-    void readyToRun();
+  const Config &configure() const { return worker_.configure(); }
+  void stop();
+  AZUREMCMCWorker *getWorker() { return &worker_; }
 
-public slots:
-    void stopMCMC();
+ signals:
+  void readyToRun();
 
-protected:
-    void run() override;
+ public slots:
+  void stopMCMC();
 
-private:
-    Config config_;
-    MCMCTab* mcmcTab_;
-    AZUREMCMCWorker worker_;
-    bool stopRequested_;
+ protected:
+  void run() override;
+
+ private:
+  Config config_;
+  MCMCTab *mcmcTab_;
+  AZUREMCMCWorker worker_;
+  bool stopRequested_;
 };
 
-#endif // AZUREMCMCTHREAD_H
+#endif  // AZUREMCMCTHREAD_H

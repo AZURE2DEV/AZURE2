@@ -18,7 +18,10 @@ struct ExforDataset {
   int npts;              // number of data points
   double enMin;          // minimum incident energy (eV)
   double enMax;          // maximum incident energy (eV)
-  ExforDataset() : npts(0), enMin(0.0), enMax(0.0) {}
+  ExforDataset() :
+    npts(0),
+    enMin(0.0),
+    enMax(0.0) {}
 };
 
 /**
@@ -28,11 +31,15 @@ struct ExforDataset {
  * cross section (barn for integrated, barn/sr for differential) and its error.
  */
 struct ExforPoint {
-  double energy;   // MeV, lab frame
-  double angle;    // degrees (0 for angle-integrated data)
-  double cross;    // barn (SIG) or barn/sr (DA)
-  double error;    // same units as cross (0 if not provided)
-  ExforPoint() : energy(0.0), angle(0.0), cross(0.0), error(0.0) {}
+  double energy;  // MeV, lab frame
+  double angle;   // degrees (0 for angle-integrated data)
+  double cross;   // barn (SIG) or barn/sr (DA)
+  double error;   // same units as cross (0 if not provided)
+  ExforPoint() :
+    energy(0.0),
+    angle(0.0),
+    cross(0.0),
+    error(0.0) {}
 };
 
 /**
@@ -48,15 +55,15 @@ class ExforData : public QObject {
   Q_OBJECT
 
  public:
-  explicit ExforData(QObject* parent = nullptr);
+  explicit ExforData(QObject *parent = nullptr);
 
   /// Search datasets matching target / reaction / quantity (EXFOR codes).
-  void searchDatasets(const QString& target, const QString& reaction,
-                       const QString& quantity);
+  void searchDatasets(const QString &target, const QString &reaction,
+                      const QString &quantity);
   /// Download (and parse) the data of a single dataset by its DatasetID.
   /// The entrance-channel charges and masses (projectile 1, target 2, in amu)
   /// are used to convert astrophysical S-factor data back to cross sections.
-  void downloadDataset(const QString& datasetId,
+  void downloadDataset(const QString &datasetId,
                        double z1 = 0.0, double z2 = 0.0,
                        double m1 = 0.0, double m2 = 0.0);
 
@@ -68,26 +75,28 @@ class ExforData : public QObject {
   bool isBusy() const { return pending_ != NoRequest; }
 
   /// Convert parsed points to AZURE2 data-file text (energy angle cross error).
-  static QString toAzureText(const QList<ExforPoint>& points);
+  static QString toAzureText(const QList<ExforPoint> &points);
 
  signals:
-  void searchFinished(const QList<ExforDataset>& datasets);
-  void downloadFinished(const QString& rawCsv,
-                        const QList<ExforPoint>& points, bool differential);
-  void errorOccurred(const QString& message);
+  void searchFinished(const QList<ExforDataset> &datasets);
+  void downloadFinished(const QString &rawCsv,
+                        const QList<ExforPoint> &points, bool differential);
+  void errorOccurred(const QString &message);
 
  private slots:
-  void handleReply(QNetworkReply* reply);
+  void handleReply(QNetworkReply *reply);
 
  private:
-  enum RequestType { NoRequest, SearchRequest, DownloadRequest };
+  enum RequestType { NoRequest,
+                     SearchRequest,
+                     DownloadRequest };
 
-  static bool parseSearch(const QByteArray& data, QList<ExforDataset>& out,
-                          QString& error);
-  bool parseCsv(const QString& csv, QList<ExforPoint>& out,
-                bool& differential, QString& error) const;
+  static bool parseSearch(const QByteArray &data, QList<ExforDataset> &out,
+                          QString &error);
+  bool parseCsv(const QString &csv, QList<ExforPoint> &out,
+                bool &differential, QString &error) const;
 
-  QNetworkAccessManager* manager_;
+  QNetworkAccessManager *manager_;
   RequestType pending_;
   QList<ExforDataset> datasets_;
   QList<ExforPoint> lastPoints_;

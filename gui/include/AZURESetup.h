@@ -33,21 +33,22 @@ QT_END_NAMESPACE
 
 class Directories {
  public:
- Directories() : outputDir(QString("")), checksDir(QString("")) {};
+  Directories() :
+    outputDir(QString("")),
+    checksDir(QString("")) {};
   QString outputDir;
   QString checksDir;
 };
 
 class AZURESetup : public QMainWindow {
-  
- Q_OBJECT
+  Q_OBJECT
 
  public:
   AZURESetup();
-  Config& GetConfig();
+  Config &GetConfig();
   void open(QString filename);
-  void saveProject() { save(); } // Public wrapper for MCMCTab to use
-  
+  void saveProject() { save(); }  // Public wrapper for MCMCTab to use
+
   // Convert RWA parameter to physical value using proper R-Matrix transformation
   /*! A Config whose configfile is a snapshot of the current GUI state.
 
@@ -59,24 +60,24 @@ class AZURESetup : public QMainWindow {
       the temporary file cannot be written, so conversion degrades rather than
       fails. */
   struct GuiStateSnapshot {
-    explicit GuiStateSnapshot(AZURESetup* setup);
-    QTemporaryFile file;   // removed when this goes out of scope
+    explicit GuiStateSnapshot(AZURESetup *setup);
+    QTemporaryFile file;  // removed when this goes out of scope
     Config config;
     bool ok;
   };
 
-  double ConvertRWAToPhysical(const QString& paramName, double rwaValue);
+  double ConvertRWAToPhysical(const QString &paramName, double rwaValue);
 
   // Batch convert multiple RWA parameters to physical values (much more efficient)
-  std::vector<double> BatchConvertRWAToPhysical(const QStringList& paramNames, const std::vector<double>& rwaValues);
+  std::vector<double> BatchConvertRWAToPhysical(const QStringList &paramNames, const std::vector<double> &rwaValues);
 
   // Batch convert RWA to physical using OLD compound structure (for loading old param files)
   // oldLevelChannelCounts maps energyIndex -> number of channels in that level from the old structure
   std::vector<double> BatchConvertRWAToPhysicalWithOldStructure(
-      const QStringList& paramNames, const std::vector<double>& rwaValues, const QMap<int, int>& oldLevelChannelCounts);
-  
+      const QStringList &paramNames, const std::vector<double> &rwaValues, const QMap<int, int> &oldLevelChannelCounts);
+
   // Getter for FittingTab (for MCMCTab access)
-  FittingTab* getFittingTab() const { return fittingTab; }
+  FittingTab *getFittingTab() const { return fittingTab; }
 
  public slots:
   void SaveAndRun();
@@ -93,9 +94,9 @@ class AZURESetup : public QMainWindow {
   void clearRecent();
   void save();
   void saveAs();
-  void matrixChanged(QAction* action);
+  void matrixChanged(QAction *action);
   void editChecks();
-  void editDirs(); 
+  void editDirs();
   void editOptions();
   void showAbout();
   void showTabInfo();
@@ -103,38 +104,38 @@ class AZURESetup : public QMainWindow {
 
  private:
   bool readFile(QString filename);
-  bool readConfig(QTextStream& inStream);
+  bool readConfig(QTextStream &inStream);
   bool writeFile(QString filename);
-  bool writeConfig(QTextStream& outStream, QString directory);
-  bool readLastRun(QTextStream& inStream);
-  bool writeLastRun(QTextStream& outStream);
+  bool writeConfig(QTextStream &outStream, QString directory);
+  bool readLastRun(QTextStream &inStream);
+  bool writeLastRun(QTextStream &outStream);
   void createActions();
   void createMenus();
   void updateRecent();
-  void updateNuclearPotentialTabVisibility(); // Show/hide Nuclear Potential tab based on config
+  void updateNuclearPotentialTabVisibility();  // Show/hide Nuclear Potential tab based on config
 
   Config config;
 
-  QAction* aboutAction;
-  QAction* resetAction;
-  QAction* quitAction;
-  QAction* openAction;
-  QAction* saveAction;
-  QAction* saveAsAction;
-  QAction* editChecksAction;
-  QAction* editDirsAction;
-  QAction* copyAction;
-  QAction* aMatrixAction;
-  QAction* rMatrixAction;
-  QAction* editOptionsAction;
-  QAction* recentSeparator;
-  QAction* clearRecentAction;
+  QAction *aboutAction;
+  QAction *resetAction;
+  QAction *quitAction;
+  QAction *openAction;
+  QAction *saveAction;
+  QAction *saveAsAction;
+  QAction *editChecksAction;
+  QAction *editDirsAction;
+  QAction *copyAction;
+  QAction *aMatrixAction;
+  QAction *rMatrixAction;
+  QAction *editOptionsAction;
+  QAction *recentSeparator;
+  QAction *clearRecentAction;
   enum { numRecent = 5 };
-  QAction* recentFileActions[numRecent];
-  QAction* showTabInfoAction; 
-  QAction* openAZURESiteAction;
+  QAction *recentFileActions[numRecent];
+  QAction *showTabInfoAction;
+  QAction *openAZURESiteAction;
 
-  QActionGroup* matrixActionGroup;
+  QActionGroup *matrixActionGroup;
 
   QMenu *fileMenu;
   QMenu *editMenu;
@@ -148,17 +149,17 @@ class AZURESetup : public QMainWindow {
   SegmentsTab *segmentsTab;
   TargetIntTab *targetIntTab;
   NuclearPotentialTab *nuclearPotentialTab;
-  int nuclearPotentialTabIndex; // Store tab index for show/hide
+  int nuclearPotentialTabIndex;  // Store tab index for show/hide
   FittingTab *fittingTab;
   RunTab *runTab;
   AZUREMainThread *azureMain;
 #ifdef USE_QWT
-  PlotTab* plotTab;
+  PlotTab *plotTab;
 #endif
 #ifdef USE_MCMC
-  MCMCTab* mcmcTab;
-  class AZUREMCMCThread* azureMCMC;
+  MCMCTab *mcmcTab;
+  class AZUREMCMCThread *azureMCMC;
 #endif
 };
 
-#endif 
+#endif

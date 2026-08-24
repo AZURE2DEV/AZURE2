@@ -3,7 +3,7 @@
 
 #include "Constants.h"
 
-///An AZURE internal reaction pathway.
+/// An AZURE internal reaction pathway.
 
 /*!
  * An MGroup in AZURE represents a given entrance and exit channel through a \f$ J^\pi \f$ group. These can be visualized
@@ -18,6 +18,7 @@ class MGroup {
   int GetJNum() const;
   double GetStatSpinFactor() const;
   void SetStatSpinFactor(double);
+
  private:
   int jnum_;
   int ch_;

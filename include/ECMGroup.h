@@ -3,11 +3,11 @@
 
 #include "Constants.h"
 
-///An AZURE external reaction pathway.
+/// An AZURE external reaction pathway.
 
 /*!
  * An external reaction pathways in AZURE is one of two types: a hard sphere pathway or a resonant pathway.
- * The hard sphere pathways refers to the portion of the initial incoming plus outgoing scattering 
+ * The hard sphere pathways refers to the portion of the initial incoming plus outgoing scattering
  * wavefunction that is hard-shpere scattered and captured directly to a final state.  The resonant pathways
  * refer to the portion of the outgoing scattering wavefunction that is scattered/transformed by the R-Matrix.
  * This type of pathway is linked to the internal resonant pathways, and can be thought of as first passing through
@@ -32,6 +32,7 @@ class ECMGroup {
   double GetJ() const;
   double GetStatSpinFactor() const;
   void SetStatSpinFactor(double);
+
  private:
   char radtype_;
   int mult_;

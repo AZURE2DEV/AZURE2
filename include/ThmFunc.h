@@ -1,7 +1,7 @@
 #ifndef THMFUNC_H
 #define THMFUNC_H
 
-///Trojan Horse Method (modified R-matrix) transfer form factor.
+/// Trojan Horse Method (modified R-matrix) transfer form factor.
 
 /*!
  * In the modified R-matrix formalism (Mukhamedzhanov et al.), the entrance
@@ -20,10 +20,10 @@
  * ``MRMModel._form_factor`` (see docs/THM_IMPLEMENTATION.md).
  */
 
-///Spherical Bessel function j_l(x) (thin wrapper for consistency/testing).
+/// Spherical Bessel function j_l(x) (thin wrapper for consistency/testing).
 double ThmSphericalBessel(int l, double x);
 
-///Half-off-shell momentum rho = sqrt(2 mu (E + B)) r / (hbar c) (dimensionless).
+/// Half-off-shell momentum rho = sqrt(2 mu (E + B)) r / (hbar c) (dimensionless).
 /*!
  * \param mu     entrance channel reduced mass in MeV/c^2 (PPair::GetRedMass()*uconv)
  * \param E      entrance channel c.m. energy (MeV)
@@ -32,7 +32,7 @@ double ThmSphericalBessel(int l, double x);
  */
 double ThmRho(double mu, double E, double B, double radius);
 
-///Boundary-independent pieces of M_l: jl = j_l(rho) and rhoDjl = rho dj_l/drho.
+/// Boundary-independent pieces of M_l: jl = j_l(rho) and rhoDjl = rho dj_l/drho.
 /*!
  * These depend only on the point energy, binding energy, reduced mass and
  * channel radius, so they can be cached per point.  The boundary-dependent
@@ -42,9 +42,9 @@ double ThmRho(double mu, double E, double B, double radius);
  * otherwise.  Parameters as in ThmRho, plus the orbital angular momentum l.
  */
 void ThmBesselParts(int l, double mu, double E, double B, double radius,
-                    double& jl, double& rhoDjl);
+                    double &jl, double &rhoDjl);
 
-///THM transfer form factor M_l(E).
+/// THM transfer form factor M_l(E).
 /*!
  * \param l      orbital angular momentum of the entrance channel
  * \param b      entrance channel boundary constant

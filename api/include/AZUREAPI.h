@@ -12,10 +12,10 @@ class CNuc;
 class EPoint;
 struct GradAccum;
 
-///A function class to perform the calculation of the chi-squared value
+/// A function class to perform the calculation of the chi-squared value
 
 /*!
- * The AZUREAPI function class calculates the cross section based on a 
+ * The AZUREAPI function class calculates the cross section based on a
  * parameter set for all available data, and returns a chi-squared value.
  * This function class is what Minuit calls repeatedly during the fitting
  * process to perform the minimization.
@@ -27,39 +27,40 @@ class AZUREAPI {
    * The AZUREAPI object is created with reference to an EData and CNuc object.
    *. The runtime configurations are also passed through a Config structure.
    */
-  AZUREAPI(Config& configure) : configure_(configure) { };
-  
+  AZUREAPI(Config &configure) :
+    configure_(configure) {};
+
   ~AZUREAPI() {
   };
 
-  bool Initialize( );
+  bool Initialize();
 
   // Update data objects, returns number of segments
-  int UpdateData( );
+  int UpdateData();
   // Update segments values
-  int UpdateSegments(vector_r& p);
+  int UpdateSegments(vector_r &p);
   // Update segments values for RWA
-  int UpdateSegmentsRWA(vector_r& p);
+  int UpdateSegmentsRWA(vector_r &p);
   // Update segments values for all RWA parameters
-  int UpdateSegmentsAllRWA(vector_r& p);
+  int UpdateSegmentsAllRWA(vector_r &p);
   // Calculate the external capture for data
-  bool CalculateExternalCapture( );
+  bool CalculateExternalCapture();
   // Reads the parameters values
-  bool UpdateParameters( );
+  bool UpdateParameters();
   // Reads the norms values
-  void UpdateNorms( );
+  void UpdateNorms();
   // Set AZURE2 to calculate data points
-  void SetData( );
+  void SetData();
   // Set AZURE2 to calculate extrapolations
-  void SetExtrap( );
+  void SetExtrap();
   // Set the channel radius of particle pair idx (1-based) to r fm and rebuild
   // the compound nucleus, data and parameters.  Returns false if the rebuild
   // failed, in which case the instance is no longer usable.
-  bool SetRadius( int idx, double r );
+  bool SetRadius(int idx, double r);
   // Get indeces of normalization parameters
-  vector_r GetNormalizationIndices( );
+  vector_r GetNormalizationIndices();
   // Get indeces of energy shift parameters
-  vector_r GetEnergyShiftIndices( );
+  vector_r GetEnergyShiftIndices();
   // Number of numeric fields packed per parameter by GetParameterInfo().
   // Keep this in sync with pyazr/parameters.py (Parameter._NFIELDS).
   static const int kParamInfoFields = 16;
@@ -91,7 +92,7 @@ class AZUREAPI {
    *                    transformations pass such widths through unconverted
    *                    (width params only, -1 otherwise)
    */
-  vector_r GetParameterInfo( ) const;
+  vector_r GetParameterInfo() const;
 
   // Number of numeric fields packed per particle pair by GetPairsInfo().
   // Keep this in sync with pyazr/parameters.py (Pair._NFIELDS).
@@ -124,80 +125,80 @@ class AZUREAPI {
    *   16 bindingE      Trojan Horse binding energy of the pair (MeV); 0 unless
    *                    the pair is used as a THM entrance channel
    */
-  vector_r GetPairsInfo( ) const;
-  
+  vector_r GetPairsInfo() const;
+
   /*!
    * Returns a reference to the Config structure.
    */
-  Config &configure() const {return configure_;};
+  Config &configure() const { return configure_; };
   /*!
    * Returns a pointer to the EData object.
    */
-  EData *data() const {return data_;};
+  EData *data() const { return data_; };
   /*!
    * Returns a pointer to the CNuc object.
    */
-  CNuc *compound() const {return compound_;};
+  CNuc *compound() const { return compound_; };
   /*!
    * Returns a pointer to the parameter values object.
    */
-  vector_r params_values() const {return values_;};
+  vector_r params_values() const { return values_; };
   /*!
    * Returns a pointer to the parameter values object for RWA.
    */
-  vector_r params_values_rwa() const {return values_rwa_;};
+  vector_r params_values_rwa() const { return values_rwa_; };
   /*!
    * Returns a pointer to the parameter names object.
    */
-  std::string params_names(int i) const {return names_[i];};
+  std::string params_names(int i) const { return names_[i]; };
   /*!
    * Returns a pointer to the parameter names object.
    */
-  vector_r params_all() const {return all_;};
+  vector_r params_all() const { return all_; };
   /*!
    * Returns a pointer to the parameter names object for RWA.
    */
-  vector_r params_all_rwa() const {return all_rwa_;};
+  vector_r params_all_rwa() const { return all_rwa_; };
   /*!
    * Returns a pointer to the fixed parameters object.
    */
-  std::vector<bool> params_fixed() const {return fixed_;};
+  std::vector<bool> params_fixed() const { return fixed_; };
   /*!
    * Returns a pointer to the calculated segments object.
    */
-  vector_r data_energies(int i) const {return dataEnergies_[i];};
+  vector_r data_energies(int i) const { return dataEnergies_[i]; };
   /*!
    * Returns a pointer to the calculated segments object.
    */
-  vector_r data_angles(int i) const {return dataAngles_[i];};
+  vector_r data_angles(int i) const { return dataAngles_[i]; };
   /*!
    * Returns a pointer to the calculated segments object.
    */
-  vector_r data_segments(int i) const {return dataSegments_[i];};
+  vector_r data_segments(int i) const { return dataSegments_[i]; };
   /*!
    * Returns a pointer to the calculated segments object.
    */
-  vector_r data_segments_errors(int i) const {return dataSegmentsErrors_[i];};
+  vector_r data_segments_errors(int i) const { return dataSegmentsErrors_[i]; };
   /*!
    * Returns a pointer to the calculated segments object.
    */
-  vector_r calculated_segments(int i) const {return calculatedSegments_[i];};
+  vector_r calculated_segments(int i) const { return calculatedSegments_[i]; };
   /*!
    * Returns a pointer to the calculated E1 segments object.
    */
-  vector_r calculated_segments_e1(int i) const {return calculatedSegmentsE1_[i];};
+  vector_r calculated_segments_e1(int i) const { return calculatedSegmentsE1_[i]; };
   /*!
    * Returns a pointer to the calculated E2 segments object.
    */
-  vector_r calculated_segments_e2(int i) const {return calculatedSegmentsE2_[i];};
+  vector_r calculated_segments_e2(int i) const { return calculatedSegmentsE2_[i]; };
   /*!
    * Returns a pointer to the calculated energies object.
    */
-  vector_r calculated_energies(int i) const {return calculatedEnergies_[i];};
+  vector_r calculated_energies(int i) const { return calculatedEnergies_[i]; };
   /*!
    * Returns a pointer to the calculated energies object.
    */
-  vector_r calculated_angles(int i) const {return calculatedAngles_[i];};
+  vector_r calculated_angles(int i) const { return calculatedAngles_[i]; };
 
   /*!
    * Legendre coefficients of the angular distribution for segment \p i, one
@@ -212,49 +213,49 @@ class AZUREAPI {
    * Only points belonging to an angular-distribution segment carry any; every
    * other point contributes a count of zero.
    */
-  vector_r calculated_angular_dists(int i) const {return calculatedAngularDists_[i];};
+  vector_r calculated_angular_dists(int i) const { return calculatedAngularDists_[i]; };
   /*!
    * Returns a pointer to the data excitation energies.
    */
-  vector_r data_excitation_energies(int i) const {return dataExcitationEnergies_[i];};
+  vector_r data_excitation_energies(int i) const { return dataExcitationEnergies_[i]; };
   /*!
    * Returns a pointer to the calculated excitation energies.
    */
-  vector_r calculated_excitation_energies(int i) const {return calculatedExcitationEnergies_[i];};
+  vector_r calculated_excitation_energies(int i) const { return calculatedExcitationEnergies_[i]; };
   /*!
    * Returns a pointer to the segments norms.
    */
-  vector_r norms( ) const {return norms_;};
+  vector_r norms() const { return norms_; };
   /*!
    * Returns a pointer to the segments norms errors.
    */
-  vector_r norms_errors( ) const {return normsErrors_;};
+  vector_r norms_errors() const { return normsErrors_; };
   /*!
    * Returns a pointer to the data sfactor conversion.
    */
-  vector_r data_conv( int i ) const {return dataConv_[i];};
+  vector_r data_conv(int i) const { return dataConv_[i]; };
   /*!
    * Returns a pointer to the calculated sfactor conversion.
    */
-  vector_r calculated_conv( int i ) const {return calculatedConv_[i];};
+  vector_r calculated_conv(int i) const { return calculatedConv_[i]; };
   /*!
    * Transform RWA parameters to physical values
    */
-  vector_r TransformRWAParameters(const vector_r& p) const;
+  vector_r TransformRWAParameters(const vector_r &p) const;
   /*!
    * Transform all RWA parameters to physical values
    */
-  vector_r TransformAllRWAParameters(const vector_r& p) const;
+  vector_r TransformAllRWAParameters(const vector_r &p) const;
 
   /*!
    * Calculate chi-squared from RWA parameters
    */
-  double CalculateChi2RWA(const vector_r& rwaParams) const;
-  
+  double CalculateChi2RWA(const vector_r &rwaParams) const;
+
   /*!
    * Calculate chi-squared from physical parameters
    */
-  double CalculateChi2Physical(const vector_r& physicalParams) const;
+  double CalculateChi2Physical(const vector_r &physicalParams) const;
 
   /*!
    * Value and analytic gradient of the (data) chi-squared with respect to the
@@ -265,7 +266,7 @@ class AZUREAPI {
    * finite-differenced.  (For a log-likelihood use lnL = -0.5*(chi2 + const),
    * grad lnL = -0.5*grad chi2.)
    */
-  vector_r CalculateChi2GradRWA(const vector_r& params) const;
+  vector_r CalculateChi2GradRWA(const vector_r &params) const;
 
   /*!
    * Standardized residuals r_i = (fit_i - data_i*n)/(cmErr_i*n) (so sum r_i^2 =
@@ -276,7 +277,7 @@ class AZUREAPI {
    * or [ -1 ] if a point is outside the supported analytic path.  Energy-shift
    * columns are left zero.
    */
-  vector_r CalculateResidualJacobianRWA(const vector_r& params) const;
+  vector_r CalculateResidualJacobianRWA(const vector_r &params) const;
 
   /*!
    * Per-point sensitivities d(model)/d(theta) of the calculated segments, for
@@ -298,7 +299,7 @@ class AZUREAPI {
    * costs about two forward evaluations regardless of the parameter count --
    * against the 2*nCols forward passes a finite-difference band would need.
    */
-  vector_r CalculateModelGradientsRWA(const vector_r& params) const;
+  vector_r CalculateModelGradientsRWA(const vector_r &params) const;
 
   /*!
    * Coulomb wave functions on a requested energy grid.
@@ -314,7 +315,7 @@ class AZUREAPI {
    * the run's own configuration -- so this is also how one sees what the hybrid
    * model does to the external region.
    */
-  vector_r GetCoulombFunctions(const vector_r& request) const;
+  vector_r GetCoulombFunctions(const vector_r &request) const;
 
   /*!
    * External-capture integrals on a requested energy grid.
@@ -331,18 +332,17 @@ class AZUREAPI {
    * are the most expensive thing in a capture calculation --- which is why they
    * are cached.  Exposing them makes both facts checkable from a script.
    */
-  vector_r GetECIntegrals(const vector_r& request) const;
+  vector_r GetECIntegrals(const vector_r &request) const;
 
   /*!
    * Coulomb-function cache counters, aggregated over threads.
    *
    * Response: [queries, hits, entries, keys, disabledKeys, threads].
    */
-  vector_r GetCacheStats( ) const;
+  vector_r GetCacheStats() const;
 
 
  private:
-
   /*!
    * Analytic reverse-mode gradient of the data chi-squared w.r.t. the energy and
    * reduced-width (gamma) parameters, accumulated into the energy/gamma entries
@@ -355,8 +355,8 @@ class AZUREAPI {
    * consistent with the gradient (same per-point residual). Left untouched when
    * the analytic path bails.
    */
-  bool Chi2GradEGammaNorm(const vector_r& fullParams, vector_r& gradFull,
-                          double& chi2Out) const;
+  bool Chi2GradEGammaNorm(const vector_r &fullParams, vector_r &gradFull,
+                          double &chi2Out) const;
 
   // Configuration
   Config &configure_;
@@ -384,7 +384,6 @@ class AZUREAPI {
   std::vector<vector_r> calculatedSegmentsE1_;
   std::vector<vector_r> calculatedSegmentsE2_;
   std::vector<vector_r> calculatedExcitationEnergies_;
-
 };
 
 #endif

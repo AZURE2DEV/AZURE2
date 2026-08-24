@@ -4,7 +4,7 @@
 #include "AZUREFBuffer.h"
 #include <vector>
 
-///A class to assist in writing AZURE output files
+/// A class to assist in writing AZURE output files
 
 /*!
  * The EData::WriteOutputFiles function simply loops over all ESegment and EPoint objects when
@@ -18,17 +18,18 @@ class AZUREOutput {
   AZUREOutput(std::string);
   ~AZUREOutput();
   bool IsExtrap() const;
-  std::filebuf *operator()(int entranceKey, int exitKey, bool isAngDist=false);
+  std::filebuf *operator()(int entranceKey, int exitKey, bool isAngDist = false);
   int NumAZUREFBuffers() const;
-  int IsAZUREFBuffer(int,int,bool);
+  int IsAZUREFBuffer(int, int, bool);
   std::string GetOutputDir() const;
-  void AddAZUREFBuffer(AZUREFBuffer*);
+  void AddAZUREFBuffer(AZUREFBuffer *);
   void SetExtrap();
   AZUREFBuffer *GetAZUREFBuffer(int);
+
  private:
   bool is_extrap_;
   std::string outputdir_;
-  std::vector<AZUREFBuffer*> azurefbuffers_;
+  std::vector<AZUREFBuffer *> azurefbuffers_;
 };
 
 #endif

@@ -15,11 +15,11 @@ class AddLevelDialog : public QDialog {
   Q_OBJECT
 
  public:
-  AddLevelDialog(QWidget *parent=0);
+  AddLevelDialog(QWidget *parent = 0);
   QLineEdit *jValueText;
   QComboBox *piValueCombo;
   QLineEdit *energyText;
- 
+
  private:
   QLabel *jValueLabel;
   QLabel *energyLabel;

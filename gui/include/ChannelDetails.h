@@ -26,6 +26,7 @@ class ChannelDetails : public QWidget {
   QRadioButton *rwaButton;
   QPushButton *wignerButton;
   QLineEdit *wignerLimitText;
+
  private:
   QLabel *normParam;
   QLabel *normUnits;

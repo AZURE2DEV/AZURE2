@@ -32,16 +32,16 @@ std::string JPi(double j, int parity);
 std::string Nuclide(int z, double mass);
 
 /*! Particle pair by 1-based pair number: "d+t".  Photon pairs give "gamma". */
-std::string Pair(CNuc* compound, int pairNum);
+std::string Pair(CNuc *compound, int pairNum);
 
 /*! e.g. "J^pi=3/2+, E=16.9285 MeV (J-group 1, level 1)". */
-std::string Level(JGroup* jgroup, ALevel* level, int jgroupIndex, int levelIndex);
+std::string Level(JGroup *jgroup, ALevel *level, int jgroupIndex, int levelIndex);
 
 /*! e.g. "channel 2: d+t, L=0, S=3/2", or "channel 5: E1 gamma to n+4He". */
-std::string Channel(CNuc* compound, JGroup* jgroup, int channelIndex);
+std::string Channel(CNuc *compound, JGroup *jgroup, int channelIndex);
 
 /*! Level and channel together, for a width. */
-std::string LevelAndChannel(CNuc* compound, JGroup* jgroup, ALevel* level,
+std::string LevelAndChannel(CNuc *compound, JGroup *jgroup, ALevel *level,
                             int jgroupIndex, int levelIndex, int channelIndex);
 
 /*!
@@ -52,13 +52,13 @@ std::string LevelAndChannel(CNuc* compound, JGroup* jgroup, ALevel* level,
  * Returns an empty string if the index is out of range, so callers can fall
  * back to the raw Minuit name.
  */
-std::string Parameter(CNuc* compound, EData* data, int minuitIndex);
+std::string Parameter(CNuc *compound, EData *data, int minuitIndex);
 
 /*!
  * Total number of parameters the walk covers; matches the size of the Minuit
  * parameter list built from the same compound nucleus and data.
  */
-int NumParameters(CNuc* compound, EData* data);
+int NumParameters(CNuc *compound, EData *data);
 
 }  // namespace AZURELabel
 

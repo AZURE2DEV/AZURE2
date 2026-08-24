@@ -21,7 +21,7 @@ class AddSegDataDialog : public QDialog {
   Q_OBJECT
 
  public:
-  AddSegDataDialog(QWidget *parent=0);
+  AddSegDataDialog(QWidget *parent = 0);
   QSpinBox *entrancePairIndexSpin;
   QSpinBox *exitPairIndexSpin;
   QLineEdit *lowEnergyText;
@@ -44,9 +44,9 @@ class AddSegDataDialog : public QDialog {
   QCheckBox *varyNormCheck;
   QLineEdit *phaseJValueText;
   QLineEdit *phaseLValueText;
-  QLabel* phaseLValueLabel;
-  QLabel* phaseJValueLabel;
-  QLabel* totalCaptureLabel;
+  QLabel *phaseLValueLabel;
+  QLabel *phaseJValueLabel;
+  QLabel *totalCaptureLabel;
   QLineEdit *energyShiftText;
   QLabel *energyShiftLabel;
   QLineEdit *energyShiftErrorText;
@@ -86,7 +86,7 @@ class AddSegDataDialog : public QDialog {
   void addComponent();
   void removeComponent();
   void uposChanged(int);
-  
+
  private:
   QPushButton *okButton;
   QPushButton *cancelButton;

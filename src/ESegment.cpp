@@ -14,68 +14,81 @@
  */
 
 ESegment::ESegment(SegLine segLine) {
-  entrancekey_=segLine.entranceKey();
-  exitkey_=segLine.exitKey();
-  min_e_=segLine.minE();
-  max_e_=segLine.maxE();
-  min_a_=segLine.minA(); 
-  max_a_=segLine.maxA();
-  e_step_=0.0;
-  a_step_=0.0;
-  segment_chi_squared_=0.0;
+  entrancekey_ = segLine.entranceKey();
+  exitkey_ = segLine.exitKey();
+  min_e_ = segLine.minE();
+  max_e_ = segLine.maxE();
+  min_a_ = segLine.minA();
+  max_a_ = segLine.maxA();
+  e_step_ = 0.0;
+  a_step_ = 0.0;
+  segment_chi_squared_ = 0.0;
   // A THM (modified R-matrix / half-off-shell) segment is flagged by an isDiff
   // offset of 10: THM is orthogonal to the underlying observable type, so
   // isDiff>=10 means "THM", and (isDiff-10) is the ordinary observable code
   // (0 angle-integrated, 1 differential, ...). See docs/THM_IMPLEMENTATION.md.
-  isTHM_ = (segLine.isDiff()>=10);
-  int diff = isTHM_ ? segLine.isDiff()-10 : segLine.isDiff();
+  isTHM_ = (segLine.isDiff() >= 10);
+  int diff = isTHM_ ? segLine.isDiff() - 10 : segLine.isDiff();
   // isDiff 7 is the vector analyzing power: differential in the centre-of-mass
   // frame, so it needs the same angular machinery as a differential cross
   // section even though the quantity itself is a dimensionless ratio. It is
   // tested against the offset-stripped code, so it composes with THM the way
   // every other observable does.
-  isAnalyzingPower_ = (diff==7);
-  if(diff==1 || diff==4 || diff==7) isdifferential_=true;
-  else isdifferential_=false;
-  if(diff==4 || diff==7) iscmdifferential_=true;
-  else iscmdifferential_=false;
-  if(diff==2) {
-    isphase_=true;
-    j_=segLine.phaseJ();
-    l_=segLine.phaseL();
+  isAnalyzingPower_ = (diff == 7);
+  if (diff == 1 || diff == 4 || diff == 7)
+    isdifferential_ = true;
+  else
+    isdifferential_ = false;
+  if (diff == 4 || diff == 7)
+    iscmdifferential_ = true;
+  else
+    iscmdifferential_ = false;
+  if (diff == 2) {
+    isphase_ = true;
+    j_ = segLine.phaseJ();
+    l_ = segLine.phaseL();
   } else {
-    isphase_=false;
-    j_=0.0;
-    l_=0;
+    isphase_ = false;
+    j_ = 0.0;
+    l_ = 0;
   }
-  isTotalCapture_ =  (diff==3) ? 1 : 0;
+  isTotalCapture_ = (diff == 3) ? 1 : 0;
   // isDiff 5/6 are angle-integrated capture segments compared only against the
   // E1 or E2 component of the cross section, respectively.
-  if(diff==5) crossSectionComponent_=1;
-  else if(diff==6) crossSectionComponent_=2;
-  else crossSectionComponent_=0;
-  isAngDist_=false;
-  maxAngDistOrder_=0;
-  datafile_=segLine.dataFile();
-  dataNorm_= dataNormNominal_ = segLine.dataNorm();
-  dataNormError_=segLine.dataNormError();
-  energyShift_=energyShiftNominal_=segLine.energyShift();
-  lastEnergyShift_=0.0;
-  energyShiftError_=segLine.energyShiftError();
-  if(segLine.varyEnergyShift()==1) varyEnergyShift_=true;
-  else varyEnergyShift_=false;
-  if(segLine.varyNorm()==1) varyNorm_=true;
-  else varyNorm_=false;
-  isAdvanced_=segLine.isAdvanced() == 1;
-  operationType_=segLine.operationType();
-  componentsList_=segLine.componentsList();
-  if(segLine.isUPOS()==1) isUPOS_=true;
-  else isUPOS_=false;
-  secondaryDecayL_=segLine.secondaryDecayL();
-  Ic_=segLine.Ic();
-  delta_=segLine.delta();
-  targetEffectNum_=0;
-  isTargetEffect_=false;
+  if (diff == 5)
+    crossSectionComponent_ = 1;
+  else if (diff == 6)
+    crossSectionComponent_ = 2;
+  else
+    crossSectionComponent_ = 0;
+  isAngDist_ = false;
+  maxAngDistOrder_ = 0;
+  datafile_ = segLine.dataFile();
+  dataNorm_ = dataNormNominal_ = segLine.dataNorm();
+  dataNormError_ = segLine.dataNormError();
+  energyShift_ = energyShiftNominal_ = segLine.energyShift();
+  lastEnergyShift_ = 0.0;
+  energyShiftError_ = segLine.energyShiftError();
+  if (segLine.varyEnergyShift() == 1)
+    varyEnergyShift_ = true;
+  else
+    varyEnergyShift_ = false;
+  if (segLine.varyNorm() == 1)
+    varyNorm_ = true;
+  else
+    varyNorm_ = false;
+  isAdvanced_ = segLine.isAdvanced() == 1;
+  operationType_ = segLine.operationType();
+  componentsList_ = segLine.componentsList();
+  if (segLine.isUPOS() == 1)
+    isUPOS_ = true;
+  else
+    isUPOS_ = false;
+  secondaryDecayL_ = segLine.secondaryDecayL();
+  Ic_ = segLine.Ic();
+  delta_ = segLine.delta();
+  targetEffectNum_ = 0;
+  isTargetEffect_ = false;
 
   // Initialize advanced segment composition
   segmentOperationType_ = SUM;  // Default to SUM operation
@@ -90,67 +103,71 @@ ESegment::ESegment(SegLine segLine) {
  */
 
 ESegment::ESegment(ExtrapLine extrapLine) {
-  entrancekey_=extrapLine.entranceKey();
-  exitkey_=extrapLine.exitKey();
-  min_e_=extrapLine.minE();
-  max_e_=extrapLine.maxE();
-  min_a_=extrapLine.minA();
-  max_a_=extrapLine.maxA();
-  e_step_=extrapLine.eStep();
-  a_step_=extrapLine.aStep();
-  segment_chi_squared_=0.0;
+  entrancekey_ = extrapLine.entranceKey();
+  exitkey_ = extrapLine.exitKey();
+  min_e_ = extrapLine.minE();
+  max_e_ = extrapLine.maxE();
+  min_a_ = extrapLine.minA();
+  max_a_ = extrapLine.maxA();
+  e_step_ = extrapLine.eStep();
+  a_step_ = extrapLine.aStep();
+  segment_chi_squared_ = 0.0;
   // THM (modified R-matrix) extrapolation segment: isDiff offset of 10 (see the
   // SegLine constructor above and docs/THM_IMPLEMENTATION.md).
-  isTHM_ = (extrapLine.isDiff()>=10);
-  int diff = isTHM_ ? extrapLine.isDiff()-10 : extrapLine.isDiff();
-  isAnalyzingPower_ = (diff==7);
-  if(diff==1 || diff==5 || diff==7) isdifferential_=true;
-  else isdifferential_=false;
-  if(diff==5 || diff==7) iscmdifferential_=true;
-  else iscmdifferential_=false;
-  if(diff==2) {
-    isphase_=true;
-    j_=extrapLine.phaseJ();
-    l_=extrapLine.phaseL();
+  isTHM_ = (extrapLine.isDiff() >= 10);
+  int diff = isTHM_ ? extrapLine.isDiff() - 10 : extrapLine.isDiff();
+  isAnalyzingPower_ = (diff == 7);
+  if (diff == 1 || diff == 5 || diff == 7)
+    isdifferential_ = true;
+  else
+    isdifferential_ = false;
+  if (diff == 5 || diff == 7)
+    iscmdifferential_ = true;
+  else
+    iscmdifferential_ = false;
+  if (diff == 2) {
+    isphase_ = true;
+    j_ = extrapLine.phaseJ();
+    l_ = extrapLine.phaseL();
   } else {
-    isphase_=false;
-    j_=0.0;
-    l_=0;
+    isphase_ = false;
+    j_ = 0.0;
+    l_ = 0;
   }
-  if(diff==3) {
-    isAngDist_=true;
-    maxAngDistOrder_=extrapLine.maxAngDistOrder();
+  if (diff == 3) {
+    isAngDist_ = true;
+    maxAngDistOrder_ = extrapLine.maxAngDistOrder();
   } else {
-    isAngDist_=false;
-    maxAngDistOrder_=0;
+    isAngDist_ = false;
+    maxAngDistOrder_ = 0;
   }
-  isTotalCapture_ =  (diff==4) ? 1 : 0;
-  crossSectionComponent_=0;
-  datafile_="";
-  dataNorm_= dataNormNominal_ = 1.;
-  dataNormError_=0.;
-  energyShift_=energyShiftNominal_=0.0;
-  energyShiftError_=0.0;
-  lastEnergyShift_=0.0;
-  varyEnergyShift_=false;
-  varyNorm_=false;
+  isTotalCapture_ = (diff == 4) ? 1 : 0;
+  crossSectionComponent_ = 0;
+  datafile_ = "";
+  dataNorm_ = dataNormNominal_ = 1.;
+  dataNormError_ = 0.;
+  energyShift_ = energyShiftNominal_ = 0.0;
+  energyShiftError_ = 0.0;
+  lastEnergyShift_ = 0.0;
+  varyEnergyShift_ = false;
+  varyNorm_ = false;
 
   // Read advanced segment data from ExtrapLine
-  isAdvanced_=(extrapLine.isAdvanced()==1);
-  operationType_=extrapLine.operationType();
-  componentsList_=extrapLine.componentsList();
+  isAdvanced_ = (extrapLine.isAdvanced() == 1);
+  operationType_ = extrapLine.operationType();
+  componentsList_ = extrapLine.componentsList();
 
-  isUPOS_=false;
-  secondaryDecayL_=0;
-  Ic_=0.0;
-  delta_=0.0;
-  targetEffectNum_=0;
-  isTargetEffect_=false;
+  isUPOS_ = false;
+  secondaryDecayL_ = 0;
+  Ic_ = 0.0;
+  delta_ = 0.0;
+  targetEffectNum_ = 0;
+  isTargetEffect_ = false;
 
   // Initialize advanced segment composition based on operation type
-  if(extrapLine.operationType() == 0) {
+  if (extrapLine.operationType() == 0) {
     segmentOperationType_ = SUM;
-  } else if(extrapLine.operationType() == 1) {
+  } else if (extrapLine.operationType() == 1) {
     segmentOperationType_ = RATIO;
   } else {
     segmentOperationType_ = SUM;  // Default to SUM operation
@@ -165,13 +182,14 @@ ESegment::ESegment(ExtrapLine extrapLine) {
  */
 
 bool ESegment::IsInSegment(EPoint point) {
-  bool b=false;
-  if(point.GetLabEnergy()>=this->GetMinEnergy()&&
-     point.GetLabEnergy()<=this->GetMaxEnergy()) {
-    if(this->IsDifferential()) {
-      if(point.GetLabAngle()>=this->GetMinAngle()&&
-	 point.GetLabAngle()<=this->GetMaxAngle()) b=true;
-    } else b=true;
+  bool b = false;
+  if (point.GetLabEnergy() >= this->GetMinEnergy() &&
+      point.GetLabEnergy() <= this->GetMaxEnergy()) {
+    if (this->IsDifferential()) {
+      if (point.GetLabAngle() >= this->GetMinAngle() &&
+          point.GetLabAngle() <= this->GetMaxAngle()) b = true;
+    } else
+      b = true;
   }
   return b;
 }
@@ -222,7 +240,7 @@ int ESegment::GetCrossSectionComponent() const {
 
 /*!
  * Returns the number of total capture segments to be summed.  Should be zero if the segment is
- * not total capture, otherwise the parameter should be the number of segments in the sum 
+ * not total capture, otherwise the parameter should be the number of segments in the sum
  * (inclusive of the current segment).
  */
 
@@ -314,54 +332,54 @@ int ESegment::GetExitKey() const {
 
 /*!
  * Fills the segment with points from the specified data file according to the
- * maximum and minimum energy and angle ranges.  If the data 
+ * maximum and minimum energy and angle ranges.  If the data
  * in the lab frame, conversions are performed to the center of mass frame.
  */
 
-int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config& configure) {
-  std::string infile=this->GetDataFile();
+int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
+  std::string infile = this->GetDataFile();
   std::ifstream in(infile.c_str());
-  if(!in) return -1;
-  while(!in.eof()) {
+  if (!in) return -1;
+  while (!in.eof()) {
     DataLine line(in);
-    if(!in.eof()) {
-      EPoint NewEPoint(line,this);
-      if(this->IsInSegment(NewEPoint)) {
-	this->AddPoint(NewEPoint);
-	PPair *entrancePair=theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
-	PPair *exitPair=theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
-	this->GetPoint(this->NumPoints())->SetParentData(theData);
-	if(entrancePair->GetPType()==20) {
-           this->GetPoint(this->NumPoints())->ConvertDecayEnergy(exitPair);
+    if (!in.eof()) {
+      EPoint NewEPoint(line, this);
+      if (this->IsInSegment(NewEPoint)) {
+        this->AddPoint(NewEPoint);
+        PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+        PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
+        this->GetPoint(this->NumPoints())->SetParentData(theData);
+        if (entrancePair->GetPType() == 20) {
+          this->GetPoint(this->NumPoints())->ConvertDecayEnergy(exitPair);
         } else if (this->IsCMDifferential()) {
-//          this->GetPoint(this->NumPoints())->ConvertExcitationEnergy(entrancePair);
-          this->GetPoint(this->NumPoints())->ConvertLabEnergy(entrancePair); 
-        } else if(!this->IsCMDifferential()){
+          //          this->GetPoint(this->NumPoints())->ConvertExcitationEnergy(entrancePair);
+          this->GetPoint(this->NumPoints())->ConvertLabEnergy(entrancePair);
+        } else if (!this->IsCMDifferential()) {
           this->GetPoint(this->NumPoints())->ConvertLabEnergy(entrancePair);
         }
-	if(exitPair->GetPType()==0&&this->IsDifferential()&&!this->IsPhase()&&!this->IsCMDifferential()) {
-	  if(this->GetEntranceKey()==this->GetExitKey()) {
-	    this->GetPoint(this->NumPoints())->ConvertLabAngle(entrancePair);
-	  } else {
-	    this->GetPoint(this->NumPoints())->ConvertLabAngle(entrancePair,exitPair,configure);
-	  }
-	  // Skip cross section conversion for ratio segments (ratios are dimensionless)
-	  // Use IsAdvanced() and GetLegacyOperationType() since components aren't added yet during Fill()
-	  if(!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
-	    this->GetPoint(this->NumPoints())->ConvertCrossSection(entrancePair,exitPair);
-	  }
-	}
-//        if(exitPair->GetPType()==0&&!this->IsDifferential()&&!this->IsPhase()&&this->IsCMDifferential()) {
-//          this->GetPoint(this->NumPoints())->ConvertCMAngle(entrancePair,exitPair,configure);
-//        }
-	if(exitPair->GetPType()==10&&this->IsDifferential()&&!this->IsPhase()&&!this->IsCMDifferential()) {
-	  this->GetPoint(this->NumPoints())->ConvertLabAngleGammas(entrancePair);
-	  // Skip cross section conversion for ratio segments (ratios are dimensionless)
-	  // Use IsAdvanced() and GetLegacyOperationType() since components aren't added yet during Fill()
-	  if(!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
-	    this->GetPoint(this->NumPoints())->ConvertCrossSectionGammas(entrancePair);
-	  }
-	}
+        if (exitPair->GetPType() == 0 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
+          if (this->GetEntranceKey() == this->GetExitKey()) {
+            this->GetPoint(this->NumPoints())->ConvertLabAngle(entrancePair);
+          } else {
+            this->GetPoint(this->NumPoints())->ConvertLabAngle(entrancePair, exitPair, configure);
+          }
+          // Skip cross section conversion for ratio segments (ratios are dimensionless)
+          // Use IsAdvanced() and GetLegacyOperationType() since components aren't added yet during Fill()
+          if (!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
+            this->GetPoint(this->NumPoints())->ConvertCrossSection(entrancePair, exitPair);
+          }
+        }
+        //        if(exitPair->GetPType()==0&&!this->IsDifferential()&&!this->IsPhase()&&this->IsCMDifferential()) {
+        //          this->GetPoint(this->NumPoints())->ConvertCMAngle(entrancePair,exitPair,configure);
+        //        }
+        if (exitPair->GetPType() == 10 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
+          this->GetPoint(this->NumPoints())->ConvertLabAngleGammas(entrancePair);
+          // Skip cross section conversion for ratio segments (ratios are dimensionless)
+          // Use IsAdvanced() and GetLegacyOperationType() since components aren't added yet during Fill()
+          if (!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
+            this->GetPoint(this->NumPoints())->ConvertCrossSectionGammas(entrancePair);
+          }
+        }
       }
     }
   }
@@ -386,8 +404,8 @@ int ESegment::GetTargetEffectNum() const {
   return targetEffectNum_;
 }
 
-/*! 
- * Returns the segment key for the current ESegment object.  The segment key is the order of 
+/*!
+ * Returns the segment key for the current ESegment object.  The segment key is the order of
  * the segment specified in the input file, INCLUDING non-active segments.
  */
 
@@ -447,9 +465,9 @@ double ESegment::GetSegmentChiSquared() const {
  * Returns the chi-squared value due to the normalization for each segment after the fitting process.
  */
 
-//double ESegment::GetNormChiSquared() const {
-//  return norm_chi_squared_;
-//}
+// double ESegment::GetNormChiSquared() const {
+//   return norm_chi_squared_;
+// }
 
 /*!
  * Returns the energy step to take when creating points in a segment.  Only applies for extrapolation segments.
@@ -575,14 +593,14 @@ std::string ESegment::GetComponentsList() const {
  */
 
 void ESegment::SetEnergyShift(double energyShift) {
-  energyShift_=energyShift;
+  energyShift_ = energyShift;
 }
 
 /*!
  * Sets the last applied energy shift value for the data segment.
  */
 void ESegment::SetLastEnergyShift(double lastEnergyShift) {
-  lastEnergyShift_=lastEnergyShift;
+  lastEnergyShift_ = lastEnergyShift;
 }
 
 namespace {
@@ -608,7 +626,7 @@ namespace {
 double ShiftedEnergy(double originalEnergy, double shift) {
   static const double kMinEnergyFraction = 1.e-6;
   double shifted = originalEnergy + shift;
-  double floorEnergy = originalEnergy*kMinEnergyFraction;
+  double floorEnergy = originalEnergy * kMinEnergyFraction;
   return (shifted < floorEnergy) ? floorEnergy : shifted;
 }
 
@@ -618,13 +636,13 @@ double ShiftedEnergy(double originalEnergy, double shift) {
  * Updates the energies of all points in this segment based on the current energy shift.
  */
 
-void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configure) {
+void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configure) {
   // No lock needed since each thread works on independent EData clones
   // after fixing EData::Clone to properly remap component segment pointers
 
-  for(int i = 0; i < NumPoints(); i++) {
-    EPoint* point = GetPoint(i+1);
-    if(point && point->GetOriginalEnergy() > 0) {
+  for (int i = 0; i < NumPoints(); i++) {
+    EPoint *point = GetPoint(i + 1);
+    if (point && point->GetOriginalEnergy() > 0) {
       double originalEnergy = point->GetOriginalEnergy();
       double shiftedEnergy = ShiftedEnergy(originalEnergy, energyShift_);
 
@@ -632,60 +650,60 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
       point->SetLabEnergy(shiftedEnergy);
 
       // Recalculate energy dependent values
-      if(theCNuc && configure) {
-        PPair* entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
-        PPair* exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
+      if (theCNuc && configure) {
+        PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+        PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
 
         // Apply the same conversion functions as in ESegment::Fill
-        if(entrancePair->GetPType()==20) {
+        if (entrancePair->GetPType() == 20) {
           point->ConvertDecayEnergy(exitPair);
         } else if (this->IsCMDifferential()) {
           point->ConvertLabEnergy(entrancePair);
-        } else if(!this->IsCMDifferential()){
+        } else if (!this->IsCMDifferential()) {
           point->ConvertLabEnergy(entrancePair);
         }
 
-        if(exitPair->GetPType()==0 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
-          if(this->GetEntranceKey()==this->GetExitKey()) {
+        if (exitPair->GetPType() == 0 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
+          if (this->GetEntranceKey() == this->GetExitKey()) {
             point->ConvertLabAngle(entrancePair);
           } else {
-            point->ConvertLabAngle(entrancePair,exitPair,*configure);
+            point->ConvertLabAngle(entrancePair, exitPair, *configure);
           }
           // Skip cross section conversion for ratio segments (ratios are dimensionless)
-          if(!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
-            point->ConvertCrossSection(entrancePair,exitPair);
+          if (!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
+            point->ConvertCrossSection(entrancePair, exitPair);
           }
         }
 
-        if(exitPair->GetPType()==10 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
+        if (exitPair->GetPType() == 10 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
           point->ConvertLabAngleGammas(entrancePair);
           // Skip cross section conversion for ratio segments (ratios are dimensionless)
-          if(!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
+          if (!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
             point->ConvertCrossSectionGammas(entrancePair);
           }
         }
 
-        if( this->IsDifferential() || this->IsCMDifferential()) {
+        if (this->IsDifferential() || this->IsCMDifferential()) {
           point->ClearLegendrePolynomials();
           // Get TargetEffect with Q-coefficients if applicable
-          TargetEffect* effect = NULL;
-          EData* parentData = point->GetParentData();
-          if(parentData && this->IsTargetEffect()) {
-            TargetEffect* te = parentData->GetTargetEffect(this->GetTargetEffectNum());
-            if(te && te->IsQCoefficients()) {
+          TargetEffect *effect = NULL;
+          EData *parentData = point->GetParentData();
+          if (parentData && this->IsTargetEffect()) {
+            TargetEffect *te = parentData->GetTargetEffect(this->GetTargetEffectNum());
+            if (te && te->IsQCoefficients()) {
               effect = te;
             }
           }
           point->CalcLegendreP(configure->maxLOrder, theCNuc, effect);
         }
-        point->RecalcEDependentValues(theCNuc,*configure);
+        point->RecalcEDependentValues(theCNuc, *configure);
 
         // IMPORTANT: Also apply energy shift to all subpoints (used in convolution/target integration)
-        for(int j = 1; j <= point->NumSubPoints(); j++) {
-          EPoint* subPoint = point->GetSubPoint(j);
-          if(subPoint && subPoint->GetOriginalEnergy() > 0) {
+        for (int j = 1; j <= point->NumSubPoints(); j++) {
+          EPoint *subPoint = point->GetSubPoint(j);
+          if (subPoint && subPoint->GetOriginalEnergy() > 0) {
             double subOriginalEnergy = subPoint->GetOriginalEnergy();
-            double energyShiftCM = (entrancePair->GetM(2))/(entrancePair->GetM(1)+entrancePair->GetM(2)) * energyShift_;
+            double energyShiftCM = (entrancePair->GetM(2)) / (entrancePair->GetM(1) + entrancePair->GetM(2)) * energyShift_;
             double subShiftedEnergy = ShiftedEnergy(subOriginalEnergy, energyShiftCM);
 
             // Set the shifted energy for subpoint
@@ -694,49 +712,49 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc* theCNuc, const Config* configu
             subPoint->SetLabEnergy(subShiftedEnergy);
 
             // Recalculate energy dependent values for subpoint
-            if(entrancePair->GetPType()==20) {
+            if (entrancePair->GetPType() == 20) {
               subPoint->ConvertDecayEnergy(exitPair);
             } else if (this->IsCMDifferential()) {
-              //subPoint->ConvertLabEnergy(entrancePair);
-            } else if(!this->IsCMDifferential()){
-              //subPoint->ConvertLabEnergy(entrancePair);
+              // subPoint->ConvertLabEnergy(entrancePair);
+            } else if (!this->IsCMDifferential()) {
+              // subPoint->ConvertLabEnergy(entrancePair);
             }
 
-            if(exitPair->GetPType()==0 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
-              if(this->GetEntranceKey()==this->GetExitKey()) {
+            if (exitPair->GetPType() == 0 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
+              if (this->GetEntranceKey() == this->GetExitKey()) {
                 subPoint->ConvertLabAngle(entrancePair);
               } else {
-                subPoint->ConvertLabAngle(entrancePair,exitPair,*configure);
+                subPoint->ConvertLabAngle(entrancePair, exitPair, *configure);
               }
               // Skip cross section conversion for ratio segments (ratios are dimensionless)
-              if(!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
-                subPoint->ConvertCrossSection(entrancePair,exitPair);
+              if (!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
+                subPoint->ConvertCrossSection(entrancePair, exitPair);
               }
             }
 
-            if(exitPair->GetPType()==10 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
+            if (exitPair->GetPType() == 10 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
               subPoint->ConvertLabAngleGammas(entrancePair);
               // Skip cross section conversion for ratio segments (ratios are dimensionless)
-              if(!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
+              if (!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
                 subPoint->ConvertCrossSectionGammas(entrancePair);
               }
             }
 
-            if( this->IsDifferential() || this->IsCMDifferential()) {
+            if (this->IsDifferential() || this->IsCMDifferential()) {
               subPoint->ClearLegendrePolynomials();
               // Get TargetEffect with Q-coefficients if applicable
               // Note: Use point->GetParentData() since subpoints don't have parentData_ set
-              TargetEffect* subEffect = NULL;
-              EData* parentData = point->GetParentData();
-              if(parentData && this->IsTargetEffect()) {
-                TargetEffect* te = parentData->GetTargetEffect(this->GetTargetEffectNum());
-                if(te && te->IsQCoefficients()) {
+              TargetEffect *subEffect = NULL;
+              EData *parentData = point->GetParentData();
+              if (parentData && this->IsTargetEffect()) {
+                TargetEffect *te = parentData->GetTargetEffect(this->GetTargetEffectNum());
+                if (te && te->IsQCoefficients()) {
                   subEffect = te;
                 }
               }
               subPoint->CalcLegendreP(configure->maxLOrder, theCNuc, subEffect);
             }
-            subPoint->RecalcEDependentValues(theCNuc,*configure);
+            subPoint->RecalcEDependentValues(theCNuc, *configure);
           }
         }
       }
@@ -756,20 +774,20 @@ void ESegment::AddPoint(EPoint point) {
 }
 
 /*!
- * Sets the chi squared value for the segment during the fitting process.  
+ * Sets the chi squared value for the segment during the fitting process.
  */
 
 void ESegment::SetSegmentChiSquared(double chiSquared) {
-  segment_chi_squared_=chiSquared;
+  segment_chi_squared_ = chiSquared;
 }
 
 /*!
- * Sets the chi squared value for the segment normalization during the fitting process.  
+ * Sets the chi squared value for the segment normalization during the fitting process.
  */
 
-//void ESegment::SetNormChiSquared(double chiSquared) {
-//  norm_chi_squared_=chiSquared;
-//}
+// void ESegment::SetNormChiSquared(double chiSquared) {
+//   norm_chi_squared_=chiSquared;
+// }
 
 /*!
  * Sets the position of the corresponding TargetEffect object in the vector
@@ -777,24 +795,24 @@ void ESegment::SetSegmentChiSquared(double chiSquared) {
  */
 
 void ESegment::SetTargetEffectNum(int targetEffectNum) {
-  targetEffectNum_=targetEffectNum;
-  isTargetEffect_=true;
+  targetEffectNum_ = targetEffectNum;
+  isTargetEffect_ = true;
 }
 
-/*! 
+/*!
  * Sets the segment key for the current ESegment object.
  */
 
-void ESegment::SetSegmentKey (int segmentKey) {
-  segmentKey_=segmentKey;
+void ESegment::SetSegmentKey(int segmentKey) {
+  segmentKey_ = segmentKey;
 }
 
-/*! 
+/*!
  * Sets the normalization parameter for the segment.
- */ 
+ */
 
 void ESegment::SetNorm(double norm) {
-  dataNorm_=norm;
+  dataNorm_ = norm;
 }
 
 /*!
@@ -802,8 +820,8 @@ void ESegment::SetNorm(double norm) {
  */
 
 void ESegment::SetExitKey(int key) {
-  exitkey_=key;
-  for(int i=1;i<=this->NumPoints();i++) 
+  exitkey_ = key;
+  for (int i = 1; i <= this->NumPoints(); i++)
     this->GetPoint(i)->SetExitKey(key);
 }
 
@@ -811,19 +829,19 @@ void ESegment::SetExitKey(int key) {
  * Sets the entrance key for the segment and all its points
  */
 void ESegment::SetEntranceKey(int key) {
-  entrancekey_=key;
-  for(int i=1;i<=this->NumPoints();i++) 
+  entrancekey_ = key;
+  for (int i = 1; i <= this->NumPoints(); i++)
     this->GetPoint(i)->SetEntranceKey(key);
 }
 
 /*!
  * Sets the number of total capture segments to be summed.  Should be zero if the segment is
- * not total capture, otherwise the parameter should be the number of segments in the sum 
+ * not total capture, otherwise the parameter should be the number of segments in the sum
  * (inclusive of the current segment).
  */
 
 void ESegment::SetIsTotalCapture(int num) {
-  isTotalCapture_=num;
+  isTotalCapture_ = num;
 }
 
 /*!
@@ -831,7 +849,7 @@ void ESegment::SetIsTotalCapture(int num) {
  */
 
 void ESegment::SetVaryNorm(bool varyNorm) {
-  varyNorm_=varyNorm;
+  varyNorm_ = varyNorm;
 }
 
 /*!
@@ -853,7 +871,7 @@ void ESegment::SetMaxAngle(double maxAngle) {
  */
 
 EPoint *ESegment::GetPoint(int pointNum) {
-  EPoint *b=&points_[pointNum-1];
+  EPoint *b = &points_[pointNum - 1];
   return b;
 }
 
@@ -861,7 +879,7 @@ EPoint *ESegment::GetPoint(int pointNum) {
  * Returns a reference to the vector of EPoint objects.
  */
 
-std::vector<EPoint>& ESegment::GetPoints() {
+std::vector<EPoint> &ESegment::GetPoints() {
   return points_;
 }
 
@@ -878,7 +896,7 @@ void ESegment::AddComponent(int entranceKey, int exitKey) {
 /*!
  * Adds a component segment (full ESegment copy)
  */
-void ESegment::AddComponentSegment(ESegment* componentSegment) {
+void ESegment::AddComponentSegment(ESegment *componentSegment) {
   if (componentSegment) {
     componentSegments_.push_back(componentSegment);
   }
@@ -908,7 +926,7 @@ bool ESegment::HasComponents() const {
 /*!
  * Returns a reference to the component segments vector
  */
-const std::vector<ESegment*>& ESegment::GetComponentSegments() const {
+const std::vector<ESegment *> &ESegment::GetComponentSegments() const {
   return componentSegments_;
 }
 
@@ -937,16 +955,16 @@ double ESegment::GetComponentScaling() const {
 }
 
 /*!
- * Calculates the theoretical cross section for this segment, including 
+ * Calculates the theoretical cross section for this segment, including
  * combination with any additional components according to the operation type
  */
-double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, const Config& configure, EData* edata) {
+double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, const Config &configure, EData *edata) {
   if (pointIndex < 0 || pointIndex >= NumPoints()) {
     return 0.0;
   }
 
   // Calculate the base segment's theoretical cross section
-  EPoint* basePoint = GetPoint(pointIndex + 1);
+  EPoint *basePoint = GetPoint(pointIndex + 1);
   if (!basePoint) {
     return 0.0;
   }
@@ -963,9 +981,12 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, co
   // For E1/E2-only segments compare against the corresponding component of the
   // (angle-integrated capture) cross section instead of the full cross section.
   double baseValue;
-  if (crossSectionComponent_ == 1) baseValue = basePoint->GetFitE1CrossSection();
-  else if (crossSectionComponent_ == 2) baseValue = basePoint->GetFitE2CrossSection();
-  else baseValue = basePoint->GetFitCrossSection();
+  if (crossSectionComponent_ == 1)
+    baseValue = basePoint->GetFitE1CrossSection();
+  else if (crossSectionComponent_ == 2)
+    baseValue = basePoint->GetFitE2CrossSection();
+  else
+    baseValue = basePoint->GetFitCrossSection();
 
   // If no components, return base value
   if (!HasComponents()) {
@@ -977,16 +998,16 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, co
   if (segmentOperationType_ == SUM) {
     double sum = baseValue;
     int compIdx = 0;
-    for (const auto& componentSegment : componentSegments_) {
+    for (const auto &componentSegment : componentSegments_) {
       if (componentSegment && pointIndex < componentSegment->NumPoints()) {
-        EPoint* componentPoint = componentSegment->GetPoint(pointIndex + 1);
+        EPoint *componentPoint = componentSegment->GetPoint(pointIndex + 1);
         if (componentPoint) {
           // No lock needed since each thread works on independent EData clones
           if (!componentPoint->IsMapped()) {
             try {
               componentPoint->Calculate(cnuc, configure);
             } catch (...) {
-              continue; // Skip this component if calculation fails
+              continue;  // Skip this component if calculation fails
             }
           }
           double compValue = componentPoint->GetFitCrossSection();
@@ -1005,11 +1026,10 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, co
     }
 
     // For ratio: base / first_component
-    ESegment* firstComponent = componentSegments_[0];
+    ESegment *firstComponent = componentSegments_[0];
     if (firstComponent && pointIndex < firstComponent->NumPoints()) {
-      EPoint* denominatorPoint = firstComponent->GetPoint(pointIndex + 1);
+      EPoint *denominatorPoint = firstComponent->GetPoint(pointIndex + 1);
       if (denominatorPoint) {
-
         // No lock needed since each thread works on independent EData clones
         if (!denominatorPoint->IsMapped()) {
           try {
@@ -1025,13 +1045,13 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc* cnuc, co
         }
 
         // Calculate the conversion factors for baseValue and denominatorValue
-        PPair* entrancePair = cnuc->GetPair(cnuc->GetPairNumFromKey(this->GetEntranceKey()));
-        PPair* exitPair = cnuc->GetPair(cnuc->GetPairNumFromKey(this->GetExitKey()));
+        PPair *entrancePair = cnuc->GetPair(cnuc->GetPairNumFromKey(this->GetEntranceKey()));
+        PPair *exitPair = cnuc->GetPair(cnuc->GetPairNumFromKey(this->GetExitKey()));
 
         // If not a gamma exit, calculate conversion factors
         double baseConversionFactor;
         double denominatorConversionFactor;
-        if(exitPair->GetPType() != 10) {
+        if (exitPair->GetPType() != 10) {
           baseConversionFactor = basePoint->CalculateCrossSectionConversionFactor(entrancePair, exitPair);
           denominatorConversionFactor = denominatorPoint->CalculateCrossSectionConversionFactor(entrancePair, exitPair);
         } else {

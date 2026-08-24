@@ -23,25 +23,25 @@ class QTextStream;
 class NuclearPotentialTab : public QWidget {
   Q_OBJECT
 
-public:
+ public:
   /*!
    * @brief Constructor
    */
-  NuclearPotentialTab(QWidget* parent = nullptr);
+  NuclearPotentialTab(QWidget *parent = nullptr);
 
   /*!
    * @brief Read nuclear potential settings from text stream
    * Used for loading configuration from file
    */
-  bool readPotentialSettings(QTextStream& inStream, Config& config);
+  bool readPotentialSettings(QTextStream &inStream, Config &config);
 
   /*!
    * @brief Write nuclear potential settings to text stream
    * Used for saving configuration to file
    */
-  bool writePotentialSettings(QTextStream& outStream);
+  bool writePotentialSettings(QTextStream &outStream);
 
-private slots:
+ private slots:
   /*!
    * @brief Handle potential type selection change
    */
@@ -62,7 +62,7 @@ private slots:
    */
   void onParameterChanged();
 
-private:
+ private:
   /*!
    * @brief Create UI components
    */
@@ -84,33 +84,33 @@ private:
   bool validateParameters();
 
   // Potential type selection
-  QLabel* potentialTypeLabel_;
-  QComboBox* potentialTypeCombo_;
+  QLabel *potentialTypeLabel_;
+  QComboBox *potentialTypeCombo_;
 
   // Woods-Saxon parameters
-  QGroupBox* woodsSaxonGroup_;
-  QLabel* v0Label_;
-  QLineEdit* v0Input_;
-  QLabel* rLabel_;
-  QLineEdit* rInput_;
-  QLabel* aLabel_;
-  QLineEdit* aInput_;
-  QLabel* v0UnitLabel_;
-  QLabel* rUnitLabel_;
-  QLabel* aUnitLabel_;
+  QGroupBox *woodsSaxonGroup_;
+  QLabel *v0Label_;
+  QLineEdit *v0Input_;
+  QLabel *rLabel_;
+  QLineEdit *rInput_;
+  QLabel *aLabel_;
+  QLineEdit *aInput_;
+  QLabel *v0UnitLabel_;
+  QLabel *rUnitLabel_;
+  QLabel *aUnitLabel_;
 
   // Gaussian parameters
-  QGroupBox* gaussianGroup_;
-  QLabel* gaussV0Label_;
-  QLineEdit* gaussV0Input_;
-  QLabel* gaussR0Label_;
-  QLineEdit* gaussR0Input_;
-  QLabel* gaussV0UnitLabel_;
-  QLabel* gaussR0UnitLabel_;
+  QGroupBox *gaussianGroup_;
+  QLabel *gaussV0Label_;
+  QLineEdit *gaussV0Input_;
+  QLabel *gaussR0Label_;
+  QLineEdit *gaussR0Input_;
+  QLabel *gaussV0UnitLabel_;
+  QLabel *gaussR0UnitLabel_;
 
   // Control buttons
-  QPushButton* applyButton_;
-  QPushButton* resetButton_;
+  QPushButton *applyButton_;
+  QPushButton *resetButton_;
 };
 
-#endif // NUCLEARPOTENTIALTAB_H
+#endif  // NUCLEARPOTENTIALTAB_H

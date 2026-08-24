@@ -7,22 +7,20 @@
 #include <QString>
 
 class ChooseFileButton : public QPushButton {
-
   Q_OBJECT;
 
  public:
-  ChooseFileButton(const QString& text, QWidget *parent = 0);
-  void setLineEdit(QLineEdit* lineEdit);
+  ChooseFileButton(const QString &text, QWidget *parent = 0);
+  void setLineEdit(QLineEdit *lineEdit);
 
  public slots:
   void click();
 
  signals:
-  void clicked(QLineEdit *lineEdit); 
+  void clicked(QLineEdit *lineEdit);
 
- private: 
+ private:
   QLineEdit *thisLineEdit;
-
 };
 
 #endif

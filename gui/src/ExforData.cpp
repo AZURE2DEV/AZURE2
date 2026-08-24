@@ -10,30 +10,33 @@
 #include <cmath>
 
 // Base URL of the IAEA EXFOR Web API (see https://nds.iaea.org/exfor/x4guide/API/)
-static const char* kExforBase = "https://nds.iaea.org/exfor";
+static const char *kExforBase = "https://nds.iaea.org/exfor";
 
 // Physical constants kept identical to AZURE2's include/Constants.h so the
 // astrophysical S-factor <-> cross-section conversion matches what AZURE2 does
 // internally (EPoint::CalcEDependentValues / AZUREPlot).
-static const double kPi     = 3.141592650;
-static const double kUconv  = 931.4940880;
+static const double kPi = 3.141592650;
+static const double kUconv = 931.4940880;
 static const double kFstruc = 1.00 / 137.0359996790;
 
-ExforData::ExforData(QObject* parent)
-    : QObject(parent),
-      manager_(new QNetworkAccessManager(this)),
-      pending_(NoRequest),
-      lastWasDifferential_(false),
-      cz1_(0.0), cz2_(0.0), cm1_(0.0), cm2_(0.0) {
+ExforData::ExforData(QObject *parent) :
+  QObject(parent),
+  manager_(new QNetworkAccessManager(this)),
+  pending_(NoRequest),
+  lastWasDifferential_(false),
+  cz1_(0.0),
+  cz2_(0.0),
+  cm1_(0.0),
+  cm2_(0.0) {
   connect(manager_, &QNetworkAccessManager::finished,
           this, &ExforData::handleReply);
 }
 
-void ExforData::searchDatasets(const QString& target, const QString& reaction,
-                               const QString& quantity) {
+void ExforData::searchDatasets(const QString &target, const QString &reaction,
+                               const QString &quantity) {
   QUrl url(QString("%1/x4list").arg(kExforBase));
   QUrlQuery query;
-  if (!target.isEmpty())   query.addQueryItem("Target", target);
+  if (!target.isEmpty()) query.addQueryItem("Target", target);
   if (!reaction.isEmpty()) query.addQueryItem("Reaction", reaction);
   if (!quantity.isEmpty()) query.addQueryItem("Quantity", quantity);
   query.addQueryItem("json", QString());
@@ -47,9 +50,12 @@ void ExforData::searchDatasets(const QString& target, const QString& reaction,
   manager_->get(request);
 }
 
-void ExforData::downloadDataset(const QString& datasetId,
+void ExforData::downloadDataset(const QString &datasetId,
                                 double z1, double z2, double m1, double m2) {
-  cz1_ = z1; cz2_ = z2; cm1_ = m1; cm2_ = m2;
+  cz1_ = z1;
+  cz2_ = z2;
+  cm1_ = m1;
+  cm2_ = m2;
   QUrl url(QString("%1/x4get").arg(kExforBase));
   QUrlQuery query;
   query.addQueryItem("DatasetID", datasetId);
@@ -68,7 +74,7 @@ void ExforData::downloadDataset(const QString& datasetId,
   manager_->get(request);
 }
 
-void ExforData::handleReply(QNetworkReply* reply) {
+void ExforData::handleReply(QNetworkReply *reply) {
   RequestType type = pending_;
   pending_ = NoRequest;
   reply->deleteLater();
@@ -103,8 +109,8 @@ void ExforData::handleReply(QNetworkReply* reply) {
   }
 }
 
-bool ExforData::parseSearch(const QByteArray& data, QList<ExforDataset>& out,
-                            QString& error) {
+bool ExforData::parseSearch(const QByteArray &data, QList<ExforDataset> &out,
+                            QString &error) {
   QJsonParseError jsonError;
   QJsonDocument doc = QJsonDocument::fromJson(data, &jsonError);
   if (doc.isNull() || !doc.isObject()) {
@@ -113,7 +119,7 @@ bool ExforData::parseSearch(const QByteArray& data, QList<ExforDataset>& out,
     return false;
   }
   QJsonArray arr = doc.object().value("x4Datasets").toArray();
-  for (const QJsonValue& v : arr) {
+  for (const QJsonValue &v : arr) {
     QJsonObject o = v.toObject();
     ExforDataset ds;
     ds.id = o.value("id").toString();
@@ -131,7 +137,7 @@ bool ExforData::parseSearch(const QByteArray& data, QList<ExforDataset>& out,
 
 // Split a CSV line honouring double-quoted fields (the trailing Reacode field
 // contains commas).
-static QStringList splitCsvLine(const QString& line) {
+static QStringList splitCsvLine(const QString &line) {
   QStringList fields;
   QString cur;
   bool inQuotes = false;
@@ -151,7 +157,7 @@ static QStringList splitCsvLine(const QString& line) {
 }
 
 // Extract the unit string enclosed in parentheses from a CSV header.
-static QString extractUnit(const QString& header) {
+static QString extractUnit(const QString &header) {
   int start = header.indexOf('(');
   int end = header.indexOf(')', start);
   if (start >= 0 && end > start) {
@@ -161,19 +167,19 @@ static QString extractUnit(const QString& header) {
 }
 
 // Multiplier to convert an energy column to MeV based on its unit token.
-static double energyToMeV(const QString& header) {
+static double energyToMeV(const QString &header) {
   QString unit = extractUnit(header);
   if (unit.isEmpty()) unit = header.toUpper();
   if (unit.contains("GEV")) return 1e3;
   if (unit.contains("MEV")) return 1.0;
   if (unit.contains("KEV")) return 1.0e-3;
   if (unit.contains("MILLI-EV") || unit.contains("MILLIEV")) return 1.0e-9;
-  if (unit.contains("EV"))  return 1.0e-6;
+  if (unit.contains("EV")) return 1.0e-6;
   return 1.0e-6;  // EXFOR computational default is eV
 }
 
 // Multiplier to convert a cross-section column to barn (or barn/sr).
-static double crossToBarn(const QString& header) {
+static double crossToBarn(const QString &header) {
   QString unit = extractUnit(header);
   if (unit.isEmpty()) unit = header.toUpper();
   if (unit.startsWith("MICRO-B") || unit.startsWith("MU-B") || unit.startsWith("MUB")) return 1.0e-6;
@@ -192,33 +198,42 @@ static double crossToBarn(const QString& header) {
 // energy-unit part (->MeV) is also returned separately: it is the unit at
 // which S(E) was tabulated and therefore the natural unit of the incident
 // energy axis as well (see parseCsv).
-static bool sFactorBarnMeV(const QString& header, double& factor,
-                           double& energyFactor) {
+static bool sFactorBarnMeV(const QString &header, double &factor,
+                           double &energyFactor) {
   QString unit = extractUnit(header);
   if (unit.isEmpty()) unit = header.toUpper();
   // Must look like cross-section * energy.
   if (!unit.contains("*") || !unit.contains("EV")) return false;
-  
+
   double barn = 1.0;
-  if (unit.startsWith("MICRO-B") || unit.startsWith("MU-B") || unit.startsWith("MUB")) barn = 1.0e-6;
-  else if (unit.startsWith("MB")) barn = 1.0e-3;
-  else if (unit.startsWith("NB")) barn = 1.0e-9;
-  else if (unit.startsWith("B"))  barn = 1.0;
-  
+  if (unit.startsWith("MICRO-B") || unit.startsWith("MU-B") || unit.startsWith("MUB"))
+    barn = 1.0e-6;
+  else if (unit.startsWith("MB"))
+    barn = 1.0e-3;
+  else if (unit.startsWith("NB"))
+    barn = 1.0e-9;
+  else if (unit.startsWith("B"))
+    barn = 1.0;
+
   double energy = 1.0e-6;  // EV -> MeV by default
-  if (unit.contains("GEV")) energy = 1e3;
-  else if (unit.contains("MEV")) energy = 1.0;
-  else if (unit.contains("KEV")) energy = 1.0e-3;
-  else if (unit.contains("MILLI-EV") || unit.contains("MILLIEV")) energy = 1.0e-9;
-  else if (unit.contains("EV")) energy = 1.0e-6;
-  
+  if (unit.contains("GEV"))
+    energy = 1e3;
+  else if (unit.contains("MEV"))
+    energy = 1.0;
+  else if (unit.contains("KEV"))
+    energy = 1.0e-3;
+  else if (unit.contains("MILLI-EV") || unit.contains("MILLIEV"))
+    energy = 1.0e-9;
+  else if (unit.contains("EV"))
+    energy = 1.0e-6;
+
   factor = barn * energy;  // -> barn*MeV
   energyFactor = energy;
   return true;
 }
 
-bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
-                         bool& differential, QString& error) const {
+bool ExforData::parseCsv(const QString &csv, QList<ExforPoint> &out,
+                         bool &differential, QString &error) const {
   QStringList lines = csv.split('\n', Qt::SkipEmptyParts);
   if (lines.isEmpty()) {
     error = "Empty dataset returned by EXFOR server.";
@@ -239,11 +254,11 @@ bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
   int errAbsCol = -1, errPctCol = -1;  // absolute (barn) and percent error cols
   bool angIsCosine = false;
   bool absIsTotal = false, pctIsTotal = false;
-  bool isSFactor = false;    // data column is an astrophysical S-factor
-  bool energyIsCM = false;   // energy column is centre-of-mass (EN-CM)
+  bool isSFactor = false;   // data column is an astrophysical S-factor
+  bool energyIsCM = false;  // energy column is centre-of-mass (EN-CM)
   double eFactor = 1.0e-6, eCmFactor = 1.0e-6;
   double crossFactor = 1.0, errAbsFactor = 1.0;
-  double sFactor = 1.0;      // S-factor value -> barn*MeV
+  double sFactor = 1.0;              // S-factor value -> barn*MeV
   double sFactorEnergyFactor = 0.0;  // S-factor's energy unit -> MeV
 
   for (int i = 0; i < headers.size(); ++i) {
@@ -288,8 +303,8 @@ bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
     if (up.startsWith("ERR")) {
       bool isTotal = up.startsWith("ERR-T");
       bool isPct = unit.contains("PER-CENT") || unit.contains("PERCENT") ||
-                   unit.contains("PER");
-      bool isAbs = !unit.isEmpty() && !isPct && unit.contains("B"); 
+          unit.contains("PER");
+      bool isAbs = !unit.isEmpty() && !isPct && unit.contains("B");
       if (isAbs && (errAbsCol < 0 || (isTotal && !absIsTotal))) {
         errAbsCol = i;
         errAbsFactor = crossToBarn(h);
@@ -320,7 +335,8 @@ bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
 
   if (eCol < 0 || dataCol < 0) {
     error = QString("Could not find energy/cross-section columns. "
-                    "Headers: %1").arg(headers.join(", "));
+                    "Headers: %1")
+                .arg(headers.join(", "));
     return false;
   }
   differential = (angCol >= 0);
@@ -366,7 +382,7 @@ bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
       // identical to AZURE2's S-factor conversion in
       // EPoint::CalcEDependentValues (mu in amu, E_cm in MeV).
       double twoPiEta = 2.0 * kPi * std::sqrt(kUconv / 2.0) * kFstruc *
-                        cz1_ * cz2_ * std::sqrt(mu / eCm);
+          cz1_ * cz2_ * std::sqrt(mu / eCm);
       double sigmaPerS = std::exp(-twoPiEta) / eCm;  // (barn*MeV) -> barn
       crossConv = sFactor * sigmaPerS;
       errConv = sFactor * sigmaPerS;  // abs error assumed in same S-factor units
@@ -379,7 +395,10 @@ bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
     if (errAbsCol >= 0) {
       bool ok = false;
       double er = f.at(errAbsCol).trimmed().toDouble(&ok);
-      if (ok && er != 0.0) { p.error = er * errConv; haveErr = true; }
+      if (ok && er != 0.0) {
+        p.error = er * errConv;
+        haveErr = true;
+      }
     }
     if (!haveErr && errPctCol >= 0) {
       bool ok = false;
@@ -409,9 +428,9 @@ bool ExforData::parseCsv(const QString& csv, QList<ExforPoint>& out,
   return true;
 }
 
-QString ExforData::toAzureText(const QList<ExforPoint>& points) {
+QString ExforData::toAzureText(const QList<ExforPoint> &points) {
   QString text;
-  for (const ExforPoint& p : points) {
+  for (const ExforPoint &p : points) {
     text += QString("%1\t%2\t%3\t%4\n")
                 .arg(p.energy, 0, 'g', 8)
                 .arg(p.angle, 0, 'g', 8)

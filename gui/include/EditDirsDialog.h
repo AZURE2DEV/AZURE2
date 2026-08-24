@@ -13,8 +13,7 @@ class QLineEdit;
 QT_END_NAMESPACE
 
 class EditDirsDialog : public QDialog {
-
-Q_OBJECT
+  Q_OBJECT
 
  public:
   EditDirsDialog(QWidget *parent = 0);
@@ -22,7 +21,7 @@ Q_OBJECT
   QLineEdit *checksDirectoryText;
 
  private slots:
-  void setChooseDirectory(QLineEdit*);
+  void setChooseDirectory(QLineEdit *);
 
  private:
   QPushButton *okButton;

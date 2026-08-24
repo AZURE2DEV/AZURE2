@@ -9,8 +9,8 @@
 /*!
  * \brief Constructor
  */
-AdaptiveIntegrationGrid::AdaptiveIntegrationGrid(const GridConfig& config)
-  : config_(config) {
+AdaptiveIntegrationGrid::AdaptiveIntegrationGrid(const GridConfig &config) :
+  config_(config) {
 }
 
 /*!
@@ -28,7 +28,7 @@ AdaptiveIntegrationGrid::AdaptiveIntegrationGrid(const GridConfig& config)
  *
  * Note: No overlap between fine and coarse grids - resonances get exclusive coverage.
  */
-std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, double endEnergy, CNuc* compound) {
+std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, double endEnergy, CNuc *compound) {
   std::vector<double> grid;
 
   // Ensure proper ordering (startEnergy > endEnergy for backward integration)
@@ -78,7 +78,7 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
   }
 
   // Also ensure resonance centers are included as grid points for accuracy
-  for (const ResonanceInfo& res : resonances) {
+  for (const ResonanceInfo &res : resonances) {
     if (res.energy >= endEnergy && res.energy <= startEnergy) {
       grid.push_back(res.energy);
     }
@@ -89,7 +89,7 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
 
   // Remove duplicates (keep points that are sufficiently different)
   std::vector<double> uniqueGrid;
-  double tolerance = 1.0e-8; // 0.01 eV tolerance
+  double tolerance = 1.0e-8;  // 0.01 eV tolerance
 
   if (!grid.empty()) {
     uniqueGrid.push_back(grid[0]);
@@ -107,7 +107,7 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
  * \brief Generate grid with detailed information about each point
  */
 std::vector<AdaptiveIntegrationGrid::GridPoint>
-AdaptiveIntegrationGrid::GenerateGridWithInfo(double startEnergy, double endEnergy, CNuc* compound) {
+AdaptiveIntegrationGrid::GenerateGridWithInfo(double startEnergy, double endEnergy, CNuc *compound) {
   // First generate the regular grid
   std::vector<double> energyGrid = GenerateGrid(startEnergy, endEnergy, compound);
 
@@ -128,7 +128,7 @@ AdaptiveIntegrationGrid::GenerateGridWithInfo(double startEnergy, double endEner
 /*!
  * \brief Get expected point count
  */
-int AdaptiveIntegrationGrid::GetExpectedPointCount(double startEnergy, double endEnergy, CNuc* compound) {
+int AdaptiveIntegrationGrid::GetExpectedPointCount(double startEnergy, double endEnergy, CNuc *compound) {
   std::vector<double> grid = GenerateGrid(startEnergy, endEnergy, compound);
   return grid.size();
 }
@@ -136,7 +136,7 @@ int AdaptiveIntegrationGrid::GetExpectedPointCount(double startEnergy, double en
 /*!
  * \brief Set grid configuration
  */
-void AdaptiveIntegrationGrid::SetConfig(const GridConfig& config) {
+void AdaptiveIntegrationGrid::SetConfig(const GridConfig &config) {
   config_ = config;
 }
 
@@ -157,13 +157,13 @@ AdaptiveIntegrationGrid::GridConfig AdaptiveIntegrationGrid::GetConfig() const {
  * the separation energy of the entrance channel.
  */
 std::vector<AdaptiveIntegrationGrid::ResonanceInfo>
-AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy, CNuc* compound) {
+AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy, CNuc *compound) {
   std::vector<ResonanceInfo> resonances;
 
   if (!compound) return resonances;
 
   // Get the entrance pair for separation energy conversion
-  PPair* entrancePair = nullptr;
+  PPair *entrancePair = nullptr;
   if (config_.entranceKey > 0 && compound->IsPairKey(config_.entranceKey)) {
     int pairNum = compound->GetPairNumFromKey(config_.entranceKey);
     entrancePair = compound->GetPair(pairNum);
@@ -179,14 +179,14 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
 
   // Loop through all J-groups
   for (int j = 1; j <= compound->NumJGroups(); j++) {
-    JGroup* jgroup = compound->GetJGroup(j);
+    JGroup *jgroup = compound->GetJGroup(j);
     if (!jgroup || !jgroup->IsInRMatrix()) continue;
 
     int numChannels = jgroup->NumChannels();
 
     // Loop through all levels in this J-group
     for (int l = 1; l <= jgroup->NumLevels(); l++) {
-      ALevel* level = jgroup->GetLevel(l);
+      ALevel *level = jgroup->GetLevel(l);
       if (!level || !level->IsInRMatrix()) continue;
 
       // Get level energy (in compound excitation energy)
@@ -200,7 +200,7 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
           break;
         }
       }
-      if (!hasWidth) continue; // skip levels with no widths
+      if (!hasWidth) continue;  // skip levels with no widths
 
       // Convert to CM energy: E_cm = E_excitation - S - E_ex
       double levelCMEnergy = levelExcitationEnergy - separationEnergy - excitationEnergy;
@@ -222,32 +222,31 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
       double totalWidth = 0.0;
       double normSum = 0.0;
       for (int ch = 1; ch <= numChannels; ch++) {
-        AChannel* channel = jgroup->GetChannel(ch);
-        if (channel->GetRadType() != 'P') continue;   // particle channels
-        PPair* chPair = compound->GetPair(channel->GetPairNum());
+        AChannel *channel = jgroup->GetChannel(ch);
+        if (channel->GetRadType() != 'P') continue;  // particle channels
+        PPair *chPair = compound->GetPair(channel->GetPairNum());
         double localEnergy = level->GetE() - chPair->GetExE() - chPair->GetSepE();
-        if (localEnergy <= 0.0) continue;             // sub-threshold channel
+        if (localEnergy <= 0.0) continue;  // sub-threshold channel
         double gamma = std::abs(level->GetGamma(ch));
         if (gamma <= 0.0) continue;
         double radius = chPair->GetChRad();
         CoulFunc coulFunc(chPair, false);
         double pene = coulFunc.Penetrability(channel->GetL(), radius, localEnergy);
         totalWidth += 2.0 * gamma * gamma * pene;
-        normSum += coulFunc.PEShift_dE(channel->GetL(), radius, localEnergy)
-                   * gamma * gamma;
+        normSum += coulFunc.PEShift_dE(channel->GetL(), radius, localEnergy) * gamma * gamma;
       }
       if (1.0 + normSum > 0.0) totalWidth /= (1.0 + normSum);
 
-      double particleWidth = totalWidth;   // before radiative channels
+      double particleWidth = totalWidth;  // before radiative channels
 
       // Radiative channels (M/E): Gamma = 2 gamma^2 P_rad, with the radiation
       // penetrability following CNuc::TransformOut (the same special cases for a
       // ground-state transition and the RMC formalism).
       for (int ch = 1; ch <= numChannels; ch++) {
-        AChannel* channel = jgroup->GetChannel(ch);
+        AChannel *channel = jgroup->GetChannel(ch);
         char radType = channel->GetRadType();
         if (radType != 'M' && radType != 'E') continue;
-        PPair* chPair = compound->GetPair(channel->GetPairNum());
+        PPair *chPair = compound->GetPair(channel->GetPairNum());
         double gamma = std::abs(level->GetGamma(ch));
         if (gamma <= 0.0) continue;
         double localEnergy = level->GetE() - chPair->GetExE() - chPair->GetSepE();
@@ -258,11 +257,11 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
           double jValue = jgroup->GetJ();
           pene = 1.0e-10;
           if (radType == 'M' && channel->GetL() == 1)
-            pene = 3.0*jValue/4.0/(jValue+1.)/nuclearMagneton/nuclearMagneton;
+            pene = 3.0 * jValue / 4.0 / (jValue + 1.) / nuclearMagneton / nuclearMagneton;
           else if (radType == 'E' && channel->GetL() == 2)
-            pene = 60.0*jValue*(2.*jValue-1.)/(jValue+1.)/(2.*jValue+3.);
+            pene = 60.0 * jValue * (2. * jValue - 1.) / (jValue + 1.) / (2. * jValue + 3.);
         } else {
-          pene = pow(std::abs(localEnergy)/hbarc, 2.0*channel->GetL()+1.0);
+          pene = pow(std::abs(localEnergy) / hbarc, 2.0 * channel->GetL() + 1.0);
         }
         totalWidth += 2.0 * gamma * gamma * std::abs(pene);
       }
@@ -282,7 +281,7 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
 
   // Sort resonances by energy in ascending order for efficient searching
   std::sort(resonances.begin(), resonances.end(),
-            [](const ResonanceInfo& a, const ResonanceInfo& b) {
+            [](const ResonanceInfo &a, const ResonanceInfo &b) {
               return a.energy < b.energy;
             });
 
@@ -292,8 +291,8 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
 /*!
  * \brief Check if an energy is within a resonant region
  */
-bool AdaptiveIntegrationGrid::IsInResonantRegion(double energy, const std::vector<ResonanceInfo>& resonances) const {
-  for (const ResonanceInfo& resonance : resonances) {
+bool AdaptiveIntegrationGrid::IsInResonantRegion(double energy, const std::vector<ResonanceInfo> &resonances) const {
+  for (const ResonanceInfo &resonance : resonances) {
     double resonantRegionWidth = resonance.particleWidth * config_.resonanceWidthMultiplier;
     if (std::abs(energy - resonance.energy) <= resonantRegionWidth) {
       return true;
@@ -305,19 +304,19 @@ bool AdaptiveIntegrationGrid::IsInResonantRegion(double energy, const std::vecto
 /*!
  * \brief Find the nearest resonance to a given energy
  */
-const AdaptiveIntegrationGrid::ResonanceInfo*
+const AdaptiveIntegrationGrid::ResonanceInfo *
 AdaptiveIntegrationGrid::FindNearestResonance(double energy,
-                                               const std::vector<ResonanceInfo>& resonances,
-                                               double& distance) const {
+                                              const std::vector<ResonanceInfo> &resonances,
+                                              double &distance) const {
   if (resonances.empty()) {
     distance = 1e10;
     return nullptr;
   }
 
-  const ResonanceInfo* nearest = nullptr;
+  const ResonanceInfo *nearest = nullptr;
   double minDistance = 1e10;
 
-  for (const ResonanceInfo& resonance : resonances) {
+  for (const ResonanceInfo &resonance : resonances) {
     double dist = std::abs(energy - resonance.energy);
     if (dist < minDistance) {
       minDistance = dist;
@@ -340,10 +339,10 @@ AdaptiveIntegrationGrid::FindNearestResonance(double energy,
  * This ensures that narrow resonances get fine grids and broad resonances
  * get appropriately coarser grids, all based on the actual physics.
  */
-double AdaptiveIntegrationGrid::CalculateAdaptiveStep(double energy, const std::vector<ResonanceInfo>& resonances) const {
+double AdaptiveIntegrationGrid::CalculateAdaptiveStep(double energy, const std::vector<ResonanceInfo> &resonances) const {
   // Find nearest resonance and distance to it
   double distance;
-  const ResonanceInfo* nearestRes = FindNearestResonance(energy, resonances, distance);
+  const ResonanceInfo *nearestRes = FindNearestResonance(energy, resonances, distance);
 
   if (!nearestRes) {
     // No resonances - use base step
@@ -368,7 +367,7 @@ double AdaptiveIntegrationGrid::CalculateAdaptiveStep(double energy, const std::
 
   // For very narrow resonances, ensure we don't go below a reasonable limit
   if (stepSize < 1.0e-5) {
-    stepSize = 1.0e-5; // 0.01 keV absolute minimum
+    stepSize = 1.0e-5;  // 0.01 keV absolute minimum
   }
 
   // Also cap at baseEnergyStep to avoid overly large steps

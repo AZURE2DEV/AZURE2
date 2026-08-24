@@ -21,7 +21,7 @@ class AddSegTestDialog : public QDialog {
   Q_OBJECT
 
  public:
-  AddSegTestDialog(QWidget *parent=0);
+  AddSegTestDialog(QWidget *parent = 0);
   QSpinBox *entrancePairIndexSpin;
   QSpinBox *exitPairIndexSpin;
   QLineEdit *lowEnergyText;
@@ -68,7 +68,7 @@ class AddSegTestDialog : public QDialog {
   void useFixedAngleChanged(int);
   void addComponent();
   void removeComponent();
- 
+
  private:
   QPushButton *okButton;
   QPushButton *cancelButton;

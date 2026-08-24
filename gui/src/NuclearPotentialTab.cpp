@@ -14,18 +14,18 @@
 #include <QDoubleValidator>
 #include <iostream>
 
-NuclearPotentialTab::NuclearPotentialTab(QWidget* parent)
-    : QWidget(parent) {
+NuclearPotentialTab::NuclearPotentialTab(QWidget *parent) :
+  QWidget(parent) {
   createUI();
   loadCurrentSettings();
   setWindowTitle(tr("Nuclear Potential"));
 }
 
 void NuclearPotentialTab::createUI() {
-  QVBoxLayout* mainLayout = new QVBoxLayout(this);
+  QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
   // Potential Type Section
-  QHBoxLayout* typeLayout = new QHBoxLayout;
+  QHBoxLayout *typeLayout = new QHBoxLayout;
   potentialTypeLabel_ = new QLabel(tr("Potential Type:"));
   potentialTypeCombo_ = new QComboBox;
   potentialTypeCombo_->addItem(tr("Woods-Saxon"));
@@ -42,7 +42,7 @@ void NuclearPotentialTab::createUI() {
 
   // Woods-Saxon Group
   woodsSaxonGroup_ = new QGroupBox(tr("Woods-Saxon Potential Parameters"));
-  QGridLayout* wsLayout = new QGridLayout(woodsSaxonGroup_);
+  QGridLayout *wsLayout = new QGridLayout(woodsSaxonGroup_);
 
   v0Label_ = new QLabel(tr("Depth (V₀):"));
   v0Input_ = new QLineEdit;
@@ -79,7 +79,7 @@ void NuclearPotentialTab::createUI() {
   // Gaussian Group
   gaussianGroup_ = new QGroupBox(tr("Gaussian Potential Parameters"));
   gaussianGroup_->setVisible(false);
-  QGridLayout* gaussLayout = new QGridLayout(gaussianGroup_);
+  QGridLayout *gaussLayout = new QGridLayout(gaussianGroup_);
 
   gaussV0Label_ = new QLabel(tr("Depth (V₀):"));
   gaussV0Input_ = new QLineEdit;
@@ -107,7 +107,7 @@ void NuclearPotentialTab::createUI() {
   mainLayout->addSpacing(15);
 
   // Control Buttons
-  QHBoxLayout* buttonLayout = new QHBoxLayout;
+  QHBoxLayout *buttonLayout = new QHBoxLayout;
   applyButton_ = new QPushButton(tr("Apply Settings"));
   resetButton_ = new QPushButton(tr("Reset to Default"));
 
@@ -123,10 +123,10 @@ void NuclearPotentialTab::createUI() {
 }
 
 void NuclearPotentialTab::onPotentialTypeChanged(int index) {
-  if(index == 0) { // Woods-Saxon
+  if (index == 0) {  // Woods-Saxon
     woodsSaxonGroup_->setVisible(true);
     gaussianGroup_->setVisible(false);
-  } else { // Gaussian
+  } else {  // Gaussian
     woodsSaxonGroup_->setVisible(false);
     gaussianGroup_->setVisible(true);
   }
@@ -137,21 +137,21 @@ void NuclearPotentialTab::updateParameterLabels() {
 }
 
 void NuclearPotentialTab::loadCurrentSettings() {
-  auto& manager = NuclearPotentialManager::instance();
+  auto &manager = NuclearPotentialManager::instance();
   std::string potentialType = manager.getCurrentPotentialType();
 
-  if(potentialType == "WoodsSaxon") {
+  if (potentialType == "WoodsSaxon") {
     potentialTypeCombo_->setCurrentIndex(0);
     double V0, R, a;
-    if(manager.getWoodsSaxonParameters(V0, R, a)) {
+    if (manager.getWoodsSaxonParameters(V0, R, a)) {
       v0Input_->setText(QString::number(V0, 'f', 3));
       rInput_->setText(QString::number(R, 'f', 3));
       aInput_->setText(QString::number(a, 'f', 3));
     }
-  } else if(potentialType == "Gaussian") {
+  } else if (potentialType == "Gaussian") {
     potentialTypeCombo_->setCurrentIndex(1);
     double V0, r0;
-    if(manager.getGaussianParameters(V0, r0)) {
+    if (manager.getGaussianParameters(V0, r0)) {
       gaussV0Input_->setText(QString::number(V0, 'f', 3));
       gaussR0Input_->setText(QString::number(r0, 'f', 3));
     }
@@ -159,37 +159,37 @@ void NuclearPotentialTab::loadCurrentSettings() {
 }
 
 bool NuclearPotentialTab::validateParameters() {
-  if(potentialTypeCombo_->currentIndex() == 0) { // Woods-Saxon
+  if (potentialTypeCombo_->currentIndex() == 0) {  // Woods-Saxon
     bool ok1, ok2, ok3;
     double v0 = v0Input_->text().toDouble(&ok1);
     double r = rInput_->text().toDouble(&ok2);
     double a = aInput_->text().toDouble(&ok3);
 
-    if(!ok1 || !ok2 || !ok3) {
+    if (!ok1 || !ok2 || !ok3) {
       QMessageBox::warning(this, tr("Invalid Input"),
-                          tr("Please enter valid numbers for all parameters."));
+                           tr("Please enter valid numbers for all parameters."));
       return false;
     }
 
-    if(v0 <= 0.0 || r <= 0.0 || a <= 0.0) {
+    if (v0 <= 0.0 || r <= 0.0 || a <= 0.0) {
       QMessageBox::warning(this, tr("Invalid Parameters"),
-                          tr("All parameters must be positive values."));
+                           tr("All parameters must be positive values."));
       return false;
     }
-  } else { // Gaussian
+  } else {  // Gaussian
     bool ok1, ok2;
     double v0 = gaussV0Input_->text().toDouble(&ok1);
     double r0 = gaussR0Input_->text().toDouble(&ok2);
 
-    if(!ok1 || !ok2) {
+    if (!ok1 || !ok2) {
       QMessageBox::warning(this, tr("Invalid Input"),
-                          tr("Please enter valid numbers for all parameters."));
+                           tr("Please enter valid numbers for all parameters."));
       return false;
     }
 
-    if(v0 <= 0.0 || r0 <= 0.0) {
+    if (v0 <= 0.0 || r0 <= 0.0) {
       QMessageBox::warning(this, tr("Invalid Parameters"),
-                          tr("All parameters must be positive values."));
+                           tr("All parameters must be positive values."));
       return false;
     }
   }
@@ -198,46 +198,46 @@ bool NuclearPotentialTab::validateParameters() {
 }
 
 void NuclearPotentialTab::onApplySettings() {
-  if(!validateParameters()) {
+  if (!validateParameters()) {
     return;
   }
 
   try {
-    auto& manager = NuclearPotentialManager::instance();
+    auto &manager = NuclearPotentialManager::instance();
 
-    if(potentialTypeCombo_->currentIndex() == 0) { // Woods-Saxon
+    if (potentialTypeCombo_->currentIndex() == 0) {  // Woods-Saxon
       double v0 = v0Input_->text().toDouble();
       double r = rInput_->text().toDouble();
       double a = aInput_->text().toDouble();
       manager.setWoodsSaxonPotential(v0, r, a);
-    } else { // Gaussian
+    } else {  // Gaussian
       double v0 = gaussV0Input_->text().toDouble();
       double r0 = gaussR0Input_->text().toDouble();
       manager.setGaussianPotential(v0, r0);
     }
 
     applyButton_->setEnabled(true);
-  } catch(const std::exception& e) {
+  } catch (const std::exception &e) {
     QMessageBox::critical(this, tr("Error"),
-                         tr("Failed to apply settings: %1").arg(e.what()));
+                          tr("Failed to apply settings: %1").arg(e.what()));
   }
 }
 
 void NuclearPotentialTab::onResetToDefault() {
   try {
-    auto& manager = NuclearPotentialManager::instance();
+    auto &manager = NuclearPotentialManager::instance();
     manager.resetToDefault();
     loadCurrentSettings();
-  } catch(const std::exception& e) {
+  } catch (const std::exception &e) {
     QMessageBox::critical(this, tr("Error"),
-                         tr("Failed to reset: %1").arg(e.what()));
+                          tr("Failed to reset: %1").arg(e.what()));
   }
 }
 
 void NuclearPotentialTab::onParameterChanged() {
 }
 
-bool NuclearPotentialTab::readPotentialSettings(QTextStream& inStream, Config& config) {
+bool NuclearPotentialTab::readPotentialSettings(QTextStream &inStream, Config &config) {
   // Read potential configuration from file
   // Format (inside <potential> section):
   // useHybridPotential=1
@@ -255,49 +255,49 @@ bool NuclearPotentialTab::readPotentialSettings(QTextStream& inStream, Config& c
   double v0 = 150.0, r = 3.6, a = 0.6, r0 = 5.0;
   bool hasType = false;
 
-  while(!inStream.atEnd()) {
+  while (!inStream.atEnd()) {
     QString line = inStream.readLine();
     QString trimmedLine = line.trimmed();
 
     // Stop at end of potential section
-    if(trimmedLine == "</potential>") {
+    if (trimmedLine == "</potential>") {
       break;
     }
 
-    if(trimmedLine.startsWith("useHybridPotential=")) {
+    if (trimmedLine.startsWith("useHybridPotential=")) {
       int value = trimmedLine.mid(19).trimmed().toInt();
       config.useHybridMethod = (value == 1);
-    } else if(trimmedLine.startsWith("useAdaptiveGrid=")) {
+    } else if (trimmedLine.startsWith("useAdaptiveGrid=")) {
       int value = trimmedLine.mid(16).trimmed().toInt();
       config.useAdaptiveGrid = (value == 1);
-    } else if(trimmedLine.startsWith("potentialType=")) {
+    } else if (trimmedLine.startsWith("potentialType=")) {
       typeCode = trimmedLine.mid(14).trimmed().toInt();
       hasType = true;
-    } else if(trimmedLine.startsWith("V0=")) {
+    } else if (trimmedLine.startsWith("V0=")) {
       v0 = trimmedLine.mid(3).trimmed().toDouble();
-    } else if(trimmedLine.startsWith("R=")) {
+    } else if (trimmedLine.startsWith("R=")) {
       r = trimmedLine.mid(2).trimmed().toDouble();
-    } else if(trimmedLine.startsWith("a=")) {
+    } else if (trimmedLine.startsWith("a=")) {
       a = trimmedLine.mid(2).trimmed().toDouble();
-    } else if(trimmedLine.startsWith("r0=")) {
+    } else if (trimmedLine.startsWith("r0=")) {
       r0 = trimmedLine.mid(3).trimmed().toDouble();
     }
   }
 
-  if(!hasType) {
+  if (!hasType) {
     return false;
   }
 
   try {
-    auto& manager = NuclearPotentialManager::instance();
+    auto &manager = NuclearPotentialManager::instance();
 
-    if(typeCode == 0) {  // WoodsSaxon
+    if (typeCode == 0) {  // WoodsSaxon
       manager.setWoodsSaxonPotential(v0, r, a);
       potentialTypeCombo_->setCurrentIndex(0);
       v0Input_->setText(QString::number(v0, 'f', 3));
       rInput_->setText(QString::number(r, 'f', 3));
       aInput_->setText(QString::number(a, 'f', 3));
-    } else if(typeCode == 1) {  // Gaussian
+    } else if (typeCode == 1) {  // Gaussian
       manager.setGaussianPotential(v0, r0);
       potentialTypeCombo_->setCurrentIndex(1);
       gaussV0Input_->setText(QString::number(v0, 'f', 3));
@@ -307,30 +307,30 @@ bool NuclearPotentialTab::readPotentialSettings(QTextStream& inStream, Config& c
     }
 
     return true;
-  } catch(...) {
+  } catch (...) {
     return false;
   }
 }
 
-bool NuclearPotentialTab::writePotentialSettings(QTextStream& outStream) {
-  auto& manager = NuclearPotentialManager::instance();
+bool NuclearPotentialTab::writePotentialSettings(QTextStream &outStream) {
+  auto &manager = NuclearPotentialManager::instance();
   std::string potentialType = manager.getCurrentPotentialType();
 
   // Write potential type as integer: 0=WoodsSaxon, 1=Gaussian
   int typeCode = 0;
-  if(potentialType == "Gaussian") typeCode = 1;
+  if (potentialType == "Gaussian") typeCode = 1;
   outStream << "potentialType=" << typeCode << "\n";
 
-  if(potentialType == "WoodsSaxon") {
+  if (potentialType == "WoodsSaxon") {
     double V0, R, a;
-    if(manager.getWoodsSaxonParameters(V0, R, a)) {
+    if (manager.getWoodsSaxonParameters(V0, R, a)) {
       outStream << "V0=" << V0 << "\n";
       outStream << "R=" << R << "\n";
       outStream << "a=" << a << "\n";
     }
-  } else if(potentialType == "Gaussian") {
+  } else if (potentialType == "Gaussian") {
     double V0, r0;
-    if(manager.getGaussianParameters(V0, r0)) {
+    if (manager.getGaussianParameters(V0, r0)) {
       outStream << "V0=" << V0 << "\n";
       outStream << "r0=" << r0 << "\n";
     }

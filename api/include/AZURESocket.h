@@ -43,47 +43,47 @@ using socket_t = int;
 const std::uint64_t MAX_FRAME_DOUBLES = 100000000ULL;
 
 class AZURESocket {
+ private:
+  int port_;
+  socket_t serverSocket_;
+  socket_t clientSocket_;
+  struct sockaddr_in serverAddress_;
+  struct sockaddr_in clientAddress_;
 
-private:
-    int port_;
-    socket_t serverSocket_;
-    socket_t clientSocket_;
-    struct sockaddr_in serverAddress_;
-    struct sockaddr_in clientAddress_;
+  AZUREAPI *api_;
 
-    AZUREAPI* api_;
+  // Low-level, loop-until-complete socket helpers.  recv/send may transfer
+  // fewer bytes than requested, so we must loop.  Return false on
+  // error/disconnect.
+  bool recvAll(void *buffer, size_t length);
+  bool sendAll(const void *buffer, size_t length);
 
-    // Low-level, loop-until-complete socket helpers.  recv/send may transfer
-    // fewer bytes than requested, so we must loop.  Return false on
-    // error/disconnect.
-    bool recvAll( void* buffer, size_t length );
-    bool sendAll( const void* buffer, size_t length );
+  // Length-prefixed framing: [uint64 count][count * double].
+  // readMessage returns false on a clean disconnect or fatal error.
+  bool readMessage(vector_r &out);
+  bool writeMessage(const double *values, std::uint64_t count);
 
-    // Length-prefixed framing: [uint64 count][count * double].
-    // readMessage returns false on a clean disconnect or fatal error.
-    bool readMessage( vector_r& out );
-    bool writeMessage( const double* values, std::uint64_t count );
+  // Dispatch a single decoded request frame.
+  void handle(const vector_r &request);
 
-    // Dispatch a single decoded request frame.
-    void handle( const vector_r& request );
+ public:
+  AZURESocket(int port, AZUREAPI *api) :
+    port_(port),
+    api_(api) {
+    serverSocket_ = -1;
+    clientSocket_ = -1;
+  };
 
-public:
-    AZURESocket(int port, AZUREAPI* api): port_(port), api_( api ) {
-      serverSocket_ = -1;
-      clientSocket_ = -1;
-    };
+  ~AZURESocket() {
+    if (clientSocket_ != -1) close(clientSocket_);
+    if (serverSocket_ != -1) close(serverSocket_);
+  };
 
-    ~AZURESocket(){
-      if( clientSocket_ != -1 ) close(clientSocket_);
-      if( serverSocket_ != -1 ) close(serverSocket_);
-    };
+  bool start();
 
-    bool start( );
-
-    bool sendPacket( const vector_r& response );
-    bool sendPacket( const std::string& response );
-    bool sendPacket( const std::vector<bool>& response );
-
+  bool sendPacket(const vector_r &response);
+  bool sendPacket(const std::string &response);
+  bool sendPacket(const std::vector<bool> &response);
 };
 
 

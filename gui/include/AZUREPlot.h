@@ -38,10 +38,11 @@ struct PlotPoint {
 
 class AZUREZoomer : public QwtPlotZoomer {
  public:
-  AZUREZoomer(QWidget *canvas) : QwtPlotZoomer(canvas) {};
- protected:
-  QwtText trackerTextF( const QPointF &pos ) const;
+  AZUREZoomer(QWidget *canvas) :
+    QwtPlotZoomer(canvas) {};
 
+ protected:
+  QwtText trackerTextF(const QPointF &pos) const;
 };
 
 class PlotEntry {
@@ -49,28 +50,28 @@ class PlotEntry {
   PlotEntry(int type, int entranceKey, int exitKey, int index, QString filename);
   ~PlotEntry();
 
-  int type() const {return type_;};
-  int entranceKey() const {return entranceKey_;};
-  int exitKey() const {return exitKey_;};
-  QString filename() const {return filename_;};
+  int type() const { return type_; };
+  int entranceKey() const { return entranceKey_; };
+  int exitKey() const { return exitKey_; };
+  QString filename() const { return filename_; };
 
-  QString label() const {return label_;};
-  void setLabel(const QString& label) {label_ = label;};
+  QString label() const { return label_; };
+  void setLabel(const QString &label) { label_ = label; };
 
-  QColor color() const {return color_;};
-  void setColor(const QColor& c) {color_ = c;};
+  QColor color() const { return color_; };
+  void setColor(const QColor &c) { color_ = c; };
 
-  QColor fitColor() const {return fitColor_;};
-  void setFitColor(const QColor& c) {fitColor_ = c;};
+  QColor fitColor() const { return fitColor_; };
+  void setFitColor(const QColor &c) { fitColor_ = c; };
 
-  QwtSymbol::Style symbolStyle() const {return symbolStyle_;};
-  void setSymbolStyle(QwtSymbol::Style s) {symbolStyle_ = s;};
+  QwtSymbol::Style symbolStyle() const { return symbolStyle_; };
+  void setSymbolStyle(QwtSymbol::Style s) { symbolStyle_ = s; };
 
-  int symbolSize() const {return symbolSize_;};
-  void setSymbolSize(int s) {symbolSize_ = s;};
+  int symbolSize() const { return symbolSize_; };
+  void setSymbolSize(int s) { symbolSize_ = s; };
 
-  int lineWidth() const {return lineWidth_;};
-  void setLineWidth(int w) {lineWidth_ = w;};
+  int lineWidth() const { return lineWidth_; };
+  void setLineWidth(int w) { lineWidth_ = w; };
 
   /*! Whether this entry may hold non-positive values.
 
@@ -78,24 +79,24 @@ class PlotEntry {
       guard for the logarithmic axis. An analyzing power is a ratio in [-1,1]
       and is negative over much of its range, so for it that guard silently
       deletes half the physics -- the data and the curve alike. */
-  bool allowNonPositive() const {return allowNonPositive_;};
-  void setAllowNonPositive(bool v) {allowNonPositive_ = v;};
+  bool allowNonPositive() const { return allowNonPositive_; };
+  void setAllowNonPositive(bool v) { allowNonPositive_ = v; };
 
   bool readData();
   //! Number of points kept by the last readData(). Diagnostic.
-  int numPoints() const {return points_.size();};
-  bool hasBand() const {return hasBand_;};
-  void attach(QwtPlot*, int xAxisType, int yAxisType, bool showBand=false);
+  int numPoints() const { return points_.size(); };
+  bool hasBand() const { return hasBand_; };
+  void attach(QwtPlot *, int xAxisType, int yAxisType, bool showBand = false);
   void detach();
 
-  static QString labelFromFilename(const QString& filename);
+  static QString labelFromFilename(const QString &filename);
 
  public:
   friend class AZUREPlot;
 
  private:
   void sortPointsByXAxis(int xAxisType);
-  bool readBandData(QVector<double>& xsErr, QVector<double>& sErr);
+  bool readBandData(QVector<double> &xsErr, QVector<double> &sErr);
   int type_;
   int entranceKey_;
   int exitKey_;
@@ -109,19 +110,18 @@ class PlotEntry {
   int lineWidth_;
   bool allowNonPositive_ = false;
   bool hasBand_;
-  QwtPlotCurve* dataCurve_;
-  QwtPlotIntervalCurve* dataErrorCurve_;
-  QwtPlotCurve* fitCurve_;
-  QwtPlotIntervalCurve* bandCurve_;
+  QwtPlotCurve *dataCurve_;
+  QwtPlotIntervalCurve *dataErrorCurve_;
+  QwtPlotCurve *fitCurve_;
+  QwtPlotIntervalCurve *bandCurve_;
   QVector<PlotPoint> points_;
 };
 
 class AZUREPlot : public QwtPlot {
-
   Q_OBJECT
 
  public:
-  AZUREPlot(PlotTab* plotTab, QWidget* parent = 0);
+  AZUREPlot(PlotTab *plotTab, QWidget *parent = 0);
   void setXAxisLog(bool set);
   void setYAxisLog(bool set);
   void setXAxisType(unsigned int type);
@@ -129,17 +129,17 @@ class AZUREPlot : public QwtPlot {
   void setGridVisible(bool visible);
   void setLegendVisible(bool visible);
   void setBandVisible(bool visible);
-  bool isBandVisible() const {return bandVisible;};
-  void setLevelsModel(LevelsModel* model);
+  bool isBandVisible() const { return bandVisible; };
+  void setLevelsModel(LevelsModel *model);
   void setLevelsVisible(bool visible);
   void refreshLevelMarkers();
 
-  const QList<PlotEntry*>& getEntries() const {return entries;};
+  const QList<PlotEntry *> &getEntries() const { return entries; };
   void redrawEntries();
 
  public slots:
   void clearEntries();
-  void draw(QList<PlotEntry*> newEntries);
+  void draw(QList<PlotEntry *> newEntries);
   void update();
   void exportPlot();
   void print();
@@ -149,15 +149,15 @@ class AZUREPlot : public QwtPlot {
 
   unsigned int xAxisType;
   unsigned int yAxisType;
-  QList<PlotEntry*> entries;
-  AZUREZoomer* zoomer;
-  PlotTab* containingTab;
-  QwtPlotGrid* grid;
-  QwtLegend* legend;
-  LevelsModel* levelsModel;
+  QList<PlotEntry *> entries;
+  AZUREZoomer *zoomer;
+  PlotTab *containingTab;
+  QwtPlotGrid *grid;
+  QwtLegend *legend;
+  LevelsModel *levelsModel;
   bool levelsVisible;
   bool bandVisible;
-  QList<QwtPlotMarker*> levelMarkers;
+  QList<QwtPlotMarker *> levelMarkers;
 };
 
 #endif

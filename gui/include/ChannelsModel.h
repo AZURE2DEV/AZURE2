@@ -28,17 +28,17 @@ class ChannelsModel : public QAbstractTableModel {
   int columnCount(const QModelIndex &parent) const;
   QVariant data(const QModelIndex &index, int role) const;
   QVariant headerData(int section, Qt::Orientation orientation, int role) const;
-  QList<ChannelsData> getChannels() const {return channelsList;};
-  bool setData(const QModelIndex &index, const QVariant &value, int role=Qt::EditRole);
-  bool insertRows(int position, int rows, const QModelIndex &index=QModelIndex());
-  bool removeRows(int position, int rows, const QModelIndex &index=QModelIndex());
+  QList<ChannelsData> getChannels() const { return channelsList; };
+  bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole);
+  bool insertRows(int position, int rows, const QModelIndex &index = QModelIndex());
+  bool removeRows(int position, int rows, const QModelIndex &index = QModelIndex());
   Qt::ItemFlags flags(const QModelIndex &index) const;
   bool isChannel(const ChannelsData &channel) const;
   QString getSpinLabel(const ChannelsData &channel) const;
   void setPairsModel(PairsModel *model);
 
  private:
-  QList<ChannelsData> channelsList;  
+  QList<ChannelsData> channelsList;
   PairsModel *pairsModel;
 };
 

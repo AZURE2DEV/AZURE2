@@ -25,15 +25,15 @@ class ExforDialog : public QDialog {
   Q_OBJECT
 
  public:
-  explicit ExforDialog(PairsModel* pairsModel, QWidget* parent = nullptr);
+  explicit ExforDialog(PairsModel *pairsModel, QWidget *parent = nullptr);
 
  private slots:
   void updateQueryFromPairs();
   void doSearch();
-  void onSearchFinished(const QList<ExforDataset>& datasets);
-  void onDownloadFinished(const QString& rawCsv,
-                          const QList<ExforPoint>& points, bool differential);
-  void onError(const QString& message);
+  void onSearchFinished(const QList<ExforDataset> &datasets);
+  void onDownloadFinished(const QString &rawCsv,
+                          const QList<ExforPoint> &points, bool differential);
+  void onError(const QString &message);
   void onDatasetSelectionChanged();
   void downloadSelected();
   void saveToDataFolder();
@@ -46,24 +46,24 @@ class ExforDialog : public QDialog {
   static QString nucleusCode(int z, double mass);
   static QString lightParticleCode(int z, double mass, int pairType);
 
-  PairsModel* pairsModel_;
-  ExforData* exfor_;
+  PairsModel *pairsModel_;
+  ExforData *exfor_;
 
-  QComboBox* entranceCombo_;
-  QComboBox* exitCombo_;
-  QLineEdit* targetEdit_;
-  QLineEdit* reactionEdit_;
-  QComboBox* quantityCombo_;
-  QPushButton* searchButton_;
-  QLabel* statusLabel_;
+  QComboBox *entranceCombo_;
+  QComboBox *exitCombo_;
+  QLineEdit *targetEdit_;
+  QLineEdit *reactionEdit_;
+  QComboBox *quantityCombo_;
+  QPushButton *searchButton_;
+  QLabel *statusLabel_;
 
-  QTableWidget* resultsTable_;
-  QLabel* datasetInfoLabel_;
-  QPushButton* downloadButton_;
+  QTableWidget *resultsTable_;
+  QLabel *datasetInfoLabel_;
+  QPushButton *downloadButton_;
 
-  QPlainTextEdit* rawView_;
-  QPlainTextEdit* azureView_;
-  QPushButton* saveButton_;
+  QPlainTextEdit *rawView_;
+  QPlainTextEdit *azureView_;
+  QPushButton *saveButton_;
 
   QString currentDatasetId_;
   bool haveData_;

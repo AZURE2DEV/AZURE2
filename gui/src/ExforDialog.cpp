@@ -24,18 +24,18 @@
 #include <QTextDocument>
 #include <cmath>
 
-ExforDialog::ExforDialog(PairsModel* pairsModel, QWidget* parent)
-    : QDialog(parent),
-      pairsModel_(pairsModel),
-      exfor_(new ExforData(this)),
-      currentDatasetId_(),
-      haveData_(false) {
+ExforDialog::ExforDialog(PairsModel *pairsModel, QWidget *parent) :
+  QDialog(parent),
+  pairsModel_(pairsModel),
+  exfor_(new ExforData(this)),
+  currentDatasetId_(),
+  haveData_(false) {
   setWindowTitle(tr("Retrieve Experimental Data from EXFOR"));
   resize(820, 640);
 
   // ---- Query group ---------------------------------------------------------
-  QGroupBox* queryBox = new QGroupBox(tr("Reaction"));
-  QGridLayout* q = new QGridLayout(queryBox);
+  QGroupBox *queryBox = new QGroupBox(tr("Reaction"));
+  QGridLayout *q = new QGridLayout(queryBox);
 
   entranceCombo_ = new QComboBox;
   exitCombo_ = new QComboBox;
@@ -90,29 +90,29 @@ ExforDialog::ExforDialog(PairsModel* pairsModel, QWidget* parent)
   azureView_->setReadOnly(true);
   azureView_->setLineWrapMode(QPlainTextEdit::NoWrap);
 
-  QGroupBox* rawBox = new QGroupBox(tr("Full dataset (EXFOR computational CSV)"));
-  QVBoxLayout* rawLay = new QVBoxLayout(rawBox);
+  QGroupBox *rawBox = new QGroupBox(tr("Full dataset (EXFOR computational CSV)"));
+  QVBoxLayout *rawLay = new QVBoxLayout(rawBox);
   rawLay->addWidget(rawView_);
-  QGroupBox* azBox = new QGroupBox(
+  QGroupBox *azBox = new QGroupBox(
       tr("AZURE2 format  (E[MeV,lab]  angle[deg]  cross[b or b/sr]  error)"));
-  QVBoxLayout* azLay = new QVBoxLayout(azBox);
+  QVBoxLayout *azLay = new QVBoxLayout(azBox);
   azLay->addWidget(azureView_);
 
-  QSplitter* previewSplit = new QSplitter(Qt::Horizontal);
+  QSplitter *previewSplit = new QSplitter(Qt::Horizontal);
   previewSplit->addWidget(rawBox);
   previewSplit->addWidget(azBox);
 
   saveButton_ = new QPushButton(tr("Save to data folder..."));
   saveButton_->setEnabled(false);
-  QPushButton* closeButton = new QPushButton(tr("Close"));
+  QPushButton *closeButton = new QPushButton(tr("Close"));
 
-  QHBoxLayout* bottom = new QHBoxLayout;
+  QHBoxLayout *bottom = new QHBoxLayout;
   bottom->addWidget(saveButton_);
   bottom->addStretch();
   bottom->addWidget(closeButton);
 
   // ---- Assemble ------------------------------------------------------------
-  QVBoxLayout* main = new QVBoxLayout(this);
+  QVBoxLayout *main = new QVBoxLayout(this);
   main->addWidget(queryBox);
   main->addWidget(resultsTable_, 1);
   main->addWidget(datasetInfoLabel_);
@@ -134,14 +134,14 @@ ExforDialog::ExforDialog(PairsModel* pairsModel, QWidget* parent)
   connect(saveButton_, SIGNAL(clicked()), this, SLOT(saveToDataFolder()));
   connect(closeButton, SIGNAL(clicked()), this, SLOT(reject()));
 
-  connect(exfor_, SIGNAL(searchFinished(const QList<ExforDataset>&)),
-          this, SLOT(onSearchFinished(const QList<ExforDataset>&)));
+  connect(exfor_, SIGNAL(searchFinished(const QList<ExforDataset> &)),
+          this, SLOT(onSearchFinished(const QList<ExforDataset> &)));
   connect(exfor_,
-          SIGNAL(downloadFinished(const QString&, const QList<ExforPoint>&, bool)),
+          SIGNAL(downloadFinished(const QString &, const QList<ExforPoint> &, bool)),
           this,
-          SLOT(onDownloadFinished(const QString&, const QList<ExforPoint>&, bool)));
-  connect(exfor_, SIGNAL(errorOccurred(const QString&)),
-          this, SLOT(onError(const QString&)));
+          SLOT(onDownloadFinished(const QString &, const QList<ExforPoint> &, bool)));
+  connect(exfor_, SIGNAL(errorOccurred(const QString &)),
+          this, SLOT(onError(const QString &)));
 }
 
 void ExforDialog::populatePairCombos() {
@@ -169,15 +169,15 @@ QString ExforDialog::nucleusCode(int z, double mass) {
 }
 
 QString ExforDialog::lightParticleCode(int z, double mass, int pairType) {
-  if (pairType == 10) return "G";          // photon
+  if (pairType == 10) return "G";  // photon
   int a = qRound(mass);
-  if (z == 0) return "N";                  // neutron
+  if (z == 0) return "N";  // neutron
   if (z == 1 && a == 1) return "P";
   if (z == 1 && a == 2) return "D";
   if (z == 1 && a == 3) return "T";
   if (z == 2 && a == 3) return "HE3";
   if (z == 2 && a == 4) return "A";
-  return nucleusCode(z, mass);             // heavy ion
+  return nucleusCode(z, mass);  // heavy ion
 }
 
 void ExforDialog::updateQueryFromPairs() {
@@ -187,8 +187,8 @@ void ExforDialog::updateQueryFromPairs() {
   int xi = exitCombo_->currentIndex();
   if (ei < 0 || ei >= pairs.size() || xi < 0 || xi >= pairs.size()) return;
 
-  const PairsData& en = pairs[ei];
-  const PairsData& ex = pairs[xi];
+  const PairsData &en = pairs[ei];
+  const PairsData &ex = pairs[xi];
 
   targetEdit_->setText(nucleusCode(en.heavyZ, en.heavyM));
 
@@ -222,11 +222,11 @@ void ExforDialog::doSearch() {
                          quantityCombo_->currentText().trimmed());
 }
 
-void ExforDialog::onSearchFinished(const QList<ExforDataset>& datasets) {
+void ExforDialog::onSearchFinished(const QList<ExforDataset> &datasets) {
   searchButton_->setEnabled(true);
   resultsTable_->setRowCount(datasets.size());
   for (int i = 0; i < datasets.size(); ++i) {
-    const ExforDataset& d = datasets[i];
+    const ExforDataset &d = datasets[i];
     QString erange = QString("%1 - %2")
                          .arg(d.enMin / 1.0e6, 0, 'g', 4)
                          .arg(d.enMax / 1.0e6, 0, 'g', 4);
@@ -242,12 +242,12 @@ void ExforDialog::onSearchFinished(const QList<ExforDataset>& datasets) {
 }
 
 void ExforDialog::onDatasetSelectionChanged() {
-  QList<QTableWidgetItem*> selected = resultsTable_->selectedItems();
+  QList<QTableWidgetItem *> selected = resultsTable_->selectedItems();
   downloadButton_->setEnabled(!selected.isEmpty());
   if (!selected.isEmpty()) {
     int row = selected.first()->row();
     if (row >= 0 && row < exfor_->datasets().size()) {
-      const ExforDataset& d = exfor_->datasets().at(row);
+      const ExforDataset &d = exfor_->datasets().at(row);
       QString info = QString("<b>Dataset ID:</b> %1 &nbsp;&nbsp;|&nbsp;&nbsp; "
                              "<b>Reaction:</b> %2 &nbsp;&nbsp;|&nbsp;&nbsp; "
                              "<b>Points:</b> %3<br>"
@@ -268,7 +268,7 @@ void ExforDialog::onDatasetSelectionChanged() {
 void ExforDialog::downloadSelected() {
   int row = resultsTable_->currentRow();
   if (row < 0) return;
-  QTableWidgetItem* idItem = resultsTable_->item(row, 4);
+  QTableWidgetItem *idItem = resultsTable_->item(row, 4);
   if (!idItem) return;
   currentDatasetId_ = idItem->text();
   haveData_ = false;
@@ -283,15 +283,17 @@ void ExforDialog::downloadSelected() {
     QList<PairsData> pairs = pairsModel_->getPairs();
     int ei = entranceCombo_->currentIndex();
     if (ei >= 0 && ei < pairs.size()) {
-      z1 = pairs[ei].lightZ;  m1 = pairs[ei].lightM;
-      z2 = pairs[ei].heavyZ;  m2 = pairs[ei].heavyM;
+      z1 = pairs[ei].lightZ;
+      m1 = pairs[ei].lightM;
+      z2 = pairs[ei].heavyZ;
+      m2 = pairs[ei].heavyM;
     }
   }
   exfor_->downloadDataset(currentDatasetId_, z1, z2, m1, m2);
 }
 
-void ExforDialog::onDownloadFinished(const QString& rawCsv,
-                                     const QList<ExforPoint>& points,
+void ExforDialog::onDownloadFinished(const QString &rawCsv,
+                                     const QList<ExforPoint> &points,
                                      bool differential) {
   downloadButton_->setEnabled(true);
   rawView_->setPlainText(rawCsv);
@@ -306,7 +308,7 @@ void ExforDialog::onDownloadFinished(const QString& rawCsv,
                             : tr("angle-integrated (barn)")));
 }
 
-void ExforDialog::onError(const QString& message) {
+void ExforDialog::onError(const QString &message) {
   searchButton_->setEnabled(true);
   downloadButton_->setEnabled(!resultsTable_->selectedItems().isEmpty());
   statusLabel_->setText(tr("Error: %1").arg(message));

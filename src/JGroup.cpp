@@ -5,18 +5,22 @@
  * This constructor is used when a \f$ J^\pi \f$ group is created from an entry in the nuclear input file.
  */
 
-JGroup::JGroup(NucLine nucLine):
-  pi_(nucLine.levelPi()), j_(nucLine.levelJ()), isinrmatrix_(true) { };
-  
+JGroup::JGroup(NucLine nucLine) :
+  pi_(nucLine.levelPi()),
+  j_(nucLine.levelJ()),
+  isinrmatrix_(true) {};
+
 /*!
  * This constructor is used when a \f$ J^\pi \f$ group is created from specified values of spin and parity.
  */
 
-JGroup::JGroup(double j,int pi):
-  pi_(pi),j_(j),isinrmatrix_(false) { };
+JGroup::JGroup(double j, int pi) :
+  pi_(pi),
+  j_(j),
+  isinrmatrix_(false) {};
 
 /*!
- * Returns true if the \f$ J^\pi \f$ group is to be included in the A-/R-Matrix calculation, otherwise returns false. 
+ * Returns true if the \f$ J^\pi \f$ group is to be included in the A-/R-Matrix calculation, otherwise returns false.
  * A \f$ J^\pi \f$ group may specify only a bound state for external capture, but may not correspond to an R-Matrix state (i.e. subthreshold state).
  */
 
@@ -25,22 +29,23 @@ bool JGroup::IsInRMatrix() const {
 }
 
 /*!
- * This function tests if a given level already exists in the vector of ALevel objects.  If the level exists 
+ * This function tests if a given level already exists in the vector of ALevel objects.  If the level exists
  * the position of the level in the vector is returned, otherwise the function returns 0.
  */
 
 int JGroup::IsLevel(ALevel level) {
-  bool b=false;
-  int c=0;
-  double tol=1e-3;
-  while(!b&&c<this->NumLevels())
-    {
-      if(this->GetLevel(c+1)->GetE()-tol<=level.GetE()&&
-	 level.GetE()<=this->GetLevel(c+1)->GetE()+tol) b=true;
-      c++;
-    }
-  if(b) return c;
-  else return 0;
+  bool b = false;
+  int c = 0;
+  double tol = 1e-3;
+  while (!b && c < this->NumLevels()) {
+    if (this->GetLevel(c + 1)->GetE() - tol <= level.GetE() &&
+        level.GetE() <= this->GetLevel(c + 1)->GetE() + tol) b = true;
+    c++;
+  }
+  if (b)
+    return c;
+  else
+    return 0;
 }
 
 /*!
@@ -68,21 +73,23 @@ int JGroup::NumChannels() {
 }
 
 /*!
- * This function tests if a given channel already exists in the vector of AChannel objects.  If the channel exists 
+ * This function tests if a given channel already exists in the vector of AChannel objects.  If the channel exists
  * the position of the channel in the vector is returned, otherwise the function returns 0.
  */
 
 int JGroup::IsChannel(AChannel channel) {
-  bool b=false;
-  int c=0;
-  while(!b&&c<this->NumChannels()) {
-    if(channel.GetL()==this->GetChannel(c+1)->GetL()&&
-       channel.GetS()==this->GetChannel(c+1)->GetS()&&
-       channel.GetPairNum()==this->GetChannel(c+1)->GetPairNum()) b=true;
+  bool b = false;
+  int c = 0;
+  while (!b && c < this->NumChannels()) {
+    if (channel.GetL() == this->GetChannel(c + 1)->GetL() &&
+        channel.GetS() == this->GetChannel(c + 1)->GetS() &&
+        channel.GetPairNum() == this->GetChannel(c + 1)->GetPairNum()) b = true;
     c++;
   }
-  if(b) return c;
-  else return 0;
+  if (b)
+    return c;
+  else
+    return 0;
 }
 
 /*!
@@ -109,21 +116,21 @@ void JGroup::AddChannel(AChannel channel) {
   channels_.push_back(channel);
 }
 
-/*! 
+/*!
  * Returns a pointer to a specified channel in the AChannel vector.
  */
 
 
 AChannel *JGroup::GetChannel(int channelNum) {
-  AChannel *b=&channels_[channelNum-1];
+  AChannel *b = &channels_[channelNum - 1];
   return b;
 }
 
-/*! 
+/*!
  * Returns a pointer to a specified level in the ALevel vector.
  */
 
 ALevel *JGroup::GetLevel(int levelNum) {
-  ALevel *b=&levels_[levelNum-1];
+  ALevel *b = &levels_[levelNum - 1];
   return b;
 }

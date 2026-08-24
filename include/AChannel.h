@@ -3,7 +3,7 @@
 
 class NucLine;
 
-///An AZURE channel object.
+/// An AZURE channel object.
 
 /*!
  * An R-Matrix channel for a given \f$J^\pi\f$ group represents a specfic combination of \f$ \alpha,s,l \f$ couplings.
@@ -21,6 +21,7 @@ class AChannel {
   void SetBoundaryCondition(double);
   void SetWignerLimit(double reducedMass, double channelRadius);
   double GetWignerLimit() const;
+
  private:
   int l_;
   int pair_;

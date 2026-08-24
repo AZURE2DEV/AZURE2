@@ -3,7 +3,7 @@
 
 #include "AMatrixFunc.h"
 
-///Modified R-matrix (Trojan Horse Method) cross-section calculator.
+/// Modified R-matrix (Trojan Horse Method) cross-section calculator.
 
 /*!
  * THMMatrixFunc reuses the shared R-matrix interior of AMatrixFunc
@@ -27,9 +27,9 @@
 
 class THMMatrixFunc : public AMatrixFunc {
  public:
-  THMMatrixFunc(CNuc* compound, const Config& configure);
-  ///Computes the HOES cross section for the point and stores it as the fit XS.
-  void CalculateTHMCrossSection(EPoint* point);
+  THMMatrixFunc(CNuc *compound, const Config &configure);
+  /// Computes the HOES cross section for the point and stores it as the fit XS.
+  void CalculateTHMCrossSection(EPoint *point);
 };
 
 #endif

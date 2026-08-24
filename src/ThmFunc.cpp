@@ -16,16 +16,16 @@ double ThmRho(double mu, double E, double B, double radius) {
 }
 
 void ThmBesselParts(int l, double mu, double E, double B, double radius,
-                    double& jl, double& rhoDjl) {
+                    double &jl, double &rhoDjl) {
   double rho = ThmRho(mu, E, B, radius);
   jl = gsl_sf_bessel_jl(l, rho);
-  
+
   /* dj_l/drho by forward finite difference (matches mrmpy), then rho*dj_l/drho.
-  
+
   Maybe would be better to switch to the analytic j_l'(x) = (l/x) j_l(x) - j_{l+1}(x)
   (first-order FD truncation ~1e-6 is the larger error for rho);
   on pause while we need to match mrmpy's behavior */
-  
+
   rhoDjl = rho * (gsl_sf_bessel_jl(l, rho + kThmFDStep) - jl) / kThmFDStep;
 }
 

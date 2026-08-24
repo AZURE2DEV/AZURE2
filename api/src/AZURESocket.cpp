@@ -12,36 +12,36 @@
 
 // Receive exactly `length` bytes, looping over short reads.  Returns false on
 // peer disconnect (recv == 0) or a fatal error.
-bool AZURESocket::recvAll( void* buffer, size_t length ) {
-  char* p = static_cast<char*>( buffer );
+bool AZURESocket::recvAll(void *buffer, size_t length) {
+  char *p = static_cast<char *>(buffer);
   size_t total = 0;
-  while( total < length ) {
-    ssize_t n = recv( clientSocket_, p + total, length - total, 0 );
-    if( n > 0 ) {
-      total += static_cast<size_t>( n );
-    } else if( n == 0 ) {
-      return false;            // peer closed the connection
+  while (total < length) {
+    ssize_t n = recv(clientSocket_, p + total, length - total, 0);
+    if (n > 0) {
+      total += static_cast<size_t>(n);
+    } else if (n == 0) {
+      return false;  // peer closed the connection
     } else {
 #ifndef _WIN32
-      if( errno == EINTR ) continue;
+      if (errno == EINTR) continue;
 #endif
-      return false;            // fatal error
+      return false;  // fatal error
     }
   }
   return true;
 }
 
 // Send exactly `length` bytes, looping over short writes.
-bool AZURESocket::sendAll( const void* buffer, size_t length ) {
-  const char* p = static_cast<const char*>( buffer );
+bool AZURESocket::sendAll(const void *buffer, size_t length) {
+  const char *p = static_cast<const char *>(buffer);
   size_t total = 0;
-  while( total < length ) {
-    ssize_t n = send( clientSocket_, p + total, length - total, 0 );
-    if( n > 0 ) {
-      total += static_cast<size_t>( n );
+  while (total < length) {
+    ssize_t n = send(clientSocket_, p + total, length - total, 0);
+    if (n > 0) {
+      total += static_cast<size_t>(n);
     } else {
 #ifndef _WIN32
-      if( n < 0 && errno == EINTR ) continue;
+      if (n < 0 && errno == EINTR) continue;
 #endif
       return false;
     }
@@ -53,27 +53,27 @@ bool AZURESocket::sendAll( const void* buffer, size_t length ) {
 // Length-prefixed framing: [uint64 count][count * double]
 // ---------------------------------------------------------------------------
 
-bool AZURESocket::readMessage( vector_r& out ) {
+bool AZURESocket::readMessage(vector_r &out) {
   std::uint64_t count = 0;
-  if( !recvAll( &count, sizeof( count ) ) ) return false;
+  if (!recvAll(&count, sizeof(count))) return false;
 
-  if( count > MAX_FRAME_DOUBLES ) {
+  if (count > MAX_FRAME_DOUBLES) {
     std::cerr << "AZURESocket: rejecting oversized frame (" << count
               << " doubles)." << std::endl;
     return false;
   }
 
-  out.resize( count );
-  if( count > 0 ) {
-    if( !recvAll( out.data(), count * sizeof( double ) ) ) return false;
+  out.resize(count);
+  if (count > 0) {
+    if (!recvAll(out.data(), count * sizeof(double))) return false;
   }
   return true;
 }
 
-bool AZURESocket::writeMessage( const double* values, std::uint64_t count ) {
-  if( !sendAll( &count, sizeof( count ) ) ) return false;
-  if( count > 0 ) {
-    if( !sendAll( values, count * sizeof( double ) ) ) return false;
+bool AZURESocket::writeMessage(const double *values, std::uint64_t count) {
+  if (!sendAll(&count, sizeof(count))) return false;
+  if (count > 0) {
+    if (!sendAll(values, count * sizeof(double))) return false;
   }
   return true;
 }
@@ -82,23 +82,23 @@ bool AZURESocket::writeMessage( const double* values, std::uint64_t count ) {
 // Public send helpers
 // ---------------------------------------------------------------------------
 
-bool AZURESocket::sendPacket( const vector_r& response ) {
-  return writeMessage( response.data(), response.size() );
+bool AZURESocket::sendPacket(const vector_r &response) {
+  return writeMessage(response.data(), response.size());
 }
 
-bool AZURESocket::sendPacket( const std::vector<bool>& response ) {
-  vector_r tmp( response.size() );
-  for( size_t i = 0; i < response.size(); ++i ) tmp[i] = response[i] ? 1.0 : 0.0;
-  return writeMessage( tmp.data(), tmp.size() );
+bool AZURESocket::sendPacket(const std::vector<bool> &response) {
+  vector_r tmp(response.size());
+  for (size_t i = 0; i < response.size(); ++i) tmp[i] = response[i] ? 1.0 : 0.0;
+  return writeMessage(tmp.data(), tmp.size());
 }
 
 // Strings are transmitted as one double per character so the client decodes
 // them with the same framing as every other response.
-bool AZURESocket::sendPacket( const std::string& response ) {
-  vector_r tmp( response.size() );
-  for( size_t i = 0; i < response.size(); ++i )
-    tmp[i] = static_cast<double>( static_cast<unsigned char>( response[i] ) );
-  return writeMessage( tmp.data(), tmp.size() );
+bool AZURESocket::sendPacket(const std::string &response) {
+  vector_r tmp(response.size());
+  for (size_t i = 0; i < response.size(); ++i)
+    tmp[i] = static_cast<double>(static_cast<unsigned char>(response[i]));
+  return writeMessage(tmp.data(), tmp.size());
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +132,7 @@ bool AZURESocket::start() {
   serverAddress_.sin_port = htons(port_);
 
   int iSetOption = 1;
-  setsockopt(serverSocket_, SOL_SOCKET, SO_REUSEADDR, (char*)&iSetOption, sizeof(iSetOption));
+  setsockopt(serverSocket_, SOL_SOCKET, SO_REUSEADDR, (char *)&iSetOption, sizeof(iSetOption));
 
   // Bind the socket to a specific address and port
   if (bind(serverSocket_, (struct sockaddr *)&serverAddress_, sizeof(serverAddress_)) == -1) {
@@ -164,7 +164,6 @@ bool AZURESocket::start() {
   // Outer loop: accept clients.  Surviving a client disconnect and waiting for
   // a fresh connection makes the server robust to client restarts.
   while (true) {
-
     clientSocket_ = accept(serverSocket_, (struct sockaddr *)&clientAddress_, &clientAddressSize);
     if (clientSocket_ == -1) {
       std::cerr << "Error accepting connection." << std::endl;
@@ -173,12 +172,12 @@ bool AZURESocket::start() {
 
     // Inner loop: process requests until the client disconnects.
     vector_r request;
-    while ( readMessage( request ) ) {
-      if( request.empty() ) {
+    while (readMessage(request)) {
+      if (request.empty()) {
         // Malformed (no command word); ignore and keep listening.
         continue;
       }
-      handle( request );
+      handle(request);
     }
 
     close(clientSocket_);
@@ -204,270 +203,268 @@ bool AZURESocket::start() {
 //                            for calculators)
 // ---------------------------------------------------------------------------
 
-void AZURESocket::handle( const vector_r& request ) {
-
-  const int cmd = static_cast<int>( request[0] );
+void AZURESocket::handle(const vector_r &request) {
+  const int cmd = static_cast<int>(request[0]);
 
   // Arguments start at index 1.  Helpers below keep the handlers terse.
   const size_t nargs = request.size() - 1;
 
   // First argument as an integer index (0 if none supplied).
-  const int idx = ( nargs >= 1 ) ? static_cast<int>( request[1] ) : 0;
+  const int idx = (nargs >= 1) ? static_cast<int>(request[1]) : 0;
 
   // Arguments as a parameter vector.
   vector_r params;
-  if( nargs > 0 ) params.assign( request.begin() + 1, request.end() );
+  if (nargs > 0) params.assign(request.begin() + 1, request.end());
 
-  switch( cmd ) {
-
+  switch (cmd) {
     // Initialize
     case 0: {
-      api_->Initialize( );
-      sendPacket( std::vector<bool>{ true } );
+      api_->Initialize();
+      sendPacket(std::vector<bool>{true});
       break;
     }
 
     // Calculate segments from params
     case 1: {
-      double nSegments = (double)api_->UpdateSegments( params );
-      sendPacket( vector_r{ nSegments } );
+      double nSegments = (double)api_->UpdateSegments(params);
+      sendPacket(vector_r{nSegments});
       break;
     }
 
     // Send the parameters
     case 2:
-      sendPacket( api_->params_values( ) );
+      sendPacket(api_->params_values());
       break;
 
     // Send the parameter name
     case 3:
-      sendPacket( api_->params_names( idx ) );
+      sendPacket(api_->params_names(idx));
       break;
 
     // Send all the parameters
     case 4:
-      sendPacket( api_->params_all( ) );
+      sendPacket(api_->params_all());
       break;
 
     // Calculate external capture
     case 5: {
-      api_->CalculateExternalCapture( );
-      sendPacket( std::vector<bool>{ true } );
+      api_->CalculateExternalCapture();
+      sendPacket(std::vector<bool>{true});
       break;
     }
 
     // Get data energies
     case 6:
-      sendPacket( api_->data_energies( idx ) );
+      sendPacket(api_->data_energies(idx));
       break;
 
     // Get data segments
     case 7:
-      sendPacket( api_->data_segments( idx ) );
+      sendPacket(api_->data_segments(idx));
       break;
 
     // Get data segments errors
     case 8:
-      sendPacket( api_->data_segments_errors( idx ) );
+      sendPacket(api_->data_segments_errors(idx));
       break;
 
     // Update data
     case 9:
-      sendPacket( vector_r{ (double)api_->UpdateData( ) } );
+      sendPacket(vector_r{(double)api_->UpdateData()});
       break;
 
     // Set to data mode
     case 10: {
-      api_->SetData( );
-      sendPacket( std::vector<bool>{ true } );
+      api_->SetData();
+      sendPacket(std::vector<bool>{true});
       break;
     }
 
     // Set to extrapolation mode
     case 11: {
-      api_->SetExtrap( );
-      sendPacket( std::vector<bool>{ true } );
+      api_->SetExtrap();
+      sendPacket(std::vector<bool>{true});
       break;
     }
 
     // Get calculated segments
     case 12:
-      sendPacket( api_->calculated_segments( idx ) );
+      sendPacket(api_->calculated_segments(idx));
       break;
 
     // Get calculated energies
     case 13:
-      sendPacket( api_->calculated_energies( idx ) );
+      sendPacket(api_->calculated_energies(idx));
       break;
 
     // Change radius
     case 14: {
       // params = [idx, radius]
-      double radius = ( nargs >= 2 ) ? request[2] : 0.0;
-      sendPacket( std::vector<bool>{ api_->SetRadius( idx, radius ) } );
+      double radius = (nargs >= 2) ? request[2] : 0.0;
+      sendPacket(std::vector<bool>{api_->SetRadius(idx, radius)});
       break;
     }
 
     // Send the norms
     case 15:
-      api_->UpdateNorms( );
-      sendPacket( api_->norms( ) );
+      api_->UpdateNorms();
+      sendPacket(api_->norms());
       break;
 
     // Send the norms errors
     case 16:
-      api_->UpdateNorms( );
-      sendPacket( api_->norms_errors( ) );
+      api_->UpdateNorms();
+      sendPacket(api_->norms_errors());
       break;
 
     // Get calculated E1 segments
     case 17:
-      sendPacket( api_->calculated_segments_e1( idx ) );
+      sendPacket(api_->calculated_segments_e1(idx));
       break;
 
     // Get calculated E2 segments
     case 18:
-      sendPacket( api_->calculated_segments_e2( idx ) );
+      sendPacket(api_->calculated_segments_e2(idx));
       break;
 
     // Get data conversion
     case 19:
-      sendPacket( api_->data_conv( idx ) );
+      sendPacket(api_->data_conv(idx));
       break;
 
     // Get calculated conversion
     case 20:
-      sendPacket( api_->calculated_conv( idx ) );
+      sendPacket(api_->calculated_conv(idx));
       break;
 
     // Get data angles
     case 21:
-      sendPacket( api_->data_angles( idx ) );
+      sendPacket(api_->data_angles(idx));
       break;
 
     // Get calculated angles
     case 22:
-      sendPacket( api_->calculated_angles( idx ) );
+      sendPacket(api_->calculated_angles(idx));
       break;
 
     // Get RWA params
     case 23:
-      sendPacket( api_->params_values_rwa( ) );
+      sendPacket(api_->params_values_rwa());
       break;
 
     // Calculate from RWA params
     case 24:
-      sendPacket( vector_r{ (double)api_->UpdateSegmentsRWA( params ) } );
+      sendPacket(vector_r{(double)api_->UpdateSegmentsRWA(params)});
       break;
 
     // Transform RWA parameters
     case 25:
-      sendPacket( api_->TransformRWAParameters( params ) );
+      sendPacket(api_->TransformRWAParameters(params));
       break;
 
     // Transform all RWA parameters
     case 26:
-      sendPacket( api_->TransformAllRWAParameters( params ) );
+      sendPacket(api_->TransformAllRWAParameters(params));
       break;
 
     // Calculate chi2 from RWA parameters
     case 27:
-      sendPacket( vector_r{ api_->CalculateChi2RWA( params ) } );
+      sendPacket(vector_r{api_->CalculateChi2RWA(params)});
       break;
 
     // Calculate chi2 from physical parameters
     case 28:
-      sendPacket( vector_r{ api_->CalculateChi2Physical( params ) } );
+      sendPacket(vector_r{api_->CalculateChi2Physical(params)});
       break;
 
     // Calculate segments from all-RWA params
     case 29:
-      sendPacket( vector_r{ (double)api_->UpdateSegmentsAllRWA( params ) } );
+      sendPacket(vector_r{(double)api_->UpdateSegmentsAllRWA(params)});
       break;
 
     // Get indices of normalization parameters
     case 30:
-      sendPacket( api_->GetNormalizationIndices( ) );
+      sendPacket(api_->GetNormalizationIndices());
       break;
 
     // Get indices of energy shift parameters
     case 31:
-      sendPacket( api_->GetEnergyShiftIndices( ) );
+      sendPacket(api_->GetEnergyShiftIndices());
       break;
 
     // Get indices of fixed parameters
     case 32:
-      sendPacket( api_->params_fixed( ) );
+      sendPacket(api_->params_fixed());
       break;
 
     // Get data excitation energies
     case 33:
-      sendPacket( api_->data_excitation_energies( idx ) );
+      sendPacket(api_->data_excitation_energies(idx));
       break;
 
     // Get calculated excitation energies
     case 34:
-      sendPacket( api_->calculated_excitation_energies( idx ) );
+      sendPacket(api_->calculated_excitation_energies(idx));
       break;
 
     // Get structured per-parameter metadata (level, J, L, S, ...)
     case 37:
-      sendPacket( api_->GetParameterInfo( ) );
+      sendPacket(api_->GetParameterInfo());
       break;
 
     // Get structured per-pair metadata (spins, parities, entrance flag, ...)
     case 38:
-      sendPacket( api_->GetPairsInfo( ) );
+      sendPacket(api_->GetPairsInfo());
       break;
 
     // Value + analytic gradient of the (data) chi-squared.
     // Response: [chi2, d(chi2)/dp_0, ..., d(chi2)/dp_{n-1}].
     case 41:
-      sendPacket( api_->CalculateChi2GradRWA( params ) );
+      sendPacket(api_->CalculateChi2GradRWA(params));
       break;
 
     // Residuals + analytic residual Jacobian (Gauss-Newton / Levenberg-Marquardt).
     // Response: [nRes, nCols, residuals..., J row-major].
     case 42:
-      sendPacket( api_->CalculateResidualJacobianRWA( params ) );
+      sendPacket(api_->CalculateResidualJacobianRWA(params));
       break;
 
     // Per-point d(model)/d(theta) for covariance uncertainty bands, over the
     // free R-matrix parameters (the columns covariance.dat spans).
     // Response: [nSegments, nCols, nPoints per segment..., G row-major].
     case 43:
-      sendPacket( api_->CalculateModelGradientsRWA( params ) );
+      sendPacket(api_->CalculateModelGradientsRWA(params));
       break;
 
     // Get the angular-distribution (Legendre) coefficients of a segment
     case 44:
-      sendPacket( api_->calculated_angular_dists( idx ) );
+      sendPacket(api_->calculated_angular_dists(idx));
       break;
 
     // Coulomb wave functions on a requested energy grid.
     // Request:  [pairKey, l, radius, nE, E...]
     // Response: [nE, then per energy F, dF, G, dG, P, S, deltaHS].
     case 45:
-      sendPacket( api_->GetCoulombFunctions( params ) );
+      sendPacket(api_->GetCoulombFunctions(params));
       break;
 
     // External-capture radial integrals on a requested energy grid.
     // Request:  [pairKey, nE, E...]
     // Response: [nPathways, nE, then per pathway 6 descriptors + 2*nE values].
     case 46:
-      sendPacket( api_->GetECIntegrals( params ) );
+      sendPacket(api_->GetECIntegrals(params));
       break;
 
     // Coulomb-function cache counters.
     // Response: [queries, hits, entries, keys, disabledKeys, threads].
     case 47:
-      sendPacket( api_->GetCacheStats( ) );
+      sendPacket(api_->GetCacheStats());
       break;
 
     default:
       std::cerr << "AZURESocket: unknown command " << cmd << "." << std::endl;
       // Reply with an empty frame so the client does not block forever.
-      sendPacket( vector_r{} );
+      sendPacket(vector_r{});
       break;
   }
 }

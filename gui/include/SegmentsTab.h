@@ -23,8 +23,8 @@ class SegmentsTab : public QWidget {
 
  public:
   SegmentsTab(QWidget *parent = 0);
-  SegmentsTestModel* getSegmentsTestModel();
-  SegmentsDataModel* getSegmentsDataModel();
+  SegmentsTestModel *getSegmentsTestModel();
+  SegmentsDataModel *getSegmentsDataModel();
   void reset();
   /*QLineEdit *getSegDataFileText() const {return segDataFileText;};
     QLineEdit *getSegTestFileText() const {return segTestFileText;};*/
@@ -53,21 +53,21 @@ class SegmentsTab : public QWidget {
   void saveSegDataFile();
   void saveAsSegDataFile();*/
   /*bool readSegDataFile(QString filename);*/
-  bool readSegDataFile(QTextStream& inStream);
+  bool readSegDataFile(QTextStream &inStream);
   /*bool writeSegDataFile(QString filename);*/
-  bool writeSegDataFile(QTextStream& outStream);
+  bool writeSegDataFile(QTextStream &outStream);
   /*void openSegTestFile();
   void openSegTestFile(QString filename);
   void saveSegTestFile();
   void saveAsSegTestFile();*/
   /*bool readSegTestFile(QString filename);*/
-  bool readSegTestFile(QTextStream& inStream);
+  bool readSegTestFile(QTextStream &inStream);
   /*bool writeSegTestFile(QString filename);*/
-  bool writeSegTestFile(QTextStream& outStream);
-  void setPairsModel(PairsModel* model);
-  void updateFilterComboboxes(PairsModel* model);
-  void updateFilterComboboxes(); // Update filters using stored model
-  void showInfo(int which=0,QString title="");
+  bool writeSegTestFile(QTextStream &outStream);
+  void setPairsModel(PairsModel *model);
+  void updateFilterComboboxes(PairsModel *model);
+  void updateFilterComboboxes();  // Update filters using stored model
+  void showInfo(int which = 0, QString title = "");
 
  private:
   void moveSegDataLine(unsigned int upDown);
@@ -78,7 +78,7 @@ class SegmentsTab : public QWidget {
   SegmentsDataModel *segmentsDataModel;
   QTableView *segmentsDataView;
   QPushButton *segDataAddButton;
-  //QPushButton *segDataEditButton;
+  // QPushButton *segDataEditButton;
   QPushButton *segDataDeleteButton;
   QPushButton *segDataUpButton;
   QPushButton *segDataDownButton;
@@ -91,11 +91,11 @@ class SegmentsTab : public QWidget {
   SegmentsTestModel *segmentsTestModel;
   QTableView *segmentsTestView;
   QPushButton *segTestAddButton;
-  //QPushButton *segTestEditButton;
+  // QPushButton *segTestEditButton;
   QPushButton *segTestDeleteButton;
   QPushButton *segTestUpButton;
   QPushButton *segTestDownButton;
-  QSignalMapper* mapper;
+  QSignalMapper *mapper;
   QPushButton *infoButton[5];
   static const std::vector<QString> infoText;
   QPointer<InfoDialog> infoDialog[5];
