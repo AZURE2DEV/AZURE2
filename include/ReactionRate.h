@@ -62,7 +62,9 @@ class ReactionRate {
    * Returns the exit pair key.
    */
   int exitKey() const { return exit_key_; };
+  /// Reaction rate on the temperature grid, writing reactionrates.dat.
   void CalculateRates();
+  /// As above, on temperatures read from a file.
   void CalculateFileRates();
   /*!
    * Writes the rates to an output file.

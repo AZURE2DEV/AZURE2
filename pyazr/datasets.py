@@ -137,7 +137,8 @@ class Segment:
             out = f"pair{e}->" + ("total" if x == -1 else f"pair{x}")
             if a > -900:
                 out += f"@{a:g}deg"
-            if s not in (1.0, None):
+            # -999 is the "absent" sentinel, the same one the angle uses.
+            if s is not None and s > -900.0 and s != 1.0:
                 out += f" x{s:g}"
             return out
 
@@ -248,13 +249,28 @@ class SegmentSet(list):
 
     @property
     def active(self):
+        """Only the active data segments."""
         return SegmentSet(s for s in self if s.active)
 
     def by_reaction(self, entrance_key=None, exit_key=None):
+        """The data segments for one entrance and exit pair."""
         return SegmentSet(
             s for s in self
             if (entrance_key is None or s.entrance_key == entrance_key)
             and (exit_key is None or s.exit_key == exit_key))
+
+    def by_key(self, key):
+        """The segment with this segment key, or None.
+
+        A key is the segment's position in the input file counting the
+        *inactive* ones too, so it is not an index into this set -- which is
+        what makes ``datasets[key - 1]`` wrong for any project that has one.
+        A ``Parameter``'s ``segment_key`` is a key in this sense.
+        """
+        for s in self:
+            if s.key == key:
+                return s
+        return None
 
     def sys_errors(self, active_only=True, vary_only=False, fractional=True):
         """Per-segment normalization systematic errors, in file order.
@@ -283,9 +299,11 @@ class SegmentSet(list):
         return [s.energy_shift_error for s in src]
 
     def files(self):
+        """The data files the segments read."""
         return [s.data_file for s in self]
 
     def table(self, pairs=None):
+        """A printable table of the data segments."""
         rows = [("#", "data file", "reaction", "observable", "E range",
                  "norm_err%", "vary")]
         for s in self:
@@ -336,6 +354,7 @@ class TestSegment:
 
     @property
     def is_angle_integrated(self) -> bool:
+        """Is the observable angle-integrated rather than differential?"""
         return self.observable in ("angle-integrated", "total-capture")
 
     @property
@@ -406,15 +425,25 @@ class TestSegmentSet(list):
 
     @property
     def active(self):
+        """Only the active test segments."""
         return TestSegmentSet(s for s in self if s.active)
 
     def by_reaction(self, entrance_key=None, exit_key=None):
+        """The test segments for one entrance and exit pair."""
         return TestSegmentSet(
             s for s in self
             if (entrance_key is None or s.entrance_key == entrance_key)
             and (exit_key is None or s.exit_key == exit_key))
 
+    def by_key(self, key):
+        """The test segment with this segment key, or None."""
+        for s in self:
+            if s.key == key:
+                return s
+        return None
+
     def table(self, pairs=None):
+        """A printable table of the test segments."""
         rows = [("#", "reaction", "observable", "E range", "E step",
                  "angle", "active")]
         for s in self:

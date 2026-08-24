@@ -27,6 +27,9 @@ struct SegmentsTestData {
   int isTHM;  // THM (modified R-matrix) flag; written as isDiff offset +10.
 };
 
+/*!
+ * Table model for <segmentsTest> -- energy and angle grids evaluated without data.
+ */
 class SegmentsTestModel : public QAbstractTableModel {
   Q_OBJECT
 

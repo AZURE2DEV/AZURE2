@@ -21,6 +21,7 @@
 #include "AZUREMainThread.h"
 #include "AboutAZURE2Dialog.h"
 #include "NuclearPotentialTab.h"
+#include "NuclearPotentialManager.h"
 #include "CNuc.h"
 #include "EData.h"
 #include "AZUREParams.h"
@@ -77,6 +78,13 @@ AZURESetup::AZURESetup() :
   targetIntTab = new TargetIntTab;
 
   nuclearPotentialTab = new NuclearPotentialTab();
+  // The tab edits one particle pair at a time, so it needs the pair list.  The
+  // pairs do not exist yet -- they are built while <levels> is read -- so the
+  // tab follows the model from here rather than taking a snapshot.
+  nuclearPotentialTab->setPairsModel(pairsTab->getPairsModel());
+  // Pair keys are positional: deleting one shifts the rest down, and the
+  // potentials have to move with them or they end up on the wrong channels.
+  connect(pairsTab, SIGNAL(pairRemoved(int)), nuclearPotentialTab, SLOT(onPairRemoved(int)));
 
   fittingTab = new FittingTab();
   fittingTab->setTabReferences(levelsTab, segmentsTab);
@@ -646,9 +654,13 @@ bool AZURESetup::writeFile(QString filename) {
   if (!this->writeConfig(out, directory)) return false;
   out << "</config>" << Qt::endl;
 
-  // Write potential section after config
+  // Write potential section after config.  A pair may be switched on while the
+  // default is off, so the master switch has to follow the pairs; otherwise the
+  // file would come back with the whole hybrid model disabled.
+  if (NuclearPotentialManager::instance().isAnyEnabled()) GetConfig().useHybridMethod = true;
   out << "<potential>" << Qt::endl;
-  out << "useHybridPotential=" << (GetConfig().useHybridMethod ? "1" : "0") << Qt::endl;
+  out << "useHybridPotential="
+      << (NuclearPotentialManager::instance().getDefaultEnabled() ? "1" : "0") << Qt::endl;
   out << "useAdaptiveGrid=" << (GetConfig().useAdaptiveGrid ? "1" : "0") << Qt::endl;
   nuclearPotentialTab->writePotentialSettings(out);
   out << "</potential>" << Qt::endl;

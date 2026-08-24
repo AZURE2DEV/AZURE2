@@ -67,6 +67,9 @@ struct MCMCParameter {
   int channelIndex = -1;
 };
 
+/*!
+ * The MCMC tab: walkers, steps and priors for a Bayesian sampling run, and the live log while it runs.
+ */
 class MCMCTab : public QWidget {
   Q_OBJECT
 
@@ -158,8 +161,11 @@ class MCMCTab : public QWidget {
   QGroupBox *progressControlsGroup;
 
   // Info system
-  QSignalMapper *mapper;
-  QPushButton *infoButton[4];  // 4 sections: Parameters, Sampling, Progress, Results
+  QSignalMapper *mapper = nullptr;
+  // 4 sections: Parameters, Sampling, Progress, Results.  Initialized here as
+  // well as in the constructor: these are read through "if(infoButton[n])"
+  // guards, which a raw array leaves testing indeterminate memory.
+  QPushButton *infoButton[4] = {nullptr, nullptr, nullptr, nullptr};
   static const std::vector<QString> infoText;
   QPointer<InfoDialog> infoDialog[4];
 

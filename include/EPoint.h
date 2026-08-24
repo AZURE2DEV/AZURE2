@@ -36,14 +36,23 @@ class Config;
 
 class EPoint {
  public:
+  /// Build from a line of a data file, taking its conventions from the parent segment.
   EPoint(DataLine, ESegment *);
+  /// Build at a given energy and angle, for a segment generated from a grid.
   EPoint(double, double, ESegment *);
+  /// Build with every convention given explicitly, rather than inherited from a segment.
   EPoint(double, double, int, int, bool, bool, bool, double, int, int);
+  /// Differential cross section?
   bool IsDifferential() const;
+  /// Phase shift?
   bool IsPhase() const;
+  /// THM (modified R-matrix, half-off-shell) point?
   bool IsTHM() const;
+  /// Is this point calculated by another? Points at equal energies are mapped onto one so the energy-dependent work is done once.
   bool IsMapped() const;
+  /// Does the point carry target effects?
   bool IsTargetEffect() const;
+  /// Angular distribution?
   bool IsAngularDist() const;
   //! Vector analyzing power point; the fit value is A_y, not a cross section.
   bool IsAnalyzingPower() const { return is_analyzing_power_; };
@@ -52,73 +61,134 @@ class EPoint {
   //! target-effect integration needs the cross section as the weight.
   double GetAnalyzingPower() const { return analyzing_power_; };
   void SetAnalyzingPower(double v) { analyzing_power_ = v; };
+  /// Is this one of the sub-points a target-effect integral is built from?
   bool IsSubPoint() const { return is_sub_point_; };
+  /// Unobserved-primary, observed-secondary point?
   bool IsUPOS() const;
+  /// Entrance pair key, as written in the input files; not necessarily its PPair position.
   int GetEntranceKey() const;
+  /// Exit pair key, as written in the input files.
   int GetExitKey() const;
+  /// Highest Legendre order stored for this point.
   int GetMaxLOrder() const;
+  /// Orbital angular momentum. Phase-shift points only.
   int GetL() const;
+  /// How many points are mapped onto this one.
   int NumLocalMappedPoints() const;
+  /// Number of sub-points, the samples a target-effect integral is evaluated on.
   int NumSubPoints() const;
+  /// 1-based position of the TargetEffect in the parent EData.
   int GetTargetEffectNum() const;
+  /// Highest Legendre order. Angular-distribution points only.
   int GetMaxAngDistOrder() const;
+  /// Number of stored angular-distribution coefficients.
   int GetNumAngularDists() const;
+  /// Angular momentum of the secondary decay. UPOS points only.
   int GetSecondaryDecayL() const;
+  /// Angle in the lab frame.
   double GetLabAngle() const;
+  /// Angle in the centre-of-mass frame.
   double GetCMAngle() const;
+  /// Energy in the lab frame.
   double GetLabEnergy() const;
+  /// Energy in the centre-of-mass frame.
   double GetCMEnergy() const;
+  /// Excitation energy of the compound nucleus -- the axis shared by every entrance pair.
   double GetExcitationEnergy() const;
+  /// Energy as read, before any energy shift was applied.
   double GetOriginalEnergy() const;
+  /// Legendre polynomial of the given order at this point's angle.
   double GetLegendreP(int) const;
+  /// Measured cross section, lab frame.
   double GetLabCrossSection() const;
+  /// Measured cross section, centre-of-mass frame.
   double GetCMCrossSection() const;
+  /// Measured uncertainty, lab frame.
   double GetLabCrossSectionError() const;
+  /// Measured uncertainty, centre-of-mass frame.
   double GetCMCrossSectionError() const;
+  /// Geometrical factor \f$\pi/k^2\f$.
   double GetGeometricalFactor() const;
+  /// Cross section AZURE2 calculated here.
   double GetFitCrossSection() const;
+  /// Calculated cross section, E1 component only.
   double GetFitE1CrossSection() const;
+  /// Calculated cross section, E2 component only.
   double GetFitE2CrossSection() const;
+  /// Multiply a cross section by this to get the astrophysical S-factor.
   double GetSFactorConversion() const;
+  /// \f$\sqrt{P_c}\f$ for the channel at (J-group, channel), both 1-based.
   double GetSqrtPenetrability(int, int) const;
   /// THM entrance transfer form factor M_l = (b-1) j_l - rho dj_l/drho for
   /// JGroup/channel, assembled with the given boundary b (0 if not stored).
   double GetThmFormFactor(int, int, double) const;
+  /// Total spin. Phase-shift points only.
   double GetJ() const;
+  /// Stopping cross section at this sub-point, for a yield-curve target integration.
   double GetStoppingPower() const;
+  /// Beam energy loss across the target at this point.
   double GetTargetThickness() const;
+  /// Angular-distribution coefficient of the given order.
   double GetAngularDist(int) const;
+  /// Jacobian converting the angle from lab to centre of mass.
   double GetAngleKinFactor() const;
+  /// Jacobian converting the cross section from lab to centre of mass.
   double GetCrossSectionKinFactor() const;
+  /// Final-state spin. UPOS points only.
   double GetIc() const;
+  /// Multipole mixing ratio. UPOS points only.
   double GetDelta() const;
+  /// Diagonal \f$L_o\f$ element for the channel at (J-group, channel), both 1-based.
   complex GetLoElement(int, int) const;
+  /// \f$\exp(i\omega_c)\f$, the Coulomb phase, for the channel at (J-group, channel).
   complex GetExpCoulombPhase(int, int) const;
+  /// \f$\exp(i\delta_c)\f$, the hard-sphere phase, for the channel at (J-group, channel).
   complex GetExpHardSpherePhase(int, int) const;
+  /// Coulomb (Rutherford) amplitude \f$C_\alpha\f$.
   complex GetCoulombAmplitude() const;
+  /// External-capture amplitude for the pathway at (KGroup, ECMGroup), both 1-based.
   complex GetECAmplitude(int, int) const;
+  /// As GetECAmplitude, but interpolated to the shifted energy through the amplitude cache.
   complex GetECAmplitudeWithShift(int, int, CNuc *, const Config &) const;
+  /// Where this point is mapped, if it is.
   EnergyMap GetMap() const;
+  /// Compute everything that depends on energy but not on the fit parameters. Run once before fitting.
   void Initialize(CNuc *, const Config &);
+  /// Lab energy to centre-of-mass energy.
   double ConvertLabValue(double, PPair *);
+  /// Centre-of-mass energy to lab energy.
   double ConvertCMValue(double, PPair *);
+  /// Fill the centre-of-mass energy from the lab energy.
   void ConvertLabEnergy(PPair *);
+  /// Fill the compound excitation energy.
   void ConvertExcitationEnergy(PPair *);
+  /// Total decay energy from the light particle's, with the parent at rest.
   void ConvertDecayEnergy(PPair *);
+  /// Fill the centre-of-mass angle from the lab angle.
   void ConvertLabAngle(PPair *);
+  /// As above for a reaction with different entrance and exit pairs.
   void ConvertLabAngle(PPair *, PPair *, const Config &);
+  /// Centre-of-mass angle by the relativistic form, Iliadis C.37-C.38.
   void ConvertCMAngle(PPair *, PPair *, const Config &);
+  /// Fill the centre-of-mass cross section and uncertainty from the lab ones.
   void ConvertCrossSection(PPair *, PPair *);
+  /// Centre-of-mass gamma angle, with the relativistic correction.
   void ConvertLabAngleGammas(PPair *);
+  /// Centre-of-mass gamma cross section.
   void ConvertCrossSectionGammas(PPair *);
   double CalculateCrossSectionConversionFactor(PPair *, PPair *);
   double CalculateCrossSectionGammaConversionFactor(PPair *);
+  /// Append the next Legendre polynomial; they are stored in order L = 0, 1, 2, ...
   void AddLegendreP(double);
+  /// Drop the stored polynomials, so they can be recomputed after an energy shift.
   void ClearLegendrePolynomials();
+  /// Set \f$\pi/k^2\f$.
   void SetGeometricalFactor(double);
+  /// Record the calculated cross section.
   void SetFitCrossSection(double);
   void SetFitE1CrossSection(double);
   void SetFitE2CrossSection(double);
+  /// Set the cross-section to S-factor conversion.
   void SetSFactorConversion(double);
   void SetLabEnergy(double);
   void SetCMEnergy(double);
@@ -127,16 +197,27 @@ class EPoint {
   void SetCMAngle(double);
   void SetExitKey(int);
   void SetEntranceKey(int);
+  /// Compute the Legendre polynomials up to a maximum order.
   void CalcLegendreP(int, CNuc *, TargetEffect *);
+  /// Compute the geometrical factor, S-factor conversion, \f$L_o\f$ elements, penetrabilities and phases together.
   void CalcEDependentValues(CNuc *, const Config &);
+  /// Recompute those at the current, possibly shifted, energy.
   void RecalcEDependentValues(CNuc *, const Config &);
+  /// Store an \f$L_o\f$ element at (J-group, channel).
   void AddLoElement(int, int, complex);
+  /// Store a \f$\sqrt{P_c}\f$ at (J-group, channel).
   void AddSqrtPenetrability(int, int, double);
+  /// Store the pieces of the THM form factor at (J-group, channel).
   void AddThmFormFactor(int, int, double, double);
+  /// Store a Coulomb phase factor at (J-group, channel).
   void AddExpCoulombPhase(int, int, complex);
+  /// Store a hard-sphere phase factor at (J-group, channel).
   void AddExpHardSpherePhase(int, int, complex);
+  /// Compute the Coulomb amplitude \f$C_\alpha\f$.
   void CalcCoulombAmplitude(CNuc *);
+  /// Set the Coulomb amplitude directly.
   void SetCoulombAmplitude(complex);
+  /// Compute the external-capture amplitudes for every matching pathway.
   void CalculateECAmplitudes(CNuc *, const Config &);
   void AddECAmplitude(int, int, complex);
   void AddECAmplitude(int, int, complex, double);

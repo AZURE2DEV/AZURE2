@@ -74,10 +74,12 @@ calculation around it.
 Seyler's expression for the transition matrix
 ---------------------------------------------
 
-The step that makes this practical for an R-matrix code is due to
-R. G. Seyler [Seyler1969]_, whose Eq. (4) writes :math:`M` directly in terms of
-the Lane–Thomas collision matrix :math:`U` — the very object an R-matrix code
-already builds:
+The step that makes this practical for an R-matrix code is that the amplitude
+can be written directly in terms of the collision matrix :math:`U` — the very
+object an R-matrix code already builds. The expression is Lane and Thomas's
+[LaneThomas1958]_; we follow the form in which Seyler [Seyler1969]_ quotes it
+as his Eq. (4), which is the one AZURE2's channel-spin bookkeeping matches
+term for term:
 
 .. math::
    :label: seyler
@@ -110,14 +112,22 @@ takes as :math:`\nu'`, the exit orbital motion must carry
 :math:`\mu = \nu - \nu'`.
 
 *The spherical harmonic* :math:`Y_{l'}^{\nu-\nu'}` is the angular function of
-that outgoing orbital motion. This is the crucial structural point. For an
-unpolarized cross section only :math:`\mu = 0` ever appears and Legendre
-polynomials suffice — which is why AZURE2, like most R-matrix codes, had
-:math:`P_L(\cos\theta)` and nothing else. **Spin flip means**
-:math:`\nu \neq \nu'`, **which means** :math:`\mu \neq 0`, **which requires the
-associated Legendre functions.** No amount of rearrangement avoids this: a code
-that has only :math:`P_L` cannot produce a non-zero analyzing power, because the
-amplitudes that would interfere are not representable in it.
+that outgoing orbital motion, and it is the structural reason this observable
+needed new machinery rather than a new formula on top of the old.
+
+An unpolarized cross section sums over spin projections, and only the
+:math:`\mu = \nu - \nu' = 0` terms survive that sum. Its angular dependence is
+therefore carried entirely by :math:`Y_{l'}^{0} \propto P_{l'}(\cos\theta)`,
+which is why an R-matrix code written for cross sections — AZURE2 included —
+computes Legendre polynomials and stores nothing else.
+
+A non-zero analyzing power comes precisely from the spin-flip amplitudes,
+:math:`\nu \neq \nu'`, hence :math:`\mu \neq 0`, hence
+:math:`Y_{l'}^{\mu \neq 0}`, which needs the *associated* Legendre functions
+:math:`P_{l'}^{\mu}`. Those terms are not merely absent from a
+Legendre-only code; they are not representable in it. This is why the
+implementation adds an angular basis rather than post-processing the existing
+one — see :doc:`polarization_implementation`.
 
 *The bracket* :math:`\delta_{ss'}\delta_{ll'} - U^J_{s'l'sl}`, dressed with the
 Coulomb phases :math:`e^{i(\omega_l+\omega_{l'})}`, is the transition matrix.
@@ -127,10 +137,37 @@ exactly this quantity, phases included, so nothing has to be reconstructed.
 The vector analyzing power
 --------------------------
 
-Specialize to a spin-1/2 projectile on a spin-0 target, which covers
-:math:`{}^{12}\mathrm{C}(\vec p, p)`. The channel spin is :math:`1/2`, and
-:math:`M` is a :math:`2\times 2` matrix in the projectile's spin projection for
-each exit configuration.
+The restriction that matters is on the **projectile**: the vector analyzing
+power is a spin-1/2 beam observable, so :math:`j_1 = 1/2` throughout. The
+*target* spin is unrestricted, and the target is taken unpolarized, so its
+projection is traced over.
+
+That trace is the one subtlety. :math:`A_y` is defined with respect to the
+polarization of the projectile alone, but :eq:`seyler` delivers amplitudes in
+the **channel-spin** basis, in which projectile and target spin are already
+coupled. The entrance index must therefore be decomposed before a Pauli matrix
+can act on the projectile:
+
+.. math::
+   :label: decompose
+
+   M_{\text{out};\,m_1 m_2} =
+     \sum_s \left( j_1\, j_2\, m_1\, m_2 \,\middle|\, s,\, m_1{+}m_2 \right)
+     M_{\text{out};\, s,\, m_1+m_2}.
+
+The coupling order and phases follow Lane and Thomas — :math:`\mathbf{s} =
+\mathbf{I}_1 + \mathbf{I}_2` with Condon–Shortley coefficients — since that is
+the convention the rest of AZURE2 is built on. Nothing in the unpolarized cross
+section fixes this order, because it adds channel spins incoherently and is
+blind to it; the analyzing power is not.
+
+For a spin-0 target the sum collapses to a single term, the channel spin *is*
+the projectile's spin, and :math:`M` is a plain :math:`2\times 2` matrix in the
+projectile projection — the case of
+:math:`{}^{12}\mathrm{C}(\vec p, p)`. For a spin-1/2 target such as
+:sup:`15`\ N the channel spins are 0 and 1 and never 1/2, so a code that looks
+for a channel spin of 1/2 finds nothing and reports zero for a perfectly well
+defined, non-zero observable.
 
 Take the quantization axis for the polarization along
 
@@ -144,13 +181,17 @@ the only sensible choice: parity conservation forbids a vector polarization
 along any other direction, so :math:`A_x = A_z = 0` identically and
 :math:`A_y` is the whole of the vector analyzing power.
 
-The observable is the trace of the outgoing density matrix against
-:math:`\sigma_y` acting in the *entrance* spin space,
+The observable is a ratio of traces: the outgoing density matrix against
+:math:`\sigma_y` acting in the projectile's spin space, over the same trace
+against the identity,
 
 .. math::
 
    A_y = \frac{\mathrm{Tr}\left( M \sigma_y M^{\dagger} \right)}
-              {\mathrm{Tr}\left( M M^{\dagger} \right)}.
+              {\mathrm{Tr}\left( M M^{\dagger} \right)},
+
+both traces running over the exit configuration and over the target projection
+:math:`m_2`, which is where the unpolarized target is averaged away.
 
 Writing this out with :math:`(\sigma_y)_{+-} = -i` and
 :math:`(\sigma_y)_{-+} = +i` gives the form the code evaluates:
@@ -267,21 +308,59 @@ analyzing-power measurements use thin targets — Baumann's were 85 nm of
 Scope
 -----
 
-What is implemented covers particle channels with a spin-1/2 projectile and a
-target of **any** spin, which is what the vector analyzing power :math:`A_y`
-requires. Two extensions are not implemented and should not be assumed to work:
+What is implemented covers the vector analyzing power :math:`A_y` for a
+spin-1/2 projectile on a target of **any** spin, in **both** particle and
+capture exit channels — the two by different routes, since the photon exit has
+no amplitude matrix of the form of :eq:`seyler`.
 
-*Tensor observables* (:math:`T_{20}`, :math:`T_{22}`, and the rest) need a
-spin-1 projectile and the corresponding rank-2 operators. The amplitude matrix
-built here is general enough in principle — it carries all channel spins and
-projections — but the observable side would have to be written.
+*Capture channels* use Seyler and Weller [SeylerWeller1979]_, who give the
+Legendre coefficients of the angular distribution directly in the channel-spin
+representation — the representation AZURE2 already works in, so their
+:math:`R` is the T-matrix element the code already forms. Writing
 
-*Capture channels* need the photon analogue of :eq:`seyler`, for which the
-reference is Seyler and Weller [SeylerWeller1979]_. Their Eq. (12) carries a
-:math:`(-1)^M` phase that several earlier treatments drop, which is a warning
-about how delicate this bookkeeping is.
+.. math::
+   :label: swcapture
 
-.. [Seyler1969] R. G. Seyler, *Nuclear Physics* **A124** (1969) 253.
+   \sigma(\theta,\phi) = N \sum_k \Bigl[ a_k P_k(\cos\theta)
+                       + b_k P_k^1(\cos\theta)\, p_y \Bigr]
+
+their Eqs. (20) and (21) give :math:`a_k` and :math:`b_k` as sums over pairs of
+reaction pathways :math:`t = \{p L b l s\}` weighted by
+:math:`\mathrm{Re}\,R R'^*` and :math:`\mathrm{Re}\,(i R R'^*)`, so that
+
+.. math::
+
+   A_y(\theta) = \frac{\sum_k b_k P_k^1(\cos\theta)}
+                      {\sum_k a_k P_k(\cos\theta)} .
+
+The structural point is that :math:`a_k` requires :math:`s = s'` while
+:math:`b_k` does not. The channel-spin off-diagonal terms are exactly the
+information a polarization measurement adds and a cross section cannot carry,
+and they are why the pathway pairs have to be enumerated across channel-spin
+groups rather than within one.
+
+Their Eq. (12) carries a :math:`(-1)^M` phase that several earlier treatments
+drop — so their :math:`P_L^M` is the associated Legendre function *without* the
+Condon-Shortley phase, and for :math:`M = 1` that is a sign. Two further
+conventions had to be settled numerically against their worked example; see
+:doc:`polarization_implementation`.
+
+One extension remains unimplemented and should not be assumed to work:
+*tensor observables* (:math:`T_{20}`, :math:`T_{22}`, and the rest) need a
+spin-1 projectile and the corresponding rank-2 operators. For particle channels
+the amplitude matrix built here is general enough in principle — it carries all
+channel spins and projections — but the observable side would have to be
+written; for capture, Seyler and Weller's Eqs. (22)–(25) give the
+:math:`c_k`, :math:`d_k` and :math:`e_k` coefficients that would be needed, in
+the same notation as the :math:`b_k` already coded.
+
+.. [LaneThomas1958] A. M. Lane and R. G. Thomas, *Reviews of Modern Physics*
+   **30** (1958) 257. The formalism AZURE2 is built on; the source of
+   :eq:`seyler` and of the channel-spin coupling convention used throughout.
+
+.. [Seyler1969] R. G. Seyler, *Nuclear Physics* **A124** (1969) 253. Quotes
+   the Lane–Thomas amplitude as its Eq. (4) before specialising to spin-1/2
+   on spin-1; only that general equation is used here.
 
 .. [SeylerWeller1979] R. G. Seyler and H. R. Weller,
    *Physical Review C* **20** (1979) 453.

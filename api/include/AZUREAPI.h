@@ -28,12 +28,16 @@ class AZUREAPI {
    *. The runtime configurations are also passed through a Config structure.
    */
   AZUREAPI(Config &configure) :
-    configure_(configure) {};
+    configure_(configure),
+    data_(nullptr),
+    compound_(nullptr) {};
 
-  ~AZUREAPI() {
-  };
+  // Defined in the .cpp: EData and CNuc are incomplete here, and deleting an
+  // incomplete type is undefined.
+  ~AZUREAPI();
 
-  bool Initialize();
+  // Returns 0 on success, -1 on failure (the model will not build).
+  int Initialize();
 
   // Update data objects, returns number of segments
   int UpdateData();
@@ -57,6 +61,28 @@ class AZUREAPI {
   // the compound nucleus, data and parameters.  Returns false if the rebuild
   // failed, in which case the instance is no longer usable.
   bool SetRadius(int idx, double r);
+  /*!
+   * Rebuild the compound nucleus and the data from the .azr and re-initialize,
+   * recomputing the external-capture integrals rather than reading back
+   * output/intEC.dat.
+   *
+   * Initialize() decides whether to reuse those integrals by looking for the
+   * file, which is right at startup and wrong afterwards: a model whose
+   * Coulomb functions have changed -- a different channel radius, a different
+   * hybrid nuclear potential -- would silently reuse integrals belonging to
+   * the old one.  SetRadius() is this with a radius override.
+   */
+  bool Rebuild();
+  /*!
+   * Write the run's standard output files -- AZUREOut_*, chiSquared.out and
+   * the rest -- into the configured output directory.
+   *
+   * The CLI does this at the end of a calculation; a Python session had no way
+   * to, and had to re-run the binary to get them.  The files are written from
+   * the cross sections stored on the points, so run a forward pass first or
+   * they report whatever parameters were last evaluated.
+   */
+  bool WriteOutputFiles();
   // Get indeces of normalization parameters
   vector_r GetNormalizationIndices();
   // Get indeces of energy shift parameters
@@ -343,6 +369,10 @@ class AZUREAPI {
 
 
  private:
+  /// Shared body of SetRadius and Rebuild; idx/r are null for a plain rebuild.
+  bool RebuildImpl(const int *idx, const double *r);
+
+
   /*!
    * Analytic reverse-mode gradient of the data chi-squared w.r.t. the energy and
    * reduced-width (gamma) parameters, accumulated into the energy/gamma entries

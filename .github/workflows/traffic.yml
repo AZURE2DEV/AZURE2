@@ -1,0 +1,190 @@
+name: traffic
+
+# GitHub keeps only the last 14 days of traffic data and shows it nowhere but
+# the Insights tab. This snapshots it daily onto an orphan branch, so the
+# history accumulates instead of rolling off, and can be plotted or pulled into
+# a report later.
+#
+# The data lands on branch `traffic-data` rather than dev, so a daily commit
+# does not clutter the history anyone actually reads:
+#
+#   git fetch origin traffic-data && git show origin/traffic-data:traffic/views.csv
+#
+# Rows are keyed by date and re-runs replace rather than append, so running it
+# twice in a day -- or backfilling by hand -- cannot double-count.
+#
+# TOKEN: the /traffic endpoints need push access, which the automatic
+# GITHUB_TOKEN is not granted. Create a fine-grained PAT with the repository's
+# "Administration: read" permission and save it as the TRAFFIC_TOKEN secret.
+# Without it the run still records what is public -- stars, forks, watchers,
+# open issues, and the download count of every release asset -- and says
+# plainly which series it could not collect, rather than failing.
+
+# NOTE: a schedule only fires from the workflow file on the repository's
+# DEFAULT branch. This one has to live there, or the cron is a silent no-op and
+# the Run workflow button never appears -- which is exactly what happened when
+# it was added to dev while qt5 was still the default.
+on:
+  schedule:
+    # 03:17 UTC daily. Off the hour on purpose: GitHub's scheduler is heavily
+    # oversubscribed at :00 and delays runs there by tens of minutes.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+# A queued run must not overlap one that is already pushing to the data branch.
+concurrency:
+  group: traffic
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      # Check out normally, then move onto the data branch. Asking checkout for
+      # traffic-data directly would fail on the very first run, before the
+      # branch exists, and leave nothing to create it with.
+      - uses: actions/checkout@v4
+
+      - name: Switch to the data branch
+        run: |
+          set -e
+          if git fetch origin traffic-data 2>/dev/null; then
+            git checkout -B traffic-data FETCH_HEAD
+          else
+            echo "traffic-data does not exist yet; starting it"
+            git checkout --orphan traffic-data
+            git rm -rf --cached . >/dev/null 2>&1 || true
+            # An orphan branch keeps the working tree, so clear it: the data
+            # branch holds traffic/ and nothing else.
+            find . -maxdepth 1 -mindepth 1 ! -name .git -exec rm -rf {} +
+          fi
+          mkdir -p traffic
+
+      - name: Collect
+        env:
+          # The PAT if it is set, the automatic token otherwise.
+          GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN || github.token }}
+          HAVE_PAT: ${{ secrets.TRAFFIC_TOKEN != '' }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import csv, json, os, urllib.request, urllib.error, datetime
+
+          repo  = os.environ["REPO"]
+          token = os.environ["GH_TOKEN"]
+          have_pat = os.environ.get("HAVE_PAT") == "true"
+          api = f"https://api.github.com/repos/{repo}"
+
+          def get(path):
+              req = urllib.request.Request(api + path, headers={
+                  "Authorization": f"Bearer {token}",
+                  "Accept": "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              })
+              try:
+                  with urllib.request.urlopen(req) as r:
+                      return json.load(r)
+              except urllib.error.HTTPError as e:
+                  print(f"  {path}: HTTP {e.code}"
+                        + ("  (needs TRAFFIC_TOKEN -- see the workflow header)"
+                           if e.code in (403, 404) and not have_pat else ""))
+                  return None
+              except Exception as e:
+                  print(f"  {path}: {e}")
+                  return None
+
+          def merge(name, rows, key):
+              """Rewrite traffic/<name>.csv with rows replaced by key, date-sorted.
+
+              Keyed rather than appended so a re-run, or a backfill of the 14
+              days GitHub still remembers, corrects the file instead of
+              duplicating it."""
+              path = f"traffic/{name}.csv"
+              existing = {}
+              if os.path.exists(path):
+                  with open(path, newline="") as f:
+                      for row in csv.DictReader(f):
+                          existing[tuple(row[k] for k in key)] = row
+              for row in rows:
+                  existing[tuple(str(row[k]) for k in key)] = row
+              if not existing:
+                  return 0
+              fields = list(rows[0].keys()) if rows else list(next(iter(existing.values())).keys())
+              out = sorted(existing.values(), key=lambda r: tuple(str(r[k]) for k in key))
+              with open(path, "w", newline="") as f:
+                  w = csv.DictWriter(f, fieldnames=fields)
+                  w.writeheader()
+                  w.writerows(out)
+              print(f"  {path}: {len(out)} rows")
+              return len(out)
+
+          today = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+          print(f"collecting for {repo} on {today}"
+                + ("" if have_pat else "  (no TRAFFIC_TOKEN; public metrics only)"))
+
+          # -- traffic (needs push access) ------------------------------------
+          for name, path in (("views", "/traffic/views"), ("clones", "/traffic/clones")):
+              d = get(path)
+              if not d:
+                  continue
+              merge(name, [{"date": e["timestamp"][:10],
+                            "count": e["count"],
+                            "uniques": e["uniques"]} for e in d.get(name, [])],
+                    key=("date",))
+
+          for name, path, label in (("popular_paths", "/traffic/popular/paths", "path"),
+                                    ("referrers", "/traffic/popular/referrers", "referrer")):
+              d = get(path)
+              if d is None:
+                  continue
+              merge(name, [{"date": today,
+                            label: e.get("path") or e.get("referrer"),
+                            "count": e["count"],
+                            "uniques": e["uniques"]} for e in d],
+                    key=("date", label))
+
+          # -- public, no PAT needed -----------------------------------------
+          r = get("")
+          if r:
+              merge("repo", [{"date": today,
+                              "stars": r.get("stargazers_count", 0),
+                              "forks": r.get("forks_count", 0),
+                              "watchers": r.get("subscribers_count", 0),
+                              "open_issues": r.get("open_issues_count", 0),
+                              "size_kb": r.get("size", 0)}],
+                    key=("date",))
+
+          rel = get("/releases?per_page=100")
+          if rel:
+              rows = [{"date": today, "release": x["tag_name"], "asset": a["name"],
+                       "downloads": a["download_count"]}
+                      for x in rel for a in x.get("assets", [])]
+              if rows:
+                  merge("downloads", rows, key=("date", "release", "asset"))
+          PY
+
+      - name: Commit
+        run: |
+          set -e
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add traffic
+          if git diff --cached --quiet; then
+            echo "nothing changed today"
+            exit 0
+          fi
+          git commit -m "traffic: $(date -u +%Y-%m-%d)"
+
+          # checkout is shallow, so a push whose history the remote cannot
+          # connect to is refused with "shallow update not allowed". It should
+          # not arise -- the parent is the tip just fetched -- but this runs
+          # unattended every day, and a daily failure is a daily notification.
+          # Deepen and retry once rather than let that happen.
+          if ! git push origin HEAD:traffic-data; then
+            echo "push refused; unshallowing and retrying"
+            git fetch --unshallow origin 2>/dev/null || true
+            git push origin HEAD:traffic-data
+          fi

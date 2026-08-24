@@ -27,6 +27,7 @@ which the ``S`` / ``L`` properties convert.
 """
 
 import os
+import re
 import tempfile
 from typing import List, Optional
 
@@ -49,6 +50,11 @@ _NFIELDS_MAX = len(_FIELDS_ALL)
 _OPTIONAL_DEFAULTS = ["0", "0"]
 
 
+def _token_spans(line):
+    """(start, end) of every whitespace-separated token in ``line``."""
+    return [m.span() for m in re.finditer(r"\S+", line)]
+
+
 def _isnum(tok):
     try:
         float(tok)
@@ -69,81 +75,150 @@ def _fmt(x):
 class AzrChannel:
     """One channel line (31 fields).  Level fields are shared by a level's lines.
 
-    Stores the raw string tokens so untouched channels round-trip exactly;
-    typed accessors parse on demand and mutators re-format only the field they
-    change.
+    Keeps the line exactly as it was read, so an untouched channel round-trips
+    byte for byte; typed accessors parse on demand and mutators rewrite only the
+    field they change, in place, keeping the column the file had it in.
     """
 
-    def __init__(self, tokens):
+    def __init__(self, tokens, raw=None):
         if not (_NFIELDS <= len(tokens) <= _NFIELDS_MAX):
             raise ValueError(
                 f"a <levels> line needs {_NFIELDS} to {_NFIELDS_MAX} fields, "
                 f"got {len(tokens)}: {tokens}")
         self.tokens = list(tokens)
-        # Remember whether the line carried the optional fields, so a file that
-        # did not have them is written back without them.
+        #: The line as read, or None for a channel built from tokens alone.
+        self._raw = raw
+        #: Field names whose token no longer matches ``_raw``.
+        self._dirty = set()
+        # Remember whether the line carried the optional (THM) fields, so a
+        # file that did not have them is written back without them.
         self._n_written = len(tokens)
         while len(self.tokens) < _NFIELDS_MAX:
             self.tokens.append(_OPTIONAL_DEFAULTS[len(self.tokens) - _NFIELDS])
 
     # -- typed field access ---------------------------------------------------
+
     def _get(self, name, cast):
         return cast(self.tokens[_IDX[name]])
 
     def _set(self, name, value):
-        self.tokens[_IDX[name]] = _fmt(value)
+        formatted = _fmt(value)
+        if self.tokens[_IDX[name]] == formatted:
+            return                      # unchanged: do not disturb the raw line
+        self.tokens[_IDX[name]] = formatted
+        self._dirty.add(name)
 
     # channel identity
+
     @property
-    def pair(self):        return self._get("ir", lambda v: int(float(v)))
+    def pair(self):
+        """1-based particle-pair number this channel decays to."""
+        return self._get("ir", lambda v: int(float(v)))
+
     @property
-    def entrance_key(self): return self._get("aa", lambda v: int(float(v)))
+    def entrance_key(self):
+        """Entrance-pair key stored on the line."""
+        return self._get("aa", lambda v: int(float(v)))
+
     @property
-    def L(self):           return self._get("l2", lambda v: int(float(v))) // 2
+    def L(self):
+        """Orbital angular momentum of the channel."""
+        return self._get("l2", lambda v: int(float(v))) // 2
+
     @L.setter
     def L(self, v):        self._set("l2", int(2 * v))
+
     @property
-    def S(self):           return self._get("s2", lambda v: int(float(v))) / 2.0
+    def S(self):
+        """Channel spin."""
+        return self._get("s2", lambda v: int(float(v))) / 2.0
+
     @S.setter
     def S(self, v):        self._set("s2", int(round(2 * v)))
+
     @property
-    def gamma(self):       return self._get("gamma", float)
+    def gamma(self):
+        """The <levels> width field: a partial width in eV for an open channel, an ANC in fm^-1/2 for a closed one -- not a reduced-width amplitude."""
+        return self._get("gamma", float)
+
     @gamma.setter
     def gamma(self, v):    self._set("gamma", float(v))
+
     @property
-    def channel_fixed(self): return self._get("channelFix", lambda v: int(float(v))) != 0
+    def channel_fixed(self):
+        """Is this channel's width held fixed in the fit?"""
+        return self._get("channelFix", lambda v: int(float(v))) != 0
+
     @channel_fixed.setter
     def channel_fixed(self, v): self._set("channelFix", 1 if v else 0)
+
     @property
-    def ptype(self):       return self._get("pType", lambda v: int(float(v)))
+    def ptype(self):
+        """Particle type code: 0 for a particle channel, nonzero for a photon."""
+        return self._get("pType", lambda v: int(float(v)))
+
     @property
-    def is_photon(self):   return self.ptype != 0
+    def is_photon(self):
+        """Is this a photon channel?"""
+        return self.ptype != 0
+
     @property
-    def channel_radius(self): return self._get("chRad", float)
+    def channel_radius(self):
+        """Channel radius in fm."""
+        return self._get("chRad", float)
+
     @channel_radius.setter
     def channel_radius(self, v): self._set("chRad", float(v))
+
     @property
-    def active(self):      return self._get("isActive", lambda v: int(float(v))) != 0
+    def active(self):
+        """Is the level active?"""
+        return self._get("isActive", lambda v: int(float(v))) != 0
 
     # pair physics -- the same quantities GET_PAIRS_INFO reports at runtime, but
     # readable straight from the file, so a caller can identify a model's
     # channels without launching AZURE2.
+
     @property
-    def Z1(self):          return self._get("z1", lambda v: int(float(v)))
+    def Z1(self):
+        """Charge number of the light particle."""
+        return self._get("z1", lambda v: int(float(v)))
+
     @property
-    def Z2(self):          return self._get("z2", lambda v: int(float(v)))
+    def Z2(self):
+        """Charge number of the heavy particle."""
+        return self._get("z2", lambda v: int(float(v)))
+
     @property
-    def M1(self):          return self._get("m1", float)
+    def M1(self):
+        """Mass of the light particle, in u."""
+        return self._get("m1", float)
+
     @property
-    def M2(self):          return self._get("m2", float)
+    def M2(self):
+        """Mass of the heavy particle, in u."""
+        return self._get("m2", float)
+
     @property
-    def J1(self):          return self._get("j1", float)
+    def J1(self):
+        """Intrinsic spin of the light particle."""
+        return self._get("j1", float)
+
     @property
-    def parity1(self):     return self._get("pi1", lambda v: int(float(v)))
+    def parity1(self):
+        """Parity of the light particle."""
+        return self._get("pi1", lambda v: int(float(v)))
+
     @property
-    def J2(self):          return self._get("j2", float)
+    def J2(self):
+        """Intrinsic spin of the heavy particle."""
+        return self._get("j2", float)
+
     @property
-    def parity2(self):     return self._get("pi2", lambda v: int(float(v)))
+    def parity2(self):
+        """Parity of the heavy particle."""
+        return self._get("pi2", lambda v: int(float(v)))
+
     @property
     def excitation(self):
         """Excitation energy of the pair's residual nucleus (MeV).
@@ -152,20 +227,38 @@ class AzrChannel:
         channels of a multi-transition model (gamma_0, gamma_1, ...).
         """
         return self._get("e2", float)
+
     @property
-    def sep_energy(self):  return self._get("sepE", float)
+    def sep_energy(self):
+        """Separation energy of the pair, in MeV."""
+        return self._get("sepE", float)
 
     # level fields (shared across a level's channel lines)
+
     @property
-    def levelJ(self):      return self._get("levelJ", float)
+    def levelJ(self):
+        """Total angular momentum of the level."""
+        return self._get("levelJ", float)
+
     @property
-    def levelPi(self):     return self._get("levelPi", lambda v: int(float(v)))
+    def levelPi(self):
+        """Parity of the level."""
+        return self._get("levelPi", lambda v: int(float(v)))
+
     @property
-    def levelE(self):      return self._get("levelE", float)
+    def levelE(self):
+        """Level energy in MeV -- an excitation energy of the compound nucleus."""
+        return self._get("levelE", float)
+
     @property
-    def levelID(self):     return self._get("levelID", lambda v: int(float(v)))
+    def levelID(self):
+        """The level's number, shared by all of its channel lines."""
+        return self._get("levelID", lambda v: int(float(v)))
+
     @property
-    def level_fixed(self): return self._get("levelFix", lambda v: int(float(v))) != 0
+    def level_fixed(self):
+        """Is the level energy held fixed in the fit?"""
+        return self._get("levelFix", lambda v: int(float(v))) != 0
 
     def _set_level(self, J, parity, energy, level_fixed, level_id):
         self._set("levelJ", float(J))
@@ -175,14 +268,48 @@ class AzrChannel:
         self._set("levelID", int(level_id))
 
     def clone(self):
-        c = AzrChannel(self.tokens)
-        c._n_written = self._n_written
-        return c
+        """A copy of this channel line, sharing nothing with the original.
+
+        The raw line comes with it, so a cloned channel whose couplings are then
+        changed keeps the column layout of the one it was cloned from.
+        """
+        copy = AzrChannel(self.tokens[:self._n_written], self._raw)
+        copy._dirty = set(self._dirty)
+        return copy
 
     def to_line(self):
-        # Emit exactly as many fields as the line arrived with, so a file
-        # predating the optional columns round-trips unchanged.
-        return " ".join(self.tokens[:self._n_written])
+        """The channel as one line of the ``<levels>`` block.
+
+        An untouched line is returned exactly as it was read.  An edited one is
+        the same line with the changed fields substituted in place, right
+        aligned in the width the file used, so a single edit does not reflow the
+        whole block.  Two fallbacks: a channel with no raw line behind it --
+        built from tokens, not parsed -- joins with single spaces; and an edit
+        to an optional (THM) field a shorter line never carried appends the
+        optional columns, since there is no column to substitute into.
+        """
+        if self._raw is None:
+            return " ".join(self.tokens[:self._n_written])
+        if not self._dirty:
+            return self._raw
+        spans = _token_spans(self._raw)
+        if len(spans) < self._n_written:  # not the line we parsed; do not guess
+            return " ".join(self.tokens[:self._n_written])
+        out = self._raw
+        appended = self._n_written > len(spans)
+        for name in sorted(self._dirty, key=lambda n: -_IDX[n]):
+            i = _IDX[name]
+            if i >= len(spans):
+                appended = True
+                continue                  # no column in the raw line: append below
+            start, end = spans[i]
+            new = self.tokens[i]
+            width = end - start
+            out = out[:start] + (new.rjust(width) if len(new) <= width else new) + out[end:]
+        if appended:
+            out = out.rstrip() + "  " + "  ".join(
+                self.tokens[len(spans):self._n_written])
+        return out
 
     # -- the optional trailing fields ----------------------------------------
     @property
@@ -203,11 +330,19 @@ class AzrChannel:
 
     @property
     def binding_energy(self):
+        """THM binding energy B_xs (MeV) of the transferred particle; 0 for a
+        conventional pair."""
         return self._get("bindingEnergy", float)
+
+    @binding_energy.setter
+    def binding_energy(self, v):
+        self._set("bindingEnergy", float(v))
+        self._n_written = _NFIELDS_MAX      # the field must now be emitted
 
     @classmethod
     def from_line(cls, line):
-        return cls(line.split())
+        """Parse one .azr channel line, keeping it verbatim for round-tripping."""
+        return cls(line.split(), raw=line)
 
 
 class AzrLevel:
@@ -219,26 +354,43 @@ class AzrLevel:
         self.channels = list(channels)
 
     @property
-    def J(self):        return self.channels[0].levelJ
+    def J(self):
+        """Total angular momentum of the level."""
+        return self.channels[0].levelJ
+
     @property
-    def parity(self):   return self.channels[0].levelPi
+    def parity(self):
+        """Parity of the level."""
+        return self.channels[0].levelPi
+
     @property
-    def energy(self):   return self.channels[0].levelE
+    def energy(self):
+        """Level energy in MeV."""
+        return self.channels[0].levelE
+
     @property
-    def level_id(self): return self.channels[0].levelID
+    def level_id(self):
+        """The level's number."""
+        return self.channels[0].levelID
+
     @property
-    def fixed(self):    return self.channels[0].level_fixed
+    def fixed(self):
+        """Is the level energy held fixed?"""
+        return self.channels[0].level_fixed
 
     @property
     def jpi(self):
+        """J^pi as text, e.g. "3/2-"."""
         j = int(self.J) if float(self.J).is_integer() else f"{int(round(2*self.J))}/2"
         return f"{j}{'+' if self.parity > 0 else '-'}"
 
     def set_energy(self, energy):
+        """Set the level energy on every channel line of the level."""
         for c in self.channels:
             c._set("levelE", float(energy))
 
     def set_fixed(self, fixed):
+        """Fix or free the level energy on every channel line."""
         for c in self.channels:
             c._set("levelFix", 1 if fixed else 0)
 
@@ -269,6 +421,7 @@ class AzrModel:
 
     @classmethod
     def from_file(cls, path):
+        """Parse a .azr file; only <levels> is interpreted, the rest is kept verbatim."""
         with open(path) as f:
             text = f.read()
         start = text.find("<levels>")
@@ -323,6 +476,7 @@ class AzrModel:
         return self
 
     def to_text(self):
+        """The whole file as text, with <levels> re-emitted and everything else unchanged."""
         self._renumber()
         blocks = ["\n".join(c.to_line() for c in lv.channels)
                   for lv in self.levels]
@@ -723,7 +877,31 @@ class AzrModel:
             raise KeyError(f"no <segmentsData> line matches {file_substr!r}.")
         return changed
 
-    def apply_fit(self, parameters, x, transform=None, physical=False):
+    def engine_level_keys(self):
+        """``{(jgroup, level): AzrLevel}`` -- the numbering AZURE2 itself uses.
+
+        The engine builds a J-group the first time it meets a ``(J, parity)``
+        while reading ``<levels>``, and numbers levels within a group in file
+        order.  Reproducing that here gives the same ``(jgroup, level)`` a
+        :class:`~pyazr.parameters.Parameter` reports, which is the only reliable
+        way to say *which* level a fitted value belongs to: a level at
+        ``Ex = 0`` comes back from the API with ``level_energy = None``, so an
+        energy-based key cannot identify it.
+
+        Both indices are 1-based, as the API reports them.
+        """
+        order, seen, out = [], {}, {}
+        for lv in self.levels:
+            k = (int(round(2 * lv.J)), int(lv.parity))
+            if k not in seen:
+                order.append(k)
+                seen[k] = 0
+            seen[k] += 1
+            out[(order.index(k) + 1, seen[k])] = lv
+        return out
+
+    def apply_fit(self, parameters, x, transform=None, physical=False,
+                  pairs=None, strict=True):
         """Write a fitted parameter vector into the levels block.
 
         **The ``gamma`` field of a ``<levels>`` line is not a reduced-width
@@ -743,14 +921,30 @@ class AzrModel:
 
         >>> mdl.apply_fit(m.parameters, m.transform_rwa(x_best), physical=True)
 
-        Passing neither raises, rather than silently writing an rwa.  Level
-        energies need no conversion (the transform leaves them alone) and are
-        written straight through.  Matching is by 2J, parity, the level's input
-        energy, and the channel's pair/L/S.
+        Passing neither raises, rather than silently writing an rwa.
 
-        Note this covers ``<levels>`` only -- normalizations are not in the
-        levels block, so a fit that moved them needs its ``param.sav`` too.
-        The number of values written is left in :attr:`applied`.
+        Levels are matched on the ``(jgroup, level)`` the engine reports, via
+        :meth:`engine_level_keys`, and channels on ``(pair, L, S)`` within the
+        matched level.
+
+        **Pass ``pairs=m.pairs``.**  A ``Parameter``'s ``pair`` is the engine's
+        number, which counts particle pairs in the order ``<levels>`` first
+        mentions them -- not the pair key the file writes.  The two differ
+        whenever the levels do not introduce the pairs in key order: on the 8Be
+        model engine pair 1 is file key 2, and file key 1 is engine pair 6, so
+        matching one against the other writes every width to the wrong channel.
+        The :class:`~pyazr.parameters.PairSet` carries both, and is the only
+        thing that can translate.
+
+        ``strict`` (the default) raises if any free parameter finds no home,
+        rather than skipping it: a partial write produces a file that loads
+        cleanly and is a mixture of two fits.
+
+        Note this covers ``<levels>`` only -- normalizations and energy shifts
+        are not in that block, so a fit that moved them is only half saved.
+        :meth:`pyazr.azure2.azure2.save_fit` writes the companion
+        ``param.sav`` and verifies the result; prefer it to calling this
+        directly.  The number of values written is left in :attr:`applied`.
         """
         if transform is None and not physical:
             raise ValueError(
@@ -762,40 +956,52 @@ class AzrModel:
                 raise ValueError("pass transform= or physical=True, not both.")
             x = transform(x)
 
-        def key(J, parity, E):
-            return (int(round(2 * J)), int(parity),
-                    round(E, 2) if E is not None else None)
-
-        lvlmap = {}
-        for lv in self.levels:
-            # a level at Ex = 0 comes back with level_energy None from the API
-            # (its sentinel), so index it under both spellings
-            k = key(lv.J, lv.parity, lv.energy)
-            lvlmap.setdefault(k, lv)
-            if k[2] == 0.0:
-                lvlmap.setdefault((k[0], k[1], None), lv)
-
-        written = 0
+        lvlmap = self.engine_level_keys()
+        # engine pair number -> the pair key the file writes
+        pairkey = {p.number: p.key for p in pairs} if pairs is not None else {}
+        written, unplaced = 0, []
         for p in parameters:
-            if p.fixed or p.free_index is None or p.J is None:
+            if p.fixed or p.free_index is None:
                 continue
+            if p.kind not in ("energy", "width"):
+                continue            # norms and shifts do not live in <levels>
             if p.free_index >= len(x):
+                unplaced.append(f"{p.name} (free_index {p.free_index} beyond the vector)")
                 continue
-            lv = lvlmap.get(key(p.J, p.parity, p.level_energy))
+            lv = lvlmap.get((p.jgroup, p.level))
             if lv is None:
+                unplaced.append(f"{p.name} (no level at jgroup {p.jgroup}, level {p.level})")
                 continue
             v = float(x[p.free_index])
             if p.kind == "energy":
                 lv.set_energy(v)
                 written += 1
-            elif p.kind == "width":
-                for c in lv.channels:
-                    if (c.pair == p.pair and c.L == p.L
-                            and abs(c.S - (p.S or 0.0)) < 1e-6):
-                        c.gamma = v
-                        written += 1
-                        break
+                continue
+            want_pair = pairkey.get(p.pair, p.pair)
+            for c in lv.channels:
+                if (c.pair == want_pair and c.L == p.L
+                        and abs(c.S - (p.S or 0.0)) < 1e-6):
+                    c.gamma = v
+                    written += 1
+                    break
+            else:
+                unplaced.append(
+                    f"{p.name} (no channel pair={want_pair} L={p.L} S={p.S} "
+                    f"in {lv.jpi} at {lv.energy} MeV)")
+
+        if unplaced and strict:
+            raise ValueError(
+                f"apply_fit could not place {len(unplaced)} of the free "
+                f"parameters, so the result would be a mixture of two fits:\n  "
+                + "\n  ".join(unplaced[:8])
+                + (f"\n  ... and {len(unplaced) - 8} more" if len(unplaced) > 8 else "")
+                + "\nThe .azr and the parameter set do not describe the same model. "
+                  "Pass strict=False to write the rest anyway."
+                + ("\nNote apply_fit was given no pairs=, so it assumed the "
+                   "engine's pair numbers are the file's pair keys. Pass "
+                   "pairs=m.pairs if they are not." if pairs is None else ""))
         self.applied = written
+        self.unplaced = unplaced
         return self
 
     def set_segment_datafile(self, file_substr, new_path):
@@ -845,6 +1051,108 @@ class AzrModel:
         if changed == 0:
             raise KeyError(f"no <segmentsData> line matches {file_substr!r}.")
         return changed
+
+    # -- adding / removing whole data segments --------------------------------
+
+    # observable name -> isDiff code for a <segmentsData> line
+    # (ESegment::ESegment(SegLine); mirrors datasets._OBSERVABLE).
+    _DATA_CODE = {
+        "angle-integrated": 0, "differential": 1, "phase-shift": 2,
+        "total-capture": 3, "differential-cm": 4, "angle-integrated-E1": 5,
+        "angle-integrated-E2": 6, "analyzing-power": 7,
+    }
+
+    def add_data_segment(self, data_file, entrance, exit,
+                         observable="angle-integrated",
+                         energy_min=0.0, energy_max=5.0,
+                         angle_min=0.0, angle_max=180.0,
+                         norm=1.0, vary_norm=False, norm_error=0.0,
+                         energy_shift=0.0, energy_shift_error=0.0,
+                         vary_shift=False, phase_J=None, phase_L=None,
+                         active=True):
+        """Append one data segment (a ``<segmentsData>`` line).
+
+        ``data_file`` is the data file path (relative to the run directory,
+        which for a model living in its own folder is usually ``data/...``).
+        ``entrance`` / ``exit`` are particle-pair keys (``exit=-1`` for a
+        summed/total observable).  ``observable`` is one of
+        ``angle-integrated``, ``differential``, ``differential-cm``,
+        ``total-capture``, ``phase-shift``, ``angle-integrated-E1``,
+        ``angle-integrated-E2``.
+
+        ``norm`` is the normalization applied to the data, ``norm_error`` its
+        systematic error (percent, as stored in the file), ``energy_shift``
+        the beam-energy shift (MeV) with its ``_error``.  ``vary_norm`` /
+        ``vary_shift`` free the corresponding parameter.
+
+        Returns ``self`` so calls chain.
+        """
+        if observable not in self._DATA_CODE:
+            raise ValueError(f"unknown observable {observable!r}; expected one "
+                             f"of {sorted(self._DATA_CODE)}.")
+        isDiff = self._DATA_CODE[observable]
+        toks = [1 if active else 0, int(entrance), int(exit),
+                _fmt(energy_min), _fmt(energy_max),
+                _fmt(angle_min), _fmt(angle_max), isDiff]
+        if isDiff == 2:                       # phase shift carries J, L
+            if phase_J is None or phase_L is None:
+                raise ValueError("a phase-shift data segment needs phase_J "
+                                 "and phase_L.")
+            toks += [_fmt(phase_J), int(phase_L)]
+        toks += [_fmt(norm), 1 if vary_norm else 0, _fmt(norm_error),
+                 _fmt(energy_shift), _fmt(energy_shift_error),
+                 1 if vary_shift else 0, str(data_file), 0, 0]
+        line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
+        lines = self._suffix.splitlines()
+        if "<segmentsData>" not in lines:
+            raise ValueError("no <segmentsData> block to add to.")
+        end = lines.index("</segmentsData>")
+        self._suffix = "\n".join(lines[:end] + [line] + lines[end:])
+        return self
+
+    def remove_data_segments(self, file_substr):
+        """Remove every ``<segmentsData>`` line whose text matches
+        ``file_substr`` (e.g. a data-file name).  Returns the number of
+        segments removed.  Raises if nothing matches.
+
+        Removing data changes which energies AZURE2 evaluates, so the
+        external-capture integrals must be recalculated before the next run --
+        delete ``output/intEC.dat`` / ``output/intEC.extrap`` (or write the
+        model into its own output directory) so the stale cache cannot be
+        reused.
+        """
+        if "<segmentsData>" not in self._suffix:
+            raise ValueError("no <segmentsData> block to edit.")
+        out, removed, inside = [], 0, False
+        for line in self._suffix.splitlines():
+            s = line.strip()
+            if s == "<segmentsData>":
+                inside = True
+            elif s == "</segmentsData>":
+                inside = False
+            elif inside and s and file_substr in line:
+                removed += 1
+                continue
+            out.append(line)
+        self._suffix = "\n".join(out)
+        if removed == 0:
+            raise KeyError(f"no <segmentsData> line matches {file_substr!r}.")
+        return removed
+
+    def clear_data_segments(self):
+        """Remove every ``<segmentsData>`` line (leave the block empty).
+
+        The external-capture caches ``output/intEC.dat`` / ``output/intEC.extrap``
+        belong to the removed grids and must be deleted before the next run.
+        """
+        lines = self._suffix.splitlines()
+        try:
+            start = lines.index("<segmentsData>")
+            end = lines.index("</segmentsData>")
+        except ValueError:
+            raise ValueError("no <segmentsData> block to clear.")
+        self._suffix = "\n".join(lines[:start + 1] + lines[end:])
+        return self
 
     # -- rendering ------------------------------------------------------------
 

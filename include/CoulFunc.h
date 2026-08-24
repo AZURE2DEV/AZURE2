@@ -36,29 +36,53 @@ struct CoulWaves {
 
 class CoulFunc {
  public:
+  /// Build for a particle pair; resolves that pair's hybrid nuclear potential.
   CoulFunc(PPair *pPair, bool useGSLFunctions);
+  /// Charge number of the first particle.
   int z1() const;
+  /// Charge number of the second particle.
   int z2() const;
+  /// Reduced mass of the pair, in u.
   double redmass() const;
+  /// Orbital angular momentum of the last evaluation.
   int lLast() const;
+  /// Radius of the last evaluation, fm.
   double radiusLast() const;
+  /// Centre-of-mass energy of the last evaluation, MeV.
   double energyLast() const;
+  /// The last functions computed; a one-deep memo for repeated calls at the same point.
   struct CoulWaves coulLast() const;
+  /// Record an evaluation as the memoized one.
   void setLast(int, double, double, CoulWaves);
+  /// Coulomb functions at (l, radius fm, centre-of-mass energy MeV).
   CoulWaves operator()(int, double, double);
+  /// Penetrability \f$P_l\f$ at (l, radius, energy).
   double Penetrability(int, double, double);
+  /// Shift function \f$S_l\f$ at (l, radius, energy), positive energies.
   double PEShift(int, double, double);
+  /// Energy derivative \f$dS_l/dE\f$ -- the term that makes the observed-width transformation singular when it grows too large.
   double PEShift_dE(int, double, double);
 
   // Hybrid method support
+  /// Override this instance's nuclear potential.
   void setNuclearPotential(std::shared_ptr<NuclearPotential> potential);
+  /// The nuclear potential in force for this pair.
   std::shared_ptr<NuclearPotential> getNuclearPotential() const;
+  /// Radius at which the Numerov solution is matched to the Coulomb functions.
   void setMatchingRadius(double r_match);
+  /// Matching radius, fm.
   double getMatchingRadius() const;
+  /// Step of the outward Numerov integration, fm.
   void setNumerovGridStep(double dr);
+  /// Numerov step, fm.
   double getNumerovGridStep() const;
+  /// Turn the hybrid model on or off for this instance.
   void setUseHybridMethod(bool useHybrid);
+  /// Is the hybrid model active here?
   bool getUseHybridMethod() const;
+  /// The key of the pair this object was built for, which is what selects
+  /// its nuclear potential out of NuclearPotentialManager.
+  int pairKey() const { return pairKey_; }
 
   // The global (radius-keyed, mutex-protected) Coulomb cache only helps when the
   // same radius is queried across many energies (e.g. penetrabilities at the
@@ -82,6 +106,10 @@ class CoulFunc {
   bool useGSLFunctions_;
   bool useHybridMethod_;
   bool useGlobalCache_ = true;
+  int pairKey_;
+  /// Identifies the nuclear potential these waves were computed under; part of
+  /// the Coulomb memo key.  0 means the plain Coulomb solution.
+  long hybridTag_;
   int z1_;
   int z2_;
   int lLast_;

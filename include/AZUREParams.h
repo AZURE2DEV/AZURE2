@@ -21,9 +21,13 @@ class Config;
 class AZUREParams {
  public:
   ROOT::Minuit2::MnUserParameters &GetMinuitParams();
+  /// Read starting parameters from the configured external parameter file.
   void ReadUserParameters(const Config &);
+  /// Read starting parameters from a named file.
   void ReadUserParameters(const std::string &);
+  /// Write the current parameters to param.sav.
   void WriteUserParameters(const Config &, bool);
+  /// Write Minos asymmetric errors to param.errors.
   void WriteParameterErrors(const std::vector<std::pair<double, double>> &, const Config &);
 
  private:

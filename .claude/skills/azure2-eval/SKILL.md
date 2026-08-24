@@ -1,6 +1,6 @@
 ---
 name: azure2-eval
-description: Run AZURE2 R-matrix evaluations of nuclear reaction/scattering data — calculate cross sections & chi-squared, fit levels/widths, add/remove levels, decompose a cross section into level/interference/external contributions, extrapolate, compute reaction rates, or drive AZURE2 from Python via pyazr. Use whenever the task involves an .azr project file, AZURE2 levels/channels/segments, R-matrix fitting, S-factors, resonance significance tests, or the o17_guardo (THM) example in this repo.
+description: Run AZURE2 R-matrix evaluations of nuclear reaction/scattering data — calculate cross sections & chi-squared, fit levels/widths, add/remove levels, decompose a cross section into level/interference/external contributions, extrapolate, compute reaction rates, or drive AZURE2 from Python via pyazr. Use whenever the task involves an .azr project file, AZURE2 levels/channels/segments, R-matrix fitting, S-factors, resonance significance tests, or the worked examples in pyazr/examples/.
 ---
 
 # Running AZURE2 evaluations
@@ -13,18 +13,20 @@ one-shot calculate/fit/extrapolate/rate that writes the standard output files;
 use **pyazr for all evaluation work** — χ², parameter scans, level add/remove
 tests, cross-section decomposition, custom fitters and samplers.
 
-The binary is on `$PATH` as `AZURE2` (also `build/src/AZURE2` in the source
-repo); pyazr resolves it via `$AZURE2_BINARY` → `<repo>/build/src/AZURE2` →
-`$PATH`, so `binary=` is usually unnecessary. **The two can drift**:
-`/usr/local/bin/AZURE2` is a copy, not a symlink, so a `make AZURE2` in the
-source repo does not reach it — `sudo cp build/src/AZURE2 /usr/local/bin/` after
-every rebuild, or export `$AZURE2_BINARY`. `pyazr/` lives at the repo root
-(`/Users/kuba/Desktop/R-Matrix/Codes/AZURE2/pyazr`, v2.3.0) and is mirrored into
-evaluation directories, so `from pyazr import ...` works when cwd is either.
+**pyazr does not run the binary.** The engine is compiled into the extension
+module `pyazr/_azure2` and runs in your interpreter, so there is no path to
+resolve and nothing to keep in step — a rebuild of `_azure2` *is* the update.
+The CLI binary (`build/src/AZURE2`) is a separate artefact, used only for
+Workflow A.
 
-Full reference docs: `docs/_build/html/_sources/` — `reference/` covers
-command_line, data_formats, output_files; `user_guide/` covers levels_channels,
-segments, particle_pairs, fitting, mcmc. Worked example: `examples/o17_guardo/`.
+`pyazr/` lives at the repo root and is mirrored into evaluation directories, so
+`from pyazr import ...` works when cwd is either. Its version is
+`pyazr.__version__`; do not assume one.
+
+Reference docs: `docs/source/` — `reference/` covers command_line,
+data_formats, output_files; `user_guide/` covers levels_channels, segments,
+particle_pairs, fitting, mcmc, pyazr. Worked examples: `pyazr/examples/`;
+runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`.
 
 ## Golden rules
 
@@ -43,16 +45,24 @@ segments, particle_pairs, fitting, mcmc. Worked example: `examples/o17_guardo/`.
   (integrals for data and test segments are built together at INITIALIZE).
   `intEC.dat` is the data-segment equivalent and is safe while `<segmentsData>`
   is untouched. Both are safe to delete; they just cost time to rebuild.
-- **One AZURE2 session per process.** Opening a second `azure2()` in the same
-  interpreter desyncs `GET_PARAMS_INFO`. Sweep variants from a shell loop, or
-  build one temp `.azr` that carries everything the run needs.
+- **Several sessions can be open at once**, each an independent engine that
+  enters its own directory per call — that is how `save_fit` verifies what it
+  wrote. The engine is not *thread*-safe, so parallelism is one session per
+  process, not per thread.
 - CLI mode does **not** read Runtime Options from the `.azr` — pass them as
-  flags every time (`--use-brune`, `--gsl-coul`, …).
+  flags every time (`--gsl-coul`, `--ignore-externals`, …). Note the Brune
+  parameterization is **on by default** and there is no flag to turn it off;
+  `--use-rmc` selects the mutually exclusive RMC formalism, and pyazr takes
+  `use_brune=False` directly.
 
 ## Workflow A — interactive CLI (one-shot runs)
 
-Prompt order: **(1) menu choice → (2) external parameter file → (3) mode-specific
-prompts**. Pipe stdin to run non-interactively.
+Prompt order: **(1) menu choice → (2) external parameter file → (3) external
+capture amplitude file → (4) mode-specific prompts**, then `7` to exit. Both
+file prompts appear whether or not the model has capture, and a recipe that
+feeds only one leaves the rest of the answers off by a line. Pipe stdin to run
+non-interactively, and pass `--no-readline` so readline does not fight the
+pipe. `tests/run_tests.sh` is the working reference.
 
 | # | Mode |
 |---|------|
@@ -69,15 +79,18 @@ from those best-fit formal parameters, or leave **blank** to build fresh from
 the `.azr` levels.
 
 ```bash
-# Calculate with saved best-fit params; writes chiSquared.out + AZUREOut_*.out
-printf '1\noutput/param.sav\n' | AZURE2 --no-gui 7Be.azr
+# Calculate from the .azr's own parameters: menu, both file prompts blank, exit.
+printf '1\n\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
+
+# Calculate with saved best-fit params (parameter file given, EC file blank):
+printf '1\noutput/param.sav\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 
 # Fit fresh from the .azr levels. Mode 2 then asks about the cross-section
 # uncertainty band (y/n) and, if yes, reduced-chi2 scaling (y/n):
-printf '2\n\nn\n' | AZURE2 --no-gui 7Be.azr
+printf '2\n\n\nn\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 
 # Extrapolate (no data) using saved params:
-printf '3\noutput/param.sav\nn\n' | AZURE2 --no-gui 7Be.azr
+printf '3\noutput/param.sav\n\nn\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 ```
 
 Non-interactive band control: `--covariance-band` (+ `--scale-covariance`) skips
@@ -86,8 +99,11 @@ the y/n prompts. Other flags: `--use-brune`, `--gsl-coul`, `--ignore-externals`,
 
 ## Workflow B — pyazr
 
-pyazr spawns headless `AZURE2 --no-gui --use-api` processes and talks to them
-over a socket. A session is a context manager; always close it.
+pyazr embeds the AZURE2 engine in-process: the R-matrix code is compiled into
+the pybind11 extension module `pyazr/_azure2`, and an `azure2()` object is a
+real `AZUREAPI` session living in the interpreter. No subprocesses, no sockets,
+no instance pool. A session is a context manager; always close it — that frees
+the compound nucleus and data, which are several MB per model.
 
 Install it from the repository root (it is not on PyPI):
 
@@ -97,12 +113,11 @@ pip install -e ".[examples]"    # + matplotlib, emcee, multiprocess
 pip install -e ".[all]"         # + zeus-mcmc
 ```
 
-`-e` is the useful form, since the package lives in the checkout. AZURE2 itself
-is C++ and is **not** installed by pip — build it separately. pyazr locates the
-binary via `$AZURE2_BINARY`, then `build/src/AZURE2`, then `$PATH`, and it must
-be built with `USE_API=ON` (the default). Installing also puts `pyazr-cleanup`
-on the path, which reaps API instances orphaned by an interpreter that died
-before it could close them.
+`-e` is the useful form, since the package lives in the checkout. The engine is
+C++ and is **not** installed by pip — build the `_azure2` module with CMake
+(`USE_API=ON`, the default), which lands it in `pyazr/`; a `pip install` ships
+it as package data. `import pyazr` from the repository root picks up the built
+module.
 
 ```python
 import os
@@ -110,14 +125,16 @@ os.environ.setdefault("OMP_NUM_THREADS", "4")   # set BEFORE importing numpy
 import numpy as np
 from pyazr import azure2, AzrModel
 
-with azure2("7Be.azr", nprocs=1, cwd=HERE) as m:
+with azure2("7Be.azr", cwd=HERE) as m:
     best = np.asarray(m.params_rwa, float)      # free parameter vector
     chi2 = np.sum(m.calculate_chi2_rwa(best))
 ```
 
-`nprocs=N` spawns N independent instances (`proc=i` selects one) — for one χ²
-per walker in emcee/zeus. Ports are OS-assigned, so parallel sessions never
-collide.
+Every `azure2()` object is an independent engine, and several can be open at
+once — each enters its own directory per call, so they never disturb each other
+or your cwd. The engine is *not* thread-safe, so parallelism is per process:
+construct the session at module level of the worker module and every pool
+worker gets its own, under either `spawn` or `fork`.
 
 ### Two parameter conventions
 
@@ -167,45 +184,82 @@ m.datasets.sys_errors(vary_only=True)   # per-segment normalization systematics 
 A `LevelKey` prints as `5/2-#2@6.588MeV`; `(jgroup, level)` is its identity
 (AZURE2 restarts level numbering inside every J-group).
 
-### χ², residuals, per-dataset χ²
+### χ², residuals, and AZURE2's objective
 
 ```python
-chi2  = np.sum(m.calculate_chi2_rwa(x))     # total only
+chi2   = np.sum(m.calculate_chi2_rwa(x))    # total DATA chi-squared
 val, g = m.chi2_and_grad(x)                 # analytic gradient (energies/widths/norms)
 r, J   = m.residual_jacobian(x)             # r_i standardized: sum(r**2) == chi2
+
+m.segment_chi2(x)      # one entry per <segmentsData> segment; sums to chi2
+m.dataset_chi2(x)      # {name: (chi2, points, segments)} -- per experiment
+m.penalties(x)         # {"norm": array, "shift": array}, per segment
+m.objective(x)         # chi2 + penalties: what AZURE2's own fit minimizes
 ```
 
 `residual_jacobian` costs ~2 forward evaluations for the whole Jacobian
-(reverse-mode adjoint) — use it for Gauss-Newton/LM fits *and* to get the
-**per-segment χ² the API does not expose**:
+(reverse-mode adjoint) — that is what makes a Gauss-Newton / LM fit in Python
+cheaper than Minuit's numerical gradients. Energy-shift columns come back zero;
+an analytically unsupported segment raises.
+
+**Fit against `objective`, not `calculate_chi2_rwa`.** The latter is the *data*
+χ² only. `AZURECalc::operator()` also adds, per segment,
+`((norm − nominal)/(nominal/100 · norm_error))²` and, for a free energy shift,
+`((shift − nominal)/shift_error)²`. Minimize the bare χ² and the normalizations
+drift to absorb every discrepancy — a "better" number AZURE2 would never have
+found (−480 on the 7Be model). Note the denominator uses the **nominal**
+normalization, and that `norm_error` is a **percentage**.
+
+`m.objective(x)` is exactly what `chiSquared.out` reports as
+`Total-Chi-Squared` + `Total-Norm-Chi-Squared`; `tests/pyazr/objective_test.py`
+cross-checks it against the engine rather than against the formula.
+
+For a least-squares fit that needs the penalties as residual *rows* (so LM sees
+their Jacobian), append them with their constant derivatives:
 
 ```python
-seglens = [len(m.energies[i]) for i in range(m.nsegments)]   # data mode
-idx = np.cumsum([0] + seglens)
-seg_chi2 = np.array([np.sum(r[idx[i]:idx[i+1]]**2) for i in range(m.nsegments)])
-# aggregate by experiment: m.datasets[i].name
-```
-
-Energy-shift columns come back zero; an analytically unsupported segment raises.
-
-**`chi2`/`residual_jacobian` are the DATA χ² only.** AZURE2's own fit objective
-(`AZURECalc::operator()`) also carries a penalty per free normalization,
-`((norm − nominal)/(nominal·sys_err))²`, and one per free energy shift. Minimize
-the API's residuals alone and the norms drift to absorb every discrepancy — a
-"better" χ² that AZURE2 would never have found (−480 on the 7Be model). Append
-the penalty rows, with their constant Jacobian rows:
-
-```python
-pen = [(p.free_index, d.norm, d.norm * d.norm_error / 100.0)
+pen = [(p.free_index, d.norm, d.norm / 100.0 * d.norm_error)
        for p in m.parameters.norms
-       for d in [m.datasets[p.segment_key - 1]] if d.norm_error > 0]
+       for d in [m.datasets.by_key(p.segment_key)] if d.norm_error > 0]
 Jpen = np.zeros((len(pen), nfree))
 for k, (fi, _, s) in enumerate(pen): Jpen[k, fi] = 1.0 / s
-resid = np.concatenate([r, [(z[fi] - n0)/s for fi, n0, s in pen]])
+resid = np.concatenate([r, [(z[fi] - n0) / s for fi, n0, s in pen]])
 ```
 
-`chiSquared.out`'s `Total-Chi-Squared` is likewise the data part; the penalty is
-the separate `Total-Norm-Chi-Squared`.
+### Writing the run's output files
+
+```python
+m.write_output_files()        # AZUREOut_*, chiSquared.out, into output/
+m.write_output_files(x_best)  # at a particular parameter vector
+```
+
+The files a colleague or the GUI's plot tab expects, without re-running the
+binary. `output/` must already exist. In data mode this runs the χ²
+evaluation first — `chiSquared.out` reports the per-segment χ² *stored on each
+segment*, and only that evaluation sets it, so writing after a bare forward
+pass gives a well-formed file full of zeros.
+
+`param.par` and `parameters.out` do not come from this call: the first is
+written at initialization, the second by `CNuc::PrintTransformParams` at the
+end of a CLI run. Use `m.transform_rwa(x)` for the numbers `parameters.out`
+would carry.
+
+### Free-vector helpers
+
+`Parameter.free_index` is a parameter's position in the free vector; threading
+that by hand is the usual source of silent misalignment.
+
+```python
+m.n_rmatrix                       # where the R-matrix block ends: x[:m.n_rmatrix]
+w = m.parameters.widths
+w.indices()                       # their free-vector positions
+w.take(x)                         # their entries of x
+w.put(x, 0.0)                     # a copy of x with every width zeroed
+m.datasets.by_key(p.segment_key)  # the segment a norm/shift belongs to
+```
+
+`by_key` rather than `datasets[key - 1]`: a segment key counts the *inactive*
+segments too, so it is not an index.
 
 ### Calculating observables
 
@@ -233,34 +287,70 @@ need no special handling.
 ay = m.calculate_analyzing_power_rwa(m.params_rwa)
 ```
 
-Works for a spin-1/2 **projectile** on a target of any spin. The amplitudes come
+Works for a spin-1/2 **projectile** on a target of any spin, in **both particle
+and capture** exit channels — by two different routes.
+
+*Particle exits* use Seyler's channel-spin amplitude matrix. The amplitudes come
 out of the R-matrix in the channel-spin basis, so for a target with spin the
 entrance index is decomposed into projectile and target projections before
 `sigma_y` is applied to the projectile alone. For a spin-0 target (¹²C) the
 channel spin *is* the projectile's and no decomposition is needed; for a
 spin-1/2 target (¹⁵N) the channel spins are 0 and 1 and never 1/2.
 
+*Capture exits* have no such amplitude matrix and use the Legendre coefficients
+of Seyler & Weller, PRC 20 (1979) 453, Eqs. (20) and (21):
+`A_y = sum_k b_k P_k^1(cos t) / sum_k a_k P_k(cos t)`, built by
+`CNuc::CalcCaptureAnalyzingPower` (lazily, on first use — the 9-j symbols cost
+time) and evaluated by `GenMatrixFunc::CalculateCaptureAnalyzingPower`. External
+capture is included; a term may pair two internal pathways, two external ones or
+one of each. The analytic adjoint is in `AMatrixFunc::PointAdjoint`.
+
+The reason capture needs its own pathway table: `a_k` forces `s = s'`, so
+`CalcAngularDists` only ever pairs pathways inside one KGroup. `b_k` does not,
+and those channel-spin off-diagonal terms are exactly what the polarization
+observable adds. `AZURE2_CAPPOL_DEBUG=1` prints, per point, the check that
+`sum_k a_k P_k` reproduces AZURE2's own differential capture cross section, up
+to `400*pi/(geom*I1I2)` — it agrees to machine precision. Reference case and the
+validation against the paper's worked example: `tests/13N_capture_ay`.
+
 Four things that will bite:
 
 - **Angles are centre-of-mass** in the data file, unlike an ordinary
   differential segment. Columns are `E_lab · theta_cm · A_y · dA_y`.
-- **A_y is a dimensionless ratio in [-1,1] and is often negative.** Do not put a
-  relative uncertainty on it — a point near a zero crossing does not have a
-  small uncertainty, and doing so gives those points enormous weight and wrecks
-  the fit. Use a roughly constant absolute uncertainty.
-- **Leave `vary_norm` off.** A normalization factor is meaningless for a ratio.
+- **A_y is a dimensionless ratio in [-1,1] and is often negative.** Take the
+  point-to-point uncertainties from the experimenters — for `A_y` these are
+  statistical and background-subtraction errors and are quoted as *absolute*
+  values, not percentages. Do not convert them to a relative error: a point
+  near a zero crossing does not thereby have a small uncertainty, and treating
+  it as though it does gives those points enormous weight and wrecks the fit.
+- **Do use a normalization, and free it.** The dominant systematic in an
+  analyzing-power measurement is the absolute calibration of the beam
+  polarization, and it scales `A_y` multiplicatively — the experiment reports
+  `A_y ∝ (N⁺−N⁻)/(P·(N⁺+N⁻))`, so an error in `P` is a scale error on `A_y`.
+  That is exactly a normalization, and it is meaningful however small `A_y`
+  is. AZURE2 already treats it correctly: an analyzing-power point stores
+  `A_y` in the cross-section slot, and the χ² compares the calculated value
+  against `data × norm`, so `set_segment_norm(name, vary=True,
+  sys_error=<beam-polarization uncertainty in %>)` does the right thing.
+  (Earlier guidance here said to leave `vary_norm` off on the grounds that a
+  normalization is meaningless for a ratio. That was wrong — the ratio is of
+  yields at fixed `P`, not of quantities that both scale with it.)
 - **Use segments with no target integration** when comparing against
   thin-target data. `A_y` averaged over a target is cross-section weighted,
   `<A_y> = ∫A_y σ dE / ∫σ dE`, and since Rutherford σ diverges at low energy
   where A_y ≈ 0, a thick target drives the average to ~1e-6. That is physics,
   not a bug.
 
-Analytic derivatives cover A_y, *except* for a point that also carries target
-integration — that one reports itself unsupported, which drops the analytic
-Jacobian for the whole fit back to numerical. Never wrong, just slower.
+Analytic derivatives cover A_y in both channels, *except* for a point that also
+carries target integration — that one reports itself unsupported, which drops
+the analytic Jacobian for the whole fit back to numerical. Never wrong, just
+slower. For capture there is a second reason to avoid target integration: the
+geometric attenuation coefficients AZURE2 folds into `P_k` have no counterpart
+for the `P_k^1` of the numerator.
 
 Worked comparison against measured data: `tests/13N`, segments 11–16 (Baumann
-1992). Formalism and implementation: `docs/source/theory/polarization_*.rst`.
+1992). Capture: `tests/13N_capture_ay`. Formalism and implementation:
+`docs/source/theory/polarization_*.rst`.
 
 ## Editing the model: adding and removing levels
 
@@ -327,31 +417,84 @@ mdl.set_channel_radius(1, 5.0)                           # 3He+alpha, all its li
 mdl.set_segment_norm("Toth", vary=True, sys_error=8.0)   # percent, as stored
 mdl.set_segment_active("Spiger", False)                  # drop a dataset from the fit
 mdl.set_segment_datafile("Elwyn-F0012002", "data/new.dat")
+mdl.add_data_segment("data/roughton.dat", entrance=1, exit=2,
+                     observable="total-capture", energy_min=0.3,
+                     energy_max=2.3, norm_error=5.0)     # brand-new dataset
+mdl.remove_data_segments("artemov.dat")                  # or clear_data_segments()
 mdl.set_extrapolations([...]) / add_extrapolation(...) / clear_extrapolations()
-mdl.apply_fit(m.parameters, x_best, transform=m.transform_rwa)   # fit -> <levels>
+m.save_fit("fitted.azr", x_best)   # fit -> a .azr + its param.sav, verified
 ```
 
-`apply_fit` turns a fit result into a real `.azr` snapshot — the reference to
-reuse and hand to the GUI. Matching is by (2J, parity, input energy, pair/L/S).
+`add_data_segment` observables include `analyzing-power` (code 7), and
+`pyazr/examples/exfor_fetch.py` + the `nds-explorer` skill show how to fetch
+real datasets from EXFOR/NDS and feed them into `add_data_segment`.
+
+**Adding/removing data segments invalidates the EC integral cache.** After any
+`add_data_segment` / `remove_data_segments` / `clear_data_segments` /
+`set_extrapolations` edit, delete `output/intEC.dat` and `output/intEC.extrap`
+before the next run, or give the edited model its own output dir
+(`mdl.set_output_dir(...)`); otherwise AZURE2 silently reuses integrals
+computed for the *old* grids. In a live session,
+`azr.recalculate_external_capture()` forces a recompute. See
+`pyazr/examples/edit_model.py`.
+
+**`m.save_fit(path, x=None)` is how you snapshot a fit.** It writes the `.azr`,
+writes the companion `param.sav`, and verifies the result — reopening what it
+wrote and comparing every R-matrix value against the fit. If they disagree it
+removes both files and raises, so a snapshot you still have is one that reads
+back as the fit it came from. `path` is always explicit; nothing is written in
+place. Returns `(azr_path, sav_path)`.
+
+```python
+azr, sav = m.save_fit("7Be_fit.azr")          # current parameters
+azr, sav = m.save_fit("7Be_fit.azr", x_best)  # or an explicit free vector
+```
+
+Three things it handles that used to be the caller's problem:
 
 **The `<levels>` `gamma` field is NOT a reduced-width amplitude.** It holds the
 physical value `parameters.out` prints: Γ in **eV** for an open particle
 channel, an **ANC in fm^-1/2** for a closed (sub-threshold) one, Γ_γ in eV for a
 photon channel — i.e. exactly `transform_rwa(x)`. In the 7Be model the two
 differ by factors of 10² to 10⁷, and a file written with the rwa loads without
-complaint and is wrong. So `apply_fit` requires the conversion to be explicit —
-`transform=m.transform_rwa`, or `physical=True` if you converted already — and
-raises if given neither. Level energies need no conversion.
+complaint and is wrong.
 
-`apply_fit` covers `<levels>` only: normalizations do not live there, so a fit
-that moved them needs its `param.sav` alongside. Verify a written file by
-reloading it and comparing `transform_rwa(m.params_rwa)` against the fit's
-physical vector — every R-matrix entry must match.
+**A `Parameter`'s `pair` is not the file's pair key.** It is the *engine's*
+number, which counts particle pairs in the order `<levels>` first mentions them.
+On the 8Be model engine pair 1 is file key 2 and file key 1 is engine pair 6 —
+match one against the other and every width lands on the wrong channel. Calling
+`AzrModel.apply_fit` directly? Pass `pairs=m.pairs`, or it cannot translate.
+
+**Normalizations and energy shifts are not in `<levels>`.** A calculate run on a
+bare `.azr` uses 1.0 for every dataset, so its χ² sits *above* the fit's by
+whatever they were absorbing (3He: 166 fitted, 769 from the snapshot). That is
+what the companion `param.sav` carries — hand it to AZURE2 as the external
+parameter file and the model is whole.
+
+`AzrModel.apply_fit` is the lower-level half if you need it: it takes
+`pairs=`, matches levels on the engine's own `(jgroup, level)` via
+`engine_level_keys()`, and refuses (rather than silently skipping) any parameter
+it cannot place. It does not verify — `save_fit` does that.
 
 `pyazr/examples/save_fit_to_azr.py` does the whole thing — loads a fit from
 `param.sav` or an `.npz`, optionally re-radiuses it (`--radius 1=4.70`, dropping
 the stale `intEC` caches), writes the `.azr` plus a companion `param.sav` with
 the norms, and fails loudly if the result does not round-trip.
+
+### What a snapshot still cannot carry
+
+`save_fit` verifies the `.azr` it writes, so a mismatched snapshot no longer
+reaches you silently — it raises and removes the file. Two things remain true
+of the `.azr` itself:
+
+- **Normalizations do not live in `<levels>`.** A calculate run on a snapshot
+  uses 1.0 for every dataset, so its `chiSquared.out` sits *above* the fit's by
+  whatever the normalizations were absorbing — 3He: 166 fitted, 769 from the
+  snapshot. Write them alongside (`output/normalizations.out`) or supply a
+  `param.sav`.
+- **The check dumps are keywords, not filenames.** `<config>` accepts only
+  `none`, `screen` or `file` (`Config::ReadConfigFile`); anything else silently
+  leaves the check off and `checks/` stays empty. Write `file`.
 
 ### Defining extrapolation grids
 
@@ -377,9 +520,25 @@ must not.
 
 ## Fitting from Python
 
-Minuit (CLI mode 2) fits everything free in the `.azr`. For evaluation work you
-usually want to fit a **subset** at frozen everything-else, which pyazr does with
-`scipy.optimize.least_squares` and the analytic Jacobian:
+**pyazr does not fit.** It gives you the model, the χ², the objective and an
+analytic Jacobian; the minimizer is yours. That is deliberate rather than a
+gap: `residual_jacobian` returns the whole Jacobian for ~2 forward evaluations
+(reverse-mode adjoint), which beats Minuit's numerical gradients on this
+problem, and binding `MnMigrad`/`MnMinos` would mean mirroring AZURE2's
+objective, parameter limits and Wigner bounds inside the API — two "AZURE2
+fits" that can silently disagree. The CLI (modes 2 and 4) remains the reference
+implementation.
+
+Two things a hand-rolled fit must do to match AZURE2:
+
+- **Minimize `m.objective(x)`**, not `calculate_chi2_rwa` — see the χ² section
+  above. Bare χ² lets the normalizations absorb everything.
+- **Respect the Wigner limits** if you care about them; `m.wigner_widths()`
+  gives the bound per channel. The engine's `ParameterLimitsManager` enforces
+  them, a Python fit will not unless you add them as bounds.
+
+`scipy.optimize.least_squares` with the analytic Jacobian, fitting a **subset**
+at frozen everything-else — the usual evaluation move:
 
 ```python
 from scipy.optimize import least_squares
@@ -400,18 +559,100 @@ sol = least_squares(resid, best[fit], jac=jac, method="lm",
 x = np.array(best, float); x[fit] = sol.x
 ```
 
+For asymmetric (MINOS-style) errors, point `iminuit` at `m.objective` and
+`m.chi2_and_grad` — it gives you `minos()` against the same objective the CLI
+uses, without a second implementation of it inside AZURE2.
+
 Fit in **rwa space** (that is where the Jacobian is exact) and convert for
 reporting with `transform_rwa`. Free the relevant normalizations too
-(`m.parameters.norms`, `p.segment_key - 1` indexes `m.datasets`) when a subset
-fit would otherwise be absorbed by them.
+(`m.parameters.norms`; `m.datasets.by_key(p.segment_key)` is the segment) when
+a subset fit would otherwise be absorbed by them.
 
 Sanity-check the fit space: `transform_rwa(best[:nR])[p.free_index]` must equal
 `p.value` for every width.
 
+Save the result with `m.save_fit("fitted.azr", x)` — see the editing section.
+
 For MCMC, `pyazr/examples/fit_emcee.py` and `fit_zeus.py` show the pattern —
-`nprocs` instances, one per pool worker, priors chosen per `p.kind`, and
+one in-process engine per pool worker (constructed at module level), priors
+chosen per `p.kind`, and
 `log_prob = -0.5*(chi2 + offset) + log_prior` with
 `offset = Σ log(2π σ²)`.
+
+### Three traps that cost a whole evaluation
+
+Found while building a BBN/pp-chain campaign; each produced a wrong answer
+*silently*. The `evaluations/_tools/...` files cited below live in that analysis
+repository, not in this one — the descriptions stand without them.
+
+#### 1. `intEC.extrap` must be deleted before every extrapolation run
+
+The golden rule above says to delete it "whenever the `<segmentsTest>` grid
+changes". **That is not sufficient.** A session that initialises in data mode
+and then calls `extrap_mode()` reuses whatever `intEC.extrap` is on disk, and
+those amplitudes do not match the combined data+test integration set the second
+INITIALIZE builds. Three identical runs of the same 7Be analysis script:
+
+| run | caches | S₃₄(10 keV) | S(p,γ)(10 keV) | S(p,α)(10 keV) |
+|---|---|---|---|---|
+| 1 | deleted | 0.5402 keV b | 0.0912 keV b | 3254 keV b |
+| 2 | deleted | 0.5402 keV b | 0.0912 keV b | 3254 keV b |
+| 3 | reused | **1.055** keV b | **2.4e8** keV b | 3254 keV b |
+
+The particle-exit grid is identical in all three — that is the signature, since
+only capture reads these integrals. Rebuilding costs seconds. Put the deletion
+in the script, not in your memory:
+
+```python
+for f in ("intEC.dat", "intEC.extrap"):
+    p = os.path.join(eval_dir, "output", f)
+    if os.path.exists(p): os.remove(p)
+```
+
+(`evaluations/_tools/uq.py:clear_ec_cache`.)
+
+#### 2. A zero Jacobian column freezes `scipy.least_squares`
+
+`residual_jacobian` returns an identically zero column for any parameter no
+active dataset can see — a γ width in a model with no capture data, a channel
+of a level that nothing populates. With `x_scale="jac"` that column's scale is
+zero, and TRF reports convergence after **one** function evaluation while the
+gradient at other parameters is still in the hundreds. On the 8Be model this
+froze every normalization at exactly 1.0 for the entire run and left
+χ²/N = 5.6; dropping the dead columns first gave χ²/N = 1.01 from the same
+seeds.
+
+```python
+J = fitter.jacobian(x0)[:, cols]
+cols = cols[np.max(np.abs(J), axis=0) > 0]      # before least_squares
+```
+
+A norm penalty of *exactly* 0.0 alongside free normalizations is the tell:
+`m.penalties(x)["norm"].sum()` says so directly.
+
+#### 3. `residual_jacobian` raises, and the exception aborts the fit
+
+A trust-region step can put a reduced width where the Coulomb functions
+overflow (`RuntimeError: z is not finite in log_Gamma`) or where the level
+matrix is singular. Catch it and return a large residual with a zero Jacobian:
+the optimiser then shrinks the region, which is what it would have concluded
+from a finite but terrible χ². Letting it propagate loses the whole fit.
+
+### Fitting a model built from hand-chosen seeds
+
+A fresh `.azr` is far from any minimum and a single global fit over sixty
+parameters walks into a bad one. Free the parameters in the order the data
+constrain them, warm-starting each stage, and run the sequence two or three
+times:
+
+1. the particle widths of the pair that carries the dominant reaction;
+2. the other particle pairs;
+3. the γ widths, at fixed particle widths;
+4. the background poles;
+5. everything, including level energies and normalizations.
+
+`evaluations/_tools/fitting.py` (`Fitter.stages`) implements this with the
+penalty rows, the dead-column filter and the exception guard already in place.
 
 ## Decomposing a cross section
 
@@ -472,8 +713,7 @@ than from the original fit; starting them all from one point biases the ends.
 **Is a new level/channel warranted?** Add it (`add_level`, or free one more
 channel of an existing level), refit the subset it can affect, and weigh Δχ²
 against the parameters spent and against physical bounds: θ² ≤ 1 for particle
-channels, a few W.u. for γ channels. Sweep candidates from a shell loop — one
-session per process.
+channels, a few W.u. for γ channels. Sweep candidates in a loop; several sessions may be open at once.
 
 **Dimensionless widths.** `m.dimensionless_widths(x)` (pyazr ≥ 2.4) does the
 whole job — θ² for every particle channel, W.u. for every γ channel, at any
@@ -627,7 +867,15 @@ fit, check `param.sav` updated and compare `parameters.out` widths — and their
 
 ## Examples shipped with pyazr
 
-In `pyazr/examples/`: `angular_distribution.py`, `print_scheme.py`,
-`edit_scheme.py`, `deactivate_level.py`, `transform_widths.py`,
-`dimensionless_widths.py`, `save_fit_to_azr.py`, `uncertainty_band.py`,
-`fit_emcee.py`, `fit_zeus.py`.
+In `pyazr/examples/` — run `ls` there rather than trusting this list to stay
+complete:
+
+| | |
+|---|---|
+| model & scheme | `print_scheme.py`, `edit_scheme.py`, `edit_model.py`, `deactivate_level.py` |
+| widths | `transform_widths.py`, `dimensionless_widths.py` |
+| observables | `angular_distribution.py`, `sfactor_extrapolation.py`, `decompose_cross_section.py`, `reaction_rate.py` |
+| fitting & UQ | `fit_emcee.py`, `fit_zeus.py`, `per_dataset_chi2.py`, `sensitivities.py`, `uncertainty_band.py` |
+| snapshots | `save_fit_to_azr.py` |
+| model internals | `coulomb_functions.py`, `ec_integrals.py`, `channel_radius_scan.py`, `nuclear_potential.py` |
+| data | `exfor_fetch.py` |

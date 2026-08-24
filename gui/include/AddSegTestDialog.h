@@ -17,6 +17,9 @@ class QLabel;
 
 QT_END_NAMESPACE
 
+/*!
+ * Dialog for adding or editing one test segment -- an energy and angle grid with no data file.
+ */
 class AddSegTestDialog : public QDialog {
   Q_OBJECT
 

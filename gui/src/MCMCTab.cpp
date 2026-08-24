@@ -65,6 +65,17 @@ struct SegPairs {
 extern bool readSegmentFile(const Config &configure, std::vector<SegPairs> &segPairs);
 extern bool checkExternalCapture(Config &configure, const std::vector<SegPairs> &segPairs);
 
+// hardware_concurrency() is permitted to return 0 when it cannot work the count
+// out, which happens on containers and some virtual machines.  Taken literally
+// that gives the thread selector a range of 1 to 0 and a default of 0, and a
+// tooltip offering "1-0 available".  The sampler itself never runs fewer than
+// four threads (the std::max(4,...) in AZURECalcMCMC.cpp), so fall back to the
+// same figure instead of advertising a machine with no processors.
+static int availableThreads() {
+  const unsigned int detected = std::thread::hardware_concurrency();
+  return detected > 0 ? static_cast<int>(detected) : 4;
+}
+
 const std::vector<QString> MCMCTab::infoText = {
     "Parameter Configuration:\n\n"
     "Configure parameters for MCMC sampling. Each parameter can have:\n"
@@ -100,6 +111,24 @@ MCMCTab::MCMCTab(QWidget *parent) :
   isRunning(false),
   stepOffset(0),
   mcmcCompletedSuccessfully(false) {
+  // The info system comes first: setupSamplingControls() and
+  // setupProgressControls() below add these buttons to their layouts, and a
+  // raw pointer array has no default constructor to null it.  Built after
+  // those calls, as it used to be, the "if(infoButton[n])" guards read
+  // indeterminate memory -- zero on most machines, so the buttons silently
+  // never appeared, and a non-zero pattern on others, which handed Qt a
+  // garbage QWidget* and segfaulted before the window was ever shown.
+  mapper = new QSignalMapper(this);
+  connect(mapper, SIGNAL(mapped(int)), this, SLOT(showInfo(int)));
+
+  for (int i = 0; i < 4; i++) {
+    infoDialog[i] = 0;
+    infoButton[i] = new QPushButton("?");
+    infoButton[i]->setMaximumSize(30, 30);
+    mapper->setMapping(infoButton[i], i);
+    connect(infoButton[i], SIGNAL(clicked()), mapper, SLOT(map()));
+  }
+
   // Create main layout
   QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
@@ -171,18 +200,6 @@ MCMCTab::MCMCTab(QWidget *parent) :
   connect(loadButton, SIGNAL(clicked()), this, SLOT(loadFromPhysical()));
   connect(loadSavButton, SIGNAL(clicked()), this, SLOT(loadFromReduced()));
   // Note: runButton and stopButton are connected by AZURESetup, not here
-
-  // Setup info system
-  mapper = new QSignalMapper(this);
-  connect(mapper, SIGNAL(mapped(int)), this, SLOT(showInfo(int)));
-
-  for (int i = 0; i < 4; i++) {
-    infoDialog[i] = 0;
-    infoButton[i] = new QPushButton("?");
-    infoButton[i]->setMaximumSize(30, 30);
-    mapper->setMapping(infoButton[i], i);
-    connect(infoButton[i], SIGNAL(clicked()), mapper, SLOT(map()));
-  }
 
   reset();
 }
@@ -319,9 +336,9 @@ void MCMCTab::setupSamplingControls(QWidget *samplingWidget) {
 
   basicLayout->addWidget(new QLabel("Number of Threads:"), 4, 0);
   nThreadsSpinBox = new QSpinBox();
-  nThreadsSpinBox->setRange(1, std::thread::hardware_concurrency());
-  nThreadsSpinBox->setValue(std::min(4, (int)std::thread::hardware_concurrency()));  // Default to 4 or max available
-  nThreadsSpinBox->setToolTip(QString("Number of parallel threads (1-%1 available)").arg(std::thread::hardware_concurrency()));
+  nThreadsSpinBox->setRange(1, availableThreads());
+  nThreadsSpinBox->setValue(std::min(4, availableThreads()));  // Default to 4 or max available
+  nThreadsSpinBox->setToolTip(QString("Number of parallel threads (1-%1 available)").arg(availableThreads()));
   basicLayout->addWidget(nThreadsSpinBox, 4, 1);
 
   samplingLayout->addWidget(basicGroup);
@@ -421,7 +438,7 @@ void MCMCTab::reset() {
   nStepsSpinBox->setValue(10000);
   chainSpreadSpinBox->setValue(5.0);
   energySpreadSpinBox->setValue(kMaxEnergySpreadKeV);
-  nThreadsSpinBox->setValue(std::min(4, (int)std::thread::hardware_concurrency()));
+  nThreadsSpinBox->setValue(std::min(4, availableThreads()));
 
   statusLabel->setText("Ready to run MCMC sampling");
   progressBar->setVisible(false);

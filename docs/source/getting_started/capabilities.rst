@@ -129,8 +129,9 @@ Interfaces
    * - **Console** (``--no-gui``)
      - Scripted or remote runs, batch jobs, HPC
        (:doc:`../reference/command_line`).
-   * - **Socket API** + ``pyazr``
-     - Anything programmatic (:doc:`../user_guide/pyazr`).
+   * - **Python** (``pyazr``)
+     - Anything programmatic (:doc:`../user_guide/pyazr`): the engine runs
+       in-process through pybind11.
 
 What AZURE2 does not do
 -----------------------

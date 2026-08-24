@@ -18,6 +18,9 @@ QT_END_NAMESPACE
 
 class InfoDialog;
 
+/*!
+ * The Target Integration tab: beam convolution, target thickness and attenuation coefficients, written to the target-effects file.
+ */
 class TargetIntTab : public QWidget {
   Q_OBJECT
 

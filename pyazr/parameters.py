@@ -37,6 +37,7 @@ class LevelKey:
 
     @property
     def jpi(self) -> str:
+        """The level's J^pi as text, e.g. "3/2-"."""
         j = int(self.J) if float(self.J).is_integer() else f"{int(round(2*self.J))}/2"
         return f"{j}{'+' if self.parity > 0 else '-'}"
 
@@ -167,6 +168,46 @@ class Parameter:
 
 
 @dataclass
+class NuclearPotential:
+    """The hybrid Coulomb model's setting for one particle pair.
+
+    A nuclear potential belongs to a pair: it bends the radial wave functions
+    of that channel and no other.  ``pair`` is the 1-based :attr:`Pair.number`,
+    or ``0`` for the default that every pair without one of its own falls back
+    to.
+
+    ``own`` distinguishes a pair that carries its own setting from one merely
+    reporting the default -- the values are the same either way, but clearing a
+    pair that has none is a no-op.
+    """
+
+    pair: int
+    enabled: bool
+    type: str
+    V0: float
+    R: float
+    a: float
+    r0: float
+    own: bool
+
+    @property
+    def is_woods_saxon(self):
+        """Is the potential a Woods-Saxon rather than a Gaussian?"""
+        return self.type == "WoodsSaxon"
+
+    def __repr__(self):
+        who = "default" if self.pair == 0 else f"pair {self.pair}"
+        if not self.enabled:
+            return f"NuclearPotential({who}, off)"
+        if self.is_woods_saxon:
+            shape = f"WoodsSaxon V0={self.V0:g} R={self.R:g} a={self.a:g}"
+        else:
+            shape = f"Gaussian V0={self.V0:g} r0={self.r0:g}"
+        return (f"NuclearPotential({who}, {shape}"
+                f"{'' if self.own or self.pair == 0 else ', inherited'})")
+
+
+@dataclass
 class Pair:
     """One AZURE2 particle pair (a reaction channel's two constituents).
 
@@ -253,6 +294,7 @@ class PairSet(list):
         return PairSet(p for p in self if not p.is_photon)
 
     def by_number(self, number):
+        """The pair with this 1-based number."""
         for p in self:
             if p.number == number:
                 return p
@@ -270,35 +312,85 @@ class ParameterSet(list):
     about, e.g. ``params.free``, ``params.widths``, ``params.by_level(2, +1)``.
     """
 
+    # -- the free vector ------------------------------------------------------
+    #
+    # A calculation takes a flat vector of the *free* parameters, and a
+    # Parameter's free_index is its position in it.  Threading that by hand is
+    # the usual source of silent misalignment, so these do it.
+
+    def indices(self):
+        """Free-vector positions of these parameters, in this set's order.
+
+        Fixed parameters have no position and are dropped, so
+        ``len(indices()) <= len(self)``.
+        """
+        return [p.free_index for p in self
+                if not p.fixed and p.free_index is not None]
+
+    def take(self, x):
+        """The entries of the free vector ``x`` belonging to these parameters."""
+        import numpy as _np
+        x = _np.asarray(x, float)
+        return x[_np.asarray(self.indices(), int)] if self.indices() else _np.empty(0)
+
+    def put(self, x, values):
+        """A *copy* of the free vector ``x`` with these parameters set.
+
+        ``values`` is either one number for all of them or one per parameter,
+        in this set's order:
+
+        >>> x = m.parameters.widths.put(m.params_rwa, 0.0)   # zero every width
+        """
+        import numpy as _np
+        out = _np.array(x, float, copy=True)
+        idx = _np.asarray(self.indices(), int)
+        values = _np.asarray(values, float)
+        if values.ndim == 0:
+            out[idx] = float(values)
+        elif values.size == idx.size:
+            out[idx] = values
+        else:
+            raise ValueError(
+                f"put() got {values.size} value(s) for {idx.size} free "
+                f"parameter(s) in this set.")
+        return out
+
     # -- filtered views -------------------------------------------------------
 
     @property
     def free(self):
+        """The parameters the fit varies."""
         return ParameterSet(p for p in self if not p.fixed)
 
     @property
     def fixed(self):
+        """The parameters held fixed."""
         return ParameterSet(p for p in self if p.fixed)
 
     @property
     def energies(self):
+        """The level-energy parameters."""
         return ParameterSet(p for p in self if p.kind == "energy")
 
     @property
     def widths(self):
+        """The reduced-width parameters."""
         return ParameterSet(p for p in self if p.kind == "width")
 
     @property
     def norms(self):
+        """The data-normalization parameters."""
         return ParameterSet(p for p in self if p.kind == "norm")
 
     @property
     def shifts(self):
+        """The energy-shift parameters."""
         return ParameterSet(p for p in self if p.kind == "shift")
 
     # -- lookups --------------------------------------------------------------
 
     def by_name(self, name):
+        """The parameter with this name."""
         for p in self:
             if p.name == name:
                 return p
@@ -330,6 +422,7 @@ class ParameterSet(list):
     def by_level(self, jgroup=None, parity=None, level=None):
         """All R-matrix parameters (energy + widths) for a level / J-group."""
         def match(p):
+            """The parameters matching every keyword given, e.g. match(jpi="1-", pair=2)."""
             if p.jgroup is None:
                 return False
             if jgroup is not None and p.jgroup != jgroup:

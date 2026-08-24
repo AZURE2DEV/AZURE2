@@ -23,6 +23,13 @@ class CoulFuncCache {
     double redmass;  // Reduced mass of the particle pair
     int l;           // Orbital angular momentum
     double radius;   // Channel radius
+    // Which nuclear potential produced these waves.  0 is the plain
+    // Coulomb solution; anything else identifies one (pair, potential)
+    // state of NuclearPotentialManager.  Without it the hybrid model would
+    // read back plain-Coulomb values cached before it was switched on, and
+    // two pairs sharing z1, z2, redmass and radius but carrying different
+    // potentials would silently share a memo.
+    long hybridTag;
 
     // Comparison operator for use as map key
     bool operator<(const CoulFuncKey &other) const {
@@ -32,6 +39,7 @@ class CoulFuncCache {
       if (fabs(redmass - other.redmass) > 1e-10) return redmass < other.redmass;
       if (l != other.l) return l < other.l;
       if (fabs(radius - other.radius) > 1e-10) return radius < other.radius;
+      if (hybridTag != other.hybridTag) return hybridTag < other.hybridTag;
       return false;
     }
   };

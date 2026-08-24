@@ -50,12 +50,19 @@ class GenericFunction {
 class Equation {
  public:
   Equation();
+  /// Parse an infix expression with \p numParams free parameters.
   Equation(std::string equation, int numParams, const Config &);
+  /// Parse an expression and bind its parameters.
   Equation(std::string equation, std::vector<double> parameters, const Config &);
+  /// As above, from a C array.
   Equation(std::string equation, double parameters[], size_t arraySize, const Config &);
+  /// Set the expression after default construction.
   void Initialize(std::string equation, int numParams, const Config &);
+  /// Set parameter \p index, 0-based.
   void SetParameter(unsigned int index, double value, const Config &);
+  /// The bound parameters.
   std::vector<double> GetParameters() const;
+  /// Evaluate at \p x.
   double Evaluate(const Config &, double x = 0.0) const;
   std::string GetEquation() const {
     return infixEquation_;
@@ -78,10 +85,15 @@ class Equation {
                       POWER = 2,
                       BADTYPE = 10 };
   typedef std::pair<TokenType, std::string> TokenPair;
+  /// Register the named functions an expression may call.
   void BuildFunctionList();
+  /// Convert the infix expression to the postfix form Evaluate walks.
   void Parse(const Config &);
+  /// Is this character an operator?
   bool IsOperator(char) const;
+  /// Is this character a digit?
   bool IsDigit(char) const;
+  /// Length of the function token at \p position, or 0 if there is none.
   unsigned int FindFunction(unsigned int &position);
   TokenPair GetToken(unsigned int &position, const Config &);
   OperatorType GetOperatorType(char) const;

@@ -455,13 +455,115 @@ Two things to keep in mind. A normalization factor is meaningless for a ratio, s
 leave ``varyNorm`` at 0. And use segments without target integration when
 comparing against thin-target data, for the reason given above.
 
+Capture channels
+----------------
+
+A photon exit has no amplitude matrix of the form of Seyler's Eq. (4), so the
+capture analyzing power is built the other way round: from the Legendre
+coefficients of Seyler and Weller [SeylerWeller1979]_, Eqs. (20) and (21), in
+the channel-spin representation. ``CNuc::CalcCaptureAnalyzingPower`` builds the
+coefficient table, ``GenMatrixFunc::CalculateCaptureAnalyzingPower`` evaluates
+
+.. math::
+
+   A_y(\theta) = \frac{\sum_k b_k P_k^1(\cos\theta)}
+                      {\sum_k a_k P_k(\cos\theta)}
+
+and ``AMatrixFunc::PointAdjoint`` differentiates it. The forward evaluation
+consumes the T-matrix elements the code has already computed, external capture
+included: a term may pair two internal pathways, two external ones, or one of
+each, exactly as the ``Interference`` objects of the unpolarized angular
+distribution do.
+
+Where the pathway pairs come from
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``CalcAngularDists`` already pairs pathways for the unpolarized angular
+distribution, but only *within* one ``KGroup`` — one entrance channel spin —
+because Eq. (20) forces :math:`s = s'`. Eq. (21) does not, and the channel-spin
+off-diagonal terms are the whole point of the observable, so the table is built
+over ordered pairs drawn from **all** KGroups of the decay. Each term therefore
+carries its own KGroup index on each side, which is why it is a new structure
+(``CaptureAyTerm``) rather than another ``Interference``.
+
+The table costs 9-j symbols, so it is built on first use rather than at
+initialization: a run with no polarization segment never pays for it.
+
+Three conventions, settled numerically
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The paper leaves three things implicit, and each of them is a silent factor or
+sign if guessed wrong. All three were settled against the worked example the
+paper prints on p. 458 (``tests/13N_capture_ay/seyler_weller_check.py``
+reproduces every one of its coefficients, :math:`a_0` through :math:`a_4` and
+:math:`b_1` through :math:`b_4`, to the two decimals given):
+
+* :math:`X(l s b; l' s' b'; k 1 k)` is the **bare 9-j symbol**, not the
+  :math:`[\prod (2j+1)]^{1/2}`-normalized Fano X. The normalized form is wrong
+  by a factor of order 100 here.
+* :math:`P_L^M` is the associated Legendre function **without** the
+  Condon-Shortley phase (their Eq. (12) carries the :math:`(-1)^M` explicitly),
+  so ``AngCoeff::LegendreP1`` is the negative of ``gsl_sf_legendre_Plm``.
+* The terms are written with the larger-:math:`L` channel first, which fixes the
+  sign of the :math:`\sin(\phi - \phi')` factor; the sum over ordered pairs in
+  the code makes this automatic.
+
+What pins it inside AZURE2
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The same table carries :math:`a_k`, and the denominator
+:math:`\sum_k a_k P_k` must reproduce the differential capture cross section
+AZURE2 builds by the entirely separate Blatt-Biedenharn route of
+``CalcAngularDists``, up to the angle-independent factor
+:math:`400\pi/(\text{geom} \times I_1I_2)` — since that route's ``z1z2`` is
+:math:`a_k/4` and ``GenMatrixFunc`` forms
+:math:`\sigma = \mathrm{Re}(\text{sum})/\pi \times \text{geom} \times I_1I_2/100`.
+Set ``AZURE2_CAPPOL_DEBUG=1`` to print the ratio per point. It agrees to machine
+precision, which is what pins the pathway enumeration, the coupling order, every
+hat factor, and the identification of Seyler and Weller's :math:`R` with the
+code's T-matrix element.
+
+What the :math:`a_k` check cannot see is a global complex conjugation:
+:math:`a_k` depends on :math:`\mathrm{Re}\,R R'^*` and :math:`b_k` on
+:math:`\mathrm{Re}\,(i R R'^*)`, so :math:`R \to R^*` would leave the cross
+section untouched and flip the sign of :math:`A_y`. The convention is inherited
+rather than assumed: the capture T-matrix element comes out of the same
+``GetUBilinear`` as the particle one, whose imaginary part is what the
+elastic :math:`A_y` — validated against measured data in ``tests/13N`` — already
+rests on.
+
+The adjoint
+~~~~~~~~~~~
+
+:math:`A_y = N/D` with :math:`N` and :math:`D` each bilinear in the T-matrix
+elements, so with
+:math:`\partial \mathrm{Re}(T_1 T_2^*)/\partial T_1^* = T_2/2` and
+:math:`\partial \mathrm{Re}(i T_1 T_2^*)/\partial T_1^* = -i T_2/2`,
+
+.. math::
+
+   \frac{\partial A_y}{\partial T_1^*}
+     = \frac{-i\, b_k P_k^1 T_2 - A_y\, a_k P_k T_2}{2D} ,
+
+and its partner with :math:`1 \leftrightarrow 2` and :math:`i \to -i`. Both
+sides of every term are accumulated, into ``tBar`` or ``ecBar`` according to
+whether that side is an internal or an external-capture pathway. It agrees with
+central differences to about :math:`10^{-6}` of the column scale.
+
 What is not done
 ----------------
 
-* **Tensor observables** need a spin-1 projectile and rank-2 operators. The
-  amplitude matrix carries all channel spins and projections already, so the
-  missing part is the observable side, but it is not written.
-* **Capture channels** need Seyler and Weller rather than Seyler.
+* **Tensor observables** need a spin-1 projectile and rank-2 operators. For
+  particle channels the amplitude matrix carries all channel spins and
+  projections already, so the missing part is the observable side; for capture,
+  Seyler and Weller's Eqs. (22)–(25) give the :math:`c_k`, :math:`d_k` and
+  :math:`e_k` coefficients in the same notation as the :math:`b_k` already
+  coded.
+* **Attenuation coefficients for the capture** :math:`A_y`. When a segment
+  carries target effects, ``EPoint::CalcLegendreP`` folds the geometric
+  attenuation :math:`Q_k` into :math:`P_k`, but there is no :math:`Q_k^1` for
+  the :math:`P_k^1` of the numerator. Use segments without target integration,
+  which is the right choice for an analyzing power anyway.
 * **Analytic derivatives through a target integration.** :math:`A_y` itself now
   has an exact adjoint (see below), but a point whose :math:`A_y` is averaged
   over a target is a ratio of two integrals and is not differentiated

@@ -24,7 +24,14 @@
 #include <new>
 #include <cmath>
 
-bool AZUREAPI::Initialize() {
+AZUREAPI::~AZUREAPI() {
+  // A session used to be a process, so the OS reclaimed these; in-process the
+  // compound nucleus and its data are ~10 MB per model and must be returned.
+  if (compound_ != nullptr) delete compound_;
+  if (data_ != nullptr) delete data_;
+}
+
+int AZUREAPI::Initialize() {
   // Initialize caches for performance
   InitializeCoulFuncCache();
   InitializeECAmplitudeCache();
@@ -54,9 +61,18 @@ bool AZUREAPI::Initialize() {
     cacheFile = configure().outputdir + "intEC_cache.extrap";
   }
 
-  // FIXME: It crashes on Linux (but fine on Mac)
-  // if( compound_ != nullptr ) delete compound_;
-  // if( data_ != nullptr ) delete data_;
+  // Initialize() is called again on every mode switch, so the previous model
+  // has to go or it is leaked.  (This used to crash: the constructor left
+  // data_/compound_ uninitialized, so the first call deleted a garbage
+  // pointer.  They are null-initialized now.)  Same order as SetRadius.
+  if (compound_ != nullptr) {
+    delete compound_;
+    compound_ = nullptr;
+  }
+  if (data_ != nullptr) {
+    delete data_;
+    data_ = nullptr;
+  }
 
   data_ = new EData();
   compound_ = new CNuc();
@@ -670,15 +686,34 @@ void AZUREAPI::SetExtrap() {
 // output/intEC*, and the parameter bookkeeping -- values, names, fixed flags
 // and the transformed physical parameters -- is refilled to match.
 bool AZUREAPI::SetRadius(int idx, double r) {
+  return RebuildImpl(&idx, &r);
+}
+
+bool AZUREAPI::WriteOutputFiles() {
+  if (data_ == nullptr) return false;
+  data()->WriteOutputFiles(configure(), false, nullptr);
+  return true;
+}
+
+bool AZUREAPI::Rebuild() {
+  return RebuildImpl(nullptr, nullptr);
+}
+
+// Shared body of SetRadius and Rebuild.  Everything the two do is identical
+// apart from whether CNuc::Fill is handed a radius override.
+bool AZUREAPI::RebuildImpl(const int *idx, const double *r) {
   if (compound_ != nullptr) delete compound_;
   if (data_ != nullptr) delete data_;
 
   compound_ = new CNuc;
   data_ = new EData;
 
-  std::pair<int, double> pair = std::make_pair(idx, r);
-
-  if (compound()->Fill(configure(), pair) == -1) return false;
+  if (idx && r) {
+    std::pair<int, double> pair = std::make_pair(*idx, *r);
+    if (compound()->Fill(configure(), pair) == -1) return false;
+  } else {
+    if (compound()->Fill(configure()) == -1) return false;
+  }
   if (compound()->NumPairs() == 0 || compound()->NumJGroups() == 0) return false;
 
   // Mirror the branch taken at startup: data mode reads the data segments,

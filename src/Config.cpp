@@ -152,11 +152,27 @@ int Config::ReadConfigFile() {
  *   R=3.6                  # radius, fm      (Woods-Saxon)
  *   a=0.6                  # diffuseness, fm (Woods-Saxon)
  *   r0=5.0                 # width, fm       (Gaussian)
+ *   pair=2                 # everything below applies to pair 2 alone
+ *   potentialType=1
+ *   V0=90
+ *   r0=4.0
+ *   pair=5
+ *   useHybridPotential=0   # pair 5 opts out
  *   </potential>
  *
+ * A nuclear potential belongs to a particle pair -- it bends the radial wave
+ * functions of that channel and no other -- so the keys are read per pair.
+ * Everything before the first pair= is the default, which stands in for every
+ * pair that does not name itself; a pair= line opens a section that starts
+ * from that default and only has to state what differs.  A file with no pair=
+ * line is therefore read exactly as it was when the model was global.
+ *
+ * useAdaptiveGrid is a property of the target-effect integration rather than
+ * of any one channel, so it stays global wherever it appears.
+ *
  * Parsing it here rather than in the setup utility is what makes the hybrid
- * model reachable from --no-gui and from the socket API: this function is on
- * the path both of them take.
+ * model reachable from --no-gui and from pyazr: this function is on the path
+ * both of them take.
  *
  * Returns 0 on success (including "no block present") and -1 if the block is
  * present but malformed.
@@ -170,9 +186,40 @@ int Config::ReadPotentialBlock() {
   while (line != "<potential>" && !in.eof()) getline(in, line);
   if (line != "<potential>") return 0;  // optional block, absent
 
-  int typeCode = 0;
-  double v0 = 150.0, r = 3.6, a = 0.6, r0 = 5.0;
-  bool hasType = false, useHybrid = false, closed = false;
+  NuclearPotentialManager &manager = NuclearPotentialManager::instance();
+  manager.resetToDefault();
+
+  NuclearPotentialSetting current = manager.getDefaultSetting();
+  int currentPair = 0;  // 0 = the default section
+  bool currentHasType = false, defaultHasType = false, closed = false;
+
+  // Install whatever the section just read describes.  A section that asks for
+  // the hybrid model without naming a potentialType, or names one that does not
+  // exist, is refused rather than silently given the default shape.
+  auto flush = [&]() {
+    if (current.enabled && !currentHasType) {
+      outStream << "WARNING: <potential> requests the hybrid method";
+      if (currentPair) outStream << " for pair " << currentPair;
+      outStream << " but gives no potentialType; it is disabled." << std::endl;
+      current.enabled = false;
+    }
+    try {
+      if (currentPair)
+        manager.setSetting(currentPair, current);
+      else
+        manager.setDefaultSetting(current);
+    } catch (const std::exception &e) {
+      outStream << "WARNING: invalid potential parameters (" << e.what()
+                << "); the hybrid method is disabled";
+      if (currentPair) outStream << " for pair " << currentPair;
+      outStream << "." << std::endl;
+      current.enabled = false;
+      if (currentPair)
+        manager.clearPairSetting(currentPair);
+      else
+        manager.setDefaultEnabled(false);
+    }
+  };
 
   while (!in.eof()) {
     getline(in, line);
@@ -190,57 +237,66 @@ int Config::ReadPotentialBlock() {
     std::string key = trimmed.substr(0, eq);
     std::istringstream value(trimmed.substr(eq + 1));
 
+    // A pair= line closes the section being read and opens the next one.  Every
+    // section starts from the default, so a pair only has to state what differs.
+    if (key == "pair") {
+      int nextPair = 0;
+      value >> nextPair;
+      if (nextPair <= 0) {
+        outStream << "WARNING: <potential> has pair=" << nextPair
+                  << ", which is not a pair key; the section is ignored." << std::endl;
+        continue;
+      }
+      flush();
+      currentPair = nextPair;
+      current = manager.getDefaultSetting();
+      currentHasType = defaultHasType;  // inherited with the shape
+      continue;
+    }
+
     if (key == "useHybridPotential") {
       int v = 0;
       value >> v;
-      useHybrid = (v == 1);
+      current.enabled = (v == 1);
     } else if (key == "useAdaptiveGrid") {
       int v = 1;
       value >> v;
       useAdaptiveGrid = (v == 1);
     } else if (key == "potentialType") {
+      int typeCode = 0;
       value >> typeCode;
-      hasType = true;
+      if (typeCode == 0) {
+        current.type = "WoodsSaxon";
+        currentHasType = true;
+      } else if (typeCode == 1) {
+        current.type = "Gaussian";
+        currentHasType = true;
+      } else {
+        outStream << "WARNING: unknown potentialType " << typeCode
+                  << " in <potential>";
+        if (currentPair) outStream << " for pair " << currentPair;
+        outStream << "; the hybrid method is disabled there." << std::endl;
+        current.enabled = false;
+        currentHasType = true;  // refused, not merely missing
+      }
+      if (!currentPair) defaultHasType = currentHasType;
     } else if (key == "V0")
-      value >> v0;
+      value >> current.V0;
     else if (key == "R")
-      value >> r;
+      value >> current.R;
     else if (key == "a")
-      value >> a;
+      value >> current.a;
     else if (key == "r0")
-      value >> r0;
+      value >> current.r0;
   }
   in.close();
 
   if (!closed) return -1;  // unterminated block
+  flush();
 
-  useHybridMethod = useHybrid;
-  if (!useHybrid) return 0;
-  if (!hasType) {
-    outStream << "WARNING: <potential> requests the hybrid method but gives no "
-                 "potentialType; the hybrid method is disabled."
-              << std::endl;
-    useHybridMethod = false;
-    return 0;
-  }
-
-  try {
-    NuclearPotentialManager &manager = NuclearPotentialManager::instance();
-    if (typeCode == 0)
-      manager.setWoodsSaxonPotential(v0, r, a);
-    else if (typeCode == 1)
-      manager.setGaussianPotential(v0, r0);
-    else {
-      outStream << "WARNING: unknown potentialType " << typeCode
-                << " in <potential>; the hybrid method is disabled." << std::endl;
-      useHybridMethod = false;
-      return 0;
-    }
-  } catch (const std::invalid_argument &e) {
-    outStream << "WARNING: invalid potential parameters (" << e.what()
-              << "); the hybrid method is disabled." << std::endl;
-    useHybridMethod = false;
-  }
+  // The global switch stays the master: it gates the paramMask bit and the
+  // GUI tab, while the manager decides which pairs the model applies to.
+  useHybridMethod = manager.isAnyEnabled();
   return 0;
 }
 

@@ -39,6 +39,7 @@ class SchemeChannel:
 
     @property
     def is_photon(self) -> bool:
+        """Is this a photon channel rather than a particle one?"""
         return self.radiation_type not in (None, "P")
 
     @property
@@ -64,6 +65,7 @@ class SchemeLevel:
 
     @property
     def jpi(self) -> str:
+        """J^pi as text."""
         return f"{_fmt_spin(self.J)}{'+' if self.parity > 0 else '-'}"
 
     @property
@@ -73,6 +75,7 @@ class SchemeLevel:
 
     @property
     def n_free(self) -> int:
+        """How many of this level's parameters the fit varies."""
         return ((0 if self.energy_fixed else 1)
                 + sum(0 if c.fixed else 1 for c in self.channels))
 
@@ -94,6 +97,7 @@ class LevelScheme:
 
     @classmethod
     def from_azr(cls, azr, name=None):
+        """Build the scheme by reading a .azr file."""
         params = azr.parameters
         pairs = azr.pairs
 
@@ -128,9 +132,11 @@ class LevelScheme:
     # -- queries --------------------------------------------------------------
 
     def by_jpi(self, jpi):
+        """The levels of one J^pi group."""
         return [lv for lv in self.levels if lv.jpi == jpi]
 
     def get(self, jgroup, level):
+        """The level at this (jgroup, level) key."""
         for lv in self.levels:
             if lv.jgroup == jgroup and lv.level == level:
                 return lv

@@ -12,6 +12,9 @@ class QLineEdit;
 
 QT_END_NAMESPACE
 
+/*!
+ * Dialog for the output and checks directories.
+ */
 class EditDirsDialog : public QDialog {
   Q_OBJECT
 

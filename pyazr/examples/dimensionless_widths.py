@@ -79,7 +79,7 @@ def main():
     args = ap.parse_args()
 
     here = os.path.dirname(os.path.abspath(args.azr)) or "."
-    with azure2(os.path.abspath(args.azr), nprocs=1, cwd=here) as m:
+    with azure2(os.path.abspath(args.azr), cwd=here) as m:
         x = load_params(m, args.params) if args.params else np.asarray(m.params_rwa, float)
         print(f"compound A = {m.mass_number}, "
               f"chi2 = {np.sum(m.calculate_chi2_rwa(x)):.2f}\n")

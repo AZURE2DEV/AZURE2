@@ -1,4 +1,5 @@
 #include "AMatrixFunc.h"
+#include "AngCoeff.h"
 #include "PolarizationFunc.h"
 #include "CNuc.h"
 #include "Config.h"
@@ -607,26 +608,83 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     //      coefficients. The Coulomb amplitude carries no parameter dependence
     //      and drops out. ----
     if (point->NumSubPoints() > 0) return false;  // see the note below
-    if (compound()->GetPair(aa)->GetPType() != 0 ||
-        compound()->GetPair(exitPairNum)->GetPType() != 0) return false;
+    if (compound()->GetPair(aa)->GetPType() != 0) return false;
 
-    Polarization::AmplitudeMatrix M(compound(), point, aa, exitPairNum);
-    for (int k = 1; k <= nK; k++) {
-      for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-        MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
-        M.AddPathway(mg->GetJNum(), mg->GetChNum(), mg->GetChpNum(),
-                     this->GetTMatrixElement(k, m));
+    if (compound()->GetPair(exitPairNum)->GetPType() == 10) {
+      // ---- Capture analyzing power (Seyler and Weller, Phys. Rev. C 20
+      //      (1979) 453). The observable is a ratio of two forms that are each
+      //      bilinear in the T-matrix elements,
+      //        A_y = N/D,  N = sum bk Re(i T1 T2*) P_k^1,
+      //                    D = sum ak Re(T1 T2*)   P_k,
+      //      so with d Re(T1 T2*)/dT1* = T2/2 and d Re(i T1 T2*)/dT1* = -i T2/2
+      //      (and their partners with 1 <-> 2, i -> -i),
+      //        dA_y/dT1* = [ -i bk P_k^1 T2 - A_y ak P_k T2 ] / (2 D),
+      //        dA_y/dT2* = [ +i bk P_k^1 T1 - A_y ak P_k T1 ] / (2 D),
+      //      and the cotangent convention of this function supplies the 2. ----
+      const int maxL = point->GetMaxLOrder();
+      compound()->CalcCaptureAnalyzingPower(aa, ir, maxL);
+      const int nTerms = theDecay->NumCaptureAyTerms();
+      if (nTerms == 0) return false;
+
+      const double xCos = cos(point->GetCMAngle() * pi / 180.0);
+      std::vector<double> assocP(maxL + 1, 0.0);
+      for (int k = 1; k <= maxL; k++) assocP[k] = AngCoeff::LegendreP1(k, xCos);
+
+      auto element = [&](int kg, int p, bool isEC) -> complex {
+        return isEC ? this->GetECTMatrixElement(kg, p)
+                    : this->GetTMatrixElement(kg, p);
+      };
+      double num = 0.0, den = 0.0;
+      for (int i = 1; i <= nTerms; i++) {
+        const CaptureAyTerm *t = theDecay->GetCaptureAyTerm(i);
+        if (t->kOrder > maxL) continue;
+        complex prod = element(t->kGroup1, t->path1, t->isEC1) * conj(element(t->kGroup2, t->path2, t->isEC2));
+        if (t->ak != 0.0) den += t->ak * real(prod) * point->GetLegendreP(t->kOrder);
+        if (t->bk != 0.0) num += t->bk * (-imag(prod)) * assocP[t->kOrder];
       }
-    }
-    if (aa == exitPairNum) M.AddCoulomb(point->GetCoulombAmplitude());
-    if (M.size() == 0) return false;
+      if (fabs(den) < 1.e-300) return false;
+      const double ay = num / den;
 
-    const std::vector<complex> bar = M.AnalyzingPowerBar();
-    for (int k = 1; k <= nK; k++) {
-      for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-        MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
-        if (!includeInternal(mg)) continue;
-        tBar[k - 1][m - 1] += fitBar * M.PathwayAdjoint(mg->GetJNum(), mg->GetChNum(), mg->GetChpNum(), bar);
+      const complex I2(0.0, 1.0);
+      for (int i = 1; i <= nTerms; i++) {
+        const CaptureAyTerm *t = theDecay->GetCaptureAyTerm(i);
+        if (t->kOrder > maxL) continue;
+        const complex T1 = element(t->kGroup1, t->path1, t->isEC1);
+        const complex T2 = element(t->kGroup2, t->path2, t->isEC2);
+        const double pk = point->GetLegendreP(t->kOrder);
+        const double pk1 = assocP[t->kOrder];
+        const complex d1 = (-I2 * t->bk * pk1 * T2 - ay * t->ak * pk * T2) / den;
+        const complex d2 = (I2 * t->bk * pk1 * T1 - ay * t->ak * pk * T1) / den;
+        if (t->isEC1)
+          ecBar[t->kGroup1 - 1][t->path1 - 1] += fitBar * d1;
+        else
+          tBar[t->kGroup1 - 1][t->path1 - 1] += fitBar * d1;
+        if (t->isEC2)
+          ecBar[t->kGroup2 - 1][t->path2 - 1] += fitBar * d2;
+        else
+          tBar[t->kGroup2 - 1][t->path2 - 1] += fitBar * d2;
+      }
+    } else if (compound()->GetPair(exitPairNum)->GetPType() != 0) {
+      return false;
+    } else {
+      Polarization::AmplitudeMatrix M(compound(), point, aa, exitPairNum);
+      for (int k = 1; k <= nK; k++) {
+        for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+          MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
+          M.AddPathway(mg->GetJNum(), mg->GetChNum(), mg->GetChpNum(),
+                       this->GetTMatrixElement(k, m));
+        }
+      }
+      if (aa == exitPairNum) M.AddCoulomb(point->GetCoulombAmplitude());
+      if (M.size() == 0) return false;
+
+      const std::vector<complex> bar = M.AnalyzingPowerBar();
+      for (int k = 1; k <= nK; k++) {
+        for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+          MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
+          if (!includeInternal(mg)) continue;
+          tBar[k - 1][m - 1] += fitBar * M.PathwayAdjoint(mg->GetJNum(), mg->GetChNum(), mg->GetChpNum(), bar);
+        }
       }
     }
   } else if (isPhase) {

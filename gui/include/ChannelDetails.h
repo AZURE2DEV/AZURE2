@@ -13,6 +13,9 @@ class QPushButton;
 
 QT_END_NAMESPACE
 
+/*!
+ * Per-channel detail panel beside the channels table.
+ */
 class ChannelDetails : public QWidget {
   Q_OBJECT
 

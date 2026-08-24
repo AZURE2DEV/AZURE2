@@ -1,0 +1,8 @@
+# Revisions that only moved whitespace around.  git blame skips them with
+#
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# (once per clone; GitHub's blame view honours the file automatically).
+
+# style: one indentation across the core, from a checked-in .clang-format
+94e2a986e301fcd8832d416b91ee3761a07738c6

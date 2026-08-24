@@ -13,6 +13,9 @@ struct LevelsData {
   double energy;
 };
 
+/*!
+ * Table model behind the Levels tab: one row per level, with its J^pi, energy and fixed flag.
+ */
 class LevelsModel : public QAbstractTableModel {
   Q_OBJECT
 

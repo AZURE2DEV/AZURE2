@@ -11,6 +11,9 @@ class QComboBox;
 
 QT_END_NAMESPACE
 
+/*!
+ * Dialog choosing which check files a run writes, and whether to screen or file.
+ */
 class EditChecksDialog : public QDialog {
   Q_OBJECT
 

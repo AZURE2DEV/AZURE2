@@ -14,9 +14,11 @@ class PPair;
 class EffectiveCharge {
  public:
   EffectiveCharge(PPair *, double, int);
+  /// Effective charge for the multipolarity, at a given energy.
   double operator()(double);
 
  private:
+  /// GSL integrand behind it.
   static double Integrand(double, void *);
   int z1_;
   int z2_;

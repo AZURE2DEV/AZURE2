@@ -212,6 +212,7 @@ class Channel:
 
     @property
     def red_mass(self) -> float:
+        """Reduced mass of the channel's pair, in u."""
         return self.M1 * self.M2 / (self.M1 + self.M2)
 
     @property
@@ -221,10 +222,12 @@ class Channel:
 
     @property
     def is_particle(self) -> bool:
+        """Is this a particle channel?"""
         return self.radiation_type == "P"
 
     @property
     def is_photon(self) -> bool:
+        """Is this a photon channel?"""
         return self.radiation_type in ("E", "M")
 
     def local_energy(self, level_energy: float) -> float:
@@ -232,6 +235,7 @@ class Channel:
         return level_energy - self.threshold
 
     def is_open(self, level_energy: float) -> bool:
+        """Is the channel open at the level's energy, i.e. above its threshold?"""
         return self.local_energy(level_energy) >= 0.0
 
     # -- the three functions TransformOut needs -----------------------------
@@ -299,6 +303,7 @@ class Channel:
         r = self.channel_radius
 
         def w(x):
+            """Whittaker function used to normalize a closed channel."""
             return whittaker(self.L, self.Z1, self.Z2, self.red_mass, x, eb)
 
         w0 = w(r)
@@ -326,10 +331,12 @@ class Level:
 
     @property
     def gammas(self) -> List[float]:
+        """The channel reduced-width amplitudes of the level."""
         return [c.gamma for c in self.channels]
 
     @property
     def jpi(self) -> str:
+        """J^pi as text."""
         if self.J is None:
             return "?"
         j = int(self.J) if float(self.J).is_integer() else f"{int(round(2 * self.J))}/2"
@@ -359,6 +366,7 @@ class TransformedChannel:
 
     @property
     def width_keV(self) -> Optional[float]:
+        """Partial width in keV."""
         w = self.width_eV
         return None if w is None else w * 1e-3
 
@@ -371,6 +379,7 @@ class TransformedChannel:
 
     @property
     def unit(self) -> str:
+        """Unit of the transformed value: eV for a width, fm^-1/2 for an ANC."""
         if self.channel.radiation_type in ("F", "G"):
             return ""
         return "eV" if self.is_open else "fm^-1/2"
@@ -384,6 +393,7 @@ class TransformedChannel:
 
     @property
     def label(self) -> str:
+        """The channel as text, with its pair, L and S."""
         c = self.channel
         if c.is_photon:
             return f"{c.radiation_type}{c.L}->pair{c.pair}"
@@ -411,6 +421,7 @@ class TransformedLevel:
 
     @property
     def total_width_eV(self) -> float:
+        """Sum of the level's partial widths, in eV."""
         return sum(c.width_eV or 0.0 for c in self.channels)
 
     def table(self) -> str:

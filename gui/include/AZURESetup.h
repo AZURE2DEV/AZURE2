@@ -40,6 +40,11 @@ class Directories {
   QString checksDir;
 };
 
+/*!
+ * The setup program's main window: it owns every tab, and reads and writes the .azr project file.
+ *
+ * The tabs are the sections of that file -- particle pairs, levels, segments, target integration -- plus the ones that drive a run: Run, Fitting, MCMC, Plot and Nuclear Potential. Saving walks them in file order, so a tab's read and write methods are the authority on its section's format.
+ */
 class AZURESetup : public QMainWindow {
   Q_OBJECT
 

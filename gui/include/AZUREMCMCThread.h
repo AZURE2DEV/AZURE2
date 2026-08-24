@@ -42,6 +42,9 @@ class AZUREMCMCWorker : public QObject {
 };
 
 // Simple thread class like AZUREMainThread
+/*!
+ * Runs an MCMC sampling off the GUI thread, reporting progress and log lines as signals, and stoppable mid-run.
+ */
 class AZUREMCMCThread : public QThread {
   Q_OBJECT
 

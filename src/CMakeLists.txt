@@ -1,7 +1,8 @@
-set(AZURE2_SOURCES AChannel.cpp CoulFunc.cpp CoulFuncCache.cpp GenMatrixFunc.cpp
+# Core sources, shared by the AZURE2 executable and the _azure2 Python module.
+set(AZURE2_CORE_SOURCES AChannel.cpp CoulFunc.cpp CoulFuncCache.cpp GenMatrixFunc.cpp
 KLGroup.cpp ALevel.cpp Decay.cpp AngCoeff.cpp MGroup.cpp
 AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
-AZURE2.cpp ECIntegral.cpp ECAmplitudeCache.cpp MatrixInv.cpp LevelMatrixSolver.cpp
+ECIntegral.cpp ECAmplitudeCache.cpp MatrixInv.cpp LevelMatrixSolver.cpp
 PPair.cpp AZURECalc.cpp
 ECMGroup.cpp ReactionRate.cpp AZUREMain.cpp EData.cpp ShftFunc.cpp
 RMatrixFunc.cpp AZUREOutput.cpp  EDataIterator.cpp   TargetEffect.cpp
@@ -11,22 +12,24 @@ EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp Straggling.cpp
 AdaptiveIntegrationGrid.cpp NuclearPotentialManager.cpp AZUREGrad.cpp ThmFunc.cpp
 THMMatrixFunc.cpp CovarianceBand.cpp ParameterLabel.cpp PolarizationFunc.cpp)
 
-# Add API stub when API is not enabled
-if(NOT USE_API)
-    list(APPEND AZURE2_SOURCES api_stub.cpp)
-endif()
-
 # Add GUI stub when GUI is not enabled
 if(NOT BUILD_GUI)
-    list(APPEND AZURE2_SOURCES gui_stub.cpp)
+    list(APPEND AZURE2_CORE_SOURCES gui_stub.cpp)
 endif()
 
 # Add MCMC sources when MCMC is enabled
 if(USE_MCMC)
-    list(APPEND AZURE2_SOURCES AZURECalcMCMC.cpp)
+    list(APPEND AZURE2_CORE_SOURCES AZURECalcMCMC.cpp)
 endif()
 
 include_directories(${AZURE2_SOURCE_DIR}/include)
+
+# The engine as a library, so both the CLI/GUI binary and the _azure2 Python
+# module link the same compiled code.  POSITION_INDEPENDENT_CODE lets the
+# static objects be pulled into the Python extension.
+add_library(AZURE2Core STATIC ${AZURE2_CORE_SOURCES})
+target_include_directories(AZURE2Core PUBLIC ${AZURE2_SOURCE_DIR}/include)
+set_target_properties(AZURE2Core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # macOS Bundle properties (set from parent CMakeLists.txt)
 if(BUILD_MACOS_BUNDLE AND APPLE)
@@ -67,33 +70,42 @@ if(NOT NO_READLINE)
     endif()
 endif (NOT NO_READLINE)
 
+set(AZURE2_EXEC_SOURCES AZURE2.cpp)
+
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-    set(AZURE2_SOURCES ${AZURE2_SOURCES} AZURE2.rc)
+    set(AZURE2_EXEC_SOURCES ${AZURE2_EXEC_SOURCES} AZURE2.rc)
     # Note: For console applications, use -subsystem,console or remove subsystem flag entirely
     # We'll let the static linking flags from main CMakeLists.txt handle the linker configuration
 endif (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 
 if (BUILD_LIBRARY) 
-add_library(AZURE2 ${AZURE2_SOURCES})
+add_library(AZURE2 STATIC ${AZURE2_CORE_SOURCES} ${AZURE2_EXEC_SOURCES})
 else (BUILD_LIBRARY)
-add_executable (AZURE2 ${AZURE2_PROPERTIES} ${AZURE2_SOURCES})
+add_executable (AZURE2 ${AZURE2_PROPERTIES} ${AZURE2_EXEC_SOURCES})
 endif (BUILD_LIBRARY)
 
-# Handle different linking for Windows cross-compilation
-if(CROSS_COMPILE_WINDOWS)
-    # For Windows, link normally and let CMake flags handle static/dynamic behavior
-    if(USE_NLOPT)
-        target_link_libraries (AZURE2 ${GSL_LIBRARIES} Minuit2::Minuit2 nlopt ${AZURESETUP_LIBRARIES} ${AZUREAPI_LIBRARIES} ${EXTRA_LIBS})
-    else()
-        target_link_libraries (AZURE2 ${GSL_LIBRARIES} Minuit2::Minuit2 ${AZURESETUP_LIBRARIES} ${AZUREAPI_LIBRARIES} ${EXTRA_LIBS})
-    endif()
-else()
-    if(USE_NLOPT)
-        target_link_libraries (AZURE2 ${GSL_LIBRARIES} Minuit2::Minuit2 nlopt ${AZURESETUP_LIBRARIES} ${AZUREAPI_LIBRARIES} ${BLAS_LIBRARIES} ${EXTRA_LIBS})
-    else()
-        target_link_libraries (AZURE2 ${GSL_LIBRARIES} Minuit2::Minuit2 ${AZURESETUP_LIBRARIES} ${AZUREAPI_LIBRARIES} ${BLAS_LIBRARIES} ${EXTRA_LIBS})
-    endif()
+# The engine's own dependencies, declared on the engine and PUBLIC so that
+# everything linking it -- the executable, the GUI, the Python module -- gets
+# them placed *after* it automatically.
+#
+# This has to be derived rather than hand-written.  A static archive only
+# supplies the symbols already demanded when the linker reaches it, so listing
+# Minuit2 or GSL before AZURE2Core leaves the engine's references to them
+# unresolved on GNU ld (Linux and MinGW).  macOS's linker rescans archives and
+# hides the mistake, which is why the hand-written order looked fine.
+target_link_libraries(AZURE2Core PUBLIC
+    Minuit2::Minuit2
+    ${GSL_LIBRARIES}
+    ${BLAS_LIBRARIES}
+    ${EXTRA_LIBS})
+if(USE_NLOPT)
+    target_link_libraries(AZURE2Core PUBLIC nlopt)
 endif()
+
+# AZURESetup (the GUI) calls into the engine, so it precedes it; AZUREAPI in
+# turn pulls AZURE2Core in as a PUBLIC dependency of its own.  Everything else
+# follows from the graph above.
+target_link_libraries(AZURE2 ${AZURESETUP_LIBRARIES} ${AZUREAPI_LIBRARIES} AZURE2Core)
 
 # Apply macOS bundle properties if building bundle
 if(BUILD_MACOS_BUNDLE AND APPLE AND DEFINED AZURE2_BUNDLE_PROPERTIES)

@@ -44,15 +44,19 @@ zeus = ["zeus-mcmc"]
 all = ["matplotlib", "emcee", "multiprocess", "zeus-mcmc"]
 
 [project.scripts]
-# Reap AZURE2 API instances left behind by an interpreter that died before it
-# could clean up. Safe by default: prints what it would do unless given --kill.
-pyazr-cleanup = "pyazr.cleanup:main"
+# The socket-based API is gone: pyazr talks to the engine in-process through
+# the _azure2 pybind11 module (built by CMake with USE_API=ON), so there is
+# nothing to launch and nothing to reap.
 
 [tool.setuptools]
 # pyazr is a plain package in the repository root; AZURE2 itself is C++ and is
-# not installed by pip. The binary is located at runtime via $AZURE2_BINARY,
-# then build/src/AZURE2, then $PATH.
+# not installed by pip. The in-process engine is the pybind11 extension module
+# _azure2.<platform>.so, built by CMake into the pyazr/ directory; ship it as
+# package data so a pip install keeps working.
 packages = ["pyazr"]
+
+[tool.setuptools.package-data]
+pyazr = ["_azure2*.so", "_azure2*.dylib", "_azure2*.pyd"]
 
 [tool.setuptools.dynamic]
 version = { attr = "pyazr.__version__" }

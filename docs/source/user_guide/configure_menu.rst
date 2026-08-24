@@ -92,7 +92,9 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
      - Automatically apply Wigner limit bounds on fit parameters.
    * - **Use Hybrid Coulomb method**
      - Use a hybrid method for Coulomb function calculations that includes a
-       nuclear potential (Woods-Saxon or Gaussian). Enables the Nuclear Potential
+       nuclear potential (Woods-Saxon or Gaussian). This is the master switch;
+       the Nuclear Potential tab then chooses which particle pairs it applies
+       to, one at a time. Enables the Nuclear Potential
        tab.
 
 .. note::

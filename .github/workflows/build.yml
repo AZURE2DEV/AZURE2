@@ -179,8 +179,41 @@ jobs:
       # in tests/ and compares chi-squared against recorded references, so a
       # change that still builds but moves the physics fails here -- on every
       # platform, which is also how cross-platform numerical drift shows up.
+      # The script prints the offending chi-squared and segment counts, but a
+      # failure only reaches the run summary as "exit code 1" -- and the job log
+      # itself needs a token to read, which the person debugging may not have.
+      # Echoing the salient lines as ::error:: puts them in the run's
+      # annotations, which are public.
       - name: Physics regression tests
-        run: ./tests/run_tests.sh
+        run: |
+          set -o pipefail
+          if ! ./tests/run_tests.sh 2>&1 | tee physics-tests.log; then
+            echo "::error::physics regression tests failed on ${{ matrix.name }}"
+            grep -nE "^===|FAIL|SKIP|ERROR|chi2|segment|expected" physics-tests.log \
+              | head -40 \
+              | while IFS= read -r line; do echo "::error::${{ matrix.name }}: $line"; done
+            exit 1
+          fi
+
+      # Everything the physics suite cannot see, because it drives the engine
+      # and nothing else: the GUI widgets (the Nuclear Potential tab once
+      # shipped with a selector that could never list a channel) and the .azr
+      # round-trip. Neither needs a display.
+      - name: Unit tests
+        run: ctest --test-dir build --output-on-failure
+
+      # Keeps the whole picture -- every project's run.log and the chi-squared
+      # it produced -- for a failure the annotations above do not explain.
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ matrix.name }}
+          path: |
+            physics-tests.log
+            tests/*/run.log
+            tests/*/output/chiSquared.out
+          if-no-files-found: warn
 
       # ------------------------------------------------------------- package
       # Qt's own deploy tools pull the Qt runtime in beside the binary. This is
@@ -199,14 +232,50 @@ jobs:
           # desktop-OpenGL Qt build does not ship, even though it has deployed
           # everything correctly. Check what it produced instead of its status.
           "$DEPLOY" dist/AZURE2.exe || echo "$DEPLOY exited non-zero; verifying its output instead"
-          for dll in Qt5Core.dll Qt5Gui.dll Qt5Widgets.dll; do
-            if [ ! -f "dist/$dll" ]; then
-              echo "Qt deployment failed: dist/$dll is missing"
+
+          # Qt loads its platform plugin at startup from platforms/ next to the
+          # executable. Without it a Widgets application dies before main() with
+          # "no Qt platform plugin could be initialized" -- so this, not the Qt
+          # DLLs, is what says the deployment is usable. windeployqt has been
+          # seen to copy the libraries and then stop short of the plugins, and
+          # the old check could not tell the two apart because the ldd sweep
+          # below produces those same DLLs anyway.
+          if [ ! -f dist/platforms/qwindows.dll ]; then
+            echo "$DEPLOY produced no platforms/qwindows.dll; copying the plugins directly"
+            PLUGINS=""
+            if command -v qmake-qt5 >/dev/null 2>&1; then
+              PLUGINS="$(qmake-qt5 -query QT_INSTALL_PLUGINS 2>/dev/null || true)"
+            fi
+            [ -d "$PLUGINS" ] || PLUGINS="$MINGW_PREFIX/share/qt5/plugins"
+            [ -d "$PLUGINS" ] || PLUGINS="$(dirname "$(find "$MINGW_PREFIX" -name qwindows.dll -print -quit 2>/dev/null || true)" 2>/dev/null || true)/.."
+            echo "Qt plugins: $PLUGINS"
+            # platforms is what it cannot start without; the others are what it
+            # looks wrong without -- no native style, no PNG icons.
+            for d in platforms styles imageformats iconengines printsupport; do
+              [ -d "$PLUGINS/$d" ] || continue
+              mkdir -p "dist/$d"
+              cp -n "$PLUGINS/$d"/*.dll "dist/$d/" 2>/dev/null || true
+            done
+          fi
+
+          for f in Qt5Core.dll Qt5Gui.dll Qt5Widgets.dll platforms/qwindows.dll; do
+            if [ ! -f "dist/$f" ]; then
+              echo "Qt deployment failed: dist/$f is missing"
+              ls -R dist | head -60
               exit 1
             fi
           done
-          # mingw runtime + the non-Qt dependencies
+
+          # mingw runtime + the non-Qt dependencies, for the executable and for
+          # every plugin copied above (a plugin can pull in a library the
+          # executable itself never references).
           ldd dist/AZURE2.exe | awk '/ucrt64/ {print $3}' | xargs -r -I{} cp -n {} dist/ || true
+          find dist -name '*.dll' -path '*/*/*' -print0 2>/dev/null \
+            | xargs -0 -r -I{} sh -c 'ldd "{}" | awk "/ucrt64/ {print \$3}"' \
+            | sort -u | xargs -r -I{} cp -n {} dist/ || true
+
+          echo "--- packaged ---"
+          ls -R dist | head -60
 
       - name: Package (macos)
         if: matrix.name == 'macos'
@@ -259,9 +328,23 @@ jobs:
 
           BASE=https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous
           PLUGIN=https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous
-          curl -fsSL -o linuxdeploy "$BASE/linuxdeploy-x86_64.AppImage"
-          curl -fsSL -o linuxdeploy-plugin-qt "$PLUGIN/linuxdeploy-plugin-qt-x86_64.AppImage"
+          RUNTIME=https://github.com/AppImage/type2-runtime/releases/download/continuous
+
+          # These are fetched from GitHub releases on every run, so a bad minute
+          # upstream fails the build with nothing wrong in the tree.  Retry
+          # rather than take the first 5xx as final.
+          fetch() { curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o "$1" "$2"; }
+
+          fetch linuxdeploy "$BASE/linuxdeploy-x86_64.AppImage"
+          fetch linuxdeploy-plugin-qt "$PLUGIN/linuxdeploy-plugin-qt-x86_64.AppImage"
           chmod +x linuxdeploy linuxdeploy-plugin-qt
+
+          # The appimage output plugin downloads this itself, unretried, at the
+          # very end of packaging -- a 503 there discards a build that has
+          # already compiled and passed its tests.  Fetch it up front and hand
+          # it over instead.
+          fetch runtime-x86_64 "$RUNTIME/runtime-x86_64"
+          export LDAI_RUNTIME_FILE="$PWD/runtime-x86_64"
 
           # The runner has no FUSE, so the AppImage tools have to be unpacked
           # rather than executed directly.
@@ -287,6 +370,78 @@ jobs:
           name: AZURE2-${{ matrix.name }}
           path: dist/
           if-no-files-found: error
+
+  # The Windows build of the newest dev commit, behind a stable download link.
+  #
+  # The matrix already uploads dist/ as a run artifact, but that is only
+  # reachable by a signed-in GitHub user, from the run page, and it expires with
+  # the run's retention. Windows users want a URL they can just click, so the
+  # same package is also published to a rolling pre-release whose tag is moved
+  # to each new dev commit:
+  #
+  #   https://github.com/AZURE2DEV/AZURE2/releases/download/continuous-windows/AZURE2-windows-x86_64.zip
+  #
+  # It is a pre-release on purpose: it is whatever dev currently builds, not a
+  # version anyone should cite. Tagged releases still go through the draft
+  # release below, untouched by this.
+  continuous-windows:
+    # !cancelled() rather than plain success(): needs waits for the whole
+    # matrix, so without it a macOS breakage -- Homebrew's qt@5 is deprecated
+    # and will be disabled -- would also stop Windows users getting builds.
+    # A failure of the Windows entry itself still stops publication, because
+    # then there is no artifact to download and the step below fails.
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: AZURE2-windows
+          path: dist
+
+      - name: Zip it
+        run: |
+          set -e
+          # Fail loudly rather than publishing an empty archive if the packaging
+          # step above ever stops producing the executable.
+          test -f dist/AZURE2.exe
+          {
+            echo "AZURE2 for Windows (x86_64), built from dev@${GITHUB_SHA}"
+            date -u +'%Y-%m-%d %H:%M UTC'
+            echo
+            echo "Unzip anywhere and run AZURE2.exe. The Qt runtime and the"
+            echo "mingw libraries it needs are in the same folder, so nothing"
+            echo "else has to be installed."
+          } > dist/BUILD-INFO.txt
+          cd dist && zip -r ../AZURE2-windows-x86_64.zip .
+
+      # The tag has to move to the new commit, which is why this is not just an
+      # asset upload: a release keeps whatever commit its tag pointed at when it
+      # was created.
+      - name: Publish the rolling pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          TAG=continuous-windows
+          git push -f origin "HEAD:refs/tags/$TAG"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --prerelease \
+              --title "Windows continuous build" \
+              --notes "Rolling build of the latest dev commit. Replaced on every push."
+          fi
+          # --clobber so the stable filename is overwritten rather than
+          # accumulating AZURE2-windows-x86_64-1.zip and friends.
+          gh release upload "$TAG" AZURE2-windows-x86_64.zip --clobber
+          gh release edit "$TAG" \
+            --prerelease \
+            --title "Windows continuous build" \
+            --notes "Rolling build of the latest dev commit (\`${GITHUB_SHA:0:7}\`), replaced on every push to dev. Not a released version -- for a citable build use a tagged release."
 
   # Tags promote the same artifacts to a draft release, so nothing is published
   # without a human looking at it first.

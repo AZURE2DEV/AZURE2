@@ -60,22 +60,31 @@ class ECIntegral {
    * The CoulFunc and WhitFunc objects are automatically destroyed with the object.
    */
   ~ECIntegral() = default;
+  /// External-capture radial integral for one pathway: entrance and exit l, the multipolarity and radiation type, and the energies.
   complex operator()(int, int, double, double, double, double, int, char, double, double, bool, bool = false);
 
  private:
+  /// Clear the cached FW, GW and WW integrals.
   void ResetIntegrals() {
     FW_ = 0.;
     GW_ = 0.;
   };
+  /// Evaluate the three radial integrals at one energy.
   void Integrate(double);
+  /// GSL integrand: regular Coulomb function against the Whittaker function.
   static double FWIntegrand(double, void *);
+  /// GSL integrand: irregular Coulomb function against the Whittaker function.
   static double GWIntegrand(double, void *);
+  /// GSL integrand: Whittaker against Whittaker, for a bound entrance channel.
   static double WWIntegrand(double, void *);
   /// Clears the per-x FW/GW memo (see ECIntegral.cpp); called before the
   /// FW/GW pair so the two integrands share their expensive evaluations.
   static void ClearFGMemo();
+  /// Coulomb functions of this pair.
   CoulFunc *coulfunction() const { return params_.coulFunc.get(); };
+  /// Whittaker functions of this pair.
   WhitFunc *whitfunction() const { return params_.whitFunc.get(); };
+  /// The pair this integral belongs to.
   PPair *pair() const { return pair_; };
   double FW() const { return FW_; };
   double GW() const { return GW_; };

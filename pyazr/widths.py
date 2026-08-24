@@ -153,18 +153,22 @@ class WidthTable(list):
 
     @property
     def photons(self):
+        """Only the photon channels."""
         return WidthTable(c for c in self if c.is_photon)
 
     @property
     def particles(self):
+        """Only the particle channels."""
         return WidthTable(c for c in self if not c.is_photon)
 
     @property
     def free(self):
+        """Only the channels the fit varies."""
         return WidthTable(c for c in self if not c.fixed)
 
     @property
     def nonzero(self):
+        """Only the channels with a nonzero width."""
         return WidthTable(c for c in self if c.value)
 
     def by_level(self):
@@ -175,6 +179,7 @@ class WidthTable(list):
         return out
 
     def to_records(self):
+        """The table as a list of plain dicts."""
         keys = [f.name for f in fields(ChannelWidth)]
         return [{k: getattr(c, k) for k in keys} for c in self]
 

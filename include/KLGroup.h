@@ -18,12 +18,17 @@
 
 class KLGroup {
  public:
+  /// Build from a KGroup position and a Legendre order.
   KLGroup(int, int);
+  /// 1-based position of the \\f$s,s'\\f$ group this belongs to.
   int GetK() const;
+  /// Order of the Legendre polynomial this term multiplies.
   int GetLOrder() const;
   int NumInterferences() const;
+  /// 1-based position of the pathway pair, or 0 if absent.
   int IsInterference(Interference);
   void AddInterference(Interference);
+  /// Pathway pair \\p i, 1-based.
   Interference *GetInterference(int);
 
  private:

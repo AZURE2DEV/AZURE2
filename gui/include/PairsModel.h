@@ -24,6 +24,11 @@ struct PairsData {
   double bindingEnergy;  // THM: transferred-particle binding energy (MeV)
 };
 
+/*!
+ * Table model behind the Particle Pairs tab.
+ *
+ * A pair's key is its 1-based row, which is what the .azr stores and what a channel's pair number refers to -- so deleting a row renumbers the pairs above it.
+ */
 class PairsModel : public QAbstractTableModel {
   Q_OBJECT
 

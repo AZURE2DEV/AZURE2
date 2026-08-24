@@ -61,11 +61,11 @@ appears with the following fields:
         - Differential cross section data given in the center-of-mass frame.
       * - **Analyzing Power**
         - Vector analyzing power :math:`A_y` for a spin-1/2 projectile, in the
-          Madison convention. Angles are centre-of-mass, as for **C.M.
-          Differential**, and the data file carries
-          ``E_lab  theta_cm  A_y  dA_y``. Because :math:`A_y` is a ratio,
-          **Vary Norm?** is disabled for it -- a normalization factor has no
-          meaning for a quantity that is already normalized. See
+          Madison convention, for a **particle or a capture** exit channel.
+          Angles are centre-of-mass, as for **C.M. Differential**, and the data
+          file carries ``E_lab  theta_cm  A_y  dA_y``. Because :math:`A_y` is a
+          ratio, **Vary Norm?** is disabled for it -- a normalization factor has
+          no meaning for a quantity that is already normalized. See
           :doc:`../theory/polarization_theory`.
 
 **Data Normalization**

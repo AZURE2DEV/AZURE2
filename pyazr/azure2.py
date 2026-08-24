@@ -1,83 +1,133 @@
-"""High-level driver for one or more AZURE2 API instances.
+"""High-level driver for one in-process AZURE2 engine instance.
 
-An :class:`azure2` object owns a pool of ``nprocs`` AZURE2 subprocesses, each
-paired with a client connection.  Methods that take a ``proc`` argument let a
-caller dispatch work to a specific instance (e.g. for parallel chi-squared
-evaluations across a worker pool).
+An :class:`azure2` object owns one ``_azure2.Session`` -- the AZUREAPI C++
+object bound into Python via pybind11 -- loaded from a single ``.azr`` file.
+There are no subprocesses, no sockets and no instance pools to manage: the
+engine runs inside the interpreter, so a session is exactly one Python object.
+Opening several ``azure2()`` objects in one interpreter is fine, each is
+independent; drive them from one thread, as the engine is not reentrant.
 """
 
-from concurrent.futures import ThreadPoolExecutor
+import os
+import shutil
+import tempfile
+from contextlib import contextmanager
 
 import numpy as np
 
-from .client import client
-from .parameters import Pair, PairSet, Parameter, ParameterSet
-from .server import server
+try:
+    from . import _azure2
+except ImportError as err:                            # pragma: no cover
+    raise ImportError(
+        "the AZURE2 engine module (pyazr._azure2) is not built.  It is a C++ "
+        "extension, not pure Python: configure with CMake (USE_API=ON, the "
+        "default) and build -- the module lands in pyazr/."
+    ) from err
+
+from .parameters import (NuclearPotential, Pair, PairSet, Parameter,
+                         ParameterSet)
+# Imported inside the module rather than at package level: azrfile does not
+# depend on the compiled engine, and this keeps that direction of the
+# dependency one-way.
+from .azrfile import AzrModel
+
+
+@contextmanager
+def _in_dir(path):
+    """Run the block with the process cwd at ``path``, then put it back."""
+    previous = os.getcwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(previous)
+
+
+class _Engine:
+    """A ``_azure2.Session`` whose every call is made from the model's directory.
+
+    AZURE2 names ``output/``, ``checks/`` and its data files relative to the
+    process' working directory, and a process has only one.  Entering that
+    directory per call rather than holding it for the session's lifetime is
+    what lets two sessions in different directories coexist -- and it leaves
+    the caller's own cwd alone, as the subprocess-based API did.
+    """
+
+    def __init__(self, session, cwd):
+        self._session = session
+        self._cwd = cwd
+
+    def __getattr__(self, name):
+        # __getattr__ runs before _session exists (unpickling, a failed
+        # __init__), and forwarding then recurses forever.
+        if name.startswith("_"):
+            raise AttributeError(name)
+        attr = getattr(self._session, name)
+        if not callable(attr):
+            return attr
+
+        def call(*args, **kwargs):
+            with _in_dir(self._cwd):
+                return attr(*args, **kwargs)
+        return call
 
 
 class azure2:
 
-    def __init__(self, file, nprocs=1, port=20000, binary=None,
-                 verbose=False, auto_port=True, cwd=None, timeout=1800.0):
-        """Launch ``nprocs`` AZURE2 instances bound to ``file``.
+    def __init__(self, file, cwd=None, data_mode=True, use_brune=True,
+                 ignore_externals=True, transform=True,
+                 use_long_wavelength=True, use_gsl_coul=False, use_rmc=False):
+        """Build the R-matrix engine for ``file`` in this interpreter.
 
         Parameters
         ----------
         file : the ``.azr`` configuration file.
-        nprocs : number of parallel AZURE2 instances to spawn.
-        port : base TCP port used only when ``auto_port=False`` (instance ``i``
-            then binds ``port + i``).  Ignored when ``auto_port`` is set.
-        binary : path to the AZURE2 executable (auto-detected if ``None``).
-        verbose : forward subprocess output to the console.
-        auto_port : let the OS assign each instance a unique free port (bind
-            port 0; the server reports back the port it got).  This is race-free,
-            unlike probing, so concurrent instances can never collide.  The
-            actual ports are available as :attr:`ports` after construction.
-        cwd : working directory for the subprocesses.  Defaults to the ``.azr``
-            file's directory, since a model names its ``output/`` and ``checks/``
-            directories relative to the running process.
-        timeout : seconds to wait for any one API response.  The default is
-            generous because ``INITIALIZE`` on a capture model builds every
-            external-capture integral from scratch when the cache is cold,
-            which runs for many minutes on a fine extrapolation grid; the
-            previous 5-minute limit killed such a session mid-build.  ``None``
-            waits indefinitely.
+        cwd : working directory for the run.  A model names its ``output/``,
+            ``checks/`` and data paths *relative to the process cwd*, so this
+            defaults to the ``.azr`` file's own directory -- the convention the
+            file itself is written against.  Each engine call enters it and
+            leaves again, so the caller's cwd is never left changed.
+        data_mode : evaluate the ``<segmentsData>`` blocks (the startup state);
+            ``False`` starts in extrapolation mode (``<segmentsTest>``).
+        use_brune, ignore_externals, transform, use_long_wavelength :
+            R-matrix formalism options, matching the CLI's ``--use-brune``,
+            ``--ignore-externals``, ``--no-transform`` and ``--no-long-wavelength``
+            (the ``use_*`` options are ON by default, ``transform`` too).
+        use_gsl_coul : use GSL's Coulomb functions instead of AZURE2's own.
+        use_rmc : use the R-matrix-with-channels (RMC) formalism instead of
+            Brune; mutually exclusive with ``use_brune`` (Brune wins).
+
+        Raises
+        ------
+        _azure2.AZURE2Error
+            if the file is missing or the model will not initialize.
         """
-        self.file = file
-        self.nprocs = nprocs
-        self.binary = binary
-        self.verbose = verbose
-        self.cwd = cwd
-        self.timeout = timeout
-        # Which segments the instances calculate: 'data' (the <segmentsData>
-        # blocks, the startup state) or 'extrap' (<segmentsTest>).  There is no
-        # API query for it, so it is tracked here -- see extrap_mode/data_mode.
-        self.mode = "data"
+        self._sess = None
+        self.file = os.path.abspath(file)
+        self.cwd = os.path.abspath(cwd if cwd is not None else (
+            os.path.dirname(self.file) or "."))
+        if not os.path.isdir(self.cwd):
+            raise FileNotFoundError(f"working directory {self.cwd!r} does not exist.")
 
-        # Instance-level lists.  (The original code declared `servers` as a
-        # *class* attribute, so every azure2 object shared -- and leaked into
-        # -- the same list.)
-        self.servers = []
-        self.clients = []
+        # Kept so a session can be reproduced elsewhere -- a worker process
+        # rebuilding this same model needs the formalism options, not just the
+        # file (see pyazr.bands.sensitivities with nprocs > 1).
+        self.options = dict(
+            data_mode=bool(data_mode), use_brune=bool(use_brune),
+            ignore_externals=bool(ignore_externals), transform=bool(transform),
+            use_long_wavelength=bool(use_long_wavelength),
+            use_gsl_coul=bool(use_gsl_coul), use_rmc=bool(use_rmc))
 
-        # With auto_port we no longer *probe* for free ports (which raced: the
-        # probe released the port before the server bound it).  Instead we ask
-        # the OS to assign one via port 0; each server reports the port it
-        # actually got, so two instances can never collide.  Explicit ports
-        # (auto_port=False) are still honored verbatim for callers who pin them.
-        if auto_port:
-            self.requested_ports = [0] * nprocs
-        else:
-            self.requested_ports = [port + i for i in range(nprocs)]
-        self.ports = list(self.requested_ports)   # filled in with real ports
+        opts = _azure2.RuntimeOptions()
+        for name, value in self.options.items():
+            setattr(opts, name, value)
+        # Construction reads the .azr and its data files, so it runs from the
+        # model's directory like every call afterwards.
+        with _in_dir(self.cwd):
+            self._sess = _Engine(_azure2.Session(self.file, opts), self.cwd)
 
-        self._closed = False
-        try:
-            self.spawn()
-            self.configure()
-        except Exception:
-            self.close()
-            raise
+        self.mode = "data" if data_mode else "extrap"
+        self.configure()
 
     def __del__(self):
         self.close()
@@ -90,86 +140,43 @@ class azure2:
 
     # -- lifecycle ------------------------------------------------------------
 
-    def spawn(self):
-        """Start the subprocesses, connect clients, and initialize them.
-
-        Connecting and (especially) the ``INITIALIZE`` step are run
-        concurrently across all instances.  ``INITIALIZE`` triggers the heavy
-        R-matrix setup inside each AZURE2 process; done sequentially the total
-        cost grows linearly with ``nprocs``.  Because ``communicate`` blocks on
-        socket I/O -- which releases the GIL -- dispatching it from a thread per
-        instance lets every AZURE2 process initialize in parallel, so the wall
-        time stays close to a single instance's setup time.
-        """
-        # Launch every subprocess first; Popen is non-blocking, so all the
-        # AZURE2 processes start booting concurrently.
-        for p in self.requested_ports:
-            self.servers.append(
-                server(p, self.file, binary=self.binary, verbose=self.verbose,
-                       cwd=self.cwd)
-            )
-
-        if self.nprocs == 1:
-            # Avoid thread-pool overhead in the common single-instance case.
-            # Wait for the server to report its actual (OS-assigned) port, then
-            # connect to exactly that port -- no probing, no race.
-            self.ports = [self.servers[0].wait_until_listening()]
-            self.clients = [client(port=self.ports[0], timeout=self.timeout)]
-            self.clients[0].communicate("INITIALIZE", [0])
-            return
-
-        with ThreadPoolExecutor(max_workers=self.nprocs) as pool:
-            # Wait for every server's bound port in parallel (each blocks on the
-            # heavy startup), keeping order so self.ports/clients stay aligned
-            # with `proc`.
-            self.ports = list(pool.map(lambda s: s.wait_until_listening(),
-                                       self.servers))
-
-            # connect() still polls until the port is accepting, run in parallel
-            # to overlap any residual latency.
-            self.clients = list(pool.map(
-                lambda p: client(port=p, timeout=self.timeout), self.ports))
-
-            # Fan out the heavy INITIALIZE so the processes set up in parallel.
-            list(pool.map(lambda c: c.communicate("INITIALIZE", [0]),
-                          self.clients))
+    @property
+    def sess(self):
+        """The underlying engine, or a clear error once it has been released."""
+        if self._sess is None:
+            raise RuntimeError(
+                "this azure2 session is closed; open a new one for more work.")
+        return self._sess
 
     def close(self):
-        """Disconnect all clients and terminate all subprocesses."""
-        if getattr(self, "_closed", False):
-            return
-        self._closed = True
-        for c in getattr(self, "clients", []):
-            try:
-                c.disconnect()
-            except Exception:
-                pass
-        for s in getattr(self, "servers", []):
-            try:
-                s.stop()
-            except Exception:
-                pass
-        self.clients = []
-        self.servers = []
+        """Release the engine.
+
+        The C++ model is several MB per session and is freed here rather than
+        whenever the garbage collector gets to it -- which matters in a loop
+        over model variants, where the collector may hold two at once.
+        """
+        self._sess = None
 
     def is_alive(self):
-        return bool(self.servers) and all(s.is_alive() for s in self.servers)
+        """Is the engine still open? False once close() has run."""
+        return self._sess is not None
 
     def configure(self):
-        c = self.clients[0]
-        self.nsegments = int(c.communicate("UPDATE_DATA", [0])[0])
+        """Re-read the parameter, pair and dataset metadata from the engine, after anything that rebuilt the model."""
+        s = self.sess
+        self.nsegments = int(s.update_data())
         rng = range(self.nsegments)
-        self.energies = [c.communicate("GET_DATA_ENERGIES", [i]) for i in rng]
-        self.excitation_energies = [c.communicate("GET_DATA_EXCITATION_ENERGY", [i]) for i in rng]
-        self.angles = [c.communicate("GET_DATA_ANGLES", [i]) for i in rng]
-        self.cross = [c.communicate("GET_DATA_SEGMENTS", [i]) for i in rng]
-        self.cross_err = [c.communicate("GET_DATA_SEGMENTS_ERRORS", [i]) for i in rng]
-        self.conv = [c.communicate("GET_DATA_CONV", [i]) for i in rng]
+        self.energies = [s.data_energies(i) for i in rng]
+        self.excitation_energies = [s.data_excitation_energies(i) for i in rng]
+        self.angles = [s.data_angles(i) for i in rng]
+        self.cross = [s.data_segments(i) for i in rng]
+        self.cross_err = [s.data_segments_errors(i) for i in rng]
+        self.conv = [s.data_conv(i) for i in rng]
         self.sfactor = [self.cross[i] * self.conv[i] for i in rng]
         self.sfactor_err = [self.cross_err[i] * self.conv[i] for i in rng]
-        self.params = c.communicate("GET_PARAMS", [0])
-        self.params_rwa = c.communicate("GET_PARAMS_RWA", [0])
-        self.fixed_params = c.communicate("GET_PARAMS_FIXED", [0])
+        self.params = s.params_values()
+        self.params_rwa = s.params_values_rwa()
+        self.fixed_params = s.params_fixed()
         self._parameters = None
         self._pairs = None
 
@@ -195,9 +202,25 @@ class azure2:
             self._parameters = self._build_parameters()
         return self._parameters
 
-    def refresh_parameters(self, proc=0):
+    @property
+    def n_rmatrix(self):
+        """How many leading entries of the free vector are R-matrix parameters.
+
+        The vector is laid out with the level energies and reduced widths
+        first, then the normalizations and energy shifts.  ``transform_rwa``
+        accepts either the whole thing or just this leading block, so this is
+        the slice point:
+
+        >>> physical = m.transform_rwa(x[:m.n_rmatrix])
+        """
+        idx = [p.free_index for p in self.parameters
+               if p.kind in ("energy", "width") and not p.fixed
+               and p.free_index is not None]
+        return 1 + max(idx) if idx else 0
+
+    def refresh_parameters(self):
         """Re-fetch and rebuild the cached :attr:`parameters`."""
-        self._parameters = self._build_parameters(proc=proc)
+        self._parameters = self._build_parameters()
         return self._parameters
 
     @property
@@ -212,15 +235,15 @@ class azure2:
             self._pairs = self._build_pairs()
         return self._pairs
 
-    def refresh_pairs(self, proc=0):
+    def refresh_pairs(self):
         """Re-fetch and rebuild the cached :attr:`pairs`."""
-        self._pairs = self._build_pairs(proc=proc)
+        self._pairs = self._build_pairs()
         return self._pairs
 
     # -- channel radius -------------------------------------------------------
 
     def set_channel_radius(self, pair, radius):
-        """Change one particle pair's channel radius, on every instance.
+        """Change one particle pair's channel radius.
 
         ``pair`` is the 1-based :attr:`Pair.number`, ``radius`` is in fm.  This
         is not a light edit: the radius sets the matching surface, so AZURE2
@@ -238,10 +261,10 @@ class azure2:
         means something different at a different radius -- **the model is no
         longer fitted**.  Refit before reading anything off it.
 
-        Note this changes only the running instance; the ``.azr`` on disk is
-        untouched.  To persist a radius (and to scan several radii from
-        separate processes, which is the safer pattern) use
-        :meth:`pyazr.AzrModel.set_channel_radius` and write a new file.
+        Note this changes only the running session; the ``.azr`` on disk is
+        untouched.  To persist a radius (and to scan several radii, which is
+        the safer pattern) use :meth:`pyazr.AzrModel.set_channel_radius` and
+        write a new file.
         """
         pair = int(pair)
         if not any(p.number == pair for p in self.pairs):
@@ -249,19 +272,135 @@ class azure2:
                            f"(have {[p.number for p in self.pairs]}).")
         if not radius > 0:
             raise ValueError(f"channel radius must be positive, got {radius}.")
-        for c in self.clients:
-            ok = c.communicate("SET_CHANNEL_RADIUS", [pair, float(radius)])
-            if not bool(np.asarray(ok).ravel()[0]):
-                raise RuntimeError(
-                    f"AZURE2 could not rebuild with pair {pair} at "
-                    f"{radius} fm; the instance is no longer usable.")
+        if not self.sess.set_radius(pair, float(radius)):
+            raise RuntimeError(
+                f"AZURE2 could not rebuild with pair {pair} at "
+                f"{radius} fm; the session is no longer usable.")
         self.configure()
         return self.pairs.by_number(pair).channel_radius
 
-    def _build_pairs(self, proc=0):
-        flat = self.clients[proc].communicate("GET_PAIRS_INFO", [0])
+    # -- hybrid nuclear potential, per particle pair --------------------------
+
+    def nuclear_potential(self, pair=0):
+        """The hybrid model's setting for one particle pair.
+
+        Returns a :class:`NuclearPotential` -- ``enabled``, ``type``
+        (``"WoodsSaxon"`` or ``"Gaussian"``), the shape parameters ``V0``/``R``/
+        ``a``/``r0``, and ``own``, which says whether this pair carries a
+        setting of its own or is following the default.
+
+        ``pair=0`` addresses that default: the setting every pair falls back to
+        when it has none.  A model where no pair is named therefore behaves as
+        it did when the potential was a single global object.
+        """
+        pair = self._check_potential_pair(pair)
+        enabled, type_, V0, R, a, r0, own = self.sess.get_potential(pair)
+        return NuclearPotential(pair=pair, enabled=bool(enabled), type=str(type_),
+                                V0=float(V0), R=float(R), a=float(a),
+                                r0=float(r0), own=bool(own))
+
+    def nuclear_potentials(self):
+        """Every pair's resolved setting, plus the default under key ``0``."""
+        out = {0: self.nuclear_potential(0)}
+        for p in self.pairs:
+            out[p.number] = self.nuclear_potential(p.number)
+        return out
+
+    def set_nuclear_potential(self, pair=0, type=None, enabled=True,
+                              V0=None, R=None, a=None, r0=None,
+                              reinitialize=True):
+        """Give one particle pair its own hybrid nuclear potential.
+
+        A nuclear potential belongs to a pair -- it bends the radial wave
+        functions of that channel and no other -- so each pair carries its own,
+        and ``pair=0`` sets the default that unnamed pairs inherit.  Anything
+        left at ``None`` keeps the value the pair already resolves to, so
+        turning one pair off is just
+        ``set_nuclear_potential(2, enabled=False)``.
+
+        ``type`` is ``"WoodsSaxon"`` (``V0``, ``R``, ``a``) or ``"Gaussian"``
+        (``V0``, ``r0``); depths are MeV and lengths fm.
+
+        The potential is read by ``CoulFunc`` when it is constructed, deep
+        inside a calculation, so a change only reaches the model once the model
+        is rebuilt.  That is what ``reinitialize=True`` does -- it costs about
+        as much as opening the session did, so pass ``reinitialize=False`` when
+        setting several pairs and let the last call do it.
+
+        Like :meth:`set_channel_radius` this changes only the running session,
+        and it changes the physics: a fit made without the potential is not a
+        fit made with it.
+
+        **Re-read the parameter vector afterwards.**  The potential changes the
+        penetrabilities and shift functions, and those are what map physical
+        widths to reduced-width amplitudes -- so ``params_rwa`` is re-derived by
+        the rebuild and a vector captured beforehand no longer describes the
+        same model.  Feeding the old one back gives a quietly wrong chi-squared;
+        re-reading ``m.params_rwa`` after the call reproduces exactly what
+        loading a ``.azr`` carrying the same potential gives.
+        """
+        pair = self._check_potential_pair(pair)
+        cur = self.nuclear_potential(pair)
+        type_ = cur.type if type is None else str(type)
+        if type_ not in ("WoodsSaxon", "Gaussian"):
+            raise ValueError(f"unknown potential type {type_!r}; expected "
+                             f"'WoodsSaxon' or 'Gaussian'.")
+        V0 = cur.V0 if V0 is None else float(V0)
+        R = cur.R if R is None else float(R)
+        a = cur.a if a is None else float(a)
+        r0 = cur.r0 if r0 is None else float(r0)
+        if type_ == "WoodsSaxon":
+            if not R > 0 or not a > 0:
+                raise ValueError(f"Woods-Saxon needs R > 0 and a > 0, "
+                                 f"got R={R}, a={a}.")
+        elif not r0 > 0:
+            raise ValueError(f"Gaussian needs r0 > 0, got r0={r0}.")
+        self.sess.set_potential(pair, type_, bool(enabled), V0, R, a, r0)
+        if reinitialize:
+            self._rebuild_after_potential_change()
+        return self.nuclear_potential(pair)
+
+    def clear_nuclear_potential(self, pair=0, reinitialize=True):
+        """Drop a pair's own setting so it follows the default again.
+
+        ``pair=0`` resets the default *and* every per-pair setting, which is
+        how one gets back to a model with no hybrid potential at all.
+        """
+        pair = self._check_potential_pair(pair)
+        self.sess.clear_potential(pair)
+        if reinitialize:
+            self._rebuild_after_potential_change()
+        return self.nuclear_potential(pair)
+
+    def _rebuild_after_potential_change(self):
+        """Rebuild so the new potential reaches the model.
+
+        A plain ``initialize()`` is not enough: it decides whether to reuse the
+        external-capture integrals by looking for ``output/intEC.dat``, which is
+        the right call at startup and the wrong one here -- the integrals on
+        disk belong to the Coulomb functions the old potential produced.
+        ``rebuild()`` recomputes them, the way a channel-radius change does.
+        """
+        if not self.sess.rebuild():
+            raise RuntimeError(
+                "AZURE2 could not rebuild with the new nuclear potential; "
+                "the session is no longer usable.")
+        self.configure()
+
+    def _check_potential_pair(self, pair):
+        pair = int(pair)
+        if pair and not any(p.number == pair for p in self.pairs):
+            raise KeyError(f"no pair {pair} in this model "
+                           f"(have {[p.number for p in self.pairs]}); "
+                           f"pair=0 is the default.")
+        if pair < 0:
+            raise ValueError(f"pair must be >= 0, got {pair}.")
+        return pair
+
+    def _build_pairs(self):
+        flat = np.asarray(self.sess.pairs_info(), dtype=float)
         nfields = Pair._NFIELDS
-        records = np.asarray(flat, dtype=float).reshape(-1, nfields)
+        records = flat.reshape(-1, nfields)
         return PairSet(Pair.from_record(rec) for rec in records)
 
     @property
@@ -303,25 +442,24 @@ class azure2:
         from .datasets import TestSegmentSet
         return TestSegmentSet.from_file(self.file)
 
-    def _build_parameters(self, proc=0):
-        c = self.clients[proc]
+    def _build_parameters(self):
+        s = self.sess
         n = len(self.fixed_params)
 
-        flat = c.communicate("GET_PARAMS_INFO", [0])
+        flat = np.asarray(s.parameter_info(), dtype=float)
         nfields = Parameter._NFIELDS
-        records = np.asarray(flat, dtype=float).reshape(-1, nfields)
+        records = flat.reshape(-1, nfields)
         if records.shape[0] != n:
             raise RuntimeError(
-                f"GET_PARAMS_INFO returned {records.shape[0]} parameters but "
-                f"GET_PARAMS_FIXED reported {n}."
+                f"parameter_info returned {records.shape[0]} parameters but "
+                f"params_fixed reported {n}."
             )
 
         params = ParameterSet()
         free_counter = 0
         for i in range(n):
-            raw_name = c.communicate("GET_PARAMS_NAMES", [i])
-            name = "".join(chr(int(round(x))) for x in raw_name)
-            fixed = bool(round(self.fixed_params[i]))
+            name = s.params_names(i)
+            fixed = bool(self.fixed_params[i])
             free_index = None if fixed else free_counter
             if not fixed:
                 free_counter += 1
@@ -411,20 +549,22 @@ class azure2:
 
     # -- index queries --------------------------------------------------------
 
-    def norm_indices(self, proc=0):
-        return self.clients[proc].communicate("GET_NORM_INDICES", [0])
+    def norm_indices(self):
+        """Free-vector positions of the normalization parameters."""
+        return self.sess.normalization_indices()
 
-    def shift_indices(self, proc=0):
-        return self.clients[proc].communicate("GET_SHIFT_INDICES", [0])
+    def shift_indices(self):
+        """Free-vector positions of the energy-shift parameters."""
+        return self.sess.energy_shift_indices()
 
-    def energy_indices(self, proc=0):
+    def energy_indices(self):
         """Packed indices of the free R-matrix level-energy parameters.
 
         Returns the positions of the level-energy parameters within
         ``params_rwa`` (the non-fixed parameter vector), the same convention
         as :meth:`norm_indices` and :meth:`shift_indices`.  Unlike those --
         which the C++ side derives by substring-matching parameter names --
-        this uses the structured ``type`` code from ``GET_PARAMS_INFO``
+        this uses the structured ``type`` code from ``parameter_info``
         (``kind == "energy"``), so it never depends on how energies are named.
         """
         return [p.free_index for p in self.parameters
@@ -432,8 +572,13 @@ class azure2:
 
     # -- param.sav helpers ----------------------------------------------------
 
+    # param.sav lives beside the model, so these read and write from the
+    # session's directory rather than wherever the caller happens to be.
+
     def update_rwa_params_from_sav(self):
-        all_rwa_params = np.loadtxt('output/param.sav', usecols=(1,))
+        """Reload params_rwa from the run's param.sav."""
+        with _in_dir(self.cwd):
+            all_rwa_params = np.loadtxt('output/param.sav', usecols=(1,))
         self.params_rwa = []
         for i in range(len(all_rwa_params)):
             if self.fixed_params[i]:
@@ -442,34 +587,140 @@ class azure2:
                 self.params_rwa.append(all_rwa_params[i])
 
     def update_sav_from_rwa_params(self, best):
+        """Write a free RWA vector back out to param.sav."""
         params_full = []
-        with open('output/param.sav', 'r') as f:
-            for line in f.readlines():
-                l = line.split()
-                params_full.append([l[0], float(l[1]), float(l[2])])
+        with _in_dir(self.cwd):
+            with open('output/param.sav', 'r') as f:
+                for line in f.readlines():
+                    l = line.split()
+                    params_full.append([l[0], float(l[1]), float(l[2])])
 
-        idx = 0
-        for i in range(len(params_full)):
-            if self.fixed_params[i]:
-                continue
-            else:
-                params_full[i][1] = best[idx]
-                idx += 1
+            idx = 0
+            for i in range(len(params_full)):
+                if self.fixed_params[i]:
+                    continue
+                else:
+                    params_full[i][1] = best[idx]
+                    idx += 1
 
-        with open('output/param.sav.new', 'w') as f:
-            for param in params_full:
-                f.write(f"{param[0]} {param[1]} {param[2]}\n")
+            with open('output/param.sav.new', 'w') as f:
+                for param in params_full:
+                    f.write(f"{param[0]} {param[1]} {param[2]}\n")
+
+    def save_fit(self, path, x=None, param_sav=True, verify=True):
+        """Snapshot a fit as a ``.azr`` you can reopen, plot, or hand over.
+
+        ``path`` is required and is written to explicitly -- nothing is ever
+        saved in place over the model you loaded.
+
+        ``x`` is a free vector in :attr:`params_rwa` order; it defaults to the
+        session's current parameters. The conversion to the physical values a
+        ``<levels>`` line holds (partial widths in eV, ANCs in fm^-1/2) is done
+        here, so a caller cannot forget it.
+
+        Two things a ``<levels>`` block cannot carry, which is why this is not
+        just :meth:`~pyazr.azrfile.AzrModel.apply_fit`:
+
+        - **Normalizations and energy shifts are not in it.** A calculate run
+          on a bare snapshot uses 1.0 for every dataset, so its chi-squared sits
+          above the fit's by whatever the normalizations were absorbing. With
+          ``param_sav`` (the default) a companion ``<name>.sav`` is written
+          beside the file carrying every parameter, free and fixed; hand that to
+          AZURE2 as the external parameter file and the model is whole.
+        - **A written file is not a fit until it reads back as one.** With
+          ``verify`` (the default) the result is reopened and its own
+          parameters transformed back; if any R-matrix value disagrees the
+          files are removed and this raises, rather than leaving a snapshot
+          that is quietly a mixture.
+
+        A ``.azr`` names its data files and its output directory *relative to
+        itself*, so a snapshot only runs from the directory the original did.
+        Write it beside the model, or move its ``data/`` with it.
+
+        Returns ``(azr_path, sav_path_or_None)``.
+        """
+        x = np.asarray(self.params_rwa if x is None else x, float).ravel()
+        want = np.asarray(self.transform_rwa(x), float)
+
+        path = os.path.abspath(path)
+        model = AzrModel.from_file(self.file)
+        model.apply_fit(self.parameters, x, transform=self.transform_rwa,
+                        pairs=self.pairs)
+        model.write(path)
+
+        sav = None
+        if param_sav:
+            sav = os.path.splitext(path)[0] + ".sav"
+            allrwa = list(np.asarray(self.sess.params_all_rwa(), float))
+            free = iter(range(len(x)))
+            with open(sav, "w") as fh:
+                for i, p in enumerate(self.parameters):
+                    v = x[next(free)] if not self.fixed_params[i] else allrwa[i]
+                    fh.write(f"{p.name:>28s} {float(v): .7e} {0.0: .7e}\n")
+
+        if verify:
+            # Verify a *copy*, in the session's own directory and with its
+            # output redirected. A .azr resolves its data files and output
+            # directory relative to itself, so the snapshot only loads where
+            # the original did -- and opening it there would otherwise
+            # overwrite the real run's output/param.par.
+            probe = tmpdir = None
+            try:
+                tmpdir = tempfile.mkdtemp(prefix=".azr_verify_", dir=self.cwd)
+                copy = AzrModel.from_file(path)
+                copy.set_output_dir(tmpdir)
+                fd, probe = tempfile.mkstemp(suffix=".azr", dir=self.cwd)
+                os.close(fd)
+                copy.write(probe)
+                with azure2(probe, cwd=self.cwd,
+                            **{k: v for k, v in self.options.items()
+                               if k != "data_mode"},
+                            data_mode=(self.mode == "data")) as check:
+                    got = np.asarray(check.transform_rwa(check.params_rwa), float)
+            except Exception as err:
+                self._discard(path, sav)
+                raise RuntimeError(
+                    f"the snapshot was written but would not load back "
+                    f"({err}); it has been removed.") from err
+            finally:
+                if probe and os.path.exists(probe):
+                    os.remove(probe)
+                if tmpdir and os.path.isdir(tmpdir):
+                    shutil.rmtree(tmpdir, ignore_errors=True)
+            if got.shape != want.shape or not np.allclose(got, want, rtol=1e-4,
+                                                          atol=0.0):
+                n = (0 if got.shape != want.shape
+                     else int(np.sum(~np.isclose(got, want, rtol=1e-4))))
+                self._discard(path, sav)
+                raise RuntimeError(
+                    "the snapshot does not read back as the fit it was made "
+                    f"from ({n or 'a different number of'} parameter(s) "
+                    "disagree); it has been removed. This means the .azr and "
+                    "the parameter set do not describe the same model.")
+        return path, sav
+
+    @staticmethod
+    def _discard(*paths):
+        """Remove a snapshot that failed verification, so nothing bad survives."""
+        for f in paths:
+            if f and os.path.exists(f):
+                os.remove(f)
 
     # -- transforms -----------------------------------------------------------
 
-    def transform_rwa(self, params, proc=0):
-        return self.clients[proc].communicate("TRANSFORM_RWA", params)
+    def transform_rwa(self, params):
+        """Map a reduced-width-amplitude vector to physical parameters: level energies in MeV, partial widths in eV, ANCs in fm^-1/2."""
+        return self.sess.transform_rwa(params)
 
-    def transform_physical(self, params, proc=0):
-        return self.clients[proc].communicate("TRANSFORM_PHYSICAL", params)
+    def transform_all_rwa(self, params):
+        """As transform_rwa, over every parameter rather than the free ones."""
+        return self.sess.transform_all_rwa(params)
 
-    def transform_all_rwa(self, params, proc=0):
-        return self.clients[proc].communicate("TRANSFORM_ALL_RWA", params)
+    def transform_physical(self, params):
+        """The inverse of transform_rwa: physical parameters back to reduced-width amplitudes."""
+        raise NotImplementedError(
+            "AZURE2 exposes no physical->RWA transform; only RWA->physical "
+            "is available (transform_rwa / transform_all_rwa).")
 
     # -- dimensionless widths -------------------------------------------------
 
@@ -481,7 +732,7 @@ class azure2:
                 return int(round(p.M1 + p.M2))
         raise ValueError("no particle pair to take the compound mass from.")
 
-    def wigner_widths(self, params=None, eps=1e-4, proc=0):
+    def wigner_widths(self, params=None, eps=1e-4):
         """``{free_index: Gamma_W}`` in eV -- the GUI's Wigner width per channel.
 
         ``Gamma_W = 2 P_l(E_r) gamma^2_W`` is what the AZURE2 GUI shows next to
@@ -507,7 +758,7 @@ class azure2:
             # photon channels are linear in the amplitude (external capture),
             # so they must not pollute the probe
             probe[p.free_index] = 0.0 if p.radiation_type in ("E", "M") else eps
-        probed = np.asarray(self.transform_rwa(probe, proc=proc), float)
+        probed = np.asarray(self.transform_rwa(probe), float)
 
         out = {}
         for p in self.parameters.widths:
@@ -521,7 +772,7 @@ class azure2:
             out[p.free_index] = two_p * p.wigner_limit
         return out
 
-    def _level_energies(self, params=None, proc=0):
+    def _level_energies(self, params=None):
         """``{(jgroup, level): Ex}`` -- level energies at ``params`` (MeV)."""
         x = np.asarray(self.params_rwa if params is None else params, float)
         energies = {}
@@ -545,7 +796,7 @@ class azure2:
             return False
         return ex > pair.sep_energy + pair.excitation
 
-    def dimensionless_widths(self, params=None, eps=1e-4, proc=0):
+    def dimensionless_widths(self, params=None, eps=1e-4):
         """Every channel's width made dimensionless -- a :class:`WidthTable`.
 
         Particle channels get the Wigner limit and ``theta^2 = Gamma/Gamma_W``
@@ -561,9 +812,9 @@ class azure2:
         from .widths import ChannelWidth, WidthTable, weisskopf_width
 
         x = np.asarray(self.params_rwa if params is None else params, float)
-        phys = np.asarray(self.transform_rwa(x, proc=proc), float)
-        gamma_w = self.wigner_widths(x, eps=eps, proc=proc)
-        energies = self._level_energies(x, proc=proc)
+        phys = np.asarray(self.transform_rwa(x), float)
+        gamma_w = self.wigner_widths(x, eps=eps)
+        energies = self._level_energies(x)
         A = self.mass_number
 
         table = WidthTable()
@@ -605,20 +856,143 @@ class azure2:
 
     # -- chi-squared ----------------------------------------------------------
 
-    def calculate_chi2_rwa(self, params, proc=0):
-        return self.clients[proc].communicate("CALCULATE_CHI2_RWA", params).tolist()
+    def calculate_chi2_rwa(self, params):
+        """Total data chi-squared at a free RWA vector, as a one-element list. Excludes the normalization and energy-shift penalties AZURE2's own objective adds."""
+        return [float(self.sess.calculate_chi2_rwa(params))]
 
-    def calculate_chi2(self, params, proc=0):
-        return self.clients[proc].communicate("CALCULATE_CHI2", params).tolist()
+    def calculate_chi2(self, params):
+        """As calculate_chi2_rwa, taking the physical parameter vector instead."""
+        return [float(self.sess.calculate_chi2_physical(params))]
 
-    def chi2_and_grad(self, params, proc=0):
+    def write_output_files(self, params=None):
+        """Write the run's standard output files, as the CLI does at the end.
+
+        ``AZUREOut_*``, ``chiSquared.out`` and the rest land in the ``.azr``'s
+        output directory, which must already exist.  Without this a Python
+        session could compute everything and still had to re-run the binary to
+        get the files a colleague or the GUI expects.
+
+        A forward pass is run first at ``params`` (the current parameters by
+        default), so the files describe the parameters you asked about rather
+        than whatever was evaluated last.
+
+        Returns the output directory.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float).ravel()
+        with _in_dir(self.cwd):
+            if self.mode == "data":
+                # chiSquared.out reports the per-segment chi-squared *stored on
+                # each segment*, and only the chi-squared evaluation sets it --
+                # a bare forward pass leaves it at zero and the file comes out
+                # full of zeros.  This populates both that and the point cross
+                # sections AZUREOut_* is written from.
+                self.sess.calculate_chi2_rwa(x)
+            else:
+                # No data to compare against; chiSquared.out is meaningless in
+                # extrapolation mode, and the forward pass is all AZUREOut_*
+                # needs.
+                self.sess.update_segments_rwa(x)
+            if not self.sess.write_output_files():
+                raise RuntimeError("AZURE2 has no data object to write from.")
+        return os.path.join(self.cwd, "output")
+
+    # -- chi-squared, per segment and per dataset -----------------------------
+
+    def segment_chi2(self, params=None):
+        """Chi-squared per data segment, in ``<segmentsData>`` order.
+
+        ``calculate_chi2_rwa`` returns only the total, but the standardized
+        residuals carry the split: they come back in segment order, so summing
+        their squares between the segment boundaries recovers each one.  The
+        sum of this equals ``calculate_chi2_rwa`` exactly.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        r = np.asarray(self.residual_jacobian(x)[0], float)
+        edges = np.cumsum([0] + [len(self.energies[i]) for i in range(self.nsegments)])
+        return np.array([float(np.sum(r[edges[i]:edges[i + 1]] ** 2))
+                         for i in range(self.nsegments)])
+
+    def dataset_chi2(self, params=None):
+        """Chi-squared per *dataset*, which is how a fit is usually judged.
+
+        An experiment often owns several segments -- one per angle, or one per
+        final state -- so the per-segment split is finer than the question
+        being asked.  Returns ``{name: (chi2, points, segments)}`` keyed by the
+        data file's name, in first-appearance order.
+        """
+        seg = self.segment_chi2(params)
+        out = {}
+        for i in range(self.nsegments):
+            name = self.datasets[i].name
+            chi2, n, k = out.get(name, (0.0, 0, 0))
+            out[name] = (chi2 + float(seg[i]), n + len(self.energies[i]), k + 1)
+        return out
+
+    # -- AZURE2's own objective -----------------------------------------------
+
+    def penalties(self, params=None):
+        """The prior terms AZURE2 adds to chi-squared, per segment.
+
+        ``AZURECalc::operator()`` does not minimize the data chi-squared alone.
+        For every segment it also adds
+
+            ((norm - nominal) / (nominal/100 * norm_error))^2
+
+        and, for a segment whose energy shift is free,
+
+            ((shift - nominal_shift) / shift_error)^2
+
+        Minimize the bare chi-squared instead and the normalizations drift to
+        absorb every discrepancy -- a "better" number AZURE2 would never have
+        found, worth -480 on the 7Be model.  Roll your own Minuit or
+        least-squares fit against :meth:`objective`, not
+        :meth:`calculate_chi2_rwa`.
+
+        Note the denominator uses the *nominal* normalization, and that
+        ``norm_error`` is a percentage.  Returns ``{"norm": array, "shift":
+        array}``, one entry per segment.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        norm = np.zeros(self.nsegments)
+        shift = np.zeros(self.nsegments)
+        current = {p.segment_key: p for p in self.parameters.norms}
+        shifting = {p.segment_key: p for p in self.parameters.shifts}
+        for i in range(self.nsegments):
+            d = self.datasets[i]
+            p = current.get(d.key)
+            value = (float(x[p.free_index])
+                     if p is not None and not p.fixed and p.free_index is not None
+                     and p.free_index < x.size else d.norm)
+            sigma = d.norm / 100.0 * d.norm_error
+            if sigma:
+                norm[i] = ((value - d.norm) / sigma) ** 2
+            if d.vary_shift and d.energy_shift_error:
+                q = shifting.get(d.key)
+                sval = (float(x[q.free_index])
+                        if q is not None and not q.fixed and q.free_index is not None
+                        and q.free_index < x.size else d.energy_shift)
+                shift[i] = ((sval - d.energy_shift) / d.energy_shift_error) ** 2
+        return {"norm": norm, "shift": shift}
+
+    def objective(self, params=None):
+        """What AZURE2's own fit minimizes: chi-squared plus the penalties.
+
+        This is the number to hand a minimizer.  ``chiSquared.out`` reports the
+        two halves separately, as ``Total-Chi-Squared`` and
+        ``Total-Norm-Chi-Squared``.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        pen = self.penalties(x)
+        return (float(np.sum(self.calculate_chi2_rwa(x)))
+                + float(np.sum(pen["norm"])) + float(np.sum(pen["shift"])))
+
+    def chi2_and_grad(self, params):
         """Value and analytic gradient of the (data) chi-squared.
 
         Parameters
         ----------
         params : the non-fixed RWA parameters (energies, reduced widths,
             normalizations), in the same order as ``self.params_rwa``.
-        proc : which AZURE2 instance to dispatch to.
 
         Returns
         -------
@@ -628,11 +1002,12 @@ class azure2:
             shifts are finite-differenced.  (For a Gaussian log-likelihood use
             ``lnL = -0.5*(chi2 + const)`` and ``grad_lnL = -0.5*grad``.)
         """
-        resp = self.clients[proc].communicate(
-            "CALCULATE_CHI2_GRAD_RWA", np.asarray(params, float).ravel())
+        resp = np.asarray(
+            self.sess.calculate_chi2_grad_rwa(np.asarray(params, float).ravel()),
+            dtype=float)
         return float(resp[0]), np.asarray(resp[1:], dtype=float)
 
-    def residual_jacobian(self, params, proc=0):
+    def residual_jacobian(self, params):
         """Standardized residuals and their Jacobian.
 
         ``r_i = (fit_i - data_i*n)/(cmErr_i*n)`` so ``sum(r_i**2) == chi2``.
@@ -657,8 +1032,9 @@ class azure2:
         least-squares driver accepts silently by never moving those
         parameters.)
         """
-        resp = self.clients[proc].communicate(
-            "CALCULATE_RESIDUAL_JACOBIAN_RWA", np.asarray(params, float).ravel())
+        resp = np.asarray(
+            self.sess.calculate_residual_jacobian_rwa(
+                np.asarray(params, float).ravel()), dtype=float)
         if resp.size == 1 and resp[0] == -1.0:
             raise RuntimeError("residual_jacobian: an analytically-unsupported "
                                "segment/config is present.")
@@ -668,7 +1044,7 @@ class azure2:
         J = resp[2 + n_res:].reshape(n_res, n_cols)
         return r, J
 
-    def model_gradients(self, params, proc=0):
+    def model_gradients(self, params):
         """Analytic ``d(observable)/d(parameter)`` for every calculated point.
 
         Returns a list with one ``(npoints, ncols)`` array per calculated
@@ -686,14 +1062,11 @@ class azure2:
         :func:`pyazr.bands.uncertainty_bands`.
 
         Raises ``RuntimeError`` if the model contains a segment outside the
-        supported analytic path, or if the AZURE2 binary predates the command.
+        supported analytic path.
         """
-        resp = self.clients[proc].communicate(
-            "CALCULATE_MODEL_GRADIENTS_RWA", np.asarray(params, float).ravel())
-        if resp.size == 0:
-            raise RuntimeError(
-                "the AZURE2 binary does not implement CALCULATE_MODEL_GRADIENTS_RWA "
-                "(command 43); rebuild it from a source tree that has it.")
+        resp = np.asarray(
+            self.sess.calculate_model_gradients_rwa(
+                np.asarray(params, float).ravel()), dtype=float)
         if resp.size == 1 and resp[0] == -1.0:
             raise RuntimeError("model_gradients: an analytically-unsupported "
                                "segment/config is present.")
@@ -713,7 +1086,7 @@ class azure2:
 
     # -- the external region, and the caches that make it affordable ----------
 
-    def coulomb_functions(self, pair, energies, L=0, radius=0.0, proc=0):
+    def coulomb_functions(self, pair, energies, L=0, radius=0.0):
         """Coulomb wave functions on an energy grid.
 
         Parameters
@@ -732,17 +1105,13 @@ class azure2:
         function) and ``delta_hs`` (hard-sphere phase shift, radians).
 
         The values follow the run's own configuration, so the same call returns
-        the accurate Coulomb routine's answer, GSL's (``--gsl-coul``), or the
-        Numerov solution through a nuclear potential (the hybrid model), and
-        comparing them is how one sees what those options do.
+        the accurate Coulomb routine's answer, GSL's (``use_gsl_coul=True`` at
+        construction), or the Numerov solution through a nuclear potential (the
+        hybrid model), and comparing them is how one sees what those options do.
         """
         e = np.asarray(energies, float).ravel()
         req = np.concatenate([[pair, L, radius, e.size], e])
-        resp = self.clients[proc].communicate("GET_COULOMB_FUNCTIONS", req)
-        if resp.size == 0:
-            raise RuntimeError(
-                "the AZURE2 binary does not implement GET_COULOMB_FUNCTIONS "
-                "(command 45); rebuild it from a source tree that has it.")
+        resp = np.asarray(self.sess.coulomb_functions(req), dtype=float)
         n = int(round(resp[0]))
         block = resp[1:].reshape(n, 7)
         keys = ("F", "dF", "G", "dG", "P", "S", "delta_hs")
@@ -750,7 +1119,7 @@ class azure2:
         out["energy"] = e[:n]
         return out
 
-    def ec_integrals(self, pair, energies, proc=0):
+    def ec_integrals(self, pair, energies):
         """External-capture radial integrals on an energy grid.
 
         Every external-capture pathway the compound nucleus generates from this
@@ -760,16 +1129,12 @@ class azure2:
         integral as ``value``.
 
         These integrals are the most expensive part of a capture calculation --
-        which is why AZURE3 caches them.  Asking for them twice and watching
+        which is why AZURE2 caches them.  Asking for them twice and watching
         :meth:`cache_stats` is the direct way to see that.
         """
         e = np.asarray(energies, float).ravel()
         req = np.concatenate([[pair, e.size], e])
-        resp = self.clients[proc].communicate("GET_EC_INTEGRALS", req)
-        if resp.size == 0:
-            raise RuntimeError(
-                "the AZURE2 binary does not implement GET_EC_INTEGRALS "
-                "(command 46); rebuild it from a source tree that has it.")
+        resp = np.asarray(self.sess.ec_integrals(req), dtype=float)
         npath = int(round(resp[0]))
         nE = int(round(resp[1]))
         stride = 6 + 2 * nE
@@ -793,7 +1158,29 @@ class azure2:
             })
         return out
 
-    def cache_stats(self, proc=0):
+    def recalculate_external_capture(self):
+        """Force a from-scratch recomputation of every external-capture
+        integral.
+
+        AZURE2 caches these in ``output/intEC.dat`` (data mode) /
+        ``output/intEC.extrap`` (extrapolation mode) and reads them back on the
+        next session start.  The cache is keyed on the *grid*, not on the
+        segment selection, so after you add or remove data segments (or change
+        the channel radius) the cached integrals belong to other energies and
+        must not be reused.  This clears AZURE2's reuse flag and recomputes
+        them in the running session.
+
+        For a file you are about to run from scratch, deleting the cache files
+        (or :meth:`pyazr.AzrModel.set_output_dir` to a fresh directory) is the
+        equivalent and usually simpler.
+        """
+        if not self.sess.calculate_external_capture():
+            raise RuntimeError(
+                "AZURE2 could not recompute the external-capture integrals; "
+                "check that output/ exists and is writable.")
+        return self
+
+    def cache_stats(self):
         """Coulomb-function cache counters, summed over threads.
 
         Returns a dict with ``queries``, ``hits``, ``hit_rate``, ``entries``,
@@ -802,11 +1189,7 @@ class azure2:
         were being asked for twice -- which is what happens when a free energy
         shift moves every point energy at every iteration.
         """
-        resp = self.clients[proc].communicate("GET_CACHE_STATS", [])
-        if resp.size == 0:
-            raise RuntimeError(
-                "the AZURE2 binary does not implement GET_CACHE_STATS "
-                "(command 47); rebuild it from a source tree that has it.")
+        resp = np.asarray(self.sess.cache_stats(), dtype=float)
         q, h = float(resp[0]), float(resp[1])
         return {
             "queries": int(q),
@@ -820,33 +1203,28 @@ class azure2:
 
     # -- calculations ---------------------------------------------------------
 
-    def calculate_excitation_energy(self, params, proc=0):
-        c = self.clients[proc]
-        nsegments = int(c.communicate("UPDATE_SEGMENTS", params)[0])
-        return [c.communicate("GET_EXCITATION_ENERGY", [i]) for i in range(nsegments)]
+    def calculate_excitation_energy(self, params):
+        """Compound-nucleus excitation energy per segment -- the one axis every entrance pair shares."""
+        s = self.sess
+        nsegments = int(s.update_segments(params))
+        return [s.calculated_excitation_energies(i) for i in range(nsegments)]
 
-    def calculate_angles(self, params, proc=0):
+    def calculate_angles(self, params):
         """Per-segment angles of the calculated points, one array per segment.
 
         The companion to :meth:`calculate_energies`: for a differential segment
         the returned angles are AZURE2's own (center-of-mass) values, which
         differ from the lab angles declared in the ``.azr`` file.
-
-        (The underlying command is spelled ``GET_CALCUALTED_ANGLES`` -- the typo
-        is in AZURE2's opcode table, not here.  This previously issued
-        ``GET_DATA_ANGLES`` with the *parameter vector* in place of a segment
-        index, which returned one arbitrary segment's data angles.)
         """
-        c = self.clients[proc]
-        nsegments = int(c.communicate("UPDATE_SEGMENTS", params)[0])
-        return [c.communicate("GET_CALCUALTED_ANGLES", [i])
-                for i in range(nsegments)]
+        s = self.sess
+        nsegments = int(s.update_segments(params))
+        return [s.calculated_angles(i) for i in range(nsegments)]
 
     @staticmethod
     def _unpack_angular_dists(flat):
         """Split the self-describing angular-distribution frame into per-point rows.
 
-        The wire format is a count followed by that many Legendre coefficients,
+        The frame format is a count followed by that many Legendre coefficients,
         repeated once per point, so segments whose points carry different orders
         survive the round trip.
         """
@@ -860,7 +1238,7 @@ class azure2:
             i += count
         return rows
 
-    def calculate_analyzing_power(self, params, proc=0):
+    def calculate_analyzing_power(self, params):
         """Vector analyzing power A_y per segment, for analyzing-power segments.
 
         A_y is returned in the slot a cross section would occupy, because
@@ -876,13 +1254,13 @@ class azure2:
         convention with y along k_in x k_out. Bounded by one in magnitude, zero
         in the pure-Coulomb limit, and zero at 0 and 180 degrees.
         """
-        return self.calculate(params, proc=proc)
+        return self.calculate(params)
 
-    def calculate_analyzing_power_rwa(self, params, proc=0):
+    def calculate_analyzing_power_rwa(self, params):
         """:meth:`calculate_analyzing_power` from reduced-width amplitudes."""
-        return self.calculate_rwa(params, proc=proc)
+        return self.calculate_rwa(params)
 
-    def calculate_angular_dists(self, params, proc=0):
+    def calculate_angular_dists(self, params):
         r"""Legendre coefficients of the angular distribution, per segment.
 
         Returns one entry per segment; each is a list with one array of
@@ -901,79 +1279,77 @@ class azure2:
 
         normalised as AZURE2 writes them into ``AZUREOut_*`` files.
         """
-        c = self.clients[proc]
-        nsegments = int(c.communicate("UPDATE_SEGMENTS", params)[0])
-        return [self._unpack_angular_dists(
-                    c.communicate("GET_CALCULATED_ANGULAR_DISTS", [i]))
+        s = self.sess
+        nsegments = int(s.update_segments(params))
+        return [self._unpack_angular_dists(s.calculated_angular_dists(i))
                 for i in range(nsegments)]
 
-    def calculate_angular_dists_rwa(self, params, proc=0):
+    def calculate_angular_dists_rwa(self, params):
         """:meth:`calculate_angular_dists` from reduced-width amplitudes."""
-        c = self.clients[proc]
-        nsegments = int(c.communicate("UPDATE_SEGMENTS_RWA", params)[0])
-        return [self._unpack_angular_dists(
-                    c.communicate("GET_CALCULATED_ANGULAR_DISTS", [i]))
+        s = self.sess
+        nsegments = int(s.update_segments_rwa(params))
+        return [self._unpack_angular_dists(s.calculated_angular_dists(i))
                 for i in range(nsegments)]
 
-    def calculate(self, params, proc=0):
-        c = self.clients[proc]
-        nsegments = int(c.communicate("UPDATE_SEGMENTS", params)[0])
-        return [c.communicate("GET_CALCULATED_SEGMENT", [i]) for i in range(nsegments)]
+    def calculate(self, params):
+        """Calculated observable per segment, from a physical parameter vector. Cross sections are centre-of-mass, in b or b/sr."""
+        s = self.sess
+        nsegments = int(s.update_segments(params))
+        return [s.calculated_segments(i) for i in range(nsegments)]
 
-    def calculate_rwa(self, params, proc=0):
-        c = self.clients[proc]
-        nsegments = int(c.communicate("UPDATE_SEGMENTS_RWA", params)[0])
-        return [c.communicate("GET_CALCULATED_SEGMENT", [i]) for i in range(nsegments)]
+    def calculate_rwa(self, params):
+        """As calculate, from a free RWA vector. This is the usual entry point."""
+        s = self.sess
+        nsegments = int(s.update_segments_rwa(params))
+        return [s.calculated_segments(i) for i in range(nsegments)]
 
-    def calculate_all_rwa(self, params, proc=0):
-        c = self.clients[proc]
-        nsegments = int(c.communicate("UPDATE_SEGMENTS_ALL_RWA", params)[0])
-        return [c.communicate("GET_CALCULATED_SEGMENT", [i]) for i in range(nsegments)]
+    def calculate_all_rwa(self, params):
+        """As calculate_rwa, taking every parameter rather than the free ones."""
+        s = self.sess
+        nsegments = int(s.update_segments_all_rwa(params))
+        return [s.calculated_segments(i) for i in range(nsegments)]
 
-    def calculate_energies(self, params, proc=0):
-        c = self.clients[proc]
-        nsegments = int(c.communicate("UPDATE_SEGMENTS", params)[0])
-        return [c.communicate("GET_CALCULATED_ENERGIES", [i]) for i in range(nsegments)]
+    def calculate_energies(self, params):
+        """Centre-of-mass energies of the calculated points, per segment."""
+        s = self.sess
+        nsegments = int(s.update_segments(params))
+        return [s.calculated_energies(i) for i in range(nsegments)]
 
-    def calculate_sfactor(self, params, proc=0):
-        c = self.clients[proc]
-        nsegments = int(c.communicate("UPDATE_SEGMENTS", params)[0])
-        segments = [c.communicate("GET_CALCULATED_SEGMENT", [i]) for i in range(nsegments)]
-        conv = [c.communicate("GET_CALCULATED_CONV", [i]) for i in range(nsegments)]
+    def calculate_sfactor(self, params):
+        """Astrophysical S-factor per segment (MeV b), from a physical parameter vector."""
+        s = self.sess
+        nsegments = int(s.update_segments(params))
+        segments = [s.calculated_segments(i) for i in range(nsegments)]
+        conv = [s.calculated_conv(i) for i in range(nsegments)]
         for i in range(nsegments):
             segments[i] = segments[i] * conv[i]
         return segments
 
-    def calculate_sfactor_rwa(self, params, proc=0):
-        c = self.clients[proc]
-        nsegments = int(c.communicate("UPDATE_SEGMENTS_RWA", params)[0])
-        segments = [c.communicate("GET_CALCULATED_SEGMENT", [i]) for i in range(nsegments)]
-        conv = [c.communicate("GET_CALCULATED_CONV", [i]) for i in range(nsegments)]
+    def calculate_sfactor_rwa(self, params):
+        """As calculate_sfactor, from a free RWA vector."""
+        s = self.sess
+        nsegments = int(s.update_segments_rwa(params))
+        segments = [s.calculated_segments(i) for i in range(nsegments)]
+        conv = [s.calculated_conv(i) for i in range(nsegments)]
         for i in range(nsegments):
             segments[i] = segments[i] * conv[i]
         return segments
 
     # -- modes ----------------------------------------------------------------
 
-    def _set_mode(self, mode_cmd, mode):
-        """Switch every instance to ``mode_cmd`` and re-INITIALIZE in parallel.
-
-        Like spawn(), the INITIALIZE re-run is the expensive part and is fanned
-        out across threads so all instances re-initialize concurrently.
-        """
-        def switch(c):
-            c.communicate(mode_cmd, [0])
-            c.communicate("INITIALIZE", [0])
-
-        if self.nprocs == 1:
-            switch(self.clients[0])
+    def _set_mode(self, extrap):
+        """Switch the engine to data or extrapolation mode and re-initialize."""
+        if extrap:
+            self.sess.set_extrap()
         else:
-            with ThreadPoolExecutor(max_workers=self.nprocs) as pool:
-                list(pool.map(switch, self.clients))
-        self.mode = mode
+            self.sess.set_data()
+        self.sess.initialize()
+        self.mode = "extrap" if extrap else "data"
 
     def extrap_mode(self):
-        self._set_mode("SET_EXTRAP_MODE", "extrap")
+        """Switch to the <segmentsTest> grids. Re-initializes the engine."""
+        self._set_mode(True)
 
     def data_mode(self):
-        self._set_mode("SET_DATA_MODE", "data")
+        """Switch back to the <segmentsData> segments, which is what chi-squared uses. Re-initializes the engine."""
+        self._set_mode(False)

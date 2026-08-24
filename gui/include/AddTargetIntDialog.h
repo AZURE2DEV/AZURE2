@@ -19,6 +19,9 @@ class QPushButton;
 
 QT_END_NAMESPACE
 
+/*!
+ * Dialog for one target effect: convolution, target integration, and the attenuation and convolution coefficients.
+ */
 class AddTargetIntDialog : public QDialog {
   Q_OBJECT
 
