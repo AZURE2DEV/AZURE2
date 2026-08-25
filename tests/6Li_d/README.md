@@ -1,4 +1,4 @@
-# 6Li_d_thm — a second Trojan-Horse regression, different carrier
+# 6Li_d — a second Trojan-Horse regression, different carrier
 
 The THM excitation function of 6Li(d,alpha)4He, on the same 8Be compound as
 `7Li_p_ay` — the validated Paneru et al. model (PRC 111, 064609, Table IV
