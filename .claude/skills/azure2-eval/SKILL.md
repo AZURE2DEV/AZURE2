@@ -30,6 +30,18 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
 
 ## Golden rules
 
+- **Particle pair masses must be precise atomic masses, not bare mass numbers.**
+  The GUI's "Particle Pairs" tab labels the field "Mass (M)" and glosses it as
+  "the mass number," but the underlying field (`PPair` in the source) is a
+  `double` in atomic mass units, u — every downstream kinematic quantity
+  (reduced mass, CM/lab conversion, penetrabilities, phase space) is computed
+  from whatever value is actually entered there. Typing the integer mass
+  number (e.g. `4` for an alpha) instead of the true mass (`4.002602`) silently
+  degrades precision throughout the fit. Look up and enter the real value from
+  the **latest Atomic Mass Evaluation (AME)** for both particles of every pair,
+  not a rounded mass number — the Separation Energy field is entered
+  independently and precisely already, so an imprecise particle mass is an easy
+  thing to overlook as the one remaining low-precision input.
 - **Input is LAB frame, forward kinematics** (light particle = projectile).
   **All output files and API results are CENTER-OF-MASS.** Never mix them.
   This includes `add_extrapolation(e_min, e_max, e_step)` — those are **lab**
