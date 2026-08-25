@@ -1,0 +1,74 @@
+<config>
+true                                                                                                #Perform A-Matrix Calculation
+output/                                                                                             #Full Path to Output Directory
+checks/                                                                                             #Full Path to Checks Directory
+none                                                                                                #Compond Nucleus Check
+none                                                                                                #Boundary Condition Check
+none                                                                                                #Data Check
+none                                                                                                #Lo-Matrix and Penetrability Check
+none                                                                                                #Legendre Polynomial Check
+none                                                                                                #Coulomb Amplitudes Check
+none                                                                                                #Reaction Pathway Check
+none                                                                                                #Angular Distributions Check
+</config>
+<potential>
+useHybridPotential=0
+useAdaptiveGrid=1
+potentialType=0
+V0=150
+R=3.6
+a=0.6
+</potential>
+<levels>
+ 1   -1   12.420829208074792    0    1    1    2    0    1    1    0    495.64374187160314    0.5    1    0.5    -1    0 1.00728    14.99627    1    7    12.1274    12.1274    0    0    0.0    0    4.85    0    0    0
+ 1   -1   12.420829208074792    0    1    1    2    4    1    1    1    0    0.5    1    0.5    -1    0 1.00728    14.99627    1    7    12.1274    12.1274    0    0    0.0    0    4.85    0    0    0
+ 1   -1   12.420829208074792    0    1    2    0    2    1    1    0      80901.5764575698    0    1    0    1    0 4.00151    11.99671    2    6    12.1274    7.16192    0    0    0.0    0    5.43    0    0    0
+
+ 1   -1   13.104982826821646    0    1    1    2    0    2    1    0    36052.4636763162    0.5    1    0.5    -1    0 1.00728    14.99627    1    7    12.1274    12.1274    0    0    0.0    0    4.85    0    0    0
+ 1   -1   13.104982826821646    0    1    1    2    4    2    1    1    0    0.5    1    0.5    -1    0 1.00728    14.99627    1    7    12.1274    12.1274    0    0    0.0    0    4.85    0    0    0
+ 1   -1   13.104982826821646    0    1    2    0    2    2    1    0    -689627.6926792272    0    1    0    1    0 4.00151    11.99671    2    6    12.1274    7.16192    0    0    0.0    0    5.43    0    0    0
+
+ 1   -1   17    1    1    1    2    0    3    1    0    8305809.880110354    0.5    1    0.5    -1    0 1.00728    14.99627    1    7    12.1274    12.1274    0    0    0.0    0    4.85    0    0    0
+ 1   -1   17    1    1    1    2    4    3    1    1    0    0.5    1    0.5    -1    0 1.00728    14.99627    1    7    12.1274    12.1274    0    0    0.0    0    4.85    0    0    0
+ 1   -1   17    1    1    2    0    2    3    1    0    -3369464.8469679463    0    1    0    1    0 4.00151    11.99671    2    6    12.1274    7.16192    0    0    0.0    0    5.43    0    0    0
+
+ 3   -1   13.073392612935473    0    1    1    2    4    4    1    0    4647.815064218057    0.5    1    0.5    -1    0 1.00728    14.99627    1    7    12.1274    12.1274    0    0    0.0    0    4.85    0    0    0
+ 3   -1   13.073392612935473    0    1    1    2    8    4    1    1    0    0.5    1    0.5    -1    0 1.00728    14.99627    1    7    12.1274    12.1274    0    0    0.0    0    4.85    0    0    0
+ 3   -1   13.073392612935473    0    1    2    0    6    4    1    0     43942.78033240644    0    1    0    1    0 4.00151    11.99671    2    6    12.1274    7.16192    0    0    0.0    0    5.43    0    0    0
+
+ 3    -1    13.26922393351259    0    1    1    2    4    5    1    0    1701.5643748408786    0.5    1    0.5    -1    0    1.00728    14.99627    1    7    12.1274    12.1274    0    0    0.0    0    4.85    0    0    0
+ 3    -1    13.26922393351259    0    1    1    2    8    5    1    1    0    0.5    1    0.5    -1    0    1.00728    14.99627    1    7    12.1274    12.1274    0    0    0.0    0    4.85    0    0    0
+ 3    -1    13.26922393351259    0    1    2    0    6    5    1    0    12919.287559610993    0    1    0    1    0    4.00151    11.99671    2    6    12.1274    7.16192    0    0    0.0    0    5.43    0    0    0
+
+</levels>
+<segmentsData>
+1  1  2  0  0.6  0  180  0  0.444486  1  0  0  0  0  data/lacognata_a.dat  0  0
+1  1  2  0  0.6  0  180  0  0.519255  1  0  0  0  0  data/lacognata_b.dat  0  0
+1  1  2  0  1.65  0  180  0  0.9950877877494786  1  15  0  0  0  data/schardt.dat  0  0
+</segmentsData>
+<segmentsTest>
+</segmentsTest>
+<targetInt>
+</targetInt>
+<parameterSettings>
+# Fitting parameter settings (only non-fixed parameters shown)
+# Format: name value lower_limit upper_limit error fit_error nuisance category minuit_index
+</parameterSettings>
+<lastRun>
+0
+"output/param.sav"
+"output/intEC.dat"
+1 2
+0 ""
+0.07 10 -1.
+</lastRun>
+<mcmc>
+nwalkers 50
+nsteps 10000
+chainspread 5
+energyspread 1
+nthreads 4
+usereducedwidths 0
+<parameters>
+</parameters>
+</mcmc>
