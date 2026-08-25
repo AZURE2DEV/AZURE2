@@ -684,6 +684,27 @@ external capture), do not assume the small-positive-seed branch is the only
 or the best one — if a prior fit of the same or a similar reaction exists,
 seed from its converged values (signs included) rather than from scratch.
 
+Follow-up, same fit, confirming the guard-vs-runaway distinction: after
+reaching the better branch above, one background E2 channel (width_6_3)
+still reverted against a generous but finite Weisskopf-unit guard
+(CAP_WU=50). The tell that this was not another runaway: the optimizer's
+own termination was `gtol` (it converged, in that direction, to
+66.7–83.6 W.u.) rather than exhausting `max_nfev` or pinning at some huge
+multiple of the guard the way every earlier true runaway in this same
+exercise had (hundreds to hundreds of thousands of W.u.). Raising the guard
+50 → 100 W.u. and re-running produced zero reverts anywhere in the fit; the
+channel settled at 77.2 W.u. — exactly inside the range the reverted run
+had already pointed at — with only a small further χ² improvement on top.
+Practical guidance, refined: when a fit reverts at a guard boundary, check
+*how* it reverted before assuming instability. A `gtol`/`xtol`/`ftol`
+termination — the optimizer actually converged, and the guard is what
+flagged it afterward — is evidence of a real local minimum just past the
+current bound, not a runaway; `max_nfev` exhaustion or a value sitting at
+many multiples of the guard is the actual runaway signature. Raising the
+guard is a legitimate modeling decision in the first case (how large a W.u.
+value is still physically reasonable for a background pole) and not a
+tuning job to bypass a fit that hasn't actually converged in the second.
+
 ## Decomposing a cross section
 
 Everything below is done at the **fitted point, without refitting**, so each
