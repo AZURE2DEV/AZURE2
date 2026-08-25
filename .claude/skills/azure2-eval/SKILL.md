@@ -79,6 +79,18 @@ pipe. `tests/run_tests.sh` is the working reference.
 | 6 | MCMC Bayesian Sampling (`samples.mcmc`) |
 | 7 | Exit |
 
+Mode 2's Minuit2 fit (MIGRAD) has a **hard-coded cap of 50,000 iterations** —
+the run simply stops there regardless of whether it has actually converged.
+On a large model (hundreds of free parameters), a flat-looking plateau near
+iteration 50,000 is not proof of a true minimum; it may just be wherever the
+fit happened to be sitting when the cap cut it off, and small stepwise
+improvements (long flat stretches punctuated by discrete drops) can keep
+recurring throughout the whole run, including near the very end. Don't infer
+convergence from a plateau of a few hundred iterations — only trust an
+explicit MIGRAD convergence message, or accept the iteration-50,000 result as
+final-for-this-run while noting it may still improve with a further
+warm-started refit.
+
 Mode 5's numerical integration (GSL adaptive quadrature over the excitation
 curve) is unreliable for narrow resonances — the manual advises caution below
 a total width of ≈1 keV, where the integral may fail outright. In that regime,
