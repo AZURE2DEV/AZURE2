@@ -433,6 +433,22 @@ included all the important transitions; there is nothing to sum by hand.
 `pyazr/examples/exfor_fetch.py` + the `nds-explorer` skill show how to fetch
 real datasets from EXFOR/NDS and feed them into `add_data_segment`.
 
+**Never fit a derived/extrapolated point alongside the data it was derived
+from.** EXFOR sometimes carries a paper's own R-matrix or polynomial
+extrapolation as a separate subentry — most often a zero-energy
+astrophysical S-factor, S(0). Fitting AZURE2 to it is circular: the fit
+gets constrained against a number some other model already derived from
+data that is very likely already in the same fit. The subentry label is
+the tell — "S-factor point" (or "SFC") on a lone point, or a handful of
+points, sitting well outside the energy range of that paper's real
+measurements is model output, not data. Two found and removed from the
+same 12C+p archive fit: `Kettner2023_S0point_pg.dat` (one point at 25 keV,
+EXFOR C2972006, "S-factor point" — the paper's actual measurements start
+above 1 MeV) and `Vogl1963_S0point_pg.dat` (EXFOR C1672006, same pattern,
+sitting next to the legitimate 80-point `Vogl1963_pg.dat` from the same
+paper). Check EXFOR provenance notes for this pattern before activating a
+new single- or few-point segment, not just after.
+
 **Adding/removing data segments invalidates the EC integral cache.** After any
 `add_data_segment` / `remove_data_segments` / `clear_data_segments` /
 `set_extrapolations` edit, delete `output/intEC.dat` and `output/intEC.extrap`
