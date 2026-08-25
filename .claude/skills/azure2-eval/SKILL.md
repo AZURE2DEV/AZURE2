@@ -53,7 +53,12 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   flags every time (`--gsl-coul`, `--ignore-externals`, …). Note the Brune
   parameterization is **on by default** and there is no flag to turn it off;
   `--use-rmc` selects the mutually exclusive RMC formalism, and pyazr takes
-  `use_brune=False` directly.
+  `use_brune=False` directly. **RMC is restricted to (n,γ) reactions** — the
+  manual warns of unexpected errors if it is selected for anything else.
+- `--gsl-coul` is a real speed/accuracy tradeoff, not just a flag name: the
+  default Coulomb-function method (Michel 2007) is more accurate but visibly
+  slower than GSL's. Reach for `--gsl-coul` if a fit is too slow and the
+  accuracy loss is acceptable, not by default.
 
 ## Workflow A — interactive CLI (one-shot runs)
 
@@ -73,6 +78,12 @@ pipe. `tests/run_tests.sh` is the working reference.
 | 5 | Calculate Reaction Rate (needs temps → `reactionrates.dat`) |
 | 6 | MCMC Bayesian Sampling (`samples.mcmc`) |
 | 7 | Exit |
+
+Mode 5's numerical integration (GSL adaptive quadrature over the excitation
+curve) is unreliable for narrow resonances — the manual advises caution below
+a total width of ≈1 keV, where the integral may fail outright. In that regime,
+sum the single-level narrow-resonance approximation instead of trusting the
+numerical rate.
 
 The **external parameter file** prompt: give a saved `output/param.sav` to start
 from those best-fit formal parameters, or leave **blank** to build fresh from
@@ -411,6 +422,12 @@ mdl.remove_data_segments("artemov.dat")                  # or clear_data_segment
 mdl.set_extrapolations([...]) / add_extrapolation(...) / clear_extrapolations()
 m.save_fit("fitted.azr", x_best)   # fit -> a .azr + its param.sav, verified
 ```
+
+`observable="total-capture"` (Angle Integrated Total Capture) needs every
+significant γ-cascade transition set up as its own `(Particle, Gamma)`
+particle pair beforehand — AZURE2 sums over them automatically for a segment
+declared with this observable. It is the user's responsibility to have
+included all the important transitions; there is nothing to sum by hand.
 
 `add_data_segment` observables include `analyzing-power` (code 7), and
 `pyazr/examples/exfor_fetch.py` + the `nds-explorer` skill show how to fetch
@@ -817,6 +834,10 @@ external-capture term is linear in the amplitude — so convert with
 Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
 
 - `<config>` — A-matrix flag, `output/` and `checks/` dirs, check toggles.
+  A-matrix vs R-matrix is **purely a computational-efficiency choice, not a
+  physics one** — both formalisms give identical results. A-matrix (level
+  matrix) wins with many channels and few levels; R-matrix (channel matrix)
+  wins with many levels and few channels.
 - `<levels>` — one line **per channel of each level**, 31 fields matching
   `NucLine` (`include/NucLine.h`); the file stores `2J`, `2S`, `2L` as integers.
   Blank line between levels; `levelID` groups them.
