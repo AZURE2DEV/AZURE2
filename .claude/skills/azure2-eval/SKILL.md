@@ -869,6 +869,87 @@ E³`, E2 `4.9e-8 A^{4/3} E⁵`, M1 `2.1e-2 E³` eV with E in MeV (E1–E4/M1–M
 external-capture term is linear in the amplitude — so convert with
 `transform_rwa`, never by squaring.
 
+**Comparing against an ENDF/B evaluation.** Getting the file: NNDC's own
+site (`nndc.bnl.gov`) is JS-rendered and its listings don't come back
+through a plain fetch. Use the IAEA mirror instead, which serves flat
+static directory listings any `curl` can walk:
+`https://www-nds.iaea.org/public/download-endf/<version>/<sublibrary>/`,
+e.g. `ENDF-B-VIII.1/p/` for the incident-proton sublibrary. Files are
+named `<projectile>_<Z>-<Elem>-<A>_<MAT>.zip`, e.g. `p_006-C-12_0625.zip`
+for p+¹²C; sublibrary folders are `n`, `p`, `d`, `t`, `he3`, `he4`, `g`,
+`decay`, etc. (`000-NSUB-index.htm` in the version root lists them all).
+This mirror occasionally 402s on a first try (also seen fetching AME mass
+data from a different IAEA path) — a plain `curl` retry has so far always
+succeeded where the fetch tool's own request didn't.
+
+Parsing: `pip install endf` (pure-Python, no compiled deps beyond numpy).
+Its high-level `Material.interpret()` does not yet cover the charged-
+particle incident sublibraries (`NotImplementedError: No class
+implemented for NSUB=10010` for protons, as of endf 0.1.12) — drop to the
+section level instead:
+
+```python
+import io, endf
+mat = endf.Material("p_006-C-12_0625.dat")
+print(mat.sections)                       # [(MF, MT), ...] present in the file
+sec = endf.mf6.parse_mf6(io.StringIO(mat.section_text[6, 2]))
+```
+
+**Elastic scattering of a charged projectile is not in MF=4/MT=2 the way
+neutron elastic is.** Coulomb scattering has no finite angle-integrated
+cross section, so MF=3/MT=2 cannot hold a real σ(E) — by convention it is
+either an unused placeholder (`1.0` at every energy, LTP=1/2) or, for
+LTP=12/14, the finite "nuclear-plus-interference" integral σ_NI(E) in
+barns (**can be negative** — it is a difference of two cross sections, not
+a cross section on its own; don't mistake this for corrupted data). The
+actual angular dependence lives in **MF=6/MT=2, LAW=5** ("charged-particle
+elastic scattering", ENDF-102 §6.2.7 — the LANL reference page for this
+section, `t2.lanl.gov/nis/endf/law5for6.html`, 403s from some networks;
+the section is short enough to pull straight from the manual PDF,
+`nndc.bnl.gov/endfdocs/ENDF-102-2023.pdf`, pages 144–147 in the 2023
+edition). `endf.mf6.parse_mf6` handles LAW=5 already; check `LTP` on each
+returned energy point (`dist['distribution'][i]['LTP']`) before assuming
+which reconstruction applies — the four representations are not
+interchangeable:
+
+- `LTP=1`: nuclear amplitude expansion — complex `a_l(E)` + real `b_l(E)`
+  Legendre coefficients (eqs. 6.13/6.14). Full-fidelity but rarely used.
+- `LTP=2`: residual cross section as Legendre coefficients (eqs.
+  6.15–6.18) — a direct fit to data, degrades at forward angles/low
+  energy where the interference term's Legendre representation isn't
+  well-behaved.
+- `LTP=12` / `LTP=14`: tabulated `(μ, P_NI)` pairs, linear in μ (12) or
+  linear in `ln(P_NI)` (14), normalized so `∫P_NI dμ = 1` over the
+  tabulated μ range. **This was the ENDF/B-VIII.1 p+¹²C representation.**
+  Reconstruct the physical differential cross section as
+  `σ(μ,E) = σ_Rutherford(μ,E) + σ_NI(E)·P_NI(μ,E)` for μ inside the
+  tabulated range (pure Rutherford outside it), with `σ_NI(E)` read
+  straight off MF=3/MT=2 at that energy and `P_NI` linearly interpolated
+  on the tabulated μ grid (ENDF-102 eqs. 6.19/6.20).
+
+Rutherford term (ENDF-102 eq. 6.9, confirmed against the standard
+nuclear-physics form independently): in the CM frame, with `T_cm` the CM
+kinetic energy of relative motion (`T_cm = E_lab · m_target/(m_beam +
+m_target)`, the same `cm2lab` factor used everywhere else in this skill)
+and `e² = 1.43996 MeV·fm`,
+
+```python
+sigma_ruth_fm2 = (Z1 * Z2 * 1.43996 / (4 * T_cm))**2 / np.sin(theta_cm / 2)**4
+sigma_ruth_b = sigma_ruth_fm2 / 100.0   # 1 barn = 100 fm^2
+```
+
+**Always check the tabulated energy grid before trusting a comparison.**
+`dist['distribution'][i]['E']` for every `i` gives the incident lab-energy
+grid (eV); light-target proton sublibraries commonly start at **1 MeV**
+and have nothing below it, because sub-MeV protons are out of scope for
+the transport/dosimetry work these evaluations are built for. That range
+can miss the entire resolved-resonance region an R-matrix archive fit was
+built to describe — the p+¹²C ENDF/B-VIII.1 file has zero coverage below
+1 MeV, so a fit dataset sitting entirely at 0.3–0.6 MeV (as the backward-
+angle ¹²C(p,p) data in this archive's `12C+p/8-9-26_claude_learns_12C+p/`
+does) has no ENDF curve to compare against at all. Check the overlap
+*before* building the plot, not after.
+
 ## `.azr` file anatomy
 
 Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
