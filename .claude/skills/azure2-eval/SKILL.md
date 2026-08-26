@@ -879,3 +879,17 @@ complete:
 | snapshots | `save_fit_to_azr.py` |
 | model internals | `coulomb_functions.py`, `ec_integrals.py`, `channel_radius_scan.py`, `nuclear_potential.py` |
 | data | `exfor_fetch.py` |
+
+## Adaptive cross-section tables
+
+`pyazr.tabulate(azr_file, pairs=[(entrance, exit), ...], e_min, e_max,
+rel_tol=5e-3)` tabulates sigma(E) for any pair combinations on a
+*non-uniform* grid: derivative-free interval bisection keeps refining until
+log-linear interpolation between knots reproduces the engine to `rel_tol`,
+so knots pile up across resonances and thin out in between (a few hundred
+to a few thousand points where a uniform grid of equal fidelity would need
+1e5). Energies are entrance-pair c.m. by default; each returned
+`TabulatedCrossSection` interpolates when called, and `.save(path)` writes
+`E_cm E_lab sigma` columns. Central values only -- combine the knots with
+the analytic parameter Jacobian and a fit covariance yourself if you need
+uncertainty bands.

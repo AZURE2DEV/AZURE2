@@ -18,11 +18,13 @@ from .transform import (Channel, Level, TransformedChannel, TransformedLevel,
                         levels_from_azr, levels_from_scheme,
                         penetrability, shift, shift_derivative, whittaker)
 from .angular import angular_distribution
+from .tabulate import tabulate, TabulatedCrossSection
 from .bands import (Band, load_covariance, rmatrix_columns, best_fit_params,
                     live_parameters, step_sizes, sensitivities, trimmed_model,
                     uncertainty_bands, extrapolation_bands)
 
 __all__ = ["azure2",
+           "tabulate", "TabulatedCrossSection",
            "angular_distribution",
            "Pair", "PairSet", "Parameter", "ParameterSet", "LevelKey",
            "NuclearPotential",
