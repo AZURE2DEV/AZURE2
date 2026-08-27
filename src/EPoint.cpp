@@ -1679,9 +1679,15 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
   TargetEffect *targetEffect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
 
   // All integration now uses Gaussian quadrature which works for non-uniform (adaptive) grids
-  if (targetEffect->IsConvolution() && targetEffect->IsTargetIntegration()) {
+  if ((targetEffect->IsConvolution() || targetEffect->IsConvCoefficients()) && targetEffect->IsTargetIntegration()) {
     // Gaussian quadrature for convolution + target integration
     // Uses 2-point Gauss-Legendre for both outer (depth) and inner (convolution) integrals
+    //
+    // The convolution sigma is either the fixed beam sigma or, for an
+    // energy-dependent convolution equation (isConvCoefficients), evaluated
+    // from that equation at each depth energy -- previously this combination
+    // silently fell through to pure target integration while the sub-point
+    // grid was sized for the convolution, corrupting the integral.
 
     int numPoints = this->NumSubPoints();
     if (numPoints < 2) {
@@ -1689,7 +1695,9 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
       return;
     }
 
-    // Get beam sigma and straggling parameters
+    // Get beam sigma and straggling parameters.  When both flags are set the
+    // fixed sigma keeps precedence, matching the order of the pure branches.
+    const bool energyDependentSigma = !targetEffect->IsConvolution() && targetEffect->IsConvCoefficients();
     double beamSigma = targetEffect->GetSigma();
     bool useStraggling = targetEffect->IsStraggling();
     double stragglingCoeff = targetEffect->GetStragglingCoefficient();
@@ -1742,11 +1750,18 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
         double deltaE = surfaceEnergy - E_depth;
         double deltaE_keV = deltaE * 1000.0;
 
-        double effectiveSigma = beamSigma;
+        // The energy-dependent sigma follows the pure-convCoefficients branch
+        // and evaluates the equation at the (CM) depth energy.
+        double baseSigma = beamSigma;
+        if (energyDependentSigma) {
+          baseSigma = targetEffect->CalculateSigma(E_depth, configure);
+          if (!(baseSigma > 0.)) baseSigma = beamSigma > 0. ? beamSigma : 1.0e-6;
+        }
+        double effectiveSigma = baseSigma;
         if (useStraggling && deltaE_keV > 0) {
           double stragglingSigma_keV = stragglingCoeff * std::sqrt(deltaE_keV);
           double stragglingSigma = stragglingSigma_keV / 1000.0;
-          effectiveSigma = std::sqrt(beamSigma * beamSigma + stragglingSigma * stragglingSigma);
+          effectiveSigma = std::sqrt(baseSigma * baseSigma + stragglingSigma * stragglingSigma);
         }
 
         // Inner integral: convolution at this depth
