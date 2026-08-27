@@ -75,6 +75,12 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
       return targetInt.resonanceWidthMultiplier;
     else if (index.column() == 18)
       return targetInt.pointsPerWidth;
+    else if (index.column() == 19)
+      return targetInt.applyRanges.isEmpty() ? QString(tr("ALL")) : targetInt.applyRanges;
+    else if (index.column() == 20)
+      return targetInt.transitionWidth;
+    else if (index.column() == 21)
+      return targetInt.autoTolerance;
   } else if (role == Qt::EditRole) {
     TargetIntData targetInt = targetIntList.at(index.row());
     if (index.column() == 1) return targetInt.segmentsList;
@@ -95,6 +101,9 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
     if (index.column() == 16) return targetInt.stragglingCoefficient;
     if (index.column() == 17) return targetInt.resonanceWidthMultiplier;
     if (index.column() == 18) return targetInt.pointsPerWidth;
+    if (index.column() == 19) return targetInt.applyRanges;
+    if (index.column() == 20) return targetInt.transitionWidth;
+    if (index.column() == 21) return targetInt.autoTolerance;
   } else if (role == Qt::CheckStateRole && index.column() == 0) {
     TargetIntData targetInt = targetIntList.at(index.row());
     if (targetInt.isActive == 1)
@@ -148,6 +157,12 @@ QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, in
         return tr("Resonance Width Multiplier");
       case 18:
         return tr("Points Per Width");
+      case 19:
+        return tr("Apply in Energy Ranges");
+      case 20:
+        return tr("Blend Width");
+      case 21:
+        return tr("Auto Tolerance");
       default:
         return QVariant();
     }
@@ -198,6 +213,12 @@ bool TargetIntModel::setData(const QModelIndex &index, const QVariant &value, in
       tempData.resonanceWidthMultiplier = value.toDouble();
     else if (index.column() == 18)
       tempData.pointsPerWidth = value.toDouble();
+    else if (index.column() == 19)
+      tempData.applyRanges = value.toString();
+    else if (index.column() == 20)
+      tempData.transitionWidth = value.toDouble();
+    else if (index.column() == 21)
+      tempData.autoTolerance = value.toDouble();
     else
       return false;
     targetIntList.replace(row, tempData);

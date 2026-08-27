@@ -1456,6 +1456,79 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
       }
     }
   } else {
+    TargetEffect *effect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+    const double blend = this->GetTargetBlendWeight();
+    const double autoTol = effect->GetAutoTolerance();
+    const bool hasMapped = this->NumLocalMappedPoints() > 0;
+
+    // The bare value of the observable at the central energy is needed both
+    // for edge blending and for the automatic per-point decision.  It is
+    // obtained from a probe copy that pretends not to carry the effect, so the
+    // ordinary single-point machinery above stays the single source of truth.
+    double bareValue = 0.0;
+    bool haveBare = false;
+    if (blend < 1.0 || autoTol > 0.) {
+      EPoint probe(*this);
+      probe.SetTargetEffectNum(0);
+      probe.ClearLocalMappedPoints();
+      probe.integrationPoints_.clear();
+      probe.Calculate(theCNuc, configure);
+      bareValue = probe.GetFitCrossSection();
+      haveBare = true;
+    }
+
+    // Automatic application: probe the first, central and last sub-point and
+    // estimate the size of the effect from the curvature across the window
+    // (plus the centroid shift when the target thickness is integrated).  If
+    // the effect would change the observable by less than the tolerance, the
+    // bare value is used and the remaining sub-points are never evaluated, so
+    // any discontinuity this introduces is bounded by the tolerance itself.
+    // Points with mapped observables are skipped only when every one of them
+    // passes its own estimate against its own bare probe.
+    if (autoTol > 0. && haveBare && this->NumSubPoints() >= 3) {
+      int iFirst = 1;
+      int iLast = this->NumSubPoints();
+      int iMid = 1;
+      double dBest = 1e100;
+      for (int i = 1; i <= this->NumSubPoints(); i++) {
+        double d = std::fabs(this->GetSubPoint(i)->GetCMEnergy() - this->GetCMEnergy());
+        if (d < dBest) { dBest = d; iMid = i; }
+      }
+      const int probes[3] = {iFirst, iMid, iLast};
+      for (int k = 0; k < 3; k++) {
+        EPoint *subPoint = this->GetSubPoint(probes[k]);
+        if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE)
+          subPoint->RecalcEDependentValues(theCNuc, configure);
+        if (hasMapped)
+          subPoint->Calculate(theCNuc, configure, this, probes[k]);
+        else
+          subPoint->Calculate(theCNuc, configure);
+      }
+      bool allPass = true;
+      for (int m = 0; m <= this->NumLocalMappedPoints() && allPass; m++) {
+        EPoint *host = (m == 0) ? this : this->GetLocalMappedPoint(m);
+        double sFirst = host->GetSubPoint(iFirst)->GetFitCrossSection();
+        double sMid = host->GetSubPoint(iMid)->GetFitCrossSection();
+        double sLast = host->GetSubPoint(iLast)->GetFitCrossSection();
+        double estimate = std::fabs(0.5 * (sFirst + sLast) - sMid);
+        if (effect->IsTargetIntegration()) estimate += 0.5 * std::fabs(sLast - sFirst);
+        if (estimate > autoTol * std::max(std::fabs(sMid), 1e-300)) allPass = false;
+      }
+      if (allPass) {
+        this->SetFitCrossSection(bareValue);
+        for (int m = 1; m <= this->NumLocalMappedPoints(); m++) {
+          EPoint *mappedPoint = this->GetLocalMappedPoint(m);
+          EPoint mappedProbe(*mappedPoint);
+          mappedProbe.SetTargetEffectNum(0);
+          mappedProbe.ClearLocalMappedPoints();
+          mappedProbe.integrationPoints_.clear();
+          mappedProbe.Calculate(theCNuc, configure);
+          mappedPoint->SetFitCrossSection(mappedProbe.GetFitCrossSection());
+        }
+        return;
+      }
+    }
+
     for (int i = 1; i <= this->NumSubPoints(); i++) {
       EPoint *subPoint = this->GetSubPoint(i);
       // Recalculate energy-dependent values for sub-points too if using external capture
@@ -1468,8 +1541,23 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
         subPoint->Calculate(theCNuc, configure);
     }
     this->IntegrateTargetEffectForObservable(configure);
-    for (int i = 1; i <= this->NumLocalMappedPoints(); i++)
-      this->GetLocalMappedPoint(i)->IntegrateTargetEffectForObservable(configure);
+    if (blend < 1.0 && haveBare)
+      this->SetFitCrossSection(blend * this->GetFitCrossSection() + (1.0 - blend) * bareValue);
+    for (int i = 1; i <= this->NumLocalMappedPoints(); i++) {
+      EPoint *mappedPoint = this->GetLocalMappedPoint(i);
+      mappedPoint->IntegrateTargetEffectForObservable(configure);
+      if (blend < 1.0) {
+        // The mapped point is another observable at the same energy: its bare
+        // value needs its own probe.
+        EPoint mappedProbe(*mappedPoint);
+        mappedProbe.SetTargetEffectNum(0);
+        mappedProbe.ClearLocalMappedPoints();
+        mappedProbe.integrationPoints_.clear();
+        mappedProbe.Calculate(theCNuc, configure);
+        mappedPoint->SetFitCrossSection(blend * mappedPoint->GetFitCrossSection() +
+                                        (1.0 - blend) * mappedProbe.GetFitCrossSection());
+      }
+    }
   }
 }
 

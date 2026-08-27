@@ -44,6 +44,9 @@ class AddTargetIntDialog : public QDialog {
   QPushButton *fetchStoppingPowerButton;
   QCheckBox *isStraggling;
   QLineEdit *stragglingCoefficientText;
+  QLineEdit *applyRangesText;
+  QLineEdit *transitionWidthText;
+  QLineEdit *autoToleranceText;
   QDoubleSpinBox *resonanceWidthMultiplierSpin;
   QDoubleSpinBox *pointsPerWidthSpin;
   QLineEdit *energyText;

@@ -523,7 +523,13 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
       targetEffect->SetSigma(cmConversion * sigma);
 
       for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
+        // An effect restricted to energy ranges leaves points outside them
+        // completely untouched: they never receive the effect number, so the
+        // whole downstream machinery treats them as ordinary points.
+        double blendWeight = targetEffect->BlendWeight(point->GetLabEnergy());
+        if (blendWeight <= 0.) continue;
         point->SetTargetEffectNum(segment->GetTargetEffectNum());
+        point->SetTargetBlendWeight(blendWeight);
 
         if (targetEffect->IsTargetIntegration() || targetEffect->IsConvolution() || targetEffect->IsConvCoefficients()) {
           double forwardDepth = 0.0;
@@ -641,7 +647,10 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
           targetEffect->SetSigma(cmConversion * sigma);
 
           for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
+            double blendWeight = targetEffect->BlendWeight(point->GetLabEnergy());
+            if (blendWeight <= 0.) continue;
             point->SetTargetEffectNum(component->GetTargetEffectNum());
+            point->SetTargetBlendWeight(blendWeight);
 
             if (targetEffect->IsTargetIntegration() || targetEffect->IsConvolution() || targetEffect->IsConvCoefficients()) {
               double forwardDepth = 0.0;

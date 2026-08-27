@@ -2,6 +2,8 @@
 #include <sstream>
 #include <iostream>
 #include <cctype>
+#include <cstdlib>
+#include <algorithm>
 #include "Straggling.h"
 
 /*!
@@ -18,6 +20,11 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
   // Initialize adaptive grid parameters to defaults
   resonanceWidthMultiplier_ = 5.0;
   pointsPerWidth_ = 50.0;
+
+  // By default the effect applies to every point of its segments, with hard
+  // edges and no automatic per-point decision.
+  transitionWidth_ = 0.0;
+  autoTolerance_ = 0.0;
 
   int isActive;
   std::string segmentList;
@@ -65,28 +72,28 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
 
     // Read straggling flag and coefficient (optional for backward compatibility)
     // Skip whitespace and check if there's a digit (not a '<' which would be </targetInt>)
-    stream >> std::ws;  // Skip whitespace
-    if (!stream.eof() && stream.peek() != '<' && std::isdigit(stream.peek())) {
+    if (stream.good()) stream >> std::ws;  // Skip whitespace
+    if (stream.good() && stream.peek() != '<' && std::isdigit(stream.peek())) {
       int isStraggling = 0;
       stream >> isStraggling;
       isStraggling_ = (isStraggling == 1);
 
       // Try to read coefficient if available
-      stream >> std::ws;
-      if (!stream.eof() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.' || stream.peek() == '-')) {
+      if (stream.good()) stream >> std::ws;
+      if (stream.good() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.' || stream.peek() == '-')) {
         double stragglingCoeff = 0.04;
         stream >> stragglingCoeff;
         stragglingCoefficient_ = stragglingCoeff;
 
         // Try to read adaptive grid params (optional for backward compatibility)
-        stream >> std::ws;
-        if (!stream.eof() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.' || stream.peek() == '-')) {
+        if (stream.good()) stream >> std::ws;
+        if (stream.good() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.' || stream.peek() == '-')) {
           double rwm;
           stream >> rwm;
           if (stream) {
             resonanceWidthMultiplier_ = rwm;
-            stream >> std::ws;
-            if (!stream.eof() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.' || stream.peek() == '-')) {
+            if (stream.good()) stream >> std::ws;
+            if (stream.good() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.' || stream.peek() == '-')) {
               double ppw;
               stream >> ppw;
               if (stream) pointsPerWidth_ = ppw;
@@ -95,6 +102,52 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
         }
       }
     }
+
+    // Optional restriction of the effect to lab-energy windows: a quoted
+    // token "lo1-hi1,lo2-hi2" (empty "" means unrestricted), then optionally
+    // the blend width at each edge (MeV) and the automatic-application
+    // tolerance.  Old files stop before this token; old readers never look
+    // past the fields they know, so the format stays compatible both ways.
+    // Every probe is guarded on good(): the caller treats failbit as a
+    // malformed line, and probing past the end of an exactly-consumed line
+    // must not look like an error.
+    if (stream.good()) {
+      stream >> std::ws;
+      if (stream.good() && stream.peek() == '"') {
+        std::string rangesToken;
+        stream >> rangesToken;
+        size_t q = 0;
+        while ((q = rangesToken.find('\"')) != std::string::npos) rangesToken.erase(q, 1);
+        std::istringstream rs(rangesToken);
+        std::string item;
+        while (std::getline(rs, item, ',')) {
+          size_t dash = item.find('-', 1);  // energies are positive; skip a leading sign
+          if (dash == std::string::npos) continue;
+          double lo = atof(item.substr(0, dash).c_str());
+          double hi = atof(item.substr(dash + 1).c_str());
+          if (hi > lo) ranges_.push_back(std::pair<double, double>(lo, hi));
+        }
+        if (stream.good()) {
+          stream >> std::ws;
+          if (stream.good() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.')) {
+            double tw;
+            stream >> tw;
+            if (!stream.fail() && tw > 0.) transitionWidth_ = tw;
+            if (stream.good()) {
+              stream >> std::ws;
+              if (stream.good() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.')) {
+                double tol;
+                stream >> tol;
+                if (!stream.fail() && tol > 0.) autoTolerance_ = tol;
+              }
+            }
+          }
+        }
+      }
+    }
+    // A line consumed exactly to its end during the optional probes is not a
+    // parse error; genuinely malformed fields fail without reaching eof.
+    if (stream.fail() && stream.eof()) stream.clear(std::ios_base::eofbit);
 
     size_t found = 0;
     while (found != std::string::npos) {
@@ -407,4 +460,60 @@ double TargetEffect::GetResonanceWidthMultiplier() const {
 
 double TargetEffect::GetPointsPerWidth() const {
   return pointsPerWidth_;
+}
+
+/*!
+ * Returns the optional lab-energy windows the effect is restricted to.
+ * An empty vector means the effect covers its segments completely.
+ */
+
+const std::vector<std::pair<double, double> > &TargetEffect::GetRanges() const {
+  return ranges_;
+}
+
+/*!
+ * Returns the width (MeV, lab energy) of the smooth blend applied at each
+ * range edge.  Zero means the effect switches on and off abruptly.
+ */
+
+double TargetEffect::GetTransitionWidth() const {
+  return transitionWidth_;
+}
+
+/*!
+ * Returns the relative tolerance of the automatic per-point application.
+ * Zero disables the automatic decision: the effect is always integrated.
+ */
+
+double TargetEffect::GetAutoTolerance() const {
+  return autoTolerance_;
+}
+
+/*!
+ * Blend weight in [0,1] at the given lab energy.  With no ranges declared the
+ * weight is always one.  With ranges and a zero transition width the weight is
+ * a hard 1 inside any window and 0 outside; a positive transition width turns
+ * each edge into a smoothstep ramp centred on the edge, so the modelled
+ * observable passes continuously between the convolved and the bare curve.
+ */
+
+double TargetEffect::BlendWeight(double labEnergy) const {
+  if (ranges_.empty()) return 1.0;
+  double weight = 0.0;
+  for (std::vector<std::pair<double, double> >::const_iterator r = ranges_.begin(); r != ranges_.end(); r++) {
+    double w;
+    if (transitionWidth_ <= 0.) {
+      w = (labEnergy >= r->first && labEnergy <= r->second) ? 1.0 : 0.0;
+    } else {
+      double up = (labEnergy - (r->first - 0.5 * transitionWidth_)) / transitionWidth_;
+      double down = ((r->second + 0.5 * transitionWidth_) - labEnergy) / transitionWidth_;
+      up = std::min(1.0, std::max(0.0, up));
+      down = std::min(1.0, std::max(0.0, down));
+      up = up * up * (3.0 - 2.0 * up);
+      down = down * down * (3.0 - 2.0 * down);
+      w = up * down;
+    }
+    if (w > weight) weight = w;
+  }
+  return weight;
 }

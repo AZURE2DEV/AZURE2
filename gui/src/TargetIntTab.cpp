@@ -113,6 +113,9 @@ void TargetIntTab::addLine() {
     newLine.stragglingCoefficient = aDialog.stragglingCoefficientText->text().toDouble();
     newLine.resonanceWidthMultiplier = aDialog.resonanceWidthMultiplierSpin->value();
     newLine.pointsPerWidth = aDialog.pointsPerWidthSpin->value();
+    newLine.applyRanges = aDialog.applyRangesText->text().remove(' ');
+    newLine.transitionWidth = aDialog.transitionWidthText->text().toDouble();
+    newLine.autoTolerance = aDialog.autoToleranceText->text().toDouble();
 
     addLine(newLine);
   }
@@ -161,6 +164,12 @@ void TargetIntTab::addLine(TargetIntData line) {
   targetIntModel->setData(index, line.resonanceWidthMultiplier, Qt::EditRole);
   index = targetIntModel->index(lines.size(), 18, QModelIndex());
   targetIntModel->setData(index, line.pointsPerWidth, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 19, QModelIndex());
+  targetIntModel->setData(index, line.applyRanges, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 20, QModelIndex());
+  targetIntModel->setData(index, line.transitionWidth, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 21, QModelIndex());
+  targetIntModel->setData(index, line.autoTolerance, Qt::EditRole);
 
   targetIntView->resizeRowsToContents();
 }
@@ -228,6 +237,15 @@ void TargetIntTab::editLine() {
   i = targetIntModel->index(index.row(), 18, QModelIndex());
   var = targetIntModel->data(i, Qt::EditRole);
   double pointsPerWidth = var.toDouble();
+  i = targetIntModel->index(index.row(), 19, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  QString applyRanges = var.toString();
+  i = targetIntModel->index(index.row(), 20, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  double transitionWidth = var.toDouble();
+  i = targetIntModel->index(index.row(), 21, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  double autoTolerance = var.toDouble();
 
   AddTargetIntDialog aDialog;
   aDialog.setWindowTitle(tr("Edit an Experimental Effect Line"));
@@ -268,6 +286,9 @@ void TargetIntTab::editLine() {
   aDialog.stragglingCoefficientText->setText(QString::number(stragglingCoefficient));
   aDialog.resonanceWidthMultiplierSpin->setValue(resonanceWidthMultiplier > 0.0 ? resonanceWidthMultiplier : 5.0);
   aDialog.pointsPerWidthSpin->setValue(pointsPerWidth > 0.0 ? pointsPerWidth : 50.0);
+  aDialog.applyRangesText->setText(applyRanges);
+  aDialog.transitionWidthText->setText(QString::number(transitionWidth));
+  aDialog.autoToleranceText->setText(QString::number(autoTolerance));
 
   if (aDialog.exec()) {
     QString newSegmentsList = aDialog.segmentsListText->text();
@@ -381,6 +402,24 @@ void TargetIntTab::editLine() {
       i = targetIntModel->index(index.row(), 18, QModelIndex());
       targetIntModel->setData(i, newPointsPerWidth, Qt::EditRole);
     }
+
+    QString newApplyRanges = aDialog.applyRangesText->text().remove(' ');
+    if (applyRanges != newApplyRanges) {
+      i = targetIntModel->index(index.row(), 19, QModelIndex());
+      targetIntModel->setData(i, newApplyRanges, Qt::EditRole);
+    }
+
+    double newTransitionWidth = aDialog.transitionWidthText->text().toDouble();
+    if (transitionWidth != newTransitionWidth) {
+      i = targetIntModel->index(index.row(), 20, QModelIndex());
+      targetIntModel->setData(i, newTransitionWidth, Qt::EditRole);
+    }
+
+    double newAutoTolerance = aDialog.autoToleranceText->text().toDouble();
+    if (autoTolerance != newAutoTolerance) {
+      i = targetIntModel->index(index.row(), 21, QModelIndex());
+      targetIntModel->setData(i, newAutoTolerance, Qt::EditRole);
+    }
   }
 }
 
@@ -443,6 +482,12 @@ bool TargetIntTab::writeFile(QTextStream &outStream) {
     outStream << " " << lines.at(i).stragglingCoefficient;
     // Write adaptive grid params (appended at end for backward compatibility)
     outStream << " " << lines.at(i).resonanceWidthMultiplier << " " << lines.at(i).pointsPerWidth;
+    // Optional lab-energy windows / blend width / automatic tolerance: only
+    // written when any of them departs from the defaults, so files that never
+    // used the feature stay byte-identical.
+    if (!lines.at(i).applyRanges.trimmed().isEmpty() || lines.at(i).transitionWidth > 0. || lines.at(i).autoTolerance > 0.) {
+      outStream << " \"" << lines.at(i).applyRanges.trimmed() << "\" " << lines.at(i).transitionWidth << " " << lines.at(i).autoTolerance;
+    }
     outStream << Qt::endl;
   }
 
@@ -540,7 +585,30 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
       double pointsPerWidth = 50.0;           // Default
 
       // Check if there's more data to read (not at end of line)
+      QString applyRanges("");
+      double transitionWidth = 0.;
+      double autoTolerance = 0.;
       QString remaining = in.readAll().trimmed();
+      // The optional ranges extension starts at the first quote: split it off
+      // so the numeric straggling/adaptive-grid chain parses as before.
+      int quotePos = remaining.indexOf('"');
+      if (quotePos >= 0) {
+        QString rangesPart = remaining.mid(quotePos).trimmed();
+        remaining = remaining.left(quotePos).trimmed();
+        int closeQuote = rangesPart.indexOf('"', 1);
+        if (closeQuote > 0) {
+          applyRanges = rangesPart.mid(1, closeQuote - 1).trimmed();
+          QString tail = rangesPart.mid(closeQuote + 1).trimmed();
+          if (!tail.isEmpty()) {
+            QTextStream tailStream(&tail);
+            tailStream >> transitionWidth;
+            if (tailStream.status() == QTextStream::Ok) tailStream >> autoTolerance;
+            if (tailStream.status() != QTextStream::Ok) autoTolerance = 0.;
+            if (transitionWidth < 0.) transitionWidth = 0.;
+            if (autoTolerance < 0.) autoTolerance = 0.;
+          }
+        }
+      }
       if (!remaining.isEmpty()) {
         QTextStream remainingStream(&remaining);
         remainingStream >> isStraggling >> stragglingCoefficient;
@@ -566,7 +634,7 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
       bool tempIsTargetIntegration = false;
       if (isTargetIntegration == 1) tempIsTargetIntegration = true;
 
-      TargetIntData newLine = {isActive, segmentsList.remove('\"'), numPoints, tempIsConvolution, sigma, tempIsTargetIntegration, density, stoppingPowerEq.remove('\"'), numParameters, parameters, tempIsQCoefficient, qCoefficients, tempIsConvCoefficient, convCoefficients, convolutionEq.remove('\"'), tempIsStraggling, stragglingCoefficient, resonanceWidthMultiplier, pointsPerWidth};
+      TargetIntData newLine = {isActive, segmentsList.remove('\"'), numPoints, tempIsConvolution, sigma, tempIsTargetIntegration, density, stoppingPowerEq.remove('\"'), numParameters, parameters, tempIsQCoefficient, qCoefficients, tempIsConvCoefficient, convCoefficients, convolutionEq.remove('\"'), tempIsStraggling, stragglingCoefficient, resonanceWidthMultiplier, pointsPerWidth, applyRanges, transitionWidth, autoTolerance};
       addLine(newLine);
     }
   }

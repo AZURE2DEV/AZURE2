@@ -68,6 +68,16 @@ class TargetEffect {
   double GetResonanceWidthMultiplier() const;
   double GetPointsPerWidth() const;
 
+  /// Optional lab-energy windows the effect is restricted to; empty = whole segment.
+  const std::vector<std::pair<double, double> > &GetRanges() const;
+  /// Width (MeV, lab) of the smooth blend at each range edge; 0 = hard edges.
+  double GetTransitionWidth() const;
+  /// Relative tolerance for automatic per-point application; 0 = always apply.
+  double GetAutoTolerance() const;
+  /// Blend weight in [0,1] at the given lab energy: 1 = effect fully applied,
+  /// 0 = point untouched.  Always 1 when no ranges are given.
+  double BlendWeight(double labEnergy) const;
+
   /// The multiple of sigma above and below centroid energy to use as integration range
   static constexpr double convolutionRange = 3.;
 
@@ -93,6 +103,13 @@ class TargetEffect {
   // Adaptive integration grid parameters
   double resonanceWidthMultiplier_;
   double pointsPerWidth_;
+
+  // Optional restriction of the effect to lab-energy windows, with a smooth
+  // blend of the given width at each edge, and/or automatic per-point
+  // application controlled by a relative tolerance.
+  std::vector<std::pair<double, double> > ranges_;
+  double transitionWidth_;
+  double autoTolerance_;
 };
 
 #endif

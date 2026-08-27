@@ -50,3 +50,27 @@ add_test(NAME nuclear_potential_tab COMMAND nuclear_potential_tab_test)
 # widgets rather than through the window system.
 set_tests_properties(nuclear_potential_tab PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# Round-trip of the Experimental Effects tab's optional energy-range tokens:
+# read, model storage, conditional write-back, and legacy-line stability.
+add_executable(target_int_tab_test target_int_tab_test.cpp)
+set_target_properties(target_int_tab_test PROPERTIES AUTOMOC OFF)
+target_include_directories(target_int_tab_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(target_int_tab_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(target_int_tab_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(target_int_tab_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME target_int_tab COMMAND target_int_tab_test)
+set_tests_properties(target_int_tab PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
