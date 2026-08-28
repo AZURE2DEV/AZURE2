@@ -74,3 +74,27 @@ endif()
 add_test(NAME target_int_tab COMMAND target_int_tab_test)
 set_tests_properties(target_int_tab PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# Moving a data segment must carry the whole row: the per-column rebuild the
+# up/down buttons used dropped the UPOS fields (James deBoer, Aug 2026).
+add_executable(segments_move_test segments_move_test.cpp)
+set_target_properties(segments_move_test PROPERTIES AUTOMOC OFF)
+target_include_directories(segments_move_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(segments_move_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(segments_move_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(segments_move_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME segments_move COMMAND segments_move_test)
+set_tests_properties(segments_move PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
