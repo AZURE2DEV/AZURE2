@@ -93,12 +93,11 @@ void AChannel::SetBoundaryCondition(double boundaryCondition) {
 
 /*!
  * This function is used to set the Wigner Limit for the channel.
- * The Wigner Limit is calculated as: 2 * hbar^2 / (2 * reduced_mass * channel_radius^2)
- * where hbar^2 = (hbarc)^2, reduced_mass is in MeV/c^2, and channel_radius is in fm.
+ * The Wigner Limit (single-particle/sum-rule reduced width) is the standard
+ * Lane & Thomas (1958) result: gamma_W^2 = 3 * hbar^2 / (2 * reduced_mass * channel_radius^2).
  */
 void AChannel::SetWignerLimit(double reducedMass, double channelRadius) {
-  // Wigner Limit = 2 * hbar^2 / (2 * reduced_mass * channel_radius^2)
-  // = hbar^2 / (reduced_mass * channel_radius^2)
+  // Wigner Limit: gamma_W^2 = 3 hbar^2 / (2 mu a^2)
   //
   // Constants:
   // hbarc = 197.32696310 MeV·fm (from Constants.h)
@@ -113,7 +112,7 @@ void AChannel::SetWignerLimit(double reducedMass, double channelRadius) {
   }
 
   double reducedMassMeV = reducedMass * uconv;  // Convert from u to MeV/c²
-  wigner_limit_ = pow(hbarc, 2.0) / (reducedMassMeV * pow(channelRadius, 2.0));
+  wigner_limit_ = 1.5 * pow(hbarc, 2.0) / (reducedMassMeV * pow(channelRadius, 2.0));
 }
 
 /*!

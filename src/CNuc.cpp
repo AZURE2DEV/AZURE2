@@ -1577,12 +1577,16 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config *config
         p.Add(varname, level->GetGamma(ch), 0.1 * level->GetGamma(ch));
         if (level->GetGamma(ch) == 0.0) p.Fix(varname);
         if (level->ChannelFixed(ch) && !p.Parameter(p.Index(varname)).IsFixed()) p.Fix(varname);
-        // Apply Wigner Limit bounds if flag is enabled
+        // Apply Wigner Limit bounds if flag is enabled.  GetWignerLimit()
+        // returns gamma_W^2 (MeV); the fit parameter at this point is the
+        // reduced-width AMPLITUDE gamma (MeV^1/2), so the bound must be
+        // sqrt(gamma_W^2), not gamma_W^2 itself.
         if (config && (config->paramMask & Config::USE_WIGNER_LIMITS)) {
           AChannel *channel = this->GetJGroup(j)->GetChannel(ch);
           double wignerLimit = channel->GetWignerLimit();
           if (wignerLimit > 0.0) {
-            p.SetLimits(varname, -wignerLimit, wignerLimit);
+            double gammaLimit = sqrt(wignerLimit);
+            p.SetLimits(varname, -gammaLimit, gammaLimit);
           }
         }
       }

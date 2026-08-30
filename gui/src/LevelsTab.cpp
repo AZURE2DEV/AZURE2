@@ -668,9 +668,10 @@ void LevelsTab::updateReducedWidth(const QString &string) {
 }
 
 // Physical Wigner limit (single-particle partial width) of the selected channel:
-// Gamma_W = 2 P(E) gamma^2_W, with the reduced limit gamma^2_W = hbar^2/(mu a^2)
-// and the penetrability P computed as in CoulFunc.  Result in eV, so it matches
-// the partial-width box.  Only meaningful for unbound particle channels.
+// Gamma_W = 2 P(E) gamma^2_W, with the reduced limit gamma^2_W = 3 hbar^2/(2 mu a^2)
+// (Lane & Thomas 1958) and the penetrability P computed as in CoulFunc.  Result
+// in eV, so it matches the partial-width box.  Only meaningful for unbound
+// particle channels.
 void LevelsTab::calculateWignerLimit() {
   if (!wignerApplicable_) {
     channelDetails->wignerLimitText->setText(tr("N/A"));
@@ -692,7 +693,7 @@ void LevelsTab::calculateWignerLimit() {
   }
 
   double P = rho / denom;
-  double gamma2W = hbarc * hbarc / (wignerRedMass_ * uconv * wignerRadius_ * wignerRadius_);  // MeV
+  double gamma2W = 1.5 * hbarc * hbarc / (wignerRedMass_ * uconv * wignerRadius_ * wignerRadius_);  // MeV
   double gammaW_eV = 2.0 * P * gamma2W * 1.0e6;                                               // eV
   double av = std::fabs(gammaW_eV);
   QString text = (av != 0. && (av >= 1.e4 || av < 1.e-4))
