@@ -1,0 +1,5 @@
+# The automatic-application decision is a hard threshold on a floating-point
+# estimate; a borderline point flipping between skipped and integrated across
+# toolchains moves chi2 by up to ~tolerance per affected point. 5e-3 absorbs
+# a single flip with margin; a real regression is far larger.
+5e-3

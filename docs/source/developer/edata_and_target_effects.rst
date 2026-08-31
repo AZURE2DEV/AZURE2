@@ -332,3 +332,25 @@ Summary: Data Flow Diagram
                └── Both: ∫∫ σ(E')/ε(E') g(E'-E_d) dE' dE_d
                            ▼
                    Final yield stored in parent EPoint
+
+Energy ranges, blending and the automatic decision
+--------------------------------------------------
+
+``TargetEffect`` optionally carries lab-energy windows, a blend width and a
+relative tolerance (three trailing tokens of the ``targetInt`` line).  During
+``EData`` fill, a point whose blend weight is zero never receives the effect
+number, so the rest of the machinery treats it as an ordinary point.  A
+parent point with a fractional weight, or a positive tolerance, first
+computes its bare value from a probe copy of itself that pretends not to
+carry the effect; edge blending mixes the integrated and bare values with a
+smoothstep weight, and the automatic decision probes the first, central and
+last sub-point to estimate the size of the effect (curvature across the
+window, plus the centroid shift under target integration), using the bare
+value outright when the estimate is below the tolerance.  Points with mapped
+observables skip only when every mapped observable passes its own estimate.
+
+The combined branch of ``EPoint::IntegrateTargetEffect`` accepts either
+convolution flavour: a fixed beam sigma, or the energy-dependent convolution
+equation evaluated at each depth energy.  The latter combination used to fall
+through to pure target integration on a grid sized for the convolution,
+corrupting the yield.

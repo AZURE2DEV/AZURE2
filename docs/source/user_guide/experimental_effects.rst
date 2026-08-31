@@ -114,6 +114,33 @@ target.
    AZURE2 also provides tools to look up stopping powers by element or compound
    formula.
 
+Restricting an Effect to Energy Ranges
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+By default an experimental effect covers every point of the segments it lists.
+Three optional controls in the *Add/Edit Experimental Effect* dialog refine
+this without splitting the data into artificial segments:
+
+- **Apply in Energy Ranges** -- a comma-separated list of laboratory-energy
+  windows, for example ``0.42-0.61,1.20-1.35`` (MeV).  Points outside every
+  window are computed as ordinary points; leave the field empty to cover the
+  whole segment.
+- **Blend Width** -- the width (MeV) of a smooth transition at each window
+  edge.  With a hard edge (``0``) the modelled curve can show a small step
+  where the convolution switches off; a positive width ramps continuously
+  between the convolved and the unconvolved curve.
+- **Auto Tolerance** -- a relative tolerance that makes the decision
+  automatic: at each point the code estimates how much the effect would change
+  the observable and skips the integration where the change is below the
+  tolerance.  Any discontinuity this introduces is bounded by the tolerance,
+  and smooth regions stop paying for integration they do not need.  It can be
+  combined with explicit ranges or used on its own.
+
+In the ``.azr`` file these appear as optional tokens at the end of the
+``targetInt`` line, for example ``"1.95-2.55" 0.12 0.002``; files that do not
+use them are written exactly as before, and remain readable by older versions
+of AZURE2.
+
 Straggling
 ^^^^^^^^^^
 
