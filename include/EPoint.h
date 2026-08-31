@@ -79,6 +79,10 @@ class EPoint {
   int NumSubPoints() const;
   /// 1-based position of the TargetEffect in the parent EData.
   int GetTargetEffectNum() const;
+  /// Weight in [0,1] with which the target effect applies to this point;
+  /// 1 everywhere unless the effect declares energy ranges.
+  double GetTargetBlendWeight() const { return target_blend_weight_; };
+  void SetTargetBlendWeight(double w) { target_blend_weight_ = w; };
   /// Highest Legendre order. Angular-distribution points only.
   int GetMaxAngDistOrder() const;
   /// Number of stored angular-distribution coefficients.
@@ -258,6 +262,7 @@ class EPoint {
   int segment_key_;
   int l_value_;
   int targetEffectNum_;
+  double target_blend_weight_ = 1.0;
   int max_ang_dist_order_;
   double cm_angle_;
   double lab_angle_;

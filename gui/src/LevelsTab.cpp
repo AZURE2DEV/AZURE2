@@ -695,9 +695,10 @@ void LevelsTab::updateReducedWidth(const QString &string) {
 }
 
 // Physical Wigner limit (single-particle partial width) of the selected channel:
-// Gamma_W = 2 P(E) gamma^2_W, with the reduced limit gamma^2_W = hbar^2/(mu a^2)
-// and the penetrability P computed as in CoulFunc.  Result in eV, so it matches
-// the partial-width box.  Only meaningful for unbound particle channels.
+// Gamma_W = 2 P(E) gamma^2_W, with the reduced limit gamma^2_W = 3 hbar^2/(2 mu a^2)
+// (Lane & Thomas 1958) and the penetrability P computed as in CoulFunc.  Result
+// in eV, so it matches the partial-width box.  Only meaningful for unbound
+// particle channels.
 void LevelsTab::calculateWignerLimit() {
   if (!wignerApplicable_) {
     channelDetails->wignerLimitText->setText(tr("N/A"));
@@ -719,7 +720,9 @@ void LevelsTab::calculateWignerLimit() {
   }
 
   double P = rho / denom;
-  double gamma2W = hbarc * hbarc / (wignerRedMass_ * uconv * wignerRadius_ * wignerRadius_);  // MeV
+  // Teichmann-Wigner limit gamma^2_W = 3 hbar^2 / (2 mu a^2), the 1.5 from dev's
+  // formula fix, displayed in the channel's own convention as before.
+  double gamma2W = 1.5 * hbarc * hbarc / (wignerRedMass_ * uconv * wignerRadius_ * wignerRadius_);  // MeV
 
   // Report the limit in whichever convention the channel's width is entered in,
   // so the number can be compared with the value in the table directly. The

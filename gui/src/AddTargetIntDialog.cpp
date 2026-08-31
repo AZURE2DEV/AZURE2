@@ -43,6 +43,15 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   QDialog(parent),
   selectedElement_(13) {
   segmentsListText = new QLineEdit;
+  applyRangesText = new QLineEdit;
+  applyRangesText->setPlaceholderText(tr("empty = whole segment"));
+  applyRangesText->setToolTip(tr("Optional lab-energy windows the effect is applied in, e.g. 0.42-0.61,1.20-1.35 (MeV). Leave empty to apply it to the whole segment."));
+  transitionWidthText = new QLineEdit;
+  transitionWidthText->setText("0");
+  transitionWidthText->setToolTip(tr("Width (MeV) of the smooth blend between the convolved and the bare curve at each range edge. 0 switches the effect on and off abruptly."));
+  autoToleranceText = new QLineEdit;
+  autoToleranceText->setText("0");
+  autoToleranceText->setToolTip(tr("Relative tolerance for the automatic per-point decision: the effect is skipped wherever it would change the observable by less than this. 0 always applies it."));
   numPointsSpin = new QSpinBox;
   numPointsSpin->setEnabled(false);
   numPointsSpin->setMinimum(1);
@@ -199,6 +208,14 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   segListLayout->addWidget(new QLabel(tr("Segments List:")));
   segListLayout->addWidget(segmentsListText);
 
+  QHBoxLayout *applyRangesLayout = new QHBoxLayout;
+  applyRangesLayout->addWidget(new QLabel(tr("Apply in Energy Ranges (lab, MeV):")));
+  applyRangesLayout->addWidget(applyRangesText);
+  applyRangesLayout->addWidget(new QLabel(tr("Blend Width:")));
+  applyRangesLayout->addWidget(transitionWidthText);
+  applyRangesLayout->addWidget(new QLabel(tr("Auto Tolerance:")));
+  applyRangesLayout->addWidget(autoToleranceText);
+
   QHBoxLayout *numPointsLayout = new QHBoxLayout;
   numPointsLayout->addWidget(new QLabel(tr("Number of Integration Points:")));
   numPointsLayout->addWidget(numPointsSpin);
@@ -212,6 +229,7 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
 
   QHBoxLayout *topLayout = new QHBoxLayout;
   topLayout->addLayout(segListLayout);
+  topLayout->addLayout(applyRangesLayout);
   topLayout->addLayout(numPointsLayout);
 
   QGridLayout *checkBoxLayout = new QGridLayout;

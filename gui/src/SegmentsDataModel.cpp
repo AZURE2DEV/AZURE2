@@ -512,3 +512,21 @@ QString SegmentsDataModel::getReactionLabel(const QModelIndex &index) {
     return pairsModel->getReactionLabel(firstPair, secondPair);
   }
 }
+
+
+/*!
+ * Moves the line at \p from so that it ends up at \p to, carrying the whole
+ * underlying struct.  The up/down buttons used to rebuild the row column by
+ * column and silently dropped every field the copy list had fallen behind on
+ * (the UPOS block, most recently); moving the struct itself cannot lose
+ * anything.
+ */
+
+bool SegmentsDataModel::moveLine(int from, int to) {
+  if (from < 0 || to < 0 || from >= segDataLineList.size() || to >= segDataLineList.size() || from == to) return false;
+  int destination = (to > from) ? to + 1 : to;
+  if (!beginMoveRows(QModelIndex(), from, from, QModelIndex(), destination)) return false;
+  segDataLineList.move(from, to);
+  endMoveRows();
+  return true;
+}

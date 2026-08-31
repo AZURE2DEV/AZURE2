@@ -915,49 +915,7 @@ void SegmentsTab::moveSegDataLine(unsigned int upDown) {
     future = previous + 1;
   else
     future = previous - 1;
-  SegmentsDataData line = segmentsDataModel->getLines().at(previous);
-  segmentsDataModel->removeRows(previous, 1, QModelIndex());
-  segmentsDataModel->insertRows(future, 1, QModelIndex());
-  QModelIndex index = segmentsDataModel->index(future, 0, QModelIndex());
-  segmentsDataModel->setData(index, line.isActive, Qt::EditRole);
-  index = segmentsDataModel->index(future, 1, QModelIndex());
-  segmentsDataModel->setData(index, line.entrancePairIndex, Qt::EditRole);
-  index = segmentsDataModel->index(future, 2, QModelIndex());
-  segmentsDataModel->setData(index, line.exitPairIndex, Qt::EditRole);
-  index = segmentsDataModel->index(future, 3, QModelIndex());
-  segmentsDataModel->setData(index, line.lowEnergy, Qt::EditRole);
-  index = segmentsDataModel->index(future, 4, QModelIndex());
-  segmentsDataModel->setData(index, line.highEnergy, Qt::EditRole);
-  index = segmentsDataModel->index(future, 5, QModelIndex());
-  segmentsDataModel->setData(index, line.lowAngle, Qt::EditRole);
-  index = segmentsDataModel->index(future, 6, QModelIndex());
-  segmentsDataModel->setData(index, line.highAngle, Qt::EditRole);
-  index = segmentsDataModel->index(future, 7, QModelIndex());
-  segmentsDataModel->setData(index, line.dataType, Qt::EditRole);
-  index = segmentsDataModel->index(future, 8, QModelIndex());
-  segmentsDataModel->setData(index, line.dataFile, Qt::EditRole);
-  index = segmentsDataModel->index(future, 9, QModelIndex());
-  segmentsDataModel->setData(index, line.dataNorm, Qt::EditRole);
-  index = segmentsDataModel->index(future, 10, QModelIndex());
-  segmentsDataModel->setData(index, line.dataNormError, Qt::EditRole);
-  index = segmentsDataModel->index(future, 11, QModelIndex());
-  segmentsDataModel->setData(index, line.varyNorm, Qt::EditRole);
-  index = segmentsDataModel->index(future, 12, QModelIndex());
-  segmentsDataModel->setData(index, line.phaseJ, Qt::EditRole);
-  index = segmentsDataModel->index(future, 13, QModelIndex());
-  segmentsDataModel->setData(index, line.phaseL, Qt::EditRole);
-  index = segmentsDataModel->index(future, 14, QModelIndex());
-  segmentsDataModel->setData(index, line.energyShift, Qt::EditRole);
-  index = segmentsDataModel->index(future, 15, QModelIndex());
-  segmentsDataModel->setData(index, line.energyShiftError, Qt::EditRole);
-  index = segmentsDataModel->index(future, 16, QModelIndex());
-  segmentsDataModel->setData(index, line.varyEnergyShift, Qt::EditRole);
-  index = segmentsDataModel->index(future, 17, QModelIndex());
-  segmentsDataModel->setData(index, line.isAdvanced, Qt::EditRole);
-  index = segmentsDataModel->index(future, 18, QModelIndex());
-  segmentsDataModel->setData(index, line.operationType, Qt::EditRole);
-  index = segmentsDataModel->index(future, 19, QModelIndex());
-  segmentsDataModel->setData(index, line.componentsList, Qt::EditRole);
+  if (!segmentsDataModel->moveLine(previous, future)) return;
   segmentsDataView->resizeRowToContents(future);
 
   selectionModel->select(segmentsDataModel->index(future, 0, QModelIndex()),
@@ -984,41 +942,7 @@ void SegmentsTab::moveSegTestLine(unsigned int upDown) {
   else
     future = previous - 1;
 
-  SegmentsTestData line = segmentsTestModel->getLines().at(previous);
-  segmentsTestModel->removeRows(previous, 1, QModelIndex());
-  segmentsTestModel->insertRows(future, 1, QModelIndex());
-  QModelIndex index = segmentsTestModel->index(future, 0, QModelIndex());
-  segmentsTestModel->setData(index, line.isActive, Qt::EditRole);
-  index = segmentsTestModel->index(future, 1, QModelIndex());
-  segmentsTestModel->setData(index, line.entrancePairIndex, Qt::EditRole);
-  index = segmentsTestModel->index(future, 2, QModelIndex());
-  segmentsTestModel->setData(index, line.exitPairIndex, Qt::EditRole);
-  index = segmentsTestModel->index(future, 3, QModelIndex());
-  segmentsTestModel->setData(index, line.lowEnergy, Qt::EditRole);
-  index = segmentsTestModel->index(future, 4, QModelIndex());
-  segmentsTestModel->setData(index, line.highEnergy, Qt::EditRole);
-  index = segmentsTestModel->index(future, 5, QModelIndex());
-  segmentsTestModel->setData(index, line.energyStep, Qt::EditRole);
-  index = segmentsTestModel->index(future, 6, QModelIndex());
-  segmentsTestModel->setData(index, line.lowAngle, Qt::EditRole);
-  index = segmentsTestModel->index(future, 7, QModelIndex());
-  segmentsTestModel->setData(index, line.highAngle, Qt::EditRole);
-  index = segmentsTestModel->index(future, 8, QModelIndex());
-  segmentsTestModel->setData(index, line.angleStep, Qt::EditRole);
-  index = segmentsTestModel->index(future, 9, QModelIndex());
-  segmentsTestModel->setData(index, line.dataType, Qt::EditRole);
-  index = segmentsTestModel->index(future, 10, QModelIndex());
-  segmentsTestModel->setData(index, line.phaseJ, Qt::EditRole);
-  index = segmentsTestModel->index(future, 11, QModelIndex());
-  segmentsTestModel->setData(index, line.phaseL, Qt::EditRole);
-  index = segmentsTestModel->index(future, 12, QModelIndex());
-  segmentsTestModel->setData(index, line.maxAngDistOrder, Qt::EditRole);
-  index = segmentsTestModel->index(future, 13, QModelIndex());
-  segmentsTestModel->setData(index, line.isAdvanced, Qt::EditRole);
-  index = segmentsTestModel->index(future, 14, QModelIndex());
-  segmentsTestModel->setData(index, line.operationType, Qt::EditRole);
-  index = segmentsTestModel->index(future, 15, QModelIndex());
-  segmentsTestModel->setData(index, line.componentsList, Qt::EditRole);
+  if (!segmentsTestModel->moveLine(previous, future)) return;
   segmentsTestView->resizeRowToContents(future);
 
   selectionModel->select(segmentsTestModel->index(future, 0, QModelIndex()),

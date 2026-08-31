@@ -30,11 +30,30 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
 
 ## Golden rules
 
+- **Particle pair masses must be precise atomic masses, not bare mass numbers.**
+  The GUI's "Particle Pairs" tab labels the field "Mass (M)" and glosses it as
+  "the mass number," but the underlying field (`PPair` in the source) is a
+  `double` in atomic mass units, u — every downstream kinematic quantity
+  (reduced mass, CM/lab conversion, penetrabilities, phase space) is computed
+  from whatever value is actually entered there. Typing the integer mass
+  number (e.g. `4` for an alpha) instead of the true mass (`4.002602`) silently
+  degrades precision throughout the fit. Look up and enter the real value from
+  the **latest Atomic Mass Evaluation (AME)** for both particles of every pair,
+  not a rounded mass number — the Separation Energy field is entered
+  independently and precisely already, so an imprecise particle mass is an easy
+  thing to overlook as the one remaining low-precision input.
 - **Input is LAB frame, forward kinematics** (light particle = projectile).
   **All output files and API results are CENTER-OF-MASS.** Never mix them.
   This includes `add_extrapolation(e_min, e_max, e_step)` — those are **lab**
   energies (multiply c.m. by `(m_beam + m_target)/m_target`), while the energies
-  that come *back* from `calculate_energies` are c.m.
+  that come *back* from `calculate_energies` are c.m. **The silent-failure mode
+  to watch for**: requesting a lab-frame `e_max` and later comparing the
+  returned (c.m.-frame) energy column against that same number looks exactly
+  like a hard extrapolation ceiling — the run doesn't error, it just appears to
+  "stop early" at `e_max * m_target/(m_beam+m_target)`. Caught this firsthand
+  chasing a phantom ~7%-short cutoff that tracked the mass ratio exactly once
+  compared side by side; there was no ceiling, just a lab-vs-c.m. mismatch in
+  what was being compared to what.
 - Always run **from the directory that contains the `.azr` file** (pyazr does
   this for you via `cwd=`, defaulting to the `.azr`'s directory), because the
   `.azr` stores `output/`, `checks/` and data paths *relative to itself*.
@@ -53,7 +72,12 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   flags every time (`--gsl-coul`, `--ignore-externals`, …). Note the Brune
   parameterization is **on by default** and there is no flag to turn it off;
   `--use-rmc` selects the mutually exclusive RMC formalism, and pyazr takes
-  `use_brune=False` directly.
+  `use_brune=False` directly. **RMC is restricted to (n,γ) reactions** — the
+  manual warns of unexpected errors if it is selected for anything else.
+- `--gsl-coul` is a real speed/accuracy tradeoff, not just a flag name: the
+  default Coulomb-function method (Michel 2007) is more accurate but visibly
+  slower than GSL's. Reach for `--gsl-coul` if a fit is too slow and the
+  accuracy loss is acceptable, not by default.
 
 ## Workflow A — interactive CLI (one-shot runs)
 
@@ -73,6 +97,24 @@ pipe. `tests/run_tests.sh` is the working reference.
 | 5 | Calculate Reaction Rate (needs temps → `reactionrates.dat`) |
 | 6 | MCMC Bayesian Sampling (`samples.mcmc`) |
 | 7 | Exit |
+
+Mode 2's Minuit2 fit (MIGRAD) has a **hard-coded cap of 50,000 iterations** —
+the run simply stops there regardless of whether it has actually converged.
+On a large model (hundreds of free parameters), a flat-looking plateau near
+iteration 50,000 is not proof of a true minimum; it may just be wherever the
+fit happened to be sitting when the cap cut it off, and small stepwise
+improvements (long flat stretches punctuated by discrete drops) can keep
+recurring throughout the whole run, including near the very end. Don't infer
+convergence from a plateau of a few hundred iterations — only trust an
+explicit MIGRAD convergence message, or accept the iteration-50,000 result as
+final-for-this-run while noting it may still improve with a further
+warm-started refit.
+
+Mode 5's numerical integration (GSL adaptive quadrature over the excitation
+curve) is unreliable for narrow resonances — the manual advises caution below
+a total width of ≈1 keV, where the integral may fail outright. In that regime,
+sum the single-level narrow-resonance approximation instead of trusting the
+numerical rate.
 
 The **external parameter file** prompt: give a saved `output/param.sav` to start
 from those best-fit formal parameters, or leave **blank** to build fresh from
@@ -180,6 +222,20 @@ m.parameters.by_physical_level()   # {LevelKey: ParameterSet} — one entry per 
 m.physical_levels()                # the LevelKeys, ordered (jgroup, level)
 m.datasets.sys_errors(vary_only=True)   # per-segment normalization systematics (fractional)
 ```
+
+**`m.parameters` (and anything built on it — `.by_physical_level()`,
+`without_level()`, `only_level()`, `find()`) can throw `RuntimeError:
+parameter_info returned N parameters but params_fixed reported M`, preceded
+by `**WARNING: Denominator less than zero while transforming` for one or more
+levels.** This is a failure in pyazr's own parameter *introspection*
+table-builder (`_build_parameters`), not in the calculation engine. It has
+shown up on a model where `calculate_energies`/`calculate_rwa` (and the
+CLI's own extrapolation mode, independently) ran the same levels through
+cleanly and reproducibly with no warning at all — i.e. the core R-matrix
+calculation was fine; only the human-readable parameter table choked on
+those levels. Don't read this crash as evidence the fit or parameters are
+corrupted on its own — cross-check with a plain `calculate_energies` call
+(or the CLI) on the same file before concluding anything is actually wrong.
 
 A `LevelKey` prints as `5/2-#2@6.588MeV`; `(jgroup, level)` is its identity
 (AZURE2 restarts level numbering inside every J-group).
@@ -425,9 +481,31 @@ mdl.set_extrapolations([...]) / add_extrapolation(...) / clear_extrapolations()
 m.save_fit("fitted.azr", x_best)   # fit -> a .azr + its param.sav, verified
 ```
 
+`observable="total-capture"` (Angle Integrated Total Capture) needs every
+significant γ-cascade transition set up as its own `(Particle, Gamma)`
+particle pair beforehand — AZURE2 sums over them automatically for a segment
+declared with this observable. It is the user's responsibility to have
+included all the important transitions; there is nothing to sum by hand.
+
 `add_data_segment` observables include `analyzing-power` (code 7), and
 `pyazr/examples/exfor_fetch.py` + the `nds-explorer` skill show how to fetch
 real datasets from EXFOR/NDS and feed them into `add_data_segment`.
+
+**Never fit a derived/extrapolated point alongside the data it was derived
+from.** EXFOR sometimes carries a paper's own R-matrix or polynomial
+extrapolation as a separate subentry — most often a zero-energy
+astrophysical S-factor, S(0). Fitting AZURE2 to it is circular: the fit
+gets constrained against a number some other model already derived from
+data that is very likely already in the same fit. The subentry label is
+the tell — "S-factor point" (or "SFC") on a lone point, or a handful of
+points, sitting well outside the energy range of that paper's real
+measurements is model output, not data. Two found and removed from the
+same 12C+p archive fit: `Kettner2023_S0point_pg.dat` (one point at 25 keV,
+EXFOR C2972006, "S-factor point" — the paper's actual measurements start
+above 1 MeV) and `Vogl1963_S0point_pg.dat` (EXFOR C1672006, same pattern,
+sitting next to the legitimate 80-point `Vogl1963_pg.dat` from the same
+paper). Check EXFOR provenance notes for this pattern before activating a
+new single- or few-point segment, not just after.
 
 **Adding/removing data segments invalidates the EC integral cache.** After any
 `add_data_segment` / `remove_data_segments` / `clear_data_segments` /
@@ -654,6 +732,70 @@ times:
 `evaluations/_tools/fitting.py` (`Fitter.stages`) implements this with the
 penalty rows, the dead-column filter and the exception guard already in place.
 
+#### Fits with interfering channels can get stuck on the wrong branch
+
+This is general to any R-matrix fit with more than one amplitude feeding the
+same final channel — background poles interfering with a real resonance,
+two resonances of the same J^π, internal vs. external capture, several
+background poles against each other — in any channel type, particle or γ.
+Interference is not a convex function of the interfering amplitudes' signs
+and relative magnitudes, so there can be more than one distinct,
+well-separated local minimum ("branch"), each a genuinely different
+combination of constructive/destructive interference. A least-squares fit
+(LM/TRF) starting every free amplitude from a small, same-sign seed can
+only walk downhill toward the *nearest* branch. If a better branch needs a
+much larger magnitude and/or a sign flip, reaching it means crossing
+through *worse* χ² first — which gradient descent will not do, and which a
+revert-on-out-of-bound guard (built to catch genuine numerical runaway)
+cannot tell apart from real progress: it just sees a parameter heading
+somewhere large and stops it.
+
+The tell: if independent fit attempts — different seeds, different subsets
+of parameters freed, different guard bounds — keep reverting with the
+*same* parameter(s) pushing toward the *same* large value, that recurrence
+is itself diagnostic. It is not noise to suppress with a tighter bound; it
+is the optimizer repeatedly trying to point at where the other branch is.
+
+The fix is not a better guard, it is a better starting point: hand-seed the
+interfering amplitudes at a large-magnitude, sign-varied point (from a
+previous fit of the same or a similar reaction, or by trying several
+sign/magnitude combinations) and let the fit *descend* into that branch
+rather than climb into it from near zero. Worked example (background γ
+channels, but the mechanism is identical for particle widths or any other
+interfering amplitude): a 12C(p,γ) fit repeatedly reverted trying to push
+two background γ widths to ~4–7×10⁵ eV across three independent attempts
+(different channel subsets, different seeds); recalculating — no fitting
+yet — from a hand-picked starting point with those same channels at
+~200–1300 eV and one sign flipped immediately dropped one
+previously-terrible data segment's χ²/N from 79.8 to 17.2.
+
+Practical guidance: when standing up any set of interfering amplitudes for
+a new reaction (background poles, near-degenerate resonances, internal vs.
+external capture), do not assume the small-positive-seed branch is the only
+or the best one — if a prior fit of the same or a similar reaction exists,
+seed from its converged values (signs included) rather than from scratch.
+
+Follow-up, same fit, confirming the guard-vs-runaway distinction: after
+reaching the better branch above, one background E2 channel (width_6_3)
+still reverted against a generous but finite Weisskopf-unit guard
+(CAP_WU=50). The tell that this was not another runaway: the optimizer's
+own termination was `gtol` (it converged, in that direction, to
+66.7–83.6 W.u.) rather than exhausting `max_nfev` or pinning at some huge
+multiple of the guard the way every earlier true runaway in this same
+exercise had (hundreds to hundreds of thousands of W.u.). Raising the guard
+50 → 100 W.u. and re-running produced zero reverts anywhere in the fit; the
+channel settled at 77.2 W.u. — exactly inside the range the reverted run
+had already pointed at — with only a small further χ² improvement on top.
+Practical guidance, refined: when a fit reverts at a guard boundary, check
+*how* it reverted before assuming instability. A `gtol`/`xtol`/`ftol`
+termination — the optimizer actually converged, and the guard is what
+flagged it afterward — is evidence of a real local minimum just past the
+current bound, not a runaway; `max_nfev` exhaustion or a value sitting at
+many multiples of the guard is the actual runaway signature. Raising the
+guard is a legitimate modeling decision in the first case (how large a W.u.
+value is still physically reasonable for a background pole) and not a
+tuning job to bypass a fit that hasn't actually converged in the second.
+
 ## Decomposing a cross section
 
 Everything below is done at the **fitted point, without refitting**, so each
@@ -761,6 +903,86 @@ E³`, E2 `4.9e-8 A^{4/3} E⁵`, M1 `2.1e-2 E³` eV with E in MeV (E1–E4/M1–M
 external-capture term is linear in the amplitude — so convert with
 `transform_rwa`, never by squaring.
 
+**Comparing against an ENDF/B evaluation.** Getting the file: NNDC's own
+site (`nndc.bnl.gov`) is JS-rendered and its listings don't come back
+through a plain fetch. Use the IAEA mirror instead, which serves flat
+static directory listings any `curl` can walk:
+`https://www-nds.iaea.org/public/download-endf/<version>/<sublibrary>/`,
+e.g. `ENDF-B-VIII.1/p/` for the incident-proton sublibrary. Files are
+named `<projectile>_<Z>-<Elem>-<A>_<MAT>.zip`, e.g. `p_006-C-12_0625.zip`
+for p+¹²C; sublibrary folders are `n`, `p`, `d`, `t`, `he3`, `he4`, `g`,
+`decay`, etc. (`000-NSUB-index.htm` in the version root lists them all).
+This mirror occasionally 402s on a first try (also seen fetching AME mass
+data from a different IAEA path) — a plain `curl` retry has so far always
+succeeded where the fetch tool's own request didn't.
+
+Parsing: `pip install endf` (pure-Python, no compiled deps beyond numpy).
+Its high-level `Material.interpret()` does not yet cover the charged-
+particle incident sublibraries (`NotImplementedError: No class
+implemented for NSUB=10010` for protons, as of endf 0.1.12) — drop to the
+section level instead:
+
+```python
+import io, endf
+mat = endf.Material("p_006-C-12_0625.dat")
+print(mat.sections)                       # [(MF, MT), ...] present in the file
+sec = endf.mf6.parse_mf6(io.StringIO(mat.section_text[6, 2]))
+```
+
+**Elastic scattering of a charged projectile is not in MF=4/MT=2 the way
+neutron elastic is.** Coulomb scattering has no finite angle-integrated
+cross section, so MF=3/MT=2 cannot hold a real σ(E) — by convention it is
+either an unused placeholder (`1.0` at every energy, LTP=1/2) or, for
+LTP=12/14, the finite "nuclear-plus-interference" integral σ_NI(E) in
+barns (**can be negative** — it is a difference of two cross sections, not
+a cross section on its own; don't mistake this for corrupted data). The
+actual angular dependence lives in **MF=6/MT=2, LAW=5** ("charged-particle
+elastic scattering", ENDF-102 §6.2.7 — the LANL reference page for this
+section, `t2.lanl.gov/nis/endf/law5for6.html`, 403s from some networks;
+the section is short enough to pull straight from the manual PDF,
+`nndc.bnl.gov/endfdocs/ENDF-102-2023.pdf`, pages 144–147 in the 2023
+edition). `endf.mf6.parse_mf6` handles LAW=5 already; check `LTP` on each
+returned energy point (`dist['distribution'][i]['LTP']`) before assuming
+which reconstruction applies — the four representations are not
+interchangeable:
+
+- `LTP=1`: nuclear amplitude expansion — complex `a_l(E)` + real `b_l(E)`
+  Legendre coefficients (eqs. 6.13/6.14). Full-fidelity but rarely used.
+- `LTP=2`: residual cross section as Legendre coefficients (eqs.
+  6.15–6.18) — a direct fit to data, degrades at forward angles/low
+  energy where the interference term's Legendre representation isn't
+  well-behaved.
+- `LTP=12` / `LTP=14`: tabulated `(μ, P_NI)` pairs, linear in μ (12) or
+  linear in `ln(P_NI)` (14), normalized so `∫P_NI dμ = 1` over the
+  tabulated μ range. **This was the ENDF/B-VIII.1 p+¹²C representation.**
+  Reconstruct the physical differential cross section as
+  `σ(μ,E) = σ_Rutherford(μ,E) + σ_NI(E)·P_NI(μ,E)` for μ inside the
+  tabulated range (pure Rutherford outside it), with `σ_NI(E)` read
+  straight off MF=3/MT=2 at that energy and `P_NI` linearly interpolated
+  on the tabulated μ grid (ENDF-102 eqs. 6.19/6.20).
+
+Rutherford term (ENDF-102 eq. 6.9, confirmed against the standard
+nuclear-physics form independently): in the CM frame, with `T_cm` the CM
+kinetic energy of relative motion (`T_cm = E_lab · m_target/(m_beam +
+m_target)`, the same `cm2lab` factor used everywhere else in this skill)
+and `e² = 1.43996 MeV·fm`,
+
+```python
+sigma_ruth_fm2 = (Z1 * Z2 * 1.43996 / (4 * T_cm))**2 / np.sin(theta_cm / 2)**4
+sigma_ruth_b = sigma_ruth_fm2 / 100.0   # 1 barn = 100 fm^2
+```
+
+**Always check the tabulated energy grid before trusting a comparison.**
+`dist['distribution'][i]['E']` for every `i` gives the incident lab-energy
+grid (eV); light-target proton sublibraries commonly start at **1 MeV**
+and have nothing below it, because sub-MeV protons are out of scope for
+the transport/dosimetry work these evaluations are built for. That range
+can miss the entire resolved-resonance region an R-matrix archive fit was
+built to describe — the p+¹²C ENDF/B-VIII.1 file has zero coverage below
+1 MeV, so a fit dataset sitting entirely at 0.3–0.6 MeV (as the backward-
+angle ¹²C(p,p) data in this archive's `12C+p/8-9-26_claude_learns_12C+p/`
+does) has no ENDF curve to compare against at all. Check the overlap
+*before* building the plot, not after.
 ## Trojan Horse (THM) segments
 
 The modified R-matrix / half-off-shell path. A THM measurement induces the
@@ -819,14 +1041,42 @@ diverging at the observable.
 Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
 
 - `<config>` — A-matrix flag, `output/` and `checks/` dirs, check toggles.
+  A-matrix vs R-matrix is **purely a computational-efficiency choice, not a
+  physics one** — both formalisms give identical results. A-matrix (level
+  matrix) wins with many channels and few levels; R-matrix (channel matrix)
+  wins with many levels and few channels.
 - `<levels>` — one line **per channel of each level**, 31 fields matching
   `NucLine` (`include/NucLine.h`); the file stores `2J`, `2S`, `2L` as integers.
   Blank line between levels; `levelID` groups them.
 - `<segmentsData>` — one line per data segment: `isActive entranceKey exitKey
   minE maxE minA maxA isDiff [phaseJ phaseL] dataNorm varyNorm dataNormError
   [energyShift …] dataFile`. A `+10` on `isDiff` marks a THM/HOES segment.
+  **If hand-editing a line (e.g. appending a new segment, flipping a flag)**,
+  match the existing fixed-width column formatting exactly — each field padded
+  to its own column, not just whitespace-separated. A plain tab-joined line
+  parses fine for AZURE2's own engine (any whitespace tokenizes the same) but
+  the **GUI's segment editor silently mis-displays/fails to load it correctly**,
+  because it expects the columns at fixed character offsets. Diff a hand-edited
+  line against an unmodified neighbor before trusting it in the GUI.
 - `<segmentsTest>` — extrapolation grids (see above).
-- `<targetInt>` — target/experimental effects (integration, convolution).
+- `<targetInt>` — target/experimental effects (integration, convolution) —
+  **matched to a `<segmentsData>` or `<segmentsTest>` line purely by its own
+  numeric key column, independent of which section that key's line lives in**
+  (`EData::ReadTargetEffectsFile`). `<segmentsData>` keys are 1..N in file
+  order; `<segmentsTest>` keys are a *separate* 1..M counter, also in file
+  order — nothing ties a test segment's key to the data segment it's meant to
+  extrapolate. Appending one new `<segmentsTest>` line (by hand, via
+  `add_extrapolation`, or `set_extrapolations` — none of the three manage this
+  for you) can land on a key some *unrelated* data segment already claims for
+  a target effect, silently inheriting that segment's convolution/integration
+  treatment instead of the intended one (or none at all). The robust fix used
+  in this project: mirror **every** `<segmentsData>` line into `<segmentsTest>`
+  1:1, in the same order, all inert (`isActive=0`) by default, so a test
+  segment's key always matches its own data segment's key by construction —
+  then flip on only the ones actually needed. See
+  `R-matrix/11B+a/8-27-26_claude/build_mirrored_test_segments.py` for a
+  working implementation (also handles the `isDiff` code remap between the two
+  sections, see below).
 - `<parameterSettings>` — free/fixed, limits, nuisance, category, Minuit index.
 - `<mcmc>` — walkers, steps, threads.
 

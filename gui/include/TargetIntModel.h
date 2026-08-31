@@ -7,7 +7,7 @@
 Q_DECLARE_METATYPE(QList<double>);
 
 struct TargetIntData {
-  static const int SIZE = 19;
+  static const int SIZE = 22;
   int isActive;
   QString segmentsList;
   int numPoints;
@@ -27,6 +27,10 @@ struct TargetIntData {
   double stragglingCoefficient;
   double resonanceWidthMultiplier;
   double pointsPerWidth;
+  // Optional restriction of the effect to lab-energy windows.
+  QString applyRanges;        // "lo1-hi1,lo2-hi2"; empty = whole segment
+  double transitionWidth;     // MeV; 0 = hard edges
+  double autoTolerance;       // relative; 0 = always apply
 };
 
 /*!
