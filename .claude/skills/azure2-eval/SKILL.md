@@ -46,7 +46,14 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   **All output files and API results are CENTER-OF-MASS.** Never mix them.
   This includes `add_extrapolation(e_min, e_max, e_step)` — those are **lab**
   energies (multiply c.m. by `(m_beam + m_target)/m_target`), while the energies
-  that come *back* from `calculate_energies` are c.m.
+  that come *back* from `calculate_energies` are c.m. **The silent-failure mode
+  to watch for**: requesting a lab-frame `e_max` and later comparing the
+  returned (c.m.-frame) energy column against that same number looks exactly
+  like a hard extrapolation ceiling — the run doesn't error, it just appears to
+  "stop early" at `e_max * m_target/(m_beam+m_target)`. Caught this firsthand
+  chasing a phantom ~7%-short cutoff that tracked the mass ratio exactly once
+  compared side by side; there was no ceiling, just a lab-vs-c.m. mismatch in
+  what was being compared to what.
 - Always run **from the directory that contains the `.azr` file** (pyazr does
   this for you via `cwd=`, defaulting to the `.azr`'s directory), because the
   `.azr` stores `output/`, `checks/` and data paths *relative to itself*.
@@ -215,6 +222,20 @@ m.parameters.by_physical_level()   # {LevelKey: ParameterSet} — one entry per 
 m.physical_levels()                # the LevelKeys, ordered (jgroup, level)
 m.datasets.sys_errors(vary_only=True)   # per-segment normalization systematics (fractional)
 ```
+
+**`m.parameters` (and anything built on it — `.by_physical_level()`,
+`without_level()`, `only_level()`, `find()`) can throw `RuntimeError:
+parameter_info returned N parameters but params_fixed reported M`, preceded
+by `**WARNING: Denominator less than zero while transforming` for one or more
+levels.** This is a failure in pyazr's own parameter *introspection*
+table-builder (`_build_parameters`), not in the calculation engine. It has
+shown up on a model where `calculate_energies`/`calculate_rwa` (and the
+CLI's own extrapolation mode, independently) ran the same levels through
+cleanly and reproducibly with no warning at all — i.e. the core R-matrix
+calculation was fine; only the human-readable parameter table choked on
+those levels. Don't read this crash as evidence the fit or parameters are
+corrupted on its own — cross-check with a plain `calculate_energies` call
+(or the CLI) on the same file before concluding anything is actually wrong.
 
 A `LevelKey` prints as `5/2-#2@6.588MeV`; `(jgroup, level)` is its identity
 (AZURE2 restarts level numbering inside every J-group).
@@ -965,8 +986,32 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
 - `<segmentsData>` — one line per data segment: `isActive entranceKey exitKey
   minE maxE minA maxA isDiff [phaseJ phaseL] dataNorm varyNorm dataNormError
   [energyShift …] dataFile`. A `+10` on `isDiff` marks a THM/HOES segment.
+  **If hand-editing a line (e.g. appending a new segment, flipping a flag)**,
+  match the existing fixed-width column formatting exactly — each field padded
+  to its own column, not just whitespace-separated. A plain tab-joined line
+  parses fine for AZURE2's own engine (any whitespace tokenizes the same) but
+  the **GUI's segment editor silently mis-displays/fails to load it correctly**,
+  because it expects the columns at fixed character offsets. Diff a hand-edited
+  line against an unmodified neighbor before trusting it in the GUI.
 - `<segmentsTest>` — extrapolation grids (see above).
-- `<targetInt>` — target/experimental effects (integration, convolution).
+- `<targetInt>` — target/experimental effects (integration, convolution) —
+  **matched to a `<segmentsData>` or `<segmentsTest>` line purely by its own
+  numeric key column, independent of which section that key's line lives in**
+  (`EData::ReadTargetEffectsFile`). `<segmentsData>` keys are 1..N in file
+  order; `<segmentsTest>` keys are a *separate* 1..M counter, also in file
+  order — nothing ties a test segment's key to the data segment it's meant to
+  extrapolate. Appending one new `<segmentsTest>` line (by hand, via
+  `add_extrapolation`, or `set_extrapolations` — none of the three manage this
+  for you) can land on a key some *unrelated* data segment already claims for
+  a target effect, silently inheriting that segment's convolution/integration
+  treatment instead of the intended one (or none at all). The robust fix used
+  in this project: mirror **every** `<segmentsData>` line into `<segmentsTest>`
+  1:1, in the same order, all inert (`isActive=0`) by default, so a test
+  segment's key always matches its own data segment's key by construction —
+  then flip on only the ones actually needed. See
+  `R-matrix/11B+a/8-27-26_claude/build_mirrored_test_segments.py` for a
+  working implementation (also handles the `isDiff` code remap between the two
+  sections, see below).
 - `<parameterSettings>` — free/fixed, limits, nuisance, category, Minuit index.
 - `<mcmc>` — walkers, steps, threads.
 
