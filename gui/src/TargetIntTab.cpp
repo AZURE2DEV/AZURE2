@@ -445,7 +445,17 @@ bool TargetIntTab::writeFile(QTextStream &outStream) {
   QList<TargetIntData> lines = targetIntModel->getLines();
 
   for (int i = 0; i < lines.size(); i++) {
-    outStream << qSetFieldWidth(15) << lines.at(i).isActive << qSetFieldWidth(15) << '\"' + lines[i].segmentsList.remove(' ') + '\"' << qSetFieldWidth(15) << lines.at(i).numPoints;
+    // qSetFieldWidth(15) only pads a field UP TO 15 characters; it adds no
+    // separator at all once the quoted segmentsList exceeds that (any list
+    // longer than ~5 segment numbers), so the closing quote runs straight
+    // into numPoints's digits with no whitespace between them. Since every
+    // reader of this file (TargetEffect.cpp's engine parser and this class's
+    // own readFile() below) tokenizes on whitespace only, that merges the two
+    // fields into one garbled token and silently corrupts numPoints (and
+    // everything after it) on the next load. Force an explicit separator
+    // here so a long segmentsList can never swallow the following field,
+    // regardless of how qSetFieldWidth pads (or fails to pad) around it.
+    outStream << qSetFieldWidth(15) << lines.at(i).isActive << qSetFieldWidth(15) << '\"' + lines[i].segmentsList.remove(' ') + '\"' << qSetFieldWidth(0) << ' ' << qSetFieldWidth(15) << lines.at(i).numPoints;
 
     if (lines.at(i).isConvolution)
       outStream << qSetFieldWidth(15) << '1';
