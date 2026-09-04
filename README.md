@@ -51,6 +51,8 @@ bundled in-tree.
 **Build tools**
 - A C++ compiler with OpenMP support (GCC or Clang)
 - [CMake](https://cmake.org/) ≥ 3.16
+- `pkg-config` — CMake locates GSL and Qwt through it, so configuring fails
+  without it even when both libraries are installed
 
 **Libraries**
 - [GSL](https://www.gnu.org/software/gsl/) — GNU Scientific Library (math routines)
@@ -67,15 +69,31 @@ bundled in-tree.
 **Ubuntu / Debian**
 ```bash
 sudo apt-get update
-sudo apt-get install build-essential cmake libgsl-dev libreadline-dev \
+sudo apt-get install build-essential cmake pkg-config libgsl-dev libreadline-dev \
     qtscript5-dev libqwt-qt5-dev libqt5svg5-dev qtwebengine5-dev \
     python3 python3-numpy
 ```
 
 **macOS (Homebrew)**
 ```bash
-brew install cmake gsl readline qt@5 qwt libomp
+brew install cmake pkg-config gsl readline libomp qt@5 qwt-qt5
 ```
+
+Three Homebrew-specific notes, none of which apply to a conda/miniforge
+toolchain (which ships its own compiler, OpenMP and Qt in a single prefix):
+
+- **`libomp` is required.** Apple's clang understands no `-fopenmp` and ships
+  no OpenMP runtime, so without it CMake stops at `find_package(OpenMP)`.
+- **`qt@5` and `qwt-qt5` are keg-only**, meaning Homebrew deliberately leaves
+  them off the default search path. CMake asks `brew` for their locations
+  automatically, so a plain `cmake -S . -B build` works; you only need
+  `-DCMAKE_PREFIX_PATH="$(brew --prefix qt@5);$(brew --prefix qwt-qt5)"` if
+  `brew` is not on your `PATH`.
+- The plotting tab needs **`qwt-qt5`**, not `qwt` — plain `qwt` is the Qt6
+  build and will not link against a Qt5 GUI.
+
+Both Qt5 formulae are deprecated upstream and Homebrew will disable them on
+2027-05-19, which is the real deadline for a Qt6 migration.
 
 ---
 
