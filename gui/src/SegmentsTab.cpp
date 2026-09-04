@@ -1105,7 +1105,20 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
       // Check if there's additional advanced segment data after the file path
       // The data is appended as: " isAdvanced operationType numComponents entrance1 exit1 entrance2 exit2 ..."
       QString remainingData = dataFile;
-      QStringList dataParts = remainingData.split(" ", Qt::SkipEmptyParts);
+      QStringList dataParts;
+      // A path containing a space is written in double quotes, because the
+      // optional composite/UPOS fields follow it and are whitespace-delimited.
+      // Split the quoted name off first, then treat what follows as before, so
+      // the indices the parsing below relies on are unchanged.
+      if (remainingData.startsWith('"')) {
+        int close = remainingData.indexOf('"', 1);
+        if (close > 0) {
+          dataFile = remainingData.mid(1, close - 1);
+          dataParts << dataFile;
+          dataParts += remainingData.mid(close + 1).split(" ", Qt::SkipEmptyParts);
+        }
+      }
+      if (dataParts.isEmpty()) dataParts = remainingData.split(" ", Qt::SkipEmptyParts);
 
       if (dataParts.size() > 1) {
         // Extract the actual file path (first part)
@@ -1255,6 +1268,16 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
   return true;
 }
 
+// Quote a data-file path that contains a space.  The optional composite/UPOS
+// fields are written after the path and read back as whitespace-delimited
+// tokens, so an unquoted path with a space would be truncated to its first word
+// on the next load.  Paths without spaces are written bare, which keeps the
+// file byte-identical for everyone who has never used one.
+static QString quotePathIfNeeded(const QString &path) {
+  if (!path.contains(' ')) return path;
+  return QString("\"%1\"").arg(path);
+}
+
 bool SegmentsTab::writeSegDataFile(QTextStream &outStream) {
   QList<SegmentsDataData> lines = segmentsDataModel->getLines();
 
@@ -1275,7 +1298,7 @@ bool SegmentsTab::writeSegDataFile(QTextStream &outStream) {
               << qSetFieldWidth(15) << lines.at(i).energyShift
               << qSetFieldWidth(15) << lines.at(i).energyShiftError
               << qSetFieldWidth(15) << lines.at(i).varyEnergyShift
-              << qSetFieldWidth(0) << " " << lines.at(i).dataFile;
+              << qSetFieldWidth(0) << " " << quotePathIfNeeded(lines.at(i).dataFile);
 
     // Add advanced segment data after the file path for backwards compatibility
     if (lines.at(i).isAdvanced == 1) {
