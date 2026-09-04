@@ -9,7 +9,9 @@
 #include <gsl/gsl_integration.h>
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_spline.h>
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 #include <algorithm>
 #include <atomic>
 #include <cmath>

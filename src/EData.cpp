@@ -11,7 +11,9 @@
 #include "GSLException.h"
 #include <iostream>
 #include <iomanip>
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 #include <time.h>
 #include <unordered_map>
 

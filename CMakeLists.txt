@@ -213,6 +213,40 @@ else()
     message(STATUS "Using OpenMP")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+
+    # Finding OpenMP is not the same as being able to include <omp.h>, and seven
+    # source files include it.  For AppleClang, FindOpenMP locates the library
+    # and reports "-Xclang -fopenmp" with no -I and an empty
+    # OpenMP_CXX_INCLUDE_DIRS, while Homebrew keeps libomp keg-only -- so the
+    # header sits in a directory nothing searches and the first compile fails
+    # with "'omp.h' file not found" despite a successful configure.
+    #
+    # Test rather than assume: a conda or MacPorts toolchain has its own omp.h
+    # already on the include path and must keep using it, since its header has
+    # to match the runtime its standard library links.
+    include(CheckIncludeFileCXX)
+    get_property(_azure2_incs DIRECTORY PROPERTY INCLUDE_DIRECTORIES)
+    set(CMAKE_REQUIRED_FLAGS "${OpenMP_CXX_FLAGS}")
+    set(CMAKE_REQUIRED_INCLUDES ${_azure2_incs} ${OpenMP_CXX_INCLUDE_DIRS})
+    check_include_file_cxx(omp.h AZURE2_HAVE_OMP_H)
+    unset(CMAKE_REQUIRED_FLAGS)
+    unset(CMAKE_REQUIRED_INCLUDES)
+
+    if(OpenMP_CXX_INCLUDE_DIRS)
+        include_directories(${OpenMP_CXX_INCLUDE_DIRS})
+    endif()
+    if(NOT AZURE2_HAVE_OMP_H)
+        if(_libomp_prefix AND EXISTS "${_libomp_prefix}/include/omp.h")
+            include_directories("${_libomp_prefix}/include")
+            message(STATUS "OpenMP: omp.h taken from ${_libomp_prefix}/include")
+        else()
+            message(FATAL_ERROR
+                "OpenMP was found but <omp.h> is not on the include path.  On "
+                "macOS install the runtime with 'brew install libomp'; if it is "
+                "already installed somewhere unusual, pass its location with "
+                "-DCMAKE_PREFIX_PATH=/path/to/libomp.")
+        endif()
+    endif()
 endif()
 
 # Extra includes/libs
