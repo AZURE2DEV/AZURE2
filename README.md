@@ -43,6 +43,30 @@ Upstream project: <https://azure.nd.edu/> · Source:
 
 ---
 
+## Ready-built downloads
+
+If you only want to *run* AZURE2, take one of these instead of building it.
+Each is self-contained: Qt, Qwt, GSL, readline and the OpenMP runtime are
+inside, so nothing else has to be installed.
+
+| Platform | Download | How to run it |
+|---|---|---|
+| **Windows** (x86_64) | [`AZURE2-windows-x86_64.zip`](https://github.com/AZURE2DEV/AZURE2/releases/download/continuous-windows/AZURE2-windows-x86_64.zip) | Unzip anywhere, run `AZURE2.exe`. |
+| **macOS** | [`AZURE2-macos.dmg`](https://github.com/AZURE2DEV/AZURE2/releases/download/continuous-windows/AZURE2-macos.dmg) | Open the disk image, drag `AZURE2.app` onto Applications. |
+| **Linux** (x86_64) | build artifact `AZURE2-linux` on any [run page](https://github.com/AZURE2DEV/AZURE2/actions) | An AppImage: `chmod +x` it and run it. |
+
+These are rolling builds of the latest `dev` commit, replaced on every push, so
+they are for using the code rather than citing it — for a citable version use a
+tagged release.
+
+On macOS the first launch is refused with "the developer cannot be verified":
+the build is signed ad-hoc rather than notarized with an Apple Developer ID.
+Right-click (or control-click) `AZURE2.app`, choose **Open**, and confirm. Only
+the first launch needs this. The macOS build is compiled for Intel and runs on
+Apple Silicon through Rosetta.
+
+---
+
 ## Dependencies
 
 These are the only components you need to install yourself; everything else is

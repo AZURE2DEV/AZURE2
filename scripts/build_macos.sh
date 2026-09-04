@@ -54,13 +54,19 @@ cmake .. \
     -DUSE_API=ON \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 \
-    -DCMAKE_INSTALL_PREFIX=/Applications \
+    -DCMAKE_INSTALL_PREFIX="$PWD/stage" \
     $QWT_CMAKE_ARGS
 
 echo -e "${GREEN}Building AZURE2 for macOS...${NC}"
 make -j$(sysctl -n hw.ncpu) VERBOSE=1
 
-echo -e "${GREEN}Installing...${NC}"
+# Into a staging directory under the build tree, never into /Applications
+# itself.  This script's deliverable is the .dmg; the user drags the app across
+# from it.  Installing straight to the prefix also scattered the project's
+# headers, static libraries and cmake/pkg-config files through
+# /Applications/include, /Applications/lib and /Applications/share, which is
+# not what anyone means by "install an app".
+echo -e "${GREEN}Staging install tree...${NC}"
 make install
 
 echo -e "${GREEN}Creating macOS application bundle...${NC}"
@@ -182,15 +188,76 @@ if [ -d "$BUNDLE_PATH" ]; then
         fi
     done
     
-    # Verify the bundle
+    # Sweep the whole bundle to a fixpoint.  The pass above follows
+    # dependencies one level deep, which is not enough -- readline pulls
+    # ncurses and ncurses pulls libtinfo, so a second-level library was left
+    # pointing at the build machine and the bundle failed on any Mac that did
+    # not happen to have it.  Every Mach-O file is examined, the Qt plugins
+    # included, since a plugin can need a library the executable never
+    # references.
+    echo -e "${YELLOW}Sweeping transitive dependencies...${NC}"
+
+    bundle_machos() {
+        find "$BUNDLE_PATH" -type f \( -name '*.dylib' -o -name '*.so' -o -perm +111 \) 2>/dev/null \
+            | while read -r f; do file "$f" 2>/dev/null | grep -q 'Mach-O' && echo "$f"; done
+    }
+    # Where Contents/Libraries sits relative to a given file, so a plugin two
+    # directories down and the executable one down each get a correct path.
+    rel_to_libs() {
+        python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], os.path.dirname(sys.argv[2])))' \
+            "$LIBS_DIR" "$1"
+    }
+
+    for pass in 1 2 3 4 5 6; do
+        added=0
+        for f in $(bundle_machos); do
+            install_name_tool -add_rpath "@loader_path/$(rel_to_libs "$f")" "$f" 2>/dev/null || true
+            for dep in $(otool -L "$f" 2>/dev/null | tail -n +2 | awk '{print $1}'); do
+                case "$dep" in @*|/usr/lib/*|/System/*) continue ;; esac
+                name=$(basename "$dep")
+                if [ ! -f "$LIBS_DIR/$name" ] && [ -f "$dep" ]; then
+                    cp -L "$dep" "$LIBS_DIR/$name" 2>/dev/null || continue
+                    chmod u+w "$LIBS_DIR/$name"
+                    install_name_tool -id "@rpath/$name" "$LIBS_DIR/$name" 2>/dev/null || true
+                    echo "  + $name"
+                    added=1
+                fi
+                [ -f "$LIBS_DIR/$name" ] && install_name_tool -change "$dep" "@rpath/$name" "$f" 2>/dev/null || true
+            done
+        done
+        if [ "$added" -eq 0 ]; then echo "  settled after pass $pass"; break; fi
+    done
+
+    # Verify for real: anything still naming an absolute path outside the
+    # bundle is a library this Mac happens to have and the user's may not.
     echo -e "${YELLOW}Verifying bundle dependencies...${NC}"
-    if otool -L "$BUNDLE_PATH/Contents/MacOS/AZURE2" | grep -q "/usr/local\|/opt/homebrew" | grep -v "@"; then
-        echo -e "${YELLOW}Warning: Some external dependencies may still be present${NC}"
-        otool -L "$BUNDLE_PATH/Contents/MacOS/AZURE2" | grep "/usr/local\|/opt/homebrew" | head -5
-    else
-        echo -e "${GREEN}All external dependencies appear to be bundled${NC}"
+    # Collected through a file rather than $(...): bash 3.2, which is what
+    # /bin/bash still is on macOS, mis-parses a case pattern's ")" inside a
+    # command substitution.
+    LEAKFILE=$(mktemp)
+    for f in $(bundle_machos); do
+        for d in $(otool -L "$f" 2>/dev/null | tail -n +2 | awk '{print $1}'); do
+            case "$d" in
+                @*|/usr/lib/*|/System/*) continue ;;
+            esac
+            echo "$(basename "$f") -> $d" >> "$LEAKFILE"
+        done
+    done
+    sort -u "$LEAKFILE" -o "$LEAKFILE"
+    if [ -s "$LEAKFILE" ]; then
+        echo -e "${RED}The bundle still references libraries outside itself:${NC}"
+        cat "$LEAKFILE"; rm -f "$LEAKFILE"
+        echo -e "${RED}It would fail on a Mac without them.${NC}"
+        exit 1
     fi
-    
+    rm -f "$LEAKFILE"
+    if [ ! -f "$BUNDLE_PATH/Contents/PlugIns/platforms/libqcocoa.dylib" ]; then
+        echo -e "${RED}No Contents/PlugIns/platforms/libqcocoa.dylib -- Qt cannot start${NC}"
+        echo -e "${RED}without its platform plugin and the app dies before main().${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}Self-contained: no external references, platform plugin present${NC}"
+
     echo -e "${GREEN}Dependency bundling completed${NC}"
     echo "Bundled libraries: $(ls -1 "$LIBS_DIR"/*.dylib 2>/dev/null | wc -l)"
     
@@ -200,31 +267,26 @@ if [ -d "$BUNDLE_PATH" ]; then
         codesign --deep --force --verify --verbose --sign - "$BUNDLE_PATH" || echo -e "${YELLOW}Code signing failed (no certificates available)${NC}"
     fi
     
+    # The disk image is built here rather than with "make package".  CPack's
+    # DragNDrop generator packages the whole install tree, so its .dmg carried
+    # include/, lib/ and share/ -- the project's headers and static libraries --
+    # beside the application, which is confusing to hand to a student.  This one
+    # holds the app, an Applications symlink to drag it onto, and a note.
     echo -e "${GREEN}Creating DMG package...${NC}"
-    make package
-    
-    # Create enhanced distributable DMG with documentation
-    if [ -f "AZURE2-*-macOS.dmg" ]; then
-        echo -e "${YELLOW}Creating enhanced DMG with documentation...${NC}"
-        
-        # Create temporary directory for DMG contents
+    if true; then
         DMG_TEMP=$(mktemp -d)
-        mkdir -p "$DMG_TEMP/AZURE2"
-        
-        # Copy the application bundle
-        cp -R "$BUNDLE_PATH" "$DMG_TEMP/AZURE2/"
+
+        # At the top level, beside the Applications symlink: the drag-and-drop
+        # gesture the window is asking for only reads if the two sit together.
+        cp -R "$BUNDLE_PATH" "$DMG_TEMP/"
         
         # Copy documentation if available
-        if [ -f "../README.md" ]; then
-            cp "../README.md" "$DMG_TEMP/AZURE2/"
-        fi
-        
         if [ -f "../LICENSE" ]; then
-            cp "../LICENSE" "$DMG_TEMP/AZURE2/"
+            cp "../LICENSE" "$DMG_TEMP/LICENSE.txt"
         fi
-        
+
         # Create README for distribution
-        cat > "$DMG_TEMP/AZURE2/README_DISTRIBUTION.txt" << EOF
+        cat > "$DMG_TEMP/READ ME FIRST.txt" << EOF
 
 AZURE2 for macOS - Standalone Distribution
 ==========================================
@@ -232,8 +294,11 @@ AZURE2 for macOS - Standalone Distribution
 This is a standalone distribution of AZURE2 that includes all necessary dependencies.
 
 Installation:
-1. Drag AZURE2.app to your Applications folder (optional)
-2. Double-click AZURE2.app to run
+1. Drag AZURE2.app onto the Applications folder shown beside it.
+2. The first time you open it, macOS will say the developer cannot be
+   verified: this build is signed ad-hoc, not notarized with an Apple
+   Developer ID. Right-click (or control-click) AZURE2.app, choose "Open",
+   and confirm. Only the first launch needs this.
 
 System Requirements:
 - macOS 10.15 (Catalina) or later
@@ -254,7 +319,7 @@ EOF
         ln -sf /Applications "$DMG_TEMP/Applications"
         
         # Create the final DMG
-        FINAL_DMG_NAME="AZURE2-$(date +%Y%m%d)-macOS-Standalone.dmg"
+        FINAL_DMG_NAME="AZURE2-$(date +%Y%m%d)-macOS-$(uname -m).dmg"
         hdiutil create -srcfolder "$DMG_TEMP" -volname "AZURE2" -fs HFS+ -fsargs "-c c=64,a=16,e=16" -format UDBZ "$FINAL_DMG_NAME"
         
         # Cleanup
@@ -265,8 +330,7 @@ EOF
     
     echo -e "${GREEN}macOS build completed successfully!${NC}"
     echo "Application bundle: ${PWD}/${BUNDLE_PATH}"
-    echo "Standard DMG: ${PWD}/AZURE2-*-macOS.dmg"
-    echo "Standalone DMG: ${PWD}/AZURE2-*-macOS-Standalone.dmg"
+    echo "Disk image:        ${PWD}/${FINAL_DMG_NAME}"
     
     # Show final bundle information
     echo -e "${BLUE}Final bundle information:${NC}"

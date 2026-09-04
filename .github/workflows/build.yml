@@ -277,23 +277,21 @@ jobs:
           echo "--- packaged ---"
           ls -R dist | head -60
 
+      # A redistributable .app inside a .dmg, not the bare binary: the build
+      # machine's Qt, Qwt, GSL, readline and libomp are copied into the bundle
+      # and every reference rewritten to point there.  The script refuses to
+      # produce a disk image whose contents still name a path outside the
+      # bundle, so a .dmg that reaches a user is one that runs without Homebrew.
       - name: Package (macos)
         if: matrix.name == 'macos'
         run: |
+          set -e
+          export PATH="$QT5_PREFIX/bin:$PATH"   # macdeployqt lives here
+          bash scripts/build_macos.sh
           mkdir -p dist
-          cp build/src/AZURE2 dist/
-          otool -L dist/AZURE2 > dist/linked-libraries.txt
-          cat > dist/README-packaging.txt <<'EOF'
-          This is the bare binary, not a redistributable .app bundle.
-
-          It resolves Qt, GSL and readline through the paths they had on the
-          build machine, so it will only run where those exist. Making it
-          redistributable needs macdeployqt for the Qt frameworks, the non-Qt
-          dylibs copied into Contents/Frameworks with their install names
-          rewritten to @executable_path/../Frameworks, and codesigning plus
-          notarization for Gatekeeper. See linked-libraries.txt for what it
-          currently depends on.
-          EOF
+          cp build-macos/*.dmg dist/
+          cp -R build-macos/src/AZURE2.app dist/
+          ls -lh dist
 
       # A single self-contained file that runs on any reasonably current distro
       # without root, which suits a Qt desktop application far better than a
@@ -403,6 +401,14 @@ jobs:
           name: AZURE2-windows
           path: dist
 
+      # Best effort: a macOS packaging failure must not stop Windows users
+      # getting a build, which is why this job runs on !cancelled() at all.
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: AZURE2-macos
+          path: dist-macos
+
       - name: Zip it
         run: |
           set -e
@@ -438,6 +444,14 @@ jobs:
           # --clobber so the stable filename is overwritten rather than
           # accumulating AZURE2-windows-x86_64-1.zip and friends.
           gh release upload "$TAG" AZURE2-windows-x86_64.zip --clobber
+          # The macOS disk image, when that platform packaged successfully.
+          DMG=$(ls dist-macos/*.dmg 2>/dev/null | head -1 || true)
+          if [ -n "$DMG" ]; then
+            cp "$DMG" AZURE2-macos.dmg
+            gh release upload "$TAG" AZURE2-macos.dmg --clobber
+          else
+            echo "No macOS disk image in this run; leaving the previous one in place."
+          fi
           gh release edit "$TAG" \
             --prerelease \
             --title "Windows continuous build" \
