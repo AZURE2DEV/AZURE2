@@ -211,6 +211,16 @@ if [ -d "$BUNDLE_PATH" ]; then
     for pass in 1 2 3 4 5 6; do
         added=0
         for f in $(bundle_machos); do
+            # Normalise the file's own install name first.  otool -L reports a
+            # dylib's LC_ID_DYLIB as its first entry, so a plugin copied from
+            # Homebrew still advertises itself as
+            # /usr/local/opt/qt@5/plugins/... and reads as an outside reference
+            # even though nothing loads it by that path.  Rewriting the id to
+            # @rpath makes the sweep and the check below see only real
+            # dependencies -- and is what a bundled library should say anyway.
+            case "$f" in
+                *.dylib|*.so) install_name_tool -id "@rpath/$(basename "$f")" "$f" 2>/dev/null || true ;;
+            esac
             install_name_tool -add_rpath "@loader_path/$(rel_to_libs "$f")" "$f" 2>/dev/null || true
             for dep in $(otool -L "$f" 2>/dev/null | tail -n +2 | awk '{print $1}'); do
                 case "$dep" in @*|/usr/lib/*|/System/*) continue ;; esac
