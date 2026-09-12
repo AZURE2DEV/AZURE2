@@ -384,6 +384,29 @@ class AzrLevel:
         j = int(self.J) if float(self.J).is_integer() else f"{int(round(2*self.J))}/2"
         return f"{j}{'+' if self.parity > 0 else '-'}"
 
+    @property
+    def active(self):
+        """Is the level active (the ``isActive`` field of its lines)?
+
+        AZURE2 skips every ``<levels>`` line whose ``isActive`` is 0
+        (``CNuc::Fill``), so an inactive level is invisible to the engine: it
+        gets no parameters and does not count in the engine's level numbering.
+        The flag is per line, but a level whose lines disagree is not something
+        the engine can represent consistently, so that raises here.
+        """
+        flags = {c.active for c in self.channels}
+        if len(flags) != 1:
+            raise ValueError(
+                f"level {self.jpi} at {self.energy} MeV has both active and "
+                f"inactive channel lines; AZURE2 reads them line by line, so "
+                f"the level would be half present.")
+        return flags.pop()
+
+    def set_active(self, active):
+        """Set the ``isActive`` flag on every channel line of the level."""
+        for c in self.channels:
+            c._set("isActive", 1 if active else 0)
+
     def set_energy(self, energy):
         """Set the level energy on every channel line of the level."""
         for c in self.channels:
@@ -889,9 +912,19 @@ class AzrModel:
         energy-based key cannot identify it.
 
         Both indices are 1-based, as the API reports them.
+
+        **Inactive levels are skipped**, because the engine skips them
+        (``CNuc::Fill`` reads only lines with ``isActive == 1``): an inactive
+        line neither opens a J-group nor takes a level number.  Counting them
+        here shifted every later level of the group by one, so a fit applied
+        through :meth:`apply_fit` landed one level early -- the 13C+alpha
+        archive's 5/2+ block was silently corrupted that way at two bakes.
+        Use :meth:`purge_inactive_levels` to remove such lines for good.
         """
         order, seen, out = [], {}, {}
         for lv in self.levels:
+            if not lv.active:
+                continue
             k = (int(round(2 * lv.J)), int(lv.parity))
             if k not in seen:
                 order.append(k)
@@ -899,6 +932,26 @@ class AzrModel:
             seen[k] += 1
             out[(order.index(k) + 1, seen[k])] = lv
         return out
+
+    @property
+    def active_levels(self):
+        """The levels AZURE2 will actually read (``isActive == 1``), in file order."""
+        return [lv for lv in self.levels if lv.active]
+
+    def purge_inactive_levels(self):
+        """Delete every inactive level from the file.  Returns the removed
+        :class:`AzrLevel` objects.
+
+        An inactive level contributes nothing to the engine, but it is a trap
+        for anything that numbers levels from the file text (older versions of
+        :meth:`engine_level_keys`, hand edits, the GUI's level table), so a
+        model that is going to be edited or baked programmatically is safer
+        without them.  Level IDs are renumbered on the next write.
+        """
+        gone = [lv for lv in self.levels if not lv.active]
+        self.levels = [lv for lv in self.levels if lv.active]
+        self._renumber()
+        return gone
 
     def apply_fit(self, parameters, x, transform=None, physical=False,
                   pairs=None, strict=True):
@@ -1052,6 +1105,41 @@ class AzrModel:
             raise KeyError(f"no <segmentsData> line matches {file_substr!r}.")
         return changed
 
+    def set_segment_energy_range(self, file_substr, energy_min=None,
+                                 energy_max=None):
+        """Cap or widen the lab-energy window of every ``<segmentsData>`` line
+        matching ``file_substr`` (the ``minE`` / ``maxE`` fields, lab MeV).
+        A ``None`` leaves that bound as it is.  Returns the number of lines
+        changed.
+
+        AZURE2 only loads the data points inside the window, so this is how an
+        energy-stepped fit grows its data set -- and, like any change to the
+        loaded grid, it invalidates ``output/intEC.dat`` (delete it, or give
+        the edited model its own output directory).
+        """
+        if "<segmentsData>" not in self._suffix:
+            raise ValueError("no <segmentsData> block to edit.")
+        out, changed, inside = [], 0, False
+        for line in self._suffix.splitlines():
+            s = line.strip()
+            if s == "<segmentsData>":
+                inside = True
+            elif s == "</segmentsData>":
+                inside = False
+            elif inside and s and file_substr in line:
+                t = line.split()
+                if energy_min is not None:
+                    t[3] = _fmt(float(energy_min))
+                if energy_max is not None:
+                    t[4] = _fmt(float(energy_max))
+                line = " ".join(t)
+                changed += 1
+            out.append(line)
+        self._suffix = "\n".join(out)
+        if changed == 0:
+            raise KeyError(f"no <segmentsData> line matches {file_substr!r}.")
+        return changed
+
     # -- adding / removing whole data segments --------------------------------
 
     # observable name -> isDiff code for a <segmentsData> line
@@ -1161,6 +1249,87 @@ class AzrModel:
         except ValueError:
             raise ValueError("no <segmentsData> block to clear.")
         self._suffix = "\n".join(lines[:start + 1] + lines[end:])
+        return self
+
+    # -- experimental effects (edits the <targetInt> block) -------------------
+
+    def target_effects(self):
+        """The raw ``<targetInt>`` lines (one experimental effect each)."""
+        lines = self._suffix.splitlines()
+        try:
+            start = lines.index("<targetInt>") + 1
+            end = lines.index("</targetInt>")
+        except ValueError:
+            return []
+        return [ln for ln in lines[start:end] if ln.strip()]
+
+    def _splice_target_int(self, new_lines):
+        lines = self._suffix.splitlines()
+        try:
+            start = lines.index("<targetInt>")
+            end = lines.index("</targetInt>")
+        except ValueError:
+            self._suffix = (self._suffix.rstrip("\n") + "\n\n<targetInt>\n"
+                            + "\n".join(new_lines) + "\n</targetInt>\n")
+            return
+        self._suffix = "\n".join(lines[:start + 1] + new_lines + lines[end:])
+
+    def clear_target_effects(self):
+        """Remove every ``<targetInt>`` line (leave the block empty)."""
+        self._splice_target_int([])
+        return self
+
+    def add_target_effect(self, segments, n_points=200, gaussian_sigma=None,
+                          beam_profile=None, tpc_sigma=0.0, truncation=0.0,
+                          photodissociation=False, q_coefficients=None,
+                          resonance_width_multiplier=20.0, points_per_width=50.0,
+                          active=True):
+        """Append one experimental effect (a ``<targetInt>`` line).
+
+        ``segments`` is the segment-key list as AZURE2 writes it (``"3"``,
+        ``"3-5"``, ``"3,7-9"`` or an iterable of ints).  Keys count *every*
+        ``<segmentsData>`` line, active or not, and a ``<segmentsTest>`` line
+        with the same key gets the effect too (see the azure2-eval skill).
+
+        ``gaussian_sigma`` (lab MeV) is the classic beam-energy Gaussian
+        convolution.  ``beam_profile`` is the beam-profile kernel: a list of
+        ``(xi, omega, alpha, weight)`` skewed-Gaussian components in lab
+        entrance-channel energy (MeV), with the detector energy resolution
+        ``tpc_sigma`` (lab MeV; the per-point energy window comes from
+        columns 5-6 of the data file), an optional ``truncation`` of each
+        component at mean +- n standard deviations (0 = none) and, for the
+        inverse reaction of a photodissociation measurement,
+        ``photodissociation=True`` to weight the average with the
+        detailed-balance factor.  ``q_coefficients`` are the finite-geometry
+        attenuation coefficients Q_0..Q_n.  Target integration and straggling
+        are not exposed here.  Returns ``self``.
+        """
+        if not isinstance(segments, str):
+            segments = ",".join(str(int(k)) for k in segments)
+        toks = [1 if active else 0, f'"{segments}"', int(n_points)]
+        if gaussian_sigma is not None:
+            toks += [1, _fmt(gaussian_sigma)]
+        else:
+            toks += [0, 0]
+        toks += [0, 0, '""', 0]                        # no target integration
+        if q_coefficients:
+            toks += [1, len(q_coefficients)] + [_fmt(q) for q in q_coefficients]
+        else:
+            toks += [0, 0]
+        toks += [0, '""', 0]                           # no energy-dependent sigma
+        toks += [0, 0.04, _fmt(resonance_width_multiplier), _fmt(points_per_width)]
+        if beam_profile:
+            toks += ["beamprofile", len(beam_profile)]
+            for xi, omega, alpha, weight in beam_profile:
+                toks += [_fmt(xi), _fmt(omega), _fmt(alpha), _fmt(weight)]
+            toks += [_fmt(tpc_sigma), _fmt(truncation), 1 if photodissociation else 0]
+        line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
+        lines = self._suffix.splitlines()
+        if "<targetInt>" in lines:
+            end = lines.index("</targetInt>")
+            self._suffix = "\n".join(lines[:end] + [line] + lines[end:])
+        else:
+            self._splice_target_int([line])
         return self
 
     # -- rendering ------------------------------------------------------------

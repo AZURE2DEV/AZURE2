@@ -274,7 +274,7 @@ bool GradAdjointPoint(EPoint *point, int xsComponent, double fitBar, GradAccum &
   TargetEffect *te = point->IsTargetEffect()
       ? point->GetParentData()->GetTargetEffect(point->GetTargetEffectNum())
       : nullptr;
-  bool subpointTE = te && (te->IsConvolution() || te->IsTargetIntegration() || te->IsConvCoefficients());
+  bool subpointTE = te && te->IsSubPointEffect();
   if (subpointTE)
     return GradTargetEffectAdjoint(point, fitBar, accum, shiftDeriv, xsComponent, compound, config);
 
@@ -305,7 +305,7 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
   TargetEffect *te = point->IsTargetEffect()
       ? point->GetParentData()->GetTargetEffect(point->GetTargetEffectNum())
       : nullptr;
-  bool subpointTE = te && (te->IsConvolution() || te->IsTargetIntegration() || te->IsConvCoefficients());
+  bool subpointTE = te && te->IsSubPointEffect();
 
   // Fast path: plain point, single forward reused for model and adjoint.
   if (!hasComp && !subpointTE) {

@@ -13,15 +13,39 @@
 # which is how this test failed on all three CI platforms while passing on the
 # machine it was written on.
 #
-# 2e-2 is chosen against what the test actually has to catch, all of which are
-# an order of magnitude larger than the noise:
+# 2e-2 is kept as a bound on toolchain noise, which is what it measures.
 #
-#     correct (pair 1 overrides the default with V0 = 20)   3.6598e6
-#     the per-pair override ignored, default V0 = 40 used   4.1257e6   +12.7%
-#     the hybrid model not reaching the CLI at all          4.3549e6   +19.0%
+# It is NO LONGER calibrated against the per-pair failure mode, and the note
+# that used to stand here was wrong about how much this chi-squared can see:
 #
-# So: ~18x above the observed numerical spread, ~6x below the smallest real
-# regression. Widen it only with a measurement, not a guess -- and if a change
-# ever needs it widened past a few percent, the right answer is a less
-# sensitive test project, not a looser bound.
+#     correct (pair 1 overrides the default with V0 = 20)   2.46215e6
+#     the per-pair override ignored, default V0 = 40 used   2.46168e6   -0.02%
+#
+# The +12.7% separation recorded previously was an artefact of an unconverged
+# target integral, not a physical sensitivity. Measured 2026-09-11 by refining
+# the integration grid with both the current code and the code as it stood
+# before the resonance-width estimator was fixed:
+#
+#     lattice pitch (points per width)      50        200       800
+#     current code,  V0 = 20            2.46215e6  2.47531e6  2.47621e6
+#     current code,  V0 = 40            2.46168e6  2.47484e6  2.47574e6
+#     pre-fix code,  V0 = 20            2.46094e6  2.47431e6  2.47614e6
+#     pre-fix code,  V0 = 40            2.44869e6  2.47379e6  2.47566e6
+#     separation, pre-fix code            -0.50%     -0.02%     -0.02%
+#
+# Both codes converge to the same answer (2.4762e6, agreeing to 0.003%) and to
+# the same -0.02% separation: the potential moves this project's chi-squared by
+# a fifth of a percent at most, and the old large separation came from the grid
+# responding to the potential through the penetrability in its width estimate,
+# not from the cross section.
+#
+# So the per-pair SEMANTICS are covered by check_per_pair.py, which compares the
+# configurations directly, and not by this bound. What the bound still catches is
+# a gross change in the target-integration or Coulomb path.
+#
+# Note also that the reference is recorded at the project's shipped grid settings
+# (10 sub-points, 20 widths, 50 points per width), which sit 0.6% below the
+# pitch-converged 2.4762e6. That is deliberate -- the reference pins what the
+# suite actually runs -- but raise points-per-width if you ever want this project
+# to represent a converged integral.
 2e-2

@@ -170,9 +170,42 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
         angleIntegratedE1XS = real(sumE1) / 100.;
         angleIntegratedE2XS = real(sumE2) / 100.;
         if (!point->IsAngularDist()) {
-          point->SetFitCrossSection(angleIntegratedXS);
-          point->SetFitE1CrossSection(angleIntegratedE1XS);
-          point->SetFitE2CrossSection(angleIntegratedE2XS);
+          // Identical-particle (Bose/Fermi) correction for the reported
+          // total. This partial-wave-unitarity sum (above) never consults
+          // GetIdenticalSign()/IsIdentical() the way the differential branch
+          // below does (rtFactor/itFactor, aa==ir identical case) -- so on
+          // its own it is the total cross section for *distinguishable*
+          // particles, silently applied to an aa==ir identical pair too.
+          //
+          // The correct factor is x2, not the differential branch's x4: x4
+          // is the enhancement of the symmetrized |F(theta)|^2 integrated
+          // over the full 0-pi range, which double-counts every physical
+          // collision for identical particles (theta and pi-theta are the
+          // same event). The physically meaningful total -- the one a
+          // reaction-rate calculation needs -- is half of that full-range
+          // integral, i.e. x2 relative to this sum. Verified against JINA
+          // ReacLib's alpha+alpha+alpha->12C rate (FY05): a 4He+4He elastic
+          // angle-integrated cross section computed here fed into the
+          // Nomoto (1985)/Langanke (1986) sequential rate formula lands
+          // within ~5-13% of ReacLib across T9 = 0.08-1.0 with x2; x4
+          // overshoots by ~2x, x1 (this branch's old behavior) undershoots
+          // by ~1.8x.
+          //
+          // Scoped to the reported cross section only -- angleIntegratedXS
+          // itself (and E1/E2) is left unscaled below, since it is also the
+          // normalization denominator for angular-distribution coefficients
+          // (angularCoeff), a separate, unverified case.
+          double reportedXS = angleIntegratedXS;
+          double reportedE1XS = angleIntegratedE1XS;
+          double reportedE2XS = angleIntegratedE2XS;
+          if (aa == ir && compound()->GetPair(aa)->IsIdentical()) {
+            reportedXS *= 2.0;
+            reportedE1XS *= 2.0;
+            reportedE2XS *= 2.0;
+          }
+          point->SetFitCrossSection(reportedXS);
+          point->SetFitE1CrossSection(reportedE1XS);
+          point->SetFitE2CrossSection(reportedE2XS);
           return;
         }
       }

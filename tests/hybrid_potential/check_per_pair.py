@@ -31,7 +31,9 @@ AZR = os.path.join(HERE, "hybrid_potential.azr")
 
 # The project as committed: default Woods-Saxon V0 = 40, pair 1 overriding it
 # with V0 = 20, pair 2 (the photon pair) off.
-FILE_CHI2 = 3659795.66031825
+# Re-measured 2026-09-11, when the project moved to a converged
+# resonance-width multiplier of 20 (see ../../include/AdaptiveIntegrationGrid.h).
+FILE_CHI2 = 2462154.20340123
 TOL = 1e-6           # relative; the two paths should agree to round-off
 
 failures = []
@@ -106,8 +108,16 @@ path = variant("_no_hybrid.azr", NO_HYBRID)
 with azure2(path, cwd=HERE) as m:
     chi2_off = float(np.sum(m.calculate_chi2_rwa(np.asarray(m.params_rwa, float))))
     print(f"        baseline chi2 = {chi2_off:.6f}")
+    # 1e-4, not the 1e-3 this used to demand. The potential's effect on this
+    # project's chi-squared is 2.9e-4 relative (2462859.63 against 2462154.20),
+    # measured 2026-09-11. The larger figure the old threshold assumed came from
+    # an unconverged target integral, in which the grid itself responded to the
+    # potential through the penetrability in its resonance-width estimate;
+    # refining the grid removes that in the pre-fix code too (see ../tolerance).
+    # Both values here come from the same process, so the comparison is
+    # deterministic and 1e-4 still leaves a factor of three of margin.
     check_true("the potential changes the answer",
-               abs(chi2_off - FILE_CHI2) > 1e-3 * FILE_CHI2,
+               abs(chi2_off - FILE_CHI2) > 1e-4 * FILE_CHI2,
                f"{chi2_off} vs {FILE_CHI2}")
 
 print("\n4. switching pair 1 off at runtime returns the baseline")

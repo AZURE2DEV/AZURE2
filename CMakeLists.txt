@@ -53,6 +53,50 @@ option(USE_MCMC "Use MCMC Bayesian sampling OFF" ON)
 option(USE_GCOV "Create a GCov-enabled build." OFF)
 option(CODE_COVERAGE "Enable coverage reporting" OFF)
 
+# ---------------------------------------------------------------- macOS/Homebrew
+# Homebrew needs help that a Linux build never does, and without it a plain
+# "cmake -S . -B build" fails on macOS for two unrelated reasons:
+#
+#   * Apple's clang ships no OpenMP runtime at all.  The compiler needs
+#     "-Xpreprocessor -fopenmp", the runtime comes from the separate libomp
+#     formula, and FindOpenMP cannot infer either for AppleClang -- so
+#     find_package(OpenMP REQUIRED) below fails outright.
+#   * qt@5 and qwt-qt5 are keg-only: Homebrew deliberately leaves them out of
+#     the default prefix, so find_package(Qt5) does not see them.
+#
+# Everything here is derived by asking brew, and every value is overridable
+# from the command line, so an explicit -D or a conda/MacPorts toolchain (which
+# has none of these problems, having its own compiler and Qt in one prefix)
+# still wins.
+if(APPLE AND NOT CROSS_COMPILE_WINDOWS)
+    find_program(BREW_EXECUTABLE brew)
+    if(BREW_EXECUTABLE)
+        # Keg-only or not, adding the prefix is harmless and makes the build
+        # independent of what the user has linked into /opt/homebrew.
+        foreach(_formula qt@5 qwt-qt5 qwt readline gsl libomp)
+            execute_process(COMMAND ${BREW_EXECUTABLE} --prefix ${_formula}
+                            OUTPUT_VARIABLE _prefix
+                            OUTPUT_STRIP_TRAILING_WHITESPACE
+                            ERROR_QUIET
+                            RESULT_VARIABLE _rc)
+            if(_rc EQUAL 0 AND IS_DIRECTORY "${_prefix}")
+                list(APPEND CMAKE_PREFIX_PATH "${_prefix}")
+                if(_formula STREQUAL "libomp")
+                    set(_libomp_prefix "${_prefix}")
+                endif()
+                message(STATUS "Homebrew ${_formula}: ${_prefix}")
+            endif()
+        endforeach()
+
+        # The libomp prefix is only recorded here.  It is applied further down,
+        # and then only if the compiler cannot do OpenMP by itself -- a conda or
+        # MacPorts toolchain brings its own, and must not be overridden.
+    else()
+        message(STATUS "Homebrew not found; assuming a self-contained toolchain "
+                       "(conda/MacPorts) that provides OpenMP and Qt5 itself.")
+    endif()
+endif()
+
 # Cross-compilation settings
 if(CROSS_COMPILE_WINDOWS)
     set(CMAKE_SYSTEM_NAME Windows)
@@ -145,18 +189,76 @@ if(CROSS_COMPILE_WINDOWS)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 else()
-    find_package(OpenMP REQUIRED)
-    if(OpenMP_FOUND)
-        message(STATUS "Using OpenMP")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    # Ask the toolchain first.  GCC, conda's clang and MacPorts all answer here,
+    # and whatever they provide is the runtime their standard library expects.
+    find_package(OpenMP QUIET)
+    if(NOT OpenMP_CXX_FOUND AND APPLE AND _libomp_prefix)
+        # Only Apple's clang gets this far: it understands no -fopenmp, and its
+        # runtime is a separate Homebrew formula.  Supply what FindOpenMP cannot
+        # infer, then ask again.
+        set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp -I${_libomp_prefix}/include")
+        set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${_libomp_prefix}/include")
+        set(OpenMP_C_LIB_NAMES omp)
+        set(OpenMP_CXX_LIB_NAMES omp)
+        set(OpenMP_omp_LIBRARY "${_libomp_prefix}/lib/libomp.dylib")
+        message(STATUS "OpenMP: falling back to Homebrew libomp at ${_libomp_prefix}")
+        find_package(OpenMP QUIET)
+    endif()
+    if(NOT OpenMP_CXX_FOUND)
+        message(FATAL_ERROR
+            "OpenMP not found.  On macOS install it with 'brew install libomp' "
+            "(Apple's clang ships no OpenMP runtime); on Debian/Ubuntu it comes "
+            "with build-essential.")
+    endif()
+    message(STATUS "Using OpenMP")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+
+    # Finding OpenMP is not the same as being able to include <omp.h>, and seven
+    # source files include it.  For AppleClang, FindOpenMP locates the library
+    # and reports "-Xclang -fopenmp" with no -I and an empty
+    # OpenMP_CXX_INCLUDE_DIRS, while Homebrew keeps libomp keg-only -- so the
+    # header sits in a directory nothing searches and the first compile fails
+    # with "'omp.h' file not found" despite a successful configure.
+    #
+    # Test rather than assume: a conda or MacPorts toolchain has its own omp.h
+    # already on the include path and must keep using it, since its header has
+    # to match the runtime its standard library links.
+    include(CheckIncludeFileCXX)
+    get_property(_azure2_incs DIRECTORY PROPERTY INCLUDE_DIRECTORIES)
+    set(CMAKE_REQUIRED_FLAGS "${OpenMP_CXX_FLAGS}")
+    set(CMAKE_REQUIRED_INCLUDES ${_azure2_incs} ${OpenMP_CXX_INCLUDE_DIRS})
+    check_include_file_cxx(omp.h AZURE2_HAVE_OMP_H)
+    unset(CMAKE_REQUIRED_FLAGS)
+    unset(CMAKE_REQUIRED_INCLUDES)
+
+    if(OpenMP_CXX_INCLUDE_DIRS)
+        include_directories(${OpenMP_CXX_INCLUDE_DIRS})
+    endif()
+    if(NOT AZURE2_HAVE_OMP_H)
+        if(_libomp_prefix AND EXISTS "${_libomp_prefix}/include/omp.h")
+            include_directories("${_libomp_prefix}/include")
+            message(STATUS "OpenMP: omp.h taken from ${_libomp_prefix}/include")
+        else()
+            message(FATAL_ERROR
+                "OpenMP was found but <omp.h> is not on the include path.  On "
+                "macOS install the runtime with 'brew install libomp'; if it is "
+                "already installed somewhere unusual, pass its location with "
+                "-DCMAKE_PREFIX_PATH=/path/to/libomp.")
+        endif()
     endif()
 endif()
 
 # Extra includes/libs
 set(AZURE2_SOURCE_DIR ${CMAKE_BUILD_DIRECTORY})
 include_directories(${AZURE2_SOURCE_DIR}/external/coul/include)
-set(EXTRA_LIBS coul pugixml ${OpenMP_LIBRARIES})
+# OpenMP_LIBRARIES is not a variable FindOpenMP sets -- the per-language
+# OpenMP_CXX_LIBRARIES is -- so this list silently carried nothing.  That went
+# unnoticed wherever the compiler driver links the runtime itself from
+# -fopenmp (GCC, and clang outside Apple's), but AppleClang is driven with
+# -Xpreprocessor -fopenmp, which is a preprocessor flag only: nothing links
+# libomp, and the build fails at the link step on undefined _omp_* symbols.
+set(EXTRA_LIBS coul pugixml ${OpenMP_CXX_LIBRARIES})
 
 # Windows DLL bundling function (define before subdirectories)
 function(copy_dll_if_exists target_name dll_name dll_path)

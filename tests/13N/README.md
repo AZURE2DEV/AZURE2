@@ -8,6 +8,18 @@ shifts, angular distributions, and polarization.
 `run_tests.sh` runs a plain calculation and compares the total and per-segment
 chi-squared against `expected/chiSquared.out`.
 
+**Re-baselined 2026-09-11.** Segments 1 and 2 carry the gas-target integration,
+and their reference was recorded at a resonance-width multiplier of 5, which
+does not converge the integral: the fine lattice has to span enough energy for
+the sub-point grid to resolve the resonance. The project's `<targetInt>` line
+now asks for 20, where the result is flat out to 200 and reproduced
+independently by refining the lattice pitch, and where the code agrees with
+itself as it stood before the resonance-width estimator was corrected
+(813.30 / 39.69 against 814.44 / 39.71). Segments 1 and 2 moved from
+823.88 / 24.335 to 814.44 / 39.706; every other segment is unchanged to the
+digits recorded here. See `../../include/AdaptiveIntegrationGrid.h` for why the
+default multiplier is now 20.
+
 ## Segments
 
 | # | data | observable |

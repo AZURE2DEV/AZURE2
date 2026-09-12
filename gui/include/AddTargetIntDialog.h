@@ -44,6 +44,13 @@ class AddTargetIntDialog : public QDialog {
   QPushButton *fetchStoppingPowerButton;
   QCheckBox *isStraggling;
   QLineEdit *stragglingCoefficientText;
+  QCheckBox *isBeamProfileCheck;
+  QCheckBox *beamPhotodissociationCheck;
+  QSpinBox *numBeamComponentSpin;
+  QTableWidget *beamProfileTable;
+  QLineEdit *beamTpcSigmaText;
+  QLineEdit *beamTruncationText;
+  QList<double> tempBeamProfile;   // flattened (xi, omega, alpha, weight) quadruples
   QLineEdit *applyRangesText;
   QLineEdit *transitionWidthText;
   QLineEdit *autoToleranceText;
@@ -62,6 +69,7 @@ class AddTargetIntDialog : public QDialog {
   void createParameterItem(int row, double value = 0.0);
   void createQCoefficientItem(int row, double value = 1.0);
   void createConvCoefficientItem(int row, double value = 1.0);
+  void createBeamProfileItem(int row, double xi = 0.0, double omega = 0.0, double alpha = 0.0, double weight = 1.0);
 
  public slots:
   void convolutionCheckChanged(bool checked);
@@ -78,6 +86,10 @@ class AddTargetIntDialog : public QDialog {
   void convCoefficientSpinChanged(int newNumber);
   void convCoefficientChanged(int row, int column);
 
+  void beamProfileCheckChanged(bool checked);
+  void beamComponentSpinChanged(int newNumber);
+  void beamProfileChanged(int row, int column);
+
   void elementSelectionChanged(int index);
   void fetchStoppingPowerParameters();
   void calculateDeltaE();
@@ -88,6 +100,7 @@ class AddTargetIntDialog : public QDialog {
   QGroupBox *stoppingPowerBox;
   QGroupBox *qCoefficientBox;
   QGroupBox *convCoefficientBox;
+  QGroupBox *beamProfileBox;
 
   int selectedElement_;
   void populateElementComboBox();

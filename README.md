@@ -43,6 +43,45 @@ Upstream project: <https://azure.nd.edu/> · Source:
 
 ---
 
+## Ready-built downloads
+
+If you only want to *run* AZURE2, take one of these instead of building it.
+Each is self-contained: Qt, Qwt, GSL, readline and the OpenMP runtime are
+inside, so nothing else has to be installed.
+
+| Platform | Download | How to run it |
+|---|---|---|
+| **Windows** (x86_64) | [`AZURE2-windows-x86_64.zip`](https://github.com/AZURE2DEV/AZURE2/releases/download/continuous-windows/AZURE2-windows-x86_64.zip) | Unzip anywhere, run `AZURE2.exe`. |
+| **macOS** | [`AZURE2-macos.dmg`](https://github.com/AZURE2DEV/AZURE2/releases/download/continuous-windows/AZURE2-macos.dmg) | Open the disk image, drag `AZURE2.app` onto Applications. |
+| **Linux** (x86_64) | build artifact `AZURE2-linux` on any [run page](https://github.com/AZURE2DEV/AZURE2/actions) | An AppImage: `chmod +x AZURE2-x86_64.AppImage` and run it. |
+
+These are rolling builds of the latest `dev` commit, replaced on every push, so
+they are for using the code rather than citing it — for a citable version use a
+tagged release.
+
+The Linux AppImage is built against glibc 2.35 (Ubuntu 22.04), so it also runs
+on Debian 12, RHEL/Alma/Rocky 9 and anything newer. A `GLIBC_2.xx not found`
+error means the system is older than that and AZURE2 has to be built from
+source there. On a system without FUSE 2 the AppImage cannot mount itself; run
+it as `./AZURE2-x86_64.AppImage --appimage-extract-and-run` instead, which
+unpacks to a temporary directory and needs no kernel support.
+
+We deliberately do not ship a snap or a Flatpak. Both sandbox the application,
+and AZURE2 reads `.azr` projects and data from wherever you point it -- an
+external disk, a network share, cluster scratch -- while writing `output/` and
+`checks/` beside the project. Under strict confinement those paths are denied,
+and the failures look like AZURE2 bugs rather than permission errors. `snapd`
+is also absent by default outside Ubuntu, so a snap would reach fewer machines
+than the AppImage does.
+
+On macOS the first launch is refused with "the developer cannot be verified":
+the build is signed ad-hoc rather than notarized with an Apple Developer ID.
+Right-click (or control-click) `AZURE2.app`, choose **Open**, and confirm. Only
+the first launch needs this. The macOS build is compiled for Intel and runs on
+Apple Silicon through Rosetta.
+
+---
+
 ## Dependencies
 
 These are the only components you need to install yourself; everything else is
@@ -51,6 +90,8 @@ bundled in-tree.
 **Build tools**
 - A C++ compiler with OpenMP support (GCC or Clang)
 - [CMake](https://cmake.org/) ≥ 3.16
+- `pkg-config` — CMake locates GSL and Qwt through it, so configuring fails
+  without it even when both libraries are installed
 
 **Libraries**
 - [GSL](https://www.gnu.org/software/gsl/) — GNU Scientific Library (math routines)
@@ -67,15 +108,31 @@ bundled in-tree.
 **Ubuntu / Debian**
 ```bash
 sudo apt-get update
-sudo apt-get install build-essential cmake libgsl-dev libreadline-dev \
+sudo apt-get install build-essential cmake pkg-config libgsl-dev libreadline-dev \
     qtscript5-dev libqwt-qt5-dev libqt5svg5-dev qtwebengine5-dev \
     python3 python3-numpy
 ```
 
 **macOS (Homebrew)**
 ```bash
-brew install cmake gsl readline qt@5 qwt libomp
+brew install cmake pkg-config gsl readline libomp qt@5 qwt-qt5
 ```
+
+Three Homebrew-specific notes, none of which apply to a conda/miniforge
+toolchain (which ships its own compiler, OpenMP and Qt in a single prefix):
+
+- **`libomp` is required.** Apple's clang understands no `-fopenmp` and ships
+  no OpenMP runtime, so without it CMake stops at `find_package(OpenMP)`.
+- **`qt@5` and `qwt-qt5` are keg-only**, meaning Homebrew deliberately leaves
+  them off the default search path. CMake asks `brew` for their locations
+  automatically, so a plain `cmake -S . -B build` works; you only need
+  `-DCMAKE_PREFIX_PATH="$(brew --prefix qt@5);$(brew --prefix qwt-qt5)"` if
+  `brew` is not on your `PATH`.
+- The plotting tab needs **`qwt-qt5`**, not `qwt` — plain `qwt` is the Qt6
+  build and will not link against a Qt5 GUI.
+
+Both Qt5 formulae are deprecated upstream and Homebrew will disable them on
+2027-05-19, which is the real deadline for a Qt6 migration.
 
 ---
 

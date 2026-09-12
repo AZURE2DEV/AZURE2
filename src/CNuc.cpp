@@ -111,6 +111,7 @@ int CNuc::GetPairNumFromKey(int key) {
  */
 
 int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
+  transformedIn_ = false;
   int PairNum, LevelNum, ChannelNum, JGroupNum;
   int maxLValue = 0;
   std::ifstream in(configure.configfile.c_str());
@@ -530,6 +531,7 @@ void CNuc::PrintCompoundFromParams() {
  */
 
 bool CNuc::TransformIn(const Config &configure) {
+  transformedIn_ = true;
   for (int j = 1; j <= this->NumJGroups(); j++) {
     JGroup *theJGroup = this->GetJGroup(j);
     if (theJGroup->IsInRMatrix()) {

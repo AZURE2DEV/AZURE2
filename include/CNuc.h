@@ -81,6 +81,11 @@ class CNuc {
   /// Observed widths and energies to formal R-matrix parameters. Returns false
   /// if a level could not be transformed.
   bool TransformIn(const Config &);
+  /// Has TransformIn run on the current level scheme?  Until it has, the
+  /// level gammas are the input values (partial widths in eV, ANCs, gamma
+  /// widths in eV), not reduced width amplitudes -- consumers that need to
+  /// estimate a resonance width before initialisation completes must check.
+  bool IsTransformedIn() const { return transformedIn_; };
   /// Formal parameters back to observed energies and partial widths, for
   /// reporting. Under Brune the two are the same and this is a near no-op.
   void TransformOut(const Config &);
@@ -116,6 +121,7 @@ class CNuc {
   std::vector<PPair> pairs_;
   std::vector<JGroup> jgroups_;
   int maxLValue_;
+  bool transformedIn_ = false;
 };
 
 extern double DoubleFactorial(int);

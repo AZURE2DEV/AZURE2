@@ -11,7 +11,9 @@
 #include "GSLException.h"
 #include <iostream>
 #include <iomanip>
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 #include <time.h>
 #include <unordered_map>
 
@@ -521,6 +523,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
       TargetEffect *targetEffect = this->GetTargetEffect(segment->GetTargetEffectNum());
       double sigma = targetEffect->GetSigma();
       targetEffect->SetSigma(cmConversion * sigma);
+      if (targetEffect->IsBeamProfile()) targetEffect->ConvertBeamProfileToCM(cmConversion);
 
       for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
         // An effect restricted to energy ranges leaves points outside them
@@ -531,7 +534,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
         point->SetTargetEffectNum(segment->GetTargetEffectNum());
         point->SetTargetBlendWeight(blendWeight);
 
-        if (targetEffect->IsTargetIntegration() || targetEffect->IsConvolution() || targetEffect->IsConvCoefficients()) {
+        if (targetEffect->IsSubPointEffect()) {
           double forwardDepth = 0.0;
           double backwardDepth = 0.0;
 
@@ -619,12 +622,31 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             }
           }
 
+          if (targetEffect->IsBeamProfile()) {
+            // The kernel is an absolute beam profile: sample where the beam
+            // is, narrowed to the point's energy window (plus the resolution
+            // tails) when it has one, not around the point's own energy.
+            double low, high;
+            targetEffect->BeamProfileSupport(low, high);
+            double s = targetEffect->GetBeamTpcSigma();
+            if (point->HasBinWindow()) {
+              low = std::max(low, point->GetBinLowCM() - 4.0 * s);
+              high = std::min(high, point->GetBinHighCM() + 4.0 * s);
+            }
+            if (low < 0.001) low = 0.001;
+            if (high <= low) high = low + 0.001;
+            startEnergy = high;
+            endEnergy = low;
+            point->SetPhotoKinematics(entrancePair->GetSepE() - exitPair->GetExE(),
+                                      (entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv);
+          }
           std::vector<double> energyGrid;
           int numPoints = targetEffect->NumSubPoints();
           if (configure.useAdaptiveGrid) {
             AdaptiveIntegrationGrid::GridConfig gridConfig;
             gridConfig.maxPoints = numPoints;
             gridConfig.entranceKey = segment->GetEntranceKey();
+            gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
             gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
             gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
             gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth();
@@ -654,6 +676,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
           TargetEffect *targetEffect = this->GetTargetEffect(component->GetTargetEffectNum());
           double sigma = targetEffect->GetSigma();
           targetEffect->SetSigma(cmConversion * sigma);
+          if (targetEffect->IsBeamProfile()) targetEffect->ConvertBeamProfileToCM(cmConversion);
 
           for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
             double blendWeight = targetEffect->BlendWeight(point->GetLabEnergy());
@@ -661,7 +684,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             point->SetTargetEffectNum(component->GetTargetEffectNum());
             point->SetTargetBlendWeight(blendWeight);
 
-            if (targetEffect->IsTargetIntegration() || targetEffect->IsConvolution() || targetEffect->IsConvCoefficients()) {
+            if (targetEffect->IsSubPointEffect()) {
               double forwardDepth = 0.0;
               double backwardDepth = 0.0;
 
@@ -752,12 +775,28 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 }
               }
 
+              if (targetEffect->IsBeamProfile()) {
+                double low, high;
+                targetEffect->BeamProfileSupport(low, high);
+                double s = targetEffect->GetBeamTpcSigma();
+                if (point->HasBinWindow()) {
+                  low = std::max(low, point->GetBinLowCM() - 4.0 * s);
+                  high = std::min(high, point->GetBinHighCM() + 4.0 * s);
+                }
+                if (low < 0.001) low = 0.001;
+                if (high <= low) high = low + 0.001;
+                startEnergy = high;
+                endEnergy = low;
+                point->SetPhotoKinematics(entrancePair->GetSepE() - exitPair->GetExE(),
+                                          (entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv);
+              }
               std::vector<double> energyGrid;
               int numPoints = targetEffect->NumSubPoints();
               if (configure.useAdaptiveGrid) {
                 AdaptiveIntegrationGrid::GridConfig gridConfig;
                 gridConfig.maxPoints = numPoints;
                 gridConfig.entranceKey = segment->GetEntranceKey();
+                gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
                 gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
                 gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
                 gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth();
@@ -1023,7 +1062,8 @@ void EData::PrintData(const Config &configure) {
             << std::setw(18) << data.point()->NumSubPoints();
       if (data.point()->IsTargetEffect() &&
           (data.point()->GetParentData()->GetTargetEffect(data.point()->GetTargetEffectNum())->IsConvolution() ||
-           data.point()->GetParentData()->GetTargetEffect(data.point()->GetTargetEffectNum())->IsTargetIntegration())) {
+           data.point()->GetParentData()->GetTargetEffect(data.point()->GetTargetEffectNum())->IsTargetIntegration() ||
+           data.point()->GetParentData()->GetTargetEffect(data.point()->GetTargetEffectNum())->IsBeamProfile())) {
         out << std::setw(18) << data.point()->GetSubPoint(data.point()->NumSubPoints())->GetCMEnergy()
             << std::setw(18) << data.point()->GetSubPoint(1)->GetCMEnergy();
       }

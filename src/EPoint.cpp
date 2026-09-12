@@ -34,6 +34,12 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   cm_angle_ = dataLine.angle();
   lab_angle_ = dataLine.angle();
   original_energy_ = dataLine.energy();
+  if (dataLine.numExtra() >= 2) {
+    bin_low_lab_ = dataLine.extra(0);
+    bin_high_lab_ = dataLine.extra(1);
+    bin_low_cm_ = bin_low_lab_;
+    bin_high_cm_ = bin_high_lab_;
+  }
   double shiftedEnergy = dataLine.energy();  //+ parent->GetEnergyShift();
   // Don't allow energies below 0.005 MeV
   if (shiftedEnergy < 0.005) {
@@ -659,10 +665,11 @@ double EPoint::ConvertLabValue(double value, PPair *pPair) {
  */
 
 void EPoint::ConvertLabEnergy(PPair *pPair) {
-  cm_energy_ = this->GetLabEnergy() *
-      (pPair->GetM(2)) /
-      (pPair->GetM(1) + pPair->GetM(2));
+  double factor = (pPair->GetM(2)) / (pPair->GetM(1) + pPair->GetM(2));
+  cm_energy_ = this->GetLabEnergy() * factor;
   excitation_energy_ = cm_energy_ + pPair->GetSepE();
+  bin_low_cm_ = bin_low_lab_ * factor;
+  bin_high_cm_ = bin_high_lab_ * factor;
 }
 
 /*!
@@ -1505,9 +1512,7 @@ void EPoint::ClearECAmplitudes() {
 
 void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, int subPointNum) {
   if (!this->IsTargetEffect() ||
-      (!this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsConvolution() &&
-       !this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsTargetIntegration() &&
-       !this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsConvCoefficients())) {
+      !this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsSubPointEffect()) {
     // THM (modified R-matrix) segments: reuse the shared interior (A-matrix)
     // but assemble the half-off-shell cross section instead of the standard
     // T-matrix cross section. Kept fully per-segment so a project may mix THM
@@ -1669,6 +1674,34 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
 }
 
 /*!
+ * A segment compared against the E1 or E2 component of an angle-integrated
+ * capture cross section (isDiff 5/6) reads that component off the parent
+ * point, which a sub-point integration never filled: only the total was
+ * integrated.  The kernel is linear in the sub-point values, so each
+ * component is integrated with the same combiner by swapping it into the
+ * sub-points' cross-section slot, exactly as the analyzing power is handled.
+ */
+void EPoint::IntegrateTargetEffectComponents(const Config &configure) {
+  if (!parentSegment_ || parentSegment_->GetCrossSectionComponent() == 0) return;
+  const int n = this->NumSubPoints();
+  if (n <= 0) return;
+  std::vector<double> sigma(n);
+  for (int i = 1; i <= n; i++) sigma[i - 1] = this->GetSubPoint(i)->GetFitCrossSection();
+  const double total = this->GetFitCrossSection();
+
+  for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(this->GetSubPoint(i)->GetFitE1CrossSection());
+  this->IntegrateTargetEffect(configure);
+  this->SetFitE1CrossSection(this->GetFitCrossSection());
+
+  for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(this->GetSubPoint(i)->GetFitE2CrossSection());
+  this->IntegrateTargetEffect(configure);
+  this->SetFitE2CrossSection(this->GetFitCrossSection());
+
+  for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(sigma[i - 1]);
+  this->SetFitCrossSection(total);
+}
+
+/*!
  * Integrates the observable over the target, which is not the same operation
  * for an analyzing power as for a cross section.
  *
@@ -1687,6 +1720,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
 void EPoint::IntegrateTargetEffectForObservable(const Config &configure) {
   if (!this->IsAnalyzingPower()) {
     this->IntegrateTargetEffect(configure);
+    this->IntegrateTargetEffectComponents(configure);
     return;
   }
 
@@ -2207,6 +2241,83 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
     }
 
     yield = integral / integralC;
+  } else if (targetEffect->IsBeamProfile()) {
+    // Beam-profile kernel (photodissociation in a broad, skewed gamma beam
+    // with an event-by-event reconstructed energy, cf. Haverson 2026 App. A):
+    //
+    //   Y = sum_i K(E_i) sigma(E_i) / sum_i K(E_i),
+    //   K(E) = G(E) * W(E) * D(E),
+    //
+    // G  the absolute beam energy profile (a sum of skewed Gaussians, not
+    //    centred on the data point),
+    // W  the fraction of the Gaussian detector resolution (sigma s) that
+    //    lands inside the point's energy window [a, b], shifted with the
+    //    segment's energy shift; 1 when the point has no window,
+    // D  the detailed-balance factor sigma(gamma,a)/sigma(a,gamma) relative
+    //    to its value at the point's own (unshifted) energy, so that a
+    //    capture cross section is averaged the way the inverse
+    //    photodissociation measurement averaged it; 1 unless requested.
+    // 2-point Gauss-Legendre on each sub-point interval with the cross
+    // section interpolated linearly; the numerical normalisation makes the
+    // result independent of how far the sub-point grid extends.
+    int numPoints = this->NumSubPoints();
+    if (numPoints < 2) {
+      this->SetFitCrossSection(0.0);
+      return;
+    }
+    const double x1 = -1.0 / sqrt(3.0);
+    const double x2 = 1.0 / sqrt(3.0);
+    const double s = targetEffect->GetBeamTpcSigma();
+    const bool window = this->HasBinWindow();
+    // The energy shift moved the point (and the sub-point grid); the window
+    // is stored unshifted, so shift it by the same c.m. amount.
+    double cmPerLab = (lab_energy_ != 0.0) ? cm_energy_ / lab_energy_ : 1.0;
+    double originalCM = original_energy_ * cmPerLab;
+    double delta = cm_energy_ - originalCM;
+    double a = bin_low_cm_ + delta;
+    double b = bin_high_cm_ + delta;
+    const bool photo = targetEffect->IsBeamPhotodissociation() && photo_mcn_ > 0.0;
+    // g(E) = E / E_gamma(E)^2 is the energy dependence of the detailed-balance
+    // factor mu c^2 E / E_gamma^2, with the photon energy including the
+    // recoil of the compound nucleus: E_gamma^2/(2 M) - E_gamma + (E + Q) = 0.
+    auto dbWeight = [&](double e) {
+      double sum = e + photo_qgamma_;
+      double arg = 1.0 - 2.0 * sum / photo_mcn_;
+      double egamma = (arg > 0.0) ? photo_mcn_ * (1.0 - std::sqrt(arg)) : sum;
+      return (egamma > 0.0) ? e / (egamma * egamma) : 0.0;
+    };
+    double dbNorm = photo ? dbWeight(originalCM) : 1.0;
+    auto kernel = [&](double e) {
+      double k = targetEffect->BeamProfileWeight(e);
+      if (window) {
+        if (s > 0.0)
+          k *= 0.5 * (std::erf((b - e) / (s * std::sqrt(2.0))) - std::erf((a - e) / (s * std::sqrt(2.0))));
+        else
+          k *= (e >= a && e <= b) ? 1.0 : 0.0;
+      }
+      if (photo && dbNorm > 0.0) k *= dbWeight(e) / dbNorm;
+      return k;
+    };
+    double numerator = 0.0;
+    double denominator = 0.0;
+    for (int i = 1; i < numPoints; i++) {
+      double Ea = this->GetSubPoint(i)->GetCMEnergy();
+      double Eb = this->GetSubPoint(i + 1)->GetCMEnergy();
+      double mid = 0.5 * (Ea + Eb);
+      double half = 0.5 * (Ea - Eb);
+      if (std::fabs(half) < 1.0e-12) continue;
+      double sa = this->GetSubPoint(i)->GetFitCrossSection();
+      double sb = this->GetSubPoint(i + 1)->GetFitCrossSection();
+      for (int gp = 0; gp < 2; gp++) {
+        double e = mid + half * ((gp == 0) ? x1 : x2);
+        double frac = (Ea - e) / (Ea - Eb);
+        double sigma = (1.0 - frac) * sa + frac * sb;
+        double k = kernel(e);
+        numerator += std::fabs(half) * k * sigma;
+        denominator += std::fabs(half) * k;
+      }
+    }
+    yield = (denominator > 0.0) ? numerator / denominator : 0.0;
   }
   this->SetFitCrossSection(yield);
 }

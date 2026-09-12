@@ -30,6 +30,10 @@ TargetIntTab::TargetIntTab(QWidget *parent) :
   targetIntView->setColumnHidden(16, true);
   targetIntView->setColumnHidden(17, true);
   targetIntView->setColumnHidden(18, true);
+  targetIntView->setColumnHidden(23, true);
+  targetIntView->setColumnHidden(24, true);
+  targetIntView->setColumnHidden(25, true);
+  targetIntView->setColumnHidden(26, true);
 
   targetIntView->setColumnWidth(0, 27);
   targetIntView->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
@@ -117,6 +121,13 @@ void TargetIntTab::addLine() {
     newLine.transitionWidth = aDialog.transitionWidthText->text().toDouble();
     newLine.autoTolerance = aDialog.autoToleranceText->text().toDouble();
 
+    newLine.isBeamProfile = aDialog.isBeamProfileCheck->isChecked();
+    for (int i = 0; i < 4 * aDialog.numBeamComponentSpin->value() && i < aDialog.tempBeamProfile.size(); i++)
+      newLine.beamProfile.append(aDialog.tempBeamProfile.at(i));
+    newLine.beamTpcSigma = aDialog.beamTpcSigmaText->text().toDouble();
+    newLine.beamTruncation = aDialog.beamTruncationText->text().toDouble();
+    newLine.beamPhotodissociation = aDialog.beamPhotodissociationCheck->isChecked();
+
     addLine(newLine);
   }
 }
@@ -170,6 +181,16 @@ void TargetIntTab::addLine(TargetIntData line) {
   targetIntModel->setData(index, line.transitionWidth, Qt::EditRole);
   index = targetIntModel->index(lines.size(), 21, QModelIndex());
   targetIntModel->setData(index, line.autoTolerance, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 22, QModelIndex());
+  targetIntModel->setData(index, line.isBeamProfile, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 23, QModelIndex());
+  targetIntModel->setData(index, QVariant::fromValue<QList<double>>(line.beamProfile), Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 24, QModelIndex());
+  targetIntModel->setData(index, line.beamTpcSigma, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 25, QModelIndex());
+  targetIntModel->setData(index, line.beamTruncation, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 26, QModelIndex());
+  targetIntModel->setData(index, line.beamPhotodissociation, Qt::EditRole);
 
   targetIntView->resizeRowsToContents();
 }
@@ -246,6 +267,21 @@ void TargetIntTab::editLine() {
   i = targetIntModel->index(index.row(), 21, QModelIndex());
   var = targetIntModel->data(i, Qt::EditRole);
   double autoTolerance = var.toDouble();
+  i = targetIntModel->index(index.row(), 22, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  bool isBeamProfile = var.toBool();
+  i = targetIntModel->index(index.row(), 23, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  QList<double> beamProfile = var.value<QList<double>>();
+  i = targetIntModel->index(index.row(), 24, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  double beamTpcSigma = var.toDouble();
+  i = targetIntModel->index(index.row(), 25, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  double beamTruncation = var.toDouble();
+  i = targetIntModel->index(index.row(), 26, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  bool beamPhotodissociation = var.toBool();
 
   AddTargetIntDialog aDialog;
   aDialog.setWindowTitle(tr("Edit an Experimental Effect Line"));
@@ -284,11 +320,21 @@ void TargetIntTab::editLine() {
 
   aDialog.isStraggling->setChecked(isStraggling);
   aDialog.stragglingCoefficientText->setText(QString::number(stragglingCoefficient));
-  aDialog.resonanceWidthMultiplierSpin->setValue(resonanceWidthMultiplier > 0.0 ? resonanceWidthMultiplier : 5.0);
+  aDialog.resonanceWidthMultiplierSpin->setValue(resonanceWidthMultiplier > 0.0 ? resonanceWidthMultiplier : 20.0);
   aDialog.pointsPerWidthSpin->setValue(pointsPerWidth > 0.0 ? pointsPerWidth : 50.0);
   aDialog.applyRangesText->setText(applyRanges);
   aDialog.transitionWidthText->setText(QString::number(transitionWidth));
   aDialog.autoToleranceText->setText(QString::number(autoTolerance));
+
+  aDialog.tempBeamProfile = beamProfile;
+  aDialog.beamTpcSigmaText->setText(QString::number(beamTpcSigma, 'g', 10));
+  aDialog.beamTruncationText->setText(QString::number(beamTruncation));
+  aDialog.beamPhotodissociationCheck->setChecked(beamPhotodissociation);
+  // The check populates the table through beamComponentSpinChanged, so the
+  // component count is set after it: setting it first would be undone when an
+  // unchecked box seeds the spin with 1.
+  aDialog.isBeamProfileCheck->setChecked(isBeamProfile);
+  aDialog.numBeamComponentSpin->setValue(beamProfile.size() / 4);
 
   if (aDialog.exec()) {
     QString newSegmentsList = aDialog.segmentsListText->text();
@@ -420,6 +466,34 @@ void TargetIntTab::editLine() {
       i = targetIntModel->index(index.row(), 21, QModelIndex());
       targetIntModel->setData(i, newAutoTolerance, Qt::EditRole);
     }
+
+    bool newIsBeamProfile = aDialog.isBeamProfileCheck->isChecked();
+    if (isBeamProfile != newIsBeamProfile) {
+      i = targetIntModel->index(index.row(), 22, QModelIndex());
+      targetIntModel->setData(i, newIsBeamProfile, Qt::EditRole);
+    }
+    QList<double> newBeamProfile;
+    for (int j = 0; j < 4 * aDialog.numBeamComponentSpin->value() && j < aDialog.tempBeamProfile.size(); j++)
+      newBeamProfile.append(aDialog.tempBeamProfile.at(j));
+    if (beamProfile != newBeamProfile) {
+      i = targetIntModel->index(index.row(), 23, QModelIndex());
+      targetIntModel->setData(i, QVariant::fromValue<QList<double>>(newBeamProfile), Qt::EditRole);
+    }
+    double newBeamTpcSigma = aDialog.beamTpcSigmaText->text().toDouble();
+    if (beamTpcSigma != newBeamTpcSigma) {
+      i = targetIntModel->index(index.row(), 24, QModelIndex());
+      targetIntModel->setData(i, newBeamTpcSigma, Qt::EditRole);
+    }
+    double newBeamTruncation = aDialog.beamTruncationText->text().toDouble();
+    if (beamTruncation != newBeamTruncation) {
+      i = targetIntModel->index(index.row(), 25, QModelIndex());
+      targetIntModel->setData(i, newBeamTruncation, Qt::EditRole);
+    }
+    bool newBeamPhotodissociation = aDialog.beamPhotodissociationCheck->isChecked();
+    if (beamPhotodissociation != newBeamPhotodissociation) {
+      i = targetIntModel->index(index.row(), 26, QModelIndex());
+      targetIntModel->setData(i, newBeamPhotodissociation, Qt::EditRole);
+    }
   }
 }
 
@@ -445,7 +519,17 @@ bool TargetIntTab::writeFile(QTextStream &outStream) {
   QList<TargetIntData> lines = targetIntModel->getLines();
 
   for (int i = 0; i < lines.size(); i++) {
-    outStream << qSetFieldWidth(15) << lines.at(i).isActive << qSetFieldWidth(15) << '\"' + lines[i].segmentsList.remove(' ') + '\"' << qSetFieldWidth(15) << lines.at(i).numPoints;
+    // qSetFieldWidth(15) only pads a field UP TO 15 characters; it adds no
+    // separator at all once the quoted segmentsList exceeds that (any list
+    // longer than ~5 segment numbers), so the closing quote runs straight
+    // into numPoints's digits with no whitespace between them. Since every
+    // reader of this file (TargetEffect.cpp's engine parser and this class's
+    // own readFile() below) tokenizes on whitespace only, that merges the two
+    // fields into one garbled token and silently corrupts numPoints (and
+    // everything after it) on the next load. Force an explicit separator
+    // here so a long segmentsList can never swallow the following field,
+    // regardless of how qSetFieldWidth pads (or fails to pad) around it.
+    outStream << qSetFieldWidth(15) << lines.at(i).isActive << qSetFieldWidth(15) << '\"' + lines[i].segmentsList.remove(' ') + '\"' << qSetFieldWidth(0) << ' ' << qSetFieldWidth(15) << lines.at(i).numPoints;
 
     if (lines.at(i).isConvolution)
       outStream << qSetFieldWidth(15) << '1';
@@ -487,6 +571,25 @@ bool TargetIntTab::writeFile(QTextStream &outStream) {
     // used the feature stay byte-identical.
     if (!lines.at(i).applyRanges.trimmed().isEmpty() || lines.at(i).transitionWidth > 0. || lines.at(i).autoTolerance > 0.) {
       outStream << " \"" << lines.at(i).applyRanges.trimmed() << "\" " << lines.at(i).transitionWidth << " " << lines.at(i).autoTolerance;
+    }
+    // Optional beam-profile kernel, last on the line and introduced by its own
+    // keyword: every older reader probes for a digit or a quote here, so an
+    // alphabetic token stops it cleanly and the rest of the line is ignored
+    // rather than mis-parsed. Written only when the effect declares one, so
+    // files that never used it stay byte-identical.
+    //
+    // The numbers go through QString::number with 12 significant digits rather
+    // than straight into the stream: QTextStream's default is 6, which would
+    // quietly round a profile location of a few MeV to the nearest ~10 eV on
+    // every load-and-save cycle.
+    if (lines.at(i).isBeamProfile && lines.at(i).beamProfile.size() >= 4) {
+      int numComponents = lines.at(i).beamProfile.size() / 4;
+      outStream << " beamprofile " << numComponents;
+      for (int j = 0; j < 4 * numComponents; j++)
+        outStream << " " << QString::number(lines.at(i).beamProfile.at(j), 'g', 12);
+      outStream << " " << QString::number(lines.at(i).beamTpcSigma, 'g', 12)
+                << " " << QString::number(lines.at(i).beamTruncation, 'g', 12)
+                << " " << (lines.at(i).beamPhotodissociation ? 1 : 0);
     }
     outStream << Qt::endl;
   }
@@ -581,7 +684,7 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
       // Try to read straggling flag and coefficient (optional for backward compatibility)
       isStraggling = 0;                       // Default to false
       stragglingCoefficient = 0.04;           // Default coefficient
-      double resonanceWidthMultiplier = 5.0;  // Default
+      double resonanceWidthMultiplier = 20.0;  // Default; see AdaptiveIntegrationGrid
       double pointsPerWidth = 50.0;           // Default
 
       // Check if there's more data to read (not at end of line)
@@ -589,6 +692,36 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
       double transitionWidth = 0.;
       double autoTolerance = 0.;
       QString remaining = in.readAll().trimmed();
+      // The beam-profile block is introduced by its keyword and runs to the end
+      // of the line. Split it off first so the quoted ranges token and the
+      // numeric straggling/adaptive-grid chain below parse exactly as before.
+      bool tempIsBeamProfile = false;
+      QList<double> beamProfile;
+      double beamTpcSigma = 0.;
+      double beamTruncation = 0.;
+      int beamPhotodissociation = 0;
+      const QString beamKeyword("beamprofile");
+      int beamPos = remaining.indexOf(beamKeyword);
+      if (beamPos >= 0) {
+        QString beamPart = remaining.mid(beamPos + beamKeyword.length()).trimmed();
+        remaining = remaining.left(beamPos).trimmed();
+        QTextStream beamStream(&beamPart);
+        int numComponents = 0;
+        beamStream >> numComponents;
+        for (int j = 0; j < 4 * numComponents && beamStream.status() == QTextStream::Ok; j++) {
+          double tempComponent;
+          beamStream >> tempComponent;
+          if (beamStream.status() == QTextStream::Ok) beamProfile.append(tempComponent);
+        }
+        if (beamStream.status() == QTextStream::Ok) beamStream >> beamTpcSigma;
+        if (beamStream.status() == QTextStream::Ok) beamStream >> beamTruncation;
+        if (beamStream.status() == QTextStream::Ok) beamStream >> beamPhotodissociation;
+        // A truncated or malformed block is dropped rather than half-applied:
+        // the engine would read it the same way and silently fold with a
+        // profile the tab never showed.
+        tempIsBeamProfile = (numComponents > 0 && beamProfile.size() == 4 * numComponents);
+        if (!tempIsBeamProfile) beamProfile.clear();
+      }
       // The optional ranges extension starts at the first quote: split it off
       // so the numeric straggling/adaptive-grid chain parses as before.
       int quotePos = remaining.indexOf('"');
@@ -634,7 +767,7 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
       bool tempIsTargetIntegration = false;
       if (isTargetIntegration == 1) tempIsTargetIntegration = true;
 
-      TargetIntData newLine = {isActive, segmentsList.remove('\"'), numPoints, tempIsConvolution, sigma, tempIsTargetIntegration, density, stoppingPowerEq.remove('\"'), numParameters, parameters, tempIsQCoefficient, qCoefficients, tempIsConvCoefficient, convCoefficients, convolutionEq.remove('\"'), tempIsStraggling, stragglingCoefficient, resonanceWidthMultiplier, pointsPerWidth, applyRanges, transitionWidth, autoTolerance};
+      TargetIntData newLine = {isActive, segmentsList.remove('\"'), numPoints, tempIsConvolution, sigma, tempIsTargetIntegration, density, stoppingPowerEq.remove('\"'), numParameters, parameters, tempIsQCoefficient, qCoefficients, tempIsConvCoefficient, convCoefficients, convolutionEq.remove('\"'), tempIsStraggling, stragglingCoefficient, resonanceWidthMultiplier, pointsPerWidth, applyRanges, transitionWidth, autoTolerance, tempIsBeamProfile, beamProfile, beamTpcSigma, beamTruncation, beamPhotodissociation == 1};
       addLine(newLine);
     }
   }

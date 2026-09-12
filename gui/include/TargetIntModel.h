@@ -7,7 +7,7 @@
 Q_DECLARE_METATYPE(QList<double>);
 
 struct TargetIntData {
-  static const int SIZE = 22;
+  static const int SIZE = 27;
   int isActive;
   QString segmentsList;
   int numPoints;
@@ -31,6 +31,14 @@ struct TargetIntData {
   QString applyRanges;        // "lo1-hi1,lo2-hi2"; empty = whole segment
   double transitionWidth;     // MeV; 0 = hard edges
   double autoTolerance;       // relative; 0 = always apply
+  // Optional beam-profile kernel: an absolute (not point-centred) beam energy
+  // profile of skewed Gaussians, a detector-resolution window per point, and
+  // the detailed-balance weight of an inverse photodissociation measurement.
+  bool isBeamProfile = false;
+  QList<double> beamProfile;         // flattened (xi, omega, alpha, weight) quadruples
+  double beamTpcSigma = 0.;          // detector energy resolution, MeV (lab)
+  double beamTruncation = 0.;        // zero each component beyond this many s.d.; 0 = none
+  bool beamPhotodissociation = false;  // weight the average with the detailed-balance factor
 };
 
 /*!

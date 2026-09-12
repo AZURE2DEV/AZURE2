@@ -107,11 +107,11 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   resonanceWidthMultiplierSpin = new QDoubleSpinBox;
   resonanceWidthMultiplierSpin->setEnabled(false);
   resonanceWidthMultiplierSpin->setMinimum(1.0);
-  resonanceWidthMultiplierSpin->setMaximum(50.0);
+  resonanceWidthMultiplierSpin->setMaximum(200.0);
   resonanceWidthMultiplierSpin->setSingleStep(0.5);
   resonanceWidthMultiplierSpin->setDecimals(1);
-  resonanceWidthMultiplierSpin->setValue(5.0);
-  resonanceWidthMultiplierSpin->setToolTip("Half-width of the resonance region covered on each side (in units of total resonance width Γ).");
+  resonanceWidthMultiplierSpin->setValue(20.0);
+  resonanceWidthMultiplierSpin->setToolTip("Half-width of the resonance region covered on each side (in units of the resonance's particle width). The integral is not converged until this covers the width of the energy window being integrated over; 20 is the default, and larger costs time but never accuracy.");
 
   pointsPerWidthSpin = new QDoubleSpinBox;
   pointsPerWidthSpin->setEnabled(false);
@@ -199,6 +199,49 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   convlabelList.append(QString(tr("Coefficent")));
   convlabelList.append(QString(tr("Value")));
   convCoefficientTable->setHorizontalHeaderLabels(convlabelList);
+
+  // Beam-profile kernel: an absolute beam energy profile (a sum of skewed
+  // Gaussians) seen through a detector energy-resolution window, for data
+  // whose reaction energy is reconstructed event by event in a broad beam.
+  isBeamProfileCheck = new QCheckBox(tr("Include Beam Profile"));
+  isBeamProfileCheck->setChecked(false);
+  isBeamProfileCheck->setToolTip(tr("Average the cross section over an absolute beam energy profile rather than a Gaussian centred on each point. The per-point energy window is read from columns 5 and 6 of the data file."));
+  connect(isBeamProfileCheck, SIGNAL(toggled(bool)), this, SLOT(beamProfileCheckChanged(bool)));
+
+  numBeamComponentSpin = new QSpinBox;
+  numBeamComponentSpin->setMinimum(0);
+  numBeamComponentSpin->setMaximum(20);
+  numBeamComponentSpin->setSingleStep(1);
+  numBeamComponentSpin->setValue(0);
+  numBeamComponentSpin->setEnabled(false);
+  connect(numBeamComponentSpin, SIGNAL(valueChanged(int)), this, SLOT(beamComponentSpinChanged(int)));
+
+  beamProfileTable = new QTableWidget(this);
+  beamProfileTable->setColumnCount(4);
+  beamProfileTable->setRowCount(0);
+  beamProfileTable->verticalHeader()->hide();
+  beamProfileTable->verticalHeader()->setHighlightSections(false);
+  beamProfileTable->horizontalHeader()->setHighlightSections(false);
+  for (int c = 0; c < 4; c++) beamProfileTable->horizontalHeader()->setSectionResizeMode(c, QHeaderView::Stretch);
+  beamProfileTable->setShowGrid(false);
+  connect(beamProfileTable, SIGNAL(cellChanged(int, int)), this, SLOT(beamProfileChanged(int, int)));
+
+  QStringList beamLabelList;
+  beamLabelList.append(QString(tr("Location xi [MeV]")));
+  beamLabelList.append(QString(tr("Scale omega [MeV]")));
+  beamLabelList.append(QString(tr("Skewness alpha")));
+  beamLabelList.append(QString(tr("Weight")));
+  beamProfileTable->setHorizontalHeaderLabels(beamLabelList);
+
+  beamTpcSigmaText = new QLineEdit;
+  beamTpcSigmaText->setText("0");
+  beamTpcSigmaText->setToolTip(tr("Gaussian energy resolution (MeV, lab) of the detector that reconstructed the energy window of each point."));
+  beamTruncationText = new QLineEdit;
+  beamTruncationText->setText("0");
+  beamTruncationText->setToolTip(tr("Zero each profile component outside its mean plus/minus this many standard deviations. 0 uses the whole profile."));
+  beamPhotodissociationCheck = new QCheckBox(tr("Weight by detailed balance (inverse reaction)"));
+  beamPhotodissociationCheck->setChecked(false);
+  beamPhotodissociationCheck->setToolTip(tr("Average the cross section the way the inverse photodissociation measurement averaged it, by weighting the integrand with the detailed-balance factor relative to its value at the point's own energy."));
 
   cancelButton = new QPushButton(tr("Cancel"));
   okButton = new QPushButton(tr("Accept"));
@@ -321,6 +364,26 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   convCoefficientBox->setLayout(convCoefficientLayout);
   convCoefficientBox->hide();
 
+  QGridLayout *beamProfileCheckBoxLayout = new QGridLayout;
+  beamProfileCheckBoxLayout->addWidget(isBeamProfileCheck, 0, 0);
+  beamProfileCheckBoxLayout->addItem(new QSpacerItem(1, 20), 0, 1);
+  beamProfileCheckBoxLayout->addWidget(new QLabel(tr("Number of Components:")), 0, 2, Qt::AlignRight);
+  beamProfileCheckBoxLayout->addWidget(numBeamComponentSpin, 0, 3);
+  beamProfileCheckBoxLayout->setColumnStretch(1, 1);
+
+  beamProfileBox = new QGroupBox(tr("Beam Energy Profile (skewed Gaussians, lab MeV)"));
+  QVBoxLayout *beamProfileLayout = new QVBoxLayout;
+  QHBoxLayout *beamOptionsLayout = new QHBoxLayout;
+  beamOptionsLayout->addWidget(new QLabel(tr("Detector Resolution Sigma [MeV]:")));
+  beamOptionsLayout->addWidget(beamTpcSigmaText);
+  beamOptionsLayout->addWidget(new QLabel(tr("Truncation [s.d.]:")));
+  beamOptionsLayout->addWidget(beamTruncationText);
+  beamProfileLayout->addLayout(beamOptionsLayout);
+  beamProfileLayout->addWidget(beamPhotodissociationCheck);
+  beamProfileLayout->addWidget(beamProfileTable);
+  beamProfileBox->setLayout(beamProfileLayout);
+  beamProfileBox->hide();
+
   QHBoxLayout *buttonBox = new QHBoxLayout;
   buttonBox->addWidget(cancelButton);
   buttonBox->addWidget(okButton);
@@ -334,6 +397,8 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   mainLayout->addWidget(qCoefficientBox);
   mainLayout->addLayout(energyConvolutionCheckBoxLayout);
   mainLayout->addWidget(convCoefficientBox);
+  mainLayout->addLayout(beamProfileCheckBoxLayout);
+  mainLayout->addWidget(beamProfileBox);
   mainLayout->addLayout(buttonBox);
 
   setLayout(mainLayout);
@@ -394,6 +459,60 @@ void AddTargetIntDialog::createConvCoefficientItem(int row, double value) {
   convCoefficientTable->resizeRowsToContents();
 }
 
+void AddTargetIntDialog::createBeamProfileItem(int row, double xi, double omega, double alpha, double weight) {
+  const double values[4] = {xi, omega, alpha, weight};
+  for (int c = 0; c < 4; c++) {
+    QTableWidgetItem *item = new QTableWidgetItem(QString::number(values[c], 'g', 10));
+    item->setTextAlignment(Qt::AlignCenter);
+    beamProfileTable->setItem(row, c, item);
+  }
+  beamProfileTable->resizeRowsToContents();
+}
+
+void AddTargetIntDialog::beamProfileCheckChanged(bool checked) {
+  if (checked) {
+    beamProfileBox->show();
+    numBeamComponentSpin->setEnabled(true);
+    if (numBeamComponentSpin->value() == 0) numBeamComponentSpin->setValue(1);
+    numPointsSpin->setEnabled(true);
+    // The kernel is integrated on the adaptive grid, and its coverage is the
+    // parameter that decides whether a beam spanning a narrow resonance is
+    // converged at all -- so these two must be reachable here, not only when
+    // target integration happens to be on as well.
+    resonanceWidthMultiplierSpin->setEnabled(true);
+    pointsPerWidthSpin->setEnabled(true);
+  } else {
+    beamProfileBox->hide();
+    numBeamComponentSpin->setEnabled(false);
+    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked() &&
+        !isConvolutionDependentCheck->isChecked())
+      numPointsSpin->setEnabled(false);
+    if (!isTargetIntegrationCheck->isChecked()) {
+      resonanceWidthMultiplierSpin->setEnabled(false);
+      pointsPerWidthSpin->setEnabled(false);
+    }
+    this->adjustSize();
+  }
+}
+
+void AddTargetIntDialog::beamComponentSpinChanged(int newNumber) {
+  beamProfileTable->clearContents();
+  beamProfileTable->setRowCount(newNumber);
+  for (int i = 0; i < newNumber; i++) {
+    if (4 * i + 3 < tempBeamProfile.size())
+      createBeamProfileItem(i, tempBeamProfile.at(4 * i), tempBeamProfile.at(4 * i + 1),
+                            tempBeamProfile.at(4 * i + 2), tempBeamProfile.at(4 * i + 3));
+    else
+      createBeamProfileItem(i);
+  }
+}
+
+void AddTargetIntDialog::beamProfileChanged(int row, int column) {
+  while (4 * row + 3 >= tempBeamProfile.size()) tempBeamProfile.append(0.0);
+  QTableWidgetItem *item = beamProfileTable->item(row, column);
+  if (item) tempBeamProfile[4 * row + column] = item->text().toDouble();
+}
+
 void AddTargetIntDialog::convolutionCheckChanged(bool checked) {
   if (checked) {
     sigmaText->setEnabled(true);
@@ -419,9 +538,12 @@ void AddTargetIntDialog::targetIntCheckChanged(bool checked) {
     energyText->setEnabled(false);
     deltaEText->clear();
     calculateDeltaEButton->setEnabled(false);
-    if (!isConvolutionCheck->isChecked()) numPointsSpin->setEnabled(false);
-    resonanceWidthMultiplierSpin->setEnabled(false);
-    pointsPerWidthSpin->setEnabled(false);
+    if (!isConvolutionCheck->isChecked() && !isBeamProfileCheck->isChecked())
+      numPointsSpin->setEnabled(false);
+    if (!isBeamProfileCheck->isChecked()) {
+      resonanceWidthMultiplierSpin->setEnabled(false);
+      pointsPerWidthSpin->setEnabled(false);
+    }
     this->adjustSize();
   }
 }

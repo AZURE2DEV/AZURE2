@@ -31,14 +31,26 @@ class AdaptiveIntegrationGrid {
     double resonanceWidthMultiplier;  ///< Multiplier for resonance width region (e.g., 3.0 = 3×Γ)
     double pointsPerWidth;            ///< Target number of points per resonance width
     int entranceKey;                  ///< Entrance channel key for separation energy calculation
+    /// The level gammas are still the input values (partial widths in eV for
+    /// open particle channels, ANCs for closed ones, gamma widths in eV): the
+    /// parameter transformation is enabled but has not run yet.  This is the
+    /// state during EData::Fill in every CLI and API flow.
+    bool inputWidthsArePhysical;
 
     // Default constructor with sensible defaults
     GridConfig() :
       maxPoints(1000),
       baseEnergyStep(0.001),
-      resonanceWidthMultiplier(5.0),
+      // 20, not 5: the fine lattice has to span enough energy for the sub-point
+      // grid to resolve the resonance. 5 widths was only ever adequate because
+      // the width estimate was wrong and enormous, which over-gridded
+      // everything; with correct widths the tests/13N and tests/hybrid_potential
+      // integrals are 4 % to 2x off the converged answer at 5, and flat from 20
+      // out to 200.
+      resonanceWidthMultiplier(20.0),
       pointsPerWidth(50.0),
-      entranceKey(0) {}
+      entranceKey(0),
+      inputWidthsArePhysical(false) {}
   };
 
   /*!

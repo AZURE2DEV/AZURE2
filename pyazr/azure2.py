@@ -922,11 +922,30 @@ class azure2:
         """
         seg = self.segment_chi2(params)
         out = {}
-        for i in range(self.nsegments):
-            name = self.datasets[i].name
+        for i, d in enumerate(self.active_datasets):
+            name = d.name
             chi2, n, k = out.get(name, (0.0, 0, 0))
             out[name] = (chi2 + float(seg[i]), n + len(self.energies[i]), k + 1)
         return out
+
+    @property
+    def active_datasets(self):
+        """The data segments the engine evaluates, in the order its results
+        come back: ``m.energies[i]``, ``m.cross[i]``, ``segment_chi2(x)[i]``
+        all belong to ``active_datasets[i]``.
+
+        :attr:`datasets` lists every ``<segmentsData>`` line, inactive ones
+        included, so ``datasets[i]`` is *not* segment ``i`` of a result on any
+        model that has one -- the 13C+alpha archive's model has 25 -- and code
+        that indexed it that way dropped the normalization penalty of every
+        active segment past the active count.
+        """
+        active = self.datasets.active
+        if len(active) != self.nsegments:
+            raise RuntimeError(
+                f"{len(active)} active <segmentsData> lines in {self.file} but "
+                f"the engine reports {self.nsegments} segments.")
+        return active
 
     # -- AZURE2's own objective -----------------------------------------------
 
@@ -957,8 +976,7 @@ class azure2:
         shift = np.zeros(self.nsegments)
         current = {p.segment_key: p for p in self.parameters.norms}
         shifting = {p.segment_key: p for p in self.parameters.shifts}
-        for i in range(self.nsegments):
-            d = self.datasets[i]
+        for i, d in enumerate(self.active_datasets):
             p = current.get(d.key)
             value = (float(x[p.free_index])
                      if p is not None and not p.fixed and p.free_index is not None

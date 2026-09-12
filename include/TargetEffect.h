@@ -93,6 +93,35 @@ class TargetEffect {
   applied relative to the physical threshold rather than an arbitrary channel origin.*/
   static constexpr double minIntegrationEnergy = 0.001;
 
+  /// One skewed-Gaussian component of a beam energy profile.
+  struct BeamProfileComponent {
+    double xi;      ///< location parameter
+    double omega;   ///< scale parameter
+    double alpha;   ///< shape (skewness) parameter
+    double weight;  ///< relative weight (luminosity) of the component
+  };
+  /// Beam-profile kernel: an absolute (not point-centred) beam energy profile,
+  /// a Gaussian detector-resolution window per point and, optionally, the
+  /// detailed-balance weight of an inverse photodissociation measurement.
+  /// Written as the trailing block `beamprofile N {xi omega alpha w}xN
+  /// tpcSigma nCut dbFlag` of a targetInt line, energies in the lab frame.
+  bool IsBeamProfile() const;
+  /// Any effect whose yield is an integral over sub-points.
+  bool IsSubPointEffect() const;
+  /// Beam profile weight (sum of the skewed Gaussians) at an energy.
+  double BeamProfileWeight(double energy) const;
+  /// Energy range outside which the beam profile is negligible.
+  void BeamProfileSupport(double &low, double &high) const;
+  /// Sigma of the Gaussian detector (TPC) energy resolution.
+  double GetBeamTpcSigma() const;
+  /// Truncate each component outside mean +- this many standard deviations; 0 = none.
+  double GetBeamTruncation() const;
+  /// Weight the integrand by the detailed-balance factor of the inverse reaction.
+  bool IsBeamPhotodissociation() const;
+  /// Scale every beam-profile energy (xi, omega, tpc sigma) once, lab -> c.m.
+  void ConvertBeamProfileToCM(double factor);
+  const std::vector<BeamProfileComponent> &GetBeamProfile() const;
+
  private:
   bool isConvolution_;
   bool isTargetIntegration_;
@@ -122,6 +151,14 @@ class TargetEffect {
   std::vector<std::pair<double, double> > ranges_;
   double transitionWidth_;
   double autoTolerance_;
+
+  // Beam-profile kernel (see IsBeamProfile).
+  bool isBeamProfile_ = false;
+  std::vector<BeamProfileComponent> beamProfile_;
+  double beamTpcSigma_ = 0.0;
+  double beamTruncation_ = 0.0;
+  bool beamPhotodissociation_ = false;
+  bool beamProfileConverted_ = false;
 };
 
 #endif

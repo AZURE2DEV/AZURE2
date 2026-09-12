@@ -31,6 +31,13 @@ add_test(NAME pyazr_objective
                  ${CMAKE_CURRENT_SOURCE_DIR}/objective_test.py)
 set_tests_properties(pyazr_objective PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# Inactive <levels> and <segmentsData> lines must not shift pyazr's level
+# numbering or its per-segment penalties off the engine's.
+add_test(NAME pyazr_inactive_lines
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/inactive_lines_test.py)
+set_tests_properties(pyazr_inactive_lines PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # write_output_files must produce the same files the binary does.
 add_test(NAME pyazr_output_files
          COMMAND ${Python3_EXECUTABLE}

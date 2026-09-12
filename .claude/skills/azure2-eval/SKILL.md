@@ -74,6 +74,25 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   `--use-rmc` selects the mutually exclusive RMC formalism, and pyazr takes
   `use_brune=False` directly. **RMC is restricted to (n,γ) reactions** — the
   manual warns of unexpected errors if it is selected for anything else.
+  **pyazr's own defaults can just as easily disagree with what a project's
+  fits actually use** — `azure2()` defaults `use_long_wavelength=True`, but a
+  project whose `run_crc_*` job scripts always pass `--no-long-wavelength`
+  needs `use_long_wavelength=False` passed explicitly, or a pyazr session
+  silently computes different physics than every CLI fit in that archive.
+  Check the project's own job scripts for the flags actually in use — never
+  assume pyazr's defaults match an established archive's CLI fits.
+- **A pyazr session can silently rewrite a live fit's own output cache.**
+  Opening `azure2(path, cwd=...)` against a `.azr` whose `<config>` output
+  directory is a real, already-fitted `output/` recomputes and overwrites
+  `intEC.dat`/`intEC.extrap` there if the runtime options (previous bullet) or
+  segment count don't match what was cached — even for a read-only-looking
+  calculation. On a 12C+alpha archive fit this overwrote a live baseline's
+  `output/intEC.dat` with amplitudes for the wrong (`use_long_wavelength=True`)
+  physics before the mistake was caught via a nonsensical χ² (~1e28). Point any
+  exploratory pyazr session at a throwaway copy with its own output dir
+  (`AzrModel.set_output_dir(...)`) instead of a fit's real `output/`; if it
+  happens anyway, repair by rerunning a plain CLI calculate under the correct
+  flags and confirming `chiSquared.out` reads back exactly as before.
 - `--gsl-coul` is a real speed/accuracy tradeoff, not just a flag name: the
   default Coulomb-function method (Michel 2007) is more accurate but visibly
   slower than GSL's. Reach for `--gsl-coul` if a fit is too slow and the
@@ -516,6 +535,30 @@ computed for the *old* grids. In a live session,
 `azr.recalculate_external_capture()` forces a recompute. See
 `pyazr/examples/edit_model.py`.
 
+**Removing (or inserting) a `<segmentsData>` row breaks any external
+`param.sav` built against the old numbering — silently.** A segment's
+norm/shift Minuit parameter is named `segment_<key>_norm` /
+`segment_<key>_energy_shift`, where `<key>` is its 1-based position counting
+*every* line, active or not (`Segment.key`, matching `Parameter.segment_key`).
+Deleting an earlier row shifts every later key down by one, but
+`AZUREParams::ReadUserParameters` matches an external parameter file purely by
+exact name string — across *all* parameters, fixed or free — and calls
+`SetValue()` unconditionally on any match, with no warning on a stale one. Two
+distinct ways this has actually bitten a 12C+alpha archive fit: (1) a remap
+script that renamed `segment_N_norm` for every `N` past the cut but forgot
+`segment_N_energy_shift` needs the identical treatment (both are keyed by the
+same per-segment number, `EData::FillMnParams`), silently reapplying one
+segment's stale fixed energy-shift calibration to its unrelated neighbour; (2)
+a *second* remap script whose regex anchored at the start of the line failed to
+match `segment_N_norm` specifically, because those lines are indented in
+`param.sav` while `segment_N_energy_shift` lines are not — leaving every
+normalization at its old, pre-removal numbering while shifts were correctly
+remapped. Both loaded and fit without any error message. When editing
+`<segmentsData>` and reusing an old `param.sav`: remap **every** per-segment
+parameter family by the same shifted key, not just the one you're thinking
+about, and verify the remap directly (diff the boundary rows on both sides of
+the edit) rather than trusting that it worked.
+
 **`m.save_fit(path, x=None)` is how you snapshot a fit.** It writes the `.azr`,
 writes the companion `param.sav`, and verifies the result — reopening what it
 wrote and comparing every R-matrix value against the fit. If they disagree it
@@ -573,6 +616,44 @@ of the `.azr` itself:
 - **The check dumps are keywords, not filenames.** `<config>` accepts only
   `none`, `screen` or `file` (`Config::ReadConfigFile`); anything else silently
   leaves the check off and `checks/` stays empty. Write `file`.
+- **Inactive `<levels>` lines used to corrupt every bake of their J-group
+  (fixed 2026-09-05).** The engine skips `isActive=0` lines (`CNuc::Fill`),
+  so an inactive level neither opens a J-group nor takes a level number;
+  `AzrModel.engine_level_keys()` counted them anyway, and `apply_fit`/`save_fit`
+  wrote every later level of that group one line too early. On the 13C+α
+  archive fit this silently deleted a fitted 5/2+ level and parked two others
+  on inactive lines at two successive bakes — and `save_fit`'s own verify
+  passed, because it compares the reopened file's *transformed parameters*
+  against the fit, both of which count the same (wrong) lines. Now
+  `engine_level_keys` skips inactive levels, `AzrLevel.active`/`set_active`
+  read and set the flag, and `AzrModel.purge_inactive_levels()` removes such
+  lines for good; regression test `tests/pyazr/inactive_lines_test.py`.
+  **Verify a bake with a *blank* external parameter file**, not with
+  `param.sav`: mode 1 with an external file loads that file's values by
+  parameter name and overrides `<levels>` entirely, so it can only ever
+  confirm the `.sav`, never the `<levels>` block. A blank-file run must equal
+  a pyazr evaluation at the fitted R-matrix block with every norm/shift at
+  its nominal value (the `.sav` carries the norms; `<levels>` cannot).
+- **`m.datasets[i]` is not segment `i` of a result on a model with inactive
+  segments (fixed 2026-09-05).** `penalties()`/`objective()` and
+  `dataset_chi2()` indexed it that way, dropping the normalization penalty of
+  every active segment past the active count and mislabeling datasets. Use
+  `m.active_datasets` (one entry per engine segment, in result order) — that
+  is what the fixed methods do.
+- **The internal verify (`rtol=1e-4`) is far looser than the engine's own
+  round-trip noise, and can still hide real fragility.** AZURE2's rwa↔physical
+  conversion for an open channel is not perfectly bit-reproducible between
+  sessions — typically 1e-7 to 1e-6 relative, nowhere near `save_fit`'s
+  tolerance. For a well-conditioned model that is irrelevant. For one sitting
+  near a destructive-interference minimum (a broad, high-lying background pole
+  feeding a low-energy capture channel, say) that tiny noise floor can move
+  specific datasets' χ² by two or three orders of magnitude even though
+  `save_fit` verifies cleanly — on a 12C+alpha archive fit, a ~5e-7 relative
+  change to one 887 keV-wide background level's widths turned one segment's χ²
+  of 883 into 358,000. A passing `save_fit` verify is not proof that reopening
+  the snapshot reproduces the fit's χ² — check the total (or per-segment, via
+  `m.segment_chi2`) objective too, especially before trusting a freshly-baked
+  file as a refit's starting point.
 
 ### Defining extrapolation grids
 
@@ -1111,9 +1192,22 @@ and its **angle column is centre-of-mass**, not lab.
 `cat output/chiSquared.out` — a finite total χ² and the expected N per segment.
 From pyazr: `np.sum(m.calculate_chi2_rwa(m.params_rwa))` must reproduce the
 model's known total (record it whenever the `.azr` changes; a jump concentrated
-in the capture datasets almost always means a stale `intEC.extrap`). After a
+in a handful of datasets can mean a stale `intEC.extrap`, a `param.sav` whose
+segment-keyed norm/shift names no longer match a just-edited `<segmentsData>`
+(see the renumbering gotcha above), or — rarer, and easy to mistake for one of
+the other two — genuine ill-conditioning in a background level that a
+`save_fit` round trip's own numerical noise floor is enough to expose). After a
 fit, check `param.sav` updated and compare `parameters.out` widths — and their
 θ² — against expectations.
+
+**Before submitting a fit job after any structural edit (a segment or level
+add/remove) plus a reparameterization (a remapped `param.sav`, a fresh
+`save_fit` snapshot), run a plain calculate first** — CLI mode 1 with the new
+parameter file, or `m.objective(m.params_rwa)` in pyazr — in a throwaway output
+dir, and check the total against the old total adjusted for exactly what
+changed (the removed segment's own χ² and N, from the old `chiSquared.out`).
+It costs seconds and catches a corrupted starting point before it burns a
+50,000-iteration cluster job on it, rather than after.
 
 ## Examples shipped with pyazr
 
@@ -1130,6 +1224,7 @@ complete:
 | model internals | `coulomb_functions.py`, `ec_integrals.py`, `channel_radius_scan.py`, `nuclear_potential.py` |
 | data | `exfor_fetch.py` |
 
+<<<<<<< HEAD
 ## Adaptive cross-section tables
 
 `pyazr.tabulate(azr_file, pairs=[(entrance, exit), ...], e_min, e_max,
@@ -1143,3 +1238,44 @@ to a few thousand points where a uniform grid of equal fidelity would need
 `E_cm E_lab sigma` columns. Central values only -- combine the knots with
 the analytic parameter Jacobian and a fit covariance yourself if you need
 uncertainty bands.
+=======
+- A `<targetInt>` (target-effect / resolution) entry is applied to an *extrapolation* segment
+  with the same key as well: to compute a bare resonance shape with mode 3, empty the
+  `<targetInt>` block first (13C+a/9-9-26_seg92_9halfplus, 2026-09-10). To get the folded
+  shape on a fine grid, give a data segment a dummy fine-grid data file and run mode 1.
+
+- A level energy written by `AzrModel.add_level` with 16 significant digits (e.g.
+  `3.436212548111519`) made AZURE2 mis-read the model (13N: chi2 x4000, silently); the same
+  energy with 8 decimals was fine, and `apply_fit`/bake exports with 18-character energies
+  read correctly, so the trigger is the token layout of add_level's lines rather than the
+  digit count alone. Round energies to <= 8 decimals before writing a `.azr`
+  programmatically (rmfit's level search rounds to 1 eV).
+
+- **Beam-profile (photodissociation / TPC fine-splitting) experimental effect** (added
+  2026-09-10, `R-matrix/12C+a_onefile/9-10-26_Haversen_test/`): for data taken in a broad,
+  skewed γ beam with event-by-event energy reconstruction (HIγS TPCs), the point-centred
+  Gaussian convolution is the wrong kernel — the beam profile is *absolute* and each point is
+  an energy slice `[a,b]` of it seen through the detector resolution. `TargetEffect` now has a
+  `beamprofile N {xi omega alpha w}xN tpcSigma nCut dbFlag` trailing block on the `<targetInt>`
+  line (all energies **lab entrance-channel MeV**; `dbFlag=1` adds the detailed-balance weight
+  so a capture cross section is averaged the way the inverse measurement was), the per-point
+  window comes from optional **columns 5-6 of the data file**, and
+  `AzrModel.add_target_effect(segments, beam_profile=[...], tpc_sigma=..., photodissociation=True)`
+  writes it. One segment per nominal beam energy, one targetInt line per segment, mirror the data
+  segments as inactive `<segmentsTest>` lines so the keys line up. Also new: isDiff 5/6 (E1/E2-only)
+  segments now integrate their component over sub-points (they read a never-set value before).
+  Validated against an independent numpy kernel (`kernel_reference.py` there); regression project
+  `tests/beam_profile_kernel/`. The GUI reads, edits and writes the tokens too
+  ("Include Beam Profile" in the experimental-effect dialog; round trip covered by
+  `tests/gui/target_int_tab_test.cpp`), so a project survives a load-and-save there --
+  but note the GUI writes the profile numbers with 12 significant digits, against
+  pyazr's 17: harmless next to any real beam width, worth knowing if you diff files.
+
+- `<targetInt>` convolution-equation coefficients are bound ASCENDING: TargetEffect.cpp does
+  `convolutionEq_.SetParameter(i, convCoefficients[i])` and Equation.cpp resolves `aN` to
+  `parameters_[N]`, so the first value in the list is a0 (the lowest power in the equation
+  string). Writing them descending silently applies a different resolution -- on 13C+a
+  segment 92 it made the applied sigma 20% too wide (0.811 vs 0.675 keV at the resonance)
+  and changed a fitted neutron width from 0.61 to 0.44 keV. Check a new entry by evaluating
+  sigma at a known energy before trusting a fit that uses it.
+>>>>>>> dev

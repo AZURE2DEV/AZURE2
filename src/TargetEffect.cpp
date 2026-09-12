@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <algorithm>
 #include "Straggling.h"
+#include <cmath>
 
 /*!
  * Constructor reads directly from an std::ifstream pointing to the target
@@ -18,7 +19,8 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
   stragglingCoefficient_ = 0.04;
 
   // Initialize adaptive grid parameters to defaults
-  resonanceWidthMultiplier_ = 5.0;
+  // See AdaptiveIntegrationGrid::GridConfig for why this is 20 rather than 5.
+  resonanceWidthMultiplier_ = 20.0;
   pointsPerWidth_ = 50.0;
 
   // By default the effect applies to every point of its segments, with hard
@@ -145,6 +147,32 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
         }
       }
     }
+    // Optional beam-profile kernel, introduced by a keyword so that older
+    // readers (which only ever probe for digits or a quote) stop in front of
+    // it:  beamprofile N {xi omega alpha weight}xN tpcSigma nCut dbFlag
+    if (stream.good()) {
+      stream >> std::ws;
+      if (stream.good() && std::isalpha(stream.peek())) {
+        std::string keyword;
+        stream >> keyword;
+        if (keyword == "beamprofile") {
+          int numComponents = 0;
+          stream >> numComponents;
+          for (int i = 0; i < numComponents && stream.good(); i++) {
+            BeamProfileComponent c;
+            stream >> c.xi >> c.omega >> c.alpha >> c.weight;
+            beamProfile_.push_back(c);
+          }
+          int dbFlag = 0;
+          stream >> beamTpcSigma_ >> beamTruncation_ >> dbFlag;
+          beamPhotodissociation_ = (dbFlag == 1);
+          isBeamProfile_ = !beamProfile_.empty() && !stream.fail();
+          if (beamProfile_.empty()) stream.setstate(std::ios_base::failbit);
+        } else {
+          stream.setstate(std::ios_base::failbit);
+        }
+      }
+    }
     // A line consumed exactly to its end during the optional probes is not a
     // parse error; genuinely malformed fields fail without reaching eof.
     if (stream.fail() && stream.eof()) stream.clear(std::ios_base::eofbit);
@@ -220,6 +248,101 @@ bool TargetEffect::IsConvolution() const {
 
 bool TargetEffect::IsTargetIntegration() const {
   return isTargetIntegration_;
+}
+
+/*!
+ * Returns true if the target effect is a beam-profile kernel.
+ */
+
+bool TargetEffect::IsBeamProfile() const {
+  return isBeamProfile_;
+}
+
+/*!
+ * Returns true if the effect integrates the observable over sub-points
+ * (Gaussian convolution, target integration, energy-dependent convolution or
+ * a beam-profile kernel).
+ */
+
+bool TargetEffect::IsSubPointEffect() const {
+  return isConvolution_ || isTargetIntegration_ || isConvCoefficients_ || isBeamProfile_;
+}
+
+/*!
+ * Beam profile weight at an energy: the weighted sum of the skewed-Gaussian
+ * components,  G(E|xi,omega,alpha) = exp(-((E-xi)/omega)^2/2) /(omega sqrt(2 pi))
+ * * (1 + erf(alpha (E-xi)/(omega sqrt 2))),  each optionally zeroed outside
+ * its mean +- nCut standard deviations.
+ */
+
+double TargetEffect::BeamProfileWeight(double energy) const {
+  double weight = 0.0;
+  for (std::vector<BeamProfileComponent>::const_iterator c = beamProfile_.begin(); c != beamProfile_.end(); c++) {
+    if (!(c->omega > 0.0)) continue;
+    double z = (energy - c->xi) / c->omega;
+    if (beamTruncation_ > 0.0) {
+      double delta = c->alpha / std::sqrt(1.0 + c->alpha * c->alpha);
+      double mean = c->xi + c->omega * delta * std::sqrt(2.0 / pi);
+      double sd = c->omega * std::sqrt(1.0 - 2.0 * delta * delta / pi);
+      if (std::fabs(energy - mean) > beamTruncation_ * sd) continue;
+    }
+    weight += c->weight * std::exp(-0.5 * z * z) / (c->omega * std::sqrt(2.0 * pi)) * (1.0 + std::erf(c->alpha * z / std::sqrt(2.0)));
+  }
+  return weight;
+}
+
+/*!
+ * Energy interval that contains all of the beam profile: the union of
+ * xi +- 5 omega over the components (tighter if the profile is truncated).
+ */
+
+void TargetEffect::BeamProfileSupport(double &low, double &high) const {
+  low = 1.0e300;
+  high = -1.0e300;
+  for (std::vector<BeamProfileComponent>::const_iterator c = beamProfile_.begin(); c != beamProfile_.end(); c++) {
+    double lo = c->xi - 5.0 * c->omega;
+    double hi = c->xi + 5.0 * c->omega;
+    if (beamTruncation_ > 0.0) {
+      double delta = c->alpha / std::sqrt(1.0 + c->alpha * c->alpha);
+      double mean = c->xi + c->omega * delta * std::sqrt(2.0 / pi);
+      double sd = c->omega * std::sqrt(1.0 - 2.0 * delta * delta / pi);
+      lo = std::max(lo, mean - beamTruncation_ * sd);
+      hi = std::min(hi, mean + beamTruncation_ * sd);
+    }
+    low = std::min(low, lo);
+    high = std::max(high, hi);
+  }
+}
+
+double TargetEffect::GetBeamTpcSigma() const {
+  return beamTpcSigma_;
+}
+
+double TargetEffect::GetBeamTruncation() const {
+  return beamTruncation_;
+}
+
+bool TargetEffect::IsBeamPhotodissociation() const {
+  return beamPhotodissociation_;
+}
+
+/*!
+ * Converts the beam-profile energies from the frame of the input file (lab)
+ * to the centre of mass, exactly once, however many segments share the effect.
+ */
+
+void TargetEffect::ConvertBeamProfileToCM(double factor) {
+  if (beamProfileConverted_) return;
+  for (std::vector<BeamProfileComponent>::iterator c = beamProfile_.begin(); c != beamProfile_.end(); c++) {
+    c->xi *= factor;
+    c->omega *= factor;
+  }
+  beamTpcSigma_ *= factor;
+  beamProfileConverted_ = true;
+}
+
+const std::vector<TargetEffect::BeamProfileComponent> &TargetEffect::GetBeamProfile() const {
+  return beamProfile_;
 }
 
 /*!

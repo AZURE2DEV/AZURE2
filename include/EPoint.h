@@ -1,5 +1,6 @@
 #ifndef EPOINT_H
 #define EPOINT_H
+#include <limits>
 
 #include <cstring>
 #include "Constants.h"
@@ -235,6 +236,18 @@ class EPoint {
   void AddSubPoint(EPoint);
   void IntegrateTargetEffect(const Config &);
   void IntegrateTargetEffectForObservable(const Config &);
+  /// Integrate the E1 and E2 components of the cross section over the same
+  /// sub-points as the total, for a segment compared against one component.
+  void IntegrateTargetEffectComponents(const Config &);
+  /// Per-point energy window (columns 5-6 of the data file) of a beam-profile
+  /// effect: the detector-reconstructed energy slice the point was built from.
+  bool HasBinWindow() const { return bin_low_lab_ == bin_low_lab_ && bin_high_lab_ == bin_high_lab_; };
+  double GetBinLowCM() const { return bin_low_cm_; };
+  double GetBinHighCM() const { return bin_high_cm_; };
+  /// Kinematics of the inverse photodissociation reaction for the
+  /// detailed-balance weight: Q_gamma = S_entrance - Ex_final (MeV) and the
+  /// compound-nucleus mass (MeV).
+  void SetPhotoKinematics(double qGamma, double compoundMassMeV) { photo_qgamma_ = qGamma; photo_mcn_ = compoundMassMeV; };
   void SetParentData(EData *);
   void SetStoppingPower(double);
   void SetTargetThickness(double);
@@ -284,6 +297,15 @@ class EPoint {
   double targetThickness_;
   double angleKinFactor_;
   double crossSectionKinFactor_;
+  // Beam-profile effect: per-point energy window (lab as read, c.m. after
+  // conversion; NaN when the data file has no such columns) and the inverse
+  // reaction kinematics for the detailed-balance weight.
+  double bin_low_lab_ = std::numeric_limits<double>::quiet_NaN();
+  double bin_high_lab_ = std::numeric_limits<double>::quiet_NaN();
+  double bin_low_cm_ = std::numeric_limits<double>::quiet_NaN();
+  double bin_high_cm_ = std::numeric_limits<double>::quiet_NaN();
+  double photo_qgamma_ = 0.0;
+  double photo_mcn_ = 0.0;
   bool isUPOS_;
   int secondaryDecayL_;
   double Ic_;

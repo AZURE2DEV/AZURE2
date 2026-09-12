@@ -141,6 +141,70 @@ In the ``.azr`` file these appear as optional tokens at the end of the
 use them are written exactly as before, and remain readable by older versions
 of AZURE2.
 
+Beam-profile kernel (photodissociation in a broad γ beam)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The Gaussian convolution above is centred on each data point.  A
+measurement in a broad, asymmetric photon beam whose reaction energy is
+reconstructed event by event (a TPC at HIγS, for example) averages the cross
+section differently: the beam profile is an *absolute* energy distribution,
+and each data point is the slice of that beam that the detector reconstructed
+inside an energy window :math:`[a, b]` with a Gaussian resolution
+:math:`s`.  For such data the model is
+
+.. math::
+
+   \langle\sigma\rangle = \frac{\int G(E)\,W(E)\,D(E)\,\sigma(E)\,dE}
+                                 {\int G(E)\,W(E)\,D(E)\,dE},
+   \qquad
+   W(E) = \tfrac{1}{2}\left[\operatorname{erf}\frac{b-E}{s\sqrt2}
+                              - \operatorname{erf}\frac{a-E}{s\sqrt2}\right]
+
+with :math:`G(E)` the beam profile, a weighted sum of skewed Gaussians
+
+.. math::
+
+   G(E\,|\,\xi,\omega,\alpha) = \frac{1}{\omega\sqrt{2\pi}}
+   \exp\left[-\frac{(E-\xi)^2}{2\omega^2}\right]
+   \left[1+\operatorname{erf}\frac{\alpha\,(E-\xi)}{\omega\sqrt2}\right],
+
+and :math:`D(E)` the detailed-balance factor of the inverse reaction
+relative to its value at the point's own energy (``dbFlag`` = 1), so that a
+capture cross section is averaged the way the photodissociation measurement
+averaged it.  The formalism follows Haverson (2026), appendix A.
+
+The effect is written as a trailing block of the ``targetInt`` line, after
+the optional straggling and energy-range tokens::
+
+   beamprofile N  xi_1 omega_1 alpha_1 w_1  ...  xi_N omega_N alpha_N w_N  s  nCut  dbFlag
+
+All energies are **laboratory energies of the entrance channel** in MeV,
+like every other energy AZURE2 reads (a photon-beam profile has to be shifted
+by the Q-value and converted first).  ``nCut`` > 0 zeroes each component
+outside its mean ± ``nCut`` standard deviations (0 = full profile).  The
+window :math:`[a, b]` of each point is read from optional **columns 5 and 6
+of the data file** (lab MeV); a point without them is averaged over the
+whole beam.  A segment energy shift moves the window with the point.  The
+sub-point grid covers the beam profile, narrowed to the window plus four
+resolution widths, on the adaptive grid described for the other effects.
+The kernel applies to any observable of the segment, including the E1- and
+E2-only capture components, and is supported by the analytic gradient.
+When the beam covers a resonance much narrower than the base sub-point step,
+the adaptive grid anchors a fine lattice on it; give the effect a resonance-width
+multiplier of at least 20 (the tenth field before ``beamprofile`` in the line,
+``resonance_width_multiplier`` in pyazr) so that the lattice also covers the
+Lorentzian tails -- with 10 widths, linear interpolation of the tails biased a
+slice dominated by a 0.6 keV 2\ :sup:`+` by 18 %, with 20 widths the result
+agreed with a dense reference integration to 0.04 %.
+
+In the GUI the effect is set up under **Include Beam Profile** in the
+*Add/Edit Experimental Effect* dialog: a component count, a table of
+``xi``/``omega``/``alpha``/weight rows, the detector resolution sigma, the
+truncation, and the **Weight by detailed balance** box.  The tab reads and
+writes the tokens, so a project can be loaded, edited and saved without
+losing them.  ``pyazr.AzrModel.add_target_effect`` writes the same line
+from a script.
+
 Straggling
 ^^^^^^^^^^
 

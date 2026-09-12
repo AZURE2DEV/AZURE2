@@ -81,6 +81,23 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
       return targetInt.transitionWidth;
     else if (index.column() == 21)
       return targetInt.autoTolerance;
+    else if (index.column() == 22) {
+      if (targetInt.isBeamProfile)
+        return QString(tr("YES"));
+      else
+        return QString(tr("NO"));
+    } else if (index.column() == 23)
+      return QVariant();
+    else if (index.column() == 24)
+      return targetInt.beamTpcSigma;
+    else if (index.column() == 25)
+      return targetInt.beamTruncation;
+    else if (index.column() == 26) {
+      if (targetInt.beamPhotodissociation)
+        return QString(tr("YES"));
+      else
+        return QString(tr("NO"));
+    }
   } else if (role == Qt::EditRole) {
     TargetIntData targetInt = targetIntList.at(index.row());
     if (index.column() == 1) return targetInt.segmentsList;
@@ -104,6 +121,11 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
     if (index.column() == 19) return targetInt.applyRanges;
     if (index.column() == 20) return targetInt.transitionWidth;
     if (index.column() == 21) return targetInt.autoTolerance;
+    if (index.column() == 22) return targetInt.isBeamProfile;
+    if (index.column() == 23) return QVariant::fromValue<QList<double>>(targetInt.beamProfile);
+    if (index.column() == 24) return targetInt.beamTpcSigma;
+    if (index.column() == 25) return targetInt.beamTruncation;
+    if (index.column() == 26) return targetInt.beamPhotodissociation;
   } else if (role == Qt::CheckStateRole && index.column() == 0) {
     TargetIntData targetInt = targetIntList.at(index.row());
     if (targetInt.isActive == 1)
@@ -163,6 +185,16 @@ QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, in
         return tr("Blend Width");
       case 21:
         return tr("Auto Tolerance");
+      case 22:
+        return tr("Beam Profile Active?");
+      case 23:
+        return tr("Beam Profile Components");
+      case 24:
+        return tr("Detector Resolution Sigma");
+      case 25:
+        return tr("Profile Truncation");
+      case 26:
+        return tr("Detailed Balance Weight?");
       default:
         return QVariant();
     }
@@ -219,6 +251,16 @@ bool TargetIntModel::setData(const QModelIndex &index, const QVariant &value, in
       tempData.transitionWidth = value.toDouble();
     else if (index.column() == 21)
       tempData.autoTolerance = value.toDouble();
+    else if (index.column() == 22)
+      tempData.isBeamProfile = value.toBool();
+    else if (index.column() == 23)
+      tempData.beamProfile = value.value<QList<double>>();
+    else if (index.column() == 24)
+      tempData.beamTpcSigma = value.toDouble();
+    else if (index.column() == 25)
+      tempData.beamTruncation = value.toDouble();
+    else if (index.column() == 26)
+      tempData.beamPhotodissociation = value.toBool();
     else
       return false;
     targetIntList.replace(row, tempData);
