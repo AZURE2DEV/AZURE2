@@ -28,3 +28,5 @@ observable weights the same poles differently. The two-peak structure
 concentrates below 0.3 MeV, where the HOES observable rises toward
 threshold against falling data, and in the relative peak heights — the
 behaviour a joint THM+direct refit corrects (see the analysis notes).
+
+Note (thm branch): the THM segment's arbitrary overall scale is now profiled out analytically by the engine (a free THM norm is set to its chi2-optimal value each evaluation), so the pinned chi2 is 2740.48 at the optimal scale -- superseding the earlier hand-solved-norm value (4952.9). This is the correct minimal chi2 for the arbitrary THM scale.

@@ -1421,41 +1421,6 @@ int main(int argc, char *argv[]) {
                              "(numerical MIGRAD stalls on joint THM+direct fits)."
                           << std::endl;
     }
-    // Scale-degeneracy guard: a THM segment carries an arbitrary, free overall
-    // normalization, so the model scale floats.  If every *direct* segment also
-    // has a free norm, nothing anchors the absolute scale and a joint fit will
-    // shrink the direct norm to bury the direct data under the free-scaled model
-    // (the "parallel THM+direct returns a wrong result" symptom).  Warn and
-    // point at the cure recommended by Typel & Baur (2003), Sec. 6.3: normalize
-    // the THM data to the direct data, i.e. keep at least one direct segment's
-    // norm fixed to anchor the scale.
-    {
-      std::ifstream segScan(configure.configfile.c_str());
-      std::string line;
-      bool inSegments = false, anyTHM = false, anyDirectFree = false, anyDirectFixed = false;
-      while (segScan && std::getline(segScan, line)) {
-        if (line.find("<segmentsData>") != std::string::npos) { inSegments = true; continue; }
-        if (line.find("</segmentsData>") != std::string::npos) break;
-        if (!inSegments) continue;
-        std::istringstream fields(line);
-        // active aa ir loE hiE loA hiA isDiff include varyNorm ...
-        double active, aa, ir, loE, hiE, loA, hiA, isDiff, include, varyNorm;
-        if (!(fields >> active >> aa >> ir >> loE >> hiE >> loA >> hiA >> isDiff >> include >> varyNorm)) continue;
-        if (active != 1.0) continue;
-        if (isDiff >= 10.0) { anyTHM = true; }
-        else if (varyNorm == 1.0) anyDirectFree = true;
-        else anyDirectFixed = true;
-      }
-      if (anyTHM && anyDirectFree && !anyDirectFixed)
-        configure.outStream
-            << "WARNING: a THM (arbitrary-scale) segment is fitted together with "
-               "direct segments whose normalizations are all free.  The absolute "
-               "scale is then unconstrained and the fit can collapse the direct "
-               "norm.  Anchor the scale by fixing (or tightly constraining) at "
-               "least one direct segment's normalization -- normalize THM to the "
-               "direct data (Typel & Baur 2003, Sec. 6.3)."
-            << std::endl;
-    }
   }
   if ((configure.paramMask & Config::USE_RMC_FORMALISM) && (configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
     configure.outStream << "WARNING: --use-brune is incompatible with --use-rmc. Ignoring --use-brune." << std::endl;

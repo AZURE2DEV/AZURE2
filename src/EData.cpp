@@ -2211,7 +2211,7 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
   SetNormParamOffset(p.Params().size());
   char varname[50];
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-    if (segment->IsVaryNorm()) {
+    if (segment->IsVaryNorm() && !segment->IsProfiledNorm()) {
       snprintf(varname, sizeof(varname), "segment_%d_norm", segment->GetSegmentKey());
       p.Add(varname, segment->GetNorm(), segment->GetNorm() * 0.05);
       p.SetLowerLimit(varname, 0.0);
@@ -2251,7 +2251,7 @@ void EData::DeleteLastSegment() {
 void EData::FillNormsFromParams(const vector_r &p) {
   int i = GetNormParamOffset();
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-    if (segment->IsVaryNorm()) {
+    if (segment->IsVaryNorm() && !segment->IsProfiledNorm()) {
       segment->SetNorm(p[i]);
       i++;
     }

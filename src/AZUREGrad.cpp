@@ -181,7 +181,7 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
   if (data) {
     for (int s = 1; s <= data->NumSegments(); s++) {
       ESegment *segment = data->GetSegment(s);
-      if (segment && segment->IsVaryNorm()) {
+      if (segment && segment->IsVaryNorm() && !segment->IsProfiledNorm()) {
         map.normIndex_[s] = i;
         map.desc_.push_back(ParamDesc{ParamKind::Norm, -1, -1, -1, s, false});
         i++;

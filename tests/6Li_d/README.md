@@ -34,3 +34,5 @@ model barely produces through the half-off-shell observable. A refit that
 frees the 2+ 22.98 / 2+ 25.72 / 0+ 27.49 widths reduces it — see the
 analysis in the evaluation notes — but the pinned reference deliberately
 stays at the published parameters.
+
+Note (thm branch): the THM segment's arbitrary overall scale is now profiled out analytically by the engine (a free THM norm is set to its chi2-optimal value each evaluation), so the pinned chi2 is 1662.03 at the optimal scale -- superseding the earlier hand-solved-norm value (6135.89). This is the correct minimal chi2 for the arbitrary THM scale.

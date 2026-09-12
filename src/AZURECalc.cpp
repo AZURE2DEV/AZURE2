@@ -107,25 +107,32 @@ double AZURECalc::operator()(const vector_r &p) const {
         }
       }
 
-      // Recalculate chi-squared for this segment with components
+      // Recalculate chi-squared for this segment with components.
+      // A THM segment with a free norm has an arbitrary overall scale: during a
+      // fit it is profiled out analytically (n* set to its optimum, no norm
+      // penalty) so it cannot trade against the direct-data normalizations.
       double segmentChiSquared = 0.0;
-      for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-        EPoint *point = segment->GetPoint(pointIdx + 1);
-        if (point) {
-          double residual = point->GetFitCrossSection() - point->GetCMCrossSection() * segment->GetNorm();
-          double error = point->GetCMCrossSectionError() * segment->GetNorm();
-          if (error != 0.0) {
-            segmentChiSquared += (residual * residual) / (error * error);
+      if (segment->IsProfiledNorm()) {
+        segmentChiSquared = segment->ProfileNormChiSquared();
+      } else {
+        for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
+          EPoint *point = segment->GetPoint(pointIdx + 1);
+          if (point) {
+            double residual = point->GetFitCrossSection() - point->GetCMCrossSection() * segment->GetNorm();
+            double error = point->GetCMCrossSectionError() * segment->GetNorm();
+            if (error != 0.0) {
+              segmentChiSquared += (residual * residual) / (error * error);
+            }
           }
         }
-      }
 
-      // Add normalization chi-squared contribution
-      double dataNorm = segment->GetNorm();
-      double dataNormNominal = segment->GetNominalNorm();
-      double dataNormError = dataNormNominal / 100. * segment->GetNormError();
-      if (dataNormError != 0.) {
-        chiSquared += pow((dataNorm - dataNormNominal) / dataNormError, 2.0);
+        // Add normalization chi-squared contribution (profiled norms have none).
+        double dataNorm = segment->GetNorm();
+        double dataNormNominal = segment->GetNominalNorm();
+        double dataNormError = dataNormNominal / 100. * segment->GetNormError();
+        if (dataNormError != 0.) {
+          chiSquared += pow((dataNorm - dataNormNominal) / dataNormError, 2.0);
+        }
       }
 
       // Add energy shift chi-squared contribution
@@ -233,21 +240,29 @@ double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
     ESegment *segment = ld->GetSegment(i);
     if (!segment) continue;
     if (thmOnly && !segment->IsTHM()) continue;
-    double segChi = 0.0;
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
       double th = segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld);
       EPoint *pt = segment->GetPoint(pid + 1);
-      if (pt) {
-        pt->SetFitCrossSection(th);
-        double r = th - pt->GetCMCrossSection() * segment->GetNorm();
-        double err = pt->GetCMCrossSectionError() * segment->GetNorm();
-        if (err != 0.0) segChi += (r * r) / (err * err);
-      }
+      if (pt) pt->SetFitCrossSection(th);
     }
-    double dataNorm = segment->GetNorm();
-    double nom = segment->GetNominalNorm();
-    double nerr = nom / 100.0 * segment->GetNormError();
-    if (nerr != 0.0) chiSquared += pow((dataNorm - nom) / nerr, 2.0);
+    double segChi = 0.0;
+    if (segment->IsProfiledNorm()) {
+      // Arbitrary THM scale: profile the norm out (no penalty).
+      segChi = segment->ProfileNormChiSquared();
+    } else {
+      for (int pid = 0; pid < segment->NumPoints(); pid++) {
+        EPoint *pt = segment->GetPoint(pid + 1);
+        if (pt) {
+          double r = pt->GetFitCrossSection() - pt->GetCMCrossSection() * segment->GetNorm();
+          double err = pt->GetCMCrossSectionError() * segment->GetNorm();
+          if (err != 0.0) segChi += (r * r) / (err * err);
+        }
+      }
+      double dataNorm = segment->GetNorm();
+      double nom = segment->GetNominalNorm();
+      double nerr = nom / 100.0 * segment->GetNormError();
+      if (nerr != 0.0) chiSquared += pow((dataNorm - nom) / nerr, 2.0);
+    }
     if (segment->IsVaryEnergyShift()) {
       double sh = segment->GetEnergyShift();
       double shn = segment->GetNominalEnergyShift();

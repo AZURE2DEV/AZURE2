@@ -229,6 +229,55 @@ bool ESegment::IsTHM() const {
 }
 
 /*!
+ * A THM segment's overall scale is arbitrary (Typel & Baur, Ann. Phys. 305
+ * (2003) 228, Sec. 6.3), so when its norm is declared free it is profiled out
+ * analytically rather than carried as a Minuit parameter -- otherwise it would
+ * trade against the direct-data normalizations and the joint fit could collapse
+ * the direct norm.
+ */
+
+bool ESegment::IsProfiledNorm() const {
+  return isTHM_ && IsVaryNorm();
+}
+
+/*!
+ * With the norm n multiplying the data (residual m - n d, error n e), the
+ * chi^2 = sum ((m - n d)/(n e))^2 is minimized at n* = S_mm / S_md, giving
+ * chi^2_min = S_dd - S_md^2 / S_mm, where S_ab = sum a_i b_i / e_i^2.  Points
+ * must already carry their model values in GetFitCrossSection().
+ */
+
+double ESegment::ProfileNormChiSquared() {
+  double Smm = 0.0, Smd = 0.0, Sdd = 0.0;
+  for (EPointIterator pt = GetPoints().begin(); pt < GetPoints().end(); pt++) {
+    double e = pt->GetCMCrossSectionError();
+    if (e == 0.0) continue;
+    double w = 1.0 / (e * e);
+    double m = pt->GetFitCrossSection();
+    double d = pt->GetCMCrossSection();
+    Smm += m * m * w;
+    Smd += m * d * w;
+    Sdd += d * d * w;
+  }
+  if (Smd > 0.0 && Smm > 0.0) {
+    SetNorm(Smm / Smd);
+    double chi = Sdd - Smd * Smd / Smm;
+    return chi > 0.0 ? chi : 0.0;
+  }
+  // Degenerate (no positive model-data overlap): leave the scale at unity and
+  // report the unscaled chi^2 so the fit still sees a finite, honest value.
+  SetNorm(1.0);
+  double chi = 0.0;
+  for (EPointIterator pt = GetPoints().begin(); pt < GetPoints().end(); pt++) {
+    double e = pt->GetCMCrossSectionError();
+    if (e == 0.0) continue;
+    double r = pt->GetFitCrossSection() - pt->GetCMCrossSection();
+    chi += (r * r) / (e * e);
+  }
+  return chi;
+}
+
+/*!
  * Returns which cross section component the segment is compared against:
  * 0 for the full cross section, 1 for the E1 component only, and 2 for the
  * E2 component only.

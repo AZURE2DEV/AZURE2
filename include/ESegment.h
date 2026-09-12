@@ -40,6 +40,16 @@ class ESegment {
   bool IsPhase() const;
   /// Returns true if this is a THM (modified R-matrix, half-off-shell) segment.
   bool IsTHM() const;
+  /// True when the normalization is profiled (eliminated analytically) rather
+  /// than fitted: a THM segment carries an arbitrary overall scale (Typel &
+  /// Baur 2003), so a free THM norm is set to its closed-form optimum each
+  /// evaluation instead of competing with the direct-data norms as a Minuit
+  /// parameter.
+  bool IsProfiledNorm() const;
+  /// Set the normalization to the value that minimizes this segment's chi^2 at
+  /// the current model (points must already hold their fit cross sections) and
+  /// return that minimum chi^2.  Used for profiled (THM) norms.
+  double ProfileNormChiSquared();
   /// Does the segment carry target effects?
   bool IsTargetEffect() const;
   /// Is the normalization a free fit parameter?
