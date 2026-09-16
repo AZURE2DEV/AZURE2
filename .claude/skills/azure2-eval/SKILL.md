@@ -1211,3 +1211,55 @@ complete:
   segment 92 it made the applied sigma 20% too wide (0.811 vs 0.675 keV at the resonance)
   and changed a fitted neutron width from 0.61 to 0.44 keV. Check a new entry by evaluating
   sigma at a known energy before trusting a fit that uses it.
+
+- A NARROW RESONANCE INSIDE A TARGET-EFFECT INTEGRATION was mis-integrated by every AZURE2
+  before commit `a4095a6` (11 Sep 2026). `AdaptiveIntegrationGrid::IdentifyResonances` read
+  `ALevel::GetGamma()` as a reduced-width amplitude, but the grids are built in `EData::Fill`
+  BEFORE the input-parameter transformation, so the value it held was still the input width in
+  eV; every estimate collapsed to about `2P/(dS/dE)` (a 0.6 keV level came out 0.8 MeV wide)
+  and the fine lattice never resolved the line. The fix also raises the default
+  `resonanceWidthMultiplier` from 5 to 20, without which the finer lattice does not converge.
+  Size of the effect on 13C+a segment 92 (111 points, a 0.5 keV 9/2+ under a 1.6 keV
+  resolution function, identical model and parameters): chi2 883 -> 1522 at Gamma_n = 200 eV
+  and 1029 -> 891 at 500 eV, i.e. it inverts which width the data prefer. Consequences:
+  (1) any fit or scan of a narrow level through a `<targetInt>` kernel done with an older
+  binary has to be redone (`9-9-26_seg92_9halfplus/binary_check.py` is the two-binary test);
+  (2) a long-running in-process job keeps the extension it loaded at start, so rebuilding
+  `pyazr/_azure2*.so` mid-campaign makes new evaluations incomparable with the ledger's --
+  check `ls -la` on the binary and the `.so` against the job's start time before comparing
+  objectives across a rebuild. Scope in this archive: 37 reaction directories hold .azr
+  files with an ACTIVE `<targetInt>` line, the largest being 12C+a_onefile (1343 files),
+  14N+p (286), 11B+a (281), 13C+a (235) and 10B+a (200), so any of those whose fit depends
+  on a resonance narrower than a few times its target-effect width is a candidate for a
+  redo -- most target effects there are thickness integrations, which is exactly where the
+  estimator was used.
+
+- 2026-09-13 (12C+a_onefile/9-13-26_rmp_MCMC_redo) -- TARGET-EFFECT SUB-POINTS WERE RECOMPUTING
+  THEIR COULOMB/WHITTAKER FUNCTIONS ON EVERY EVALUATION. `EPoint::Calculate` called
+  `subPoint->RecalcEDependentValues()` for every sub-point of every target-effect point whenever
+  external capture was in use (the branch exists for energy shifts, but it ran unconditionally and
+  serially). On a model with two convolved 16N(beta,alpha) spectra (175 points, ~35 sub-points
+  each after the narrow-resonance lattice) that was 40 s of a 41.6 s chi2 evaluation, with no
+  thread scaling; the capture and scattering data together cost 1.5 s. Fix: `EPoint` remembers the
+  energy at which `CalcEDependentValues` last ran (`eDependentEnergy_`/`eDependentValid_`) and
+  `RecalcEDependentValues` returns immediately when the energy is unchanged (an energy shift still
+  changes it and triggers the recompute). Bit-identical chi2 on the beta-only and full models, the
+  CLI reproduces the 99,024.5 check exactly, tests/run_tests.sh 6/6. Symptom to recognise: `gstack`
+  on an evaluation shows `RecalcEDependentValues -> ShftFunc::theWhitFunc -> gsl_sf_hyperg_U`.
+  Timing recipe that found it: switch data groups off in copies of the model and time
+  `calculate_chi2_rwa` (the beta-only copy told the story in one line), then sample stacks.
+- 2026-09-13 -- pyazr and `output/intEC.dat`: a session that RELOADS an existing cache for the
+  12C+alpha truncated model returns a wrong chi2 (120,593 instead of 113,512, sometimes ~1e26)
+  while the CLI reloading the same cache is exact; confirmed with the pre-fix module too, so it is
+  a pre-existing API-side cache issue (AZUREAPI also keeps `intEC_cache.dat`). Until it is
+  understood: pyazr scripts delete `output/intEC.*` first or use a fresh output directory.
+- 2026-09-13 -- `<parameterSettings>` NUISANCE PRIORS ON ANCs / GAMMA WIDTHS GIVE WRONG PENALTIES.
+  `ParameterLimitsManager::ConvertPhysicalLimitToReduced` maps the physical nominal value and sigma
+  to reduced widths through a clone transform; on the 12C+alpha truncated model, one nuisance entry
+  at a time with the parameter exactly at its nominal value added 316 (6.13 3- ANC), 3,306
+  (Gamma_gamma0 of 6.92) and 3.3e9 (Gamma_gamma0 of 7.12) to the mode-1 total, and an entry with a
+  real 2.2-sigma offset (6.05 ANC) added 85 instead of 4.7. Do not use nuisance entries for
+  closed-channel or photon parameters until this is fixed; the mode-6 `<mcmc>` priors act on the
+  physical values directly (usereducedwidths 0) and are fine. Test recipe: mode 1 with the
+  external parameter file, compare the log's "Total Chi-Squared" (includes the penalty) against
+  chiSquared.out (data only).
