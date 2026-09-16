@@ -235,6 +235,14 @@ class EPoint {
   /// Per-point energy window (columns 5-6 of the data file) of a beam-profile
   /// effect: the detector-reconstructed energy slice the point was built from.
   bool HasBinWindow() const { return bin_low_lab_ == bin_low_lab_ && bin_high_lab_ == bin_high_lab_; };
+  /// Set the per-point energy window directly, in the frame the point is
+  /// already in.  EData::Fill normally reads it from columns 5-6 of the data
+  /// file and converts it with the point; this is for a point built outside
+  /// that path, as the beam-profile reference test does.
+  void SetBinWindow(double low, double high) {
+    bin_low_lab_ = bin_low_cm_ = low;
+    bin_high_lab_ = bin_high_cm_ = high;
+  };
   double GetBinLowCM() const { return bin_low_cm_; };
   double GetBinHighCM() const { return bin_high_cm_; };
   /// Kinematics of the inverse photodissociation reaction for the
