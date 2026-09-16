@@ -1263,3 +1263,20 @@ complete:
   physical values directly (usereducedwidths 0) and are fine. Test recipe: mode 1 with the
   external parameter file, compare the log's "Total Chi-Squared" (includes the penalty) against
   chiSquared.out (data only).
+
+- **A regression reference is not a correctness check.** `tests/run_tests.sh` pins each
+  project's chi-squared against a number this code produced, so it catches a change and
+  nothing else. `tests/reference/` is the other kind: it recomputes the same quantity from
+  a closed form or from an independent implementation of the documented formula.
+  `beam_profile_reference_test.cpp` does that for the beam-profile convolution -- it drives
+  `EPoint::IntegrateTargetEffect` with hand-chosen sub-point cross sections, needs no model,
+  and runs in 0.12 s. The load-bearing check is an identity: a CONSTANT cross section must
+  fold back to itself exactly, whatever the profile, window and detailed-balance weight are
+  doing, because numerator and denominator share the kernel. Worth copying for any other
+  integrator. Both halves are mutation-tested (forcing the window shift to zero, and dropping
+  the detailed-balance factor, each fail exactly one check).
+- `include/Constants.h` defines `pi = 3.141592650`, the true value truncated at ten digits
+  (relative error 1.14e-9). Anything compared against a closed form evaluated with a real pi
+  inherits it -- half of it for a `1/sqrt(2 pi)` normalisation -- so do not set a 1e-12
+  tolerance on such a comparison without expecting 5.7e-10. It cancels wherever a ratio
+  shares the constant.
