@@ -321,6 +321,27 @@ int ESegment::GetExitKey() const {
  */
 
 int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
+  // isDiff 8 computes the vector polarization of a spin-1/2 ejectile from the
+  // amplitude matrix, and a photon exit has no such matrix.  The capture
+  // analyzing power AZURE2 already computes is NOT the same observable: it is
+  // the ANALYZING power, indexed on the polarized entrance channel, which by
+  // time reversal is the outgoing polarization of the INVERSE reaction, not of
+  // capture.  Photon polarization data -- linear or circular -- needs its own
+  // formalism.  Refuse the combination outright rather than evaluate to zero:
+  // a segment that silently returns 0 still contributes a finite chi2 against
+  // real data, so it would drag every other parameter in the fit without ever
+  // announcing itself.
+  if (this->IsPolarizationProduct() && theCNuc->IsPairKey(this->GetExitKey()) &&
+      theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()))->GetPType() == 10) {
+    configure.outStream
+        << "ERROR: Polarization x Cross Section (isDiff 8) is not implemented for a capture"
+        << " exit channel." << std::endl
+        << "       Data file: " << this->GetDataFile() << std::endl
+        << "       The polarization of an outgoing photon is not the ejectile polarization"
+        << " this observable computes, and the capture analyzing power is a different"
+        << " quantity again." << std::endl;
+    return -1;
+  }
   std::string infile = this->GetDataFile();
   std::ifstream in(infile.c_str());
   if (!in) return -1;

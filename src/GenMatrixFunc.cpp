@@ -435,6 +435,10 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
         compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()))->GetPType();
     bool ok = false;
     double numN = 0.0;
+    // A capture exit is refused when the model is read (ESegment::Fill and the
+    // segmentsTest reader), so this is a backstop for a point built some other
+    // way -- via the API, say -- rather than the primary guard.  Zero here is
+    // safe only because no such segment can reach a chi2.
     if (exitPType != 10) ok = this->CalculateAmplitudeMatrixPy(point, &spinSum, &py, &numN);
     if (!ok) { py = 0.0; numN = 0.0; }
     point->SetOutgoingPolarization(py);

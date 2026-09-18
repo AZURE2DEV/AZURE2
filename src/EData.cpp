@@ -261,7 +261,19 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
               }
             }
           }
-          if (isValidTotal || theCNuc->IsPairKey(NewSegment.GetExitKey())) {
+          // See ESegment::Fill: isDiff 8 has no photon implementation.  A test
+          // segment costs no chi2, but it would write a column of zeros to
+          // AZUREOut and read as a prediction, so drop it with a reason too.
+          const bool polProductCapture =
+              NewSegment.IsPolarizationProduct() && theCNuc->IsPairKey(NewSegment.GetExitKey()) &&
+              theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetExitKey()))->GetPType() == 10;
+          if (polProductCapture) {
+            configure.outStream
+                << "WARNING: Test segment #" << numTotalSegments
+                << " is Polarization x Cross Section (isDiff 8) with a capture exit channel,"
+                << " which is not implemented; it will not be used." << std::endl;
+          }
+          if (!polProductCapture && (isValidTotal || theCNuc->IsPairKey(NewSegment.GetExitKey()))) {
             NewSegment.SetSegmentKey(numTotalSegments);
             this->AddSegment(NewSegment);
             ESegment *theSegment = this->GetSegment(this->NumSegments());
