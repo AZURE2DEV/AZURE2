@@ -102,7 +102,11 @@ for project_dir in "$REPO_ROOT"/tests/*/; do
     # and external capture amplitude file prompts (blank = build from the .azr),
     # then 7 = Exit. The prompt loops spin on EOF, so the output is capped as a
     # backstop -- SIGPIPE from head then stops the process.
-    printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline "$(basename "$azr")" 2>&1 \
+    # A hang must FAIL, not stall the suite: an unparseable data line once
+    # spun ESegment::Fill forever at 100% CPU with no message.  GNU timeout
+    # is not on every platform (macOS lacks it), so fall back to a bare run.
+    if command -v timeout >/dev/null 2>&1; then RUN="timeout ${TEST_TIMEOUT:-1800}"; else RUN=""; fi
+    printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline "$(basename "$azr")" 2>&1 \
       | head -c 2000000 > run.log
   )
 

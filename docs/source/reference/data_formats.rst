@@ -34,6 +34,14 @@ Example data file:
 Notes on Data Files
 ^^^^^^^^^^^^^^^^^^^
 
+
+- Blank lines, and lines whose first non-blank character is ``#``, are
+  comments and are ignored, so a data file may carry a header describing its
+  provenance and units. Any other line must have at least the four numeric
+  columns; a line that does not parse is reported with its file, line number
+  and text, and the segment is dropped with the usual *Could Not Fill Segment*
+  warning rather than silently skipped -- a mangled row is a corrupt file, not
+  a comment.
 - **Angle column**: must always be present, even for angle-integrated data. In
   that case the angle is a dummy value and is not used in the calculation.
 - **Sorting**: data may be entered in any order. However, for plotting purposes

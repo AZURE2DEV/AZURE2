@@ -345,9 +345,23 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
   std::string infile = this->GetDataFile();
   std::ifstream in(infile.c_str());
   if (!in) return -1;
-  while (!in.eof()) {
+  int lineNumber = 0;
+  while (true) {
     DataLine line(in);
-    if (!in.eof()) {
+    lineNumber += line.linesConsumed();
+    if (line.atEnd()) break;
+    if (!line.valid()) {
+      // Not a comment and not a data row.  Say exactly where, then let the
+      // caller drop the segment with its usual "Could Not Fill" warning --
+      // silently skipping a mangled row would hide a corrupt file.
+      configure.outStream << "ERROR: Cannot parse line " << lineNumber << " of " << infile << ": \"" << line.raw()
+                          << "\"" << std::endl
+                          << "       A data line needs at least four numeric columns (energy, angle, value,"
+                          << " uncertainty). Lines beginning with '#' and blank lines are ignored." << std::endl;
+      in.close();
+      return -1;
+    }
+    {
       EPoint NewEPoint(line, this);
       if (this->IsInSegment(NewEPoint)) {
         this->AddPoint(NewEPoint);
