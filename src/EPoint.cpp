@@ -1182,6 +1182,8 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
       subMappedPoint->hardspherephase_ = this->GetSubPoint(ii)->hardspherephase_;
     }
   }
+  eDependentEnergy_ = this->GetCMEnergy();
+  eDependentValid_ = true;
 }
 
 /*!
@@ -1189,6 +1191,12 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
  * This is needed when energy shifts are applied after initialization.
  */
 void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure) {
+  // Nothing to do while the energy is the one the values were computed at.
+  // Every sub-point of a target-effect point used to pay for this on every
+  // evaluation whenever external capture was in use (Coulomb and Whittaker
+  // functions for each channel, serial): 40 s per evaluation for two
+  // convolved 16N beta-delayed alpha spectra on the 12C+alpha model.
+  if (eDependentValid_ && this->GetCMEnergy() == eDependentEnergy_) return;
   // Clear existing energy-dependent values first
   lo_elements_.clear();
   penetrabilities_.clear();

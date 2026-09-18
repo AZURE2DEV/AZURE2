@@ -333,6 +333,11 @@ class EPoint {
   matrix_r penetrabilities_;
   matrix_c coulombphase_;
   matrix_c hardspherephase_;
+  // Energy at which CalcEDependentValues last ran: RecalcEDependentValues is
+  // a no-op while the point's energy is unchanged (its values depend only on
+  // the energy, the angle and the channel radii).
+  double eDependentEnergy_ = 0.0;
+  bool eDependentValid_ = false;
   matrix_c ec_amplitudes_;
   matrix_r ec_energies_;  // Energies at which EC amplitudes were calculated
   std::vector<EPoint *> local_mapped_points_;
