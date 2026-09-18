@@ -570,7 +570,8 @@ power's, and multiplies the cross section the point already carries by
 The constant that has to be carried forward
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-As the previous chapter shows, the published product is a plain multiple of the
+As the previous chapter shows -- and as Ohlsen's eq. (5.38) [Ohlsen1972]_
+states directly -- the published product is a plain multiple of the
 bare numerator :math:`N = \mathrm{Tr}(\sigma_y M M^{\dagger})`: the denominator
 of :math:`P_y` is exactly the spin sum the cross section divides by, so it
 cancels. That is what makes the adjoint easy — :math:`N` is bilinear in

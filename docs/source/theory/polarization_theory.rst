@@ -176,12 +176,14 @@ Take the quantization axis for the polarization along
    \hat{\mathbf{n}} = \frac{\mathbf{k}_{\text{in}} \times \mathbf{k}_{\text{out}}}
                            {|\mathbf{k}_{\text{in}} \times \mathbf{k}_{\text{out}}|},
 
-the normal to the scattering plane. This is the Madison convention, and it is
+the normal to the scattering plane. This is the Madison convention
+(Ohlsen [Ohlsen1972]_, §5.1), and it is
 the only sensible choice: parity conservation forbids a vector polarization
 along any other direction, so :math:`A_x = A_z = 0` identically and
 :math:`A_y` is the whole of the vector analyzing power.
 
-The observable is a ratio of traces: the outgoing density matrix against
+The observable is a ratio of traces, Ohlsen's eq. (5.31) [Ohlsen1972]_: the
+outgoing density matrix against
 :math:`\sigma_y` acting in the projectile's spin space, over the same trace
 against the identity,
 
@@ -313,7 +315,8 @@ section. The mirror question — what polarization the *ejectile* carries away
 from an unpolarized reaction — is a different observable built from the same
 amplitude matrix, and it is the one most of the older literature reports.
 
-Formally the two differ only in which index the Pauli matrix acts on:
+Formally the two differ only in which index the Pauli matrix acts on --
+Ohlsen's eqs. (5.31) and (5.33) [Ohlsen1972]_:
 
 .. math::
 
@@ -332,7 +335,9 @@ decomposed into ejectile and residual projections before :math:`\sigma_y` can
 act, exactly as :eq:`decompose` decomposes the entrance channel spin, and with
 the same Lane–Thomas coupling order for the same reason.
 
-The two are related by time reversal: :math:`P` for :math:`A(a,b)B` equals
+The two are related by time reversal -- Ohlsen's eq. (5.39) [Ohlsen1972]_, which
+carries no sign factor on the :math:`y` components, unlike the transfer
+coefficients -- :math:`P` for :math:`A(a,b)B` equals
 :math:`A_y` for the inverse reaction :math:`B(b,a)A`. They are *not* the same
 quantity for the same reaction, and the distinction is not academic here. A
 spin-0 projectile has no vector analyzing power at all — there is no beam spin
@@ -343,7 +348,10 @@ the polarization is the only vector observable the reaction has.
 What is measured, and what is published
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-An experiment does not measure :math:`P` directly. It measures a left–right
+An experiment does not measure :math:`P` directly. Ohlsen's eq. (5.38)
+[Ohlsen1972]_ says why in one line: for an unpolarized beam,
+:math:`p_{y'}\,I = I_0\,P_{y'}`, so the product is what the reaction hands the
+experimenter. It measures a left–right
 asymmetry in a polarimeter, which is proportional to the *product* of the
 polarization and the cross section that produced the ejectiles in the first
 place. Dividing out the cross section requires knowing it at the same angles
@@ -463,3 +471,16 @@ the same notation as the :math:`b_k` already coded.
    *Physical Review C* **20** (1979) 453.
 
 .. [Baumann1992] R. Baumann *et al.*, *Nuclear Physics* **A542** (1992) 53.
+
+.. [Ohlsen1972] G. G. Ohlsen, *Reports on Progress in Physics* **35** (1972)
+   717. The reference the conventions of this chapter were checked against:
+   the analysing power as a trace over the initial spin index, eq. (5.31),
+   and the outgoing polarization as a trace over the final one, eq. (5.33);
+   the outgoing particle's :math:`y'` axis along
+   :math:`\mathbf{k}_{\text{in}} \times \mathbf{k}_{\text{out}}`, §5.1; the
+   time-reversal relation :math:`P_{y'} = \bar{A}_y` between a reaction and
+   its inverse at the same c.m. energy and angle, eq. (5.39), and its elastic
+   case :math:`A_y = P_{y'}`, eq. (5.40); and the unpolarized-beam product
+   :math:`p_{y'} I = I_0 P_{y'}`, eq. (5.38). His spin-1/2-on-spin-0 matrix
+   :math:`M = A + B\sigma_y`, eq. (7.1), is the form AZURE2's own self-check
+   asserts, so the sign convention is the same and not merely compatible.
