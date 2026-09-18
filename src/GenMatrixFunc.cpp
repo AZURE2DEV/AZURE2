@@ -420,6 +420,30 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
     if (!point->IsSubPoint()) point->SetFitCrossSection(ay);
   }
 
+  // A polarization-product segment (isDiff 8) reports P dsigma/dOmega. The
+  // differential cross section is already in the cross-section slot by this
+  // point -- every branch above has set it -- so the observable is that value
+  // multiplied by the outgoing polarization, and the units come along for free
+  // rather than having to be rebuilt from the amplitude matrix's bare spin sum.
+  //
+  // Unlike A_y this is extensive: a target effect integrates it exactly as it
+  // integrates a cross section, so sub-points need no special averaging and
+  // the value is written for sub-points too.
+  if (point->IsPolarizationProduct()) {
+    double spinSum = 0.0, py = 0.0;
+    const int exitPType =
+        compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()))->GetPType();
+    bool ok = false;
+    double numN = 0.0;
+    if (exitPType != 10) ok = this->CalculateAmplitudeMatrixPy(point, &spinSum, &py, &numN);
+    if (!ok) { py = 0.0; numN = 0.0; }
+    point->SetOutgoingPolarization(py);
+    const double model = point->GetFitCrossSection() * py;
+    // scale = model / N: the kinematic constant, independent of the T-matrix.
+    point->SetPolarizationScale(std::fabs(numN) > 1.e-300 ? model / numN : 0.0);
+    point->SetFitCrossSection(model);
+  }
+
   // Temporary validation hook: compare the Seyler amplitude-matrix route
   // against the Blatt-Biedenharn one. At fixed energy the ratio must be
   // constant in angle.
@@ -666,6 +690,76 @@ bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint *point, double *spinSum,
     std::printf("FLIP n=%zu maxflip=%.6e\n", M.size(), M.MaxSpinFlip());
   if (spinSum) *spinSum = M.UnpolarizedCrossSection();
   if (analyzingPower) *analyzingPower = M.AnalyzingPowerAy();
+  // Prototype: outgoing vector polarization on the same amplitude matrix.
+  // For elastic scattering (aa == ir) P_y must equal A_y; that identity is the
+  // correctness test for the exit-index trace and its sign.
+  if (std::getenv("AZR_DEBUG_POL")) {
+    const double ay = M.AnalyzingPowerAy();
+    const double py = M.OutgoingPolarizationPy();
+    std::printf("POL aa=%d ir=%d theta=%9.4f xs=%12.5e Ay=%+12.6e Py=%+12.6e %s\n",
+                aaPair, irPair, point->GetCMAngle(), M.UnpolarizedCrossSection(), ay, py,
+                (aaPair == irPair) ? ((std::fabs(ay - py) <= 1.e-9 * (std::fabs(ay) + 1.e-30))
+                                       ? "ELASTIC-MATCH" : "ELASTIC-MISMATCH") : "");
+  }
+  return true;
+}
+/*!
+ * Outgoing-polarization twin of CalculateAmplitudeMatrix: identical amplitude
+ * matrix, P_y taken off it instead of A_y.
+ */
+
+bool GenMatrixFunc::CalculateAmplitudeMatrixPy(EPoint *point, double *spinSum,
+                                             double *outgoingPolarization,
+                                             double *numerator) {
+  if (spinSum) *spinSum = 0.0;
+  if (outgoingPolarization) *outgoingPolarization = 0.0;
+
+  const int aaPair = compound()->GetPairNumFromKey(point->GetEntranceKey());
+  const int irPair = compound()->GetPairNumFromKey(point->GetExitKey());
+  // Particle channels only. A photon exit has no amplitude matrix of this form
+  // and goes through CalculateCaptureAnalyzingPower instead.
+  if (compound()->GetPair(aaPair)->GetPType() != 0 ||
+      compound()->GetPair(irPair)->GetPType() != 0) return false;
+
+  int ir = 0;
+  while (ir < compound()->GetPair(aaPair)->NumDecays()) {
+    ir++;
+    if (compound()->GetPair(aaPair)->GetDecay(ir)->GetPairNum() == irPair) break;
+  }
+  if (ir > compound()->GetPair(aaPair)->NumDecays()) return false;
+  Decay *theDecay = compound()->GetPair(aaPair)->GetDecay(ir);
+
+  Polarization::AmplitudeMatrix M(compound(), point, aaPair, irPair);
+
+  for (int k = 1; k <= theDecay->NumKGroups(); k++) {
+    for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+      MGroup *g = theDecay->GetKGroup(k)->GetMGroup(m);
+      M.AddPathway(g->GetJNum(), g->GetChNum(), g->GetChpNum(),
+                   this->GetTMatrixElement(k, m));
+    }
+  }
+
+  // Coulomb only contributes to elastic scattering.
+  if (aaPair == irPair) M.AddCoulomb(point->GetCoulombAmplitude());
+
+  if (M.size() == 0) return false;
+    if (spinSum) *spinSum = M.UnpolarizedCrossSection();
+  if (outgoingPolarization) *outgoingPolarization = M.OutgoingPolarizationPy();
+  if (numerator) *numerator = M.OutgoingPolarizationNumerator();
+  if (std::getenv("AZR_CHECK_ADJOINT"))
+    std::printf("ADJ theta=%9.4f nAmp=%3zu worstRelErr=%.3e\n",
+                point->GetCMAngle(), M.size(), M.SelfCheckNumeratorBar());
+  // Prototype: outgoing vector polarization on the same amplitude matrix.
+  // For elastic scattering (aa == ir) P_y must equal A_y; that identity is the
+  // correctness test for the exit-index trace and its sign.
+  if (false) {
+    const double ay = M.AnalyzingPowerAy();
+    const double py = M.OutgoingPolarizationPy();
+    std::printf("POL aa=%d ir=%d theta=%9.4f xs=%12.5e Ay=%+12.6e Py=%+12.6e %s\n",
+                aaPair, irPair, point->GetCMAngle(), M.UnpolarizedCrossSection(), ay, py,
+                (aaPair == irPair) ? ((std::fabs(ay - py) <= 1.e-9 * (std::fabs(ay) + 1.e-30))
+                                       ? "ELASTIC-MATCH" : "ELASTIC-MISMATCH") : "");
+  }
   return true;
 }
 

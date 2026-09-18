@@ -326,4 +326,231 @@ double AmplitudeMatrix::AnalyzingPowerAy() const {
   return 2.0 * std::imag(interference) / denominator;
 }
 
+
+/*!
+ * Vector polarization of the outgoing particle, produced with an unpolarized
+ * beam. See the header for why this is the exit-index counterpart of
+ * AnalyzingPowerAy and where the sign comes from.
+ */
+
+double AmplitudeMatrix::OutgoingPolarizationPy() const {
+  // The Pauli matrix acts on the ejectile alone, so the exit channel spin has
+  // to be decomposed into ejectile and residual just as AnalyzingPowerAy
+  // decomposes the entrance channel spin into projectile and target:
+  //
+  //   M_{s' , m1' m2' ; in} = sum_{s'} <j1' m1' j2' m2' | s' m1'+m2'> M_{s' v' ; in}
+  //
+  // with the same Lane and Thomas coupling order (particle 1 first) and
+  // Condon-Shortley phases that AngCoeff::ClebGord supplies.
+  PPair *exit = compound_->GetPair(ir_);
+  const double j1p = exit->GetJ(1);  // the ejectile
+  const double j2p = exit->GetJ(2);  // the residual nucleus
+  // A vector polarization is a spin-1/2 ejectile observable.
+  if (std::fabs(j1p - 0.5) > 1.e-6) return 0.0;
+
+  complex interference(0.0, 0.0);
+  double denominator = 0.0;
+  for (std::size_t i = 0; i < entranceSpins_.size(); i++) {
+    const double s = entranceSpins_[i];
+    for (double v = -s; v <= s + 1.e-6; v += 1.0) {
+      for (double m2p = -j2p; m2p <= j2p + 1.e-6; m2p += 1.0) {
+        complex up(0.0, 0.0), down(0.0, 0.0);
+        for (std::size_t j = 0; j < exitSpins_.size(); j++) {
+          const double sp = exitSpins_[j];
+          const double nuUp = 0.5 + m2p, nuDn = -0.5 + m2p;
+          if (std::fabs(nuUp) <= sp + 1.e-6)
+            up += AngCoeff::ClebGord(j1p, j2p, sp, 0.5, m2p, nuUp) * Get(s, v, sp, nuUp);
+          if (std::fabs(nuDn) <= sp + 1.e-6)
+            down += AngCoeff::ClebGord(j1p, j2p, sp, -0.5, m2p, nuDn) * Get(s, v, sp, nuDn);
+        }
+        interference += up * std::conj(down);
+        denominator += std::norm(up) + std::norm(down);
+      }
+    }
+  }
+  if (denominator <= 0.0) return 0.0;
+  // Exit-index trace: Tr(sigma_y M M+) = -2 Im(sum up conj(down)).
+  return -2.0 * std::imag(interference) / denominator;
+}
+
+
+/*!
+ * Numerator of P_y: N = -2 Im(sum over the exit decomposition of u' conj(d')).
+ */
+
+double AmplitudeMatrix::OutgoingPolarizationNumerator() const {
+  PPair *exit = compound_->GetPair(ir_);
+  const double j1p = exit->GetJ(1);
+  const double j2p = exit->GetJ(2);
+  if (std::fabs(j1p - 0.5) > 1.e-6) return 0.0;
+  complex interference(0.0, 0.0);
+  for (std::size_t i = 0; i < entranceSpins_.size(); i++) {
+    const double s = entranceSpins_[i];
+    for (double v = -s; v <= s + 1.e-6; v += 1.0) {
+      for (double m2p = -j2p; m2p <= j2p + 1.e-6; m2p += 1.0) {
+        complex up(0.0, 0.0), down(0.0, 0.0);
+        for (std::size_t j = 0; j < exitSpins_.size(); j++) {
+          const double sp = exitSpins_[j];
+          const double nuUp = 0.5 + m2p, nuDn = -0.5 + m2p;
+          if (std::fabs(nuUp) <= sp + 1.e-6)
+            up += AngCoeff::ClebGord(j1p, j2p, sp, 0.5, m2p, nuUp) * Get(s, v, sp, nuUp);
+          if (std::fabs(nuDn) <= sp + 1.e-6)
+            down += AngCoeff::ClebGord(j1p, j2p, sp, -0.5, m2p, nuDn) * Get(s, v, sp, nuDn);
+        }
+        interference += up * std::conj(down);
+      }
+    }
+  }
+  return -2.0 * std::imag(interference);
+}
+
+/*!
+ * Reverse mode for the numerator. N is bilinear in M, so the derivative is
+ * exact and has no denominator: dN/du'* = -i d', dN/dd'* = +i u'.
+ */
+
+std::vector<complex> AmplitudeMatrix::OutgoingPolarizationNumeratorBar() const {
+  std::vector<complex> bar(amplitudes_.size(), complex(0.0, 0.0));
+  PPair *exit = compound_->GetPair(ir_);
+  const double j1p = exit->GetJ(1);
+  const double j2p = exit->GetJ(2);
+  if (std::fabs(j1p - 0.5) > 1.e-6) return bar;
+  const complex I(0.0, 1.0);
+  for (std::size_t i = 0; i < entranceSpins_.size(); i++) {
+    const double s = entranceSpins_[i];
+    for (double v = -s; v <= s + 1.e-6; v += 1.0) {
+      for (double m2p = -j2p; m2p <= j2p + 1.e-6; m2p += 1.0) {
+        const double nuUp = 0.5 + m2p, nuDn = -0.5 + m2p;
+        complex up(0.0, 0.0), down(0.0, 0.0);
+        for (std::size_t j = 0; j < exitSpins_.size(); j++) {
+          const double sp = exitSpins_[j];
+          if (std::fabs(nuUp) <= sp + 1.e-6)
+            up += AngCoeff::ClebGord(j1p, j2p, sp, 0.5, m2p, nuUp) * Get(s, v, sp, nuUp);
+          if (std::fabs(nuDn) <= sp + 1.e-6)
+            down += AngCoeff::ClebGord(j1p, j2p, sp, -0.5, m2p, nuDn) * Get(s, v, sp, nuDn);
+        }
+        const complex dN_du = -I * down;
+        const complex dN_dd = I * up;
+        for (std::size_t j = 0; j < exitSpins_.size(); j++) {
+          const double sp = exitSpins_[j];
+          if (std::fabs(nuUp) <= sp + 1.e-6) {
+            const int idx = IndexOf(s, v, sp, nuUp);
+            if (idx >= 0)
+              bar[idx] += 2.0 * AngCoeff::ClebGord(j1p, j2p, sp, 0.5, m2p, nuUp) * dN_du;
+          }
+          if (std::fabs(nuDn) <= sp + 1.e-6) {
+            const int idx = IndexOf(s, v, sp, nuDn);
+            if (idx >= 0)
+              bar[idx] += 2.0 * AngCoeff::ClebGord(j1p, j2p, sp, -0.5, m2p, nuDn) * dN_dd;
+          }
+        }
+      }
+    }
+  }
+  return bar;
+}
+
+/*!
+ * Reverse mode for P_y itself (the ratio), for completeness and for anyone
+ * fitting the bare polarization rather than the published product.
+ */
+
+std::vector<complex> AmplitudeMatrix::OutgoingPolarizationBar() const {
+  std::vector<complex> bar(amplitudes_.size(), complex(0.0, 0.0));
+  PPair *exit = compound_->GetPair(ir_);
+  const double j1p = exit->GetJ(1);
+  const double j2p = exit->GetJ(2);
+  if (std::fabs(j1p - 0.5) > 1.e-6) return bar;
+
+  complex interference(0.0, 0.0);
+  double denominator = 0.0;
+  for (std::size_t i = 0; i < entranceSpins_.size(); i++) {
+    const double s = entranceSpins_[i];
+    for (double v = -s; v <= s + 1.e-6; v += 1.0) {
+      for (double m2p = -j2p; m2p <= j2p + 1.e-6; m2p += 1.0) {
+        complex up(0.0, 0.0), down(0.0, 0.0);
+        for (std::size_t j = 0; j < exitSpins_.size(); j++) {
+          const double sp = exitSpins_[j];
+          const double nuUp = 0.5 + m2p, nuDn = -0.5 + m2p;
+          if (std::fabs(nuUp) <= sp + 1.e-6)
+            up += AngCoeff::ClebGord(j1p, j2p, sp, 0.5, m2p, nuUp) * Get(s, v, sp, nuUp);
+          if (std::fabs(nuDn) <= sp + 1.e-6)
+            down += AngCoeff::ClebGord(j1p, j2p, sp, -0.5, m2p, nuDn) * Get(s, v, sp, nuDn);
+        }
+        interference += up * std::conj(down);
+        denominator += std::norm(up) + std::norm(down);
+      }
+    }
+  }
+  if (denominator <= 0.0) return bar;
+  const double N = -2.0 * std::imag(interference);
+  const double D = denominator;
+  const complex I(0.0, 1.0);
+
+  for (std::size_t i = 0; i < entranceSpins_.size(); i++) {
+    const double s = entranceSpins_[i];
+    for (double v = -s; v <= s + 1.e-6; v += 1.0) {
+      for (double m2p = -j2p; m2p <= j2p + 1.e-6; m2p += 1.0) {
+        const double nuUp = 0.5 + m2p, nuDn = -0.5 + m2p;
+        complex up(0.0, 0.0), down(0.0, 0.0);
+        for (std::size_t j = 0; j < exitSpins_.size(); j++) {
+          const double sp = exitSpins_[j];
+          if (std::fabs(nuUp) <= sp + 1.e-6)
+            up += AngCoeff::ClebGord(j1p, j2p, sp, 0.5, m2p, nuUp) * Get(s, v, sp, nuUp);
+          if (std::fabs(nuDn) <= sp + 1.e-6)
+            down += AngCoeff::ClebGord(j1p, j2p, sp, -0.5, m2p, nuDn) * Get(s, v, sp, nuDn);
+        }
+        // Sign mirrors the entrance-index case with N = -2 Im(...).
+        const complex dP_du = -I * down / D - (N / (D * D)) * up;
+        const complex dP_dd = I * up / D - (N / (D * D)) * down;
+        for (std::size_t j = 0; j < exitSpins_.size(); j++) {
+          const double sp = exitSpins_[j];
+          if (std::fabs(nuUp) <= sp + 1.e-6) {
+            const int idx = IndexOf(s, v, sp, nuUp);
+            if (idx >= 0)
+              bar[idx] += 2.0 * AngCoeff::ClebGord(j1p, j2p, sp, 0.5, m2p, nuUp) * dP_du;
+          }
+          if (std::fabs(nuDn) <= sp + 1.e-6) {
+            const int idx = IndexOf(s, v, sp, nuDn);
+            if (idx >= 0)
+              bar[idx] += 2.0 * AngCoeff::ClebGord(j1p, j2p, sp, -0.5, m2p, nuDn) * dP_dd;
+          }
+        }
+      }
+    }
+  }
+  return bar;
+}
+
+
+double AmplitudeMatrix::SelfCheckNumeratorBar(double h) const {
+  const std::vector<complex> bar = OutgoingPolarizationNumeratorBar();
+  AmplitudeMatrix probe(*this);
+  double worst = 0.0;
+  for (std::size_t i = 0; i < amplitudes_.size(); i++) {
+    const complex saved = amplitudes_[i].value;
+    const double scale = std::max(std::abs(saved), 1.e-12) * h;
+    // d/dRe
+    probe.amplitudes_[i].value = saved + complex(scale, 0.0);
+    const double np = probe.OutgoingPolarizationNumerator();
+    probe.amplitudes_[i].value = saved - complex(scale, 0.0);
+    const double nm = probe.OutgoingPolarizationNumerator();
+    const double dRe = (np - nm) / (2.0 * scale);
+    // d/dIm
+    probe.amplitudes_[i].value = saved + complex(0.0, scale);
+    const double ip = probe.OutgoingPolarizationNumerator();
+    probe.amplitudes_[i].value = saved - complex(0.0, scale);
+    const double im = probe.OutgoingPolarizationNumerator();
+    const double dIm = (ip - im) / (2.0 * scale);
+    probe.amplitudes_[i].value = saved;
+    const double refR = std::max(std::fabs(std::real(bar[i])), std::fabs(dRe));
+    const double refI = std::max(std::fabs(std::imag(bar[i])), std::fabs(dIm));
+    if (refR > 1.e-14)
+      worst = std::max(worst, std::fabs(std::real(bar[i]) - dRe) / refR);
+    if (refI > 1.e-14)
+      worst = std::max(worst, std::fabs(std::imag(bar[i]) - dIm) / refI);
+  }
+  return worst;
+}
+
 }  // namespace Polarization

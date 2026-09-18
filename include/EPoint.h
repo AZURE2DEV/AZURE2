@@ -56,10 +56,22 @@ class EPoint {
   //! Vector analyzing power point; the fit value is A_y, not a cross section.
   bool IsAnalyzingPower() const { return is_analyzing_power_; };
   void SetIsAnalyzingPower(bool v) { is_analyzing_power_ = v; };
+  bool IsPolarizationProduct() const { return is_polarization_product_; };
+  void SetIsPolarizationProduct(bool v) { is_polarization_product_ = v; };
   //! A_y is kept beside the cross section rather than replacing it, because
   //! target-effect integration needs the cross section as the weight.
   double GetAnalyzingPower() const { return analyzing_power_; };
   void SetAnalyzingPower(double v) { analyzing_power_ = v; };
+  //! Outgoing vector polarization P_y, before multiplication by the cross
+  //! section. Kept for output and diagnostics; the fitted quantity is the
+  //! product, which lives in the cross-section slot.
+  double GetOutgoingPolarization() const { return outgoing_polarization_; };
+  void SetOutgoingPolarization(double v) { outgoing_polarization_ = v; };
+  //! model = scale * N, with N the polarization numerator and scale the purely
+  //! kinematic constant (wave number, spin weights) that is independent of the
+  //! T-matrix. Captured in the forward pass so the adjoint can apply it.
+  double GetPolarizationScale() const { return polarization_scale_; };
+  void SetPolarizationScale(double v) { polarization_scale_ = v; };
   /// Is this one of the sub-points a target-effect integral is built from?
   bool IsSubPoint() const { return is_sub_point_; };
   /// Unobserved-primary, observed-secondary point?
@@ -268,8 +280,11 @@ class EPoint {
   bool is_mapped_;
   bool is_ang_dist_;
   bool is_analyzing_power_ = false;
+  bool is_polarization_product_ = false;
   bool is_sub_point_ = false;
   double analyzing_power_ = 0.0;
+  double outgoing_polarization_ = 0.0;
+  double polarization_scale_ = 0.0;
   int entrance_key_;
   int exit_key_;
   int segment_key_;

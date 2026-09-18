@@ -50,6 +50,14 @@ class ESegment {
    * dimensionless and bounded by one.
    */
   bool IsAnalyzingPower() const { return isAnalyzingPower_; };
+  /*!
+   * Polarization-times-cross-section segment (isDiff = 8). The comparison
+   * quantity is P dsigma/dOmega, the outgoing vector polarization multiplied
+   * by the differential cross section -- the form most polarization
+   * measurements are published in. Unlike A_y it is extensive, so a target
+   * effect integrates it exactly as it integrates a cross section.
+   */
+  bool IsPolarizationProduct() const { return isPolarizationProduct_; };
   /// Unobserved-primary, observed-secondary reaction?
   bool IsUPOS() const;
   /// Number of segments summed for total capture; 0 if this is not a total-capture segment.
@@ -184,6 +192,7 @@ class ESegment {
   bool varyNorm_;
   bool isAngDist_;
   bool isAnalyzingPower_;
+  bool isPolarizationProduct_;
   bool isUPOS_;
   int secondaryDecayL_;
   double Ic_;

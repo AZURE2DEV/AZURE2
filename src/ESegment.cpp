@@ -27,11 +27,14 @@ ESegment::ESegment(SegLine segLine) {
   // frame, so it needs the same angular machinery as a differential cross
   // section even though the quantity itself is a dimensionless ratio.
   isAnalyzingPower_ = (segLine.isDiff() == 7);
-  if (segLine.isDiff() == 1 || segLine.isDiff() == 4 || segLine.isDiff() == 7)
+  // isDiff 8 is P dsigma/dOmega: differential in the centre-of-mass frame
+  // like the analysing power, but an extensive quantity.
+  isPolarizationProduct_ = (segLine.isDiff() == 8);
+  if (segLine.isDiff() == 1 || segLine.isDiff() == 4 || segLine.isDiff() == 7 || segLine.isDiff() == 8)
     isdifferential_ = true;
   else
     isdifferential_ = false;
-  if (segLine.isDiff() == 4 || segLine.isDiff() == 7)
+  if (segLine.isDiff() == 4 || segLine.isDiff() == 7 || segLine.isDiff() == 8)
     iscmdifferential_ = true;
   else
     iscmdifferential_ = false;
@@ -105,11 +108,14 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   a_step_ = extrapLine.aStep();
   segment_chi_squared_ = 0.0;
   isAnalyzingPower_ = (extrapLine.isDiff() == 7);
-  if (extrapLine.isDiff() == 1 || extrapLine.isDiff() == 5 || extrapLine.isDiff() == 7)
+  // isDiff 8 is P dsigma/dOmega: differential in the centre-of-mass frame
+  // like the analysing power, but an extensive quantity.
+  isPolarizationProduct_ = (extrapLine.isDiff() == 8);
+  if (extrapLine.isDiff() == 1 || extrapLine.isDiff() == 5 || extrapLine.isDiff() == 7 || extrapLine.isDiff() == 8)
     isdifferential_ = true;
   else
     isdifferential_ = false;
-  if (extrapLine.isDiff() == 5 || extrapLine.isDiff() == 7)
+  if (extrapLine.isDiff() == 5 || extrapLine.isDiff() == 7 || extrapLine.isDiff() == 8)
     iscmdifferential_ = true;
   else
     iscmdifferential_ = false;
@@ -748,6 +754,7 @@ void ESegment::AddPoint(EPoint point) {
   // The observable is a property of the segment; stamp it on the point so the
   // calculation does not have to look back up.
   point.SetIsAnalyzingPower(this->IsAnalyzingPower());
+  point.SetIsPolarizationProduct(this->IsPolarizationProduct());
   points_.push_back(point);
 }
 

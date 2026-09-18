@@ -687,6 +687,39 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
         }
       }
     }
+  } else if (point->IsPolarizationProduct()) {
+    // ---- P dsigma/dOmega. The observable is the bare numerator
+    //        N = -2 Im(sum u' conj(d'))
+    //      of the outgoing polarization: P_y's denominator is exactly the spin
+    //      sum the cross section divides by, so the product carries no ratio
+    //      (verified -- P_y sigma / N is 1/nEntrance to twelve digits at every
+    //      angle). N is bilinear in M, so the adjoint is exact and has no
+    //      1/D^2, making it better conditioned than the A_y adjoint above.
+    const int exitPairNum2 = compound()->GetPairNumFromKey(point->GetExitKey());
+    if (compound()->GetPair(exitPairNum2)->GetPType() != 0) return false;
+    Polarization::AmplitudeMatrix M(compound(), point, aa, exitPairNum2);
+    for (int k = 1; k <= nK; k++) {
+      for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+        MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
+        M.AddPathway(mg->GetJNum(), mg->GetChNum(), mg->GetChpNum(),
+                     this->GetTMatrixElement(k, m));
+      }
+    }
+    if (aa == exitPairNum2) M.AddCoulomb(point->GetCoulombAmplitude());
+    if (M.size() == 0) return false;
+    const std::vector<complex> bar = M.OutgoingPolarizationNumeratorBar();
+    // model = scale * N, so the cotangent carries the same constant. Without it
+    // the Jacobian rows are scaled inconsistently across energies and the search
+    // directions are wrong even though each column is individually proportional
+    // to the truth.
+    const double polScale = point->GetPolarizationScale();
+    for (int k = 1; k <= nK; k++) {
+      for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+        MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
+        if (!includeInternal(mg)) continue;
+        tBar[k - 1][m - 1] += fitBar * polScale * M.PathwayAdjoint(mg->GetJNum(), mg->GetChNum(), mg->GetChpNum(), bar);
+      }
+    }
   } else if (isPhase) {
     // ---- Phase shift: model = (90/pi) * arg(U) [+ const for identical pairs],
     //      U = sum_{matching k,m} (expCP^2 - T(k,m)) / expCP^2, matched by

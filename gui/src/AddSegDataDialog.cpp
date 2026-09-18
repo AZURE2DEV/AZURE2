@@ -35,9 +35,12 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   dataTypeCombo->addItem(tr("Angle Integrated (E1 only)"));
   dataTypeCombo->addItem(tr("Angle Integrated (E2 only)"));
   dataTypeCombo->addItem(tr("Analyzing Power"));
+  dataTypeCombo->addItem(tr("Polarization x Cross Section"));
   // Codes 0-6 happen to equal their position; the analyzing power is 7.
   for (int i = 0; i < dataTypeCombo->count(); i++) dataTypeCombo->setItemData(i, i);
-  dataTypeCombo->setItemData(dataTypeCombo->count() - 1, 7);
+  dataTypeCombo->setItemData(dataTypeCombo->count() - 2, 7);
+  // isDiff 8: P dsigma/dOmega, the published form of most polarization data.
+  dataTypeCombo->setItemData(dataTypeCombo->count() - 1, 8);
   connect(dataTypeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(dataTypeChanged(int)));
   QRegExp spinRX("^\\d{0,2}(\\.[05]{0,1})?$");
   QValidator *spinValidator = new QRegExpValidator(spinRX, this);

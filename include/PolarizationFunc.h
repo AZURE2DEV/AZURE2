@@ -105,6 +105,61 @@ class AmplitudeMatrix {
   complex PathwayAdjoint(int jNum, int chNum, int chpNum,
                          const std::vector<complex> &bar) const;
 
+  /*!
+   * Vector polarization P_y of the OUTGOING particle produced with an
+   * unpolarized beam and target, in the same Madison convention (y along
+   * k_in x k_out).
+   *
+   * Where A_y is Tr(M sigma_y M+)/Tr(M M+), with the Pauli matrix acting on
+   * the entrance spin, this is Tr(sigma_y M M+)/Tr(M M+): the same amplitude
+   * matrix, the same trace, taken on the exit index instead. The exit channel
+   * spin is decomposed into (ejectile, residual) exactly as AnalyzingPowerAy
+   * decomposes the entrance one, so a residual nucleus of any spin is handled.
+   *
+   * Returns 0 when the ejectile is not spin-1/2, which is the correct value.
+   *
+   * Note the sign: carrying the Pauli matrix through on the exit index gives
+   * -2 Im(...) where the entrance-index trace gives +2 Im(...). For elastic
+   * scattering P_y and A_y must come out equal, which is the test.
+   */
+  double OutgoingPolarizationPy() const;
+
+  /*!
+   * Reverse mode for P_y, the exit-index counterpart of AnalyzingPowerBar:
+   * per amplitude slot, 2 dP_y/dM*, in the same cotangent convention.
+   * Feed the result to PathwayAdjoint, which is observable-agnostic.
+   */
+  std::vector<complex> OutgoingPolarizationBar() const;
+
+  /*!
+   * Numerator of P_y on its own: N = -2 Im(sum u' conj(d')) over the exit-spin
+   * decomposition, with no denominator.
+   *
+   * This is worth having separately because the denominator of P_y is, by
+   * unitarity of the Clebsch-Gordan transformation, exactly the spin sum that
+   * UnpolarizedCrossSection divides by nEntrance. So the published observable
+   *
+   *     P dsigma/dOmega  =  P_y * sigma  =  (N/D) * (C D / nEntrance)
+   *                      =  C N / nEntrance
+   *
+   * with C the kinematic factor the caller supplies. The product carries no
+   * ratio at all: it is linear in the numerator, so its adjoint needs no
+   * quotient rule and cannot blow up where the cross section is small -- which
+   * is precisely where A_y's adjoint is worst conditioned.
+   */
+  double OutgoingPolarizationNumerator() const;
+  std::vector<complex> OutgoingPolarizationNumeratorBar() const;
+
+  /*!
+   * Unit check of OutgoingPolarizationNumeratorBar: perturbs every amplitude
+   * slot in turn and compares the analytic cotangent against a central
+   * difference of OutgoingPolarizationNumerator. The convention is
+   * bar = 2 dN/dM*, and for a real N of complex M that is exactly
+   * dN/dRe(M) + i dN/dIm(M), so both parts are directly checkable.
+   * Returns the worst relative disagreement over all slots.
+   */
+  double SelfCheckNumeratorBar(double h = 1.e-6) const;
+
   //! Largest |M| with v != v' -- the spin-flip strength, which is what makes
   //! a vector analyzing power non-zero. Diagnostic.
   double MaxSpinFlip() const;
