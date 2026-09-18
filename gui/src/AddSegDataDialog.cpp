@@ -334,7 +334,7 @@ void AddSegDataDialog::dataTypeChanged(int index) {
     totalCaptureLabel->setVisible(false);
     exitPairIndexSpin->setVisible(true);
   }
-  if (index == 4 || index == 7) {
+  if (index == 4 || index == 7 || index == 8) {  // C.M. differential, A_y, or P dsigma/dOmega
     lowAngleText->setEnabled(true);
     highAngleText->setEnabled(true);
   }

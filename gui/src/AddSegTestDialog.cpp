@@ -269,7 +269,7 @@ void AddSegTestDialog::dataTypeChanged(int index) {
     totalCaptureLabel->setVisible(false);
     exitPairIndexSpin->setVisible(true);
   }
-  if (index == 5 || index == 6) {  // C.M. differential, or the analyzing power
+  if (index == 5 || index == 6 || index == 7) {  // C.M. differential, A_y, or P dsigma/dOmega
     lowAngleText->setEnabled(true);
     highAngleText->setEnabled(true);
     angleStepText->setEnabled(true);
