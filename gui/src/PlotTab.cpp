@@ -469,6 +469,36 @@ void PlotTab::testChannelFilterChanged() {
   segTestProxyModel->setExitFilter(testOutChannelCombo->currentData().toInt());
 }
 
+/*!
+ * Folds one selected segment's data type into the aggregate y-axis quantity.
+ *
+ * The data and test segment lists do NOT share a code set, which is the trap
+ * here: 3 is total capture among data segments but angular distribution
+ * coefficients among test segments, and 4 is c.m. differential among data
+ * segments but total capture among test segments.  Only 1, 2, 7 and 8 mean the
+ * same thing in both.  The classification therefore has to be told which list
+ * the code came from; the grouping mirrors ESegment's two constructors.
+ */
+void PlotTab::noteSelectionQuantity(int dataType, bool isTestSegment) {
+  int q;
+  if (dataType == 7) {
+    q = AZUREPlot::YQ_ANALYZING_POWER;
+  } else if (dataType == 8) {
+    q = AZUREPlot::YQ_POLARIZATION_PRODUCT;
+  } else if (dataType == 2) {
+    q = AZUREPlot::YQ_PHASE_SHIFT;
+  } else if (isTestSegment) {
+    if (dataType == 3) q = AZUREPlot::YQ_ANGDIST_COEFF;
+    else if (dataType == 1 || dataType == 5) q = AZUREPlot::YQ_CROSS_SECTION_DIFFERENTIAL;
+    else q = AZUREPlot::YQ_CROSS_SECTION_INTEGRATED;  // 0, 4
+  } else {
+    if (dataType == 1 || dataType == 4) q = AZUREPlot::YQ_CROSS_SECTION_DIFFERENTIAL;
+    else q = AZUREPlot::YQ_CROSS_SECTION_INTEGRATED;  // 0, 3, 5, 6
+  }
+  if (selectionYQuantity_ == -1) selectionYQuantity_ = q;
+  else if (selectionYQuantity_ != q) selectionYQuantity_ = AZUREPlot::YQ_MIXED;
+}
+
 QList<PlotEntry *> PlotTab::getDataSegments() {
   QList<PlotEntry *> dataSegmentPlotEntries;
   QModelIndexList indexes = dataSegmentSelectorList->selectionModel()->selectedIndexes();
@@ -481,6 +511,7 @@ QList<PlotEntry *> PlotTab::getDataSegments() {
     sourceIndex = segDataProxyModel->mapToSource(segDataProxyModel->index(indexes[i].row(), 7, QModelIndex()));
     int dataType = segDataProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toInt();
     if (dataType == 7 || dataType == 8) selectionHasSignedObservable_ = true;
+    noteSelectionQuantity(dataType, false);
     QString filename = (dataType == 3) ? QString::fromStdString(configure.outputdir) + QString("AZUREOut_aa=%1_TOTAL_CAPTURE.out").arg(entranceKey) : QString::fromStdString(configure.outputdir) + QString("AZUREOut_aa=%1_R=%2.out").arg(entranceKey).arg(exitKey);
     sourceIndex = segDataProxyModel->mapToSource(segDataProxyModel->index(indexes[i].row(), 8, QModelIndex()));
     QString segmentDataFile = segDataProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toString();
@@ -514,6 +545,7 @@ QList<PlotEntry *> PlotTab::getTestSegments() {
     sourceIndex = segTestProxyModel->mapToSource(segTestProxyModel->index(indexes[i].row(), 9, QModelIndex()));
     int dataType = segTestProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toInt();
     if (dataType == 7 || dataType == 8) selectionHasSignedObservable_ = true;
+    noteSelectionQuantity(dataType, true);
     QString filename = (dataType == 4) ? QString::fromStdString(configure.outputdir) + QString("AZUREOut_aa=%1_TOTAL_CAPTURE.extrap").arg(entranceKey) : QString::fromStdString(configure.outputdir) + QString("AZUREOut_aa=%1_R=%2.extrap").arg(entranceKey).arg(exitKey);
     int numPreviousInBlock = 0;
     for (int j = 0; j < indexes[i].row(); j++) {
@@ -532,6 +564,7 @@ QList<PlotEntry *> PlotTab::getTestSegments() {
 
 void PlotTab::draw() {
   selectionHasSignedObservable_ = false;
+  selectionYQuantity_ = -1;
   QList<PlotEntry *> entries = getDataSegments();
   entries.append(getTestSegments());
   // Both polarization observables take negative values. An analyzing power is a
@@ -546,6 +579,9 @@ void PlotTab::draw() {
     if (yAxisIsLogCheck->isChecked()) yAxisIsLogCheck->setChecked(false);
     if (yAxisSFButton->isChecked()) yAxisXSButton->setChecked(true);
   }
+  // After the S-factor override above, so the title reflects the axis actually
+  // shown. An empty selection leaves the previous title alone.
+  if (selectionYQuantity_ != -1) azurePlot->setYAxisQuantity(selectionYQuantity_);
   azurePlot->draw(entries);
   rebuildCurveList();
 }

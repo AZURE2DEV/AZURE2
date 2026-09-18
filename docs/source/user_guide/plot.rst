@@ -56,15 +56,26 @@ Choose the vertical axis quantity:
 
 Both axes have a **Log** checkbox to switch to logarithmic scale.
 
+The axis title follows what the selected segments actually plot, rather than
+the radio button alone. A differential segment is labelled ``[b/sr]`` and an
+angle-integrated one ``[b]``; a phase-shift segment is labelled in degrees; and
+the two polarization observables are named as themselves --
+**Analyzing Power**, which is dimensionless, and
+:math:`P\,d\sigma/d\Omega` in ``[b/sr]``. If a selection mixes quantities
+whose units differ, the title carries no units rather than asserting the wrong
+ones.
+
 .. note::
 
-   Drawing an analyzing-power segment switches the y-axis to a linear
-   **Cross Section** scale automatically, overriding both settings. This is a
-   necessity rather than a preference: :math:`A_y` is a dimensionless ratio
-   that is negative over much of its range, so a logarithmic axis cannot
-   represent it and an S-factor conversion has no meaning for it. Negative
-   points are drawn; for every other observable the non-positive values that a
-   logarithmic axis cannot show are still filtered out.
+   Drawing an analyzing-power or **Polarization x Cross Section** segment
+   switches the y-axis to a linear scale automatically, overriding both
+   settings. This is a necessity rather than a preference: both observables
+   take negative values -- :math:`A_y` is a dimensionless ratio negative over
+   much of its range, and :math:`P\,d\sigma/d\Omega` is negative wherever the
+   polarization is -- so a logarithmic axis cannot represent either, and an
+   S-factor conversion has no meaning for them. Negative points are drawn; for
+   every other observable the non-positive values that a logarithmic axis
+   cannot show are still filtered out.
 
 .. tip::
 

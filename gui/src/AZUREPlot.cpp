@@ -512,10 +512,50 @@ void AZUREPlot::setXAxisType(unsigned int type) {
   update();
 }
 
+/*!
+ * Composes the y-axis title from what is being plotted and from the
+ * cross-section/S-factor choice.
+ *
+ * The units are the point.  A differential cross section is barns per
+ * steradian, not barns, and the axis said barns for both for as long as the
+ * plot has existed.  An analyzing power is dimensionless and is not a cross
+ * section in any units.  Where a selection mixes quantities whose units differ,
+ * no single label is correct, so the title carries no units at all rather than
+ * asserting the wrong ones.
+ */
+QString AZUREPlot::yAxisTitleText() const {
+  const bool sFactor = (yAxisType != 0);
+  switch (yAxisQuantity) {
+    case YQ_ANALYZING_POWER:
+      return QString("Analyzing Power");
+    case YQ_POLARIZATION_PRODUCT:
+      // P dsigma/dOmega, written with the Greek letters the observable is
+      // normally printed with.  Escaped rather than typed so the source stays
+      // pure ASCII and cannot be mangled by a re-encoding.
+      return QString("P d") + QChar(0x03C3) + QString("/d") + QChar(0x03A9) + QString(" [b/sr]");
+    case YQ_PHASE_SHIFT:
+      return QString("Phase Shift [degrees]");
+    case YQ_ANGDIST_COEFF:
+      return QString("Angular Distribution Coefficient");
+    case YQ_CROSS_SECTION_DIFFERENTIAL:
+      return sFactor ? QString("S-Factor [MeV b/sr]") : QString("Cross Section [b/sr]");
+    case YQ_MIXED:
+      return sFactor ? QString("S-Factor") : QString("Cross Section");
+    case YQ_CROSS_SECTION_INTEGRATED:
+    default:
+      return sFactor ? QString("S-Factor [MeV b]") : QString("Cross Section [b]");
+  }
+}
+
+void AZUREPlot::setYAxisQuantity(int quantity) {
+  yAxisQuantity = quantity;
+  setAxisTitle(QwtPlot::yLeft, QwtText(yAxisTitleText()));
+  update();
+}
+
 void AZUREPlot::setYAxisType(unsigned int type) {
-  QwtText text = (type == 0) ? QwtText(QString("Cross Section [b]")) : QwtText(QString("S-Factor [MeV b]"));
-  setAxisTitle(QwtPlot::yLeft, text);
   yAxisType = type;
+  setAxisTitle(QwtPlot::yLeft, QwtText(yAxisTitleText()));
   update();
 }
 

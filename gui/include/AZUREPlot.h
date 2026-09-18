@@ -118,8 +118,25 @@ class AZUREPlot : public QwtPlot {
   Q_OBJECT
 
  public:
+  /*!
+   * What the selected segments actually put on the y axis.  The axis title and
+   * its units follow from this together with the cross-section/S-factor choice,
+   * so that a differential segment is not labelled in barns and a polarization
+   * observable is not labelled a cross section at all.
+   */
+  enum YQuantity {
+    YQ_CROSS_SECTION_INTEGRATED = 0,
+    YQ_CROSS_SECTION_DIFFERENTIAL,
+    YQ_ANALYZING_POWER,
+    YQ_POLARIZATION_PRODUCT,
+    YQ_PHASE_SHIFT,
+    YQ_ANGDIST_COEFF,
+    YQ_MIXED
+  };
+
   AZUREPlot(PlotTab *plotTab, QWidget *parent = 0);
   void setXAxisLog(bool set);
+  void setYAxisQuantity(int quantity);
   void setYAxisLog(bool set);
   void setXAxisType(unsigned int type);
   void setYAxisType(unsigned int type);
@@ -144,8 +161,11 @@ class AZUREPlot : public QwtPlot {
  private:
   void clearLevelMarkers();
 
+  QString yAxisTitleText() const;
+
   unsigned int xAxisType;
   unsigned int yAxisType;
+  int yAxisQuantity = YQ_CROSS_SECTION_INTEGRATED;
   QList<PlotEntry *> entries;
   AZUREZoomer *zoomer;
   PlotTab *containingTab;
