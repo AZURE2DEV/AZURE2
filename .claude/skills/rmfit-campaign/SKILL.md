@@ -350,11 +350,11 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
   baseline and slid 180 keV during the first tightening polish, when the objective was
   dominated by the not-yet-normalized MANA set; once more than ~1 keV from the peak a
   narrow level has no gradient pull and never comes back (rmfit's trust-region steps have
-  no "initial step" problem, but the same flat surface). MINUIT (CLI mode 2) cannot fit
-  such an energy at all (10% initial step). Remedies to build (Phase 7 with the level
-  search): per-level energy windows of a few times max(Gamma, resolution) for narrow
-  levels in `default_bounds`, and a relocation move to the nearest residual peak;
-  meanwhile map narrow levels by direct (E, Gamma) scans (`9-9-26_seg92_9halfplus/grid2d.py`).
+  no "initial step" problem, but the same flat surface). Remedies to build (Phase 7 with
+  the level search): per-level energy windows of a few times max(Gamma, resolution) for
+  narrow levels in `default_bounds`, and a relocation move to the nearest residual peak;
+  narrow levels can also be mapped by direct (E, Gamma) scans
+  (`9-9-26_seg92_9halfplus/grid2d.py`).
 - 2026-09-10 -- robust campaign (global-scaled Sivia, free Heil norms) finished at 183,309
   (plain chi2 931,838): sign rounds empty under this objective too, the crossover with the
   chi2 campaign's old basin gave -1.2%, the perturb + crossover cycle nothing. Objective G
@@ -382,8 +382,518 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
   normalizations: anything that re-evaluates an export (a gate script, a side fit) must seed
   the norms from the companion `.sav` by parameter name, or the objective is wrong. Queue a
   follow-up analysis with `qsub -hold_jid <campaign job>` so it runs the moment the node frees.
-- 2026-09-11 -- perturbation size: 8 flips on an already sign-converged 13C+a fit landed only
-  1.0% above it and its rounds/crossover found nothing (a wasted 12 h); 12 flips on the same
-  model landed 22% above it, a genuinely different basin. For a donor basin or a real
-  recovery test use enough flips to move the objective by >= 10%; check the `perturb` line's
-  verified value before committing the follow-up rounds.
+- 2026-09-11/12 -- PERTURBATION SIZE, both ends measured on the same sign-converged 13C+a
+  fit, and neither worked. 8 flips landed 1.0% above the incumbent; its rounds and crossover
+  found nothing (12 h). 12 flips landed 22% above it -- a genuinely different basin, but a
+  dead one: two sign rounds plus two polishes moved it only 496,184 -> 496,139 (0.009% over
+  9.5 h, sign distance to the target 32 -> 31), and the crossover of its best candidate back
+  onto the incumbent screened 0 of 24 patterns improving and accepted 0 of 24 after the
+  polishes (406,878.3 -> 406,873.9, i.e. control drift). So a 12-flip basin is both
+  unrecoverable by local search and useless as a donor: the flips destroy the shared
+  structure that makes a donor pattern transplantable. Read the geometry, not just the
+  objective gap: inside a wrong sign basin the surface is nearly flat (0.009% over two
+  rounds), so the gap tells you nothing about whether search can cross back. Practical rule
+  until a better one is measured: for a donor basin, perturb 2-4 flips inside ONE J^pi group
+  and keep the rest of the pattern intact, rather than scattering flips across groups; use a
+  large scattered perturbation only as a from-scratch recovery benchmark, and expect it to
+  need a structure move or a fresh seed, not sign rounds. Always verify the `perturb` line's
+  value AND, after the first round, whether the sign distance to the target is falling at
+  all -- if it moves by 1 flip in a round, stop the arm.
+- 2026-09-11 -- RETRACTION (DeBoer challenged the claim, and he was right): an earlier entry
+  here said MINUIT (CLI mode 2) "cannot fit such an energy at all (10% initial step)".
+  The hard-coded initial steps are real (`src/CNuc.cpp:1562` uses 0.1*E for a level energy,
+  `:1579` 0.1*gamma for a width), but they do not prevent the fit. A basin test on the
+  isolated 9/2+ level in Cierjacks segment 92 (energy free, one free neutron width,
+  everything else fixed; `9-9-26_seg92_9halfplus/minuit_basin.py`) converges to
+  E = 8.4653 MeV, Gamma_n = 479 eV from every start in 8.4620-8.4700 MeV, including a
+  start with Gamma_n = 18.77 eV. It fails only from 8.4600 MeV (collapses to 53 eV) and
+  runs off from 8.4800 MeV. The original failing case reproduces as a success
+  (`minuit_repro.py`). What actually moved that level 8.4554 -> 8.6376 MeV was rmfit's own
+  bound-tightening polish while the objective was dominated by the un-normalized MANA set.
+  Lesson for the method, not for MINUIT: a narrow level needs a per-level energy window,
+  and a single anomalous observation about a widely used code is not evidence -- test it
+  across starting points before writing it down.
+- 2026-09-12 -- a model variant written into a SUBDIRECTORY needs the base model's `data/`
+  linked beside it, because `<segmentsData>` paths in an .azr are relative. `structure.py`
+  and `windows.py` already did this; `levelscan.template_variant` did not, so the first
+  13C+a gate run died on `scan_A/data/Fow_Joh_Fre_EXFOR_ntotal.dat` after 3 minutes of
+  session build. Fixed in `rmfit/levelscan.py` (same 8-line idiom). The 13N test never
+  caught it because it writes its variant BESIDE the base model, where the link already
+  exists -- when a helper takes a path, test it with a path in a fresh subdirectory, not
+  just a sibling name. Related: `qsub` a csh job script whose python call passes a value
+  starting with a minus (`--offsets -0.05,0,0.05`) and argparse reads it as an option; use
+  the `--opt=value` form. Both failures cost a node handover each, and both would have been
+  caught by running the job script's exact command line once on the login node first.
+- 2026-09-12 -- THE TEMPLATE SCREEN AND THE NARROW-RESONANCE INTEGRATION FIX INTERACT
+  BADLY, and this is now the binding cost problem. Since commit a4095a6 the adaptive
+  target-effect grid actually resolves a narrow resonance, so an evaluation whose trial
+  level is narrow INSIDE a target-integration segment subdivides enormously: on tests/13N
+  (two active `<targetInt>` entries, evaluations normally sub-second) one screen worker
+  burned 69 minutes of solid CPU on a single frozen pass and had to be killed. On 13C+a it
+  is why the gate spent 77 min on 4788 patterns. Widening the width grid downwards makes it
+  worse: a prior-partition template can give a channel 0.7% of the total, and at the 0.3x
+  scale that is a few hundred eV.
+  CORRECTION (measured the same day, `9-9-26_seg92_9halfplus/width_cost_cli.py`): the cost
+  does NOT diverge, it SATURATES, and calling it pathological was wrong. On segment 92
+  (111 points, kernel sigma 0.675 keV) the wall time per mode-1 evaluation against the
+  trial width is 14.9 s at 50 keV, 14.9 s at 10 keV, 34.5 s at 2 keV, then flat at
+  36-40 s from 500 eV down to 10 eV -- a factor 2.6, not orders of magnitude. So the 13N
+  screen's 69 CPU-minutes was ~2160 evaluations at ~2 s each, arithmetic I had not done,
+  not a hang and not a divergence. A width floor is still right on INFORMATION grounds (a
+  template narrower than the resolution is not identifiable from the data) but it buys
+  ~2.6x on the affected patterns, not a rescue. THE DOMINANT COST IS PATTERN COUNT.
+  THE REAL LEVER IS THE GRID SETTING, and it is nearly free. The last two optional numbers
+  on a `<targetInt>` line are resonanceWidthMultiplier and pointsPerWidth
+  (`TargetEffect.cpp:92-102`; defaults 20 and 50 since a4095a6). Measured at the fitted
+  width, segment 92 (`grid_setting_cost.py`):
+       mult  ppw   wall     chi2      deviation
+         20   50  113.0 s   929.33    reference (the converged default)
+         10   50   61.8 s   929.35    +0.002%
+          5   50   36.8 s   929.38    +0.005%
+          5   20   16.9 s   929.63    +0.032%     <- 6.7x cheaper, use for SCREENING
+          2   20   10.1 s   927.36    -0.212%
+          2   10    6.0 s   923.28    -0.651%     <- 6 units of chi2, larger than the
+                                                     Delta chi2 = 1 interval: NOT safe
+  So screen at mult 5 / ppw 20 and refit and report at 20/50: 6.7x for 0.03%. Do not go to
+  mult 2 -- the shift there is comparable to the width uncertainty itself. Re-measure this
+  per project rather than assuming it; the commit established convergence out to a
+  multiplier of 200, so 20 is deliberately conservative.
+  Also note for the archive: a project that does not set the field now gets 20 instead of
+  5, so every target-effect fit became ~3x slower with a4095a6. That is the price of
+  correct narrow-resonance integration, but it should be a known price.
+- 2026-09-13 -- A FREE ENERGY SHIFT IN THE .azr IS NOT A FREE PARAMETER IN A CAMPAIGN.
+  `BoundsPolicy.shifts_free` defaults to False (local.py:39) because shifts are
+  finite-differenced, and `default_bounds` then marks every shift column `fixed` (via the
+  `Bounds.fixed` mask; lb/ub stay +-inf, so do not judge freedom by the bounds) regardless
+  of the file's vary flag, and `polish()` optimizes only the columns not marked fixed. `run_polish` and `run_dataset_off`
+  both use the campaign policy, so a "test of freeing the BandH shift" ran with the shift
+  clamped at 0.0 for 201 iterations and I reported the shift-fixed result as a negative
+  finding (13C+a/9-13-26_bandh_shift, void; see its readme). Corollary: segments 91, 94-96
+  of 13C+a carried vary_shift=1 through every campaign and were pinned throughout.
+  RULES: (1) to free shifts, put `"shifts_free": true` in the campaign policy at init --
+  the CLI's `polish --shifts-free` frees them for that step only, and the dataset-off and
+  structure paths ignore it; (2) only segments with a NON-ZERO shift systematic open, so
+  set the systematic deliberately and zero it on any segment you want to keep pinned for an
+  isolated test; (3) PRE-FLIGHT before submitting: build `default_bounds` on a single
+  session with the campaign's policy and print `Bounds.fixed` for every `kind == "shift"`
+  key (`9-13-26_bandh_shift_v2/preflight_shift_bounds.py`). Two minutes; it prints
+  OPTIMIZED or excluded per shift and would have caught this before a node was spent.
+- 2026-09-13 (later) -- the same shift test was void a SECOND time: `run_polish` had
+  `shifts_free=False` as its own default and replaced the campaign policy's value with it,
+  so `polish` without `--shifts-free` excluded the shift even though campaign.json said
+  free. Fixed: `run_polish(shifts_free=None)` defers to the policy and logs
+  `polish policy: shifts_free=...`; the CLI flag only ever forces True. Lessons that
+  generalize: (1) a pre-flight must build its check through the SAME code path the job
+  will run (`Campaign.policy` + the method's own argument handling), not from a hand-made
+  object that merely looks equivalent -- mine passed twice while the job failed twice;
+  (2) a fitted value of exactly 0.0000000e+00 for a continuous free parameter is never a
+  result, it is a parameter that was not optimized; treat it as a failed test until the
+  log line naming the policy in force says otherwise; (3) look for the round's
+  "dead columns dropped" line -- its absence means the column had a live derivative, so
+  an unmoved parameter was excluded upstream of the optimizer, not by the Jacobian.
+- 2026-09-13 -- OPEN ISSUE, single-session path only: `SingleSession.residuals(x, jac=True)`
+  on the full 13C+a model (34,951 points) with ONE energy shift free ran > 47 min at 100%
+  CPU and was killed (`9-13-26_bandh_shift_v2/shift_effect_test.py`); the plan's own
+  measurement was 158 s for the whole Jacobian with four free shifts. The SHARDED polish
+  with the same shift free ran at its normal 105 s per 10 iterations (job 1440605), so
+  per-shard finite differences of a shift are fine and campaigns are not affected. Until
+  the single-session case is diagnosed: do not call a single-session Jacobian with free
+  shifts (verify() only needs objective/score, which are unaffected); if you must, put
+  it in the background with a cap and a kill, as here. The objective itself with the
+  shift moved by hand is fast and correct (the +-10/+50 keV sensitivity table in
+  9-13-26_bandh_shift_v3/readme came from that path).
+- 2026-09-13 -- A POSITIONAL .sav IS INVALID AFTER A LEVEL ADD/REMOVE. AZURE2's param.sav
+  names level parameters energy_N / width_N_c by position, so removing (or adding) a
+  <levels> line renumbers every later level and `init --sav` puts the fitted values on the
+  wrong levels: on 13C+a a seed with three removals applied gave a baseline of 7,199,392
+  instead of ~378,020, with "theta2>2, E out of window x25" as the tell. The exported .azr's
+  <levels> block already carries the fitted R-matrix values (round-trip 1e-9), so after a
+  structure change seed ONLY the norms/shifts, from a .sav reduced to its segment_* lines
+  (`grep '^\s*segment_' export.sav > norms.sav`). Also: csh `eval` of a step string drops
+  everything after "#" in a label like 9/2+#2 and splits quoted --note values -- write job
+  steps as explicit quoted lines and dry-run them into Python's argv before qsub.
+  GUARD (same day): `Campaign._seed_vector` now compares the .sav's highest energy_N index
+  with the model's; on a mismatch it logs "WARNING ... a positional .sav is invalid after a
+  level add/remove" and seeds norms/shifts only. Verified end to end: the positional .sav
+  fed to the 92-level model warned ("indexes 95 levels but the model has 92"), seeded 95
+  segment parameters, and reproduced the correct baseline 378,052.431 exactly, where the
+  unguarded seeding had given 7,199,392.
+- 2026-09-13 -- EVERY STRUCTURE MOVE IS JUDGED AGAINST A SAME-BUDGET CONTROL POLISH, now
+  including `run_relocate` (it had none: a relocation whose level walked straight back to
+  its start still showed a "gain" of 309, which was 100 evaluations of warm-start drift).
+  `run_remove`, `run_level_add`, the sign round and `run_relocate` all now polish the
+  unmodified incumbent with the same budget first and judge the move against that. Rule:
+  a move's gain is `control - moved`, never `incumbent - moved`; if you see the latter in
+  any new move, it is wrong. The 13C+a 9.864 MeV 9/2+ relocation is the worked example
+  (`9-13-26_structure2/readme`).
+- 2026-09-13 -- THE REDESIGNED LEVEL SEARCH IS WIRED INTO `rmfit levelscan` with two new
+  flags. `--differential-window KEV` (default 250): after the GN step the candidates are
+  re-ranked on the DIFFERENTIAL segments within that half-width of the candidate energy
+  (`levelscan.scoring_segments`; Ex ranges from one cached single session), because the
+  total objective barely distinguishes J^pi; 0 restores ranking on the total. `--grid M,P`
+  (default 5,20): the screen VARIANT's <targetInt> lines get resonanceWidthMultiplier M and
+  pointsPerWidth P (`Campaign.set_grid_setting`), measured 6.7x cheaper than the converged
+  20/50 for 0.03% -- the base model is untouched, so verify/export/report stay converged;
+  'none' keeps the model's own setting. Also new defaults: `--scales` 0.3,0.6,1.2,2.5,5,10
+  (x2 steps, reach matters more than density) and 2 GN slots reserved per J^pi group.
+  Prior-partition templates come from the group's own existing levels automatically.
+- 2026-09-13 -- REDESIGNED SCREEN, FIRST END-TO-END RESULT (13N, the removed 3/2- 3.5032 MeV
+  level, `rmfit levelscan --ex 3.5032 --grid 5,20 --differential-window 250`): grid 5/20
+  applied to both <targetInt> lines of the screen variant; 1008 patterns frozen-evaluated
+  in 193 s (the same model took a 13N worker 69 CPU-min two days ago at the converged
+  grid with the old pattern set); differential re-rank ran on 5 segments; the removed 3/2-
+  ranked FIRST, and it was found through the PRIOR-PARTITION family (the partition of the
+  group's own existing 3/2- at 20 MeV), gain +1,784,301 global / +353,977 local. The
+  relocate regression also passes with its new control polish. So both mechanisms the
+  13C+a gate failure asked for -- a grid that reaches the level, and a ranking that sees
+  J^pi -- work on the fixture. First real use: 13C+a at 9.862 MeV (job 1441224).
+- 2026-09-14 -- REDESIGNED SCREEN, FIRST REAL USE (13C+a at Ex 9.862 MeV, job 1441224,
+  `13C+a/9-13-26_levelscan_986/`): NULL. 16,668 patterns frozen-evaluated in 4.0 h at grid
+  5/20 (0.87 s per pattern; the cost is now the pattern COUNT, not the evaluation), 2,416
+  below the incumbent; best after the GN step +30.8 on the global objective (1/2+ prior
+  partition) and +3.0 on the 46 differential segments within +-250 keV (7/2+ single channel
+  @9.902) -- both noise against tau ~378. The 7/2+ refit that followed sat at 377,782.9 after
+  30 released iterations (incumbent 377,786.07) and threw Brune "Denominator less than
+  zero" warnings for the added level throughout: a level the data do not want.  Read it
+  as a limit of the FROZEN screen, not as "no level here": BandH's 9.857 MeV peak is real
+  (seen by all ND 2021 angles and 28 Heil angles) and the model's 9/2+ 9.864 sits 5 keV
+  away, so any new level here is the non-perturbative two-level case that the frozen
+  single-level template cannot represent (the 9/2+ cannot readjust inside the screen).
+  The move that CAN see it is `structure add` with a pinned energy and the released polish
+  (9-14-26_add_52m_986, ENSDF 5/2- 9861.74 keV), judged against its control polish.
+  Cost lesson for the ceiling of <= 30 min per energy: 16,668 patterns is 11 J^pi x
+  6 widths x (single-channel + equal + dominant + prior families) x signs x 3 offsets;
+  the offsets and the full sign enumeration of the equal split are where to cut.
+- 2026-09-14 -- THE TEMPLATE SCREEN IS TWO-STAGE (`template_screen(stage_scales=(1.2, 5.0),
+  refine_top=3)`, CLI `levelscan --stage-scales 1.2,5 --refine-top 3`; `--stage-scales none`
+  restores the exhaustive stage).  Stage 1 evaluates every partition x sign SHAPE at the two
+  stage widths and the candidate energy only; stage 2 takes the best `refine_top` shapes per
+  J^pi to every width in `scales` and every energy offset.  The shape ranking is what carries
+  the information; width and a 40 keV offset only scale it.  Counted on the 13C+a 9.862 MeV
+  variant (11 J^pi, 12-24 channels each, 1-14 priors): 19,836 -> 2,852 evaluations, ~41 min
+  at 0.87 s instead of 4 h; `--max-signs 8` takes it to ~34 min (the equal-split family's
+  32 random sign patterns are the least informative shapes for n >= 12).  13N regression
+  (`tests/test_levelscan_13n.py`, now with the 5/20 screening grid applied to its variant
+  as the campaign does -- at the converged grid the 13N variant is ~7 s/evaluation, at 5/20
+  ~0.2 s): the removed 3/2- still ranks first, gain +1,771,289 vs +1,784,301 exhaustive;
+  30-70 evaluations per group instead of 180; whole test ~4 min on the login node.
+  The per-J^pi line the screen now logs ("<jpi>: n channels, S shapes; N1 stage-1 + N2
+  refinement evaluations in T s; best frozen ...") is the cost accounting the 4 h run lacked.
+- 2026-09-14 -- FIRST LEVEL ACCEPTED BY `structure add` ON 13C+a AFTER THE FROZEN SCREEN SAID
+  NULL at the same energy (job 1441491, `13C+a/9-14-26_add_52m_986/`): candidate energy
+  9.8617 MeV pinned, `jpi: null` so all 12 J^pi were scanned on the +-0.5 MeV window model
+  with a local polish each (1/2+ -2,487, 9/2+ -1,104, ..., the compilation's 5/2- only -27);
+  the 1/2+ went to the full model: seeded 376,078 -> pinned 375,975 -> released 375,519
+  (150 evaluations) vs a same-budget control 377,786 -> 377,786: delta +2,266 against tau
+  756, rho 0.42, theta^2 1.9e-4 -> accept.  Fitted: Gamma_n(L=0) 2.92 keV, Gamma_alpha(L=1)
+  39 eV.  The gain sits in Cierjacks n-total (-1,239) and Heil (a,a) (-1,176), not in the
+  BandH 9.857/9.867 pair that motivated the energy (unchanged, -76/+34/+35 sigma).  Two
+  lessons.  (1) The window scan's LOCAL POLISH sees what the frozen screen plus one damped
+  GN step cannot: the same energy screened null (best +30.8) four hours earlier.  A frozen
+  template is a lower bound on a level's worth, never an upper bound; a null screen is not
+  a reason to skip the add when independent evidence (a peak the data resolve) points at
+  the energy.  (2) `jpi: null` with the pinned energy is the right way to let the angular
+  data assign J^pi: it disagreed with the compilation's tentative (5/2-) and won by a
+  factor 90 on the window.  Record such disagreements as evaluation decisions for the human.
+  Current best: 375,519.344, 93 levels.  Post-add sign round over 1/2+ = job 1441540.
+- 2026-09-14 -- THE TEMPLATE SCREEN'S AMPLITUDES WERE WRONG BY ~100x ON 13C+a; BOTH "NULL"
+  SCREENS AND THE FIRST GATE FAILURE WERE THIS BUG, NOT THE GRID.  Diagnosis chain, each step
+  a measurement: (1) the accepted 1/2+ 9.862 dropped into the incumbent at its fitted widths
+  with nothing else moved is worth +1,723 frozen (of the +2,266 released), so a frozen screen
+  should have seen it; (2) the screen's own variant with the dummy 1/2+ at those widths through
+  the screen's amplitude conversion gains +0.4, and flipping the sign changes nothing -- the
+  amplitude column was inert; (3) the engine's x0 for the dummy's 1 eV reference width was
+  5.5e-6 where the group's existing levels imply ~0.013 per sqrt(eV): the .azr -> rwa step
+  goes through a Brune transform that fails for a 1 eV level among keV-wide neighbours
+  ("**WARNING: Denominator less than zero while transforming", exactly one per dummy: 12 in
+  the 9.862 run, 338 lines in its log, 576 in the first gate's); (4) the dummy set directly to
+  the fitted rwa (0.0255 / 0.00364) gains +1,722.7 in the variant -- identical to (1).
+  FIX (`levelscan.py`, backup `.bak-2026-09-14`): gamma = gamma_W sqrt(Gamma_c / Gamma_W) with
+  `ev.wigner_amplitudes()` and `ev.wigner_widths(x_inc)` (eps-probe, no transform of the
+  dummy); closed channels (no Gamma_W: an ANC) are excluded from the partitions instead of
+  being given "widths"; the screen logs per group the x0-based/Wigner-based ratio and flags
+  it outside 0.3..3.  The 13N fixture never showed this (its dummies transform fine, ratio
+  ~1), which is why every test passed while the real screens were blind.  RULE: whenever a
+  screen returns null at an energy the data visibly resolve, drop the hypothesised level in
+  at plausible widths through the SAME code path and check the frozen gain is nonzero before
+  trusting the null -- and grep the log for "Denominator less than zero" first.
+  Consequences: the 2026-09-12 "width grid reach" finding stands as geometry but was NOT the
+  binding defect of the first gate run; the 9.862 null (16,668 patterns, 4 h) is void; the
+  gate (a) re-run and the 9.862 screen must be repeated with the fix.
+- 2026-09-14 -- FIX VALIDATED ON THE REAL CASE (login node, 6 shards, grid 5/20, 1/2+ only at
+  9.862 MeV on the 92-level incumbent): 1/2+ now has 3 OPEN particle channels (the 9 closed
+  ones that used to be given "widths" are left out, so 42 shapes instead of 84); best frozen
+  template = the prior partition of the 1/2+ @6.372 at 3 keV, +1,621; after the GN step
+  +1,902 (the released add gave +2,266); 132 frozen evaluations in 285 s, GN of 6 in 441 s.
+  Note the differential re-rank put that same candidate at local +5 / -217: the angular
+  segments within +-250 keV do NOT carry this level (its gain is Cierjacks n-total and the
+  Heil angles as a whole), so the LOCAL statistic is for deciding J^pi among candidates that
+  the GLOBAL GN gain already flags, never for deciding whether a level exists.  The GN gain
+  predicted the released gain to 16%.
+  Tests after the fix: `test_levelscan_13n.py` (its exact-parameter check now converts through
+  the screen's Wigner route and asserts the dummy's open channel has a Gamma_W; logs the
+  x0/Wigner ratio, which is 1.0 on 13N for every group but 11/2+ at 0.12 and 9/2- at 1.6) and
+  `test_levelscan_grid_13n.py` both pass; the 3/2- gain is unchanged (+1,771,289).
+- 2026-09-14 -- GATE C' (`13C+a/9-14-26_levelscan_986_fixed`, job 1441597): the repaired
+  screen at 9.862 MeV on the 92-level model ranks the accepted 1/2+ FIRST on the global GN
+  gain (+1,902; released +2,266) -- 1,504 patterns, 26 min all-in (budget 30).  The LOCAL
+  differential re-rank does not put it in the top 5, and instead ranks a 9/2+ 2 keV from the
+  existing 9/2+ 9.864 first (+1,693 local / +1,814 global).  Two rules from this.  (1) The
+  GLOBAL GN gain is the existence statistic; the LOCAL one discriminates J^pi among
+  candidates the global gain already flags (a narrow n s-wave level is paid for by n-total
+  and by every angle of (a,a), not by the +-250 keV window).  `run_levelscan --refit N`
+  refits by the local order today; make it refit the top-N by global gain and report the
+  local rank alongside.  (2) A candidate ON TOP of an existing level of the same J^pi is not
+  noise: it says the existing level's strength or partition is wrong there and is tested as
+  a pinned add with the released polish (the relocate move is the wrong tool -- it keeps
+  the partition).  Wigner ratios on 13C+a: 0.012 (1/2+) down to 3.7e-6 (11/2+).
+  Done the same morning: `Campaign.run_levelscan` records `best_global` (by GN gain, with the
+  local gain alongside) next to the local-order `best`, notes "best per J^pi by GLOBAL gain
+  ... | local order ...", and `--refit N` takes the top N by global gain.  13N smoke test
+  through the CLI (`levelscan --ex 3.5032 --grid 5,20 --stage-scales 1 --refine-top 2`):
+  304 patterns in 54 s, 3/2- first on both statistics (+1,784,313 global / +354,070 local).
+- 2026-09-14 -- THE SCREEN'S LOCAL TOP CANDIDATE, A 9/2+ 2 keV FROM AN EXISTING 9/2+, WAS
+  ACCEPTED BY THE CRITERIA (job 1441606, `13C+a/9-14-26_add_92p_986`): delta +3,898 vs tau
+  751, rho 0.31, theta^2 1.6e-3; 375,519 -> 371,621 (94 levels).  The fitted level is 330 eV
+  wide, 1.2 keV below the 3.8 keV 9/2+; BandH's +34 sigma point at 9.8613 went to -0.5.
+  LESSON: the acceptance criteria (delta, tau, rho, theta^2, holdout) test whether a level
+  HELPS, not whether it is a level.  A candidate that lands within a width of an existing
+  level of the same J^pi is a LINESHAPE hypothesis, and the method must test the
+  alternatives before adopting it: energy resolution / target convolution on the segments
+  that drive the gain (BandH has none here; only segments 52 and 92 carry <targetInt>), a
+  single point, or the existing level's own partition.  To build: `structure add` should
+  flag "within 2 Gamma of a same-J^pi level" in its verdict and the campaign should stage
+  a resolution test (`<targetInt>` beam spread grid, doublet removed, control polish) as
+  the competing move.  Until then such acceptances are recorded as PROVISIONAL in the
+  readme and left to the evaluator.
+  Built the same morning: `run_level_add(near_same_jpi_kev=20)` checks the base model for a
+  same-J^pi level within 20 keV of the candidate, logs "PROVISIONAL: ... lineshape
+  hypothesis" in the verdict and the readme note, and records `near_same_jpi` in the
+  ledger round (13N smoke test through `structure add`: accept, no flag, exit 0).  The
+  competing resolution test is still to build.
+- 2026-09-14 -- FIRST LEVEL FOUND FROM RESIDUALS ALONE (`13C+a/9-14-26_levelscan_resid`, job
+  1441631, `levelscan --top 3 --refit 1`, 3.6 h): the three residual-run candidates
+  (10.366, 10.452, 10.413 MeV) all screened to ~10.41 MeV; best global GN gain 7/2+ +3,706;
+  refit accepted at delta +5,053 vs tau 1,669, rho 0.28: 371,621 -> 366,568 (95 levels).
+  It is an n2 p-wave level (n + 16O*(6.13 MeV 3-), 12.6 + 5.6 keV) 140 keV above the n2
+  threshold; the gain is the 13C(a,n2 gamma) data (48.2 -> 17.8 chi2 per point).  Per-energy
+  cost at 10.4 MeV: 2,488 patterns / 37 min + GN 7 min (more open channels than at 9.86).
+  Two things to fix from this run: (1) the accepted level carries formal theta^2 ~0.6 in
+  channels with ~0 physical width (high-L / barely open) -- the theta^2 sanity uses formal
+  amplitudes, so a level can pass with meaningless amplitudes in dead channels; zero and
+  fix channels whose Wigner width is below ~1 eV at the level energy before the released
+  polish; (2) `run_levelscan` screens three residual energies that turn out to be one
+  feature -- cluster candidates whose +-40 keV screens converge on the same energy before
+  spending 40 min on each.
+  Built the same afternoon (campaign.py, backup `.bak-2026-09-14b`): (1) `run_level_add(
+  dead_channel_ev=1.0)` zeroes and FIXES the new level's particle channels whose Gamma_W
+  at the level energy is below 1 eV (closed or barely open; photon channels exempt), logs
+  them, and leaves them out of tau's k -- the 7/2+ 10.413 sign round otherwise spent its
+  polishes flipping four such channels at an unchanged objective; (2) `run_levelscan(
+  merge_kev=60)` / `levelscan --merge-kev` drops residual candidates within 60 keV of a
+  stronger one before screening (13N: 3.572 dropped next to 3.541; on 13C+a it would have
+  saved the third 40-min screen at 10.413).  13N smoke through the CLI: levelscan with
+  clustering exit 0; structure add ran through the window scan and pinned polish before
+  the login-node time cap.
+- 2026-09-14 (DeBoer) -- BROAD STRUCTURE FIRST.  "Don't get stuck investigating the
+  inconsistencies between alignments of very narrow resonances ... focus on the broader
+  resonances, widths greater than approximately 10 keV, to get a fit to the wider energy
+  range first."  In practice: `levelscan --gamma 20 --scales 0.5,1,2,4` (10-80 keV trial
+  widths, so sub-10-keV levels are simply not in the template grid), candidates ranked by
+  broad residual runs, and no lineshape/resolution/doublet tests of narrow levels until the
+  end stage -- record them PROVISIONAL and move on.  The 9.86 MeV morning (a 3 keV 1/2+, a
+  330 eV 9/2+ partner, per-point BandH residuals) is the example of what NOT to spend a
+  node-day on at this stage.
+- 2026-09-14 (evening) -- STATE AND HANDOVER.  Campaign best: 366,565, 95 levels
+  (`13C+a/9-14-26_signround_72p`).  Today's chain: 377,786 -> 375,519 (1/2+ 9.862) ->
+  371,621 (9/2+ 9.862, PROVISIONAL) -> 366,568 (7/2+ 10.413, n2 level) -> 366,565 (7/2+
+  sign round, empty).  The second residual search found nothing above tau at 10.37-10.49
+  after the GN step and was terminated from outside during its GN step; a parallel session
+  (DeBoer's) now runs the BROAD-structure search on the same seed
+  (`9-14-26_levelscan_broad`: --gamma 20 --scales 0.5,1,2,4) under his instruction to fit
+  Gamma >~ 10 keV resonances over the whole range before narrow alignment -- follow that
+  ordering in future campaigns: broad screen first, narrow candidates near same-J^pi
+  levels provisional.  Two nodes were briefly in use today (the other session's high-Ex
+  window job and mine): check `qstat` for OTHER rmfit17O jobs before every submission,
+  not just one's own.
+- 2026-09-14 (evening) -- READ THE DRIVER'S campaign.log, NOT THE SGE STDOUT FILE.  The
+  `-o rmfit_*.log` file is the job's stdout on NFS and can lag the driver by an hour (job
+  1443295: stdout mtime 17:47 while campaign.log showed the refit verdict at 18:44).  I read
+  the stale stdout, saw "nothing for 53 min", sampled CPU (one core busy -- the control
+  polish's Jacobian, as it turned out), reproduced a suspect call standalone (fine), and
+  qdel'd the job a few minutes after it had already recorded its verdict, during the
+  report/export of an unchanged incumbent.  Nothing was lost, but the rule for every watch
+  and every "is it hung?" question is: `campaign.log` (written directly by the driver) and
+  the ledger are the truth; the SGE log is a convenience.  Monitors should tail
+  campaign.log.
+- 2026-09-14 (night) -- THE BROAD-ONLY SEARCH PAID OFF AT ONCE (`13C+a/9-14-26_levelscan_broad2`,
+  job 1443649, `levelscan --ex 10.846 10.753 9.160 --gamma 20 --scales 0.5,1,2,4 --refit 1`):
+  a 5/2- at 10.886 MeV, Gamma ~360 keV (n2 s-wave 220 keV, n0 f-wave 96 keV), accepted at
+  delta +13,859 vs tau 1,097, rho 0.18: 366,565 -> 352,703 (96 levels).  Screen +3,999 after
+  GN predicted a released +13,859 -- for a BROAD level the GN step underestimates by 3.5x
+  (the whole neighbourhood re-shapes: the 5/2- 10.940 next to it changed by 100s of keV),
+  so for broad candidates a screen gain of ~+2,000 already deserves the refit.  The gain is
+  spread over every broad dataset (MANA (a,a) -6,231, ND 2021 -2,486, Heil -2,165, Cierjacks
+  -1,754): that is what "broad structure first" buys.  Cost: 3 energies x ~40 min + refit
+  ~70 min = 3 h per accepted level.  The dead-channel rule fired for the first time here
+  (5 channels with Gamma_W < 1 eV zeroed and fixed).  Also the first time DeBoer's
+  restriction changed the ranking: at 10.453 the narrow-capable screen had preferred a
+  5/2- n2-only ~20 keV candidate (refit marginal); the broad grid at 10.846 found the
+  360 keV one.
+- 2026-09-14 (night) -- THE BROAD-ONLY SEARCH FOUND THE CAMPAIGN'S LARGEST GAIN
+  (`13C+a/9-14-26_levelscan_broad2`, job 1443649, `levelscan --ex 10.846 10.753 9.160
+  --gamma 20 --scales 0.5,1,2,4 --refit 1`): a 5/2- at 10.886 MeV, ~360 keV wide (n0
+  f-wave 96 keV, n2 s-wave 220 keV, n2 d-wave 43 keV), screen +3,999 after GN, refit
+  delta +13,859 vs tau 1,097, rho 0.18: 366,565 -> 352,703 (96 levels).  Paid for by MANA
+  (a,a) -6,231, ND 2021 (a,n0) angles -2,486, Heil -2,165, Cierjacks n-total -1,754.  The
+  earlier narrow-capable screens (Gamma 1.5-50 keV) at 10.366/10.452 never reached this
+  energy; the 10-80 keV grid at the next residual energy found it in one screen.  Notes:
+  (1) the dead-channel rule fired on first use (5 channels zeroed) and the level came out
+  clean; (2) the existing broad 5/2- 54 keV away re-shaped with it (n2 s-wave 0 -> 152
+  keV) -- two broad same-J^pi poles sharing strength is what a broad feature looks like in
+  R-matrix, not a doublet to be "resolved"; theta^2 0.95 on the n2 s-wave widths says the
+  strength is at the Wigner limit, an evaluator's question (background pole?) for later;
+  (3) 9.160 MeV (15.6k chi2 in runs) was a clean null at broad widths: not every large
+  residual run is a broad level.  Per-energy cost 34 + 6 min at 10.8 MeV.
+- 2026-09-14 (late) -- SIGN ROUNDS NO LONGER PROPOSE FLIPS OF ~ZERO AMPLITUDES (search.py,
+  backup `.bak-2026-09-14`): `sign_round` feeds the proposal generators a vector in which
+  |rwa| < sign_eps * gamma_W (open channels a released polish left at ~0 -- typical of a
+  just-added level; not caught by the dead-channel rule, which only fixes Gamma_W < 1 eV) is
+  zeroed, and logs the excluded keys.  Flipping ~0 is a no-op that "improves" by noise and
+  then costs a staged polish: the 7/2+ and 5/2- post-add rounds each spent ~3 h on such
+  flips (0 accepted).  Screening/polishing still start from the true incumbent.  13N
+  `tests/test_search_13n.py`: all checks ok, round unchanged (70,972.321 -> same).
+  Diagnosed jointly with the parallel session, which also proposed fixing those columns
+  after the released polish -- not done, because a later round may legitimately want them.
+- 2026-09-15 -- A DETACHED (nohup) SUBMITTER CANNOT qsub ON THIS CLUSTER: "job rejected: job
+  does not provide an AFS token".  The 9-15-26_levelscan_broad3 job staged at 01:41 was
+  never submitted and nobody noticed for 15 h because the script logged "submitted" after
+  the failed qsub.  Submit from a live session's shell or Monitor (both carry the token),
+  check the qsub output for "Your job N", and never print "submitted" unconditionally.
+- 2026-09-15 -- SECOND BROAD LEVEL FROM THE SAME SEARCH FAMILY (`13C+a/9-15-26_levelscan_broad4`,
+  job 1447357, explicit energies 10.543/10.909/10.172/9.774 at Gamma 10-80 keV): a 9/2+ at
+  10.909 MeV accepted, delta +1,976 vs tau 842, rho 0.34: 351,676 -> 349,630 (97 levels);
+  gain again from MANA (a,a) -1,086 and Heil -398.  Three observations worth carrying:
+  (1) the WINDOW scan read -19,832 while the full-model gain was +1,976 -- a truncated
+  window model exaggerates a level's worth by an order of magnitude; never quote the window
+  delta as the level's value, only use it to rank J^pi.  (2) tau fell from ~1,700 to 842
+  because the dead-channel rule zeroed 6 of the level's channels: the threshold correctly
+  follows the level's effective parameter count.  (3) theta^2 = 0.98 on this level and 0.95
+  on the 5/2- 10.886/10.940 pair -- three broad levels at the Wigner limit in one 200 keV
+  band says the model is short of poles there (background-pole question for the evaluator),
+  not that three resonances are well determined.  Also: 10.3-10.5 MeV is now exhausted at
+  broad widths (broad3: 7/2+ @10.449 delta +676 vs tau 737, marginal), and 9.774 and 10.172
+  are clean nulls.
+- 2026-09-16 -- A SIGN FLIP IN A CHANNEL THE DATA DO NOT SEE IS A NO-OP, AND SIZE DOES NOT
+  TELL YOU WHICH ONES THOSE ARE.  Three post-add sign rounds in a row (7/2+ 10.413, 5/2-
+  10.886, 9/2+ 10.909) spent 2-3.5 h polishing flips that left the objective unchanged.
+  The 2026-09-14 tiny-amplitude exclusion (|rwa| < sign_eps*gamma_W) caught some but not
+  these: measured on the 9/2+ round, `g[9/2+#6 p4 L4 S0.5]` has theta^2 = 0.98 -- at the
+  Wigner limit -- and flipping it moves the objective by +0.24.  Reason: on 13C+a only
+  pairs 1, 2, 3 and 5 appear in any active `<segmentsData>` line; pairs 4, 6, 7, 8, 9 are
+  carried by every level but observed by nothing, so their signs reach the observables only
+  through second-order multiple-scattering terms.  FIX (`search.py`, `SearchConfig.
+  flip_floor = 0.01`): a proposal must move the FROZEN objective by at least
+  `flip_floor * tau` (~5 on 13C+a) to earn a staged polish; the screen already computes
+  that number, so the filter is free, and it logs what it dropped.  Regression test
+  `tests/test_flip_floor.py` (no engine, milliseconds) pins the behaviour on the six
+  measured no-op responses.  General rule: judge a proposal by the response it produces,
+  not by the size of the parameter it changes.
+- 2026-09-16 -- WHEN SINGLE-LEVEL ADDS STOP PAYING, MAP THE CHI^2 AND AUDIT THE CAPS BEFORE
+  SCREENING ANOTHER ENERGY.  Three refits at 10.449 MeV on 13C+a came back marginal (+676,
+  +617 against tau ~735) and two more energies screened null, while the residual-run ranking
+  kept nominating the same band -- because those runs are large in POINT COUNT, not because
+  one level is missing.  Two cheap diagnostics (one single session each, ~5 min) said what
+  the searches could not.  (a) chi^2 in 200 keV Ex bands with the dominant datasets per band:
+  the 13C+a misfit is SPREAD at 12-20 per point over Ex 9.0-11.2 (2,000-point bands, tens of
+  thousands of chi^2) -- a single level returning +400 cannot matter there -- plus one sharp
+  outlier, Ex 5.6-5.8 = 7,529 chi^2 over 60 points (125/pt), ALL in one n-total set and
+  ~5,500 of it in six points (+74 sigma at 5.7321): a narrow n-channel feature, correctly
+  deferred under "broad first".  (b) A theta^2 audit: 5 physical levels at Ex 10.54-10.94
+  sit AT the cap (theta^2 0.83-1.00) and 5 background poles at Ex 12-27 sit AT theirs
+  (1.7-3.0 of cap 3) -- the R-matrix has no room left in those J^pi groups, which is why
+  capped adds buy nothing.  The physical reading is that the region is short of POLES, the
+  archive's 16O+p lesson (an added l=0 background pole was what fixed that fit).  Running
+  `13C+a/9-16-26_cap_diagnostic` (job 1447768): the same fit re-polished with the caps
+  raised (physical 3, background 10) to measure what the caps cost -- a diagnostic, never
+  adopted.  RULE: a band map plus a cap audit costs ten minutes and should precede any
+  further level search once two consecutive searches come back marginal or null.
+- 2026-09-16 -- THE MODEL'S BACKGROUND POLES WERE INERT, AND THAT IS WHY THE FIT WAS PINNED
+  AT THE WIGNER LIMIT.  Every J^pi group of 13C+a carries a level at Ex = 50 MeV whose
+  <levels> lines have levelFix = 1 and gamma = 0 in EVERY channel -- fixed and zero, so the
+  engine creates no free parameter for them (`ev.level_energy` lists the level, but no key
+  of any kind belongs to it: check with `[k for k in ev.keys if k.level == lab]`, not with
+  the file's channelFix field, which is 0 and looks free).  Ten poles doing nothing, in a
+  campaign that spent days looking for missing strength between 10.5 and 11 MeV.  Two
+  separate traps here: (1) a level whose widths are all zero is invisible to a gradient
+  polish even when free -- the cross section is quadratic in the amplitude, so the
+  derivative vanishes at gamma = 0 and the polish leaves it at zero forever (the same
+  reason the template screen needs a finite trial width); (2) `levelFix` (field 4) fixes
+  the whole level, while `channelFix` (field 11) is per channel -- reading only the latter
+  says "free" when the level is frozen.  DIAGNOSTIC that finds this in one session: count
+  the free keys per level and list the levels with none.  The fix is a file edit plus a
+  seed: `set_fixed(False)` on the pole and a physical width (200 keV used here) in the
+  channels the data observe, then a normal polish + sign round (`13C+a/9-16-26_bgpoles`,
+  job 1447775).  Generally: before concluding "the region needs another level", check that
+  the poles already in the model are actually being fitted.
+  Follow-up the same morning: seeding those poles took two attempts.  A `.sav` is POSITIONAL
+  (`width_N_c`) and N is the ENGINE's level index, NOT the level's position in the file --
+  the 3/2+ pole is level 47 in file order and `width_48_*` to the engine.  The first job
+  filtered the .sav on the file index, so the real entries survived and zeroed every seed,
+  and the init came back at exactly the incumbent's objective (349,619.415).  Nothing
+  crashed; only the identical number gave it away.  RULES: (1) when seeding a parameter the
+  .sav also carries, filter the .sav by the names a SESSION reports (`snapshot`'s
+  `parameter.name` for the columns you seeded), never by an index you computed from the
+  file; (2) after staging any seed, evaluate it once and check the objective MOVED before
+  spending a node on it -- `13C+a/9-16-26_bgpoles/filter_sav.py` and the check in that
+  readme are the pattern (seed verified at 349,549.427 vs 349,619.415 before resubmitting
+  as job 1447790).
+- 2026-09-16 -- level tests accepted broad absorbers on the 13C+a high-Ex window
+  (`13C+a/9-14-26_highE_structure`): a 9/2- 12.738 (+222k) and a 7/2- 11.818 (+320k)
+  with three or four channels pinned EXACTLY at the theta^2 cap (1.0, then 0.5) and the
+  rest collapsed to ~1e-35; their Brune transformation fails ("Denominator less than
+  zero") and `export`/`bake` then dies with "different free-parameter set". `classify`'s
+  blowup test only fires above the cap; tightening the cap does not help (the polish
+  drives the amplitudes to whatever cap exists). `classify` now takes `at_bound` (the
+  new level's width keys the released polish left on a bound, from `FitResult.bounds_hit`)
+  and returns "unphysical" -- not adopted -- for any at-bound width or theta^2 within
+  0.1% of the cap. Test: `rmfit/tests/test_classify_gate.py`. Structures 4-7 of that
+  campaign are the evidence; the search was rerun from structure 3.
+- 2026-09-16 -- TWO SAME-J^pi LEVELS WITHIN ~1 keV MAKE A FIT UNWRITABLE.  The 13C+a fit at
+  336,944.52 verified fine in-session but `bake` refused it: "the baked model has a different
+  free-parameter set than its source".  The polish had drifted a free 9/2+ level to 0.66 keV
+  from a pinned 9/2+ (the PROVISIONAL doublet partner added two days earlier), and the engine
+  reading the WRITTEN file merges levels that close -- the group loses a level, its labels
+  shift (9/2+#6 -> #5) and eight keys vanish.  In-session evaluation never sees this because
+  the model is never re-read.  Three lessons.  (1) A same-J^pi pair at the same energy is a
+  REDUNDANCY, not a doublet: measured here, separating them costs +1,700 at 1.1 keV, +5,400
+  at 2 keV, +80,000 at 5 keV -- the fit had tuned them as one structure, so the cure is to
+  remove one, not to pull them apart.  (2) `bake`'s key-set guard must delete its half-written
+  files (patched): they were left on disk and evaluated at 403,867 while looking exactly like
+  a successful export -- I quoted that file as the result before checking.  (3) After any
+  campaign that adds a level near an existing one of the same J^pi, check the minimum
+  same-J^pi energy gap before trusting an export; `structure remove` on the incumbent is the
+  fix and needs no export to run.
+  Corollary measured the same afternoon: the FROZEN removal screen cannot see a degenerate
+  pair.  On the 13C+a fit the two 9/2+ levels 0.66 keV apart ranked NOWHERE in the ten
+  cheapest removals (the cheapest were 1/2-#1 at +0.0, the freshly activated 9/2+ background
+  pole at +836, 7/2-#4 at +1,153), because zeroing one level's widths without letting its
+  partner absorb the strength is catastrophic by construction.  Frozen screens rank levels
+  by what the model loses when a level is switched OFF; a redundancy only shows up when the
+  partner is refit.  So for a suspected same-J^pi degeneracy, test the specific level with a
+  targeted remove-and-refit, not with the ranking.
+
+## 2026-09-17 — audit the pair table before fitting (13C+α)
+
+Pair 8 of the 13C+α model (α + ¹³C* 3.854 MeV) had `z2 = 8` on every level line since
+2016 — an oxygen Coulomb barrier on a carbon channel — through every fit in the archive.
+It cost nothing in the fitted window only because the channel was also inert (all
+amplitudes exactly zero, so never moved by any polish); above Ex 12 MeV it is a factor
+3–12 in penetrability.  Nothing in AZURE2, pyazr or rmfit checks a pair's charges and
+masses against each other.  Rule: at campaign init, print one row per pair —
+`ir m1 m2 z1 z2 sepE e3 j3 pi3 radius` — from the `<levels>` block and compare with the
+other pairs of the same particle (same target nucleus ⇒ same z2, same m2, same sepE
+minus e3) before anything is fitted; also list channels with γ = 0 and channelFix = 0
+(nominally free, actually dead — see the background-pole entry of 09-16).  A `rmfit
+audit` command that does both is the right home; until it exists, the awk one-liner is
+in `13C+a/8-10-26_more_data_claude/readme` (2026-09-17 19:40 entry).

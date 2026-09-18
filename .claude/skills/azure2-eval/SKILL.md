@@ -98,6 +98,16 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   slower than GSL's. Reach for `--gsl-coul` if a fit is too slow and the
   accuracy loss is acceptable, not by default.
 
+## Showing a result in the GUI
+
+**Recalculate before opening the GUI.** The GUI's plot tab reads the
+`AZUREOut_*.out` files in `output/`, not the `.azr`, so a GUI opened on a
+freshly edited project shows the previous run's curves next to the new segment
+list with no warning that they disagree. Close any running GUI, run a mode-1
+calculate, verify the output timestamps, then open it. Full procedure,
+including the flag/binary/parameter-file traps and the cost of a calculate on a
+large model, is in the `azure2-gui-review` skill.
+
 ## Workflow A — interactive CLI (one-shot runs)
 
 Prompt order: **(1) menu choice → (2) external parameter file → (3) external
@@ -1280,3 +1290,32 @@ complete:
   inherits it -- half of it for a `1/sqrt(2 pi)` normalisation -- so do not set a 1e-12
   tolerance on such a comparison without expecting 5.7e-10. It cancels wherever a ratio
   shares the constant.
+- 2026-09-16 -- THE LEVEL-MERGE TOLERANCE IS A HARD-CODED 1 keV.  A FIX WAS TRIED AND
+  REVERTED 2026-09-17; THE DEFECT IS STILL PRESENT.
+  `JGroup::IsLevel` (src/JGroup.cpp) decides whether a `<levels>` line belongs to a level
+  already read by matching the level energy within `tol`, and `CNuc::Fill`
+  (src/CNuc.cpp:168-174) then APPENDS that line's channel to the matched level.  With
+  `tol = 1e-3` any two levels of the same J^pi closer than 1 keV are silently merged on
+  read: the second level's channels become extra channels of the first, so a model written
+  out and read back has a different level count and a different free-parameter set, with no
+  warning anywhere and nothing about it in the docs.  Found on the 17O evaluation, where a
+  fit drove two 9/2+ levels to 0.66 keV apart and then could not be saved (rmfit's bake
+  guard caught it: "8 key(s) lost").
+  A one-line change to `tol = 1e-6` (1 eV) was made and verified on the 13C+a model -- a
+  same-J^pi pair written at 5, 2, 1.5, 1.05, 1.0, 0.95, 0.5 and 0.1 keV separation all came
+  back with 5 levels in the group and 432 free parameters, where the old build returned 4
+  and a changed key set below 1 keV -- and `tests/run_tests.sh` passed.  It was REVERTED on
+  2026-09-17 at deBoer's direction: the tolerance sits on the read path of every model, so
+  changing it retroactively alters how any previously saved `.azr` with a sub-keV same-J^pi
+  pair is interpreted, and that risk outweighs the 17O blocker.  The patch is kept at
+  `src/JGroup.cpp.patch_tol1e-6_reverted-2026-09-17` (untracked, next to the source).
+  CONSEQUENCES, STILL OPEN:
+  * The defect is unfixed.  A model needing two same-J^pi levels closer than 1 keV cannot
+    round-trip through a `.azr`.  17O needs another route -- constrain the pair apart, merge
+    them physically, or fix the read path properly (warn on merge rather than move `tol`).
+  * Nothing in the suite covers it: no test model has a same-J^pi gap under 15.5 keV, so
+    both tolerances pass 7/7.  A real fix needs its own round-trip regression test.
+  * ~/bin/AZURE2 (2026-09-16 21:54) and pyazr/_azure2*.so (2026-09-16 21:25) were built
+    WITH `tol = 1e-6` and still carry it -- the source revert did not touch them.  They are
+    to be rebuilt from reverted source once the running jobs finish; until then, results
+    from those builds used 1 eV.  Pre-change CLI binary: ~/bin/AZURE2.bak-2026-09-13_tol1e-3.
