@@ -101,8 +101,12 @@ residual Jacobian, are obtained by reverse accumulation through the same chain
 the forward calculation uses, at roughly the cost of two forward evaluations
 regardless of how many parameters are free. Finite differences would cost one
 evaluation per parameter per iteration. This covers cross sections, S-factors,
-phase shifts and analyzing powers; the one case still done numerically is an
+phase shifts, analyzing powers and the product
+:math:`P(\theta)\,d\sigma/d\Omega`; the one case still done numerically is an
 analyzing power averaged over a target, which is a ratio of two integrals.
+:math:`P\,d\sigma/d\Omega` is better conditioned than the analyzing power:
+it is bilinear in the amplitude matrix rather than a ratio, so its adjoint
+carries no :math:`1/D^2` term.
 
 **Coulomb functions are cached, and the cache knows when to give up.** These are
 among the most expensive quantities in an R-matrix calculation, and during a fit

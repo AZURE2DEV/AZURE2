@@ -305,6 +305,94 @@ around :math:`10^{-6}`. This is physics, not a numerical artefact, and it is why
 analyzing-power measurements use thin targets — Baumann's were 85 nm of
 :sup:`12`\ C, about 3.1 keV of energy loss at 1.7 MeV.
 
+The outgoing polarization, and the product that gets published
+--------------------------------------------------------------
+
+The analyzing power asks what the *entrance* channel's spin does to the cross
+section. The mirror question — what polarization the *ejectile* carries away
+from an unpolarized reaction — is a different observable built from the same
+amplitude matrix, and it is the one most of the older literature reports.
+
+Formally the two differ only in which index the Pauli matrix acts on:
+
+.. math::
+
+   A_y = \frac{\mathrm{Tr}\left( M \sigma_y M^{\dagger} \right)}
+              {\mathrm{Tr}\left( M M^{\dagger} \right)},
+   \qquad
+   P_y = \frac{\mathrm{Tr}\left( \sigma_y M M^{\dagger} \right)}
+              {\mathrm{Tr}\left( M M^{\dagger} \right)},
+
+:math:`\sigma_y` acting in the projectile's spin space in the first and in the
+ejectile's in the second. Written out, the interference term changes sign
+relative to :eq:`ay` — :math:`-2\,\mathrm{Im}[\cdot]` in place of
+:math:`+2\,\mathrm{Im}[\cdot]` — and the sum runs over the *entrance*
+configuration rather than the exit one. The exit channel spin has to be
+decomposed into ejectile and residual projections before :math:`\sigma_y` can
+act, exactly as :eq:`decompose` decomposes the entrance channel spin, and with
+the same Lane–Thomas coupling order for the same reason.
+
+The two are related by time reversal: :math:`P` for :math:`A(a,b)B` equals
+:math:`A_y` for the inverse reaction :math:`B(b,a)A`. They are *not* the same
+quantity for the same reaction, and the distinction is not academic here. A
+spin-0 projectile has no vector analyzing power at all — there is no beam spin
+to align — yet the ejectile can be strongly polarized. :sup:`11`\ B(:math:`\alpha`,n)
+is exactly this case: :math:`A_y` is identically zero and :math:`P` is not, so
+the polarization is the only vector observable the reaction has.
+
+What is measured, and what is published
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An experiment does not measure :math:`P` directly. It measures a left–right
+asymmetry in a polarimeter, which is proportional to the *product* of the
+polarization and the cross section that produced the ejectiles in the first
+place. Dividing out the cross section requires knowing it at the same angles
+and energies, from a separate measurement with its own normalization, so many
+authors do not: they report
+
+.. math::
+   :label: pdsdo
+
+   P(\theta)\,\frac{d\sigma}{d\Omega}
+
+as measured. Niecke *et al.* report both :sup:`11`\ B(:math:`\alpha`,n) and
+:sup:`14`\ C(p,n) this way. Converting such data to :math:`P` before fitting
+means importing a second dataset's normalization and its uncertainty into
+points that did not have it, and losing the correlation between numerator and
+denominator; fitting :eq:`pdsdo` directly avoids both.
+
+Why the product is the better-behaved quantity
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+There is a second, less obvious reason to prefer it. The denominator of
+:math:`P_y` is the same spin sum the differential cross section is built from,
+so it cancels when the two are multiplied. Writing :math:`N` for the bare
+numerator :math:`\mathrm{Tr}(\sigma_y M M^{\dagger})` and :math:`D` for
+:math:`\mathrm{Tr}(M M^{\dagger})`, and recalling that the unpolarized cross
+section averages over the :math:`n_{\text{entrance}}` entrance projections,
+
+.. math::
+
+   P_y \, \frac{d\sigma}{d\Omega}
+     = \frac{N}{D} \cdot \frac{D}{n_{\text{entrance}}}
+     = \frac{N}{n_{\text{entrance}}} ,
+
+a plain multiple of :math:`N` with no ratio left in it. The observable is
+therefore **bilinear in the amplitude matrix**, like a cross section and unlike
+an analyzing power. Two things follow. Its derivative with respect to any
+R-matrix parameter is exact and carries no :math:`1/D^2`, so the adjoint is
+better conditioned than the analyzing power's. And it is *extensive*: a target
+of finite thickness integrates it exactly as it integrates a cross section,
+with none of the cross-section weighting :eq:`aytarget` forces on a ratio. The
+long paragraph above about thick targets diluting :math:`A_y` towards zero has
+no counterpart here.
+
+The identity is worth checking rather than trusting, since it rests on the
+denominator of :math:`P_y` being *exactly* the cross section's spin sum and not
+merely proportional to it. For :sup:`11`\ B + :math:`\alpha`, where the
+entrance channel spin is 3/2 and :math:`n_{\text{entrance}} = 4`, the ratio
+:math:`P_y \sigma / N` comes out 0.250000000000 at every angle.
+
 Scope
 -----
 
@@ -312,6 +400,15 @@ What is implemented covers the vector analyzing power :math:`A_y` for a
 spin-1/2 projectile on a target of **any** spin, in **both** particle and
 capture exit channels — the two by different routes, since the photon exit has
 no amplitude matrix of the form of :eq:`seyler`.
+
+The product :math:`P(\theta)\,d\sigma/d\Omega` of :eq:`pdsdo` is implemented
+for **particle exit channels only**, for an ejectile of spin 1/2 and a
+projectile of any spin. A capture exit is refused rather than approximated: the
+observable is the polarization of a spin-1/2 ejectile and a photon is not one,
+while the capture analyzing power above is — by the time-reversal relation —
+the outgoing polarization of the *inverse* reaction, so it cannot stand in.
+Photon polarization, linear or circular, is a separate formalism and is not
+implemented.
 
 *Capture channels* use Seyler and Weller [SeylerWeller1979]_, who give the
 Legendre coefficients of the angular distribution directly in the channel-spin

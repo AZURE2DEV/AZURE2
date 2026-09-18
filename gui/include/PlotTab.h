@@ -139,7 +139,9 @@ class PlotTab : public QWidget {
   QCheckBox *yAxisIsLogCheck;
   //! Set while collecting the current selection: an analyzing power cannot
   //! be drawn on a logarithmic axis, nor converted to an S-factor.
-  bool selectionHasAnalyzingPower_ = false;
+  // Set when the selection contains an observable that can go negative:
+  // the analyzing power (isDiff 7) or P dsigma/dOmega (isDiff 8).
+  bool selectionHasSignedObservable_ = false;
   QCheckBox *gridCheck;
   QCheckBox *legendCheck;
   QCheckBox *levelsCheck;

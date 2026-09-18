@@ -1,5 +1,5 @@
-Computing the Analyzing Power in AZURE2
-=======================================
+Computing Polarization Observables in AZURE2
+============================================
 
 This chapter is the companion to :doc:`polarization_theory`. It describes what
 was actually built, how each step was tested, what went wrong, and how far the
@@ -550,6 +550,106 @@ sides of every term are accumulated, into ``tBar`` or ``ecBar`` according to
 whether that side is an internal or an external-capture pathway. It agrees with
 central differences to about :math:`10^{-6}` of the column scale.
 
+Polarization times cross section
+--------------------------------
+
+The product :math:`P(\theta)\,d\sigma/d\Omega` is segment code **8**. It reuses
+the amplitude matrix unchanged; only the observable built from it is new.
+
+``PolarizationFunc::OutgoingPolarizationPy`` evaluates :math:`P_y`. It is the
+analyzing power's code with two changes: the Pauli matrix acts on the *exit*
+index, so the exit channel spin is decomposed into ejectile and residual
+projections through ``AngCoeff::ClebGord(j1p, j2p, sp, ±0.5, m2p, nu)`` in the
+same coupling order the entrance decomposition uses, and the interference term
+enters as :math:`-2\,\mathrm{Im}[\cdot]` rather than :math:`+2`.
+
+The forward branch for code 8 lives in ``GenMatrixFunc``, next to the analyzing
+power's, and multiplies the cross section the point already carries by
+:math:`P_y`.
+
+The constant that has to be carried forward
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+As the previous chapter shows, the published product is a plain multiple of the
+bare numerator :math:`N = \mathrm{Tr}(\sigma_y M M^{\dagger})`: the denominator
+of :math:`P_y` is exactly the spin sum the cross section divides by, so it
+cancels. That is what makes the adjoint easy — :math:`N` is bilinear in
+:math:`M`, so ``OutgoingPolarizationNumeratorBar`` is exact and carries no
+:math:`1/D^2` — but it is also the one place the implementation can go quietly
+wrong.
+
+The multiple is not 1. It is :math:`1/n_{\text{entrance}}` times whatever
+kinematic and unit factors the point's cross section already carries, and those
+vary from point to point. The adjoint differentiates :math:`N`, but the model
+value is :math:`\text{scale} \cdot N`, so the cotangent has to be scaled by the
+same constant. The forward pass therefore records
+
+.. code-block:: cpp
+
+   point->SetPolarizationScale(std::fabs(numN) > 1.e-300 ? model / numN : 0.0);
+
+and ``AMatrixFunc::PointAdjoint`` multiplies by it.
+
+This is worth spelling out because of how the omission presented. Without the
+scale the adjoint is still proportional to the truth *for each parameter
+separately*, so a finite-difference check on any single column passes — the
+first version passed at :math:`10^{-8}`. What is wrong is the relative scaling
+of the Jacobian **rows**, which a per-column check cannot see. The symptom only
+appeared in a real fit: against the ten digitized Niecke points the analytic
+Jacobian converged prematurely to :math:`\chi^2 = 91.2` while the numerical one
+reached 36.4, the search directions being wrong even though every individual
+derivative was proportional to the right answer. **A finite-difference check
+that varies one parameter at a time cannot validate a Jacobian whose rows carry
+independent constants; only a fit can.**
+
+With the scale carried through, the two agree: both reach
+:math:`\chi^2 = 101.2185` from a starting 2276.64, and the fitted parameters
+agree to a maximum relative difference of :math:`1.4\times10^{-7}`.
+
+Using it
+~~~~~~~~
+
+In the GUI, choose *Polarization x Cross Section* from the **Data Type** menu.
+The angle fields are enabled as for a centre-of-mass differential segment;
+unlike the analyzing power **Vary Norm?** is *available*, since the product is
+extensive and a measured one can carry a scale uncertainty like any other cross
+section; and the Plot tab switches the y-axis to linear for it, because it takes
+the sign of the polarization and a logarithmic axis drops negative points
+silently.
+
+By hand the code is 8, with angles centre-of-mass and energies laboratory. The
+data file carries ``E_lab  theta_cm  P*dsdo  d(P*dsdo)`` in b/sr:
+
+.. code-block:: text
+
+   <segmentsData>
+   1  1  2  0.5  0.7  0  180  8  1  0  5  0  0.005  0  data/niecke_pdsdo.dat 0 0
+   </segmentsData>
+
+A target integration needs no special handling: the observable is extensive, so
+the ordinary yield integrator averages it correctly and there is no analogue of
+the cross-section weighting an analyzing power requires.
+
+``tests/polarization_product`` is the regression test, fitting the ten
+:sup:`11`\ B(:math:`\alpha`,n) points digitized from Niecke *et al.* Fig. 6(b).
+
+Capture exits
+~~~~~~~~~~~~~
+
+A code 8 segment pointed at a capture exit is **rejected when the model is
+read** — by ``ESegment::Fill`` for a data segment and by the ``segmentsTest``
+reader for a test segment — rather than evaluated. The reason is in the
+previous chapter: a photon is not a spin-1/2 ejectile, and the capture
+analyzing power is by time reversal the outgoing polarization of the inverse
+reaction, so it cannot be substituted.
+
+The refusal is deliberate and the alternative was worse. The first version
+simply skipped the amplitude matrix for a photon exit and fell through to
+:math:`P_y = 0`, which is not harmless: a segment evaluating to zero at every
+angle still contributes a finite :math:`\chi^2` against real data, so it drags
+every other parameter in the fit while looking like an ordinary segment in the
+output.
+
 What is not done
 ----------------
 
@@ -570,3 +670,12 @@ What is not done
   analytically. Such a point returns *unsupported*, which makes the whole
   Jacobian unavailable and falls the fit back to numerical derivatives -- coarse,
   but never wrong.
+* **A target-integrated** :math:`P\,d\sigma/d\Omega` **has not been tested.**
+  The forward path should be correct by construction -- the observable is
+  extensive, so it takes the ordinary integration branch and sub-points inherit
+  the flag -- but no test exercises code 8 together with target effects, and the
+  adjoint's per-point scale has never been checked under sub-point integration.
+  Given how the scale error above presented, that check should be a fit and not
+  a per-parameter finite difference.
+* **Photon polarization** (linear or circular) for capture exits. Code 8 covers
+  spin-1/2 ejectiles only; see the refusal described above.

@@ -480,7 +480,7 @@ QList<PlotEntry *> PlotTab::getDataSegments() {
     int exitKey = segDataProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toInt();
     sourceIndex = segDataProxyModel->mapToSource(segDataProxyModel->index(indexes[i].row(), 7, QModelIndex()));
     int dataType = segDataProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toInt();
-    if (dataType == 7) selectionHasAnalyzingPower_ = true;
+    if (dataType == 7 || dataType == 8) selectionHasSignedObservable_ = true;
     QString filename = (dataType == 3) ? QString::fromStdString(configure.outputdir) + QString("AZUREOut_aa=%1_TOTAL_CAPTURE.out").arg(entranceKey) : QString::fromStdString(configure.outputdir) + QString("AZUREOut_aa=%1_R=%2.out").arg(entranceKey).arg(exitKey);
     sourceIndex = segDataProxyModel->mapToSource(segDataProxyModel->index(indexes[i].row(), 8, QModelIndex()));
     QString segmentDataFile = segDataProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toString();
@@ -493,7 +493,7 @@ QList<PlotEntry *> PlotTab::getDataSegments() {
       if (previousEntranceKey == entranceKey && previousExitKey == exitKey) numPreviousInBlock++;
     }
     PlotEntry *newPlotEntry = new PlotEntry(0, entranceKey, exitKey, numPreviousInBlock, filename);
-    newPlotEntry->setAllowNonPositive(dataType == 7);
+    newPlotEntry->setAllowNonPositive(dataType == 7 || dataType == 8);
     if (!segmentDataFile.isEmpty()) {
       newPlotEntry->setLabel(PlotEntry::labelFromFilename(segmentDataFile));
     }
@@ -513,7 +513,7 @@ QList<PlotEntry *> PlotTab::getTestSegments() {
     int exitKey = segTestProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toInt();
     sourceIndex = segTestProxyModel->mapToSource(segTestProxyModel->index(indexes[i].row(), 9, QModelIndex()));
     int dataType = segTestProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toInt();
-    if (dataType == 7) selectionHasAnalyzingPower_ = true;
+    if (dataType == 7 || dataType == 8) selectionHasSignedObservable_ = true;
     QString filename = (dataType == 4) ? QString::fromStdString(configure.outputdir) + QString("AZUREOut_aa=%1_TOTAL_CAPTURE.extrap").arg(entranceKey) : QString::fromStdString(configure.outputdir) + QString("AZUREOut_aa=%1_R=%2.extrap").arg(entranceKey).arg(exitKey);
     int numPreviousInBlock = 0;
     for (int j = 0; j < indexes[i].row(); j++) {
@@ -524,21 +524,25 @@ QList<PlotEntry *> PlotTab::getTestSegments() {
       if (previousEntranceKey == entranceKey && previousExitKey == exitKey) numPreviousInBlock++;
     }
     PlotEntry *newPlotEntry = new PlotEntry(1, entranceKey, exitKey, numPreviousInBlock, filename);
-    newPlotEntry->setAllowNonPositive(dataType == 7);
+    newPlotEntry->setAllowNonPositive(dataType == 7 || dataType == 8);
     testSegmentPlotEntries.push_back(newPlotEntry);
   }
   return testSegmentPlotEntries;
 }
 
 void PlotTab::draw() {
-  selectionHasAnalyzingPower_ = false;
+  selectionHasSignedObservable_ = false;
   QList<PlotEntry *> entries = getDataSegments();
   entries.append(getTestSegments());
-  // An analyzing power is a ratio lying in [-1,1] and negative over much of its
-  // range. A logarithmic axis -- the default here -- simply cannot show it, and
-  // an S-factor conversion has no meaning for it. Switch both off rather than
-  // leave the user with a plot that looks empty.
-  if (selectionHasAnalyzingPower_) {
+  // Both polarization observables take negative values. An analyzing power is a
+  // ratio in [-1,1], negative over much of its range; P dsigma/dOmega carries
+  // the sign of the polarization, so it is negative wherever the polarization
+  // is (4 of the 10 published Niecke 11B(a,n) points are). A logarithmic axis --
+  // the default here -- simply cannot show either, and it drops the offending
+  // points silently rather than complaining, so the curve looks merely sparse.
+  // An S-factor conversion is meaningless for both. Switch both off rather than
+  // leave the user with a plot that quietly omits half the data.
+  if (selectionHasSignedObservable_) {
     if (yAxisIsLogCheck->isChecked()) yAxisIsLogCheck->setChecked(false);
     if (yAxisSFButton->isChecked()) yAxisXSButton->setChecked(true);
   }

@@ -60,12 +60,16 @@ Nine columns:
      - Center-of-mass angle (degrees)
    * - 4
      - Fit center-of-mass cross section (barns or barns/sr), or the fitted
-       analyzing power (dimensionless) for an analyzing-power segment
+       analyzing power (dimensionless) for an analyzing-power segment, or the
+       fitted :math:`P\,d\sigma/d\Omega` (barns/sr, and signed) for a
+       polarization-times-cross-section segment
    * - 5
      - Fit center-of-mass S-factor (MeV b or MeV b/sr)
    * - 6
      - Data center-of-mass cross section (barns or barns/sr), or the measured
-       analyzing power (dimensionless) for an analyzing-power segment
+       analyzing power (dimensionless) for an analyzing-power segment, or the
+       measured :math:`P\,d\sigma/d\Omega` (barns/sr, and signed) for a
+       polarization-times-cross-section segment
    * - 7
      - Data center-of-mass cross section uncertainty (barns or barns/sr)
    * - 8
@@ -97,7 +101,9 @@ as above. Five columns:
      - Center-of-mass angle (degrees)
    * - 4
      - Extrapolated center-of-mass cross section (barns or barns/sr), or the
-       analyzing power (dimensionless) for an analyzing-power segment
+       analyzing power (dimensionless) for an analyzing-power segment, or
+       :math:`P\,d\sigma/d\Omega` (barns/sr, and signed) for a
+       polarization-times-cross-section segment
    * - 5
      - Extrapolated center-of-mass S-factor (MeV b or MeV b/sr)
 

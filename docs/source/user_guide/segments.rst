@@ -67,6 +67,32 @@ appears with the following fields:
           ratio, **Vary Norm?** is disabled for it -- a normalization factor has
           no meaning for a quantity that is already normalized. See
           :doc:`../theory/polarization_theory`.
+      * - **Polarization x Cross Section**
+        - The product :math:`P(\theta)\,d\sigma/d\Omega` of the outgoing
+          polarization and the differential cross section, for a **particle**
+          exit channel. This is the form in which most polarization
+          measurements are published -- Niecke *et al.* report
+          :sup:`11`\ B(:math:`\alpha`,n) and :sup:`14`\ C(p,n) this way --
+          so the data can be fitted as measured, without first dividing by a
+          cross section taken from somewhere else. Angles are centre-of-mass
+          and the data file carries
+          ``E_lab  theta_cm  P*dsdo  d(P*dsdo)``, in the same units as a
+          differential cross section (b/sr). Unlike the analyzing power this
+          is an extensive quantity, so **Vary Norm?** is available and a
+          target integration averages it exactly as it averages a cross
+          section. See :doc:`../theory/polarization_theory`.
+
+.. note::
+
+   **Polarization x Cross Section** is not implemented for a capture exit
+   channel, and a segment that asks for one is rejected when the model is read
+   rather than silently evaluated. The observable is the vector polarization of
+   a spin-1/2 ejectile, obtained from the amplitude matrix, and a photon exit
+   has no such matrix. The capture analyzing power AZURE2 computes is a
+   different quantity and cannot stand in for it: that is the *analyzing*
+   power, indexed on the polarized entrance channel, which by time reversal is
+   the outgoing polarization of the **inverse** reaction, not of capture.
+   Published photon polarization, linear or circular, needs its own formalism.
 
 **Data Normalization**
    A normalization factor applied to the data yield. Default is ``1.0``.
@@ -153,6 +179,9 @@ segment dialog but includes:
      coefficients. Requires specifying the polynomial order.
    - **Analyzing Power** -- the vector analyzing power on the chosen energy and
      angle grid, in the centre-of-mass frame.
+   - **Polarization x Cross Section** -- the product
+     :math:`P(\theta)\,d\sigma/d\Omega` on the chosen energy and angle grid,
+     in the centre-of-mass frame.
 
 .. warning::
 
@@ -169,7 +198,11 @@ segment dialog but includes:
    average towards zero. This is physical, and it is explained in
    :doc:`../theory/polarization_implementation`.
 
-   When an analyzing-power segment is plotted, the Plot tab switches the
-   y-axis to a linear scale and to *Cross Section* automatically: a logarithmic
-   axis cannot display a quantity that goes negative, and an S-factor
-   conversion is meaningless for a ratio.
+   When an analyzing-power or **Polarization x Cross Section** segment is
+   plotted, the Plot tab switches the y-axis to a linear scale and to
+   *Cross Section* automatically: a logarithmic axis cannot display a quantity
+   that goes negative, and it drops such points silently rather than
+   complaining, so the curve would look merely sparse. Both observables take
+   negative values -- :math:`P\,d\sigma/d\Omega` wherever the polarization
+   is negative, which is 4 of the 10 published Niecke
+   :sup:`11`\ B(:math:`\alpha`,n) points.
