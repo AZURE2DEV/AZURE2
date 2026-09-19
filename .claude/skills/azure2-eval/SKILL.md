@@ -156,13 +156,26 @@ printf '1\n\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 # Calculate with saved best-fit params (parameter file given, EC file blank):
 printf '1\noutput/param.sav\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 
-# Fit fresh from the .azr levels. Mode 2 then asks about the cross-section
-# uncertainty band (y/n) and, if yes, reduced-chi2 scaling (y/n):
-printf '2\n\n\nn\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
+# Modes 2 and 3 ask "Calculate cross-section uncertainty band? (y/n)" FIRST --
+# immediately after the menu choice and BEFORE the parameter-file prompt (mode 1
+# does not ask).  If yes, mode 2 then asks about reduced-chi2 scaling (y/n).
+# Fit fresh from the .azr levels:
+printf '2\nn\n\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
+
+# Fit starting from saved params:
+printf '2\nn\noutput/param.sav\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 
 # Extrapolate (no data) using saved params:
-printf '3\noutput/param.sav\n\nn\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
+printf '3\nn\noutput/param.sav\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 ```
+
+**Get this ordering wrong and the run silently ignores your parameter file.**
+Feeding `2\nparam.sav\n\n7` gives the filename to the y/n prompt (read as "no")
+and the blank line to the parameter-file prompt, so AZURE2 starts from the `.azr`
+`<levels>` values with no error. Always confirm in the log: a run that used the
+file prints `Reading User Parameter File...`; one that did not prints
+`Creating New param.par File...`. (`--covariance-band` also removes the prompt, but
+by answering it *yes* -- it turns the band calculation on. pyazr has no prompts.)
 
 Non-interactive band control: `--covariance-band` (+ `--scale-covariance`) skips
 the y/n prompts. Other flags: `--use-brune`, `--gsl-coul`, `--ignore-externals`,
