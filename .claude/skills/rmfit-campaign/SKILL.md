@@ -897,3 +897,119 @@ minus e3) before anything is fitted; also list channels with γ = 0 and channelF
 (nominally free, actually dead — see the background-pole entry of 09-16).  A `rmfit
 audit` command that does both is the right home; until it exists, the awk one-liner is
 in `13C+a/8-10-26_more_data_claude/readme` (2026-09-17 19:40 entry).
+
+## 2026-09-18 — seed dead channels in units of γ_W, never in keV (13C+α)
+
+Seeding zero amplitudes with a physical width (`gamma = 200e3` eV in the `.azr`) is only
+safe in well-penetrable channels.  Applied to the n₁/α₁ pairs of thirty background levels
+it put the model at +166,747 (and +136,525 at 20 keV): for a high-L channel with
+P ~ 10⁻⁶, 20 keV is a reduced width of thousands of MeV.  Do it in two steps instead:
+a 1 eV physical seed so the channels exist as engine keys (zero amplitudes are not keys),
+then set each key to `frac · γ_W` (θ² = frac², 0.04 is plenty) in the engine and `bake`
+the vector — the baked `.azr`/`.sav` pair is consistent and round-trip checked, so no
+`.sav` filtering is needed.  Always evaluate the seed before submitting: a seed should move
+the objective by less than the polish's first step, not by 50%.  Script:
+`13C+a/9-18-26_nbg/seed_nbg2.py`.
+
+## 2026-09-18 — leave-one-dataset-out: totals are not enough (13C+α)
+
+The 14-row table (`13C+a/9-18-26_loo`) separated cleanly into distorting sets (extra
+recovery 2,400–37,000) and consistent ones (190–1,000 = the drift of a 100-evaluation
+refit with no control polish — polish the reference first and quote that floor).  But
+EVERY distorting set sat in the same energy region, so the table said "region", not
+"dataset", and could not say which measurements disagree with which.  `run_dataset_off`
+now also logs and stores (`by_dataset` in the round stats) the per-dataset χ² of the rest,
+frozen vs refitted — the pairwise tension map.  Two reading rules: extra/own > 1 (a set
+that returns more than its own χ² when removed) means it pulls against a specific partner,
+look for the partner in the breakdown; and rank by extra recovery PER POINT, not total —
+the leverage is in small precise sets (here 145 points returned 35 per point against 2–4
+for the 10,000-point sets).  Test: `rmfit/tests/test_dataset_off_13n.py` (slow, ~15 min:
+13N recomputes its capture integrals for the reduced variant).
+
+## 2026-09-18 — a per-dataset table must reproduce a number you already know
+
+`diagnose.dataset_table(ev, score)` double-counted any segment that a `Sharded` evaluator
+splits into pieces (one row range per piece, χ² per base segment): Heil on 13C+α came out
+at exactly 2.000× its known χ².  Caught only because the first use of a new breakdown was
+compared, row by row, with the incumbent's REPORT table before being interpreted.  Fixed;
+regression test `tests/test_dataset_table_split.py` uses a stub evaluator (runs in a
+second) and was run against the OLD code first to prove it fails there.  Scope: the
+"worst datasets" line at `init` and `compare()` on a sharded evaluator; accept decisions
+were unaffected (their ρ is per segment from verified single-session scores).  Rule: the
+first output of any new diagnostic gets checked against an independently known total
+before anyone reads physics into it.
+
+## 2026-09-18 — after a session restart, qsub may lose its Kerberos cache
+
+"job rejected: job does not provide an AFS token" from an INTERACTIVE shell: the restarted
+session inherited a KRB5CCNAME pointing at a cache file that no longer exists (`klist`:
+"No credentials cache found") although the AFS token itself was fine.  Fix: point
+KRB5CCNAME at the session's own still-valid cache (`ls /tmp/krb5cc_<uid>_*`, check each
+with `KRB5CCNAME=FILE:<path> klist`; the one whose start time matches `tokens`' expiry is
+this login's) for the qsub call, or ask the user to `kinit`.  Also: long login-node
+computations launched with run_in_background die with the session -- launch them with
+nohup and a done-file, and watch the done-file.  And `qsub -hold_jid <running job>` queues
+the next step behind the current one without needing the session alive at hand-over.
+
+## 2026-09-18 — new data in a channel the model never used (13C+α, (α,α₁γ))
+
+Adding the first data to observe a particle pair (here 157 points of 13C(α,α₁γ), exit pair 4)
+has three traps, all hit today:
+1. **The data cannot act until the channel is seeded**: every amplitude in that pair was
+   exactly zero (frozen cost 59 χ²/pt; a polish alone would never move).  Seed only the ZERO
+   channels of the physical levels in the data's range.
+2. **Do not create the engine keys with a placeholder physical width.**  1 eV in an L = 4–6
+   α channel just above threshold is an enormous reduced width; the Brune transform of the
+   whole level failed and its *fitted* amplitudes arrived corrupted (+40k whatever the seed
+   size).  Write each new channel as θ²·Γ_W *of that channel* (Γ_W from the engine; it does
+   not depend on the amplitude) straight into the `.azr`, use a norms-and-shifts-only
+   `.sav` (a new channel shifts the positional `width_N_c` names), evaluate two seed sizes,
+   keep the lower.  Result here: seeds alone −1,276; polish 321,168 → 314,231 against 322,444
+   with no strength in the pair.
+3. **Any structural edit of a level nudges its other amplitudes through the Brune
+   transform** (~1 % here): amplitudes that sat exactly at a θ² cap land marginally over it
+   and `init` reports a sanity flag.  Harmless (the bounded polish clips them), but check
+   what the flag lists before believing or dismissing it.
+Also: before trusting a secondary-γ dataset's absolute scale, test its detectors against
+each other — a γ ray from a J = 1/2 state is isotropic, so the angles must agree (here
+χ²/dof 3.1, 10–15 % scale differences).  And `levelscan.scoring_segments` now counts
+`differential-cm` (isDiff 4) data as differential (`tests/test_scoring_segments.py`).
+
+## 2026-09-18 — campaign directories go directly under the reaction directory
+
+`rmfit export` writes `<reaction>.azr` only when the campaign directory's PARENT is the
+reaction directory (`campaign.reaction_name()` looks for a "+" in the parent's name).  A
+campaign nested one level deeper exports to the BASE FILE'S OWN STEM — i.e. it overwrites
+its seed (`13C+a_seed.azr`) — and anything chained on `<reaction>.azr` finds nothing.  Found
+when a five-step continuation aborted at its first hand-over (its guard worked; the refit
+was intact in the overwritten seed).  Rule: one dated directory per fit, directly under the
+reaction directory — which is the archive's convention anyway — and a chained job must
+check for the previous step's export and stop if it is missing.
+
+## 2026-09-19 — one bad point can hold a converged fit hostage (13C+α, MANA)
+
+A per-ANGLE χ² table of a 14-detector dataset showed one segment at 4× its neighbours; it
+was a single point, a factor 6.6 below both energy neighbours in the same detector and
+below the adjacent detectors at the same beam energy (pull −61, χ² 3,746).  Dropping it
+(evaluator's decision, new data file, old file untouched because a running job read it)
+removed its 3,746 — and the refit then fell ANOTHER 3,743, in datasets that do not contain
+the point (other channels' angular distributions, the neutron total), although the model
+with the point in was converged.  Rules: (1) routinely print χ² per segment AND the largest
+single-point χ² per segment; a segment whose maximum is most of its total is a data
+question, not a physics one; (2) never edit a data file a running job reads — new name, new
+directory; (3) predict the frozen effect of a data change before spending a node on it (here
+the prediction matched to the digit), so that everything beyond it is attributable to the
+refit.
+
+## 2026-09-19 — levels added by the search had FIXED energies (method gap)
+
+`structure.LevelCandidate.energy_fixed` defaults to True and `levelscan` passes True, so the
+added level is written with `levelFix = 1`.  The "released polish" of `run_level_add`
+therefore releases the rest of the model but never the new level's energy, and the accepted
+structure keeps the flag, so no later polish moves it either.  Found only because an accepted
+level read out at exactly 10.9 MeV, and then every level added since 09-14 turned out to sit
+at a round number.  The plan had specified a released energy (±max(3Γ, 50 keV)).  Until the
+code path is repaired (pinned stage by BOUNDS, released stage with the energy free in a
+narrow window; 13N test), follow every accepted add with a job that frees the new level's
+energy (flip token 4 of its channel lines) and polishes.  Read-out rule: after any accepted
+structure change, print the new level's parameters and ask whether each one could have moved.
