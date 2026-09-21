@@ -96,11 +96,26 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
     // plain nearest-distance let the broad pole's far-too-coarse pitch
     // silently override the narrow resonance's anchoring everywhere the two
     // overlap, which is precisely the case this anchoring exists to fix.
+    //
+    // Only a resonance whose lattice is FINER than the smooth step is a
+    // refinement worth anchoring to. A broad pole's pitch can exceed the whole
+    // window -- a 10 MeV background level at pointsPerWidth 50 gives 200 keV,
+    // against a 100 keV thick target -- and anchoring to it stepped straight
+    // from the window's start to its end, past everything in between: past the
+    // tail below a narrow resonance, and past the narrow resonance itself
+    // whenever the window started outside its margin, leaving the grid
+    // [start, E_R, end]. The integral then weighted sigma(E_R) by half the
+    // window. This only became reachable once IdentifyResonances returned the
+    // physical widths: a background pole now carries its real 10 MeV. Such a
+    // resonance is left to CalculateAdaptiveStep, which is capped at
+    // baseEnergyStep.
     const ResonanceInfo *anchorRes = nullptr;
     for (const ResonanceInfo &res : resonances) {
       if (!(res.particleWidth > 0.0)) continue;
+      if (config_.pointsPerWidth > 0.0 &&
+          !(res.particleWidth / config_.pointsPerWidth < config_.baseEnergyStep)) continue;
       double margin = res.particleWidth * config_.resonanceWidthMultiplier;
-      if (std::abs(currentEnergy - res.energy) > margin) continue;
+      if (std::abs(currentEnergy - res.energy) > margin + 1.0e-12) continue;  // the edge itself counts (see below)
       if (!anchorRes || res.particleWidth < anchorRes->particleWidth) {
         anchorRes = &res;
       }
@@ -132,6 +147,22 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
         grid.push_back(nextEnergy);
         break;
       }
+    }
+
+    // Never step INTO a resonance's region from outside it: stop at its upper
+    // edge, so the region is sampled on its own lattice from there down. The
+    // smooth step is sized by the nearest resonance's Gaussian falloff and is
+    // up to baseEnergyStep long, which can land deep inside a narrow region
+    // (or clear across it) -- a 4.5 keV step from 264.9 keV to 260.4 keV
+    // skipped the whole upper wing of the 0.97 keV-wide 259.7 keV resonance
+    // in 14N(p,g), and the trapezoid then spread sigma at 0.7 keV from the
+    // peak over the full step.
+    for (const ResonanceInfo &res : resonances) {
+      if (!(res.particleWidth > 0.0)) continue;
+      if (config_.pointsPerWidth > 0.0 &&
+          !(res.particleWidth / config_.pointsPerWidth < config_.baseEnergyStep)) continue;
+      double upperEdge = res.energy + res.particleWidth * config_.resonanceWidthMultiplier;
+      if (upperEdge < currentEnergy - 1.0e-12 && upperEdge > nextEnergy) nextEnergy = upperEdge;
     }
 
     if (nextEnergy < endEnergy) {
