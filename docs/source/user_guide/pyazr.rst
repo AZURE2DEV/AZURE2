@@ -198,11 +198,13 @@ relative to itself, so a snapshot runs from the directory the original did.
 
    Adding or removing data segments changes which energies AZURE2 evaluates.
    The external-capture integrals are cached in ``output/intEC.dat`` /
-   ``output/intEC.extrap`` keyed on the *grid*, not on the segment selection,
-   and AZURE2 silently reuses a stale file.  After any data edit, delete those
-   caches (or give the edited model its own output directory) so the integrals
-   are recomputed; ``azure2.recalculate_external_capture()`` forces it inside a
-   live session.  See ``pyazr/examples/edit_model.py``.
+   ``output/intEC.extrap`` for the energies of one grid.  AZURE2 records a
+   signature of that grid beside each file (``.sig``) and recomputes, with a
+   warning, a cache that no longer matches -- but only at session start.
+   After any data edit, delete those caches (or give the edited model its own
+   output directory) so the integrals are recomputed;
+   ``azure2.recalculate_external_capture()`` forces it inside a live session.
+   See ``pyazr/examples/edit_model.py``.
 
 Decomposing a cross section
 ---------------------------
@@ -581,9 +583,10 @@ mode **only active test segments are returned**, so segment *i* is
 .. note::
 
    Delete ``output/intEC.extrap`` whenever the ``<segmentsTest>`` grid changes.
-   AZURE2 caches external-capture integrals there and silently reuses them on a
-   different grid, which corrupts capture cross sections. It is safe to delete;
-   it only costs time to rebuild.
+   AZURE2 caches external-capture integrals there; a session that starts on a
+   changed grid detects it from ``intEC.extrap.sig`` and recomputes, but a
+   running session does not re-check. It is safe to delete; it only costs time
+   to rebuild.
 
 Frames and units
 ----------------

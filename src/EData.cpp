@@ -9,8 +9,13 @@
 #include "AdaptiveIntegrationGrid.h"
 #include "Minuit2/MnUserParameters.h"
 #include "GSLException.h"
+#include "NuclearPotentialManager.h"
+#include <cinttypes>
+#include <cstdio>
 #include <iostream>
 #include <iomanip>
+#include <set>
+#include <sstream>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -29,6 +34,7 @@ EData::EData() {
   isFit_ = true;
   isErrorAnalysis_ = false;
   ecReadPos_ = std::streampos(0);
+  ecUsePrevious_ = false;
 }
 
 /*!
@@ -1590,21 +1596,57 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
   }
 }
 
-/*!
- * Counts the external-capture amplitudes this model expects to read from, or
- * write to, an intEC file.  The loop structure mirrors CalculateECAmplitudes
- * exactly; if that routine changes, this one must change with it.
- *
- * The point of counting is that the intEC file records amplitudes evaluated at
- * the sub-point energies of one particular data grid, and carries no record of
- * which grid that was.  Reading a file built for a different segment selection
- * returns amplitudes belonging to other energies, silently, and the result
- * looks like physics.
- */
+namespace {
 
-long long EData::CountECAmplitudes(CNuc *theCNuc, const Config &configure) {
+/*!
+ * 64-bit FNV-1a over a stream of values, each written as text.  Doubles are
+ * printed at fixed precision (%.12e) rather than hashed bit for bit, so the
+ * signature survives a value that went through a text file and back, while
+ * still moving for any change that matters to the integrals.
+ */
+class ECSignatureHash {
+ public:
+  void Add(const char *text) {
+    for (const char *c = text; *c; c++) {
+      hash_ ^= (unsigned char)*c;
+      hash_ *= 1099511628211ULL;
+    }
+    // A separator, so that ("1","23") and ("12","3") hash differently.
+    hash_ ^= (unsigned char)';';
+    hash_ *= 1099511628211ULL;
+  }
+  void Add(double value) {
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer), "%.12e", value);
+    Add(buffer);
+  }
+  void Add(int value) {
+    char buffer[32];
+    snprintf(buffer, sizeof(buffer), "%d", value);
+    Add(buffer);
+  }
+  std::string Hex() const {
+    char buffer[32];
+    snprintf(buffer, sizeof(buffer), "%016" PRIx64, hash_);
+    return buffer;
+  }
+
+ private:
+  uint64_t hash_ = 14695981039346656037ULL;
+};
+
+/*!
+ * Walks the external-capture amplitudes of one set of segments in exactly the
+ * order CalculateECAmplitudes and InitializeComponentSegments write them, and
+ * returns how many there are.  With a hash, it also feeds in what each block of
+ * amplitudes depends on, and collects the pairs involved so their properties
+ * can be added afterwards.
+ */
+template <class Segments>
+long long WalkECAmplitudes(Segments &segments, CNuc *theCNuc, ECSignatureHash *hash,
+                           std::set<int> *pairs) {
   long long count = 0;
-  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+  for (auto segment = segments.begin(); segment != segments.end(); segment++) {
     int aa = theCNuc->GetPairNumFromKey(segment->GetEntranceKey());
     if (theCNuc->GetPair(aa)->GetPType() == 20) continue;
     if (!theCNuc->GetPair(aa)->IsEntrance()) continue;
@@ -1615,17 +1657,162 @@ long long EData::CountECAmplitudes(CNuc *theCNuc, const Config &configure) {
         ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
         int ir = theCNuc->GetPairNumFromKey(segment->GetExitKey());
         if (ecLevel->GetECPairNum() != ir) continue;
-        for (EPointIterator point = segment->GetPoints().begin();
-             point < segment->GetPoints().end(); point++) {
+        Decay *decay = entrancePair->GetDecay(ir);
+        if (hash) {
+          // Which block this is, and the final state it captures to.  The
+          // level energy enters every integral (EPoint::CalculateECAmplitudes);
+          // the ANC does not -- it multiplies the amplitude later -- so it is
+          // deliberately left out and can be varied without invalidating.
+          hash->Add("segment");
+          hash->Add(segment->GetSegmentKey());
+          hash->Add(segment->GetEntranceKey());
+          hash->Add(segment->GetExitKey());
+          hash->Add(theCNuc->GetJGroup(j)->GetJ());
+          hash->Add(ecLevel->GetE());
+          pairs->insert(aa);
+          for (int k = 1; k <= decay->NumKGroups(); k++) {
+            KGroup *theKGroup = decay->GetKGroup(k);
+            hash->Add(theKGroup->GetS());
+            for (int ecm = 1; ecm <= theKGroup->NumECMGroups(); ecm++) {
+              ECMGroup *theECMGroup = theKGroup->GetECMGroup(ecm);
+              AChannel *finalChannel = theCNuc->GetJGroup(j)->GetChannel(theECMGroup->GetFinalChannel());
+              hash->Add(theECMGroup->GetL());
+              hash->Add(theECMGroup->GetMult());
+              hash->Add((int)theECMGroup->GetRadType());
+              hash->Add(theECMGroup->GetJ());
+              hash->Add(finalChannel->GetL());
+              hash->Add(finalChannel->GetS());
+              hash->Add(theCNuc->GetPair(finalChannel->GetPairNum())->GetPairKey());
+              pairs->insert(finalChannel->GetPairNum());
+              hash->Add(theECMGroup->IsChannelCapture() ? 1 : 0);
+              if (theECMGroup->IsChannelCapture()) {
+                MGroup *chanCap = entrancePair->GetDecay(theECMGroup->GetChanCapDecay())->GetKGroup(theECMGroup->GetChanCapKGroup())->GetMGroup(theECMGroup->GetChanCapMGroup());
+                AChannel *initial = theCNuc->GetJGroup(chanCap->GetJNum())->GetChannel(chanCap->GetChpNum());
+                hash->Add(initial->GetL());
+                hash->Add(initial->GetS());
+              }
+            }
+          }
+        }
+        for (auto point = segment->GetPoints().begin(); point != segment->GetPoints().end(); point++) {
           if (point->IsMapped()) continue;
-          for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++)
-            for (int ecm = 1; ecm <= entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups(); ecm++)
+          for (int k = 1; k <= decay->NumKGroups(); k++)
+            for (int ecm = 1; ecm <= decay->GetKGroup(k)->NumECMGroups(); ecm++)
               count += 1 + (long long)point->NumSubPoints();
+          if (hash) {
+            // The energies the amplitudes are evaluated at.  The angle does
+            // not enter an EC amplitude, so it is not part of the signature.
+            // The lab energy is included as well as the c.m. one because a
+            // component segment's c.m. energy is converted again, with its own
+            // entrance pair, after this point (InitializeComponentSegments).
+            hash->Add("point");
+            hash->Add(point->GetLabEnergy());
+            hash->Add(point->GetCMEnergy());
+            hash->Add(point->NumSubPoints());
+            for (auto subPoint = point->GetSubPoints().begin(); subPoint != point->GetSubPoints().end(); subPoint++)
+              hash->Add(subPoint->GetCMEnergy());
+          }
         }
       }
     }
   }
   return count;
+}
+
+}  // namespace
+
+/*!
+ * Counts the external-capture amplitudes this model expects to read from, or
+ * write to, an intEC file: those of the data segments, which
+ * CalculateECAmplitudes writes, followed by those of the component segments,
+ * which InitializeComponentSegments appends.  The walk mirrors both loops
+ * exactly; if either changes, WalkECAmplitudes must change with it.
+ *
+ * A count only catches a file built for a different number of points.  The
+ * signature (ECSignature) is what catches the same number of points at
+ * different energies.
+ */
+
+long long EData::CountECAmplitudes(CNuc *theCNuc, const Config &configure) {
+  return WalkECAmplitudes(GetSegments(), theCNuc, nullptr, nullptr) +
+      WalkECAmplitudes(componentSegments_, theCNuc, nullptr, nullptr);
+}
+
+/*!
+ * The signature of the external-capture integrals this calculation needs.
+ *
+ * An intEC file records amplitudes at the sub-point energies of one grid and
+ * carries no record of which grid.  Energy straggling, a target thickness or
+ * the adaptive-grid settings move those energies without changing how many
+ * there are; a channel radius, the Coulomb-function routine or the hybrid
+ * potential change the integrand at the same energies.  Either way the count
+ * check passes and the stale amplitudes are reused, silently.  The signature
+ * covers all of it: every energy an amplitude is evaluated at, the structure
+ * of each capture block, the level energy of each final state, the entrance
+ * and final pairs (masses, charges, spins, separation and excitation
+ * energies, channel radius, hybrid potential), and the options that select
+ * how the Coulomb functions and the integrals are computed.
+ *
+ * Energy shifts: the amplitudes are computed once, here, at the energies the
+ * points have at initialization, and are not recomputed when a fit moves a
+ * segment's energy shift (ESegment::UpdatePointEnergiesWithShift refreshes the
+ * penetrabilities and phases, not the EC amplitudes).  The file is therefore
+ * the initial state only, and the signature is taken over the energies at the
+ * time the file is written or read, which is the same stage of the same
+ * calculation in both cases.
+ */
+
+std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
+  ECSignatureHash hash;
+  // Bump the version if what goes into the signature changes, so files written
+  // under the old definition are recomputed rather than wrongly matched.
+  hash.Add("AZURE2 EC signature v1");
+  hash.Add((configure.paramMask & Config::USE_GSL_COULOMB_FUNC) ? 1 : 0);
+  hash.Add((configure.paramMask & Config::CALCULATE_REACTION_RATE) ? 1 : 0);
+  hash.Add(configure.useHybridMethod ? 1 : 0);
+
+  std::set<int> pairs;
+  hash.Add("data segments");
+  WalkECAmplitudes(GetSegments(), theCNuc, &hash, &pairs);
+  hash.Add("component segments");
+  WalkECAmplitudes(componentSegments_, theCNuc, &hash, &pairs);
+
+  for (std::set<int>::const_iterator it = pairs.begin(); it != pairs.end(); ++it) {
+    PPair *pair = theCNuc->GetPair(*it);
+    hash.Add("pair");
+    hash.Add(pair->GetPairKey());
+    hash.Add(pair->GetPType());
+    for (int i = 1; i <= 2; i++) {
+      hash.Add(pair->GetZ(i));
+      hash.Add(pair->GetM(i));
+      hash.Add(pair->GetJ(i));
+      hash.Add(pair->GetPi(i));
+      hash.Add(pair->GetG(i));
+    }
+    hash.Add(pair->GetSepE());
+    hash.Add(pair->GetExE());
+    hash.Add(pair->GetChRad());
+    // The hybrid potential bends the Coulomb functions of this pair, and so
+    // both the entrance-channel phases and the final-state integrand.
+    // (CoulFunc applies it when the global switch and the pair's own
+    // setting are both on.)
+    const NuclearPotentialManager &potentials = NuclearPotentialManager::instance();
+    bool hybrid = configure.useHybridMethod && potentials.isPairEnabled(pair->GetPairKey());
+    hash.Add(hybrid ? 1 : 0);
+    if (hybrid) {
+      NuclearPotentialSetting setting = potentials.getSetting(pair->GetPairKey());
+      hash.Add(setting.type.c_str());
+      hash.Add(setting.V0);
+      hash.Add(setting.R);
+      hash.Add(setting.a);
+      hash.Add(setting.r0);
+    }
+  }
+  return hash.Hex();
+}
+
+std::string EData::ECSignaturePath(const std::string &integralsFile) {
+  return integralsFile + ".sig";
 }
 
 /*!
@@ -1644,11 +1831,14 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
     outputfile = configure.outputdir + "intEC.extrap";
 
   // An intEC file records amplitudes at the sub-point energies of the grid it
-  // was built for and carries no record of which grid that was.  Reusing one
-  // across a changed segment selection returns amplitudes belonging to other
-  // energies -- silently, and with a result that looks like physics.  Count
-  // what this model needs and what the file actually holds; on a mismatch,
-  // say so and recompute rather than proceed.
+  // was built for.  Reusing one built for a different grid, or for different
+  // inputs at the same energies, returns amplitudes that belong to another
+  // calculation -- silently, and with a result that looks like physics.  Two
+  // checks guard the reuse: the number of amplitudes in the file, and the
+  // signature recorded beside it (ECSignature).  If either disagrees, say so
+  // and recompute rather than proceed.
+  ecSignature_ = ECSignature(theCNuc, configure);
+  ecOutputFile_ = outputfile;
   bool usePrevious = (configure.paramMask & Config::USE_PREVIOUS_INTEGRALS) != 0;
   if (usePrevious) {
     long long expected = CountECAmplitudes(theCNuc, configure);
@@ -1674,10 +1864,51 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
       }
     }
   }
+  if (usePrevious) {
+    std::string sigFile = ECSignaturePath(configure.integralsfile);
+    std::ifstream sigIn(sigFile.c_str());
+    std::string recorded, line;
+    while (sigIn && std::getline(sigIn, line)) {
+      std::istringstream fields(line);
+      std::string tag, version, value;
+      if (fields >> tag >> version >> value && tag == "AZURE2-EC-SIGNATURE") recorded = version + " " + value;
+    }
+    if (recorded.empty()) {
+      // A file from before signatures existed (or one copied without its
+      // sidecar): there is no record of what it was computed for, and the
+      // cases that matter are exactly the ones the count cannot see.
+      configure.outStream << "WARNING: '" << configure.integralsfile
+                          << "' has no signature file ('" << sigFile << "')," << std::endl
+                          << "         so there is no record of the energies and inputs its"
+                          << " integrals were computed for." << std::endl
+                          << "         Recalculating the integrals." << std::endl;
+      usePrevious = false;
+    } else if (recorded != "1 " + ecSignature_) {
+      configure.outStream << "WARNING: '" << configure.integralsfile
+                          << "' was computed for a different integration grid or different inputs" << std::endl
+                          << "         (signature " << recorded.substr(recorded.find(' ') + 1)
+                          << ", this calculation needs " << ecSignature_ << ")." << std::endl
+                          << "         The number of amplitudes matches, but their energies or integrands do not:"
+                          << std::endl
+                          << "         straggling, a target thickness, the integration-grid settings, a channel"
+                          << std::endl
+                          << "         radius, a level energy, the Coulomb-function routine or the hybrid potential"
+                          << std::endl
+                          << "         may have changed.  Recalculating the integrals." << std::endl;
+      usePrevious = false;
+    }
+  }
+  ecUsePrevious_ = usePrevious;
 
   if (usePrevious)
     in.open(configure.integralsfile.c_str());
   else {
+    // The signature is written only once the file is complete, after the
+    // component segments are appended (InitializeComponentSegments).  Remove
+    // the old one first, so that a run interrupted part way leaves a file
+    // with no signature -- which is recomputed -- rather than one whose old
+    // signature still vouches for it.
+    std::remove(ECSignaturePath(outputfile).c_str());
     out.open(outputfile.c_str());
     if (!out) configure.outStream << "Could not write to EC Amplitude File." << std::endl;
   }
@@ -1951,7 +2182,10 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
   // the (expensive) component-segment EC calculation is skipped entirely, which is
   // what makes subsequent calculations much faster.
   if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
-    bool usePrevious = (configure.paramMask & Config::USE_PREVIOUS_INTEGRALS);
+    // Follow the decision CalculateECAmplitudes made for the data segments.
+    // Reading the flag again here would resume reading a file that was just
+    // rejected, and rewritten without these amplitudes, from its start.
+    bool usePrevious = ecUsePrevious_;
     std::ifstream in;
     std::ofstream out;
     if (usePrevious) {
@@ -2084,6 +2318,16 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
     if (out.is_open()) {
       out.flush();
       out.close();
+      // The file is complete: record what it was computed for.  (Only when
+      // CalculateECAmplitudes started it, which is what set the signature.)
+      std::ofstream sig;
+      if (!ecOutputFile_.empty() && !ecSignature_.empty()) sig.open(ECSignaturePath(ecOutputFile_).c_str());
+      if (sig.is_open()) {
+        sig << "# External-capture integral signature for " << ecOutputFile_ << std::endl
+            << "# (FNV-1a 64 of the energies, pairs and options the integrals depend on;"
+            << " see EData::ECSignature)" << std::endl
+            << "AZURE2-EC-SIGNATURE 1 " << ecSignature_ << std::endl;
+      }
     }
     if (in.is_open()) in.close();
   }

@@ -152,13 +152,29 @@ speed up subsequent calculations, as long as:
 - No levels of a new :math:`J^\pi` have been added or removed.
 - No channels have been added or removed.
 - The channel radius has not changed.
+- The integration grid has not changed: target thickness, energy straggling,
+  convolution width and the adaptive-grid settings all move the sub-point
+  energies the integrals are evaluated at.
+- The Coulomb-function routine (``--gsl-coul``) and the hybrid potential are
+  the same.
 
-Level energies, widths, and ANCs can be changed freely while reusing this file.
+Energies, widths, and ANCs of the R-matrix levels can be changed freely while
+reusing this file; the energy of an external-capture final state cannot, since
+it enters the integrals.
+
+AZURE2 checks this itself.  Beside the file it writes ``intEC.dat.sig``, a
+64-bit hash of every energy an integral is evaluated at and of every input the
+integrals depend on.  When a saved file is offered for reuse, both its number of
+amplitudes and its signature must match the calculation at hand; otherwise a
+``WARNING`` says why and the integrals are recomputed.  A file with no
+signature -- written by an older AZURE2, or copied without its ``.sig`` -- is
+recomputed once, with a warning, and gets one.
 
 intEC.extrap
 ^^^^^^^^^^^^
 
-Same as ``intEC.dat``, but for the calculation (extrapolation) segments.
+Same as ``intEC.dat``, but for the calculation (extrapolation) segments; its
+signature is ``intEC.extrap.sig``.
 
 reactionrates.dat
 ^^^^^^^^^^^^^^^^^

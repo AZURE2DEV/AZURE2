@@ -74,6 +74,12 @@ class EData {
   /// How many external-capture amplitudes this model expects in an intEC file.
   /// Mirrors CalculateECAmplitudes exactly, so a mismatch means the cached file belongs to a different model.
   long long CountECAmplitudes(CNuc *, const Config &);
+  /// Hash of everything the external-capture integrals depend on: the energies they are evaluated at,
+  /// the pairs and final states that enter them, and the Coulomb-function options.  Stored beside an
+  /// intEC file (see ECSignaturePath) so that a file built for another grid is not reused.
+  std::string ECSignature(CNuc *, const Config &);
+  /// The sidecar that records the signature of an intEC file: the file name with ".sig" appended.
+  static std::string ECSignaturePath(const std::string &integralsFile);
   /// Set up the entrance/exit pairs of the component segments in the compound nucleus.
   int InitializeComponentSegments(CNuc *, const Config &);
   ESegment *CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey);
@@ -112,6 +118,11 @@ class EData {
   bool isFit_;
   bool isErrorAnalysis_;
   std::streampos ecReadPos_;  // File offset where component-segment EC integrals begin in the intEC file
+  // Whether the intEC file is being read back rather than written.  Decided once, in
+  // CalculateECAmplitudes, and followed by the component-segment pass so the two cannot disagree.
+  bool ecUsePrevious_;
+  std::string ecSignature_;   // Signature of the calculation being set up (see ECSignature)
+  std::string ecOutputFile_;  // The intEC file being written, when not reading one back
 };
 
 #endif
