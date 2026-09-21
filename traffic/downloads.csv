@@ -14,3 +14,8 @@ date,release,asset,downloads
 2026-09-20,v1.0,AZURE2_1.0.0-MacOSX-binary.dmg,9
 2026-09-20,v1.0,AZURE2_1.0.0-Windows-binary.zip,18
 2026-09-20,v1.0,AZURE2_1.0.0-source.tar.gz,18
+2026-09-21,continuous-windows,AZURE2-macos.dmg,0
+2026-09-21,continuous-windows,AZURE2-windows-x86_64.zip,0
+2026-09-21,v1.0,AZURE2_1.0.0-MacOSX-binary.dmg,9
+2026-09-21,v1.0,AZURE2_1.0.0-Windows-binary.zip,18
+2026-09-21,v1.0,AZURE2_1.0.0-source.tar.gz,18
