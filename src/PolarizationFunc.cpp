@@ -2,6 +2,8 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #include "AChannel.h"
 #include "AngCoeff.h"
@@ -15,6 +17,26 @@ namespace {
 
 //! Half-integer-safe equality for spins and projections.
 inline bool Same(double a, double b) { return std::fabs(a - b) < 1.e-6; }
+
+/*!
+ * <j1 m1 j2 m2 | s nu>: decomposes a channel spin s into its two particles,
+ * particle 1 (the light one) first, as Lane and Thomas couple them.
+ *
+ * AZURE2_SWAP_COUPLING_ORDER=1 couples them the other way round,
+ * <j2 m2 j1 m1 | s nu> = (-1)^(j1+j2-s) <j1 m1 j2 m2 | s nu>.  It exists solely
+ * to test convention invariance: the swap alone must move A_y on a target with
+ * spin, and the swap together with a sign flip of every reduced-width amplitude
+ * whose channel spin has (-1)^(j1+j2-s) = -1 must reproduce the original A_y to
+ * round-off.  It is read once per process and is not a physics option.
+ */
+inline double ParticleCG(double j1, double j2, double s, double m1, double m2, double nu) {
+  static const bool swapOrder = [] {
+    const char *value = std::getenv("AZURE2_SWAP_COUPLING_ORDER");
+    return value != nullptr && *value != '\0' && std::strcmp(value, "0") != 0;
+  }();
+  return swapOrder ? AngCoeff::ClebGord(j2, j1, s, m2, m1, nu)
+                   : AngCoeff::ClebGord(j1, j2, s, m1, m2, nu);
+}
 
 }  // namespace
 
@@ -160,9 +182,9 @@ std::vector<complex> AmplitudeMatrix::AnalyzingPowerBar() const {
           const double s = entranceSpins_[i];
           const double nuUp = 0.5 + m2, nuDn = -0.5 + m2;
           if (std::fabs(nuUp) <= s + 1.e-6)
-            up += AngCoeff::ClebGord(j1, j2, s, 0.5, m2, nuUp) * Get(s, nuUp, sp, vp);
+            up += ParticleCG(j1, j2, s, 0.5, m2, nuUp) * Get(s, nuUp, sp, vp);
           if (std::fabs(nuDn) <= s + 1.e-6)
-            down += AngCoeff::ClebGord(j1, j2, s, -0.5, m2, nuDn) * Get(s, nuDn, sp, vp);
+            down += ParticleCG(j1, j2, s, -0.5, m2, nuDn) * Get(s, nuDn, sp, vp);
         }
         interference += up * std::conj(down);
         denominator += std::norm(up) + std::norm(down);
@@ -183,9 +205,9 @@ std::vector<complex> AmplitudeMatrix::AnalyzingPowerBar() const {
         for (std::size_t i = 0; i < entranceSpins_.size(); i++) {
           const double s = entranceSpins_[i];
           if (std::fabs(nuUp) <= s + 1.e-6)
-            up += AngCoeff::ClebGord(j1, j2, s, 0.5, m2, nuUp) * Get(s, nuUp, sp, vp);
+            up += ParticleCG(j1, j2, s, 0.5, m2, nuUp) * Get(s, nuUp, sp, vp);
           if (std::fabs(nuDn) <= s + 1.e-6)
-            down += AngCoeff::ClebGord(j1, j2, s, -0.5, m2, nuDn) * Get(s, nuDn, sp, vp);
+            down += ParticleCG(j1, j2, s, -0.5, m2, nuDn) * Get(s, nuDn, sp, vp);
         }
         // dA/du* and dA/dd*, with u and d the decomposed amplitudes.
         const complex dA_du = I * down / D - (N / (D * D)) * up;
@@ -198,12 +220,12 @@ std::vector<complex> AmplitudeMatrix::AnalyzingPowerBar() const {
           if (std::fabs(nuUp) <= s + 1.e-6) {
             const int idx = IndexOf(s, nuUp, sp, vp);
             if (idx >= 0)
-              bar[idx] += 2.0 * AngCoeff::ClebGord(j1, j2, s, 0.5, m2, nuUp) * dA_du;
+              bar[idx] += 2.0 * ParticleCG(j1, j2, s, 0.5, m2, nuUp) * dA_du;
           }
           if (std::fabs(nuDn) <= s + 1.e-6) {
             const int idx = IndexOf(s, nuDn, sp, vp);
             if (idx >= 0)
-              bar[idx] += 2.0 * AngCoeff::ClebGord(j1, j2, s, -0.5, m2, nuDn) * dA_dd;
+              bar[idx] += 2.0 * ParticleCG(j1, j2, s, -0.5, m2, nuDn) * dA_dd;
           }
         }
       }
@@ -295,7 +317,8 @@ double AmplitudeMatrix::AnalyzingPowerAy() const {
   // first and the phases are Condon-Shortley, which is what AngCoeff::ClebGord
   // provides. Nothing else in AZURE2 fixes this order -- the unpolarized cross
   // section adds channel spins incoherently and is blind to it -- so it is
-  // recorded here rather than left implicit.
+  // recorded here rather than left implicit.  ParticleCG supplies the
+  // coefficients, and can reverse the order for a convention-invariance test.
   PPair *entrance = compound_->GetPair(aa_);
   const double j1 = entrance->GetJ(1);  // particle 1, the light one
   const double j2 = entrance->GetJ(2);  // particle 2, the heavy one
@@ -313,9 +336,9 @@ double AmplitudeMatrix::AnalyzingPowerAy() const {
           const double s = entranceSpins_[i];
           const double nuUp = 0.5 + m2, nuDn = -0.5 + m2;
           if (std::fabs(nuUp) <= s + 1.e-6)
-            up += AngCoeff::ClebGord(j1, j2, s, 0.5, m2, nuUp) * Get(s, nuUp, sp, vp);
+            up += ParticleCG(j1, j2, s, 0.5, m2, nuUp) * Get(s, nuUp, sp, vp);
           if (std::fabs(nuDn) <= s + 1.e-6)
-            down += AngCoeff::ClebGord(j1, j2, s, -0.5, m2, nuDn) * Get(s, nuDn, sp, vp);
+            down += ParticleCG(j1, j2, s, -0.5, m2, nuDn) * Get(s, nuDn, sp, vp);
         }
         interference += up * std::conj(down);
         denominator += std::norm(up) + std::norm(down);
@@ -359,9 +382,9 @@ double AmplitudeMatrix::OutgoingPolarizationPy() const {
           const double sp = exitSpins_[j];
           const double nuUp = 0.5 + m2p, nuDn = -0.5 + m2p;
           if (std::fabs(nuUp) <= sp + 1.e-6)
-            up += AngCoeff::ClebGord(j1p, j2p, sp, 0.5, m2p, nuUp) * Get(s, v, sp, nuUp);
+            up += ParticleCG(j1p, j2p, sp, 0.5, m2p, nuUp) * Get(s, v, sp, nuUp);
           if (std::fabs(nuDn) <= sp + 1.e-6)
-            down += AngCoeff::ClebGord(j1p, j2p, sp, -0.5, m2p, nuDn) * Get(s, v, sp, nuDn);
+            down += ParticleCG(j1p, j2p, sp, -0.5, m2p, nuDn) * Get(s, v, sp, nuDn);
         }
         interference += up * std::conj(down);
         denominator += std::norm(up) + std::norm(down);
@@ -393,9 +416,9 @@ double AmplitudeMatrix::OutgoingPolarizationNumerator() const {
           const double sp = exitSpins_[j];
           const double nuUp = 0.5 + m2p, nuDn = -0.5 + m2p;
           if (std::fabs(nuUp) <= sp + 1.e-6)
-            up += AngCoeff::ClebGord(j1p, j2p, sp, 0.5, m2p, nuUp) * Get(s, v, sp, nuUp);
+            up += ParticleCG(j1p, j2p, sp, 0.5, m2p, nuUp) * Get(s, v, sp, nuUp);
           if (std::fabs(nuDn) <= sp + 1.e-6)
-            down += AngCoeff::ClebGord(j1p, j2p, sp, -0.5, m2p, nuDn) * Get(s, v, sp, nuDn);
+            down += ParticleCG(j1p, j2p, sp, -0.5, m2p, nuDn) * Get(s, v, sp, nuDn);
         }
         interference += up * std::conj(down);
       }
@@ -425,9 +448,9 @@ std::vector<complex> AmplitudeMatrix::OutgoingPolarizationNumeratorBar() const {
         for (std::size_t j = 0; j < exitSpins_.size(); j++) {
           const double sp = exitSpins_[j];
           if (std::fabs(nuUp) <= sp + 1.e-6)
-            up += AngCoeff::ClebGord(j1p, j2p, sp, 0.5, m2p, nuUp) * Get(s, v, sp, nuUp);
+            up += ParticleCG(j1p, j2p, sp, 0.5, m2p, nuUp) * Get(s, v, sp, nuUp);
           if (std::fabs(nuDn) <= sp + 1.e-6)
-            down += AngCoeff::ClebGord(j1p, j2p, sp, -0.5, m2p, nuDn) * Get(s, v, sp, nuDn);
+            down += ParticleCG(j1p, j2p, sp, -0.5, m2p, nuDn) * Get(s, v, sp, nuDn);
         }
         const complex dN_du = -I * down;
         const complex dN_dd = I * up;
@@ -436,12 +459,12 @@ std::vector<complex> AmplitudeMatrix::OutgoingPolarizationNumeratorBar() const {
           if (std::fabs(nuUp) <= sp + 1.e-6) {
             const int idx = IndexOf(s, v, sp, nuUp);
             if (idx >= 0)
-              bar[idx] += 2.0 * AngCoeff::ClebGord(j1p, j2p, sp, 0.5, m2p, nuUp) * dN_du;
+              bar[idx] += 2.0 * ParticleCG(j1p, j2p, sp, 0.5, m2p, nuUp) * dN_du;
           }
           if (std::fabs(nuDn) <= sp + 1.e-6) {
             const int idx = IndexOf(s, v, sp, nuDn);
             if (idx >= 0)
-              bar[idx] += 2.0 * AngCoeff::ClebGord(j1p, j2p, sp, -0.5, m2p, nuDn) * dN_dd;
+              bar[idx] += 2.0 * ParticleCG(j1p, j2p, sp, -0.5, m2p, nuDn) * dN_dd;
           }
         }
       }
@@ -473,9 +496,9 @@ std::vector<complex> AmplitudeMatrix::OutgoingPolarizationBar() const {
           const double sp = exitSpins_[j];
           const double nuUp = 0.5 + m2p, nuDn = -0.5 + m2p;
           if (std::fabs(nuUp) <= sp + 1.e-6)
-            up += AngCoeff::ClebGord(j1p, j2p, sp, 0.5, m2p, nuUp) * Get(s, v, sp, nuUp);
+            up += ParticleCG(j1p, j2p, sp, 0.5, m2p, nuUp) * Get(s, v, sp, nuUp);
           if (std::fabs(nuDn) <= sp + 1.e-6)
-            down += AngCoeff::ClebGord(j1p, j2p, sp, -0.5, m2p, nuDn) * Get(s, v, sp, nuDn);
+            down += ParticleCG(j1p, j2p, sp, -0.5, m2p, nuDn) * Get(s, v, sp, nuDn);
         }
         interference += up * std::conj(down);
         denominator += std::norm(up) + std::norm(down);
@@ -496,9 +519,9 @@ std::vector<complex> AmplitudeMatrix::OutgoingPolarizationBar() const {
         for (std::size_t j = 0; j < exitSpins_.size(); j++) {
           const double sp = exitSpins_[j];
           if (std::fabs(nuUp) <= sp + 1.e-6)
-            up += AngCoeff::ClebGord(j1p, j2p, sp, 0.5, m2p, nuUp) * Get(s, v, sp, nuUp);
+            up += ParticleCG(j1p, j2p, sp, 0.5, m2p, nuUp) * Get(s, v, sp, nuUp);
           if (std::fabs(nuDn) <= sp + 1.e-6)
-            down += AngCoeff::ClebGord(j1p, j2p, sp, -0.5, m2p, nuDn) * Get(s, v, sp, nuDn);
+            down += ParticleCG(j1p, j2p, sp, -0.5, m2p, nuDn) * Get(s, v, sp, nuDn);
         }
         // Sign mirrors the entrance-index case with N = -2 Im(...).
         const complex dP_du = -I * down / D - (N / (D * D)) * up;
@@ -508,12 +531,12 @@ std::vector<complex> AmplitudeMatrix::OutgoingPolarizationBar() const {
           if (std::fabs(nuUp) <= sp + 1.e-6) {
             const int idx = IndexOf(s, v, sp, nuUp);
             if (idx >= 0)
-              bar[idx] += 2.0 * AngCoeff::ClebGord(j1p, j2p, sp, 0.5, m2p, nuUp) * dP_du;
+              bar[idx] += 2.0 * ParticleCG(j1p, j2p, sp, 0.5, m2p, nuUp) * dP_du;
           }
           if (std::fabs(nuDn) <= sp + 1.e-6) {
             const int idx = IndexOf(s, v, sp, nuDn);
             if (idx >= 0)
-              bar[idx] += 2.0 * AngCoeff::ClebGord(j1p, j2p, sp, -0.5, m2p, nuDn) * dP_dd;
+              bar[idx] += 2.0 * ParticleCG(j1p, j2p, sp, -0.5, m2p, nuDn) * dP_dd;
           }
         }
       }
