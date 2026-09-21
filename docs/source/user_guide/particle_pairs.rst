@@ -101,3 +101,47 @@ External Capture Multipolarities
    For **(Particle, Gamma)** pairs only. Select **E1** and/or **E2**
    multipolarities. The code automatically determines the allowed intrinsic and
    angular momentum combinations based on the defined resonances.
+
+Identical Particles
+-------------------
+
+A (Particle, Particle) pair whose two members have the same Z, mass, spin and
+parity, with the heavy one in its ground state, is treated as a pair of
+identical particles (:math:`\alpha+\alpha`, p+p, d+d, :math:`^3`\ He+\ :math:`^3`\ He,
+:math:`^{12}`\ C+\ :math:`^{12}`\ C, ...). Nothing has to be switched on.
+
+Allowed channels
+   Exchange symmetry admits only channels with :math:`\ell + s` **even**, for
+   bosons and fermions alike: 1S0, 3P\ :sub:`0,1,2`, 1D2, ... for p+p, and
+   even :math:`\ell` only for a spin-0 pair. For a pair with spin, a channel
+   with :math:`\ell + s` odd (3S1 in p+p, say) is refused when the model is
+   read, with a message naming it; for a spin-0 pair it draws a warning.
+
+Elastic scattering
+   The differential cross section is symmetrized in each channel spin
+   :math:`s`: the Coulomb amplitude is
+   :math:`f_C(\theta) + (-1)^s f_C(\pi-\theta)`, and every nuclear pathway
+   carries :math:`1 + (-1)^{\ell'+s'}` (a factor 2 on allowed channels). The
+   spin-averaged Coulomb cross section is then the Mott formula for spin
+   :math:`j`,
+
+   .. math::
+
+      \frac{d\sigma}{d\Omega} = \left(\frac{\eta}{2k}\right)^2 \left[
+      \frac{1}{\sin^4\frac{\theta}{2}} + \frac{1}{\cos^4\frac{\theta}{2}}
+      + \frac{(-1)^{2j}}{2j+1}\,
+      \frac{2\cos\!\left(\eta \ln \tan^2\frac{\theta}{2}\right)}
+           {\sin^2\frac{\theta}{2}\cos^2\frac{\theta}{2}} \right],
+
+   with interference weight +1 for :math:`\alpha+\alpha`, :math:`-1/2` for
+   p+p and :math:`+1/3` for d+d. The same symmetrization enters the
+   polarization observables (isDiff 7 and 8), so for p+p
+   :math:`A_y(\pi-\theta) = -A_y(\theta)`. The angle-integrated elastic cross
+   section is reported per collision (half the integral over the full sphere)
+   for any spin.
+
+What is not symmetrized
+   Reactions into or out of an identical pair (d+d :math:`\to` p+t, say) use
+   only the channel rule above; no exchange factor is applied to their cross
+   sections, the same convention as for spin-0 pairs. The vector analyzing
+   power is defined for a spin-1/2 beam only (it is zero for d+d).
