@@ -1,0 +1,37 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+</config>
+<levels>
+4 1 30.0 1 1 1 0 8 1 1 1 0.0 0.5 1 0.5 1 0 1.00727646688 1.00727646688 1 1 -1.0 -1.0 0 0 0.0 0 3.0 0 0 0
+</levels>
+<segmentsData>
+1 1 1 0 100 20 20 4 1 0 0 0 0 0 data/mott_20.dat 0 0
+1 1 1 0 100 45 45 4 1 0 0 0 0 0 data/mott_45.dat 0 0
+1 1 1 0 100 70 70 4 1 0 0 0 0 0 data/mott_70.dat 0 0
+1 1 1 0 100 90 90 4 1 0 0 0 0 0 data/mott_90.dat 0 0
+1 1 1 0 100 110 110 4 1 0 0 0 0 0 data/mott_110.dat 0 0
+1 1 1 0 100 135 135 4 1 0 0 0 0 0 data/mott_135.dat 0 0
+1 1 1 0 100 160 160 4 1 0 0 0 0 0 data/mott_160.dat 0 0
+</segmentsData>
+<segmentsTest>
+</segmentsTest>
+<targetInt>
+</targetInt>
+<lastRun>
+9997
+"output/param.sav"
+""
+0 0
+0 ""
+-1. -1. -1.
+</lastRun>

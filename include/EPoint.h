@@ -156,8 +156,15 @@ class EPoint {
   complex GetExpCoulombPhase(int, int) const;
   /// \f$\exp(i\delta_c)\f$, the hard-sphere phase, for the channel at (J-group, channel).
   complex GetExpHardSpherePhase(int, int) const;
-  /// Coulomb (Rutherford) amplitude \f$C_\alpha\f$.
+  /// Coulomb (Rutherford) amplitude \f$C_\alpha\f$.  For an identical spin-0
+  /// pair this is already the symmetrized f_C(theta) + f_C(pi - theta); for an
+  /// identical pair with spin it is only the direct term -- use the
+  /// channel-spin overload there.
   complex GetCoulombAmplitude() const;
+  /// Coulomb amplitude seen by channel spin \p s.  Identical to
+  /// GetCoulombAmplitude() except for an identical pair with spin j != 0,
+  /// where exchange enters with (-1)^s: f_C(theta) + (-1)^s f_C(pi - theta).
+  complex GetCoulombAmplitude(double s) const;
   /// External-capture amplitude for the pathway at (KGroup, ECMGroup), both 1-based.
   complex GetECAmplitude(int, int) const;
   /// As GetECAmplitude, but interpolated to the shifted energy through the amplitude cache.
@@ -327,6 +334,11 @@ class EPoint {
   double delta_;
   struct EnergyMap energy_map_;
   complex coulombamplitude_;
+  // Direct and exchange Coulomb amplitudes, kept apart only for an identical
+  // pair with spin, whose exchange sign depends on the channel spin.
+  bool spinDependentCoulomb_ = false;
+  complex coulombdirect_ = complex(0., 0.);
+  complex coulombexchange_ = complex(0., 0.);
   vector_r legendreP_;
   vector_r angularDists_;
   matrix_c lo_elements_;

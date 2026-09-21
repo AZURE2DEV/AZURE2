@@ -62,6 +62,12 @@ class PPair {
   /// Boson/fermion sign: +1 for identical bosons (2j even), -1 for
   /// identical fermions. Returns +1 when IsIdentical() is false.
   int GetIdenticalSign() const;
+  /// True for an identical pair whose members carry spin (j != 0).  For these
+  /// the exchange term of the elastic amplitude depends on the channel spin s
+  /// through (-1)^s, so no single sign symmetrizes it -- the spin-0 shortcut
+  /// (one Coulomb amplitude f_C(theta) + f_C(pi - theta) for every channel)
+  /// does not apply.
+  bool HasSpinDependentExchange() const;
   void AddDecay(Decay);
   void SetEntrance();
   /// Decay \p i, 1-based.

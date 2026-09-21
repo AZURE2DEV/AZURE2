@@ -105,6 +105,9 @@ void AmplitudeMatrix::AddPathway(int jNum, int chNum, int chpNum,
   const double s = entrance->GetS();
   const double sp = exitCh->GetS();
 
+  const double identical = IdenticalFactor(lp, sp);
+  if (identical == 0.0) return;
+
   // Seyler Eq. (4): the sum over J, l, l' of
   //   sqrt(2l+1) (s l v 0|J v) (s' l' v' v-v'|J v) [bracket] Y_{l'}^{v-v'}
   // The incident wave travels along z, so the entrance orbital projection is
@@ -120,17 +123,32 @@ void AmplitudeMatrix::AddPathway(int jNum, int chNum, int chpNum,
 
       const complex y = AngCoeff::SphericalHarmonic(lp, (int)std::lround(mu), theta_);
       At(s, v, sp, vp) += complex(0.0, 1.0) * std::sqrt(2.0 * l + 1.0) *
-          cg1 * cg2 * tMatrixElement * y;
+          cg1 * cg2 * tMatrixElement * y * identical;
     }
   }
 }
 
-void AmplitudeMatrix::AddCoulomb(complex coulombAmplitude) {
+double AmplitudeMatrix::IdenticalFactor(int lp, double sp) const {
+  // Two identical particles in the exit channel: the physical amplitude is
+  // A(k') + eps P12 A(-k'), eps = (-1)^(2j). P12 on the exit channel-spin
+  // state gives (-1)^(2j-s'), and Y_l'(pi-theta, pi) = (-1)^l' Y_l'(theta, 0),
+  // so each pathway is multiplied by 1 + (-1)^(l'+s'): 2 on allowed channels,
+  // 0 on forbidden ones. Applied to elastic scattering only, which is where
+  // GenMatrixFunc applies the same symmetrization (its factor 4 on |f_N|^2),
+  // so the two routes stay equal; a reaction into or out of an identical pair
+  // keeps the unsymmetrized normalization the cross-section route uses.
+  if (aa_ != ir_ || !compound_->GetPair(aa_)->IsIdentical()) return 1.0;
+  const int parity = (lp + (int)std::lround(sp)) % 2;
+  return (parity == 0) ? 2.0 : 0.0;
+}
+
+void AmplitudeMatrix::AddCoulomb() {
   // Coulomb scattering is diagonal in channel spin and its projection, and
   // only exists when entrance and exit pairs are the same.
   if (aa_ != ir_) return;
   for (std::size_t i = 0; i < entranceSpins_.size(); i++) {
     const double s = entranceSpins_[i];
+    const complex coulombAmplitude = point_->GetCoulombAmplitude(s);
     for (double v = -s; v <= s + 1.e-6; v += 1.0)
       At(s, v, s, v) += -coulombAmplitude;
   }
@@ -246,6 +264,9 @@ complex AmplitudeMatrix::PathwayAdjoint(int jNum, int chNum, int chpNum,
   const double s = entrance->GetS();
   const double sp = exitCh->GetS();
 
+  const double identical = IdenticalFactor(lp, sp);
+  if (identical == 0.0) return complex(0.0, 0.0);
+
   // The mirror of AddPathway: same loop, same coefficients, contracted against
   // the cotangents instead of multiplied by T. M is linear in T, so the
   // coefficient is the entire derivative and nothing has to be re-derived.
@@ -262,7 +283,7 @@ complex AmplitudeMatrix::PathwayAdjoint(int jNum, int chNum, int chpNum,
       if (idx < 0) continue;
       const complex y = AngCoeff::SphericalHarmonic(lp, (int)std::lround(mu), theta_);
       const complex coeff = complex(0.0, 1.0) * std::sqrt(2.0 * l + 1.0) *
-          cg1 * cg2 * y;
+          cg1 * cg2 * y * identical;
       tbar += std::conj(coeff) * bar[idx];
     }
   }

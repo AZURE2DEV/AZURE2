@@ -932,9 +932,8 @@ int EData::Initialize(CNuc *compound, const Config &configure) {
                           << " for identical pair (Z=" << pp->GetZ(1)
                           << ", A=" << pp->GetM(1)
                           << "); no matching partial wave exists "
-                          << "(likely forbidden by (-1)^(L+S) = "
-                          << pp->GetIdenticalSign()
-                          << "). The fit will report delta = 0 at every energy."
+                          << "(likely forbidden by Bose/Fermi symmetry, "
+                          << "which requires L+S even). The fit will report delta = 0 at every energy."
                           << std::endl;
     }
   }

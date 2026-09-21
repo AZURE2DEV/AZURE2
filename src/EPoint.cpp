@@ -528,6 +528,16 @@ complex EPoint::GetCoulombAmplitude() const {
   return coulombamplitude_;
 }
 
+complex EPoint::GetCoulombAmplitude(double s) const {
+  // Every pair but an identical one with spin returns the stored amplitude
+  // untouched, so the spin-0 and distinguishable results cannot move.
+  if (!spinDependentCoulomb_) return coulombamplitude_;
+  const int twoS = (int)std::lround(2.0 * s);
+  // Channel spins of two identical particles are integers.
+  const double sign = ((twoS / 2) % 2 == 0) ? 1.0 : -1.0;
+  return coulombdirect_ + sign * coulombexchange_;
+}
+
 /*!
  * Returns the external capture amplitude for a given external reaction pathway
  * specified by positions in the KGroup and subsequent ECMGroup vectors.
@@ -1275,18 +1285,33 @@ void EPoint::CalcCoulombAmplitude(CNuc *theCNuc) {
     double cal = (1.0 / (2.0 * sqrt(pi))) * eta * (1.0 / pow(sin(angle * pi / 360.0), 2.));
     double cex = 2.0 * eta * log(sin(angle * pi / 360.0));
     complex calpha(cal * cos(cex), -cal * sin(cex));
-    // Identical-particle Mott amplitude: add f_C(pi - theta) with the
-    // boson/fermion sign. For two identical 0+ bosons the sign is +1 and
-    // the resulting |C|^2 reproduces the Mott Coulomb cross section.
+    // Identical-particle Mott amplitude: the exchange term f_C(pi - theta).
+    // Exchanging two identical particles of spin j multiplies a channel-spin
+    // state |s v> by (-1)^(2j-s) and the wave function must pick up
+    // (-1)^(2j), so the exchange term enters channel spin s with (-1)^s --
+    // not with one boson/fermion sign for all s. Only for j = 0 (s = 0 alone)
+    // do the two coincide, and there the symmetrized amplitude is stored as
+    // before and reproduces the spin-0 Mott cross section. For j != 0 the
+    // direct and exchange terms are kept apart and combined per channel spin
+    // by GetCoulombAmplitude(s).
+    spinDependentCoulomb_ = false;
     if (entrancePair->IsIdentical()) {
       double cal_p = (1.0 / (2.0 * sqrt(pi))) * eta * (1.0 / pow(cos(angle * pi / 360.0), 2.));
       double cex_p = 2.0 * eta * log(cos(angle * pi / 360.0));
       complex calpha_p(cal_p * cos(cex_p), -cal_p * sin(cex_p));
-      calpha = calpha + double(entrancePair->GetIdenticalSign()) * calpha_p;
+      if (entrancePair->HasSpinDependentExchange()) {
+        spinDependentCoulomb_ = true;
+        coulombdirect_ = calpha;
+        coulombexchange_ = calpha_p;
+      } else {
+        calpha = calpha + double(entrancePair->GetIdenticalSign()) * calpha_p;
+      }
     }
     this->SetCoulombAmplitude(calpha);
-  } else
+  } else {
+    spinDependentCoulomb_ = false;
     this->SetCoulombAmplitude(complex(0., 0.));
+  }
   for (int i = 1; i <= this->NumSubPoints(); i++) {
     this->GetSubPoint(i)->CalcCoulombAmplitude(theCNuc);
   }
