@@ -197,9 +197,52 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
   }
 
   this->SetMaxLValue(maxLValue);
+  if (this->CheckIdenticalChannels(configure) == -1) return -1;
   if ((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) && this->NumJGroups() > 0 && this->NumPairs() > 0)
     this->ParseExternalCapture(configure, ecPairs);
 
+  return 0;
+}
+
+/*!
+ * Refuses a model that gives an identical pair with spin (p+p, d+d, 3He+3He)
+ * a channel forbidden by Bose/Fermi symmetry, i.e. one with L+S odd.
+ *
+ * For spin-0 pairs such a channel only draws a warning (CNuc::Initialize),
+ * as it always has. With spin the elastic cross section symmetrizes each
+ * pathway by 1 + (-1)^(L'+S'), which the cross-section route applies as a
+ * factor 4 on every channel it is given: a forbidden channel would be counted
+ * four times instead of not at all, and the result would be wrong without any
+ * sign of it. Such channels were also what the previous fermion rule,
+ * (-1)^(L+S) = -1, asked for (3S1 instead of 1S0 in p+p), so an old model is
+ * stopped here with the reason rather than silently re-interpreted.
+ */
+
+int CNuc::CheckIdenticalChannels(const Config &configure) {
+  int bad = 0;
+  for (int j = 1; j <= this->NumJGroups(); j++) {
+    JGroup *jg = this->GetJGroup(j);
+    for (int ch = 1; ch <= jg->NumChannels(); ch++) {
+      AChannel *channel = jg->GetChannel(ch);
+      if (channel->GetRadType() != 'P') continue;
+      PPair *pp = this->GetPair(channel->GetPairNum());
+      if (!pp->HasSpinDependentExchange()) continue;
+      const int twoS = (int)std::lround(2.0 * channel->GetS());
+      if ((channel->GetL() + twoS / 2) % 2 == 0) continue;
+      configure.outStream << "ERROR: Identical-particle pair (Z=" << pp->GetZ(1)
+                          << ", A=" << pp->GetM(1) << ", j=" << pp->GetJ(1)
+                          << ") has a channel with J=" << jg->GetJ()
+                          << ", L=" << channel->GetL() << ", S=" << channel->GetS()
+                          << ", which Bose/Fermi symmetry forbids (L+S must be even)."
+                          << std::endl;
+      bad++;
+    }
+  }
+  if (bad) {
+    configure.outStream << "       Remove them from the model: allowed channels have L+S even (1S0, 3P0,1,2, 1D2, ... for p+p)."
+                        << std::endl;
+    return -1;
+  }
   return 0;
 }
 
@@ -264,16 +307,14 @@ void CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecP
           double s2 = this->GetPair(ir)->GetJ(2);
           int sPi = this->GetPair(ir)->GetPi(1) * this->GetPair(ir)->GetPi(2);
           bool identicalPair = this->GetPair(ir)->IsIdentical();
-          int identicalSign = this->GetPair(ir)->GetIdenticalSign();
           for (double chS = fabs(s1 - s2); chS <= s1 + s2; chS += 1.) {
             for (int chL = 0; chL <= this->GetMaxLValue(); chL++) {
               int chPi = sPi * (int)pow(-1, chL);
-              // Bose/Fermi symmetry for identical pair: only keep
-              // channels with (-1)^(L+S) equal to the identical sign.
-              if (identicalPair) {
-                int parityLS = ((chL + (int)(chS + 0.5)) % 2 == 0) ? +1 : -1;
-                if (parityLS != identicalSign) continue;
-              }
+              // Bose/Fermi symmetry for an identical pair: exchange gives
+              // (-1)^l in space and (-1)^(2j-s) in channel spin, and the
+              // product must be (-1)^(2j), so only l+s even survives -- for
+              // bosons and fermions alike (1S0 is allowed in p+p, 3S1 is not).
+              if (identicalPair && (chL + (int)(chS + 0.5)) % 2 != 0) continue;
               if (fabs(chS - chL) <= jValue && jValue <= chS + chL && chPi == parity) {
                 AChannel newChannel(chL, chS, ir, 'P');
                 this->GetJGroup(jGroupNum)->AddChannel(newChannel);
@@ -317,9 +358,11 @@ int CNuc::GetMaxLValue() const {
 
 void CNuc::Initialize(const Config &configure) {
   // Validate channels associated with identical-particle pairs:
-  // Bose/Fermi symmetry requires (-1)^(L+S) == identicalSign. Warn on any
-  // violation; such channels still contribute to the calculation but the
-  // result will not respect identical-particle symmetry.
+  // Bose/Fermi symmetry requires L+S even (for bosons this is the same as
+  // (-1)^(L+S) == +1). Warn on any violation; such channels still contribute
+  // to the calculation but the result will not respect identical-particle
+  // symmetry. Only spin-0 pairs get this far: for a pair with spin CNuc::Fill
+  // has already refused the model (CheckIdenticalChannels).
   for (int j = 1; j <= this->NumJGroups(); j++) {
     JGroup *jg = this->GetJGroup(j);
     for (int ch = 1; ch <= jg->NumChannels(); ch++) {
@@ -335,15 +378,13 @@ void CNuc::Initialize(const Config &configure) {
         // even/odd test in that case to avoid false positives.
         continue;
       }
-      int parityLS = ((chL + chS_twice / 2) % 2 == 0) ? +1 : -1;
-      if (parityLS != pp->GetIdenticalSign()) {
+      if ((chL + chS_twice / 2) % 2 != 0) {
         configure.outStream << "**WARNING: Identical-particle pair (Z="
                             << pp->GetZ(1) << ", A=" << pp->GetM(1)
                             << ") has channel with L=" << chL
                             << ", S=" << channel->GetS()
                             << " violating Bose/Fermi symmetry "
-                            << "((-1)^(L+S) != " << pp->GetIdenticalSign()
-                            << "). This channel should be removed from the input."
+                            << "(L+S must be even). This channel should be removed from the input."
                             << std::endl;
       }
     }

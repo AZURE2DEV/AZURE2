@@ -212,6 +212,10 @@ int PPair::GetIdenticalSign() const {
   return identical_sign_;
 }
 
+bool PPair::HasSpinDependentExchange() const {
+  return is_identical_ && pair_j_[0] > 1.0e-6;
+}
+
 /*!
  * Adds a decay particle pair to the Decay vector.
  */
