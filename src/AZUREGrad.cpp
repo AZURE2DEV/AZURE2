@@ -234,6 +234,14 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
                              CNuc *compound, const Config &config) {
   int nsp = point->NumSubPoints();
   if (nsp <= 0) return true;
+  // A target-averaged analyzing power is a ratio of two integrals,
+  // Int A_y sigma dE / Int sigma dE (EPoint::IntegrateTargetEffectForObservable),
+  // not a fixed linear combination of the sub-point values.  The weights below
+  // would treat it as one, and each sub-point's own A_y adjoint would then be
+  // combined without the cross-section weighting -- a wrong Jacobian with no
+  // diagnostic.  PointAdjoint refuses such a point, but it is only ever called
+  // here on the sub-points, so the refusal has to be made at this level.
+  if (point->IsAnalyzingPower()) return false;
 
   std::vector<double> sigma(nsp);
   for (int i = 1; i <= nsp; i++) sigma[i - 1] = point->GetSubPoint(i)->GetFitCrossSection();
