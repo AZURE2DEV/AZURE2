@@ -11,7 +11,8 @@
 #
 # Adding a case: create tests/<name>/ containing <name>.azr, its data/, and
 # expected/chiSquared.out from a run you trust. Nothing here needs editing --
-# every directory holding an .azr is picked up automatically.
+# every directory holding an .azr is picked up automatically, and so is every
+# executable tests/<name>/check.sh (see the end of this script).
 #
 # TOL is the relative tolerance on chi-squared (default 1e-3). It has to absorb
 # genuine cross-platform floating-point differences -- GCC, Clang and MinGW
@@ -160,6 +161,26 @@ for project_dir in "$REPO_ROOT"/tests/*/; do
     echo "  PASS"
     pass=$((pass + 1))
   else
+    echo "  FAIL"
+    fail=$((fail + 1))
+  fi
+  echo
+done
+
+# Behavioural checks.  Some regressions are not a chi-squared of one project
+# but a sequence of runs -- a cache written by one and read by the next, say.
+# A test directory can carry an executable check.sh for that: it is run with
+# the binary as its argument, does its own work in a temporary directory, and
+# passes when it exits 0.
+for check in "$REPO_ROOT"/tests/*/check.sh; do
+  [ -x "$check" ] || continue
+  name="$(basename "$(dirname "$check")")"
+  echo "=== $name (check.sh) ==="
+  if "$check" "$AZURE2_BIN" > "$(dirname "$check")/run.log" 2>&1; then
+    tail -1 "$(dirname "$check")/run.log"
+    pass=$((pass + 1))
+  else
+    sed 's/^/  /' "$(dirname "$check")/run.log" | tail -30
     echo "  FAIL"
     fail=$((fail + 1))
   fi
