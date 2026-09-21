@@ -675,7 +675,7 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
                        this->GetTMatrixElement(k, m));
         }
       }
-      if (aa == exitPairNum) M.AddCoulomb(point->GetCoulombAmplitude());
+      if (aa == exitPairNum) M.AddCoulomb();
       if (M.size() == 0) return false;
 
       const std::vector<complex> bar = M.AnalyzingPowerBar();
@@ -705,7 +705,7 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
                      this->GetTMatrixElement(k, m));
       }
     }
-    if (aa == exitPairNum2) M.AddCoulomb(point->GetCoulombAmplitude());
+    if (aa == exitPairNum2) M.AddCoulomb();
     if (M.size() == 0) return false;
     const std::vector<complex> bar = M.OutgoingPolarizationNumeratorBar();
     // model = scale * N, so the cotangent carries the same constant. Without it
@@ -895,7 +895,6 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     }
 
     if (aa == ir) {  // elastic Coulomb-nuclear interference
-      complex coulombAmp = point->GetCoulombAmplitude();
       complex cI = I * geom * itFactor / (std::sqrt(pi) * 100.0);
       for (int k = 1; k <= nK; k++) {
         for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
@@ -904,7 +903,9 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
           AChannel *ex = compound()->GetJGroup(mg->GetJNum())->GetChannel(mg->GetChpNum());
           if (en == ex) {
             int l = en->GetL();
-            complex B = cI * mg->GetStatSpinFactor() * coulombAmp * point->GetLegendreP(l);
+            // Per channel spin, as in the forward sum: only an identical pair
+            // with spin has a Coulomb amplitude that depends on it.
+            complex B = cI * mg->GetStatSpinFactor() * point->GetCoulombAmplitude(en->GetS()) * point->GetLegendreP(l);
             // model += Re(B conj T)  ->  Tbar += fitBar B.
             tBar[k - 1][m - 1] += fitBar * B;
           }

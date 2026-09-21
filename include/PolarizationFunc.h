@@ -69,8 +69,13 @@ class AmplitudeMatrix {
   //! Add the contribution of one pathway: T element for (jNum, ch, chp).
   void AddPathway(int jNum, int chNum, int chpNum, complex tMatrixElement);
 
-  //! Coulomb amplitude term, added once per (s, v) diagonal element.
-  void AddCoulomb(complex coulombAmplitude);
+  /*!
+   * Coulomb amplitude term, added once per (s, v) diagonal element. The
+   * amplitude is the point's own, taken per channel spin: for two identical
+   * particles with spin the exchange term enters as (-1)^s f_C(pi - theta)
+   * (see EPoint::GetCoulombAmplitude(double)).
+   */
+  void AddCoulomb();
 
   /*!
    * Spin-averaged, spin-summed |M|^2 -- the unpolarized differential cross
@@ -172,6 +177,10 @@ class AmplitudeMatrix {
   complex &At(double s, double v, double sp, double vp);
   int IndexOf(double s, double v, double sp, double vp) const;
   complex Get(double s, double v, double sp, double vp) const;
+
+  //! Exchange symmetrization of one nuclear pathway: 1 + (-1)^(l'+s') for
+  //! elastic scattering of identical particles, 1 otherwise.
+  double IdenticalFactor(int lp, double sp) const;
 
   CNuc *compound_;
   EPoint *point_;

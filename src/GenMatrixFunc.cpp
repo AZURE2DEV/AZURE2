@@ -315,11 +315,16 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
       }
       // Identical-particle symmetrization (elastic, aa==ir):
       //   |F|^2 = |F_C|^2 + |F_N|^2 + 2 Re[F_C* F_N]
-      // with F_X = f_X(theta) + eps f_X(pi-theta). For two identical 0+
-      // bosons the only contributing partial waves have L even, so
-      // f_N(pi-theta) = f_N(theta), giving |F_N|^2 = 4|f_N|^2 and
-      // 2 Re[F_C* F_N] = 4 Re[F_C* f_N]. The Coulomb piece is already
-      // built as F_C in EPoint::CalcCoulombAmplitude. Here we apply the
+      // with, in channel spin s, F_X = f_X(theta) + (-1)^s f_X(pi-theta):
+      // exchange multiplies |s v> by (-1)^(2j-s) and the state must pick up
+      // (-1)^(2j), leaving (-1)^s, and Y_l(pi-theta, pi) = (-1)^l Y_l(theta, 0).
+      // The nuclear term therefore carries 1 + (-1)^(l'+s'), which is 2 on
+      // every channel CNuc admits (l+s even; forbidden ones are refused when
+      // the model is read) -- so |F_N|^2 = 4|f_N|^2 and 2 Re[F_C* F_N] =
+      // 4 Re[F_C,s* f_N] for any spin. Only the Coulomb amplitude depends on
+      // s: for j = 0 there is just s = 0 and EPoint stores the symmetrized
+      // F_C; for j != 0 it is taken per channel spin, in CT below and in the
+      // interference sum through GetCoulombAmplitude(s). Here we apply the
       // remaining factors 4 to RT and 2 to IT.
       double rtFactor = 1.0;
       double itFactor = 1.0;
@@ -333,7 +338,20 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
       complex CT(0., 0.), IT(0., 0.);
       if (aa == ir) {
         complex coulombAmplitude = point->GetCoulombAmplitude();
-        CT = coulombAmplitude * conj(coulombAmplitude) * point->GetGeometricalFactor();
+        PPair *elasticPair = compound()->GetPair(aa);
+        if (elasticPair->HasSpinDependentExchange()) {
+          // Identical particles with spin j: the Coulomb term is diagonal in
+          // (s, v) with amplitude f_C(theta) + (-1)^s f_C(pi-theta), so the
+          // spin average is sum_s (2s+1) |F_C,s|^2 / (2j+1)^2. Summed over s
+          // this leaves the Mott interference weighted by (-1)^(2j)/(2j+1).
+          const double j = elasticPair->GetJ(1);
+          double coulombSum = 0.0;
+          for (double chS = 0.0; chS <= 2.0 * j + 1.e-6; chS += 1.0)
+            coulombSum += (2.0 * chS + 1.0) * std::norm(point->GetCoulombAmplitude(chS));
+          CT = complex(coulombSum / ((2.0 * j + 1.0) * (2.0 * j + 1.0)) * point->GetGeometricalFactor(), 0.);
+        } else {
+          CT = coulombAmplitude * conj(coulombAmplitude) * point->GetGeometricalFactor();
+        }
 
         sum = complex(0., 0.);
         for (int k = 1; k <= theDecay->NumKGroups(); k++) {
@@ -341,9 +359,12 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
             MGroup *theMGroup = theDecay->GetKGroup(k)->GetMGroup(m);
             AChannel *entranceChannel = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChNum());
             AChannel *exitChannel = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChpNum());
+            // The Coulomb amplitude is that of the channel's own spin: it
+            // differs between channel spins only for identical particles with
+            // spin, and is the one stored amplitude otherwise.
             if (entranceChannel == exitChannel)
               sum += theMGroup->GetStatSpinFactor() *
-                  coulombAmplitude * conj(this->GetTMatrixElement(k, m)) *
+                  point->GetCoulombAmplitude(entranceChannel->GetS()) * conj(this->GetTMatrixElement(k, m)) *
                   point->GetLegendreP(compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChNum())->GetL());
           }
         }
@@ -686,7 +707,7 @@ bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint *point, double *spinSum,
   }
 
   // Coulomb only contributes to elastic scattering.
-  if (aaPair == irPair) M.AddCoulomb(point->GetCoulombAmplitude());
+  if (aaPair == irPair) M.AddCoulomb();
 
   if (M.size() == 0) return false;
   if (std::getenv("AZURE2_POL_DEBUG2")) M.DumpSpinHalf();
@@ -744,7 +765,7 @@ bool GenMatrixFunc::CalculateAmplitudeMatrixPy(EPoint *point, double *spinSum,
   }
 
   // Coulomb only contributes to elastic scattering.
-  if (aaPair == irPair) M.AddCoulomb(point->GetCoulombAmplitude());
+  if (aaPair == irPair) M.AddCoulomb();
 
   if (M.size() == 0) return false;
     if (spinSum) *spinSum = M.UnpolarizedCrossSection();
