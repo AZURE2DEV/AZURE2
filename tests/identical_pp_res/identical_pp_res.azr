@@ -1,0 +1,44 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+</config>
+<levels>
+0 1 0.0 0 1 1 0 0 1 1 0 300000.0 0.5 1 0.5 1 0 1.00727646688 1.00727646688 1 1 -1.0 -1.0 0 0 0.0 0 3.0 0 0 0
+
+0 -1 0.8 0 1 1 2 2 2 1 0 150000.0 0.5 1 0.5 1 0 1.00727646688 1.00727646688 1 1 -1.0 -1.0 0 0 0.0 0 3.0 0 0 0
+
+1 -1 1.0 0 1 1 2 2 3 1 0 200000.0 0.5 1 0.5 1 0 1.00727646688 1.00727646688 1 1 -1.0 -1.0 0 0 0.0 0 3.0 0 0 0
+
+2 -1 1.2 0 1 1 2 2 4 1 0 100000.0 0.5 1 0.5 1 0 1.00727646688 1.00727646688 1 1 -1.0 -1.0 0 0 0.0 0 3.0 0 0 0
+2 -1 1.2 0 1 1 2 6 4 1 0 1000.0 0.5 1 0.5 1 0 1.00727646688 1.00727646688 1 1 -1.0 -1.0 0 0 0.0 0 3.0 0 0 0
+
+2 1 1.5 0 1 1 0 4 5 1 0 100000.0 0.5 1 0.5 1 0 1.00727646688 1.00727646688 1 1 -1.0 -1.0 0 0 0.0 0 3.0 0 0 0
+</levels>
+<segmentsData>
+1 1 1 0 100 40 40 4 1 0 0 0 0 0 data/xs_40.dat 0 0
+1 1 1 0 100 90 90 4 1 0 0 0 0 0 data/xs_90.dat 0 0
+1 1 1 0 100 140 140 4 1 0 0 0 0 0 data/xs_140.dat 0 0
+1 1 1 0 100 60 60 7 1 0 0 0 0 0 data/ay_60.dat 0 0
+1 1 1 0 100 120 120 7 1 0 0 0 0 0 data/ay_120.dat 0 0
+</segmentsData>
+<segmentsTest>
+</segmentsTest>
+<targetInt>
+</targetInt>
+<lastRun>
+9997
+"output/param.sav"
+""
+0 0
+0 ""
+-1. -1. -1.
+</lastRun>
