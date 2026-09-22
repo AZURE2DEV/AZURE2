@@ -1286,6 +1286,43 @@ complete:
   physical values directly (usereducedwidths 0) and are fine. Test recipe: mode 1 with the
   external parameter file, compare the log's "Total Chi-Squared" (includes the penalty) against
   chiSquared.out (data only).
+- 2026-09-22 (12C+p Meyer 1976 teaching exercise; numbers from a scratch copy of
+  `12C+p/8-9-26_claude_learns_12C+p`) -- WHICH EXPERIMENTAL-EFFECT KERNEL TO USE, and
+  "TARGET INTEGRATION LOOKS WRONG FOR A THIN TARGET" IS NOT A BUG.
+  **Rule:** when the paper attributes the energy spread to the beam losing energy in the
+  target -- it quotes a foil thickness in ug/cm2, or "the total energy loss in the target was
+  X keV" (Meyer 1976: 5-10 ug/cm2 carbon foils, 1.3-1.7 keV) -- use target integration
+  (`<targetInt>` with isTargetIntegration=1, an areal density and the stopping-power
+  formula), not the constant-sigma Gaussian. Do NOT turn a detector resolution ("7.5 keV
+  FWHM for protons scattered to 144 deg", same paper) into a beam-energy Gaussian: that is
+  the resolution of the *detected* particle energy, used to separate the 12C and 16O peaks,
+  and says nothing about the energy at which the reaction happened. The Gaussian is for the
+  accelerator's beam-energy spread (a keV or less on a Cockcroft-Walton / Van de Graaff,
+  usually quoted separately), for straggling add the straggling flag to the same line.
+  **Why they are not interchangeable:** target integration is the thick-target yield
+  Y(E) = (1/N) int_{E-dE}^{E} sigma(E')/eps(E') dE' (EPoint.cpp, "Standard target
+  integration"), a one-sided flat window BELOW the nominal energy, so its first-order effect
+  on a feature narrower than or comparable to dE is a SHIFT of ~dE/2 to higher nominal
+  energy; the broadening is second order. A point-centred Gaussian shifts nothing. On the
+  Meyer 89.1 deg excitation function through the 1/2+ dip (7.5 ug/cm2, dE_lab = 2.9 keV at
+  0.45 MeV, 10 sub-points) target integration moves the model +16% / -16% on the two flanks
+  of the dip and the dip itself by +1.29 keV (dE_cm/2 = 1.32); a Gaussian with sigma = dE/2
+  moves the same points by <= 1.5% and the dip not at all. Someone comparing the two will
+  conclude target integration is broken; it is not.
+  **Verified** (post-a4095a6 build): (1) AZURE2's values agree with a numpy evaluation of
+  the same integral on a 0.2 keV bare grid to <= 0.13% at every data point; (2) density x
+  1e-3 (dE ~ 3 eV) reproduces the bare curve to 0.02%; (3) 10 and 100 sub-points agree to
+  5 digits. Recipe: copy the project, edit only the `<targetInt>` line (isActive / density /
+  isConv + sigma + isTargetInt=0), then read
+  `m.sess.calculated_segments(active_indices(m.datasets)[key])` after
+  `m.sess.update_segments_rwa(m.params_rwa)`; a fine dummy data file on the segment gives the
+  bare curve for the reference integral.
+  **Related:** a paper that says the loss was held constant ("1.3-1.7 keV for all
+  measurements" with foils of 5-10 ug/cm2) means the areal density VARIED with beam energy.
+  One density with the energy-dependent stopping power does not reproduce that: 7.5 ug/cm2
+  gives 2.8 keV at 0.46 MeV and 1.1 keV at 2 MeV. Match the quoted loss at the energy that
+  matters (2.0e17 atoms/cm2 = 4.0 ug/cm2 gives 1.5 keV at the 1/2+ resonance) or use
+  per-window `<targetInt>` lines with the lab-energy ranges token.
 
 - **A regression reference is not a correctness check.** `tests/run_tests.sh` pins each
   project's chi-squared against a number this code produced, so it catches a change and
