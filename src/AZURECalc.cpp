@@ -446,6 +446,44 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
   int nCols = 0;
   bool ok = ComputeResidualJacobian(lc, ld, configure(), pmap, sdp, residuals, jac, nCols);
 
+  // Energy-shift columns by central differences, as AZUREAPI::
+  // CalculateResidualJacobianRWA does for pyazr.  The adjoint does not cover a
+  // shift (it moves the energy of every quantity of the segment), and left as
+  // zero the Levenberg-Marquardt and GSL drivers flag the shifts as
+  // data-insensitive and never move them.  Differencing the residual vector
+  // of the same function keeps the rows aligned.
+  if (ok) {
+    const size_t nRes = residuals.size();
+    vector_r rPlus, rMinus, jTmp;
+    int nc = 0;
+    for (int f = 0; f < pmap.NumFull() && f < (int)full.size(); f++) {
+      if (fixed[f]) continue;
+      if (pmap.Desc(f).kind != ParamKind::EnergyShift) continue;
+      const int packed = pmap.FullToPacked(f);
+      if (packed < 0 || packed >= nCols) continue;
+      const double x0 = full[f];
+      const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+      auto residualsAt = [&](double value, vector_r &out) -> bool {
+        vector_r fk = full;
+        fk[f] = value;
+        lc->FillCompoundFromParams(fk);
+        ld->FillNormsFromParams(fk);
+        ld->FillEnergyShiftsFromParams(fk, ld, lc, &configure());
+        out.clear();
+        jTmp.clear();
+        return ComputeResidualJacobian(lc, ld, configure(), pmap, sdp, out, jTmp, nc);
+      };
+      const bool okp = residualsAt(x0 + h, rPlus);
+      const bool okm = residualsAt(x0 - h, rMinus);
+      if (okp && okm && rPlus.size() == nRes && rMinus.size() == nRes)
+        for (size_t r = 0; r < nRes; r++)
+          jac[r * (size_t)nCols + (size_t)packed] = (rPlus[r] - rMinus[r]) / (2.0 * h);
+    }
+    lc->FillCompoundFromParams(full);
+    ld->FillNormsFromParams(full);
+    ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+  }
+
   packedToFull.resize(pmap.NumPacked());
   for (int a = 0; a < pmap.NumPacked(); a++) packedToFull[a] = pmap.PackedToFull(a);
 
