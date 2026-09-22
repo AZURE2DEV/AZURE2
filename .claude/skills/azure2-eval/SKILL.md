@@ -1317,6 +1317,18 @@ complete:
   `m.sess.calculated_segments(active_indices(m.datasets)[key])` after
   `m.sess.update_segments_rwa(m.params_rwa)`; a fine dummy data file on the segment gives the
   bare curve for the reference integral.
+  **But a real regression did exist in the same weeks.** `710b518` (2026-09-21) fixes a
+  target-integration bug introduced by `a4095a6` (2026-09-11): once background poles carried
+  their physical widths, a broad pole's lattice (pitch Gamma/pointsPerWidth, e.g. 200 keV)
+  could be the only "covering" resonance across a thick-target window and the grid collapsed
+  to `[start, E_R, end]`, weighting sigma(E_R) by half the window -- the 14N(p,g) paper
+  example's yield came out x27 at 264.3 keV. Any build from Sep 11-21 has it (the Meyer
+  numbers above are from a Sep 18/19 build and still agreed with the reference, so it did not
+  bite there: the 1/2+ lattice covered the window). A model with fewer narrow levels near the
+  point, or the 1.5-1.7 MeV 12C+p region where the 3/2+ 5.86 MeV pole is the only cover, can
+  hit it. So: before calling a target-integration discrepancy physics, check the binary/`.so`
+  date against `git log -- src/AdaptiveIntegrationGrid.cpp`, and run the numpy Gove check on
+  the actual model -- that check is what separates the two cases.
   **Related:** a paper that says the loss was held constant ("1.3-1.7 keV for all
   measurements" with foils of 5-10 ug/cm2) means the areal density VARIED with beam energy.
   One density with the energy-dependent stopping power does not reproduce that: 7.5 ug/cm2
