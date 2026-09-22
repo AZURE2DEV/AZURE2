@@ -13,6 +13,7 @@ none #Angular Distributions Check
 </config>
 <levels>
 4 1 30.0 1 1 1 0 8 1 1 1 0.0 0.5 1 0.5 1 0 1.00727646688 1.00727646688 1 1 -1.0 -1.0 0 0 0.0 0 3.0 0 0 0
+
 </levels>
 <segmentsData>
 1 1 1 0 100 20 20 4 1 0 0 0 0 0 data/mott_20.dat 0 0

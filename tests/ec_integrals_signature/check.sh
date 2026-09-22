@@ -58,8 +58,12 @@ make_variant() {
 }
 
 # run NAME [EC_FILE] [FLAGS...]: mode 1, with or without a saved EC file.
+# The saved file is passed relative to the run directory: the path is read
+# from stdin, where MSYS does not translate POSIX paths, so an absolute
+# /tmp/... path cannot be opened by the Windows binary.
 run() {
   local dir="$WORK/$1" ec="${2:-}"
+  [ -n "$ec" ] && ec="../$(basename "$ec")"
   shift 2 || shift $#
   (cd "$dir" && printf '1\n\n%s\n7\n' "$ec" |
     "$AZURE2_BIN" --no-gui --no-readline "$@" 13N.azr > run.log 2>&1)
@@ -100,7 +104,7 @@ cp "$WORK/plain/output/intEC.dat.sig" "$WORK/intEC.dat.sig"
 
 echo "reusing the file on the grid it was built for"
 run plain "$WORK/intEC.dat"
-warned plain "WARNING: .*intEC" && bad "a matching file was rejected" || ok "a matching file is reused without a warning"
+warned plain "WARNING: .*intEC\\|Could not open external capture file" && bad "a matching file was rejected or not found" || ok "a matching file is reused without a warning"
 close "$(chi2 plain)" "$A" && ok "and gives the same chi2 ($(chi2 plain), to the file's precision)" || bad "reused file gives chi2 $(chi2 plain), fresh $A"
 
 echo "reusing the file with a different channel radius"
