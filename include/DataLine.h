@@ -32,10 +32,15 @@ class DataLine {
     // comments and are skipped.  Anything else must carry at least the four
     // required numeric columns; if it does not, valid() is false and raw()
     // holds the text so the caller can say which line was wrong.
+    //
+    // A line ends at LF, CRLF or a bare CR.  Files written with classic-Mac
+    // line endings (CR only) are otherwise read as a single line: its first
+    // four numbers become one point and every later number is taken as an
+    // optional extra column, so all but one point of the segment are lost
+    // without a message.
     std::string raw;
-    while (std::getline(stream, raw)) {
+    while (ReadLine(stream, raw)) {
       linesConsumed_++;
-      if (!raw.empty() && raw[raw.size() - 1] == '\r') raw.erase(raw.size() - 1);
       std::string::size_type k = raw.find_first_not_of(" \t");
       if (k == std::string::npos || raw[k] == '#') continue;   // blank or comment
       std::istringstream ls(raw);
@@ -57,6 +62,25 @@ class DataLine {
    * exhausted.  The caller's read loop should stop here.
    */
   bool atEnd() const { return atEnd_; };
+  /*!
+   * Reads one line terminated by LF, CRLF or CR; false at end of stream with
+   * nothing read.
+   */
+  static bool ReadLine(std::istream &in, std::string &out) {
+    out.clear();
+    char c;
+    bool any = false;
+    while (in.get(c)) {
+      any = true;
+      if (c == '\n') return true;
+      if (c == '\r') {
+        if (in.peek() == '\n') in.get(c);
+        return true;
+      }
+      out.push_back(c);
+    }
+    return any;
+  };
   /*!
    * True when a data line was read and its four required columns parsed.
    * False, with atEnd() also false, means a non-comment line that could not
