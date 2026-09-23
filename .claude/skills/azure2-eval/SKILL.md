@@ -609,11 +609,9 @@ On the 8Be model engine pair 1 is file key 2 and file key 1 is engine pair 6 —
 match one against the other and every width lands on the wrong channel. Calling
 `AzrModel.apply_fit` directly? Pass `pairs=m.pairs`, or it cannot translate.
 
-**Normalizations and energy shifts are not in `<levels>`.** A calculate run on a
-bare `.azr` uses 1.0 for every dataset, so its χ² sits *above* the fit's by
-whatever they were absorbing (3He: 166 fitted, 769 from the snapshot). That is
-what the companion `param.sav` carries — hand it to AZURE2 as the external
-parameter file and the model is whole.
+**Normalizations and energy shifts are not in `<levels>` -- and `save_fit` does
+not update the copies that ARE in the `.azr`.** See "Normalizations live in two
+places" below before trusting a snapshot with a blank parameter file.
 
 `AzrModel.apply_fit` is the lower-level half if you need it: it takes
 `pairs=`, matches levels on the engine's own `(jgroup, level)` via
@@ -625,17 +623,78 @@ it cannot place. It does not verify — `save_fit` does that.
 the stale `intEC` caches), writes the `.azr` plus a companion `param.sav` with
 the norms, and fails loudly if the result does not round-trip.
 
+### Normalizations live in two places -- the mistake that keeps recurring
+
+Every data segment's normalization and energy shift exist twice:
+
+| where | field | used when |
+|---|---|---|
+| `<segmentsData>` line, tokens 9 and 12 (1-based; `dataNorm`, `energyShift`) | stored in the `.azr` | a run with a **blank** external parameter file, and the GUI's segment table |
+| `param.sav`, `segment_<key>_norm` / `segment_<key>_energy_shift` | written by every fit | a run given that file, which then **overrides** the `.azr` values |
+
+Only a fit updates the `.sav`; **nothing updates the `<segmentsData>` copies**:
+not a fit (AZURE2 never writes back into the `.azr` in CLI mode), not
+`save_fit` (it rewrites `<levels>` and writes a `.sav`, and leaves
+`<segmentsData>` as it found it), not a calculate. So after any fit the `.azr`
+carries the *previous* fit's norms and shifts, silently, and stays that way
+until someone bakes them in. Symptoms seen on the 11B+alpha archive, each
+rediscovered from scratch: a baked snapshot that gave 11,112 with a blank file
+against the fit's 9,970 (64 norms off by up to 21 %, 55 shifts stale); figures
+plotted with data at a stale norm next to a current-fit curve; the GUI showing
+some segments at `param.sav` values and others at `.azr` values because the
+`.sav` predated a segment reactivation.
+
+**Rule: a `.azr` is the fit only after both homes agree.** After `save_fit`, or
+after any fit whose result you want to carry in the `.azr` alone, bake the
+`.sav` into `<segmentsData>` (keys are 1-based line positions, inactive lines
+included, matched by name -- so this is safe with inactive or extra entries):
+
+```python
+import re, io
+S = {}
+for l in open("output/param.sav"):
+    p = l.split()
+    if len(p) >= 2:
+        try: S[p[0]] = float(p[1])
+        except ValueError: pass
+c = io.open("fit.azr", encoding="latin-1").read()
+m = re.search(r'(<segmentsData>)(.*?)(</segmentsData>)', c, re.DOTALL)
+rows = m.group(2).split('\n'); key = 0
+for i, l in enumerate(rows):
+    t = l.split()
+    if not t: continue
+    key += 1
+    n = S.get("segment_%d_norm" % key); e = S.get("segment_%d_energy_shift" % key)
+    if n is not None: t[8]  = "%.7g" % n
+    if e is not None: t[11] = "%.7g" % e
+    rows[i] = '  ' + '  '.join(t)
+io.open("fit.azr", "w", encoding="latin-1").write(c[:m.start(2)] + '\n'.join(rows) + c[m.end(2):])
+```
+
+Then prove it: CLI mode 1 with a **blank** parameter file into a throwaway
+output directory must reproduce the fit's `chiSquared.out` -- total, every
+segment, every printed norm, and `Total-Norm-Chi-Squared` (a blank-file run that
+prints 0 there while the fit printed something else is the signature of stale
+norms, since the penalty is computed from the norms in use). Queue it; do not
+declare the snapshot done on `save_fit`'s own verify, which covers `<levels>`
+only. The same check, run with the `.sav` supplied, separates an R-matrix bake
+error from a norm bake error.
+
+Whenever you hand over, plot from, or build a variant on a `.azr`, say which of
+the two homes the numbers came from.
+
 ### What a snapshot still cannot carry
 
 `save_fit` verifies the `.azr` it writes, so a mismatched snapshot no longer
 reaches you silently — it raises and removes the file. Two things remain true
 of the `.azr` itself:
 
-- **Normalizations do not live in `<levels>`.** A calculate run on a snapshot
-  uses 1.0 for every dataset, so its `chiSquared.out` sits *above* the fit's by
-  whatever the normalizations were absorbing — 3He: 166 fitted, 769 from the
-  snapshot. Write them alongside (`output/normalizations.out`) or supply a
-  `param.sav`.
+- **Normalizations and energy shifts go stale in `<segmentsData>`.** `save_fit`
+  rewrites `<levels>` and the companion `.sav`; the per-segment `dataNorm` and
+  `energyShift` fields in `<segmentsData>` keep whatever the file had before
+  (typically an older fit's values), so a calculate with a blank parameter file
+  is NOT the fit. Bake them or supply the `.sav` -- "Normalizations live in two
+  places" below.
 - **The check dumps are keywords, not filenames.** `<config>` accepts only
   `none`, `screen` or `file` (`Config::ReadConfigFile`); anything else silently
   leaves the check off and `checks/` stays empty. Write `file`.

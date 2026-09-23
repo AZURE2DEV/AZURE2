@@ -100,7 +100,9 @@ Things that need no change, and one that might:
 ## Verify: the difference must be exactly the dropped segment
 
 Run a plain calculate (mode 1) of the new `.azr` with the **same** parameter
-file as the reference and compare `chiSquared.out`:
+file as the reference and compare `chiSquared.out` (same file, not blank: with a
+blank file both runs would use the `<segmentsData>` norms, which are usually stale
+-- azure2-eval skill, "Normalizations live in two places"):
 
 ```python
 def chi(f):
