@@ -1195,13 +1195,19 @@ Two traps:
 **The `<thm>` block selects the HOES observable variant.** Optional, anywhere
 in the `.azr`, `key=value` per line; an unknown key or value, or a missing
 `</thm>`, makes AZURE2 exit with `ERROR: <thm> ...` before computing anything.
-Keys: `entranceL=incoherent|coherent`, `vertex=real|onshell`,
+Keys: `entranceL=incoherent|coherent`, `vertex=constant|perlevel|onshell`,
 `kinematics=lacognata|triple|kf3body|lambda32`, `coulombIntegral=0|1`,
 `spectatorEnergy=<MeV>`, `spectatorEnergy[<pair>]=<MeV>` (defaults first).
 Pick `kinematics=` from what the data paper divided by: full three-body KF ->
 `kf3body`, lambda3/lambda2 -> `lambda32`, only |phi|^2 -> `triple`, La Cognata's
 formula or unknown -> `lacognata`; the wrong one distorts relative resonance
-heights. Physics, equations and pinned values:
+heights. `vertex=constant` (default since 2026-09-25) is the formal-R-matrix
+vertex at B_c = S_c(E_1), identical with Brune on or off; `vertex=perlevel`
+(alias `real`, the old default, as mrmpy) puts each level's S_c(E_lambda) in
+the vertex and is representation-dependent once levels of one J^pi interfere --
+use it only to reproduce pre-Sep-2026 numbers. Evidence: `tests/18O_p_a_thm`
+reproduces La Cognata et al., ApJ 723 (2010) 1512 with `constant` (5 % rms at
+the peaks) and not with `perlevel` (23 %). Physics, equations and pinned values:
 `docs/source/theory/thm_implementation.rst`; regression: `tests/thm_options`.
 The GUI and `AzrModel` carry the block through a save unchanged (no editor);
 append it as `"\n<thm>\n...\n</thm>\n"`, since an `.azr` may lack a final
@@ -1209,8 +1215,10 @@ newline and `<thm>` must start its own line.
 
 Reference cases: `tests/17O` — 17O(n,alpha)14C from Guardo/Sergi *et al.*,
 23 points, one THM segment, chi-squared 96.69 (neutron entrance, RWA widths);
-`tests/7Li_p_a` (2180.69) and `tests/6Li_d` (1076.06), charged entrance with
-two entrance l; `tests/thm_rwa_grid` and `tests/thm_options` (check.sh). They
+`tests/7Li_p_a` (1753.15) and `tests/6Li_d` (856.617), charged entrance with
+two entrance l; `tests/18O_p_a_thm` (2191.98 + check.sh against the published
+band), two interfering levels of one J^pi; `tests/thm_rwa_grid` and
+`tests/thm_options` (check.sh). They
 exist because THM shares `ESegment`, `EPoint`, `AZURECalc` and the gradient
 code with the on-shell machinery while diverging at the observable.
 
