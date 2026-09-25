@@ -1192,11 +1192,27 @@ Two traps:
   width *squared*. It matches neither convention `value` can be in. Use
   `pyazr.widths` to form theta^2 rather than dividing by it.
 
-Reference case: `tests/17O` — 17O(n,alpha)14C from Guardo/Sergi *et al.*,
-23 points, one THM segment, chi-squared 12.3193. It is the only case in the
-suite that touches this path, and it exists because THM shares `ESegment`,
-`EPoint`, `AZURECalc` and the gradient code with the on-shell machinery while
-diverging at the observable.
+**The `<thm>` block selects the HOES observable variant.** Optional, anywhere
+in the `.azr`, `key=value` per line; an unknown key or value, or a missing
+`</thm>`, makes AZURE2 exit with `ERROR: <thm> ...` before computing anything.
+Keys: `entranceL=incoherent|coherent`, `vertex=real|onshell`,
+`kinematics=lacognata|triple|kf3body|lambda32`, `coulombIntegral=0|1`,
+`spectatorEnergy=<MeV>`, `spectatorEnergy[<pair>]=<MeV>` (defaults first).
+Pick `kinematics=` from what the data paper divided by: full three-body KF ->
+`kf3body`, lambda3/lambda2 -> `lambda32`, only |phi|^2 -> `triple`, La Cognata's
+formula or unknown -> `lacognata`; the wrong one distorts relative resonance
+heights. Physics, equations and pinned values:
+`docs/source/theory/thm_implementation.rst`; regression: `tests/thm_options`.
+The GUI and `AzrModel` carry the block through a save unchanged (no editor);
+append it as `"\n<thm>\n...\n</thm>\n"`, since an `.azr` may lack a final
+newline and `<thm>` must start its own line.
+
+Reference cases: `tests/17O` — 17O(n,alpha)14C from Guardo/Sergi *et al.*,
+23 points, one THM segment, chi-squared 96.69 (neutron entrance, RWA widths);
+`tests/7Li_p_a` (2180.69) and `tests/6Li_d` (1076.06), charged entrance with
+two entrance l; `tests/thm_rwa_grid` and `tests/thm_options` (check.sh). They
+exist because THM shares `ESegment`, `EPoint`, `AZURECalc` and the gradient
+code with the on-shell machinery while diverging at the observable.
 
 ## `.azr` file anatomy
 
