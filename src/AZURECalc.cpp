@@ -759,10 +759,14 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
           break;
         }
       }
-    } else if (limitsManager_ && limitsManager_->IsNuisanceParameterByIndex(a)) {
-      double sig = limitsManager_->GetConvertedErrorByIndex(a);
-      if (sig > 0.0) {
-        pen_nom[a] = limitsManager_->GetConvertedNominalValueByIndex(a);
+    } else if (limitsManager_) {
+      // Looked up by the full-vector index f, not by a: a counts the
+      // parameters free in this Jacobian, the limits manager's non-fixed index
+      // counts those free when it was applied plus every fixed segment
+      // parameter, and the two need not agree.
+      double nom, sig;
+      if (limitsManager_->NuisancePrior(f, nom, sig)) {
+        pen_nom[a] = nom;
         pen_inv2[a] = 1.0 / (sig * sig);
       }
     }
@@ -1139,76 +1143,31 @@ double AZURECalc::RunGSLNonlinear(AZUREParams &params, int maxIter,
 
 void AZURECalc::AddNuisanceGradient(const vector_r &p, std::vector<double> &grad) const {
   if (!limitsManager_) return;
-
-  AZUREParams tempParams;
-  compound()->FillMnParams(tempParams.GetMinuitParams(), &configure());
-  data()->FillMnParams(tempParams.GetMinuitParams());
-
-  std::vector<int> nonFixedToActualIndex;
-  for (int i = 0; i < tempParams.GetMinuitParams().Params().size(); i++) {
-    if (!tempParams.GetMinuitParams().Parameter(i).IsFixed() ||
-        tempParams.GetMinuitParams().Parameter(i).GetName().find("segment") != std::string::npos) {
-      nonFixedToActualIndex.push_back(i);
-    }
-  }
-
-  for (int nf = 0; nf < (int)nonFixedToActualIndex.size() && nf < (int)p.size(); nf++) {
-    int actualIndex = nonFixedToActualIndex[nf];
-    std::string paramName = tempParams.GetMinuitParams().Parameter(actualIndex).GetName();
-    if (paramName.find("norm") != std::string::npos || paramName.find("shift") != std::string::npos) continue;
-    if (!limitsManager_->IsNuisanceParameterByIndex(nf)) continue;
-    double nominalValue = limitsManager_->GetConvertedNominalValueByIndex(nf);
-    double paramError = limitsManager_->GetConvertedErrorByIndex(nf);
-    if (paramError > 0.0) {
-      // d/d p[nf] of ((p[nf]-nominal)/error)^2.
-      grad[nf] += 2.0 * (p[nf] - nominalValue) / (paramError * paramError);
-    }
+  // p and grad are the full parameter vector (fixed parameters included), and
+  // the prior is looked up by that same full index.
+  const int n = (int)std::min(p.size(), grad.size());
+  for (int f = 0; f < n; f++) {
+    double nominalValue, paramError;
+    if (!limitsManager_->NuisancePrior(f, nominalValue, paramError)) continue;
+    // d/dp of ((p - nominal)/error)^2.
+    grad[f] += 2.0 * (p[f] - nominalValue) / (paramError * paramError);
   }
 }
 
 double AZURECalc::CalculateNuisanceChiSquared(const vector_r &p) const {
+  if (!limitsManager_) return 0.0;
+  // p is the full parameter vector (fixed parameters included), as
+  // CNuc::FillCompoundFromParams reads it; the prior is looked up by the same
+  // full index.  (Indexing p by the limits manager's non-fixed index, as this
+  // once did, evaluates a prior on whatever parameter sits at that position as
+  // soon as a fixed parameter precedes the one carrying it.)
   double nuisanceChiSquared = 0.0;
-
-  // Create temporary AZUREParams to get parameter names
-  AZUREParams tempParams;
-  compound()->FillMnParams(tempParams.GetMinuitParams(), &configure());
-  data()->FillMnParams(tempParams.GetMinuitParams());
-
-  // Build mapping from non-fixed parameter index to actual parameter index
-  std::vector<int> nonFixedToActualIndex;
-  for (int i = 0; i < tempParams.GetMinuitParams().Params().size(); i++) {
-    if (!tempParams.GetMinuitParams().Parameter(i).IsFixed() || tempParams.GetMinuitParams().Parameter(i).GetName().find("segment") != std::string::npos) {
-      nonFixedToActualIndex.push_back(i);
-    }
+  for (int f = 0; f < (int)p.size(); f++) {
+    double nominalValue, paramError;
+    if (!limitsManager_->NuisancePrior(f, nominalValue, paramError)) continue;
+    double deviation = (p[f] - nominalValue) / paramError;
+    nuisanceChiSquared += deviation * deviation;
   }
-
-  // Check each non-fixed parameter to see if it's marked as nuisance
-  for (int nonFixedIndex = 0; nonFixedIndex < nonFixedToActualIndex.size() && nonFixedIndex < p.size(); nonFixedIndex++) {
-    int actualIndex = nonFixedToActualIndex[nonFixedIndex];
-    std::string paramName = tempParams.GetMinuitParams().Parameter(actualIndex).GetName();
-
-    // If norm or shift in param name, skip
-    if (paramName.find("norm") != std::string::npos || paramName.find("shift") != std::string::npos) {
-      continue;
-    }
-
-    // First check if this parameter is marked as nuisance (fast check)
-    if (!limitsManager_->IsNuisanceParameterByIndex(nonFixedIndex)) {
-      continue;  // Skip if not a nuisance parameter
-    }
-
-    // Only do expensive conversions if parameter is marked as nuisance
-    double nominalValue = limitsManager_->GetConvertedNominalValueByIndex(nonFixedIndex);
-    double paramError = limitsManager_->GetConvertedErrorByIndex(nonFixedIndex);
-
-    // If we got valid values (non-zero error means this parameter has valid nuisance settings)
-    if (paramError > 0.0) {
-      double paramValue = p[nonFixedIndex];
-      double deviation = (paramValue - nominalValue) / paramError;
-      nuisanceChiSquared += deviation * deviation;
-    }
-  }
-
   return nuisanceChiSquared;
 }
 

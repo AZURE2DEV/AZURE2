@@ -575,8 +575,13 @@ int AZUREMain::operator()() {
                               << std::endl;
         // With component segments, no need to skip - total capture is handled within the segment
       }
+      // Twelve significant digits: the total includes the nuisance priors,
+      // which chiSquared.out does not, and a unit change of a prior must be
+      // readable from this line against a data chi-squared of thousands.
+      std::ostringstream total;
+      total << std::setprecision(12) << chiSquared;
       configure().outStream << "Total Chi-Squared: "
-                            << chiSquared << std::endl
+                            << total.str() << std::endl
                             << std::endl;
     }
 

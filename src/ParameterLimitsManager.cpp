@@ -244,6 +244,18 @@ void ParameterLimitsManager::BuildIndexMap(const ROOT::Minuit2::MnUserParameters
       }
     }
   }
+
+  // The same association keyed by the full-vector index, for the nuisance
+  // prior.  Norms and shifts are left out, as the chi-squared always has.
+  priorByActualIndex_.assign(p.Params().size(), NULL);
+  for (size_t nonFixedIndex = 0; nonFixedIndex < nonFixedToActualIndex.size(); nonFixedIndex++) {
+    ParameterSetting *setting = indexToSetting_[nonFixedIndex];
+    if (!setting || !setting->useAsNuisance) continue;
+    const int actualIndex = nonFixedToActualIndex[nonFixedIndex];
+    const std::string &name = p.Parameter(actualIndex).GetName();
+    if (name.find("norm") != std::string::npos || name.find("shift") != std::string::npos) continue;
+    priorByActualIndex_[actualIndex] = setting;
+  }
 }
 
 ParameterSetting *ParameterLimitsManager::SettingForIndex(int nonFixedIndex) const {
@@ -637,4 +649,16 @@ double ParameterLimitsManager::GetConvertedErrorByIndex(int nonFixedIndex) const
     return setting->errorReduced;  // Return reduced error for width parameters
   // For non-width parameters, use error as-is
   return setting->error;
+}
+
+bool ParameterLimitsManager::NuisancePrior(int actualIndex, double &nominal, double &error) const {
+  if (actualIndex < 0 || actualIndex >= (int)priorByActualIndex_.size()) return false;
+  const ParameterSetting *setting = priorByActualIndex_[actualIndex];
+  if (!setting) return false;
+  const bool isWidth = (setting->name.find("width") != std::string::npos ||
+                        setting->name.find("Width") != std::string::npos) &&
+                       setting->category == "level";
+  nominal = isWidth ? setting->nominalValueReduced : setting->nominalValue;
+  error = isWidth ? setting->errorReduced : setting->error;
+  return error > 0.0;
 }
