@@ -3,6 +3,7 @@
 
 #include <string>
 #include <fstream>
+#include <map>
 
 /// A structure holding the reaction rate calculation configuration
 
@@ -111,12 +112,45 @@ class Config {
   bool useHybridMethod;
   /// Use adaptive integration grid for target effects (false = uniform grid)
   bool useAdaptiveGrid;
+  /// Choices in the THM (modified R-matrix, HOES) observable, read from the
+  /// optional <thm> block.  The defaults reproduce the Typel--Baur / La Cognata
+  /// working formula (Tumino et al. 2021, eqs. 50-51) that the code has always
+  /// used, except that entrance partial waves are summed incoherently.
+  struct ThmOptions {
+    /// Vertex boundary L_c(E) = S_c(E) + i P_c(E) of the on-shell outgoing wave
+    /// (Tribble et al. 2014 eq. 2.76; Mukhamedzhanov 2017 eq. 28) instead of the
+    /// real per-level S_c(E_lambda).  Key `vertex=onshell` (default `real`).
+    bool onShellVertex = false;
+    /// Exit flux factor k_f/mu_f of La Cognata's formula.  The surface-integral
+    /// derivations (Mukhamedzhanov 2017 eq. 34) have Gamma_f alone.  Key `exitFlux=0|1`.
+    bool exitFlux = true;
+    /// Sum entrance partial waves of one channel spin coherently, as mrmpy and
+    /// AZURE2 before Sep 2026 did.  For an observable integrated over the exit
+    /// direction the l cross terms vanish, so incoherent is the default.
+    /// Key `entranceL=coherent|incoherent`.
+    bool coherentL = false;
+    /// Add the external Coulomb term 2 eta k \int_a^inf O_l(kr)/O_l(ka) j_l(pr) dr to
+    /// the vertex (Tribble eq. 2.79; Typel & Baur eq. A.4).  Key `coulombIntegral=0|1`.
+    bool coulombIntegral = false;
+    /// Mean spectator kinetic energy <p_sx^2>/2mu_sx (MeV) added to E + B in the
+    /// half-off-shell momentum (Typel & Baur eq. 11).  Key `spectatorEnergy=` for
+    /// every THM pair, `spectatorEnergy[<pair key>]=` for one.
+    double spectatorEnergy = 0.0;
+    std::map<int, double> spectatorEnergyByPair;
+    double SpectatorEnergy(int pairKey) const {
+      std::map<int, double>::const_iterator it = spectatorEnergyByPair.find(pairKey);
+      return it == spectatorEnergyByPair.end() ? spectatorEnergy : it->second;
+    }
+  };
+  ThmOptions thm;
   /// A constant indicating the maximum order of the Legendre polynomials to calculate.
   static const int maxLOrder = 20;
   /// Read the <config> block, then the optional <potential> block. -1 if the file cannot be read.
   int ReadConfigFile();
   /// Reads the <potential> block of the configuration file, if it has one.
   int ReadPotentialBlock();
+  /// Reads the optional <thm> block. -1 on an unknown key or an unterminated block.
+  int ReadThmBlock();
 #ifndef NO_STAT
   /// Check that the output and checks directories exist.
   int CheckForInputFiles();

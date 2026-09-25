@@ -458,16 +458,17 @@ double EPoint::GetSqrtPenetrability(int jGroupNum, int channelNum) const {
 
 /*!
  * Returns the THM entrance transfer form factor M_l = (b-1) j_l - rho dj_l/drho
- * for the channel specified by positions in the JGroup and AChannel vectors,
+ * (+ the external Coulomb term, when stored) for the channel specified by positions in the JGroup and AChannel vectors,
  * assembled with the given boundary b (the per-level shift function under the
  * Brune formalism, or the channel boundary constant otherwise). Returns 0 if
  * not stored (e.g. non-entrance channels, or non-THM points).
  */
 
-double EPoint::GetThmFormFactor(int jGroupNum, int channelNum, double boundary) const {
+complex EPoint::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary) const {
   if (jGroupNum - 1 >= (int)thm_jl_.size()) return 0.0;
   if (channelNum - 1 >= (int)thm_jl_[jGroupNum - 1].size()) return 0.0;
-  return (boundary - 1.0) * thm_jl_[jGroupNum - 1][channelNum - 1] - thm_rhodjl_[jGroupNum - 1][channelNum - 1];
+  return (boundary - 1.0) * thm_jl_[jGroupNum - 1][channelNum - 1] - thm_rhodjl_[jGroupNum - 1][channelNum - 1]
+         + thm_coul_[jGroupNum - 1][channelNum - 1];
 }
 
 /*!
@@ -1208,13 +1209,21 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
         // entrance *vertex*, not the interior.
         double thmJl = 0.0;
         double thmRhoDjl = 0.0;
+        complex thmCoul(0.0, 0.0);
         if (this->IsTHM() && thePair == entrancePair && thePair->GetPType() == 0) {
           double muMeV = thePair->GetRedMass() * uconv;
-          double bindingE = thePair->GetBindingEnergy();
-          if (localEnergy + bindingE > 0.0)
+          // The spectator's kinetic energy raises the half-off-shell momentum
+          // above its quasi-free value (Typel & Baur eq. 11); 0 by default.
+          double bindingE = thePair->GetBindingEnergy() +
+                            configure.thm.SpectatorEnergy(this->GetEntranceKey());
+          if (localEnergy + bindingE > 0.0) {
             ThmBesselParts(lValue, muMeV, localEnergy, bindingE, thePair->GetChRad(),
                            thmJl, thmRhoDjl);
-          else {
+            if (configure.thm.coulombIntegral && thePair->GetZ(1) * thePair->GetZ(2) != 0)
+              thmCoul = ThmCoulombTerm(thePair, lValue, localEnergy,
+                                       ThmRho(muMeV, localEnergy, bindingE, 1.0),
+                                       !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+          } else {
             /* Below E = -B the half-off-shell momentum is imaginary and the form
             factor (hence the HOES cross section) is left identically zero.
             Physically the QF relative energy satisfies E + B > 0, so points
@@ -1230,7 +1239,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
                         << std::endl;
           }
         }
-        this->AddThmFormFactor(j, ch, thmJl, thmRhoDjl);
+        this->AddThmFormFactor(j, ch, thmJl, thmRhoDjl, thmCoul);
       }
     }
   }
@@ -1245,6 +1254,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
     mappedPoint->penetrabilities_ = penetrabilities_;
     mappedPoint->thm_jl_ = thm_jl_;
     mappedPoint->thm_rhodjl_ = thm_rhodjl_;
+    mappedPoint->thm_coul_ = thm_coul_;
     mappedPoint->coulombphase_ = coulombphase_;
     mappedPoint->hardspherephase_ = hardspherephase_;
     for (int ii = 1; ii <= this->NumSubPoints(); ii++) {
@@ -1255,6 +1265,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
       subMappedPoint->penetrabilities_ = this->GetSubPoint(ii)->penetrabilities_;
       subMappedPoint->thm_jl_ = this->GetSubPoint(ii)->thm_jl_;
       subMappedPoint->thm_rhodjl_ = this->GetSubPoint(ii)->thm_rhodjl_;
+      subMappedPoint->thm_coul_ = this->GetSubPoint(ii)->thm_coul_;
       subMappedPoint->coulombphase_ = this->GetSubPoint(ii)->coulombphase_;
       subMappedPoint->hardspherephase_ = this->GetSubPoint(ii)->hardspherephase_;
     }
@@ -1279,6 +1290,7 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure) {
   penetrabilities_.clear();
   thm_jl_.clear();
   thm_rhodjl_.clear();
+  thm_coul_.clear();
   coulombphase_.clear();
   hardspherephase_.clear();
 
@@ -1320,13 +1332,16 @@ void EPoint::AddSqrtPenetrability(int jGroupNum, int channelNum, double sqrtPene
  * (one entry per channel), so a non-entrance channel stores 0.
  */
 
-void EPoint::AddThmFormFactor(int jGroupNum, int channelNum, double jl, double rhoDjl) {
+void EPoint::AddThmFormFactor(int jGroupNum, int channelNum, double jl, double rhoDjl, complex coul) {
   vector_r d;
+  vector_c dc;
   while (jGroupNum > thm_jl_.size()) thm_jl_.push_back(d);
   while (jGroupNum > thm_rhodjl_.size()) thm_rhodjl_.push_back(d);
+  while (jGroupNum > thm_coul_.size()) thm_coul_.push_back(dc);
   thm_jl_[jGroupNum - 1].push_back(jl);
   thm_rhodjl_[jGroupNum - 1].push_back(rhoDjl);
-  assert(channelNum = thm_jl_[jGroupNum - 1].size());
+  thm_coul_[jGroupNum - 1].push_back(coul);
+  assert(channelNum == (int)thm_jl_[jGroupNum - 1].size());
 }
 
 /*!

@@ -136,9 +136,10 @@ class EPoint {
   double GetSFactorConversion() const;
   /// \f$\sqrt{P_c}\f$ for the channel at (J-group, channel), both 1-based.
   double GetSqrtPenetrability(int, int) const;
-  /// THM entrance transfer form factor M_l = (b-1) j_l - rho dj_l/drho for
-  /// JGroup/channel, assembled with the given boundary b (0 if not stored).
-  double GetThmFormFactor(int, int, double) const;
+  /// THM entrance transfer form factor M_l = (b-1) j_l - rho dj_l/drho + C_l for
+  /// JGroup/channel, assembled with the given (possibly complex) boundary b;
+  /// C_l is the external Coulomb term, 0 unless requested (0 if not stored).
+  complex GetThmFormFactor(int, int, complex) const;
   /// Total spin. Phase-shift points only.
   double GetJ() const;
   /// Stopping cross section at this sub-point, for a yield-curve target integration.
@@ -232,7 +233,7 @@ class EPoint {
   /// Store a \f$\sqrt{P_c}\f$ at (J-group, channel).
   void AddSqrtPenetrability(int, int, double);
   /// Store the pieces of the THM form factor at (J-group, channel).
-  void AddThmFormFactor(int, int, double, double);
+  void AddThmFormFactor(int, int, double, double, complex = complex(0.0, 0.0));
   /// Store a Coulomb phase factor at (J-group, channel).
   void AddExpCoulombPhase(int, int, complex);
   /// Store a hard-sphere phase factor at (J-group, channel).
@@ -356,6 +357,8 @@ class EPoint {
   /// with the per-level boundary (Brune) or the channel boundary constant.
   matrix_r thm_jl_;
   matrix_r thm_rhodjl_;
+  /// External Coulomb term of the THM vertex, same indexing (0 when not used).
+  matrix_c thm_coul_;
   matrix_c coulombphase_;
   matrix_c hardspherephase_;
   // Energy at which CalcEDependentValues last ran: RecalcEDependentValues is

@@ -36,3 +36,5 @@ analysis in the evaluation notes — but the pinned reference deliberately
 stays at the published parameters.
 
 Note (thm branch): the THM segment's arbitrary overall scale is now profiled out analytically by the engine (a free THM norm is set to its chi2-optimal value each evaluation), so the pinned chi2 is 1662.03 at the optimal scale -- superseding the earlier hand-solved-norm value (6135.89). This is the correct minimal chi2 for the arbitrary THM scale.
+
+Note (Sep 2026): entrance partial waves are now summed incoherently in l (the l cross terms vanish once the exit direction is integrated and the spin projections summed; see src/THMMatrixFunc.cpp). This case has two entrance l in one channel spin, so the pin moves from 1662.03 to 1076.06 with the same parameters. A `<thm>` block with `entranceL=coherent` restores the old sum and reproduces 1662.03.

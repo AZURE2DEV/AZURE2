@@ -35,3 +35,7 @@ double ThmFormFactor(int l, double b, double mu, double E, double B,
   ThmBesselParts(l, mu, E, B, radius, jl, rhoDjl);
   return (b - 1.0) * jl - rhoDjl;
 }
+
+complex ThmCoulombTerm(PPair *pair, int l, double E, double p, bool useGSL) {
+  return complex(0.0, 0.0);  // TODO: implemented in a follow-up
+}

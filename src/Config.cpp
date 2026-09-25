@@ -33,6 +33,7 @@ void Config::Reset() {
   nloptAlgorithm = 0;       // Default to SBPLX
   useHybridMethod = false;  // Default to disabled
   useAdaptiveGrid = true;   // Default to adaptive grid
+  thm = ThmOptions();
 }
 
 /*!
@@ -131,7 +132,8 @@ int Config::ReadConfigFile() {
   while (line != "</config>" && !in.eof()) getline(in, line);
   if (line != "</config>") return -1;
   in.close();
-  return this->ReadPotentialBlock();
+  if (this->ReadPotentialBlock() != 0) return -1;
+  return this->ReadThmBlock();
 }
 
 /*!
@@ -319,3 +321,87 @@ int Config::CheckForInputFiles() {
   return 0;
 }
 #endif
+
+/*!
+ * Reads the optional <thm> block: `key=value` lines setting the variant of the
+ * THM (HOES) observable, see Config::ThmOptions.  A '#' starts a comment.
+ *
+ *   <thm>
+ *   vertex=onshell
+ *   exitFlux=0
+ *   entranceL=incoherent
+ *   coulombIntegral=1
+ *   spectatorEnergy=0.4
+ *   spectatorEnergy[1]=0.6
+ *   </thm>
+ *
+ * An unknown key is an error rather than a silent default, so a misspelt
+ * option cannot change a fit without notice.
+ */
+
+int Config::ReadThmBlock() {
+  std::ifstream in(configfile.c_str());
+  if (!in) return -1;
+  std::string line = "";
+  while (!in.eof()) {
+    getline(in, line);
+    size_t b = line.find_first_not_of(" \t\r\n");
+    if (b != std::string::npos && line.compare(b, 5, "<thm>") == 0) break;
+    line = "";
+  }
+  if (line.find("<thm>") == std::string::npos) return 0;  // optional block, absent
+
+  auto flag = [](const std::string &v, bool &out) {
+    if (v == "1" || v == "true" || v == "on") out = true;
+    else if (v == "0" || v == "false" || v == "off") out = false;
+    else return false;
+    return true;
+  };
+  while (!in.eof()) {
+    getline(in, line);
+    size_t hash = line.find('#');
+    if (hash != std::string::npos) line = line.substr(0, hash);
+    size_t b = line.find_first_not_of(" \t\r\n");
+    if (b == std::string::npos) continue;
+    size_t e = line.find_last_not_of(" \t\r\n");
+    std::string trimmed = line.substr(b, e - b + 1);
+    if (trimmed == "</thm>") return 0;
+    size_t eq = trimmed.find('=');
+    std::string key = trimmed.substr(0, eq);
+    std::string value = eq == std::string::npos ? std::string() : trimmed.substr(eq + 1);
+    key.erase(key.find_last_not_of(" \t") + 1);
+    value.erase(0, value.find_first_not_of(" \t"));
+    bool ok = eq != std::string::npos;
+    if (!ok) {
+    } else if (key == "vertex") {
+      if (value == "onshell") thm.onShellVertex = true;
+      else if (value == "real") thm.onShellVertex = false;
+      else ok = false;
+    } else if (key == "exitFlux") {
+      ok = flag(value, thm.exitFlux);
+    } else if (key == "entranceL") {
+      if (value == "coherent") thm.coherentL = true;
+      else if (value == "incoherent") thm.coherentL = false;
+      else ok = false;
+    } else if (key == "coulombIntegral") {
+      ok = flag(value, thm.coulombIntegral);
+    } else if (key.compare(0, 15, "spectatorEnergy") == 0) {
+      std::istringstream vs(value);
+      double x;
+      ok = !!(vs >> x) && x >= 0.0;
+      if (ok && key == "spectatorEnergy") thm.spectatorEnergy = x;
+      else if (ok && key.size() > 17 && key[15] == '[' && key.back() == ']') {
+        std::istringstream ks(key.substr(16, key.size() - 17));
+        int pairKey;
+        ok = !!(ks >> pairKey);
+        if (ok) thm.spectatorEnergyByPair[pairKey] = x;
+      } else ok = false;
+    } else ok = false;
+    if (!ok) {
+      outStream << "ERROR: <thm> line not understood: '" << trimmed << "'" << std::endl;
+      return -1;
+    }
+  }
+  outStream << "ERROR: <thm> block is not terminated by </thm>." << std::endl;
+  return -1;
+}

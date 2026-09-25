@@ -1,6 +1,10 @@
 #ifndef THMFUNC_H
 #define THMFUNC_H
 
+#include "Constants.h"
+
+class PPair;
+
 /// Trojan Horse Method (modified R-matrix) transfer form factor.
 
 /*!
@@ -58,5 +62,23 @@ void ThmBesselParts(int l, double mu, double E, double B, double radius,
  */
 double ThmFormFactor(int l, double b, double mu, double E, double B,
                      double radius);
+
+/// External Coulomb term of the THM entrance vertex.
+/*!
+ *   C_l(E) = 2 eta k \int_a^inf dr O_l(k r) / O_l(k a) j_l(p r)
+ *
+ * (Tribble et al. 2014 eq. 2.79, last line; Mukhamedzhanov et al. 2017 eq. 27;
+ * Typel & Baur 2003 eq. A.4), with O_l = G_l + i F_l the outgoing Coulomb wave
+ * of the entrance pair at the on-shell energy E > 0 and, for E < 0, the
+ * decaying Whittaker function in its place.  2 eta k = 2 Z1 Z2 alpha mu c^2/(hbar c)
+ * does not depend on E.  Dimensionless; 0 for a neutral pair.
+ *
+ * \param pair   entrance particle pair (charges, reduced mass, channel radius a)
+ * \param l      orbital angular momentum
+ * \param E      entrance c.m. energy (MeV), may be negative
+ * \param p      half-off-shell momentum (fm^-1)
+ * \param useGSL Coulomb functions from GSL instead of the built-in routine
+ */
+complex ThmCoulombTerm(PPair *pair, int l, double E, double p, bool useGSL);
 
 #endif

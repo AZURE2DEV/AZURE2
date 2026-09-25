@@ -34,7 +34,8 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
   double muf = exitPair->GetRedMass() * uconv;  // MeV/c^2
   double kf = (exitEnergy > 0.0) ? std::sqrt(2.0 * muf * exitEnergy) / hbarc
                                  : 0.0;  // fm^-1
-  double fluxFactor = kf / muf;
+  // Mukhamedzhanov's surface-integral form has the exit channel in Gamma_f only.
+  double fluxFactor = configure().thm.exitFlux ? kf / muf : (kf > 0.0 ? 1.0 : 0.0);
 
   double sigma = 0.0;
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
@@ -52,28 +53,37 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
       if (jg->GetLevel(la)->IsInRMatrix()) act[la] = ++na;
     if (na == 0) continue;
 
-    // Entrance vertices: v_s[la] = sum_{c_in in spin s} gamma_{la,c_in} M_l,
-    // coherent over entrance partial waves of the same channel spin, kept in
-    // separate (incoherent) buckets per channel spin s. Under the Brune
-    // formalism the boundary in M_l is the per-level shift function
-    // S_c(E_lambda) at the current fit energy (mrmpy
-    // vertex_boundary="per_level"), refreshed each evaluation by
-    // CNuc::CalcShiftFunctions; otherwise it is the fixed channel boundary
-    // constant (first-level convention).
+    // Entrance vertices v[la] = sum_{c_in} gamma_{la,c_in} M_l, one bucket per
+    // entrance channel spin s and orbital l, summed incoherently: with the
+    // quantization axis along p_xA only m_l = 0 enters, and once the exit
+    // direction is integrated and the spin projections summed,
+    // sum_{M,m_s} <s m_s l 0|J M><s m_s l' 0|J M> = delta_{ll'} (2J+1)/(2l+1)
+    // removes the l cross terms.  `entranceL=coherent` keeps one bucket per s,
+    // as mrmpy does.
+    //
+    // Vertex boundary: by default the real per-level shift S_c(E_lambda) under
+    // the Brune formalism (mrmpy vertex_boundary="per_level"; Tumino et al.
+    // 2021 eq. 51), else the channel boundary constant.  `vertex=onshell` uses
+    // the log-derivative of the outgoing wave, L_c(E) = S_c(E) + i P_c(E)
+    // (Tribble et al. 2014 eq. 2.76), recovered from L_o = L_c - B_c.
     bool brune = !!(configure().paramMask & Config::USE_BRUNE_FORMALISM);
-    std::map<double, std::vector<complex>> vbys;
+    bool onShell = configure().thm.onShellVertex;
+    bool coherentL = configure().thm.coherentL;
+    std::map<std::pair<double, int>, std::vector<complex>> vbys;
     bool hasEntrance = false;
     for (int ch = 1; ch <= numChannels; ch++) {
       AChannel *c = jg->GetChannel(ch);
       if (c->GetPairNum() != aa) continue;
       hasEntrance = true;
-      std::vector<complex> &vertex = vbys[c->GetS()];
+      std::vector<complex> &vertex = vbys[std::make_pair(c->GetS(), coherentL ? 0 : c->GetL())];
       if (vertex.empty()) vertex.assign(numLevels + 1, complex(0.0, 0.0));
+      complex onShellL = point->GetLoElement(j, ch) + c->GetBoundaryCondition();
       for (int la = 1; la <= numLevels; la++) {
         ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
-        double boundary = brune ? level->GetShiftFunction(ch)
-                                : c->GetBoundaryCondition();
+        complex boundary = onShell ? onShellL
+                           : complex(brune ? level->GetShiftFunction(ch)
+                                           : c->GetBoundaryCondition(), 0.0);
         vertex[la] += level->GetFitGamma(ch) * point->GetThmFormFactor(j, ch, boundary);
       }
     }
@@ -88,7 +98,7 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
       if (pex == 0.0) continue;
 
       double term = 0.0;
-      for (std::map<double, std::vector<complex>>::iterator it = vbys.begin();
+      for (std::map<std::pair<double, int>, std::vector<complex>>::iterator it = vbys.begin();
            it != vbys.end(); ++it) {
         std::vector<complex> &vertex = it->second;
         complex amp(0.0, 0.0);
@@ -101,7 +111,7 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
             amp += gEx * this->GetAMatrixElement(j, act[la], act[lap]) * vertex[lap];
           }
         }
-        term += std::norm(amp);  // |amp|^2, incoherent over s
+        term += std::norm(amp);  // |amp|^2, incoherent over (s, l)
       }
       sigma += spinWeight * fluxFactor * 2.0 * pex * term;
     }

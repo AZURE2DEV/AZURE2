@@ -30,3 +30,5 @@ threshold against falling data, and in the relative peak heights — the
 behaviour a joint THM+direct refit corrects (see the analysis notes).
 
 Note (thm branch): the THM segment's arbitrary overall scale is now profiled out analytically by the engine (a free THM norm is set to its chi2-optimal value each evaluation), so the pinned chi2 is 2740.48 at the optimal scale -- superseding the earlier hand-solved-norm value (4952.9). This is the correct minimal chi2 for the arbitrary THM scale.
+
+Note (Sep 2026): entrance partial waves are now summed incoherently in l (the l cross terms vanish once the exit direction is integrated and the spin projections summed; see src/THMMatrixFunc.cpp). This case has two entrance l in one channel spin, so the pin moves from 2740.48 to 2180.69 with the same parameters. A `<thm>` block with `entranceL=coherent` restores the old sum and reproduces 2740.48.
