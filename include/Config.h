@@ -121,9 +121,18 @@ class Config {
     /// (Tribble et al. 2014 eq. 2.76; Mukhamedzhanov 2017 eq. 28) instead of the
     /// real per-level S_c(E_lambda).  Key `vertex=onshell` (default `real`).
     bool onShellVertex = false;
-    /// Exit flux factor k_f/mu_f of La Cognata's formula.  The surface-integral
-    /// derivations (Mukhamedzhanov 2017 eq. 34) have Gamma_f alone.  Key `exitFlux=0|1`.
-    bool exitFlux = true;
+    /// Which kinematic factors the model carries, set by how the HOES data
+    /// were extracted from the triple cross section (key `kinematics=`):
+    ///  lacognata  exit k_f/mu_f, as La Cognata's working formula (Tumino et
+    ///             al. 2021 eq. 50) -- the default, what the code always did;
+    ///  triple     exit Gamma_f alone: raw d3sigma / |phi|^2 (Mukhamedzhanov
+    ///             2017 eq. 34);
+    ///  kf3body    exit Gamma_f / (mu_f k_f): data divided by the full
+    ///             three-body phase-space KF (Typel & Baur 2003 eq. 16);
+    ///  lambda32   exit Gamma_f, entrance 1/k_i on shell: data divided by
+    ///             KF = lambda3/lambda2 (Pizzone et al. 2011; Tumino eq. 22).
+    enum Kinematics { LA_COGNATA, TRIPLE, KF_THREE_BODY, LAMBDA32 };
+    Kinematics kinematics = LA_COGNATA;
     /// Sum entrance partial waves of one channel spin coherently, as mrmpy and
     /// AZURE2 before Sep 2026 did.  For an observable integrated over the exit
     /// direction the l cross terms vanish, so incoherent is the default.

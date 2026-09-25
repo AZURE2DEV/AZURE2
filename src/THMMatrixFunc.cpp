@@ -7,6 +7,7 @@
 #include "AChannel.h"
 #include "PPair.h"
 #include "Constants.h"
+#include <algorithm>
 #include <cmath>
 #include <map>
 #include <vector>
@@ -26,16 +27,38 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
   PPair *entrancePair = compound()->GetPair(aa);
   PPair *exitPair = compound()->GetPair(exitPairNum);
 
-  // Exit-channel flux factor k_f / mu_f (mrmpy). The entrance c.m. energy sets
-  // the compound-system energy; the exit channel energy is that minus the exit
-  // pair threshold. Below the exit threshold there is no outgoing flux.
+  // Kinematic factors, fixed by how the HOES data were divided out of the
+  // triple cross section (Config::ThmOptions::kinematics).  The entrance c.m.
+  // energy sets the compound-system energy; the exit channel energy is that
+  // minus the exit pair threshold. Below the exit threshold there is no flux.
   double inEnergy = point->GetCMEnergy() + entrancePair->GetSepE() + entrancePair->GetExE();
   double exitEnergy = inEnergy - exitPair->GetSepE() - exitPair->GetExE();
   double muf = exitPair->GetRedMass() * uconv;  // MeV/c^2
   double kf = (exitEnergy > 0.0) ? std::sqrt(2.0 * muf * exitEnergy) / hbarc
                                  : 0.0;  // fm^-1
-  // Mukhamedzhanov's surface-integral form has the exit channel in Gamma_f only.
-  double fluxFactor = configure().thm.exitFlux ? kf / muf : (kf > 0.0 ? 1.0 : 0.0);
+  if (kf == 0.0) {
+    point->SetFitCrossSection(0.0);
+    return;
+  }
+  double fluxFactor = 1.0;
+  switch (configure().thm.kinematics) {
+    case Config::ThmOptions::LA_COGNATA:  // k_f/mu_f (mrmpy)
+      fluxFactor = kf / muf;
+      break;
+    case Config::ThmOptions::TRIPLE:
+      break;
+    case Config::ThmOptions::KF_THREE_BODY:
+      fluxFactor = 1.0 / (muf * kf);
+      break;
+    case Config::ThmOptions::LAMBDA32: {
+      // On-shell entrance momentum, as Pizzone et al. take it.  Undefined
+      // below the entrance threshold; |E| keeps sub-threshold tails finite.
+      double mui = entrancePair->GetRedMass() * uconv;
+      double ki = std::sqrt(2.0 * mui * std::max(std::fabs(point->GetCMEnergy()), 1.0e-6)) / hbarc;
+      fluxFactor = 1.0 / ki;
+      break;
+    }
+  }
 
   double sigma = 0.0;
   for (int j = 1; j <= compound()->NumJGroups(); j++) {

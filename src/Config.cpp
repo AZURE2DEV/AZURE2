@@ -328,7 +328,7 @@ int Config::CheckForInputFiles() {
  *
  *   <thm>
  *   vertex=onshell
- *   exitFlux=0
+ *   kinematics=triple
  *   entranceL=incoherent
  *   coulombIntegral=1
  *   spectatorEnergy=0.4
@@ -377,8 +377,12 @@ int Config::ReadThmBlock() {
       if (value == "onshell") thm.onShellVertex = true;
       else if (value == "real") thm.onShellVertex = false;
       else ok = false;
-    } else if (key == "exitFlux") {
-      ok = flag(value, thm.exitFlux);
+    } else if (key == "kinematics") {
+      if (value == "lacognata") thm.kinematics = ThmOptions::LA_COGNATA;
+      else if (value == "triple") thm.kinematics = ThmOptions::TRIPLE;
+      else if (value == "kf3body") thm.kinematics = ThmOptions::KF_THREE_BODY;
+      else if (value == "lambda32") thm.kinematics = ThmOptions::LAMBDA32;
+      else ok = false;
     } else if (key == "entranceL") {
       if (value == "coherent") thm.coherentL = true;
       else if (value == "incoherent") thm.coherentL = false;
