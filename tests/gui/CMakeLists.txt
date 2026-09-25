@@ -126,3 +126,30 @@ add_test(NAME thm_block COMMAND thm_block_test)
 set_tests_properties(thm_block PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     TIMEOUT 120)
+
+# <parameterSettings> rows name levels and channels the way AZURE2 numbers the
+# saved file, and open + save of the GUI's own output changes nothing.
+add_executable(parameter_settings_test parameter_settings_test.cpp)
+set_target_properties(parameter_settings_test PROPERTIES AUTOMOC OFF)
+target_include_directories(parameter_settings_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(parameter_settings_test PRIVATE
+    AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(parameter_settings_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(parameter_settings_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(parameter_settings_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME parameter_settings COMMAND parameter_settings_test)
+set_tests_properties(parameter_settings PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 300)

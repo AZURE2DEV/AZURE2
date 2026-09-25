@@ -215,6 +215,51 @@ void FittingTab::setTabReferences(LevelsTab *levelsTab, SegmentsTab *segmentsTab
   populateFromCurrentGUIState();
 }
 
+// The channels of one level, as indices into the channels model, in the order
+// they are written to (and read back from) the file.  AZURE2 numbers a level's
+// widths by this position: width_N_k is the k-th of them.
+static QList<int> channelsOfLevel(const QList<ChannelsData> &channels, int levelIndex) {
+  QList<int> result;
+  for (int ch = 0; ch < channels.size(); ch++)
+    if (channels.at(ch).levelIndex == levelIndex) result.append(ch);
+  return result;
+}
+
+// The levels AZURE2 builds from a file whose <levels> block lists the given
+// model levels in the given order, in the order it numbers them ("Level N",
+// energy_N): CNuc::Fill keeps only active lines, opens a J-group at the first
+// level of each (J, parity) and appends later levels to their group, and
+// FillMnParams counts group by group.  A level without channels writes no line
+// and so does not exist for the engine.
+//
+// These numbers, not the model's row indices, are what the "Level N ..." names
+// in <parameterSettings> mean.  The model keeps the order of the file that was
+// opened while the GUI writes its levels sorted by J, parity and energy, so a
+// name built from a row index described one level in the file just saved and
+// another one after reopening it.
+QList<int> FittingTab::engineLevelOrder(const QList<int> &fileOrder) {
+  QList<LevelsData> levels;
+  QList<ChannelsData> channels;
+  if (levelsTab_) {
+    if (LevelsModel *m = levelsTab_->getLevelsModel()) levels = m->getLevels();
+    if (ChannelsModel *m = levelsTab_->getChannelsModel()) channels = m->getChannels();
+  }
+  QList<QList<int>> groups;
+  for (int la : fileOrder) {
+    if (la < 0 || la >= levels.size() || levels[la].isActive == 0) continue;
+    if (channelsOfLevel(channels, la).isEmpty()) continue;
+    int g = 0;
+    while (g < groups.size() && !(levels[groups[g].first()].jValue == levels[la].jValue &&
+                                  levels[groups[g].first()].piValue == levels[la].piValue))
+      g++;
+    if (g == groups.size()) groups.append(QList<int>());
+    groups[g].append(la);
+  }
+  QList<int> order;
+  for (const QList<int> &group : groups) order.append(group);
+  return order;
+}
+
 void FittingTab::populateFromCurrentGUIState() {
   if (!levelsTab_ || !segmentsTab_) return;
 
@@ -228,19 +273,17 @@ void FittingTab::populateFromCurrentGUIState() {
     QList<LevelsData> levels = levelsModel->getLevels();
     QList<ChannelsData> channels = channelsModel->getChannels();
 
-    // CORRECT ORDER: For each level, add energy first, then all widths for that level
-    for (int levelIndex = 0; levelIndex < levels.size(); levelIndex++) {
+    // AZURE2's order and numbering: the levels of the file this tab's rows
+    // will be saved into, energy first, then that level's widths.
+    const QList<int> order = engineLevelOrder(levelsTab_->writeOrder());
+    for (int n = 0; n < order.size(); n++) {
+      const int levelIndex = order.at(n);
       const LevelsData &level = levels[levelIndex];
-
-      // Skip levels that are not included in the calculation
-      if (level.isActive == 0) {
-        continue;
-      }
 
       // Add energy parameter if not fixed (isFixed == 0 means not fixed)
       if (level.isFixed == 0) {
         FittingParameter energyParam;
-        energyParam.name = QString("Level %1 Energy (MeV)").arg(levelIndex + 1);
+        energyParam.name = QString("Level %1 Energy (MeV)").arg(n + 1);
         energyParam.value = level.energy;
         energyParam.lowerLimit = 0;  // Default limits
         energyParam.upperLimit = 0;
@@ -255,17 +298,19 @@ void FittingTab::populateFromCurrentGUIState() {
       }
 
       // Now add all width parameters for this level
-      for (int channelIndex = 0; channelIndex < channels.size(); channelIndex++) {
+      const QList<int> levelChannels = channelsOfLevel(channels, levelIndex);
+      for (int k = 0; k < levelChannels.size(); k++) {
+        const int channelIndex = levelChannels.at(k);
         const ChannelsData &channel = channels[channelIndex];
 
-        // Only add widths that belong to this level
-        if (channel.levelIndex == levelIndex && channel.isFixed == 0 && channel.reducedWidth != 0.0) {
+        if (channel.isFixed == 0 && channel.reducedWidth != 0.0) {
           FittingParameter widthParam;
           // Keep "Width" in the name (parameter matching keys on it);
-          // the unit reflects the channel's input convention.
+          // the unit reflects the channel's input convention.  The channel
+          // is numbered within its level, as AZURE2 does (width_N_k).
           widthParam.name = QString("Level %1 Channel %2 Width (%3)")
-                                .arg(levelIndex + 1)
-                                .arg(channelIndex + 1)
+                                .arg(n + 1)
+                                .arg(k + 1)
                                 .arg(channel.gammaIsRWA == 1 ? "MeV^(1/2)" : "eV");
 
           // LevelsTab stores the value in the channel's input convention:
@@ -458,8 +503,16 @@ double FittingTab::transformRWAParameterToPhysical(const QString &paramName, dou
 void FittingTab::applyParameterSettings() {
   // Apply saved parameter settings (limits, errors, etc.) to current parameters
   for (int i = 0; i < fittingParameters.size(); i++) {
+    const FittingParameter &current = fittingParameters[i];
     for (const FittingParameter &saved : savedParameterSettings) {
-      if (fittingParameters[i].name == saved.name) {
+      // Level entries were tied to a level and channel of the model when the
+      // file was read (see readParameterSettings); their names are numbers
+      // that depend on the order the levels happen to be in.
+      bool same = (current.category == "level" || saved.category == "level")
+                      ? (current.category == saved.category && current.levelIndex == saved.levelIndex &&
+                         current.channelIndex == saved.channelIndex)
+                      : (current.name == saved.name);
+      if (same) {
         // Apply saved settings but keep current value from models
         fittingParameters[i].lowerLimit = saved.lowerLimit;
         fittingParameters[i].upperLimit = saved.upperLimit;
@@ -609,13 +662,17 @@ void FittingTab::loadSettings() {
           QList<LevelsData> levels = levelsModel->getLevels();
           QList<ChannelsData> channels = channelsModel->getChannels();
 
-          // Add ALL level parameters (including fixed)
-          for (int levelIndex = 0; levelIndex < levels.size(); levelIndex++) {
+          // Add ALL level parameters (including fixed) of the levels AZURE2
+          // has, in its order and with its numbers -- the .sav file's
+          // energy_N and width_N_k refer to those.
+          const QList<int> order = engineLevelOrder(levelsTab_->writeOrder());
+          for (int n = 0; n < order.size(); n++) {
+            const int levelIndex = order.at(n);
             const LevelsData &level = levels[levelIndex];
 
             // Add ALL energy parameters
             FittingParameter energyParam;
-            energyParam.name = QString("Level %1 Energy (MeV)").arg(levelIndex + 1);
+            energyParam.name = QString("Level %1 Energy (MeV)").arg(n + 1);
             energyParam.value = level.energy;
             energyParam.lowerLimit = 0;
             energyParam.upperLimit = 0;
@@ -629,29 +686,27 @@ void FittingTab::loadSettings() {
             fittingParameters.append(energyParam);
 
             // Add ALL width parameters for this level (including those with zero width or fixed)
-            for (int channelIndex = 0; channelIndex < channels.size(); channelIndex++) {
+            const QList<int> levelChannels = channelsOfLevel(channels, levelIndex);
+            for (int k = 0; k < levelChannels.size(); k++) {
+              const int channelIndex = levelChannels.at(k);
               const ChannelsData &channel = channels[channelIndex];
+              FittingParameter widthParam;
+              widthParam.name = QString("Level %1 Channel %2 Width (%3)")
+                                    .arg(n + 1)
+                                    .arg(k + 1)
+                                    .arg(channel.gammaIsRWA == 1 ? "MeV^(1/2)" : "eV");
 
-              // Add ALL widths that belong to this level (including fixed and zero-width)
-              if (channel.levelIndex == levelIndex) {
-                FittingParameter widthParam;
-                widthParam.name = QString("Level %1 Channel %2 Width (%3)")
-                                      .arg(levelIndex + 1)
-                                      .arg(channelIndex + 1)
-                                      .arg(channel.gammaIsRWA == 1 ? "MeV^(1/2)" : "eV");
+              widthParam.value = channel.reducedWidth;
+              widthParam.lowerLimit = 0;
+              widthParam.upperLimit = 0;
+              widthParam.error = (channel.reducedWidth != 0.0) ? channel.reducedWidth * 0.1 : 0.01;
+              widthParam.fitError = 0.0;
+              widthParam.useAsNuisance = false;
+              widthParam.category = "level";
+              widthParam.levelIndex = levelIndex;
+              widthParam.channelIndex = channelIndex;
 
-                widthParam.value = channel.reducedWidth;
-                widthParam.lowerLimit = 0;
-                widthParam.upperLimit = 0;
-                widthParam.error = (channel.reducedWidth != 0.0) ? channel.reducedWidth * 0.1 : 0.01;
-                widthParam.fitError = 0.0;
-                widthParam.useAsNuisance = false;
-                widthParam.category = "level";
-                widthParam.levelIndex = levelIndex;
-                widthParam.channelIndex = channelIndex;
-
-                fittingParameters.append(widthParam);
-              }
+              fittingParameters.append(widthParam);
             }
           }
         }
@@ -1414,8 +1469,9 @@ QString FittingTab::findMatchingParameterKey(const FittingParameter &param, cons
     // Current GUI names are like "Level 1 Energy (MeV)" and "Level 1 Channel 2 Width (eV)"
 
     if (param.name.contains("Energy") && param.channelIndex == -1) {
-      // Energy parameter: "Level N Energy (MeV)" -> "energy_N"
-      int levelIndex = param.levelIndex + 1;  // Convert 0-based to 1-based
+      // Energy parameter: "Level N Energy (MeV)" -> "energy_N", N in AZURE2's numbering
+      int levelIndex = engineLevelOrder(levelsTab_ ? levelsTab_->writeOrder() : QList<int>()).indexOf(param.levelIndex) + 1;
+      if (levelIndex < 1) return QString();
 
       QStringList possibleNames;
       possibleNames << QString("energy_%1").arg(levelIndex);
@@ -1432,7 +1488,8 @@ QString FittingTab::findMatchingParameterKey(const FittingParameter &param, cons
     } else if (param.name.contains("Width") && param.channelIndex >= 0) {
       // Width parameter: "Level N Channel M Width (eV)" -> "width_N_M"
       // Need to count channels per level, not global channel index
-      int levelIndex = param.levelIndex + 1;  // Convert 0-based to 1-based
+      int levelIndex = engineLevelOrder(levelsTab_ ? levelsTab_->writeOrder() : QList<int>()).indexOf(param.levelIndex) + 1;
+      if (levelIndex < 1) return QString();
 
       // Count which channel this is within this specific level
       int channelWithinLevel = 1;  // Start counting from 1 for .sav file format
@@ -1493,31 +1550,10 @@ void FittingTab::updateParameterInOtherTabs(const QString &paramName, const Fitt
     // Update level parameters in LevelsModel - same pattern as LevelsTab::editLevel()
     LevelsModel *levelsModel = levelsTab_->getLevelsModel();
     if (levelsModel) {
-      // Parse level index from parameter name using current naming scheme
-      // Parameter names are like "Level 1 Energy (MeV)" and "Level 1 Channel 2 Width (eV)"
-      int levelIndex = -1;
-      int channelIndex = -1;
-
-      if (paramName.contains("Energy") && paramName.contains("Level")) {
-        // Energy parameter: "Level N Energy (MeV)"
-        QRegExp rx("Level (\\d+) Energy");
-        if (rx.indexIn(paramName) != -1) {
-          levelIndex = rx.cap(1).toInt() - 1;  // Convert 1-based to 0-based
-        }
-      } else if (paramName.contains("Width") && paramName.contains("Level") && paramName.contains("Channel")) {
-        // Width parameter: "Level N Channel M Width (eV)"
-        QRegExp rx("Level (\\d+) Channel (\\d+) Width");
-        if (rx.indexIn(paramName) != -1) {
-          levelIndex = rx.cap(1).toInt() - 1;    // Convert 1-based to 0-based
-          channelIndex = rx.cap(2).toInt() - 1;  // Convert 1-based to 0-based
-        }
-      }
-
-      // Alternative: use the stored indices from the FittingParameter structure
-      if (levelIndex == -1 && param.levelIndex >= 0) {
-        levelIndex = param.levelIndex;
-        channelIndex = param.channelIndex;
-      }
+      // The model row and channel this parameter was built from.  Its name
+      // carries AZURE2's numbering, which is not the model's.
+      int levelIndex = param.levelIndex;
+      int channelIndex = param.channelIndex;
 
       if (levelIndex >= 0) {
         QList<LevelsData> levels = levelsModel->getLevels();
@@ -1657,6 +1693,60 @@ bool FittingTab::readParameterSettings(QTextStream &inStream) {
     numSegments = segmentsTab_->getSegmentsDataModel()->getLines().size();
   QRegExp segmentEntry("^segment_(\\d+)_(norm|energy_shift)$");
 
+  // Level entries are named the way AZURE2 numbers this file: "Level N" is the
+  // N-th level it builds from <levels> (read just before this section, into the
+  // model in file order), "Channel k" the k-th channel of that level.  Each one
+  // is tied to the model's level and channel here; the names written back on
+  // save follow the order the levels are saved in, which need not be this one.
+  //
+  // Files written by earlier versions of the GUI numbered differently: "Level N"
+  // was the N-th row of the levels model and "Channel k" the k-th row of the
+  // channels model, whatever level it belonged to.  Such a file is recognised
+  // by the values it records, which are those of the parameters it meant.
+  QList<LevelsData> levels;
+  QList<ChannelsData> channels;
+  if (levelsTab_) {
+    if (LevelsModel *m = levelsTab_->getLevelsModel()) levels = m->getLevels();
+    if (ChannelsModel *m = levelsTab_->getChannelsModel()) channels = m->getChannels();
+  }
+  QList<int> fileOrder;
+  for (int la = 0; la < levels.size(); la++) fileOrder.append(la);
+  const QList<int> engineOrder = engineLevelOrder(fileOrder);
+  // False when the entry names a level or channel the file does not have.
+  auto locate = [&](FittingParameter &param, int levelNumber, int channelNumber, bool legacy) {
+    param.levelIndex = -1;
+    param.channelIndex = -1;
+    if (legacy) {
+      if (levelNumber < 1 || levelNumber > levels.size()) return false;
+      param.levelIndex = levelNumber - 1;
+      if (channelNumber == 0) return true;
+      if (channelNumber < 1 || channelNumber > channels.size() ||
+          channels.at(channelNumber - 1).levelIndex != param.levelIndex)
+        return false;
+      param.channelIndex = channelNumber - 1;
+      return true;
+    }
+    if (levelNumber < 1 || levelNumber > engineOrder.size()) return false;
+    param.levelIndex = engineOrder.at(levelNumber - 1);
+    if (channelNumber == 0) return true;
+    const QList<int> levelChannels = channelsOfLevel(channels, param.levelIndex);
+    if (channelNumber < 1 || channelNumber > levelChannels.size()) return false;
+    param.channelIndex = levelChannels.at(channelNumber - 1);
+    return true;
+  };
+  // Does the recorded value belong to the parameter the entry was located at?
+  auto recordedValueFits = [&](const FittingParameter &param) {
+    double current = param.channelIndex < 0 ? levels.at(param.levelIndex).energy
+                                            : channels.at(param.channelIndex).reducedWidth;
+    return std::fabs(param.value - current) <= 1e-5 * std::max(std::fabs(current), 1e-30);
+  };
+  struct LevelEntry {
+    FittingParameter param;
+    int levelNumber;
+    int channelNumber;
+  };
+  QList<LevelEntry> levelEntries;
+
   QString line;
   while (!inStream.atEnd()) {
     line = inStream.readLine().trimmed();
@@ -1675,6 +1765,8 @@ bool FittingTab::readParameterSettings(QTextStream &inStream) {
       param.useAsNuisance = (parts[6].toInt() == 1);
       param.category = parts[7];
       param.minuitIndex = parts[8].toInt();
+      param.levelIndex = -1;
+      param.channelIndex = -1;
       if (numSegments > 0 && segmentEntry.indexIn(param.name) != -1 &&
           segmentEntry.cap(1).toInt() > numSegments) continue;
       savedParameterSettings.append(param);
@@ -1691,11 +1783,7 @@ bool FittingTab::readParameterSettings(QTextStream &inStream) {
       param.category = parts[10];
       param.minuitIndex = parts[11].toInt();
 
-      // Set defaults for level-specific parameters
-      param.levelIndex = parts[1].toInt();
-      param.channelIndex = -1;
-
-      savedParameterSettings.append(param);
+      levelEntries.append({param, parts[1].toInt(), 0});
     } else if (parts.size() == 14) {
       // Backward compatibility: old format without fitError
       FittingParameter param;
@@ -1709,13 +1797,28 @@ bool FittingTab::readParameterSettings(QTextStream &inStream) {
       param.category = parts[12];
       param.minuitIndex = parts[13].toInt();
 
-      // Set defaults for level-specific parameters
-      param.levelIndex = parts[1].toInt();
-      param.channelIndex = parts[3].toInt();
-
-      savedParameterSettings.append(param);
+      levelEntries.append({param, parts[1].toInt(), parts[3].toInt()});
     }
   }
+
+  // Read the entries the way that accounts for more of the values they record,
+  // then the way that finds more of them a parameter; on a tie, the way AZURE2
+  // itself reads them.
+  int fitsEngine = 0, fitsLegacy = 0, foundEngine = 0, foundLegacy = 0;
+  for (LevelEntry &entry : levelEntries) {
+    if (locate(entry.param, entry.levelNumber, entry.channelNumber, false)) {
+      foundEngine++;
+      if (recordedValueFits(entry.param)) fitsEngine++;
+    }
+    if (locate(entry.param, entry.levelNumber, entry.channelNumber, true)) {
+      foundLegacy++;
+      if (recordedValueFits(entry.param)) fitsLegacy++;
+    }
+  }
+  const bool legacy = fitsLegacy > fitsEngine || (fitsLegacy == fitsEngine && foundLegacy > foundEngine);
+  for (LevelEntry &entry : levelEntries)
+    if (locate(entry.param, entry.levelNumber, entry.channelNumber, legacy))
+      savedParameterSettings.append(entry.param);
 
   return true;
 }

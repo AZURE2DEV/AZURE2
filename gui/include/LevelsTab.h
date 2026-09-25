@@ -34,6 +34,10 @@ class LevelsTab : public QWidget {
   void updateChannelsLevelEdited(int levelIndex);
   QList<ChannelsData> calculateChannels(int levelIndex);
   bool writeNuclearFile(QTextStream &outStream);
+  // Model indices of the levels in the order writeNuclearFile writes them
+  // (J ascending, parity -1 before +1, energy ascending).  This, not the model
+  // order, is the order AZURE2 numbers the levels of a saved file in.
+  QList<int> writeOrder();
   bool readNuclearFile(QTextStream &inStream);
   void reset();
   LevelsModel *getLevelsModel() { return levelsModel; }

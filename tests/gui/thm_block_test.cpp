@@ -130,22 +130,14 @@ int main(int argc, char** argv) {
   ok("nothing else changes", stripped == savedPlain);
   ok("written after </targetInt>", savedEnd.contains("</targetInt>\n" + full));
 
-  // A second open/save of the GUI's own output keeps the block in place.  The
-  // rest of that file is not a fixed point (the <parameterSettings> rows are
-  // regenerated on open), so it is compared with the plain file's second save
-  // rather than with the first.
+  // A second open/save of the GUI's own output changes nothing, block included.
   spit(work.filePath("again.in"), savedEnd);
   spit(work.filePath("againPlain.in"), savedPlain);
   const QString savedAgain = openAndSave(w, work.filePath("again.in"), work.filePath("a.azr"));
   const QString savedAgainPlain =
       openAndSave(w, work.filePath("againPlain.in"), work.filePath("a.azr"));
-  ok("second round trip keeps the block, once", savedAgain.count(full) == 1);
-  QString strippedAgain = savedAgain;
-  strippedAgain.remove(full);
-  ok("second round trip: nothing else differs from the plain file", strippedAgain == savedAgainPlain);
-  if(savedAgainPlain != savedPlain)
-    std::cout << "  note  a second open/save of the plain project changes it too "
-                 "(<parameterSettings>, not the <thm> block)" << std::endl;
+  ok("second round trip is byte-identical, block included", savedAgain == savedEnd);
+  ok("second round trip of the plain project is byte-identical", savedAgainPlain == savedPlain);
 
   // Opening a project without the block after one with it must not carry it over.
   const QString savedAfter = openAndSave(w, work.filePath("plain.in"), work.filePath("a.azr"));

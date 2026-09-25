@@ -741,12 +741,8 @@ void LevelsTab::calculateWignerLimit() {
   channelDetails->wignerLimitText->setText(text);
 }
 
-bool LevelsTab::writeNuclearFile(QTextStream &outStream) {
-  QList<PairsData> pairs = pairsModel->getPairs();
+QList<int> LevelsTab::writeOrder() {
   QList<LevelsData> levels = levelsModel->getLevels();
-  QList<ChannelsData> channels = channelsModel->getChannels();
-
-  outStream.setFieldAlignment(QTextStream::AlignRight);
 
   double lowJ = 0;
   double highJ = 0;
@@ -760,79 +756,73 @@ bool LevelsTab::writeNuclearFile(QTextStream &outStream) {
     else if (tempJ >= highJ)
       highJ = tempJ;
   }
-  QList<QList<LevelsData>> sortedLevels;
-  QList<QList<int>> levelsMap;
+  QList<int> order;
   for (double j = lowJ; j <= highJ; j += 0.5) {
     for (int pi = -1; pi <= 1; pi += 2) {
+      // Insertion by energy within the (J, parity) group; a level is placed
+      // before the first one of equal or higher energy.
+      QList<int> group;
       for (int la = 0; la < levels.size(); la++) {
-        if (levels.at(la).jValue == j && levels.at(la).piValue == pi) {
-          if (sortedLevels.size() == 0 || (sortedLevels.at(sortedLevels.size() - 1).at(0).jValue != j || sortedLevels.at(sortedLevels.size() - 1).at(0).piValue != pi)) {
-            QList<LevelsData> tempLevelList;
-            sortedLevels.append(tempLevelList);
-            QList<int> tempKeyList;
-            levelsMap.append(tempKeyList);
-          }
-          if (sortedLevels.at(sortedLevels.size() - 1).size() == 0) {
-            sortedLevels[sortedLevels.size() - 1].append(levels.at(la));
-            levelsMap[levelsMap.size() - 1].append(la);
-          } else
-            for (int mu = 0; mu < sortedLevels.at(sortedLevels.size() - 1).size(); mu++) {
-              if (levels.at(la).energy <= sortedLevels.at(sortedLevels.size() - 1).at(mu).energy) {
-                sortedLevels[sortedLevels.size() - 1].insert(mu, levels.at(la));
-                levelsMap[levelsMap.size() - 1].insert(mu, la);
-                break;
-              } else if (mu == sortedLevels.at(sortedLevels.size() - 1).size() - 1) {
-                sortedLevels[sortedLevels.size() - 1].append(levels.at(la));
-                levelsMap[levelsMap.size() - 1].append(la);
-                break;
-              }
-            }
-        }
+        if (levels.at(la).jValue != j || levels.at(la).piValue != pi) continue;
+        int mu = 0;
+        while (mu < group.size() && levels.at(la).energy > levels.at(group.at(mu)).energy) mu++;
+        group.insert(mu, la);
       }
+      order.append(group);
     }
   }
+  return order;
+}
+
+bool LevelsTab::writeNuclearFile(QTextStream &outStream) {
+  QList<PairsData> pairs = pairsModel->getPairs();
+  QList<LevelsData> levels = levelsModel->getLevels();
+  QList<ChannelsData> channels = channelsModel->getChannels();
+
+  outStream.setFieldAlignment(QTextStream::AlignRight);
+
+  const QList<int> order = writeOrder();
   int levelId = 1;
-  for (int i = 0; i < sortedLevels.size(); i++) {
-    for (int ii = 0; ii < sortedLevels.at(i).size(); ii++) {
-      for (int ch = 0; ch < channels.size(); ch++) {
-        if (channels.at(ch).levelIndex == levelsMap.at(i).at(ii)) {
-          outStream << qSetFieldWidth(4) << sortedLevels.at(i).at(ii).jValue
-                    << qSetFieldWidth(5) << sortedLevels.at(i).at(ii).piValue
-                    << qSetFieldWidth(13) << sortedLevels.at(i).at(ii).energy
-                    << qSetFieldWidth(5) << sortedLevels.at(i).at(ii).isFixed
-                    << qSetFieldWidth(5) << "1"
-                    << qSetFieldWidth(5) << channels.at(ch).pairIndex + 1
-                    << qSetFieldWidth(5) << int(channels.at(ch).sValue * 2)
-                    << qSetFieldWidth(5) << int(channels.at(ch).lValue * 2)
-                    << qSetFieldWidth(5) << levelId
-                    << qSetFieldWidth(5) << sortedLevels.at(i).at(ii).isActive
-                    << qSetFieldWidth(5) << channels.at(ch).isFixed
-                    << qSetFieldWidth(20) << channels.at(ch).reducedWidth
-                    << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightJ
-                    << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightPi
-                    << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyJ
-                    << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyPi
-                    << qSetFieldWidth(13) << pairs.at(channels.at(ch).pairIndex).excitationEnergy
-                    << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).lightM
-                    << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).heavyM
-                    << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightZ
-                    << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyZ
-                    << qSetFieldWidth(13) << pairs.at(0).seperationEnergy
-                    << qSetFieldWidth(13) << pairs.at(channels.at(ch).pairIndex).seperationEnergy
-                    << "    0    0          0.0"
-                    << qSetFieldWidth(6) << pairs.at(channels.at(ch).pairIndex).pairType
-                    << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).channelRadius
-                    << qSetFieldWidth(13) << pairs.at(channels.at(ch).pairIndex).lightG
-                    << qSetFieldWidth(13) << pairs.at(channels.at(ch).pairIndex).heavyG
-                    << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).ecMultMask
-                    << qSetFieldWidth(9) << pairs.at(channels.at(ch).pairIndex).bindingEnergy
-                    << qSetFieldWidth(4) << (channels.at(ch).radType == 'P' ? channels.at(ch).gammaIsRWA : 0)
-                    << qSetFieldWidth(0) << Qt::endl;
-        }
+  for (int la : order) {
+    const LevelsData &level = levels.at(la);
+    for (int ch = 0; ch < channels.size(); ch++) {
+      if (channels.at(ch).levelIndex == la) {
+        outStream << qSetFieldWidth(4) << level.jValue
+                  << qSetFieldWidth(5) << level.piValue
+                  << qSetFieldWidth(13) << level.energy
+                  << qSetFieldWidth(5) << level.isFixed
+                  << qSetFieldWidth(5) << "1"
+                  << qSetFieldWidth(5) << channels.at(ch).pairIndex + 1
+                  << qSetFieldWidth(5) << int(channels.at(ch).sValue * 2)
+                  << qSetFieldWidth(5) << int(channels.at(ch).lValue * 2)
+                  << qSetFieldWidth(5) << levelId
+                  << qSetFieldWidth(5) << level.isActive
+                  << qSetFieldWidth(5) << channels.at(ch).isFixed
+                  << qSetFieldWidth(20) << channels.at(ch).reducedWidth
+                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightJ
+                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightPi
+                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyJ
+                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyPi
+                  << qSetFieldWidth(13) << pairs.at(channels.at(ch).pairIndex).excitationEnergy
+                  << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).lightM
+                  << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).heavyM
+                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightZ
+                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyZ
+                  << qSetFieldWidth(13) << pairs.at(0).seperationEnergy
+                  << qSetFieldWidth(13) << pairs.at(channels.at(ch).pairIndex).seperationEnergy
+                  << "    0    0          0.0"
+                  << qSetFieldWidth(6) << pairs.at(channels.at(ch).pairIndex).pairType
+                  << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).channelRadius
+                  << qSetFieldWidth(13) << pairs.at(channels.at(ch).pairIndex).lightG
+                  << qSetFieldWidth(13) << pairs.at(channels.at(ch).pairIndex).heavyG
+                  << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).ecMultMask
+                  << qSetFieldWidth(9) << pairs.at(channels.at(ch).pairIndex).bindingEnergy
+                  << qSetFieldWidth(4) << (channels.at(ch).radType == 'P' ? channels.at(ch).gammaIsRWA : 0)
+                  << qSetFieldWidth(0) << Qt::endl;
       }
-      outStream << Qt::endl;
-      levelId++;
     }
+    outStream << Qt::endl;
+    levelId++;
   }
 
   outStream.setFieldAlignment(QTextStream::AlignLeft);

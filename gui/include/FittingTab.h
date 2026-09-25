@@ -95,6 +95,7 @@ class FittingTab : public QWidget {
   void updateParameterTableError(const QString &paramName, double error);
   void updateParameterTableCheckbox(const QString &paramName, bool checked);
   void applyParameterSettings();
+  QList<int> engineLevelOrder(const QList<int> &fileOrder);
   QString findMatchingParameterKey(const FittingParameter &param, const QStringList &savKeys);
   double convertReducedToPhysical(double reducedWidth, int levelIndex, int channelIndex);
   double convertPhysicalToReduced(double physicalWidth, int levelIndex, int channelIndex);
