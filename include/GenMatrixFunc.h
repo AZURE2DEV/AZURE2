@@ -84,6 +84,12 @@ class GenMatrixFunc {
    * object has already computed, external capture included.
    * Returns false for anything that is not a photon exit channel.
    */
+  //! As CalculateAmplitudeMatrix, but returns the outgoing vector
+  //! polarization P_y rather than the analysing power.
+  bool CalculateAmplitudeMatrixPy(EPoint *point, double *spinSum,
+                                  double *outgoingPolarization,
+                                  double *numerator = nullptr);
+
   bool CalculateCaptureAnalyzingPower(EPoint *point, double *unpolarized,
                                       double *analyzingPower);
   /// Start a temporary T-matrix element for a \f$J,l,l'\f$ combination.

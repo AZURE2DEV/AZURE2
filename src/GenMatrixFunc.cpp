@@ -315,11 +315,16 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
       }
       // Identical-particle symmetrization (elastic, aa==ir):
       //   |F|^2 = |F_C|^2 + |F_N|^2 + 2 Re[F_C* F_N]
-      // with F_X = f_X(theta) + eps f_X(pi-theta). For two identical 0+
-      // bosons the only contributing partial waves have L even, so
-      // f_N(pi-theta) = f_N(theta), giving |F_N|^2 = 4|f_N|^2 and
-      // 2 Re[F_C* F_N] = 4 Re[F_C* f_N]. The Coulomb piece is already
-      // built as F_C in EPoint::CalcCoulombAmplitude. Here we apply the
+      // with, in channel spin s, F_X = f_X(theta) + (-1)^s f_X(pi-theta):
+      // exchange multiplies |s v> by (-1)^(2j-s) and the state must pick up
+      // (-1)^(2j), leaving (-1)^s, and Y_l(pi-theta, pi) = (-1)^l Y_l(theta, 0).
+      // The nuclear term therefore carries 1 + (-1)^(l'+s'), which is 2 on
+      // every channel CNuc admits (l+s even; forbidden ones are refused when
+      // the model is read) -- so |F_N|^2 = 4|f_N|^2 and 2 Re[F_C* F_N] =
+      // 4 Re[F_C,s* f_N] for any spin. Only the Coulomb amplitude depends on
+      // s: for j = 0 there is just s = 0 and EPoint stores the symmetrized
+      // F_C; for j != 0 it is taken per channel spin, in CT below and in the
+      // interference sum through GetCoulombAmplitude(s). Here we apply the
       // remaining factors 4 to RT and 2 to IT.
       double rtFactor = 1.0;
       double itFactor = 1.0;
@@ -333,7 +338,20 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
       complex CT(0., 0.), IT(0., 0.);
       if (aa == ir) {
         complex coulombAmplitude = point->GetCoulombAmplitude();
-        CT = coulombAmplitude * conj(coulombAmplitude) * point->GetGeometricalFactor();
+        PPair *elasticPair = compound()->GetPair(aa);
+        if (elasticPair->HasSpinDependentExchange()) {
+          // Identical particles with spin j: the Coulomb term is diagonal in
+          // (s, v) with amplitude f_C(theta) + (-1)^s f_C(pi-theta), so the
+          // spin average is sum_s (2s+1) |F_C,s|^2 / (2j+1)^2. Summed over s
+          // this leaves the Mott interference weighted by (-1)^(2j)/(2j+1).
+          const double j = elasticPair->GetJ(1);
+          double coulombSum = 0.0;
+          for (double chS = 0.0; chS <= 2.0 * j + 1.e-6; chS += 1.0)
+            coulombSum += (2.0 * chS + 1.0) * std::norm(point->GetCoulombAmplitude(chS));
+          CT = complex(coulombSum / ((2.0 * j + 1.0) * (2.0 * j + 1.0)) * point->GetGeometricalFactor(), 0.);
+        } else {
+          CT = coulombAmplitude * conj(coulombAmplitude) * point->GetGeometricalFactor();
+        }
 
         sum = complex(0., 0.);
         for (int k = 1; k <= theDecay->NumKGroups(); k++) {
@@ -341,9 +359,12 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
             MGroup *theMGroup = theDecay->GetKGroup(k)->GetMGroup(m);
             AChannel *entranceChannel = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChNum());
             AChannel *exitChannel = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChpNum());
+            // The Coulomb amplitude is that of the channel's own spin: it
+            // differs between channel spins only for identical particles with
+            // spin, and is the one stored amplitude otherwise.
             if (entranceChannel == exitChannel)
               sum += theMGroup->GetStatSpinFactor() *
-                  coulombAmplitude * conj(this->GetTMatrixElement(k, m)) *
+                  point->GetCoulombAmplitude(entranceChannel->GetS()) * conj(this->GetTMatrixElement(k, m)) *
                   point->GetLegendreP(compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChNum())->GetL());
           }
         }
@@ -418,6 +439,34 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
     // other point reports A_y directly, so nothing downstream needs a special
     // case.
     if (!point->IsSubPoint()) point->SetFitCrossSection(ay);
+  }
+
+  // A polarization-product segment (isDiff 8) reports P dsigma/dOmega. The
+  // differential cross section is already in the cross-section slot by this
+  // point -- every branch above has set it -- so the observable is that value
+  // multiplied by the outgoing polarization, and the units come along for free
+  // rather than having to be rebuilt from the amplitude matrix's bare spin sum.
+  //
+  // Unlike A_y this is extensive: a target effect integrates it exactly as it
+  // integrates a cross section, so sub-points need no special averaging and
+  // the value is written for sub-points too.
+  if (point->IsPolarizationProduct()) {
+    double spinSum = 0.0, py = 0.0;
+    const int exitPType =
+        compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()))->GetPType();
+    bool ok = false;
+    double numN = 0.0;
+    // A capture exit is refused when the model is read (ESegment::Fill and the
+    // segmentsTest reader), so this is a backstop for a point built some other
+    // way -- via the API, say -- rather than the primary guard.  Zero here is
+    // safe only because no such segment can reach a chi2.
+    if (exitPType != 10) ok = this->CalculateAmplitudeMatrixPy(point, &spinSum, &py, &numN);
+    if (!ok) { py = 0.0; numN = 0.0; }
+    point->SetOutgoingPolarization(py);
+    const double model = point->GetFitCrossSection() * py;
+    // scale = model / N: the kinematic constant, independent of the T-matrix.
+    point->SetPolarizationScale(std::fabs(numN) > 1.e-300 ? model / numN : 0.0);
+    point->SetFitCrossSection(model);
   }
 
   // Temporary validation hook: compare the Seyler amplitude-matrix route
@@ -658,7 +707,7 @@ bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint *point, double *spinSum,
   }
 
   // Coulomb only contributes to elastic scattering.
-  if (aaPair == irPair) M.AddCoulomb(point->GetCoulombAmplitude());
+  if (aaPair == irPair) M.AddCoulomb();
 
   if (M.size() == 0) return false;
   if (std::getenv("AZURE2_POL_DEBUG2")) M.DumpSpinHalf();
@@ -666,6 +715,76 @@ bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint *point, double *spinSum,
     std::printf("FLIP n=%zu maxflip=%.6e\n", M.size(), M.MaxSpinFlip());
   if (spinSum) *spinSum = M.UnpolarizedCrossSection();
   if (analyzingPower) *analyzingPower = M.AnalyzingPowerAy();
+  // Prototype: outgoing vector polarization on the same amplitude matrix.
+  // For elastic scattering (aa == ir) P_y must equal A_y; that identity is the
+  // correctness test for the exit-index trace and its sign.
+  if (std::getenv("AZR_DEBUG_POL")) {
+    const double ay = M.AnalyzingPowerAy();
+    const double py = M.OutgoingPolarizationPy();
+    std::printf("POL aa=%d ir=%d theta=%9.4f xs=%12.5e Ay=%+12.6e Py=%+12.6e %s\n",
+                aaPair, irPair, point->GetCMAngle(), M.UnpolarizedCrossSection(), ay, py,
+                (aaPair == irPair) ? ((std::fabs(ay - py) <= 1.e-9 * (std::fabs(ay) + 1.e-30))
+                                       ? "ELASTIC-MATCH" : "ELASTIC-MISMATCH") : "");
+  }
+  return true;
+}
+/*!
+ * Outgoing-polarization twin of CalculateAmplitudeMatrix: identical amplitude
+ * matrix, P_y taken off it instead of A_y.
+ */
+
+bool GenMatrixFunc::CalculateAmplitudeMatrixPy(EPoint *point, double *spinSum,
+                                             double *outgoingPolarization,
+                                             double *numerator) {
+  if (spinSum) *spinSum = 0.0;
+  if (outgoingPolarization) *outgoingPolarization = 0.0;
+
+  const int aaPair = compound()->GetPairNumFromKey(point->GetEntranceKey());
+  const int irPair = compound()->GetPairNumFromKey(point->GetExitKey());
+  // Particle channels only. A photon exit has no amplitude matrix of this form
+  // and goes through CalculateCaptureAnalyzingPower instead.
+  if (compound()->GetPair(aaPair)->GetPType() != 0 ||
+      compound()->GetPair(irPair)->GetPType() != 0) return false;
+
+  int ir = 0;
+  while (ir < compound()->GetPair(aaPair)->NumDecays()) {
+    ir++;
+    if (compound()->GetPair(aaPair)->GetDecay(ir)->GetPairNum() == irPair) break;
+  }
+  if (ir > compound()->GetPair(aaPair)->NumDecays()) return false;
+  Decay *theDecay = compound()->GetPair(aaPair)->GetDecay(ir);
+
+  Polarization::AmplitudeMatrix M(compound(), point, aaPair, irPair);
+
+  for (int k = 1; k <= theDecay->NumKGroups(); k++) {
+    for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+      MGroup *g = theDecay->GetKGroup(k)->GetMGroup(m);
+      M.AddPathway(g->GetJNum(), g->GetChNum(), g->GetChpNum(),
+                   this->GetTMatrixElement(k, m));
+    }
+  }
+
+  // Coulomb only contributes to elastic scattering.
+  if (aaPair == irPair) M.AddCoulomb();
+
+  if (M.size() == 0) return false;
+    if (spinSum) *spinSum = M.UnpolarizedCrossSection();
+  if (outgoingPolarization) *outgoingPolarization = M.OutgoingPolarizationPy();
+  if (numerator) *numerator = M.OutgoingPolarizationNumerator();
+  if (std::getenv("AZR_CHECK_ADJOINT"))
+    std::printf("ADJ theta=%9.4f nAmp=%3zu worstRelErr=%.3e\n",
+                point->GetCMAngle(), M.size(), M.SelfCheckNumeratorBar());
+  // Prototype: outgoing vector polarization on the same amplitude matrix.
+  // For elastic scattering (aa == ir) P_y must equal A_y; that identity is the
+  // correctness test for the exit-index trace and its sign.
+  if (false) {
+    const double ay = M.AnalyzingPowerAy();
+    const double py = M.OutgoingPolarizationPy();
+    std::printf("POL aa=%d ir=%d theta=%9.4f xs=%12.5e Ay=%+12.6e Py=%+12.6e %s\n",
+                aaPair, irPair, point->GetCMAngle(), M.UnpolarizedCrossSection(), ay, py,
+                (aaPair == irPair) ? ((std::fabs(ay - py) <= 1.e-9 * (std::fabs(ay) + 1.e-30))
+                                       ? "ELASTIC-MATCH" : "ELASTIC-MISMATCH") : "");
+  }
   return true;
 }
 

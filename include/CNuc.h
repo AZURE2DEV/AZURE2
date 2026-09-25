@@ -51,6 +51,8 @@ class CNuc {
   /// Returns -1 if a file cannot be read. \p radii optionally overrides one
   /// pair's channel radius, as SetRadius does.
   int Fill(const Config &, std::pair<int, double> radii = std::pair<int, double>(0, 0.0));
+  /// Refuse (return -1) a channel with L+S odd on an identical pair with spin.
+  int CheckIdenticalChannels(const Config &);
   /// Read the external-capture file into the ECLevel vector and check each
   /// final state against the nuclear file.
   void ParseExternalCapture(const Config &, std::map<int, int> &);

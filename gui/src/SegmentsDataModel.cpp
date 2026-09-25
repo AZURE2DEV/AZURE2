@@ -201,6 +201,8 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
         return QString(tr("<center>Angle Integrated (E2)</center>"));
       else if (line.dataType == 7)
         return QString(tr("<center>Analyzing Power</center>"));
+      else if (line.dataType == 8)
+        return QString(tr("<center>Polarization &times; Cross Section</center>"));
       else
         return QString(tr("<center>Angle Integrated</center>"));
     } else if (index.column() == 8)

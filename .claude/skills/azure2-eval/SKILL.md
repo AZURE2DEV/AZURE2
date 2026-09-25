@@ -98,6 +98,16 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   slower than GSL's. Reach for `--gsl-coul` if a fit is too slow and the
   accuracy loss is acceptable, not by default.
 
+## Showing a result in the GUI
+
+**Recalculate before opening the GUI.** The GUI's plot tab reads the
+`AZUREOut_*.out` files in `output/`, not the `.azr`, so a GUI opened on a
+freshly edited project shows the previous run's curves next to the new segment
+list with no warning that they disagree. Close any running GUI, run a mode-1
+calculate, verify the output timestamps, then open it. Full procedure,
+including the flag/binary/parameter-file traps and the cost of a calculate on a
+large model, is in the `azure2-gui-review` skill.
+
 ## Workflow A — interactive CLI (one-shot runs)
 
 Prompt order: **(1) menu choice → (2) external parameter file → (3) external
@@ -146,13 +156,26 @@ printf '1\n\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 # Calculate with saved best-fit params (parameter file given, EC file blank):
 printf '1\noutput/param.sav\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 
-# Fit fresh from the .azr levels. Mode 2 then asks about the cross-section
-# uncertainty band (y/n) and, if yes, reduced-chi2 scaling (y/n):
-printf '2\n\n\nn\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
+# Modes 2 and 3 ask "Calculate cross-section uncertainty band? (y/n)" FIRST --
+# immediately after the menu choice and BEFORE the parameter-file prompt (mode 1
+# does not ask).  If yes, mode 2 then asks about reduced-chi2 scaling (y/n).
+# Fit fresh from the .azr levels:
+printf '2\nn\n\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
+
+# Fit starting from saved params:
+printf '2\nn\noutput/param.sav\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 
 # Extrapolate (no data) using saved params:
-printf '3\noutput/param.sav\n\nn\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
+printf '3\nn\noutput/param.sav\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 ```
+
+**Get this ordering wrong and the run silently ignores your parameter file.**
+Feeding `2\nparam.sav\n\n7` gives the filename to the y/n prompt (read as "no")
+and the blank line to the parameter-file prompt, so AZURE2 starts from the `.azr`
+`<levels>` values with no error. Always confirm in the log: a run that used the
+file prints `Reading User Parameter File...`; one that did not prints
+`Creating New param.par File...`. (`--covariance-band` also removes the prompt, but
+by answering it *yes* -- it turns the band calculation on. pyazr has no prompts.)
 
 Non-interactive band control: `--covariance-band` (+ `--scale-covariance`) skips
 the y/n prompts. Other flags: `--use-brune`, `--gsl-coul`, `--ignore-externals`,
@@ -586,11 +609,11 @@ On the 8Be model engine pair 1 is file key 2 and file key 1 is engine pair 6 —
 match one against the other and every width lands on the wrong channel. Calling
 `AzrModel.apply_fit` directly? Pass `pairs=m.pairs`, or it cannot translate.
 
-**Normalizations and energy shifts are not in `<levels>`.** A calculate run on a
-bare `.azr` uses 1.0 for every dataset, so its χ² sits *above* the fit's by
-whatever they were absorbing (3He: 166 fitted, 769 from the snapshot). That is
-what the companion `param.sav` carries — hand it to AZURE2 as the external
-parameter file and the model is whole.
+**Fitted normalizations and energy shifts live only in the companion `.sav`.**
+The `.azr`'s own `dataNorm`/`energyShift` fields are the nominal values that the
+systematic-error penalty is measured from, and `save_fit` leaves them alone. See
+"Normalizations live in two places" below before trusting a snapshot with a
+blank parameter file.
 
 `AzrModel.apply_fit` is the lower-level half if you need it: it takes
 `pairs=`, matches levels on the engine's own `(jgroup, level)` via
@@ -602,17 +625,75 @@ it cannot place. It does not verify — `save_fit` does that.
 the stale `intEC` caches), writes the `.azr` plus a companion `param.sav` with
 the norms, and fails loudly if the result does not round-trip.
 
+### Normalizations live in two places -- and they mean different things
+
+Every data segment's normalization and energy shift exist twice, and the two
+copies are NOT the same quantity:
+
+| where | field | what it is |
+|---|---|---|
+| `<segmentsData>` line, tokens 9 and 12 (1-based; `dataNorm`, `energyShift`) | stored in the `.azr` | the **nominal** value: the starting value, AND the reference the systematic-error penalty is measured from -- `chi2 += ((N - N_nominal)/(N_nominal * normErr/100))^2` (`AZURECalc.cpp`, `GetNominalNorm`), same for the shift |
+| `param.sav`, `segment_<key>_norm` / `segment_<key>_energy_shift` | written by every fit | the **fitted** value; a run given this file uses it, the penalty still refers to the `.azr` nominal |
+
+Consequences, each rediscovered the hard way on the 11B+alpha archive:
+
+- **A fit is `.azr` + `.sav`, never the `.azr` alone.** Nothing writes fitted
+  norms back into `<segmentsData>` -- not a fit (CLI mode never rewrites the
+  `.azr`), not `save_fit` (it rewrites `<levels>` and writes the `.sav`; the
+  segment lines are left as found). A calculate with a blank parameter file uses
+  the nominal norms and shifts, i.e. NOT the fit (snapshot at 11,112 vs the fit's
+  9,970: 64 norms differed by up to 21 %). The only correct check of a snapshot
+  is mode 1 **with the `.sav`**, which must reproduce `chiSquared.out` including
+  `Total-Norm-Chi-Squared` (agreement to ~1e-4 relative; the residual is the
+  7-digit `.sav` rounding through adaptive target-integration grids).
+- **Do not "fix" that by baking fitted norms into `<segmentsData>`.** For a
+  penalized segment (`normErr != 0`) that moves the penalty reference onto the
+  fitted value: the blank-file run then prints `Total-Norm-Chi-Squared 0` and a
+  refit from that file minimizes a different objective. Tried once, reverted.
+  Baking is harmless only for unpenalized norms, which is not worth a rule.
+- **Audit the nominals.** They are supposed to be the data's own scale (1.0 for
+  an absolutely normalized set, or the published scale factor). An `.azr` that has
+  been through GUI saves or old snapshots can carry a *previous fit's* fitted norms
+  as nominals -- the 11B+alpha master had 0 of its 27 penalized segments at 1.0
+  (Fowler 5 % sets at 0.74-1.42, CASPAR at 1.71) -- so its 5-30 % "systematic
+  errors" penalized deviations from an arbitrary earlier fit, not from the data.
+  List `dataNorm` vs `normErr` for every penalized segment before trusting any
+  `Total-Norm-Chi-Squared`, and say so in the readme when they are not 1.
+- **Plotting and the GUI.** The GUI's segment table shows the nominals; its plots
+  come from `output/`. Data scaled "by the fit norm" must use the `.sav` value
+  (`normalizations.out` prints it), not the `.azr` field.
+
+```python
+# nominal vs fitted, penalized segments only
+import re, io
+S = {}
+for l in open("output/param.sav"):
+    p = l.split()
+    if len(p) >= 2:
+        try: S[p[0]] = float(p[1])
+        except ValueError: pass
+c = io.open("fit.azr", encoding="latin-1").read()
+rows = [l.split() for l in re.search(r'<segmentsData>(.*?)</segmentsData>', c, re.DOTALL).group(1).split('\n') if l.split()]
+for k, t in enumerate(rows, 1):
+    if t[0] == '1' and float(t[10]) > 0:
+        nom, fit, err = float(t[8]), S["segment_%d_norm" % k], float(t[10])
+        print(k, t[-3], "nominal %.4f fitted %.4f err %g%% penalty %.2f" % (nom, fit, err, ((fit-nom)/(nom*err/100))**2))
+```
+
+Whenever you hand over, plot from, or build a variant on a `.azr`, say which of
+the two homes the numbers came from.
+
 ### What a snapshot still cannot carry
 
 `save_fit` verifies the `.azr` it writes, so a mismatched snapshot no longer
 reaches you silently — it raises and removes the file. Two things remain true
 of the `.azr` itself:
 
-- **Normalizations do not live in `<levels>`.** A calculate run on a snapshot
-  uses 1.0 for every dataset, so its `chiSquared.out` sits *above* the fit's by
-  whatever the normalizations were absorbing — 3He: 166 fitted, 769 from the
-  snapshot. Write them alongside (`output/normalizations.out`) or supply a
-  `param.sav`.
+- **Fitted normalizations and shifts are only in the `.sav`.** The `.azr`'s
+  `<segmentsData>` fields are the nominal (penalty-reference) values and
+  `save_fit` leaves them alone, so a calculate with a blank parameter file is
+  NOT the fit and baking is not the fix -- "Normalizations live in two places"
+  above.
 - **The check dumps are keywords, not filenames.** `<config>` accepts only
   `none`, `screen` or `file` (`Config::ReadConfigFile`); anything else silently
   leaves the check off and `checks/` stays empty. Write `file`.
@@ -1224,21 +1305,6 @@ complete:
 | model internals | `coulomb_functions.py`, `ec_integrals.py`, `channel_radius_scan.py`, `nuclear_potential.py` |
 | data | `exfor_fetch.py` |
 
-<<<<<<< HEAD
-## Adaptive cross-section tables
-
-`pyazr.tabulate(azr_file, pairs=[(entrance, exit), ...], e_min, e_max,
-rel_tol=5e-3)` tabulates sigma(E) for any pair combinations on a
-*non-uniform* grid: derivative-free interval bisection keeps refining until
-log-linear interpolation between knots reproduces the engine to `rel_tol`,
-so knots pile up across resonances and thin out in between (a few hundred
-to a few thousand points where a uniform grid of equal fidelity would need
-1e5). Energies are entrance-pair c.m. by default; each returned
-`TabulatedCrossSection` interpolates when called, and `.save(path)` writes
-`E_cm E_lab sigma` columns. Central values only -- combine the knots with
-the analytic parameter Jacobian and a fit covariance yourself if you need
-uncertainty bands.
-=======
 - A `<targetInt>` (target-effect / resolution) entry is applied to an *extrapolation* segment
   with the same key as well: to compute a bare resonance shape with mode 3, empty the
   `<targetInt>` block first (13C+a/9-9-26_seg92_9halfplus, 2026-09-10). To get the folded
@@ -1278,4 +1344,164 @@ uncertainty bands.
   segment 92 it made the applied sigma 20% too wide (0.811 vs 0.675 keV at the resonance)
   and changed a fitted neutron width from 0.61 to 0.44 keV. Check a new entry by evaluating
   sigma at a known energy before trusting a fit that uses it.
->>>>>>> dev
+
+- A NARROW RESONANCE INSIDE A TARGET-EFFECT INTEGRATION was mis-integrated by every AZURE2
+  before commit `a4095a6` (11 Sep 2026). `AdaptiveIntegrationGrid::IdentifyResonances` read
+  `ALevel::GetGamma()` as a reduced-width amplitude, but the grids are built in `EData::Fill`
+  BEFORE the input-parameter transformation, so the value it held was still the input width in
+  eV; every estimate collapsed to about `2P/(dS/dE)` (a 0.6 keV level came out 0.8 MeV wide)
+  and the fine lattice never resolved the line. The fix also raises the default
+  `resonanceWidthMultiplier` from 5 to 20, without which the finer lattice does not converge.
+  Size of the effect on 13C+a segment 92 (111 points, a 0.5 keV 9/2+ under a 1.6 keV
+  resolution function, identical model and parameters): chi2 883 -> 1522 at Gamma_n = 200 eV
+  and 1029 -> 891 at 500 eV, i.e. it inverts which width the data prefer. Consequences:
+  (1) any fit or scan of a narrow level through a `<targetInt>` kernel done with an older
+  binary has to be redone (`9-9-26_seg92_9halfplus/binary_check.py` is the two-binary test);
+  (2) a long-running in-process job keeps the extension it loaded at start, so rebuilding
+  `pyazr/_azure2*.so` mid-campaign makes new evaluations incomparable with the ledger's --
+  check `ls -la` on the binary and the `.so` against the job's start time before comparing
+  objectives across a rebuild. Scope in this archive: 37 reaction directories hold .azr
+  files with an ACTIVE `<targetInt>` line, the largest being 12C+a_onefile (1343 files),
+  14N+p (286), 11B+a (281), 13C+a (235) and 10B+a (200), so any of those whose fit depends
+  on a resonance narrower than a few times its target-effect width is a candidate for a
+  redo -- most target effects there are thickness integrations, which is exactly where the
+  estimator was used.
+
+- 2026-09-13 (12C+a_onefile/9-13-26_rmp_MCMC_redo) -- TARGET-EFFECT SUB-POINTS WERE RECOMPUTING
+  THEIR COULOMB/WHITTAKER FUNCTIONS ON EVERY EVALUATION. `EPoint::Calculate` called
+  `subPoint->RecalcEDependentValues()` for every sub-point of every target-effect point whenever
+  external capture was in use (the branch exists for energy shifts, but it ran unconditionally and
+  serially). On a model with two convolved 16N(beta,alpha) spectra (175 points, ~35 sub-points
+  each after the narrow-resonance lattice) that was 40 s of a 41.6 s chi2 evaluation, with no
+  thread scaling; the capture and scattering data together cost 1.5 s. Fix: `EPoint` remembers the
+  energy at which `CalcEDependentValues` last ran (`eDependentEnergy_`/`eDependentValid_`) and
+  `RecalcEDependentValues` returns immediately when the energy is unchanged (an energy shift still
+  changes it and triggers the recompute). Bit-identical chi2 on the beta-only and full models, the
+  CLI reproduces the 99,024.5 check exactly, tests/run_tests.sh 6/6. Symptom to recognise: `gstack`
+  on an evaluation shows `RecalcEDependentValues -> ShftFunc::theWhitFunc -> gsl_sf_hyperg_U`.
+  Timing recipe that found it: switch data groups off in copies of the model and time
+  `calculate_chi2_rwa` (the beta-only copy told the story in one line), then sample stacks.
+- 2026-09-13 -- pyazr and `output/intEC.dat`: a session that RELOADS an existing cache for the
+  12C+alpha truncated model returns a wrong chi2 (120,593 instead of 113,512, sometimes ~1e26)
+  while the CLI reloading the same cache is exact; confirmed with the pre-fix module too, so it is
+  a pre-existing API-side cache issue (AZUREAPI also keeps `intEC_cache.dat`). Until it is
+  understood: pyazr scripts delete `output/intEC.*` first or use a fresh output directory.
+- 2026-09-13 -- `<parameterSettings>` NUISANCE PRIORS ON ANCs / GAMMA WIDTHS GIVE WRONG PENALTIES.
+  `ParameterLimitsManager::ConvertPhysicalLimitToReduced` maps the physical nominal value and sigma
+  to reduced widths through a clone transform; on the 12C+alpha truncated model, one nuisance entry
+  at a time with the parameter exactly at its nominal value added 316 (6.13 3- ANC), 3,306
+  (Gamma_gamma0 of 6.92) and 3.3e9 (Gamma_gamma0 of 7.12) to the mode-1 total, and an entry with a
+  real 2.2-sigma offset (6.05 ANC) added 85 instead of 4.7. Do not use nuisance entries for
+  closed-channel or photon parameters until this is fixed; the mode-6 `<mcmc>` priors act on the
+  physical values directly (usereducedwidths 0) and are fine. Test recipe: mode 1 with the
+  external parameter file, compare the log's "Total Chi-Squared" (includes the penalty) against
+  chiSquared.out (data only).
+- 2026-09-22 (12C+p Meyer 1976 teaching exercise; numbers from a scratch copy of
+  `12C+p/8-9-26_claude_learns_12C+p`) -- WHICH EXPERIMENTAL-EFFECT KERNEL TO USE, and
+  "TARGET INTEGRATION LOOKS WRONG FOR A THIN TARGET" IS NOT A BUG.
+  **Rule:** when the paper attributes the energy spread to the beam losing energy in the
+  target -- it quotes a foil thickness in ug/cm2, or "the total energy loss in the target was
+  X keV" (Meyer 1976: 5-10 ug/cm2 carbon foils, 1.3-1.7 keV) -- use target integration
+  (`<targetInt>` with isTargetIntegration=1, an areal density and the stopping-power
+  formula), not the constant-sigma Gaussian. Do NOT turn a detector resolution ("7.5 keV
+  FWHM for protons scattered to 144 deg", same paper) into a beam-energy Gaussian: that is
+  the resolution of the *detected* particle energy, used to separate the 12C and 16O peaks,
+  and says nothing about the energy at which the reaction happened. The Gaussian is for the
+  accelerator's beam-energy spread (a keV or less on a Cockcroft-Walton / Van de Graaff,
+  usually quoted separately), for straggling add the straggling flag to the same line.
+  **Why they are not interchangeable:** target integration is the thick-target yield
+  Y(E) = (1/N) int_{E-dE}^{E} sigma(E')/eps(E') dE' (EPoint.cpp, "Standard target
+  integration"), a one-sided flat window BELOW the nominal energy, so its first-order effect
+  on a feature narrower than or comparable to dE is a SHIFT of ~dE/2 to higher nominal
+  energy; the broadening is second order. A point-centred Gaussian shifts nothing. On the
+  Meyer 89.1 deg excitation function through the 1/2+ dip (7.5 ug/cm2, dE_lab = 2.9 keV at
+  0.45 MeV, 10 sub-points) target integration moves the model +16% / -16% on the two flanks
+  of the dip and the dip itself by +1.29 keV (dE_cm/2 = 1.32); a Gaussian with sigma = dE/2
+  moves the same points by <= 1.5% and the dip not at all. Someone comparing the two will
+  conclude target integration is broken; it is not.
+  **Verified** (post-a4095a6 build): (1) AZURE2's values agree with a numpy evaluation of
+  the same integral on a 0.2 keV bare grid to <= 0.13% at every data point; (2) density x
+  1e-3 (dE ~ 3 eV) reproduces the bare curve to 0.02%; (3) 10 and 100 sub-points agree to
+  5 digits. Recipe: copy the project, edit only the `<targetInt>` line (isActive / density /
+  isConv + sigma + isTargetInt=0), then read
+  `m.sess.calculated_segments(active_indices(m.datasets)[key])` after
+  `m.sess.update_segments_rwa(m.params_rwa)`; a fine dummy data file on the segment gives the
+  bare curve for the reference integral.
+  **But a real regression did exist in the same weeks.** `710b518` (2026-09-21) fixes a
+  target-integration bug introduced by `a4095a6` (2026-09-11): once background poles carried
+  their physical widths, a broad pole's lattice (pitch Gamma/pointsPerWidth, e.g. 200 keV)
+  could be the only "covering" resonance across a thick-target window and the grid collapsed
+  to `[start, E_R, end]`, weighting sigma(E_R) by half the window -- the 14N(p,g) paper
+  example's yield came out x27 at 264.3 keV. Any build from Sep 11-21 has it (the Meyer
+  numbers above are from a Sep 18/19 build and still agreed with the reference, so it did not
+  bite there: the 1/2+ lattice covered the window). A model with fewer narrow levels near the
+  point, or the 1.5-1.7 MeV 12C+p region where the 3/2+ 5.86 MeV pole is the only cover, can
+  hit it. So: before calling a target-integration discrepancy physics, check the binary/`.so`
+  date against `git log -- src/AdaptiveIntegrationGrid.cpp`, and run the numpy Gove check on
+  the actual model -- that check is what separates the two cases.
+  **Related:** a paper that says the loss was held constant ("1.3-1.7 keV for all
+  measurements" with foils of 5-10 ug/cm2) means the areal density VARIED with beam energy.
+  One density with the energy-dependent stopping power does not reproduce that: 7.5 ug/cm2
+  gives 2.8 keV at 0.46 MeV and 1.1 keV at 2 MeV. Match the quoted loss at the energy that
+  matters (2.0e17 atoms/cm2 = 4.0 ug/cm2 gives 1.5 keV at the 1/2+ resonance) or use
+  per-window `<targetInt>` lines with the lab-energy ranges token.
+
+- **A regression reference is not a correctness check.** `tests/run_tests.sh` pins each
+  project's chi-squared against a number this code produced, so it catches a change and
+  nothing else. `tests/reference/` is the other kind: it recomputes the same quantity from
+  a closed form or from an independent implementation of the documented formula.
+  `beam_profile_reference_test.cpp` does that for the beam-profile convolution -- it drives
+  `EPoint::IntegrateTargetEffect` with hand-chosen sub-point cross sections, needs no model,
+  and runs in 0.12 s. The load-bearing check is an identity: a CONSTANT cross section must
+  fold back to itself exactly, whatever the profile, window and detailed-balance weight are
+  doing, because numerator and denominator share the kernel. Worth copying for any other
+  integrator. Both halves are mutation-tested (forcing the window shift to zero, and dropping
+  the detailed-balance factor, each fail exactly one check).
+- `include/Constants.h` defines `pi = 3.141592650`, the true value truncated at ten digits
+  (relative error 1.14e-9). Anything compared against a closed form evaluated with a real pi
+  inherits it -- half of it for a `1/sqrt(2 pi)` normalisation -- so do not set a 1e-12
+  tolerance on such a comparison without expecting 5.7e-10. It cancels wherever a ratio
+  shares the constant.
+- 2026-09-16 -- THE LEVEL-MERGE TOLERANCE IS A HARD-CODED 1 keV.  A FIX WAS TRIED AND
+  REVERTED 2026-09-17; THE DEFECT IS STILL PRESENT.
+  `JGroup::IsLevel` (src/JGroup.cpp) decides whether a `<levels>` line belongs to a level
+  already read by matching the level energy within `tol`, and `CNuc::Fill`
+  (src/CNuc.cpp:168-174) then APPENDS that line's channel to the matched level.  With
+  `tol = 1e-3` any two levels of the same J^pi closer than 1 keV are silently merged on
+  read: the second level's channels become extra channels of the first, so a model written
+  out and read back has a different level count and a different free-parameter set, with no
+  warning anywhere and nothing about it in the docs.  Found on the 17O evaluation, where a
+  fit drove two 9/2+ levels to 0.66 keV apart and then could not be saved (rmfit's bake
+  guard caught it: "8 key(s) lost").
+  A one-line change to `tol = 1e-6` (1 eV) was made and verified on the 13C+a model -- a
+  same-J^pi pair written at 5, 2, 1.5, 1.05, 1.0, 0.95, 0.5 and 0.1 keV separation all came
+  back with 5 levels in the group and 432 free parameters, where the old build returned 4
+  and a changed key set below 1 keV -- and `tests/run_tests.sh` passed.  It was REVERTED on
+  2026-09-17 at deBoer's direction: the tolerance sits on the read path of every model, so
+  changing it retroactively alters how any previously saved `.azr` with a sub-keV same-J^pi
+  pair is interpreted, and that risk outweighs the 17O blocker.  The patch is kept at
+  `src/JGroup.cpp.patch_tol1e-6_reverted-2026-09-17` (untracked, next to the source).
+  CONSEQUENCES, STILL OPEN:
+  * The defect is unfixed.  A model needing two same-J^pi levels closer than 1 keV cannot
+    round-trip through a `.azr`.  17O needs another route -- constrain the pair apart, merge
+    them physically, or fix the read path properly (warn on merge rather than move `tol`).
+  * Nothing in the suite covers it: no test model has a same-J^pi gap under 15.5 keV, so
+    both tolerances pass 7/7.  A real fix needs its own round-trip regression test.
+  * ~/bin/AZURE2 (2026-09-16 21:54) and pyazr/_azure2*.so (2026-09-16 21:25) were built
+    WITH `tol = 1e-6` and still carry it -- the source revert did not touch them.  They are
+    to be rebuilt from reverted source once the running jobs finish; until then, results
+    from those builds used 1 eV.  Pre-change CLI binary: ~/bin/AZURE2.bak-2026-09-13_tol1e-3.
+
+## Adaptive cross-section tables
+
+`pyazr.tabulate(azr_file, pairs=[(entrance, exit), ...], e_min, e_max,
+rel_tol=5e-3)` tabulates sigma(E) for any pair combinations on a
+*non-uniform* grid: derivative-free interval bisection keeps refining until
+log-linear interpolation between knots reproduces the engine to `rel_tol`,
+so knots pile up across resonances and thin out in between (a few hundred
+to a few thousand points where a uniform grid of equal fidelity would need
+1e5). Energies are entrance-pair c.m. by default; each returned
+`TabulatedCrossSection` interpolates when called, and `.save(path)` writes
+`E_cm E_lab sigma` columns. Central values only -- combine the knots with
+the analytic parameter Jacobian and a fit covariance yourself if you need
+uncertainty bands.

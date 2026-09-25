@@ -132,8 +132,11 @@ Parameter and Integral Files
    .. note::
 
       The integrals file can be reused as long as the calculation segments,
-      channel radii, and :math:`J^\pi` values have not changed. Level energies,
-      widths, and ANCs can be changed freely.
+      channel radii, :math:`J^\pi` values and integration grids (target
+      effects) have not changed. Level energies, widths, and ANCs can be
+      changed freely. AZURE2 verifies this against the signature it keeps in
+      ``intEC.dat.sig`` and recomputes, with a warning, a file that does not
+      match (see :doc:`../reference/output_files`).
 
 Execution Controls
 ------------------

@@ -369,6 +369,15 @@ kinematics stored by ``EPoint::SetPhotoKinematics``.
 integrates over sub-points; ``EPoint::IntegrateTargetEffectComponents``
 re-runs the combiner on the E1 and E2 components for isDiff 5/6 segments.
 
+The convolution has a reference calculation of its own in
+``tests/reference/beam_profile_reference_test.cpp``: it drives
+``EPoint::IntegrateTargetEffect`` with hand-chosen sub-point cross sections and
+compares against closed forms (a constant cross section must come back exactly)
+and against a second, densely integrated implementation of the documented
+formula. Unlike ``tests/beam_profile_kernel``, which pins a chi-squared this
+code produced, it can tell you the answer is right rather than merely
+unchanged. It needs no model and runs in milliseconds.
+
 On the GUI side the block lives in ``TargetIntData`` (``gui/include/TargetIntModel.h``,
 columns 22-26 of the table model) and is parsed and emitted by
 ``TargetIntTab::readFile``/``writeFile``.  The reader splits the block off at

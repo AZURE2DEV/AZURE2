@@ -439,6 +439,7 @@ add_subdirectory(src)
 # is being built.
 enable_testing()
 add_subdirectory(tests/gui)
+add_subdirectory(tests/reference)
 add_subdirectory(tests/pyazr)
 
 # Install and copy SRIM data file (only if ERYA is enabled)

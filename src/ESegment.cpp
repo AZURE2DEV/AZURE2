@@ -35,11 +35,14 @@ ESegment::ESegment(SegLine segLine) {
   // tested against the offset-stripped code, so it composes with THM the way
   // every other observable does.
   isAnalyzingPower_ = (diff == 7);
-  if (diff == 1 || diff == 4 || diff == 7)
+  // isDiff 8 is P dsigma/dOmega: differential in the centre-of-mass frame
+  // like the analysing power, but an extensive quantity.
+  isPolarizationProduct_ = (diff == 8);
+  if (diff == 1 || diff == 4 || diff == 7 || diff == 8)
     isdifferential_ = true;
   else
     isdifferential_ = false;
-  if (diff == 4 || diff == 7)
+  if (diff == 4 || diff == 7 || diff == 8)
     iscmdifferential_ = true;
   else
     iscmdifferential_ = false;
@@ -117,11 +120,14 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   isTHM_ = (extrapLine.isDiff() >= 10);
   int diff = isTHM_ ? extrapLine.isDiff() - 10 : extrapLine.isDiff();
   isAnalyzingPower_ = (diff == 7);
-  if (diff == 1 || diff == 5 || diff == 7)
+  // isDiff 8 is P dsigma/dOmega: differential in the centre-of-mass frame
+  // like the analysing power, but an extensive quantity.
+  isPolarizationProduct_ = (diff == 8);
+  if (diff == 1 || diff == 5 || diff == 7 || diff == 8)
     isdifferential_ = true;
   else
     isdifferential_ = false;
-  if (diff == 5 || diff == 7)
+  if (diff == 5 || diff == 7 || diff == 8)
     iscmdifferential_ = true;
   else
     iscmdifferential_ = false;
@@ -386,12 +392,47 @@ int ESegment::GetExitKey() const {
  */
 
 int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
+  // isDiff 8 computes the vector polarization of a spin-1/2 ejectile from the
+  // amplitude matrix, and a photon exit has no such matrix.  The capture
+  // analyzing power AZURE2 already computes is NOT the same observable: it is
+  // the ANALYZING power, indexed on the polarized entrance channel, which by
+  // time reversal is the outgoing polarization of the INVERSE reaction, not of
+  // capture.  Photon polarization data -- linear or circular -- needs its own
+  // formalism.  Refuse the combination outright rather than evaluate to zero:
+  // a segment that silently returns 0 still contributes a finite chi2 against
+  // real data, so it would drag every other parameter in the fit without ever
+  // announcing itself.
+  if (this->IsPolarizationProduct() && theCNuc->IsPairKey(this->GetExitKey()) &&
+      theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()))->GetPType() == 10) {
+    configure.outStream
+        << "ERROR: Polarization x Cross Section (isDiff 8) is not implemented for a capture"
+        << " exit channel." << std::endl
+        << "       Data file: " << this->GetDataFile() << std::endl
+        << "       The polarization of an outgoing photon is not the ejectile polarization"
+        << " this observable computes, and the capture analyzing power is a different"
+        << " quantity again." << std::endl;
+    return -1;
+  }
   std::string infile = this->GetDataFile();
   std::ifstream in(infile.c_str());
   if (!in) return -1;
-  while (!in.eof()) {
+  int lineNumber = 0;
+  while (true) {
     DataLine line(in);
-    if (!in.eof()) {
+    lineNumber += line.linesConsumed();
+    if (line.atEnd()) break;
+    if (!line.valid()) {
+      // Not a comment and not a data row.  Say exactly where, then let the
+      // caller drop the segment with its usual "Could Not Fill" warning --
+      // silently skipping a mangled row would hide a corrupt file.
+      configure.outStream << "ERROR: Cannot parse line " << lineNumber << " of " << infile << ": \"" << line.raw()
+                          << "\"" << std::endl
+                          << "       A data line needs at least four numeric columns (energy, angle, value,"
+                          << " uncertainty). Lines beginning with '#' and blank lines are ignored." << std::endl;
+      in.close();
+      return -1;
+    }
+    {
       EPoint NewEPoint(line, this);
       if (this->IsInSegment(NewEPoint)) {
         this->AddPoint(NewEPoint);
@@ -819,6 +860,7 @@ void ESegment::AddPoint(EPoint point) {
   // The observable is a property of the segment; stamp it on the point so the
   // calculation does not have to look back up.
   point.SetIsAnalyzingPower(this->IsAnalyzingPower());
+  point.SetIsPolarizationProduct(this->IsPolarizationProduct());
   points_.push_back(point);
 }
 

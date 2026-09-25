@@ -275,7 +275,9 @@ def _worker_setup(spec):
     os.makedirs(workdir, exist_ok=True)
     # Best effort: a missing seed only means this worker rebuilds its own
     # integrals, which is correct, just slower.
-    for cache in ("intEC.dat", "intEC.extrap"):
+    # The .sig sidecar goes with its file: without it AZURE2 cannot tell the
+    # copy is valid and recomputes it.
+    for cache in ("intEC.dat", "intEC.dat.sig", "intEC.extrap", "intEC.extrap.sig"):
         seed = os.path.join(cwd, "output", cache)
         if os.path.exists(seed):
             shutil.copyfile(seed, os.path.join(workdir, cache))
@@ -641,10 +643,11 @@ def trimmed_model(azr_file, keys=None, grids=None, cwd=None, workdir=None):
     # Trimming touches <segmentsTest> only, so the data-segment external-capture
     # integrals are unchanged and the main run's cache is valid here.  Seeding
     # it saves rebuilding them -- the bulk of a capture model's startup.
-    seed = os.path.join(cwd, "output", "intEC.dat")
-    target = os.path.join(workdir, "intEC.dat")
-    if os.path.exists(seed) and not os.path.exists(target):
-        shutil.copyfile(seed, target)
+    for cache in ("intEC.dat", "intEC.dat.sig"):
+        seed = os.path.join(cwd, "output", cache)
+        target = os.path.join(workdir, cache)
+        if os.path.exists(seed) and not os.path.exists(target):
+            shutil.copyfile(seed, target)
 
     return model_file.to_tempfile(dir=cwd), workdir
 

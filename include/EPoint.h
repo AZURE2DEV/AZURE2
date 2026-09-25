@@ -58,10 +58,22 @@ class EPoint {
   //! Vector analyzing power point; the fit value is A_y, not a cross section.
   bool IsAnalyzingPower() const { return is_analyzing_power_; };
   void SetIsAnalyzingPower(bool v) { is_analyzing_power_ = v; };
+  bool IsPolarizationProduct() const { return is_polarization_product_; };
+  void SetIsPolarizationProduct(bool v) { is_polarization_product_ = v; };
   //! A_y is kept beside the cross section rather than replacing it, because
   //! target-effect integration needs the cross section as the weight.
   double GetAnalyzingPower() const { return analyzing_power_; };
   void SetAnalyzingPower(double v) { analyzing_power_ = v; };
+  //! Outgoing vector polarization P_y, before multiplication by the cross
+  //! section. Kept for output and diagnostics; the fitted quantity is the
+  //! product, which lives in the cross-section slot.
+  double GetOutgoingPolarization() const { return outgoing_polarization_; };
+  void SetOutgoingPolarization(double v) { outgoing_polarization_ = v; };
+  //! model = scale * N, with N the polarization numerator and scale the purely
+  //! kinematic constant (wave number, spin weights) that is independent of the
+  //! T-matrix. Captured in the forward pass so the adjoint can apply it.
+  double GetPolarizationScale() const { return polarization_scale_; };
+  void SetPolarizationScale(double v) { polarization_scale_ = v; };
   /// Is this one of the sub-points a target-effect integral is built from?
   bool IsSubPoint() const { return is_sub_point_; };
   /// Unobserved-primary, observed-secondary point?
@@ -149,8 +161,15 @@ class EPoint {
   complex GetExpCoulombPhase(int, int) const;
   /// \f$\exp(i\delta_c)\f$, the hard-sphere phase, for the channel at (J-group, channel).
   complex GetExpHardSpherePhase(int, int) const;
-  /// Coulomb (Rutherford) amplitude \f$C_\alpha\f$.
+  /// Coulomb (Rutherford) amplitude \f$C_\alpha\f$.  For an identical spin-0
+  /// pair this is already the symmetrized f_C(theta) + f_C(pi - theta); for an
+  /// identical pair with spin it is only the direct term -- use the
+  /// channel-spin overload there.
   complex GetCoulombAmplitude() const;
+  /// Coulomb amplitude seen by channel spin \p s.  Identical to
+  /// GetCoulombAmplitude() except for an identical pair with spin j != 0,
+  /// where exchange enters with (-1)^s: f_C(theta) + (-1)^s f_C(pi - theta).
+  complex GetCoulombAmplitude(double s) const;
   /// External-capture amplitude for the pathway at (KGroup, ECMGroup), both 1-based.
   complex GetECAmplitude(int, int) const;
   /// As GetECAmplitude, but interpolated to the shifted energy through the amplitude cache.
@@ -242,6 +261,14 @@ class EPoint {
   /// Per-point energy window (columns 5-6 of the data file) of a beam-profile
   /// effect: the detector-reconstructed energy slice the point was built from.
   bool HasBinWindow() const { return bin_low_lab_ == bin_low_lab_ && bin_high_lab_ == bin_high_lab_; };
+  /// Set the per-point energy window directly, in the frame the point is
+  /// already in.  EData::Fill normally reads it from columns 5-6 of the data
+  /// file and converts it with the point; this is for a point built outside
+  /// that path, as the beam-profile reference test does.
+  void SetBinWindow(double low, double high) {
+    bin_low_lab_ = bin_low_cm_ = low;
+    bin_high_lab_ = bin_high_cm_ = high;
+  };
   double GetBinLowCM() const { return bin_low_cm_; };
   double GetBinHighCM() const { return bin_high_cm_; };
   /// Kinematics of the inverse photodissociation reaction for the
@@ -268,8 +295,11 @@ class EPoint {
   bool is_mapped_;
   bool is_ang_dist_;
   bool is_analyzing_power_ = false;
+  bool is_polarization_product_ = false;
   bool is_sub_point_ = false;
   double analyzing_power_ = 0.0;
+  double outgoing_polarization_ = 0.0;
+  double polarization_scale_ = 0.0;
   int entrance_key_;
   int exit_key_;
   int segment_key_;
@@ -312,6 +342,11 @@ class EPoint {
   double delta_;
   struct EnergyMap energy_map_;
   complex coulombamplitude_;
+  // Direct and exchange Coulomb amplitudes, kept apart only for an identical
+  // pair with spin, whose exchange sign depends on the channel spin.
+  bool spinDependentCoulomb_ = false;
+  complex coulombdirect_ = complex(0., 0.);
+  complex coulombexchange_ = complex(0., 0.);
   vector_r legendreP_;
   vector_r angularDists_;
   matrix_c lo_elements_;
@@ -323,6 +358,11 @@ class EPoint {
   matrix_r thm_rhodjl_;
   matrix_c coulombphase_;
   matrix_c hardspherephase_;
+  // Energy at which CalcEDependentValues last ran: RecalcEDependentValues is
+  // a no-op while the point's energy is unchanged (its values depend only on
+  // the energy, the angle and the channel radii).
+  double eDependentEnergy_ = 0.0;
+  bool eDependentValid_ = false;
   matrix_c ec_amplitudes_;
   matrix_r ec_energies_;  // Energies at which EC amplitudes were calculated
   std::vector<EPoint *> local_mapped_points_;

@@ -202,6 +202,8 @@ QVariant SegmentsTestModel::data(const QModelIndex &index, int role) const {
         return QString(tr("<center>C.M. Differential</center>"));
       else if (line.dataType == 7)
         return QString(tr("<center>Analyzing Power</center>"));
+      else if (line.dataType == 8)
+        return QString(tr("<center>Polarization &times; Cross Section</center>"));
       else
         return QString(tr("<center>Angle Integrated</center>"));
     } else if (index.column() == 10)
