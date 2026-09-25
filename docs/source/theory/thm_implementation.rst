@@ -70,8 +70,8 @@ block but carry it through a save unchanged; the GUI writes it after
    expansion, leaving the :math:`l`-independent weight :math:`2J+1`. The
    coherent sum is exact only in the limit of the exit direction fixed along
    :math:`\hat p_{xA}`; it is kept for comparison with older fits.
-   ``tests/7Li_p_a`` (two entrance :math:`l` in one channel spin): 1753.15
-   incoherent, 2706.00 coherent, same parameters (2180.69 / 2740.48 with
+   ``tests/7Li_p_a`` (two entrance :math:`l` in one channel spin): 2137.83
+   incoherent, 3195.37 coherent, same parameters (2180.69 / 2740.48 with
    ``vertex=perlevel``, the pins before 2026-09-25).
 
 ``vertex`` — boundary term at the entrance vertex
@@ -79,15 +79,20 @@ block but carry it through a save unchanged; the GUI writes it after
    needs a boundary value :math:`L_c`:
 
    ``constant`` (default since 2026-09-25)
-      the channel boundary constant :math:`B_c = S_c(E_1)` (the shift at the
-      first level of the :math:`J^\pi` group, AZURE2's boundary condition),
-      applied after the level sum, in either formalism. This is the vertex of
-      the formal R-matrix at that :math:`B_c` — La Cognata's working formula
-      (Tumino 2021 eq. 51) as the authors evaluate it.
+      a constant :math:`B_c = S_c(E_1)`, the shift at the lowest-energy level
+      of the :math:`J^\pi` group, applied after the level sum, in either
+      formalism. This is the vertex of the formal R-matrix at that
+      :math:`B_c` — La Cognata's working formula (Tumino 2021 eq. 51) as the
+      authors evaluate it. :math:`B_c` is taken from the lowest level, not
+      from AZURE2's channel boundary condition (the first level read), so the
+      result does not depend on the order of levels in the file; the vertex
+      :math:`B_c` is free because :math:`\gamma^T A\gamma` does not depend on
+      the R-matrix boundary.
    ``perlevel`` (alias ``real``; the default until 2026-09-25)
       the per-level shift :math:`S_c(E_\lambda)` of each level under the Brune
       parametrization (as mrmpy, ``vertex_boundary="per_level"``); without
-      Brune it falls back to :math:`B_c`, i.e. to ``constant``.
+      Brune it falls back to AZURE2's channel boundary condition (first
+      level read).
    ``onshell``
       the logarithmic derivative of the on-shell outgoing wave,
       :math:`L_c(E) = S_c(E) + i P_c(E)` (Tribble 2014 eq. 2.76;
@@ -121,7 +126,7 @@ block but carry it through a save unchanged; the GUI writes it after
    test's ``check.sh`` asserts the first two.
 
    Pins that moved with the default (same parameters): ``tests/7Li_p_a``
-   2180.69 → 1753.15, ``tests/6Li_d`` 1076.06 → 856.617; ``vertex=perlevel``
+   2180.69 → 2137.83, ``tests/6Li_d`` 1076.06 → 682.099; ``vertex=perlevel``
    reproduces the old values. ``tests/7Li_p_a`` with ``vertex=onshell``:
    2070.17.
 
@@ -151,7 +156,7 @@ block but carry it through a save unchanged; the GUI writes it after
    :math:`k_i` the on-shell entrance momentum at :math:`|E|`. The factors
    change the energy dependence, not only the scale, so the wrong choice
    distorts the relative heights of resonances. ``tests/7Li_p_a``:
-   1753.15 / 1964.94 / 2191.45 / 5386.89 for the four values in table order
+   2137.83 / 2380.33 / 2624.63 / 5499.45 for the four values in table order
    (2180.69 / 2402.92 / 2632.81 / 5573.25 with ``vertex=perlevel``).
 
 ``coulombIntegral`` — external Coulomb term of the vertex
@@ -169,7 +174,7 @@ block but carry it through a save unchanged; the GUI writes it after
    :math:`x` and :math:`A` outside the channel radius; the term matters for
    charged entrance pairs at energies well below the barrier. It is skipped
    for :math:`Z_1 Z_2 = 0` and costs about a factor 3–4 in run time.
-   ``tests/7Li_p_a``: 1641.34 (2145.79 with ``vertex=perlevel``).
+   ``tests/7Li_p_a``: 2111.79 (2145.79 with ``vertex=perlevel``).
    Implementation and numerics:
    ``ThmCoulombTerm`` (``src/ThmFunc.cpp``), checked against
    ``tests/reference/thm_coulomb_term_reference.py``.
@@ -182,7 +187,7 @@ block but carry it through a save unchanged; the GUI writes it after
    ``spectatorEnergy=`` applies to every THM entrance pair;
    ``spectatorEnergy[k]=`` to the entrance pair with key ``k`` (the pair
    number that the segment's entrance key refers to) and overrides the global
-   value for it. Default 0. ``tests/7Li_p_a``: 1713.61 at 0.5 MeV (2088.25 with
+   value for it. Default 0. ``tests/7Li_p_a``: 2195.06 at 0.5 MeV (2088.25 with
    ``vertex=perlevel``).
 
 Which ``kinematics=`` to use

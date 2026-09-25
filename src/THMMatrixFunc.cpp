@@ -7,6 +7,8 @@
 #include "AChannel.h"
 #include "PPair.h"
 #include "Constants.h"
+#include "CoulFunc.h"
+#include "ShftFunc.h"
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -14,6 +16,34 @@
 
 THMMatrixFunc::THMMatrixFunc(CNuc *compound, const Config &configure) :
   AMatrixFunc(compound, configure) {}
+
+/*!
+ * Shift function S_c at a level energy (compound-system excitation, MeV), the
+ * value CNuc::CalcShiftFunctions stores per level under Brune.  A per-thread
+ * memo keeps it cheap: within one evaluation every point asks for the same
+ * few (pair, l, energy) triples.
+ */
+static double ShiftAtLevelEnergy(PPair *pair, int l, double levelEnergy, bool useGSL) {
+  struct Entry { PPair *pair; int l; double e; double s; };
+  static const int kMemo = 32;
+  thread_local Entry memo[kMemo];
+  thread_local int filled = 0, next = 0;
+  for (int i = 0; i < filled; i++)
+    if (memo[i].pair == pair && memo[i].l == l && memo[i].e == levelEnergy) return memo[i].s;
+  double resonanceEnergy = levelEnergy - (pair->GetSepE() + pair->GetExE());
+  double s;
+  if (resonanceEnergy < 0.0) {
+    ShftFunc shift(pair);
+    s = shift(l, levelEnergy);
+  } else {
+    CoulFunc coul(pair, useGSL);
+    s = coul.PEShift(l, pair->GetChRad(), resonanceEnergy);
+  }
+  memo[next] = Entry{pair, l, levelEnergy, s};
+  next = (next + 1) % kMemo;
+  if (filled < kMemo) filled++;
+  return s;
+}
 
 /*!
  * HOES cross section of the modified R-matrix formalism (arbitrary units).
@@ -93,6 +123,7 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
     bool perLevel = (configure().paramMask & Config::USE_BRUNE_FORMALISM) &&
                     configure().thm.vertex == Config::ThmOptions::PER_LEVEL;
     bool onShell = configure().thm.vertex == Config::ThmOptions::ON_SHELL;
+    bool constantVertex = configure().thm.vertex == Config::ThmOptions::CONSTANT;
     bool coherentL = configure().thm.coherentL;
     std::map<std::pair<double, int>, std::vector<complex>> vbys;
     bool hasEntrance = false;
@@ -103,10 +134,27 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
       std::vector<complex> &vertex = vbys[std::make_pair(c->GetS(), coherentL ? 0 : c->GetL())];
       if (vertex.empty()) vertex.assign(numLevels + 1, complex(0.0, 0.0));
       complex onShellL = point->GetLoElement(j, ch) + c->GetBoundaryCondition();
+      // `constant`: S_c at the lowest level of the J group, whatever the order
+      // of the levels in the file (the channel boundary constant of the
+      // R-matrix is tied to the first level read, which is not physical).
+      complex constantB(0.0, 0.0);
+      if (constantVertex) {
+        double eMin = 0.0;
+        bool found = false;
+        for (int la = 1; la <= numLevels; la++) {
+          ALevel *level = jg->GetLevel(la);
+          if (!level->IsInRMatrix()) continue;
+          if (!found || level->GetFitE() < eMin) eMin = level->GetFitE();
+          found = true;
+        }
+        constantB = ShiftAtLevelEnergy(compound()->GetPair(aa), c->GetL(), eMin,
+                                       !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC));
+      }
       for (int la = 1; la <= numLevels; la++) {
         ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
         complex boundary = onShell ? onShellL
+                           : constantVertex ? constantB
                            : complex(perLevel ? level->GetShiftFunction(ch)
                                               : c->GetBoundaryCondition(), 0.0);
         vertex[la] += level->GetFitGamma(ch) * point->GetThmFormFactor(j, ch, boundary);

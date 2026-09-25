@@ -1202,7 +1202,7 @@ Pick `kinematics=` from what the data paper divided by: full three-body KF ->
 `kf3body`, lambda3/lambda2 -> `lambda32`, only |phi|^2 -> `triple`, La Cognata's
 formula or unknown -> `lacognata`; the wrong one distorts relative resonance
 heights. `vertex=constant` (default since 2026-09-25) is the formal-R-matrix
-vertex at B_c = S_c(E_1), identical with Brune on or off; `vertex=perlevel`
+vertex at B_c = S_c(E_1) of the lowest level of each J^pi (order-independent), identical with Brune on or off; `vertex=perlevel`
 (alias `real`, the old default, as mrmpy) puts each level's S_c(E_lambda) in
 the vertex and is representation-dependent once levels of one J^pi interfere --
 use it only to reproduce pre-Sep-2026 numbers. Evidence: `tests/18O_p_a_thm`
@@ -1215,7 +1215,7 @@ newline and `<thm>` must start its own line.
 
 Reference cases: `tests/17O` — 17O(n,alpha)14C from Guardo/Sergi *et al.*,
 23 points, one THM segment, chi-squared 96.69 (neutron entrance, RWA widths);
-`tests/7Li_p_a` (1753.15) and `tests/6Li_d` (856.617), charged entrance with
+`tests/7Li_p_a` (2137.83) and `tests/6Li_d` (682.099), charged entrance with
 two entrance l; `tests/18O_p_a_thm` (2191.98 + check.sh against the published
 band), two interfering levels of one J^pi; `tests/thm_rwa_grid` and
 `tests/thm_options` (check.sh). They

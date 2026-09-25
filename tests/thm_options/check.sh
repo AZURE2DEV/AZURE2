@@ -33,10 +33,22 @@ run() {
   cp -r "$SRC/data" "$d/"
   cp "$SRC/7Li_p_a.azr" "$d/run.azr"
   [ -z "$2" ] || printf '%b' "$2" >> "$d/run.azr"
+  [ "${3:-}" != sorted ] || sort_levels "$d/run.azr"
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
   echo $? > "$d/status"
   [ -f "$d/output/chiSquared.out" ] || return 0
   grep -oE 'Total-Chi-Squared: [0-9.eE+-]+' "$d/output/chiSquared.out" | awk '{print $2}'
+}
+# Rewrite <levels> sorted by (J, parity, E), the order the GUI writes.
+sort_levels() {
+  python3 - "$1" <<'PY'
+import sys
+f = sys.argv[1]; t = open(f).read()
+a = t.index('<levels>') + len('<levels>\n'); b = t.index('</levels>')
+bl = [x for x in t[a:b].split('\n\n') if x.strip()]
+bl.sort(key=lambda x: (float(x.split()[0]), int(x.split()[1]), float(x.split()[2])))
+open(f, 'w').write(t[:a] + '\n\n'.join(bl) + '\n' + t[b:])
+PY
 }
 block() { printf '\\n<thm>\\n%s\\n</thm>\\n' "$1"; }
 
@@ -60,7 +72,7 @@ expect() {
 
 # (a) defaults: no block == every key written with its default value
 none="$(run none "")"
-expect "no block (vertex=constant pin)" "$none" 1753.15
+expect "no block (vertex=constant pin)" "$none" 2137.83
 defaults="$(run defaults "$(block "entranceL=incoherent
 vertex=constant
 kinematics=lacognata
@@ -76,28 +88,36 @@ expect "empty block == no block" "$empty" "$none" 0
 perlevel="$(run perlevel "$(block vertex=perlevel)")"
 expect "vertex=perlevel (previous default pin)" "$perlevel" 2180.69
 expect "vertex=real == vertex=perlevel" "$(run real "$(block vertex=real)")" "$perlevel" 0
-expect "entranceL=coherent" "$(run coherent "$(block entranceL=coherent)")" 2706.00
+expect "entranceL=coherent" "$(run coherent "$(block entranceL=coherent)")" 3195.37
 expect "entranceL=coherent + vertex=perlevel (legacy pin)" \
   "$(run legacy "$(block "entranceL=coherent
 vertex=perlevel")")" 2740.48
 
 # (c) kinematic factor conventions
 expect "kinematics=lacognata == no block" "$(run lacognata "$(block kinematics=lacognata)")" "$none" 0
-expect "kinematics=triple"    "$(run triple    "$(block kinematics=triple)")"    1964.94
-expect "kinematics=kf3body"   "$(run kf3body   "$(block kinematics=kf3body)")"   2191.45
-expect "kinematics=lambda32"  "$(run lambda32  "$(block kinematics=lambda32)")"  5386.89
+expect "kinematics=triple"    "$(run triple    "$(block kinematics=triple)")"    2380.33
+expect "kinematics=kf3body"   "$(run kf3body   "$(block kinematics=kf3body)")"   2624.63
+expect "kinematics=lambda32"  "$(run lambda32  "$(block kinematics=lambda32)")"  5499.45
 
 # (d) on-shell vertex and the external Coulomb term
 expect "vertex=onshell"    "$(run onshell "$(block vertex=onshell)")"    2070.17
-expect "coulombIntegral=1" "$(run coulomb "$(block coulombIntegral=1)")" 1641.34
+expect "coulombIntegral=1" "$(run coulomb "$(block coulombIntegral=1)")" 2111.79
 
 # (e) spectator energy: global and per pair (pair 5 is the entrance pair)
 expect "spectatorEnergy=0 == no block" "$(run sp0 "$(block spectatorEnergy=0)")" "$none" 0
 spg="$(run spg "$(block spectatorEnergy=0.5)")"
-expect "spectatorEnergy=0.5" "$spg" 1713.61
+expect "spectatorEnergy=0.5" "$spg" 2195.06
 expect "spectatorEnergy[5]=0.5 == global 0.5" "$(run sp5 "$(block "spectatorEnergy[5]=0.5")")" "$spg" 0
 expect "spectatorEnergy[3]=0.5 (not a THM pair) == no block" \
   "$(run sp3 "$(block "spectatorEnergy[3]=0.5")")" "$none" 0
+
+# the result does not depend on the order of the levels in the file (the
+# constant vertex once took B_c from the first level read)
+if command -v python3 > /dev/null; then
+  expect "levels sorted as the GUI writes them == file order" "$(run sorted "" sorted)" "$none" 0
+  expect "vertex=perlevel, sorted == file order" \
+    "$(run plsorted "$(block vertex=perlevel)" sorted)" "$(run plfile "$(block vertex=perlevel)")" 0
+fi
 
 # (f)/(g) malformed blocks: AZURE2 prints an ERROR, exits non-zero, writes nothing
 refuse() {   # refuse NAME TEXT PATTERN

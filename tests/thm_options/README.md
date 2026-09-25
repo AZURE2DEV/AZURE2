@@ -7,15 +7,15 @@ chi2 in `output/chiSquared.out`:
 
 | block | chi2 |
 |---|---|
-| none / all defaults written out (`vertex=constant`) / comment only | 1753.15 (identical) |
+| none / all defaults written out (`vertex=constant`) / comment only | 2137.83 (identical) |
 | `vertex=perlevel`, `vertex=real` | 2180.69 (identical to each other; the pin of the default before 2026-09-25) |
-| `entranceL=coherent` | 2706.00 |
+| `entranceL=coherent` | 3195.37 |
 | `entranceL=coherent` + `vertex=perlevel` | 2740.48 (legacy pin of AZURE2 before Sep 2026; measured 2740.55, rel 3e-5) |
-| `kinematics=lacognata` / `triple` / `kf3body` / `lambda32` | 1753.15 (identical to none) / 1964.94 / 2191.45 / 5386.89 |
+| `kinematics=lacognata` / `triple` / `kf3body` / `lambda32` | 2137.83 (identical to none) / 2380.33 / 2624.63 / 5499.45 |
 | `vertex=onshell` | 2070.17 (independent of the half-off-shell vertex choice) |
-| `coulombIntegral=1` | 1641.34 |
+| `coulombIntegral=1` | 2111.79 |
 | `spectatorEnergy=0` | identical to none |
-| `spectatorEnergy=0.5` | 1713.61; `spectatorEnergy[5]=0.5` identical to it |
+| `spectatorEnergy=0.5` | 2195.06; `spectatorEnergy[5]=0.5` identical to it |
 | `spectatorEnergy[3]=0.5` (not the entrance pair) | identical to none |
 
 A misspelt key (`vertx=onshell`), an unknown value (`kinematics=kf2body`), a

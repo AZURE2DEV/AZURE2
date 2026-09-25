@@ -119,8 +119,8 @@ class Config {
   struct ThmOptions {
     /// Boundary in the entrance vertex (B - 1) j_l - rho j_l' (key `vertex=`):
     ///  perlevel  S_c(E_lambda) of each level under Brune, as mrmpy (alias `real`);
-    ///  constant  the channel boundary constant B_c = S_c(E_1) of the J group's
-    ///            first level, applied after the level sum.  gamma^T A gamma is
+    ///  constant  B_c = S_c(E_1) at the lowest-energy level of the J group,
+    ///            applied after the level sum.  gamma^T A gamma is
     ///            the same in the Brune and formal representations, so this is
     ///            the formal-R-matrix vertex at that B (La Cognata et al.,
     ///            ApJ 723 (2010) 1512 use B = S(E_1));
