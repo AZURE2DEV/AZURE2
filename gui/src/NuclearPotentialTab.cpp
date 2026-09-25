@@ -1,4 +1,5 @@
 #include "NuclearPotentialTab.h"
+#include "RoundTripNumber.h"
 #include "NuclearPotentialManager.h"
 #include "Config.h"
 #include "PairsModel.h"
@@ -584,12 +585,12 @@ bool NuclearPotentialTab::writePotentialSettings(QTextStream &outStream) {
   // single pair writes exactly the block it always did.
   auto writeShape = [&outStream](const NuclearPotentialSetting &s) {
     outStream << "potentialType=" << (s.type == "Gaussian" ? 1 : 0) << "\n";
-    outStream << "V0=" << s.V0 << "\n";
+    outStream << "V0=" << roundTripNumber(s.V0) << "\n";
     if (s.type == "Gaussian") {
-      outStream << "r0=" << s.r0 << "\n";
+      outStream << "r0=" << roundTripNumber(s.r0) << "\n";
     } else {
-      outStream << "R=" << s.R << "\n";
-      outStream << "a=" << s.a << "\n";
+      outStream << "R=" << roundTripNumber(s.R) << "\n";
+      outStream << "a=" << roundTripNumber(s.a) << "\n";
     }
   };
 

@@ -3,6 +3,7 @@
 #include <QFile>
 
 #include "LevelsTab.h"
+#include "RoundTripNumber.h"
 #include "LevelsHeaderView.h"
 #include "AddLevelDialog.h"
 #include "IAEALevelDialog.h"
@@ -787,9 +788,9 @@ bool LevelsTab::writeNuclearFile(QTextStream &outStream) {
     const LevelsData &level = levels.at(la);
     for (int ch = 0; ch < channels.size(); ch++) {
       if (channels.at(ch).levelIndex == la) {
-        outStream << qSetFieldWidth(4) << level.jValue
+        outStream << qSetFieldWidth(4) << roundTripNumber(level.jValue)
                   << qSetFieldWidth(5) << level.piValue
-                  << qSetFieldWidth(13) << level.energy
+                  << qSetFieldWidth(13) << roundTripNumber(level.energy)
                   << qSetFieldWidth(5) << level.isFixed
                   << qSetFieldWidth(5) << "1"
                   << qSetFieldWidth(5) << channels.at(ch).pairIndex + 1
@@ -798,25 +799,25 @@ bool LevelsTab::writeNuclearFile(QTextStream &outStream) {
                   << qSetFieldWidth(5) << levelId
                   << qSetFieldWidth(5) << level.isActive
                   << qSetFieldWidth(5) << channels.at(ch).isFixed
-                  << qSetFieldWidth(20) << channels.at(ch).reducedWidth
-                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightJ
+                  << qSetFieldWidth(20) << roundTripNumber(channels.at(ch).reducedWidth)
+                  << qSetFieldWidth(5) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).lightJ)
                   << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightPi
-                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyJ
+                  << qSetFieldWidth(5) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).heavyJ)
                   << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyPi
-                  << qSetFieldWidth(13) << pairs.at(channels.at(ch).pairIndex).excitationEnergy
-                  << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).lightM
-                  << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).heavyM
+                  << qSetFieldWidth(13) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).excitationEnergy)
+                  << qSetFieldWidth(8) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).lightM)
+                  << qSetFieldWidth(8) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).heavyM)
                   << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightZ
                   << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyZ
-                  << qSetFieldWidth(13) << pairs.at(0).seperationEnergy
-                  << qSetFieldWidth(13) << pairs.at(channels.at(ch).pairIndex).seperationEnergy
+                  << qSetFieldWidth(13) << roundTripNumber(pairs.at(0).seperationEnergy)
+                  << qSetFieldWidth(13) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).seperationEnergy)
                   << "    0    0          0.0"
                   << qSetFieldWidth(6) << pairs.at(channels.at(ch).pairIndex).pairType
-                  << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).channelRadius
-                  << qSetFieldWidth(13) << pairs.at(channels.at(ch).pairIndex).lightG
-                  << qSetFieldWidth(13) << pairs.at(channels.at(ch).pairIndex).heavyG
+                  << qSetFieldWidth(8) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).channelRadius)
+                  << qSetFieldWidth(13) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).lightG)
+                  << qSetFieldWidth(13) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).heavyG)
                   << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).ecMultMask
-                  << qSetFieldWidth(9) << pairs.at(channels.at(ch).pairIndex).bindingEnergy
+                  << qSetFieldWidth(9) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).bindingEnergy)
                   << qSetFieldWidth(4) << (channels.at(ch).radType == 'P' ? channels.at(ch).gammaIsRWA : 0)
                   << qSetFieldWidth(0) << Qt::endl;
       }

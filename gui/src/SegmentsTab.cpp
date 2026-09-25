@@ -10,6 +10,7 @@
 #include <algorithm>
 
 #include "SegmentsTab.h"
+#include "RoundTripNumber.h"
 #include "RichTextDelegate.h"
 #include "InfoDialog.h"
 #include "PairsModel.h"
@@ -1314,18 +1315,18 @@ bool SegmentsTab::writeSegDataFile(QTextStream &outStream) {
     outStream << qSetFieldWidth(15) << lines.at(i).isActive
               << qSetFieldWidth(15) << lines.at(i).entrancePairIndex
               << qSetFieldWidth(15) << lines.at(i).exitPairIndex
-              << qSetFieldWidth(15) << lines.at(i).lowEnergy
-              << qSetFieldWidth(15) << lines.at(i).highEnergy
-              << qSetFieldWidth(15) << lines.at(i).lowAngle
-              << qSetFieldWidth(15) << lines.at(i).highAngle
+              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).lowEnergy)
+              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).highEnergy)
+              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).lowAngle)
+              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).highAngle)
               << qSetFieldWidth(15) << (lines.at(i).dataType + (lines.at(i).isTHM ? 10 : 0));
-    if (lines.at(i).dataType == 2) outStream << qSetFieldWidth(15) << lines.at(i).phaseJ
+    if (lines.at(i).dataType == 2) outStream << qSetFieldWidth(15) << roundTripNumber(lines.at(i).phaseJ)
                                              << qSetFieldWidth(15) << lines.at(i).phaseL;
-    outStream << qSetFieldWidth(15) << lines.at(i).dataNorm
+    outStream << qSetFieldWidth(15) << roundTripNumber(lines.at(i).dataNorm)
               << qSetFieldWidth(15) << lines.at(i).varyNorm
-              << qSetFieldWidth(15) << lines.at(i).dataNormError
-              << qSetFieldWidth(15) << lines.at(i).energyShift
-              << qSetFieldWidth(15) << lines.at(i).energyShiftError
+              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).dataNormError)
+              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).energyShift)
+              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).energyShiftError)
               << qSetFieldWidth(15) << lines.at(i).varyEnergyShift
               << qSetFieldWidth(0) << " " << quotePathIfNeeded(lines.at(i).dataFile);
 
@@ -1368,8 +1369,8 @@ bool SegmentsTab::writeSegDataFile(QTextStream &outStream) {
             int exit = parts[1].split(": ")[1].trimmed().toInt();
             double angle, scaling;
             extractAngleScaling(component, angle, scaling);
-            outStream << " " << entrance << " " << exit << " " << angle;
-            if (anyScaling) outStream << " " << scaling;
+            outStream << " " << entrance << " " << exit << " " << roundTripNumber(angle);
+            if (anyScaling) outStream << " " << roundTripNumber(scaling);
           }
         }
       } else {  // Ratio - only 1 component (denominator, main segment is numerator)
@@ -1384,8 +1385,8 @@ bool SegmentsTab::writeSegDataFile(QTextStream &outStream) {
             int exit = parts[1].split(": ")[1].trimmed().toInt();
             double angle, scaling;
             extractAngleScaling(components[0], angle, scaling);
-            outStream << " " << entrance << " " << exit << " " << angle;
-            if (anyScaling) outStream << " " << scaling;
+            outStream << " " << entrance << " " << exit << " " << roundTripNumber(angle);
+            if (anyScaling) outStream << " " << roundTripNumber(scaling);
           }
         }
       }
@@ -1396,8 +1397,8 @@ bool SegmentsTab::writeSegDataFile(QTextStream &outStream) {
     // Write UPOS data after advanced segment data
     if (lines.at(i).isUPOS == 1) {
       outStream << " 1 " << lines.at(i).secondaryDecayL
-                << " " << lines.at(i).finalJ
-                << " " << lines.at(i).delta;
+                << " " << roundTripNumber(lines.at(i).finalJ)
+                << " " << roundTripNumber(lines.at(i).delta);
     } else {
       outStream << " 0";
     }
@@ -1544,15 +1545,15 @@ bool SegmentsTab::writeSegTestFile(QTextStream &outStream) {
     outStream << qSetFieldWidth(15) << lines.at(i).isActive
               << qSetFieldWidth(15) << lines.at(i).entrancePairIndex
               << qSetFieldWidth(15) << lines.at(i).exitPairIndex
-              << qSetFieldWidth(15) << lines.at(i).lowEnergy
-              << qSetFieldWidth(15) << lines.at(i).highEnergy
-              << qSetFieldWidth(15) << lines.at(i).energyStep
-              << qSetFieldWidth(15) << lines.at(i).lowAngle
-              << qSetFieldWidth(15) << lines.at(i).highAngle
-              << qSetFieldWidth(15) << lines.at(i).angleStep;
+              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).lowEnergy)
+              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).highEnergy)
+              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).energyStep)
+              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).lowAngle)
+              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).highAngle)
+              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).angleStep);
     if (lines.at(i).dataType == 2) {
       outStream << qSetFieldWidth(15) << lines.at(i).dataType
-                << qSetFieldWidth(15) << lines.at(i).phaseJ
+                << qSetFieldWidth(15) << roundTripNumber(lines.at(i).phaseJ)
                 << qSetFieldWidth(0) << lines.at(i).phaseL;
     } else if (lines.at(i).dataType == 3) {
       outStream << qSetFieldWidth(15) << lines.at(i).dataType
@@ -1597,8 +1598,8 @@ bool SegmentsTab::writeSegTestFile(QTextStream &outStream) {
             int exit = parts[1].split(": ")[1].trimmed().toInt();
             double angle, scaling;
             extractAngleScaling(component, angle, scaling);
-            outStream << " " << entrance << " " << exit << " " << angle;
-            if (anyScaling) outStream << " " << scaling;
+            outStream << " " << entrance << " " << exit << " " << roundTripNumber(angle);
+            if (anyScaling) outStream << " " << roundTripNumber(scaling);
           }
         }
       } else {  // Ratio - only 1 component (denominator, main segment is numerator)
@@ -1613,8 +1614,8 @@ bool SegmentsTab::writeSegTestFile(QTextStream &outStream) {
             int exit = parts[1].split(": ")[1].trimmed().toInt();
             double angle, scaling;
             extractAngleScaling(components[0], angle, scaling);
-            outStream << " " << entrance << " " << exit << " " << angle;
-            if (anyScaling) outStream << " " << scaling;
+            outStream << " " << entrance << " " << exit << " " << roundTripNumber(angle);
+            if (anyScaling) outStream << " " << roundTripNumber(scaling);
           }
         }
       }

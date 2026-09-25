@@ -153,3 +153,32 @@ add_test(NAME parameter_settings COMMAND parameter_settings_test)
 set_tests_properties(parameter_settings PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     TIMEOUT 300)
+
+# Open + save must not round the model: every <levels> number comes back
+# exactly, and the engine's chi-squared of the saved file is the original's.
+add_executable(level_precision_test level_precision_test.cpp)
+set_target_properties(level_precision_test PROPERTIES AUTOMOC OFF)
+target_include_directories(level_precision_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(level_precision_test PRIVATE
+    AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    AZURE2_BINARY="$<TARGET_FILE:AZURE2>")
+target_link_libraries(level_precision_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(level_precision_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(level_precision_test PRIVATE pugixml srim_utilities)
+endif()
+add_dependencies(level_precision_test AZURE2)
+add_test(NAME level_precision COMMAND level_precision_test)
+set_tests_properties(level_precision PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 300)

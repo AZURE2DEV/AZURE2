@@ -8,6 +8,7 @@
 #include <QHeaderView>
 
 #include "TargetIntTab.h"
+#include "RoundTripNumber.h"
 #include "InfoDialog.h"
 
 TargetIntTab::TargetIntTab(QWidget *parent) :
@@ -535,42 +536,42 @@ bool TargetIntTab::writeFile(QTextStream &outStream) {
       outStream << qSetFieldWidth(15) << '1';
     else
       outStream << qSetFieldWidth(15) << '0';
-    outStream << qSetFieldWidth(15) << lines.at(i).sigma;
+    outStream << qSetFieldWidth(15) << roundTripNumber(lines.at(i).sigma);
 
     if (lines.at(i).isTargetIntegration)
       outStream << qSetFieldWidth(15) << '1';
     else
       outStream << qSetFieldWidth(15) << '0';
-    outStream << qSetFieldWidth(15) << lines.at(i).density << qSetFieldWidth(0) << " \"" + lines[i].stoppingPowerEq.remove(' ') + "\" " << qSetFieldWidth(0) << lines.at(i).numParameters << qSetFieldWidth(0) << ' ';
-    for (int j = 0; j < lines.at(i).numParameters; j++) outStream << lines.at(i).parameters.at(j) << qSetFieldWidth(0) << ' ';
+    outStream << qSetFieldWidth(15) << roundTripNumber(lines.at(i).density) << qSetFieldWidth(0) << " \"" + lines[i].stoppingPowerEq.remove(' ') + "\" " << qSetFieldWidth(0) << lines.at(i).numParameters << qSetFieldWidth(0) << ' ';
+    for (int j = 0; j < lines.at(i).numParameters; j++) outStream << roundTripNumber(lines.at(i).parameters.at(j)) << qSetFieldWidth(0) << ' ';
 
     if (lines.at(i).isQCoefficients)
       outStream << qSetFieldWidth(0) << "              1";
     else
       outStream << qSetFieldWidth(0) << "              0";
     outStream << qSetFieldWidth(0) << "              " << lines.at(i).qCoefficients.size() << ' ';
-    for (int j = 0; j < lines.at(i).qCoefficients.size(); j++) outStream << qSetFieldWidth(0) << lines.at(i).qCoefficients.at(j) << ' ';
+    for (int j = 0; j < lines.at(i).qCoefficients.size(); j++) outStream << qSetFieldWidth(0) << roundTripNumber(lines.at(i).qCoefficients.at(j)) << ' ';
 
     if (lines.at(i).isConvCoefficients)
       outStream << qSetFieldWidth(0) << "              1";
     else
       outStream << qSetFieldWidth(0) << "              0";
     outStream << qSetFieldWidth(0) << "              " << " \"" + lines[i].convolutionEq.remove(' ') + "\" " << qSetFieldWidth(0) << lines.at(i).convCoefficients.size() << ' ';
-    for (int j = 0; j < lines.at(i).convCoefficients.size(); j++) outStream << qSetFieldWidth(0) << lines.at(i).convCoefficients.at(j) << ' ';
+    for (int j = 0; j < lines.at(i).convCoefficients.size(); j++) outStream << qSetFieldWidth(0) << roundTripNumber(lines.at(i).convCoefficients.at(j)) << ' ';
 
     // Write straggling flag and coefficient (appended at end for backward compatibility)
     if (lines.at(i).isStraggling)
       outStream << qSetFieldWidth(0) << "              1";
     else
       outStream << qSetFieldWidth(0) << "              0";
-    outStream << " " << lines.at(i).stragglingCoefficient;
+    outStream << " " << roundTripNumber(lines.at(i).stragglingCoefficient);
     // Write adaptive grid params (appended at end for backward compatibility)
-    outStream << " " << lines.at(i).resonanceWidthMultiplier << " " << lines.at(i).pointsPerWidth;
+    outStream << " " << roundTripNumber(lines.at(i).resonanceWidthMultiplier) << " " << roundTripNumber(lines.at(i).pointsPerWidth);
     // Optional lab-energy windows / blend width / automatic tolerance: only
     // written when any of them departs from the defaults, so files that never
     // used the feature stay byte-identical.
     if (!lines.at(i).applyRanges.trimmed().isEmpty() || lines.at(i).transitionWidth > 0. || lines.at(i).autoTolerance > 0.) {
-      outStream << " \"" << lines.at(i).applyRanges.trimmed() << "\" " << lines.at(i).transitionWidth << " " << lines.at(i).autoTolerance;
+      outStream << " \"" << lines.at(i).applyRanges.trimmed() << "\" " << roundTripNumber(lines.at(i).transitionWidth) << " " << roundTripNumber(lines.at(i).autoTolerance);
     }
     // Optional beam-profile kernel, last on the line and introduced by its own
     // keyword: every older reader probes for a digit or a quote here, so an
@@ -578,17 +579,16 @@ bool TargetIntTab::writeFile(QTextStream &outStream) {
     // rather than mis-parsed. Written only when the effect declares one, so
     // files that never used it stay byte-identical.
     //
-    // The numbers go through QString::number with 12 significant digits rather
-    // than straight into the stream: QTextStream's default is 6, which would
-    // quietly round a profile location of a few MeV to the nearest ~10 eV on
-    // every load-and-save cycle.
+    // Like every number here, through roundTripNumber: QTextStream's default
+    // of 6 digits would quietly round a profile location of a few MeV to the
+    // nearest ~10 eV on every load-and-save cycle.
     if (lines.at(i).isBeamProfile && lines.at(i).beamProfile.size() >= 4) {
       int numComponents = lines.at(i).beamProfile.size() / 4;
       outStream << " beamprofile " << numComponents;
       for (int j = 0; j < 4 * numComponents; j++)
-        outStream << " " << QString::number(lines.at(i).beamProfile.at(j), 'g', 12);
-      outStream << " " << QString::number(lines.at(i).beamTpcSigma, 'g', 12)
-                << " " << QString::number(lines.at(i).beamTruncation, 'g', 12)
+        outStream << " " << roundTripNumber(lines.at(i).beamProfile.at(j));
+      outStream << " " << roundTripNumber(lines.at(i).beamTpcSigma)
+                << " " << roundTripNumber(lines.at(i).beamTruncation)
                 << " " << (lines.at(i).beamPhotodissociation ? 1 : 0);
     }
     outStream << Qt::endl;

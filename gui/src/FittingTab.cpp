@@ -21,6 +21,8 @@
 #include <iostream>
 
 #include "FittingTab.h"
+#include <QSignalBlocker>
+#include "RoundTripNumber.h"
 #include "InfoDialog.h"
 #include "LevelsTab.h"
 #include "SegmentsTab.h"
@@ -104,6 +106,11 @@ void FittingTab::setupParameterTable(QTableWidget *table, const QString &title) 
 }
 
 void FittingTab::addParameterRow(QTableWidget *table, const FittingParameter &param) {
+  // Filling a row is not an edit.  Unblocked, each setItem emits itemChanged,
+  // and parameterItemChanged read the six-digit display text back as the new
+  // value (or limit, or error) and pushed it into the levels model: merely
+  // opening a project rounded every free level parameter.
+  const QSignalBlocker blocker(table);
   int row = table->rowCount();
   table->insertRow(row);
 
@@ -1666,11 +1673,11 @@ bool FittingTab::writeParameterSettings(QTextStream &outStream) {
 
   for (const FittingParameter &param : fittingParameters) {
     outStream << param.name << " "
-              << param.value << " "
-              << param.lowerLimit << " "
-              << param.upperLimit << " "
-              << param.error << " "
-              << param.fitError << " "
+              << roundTripNumber(param.value) << " "
+              << roundTripNumber(param.lowerLimit) << " "
+              << roundTripNumber(param.upperLimit) << " "
+              << roundTripNumber(param.error) << " "
+              << roundTripNumber(param.fitError) << " "
               << (param.useAsNuisance ? 1 : 0) << " "
               << param.category << " "
               << param.minuitIndex << "\n";

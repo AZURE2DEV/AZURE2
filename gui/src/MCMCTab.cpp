@@ -1,4 +1,5 @@
 #include "MCMCTab.h"
+#include "RoundTripNumber.h"
 #include "InfoDialog.h"
 #include "LevelsTab.h"
 #include "SegmentsTab.h"
@@ -840,9 +841,9 @@ bool MCMCTab::writeMCMCSettings(QTextStream &outStream) {
   outStream << "<parameters>\n";
   for (const MCMCParameter &param : mcmcParameters) {
     outStream << param.name << " "
-              << param.value << " "
-              << param.priorMean << " "
-              << param.priorStd << " "
+              << roundTripNumber(param.value) << " "
+              << roundTripNumber(param.priorMean) << " "
+              << roundTripNumber(param.priorStd) << " "
               << (param.useGaussianPrior ? "1" : "0") << "\n";
   }
   outStream << "</parameters>\n";
