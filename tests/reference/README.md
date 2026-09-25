@@ -57,3 +57,42 @@ half of that. It cancels in the fold itself, where numerator and denominator
 share it, which is why the identity checks hold to 1e-12. Giving the constant
 its full precision would let the tolerance go to 1e-12 too, at the cost of
 moving every recorded chi-squared in the suite very slightly.
+
+## thm_coulomb_term_test
+
+The external Coulomb term of the THM entrance vertex, `ThmCoulombTerm`
+(`src/ThmFunc.cpp`, contract in `include/ThmFunc.h`):
+
+    C_l(E) = 2 eta k Int_a^inf dr O_l(k r) / O_l(k a) j_l(p r)
+
+(Tribble et al. 2014 eq. 2.79; Mukhamedzhanov et al. 2017 eq. 27; Typel & Baur
+2003 eq. A.4). For E > 0 the integral converges only conditionally (1/r times
+oscillation), which is what makes it worth an independent check.
+
+The expected values come from `thm_coulomb_term_reference.py` (mpmath, 25
+digits). It shares no numerics with the engine: O_l is `mpmath.whitw`
+(DLMF 33.2.7, H+ ~ W_{-i eta, l+1/2}(-2 i rho)) rather than the library Coulomb
+functions, and the whole integral is taken along two rays into the complex r
+plane starting at the channel radius (j_l = (h1 + h2)/2, each half on the ray
+where it decays) — no real-axis quadrature and no asymptotic expansion. Its
+`--check` option recomputes every value with a real-axis segment a..a+15 fm
+followed by rays, and the two agree to ~1e-14 or better. Regenerating the table takes
+about half an hour:
+
+    python3 tests/reference/thm_coulomb_term_reference.py
+
+The grid: 7Li+p (a = 4 fm, B = 2.2246 MeV), 6Li+d (4.5 fm, 1.4735 MeV),
+12C+12C (6 fm, 10.27 MeV; eta up to 62 at 50 keV, deep below the barrier)
+at E = -1, -0.1, 0, 0.05, 0.3, 1, 3, 6 MeV and l = 0..3, plus 17O+n, which must
+return exactly zero. Tolerance 1e-5 relative + 1e-8 absolute; the observed
+agreement is ~1e-13.
+
+Every case is run with `useGSL` both off and on, which must not matter: the
+engine builds O_l from its asymptotic expansion by inward integration and calls
+no library Coulomb function. (Were it to use GSL's, C_l would inherit their
+errors — G_l and F_l from GSL are off by up to ~2% for l >= 2, eta ~ 2,
+rho ~ 1-4, checked against mpmath.)
+
+It also checks that E <= 0 gives a real result and that C_l is continuous
+through threshold (E = +-1e-4 MeV against the E = 0 limit). `-v` prints every
+value and the time per call (~0.05-1 ms).

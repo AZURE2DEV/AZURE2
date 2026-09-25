@@ -10,3 +10,10 @@ add_executable(beam_profile_reference_test beam_profile_reference_test.cpp)
 target_link_libraries(beam_profile_reference_test PRIVATE AZURE2Core)
 
 add_test(NAME beam_profile_reference COMMAND beam_profile_reference_test)
+
+# Reference calculation for the THM external Coulomb term (ThmCoulombTerm),
+# against mpmath values from thm_coulomb_term_reference.py.
+add_executable(thm_coulomb_term_test thm_coulomb_term_test.cpp)
+target_link_libraries(thm_coulomb_term_test PRIVATE AZURE2Core)
+
+add_test(NAME thm_coulomb_term COMMAND thm_coulomb_term_test)
