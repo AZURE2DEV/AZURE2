@@ -353,24 +353,53 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
       if (config_.inputWidthsArePhysical) {
         double particleWidthEV = 0.0;
         double gammaWidthEV = 0.0;
+        // A channel flagged gammaIsRWA (the optional 33rd field of a level
+        // line, used by THM projects) holds a reduced-width amplitude in
+        // MeV^1/2, not a width in eV.  Summing it as eV made such a resonance
+        // look orders of magnitude narrower than it is: the grid then packed
+        // its points into a sliver around the peak and bridged the real flanks
+        // with keV-wide linear interpolation, over-counting the resonance area
+        // tenfold in every convolution or target integration across it.
+        // Convert those channels exactly as the amplitude branch below does.
+        double rwaParticleMeV = 0.0;
+        double rwaNormSum = 0.0;
+        double rwaGammaMeV = 0.0;
         for (int ch = 1; ch <= numChannels; ch++) {
           AChannel *channel = jgroup->GetChannel(ch);
           PPair *chPair = compound->GetPair(channel->GetPairNum());
           double gamma = std::abs(level->GetGamma(ch));
           if (gamma <= 0.0) continue;
+          const bool isRWA = level->GammaIsRWA(ch);
           if (channel->GetRadType() == 'P') {
             double localEnergy = level->GetE() - chPair->GetExE() - chPair->GetSepE();
             if (localEnergy <= 0.0) continue;  // closed channel: the value is an ANC
-            particleWidthEV += gamma;
+            if (isRWA) {
+              CoulFunc coulFunc(chPair, false);
+              double radius = chPair->GetChRad();
+              double pene = coulFunc.Penetrability(channel->GetL(), radius, localEnergy);
+              double dSdE = coulFunc.PEShift_dE(channel->GetL(), radius, localEnergy);
+              rwaParticleMeV += 2.0 * gamma * gamma * pene;
+              rwaNormSum += dSdE * gamma * gamma;
+            } else {
+              particleWidthEV += gamma;
+            }
           } else if (channel->GetRadType() == 'M' || channel->GetRadType() == 'E') {
-            gammaWidthEV += gamma;
+            if (isRWA) {
+              double localEnergy = level->GetE() - chPair->GetExE() - chPair->GetSepE();
+              rwaGammaMeV += 2.0 * gamma * gamma *
+                             pow(std::abs(localEnergy) / hbarc, 2.0 * channel->GetL() + 1.0);
+            } else {
+              gammaWidthEV += gamma;
+            }
           }
         }
-        double particleWidth = particleWidthEV * 1.0e-6;
-        double totalWidthMeV = (particleWidthEV + gammaWidthEV) * 1.0e-6;
+        if (1.0 + rwaNormSum > 0.0) rwaParticleMeV /= (1.0 + rwaNormSum);
+        double particleWidth = particleWidthEV * 1.0e-6 + rwaParticleMeV;
+        double totalWidthMeV = particleWidth + gammaWidthEV * 1.0e-6 + rwaGammaMeV;
         if (DebugGridEnabled()) {
-          fprintf(stderr, "[AZR_DEBUG_GRID]     level E=%.6f: input widths particle=%.6e eV gamma=%.6e eV\n",
-                  level->GetE(), particleWidthEV, gammaWidthEV);
+          fprintf(stderr, "[AZR_DEBUG_GRID]     level E=%.6f: input widths particle=%.6e eV gamma=%.6e eV "
+                  "(total from RWA-flagged channels %.6e eV)\n",
+                  level->GetE(), particleWidthEV, gammaWidthEV, (rwaParticleMeV + rwaGammaMeV) * 1.0e6);
         }
         double margin = particleWidth * config_.resonanceWidthMultiplier;
         if (levelCMEnergy >= endEnergy - margin && levelCMEnergy <= startEnergy + margin) {
