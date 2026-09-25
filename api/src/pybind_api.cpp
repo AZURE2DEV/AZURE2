@@ -132,9 +132,12 @@ class Session {
 
     // The API stub used to guard the CLI's reads against --use-api; the binding
     // is the API, so mirror the checks main() performed for a headless run.
-    if (config_->ReadConfigFile() == -1) {
+    int configStatus = config_->ReadConfigFile();
+    if (configStatus == -1) {
       std::string msg = "Could not open " + configfile + " or no <config> block found.";
       fail(msg);
+    } else if (configStatus < 0) {
+      fail("Malformed <potential> or <thm> block in " + configfile + " (see the ERROR above).");
     }
 
     InitializeCoulFuncCache();

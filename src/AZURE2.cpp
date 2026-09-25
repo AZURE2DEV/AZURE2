@@ -1382,9 +1382,12 @@ int main(int argc, char *argv[]) {
                         << "\tSyntax: AZURE2 <options> configfile" << std::endl;
     return -1;
   }
-  if (configure.ReadConfigFile() == -1) {
+  int configStatus = configure.ReadConfigFile();
+  if (configStatus == -1) {
     configure.outStream << "Could not open " << configure.configfile << ".  Check that file exists."
                         << std::endl;
+    return -1;
+  } else if (configStatus < 0) {
     return -1;
   }
 #ifndef NO_STAT

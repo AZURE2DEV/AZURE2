@@ -154,7 +154,8 @@ class Config {
   ThmOptions thm;
   /// A constant indicating the maximum order of the Legendre polynomials to calculate.
   static const int maxLOrder = 20;
-  /// Read the <config> block, then the optional <potential> block. -1 if the file cannot be read.
+  /// Read the <config> block, then the optional <potential> and <thm> blocks.
+  /// -1 if the file cannot be read, -2 if an optional block is malformed (already reported).
   int ReadConfigFile();
   /// Reads the <potential> block of the configuration file, if it has one.
   int ReadPotentialBlock();

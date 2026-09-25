@@ -132,8 +132,10 @@ int Config::ReadConfigFile() {
   while (line != "</config>" && !in.eof()) getline(in, line);
   if (line != "</config>") return -1;
   in.close();
-  if (this->ReadPotentialBlock() != 0) return -1;
-  return this->ReadThmBlock();
+  // A malformed optional block has already been reported: -2, so the caller
+  // does not add a misleading "could not open" on top.
+  if (this->ReadPotentialBlock() != 0) return -2;
+  return this->ReadThmBlock() != 0 ? -2 : 0;
 }
 
 /*!
