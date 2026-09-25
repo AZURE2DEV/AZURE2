@@ -84,13 +84,15 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
     // removes the l cross terms.  `entranceL=coherent` keeps one bucket per s,
     // as mrmpy does.
     //
-    // Vertex boundary: by default the real per-level shift S_c(E_lambda) under
-    // the Brune formalism (mrmpy vertex_boundary="per_level"; Tumino et al.
-    // 2021 eq. 51), else the channel boundary constant.  `vertex=onshell` uses
-    // the log-derivative of the outgoing wave, L_c(E) = S_c(E) + i P_c(E)
-    // (Tribble et al. 2014 eq. 2.76), recovered from L_o = L_c - B_c.
-    bool brune = !!(configure().paramMask & Config::USE_BRUNE_FORMALISM);
-    bool onShell = configure().thm.onShellVertex;
+    // Vertex boundary (Config::ThmOptions::vertex): the per-level shift
+    // S_c(E_lambda) under Brune (mrmpy vertex_boundary="per_level"; Tumino et
+    // al. 2021 eq. 51), else the channel boundary constant; `constant` uses the
+    // channel constant in either formalism; `onshell` the log-derivative of the
+    // outgoing wave L_c(E) = S_c(E) + i P_c(E) (Tribble et al. 2014 eq. 2.76),
+    // recovered from L_o = L_c - B_c.
+    bool perLevel = (configure().paramMask & Config::USE_BRUNE_FORMALISM) &&
+                    configure().thm.vertex == Config::ThmOptions::PER_LEVEL;
+    bool onShell = configure().thm.vertex == Config::ThmOptions::ON_SHELL;
     bool coherentL = configure().thm.coherentL;
     std::map<std::pair<double, int>, std::vector<complex>> vbys;
     bool hasEntrance = false;
@@ -105,8 +107,8 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
         ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
         complex boundary = onShell ? onShellL
-                           : complex(brune ? level->GetShiftFunction(ch)
-                                           : c->GetBoundaryCondition(), 0.0);
+                           : complex(perLevel ? level->GetShiftFunction(ch)
+                                              : c->GetBoundaryCondition(), 0.0);
         vertex[la] += level->GetFitGamma(ch) * point->GetThmFormFactor(j, ch, boundary);
       }
     }

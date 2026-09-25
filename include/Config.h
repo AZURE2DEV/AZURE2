@@ -117,10 +117,18 @@ class Config {
   /// working formula (Tumino et al. 2021, eqs. 50-51) that the code has always
   /// used, except that entrance partial waves are summed incoherently.
   struct ThmOptions {
-    /// Vertex boundary L_c(E) = S_c(E) + i P_c(E) of the on-shell outgoing wave
-    /// (Tribble et al. 2014 eq. 2.76; Mukhamedzhanov 2017 eq. 28) instead of the
-    /// real per-level S_c(E_lambda).  Key `vertex=onshell` (default `real`).
-    bool onShellVertex = false;
+    /// Boundary in the entrance vertex (B - 1) j_l - rho j_l' (key `vertex=`):
+    ///  perlevel  S_c(E_lambda) of each level under Brune, as mrmpy (alias `real`);
+    ///  constant  the channel boundary constant B_c = S_c(E_1) of the J group's
+    ///            first level, applied after the level sum.  gamma^T A gamma is
+    ///            the same in the Brune and formal representations, so this is
+    ///            the formal-R-matrix vertex at that B (La Cognata et al.,
+    ///            ApJ 723 (2010) 1512 use B = S(E_1));
+    ///  onshell   L_c(E) = S_c(E) + i P_c(E) (Tribble et al. 2014 eq. 2.76),
+    ///            independent of any boundary constant.
+    /// perlevel and constant coincide for a J group with a single level.
+    enum Vertex { PER_LEVEL, CONSTANT, ON_SHELL };
+    Vertex vertex = CONSTANT;
     /// Which kinematic factors the model carries, set by how the HOES data
     /// were extracted from the triple cross section (key `kinematics=`):
     ///  lacognata  exit k_f/mu_f, as La Cognata's working formula (Tumino et

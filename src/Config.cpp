@@ -376,8 +376,9 @@ int Config::ReadThmBlock() {
     bool ok = eq != std::string::npos;
     if (!ok) {
     } else if (key == "vertex") {
-      if (value == "onshell") thm.onShellVertex = true;
-      else if (value == "real") thm.onShellVertex = false;
+      if (value == "onshell") thm.vertex = ThmOptions::ON_SHELL;
+      else if (value == "constant") thm.vertex = ThmOptions::CONSTANT;
+      else if (value == "perlevel" || value == "real") thm.vertex = ThmOptions::PER_LEVEL;
       else ok = false;
     } else if (key == "kinematics") {
       if (value == "lacognata") thm.kinematics = ThmOptions::LA_COGNATA;
