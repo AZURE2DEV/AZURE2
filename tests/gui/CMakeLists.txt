@@ -98,3 +98,31 @@ endif()
 add_test(NAME segments_move COMMAND segments_move_test)
 set_tests_properties(segments_move PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# The <thm> block has no tab; open + save must carry it verbatim and must not
+# add one to a project that had none.
+add_executable(thm_block_test thm_block_test.cpp)
+set_target_properties(thm_block_test PROPERTIES AUTOMOC OFF)
+target_include_directories(thm_block_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(thm_block_test PRIVATE
+    AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(thm_block_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(thm_block_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(thm_block_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME thm_block COMMAND thm_block_test)
+# A modal dialog on a failed open would wait forever offscreen; fail instead.
+set_tests_properties(thm_block PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 120)

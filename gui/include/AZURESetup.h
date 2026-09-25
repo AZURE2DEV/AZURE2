@@ -3,6 +3,8 @@
 
 #include <QMainWindow>
 #include <QTemporaryFile>
+#include <QStringList>
+#include <QTextStream>
 
 #include "PairsTab.h"
 #include "LevelsTab.h"
@@ -84,6 +86,17 @@ class AZURESetup : public QMainWindow {
   // Getter for FittingTab (for MCMCTab access)
   FittingTab *getFittingTab() const { return fittingTab; }
 
+  /*! The optional <thm> block (THM options, read by the engine's
+      Config::ReadThmBlock) has no editor; the GUI keeps its lines verbatim so
+      that a save does not drop it.  readThmBlock scans the rest of the stream
+      for the first line starting with <thm>, as the engine does, and stores the
+      lines up to </thm> (comments included).  It sets present = false and
+      returns true when there is no block, and returns false when the block is
+      not terminated -- the engine refuses such a file too.  writeThmBlock
+      writes <thm>, the stored lines and </thm>. */
+  static bool readThmBlock(QTextStream &in, QStringList &lines, bool &present);
+  static void writeThmBlock(QTextStream &out, const QStringList &lines);
+
  public slots:
   void SaveAndRun();
 #ifdef USE_MCMC
@@ -120,6 +133,11 @@ class AZURESetup : public QMainWindow {
   void updateNuclearPotentialTabVisibility();  // Show/hide Nuclear Potential tab based on config
 
   Config config;
+
+  // Verbatim content of the <thm> block of the file last read; written back
+  // only when the file had one (see readThmBlock).
+  bool hasThmBlock = false;
+  QStringList thmBlockLines;
 
   QAction *aboutAction;
   QAction *resetAction;

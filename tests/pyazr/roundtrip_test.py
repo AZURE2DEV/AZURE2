@@ -79,6 +79,29 @@ n = len(azrfile.AzrChannel(tokens).to_line().split())
 check("emits a full line",
       azrfile._NFIELDS <= n <= azrfile._NFIELDS_MAX, f"{n} fields")
 
+print("\n7. a <thm> options block survives edits wherever it sits")
+# The engine reads <thm> from anywhere in the file (Config::ReadThmBlock);
+# AzrModel interprets only <levels>, so the block has to come back verbatim.
+thm = "<thm>\nkinematics=kf3body   # data / full three-body KF\nspectatorEnergy[5]=0.5\n</thm>\n"
+src7 = open(files[0]).read()
+at_end = src7 + "\n" + thm
+before_levels = src7.replace("<levels>", thm + "<levels>", 1)
+import tempfile
+for label, text in (("at end of file", at_end), ("before <levels>", before_levels)):
+    fd, path = tempfile.mkstemp(suffix=".azr")
+    with os.fdopen(fd, "w") as fh:
+        fh.write(text)
+    try:
+        m = AzrModel.from_file(path)
+        check(f"{label}: byte-identical", m.to_text() == text)
+        m.levels[0].channels[0].gamma = 1.75
+        m.clear_data_segments()
+        m.clear_target_effects()
+        # (the segment/targetInt splicers drop the file's final newline)
+        check(f"{label}: block intact after edits", thm.rstrip("\n") in m.to_text())
+    finally:
+        os.remove(path)
+
 print()
 if failures:
     print(f"FAILED: {len(failures)} check(s): {', '.join(failures)}")
