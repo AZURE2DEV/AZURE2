@@ -35,6 +35,35 @@ yields, so neither number is a physics benchmark.  (`run_tests.sh` takes the
 first `.azr` of a project directory, so a second `.azr` beside each project
 could not be pinned there; check.sh builds the variants on the fly.)
 
+Section (i) is the energy-dependent weight `weight[k]=<file>` (a two-column
+table E_cm, w multiplying the THM model of `<segmentsData>` line k, points
+and folding sub-points, before the folding; log-linear interpolation). The
+THM norm of `7Li_p_a` is free and so profiled out:
+
+| weight on segment 1 | chi2 | norm (chiSquared.out) |
+|---|---|---|
+| none | 2138.51 (the none pin above) | 0.00493426 |
+| w = 1 (table -1..20 MeV) | identical | identical |
+| w = 2 (table 0..10 MeV), relative or absolute path | identical | doubled (0.00986851; the norm multiplies the data, n* = Smm/Smd) |
+| w = 1 + E (11 rows, 0..10 MeV) | 868.963 | |
+| `weightTest[2]` (a `<segmentsTest>` line, not read in a data run) | identical | |
+
+`weightTest[3]` is checked in an extrapolation ("Calculate Segments Without
+Data") with `<segmentsTest>` line 3 turned into a THM line (5 -> 4, isDiff
+10, lab 0.5-3 MeV): with the two-row table (0, 1), (5, 4) every extrapolated
+model value is the unweighted one times 4^(E_cm/5) to 1e-6.
+
+With the table starting at 0 the 30 keV folding reaches below it
+(E = -0.001 MeV): one `WARNING: <thm> weight ... outside its table` and the
+end value. Refused at startup with `ERROR: <thm> weight[k]: ...` and a
+non-zero exit: a missing file, energies not strictly increasing, w <= 0, three
+columns, a data point outside the table (a table from 1 MeV), k beyond the
+last `<segmentsData>` line, `weight[0]`, and a weight on a segment that is not
+THM (a second, isDiff 0 copy of the segment line). A failure after the
+configuration is read (these data-dependent checks) makes AZURE2 exit 255 as
+a malformed block does; before 2026-09-26 AZURE2 exited 0 whenever the run
+itself failed.
+
 A misspelt key (`vertx=onshell`), an unknown value (`kinematics=kf2body`), a
 negative spectator energy and an unterminated block must each print an
 `ERROR: <thm> ...` line, make AZURE2 exit non-zero (255) and leave no
