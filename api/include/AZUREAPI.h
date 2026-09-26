@@ -11,6 +11,7 @@ class EData;
 class CNuc;
 class EPoint;
 struct GradAccum;
+class ParamIndexMap;
 
 /// A function class to perform the calculation of the chi-squared value
 
@@ -306,6 +307,22 @@ class AZUREAPI {
   vector_r CalculateResidualJacobianRWA(const vector_r &params) const;
 
   /*!
+   * Standardized residuals only, from one forward pass: the residual vector
+   * of CalculateResidualJacobianRWA (same rows, same order: every point of every
+   * segment, in segment order), without the Jacobian.  sum r_i^2 equals
+   * CalculateChi2RWA.  Never bails: it uses the forward model, not the adjoint.
+   */
+  vector_r CalculateResidualsRWA(const vector_r &params) const;
+
+  /*!
+   * The normalization each segment carries now (one per calculated segment,
+   * collapsed by segment key like UpdateData), as opposed to norms(), which is
+   * the nominal value from the file.  After a chi-squared evaluation a
+   * profiled (free THM) norm holds its optimum n* = S_mm/S_md.
+   */
+  vector_r GetCurrentNorms() const;
+
+  /*!
    * Per-point sensitivities d(model)/d(theta) of the calculated segments, for
    * covariance uncertainty bands: sigma^2 = g^T C g (SAMMY Eq. IV E4.2).
    *
@@ -387,6 +404,46 @@ class AZUREAPI {
    */
   bool Chi2GradEGammaNorm(const vector_r &fullParams, vector_r &gradFull,
                           double &chi2Out) const;
+
+  /// Fill the canonical compound/data from a full RWA vector (R-matrix
+  /// parameters, norms, energy shifts, and the Brune shift functions).
+  void FillFromFullRWA(const vector_r &full) const;
+
+  /*!
+   * Forward model and data chi-squared on the already-filled compound/data,
+   * exactly as the CLI's AZURECalc::operator() computes the data term: every
+   * point's model is stored on it, a profiled (free THM) norm is set to its
+   * optimum and contributes S_dd - S_md^2/S_mm, and the per-segment value is
+   * stored on the segment.  No penalties.  If res is given it receives the
+   * standardized residual (m - n d)/(n e) of every point (0 where e = 0), in
+   * the row order of ComputeResidualJacobian -- with the profiled n, so that
+   * sum r^2 is the returned chi-squared.
+   */
+  double EvaluateFilledChi2(vector_r *res) const;
+
+  /// Residuals and d r/d(packed parameter) of the points of one THM segment.
+  struct THMRows {
+    int segment = 0;   ///< 1-based segment index
+    int firstRow = 0;  ///< row of its first point in the global residual vector
+    vector_r m;        ///< model per point
+    vector_r r;        ///< standardized residual per point
+    vector_r Jm;       ///< d m / d p, row-major nPoints x nCols (E, gamma columns)
+    vector_r J;        ///< d r / d p, row-major nPoints x nCols
+  };
+  /*!
+   * THM (HOES) points are outside the analytic adjoint, so their model
+   * Jacobian J_m is taken by central differences in the level energies and
+   * reduced widths (h = 1e-6 (|x| + 1), the step AZURECalc::Gradient uses for
+   * its THM part); norm and energy-shift columns are left zero (the caller
+   * differences shifts on the whole residual vector).  The residual of a point
+   * of a profiled segment is r_i = (s m_i - d_i)/e_i with s = 1/n* = S_md/S_mm,
+   * a function of the parameters; its derivative is taken analytically:
+   *   d r_i/dp = (s J_mi + m_i ds/dp)/e_i,
+   *   ds/dp    = (sum_k d_k J_mk/e_k^2 - 2 s sum_k m_k J_mk/e_k^2) / S_mm.
+   * (A fixed THM norm, or a degenerate profile, has ds/dp = 0.)  The
+   * compound/data are left filled at `full`.
+   */
+  std::vector<THMRows> ComputeTHMRows(const vector_r &full, const ParamIndexMap &pmap) const;
 
   // Configuration
   Config &configure_;

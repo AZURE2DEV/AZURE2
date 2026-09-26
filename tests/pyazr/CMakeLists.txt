@@ -43,3 +43,10 @@ add_test(NAME pyazr_output_files
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/output_files_test.py)
 set_tests_properties(pyazr_output_files PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# A free THM norm is profiled, in pyazr as in the CLI: chi2, parameters,
+# residuals, derivatives and output files on tests/7Li_p_a.
+add_test(NAME pyazr_thm_profiled
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_profiled_test.py)
+set_tests_properties(pyazr_thm_profiled PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

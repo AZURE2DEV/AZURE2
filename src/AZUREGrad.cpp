@@ -441,7 +441,8 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
 bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
                              const ParamIndexMap &pmap,
                              const vector_matrix_r *shiftDeriv,
-                             vector_r &residuals, vector_r &jacobian, int &nCols) {
+                             vector_r &residuals, vector_r &jacobian, int &nCols,
+                             bool skipTHM) {
   // Columns of J are the non-fixed (packed) parameters; rows are data points.
   nCols = pmap.NumPacked();
   residuals.clear();
@@ -472,8 +473,12 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
     // THM (HOES) segments are not supported here: the adjoint differentiates
     // the T-matrix observable and the fast forward path computes the standard
     // cross section, both wrong for HOES. Bail so the LM caller falls back to
-    // MIGRAD (which handles THM through Gradient()'s hybrid path).
-    if (segment->IsTHM()) return false;
+    // MIGRAD (which handles THM through Gradient()'s hybrid path).  A caller
+    // that fills THM rows itself (AZUREAPI) asks for them to be left zero.
+    if (segment->IsTHM()) {
+      if (skipTHM) continue;
+      return false;
+    }
     const double norm = segment->GetNorm();
     const int normFull = segment->IsVaryNorm() ? pmap.NormIndex(i) : -1;
     const int nPoints = segment->NumPoints();
@@ -538,7 +543,8 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
 bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
                            const ParamIndexMap &pmap,
                            const vector_matrix_r *shiftDeriv,
-                           std::map<EPoint *, vector_r> &gradByPoint) {
+                           std::map<EPoint *, vector_r> &gradByPoint,
+                           bool skipTHM) {
   gradByPoint.clear();
   const int nCols = pmap.NumPacked();
   const int nSeg = data->NumSegments();
@@ -563,6 +569,7 @@ bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
   for (int i = 1; i <= nSeg && ok; i++) {
     ESegment *segment = data->GetSegment(i);
     if (!segment) continue;
+    if (skipTHM && segment->IsTHM()) continue;  // rows left zero for the caller
     const int nPoints = segment->NumPoints();
     bool bail = false;
 

@@ -199,11 +199,17 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
  * finite differences on the residual vector this function returns (see
  * AZUREAPI::CalculateResidualJacobianRWA).  Returns false if any point is
  * outside the supported analytic path.
+ *
+ * THM (HOES) segments are outside it: by default their presence returns false.
+ * With skipTHM their rows are still assigned (in segment order, like every other
+ * row) but left zero, for a caller that fills them itself -- AZUREAPI does, with
+ * the profiled norm (see AZUREAPI::THMRows).
  */
 bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
                              const ParamIndexMap &pmap,
                              const vector_matrix_r *shiftDeriv,
-                             vector_r &residuals, vector_r &jacobian, int &nCols);
+                             vector_r &residuals, vector_r &jacobian, int &nCols,
+                             bool skipTHM = false);
 
 /*!
  * \brief Per-point d(model)/d(theta) for analytic covariance bands, keyed by
@@ -211,11 +217,14 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
  *        (E, gamma) columns are populated (dT/dn = dT/dshift = 0).  Each row is
  *        one adjoint with cotangent 1.  `compound`/`data` must be best-fit-filled.
  *        Returns false (clearing the output) if any point is outside the analytic
- *        path, so the caller can skip the band.
+ *        path, so the caller can skip the band.  With skipTHM the rows of THM
+ *        (HOES) points are left zero for the caller to fill (the adjoint
+ *        differentiates the T-matrix observable, not the HOES one).
  */
 bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
                            const ParamIndexMap &pmap,
                            const vector_matrix_r *shiftDeriv,
-                           std::map<EPoint *, vector_r> &gradByPoint);
+                           std::map<EPoint *, vector_r> &gradByPoint,
+                           bool skipTHM = false);
 
 #endif

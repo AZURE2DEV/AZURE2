@@ -392,6 +392,19 @@ class Session {
     }
     return to_array(out);
   }
+  py::array_t<double> calculate_residuals_rwa(py::array_t<double, py::array::forcecast> p) {
+    vector_r v = to_vector(p), out;
+    {
+      py::gil_scoped_release release;
+      ConfigScope guard(config_);
+      out = api_->CalculateResidualsRWA(v);
+    }
+    return to_array(out);
+  }
+  py::array_t<double> current_norms() {
+    ConfigScope guard(config_);
+    return to_array(api_->GetCurrentNorms());
+  }
   py::array_t<double> calculate_model_gradients_rwa(py::array_t<double, py::array::forcecast> p) {
     vector_r v = to_vector(p), out;
     {
@@ -543,6 +556,10 @@ PYBIND11_MODULE(_azure2, m) {
            py::arg("params"))
       .def("calculate_residual_jacobian_rwa", &Session::calculate_residual_jacobian_rwa,
            py::arg("params"))
+      .def("calculate_residuals_rwa", &Session::calculate_residuals_rwa, py::arg("params"),
+           "Standardized residuals (forward pass; THM norms profiled).")
+      .def("current_norms", &Session::current_norms,
+           "Norm each segment carries now (profiled THM norms at their optimum).")
       .def("calculate_model_gradients_rwa", &Session::calculate_model_gradients_rwa,
            py::arg("params"))
       .def("coulomb_functions", &Session::coulomb_functions, py::arg("request"))

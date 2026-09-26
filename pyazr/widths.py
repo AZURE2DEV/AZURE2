@@ -7,7 +7,8 @@ picture allows.  This module builds that comparison for a whole level scheme at
 once, at whatever parameter vector you hand it:
 
 * **particle channels** -- the Wigner (single-particle) limit
-  ``gamma^2_W = hbar^2 / (mu a^2)``, and the dimensionless reduced width
+  ``gamma^2_W = 3 hbar^2 / (2 mu a^2)`` (the Teichmann-Wigner convention, with
+  the factor 3/2; AChannel::SetWignerLimit), and the dimensionless reduced width
   ``theta^2 = Gamma_c / Gamma_W`` with ``Gamma_W = 2 P_l(E_r) gamma^2_W``.
   ``theta^2 <= 1`` is the sum-rule expectation.
 * **photon channels** -- the Weisskopf single-particle estimate for the
@@ -86,10 +87,14 @@ def weisskopf_width(radiation_type, L, e_gamma, mass_number):
 def teichmann_wigner(wigner_gamma2):
     """The Teichmann-Wigner sum-rule unit ``3 hbar^2 / (2 mu a^2)``.
 
-    Some references quote dimensionless widths against this instead of
-    ``hbar^2/(mu a^2)``; it is 1.5x larger, so their theta^2 is 1.5x smaller.
+    AZURE2's ``Parameter.wigner_limit`` (and hence ``ChannelWidth.wigner_gamma2``)
+    already *is* this unit -- AChannel::SetWignerLimit computes
+    ``1.5 hbar^2 / (mu a^2)`` -- so it is returned unchanged.  (This function
+    used to multiply by 1.5 again, on the mistaken premise that the API limit
+    was ``hbar^2/(mu a^2)``.)  For the ``hbar^2/(mu a^2)`` unit some references
+    use instead, divide by 1.5; theta^2 against it is 1.5x larger.
     """
-    return None if wigner_gamma2 is None else 1.5 * wigner_gamma2
+    return None if wigner_gamma2 is None else float(wigner_gamma2)
 
 
 @dataclass
@@ -124,7 +129,7 @@ class ChannelWidth:
     is_photon: bool = False
     is_open: bool = True            # above threshold at this level energy?
     threshold: Optional[float] = None       # channel threshold, in Ex (MeV)
-    wigner_gamma2: Optional[float] = None   # hbar^2/(mu a^2), MeV
+    wigner_gamma2: Optional[float] = None   # 3 hbar^2/(2 mu a^2), MeV
     wigner_width: Optional[float] = None    # 2 P_l(E_r) gamma^2_W, eV
     theta2: Optional[float] = None          # Gamma / Gamma_W
     theta2_formal: Optional[float] = None   # gamma^2 / gamma^2_W

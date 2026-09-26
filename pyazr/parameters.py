@@ -86,12 +86,16 @@ class Parameter:
     pair: Optional[int] = None
     radiation_type: Optional[str] = None   # 'P' (particle), 'E', 'M', ...
 
-    # Wigner limit of the channel's reduced width (width parameters only).
-    # This is the bound AZURE2 places on the reduced-width amplitude when the
-    # gamma^2_W = hbar^2/(mu a^2) in MeV -- the limit on the reduced width
-    # *squared*, not on ``value``.  It matches neither convention ``value`` can
-    # be in: a partial width in eV, nor a reduced width amplitude in MeV^(1/2).
-    # Form theta^2 with pyazr.widths rather than dividing ``value`` by this.
+    # Wigner limit of the channel's reduced width (width parameters only):
+    # gamma^2_W = 3 hbar^2 / (2 mu a^2) in MeV (AChannel::SetWignerLimit), the
+    # Teichmann-Wigner single-particle sum-rule limit, which carries the factor
+    # 3/2 relative to the hbar^2/(mu a^2) unit some references use (divide by
+    # 1.5 to get that one; theta^2 against it is 1.5x larger).  It is the limit
+    # on the reduced width *squared* -- AZURE2's Wigner-limit bound on the
+    # reduced-width amplitude is its square root -- not on ``value``, and it
+    # matches neither convention ``value`` can be in: a partial width in eV,
+    # nor a reduced width amplitude in MeV^(1/2).  Form theta^2 with
+    # pyazr.widths rather than dividing ``value`` by this.
     # ``None`` for non-width parameters.
     wigner_limit: Optional[float] = None
 

@@ -857,12 +857,44 @@ class azure2:
     # -- chi-squared ----------------------------------------------------------
 
     def calculate_chi2_rwa(self, params):
-        """Total data chi-squared at a free RWA vector, as a one-element list. Excludes the normalization and energy-shift penalties AZURE2's own objective adds."""
+        """Total data chi-squared at a free RWA vector, as a one-element list.
+
+        Excludes the normalization and energy-shift penalties AZURE2's own
+        objective adds.  A THM segment with a free norm is treated as the CLI
+        treats it: its arbitrary scale is profiled out (n* = S_mm/S_md, chi2 =
+        S_dd - S_md^2/S_mm, no penalty) and is not an entry of ``params`` --
+        see :meth:`segment_norms` for the n* it lands on.
+        """
         return [float(self.sess.calculate_chi2_rwa(params))]
 
     def calculate_chi2(self, params):
         """As calculate_chi2_rwa, taking the physical parameter vector instead."""
         return [float(self.sess.calculate_chi2_physical(params))]
+
+    def segment_norms(self, params=None):
+        """The normalization each segment carries at ``params``.
+
+        One entry per segment, in ``segment_chi2`` order.  For most segments
+        this is the free-vector value (or the fixed one from the file); for a
+        THM segment with a free norm it is the profiled optimum ``n*`` -- which
+        is not a fit parameter, so this is the only way to see it.  Runs a
+        chi-squared evaluation.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        self.sess.calculate_chi2_rwa(x)
+        return np.asarray(self.sess.current_norms(), float)
+
+    def residuals(self, params=None):
+        """Standardized residuals ``(fit_i - data_i*n)/(cmErr_i*n)``, from a
+        forward pass alone.
+
+        The residual vector of :meth:`residual_jacobian` (same rows, in segment
+        order) without its Jacobian, so it is as cheap as one chi-squared and
+        never refuses a model.  ``sum(r**2) == calculate_chi2_rwa``: THM
+        segments with a free norm use their profiled ``n*``.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        return np.asarray(self.sess.calculate_residuals_rwa(x.ravel()), float)
 
     def write_output_files(self, params=None):
         """Write the run's standard output files, as the CLI does at the end.
@@ -904,10 +936,11 @@ class azure2:
         ``calculate_chi2_rwa`` returns only the total, but the standardized
         residuals carry the split: they come back in segment order, so summing
         their squares between the segment boundaries recovers each one.  The
-        sum of this equals ``calculate_chi2_rwa`` exactly.
+        sum of this equals ``calculate_chi2_rwa`` exactly (THM segments with
+        a free norm at their profiled optimum, as in the CLI's chiSquared.out).
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
-        r = np.asarray(self.residual_jacobian(x)[0], float)
+        r = self.residuals(x)
         edges = np.cumsum([0] + [len(self.energies[i]) for i in range(self.nsegments)])
         return np.array([float(np.sum(r[edges[i]:edges[i + 1]] ** 2))
                          for i in range(self.nsegments)])
@@ -968,7 +1001,8 @@ class azure2:
         :meth:`calculate_chi2_rwa`.
 
         Note the denominator uses the *nominal* normalization, and that
-        ``norm_error`` is a percentage.  Returns ``{"norm": array, "shift":
+        ``norm_error`` is a percentage.  A THM segment with a free norm has no
+        norm penalty: its scale is profiled out, not a parameter.  Returns ``{"norm": array, "shift":
         array}``, one entry per segment.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
@@ -1017,7 +1051,11 @@ class azure2:
         (float, numpy.ndarray)
             ``(chi2, grad)`` with one gradient entry per input parameter.
             Energies / reduced widths / normalizations are analytic; energy
-            shifts are finite-differenced.  (For a Gaussian log-likelihood use
+            shifts are finite-differenced.  THM (HOES) points are outside the
+            adjoint: their contribution, with the norm profiled, is
+            ``2 J^T r`` over the THM rows of :meth:`residual_jacobian` (model
+            Jacobian by central differences, two THM forward passes per free
+            R-matrix parameter, like the CLI's own THM gradient).  (For a Gaussian log-likelihood use
             ``lnL = -0.5*(chi2 + const)`` and ``grad_lnL = -0.5*grad``.)
         """
         resp = np.asarray(
@@ -1049,6 +1087,16 @@ class azure2:
         (Before pyazr 2.7 these columns came back as zero, which a
         least-squares driver accepts silently by never moving those
         parameters.)
+
+        THM (HOES) segments: the adjoint does not cover the HOES observable,
+        so the model Jacobian ``J_m`` of a THM point is taken by central
+        differences (step ``1e-6 (|x| + 1)``) in every free level energy and
+        reduced width -- two THM forward passes per column.  With a free norm
+        the scale is profiled: ``r_i = (s m_i - d_i)/e_i`` with
+        ``s = 1/n* = S_md/S_mm`` a function of the parameters, and its
+        dependence is added analytically,
+        ``dr_i/dp = (s J_mi + m_i ds/dp)/e_i``,
+        ``ds/dp = (sum d_k J_mk/e_k^2 - 2 s sum m_k J_mk/e_k^2)/S_mm``.
         """
         resp = np.asarray(
             self.sess.calculate_residual_jacobian_rwa(
@@ -1078,6 +1126,9 @@ class azure2:
         many parameters the model has -- as against the ``2 * ncols`` forward
         passes a finite-difference estimate would take.  See
         :func:`pyazr.bands.uncertainty_bands`.
+
+        THM (HOES) points are outside the adjoint; their rows are central
+        differences of the HOES model (see :meth:`residual_jacobian`).
 
         Raises ``RuntimeError`` if the model contains a segment outside the
         supported analytic path.

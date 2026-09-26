@@ -1043,15 +1043,16 @@ non-interchangeable forms.
 1. **GUI / width form**, in eV next to each channel: `Γ_W = 2 P_l(E_r) γ²_W`,
    energy-dependent. **θ² = Γ/Γ_W** — prefer this; it is checkable one channel
    at a time in the GUI.
-2. **API form**, `Parameter.wigner_limit`: `γ²_W = ħ²/(μ a²)` in **MeV**,
+2. **API form**, `Parameter.wigner_limit`: `γ²_W = 3ħ²/(2μ a²)` in **MeV**
+   (the Teichmann–Wigner convention, with the 3/2 factor),
    already squared and energy-independent. Then θ² = γ²_formal/γ²_W with the
    formal reduced width (`g_int` in `parameters.out`, squared).
 
 Never divide by `wigner_limit` twice. The two differ by the level-shift factor
 `1/(1 + Σ_c γ_c² dS_c/dE)`, negligible for narrow levels but a factor 70+ for
 the 30 MeV background poles. AZURE2 reports **observed** partial widths,
-`Γ_c = 2 P_c γ_c²/(1 + Σ γ² dS/dE)`. Some references use the Teichmann–Wigner
-sum-rule unit `3ħ²/(2μa²)`, 1.5× larger (`teichmann_wigner()`).
+`Γ_c = 2 P_c γ_c²/(1 + Σ γ² dS/dE)`. Some references use `ħ²/(μa²)` instead,
+1.5× smaller (divide `wigner_limit` by 1.5; θ² against it is 1.5× larger).
 
 `Γ_W` needs `P_l(E_r)`, which the API does not expose; `wigner_widths` gets it
 out of AZURE2 itself by transforming a probe vector with every rwa set to a tiny

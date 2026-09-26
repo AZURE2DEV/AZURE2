@@ -1663,7 +1663,7 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config *config
         // sqrt(gamma_W^2), not gamma_W^2 itself.
         if (config && (config->paramMask & Config::USE_WIGNER_LIMITS)) {
           AChannel *channel = this->GetJGroup(j)->GetChannel(ch);
-          // GetWignerLimit returns gamma^2_W = hbar^2/(mu a^2) in MeV -- the
+          // GetWignerLimit returns gamma^2_W = 3 hbar^2/(2 mu a^2) in MeV -- the
           // limit on the reduced width *squared*.  The fit parameter is the
           // reduced width *amplitude* in MeV^(1/2), so the bound is its square
           // root; using gamma^2_W directly bounds a MeV^(1/2) quantity by a MeV
