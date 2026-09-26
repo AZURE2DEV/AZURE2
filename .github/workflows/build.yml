@@ -197,9 +197,15 @@ jobs:
           set -o pipefail
           if ! ./tests/run_tests.sh 2>&1 | tee physics-tests.log; then
             echo "::error::physics regression tests failed on ${{ matrix.name }}"
-            grep -nE "^===|FAIL|SKIP|ERROR|chi2|segment|expected" physics-tests.log \
-              | head -40 \
-              | while IFS= read -r line; do echo "::error::${{ matrix.name }}: $line"; done
+            # One annotation per failing test (GitHub shows only ten per step),
+            # carrying that test's own output, so the reason is readable without
+            # downloading the log.  %0A is a newline inside an annotation.
+            awk -v os="${{ matrix.name }}" '
+              function flush() { if (bad && blk != "") printf "::error::%s: %s\n", os, blk; blk = ""; bad = 0 }
+              /^=== / { flush(); blk = $0; next }
+              blk != "" { gsub(/%/, "%25"); gsub(/\r/, ""); blk = blk "%0A" $0
+                          if ($0 ~ /FAIL|ERROR|missing|No such|not found|Killed|Timeout|timed out/) bad = 1 }
+              END { flush() }' physics-tests.log | head -9
             exit 1
           fi
 
