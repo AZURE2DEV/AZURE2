@@ -3,6 +3,8 @@
 #ifndef NO_STAT
 #include <sys/stat.h>
 #endif
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -403,6 +405,33 @@ int Config::ReadThmBlock() {
         ok = !!(ks >> pairKey);
         if (ok) thm.spectatorEnergyByPair[pairKey] = x;
       } else ok = false;
+    } else if (key.compare(0, 6, "weight") == 0) {
+      // weight[<k>]=<file> (k-th <segmentsData> line) or weightTest[<k>]=<file>
+      // (k-th <segmentsTest> line).  Which segments exist, and whether they are
+      // THM, is checked once the data are read (EData::Fill / MakePoints).
+      bool test = key.compare(0, 11, "weightTest[") == 0;
+      size_t open = test ? 10 : 6;
+      int segKey = 0;
+      ok = key.size() > open + 2 && key[open] == '[' && key.back() == ']' && !value.empty();
+      if (ok) {
+        std::istringstream ks(key.substr(open + 1, key.size() - open - 2));
+        std::string rest;
+        ok = !!(ks >> segKey) && segKey >= 1 && !(ks >> rest);
+      }
+      if (ok) {
+        std::shared_ptr<ThmWeightTable> table = std::make_shared<ThmWeightTable>();
+        table->name = value;
+        std::string dir;
+        size_t slash = configfile.find_last_of('/');
+        if (slash != std::string::npos) dir = configfile.substr(0, slash + 1);
+        table->path = (value[0] == '/' || dir.empty()) ? value : dir + value;
+        std::string why = table->Read(table->path);
+        if (!why.empty()) {
+          outStream << "ERROR: <thm> " << key << ": " << why << std::endl;
+          return -1;
+        }
+        (test ? thm.weightByTestSegment : thm.weightBySegment)[segKey] = table;
+      }
     } else ok = false;
     if (!ok) {
       outStream << "ERROR: <thm> line not understood: '" << trimmed << "'" << std::endl;
@@ -411,4 +440,56 @@ int Config::ReadThmBlock() {
   }
   outStream << "ERROR: <thm> block is not terminated by </thm>." << std::endl;
   return -1;
+}
+
+/*!
+ * Reads a THM weight table: two columns, E_cm of the THM entrance pair (MeV)
+ * and w(E) > 0, one row per line, '#' starts a comment.  At least two rows,
+ * strictly increasing in E.  Returns "" on success, else what is wrong.
+ */
+std::string ThmWeightTable::Read(const std::string &file) {
+  e.clear();
+  w.clear();
+  lnw.clear();
+  std::ifstream in(file.c_str());
+  if (!in) return "cannot read the weight file '" + file + "'";
+  std::string line;
+  int lineNumber = 0;
+  while (std::getline(in, line)) {
+    lineNumber++;
+    size_t hash = line.find('#');
+    if (hash != std::string::npos) line = line.substr(0, hash);
+    if (line.find_first_not_of(" \t\r\n") == std::string::npos) continue;
+    std::istringstream ls(line);
+    double energy, weight;
+    std::string extra;
+    std::ostringstream where;
+    where << "'" << file << "' line " << lineNumber << ": ";
+    if (!(ls >> energy >> weight) || (ls >> extra))
+      return where.str() + "expected two numbers, E (MeV) and w";
+    if (!std::isfinite(energy) || !std::isfinite(weight) || !(weight > 0.0))
+      return where.str() + "the weight must be finite and > 0";
+    if (!e.empty() && !(energy > e.back()))
+      return where.str() + "the energies must be strictly increasing";
+    e.push_back(energy);
+    w.push_back(weight);
+    lnw.push_back(std::log(weight));
+  }
+  if (e.size() < 2) return "'" + file + "' needs at least two rows (E w)";
+  return "";
+}
+
+/*!
+ * w(E), linear in E and in ln w between the rows of the table; the end value
+ * beyond either end (*outside is then set).  Two rows of equal w give that w
+ * exactly, so a constant table scales the model by exactly w.
+ */
+double ThmWeightTable::operator()(double energy, bool *outside) const {
+  if (outside) *outside = !Covers(energy);
+  if (energy <= e.front()) return w.front();
+  if (energy >= e.back()) return w.back();
+  size_t hi = std::upper_bound(e.begin(), e.end(), energy) - e.begin();
+  size_t lo = hi - 1;
+  double t = (energy - e[lo]) / (e[hi] - e[lo]);
+  return w[lo] * std::exp(t * (lnw[hi] - lnw[lo]));
 }

@@ -107,3 +107,31 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
    When running AZURE2 from the command line (``--no-gui``), these runtime
    options are not applied from the saved configuration. They must be specified
    as command-line flags each time. See :doc:`/reference/command_line`.
+
+THM Options
+-----------
+
+Selecting **THM Options...** edits the optional ``<thm>`` block: the choices in
+the Trojan Horse (half-off-energy-shell) observable of THM segments
+(observable code 10 or more). They have no effect on other segments.
+
+- **Entrance partial waves** (``entranceL``) -- incoherent (default) or
+  coherent sum over the entrance orbital momenta.
+- **Vertex boundary** (``vertex``) -- constant (default), perlevel or onshell
+  boundary term in the transfer vertex.
+- **Kinematic factors** (``kinematics``) -- lacognata (default), triple,
+  kf3body or lambda32, matching how the HOES data were extracted.
+- **External Coulomb term in the vertex** (``coulombIntegral``).
+- **Spectator energy** (``spectatorEnergy``, MeV) for every THM entrance pair,
+  and a table of per-pair values (``spectatorEnergy[<pair>]``).
+- **Energy-dependent weight per segment** (``weight[<segment>]``,
+  ``weightTest[<segment>]``) -- a two-column table w(E) multiplying the THM
+  model of one segment, e.g. a Coulomb-distortion correction. The segment
+  number is the line number in the Data (or Test) segments table, counting
+  inactive lines. The **...** button picks the file; a file inside the project
+  directory is stored relative to it.
+
+Each control has a tooltip with the physics in one line; the full description
+is in :doc:`../theory/thm_implementation`. Options left at their defaults are
+not written, and a project whose options are all default has no ``<thm>``
+block. If the dialog is not changed, the block is saved exactly as it was read.

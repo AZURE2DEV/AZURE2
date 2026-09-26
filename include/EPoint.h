@@ -26,6 +26,7 @@ class PPair;
 class TargetEffect;
 class DataLine;
 class Config;
+struct ThmWeightTable;
 
 /// An AZURE data point
 
@@ -49,6 +50,9 @@ class EPoint {
   bool IsPhase() const;
   /// THM (modified R-matrix, half-off-shell) point?
   bool IsTHM() const;
+  /// Weight table multiplying the THM model cross section (<thm> weight[k]=),
+  /// or null.  Owned by the parent ESegment.
+  const ThmWeightTable *GetThmWeight() const { return thm_weight_; }
   /// Is this point calculated by another? Points at equal energies are mapped onto one so the energy-dependent work is done once.
   bool IsMapped() const;
   /// Does the point carry target effects?
@@ -293,6 +297,7 @@ class EPoint {
   bool is_differential_;
   bool is_phase_;
   bool is_thm_;
+  const ThmWeightTable *thm_weight_ = nullptr;
   bool is_mapped_;
   bool is_ang_dist_;
   bool is_analyzing_power_ = false;

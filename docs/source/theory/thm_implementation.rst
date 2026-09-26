@@ -43,13 +43,34 @@ with every key at its default, gives identical results
    coulombIntegral=0        # 0 | 1
    spectatorEnergy=0        # MeV, every THM entrance pair
    spectatorEnergy[5]=0.4   # MeV, entrance pair 5 only (overrides the above)
+   weight[1]=R_E.dat        # w(E) multiplying the model of <segmentsData> line 1
+   weightTest[2]=R_E.dat    # the same for <segmentsTest> line 2
    </thm>
 
-An unknown key, an unknown value, a negative spectator energy or a missing
-``</thm>`` prints ``ERROR: <thm> ...``, and AZURE2 exits with a non-zero status
-before any calculation. The GUI and ``pyazr.AzrModel`` have no editor for the
-block but carry it through a save unchanged; the GUI writes it after
-``</targetInt>``.
+An unknown key, an unknown value, a negative spectator energy, a missing
+``</thm>`` or a bad weight (below) prints ``ERROR: <thm> ...``, and AZURE2
+exits with a non-zero status before any calculation; ``pyazr`` refuses the
+project the same way. ``pyazr.AzrModel`` has no editor for the block but
+carries it through a save unchanged.
+
+The GUI edits the block under *Configure > THM Options...*: the four global
+choices, the spectator energy, a table of per-pair spectator energies and a
+table of per-segment weight files (with a file chooser; a file inside the
+project directory is stored relative to it). Every control has a one-line
+tooltip. The dialog applies the engine's rules (same keys and values,
+spectator energies :math:`\ge 0`, every weight file read with the engine's
+own reader) before it accepts; whether a weighted segment exists, is THM and
+has its points inside the table is checked by the engine at startup. The GUI
+writes the block after ``</targetInt>``. A project whose options are not
+changed in the dialog keeps its block byte for byte
+(``tests/gui/thm_block_test``). When they are changed, only non-default keys
+are written: comment and blank lines of the block stay where they were, a
+line whose value did not change is kept verbatim, a changed one is rewritten
+keeping its indentation and inline comment, a key that returns to its default
+is removed, and new keys are appended. Options that are all default remove
+the block, comments included, since an empty block and no block are the same
+to the engine (``tests/gui/thm_options_dialog_test``). A block with a line the
+engine would refuse is not opened in the editor (it is kept as it is).
 
 ``entranceL`` — interference between entrance orbital momenta
    ``incoherent`` (default) sums the entrance partial waves of one channel spin
@@ -192,6 +213,103 @@ block but carry it through a save unchanged; the GUI writes it after
    number that the segment's entrance key refers to) and overrides the global
    value for it. Default 0. ``tests/7Li_p_a``: 2195.75 at 0.5 MeV (2088.91 with
    ``vertex=perlevel``).
+
+``weight`` — energy-dependent weight of one segment's model
+   ``weight[k]=<file>`` multiplies the THM model cross section of segment
+   ``k`` by :math:`w(E)` at every point and at every sub-point of the
+   experimental-effect (resolution) folding, i.e. before the folding, with
+   :math:`E` the c.m. energy of the THM entrance pair at that (sub-)point.
+   ``k`` is the segment's line number in ``<segmentsData>``, counting inactive
+   lines — the numbering of ``segment_<k>_norm``, of the first column of
+   ``normalizations.out`` and of ``chiSquared.out``, and of the output files
+   (``ESegment::GetSegmentKey``). ``weightTest[k]=<file>`` does the same for
+   line ``k`` of ``<segmentsTest>`` (extrapolation of a THM segment with the
+   weighted model; ``<segmentsTest>`` lines are numbered on their own, from 1).
+   A relative path is taken from the directory of the ``.azr`` file; a path
+   cannot contain ``#`` (it starts a comment).
+
+   The file has two columns, :math:`E` (MeV) and :math:`w(E) > 0`, one row per
+   line, at least two rows, strictly increasing in :math:`E`; ``#`` starts a
+   comment. Between rows :math:`w` is interpolated log-linearly (linear in
+   :math:`E`, linear in :math:`\ln w`: exponential pieces, which suit factors
+   that vary by orders of magnitude). Every point of the segment must lie
+   inside the table, or AZURE2 stops at startup; folding sub-points (and points
+   moved by a fitted energy shift) beyond either end get the end value, and the
+   first such evaluation prints one ``WARNING``.
+
+   Errors (``ERROR: <thm> ...``, exit non-zero): a file that cannot be read,
+   a line that is not two numbers, :math:`w \le 0`, energies not strictly
+   increasing, fewer than two rows, a ``k`` beyond the last line of the block,
+   a weight on a segment that is not THM (``isDiff < 10``), a point outside
+   the table. A weight on an inactive (or unusable) line is ignored with a
+   ``WARNING``.
+
+   With a free (profiled) THM normalization a constant :math:`w` changes
+   nothing but the norm: :math:`\chi^2` is identical, and since the norm
+   multiplies the *data* (:math:`n^* = S_{mm}/S_{md}`, ``ESegment::
+   ProfileNormChiSquared``), ``w ≡ 2`` *doubles* the norm written to
+   ``chiSquared.out`` and ``normalizations.out``. Only the energy dependence
+   of :math:`w` matters, so the choice of :math:`E_\mathrm{norm}` below is
+   immaterial. ``tests/thm_options/check.sh`` pins both and an energy ramp.
+
+   *Physics: the Coulomb-distortion factor.* The plane-wave (PWA) THM analysis
+   takes the transfer amplitude of :math:`a + A \to s + F^*` as constant over
+   the measured range (Mukhamedzhanov et al., J. Phys. G 35 (2008) 014016:
+   :math:`M^\mathrm{DW}` "practically constant on the interval of a few hundred
+   keV"), so the HOES excitation function is the measured yield divided by
+   :math:`\mathrm{KF}\,|\phi_a(p_{sx})|^2` alone. When the projectile or the
+   spectator moves below a Coulomb barrier this fails: the distorted-wave
+   amplitude :math:`M(E)` varies with :math:`E` through the initial and the
+   final (spectator–residual) Coulomb interaction. Mukhamedzhanov & Pang,
+   PRC 99 (2019) 064618, eqs. 20–24 (DWBA, FRESCO), and Mukhamedzhanov,
+   arXiv:2609.04498, eqs. 22–30 (zero-range prior amplitude, Nordsieck
+   integral), find for 12C(14N,α 20Ne)d and 12C(16O,α 20Ne)α a factor that
+   varies by 10\ :sup:`2`–10\ :sup:`5` across the measured range — mostly the
+   exit-channel Coulomb penetrability of the spectator. The PWA-extracted
+   quantity is then
+
+   .. math::
+
+      \sigma^\mathrm{PWA}(E) = R(E)\, \sigma^\mathrm{HOES}(E), \qquad
+      R(E) = \frac{|M(E)|^2}{|M(E_\mathrm{norm})|^2}
+      \quad \text{(arXiv:2609.04498 eqs. 29–30)},
+
+   so the published :math:`S^*(E)` has to be *divided* by :math:`R(E)` — or,
+   equivalently and without touching the data, the HOES model that is fitted
+   to them *multiplied* by :math:`R(E)`. That is what ``weight`` does, with
+   :math:`w(E) = R(E)`. The definition that avoids every convention is
+   :math:`w(E) = S^*_\mathrm{PWA}(E) / S^*_\mathrm{corrected}(E)` up to a
+   constant: the published curves do not all define "R" the same way round
+   (1806.08828 eq. 24 writes a ratio of DWBA cross sections at
+   :math:`E_\mathrm{norm}` over :math:`E`, and its figures show the factor that
+   multiplies :math:`S^*`). For 12C+12C the correction *lowers* the
+   low-energy :math:`S^*`, so :math:`w` grows toward low :math:`E`, by about
+   10\ :sup:`2` from 2.5 to 0.8 MeV. For light, weakly charged systems
+   (7Li(p,α), 6Li(d,α), 17O(n,α)) PWA and DWBA agree to about 10 % and no
+   weight is needed. The same hook carries Mukhamedzhanov's line-shape factor
+   :math:`|N_C(E)|^2` for charged spectators (Mukhamedzhanov 2020 eq. 62), or
+   any other correction that multiplies the HOES cross section.
+
+   *Where the table comes from.* AZURE2 does not compute :math:`R(E)`: it
+   needs the spectator and the residual system (masses, charges, the bound
+   state of :math:`a = x + s`, the kinematics and the angular acceptance of
+   the experiment) and a DWBA/CDCC (e.g. FRESCO) or Nordsieck-integral
+   calculation, none of which is part of an R-matrix project. Make the table
+   outside and name it here, for instance
+
+   * from the published curves (1806.08828 Fig. 10; 2609.04498 Figs. 7–9),
+     digitized, taking care of which way round they are defined;
+   * from a DWBA of the transfer reaction at each :math:`E`:
+     :math:`w(E) = d\sigma^\mathrm{DW}(E) / d\sigma^\mathrm{PWA}(E)` up to a
+     constant;
+   * as an order-of-magnitude estimate, from the Coulomb penetrability of the
+     spectator in the exit channel: it leaves the residual nucleus with
+     :math:`E_{sF} = Q - E` (12C(14N,α 20Ne)d:
+     :math:`E_{d+{}^{24}\mathrm{Mg}} = 3.573\,\mathrm{MeV} - E`), and
+     :math:`w(E) \propto P_0(E_{sF})` at :math:`r \approx 5` fm. For 12C+12C
+     this reproduces the 2026 curve to within a factor 2 (the factor that
+     multiplies :math:`S^*`, :math:`1/w` in the scale of their curve, is
+     4.4×10\ :sup:`-3` at 0.8 MeV against their 3.7–4.2×10\ :sup:`-3`).
 
 Which ``kinematics=`` to use
    Read the data paper's definition of the extracted quantity. Division by the

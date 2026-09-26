@@ -11,6 +11,7 @@ class ExtrapLine;
 class SegLine;
 class CNuc;
 class Config;
+struct ThmWeightTable;
 
 enum OperationType {
   SUM = 0,
@@ -145,6 +146,10 @@ class ESegment {
   /// Point the segment at a TargetEffect in the parent EData.
   void SetTargetEffectNum(int);
   void SetSegmentKey(int);
+  /// Attach the <thm> weight table of this segment; points created afterwards
+  /// carry it.  The segment keeps the table alive.
+  void SetThmWeight(std::shared_ptr<const ThmWeightTable> w) { thmWeight_ = w; }
+  const ThmWeightTable *GetThmWeight() const { return thmWeight_.get(); }
   /// Set the normalization applied to the data.
   void SetNorm(double);
   /// Set the energy shift; UpdatePointEnergiesWithShift applies it to the points.
@@ -199,6 +204,7 @@ class ESegment {
   bool iscmdifferential_;
   bool isphase_;
   bool isTHM_;
+  std::shared_ptr<const ThmWeightTable> thmWeight_;
   /// Which cross section component to compare against: 0 = full, 1 = E1 only, 2 = E2 only.
   int crossSectionComponent_;
   bool isTargetEffect_;

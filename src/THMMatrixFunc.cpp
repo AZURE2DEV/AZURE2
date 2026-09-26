@@ -190,5 +190,18 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
     }
   }
 
+  // Energy-dependent weight of this segment (<thm> weight[k]=), e.g. the
+  // Coulomb-distortion factor R(E) of Mukhamedzhanov & Pang, PRC 99 (2019)
+  // 064618.  Applied to every point and folding sub-point, before the folding.
+  if (const ThmWeightTable *weight = point->GetThmWeight()) {
+    bool outside = false;
+    sigma *= (*weight)(point->GetCMEnergy(), &outside);
+    if (outside && !weight->warned.exchange(true))
+      configure().outStream << "WARNING: <thm> weight '" << weight->name << "' is evaluated at E = "
+                            << point->GetCMEnergy() << " MeV, outside its table ["
+                            << weight->e.front() << ", " << weight->e.back()
+                            << "] MeV; the end value is used there (reported once)." << std::endl;
+  }
+
   point->SetFitCrossSection(sigma);
 }

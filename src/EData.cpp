@@ -27,6 +27,62 @@
  * At creation, this attribute is set to 0.
  */
 
+namespace {
+
+/// The <thm> weight table named for segment line `key`, or null.
+std::shared_ptr<const ThmWeightTable> ThmWeightFor(
+    const std::map<int, std::shared_ptr<const ThmWeightTable>> &tables, int key) {
+  auto it = tables.find(key);
+  return it == tables.end() ? nullptr : it->second;
+}
+
+/*!
+ * Checks the <thm> weight[k]= (or weightTest[k]=) keys against the segments
+ * just read: k must be a line of the block, a segment in use must be THM, and
+ * every one of its points must lie inside the table (folding sub-points may
+ * reach beyond it; they get the end value).  A key naming an inactive or
+ * unusable line is ignored with a warning.  Returns -1 after an ERROR line.
+ */
+int CheckThmWeights(const Config &configure,
+                    const std::map<int, std::shared_ptr<const ThmWeightTable>> &tables,
+                    const char *keyName, const char *blockName, int numLines, EData *data) {
+  for (const auto &entry : tables) {
+    const int key = entry.first;
+    const ThmWeightTable &table = *entry.second;
+    if (key > numLines) {
+      configure.outStream << "ERROR: <thm> " << keyName << "[" << key << "]: " << blockName << " has only "
+                          << numLines << " line(s)." << std::endl;
+      return -1;
+    }
+    ESegment *segment = nullptr;
+    for (int s = 1; s <= data->NumSegments(); s++)
+      if (data->GetSegment(s)->GetSegmentKey() == key) segment = data->GetSegment(s);
+    if (!segment) {
+      configure.outStream << "WARNING: <thm> " << keyName << "[" << key << "]: segment line " << key
+                          << " of " << blockName << " is not in use; the weight is ignored." << std::endl;
+      continue;
+    }
+    if (!segment->IsTHM()) {
+      configure.outStream << "ERROR: <thm> " << keyName << "[" << key << "]: segment " << key << " of "
+                          << blockName << " is not a THM segment (isDiff < 10)." << std::endl;
+      return -1;
+    }
+    for (int p = 1; p <= segment->NumPoints(); p++) {
+      double energy = segment->GetPoint(p)->GetCMEnergy();
+      if (!table.Covers(energy)) {
+        configure.outStream << "ERROR: <thm> " << keyName << "[" << key << "]: segment " << key
+                            << " has a point at E_cm = " << energy << " MeV, outside the table '"
+                            << table.name << "' [" << table.e.front() << ", " << table.e.back() << "] MeV."
+                            << std::endl;
+        return -1;
+      }
+    }
+  }
+  return 0;
+}
+
+}  // namespace
+
 EData::EData() {
   iterations_ = 0;
   normParamOffset_ = 0;
@@ -90,6 +146,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
           }
           if (isValidTotal || theCNuc->IsPairKey(NewSegment.GetExitKey())) {
             NewSegment.SetSegmentKey(numTotalSegments);
+            if (NewSegment.IsTHM()) NewSegment.SetThmWeight(ThmWeightFor(configure.thm.weightBySegment, numTotalSegments));
             this->AddSegment(NewSegment);
 
             // Fill the segment with data first
@@ -218,6 +275,10 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
 
   in.close();
 
+  if (CheckThmWeights(configure, configure.thm.weightBySegment, "weight", "<segmentsData>",
+                      numTotalSegments, this) != 0)
+    return -1;
+
   if (this->NumSegments() > 0) {
     if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
     this->MapData();
@@ -281,6 +342,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
           }
           if (!polProductCapture && (isValidTotal || theCNuc->IsPairKey(NewSegment.GetExitKey()))) {
             NewSegment.SetSegmentKey(numTotalSegments);
+            if (NewSegment.IsTHM()) NewSegment.SetThmWeight(ThmWeightFor(configure.thm.weightByTestSegment, numTotalSegments));
             this->AddSegment(NewSegment);
             ESegment *theSegment = this->GetSegment(this->NumSegments());
 
@@ -441,6 +503,10 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
   if (line != "</segmentsTest>") return -1;
 
   in.close();
+
+  if (CheckThmWeights(configure, configure.thm.weightByTestSegment, "weightTest", "<segmentsTest>",
+                      numTotalSegments, this) != 0)
+    return -1;
 
   if (this->NumSegments() > 0) {
     if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;

@@ -1436,6 +1436,10 @@ int main(int argc, char *argv[]) {
     configure.paramMask |= Config::USE_AMATRIX;
   }
 
+  // Non-zero when the run failed (a project the engine refused after the
+  // configuration was read, e.g. a <thm> weight that does not fit the data),
+  // so that scripts see the failure as they see a malformed <thm> block.
+  int runStatus = 0;
   {
     // Print welcome message
     welcomeMessage(configure);
@@ -1497,6 +1501,7 @@ int main(int argc, char *argv[]) {
       configure.outStream << std::endl;
       startMessage(configure);
       int returnValue = azureMain();
+      runStatus = returnValue;
 #ifdef USE_MCMC
     }
 #endif
@@ -1514,5 +1519,5 @@ int main(int argc, char *argv[]) {
   CleanupCoulFuncCache();
   CleanupECAmplitudeCache();
 
-  return 0;
+  return runStatus != 0 ? -1 : 0;
 }

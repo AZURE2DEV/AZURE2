@@ -62,6 +62,7 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   is_differential_ = parent->IsDifferential();
   is_phase_ = parent->IsPhase();
   is_thm_ = parent->IsTHM();
+  thm_weight_ = parent->GetThmWeight();
   is_ang_dist_ = parent->IsAngularDist();
   max_ang_dist_order_ = parent->GetMaxAngDistOrder();
   j_value_ = parent->GetJ();
@@ -107,6 +108,7 @@ EPoint::EPoint(double angle, double energy, ESegment *parent) {
   is_differential_ = parent->IsDifferential();
   is_phase_ = parent->IsPhase();
   is_thm_ = parent->IsTHM();
+  thm_weight_ = parent->GetThmWeight();
   is_ang_dist_ = parent->IsAngularDist();
   max_ang_dist_order_ = parent->GetMaxAngDistOrder();
   j_value_ = parent->GetJ();

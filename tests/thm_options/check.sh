@@ -9,6 +9,7 @@
 # temporary directory, appends "\n<thm>\n...\n</thm>\n" (the .azr has no
 # trailing newline) and reads the total chi2 from output/chiSquared.out.
 # Section (h) also runs tests/6Li_d, both projects with the 3He binding energy.
+# Section (i) is the per-segment weight table weight[k]=<file>.
 #
 #   ./tests/thm_options/check.sh path/to/AZURE2
 
@@ -35,6 +36,9 @@ run() {
   cp "$SRC/7Li_p_a.azr" "$d/run.azr"
   [ -z "$2" ] || printf '%b' "$2" >> "$d/run.azr"
   [ "${3:-}" != sorted ] || sort_levels "$d/run.azr"
+  # nonthm: a second <segmentsData> line, the same data read as an ordinary
+  # angle-integrated segment (isDiff 0), so segment 2 is not THM.
+  [ "${3:-}" != nonthm ] || sed -i 's|^\(1  5  4  0  8.2  0  180  \)10\(  .*\)$|&\n\10\2|' "$d/run.azr"
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
   echo $? > "$d/status"
   [ -f "$d/output/chiSquared.out" ] || return 0
@@ -159,6 +163,91 @@ refuse misspelt     "$(block vertx=onshell)"             "ERROR: <thm> line not 
 refuse badvalue     "$(block kinematics=kf2body)"        "ERROR: <thm> line not understood"
 refuse negative     "$(block spectatorEnergy=-0.1)"      "ERROR: <thm> line not understood"
 refuse unterminated "\n<thm>\nvertex=onshell\n"          "ERROR: <thm> block is not terminated"
+
+# (i) weight[k]=<file>: w(E) multiplying the THM model of segment k (every point
+# and folding sub-point, before the folding), log-linear in E.  The THM norm of
+# 7Li_p_a is free, hence profiled: a constant w changes only the norm, which
+# multiplies the data (n* = Smm/Smd) and so scales with w.
+# wfile NAME FILE CONTENT: put a weight table into case NAME's directory.
+wfile() { mkdir -p "$WORK/$1"; printf '%b' "$3" > "$WORK/$1/$2"; }
+# norm NAME: the norm column of segment 1 in chiSquared.out
+norm() { awk -F, '$1 == 1 {print $4}' "$WORK/$1/output/chiSquared.out" 2>/dev/null; }
+wfile w1 unit.dat "# w = 1\n-1 1\n20 1\n"
+w1="$(run w1 "$(block "weight[1]=unit.dat")")"
+expect "weight[1] w=1 == no block" "$w1" "$none" 0
+expect "weight[1] w=1: norm unchanged" "$(norm w1)" "$(norm none)" 0
+wfile w2 two.dat "0 2\n10 2   # constant\n"
+w2="$(run w2 "$(block "weight[1]=two.dat")")"
+expect "weight[1] w=2 == no block (profiled norm absorbs it)" "$w2" "$none" 0
+expect "weight[1] w=2: norm doubled" "$(norm w2)" \
+  "$(awk -v n="$(norm none)" 'BEGIN{printf "%.6g", 2*n}')" 1e-5
+if grep -q "WARNING: <thm> weight 'two.dat' is evaluated at E = .* outside its table" "$WORK/w2/log"; then
+  echo "  ok    folding sub-points below the table: one warning, end value used"
+else
+  echo "  FAIL  no warning for sub-points outside the table"; fail=1
+fi
+# absolute path, and the table's range exactly covering the data is accepted
+wfile wabs two.dat "0 2\n10 2\n"
+expect "weight[1] absolute path == relative" \
+  "$(run wabs "$(block "weight[1]=$WORK/wabs/two.dat")")" "$w2" 0
+# w = 1 + E_cm as piecewise log-linear rows: a different chi2
+wfile ramp ramp.dat "# w = 1 + E\n0 1\n1 2\n2 3\n3 4\n4 5\n5 6\n6 7\n7 8\n8 9\n9 10\n10 11\n"
+expect "weight[1] ramp w = 1 + E" "$(run ramp "$(block "weight[1]=ramp.dat")")" 868.963
+# weightTest[k] names a <segmentsTest> line and is only read for extrapolation
+wfile wtest two.dat "0 2\n10 2\n"
+expect "weightTest[2] does not touch the data segments" \
+  "$(run wtest "$(block "weightTest[2]=two.dat")")" "$none" 0
+
+# weightTest[k] in an extrapolation ("Calculate Segments Without Data"):
+# <segmentsTest> line 3 made a THM line (5 -> 4, isDiff 10, lab 0.5-3 MeV),
+# line 2 switched off.  With w = 4^(E/5) (two rows, log-linear) the model is
+# exactly the unweighted one times 4^(E_cm/5).
+runx() {
+  local d="$WORK/$1"
+  mkdir -p "$d/output" "$d/checks"
+  cp -r "$SRC/data" "$d/"
+  awk '/^<segmentsTest>/ { t = 1; n = 0; print; next } /^<\/segmentsTest>/ { t = 0 }
+       t { n++; if (n == 2) sub(/^1/, "0"); if (n == 3) $0 = "1 5 4 0.5 3 0.5 0 180 0 10" }
+       { print }' "$SRC/7Li_p_a.azr" > "$d/run.azr"
+  [ -z "$2" ] || printf '%b' "$2" >> "$d/run.azr"
+  (cd "$d" && printf '3\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+}
+wfile xw ramp4.dat "0 1\n5 4\n"
+runx xn ""
+runx xw "$(block "weightTest[3]=ramp4.dat")"
+xo="output/AZUREOut_aa=5_R=4.extrap"
+if [ -s "$WORK/xn/$xo" ] && [ -s "$WORK/xw/$xo" ] &&
+   paste "$WORK/xn/$xo" "$WORK/xw/$xo" | awk -v h=$(( $(head -1 "$WORK/xn/$xo" | wc -w) )) '
+     { e = $1; a = $4; b = $(h + 4); n++
+       if (NF < 8 || a + 0 == 0) next
+       m++; r = b / a / exp(e / 5 * log(4)); if (r < 1 - 1e-6 || r > 1 + 1e-6) bad++ }
+     END { exit !(m >= 5 && !bad) }'; then
+  echo "  ok    weightTest[3]: extrapolated THM model x 4^(E/5) at every energy"
+else
+  echo "  FAIL  weightTest[3] in an extrapolation"; tail -5 "$WORK/xw/log"; fail=1
+fi
+
+refuse wmissing  "$(block "weight[1]=nothere.dat")" "ERROR: <thm> weight.1.: cannot read the weight file"
+wfile wdecr decr.dat "0 1\n5 2\n5 3\n"
+refuse wdecr     "$(block "weight[1]=decr.dat")"     "ERROR: <thm> weight.1.: .* the energies must be strictly increasing"
+wfile wneg neg.dat "0 1\n5 0\n"
+refuse wneg      "$(block "weight[1]=neg.dat")"      "ERROR: <thm> weight.1.: .* the weight must be finite and > 0"
+wfile wcols cols.dat "0 1 3\n5 2 3\n"
+refuse wcols     "$(block "weight[1]=cols.dat")"     "ERROR: <thm> weight.1.: .* expected two numbers"
+wfile wrange short.dat "1 1\n10 1\n"
+refuse wrange    "$(block "weight[1]=short.dat")"    "ERROR: <thm> weight.1.: segment 1 has a point at E_cm = .* outside the table"
+wfile wbeyond two.dat "0 2\n10 2\n"
+refuse wbeyond   "$(block "weight[2]=two.dat")"      "ERROR: <thm> weight.2.: <segmentsData> has only 1 line"
+refuse wkey      "$(block "weight[0]=two.dat")"      "ERROR: <thm> line not understood: 'weight.0.=two.dat'"
+# weight on a segment that is not THM (a second, isDiff 0 line)
+wfile wnonthm two.dat "0 2\n10 2\n"
+c="$(run wnonthm "$(block "weight[2]=two.dat")" nonthm)"
+if [ -z "$c" ] && [ "$(cat "$WORK/wnonthm/status")" -ne 0 ] &&
+   grep -q "ERROR: <thm> weight.2.: segment 2 of <segmentsData> is not a THM segment" "$WORK/wnonthm/log"; then
+  echo "  ok    wnonthm refused: $(grep -m1 'ERROR' "$WORK/wnonthm/log")"
+else
+  echo "  FAIL  wnonthm: exit $(cat "$WORK/wnonthm/status"), chi2 '${c}'"; tail -5 "$WORK/wnonthm/log"; fail=1
+fi
 
 if [ "$fail" -eq 0 ]; then
   echo "  ok    all <thm> options behave as pinned"; exit 0

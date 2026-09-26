@@ -4,6 +4,32 @@
 #include <string>
 #include <fstream>
 #include <map>
+#include <memory>
+#include <atomic>
+#include <vector>
+
+/*!
+ * An energy-dependent weight w(E) multiplying the THM (HOES) model cross
+ * section of one segment, read from a two-column file named by the
+ * `weight[<segment key>]=` key of the <thm> block (Config::ReadThmBlock).
+ * It is the hook for a correction AZURE2 does not compute itself, typically
+ * Mukhamedzhanov's Coulomb-distortion factor R(E) = |M(E)|^2/|M(E_norm)|^2
+ * (docs/source/theory/thm_implementation.rst).  Interpolated log-linearly
+ * (linear in E, linear in ln w); constant beyond the ends of the table.
+ */
+struct ThmWeightTable {
+  /// The file as named in the <thm> block, and as resolved against the .azr.
+  std::string name, path;
+  /// Strictly increasing E_cm (MeV) of the THM entrance pair, w(E) and ln w(E).
+  std::vector<double> e, w, lnw;
+  /// Set once the first evaluation outside [e.front(), e.back()] has been reported.
+  mutable std::atomic<bool> warned{false};
+  /// Reads the file; returns an empty string on success, else the reason.
+  std::string Read(const std::string &file);
+  /// w(E); *outside (if given) is set when E lies beyond the table.
+  double operator()(double energy, bool *outside = nullptr) const;
+  bool Covers(double energy) const { return energy >= e.front() && energy <= e.back(); }
+};
 
 /// A structure holding the reaction rate calculation configuration
 
@@ -158,6 +184,12 @@ class Config {
       std::map<int, double>::const_iterator it = spectatorEnergyByPair.find(pairKey);
       return it == spectatorEnergyByPair.end() ? spectatorEnergy : it->second;
     }
+    /// Energy-dependent weight of the THM model cross section, per segment:
+    /// key `weight[<k>]=<file>` for the k-th line of <segmentsData> (counting
+    /// inactive lines, the numbering of segment_<k>_norm and the output
+    /// files), `weightTest[<k>]=<file>` for the k-th line of <segmentsTest>.
+    /// A relative path is taken from the directory of the .azr file.
+    std::map<int, std::shared_ptr<const ThmWeightTable>> weightBySegment, weightByTestSegment;
   };
   ThmOptions thm;
   /// A constant indicating the maximum order of the Legendre polynomials to calculate.
