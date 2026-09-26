@@ -208,7 +208,40 @@ bool BuildBandData(CNuc *compound, EData *data, const Config &config,
   // ComputeModelGradients yields full packed rows; reduce each to R-matrix
   // columns so the sensitivities line up with the (R-matrix-only) covariance.
   std::map<EPoint *, vector_r> fullGrad;
-  if (!ComputeModelGradients(compound, data, config, pmap, sdp, fullGrad)) return false;
+  if (!ComputeModelGradients(compound, data, config, pmap, sdp, fullGrad, /*skipTHM=*/true))
+    return false;
+
+  // THM (HOES) points: the adjoint differentiates the T-matrix observable, not
+  // the HOES one, so their rows come from ComputeTHMRows (central differences of
+  // the HOES model).  What the output file shows for a THM point is the model m
+  // next to the data scaled by the profiled norm, d n*; the parameters move
+  // both.  The band is therefore that of the model as it lies against the data,
+  // q = s(p) m(p) / s(p0), s = 1/n*, whose gradient at the best fit is
+  //   dq/dp = J_m + m (ds/dp)/s
+  // (ComputeTHMRows' J_m and ds/dp; a fixed THM norm has ds/dp = 0 and the band
+  // is that of m).  The overall scale of the THM model, arbitrary in THM, thus
+  // gets no band: a change of the parameters that only rescales m leaves q put.
+  {
+    const vector_r full = tp.GetMinuitParams().Params();
+    std::vector<THMRows> thm = ComputeTHMRows(compound, data, config, full, pmap);
+    const int nCols = pmap.NumPacked();
+    for (const THMRows &tr : thm) {
+      ESegment *seg = data->GetSegment(tr.segment);
+      size_t i = 0;
+      for (int pid = 0; pid < seg->NumPoints(); pid++) {
+        EPoint *pt = seg->GetPoint(pid + 1);
+        if (!pt) continue;
+        vector_r &row = fullGrad[pt];
+        row.assign(nCols, 0.0);
+        for (int c = 0; c < nCols; c++) {
+          double g = tr.Jm[i * nCols + c];
+          if (tr.profiled && tr.s != 0.0) g += tr.m[i] * tr.ds[c] / tr.s;
+          row[c] = g;
+        }
+        i++;
+      }
+    }
+  }
   for (std::map<EPoint *, vector_r>::const_iterator it = fullGrad.begin();
        it != fullGrad.end(); ++it) {
     const vector_r &f = it->second;

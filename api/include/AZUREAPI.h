@@ -4,6 +4,7 @@
 #include "AZUREMain.h"
 
 #include "Constants.h"
+#include "AZUREGrad.h"
 #include <vector>
 
 class Config;
@@ -422,27 +423,8 @@ class AZUREAPI {
   double EvaluateFilledChi2(vector_r *res) const;
 
   /// Residuals and d r/d(packed parameter) of the points of one THM segment.
-  struct THMRows {
-    int segment = 0;   ///< 1-based segment index
-    int firstRow = 0;  ///< row of its first point in the global residual vector
-    vector_r m;        ///< model per point
-    vector_r r;        ///< standardized residual per point
-    vector_r Jm;       ///< d m / d p, row-major nPoints x nCols (E, gamma columns)
-    vector_r J;        ///< d r / d p, row-major nPoints x nCols
-  };
-  /*!
-   * THM (HOES) points are outside the analytic adjoint, so their model
-   * Jacobian J_m is taken by central differences in the level energies and
-   * reduced widths (h = 1e-6 (|x| + 1), the step AZURECalc::Gradient uses for
-   * its THM part); norm and energy-shift columns are left zero (the caller
-   * differences shifts on the whole residual vector).  The residual of a point
-   * of a profiled segment is r_i = (s m_i - d_i)/e_i with s = 1/n* = S_md/S_mm,
-   * a function of the parameters; its derivative is taken analytically:
-   *   d r_i/dp = (s J_mi + m_i ds/dp)/e_i,
-   *   ds/dp    = (sum_k d_k J_mk/e_k^2 - 2 s sum_k m_k J_mk/e_k^2) / S_mm.
-   * (A fixed THM norm, or a degenerate profile, has ds/dp = 0.)  The
-   * compound/data are left filled at `full`.
-   */
+  /// THM (HOES) rows of the residual Jacobian; see ::ComputeTHMRows (AZUREGrad.h).
+  typedef ::THMRows THMRows;
   std::vector<THMRows> ComputeTHMRows(const vector_r &full, const ParamIndexMap &pmap) const;
 
   // Configuration

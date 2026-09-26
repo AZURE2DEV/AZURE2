@@ -63,7 +63,10 @@ struct BandData {
 };
 
 /// Build a BandData from savedCov for the current (best-fit-filled) compound/data.
-/// False if the analytic sensitivities are unavailable for this model.
+/// False if the analytic sensitivities are unavailable for this model.  THM
+/// (HOES) points get g = J_m + m (ds/dp)/s from ComputeTHMRows (central
+/// differences of the HOES model plus the profiled scale s = 1/n*): the band of
+/// the model as it lies against the data scaled by n*.
 bool BuildBandData(CNuc *compound, EData *data, const Config &config,
                    const BandCovariance &savedCov, BandData &out);
 

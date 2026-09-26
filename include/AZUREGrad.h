@@ -203,7 +203,7 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
  * THM (HOES) segments are outside it: by default their presence returns false.
  * With skipTHM their rows are still assigned (in segment order, like every other
  * row) but left zero, for a caller that fills them itself -- AZUREAPI does, with
- * the profiled norm (see AZUREAPI::THMRows).
+ * the profiled norm (see ComputeTHMRows).
  */
 bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
                              const ParamIndexMap &pmap,
@@ -226,5 +226,40 @@ bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
                            const vector_matrix_r *shiftDeriv,
                            std::map<EPoint *, vector_r> &gradByPoint,
                            bool skipTHM = false);
+
+/// THM (HOES) rows of one THM segment: model, residuals and their parameter
+/// derivatives with the segment norm profiled (see ComputeTHMRows).
+struct THMRows {
+  int segment = 0;       ///< 1-based segment index
+  int firstRow = 0;      ///< row of its first point in the global residual vector
+  vector_r m;            ///< model per point
+  vector_r r;            ///< standardized residual per point
+  vector_r Jm;           ///< d m / d p, row-major nPoints x nCols (E, gamma columns)
+  vector_r J;            ///< d r / d p, row-major nPoints x nCols
+  double s = 1.0;        ///< scale on the model, 1/n (n* = S_mm/S_md when profiled)
+  bool profiled = false; ///< s follows the parameters (profiled, non-degenerate norm)
+  vector_r ds;           ///< d s / d p per packed column (zero unless profiled)
+};
+
+/*!
+ * \brief THM (HOES) rows for every THM segment, at the parameters `full`.
+ *
+ * THM points are outside the analytic adjoint (it differentiates the T-matrix
+ * observable), so their model Jacobian J_m is taken by central differences in
+ * the level energies and reduced widths (h = 1e-6 (|x| + 1), the step
+ * AZURECalc::Gradient uses for its THM part); norm and energy-shift columns are
+ * left zero (a caller differences shifts on the whole residual vector).  The
+ * residual of a point of a profiled segment is r_i = (s m_i - d_i)/e_i with
+ * s = 1/n* = S_md/S_mm, a function of the parameters; its derivative is taken
+ * analytically:
+ *   d r_i/dp = (s J_mi + m_i ds/dp)/e_i,
+ *   ds/dp    = (sum_k d_k J_mk/e_k^2 - 2 s sum_k m_k J_mk/e_k^2) / S_mm.
+ * (A fixed THM norm, or a degenerate profile, has ds/dp = 0.)  `full` is the
+ * full (Minuit-ordered) parameter vector of `pmap`.  The compound/data are left
+ * filled at `full`, each THM point's fit cross section set to its model and a
+ * profiled segment's norm to n*.
+ */
+std::vector<THMRows> ComputeTHMRows(CNuc *compound, EData *data, const Config &config,
+                                    const vector_r &full, const ParamIndexMap &pmap);
 
 #endif

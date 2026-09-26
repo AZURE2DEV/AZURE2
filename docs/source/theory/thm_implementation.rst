@@ -319,3 +319,32 @@ Which ``kinematics=`` to use
    convention unknown → ``lacognata``. A THM segment always has a free
    arbitrary normalization, so only the energy dependence of :math:`K(E)`
    matters.
+
+Normalization, gradients and uncertainty bands
+----------------------------------------------
+
+A THM segment with a free norm has its arbitrary scale profiled out
+(``ESegment::IsProfiledNorm``): :math:`n^* = S_{mm}/S_{md}` and
+:math:`\chi^2 = S_{dd} - S_{md}^2/S_{mm}`, no penalty, no fit parameter. The
+analytic adjoint differentiates the T-matrix observable, not the HOES one, so
+every derivative of a THM point is taken by central differences of the HOES
+model, :math:`J_m`, with the dependence of the profiled scale
+:math:`s = 1/n^*` added analytically (``ComputeTHMRows`` in ``AZUREGrad.h``;
+used by the MIGRAD gradient, ``pyazr``'s Jacobian and gradients, and the CLI
+band).
+
+The cross-section band (``--covariance-band``) of a THM point is that of the
+model *as it lies against the data*. The output file shows the model
+:math:`m` next to the data scaled by :math:`n^*`, and the parameters move
+both, so the band is taken for :math:`q(p) = m(p)\,n^*(p_0)/n^*(p)`:
+
+.. math::
+
+   \delta q = \sqrt{g\,\Sigma\,g^T}, \qquad
+   g = J_m + m\,\frac{\partial s/\partial p}{s}
+
+(:math:`\partial s/\partial p = 0` for a fixed THM norm). A change of the
+parameters that only rescales :math:`m` is absorbed by :math:`n^*` and gives
+no band, as it should: the THM scale is arbitrary.
+``tests/thm_band/check.sh`` checks the band against finite differences of the
+CLI's own output on ``tests/18O_p_a_thm`` with six free parameters.
