@@ -42,3 +42,5 @@ The interesting physics: Table IV's width *signs* barely move the cross
 section (per-level overall signs are gauge) but move Ay directly, since it
 is built from channel-spin off-diagonal interference. This dataset is the
 kind of measurement that would discriminate them.
+
+Re-pinned 2026-09-26: the shift-function fix b6cc41b removed ~1e-9 noise from S(E) that ShftFunc::EnergyDerivative amplified into dS/dE, which enters the Brune transformation of sub-threshold levels. 3955.30 -> 3955.32, segments by up to 1.7e-5.

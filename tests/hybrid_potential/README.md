@@ -83,3 +83,5 @@ feed the old one back and the chi-squared is quietly wrong. Re-read
 `m.params_rwa` after the call. Check 7 pins exactly this.
 
 It is the same caveat as a channel-radius change, and for the same reason.
+
+Re-pinned 2026-09-26: the shift-function fix b6cc41b removed ~1e-9 noise from S(E) that ShftFunc::EnergyDerivative amplified into dS/dE, which enters the Brune transformation of sub-threshold levels. One segment moved by 4.9e-5. It had already drifted by 6e-5 before b6cc41b, below the tolerance and never re-pinned.

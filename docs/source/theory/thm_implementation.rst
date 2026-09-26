@@ -71,9 +71,11 @@ block but carry it through a save unchanged; the GUI writes it after
    expansion, leaving the :math:`l`-independent weight :math:`2J+1`. The
    coherent sum is exact only in the limit of the exit direction fixed along
    :math:`\hat p_{xA}`; it is kept for comparison with older fits.
-   ``tests/7Li_p_a`` (two entrance :math:`l` in one channel spin): 2137.83
-   incoherent, 3195.37 coherent, same parameters (2180.69 / 2740.48 with
-   ``vertex=perlevel``, the pins before 2026-09-25).
+   ``tests/7Li_p_a`` (two entrance :math:`l` in one channel spin): 2138.51
+   incoherent, 3196.17 coherent, same parameters (2181.41 / 2741.34 with
+   ``vertex=perlevel``; 2180.69 / 2740.48 were the pins before 2026-09-25).
+   All ``tests/7Li_p_a`` values in this section are those after the
+   shift-function fix b6cc41b, which moved them by up to 3.2e-4.
 
 ``vertex`` — boundary term at the entrance vertex
    The transfer form factor :math:`M_l = (L_c - 1)\, j_l(pa) - pa\, j_l'(pa)`
@@ -128,8 +130,8 @@ block but carry it through a save unchanged; the GUI writes it after
 
    Pins that moved with the default (same parameters): ``tests/7Li_p_a``
    2180.69 → 2137.83, ``tests/6Li_d`` 1076.06 → 682.099; ``vertex=perlevel``
-   reproduces the old values. ``tests/7Li_p_a`` with ``vertex=onshell``:
-   2070.17.
+   reproduces the old values. Since b6cc41b these are 2181.41 → 2138.51
+   and 682.133. ``tests/7Li_p_a`` with ``vertex=onshell``: 2070.84.
 
 ``kinematics`` — factors left in the model by the data reduction
    HOES data are the measured triple-differential cross section divided by a
@@ -157,8 +159,8 @@ block but carry it through a save unchanged; the GUI writes it after
    :math:`k_i` the on-shell entrance momentum at :math:`|E|`. The factors
    change the energy dependence, not only the scale, so the wrong choice
    distorts the relative heights of resonances. ``tests/7Li_p_a``:
-   2137.83 / 2380.33 / 2624.63 / 5499.45 for the four values in table order
-   (2180.69 / 2402.92 / 2632.81 / 5573.25 with ``vertex=perlevel``).
+   2138.51 / 2381.03 / 2625.34 / 5499.70 for the four values in table order
+   (2181.41 / 2403.67 / 2633.59 / 5573.51 with ``vertex=perlevel``).
 
 ``coulombIntegral`` — external Coulomb term of the vertex
    ``1`` adds
@@ -175,7 +177,7 @@ block but carry it through a save unchanged; the GUI writes it after
    :math:`x` and :math:`A` outside the channel radius; the term matters for
    charged entrance pairs at energies well below the barrier. It is skipped
    for :math:`Z_1 Z_2 = 0` and costs about a factor 3–4 in run time.
-   ``tests/7Li_p_a``: 2111.79 (2145.79 with ``vertex=perlevel``).
+   ``tests/7Li_p_a``: 2112.47 (2146.48 with ``vertex=perlevel``).
    Implementation and numerics:
    ``ThmCoulombTerm`` (``src/ThmFunc.cpp``), checked against
    ``tests/reference/thm_coulomb_term_reference.py``.
@@ -188,7 +190,7 @@ block but carry it through a save unchanged; the GUI writes it after
    ``spectatorEnergy=`` applies to every THM entrance pair;
    ``spectatorEnergy[k]=`` to the entrance pair with key ``k`` (the pair
    number that the segment's entrance key refers to) and overrides the global
-   value for it. Default 0. ``tests/7Li_p_a``: 2195.06 at 0.5 MeV (2088.25 with
+   value for it. Default 0. ``tests/7Li_p_a``: 2195.75 at 0.5 MeV (2088.91 with
    ``vertex=perlevel``).
 
 Which ``kinematics=`` to use

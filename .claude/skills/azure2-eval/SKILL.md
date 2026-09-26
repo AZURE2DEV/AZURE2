@@ -1216,7 +1216,7 @@ newline and `<thm>` must start its own line.
 
 Reference cases: `tests/17O` — 17O(n,alpha)14C from Guardo/Sergi *et al.*,
 23 points, one THM segment, chi-squared 96.69 (neutron entrance, RWA widths);
-`tests/7Li_p_a` (2137.83) and `tests/6Li_d` (682.099), charged entrance with
+`tests/7Li_p_a` (2138.51) and `tests/6Li_d` (682.133), charged entrance with
 two entrance l; `tests/18O_p_a_thm` (2191.98 + check.sh against the published
 band), two interfering levels of one J^pi; `tests/thm_rwa_grid` and
 `tests/thm_options` (check.sh). They

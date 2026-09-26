@@ -47,3 +47,5 @@ The reference is a fixed number for regression purposes, nothing more.
 
 The suite runs mode 1 with a blank external parameter file, so everything
 the number depends on is in the `<levels>` block of the `.azr`.
+
+Re-pinned 2026-09-26: the shift-function fix b6cc41b removed ~1e-9 noise from S(E) that ShftFunc::EnergyDerivative amplified into dS/dE, which enters the Brune transformation of sub-threshold levels. 2276.64 -> 2276.67 (1.3e-5).

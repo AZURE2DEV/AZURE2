@@ -10,3 +10,5 @@ Before the line-based reader, any of these hung AZURE2 forever in
 `ESegment::Fill` -- a line that failed `stream >>` set failbit, eof was never
 reached, and the loop spun at 100% CPU with no message.  If this test ever
 hangs, that regression is back; the harness timeout turns it into a FAIL.
+
+Re-pinned 2026-09-26: the shift-function fix b6cc41b removed ~1e-9 noise from S(E) that ShftFunc::EnergyDerivative amplified into dS/dE, which enters the Brune transformation of sub-threshold levels. As in 7Li_p_ay: 3955.30 -> 3955.32, segments by up to 1.7e-5.

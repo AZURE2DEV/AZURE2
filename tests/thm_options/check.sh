@@ -85,7 +85,7 @@ expect() {
 
 # (a) defaults: no block == every key written with its default value
 none="$(run none "")"
-expect "no block (vertex=constant pin)" "$none" 2137.83
+expect "no block (vertex=constant pin)" "$none" 2138.51
 defaults="$(run defaults "$(block "entranceL=incoherent
 vertex=constant
 kinematics=lacognata
@@ -96,30 +96,31 @@ empty="$(run empty "$(block "# comment only")")"
 expect "empty block == no block" "$empty" "$none" 0
 
 # (b) earlier defaults.  vertex=perlevel (alias real) was the default until
-# 2026-09-25 (pin 2180.69); with the coherent l sum as well it is the AZURE2
-# of before Sep 2026 (legacy pin 2740.48; measured 2740.55, rel 3e-5).
+# 2026-09-25 (pin 2181.41); with the coherent l sum as well it is the AZURE2
+# of before Sep 2026 (whose pin was 2740.48; 2741.34 since the dS/dE fix of
+# b6cc41b, rel 3e-4).
 perlevel="$(run perlevel "$(block vertex=perlevel)")"
-expect "vertex=perlevel (previous default pin)" "$perlevel" 2180.69
+expect "vertex=perlevel (previous default pin)" "$perlevel" 2181.41
 expect "vertex=real == vertex=perlevel" "$(run real "$(block vertex=real)")" "$perlevel" 0
-expect "entranceL=coherent" "$(run coherent "$(block entranceL=coherent)")" 3195.37
+expect "entranceL=coherent" "$(run coherent "$(block entranceL=coherent)")" 3196.17
 expect "entranceL=coherent + vertex=perlevel (legacy pin)" \
   "$(run legacy "$(block "entranceL=coherent
-vertex=perlevel")")" 2740.48
+vertex=perlevel")")" 2741.34
 
 # (c) kinematic factor conventions
 expect "kinematics=lacognata == no block" "$(run lacognata "$(block kinematics=lacognata)")" "$none" 0
-expect "kinematics=triple"    "$(run triple    "$(block kinematics=triple)")"    2380.33
-expect "kinematics=kf3body"   "$(run kf3body   "$(block kinematics=kf3body)")"   2624.63
-expect "kinematics=lambda32"  "$(run lambda32  "$(block kinematics=lambda32)")"  5499.45
+expect "kinematics=triple"    "$(run triple    "$(block kinematics=triple)")"    2381.03
+expect "kinematics=kf3body"   "$(run kf3body   "$(block kinematics=kf3body)")"   2625.34
+expect "kinematics=lambda32"  "$(run lambda32  "$(block kinematics=lambda32)")"  5499.7
 
 # (d) on-shell vertex and the external Coulomb term
-expect "vertex=onshell"    "$(run onshell "$(block vertex=onshell)")"    2070.17
-expect "coulombIntegral=1" "$(run coulomb "$(block coulombIntegral=1)")" 2111.79
+expect "vertex=onshell"    "$(run onshell "$(block vertex=onshell)")"    2070.84
+expect "coulombIntegral=1" "$(run coulomb "$(block coulombIntegral=1)")" 2112.47
 
 # (e) spectator energy: global and per pair (pair 5 is the entrance pair)
 expect "spectatorEnergy=0 == no block" "$(run sp0 "$(block spectatorEnergy=0)")" "$none" 0
 spg="$(run spg "$(block spectatorEnergy=0.5)")"
-expect "spectatorEnergy=0.5" "$spg" 2195.06
+expect "spectatorEnergy=0.5" "$spg" 2195.75
 expect "spectatorEnergy[5]=0.5 == global 0.5" "$(run sp5 "$(block "spectatorEnergy[5]=0.5")")" "$spg" 0
 expect "spectatorEnergy[3]=0.5 (not a THM pair) == no block" \
   "$(run sp3 "$(block "spectatorEnergy[3]=0.5")")" "$none" 0

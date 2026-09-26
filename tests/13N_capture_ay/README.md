@@ -51,3 +51,5 @@ which is a different observable from the thin-target one.
 The data columns are placeholders (`A_y = 0`, uncertainty 1), so segment 2's
 chi-squared is just `sum A_y^2` over the grid — which moves if anything in the
 calculation moves.
+
+Re-pinned 2026-09-26: the shift-function fix b6cc41b removed ~1e-9 noise from S(E) that ShftFunc::EnergyDerivative amplified into dS/dE, which enters the Brune transformation of sub-threshold levels. 3.73919 -> 3.73951 (8.6e-5).

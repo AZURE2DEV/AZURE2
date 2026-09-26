@@ -35,3 +35,5 @@ conversion of the kernel energies done once per effect.  The reference
 chi2 was recorded from the run that was validated point by point against
 an independent numpy implementation of the kernel
 (R-matrix/12C+a_onefile/9-10-26_Haversen_test/kernel_reference.py).
+
+Re-pinned 2026-09-26: the shift-function fix b6cc41b removed ~1e-9 noise from S(E) that ShftFunc::EnergyDerivative amplified into dS/dE, which enters the Brune transformation of sub-threshold levels. 40.4045 -> 40.4033, segment 1 by 1.9e-4.

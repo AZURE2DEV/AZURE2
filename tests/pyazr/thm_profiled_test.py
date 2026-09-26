@@ -37,7 +37,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "tests", "7Li_p_a")
-PIN = 2137.83          # tests/7Li_p_a/expected/chiSquared.out
+PIN = 2138.51          # tests/7Li_p_a/expected/chiSquared.out (re-pinned after b6cc41b)
 
 failures = []
 

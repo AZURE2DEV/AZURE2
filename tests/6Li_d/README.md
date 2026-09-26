@@ -84,3 +84,5 @@ Note (Sep 2026): entrance partial waves are now summed incoherently in l (the l 
 Note (2026-09-25): the default THM entrance vertex changed from `vertex=perlevel` (per-level S_c(E_lambda) under Brune, as mrmpy) to `vertex=constant` (the formal-R-matrix vertex with the channel boundary B_c = S_c(E_1), applied after the level sum; see docs/source/theory/thm_implementation.rst). Same parameters; the pin moves from 1076.06 to 682.099 (optimal norm 0.00735648 -> 0.0319074). A `<thm>` block with `vertex=perlevel` reproduces the previous pin, 1076.06 (checked on 2026-09-25).
 
 Note (2026-09-25, later): `vertex=constant` first took B_c = S_c at the first level of each J group in file order, so the result depended on level order (this file sorted as the GUI writes it gave a different chi2). It now uses S_c at the lowest-energy level of each J group, independent of order; the pin above is that value.
+
+Re-pinned 2026-09-26: the shift-function fix b6cc41b removed ~1e-9 noise from S(E) that ShftFunc::EnergyDerivative amplified into dS/dE, which enters the Brune transformation of sub-threshold levels. 682.099 -> 682.133 (5.0e-5).

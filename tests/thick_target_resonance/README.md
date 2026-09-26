@@ -37,3 +37,5 @@ a4095a6 (physical widths) both changed that grid on purpose. At multiplier 5
 the first point, 6 keV below the resonance, is still under-resolved -- 15%
 above the 1000-sub-point value, where the pre-regression grid happened to be
 3% above it. That is the multiplier, not the regression; use 20.
+
+Re-pinned 2026-09-26: the shift-function fix b6cc41b removed ~1e-9 noise from S(E) that ShftFunc::EnergyDerivative amplified into dS/dE, which enters the Brune transformation of sub-threshold levels. 19.0295 -> 19.0249 (2.4e-4).

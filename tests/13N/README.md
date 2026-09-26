@@ -146,3 +146,5 @@ had more segments than it does now. They were harmless only until a segment 11
 existed — at which point a new data set silently inherited another segment's
 nuisance prior and a freed normalization. They have been removed, and AZURE2
 now drops settings entries numbered beyond the segments that actually exist.
+
+Re-pinned 2026-09-26: the shift-function fix b6cc41b removed ~1e-9 noise from S(E) that ShftFunc::EnergyDerivative amplified into dS/dE, which enters the Brune transformation of sub-threshold levels. The total moved 336521 -> 336454 (2.0e-4) and segment 7 by 9.3e-4, just inside the 1e-3 tolerance.
