@@ -1,0 +1,38 @@
+<config>
+true                                                                                                #Perform A-Matrix Calculation
+output/                                                                                             #Full Path to Output Directory
+checks/                                                                                             #Full Path to Checks Directory
+none                                                                                                #Compond Nucleus Check
+none                                                                                                #Boundary Condition Check
+none                                                                                                #Data Check
+none                                                                                                #Lo-Matrix and Penetrability Check
+none                                                                                                #Legendre Polynomial Check
+none                                                                                                #Coulomb Amplitudes Check
+none                                                                                                #Reaction Pathway Check
+none                                                                                                #Angular Distributions Check
+</config>
+<levels>
+2.5 1 8.012777824168348 1 1 1 1 4 1 1 0 2.620861418322567e-20 0.5 1 0 1 0 1.00727645 17.99477097 1 8 7.993600 7.993600 0 0 0.0 0 5.1 0 0 0 2.224566 0
+2.5 1 8.012777824168348 1 1 2 1 6 1 1 1 995.9217549080738 0 1 0.5 -1 0 4.00150609 14.99626884 2 7 7.993600 4.013799 0 0 0.0 0 5.7 0 0 0 0.000000 0
+
+1.5 1 8.093385580677364 1 1 1 1 4 2 1 0 1.1073204945906858e-06 0.5 1 0 1 0 1.00727645 17.99477097 1 8 7.993600 7.993600 0 0 0.0 0 5.1 0 0 0 2.224566 0
+1.5 1 8.093385580677364 1 1 2 1 2 2 1 1 3007.2913010820325 0 1 0.5 -1 0 4.00150609 14.99626884 2 7 7.993600 4.013799 0 0 0.0 0 5.7 0 0 0 0.000000 0
+
+0.5 1 8.140404137835182 1 1 1 1 0 3 1 0 0.19769519729902704 0.5 1 0 1 0 1.00727645 17.99477097 1 8 7.993600 7.993600 0 0 0.0 0 5.1 0 0 0 2.224566 0
+0.5 1 8.140404137835182 1 1 2 1 2 3 1 1 289.71690200450723 0 1 0.5 -1 0 4.00150609 14.99626884 2 7 7.993600 4.013799 0 0 0.0 0 5.7 0 0 0 0.000000 0
+
+</levels>
+<segmentsData>
+1  1  2  -0.052899  0.264094  0  180  10  1  1  0  0  0  0  data/thm_lc2008_hoes_bkgsub.dat  0  0
+</segmentsData>
+<segmentsTest>
+</segmentsTest>
+<targetInt>
+1  "1"  50  1  0.018239375  0  0  "" 0  0  0  0  "" 0  0 0.04 5 50
+</targetInt>
+<thm>
+entranceL=incoherent
+vertex=constant
+kinematics=lacognata
+coulombIntegral=0
+</thm>
