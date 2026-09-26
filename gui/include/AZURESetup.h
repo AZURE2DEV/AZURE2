@@ -11,6 +11,7 @@
 #include "SegmentsTab.h"
 #include "TargetIntTab.h"
 #include "Config.h"
+#include "ThmOptionsDialog.h"
 
 class RunTab;
 class FittingTab;
@@ -87,8 +88,9 @@ class AZURESetup : public QMainWindow {
   FittingTab *getFittingTab() const { return fittingTab; }
 
   /*! The optional <thm> block (THM options, read by the engine's
-      Config::ReadThmBlock) has no editor; the GUI keeps its lines verbatim so
-      that a save does not drop it.  readThmBlock scans the rest of the stream
+      Config::ReadThmBlock) is edited by ThmOptionsDialog; the GUI keeps its
+      lines verbatim unless the options are changed there, so that a save
+      reproduces it.  readThmBlock scans the rest of the stream
       for the first line starting with <thm>, as the engine does, and stores the
       lines up to </thm> (comments included).  It sets present = false and
       returns true when there is no block, and returns false when the block is
@@ -96,6 +98,21 @@ class AZURESetup : public QMainWindow {
       writes <thm>, the stored lines and </thm>. */
   static bool readThmBlock(QTextStream &in, QStringList &lines, bool &present);
   static void writeThmBlock(QTextStream &out, const QStringList &lines);
+
+  /*! The <thm> block as settings (defaults when the project has none).
+      Returns false, with the reason, if a line of the block is one the
+      engine would refuse; the editor then leaves the block alone. */
+  bool thmSettings(ThmSettings &settings, QString *error = nullptr) const;
+  /*! Installs edited settings.  Settings equal to those read change nothing,
+      so a project whose options were not changed keeps its block byte for
+      byte.  Otherwise the block is recomposed (ThmSettings::compose: comments
+      and unchanged lines kept, defaults dropped, new keys appended), and
+      settings that are all default remove the block, comments included. */
+  void setThmSettings(const ThmSettings &settings);
+  bool hasThmOptionsBlock() const { return hasThmBlock; }
+  const QStringList &thmOptionsLines() const { return thmBlockLines; }
+  /// Directory of the project file, against which relative paths resolve.
+  QString projectDirectory();
 
  public slots:
   void SaveAndRun();
@@ -116,6 +133,7 @@ class AZURESetup : public QMainWindow {
   void editChecks();
   void editDirs();
   void editOptions();
+  void editThmOptions();
   void showAbout();
   void showTabInfo();
   void openWebsite();
@@ -151,6 +169,7 @@ class AZURESetup : public QMainWindow {
   QAction *aMatrixAction;
   QAction *rMatrixAction;
   QAction *editOptionsAction;
+  QAction *editThmOptionsAction;
   QAction *recentSeparator;
   QAction *clearRecentAction;
   enum { numRecent = 5 };

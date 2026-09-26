@@ -182,3 +182,33 @@ add_test(NAME level_precision COMMAND level_precision_test)
 set_tests_properties(level_precision PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     TIMEOUT 300)
+
+# The THM options editor: options set on the dialog are written as the <thm>
+# block, come back on reopening, an untouched dialog keeps the block byte for
+# byte, and the engine runs the GUI's block (weight file included).
+add_executable(thm_options_dialog_test thm_options_dialog_test.cpp)
+set_target_properties(thm_options_dialog_test PROPERTIES AUTOMOC OFF)
+target_include_directories(thm_options_dialog_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(thm_options_dialog_test PRIVATE
+    AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    AZURE2_BINARY="$<TARGET_FILE:AZURE2>")
+target_link_libraries(thm_options_dialog_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(thm_options_dialog_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(thm_options_dialog_test PRIVATE pugixml srim_utilities)
+endif()
+add_dependencies(thm_options_dialog_test AZURE2)
+add_test(NAME thm_options_dialog COMMAND thm_options_dialog_test)
+set_tests_properties(thm_options_dialog PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 300)

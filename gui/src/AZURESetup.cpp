@@ -188,6 +188,10 @@ void AZURESetup::createActions() {
   editOptionsAction = new QAction(tr("&Runtime Options..."), this);
   connect(editOptionsAction, SIGNAL(triggered()), this, SLOT(editOptions()));
 
+  editThmOptionsAction = new QAction(tr("&THM Options..."), this);
+  editThmOptionsAction->setToolTip(tr("Options of the Trojan Horse (HOES) observable: the <thm> block"));
+  connect(editThmOptionsAction, SIGNAL(triggered()), this, SLOT(editThmOptions()));
+
   showTabInfoAction = new QAction(tr("Show Documentation For Current Tab"), this);
   showTabInfoAction->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_D));
   connect(showTabInfoAction, SIGNAL(triggered()), this, SLOT(showTabInfo()));
@@ -219,6 +223,7 @@ void AZURESetup::createMenus() {
   configMenu->addAction(editChecksAction);
   configMenu->addAction(editDirsAction);
   configMenu->addAction(editOptionsAction);
+  configMenu->addAction(editThmOptionsAction);
 
   helpMenu = menuBar()->addMenu(tr("&Documentation"));
   helpMenu->addAction(showTabInfoAction);
@@ -417,6 +422,45 @@ void AZURESetup::writeThmBlock(QTextStream &out, const QStringList &lines) {
   out << "<thm>" << Qt::endl;
   for (const QString &line : lines) out << line << Qt::endl;
   out << "</thm>" << Qt::endl;
+}
+
+bool AZURESetup::thmSettings(ThmSettings &settings, QString *error) const {
+  if (!hasThmBlock) {
+    settings = ThmSettings();
+    return true;
+  }
+  return ThmSettings::parse(thmBlockLines, settings, error);
+}
+
+void AZURESetup::setThmSettings(const ThmSettings &settings) {
+  ThmSettings current;
+  if (thmSettings(current) && current == settings) return;  // untouched: keep the block verbatim
+  if (settings.isDefault()) {
+    hasThmBlock = false;
+    thmBlockLines.clear();
+    return;
+  }
+  thmBlockLines = settings.compose(hasThmBlock ? thmBlockLines : QStringList());
+  hasThmBlock = true;
+}
+
+QString AZURESetup::projectDirectory() {
+  QString file = QString::fromStdString(GetConfig().configfile);
+  return file.isEmpty() ? QDir::currentPath() : QFileInfo(file).absolutePath();
+}
+
+void AZURESetup::editThmOptions() {
+  ThmSettings current;
+  QString error;
+  if (!thmSettings(current, &error)) {
+    QMessageBox::warning(this, tr("THM Options"),
+                         tr("The <thm> block of this project has a line the engine would refuse:\n%1\n"
+                            "Correct it in the .azr file; the block is kept as it is.")
+                             .arg(error));
+    return;
+  }
+  ThmOptionsDialog aDialog(current, projectDirectory(), this);
+  if (aDialog.exec()) setThmSettings(aDialog.settings());
 }
 
 bool AZURESetup::readLastRun(QTextStream &inStream) {
