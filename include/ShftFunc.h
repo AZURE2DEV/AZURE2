@@ -12,8 +12,9 @@ class ShftFunc;
 /*!
  * A shift function for negative energy channels is calculated as
  * \f$ S=\rho \frac{W_c'(k\rho)}{W_c(k\rho)} \f$, where the prime indicates
- * the derivative with respect to \f$ \rho \f$. The AZURE function class ShftFunc
- * uses the GSL package to calculates the numerical derivative.
+ * the derivative with respect to \f$ \rho \f$.  The derivative is taken
+ * analytically through the Whittaker recurrence (see operator()), and at
+ * threshold the zero-energy limit is used (ZeroEnergyLimit()).
  */
 
 class ShftFunc {
@@ -41,6 +42,17 @@ class ShftFunc {
    * angular momentum and energy in the compound system.
    */
   double EnergyDerivative(int l, double energy);
+  /*!
+   * The threshold (E = 0) value S_l(0), common limit of the positive- and
+   * negative-energy shift functions: -l - (x/2) K_{2l}(x)/K_{2l+1}(x) with
+   * x = sqrt(8 eta k a), or -l without Coulomb.
+   */
+  double ZeroEnergyLimit(int l) const;
+  /*!
+   * S = z W'/W below threshold from the Whittaker recurrence, at a binding
+   * energy (MeV, > 0).  False if GSL cannot evaluate it.
+   */
+  bool WhittakerShift(int l, double binding, double &s) const;
 
  private:
   /// Separation plus excitation energy of the pair, the threshold this is measured from.
@@ -49,8 +61,6 @@ class ShftFunc {
   double radius() const { return radius_; };
   /// GSL adaptor for the shift function, for differentiation.
   static double thisShftFunc(double, void *);
-  /// GSL adaptor for the Whittaker function.
-  static double theWhitFunc(double, void *);
   typedef struct Params {
     int lValue;
     double bindingEnergy;

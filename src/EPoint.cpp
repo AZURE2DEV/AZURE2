@@ -1098,6 +1098,22 @@ void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect *targetEffect) 
 
 
 /*!
+ * Is a positive channel energy so close to a charged-particle threshold that
+ * the channel is closed in double precision?  Above a Sommerfeld parameter of
+ * 100 the penetrability is below exp(-2 pi 100) ~ 1e-273, and the Coulomb-wave
+ * routines start to fail a little further on (NaN for 6Li+d below ~1e-10 MeV,
+ * garbage for 12C+12C near 1 keV, and up to seconds per call).  Such points are
+ * treated as at threshold: P = 0 and the shift function continued through
+ * E = 0.  Neutral channels never qualify.
+ */
+static bool IsCoulombThreshold(PPair *pair, double energy) {
+  const double z1z2 = pair->GetZ(1) * pair->GetZ(2);
+  if (!(energy > 0.0) || z1z2 == 0.0) return false;
+  const double eta = sqrt(uconv / 2.) * fstruc * z1z2 * sqrt(pair->GetRedMass() / energy);
+  return eta > 100.0;
+}
+
+/*!
  * This function calculates several energy dependent quantities simultaniously.
  * This includes the geometrical cross section, the s-factor conversion, the \f$ L_o \f$ matrix
  * elements, the square root of the penetrability, and the exponentials of the Coulomb phase shifts
@@ -1135,9 +1151,20 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
         int lValue = theChannel->GetL();
         double localEnergy = inEnergy - thePair->GetSepE() - thePair->GetExE();
         if (thePair->GetPType() == 0) {
-          if (localEnergy <= 0.0) {
+          if (localEnergy <= 0.0 || IsCoulombThreshold(thePair, localEnergy)) {
+            // At and below threshold, and just above it where the Coulomb
+            // barrier makes P = 0 to double precision: the shift function
+            // continued through E = 0 (ShftFunc handles E -> 0-; above, the
+            // reflection 2 S(0) - S(-E), exact to O(E^2)).  The Coulomb-wave
+            // routines are not usable that close to threshold (NaN, garbage
+            // or seconds per call), and a Gaussian-folding sub-point of a THM
+            // segment -- whose grid crosses E = 0 -- can land at round-off
+            // distance from it.
             ShftFunc theShiftFunction(thePair);
-            double localShift = theShiftFunction(lValue, inEnergy);
+            double localShift = (localEnergy <= 0.0)
+                ? theShiftFunction(lValue, inEnergy)
+                : 2.0 * theShiftFunction.ZeroEnergyLimit(lValue) -
+                    theShiftFunction(lValue, inEnergy - 2.0 * localEnergy);
             double boundary = theChannel->GetBoundaryCondition();
             complex loElement(localShift - boundary, 0.0);
             this->AddLoElement(j, ch, loElement);

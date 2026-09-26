@@ -109,7 +109,9 @@ with tempfile.TemporaryDirectory() as tmp:
     print(f"CLI: chi2 {cli_chi2!r}, norm {cli_norm}")
 
     print("1. the profiled THM norm, as the CLI has it")
-    check("the CLI still lands on the pin", rel(cli_chi2, PIN) < 1e-5,
+    # run_tests.sh's tolerance: the pin is the regression suite's, and moves
+    # within it when e.g. the shift-function derivative gets more accurate.
+    check("the CLI still lands on the pin (rel 1e-3)", rel(cli_chi2, PIN) < 1e-3,
           f"{cli_chi2} vs {PIN}")
     with azure2(os.path.join(py_dir, "7Li_p_a.azr"), cwd=py_dir) as m:
         x = np.asarray(m.params_rwa, float)
