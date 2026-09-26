@@ -16,270 +16,276 @@ bool DebugGridEnabled() {
 }
 }  // namespace
 
-/*!
- * \brief Constructor
- */
 AdaptiveIntegrationGrid::AdaptiveIntegrationGrid(const GridConfig &config) :
   config_(config) {
 }
 
 /*!
- * \brief Generate adaptive grid for target integration
+ * \brief Round a resonance to its lattice anchor.
  *
- * Algorithm:
- * 1. Add fine symmetric grids around each resonance FIRST
- *    - Track resonance regions (±3Γ around each resonance)
- *    - Add symmetric points with fine step = Γ/pointsPerWidth
- *    - Handle partial coverage when resonances near boundaries
- * 2. Add coarse grid ONLY in smooth regions (outside resonance regions)
- *    - Step size = baseEnergyStep (default 50 keV)
- *    - Skip any points falling within resonance regions
- * 3. Sort and remove duplicates
- *
- * Note: No overlap between fine and coarse grids - resonances get exclusive coverage.
+ * The width goes to the nearest power of 1.25 and the energy to the nearest
+ * multiple of a quarter of that width.  The grid built from the anchors is
+ * then piecewise constant in the level parameters: it changes only when a
+ * level moves by about a quarter of its width or its width changes by about
+ * 25 %, so a fit that rebuilds the grid as a narrow level moves (see
+ * EPoint::RefreshSubPointGrid) gets the same grid at the same parameters in
+ * every thread, and a finite-difference step almost never straddles a change.
+ * The peak stays within Gamma/8 of the centre of its uniform core.
  */
-std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, double endEnergy, CNuc *compound) {
-  std::vector<double> grid;
+AdaptiveIntegrationGrid::ResonanceInfo AdaptiveIntegrationGrid::Quantize(const ResonanceInfo &resonance) {
+  ResonanceInfo q = resonance;
+  if (!(resonance.particleWidth > 0.0)) return q;
+  const double ratio = 1.25;
+  double width = std::pow(ratio, std::round(std::log(resonance.particleWidth) / std::log(ratio)));
+  double quantum = 0.25 * width;
+  q.particleWidth = width;
+  q.totalWidth = resonance.totalWidth * width / resonance.particleWidth;
+  q.energy = quantum * std::round(resonance.energy / quantum);
+  return q;
+}
 
-  // Ensure proper ordering (startEnergy > endEnergy for backward integration)
-  if (startEnergy < endEnergy) {
-    std::swap(startEnergy, endEnergy);
+/*!
+ * \brief The quantized anchors of every level of the compound.
+ */
+std::vector<AdaptiveIntegrationGrid::ResonanceInfo> AdaptiveIntegrationGrid::Anchors(CNuc *compound) {
+  std::vector<ResonanceInfo> anchors = LevelResonances(compound);
+  for (ResonanceInfo &r : anchors) r = Quantize(r);
+  return anchors;
+}
+
+/*!
+ * \brief Growth of the tail step with distance: step = TailFactor() x distance.
+ *
+ * A chord over a 1/x^2 wing whose step is a fraction r of the distance
+ * over-counts that stretch by about r^2/2; summed over the wing beyond the
+ * core (which holds ~Gamma/(pi core) of the peak's area on each side) the peak
+ * area comes out high by about r^2 Gamma / (2 pi core).  So the ratio can grow
+ * as sqrt(core) for the same bias: tailRatio/pointsPerWidth (0.05 at 50) for a
+ * 2-width core, three times that for 20 widths.
+ */
+double AdaptiveIntegrationGrid::TailFactor() const {
+  double coreWidths = std::max(convolutionCoreWidths, config_.resonanceWidthMultiplier);
+  return tailRatio / config_.pointsPerWidth * std::sqrt(coreWidths / convolutionCoreWidths);
+}
+
+/*!
+ * \brief Distance out to which a resonance's lattice is finer than the smooth
+ * step: the uniform core, then the geometric tail up to where its step
+ * (TailFactor() times the distance) reaches baseEnergyStep.
+ * Zero for a resonance whose core pitch is already coarser than the smooth
+ * step (a broad or background pole): the smooth lattice covers it.
+ */
+double AdaptiveIntegrationGrid::Reach(const ResonanceInfo &resonance) const {
+  double width = resonance.particleWidth;
+  if (!(width > 0.0) || !(config_.pointsPerWidth > 0.0)) return 0.0;
+  double pitch = width / config_.pointsPerWidth;
+  if (!(pitch < config_.baseEnergyStep)) return 0.0;
+  double core = std::max(0.0, config_.resonanceWidthMultiplier) * width;
+  double tail = config_.baseEnergyStep / TailFactor();
+  return std::max(core, tail);
+}
+
+std::vector<AdaptiveIntegrationGrid::ResonanceInfo>
+AdaptiveIntegrationGrid::AnchorsInReach(double startEnergy, double endEnergy,
+                                        const std::vector<ResonanceInfo> &anchors) const {
+  if (startEnergy < endEnergy) std::swap(startEnergy, endEnergy);
+  std::vector<ResonanceInfo> inReach;
+  for (const ResonanceInfo &r : anchors) {
+    double reach = Reach(r);
+    if (!(reach > 0.0)) continue;
+    if (r.energy - reach > startEnergy || r.energy + reach < endEnergy) continue;
+    inReach.push_back(r);
   }
+  return inReach;
+}
 
-  // Handle trivial case
+std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, double endEnergy, CNuc *compound) {
+  return GenerateGrid(startEnergy, endEnergy, Anchors(compound));
+}
+
+/*!
+ * \brief Generate the sub-point grid of a window [endEnergy, startEnergy].
+ *
+ * 1. A uniform smooth lattice with the step closest to baseEnergyStep that
+ *    divides the window.
+ * 2. For every anchor finer than that step: its own lattice, a fixed function
+ *    of (E_R, Gamma) and never of the window -- so overlapping windows sample
+ *    a resonance at the same energies and the convolved curve varies smoothly
+ *    from one data point to the next -- made of a uniform core of pitch
+ *    Gamma/pointsPerWidth out to resonanceWidthMultiplier widths and
+ *    geometric tails (step = TailFactor() x distance) out to the
+ *    smooth step.  Where lattices overlap, each energy keeps only the points
+ *    of the finest one there; the smooth lattice fills in where none is finer.
+ * 3. Sort (descending) and remove near-duplicates.
+ */
+std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, double endEnergy,
+                                                          const std::vector<ResonanceInfo> &anchors) const {
+  std::vector<double> grid;
+  if (startEnergy < endEnergy) std::swap(startEnergy, endEnergy);
   double totalRange = startEnergy - endEnergy;
   if (totalRange <= 0.0 || totalRange < 1.0e-6) {
     grid.push_back(startEnergy);
     return grid;
   }
 
-  // Identify resonances in the energy range with their widths
-  std::vector<ResonanceInfo> resonances = IdentifyResonances(startEnergy, endEnergy, compound);
+  double base = config_.baseEnergyStep;
+  if (!(base > 0.0) || base > totalRange) base = totalRange;
+  int nSmooth = (int)std::ceil(totalRange / base - 1.0e-9);
+  if (nSmooth < 1) nSmooth = 1;
 
-  static const bool debugGrid = (std::getenv("AZR_DEBUG_GRID") != nullptr);
+  std::vector<ResonanceInfo> resonances = AnchorsInReach(startEnergy, endEnergy, anchors);
+  const double tailFactor = TailFactor();
+
+  // Spacing of resonance r's lattice at energy e (base where it has none).
+  // Where lattices overlap, only the finest one is kept: interleaving two
+  // lattices adds points without resolving anything either does not (three
+  // 35-55 keV poles with 20-width cores tripled the sub-points of
+  // tests/hybrid_potential).
+  auto localStep = [&](const ResonanceInfo &r, double e) {
+    double pitch = r.particleWidth / config_.pointsPerWidth;
+    double d = std::abs(e - r.energy);
+    double step = (d <= std::max(0.0, config_.resonanceWidthMultiplier) * r.particleWidth * (1.0 + 1.0e-9))
+        ? pitch : std::max(pitch, tailFactor * d);
+    return std::min(step, base);
+  };
+  auto finestStep = [&](double e) {
+    double s = base;
+    for (const ResonanceInfo &r : resonances) s = std::min(s, localStep(r, e));
+    return s;
+  };
+
+  // The smooth lattice, where no resonance lattice is finer (the edges always).
+  for (int i = 0; i <= nSmooth; i++) {
+    double e = startEnergy - totalRange * i / nSmooth;
+    if (i == 0 || i == nSmooth || !(finestStep(e) < 0.5 * base)) grid.push_back(e);
+  }
+
+  static const bool debugGrid = DebugGridEnabled();
   if (debugGrid) {
-    fprintf(stderr, "[AZR_DEBUG_GRID] window [%.10f, %.10f] MeV, %zu resonances found:\n",
-            endEnergy, startEnergy, resonances.size());
-    for (const ResonanceInfo &r : resonances) {
-      fprintf(stderr, "[AZR_DEBUG_GRID]   res E=%.10f MeV particleWidth=%.6e MeV totalWidth=%.6e MeV\n",
-              r.energy, r.particleWidth, r.totalWidth);
-    }
+    fprintf(stderr, "[AZR_DEBUG_GRID] window [%.10f, %.10f] MeV, smooth step %.6e MeV, %zu anchors in reach:\n",
+            endEnergy, startEnergy, totalRange / nSmooth, resonances.size());
+    for (const ResonanceInfo &r : resonances)
+      fprintf(stderr, "[AZR_DEBUG_GRID]   anchor id=%d E=%.10f MeV particleWidth=%.6e MeV\n",
+              r.id, r.energy, r.particleWidth);
   }
 
-  // Use smooth adaptive stepping - step size varies continuously based on distance to resonances
-  // This avoids sharp boundaries that cause integration artifacts.
-  //
-  // Near a resonance, though, points are snapped onto a FIXED lattice anchored
-  // at that resonance's own energy (spacing = particleWidth / pointsPerWidth)
-  // rather than accumulated by marching from the window's own startEnergy.
-  // Two overlapping integration windows (e.g. the same resonance seen by
-  // neighboring data points, whose windows both extend back past it) walk the
-  // fine region from different starting points; free marching gives each one
-  // an essentially arbitrary phase relative to the resonance, so a subinterval
-  // can straddle the peak very differently window to window even when both
-  // are individually well converged. For a resonance many orders of magnitude
-  // narrower than the window (the extreme, but not the only, case this
-  // matters for), that phase drift makes the quadrature result swing sharply
-  // between adjacent evaluation energies instead of varying smoothly. Anchoring
-  // the fine lattice to the resonance itself removes that drift: every window
-  // that reaches the same resonance samples it at the same fixed energies.
-
-  grid.push_back(startEnergy);
-  double currentEnergy = startEnergy;
-
-  while (currentEnergy > endEnergy) {
-    // Anchor to whichever resonance actually covers currentEnergy (distance
-    // within ITS OWN margin) and, among those, is the NARROWEST -- not simply
-    // whichever resonance is nearest by raw energy distance. A broad nearby
-    // pole's margin can be huge (resonanceWidthMultiplier * its own large
-    // particleWidth) and so trivially contains points that a much narrower,
-    // slightly more distant resonance actually needs fine treatment for; using
-    // plain nearest-distance let the broad pole's far-too-coarse pitch
-    // silently override the narrow resonance's anchoring everywhere the two
-    // overlap, which is precisely the case this anchoring exists to fix.
-    //
-    // Only a resonance whose lattice is FINER than the smooth step is a
-    // refinement worth anchoring to. A broad pole's pitch can exceed the whole
-    // window -- a 10 MeV background level at pointsPerWidth 50 gives 200 keV,
-    // against a 100 keV thick target -- and anchoring to it stepped straight
-    // from the window's start to its end, past everything in between: past the
-    // tail below a narrow resonance, and past the narrow resonance itself
-    // whenever the window started outside its margin, leaving the grid
-    // [start, E_R, end]. The integral then weighted sigma(E_R) by half the
-    // window. This only became reachable once IdentifyResonances returned the
-    // physical widths: a background pole now carries its real 10 MeV. Such a
-    // resonance is left to CalculateAdaptiveStep, which is capped at
-    // baseEnergyStep.
-    const ResonanceInfo *anchorRes = nullptr;
-    for (const ResonanceInfo &res : resonances) {
-      if (!(res.particleWidth > 0.0)) continue;
-      if (config_.pointsPerWidth > 0.0 &&
-          !(res.particleWidth / config_.pointsPerWidth < config_.baseEnergyStep)) continue;
-      double margin = res.particleWidth * config_.resonanceWidthMultiplier;
-      if (std::abs(currentEnergy - res.energy) > margin + 1.0e-12) continue;  // the edge itself counts (see below)
-      if (!anchorRes || res.particleWidth < anchorRes->particleWidth) {
-        anchorRes = &res;
-      }
-    }
-
-    double nextEnergy;
-    bool anchored = false;
-    if (anchorRes && config_.pointsPerWidth > 0.0) {
-      double pitch = anchorRes->particleWidth / config_.pointsPerWidth;
-      if (pitch > 0.0) {
-        // Largest point of resonance.energy + n*pitch strictly below currentEnergy.
-        double offset = currentEnergy - anchorRes->energy;
-        double n = std::floor(offset / pitch - 1.0e-9);
-        nextEnergy = anchorRes->energy + n * pitch;
-        if (!(nextEnergy < currentEnergy - 1.0e-12)) {
-          nextEnergy = currentEnergy - pitch;
-        }
-        anchored = true;
-      }
-    }
-    if (!anchored) {
-      double stepSize = CalculateAdaptiveStep(currentEnergy, resonances);
-      nextEnergy = currentEnergy - stepSize;
-      // Safety check to avoid infinite loops in the smooth/background regime;
-      // the anchored branch above always advances by a fixed, positive pitch,
-      // so it cannot stall and does not need this guard.
-      if (stepSize < 1.0e-10) {
-        if (nextEnergy < endEnergy) nextEnergy = endEnergy;
-        grid.push_back(nextEnergy);
-        break;
-      }
-    }
-
-    // Never step INTO a resonance's region from outside it: stop at its upper
-    // edge, so the region is sampled on its own lattice from there down. The
-    // smooth step is sized by the nearest resonance's Gaussian falloff and is
-    // up to baseEnergyStep long, which can land deep inside a narrow region
-    // (or clear across it) -- a 4.5 keV step from 264.9 keV to 260.4 keV
-    // skipped the whole upper wing of the 0.97 keV-wide 259.7 keV resonance
-    // in 14N(p,g), and the trapezoid then spread sigma at 0.7 keV from the
-    // peak over the full step.
-    for (const ResonanceInfo &res : resonances) {
-      if (!(res.particleWidth > 0.0)) continue;
-      if (config_.pointsPerWidth > 0.0 &&
-          !(res.particleWidth / config_.pointsPerWidth < config_.baseEnergyStep)) continue;
-      double upperEdge = res.energy + res.particleWidth * config_.resonanceWidthMultiplier;
-      if (upperEdge < currentEnergy - 1.0e-12 && upperEdge > nextEnergy) nextEnergy = upperEdge;
-    }
-
-    if (nextEnergy < endEnergy) {
-      nextEnergy = endEnergy;
-    }
-
-    if (debugGrid) {
-      fprintf(stderr, "[AZR_DEBUG_GRID]   step: current=%.10f -> next=%.10f anchored=%d anchorE=%.10f anchorW=%.6e\n",
-              currentEnergy, nextEnergy, anchored ? 1 : 0,
-              anchorRes ? anchorRes->energy : -1.0, anchorRes ? anchorRes->particleWidth : -1.0);
-    }
-
-    grid.push_back(nextEnergy);
-    currentEnergy = nextEnergy;
-  }
-
-  // Ensure endpoint is included
-  if (std::abs(grid.back() - endEnergy) > 1.0e-10) {
-    grid.push_back(endEnergy);
-  }
-
-  // Also ensure resonance centers are included as grid points for accuracy
+  double finestPitch = base;
   for (const ResonanceInfo &res : resonances) {
-    if (res.energy >= endEnergy && res.energy <= startEnergy) {
-      grid.push_back(res.energy);
+    const double width = res.particleWidth;
+    const double pitch = width / config_.pointsPerWidth;
+    const double core = std::max(0.0, config_.resonanceWidthMultiplier) * width;
+    finestPitch = std::min(finestPitch, pitch);
+    // Farthest window edge from the resonance: nothing beyond it is kept.
+    const double farthest = std::max(startEnergy - res.energy, res.energy - endEnergy);
+    // Nearest window edge: offsets below it fall outside on both sides.
+    const double nearest = (res.energy > startEnergy) ? res.energy - startEnergy
+                         : (res.energy < endEnergy) ? endEnergy - res.energy : 0.0;
+    auto keep = [&](double e) {
+      if (!(e >= endEnergy && e <= startEnergy)) return;
+      double own = localStep(res, e);
+      for (const ResonanceInfo &other : resonances) {
+        if (&other == &res) continue;
+        double s = localStep(other, e);
+        if (s < own * (1.0 - 1.0e-9) || (s <= own * (1.0 + 1.0e-9) && &other < &res)) return;
+      }
+      grid.push_back(e);
+    };
+    double offset = 0.0;
+    long nCore = (long)std::floor(core / pitch + 1.0e-9);
+    // Core: offset = k * pitch.  Start at the first index that can reach the
+    // window (an anchor outside it contributes only its inner flank).
+    long k0 = (long)std::floor(nearest / pitch);
+    if (k0 > nCore) k0 = nCore + 1;
+    for (long k = k0; k <= nCore; k++) {
+      offset = k * pitch;
+      if (offset > farthest) break;
+      keep(res.energy + offset);
+      if (k > 0) keep(res.energy - offset);
+    }
+    offset = nCore * pitch;
+    // Geometric tails.
+    while (offset <= farthest) {
+      double step = std::max(pitch, tailFactor * offset);
+      if (!(step < base)) break;
+      offset += step;
+      if (offset >= nearest) {
+        keep(res.energy + offset);
+        keep(res.energy - offset);
+      }
     }
   }
 
-  // Sort grid in descending order (high to low energy)
   std::sort(grid.begin(), grid.end(), std::greater<double>());
 
-  // Remove duplicates (keep points that are sufficiently different). The
-  // default 0.01 eV tolerance is fine for ordinary (>~keV-wide) resonances,
-  // but a resonance narrow enough to need a sub-eV lattice pitch would have
-  // most of its own fine points collapsed back together by a fixed 0.01 eV
-  // tolerance, silently undoing the anchoring above. Scale the tolerance down
-  // to track the finest lattice pitch actually in use, floored well below any
-  // physically meaningful width so exact duplicates still collapse.
-  double tolerance = 1.0e-8;  // 0.01 eV, unchanged default for the no-resonance case
-  for (const ResonanceInfo &res : resonances) {
-    if (res.particleWidth > 0.0 && config_.pointsPerWidth > 0.0) {
-      double pitch = res.particleWidth / config_.pointsPerWidth;
-      double candidateTol = pitch * 1.0e-3;
-      if (candidateTol > 0.0 && candidateTol < tolerance) tolerance = candidateTol;
-    }
-  }
+  // Remove near-duplicates.  The tolerance tracks the finest pitch in use, so
+  // a sub-eV lattice is not collapsed; exact duplicates always go.
+  double tolerance = std::min(1.0e-8, finestPitch * 1.0e-3);
   if (tolerance < 1.0e-14) tolerance = 1.0e-14;
-
   std::vector<double> uniqueGrid;
-  if (!grid.empty()) {
-    uniqueGrid.push_back(grid[0]);
-    for (size_t i = 1; i < grid.size(); i++) {
-      if (std::abs(grid[i] - uniqueGrid.back()) > tolerance) {
-        uniqueGrid.push_back(grid[i]);
-      }
-    }
+  for (double e : grid) {
+    if (uniqueGrid.empty() || std::abs(e - uniqueGrid.back()) > tolerance) uniqueGrid.push_back(e);
   }
-
+  // The window edges are exact grid points (the quadrature clips to them).
+  uniqueGrid.front() = startEnergy;
+  uniqueGrid.back() = endEnergy;
+  if (debugGrid) fprintf(stderr, "[AZR_DEBUG_GRID]   %zu grid points\n", uniqueGrid.size());
   return uniqueGrid;
 }
 
-/*!
- * \brief Generate grid with detailed information about each point
- */
 std::vector<AdaptiveIntegrationGrid::GridPoint>
 AdaptiveIntegrationGrid::GenerateGridWithInfo(double startEnergy, double endEnergy, CNuc *compound) {
-  // First generate the regular grid
-  std::vector<double> energyGrid = GenerateGrid(startEnergy, endEnergy, compound);
-
-  // Then annotate with resonance information
-  std::vector<ResonanceInfo> resonances = IdentifyResonances(startEnergy, endEnergy, compound);
-
+  std::vector<ResonanceInfo> anchors = Anchors(compound);
+  std::vector<double> energyGrid = GenerateGrid(startEnergy, endEnergy, anchors);
+  std::vector<ResonanceInfo> inReach = AnchorsInReach(startEnergy, endEnergy, anchors);
   std::vector<GridPoint> gridInfo;
   for (double energy : energyGrid) {
     GridPoint point;
     point.energy = energy;
-    point.isResonant = IsInResonantRegion(energy, resonances);
+    point.isResonant = false;
+    for (const ResonanceInfo &r : inReach)
+      if (std::abs(energy - r.energy) <= Reach(r)) point.isResonant = true;
     gridInfo.push_back(point);
   }
-
   return gridInfo;
 }
 
-/*!
- * \brief Get expected point count
- */
 int AdaptiveIntegrationGrid::GetExpectedPointCount(double startEnergy, double endEnergy, CNuc *compound) {
-  std::vector<double> grid = GenerateGrid(startEnergy, endEnergy, compound);
-  return grid.size();
+  return (int)GenerateGrid(startEnergy, endEnergy, compound).size();
 }
 
-/*!
- * \brief Set grid configuration
- */
 void AdaptiveIntegrationGrid::SetConfig(const GridConfig &config) {
   config_ = config;
 }
 
-/*!
- * \brief Get current configuration
- */
 AdaptiveIntegrationGrid::GridConfig AdaptiveIntegrationGrid::GetConfig() const {
   return config_;
 }
 
 /*!
- * \brief Identify resonances within the energy range with their total widths
+ * \brief The levels within 20 widths of an energy range, unquantized (for the
+ * reaction-rate breakpoints).
+ */
+std::vector<AdaptiveIntegrationGrid::ResonanceInfo>
+AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy, CNuc *compound) {
+  if (startEnergy < endEnergy) std::swap(startEnergy, endEnergy);
+  std::vector<ResonanceInfo> resonances;
+  for (const ResonanceInfo &r : LevelResonances(compound)) {
+    double margin = 20.0 * r.particleWidth;
+    if (r.energy >= endEnergy - margin && r.energy <= startEnergy + margin) resonances.push_back(r);
+  }
+  return resonances;
+}
+
+/*!
+ * \brief Every level of the compound as a resonance, with its widths
  *
- * Loops through all J-groups and levels in the compound nucleus to find
- * resonances that fall within the integration energy range. For each resonance,
+ * Loops through all J-groups and levels in the compound nucleus. For each resonance,
  * calculates the total width by summing all partial widths (Γ_total = Σ Γ_i).
  * Converts level energies from compound excitation energy to CM energy using
  * the separation energy of the entrance channel.
  */
 std::vector<AdaptiveIntegrationGrid::ResonanceInfo>
-AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy, CNuc *compound) {
+AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
   std::vector<ResonanceInfo> resonances;
 
   if (!compound) return resonances;
@@ -299,6 +305,12 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
   double separationEnergy = entrancePair->GetSepE();
   double excitationEnergy = entrancePair->GetExE();
 
+  // The level parameters to read: the stored ones, or the current fit values
+  // (observed energies and Brune amplitudes during a fit).
+  const bool fit = config_.useFitParameters;
+  auto levelE = [fit](ALevel *lv) { return fit ? lv->GetFitE() : lv->GetE(); };
+  auto levelGamma = [fit](ALevel *lv, int ch) { return fit ? lv->GetFitGamma(ch) : lv->GetGamma(ch); };
+
   // Loop through all J-groups
   for (int j = 1; j <= compound->NumJGroups(); j++) {
     JGroup *jgroup = compound->GetJGroup(j);
@@ -312,12 +324,12 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
       if (!level || !level->IsInRMatrix()) continue;
 
       // Get level energy (in compound excitation energy)
-      double levelExcitationEnergy = level->GetE();
+      double levelExcitationEnergy = levelE(level);
 
       // Check if level has widths (Γ > 0) to be considered a resonance
       bool hasWidth = false;
       for (int ch = 1; ch <= numChannels; ch++) {
-        if (std::abs(level->GetGamma(ch)) > 1.0e-6) {
+        if (std::abs(levelGamma(level, ch)) > 1.0e-6) {
           hasWidth = true;
           break;
         }
@@ -368,11 +380,11 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
         for (int ch = 1; ch <= numChannels; ch++) {
           AChannel *channel = jgroup->GetChannel(ch);
           PPair *chPair = compound->GetPair(channel->GetPairNum());
-          double gamma = std::abs(level->GetGamma(ch));
+          double gamma = std::abs(levelGamma(level, ch));
           if (gamma <= 0.0) continue;
           const bool isRWA = level->GammaIsRWA(ch);
           if (channel->GetRadType() == 'P') {
-            double localEnergy = level->GetE() - chPair->GetExE() - chPair->GetSepE();
+            double localEnergy = levelE(level) - chPair->GetExE() - chPair->GetSepE();
             // Closed channels -- below or at threshold (the value is an ANC
             // unless flagged), or just above a Coulomb threshold where P = 0
             // in double precision (ChannelFunc) -- are left out of this
@@ -393,7 +405,7 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
             }
           } else if (channel->GetRadType() == 'M' || channel->GetRadType() == 'E') {
             if (isRWA) {
-              double localEnergy = level->GetE() - chPair->GetExE() - chPair->GetSepE();
+              double localEnergy = levelE(level) - chPair->GetExE() - chPair->GetSepE();
               rwaGammaMeV += 2.0 * gamma * gamma *
                              pow(std::abs(localEnergy) / hbarc, 2.0 * channel->GetL() + 1.0);
             } else {
@@ -407,28 +419,26 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
         if (DebugGridEnabled()) {
           fprintf(stderr, "[AZR_DEBUG_GRID]     level E=%.6f: input widths particle=%.6e eV gamma=%.6e eV "
                   "(total from RWA-flagged channels %.6e eV)\n",
-                  level->GetE(), particleWidthEV, gammaWidthEV, (rwaParticleMeV + rwaGammaMeV) * 1.0e6);
+                  levelE(level), particleWidthEV, gammaWidthEV, (rwaParticleMeV + rwaGammaMeV) * 1.0e6);
         }
-        double margin = particleWidth * config_.resonanceWidthMultiplier;
-        if (levelCMEnergy >= endEnergy - margin && levelCMEnergy <= startEnergy + margin) {
-          ResonanceInfo resInfo;
-          resInfo.energy = levelCMEnergy;
-          resInfo.totalWidth = totalWidthMeV;
-          resInfo.particleWidth = particleWidth;
-          resonances.push_back(resInfo);
-        }
+        ResonanceInfo resInfo;
+        resInfo.energy = levelCMEnergy;
+        resInfo.totalWidth = totalWidthMeV;
+        resInfo.particleWidth = particleWidth;
+        resInfo.id = 1000 * j + l;
+        resonances.push_back(resInfo);
         continue;
       }
       for (int ch = 1; ch <= numChannels; ch++) {
         AChannel *channel = jgroup->GetChannel(ch);
         if (channel->GetRadType() != 'P') continue;  // particle channels
         PPair *chPair = compound->GetPair(channel->GetPairNum());
-        double localEnergy = level->GetE() - chPair->GetExE() - chPair->GetSepE();
+        double localEnergy = levelE(level) - chPair->GetExE() - chPair->GetSepE();
         // Closed channels are left out, as above (ChannelFunc: P = 0 also just
         // above a Coulomb threshold).
         ChannelFunc channelFunc(chPair, false);
         if (channelFunc.IsClosed(localEnergy)) continue;
-        double gamma = std::abs(level->GetGamma(ch));
+        double gamma = std::abs(levelGamma(level, ch));
         if (gamma <= 0.0) continue;
         double radius = chPair->GetChRad();
         double pene = channelFunc.Penetrability(channel->GetL(), localEnergy);
@@ -454,11 +464,11 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
         char radType = channel->GetRadType();
         if (radType != 'M' && radType != 'E') continue;
         PPair *chPair = compound->GetPair(channel->GetPairNum());
-        double gamma = std::abs(level->GetGamma(ch));
+        double gamma = std::abs(levelGamma(level, ch));
         if (gamma <= 0.0) continue;
-        double localEnergy = level->GetE() - chPair->GetExE() - chPair->GetSepE();
+        double localEnergy = levelE(level) - chPair->GetExE() - chPair->GetSepE();
         double pene;
-        if (std::abs(level->GetE() - chPair->GetExE()) < 1.0e-3 &&
+        if (std::abs(levelE(level) - chPair->GetExE()) < 1.0e-3 &&
             jgroup->GetJ() == chPair->GetJ(2) &&
             jgroup->GetPi() == chPair->GetPi(2)) {
           double jValue = jgroup->GetJ();
@@ -474,15 +484,13 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
       }
 
       // The resonance in sigma(E) is shaped by the particle width, so the grid
-      // is sized by it (see CalculateAdaptiveStep / IsInResonantRegion).
-      double margin = particleWidth * config_.resonanceWidthMultiplier;
-      if (levelCMEnergy >= endEnergy - margin && levelCMEnergy <= startEnergy + margin) {
-        ResonanceInfo resInfo;
-        resInfo.energy = levelCMEnergy;
-        resInfo.totalWidth = totalWidth;
-        resInfo.particleWidth = particleWidth;
-        resonances.push_back(resInfo);
-      }
+      // is sized by it.
+      ResonanceInfo resInfo;
+      resInfo.energy = levelCMEnergy;
+      resInfo.totalWidth = totalWidth;
+      resInfo.particleWidth = particleWidth;
+      resInfo.id = 1000 * j + l;
+      resonances.push_back(resInfo);
     }
   }
 
@@ -495,92 +503,3 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
   return resonances;
 }
 
-/*!
- * \brief Check if an energy is within a resonant region
- */
-bool AdaptiveIntegrationGrid::IsInResonantRegion(double energy, const std::vector<ResonanceInfo> &resonances) const {
-  for (const ResonanceInfo &resonance : resonances) {
-    double resonantRegionWidth = resonance.particleWidth * config_.resonanceWidthMultiplier;
-    if (std::abs(energy - resonance.energy) <= resonantRegionWidth) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/*!
- * \brief Find the nearest resonance to a given energy
- */
-const AdaptiveIntegrationGrid::ResonanceInfo *
-AdaptiveIntegrationGrid::FindNearestResonance(double energy,
-                                              const std::vector<ResonanceInfo> &resonances,
-                                              double &distance) const {
-  if (resonances.empty()) {
-    distance = 1e10;
-    return nullptr;
-  }
-
-  const ResonanceInfo *nearest = nullptr;
-  double minDistance = 1e10;
-
-  for (const ResonanceInfo &resonance : resonances) {
-    double dist = std::abs(energy - resonance.energy);
-    if (dist < minDistance) {
-      minDistance = dist;
-      nearest = &resonance;
-    }
-  }
-
-  distance = minDistance;
-  return nearest;
-}
-
-/*!
- * \brief Calculate adaptive step size based on proximity to resonances
- *
- * The step size is determined by the width of the nearest resonance:
- * - Near resonances: stepSize ~ Γ / pointsPerWidth
- * - Far from resonances: stepSize = baseEnergyStep
- * - Smooth transition between the two regimes
- *
- * This ensures that narrow resonances get fine grids and broad resonances
- * get appropriately coarser grids, all based on the actual physics.
- */
-double AdaptiveIntegrationGrid::CalculateAdaptiveStep(double energy, const std::vector<ResonanceInfo> &resonances) const {
-  // Find nearest resonance and distance to it
-  double distance;
-  const ResonanceInfo *nearestRes = FindNearestResonance(energy, resonances, distance);
-
-  if (!nearestRes) {
-    // No resonances - use base step
-    return config_.baseEnergyStep;
-  }
-
-  // Fine step at resonance center (particle width shapes sigma(E)).
-  double fineStep = nearestRes->particleWidth / config_.pointsPerWidth;
-
-  double sigma = nearestRes->particleWidth * config_.resonanceWidthMultiplier / 2.0;
-
-  // A zero width (e.g. a level whose channels are all sub-threshold) would make
-  // the falloff below 0/0.  Such a level has no resonant structure to resolve,
-  // so fall back to the base step.
-  if (!(sigma > 0.0)) return config_.baseEnergyStep;
-
-  // Gaussian falloff factor: 1 at center, approaches 0 far away
-  double gaussianFactor = std::exp(-distance * distance / (2.0 * sigma * sigma));
-
-  // Step size: fine at center, coarse far away
-  double stepSize = fineStep * gaussianFactor + config_.baseEnergyStep * (1.0 - gaussianFactor);
-
-  // For very narrow resonances, ensure we don't go below a reasonable limit
-  if (stepSize < 1.0e-5) {
-    stepSize = 1.0e-5;  // 0.01 keV absolute minimum
-  }
-
-  // Also cap at baseEnergyStep to avoid overly large steps
-  if (stepSize > config_.baseEnergyStep) {
-    stepSize = config_.baseEnergyStep;
-  }
-
-  return stepSize;
-}

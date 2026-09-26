@@ -39,3 +39,5 @@ above the 1000-sub-point value, where the pre-regression grid happened to be
 3% above it. That is the multiplier, not the regression; use 20.
 
 Re-pinned 2026-09-26: the shift-function fix b6cc41b removed ~1e-9 noise from S(E) that ShftFunc::EnergyDerivative amplified into dS/dE, which enters the Brune transformation of sub-threshold levels. 19.0295 -> 19.0249 (2.4e-4).
+
+Re-pinned 2026-09-26: the adaptive grid now continues each resonance's lattice past its uniform core in geometric tails (tests/thm_narrow_fold). Segment 1 (multiplier 5) is therefore converged too. Its first point went from 4.405e-08, 15 % above the 1000-sub-point integral, to 3.856e-08 (+0.3 %); its other points agree to 1e-4. Segment 2 went to 3.847e-08 / 2.0394e-06 / 2.0773e-06 / 2.1506e-06, within 0.1 % of the 1000-sub-point column. The earlier segment-1 chi2 of 3.61 was the grid error happening to sit closer to the data; with both segments converged they carry the same chi2. 19.0249 -> 30.8444 (segment 1 3.607 -> 15.28, segment 2 15.418 -> 15.565).

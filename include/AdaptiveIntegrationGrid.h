@@ -9,16 +9,28 @@
 /*!
  * \brief Adaptive integration grid generator for target integration
  *
- * This class generates intelligent energy grids for target integration that
- * adaptively place more points near resonances and fewer points in smooth regions.
- * The grid generation analyzes the compound nucleus level scheme to identify
- * resonance locations and allocates integration points accordingly.
+ * Generates the sub-point energies of a target effect (Gaussian convolution,
+ * target integration, beam profile).  The window is covered by a uniform
+ * smooth lattice (step = baseEnergyStep) and, for every resonance narrower
+ * than that step, by a lattice anchored at the resonance itself:
  *
- * Key features:
- * - Resonance-aware: Places finer grids near level energies
- * - Adaptive: Uses fewer points in smooth regions
- * - Bounded: Respects a maximum point limit
- * - Compatible: Designed as a drop-in replacement for uniform grids
+ *  - a uniform core of pitch Gamma/pointsPerWidth out to
+ *    +-resonanceWidthMultiplier*Gamma, then
+ *  - geometric tails whose step grows in proportion to the distance to the
+ *    resonance (see TailFactor), until it reaches the smooth step.
+ *
+ * The tails keep the relative spacing constant in the 1/(E-E_R)^2 wings of a
+ * narrow peak, so the piecewise-linear quadrature over the sub-points
+ * integrates each isolated resonance's area to a fixed relative accuracy
+ * however narrow it is and however far the window extends.  A lattice that
+ * stopped at a fixed number of widths and bridged the wings with the smooth
+ * step instead over-counted a 33 eV THM resonance under a 21 keV Gaussian by up
+ * to 16 % (the chord over a convex 1/x^2 wing lies above it).
+ *
+ * The anchors are quantized (see Quantize) so the lattice is a deterministic,
+ * piecewise-constant function of the level parameters: the grid can then be
+ * rebuilt when a fit moves a narrow level (EPoint::RefreshSubPointGrid)
+ * without each evaluation seeing a slightly different grid.
  */
 class AdaptiveIntegrationGrid {
  public:
@@ -26,32 +38,49 @@ class AdaptiveIntegrationGrid {
    * \brief Configuration parameters for adaptive grid generation
    */
   struct GridConfig {
-    int maxPoints;                    ///< Maximum number of integration points (upper limit)
-    double baseEnergyStep;            ///< Base energy step in smooth regions (MeV)
-    double resonanceWidthMultiplier;  ///< Multiplier for resonance width region (e.g., 3.0 = 3×Γ)
-    double pointsPerWidth;            ///< Target number of points per resonance width
+    int maxPoints;                    ///< Number of smooth intervals across the window (targetInt field 3)
+    double baseEnergyStep;            ///< Smooth step (MeV); the caller sets window / maxPoints
+    double resonanceWidthMultiplier;  ///< Half-extent of the uniform core, in widths
+    double pointsPerWidth;            ///< Core points per width; also sets the tail growth
     int entranceKey;                  ///< Entrance channel key for separation energy calculation
     /// The level gammas are still the input values (partial widths in eV for
     /// open particle channels, ANCs for closed ones, gamma widths in eV): the
     /// parameter transformation is enabled but has not run yet.  This is the
     /// state during EData::Fill in every CLI and API flow.
     bool inputWidthsArePhysical;
+    /// Read the current fit values (ALevel::GetFitE / GetFitGamma: observed
+    /// energies and Brune amplitudes) instead of the stored level parameters.
+    bool useFitParameters;
 
-    // Default constructor with sensible defaults
     GridConfig() :
       maxPoints(1000),
       baseEnergyStep(0.001),
-      // 20, not 5: the fine lattice has to span enough energy for the sub-point
-      // grid to resolve the resonance. 5 widths was only ever adequate because
-      // the width estimate was wrong and enormous, which over-gridded
-      // everything; with correct widths the tests/13N and tests/hybrid_potential
-      // integrals are 4 % to 2x off the converged answer at 5, and flat from 20
-      // out to 200.
+      // 20, not 5: before the lattice had geometric tails it had to span
+      // enough energy for the sub-point grid to resolve the resonance; with
+      // correct widths the tests/13N and tests/hybrid_potential integrals were
+      // 4 % to 2x off the converged answer at 5.  A Gaussian convolution needs
+      // far less (see convolutionCoreWidths).
       resonanceWidthMultiplier(20.0),
       pointsPerWidth(50.0),
       entranceKey(0),
-      inputWidthsArePhysical(false) {}
+      inputWidthsArePhysical(false),
+      useFitParameters(false) {}
   };
+
+  /// Tail step / distance for a convolutionCoreWidths core: tailRatio /
+  /// pointsPerWidth (0.05 at the default 50); see TailFactor.
+  static constexpr double tailRatio = 2.5;
+
+  /// Default core half-extent (widths) of a pure Gaussian convolution (no
+  /// target integration, no beam profile) whose targetInt line leaves it
+  /// out.  The kernel is smooth on the scale of the sub-point step, so the
+  /// core only has to hold the peak: with the geometric tails, 2 widths at 50
+  /// points per width fold an isolated resonance to ~3e-4 (tests/17O,
+  /// tests/thm_narrow_fold) with a fifth of the sub-points of 20 widths.  A
+  /// thick-target integral keeps 20: its integrand can be steep away from any
+  /// resonance (tests/hybrid_potential integrates Rutherford scattering down to
+  /// 1 keV), and the wide core is what samples it there.
+  static constexpr double convolutionCoreWidths = 2.0;
 
   /*!
    * \brief Grid point information
@@ -68,43 +97,46 @@ class AdaptiveIntegrationGrid {
     double energy;         ///< Resonance energy (CM frame, MeV)
     double totalWidth;     ///< Gamma_particle + Gamma_radiative (MeV)
     double particleWidth;  ///< Gamma_particle only (MeV); shapes sigma(E) in non-RMC
+    int id;                ///< 1000 * J-group + level: identifies the level
   };
 
-  /*!
-   * \brief Constructor
-   * \param config Grid generation configuration
-   */
   AdaptiveIntegrationGrid(const GridConfig &config);
 
   /*!
-   * \brief Generate adaptive grid for a given energy range
-   *
-   * Analyzes the compound nucleus level scheme and creates an adaptive
-   * energy grid with more points near resonances and fewer in smooth regions.
-   *
-   * \param startEnergy Starting energy (highest energy, CM frame)
-   * \param endEnergy Ending energy (lowest energy, CM frame)
-   * \param compound Pointer to compound nucleus for level information
-   * \return Vector of grid points (energies in descending order)
+   * \brief Generate the grid for a window from the compound's levels.
+   * \return Energies in descending order (CM frame)
    */
   std::vector<double> GenerateGrid(double startEnergy, double endEnergy, CNuc *compound);
 
   /*!
-   * \brief Generate grid with detailed point information
-   * \param startEnergy Starting energy (highest energy, CM frame)
-   * \param endEnergy Ending energy (lowest energy, CM frame)
-   * \param compound Pointer to compound nucleus for level information
-   * \return Vector of GridPoint structures with energy and resonance flags
+   * \brief Generate the grid for a window from already quantized anchors
+   * (the output of Anchors()).  Only anchors whose lattice reaches the window
+   * and is finer than the smooth step contribute.
    */
-  std::vector<GridPoint> GenerateGridWithInfo(double startEnergy, double endEnergy, CNuc *compound);
+  std::vector<double> GenerateGrid(double startEnergy, double endEnergy,
+                                   const std::vector<ResonanceInfo> &anchors) const;
 
   /*!
-   * \brief Get the actual number of points that would be generated
-   * \param startEnergy Starting energy (CM frame)
-   * \param endEnergy Ending energy (CM frame)
-   * \param compound Pointer to compound nucleus
-   * \return Number of points in the adaptive grid
+   * \brief The quantized resonance anchors of every level of the compound.
    */
+  std::vector<ResonanceInfo> Anchors(CNuc *compound);
+
+  /*!
+   * \brief The anchors that shape the grid of a window (see GenerateGrid).
+   */
+  std::vector<ResonanceInfo> AnchorsInReach(double startEnergy, double endEnergy,
+                                            const std::vector<ResonanceInfo> &anchors) const;
+
+  /*!
+   * \brief Round a resonance to its anchor: the width to a power of 1.25 and
+   * the energy to a quarter of that width.  The lattice then only changes
+   * when a level moves by a quarter width or its width by 25 %, and a peak
+   * never sits more than Gamma/8 from the centre of its uniform core.
+   */
+  static ResonanceInfo Quantize(const ResonanceInfo &resonance);
+
+  std::vector<GridPoint> GenerateGridWithInfo(double startEnergy, double endEnergy, CNuc *compound);
+
   int GetExpectedPointCount(double startEnergy, double endEnergy, CNuc *compound);
 
   /*!
@@ -112,67 +144,29 @@ class AdaptiveIntegrationGrid {
    *
    * Thin public accessor around the internal resonance finder so that other
    * integrators (e.g. the reaction-rate integration) can place integration
-   * breakpoints at the resonance energies.
-   *
-   * \param startEnergy Highest energy of the range (CM frame)
-   * \param endEnergy   Lowest energy of the range (CM frame)
-   * \param compound    Pointer to compound nucleus for level information
-   * \return Vector of ResonanceInfo (energy, totalWidth), sorted by energy
+   * breakpoints at the resonance energies.  Not quantized.
    */
   std::vector<ResonanceInfo> GetResonances(double startEnergy, double endEnergy, CNuc *compound) {
     return IdentifyResonances(startEnergy, endEnergy, compound);
   }
 
-  /*!
-   * \brief Set grid configuration
-   * \param config New configuration parameters
-   */
   void SetConfig(const GridConfig &config);
-
-  /*!
-   * \brief Get current grid configuration
-   * \return Current configuration
-   */
   GridConfig GetConfig() const;
 
  private:
   GridConfig config_;  ///< Grid generation configuration
 
-  /*!
-   * \brief Identify resonances within the energy range with their widths
-   * \param startEnergy Starting energy (CM frame)
-   * \param endEnergy Ending energy (CM frame)
-   * \param compound Pointer to compound nucleus
-   * \return Vector of ResonanceInfo structures with energies and widths
-   */
+  /// Every level with a width, unquantized, sorted by energy.
+  std::vector<ResonanceInfo> LevelResonances(CNuc *compound);
+
+  /// The levels within resonanceWidthMultiplier widths of the range.
   std::vector<ResonanceInfo> IdentifyResonances(double startEnergy, double endEnergy, CNuc *compound);
 
-  /*!
-   * \brief Check if an energy is within a resonant region
-   * \param energy Energy to check
-   * \param resonances Vector of resonance information
-   * \return True if energy is near a resonance
-   */
-  bool IsInResonantRegion(double energy, const std::vector<ResonanceInfo> &resonances) const;
+  /// Distance out to which a resonance's lattice is finer than the smooth step.
+  double Reach(const ResonanceInfo &resonance) const;
 
-  /*!
-   * \brief Calculate appropriate step size at a given energy
-   * \param energy Current energy
-   * \param resonances Vector of resonance information
-   * \return Adaptive step size based on local resonance width
-   */
-  double CalculateAdaptiveStep(double energy, const std::vector<ResonanceInfo> &resonances) const;
-
-  /*!
-   * \brief Find the nearest resonance to a given energy
-   * \param energy Energy to check
-   * \param resonances Vector of resonance information
-   * \param distance Output parameter for distance to nearest resonance
-   * \return Pointer to nearest ResonanceInfo, or nullptr if no resonances
-   */
-  const ResonanceInfo *FindNearestResonance(double energy,
-                                            const std::vector<ResonanceInfo> &resonances,
-                                            double &distance) const;
+  /// Tail step per unit distance from the resonance.
+  double TailFactor() const;
 };
 
 #endif  // ADAPTIVEINTEGRATIONGRID_H

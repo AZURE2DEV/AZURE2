@@ -1,4 +1,8 @@
 #include "AMatrixFunc.h"
+#include "AdaptiveIntegrationGrid.h"
+#include "ALevel.h"
+#include "JGroup.h"
+#include "PPair.h"
 #include "AngCoeff.h"
 #include "CNuc.h"
 #include "Config.h"
@@ -17,6 +21,7 @@
 #include "Straggling.h"
 #include "IntegratedFermiFunc.h"
 #include <atomic>
+#include <cstdint>
 #include <iostream>
 #include <assert.h>
 #include <fstream>
@@ -1637,6 +1642,9 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
     }
   } else {
     TargetEffect *effect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+    // A fit may have moved a narrow level off the lattice this point's grid
+    // was built around: rebuild it from the current parameters first.
+    this->RefreshSubPointGrid(theCNuc, configure);
     const double blend = this->GetTargetBlendWeight();
     const double autoTol = effect->GetAutoTolerance();
     const bool hasMapped = this->NumLocalMappedPoints() > 0;
@@ -1870,6 +1878,128 @@ void EPoint::AddSubPoint(EPoint subPoint) {
   subPoint.is_sub_point_ = true;
   integrationPoints_.push_back(subPoint);
 }
+
+namespace {
+
+/*
+The quantized grid anchors of the compound at its current fit parameters.
+Computing them costs a penetrability and a shift derivative per level and
+channel; every target-effect point of an evaluation asks for the same ones, so
+the last result is kept per thread, keyed by everything it depends on.
+*/
+const std::vector<AdaptiveIntegrationGrid::ResonanceInfo> &
+CurrentGridAnchors(CNuc *compound, int entranceKey) {
+  thread_local std::vector<double> key;
+  thread_local std::vector<AdaptiveIntegrationGrid::ResonanceInfo> anchors;
+  std::vector<double> newKey;
+  newKey.push_back((double)(uintptr_t)compound);
+  newKey.push_back(entranceKey);
+  for (int p = 1; p <= compound->NumPairs(); p++) newKey.push_back(compound->GetPair(p)->GetChRad());
+  for (int j = 1; j <= compound->NumJGroups(); j++) {
+    JGroup *jgroup = compound->GetJGroup(j);
+    newKey.push_back(jgroup->IsInRMatrix() ? 1. : 0.);
+    for (int l = 1; l <= jgroup->NumLevels(); l++) {
+      ALevel *level = jgroup->GetLevel(l);
+      newKey.push_back(level->IsInRMatrix() ? 1. : 0.);
+      newKey.push_back(level->GetFitE());
+      for (int ch = 1; ch <= jgroup->NumChannels(); ch++) newKey.push_back(level->GetFitGamma(ch));
+    }
+  }
+  if (newKey != key) {
+    AdaptiveIntegrationGrid::GridConfig config;
+    config.entranceKey = entranceKey;
+    config.useFitParameters = true;
+    AdaptiveIntegrationGrid generator(config);
+    anchors = generator.Anchors(compound);
+    key.swap(newKey);
+  }
+  return anchors;
+}
+
+}  // namespace
+
+/*!
+ * Rebuilds the sub-point grid of a target-effect point when the current fit
+ * parameters anchor it differently from the parameters it was built with.
+ *
+ * The grid packs its points around every narrow resonance (see
+ * AdaptiveIntegrationGrid), placed where the level was when the data were
+ * filled.  A fit that moves a 33 eV level by 1-2 keV leaves it between coarse
+ * sub-points, and the convolved cross section was then wrong by 13-70 % with
+ * no warning.  The anchors are quantized, so the grid is a deterministic,
+ * piecewise-constant function of the parameters: it changes only when a level
+ * moves by about a quarter of its width or its width by about 25 %, identically
+ * in every thread and pooled copy of the data.
+ *
+ * Only under the Brune formalism, where the fit energies are the observed
+ * resonance energies, and only for points whose grid is self-contained: not
+ * for component segments, beam profiles, mapped points, energy-shifted
+ * segments or models with external-capture levels (whose sub-point amplitudes
+ * are precomputed and cached by energy).  Those keep the grid they were filled with.
+ */
+bool EPoint::RefreshSubPointGrid(CNuc *theCNuc, const Config &configure) {
+  if (!subGrid_.refreshable || !configure.useAdaptiveGrid) return false;
+  if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) return false;
+  if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
+    for (int j = 1; j <= theCNuc->NumJGroups(); j++)
+      for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++)
+        if (theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) return false;
+  }
+  if (this->NumLocalMappedPoints() > 0 || !this->GetParentData()) return false;
+  // The segment of this copy of the data (parentSegment_ is not remapped when
+  // the data are cloned for a fit, and the energy shift lives on the copy).
+  ESegment *segment = this->GetParentData()->GetSegmentFromKey(segment_key_);
+  if (!segment || segment->IsVaryEnergyShift() || segment->GetEnergyShift() != 0.) return false;
+
+  AdaptiveIntegrationGrid::GridConfig gridConfig;
+  gridConfig.entranceKey = subGrid_.entranceKey;
+  gridConfig.baseEnergyStep = subGrid_.baseEnergyStep;
+  gridConfig.resonanceWidthMultiplier = subGrid_.resonanceWidthMultiplier;
+  gridConfig.pointsPerWidth = subGrid_.pointsPerWidth;
+  AdaptiveIntegrationGrid generator(gridConfig);
+  const std::vector<AdaptiveIntegrationGrid::ResonanceInfo> &anchors =
+      CurrentGridAnchors(theCNuc, subGrid_.entranceKey);
+  std::vector<double> inReach;
+  for (const AdaptiveIntegrationGrid::ResonanceInfo &r :
+       generator.AnchorsInReach(subGrid_.startEnergy, subGrid_.endEnergy, anchors)) {
+    inReach.push_back(r.id);
+    inReach.push_back(r.energy);
+    inReach.push_back(r.particleWidth);
+  }
+  if (inReach == subGrid_.anchors) return false;
+
+  std::vector<double> energyGrid = generator.GenerateGrid(subGrid_.startEnergy, subGrid_.endEnergy, anchors);
+  TargetEffect *effect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+  TargetEffect *legendreEffect = effect->IsQCoefficients() ? effect : NULL;
+  integrationPoints_.clear();
+  for (double subEnergy : energyGrid) {
+    EPoint subPoint(this->GetCMAngle(), subEnergy, segment);
+    if (effect->IsTargetIntegration()) {
+      double cmConversion = subGrid_.cmConversion;
+      subPoint.SetStoppingPower(cmConversion *
+                                effect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / cmConversion));
+    }
+    this->AddSubPoint(subPoint);
+  }
+  // The same per-point preparation EData::Initialize gives every sub-point.
+  for (EPoint &subPoint : integrationPoints_) {
+    subPoint.CalcEDependentValues(theCNuc, configure);
+    subPoint.CalcLegendreP(configure.maxLOrder, theCNuc, legendreEffect);
+    subPoint.CalcCoulombAmplitude(theCNuc);
+  }
+  static const bool debugGrid = (std::getenv("AZR_DEBUG_GRID") != nullptr);
+  if (debugGrid) {
+    fprintf(stderr, "[AZR_DEBUG_GRID] rebuilt the grid of the point at E_cm = %.8f MeV: %zu sub-points; anchors (id E Gamma) were",
+            this->GetCMEnergy(), integrationPoints_.size());
+    for (double v : subGrid_.anchors) fprintf(stderr, " %.10g", v);
+    fprintf(stderr, ", now");
+    for (double v : inReach) fprintf(stderr, " %.10g", v);
+    fprintf(stderr, "\n");
+  }
+  subGrid_.anchors.swap(inReach);
+  return true;
+}
+
 
 /*!
  * This function is called to integrate the vector of sub-points to determine

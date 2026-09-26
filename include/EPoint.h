@@ -19,6 +19,8 @@ struct EnergyMap {
   int point;
 };
 
+#include <vector>
+
 class ESegment;
 class EData;
 class CNuc;
@@ -27,6 +29,30 @@ class TargetEffect;
 class DataLine;
 class Config;
 struct ThmWeightTable;
+
+/// How a target-effect point's sub-point grid was built.
+
+/*!
+ * Kept so the grid can be rebuilt when a fit moves a narrow level off the
+ * lattice it was built around (EPoint::RefreshSubPointGrid).
+ */
+
+struct SubGridSpec {
+  /// The grid may be rebuilt (adaptive grid, main segment, no beam profile).
+  bool refreshable = false;
+  /// Integration window (CM, MeV): startEnergy > endEnergy.
+  double startEnergy = 0.;
+  double endEnergy = 0.;
+  /// Smooth step, core half-extent in widths, core points per width.
+  double baseEnergyStep = 0.;
+  double resonanceWidthMultiplier = 0.;
+  double pointsPerWidth = 0.;
+  int entranceKey = 0;
+  /// Lab-to-CM energy factor, for the stopping power of target integration.
+  double cmConversion = 1.;
+  /// The anchors that shaped the grid: (id, E, Gamma) per anchor in reach.
+  std::vector<double> anchors;
+};
 
 /// An AZURE data point
 
@@ -291,6 +317,12 @@ class EPoint {
   EPoint *GetSubPoint(int);
   std::vector<EPoint> &GetSubPoints();
   std::vector<EPoint *> &GetMappedPoints();
+  /// How the sub-point grid was built (see SubGridSpec).
+  void SetSubGridSpec(const SubGridSpec &spec) { subGrid_ = spec; }
+  const SubGridSpec &GetSubGridSpec() const { return subGrid_; }
+  /// Rebuild the sub-point grid if the current fit parameters anchor it
+  /// differently; returns true when it was rebuilt.
+  bool RefreshSubPointGrid(CNuc *, const Config &);
   void StoreSubpointOffsets();                                                          // Store offsets for adaptive grid preservation
   void ApplySubpointShift(double energyShift, CNuc *theCNuc, const Config &configure);  // Intelligent shift preserving resonance structure
  private:
@@ -375,6 +407,7 @@ class EPoint {
   matrix_r ec_energies_;  // Energies at which EC amplitudes were calculated
   std::vector<EPoint *> local_mapped_points_;
   std::vector<EPoint> integrationPoints_;
+  SubGridSpec subGrid_;
   EData *parentData_;
   ESegment *parentSegment_;
 };

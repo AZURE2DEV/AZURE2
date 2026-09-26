@@ -143,6 +143,7 @@ class TargetEffect {
 
   // Adaptive integration grid parameters
   double resonanceWidthMultiplier_;
+  bool explicitResonanceWidthMultiplier_ = false;
   double pointsPerWidth_;
 
   // Optional restriction of the effect to lab-energy windows, with a smooth

@@ -111,7 +111,7 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   resonanceWidthMultiplierSpin->setSingleStep(0.5);
   resonanceWidthMultiplierSpin->setDecimals(1);
   resonanceWidthMultiplierSpin->setValue(20.0);
-  resonanceWidthMultiplierSpin->setToolTip("Half-width of the resonance region covered on each side (in units of the resonance's particle width). The integral is not converged until this covers the width of the energy window being integrated over; 20 is the default, and larger costs time but never accuracy.");
+  resonanceWidthMultiplierSpin->setToolTip("Half-width, in units of the resonance's particle width, of the uniformly spaced core of each resonance's sub-point lattice; geometrically growing steps continue beyond it. 20 is the default; 2 is enough for a Gaussian convolution and needs a fifth of the sub-points. Larger costs time but never accuracy.");
 
   pointsPerWidthSpin = new QDoubleSpinBox;
   pointsPerWidthSpin->setEnabled(false);

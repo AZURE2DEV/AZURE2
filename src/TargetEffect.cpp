@@ -1,4 +1,5 @@
 #include "TargetEffect.h"
+#include "AdaptiveIntegrationGrid.h"
 #include <sstream>
 #include <iostream>
 #include <cctype>
@@ -19,9 +20,12 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
   stragglingCoefficient_ = 0.04;
 
   // Initialize adaptive grid parameters to defaults
-  // See AdaptiveIntegrationGrid::GridConfig for why this is 20 rather than 5.
-  resonanceWidthMultiplier_ = 20.0;
-  pointsPerWidth_ = 50.0;
+  // Same defaults as AdaptiveIntegrationGrid::GridConfig (see there).
+  {
+    AdaptiveIntegrationGrid::GridConfig defaults;
+    resonanceWidthMultiplier_ = defaults.resonanceWidthMultiplier;
+    pointsPerWidth_ = defaults.pointsPerWidth;
+  }
 
   // By default the effect applies to every point of its segments, with hard
   // edges and no automatic per-point decision.
@@ -94,6 +98,7 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
           stream >> rwm;
           if (stream) {
             resonanceWidthMultiplier_ = rwm;
+            explicitResonanceWidthMultiplier_ = true;
             if (stream.good()) stream >> std::ws;
             if (stream.good() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.' || stream.peek() == '-')) {
               double ppw;
@@ -570,10 +575,18 @@ double TargetEffect::GetStragglingCoefficient() const {
 
 /*!
  * Returns the resonance width multiplier for the adaptive integration grid.
- * This controls how many total widths Γ are covered on each side of a resonance.
+ * The half-extent, in widths, of the uniform core of each resonance's lattice
+ * (geometric tails continue beyond it; see AdaptiveIntegrationGrid).
  */
 
 double TargetEffect::GetResonanceWidthMultiplier() const {
+  // A value on the targetInt line always wins.  Left out, a pure Gaussian
+  // convolution gets the smaller core it needs (see
+  // AdaptiveIntegrationGrid::convolutionCoreWidths); every other effect keeps
+  // the general default.
+  if (!explicitResonanceWidthMultiplier_ && (isConvolution_ || isConvCoefficients_) &&
+      !isTargetIntegration_ && !isBeamProfile_)
+    return AdaptiveIntegrationGrid::convolutionCoreWidths;
   return resonanceWidthMultiplier_;
 }
 

@@ -69,3 +69,5 @@ is a fitted quantity, not a physical cross-section scale.
 The case is deliberately left at these parameters rather than refitted on every
 run, so the number is a fixed reference. A change to it means the THM path
 moved.
+
+Re-pinned 2026-09-26: the adaptive grid's narrow-resonance lattice now has geometric tails beyond its uniform core, anchors that are rebuilt when a fit moves a level, and cores that keep only the finest lattice where they overlap (tests/thm_narrow_fold). With this file's "5 50" grid, the 46 eV resonance at 74 keV was folded up to 0.5 % high: the chord across its 1/(E-E_R)^2 wings lies above them. It now matches a dense-grid fold of the unfolded curve to 1e-4. 96.6928 -> 96.9061 (+2.2e-3); the fitted norm moved by 9e-5. tests/thm_rwa_grid (150 vs 600 sub-points) now agrees to 1.2e-5, where it agreed to 4.3e-4 before.

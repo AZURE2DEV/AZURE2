@@ -546,6 +546,63 @@ int EData::GetEnergyShiftParamOffset() const {
   return energyShiftParamOffset_;
 }
 
+namespace {
+
+/*
+Builds the sub-points of a target-effect point on [endEnergy, startEnergy] (CM)
+and records on the point how the grid was built, so EPoint::RefreshSubPointGrid
+can rebuild it the same way from the current fit parameters.
+*/
+void FillSubPoints(EPoint *point, ESegment *segment, TargetEffect *targetEffect, double startEnergy,
+                   double endEnergy, double cmConversion, int entranceKey, bool refreshable,
+                   CNuc *compound, const Config &configure) {
+  std::vector<double> energyGrid;
+  int numPoints = targetEffect->NumSubPoints();
+  SubGridSpec spec;
+  if (configure.useAdaptiveGrid) {
+    AdaptiveIntegrationGrid::GridConfig gridConfig;
+    gridConfig.maxPoints = numPoints;
+    gridConfig.entranceKey = entranceKey;
+    gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
+    gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
+    gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
+    gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth();
+    AdaptiveIntegrationGrid gridGenerator(gridConfig);
+    std::vector<AdaptiveIntegrationGrid::ResonanceInfo> anchors = gridGenerator.Anchors(compound);
+    energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, anchors);
+    spec.refreshable = refreshable;
+    spec.startEnergy = startEnergy;
+    spec.endEnergy = endEnergy;
+    spec.baseEnergyStep = gridConfig.baseEnergyStep;
+    spec.resonanceWidthMultiplier = gridConfig.resonanceWidthMultiplier;
+    spec.pointsPerWidth = gridConfig.pointsPerWidth;
+    spec.entranceKey = entranceKey;
+    spec.cmConversion = cmConversion;
+    for (const AdaptiveIntegrationGrid::ResonanceInfo &r : gridGenerator.AnchorsInReach(startEnergy, endEnergy, anchors)) {
+      spec.anchors.push_back(r.id);
+      spec.anchors.push_back(r.energy);
+      spec.anchors.push_back(r.particleWidth);
+    }
+  } else {
+    double step = (startEnergy - endEnergy) / numPoints;
+    for (int i = 0; i <= numPoints; i++)
+      energyGrid.push_back(startEnergy - i * step);
+  }
+
+  for (size_t i = 0; i < energyGrid.size(); i++) {
+    double subEnergy = energyGrid[i];
+    EPoint subPoint(point->GetCMAngle(), subEnergy, segment);
+    if (targetEffect->IsTargetIntegration()) {
+      double stoppingPower = cmConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / cmConversion);
+      subPoint.SetStoppingPower(stoppingPower);
+    }
+    point->AddSubPoint(subPoint);
+  }
+  point->SetSubGridSpec(spec);
+}
+
+}  // namespace
+
 /*!
  * Reads the target effects input file and creates the TargetEffect objects
  * to be applied to the data.
@@ -724,33 +781,11 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             point->SetPhotoKinematics(entrancePair->GetSepE() - exitPair->GetExE(),
                                       (entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv);
           }
-          std::vector<double> energyGrid;
-          int numPoints = targetEffect->NumSubPoints();
-          if (configure.useAdaptiveGrid) {
-            AdaptiveIntegrationGrid::GridConfig gridConfig;
-            gridConfig.maxPoints = numPoints;
-            gridConfig.entranceKey = segment->GetEntranceKey();
-            gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
-            gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
-            gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
-            gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth();
-            AdaptiveIntegrationGrid gridGenerator(gridConfig);
-            energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
-          } else {
-            double step = (startEnergy - endEnergy) / numPoints;
-            for (int i = 0; i <= numPoints; i++)
-              energyGrid.push_back(startEnergy - i * step);
-          }
-
-          for (size_t i = 0; i < energyGrid.size(); i++) {
-            double subEnergy = energyGrid[i];
-            EPoint subPoint(point->GetCMAngle(), subEnergy, &*segment);
-            if (targetEffect->IsTargetIntegration()) {
-              double stoppingPower = cmConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / cmConversion);
-              subPoint.SetStoppingPower(stoppingPower);
-            }
-            point->AddSubPoint(subPoint);
-          }
+          // The grid of a main segment may be rebuilt later when a fit moves a
+          // narrow level (EPoint::RefreshSubPointGrid); a beam-profile window
+          // is absolute and is left as built.
+          FillSubPoints(&*point, &*segment, targetEffect, startEnergy, endEnergy, cmConversion,
+                        segment->GetEntranceKey(), !targetEffect->IsBeamProfile(), compound, configure);
         }
       }
     }
@@ -874,33 +909,10 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 point->SetPhotoKinematics(entrancePair->GetSepE() - exitPair->GetExE(),
                                           (entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv);
               }
-              std::vector<double> energyGrid;
-              int numPoints = targetEffect->NumSubPoints();
-              if (configure.useAdaptiveGrid) {
-                AdaptiveIntegrationGrid::GridConfig gridConfig;
-                gridConfig.maxPoints = numPoints;
-                gridConfig.entranceKey = segment->GetEntranceKey();
-                gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
-                gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
-                gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
-                gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth();
-                AdaptiveIntegrationGrid gridGenerator(gridConfig);
-                energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
-              } else {
-                double step = (startEnergy - endEnergy) / numPoints;
-                for (int i = 0; i <= numPoints; i++)
-                  energyGrid.push_back(startEnergy - i * step);
-              }
-
-              for (size_t i = 0; i < energyGrid.size(); i++) {
-                double subEnergy = energyGrid[i];
-                EPoint subPoint(point->GetCMAngle(), subEnergy, &*component);
-                if (targetEffect->IsTargetIntegration()) {
-                  double stoppingPower = cmConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / cmConversion);
-                  subPoint.SetStoppingPower(stoppingPower);
-                }
-                point->AddSubPoint(subPoint);
-              }
+              // A component's points are converted again after this
+              // (InitializeComponentSegments), so its grid is never rebuilt.
+              FillSubPoints(&*point, &*component, targetEffect, startEnergy, endEnergy, cmConversion,
+                            segment->GetEntranceKey(), false, compound, configure);
             }
           }
         }
