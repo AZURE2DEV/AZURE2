@@ -26,6 +26,7 @@ The 31 fields of a channel line match ``NucLine`` in the AZURE2 source
 which the ``S`` / ``L`` properties convert.
 """
 
+import math
 import os
 import re
 import tempfile
@@ -70,6 +71,199 @@ def _fmt(x):
     if float(x).is_integer() and abs(x) < 1e15:
         return str(int(x))
     return repr(float(x))
+
+
+# -- the <thm> block: the engine's (Config::ReadThmBlock) and the GUI's
+#    (ThmSettings in gui/src/ThmOptionsDialog.cpp) rules, ported -------------
+
+_THM_GLOBAL_DEFAULTS = {"entranceL": "incoherent", "vertex": "constant",
+                        "kinematics": "lacognata", "coulombIntegral": False,
+                        "spectatorEnergy": 0.0}
+_THM_FLOAT_PREFIX = re.compile(r"[ \t\n\r\f\v]*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?")
+_THM_INT_PREFIX = re.compile(r"[ \t\n\r\f\v]*[+-]?\d+")
+
+
+def _thm_default_settings():
+    s = dict(_THM_GLOBAL_DEFAULTS)
+    s.update(spectatorByPair={}, weight={}, weightTest={})
+    return s
+
+
+def _thm_is_default(s):
+    return s == _thm_default_settings()
+
+
+def _thm_number(x):
+    """Shortest text that reads back as the same double, as Qt's
+    QString::number(x, 'g', QLocale::FloatingPointShortest) writes it."""
+    for p in range(1, 18):
+        t = f"{x:.{p}g}"
+        if float(t) == x:
+            return t
+    return repr(x)
+
+
+def _thm_read_double(text):
+    """operator>> on an istringstream: a leading number, the rest ignored."""
+    m = _THM_FLOAT_PREFIX.match(text)
+    return float(m.group(0)) if m else None
+
+
+def _thm_read_int(text, strict):
+    m = _THM_INT_PREFIX.match(text)
+    if not m:
+        return None
+    if strict and text[m.end():].strip():
+        return None
+    return int(m.group(0))
+
+
+def _thm_parse_line(raw, s):
+    """One block line into settings ``s``: returns (key, value) normalized
+    as the GUI writes them, ("", "") for a blank or comment line; raises
+    ValueError for a line the engine would refuse."""
+    line = raw.split("#", 1)[0].strip()
+    if not line:
+        return "", ""
+    if "=" not in line:
+        raise ValueError(f"<thm> line not understood: '{raw.strip()}'")
+    k, v = line.split("=", 1)
+    k = k.rstrip(" \t")
+    v = v.lstrip(" \t")
+    bad = ValueError(f"<thm> line not understood: '{raw.strip()}'")
+    if k == "vertex":
+        if v == "real":
+            v = "perlevel"
+        if v not in ("onshell", "constant", "perlevel"):
+            raise bad
+        s["vertex"] = v
+    elif k == "kinematics":
+        if v not in ("lacognata", "triple", "kf3body", "lambda32"):
+            raise bad
+        s["kinematics"] = v
+    elif k == "entranceL":
+        if v not in ("coherent", "incoherent"):
+            raise bad
+        s["entranceL"] = v
+    elif k == "coulombIntegral":
+        if v in ("1", "true", "on"):
+            s["coulombIntegral"] = True
+        elif v in ("0", "false", "off"):
+            s["coulombIntegral"] = False
+        else:
+            raise bad
+        v = "1" if s["coulombIntegral"] else "0"
+    elif k.startswith("spectatorEnergy"):
+        x = _thm_read_double(v)
+        if x is None or not x >= 0.0:
+            raise bad
+        v = _thm_number(x)
+        if k == "spectatorEnergy":
+            s["spectatorEnergy"] = x
+        elif len(k) > 17 and k[15] == "[" and k.endswith("]"):
+            pair = _thm_read_int(k[16:-1], strict=False)
+            if pair is None:
+                raise bad
+            s["spectatorByPair"][pair] = x
+            k = f"spectatorEnergy[{pair}]"
+        else:
+            raise bad
+    elif k.startswith("weight"):
+        test = k.startswith("weightTest[")
+        open_ = 10 if test else 6
+        if not (len(k) > open_ + 2 and k[open_] == "[" and k.endswith("]") and v):
+            raise bad
+        seg = _thm_read_int(k[open_ + 1:-1], strict=True)
+        if seg is None or seg < 1:
+            raise bad
+        s["weightTest" if test else "weight"][seg] = v
+        k = f"{'weightTest' if test else 'weight'}[{seg}]"
+    else:
+        raise bad
+    return k, v
+
+
+def _thm_key_values(s):
+    """ThmSettings::keyValues: the non-default options, in the GUI's order."""
+    d = _thm_default_settings()
+    kv = []
+    for key in ("entranceL", "vertex", "kinematics"):
+        if s[key] != d[key]:
+            kv.append((key, s[key]))
+    if s["coulombIntegral"] != d["coulombIntegral"]:
+        kv.append(("coulombIntegral", "1"))
+    if s["spectatorEnergy"] != d["spectatorEnergy"]:
+        kv.append(("spectatorEnergy", _thm_number(s["spectatorEnergy"])))
+    for k in sorted(s["spectatorByPair"]):
+        kv.append((f"spectatorEnergy[{k}]", _thm_number(s["spectatorByPair"][k])))
+    for k in sorted(s["weight"]):
+        kv.append((f"weight[{k}]", s["weight"][k]))
+    for k in sorted(s["weightTest"]):
+        kv.append((f"weightTest[{k}]", s["weightTest"][k]))
+    return kv
+
+
+def _thm_compose(old_lines, s):
+    """ThmSettings::compose: the block body for settings ``s``, keeping
+    comments, blank lines and unchanged lines of ``old_lines``."""
+    kv = _thm_key_values(s)
+    wanted = dict(kv)
+    written, out = set(), []
+    for line in old_lines:
+        try:
+            key, value = _thm_parse_line(line, _thm_default_settings())
+        except ValueError:
+            key = ""
+        if not key:
+            out.append(line)           # comment or blank line
+            continue
+        if key not in wanted or key in written:
+            continue                   # back to default, or repeated
+        written.add(key)
+        if value == wanted[key]:
+            out.append(line)
+            continue
+        # Rewrite the value, keeping the indentation and any inline comment.
+        hash_ = line.find("#")
+        code = line[:hash_] if hash_ >= 0 else line
+        comment = line[hash_:] if hash_ >= 0 else ""
+        start = len(code) - len(code.lstrip())
+        end = len(code.rstrip())
+        out.append(code[:start] + key + "=" + wanted[key] + code[end:] + comment)
+    for key, value in kv:
+        if key not in written:
+            out.append(key + "=" + value)
+    return out
+
+
+def _thm_read_weight_table(path):
+    """ThmWeightTable::Read: "" if the table is usable, else why not."""
+    try:
+        with open(path) as f:
+            text = f.read()
+    except OSError:
+        return f"cannot read the weight file '{path}'"
+    energies = []
+    for n, line in enumerate(text.splitlines(), 1):
+        line = line.split("#", 1)[0]
+        if not line.strip():
+            continue
+        where = f"'{path}' line {n}: "
+        tok = line.split()
+        try:
+            if len(tok) != 2 or any("_" in t for t in tok):
+                raise ValueError
+            e, w = float(tok[0]), float(tok[1])
+        except ValueError:
+            return where + "expected two numbers, E (MeV) and w"
+        if not (math.isfinite(e) and math.isfinite(w) and w > 0.0):
+            return where + "the weight must be finite and > 0"
+        if energies and not e > energies[-1]:
+            return where + "the energies must be strictly increasing"
+        energies.append(e)
+    if len(energies) < 2:
+        return f"'{path}' needs at least two rows (E w)"
+    return ""
 
 
 class AzrChannel:
@@ -471,6 +665,17 @@ class AzrModel:
             levels.append(AzrLevel(cur))
         return cls(prefix, levels, suffix, source=path)
 
+    def _final_newline(self):
+        """"\n" if the file ends with a newline, else "" -- what it keeps."""
+        return "\n" if self._suffix.endswith("\n") else ""
+
+    def _set_suffix_lines(self, lines):
+        """Replace the verbatim tail by ``lines``, keeping whether the file
+        ends with a newline.  (``"\n".join(text.splitlines())`` alone drops
+        it, so every edit of a block after ``<levels>`` used to leave the
+        written file without its final newline.)"""
+        self._suffix = "\n".join(lines) + self._final_newline()
+
     def set_output_dir(self, path):
         """Point the model's ``<config>`` output directory somewhere else.
 
@@ -766,9 +971,10 @@ class AzrModel:
         except ValueError:
             # No block yet: append one at the end of the tail.
             self._suffix = (self._suffix.rstrip("\n") + "\n\n<segmentsTest>\n"
-                            + "\n".join(new_lines) + "\n</segmentsTest>\n")
+                            + "\n".join(new_lines) + "\n</segmentsTest>"
+                            + self._final_newline())
             return
-        self._suffix = "\n".join(lines[:start + 1] + new_lines
+        self._set_suffix_lines(lines[:start + 1] + new_lines
                                  + lines[end:])
 
     def clear_extrapolations(self):
@@ -818,7 +1024,7 @@ class AzrModel:
         lines = self._suffix.splitlines()
         if "<segmentsTest>" in lines:
             end = lines.index("</segmentsTest>")
-            self._suffix = "\n".join(lines[:end] + [line] + lines[end:])
+            self._set_suffix_lines(lines[:end] + [line] + lines[end:])
         else:
             self._splice_segments_test([line])
         return self
@@ -895,7 +1101,7 @@ class AzrModel:
                 line = " ".join(t)
                 changed += 1
             out.append(line)
-        self._suffix = "\n".join(out)
+        self._set_suffix_lines(out)
         if changed == 0:
             raise KeyError(f"no <segmentsData> line matches {file_substr!r}.")
         return changed
@@ -1076,7 +1282,7 @@ class AzrModel:
                 line = " ".join(t)
                 changed += 1
             out.append(line)
-        self._suffix = "\n".join(out)
+        self._set_suffix_lines(out)
         if changed == 0:
             raise KeyError(f"no <segmentsData> line matches {file_substr!r}.")
         return changed
@@ -1100,7 +1306,7 @@ class AzrModel:
                 line = " ".join(t)
                 changed += 1
             out.append(line)
-        self._suffix = "\n".join(out)
+        self._set_suffix_lines(out)
         if changed == 0:
             raise KeyError(f"no <segmentsData> line matches {file_substr!r}.")
         return changed
@@ -1135,7 +1341,7 @@ class AzrModel:
                 line = " ".join(t)
                 changed += 1
             out.append(line)
-        self._suffix = "\n".join(out)
+        self._set_suffix_lines(out)
         if changed == 0:
             raise KeyError(f"no <segmentsData> line matches {file_substr!r}.")
         return changed
@@ -1204,7 +1410,7 @@ class AzrModel:
         if "<segmentsData>" not in lines:
             raise ValueError("no <segmentsData> block to add to.")
         end = lines.index("</segmentsData>")
-        self._suffix = "\n".join(lines[:end] + [line] + lines[end:])
+        self._set_suffix_lines(lines[:end] + [line] + lines[end:])
         return self
 
     def remove_data_segments(self, file_substr):
@@ -1231,7 +1437,7 @@ class AzrModel:
                 removed += 1
                 continue
             out.append(line)
-        self._suffix = "\n".join(out)
+        self._set_suffix_lines(out)
         if removed == 0:
             raise KeyError(f"no <segmentsData> line matches {file_substr!r}.")
         return removed
@@ -1248,7 +1454,7 @@ class AzrModel:
             end = lines.index("</segmentsData>")
         except ValueError:
             raise ValueError("no <segmentsData> block to clear.")
-        self._suffix = "\n".join(lines[:start + 1] + lines[end:])
+        self._set_suffix_lines(lines[:start + 1] + lines[end:])
         return self
 
     # -- experimental effects (edits the <targetInt> block) -------------------
@@ -1270,9 +1476,10 @@ class AzrModel:
             end = lines.index("</targetInt>")
         except ValueError:
             self._suffix = (self._suffix.rstrip("\n") + "\n\n<targetInt>\n"
-                            + "\n".join(new_lines) + "\n</targetInt>\n")
+                            + "\n".join(new_lines) + "\n</targetInt>"
+                            + self._final_newline())
             return
-        self._suffix = "\n".join(lines[:start + 1] + new_lines + lines[end:])
+        self._set_suffix_lines(lines[:start + 1] + new_lines + lines[end:])
 
     def clear_target_effects(self):
         """Remove every ``<targetInt>`` line (leave the block empty)."""
@@ -1327,10 +1534,219 @@ class AzrModel:
         lines = self._suffix.splitlines()
         if "<targetInt>" in lines:
             end = lines.index("</targetInt>")
-            self._suffix = "\n".join(lines[:end] + [line] + lines[end:])
+            self._set_suffix_lines(lines[:end] + [line] + lines[end:])
         else:
             self._splice_target_int([line])
         return self
+
+    # -- THM options (the <thm> block) ----------------------------------------
+    #
+    # The engine reads the block from anywhere in the file (Config::ReadThmBlock)
+    # and refuses a line it does not understand; the GUI's THM Options dialog
+    # (gui/src/ThmOptionsDialog.cpp) edits it with the same rules.  These
+    # methods are the GUI's, line for line: the same keys and values, the same
+    # normalization of a value, and the same way of writing the block back --
+    # comment and blank lines stay where they were, a line whose value did not
+    # change is kept verbatim, a changed one is rewritten keeping its
+    # indentation and inline comment, a key that returns to its default is
+    # removed, a new key is appended, and options that are all default remove
+    # the block (comments included), since an empty block and no block are the
+    # same to the engine.  A new block goes after </targetInt>, where the GUI
+    # writes it.
+
+    def _thm_locate(self):
+        """(attribute, lines, open, close) of the <thm> block, or None.
+
+        ``lines`` is the text of ``self._prefix`` or ``self._suffix`` split with
+        line ends kept; ``open``/``close`` index its ``<thm>`` and ``</thm>``
+        lines.  Raises ValueError for an unterminated block (the engine refuses
+        the file)."""
+        for attr in ("_prefix", "_suffix"):
+            lines = getattr(self, attr).splitlines(keepends=True)
+            for i, line in enumerate(lines):
+                if line.strip().startswith("<thm>"):
+                    for j in range(i + 1, len(lines)):
+                        if lines[j].split("#", 1)[0].strip() == "</thm>":
+                            return attr, lines, i, j
+                    raise ValueError("the <thm> block is not terminated by "
+                                     "</thm> (AZURE2 refuses the file).")
+        return None
+
+    def _thm_body(self):
+        loc = self._thm_locate()
+        if loc is None:
+            return []
+        _, lines, i, j = loc
+        return [ln.rstrip("\r\n") for ln in lines[i + 1:j]]
+
+    def _thm_settings(self):
+        """The block parsed into the GUI's ThmSettings (a dict); ValueError on
+        a line the engine would refuse."""
+        s = _thm_default_settings()
+        for line in self._thm_body():
+            _thm_parse_line(line, s)
+        return s
+
+    def thm_options(self, defaults=False):
+        """The options of the ``<thm>`` block, as a dict.
+
+        Keys are the block's keys (``vertex``, ``kinematics``, ``entranceL``,
+        ``coulombIntegral``, ``spectatorEnergy``, ``spectatorEnergy[<pair>]``,
+        ``weight[<k>]``, ``weightTest[<k>]``); values are str, bool
+        (``coulombIntegral``), float (spectator energies, MeV) and the file as
+        written (weights).  Only the options that differ from the engine's
+        defaults are listed -- with ``defaults=True`` the five global options
+        are always there.  Raises ValueError if the block has a line AZURE2
+        would refuse.  See docs/source/theory/thm_implementation.rst.
+        """
+        s = self._thm_settings()
+        out = {}
+        d = _thm_default_settings()
+        for key in ("entranceL", "vertex", "kinematics", "coulombIntegral",
+                    "spectatorEnergy"):
+            if defaults or s[key] != d[key]:
+                out[key] = s[key]
+        for k in sorted(s["spectatorByPair"]):
+            out[f"spectatorEnergy[{k}]"] = s["spectatorByPair"][k]
+        for k in sorted(s["weight"]):
+            out[f"weight[{k}]"] = s["weight"][k]
+        for k in sorted(s["weightTest"]):
+            out[f"weightTest[{k}]"] = s["weightTest"][k]
+        return out
+
+    def set_thm_option(self, key, value):
+        """Set one option of the ``<thm>`` block, validated as AZURE2 does.
+
+        ``key`` is a block key (see :meth:`thm_options`); ``value`` a str, a
+        bool for ``coulombIntegral``, a number >= 0 for a spectator energy (MeV).
+        ``weight[<k>]`` / ``weightTest[<k>]`` take a file name; prefer
+        :meth:`set_thm_weight`, which also checks the segment.  Setting an
+        option to its default removes its line.  Raises ValueError for an
+        unknown key or a value the engine would refuse, and leaves the model
+        unchanged then.
+        """
+        if isinstance(value, bool):
+            text = "1" if value else "0"
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            text = _thm_number(float(value))
+        else:
+            text = str(value)
+        if "\n" in text or "\r" in text:
+            raise ValueError(f"<thm> {key}: a value must be one line.")
+        s = self._thm_settings()
+        try:
+            canon_key, canon_value = _thm_parse_line(f"{key}={text}", s)
+        except ValueError:
+            raise ValueError(f"<thm> {key}={text}: not an option AZURE2 "
+                             "accepts (see thm_options()).") from None
+        if not canon_key:
+            raise ValueError(f"<thm> {key!r}: not an option.")
+        if canon_key.startswith("weight"):
+            self._thm_check_weight_file(canon_key, canon_value)
+        self._thm_write(s)
+        return self
+
+    def set_thm_weight(self, segment, path, test=False):
+        """``weight[<segment>]=<path>`` (``weightTest`` with ``test=True``): the
+        energy-dependent weight w(E) of the THM model of one segment.
+
+        ``segment`` counts every line of ``<segmentsData>`` (``<segmentsTest>``),
+        inactive ones included -- the engine's segment key.  The line must
+        exist and be a THM segment (isDiff >= 10).  ``path`` is a two-column
+        table (E_cm of the THM entrance pair in MeV, w > 0; ``#`` comments;
+        at least two rows, E strictly increasing), read here with the engine's
+        rules.  A relative path is taken from the directory of the .azr --
+        write the edited model next to its source, or give an absolute path.
+        """
+        segment = int(segment)
+        block = "segmentsTest" if test else "segmentsData"
+        seg_lines = self._block_lines(block)
+        if seg_lines is None:
+            raise ValueError(f"no <{block}> block.")
+        if not 1 <= segment <= len(seg_lines):
+            raise ValueError(f"<{block}> has {len(seg_lines)} lines; no "
+                             f"segment {segment}.")
+        tok = seg_lines[segment - 1].split()
+        is_diff = int(float(tok[7])) if len(tok) > 7 and _isnum(tok[7]) else -1
+        if is_diff < 10:
+            raise ValueError(f"<{block}> line {segment} is not a THM segment "
+                             f"(isDiff {is_diff} < 10); AZURE2 refuses a "
+                             "weight on it.")
+        key = f"{'weightTest' if test else 'weight'}[{segment}]"
+        return self.set_thm_option(key, str(path))
+
+    def clear_thm_option(self, key):
+        """Remove an option from the ``<thm>`` block (back to its default).
+        Removing the last one removes the block.  Unknown keys raise
+        ValueError; a key that is not set is a no-op."""
+        s = self._thm_settings()
+        key = str(key).strip()
+        if key in _THM_GLOBAL_DEFAULTS:
+            s[key] = _thm_default_settings()[key]
+        else:
+            m = re.fullmatch(r"(spectatorEnergy|weightTest|weight)\[(.+)\]", key)
+            if not m:
+                raise ValueError(f"<thm> {key!r}: not an option.")
+            try:
+                k = int(m.group(2))
+            except ValueError:
+                raise ValueError(f"<thm> {key!r}: not an option.") from None
+            table = {"spectatorEnergy": "spectatorByPair", "weight": "weight",
+                     "weightTest": "weightTest"}[m.group(1)]
+            s[table].pop(k, None)
+        self._thm_write(s)
+        return self
+
+    def clear_thm_weight(self, segment, test=False):
+        """Remove ``weight[<segment>]`` (``weightTest`` with ``test=True``)."""
+        return self.clear_thm_option(
+            f"{'weightTest' if test else 'weight'}[{int(segment)}]")
+
+    def _block_lines(self, tag):
+        """Non-blank lines of a block after <levels>, or None if absent."""
+        lines = self._suffix.splitlines()
+        try:
+            start = lines.index(f"<{tag}>") + 1
+            end = lines.index(f"</{tag}>")
+        except ValueError:
+            return None
+        return [ln for ln in lines[start:end] if ln.strip()]
+
+    def _thm_check_weight_file(self, key, name):
+        name = name.strip()
+        if "#" in name:
+            raise ValueError(f"<thm> {key}: the path contains '#', which "
+                             "starts a comment in the .azr.")
+        base = os.path.dirname(os.path.abspath(self.source)) if self.source else os.getcwd()
+        path = name if os.path.isabs(name) else os.path.join(base, name)
+        why = _thm_read_weight_table(path)
+        if why:
+            raise ValueError(f"<thm> {key}: {why}")
+
+    def _thm_write(self, s):
+        """Write settings ``s`` back into the block, the GUI's way."""
+        if s == self._thm_settings():
+            return                               # untouched: keep it verbatim
+        loc = self._thm_locate()
+        if _thm_is_default(s):
+            if loc is not None:                  # all default: no block
+                attr, lines, i, j = loc
+                setattr(self, attr, "".join(lines[:i] + lines[j + 1:]))
+            return
+        body = _thm_compose(self._thm_body(), s)
+        if loc is not None:
+            attr, lines, i, j = loc
+            nl = "\r\n" if lines[i].endswith("\r\n") else "\n"
+            new = [ln + nl for ln in body]
+            setattr(self, attr, "".join(lines[:i + 1] + new + lines[j:]))
+            return
+        block = ["<thm>"] + body + ["</thm>"]
+        lines = self._suffix.splitlines()
+        if "</targetInt>" in lines:
+            end = lines.index("</targetInt>") + 1
+            self._set_suffix_lines(lines[:end] + block + lines[end:])
+        else:
+            self._set_suffix_lines(lines + block)
 
     # -- rendering ------------------------------------------------------------
 

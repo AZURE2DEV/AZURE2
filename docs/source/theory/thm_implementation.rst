@@ -50,8 +50,15 @@ with every key at its default, gives identical results
 An unknown key, an unknown value, a negative spectator energy, a missing
 ``</thm>`` or a bad weight (below) prints ``ERROR: <thm> ...``, and AZURE2
 exits with a non-zero status before any calculation; ``pyazr`` refuses the
-project the same way. ``pyazr.AzrModel`` has no editor for the block but
-carries it through a save unchanged.
+project the same way. ``pyazr.AzrModel`` reads and edits the block with the
+GUI's rules (below): ``thm_options()`` returns the options as a dict,
+``set_thm_option(key, value)`` and ``clear_thm_option(key)`` change one,
+``set_thm_weight(segment, path, test=False)`` / ``clear_thm_weight`` a weight
+table (the segment must exist and be THM; the table is read with the engine's
+rules, a relative path from the directory of the .azr). A value the engine
+would refuse raises ``ValueError`` and leaves the model unchanged; a project
+whose block the engine refuses raises on any of them. Without an edit the
+block is carried through a save unchanged.
 
 The GUI edits the block under *Configure > THM Options...*: the four global
 choices, the spectator energy, a table of per-pair spectator energies and a

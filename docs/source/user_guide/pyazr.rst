@@ -177,8 +177,11 @@ the group.
 
 Also available: ``set_channel_radius``, ``set_segment_norm``,
 ``set_segment_active``, ``set_segment_datafile``, ``add_data_segment``,
-``remove_data_segments``, ``clear_data_segments``, ``set_extrapolations`` and
-``apply_fit``.
+``remove_data_segments``, ``clear_data_segments``, ``set_extrapolations``,
+``apply_fit``, and for the ``<thm>`` block ``thm_options``, ``set_thm_option``,
+``clear_thm_option``, ``set_thm_weight`` and ``clear_thm_weight``
+(:doc:`../theory/thm_implementation`). Every edit keeps the rest of the file
+byte for byte, including whether it ends with a newline.
 
 To snapshot a fit, prefer :meth:`~pyazr.azure2.azure2.save_fit`, which wraps
 ``apply_fit``:

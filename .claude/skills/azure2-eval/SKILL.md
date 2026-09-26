@@ -1210,9 +1210,16 @@ use it only to reproduce pre-Sep-2026 numbers. Evidence: `tests/18O_p_a_thm`
 reproduces La Cognata et al., ApJ 723 (2010) 1512 with `constant` (5 % rms at
 the peaks) and not with `perlevel` (23 %). Physics, equations and pinned values:
 `docs/source/theory/thm_implementation.rst`; regression: `tests/thm_options`.
-The GUI and `AzrModel` carry the block through a save unchanged (no editor);
-append it as `"\n<thm>\n...\n</thm>\n"`, since an `.azr` may lack a final
-newline and `<thm>` must start its own line.
+Edit it with `AzrModel`, which applies the engine's/GUI's rules and keeps
+comments and untouched lines: `mdl.thm_options()` (dict of the non-default
+options), `mdl.set_thm_option("kinematics", "kf3body")`,
+`mdl.set_thm_weight(1, "R_of_E.dat")` (segment key counts every
+`<segmentsData>` line; must be THM; table checked; relative path from the
+.azr's directory), `mdl.clear_thm_option(key)` / `clear_thm_weight(k)`; a bad
+value raises ValueError. The GUI edits it under Configure > THM Options.
+(By hand: append `"\n<thm>\n...\n</thm>\n"`, since an `.azr` may lack a final
+newline and `<thm>` must start its own line.) Also `weight[<k>]=<file>` /
+`weightTest[<k>]=<file>`: w(E) multiplying the THM model of that segment.
 
 Reference cases: `tests/17O` — 17O(n,alpha)14C from Guardo/Sergi *et al.*,
 23 points, one THM segment, chi-squared 96.69 (neutron entrance, RWA widths);
