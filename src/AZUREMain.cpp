@@ -165,6 +165,13 @@ int AZUREMain::operator()() {
     AZURECalc theFunc(data(), compound(), configure(), &limitsManager);
     // theFunc.InitializePools();
     theFunc.SetErrorDef(1.0);
+    // The fixed flags the minimizers and the band honour: the .azr's, then an
+    // external param.par's, then the <parameterSettings> (MIGRAD reads them off
+    // params; see AZURECalc::FixedMask).
+    std::vector<bool> fitFixedMask(params.GetMinuitParams().Params().size());
+    for (size_t fi = 0; fi < fitFixedMask.size(); fi++)
+      fitFixedMask[fi] = params.GetMinuitParams().Parameter(fi).IsFixed();
+    theFunc.SetFixedMask(fitFixedMask);
 
     // Parameter covariance for the cross-section band, saved for reuse by later
     // extrapolation runs.  Any fit (MIGRAD or LM) yields it; MINOS is not needed.
@@ -647,7 +654,7 @@ int AZUREMain::operator()() {
                               << std::endl;
       }
       if (!cov.empty()) {
-        if (BuildBandData(compound(), data(), configure(), cov, bandData)) {
+        if (BuildBandData(compound(), data(), configure(), cov, bandData, &fitFixedMask)) {
           bandPtr = &bandData;
           configure().outStream << "Writing cross-section uncertainty bands..." << std::endl;
         } else {

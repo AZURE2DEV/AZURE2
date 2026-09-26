@@ -161,20 +161,23 @@ double BandData::dXS(const std::vector<double> &g) const {
 }
 
 bool BuildBandData(CNuc *compound, EData *data, const Config &config,
-                   const BandCovariance &savedCov, BandData &out) {
+                   const BandCovariance &savedCov, BandData &out,
+                   const std::vector<bool> *fixedMask) {
   out.compound = compound;
   out.M.clear();
   out.grad.clear();
   if (savedCov.empty()) return false;
 
   // Parameter-index map for the current run, using the same fixed mask (in
-  // Minuit order) as the fitter -- mirrors AZURECalc::ResidualJacobian.
+  // Minuit order) as the fitter: the caller's (param.par included), else the
+  // .azr's -- mirrors AZURECalc::ResidualJacobian.
   AZUREParams tp;
   compound->FillMnParams(tp.GetMinuitParams(), &config);
   data->FillMnParams(tp.GetMinuitParams());
   const int nMn = tp.GetMinuitParams().Params().size();
   std::vector<bool> fixed(nMn);
   for (int i = 0; i < nMn; i++) fixed[i] = tp.GetMinuitParams().Parameter(i).IsFixed();
+  if (fixedMask && (int)fixedMask->size() == nMn) fixed = *fixedMask;
 
   ParamIndexMap pmap = BuildParamIndexMap(compound, data, fixed);
 

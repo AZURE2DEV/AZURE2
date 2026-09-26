@@ -104,6 +104,20 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
                         vector_r &jac, std::vector<int> &packedToFull) const;
 
   /*!
+   * The fixed flags of the parameters being minimized, in Minuit order: those of
+   * the AZUREParams handed to the minimizer, i.e. the .azr's, then an external
+   * param.par's ("fixed", and the release/fix of a zero value), then the
+   * <parameterSettings>.  MIGRAD reads them off the parameters themselves; the
+   * least-squares solvers (ResidualJacobian's columns), the gradient's
+   * finite-difference skip and the band covariance take them from here.  Set by
+   * RunLevenbergMarquardt / RunGSLNonlinear from their parameters and by the
+   * caller before MIGRAD.  Unset (or of the wrong size) falls back to the flags
+   * a fresh FillMnParams gives, the .azr's alone.
+   */
+  void SetFixedMask(const std::vector<bool> &fixed) const { fixedMask_ = fixed; }
+  std::vector<bool> FixedMask() const;
+
+  /*!
    * Standardized residuals only (no Jacobian) at `full`, in the same row order
    * as ResidualJacobian.  A plain forward pass, used for the trust-region trial
    * evaluations of the GSL solver.  Returns false if the evaluation fails.
@@ -211,6 +225,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   CNuc *compound_;
   ParameterLimitsManager *limitsManager_;
   double theErrorDef;
+  mutable std::vector<bool> fixedMask_;  ///< see FixedMask()
 
   // Object pools for memory reuse - store cloned objects directly
   mutable std::stack<std::unique_ptr<CNuc>> cnuc_pool_;

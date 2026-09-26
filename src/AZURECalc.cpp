@@ -357,10 +357,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
 
   // Fixed-parameter mask: Minuit ignores the gradient of fixed parameters, so
   // do not waste finite differences on them (large fits fix most energy shifts).
-  AZUREParams fp;
-  compound()->FillMnParams(fp.GetMinuitParams(), &configure());
-  data()->FillMnParams(fp.GetMinuitParams());
-  const int nMn = fp.GetMinuitParams().Params().size();
+  const std::vector<bool> fixedMask = FixedMask();
+  const int nMn = (int)fixedMask.size();
 
   // THM (HOES) segments are excluded from the analytic adjoint (it
   // differentiates the T-matrix observable, not HOES); their energy/gamma/norm
@@ -395,7 +393,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   //     the THM-segment contribution to energies/gammas/norms, and (if the
   //     analytic path bailed) the energy/gamma and norm blocks too. ---
   for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
-    if (idx < nMn && fp.GetMinuitParams().Parameter(idx).IsFixed()) continue;
+    if (idx < nMn && fixedMask[idx]) continue;
     ParamKind kind = pmap.Desc(idx).kind;
     if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm)) {
       if (!haveTHM) continue;  // fully analytic
@@ -476,7 +474,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       int worstIdx = -1;
       double worstGrad = 0.0, worstFd = 0.0;
       for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
-        if (idx < nMn && fp.GetMinuitParams().Parameter(idx).IsFixed()) continue;
+        if (idx < nMn && fixedMask[idx]) continue;
         double x0 = p[idx];
         double h = 1.0e-6 * (std::fabs(x0) + 1.0);
         vector_r pp = p;
@@ -505,6 +503,17 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   return grad;
 }
 
+std::vector<bool> AZURECalc::FixedMask() const {
+  AZUREParams tp;
+  compound()->FillMnParams(tp.GetMinuitParams(), &configure());
+  data()->FillMnParams(tp.GetMinuitParams());
+  const int nMn = tp.GetMinuitParams().Params().size();
+  if ((int)fixedMask_.size() == nMn) return fixedMask_;
+  std::vector<bool> fixed(nMn);
+  for (int i = 0; i < nMn; i++) fixed[i] = tp.GetMinuitParams().Parameter(i).IsFixed();
+  return fixed;
+}
+
 bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
                                  vector_r &jac, std::vector<int> &packedToFull) const {
   CNuc *lc = compound()->Clone();
@@ -521,13 +530,8 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     sdp = &shiftDeriv;
   }
 
-  // Fixed-parameter mask, in the Minuit parameter order.
-  AZUREParams tp;
-  compound()->FillMnParams(tp.GetMinuitParams(), &configure());
-  data()->FillMnParams(tp.GetMinuitParams());
-  int nMn = tp.GetMinuitParams().Params().size();
-  std::vector<bool> fixed(nMn);
-  for (int i = 0; i < nMn; i++) fixed[i] = tp.GetMinuitParams().Parameter(i).IsFixed();
+  // Fixed-parameter mask, in the Minuit parameter order: the minimizer's.
+  const std::vector<bool> fixed = FixedMask();
 
   ParamIndexMap pmap = BuildParamIndexMap(lc, ld, fixed);
   int nCols = 0;
@@ -583,6 +587,13 @@ double AZURECalc::RunLevenbergMarquardt(AZUREParams &params, int maxIter,
                                         BandCovariance *bandCovOut) const {
   ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
   const int nFull = mp.Params().size();
+  // Free exactly what MIGRAD would: the fixed flags of these parameters
+  // (param.par "fixed", <parameterSettings>), not a fresh mask from the .azr.
+  {
+    std::vector<bool> fixed(nFull);
+    for (int i = 0; i < nFull; i++) fixed[i] = mp.Parameter(i).IsFixed();
+    SetFixedMask(fixed);
+  }
   vector_r full(nFull);
   for (int i = 0; i < nFull; i++) full[i] = mp.Value(i);
 
@@ -913,13 +924,7 @@ void AZURECalc::FinalizeLeastSquaresCovariance(const vector_r &full,
     // packed free parameters, in the same order as p2f, so we tag them with
     // their parameter identities via a matching index map.
     if (bandCovOut) {
-      AZUREParams tp;
-      compound()->FillMnParams(tp.GetMinuitParams(), &configure());
-      data()->FillMnParams(tp.GetMinuitParams());
-      int nMn = tp.GetMinuitParams().Params().size();
-      std::vector<bool> fixed(nMn);
-      for (int i = 0; i < nMn; i++) fixed[i] = tp.GetMinuitParams().Parameter(i).IsFixed();
-      ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), fixed);
+      ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), FixedMask());
       if (pmap.NumPacked() == nFree) {
         // Keep only the R-matrix sub-block: the band is insensitive to norms
         // and energy shifts, so they are dropped from the saved covariance.
@@ -1055,6 +1060,13 @@ double AZURECalc::RunGSLNonlinear(AZUREParams &params, int maxIter,
                                   BandCovariance *bandCovOut) const {
   ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
   const int nFull = mp.Params().size();
+  // Free exactly what MIGRAD would: the fixed flags of these parameters
+  // (param.par "fixed", <parameterSettings>), not a fresh mask from the .azr.
+  {
+    std::vector<bool> fixed(nFull);
+    for (int i = 0; i < nFull; i++) fixed[i] = mp.Parameter(i).IsFixed();
+    SetFixedMask(fixed);
+  }
   vector_r full(nFull);
   for (int i = 0; i < nFull; i++) full[i] = mp.Value(i);
 
