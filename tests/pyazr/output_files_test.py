@@ -44,11 +44,14 @@ except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(0)
 
-binary = None
-for cand in sorted(glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))):
-    if os.path.isfile(cand) and os.access(cand, os.X_OK):
-        binary = cand
-        break
+# The newest binary, as run_tests.sh takes it: several build directories can
+# coexist, and the first in sorted order (build-gui/ sorts before build/) may
+# be an older engine than the pyazr module under test.  AZURE2_BIN overrides.
+binary = os.environ.get("AZURE2_BIN")
+if not binary:
+    cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
+             if os.path.isfile(c) and os.access(c, os.X_OK)]
+    binary = max(cands, key=os.path.getmtime) if cands else None
 if binary is None:
     print("skip: no AZURE2 binary to compare against")
     sys.exit(0)
