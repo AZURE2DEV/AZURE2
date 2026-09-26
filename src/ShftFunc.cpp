@@ -1,5 +1,6 @@
 #include "ShftFunc.h"
 #include "Constants.h"
+#include <algorithm>
 #include <cmath>
 #include <math.h>
 #include <gsl/gsl_deriv.h>
@@ -79,23 +80,36 @@ bool ShftFunc::WhittakerShift(int l, double binding, double &s) const {
  * there (the Gaussian-folding grid of a THM segment crosses E = 0) put a NaN
  * into the level matrix and ~1e20 into the folded cross section.
  *
- * Now: the analytic log-derivative (WhittakerShift) while eta <= kEtaMax.  The
- * two U's there nearly cancel against eta, and beyond eta ~ 500 GSL's values
- * lose the digits that survive the cancellation, so closer to threshold S is
- * interpolated linearly between S(-B at eta = kEtaMax) and the exact
+ * Now: the analytic log-derivative (WhittakerShift) where GSL's U is trusted
+ * (bindingMin below).  The two U's there nearly cancel against eta, and beyond
+ * it GSL's values lose the digits that survive the cancellation, so closer to
+ * threshold S is interpolated linearly between S(-bindingMin) and the exact
  * zero-energy limit S(0): S is smooth through threshold, and the neglected
- * curvature is below 1e-6 relative on the systems tried (p+7Li, 6Li+d,
- * 12C+12C).  At exactly zero binding S(0) itself.
+ * curvature is below 1e-8 absolute on the systems tried (p+7Li, 6Li+d,
+ * 12C+12C; the slope within 1e-4 relative of dS/dE(0)).  At exactly zero
+ * binding S(0) itself.
  */
 double ShftFunc::operator()(int l, double energy) {
   const double binding = fabs(energy - totalSepE());
   if (!(binding > 0.0)) return ZeroEnergyLimit(l);
 
-  const double kEtaMax = 300.0;
+  // Where GSL's U is trusted: eta <= 300, and either eta <= 50 or z = 2 kappa a
+  // >= 0.1.  Light pairs reach eta = 300 only at z ~ 1e-3, where the values
+  // carry errors of ~1e-7 (p+7Li l=1 against mpmath: 4.4e-7 at B = 1e-6 MeV,
+  // eta = 443; 5e-9 at eta = 81-140, z ~ 0.01; scattered by up to ~1e-9 with
+  // the last bits of B at eta = 44).  An S good to 1e-7 is harmless, but the
+  // slope of the interpolation below came out 0.60 instead of 0.373 MeV^-1
+  // there -- and dS/dE at a level at threshold is that slope (now within 1e-5).
+  // Heavy pairs keep eta = 300 (12C+12C at eta = 254, z = 0.35: 7.5e-11).
+  const double kEtaMax = 300.0, kEtaSafe = 50.0, kZSafe = 0.1;
   const WhitFunc &w = *params_.whitFunc;
   const double mu = w.redmass() * uconv;
   const double c = w.z1() * w.z2() * fstruc * mu / hbarc;  // eta * kappa, fm^-1
-  const double bindingMin = (c > 0.0) ? std::pow(hbarc * c / kEtaMax, 2.0) / (2.0 * mu) : 0.0;
+  auto bindingAtKappa = [mu](double kappa) { return std::pow(hbarc * kappa, 2.0) / (2.0 * mu); };
+  const double bindingMin =
+      (c > 0.0) ? std::max(bindingAtKappa(c / kEtaMax),
+                           std::min(bindingAtKappa(c / kEtaSafe), bindingAtKappa(kZSafe / (2.0 * radius()))))
+                : 0.0;
 
   double s;
   if (binding >= bindingMin) {

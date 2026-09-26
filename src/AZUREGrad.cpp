@@ -10,6 +10,7 @@
 #include "TargetEffect.h"
 #include "AMatrixFunc.h"
 #include "Config.h"
+#include "ChannelFunc.h"
 #include "CoulFunc.h"
 #include "ShftFunc.h"
 #include <cmath>
@@ -40,16 +41,8 @@ vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure) {
         int l = channel->GetL();
         double levelEnergy = level->GetFitE();
         double resonanceEnergy = levelEnergy - (pair->GetSepE() + pair->GetExE());
-        double dS;
-        if (resonanceEnergy < 0.0) {
-          ShftFunc theShiftFunction(pair);
-          dS = theShiftFunction.EnergyDerivative(l, levelEnergy);
-        } else {
-          CoulFunc theCoulombFunction(pair,
-                                      !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-          double radius = pair->GetChRad();
-          dS = theCoulombFunction.PEShift_dE(l, radius, resonanceEnergy);
-        }
+        double dS = ChannelFunc(pair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC))
+                        .ShiftDerivative(l, resonanceEnergy);
         tab[j - 1][la - 1][ch - 1] = dS;
       }
     }

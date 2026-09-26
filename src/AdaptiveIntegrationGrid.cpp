@@ -2,6 +2,7 @@
 #include "JGroup.h"
 #include "ALevel.h"
 #include "PPair.h"
+#include "ChannelFunc.h"
 #include "CoulFunc.h"
 #include <cmath>
 #include <algorithm>
@@ -372,12 +373,19 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
           const bool isRWA = level->GammaIsRWA(ch);
           if (channel->GetRadType() == 'P') {
             double localEnergy = level->GetE() - chPair->GetExE() - chPair->GetSepE();
-            if (localEnergy <= 0.0) continue;  // closed channel: the value is an ANC
+            // Closed channels -- below or at threshold (the value is an ANC
+            // unless flagged), or just above a Coulomb threshold where P = 0
+            // in double precision (ChannelFunc) -- are left out of this
+            // estimate, on both sides of threshold alike, so it does not jump
+            // when a level crosses it.  (Their gamma^2 dS/dE would belong in
+            // the normalization, as in CNuc::TransformOut; the estimate only
+            // sizes the integration grid, and adding it moves the grid of
+            // existing projects -- tests/17O by 1.4e-3 in chi2.)
+            ChannelFunc channelFunc(chPair, false);
+            if (channelFunc.IsClosed(localEnergy)) continue;
             if (isRWA) {
-              CoulFunc coulFunc(chPair, false);
-              double radius = chPair->GetChRad();
-              double pene = coulFunc.Penetrability(channel->GetL(), radius, localEnergy);
-              double dSdE = coulFunc.PEShift_dE(channel->GetL(), radius, localEnergy);
+              double pene = channelFunc.Penetrability(channel->GetL(), localEnergy);
+              double dSdE = channelFunc.ShiftDerivative(channel->GetL(), localEnergy);
               rwaParticleMeV += 2.0 * gamma * gamma * pene;
               rwaNormSum += dSdE * gamma * gamma;
             } else {
@@ -416,13 +424,15 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
         if (channel->GetRadType() != 'P') continue;  // particle channels
         PPair *chPair = compound->GetPair(channel->GetPairNum());
         double localEnergy = level->GetE() - chPair->GetExE() - chPair->GetSepE();
-        if (localEnergy <= 0.0) continue;  // sub-threshold channel
+        // Closed channels are left out, as above (ChannelFunc: P = 0 also just
+        // above a Coulomb threshold).
+        ChannelFunc channelFunc(chPair, false);
+        if (channelFunc.IsClosed(localEnergy)) continue;
         double gamma = std::abs(level->GetGamma(ch));
         if (gamma <= 0.0) continue;
         double radius = chPair->GetChRad();
-        CoulFunc coulFunc(chPair, false);
-        double pene = coulFunc.Penetrability(channel->GetL(), radius, localEnergy);
-        double dSdE = coulFunc.PEShift_dE(channel->GetL(), radius, localEnergy);
+        double pene = channelFunc.Penetrability(channel->GetL(), localEnergy);
+        double dSdE = channelFunc.ShiftDerivative(channel->GetL(), localEnergy);
         totalWidth += 2.0 * gamma * gamma * pene;
         normSum += dSdE * gamma * gamma;
         if (DebugGridEnabled()) {

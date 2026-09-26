@@ -1,4 +1,5 @@
 #include "ECIntegral.h"
+#include "ChannelFunc.h"
 #include "AngCoeff.h"
 #include "EffectiveCharge.h"
 #include "Config.h"
@@ -283,6 +284,17 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
   double outEnergy = inEnergy - sepEnergy;
   double chanRad = pair()->GetChRad();
   double redMass = pair()->GetRedMass();
+
+  // Just above a Coulomb threshold (P = 0 in double precision, ChannelFunc) the
+  // Coulomb waves are unusable (NaN, garbage or seconds per call).  There the
+  // continuum overlap of channel capture tends to the bound-state one -- F -> 0,
+  // G(r)/G(a) -> W(r)/W(a), and sqrt(P) (mu/2E)^(1/4) -> sqrt(mu a)/hbar c --
+  // so it is evaluated at the mirrored energy, exact to O(E).  Direct capture
+  // from a closed entrance channel vanishes (its amplitude carries F).
+  if (ChannelFunc::IsCoulombThreshold(pair(), outEnergy)) {
+    if (!isChannelCapture) return complex(0.0, 0.0);
+    outEnergy = -outEnergy;
+  }
 
   EffectiveCharge effectiveChargeFunc(pair(), inEnergy - levelEnergy, theLMult);
 

@@ -17,3 +17,11 @@ add_executable(thm_coulomb_term_test thm_coulomb_term_test.cpp)
 target_link_libraries(thm_coulomb_term_test PRIVATE AZURE2Core)
 
 add_test(NAME thm_coulomb_term COMMAND thm_coulomb_term_test)
+
+# The shared threshold helper ChannelFunc: S, P and dS/dE of a channel at,
+# just below and just above threshold (finite, continuous, fast), and bit for
+# bit the old routines away from it.
+add_executable(channel_threshold_test channel_threshold_test.cpp)
+target_link_libraries(channel_threshold_test PRIVATE AZURE2Core)
+
+add_test(NAME channel_threshold COMMAND channel_threshold_test)

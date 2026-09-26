@@ -7,6 +7,7 @@
 #include "AChannel.h"
 #include "PPair.h"
 #include "Constants.h"
+#include "ChannelFunc.h"
 #include "CoulFunc.h"
 #include "ShftFunc.h"
 #include <algorithm>
@@ -31,14 +32,8 @@ static double ShiftAtLevelEnergy(PPair *pair, int l, double levelEnergy, bool us
   for (int i = 0; i < filled; i++)
     if (memo[i].pair == pair && memo[i].l == l && memo[i].e == levelEnergy) return memo[i].s;
   double resonanceEnergy = levelEnergy - (pair->GetSepE() + pair->GetExE());
-  double s;
-  if (resonanceEnergy < 0.0) {
-    ShftFunc shift(pair);
-    s = shift(l, levelEnergy);
-  } else {
-    CoulFunc coul(pair, useGSL);
-    s = coul.PEShift(l, pair->GetChRad(), resonanceEnergy);
-  }
+  // Continuous through threshold, and at it (ChannelFunc).
+  double s = ChannelFunc(pair, useGSL).Shift(l, resonanceEnergy);
   memo[next] = Entry{pair, l, levelEnergy, s};
   next = (next + 1) % kMemo;
   if (filled < kMemo) filled++;
