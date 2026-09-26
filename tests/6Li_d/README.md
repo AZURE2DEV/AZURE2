@@ -55,7 +55,8 @@ carries no uncertainties for the entry, so the files hold an assigned 10%.
   (B = 2.225 MeV); this model takes the transferred particle to be the
   deuteron bound in 6Li = alpha (x) d with **B = 1.4735 MeV** (the experiment
   used 3He, B = 5.4935 MeV — see *Data provenance*), written on the
-  entrance-pair channel lines through the optional 33-field column. A
+  entrance-pair channel lines in field 32, the first of the two optional THM
+  fields (field 33 is the gammaIsRWA flag). A
   hard-coded deuteron binding would pass 17O and fail here.
 * **The energy-resolution convolution on a THM segment.** The `<targetInt>`
   line folds a 30 keV Gaussian (sigma) through the engine's sub-point

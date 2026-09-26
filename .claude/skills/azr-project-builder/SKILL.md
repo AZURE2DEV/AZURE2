@@ -53,6 +53,12 @@ pType chRad g1 g2 ecMultMask
 | `g1 g2` | nuclear g-factors | only used for M1 external capture |
 | `ecMultMask` | external-capture bitmask, per pair | bit0 E1, bit1 M1, bit2 E2 (`Constants.h:15`); 5 = E1+E2 |
 
+Two optional trailing fields follow on a THM line: field **32** is the
+binding energy B (MeV) of the transferred particle, read on the entrance
+pair's lines, and field **33** is the `gammaIsRWA` flag (0 = width/ANC,
+1 = reduced-width amplitude in MeV^1/2). The flag can only follow a present
+field 32. A 31-field line is a conventional line.
+
 ## Rules the code enforces silently
 
 **A pair's threshold sits at `Ex = sepE + exE`** (`AMatrixFunc.cpp:144`,

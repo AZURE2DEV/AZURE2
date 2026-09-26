@@ -51,8 +51,8 @@ Model: the validated Paneru et al. 8Be evaluation (PRC 111, 064609,
 Table IV; the same base as `6Li_d` and `7Li_p_ay`), entrance pair 5
 (7Li+p), exit the identical-boson alpha+alpha pair. The model takes the
 Trojan horse to be the deuteron (it was 3He — see *Data provenance*), so the
-entrance-pair channel lines carry B = 2.2246 MeV in the optional 33-field
-column — the complementary case to `6Li_d`, whose
+entrance-pair channel lines carry B = 2.2246 MeV in field 32, the first of
+the two optional THM fields (field 33 is the gammaIsRWA flag) — the complementary case to `6Li_d`, whose
 carrier is 6Li at 1.4735 MeV. A 30 keV (sigma) Gaussian resolution is
 folded through the engine's sub-point convolution on the THM segment.
 

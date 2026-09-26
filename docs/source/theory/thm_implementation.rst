@@ -6,7 +6,8 @@ Horse Method (THM) segment: its data are the half-off-energy-shell (HOES)
 excitation function :math:`A(x,c)B` extracted from a three-body reaction
 :math:`a + A \to c + B + s` with :math:`a = x + s`. The entrance pair carries
 the binding energy :math:`B_{xs}` of the transferred particle in the optional
-33rd field of its channel lines. ``THMMatrixFunc::CalculateTHMCrossSection``
+32nd field of its channel lines (the optional 33rd is the ``gammaIsRWA``
+flag, which can only follow it). ``THMMatrixFunc::CalculateTHMCrossSection``
 evaluates
 
 .. math::

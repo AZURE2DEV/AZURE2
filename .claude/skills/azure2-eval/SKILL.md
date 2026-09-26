@@ -1233,7 +1233,8 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
   matrix) wins with many channels and few levels; R-matrix (channel matrix)
   wins with many levels and few channels.
 - `<levels>` — one line **per channel of each level**, 31 fields matching
-  `NucLine` (`include/NucLine.h`); the file stores `2J`, `2S`, `2L` as integers.
+  `NucLine` (`include/NucLine.h`), plus the optional THM field 32 (binding
+  energy B) and field 33 (`gammaIsRWA` flag); the file stores `J`, `2S`, `2L`.
   Blank line between levels; `levelID` groups them.
 - `<segmentsData>` — one line per data segment: `isActive entranceKey exitKey
   minE maxE minA maxA isDiff [phaseJ phaseL] dataNorm varyNorm dataNormError
