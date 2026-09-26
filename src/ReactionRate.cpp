@@ -474,6 +474,19 @@ void DispatchRateCalculation(const std::vector<double> &temps,
                              CNuc *compound, const Config &configure,
                              int entranceKey, int exitKey,
                              std::vector<RateData> &outRates) {
+  // The rate is N_A <sigma v> of the physical cross section, which for an
+  // identical entrance pair already carries (1+delta_12) = 2
+  // (GenMatrixFunc::CalculateCrossSection). Nothing here divides it back out:
+  // by the convention of the rate compilations (Fowler, Caughlan and Zimmerman
+  // 1967; CF88; NACRE; REACLIB) the tabulated N_A<sigma v> excludes the
+  // pair-counting 1/(1+delta_12), which belongs to the rate equation
+  // r = n_1 n_2 <sigma v> / (1+delta_12). Say so, so it is not applied twice
+  // or not at all.
+  PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(entranceKey));
+  if (entrancePair->IsIdentical())
+    configure.outStream << "\tIdentical entrance particles: N_A<sigma v> includes (1+delta_12) in sigma and excludes\n"
+                        << "\tthe 1/(1+delta_12) of the rate equation r = n^2 <sigma v> / 2 (FCZ 1967, REACLIB convention)."
+                        << std::endl;
   if (configure.useAdaptiveGrid)
     RunTabulatedRateCalculation(temps, compound, configure, entranceKey, exitKey, outRates);
   else

@@ -235,6 +235,10 @@ bool PPair::HasSpinDependentExchange() const {
   return is_identical_ && pair_j_[0] > 1.0e-6;
 }
 
+double PPair::GetEntranceSymmetryFactor() const {
+  return is_identical_ ? 2.0 : 1.0;
+}
+
 /*!
  * Adds a decay particle pair to the Decay vector.
  */

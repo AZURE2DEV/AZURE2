@@ -758,7 +758,7 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     }
   } else if (!isDiff) {
     // ---- Angle-integrated: model = (1/100) sum_k sum_temp w_temp |T_temp|^2,
-    //      w_temp = geom (2J+1) I1I2,  T_temp = sum_m T(k,m) sharing (J,l,l'). ----
+    //      w_temp = geom (2J+1) I1I2 (1+delta_12),  T_temp = sum_m T(k,m) sharing (J,l,l'). ----
     for (int k = 1; k <= nK; k++) {
       // Mirror the angle-integrated UPOS over-counting guard.
       if (aa != ir && compound()->GetPair(exitPairNum)->GetPType() == 0) {
@@ -802,8 +802,10 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
         ecGroupIdx[m] = gi;
       }
       std::vector<complex> tBarGroup(groups.size());
+      // (1+delta_12) of an identical entrance pair, as the forward sum applies it.
+      const double symmetryFactor = compound()->GetPair(aa)->GetEntranceSymmetryFactor();
       for (int g = 0; g < (int)groups.size(); g++) {
-        double w = geom * (2.0 * groups[g].j + 1.0) * i1i2;
+        double w = geom * (2.0 * groups[g].j + 1.0) * i1i2 * symmetryFactor;
         tBarGroup[g] = fitBar * (2.0 / 100.0) * w * groups[g].tsum;
       }
       for (int m = 1; m <= numM; m++)
@@ -820,10 +822,16 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     // external-capture interferences (RR/ER/RE/EE), and the inelastic-particle
     // UPOS / normal-angular-distribution case.
     PPair *exitPairDiff = compound()->GetPair(exitPairNum);
+    // Identical entrance pair: x4 / x2 for elastic, (1+delta_12) otherwise,
+    // mirroring GenMatrixFunc::CalculateCrossSection.
     double rtFactor = 1.0, itFactor = 1.0;
-    if (aa == ir && compound()->GetPair(aa)->IsIdentical()) {
-      rtFactor = 4.0;
-      itFactor = 2.0;
+    if (compound()->GetPair(aa)->IsIdentical()) {
+      if (aa == ir) {
+        rtFactor = 4.0;
+        itFactor = 2.0;
+      } else {
+        rtFactor = compound()->GetPair(aa)->GetEntranceSymmetryFactor();
+      }
     }
     double cR = geom * i1i2 * rtFactor / (pi * 100.0);
 

@@ -73,6 +73,22 @@ class PPair {
   /// (one Coulomb amplitude f_C(theta) + f_C(pi - theta) for every channel)
   /// does not apply.
   bool HasSpinDependentExchange() const;
+  /// \f$1+\delta_{12}\f$: 2 for an identical pair, 1 otherwise.  An identical
+  /// pair in the ENTRANCE channel multiplies every cross section out of it --
+  /// reaction, capture or elastic, angle-integrated or differential -- by this
+  /// factor, sigma = (pi/k^2) sum_J g_J (1+delta_12) sum |T|^2 over the channels
+  /// symmetry allows -- for spin-0 bosons the familiar
+  /// sigma = (pi/k^2) sum_l (2l+1) [1+(-1)^l] T_l (e.g. Hagino, Rowley and Yao,
+  /// EPJ Web Conf. 122 (2016) 07002).  It is the convention of the reciprocity
+  /// theorem w_12 k_12^2 sigma_12->34 / (1+delta_12) =
+  /// w_34 k_34^2 sigma_34->12 / (1+delta_34), w = (2i_1+1)(2i_2+1)
+  /// (Blatt and Weisskopf 1952; Fowler,
+  /// Caughlan and Zimmerman, ARA&A 5 (1967) 525) with a symmetric U.  An
+  /// identical pair in the EXIT channel contributes no factor: the cross section
+  /// counts each reaction once, not each outgoing particle.  The elastic
+  /// differential cross section, which by convention counts particles, carries
+  /// a further 2 of its own (GenMatrixFunc).
+  double GetEntranceSymmetryFactor() const;
   void AddDecay(Decay);
   void SetEntrance();
   /// Decay \p i, 1-based.

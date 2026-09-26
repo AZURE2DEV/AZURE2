@@ -140,8 +140,51 @@ Elastic scattering
    section is reported per collision (half the integral over the full sphere)
    for any spin.
 
-What is not symmetrized
-   Reactions into or out of an identical pair (d+d :math:`\to` p+t, say) use
-   only the channel rule above; no exchange factor is applied to their cross
-   sections, the same convention as for spin-0 pairs. The vector analyzing
-   power is defined for a spin-1/2 beam only (it is zero for d+d).
+Reactions out of an identical pair
+   An identical pair in the **entrance** channel multiplies every cross
+   section out of it by :math:`1+\delta_{12} = 2` -- reaction, capture and
+   elastic, angle-integrated and differential:
+
+   .. math::
+
+      \sigma_{12\to34} = \frac{\pi}{k^2} \sum_J
+      \frac{2J+1}{(2i_1+1)(2i_2+1)} \,(1+\delta_{12})
+      \sum_{\ell s,\,\ell' s'} \left|T^J_{\ell' s',\ell s}\right|^2 ,
+
+   the sum running over the channels symmetry allows; for a spin-0 pair this
+   is the familiar :math:`(\pi/k^2)\sum_\ell (2\ell+1)[1+(-1)^\ell]\,T_\ell`
+   of :math:`^{12}`\ C+\ :math:`^{12}`\ C fusion. It is the convention of the
+   reciprocity theorem,
+   :math:`w_{12} k_{12}^2 \sigma_{12\to34}/(1+\delta_{12}) =
+   w_{34} k_{34}^2 \sigma_{34\to12}/(1+\delta_{34})` with
+   :math:`w = (2i_1+1)(2i_2+1)`, and counts each reaction once. The
+   differential cross section of a reaction (d(d,p)t, say) carries the same
+   factor 2, so that its integral over :math:`4\pi` is the angle-integrated
+   value; it is symmetric about 90 degrees. (Before September 2026 only the
+   elastic cross section had the factor; reaction and capture cross sections
+   out of an identical pair were a factor 2 low.)
+
+Reactions into an identical pair
+   An identical pair in the **exit** channel (:math:`^7`\ Li(p,\ :math:`\alpha`)\ :math:`\alpha`)
+   takes no factor: the cross section counts reactions, not outgoing
+   particles. Data that count both alphas of every event -- an angle-integrated
+   yield summed over both particles, or a detector at :math:`\theta` that
+   sees either alpha -- are twice the model and must be halved (or given a
+   normalization of 2).
+
+Reaction rates
+   The rate is :math:`N_A\langle\sigma v\rangle` of this physical cross
+   section, so for an identical entrance pair it includes
+   :math:`1+\delta_{12}` through :math:`\sigma` and, like the rate
+   compilations (Fowler, Caughlan and Zimmerman 1967; NACRE; REACLIB),
+   **excludes** the pair-counting :math:`1/(1+\delta_{12})` of the rate
+   equation :math:`r = n_1 n_2 \langle\sigma v\rangle / (1+\delta_{12})`.
+   AZURE2 prints a reminder when it computes such a rate.
+
+Trojan Horse (HOES) cross sections
+   These are in arbitrary units, and every channel of a THM segment shares
+   its entrance pair, so a :math:`1+\delta_{12}` would only rescale the fitted
+   normalization; none is applied.
+
+The vector analyzing power is defined for a spin-1/2 beam only (it is zero
+for d+d).

@@ -68,7 +68,9 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
         }
       }
     }
-    point->SetFitCrossSection(real(sum) / 100.);
+    // (1+delta_12) of an identical entrance pair: see the angle-integrated
+    // branch below.
+    point->SetFitCrossSection(real(sum) / 100. * compound()->GetPair(aa)->GetEntranceSymmetryFactor());
   } else {
     if (!point->IsPhase()) {
       double angleIntegratedXS = 0.;
@@ -170,39 +172,37 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
         angleIntegratedE1XS = real(sumE1) / 100.;
         angleIntegratedE2XS = real(sumE2) / 100.;
         if (!point->IsAngularDist()) {
-          // Identical-particle (Bose/Fermi) correction for the reported
-          // total. This partial-wave-unitarity sum (above) never consults
-          // GetIdenticalSign()/IsIdentical() the way the differential branch
-          // below does (rtFactor/itFactor, aa==ir identical case) -- so on
-          // its own it is the total cross section for *distinguishable*
-          // particles, silently applied to an aa==ir identical pair too.
-          //
-          // The correct factor is x2, not the differential branch's x4: x4
-          // is the enhancement of the symmetrized |F(theta)|^2 integrated
-          // over the full 0-pi range, which double-counts every physical
-          // collision for identical particles (theta and pi-theta are the
-          // same event). The physically meaningful total -- the one a
-          // reaction-rate calculation needs -- is half of that full-range
-          // integral, i.e. x2 relative to this sum. Verified against JINA
-          // ReacLib's alpha+alpha+alpha->12C rate (FY05): a 4He+4He elastic
-          // angle-integrated cross section computed here fed into the
-          // Nomoto (1985)/Langanke (1986) sequential rate formula lands
-          // within ~5-13% of ReacLib across T9 = 0.08-1.0 with x2; x4
-          // overshoots by ~2x, x1 (this branch's old behavior) undershoots
-          // by ~1.8x.
+          // Identical particles in the ENTRANCE channel: the reported total
+          // is sigma = (pi/k^2) sum_J g_J (1+delta_12) sum |T|^2 over the
+          // channels symmetry allows (l+s even; CNuc refuses or warns about
+          // the others) -- for spin-0 bosons the familiar
+          // (pi/k^2) sum_l (2l+1)[1+(-1)^l] T_l.  The sum above is the
+          // distinguishable-particle one, so an identical entrance pair takes
+          // x2 whatever the exit: elastic (4He+4He), reaction (12C+12C ->
+          // 20Ne+a, d+d -> t+p) and capture (d+d -> 4He+g) alike.  It is the
+          // convention of the reciprocity theorem with a symmetric U,
+          //   w_12 k_12^2 sigma(12->34)/(1+delta_12)
+          //     = w_34 k_34^2 sigma(34->12)/(1+delta_34),  w = (2i_1+1)(2i_2+1),
+          // and counts each reaction once.  An identical EXIT pair (7Li+p ->
+          // a+a) takes no factor: sum |U_cc'|^2 is already the probability of
+          // the reaction, so the total counts events, not alphas.  For elastic
+          // scattering x2 is half the full 0-pi integral of the symmetrized
+          // |F(theta)|^2 (x4), which counts both particles of every event.
+          // Checked against JINA ReacLib's triple-alpha rate (elastic, x2),
+          // and in tests/identical_entrance_reaction against the one-level
+          // (1+delta) Breit-Wigner for 12C+12C -> a+20Ne and d+d -> p+t.
           //
           // Scoped to the reported cross section only -- angleIntegratedXS
           // itself (and E1/E2) is left unscaled below, since it is also the
           // normalization denominator for angular-distribution coefficients
-          // (angularCoeff), a separate, unverified case.
+          // (angularCoeff), which are ratios the factor cancels from.
           double reportedXS = angleIntegratedXS;
           double reportedE1XS = angleIntegratedE1XS;
           double reportedE2XS = angleIntegratedE2XS;
-          if (aa == ir && compound()->GetPair(aa)->IsIdentical()) {
-            reportedXS *= 2.0;
-            reportedE1XS *= 2.0;
-            reportedE2XS *= 2.0;
-          }
+          const double symmetryFactor = compound()->GetPair(aa)->GetEntranceSymmetryFactor();
+          reportedXS *= symmetryFactor;
+          reportedE1XS *= symmetryFactor;
+          reportedE2XS *= symmetryFactor;
           point->SetFitCrossSection(reportedXS);
           point->SetFitE1CrossSection(reportedE1XS);
           point->SetFitE2CrossSection(reportedE2XS);
@@ -326,11 +326,26 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
       // F_C; for j != 0 it is taken per channel spin, in CT below and in the
       // interference sum through GetCoulombAmplitude(s). Here we apply the
       // remaining factors 4 to RT and 2 to IT.
+      //
+      // Identical entrance pair, different exit pair (12C(12C,a)20Ne,
+      // d(d,p)t, d(d,g)4He): only the (1+delta_12) = 2 of the total. The
+      // distribution is already symmetric about 90 deg -- odd Legendre terms
+      // need entrance waves of opposite l parity in the same channel spin, and
+      // l+s even forbids that -- and each event gives one ejectile, so its
+      // 4 pi integral must be the angle-integrated sigma above, x2. (For
+      // elastic the 4 pi integral of the x4 form is twice sigma because it
+      // counts both particles.)  An identical exit pair gets no factor: the
+      // model is per event, so a detector counting either alpha of
+      // 7Li(p,a)a sees twice it.
       double rtFactor = 1.0;
       double itFactor = 1.0;
-      if (aa == ir && compound()->GetPair(aa)->IsIdentical()) {
-        rtFactor = 4.0;
-        itFactor = 2.0;
+      if (compound()->GetPair(aa)->IsIdentical()) {
+        if (aa == ir) {
+          rtFactor = 4.0;
+          itFactor = 2.0;
+        } else {
+          rtFactor = compound()->GetPair(aa)->GetEntranceSymmetryFactor();
+        }
       }
       complex RT = sum / pi * point->GetGeometricalFactor() *
           compound()->GetPair(aa)->GetI1I2Factor() * rtFactor;
