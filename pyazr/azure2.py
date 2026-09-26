@@ -1379,7 +1379,14 @@ class azure2:
         return [s.calculated_segments(i) for i in range(nsegments)]
 
     def calculate_energies(self, params):
-        """Centre-of-mass energies of the calculated points, per segment."""
+        """Centre-of-mass energies of the calculated points, per segment.
+
+        Takes a physical parameter vector, as :meth:`calculate` does. The
+        energies do not depend on the widths, but the vector still goes through
+        the observed-to-formal transformation. Passing ``params_rwa`` here reads
+        each amplitude as a width in eV and can print "Denominator less than zero
+        while transforming".
+        """
         s = self.sess
         nsegments = int(s.update_segments(params))
         return [s.calculated_energies(i) for i in range(nsegments)]

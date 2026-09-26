@@ -589,6 +589,14 @@ bool CNuc::TransformIn(const Config &configure) {
           // the physical-width channels of the same level
           // (gamma_b^2 = (Gamma_b/P_b)*numer/denom)
           double numer = 1.0;
+          // Per-channel share of denom, for the diagnostic below: the term
+          // Gamma_c (dS_c/dE) / P_c that each physical-width particle channel
+          // subtracts from 2, with its P_c and dS_c/dE.
+          struct DenomTerm {
+            int ch;
+            double term, pene, dShift;
+          };
+          std::vector<DenomTerm> denomTerms;
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
             AChannel *theChannel = theJGroup->GetChannel(ch);
             double localEnergy = theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetExE() - this->GetPair(theChannel->GetPairNum())->GetSepE();
@@ -629,8 +637,9 @@ bool CNuc::TransformIn(const Config &configure) {
                 double tempPene = theCoulombFunction.Penetrability(theChannel->GetL(),
                                                                    radius,
                                                                    localEnergy);
-                denom -= tempGammas[ch - 1] / tempPene *
-                    theCoulombFunction.PEShift_dE(theChannel->GetL(), radius, localEnergy);
+                double dShift = theCoulombFunction.PEShift_dE(theChannel->GetL(), radius, localEnergy);
+                denom -= tempGammas[ch - 1] / tempPene * dShift;
+                denomTerms.push_back(DenomTerm{ch, tempGammas[ch - 1] / tempPene * dShift, tempPene, dShift});
                 penes.push_back(tempPene);
                 passThrough.push_back(false);
               } else {
@@ -644,8 +653,9 @@ bool CNuc::TransformIn(const Config &configure) {
                 double whitConv = newWhitFunc(theChannel->GetL(), radius, fabs(localEnergy));
                 double tempPene = this->GetPair(theChannel->GetPairNum())->GetRedMass() * radius * uconv /
                     pow(hbarc, 2.0) / pow(whitConv, 2.0);
-                denom -= tempGammas[ch - 1] / tempPene *
-                    theShiftFunction.EnergyDerivative(theChannel->GetL(), theLevel->GetE());
+                double dShift = theShiftFunction.EnergyDerivative(theChannel->GetL(), theLevel->GetE());
+                denom -= tempGammas[ch - 1] / tempPene * dShift;
+                denomTerms.push_back(DenomTerm{ch, tempGammas[ch - 1] / tempPene * dShift, tempPene, dShift});
                 penes.push_back(tempPene);
                 passThrough.push_back(false);
               }
@@ -697,10 +707,47 @@ bool CNuc::TransformIn(const Config &configure) {
             }
           }
           if (denom < 0.) {
+            // An observed width Gamma_c = 2 P_c gamma_c^2 / (1 + sum gamma^2 dS/dE)
+            // saturates at 2 P_c / (dS_c/dE) as gamma_c -> infinity, so the
+            // input is out of reach of any reduced width when
+            //   1 - sum_c Gamma_c (dS_c/dE) / (2 P_c) = denom / 2 < 0.
+            // That is a property of the input, not of the transformation --
+            // but the usual cause is input in the wrong units (a reduced-width
+            // amplitude read as a width), so name the channel and the numbers.
             configure.outStream << "**WARNING: Denominator less than zero while transforming"
                                 << std::endl
                                 << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
-                                << "  The transformation may not have been successful for this level."
+                                << "  No reduced width reproduces these observed widths: "
+                                << "1 - sum_c Gamma_c (dS_c/dE)/(2 P_c) = " << denom / 2.0 << " < 0."
+                                << std::endl;
+            const DenomTerm *worst = nullptr;
+            for (const DenomTerm &t : denomTerms)
+              if (!worst || t.term > worst->term) worst = &t;
+            if (worst) {
+              AChannel *wc = theJGroup->GetChannel(worst->ch);
+              bool bound = theLevel->GetE() - this->GetPair(wc->GetPairNum())->GetExE() -
+                      this->GetPair(wc->GetPairNum())->GetSepE() <= 0.0;
+              configure.outStream << "  Largest term: " << AZURELabel::Channel(this, theJGroup, worst->ch)
+                                  << (bound ? " (bound; ANC input)" : "")
+                                  << ": input " << theLevel->GetGamma(worst->ch)
+                                  << (bound ? " fm^(-1/2)" : " eV")
+                                  << ", P = " << worst->pene << ", dS/dE = " << worst->dShift
+                                  << " MeV^-1, Gamma (dS/dE)/(2P) = " << worst->term / 2.0 << "." << std::endl;
+              if (!bound && worst->dShift > 0.0)
+                configure.outStream << "  Even alone, this channel's observed width saturates at 2P/(dS/dE) = "
+                                    << 2.0 * worst->pene / worst->dShift * 1e6 << " eV." << std::endl;
+            }
+            // Orders of magnitude over the limit is the signature of a unit
+            // mistake; a sum just past 1 is a level broader than its channels
+            // allow at these radii.
+            if (-denom / 2.0 > 100.0)
+              configure.outStream << "  So large an excess usually means wrong units: widths in eV (ANCs in fm^-1/2), "
+                                  << "not reduced-width amplitudes -- pyazr's calculate() and calculate_energies() "
+                                  << "take physical values, calculate_rwa() amplitudes." << std::endl;
+            else
+              configure.outStream << "  The level is broader than its channels allow at these radii: "
+                                  << "reduce the widths or enlarge the channel radii." << std::endl;
+            configure.outStream << "  The transformation may not have been successful for this level."
                                 << std::endl;
           }
           double nFSum = 1.0;
