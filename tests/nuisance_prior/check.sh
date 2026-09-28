@@ -45,6 +45,9 @@ run() {
     {print}
     /<\/targetInt>/ && row != "" {print "<parameterSettings>"; print row; print "</parameterSettings>"}
   ' "$SRC/7Li_p_a.azr" > "$d/run.azr"
+  # Relative to the run directory: read from stdin, a POSIX /tmp/... path is
+  # not translated by MSYS and the native Windows binary cannot open it.
+  [ -z "$par" ] || { cp "$par" "$d/start.par"; par="start.par"; }
   (cd "$d" && printf '1\n%s\n\n7\n' "$par" | "$AZURE2_BIN" --no-gui --no-readline run.azr > run.log 2>&1)
   grep -oE 'Total Chi-Squared: [0-9.eE+-]+' "$d/run.log" | awk '{print $3}'
 }
@@ -56,7 +59,7 @@ c0="$(run none "")"
 ca="$(run a "$row_a")"
 cb="$(run b "$row_b")"
 # param.par of the plain run with energy_1 marked fixed.
-awk '$1 == "energy_1" {print $0 "  fixed"; next} {print}' "$WORK/none/output/param.par" > "$WORK/fixed.par"
+awk '{ sub(/\r$/, "") } $1 == "energy_1" {print $0 "  fixed"; next} {print}' "$WORK/none/output/param.par" > "$WORK/fixed.par"
 c0p="$(run none_par "" "$WORK/fixed.par")"
 cc="$(run c "$row_b" "$WORK/fixed.par")"
 

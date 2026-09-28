@@ -25,7 +25,7 @@ assumes:
   these points come from.
 * **What is pinned.** The recorded chi2 (`expected/`) keeps B = 2.2246 MeV, as
   it always has. The same model with the 3He binding is pinned alongside, in
-  `tests/thm_options/check.sh` (chi2 = 1827.89 on 2026-09-26); `run_tests.sh`
+  `tests/thm_options/check.sh` (chi2 = 1827.89 on 2026-09-26, 1827.73 since the dS/dE step fix of 2026-09-28); `run_tests.sh`
   takes the first `.azr` of a directory, so it cannot live here as a second
   file.
 

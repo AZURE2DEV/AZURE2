@@ -43,7 +43,12 @@ run() {
   cp -r "$WORK/proj" "$d"
   mkdir -p "$d/output" "$d/checks"
   [ -z "${4:-}" ] || cp "$4" "$d/output/covariance.dat"
-  (cd "$d" && printf '1\n%s\n\n7\n' "$2" | $RUN "$AZURE2_BIN" --no-gui --no-readline $3 run.azr 2>&1 \
+  # The parameter file is handed over relative to the run directory: the path
+  # is read from stdin, where MSYS does not translate a POSIX path, and the
+  # native Windows binary cannot open /tmp/...
+  local par=""
+  [ -z "$2" ] || { cp "$2" "$d/start.par"; par="start.par"; }
+  (cd "$d" && printf '1\n%s\n\n7\n' "$par" | $RUN "$AZURE2_BIN" --no-gui --no-readline $3 run.azr 2>&1 \
      | head -c 1000000 > log)
   [ -f "$d/output/$OUT" ] || { echo "FAIL: run $1 produced no $OUT"; tail -5 "$d/log"; exit 1; }
 }

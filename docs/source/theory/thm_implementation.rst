@@ -99,11 +99,12 @@ engine would refuse is not opened in the editor (it is kept as it is).
    expansion, leaving the :math:`l`-independent weight :math:`2J+1`. The
    coherent sum is exact only in the limit of the exit direction fixed along
    :math:`\hat p_{xA}`; it is kept for comparison with older fits.
-   ``tests/7Li_p_a`` (two entrance :math:`l` in one channel spin): 2138.51
-   incoherent, 3196.17 coherent, same parameters (2181.41 / 2741.34 with
+   ``tests/7Li_p_a`` (two entrance :math:`l` in one channel spin): 2138.48
+   incoherent, 3196.77 coherent, same parameters (2181.45 / 2741.85 with
    ``vertex=perlevel``; 2180.69 / 2740.48 were the pins before 2026-09-25).
-   All ``tests/7Li_p_a`` values in this section are those after the
-   shift-function fix b6cc41b, which moved them by up to 3.2e-4.
+   The ``tests/7Li_p_a`` values in this section are those after the
+   shift-function fix b6cc41b, which moved them by up to 3.2e-4, and the
+   dS/dE step fix of 2026-09-28 (up to 1.9e-4), unless marked otherwise.
 
 ``vertex`` — boundary term at the entrance vertex
    The transfer form factor :math:`M_l = (L_c - 1)\, j_l(pa) - pa\, j_l'(pa)`
@@ -158,8 +159,9 @@ engine would refuse is not opened in the editor (it is kept as it is).
 
    Pins that moved with the default (same parameters): ``tests/7Li_p_a``
    2180.69 → 2137.83, ``tests/6Li_d`` 1076.06 → 682.099; ``vertex=perlevel``
-   reproduces the old values. Since b6cc41b these are 2181.41 → 2138.51
-   and 682.133. ``tests/7Li_p_a`` with ``vertex=onshell``: 2070.84.
+   reproduces the old values. Since b6cc41b and the dS/dE step fix these
+   are 2181.45 → 2138.48 and 682.147. ``tests/7Li_p_a`` with
+   ``vertex=onshell``: 2070.75.
 
 ``kinematics`` — factors left in the model by the data reduction
    HOES data are the measured triple-differential cross section divided by a
@@ -187,8 +189,9 @@ engine would refuse is not opened in the editor (it is kept as it is).
    :math:`k_i` the on-shell entrance momentum at :math:`|E|`. The factors
    change the energy dependence, not only the scale, so the wrong choice
    distorts the relative heights of resonances. ``tests/7Li_p_a``:
-   2138.51 / 2381.03 / 2625.34 / 5499.70 for the four values in table order
-   (2181.41 / 2403.67 / 2633.59 / 5573.51 with ``vertex=perlevel``).
+   2138.48 / 2381.01 / 2625.33 / 5499.08 for the four values in table order
+   (2181.41 / 2403.67 / 2633.59 / 5573.51 with ``vertex=perlevel``, before
+   the dS/dE step fix).
 
 ``coulombIntegral`` — external Coulomb term of the vertex
    ``1`` adds

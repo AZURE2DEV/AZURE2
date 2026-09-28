@@ -28,6 +28,7 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ec_signature.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
+if command -v timeout >/dev/null 2>&1; then RUN="timeout ${TEST_TIMEOUT:-900}"; else RUN=""; fi
 
 failures=0
 ok() { echo "  ok    $1"; }
@@ -66,7 +67,7 @@ run() {
   [ -n "$ec" ] && ec="../$(basename "$ec")"
   shift 2 || shift $#
   (cd "$dir" && printf '1\n\n%s\n7\n' "$ec" |
-    "$AZURE2_BIN" --no-gui --no-readline "$@" 13N.azr > run.log 2>&1)
+    $RUN "$AZURE2_BIN" --no-gui --no-readline "$@" 13N.azr > run.log 2>&1)
 }
 
 chi2() { awk '/^Total-Chi-Squared:/ { print $2 }' "$WORK/$1/output/chiSquared.out" 2>/dev/null; }

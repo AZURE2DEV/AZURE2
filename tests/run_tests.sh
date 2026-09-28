@@ -63,7 +63,8 @@ echo "relative tolerance: $TOL"
 # to date; say so when they are not.  (The rule itself stays: an argument wins,
 # else the newest.)  mtime in seconds, GNU stat or BSD stat.
 mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; }
-stamp() { date -r "$1" '+%Y-%m-%d %H:%M' 2>/dev/null || echo "?"; }
+# GNU date -r takes a file; BSD date -r takes seconds since the epoch.
+stamp() { date -r "$1" '+%Y-%m-%d %H:%M' 2>/dev/null || date -r "$(mtime "$1")" '+%Y-%m-%d %H:%M' 2>/dev/null || echo "?"; }
 bins=()
 for candidate in "$REPO_ROOT"/build*/src/AZURE2 "$REPO_ROOT"/build*/src/AZURE2.exe; do
   [ -x "$candidate" ] && bins+=("$candidate")

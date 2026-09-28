@@ -52,7 +52,11 @@ cat > "$WORK/proj/data/p7li_aa_int.dat" <<'EOF'
 0.8 0 2.048842e-01 6.146525e-03
 1.0 0 8.804675e-02 2.641402e-03
 EOF
-cat > "$WORK/fix.par" <<'EOF'
+# In the project, so every run names it relative to its own directory: the
+# path is read from stdin, where MSYS does not translate a POSIX path, and the
+# native Windows binary cannot open /tmp/... (it re-prompted, took the next
+# blank line for "new file" and fitted without the fixed flag).
+cat > "$WORK/proj/fix.par" <<'EOF'
 energy_1 1.7755100e+01 1.7755100e+00
 width_1_1 8.5745701e-01 8.5745701e-02 fixed
 width_1_2 1.2520344e-01 1.2520344e-02
@@ -74,7 +78,7 @@ chis=()
 for m in migrad lm gsl-lm; do
   flag=""; [ "$m" = migrad ] || flag="--use-$m"
   # Menu 2 asks about the band first (n), then the parameter file.
-  fit "$m" "2\nn\n$WORK/fix.par\n\n7\n" $flag || continue
+  fit "$m" "2\nn\nfix.par\n\n7\n" $flag || continue
   sav="$WORK/$m/output/param.sav"
   w11="$(value "$sav" width_1_1)"; e1="$(value "$sav" energy_1)"; w12="$(value "$sav" width_1_2)"
   chi="$(grep -oE 'Total Chi-Squared: [0-9.eE+-]+' "$WORK/$m/log" | awk '{ print $3 }')"
@@ -101,7 +105,7 @@ else
 fi
 
 # The band covariance of an LM fit spans the free R-matrix parameters only.
-if fit lmband "2\n$WORK/fix.par\n\n7\n" --use-lm --covariance-band; then
+if fit lmband "2\nfix.par\n\n7\n" --use-lm --covariance-band; then
   cov="$WORK/lmband/output/covariance.dat"
   if [ -f "$cov" ] && awk 'NF { r++; if (NF != 2) bad = 1 } END { exit !(r == 2 && !bad) }' "$cov"; then
     echo "  ok    LM band covariance is 2x2 (energy_1, width_1_2)"

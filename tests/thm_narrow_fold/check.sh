@@ -62,9 +62,14 @@ project() {
     { print }' "$SRC/17O.azr" > "$d/run.azr"
 }
 
-# run DIR [PARFILE]: calculate; prints nothing, leaves output/
+# run DIR [PARFILE]: calculate; prints nothing, leaves output/.  PARFILE is
+# copied into DIR and named relative to it: the path is read from stdin, where
+# MSYS does not translate a POSIX path, and the native Windows binary cannot
+# open /tmp/... (it then silently used the .azr's own parameters).
 run() {
-  (cd "$1" && printf '1\n%s\n\n7\n' "${2:-}" | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 \
+  local par=""
+  [ -z "${2:-}" ] || { cp "$2" "$1/start.par"; par="start.par"; }
+  (cd "$1" && printf '1\n%s\n\n7\n' "$par" | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 \
      | head -c 1000000 > log)
   [ -s "$1/output/AZUREOut_aa=1_R=2.out" ] || { echo "  FAIL  no output in $(basename "$1")"; tail -3 "$1/log" | sed 's/^/        /'; exit 1; }
 }

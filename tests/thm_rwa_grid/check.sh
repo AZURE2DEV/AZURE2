@@ -25,6 +25,7 @@ AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_rwa_grid.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
+if command -v timeout >/dev/null 2>&1; then RUN="timeout ${TEST_TIMEOUT:-900}"; else RUN=""; fi
 
 run_with_points() {   # run_with_points N -> prints total chi2
   local d="$WORK/n$1"
@@ -37,7 +38,7 @@ run_with_points() {   # run_with_points N -> prints total chi2
     /<\/targetInt>/ {inT=0}
     inT && NF>3 {$3=n}
     {print}' "$azr" > "$d/run.azr"
-  (cd "$d" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline run.azr >/dev/null 2>&1)
+  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr >/dev/null 2>&1)
   grep -oE 'Total-Chi-Squared: [0-9.eE+-]+' "$d/output/chiSquared.out" | awk '{print $2}'
 }
 

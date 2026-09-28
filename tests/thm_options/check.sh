@@ -26,6 +26,16 @@ if command -v timeout >/dev/null 2>&1; then RUN="timeout ${TEST_TIMEOUT:-600}"; 
 
 fail=0
 
+# Relative tolerance of the pins: the suite's 1e-3 (see run_tests.sh), and
+# TOL_WIDE for the two cases that CI saw move by more across platforms before
+# the dS/dE step fix: 6Li_d with the 3He binding, whose Brune transformation
+# has a level at its limit (1 - sum Gamma dS/dE / 2P = -4e-4), 1.6e-3 on
+# Linux/Windows; and the w = 1 + E weight, 9e-4 on Linux/Windows and 2.2e-3 on
+# macOS off this machine's pins.
+# See README.md.  Identities (tolerance 0, or 1e-5 for the doubled norm) stay
+# exact.
+TOL_WIDE=5e-3
+
 # run NAME BLOCK -> prints total chi2 (empty if none); AZURE2's exit status is
 # left in $WORK/NAME/status (run is called in a subshell).
 # BLOCK is the literal text appended after the last line of the .azr ("" = none).
@@ -38,7 +48,11 @@ run() {
   [ "${3:-}" != sorted ] || sort_levels "$d/run.azr"
   # nonthm: a second <segmentsData> line, the same data read as an ordinary
   # angle-integrated segment (isDiff 0), so segment 2 is not THM.
-  [ "${3:-}" != nonthm ] || sed -i 's|^\(1  5  4  0  8.2  0  180  \)10\(  .*\)$|&\n\10\2|' "$d/run.azr"
+  # (awk to a temporary file: sed -i is not portable to BSD/macOS sed.)
+  if [ "${3:-}" = nonthm ]; then
+    awk '{ print } /^1  5  4  0  8\.2  0  180  10  / { sub(/  180  10  /, "  180  0  "); print }' \
+      "$d/run.azr" > "$d/run.azr.tmp" && mv "$d/run.azr.tmp" "$d/run.azr"
+  fi
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
   echo $? > "$d/status"
   [ -f "$d/output/chiSquared.out" ] || return 0
@@ -89,7 +103,7 @@ expect() {
 
 # (a) defaults: no block == every key written with its default value
 none="$(run none "")"
-expect "no block (vertex=constant pin)" "$none" 2138.51
+expect "no block (vertex=constant pin)" "$none" 2138.48
 defaults="$(run defaults "$(block "entranceL=incoherent
 vertex=constant
 kinematics=lacognata
@@ -100,31 +114,31 @@ empty="$(run empty "$(block "# comment only")")"
 expect "empty block == no block" "$empty" "$none" 0
 
 # (b) earlier defaults.  vertex=perlevel (alias real) was the default until
-# 2026-09-25 (pin 2181.41); with the coherent l sum as well it is the AZURE2
-# of before Sep 2026 (whose pin was 2740.48; 2741.34 since the dS/dE fix of
-# b6cc41b, rel 3e-4).
+# 2026-09-25 (pin 2181.41, 2181.45 since the dS/dE step fix); with the
+# coherent l sum as well it is the AZURE2 of before Sep 2026 (whose pin was
+# 2740.48; 2741.34 after the dS/dE fix of b6cc41b, 2741.85 after the step fix).
 perlevel="$(run perlevel "$(block vertex=perlevel)")"
-expect "vertex=perlevel (previous default pin)" "$perlevel" 2181.41
+expect "vertex=perlevel (previous default pin)" "$perlevel" 2181.45
 expect "vertex=real == vertex=perlevel" "$(run real "$(block vertex=real)")" "$perlevel" 0
-expect "entranceL=coherent" "$(run coherent "$(block entranceL=coherent)")" 3196.17
+expect "entranceL=coherent" "$(run coherent "$(block entranceL=coherent)")" 3196.77
 expect "entranceL=coherent + vertex=perlevel (legacy pin)" \
   "$(run legacy "$(block "entranceL=coherent
-vertex=perlevel")")" 2741.34
+vertex=perlevel")")" 2741.85
 
 # (c) kinematic factor conventions
 expect "kinematics=lacognata == no block" "$(run lacognata "$(block kinematics=lacognata)")" "$none" 0
-expect "kinematics=triple"    "$(run triple    "$(block kinematics=triple)")"    2381.03
-expect "kinematics=kf3body"   "$(run kf3body   "$(block kinematics=kf3body)")"   2625.34
-expect "kinematics=lambda32"  "$(run lambda32  "$(block kinematics=lambda32)")"  5499.7
+expect "kinematics=triple"    "$(run triple    "$(block kinematics=triple)")"    2381.01
+expect "kinematics=kf3body"   "$(run kf3body   "$(block kinematics=kf3body)")"   2625.33
+expect "kinematics=lambda32"  "$(run lambda32  "$(block kinematics=lambda32)")"  5499.08
 
 # (d) on-shell vertex and the external Coulomb term
-expect "vertex=onshell"    "$(run onshell "$(block vertex=onshell)")"    2070.84
-expect "coulombIntegral=1" "$(run coulomb "$(block coulombIntegral=1)")" 2112.47
+expect "vertex=onshell"    "$(run onshell "$(block vertex=onshell)")"    2070.75
+expect "coulombIntegral=1" "$(run coulomb "$(block coulombIntegral=1)")" 2112.45
 
 # (e) spectator energy: global and per pair (pair 5 is the entrance pair)
 expect "spectatorEnergy=0 == no block" "$(run sp0 "$(block spectatorEnergy=0)")" "$none" 0
 spg="$(run spg "$(block spectatorEnergy=0.5)")"
-expect "spectatorEnergy=0.5" "$spg" 2195.75
+expect "spectatorEnergy=0.5" "$spg" 2195.69
 expect "spectatorEnergy[5]=0.5 == global 0.5" "$(run sp5 "$(block "spectatorEnergy[5]=0.5")")" "$spg" 0
 expect "spectatorEnergy[3]=0.5 (not a THM pair) == no block" \
   "$(run sp3 "$(block "spectatorEnergy[3]=0.5")")" "$none" 0
@@ -137,8 +151,8 @@ expect "spectatorEnergy[3]=0.5 (not a THM pair) == no block" \
 # the same models with the binding the experiments had.  Regression pins, not
 # physics benchmarks: the published points are penetrability-corrected and
 # normalized to direct data, not raw HOES.
-expect "7Li_p_a with B(3He) = 5.4935" "$(runb b3he7 7Li_p_a 2.2246 5.4935)" 1827.89
-expect "6Li_d with B(3He) = 5.4935" "$(runb b3he6 6Li_d 1.4735 5.4935)" 483.474
+expect "7Li_p_a with B(3He) = 5.4935" "$(runb b3he7 7Li_p_a 2.2246 5.4935)" 1827.73
+expect "6Li_d with B(3He) = 5.4935" "$(runb b3he6 6Li_d 1.4735 5.4935)" 482.892 "$TOL_WIDE"
 
 # the result does not depend on the order of the levels in the file (the
 # constant vertex once took B_c from the first level read)
@@ -186,13 +200,17 @@ if grep -q "WARNING: <thm> weight 'two.dat' is evaluated at E = .* outside its t
 else
   echo "  FAIL  no warning for sub-points outside the table"; fail=1
 fi
-# absolute path, and the table's range exactly covering the data is accepted
+# absolute path, and the table's range exactly covering the data is accepted.
+# The path is read from the .azr, where MSYS does not translate it, so on
+# Windows it is written the way the native binary names it (C:/msys64/tmp/...).
 wfile wabs two.dat "0 2\n10 2\n"
+wabs="$WORK/wabs/two.dat"
+if command -v cygpath > /dev/null 2>&1; then wabs="$(cygpath -m "$wabs")"; fi
 expect "weight[1] absolute path == relative" \
-  "$(run wabs "$(block "weight[1]=$WORK/wabs/two.dat")")" "$w2" 0
+  "$(run wabs "$(block "weight[1]=$wabs")")" "$w2" 0
 # w = 1 + E_cm as piecewise log-linear rows: a different chi2
 wfile ramp ramp.dat "# w = 1 + E\n0 1\n1 2\n2 3\n3 4\n4 5\n5 6\n6 7\n7 8\n8 9\n9 10\n10 11\n"
-expect "weight[1] ramp w = 1 + E" "$(run ramp "$(block "weight[1]=ramp.dat")")" 868.963
+expect "weight[1] ramp w = 1 + E" "$(run ramp "$(block "weight[1]=ramp.dat")")" 869.55 "$TOL_WIDE"
 # weightTest[k] names a <segmentsTest> line and is only read for extrapolation
 wfile wtest two.dat "0 2\n10 2\n"
 expect "weightTest[2] does not touch the data segments" \
