@@ -50,8 +50,8 @@ profiled out by the engine.
 
 ## The pins
 
-`expected/chiSquared.out`: chi2 = 2095.59 (segment 1, 39 points) + 96.38
-(segment 2, 79 points) = **2191.98**, a pin, not a fit. Segment 1 is large
+`expected/chiSquared.out`: chi2 = 2130.08 (segment 1, 39 points) + 98.86
+(segment 2, 79 points) = **2228.94**, a pin, not a fit. Segment 1 is large
 because the digitized error bars are only 3–5 % while the points scatter
 by more than that about the smooth curve, and the model has no freedom here.
 
@@ -62,12 +62,22 @@ relative deviation from the mid-line:
 
 | run | rms 0.505–0.895 | rms 0.56–0.84 | max | in band | asserted |
 |---|---|---|---|---|---|
-| default, `vertex=constant` | 10.2 % | 5.2 % | 30 % | 0.72 | rms ≤ 12 %, peak ≤ 7 % |
-| `vertex=perlevel` (default before 2026-09-25) | 26.8 % | 23.1 % | 55 % | 0.15 | peak ≥ 15 % |
+| default, `vertex=constant` | 10.2 % | 5.2 % | 31 % | 0.71 | rms ≤ 12 %, peak ≤ 7 % |
+| `vertex=perlevel` (default before 2026-09-25) | 26.8 % | 23.1 % | 55 % | 0.19 | peak ≥ 15 % |
 
 The reproduction measured 10.1 / 5.1 % (no-Brune, Python folding of S) and
 26.8 / 23.1 % (Brune per-level, AZURE2 folding) — folding σ in AZURE2 instead
 of S in Python moves these by < 0.4 points.
+
+Re-pinned 2026-09-28: the `<targetInt>` line lists both segments ("1,2"),
+and AZURE2 converted the one shared effect's sigma lab -> c.m. once per listed
+segment, so both segments were folded with 17 x 0.947 = 16.1 keV instead of
+17 keV. Each listed segment now gets its own copy of the effect, converted
+once. 2191.98 -> 2228.94 (segment 1 2095.59 -> 2130.08, segment 2 96.38 ->
+98.86); the table above moved by less than 0.4 points (it was 10.2 / 5.2 %,
+30 %, 0.72 and 26.8 / 23.1 %, 55 %, 0.15) and both verdicts stand.
+`check.sh` also asserts that the "1,2" line gives output identical to one
+line per segment.
 
 ## Verdict
 

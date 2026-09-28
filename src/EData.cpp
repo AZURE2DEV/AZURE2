@@ -630,17 +630,25 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
       TargetEffect targetEffect(stm, configure);
       if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) return -1;
       if (targetEffect.IsActive()) {
-        this->AddTargetEffect(targetEffect);
-        TargetEffect *thisTargetEffect = this->GetTargetEffect(this->NumTargetEffects());
-        std::vector<int> segmentsList = thisTargetEffect->GetSegmentsList();
+        // Every listed segment gets its own copy of the effect.  The effect's
+        // energies (sigma, beam profile) are converted lab -> c.m. below with
+        // the segment's own factor; one object shared by "1,2" was converted
+        // once per listed segment, and both segments were then folded with
+        // the twice-converted sigma (17 keV c.m. became 16.1 keV for 18O+p).
+        // A copy per segment also lets segments of different entrance pairs
+        // share one line.
+        std::vector<int> segmentsList = targetEffect.GetSegmentsList();
         for (int i = 1; i <= segmentsList.size(); i++) {
           if (this->IsSegmentKey(segmentsList[i - 1])) {
             ESegment *segment = this->GetSegmentFromKey(segmentsList[i - 1]);
             if (segment) {
+              this->AddTargetEffect(targetEffect);
               segment->SetTargetEffectNum(this->NumTargetEffects());
-              // If segment has components, set the target effect to these as well
+              // If segment has components, set the target effect to these as
+              // well -- again a copy each, since each is converted below.
               if (segment->HasComponents()) {
                 for (auto component : segment->GetComponentSegments()) {
+                  this->AddTargetEffect(targetEffect);
                   component->SetTargetEffectNum(this->NumTargetEffects());
                 }
               }

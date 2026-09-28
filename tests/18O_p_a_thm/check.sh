@@ -22,7 +22,8 @@
 #
 # i.e. it encodes the verdict of the reproduction: the formal vertex with the
 # channel constant B_c reproduces the band, the per-level S_c(E_lambda) vertex
-# does not.  Pure bash + awk.
+# does not.  It also checks that the project's shared "1,2" <targetInt> line
+# folds both segments as one line per segment would.  Pure bash + awk.
 #
 #   ./tests/18O_p_a_thm/check.sh path/to/AZURE2
 
@@ -88,6 +89,25 @@ else
   else
     echo "  FAIL  published band not reproduced (want rms <= 12 %, peak rms <= 7 %)"; fail=1
   fi
+fi
+
+# One <targetInt> line for both segments ("1,2", as the project has it) is the
+# same as one line per segment.  The shared effect's sigma was converted to
+# the c.m. once per listed segment, so segment 2 was folded with 17 x 0.947
+# keV instead of 17 keV.
+run split ""
+awk '$2 == "\"1,2\"" { l = $0; sub(/"1,2"/, "\"1\"", l); print l; sub(/"1,2"/, "\"2\""); print; next }
+     { print }' "$WORK/split/run.azr" > "$WORK/split/run.azr.tmp" && mv "$WORK/split/run.azr.tmp" "$WORK/split/run.azr"
+(cd "$WORK/split" && rm -rf output && mkdir output &&
+   printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+if [ "$(grep -c '^1  *"[12]"' "$WORK/split/run.azr")" -eq 2 ] && [ -s "$WORK/split/output/chiSquared.out" ] &&
+   cmp -s "$WORK/default/output/chiSquared.out" "$WORK/split/output/chiSquared.out" &&
+   cmp -s "$WORK/default/output/AZUREOut_aa=1_R=2.out" "$WORK/split/output/AZUREOut_aa=1_R=2.out"; then
+  echo "  ok    targetInt \"1,2\" == one line per segment (identical output)"
+else
+  echo "  FAIL  targetInt \"1,2\" differs from one line per segment:"
+  paste "$WORK/default/output/chiSquared.out" "$WORK/split/output/chiSquared.out" 2>/dev/null | sed 's/^/        /'
+  fail=1
 fi
 
 run perlevel "vertex=perlevel"
