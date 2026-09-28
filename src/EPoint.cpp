@@ -1882,19 +1882,22 @@ void EPoint::AddSubPoint(EPoint subPoint) {
 namespace {
 
 /*
-The quantized grid anchors of the compound at its current fit parameters.
-Computing them costs a penetrability and a shift derivative per level and
-channel; every target-effect point of an evaluation asks for the same ones, so
-the last result is kept per thread, keyed by everything it depends on.
+The quantized grid anchors of the compound at its current fit parameters, in
+the frame of a segment's unshifted data (frameShift, c.m. MeV, is the
+segment's energy shift).  Computing them costs a penetrability and a shift
+derivative per level and channel; every target-effect point of an evaluation
+asks for the same ones, so the last result is kept per thread, keyed by
+everything it depends on.
 */
 const std::vector<AdaptiveIntegrationGrid::ResonanceInfo> &
-CurrentGridAnchors(CNuc *compound, int entranceKey, bool formal) {
+CurrentGridAnchors(CNuc *compound, int entranceKey, bool formal, double frameShift) {
   thread_local std::vector<double> key;
   thread_local std::vector<AdaptiveIntegrationGrid::ResonanceInfo> anchors;
   std::vector<double> newKey;
   newKey.push_back((double)(uintptr_t)compound);
   newKey.push_back(entranceKey);
   newKey.push_back(formal ? 1. : 0.);
+  newKey.push_back(frameShift);
   for (int p = 1; p <= compound->NumPairs(); p++) newKey.push_back(compound->GetPair(p)->GetChRad());
   for (int j = 1; j <= compound->NumJGroups(); j++) {
     JGroup *jgroup = compound->GetJGroup(j);
@@ -1912,7 +1915,7 @@ CurrentGridAnchors(CNuc *compound, int entranceKey, bool formal) {
     config.useFitParameters = true;
     config.formalParameters = formal;
     AdaptiveIntegrationGrid generator(config);
-    anchors = generator.Anchors(compound);
+    anchors = generator.Anchors(compound, frameShift);
     key.swap(newKey);
   }
   return anchors;
@@ -1936,12 +1939,17 @@ CurrentGridAnchors(CNuc *compound, int entranceKey, bool formal) {
  * Under the Brune formalism the fit energies are the observed resonance
  * energies; with formal parameters (Brune off) each level is anchored at the
  * Thomas estimate of its observed energy (AdaptiveIntegrationGrid::GridConfig::
- * formalParameters).
+ * formalParameters).  A segment with an energy shift keeps its sub-points in
+ * the frame of its unshifted data, each evaluated at its energy plus the
+ * shift (ESegment::UpdatePointEnergiesWithShift); its grid is built there,
+ * around the anchors moved back by the shift and quantized in that frame, so
+ * the lattice stays on a narrow level however the shift moves.
  *
  * Only for points whose grid is self-contained: not for component segments,
- * beam profiles, mapped points, energy-shifted segments or models with
- * external-capture levels (whose sub-point amplitudes are precomputed and
- * cached by energy).  Those keep the grid they were filled with.
+ * beam profiles, mapped points, energy-shifted segments other than
+ * angle-integrated THM ones, or models with external-capture levels (whose
+ * sub-point amplitudes are precomputed and cached by energy).  Those keep the
+ * grid they were filled with.
  */
 bool EPoint::RefreshSubPointGrid(CNuc *theCNuc, const Config &configure) {
   if (!subGrid_.refreshable || !configure.useAdaptiveGrid) return false;
@@ -1955,7 +1963,19 @@ bool EPoint::RefreshSubPointGrid(CNuc *theCNuc, const Config &configure) {
   // The segment of this copy of the data (parentSegment_ is not remapped when
   // the data are cloned for a fit, and the energy shift lives on the copy).
   ESegment *segment = this->GetParentData()->GetSegmentFromKey(segment_key_);
-  if (!segment || segment->IsVaryEnergyShift() || segment->GetEnergyShift() != 0.) return false;
+  if (!segment) return false;
+  // The c.m. shift of the sub-points, as UpdatePointEnergiesWithShift applies it.
+  double shiftCM = 0.0;
+  const bool shifted = segment->IsVaryEnergyShift() || segment->GetEnergyShift() != 0.;
+  if (shifted) {
+    // Only a THM segment's sub-points are a pure translation of the grid
+    // (UpdatePointEnergiesWithShift floors an ordinary segment's energies
+    // above zero and re-converts the angles of differential ones).
+    if (!segment->IsTHM() || segment->IsDifferential()) return false;
+    PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment->GetEntranceKey()));
+    if (!entrancePair || entrancePair->GetPType() == 20) return false;
+    shiftCM = entrancePair->GetM(2) / (entrancePair->GetM(1) + entrancePair->GetM(2)) * segment->GetEnergyShift();
+  }
 
   AdaptiveIntegrationGrid::GridConfig gridConfig;
   gridConfig.entranceKey = subGrid_.entranceKey;
@@ -1964,7 +1984,7 @@ bool EPoint::RefreshSubPointGrid(CNuc *theCNuc, const Config &configure) {
   gridConfig.pointsPerWidth = subGrid_.pointsPerWidth;
   AdaptiveIntegrationGrid generator(gridConfig);
   const std::vector<AdaptiveIntegrationGrid::ResonanceInfo> &anchors =
-      CurrentGridAnchors(theCNuc, subGrid_.entranceKey, formal);
+      CurrentGridAnchors(theCNuc, subGrid_.entranceKey, formal, shiftCM);
   std::vector<double> inReach;
   for (const AdaptiveIntegrationGrid::ResonanceInfo &r :
        generator.AnchorsInReach(subGrid_.startEnergy, subGrid_.endEnergy, anchors)) {
@@ -1984,6 +2004,11 @@ bool EPoint::RefreshSubPointGrid(CNuc *theCNuc, const Config &configure) {
       double cmConversion = subGrid_.cmConversion;
       subPoint.SetStoppingPower(cmConversion *
                                 effect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / cmConversion));
+    }
+    if (shifted) {
+      // Where UpdatePointEnergiesWithShift puts a THM sub-point.
+      subPoint.SetCMEnergy(subEnergy + shiftCM);
+      subPoint.SetLabEnergy(subEnergy + shiftCM);
     }
     this->AddSubPoint(subPoint);
   }

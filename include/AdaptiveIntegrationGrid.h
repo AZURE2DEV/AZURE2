@@ -125,8 +125,13 @@ class AdaptiveIntegrationGrid {
 
   /*!
    * \brief The quantized resonance anchors of every level of the compound.
+   *
+   * \param frameShift  c.m. energy (MeV) subtracted from every level energy
+   * before quantizing: the anchors of a segment whose energies are shifted by
+   * frameShift, in the frame of its unshifted data (and so of its sub-point
+   * grid), quantized there.
    */
-  std::vector<ResonanceInfo> Anchors(CNuc *compound);
+  std::vector<ResonanceInfo> Anchors(CNuc *compound, double frameShift = 0.0);
 
   /*!
    * \brief The anchors that shape the grid of a window (see GenerateGrid).

@@ -47,9 +47,13 @@ AdaptiveIntegrationGrid::ResonanceInfo AdaptiveIntegrationGrid::Quantize(const R
 /*!
  * \brief The quantized anchors of every level of the compound.
  */
-std::vector<AdaptiveIntegrationGrid::ResonanceInfo> AdaptiveIntegrationGrid::Anchors(CNuc *compound) {
+std::vector<AdaptiveIntegrationGrid::ResonanceInfo> AdaptiveIntegrationGrid::Anchors(CNuc *compound,
+                                                                                     double frameShift) {
   std::vector<ResonanceInfo> anchors = LevelResonances(compound);
-  for (ResonanceInfo &r : anchors) r = Quantize(r);
+  for (ResonanceInfo &r : anchors) {
+    r.energy -= frameShift;
+    r = Quantize(r);
+  }
   return anchors;
 }
 

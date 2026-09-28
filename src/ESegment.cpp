@@ -730,11 +730,18 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
   // No lock needed since each thread works on independent EData clones
   // after fixing EData::Clone to properly remap component segment pointers
 
+  // An ordinary segment's energies are positive and must stay so: points at
+  // E <= 0 are left alone and a shift is floored above zero (ShiftedEnergy).
+  // A THM (HOES) segment has points and folding sub-points below the entrance
+  // threshold, and all of them shift: leaving the sub-points at E <= 0 behind
+  // (as the guard did) tore the fold of every point within its reach of
+  // threshold, and a point below threshold never moved at all.
+  const bool thm = this->IsTHM();
   for (int i = 0; i < NumPoints(); i++) {
     EPoint *point = GetPoint(i + 1);
-    if (point && point->GetOriginalEnergy() > 0) {
+    if (point && (thm || point->GetOriginalEnergy() > 0)) {
       double originalEnergy = point->GetOriginalEnergy();
-      double shiftedEnergy = ShiftedEnergy(originalEnergy, energyShift_);
+      double shiftedEnergy = thm ? originalEnergy + energyShift_ : ShiftedEnergy(originalEnergy, energyShift_);
 
       // Set the shifted energy
       point->SetLabEnergy(shiftedEnergy);
@@ -791,10 +798,11 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
         // IMPORTANT: Also apply energy shift to all subpoints (used in convolution/target integration)
         for (int j = 1; j <= point->NumSubPoints(); j++) {
           EPoint *subPoint = point->GetSubPoint(j);
-          if (subPoint && subPoint->GetOriginalEnergy() > 0) {
+          if (subPoint && (thm || subPoint->GetOriginalEnergy() > 0)) {
             double subOriginalEnergy = subPoint->GetOriginalEnergy();
             double energyShiftCM = (entrancePair->GetM(2)) / (entrancePair->GetM(1) + entrancePair->GetM(2)) * energyShift_;
-            double subShiftedEnergy = ShiftedEnergy(subOriginalEnergy, energyShiftCM);
+            double subShiftedEnergy = thm ? subOriginalEnergy + energyShiftCM
+                                          : ShiftedEnergy(subOriginalEnergy, energyShiftCM);
 
             // Set the shifted energy for subpoint
             // Must set both CM and Lab energy since CalcLegendreP uses GetLabEnergy() for Q-coefficients
