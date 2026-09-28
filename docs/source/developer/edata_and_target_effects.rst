@@ -383,7 +383,11 @@ detailed-balance flag, parsed from the ``beamprofile`` keyword block at the
 end of the ``targetInt`` line (older readers stop in front of the keyword).
 ``EData::ReadTargetEffectsFile`` converts its energies lab → c.m. once
 (``ConvertBeamProfileToCM``) and sizes the sub-point grid from
-``BeamProfileSupport`` intersected with the point's window ± 4 s.  The window
+``BeamProfileSupport`` intersected with the point's window ± 4 s (± 5 s,
+the Gaussian fold's range, for a THM point), down to the same floor as the
+Gaussian fold: 1 keV, or for a THM segment 1 keV above the compound
+threshold, so a HOES point below the entrance threshold is folded over its
+whole window (``tests/thm_beam_profile``).  The window
 comes from ``DataLine`` extras (columns 5–6, ``EPoint::HasBinWindow``), is
 converted with the point in ``ConvertLabEnergy`` and stored unshifted; the
 branch in ``EPoint::IntegrateTargetEffect`` shifts it by the segment's current

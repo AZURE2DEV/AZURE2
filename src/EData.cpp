@@ -770,11 +770,18 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             double low, high;
             targetEffect->BeamProfileSupport(low, high);
             double s = targetEffect->GetBeamTpcSigma();
+            // The resolution tails: 4 s, or for a THM (HOES) point the 5 s of
+            // its Gaussian fold -- a narrow peak 4-5 s from a point dominates
+            // the tail there (-2 % at 81 keV from a 289 eV level, 18O(p,a) THM).
+            double tails = segment->IsTHM() ? TargetEffect::thmConvolutionRange : 4.0;
             if (point->HasBinWindow()) {
-              low = std::max(low, point->GetBinLowCM() - 4.0 * s);
-              high = std::min(high, point->GetBinHighCM() + 4.0 * s);
+              low = std::max(low, point->GetBinLowCM() - tails * s);
+              high = std::min(high, point->GetBinHighCM() + tails * s);
             }
-            if (low < 0.001) low = 0.001;
+            // The floor of the Gaussian fold: a THM point may sit below the entrance
+            // threshold (this was +1 keV, and the fold of a point at -45 keV came
+            // out 66 times too large).
+            if (low < minSubEnergy) low = minSubEnergy;
             if (high <= low) high = low + 0.001;
             startEnergy = high;
             endEnergy = low;
@@ -898,11 +905,12 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 double low, high;
                 targetEffect->BeamProfileSupport(low, high);
                 double s = targetEffect->GetBeamTpcSigma();
+                double tails = component->IsTHM() ? TargetEffect::thmConvolutionRange : 4.0;
                 if (point->HasBinWindow()) {
-                  low = std::max(low, point->GetBinLowCM() - 4.0 * s);
-                  high = std::min(high, point->GetBinHighCM() + 4.0 * s);
+                  low = std::max(low, point->GetBinLowCM() - tails * s);
+                  high = std::min(high, point->GetBinHighCM() + tails * s);
                 }
-                if (low < 0.001) low = 0.001;
+                if (low < minSubEnergy) low = minSubEnergy;  // as above
                 if (high <= low) high = low + 0.001;
                 startEnergy = high;
                 endEnergy = low;
