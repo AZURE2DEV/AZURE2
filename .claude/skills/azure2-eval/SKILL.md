@@ -45,7 +45,8 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
 - **Input is LAB frame, forward kinematics** (light particle = projectile).
   **All output files and API results are CENTER-OF-MASS.** Never mix them.
   This includes `add_extrapolation(e_min, e_max, e_step)` — those are **lab**
-  energies (multiply c.m. by `(m_beam + m_target)/m_target`), while the energies
+  energies by default (`frame="lab"`; pass `frame="cm"` to give c.m. energies
+  and let it multiply by `(m_beam + m_target)/m_target`), while the energies
   that come *back* from `calculate_energies` are c.m. **The silent-failure mode
   to watch for**: requesting a lab-frame `e_max` and later comparing the
   returned (c.m.-frame) energy column against that same number looks exactly

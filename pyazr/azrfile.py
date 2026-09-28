@@ -985,12 +985,24 @@ class AzrModel:
     def add_extrapolation(self, entrance, exit, e_min, e_max, e_step,
                           observable="angle-integrated", angle=None,
                           angle_min=0.0, angle_max=0.0, angle_step=0.0,
-                          phase_J=None, phase_L=None, order=None, active=True):
+                          phase_J=None, phase_L=None, order=None, active=True,
+                          frame="lab"):
         """Append one extrapolation segment (a grid to evaluate the model on).
 
         ``entrance`` / ``exit`` are particle-pair keys (``exit=-1`` for a summed
         / total observable such as capture).  The model is evaluated on the
-        energy grid ``e_min : e_max : e_step`` (entrance-channel c.m. MeV).
+        energy grid ``e_min : e_max : e_step`` in MeV.
+
+        ``frame`` says what those energies are.  ``"lab"`` (the default) is
+        what a ``<segmentsTest>`` line holds and AZURE2 reads: the lab energy
+        of the light particle of the entrance pair on the heavy one at rest,
+        as for data files and in the GUI.  ``"cm"`` gives entrance-channel
+        c.m. energies, converted here to lab with the pair's masses,
+        E_lab = E_cm (M1 + M2) / M2 -- the inverse of AZURE2's own conversion,
+        so the engine evaluates, and :meth:`~pyazr.azure2.azure2.calculate_energies`
+        reports, the c.m. grid asked for.  (Until pyazr 2.8.0 this docstring called
+        the grid c.m. while the engine read it as lab: a c.m. grid came out
+        stretched by (M1 + M2)/M2 in c.m. energy, 6 % for p + 17O.)
 
         ``observable`` is one of ``angle-integrated``, ``differential``,
         ``differential-cm``, ``total-capture``, ``angular-distribution``,
@@ -1002,6 +1014,22 @@ class AzrModel:
         if observable not in self._EXTRAP_CODE:
             raise ValueError(f"unknown observable {observable!r}; expected one "
                              f"of {sorted(self._EXTRAP_CODE)}.")
+        if frame not in ("lab", "cm"):
+            raise ValueError(f"frame must be 'lab' or 'cm', not {frame!r}.")
+        if frame == "cm":
+            pair = self._pair_template(int(entrance))
+            if pair.ptype != 0:
+                raise ValueError(
+                    f"frame='cm' converts with a particle pair's masses; entrance "
+                    f"pair {entrance} has pType {pair.ptype} -- give its energies "
+                    f"as AZURE2 reads them (frame='lab').")
+            to_lab = (pair.M1 + pair.M2) / pair.M2
+            e_min, e_max, e_step = e_min * to_lab, e_max * to_lab, e_step * to_lab
+            # AZURE2 steps e_min + e_step + ... while <= e_max; the converted
+            # numbers are not exact, so a last point that should sit on e_max
+            # could land just above it and be lost.  A billionth of a step of
+            # slack keeps it.
+            e_max += 1e-9 * abs(e_step)
         isDiff = self._EXTRAP_CODE[observable]
         if angle is not None:
             angle_min = angle_max = angle

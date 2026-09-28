@@ -65,3 +65,9 @@ add_test(NAME pyazr_fixed_width_roundtrip
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/fixed_width_roundtrip_test.py)
 set_tests_properties(pyazr_fixed_width_roundtrip PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# add_extrapolation(frame="lab"|"cm"): the engine evaluates the grid asked for.
+add_test(NAME pyazr_extrapolation_frame
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/extrapolation_frame_test.py)
+set_tests_properties(pyazr_extrapolation_frame PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

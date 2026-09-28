@@ -67,25 +67,19 @@ def angular_distribution(azr_file, energies, entrance=1, exit=1, order=4,
 
     model = AzrModel.from_file(azr_file)
 
-    # Convert to the lab frame the file expects. The factor is the same one the
-    # extrapolation grids use: E_lab = E_cm (m_beam + m_target) / m_target.
-    if lab:
-        e_lab = energies
-    else:
-        pair = model.pairs()[entrance] if hasattr(model, "pairs") else None
-        if pair is None:
-            raise ValueError(
-                "centre-of-mass input needs the entrance pair's masses, which "
-                "this model does not expose; pass lab energies instead")
-        e_lab = energies * (pair["m1"] + pair["m2"]) / pair["m2"]
+    # add_extrapolation converts c.m. energies to the lab frame the file holds
+    # (frame="cm"), with the entrance pair's masses.  (AzrModel has no pairs()
+    # method, so the conversion that stood here always refused c.m. input.)
+    frame = "lab" if lab else "cm"
 
     # One single-point extrapolation per energy, so segment i is energy i and
     # no interpolation onto a grid is involved.
     model.clear_extrapolations()
-    for e in e_lab:
+    for e in energies:
         model.add_extrapolation(entrance=entrance, exit=exit,
                                 e_min=float(e), e_max=float(e), e_step=1.0,
-                                observable="angular-distribution", order=order)
+                                observable="angular-distribution", order=order,
+                                frame=frame)
 
     tmpdir = tempfile.mkdtemp(prefix="pyazr-angdist-")
     tmp_azr = os.path.join(tmpdir, "_angular_distribution.azr")
