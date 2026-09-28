@@ -618,6 +618,16 @@ class azure2:
         ``<levels>`` line holds (partial widths in eV, ANCs in fm^-1/2) is done
         here, so a caller cannot forget it.
 
+        **Fixed parameters are written too.** A width marked fixed holds its
+        reduced-width amplitude during a fit -- in pyazr as in the CLI's MIGRAD
+        and LM -- so its *physical* value moves whenever the level's other
+        widths do (the Brune denominator ``1 + sum_c gamma_c^2 dS_c/dE``
+        contains them all).  The snapshot carries the physical value the fit
+        actually had, so the fixed amplitude reads back unchanged.  (Before,
+        the file kept the fixed width as it was read: a fit that tripled a
+        level's free width reloaded as a different model, 4 % off in chi2 on
+        tests/15N_p_a.)
+
         Two things a ``<levels>`` block cannot carry, which is why this is not
         just :meth:`~pyazr.azrfile.AzrModel.apply_fit`:
 
@@ -640,12 +650,13 @@ class azure2:
         Returns ``(azr_path, sav_path_or_None)``.
         """
         x = np.asarray(self.params_rwa if x is None else x, float).ravel()
-        want = np.asarray(self.transform_rwa(x), float)
+        # Every parameter's physical value, fixed ones included (see above).
+        want = np.asarray(self.transform_all_rwa(self._all_rwa(x), include_fixed=True), float)
 
         path = os.path.abspath(path)
         model = AzrModel.from_file(self.file)
-        model.apply_fit(self.parameters, x, transform=self.transform_rwa,
-                        pairs=self.pairs)
+        model.apply_fit(self.parameters, want, physical=True, pairs=self.pairs,
+                        include_fixed=True)
         model.write(path)
 
         sav = None
@@ -676,7 +687,8 @@ class azure2:
                             **{k: v for k, v in self.options.items()
                                if k != "data_mode"},
                             data_mode=(self.mode == "data")) as check:
-                    got = np.asarray(check.transform_rwa(check.params_rwa), float)
+                    got = np.asarray(check.transform_all_rwa(
+                        check._all_rwa(check.params_rwa), include_fixed=True), float)
             except Exception as err:
                 self._discard(path, sav)
                 raise RuntimeError(
@@ -712,9 +724,25 @@ class azure2:
         """Map a reduced-width-amplitude vector to physical parameters: level energies in MeV, partial widths in eV, ANCs in fm^-1/2."""
         return self.sess.transform_rwa(params)
 
-    def transform_all_rwa(self, params):
-        """As transform_rwa, over every parameter rather than the free ones."""
-        return self.sess.transform_all_rwa(params)
+    def transform_all_rwa(self, params, include_fixed=False):
+        """As transform_rwa, taking every parameter rather than the free ones.
+
+        Returns the physical values of the free parameters, or with
+        ``include_fixed`` of every parameter.  A *fixed* width holds its
+        reduced-width amplitude (as in the CLI's fits), so its physical value
+        is not constant: it follows the level's other widths through the
+        Brune denominator ``1 + sum_c gamma_c^2 dS_c/dE``.
+        """
+        return self.sess.transform_all_rwa(params, include_fixed=bool(include_fixed))
+
+    def _all_rwa(self, x):
+        """The full RWA vector with the free vector ``x`` in its free slots."""
+        allx = np.asarray(self.sess.params_all_rwa(), float).copy()
+        free = [i for i in range(allx.size) if not self.fixed_params[i]]
+        x = np.asarray(x, float).ravel()
+        for k, i in enumerate(free[:x.size]):
+            allx[i] = x[k]
+        return allx
 
     def transform_physical(self, params):
         """The inverse of transform_rwa: physical parameters back to reduced-width amplitudes."""

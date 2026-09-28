@@ -57,3 +57,11 @@ add_test(NAME pyazr_thm_nonbrune_grid
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_nonbrune_grid_test.py)
 set_tests_properties(pyazr_thm_nonbrune_grid PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# save_fit writes a fixed width's physical value as the fit had it (the fixed
+# amplitude's width moves with the level's other widths), so it reloads as
+# the same model.
+add_test(NAME pyazr_fixed_width_roundtrip
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/fixed_width_roundtrip_test.py)
+set_tests_properties(pyazr_fixed_width_roundtrip PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

@@ -1160,7 +1160,7 @@ class AzrModel:
         return gone
 
     def apply_fit(self, parameters, x, transform=None, physical=False,
-                  pairs=None, strict=True):
+                  pairs=None, strict=True, include_fixed=False):
         """Write a fitted parameter vector into the levels block.
 
         **The ``gamma`` field of a ``<levels>`` line is not a reduced-width
@@ -1199,6 +1199,13 @@ class AzrModel:
         rather than skipping it: a partial write produces a file that loads
         cleanly and is a mixture of two fits.
 
+        ``include_fixed``: ``x`` is a vector over *every* parameter (index
+        :attr:`Parameter.index`, as ``transform_all_rwa(..., include_fixed=True)``
+        returns it) and the fixed energies and widths are written as well.  A
+        fixed width holds its reduced-width amplitude in a fit, so its physical
+        value moves with the level's other widths; writing it keeps the file
+        the model the fit had.
+
         Note this covers ``<levels>`` only -- normalizations and energy shifts
         are not in that block, so a fit that moved them is only half saved.
         :meth:`pyazr.azure2.azure2.save_fit` writes the companion
@@ -1220,18 +1227,19 @@ class AzrModel:
         pairkey = {p.number: p.key for p in pairs} if pairs is not None else {}
         written, unplaced = 0, []
         for p in parameters:
-            if p.fixed or p.free_index is None:
+            slot = p.index if include_fixed else p.free_index
+            if not include_fixed and (p.fixed or p.free_index is None):
                 continue
             if p.kind not in ("energy", "width"):
                 continue            # norms and shifts do not live in <levels>
-            if p.free_index >= len(x):
-                unplaced.append(f"{p.name} (free_index {p.free_index} beyond the vector)")
+            if slot is None or slot >= len(x):
+                unplaced.append(f"{p.name} (index {slot} beyond the vector)")
                 continue
             lv = lvlmap.get((p.jgroup, p.level))
             if lv is None:
                 unplaced.append(f"{p.name} (no level at jgroup {p.jgroup}, level {p.level})")
                 continue
-            v = float(x[p.free_index])
+            v = float(x[slot])
             if p.kind == "energy":
                 lv.set_energy(v)
                 written += 1

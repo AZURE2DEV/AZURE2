@@ -352,12 +352,12 @@ class Session {
     }
     return to_array(out);
   }
-  py::array_t<double> transform_all_rwa(py::array_t<double, py::array::forcecast> p) {
+  py::array_t<double> transform_all_rwa(py::array_t<double, py::array::forcecast> p, bool include_fixed) {
     vector_r v = to_vector(p), out;
     {
       py::gil_scoped_release release;
       ConfigScope guard(config_);
-      out = api_->TransformAllRWAParameters(v);
+      out = api_->TransformAllRWAParameters(v, include_fixed);
     }
     return to_array(out);
   }
@@ -547,7 +547,8 @@ PYBIND11_MODULE(_azure2, m) {
       .def("update_segments_all_rwa", &Session::update_segments_all_rwa,
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
       .def("transform_rwa", &Session::transform_rwa, py::arg("params"))
-      .def("transform_all_rwa", &Session::transform_all_rwa, py::arg("params"))
+      .def("transform_all_rwa", &Session::transform_all_rwa, py::arg("params"),
+           py::arg("include_fixed") = false)
       .def("calculate_chi2_rwa", &Session::calculate_chi2_rwa,
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
       .def("calculate_chi2_physical", &Session::calculate_chi2_physical,

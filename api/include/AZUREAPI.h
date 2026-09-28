@@ -271,9 +271,13 @@ class AZUREAPI {
    */
   vector_r TransformRWAParameters(const vector_r &p) const;
   /*!
-   * Transform all RWA parameters to physical values
+   * Transform all RWA parameters to physical values.  Returns the non-fixed
+   * ones, or with includeFixed every parameter: a fixed width holds its
+   * reduced-width amplitude, so its physical value follows the level's other
+   * widths (the Brune denominator 1 + sum gamma^2 dS/dE) and is only known
+   * from the whole vector.
    */
-  vector_r TransformAllRWAParameters(const vector_r &p) const;
+  vector_r TransformAllRWAParameters(const vector_r &p, bool includeFixed = false) const;
 
   /*!
    * Calculate chi-squared from RWA parameters

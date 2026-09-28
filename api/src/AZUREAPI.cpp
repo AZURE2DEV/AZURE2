@@ -553,7 +553,7 @@ vector_r AZUREAPI::TransformRWAParameters(const vector_r &p) const {
 }
 
 // Transform RWA parameters to physical values
-vector_r AZUREAPI::TransformAllRWAParameters(const vector_r &p) const {
+vector_r AZUREAPI::TransformAllRWAParameters(const vector_r &p, bool includeFixed) const {
   // p holds every parameter, fixed ones included; a short p updates a prefix.
   vector_r params = all_rwa_;
   for (int i = 0; i < p.size() && i < params.size(); ++i) {
@@ -571,6 +571,7 @@ vector_r AZUREAPI::TransformAllRWAParameters(const vector_r &p) const {
 
   vector_r transformedParams = compound()->GetTransformParams(configure());
 
+  if (includeFixed) return transformedParams;
   // Get only non fixed parameters
   vector_r transformed;
   for (int i = 0; i < transformedParams.size(); ++i) {
