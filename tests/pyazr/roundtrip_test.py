@@ -269,8 +269,9 @@ if binaries:
     m = project(base)
     m.set_thm_option("vertex", "onshell")
     rc, chi, _ = engine(m)
-    check(f"engine runs the written block (vertex=onshell, pin 2070.84)",
-          rc == 0 and chi is not None and abs(chi - 2070.84) < 0.01, f"rc {rc} chi2 {chi}")
+    # tests/thm_options' pin, at the suite's relative tolerance.
+    check(f"engine runs the written block (vertex=onshell, pin 2070.75)",
+          rc == 0 and chi is not None and abs(chi / 2070.75 - 1) < 1e-3, f"rc {rc} chi2 {chi}")
     m.set_thm_weight(1, name)
     rc, chi2w, _ = engine(m)
     check("engine accepts the written weight (w = 1 + E/5 moves chi2)",
