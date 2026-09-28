@@ -631,15 +631,37 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, const Config &config,
   }
   if (rows.empty()) return rows;
 
-  // Models of every THM point at the currently filled compound.
+  // Models of every THM point at the currently filled compound.  The points
+  // are independent (as in every other forward pass, the compound is only
+  // read), so they are evaluated in parallel: this runs 2 x (free E and gamma
+  // columns) + 1 times per Jacobian, and serially it left all but one thread
+  // idle -- 280 s for the 230 columns of the 12C+12C THM example against a
+  // 0.67 s forward pass.  A mapped point is filled by its host's calculation,
+  // so the mapped ones are read afterwards.
+  std::vector<std::pair<int, int>> order;  // (row block t, point index pid)
+  for (size_t t = 0; t < rows.size(); t++) {
+    ESegment *seg = ld->GetSegment(rows[t].segment);
+    for (int pid = 0; pid < seg->NumPoints(); pid++)
+      if (seg->GetPoint(pid + 1)) order.push_back(std::make_pair((int)t, pid));
+  }
   auto models = [&](std::vector<vector_r> &out) {
-    out.resize(rows.size());
-    for (size_t t = 0; t < rows.size(); t++) {
-      ESegment *seg = ld->GetSegment(rows[t].segment);
-      out[t].clear();
-      for (int pid = 0; pid < seg->NumPoints(); pid++)
-        if (seg->GetPoint(pid + 1))
-          out[t].push_back(seg->CalculateTheoreticalCrossSection(pid, lc, config, ld));
+    out.assign(rows.size(), vector_r());
+    std::vector<size_t> slot(order.size());
+    for (size_t k = 0; k < order.size(); k++) {
+      slot[k] = out[order[k].first].size();
+      out[order[k].first].push_back(0.0);
+    }
+    const long n = (long)order.size();
+#pragma omp parallel for schedule(dynamic)
+    for (long k = 0; k < n; k++) {
+      ESegment *seg = ld->GetSegment(rows[order[k].first].segment);
+      if (seg->GetPoint(order[k].second + 1)->IsMapped()) continue;
+      out[order[k].first][slot[k]] = seg->CalculateTheoreticalCrossSection(order[k].second, lc, config, ld);
+    }
+    for (long k = 0; k < n; k++) {
+      ESegment *seg = ld->GetSegment(rows[order[k].first].segment);
+      if (seg->GetPoint(order[k].second + 1)->IsMapped())
+        out[order[k].first][slot[k]] = seg->CalculateTheoreticalCrossSection(order[k].second, lc, config, ld);
     }
   };
   auto fillCompound = [&](const vector_r &p) {
