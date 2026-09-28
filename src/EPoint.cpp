@@ -1888,12 +1888,13 @@ channel; every target-effect point of an evaluation asks for the same ones, so
 the last result is kept per thread, keyed by everything it depends on.
 */
 const std::vector<AdaptiveIntegrationGrid::ResonanceInfo> &
-CurrentGridAnchors(CNuc *compound, int entranceKey) {
+CurrentGridAnchors(CNuc *compound, int entranceKey, bool formal) {
   thread_local std::vector<double> key;
   thread_local std::vector<AdaptiveIntegrationGrid::ResonanceInfo> anchors;
   std::vector<double> newKey;
   newKey.push_back((double)(uintptr_t)compound);
   newKey.push_back(entranceKey);
+  newKey.push_back(formal ? 1. : 0.);
   for (int p = 1; p <= compound->NumPairs(); p++) newKey.push_back(compound->GetPair(p)->GetChRad());
   for (int j = 1; j <= compound->NumJGroups(); j++) {
     JGroup *jgroup = compound->GetJGroup(j);
@@ -1909,6 +1910,7 @@ CurrentGridAnchors(CNuc *compound, int entranceKey) {
     AdaptiveIntegrationGrid::GridConfig config;
     config.entranceKey = entranceKey;
     config.useFitParameters = true;
+    config.formalParameters = formal;
     AdaptiveIntegrationGrid generator(config);
     anchors = generator.Anchors(compound);
     key.swap(newKey);
@@ -1931,15 +1933,19 @@ CurrentGridAnchors(CNuc *compound, int entranceKey) {
  * moves by about a quarter of its width or its width by about 25 %, identically
  * in every thread and pooled copy of the data.
  *
- * Only under the Brune formalism, where the fit energies are the observed
- * resonance energies, and only for points whose grid is self-contained: not
- * for component segments, beam profiles, mapped points, energy-shifted
- * segments or models with external-capture levels (whose sub-point amplitudes
- * are precomputed and cached by energy).  Those keep the grid they were filled with.
+ * Under the Brune formalism the fit energies are the observed resonance
+ * energies; with formal parameters (Brune off) each level is anchored at the
+ * Thomas estimate of its observed energy (AdaptiveIntegrationGrid::GridConfig::
+ * formalParameters).
+ *
+ * Only for points whose grid is self-contained: not for component segments,
+ * beam profiles, mapped points, energy-shifted segments or models with
+ * external-capture levels (whose sub-point amplitudes are precomputed and
+ * cached by energy).  Those keep the grid they were filled with.
  */
 bool EPoint::RefreshSubPointGrid(CNuc *theCNuc, const Config &configure) {
   if (!subGrid_.refreshable || !configure.useAdaptiveGrid) return false;
-  if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) return false;
+  const bool formal = !(configure.paramMask & Config::USE_BRUNE_FORMALISM);
   if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
     for (int j = 1; j <= theCNuc->NumJGroups(); j++)
       for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++)
@@ -1958,7 +1964,7 @@ bool EPoint::RefreshSubPointGrid(CNuc *theCNuc, const Config &configure) {
   gridConfig.pointsPerWidth = subGrid_.pointsPerWidth;
   AdaptiveIntegrationGrid generator(gridConfig);
   const std::vector<AdaptiveIntegrationGrid::ResonanceInfo> &anchors =
-      CurrentGridAnchors(theCNuc, subGrid_.entranceKey);
+      CurrentGridAnchors(theCNuc, subGrid_.entranceKey, formal);
   std::vector<double> inReach;
   for (const AdaptiveIntegrationGrid::ResonanceInfo &r :
        generator.AnchorsInReach(subGrid_.startEnergy, subGrid_.endEnergy, anchors)) {

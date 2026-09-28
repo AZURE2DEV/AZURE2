@@ -50,3 +50,10 @@ add_test(NAME pyazr_thm_profiled
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_profiled_test.py)
 set_tests_properties(pyazr_thm_profiled PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The THM sub-point grid follows a narrow level moved by a fit of the formal
+# parameters (Brune off), not only under Brune.
+add_test(NAME pyazr_thm_nonbrune_grid
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_nonbrune_grid_test.py)
+set_tests_properties(pyazr_thm_nonbrune_grid PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

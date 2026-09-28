@@ -325,6 +325,30 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
 
       // Get level energy (in compound excitation energy)
       double levelExcitationEnergy = levelE(level);
+      // Formal parameters (Brune off): E_lambda is not where the peak is.
+      // Anchor the level at the Thomas estimate of the observed energy,
+      // E_lambda - sum gamma^2 (S - B) / (1 + sum gamma^2 dS/dE), every
+      // particle channel (closed ones shift the level too), and take the
+      // widths there.  Interference between levels is ignored: the anchor only
+      // has to put the lattice on the peak, to a fraction of its width.
+      if (fit && config_.formalParameters && !config_.inputWidthsArePhysical) {
+        double shiftSum = 0.0;
+        double slopeSum = 0.0;
+        for (int ch = 1; ch <= numChannels; ch++) {
+          AChannel *channel = jgroup->GetChannel(ch);
+          if (channel->GetRadType() != 'P') continue;
+          PPair *chPair = compound->GetPair(channel->GetPairNum());
+          double gamma = levelGamma(level, ch);
+          if (gamma == 0.0) continue;
+          ChannelFunc channelFunc(chPair, false);
+          double localEnergy = levelExcitationEnergy - chPair->GetExE() - chPair->GetSepE();
+          shiftSum += gamma * gamma *
+                      (channelFunc.Shift(channel->GetL(), localEnergy) - channel->GetBoundaryCondition());
+          slopeSum += gamma * gamma * channelFunc.ShiftDerivative(channel->GetL(), localEnergy);
+        }
+        if (1.0 + slopeSum > 0.0 && std::isfinite(shiftSum)) levelExcitationEnergy -= shiftSum / (1.0 + slopeSum);
+      }
+      auto levelEnergy = [&](ALevel *) { return levelExcitationEnergy; };
 
       // Check if level has widths (Γ > 0) to be considered a resonance
       bool hasWidth = false;
@@ -384,7 +408,7 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
           if (gamma <= 0.0) continue;
           const bool isRWA = level->GammaIsRWA(ch);
           if (channel->GetRadType() == 'P') {
-            double localEnergy = levelE(level) - chPair->GetExE() - chPair->GetSepE();
+            double localEnergy = levelEnergy(level) - chPair->GetExE() - chPair->GetSepE();
             // Closed channels -- below or at threshold (the value is an ANC
             // unless flagged), or just above a Coulomb threshold where P = 0
             // in double precision (ChannelFunc) -- are left out of this
@@ -405,7 +429,7 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
             }
           } else if (channel->GetRadType() == 'M' || channel->GetRadType() == 'E') {
             if (isRWA) {
-              double localEnergy = levelE(level) - chPair->GetExE() - chPair->GetSepE();
+              double localEnergy = levelEnergy(level) - chPair->GetExE() - chPair->GetSepE();
               rwaGammaMeV += 2.0 * gamma * gamma *
                              pow(std::abs(localEnergy) / hbarc, 2.0 * channel->GetL() + 1.0);
             } else {
@@ -419,7 +443,7 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
         if (DebugGridEnabled()) {
           fprintf(stderr, "[AZR_DEBUG_GRID]     level E=%.6f: input widths particle=%.6e eV gamma=%.6e eV "
                   "(total from RWA-flagged channels %.6e eV)\n",
-                  levelE(level), particleWidthEV, gammaWidthEV, (rwaParticleMeV + rwaGammaMeV) * 1.0e6);
+                  levelEnergy(level), particleWidthEV, gammaWidthEV, (rwaParticleMeV + rwaGammaMeV) * 1.0e6);
         }
         ResonanceInfo resInfo;
         resInfo.energy = levelCMEnergy;
@@ -433,7 +457,7 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
         AChannel *channel = jgroup->GetChannel(ch);
         if (channel->GetRadType() != 'P') continue;  // particle channels
         PPair *chPair = compound->GetPair(channel->GetPairNum());
-        double localEnergy = levelE(level) - chPair->GetExE() - chPair->GetSepE();
+        double localEnergy = levelEnergy(level) - chPair->GetExE() - chPair->GetSepE();
         // Closed channels are left out, as above (ChannelFunc: P = 0 also just
         // above a Coulomb threshold).
         ChannelFunc channelFunc(chPair, false);
@@ -466,9 +490,9 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
         PPair *chPair = compound->GetPair(channel->GetPairNum());
         double gamma = std::abs(levelGamma(level, ch));
         if (gamma <= 0.0) continue;
-        double localEnergy = levelE(level) - chPair->GetExE() - chPair->GetSepE();
+        double localEnergy = levelEnergy(level) - chPair->GetExE() - chPair->GetSepE();
         double pene;
-        if (std::abs(levelE(level) - chPair->GetExE()) < 1.0e-3 &&
+        if (std::abs(levelEnergy(level) - chPair->GetExE()) < 1.0e-3 &&
             jgroup->GetJ() == chPair->GetJ(2) &&
             jgroup->GetPi() == chPair->GetPi(2)) {
           double jValue = jgroup->GetJ();

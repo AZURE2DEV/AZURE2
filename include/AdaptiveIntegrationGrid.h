@@ -51,6 +51,12 @@ class AdaptiveIntegrationGrid {
     /// Read the current fit values (ALevel::GetFitE / GetFitGamma: observed
     /// energies and Brune amplitudes) instead of the stored level parameters.
     bool useFitParameters;
+    /// With useFitParameters: the fit values are formal R-matrix parameters
+    /// (E_lambda, gamma; Brune formalism off), not observed energies and Brune
+    /// amplitudes.  Each level is then anchored at the Thomas estimate of its
+    /// observed energy, E_lambda - sum_c gamma_c^2 (S_c - B_c) / (1 + sum_c
+    /// gamma_c^2 dS_c/dE), with the widths taken there.
+    bool formalParameters;
 
     GridConfig() :
       maxPoints(1000),
@@ -64,7 +70,8 @@ class AdaptiveIntegrationGrid {
       pointsPerWidth(50.0),
       entranceKey(0),
       inputWidthsArePhysical(false),
-      useFitParameters(false) {}
+      useFitParameters(false),
+      formalParameters(false) {}
   };
 
   /// Tail step / distance for a convolutionCoreWidths core: tailRatio /
