@@ -61,7 +61,7 @@ class CoulFunc {
   /// Shift function \f$S_l\f$ at (l, radius, energy), positive energies.
   double PEShift(int, double, double);
   /// Energy derivative \f$dS_l/dE\f$ -- the term that makes the observed-width transformation singular when it grows too large.
-  double PEShift_dE(int, double, double);
+  double PEShift_dE(int, double, double, double step = 1.0e-6);
 
   // Hybrid method support
   /// Override this instance's nuclear potential.

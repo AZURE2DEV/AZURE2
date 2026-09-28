@@ -41,7 +41,7 @@ class ShftFunc {
    * Returns the energy derivative of the shift function at the specified orbital
    * angular momentum and energy in the compound system.
    */
-  double EnergyDerivative(int l, double energy);
+  double EnergyDerivative(int l, double energy, double step = 1.0e-6);
   /*!
    * The threshold (E = 0) value S_l(0), common limit of the positive- and
    * negative-energy shift functions: -l - (x/2) K_{2l}(x)/K_{2l+1}(x) with

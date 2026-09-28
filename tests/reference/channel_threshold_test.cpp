@@ -21,7 +21,10 @@
  *     to the Coulomb functions: S continuous to 1e-5 (1 + |S|);
  *   - away from threshold the helper is the routine it replaces, bit for bit:
  *     CoulFunc::PEShift/Penetrability/PEShift_dE at +1 MeV, ShftFunc and
- *     ShftFunc::EnergyDerivative at -1 MeV.
+ *     ShftFunc::EnergyDerivative at -1 MeV (the derivatives at the helper's
+ *     step, ChannelFunc::DerivativeStep);
+ *   - dS/dE at +-0.3 and +-1 MeV does not depend on the starting step (half
+ *     of it agrees to 1e-7): the difference is not round-off dominated.
  *
  * Run:  tests/reference/channel_threshold_test [-v]   (ctest: channel_threshold)
  */
@@ -159,11 +162,27 @@ int main(int argc, char **argv) {
       check(cf.Shift(l, 1.0) == coul.PEShift(l, spec.a, 1.0), t + " S(+1) = CoulFunc::PEShift");
       check(cf.Penetrability(l, 1.0) == coul.Penetrability(l, spec.a, 1.0),
             t + " P(+1) = CoulFunc::Penetrability");
-      check(cf.ShiftDerivative(l, 1.0) == coul.PEShift_dE(l, spec.a, 1.0),
+      const double h1 = ChannelFunc::DerivativeStep(1.0);
+      check(cf.ShiftDerivative(l, 1.0) == coul.PEShift_dE(l, spec.a, 1.0, h1),
             t + " dS/dE(+1) = CoulFunc::PEShift_dE");
       check(cf.Shift(l, -1.0) == shft(l, spec.sepE - 1.0), t + " S(-1) = ShftFunc");
-      check(cf.ShiftDerivative(l, -1.0) == shft.EnergyDerivative(l, spec.sepE - 1.0),
+      check(cf.ShiftDerivative(l, -1.0) == shft.EnergyDerivative(l, spec.sepE - 1.0, h1),
             t + " dS/dE(-1) = ShftFunc::EnergyDerivative");
+      // dS/dE is not round-off dominated: started from half the step it
+      // agrees to 1e-7 (the 1 eV step AZURE2 used before was off by up to
+      // 1e-5 relative, and by a different amount with and without FMA).
+      for (double e : {1.0, -1.0, 0.3, -0.3}) {
+        double h = ChannelFunc::DerivativeStep(e);
+        double d1 = cf.ShiftDerivative(l, e);
+        double d2 = (e > 0) ? coul.PEShift_dE(l, spec.a, e, 0.5 * h)
+                            : shft.EnergyDerivative(l, spec.sepE + e, 0.5 * h);
+        double d6 = (e > 0) ? coul.PEShift_dE(l, spec.a, e, 1e-6)
+                            : shft.EnergyDerivative(l, spec.sepE + e, 1e-6);
+        if (verbose) std::printf("      %s dS/dE(%g) %.15g | half step %.15g | 1 eV step %.15g\n", tag, e, d1, d2, d6);
+        std::ostringstream what;
+        what << t << " dS/dE(" << e << ") independent of the step";
+        check(std::isfinite(d1) && std::fabs(d1 - d2) <= 1e-7 * (1e-3 + std::fabs(d1)), what.str());
+      }
       check(cf.Penetrability(l, -1.0) == 0.0, t + " P(-1) = 0");
     }
   }

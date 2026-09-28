@@ -22,8 +22,15 @@ class ShftFunc;
  *                     S = 2 S(0) - S(-e), exact to O(e^2)
  *   otherwise         the Coulomb functions (CoulFunc)
  *
- * dS/dE is the central difference AZURE2 always used (step 1e-6 MeV) of the
- * branch the stencil lies in; a stencil that crosses threshold differences the
+ * dS/dE is a central difference (gsl_deriv_central) of the branch the stencil
+ * lies in, started from DerivativeStep(e): a quarter of the distance to
+ * threshold, at most 1 keV and at least 1 eV.  (It was always 1 eV, where the
+ * difference is round-off dominated: the Coulomb and Whittaker functions are
+ * good to ~1e-12, which left dS/dE uncertain at ~1e-5 relative -- different
+ * with and without FMA, or from one libm to the next -- and the Brune
+ * transformation of a level near its limit, 1 - sum Gamma dS/dE / 2P ~ 1e-3,
+ * amplifies that to 1e-3 in chi2.  GSL shrinks the step further where the
+ * truncation error calls for it.)  A stencil that crosses threshold differences the
  * continuous S above instead of calling a routine outside its domain (the
  * Coulomb functions at e <= 0, or ShftFunc, which takes |E - threshold| and so
  * mirrored the probe above threshold back below it: dS/dE came out 0 for a level
@@ -51,8 +58,14 @@ class ChannelFunc {
 
   /// Sommerfeld parameter above which a positive-energy channel counts as closed.
   static constexpr double kEtaClosed = 100.0;
-  /// Step of the central differences (MeV), as CoulFunc/ShftFunc use.
+  /// Smallest starting step of the dS/dE central difference (MeV), and the
+  /// step of one that crosses threshold.
   static constexpr double kStep = 1.0e-6;
+  /// Largest starting step of the dS/dE central difference (MeV).
+  static constexpr double kMaxStep = 1.0e-3;
+  /// Starting step of the dS/dE central difference at e: |e|/4 within
+  /// [kStep, kMaxStep], so the stencil stays on its side of threshold.
+  static double DerivativeStep(double e);
 
  private:
   CoulFunc &coul();

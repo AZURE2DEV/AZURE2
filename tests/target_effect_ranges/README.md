@@ -18,3 +18,5 @@ The chi2 (3861.51 at the recorded parameters) sits between the bare
 (3955.3) and fully convolved (3800.8) values, as it must.
 
 Re-pinned 2026-09-26: the shift-function fix b6cc41b removed ~1e-9 noise from S(E) that ShftFunc::EnergyDerivative amplified into dS/dE, which enters the Brune transformation of sub-threshold levels. 3861.43 -> 3861.51 (2.1e-5, segments up to 3.4e-5). About 1.3e-5 of that predates b6cc41b.
+
+Re-pinned 2026-09-28: the dS/dE fix (ChannelFunc::DerivativeStep) starts the central difference of the shift function from a quarter of the distance to threshold, at most 1 keV, instead of 1 eV, where it was round-off dominated (~1e-7..1e-5 relative, and different with and without FMA -- Linux and Windows CI differed from an x86-64-v3 build by up to 1.6e-3 in tests/thm_options). 3861.51 -> 3861.54 (7.8e-6).

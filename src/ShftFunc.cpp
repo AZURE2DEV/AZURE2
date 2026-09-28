@@ -121,7 +121,7 @@ double ShftFunc::operator()(int l, double energy) {
   return s0 + (s - s0) * (binding / bindingMin);
 }
 
-double ShftFunc::EnergyDerivative(int l, double energy) {
+double ShftFunc::EnergyDerivative(int l, double energy, double step) {
   double result;
   double error;
 
@@ -131,7 +131,7 @@ double ShftFunc::EnergyDerivative(int l, double energy) {
   F.function = &thisShftFunc;
   F.params = this;
 
-  gsl_deriv_central(&F, energy, 1e-6, &result, &error);
+  gsl_deriv_central(&F, energy, step, &result, &error);
 
   return result;
 }
