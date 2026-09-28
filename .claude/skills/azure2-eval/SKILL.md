@@ -1153,6 +1153,7 @@ The modified R-matrix / half-off-shell path. A THM measurement induces the
 reaction with a nucleon bound inside a carrier nucleus, so it proceeds below the
 Coulomb barrier without penetrability suppression, and what is extracted is
 half-off-shell: entrance off the energy shell, exit on it.
+For the analysis procedure (what published THM points are, joint fits with direct data, model-dependence protocol) load the **`azure2-thm`** skill.
 
 **A THM segment adds 10 to its observable code.** THM is orthogonal to the
 observable, so `isDiff >= 10` means THM and `isDiff - 10` is the ordinary code:
