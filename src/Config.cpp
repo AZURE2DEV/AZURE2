@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #endif
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <iostream>
 #include <sstream>
@@ -421,10 +422,15 @@ int Config::ReadThmBlock() {
       if (ok) {
         std::shared_ptr<ThmWeightTable> table = std::make_shared<ThmWeightTable>();
         table->name = value;
+        // Relative to the .azr.  Absolute is a leading slash or backslash, or
+        // (Windows) a drive letter: "C:/..." or "C:\..." handed to the native
+        // binary was otherwise prefixed with the project directory.
         std::string dir;
-        size_t slash = configfile.find_last_of('/');
+        size_t slash = configfile.find_last_of("/\\");
         if (slash != std::string::npos) dir = configfile.substr(0, slash + 1);
-        table->path = (value[0] == '/' || dir.empty()) ? value : dir + value;
+        bool absolute = value[0] == '/' || value[0] == '\\' ||
+                        (value.size() > 1 && value[1] == ':' && std::isalpha((unsigned char)value[0]));
+        table->path = (absolute || dir.empty()) ? value : dir + value;
         std::string why = table->Read(table->path);
         if (!why.empty()) {
           outStream << "ERROR: <thm> " << key << ": " << why << std::endl;
