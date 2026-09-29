@@ -69,7 +69,8 @@ set(AZURESETUP_SOURCES
     TargetIntModel.cpp ChannelsModel.cpp main.cpp TargetIntTab.cpp FittingTab.cpp
     AboutAZURE2Dialog.cpp InfoDialog.cpp InTabDocs.cpp
     IAEALevelData.cpp IAEALevelDialog.cpp NuclearPotentialTab.cpp
-    ExforData.cpp ExforDialog.cpp ThmOptionsDialog.cpp
+    ExforData.cpp ExforDialog.cpp ThmSettings.cpp ThmModelPage.cpp
+    ThmExperimentsPage.cpp ThmChannelsPage.cpp ThmWorkspace.cpp
 )
 
 set(AZURESETUP_HEADERS
@@ -84,7 +85,9 @@ set(AZURESETUP_HEADERS
     ../include/TargetIntModel.h ../include/TargetIntTab.h ../include/FittingTab.h
     ../include/TextEditBuffer.h ../include/AboutAZURE2Dialog.h ../include/InfoDialog.h
     ../include/IAEALevelData.h ../include/IAEALevelDialog.h ../include/NuclearPotentialTab.h
-    ../include/ExforData.h ../include/ExforDialog.h ../include/ThmOptionsDialog.h
+    ../include/ExforData.h ../include/ExforDialog.h ../include/ThmSettings.h
+    ../include/ThmModelPage.h ../include/ThmExperimentsPage.h ../include/ThmChannelsPage.h
+    ../include/ThmWorkspace.h
 )
 
 set(AZURESETUP_RCCS AZURESetup.qrc)

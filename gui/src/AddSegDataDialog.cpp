@@ -186,7 +186,8 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
                           "(half-off-shell) measurement: the entrance vertex "
                           "uses the transfer form factor instead of the "
                           "penetrability. Requires the entrance pair's THM "
-                          "binding energy to be set."));
+                          "binding energy (Configure > THM Workspace, "
+                          "Channels)."));
   lowerLayout->addWidget(thmCheck, 0, 2);
 
   QGridLayout *phaseLayout = new QGridLayout;

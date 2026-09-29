@@ -108,12 +108,22 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
    options are not applied from the saved configuration. They must be specified
    as command-line flags each time. See :doc:`/reference/command_line`.
 
-THM Options
------------
+THM Workspace
+-------------
 
-Selecting **THM Options...** edits the optional ``<thm>`` block: the choices in
+Selecting **THM Workspace...** opens one window for everything that belongs to
 the Trojan Horse (half-off-energy-shell) observable of THM segments
-(observable code 10 or more). They have no effect on other segments.
+(observable code 10 or more): the optional ``<thm>`` block and the two THM
+columns of the ``<levels>`` lines. The classic tabs do not show these; they
+are edited here only. The window has three pages, and **Accept** checks them
+with the rules AZURE2 applies at startup (a refusal shows AZURE2's own message
+and the page it concerns) before anything is changed. **Cancel** changes
+nothing.
+
+If the project has no THM segment, the window says so and its pages are
+disabled: tick *THM* on a segment in the Segments tab first.
+
+**Model** -- the options of the ``<thm>`` block:
 
 - **Entrance partial waves** (``entranceL``) -- incoherent (default) or
   coherent sum over the entrance orbital momenta.
@@ -131,7 +141,45 @@ the Trojan Horse (half-off-energy-shell) observable of THM segments
   inactive lines. The **...** button picks the file; a file inside the project
   directory is stored relative to it.
 
+**Experiments** -- the ``experiment[<name>]`` lines: THM data segments
+measured together (exit channels, angular bins or runs of one three-body
+reaction) that share one profiled normalization and, optionally, a smooth
+background. The table lists the experiments (name, segments, background,
+reaction); **Add** and **Remove** are below it. The editor underneath shows the
+selected experiment:
+
+- **Name** -- letters, digits and ``_ - . +``.
+- **Segments** -- a check list of the Data segments that can be added: THM
+  segments with a free norm that are in no other experiment (the segments of an
+  experiment share one norm, so a fixed one is refused).
+- **Background** (``background``) -- none, const, linear or quadratic.
+- **Three-body reaction** -- beam, target and spectator (a nuclide of the
+  built-in table, or ``Z,A,mass`` with the nuclear mass in u) and the lab beam
+  energy in MeV. The four are a unit: untick the group to write none of them.
+  When they are complete, the page shows what AZURE2 prints for them: the
+  binding energy B(x+s) of the Trojan horse and the quasi-free energy. The fit
+  does not use them yet.
+
+Keys of an experiment line that the page does not show are kept as written.
+
+**Channels** -- the THM columns of the ``<levels>`` lines:
+
+- **Binding energy** B (MeV, field 32) of the transferred particle in the
+  Trojan horse, for each particle pair that is the entrance of a THM segment.
+  It is a property of the pair and is written on every line of the pair.
+- **Width input convention** (field 33) of each particle channel of those
+  pairs: ticked, the width entered in the Levels tab is a reduced width
+  amplitude (MeV\ :sup:`1/2`) rather than a partial width or ANC -- for a
+  level known only from THM data, say. The value is not converted when the
+  flag changes; re-enter it in the Levels tab, where it is labelled with its
+  unit.
+
+A pair with a binding energy, or a channel with the flag, is listed even if no
+THM segment uses its pair, so that nothing in the file is out of reach.
+
 Each control has a tooltip with the physics in one line; the full description
 is in :doc:`../theory/thm_implementation`. Options left at their defaults are
-not written, and a project whose options are all default has no ``<thm>``
-block. If the dialog is not changed, the block is saved exactly as it was read.
+not written, and a project whose options are all default and that has no
+experiment has no ``<thm>`` block. The workspace writes nothing else: values
+left as they were read are saved exactly as they were read, comments included,
+and an edited experiment is written as one line in place of its first.

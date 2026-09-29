@@ -11,7 +11,7 @@
 #include "SegmentsTab.h"
 #include "TargetIntTab.h"
 #include "Config.h"
-#include "ThmOptionsDialog.h"
+#include "ThmSettings.h"
 
 class RunTab;
 class FittingTab;
@@ -86,10 +86,14 @@ class AZURESetup : public QMainWindow {
 
   // Getter for FittingTab (for MCMCTab access)
   FittingTab *getFittingTab() const { return fittingTab; }
+  // The tabs whose models the THM workspace reads and edits.
+  PairsTab *getPairsTab() const { return pairsTab; }
+  LevelsTab *getLevelsTab() const { return levelsTab; }
+  SegmentsTab *getSegmentsTab() const { return segmentsTab; }
 
   /*! The optional <thm> block (THM options, read by the engine's
-      Config::ReadThmBlock) is edited by ThmOptionsDialog; the GUI keeps its
-      lines verbatim unless the options are changed there, so that a save
+      Config::ReadThmBlock) is edited in the THM workspace; the GUI keeps its
+      lines verbatim unless they are changed there, so that a save
       reproduces it.  readThmBlock scans the rest of the stream
       for the first line starting with <thm>, as the engine does, and stores the
       lines up to </thm> (comments included).  It sets present = false and
@@ -133,7 +137,7 @@ class AZURESetup : public QMainWindow {
   void editChecks();
   void editDirs();
   void editOptions();
-  void editThmOptions();
+  void editThmWorkspace();
   void showAbout();
   void showTabInfo();
   void openWebsite();
@@ -169,7 +173,7 @@ class AZURESetup : public QMainWindow {
   QAction *aMatrixAction;
   QAction *rMatrixAction;
   QAction *editOptionsAction;
-  QAction *editThmOptionsAction;
+  QAction *thmWorkspaceAction;
   QAction *recentSeparator;
   QAction *clearRecentAction;
   enum { numRecent = 5 };

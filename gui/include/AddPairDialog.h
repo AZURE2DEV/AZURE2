@@ -35,7 +35,6 @@ class AddPairDialog : public QDialog {
   QLineEdit *excitationEnergyText;
   QLineEdit *seperationEnergyText;
   QLineEdit *channelRadiusText;
-  QLineEdit *bindingEnergyText;
   QComboBox *pairTypeCombo;
   QCheckBox *e1Check;
   // QCheckBox *m1Check;
@@ -59,7 +58,6 @@ class AddPairDialog : public QDialog {
   QLabel *excitationEnergyLabel;
   QLabel *seperationEnergyLabel;
   QLabel *channelRadiusLabel;
-  QLabel *bindingEnergyLabel;
   QLabel *pairTypeLabel;
 
   QPushButton *okButton;

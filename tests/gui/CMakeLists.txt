@@ -212,3 +212,34 @@ add_test(NAME thm_options_dialog COMMAND thm_options_dialog_test)
 set_tests_properties(thm_options_dialog PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     TIMEOUT 300)
+
+# The THM workspace (Configure > THM Workspace...): its Model, Experiments and
+# Channels pages write the <thm> block and the THM columns of <levels>, come
+# back on reopening, refuse what the engine refuses, leave an untouched
+# project byte for byte, and show the energies the engine prints.
+add_executable(thm_workspace_test thm_workspace_test.cpp)
+set_target_properties(thm_workspace_test PROPERTIES AUTOMOC OFF)
+target_include_directories(thm_workspace_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(thm_workspace_test PRIVATE
+    AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    AZURE2_BINARY="$<TARGET_FILE:AZURE2>")
+target_link_libraries(thm_workspace_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(thm_workspace_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(thm_workspace_test PRIVATE pugixml srim_utilities)
+endif()
+add_dependencies(thm_workspace_test AZURE2)
+add_test(NAME thm_workspace COMMAND thm_workspace_test)
+set_tests_properties(thm_workspace PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 300)

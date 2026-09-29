@@ -7,8 +7,6 @@ QT_BEGIN_NAMESPACE
 
 class QLineEdit;
 class QLabel;
-class QRadioButton;
-class QButtonGroup;
 class QPushButton;
 
 QT_END_NAMESPACE
@@ -22,19 +20,20 @@ class ChannelDetails : public QWidget {
  public:
   ChannelDetails(QWidget *parent = 0);
   void setNormParam(int which);
-  void setConventionChoice(bool isParticle, bool isRWA);
+  /// A particle channel whose width column is a reduced width amplitude
+  /// (field 33, set in the THM workspace): the value is labelled MeV^(1/2).
+  void setWidthIsAmplitude(bool amplitude);
+  bool widthIsAmplitude() const { return widthIsAmplitude_; }
   QLineEdit *reducedWidthText;
   QLabel *details;
-  QRadioButton *physicalButton;
-  QRadioButton *rwaButton;
   QPushButton *wignerButton;
   QLineEdit *wignerLimitText;
 
  private:
   QLabel *normParam;
   QLabel *normUnits;
-  QButtonGroup *conventionGroup;
   int normParamWhich_;
+  bool widthIsAmplitude_ = false;
 };
 
 #endif

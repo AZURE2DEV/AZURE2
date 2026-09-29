@@ -12,6 +12,7 @@
 #include <QDesktopServices>
 
 #include "AZURESetup.h"
+#include "ThmWorkspace.h"
 #include "FittingTab.h"
 #include "EditChecksDialog.h"
 #include "EditDirsDialog.h"
@@ -188,9 +189,10 @@ void AZURESetup::createActions() {
   editOptionsAction = new QAction(tr("&Runtime Options..."), this);
   connect(editOptionsAction, SIGNAL(triggered()), this, SLOT(editOptions()));
 
-  editThmOptionsAction = new QAction(tr("&THM Options..."), this);
-  editThmOptionsAction->setToolTip(tr("Options of the Trojan Horse (HOES) observable: the <thm> block"));
-  connect(editThmOptionsAction, SIGNAL(triggered()), this, SLOT(editThmOptions()));
+  thmWorkspaceAction = new QAction(tr("&THM Workspace..."), this);
+  thmWorkspaceAction->setToolTip(
+      tr("The Trojan Horse (HOES) observable: model options, experiments, binding energies"));
+  connect(thmWorkspaceAction, SIGNAL(triggered()), this, SLOT(editThmWorkspace()));
 
   showTabInfoAction = new QAction(tr("Show Documentation For Current Tab"), this);
   showTabInfoAction->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_D));
@@ -223,7 +225,7 @@ void AZURESetup::createMenus() {
   configMenu->addAction(editChecksAction);
   configMenu->addAction(editDirsAction);
   configMenu->addAction(editOptionsAction);
-  configMenu->addAction(editThmOptionsAction);
+  configMenu->addAction(thmWorkspaceAction);
 
   helpMenu = menuBar()->addMenu(tr("&Documentation"));
   helpMenu->addAction(showTabInfoAction);
@@ -449,18 +451,18 @@ QString AZURESetup::projectDirectory() {
   return file.isEmpty() ? QDir::currentPath() : QFileInfo(file).absolutePath();
 }
 
-void AZURESetup::editThmOptions() {
+void AZURESetup::editThmWorkspace() {
   ThmSettings current;
   QString error;
   if (!thmSettings(current, &error)) {
-    QMessageBox::warning(this, tr("THM Options"),
+    QMessageBox::warning(this, tr("THM Workspace"),
                          tr("The <thm> block of this project has a line the engine would refuse:\n%1\n"
                             "Correct it in the .azr file; the block is kept as it is.")
                              .arg(error));
     return;
   }
-  ThmOptionsDialog aDialog(current, projectDirectory(), this);
-  if (aDialog.exec()) setThmSettings(aDialog.settings());
+  ThmWorkspace workspace(this, current, this);
+  workspace.exec();  // Accept installs the pages' values (ThmWorkspace::apply)
 }
 
 bool AZURESetup::readLastRun(QTextStream &inStream) {

@@ -27,6 +27,7 @@ PairsTab::PairsTab(QWidget *parent) :
   pairsView->setColumnHidden(9, true);
   pairsView->setColumnHidden(13, true);
   pairsView->setColumnHidden(14, true);
+  pairsView->setColumnHidden(15, true);  // THM binding energy: THM workspace
   RichTextDelegate *rt = new RichTextDelegate();
   pairsView->setItemDelegateForColumn(0, rt);
   pairsView->setItemDelegateForColumn(5, rt);
@@ -108,7 +109,7 @@ void PairsTab::addPair() {
       newPair.seperationEnergy = (aDialog.seperationEnergyText->text()).toDouble();
       newPair.excitationEnergy = (aDialog.excitationEnergyText->text()).toDouble();
       newPair.channelRadius = (aDialog.channelRadiusText->text()).toDouble();
-      newPair.bindingEnergy = (aDialog.bindingEnergyText->text()).toDouble();
+      newPair.bindingEnergy = 0.0;  // THM binding energy: set in the THM workspace
       if (aDialog.pairTypeCombo->currentIndex() == 1)
         newPair.pairType = 10;
       else if (aDialog.pairTypeCombo->currentIndex() == 2)
@@ -244,7 +245,7 @@ void PairsTab::editPair() {
   int ecMultMask = var.toInt();
   i = pairsModel->index(index.row(), 15, QModelIndex());
   var = pairsModel->data(i, Qt::EditRole);
-  QString bindingEnergy = var.toString();
+  const double bindingEnergy = var.toDouble();  // THM workspace's, kept as it is
 
 
   AddPairDialog aDialog;
@@ -268,7 +269,6 @@ void PairsTab::editPair() {
   aDialog.excitationEnergyText->setText(excitationEnergy);
   aDialog.seperationEnergyText->setText(seperationEnergy);
   aDialog.channelRadiusText->setText(channelRadius);
-  aDialog.bindingEnergyText->setText(bindingEnergy);
   if (pairType == 10)
     aDialog.pairTypeCombo->setCurrentIndex(1);
   else if (pairType == 20)
@@ -308,7 +308,7 @@ void PairsTab::editPair() {
       pair.excitationEnergy = aDialog.excitationEnergyText->text().toDouble();
       pair.seperationEnergy = aDialog.seperationEnergyText->text().toDouble();
       pair.channelRadius = aDialog.channelRadiusText->text().toDouble();
-      pair.bindingEnergy = aDialog.bindingEnergyText->text().toDouble();
+      pair.bindingEnergy = bindingEnergy;
       if (aDialog.pairTypeCombo->currentIndex() == 1)
         pair.pairType = 10;
       else if (aDialog.pairTypeCombo->currentIndex() == 2)

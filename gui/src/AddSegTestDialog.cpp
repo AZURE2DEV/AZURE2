@@ -148,7 +148,8 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   thmCheck = new QCheckBox(tr("THM (modified R-matrix)"));
   thmCheck->setToolTip(tr("Compute this segment as a Trojan Horse Method "
                           "(half-off-shell) cross section. Requires the "
-                          "entrance pair's THM binding energy to be set."));
+                          "entrance pair's THM binding energy (Configure > "
+                          "THM Workspace, Channels)."));
   lowerLayout->addWidget(thmCheck, 0, 2);
   lowerLayout->addItem(new QSpacerItem(1, 25), 0, 2);
   lowerLayout->setColumnStretch(2, 1);

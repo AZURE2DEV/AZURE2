@@ -1,6 +1,6 @@
-// Headless test of the THM options editor (Configure > THM Options...).
+// Headless test of the THM workspace's Model page (the former THM Options dialog).
 //
-// The dialog edits the optional <thm> block through ThmSettings.  Checked here:
+// The page edits the optional <thm> block through ThmSettings.  Checked here:
 //  1. ThmSettings parses what the engine accepts and refuses what it refuses;
 //  2. compose() keeps comments and unchanged lines, rewrites changed values,
 //     drops defaults and appends new keys;
@@ -30,7 +30,7 @@
 #include <iostream>
 #include "AZURESetup.h"
 #include "Config.h"
-#include "ThmOptionsDialog.h"
+#include "ThmModelPage.h"
 struct SegPairs {int firstPair; int secondPair;};
 
 // Defined by AZURE2.cpp, which belongs to the executable rather than the GUI
@@ -170,7 +170,7 @@ int main(int argc, char** argv) {
     const QString before = slurp(path);
     ThmSettings s;
     ok("the block of the project parses", w.thmSettings(s));
-    ThmOptionsDialog d(s, w.projectDirectory());
+    ThmModelPage d(s, w.projectDirectory());
     w.setThmSettings(d.settings());
     w.saveProject();
     ok(qPrintable(QString("untouched dialog: byte-identical save of ") + name), slurp(path) == before);
@@ -183,7 +183,7 @@ int main(int argc, char** argv) {
     w.open(work.filePath("block.azr"));
     ThmSettings s;
     w.thmSettings(s);
-    ThmOptionsDialog d(s, w.projectDirectory());
+    ThmModelPage d(s, w.projectDirectory());
     ok("dialog shows the block's kinematics", d.kinematicsCombo->currentText() == "kf3body");
     d.vertexCombo->setCurrentText("onshell");
     d.coulombIntegralCheck->setChecked(true);
@@ -209,7 +209,7 @@ int main(int argc, char** argv) {
     w.open(work.filePath("block.azr"));
     ThmSettings s;
     ok("saved block parses", w.thmSettings(s));
-    ThmOptionsDialog d(s, w.projectDirectory());
+    ThmModelPage d(s, w.projectDirectory());
     ok("reopened: vertex", d.vertexCombo->currentText() == "onshell");
     ok("reopened: kinematics", d.kinematicsCombo->currentText() == "kf3body");
     ok("reopened: entranceL", d.entranceLCombo->currentText() == "incoherent");
@@ -296,7 +296,7 @@ int main(int argc, char** argv) {
     ThmSettings cur;
     ok("experiment block parses in the GUI", w.thmSettings(cur, &err), err);
     {
-      ThmOptionsDialog d(cur, w.projectDirectory());
+      ThmModelPage d(cur, w.projectDirectory());
       ok("dialog round trip keeps the experiment lines", d.settings() == cur);
       w.setThmSettings(d.settings());
       w.saveProject();

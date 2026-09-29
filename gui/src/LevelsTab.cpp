@@ -100,7 +100,6 @@ LevelsTab::LevelsTab(QWidget *parent) :
   channelDetails = new ChannelDetails(this);
   channelDetails->hide();
   connect(channelDetails->reducedWidthText, SIGNAL(textEdited(const QString &)), this, SLOT(updateReducedWidth(const QString &)));
-  connect(channelDetails->rwaButton, SIGNAL(toggled(bool)), this, SLOT(updateGammaIsRWA(bool)));
   connect(channelDetails->wignerButton, SIGNAL(clicked()), this, SLOT(calculateWignerLimit()));
 
   addLevelButton = new QPushButton(tr("+"));
@@ -641,9 +640,9 @@ void LevelsTab::updateDetails(const QItemSelection &selection) {
       channelDetails->setNormParam(4);
     else
       channelDetails->setNormParam(0);
-    // Input-convention radios (particle channels only): seed from the model
-    // and override the label if the stored value is a reduced width amplitude.
-    channelDetails->setConventionChoice(channel.radType == 'P', channel.gammaIsRWA == 1);
+    // A width entered as a reduced width amplitude (THM workspace) is
+    // labelled as one; the flag itself is edited there, not here.
+    channelDetails->setWidthIsAmplitude(channel.radType == 'P' && channel.gammaIsRWA == 1);
     channelDetails->reducedWidthText->setText(QString("%1").arg(channel.reducedWidth));
 
     // Store the inputs for the physical Wigner-limit calculation.  It applies to
@@ -666,22 +665,6 @@ void LevelsTab::updateDetails(const QItemSelection &selection) {
         wignerApplicable_ ? QString() : tr("N/A"));
     channelDetails->show();
   }
-}
-
-void LevelsTab::updateGammaIsRWA(bool isRWA) {
-  QItemSelectionModel *selectionModel = channelsView->selectionModel();
-  if (selectionModel->selectedRows().isEmpty()) return;
-  QModelIndex index = proxyModel->mapToSource(selectionModel->selectedRows().at(0));
-
-  if (index.isValid()) {
-    QModelIndex i = channelsModel->index(index.row(), 7, QModelIndex());
-    channelsModel->setData(i, isRWA ? 1 : 0, Qt::EditRole);
-    // refresh the value field's label/units; the value itself is NOT converted
-    channelDetails->setConventionChoice(true, isRWA);
-  }
-  // The limit is quoted in the selected convention, so a value already on
-  // screen would otherwise be left in the wrong units.
-  if (!channelDetails->wignerLimitText->text().isEmpty()) calculateWignerLimit();
 }
 
 void LevelsTab::updateReducedWidth(const QString &string) {
@@ -730,8 +713,7 @@ void LevelsTab::calculateWignerLimit() {
   // stored quantity is gamma^2_W, the limit on the reduced width *squared*: for
   // an amplitude that means its square root, and for a partial width the usual
   // Gamma_W = 2 P gamma^2_W.
-  const bool asAmplitude = channelDetails->rwaButton->isVisible() &&
-      channelDetails->rwaButton->isChecked();
+  const bool asAmplitude = channelDetails->widthIsAmplitude();
   double value = asAmplitude ? std::sqrt(gamma2W)          // MeV^(1/2)
                              : 2.0 * P * gamma2W * 1.0e6;  // eV
   double av = std::fabs(value);
