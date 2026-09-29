@@ -188,7 +188,13 @@ shared norm and background with ``thm_background(name)``, and with
 ``thm_lineshape(name, energies)``; ``set_thm_experiment(..., ps="hulthen:0-40")``
 averages the HOES cross section over a spectator-momentum window, and
 ``thm_vertex(name, energies)`` returns its nodes, weights, :math:`\rho` and
-the window-averaged :math:`|M_l|^2` per entrance channel and level). Every edit keeps the rest of the file
+the window-averaged :math:`|M_l|^2` per entrance channel and level;
+``set_thm_experiment(..., distortion="coulomb")`` multiplies the model by the
+zero-range DWBA distortion factor :math:`R(E)`, with ``opticalAA``,
+``opticalSF``, ``spectatorAngle``, ``distortionRef``, ``distortionRatio`` and
+``boundState``, and ``thm_distortion(name, energies)`` returns :math:`R`, the
+interpolated :math:`R` the model uses, :math:`|M|^2`, :math:`|M_\mathrm{PW}|^2`,
+:math:`E_{sF}`, :math:`\eta_{sF}` and the spectator angle). Every edit keeps the rest of the file
 byte for byte, including whether it ends with a newline.
 
 To snapshot a fit, prefer :meth:`~pyazr.azure2.azure2.save_fit`, which wraps

@@ -46,6 +46,7 @@ with every key at its default, gives identical results
    weight[1]=R_E.dat        # w(E) multiplying the model of <segmentsData> line 1
    weightTest[2]=R_E.dat    # the same for <segmentsTest> line 2
    experiment[E1] segments=1,2 background=linear   # see "THM experiments" below
+   experiment[E2] segments=3 beam=14N target=12C spectator=d Ebeam=30 distortion=coulomb
    </thm>
 
 An unknown key, an unknown value, a negative spectator energy, a missing
@@ -307,12 +308,15 @@ engine would refuse is not opened in the editor (it is kept as it is).
    coherent sum (``lineshape=on``, "Coulomb line shape" below), which a weight
    of the summed cross section cannot do.
 
-   *Where the table comes from.* AZURE2 does not compute :math:`R(E)`: it
-   needs the spectator and the residual system (masses, charges, the bound
-   state of :math:`a = x + s`, the kinematics and the angular acceptance of
-   the experiment) and a DWBA/CDCC (e.g. FRESCO) or Nordsieck-integral
-   calculation, none of which is part of an R-matrix project. Make the table
-   outside and name it here, for instance
+   *Where the table comes from.* Since September 2026 AZURE2 computes
+   :math:`R(E)` itself in the zero-range DWBA of Mukhamedzhanov's papers,
+   with point-Coulomb or optical-potential distortions, for the segments of
+   a THM experiment that has the kinematics (``distortion=coulomb|optical``,
+   "Distortion factor R(E)" below); ``distortion=table:<file>`` applies a
+   table of this format to all segments of an experiment. A ``weight[k]``
+   table remains the hook for anything else (a finite-range DWBA or CDCC,
+   e.g. FRESCO, with the experiment's angular acceptance), made outside, for
+   instance
 
    * from the published curves (1806.08828 Fig. 10; 2609.04498 Figs. 7–9),
      digitized, taking care of which way round they are defined;
@@ -379,10 +383,13 @@ letters, digits and ``_ - . +``.
    averaged (default ``delta``, the quasi-free point; the other forms need the
    four kinematics keys), and its number of Gauss-Legendre nodes (1-64,
    default 16), below.
-``theta=``, ``distortion=``
-   Reserved for later versions (angular acceptance, distortion):
-   refused with ``not implemented yet``, so that no file can rely on them
-   silently.
+``distortion=none|coulomb|optical|table:<file>``, ``opticalAA=``, ``opticalSF=``, ``spectatorAngle=``, ``distortionRef=``, ``distortionRatio=``, ``boundState=``
+   The distortion factor :math:`R(E)` multiplying the model of every
+   segment (default ``none``; ``coulomb`` and ``optical`` need the four
+   kinematics keys), below ("Distortion factor R(E)").
+``theta=``
+   Reserved for a later version (angular acceptance): refused with ``not
+   implemented yet``, so that no file can rely on it silently.
 
 Anything else -- an unknown key or nuclide, a malformed value, partial
 kinematics, a segment that does not exist, is not THM, has a fixed norm or is
@@ -788,6 +795,235 @@ the repository).
   10^{-6}` against a maximum of 0.68), which the window fills to
   :math:`4.8\times 10^{-2}`. Published 12C+12C THM fits assume the
   quasi-free vertex; with the window the parameters would move.
+
+Distortion factor R(E)
+----------------------
+
+*Physics.* The PWA analysis of a THM experiment takes the transfer amplitude
+of :math:`a + A \to s + F^*` as constant, so the HOES excitation function is
+the yield divided by the kinematic factor and the momentum distribution
+:math:`|\phi_a(p_{sx})|^2` alone ("weight" above). With the distortions of
+the initial (:math:`a + A`) and final (:math:`s + F`) relative motion the
+amplitude varies with :math:`E` -- for a charged spectator below the
+:math:`s + F` barrier by orders of magnitude, through the penetrability of
+the spectator in the exit channel (Mukhamedzhanov & Pang, PRC 99 (2019)
+064618; Mukhamedzhanov, arXiv:2609.04498). ``distortion=coulomb|optical`` on
+an experiment line computes that variation and multiplies the model of every
+segment of the experiment by it, before the folding, like ``weight[k]``.
+
+*Amplitude.* Zero-range prior form (2019 eqs. 20-24; 2026 eqs. 22-28): with
+the :math:`x`-:math:`A` vertex of zero range, :math:`\mathbf r_{sF} =
+\mathbf r_{sx} \equiv \mathbf r` and :math:`\mathbf r_{aA} = \beta\mathbf
+r`, :math:`\beta = m_s/m_a`, and
+
+.. math::
+
+   M(E) = \int d^3r\, \chi^{(-)*}_{\mathbf k_{sF}}(\mathbf r)\,
+          \phi_{sx}(r)\, \chi^{(+)}_{\mathbf k_{aA}}(\beta\mathbf r)
+        = \frac{4\pi}{k_{sF}\,\beta k_{aA}} \sum_l (2l+1)\,
+          e^{i(\sigma_l^{aA} + \sigma_l^{sF})} P_l(x)
+          \int_{r_\mathrm{min}}^\infty dr\, \phi_{sx}(r)\,
+          u_l^{sF}(k_{sF} r)\, u_l^{aA}(\beta k_{aA} r),
+
+with :math:`\chi^{(-)*}_{\mathbf k} = \chi^{(+)}_{-\mathbf k}` (2026 eq. 23),
+:math:`x = \hat k_{sF}\cdot\hat k_{aA}`, :math:`\sigma_l` the Coulomb
+phases and :math:`u_l` the regular radial waves normalized to :math:`u_l \to
+F_l + T_l H_l^+` (:math:`u_l = F_l` for point Coulomb). The :math:`s`-:math:`x`
+bound state is taken in :math:`l_{sx} = 0` from its tail: the Whittaker
+function :math:`\phi = W_{-\eta_b,1/2}(2\kappa r)/r` (default,
+``boundState=whittaker``, :math:`\eta_b = Z_sZ_x\alpha\mu_{sx}/\hbar\kappa`)
+or the Yukawa :math:`e^{-\kappa r}/r` (``yukawa``), :math:`\kappa =
+\sqrt{2\mu_{sx}B_{xs}}/\hbar`, zero below :math:`r_\mathrm{min}`
+(``boundState=whittaker:3``, fm; 2026 uses its tail for :math:`r \ge 3` fm).
+The normalization of :math:`\phi` cancels in :math:`R`. The plane-wave limit
+is the Fourier transform of :math:`\phi` at the spectator momentum in
+:math:`a`, :math:`\mathbf q = \mathbf k_{sF} - \beta\mathbf k_{aA}`,
+
+.. math::
+
+   M_\mathrm{PW}(E) = 4\pi\int dr\, r^2 j_0(qr)\,\phi_{sx}(r),
+
+the momentum distribution by which the PWA data reduction divides
+(:math:`4\pi/(\kappa^2 + q^2)` for the Yukawa tail).
+
+*The factor.*
+
+.. math::
+
+   R(E) = \frac{\rho(E)}{\rho(E_\mathrm{ref})}, \qquad
+   \rho = \frac{|M|^2}{|M_\mathrm{PW}|^2}\ (\texttt{distortionRatio=dwpw},
+   \text{default})
+   \quad\text{or}\quad \rho = |M|^2\ (\texttt{dw}),
+
+and the model is multiplied by :math:`R`: the PWA-extracted quantity is
+:math:`R\,\sigma^\mathrm{HOES}`, so multiplying the model by :math:`R` is the
+same as dividing the published :math:`S^*` by :math:`R` (2026 eqs. 29-30; the
+2019 eq. 24 and both papers' figures show :math:`1/R`, the factor that
+multiplies :math:`S^*`, with :math:`E_\mathrm{norm} = 2.664` MeV). ``dwpw`` is
+the correction to data that were divided by :math:`|\phi_a(p_{sx})|^2` at
+the event's momentum: without distortion :math:`R \equiv 1`. ``dw`` is the
+papers' ratio, which also carries the energy dependence of
+:math:`|\phi_a(q(E))|^2` at a fixed angle (they drop :math:`\phi_a` as
+energy independent). :math:`E_\mathrm{ref}` (``distortionRef=``, MeV,
+default the middle of the experiment's data range) only sets the scale, which
+the profiled norm absorbs: :math:`\chi^2` does not depend on it.
+
+*Kinematics* (from ``beam``, ``target``, ``spectator``, ``Ebeam``, nuclear
+masses of the built-in table): :math:`E_{aA}` the non-relativistic beam-target
+c.m. energy, :math:`E_{sF} = E_{aA} - B_{xs} - E` (as for the line shape; a
+data point with :math:`E_{sF} \le 0` is refused), :math:`F = x + A`,
+:math:`B_{xs}` from the masses. If the masses and field 32 of the entrance
+pair disagree on :math:`B_{xs}` by more than 1 keV AZURE2 prints a
+``WARNING`` (the vertex uses field 32, these kinematics the masses).
+``spectatorAngle=`` sets :math:`x`:
+
+``qf`` (default)
+   :math:`\hat k_{sF} = \hat k_{aA}`, the direction of least :math:`q`:
+   :math:`\theta_s = 0` in the c.m. (and in the lab) when the Trojan horse
+   is the beam, :math:`180^\circ` when it is the target.
+``<deg>``
+   a lab angle of the spectator to the beam, converted to the c.m. at every
+   :math:`E` (non-relativistic, forward branch :math:`\theta_\mathrm{cm} =
+   \theta_\mathrm{lab} + \arcsin(\gamma\sin\theta_\mathrm{lab})`,
+   :math:`\gamma = V_\mathrm{cm}/v_s`); an angle the spectator cannot reach
+   at a data point is refused (on the grid beyond the data, the largest
+   reachable angle is used).
+``cm:<deg>``
+   a c.m. angle to the beam, fixed.
+
+*Distorted waves.* ``distortion=coulomb``: point-Coulomb waves in both
+channels. ``distortion=optical``: per channel, ``opticalAA=`` (:math:`a + A`)
+and ``opticalSF=`` (:math:`s + F`), each ``coulomb`` (default), ``plane`` (no
+distortion at all, as the 2026 Figs. 5-6 switch one channel off) or ten
+numbers ``V,R,a,W,RW,aW,WD,RD,aD,RC``:
+
+.. math::
+
+   U(r) = V_C(r) - V f(r; R, a) - iW f(r; R_W, a_W)
+          - 4iW_D \frac{e^{(r - R_D)/a_D}}{(1 + e^{(r - R_D)/a_D})^2},
+   \qquad f = \frac{1}{1 + e^{(r - R)/a}},
+
+depths in MeV (positive: attractive and absorptive), radii in fm (not
+reduced radii), :math:`V_C` a uniform sphere of radius ``RC`` or, for
+``RC=0``, a point charge. A depth 0 switches its term off.
+
+*Numerics* (``src/ThmDistortion.cpp``). The radial equations are integrated
+outward from the origin by Numerov's method (complex for an optical
+potential), started from the power series, with step :math:`h = 0.02` fm for
+:math:`r` (smaller if a local wave number exceeds :math:`0.1/h`) and
+:math:`\beta h` for :math:`a + A`, so that :math:`u^{aA}` is read at
+:math:`\beta r` on its own grid; beyond the potential and the turning point
+each wave is matched at two points a quarter wavelength apart to
+:math:`c_1F_l + c_2G_l` from AZURE2's Coulomb functions (COUL, as CoulFunc)
+and divided by :math:`c_1 - ic_2`. The radial integrals are Simpson sums from
+:math:`r_\mathrm{min}` to :math:`r_\mathrm{min} + 50/\kappa`: the bound state
+makes them absolutely convergent, so no complex rotation or damping is needed
+(unlike the external Coulomb term :math:`C_l`); the size of the cut is
+checked and a ``WARNING`` printed above :math:`10^{-8}`. The :math:`a + A`
+waves are computed once, up to the :math:`l` where :math:`(2l+1)\int|\phi
+u_l^{aA}|` has fallen below :math:`10^{-17}` of its maximum; at each energy
+the sum stops once the bound on the remaining terms is below
+:math:`10^{-13}|M|` (12C(14N,d): :math:`l \le 23`; a deuteron Trojan horse,
+:math:`\kappa = 0.23` fm\ :sup:`-1`: :math:`l \approx 50`-80). :math:`\ln R`
+is tabulated at 10 keV steps from 0.5 MeV below the lowest to 0.5 MeV above
+the highest point (short of the spectator threshold) and interpolated by
+cubic Lagrange (error :math:`< 10^{-6}`); points beyond take the end value
+with one ``WARNING``. Cost: about 1 s at startup for 12C(14N,d), nothing per
+evaluation. With ``dwpw`` and a cutoff :math:`r_\mathrm{min} > 0`,
+:math:`M_\mathrm{PW}` can pass through zero at large :math:`q`; AZURE2 warns,
+and ``dw`` avoids the singularity.
+
+*Output.* The startup summary gives :math:`k_{aA}`, :math:`\eta_{aA}`,
+:math:`\kappa`, :math:`\eta_b`, :math:`\beta`, :math:`E_\mathrm{ref}`, the
+grid, the highest :math:`l` and :math:`R` at the ends of the data;
+``thm_experiments.out`` a ``distortion:`` line and ``distortion_point`` rows
+(:math:`E`, :math:`E_{sF}`, :math:`\eta_{sF}`, :math:`\theta_\mathrm{cm}`,
+:math:`|M|^2`, :math:`|M_\mathrm{PW}|^2`, :math:`R`, :math:`l_\mathrm{max}`)
+at the lowest point, :math:`E_\mathrm{ref}` and the highest point.
+``pyazr``: ``session.thm_distortion(name, energies)``;
+``AzrModel.set_thm_experiment(..., distortion="optical",
+opticalAA=[V, R, a, W, RW, aW, WD, RD, aD, RC], opticalSF="coulomb",
+spectatorAngle=8, distortionRef=2.664, distortionRatio="dw",
+boundState="whittaker:3")``. ``distortion=table:<file>`` (the ``weight[k]``
+format and interpolation, relative to the ``.azr``, every point inside the
+table) multiplies all segments of the experiment by its :math:`w(E)`; it needs
+no kinematics. A segment that also has ``weight[k]`` gets both (warned).
+Extrapolation segments are in no experiment and carry no distortion.
+
+*Checks.* ``tests/reference/thm_distortion_test`` (ctest ``thm_distortion``):
+:math:`|M|^2` and :math:`M_\mathrm{PW}` against an independent evaluation
+(``tests/reference/thm_distortion_reference.py``: mpmath Coulomb functions and
+adaptive quadrature; scipy's DOP853 for a complex Woods-Saxon in both
+channels) -- point Coulomb to :math:`10^{-8}`, the optical case to
+:math:`5\times 10^{-6}`, for 12C(14N,d) forward and at 90°, with a 3 fm
+cutoff, and a made-up 18O(3He,d) with the Trojan horse as target; plane
+waves in both channels equal :math:`4\pi/(\kappa^2 + q^2)` to
+:math:`2\times 10^{-9}` at 0, 70 and 180°, so :math:`R \equiv 1`; nuclear
+part off (ten zeros) equals point Coulomb exactly. ``tests/thm_distortion``
+(CLI): ``distortion=none`` byte-identical to no key; a neutral spectator with
+a plane :math:`a + A` wave gives :math:`R = 1` to :math:`5\times 10^{-11}`; the
+model ratio equals the directly evaluated :math:`R`; the 12C+12C factors
+below; refusals. ``tests/pyazr/thm_distortion_test.py``: ``AzrModel``, CLI ==
+session, ``thm_distortion``, a table.
+
+*12C+12C: the published curves.* 12C(14N,α/p)d at 30 MeV (Tumino et al.,
+Nature 557 (2018) 687): :math:`E_{aA} = 13.84` MeV, :math:`B = 10.272` MeV,
+:math:`E_{sF} = 3.573 - E`, :math:`\eta_{aA} = 4.52`, :math:`\eta_{sF} =
+1.55`-2.74 over :math:`E` = 0.8-2.66 MeV, :math:`\kappa = 0.921`
+fm\ :sup:`-1`, :math:`\eta_b = 0.39`, :math:`\beta = 1/7`. Against the
+factors that multiply :math:`S^*`, :math:`1/R` normalized at 2.664 MeV,
+digitized from the vector figures (digitisation 0.03 dex), over 0.8-2.55 MeV:
+
+================================================ ==================== ===================
+AZURE2 settings                                  2019 Fig. 10          2026 Fig. 9
+                                                 (FRESCO, Coulomb)     (forward angles)
+================================================ ==================== ===================
+``coulomb`` (qf, whittaker, dwpw), Ebeam 30      0.026 / 0.046 dex     0.12 / 0.16
+same, ``boundState=yukawa:3``                    0.007 / 0.015         0.13 / 0.21
+qf, whittaker, ``dw``, Ebeam 30                  0.040 / 0.076         0.11 / 0.14
+qf, whittaker, ``dw``, Ebeam 30.11               0.16 / 0.23           0.007 / 0.023
+qf, whittaker, dwpw, Ebeam 30.11                 0.14 / 0.20           0.012 / 0.019
+================================================ ==================== ===================
+
+(rms / max of :math:`\log_{10}` differences.) The zero-range Coulomb DWBA at
+the quasi-free angle reproduces the 2019 FRESCO curve within the digitisation
+with the default settings (:math:`1/R = 2.6\times 10^{-3}` at 0.8 MeV,
+:math:`3.3\times 10^{-3}` at 1.0, 0.30 at 2.5, against their 2.3, 3.0 and
+:math:`302\times 10^{-3}`). The 2026 forward-angle curve is
+steeper near the normalization point; at the nominal kinematics AZURE2 lies
+0.11 dex (a factor 1.3) below it at 0.8-1.5 MeV, and it is reproduced to 0.007
+dex if :math:`E_{sF}` is 50 keV higher (``Ebeam=30.11``, :math:`E_{aA}` + 51
+keV), so the two papers differ mainly in the :math:`s`-:math:`F` energy their
+kinematics assign, where the barrier penetrability is steep (:math:`E_{sF}
+\approx 0.9` MeV at the normalization point). Angles other than forward do
+worse for 2019 (0.09-0.4 dex); against 2026 at the nominal kinematics
+``cm:90`` with ``dw`` comes to 0.030 dex, which we take for a coincidence
+(the paper computes 0° and 8° and finds them nearly equal, as AZURE2 does:
+8° in the lab gives 0.083 dex). Which value of :math:`E_{sF}` the 2026
+calculation used is not stated.
+
+*Size* (models at the published parameters, not refitted; the four THM
+segments of ``examples/c12c12_tumino2018`` one experiment with a free norm,
+30 keV folding). ``distortion=coulomb`` (defaults): :math:`R` = 5.4 at 0.82
+MeV to 0.012 at 2.69 MeV (:math:`E_\mathrm{ref}` = 1.75 MeV), the folded model
+changes by a factor 0.012-5.4 across the data (a factor 440), and the THM
+:math:`\chi^2` goes 61 → 3247 (192 points); with the 2026-like ``dw``,
+Ebeam 30.11: 61 → 2999. Published 12C+12C :math:`S^*` would move by 2-3
+orders of magnitude below 1.5 MeV. For a light system with a neutron
+spectator, 2H(18O,α15N)n at 54 MeV (``examples/o18_lacognata2010``, only the
+:math:`d + {}^{18}`\ O Coulomb wave, :math:`\eta_{aA} = 0.73`, is
+distorted): :math:`R` = 0.93-1.08 over 0.51-0.89 MeV and the THM
+:math:`\chi^2` 414 → 397 (``dw``: 398); for the made-up charged 18O(3He,d)
+at 115 MeV (:math:`E_{sF} \approx 10` MeV, above the barrier): :math:`R` =
+0.998-1.002 at the quasi-free angle, 0.99-1.01 at 30° in the lab.
+
+*Scope and limits.* Zero range at the :math:`x`-:math:`A` vertex, the
+:math:`s`-:math:`x` bound state in :math:`l_{sx} = 0` and in its asymptotic
+form, one spectator angle rather than the experimental acceptance (``theta=``
+is reserved for it), no spin-orbit term, no three-body (line-shape) Coulomb
+effects -- those are ``lineshape=on``, which multiplies independently.
+Whether a DWBA vertex should replace the PWA one at all is the question the
+papers debate; the factor lets a fit show what it would change.
 
 Normalization, gradients and uncertainty bands
 ----------------------------------------------
