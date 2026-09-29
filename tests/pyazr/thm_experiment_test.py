@@ -52,7 +52,14 @@ def rel(a, b):
 
 sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "2")
-from pyazr import AzrModel                                     # noqa: E402 (pure Python)
+# AzrModel is pure Python: load azrfile.py directly, as roundtrip_test does,
+# so these checks run where numpy (needed by the pyazr package) is missing.
+import importlib.util                                          # noqa: E402
+_spec = importlib.util.spec_from_file_location(
+    "azrfile", os.path.join(ROOT, "pyazr", "azrfile.py"))
+_azrfile = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_azrfile)
+AzrModel = _azrfile.AzrModel
 
 
 def fresh_copy(dst):
