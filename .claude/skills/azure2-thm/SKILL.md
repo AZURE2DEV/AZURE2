@@ -12,6 +12,7 @@ keys, `AzrModel.set_thm_option`) is in **`azure2-eval`**, section "Trojan Horse
 `docs/source/theory/thm_implementation.rst`. Level choice and Brune/formal
 questions: **`r-matrix-analysis`**. Fetching data: **`nds-explorer`**. New
 compound nucleus: **`azr-project-builder`**.
+GUI: all of it (`<thm>` options, experiments, fields 32/33) is edited in *Configure > THM Workspace...*, not in the classic tabs.
 
 Calibration comes from seven cases, all in `examples/` (`.azr` holds the best
 fit, `data/` headers name the sources): `li7_tumino2006`, `li6_pizzone2011`,
