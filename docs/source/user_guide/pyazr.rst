@@ -179,8 +179,10 @@ Also available: ``set_channel_radius``, ``set_segment_norm``,
 ``set_segment_active``, ``set_segment_datafile``, ``add_data_segment``,
 ``remove_data_segments``, ``clear_data_segments``, ``set_extrapolations``,
 ``apply_fit``, and for the ``<thm>`` block ``thm_options``, ``set_thm_option``,
-``clear_thm_option``, ``set_thm_weight`` and ``clear_thm_weight``
-(:doc:`../theory/thm_implementation`). Every edit keeps the rest of the file
+``clear_thm_option``, ``set_thm_weight``, ``clear_thm_weight``,
+``thm_experiments``, ``set_thm_experiment`` and ``clear_thm_experiment``
+(:doc:`../theory/thm_implementation`; a session reports a THM experiment's
+shared norm and background with ``thm_background(name)``). Every edit keeps the rest of the file
 byte for byte, including whether it ends with a newline.
 
 To snapshot a fit, prefer :meth:`~pyazr.azure2.azure2.save_fit`, which wraps

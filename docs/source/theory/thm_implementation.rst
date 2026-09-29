@@ -45,6 +45,7 @@ with every key at its default, gives identical results
    spectatorEnergy[5]=0.4   # MeV, entrance pair 5 only (overrides the above)
    weight[1]=R_E.dat        # w(E) multiplying the model of <segmentsData> line 1
    weightTest[2]=R_E.dat    # the same for <segmentsTest> line 2
+   experiment[E1] segments=1,2 background=linear   # see "THM experiments" below
    </thm>
 
 An unknown key, an unknown value, a negative spectator energy, a missing
@@ -330,12 +331,149 @@ Which ``kinematics=`` to use
    arbitrary normalization, so only the energy dependence of :math:`K(E)`
    matters.
 
+THM experiments
+---------------
+
+Segments measured in one experiment -- several exit channels, angular bins or
+runs of the same three-body reaction -- carry the *same* arbitrary THM scale.
+A line
+
+.. code-block:: text
+
+   experiment[<name>] key=value key=value ...
+
+in the ``<thm>`` block groups them. Keys may be spread over several lines of
+the same name (they merge; a key given twice is an error). ``<name>`` is
+letters, digits and ``_ - . +``.
+
+``segments=`` (required)
+   ``<segmentsData>`` line numbers, counting inactive lines (the numbering of
+   ``weight[k]``, of ``chiSquared.out`` and of ``normalizations.out``), as a
+   comma list with ranges: ``1,2,5-7``. Each must be a THM segment with a free
+   norm, and in no other experiment. An inactive line is left out with a
+   ``WARNING``.
+``background=none|const|linear|quadratic``
+   A smooth background added to the model (default ``none``), below.
+``beam=``, ``target=``, ``spectator=``, ``Ebeam=``
+   The three-body reaction: nuclides from the built-in table (n p d t 3He 4He
+   6Li 7Li 9Be 10B 11B 12C 13C 14N 15N 16O 17O 18O 19F 20Ne 23Na 24Mg; AME2020
+   atomic masses minus the electrons plus their binding, i.e. nuclear masses in
+   u) or ``Z,A,mass`` (nuclear mass in u), and the lab beam energy in MeV. All
+   four or none. Nothing uses them yet: AZURE2 checks that one of beam and
+   target is a nucleus of the segments' entrance pair and the other is the
+   second nucleus plus the spectator (the Trojan horse :math:`a = x + s`), and
+   prints :math:`B_{xs}` and the quasi-free energy
+   :math:`E_{xA} - B_{xs}` (spectator at rest in the lab when the Trojan horse
+   is the target, moving with the beam velocity when it is the beam).
+``ps=``, ``theta=``, ``lineshape=``, ``distortion=``
+   Reserved for later versions (phase space, angular acceptance, line shape,
+   distortion): refused with ``not implemented yet``, so that no file can rely
+   on them silently.
+
+Anything else -- an unknown key or nuclide, a malformed value, partial
+kinematics, a segment that does not exist, is not THM, has a fixed norm or is
+in two experiments, too few points for the linear parameters -- prints
+``ERROR: <thm> experiment[<name>]: ...`` and AZURE2 exits with a non-zero
+status. A file without experiment lines, and an experiment of one segment
+without background, give results identical to before, bit for bit
+(``tests/thm_experiment``).
+
+*Shared norm.* All segments of an experiment share one profiled norm: the
+sums :math:`S_{mm}, S_{md}, S_{dd}` of the previous section run over the points
+of all of them, :math:`n^* = S_{mm}/S_{md}` and
+:math:`\chi^2 = S_{dd} - S_{md}^2/S_{mm}`. Every segment of the experiment
+carries :math:`n^*` in ``chiSquared.out`` and ``normalizations.out``, and its
+own points' share of the :math:`\chi^2`. Segments in no experiment keep their
+own profile.
+
+*Background.* With ``background=const|linear|quadratic`` the curve compared
+with the data is
+
+.. math::
+
+   f_i = n^{-1}\,\bigl(m_i + b_0 + b_1 E_i + b_2 E_i^2\bigr),
+
+:math:`m_i` the THM model at point :math:`i` (resolution-folded, weighted),
+:math:`E_i` the point's c.m. energy of the THM entrance pair (MeV), and
+:math:`b_k` in the units of the model (the data scaled by :math:`n`, the
+scale of the output files). The background is added to the *folded* model: it
+is smooth on the scale of the resolution, so folding it would change nothing
+but the cost; for the same reason it is not multiplied by ``weight[k]``.
+:math:`s = 1/n` and :math:`a_k = s\,b_k` are linear parameters and are
+eliminated together by weighted linear least squares over all points of the
+experiment: with the design matrix :math:`A = [m, 1, E, E^2]` (as many
+background columns as terms), :math:`\tilde A = A/e`, :math:`\tilde y = d/e`,
+
+.. math::
+
+   c = (s, a_0, \dots) = G^{-1}\tilde A^T\tilde y, \qquad
+   G = \tilde A^T\tilde A, \qquad
+   \operatorname{cov}(c) = G^{-1},
+
+solved by Cholesky on the Jacobi-scaled :math:`G` (``SolveThmProfile`` in
+``src/ThmExperiment.cpp``). Points with :math:`e_i = 0` carry no weight. The
+output file writes :math:`m_i + b(E_i)` as the fitted curve next to the data
+scaled by :math:`n^*`. The background may come out negative: it is a
+phenomenological term (non-quasi-free or sequential contributions, an
+imperfect subtraction), not a positive-definite cross section, and a sign
+constraint would make the profile non-linear; judge a negative background on
+the plot. :math:`n^* = 1/s` must be positive.
+
+*Degenerate cases.* A singular :math:`G` (the model a combination of the
+background terms, or collinear background columns), or :math:`s \le 0` (no
+positive overlap of model and data), leave the norm at 1, as the single-segment
+profile does, and profile the background alone; if its own normal matrix is
+singular too, nothing is profiled. ``thm_experiments.out`` says which in its
+``status`` line. Fewer points (with an error) than linear parameters plus one
+is refused at startup.
+
+*Output.* ``output/thm_experiments.out`` lists, per experiment, its segments,
+background, points, :math:`\chi^2`, status, the norm and the :math:`b_k` with
+their uncertainties and covariance, transformed from :math:`\operatorname{cov}(c)`
+by :math:`n = 1/s`, :math:`b_k = a_k/s`. They are the uncertainties of the
+profile at fixed R-matrix parameters, not scaled by :math:`\chi^2/\nu`.
+``pyazr``: ``session.thm_background(name)`` (norm, ``b``, ``cov``, ``sigma``,
+``chi2``, ``status``) and ``session.thm_experiments()``; ``segment_norms()``
+gives the shared :math:`n^*` for each segment. ``AzrModel.thm_experiments()``,
+``set_thm_experiment(name, segments, background=..., beam=..., target=...,
+spectator=..., Ebeam=...)`` (replaces the record with one line) and
+``clear_thm_experiment(name)`` edit the lines with the engine's rules. The GUI's
+*THM Options* dialog does not edit experiment lines; it keeps them verbatim
+(``tests/gui/thm_options_dialog_test``).
+
+*Derivatives.* Where the model Jacobian :math:`J_m = \partial m/\partial p`
+is used (MIGRAD's THM gradient, ``pyazr``'s ``residual_jacobian`` and
+``chi2_and_grad``, the covariance band), the dependence of the profiled
+:math:`c^*(p)` is included exactly. With :math:`\rho = \tilde y - \tilde A c`
+and :math:`\dot{\tilde A} = [J_m/e, 0, \dots]` (only the model column
+depends on :math:`p`), differentiating the normal equations gives
+(Golub & Pereyra, SIAM J. Numer. Anal. 10 (1973) 413)
+
+.. math::
+
+   \dot c = G^{-1}\bigl(\dot{\tilde A}^T\rho - \tilde A^T\dot{\tilde A}\,c\bigr),
+   \qquad
+   \dot r = \dot{\tilde A}\,c + \tilde A\,\dot c
+          = P_\perp \dot{\tilde A}\,c + \tilde A G^{-1}\dot{\tilde A}^T\rho,
+
+:math:`P_\perp = 1 - \tilde A G^{-1}\tilde A^T` the projector onto the
+orthogonal complement of the columns of :math:`\tilde A`. The first term alone
+(Kaufman's variable-projection approximation) is exact only at zero residual;
+the second is kept. For the model column alone this is the :math:`\partial
+s/\partial p` below. ``ThmProfileDerivative``; checked against central
+differences in ``tests/pyazr/thm_experiment_test.py`` (all six parameters of
+``tests/18O_p_a_thm``, linear background, rel. :math:`\le 5\times 10^{-6}`)
+and, for the band, in ``tests/thm_band/check.sh``. The band row of a point is
+the derivative of the curve the output shows, :math:`(s J_m + A\dot c)/s`.
+
 Normalization, gradients and uncertainty bands
 ----------------------------------------------
 
 A THM segment with a free norm has its arbitrary scale profiled out
 (``ESegment::IsProfiledNorm``): :math:`n^* = S_{mm}/S_{md}` and
-:math:`\chi^2 = S_{dd} - S_{md}^2/S_{mm}`, no penalty, no fit parameter. The
+:math:`\chi^2 = S_{dd} - S_{md}^2/S_{mm}`, no penalty, no fit parameter (the
+segments of a THM experiment share one, with an optional background: see
+"THM experiments"). The
 analytic adjoint differentiates the T-matrix observable, not the HOES one, so
 every derivative of a THM point is taken by central differences of the HOES
 model, :math:`J_m`, with the dependence of the profiled scale

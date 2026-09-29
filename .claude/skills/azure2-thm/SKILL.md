@@ -81,7 +81,14 @@ P₀e^{2πη} gives 2.85 against on-shell 1.25. A χ² that does not discriminat
   entrance-pair channel line; one `<targetInt>` Gaussian per THM segment (60 uniform
   sub-points for 12C+12C; check convergence, section 6); THM norm free → AZURE2
   profiles it analytically (n* = S_mm/S_md, no penalty). Several channels of one
-  experiment share **one** scale (12C+12C: free per-channel scales came out 0.96–1.07).
+  experiment share **one** scale (12C+12C: free per-channel scales came out 0.96–1.07). Declare
+  such segments one THM experiment, `experiment[<name>] segments=1,2,5-7` in `<thm>`:
+  one shared profiled norm (n* from the summed S sums), optional
+  `background=const|linear|quadratic` added to the folded model (e.g. the linear
+  background of ApJ 723), both closed-form linear least squares; coefficients and
+  covariance in `output/thm_experiments.out` and `session.thm_background(name)`.
+  `AzrModel.set_thm_experiment(...)`; `ps/theta/lineshape/distortion` are reserved
+  (refused). Details: thm_implementation.rst, "THM experiments".
 - **Recommended `<thm>` defaults** and why:
   - `entranceL=incoherent`: exact for a 4π-integrated, spin-summed observable. In a
     restricted window the l ≠ l′ cross term survives (7Li 50–70°: +77 % for s = 1,

@@ -35,6 +35,15 @@ normalizations.out
 Contains the fitted normalization factors for data segments where normalization
 was varied. This file is automatically loaded when ``param.sav`` is selected.
 
+thm_experiments.out
+^^^^^^^^^^^^^^^^^^^
+
+Written when the ``<thm>`` block defines THM experiments (``experiment[<name>]``
+lines): per experiment its segments, background, number of points,
+chi-squared, the shared profiled norm and the background coefficients with
+their uncertainties and covariance. See :doc:`../theory/thm_implementation`,
+"THM experiments".
+
 Cross Section Output
 --------------------
 

@@ -1222,6 +1222,9 @@ value raises ValueError. The GUI edits it under Configure > THM Options.
 (By hand: append `"\n<thm>\n...\n</thm>\n"`, since an `.azr` may lack a final
 newline and `<thm>` must start its own line.) Also `weight[<k>]=<file>` /
 `weightTest[<k>]=<file>`: w(E) multiplying the THM model of that segment.
+And `experiment[<name>] segments=1,2 background=linear`: segments sharing one
+profiled norm plus a profiled background (`mdl.set_thm_experiment`,
+`session.thm_background(name)`, `output/thm_experiments.out`; `tests/thm_experiment`).
 
 Reference cases: `tests/17O` — 17O(n,alpha)14C from Guardo/Sergi *et al.*,
 23 points, one THM segment, chi-squared 96.69 (neutron entrance, RWA widths);
