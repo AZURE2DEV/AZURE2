@@ -82,9 +82,11 @@ Check **Include Gaussian Convolution** to convolve the calculated cross section
 with a Gaussian beam energy distribution.
 
 **Sigma** (MeV)
-   The full width at half maximum of the Gaussian convolution function. Although
-   beam resolution is typically of order keV, the value must be entered in **MeV**
-   (e.g., ``0.001`` for 1 keV).
+   The standard deviation :math:`\sigma` of the Gaussian convolution function, in
+   the laboratory frame (AZURE2 converts it to the centre of mass). It is not the
+   full width at half maximum: for a resolution quoted as a FWHM enter
+   :math:`\sigma = \mathrm{FWHM}/2.355`. Although beam resolution is typically of
+   order keV, the value must be entered in **MeV** (e.g., ``0.001`` for 1 keV).
 
 Target Integration
 ^^^^^^^^^^^^^^^^^^
