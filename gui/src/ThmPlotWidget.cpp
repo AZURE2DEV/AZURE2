@@ -256,7 +256,9 @@ void ThmPlotWidget::paintEvent(QPaintEvent *) {
                Qt::AlignLeft | Qt::AlignVCenter, m.label);
   }
 
-  // The reaction, bold, inside the axes (upper left).
+  // The reaction, bold, inside the axes, in the corner the curves and marker
+  // lines cross least (upper left on a tie), over a light box so it stays
+  // readable where no corner is free.
   if (!title_.isEmpty()) {
     QTextDocument doc;
     QFont f = tickFont;
@@ -264,8 +266,53 @@ void ThmPlotWidget::paintEvent(QPaintEvent *) {
     f.setPointSizeF(f.pointSizeF() * 1.1);
     doc.setDefaultFont(f);
     doc.setHtml(QString("<b>%1</b>").arg(title_));
+    const QSizeF ts = doc.size();
+    const double pad = 6;
+    const QRectF inner = QRectF(frame).adjusted(pad, pad, -pad, -pad);
+    const QRectF corners[4] = {
+        QRectF(inner.left(), inner.top(), ts.width(), ts.height()),
+        QRectF(inner.right() - ts.width(), inner.top(), ts.width(), ts.height()),
+        QRectF(inner.left(), inner.bottom() - ts.height(), ts.width(), ts.height()),
+        QRectF(inner.right() - ts.width(), inner.bottom() - ts.height(), ts.width(), ts.height())};
+    // Occupancy: sample every drawn segment finely and count samples in each
+    // corner box, grown by a small margin; marker lines count too.
+    int hits[4] = {0, 0, 0, 0};
+    auto count = [&](const QPointF &q) {
+      for (int c = 0; c < 4; c++)
+        if (corners[c].adjusted(-4, -4, 4, 4).contains(q)) hits[c]++;
+    };
+    for (const Series &s : series_) {
+      bool have = false;
+      QPointF prev;
+      for (int i = 0; i < s.x.size() && i < s.y.size(); i++) {
+        if (!std::isfinite(s.x[i]) || !std::isfinite(s.y[i]) || (logY_ && !(s.y[i] > 0.0))) {
+          have = false;
+          continue;
+        }
+        const QPointF q(X(s.x[i]), Y(s.y[i]));
+        if (have) {
+          const int n = std::max(1, (int)(std::hypot(q.x() - prev.x(), q.y() - prev.y()) / 2.0));
+          for (int k = 0; k <= n; k++) count(prev + (q - prev) * (double(k) / n));
+        } else {
+          count(q);
+        }
+        prev = q;
+        have = true;
+      }
+    }
+    for (const Marker &m : markers_) {
+      if (m.x < xlo || m.x > xhi) continue;
+      for (double yy = frame.top(); yy <= frame.bottom(); yy += 2.0) count(QPointF(X(m.x), yy));
+    }
+    int best = 0;
+    for (int c = 1; c < 4; c++)
+      if (hits[c] < hits[best]) best = c;
+    const QRectF box = corners[best].adjusted(-3, -1, 3, 1);
+    QColor bg = pal.color(QPalette::Base);
+    bg.setAlpha(225);
+    p.fillRect(box, bg);
     p.save();
-    p.translate(frame.left() + 8, frame.top() + 4);
+    p.translate(corners[best].topLeft());
     QAbstractTextDocumentLayout::PaintContext ctx;
     ctx.palette.setColor(QPalette::Text, ink);
     doc.documentLayout()->draw(&p, ctx);
