@@ -405,6 +405,24 @@ class Session {
     ConfigScope guard(config_);
     return to_array(api_->GetCurrentNorms());
   }
+  // The THM experiments as the last chi-squared evaluation profiled them.
+  py::list thm_experiments() {
+    ConfigScope guard(config_);
+    py::list out;
+    for (const ThmExperimentReport &r : api_->GetThmExperiments()) {
+      py::dict d;
+      d["name"] = r.name;
+      d["segments"] = r.segments;
+      d["background"] = r.background;
+      d["points"] = r.points;
+      d["chi2"] = r.chi2;
+      d["status"] = r.status;
+      d["value"] = std::vector<double>(r.value, r.value + 4);
+      d["covariance"] = std::vector<double>(r.covariance, r.covariance + 16);
+      out.append(d);
+    }
+    return out;
+  }
   py::array_t<double> calculate_model_gradients_rwa(py::array_t<double, py::array::forcecast> p) {
     vector_r v = to_vector(p), out;
     {
@@ -561,6 +579,10 @@ PYBIND11_MODULE(_azure2, m) {
            "Standardized residuals (forward pass; THM norms profiled).")
       .def("current_norms", &Session::current_norms,
            "Norm each segment carries now (profiled THM norms at their optimum).")
+      .def("thm_experiments", &Session::thm_experiments,
+           "THM experiments (<thm> experiment[...]) as the last chi-squared evaluation "
+           "profiled them: list of dicts (name, segments, background, points, chi2, status, "
+           "value = [norm, b0, b1, b2], covariance = 4x4 row-major).")
       .def("calculate_model_gradients_rwa", &Session::calculate_model_gradients_rwa,
            py::arg("params"))
       .def("coulomb_functions", &Session::coulomb_functions, py::arg("request"))

@@ -6,6 +6,7 @@
 #include "Constants.h"
 #include "AZUREGrad.h"
 #include <vector>
+#include "ThmExperiment.h"
 
 class Config;
 class EData;
@@ -326,6 +327,9 @@ class AZUREAPI {
    * profiled (free THM) norm holds its optimum n* = S_mm/S_md.
    */
   vector_r GetCurrentNorms() const;
+  /// The THM experiments (<thm> experiment[...]) as the last chi^2 evaluation
+  /// profiled them: shared norm, background and their covariance.
+  std::vector<ThmExperimentReport> GetThmExperiments() const;
 
   /*!
    * Per-point sensitivities d(model)/d(theta) of the calculated segments, for

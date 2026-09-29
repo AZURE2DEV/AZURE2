@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "AZUREAPI.h"
 #include "AZUREParams.h"
 
@@ -696,6 +697,11 @@ bool AZUREAPI::WriteOutputFiles() {
   return true;
 }
 
+std::vector<ThmExperimentReport> AZUREAPI::GetThmExperiments() const {
+  if (data_ == nullptr) return std::vector<ThmExperimentReport>();
+  return data()->ThmExperimentReports();
+}
+
 bool AZUREAPI::Rebuild() {
   return RebuildImpl(nullptr, nullptr);
 }
@@ -772,6 +778,8 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
   EData *ld = data();
   if (res) res->clear();
   double chiSquared = 0.0;
+  // Rows of the segments of a THM experiment, filled once it is profiled.
+  std::vector<std::vector<std::pair<int, size_t>>> groupRows(ld->NumThmGroups());
   for (int i = 1; i <= ld->NumSegments(); i++) {
     ESegment *segment = ld->GetSegment(i);
     if (!segment) continue;
@@ -779,6 +787,28 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
       double th = segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld);
       EPoint *point = segment->GetPoint(pid + 1);
       if (point) point->SetFitCrossSection(th);
+    }
+
+    // A THM experiment: one profile (shared norm, background) over its
+    // segments, at the last of them, as the CLI.
+    const int g = ld->ThmGroupOf(i);
+    if (g >= 0) {
+      if (res) {
+        groupRows[g].push_back(std::make_pair(i, res->size()));
+        for (int pid = 0; pid < segment->NumPoints(); pid++)
+          if (segment->GetPoint(pid + 1)) res->push_back(0.0);
+      }
+      if (ld->IsLastOfThmGroup(g, i)) {
+        chiSquared += ld->ProfileThmGroup(g);
+        if (res) {
+          std::vector<double> r;
+          for (const std::pair<int, size_t> &row : groupRows[g]) {
+            ld->ThmGroupResiduals(g, row.first, r);
+            std::copy(r.begin(), r.end(), res->begin() + row.second);
+          }
+        }
+      }
+      continue;
     }
 
     // A free THM norm is the arbitrary HOES scale: profiled to its optimum
@@ -961,7 +991,10 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
     for (const THMRows &tr : thm) {
       ESegment *seg = data()->GetSegment(tr.segment);
       double c = 0.0;
-      if (seg->IsProfiledNorm()) {
+      if (data()->ThmGroupOf(tr.segment) >= 0) {
+        // A THM experiment, profiled by ComputeTHMRows: its residuals.
+        for (double r : tr.r) c += r * r;
+      } else if (seg->IsProfiledNorm()) {
         c = seg->ProfileNormChiSquared();
       } else {
         for (double r : tr.r) c += r * r;

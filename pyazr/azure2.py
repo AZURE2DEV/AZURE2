@@ -43,6 +43,8 @@ def _in_dir(path):
         os.chdir(previous)
 
 
+_THM_BACKGROUND_TERMS = {"none": 0, "const": 1, "linear": 2, "quadratic": 3}
+
 class _Engine:
     """A ``_azure2.Session`` whose every call is made from the model's directory.
 
@@ -905,12 +907,72 @@ class azure2:
         One entry per segment, in ``segment_chi2`` order.  For most segments
         this is the free-vector value (or the fixed one from the file); for a
         THM segment with a free norm it is the profiled optimum ``n*`` -- which
-        is not a fit parameter, so this is the only way to see it.  Runs a
-        chi-squared evaluation.
+        is not a fit parameter, so this is the only way to see it.  The
+        segments of a THM experiment (``<thm>`` ``experiment[...]``) all carry
+        its shared ``n*`` (see :meth:`thm_background`).  Runs a chi-squared
+        evaluation.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         self.sess.calculate_chi2_rwa(x)
         return np.asarray(self.sess.current_norms(), float)
+
+    def thm_experiments(self, params=None):
+        """The THM experiments (``<thm>`` ``experiment[<name>]`` lines) as a
+        chi-squared evaluation at ``params`` profiles them.
+
+        Returns ``{name: report}``; see :meth:`thm_background` for a report.
+        Empty without experiments (or in extrapolation mode).  Runs a
+        chi-squared evaluation.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        if self.mode == "data":
+            self.sess.calculate_chi2_rwa(x)
+        out = {}
+        for r in self.sess.thm_experiments():
+            q = 1 + _THM_BACKGROUND_TERMS[r["background"]]
+            cov = np.asarray(r["covariance"], float).reshape(4, 4)[:q, :q]
+            value = np.asarray(r["value"], float)
+            out[r["name"]] = {
+                "segments": list(r["segments"]),
+                "background": r["background"],
+                "points": int(r["points"]),
+                "chi2": float(r["chi2"]),
+                "status": r["status"],
+                "norm": float(value[0]),
+                "b": value[1:q].copy(),
+                "cov": cov,
+                "sigma": np.sqrt(np.maximum(np.diag(cov), 0.0)),
+            }
+        return out
+
+    def thm_background(self, experiment, params=None):
+        """Shared norm and background of one THM experiment at ``params``.
+
+        The segments of ``experiment[<name>]`` share one profiled norm ``n*``
+        (it multiplies the data, as ``segment_norms``) and a background
+        ``b(E) = b0 + b1 E + b2 E^2`` added to the folded HOES model (model
+        units, E the c.m. energy of the THM entrance pair, MeV); both are
+        eliminated by closed-form weighted linear least squares at every
+        evaluation.  Returns a dict:
+
+        ``norm``        n*
+        ``b``           array of the background coefficients (length 0-3)
+        ``cov``         covariance of (norm, b0, ...) from the profile, at fixed
+                        R-matrix parameters (not scaled by chi2/nu)
+        ``sigma``       sqrt(diag(cov))
+        ``chi2``        the experiment's chi-squared, ``points``, ``segments``
+        ``background``  none | const | linear | quadratic
+        ``status``      "profiled", or what a degenerate profile fell back to
+
+        The model at a point, as the output files show it next to the data
+        scaled by n*, is ``calculate_rwa`` plus ``b(E)``.  Runs a chi-squared
+        evaluation.  KeyError for an unknown experiment.
+        """
+        reports = self.thm_experiments(params)
+        if experiment not in reports:
+            raise KeyError(f"no THM experiment {experiment!r} "
+                           f"(have: {', '.join(reports) or 'none'})")
+        return reports[experiment]
 
     def residuals(self, params=None):
         """Standardized residuals ``(fit_i - data_i*n)/(cmErr_i*n)``, from a
@@ -1125,6 +1187,10 @@ class azure2:
         dependence is added analytically,
         ``dr_i/dp = (s J_mi + m_i ds/dp)/e_i``,
         ``ds/dp = (sum d_k J_mk/e_k^2 - 2 s sum m_k J_mk/e_k^2)/S_mm``.
+        The segments of a THM experiment share the scale and a background,
+        profiled together by linear least squares; ``J`` then carries the
+        exact derivative through that profile (Golub-Pereyra; see
+        docs/source/theory/thm_implementation.rst, "THM experiments").
         """
         resp = np.asarray(
             self.sess.calculate_residual_jacobian_rwa(

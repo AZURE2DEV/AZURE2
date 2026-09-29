@@ -71,3 +71,10 @@ add_test(NAME pyazr_extrapolation_frame
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/extrapolation_frame_test.py)
 set_tests_properties(pyazr_extrapolation_frame PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# THM experiments (<thm> experiment[...]): shared profiled norm and background
+# in AzrModel, chi2, output files and derivatives, against the CLI.
+add_test(NAME pyazr_thm_experiment
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_experiment_test.py)
+set_tests_properties(pyazr_thm_experiment PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

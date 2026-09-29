@@ -85,8 +85,180 @@ _THM_INT_PREFIX = re.compile(r"[ \t\n\r\f\v]*[+-]?\d+")
 
 def _thm_default_settings():
     s = dict(_THM_GLOBAL_DEFAULTS)
-    s.update(spectatorByPair={}, weight={}, weightTest={})
+    s.update(spectatorByPair={}, weight={}, weightTest={}, experiments={})
     return s
+
+
+# -- THM experiments: experiment[<name>] key=value ... (src/ThmExperiment.cpp) --
+
+# AME2020 nuclear masses (u): atomic mass - Z m_e + electron binding (Lunney
+# et al. 2003), the engine's table (ThmExperiment.cpp, kNuclides).
+_THM_NUCLIDES = {
+    "n": (0, 1, 1.0086649159), "p": (1, 1, 1.0072764675), "d": (1, 2, 2.0135532134),
+    "t": (1, 3, 3.0155007169), "3He": (2, 3, 3.0149322434), "4He": (2, 4, 4.0015061756),
+    "6Li": (3, 6, 6.0134773618), "7Li": (3, 7, 7.0143579087), "9Be": (4, 9, 9.0099891714),
+    "10B": (5, 10, 10.0101946866), "11B": (5, 11, 11.0065629921),
+    "12C": (6, 12, 11.9967096429), "13C": (6, 13, 13.0000644777),
+    "14N": (7, 14, 13.9992355671), "15N": (7, 15, 14.9962704619),
+    "16O": (8, 16, 15.9905282131), "17O": (8, 17, 16.9947453497),
+    "18O": (8, 18, 17.9947732059), "19F": (9, 19, 18.9934689019),
+    "20Ne": (10, 20, 19.9869581831), "23Na": (11, 23, 22.9837396828),
+    "24Mg": (12, 24, 23.9784646239),
+}
+_THM_BACKGROUNDS = ("none", "const", "linear", "quadratic")
+_THM_EXPERIMENT_KEYS = ("segments", "background", "beam", "target", "spectator", "Ebeam")
+_THM_EXPERIMENT_RESERVED = ("ps", "theta", "lineshape", "distortion")
+_THM_NAME = re.compile(r"[A-Za-z0-9_.+-]+")
+_THM_WHOLE_INT = re.compile(r"[+-]?\d+")
+
+
+def _thm_whole_double(text):
+    """A whole token as a finite number (operator>> consuming everything)."""
+    m = _THM_FLOAT_PREFIX.match(text)
+    if not m or m.start(0) != 0 or text[:1].isspace() or m.end(0) != len(text):
+        return None
+    x = float(m.group(0))
+    return x if math.isfinite(x) else None
+
+
+def _thm_whole_int(text):
+    return int(text) if _THM_WHOLE_INT.fullmatch(text) else None
+
+
+def _thm_nuclide(text):
+    """ThmNuclide::Parse: (name, Z, A, mass) or ValueError."""
+    if text in _THM_NUCLIDES:
+        return (text,) + _THM_NUCLIDES[text]
+    f = text.split(",")
+    if len(f) == 3:
+        Z, A, mass = _thm_whole_int(f[0]), _thm_whole_int(f[1]), _thm_whole_double(f[2])
+        if (Z is not None and A is not None and mass is not None and Z >= 0
+                and A >= 1 and Z <= A and mass > 0.0 and abs(mass - A) < 1.0):
+            return (text, Z, A, mass)
+        raise ValueError(f"'{text}': expected Z,A,mass with 0 <= Z <= A and the "
+                         "nuclear mass in u (within 1 u of A)")
+    raise ValueError(f"unknown nuclide '{text}' (known: {' '.join(_THM_NUCLIDES)}; "
+                     "or Z,A,mass in u)")
+
+
+def _thm_segment_list(text):
+    out = []
+    for item in text.split(","):
+        dash = item.find("-", 1)
+        if dash < 0:
+            lo = hi = _thm_whole_int(item)
+            ok = lo is not None
+        else:
+            lo, hi = _thm_whole_int(item[:dash]), _thm_whole_int(item[dash + 1:])
+            ok = lo is not None and hi is not None and hi >= lo
+        if not ok or lo < 1:
+            raise ValueError(f"segments='{text}': expected segment numbers >= 1 "
+                             "like 1,2,4-6")
+        for k in range(lo, hi + 1):
+            if k in out:
+                raise ValueError(f"segments='{text}': segment {k} is listed twice")
+            out.append(k)
+    return sorted(out)
+
+
+def _thm_parse_experiment(line, experiments):
+    """ParseThmExperimentLine: merge one experiment line (comment stripped,
+    trimmed) into ``experiments`` (name -> record); ValueError if AZURE2
+    would refuse it."""
+    close = line.find("]")
+    if not line.startswith("experiment[") or close < 0:
+        raise ValueError("<thm> expected experiment[<name>] key=value ...")
+    name = line[len("experiment["):close]
+    if not _THM_NAME.fullmatch(name):
+        raise ValueError(f"<thm> experiment[{name}]: a name is letters, digits "
+                         "and _ - . + only")
+    where = f"<thm> experiment[{name}]: "
+    rest = line[close + 1:]
+    if rest and rest[0] not in " \t":
+        raise ValueError(where + "expected a space after ']'")
+    work = dict(experiments.get(name, {"keys": []}))
+    work["keys"] = list(work["keys"])
+    tokens = rest.split()
+    if not tokens:
+        raise ValueError(where + "no key=value given")
+    for token in tokens:
+        eq = token.find("=")
+        if eq <= 0 or eq + 1 == len(token):
+            raise ValueError(where + f"'{token}' is not key=value")
+        key, value = token[:eq], token[eq + 1:]
+        if key in _THM_EXPERIMENT_RESERVED:
+            raise ValueError(where + f"key '{key}' is reserved for a later version "
+                             "(not implemented yet)")
+        if key in work["keys"]:
+            raise ValueError(where + f"key '{key}' is given twice")
+        if key == "segments":
+            try:
+                work["segments"] = _thm_segment_list(value)
+            except ValueError as err:
+                raise ValueError(where + str(err)) from None
+        elif key == "background":
+            if value not in _THM_BACKGROUNDS:
+                raise ValueError(where + f"background='{value}': expected none, "
+                                 "const, linear or quadratic")
+            work["background"] = value
+        elif key in ("beam", "target", "spectator"):
+            try:
+                work[key] = _thm_nuclide(value)
+            except ValueError as err:
+                raise ValueError(where + f"{key}: {err}") from None
+        elif key == "Ebeam":
+            x = _thm_whole_double(value)
+            if x is None or not x > 0.0:
+                raise ValueError(where + f"Ebeam='{value}': expected the lab beam "
+                                 "energy in MeV, > 0")
+            work["Ebeam"] = x
+        else:
+            raise ValueError(where + f"unknown key '{key}' (keys: segments, "
+                             "background, beam, target, spectator, Ebeam)")
+        work["keys"].append(key)
+    experiments[name] = work
+
+
+def _thm_check_experiments(experiments):
+    """CheckThmExperiments: ValueError if the set is refused."""
+    owner = {}
+    for name, x in experiments.items():
+        where = f"<thm> experiment[{name}]: "
+        if "segments" not in x["keys"]:
+            raise ValueError(where + "segments= is required")
+        kin = sum(k in x["keys"] for k in ("beam", "target", "spectator", "Ebeam"))
+        if kin not in (0, 4):
+            raise ValueError(where + "beam, target, spectator and Ebeam go together "
+                             "(all four or none)")
+        for k in x["segments"]:
+            if k in owner:
+                raise ValueError(where + f"segment {k} is already in "
+                                 f"experiment[{owner[k]}]")
+            owner[k] = name
+
+
+def _thm_experiment_record(x):
+    """The public form of a parsed experiment."""
+    out = {"segments": list(x["segments"]), "background": x.get("background", "none")}
+    for key in ("beam", "target", "spectator"):
+        if key in x:
+            out[key] = x[key][0]
+    if "Ebeam" in x:
+        out["Ebeam"] = x["Ebeam"]
+    return out
+
+
+def _thm_experiment_line(name, rec):
+    """The canonical line for a record (segments as a plain comma list)."""
+    parts = [f"experiment[{name}]", "segments=" + ",".join(str(k) for k in rec["segments"])]
+    if rec.get("background", "none") != "none":
+        parts.append(f"background={rec['background']}")
+    for key in ("beam", "target", "spectator"):
+        if key in rec:
+            parts.append(f"{key}={rec[key]}")
+    if "Ebeam" in rec:
+        parts.append(f"Ebeam={_thm_number(float(rec['Ebeam']))}")
+    return " ".join(parts)
 
 
 def _thm_is_default(s):
@@ -124,6 +296,11 @@ def _thm_parse_line(raw, s):
     ValueError for a line the engine would refuse."""
     line = raw.split("#", 1)[0].strip()
     if not line:
+        return "", ""
+    if line.startswith("experiment["):
+        # An experiment record: validated and merged, but kept as a line of
+        # its own (like a comment) when the options are rewritten.
+        _thm_parse_experiment(line, s["experiments"])
         return "", ""
     if "=" not in line:
         raise ValueError(f"<thm> line not understood: '{raw.strip()}'")
@@ -1621,6 +1798,7 @@ class AzrModel:
         s = _thm_default_settings()
         for line in self._thm_body():
             _thm_parse_line(line, s)
+        _thm_check_experiments(s["experiments"])
         return s
 
     def thm_options(self, defaults=False):
@@ -1737,6 +1915,128 @@ class AzrModel:
         """Remove ``weight[<segment>]`` (``weightTest`` with ``test=True``)."""
         return self.clear_thm_option(
             f"{'weightTest' if test else 'weight'}[{int(segment)}]")
+
+    # -- THM experiments: experiment[<name>] lines of the <thm> block ---------
+
+    def thm_experiments(self):
+        """The THM experiments of the ``<thm>`` block, ``{name: record}``.
+
+        A record has ``segments`` (list of ``<segmentsData>`` line numbers,
+        inactive lines counted, like ``weight[k]``), ``background`` (``none``,
+        ``const``, ``linear`` or ``quadratic``) and, if given, ``beam``,
+        ``target``, ``spectator`` (nuclide names or ``Z,A,mass``) and
+        ``Ebeam`` (lab MeV).  All segments of an experiment share one profiled
+        norm and the background; see docs/source/theory/thm_implementation.rst,
+        "THM experiments".  Raises ValueError if the block has a line AZURE2
+        would refuse.
+        """
+        s = self._thm_settings()
+        return {name: _thm_experiment_record(x) for name, x in s["experiments"].items()}
+
+    def set_thm_experiment(self, name, segments, background="none", beam=None,
+                           target=None, spectator=None, Ebeam=None):
+        """Define (or replace) ``experiment[<name>]`` in the ``<thm>`` block.
+
+        ``segments`` is a list of ``<segmentsData>`` line numbers (or the
+        engine's text form, ``"1,2,4-6"``); each must exist, be a THM segment
+        (isDiff >= 10) with a free norm, and belong to no other experiment.
+        ``background`` is ``none``, ``const``, ``linear`` or ``quadratic``.
+        ``beam``, ``target``, ``spectator`` (a name of the built-in table --
+        n p d t 3He 4He 6Li 7Li 9Be 10B 11B 12C 13C 14N 15N 16O 17O 18O 19F
+        20Ne 23Na 24Mg -- or ``"Z,A,mass"``, nuclear mass in u) and ``Ebeam``
+        (lab MeV) go together: all four or none.  The record replaces every
+        earlier line of that name with one line; other lines stay as they
+        are.  Raises ValueError (model unchanged) for anything AZURE2 would
+        refuse.
+        """
+        if not isinstance(segments, str):
+            try:
+                segments = ",".join(str(int(k)) for k in segments)
+            except TypeError:
+                segments = str(int(segments))
+        text = f"experiment[{name}] segments={segments}"
+        if background != "none":
+            text += f" background={background}"
+        for key, value in (("beam", beam), ("target", target), ("spectator", spectator)):
+            if value is not None:
+                text += f" {key}={value}"
+        if Ebeam is not None:
+            text += f" Ebeam={_thm_number(float(Ebeam))}"
+        if any(c in text for c in "#\r\n"):
+            raise ValueError(f"<thm> experiment[{name}]: a value cannot contain '#' "
+                             "or a line break.")
+        s = self._thm_settings()
+        others = {k: v for k, v in s["experiments"].items() if k != name}
+        trial = dict(others)
+        _thm_parse_experiment(text, trial)
+        _thm_check_experiments(trial)
+        rec = _thm_experiment_record(trial[name])
+        seg_lines = self._block_lines("segmentsData") or []
+        for k in rec["segments"]:
+            if k > len(seg_lines):
+                raise ValueError(f"<thm> experiment[{name}]: segment {k}: "
+                                 f"<segmentsData> has only {len(seg_lines)} line(s).")
+            tok = seg_lines[k - 1].split()
+            is_diff = int(float(tok[7])) if len(tok) > 7 and _isnum(tok[7]) else -1
+            if is_diff < 10:
+                raise ValueError(f"<thm> experiment[{name}]: segment {k} is not a "
+                                 "THM segment (isDiff < 10).")
+            vary = int(float(tok[9])) if len(tok) > 9 and _isnum(tok[9]) else 0
+            if not vary:
+                raise ValueError(f"<thm> experiment[{name}]: segment {k} has a fixed "
+                                 "norm; the segments of an experiment share one free "
+                                 "(profiled) norm, so free it.")
+        body = self._thm_body_without_experiment(name)
+        body.append(_thm_experiment_line(name, rec))
+        self._thm_set_body(body)
+        return self
+
+    def clear_thm_experiment(self, name):
+        """Remove every ``experiment[<name>]`` line.  A block left with only
+        default options (and no experiment) is removed, as the GUI does.
+        Unknown names are a no-op."""
+        s = self._thm_settings()
+        if name not in s["experiments"]:
+            return self
+        body = self._thm_body_without_experiment(name)
+        rest = _thm_default_settings()
+        for line in body:
+            _thm_parse_line(line, rest)
+        if _thm_is_default(rest):
+            body = []
+        self._thm_set_body(body)
+        return self
+
+    def _thm_body_without_experiment(self, name):
+        out = []
+        for line in self._thm_body():
+            code = line.split("#", 1)[0].strip()
+            if code.startswith(f"experiment[{name}]") and \
+                    code[len(f"experiment[{name}]"):][:1] in ("", " ", "\t"):
+                continue
+            out.append(line)
+        return out
+
+    def _thm_set_body(self, body):
+        """Replace the block's lines by ``body``; no lines: no block."""
+        loc = self._thm_locate()
+        if not body:
+            if loc is not None:
+                attr, lines, i, j = loc
+                setattr(self, attr, "".join(lines[:i] + lines[j + 1:]))
+            return
+        if loc is not None:
+            attr, lines, i, j = loc
+            nl = "\r\n" if lines[i].endswith("\r\n") else "\n"
+            setattr(self, attr, "".join(lines[:i + 1] + [ln + nl for ln in body] + lines[j:]))
+            return
+        block = ["<thm>"] + body + ["</thm>"]
+        lines = self._suffix.splitlines()
+        if "</targetInt>" in lines:
+            end = lines.index("</targetInt>") + 1
+            self._set_suffix_lines(lines[:end] + block + lines[end:])
+        else:
+            self._set_suffix_lines(lines + block)
 
     def _block_lines(self, tag):
         """Non-blank lines of a block after <levels>, or None if absent."""
