@@ -720,6 +720,15 @@ bool AZUREAPI::GetThmVertex(const std::string &name, const vector_r &energies, T
   return data()->ThmVertexTable(name, energies, compound(), configure(), out, why);
 }
 
+bool AZUREAPI::GetThmDistortion(const std::string &name, const vector_r &energies, ThmDistortionReport &out,
+                                std::string &why) {
+  if (data_ == nullptr) {
+    why = "no data loaded";
+    return false;
+  }
+  return data()->ThmDistortionTable(name, energies, out, why);
+}
+
 bool AZUREAPI::Rebuild() {
   return RebuildImpl(nullptr, nullptr);
 }

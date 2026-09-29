@@ -1,8 +1,11 @@
 #ifndef THM_EXPERIMENT_H
 #define THM_EXPERIMENT_H
 
+#include <memory>
 #include <string>
 #include <vector>
+
+struct ThmWeightTable;
 
 /*!
  * THM experiments: the `experiment[<name>] key=value ...` lines of the <thm>
@@ -59,6 +62,33 @@ struct ThmExperiment {
   std::string psTable;               ///< table: the file as written
   std::vector<double> psTableP, psTableW;  ///< table rows (Config::ReadThmBlock loads them)
   int psNodes = 16;                  ///< Gauss-Legendre nodes in p_s (`psNodes=`)
+  /*!
+   * Distortion factor R(E) multiplying the model of every segment
+   * (`distortion=`, ThmDistortion.h): none (default), coulomb (point-Coulomb
+   * waves in a + A and s + F), optical (per channel `opticalAA=`,
+   * `opticalSF=`: plane, coulomb or a Woods-Saxon potential) or a table
+   * w(E) (`table:<file>`, the weight[k] format).  coulomb and optical need the
+   * kinematics.
+   */
+  enum DistortionKind { DIST_NONE, DIST_COULOMB, DIST_OPTICAL, DIST_TABLE };
+  DistortionKind distortion = DIST_NONE;
+  std::string distortionTable;  ///< table: the file as written
+  std::shared_ptr<const ThmWeightTable> distortionWeights;  ///< table rows (Config::ReadThmBlock)
+  /// opticalAA= / opticalSF=: 0 plane, 1 coulomb, 2 Woods-Saxon with p[10] =
+  /// V,R,a,W,RW,aW,WD,RD,aD,RC (MeV, fm).
+  struct Optical {
+    int kind = 1;
+    double p[10] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+  };
+  Optical opticalAA, opticalSF;
+  /// spectatorAngle=: 0 qf (k_sF along k_aA, default), 1 lab degrees, 2 cm:degrees.
+  int angleKind = 0;
+  double angle = 0.0;
+  bool hasDistortionRef = false;
+  double distortionRef = 0.0;  ///< MeV (default: the middle of the data range)
+  bool distortionRatioPW = true;  ///< distortionRatio=dwpw (default) or dw
+  bool boundYukawa = false;       ///< boundState=yukawa (default whittaker)
+  double boundRmin = 0.0;         ///< boundState=...:rmin (fm)
   /// Keys given so far (a key may not be repeated).
   std::vector<std::string> keys;
   static const char *BackgroundName(int terms);
@@ -70,14 +100,16 @@ struct ThmExperiment {
  * same name.  Returns "" or what is wrong.  Keys: segments (required),
  * background, beam, target, spectator, Ebeam, lineshape (on|off), ps
  * (delta | hulthen:pmin-pmax | hulthen:a,b:pmin-pmax | gauss:FWHM:pmin-pmax |
- * table:file), psNodes; theta and distortion are reserved and refused ("not
- * implemented yet").
+ * table:file), psNodes, distortion (none | coulomb | optical | table:file),
+ * opticalAA, opticalSF, spectatorAngle, distortionRef, distortionRatio,
+ * boundState; theta is reserved and refused ("not implemented yet").
  */
 std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExperiment> &experiments);
 
 /// Checks the complete set once the block is read: segments given, kinematics
 /// all-or-none, lineshape=on and a ps window only with them, psNodes only with a
-/// window, no segment in two experiments.  "" or what is wrong.
+/// window, no segment in two experiments, distortion keys consistent.  "" or
+/// what is wrong.
 std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments);
 
 /// Reads a `ps=table:` file: two columns, p_s (MeV/c, >= 0, strictly

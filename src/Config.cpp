@@ -399,6 +399,19 @@ int Config::ReadThmBlock() {
         x.psMin = x.psTableP.front();
         x.psMax = x.psTableP.back();
       }
+      // distortion=table:<file>, the weight[k] format, relative to the .azr.
+      for (ThmExperiment &x : thm.experiments) {
+        if (x.distortion != ThmExperiment::DIST_TABLE) continue;
+        std::shared_ptr<ThmWeightTable> table = std::make_shared<ThmWeightTable>();
+        table->name = x.distortionTable;
+        table->path = thmRelativePath(x.distortionTable);
+        why = table->Read(table->path);
+        if (!why.empty()) {
+          outStream << "ERROR: <thm> experiment[" << x.name << "]: distortion: " << why << std::endl;
+          return -1;
+        }
+        x.distortionWeights = table;
+      }
       return 0;
     }
     if (trimmed.compare(0, 11, "experiment[") == 0) {

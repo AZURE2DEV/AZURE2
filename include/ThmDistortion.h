@@ -1,0 +1,160 @@
+#ifndef THM_DISTORTION_H
+#define THM_DISTORTION_H
+
+#include "Constants.h"
+
+#include <atomic>
+#include <memory>
+#include <string>
+#include <vector>
+
+struct ThmExperiment;
+struct ThmWeightTable;
+
+/*!
+ * The energy dependence of the THM transfer amplitude from the distortions of
+ * the initial (a + A) and final (s + F) relative motion: `distortion=` on a
+ * THM experiment line (docs/source/theory/thm_implementation.rst,
+ * "Distortion factor R(E)").
+ *
+ * Zero-range prior-form DWBA (Mukhamedzhanov, Pang & Kadyrov, PRC 99 (2019)
+ * 064618, eqs. 20-24; Mukhamedzhanov, arXiv:2609.04498, eqs. 22-30): with the
+ * x-A vertex of zero range, r_sF = r_sx = r and r_aA = beta r, beta = m_s/m_a,
+ * and
+ *
+ *   M(E) = Int d^3r chi^(-)*_{k_sF}(r) phi_sx(r) chi^(+)_{k_aA}(beta r)
+ *        = 4 pi/(k_sF beta k_aA) sum_l (2l+1) e^{i(sigma_l^aA + sigma_l^sF)} P_l(x)
+ *          Int_0^inf dr phi_sx(r) u_l^sF(k_sF r) u_l^aA(k_aA beta r),
+ *
+ * x = k_sF.k_aA/(k_sF k_aA), u_l the regular radial waves normalized to
+ * u -> F_l + T_l H_l^+ (u = F_l for point Coulomb), phi_sx the s-x bound
+ * state (l_sx = 0): the Whittaker tail W_{-eta_b,1/2}(2 kappa r)/r or the
+ * Yukawa e^{-kappa r}/r, zero below rmin.  The plane-wave limit is the
+ * Fourier transform of phi at q = k_sF - beta k_aA, the momentum distribution
+ * the PWA data reduction divides by:
+ *
+ *   M_PW(E) = 4 pi Int dr r^2 j_0(q r) phi_sx(r).
+ *
+ * The weight multiplying the HOES model (before folding, as weight[k]) is
+ *
+ *   R(E) = rho(E)/rho(E_ref),  rho = |M|^2/|M_PW|^2  (distortionRatio=dwpw)
+ *                               or   |M|^2          (dw, the papers' R),
+ *
+ * i.e. the published S*_PWA has to be divided by R; R grows toward low E for
+ * 12C+12C.  Distorted waves: point Coulomb (distortion=coulomb) or, per
+ * channel, plane / point Coulomb / Woods-Saxon real + imaginary volume +
+ * imaginary surface with a uniform-sphere Coulomb term (distortion=optical,
+ * opticalAA=, opticalSF=), all by the same complex Numerov integration
+ * outward from the origin, matched to AZURE2's Coulomb functions (COUL)
+ * beyond the turning point.  The radial integrals converge absolutely (the
+ * bound state decays as e^{-kappa r}); the partial-wave sum runs until the
+ * bound on the remaining terms is below 1e-13 |M|.
+ */
+class ThmDistortion {
+ public:
+  enum Kind { COULOMB, OPTICAL, TABLE };
+  /// One channel's distortion: none (plane wave), point Coulomb, or a
+  /// Woods-Saxon potential p[] = V,R,a, W,RW,aW, WD,RD,aD, RC (MeV, fm;
+  /// RC = 0 a point charge) plus Coulomb.
+  struct Channel {
+    enum Kind { PLANE, POINT_COULOMB, WOODS_SAXON };
+    Kind kind = POINT_COULOMB;
+    double p[10] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    int Z1 = 0, Z2 = 0;
+    double mu = 0.0;  ///< reduced mass (MeV)
+    double k = 0.0;   ///< wave number (fm^-1)
+    double eta = 0.0; ///< Sommerfeld parameter (0 for PLANE)
+    std::string Describe() const;
+  };
+  /// The three-body kinematics (BuildThmGroups fills it from the experiment line).
+  struct Kinematics {
+    int Za = 0, ZA = 0, Zs = 0, Zx = 0;  ///< Trojan horse a, the other nucleus A, spectator s, x = a - s
+    double ma = 0.0, mA = 0.0, ms = 0.0, mx = 0.0;  ///< nuclear masses (u)
+    bool horseIsBeam = true;
+    double mBeam = 0.0, mTarget = 0.0;  ///< u
+    double beamEnergy = 0.0;            ///< lab (MeV)
+    double bind = 0.0;                  ///< B_xs (MeV)
+  };
+  /// Everything at one energy (Evaluate).
+  struct Point {
+    double energy = 0.0;  ///< E, c.m. of x + A (MeV)
+    double esf = 0.0, ksf = 0.0, etasf = 0.0;
+    double thetaCm = 0.0;  ///< spectator c.m. angle to the beam (deg)
+    double x = 1.0;        ///< cos of the angle between k_sF and k_aA
+    double q = 0.0;        ///< |k_sF - beta k_aA| (fm^-1)
+    complex m = complex(0.0, 0.0);  ///< M (fm^3 up to 4 pi/(k k') conventions as above)
+    double mpw = 0.0;      ///< M_PW
+    int lmax = 0;          ///< highest l summed
+    bool ok = false;
+    std::string why;       ///< if !ok
+    bool angleClamped = false;  ///< lab angle beyond the reach of the forward branch
+    double tail = 0.0;  ///< |integrand(r_end)|/(kappa |M|), l = 0: the radial cutoff's size
+  };
+
+  Kind kind = COULOMB;
+  std::string experiment;
+  std::string description;  ///< settings, for the output
+  // Settings (ThmExperiment).
+  enum AngleKind { QF, LAB, CM };
+  AngleKind angleKind = QF;
+  double angle = 0.0;  ///< deg
+  bool ratioPW = true; ///< dwpw (else dw)
+  bool yukawa = false;
+  double rmin = 0.0;   ///< fm (as used: snapped to the grid)
+  double eRef = 0.0;   ///< MeV
+  // Derived.
+  Kinematics kin;
+  Channel aa, sf;
+  double eAA = 0.0, muSx = 0.0, kappa = 0.0, etaB = 0.0, beta = 0.0, vcm = 0.0;
+  double h = 0.0;      ///< radial step for r = r_sx (fm); the a + A wave uses beta h
+  int i0 = 0, n = 0;   ///< integration from node i0 to node n-1 (Simpson)
+  std::vector<double> phi;  ///< phi_sx on the grid
+  std::vector<double> simpson;  ///< Simpson weights (times h), 0 below i0
+  std::vector<complex> sigmaAA;  ///< e^{i sigma_l^aA} ... stored as the phase factor
+  std::vector<std::vector<complex>> uAA;  ///< u_l^aA(beta r_i), l = 0..
+  std::vector<double> tailAA;  ///< sum_{l' >= l} (2l'+1) Int |phi u_l'^aA| (bound on what is left)
+  double refRatio = 0.0;  ///< rho(E_ref)
+  Point ref;
+  /// ln R on a uniform energy grid (cubic Lagrange interpolation).
+  double gridLo = 0.0, gridStep = 0.0;
+  std::vector<double> lnR;
+  double tailWorst = 0.0;  ///< largest |integrand at r_end|/(kappa |M|) seen on the grid
+  /// M_PW changes sign on the grid (a node of the momentum distribution;
+  /// possible with rmin > 0 at large q): dwpw is then singular there.
+  bool pwSignChange = false;
+  /// Table form (distortion=table:<file>).
+  std::shared_ptr<const ThmWeightTable> table;
+  mutable std::atomic<bool> warned{false};
+
+  /// Sets up everything and fills the grid on [eLo, eHi] (MeV).  "" or what is wrong.
+  std::string Build(const ThmExperiment &x, const Kinematics &k, double eLo, double eHi, double eRefDefault);
+  /// Direct evaluation at E (not the grid).
+  Point Evaluate(double energy) const;
+  /// rho(E) as R uses it, from a Point.
+  double Ratio(const Point &p) const {
+    return ratioPW ? std::norm(p.m) / (p.mpw * p.mpw) : std::norm(p.m);
+  }
+  /// R(E) = rho(E)/rho(E_ref) directly.
+  double R(const Point &p) const { return Ratio(p) / refRatio; }
+  /// The weight applied to the model: interpolated R (or the table).  *outside
+  /// is set when E lies beyond the grid (the end value is used).
+  double Weight(double energy, bool *outside = nullptr) const;
+  /// Kinematics at E only (E_sF > 0, eta_sF, a reachable lab angle): "" or what is wrong.
+  std::string CheckEnergy(double energy) const;
+  /// E_sF(E) = E_aA - B - E.
+  double EsF(double energy) const { return eAA - kin.bind - energy; }
+
+ private:
+  /// u_l of channel c on the grid r_j = j step, j = 0..nStore-1; false if it fails.
+  bool Wave(const Channel &c, int l, double step, int nStore, std::vector<complex> &u) const;
+};
+
+/// What the output file and pyazr report for one experiment's distortion.
+struct ThmDistortionReport {
+  std::string experiment, kind, description;
+  double eRef = 0.0, eAA = 0.0, bind = 0.0, kAA = 0.0, etaAA = 0.0, kappa = 0.0, etaB = 0.0, beta = 0.0;
+  std::vector<double> energy, esf, ksf, etasf, thetaCm, x, q, m2, mpw2, r, rModel;
+  std::vector<int> lmax;
+};
+
+#endif

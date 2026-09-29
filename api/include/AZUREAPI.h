@@ -8,6 +8,7 @@
 #include <vector>
 #include "ThmExperiment.h"
 #include "ThmLineshape.h"
+#include "ThmDistortion.h"
 
 class Config;
 class EData;
@@ -338,6 +339,9 @@ class AZUREAPI {
                        std::string &why);
   /// The window-averaged THM entrance vertex of experiment `name` (EData::ThmVertexTable).
   bool GetThmVertex(const std::string &name, const vector_r &energies, ThmVertexReport &out, std::string &why);
+  /// The distortion factor R(E) of experiment `name` (EData::ThmDistortionTable).
+  bool GetThmDistortion(const std::string &name, const vector_r &energies, ThmDistortionReport &out,
+                        std::string &why);
 
   /*!
    * Per-point sensitivities d(model)/d(theta) of the calculated segments, for

@@ -11,6 +11,7 @@
 #include "CoulFunc.h"
 #include "ShftFunc.h"
 #include "ThmLineshape.h"
+#include "ThmDistortion.h"
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -251,6 +252,17 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
                             << point->GetCMEnergy() << " MeV, outside its table ["
                             << weight->e.front() << ", " << weight->e.back()
                             << "] MeV; the end value is used there (reported once)." << std::endl;
+  }
+  // Distortion factor R(E) of the point's THM experiment (distortion=...;
+  // ThmDistortion.h), the same convention: it multiplies the model before
+  // the folding.
+  if (const ThmDistortion *distortion = point->GetThmDistortion()) {
+    bool outside = false;
+    sigma *= distortion->Weight(point->GetCMEnergy(), &outside);
+    if (outside && !distortion->warned.exchange(true))
+      configure().outStream << "WARNING: <thm> experiment[" << distortion->experiment
+                            << "]: the distortion factor is evaluated at E = " << point->GetCMEnergy()
+                            << " MeV, outside its grid; the end value is used there (reported once)." << std::endl;
   }
 
   point->SetFitCrossSection(sigma);

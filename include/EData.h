@@ -6,6 +6,7 @@
 #include "EDataIterator.h"
 #include "ThmExperiment.h"
 #include "ThmLineshape.h"
+#include "ThmDistortion.h"
 #include <memory>
 #include <deque>
 #include <ios>
@@ -124,6 +125,8 @@ class EData {
     /// Spectator-momentum window (ps=hulthen|gauss|table), or null; shared
     /// with its segments.
     std::shared_ptr<const ThmSpectatorWindow> window;
+    /// Distortion factor R(E) (distortion=...), or null; shared with its segments.
+    std::shared_ptr<const ThmDistortion> distortion;
     /// Entrance pair key of its segments (0 if they differ).
     int pairKey = 0;
   };
@@ -170,6 +173,16 @@ class EData {
    */
   bool ThmVertexTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
                       const Config &configure, ThmVertexReport &out, std::string &why);
+  /*!
+   * The distortion factor of THM experiment `name` (distortion=coulomb or
+   * optical) at the c.m. energies `energies` (MeV, x + A): E_sF, k_sF,
+   * eta_sF, the spectator angle, q, |M|^2, |M_PW|^2, the l summed, R
+   * evaluated directly and R as the model uses it (interpolated on the grid).
+   * For distortion=table only the model's w(E).  False (and `why`) if there is
+   * no such experiment or it has no distortion.
+   */
+  bool ThmDistortionTable(const std::string &name, const std::vector<double> &energies, ThmDistortionReport &out,
+                          std::string &why);
   TargetEffect *GetTargetEffect(int);
   EDataIterator begin();
   EDataIterator end();

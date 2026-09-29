@@ -2960,6 +2960,7 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
     configure.outStream << summary.str() << std::endl;
 
     {
+      ThmDistortion::Kinematics dk;  // for distortion=coulomb|optical
       if (x.hasKinematics) {
         // The entrance pair x + A of the THM segments, and which of beam and
         // target is the Trojan horse a = x + s.
@@ -3000,6 +3001,19 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
         double mX = tabX ? tabX->mass : pair->GetM(2 - other);  // the pair nucleus that is x
         double mA = nA.mass;
         double bind = (mX + sp.mass - th.mass) * amu;
+        dk.Za = th.Z;
+        dk.ZA = nA.Z;
+        dk.Zs = sp.Z;
+        dk.Zx = th.Z - sp.Z;
+        dk.ma = th.mass;
+        dk.mA = nA.mass;
+        dk.ms = sp.mass;
+        dk.mx = mX;
+        dk.horseIsBeam = horse == 0;
+        dk.mBeam = b.mass;
+        dk.mTarget = t.mass;
+        dk.beamEnergy = x.beamEnergy;
+        dk.bind = bind;
         // Quasi-free x + A energy: the spectator keeps the Trojan horse's
         // velocity (horse = beam) or stays at rest (horse = target).
         double exa = horse == 0 ? x.beamEnergy * mX / th.mass * mA / (mX + mA) : x.beamEnergy * mX / (mA + mX);
@@ -3009,6 +3023,19 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
           << th.name << " = x + " << sp.name << ", B(x+s) = " << bind << " MeV; quasi-free E(x+A) = " << exa
           << " MeV, E_qf = E(x+A) - B = " << exa - bind << " MeV.";
         configure.outStream << k.str() << std::endl;
+        // The vertex takes B from the entrance pair's channel lines (field 32),
+        // the kinematics from the masses; say so when they disagree.
+        if (std::fabs(pair->GetBindingEnergy() - bind) > 1.0e-3) {
+          std::ostringstream w;
+          w.precision(6);
+          w << "WARNING: <thm> experiment[" << x.name << "]: B(x+s) from the masses of " << th.name << " = x + "
+            << sp.name << " is " << bind << " MeV, but the entrance pair " << pairKey
+            << " carries B = " << pair->GetBindingEnergy()
+            << " MeV (field 32 of its channel lines); the THM vertex uses field 32, the kinematics of this "
+               "experiment (the quasi-free energy above, E_sF of the line shape and of the distortion "
+               "factor) use the masses.";
+          configure.outStream << w.str() << std::endl;
+        }
 
         if (x.psKind != ThmExperiment::PS_DELTA) {
           // Spectator-momentum window (ThmLineshape.h ThmSpectatorWindow).
@@ -3090,6 +3117,84 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
           group.lineshape = shape;
           for (int s : group.segments) GetSegment(s)->SetThmLineshape(shape);
         }
+      }
+      if (x.distortion != ThmExperiment::DIST_NONE) {
+        // Distortion factor R(E) (ThmDistortion.h): multiplies the model of
+        // every segment of the experiment before the folding.
+        double eLo = 1.0e300, eHi = -1.0e300;
+        for (int s : group.segments)
+          for (int p = 1; p <= GetSegment(s)->NumPoints(); p++) {
+            eLo = std::min(eLo, GetSegment(s)->GetPoint(p)->GetCMEnergy());
+            eHi = std::max(eHi, GetSegment(s)->GetPoint(p)->GetCMEnergy());
+          }
+        std::shared_ptr<ThmDistortion> d = std::make_shared<ThmDistortion>();
+        d->experiment = x.name;
+        std::ostringstream l;
+        l.precision(6);
+        if (x.distortion == ThmExperiment::DIST_TABLE) {
+          d->kind = ThmDistortion::TABLE;
+          d->table = x.distortionWeights;
+          const ThmWeightTable &table = *d->table;
+          if (!table.Covers(eLo) || !table.Covers(eHi)) {
+            configure.outStream << where << "distortion: the points span E_cm = " << eLo << " to " << eHi
+                                << " MeV, beyond the table '" << table.name << "' [" << table.e.front() << ", "
+                                << table.e.back() << "] MeV." << std::endl;
+            return -1;
+          }
+          d->description = "table " + table.name;
+          l << "  Distortion factor: w(E) from the table '" << table.name << "' multiplies the model.";
+        } else {
+          d->kin = dk;
+          d->eAA = dk.beamEnergy * dk.mTarget / (dk.mBeam + dk.mTarget);
+          // Every data point must be reachable (the grid then extends 0.5
+          // MeV beyond the points, short of the spectator's threshold).
+          d->angleKind = x.angleKind == 1 ? ThmDistortion::LAB : x.angleKind == 2 ? ThmDistortion::CM : ThmDistortion::QF;
+          d->angle = x.angle;
+          d->sf.kind = x.distortion == ThmExperiment::DIST_OPTICAL && x.opticalSF.kind == 0
+                           ? ThmDistortion::Channel::PLANE
+                           : ThmDistortion::Channel::POINT_COULOMB;
+          d->sf.mu = dk.ms * (dk.mx + dk.mA) / (dk.ms + dk.mx + dk.mA) * uconv;
+          d->vcm = std::sqrt(2.0 * dk.mBeam * uconv * dk.beamEnergy) / ((dk.mBeam + dk.mTarget) * uconv);
+          for (int s : group.segments)
+            for (int p = 1; p <= GetSegment(s)->NumPoints(); p++) {
+              std::string why = d->CheckEnergy(GetSegment(s)->GetPoint(p)->GetCMEnergy());
+              if (!why.empty()) {
+                configure.outStream << where << "distortion: " << why << "." << std::endl;
+                return -1;
+              }
+            }
+          double gridHi = std::min(eHi + 0.5, d->eAA - dk.bind - 0.5 * d->EsF(eHi));
+          std::string why = d->Build(x, dk, eLo - 0.5, gridHi, 0.5 * (eLo + eHi));
+          if (!why.empty()) {
+            configure.outStream << where << "distortion: " << why << "." << std::endl;
+            return -1;
+          }
+          ThmDistortion::Point lo = d->Evaluate(eLo), hi = d->Evaluate(eHi);
+          l << "  Distortion factor R(E), zero-range DWBA: " << d->description << ".\n"
+            << "  k_aA = " << d->aa.k << " fm^-1, eta_aA = " << d->aa.eta << ", kappa = " << d->kappa
+            << " fm^-1, eta_b = " << d->etaB << ", beta = m_s/m_a = " << d->beta << "; E_ref = " << d->eRef
+            << " MeV, grid " << d->gridLo << " to " << d->gridLo + (d->lnR.size() - 1) * d->gridStep
+            << " MeV, radial step " << d->h << " fm to " << (d->n - 1) * d->h << " fm, l <= " << d->uAA.size() - 1
+            << ".\n"
+            << "  R = " << d->R(lo) << " at E = " << eLo << " MeV (E_sF = " << lo.esf << ", eta_sF = " << lo.etasf
+            << ", theta_cm = " << lo.thetaCm << " deg), " << d->R(hi) << " at E = " << eHi << " MeV (E_sF = "
+            << hi.esf << ", eta_sF = " << hi.etasf << ", theta_cm = " << hi.thetaCm << " deg).";
+          if (d->pwSignChange && d->ratioPW)
+            l << "\nWARNING: <thm> experiment[" << x.name << "]: the plane-wave amplitude M_PW changes sign on "
+                 "the grid (a node of the momentum distribution at this angle); R = |M/M_PW|^2 is singular "
+                 "there (distortionRatio=dw avoids it).";
+          if (d->tailWorst > 1.0e-8)
+            l << "\nWARNING: <thm> experiment[" << x.name << "]: the radial integrals are cut at r = "
+              << (d->n - 1) * d->h << " fm with a remainder up to " << d->tailWorst << " of |M|.";
+        }
+        for (int s : group.segments)
+          if (GetSegment(s)->GetThmWeight())
+            l << "\nWARNING: <thm> experiment[" << x.name << "]: segment " << GetSegment(s)->GetSegmentKey()
+              << " also has weight[" << GetSegment(s)->GetSegmentKey()
+              << "]=; both multiply its model (the distortion factor and the weight).";
+        configure.outStream << l.str() << std::endl;
+        group.distortion = d;
+        for (int s : group.segments) GetSegment(s)->SetThmDistortion(d);
       }
     }
     thmGroups_.push_back(group);
@@ -3256,6 +3361,31 @@ void EData::WriteThmExperiments(const Config &configure) {
             << "\n";
       out << std::left << std::setw(16) << "<T_s>" << std::right << std::setw(18) << w.MeanEs() << "\n";
     }
+    // Distortion factor (distortion=...): R at the lowest point, E_ref and the highest point.
+    for (const ThmGroup &group : thmGroups_) {
+      if (group.name != r.name || !group.distortion) continue;
+      const ThmDistortion &d = *group.distortion;
+      out << "distortion: " << d.description << "\n";
+      if (d.kind == ThmDistortion::TABLE) continue;
+      double eLo = 1.0e300, eHi = -1.0e300;
+      for (int s : group.segments)
+        for (int p = 1; p <= GetSegment(s)->NumPoints(); p++) {
+          eLo = std::min(eLo, GetSegment(s)->GetPoint(p)->GetCMEnergy());
+          eHi = std::max(eHi, GetSegment(s)->GetPoint(p)->GetCMEnergy());
+        }
+      out << "# Zero-range DWBA transfer amplitude M(E) = <chi(-)_sF phi_sx chi(+)_aA(beta r)> (Mukhamedzhanov &\n"
+          << "# Pang PRC 99 (2019) 064618 eqs. 20-24; Mukhamedzhanov arXiv:2609.04498 eqs. 22-30), M_PW its\n"
+          << "# plane-wave limit; the model is multiplied by R(E) before folding (PWA-extracted S* / R).\n"
+          << "# E_aA = " << d.eAA << " MeV, B = " << d.kin.bind << " MeV, k_aA = " << d.aa.k << " fm^-1, eta_aA = "
+          << d.aa.eta << ", kappa = " << d.kappa << " fm^-1, eta_b = " << d.etaB << ", beta = " << d.beta << "\n"
+          << "# Columns: E, E_sF (MeV), eta_sF, theta_cm (deg), |M|^2, |M_PW|^2, R, l_max.\n";
+      for (double e : {eLo, d.eRef, eHi}) {
+        ThmDistortion::Point p = d.Evaluate(e);
+        out << "distortion_point" << std::setw(18) << e << std::setw(18) << p.esf << std::setw(18) << p.etasf
+            << std::setw(18) << p.thetaCm << std::setw(18) << std::norm(p.m) << std::setw(18) << p.mpw * p.mpw
+            << std::setw(18) << (p.ok ? d.R(p) : 0.0) << std::setw(6) << p.lmax << "\n";
+      }
+    }
     // Coulomb line shape (lineshape=on): the ranges over the experiment's points.
     for (const ThmGroup &group : thmGroups_) {
       if (group.name != r.name || !group.lineshape) continue;
@@ -3359,6 +3489,61 @@ bool EData::ThmLineshapeTable(const std::string &name, const std::vector<double>
       }
     }
     out.exits.push_back(ex);
+  }
+  return true;
+}
+
+bool EData::ThmDistortionTable(const std::string &name, const std::vector<double> &energies, ThmDistortionReport &out,
+                               std::string &why) {
+  const ThmGroup *group = nullptr;
+  for (const ThmGroup &g : thmGroups_)
+    if (g.name == name) group = &g;
+  if (!group) {
+    why = "no THM experiment '" + name + "' in use";
+    return false;
+  }
+  if (!group->distortion) {
+    why = "THM experiment '" + name + "' has no distortion (distortion=coulomb|optical|table:<file>)";
+    return false;
+  }
+  const ThmDistortion &d = *group->distortion;
+  out = ThmDistortionReport();
+  out.experiment = name;
+  out.description = d.description;
+  out.energy = energies;
+  if (d.kind == ThmDistortion::TABLE) {
+    out.kind = "table";
+    for (double e : energies) out.rModel.push_back(d.Weight(e));
+    return true;
+  }
+  out.kind = d.kind == ThmDistortion::COULOMB ? "coulomb" : "optical";
+  out.eRef = d.eRef;
+  out.eAA = d.eAA;
+  out.bind = d.kin.bind;
+  out.kAA = d.aa.k;
+  out.etaAA = d.aa.eta;
+  out.kappa = d.kappa;
+  out.etaB = d.etaB;
+  out.beta = d.beta;
+  for (double e : energies) {
+    ThmDistortion::Point p;
+    std::string bad = d.CheckEnergy(e);
+    if (bad.empty()) p = d.Evaluate(e);
+    if (!bad.empty() || !p.ok) {
+      why = "THM experiment '" + name + "': " + (bad.empty() ? p.why : bad);
+      return false;
+    }
+    out.esf.push_back(p.esf);
+    out.ksf.push_back(p.ksf);
+    out.etasf.push_back(p.etasf);
+    out.thetaCm.push_back(p.thetaCm);
+    out.x.push_back(p.x);
+    out.q.push_back(p.q);
+    out.m2.push_back(std::norm(p.m));
+    out.mpw2.push_back(p.mpw * p.mpw);
+    out.r.push_back(d.R(p));
+    out.rModel.push_back(d.Weight(e));
+    out.lmax.push_back(p.lmax);
   }
   return true;
 }

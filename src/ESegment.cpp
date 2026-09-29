@@ -8,6 +8,7 @@
 #include "ExtrapLine.h"
 #include "SegLine.h"
 #include "ThmLineshape.h"
+#include "ThmDistortion.h"
 
 /*!
  * This constructor is used if the segment contains actual experimental data.  The segment
@@ -1172,6 +1173,11 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
 void ESegment::SetThmLineshape(std::shared_ptr<const ThmLineshape> l) {
   thmLineshape_ = l;
   for (EPoint &point : points_) point.SetThmLineshape(l.get());
+}
+
+void ESegment::SetThmDistortion(std::shared_ptr<const ThmDistortion> d) {
+  thmDistortion_ = d;
+  for (EPoint &point : points_) point.SetThmDistortion(d.get());
 }
 
 void ESegment::SetThmSpectatorWindow(std::shared_ptr<const ThmSpectatorWindow> w) {

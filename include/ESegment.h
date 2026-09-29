@@ -12,6 +12,7 @@ class SegLine;
 class CNuc;
 class Config;
 struct ThmWeightTable;
+class ThmDistortion;
 struct ThmLineshape;
 struct ThmSpectatorWindow;
 
@@ -161,6 +162,10 @@ class ESegment {
   /// (ps=...), as SetThmLineshape.
   void SetThmSpectatorWindow(std::shared_ptr<const ThmSpectatorWindow> w);
   const ThmSpectatorWindow *GetThmSpectatorWindow() const { return thmWindow_.get(); }
+  /// Attach the distortion factor R(E) of this segment's THM experiment
+  /// (distortion=...), as SetThmLineshape.
+  void SetThmDistortion(std::shared_ptr<const ThmDistortion> d);
+  const ThmDistortion *GetThmDistortion() const { return thmDistortion_.get(); }
   /// Set the normalization applied to the data.
   void SetNorm(double);
   /// Set the energy shift; UpdatePointEnergiesWithShift applies it to the points.
@@ -218,6 +223,7 @@ class ESegment {
   std::shared_ptr<const ThmWeightTable> thmWeight_;
   std::shared_ptr<const ThmLineshape> thmLineshape_;
   std::shared_ptr<const ThmSpectatorWindow> thmWindow_;
+  std::shared_ptr<const ThmDistortion> thmDistortion_;
   /// Which cross section component to compare against: 0 = full, 1 = E1 only, 2 = E2 only.
   int crossSectionComponent_;
   bool isTargetEffect_;

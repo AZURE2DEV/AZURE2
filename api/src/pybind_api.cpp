@@ -511,6 +511,39 @@ class Session {
     d["channels"] = channels;
     return d;
   }
+  // The distortion factor R(E) of a THM experiment (distortion=...).
+  py::dict thm_distortion(const std::string &name, py::array_t<double, py::array::forcecast> e) {
+    ConfigScope guard(config_);
+    ThmDistortionReport r;
+    std::string why;
+    if (!api_->GetThmDistortion(name, to_vector(e), r, why)) throw AZURE2Error(why);
+    py::dict d;
+    d["experiment"] = r.experiment;
+    d["kind"] = r.kind;
+    d["description"] = r.description;
+    d["E"] = to_array(r.energy);
+    d["R_model"] = to_array(r.rModel);
+    if (r.kind == "table") return d;
+    d["E_ref"] = r.eRef;
+    d["E_aA"] = r.eAA;
+    d["B"] = r.bind;
+    d["k_aA"] = r.kAA;
+    d["eta_aA"] = r.etaAA;
+    d["kappa"] = r.kappa;
+    d["eta_b"] = r.etaB;
+    d["beta"] = r.beta;
+    d["E_sF"] = to_array(r.esf);
+    d["k_sF"] = to_array(r.ksf);
+    d["eta_sF"] = to_array(r.etasf);
+    d["theta_cm"] = to_array(r.thetaCm);
+    d["x"] = to_array(r.x);
+    d["q"] = to_array(r.q);
+    d["M2"] = to_array(r.m2);
+    d["M2_PW"] = to_array(r.mpw2);
+    d["R"] = to_array(r.r);
+    d["lmax"] = r.lmax;
+    return d;
+  }
   py::array_t<double> calculate_model_gradients_rwa(py::array_t<double, py::array::forcecast> p) {
     vector_r v = to_vector(p), out;
     {
@@ -678,6 +711,10 @@ PYBIND11_MODULE(_azure2, m) {
            "THM entrance vertex of experiment `name` at c.m. energies: the spectator-momentum "
            "window (nodes, weights, rho) and, per entrance channel and level, <|M_l|^2> over "
            "the window and |M_l|^2 at p_s = 0.")
+      .def("thm_distortion", &Session::thm_distortion, py::arg("name"), py::arg("energies"),
+           "Distortion factor R(E) of THM experiment `name` (distortion=coulomb|optical|table) at "
+           "c.m. energies: E_sF, eta_sF, the spectator angle, |M|^2, |M_PW|^2, R directly and as the "
+           "model uses it (R_model).")
       .def("calculate_model_gradients_rwa", &Session::calculate_model_gradients_rwa,
            py::arg("params"))
       .def("coulomb_functions", &Session::coulomb_functions, py::arg("request"))

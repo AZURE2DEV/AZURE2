@@ -131,6 +131,33 @@ std::string ParsePs(const std::string &value, ThmExperiment &x) {
   return usage;
 }
 
+// opticalAA= / opticalSF=: plane | coulomb | V,R,a,W,RW,aW,WD,RD,aD,RC.
+std::string ParseOptical(const std::string &key, const std::string &value, ThmExperiment::Optical &o) {
+  o = ThmExperiment::Optical();
+  if (value == "plane") {
+    o.kind = 0;
+    return "";
+  }
+  if (value == "coulomb") {
+    o.kind = 1;
+    return "";
+  }
+  std::vector<std::string> f = Split(value, ',');
+  bool ok = f.size() == 10;
+  for (size_t k = 0; ok && k < 10; k++) ok = ReadWholeDouble(f[k], o.p[k]);
+  // Radii and diffusenesses > 0 where their depth is non-zero; RC >= 0.
+  for (int t = 0; ok && t < 3; t++)
+    if (o.p[3 * t] != 0.0 && !(o.p[3 * t + 1] > 0.0 && o.p[3 * t + 2] > 0.0)) ok = false;
+  if (ok && !(o.p[9] >= 0.0)) ok = false;
+  if (!ok)
+    return key + "='" + value +
+           "': expected plane, coulomb or ten numbers V,R,a,W,RW,aW,WD,RD,aD,RC (MeV and fm: real volume, "
+           "imaginary volume and imaginary surface Woods-Saxon, depths > 0 attractive/absorptive, radii and "
+           "diffusenesses > 0 where the depth is not 0, the Coulomb radius RC >= 0, 0 = point charge)";
+  o.kind = 2;
+  return "";
+}
+
 bool ValidName(const std::string &name) {
   if (name.empty()) return false;
   for (char c : name)
@@ -205,7 +232,7 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
     if (eq == std::string::npos || eq == 0 || eq + 1 == token.size())
       return where + "'" + token + "' is not key=value";
     std::string key = token.substr(0, eq), value = token.substr(eq + 1);
-    if (key == "theta" || key == "distortion")
+    if (key == "theta")
       return where + "key '" + key + "' is reserved for a later version (not implemented yet)";
     if (std::find(work.keys.begin(), work.keys.end(), key) != work.keys.end())
       return where + "key '" + key + "' is given twice";
@@ -238,9 +265,59 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
     } else if (key == "psNodes") {
       if (!ReadWholeInt(value, work.psNodes) || work.psNodes < 1 || work.psNodes > 64)
         why = "psNodes='" + value + "': expected a whole number of Gauss-Legendre nodes, 1 to 64";
+    } else if (key == "distortion") {
+      work.distortionTable.clear();
+      if (value == "none")
+        work.distortion = ThmExperiment::DIST_NONE;
+      else if (value == "coulomb")
+        work.distortion = ThmExperiment::DIST_COULOMB;
+      else if (value == "optical")
+        work.distortion = ThmExperiment::DIST_OPTICAL;
+      else if (value.compare(0, 6, "table:") == 0 && value.size() > 6) {
+        work.distortion = ThmExperiment::DIST_TABLE;
+        work.distortionTable = value.substr(6);
+      } else
+        why = "distortion='" + value + "': expected none, coulomb, optical or table:<file>";
+    } else if (key == "opticalAA" || key == "opticalSF") {
+      why = ParseOptical(key, value, key == "opticalAA" ? work.opticalAA : work.opticalSF);
+    } else if (key == "spectatorAngle") {
+      double a = 0.0;
+      if (value == "qf") {
+        work.angleKind = 0;
+      } else if (value.compare(0, 3, "cm:") == 0 && ReadWholeDouble(value.substr(3), a) && a >= 0.0 && a <= 180.0) {
+        work.angleKind = 2;
+        work.angle = a;
+      } else if (ReadWholeDouble(value, a) && a >= 0.0 && a <= 180.0) {
+        work.angleKind = 1;
+        work.angle = a;
+      } else
+        why = "spectatorAngle='" + value +
+              "': expected qf, a lab angle in degrees (0-180) or cm:<degrees> (0-180)";
+    } else if (key == "distortionRef") {
+      if (!ReadWholeDouble(value, work.distortionRef))
+        why = "distortionRef='" + value + "': expected the reference energy E_ref in MeV (c.m. of x + A)";
+      work.hasDistortionRef = true;
+    } else if (key == "distortionRatio") {
+      if (value == "dwpw")
+        work.distortionRatioPW = true;
+      else if (value == "dw")
+        work.distortionRatioPW = false;
+      else
+        why = "distortionRatio='" + value + "': expected dwpw or dw";
+    } else if (key == "boundState") {
+      std::vector<std::string> f = Split(value, ':');
+      double rmin = 0.0;
+      bool ok = (f.size() == 1 || f.size() == 2) && (f[0] == "whittaker" || f[0] == "yukawa");
+      if (ok && f.size() == 2) ok = ReadWholeDouble(f[1], rmin) && rmin >= 0.0 && rmin <= 50.0;
+      if (ok) {
+        work.boundYukawa = f[0] == "yukawa";
+        work.boundRmin = rmin;
+      } else
+        why = "boundState='" + value + "': expected whittaker or yukawa, optionally :rmin in fm (0-50)";
     } else {
       why = "unknown key '" + key +
-            "' (keys: segments, background, beam, target, spectator, Ebeam, lineshape, ps, psNodes)";
+            "' (keys: segments, background, beam, target, spectator, Ebeam, lineshape, ps, psNodes, "
+            "distortion, opticalAA, opticalSF, spectatorAngle, distortionRef, distortionRatio, boundState)";
     }
     if (!why.empty()) return where + why;
     work.keys.push_back(key);
@@ -268,6 +345,15 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
                      "spectator and Ebeam (mu_sx from the spectator and x masses)";
     if (has("psNodes") && x.psKind == ThmExperiment::PS_DELTA)
       return where + "psNodes= needs a ps window (ps=hulthen|gauss|table)";
+    const bool computed = x.distortion == ThmExperiment::DIST_COULOMB || x.distortion == ThmExperiment::DIST_OPTICAL;
+    if (computed && kin != 4)
+      return where + "distortion=" + (x.distortion == ThmExperiment::DIST_COULOMB ? "coulomb" : "optical") +
+             " needs the kinematics of the reaction: beam, target, spectator and Ebeam";
+    if ((has("opticalAA") || has("opticalSF")) && x.distortion != ThmExperiment::DIST_OPTICAL)
+      return where + "opticalAA= and opticalSF= need distortion=optical";
+    for (const char *key : {"spectatorAngle", "distortionRef", "distortionRatio", "boundState"})
+      if (has(key) && !computed)
+        return where + key + "= needs distortion=coulomb or distortion=optical";
     for (int k : x.segments) {
       auto it = owner.find(k);
       if (it != owner.end()) {
