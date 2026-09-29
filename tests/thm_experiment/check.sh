@@ -18,7 +18,7 @@
 #   (c) background: data made as s m + a0 + a1 E (m the model of run (a),
 #       E the c.m. energy) are fitted with n = 1/s, b_k = a_k/s recovered to
 #       1e-8 and chi2 ~ 0, and the fitted curve written is the model plus b(E);
-#   (d) what AZURE2 refuses (ERROR line, non-zero exit): the reserved keys,
+#   (d) what AZURE2 refuses (ERROR line, non-zero exit): the reserved key theta, a bad distortion,
 #       an unknown key or nuclide, a malformed value, partial kinematics, a
 #       segment in two experiments, a segment that is not THM or has a fixed
 #       norm, kinematics that do not make the entrance pair.
@@ -151,9 +151,9 @@ refuse() {  # refuse NAME MESSAGE-FRAGMENT BLOCK [AWK]
     bad "$1: not refused with '$2' (status $(cat "$WORK/$1/status"))"; tail -3 "$WORK/$1/log" | sed 's/^/        /'
   fi
 }
-for k in theta distortion; do  # ps: tests/thm_spectator_window
-  refuse "reserved_$k" "not implemented yet" "experiment[A] segments=1,2 $k=1"
-done
+refuse reserved_theta "not implemented yet" "experiment[A] segments=1,2 theta=1"  # ps: tests/thm_spectator_window
+# distortion= is implemented since Stage D (tests/thm_distortion); a bad value is refused.
+refuse bad_distortion "expected none, coulomb, optical or table" "experiment[A] segments=1,2 distortion=1"
 refuse unknown_key "unknown key 'foo'" "experiment[A] segments=1 foo=1"
 refuse bad_nuclide "unknown nuclide '8Be'" "experiment[A] segments=1-2 beam=8Be target=d spectator=n Ebeam=54"
 refuse bad_explicit "expected Z,A,mass" "experiment[A] segments=1-2 beam=18O target=2,1,2.0135 spectator=n Ebeam=54"

@@ -126,7 +126,7 @@ with tempfile.TemporaryDirectory() as tmp:
           m2.thm_experiments() == before and str(m2._suffix) + str(m2._prefix) == snapshot)
 
     # Engine-side refusals seen by the parser too.
-    for line, frag in [("experiment[A] segments=1 distortion=on", "not implemented yet"),
+    for line, frag in [("experiment[A] segments=1 distortion=on", "expected none, coulomb, optical"),
                        ("experiment[A] segments=1 theta=20", "not implemented yet"),
                        ("experiment[A] segments=1 foo=1", "unknown key"),
                        ("experiment[A] segments=1\nexperiment[B] segments=1", "already in"),
