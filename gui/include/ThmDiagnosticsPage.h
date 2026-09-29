@@ -1,6 +1,7 @@
 #ifndef THMDIAGNOSTICSPAGE_H
 #define THMDIAGNOSTICSPAGE_H
 
+#include <QHash>
 #include <QWidget>
 #include <functional>
 
@@ -8,6 +9,7 @@
 
 QT_BEGIN_NAMESPACE
 class QComboBox;
+class QFrame;
 class QGridLayout;
 class QLabel;
 class QProgressBar;
@@ -30,8 +32,12 @@ class ThmPlotWidget;
  *   p_s window       w(p) = |phi(p)|^2 p^2 over the window with its quadrature
  *                    nodes (only for an experiment with ps=), and the vertex
  *                    panel adds <|M_l|^2> over the window, dashed.
- * Every panel carries the reaction as a bold label inside the axes.  Later
- * stages add panels here (distortion), not controls.
+ * Each panel is a framed card with a short bold title; the cards fill a
+ * grid of equal cells (two or three columns, by width) and their axes line
+ * up (ThmPlotWidget::setAlignedWith).  Every plot carries the reaction as a
+ * bold label inside the axes.  One toolbar row holds the controls (segment,
+ * J^pi of the vertex panel, Compute); the status is one line, its details in
+ * its tooltip.  Later stages add panels here (distortion), not controls.
  */
 class ThmDiagnosticsPage : public QWidget {
   Q_OBJECT
@@ -65,14 +71,14 @@ class ThmDiagnosticsPage : public QWidget {
   QPushButton *computeButton;
   QProgressBar *busyBar;
   QLabel *statusLabel;
-  QComboBox *vertexGroupCombo;  ///< J^pi of the vertex panel
+  QComboBox *vertexGroupCombo;  ///< J^pi of the vertex panel (in the toolbar)
   ThmPlotWidget *vertexPlot;
   ThmPlotWidget *hoesPlot;
   ThmPlotWidget *lineshapePlot;
   ThmPlotWidget *zetaPlot;
   ThmPlotWidget *weightPlot;
   ThmPlotWidget *windowPlot;
-  QWidget *vertexPanel;  ///< vertexGroupCombo + vertexPlot
+  QWidget *vertexPanel;  ///< the card of vertexPlot
 
  signals:
   /// Emitted when a computation has finished and its result is shown.
@@ -82,7 +88,14 @@ class ThmDiagnosticsPage : public QWidget {
   void threadFinished();
   void drawVertex();
 
+ protected:
+  void resizeEvent(QResizeEvent *event) override;
+
  private:
+  int columnsFor(int shown) const;
+  bool panelShown(ThmPlotWidget *plot) const;
+  QHash<ThmPlotWidget *, QFrame *> cards_;
+  int columns_ = 2;
   void clearPlots(const QString &message);
   /// The optional panels that are shown, in reading order after the first row.
   void layoutPanels();

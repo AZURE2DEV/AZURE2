@@ -67,6 +67,7 @@
 #include "ThmExperiment.h"
 #include "ThmExperimentsPage.h"
 #include "ThmModelPage.h"
+#include "ThmNumberSpin.h"
 #include "ThmWorkspace.h"
 #include "Constants.h"
 #include "ThmFunc.h"
@@ -140,6 +141,13 @@ static QStringList offeredSegments(QListWidget* list) {
   for(int i = 0; i < list->count(); i++) s << list->item(i)->data(Qt::UserRole).toString();
   return s;
 }
+// A number typed into a field of the THM workspace (its text as typed).
+static void typeNumber(ThmNumberSpin* e, const QString& text) {
+  const double before = e->value();
+  e->setValue(text.toDouble());
+  if(e->value() == before) emit e->valueChanged(e->value());
+}
+
 static QListWidgetItem* segmentItem(QListWidget* list, int key) {
   for(int i = 0; i < list->count(); i++)
     if(list->item(i)->data(Qt::UserRole).toInt() == key) return list->item(i);
@@ -336,11 +344,10 @@ int main(int argc, char** argv) {
     p->beamCombo->setEditText("7Li");
     p->targetCombo->setEditText("d");
     p->spectatorCombo->setEditText("n");
-    p->beamEnergyEdit->setText("19");
-    emit p->beamEnergyEdit->textEdited("19");
-    ok("derived energies shown", p->derivedLabel->text().contains("B(x+s) = 2.22") &&
-                                     p->derivedLabel->text().contains("quasi-free E(x+A)"),
-       p->derivedLabel->text());
+    typeNumber(p->beamEnergyEdit, "19");
+    ok("derived energies shown", p->derivedText().contains("B(x+s) = 2.22") &&
+                                     p->derivedText().contains("quasi-free E(x+A)"),
+       p->derivedText());
     ok("table row", p->experimentTable->item(0, 1)->text() == "1,2" && p->experimentTable->item(0, 2)->text() == "linear");
 
     // A second experiment: nothing left to offer; refusals with the engine's messages.
@@ -392,7 +399,7 @@ int main(int argc, char** argv) {
     ok("reopened: editor", p->nameEdit->text() == "E1" && checkedSegments(p->segmentList) == QStringList({"1", "2"}) &&
                                p->backgroundCombo->currentText() == "linear" && p->kinematicsBox->isChecked() &&
                                p->beamCombo->currentText() == "7Li" && p->targetCombo->currentText() == "d" &&
-                               p->spectatorCombo->currentText() == "n" && p->beamEnergyEdit->text() == "19");
+                               p->spectatorCombo->currentText() == "n" && p->beamEnergyEdit->writtenText() == "19");
     // Edit: segment 2 out, background const; the kinematics unticked as a unit.
     segmentItem(p->segmentList, 2)->setCheckState(Qt::Unchecked);
     p->backgroundCombo->setCurrentText("const");
@@ -444,8 +451,8 @@ int main(int argc, char** argv) {
     ok("lineshape: switch on, enabled", ws.experimentsPage->lineshapeCheck->isChecked() &&
                                             ws.experimentsPage->lineshapeCheck->isEnabled());
     ok("lineshape: zeta shown (neutral spectator: 0)",
-       ws.experimentsPage->derivedLabel->text().contains(QString::fromUtf8("\u03b6 = 0 \u2026 0 into")),
-       ws.experimentsPage->derivedLabel->text());
+       ws.experimentsPage->derivedText().contains(QString::fromUtf8("\u03b6 = 0 \u2026 0 into")),
+       ws.experimentsPage->derivedText());
     ws.experimentsPage->backgroundCombo->setCurrentText("const");
     ws.accept();
     w.saveProject();
@@ -471,8 +478,7 @@ int main(int argc, char** argv) {
     p->targetCombo->setEditText("d");
     p->spectatorCombo->setEditText("n");
     ok("lineshape: disabled with an incomplete reaction", !p->lineshapeCheck->isEnabled());
-    p->beamEnergyEdit->setText("60");
-    emit p->beamEnergyEdit->textEdited("60");
+    typeNumber(p->beamEnergyEdit, "60");
     ok("lineshape: enabled with the complete reaction", p->lineshapeCheck->isEnabled() && !p->lineshapeCheck->isChecked());
     p->lineshapeCheck->setChecked(true);
     ok("lineshape: in the record", p->records().at(0).lineshape);
@@ -595,9 +601,8 @@ int main(int argc, char** argv) {
     p->beamCombo->setEditText("7Li");
     p->targetCombo->setEditText("d");
     p->spectatorCombo->setEditText("n");
-    p->beamEnergyEdit->setText("19");
-    emit p->beamEnergyEdit->textEdited("19");
-    const QString shown = p->derivedLabel->text();
+    typeNumber(p->beamEnergyEdit, "19");
+    const QString shown = p->derivedText();
     ws.accept();
     w.saveProject();
     int code = -1;
@@ -612,6 +617,10 @@ int main(int argc, char** argv) {
          shown.contains("B(x+s) = " + rx.cap(1) + " MeV") && shown.contains("E(x+A) = " + rx.cap(2) + " MeV") &&
              shown.contains("E_qf = E(x+A) - B = " + rx.cap(3) + " MeV"),
          shown + " | " + rx.cap(0));
+    if(found)
+      ok("page's B(x+s) and E_qf fields show the engine's numbers",
+         p->bindingValue->text() == rx.cap(1) + " MeV" && p->qfValue->text() == rx.cap(3) + " MeV",
+         p->bindingValue->text() + " | " + p->qfValue->text());
   }
 
   // 8. zeta at the ends of the data, charged spectator: 7Li(p,a) via
@@ -626,7 +635,7 @@ int main(int argc, char** argv) {
     ok("charged spectator: block opens", w.thmSettings(s, &err), err);
     ThmWorkspace ws(&w, s);
     ThmExperimentsPage* p = ws.experimentsPage;
-    const QString shown = p->derivedLabel->text();
+    const QString shown = p->derivedText();
     double lo = 0, hi = 0;
     ok("charged spectator: data range read", p->pointRange(QList<int>() << 1, lo, hi) && hi > lo);
     int code = -1;
@@ -671,7 +680,7 @@ int main(int argc, char** argv) {
     p->targetCombo->setEditText("d");
     p->spectatorCombo->setEditText("n");
     ok("ps: disabled with an incomplete reaction", !p->psBox->isEnabled());
-    type(p->beamEnergyEdit, "19");
+    typeNumber(p->beamEnergyEdit, "19");
     ok("ps: enabled with the complete reaction", p->psBox->isEnabled());
     ok("ps: point by default, only the distribution shown",
        p->psKindCombo->currentData().toString() == "delta" && !p->psMinEdit->isVisibleTo(p) &&
@@ -679,24 +688,24 @@ int main(int argc, char** argv) {
     p->psKindCombo->setCurrentIndex(p->psKindCombo->findData("hulthen"));
     ok("ps: Hulthen shows the window, a,b (standard, read-only) and the nodes",
        p->psMinEdit->isVisibleTo(p) && p->psAEdit->isVisibleTo(p) && !p->psAEdit->isEnabled() &&
-           p->psAEdit->text() == "0.2317" && p->psBEdit->text() == "1.202" && p->psNodesSpin->isVisibleTo(p) &&
+           p->psAEdit->writtenText() == "0.2317" && p->psBEdit->writtenText() == "1.202" && p->psNodesSpin->isVisibleTo(p) &&
            p->psNodesSpin->value() == 16 && !p->psFwhmEdit->isVisibleTo(p) && !p->psTableEdit->isVisibleTo(p));
-    type(p->psMinEdit, "0");
-    type(p->psMaxEdit, "40");
+    typeNumber(p->psMinEdit, "0");
+    typeNumber(p->psMaxEdit, "40");
     ok("ps: hulthen:0-40", p->records().at(0).ps == "hulthen:0-40" && p->records().at(0).psNodes.isEmpty(),
        p->records().at(0).ps);
-    ok("ps: <T_s> shown", p->derivedLabel->text().contains("<T_s> = ") && p->derivedLabel->text().contains("16 Gauss-Legendre"),
-       p->derivedLabel->text());
+    ok("ps: <T_s> shown", p->derivedText().contains("<T_s> = ") && p->derivedText().contains("16 Gauss-Legendre"),
+       p->derivedText());
     p->psCustomCheck->setChecked(true);
     ok("ps: custom a,b editable", p->psAEdit->isEnabled() && p->psBEdit->isEnabled());
-    type(p->psAEdit, "0.42");
-    type(p->psBEdit, "1.2");
+    typeNumber(p->psAEdit, "0.42");
+    typeNumber(p->psBEdit, "1.2");
     ok("ps: hulthen:a,b:pmin-pmax", p->records().at(0).ps == "hulthen:0.42,1.2:0-40", p->records().at(0).ps);
     p->psNodesSpin->setValue(24);
     ok("ps: psNodes", p->records().at(0).psNodes == "24");
     p->psKindCombo->setCurrentIndex(p->psKindCombo->findData("gauss"));
     ok("ps: Gaussian shows FWHM, not a,b", p->psFwhmEdit->isVisibleTo(p) && !p->psAEdit->isVisibleTo(p));
-    type(p->psFwhmEdit, "50");
+    typeNumber(p->psFwhmEdit, "50");
     ok("ps: gauss:FWHM:pmin-pmax", p->records().at(0).ps == "gauss:50:0-40", p->records().at(0).ps);
     p->psKindCombo->setCurrentIndex(p->psKindCombo->findData("table"));
     ok("ps: table shows the file, not the window", p->psTableEdit->isVisibleTo(p) && p->psTableButton->isVisibleTo(p) &&
@@ -705,8 +714,8 @@ int main(int argc, char** argv) {
     ok("ps: table:file", p->records().at(0).ps == "table:psmissing.dat");
     ok("refused: unreadable table (engine's reader)", ws.validate().contains("ps: cannot read the ps table"), ws.validate());
     type(p->psTableEdit, "psflat.dat");
-    ok("ps: table accepted, <T_s> over its range", ws.validate().isEmpty() && p->derivedLabel->text().contains("[20, 40]"),
-       ws.validate() + " | " + p->derivedLabel->text());
+    ok("ps: table accepted, <T_s> over its range", ws.validate().isEmpty() && p->derivedText().contains("[20, 40]"),
+       ws.validate() + " | " + p->derivedText());
     ok("ps: chosen file stored relative to the project",
        ThmExperimentsPage::projectRelative(work.filePath("psflat.dat"), work.path()) == "psflat.dat" &&
            ThmExperimentsPage::projectRelative("/elsewhere/ps.dat", work.path()) == "/elsewhere/ps.dat");
@@ -716,7 +725,7 @@ int main(int argc, char** argv) {
     p->psKindCombo->setCurrentIndex(p->psKindCombo->findData("hulthen"));
     p->psCustomCheck->setChecked(false);
     ok("ps: unticking custom restores the deuteron's a,b", p->records().at(0).ps == "hulthen:0-40" &&
-                                                                p->psAEdit->text() == "0.2317", p->records().at(0).ps);
+                                                                p->psAEdit->writtenText() == "0.2317", p->records().at(0).ps);
     p->kinematicsBox->setChecked(false);
     ok("ps: dropped with the reaction", p->records().at(0).ps.isEmpty() && !p->psBox->isEnabled() &&
                                             p->psKindCombo->currentData().toString() == "delta");
@@ -741,20 +750,20 @@ int main(int argc, char** argv) {
         p->beamCombo->setEditText("7Li");
         p->targetCombo->setEditText("d");
         p->spectatorCombo->setEditText("n");
-        type(p->beamEnergyEdit, "19");
+        typeNumber(p->beamEnergyEdit, "19");
         const QStringList f = value.split(':');
         p->psKindCombo->setCurrentIndex(p->psKindCombo->findData(f[0]));
         if(f[0] == "table") {
           type(p->psTableEdit, f[1]);
         } else {
           const QString window = f.last();
-          type(p->psMinEdit, window.section('-', 0, 0));
-          type(p->psMaxEdit, window.section('-', 1));
-          if(f[0] == "gauss") type(p->psFwhmEdit, f[1]);
+          typeNumber(p->psMinEdit, window.section('-', 0, 0));
+          typeNumber(p->psMaxEdit, window.section('-', 1));
+          if(f[0] == "gauss") typeNumber(p->psFwhmEdit, f[1]);
           if(f[0] == "hulthen" && f.size() == 3) {
             p->psCustomCheck->setChecked(true);
-            type(p->psAEdit, f[1].section(',', 0, 0));
-            type(p->psBEdit, f[1].section(',', 1));
+            typeNumber(p->psAEdit, f[1].section(',', 0, 0));
+            typeNumber(p->psBEdit, f[1].section(',', 1));
           }
         }
         if(!nodes.isEmpty()) p->psNodesSpin->setValue(nodes.toInt());
@@ -797,8 +806,8 @@ int main(int argc, char** argv) {
     ok("ps by hand: opens", w.thmSettings(s, &err), err);
     {
       ThmWorkspace ws(&w, s);
-      ok("ps by hand: controls", ws.experimentsPage->psMinEdit->text() == "0.0" &&
-                                     ws.experimentsPage->psMaxEdit->text() == "40.00" &&
+      ok("ps by hand: controls", ws.experimentsPage->psMinEdit->writtenText() == "0.0" &&
+                                     ws.experimentsPage->psMaxEdit->writtenText() == "40.00" &&
                                      ws.experimentsPage->psNodesSpin->value() == 8);
       ws.accept();
     }
@@ -807,7 +816,7 @@ int main(int argc, char** argv) {
     w.thmSettings(s);
     {
       ThmWorkspace ws(&w, s);
-      type(ws.experimentsPage->psMaxEdit, "30");
+      typeNumber(ws.experimentsPage->psMaxEdit, "30");
       ws.accept();
     }
     w.saveProject();
@@ -840,7 +849,7 @@ int main(int argc, char** argv) {
                 "use one (ps=delta keeps spectatorEnergy).",
          why);
       ok("refusal shown on the Experiments page", ws.pages->currentWidget() == ws.experimentsPage &&
-                                                      ws.experimentsPage->derivedLabel->text().contains("spectatorEnergy both"));
+                                                      ws.experimentsPage->messageLabel->text().contains("spectatorEnergy both"));
     }
     int code = -1;
     const QString out = engineRun(work.path(), "psrefuse.azr", &code);
@@ -870,7 +879,7 @@ int main(int argc, char** argv) {
       ThmSettings s;
       w.thmSettings(s);
       ThmWorkspace ws(&w, s);
-      const QString shown = ws.experimentsPage->derivedLabel->text();
+      const QString shown = ws.experimentsPage->derivedText();
       int code = -1;
       const QString out = engineRun(work.path(), "psmean.azr", &code);
       QRegExp rx("mu_sx = ([-+0-9.eE]+) MeV, T_s = p_s\\^2/2mu_sx from ([-+0-9.eE]+) to ([-+0-9.eE]+) MeV, "
@@ -882,6 +891,9 @@ int main(int argc, char** argv) {
            shown.contains("mu_sx = " + rx.cap(1) + " MeV") && shown.contains("from " + rx.cap(2) + " to " + rx.cap(3)) &&
                shown.contains("<T_s> = " + rx.cap(4) + " MeV"),
            shown + " | " + rx.cap(0));
+      if(found)
+        ok(qPrintable("ps " + value + ": the <T_s> field shows the engine's"),
+           ws.experimentsPage->meanTsValue->text() == rx.cap(4) + " MeV", ws.experimentsPage->meanTsValue->text());
     }
     // THM_EXPERIMENTS_PNG=<file>: keep a rendering of the page, to look at it
     // (charged spectator, line shape and a Hulthen window).
@@ -894,11 +906,10 @@ int main(int argc, char** argv) {
     ThmWorkspace ws(&w, s);
     ok("charged spectator with a window: accepted", ws.validate().isEmpty(), ws.validate());
     if(qEnvironmentVariableIsSet("THM_EXPERIMENTS_PNG")) {
-      ws.resize(760, 900);
-      ws.pages->setCurrentWidget(ws.experimentsPage);
+      ws.pages->setCurrentWidget(ws.experimentsPage);  // at the default size
       ws.show();  // lays the page out, so that its editor can be scrolled to the window
       QApplication::processEvents();
-      if(QScrollArea* a = ws.experimentsPage->findChild<QScrollArea*>()) a->ensureWidgetVisible(ws.experimentsPage->derivedLabel);
+      if(QScrollArea* a = ws.experimentsPage->findChild<QScrollArea*>()) a->ensureWidgetVisible(ws.experimentsPage->psBox);
       QPixmap shot(ws.size());
       ws.render(&shot);
       shot.save(qEnvironmentVariable("THM_EXPERIMENTS_PNG"));
@@ -1152,7 +1163,7 @@ int main(int argc, char** argv) {
     ok("vertex panel: <|M_l|^2> dashed next to each |M_l|^2",
        d->vertexPlot->series().size() == 2 * r.vertex[0].curves.size() &&
            d->vertexPlot->series()[1].style == Qt::DashLine && d->vertexPlot->series()[1].y == r.vertex[0].curves[0].yWindow);
-    ok("status names <T_s>", d->statusLabel->text().contains("<T_s> = "), d->statusLabel->text());
+    ok("status names <T_s> (details in its tooltip)", d->statusLabel->toolTip().contains("<T_s> = "), d->statusLabel->toolTip());
     ok("every panel shown", d->lineshapePlot->isVisibleTo(d) && d->zetaPlot->isVisibleTo(d) && d->weightPlot->isVisibleTo(d));
     std::cout << "        (" << curves << " vertex curve(s), " << nodes << " node(s))" << std::endl;
     // Shown: a J^pi group whose vertex has a node, to see it filled.
@@ -1168,6 +1179,24 @@ int main(int argc, char** argv) {
     ok("window diagnostics: page paints", !shot.isNull());
     // THM_DIAGNOSTICS_PNG=<file>: keep the rendering, to look at it.
     if(qEnvironmentVariableIsSet("THM_DIAGNOSTICS_PNG")) shot.save(qEnvironmentVariable("THM_DIAGNOSTICS_PNG"));
+    // THM_PNG_DIR=<dir>: every page at the workspace's default size (model.png,
+    // experiments.png, channels.png, diagnostics.png), to look at them.
+    if(qEnvironmentVariableIsSet("THM_PNG_DIR")) {
+      const QDir dir(qEnvironmentVariable("THM_PNG_DIR"));
+      ws.resize(900, 700);
+      ws.show();
+      const QList<QPair<QWidget*, QString>> shots = {{ws.modelPage, "model.png"},
+                                                     {ws.experimentsPage, "experiments.png"},
+                                                     {ws.channelsPage, "channels.png"},
+                                                     {d, "diagnostics.png"}};
+      for(const auto& s : shots) {
+        ws.pages->setCurrentWidget(s.first);
+        QApplication::processEvents();
+        QPixmap page(ws.size());
+        ws.render(&page);
+        page.save(dir.filePath(s.second));
+      }
+    }
   }
   {
     // ps=table:<file> relative to the project: made absolute in the engine's

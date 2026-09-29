@@ -9,6 +9,7 @@ QT_BEGIN_NAMESPACE
 class QLabel;
 class QPushButton;
 class QTabWidget;
+class QUrl;
 QT_END_NAMESPACE
 
 class AZURESetup;
@@ -32,7 +33,9 @@ class ThmModelPage;
  *                as the Plot tab is with USE_QWT).
  * It writes nothing else, and nothing at all when its values are left as
  * they were read: such a project saves byte for byte as before.  Without a
- * THM segment the pages are disabled under a short explanation.
+ * THM segment the pages are disabled under a one-line note.  The pages carry
+ * no explanatory text of their own: tooltips, and a Help button that opens
+ * the user guide.
  */
 class ThmWorkspace : public QDialog {
   Q_OBJECT
@@ -61,6 +64,9 @@ class ThmWorkspace : public QDialog {
   /// Null in a build without the engine API (USE_API=OFF): the page needs it.
   ThmDiagnosticsPage *diagnosticsPage = nullptr;
   QPushButton *acceptButton;
+  QPushButton *helpButton;  ///< opens helpUrl()
+  /// The user guide's THM workspace section: a local build of the docs if found, else online.
+  static QUrl helpUrl();
 
  public slots:
   void accept() override;

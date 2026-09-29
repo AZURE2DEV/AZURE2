@@ -5,6 +5,8 @@
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QFrame>
+#include <QHash>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollArea>
@@ -18,11 +20,10 @@ namespace {
 ThmPlotWidget *makePlot(const QString &x, const QString &y) {
   ThmPlotWidget *p = new ThmPlotWidget;
   p->setAxisLabels(x, y);
-  p->setMinimumHeight(250);
   return p;
 }
 
-const char *kEcm = "E (c.m. of the THM entrance pair, MeV)";
+const char *kEcm = "E_cm (MeV)";
 
 }  // namespace
 
@@ -33,86 +34,107 @@ ThmDiagnosticsPage::ThmDiagnosticsPage(std::function<QString(int, ThmDiagnostics
   targets_(targets) {
   segmentCombo = new QComboBox;
   segmentCombo->setToolTip(tr("The THM data segment to look at; its experiment, if any, in front."));
+  segmentCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+  segmentCombo->setMinimumContentsLength(24);
   computeButton = new QPushButton(tr("Compute"));
   computeButton->setToolTip(
-      tr("Runs AZURE2 on the project as this workspace would leave it (a temporary copy; nothing is written into "
-         "the project) at the current parameters, on a grid over the segment's data."));
+      tr("Runs AZURE2 on the project as this workspace would leave it (a temporary copy; nothing is written) at the "
+         "current parameters, on a grid over the segment's data."));
   connect(computeButton, &QPushButton::clicked, this, [this]() { compute(); });
   busyBar = new QProgressBar;
   busyBar->setRange(0, 0);  // busy indicator
-  busyBar->setMaximumWidth(120);
+  busyBar->setMaximumWidth(100);
   busyBar->setTextVisible(false);
   busyBar->hide();
-  statusLabel = new QLabel(tr("Read-only. Press Compute to evaluate the selected segment."));
+  vertexGroupCombo = new QComboBox;
+  vertexGroupCombo->setToolTip(tr("The J^pi group whose entrance channels the vertex panel shows."));
+  vertexGroupCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+  connect(vertexGroupCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(drawVertex()));
+  statusLabel = new QLabel(tr("Press Compute to evaluate the selected segment."));
   statusLabel->setWordWrap(true);
+  statusLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
+  // One toolbar row: what to compute, and the vertex group to show.
   QHBoxLayout *top = new QHBoxLayout;
+  top->setSpacing(8);
   top->addWidget(new QLabel(tr("Segment:")));
   top->addWidget(segmentCombo, 1);
+  top->addSpacing(4);
+  top->addWidget(new QLabel(QString::fromUtf8("J<sup>π</sup>:")));
+  top->addWidget(vertexGroupCombo);
+  top->addSpacing(4);
   top->addWidget(computeButton);
   top->addWidget(busyBar);
 
-  vertexGroupCombo = new QComboBox;
-  vertexGroupCombo->setToolTip(tr("The J^pi group whose entrance channels are shown."));
-  connect(vertexGroupCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(drawVertex()));
-  vertexPlot = makePlot(tr(kEcm), QString::fromUtf8("|M_l|\u00b2"));
+  vertexPlot = makePlot(tr(kEcm), QString::fromUtf8("|M_l|²"));
   vertexPlot->setToolTip(
-      tr("Entrance vertex |M_l(E)|^2 = |(B_c - 1) j_l(pa) - pa j_l'(pa) [+ C_l]|^2 at the quasi-free point "
-         "(spectator at rest), with the boundary B_c of the <thm> vertex option; dashed lines: its nodes. A "
-         "resonance near a node is suppressed in the HOES cross section. With a spectator-momentum window (ps=) "
-         "the dashed curve is <|M_l|^2> over the window, as AZURE2 uses it: the window fills the nodes."));
-  vertexPanel = new QWidget;
-  QVBoxLayout *vl = new QVBoxLayout;
-  vl->setContentsMargins(0, 0, 0, 0);
-  QHBoxLayout *vh = new QHBoxLayout;
-  vh->addWidget(new QLabel(tr("Entrance J^pi:")));
-  vh->addWidget(vertexGroupCombo);
-  vh->addStretch(1);
-  vl->addLayout(vh);
-  vl->addWidget(vertexPlot, 1);
-  vertexPanel->setLayout(vl);
-
-  hoesPlot = makePlot(tr(kEcm), tr("cross section (b)"));
+      tr("|M_l(E)|^2 = |(B_c - 1) j_l(pa) - pa j_l'(pa) [+ C_l]|^2 at the quasi-free point; dashed vertical lines: "
+         "its nodes, where a resonance is suppressed. With a spectator window (ps=), dashed curves: <|M_l|^2> over "
+         "the window, as AZURE2 uses it."));
+  hoesPlot = makePlot(tr(kEcm), QString::fromUtf8("σ (b)"));
   hoesPlot->setLogY(true);
-  hoesPlot->setToolTip(tr("The HOES cross section of the segment's channel (the options of the <thm> block, at the "
-                          "quasi-free point, without resolution, weight or line shape; its arbitrary scale matched "
-                          "to the other curve) and the on-shell angle-integrated cross section of the same channel."));
-  lineshapePlot = makePlot(tr(kEcm), QString::fromUtf8("|N_C|\u00b2"));
-  lineshapePlot->setToolTip(tr("|N_C|^2 = exp[2 zeta arctan(2 (E_lambda - E)/Gamma_lambda)] of the levels with a pole "
-                               "near the data (lineshape=on); 1 at the pole."));
+  hoesPlot->setToolTip(tr("The HOES cross section of the segment's channel (quasi-free point; no resolution, weight "
+                          "or line shape; scaled to the other curve) and the on-shell angle-integrated one."));
+  lineshapePlot = makePlot(tr(kEcm), QString::fromUtf8("|N_C|²"));
+  lineshapePlot->setToolTip(tr("|N_C|^2 = exp[2 zeta arctan(2 (E_lambda - E)/Gamma_lambda)] of the levels with a "
+                               "pole near the data (lineshape=on); 1 at the pole."));
   zetaPlot = makePlot(tr(kEcm), QString::fromUtf8("ζ"));
   zetaPlot->setToolTip(tr("zeta(E) = eta_sB - eta_0 of the segment's exit pair (lineshape=on)."));
-  weightPlot = makePlot(tr(kEcm), tr("w(E)"));
+  weightPlot = makePlot(tr(kEcm), tr("w"));
   weightPlot->setToolTip(tr("The weight table of the segment (weight[k]), as the engine interpolates it."));
-  windowPlot = makePlot(tr("p_s (MeV/c)"), tr("w(p_s) per MeV/c"));
-  windowPlot->setToolTip(tr("The spectator-momentum window of the segment's experiment (ps=): the event weight "
-                            "w(p) = |phi(p)|^2 p^2 (a table: as given) over [p_min, p_max], normalized to unit "
-                            "area; dots: the Gauss-Legendre nodes at which AZURE2 evaluates the vertex."));
+  windowPlot = makePlot(tr("p_s (MeV/c)"), tr("w (per MeV/c)"));
+  windowPlot->setToolTip(tr("w(p) = |phi(p)|^2 p^2 over [p_min, p_max] (a table: as given), unit area; dots: the "
+                            "Gauss-Legendre nodes at which AZURE2 evaluates the vertex."));
+
+  // Each plot in a card: a framed panel with a short bold title.
+  auto card = [this](ThmPlotWidget *plot, const QString &title) {
+    QFrame *f = new QFrame;
+    f->setFrameShape(QFrame::StyledPanel);
+    f->setFrameShadow(QFrame::Plain);
+    f->setAutoFillBackground(true);
+    f->setBackgroundRole(QPalette::Base);
+    QLabel *t = new QLabel(title);
+    QFont bold = t->font();
+    bold.setBold(true);
+    t->setFont(bold);
+    t->setToolTip(plot->toolTip());
+    QVBoxLayout *l = new QVBoxLayout;
+    l->setContentsMargins(8, 6, 8, 6);
+    l->setSpacing(2);
+    l->addWidget(t);
+    l->addWidget(plot, 1);
+    f->setLayout(l);
+    f->setMinimumHeight(220);
+    cards_[plot] = f;
+    return f;
+  };
+  vertexPanel = card(vertexPlot, QString::fromUtf8("Entrance vertex |M<sub>l</sub>|²"));
+  card(hoesPlot, tr("HOES vs on-shell"));
+  card(lineshapePlot, QString::fromUtf8("Line shape |N<sub>C</sub>|²"));
+  card(zetaPlot, QString::fromUtf8("Line shape ζ(E)"));
+  card(weightPlot, tr("Weight w(E)"));
+  card(windowPlot, QString::fromUtf8("Spectator window w(p<sub>s</sub>)"));
 
   QWidget *panels = new QWidget;
-  QGridLayout *grid = new QGridLayout;
-  grid_ = grid;
-  grid->addWidget(vertexPanel, 0, 0);
-  grid->addWidget(hoesPlot, 0, 1);
-  grid->addWidget(lineshapePlot, 1, 0);
-  grid->addWidget(zetaPlot, 1, 1);
-  grid->addWidget(weightPlot, 2, 0);
-  grid->addWidget(windowPlot, 2, 1);
-  grid->setColumnStretch(0, 1);
-  grid->setColumnStretch(1, 1);
-  panels->setLayout(grid);
+  grid_ = new QGridLayout;
+  grid_->setContentsMargins(0, 0, 0, 0);
+  grid_->setSpacing(8);
+  panels->setLayout(grid_);
   QScrollArea *scroll = new QScrollArea;
   scroll->setWidget(panels);
   scroll->setWidgetResizable(true);
   scroll->setFrameShape(QFrame::NoFrame);
+  scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
   QVBoxLayout *main = new QVBoxLayout;
+  main->setSpacing(8);
   main->addLayout(top);
   main->addWidget(statusLabel);
   main->addWidget(scroll, 1);
   setLayout(main);
 
   clearPlots(tr("not computed yet"));
+  layoutPanels();
   refreshTargets();
 }
 
@@ -133,12 +155,12 @@ void ThmDiagnosticsPage::refreshTargets() {
   segmentCombo->setCurrentIndex(at >= 0 ? at : (list_.isEmpty() ? -1 : 0));
   segmentCombo->blockSignals(false);
   computeButton->setEnabled(!list_.isEmpty() && !busy());
-  if (list_.isEmpty()) statusLabel->setText(tr("No active THM data segment to look at."));
+  if (list_.isEmpty()) statusLabel->setText(tr("No active THM data segment."));
   // Results of settings that have changed since are marked as such.
   if (!computedText_.isEmpty() && !busy()) {
     ThmDiagnosticsRequest now;
     if (prepare_(computedSegment_, now).isEmpty() && now.projectText != computedText_)
-      statusLabel->setText(tr("The project or this workspace changed since the last Compute; press Compute again."));
+      statusLabel->setText(tr("Changed since the last Compute: press Compute again."));
   }
 }
 
@@ -153,11 +175,9 @@ void ThmDiagnosticsPage::clearPlots(const QString &message) {
     p->clear();
     p->setMessage(message);
   }
-  lineshapePlot->hide();
-  zetaPlot->hide();
-  weightPlot->hide();
-  windowPlot->hide();
+  for (ThmPlotWidget *p : {lineshapePlot, zetaPlot, weightPlot, windowPlot}) cards_[p]->hide();
   vertexGroupCombo->clear();
+  statusLabel->setToolTip(QString());
 }
 
 void ThmDiagnosticsPage::compute() {
@@ -213,7 +233,14 @@ void ThmDiagnosticsPage::showResult(const ThmDiagnosticsResult &result) {
   }
   clearPlots(QString());
   const QString reaction = reactionOf(result.segment);
-  statusLabel->setText(
+  // One short line; the details in its tooltip.
+  statusLabel->setText(tr("Segment %1%2 \u00b7 %3 points \u00b7 %4 \u2026 %5 MeV")
+                           .arg(result.segment)
+                           .arg(result.experiment.isEmpty() ? QString() : tr(" (%1)").arg(result.experiment))
+                           .arg(result.energy.size())
+                           .arg(result.eLo, 0, 'g', 4)
+                           .arg(result.eHi, 0, 'g', 4));
+  statusLabel->setToolTip(
       tr("Segment %1%2: %3 points from %4 to %5 MeV; vertex %6, B + T_s = %7 MeV.")
           .arg(result.segment)
           .arg(result.experiment.isEmpty() ? QString() : tr(" (experiment %1)").arg(result.experiment))
@@ -258,8 +285,8 @@ void ThmDiagnosticsPage::showResult(const ThmDiagnosticsResult &result) {
 
   // Line shape.
   if (result.lineshape) {
-    lineshapePlot->show();
-    zetaPlot->show();
+    cards_[lineshapePlot]->show();
+    cards_[zetaPlot]->show();
     lineshapePlot->setTitle(reaction);
     zetaPlot->setTitle(reaction);
     for (int i = 0; i < result.nc2.size(); i++) {
@@ -280,7 +307,7 @@ void ThmDiagnosticsPage::showResult(const ThmDiagnosticsResult &result) {
 
   // Weight.
   if (!result.weight.isEmpty()) {
-    weightPlot->show();
+    cards_[weightPlot]->show();
     weightPlot->setTitle(reaction);
     ThmPlotWidget::Series w;
     w.x = result.energy;
@@ -300,7 +327,7 @@ void ThmDiagnosticsPage::showResult(const ThmDiagnosticsResult &result) {
 
   // Spectator-momentum window.
   if (result.window) {
-    windowPlot->show();
+    cards_[windowPlot]->show();
     windowPlot->setTitle(reaction);
     if (!result.windowP.isEmpty()) {
       ThmPlotWidget::Series w;
@@ -323,19 +350,50 @@ void ThmDiagnosticsPage::showResult(const ThmDiagnosticsResult &result) {
   layoutPanels();
 }
 
+bool ThmDiagnosticsPage::panelShown(ThmPlotWidget *plot) const {
+  // The first two always; the optional ones are hidden and shown explicitly.
+  return plot == vertexPlot || plot == hoesPlot || !cards_.value(plot)->isHidden();
+}
+
+int ThmDiagnosticsPage::columnsFor(int shown) const {
+  // Three columns when there are more panels than two rows of two hold (or
+  // three), and the page is wide enough for panels of ~280 px; else two.
+  const bool wide = width() >= 3 * 280;
+  return wide && (shown == 3 || shown > 4) ? 3 : 2;
+}
+
 void ThmDiagnosticsPage::layoutPanels() {
-  // The first row is fixed; the optional panels that are shown fill the
-  // following cells in reading order, so none leaves a hole.
-  int at = 0;
-  for (ThmPlotWidget *p : {lineshapePlot, zetaPlot, weightPlot, windowPlot}) {
-    grid_->removeWidget(p);
-    if (p->isHidden()) {
-      grid_->addWidget(p, 3, 0);  // hidden: parked
-      continue;
-    }
-    grid_->addWidget(p, 1 + at / 2, at % 2);
-    at++;
+  // The panels that are shown fill a grid of equal cells in reading order,
+  // so none leaves a hole; the plots of a row share their frame top and those
+  // of a column their left edge (ThmPlotWidget::setAlignedWith).
+  QList<ThmPlotWidget *> shown;
+  for (ThmPlotWidget *p : {vertexPlot, hoesPlot, lineshapePlot, zetaPlot, weightPlot, windowPlot}) {
+    grid_->removeWidget(cards_[p]);
+    if (panelShown(p)) shown << p;
   }
+  columns_ = columnsFor(shown.size());
+  const int rows = (shown.size() + columns_ - 1) / columns_;
+  for (int c = 0; c < 3; c++) grid_->setColumnStretch(c, c < columns_ ? 1 : 0);
+  for (int r = 0; r < 3; r++) grid_->setRowStretch(r, r < rows ? 1 : 0);
+  for (int i = 0; i < shown.size(); i++) grid_->addWidget(cards_[shown[i]], i / columns_, i % columns_);
+  for (ThmPlotWidget *p : {lineshapePlot, zetaPlot, weightPlot, windowPlot})
+    if (!panelShown(p)) grid_->addWidget(cards_[p], 3, 0);  // parked
+  for (int i = 0; i < shown.size(); i++) {
+    QList<ThmPlotWidget *> row, column;
+    for (int j = 0; j < shown.size(); j++) {
+      if (j / columns_ == i / columns_) row << shown[j];
+      if (j % columns_ == i % columns_) column << shown[j];
+    }
+    shown[i]->setAlignedWith(row, column);
+  }
+}
+
+void ThmDiagnosticsPage::resizeEvent(QResizeEvent *event) {
+  QWidget::resizeEvent(event);
+  int shown = 0;
+  for (ThmPlotWidget *p : {vertexPlot, hoesPlot, lineshapePlot, zetaPlot, weightPlot, windowPlot})
+    if (panelShown(p)) shown++;
+  if (columnsFor(shown) != columns_) layoutPanels();
 }
 
 void ThmDiagnosticsPage::drawVertex() {
@@ -346,6 +404,7 @@ void ThmDiagnosticsPage::drawVertex() {
     return;
   }
   const ThmDiagnosticsResult::VertexGroup &group = result_.vertex[g];
+  bool window = false;
   for (int i = 0; i < group.curves.size(); i++) {
     ThmPlotWidget::Series s;
     s.x = result_.energy;
@@ -358,9 +417,9 @@ void ThmDiagnosticsPage::drawVertex() {
       a.x = result_.energy;
       a.y = group.curves[i].yWindow;
       a.color = thmPlotColor(i);
-      a.style = Qt::DashLine;
-      a.label = group.curves[i].label + tr(", p_s window");
+      a.style = Qt::DashLine;  // one legend entry for all of them, below
       vertexPlot->addSeries(a);
+      window = true;
     }
     for (double e : group.curves[i].nodes) {
       ThmPlotWidget::Marker m;
@@ -370,4 +429,5 @@ void ThmDiagnosticsPage::drawVertex() {
       vertexPlot->addMarker(m);
     }
   }
+  if (window) vertexPlot->addLegendEntry(tr("p_s window"), Qt::DashLine);
 }

@@ -24,20 +24,23 @@ QT_END_NAMESPACE
 
 class PairsModel;
 class SegmentsDataModel;
+class ThmNumberSpin;
 struct ThmSpectatorWindow;
 
 /*!
  * The Experiments page of the THM workspace: the experiment[<name>] lines of
  * the <thm> block (docs/source/theory/thm_implementation.rst, "THM
- * experiments").  A table of the experiments and an editor of the selected
- * one: its name, its segments (THM data segments with a free norm that no
- * other experiment has), the background, and the optional three-body
- * reaction (beam, target, spectator, lab beam energy -- all four or none),
- * with the binding and quasi-free energies AZURE2 prints for it, and the
- * Coulomb line shape of the spectator (lineshape=on) with zeta at the ends of
- * the data, and the spectator-momentum window (ps=, psNodes=) with the mean
- * spectator energy <T_s> the engine's ThmSpectatorWindow gives.  Keys the
- * page does not show are kept as written.
+ * experiments").  A compact list of the experiments on the left and an
+ * editor of the selected one on the right, in sections: Experiment (name,
+ * segments -- THM data segments with a free norm that no other experiment
+ * has --, background), Three-body reaction (beam, target, spectator, lab
+ * beam energy -- all four or none -- with the binding and quasi-free
+ * energies AZURE2 prints for it, and the line shape, lineshape=on, with zeta
+ * at the ends of the data) and Spectator momentum window (ps=, psNodes=, with the
+ * mean spectator energy <T_s> the engine's ThmSpectatorWindow gives).
+ * Numbers are spin boxes with their unit that give back the text they were
+ * read with until changed (ThmNumberSpin).  Keys the page does not show are
+ * kept as written.
  */
 class ThmExperimentsPage : public QWidget {
   Q_OBJECT
@@ -68,7 +71,11 @@ class ThmExperimentsPage : public QWidget {
       exit pair at the lowest and highest point energy of its segments (the
       engine's ThmLineshape on the engine's data reader), or "" and the
       reason in *error when AZURE2 would refuse it (no Brune, E_sF <= 0). */
-  QString lineshapeInfo(const ThmExperimentRecord &record, QString *error = nullptr) const;
+  QString lineshapeInfo(const ThmExperimentRecord &record, QString *error = nullptr,
+                        QString *compact = nullptr) const;
+  /// Everything derivedInfo gives for the selected experiment, and the reason
+  /// AZURE2 would refuse it, as the tooltips of the page's values show it.
+  QString derivedText() const { return derivedText_; }
   /*! For a record with a ps window and a complete reaction: the window as
       the engine builds it (BuildThmSpectatorWindow on the engine's parse of
       the line, the table read by ReadThmPsTable, mu_sx from the reaction),
@@ -100,7 +107,7 @@ class ThmExperimentsPage : public QWidget {
   QTableWidget *experimentTable;
   QPushButton *addButton;
   QPushButton *removeButton;
-  QGroupBox *editorBox;
+  QWidget *editorBox;
   QLineEdit *nameEdit;
   QListWidget *segmentList;  ///< checkable; item data Qt::UserRole = segment number
   QComboBox *backgroundCombo;
@@ -108,18 +115,21 @@ class ThmExperimentsPage : public QWidget {
   QComboBox *beamCombo;
   QComboBox *targetCombo;
   QComboBox *spectatorCombo;
-  QLineEdit *beamEnergyEdit;
+  ThmNumberSpin *beamEnergyEdit;  ///< MeV; the minimum (shown as a dash) = not given
   QCheckBox *lineshapeCheck;  ///< lineshape=on; enabled with a complete reaction
   QGroupBox *psBox;          ///< spectator momentum; enabled with a complete reaction
   QComboBox *psKindCombo;    ///< item data: delta | hulthen | gauss | table
-  QLineEdit *psMinEdit, *psMaxEdit;  ///< MeV/c
+  ThmNumberSpin *psMinEdit, *psMaxEdit;  ///< MeV/c
   QCheckBox *psCustomCheck;  ///< Hulthen a, b other than the deuteron's
-  QLineEdit *psAEdit, *psBEdit;      ///< fm^-1
-  QLineEdit *psFwhmEdit;     ///< MeV/c
+  ThmNumberSpin *psAEdit, *psBEdit;  ///< fm^-1
+  ThmNumberSpin *psFwhmEdit;         ///< MeV/c
   QLineEdit *psTableEdit;
   QPushButton *psTableButton;
   QSpinBox *psNodesSpin;     ///< psNodes=, 1-64, default 16
-  QLabel *derivedLabel;
+  /// Derived values (the reaction, zeta, the window), and why AZURE2 would refuse the experiment.
+  QLabel *bindingValue, *qfValue, *zetaValue, *meanTsValue;
+  QLabel *messageLabel;
+  QLabel *messageIcon;
 
  private slots:
   void tableSelectionChanged();
@@ -142,6 +152,7 @@ class ThmExperimentsPage : public QWidget {
   /// The reaction of a record with all four keys, as EData::SetupThmExperiments checks it.
   bool reaction(const ThmExperimentRecord &x, Reaction &out, QString *error) const;
   void showDerived(const ThmExperimentRecord &r);
+  QString derivedText_;
   void loadEditor();
   void loadPs(const ThmExperimentRecord &r);
   void showPsRows();

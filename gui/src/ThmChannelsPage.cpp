@@ -10,6 +10,7 @@
 #include <QLocale>
 #include <QTableWidget>
 #include <QVBoxLayout>
+#include <algorithm>
 #include <cmath>
 #include <sstream>
 
@@ -31,11 +32,6 @@ bool readWholeDouble(const QString &text, double &x) {
   std::string rest;
   return !!(s >> x) && !(s >> rest) && std::isfinite(x);
 }
-
-const char *kDocs =
-    "docs/source/theory/thm_implementation.rst; online: "
-    "<a href=\"https://rdeboer1.github.io/AZURE2/\">rdeboer1.github.io/AZURE2</a> "
-    "(Theory &gt; Trojan Horse (HOES) Observable).";
 
 }  // namespace
 
@@ -86,12 +82,15 @@ ThmChannelsPage::ThmChannelsPage(PairsModel *pairs, LevelsModel *levels, Channel
     pairTable->insertRow(row);
     pairRows_ << key;
     pairTable->setItem(row, 0, new QTableWidgetItem(QString::number(key)));
+    pairTable->item(row, 0)->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
     QString nuclei = pairs->getParticleLabel(p, 0) + " + " + pairs->getParticleLabel(p, 1);
     nuclei.remove("<center>").remove("</center>");  // one line: the delegate renders the rest
     pairTable->setItem(row, 1, new QTableWidgetItem(nuclei));
     pairTable->setItem(row, 2, new QTableWidgetItem(users.contains(key) ? users[key].join(", ")
                                                                         : tr("none (B kept as in the file)")));
     QLineEdit *edit = new QLineEdit(numberText(p.bindingEnergy));
+    edit->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    edit->setFrame(false);
     QDoubleValidator *v = new QDoubleValidator(edit);
     v->setLocale(QLocale::c());
     edit->setValidator(v);
@@ -99,7 +98,14 @@ ThmChannelsPage::ThmChannelsPage(PairsModel *pairs, LevelsModel *levels, Channel
     pairTable->setCellWidget(row, 3, edit);
   }
   pairTable->resizeColumnsToContents();
-  pairTable->horizontalHeader()->setStretchLastSection(true);
+  pairTable->horizontalHeader()->setStretchLastSection(false);
+  pairTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+  pairTable->setColumnWidth(3, std::max(pairTable->columnWidth(3), fontMetrics().horizontalAdvance("0000.000000") + 16));
+  // As high as its rows (up to four), the channels get the rest.
+  pairTable->setMaximumHeight(pairTable->horizontalHeader()->sizeHint().height() +
+                              std::max(1, std::min(4, pairTable->rowCount())) *
+                                  pairTable->verticalHeader()->defaultSectionSize() +
+                              2 * pairTable->frameWidth() + 2);
 
   channelTable = new QTableWidget(0, 6);
   channelTable->setHorizontalHeaderLabels(QStringList() << tr("Level") << tr("Pair") << tr("l") << tr("s")
@@ -128,6 +134,8 @@ ThmChannelsPage::ThmChannelsPage(PairsModel *pairs, LevelsModel *levels, Channel
     channelTable->setItem(row, 2, new QTableWidgetItem(QString::number(ch.lValue)));
     channelTable->setItem(row, 3, new QTableWidgetItem(channels->getSpinLabel(ch)));
     channelTable->setItem(row, 4, new QTableWidgetItem(numberText(ch.reducedWidth)));
+    for (int c : {1, 2, 4}) channelTable->item(row, c)->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    channelTable->item(row, 3)->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
     QTableWidgetItem *flag = new QTableWidgetItem;
     flag->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
     flag->setCheckState(ch.gammaIsRWA == 1 ? Qt::Checked : Qt::Unchecked);
@@ -135,9 +143,12 @@ ThmChannelsPage::ThmChannelsPage(PairsModel *pairs, LevelsModel *levels, Channel
     channelTable->setItem(row, 5, flag);
   }
   channelTable->resizeColumnsToContents();
-  channelTable->horizontalHeader()->setStretchLastSection(true);
+  channelTable->horizontalHeader()->setStretchLastSection(false);
+  channelTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+  channelTable->setColumnWidth(4, std::max(channelTable->columnWidth(4), fontMetrics().horizontalAdvance("-00000000.0") + 12));
 
   QGroupBox *pairBox = new QGroupBox(tr("Binding energy of the transferred particle"));
+  pairBox->setToolTip(pairTable->toolTip());
   QVBoxLayout *pl = new QVBoxLayout;
   pl->addWidget(pairTable);
   pairBox->setLayout(pl);
@@ -146,17 +157,10 @@ ThmChannelsPage::ThmChannelsPage(PairsModel *pairs, LevelsModel *levels, Channel
   cl->addWidget(channelTable);
   channelBox->setLayout(cl);
 
-  QLabel *docs = new QLabel(tr("Pairs that are the entrance of a THM segment, and their particle channels. "
-                               "Documentation: ") +
-                            QString(kDocs));
-  docs->setWordWrap(true);
-  docs->setOpenExternalLinks(true);
-  docs->setTextFormat(Qt::RichText);
-
   QVBoxLayout *mainLayout = new QVBoxLayout;
-  mainLayout->addWidget(pairBox, 1);
-  mainLayout->addWidget(channelBox, 3);
-  mainLayout->addWidget(docs);
+  mainLayout->setSpacing(12);
+  mainLayout->addWidget(pairBox, 0);
+  mainLayout->addWidget(channelBox, 1);
   setLayout(mainLayout);
 }
 

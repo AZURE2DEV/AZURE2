@@ -119,6 +119,11 @@ are edited here only. The window has three pages that edit and a fourth,
 **Diagnostics**, that only shows. **Accept** checks the pages with the rules
 AZURE2 applies at startup (a refusal shows AZURE2's own message and the page
 it concerns) before anything is changed. **Cancel** changes nothing.
+**Help** opens this section of the user guide. The pages carry no
+explanatory text of their own: every field explains itself in its tooltip,
+numbers are entered in spin boxes that show their unit, and values AZURE2
+derives are shown as short label--value pairs next to the fields they come
+from (their full text, as AZURE2 prints it, in their tooltips).
 
 If the project has no THM segment, the window says so and its pages are
 disabled: tick *THM* on a segment in the Segments tab first.
@@ -144,9 +149,11 @@ disabled: tick *THM* on a segment in the Segments tab first.
 **Experiments** -- the ``experiment[<name>]`` lines: THM data segments
 measured together (exit channels, angular bins or runs of one three-body
 reaction) that share one profiled normalization and, optionally, a smooth
-background. The table lists the experiments (name, segments, background,
-reaction); **Add** and **Remove** are below it. The editor underneath shows the
-selected experiment:
+background. The list on the left shows the experiments (name and segments;
+the background and the reaction in the tooltip of a row), with **Add** and
+**Remove** below it. The editor on the right shows the selected experiment
+in three sections -- *Experiment*, *Three-body reaction* and *Spectator
+momentum window*:
 
 - **Name** -- letters, digits and ``_ - . +``.
 - **Segments** -- a check list of the Data segments that can be added: THM
@@ -156,11 +163,12 @@ selected experiment:
 - **Three-body reaction** -- beam, target and spectator (a nuclide of the
   built-in table, or ``Z,A,mass`` with the nuclear mass in u) and the lab beam
   energy in MeV. The four are a unit: untick the group to write none of them.
-  When they are complete, the page shows what AZURE2 prints for them: the
-  binding energy B(x+s) of the Trojan horse and the quasi-free energy. The fit
-  uses them only for the spectator's Coulomb line shape, below.
-- **Coulomb line shape of the spectator** (``lineshape=on``) -- inside the
-  three-body reaction group, offered once its four fields are filled. The
+  When they are complete, the section shows what AZURE2 prints for them: the
+  binding energy **B(x+s)** of the Trojan horse and the quasi-free energy
+  **E_qf** (E(x+A) in its tooltip). The fit uses them only for the
+  spectator's Coulomb line shape and momentum window, below.
+- **Line shape: Coulomb** (``lineshape=on``) -- the last row of the
+  three-body reaction section, offered once its four fields are filled. The
   charged spectator leaves in the Coulomb field of the resonance and of its
   decay products; this skews each resonance and shifts its peak (upwards for
   the usual sign of :math:`\zeta`). AZURE2 multiplies each level's exit
@@ -168,14 +176,14 @@ selected experiment:
   233; Mukhamedzhanov, EPJA 58 (2022) 71). It needs the Brune
   parameterization, and the spectator must keep some energy at the highest
   data point; the page refuses otherwise, with AZURE2's words. When on, the
-  page shows :math:`\zeta` of every exit pair at the lowest and highest point
+  row shows :math:`\zeta` of every exit pair at the lowest and highest point
   energy of the experiment's data -- the values AZURE2 writes to
   ``output/thm_experiments.out``. A neutral spectator gives
   :math:`\zeta = 0`, i.e. no change. Details:
   :doc:`../theory/thm_implementation`, "Coulomb line shape".
 
-- **Spectator momentum** (``ps``, ``psNodes``) -- inside the three-body
-  reaction group, offered once its four fields are filled. The off-shell x-A
+- **Spectator momentum window** (``ps``, ``psNodes``) -- its own section,
+  offered once the four fields of the three-body reaction are filled. The off-shell x-A
   momentum of the entrance vertex depends on the spectator momentum
   :math:`p_s` (:math:`p_{xA}^2/2\mu_{xA} = E + B + p_s^2/2\mu_{sx}`), and THM
   data are averaged over the accepted :math:`p_s` window; AZURE2 then averages
@@ -186,19 +194,20 @@ selected experiment:
   fields of the chosen distribution are shown: **p_min** and **p_max** in
   MeV/c (Hulthén and Gaussian); the Hulthén **a** and **b** in
   fm\ :sup:`-1`, shown with the deuteron's standard values 0.2317 and 1.202
-  and editable once **custom a, b** is ticked (e.g. an Eckart function for
+  and editable once **custom a, b** (next to the distribution) is ticked (e.g. an Eckart function for
   :sup:`3`\ He or :sup:`6`\ Li); the Gaussian **FWHM** of
   :math:`|\phi|^2` in MeV/c; the **table** file (two columns, :math:`p_s` and
   the event weight per unit :math:`p_s`; its range is the window), whose
   **...** button stores a file inside the project directory relative to it,
-  as for weight tables. **Nodes (advanced)** is the number of Gauss-Legendre
+  as for weight tables. **Nodes** is the number of Gauss-Legendre
   nodes (1-64, default 16; ``psNodes`` is written only when it is not 16).
   The page writes ``ps=hulthen:pmin-pmax``, ``ps=hulthen:a,b:pmin-pmax``,
   ``ps=gauss:FWHM:pmin-pmax`` or ``ps=table:<file>``, keeping numbers as
-  they were typed. With a window set, it shows what AZURE2 prints at startup:
-  the window, :math:`\mu_{sx}`, the range of :math:`T_s = p_s^2/2\mu_{sx}`
-  over the nodes and the mean spectator energy :math:`\langle T_s\rangle`,
-  computed with AZURE2's own code. A window cannot be combined with a
+  they were read or typed. With a window set, the section shows the mean
+  spectator energy :math:`\langle T_s\rangle`; its tooltip has the rest of
+  what AZURE2 prints at startup (the window, :math:`\mu_{sx}` and the range
+  of :math:`T_s = p_s^2/2\mu_{sx}` over the nodes), computed with AZURE2's
+  own code. A window cannot be combined with a
   non-zero **Spectator energy** (Model page) for the same entrance pair -- the
   window replaces it; AZURE2 refuses the pair, and so does the page. Unticking
   the three-body reaction drops the window with it. Details:
@@ -226,15 +235,21 @@ when **Compute** is pressed (never on an edit), for the parameters in the
 Levels tab and the settings of the other pages as they stand -- including
 changes not yet accepted. The engine runs on a temporary copy of the project,
 in the background, while a busy bar runs; nothing is written into the project
-or its output directory. Choose the segment at the top (its experiment, if
-any, is named in front). If the project or the workspace changes after a
-computation, the page says so; press **Compute** again. The panels share the
-energy axis (the data range of the segment, c.m. of the THM entrance pair) and
-each carries the reaction in bold:
+or its output directory. One toolbar row holds the controls: the segment (its
+experiment, if any, named in front), the J\ :sup:`π` group of the entrance
+vertex panel and **Compute**. Below it, one status line gives the segment,
+the number of points and the energy range; its tooltip has the details
+(vertex option, B + T\ :sub:`s`, the spectator window's
+:math:`\langle T_s\rangle`, line-shape levels not drawn). If the project or
+the workspace changes after a computation, the status line says so; press
+**Compute** again. The panels are framed cards of equal size in a grid (three
+columns when the window is wide enough, else two) whose axes line up; the
+energy axis is the data range of the segment (c.m. of the THM entrance pair),
+and each plot carries the reaction in bold:
 
 - **Entrance vertex** -- :math:`|M_l(E)|^2` at the quasi-free point, one curve
-  per entrance orbital momentum of the J\ :sup:`π` group chosen above the
-  plot, with the boundary the ``vertex`` option gives; dashed lines mark its
+  per entrance orbital momentum of the J\ :sup:`π` group chosen in the
+  toolbar, with the boundary the ``vertex`` option gives; dashed lines mark its
   nodes. A resonance close to a node is suppressed in the HOES cross section.
   With ``vertex=onshell`` or the Coulomb term the vertex is complex and has no
   nodes.
@@ -254,8 +269,8 @@ each carries the reaction in bold:
   with dots at the Gauss-Legendre nodes where AZURE2 evaluates the vertex.
   The **Entrance vertex** panel then also shows, dashed, the window average
   :math:`\langle |M_l|^2\rangle` that AZURE2 uses, next to the quasi-free
-  :math:`|M_l|^2`: the window fills the vertex nodes. The status line gives
-  :math:`\langle T_s\rangle`. A table named relative to the project is found
+  :math:`|M_l|^2`: the window fills the vertex nodes. The status line's
+  tooltip gives :math:`\langle T_s\rangle`. A table named relative to the project is found
   although the engine runs on a copy elsewhere.
 
 The page needs a build with the engine API (``USE_API=ON``, the default),

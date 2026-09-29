@@ -7,6 +7,7 @@
 #include <QDoubleValidator>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -37,11 +38,6 @@ bool readDouble(const QString &text, double &x) {
   std::istringstream s(text.toStdString());
   return !!(s >> x);
 }
-const char *kDocs =
-    "docs/source/theory/thm_implementation.rst, section \"Options (&lt;thm&gt; block)\"; "
-    "online: <a href=\"https://rdeboer1.github.io/AZURE2/\">rdeboer1.github.io/AZURE2</a> "
-    "(Theory &gt; Trojan Horse (HOES) Observable).";
-
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -53,107 +49,94 @@ ThmModelPage::ThmModelPage(const ThmSettings &settings, const QString &projectDi
   entranceLCombo = new QComboBox;
   entranceLCombo->addItems(QStringList() << "incoherent" << "coherent");
   entranceLCombo->setToolTip(
-      tr("entranceL: how the entrance partial waves l of one channel spin add. incoherent "
-         "(default): the l cross terms vanish once the exit direction is integrated; coherent: "
-         "one amplitude, as mrmpy and AZURE2 before September 2026."));
+      tr("entranceL: incoherent (default): the l cross terms vanish once the exit direction is integrated; "
+         "coherent: one amplitude, as mrmpy and AZURE2 before September 2026."));
   vertexCombo = new QComboBox;
   vertexCombo->addItems(QStringList() << "constant" << "perlevel" << "onshell");
   vertexCombo->setToolTip(
-      tr("vertex: boundary constant B in the transfer vertex (B-1) j_l(pa) - pa j_l'(pa). "
-         "constant (default): shift function at the lowest level of the J group (La Cognata "
-         "2010); perlevel: S_c(E_lambda) of each level under Brune, as mrmpy (alias real); "
-         "onshell: L_c(E) = S_c + iP_c, the outgoing-wave log-derivative (Tribble 2014 eq. 2.76)."));
+      tr("vertex: boundary B in (B-1) j_l(pa) - pa j_l'(pa). constant (default): shift function at the lowest "
+         "level of the J group; perlevel: S_c(E_lambda) of each level (Brune); onshell: L_c(E) = S_c + iP_c."));
   kinematicsCombo = new QComboBox;
   kinematicsCombo->addItems(QStringList() << "lacognata" << "triple" << "kf3body" << "lambda32");
   kinematicsCombo->setToolTip(
-      tr("kinematics: the kinematic factors the model carries, matching how the HOES data were "
-         "divided out of the triple cross section. lacognata (default): exit k_f/mu_f (Tumino "
-         "2021 eq. 50); triple: raw d3sigma/|phi|^2; kf3body: divided by the full three-body KF "
-         "(Typel & Baur 2003); lambda32: divided by lambda3/lambda2 (Pizzone 2011)."));
+      tr("kinematics: as the HOES data were extracted. lacognata (default): exit k_f/mu_f; triple: raw "
+         "d3sigma/|phi|^2; kf3body: divided by the three-body KF; lambda32: divided by lambda3/lambda2."));
   coulombIntegralCheck = new QCheckBox(tr("External Coulomb term in the vertex"));
   coulombIntegralCheck->setToolTip(
-      tr("coulombIntegral: add 2 eta k Int_a^inf O_l(kr)/O_l(ka) j_l(pr) dr to the vertex "
-         "(Tribble 2014 eq. 2.79; Typel & Baur eq. A.4). Mostly a normalization for small eta, "
-         "a shape change for large eta."));
+      tr("coulombIntegral: add 2 eta k Int_a^inf O_l(kr)/O_l(ka) j_l(pr) dr to the vertex (Tribble 2014 eq. "
+         "2.79)."));
   spectatorEnergySpin = new QDoubleSpinBox;
   spectatorEnergySpin->setRange(0.0, 1000.0);
   spectatorEnergySpin->setDecimals(6);
   spectatorEnergySpin->setSuffix(" MeV");
+  spectatorEnergySpin->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
   spectatorEnergySpin->setToolTip(
-      tr("spectatorEnergy: mean spectator kinetic energy <p_sx^2>/2mu_sx added to E + B in the "
-         "half-off-shell momentum (Typel & Baur 2003 eq. 11), for every THM entrance pair. "
-         "0 = the spectator at rest (default)."));
+      tr("spectatorEnergy: mean spectator kinetic energy added to E + B in the half-off-shell momentum, for "
+         "every THM entrance pair; 0 = at rest (default)."));
 
   QGroupBox *globalBox = new QGroupBox(tr("THM observable"));
-  QGridLayout *g = new QGridLayout;
-  g->addWidget(new QLabel(tr("Entrance partial waves:")), 0, 0, Qt::AlignRight);
-  g->addWidget(entranceLCombo, 0, 1);
-  g->addWidget(new QLabel(tr("Vertex boundary:")), 1, 0, Qt::AlignRight);
-  g->addWidget(vertexCombo, 1, 1);
-  g->addWidget(new QLabel(tr("Kinematic factors:")), 2, 0, Qt::AlignRight);
-  g->addWidget(kinematicsCombo, 2, 1);
-  g->addWidget(coulombIntegralCheck, 3, 1);
-  g->addWidget(new QLabel(tr("Spectator energy:")), 4, 0, Qt::AlignRight);
-  g->addWidget(spectatorEnergySpin, 4, 1);
-  g->setColumnStretch(1, 1);
+  QFormLayout *g = new QFormLayout;
+  g->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+  g->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+  g->setHorizontalSpacing(8);
+  g->setVerticalSpacing(6);
+  g->addRow(tr("Entrance partial waves:"), entranceLCombo);
+  g->addRow(tr("Vertex boundary:"), vertexCombo);
+  g->addRow(tr("Kinematic factors:"), kinematicsCombo);
+  g->addRow(tr("Spectator energy:"), spectatorEnergySpin);
+  g->addRow(QString(), coulombIntegralCheck);
   globalBox->setLayout(g);
+
+  auto tableBox = [](const QString &title, QTableWidget *table, QPushButton *add, QPushButton *remove) {
+    QGroupBox *box = new QGroupBox(title);
+    QGridLayout *l = new QGridLayout;
+    l->setVerticalSpacing(6);
+    l->addWidget(table, 0, 0, 1, 3);
+    l->addWidget(add, 1, 1);
+    l->addWidget(remove, 1, 2);
+    l->setColumnStretch(0, 1);
+    box->setLayout(l);
+    return box;
+  };
 
   spectatorTable = new QTableWidget(0, 2);
   spectatorTable->setHorizontalHeaderLabels(QStringList() << tr("Pair") << tr("Energy (MeV)"));
   spectatorTable->horizontalHeader()->setStretchLastSection(true);
   spectatorTable->verticalHeader()->hide();
   spectatorTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-  spectatorTable->setToolTip(
-      tr("spectatorEnergy[<pair>]: the spectator energy for one THM entrance pair (its key in "
-         "the Particle Pairs tab), overriding the global value."));
+  spectatorTable->setToolTip(tr("spectatorEnergy[<pair>]: overrides the global value for one THM entrance pair "
+                                "(its key in the Particle Pairs tab)."));
   QPushButton *addSpectator = new QPushButton(tr("Add"));
   QPushButton *removeSpectator = new QPushButton(tr("Remove"));
   connect(addSpectator, &QPushButton::clicked, this, [this]() { addSpectatorRow(1, 0.0); });
   connect(removeSpectator, SIGNAL(clicked()), this, SLOT(removeSelectedSpectatorRows()));
-  QGroupBox *spectatorBox = new QGroupBox(tr("Spectator energy per pair"));
-  QGridLayout *sl = new QGridLayout;
-  sl->addWidget(spectatorTable, 0, 0, 1, 3);
-  sl->addWidget(addSpectator, 1, 1);
-  sl->addWidget(removeSpectator, 1, 2);
-  sl->setColumnStretch(0, 1);
-  spectatorBox->setLayout(sl);
+  QGroupBox *spectatorBox = tableBox(tr("Spectator energy per pair"), spectatorTable, addSpectator, removeSpectator);
 
   weightTable = new QTableWidget(0, 4);
   weightTable->setHorizontalHeaderLabels(QStringList() << tr("Segments") << tr("Segment")
                                                        << tr("Weight file (E_cm MeV, w)") << QString());
   weightTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+  weightTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
   weightTable->verticalHeader()->hide();
   weightTable->setSelectionBehavior(QAbstractItemView::SelectRows);
   weightTable->setToolTip(
-      tr("weight[<segment>]: w(E) multiplying the THM model of one segment before the resolution "
-         "folding, e.g. Mukhamedzhanov's Coulomb-distortion factor R(E) (PRC 99 (2019) 064618). "
-         "Two columns, E_cm of the THM entrance pair (MeV) and w > 0, strictly increasing E, "
-         "'#' comments; a relative path is taken from the directory of the .azr. The segment "
-         "number counts every line of the Data (or Test) segments table, active or not."));
+      tr("weight[<segment>]: w(E) multiplying the THM model of one segment before the resolution folding, e.g. a "
+         "Coulomb-distortion factor. Two columns, E_cm (MeV) and w > 0; relative to the project directory. The "
+         "segment number counts every line of the Data (or Test) segments table."));
   QPushButton *addWeight = new QPushButton(tr("Add"));
   QPushButton *removeWeight = new QPushButton(tr("Remove"));
   connect(addWeight, &QPushButton::clicked, this, [this]() { addWeightRow(false, 1, QString()); });
   connect(removeWeight, SIGNAL(clicked()), this, SLOT(removeSelectedWeightRows()));
-  QGroupBox *weightBox = new QGroupBox(tr("Energy-dependent weight per segment"));
-  QGridLayout *wl = new QGridLayout;
-  wl->addWidget(weightTable, 0, 0, 1, 3);
-  wl->addWidget(addWeight, 1, 1);
-  wl->addWidget(removeWeight, 1, 2);
-  wl->setColumnStretch(0, 1);
-  weightBox->setLayout(wl);
+  QGroupBox *weightBox = tableBox(tr("Energy-dependent weight per segment"), weightTable, addWeight, removeWeight);
 
-  QLabel *docs = new QLabel(tr("These options apply to THM segments (isDiff >= 10) only; "
-                               "defaults write no &lt;thm&gt; block. Documentation: ") +
-                            QString(kDocs));
-  docs->setWordWrap(true);
-  docs->setOpenExternalLinks(true);
-  docs->setTextFormat(Qt::RichText);
-
+  QHBoxLayout *top = new QHBoxLayout;
+  top->setSpacing(12);
+  top->addWidget(globalBox, 3);
+  top->addWidget(spectatorBox, 2);
   QVBoxLayout *mainLayout = new QVBoxLayout;
-  mainLayout->addWidget(globalBox);
-  mainLayout->addWidget(spectatorBox);
-  mainLayout->addWidget(weightBox);
-  mainLayout->addWidget(docs);
+  mainLayout->setSpacing(12);
+  mainLayout->addLayout(top);
+  mainLayout->addWidget(weightBox, 1);
   setLayout(mainLayout);
 
   setSettings(settings);
@@ -168,9 +151,13 @@ void ThmModelPage::addSpectatorRow(int pair, double energy) {
   int row = spectatorTable->rowCount();
   spectatorTable->insertRow(row);
   QSpinBox *pairSpin = new QSpinBox;
+  pairSpin->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+  pairSpin->setFrame(false);
   pairSpin->setRange(1, 9999);
   pairSpin->setValue(pair);
   QLineEdit *energyEdit = new QLineEdit(numberText(energy));
+  energyEdit->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+  energyEdit->setFrame(false);
   QDoubleValidator *v = new QDoubleValidator(0.0, 1.0e6, 12, energyEdit);
   v->setLocale(QLocale::c());
   energyEdit->setValidator(v);
@@ -185,9 +172,12 @@ void ThmModelPage::addWeightRow(bool test, int segment, const QString &file) {
   block->addItems(QStringList() << tr("Data") << tr("Test"));
   block->setCurrentIndex(test ? 1 : 0);
   QSpinBox *segSpin = new QSpinBox;
+  segSpin->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+  segSpin->setFrame(false);
   segSpin->setRange(1, 9999);
   segSpin->setValue(segment);
   QLineEdit *fileEdit = new QLineEdit(file);
+  fileEdit->setFrame(false);
   ChooseFileButton *choose = new ChooseFileButton(tr("..."));
   choose->setLineEdit(fileEdit);
   connect(choose, SIGNAL(clicked(QLineEdit *)), this, SLOT(chooseWeightFile(QLineEdit *)));

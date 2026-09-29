@@ -1,6 +1,12 @@
 #include "ThmWorkspace.h"
 
+#include <QCoreApplication>
+#include <QDesktopServices>
+#include <QDir>
+#include <QFileInfo>
 #include <QHBoxLayout>
+#include <QStyle>
+#include <QUrl>
 #include <QTextStream>
 #include <QRegularExpression>
 #include <QTextDocument>
@@ -60,9 +66,8 @@ ThmWorkspace::ThmWorkspace(AZURESetup *setup, const ThmSettings &settings, QWidg
   SegmentsTestModel *test = setup->getSegmentsTab()->getSegmentsTestModel();
   hasThm_ = !ThmChannelsPage::thmEntrancePairs(data, test).isEmpty();
 
-  noThmLabel = new QLabel(
-      tr("This project has no THM segment. The THM workspace edits the Trojan Horse (HOES) observable of THM "
-         "segments: tick \"THM\" on a segment in the Segments tab (isDiff >= 10), then open it again."));
+  noThmLabel = new QLabel(tr("This project has no THM segment: tick \"THM\" on a segment in the Segments tab "
+                             "(isDiff >= 10), then open the workspace again."));
   noThmLabel->setWordWrap(true);
   noThmLabel->setVisible(!hasThm_);
 
@@ -107,6 +112,12 @@ ThmWorkspace::ThmWorkspace(AZURESetup *setup, const ThmSettings &settings, QWidg
   pages->setTabToolTip(2, tr("Binding energy and width input flag of the THM entrance channels"));
   pages->setEnabled(hasThm_);
 
+  helpButton = new QPushButton(tr("Help"));
+  helpButton->setAutoDefault(false);
+  helpButton->setToolTip(tr("Opens the THM workspace section of the AZURE2 user guide (%1); the physics is in "
+                            "Theory > Trojan Horse (HOES) Observable.")
+                             .arg(helpUrl().toDisplayString()));
+  connect(helpButton, &QPushButton::clicked, this, [this]() { QDesktopServices::openUrl(helpUrl()); });
   QPushButton *cancelButton = new QPushButton(tr("Cancel"));
   acceptButton = new QPushButton(tr("Accept"));
   acceptButton->setDefault(true);
@@ -114,18 +125,37 @@ ThmWorkspace::ThmWorkspace(AZURESetup *setup, const ThmSettings &settings, QWidg
   connect(acceptButton, SIGNAL(clicked()), this, SLOT(accept()));
   connect(cancelButton, SIGNAL(clicked()), this, SLOT(reject()));
   QHBoxLayout *buttonBox = new QHBoxLayout;
+  buttonBox->addWidget(helpButton);
+  buttonBox->addStretch(1);
   buttonBox->addWidget(cancelButton);
   buttonBox->addWidget(acceptButton);
 
   QVBoxLayout *mainLayout = new QVBoxLayout;
+  mainLayout->setSpacing(8);
   mainLayout->addWidget(noThmLabel);
   mainLayout->addWidget(pages, 1);
   mainLayout->addLayout(buttonBox);
   setLayout(mainLayout);
   setWindowTitle(tr("THM Workspace"));
-  resize(760, 720);
+  setMinimumSize(720, 560);
+  resize(900, 700);
 }
 
+
+QUrl ThmWorkspace::helpUrl() {
+  // A local build of the documentation next to the program, else the online one.
+  const QString page = "user_guide/configure_menu.html";
+  const QDir app(QCoreApplication::applicationDirPath());
+  for (const QString &root : {"../docs/build/html", "../../docs/build/html", "../share/doc/azure2/html"}) {
+    const QFileInfo f(app.filePath(root + "/" + page));
+    if (f.exists()) {
+      QUrl url = QUrl::fromLocalFile(f.absoluteFilePath());
+      url.setFragment("thm-workspace");
+      return url;
+    }
+  }
+  return QUrl("https://rdeboer1.github.io/AZURE2/" + page + "#thm-workspace");
+}
 
 bool ThmWorkspace::projectSnapshot(QString &text, QString *error) {
   if (setup_->GetConfig().configfile.empty()) {

@@ -17,7 +17,9 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSet>
+#include <QSignalBlocker>
 #include <QSpinBox>
+#include <QStyle>
 #include <QTableWidget>
 #include <QTextDocument>
 #include <QVBoxLayout>
@@ -31,6 +33,7 @@
 #include "DataLine.h"
 #include "ThmExperiment.h"
 #include "ThmLineshape.h"
+#include "ThmNumberSpin.h"
 
 namespace {
 
@@ -49,11 +52,6 @@ QString plain(const QString &html) {
   d.setHtml(html);
   return d.toPlainText().simplified();
 }
-
-const char *kDocs =
-    "docs/source/theory/thm_implementation.rst, section \"THM experiments\"; online: "
-    "<a href=\"https://rdeboer1.github.io/AZURE2/\">rdeboer1.github.io/AZURE2</a> "
-    "(Theory &gt; Trojan Horse (HOES) Observable).";
 
 }  // namespace
 
@@ -80,18 +78,20 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   experimentTable = new QTableWidget(0, 4);
   experimentTable->setHorizontalHeaderLabels(QStringList() << tr("Name") << tr("Segments") << tr("Background")
                                                            << tr("Three-body reaction"));
-  experimentTable->horizontalHeader()->setStretchLastSection(true);
+  // A compact list: name and segments; the rest is in the row's tooltip.
+  experimentTable->setColumnHidden(2, true);
+  experimentTable->setColumnHidden(3, true);
+  experimentTable->horizontalHeader()->setStretchLastSection(false);
+  experimentTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+  experimentTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
   experimentTable->verticalHeader()->hide();
   experimentTable->setSelectionBehavior(QAbstractItemView::SelectRows);
   experimentTable->setSelectionMode(QAbstractItemView::SingleSelection);
   experimentTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-  // Four rows, then it scrolls: the editor below gets the room.
-  experimentTable->setMaximumHeight(experimentTable->horizontalHeader()->sizeHint().height() +
-                                    4 * experimentTable->verticalHeader()->defaultSectionSize() +
-                                    2 * experimentTable->frameWidth() + 2);
+  experimentTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   experimentTable->setToolTip(
-      tr("experiment[<name>]: THM data segments measured together (exit channels, angular bins or runs "
-         "of one three-body reaction) share one profiled normalization and, optionally, a background."));
+      tr("experiment[<name>]: THM data segments measured together share one profiled norm and, optionally, a "
+         "background. Segments in no experiment keep their own norm."));
   addButton = new QPushButton(tr("Add"));
   removeButton = new QPushButton(tr("Remove"));
   connect(addButton, &QPushButton::clicked, this, [this]() { addExperiment(); });
@@ -99,28 +99,31 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   connect(experimentTable->selectionModel(), SIGNAL(selectionChanged(const QItemSelection &, const QItemSelection &)),
           this, SLOT(tableSelectionChanged()));
 
-  QGroupBox *listBox = new QGroupBox(tr("THM experiments"));
+  QGroupBox *listBox = new QGroupBox(tr("Experiments"));
+  listBox->setMaximumWidth(fontMetrics().horizontalAdvance("M") * 12);
   QGridLayout *ll = new QGridLayout;
-  ll->addWidget(experimentTable, 0, 0, 1, 3);
-  ll->addWidget(addButton, 1, 1);
-  ll->addWidget(removeButton, 1, 2);
-  ll->setColumnStretch(0, 1);
+  ll->addWidget(experimentTable, 0, 0, 1, 2);
+  ll->addWidget(addButton, 1, 0);
+  ll->addWidget(removeButton, 1, 1);
   listBox->setLayout(ll);
 
   nameEdit = new QLineEdit;
-  nameEdit->setToolTip(tr("The experiment's name: letters, digits and _ - . + only."));
+  nameEdit->setToolTip(tr("Letters, digits and _ - . + only."));
   connect(nameEdit, SIGNAL(textEdited(const QString &)), this, SLOT(nameEdited(const QString &)));
   segmentList = new QListWidget;
   segmentList->setToolTip(
-      tr("segments=: the data segments of the experiment (numbers count every line of the Data segments "
-         "table, active or not). Offered: THM segments (isDiff >= 10) with a free norm that are in no other "
-         "experiment; all of them share one norm."));
+      tr("segments=: THM data segments (isDiff >= 10) with a free norm that are in no other experiment. Numbers "
+         "count every line of the Data segments table, active or not."));
+  // About three rows: the sections below keep their room.
+  segmentList->setMinimumHeight(2 * segmentList->fontMetrics().lineSpacing() + 10);
+  segmentList->setMaximumHeight(4 * segmentList->fontMetrics().lineSpacing() + 10);
+  segmentList->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
   connect(segmentList, SIGNAL(itemChanged(QListWidgetItem *)), this, SLOT(segmentItemChanged(QListWidgetItem *)));
   backgroundCombo = new QComboBox;
   backgroundCombo->addItems(QStringList() << "none" << "const" << "linear" << "quadratic");
   backgroundCombo->setToolTip(
-      tr("background=: a smooth b0 + b1 E + b2 E^2 (E the c.m. energy of the THM entrance pair) added to the "
-         "folded model, profiled with the norm by linear least squares; it may come out negative."));
+      tr("background=: b0 + b1 E + b2 E^2 (E: c.m. energy of the THM entrance pair) added to the folded model, "
+         "profiled with the norm."));
   connect(backgroundCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(backgroundChanged(int)));
 
   const QStringList nuclides = nuclideNames();
@@ -130,179 +133,222 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
     c->addItems(nuclides);
     c->setCurrentIndex(-1);
     c->setInsertPolicy(QComboBox::NoInsert);
-    c->setToolTip(tip + tr(" A nuclide of the built-in table (AME2020 nuclear masses) or Z,A,mass "
-                           "(nuclear mass in u)."));
+    c->setToolTip(tip + tr(" A nuclide of the built-in table (AME2020) or Z,A,mass (nuclear mass in u)."));
     connect(c, SIGNAL(editTextChanged(const QString &)), this, SLOT(kinematicsEdited()));
     return c;
   };
-  beamCombo = nuclideCombo(tr("beam=: the projectile of the three-body reaction."));
-  targetCombo = nuclideCombo(tr("target=: the target of the three-body reaction."));
+  beamCombo = nuclideCombo(tr("beam=: the projectile."));
+  targetCombo = nuclideCombo(tr("target=: the target."));
   spectatorCombo = nuclideCombo(tr("spectator=: the spectator s of the Trojan horse a = x + s."));
-  beamEnergyEdit = new QLineEdit;
-  beamEnergyEdit->setToolTip(tr("Ebeam=: the lab beam energy, MeV (> 0)."));
-  connect(beamEnergyEdit, SIGNAL(textEdited(const QString &)), this, SLOT(kinematicsEdited()));
-  lineshapeCheck = new QCheckBox(tr("Coulomb line shape of the spectator"));
+  beamEnergyEdit = new ThmNumberSpin(" MeV", 0.0, 1.0e5, 1.0);
+  beamEnergyEdit->setSpecialValueText(QString::fromUtf8("—"));  // 0: not given
+  beamEnergyEdit->setToolTip(tr("Ebeam=: the lab beam energy (> 0)."));
+  connect(beamEnergyEdit, SIGNAL(valueChanged(double)), this, SLOT(kinematicsEdited()));
+  lineshapeCheck = new QCheckBox(tr("Coulomb (lineshape=on)"));
   lineshapeCheck->setToolTip(
-      tr("lineshape=on: the final-state Coulomb interaction of the charged spectator with the resonance and its "
-         "decay products skews and shifts each resonance (the factor N_C per level, inside the coherent level sum; "
-         "Mukhamedzhanov, Kadyrov & Pang, EPJA 56 (2020) 233; Mukhamedzhanov, EPJA 58 (2022) 71). Needs the "
-         "three-body reaction and the Brune parameterization. zeta is shown at the ends of the data."));
+      tr("lineshape=on: the Coulomb field of the charged spectator skews and shifts each resonance (factor N_C per "
+         "level; Mukhamedzhanov, Kadyrov & Pang, EPJA 56 (2020) 233). Needs the three-body reaction and the Brune "
+         "parameterization."));
   connect(lineshapeCheck, SIGNAL(toggled(bool)), this, SLOT(lineshapeToggled(bool)));
+
   // Spectator-momentum window (ps=, psNodes=).
   const QString psPhysics =
-      tr("The off-shell x-A momentum of the entrance vertex depends on the spectator momentum p_s "
-         "(p_xA^2/2mu_xA = E + B + p_s^2/2mu_sx); THM data are averaged over the accepted p_s window, so AZURE2 "
-         "averages the HOES cross section over it with the weight |phi(p_s)|^2 p_s^2. It matters most near the "
-         "nodes of the vertex. Not together with a non-zero spectator energy (Model page) for the same entrance "
-         "pair: use one or the other.");
+      tr("The vertex is averaged over the accepted spectator momenta p_s with the weight |phi(p_s)|^2 p_s^2 "
+         "(p_xA^2/2mu_xA = E + B + p_s^2/2mu_sx). Not together with a non-zero spectator energy (Model page) for "
+         "the same entrance pair.");
   psKindCombo = new QComboBox;
   psKindCombo->addItem(tr("point (quasi-free)"), "delta");
   psKindCombo->addItem(QString::fromUtf8("Hulthén"), "hulthen");
   psKindCombo->addItem(tr("Gaussian"), "gauss");
   psKindCombo->addItem(tr("table"), "table");
-  psKindCombo->setToolTip(
-      tr("ps=: the momentum distribution |phi(p_s)|^2 of the spectator in the Trojan horse. Point: the vertex at "
-         "p_s = 0 (or at the Model page's spectator energy), the default, nothing written. ") +
-      psPhysics);
+  psKindCombo->setToolTip(tr("ps=: the momentum distribution |phi(p_s)|^2 of the spectator. Point: p_s = 0, "
+                             "nothing written. ") +
+                          psPhysics);
   connect(psKindCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(psEdited()));
-  auto psEdit = [&](const QString &placeholder, const QString &tip) {
-    QLineEdit *e = new QLineEdit;
-    e->setPlaceholderText(placeholder);
+  auto psSpin = [&](const QString &suffix, double hi, double step, const QString &tip) {
+    ThmNumberSpin *e = new ThmNumberSpin(suffix, 0.0, hi, step);
     e->setToolTip(tip);
-    connect(e, SIGNAL(textEdited(const QString &)), this, SLOT(psEdited()));
+    connect(e, SIGNAL(valueChanged(double)), this, SLOT(psEdited()));
     return e;
   };
-  psMinEdit = psEdit(tr("e.g. 0"), tr("p_min of the accepted window, MeV/c (>= 0). ") + psPhysics);
-  psMaxEdit = psEdit(tr("e.g. 40"), tr("p_max of the accepted window, MeV/c (>= p_min; = p_min: one point). ") +
-                                        psPhysics);
+  const QString perFm = QString::fromUtf8(" fm⁻¹");
+  psMinEdit = psSpin(" MeV/c", 1.0e4, 1.0, tr("p_min of the accepted window (>= 0)."));
+  psMaxEdit = psSpin(" MeV/c", 1.0e4, 1.0, tr("p_max of the accepted window (>= p_min; = p_min: one point)."));
   psCustomCheck = new QCheckBox(tr("custom a, b"));
-  psCustomCheck->setToolTip(
-      QString::fromUtf8("Hulthén phi(p) ~ 1/(a^2+q^2) - 1/(b^2+q^2), q = p/hbar c. Unticked: the deuteron, "
-                        "a = 0.2317, b = 1.202 fm^-1 (Tribble 2014 eq. 4.4). Ticked: other 0 < a < b, e.g. the "
-                        "Eckart function of 3He or 6Li."));
+  psCustomCheck->setToolTip(QString::fromUtf8("Hulthén phi(p) ~ 1/(a^2+q^2) - 1/(b^2+q^2). Unticked: the "
+                                              "deuteron, a = 0.2317, b = 1.202 fm^-1 (Tribble 2014 eq. 4.4)."));
   connect(psCustomCheck, SIGNAL(toggled(bool)), this, SLOT(psEdited()));
-  psAEdit = psEdit("0.2317", tr("Hulthen a, fm^-1 (> 0)."));
-  psBEdit = psEdit("1.202", tr("Hulthen b, fm^-1 (> a)."));
-  psAEdit->setText("0.2317");
-  psBEdit->setText("1.202");
-  psFwhmEdit = psEdit(tr("MeV/c"), tr("FWHM of |phi(p_s)|^2 = exp(-4 ln2 p^2/FWHM^2), MeV/c (> 0). ") + psPhysics);
-  psTableEdit = psEdit(tr("file"), tr("ps=table:<file>: two columns, p_s (MeV/c, >= 0, strictly increasing) and "
-                                      "the event weight w(p_s) per unit p_s (>= 0; |phi|^2 p^2, or a measured "
-                                      "|p_s| distribution); '#' comments; linear between rows. The window is the "
-                                      "table's range. Relative to the project directory; no blanks or '#'. ") +
-                                   psPhysics);
+  psAEdit = psSpin(perFm, 100.0, 0.01, tr("Hulthen a (> 0)."));
+  psBEdit = psSpin(perFm, 100.0, 0.01, tr("Hulthen b (> a)."));
+  psAEdit->setWrittenText("0.2317");
+  psBEdit->setWrittenText("1.202");
+  psFwhmEdit = psSpin(" MeV/c", 1.0e4, 1.0, tr("FWHM of |phi(p_s)|^2 = exp(-4 ln2 p^2/FWHM^2) (> 0)."));
+  psTableEdit = new QLineEdit;
+  psTableEdit->setPlaceholderText(tr("file"));
+  psTableEdit->setToolTip(tr("ps=table:<file>: two columns, p_s (MeV/c, increasing) and the weight per unit p_s; "
+                             "the window is its range. Relative to the project directory."));
+  connect(psTableEdit, SIGNAL(textEdited(const QString &)), this, SLOT(psEdited()));
   psTableButton = new QPushButton("...");
   psTableButton->setToolTip(tr("Choose the table; a file inside the project directory is stored relative to it."));
   connect(psTableButton, SIGNAL(clicked()), this, SLOT(chooseTable()));
   psNodesSpin = new QSpinBox;
   psNodesSpin->setRange(1, 64);
   psNodesSpin->setValue(16);
-  psNodesSpin->setToolTip(tr("psNodes=: Gauss-Legendre nodes on the window (1-64, default 16; 16 and 32 agree to "
-                             "1e-10 for a Hulthen window). Raise it for a table with kinks."));
+  psNodesSpin->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+  psNodesSpin->setToolTip(tr("psNodes=: Gauss-Legendre nodes on the window (1-64, default 16)."));
   connect(psNodesSpin, SIGNAL(valueChanged(int)), this, SLOT(psNodesChanged(int)));
 
-  psBox = new QGroupBox(tr("Spectator momentum"));
-  psBox->setToolTip(psPhysics);
-  // Distribution and nodes on one line; below it only the fields of the
-  // chosen distribution (showPsRows).
-  QGridLayout *pl = new QGridLayout;
-  QLabel *nodesLabel = new QLabel(tr("Nodes (advanced):"));
-  pl->addWidget(new QLabel(tr("Distribution:")), 0, 0, Qt::AlignRight);
-  pl->addWidget(psKindCombo, 0, 1);
-  pl->addWidget(nodesLabel, 0, 2, Qt::AlignRight);
-  pl->addWidget(psNodesSpin, 0, 3);
-  QLabel *minLabel = new QLabel(tr("p_min (MeV/c):")), *maxLabel = new QLabel(tr("p_max (MeV/c):"));
-  pl->addWidget(minLabel, 1, 0, Qt::AlignRight);
-  pl->addWidget(psMinEdit, 1, 1);
-  pl->addWidget(maxLabel, 1, 2, Qt::AlignRight);
-  pl->addWidget(psMaxEdit, 1, 3);
-  QLabel *aLabel = new QLabel(tr("a (fm^-1):")), *bLabel = new QLabel(tr("b (fm^-1):"));
-  QHBoxLayout *ab = new QHBoxLayout;
-  ab->setContentsMargins(0, 0, 0, 0);
-  ab->addWidget(psCustomCheck);
-  ab->addStretch(1);
-  ab->addWidget(aLabel);
-  ab->addWidget(psAEdit, 2);
-  pl->addLayout(ab, 2, 0, 1, 2);
-  pl->addWidget(bLabel, 2, 2, Qt::AlignRight);
-  pl->addWidget(psBEdit, 2, 3);
-  QLabel *fwhmLabel = new QLabel(tr("FWHM (MeV/c):"));
-  pl->addWidget(fwhmLabel, 3, 0, Qt::AlignRight);
-  pl->addWidget(psFwhmEdit, 3, 1);
-  QLabel *tableLabel = new QLabel(tr("Table:"));
-  pl->addWidget(tableLabel, 4, 0, Qt::AlignRight);
-  QHBoxLayout *tl = new QHBoxLayout;
-  tl->setContentsMargins(0, 0, 0, 0);
-  tl->addWidget(psTableEdit, 1);
-  tl->addWidget(psTableButton);
-  pl->addLayout(tl, 4, 1, 1, 3);
-  pl->setColumnStretch(1, 1);
-  pl->setColumnStretch(3, 1);
-  psWindowRow_ = {minLabel, psMinEdit, maxLabel, psMaxEdit};
-  psHulthenRow_ = {psCustomCheck, aLabel, psAEdit, bLabel, psBEdit};
-  psGaussRow_ = {fwhmLabel, psFwhmEdit};
-  psTableRow_ = {tableLabel, psTableEdit, psTableButton};
-  psNodesRow_ = {nodesLabel, psNodesSpin};
-  psBox->setLayout(pl);
+  // Derived values, as AZURE2 prints them (the whole text: derivedText, in the tooltips).
+  auto value = [this]() {
+    QLabel *l = new QLabel(QString::fromUtf8("—"));
+    l->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    return l;
+  };
+  bindingValue = value();
+  qfValue = value();
+  zetaValue = value();
+  meanTsValue = value();
+  messageIcon = new QLabel;
+  const int icon = style()->pixelMetric(QStyle::PM_SmallIconSize);
+  messageIcon->setPixmap(style()->standardIcon(QStyle::SP_MessageBoxWarning).pixmap(icon, icon));
+  messageIcon->setAlignment(Qt::AlignTop);
+  messageLabel = new QLabel;
+  messageLabel->setWordWrap(true);
+  messageLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
-  derivedLabel = new QLabel;
-  derivedLabel->setWordWrap(true);
-  derivedLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-  derivedLabel->setMinimumHeight(3 * derivedLabel->fontMetrics().lineSpacing());  // three lines, always
+  // Sections: four-column forms (label, field, label, field) whose label
+  // columns have one width in every section, so that the fields line up.
+  QList<QGridLayout *> forms;
+  QList<QLabel *> leftLabels, rightLabels;
+  auto label = [&](const QString &text, bool left, const QString &tip = QString()) {
+    QLabel *l = new QLabel(text);
+    l->setToolTip(tip);
+    (left ? leftLabels : rightLabels) << l;
+    return l;
+  };
+  auto form = [&]() {
+    QGridLayout *g = new QGridLayout;
+    g->setHorizontalSpacing(8);
+    g->setVerticalSpacing(6);
+    g->setColumnStretch(1, 1);
+    g->setColumnStretch(3, 1);
+    forms << g;
+    return g;
+  };
+  const Qt::Alignment right = Qt::AlignRight | Qt::AlignVCenter;
+
+  QGroupBox *experimentBox = new QGroupBox(tr("Experiment"));
+  QGridLayout *xl = form();
+  xl->addWidget(label(tr("Name:"), true), 0, 0, right);
+  xl->addWidget(nameEdit, 0, 1);
+  xl->addWidget(label(tr("Background:"), false), 0, 2, right);
+  xl->addWidget(backgroundCombo, 0, 3);
+  xl->addWidget(label(tr("Segments:"), true), 1, 0, Qt::AlignRight | Qt::AlignTop);
+  xl->addWidget(segmentList, 1, 1, 1, 3);
+  experimentBox->setLayout(xl);
 
   kinematicsBox = new QGroupBox(tr("Three-body reaction"));
   kinematicsBox->setCheckable(true);
   kinematicsBox->setChecked(false);
   kinematicsBox->setToolTip(
-      tr("beam, target, spectator and Ebeam go together (all four or none). One of beam and target must be a "
-         "nucleus of the segments' entrance pair and the other the second nucleus plus the spectator. AZURE2 "
-         "reports B(x+s) and the quasi-free energy; the Coulomb line shape and the spectator-momentum window use "
-         "them."));
+      tr("beam, target, spectator and Ebeam: all four or none. One of beam and target is a nucleus of the "
+         "segments' entrance pair, the other the second nucleus plus the spectator."));
   connect(kinematicsBox, SIGNAL(toggled(bool)), this, SLOT(kinematicsEdited()));
-  QGridLayout *kl = new QGridLayout;
-  kl->addWidget(new QLabel(tr("Beam:")), 0, 0, Qt::AlignRight);
+  QGridLayout *kl = form();
+  kl->addWidget(label(tr("Beam:"), true), 0, 0, right);
   kl->addWidget(beamCombo, 0, 1);
-  kl->addWidget(new QLabel(tr("Target:")), 0, 2, Qt::AlignRight);
+  kl->addWidget(label(tr("Target:"), false), 0, 2, right);
   kl->addWidget(targetCombo, 0, 3);
-  kl->addWidget(new QLabel(tr("Spectator:")), 1, 0, Qt::AlignRight);
+  kl->addWidget(label(tr("Spectator:"), true), 1, 0, right);
   kl->addWidget(spectatorCombo, 1, 1);
-  kl->addWidget(new QLabel(tr("Beam energy (lab, MeV):")), 1, 2, Qt::AlignRight);
+  kl->addWidget(label(tr("Beam energy:"), false, tr("Lab frame")), 1, 2, right);
   kl->addWidget(beamEnergyEdit, 1, 3);
-  kl->addWidget(lineshapeCheck, 2, 0, 1, 4);
-  kl->addWidget(psBox, 3, 0, 1, 4);
-  kl->addWidget(derivedLabel, 4, 0, 1, 4);
-  kl->setColumnStretch(1, 1);
-  kl->setColumnStretch(3, 1);
+  kl->addWidget(label("B(x+s):", true, tr("Binding energy of the Trojan horse a = x + s")), 2, 0, right);
+  kl->addWidget(bindingValue, 2, 1);
+  kl->addWidget(label(QString::fromUtf8("E<sub>qf</sub>:"), false, tr("Quasi-free energy E(x+A) - B")), 2, 2, right);
+  kl->addWidget(qfValue, 2, 3);
+  // The line shape needs the reaction: in its section.
+  kl->addWidget(label(tr("Line shape:"), true), 3, 0, right);
+  kl->addWidget(lineshapeCheck, 3, 1);
+  kl->addWidget(label(QString::fromUtf8("\u03b6:"), false, tr("zeta at the lowest and highest data point")), 3, 2,
+                right);
+  kl->addWidget(zetaValue, 3, 3);
   kinematicsBox->setLayout(kl);
 
-  editorBox = new QGroupBox(tr("Selected experiment"));
-  QGridLayout *el = new QGridLayout;
-  el->addWidget(new QLabel(tr("Name:")), 0, 0, Qt::AlignRight);
-  el->addWidget(nameEdit, 0, 1);
-  el->addWidget(new QLabel(tr("Segments:")), 1, 0, Qt::AlignRight | Qt::AlignTop);
-  el->addWidget(segmentList, 1, 1);
-  el->addWidget(new QLabel(tr("Background:")), 2, 0, Qt::AlignRight);
-  el->addWidget(backgroundCombo, 2, 1);
-  el->addWidget(kinematicsBox, 3, 0, 1, 2);
-  el->setColumnStretch(1, 1);
+  psBox = new QGroupBox(tr("Spectator momentum window"));
+  psBox->setToolTip(psPhysics);
+  // Only the fields of the chosen distribution are shown (showPsRows).
+  QGridLayout *pl = form();
+  pl->addWidget(label(tr("Distribution:"), true), 0, 0, right);
+  pl->addWidget(psKindCombo, 0, 1);
+  pl->addWidget(psCustomCheck, 0, 3);
+  QLabel *minLabel = label(QString::fromUtf8("p<sub>min</sub>:"), true);
+  QLabel *maxLabel = label(QString::fromUtf8("p<sub>max</sub>:"), false);
+  pl->addWidget(minLabel, 1, 0, right);
+  pl->addWidget(psMinEdit, 1, 1);
+  pl->addWidget(maxLabel, 1, 2, right);
+  pl->addWidget(psMaxEdit, 1, 3);
+  QLabel *tableLabel = label(tr("Table:"), true);
+  QHBoxLayout *tl = new QHBoxLayout;
+  tl->setContentsMargins(0, 0, 0, 0);
+  tl->addWidget(psTableEdit, 1);
+  tl->addWidget(psTableButton);
+  pl->addWidget(tableLabel, 1, 0, right);
+  pl->addLayout(tl, 1, 1, 1, 3);
+  QLabel *aLabel = label("a:", true), *bLabel = label("b:", false);
+  pl->addWidget(aLabel, 2, 0, right);
+  pl->addWidget(psAEdit, 2, 1);
+  pl->addWidget(bLabel, 2, 2, right);
+  pl->addWidget(psBEdit, 2, 3);
+  QLabel *fwhmLabel = label(tr("FWHM:"), true);
+  pl->addWidget(fwhmLabel, 2, 0, right);
+  pl->addWidget(psFwhmEdit, 2, 1);
+  QLabel *meanLabel = label(QString::fromUtf8("\u27e8T<sub>s</sub>\u27e9:"), true, tr("Mean spectator energy"));
+  QLabel *nodesLabel = label(tr("Nodes:"), false);
+  pl->addWidget(meanLabel, 3, 0, right);
+  pl->addWidget(meanTsValue, 3, 1);
+  pl->addWidget(nodesLabel, 3, 2, right);
+  pl->addWidget(psNodesSpin, 3, 3);
+  psWindowRow_ = {minLabel, psMinEdit, maxLabel, psMaxEdit};
+  psHulthenRow_ = {psCustomCheck, aLabel, psAEdit, bLabel, psBEdit};
+  psGaussRow_ = {fwhmLabel, psFwhmEdit};
+  psTableRow_ = {tableLabel, psTableEdit, psTableButton};
+  psNodesRow_ = {nodesLabel, psNodesSpin, meanLabel, meanTsValue};
+  psBox->setLayout(pl);
+
+  int leftWidth = 0, rightWidth = 0;
+  for (QLabel *l : leftLabels) leftWidth = std::max(leftWidth, l->sizeHint().width());
+  for (QLabel *l : rightLabels) rightWidth = std::max(rightWidth, l->sizeHint().width());
+  for (QGridLayout *g : forms) {
+    g->setColumnMinimumWidth(0, leftWidth);
+    g->setColumnMinimumWidth(2, rightWidth);
+  }
+
+  QHBoxLayout *message = new QHBoxLayout;
+  message->setContentsMargins(0, 0, 0, 0);
+  message->addWidget(messageIcon);
+  message->addWidget(messageLabel, 1);
+
+  editorBox = new QWidget;
+  QVBoxLayout *el = new QVBoxLayout;
+  el->setContentsMargins(0, 0, 0, 0);
+  el->setSpacing(8);
+  el->addWidget(experimentBox);
+  el->addWidget(kinematicsBox);
+  el->addWidget(psBox);
+  el->addLayout(message);
+  el->addStretch(1);
   editorBox->setLayout(el);
 
-  QLabel *docs = new QLabel(tr("The segments of an experiment share one profiled norm; segments in no "
-                               "experiment keep their own. Documentation: ") +
-                            QString(kDocs));
-  docs->setWordWrap(true);
-  docs->setOpenExternalLinks(true);
-  docs->setTextFormat(Qt::RichText);
-
-  // The editor scrolls rather than squeezing its groups when space is short.
+  // The editor scrolls rather than squeezing its sections when space is short.
   QScrollArea *editorScroll = new QScrollArea;
   editorScroll->setWidget(editorBox);
   editorScroll->setWidgetResizable(true);
   editorScroll->setFrameShape(QFrame::NoFrame);
-  QVBoxLayout *mainLayout = new QVBoxLayout;
-  mainLayout->addWidget(listBox);
+  QHBoxLayout *mainLayout = new QHBoxLayout;
+  mainLayout->setSpacing(12);
+  mainLayout->addWidget(listBox, 0);
   mainLayout->addWidget(editorScroll, 1);
-  mainLayout->addWidget(docs);
   setLayout(mainLayout);
 
   refreshTable();
@@ -332,8 +378,9 @@ void ThmExperimentsPage::refreshRow(int row) {
       experimentTable->setItem(row, c, item);
     }
     item->setText(cells[c]);
-    item->setToolTip(r.extraTokens.isEmpty() ? QString()
-                                             : tr("Also kept as written: %1").arg(r.extraTokens.join(' ')));
+    QString tip = tr("Background: %1\nReaction: %2").arg(r.background, reaction);
+    if (!r.extraTokens.isEmpty()) tip += "\n" + tr("Also kept as written: %1").arg(r.extraTokens.join(' '));
+    item->setToolTip(tip);
   }
 }
 
@@ -448,7 +495,7 @@ void ThmExperimentsPage::loadEditor() {
   beamCombo->setEditText(r.beam);
   targetCombo->setEditText(r.target);
   spectatorCombo->setEditText(r.spectator);
-  beamEnergyEdit->setText(r.beamEnergy);
+  beamEnergyEdit->setWrittenText(r.beamEnergy);
   lineshapeCheck->setChecked(r.lineshape);
   const bool complete = !r.beam.isEmpty() && !r.target.isEmpty() && !r.spectator.isEmpty() && !r.beamEnergy.isEmpty();
   lineshapeCheck->setEnabled(complete);
@@ -458,9 +505,28 @@ void ThmExperimentsPage::loadEditor() {
   loading_ = false;
 }
 
-void ThmExperimentsPage::showDerived(const ThmExperimentRecord &r) {
-  QString why, info = derivedInfo(r, &why);
-  derivedLabel->setText(info.isEmpty() ? why : why.isEmpty() ? info : info + "\n" + why);
+void ThmExperimentsPage::showDerived(const ThmExperimentRecord &x) {
+  QString why, info = derivedInfo(x, &why);
+  derivedText_ = info.isEmpty() ? why : why.isEmpty() ? info : info + "\n" + why;
+  // The values in the sections, compact; the whole text in their tooltips.
+  const QString none = QString::fromUtf8("\u2014");
+  auto mev = [](double v) { return QString::number(v, 'g', 6) + " MeV"; };
+  Reaction r;
+  QString ignored;
+  const bool haveReaction = reaction(x, r, &ignored);
+  bindingValue->setText(haveReaction ? mev(r.bind) : none);
+  qfValue->setText(haveReaction ? mev(r.exa - r.bind) : none);
+  qfValue->setToolTip(haveReaction ? tr("E(x+A) = %1, E_qf = E(x+A) - B").arg(mev(r.exa)) : QString());
+  QString zeta;
+  if (haveReaction && x.lineshape) lineshapeInfo(x, &ignored, &zeta);
+  zetaValue->setText(zeta.isEmpty() ? none : zeta);
+  ThmSpectatorWindow window;
+  const bool haveWindow = haveReaction && x.hasWindow() && !windowInfo(x, &ignored, &window).isEmpty();
+  meanTsValue->setText(haveWindow ? mev(window.MeanEs()) : none);
+  for (QLabel *l : {bindingValue, zetaValue, meanTsValue}) l->setToolTip(info);
+  messageLabel->setText(why);
+  messageLabel->setVisible(!why.isEmpty());
+  messageIcon->setVisible(!why.isEmpty());
 }
 
 void ThmExperimentsPage::nameEdited(const QString &text) {
@@ -508,7 +574,7 @@ void ThmExperimentsPage::kinematicsEdited() {
   r.beam = on ? beamCombo->currentText().trimmed() : QString();
   r.target = on ? targetCombo->currentText().trimmed() : QString();
   r.spectator = on ? spectatorCombo->currentText().trimmed() : QString();
-  r.beamEnergy = on ? beamEnergyEdit->text().trimmed() : QString();
+  r.beamEnergy = on ? beamEnergyEdit->writtenText() : QString();
   // The line shape needs the reaction: offered once all four keys are given,
   // and dropped with them.
   lineshapeCheck->setEnabled(on && !r.beam.isEmpty() && !r.target.isEmpty() && !r.spectator.isEmpty() &&
@@ -671,7 +737,7 @@ bool ThmExperimentsPage::pointRange(const QList<int> &segments, double &lo, doub
   return lo <= hi;
 }
 
-QString ThmExperimentsPage::lineshapeInfo(const ThmExperimentRecord &x, QString *error) const {
+QString ThmExperimentsPage::lineshapeInfo(const ThmExperimentRecord &x, QString *error, QString *compact) const {
   Reaction r;
   if (!reaction(x, r, error)) return QString();
   if (!brune_) {
@@ -718,6 +784,7 @@ QString ThmExperimentsPage::lineshapeInfo(const ThmExperimentRecord &x, QString 
                                QString::number(shape.Zeta(hi, ZB, mB), 'g', 3)),
                       plain(pairs_->getParticleLabel(p, 0)) + "+" + plain(pairs_->getParticleLabel(p, 1)));
   }
+  if (compact) *compact = parts.join("; ").replace(" into ", " (") .replace("; ", "); ") + ")";
   return QString::fromUtf8("\u03b6 = ") + parts.join("; ") +
          tr(" at E = %1 \u2026 %2 MeV (the ends of the data)")
              .arg(QString::number(lo, 'g', 4), QString::number(hi, 'g', 4));
@@ -804,12 +871,12 @@ void ThmExperimentsPage::loadPs(const ThmExperimentRecord &r) {
   loading_ = true;
   int at = psKindCombo->findData(kind);
   psKindCombo->setCurrentIndex(at >= 0 ? at : 0);
-  psMinEdit->setText(lo);
-  psMaxEdit->setText(hi);
+  psMinEdit->setWrittenText(lo);
+  psMaxEdit->setWrittenText(hi);
   psCustomCheck->setChecked(custom);
-  psAEdit->setText(a);
-  psBEdit->setText(b);
-  psFwhmEdit->setText(fwhm);
+  psAEdit->setWrittenText(a);
+  psBEdit->setWrittenText(b);
+  psFwhmEdit->setWrittenText(fwhm);
   psTableEdit->setText(table);
   int nodes = 16;
   if (!r.psNodes.isEmpty()) {
@@ -836,12 +903,12 @@ void ThmExperimentsPage::showPsRows() {
 
 QString ThmExperimentsPage::psText() const {
   const QString kind = psKindCombo->currentData().toString();
-  const QString window = psMinEdit->text().trimmed() + "-" + psMaxEdit->text().trimmed();
+  const QString window = psMinEdit->writtenText() + "-" + psMaxEdit->writtenText();
   if (kind == "hulthen")
     return psCustomCheck->isChecked()
-               ? "hulthen:" + psAEdit->text().trimmed() + "," + psBEdit->text().trimmed() + ":" + window
+               ? "hulthen:" + psAEdit->writtenText() + "," + psBEdit->writtenText() + ":" + window
                : "hulthen:" + window;
-  if (kind == "gauss") return "gauss:" + psFwhmEdit->text().trimmed() + ":" + window;
+  if (kind == "gauss") return "gauss:" + psFwhmEdit->writtenText() + ":" + window;
   if (kind == "table") return "table:" + psTableEdit->text().trimmed();
   return QString();
 }
@@ -852,8 +919,9 @@ void ThmExperimentsPage::psEdited() {
   ThmExperimentRecord &r = records_[current_];
   if (!psCustomCheck->isChecked()) {
     // Back to the deuteron's values, shown as the engine's defaults.
-    psAEdit->setText("0.2317");
-    psBEdit->setText("1.202");
+    const QSignalBlocker blockA(psAEdit), blockB(psBEdit);
+    psAEdit->setWrittenText("0.2317");
+    psBEdit->setWrittenText("1.202");
   }
   r.ps = psText();
   if (r.ps.isEmpty() && !r.psNodes.isEmpty()) {
