@@ -711,6 +711,15 @@ bool AZUREAPI::GetThmLineshape(const std::string &name, const vector_r &energies
   return data()->ThmLineshapeTable(name, energies, compound(), configure(), out, why);
 }
 
+bool AZUREAPI::GetThmVertex(const std::string &name, const vector_r &energies, ThmVertexReport &out,
+                            std::string &why) {
+  if (data_ == nullptr || compound_ == nullptr) {
+    why = "no data loaded";
+    return false;
+  }
+  return data()->ThmVertexTable(name, energies, compound(), configure(), out, why);
+}
+
 bool AZUREAPI::Rebuild() {
   return RebuildImpl(nullptr, nullptr);
 }

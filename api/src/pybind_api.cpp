@@ -467,6 +467,50 @@ class Session {
     d["exits"] = exits;
     return d;
   }
+  // The window-averaged THM entrance vertex of an experiment at the current parameters.
+  py::dict thm_vertex(const std::string &name, py::array_t<double, py::array::forcecast> e) {
+    ConfigScope guard(config_);
+    ThmVertexReport r;
+    std::string why;
+    if (!api_->GetThmVertex(name, to_vector(e), r, why)) throw AZURE2Error(why);
+    py::dict d;
+    d["experiment"] = r.experiment;
+    d["window"] = r.window;
+    d["pair"] = r.pairKey;
+    d["mu_sx"] = r.muSx;
+    d["B"] = r.bind;
+    d["radius"] = r.radius;
+    d["p_s"] = to_array(r.p);
+    d["weights"] = to_array(r.weight);
+    d["T_s"] = to_array(r.es);
+    d["E"] = to_array(r.energy);
+    py::list rho;
+    for (const std::vector<double> &row : r.rho) rho.append(to_array(row));
+    d["rho"] = rho;
+    py::list channels;
+    for (const ThmVertexReport::Channel &c : r.channels) {
+      py::dict cd;
+      cd["jgroup"] = c.jgroup;
+      cd["channel"] = c.channel;
+      cd["J"] = c.J;
+      cd["pi"] = c.pi;
+      cd["l"] = c.l;
+      cd["s"] = c.s;
+      py::list levels;
+      for (const ThmVertexReport::Level &l : c.levels) {
+        py::dict ld;
+        ld["level"] = l.level;
+        ld["boundary"] = l.boundary;
+        ld["M2"] = to_array(l.m2);
+        ld["M2_qf"] = to_array(l.m2qf);
+        levels.append(ld);
+      }
+      cd["levels"] = levels;
+      channels.append(cd);
+    }
+    d["channels"] = channels;
+    return d;
+  }
   py::array_t<double> calculate_model_gradients_rwa(py::array_t<double, py::array::forcecast> p) {
     vector_r v = to_vector(p), out;
     {
@@ -630,6 +674,10 @@ PYBIND11_MODULE(_azure2, m) {
       .def("thm_lineshape", &Session::thm_lineshape, py::arg("name"), py::arg("energies"),
            "Coulomb line shape of THM experiment `name` (lineshape=on) at c.m. energies, with the "
            "level poles of the last evaluation's parameters.")
+      .def("thm_vertex", &Session::thm_vertex, py::arg("name"), py::arg("energies"),
+           "THM entrance vertex of experiment `name` at c.m. energies: the spectator-momentum "
+           "window (nodes, weights, rho) and, per entrance channel and level, <|M_l|^2> over "
+           "the window and |M_l|^2 at p_s = 0.")
       .def("calculate_model_gradients_rwa", &Session::calculate_model_gradients_rwa,
            py::arg("params"))
       .def("coulomb_functions", &Session::coulomb_functions, py::arg("request"))

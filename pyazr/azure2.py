@@ -1014,6 +1014,46 @@ class azure2:
         r = self.sess.thm_lineshape(str(experiment), np.asarray(energies, float).ravel())
         return r
 
+    def thm_vertex(self, experiment, energies, params=None):
+        """The THM entrance vertex of an experiment, averaged over its
+        spectator-momentum window (``ps=`` on the experiment line).
+
+        The off-shell x-A momentum is ``p_xA^2/2mu_xA = E + B + p_s^2/2mu_sx``
+        (Mukhamedzhanov et al., PRC 96 (2017) 024623, eq. 31), so the vertex
+        ``M_l = (B_c - 1) j_l(rho) - rho j_l'(rho) (+ C_l)``, ``rho = p_xA a``,
+        changes with the spectator momentum p_s inside the accepted window.
+        The engine averages the cross section (not the amplitude) over the
+        window with the event weight |phi(p_s)|^2 p_s^2; this reports the
+        vertex part of it.  See docs/source/theory/thm_implementation.rst,
+        "Spectator-momentum window".
+
+        ``energies``: c.m. energies E of x + A (MeV).  The per-level vertex
+        boundaries are those of ``params`` (default: the current parameters;
+        a chi-squared evaluation is run to load them in data mode).  Returns a
+        dict:
+
+        ``window``    description (``"delta"`` without a window)
+        ``p_s``, ``weights``, ``T_s``   the Gauss-Legendre nodes (MeV/c), their
+                      normalized weights and T_s = p_s^2/2mu_sx (MeV); a delta
+                      experiment has one node, p_s = 0 and T_s the
+                      ``spectatorEnergy`` of its pair
+        ``mu_sx``, ``B``, ``radius``, ``pair``   (MeV, MeV, fm, entrance key)
+        ``E``         the grid; ``rho``: list over E of the rho at each node
+        ``channels``  one dict per entrance channel of every J group:
+                      ``jgroup``, ``channel`` (1-based), ``J``, ``pi``, ``l``,
+                      ``s`` and ``levels``: per level ``level`` (1-based),
+                      ``boundary`` (the vertex boundary B_c for that level;
+                      NaN for ``vertex=onshell``, where it is S(E) + iP(E)),
+                      ``M2`` (<|M_l|^2> over the window) and ``M2_qf``
+                      (|M_l|^2 at p_s = 0) on the grid.
+
+        Raises the engine error if the experiment is unknown.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        if self.mode == "data":
+            self.sess.calculate_chi2_rwa(x)
+        return self.sess.thm_vertex(str(experiment), np.asarray(energies, float).ravel())
+
     def residuals(self, params=None):
         """Standardized residuals ``(fit_i - data_i*n)/(cmErr_i*n)``, from a
         forward pass alone.

@@ -126,7 +126,7 @@ with tempfile.TemporaryDirectory() as tmp:
           m2.thm_experiments() == before and str(m2._suffix) + str(m2._prefix) == snapshot)
 
     # Engine-side refusals seen by the parser too.
-    for line, frag in [("experiment[A] segments=1 ps=file.dat", "not implemented yet"),
+    for line, frag in [("experiment[A] segments=1 distortion=on", "not implemented yet"),
                        ("experiment[A] segments=1 theta=20", "not implemented yet"),
                        ("experiment[A] segments=1 foo=1", "unknown key"),
                        ("experiment[A] segments=1\nexperiment[B] segments=1", "already in"),
@@ -294,7 +294,7 @@ with tempfile.TemporaryDirectory() as tmp:
               sorted(s.thm_experiments(x)) == ["A", "B"])
     check("residuals bit for bit", np.array_equal(r0, r1))
     check("Jacobian bit for bit", np.array_equal(J0, J1))
-    bad_dir = project("bad", "experiment[A] segments=1,2 ps=x")
+    bad_dir = project("bad", "experiment[A] segments=1,2 theta=x")
     try:
         with azure2(os.path.join(bad_dir, "run.azr"), cwd=bad_dir):
             pass

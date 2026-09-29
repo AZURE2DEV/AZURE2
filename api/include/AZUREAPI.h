@@ -336,6 +336,8 @@ class AZUREAPI {
   /// (the last evaluation's parameters).  False and `why` if unavailable.
   bool GetThmLineshape(const std::string &name, const vector_r &energies, ThmLineshapeReport &out,
                        std::string &why);
+  /// The window-averaged THM entrance vertex of experiment `name` (EData::ThmVertexTable).
+  bool GetThmVertex(const std::string &name, const vector_r &energies, ThmVertexReport &out, std::string &why);
 
   /*!
    * Per-point sensitivities d(model)/d(theta) of the calculated segments, for

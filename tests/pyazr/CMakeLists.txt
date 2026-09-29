@@ -85,3 +85,10 @@ add_test(NAME pyazr_thm_lineshape
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_lineshape_test.py)
 set_tests_properties(pyazr_thm_lineshape PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Spectator-momentum window of a THM experiment (experiment[...] ps=...):
+# AzrModel, CLI == pyazr, thm_vertex against the formulas, linearity in the nodes.
+add_test(NAME pyazr_thm_spectator_window
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_spectator_window_test.py)
+set_tests_properties(pyazr_thm_spectator_window PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

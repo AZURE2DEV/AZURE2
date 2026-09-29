@@ -107,8 +107,8 @@ _THM_NUCLIDES = {
 }
 _THM_BACKGROUNDS = ("none", "const", "linear", "quadratic")
 _THM_EXPERIMENT_KEYS = ("segments", "background", "beam", "target", "spectator", "Ebeam",
-                        "lineshape")
-_THM_EXPERIMENT_RESERVED = ("ps", "theta", "distortion")
+                        "lineshape", "ps", "psNodes")
+_THM_EXPERIMENT_RESERVED = ("theta", "distortion")
 _THM_NAME = re.compile(r"[A-Za-z0-9_.+-]+")
 _THM_WHOLE_INT = re.compile(r"[+-]?\d+")
 
@@ -160,6 +160,53 @@ def _thm_segment_list(text):
                 raise ValueError(f"segments='{text}': segment {k} is listed twice")
             out.append(k)
     return sorted(out)
+
+
+def _thm_ps_window(text):
+    """"pmin-pmax" (MeV/c, 0 <= pmin <= pmax): the '-' with a number on both
+    sides; (lo, hi) or None."""
+    for k in range(1, len(text) - 1):
+        if text[k] != "-":
+            continue
+        lo, hi = _thm_whole_double(text[:k]), _thm_whole_double(text[k + 1:])
+        if lo is not None and hi is not None:
+            return (lo, hi) if 0.0 <= lo <= hi else None
+    return None
+
+
+def _thm_parse_ps(value):
+    """ParsePs (src/ThmExperiment.cpp): the value of ps= as a normalized
+    string, or ValueError (message without the experiment prefix)."""
+    usage = (f"ps='{value}': expected delta, hulthen:pmin-pmax, hulthen:a,b:pmin-pmax "
+             "(a, b in fm^-1), gauss:FWHM:pmin-pmax or table:<file> (momenta in MeV/c, "
+             "0 <= pmin <= pmax)")
+    if value == "delta":
+        return value
+    f = value.split(":")
+    if len(f) >= 2 and f[0] == "table":
+        if not value[6:]:
+            raise ValueError(usage)
+        return value
+    if f[0] == "hulthen" and len(f) in (2, 3):
+        if len(f) == 3:
+            ab = f[1].split(",")
+            a = _thm_whole_double(ab[0]) if len(ab) == 2 else None
+            b = _thm_whole_double(ab[1]) if len(ab) == 2 else None
+            if a is None or b is None or not (a > 0.0 and b > a):
+                raise ValueError(f"ps='{value}': Hulthen a,b in fm^-1 with 0 < a < b "
+                                 "(deuteron: 0.2317,1.202)")
+        if _thm_ps_window(f[-1]) is None:
+            raise ValueError(usage)
+        return value
+    if f[0] == "gauss" and len(f) == 3:
+        w = _thm_whole_double(f[1])
+        if w is None or not w > 0.0:
+            raise ValueError(f"ps='{value}': the FWHM of |phi(p_s)|^2 must be a number "
+                             "> 0 (MeV/c)")
+        if _thm_ps_window(f[2]) is None:
+            raise ValueError(usage)
+        return value
+    raise ValueError(usage)
 
 
 def _thm_parse_experiment(line, experiments):
@@ -217,9 +264,21 @@ def _thm_parse_experiment(line, experiments):
             if value not in ("on", "off"):
                 raise ValueError(where + f"lineshape='{value}': expected on or off")
             work["lineshape"] = value == "on"
+        elif key == "ps":
+            try:
+                work["ps"] = _thm_parse_ps(value)
+            except ValueError as err:
+                raise ValueError(where + str(err)) from None
+        elif key == "psNodes":
+            n = _thm_whole_int(value)
+            if n is None or not 1 <= n <= 64:
+                raise ValueError(where + f"psNodes='{value}': expected a whole number of "
+                                 "Gauss-Legendre nodes, 1 to 64")
+            work["psNodes"] = n
         else:
             raise ValueError(where + f"unknown key '{key}' (keys: segments, "
-                             "background, beam, target, spectator, Ebeam, lineshape)")
+                             "background, beam, target, spectator, Ebeam, lineshape, ps, "
+                             "psNodes)")
         work["keys"].append(key)
     experiments[name] = work
 
@@ -238,6 +297,12 @@ def _thm_check_experiments(experiments):
         if x.get("lineshape") and kin != 4:
             raise ValueError(where + "lineshape=on needs the kinematics of the reaction: "
                              "beam, target, spectator and Ebeam")
+        if x.get("ps", "delta") != "delta" and kin != 4:
+            raise ValueError(where + "a ps window (ps=hulthen|gauss|table) needs the "
+                             "kinematics of the reaction: beam, target, spectator and "
+                             "Ebeam (mu_sx from the spectator and x masses)")
+        if "psNodes" in x["keys"] and x.get("ps", "delta") == "delta":
+            raise ValueError(where + "psNodes= needs a ps window (ps=hulthen|gauss|table)")
         for k in x["segments"]:
             if k in owner:
                 raise ValueError(where + f"segment {k} is already in "
@@ -255,6 +320,10 @@ def _thm_experiment_record(x):
         out["Ebeam"] = x["Ebeam"]
     if x.get("lineshape"):
         out["lineshape"] = True
+    if "ps" in x:
+        out["ps"] = x["ps"]
+    if "psNodes" in x:
+        out["psNodes"] = x["psNodes"]
     return out
 
 
@@ -270,6 +339,10 @@ def _thm_experiment_line(name, rec):
         parts.append(f"Ebeam={_thm_number(float(rec['Ebeam']))}")
     if rec.get("lineshape"):
         parts.append("lineshape=on")
+    if "ps" in rec:
+        parts.append(f"ps={rec['ps']}")
+    if "psNodes" in rec:
+        parts.append(f"psNodes={int(rec['psNodes'])}")
     return " ".join(parts)
 
 
@@ -1937,8 +2010,9 @@ class AzrModel:
         inactive lines counted, like ``weight[k]``), ``background`` (``none``,
         ``const``, ``linear`` or ``quadratic``) and, if given, ``beam``,
         ``target``, ``spectator`` (nuclide names or ``Z,A,mass``) and
-        ``Ebeam`` (lab MeV), and ``lineshape: True`` when the Coulomb line
-        shape of the spectator is on.  All segments of an experiment share one
+        ``Ebeam`` (lab MeV), ``lineshape: True`` when the Coulomb line
+        shape of the spectator is on, and ``ps`` / ``psNodes`` when given
+        (spectator-momentum window).  All segments of an experiment share one
         profiled norm and the background; see
         docs/source/theory/thm_implementation.rst, "THM experiments" and
         "Coulomb line shape".  Raises ValueError if the block has a line AZURE2
@@ -1948,7 +2022,8 @@ class AzrModel:
         return {name: _thm_experiment_record(x) for name, x in s["experiments"].items()}
 
     def set_thm_experiment(self, name, segments, background="none", beam=None,
-                           target=None, spectator=None, Ebeam=None, lineshape=False):
+                           target=None, spectator=None, Ebeam=None, lineshape=False,
+                           ps=None, psNodes=None):
         """Define (or replace) ``experiment[<name>]`` in the ``<thm>`` block.
 
         ``segments`` is a list of ``<segmentsData>`` line numbers (or the
@@ -1961,6 +2036,16 @@ class AzrModel:
         (lab MeV) go together: all four or none.  ``lineshape=True`` turns on
         the Coulomb line-shape factor N_C of the spectator (needs the four
         kinematics keys; see :meth:`pyazr.azure2.azure2.thm_lineshape`).
+        ``ps`` sets the spectator-momentum window over which the HOES cross
+        section is averaged (weight |phi(p_s)|^2 p_s^2, momenta in MeV/c):
+        ``"delta"`` (the quasi-free point, the default), ``"hulthen:0-40"``,
+        ``"hulthen:a,b:0-40"`` (a, b in fm^-1; default the deuteron's 0.2317,
+        1.202), ``"gauss:FWHM:0-40"`` or ``"table:<file>"`` (p_s and the event
+        weight per unit p_s; relative to the .azr, read by the engine); a
+        window needs the kinematics keys and excludes ``spectatorEnergy`` for
+        the experiment's entrance pair.  ``psNodes`` (1-64, default 16) is the
+        number of Gauss-Legendre nodes in p_s (see
+        :meth:`pyazr.azure2.azure2.thm_vertex`).
         The record replaces every
         earlier line of that name with one line; other lines stay as they
         are.  Raises ValueError (model unchanged) for anything AZURE2 would
@@ -1981,6 +2066,10 @@ class AzrModel:
             text += f" Ebeam={_thm_number(float(Ebeam))}"
         if lineshape:
             text += " lineshape=on"
+        if ps is not None:
+            text += f" ps={ps}"
+        if psNodes is not None:
+            text += f" psNodes={psNodes}"
         if any(c in text for c in "#\r\n"):
             raise ValueError(f"<thm> experiment[{name}]: a value cannot contain '#' "
                              "or a line break.")
@@ -2005,6 +2094,13 @@ class AzrModel:
                 raise ValueError(f"<thm> experiment[{name}]: segment {k} has a fixed "
                                  "norm; the segments of an experiment share one free "
                                  "(profiled) norm, so free it.")
+            if rec.get("ps", "delta") != "delta":
+                key = int(float(tok[1])) if len(tok) > 1 and _isnum(tok[1]) else None
+                if s["spectatorEnergy"] != 0.0 or s["spectatorByPair"].get(key, 0.0) != 0.0:
+                    raise ValueError(f"<thm> experiment[{name}]: a ps window and "
+                                     "spectatorEnergy both set the spectator motion of "
+                                     f"entrance pair {key}; use one (ps=delta keeps "
+                                     "spectatorEnergy).")
         body = self._thm_body_without_experiment(name)
         body.append(_thm_experiment_line(name, rec))
         self._thm_set_body(body)
