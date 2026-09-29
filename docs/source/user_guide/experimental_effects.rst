@@ -82,15 +82,24 @@ Check **Include Gaussian Convolution** to convolve the calculated cross section
 with a Gaussian beam energy distribution.
 
 **Sigma** (MeV)
-   The full width at half maximum of the Gaussian convolution function. Although
-   beam resolution is typically of order keV, the value must be entered in **MeV**
-   (e.g., ``0.001`` for 1 keV).
+   The standard deviation :math:`\sigma_b` of the Gaussian convolution function
+   (not the FWHM; FWHM :math:`= 2.355\,\sigma_b`). Although beam resolution is
+   typically of order keV, the value must be entered in **MeV** (e.g., ``0.001``
+   for 1 keV), in the laboratory frame; AZURE2 converts it to the centre of mass.
 
 Target Integration
 ^^^^^^^^^^^^^^^^^^
 
 Check **Include Target Integration** to account for beam energy loss in the
-target.
+target. The yield is computed as
+
+.. math::
+
+   Y(E_0) = \frac{1}{N} \int_{E_0 - \Delta}^{E_0} \frac{\sigma(E')}{\epsilon(E')}\, dE',
+   \qquad \Delta = \epsilon(E_0)\, N ,
+
+where :math:`N` is the areal density entered below and :math:`\epsilon(E)` the
+stopping cross section entered below.
 
 **Active Density** (atoms/cm\ :sup:`2`)
    The areal density of the active target material (the nuclei producing the
@@ -100,8 +109,11 @@ target.
    The effective stopping cross section must be entered as a continuous function
    of energy using a parameterized equation:
 
-   - The variable ``y`` represents the stopping cross section.
-   - The variable ``x`` represents the energy.
+   - The variable ``y`` represents the stopping cross section, in
+     MeV cm\ :sup:`2` per *atom* (or per whatever entity the density counts --
+     see below). Tabulated values in eV per 10\ :sup:`15` atoms/cm\ :sup:`2`
+     (SRIM, Ziegler) are converted by dividing by ``1e21``.
+   - The variable ``x`` represents the laboratory energy in MeV.
    - Parameters are labeled ``a0``, ``a1``, ``a2``, etc.
 
    **Example** -- a second-order polynomial with 3 parameters::
@@ -112,7 +124,52 @@ target.
    ``a1``, and ``a2`` in the table.
 
    AZURE2 also provides tools to look up stopping powers by element or compound
-   formula.
+   formula (**Fetch from ERYA**).
+
+**Compound and mixed targets: one stopping power is enough, but it must
+be normalized to the same thing the density counts.**
+
+   The stopping cross section and the areal density enter the calculation
+   only through their product (the energy loss :math:`\Delta = \epsilon N`)
+   and through :math:`1/(N\epsilon)` in the integrand, so any pair
+   :math:`(\epsilon, N)` that refers to the *same entity* gives the same
+   yield. You do not need a separate "compound" and "effective" stopping
+   power; you need the one that matches your :math:`N`. For a target
+   A\ :sub:`x`\ B\ :sub:`y` in which A is the reacting nucleus, Bragg's rule
+   gives the stopping cross section per molecule
+   :math:`\epsilon_{\rm mol} = x\,\epsilon_A + y\,\epsilon_B`, and the three
+   consistent choices are
+
+   ============================  =================================================  ==========================
+   entity                        stopping cross section :math:`\epsilon`            density :math:`N`
+   ============================  =================================================  ==========================
+   active atom (recommended)     :math:`\epsilon_A + (y/x)\,\epsilon_B`              active atoms / cm\ :sup:`2`
+   molecule                      :math:`x\,\epsilon_A + y\,\epsilon_B`               molecules / cm\ :sup:`2`
+   average atom                  :math:`(x\,\epsilon_A + y\,\epsilon_B)/(x+y)`       *all* atoms / cm\ :sup:`2`
+   ============================  =================================================  ==========================
+
+   The mistakes are the mixed pairings: the pure-element :math:`\epsilon_A`
+   with the active density (the energy loss is missing the
+   :math:`(y/x)\,\epsilon_B` term -- for TiN or Ta\ :sub:`2`\ O\ :sub:`5` a
+   large fraction of it), or a per-average-atom value with the active
+   density (the loss is too small by :math:`(x+y)/x`).
+
+   .. warning::
+
+      **Fetch from ERYA** with a compound formula returns the *average-atom*
+      stopping cross section -- each element weighted by its stoichiometry
+      divided by the *total* stoichiometry -- so it must be paired with the
+      areal density of **all** atoms in the target, not the active ones,
+      despite the field's name. To use the active density instead, multiply
+      the ERYA result by :math:`(x+y)/x` (the number of atoms per active
+      atom), or build the per-active-atom sum from the elemental equations
+      yourself.
+
+   If the experiment reports the energy loss in the target directly (for
+   example "the target thickness corresponded to 1.5 keV at the resonance"),
+   that number is more reliable than a stoichiometry and a nominal thickness:
+   choose :math:`N` so that :math:`\epsilon(E_0)\,N` reproduces the quoted
+   loss at the energy of interest.
 
 Restricting an Effect to Energy Ranges
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

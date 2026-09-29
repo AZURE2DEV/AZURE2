@@ -870,6 +870,20 @@ cols = cols[np.max(np.abs(J), axis=0) > 0]      # before least_squares
 A norm penalty of *exactly* 0.0 alongside free normalizations is the tell:
 `m.penalties(x)["norm"].sum()` says so directly.
 
+**The same freeze hides missing physics: an amplitude that is exactly zero never
+moves.** χ² depends on a reduced-width amplitude only through its square near
+zero, so its slope there is zero and no gradient method pushes it off — "free" in
+the `.azr` means nothing if the value is 0. The common case is a *closed* channel:
+levels just below a particle threshold carry that channel as a sub-threshold
+(ANC-type) amplitude, and if the levels were placed with widths only in their
+open channels, the sub-threshold contribution is simply absent from the model.
+Audit before blaming the level scheme: list the zero entries of channels whose
+threshold lies just above the levels (13C+α, 2026-09-25: all 14 n₁ entries of the
+levels between 9.36 MeV and the n₁ threshold were 0, while the (α,n₁) data are
+missed right at threshold). To test them, seed in units of the Wigner amplitude,
+never as a physical width (~0.05 γ_W; `13C+a/9-25-26_n1_anc/seed_anc.py`), touch
+only channels that are zero, and judge against a control with the same budget.
+
 #### 3. `residual_jacobian` raises, and the exception aborts the fit
 
 A trust-region step can put a reduced width where the Coulomb functions
@@ -1238,6 +1252,69 @@ changed (the removed segment's own χ² and N, from the old `chiSquared.out`).
 It costs seconds and catches a corrupted starting point before it burns a
 50,000-iteration cluster job on it, rather than after.
 
+## Checking what the data and the figures mean
+
+Most of a week's χ² on 13C+α (2026-09-22 to 25) came from data *definitions* and
+from figures that did not show the fit, not from the level scheme. Check these
+before adding structure.
+
+**A total must be summed over every channel it measures.** A neutron-total or
+total-yield segment is the sum of all channels open in its energy range. A
+segment defined with too few exits looks like a model failure above the next
+threshold. In 13C+α both such sets were short: a neutron total defined as
+(n,n₀)+(n,α₀) above the (n,n₁) threshold, and a 4π total (α,n) yield (Bair and
+Haas, "Total Neutron Yield") defined as (α,n₀) only. Fixing the second was worth
+33,500 in χ². Composite segments use the tail
+`1 0 <nComp> <ent> <exit> -999 ... 0` after the file name (operation 0 = sum; the
+segment's own exit is included). Two cheap tests: (1) evaluate the corrected
+definition at the current parameters (CLI mode 1 with the `.sav`) — the right
+definition usually wins before any refit; (2) plot two total measurements
+against each other across the threshold — two sets that track each other with
+no step where a channel opens measure the same (total) quantity.
+
+**A large, angle-dependent normalization is a symptom, not a result.** When a
+set needs norms of 1.7–1.9 that change with angle, look for a definition error
+in *another* set that shares its channels first. The ND 2020 (α,n₀) factors fell
+to 1.0–1.2 once the (α,n) total above was fixed.
+
+**Find outliers by comparing data sets, not only by pulls.** A point 6σ off the
+fit can look like model trouble until a second measurement of the same quantity
+shows it is the point (13C+α Brandenburg, E_α = 4.693 MeV: 1.43× Bair and Haas).
+Remove it only on the evaluator's decision, into a new `_clean` file, and record
+the row and the reason.
+
+**Rebuild combined data files with a script, and diff new data row by row.** A
+multi-angle file built from per-detector files needs a script that first
+reproduces the existing combined file exactly from the old inputs (same row
+order, same dropped duplicates, same added systematics). A revised data delivery
+must be compared row by row: a median ratio of 1.000 hid point-by-point changes
+of up to 40 % in the MANA (α,n₀) update of 2026-09-24.
+
+**Check every figure against the fit column of `AZUREOut_*.out`.** Interpolate
+the plotted curve to the data energies and compare with column 4 of the output
+file for the same segment. It catches the following:
+- **observables an extrapolation cannot compute**: UPOS / secondary-γ segments
+  (compute those curves in data mode on a pseudo-data grid);
+- **grids too coarse for narrow resonances**: a 5 keV grid misdrew peaks by up
+  to ×11; 0.25–0.5 keV is needed for keV-wide levels;
+- **single-point spikes at channel thresholds**: a grid point that lands on a
+  threshold can return nonsense (10²⁸ b). Drop a point that departs by more than
+  ~5 % from its neighbours' mean within a few keV of a threshold, testing the
+  *total*. A partial cross section's own opening is steep but genuine.
+
+Draw the data multiplied by the fitted normalization (a *fixed* non-unity norm
+lives only in the `.azr`, not the `.sav`) and at the fitted energy shift, which
+is what AZURE2 compares and what the GUI shows.
+
+**Legendre coefficients are a data-consistency tool, not the fit target.** Fitting
+each angular-distribution set with Σ a_L P_L per energy gives angle-free
+comparisons between sets. Use them for per-detector ratios against a reference
+set, and for mechanism fingerprints: an angle offset scales with ∂lnσ/∂θ;
+acceptance smearing shows as a_L/a₀ falling like the attenuation factors Q_L of a
+cone. They also give Jπ hints (a₆ ≠ 0 needs J ≥ 7/2; a₈ ≠ 0 needs J ≥ 9/2). Keep
+the R-matrix fit on the angular distributions themselves: coefficients carry
+correlated errors and truncation choices (DeBoer, 2026-09-23).
+
 ## Examples shipped with pyazr
 
 In `pyazr/examples/` — run `ls` there rather than trusting this list to stay
@@ -1393,6 +1470,22 @@ complete:
   gives 2.8 keV at 0.46 MeV and 1.1 keV at 2 MeV. Match the quoted loss at the energy that
   matters (2.0e17 atoms/cm2 = 4.0 ug/cm2 gives 1.5 keV at the 1/2+ resonance) or use
   per-window `<targetInt>` lines with the lab-energy ranges token.
+- 2026-09-28 -- COMPOUND TARGETS: THE STOPPING POWER AND THE DENSITY MUST COUNT THE SAME
+  THING. Target integration uses epsilon and N only as the product Delta = epsilon*N and as
+  1/(N*epsilon) in the integrand (EPoint.cpp, `yield = integral / (density*1e-24)`), so any
+  (epsilon, N) pair normalized to the same entity gives the same yield -- one stopping power
+  is enough, there is no separate "compound" vs "effective" input. For A_xB_y with A active:
+  per active atom epsilon_A + (y/x) epsilon_B with N = active atoms/cm2 (what the GUI's
+  "Active Density" label means); per molecule x eps_A + y eps_B with N = molecules/cm2; per
+  average atom (x eps_A + y eps_B)/(x+y) with N = ALL atoms/cm2. Wrong: pure-element eps_A
+  with the active density (loss missing (y/x) eps_B), or average-atom with the active
+  density (loss too small by (x+y)/x). TRAP: the GUI's "Fetch from ERYA" compound path
+  (`SRIMUtilities::generateCompoundAZUREEquation`) weights each element by
+  stoichiometry/TOTAL stoichiometry, i.e. it returns the average-atom value -- pair it with
+  the total atoms/cm2, or scale it by (x+y)/x before using the active density. When a paper
+  quotes the energy loss in keV, set eps(E0)*N to reproduce it and skip the stoichiometry.
+  Written up in docs/source/user_guide/experimental_effects.rst (which also had "Sigma" of
+  the Gaussian documented as the FWHM; the code uses it as the standard deviation -- fixed).
 
 - **A regression reference is not a correctness check.** `tests/run_tests.sh` pins each
   project's chi-squared against a number this code produced, so it catches a change and
