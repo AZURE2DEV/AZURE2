@@ -107,8 +107,10 @@ _THM_NUCLIDES = {
 }
 _THM_BACKGROUNDS = ("none", "const", "linear", "quadratic")
 _THM_EXPERIMENT_KEYS = ("segments", "background", "beam", "target", "spectator", "Ebeam",
-                        "lineshape", "ps", "psNodes")
-_THM_EXPERIMENT_RESERVED = ("theta", "distortion")
+                        "lineshape", "ps", "psNodes", "distortion", "opticalAA", "opticalSF",
+                        "spectatorAngle", "distortionRef", "distortionRatio", "boundState")
+_THM_EXPERIMENT_RESERVED = ("theta",)
+_THM_DISTORTION_DETAIL = ("spectatorAngle", "distortionRef", "distortionRatio", "boundState")
 _THM_NAME = re.compile(r"[A-Za-z0-9_.+-]+")
 _THM_WHOLE_INT = re.compile(r"[+-]?\d+")
 
@@ -209,6 +211,69 @@ def _thm_parse_ps(value):
     raise ValueError(usage)
 
 
+def _thm_parse_optical(key, value):
+    """ParseOptical (src/ThmExperiment.cpp): plane | coulomb | ten numbers
+    V,R,a,W,RW,aW,WD,RD,aD,RC; the value as given, or ValueError."""
+    if value in ("plane", "coulomb"):
+        return value
+    f = value.split(",")
+    p = [_thm_whole_double(t) for t in f] if len(f) == 10 else None
+    ok = p is not None and all(v is not None for v in p)
+    if ok:
+        for t in range(3):
+            if p[3 * t] != 0.0 and not (p[3 * t + 1] > 0.0 and p[3 * t + 2] > 0.0):
+                ok = False
+        ok = ok and p[9] >= 0.0
+    if not ok:
+        raise ValueError(f"{key}='{value}': expected plane, coulomb or ten numbers "
+                         "V,R,a,W,RW,aW,WD,RD,aD,RC (MeV and fm: real volume, imaginary "
+                         "volume and imaginary surface Woods-Saxon, depths > 0 "
+                         "attractive/absorptive, radii and diffusenesses > 0 where the "
+                         "depth is not 0, the Coulomb radius RC >= 0, 0 = point charge)")
+    return value
+
+
+def _thm_parse_distortion_key(key, value):
+    """The distortion keys of an experiment line: the value to keep, or
+    ValueError (message without the experiment prefix)."""
+    if key == "distortion":
+        if value in ("none", "coulomb", "optical") or (value.startswith("table:")
+                                                        and len(value) > 6):
+            return value
+        raise ValueError(f"distortion='{value}': expected none, coulomb, optical or "
+                         "table:<file>")
+    if key in ("opticalAA", "opticalSF"):
+        return _thm_parse_optical(key, value)
+    if key == "spectatorAngle":
+        if value == "qf":
+            return value
+        a = _thm_whole_double(value[3:]) if value.startswith("cm:") else _thm_whole_double(value)
+        if a is None or not 0.0 <= a <= 180.0:
+            raise ValueError(f"spectatorAngle='{value}': expected qf, a lab angle in "
+                             "degrees (0-180) or cm:<degrees> (0-180)")
+        return value
+    if key == "distortionRef":
+        if _thm_whole_double(value) is None:
+            raise ValueError(f"distortionRef='{value}': expected the reference energy "
+                             "E_ref in MeV (c.m. of x + A)")
+        return value
+    if key == "distortionRatio":
+        if value not in ("dwpw", "dw"):
+            raise ValueError(f"distortionRatio='{value}': expected dwpw or dw")
+        return value
+    if key == "boundState":
+        f = value.split(":")
+        ok = len(f) in (1, 2) and f[0] in ("whittaker", "yukawa")
+        if ok and len(f) == 2:
+            r = _thm_whole_double(f[1])
+            ok = r is not None and 0.0 <= r <= 50.0
+        if not ok:
+            raise ValueError(f"boundState='{value}': expected whittaker or yukawa, "
+                             "optionally :rmin in fm (0-50)")
+        return value
+    raise KeyError(key)
+
+
 def _thm_parse_experiment(line, experiments):
     """ParseThmExperimentLine: merge one experiment line (comment stripped,
     trimmed) into ``experiments`` (name -> record); ValueError if AZURE2
@@ -275,10 +340,16 @@ def _thm_parse_experiment(line, experiments):
                 raise ValueError(where + f"psNodes='{value}': expected a whole number of "
                                  "Gauss-Legendre nodes, 1 to 64")
             work["psNodes"] = n
+        elif key in ("distortion", "opticalAA", "opticalSF") + _THM_DISTORTION_DETAIL:
+            try:
+                work[key] = _thm_parse_distortion_key(key, value)
+            except ValueError as err:
+                raise ValueError(where + str(err)) from None
         else:
             raise ValueError(where + f"unknown key '{key}' (keys: segments, "
                              "background, beam, target, spectator, Ebeam, lineshape, ps, "
-                             "psNodes)")
+                             "psNodes, distortion, opticalAA, opticalSF, spectatorAngle, "
+                             "distortionRef, distortionRatio, boundState)")
         work["keys"].append(key)
     experiments[name] = work
 
@@ -303,6 +374,17 @@ def _thm_check_experiments(experiments):
                              "Ebeam (mu_sx from the spectator and x masses)")
         if "psNodes" in x["keys"] and x.get("ps", "delta") == "delta":
             raise ValueError(where + "psNodes= needs a ps window (ps=hulthen|gauss|table)")
+        dist = x.get("distortion", "none")
+        computed = dist in ("coulomb", "optical")
+        if computed and kin != 4:
+            raise ValueError(where + f"distortion={dist} needs the kinematics of the "
+                             "reaction: beam, target, spectator and Ebeam")
+        if ("opticalAA" in x["keys"] or "opticalSF" in x["keys"]) and dist != "optical":
+            raise ValueError(where + "opticalAA= and opticalSF= need distortion=optical")
+        for key in _THM_DISTORTION_DETAIL:
+            if key in x["keys"] and not computed:
+                raise ValueError(where + f"{key}= needs distortion=coulomb or "
+                                 "distortion=optical")
         for k in x["segments"]:
             if k in owner:
                 raise ValueError(where + f"segment {k} is already in "
@@ -324,6 +406,9 @@ def _thm_experiment_record(x):
         out["ps"] = x["ps"]
     if "psNodes" in x:
         out["psNodes"] = x["psNodes"]
+    for key in ("distortion", "opticalAA", "opticalSF") + _THM_DISTORTION_DETAIL:
+        if key in x:
+            out[key] = x[key]
     return out
 
 
@@ -343,7 +428,17 @@ def _thm_experiment_line(name, rec):
         parts.append(f"ps={rec['ps']}")
     if "psNodes" in rec:
         parts.append(f"psNodes={int(rec['psNodes'])}")
+    for key in ("distortion", "opticalAA", "opticalSF") + _THM_DISTORTION_DETAIL:
+        if key in rec:
+            parts.append(f"{key}={rec[key]}")
     return " ".join(parts)
+
+
+def _thm_plain_number(x):
+    """Shortest round-trip text of a number, without exponent for whole
+    numbers ('100', '4.2', '1e-05')."""
+    t = repr(float(x))
+    return t[:-2] if t.endswith(".0") else t
 
 
 def _thm_is_default(s):
@@ -2023,7 +2118,9 @@ class AzrModel:
 
     def set_thm_experiment(self, name, segments, background="none", beam=None,
                            target=None, spectator=None, Ebeam=None, lineshape=False,
-                           ps=None, psNodes=None):
+                           ps=None, psNodes=None, distortion=None, opticalAA=None,
+                           opticalSF=None, spectatorAngle=None, distortionRef=None,
+                           distortionRatio=None, boundState=None):
         """Define (or replace) ``experiment[<name>]`` in the ``<thm>`` block.
 
         ``segments`` is a list of ``<segmentsData>`` line numbers (or the
@@ -2046,6 +2143,17 @@ class AzrModel:
         the experiment's entrance pair.  ``psNodes`` (1-64, default 16) is the
         number of Gauss-Legendre nodes in p_s (see
         :meth:`pyazr.azure2.azure2.thm_vertex`).
+        ``distortion`` multiplies the model of every segment by the
+        distortion factor R(E) (see :meth:`pyazr.azure2.azure2.thm_distortion`):
+        ``"coulomb"`` (point-Coulomb waves in a + A and s + F), ``"optical"``
+        (per channel ``opticalAA`` / ``opticalSF``: ``"plane"``,
+        ``"coulomb"`` or ten numbers ``"V,R,a,W,RW,aW,WD,RD,aD,RC"`` in MeV and
+        fm, or a sequence of them) -- both need the kinematics keys -- or
+        ``"table:<file>"`` (E, w columns as ``weight[k]``).  With coulomb or
+        optical: ``spectatorAngle`` (``"qf"``, a lab angle in degrees or
+        ``"cm:<deg>"``), ``distortionRef`` (E_ref, MeV), ``distortionRatio``
+        (``"dwpw"`` or ``"dw"``), ``boundState`` (``"whittaker"`` or
+        ``"yukawa"``, optionally ``":rmin"`` in fm).
         The record replaces every
         earlier line of that name with one line; other lines stay as they
         are.  Raises ValueError (model unchanged) for anything AZURE2 would
@@ -2070,6 +2178,17 @@ class AzrModel:
             text += f" ps={ps}"
         if psNodes is not None:
             text += f" psNodes={psNodes}"
+        for key, value in (("distortion", distortion), ("opticalAA", opticalAA),
+                           ("opticalSF", opticalSF), ("spectatorAngle", spectatorAngle),
+                           ("distortionRef", distortionRef),
+                           ("distortionRatio", distortionRatio), ("boundState", boundState)):
+            if value is None:
+                continue
+            if key in ("opticalAA", "opticalSF") and not isinstance(value, str):
+                value = ",".join(_thm_plain_number(v) for v in value)
+            elif key in ("distortionRef", "spectatorAngle") and not isinstance(value, str):
+                value = _thm_plain_number(value)
+            text += f" {key}={value}"
         if any(c in text for c in "#\r\n"):
             raise ValueError(f"<thm> experiment[{name}]: a value cannot contain '#' "
                              "or a line break.")

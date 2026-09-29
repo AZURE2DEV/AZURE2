@@ -1054,6 +1054,43 @@ class azure2:
             self.sess.calculate_chi2_rwa(x)
         return self.sess.thm_vertex(str(experiment), np.asarray(energies, float).ravel())
 
+    def thm_distortion(self, experiment, energies):
+        """The distortion factor R(E) of a THM experiment (``distortion=`` on
+        its experiment line).
+
+        Zero-range prior-form DWBA (Mukhamedzhanov & Pang, PRC 99 (2019)
+        064618, eqs. 20-24; Mukhamedzhanov, arXiv:2609.04498, eqs. 22-30):
+        ``M(E) = <chi(-)_{k_sF} | phi_sx | chi(+)_{k_aA}(beta r)>``, beta =
+        m_s/m_a, summed over partial waves; ``M_PW`` is its plane-wave limit,
+        the Fourier transform of the s-x bound state at q = |k_sF - beta
+        k_aA|, which the PWA data reduction divides by.  The model is
+        multiplied by ``R(E) = rho(E)/rho(E_ref)`` before the folding, with
+        rho = |M|^2/|M_PW|^2 (``distortionRatio=dwpw``, default) or |M|^2
+        (``dw``, the published convention); equivalently the PWA-extracted
+        S* divided by R.  See docs/source/theory/thm_implementation.rst,
+        "Distortion factor R(E)".  R does not depend on the R-matrix
+        parameters.
+
+        ``energies``: c.m. energies E of x + A (MeV).  Returns a dict:
+
+        ``kind``, ``description``   coulomb | optical | table, the settings
+        ``E``, ``R_model``          the grid and the w(E) the model uses
+                                    (interpolated; the table's for
+                                    ``table:<file>``, then nothing else)
+        ``R``                       R evaluated directly at each E
+        ``M2``, ``M2_PW``           |M|^2 and |M_PW|^2 (fm^6 up to a constant)
+        ``E_sF``, ``k_sF``, ``eta_sF``   the spectator-F channel (MeV, fm^-1)
+        ``theta_cm``, ``x``, ``q``  spectator c.m. angle to the beam (deg),
+                                    cos(k_sF, k_aA), |k_sF - beta k_aA|
+        ``lmax``                    the highest partial wave summed
+        ``E_ref``, ``E_aA``, ``B``, ``k_aA``, ``eta_aA``, ``kappa``,
+        ``eta_b``, ``beta``         scalars of the experiment
+
+        Raises the engine error if the experiment is unknown, has no
+        distortion, or an energy leaves the spectator no energy.
+        """
+        return self.sess.thm_distortion(str(experiment), np.asarray(energies, float).ravel())
+
     def residuals(self, params=None):
         """Standardized residuals ``(fit_i - data_i*n)/(cmErr_i*n)``, from a
         forward pass alone.
