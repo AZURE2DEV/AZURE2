@@ -7,6 +7,7 @@
 #include "AZUREGrad.h"
 #include <vector>
 #include "ThmExperiment.h"
+#include "ThmLineshape.h"
 
 class Config;
 class EData;
@@ -330,6 +331,11 @@ class AZUREAPI {
   /// The THM experiments (<thm> experiment[...]) as the last chi^2 evaluation
   /// profiled them: shared norm, background and their covariance.
   std::vector<ThmExperimentReport> GetThmExperiments() const;
+  /// The Coulomb line shape of THM experiment `name` (lineshape=on) at the
+  /// c.m. energies `energies`, with the level poles of the current compound
+  /// (the last evaluation's parameters).  False and `why` if unavailable.
+  bool GetThmLineshape(const std::string &name, const vector_r &energies, ThmLineshapeReport &out,
+                       std::string &why);
 
   /*!
    * Per-point sensitivities d(model)/d(theta) of the calculated segments, for

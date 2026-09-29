@@ -974,6 +974,46 @@ class azure2:
                            f"(have: {', '.join(reports) or 'none'})")
         return reports[experiment]
 
+    def thm_lineshape(self, experiment, energies, params=None):
+        """The Coulomb line shape N_C of a THM experiment (``lineshape=on``).
+
+        In A + a(x+s) -> s + F*(x+A) -> s + b + B the spectator s leaves in
+        the Coulomb field of F*, and of b and B once F* has decayed; each
+        level's exit amplitude is multiplied by
+        ``N_C = exp(pi zeta/2) (E_l - E - i G_l/2)^(-i zeta)``, so for an
+        isolated level ``|N_C|^2 = exp[2 zeta arctan(2 (E_l - E)/G_l)]``
+        (Mukhamedzhanov, Kadyrov & Pang, EPJA 56 (2020) 233, eqs. 55-62), with
+        ``zeta = eta_sB - eta_0`` (their case 2: B much heavier than s and b,
+        the s-b term eta_sb neglected), ``eta_0 = Z_s Z_F alpha mu_sF/k_sF``,
+        ``eta_sB = Z_s Z_B alpha mu_sB/k_sF`` and ``E_sF = E_aA - B - E``.
+        See docs/source/theory/thm_implementation.rst, "Coulomb line shape".
+
+        ``energies``: c.m. energies E of x + A (MeV).  The level poles
+        (observed energy and total width, Brune) are those of ``params``
+        (default: the current parameters; a chi-squared evaluation is run to
+        load them in data mode).  Returns a dict:
+
+        ``E``, ``E_sF``, ``eta_0``   arrays on the grid
+        ``E_aA``, ``B``, ``Zs``, ``ZF``, ``spectator``
+        ``exits``   one dict per exit pair of the experiment's segments:
+                    ``pair`` (key), ``Zb``/``ZB``, ``mb``/``mB`` (light and
+                    heavy nucleus), ``zeta`` and ``eta_sb`` (the neglected
+                    s-b parameter averaged over the b direction, a validity
+                    check: it should be << 1) on the grid, and ``levels``: per
+                    level of a J group coupling entrance and exit, ``jgroup``,
+                    ``level`` (1-based, as parameters.out), ``J``, ``pi``,
+                    ``E_level`` (c.m. of x + A), ``Gamma`` (MeV) and ``NC2``
+                    (|N_C|^2 on the grid).
+
+        Raises the engine error if the experiment is unknown or has no line
+        shape.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        if self.mode == "data":
+            self.sess.calculate_chi2_rwa(x)
+        r = self.sess.thm_lineshape(str(experiment), np.asarray(energies, float).ravel())
+        return r
+
     def residuals(self, params=None):
         """Standardized residuals ``(fit_i - data_i*n)/(cmErr_i*n)``, from a
         forward pass alone.

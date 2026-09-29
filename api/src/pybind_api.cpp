@@ -423,6 +423,50 @@ class Session {
     }
     return out;
   }
+  // The Coulomb line shape of a THM experiment at the current parameters.
+  py::dict thm_lineshape(const std::string &name, py::array_t<double, py::array::forcecast> e) {
+    ConfigScope guard(config_);
+    ThmLineshapeReport r;
+    std::string why;
+    if (!api_->GetThmLineshape(name, to_vector(e), r, why)) throw AZURE2Error(why);
+    py::dict d;
+    d["experiment"] = r.experiment;
+    d["spectator"] = r.spectator;
+    d["Zs"] = r.Zs;
+    d["ZF"] = r.ZF;
+    d["E_aA"] = r.eAA;
+    d["B"] = r.bind;
+    d["E"] = to_array(r.energy);
+    d["E_sF"] = to_array(r.esf);
+    d["eta_0"] = to_array(r.eta0);
+    py::list exits;
+    for (const ThmLineshapeReport::Exit &x : r.exits) {
+      py::dict xd;
+      xd["pair"] = x.pairKey;
+      xd["Zb"] = x.Zb;
+      xd["ZB"] = x.ZB;
+      xd["mb"] = x.mb;
+      xd["mB"] = x.mB;
+      xd["zeta"] = to_array(x.zeta);
+      xd["eta_sb"] = to_array(x.etaSb);
+      py::list levels;
+      for (const ThmLineshapeReport::Level &l : x.levels) {
+        py::dict ld;
+        ld["jgroup"] = l.jgroup;
+        ld["level"] = l.level;
+        ld["J"] = l.J;
+        ld["pi"] = l.pi;
+        ld["E_level"] = l.energy;
+        ld["Gamma"] = l.width;
+        ld["NC2"] = to_array(l.nc2);
+        levels.append(ld);
+      }
+      xd["levels"] = levels;
+      exits.append(xd);
+    }
+    d["exits"] = exits;
+    return d;
+  }
   py::array_t<double> calculate_model_gradients_rwa(py::array_t<double, py::array::forcecast> p) {
     vector_r v = to_vector(p), out;
     {
@@ -583,6 +627,9 @@ PYBIND11_MODULE(_azure2, m) {
            "THM experiments (<thm> experiment[...]) as the last chi-squared evaluation "
            "profiled them: list of dicts (name, segments, background, points, chi2, status, "
            "value = [norm, b0, b1, b2], covariance = 4x4 row-major).")
+      .def("thm_lineshape", &Session::thm_lineshape, py::arg("name"), py::arg("energies"),
+           "Coulomb line shape of THM experiment `name` (lineshape=on) at c.m. energies, with the "
+           "level poles of the last evaluation's parameters.")
       .def("calculate_model_gradients_rwa", &Session::calculate_model_gradients_rwa,
            py::arg("params"))
       .def("coulomb_functions", &Session::coulomb_functions, py::arg("request"))

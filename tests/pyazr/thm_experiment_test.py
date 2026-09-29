@@ -287,7 +287,7 @@ with tempfile.TemporaryDirectory() as tmp:
               sorted(s.thm_experiments(x)) == ["A", "B"])
     check("residuals bit for bit", np.array_equal(r0, r1))
     check("Jacobian bit for bit", np.array_equal(J0, J1))
-    bad_dir = project("bad", "experiment[A] segments=1,2 lineshape=x")
+    bad_dir = project("bad", "experiment[A] segments=1,2 ps=x")
     try:
         with azure2(os.path.join(bad_dir, "run.azr"), cwd=bad_dir):
             pass

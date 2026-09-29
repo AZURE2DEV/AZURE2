@@ -78,3 +78,10 @@ add_test(NAME pyazr_thm_experiment
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_experiment_test.py)
 set_tests_properties(pyazr_thm_experiment PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Coulomb line shape of the THM spectator (experiment[...] lineshape=on):
+# AzrModel, CLI == pyazr, thm_lineshape against the formulas, model ratio.
+add_test(NAME pyazr_thm_lineshape
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_lineshape_test.py)
+set_tests_properties(pyazr_thm_lineshape PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

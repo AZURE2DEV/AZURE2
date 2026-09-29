@@ -702,6 +702,15 @@ std::vector<ThmExperimentReport> AZUREAPI::GetThmExperiments() const {
   return data()->ThmExperimentReports();
 }
 
+bool AZUREAPI::GetThmLineshape(const std::string &name, const vector_r &energies, ThmLineshapeReport &out,
+                               std::string &why) {
+  if (data_ == nullptr || compound_ == nullptr) {
+    why = "no data loaded";
+    return false;
+  }
+  return data()->ThmLineshapeTable(name, energies, compound(), configure(), out, why);
+}
+
 bool AZUREAPI::Rebuild() {
   return RebuildImpl(nullptr, nullptr);
 }

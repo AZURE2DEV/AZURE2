@@ -106,8 +106,9 @@ _THM_NUCLIDES = {
     "24Mg": (12, 24, 23.9784646239),
 }
 _THM_BACKGROUNDS = ("none", "const", "linear", "quadratic")
-_THM_EXPERIMENT_KEYS = ("segments", "background", "beam", "target", "spectator", "Ebeam")
-_THM_EXPERIMENT_RESERVED = ("ps", "theta", "lineshape", "distortion")
+_THM_EXPERIMENT_KEYS = ("segments", "background", "beam", "target", "spectator", "Ebeam",
+                        "lineshape")
+_THM_EXPERIMENT_RESERVED = ("ps", "theta", "distortion")
 _THM_NAME = re.compile(r"[A-Za-z0-9_.+-]+")
 _THM_WHOLE_INT = re.compile(r"[+-]?\d+")
 
@@ -212,9 +213,13 @@ def _thm_parse_experiment(line, experiments):
                 raise ValueError(where + f"Ebeam='{value}': expected the lab beam "
                                  "energy in MeV, > 0")
             work["Ebeam"] = x
+        elif key == "lineshape":
+            if value not in ("on", "off"):
+                raise ValueError(where + f"lineshape='{value}': expected on or off")
+            work["lineshape"] = value == "on"
         else:
             raise ValueError(where + f"unknown key '{key}' (keys: segments, "
-                             "background, beam, target, spectator, Ebeam)")
+                             "background, beam, target, spectator, Ebeam, lineshape)")
         work["keys"].append(key)
     experiments[name] = work
 
@@ -230,6 +235,9 @@ def _thm_check_experiments(experiments):
         if kin not in (0, 4):
             raise ValueError(where + "beam, target, spectator and Ebeam go together "
                              "(all four or none)")
+        if x.get("lineshape") and kin != 4:
+            raise ValueError(where + "lineshape=on needs the kinematics of the reaction: "
+                             "beam, target, spectator and Ebeam")
         for k in x["segments"]:
             if k in owner:
                 raise ValueError(where + f"segment {k} is already in "
@@ -245,6 +253,8 @@ def _thm_experiment_record(x):
             out[key] = x[key][0]
     if "Ebeam" in x:
         out["Ebeam"] = x["Ebeam"]
+    if x.get("lineshape"):
+        out["lineshape"] = True
     return out
 
 
@@ -258,6 +268,8 @@ def _thm_experiment_line(name, rec):
             parts.append(f"{key}={rec[key]}")
     if "Ebeam" in rec:
         parts.append(f"Ebeam={_thm_number(float(rec['Ebeam']))}")
+    if rec.get("lineshape"):
+        parts.append("lineshape=on")
     return " ".join(parts)
 
 
@@ -1925,16 +1937,18 @@ class AzrModel:
         inactive lines counted, like ``weight[k]``), ``background`` (``none``,
         ``const``, ``linear`` or ``quadratic``) and, if given, ``beam``,
         ``target``, ``spectator`` (nuclide names or ``Z,A,mass``) and
-        ``Ebeam`` (lab MeV).  All segments of an experiment share one profiled
-        norm and the background; see docs/source/theory/thm_implementation.rst,
-        "THM experiments".  Raises ValueError if the block has a line AZURE2
+        ``Ebeam`` (lab MeV), and ``lineshape: True`` when the Coulomb line
+        shape of the spectator is on.  All segments of an experiment share one
+        profiled norm and the background; see
+        docs/source/theory/thm_implementation.rst, "THM experiments" and
+        "Coulomb line shape".  Raises ValueError if the block has a line AZURE2
         would refuse.
         """
         s = self._thm_settings()
         return {name: _thm_experiment_record(x) for name, x in s["experiments"].items()}
 
     def set_thm_experiment(self, name, segments, background="none", beam=None,
-                           target=None, spectator=None, Ebeam=None):
+                           target=None, spectator=None, Ebeam=None, lineshape=False):
         """Define (or replace) ``experiment[<name>]`` in the ``<thm>`` block.
 
         ``segments`` is a list of ``<segmentsData>`` line numbers (or the
@@ -1944,7 +1958,10 @@ class AzrModel:
         ``beam``, ``target``, ``spectator`` (a name of the built-in table --
         n p d t 3He 4He 6Li 7Li 9Be 10B 11B 12C 13C 14N 15N 16O 17O 18O 19F
         20Ne 23Na 24Mg -- or ``"Z,A,mass"``, nuclear mass in u) and ``Ebeam``
-        (lab MeV) go together: all four or none.  The record replaces every
+        (lab MeV) go together: all four or none.  ``lineshape=True`` turns on
+        the Coulomb line-shape factor N_C of the spectator (needs the four
+        kinematics keys; see :meth:`pyazr.azure2.azure2.thm_lineshape`).
+        The record replaces every
         earlier line of that name with one line; other lines stay as they
         are.  Raises ValueError (model unchanged) for anything AZURE2 would
         refuse.
@@ -1962,6 +1979,8 @@ class AzrModel:
                 text += f" {key}={value}"
         if Ebeam is not None:
             text += f" Ebeam={_thm_number(float(Ebeam))}"
+        if lineshape:
+            text += " lineshape=on"
         if any(c in text for c in "#\r\n"):
             raise ValueError(f"<thm> experiment[{name}]: a value cannot contain '#' "
                              "or a line break.")
