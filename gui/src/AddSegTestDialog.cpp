@@ -39,12 +39,9 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   dataTypeCombo->addItem(tr("Angle Integrated Total Capture"));
   dataTypeCombo->addItem(tr("C.M. Differential"));
   dataTypeCombo->addItem(tr("Analyzing Power"));
-  dataTypeCombo->addItem(tr("Polarization x Cross Section"));
   // Codes 0-5 happen to equal their position; the analyzing power is 7.
   for (int i = 0; i < dataTypeCombo->count(); i++) dataTypeCombo->setItemData(i, i);
-  dataTypeCombo->setItemData(dataTypeCombo->count() - 2, 7);
-  // isDiff 8: P dsigma/dOmega, the published form of most polarization data.
-  dataTypeCombo->setItemData(dataTypeCombo->count() - 1, 8);
+  dataTypeCombo->setItemData(dataTypeCombo->count() - 1, 7);
   connect(dataTypeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(dataTypeChanged(int)));
   QRegExp spinRX("^\\d{0,2}(\\.[05]{0,1})?$");
   QValidator *spinValidator = new QRegExpValidator(spinRX, this);
@@ -269,7 +266,7 @@ void AddSegTestDialog::dataTypeChanged(int index) {
     totalCaptureLabel->setVisible(false);
     exitPairIndexSpin->setVisible(true);
   }
-  if (index == 5 || index == 6 || index == 7) {  // C.M. differential, A_y, or P dsigma/dOmega
+  if (index == 5 || index == 6) {  // C.M. differential, or the analyzing power
     lowAngleText->setEnabled(true);
     highAngleText->setEnabled(true);
     angleStepText->setEnabled(true);

@@ -27,14 +27,11 @@ ESegment::ESegment(SegLine segLine) {
   // frame, so it needs the same angular machinery as a differential cross
   // section even though the quantity itself is a dimensionless ratio.
   isAnalyzingPower_ = (segLine.isDiff() == 7);
-  // isDiff 8 is P dsigma/dOmega: differential in the centre-of-mass frame
-  // like the analysing power, but an extensive quantity.
-  isPolarizationProduct_ = (segLine.isDiff() == 8);
-  if (segLine.isDiff() == 1 || segLine.isDiff() == 4 || segLine.isDiff() == 7 || segLine.isDiff() == 8)
+  if (segLine.isDiff() == 1 || segLine.isDiff() == 4 || segLine.isDiff() == 7)
     isdifferential_ = true;
   else
     isdifferential_ = false;
-  if (segLine.isDiff() == 4 || segLine.isDiff() == 7 || segLine.isDiff() == 8)
+  if (segLine.isDiff() == 4 || segLine.isDiff() == 7)
     iscmdifferential_ = true;
   else
     iscmdifferential_ = false;
@@ -108,14 +105,11 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   a_step_ = extrapLine.aStep();
   segment_chi_squared_ = 0.0;
   isAnalyzingPower_ = (extrapLine.isDiff() == 7);
-  // isDiff 8 is P dsigma/dOmega: differential in the centre-of-mass frame
-  // like the analysing power, but an extensive quantity.
-  isPolarizationProduct_ = (extrapLine.isDiff() == 8);
-  if (extrapLine.isDiff() == 1 || extrapLine.isDiff() == 5 || extrapLine.isDiff() == 7 || extrapLine.isDiff() == 8)
+  if (extrapLine.isDiff() == 1 || extrapLine.isDiff() == 5 || extrapLine.isDiff() == 7)
     isdifferential_ = true;
   else
     isdifferential_ = false;
-  if (extrapLine.isDiff() == 5 || extrapLine.isDiff() == 7 || extrapLine.isDiff() == 8)
+  if (extrapLine.isDiff() == 5 || extrapLine.isDiff() == 7)
     iscmdifferential_ = true;
   else
     iscmdifferential_ = false;
@@ -321,27 +315,6 @@ int ESegment::GetExitKey() const {
  */
 
 int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
-  // isDiff 8 computes the vector polarization of a spin-1/2 ejectile from the
-  // amplitude matrix, and a photon exit has no such matrix.  The capture
-  // analyzing power AZURE2 already computes is NOT the same observable: it is
-  // the ANALYZING power, indexed on the polarized entrance channel, which by
-  // time reversal is the outgoing polarization of the INVERSE reaction, not of
-  // capture.  Photon polarization data -- linear or circular -- needs its own
-  // formalism.  Refuse the combination outright rather than evaluate to zero:
-  // a segment that silently returns 0 still contributes a finite chi2 against
-  // real data, so it would drag every other parameter in the fit without ever
-  // announcing itself.
-  if (this->IsPolarizationProduct() && theCNuc->IsPairKey(this->GetExitKey()) &&
-      theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()))->GetPType() == 10) {
-    configure.outStream
-        << "ERROR: Polarization x Cross Section (isDiff 8) is not implemented for a capture"
-        << " exit channel." << std::endl
-        << "       Data file: " << this->GetDataFile() << std::endl
-        << "       The polarization of an outgoing photon is not the ejectile polarization"
-        << " this observable computes, and the capture analyzing power is a different"
-        << " quantity again." << std::endl;
-    return -1;
-  }
   std::string infile = this->GetDataFile();
   std::ifstream in(infile.c_str());
   if (!in) return -1;
@@ -789,7 +762,6 @@ void ESegment::AddPoint(EPoint point) {
   // The observable is a property of the segment; stamp it on the point so the
   // calculation does not have to look back up.
   point.SetIsAnalyzingPower(this->IsAnalyzingPower());
-  point.SetIsPolarizationProduct(this->IsPolarizationProduct());
   points_.push_back(point);
 }
 

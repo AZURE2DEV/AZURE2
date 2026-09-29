@@ -74,6 +74,18 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
       SegLine segment(stm);
       if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) return -1;
       numTotalSegments++;
+      if (segment.isDiff() == 8) {
+        // Polarization x Cross Section was removed: the outgoing polarization of
+        // A(a,b)B is the analyzing power of the inverse reaction B(b,a)A.
+        configure.outStream
+            << "ERROR: Data segment #" << numTotalSegments << " uses isDiff 8 (Polarization x"
+            << " Cross Section), which is no longer supported." << std::endl
+            << "       Divide the data by the differential cross section and enter the"
+            << " polarization as an Analyzing Power (isDiff 7) segment on the inverse"
+            << " channel (entrance = the measured exit pair, exit = the measured entrance pair)."
+            << std::endl;
+        return -1;
+      }
       if (segment.isActive() == 1) {
         ESegment NewSegment(segment);
 
@@ -255,6 +267,13 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
       ExtrapLine segment(stm);
       if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) return -1;
       numTotalSegments++;
+      if (segment.isDiff() == 8) {
+        configure.outStream
+            << "ERROR: Test segment #" << numTotalSegments << " uses isDiff 8 (Polarization x"
+            << " Cross Section), which is no longer supported; use an Analyzing Power (isDiff 7)"
+            << " segment on the inverse channel instead." << std::endl;
+        return -1;
+      }
       if (segment.isActive() == 1) {
         ESegment NewSegment(segment);
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
@@ -267,19 +286,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
               }
             }
           }
-          // See ESegment::Fill: isDiff 8 has no photon implementation.  A test
-          // segment costs no chi2, but it would write a column of zeros to
-          // AZUREOut and read as a prediction, so drop it with a reason too.
-          const bool polProductCapture =
-              NewSegment.IsPolarizationProduct() && theCNuc->IsPairKey(NewSegment.GetExitKey()) &&
-              theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetExitKey()))->GetPType() == 10;
-          if (polProductCapture) {
-            configure.outStream
-                << "WARNING: Test segment #" << numTotalSegments
-                << " is Polarization x Cross Section (isDiff 8) with a capture exit channel,"
-                << " which is not implemented; it will not be used." << std::endl;
-          }
-          if (!polProductCapture && (isValidTotal || theCNuc->IsPairKey(NewSegment.GetExitKey()))) {
+          if (isValidTotal || theCNuc->IsPairKey(NewSegment.GetExitKey())) {
             NewSegment.SetSegmentKey(numTotalSegments);
             this->AddSegment(NewSegment);
             ESegment *theSegment = this->GetSegment(this->NumSegments());

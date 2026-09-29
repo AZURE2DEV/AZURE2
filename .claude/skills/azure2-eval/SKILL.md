@@ -1492,6 +1492,21 @@ complete:
   Written up in docs/source/user_guide/experimental_effects.rst (which also had "Sigma" of
   the Gaussian documented as the FWHM; the code uses it as the standard deviation -- fixed).
 
+- 2026-09-28 -- isDiff 8 ("Polarization x Cross Section", P dsigma/dOmega) WAS REMOVED from
+  AZURE2 and the GUI (it existed from 922c053, 2026-09-17, to this date). Reason: by time
+  reversal the outgoing polarization P of A(a,b)B is the analyzing power A_y of the inverse
+  reaction B(b,a)A, which the isDiff 7 machinery already computes, so the observable was
+  redundant. A file with an isDiff 8 line is now refused at read time with an ERROR naming
+  the segment (`EData::Fill` / `EData::MakePoints`), not silently reinterpreted. To fit such
+  data: divide P dsigma/dOmega by the differential cross section (same angles/energies) to
+  get P, then enter it as an Analyzing Power segment on the INVERSE channel (entrance = the
+  measured exit pair, exit = the measured entrance pair; the same T-matrix serves both).
+  Archive files that still carry isDiff 8 lines and will need this conversion before they
+  load again: everything in `11B+a/9-18-26_niecke_polarization/`,
+  `11B+a/9-18-26_niecke_params/` and `11B+a/9-18-26_hybrid_niecke/` (Niecke 1977 11B(a,n)
+  and 14C(p,n) polarization data, 5 segments each). `tests/polarization_product` was deleted
+  with the feature.
+
 - **A regression reference is not a correctness check.** `tests/run_tests.sh` pins each
   project's chi-squared against a number this code produced, so it catches a change and
   nothing else. `tests/reference/` is the other kind: it recomputes the same quantity from

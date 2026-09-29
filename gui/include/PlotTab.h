@@ -140,7 +140,7 @@ class PlotTab : public QWidget {
   //! Set while collecting the current selection: an analyzing power cannot
   //! be drawn on a logarithmic axis, nor converted to an S-factor.
   // Set when the selection contains an observable that can go negative:
-  // the analyzing power (isDiff 7) or P dsigma/dOmega (isDiff 8).
+  // the analyzing power (isDiff 7).
   bool selectionHasSignedObservable_ = false;
   // Aggregated AZUREPlot::YQuantity over the selected segments, or -1 before
   // any has been seen. Mixed selections collapse to YQ_MIXED.

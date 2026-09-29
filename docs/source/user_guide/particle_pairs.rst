@@ -135,7 +135,7 @@ Elastic scattering
 
    with interference weight +1 for :math:`\alpha+\alpha`, :math:`-1/2` for
    p+p and :math:`+1/3` for d+d. The same symmetrization enters the
-   polarization observables (isDiff 7 and 8), so for p+p
+   analyzing power (isDiff 7), so for p+p
    :math:`A_y(\pi-\theta) = -A_y(\theta)`. The angle-integrated elastic cross
    section is reported per collision (half the integral over the full sphere)
    for any spin.
