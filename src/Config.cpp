@@ -370,7 +370,23 @@ int Config::ReadThmBlock() {
     if (b == std::string::npos) continue;
     size_t e = line.find_last_not_of(" \t\r\n");
     std::string trimmed = line.substr(b, e - b + 1);
-    if (trimmed == "</thm>") return 0;
+    if (trimmed == "</thm>") {
+      std::string why = CheckThmExperiments(thm.experiments);
+      if (!why.empty()) {
+        outStream << "ERROR: <thm> " << why << std::endl;
+        return -1;
+      }
+      return 0;
+    }
+    if (trimmed.compare(0, 11, "experiment[") == 0) {
+      // experiment[<name>] key=value ...: several keys on one line.
+      std::string why = ParseThmExperimentLine(trimmed, thm.experiments);
+      if (!why.empty()) {
+        outStream << "ERROR: <thm> " << why << std::endl;
+        return -1;
+      }
+      continue;
+    }
     size_t eq = trimmed.find('=');
     std::string key = trimmed.substr(0, eq);
     std::string value = eq == std::string::npos ? std::string() : trimmed.substr(eq + 1);

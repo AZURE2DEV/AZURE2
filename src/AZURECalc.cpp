@@ -112,7 +112,13 @@ double AZURECalc::operator()(const vector_r &p) const {
       // fit it is profiled out analytically (n* set to its optimum, no norm
       // penalty) so it cannot trade against the direct-data normalizations.
       double segmentChiSquared = 0.0;
-      if (segment->IsProfiledNorm()) {
+      // A THM experiment (<thm> experiment[...]) profiles one norm (and a
+      // background) over all of its segments: once, at its last segment, when
+      // the models of all of them are in.  It sets their norms and chi^2.
+      const int thmGroup = localData->ThmGroupOf(i);
+      if (thmGroup >= 0) {
+        if (localData->IsLastOfThmGroup(thmGroup, i)) chiSquared += localData->ProfileThmGroup(thmGroup);
+      } else if (segment->IsProfiledNorm()) {
         segmentChiSquared = segment->ProfileNormChiSquared();
       } else {
         for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
@@ -145,8 +151,10 @@ double AZURECalc::operator()(const vector_r &p) const {
         }
       }
 
-      segment->SetSegmentChiSquared(segmentChiSquared);
-      chiSquared += segmentChiSquared;
+      if (thmGroup < 0) {
+        segment->SetSegmentChiSquared(segmentChiSquared);
+        chiSquared += segmentChiSquared;
+      }
     }
   }
 
@@ -246,7 +254,11 @@ double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
       if (pt) pt->SetFitCrossSection(th);
     }
     double segChi = 0.0;
-    if (segment->IsProfiledNorm()) {
+    const int thmGroup = ld->ThmGroupOf(i);
+    if (thmGroup >= 0) {
+      // A THM experiment: one profile over its segments, at the last of them.
+      if (ld->IsLastOfThmGroup(thmGroup, i)) segChi = ld->ProfileThmGroup(thmGroup);
+    } else if (segment->IsProfiledNorm()) {
       // Arbitrary THM scale: profile the norm out (no penalty).
       segChi = segment->ProfileNormChiSquared();
     } else {
@@ -424,7 +436,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     if (kind == ParamKind::EnergyShift && localShiftOk) {
       int s = pmap.Desc(idx).segment;
       ESegment *seg = (s >= 1) ? ld->GetSegment(s) : nullptr;
-      if (seg && !seg->HasComponents() && !seg->IsTotalCapture()) {
+      // (Not for a segment of a THM experiment: its chi^2 is not its own.)
+      if (seg && !seg->HasComponents() && !seg->IsTotalCapture() && ld->ThmGroupOf(s) < 0) {
         double d0 = seg->GetEnergyShift();
         seg->SetEnergyShift(x0 + h);
         seg->UpdatePointEnergiesWithShift(lc, &configure());

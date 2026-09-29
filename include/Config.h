@@ -8,6 +8,8 @@
 #include <atomic>
 #include <vector>
 
+#include "ThmExperiment.h"
+
 /*!
  * An energy-dependent weight w(E) multiplying the THM (HOES) model cross
  * section of one segment, read from a two-column file named by the
@@ -190,6 +192,10 @@ class Config {
     /// files), `weightTest[<k>]=<file>` for the k-th line of <segmentsTest>.
     /// A relative path is taken from the directory of the .azr file.
     std::map<int, std::shared_ptr<const ThmWeightTable>> weightBySegment, weightByTestSegment;
+    /// THM experiments, `experiment[<name>] key=value ...` (ThmExperiment.h):
+    /// segments sharing one profiled norm and an optional background.  Empty
+    /// unless the block has such lines; then nothing changes.
+    std::vector<ThmExperiment> experiments;
   };
   ThmOptions thm;
   /// A constant indicating the maximum order of the Legendre polynomials to calculate.

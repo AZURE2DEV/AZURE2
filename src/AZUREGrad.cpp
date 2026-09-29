@@ -715,6 +715,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, const Config &config,
       pt->SetFitCrossSection(tr.m[d.size() - 1]);
     }
     const size_t n = d.size();
+    if (ld->ThmGroupOf(tr.segment) >= 0) continue;  // a THM experiment: below
     double Smm = 0.0, Smd = 0.0;
     for (size_t i = 0; i < n; i++) {
       if (e[i] == 0.0) continue;
@@ -758,6 +759,47 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, const Config &config,
     tr.s = s;
     tr.profiled = varyScale;
     tr.ds = ds;
+  }
+
+  // THM experiments: one linear profile (shared norm, background) over the
+  // points of all their segments, differentiated through the profile.
+  for (int g = 0; g < ld->NumThmGroups(); g++) {
+    std::vector<size_t> members;  // indices into rows
+    for (size_t t = 0; t < rows.size(); t++)
+      if (ld->ThmGroupOf(rows[t].segment) == g) members.push_back(t);
+    if (members.empty()) continue;
+    ld->ProfileThmGroup(g);  // norms and profile from the models set above
+    const ThmProfile &prof = ld->GetThmGroup(g).profile;
+    std::vector<double> m, d, e, energy, Jm;
+    for (size_t t : members) {
+      ESegment *seg = ld->GetSegment(rows[t].segment);
+      size_t i = 0;
+      for (int pid = 0; pid < seg->NumPoints(); pid++) {
+        EPoint *pt = seg->GetPoint(pid + 1);
+        if (!pt) continue;
+        m.push_back(rows[t].m[i]);
+        d.push_back(pt->GetCMCrossSection());
+        e.push_back(pt->GetCMCrossSectionError());
+        energy.push_back(pt->GetCMEnergy());
+        Jm.insert(Jm.end(), rows[t].Jm.begin() + i * nCols, rows[t].Jm.begin() + (i + 1) * nCols);
+        i++;
+      }
+    }
+    std::vector<double> J, G;
+    ThmProfileDerivative(prof, m, d, e, energy, Jm, nCols, J, G);
+    size_t k = 0;
+    for (size_t t : members) {
+      THMRows &tr = rows[t];
+      const size_t n = tr.m.size();
+      tr.r.assign(n, 0.0);
+      for (size_t i = 0; i < n; i++) tr.r[i] = prof.Residual(m[k + i], d[k + i], e[k + i], energy[k + i]);
+      tr.J.assign(J.begin() + k * nCols, J.begin() + (k + n) * nCols);
+      tr.G.assign(G.begin() + k * nCols, G.begin() + (k + n) * nCols);
+      tr.s = prof.s;
+      tr.profiled = false;  // the whole derivative is in J and G
+      tr.ds.assign(nCols, 0.0);
+      k += n;
+    }
   }
   return rows;
 }

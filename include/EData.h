@@ -4,6 +4,7 @@
 #include "ESegment.h"
 #include "TargetEffect.h"
 #include "EDataIterator.h"
+#include "ThmExperiment.h"
 #include <deque>
 #include <ios>
 
@@ -103,6 +104,43 @@ class EData {
   /// The segment with this key, or null if there is none.
   ESegment *GetSegmentFromKey(int);
   EData *Clone() const;
+
+  /*!
+   * A THM experiment (<thm> experiment[<name>] ..., ThmExperiment.h) as the
+   * data see it: the segments that share one profiled norm and background.
+   */
+  struct ThmGroup {
+    std::string name;
+    int terms = 0;              ///< background terms, 0..3
+    std::vector<int> segments;  ///< 1-based indices into the segments, ascending
+    /// One segment and no background: exactly the per-segment profile of
+    /// ESegment::ProfileNormChiSquared, which then handles it.
+    bool trivial = false;
+    ThmProfile profile;         ///< the last profile (ProfileThmGroup)
+  };
+  int NumThmGroups() const { return (int)thmGroups_.size(); }
+  const ThmGroup &GetThmGroup(int g) const { return thmGroups_[g]; }
+  /// The (non-trivial) THM experiment that profiles segment i jointly with
+  /// others or with a background, or -1: then the segment is handled as
+  /// before (its own profile, or its fixed norm).  Only a segment whose norm
+  /// is profiled (ESegment::IsProfiledNorm) belongs.
+  int ThmGroupOf(int i);
+  /// Is i the last segment of group g, where its profile is taken once the
+  /// models of all its segments are in?
+  bool IsLastOfThmGroup(int g, int i);
+  /*!
+   * Profiles group g from the fit cross sections of its segments' points:
+   * stores the profile, sets every segment's norm to the shared n* and its
+   * chi^2 to that of its own points, and returns the group's chi^2.
+   */
+  double ProfileThmGroup(int g);
+  /// Standardized residuals (f - d)/e of segment i under its group's last profile, one per point.
+  void ThmGroupResiduals(int g, int i, std::vector<double> &out);
+  /// The background (model units) that the output adds to the fit cross
+  /// section of a point of segment i at c.m. energy E; 0 outside a group with one.
+  double ThmBackgroundAt(int i, double energy);
+  /// Profile of every experiment, trivial ones included, for the output and pyazr.
+  std::vector<ThmExperimentReport> ThmExperimentReports();
   TargetEffect *GetTargetEffect(int);
   EDataIterator begin();
   EDataIterator end();
@@ -123,6 +161,11 @@ class EData {
   bool ecUsePrevious_;
   std::string ecSignature_;   // Signature of the calculation being set up (see ECSignature)
   std::string ecOutputFile_;  // The intEC file being written, when not reading one back
+  std::vector<ThmGroup> thmGroups_;  // THM experiments (BuildThmGroups), empty without them
+  /// Builds thmGroups_ from the <thm> experiments once the segments are read; -1 after an ERROR.
+  int BuildThmGroups(const Config &, CNuc *, int numLines);
+  /// Writes output/thm_experiments.out.
+  void WriteThmExperiments(const Config &);
 };
 
 #endif

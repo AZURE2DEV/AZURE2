@@ -239,6 +239,8 @@ bool BuildBandData(CNuc *compound, EData *data, const Config &config,
         for (int c = 0; c < nCols; c++) {
           double g = tr.Jm[i * nCols + c];
           if (tr.profiled && tr.s != 0.0) g += tr.m[i] * tr.ds[c] / tr.s;
+          // A THM experiment: through its shared norm and background.
+          if (!tr.G.empty()) g = tr.G[i * nCols + c];
           row[c] = g;
         }
         i++;

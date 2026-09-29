@@ -10,7 +10,9 @@
 #include "Minuit2/MnUserParameters.h"
 #include "GSLException.h"
 #include "NuclearPotentialManager.h"
+#include <algorithm>
 #include <cinttypes>
+#include <cmath>
 #include <cstdio>
 #include <iostream>
 #include <iomanip>
@@ -278,6 +280,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
   if (CheckThmWeights(configure, configure.thm.weightBySegment, "weight", "<segmentsData>",
                       numTotalSegments, this) != 0)
     return -1;
+  if (BuildThmGroups(configure, theCNuc, numTotalSegments) != 0) return -1;
 
   if (this->NumSegments() > 0) {
     if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
@@ -1439,6 +1442,13 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
   }
   if (kinflag != 0) configure.outStream << "Using alternate output format..." << std::endl;
 
+  // THM experiments: refresh their profile from the models the points hold
+  // (a snapshot written during a fit has not been profiled), so that the norm
+  // and the background written are those of these models.
+  if (configure.paramMask & Config::CALCULATE_WITH_DATA)
+    for (int g = 0; g < NumThmGroups(); g++)
+      if (!thmGroups_[g].trivial) ProfileThmGroup(g);
+
   // When a covariance is available, write a sibling ".band" file per output file,
   // with the same block/point structure so the GUI can pair them.
   bool writeBand = band && (configure.paramMask & Config::CALCULATE_COVARIANCE_BAND) && !band->grad.empty();
@@ -1485,6 +1495,10 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
         buf = output(aa, ir);
     }
     std::ostream out(buf);
+    // A THM experiment with a background: the fitted curve is the model plus b(E).
+    const int segmentIndex = (int)(segment - GetSegments().begin()) + 1;
+    const bool thmBackground = !output.IsExtrap() && ThmGroupOf(segmentIndex) >= 0 &&
+                               thmGroups_[ThmGroupOf(segmentIndex)].terms > 0;
     ESegmentIterator thisSegment = segment;
     if (firstSumIterator != GetSegments().end()) thisSegment = firstSumIterator;
 
@@ -1522,6 +1536,7 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
                                      point->GetCMAngle(), 0., 0., 0.);
         } else {
           double fitCrossSection = point->GetFitCrossSection();
+          if (thmBackground) fitCrossSection += ThmBackgroundAt(segmentIndex, point->GetCMEnergy());
           if (firstSumIterator != GetSegments().end()) {
             int pointIndex = point - segment->GetPoints().begin() + 1;
             for (ESegmentIterator it = firstSumIterator; it < segment; it++)
@@ -1560,7 +1575,9 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
           if (bandOut) WriteBandLine(*bandOut, point->GetLabEnergy(), point->GetExcitationEnergy(),
                                      point->GetLabAngle(), 0., 0., 0.);
         } else {
-          double fitCrossSection = point->GetFitCrossSection() / point->GetCrossSectionKinFactor();
+          double fitCrossSection = (point->GetFitCrossSection() +
+                                    (thmBackground ? ThmBackgroundAt(segmentIndex, point->GetCMEnergy()) : 0.0)) /
+                                   point->GetCrossSectionKinFactor();
           if (firstSumIterator != GetSegments().end()) {
             int pointIndex = point - segment->GetPoints().begin() + 1;
             for (ESegmentIterator it = firstSumIterator; it < segment; it++)
@@ -1637,6 +1654,8 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
     chiOut.flush();
     chiOut.close();
   }
+  if (!isFit && (configure.paramMask & Config::CALCULATE_WITH_DATA) && NumThmGroups() > 0)
+    WriteThmExperiments(configure);
   if (isVaryNorm) {
     std::string outputfile = configure.outputdir + "normalizations.out";
     std::ofstream out(outputfile.c_str());
@@ -2769,6 +2788,7 @@ EData *EData::Clone() const {
   dataCopy->targetEffects_ = this->targetEffects_;
   dataCopy->segments_ = this->segments_;
   dataCopy->componentSegments_ = this->componentSegments_;
+  dataCopy->thmGroups_ = this->thmGroups_;
 
   // Build a mapping from component segment keys to cloned component segments
   std::unordered_map<int, ESegment *> clonedComponentMap;
@@ -2867,4 +2887,274 @@ EDataIterator EData::end() {
 
 std::vector<ESegment> &EData::GetSegments() {
   return segments_;
+}
+
+// ---------------------------------------------------------------------------
+// THM experiments (<thm> experiment[<name>] ...): see ThmExperiment.h.
+
+int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) {
+  thmGroups_.clear();
+  const double amu = 931.49410242;  // MeV/u (CODATA 2018)
+  for (const ThmExperiment &x : configure.thm.experiments) {
+    const std::string where = "ERROR: <thm> experiment[" + x.name + "]: ";
+    ThmGroup group;
+    group.name = x.name;
+    group.terms = x.backgroundTerms;
+    for (int key : x.segments) {
+      if (key > numLines) {
+        configure.outStream << where << "segment " << key << ": <segmentsData> has only " << numLines
+                            << " line(s)." << std::endl;
+        return -1;
+      }
+      int index = 0;
+      for (int s = 1; s <= NumSegments(); s++)
+        if (GetSegment(s)->GetSegmentKey() == key) index = s;
+      if (index == 0) {
+        configure.outStream << "WARNING: <thm> experiment[" << x.name << "]: segment line " << key
+                            << " of <segmentsData> is not in use; it is left out." << std::endl;
+        continue;
+      }
+      ESegment *segment = GetSegment(index);
+      if (!segment->IsTHM()) {
+        configure.outStream << where << "segment " << key << " is not a THM segment (isDiff < 10)." << std::endl;
+        return -1;
+      }
+      if (!segment->IsVaryNorm()) {
+        configure.outStream << where << "segment " << key
+                            << " has a fixed norm; the segments of an experiment share one free "
+                               "(profiled) norm, so free it."
+                            << std::endl;
+        return -1;
+      }
+      group.segments.push_back(index);
+    }
+    if (group.segments.empty()) {
+      configure.outStream << "WARNING: <thm> experiment[" << x.name << "] has no segment in use; ignored."
+                          << std::endl;
+      continue;
+    }
+    int points = 0;
+    for (int s : group.segments)
+      for (int p = 1; p <= GetSegment(s)->NumPoints(); p++)
+        if (GetSegment(s)->GetPoint(p)->GetCMCrossSectionError() != 0.0) points++;
+    if (points <= 1 + group.terms) {
+      configure.outStream << where << points << " point(s) with an error for " << 1 + group.terms
+                          << " profiled linear parameter(s) (norm and background " << ThmExperiment::BackgroundName(group.terms)
+                          << "); it needs more." << std::endl;
+      return -1;
+    }
+    group.trivial = group.segments.size() == 1 && group.terms == 0;
+
+    std::ostringstream summary;
+    summary << "THM experiment '" << x.name << "': segment" << (group.segments.size() > 1 ? "s " : " ");
+    for (size_t k = 0; k < group.segments.size(); k++)
+      summary << (k ? "," : "") << GetSegment(group.segments[k])->GetSegmentKey();
+    summary << (group.segments.size() > 1 ? " share one profiled norm" : " with a profiled norm")
+            << ", background " << ThmExperiment::BackgroundName(group.terms) << ".";
+    configure.outStream << summary.str() << std::endl;
+
+    {
+      if (x.hasKinematics) {
+        // The entrance pair x + A of the THM segments, and which of beam and
+        // target is the Trojan horse a = x + s.
+        int pairKey = GetSegment(group.segments[0])->GetEntranceKey();
+        for (int s : group.segments)
+          if (GetSegment(s)->GetEntranceKey() != pairKey) {
+            configure.outStream << where << "beam/target/spectator describe one reaction, but its segments "
+                                   "have different entrance pairs."
+                                << std::endl;
+            return -1;
+          }
+        PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(pairKey));
+        int Z[2] = {pair->GetZ(1), pair->GetZ(2)};
+        int A[2] = {(int)std::lround(pair->GetM(1)), (int)std::lround(pair->GetM(2))};
+        const ThmNuclide &b = x.beam, &t = x.target, &sp = x.spectator;
+        // horse: 0 beam, 1 target; other: index of the pair nucleus that is the other one.
+        int horse = -1, other = -1;
+        for (int h = 0; h < 2 && horse < 0; h++) {
+          const ThmNuclide &th = h == 0 ? b : t, &tg = h == 0 ? t : b;
+          for (int k = 0; k < 2; k++)
+            if (tg.Z == Z[k] && tg.A == A[k] && th.Z - sp.Z == Z[1 - k] && th.A - sp.A == A[1 - k]) {
+              horse = h;
+              other = k;
+              break;
+            }
+        }
+        if (horse < 0) {
+          configure.outStream << where << "beam " << b.name << " + target " << t.name << " with spectator "
+                              << sp.name << " does not give the entrance pair of its segments (Z,A) = ("
+                              << Z[0] << "," << A[0] << ") + (" << Z[1] << "," << A[1]
+                              << "): one of beam/target must be a nucleus of the pair and the other the "
+                                 "second nucleus plus the spectator."
+                              << std::endl;
+          return -1;
+        }
+        const ThmNuclide &th = horse == 0 ? b : t, &nA = horse == 0 ? t : b;
+        const ThmNuclide *tabX = ThmNuclide::Find(th.Z - sp.Z, th.A - sp.A);
+        double mX = tabX ? tabX->mass : pair->GetM(2 - other);  // the pair nucleus that is x
+        double mA = nA.mass;
+        double bind = (mX + sp.mass - th.mass) * amu;
+        // Quasi-free x + A energy: the spectator keeps the Trojan horse's
+        // velocity (horse = beam) or stays at rest (horse = target).
+        double exa = horse == 0 ? x.beamEnergy * mX / th.mass * mA / (mX + mA) : x.beamEnergy * mX / (mA + mX);
+        std::ostringstream k;
+        k.precision(6);
+        k << "  " << b.name << " + " << t.name << " at " << x.beamEnergy << " MeV (lab), Trojan horse "
+          << th.name << " = x + " << sp.name << ", B(x+s) = " << bind << " MeV; quasi-free E(x+A) = " << exa
+          << " MeV, E_qf = E(x+A) - B = " << exa - bind << " MeV.";
+        configure.outStream << k.str() << std::endl;
+      }
+    }
+    thmGroups_.push_back(group);
+  }
+  return 0;
+}
+
+int EData::ThmGroupOf(int i) {
+  for (size_t g = 0; g < thmGroups_.size(); g++) {
+    if (thmGroups_[g].trivial) continue;
+    const std::vector<int> &s = thmGroups_[g].segments;
+    if (std::find(s.begin(), s.end(), i) != s.end()) return GetSegment(i)->IsProfiledNorm() ? (int)g : -1;
+  }
+  return -1;
+}
+
+bool EData::IsLastOfThmGroup(int g, int i) {
+  const std::vector<int> &s = thmGroups_[g].segments;
+  for (size_t k = s.size(); k-- > 0;)
+    if (GetSegment(s[k])->IsProfiledNorm()) return s[k] == i;
+  return false;
+}
+
+namespace {
+// The points of the profiled segments of a group, concatenated in order.
+void GatherThmGroup(EData *data, const std::vector<int> &segments, std::vector<double> &m,
+                    std::vector<double> &d, std::vector<double> &e, std::vector<double> &energy) {
+  m.clear();
+  d.clear();
+  e.clear();
+  energy.clear();
+  for (int s : segments) {
+    ESegment *seg = data->GetSegment(s);
+    if (!seg->IsProfiledNorm()) continue;
+    for (int p = 1; p <= seg->NumPoints(); p++) {
+      EPoint *pt = seg->GetPoint(p);
+      if (!pt) continue;
+      m.push_back(pt->GetFitCrossSection());
+      d.push_back(pt->GetCMCrossSection());
+      e.push_back(pt->GetCMCrossSectionError());
+      energy.push_back(pt->GetCMEnergy());
+    }
+  }
+}
+}  // namespace
+
+double EData::ProfileThmGroup(int g) {
+  ThmGroup &group = thmGroups_[g];
+  std::vector<double> m, d, e, energy;
+  GatherThmGroup(this, group.segments, m, d, e, energy);
+  group.profile = SolveThmProfile(m, d, e, energy, group.terms);
+  const ThmProfile &p = group.profile;
+  double total = 0.0;
+  size_t k = 0;
+  for (int s : group.segments) {
+    ESegment *seg = GetSegment(s);
+    if (!seg->IsProfiledNorm()) continue;
+    seg->SetNorm(p.Norm());
+    double chi = 0.0;
+    for (int q = 1; q <= seg->NumPoints(); q++) {
+      if (!seg->GetPoint(q)) continue;
+      double r = p.Residual(m[k], d[k], e[k], energy[k]);
+      chi += r * r;
+      k++;
+    }
+    seg->SetSegmentChiSquared(chi);
+    total += chi;
+  }
+  return total;
+}
+
+void EData::ThmGroupResiduals(int g, int i, std::vector<double> &out) {
+  out.clear();
+  const ThmProfile &p = thmGroups_[g].profile;
+  ESegment *seg = GetSegment(i);
+  for (int q = 1; q <= seg->NumPoints(); q++) {
+    EPoint *pt = seg->GetPoint(q);
+    if (!pt) continue;
+    out.push_back(p.Residual(pt->GetFitCrossSection(), pt->GetCMCrossSection(), pt->GetCMCrossSectionError(),
+                             pt->GetCMEnergy()));
+  }
+}
+
+double EData::ThmBackgroundAt(int i, double energy) {
+  int g = ThmGroupOf(i);
+  if (g < 0 || thmGroups_[g].terms == 0) return 0.0;
+  return thmGroups_[g].profile.Background(energy);
+}
+
+std::vector<ThmExperimentReport> EData::ThmExperimentReports() {
+  std::vector<ThmExperimentReport> out;
+  for (size_t g = 0; g < thmGroups_.size(); g++) {
+    ThmGroup &group = thmGroups_[g];
+    ThmExperimentReport r;
+    r.name = group.name;
+    r.background = ThmExperiment::BackgroundName(group.terms);
+    ThmProfile p;
+    if (group.trivial || ThmGroupOf(group.segments[0]) < 0) {
+      // Profiled per segment (ESegment::ProfileNormChiSquared) or not at all:
+      // the same closed form, recomputed here for its uncertainty.
+      std::vector<double> m, d, e, energy;
+      GatherThmGroup(this, group.segments, m, d, e, energy);
+      p = SolveThmProfile(m, d, e, energy, group.terms);
+    } else {
+      p = group.profile;
+    }
+    r.points = 0;
+    r.chi2 = 0.0;
+    for (int s : group.segments) {
+      ESegment *seg = GetSegment(s);
+      if (!seg->IsProfiledNorm()) continue;
+      r.segments.push_back(seg->GetSegmentKey());
+      r.chi2 += seg->GetSegmentChiSquared();
+    }
+    r.points = p.points;
+    p.Reported(r.value, r.covariance);
+    r.status = r.segments.empty() ? "not profiled: no segment of it has a free norm" : p.status;
+    out.push_back(r);
+  }
+  return out;
+}
+
+void EData::WriteThmExperiments(const Config &configure) {
+  std::string file = configure.outputdir + "thm_experiments.out";
+  std::ofstream out(file.c_str());
+  if (!out) {
+    configure.outStream << "Could not write " << file << "." << std::endl;
+    return;
+  }
+  out << "# THM experiments (<thm> experiment[<name>] lines): segments sharing one profiled norm and\n"
+         "# a background b(E) = b0 + b1 E + b2 E^2 added to the folded model (model units, E the c.m.\n"
+         "# energy of the entrance pair in MeV).  norm multiplies the data, as the segment norms of\n"
+         "# normalizations.out.  Uncertainties and covariance are those of the closed-form profile\n"
+         "# at fixed R-matrix parameters (inverse normal matrix of the linear least squares, not\n"
+         "# scaled by chi2/nu).\n";
+  out.precision(10);
+  out << std::scientific;
+  for (const ThmExperimentReport &r : ThmExperimentReports()) {
+    out << "\nexperiment: " << r.name << "\nsegments:";
+    for (size_t k = 0; k < r.segments.size(); k++) out << (k ? "," : " ") << r.segments[k];
+    out << "\nbackground: " << r.background << "\npoints: " << r.points << "\nchi2: " << r.chi2
+        << "\nstatus: " << r.status << "\n";
+    const char *names[4] = {"norm", "b0", "b1", "b2"};
+    int q = 1 + (r.background == "none" ? 0 : r.background == "const" ? 1 : r.background == "linear" ? 2 : 3);
+    for (int i = 0; i < q; i++)
+      out << std::left << std::setw(6) << names[i] << std::right << std::setw(18) << r.value[i]
+          << std::setw(18) << std::sqrt(std::max(0.0, r.covariance[i * 4 + i])) << "\n";
+    out << "covariance:\n";
+    for (int i = 0; i < q; i++) {
+      out << std::left << std::setw(6) << names[i] << std::right;
+      for (int j = 0; j < q; j++) out << std::setw(18) << r.covariance[i * 4 + j];
+      out << "\n";
+    }
+  }
 }

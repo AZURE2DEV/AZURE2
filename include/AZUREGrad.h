@@ -239,6 +239,12 @@ struct THMRows {
   double s = 1.0;        ///< scale on the model, 1/n (n* = S_mm/S_md when profiled)
   bool profiled = false; ///< s follows the parameters (profiled, non-degenerate norm)
   vector_r ds;           ///< d s / d p per packed column (zero unless profiled)
+  /// Segments of a THM experiment (<thm> experiment[...], profiled jointly
+  /// with a shared norm and background): the band rows d q/d p of the curve
+  /// the output shows, q = f(p)/s(p0), nPoints x nCols (ThmProfileDerivative).
+  /// Empty otherwise, where the band row is J_m + m (ds/dp)/s.  ds is then zero
+  /// and J carries the whole derivative through the profile.
+  vector_r G;
 };
 
 /*!
@@ -254,7 +260,9 @@ struct THMRows {
  * analytically:
  *   d r_i/dp = (s J_mi + m_i ds/dp)/e_i,
  *   ds/dp    = (sum_k d_k J_mk/e_k^2 - 2 s sum_k m_k J_mk/e_k^2) / S_mm.
- * (A fixed THM norm, or a degenerate profile, has ds/dp = 0.)  `full` is the
+ * (A fixed THM norm, or a degenerate profile, has ds/dp = 0.)  The segments
+ * of a THM experiment are profiled together, norm and background, and their J
+ * (and band rows G) come from ThmProfileDerivative.  `full` is the
  * full (Minuit-ordered) parameter vector of `pmap`.  The compound/data are left
  * filled at `full`, each THM point's fit cross section set to its model and a
  * profiled segment's norm to n*.

@@ -16,6 +16,11 @@
 # conversion to the CM frame cancels in the ratio).  Every point whose band is
 # not negligible must agree to 2e-3 relative.
 #
+# A second pass groups the two segments into one THM experiment with a linear
+# background (<thm> experiment[A] segments=1,2 background=linear): the curve
+# written is then m + b(E), with the norm and background profiled together,
+# and q = (m + b) n*(p0)/n*(p) -- the same finite differences of the output.
+#
 #   ./tests/thm_band/check.sh path/to/AZURE2
 
 set -uo pipefail
@@ -25,16 +30,22 @@ SRC="$HERE/../18O_p_a_thm"
 AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_band.XXXXXX")"
-trap 'rm -rf "$WORK"' EXIT
+TOP="$(mktemp -d "${TMPDIR:-/tmp}/thm_band.XXXXXX")"
+trap 'rm -rf "$TOP"' EXIT
 if command -v timeout >/dev/null 2>&1; then RUN="timeout ${TEST_TIMEOUT:-300}"; else RUN=""; fi
 OUT="AZUREOut_aa=1_R=2.out"
 
+# band_case LABEL BLOCK -- the whole check on the project with BLOCK (lines)
+# as its <thm> block ("" = none).
+band_case() {
+WORK="$TOP/$1"
+echo "== $1"
 # Project with every level energy and channel width free (fields 4 and 11).
 mkdir -p "$WORK/proj"
 cp -r "$SRC/data" "$WORK/proj/"
 awk '/<levels>/ { L = 1; print; next } /<\/levels>/ { L = 0 }
      L && NF > 0 { $4 = 0; $11 = 0 } { print }' "$SRC/18O_p_a_thm.azr" > "$WORK/proj/run.azr"
+[ -z "$2" ] || printf '\n<thm>\n%s\n</thm>\n' "$2" >> "$WORK/proj/run.azr"
 
 # run DIR PARFILE [FLAGS] -- a "calculate with data" run from a copy of proj.
 run() {
@@ -145,3 +156,7 @@ awk -v np=6 -v W="$WORK" -v OUT="$OUT" -v names="${names[*]}" '
     if (bad) { printf "FAIL: %d of %d THM band points off the finite-difference J Sigma J^T\n", bad, used; exit 1 }
     printf "PASS: THM band = sqrt(J Sigma J^T) of the profiled model at %d points (worst rel %.2e)\n", used, worst
   }'
+}
+
+band_case per_segment "" || exit 1
+band_case experiment_linear "experiment[A] segments=1,2 background=linear" || exit 1
