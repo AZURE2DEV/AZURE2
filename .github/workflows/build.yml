@@ -214,7 +214,21 @@ jobs:
       # shipped with a selector that could never list a channel) and the .azr
       # round-trip. Neither needs a display.
       - name: Unit tests
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          set -o pipefail
+          if ! ctest --test-dir build --output-on-failure 2>&1 | tee unit-tests.log; then
+            echo "::error::unit tests failed on ${{ matrix.name }}"
+            # One annotation per failed test with the tail of its own output
+            # (%0A = newline), so the reason shows without the log download.
+            awk -v os="${{ matrix.name }}" '
+              function flush() { if (name != "") { n = split(buf, L, "\n"); s = (n > 25) ? n - 24 : 1; out = ""
+                                   for (i = s; i <= n; i++) out = out "%0A" L[i]
+                                   printf "::error::%s: %s%s\n", os, name, out } name = ""; buf = "" }
+              /^ *[0-9]+\/[0-9]+ Test +#[0-9]+: / { flush(); if ($0 ~ /Failed|Timeout|Exception|Not Run/) name = $0; next }
+              name != "" { gsub(/%/, "%25"); gsub(/\r/, ""); buf = buf $0 "\n" }
+              END { flush() }' unit-tests.log | head -9
+            exit 1
+          fi
 
       # Keeps the whole picture -- every project's run.log and the chi-squared
       # it produced -- for a failure the annotations above do not explain.

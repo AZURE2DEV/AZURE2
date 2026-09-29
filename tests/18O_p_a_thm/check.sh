@@ -96,13 +96,16 @@ fi
 # the c.m. once per listed segment, so segment 2 was folded with 17 x 0.947
 # keV instead of 17 keV.
 run split ""
+# Byte-identical files, without cmp (not in every MSYS2 image); \r stripped so a
+# CRLF-writing Windows build compares like the others.
+same() { [ "$(tr -d '\r' < "$1")" = "$(tr -d '\r' < "$2")" ]; }
 awk '$2 == "\"1,2\"" { l = $0; sub(/"1,2"/, "\"1\"", l); print l; sub(/"1,2"/, "\"2\""); print; next }
      { print }' "$WORK/split/run.azr" > "$WORK/split/run.azr.tmp" && mv "$WORK/split/run.azr.tmp" "$WORK/split/run.azr"
 (cd "$WORK/split" && rm -rf output && mkdir output &&
    printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
 if [ "$(grep -c '^1  *"[12]"' "$WORK/split/run.azr")" -eq 2 ] && [ -s "$WORK/split/output/chiSquared.out" ] &&
-   cmp -s "$WORK/default/output/chiSquared.out" "$WORK/split/output/chiSquared.out" &&
-   cmp -s "$WORK/default/output/AZUREOut_aa=1_R=2.out" "$WORK/split/output/AZUREOut_aa=1_R=2.out"; then
+   same "$WORK/default/output/chiSquared.out" "$WORK/split/output/chiSquared.out" &&
+   same "$WORK/default/output/AZUREOut_aa=1_R=2.out" "$WORK/split/output/AZUREOut_aa=1_R=2.out"; then
   echo "  ok    targetInt \"1,2\" == one line per segment (identical output)"
 else
   echo "  FAIL  targetInt \"1,2\" differs from one line per segment:"
