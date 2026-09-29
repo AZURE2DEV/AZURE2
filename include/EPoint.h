@@ -30,6 +30,7 @@ class DataLine;
 class Config;
 struct ThmWeightTable;
 struct ThmLineshape;
+struct ThmSpectatorWindow;
 
 /// How a target-effect point's sub-point grid was built.
 
@@ -84,6 +85,10 @@ class EPoint {
   /// null.  Owned by the parent ESegment.
   const ThmLineshape *GetThmLineshape() const { return thm_lineshape_; }
   void SetThmLineshape(const ThmLineshape *l);
+  /// Spectator-momentum window of the point's THM experiment (ps=...), or
+  /// null.  Owned by the parent ESegment.
+  const ThmSpectatorWindow *GetThmSpectatorWindow() const { return thm_window_; }
+  void SetThmSpectatorWindow(const ThmSpectatorWindow *w);
   /// Is this point calculated by another? Points at equal energies are mapped onto one so the energy-dependent work is done once.
   bool IsMapped() const;
   /// Does the point carry target effects?
@@ -175,6 +180,11 @@ class EPoint {
   /// JGroup/channel, assembled with the given (possibly complex) boundary b;
   /// C_l is the external Coulomb term, 0 unless requested (0 if not stored).
   complex GetThmFormFactor(int, int, complex) const;
+  /// The same at node `node` of the point's spectator-momentum window
+  /// (0-based; ps=...).  0 if not stored.
+  complex GetThmFormFactor(int, int, complex, int node) const;
+  /// Number of nodes of the point's spectator-momentum window (0: none).
+  int NumThmPsNodes() const { return (int)thm_jl_ps_.size(); }
   /// Total spin. Phase-shift points only.
   double GetJ() const;
   /// Stopping cross section at this sub-point, for a yield-curve target integration.
@@ -269,6 +279,8 @@ class EPoint {
   void AddSqrtPenetrability(int, int, double);
   /// Store the pieces of the THM form factor at (J-group, channel).
   void AddThmFormFactor(int, int, double, double, complex = complex(0.0, 0.0));
+  /// The same at node `node` (0-based) of the spectator-momentum window.
+  void AddThmFormFactorNode(int node, int, int, double, double, complex);
   /// Store a Coulomb phase factor at (J-group, channel).
   void AddExpCoulombPhase(int, int, complex);
   /// Store a hard-sphere phase factor at (J-group, channel).
@@ -336,6 +348,7 @@ class EPoint {
   bool is_thm_;
   const ThmWeightTable *thm_weight_ = nullptr;
   const ThmLineshape *thm_lineshape_ = nullptr;
+  const ThmSpectatorWindow *thm_window_ = nullptr;
   bool is_mapped_;
   bool is_ang_dist_;
   bool is_analyzing_power_ = false;
@@ -402,6 +415,12 @@ class EPoint {
   matrix_r thm_rhodjl_;
   /// External Coulomb term of the THM vertex, same indexing (0 when not used).
   matrix_c thm_coul_;
+  /// With a spectator-momentum window (ps=...): the same three pieces per
+  /// Gauss-Legendre node k of the window, [k][jGroup-1][channel-1]; the
+  /// single-node matrices above are then unused (zero).
+  std::vector<matrix_r> thm_jl_ps_;
+  std::vector<matrix_r> thm_rhodjl_ps_;
+  std::vector<matrix_c> thm_coul_ps_;
   matrix_c coulombphase_;
   matrix_c hardspherephase_;
   // Energy at which CalcEDependentValues last ran: RecalcEDependentValues is

@@ -1173,3 +1173,8 @@ void ESegment::SetThmLineshape(std::shared_ptr<const ThmLineshape> l) {
   thmLineshape_ = l;
   for (EPoint &point : points_) point.SetThmLineshape(l.get());
 }
+
+void ESegment::SetThmSpectatorWindow(std::shared_ptr<const ThmSpectatorWindow> w) {
+  thmWindow_ = w;
+  for (EPoint &point : points_) point.SetThmSpectatorWindow(w.get());
+}

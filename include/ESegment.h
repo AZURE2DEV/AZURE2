@@ -13,6 +13,7 @@ class CNuc;
 class Config;
 struct ThmWeightTable;
 struct ThmLineshape;
+struct ThmSpectatorWindow;
 
 enum OperationType {
   SUM = 0,
@@ -156,6 +157,10 @@ class ESegment {
   /// created afterwards).  The segment keeps it alive.
   void SetThmLineshape(std::shared_ptr<const ThmLineshape> l);
   const ThmLineshape *GetThmLineshape() const { return thmLineshape_.get(); }
+  /// Attach the spectator-momentum window of this segment's THM experiment
+  /// (ps=...), as SetThmLineshape.
+  void SetThmSpectatorWindow(std::shared_ptr<const ThmSpectatorWindow> w);
+  const ThmSpectatorWindow *GetThmSpectatorWindow() const { return thmWindow_.get(); }
   /// Set the normalization applied to the data.
   void SetNorm(double);
   /// Set the energy shift; UpdatePointEnergiesWithShift applies it to the points.
@@ -212,6 +217,7 @@ class ESegment {
   bool isTHM_;
   std::shared_ptr<const ThmWeightTable> thmWeight_;
   std::shared_ptr<const ThmLineshape> thmLineshape_;
+  std::shared_ptr<const ThmSpectatorWindow> thmWindow_;
   /// Which cross section component to compare against: 0 = full, 1 = E1 only, 2 = E2 only.
   int crossSectionComponent_;
   bool isTargetEffect_;

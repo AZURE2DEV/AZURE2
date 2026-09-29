@@ -1,6 +1,8 @@
 #include "AZUREOutput.h"
 #include "CNuc.h"
 #include "PPair.h"
+#include "ChannelFunc.h"
+#include "ThmFunc.h"
 #include "Config.h"
 #include "CovarianceBand.h"
 #include "EData.h"
@@ -2945,6 +2947,9 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
       return -1;
     }
     group.trivial = group.segments.size() == 1 && group.terms == 0;
+    group.pairKey = GetSegment(group.segments[0])->GetEntranceKey();
+    for (int s : group.segments)
+      if (GetSegment(s)->GetEntranceKey() != group.pairKey) group.pairKey = 0;
 
     std::ostringstream summary;
     summary << "THM experiment '" << x.name << "': segment" << (group.segments.size() > 1 ? "s " : " ");
@@ -3004,6 +3009,31 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
           << th.name << " = x + " << sp.name << ", B(x+s) = " << bind << " MeV; quasi-free E(x+A) = " << exa
           << " MeV, E_qf = E(x+A) - B = " << exa - bind << " MeV.";
         configure.outStream << k.str() << std::endl;
+
+        if (x.psKind != ThmExperiment::PS_DELTA) {
+          // Spectator-momentum window (ThmLineshape.h ThmSpectatorWindow).
+          if (configure.thm.SpectatorEnergy(pairKey) != 0.0) {
+            configure.outStream << where << "a ps window and spectatorEnergy both set the spectator motion of "
+                                   "entrance pair "
+                                << pairKey << "; use one (ps=delta keeps spectatorEnergy)." << std::endl;
+            return -1;
+          }
+          double muSx = mX * sp.mass / (mX + sp.mass) * amu;
+          std::shared_ptr<ThmSpectatorWindow> window = std::make_shared<ThmSpectatorWindow>();
+          std::string why = BuildThmSpectatorWindow(x, muSx, *window);
+          if (!why.empty()) {
+            configure.outStream << where << "ps: " << why << "." << std::endl;
+            return -1;
+          }
+          std::ostringstream w;
+          w.precision(6);
+          w << "  Spectator-momentum window: " << window->description << "; mu_sx = " << muSx
+            << " MeV, T_s = p_s^2/2mu_sx from " << window->es.front() << " to " << window->es.back()
+            << " MeV, <T_s> = " << window->MeanEs() << " MeV.";
+          configure.outStream << w.str() << std::endl;
+          group.window = window;
+          for (int s : group.segments) GetSegment(s)->SetThmSpectatorWindow(window);
+        }
 
         if (x.lineshape) {
           // Coulomb line shape of the spectator (ThmLineshape.h).  The level
@@ -3213,6 +3243,19 @@ void EData::WriteThmExperiments(const Config &configure) {
       for (int j = 0; j < q; j++) out << std::setw(18) << r.covariance[i * 4 + j];
       out << "\n";
     }
+    // Spectator-momentum window (ps=...): the nodes.
+    for (const ThmGroup &group : thmGroups_) {
+      if (group.name != r.name || !group.window) continue;
+      const ThmSpectatorWindow &w = *group.window;
+      out << "ps: " << w.description << "; mu_sx = " << w.muSx << " MeV\n"
+          << "# The model at E is the average of the HOES cross section over the spectator momentum\n"
+          << "# p_s, weight |phi(p_s)|^2 p_s^2 (a table: its w(p_s)), incoherent; node k adds\n"
+          << "# T_s = p_s^2/2mu_sx to E + B in the vertex.  Columns: p_s (MeV/c), weight, T_s (MeV).\n";
+      for (size_t k = 0; k < w.p.size(); k++)
+        out << "ps_node" << std::setw(18) << w.p[k] << std::setw(18) << w.weight[k] << std::setw(18) << w.es[k]
+            << "\n";
+      out << std::left << std::setw(16) << "<T_s>" << std::right << std::setw(18) << w.MeanEs() << "\n";
+    }
     // Coulomb line shape (lineshape=on): the ranges over the experiment's points.
     for (const ThmGroup &group : thmGroups_) {
       if (group.name != r.name || !group.lineshape) continue;
@@ -3316,6 +3359,127 @@ bool EData::ThmLineshapeTable(const std::string &name, const std::vector<double>
       }
     }
     out.exits.push_back(ex);
+  }
+  return true;
+}
+
+bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
+                           const Config &configure, ThmVertexReport &out, std::string &why) {
+  const ThmGroup *group = nullptr;
+  for (const ThmGroup &g : thmGroups_)
+    if (g.name == name) group = &g;
+  if (!group) {
+    why = "no THM experiment '" + name + "' in use";
+    return false;
+  }
+  if (group->pairKey == 0 || !compound->IsPairKey(group->pairKey)) {
+    why = "THM experiment '" + name + "': its segments have different entrance pairs";
+    return false;
+  }
+  const bool useGSL = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
+  const int aa = compound->GetPairNumFromKey(group->pairKey);
+  PPair *pair = compound->GetPair(aa);
+  if (pair->GetPType() != 0) {
+    why = "THM experiment '" + name + "': the entrance pair is not a particle pair";
+    return false;
+  }
+  out = ThmVertexReport();
+  out.experiment = name;
+  out.pairKey = group->pairKey;
+  out.bind = pair->GetBindingEnergy();
+  out.radius = pair->GetChRad();
+  if (group->window) {
+    const ThmSpectatorWindow &w = *group->window;
+    out.window = w.description;
+    out.muSx = w.muSx;
+    out.p = w.p;
+    out.weight = w.weight;
+    out.es = w.es;
+  } else {
+    out.window = "delta";
+    out.p.push_back(0.0);
+    out.weight.push_back(1.0);
+    out.es.push_back(configure.thm.SpectatorEnergy(group->pairKey));
+  }
+  out.energy = energies;
+  const double mu = pair->GetRedMass() * uconv;
+  // M_l = (B - 1) j_l - rho j_l' + C_l at E with T_s = es added to E + B (EPoint::CalcEDependentValues).
+  struct Pieces {
+    double jl = 0.0, rhoDjl = 0.0;
+    complex coul = complex(0.0, 0.0);
+  };
+  auto pieces = [&](int l, double e, double es) {
+    Pieces q;
+    double b = out.bind + es;
+    if (e + b > 0.0) {
+      ThmBesselParts(l, mu, e, b, out.radius, q.jl, q.rhoDjl);
+      if (configure.thm.coulombIntegral && pair->GetZ(1) * pair->GetZ(2) != 0)
+        q.coul = ThmCoulombTerm(pair, l, e, ThmRho(mu, e, b, 1.0), useGSL);
+    }
+    return q;
+  };
+  for (double e : energies) {
+    std::vector<double> row;
+    for (double es : out.es) row.push_back(e + out.bind + es > 0.0 ? ThmRho(mu, e, out.bind + es, out.radius) : 0.0);
+    out.rho.push_back(row);
+  }
+  // Vertex boundary, as THMMatrixFunc::CalculateTHMCrossSection chooses it.
+  const bool perLevel = (configure.paramMask & Config::USE_BRUNE_FORMALISM) &&
+                        configure.thm.vertex == Config::ThmOptions::PER_LEVEL;
+  const bool onShell = configure.thm.vertex == Config::ThmOptions::ON_SHELL;
+  const bool constantVertex = configure.thm.vertex == Config::ThmOptions::CONSTANT;
+  const double threshold = pair->GetSepE() + pair->GetExE();
+  ChannelFunc channelFunc(pair, useGSL);
+  for (int j = 1; j <= compound->NumJGroups(); j++) {
+    JGroup *jg = compound->GetJGroup(j);
+    if (!jg->IsInRMatrix()) continue;
+    for (int ch = 1; ch <= jg->NumChannels(); ch++) {
+      AChannel *c = jg->GetChannel(ch);
+      if (c->GetPairNum() != aa) continue;
+      ThmVertexReport::Channel cr;
+      cr.jgroup = j;
+      cr.channel = ch;
+      cr.J = jg->GetJ();
+      cr.pi = jg->GetPi();
+      cr.l = c->GetL();
+      cr.s = c->GetS();
+      double eMin = 0.0;
+      bool found = false;
+      for (int la = 1; la <= jg->NumLevels(); la++) {
+        ALevel *level = jg->GetLevel(la);
+        if (!level->IsInRMatrix()) continue;
+        if (!found || level->GetFitE() < eMin) eMin = level->GetFitE();
+        found = true;
+      }
+      // The pieces on the grid: [E][node] and the quasi-free [E].
+      std::vector<std::vector<Pieces>> grid(energies.size());
+      std::vector<Pieces> qf(energies.size());
+      for (size_t i = 0; i < energies.size(); i++) {
+        for (double es : out.es) grid[i].push_back(pieces(cr.l, energies[i], es));
+        qf[i] = pieces(cr.l, energies[i], 0.0);
+      }
+      for (int la = 1; la <= jg->NumLevels(); la++) {
+        ALevel *level = jg->GetLevel(la);
+        if (!level->IsInRMatrix()) continue;
+        ThmVertexReport::Level lr;
+        lr.level = la;
+        double fixedB = constantVertex ? channelFunc.Shift(cr.l, eMin - threshold)
+                        : perLevel     ? channelFunc.Shift(cr.l, level->GetFitE() - threshold)
+                                       : c->GetBoundaryCondition();
+        lr.boundary = onShell ? std::nan("") : fixedB;
+        for (size_t i = 0; i < energies.size(); i++) {
+          complex B(fixedB, 0.0);
+          if (onShell) B = complex(channelFunc.Shift(cr.l, energies[i]), channelFunc.Penetrability(cr.l, energies[i]));
+          auto m2 = [&](const Pieces &q) { return std::norm((B - 1.0) * q.jl - q.rhoDjl + q.coul); };
+          double avg = 0.0;
+          for (size_t k = 0; k < out.es.size(); k++) avg += out.weight[k] * m2(grid[i][k]);
+          lr.m2.push_back(avg);
+          lr.m2qf.push_back(m2(qf[i]));
+        }
+        cr.levels.push_back(lr);
+      }
+      out.channels.push_back(cr);
+    }
   }
   return true;
 }

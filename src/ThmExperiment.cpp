@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
+#include <fstream>
 #include <map>
 #include <set>
 #include <sstream>
@@ -76,6 +77,58 @@ std::string ParseSegmentList(const std::string &text, std::vector<int> &out) {
   }
   std::sort(out.begin(), out.end());
   return "";
+}
+
+// "pmin-pmax" (MeV/c, 0 <= pmin <= pmax): the '-' whose both sides are numbers.
+bool ReadWindow(const std::string &text, double &lo, double &hi) {
+  for (size_t k = 1; k + 1 < text.size(); k++) {
+    if (text[k] != '-') continue;
+    if (ReadWholeDouble(text.substr(0, k), lo) && ReadWholeDouble(text.substr(k + 1), hi))
+      return lo >= 0.0 && hi >= lo;
+  }
+  return false;
+}
+
+// The value of ps=: "" or what is wrong.
+std::string ParsePs(const std::string &value, ThmExperiment &x) {
+  const std::string usage =
+      "ps='" + value +
+      "': expected delta, hulthen:pmin-pmax, hulthen:a,b:pmin-pmax (a, b in fm^-1), "
+      "gauss:FWHM:pmin-pmax or table:<file> (momenta in MeV/c, 0 <= pmin <= pmax)";
+  x.psA = 0.2317;
+  x.psB = 1.202;
+  x.psFwhm = 0.0;
+  x.psMin = x.psMax = 0.0;
+  x.psTable.clear();
+  if (value == "delta") {
+    x.psKind = ThmExperiment::PS_DELTA;
+    return "";
+  }
+  std::vector<std::string> f = Split(value, ':');
+  if (f.size() >= 2 && f[0] == "table") {
+    x.psKind = ThmExperiment::PS_TABLE;
+    x.psTable = value.substr(6);
+    return x.psTable.empty() ? usage : "";
+  }
+  if (f.size() == 2 && f[0] == "hulthen") {
+    x.psKind = ThmExperiment::PS_HULTHEN;
+    return ReadWindow(f[1], x.psMin, x.psMax) ? "" : usage;
+  }
+  if (f.size() == 3 && f[0] == "hulthen") {
+    x.psKind = ThmExperiment::PS_HULTHEN;
+    std::vector<std::string> ab = Split(f[1], ',');
+    if (ab.size() != 2 || !ReadWholeDouble(ab[0], x.psA) || !ReadWholeDouble(ab[1], x.psB) ||
+        !(x.psA > 0.0) || !(x.psB > x.psA))
+      return "ps='" + value + "': Hulthen a,b in fm^-1 with 0 < a < b (deuteron: 0.2317,1.202)";
+    return ReadWindow(f[2], x.psMin, x.psMax) ? "" : usage;
+  }
+  if (f.size() == 3 && f[0] == "gauss") {
+    x.psKind = ThmExperiment::PS_GAUSS;
+    if (!ReadWholeDouble(f[1], x.psFwhm) || !(x.psFwhm > 0.0))
+      return "ps='" + value + "': the FWHM of |phi(p_s)|^2 must be a number > 0 (MeV/c)";
+    return ReadWindow(f[2], x.psMin, x.psMax) ? "" : usage;
+  }
+  return usage;
 }
 
 bool ValidName(const std::string &name) {
@@ -152,7 +205,7 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
     if (eq == std::string::npos || eq == 0 || eq + 1 == token.size())
       return where + "'" + token + "' is not key=value";
     std::string key = token.substr(0, eq), value = token.substr(eq + 1);
-    if (key == "ps" || key == "theta" || key == "distortion")
+    if (key == "theta" || key == "distortion")
       return where + "key '" + key + "' is reserved for a later version (not implemented yet)";
     if (std::find(work.keys.begin(), work.keys.end(), key) != work.keys.end())
       return where + "key '" + key + "' is given twice";
@@ -180,8 +233,14 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
         work.lineshape = false;
       else
         why = "lineshape='" + value + "': expected on or off";
+    } else if (key == "ps") {
+      why = ParsePs(value, work);
+    } else if (key == "psNodes") {
+      if (!ReadWholeInt(value, work.psNodes) || work.psNodes < 1 || work.psNodes > 64)
+        why = "psNodes='" + value + "': expected a whole number of Gauss-Legendre nodes, 1 to 64";
     } else {
-      why = "unknown key '" + key + "' (keys: segments, background, beam, target, spectator, Ebeam, lineshape)";
+      why = "unknown key '" + key +
+            "' (keys: segments, background, beam, target, spectator, Ebeam, lineshape, ps, psNodes)";
     }
     if (!why.empty()) return where + why;
     work.keys.push_back(key);
@@ -204,6 +263,11 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
     if (kin != 0 && kin != 4) return where + "beam, target, spectator and Ebeam go together (all four or none)";
     if (x.lineshape && kin != 4)
       return where + "lineshape=on needs the kinematics of the reaction: beam, target, spectator and Ebeam";
+    if (x.psKind != ThmExperiment::PS_DELTA && kin != 4)
+      return where + "a ps window (ps=hulthen|gauss|table) needs the kinematics of the reaction: beam, target, "
+                     "spectator and Ebeam (mu_sx from the spectator and x masses)";
+    if (has("psNodes") && x.psKind == ThmExperiment::PS_DELTA)
+      return where + "psNodes= needs a ps window (ps=hulthen|gauss|table)";
     for (int k : x.segments) {
       auto it = owner.find(k);
       if (it != owner.end()) {
@@ -214,6 +278,37 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
       owner[k] = x.name;
     }
   }
+  return "";
+}
+
+std::string ReadThmPsTable(const std::string &path, std::vector<double> &p, std::vector<double> &w) {
+  p.clear();
+  w.clear();
+  std::ifstream in(path.c_str());
+  if (!in) return "cannot read the ps table '" + path + "'";
+  std::string line;
+  int lineNumber = 0;
+  double total = 0.0;
+  while (std::getline(in, line)) {
+    lineNumber++;
+    size_t hash = line.find('#');
+    if (hash != std::string::npos) line = line.substr(0, hash);
+    if (line.find_first_not_of(" \t\r\n") == std::string::npos) continue;
+    std::istringstream ls(line);
+    double pv, wv;
+    std::string extra;
+    std::ostringstream where;
+    where << "'" << path << "' line " << lineNumber << ": ";
+    if (!(ls >> pv >> wv) || (ls >> extra)) return where.str() + "expected two numbers, p_s (MeV/c) and w";
+    if (!std::isfinite(pv) || !std::isfinite(wv) || pv < 0.0 || wv < 0.0)
+      return where.str() + "p_s and the weight must be finite and >= 0";
+    if (!p.empty() && !(pv > p.back())) return where.str() + "p_s must be strictly increasing";
+    p.push_back(pv);
+    w.push_back(wv);
+    total += wv;
+  }
+  if (p.size() < 2) return "'" + path + "' needs at least two rows (p_s w)";
+  if (!(total > 0.0)) return "'" + path + "': every weight is zero";
   return "";
 }
 

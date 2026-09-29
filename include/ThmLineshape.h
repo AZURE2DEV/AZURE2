@@ -108,6 +108,83 @@ double ThmLineshapeFactorSq(double zeta, double x, double Gamma);
  */
 double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config &configure);
 
+struct ThmExperiment;
+
+/*!
+ * The spectator-momentum window of a THM experiment (<thm> experiment[...]
+ * ps=...; docs/source/theory/thm_implementation.rst, "Spectator-momentum
+ * window").
+ *
+ * The off-shell x-A momentum of the entrance vertex depends on the
+ * spectator momentum p_s = p_sx (the s-x relative momentum in a, = the
+ * spectator momentum in the rest frame of a):
+ *
+ *   p_xA^2 / 2 mu_xA = E + B_xs + p_s^2 / 2 mu_sx
+ *
+ * (Mukhamedzhanov et al., PRC 96 (2017) 024623, eq. 31; Typel & Baur, Ann.
+ * Phys. 305 (2003) 228, eq. 11).  The THM double differential cross section
+ * at one p_s is |phi_a(p_s)|^2 times sum_l |...M_l(p_xA)|^2 (2017 eq. 34); the
+ * data are divided by |phi_a|^2 bin by bin over events with p_s in the
+ * accepted window, so the HOES "data" at E are the event-weighted average of
+ * the HOES cross section over the window, incoherent in p_s (distinct final
+ * states):
+ *
+ *   sigma(E) = Int w(p) sigma(E; p) dp / Int w(p) dp,   w = |phi(p)|^2 p^2
+ *
+ * evaluated by Gauss-Legendre in p on [pmin, pmax]: sigma = sum_k w_k
+ * sigma(E; p_k) with sum_k w_k = 1.  Each node k adds T_k = p_k^2 / 2 mu_sx to
+ * E + B in the vertex (and in the Coulomb term C_l), as spectatorEnergy does.
+ */
+struct ThmSpectatorWindow {
+  std::string experiment;
+  std::string description;  ///< for the output: kind and parameters
+  double muSx = 0.0;        ///< reduced mass of s + x (MeV)
+  double pMin = 0.0, pMax = 0.0;  ///< MeV/c
+  std::vector<double> p;       ///< nodes (MeV/c)
+  std::vector<double> weight;  ///< normalized weights, sum 1
+  std::vector<double> es;      ///< T_k = p_k^2 / 2 mu_sx (MeV)
+  /// <T_s> = sum_k w_k T_k (MeV).
+  double MeanEs() const;
+};
+
+/*!
+ * The nodes and weights of experiment x's ps window (not PS_DELTA), for the
+ * spectator + x reduced mass muSx (MeV).  |phi|^2: Hulthen, (1/(a^2 + q^2) -
+ * 1/(b^2 + q^2))^2 with q = p/hbar c (Tribble et al., RPP 77 (2014) 106901,
+ * eq. 4.4); gauss, exp(-4 ln 2 p^2/FWHM^2); both times p^2.  A table gives the
+ * event weight per unit p directly (linear between rows).  pmin == pmax is one
+ * node of weight 1.  "" or what is wrong.
+ */
+std::string BuildThmSpectatorWindow(const ThmExperiment &x, double muSx, ThmSpectatorWindow &out);
+
+/// The window-averaged entrance vertex of one experiment (EData::ThmVertexTable).
+struct ThmVertexReport {
+  std::string experiment;
+  std::string window;  ///< description ("delta" without a window)
+  int pairKey = 0;
+  double muSx = 0.0;   ///< MeV (0 without a window)
+  double bind = 0.0;   ///< B_xs as the vertex uses it (the entrance pair's), MeV
+  double radius = 0.0; ///< channel radius a (fm)
+  std::vector<double> p, weight, es;  ///< nodes (a delta: one node, p = 0, T = spectatorEnergy)
+  std::vector<double> energy;         ///< E (MeV)
+  std::vector<std::vector<double>> rho;  ///< [E][node] p_xA a / hbar c
+  struct Level {
+    int level = 0;          ///< 1-based in the J group
+    double boundary = 0.0;  ///< Re of the vertex boundary B used for this level
+    std::vector<double> m2;   ///< <|M_l|^2> over the window, on the grid
+    std::vector<double> m2qf; ///< |M_l|^2 at p_s = 0 (quasi-free), on the grid
+  };
+  struct Channel {
+    int jgroup = 0, channel = 0;  ///< 1-based
+    double J = 0.0;
+    int pi = 1;
+    int l = 0;
+    double s = 0.0;
+    std::vector<Level> levels;
+  };
+  std::vector<Channel> channels;
+};
+
 /// The line shape of one experiment on an energy grid (EData::ThmLineshapeTable).
 struct ThmLineshapeReport {
   std::string experiment, spectator;

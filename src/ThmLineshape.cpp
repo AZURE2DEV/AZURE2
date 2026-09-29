@@ -7,9 +7,13 @@
 #include "Config.h"
 #include "JGroup.h"
 #include "PPair.h"
+#include "ThmExperiment.h"
 
 #include <algorithm>
+#include <functional>
 #include <cmath>
+#include <sstream>
+#include <gsl/gsl_integration.h>
 #include <vector>
 
 namespace {
@@ -113,4 +117,80 @@ double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config
     next = (next + 1) % kMemo;
   }
   return width;
+}
+
+double ThmSpectatorWindow::MeanEs() const {
+  double m = 0.0;
+  for (size_t k = 0; k < es.size(); k++) m += weight[k] * es[k];
+  return m;
+}
+
+std::string BuildThmSpectatorWindow(const ThmExperiment &x, double muSx, ThmSpectatorWindow &out) {
+  out = ThmSpectatorWindow();
+  out.experiment = x.name;
+  out.muSx = muSx;
+  out.pMin = x.psMin;
+  out.pMax = x.psMax;
+  std::ostringstream d;
+  d.precision(8);
+  // Event weight per unit p_s.
+  std::function<double(double)> w;
+  switch (x.psKind) {
+    case ThmExperiment::PS_HULTHEN: {
+      const double a2 = x.psA * x.psA, b2 = x.psB * x.psB;
+      w = [a2, b2](double p) {
+        double q2 = (p / hbarc) * (p / hbarc);
+        double phi = 1.0 / (a2 + q2) - 1.0 / (b2 + q2);
+        return phi * phi * p * p;
+      };
+      d << "hulthen a=" << x.psA << " b=" << x.psB << " fm^-1";
+      break;
+    }
+    case ThmExperiment::PS_GAUSS: {
+      const double c = 4.0 * std::log(2.0) / (x.psFwhm * x.psFwhm);
+      w = [c](double p) { return std::exp(-c * p * p) * p * p; };
+      d << "gauss FWHM=" << x.psFwhm << " MeV/c";
+      break;
+    }
+    case ThmExperiment::PS_TABLE: {
+      const std::vector<double> &tp = x.psTableP, &tw = x.psTableW;
+      w = [&tp, &tw](double p) {
+        if (p <= tp.front()) return tw.front();
+        if (p >= tp.back()) return tw.back();
+        size_t hi = std::upper_bound(tp.begin(), tp.end(), p) - tp.begin(), lo = hi - 1;
+        return tw[lo] + (tw[hi] - tw[lo]) * (p - tp[lo]) / (tp[hi] - tp[lo]);
+      };
+      d << "table " << x.psTable;
+      break;
+    }
+    default:
+      return "no ps window";
+  }
+  d << ", p_s in [" << x.psMin << ", " << x.psMax << "] MeV/c";
+  if (!(muSx > 0.0)) return "the s + x reduced mass is not positive";
+  if (x.psMax == x.psMin) {
+    out.p.push_back(x.psMin);
+    out.weight.push_back(1.0);
+    d << ", one node";
+  } else {
+    const int n = x.psNodes;
+    gsl_integration_glfixed_table *t = gsl_integration_glfixed_table_alloc(n);
+    double total = 0.0;
+    for (int i = 0; i < n; i++) {
+      double xi, wi;
+      gsl_integration_glfixed_point(x.psMin, x.psMax, i, &xi, &wi, t);
+      double v = wi * w(xi);
+      out.p.push_back(xi);
+      out.weight.push_back(v);
+      total += v;
+    }
+    gsl_integration_glfixed_table_free(t);
+    if (!(total > 0.0) || !std::isfinite(total))
+      return "the weight vanishes at every Gauss-Legendre node of the window (widen it or raise psNodes)";
+    for (double &v : out.weight) v /= total;
+    d << ", " << n << " Gauss-Legendre nodes";
+  }
+  for (double p : out.p) out.es.push_back(p * p / (2.0 * muSx));
+  out.description = d.str();
+  return "";
 }

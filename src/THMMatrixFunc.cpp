@@ -101,6 +101,9 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
                             << "E_sF = 1 keV is used there (reported once)." << std::endl;
   }
 
+  const ThmSpectatorWindow *window = point->GetThmSpectatorWindow();
+  const int numNodes = window ? point->NumThmPsNodes() : 0;
+
   double sigma = 0.0;
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
     JGroup *jg = compound()->GetJGroup(j);
@@ -136,41 +139,9 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
     bool onShell = configure().thm.vertex == Config::ThmOptions::ON_SHELL;
     bool constantVertex = configure().thm.vertex == Config::ThmOptions::CONSTANT;
     bool coherentL = configure().thm.coherentL;
-    std::map<std::pair<double, int>, std::vector<complex>> vbys;
     bool hasEntrance = false;
-    for (int ch = 1; ch <= numChannels; ch++) {
-      AChannel *c = jg->GetChannel(ch);
-      if (c->GetPairNum() != aa) continue;
-      hasEntrance = true;
-      std::vector<complex> &vertex = vbys[std::make_pair(c->GetS(), coherentL ? 0 : c->GetL())];
-      if (vertex.empty()) vertex.assign(numLevels + 1, complex(0.0, 0.0));
-      complex onShellL = point->GetLoElement(j, ch) + c->GetBoundaryCondition();
-      // `constant`: S_c at the lowest level of the J group, whatever the order
-      // of the levels in the file (the channel boundary constant of the
-      // R-matrix is tied to the first level read, which is not physical).
-      complex constantB(0.0, 0.0);
-      if (constantVertex) {
-        double eMin = 0.0;
-        bool found = false;
-        for (int la = 1; la <= numLevels; la++) {
-          ALevel *level = jg->GetLevel(la);
-          if (!level->IsInRMatrix()) continue;
-          if (!found || level->GetFitE() < eMin) eMin = level->GetFitE();
-          found = true;
-        }
-        constantB = ShiftAtLevelEnergy(compound()->GetPair(aa), c->GetL(), eMin,
-                                       !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC));
-      }
-      for (int la = 1; la <= numLevels; la++) {
-        ALevel *level = jg->GetLevel(la);
-        if (!level->IsInRMatrix()) continue;
-        complex boundary = onShell ? onShellL
-                           : constantVertex ? constantB
-                           : complex(perLevel ? level->GetShiftFunction(ch)
-                                              : c->GetBoundaryCondition(), 0.0);
-        vertex[la] += level->GetFitGamma(ch) * point->GetThmFormFactor(j, ch, boundary);
-      }
-    }
+    for (int ch = 1; ch <= numChannels; ch++)
+      if (jg->GetChannel(ch)->GetPairNum() == aa) hasEntrance = true;
     if (!hasEntrance) continue;  // this J group does not couple the entrance pair
 
     // N_C of each level (lineshape=on); the pole is the observed energy and
@@ -186,39 +157,86 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
       }
     }
 
-    // Exit channels (incoherent), each with sqrt(2 P) folded in as 2 P outside.
-    for (int ch = 1; ch <= numChannels; ch++) {
-      AChannel *c = jg->GetChannel(ch);
-      if (c->GetPairNum() != exitPairNum) continue;
-      double sqrtPen = point->GetSqrtPenetrability(j, ch);
-      double pex = sqrtPen * sqrtPen;  // P_l(E_exit); 0 if closed
-      if (pex == 0.0) continue;
-
-      double term = 0.0;
-      for (std::map<std::pair<double, int>, std::vector<complex>>::iterator it = vbys.begin();
-           it != vbys.end(); ++it) {
-        std::vector<complex> &vertex = it->second;
-        complex amp(0.0, 0.0);
+    // Spectator-momentum window (ps=..., ThmLineshape.h ThmSpectatorWindow):
+    // the cross section -- not the amplitude -- is averaged over the nodes
+    // p_k with the normalized event weights w_k, since each p_s is a distinct
+    // final state (Mukhamedzhanov et al. 2017 eq. 34).  Without a window one
+    // pass with the stored single-node vertex (node -1), as before.
+    const int passes = numNodes > 0 ? numNodes : 1;
+    for (int pass = 0; pass < passes; pass++) {
+      const int node = numNodes > 0 ? pass : -1;
+      std::map<std::pair<double, int>, std::vector<complex>> vbys;
+      for (int ch = 1; ch <= numChannels; ch++) {
+        AChannel *c = jg->GetChannel(ch);
+        if (c->GetPairNum() != aa) continue;
+        std::vector<complex> &vertex = vbys[std::make_pair(c->GetS(), coherentL ? 0 : c->GetL())];
+        if (vertex.empty()) vertex.assign(numLevels + 1, complex(0.0, 0.0));
+        complex onShellL = point->GetLoElement(j, ch) + c->GetBoundaryCondition();
+        // `constant`: S_c at the lowest level of the J group, whatever the order
+        // of the levels in the file (the channel boundary constant of the
+        // R-matrix is tied to the first level read, which is not physical).
+        complex constantB(0.0, 0.0);
+        if (constantVertex) {
+          double eMin = 0.0;
+          bool found = false;
+          for (int la = 1; la <= numLevels; la++) {
+            ALevel *level = jg->GetLevel(la);
+            if (!level->IsInRMatrix()) continue;
+            if (!found || level->GetFitE() < eMin) eMin = level->GetFitE();
+            found = true;
+          }
+          constantB = ShiftAtLevelEnergy(compound()->GetPair(aa), c->GetL(), eMin,
+                                         !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC));
+        }
         for (int la = 1; la <= numLevels; la++) {
-          if (!jg->GetLevel(la)->IsInRMatrix()) continue;
-          double gEx = jg->GetLevel(la)->GetFitGamma(ch);
-          if (std::fabs(gEx) < 1.0e-12) continue;
-          if (lineshape) {
-            complex gExC = gEx * nc[la];
+          ALevel *level = jg->GetLevel(la);
+          if (!level->IsInRMatrix()) continue;
+          complex boundary = onShell ? onShellL
+                             : constantVertex ? constantB
+                             : complex(perLevel ? level->GetShiftFunction(ch)
+                                                : c->GetBoundaryCondition(), 0.0);
+          vertex[la] += level->GetFitGamma(ch) * (node < 0 ? point->GetThmFormFactor(j, ch, boundary)
+                                                           : point->GetThmFormFactor(j, ch, boundary, node));
+        }
+      }
+
+      // Exit channels (incoherent), each with sqrt(2 P) folded in as 2 P outside.
+      for (int ch = 1; ch <= numChannels; ch++) {
+        AChannel *c = jg->GetChannel(ch);
+        if (c->GetPairNum() != exitPairNum) continue;
+        double sqrtPen = point->GetSqrtPenetrability(j, ch);
+        double pex = sqrtPen * sqrtPen;  // P_l(E_exit); 0 if closed
+        if (pex == 0.0) continue;
+
+        double term = 0.0;
+        for (std::map<std::pair<double, int>, std::vector<complex>>::iterator it = vbys.begin();
+             it != vbys.end(); ++it) {
+          std::vector<complex> &vertex = it->second;
+          complex amp(0.0, 0.0);
+          for (int la = 1; la <= numLevels; la++) {
+            if (!jg->GetLevel(la)->IsInRMatrix()) continue;
+            double gEx = jg->GetLevel(la)->GetFitGamma(ch);
+            if (std::fabs(gEx) < 1.0e-12) continue;
+            if (lineshape) {
+              complex gExC = gEx * nc[la];
+              for (int lap = 1; lap <= numLevels; lap++) {
+                if (!jg->GetLevel(lap)->IsInRMatrix()) continue;
+                amp += gExC * this->GetAMatrixElement(j, act[la], act[lap]) * vertex[lap];
+              }
+              continue;
+            }
             for (int lap = 1; lap <= numLevels; lap++) {
               if (!jg->GetLevel(lap)->IsInRMatrix()) continue;
-              amp += gExC * this->GetAMatrixElement(j, act[la], act[lap]) * vertex[lap];
+              amp += gEx * this->GetAMatrixElement(j, act[la], act[lap]) * vertex[lap];
             }
-            continue;
           }
-          for (int lap = 1; lap <= numLevels; lap++) {
-            if (!jg->GetLevel(lap)->IsInRMatrix()) continue;
-            amp += gEx * this->GetAMatrixElement(j, act[la], act[lap]) * vertex[lap];
-          }
+          term += std::norm(amp);  // |amp|^2, incoherent over (s, l)
         }
-        term += std::norm(amp);  // |amp|^2, incoherent over (s, l)
+        if (node < 0)
+          sigma += spinWeight * fluxFactor * 2.0 * pex * term;
+        else
+          sigma += window->weight[node] * (spinWeight * fluxFactor * 2.0 * pex * term);
       }
-      sigma += spinWeight * fluxFactor * 2.0 * pex * term;
     }
   }
 

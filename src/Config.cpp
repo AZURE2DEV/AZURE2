@@ -356,6 +356,18 @@ int Config::ReadThmBlock() {
   }
   if (line.find("<thm>") == std::string::npos) return 0;  // optional block, absent
 
+  // A file named in the block, relative to the .azr.  Absolute is a leading
+  // slash or backslash, or (Windows) a drive letter: "C:/..." or "C:\..."
+  // handed to the native binary was otherwise prefixed with the project
+  // directory.
+  auto thmRelativePath = [this](const std::string &value) {
+    std::string dir;
+    size_t slash = configfile.find_last_of("/\\");
+    if (slash != std::string::npos) dir = configfile.substr(0, slash + 1);
+    bool absolute = !value.empty() && (value[0] == '/' || value[0] == '\\' ||
+                                       (value.size() > 1 && value[1] == ':' && std::isalpha((unsigned char)value[0])));
+    return (absolute || dir.empty()) ? value : dir + value;
+  };
   auto flag = [](const std::string &v, bool &out) {
     if (v == "1" || v == "true" || v == "on") out = true;
     else if (v == "0" || v == "false" || v == "off") out = false;
@@ -375,6 +387,17 @@ int Config::ReadThmBlock() {
       if (!why.empty()) {
         outStream << "ERROR: <thm> " << why << std::endl;
         return -1;
+      }
+      // ps=table:<file>, relative to the .azr as weight[k]=.
+      for (ThmExperiment &x : thm.experiments) {
+        if (x.psKind != ThmExperiment::PS_TABLE) continue;
+        why = ReadThmPsTable(thmRelativePath(x.psTable), x.psTableP, x.psTableW);
+        if (!why.empty()) {
+          outStream << "ERROR: <thm> experiment[" << x.name << "]: ps: " << why << std::endl;
+          return -1;
+        }
+        x.psMin = x.psTableP.front();
+        x.psMax = x.psTableP.back();
       }
       return 0;
     }
@@ -438,15 +461,7 @@ int Config::ReadThmBlock() {
       if (ok) {
         std::shared_ptr<ThmWeightTable> table = std::make_shared<ThmWeightTable>();
         table->name = value;
-        // Relative to the .azr.  Absolute is a leading slash or backslash, or
-        // (Windows) a drive letter: "C:/..." or "C:\..." handed to the native
-        // binary was otherwise prefixed with the project directory.
-        std::string dir;
-        size_t slash = configfile.find_last_of("/\\");
-        if (slash != std::string::npos) dir = configfile.substr(0, slash + 1);
-        bool absolute = value[0] == '/' || value[0] == '\\' ||
-                        (value.size() > 1 && value[1] == ':' && std::isalpha((unsigned char)value[0]));
-        table->path = (absolute || dir.empty()) ? value : dir + value;
+        table->path = thmRelativePath(value);
         std::string why = table->Read(table->path);
         if (!why.empty()) {
           outStream << "ERROR: <thm> " << key << ": " << why << std::endl;

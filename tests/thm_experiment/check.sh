@@ -151,7 +151,7 @@ refuse() {  # refuse NAME MESSAGE-FRAGMENT BLOCK [AWK]
     bad "$1: not refused with '$2' (status $(cat "$WORK/$1/status"))"; tail -3 "$WORK/$1/log" | sed 's/^/        /'
   fi
 }
-for k in ps theta distortion; do
+for k in theta distortion; do  # ps: tests/thm_spectator_window
   refuse "reserved_$k" "not implemented yet" "experiment[A] segments=1,2 $k=1"
 done
 refuse unknown_key "unknown key 'foo'" "experiment[A] segments=1 foo=1"

@@ -16,6 +16,7 @@
 #include "RMatrixFunc.h"
 #include "ShftFunc.h"
 #include "ThmFunc.h"
+#include "ThmLineshape.h"
 #include "THMMatrixFunc.h"
 #include "TargetEffect.h"
 #include "Straggling.h"
@@ -70,6 +71,7 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   is_thm_ = parent->IsTHM();
   thm_weight_ = parent->GetThmWeight();
   thm_lineshape_ = parent->GetThmLineshape();
+  thm_window_ = parent->GetThmSpectatorWindow();
   is_ang_dist_ = parent->IsAngularDist();
   max_ang_dist_order_ = parent->GetMaxAngDistOrder();
   j_value_ = parent->GetJ();
@@ -117,6 +119,7 @@ EPoint::EPoint(double angle, double energy, ESegment *parent) {
   is_thm_ = parent->IsTHM();
   thm_weight_ = parent->GetThmWeight();
   thm_lineshape_ = parent->GetThmLineshape();
+  thm_window_ = parent->GetThmSpectatorWindow();
   is_ang_dist_ = parent->IsAngularDist();
   max_ang_dist_order_ = parent->GetMaxAngDistOrder();
   j_value_ = parent->GetJ();
@@ -479,6 +482,15 @@ complex EPoint::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary
   if (channelNum - 1 >= (int)thm_jl_[jGroupNum - 1].size()) return 0.0;
   return (boundary - 1.0) * thm_jl_[jGroupNum - 1][channelNum - 1] - thm_rhodjl_[jGroupNum - 1][channelNum - 1]
          + thm_coul_[jGroupNum - 1][channelNum - 1];
+}
+
+complex EPoint::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary, int node) const {
+  if (node < 0 || node >= (int)thm_jl_ps_.size()) return 0.0;
+  const matrix_r &jl = thm_jl_ps_[node];
+  if (jGroupNum - 1 >= (int)jl.size()) return 0.0;
+  if (channelNum - 1 >= (int)jl[jGroupNum - 1].size()) return 0.0;
+  return (boundary - 1.0) * jl[jGroupNum - 1][channelNum - 1] - thm_rhodjl_ps_[node][jGroupNum - 1][channelNum - 1]
+         + thm_coul_ps_[node][jGroupNum - 1][channelNum - 1];
 }
 
 /*!
@@ -1227,7 +1239,28 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
         double thmJl = 0.0;
         double thmRhoDjl = 0.0;
         complex thmCoul(0.0, 0.0);
-        if (this->IsTHM() && thePair == entrancePair && thePair->GetPType() == 0) {
+        const ThmSpectatorWindow *window = this->IsTHM() ? thm_window_ : nullptr;
+        if (window) {
+          // Spectator-momentum window (ps=..., ThmLineshape.h): the pieces at
+          // every node p_k, with T_k = p_k^2/2 mu_sx added to E + B (a window
+          // and spectatorEnergy for the same pair are refused at startup).
+          // Stored for every channel, as below; the single-node ones stay 0.
+          for (size_t k = 0; k < window->p.size(); k++) {
+            double jl = 0.0, rhoDjl = 0.0;
+            complex coul(0.0, 0.0);
+            if (thePair == entrancePair && thePair->GetPType() == 0) {
+              double muMeV = thePair->GetRedMass() * uconv;
+              double bindingE = thePair->GetBindingEnergy() + window->es[k];
+              if (localEnergy + bindingE > 0.0) {
+                ThmBesselParts(lValue, muMeV, localEnergy, bindingE, thePair->GetChRad(), jl, rhoDjl);
+                if (configure.thm.coulombIntegral && thePair->GetZ(1) * thePair->GetZ(2) != 0)
+                  coul = ThmCoulombTerm(thePair, lValue, localEnergy, ThmRho(muMeV, localEnergy, bindingE, 1.0),
+                                        !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+              }
+            }
+            this->AddThmFormFactorNode((int)k, j, ch, jl, rhoDjl, coul);
+          }
+        } else if (this->IsTHM() && thePair == entrancePair && thePair->GetPType() == 0) {
           double muMeV = thePair->GetRedMass() * uconv;
           // The spectator's kinetic energy raises the half-off-shell momentum
           // above its quasi-free value (Typel & Baur eq. 11); 0 by default.
@@ -1272,6 +1305,9 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
     mappedPoint->thm_jl_ = thm_jl_;
     mappedPoint->thm_rhodjl_ = thm_rhodjl_;
     mappedPoint->thm_coul_ = thm_coul_;
+    mappedPoint->thm_jl_ps_ = thm_jl_ps_;
+    mappedPoint->thm_rhodjl_ps_ = thm_rhodjl_ps_;
+    mappedPoint->thm_coul_ps_ = thm_coul_ps_;
     mappedPoint->coulombphase_ = coulombphase_;
     mappedPoint->hardspherephase_ = hardspherephase_;
     for (int ii = 1; ii <= this->NumSubPoints(); ii++) {
@@ -1283,6 +1319,9 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
       subMappedPoint->thm_jl_ = this->GetSubPoint(ii)->thm_jl_;
       subMappedPoint->thm_rhodjl_ = this->GetSubPoint(ii)->thm_rhodjl_;
       subMappedPoint->thm_coul_ = this->GetSubPoint(ii)->thm_coul_;
+      subMappedPoint->thm_jl_ps_ = this->GetSubPoint(ii)->thm_jl_ps_;
+      subMappedPoint->thm_rhodjl_ps_ = this->GetSubPoint(ii)->thm_rhodjl_ps_;
+      subMappedPoint->thm_coul_ps_ = this->GetSubPoint(ii)->thm_coul_ps_;
       subMappedPoint->coulombphase_ = this->GetSubPoint(ii)->coulombphase_;
       subMappedPoint->hardspherephase_ = this->GetSubPoint(ii)->hardspherephase_;
     }
@@ -1308,6 +1347,9 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure) {
   thm_jl_.clear();
   thm_rhodjl_.clear();
   thm_coul_.clear();
+  thm_jl_ps_.clear();
+  thm_rhodjl_ps_.clear();
+  thm_coul_ps_.clear();
   coulombphase_.clear();
   hardspherephase_.clear();
 
@@ -1359,6 +1401,25 @@ void EPoint::AddThmFormFactor(int jGroupNum, int channelNum, double jl, double r
   thm_rhodjl_[jGroupNum - 1].push_back(rhoDjl);
   thm_coul_[jGroupNum - 1].push_back(coul);
   assert(channelNum == (int)thm_jl_[jGroupNum - 1].size());
+}
+
+void EPoint::AddThmFormFactorNode(int node, int jGroupNum, int channelNum, double jl, double rhoDjl, complex coul) {
+  while (node >= (int)thm_jl_ps_.size()) {
+    thm_jl_ps_.emplace_back();
+    thm_rhodjl_ps_.emplace_back();
+    thm_coul_ps_.emplace_back();
+  }
+  matrix_r &j = thm_jl_ps_[node], &r = thm_rhodjl_ps_[node];
+  matrix_c &c = thm_coul_ps_[node];
+  while (jGroupNum > (int)j.size()) {
+    j.emplace_back();
+    r.emplace_back();
+    c.emplace_back();
+  }
+  j[jGroupNum - 1].push_back(jl);
+  r[jGroupNum - 1].push_back(rhoDjl);
+  c[jGroupNum - 1].push_back(coul);
+  assert(channelNum == (int)j[jGroupNum - 1].size());
 }
 
 /*!
@@ -1870,6 +1931,11 @@ void EPoint::SetTargetEffectNum(int targetEffectNum) {
 void EPoint::SetThmLineshape(const ThmLineshape *l) {
   thm_lineshape_ = l;
   for (EPoint &sub : integrationPoints_) sub.thm_lineshape_ = l;
+}
+
+void EPoint::SetThmSpectatorWindow(const ThmSpectatorWindow *w) {
+  thm_window_ = w;
+  for (EPoint &sub : integrationPoints_) sub.thm_window_ = w;
 }
 
 /*!

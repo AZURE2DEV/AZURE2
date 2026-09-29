@@ -516,7 +516,9 @@ complex ThmCoulombTerm(PPair *pair, int l, double E, double p, bool useGSL) {
     double mu, a, E, p;
     complex value;
   };
-  static const int kMemo = 16;
+  // 64: a spectator-momentum window (ps=...) asks for up to psNodes momenta
+  // per (l, E), each a few times.
+  static const int kMemo = 64;
   thread_local Entry memo[kMemo];
   thread_local int filled = 0, next = 0;
   const int zz = pair->GetZ(1) * pair->GetZ(2);

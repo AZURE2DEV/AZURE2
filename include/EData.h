@@ -121,6 +121,11 @@ class EData {
     ThmProfile profile;         ///< the last profile (ProfileThmGroup)
     /// Coulomb line shape (lineshape=on), or null; shared with its segments.
     std::shared_ptr<const ThmLineshape> lineshape;
+    /// Spectator-momentum window (ps=hulthen|gauss|table), or null; shared
+    /// with its segments.
+    std::shared_ptr<const ThmSpectatorWindow> window;
+    /// Entrance pair key of its segments (0 if they differ).
+    int pairKey = 0;
   };
   int NumThmGroups() const { return (int)thmGroups_.size(); }
   const ThmGroup &GetThmGroup(int g) const { return thmGroups_[g]; }
@@ -155,6 +160,16 @@ class EData {
    */
   bool ThmLineshapeTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
                          const Config &configure, ThmLineshapeReport &out, std::string &why);
+  /*!
+   * The entrance vertex of THM experiment `name` at the c.m. energies
+   * `energies` (MeV, x + A) and the current parameters: the nodes and weights
+   * of its spectator-momentum window (one node for ps=delta), rho = p_xA a/hbar c
+   * per node, and per entrance channel and level the window average of
+   * |M_l|^2 and its quasi-free value (p_s = 0), with the boundary the vertex
+   * uses for that level.  False (and `why`) if there is no such experiment.
+   */
+  bool ThmVertexTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
+                      const Config &configure, ThmVertexReport &out, std::string &why);
   TargetEffect *GetTargetEffect(int);
   EDataIterator begin();
   EDataIterator end();

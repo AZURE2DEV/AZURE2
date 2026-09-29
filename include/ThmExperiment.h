@@ -43,6 +43,22 @@ struct ThmExperiment {
   /// Coulomb line-shape factor N_C of the spectator (`lineshape=on`,
   /// ThmLineshape.h); needs the kinematics.  Off by default.
   bool lineshape = false;
+  /*!
+   * Spectator-momentum window (`ps=`, ThmLineshape.h ThmSpectatorWindow):
+   * the HOES model at E is the average of the cross section over the
+   * spectator momentum p_s in [psMin, psMax] (MeV/c) with the weight of the
+   * accepted events, |phi(p_s)|^2 p_s^2 dp_s.  DELTA (default) is the
+   * quasi-free point p_s = 0 (or the scalar spectatorEnergy).  Needs the
+   * kinematics.
+   */
+  enum PsKind { PS_DELTA, PS_HULTHEN, PS_GAUSS, PS_TABLE };
+  PsKind psKind = PS_DELTA;
+  double psA = 0.2317, psB = 1.202;  ///< Hulthen a, b (fm^-1; Tribble 2014 eq. 4.4)
+  double psFwhm = 0.0;               ///< gauss: FWHM of |phi(p)|^2 (MeV/c)
+  double psMin = 0.0, psMax = 0.0;   ///< window (MeV/c); a table: its first and last p
+  std::string psTable;               ///< table: the file as written
+  std::vector<double> psTableP, psTableW;  ///< table rows (Config::ReadThmBlock loads them)
+  int psNodes = 16;                  ///< Gauss-Legendre nodes in p_s (`psNodes=`)
   /// Keys given so far (a key may not be repeated).
   std::vector<std::string> keys;
   static const char *BackgroundName(int terms);
@@ -52,14 +68,22 @@ struct ThmExperiment {
  * Parses one `experiment[<name>] key=value ...` line (comment already
  * stripped, trimmed) into `experiments`, merging with an earlier line of the
  * same name.  Returns "" or what is wrong.  Keys: segments (required),
- * background, beam, target, spectator, Ebeam, lineshape (on|off); ps, theta
- * and distortion are reserved and refused ("not implemented yet").
+ * background, beam, target, spectator, Ebeam, lineshape (on|off), ps
+ * (delta | hulthen:pmin-pmax | hulthen:a,b:pmin-pmax | gauss:FWHM:pmin-pmax |
+ * table:file), psNodes; theta and distortion are reserved and refused ("not
+ * implemented yet").
  */
 std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExperiment> &experiments);
 
 /// Checks the complete set once the block is read: segments given, kinematics
-/// all-or-none, lineshape=on only with them, no segment in two experiments.  "" or what is wrong.
+/// all-or-none, lineshape=on and a ps window only with them, psNodes only with a
+/// window, no segment in two experiments.  "" or what is wrong.
 std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments);
+
+/// Reads a `ps=table:` file: two columns, p_s (MeV/c, >= 0, strictly
+/// increasing) and the event weight w >= 0 per unit p_s; '#' starts a comment;
+/// at least two rows and some positive weight.  "" or what is wrong.
+std::string ReadThmPsTable(const std::string &path, std::vector<double> &p, std::vector<double> &w);
 
 /*!
  * The closed-form profile of one experiment's linear parameters.
