@@ -182,7 +182,10 @@ Also available: ``set_channel_radius``, ``set_segment_norm``,
 ``clear_thm_option``, ``set_thm_weight``, ``clear_thm_weight``,
 ``thm_experiments``, ``set_thm_experiment`` and ``clear_thm_experiment``
 (:doc:`../theory/thm_implementation`; a session reports a THM experiment's
-shared norm and background with ``thm_background(name)``). Every edit keeps the rest of the file
+shared norm and background with ``thm_background(name)``, and with
+``lineshape=on`` the spectator's Coulomb line shape -- :math:`\zeta(E)`,
+:math:`E_{sF}(E)` and :math:`|N_C|^2` per level -- with
+``thm_lineshape(name, energies)``). Every edit keeps the rest of the file
 byte for byte, including whether it ends with a newline.
 
 To snapshot a fit, prefer :meth:`~pyazr.azure2.azure2.save_fit`, which wraps

@@ -61,7 +61,8 @@ would refuse raises ``ValueError`` and leaves the model unchanged; a project
 whose block the engine refuses raises on any of them. Without an edit the
 block is carried through a save unchanged.
 
-The GUI edits the block under *Configure > THM Options...*: the four global
+The GUI edits the block under *Configure > THM Workspace...*, page *Model*
+(:doc:`../user_guide/configure_menu`, "THM Workspace"): the four global
 choices, the spectator energy, a table of per-pair spectator energies and a
 table of per-segment weight files (with a file chooser; a file inside the
 project directory is stored relative to it). Every control has a one-line
@@ -297,9 +298,11 @@ engine would refuse is not opened in the editor (it is kept as it is).
    low-energy :math:`S^*`, so :math:`w` grows toward low :math:`E`, by about
    10\ :sup:`2` from 2.5 to 0.8 MeV. For light, weakly charged systems
    (7Li(p,α), 6Li(d,α), 17O(n,α)) PWA and DWBA agree to about 10 % and no
-   weight is needed. The same hook carries Mukhamedzhanov's line-shape factor
-   :math:`|N_C(E)|^2` for charged spectators (Mukhamedzhanov 2020 eq. 62), or
-   any other correction that multiplies the HOES cross section.
+   weight is needed. The same hook can carry any other correction that
+   multiplies the HOES cross section; Mukhamedzhanov's line-shape factor
+   :math:`N_C` for charged spectators is built in, per level and inside the
+   coherent sum (``lineshape=on``, "Coulomb line shape" below), which a weight
+   of the summed cross section cannot do.
 
    *Where the table comes from.* AZURE2 does not compute :math:`R(E)`: it
    needs the spectator and the residual system (masses, charges, the bound
@@ -359,16 +362,19 @@ letters, digits and ``_ - . +``.
    6Li 7Li 9Be 10B 11B 12C 13C 14N 15N 16O 17O 18O 19F 20Ne 23Na 24Mg; AME2020
    atomic masses minus the electrons plus their binding, i.e. nuclear masses in
    u) or ``Z,A,mass`` (nuclear mass in u), and the lab beam energy in MeV. All
-   four or none. Nothing uses them yet: AZURE2 checks that one of beam and
+   four or none. Only ``lineshape=on`` uses them: AZURE2 checks that one of beam and
    target is a nucleus of the segments' entrance pair and the other is the
    second nucleus plus the spectator (the Trojan horse :math:`a = x + s`), and
    prints :math:`B_{xs}` and the quasi-free energy
    :math:`E_{xA} - B_{xs}` (spectator at rest in the lab when the Trojan horse
    is the target, moving with the beam velocity when it is the beam).
-``ps=``, ``theta=``, ``lineshape=``, ``distortion=``
-   Reserved for later versions (phase space, angular acceptance, line shape,
-   distortion): refused with ``not implemented yet``, so that no file can rely
-   on them silently.
+``lineshape=on|off``
+   The Coulomb line-shape factor of the spectator (default ``off``; needs the
+   four kinematics keys), below.
+``ps=``, ``theta=``, ``distortion=``
+   Reserved for later versions (phase space, angular acceptance, distortion):
+   refused with ``not implemented yet``, so that no file can rely on them
+   silently.
 
 Anything else -- an unknown key or nuclide, a malformed value, partial
 kinematics, a segment that does not exist, is not THM, has a fixed norm or is
@@ -437,9 +443,10 @@ profile at fixed R-matrix parameters, not scaled by :math:`\chi^2/\nu`.
 gives the shared :math:`n^*` for each segment. ``AzrModel.thm_experiments()``,
 ``set_thm_experiment(name, segments, background=..., beam=..., target=...,
 spectator=..., Ebeam=...)`` (replaces the record with one line) and
-``clear_thm_experiment(name)`` edit the lines with the engine's rules. The GUI's
-*THM Options* dialog does not edit experiment lines; it keeps them verbatim
-(``tests/gui/thm_options_dialog_test``).
+``clear_thm_experiment(name)`` edit the lines with the engine's rules. In the
+GUI, *Configure > THM Workspace...*, page *Experiments*, edits them
+(:doc:`../user_guide/configure_menu`, "THM Workspace"); keys it does not show,
+such as ``lineshape``, are kept as written.
 
 *Derivatives.* Where the model Jacobian :math:`J_m = \partial m/\partial p`
 is used (MIGRAD's THM gradient, ``pyazr``'s ``residual_jacobian`` and
@@ -465,6 +472,139 @@ differences in ``tests/pyazr/thm_experiment_test.py`` (all six parameters of
 ``tests/18O_p_a_thm``, linear background, rel. :math:`\le 5\times 10^{-6}`)
 and, for the band, in ``tests/thm_band/check.sh``. The band row of a point is
 the derivative of the curve the output shows, :math:`(s J_m + A\dot c)/s`.
+
+Coulomb line shape
+------------------
+
+In :math:`A + a(x+s) \to s + F^*(x+A) \to s + b + B` the spectator :math:`s`
+leaves in the Coulomb field of the resonance :math:`F^*`, and after
+:math:`F^*` has decayed in that of :math:`b` and :math:`B`. Mukhamedzhanov,
+Kadyrov & Pang, EPJA 56 (2020) 233 (arXiv:2007.13331), eqs. (55)-(57), derive
+the resonant THM amplitude with these three-body Coulomb interactions: the
+Breit-Wigner factor :math:`(E_0 - E - i\Gamma/2)^{-1}` becomes the branch
+point :math:`(E_0 - E - i\Gamma/2)^{-1-i\zeta}` times Coulomb factors that do
+not depend on the level,
+
+.. math::
+
+   N_C = \frac{\Gamma(1+i\eta_{bs})\Gamma(1+i\eta_{Bs})}{\Gamma(1+i[\eta_{bs}+\eta_{Bs}])}
+         F(-i\eta_{Bs}, -i\eta_{bs}, 1; -1)\,(-\gamma_{(0)})^{i\eta_{bs}}(-\nu)^{i\eta_{Bs}}
+         \Bigl(E_0 - E - i\frac{\Gamma}{2}\Bigr)^{-i\zeta},
+   \qquad \zeta = \eta_{sb} + \eta_{sB} - \eta_0
+
+(eqs. 56-57; :math:`\eta_{ij} = Z_iZ_j\alpha\mu_{ij}/k_{ij}`, :math:`\eta_0`
+the :math:`s`-:math:`F^*` parameter of the intermediate state), and for a
+narrow level
+
+.. math::
+
+   |N_C|^2 = \frac{\sinh[\pi(\eta_{sb}+\eta_{sB})]}{\sinh(\pi\eta_{sb})\sinh(\pi\eta_{sB})}
+             \frac{\pi\eta_{sb}\eta_{sB}}{\eta_{sb}+\eta_{sB}}
+             \frac{\pi\eta_\zeta}{\sinh(\pi\eta_\zeta)}\,|F|^2\,
+             \exp\Bigl[2\zeta\arctan\frac{2(E_0 - E)}{\Gamma}\Bigr]
+
+(2020 eq. 62 = Mukhamedzhanov, EPJA 58 (2022) 71, eq. 32). Both papers then
+set :math:`|N_C| = 1` in their fits. ``lineshape=on`` on an experiment line
+applies it:
+
+*zeta.* :math:`\eta_{sb}` depends on the direction of :math:`b`, which the
+HOES cross section integrates over; the papers' own tractable limit (2020 p.
+15 case 2, 2022 eq. 34) is :math:`m_B \gg m_s, m_b`, so that
+:math:`k_{sB} \approx k_{sF}`, with :math:`|\eta_{sb}| \ll 1` dropped. AZURE2
+takes that limit:
+
+.. math::
+
+   \zeta(E) = \eta_{sB} - \eta_0
+            = \frac{Z_s\,\alpha\,(Z_B\,\mu_{sB} - Z_F\,\mu_{sF})}{\hbar c\,k_{sF}(E)},
+   \qquad
+   k_{sF} = \frac{\sqrt{2\mu_{sF}E_{sF}}}{\hbar c}, \quad
+   E_{sF} = E_{aA} - B_{xs} - E,
+
+:math:`b` the lighter and :math:`B` the heavier nucleus of the segment's exit
+pair, :math:`F = x + A` (:math:`Z_F = Z_b + Z_B`, :math:`m_F = m_x + m_A` from
+the entrance pair), :math:`E_{aA}` the beam-target c.m. energy (non-
+relativistic, from ``Ebeam`` and the table masses), :math:`B_{xs}` from the
+masses, :math:`E` the :math:`x + A` c.m. energy from its threshold (energy
+conservation in the three-body final state; all energies of the exit channel
+move with :math:`E`, so :math:`E_0 - E_{bB} = E_\lambda - E`). Since
+:math:`Z_B < Z_F`, :math:`\zeta < 0` whenever :math:`\mu_{sB} \approx
+\mu_{sF}`: after :math:`F^*` decays the spectator is repelled by :math:`Z_B`
+only, gains less energy from the field than it would have, and the balance
+goes to :math:`b + B` -- the peaks move *up* in :math:`E` (the
+post-collision-interaction shift of atomic physics, ref. [18] of the 2020
+paper). :math:`\eta_0` is evaluated at the point's :math:`k_{sF}(E)` rather
+than at the pole momentum :math:`k_0`: the two agree at the pole (narrow
+resonance), and it keeps :math:`\zeta` common to all levels at one energy, so
+that the arbitrary energy unit of the complex power is a common phase.
+Taking the :math:`s`-:math:`F` Sommerfeld parameter alone would be
+:math:`\zeta = -\eta_0` (eq. 57 with :math:`\eta_{sb} = \eta_{sB} = 0`,
+no final-state interaction); the final-state :math:`\eta_{sB}` cancels most
+of it, leaving :math:`|\zeta| \approx (Z_b/Z_F)\,\eta_0` (for
+12C(14N,d): 0.18 :math:`\eta_0` into :math:`\alpha + {}^{20}`\ Ne, 0.09
+:math:`\eta_0` into :math:`p + {}^{23}`\ Na).
+
+*Per level, coherently.* Level :math:`\lambda`'s exit amplitude -- the level
+that decays to :math:`b + B` -- is multiplied by
+
+.. math::
+
+   N_{C,\lambda}(E) = e^{\pi\zeta/2}\,
+     \Bigl(E_\lambda - E - i\frac{\Gamma_\lambda}{2}\Bigr)^{-i\zeta}
+     \quad (\text{MeV}), \qquad
+   |N_{C,\lambda}|^2 = \exp\Bigl[2\zeta\arctan\frac{2(E_\lambda - E)}{\Gamma_\lambda}\Bigr],
+
+inside the coherent sum over levels,
+:math:`\sum_\lambda N_{C,\lambda}\gamma_{\lambda c'}\sum_\mu A_{\lambda\mu}v_\mu`
+(``THMMatrixFunc``). For an isolated level the HOES cross section is multiplied
+by eq. (62)'s exponential, normalized to 1 at the pole; the level-independent
+factors of eq. (56) and the prefactor of eq. (62) are smooth in :math:`E` and
+are left to the arbitrary THM normalization. The pole is the level's observed
+energy and total width at the current parameters, Brune (required:
+``lineshape=on`` with the formal parameterization is refused):
+:math:`\Gamma_\lambda = \sum_c 2\gamma_c^2P_c(E_\lambda) /
+(1 + \sum_c\gamma_c^2\,dS_c/dE)` over the open particle channels plus the
+radiative widths, as ``parameters.out`` writes them. The papers derive
+:math:`N_C` for one isolated narrow level. For overlapping levels the poles of
+the level matrix are not exactly the Brune :math:`(E_\lambda, \Gamma_\lambda)`,
+and the factor on the exit index is an approximation; for a broad level
+(:math:`\Gamma \gtrsim` the scale on which :math:`\zeta` varies) the
+narrow-resonance form of eq. (62) is itself an approximation.
+
+*Checks and output.* Every data point must leave :math:`E_{sF} > 0` (refused
+otherwise; a sub-point of a folding grid beyond the limit takes
+:math:`E_{sF} = 1` keV with a ``WARNING``). A neutral spectator gives
+:math:`\zeta = 0` and results identical to ``lineshape=off`` bit for bit.
+``thm_experiments.out`` adds, per line-shape experiment, :math:`E_{sF}`,
+:math:`\eta_0` and, per exit pair, :math:`\zeta` and the size of the neglected
+:math:`\eta_{sb}` (averaged over the :math:`b` direction,
+:math:`\langle 1/|v_s - v_b|\rangle = 1/\max(v_s, v_b)` in the :math:`F^*`
+frame) at the lowest and highest point energy. ``pyazr``:
+``session.thm_lineshape(name, energies)`` returns :math:`E_{sF}`,
+:math:`\eta_0` and, per exit pair, :math:`\zeta`, :math:`\eta_{sb}` and per
+level the pole and :math:`|N_C|^2`; ``AzrModel.set_thm_experiment(...,
+lineshape=True)``. Extrapolation segments (``<segmentsTest>``) are in no
+experiment and carry no line shape. ``tests/thm_lineshape`` and
+``tests/pyazr/thm_lineshape_test.py``.
+
+*Size.* ``tests/18O_p_a_thm`` with a made-up 18O(3He,α15N)d at 115 MeV
+(:math:`E_{sF} \approx 10.4` MeV): :math:`\zeta \approx -0.14`, the peak of the
+0.61 MeV level moves up by 13 keV and the model changes by 0.79-1.44 across
+it -- but the neglected :math:`\eta_{sb} \approx 0.13` is as large as
+:math:`\zeta`. For 2H(18O,α15N)n the spectator is a neutron: :math:`N_C = 1`.
+For 12C(14N,α20Ne / p23Na)d at 30 MeV (Tumino et al. 2018; ``examples/
+c12c12_tumino2018`` at its parameters, the four THM segments one experiment):
+:math:`E_{sF}` = 2.76-0.88 MeV over :math:`E` = 0.82-2.69 MeV,
+:math:`\eta_0` = 1.55-2.74, :math:`\zeta` = -0.28 to -0.49 into
+:math:`\alpha_{0,1}` and -0.13 to -0.24 into :math:`p_{0,1}`; the folded
+model changes by a factor 0.51-3.6 (α) and 0.73-2.0 (p) across the range,
+rising with :math:`E` (most levels lie below a given energy, and above its
+pole a level is raised by up to :math:`e^{\pi|\zeta|}`), the low-energy
+peaks move up by 0-15 keV, and the THM :math:`\chi^2` at the published
+parameters goes from 61 to 479 (shared norm profiled): a fit with
+:math:`N_C` would move the levels. The neglected :math:`\eta_{sb}` is
+0.26-0.29 into the α channels (half of :math:`|\zeta|`) and 0.07-0.10 into
+the p channels: the case-2 limit is marginal for α.
 
 Normalization, gradients and uncertainty bands
 ----------------------------------------------

@@ -88,8 +88,18 @@ P₀e^{2πη} gives 2.85 against on-shell 1.25. A χ² that does not discriminat
   `background=const|linear|quadratic` added to the folded model (e.g. the linear
   background of ApJ 723), both closed-form linear least squares; coefficients and
   covariance in `output/thm_experiments.out` and `session.thm_background(name)`.
-  `AzrModel.set_thm_experiment(...)`; `ps/theta/lineshape/distortion` are reserved
+  `AzrModel.set_thm_experiment(...)`; `ps/theta/distortion` are reserved
   (refused). Details: thm_implementation.rst, "THM experiments".
+- **Coulomb line shape** (charged spectator): `lineshape=on` on the experiment line
+  (needs `beam/target/spectator/Ebeam`, Brune) multiplies each level's exit
+  amplitude, inside the coherent sum, by N_C = e^{πζ/2}(E_λ−E−iΓ_λ/2)^{−iζ},
+  |N_C|² = exp[2ζ arctan(2(E_λ−E)/Γ_λ)] (Mukhamedzhanov 2020 eqs. 56–62), with
+  ζ = η_sB − η_0 = Z_s α(Z_B μ_sB − Z_F μ_sF)/k_sF, E_sF = E_aA − B − E (paper's case 2,
+  η_sb dropped; ζ < 0 → peaks move up). Off by default and 1 for a neutron
+  spectator; published fits assume N_C = 1, so turning it on changes the shape a lot
+  for 12C(14N,d) (ζ ≈ −0.13…−0.49). `session.thm_lineshape(name, E)` gives ζ, E_sF,
+  η_sb (validity: ≪ 1) and |N_C|² per level. Details: thm_implementation.rst,
+  "Coulomb line shape".
 - **Recommended `<thm>` defaults** and why:
   - `entranceL=incoherent`: exact for a 4π-integrated, spin-summed observable. In a
     restricted window the l ≠ l′ cross term survives (7Li 50–70°: +77 % for s = 1,

@@ -158,7 +158,9 @@ selected experiment:
   energy in MeV. The four are a unit: untick the group to write none of them.
   When they are complete, the page shows what AZURE2 prints for them: the
   binding energy B(x+s) of the Trojan horse and the quasi-free energy. The fit
-  does not use them yet.
+  uses them only for the spectator's Coulomb line shape (``lineshape=on``,
+  written in the file; :doc:`../theory/thm_implementation`, "Coulomb line
+  shape").
 
 Keys of an experiment line that the page does not show are kept as written.
 
