@@ -1507,6 +1507,18 @@ complete:
   and 14C(p,n) polarization data, 5 segments each). `tests/polarization_product` was deleted
   with the feature.
 
+- 2026-09-29 -- ENERGY-DEPENDENT CONVOLUTION (`<targetInt>` convolution equation, isConvCoefficients):
+  the equation is evaluated at the CENTRE-OF-MASS energy of each sub-point and its value is
+  used directly as the c.m. sigma (no lab->c.m. scaling, unlike the fixed "Sigma" field which
+  is entered in the lab and converted). So sigma_b(E) must be written as a c.m. width of the
+  c.m. energy; a lab-frame time-of-flight derivation (Cierjacks 16O+n in 13C+a, Morgan 14N+n
+  in 11B+a) is off by the mass ratio (16/17, 14/15) on both axes unless converted. Until
+  this date the +-3 sigma grid window was sized from sigma_b(E_lab) while the integrand used
+  sigma_b(E_cm) -- fixed in EData.cpp (8 sites); on the Cierjacks segment-92 project the
+  narrower window moved the model by <= 1.5e-3 (chi2 247.5 -> 248.9 of 111 points), which
+  is also the size of the +-3 sigma truncation itself. The kernel is renormalized by its own
+  integral over the window, so a constant cross section is always reproduced exactly.
+
 - **A regression reference is not a correctness check.** `tests/run_tests.sh` pins each
   project's chi-squared against a number this code produced, so it catches a change and
   nothing else. `tests/reference/` is the other kind: it recomputes the same quantity from
