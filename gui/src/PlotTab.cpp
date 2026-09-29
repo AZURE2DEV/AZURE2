@@ -58,7 +58,9 @@ bool ChannelFilterProxy::entranceExitAccepts(int source_row, const QModelIndex &
 QVariant SegTestProxyModel::data(const QModelIndex &index, int role) const {
   if (index.isValid() && role == Qt::DisplayRole) {
     QModelIndex sourceIndex = mapToSource(index);
-    return QString("#%1: %2").arg(sourceIndex.row() + 1).arg(static_cast<SegmentsTestModel *>(sourceModel())->getReactionLabel(sourceIndex));
+    // A THM segment's curve is the HOES model in arbitrary units: say so.
+    const bool thm = sourceModel()->data(sourceModel()->index(sourceIndex.row(), 16), Qt::EditRole).toInt() != 0;
+    return QString("#%1: %2%3").arg(sourceIndex.row() + 1).arg(static_cast<SegmentsTestModel *>(sourceModel())->getReactionLabel(sourceIndex)).arg(thm ? " (THM)" : "");
   }
   return QVariant();
 }
@@ -76,7 +78,10 @@ bool SegTestProxyModel::filterAcceptsRow(int source_row, const QModelIndex &sour
 QVariant SegDataProxyModel::data(const QModelIndex &index, int role) const {
   if (index.isValid() && role == Qt::DisplayRole) {
     QModelIndex sourceIndex = mapToSource(index);
-    return QString("#%1: %2").arg(sourceIndex.row() + 1).arg(static_cast<SegmentsDataModel *>(sourceModel())->getReactionLabel(sourceIndex));
+    // A THM segment is plotted as AZURE2 writes it: the data scaled by the
+    // profiled norm next to the model plus the experiment's background.
+    const bool thm = sourceModel()->data(sourceModel()->index(sourceIndex.row(), 24), Qt::EditRole).toInt() != 0;
+    return QString("#%1: %2%3").arg(sourceIndex.row() + 1).arg(static_cast<SegmentsDataModel *>(sourceModel())->getReactionLabel(sourceIndex)).arg(thm ? " (THM)" : "");
   }
   return QVariant();
 }
@@ -528,6 +533,9 @@ QList<PlotEntry *> PlotTab::getDataSegments() {
     if (!segmentDataFile.isEmpty()) {
       newPlotEntry->setLabel(PlotEntry::labelFromFilename(segmentDataFile));
     }
+    sourceIndex = segDataProxyModel->mapToSource(segDataProxyModel->index(indexes[i].row(), 24, QModelIndex()));
+    if (segDataProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toInt() != 0)
+      newPlotEntry->setLabel(newPlotEntry->label() + " (THM)");
     dataSegmentPlotEntries.push_back(newPlotEntry);
   }
   return dataSegmentPlotEntries;
@@ -557,6 +565,9 @@ QList<PlotEntry *> PlotTab::getTestSegments() {
     }
     PlotEntry *newPlotEntry = new PlotEntry(1, entranceKey, exitKey, numPreviousInBlock, filename);
     newPlotEntry->setAllowNonPositive(dataType == 7 || dataType == 8);
+    sourceIndex = segTestProxyModel->mapToSource(segTestProxyModel->index(indexes[i].row(), 16, QModelIndex()));
+    if (segTestProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toInt() != 0)
+      newPlotEntry->setLabel(newPlotEntry->label() + " (THM)");
     testSegmentPlotEntries.push_back(newPlotEntry);
   }
   return testSegmentPlotEntries;
