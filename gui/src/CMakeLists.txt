@@ -97,6 +97,14 @@ if(USE_QWT)
     list(APPEND AZURESETUP_HEADERS ../include/PlotTab.h ../include/AZUREPlot.h)
 endif()
 
+# The Diagnostics page of the THM workspace runs the engine through AZUREAPI;
+# without it the page is not built (as the Plot tab without Qwt).
+if(USE_API)
+    list(APPEND AZURESETUP_SOURCES ThmPlotWidget.cpp ThmDiagnostics.cpp ThmDiagnosticsPage.cpp)
+    list(APPEND AZURESETUP_HEADERS ../include/ThmPlotWidget.h ../include/ThmDiagnostics.h
+                                   ../include/ThmDiagnosticsPage.h)
+endif()
+
 if(USE_MCMC)
     list(APPEND AZURESETUP_SOURCES MCMCTab.cpp AZUREMCMCThread.cpp)
     list(APPEND AZURESETUP_HEADERS ../include/MCMCTab.h ../include/AZUREMCMCThread.h)
@@ -118,7 +126,14 @@ endif()
 target_include_directories(AZURESetup PRIVATE
     ../include
     ${AZURE2_SOURCE_DIR}/include
+    # The THM workspace's diagnostics drive the engine through AZUREAPI, the
+    # library the executable (and pyazr) already link.
+    ${AZURE2_SOURCE_DIR}/api/include
 )
+
+if(USE_API)
+    target_compile_definitions(AZURESetup PUBLIC AZURE2_THM_DIAGNOSTICS)
+endif()
 
 # Platform definitions
 if(APPLE)

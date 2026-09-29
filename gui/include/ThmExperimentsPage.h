@@ -5,9 +5,11 @@
 #include <QStringList>
 #include <QWidget>
 
+#include "ThmExperiment.h"
 #include "ThmSettings.h"
 
 QT_BEGIN_NAMESPACE
+class QCheckBox;
 class QComboBox;
 class QGroupBox;
 class QLabel;
@@ -28,15 +30,18 @@ class SegmentsDataModel;
  * one: its name, its segments (THM data segments with a free norm that no
  * other experiment has), the background, and the optional three-body
  * reaction (beam, target, spectator, lab beam energy -- all four or none),
- * with the binding and quasi-free energies AZURE2 prints for it.  Keys the
- * page does not show are kept as written.
+ * with the binding and quasi-free energies AZURE2 prints for it, and the
+ * Coulomb line shape of the spectator (lineshape=on) with zeta at the ends of
+ * the data.  Keys the page does not show are kept as written.
  */
 class ThmExperimentsPage : public QWidget {
   Q_OBJECT
 
  public:
+  /// `projectDir`: where relative data file names resolve; `brune`: the
+  /// project uses the Brune parameterization (lineshape=on needs it).
   ThmExperimentsPage(const QStringList &experimentLines, SegmentsDataModel *segments, PairsModel *pairs,
-                     QWidget *parent = 0);
+                     const QString &projectDir = QString(), bool brune = true, QWidget *parent = 0);
 
   /// The experiment lines to write (ThmExperimentRecord::compose): the
   /// lines read, verbatim, if nothing changed.
@@ -54,6 +59,14 @@ class ThmExperimentsPage : public QWidget {
       complete kinematics, or "" (and the reason in *error when the engine
       would refuse the reaction, e.g. it does not give the entrance pair). */
   QString derivedInfo(const ThmExperimentRecord &record, QString *error = nullptr) const;
+  /*! For a record with lineshape=on and a complete reaction: zeta of every
+      exit pair at the lowest and highest point energy of its segments (the
+      engine's ThmLineshape on the engine's data reader), or "" and the
+      reason in *error when AZURE2 would refuse it (no Brune, E_sF <= 0). */
+  QString lineshapeInfo(const ThmExperimentRecord &record, QString *error = nullptr) const;
+  /// The lowest and highest c.m. point energy of the given data segments, as
+  /// ESegment::FillData reads them; false if a file cannot be read.
+  bool pointRange(const QList<int> &segments, double &lo, double &hi) const;
 
   /// Editing, as the buttons and the editor do it (for the tests too).
   void addExperiment();
@@ -75,6 +88,7 @@ class ThmExperimentsPage : public QWidget {
   QComboBox *targetCombo;
   QComboBox *spectatorCombo;
   QLineEdit *beamEnergyEdit;
+  QCheckBox *lineshapeCheck;  ///< lineshape=on; enabled with a complete reaction
   QLabel *derivedLabel;
 
  private slots:
@@ -83,8 +97,17 @@ class ThmExperimentsPage : public QWidget {
   void segmentItemChanged(QListWidgetItem *item);
   void backgroundChanged(int index);
   void kinematicsEdited();
+  void lineshapeToggled(bool on);
 
  private:
+  struct Reaction {
+    ThmNuclide beam, target, spectator, horse;
+    int pairKey = 0;
+    double beamEnergy = 0.0, bind = 0.0, exa = 0.0;
+  };
+  /// The reaction of a record with all four keys, as EData::SetupThmExperiments checks it.
+  bool reaction(const ThmExperimentRecord &x, Reaction &out, QString *error) const;
+  void showDerived(const ThmExperimentRecord &r);
   void loadEditor();
   void fillSegmentList();
   void storeSegments(const QList<int> &segments);
@@ -94,6 +117,8 @@ class ThmExperimentsPage : public QWidget {
 
   SegmentsDataModel *segments_;
   PairsModel *pairs_;
+  QString projectDir_;
+  bool brune_;
   QStringList oldLines_;
   QList<ThmExperimentRecord> oldRecords_;
   QList<ThmExperimentRecord> records_;

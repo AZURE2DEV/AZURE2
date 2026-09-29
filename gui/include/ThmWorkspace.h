@@ -13,6 +13,7 @@ QT_END_NAMESPACE
 
 class AZURESetup;
 class ThmChannelsPage;
+class ThmDiagnosticsPage;
 class ThmExperimentsPage;
 class ThmModelPage;
 
@@ -23,7 +24,11 @@ class ThmModelPage;
  *   Model        the options of the <thm> block (ThmModelPage);
  *   Experiments  its experiment[<name>] lines (ThmExperimentsPage);
  *   Channels     the THM columns of the <levels> lines: binding energy B
- *                (field 32) and width input flag (field 33) (ThmChannelsPage).
+ *                (field 32) and width input flag (field 33) (ThmChannelsPage);
+ *   Diagnostics  read-only plots the engine computes on request for one THM
+ *                segment: entrance vertex, HOES and on-shell cross sections,
+ *                line shape, weight (ThmDiagnosticsPage; built with USE_API,
+ *                as the Plot tab is with USE_QWT).
  * It writes nothing else, and nothing at all when its values are left as
  * they were read: such a project saves byte for byte as before.  Without a
  * THM segment the pages are disabled under a short explanation.
@@ -41,12 +46,19 @@ class ThmWorkspace : public QDialog {
   QString validate();
   /// Installs the pages' values into the project (no check; see validate).
   void apply();
+  /*! The project as Accept followed by a save would write it: the <thm> block
+      as the Model and Experiments pages set it, the Channels page's values
+      installed for the time of writing only.  The project is left as it was.
+      False (and the reason) for a project that has no file yet. */
+  bool projectSnapshot(QString &text, QString *error = nullptr);
 
   QLabel *noThmLabel;
   QTabWidget *pages;
   ThmModelPage *modelPage;
   ThmExperimentsPage *experimentsPage;
   ThmChannelsPage *channelsPage;
+  /// Null in a build without the engine API (USE_API=OFF): the page needs it.
+  ThmDiagnosticsPage *diagnosticsPage = nullptr;
   QPushButton *acceptButton;
 
  public slots:

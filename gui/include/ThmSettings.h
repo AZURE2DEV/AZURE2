@@ -87,6 +87,9 @@ struct ThmExperimentRecord {
   QString background = "none";
   bool hasBackgroundKey = false;
   QString beam, target, spectator, beamEnergy;  ///< as written; "" = key absent
+  /// lineshape=on (the Coulomb line shape of the spectator); written only
+  /// when on, since off is the engine's default.
+  bool lineshape = false;
   QStringList extraTokens;   ///< other key=value tokens, verbatim, in order
 
   bool hasKinematics() const {

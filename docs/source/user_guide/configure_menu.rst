@@ -115,10 +115,10 @@ Selecting **THM Workspace...** opens one window for everything that belongs to
 the Trojan Horse (half-off-energy-shell) observable of THM segments
 (observable code 10 or more): the optional ``<thm>`` block and the two THM
 columns of the ``<levels>`` lines. The classic tabs do not show these; they
-are edited here only. The window has three pages, and **Accept** checks them
-with the rules AZURE2 applies at startup (a refusal shows AZURE2's own message
-and the page it concerns) before anything is changed. **Cancel** changes
-nothing.
+are edited here only. The window has three pages that edit and a fourth,
+**Diagnostics**, that only shows. **Accept** checks the pages with the rules
+AZURE2 applies at startup (a refusal shows AZURE2's own message and the page
+it concerns) before anything is changed. **Cancel** changes nothing.
 
 If the project has no THM segment, the window says so and its pages are
 disabled: tick *THM* on a segment in the Segments tab first.
@@ -158,9 +158,21 @@ selected experiment:
   energy in MeV. The four are a unit: untick the group to write none of them.
   When they are complete, the page shows what AZURE2 prints for them: the
   binding energy B(x+s) of the Trojan horse and the quasi-free energy. The fit
-  uses them only for the spectator's Coulomb line shape (``lineshape=on``,
-  written in the file; :doc:`../theory/thm_implementation`, "Coulomb line
-  shape").
+  uses them only for the spectator's Coulomb line shape, below.
+- **Coulomb line shape of the spectator** (``lineshape=on``) -- inside the
+  three-body reaction group, offered once its four fields are filled. The
+  charged spectator leaves in the Coulomb field of the resonance and of its
+  decay products; this skews each resonance and shifts its peak (upwards for
+  the usual sign of :math:`\zeta`). AZURE2 multiplies each level's exit
+  amplitude by :math:`N_C` (Mukhamedzhanov, Kadyrov & Pang, EPJA 56 (2020)
+  233; Mukhamedzhanov, EPJA 58 (2022) 71). It needs the Brune
+  parameterization, and the spectator must keep some energy at the highest
+  data point; the page refuses otherwise, with AZURE2's words. When on, the
+  page shows :math:`\zeta` of every exit pair at the lowest and highest point
+  energy of the experiment's data -- the values AZURE2 writes to
+  ``output/thm_experiments.out``. A neutral spectator gives
+  :math:`\zeta = 0`, i.e. no change. Details:
+  :doc:`../theory/thm_implementation`, "Coulomb line shape".
 
 Keys of an experiment line that the page does not show are kept as written.
 
@@ -178,6 +190,37 @@ Keys of an experiment line that the page does not show are kept as written.
 
 A pair with a binding energy, or a channel with the flag, is listed even if no
 THM segment uses its pair, so that nothing in the file is out of reach.
+
+**Diagnostics** -- read-only plots of one THM data segment, computed by AZURE2
+when **Compute** is pressed (never on an edit), for the parameters in the
+Levels tab and the settings of the other pages as they stand -- including
+changes not yet accepted. The engine runs on a temporary copy of the project,
+in the background, while a busy bar runs; nothing is written into the project
+or its output directory. Choose the segment at the top (its experiment, if
+any, is named in front). If the project or the workspace changes after a
+computation, the page says so; press **Compute** again. The panels share the
+energy axis (the data range of the segment, c.m. of the THM entrance pair) and
+each carries the reaction in bold:
+
+- **Entrance vertex** -- :math:`|M_l(E)|^2` at the quasi-free point, one curve
+  per entrance orbital momentum of the J\ :sup:`π` group chosen above the
+  plot, with the boundary the ``vertex`` option gives; dashed lines mark its
+  nodes. A resonance close to a node is suppressed in the HOES cross section.
+  With ``vertex=onshell`` or the Coulomb term the vertex is complex and has no
+  nodes.
+- **HOES and on-shell** -- the HOES cross section of the segment's channel
+  (without resolution, weight or line shape; its arbitrary scale matched to
+  the other curve) and the ordinary angle-integrated cross section of the same
+  channel, on a logarithmic scale. Where the two differ in shape, the vertex
+  and the kinematic factors are at work.
+- **Line shape** (only for an experiment with the line shape on) --
+  :math:`|N_C|^2` of the levels with a pole near the data (1 at the pole), and
+  :math:`\zeta(E)` of the segment's exit pair.
+- **Weight** (only when the segment has a weight table) -- :math:`w(E)` as the
+  engine interpolates the table.
+
+The page needs a build with the engine API (``USE_API=ON``, the default),
+as the Plot tab needs Qwt.
 
 Each control has a tooltip with the physics in one line; the full description
 is in :doc:`../theory/thm_implementation`. Options left at their defaults are

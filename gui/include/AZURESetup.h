@@ -117,6 +117,10 @@ class AZURESetup : public QMainWindow {
   const QStringList &thmOptionsLines() const { return thmBlockLines; }
   /// Directory of the project file, against which relative paths resolve.
   QString projectDirectory();
+  /*! The project as a save writes it, into `out`, with paths as they would
+      be written in `directory`; writeFile is this plus the file and the
+      window title.  The THM workspace's diagnostics run the engine on it. */
+  bool writeProject(QTextStream &out, const QString &directory);
 
  public slots:
   void SaveAndRun();

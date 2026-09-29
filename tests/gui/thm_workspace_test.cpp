@@ -15,7 +15,15 @@
 //  6. Channels page: B and the RWA flag edited there are written on the
 //     <levels> lines, exactly, and come back on reopening;
 //  7. the engine runs the GUI's experiment block and prints the binding and
-//     quasi-free energies the page shows.
+//     quasi-free energies the page shows;
+//  8. the Coulomb line shape switch: offered only with a complete reaction,
+//     written as lineshape=on, read back, refused without Brune; zeta at the
+//     ends of the data as the engine prints it (charged spectator);
+//  9. the Diagnostics page (builds with the engine API): the snapshot it runs
+//     is what Accept + save would write and leaves the project untouched; the
+//     engine's curves are finite, the vertex nodes are where the engine's
+//     ThmFormFactor changes sign, the line shape and weight panels appear
+//     with their options, Compute runs off the GUI thread.
 //
 // Runs without a display; the CMake target passes QT_QPA_PLATFORM=offscreen.
 
@@ -28,6 +36,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPixmap>
 #include <QProcess>
 #include <QPushButton>
 #include <QRadioButton>
@@ -49,6 +58,17 @@
 #include "ThmExperimentsPage.h"
 #include "ThmModelPage.h"
 #include "ThmWorkspace.h"
+#include "Constants.h"
+#include "ThmFunc.h"
+#include "ThmLineshape.h"
+#ifdef AZURE2_THM_DIAGNOSTICS
+#include <QEventLoop>
+#include <QProgressBar>
+#include <QTimer>
+#include "ThmDiagnosticsPage.h"
+#include "ThmPlotWidget.h"
+#endif
+#include <cmath>
 struct SegPairs {int firstPair; int secondPair;};
 
 // Defined by AZURE2.cpp, which belongs to the executable rather than the GUI
@@ -151,6 +171,15 @@ int main(int argc, char** argv) {
     ok("records merged by name", r.size() == 2 && r[0].name == "A" && r[1].name == "B");
     ok("segment ranges expanded", r.size() == 2 && r[0].segments == (QList<int>() << 1 << 2 << 3));
     ok("unshown key kept aside", r.size() == 2 && r[1].extraTokens == QStringList("ps=3"));
+    QList<ThmExperimentRecord> ls = ThmExperimentRecord::read(QStringList() << "experiment[C] segments=1 lineshape=on"
+                                                                            << "experiment[D] segments=2 lineshape=off");
+    ok("lineshape read as a field", ls.size() == 2 && ls[0].lineshape && !ls[1].lineshape && ls[0].extraTokens.isEmpty() &&
+                                        ls[1].extraTokens.isEmpty());
+    QList<ThmExperimentRecord> lsOff = ls;
+    lsOff[0].lineshape = false;
+    ok("lineshape off is not written (the default)",
+       ThmExperimentRecord::compose(QStringList() << "experiment[C] segments=1 lineshape=on", ls.mid(0, 1),
+                                    lsOff.mid(0, 1)) == QStringList("experiment[C] segments=1"));
     ok("unchanged records: lines verbatim", ThmExperimentRecord::compose(lines, r, r) == lines);
     QList<ThmExperimentRecord> e = r;
     e[1].background = "linear";
@@ -211,7 +240,12 @@ int main(int argc, char** argv) {
     ThmWorkspace ws(&w, s);
     ok("no THM: pages disabled", !ws.hasThmSegments() && !ws.pages->isEnabled() && !ws.acceptButton->isEnabled());
     ok("no THM: explanation shown", ws.noThmLabel->isVisibleTo(&ws) && ws.noThmLabel->text().contains("no THM"));
-    ok("no THM: three pages, no diagnostics page", ws.pages->count() == 3);
+#ifdef AZURE2_THM_DIAGNOSTICS
+    ok("no THM: four pages, the diagnostics page disabled with the others",
+       ws.pages->count() == 4 && ws.diagnosticsPage && !ws.diagnosticsPage->isEnabled());
+#else
+    ok("no THM: three pages (no engine API: no diagnostics page)", ws.pages->count() == 3 && !ws.diagnosticsPage);
+#endif
     ws.accept();
     w.saveProject();
     ok("no THM: byte-identical save", slurp(path) == before);
@@ -384,30 +418,78 @@ int main(int argc, char** argv) {
     ok("experiments removed", blockOf(slurp(fourPath)) == "# runs\nvertex=onshell\n", blockOf(slurp(fourPath)));
   }
   {
-    // A key the engine knows and the page does not show is kept as written
-    // (only where the engine linked here knows one: lineshape, a later stage).
-    std::vector<ThmExperiment> x;
-    const bool known =
-        ParseThmExperimentLine("experiment[L] segments=1 beam=7Li target=d spectator=n Ebeam=19 lineshape=on", x).empty();
-    if(known) {
-      const QString block = "experiment[L] segments=1 lineshape=on beam=7Li target=d spectator=n Ebeam=19\n";
-      spit(fourPath, four + "<thm>\n" + block + "</thm>\n");
-      w.open(fourPath);
-      ThmSettings s;
-      QString err;
-      ok("future key: block opens", w.thmSettings(s, &err), err);
-      ThmWorkspace ws(&w, s);
-      ws.experimentsPage->backgroundCombo->setCurrentText("const");
-      ws.accept();
-      w.saveProject();
-      ok("future key kept through an edit",
-         blockOf(slurp(fourPath)) ==
-             "experiment[L] segments=1 background=const beam=7Li target=d spectator=n Ebeam=19 lineshape=on\n",
-         blockOf(slurp(fourPath)));
-    } else {
-      std::cout << "  skip  future key through the workspace (the linked engine knows no key the page hides)"
-                << std::endl;
-    }
+    // lineshape=on as written is shown by the switch and kept through an edit.
+    const QString block = "experiment[L] segments=1 lineshape=on beam=7Li target=d spectator=n Ebeam=60\n";
+    spit(fourPath, four + "<thm>\n" + block + "</thm>\n");
+    w.open(fourPath);
+    ThmSettings s;
+    QString err;
+    ok("lineshape: block opens", w.thmSettings(s, &err), err);
+    ThmWorkspace ws(&w, s);
+    ok("lineshape: switch on, enabled", ws.experimentsPage->lineshapeCheck->isChecked() &&
+                                            ws.experimentsPage->lineshapeCheck->isEnabled());
+    ok("lineshape: zeta shown (neutral spectator: 0)",
+       ws.experimentsPage->derivedLabel->text().contains(QString::fromUtf8("\u03b6 = 0 \u2026 0 into")),
+       ws.experimentsPage->derivedLabel->text());
+    ws.experimentsPage->backgroundCombo->setCurrentText("const");
+    ws.accept();
+    w.saveProject();
+    ok("lineshape kept through an edit",
+       blockOf(slurp(fourPath)) ==
+           "experiment[L] segments=1 background=const beam=7Li target=d spectator=n Ebeam=60 lineshape=on\n",
+       blockOf(slurp(fourPath)));
+  }
+  {
+    // The switch: offered only with a complete reaction, written, read back,
+    // dropped with the reaction.
+    spit(fourPath, four);
+    w.open(fourPath);
+    ThmSettings s;
+    w.thmSettings(s);
+    ThmWorkspace ws(&w, s);
+    ThmExperimentsPage* p = ws.experimentsPage;
+    p->addExperiment();
+    segmentItem(p->segmentList, 1)->setCheckState(Qt::Checked);
+    ok("lineshape: disabled without the reaction", !p->lineshapeCheck->isEnabled());
+    p->kinematicsBox->setChecked(true);
+    p->beamCombo->setEditText("7Li");
+    p->targetCombo->setEditText("d");
+    p->spectatorCombo->setEditText("n");
+    ok("lineshape: disabled with an incomplete reaction", !p->lineshapeCheck->isEnabled());
+    p->beamEnergyEdit->setText("60");
+    emit p->beamEnergyEdit->textEdited("60");
+    ok("lineshape: enabled with the complete reaction", p->lineshapeCheck->isEnabled() && !p->lineshapeCheck->isChecked());
+    p->lineshapeCheck->setChecked(true);
+    ok("lineshape: in the record", p->records().at(0).lineshape);
+    ok("lineshape: accepted", ws.validate().isEmpty(), ws.validate());
+    ws.accept();
+    w.saveProject();
+    ok("lineshape: written", blockOf(slurp(fourPath)) ==
+                                 "experiment[E1] segments=1 beam=7Li target=d spectator=n Ebeam=60 lineshape=on\n",
+       blockOf(slurp(fourPath)));
+    ThmSettings s2;
+    w.thmSettings(s2);
+    ThmWorkspace again(&w, s2);
+    ok("lineshape: read back", again.experimentsPage->lineshapeCheck->isChecked());
+    again.experimentsPage->kinematicsBox->setChecked(false);
+    ok("lineshape: dropped with the reaction", !again.experimentsPage->records().at(0).lineshape &&
+                                                   !again.experimentsPage->lineshapeCheck->isChecked());
+    again.accept();
+    w.saveProject();
+    ok("lineshape: removed", blockOf(slurp(fourPath)) == "experiment[E1] segments=1\n", blockOf(slurp(fourPath)));
+
+    // Without Brune the engine refuses the line shape; the page says so.
+    ThmExperimentsPage noBrune(QStringList() << "experiment[E1] segments=1 beam=7Li target=d spectator=n Ebeam=60 lineshape=on",
+                               w.getSegmentsTab()->getSegmentsDataModel(), w.getPairsTab()->getPairsModel(),
+                               w.projectDirectory(), false);
+    ok("lineshape: refused without Brune", noBrune.check().contains("needs the Brune parameterization"),
+       noBrune.check());
+    // E_sF <= 0 at the highest point: refused with the engine's words.
+    ThmExperimentsPage low(QStringList() << "experiment[E1] segments=1 beam=3He target=7Li spectator=d Ebeam=8 lineshape=on",
+                           w.getSegmentsTab()->getSegmentsDataModel(), w.getPairsTab()->getPairsModel(),
+                           w.projectDirectory(), true);
+    ok("lineshape: refused when the spectator has no energy left", low.check().contains("has no energy left"),
+       low.check());
   }
 
   // 6. Channels page.
@@ -516,6 +598,198 @@ int main(int argc, char** argv) {
              shown.contains("E_qf = E(x+A) - B = " + rx.cap(3) + " MeV"),
          shown + " | " + rx.cap(0));
   }
+
+  // 8. zeta at the ends of the data, charged spectator: 7Li(p,a) via
+  //    3He(7Li, a a)d -- made up, the proton carried by 3He = p + d.
+  const QString lsBlock = "experiment[E1] segments=1 beam=3He target=7Li spectator=d Ebeam=20 lineshape=on\n";
+  const QString lsPath = work.filePath("lineshape.azr");
+  spit(lsPath, plain + "<thm>\n" + lsBlock + "</thm>\n");
+  {
+    w.open(lsPath);
+    ThmSettings s;
+    QString err;
+    ok("charged spectator: block opens", w.thmSettings(s, &err), err);
+    ThmWorkspace ws(&w, s);
+    ThmExperimentsPage* p = ws.experimentsPage;
+    const QString shown = p->derivedLabel->text();
+    // THM_EXPERIMENTS_PNG=<file>: keep a rendering of the page, to look at it.
+    if(qEnvironmentVariableIsSet("THM_EXPERIMENTS_PNG")) {
+      ws.resize(760, 720);
+      ws.pages->setCurrentWidget(p);
+      QPixmap shot(ws.size());
+      ws.render(&shot);
+      shot.save(qEnvironmentVariable("THM_EXPERIMENTS_PNG"));
+    }
+    double lo = 0, hi = 0;
+    ok("charged spectator: data range read", p->pointRange(QList<int>() << 1, lo, hi) && hi > lo);
+    int code = -1;
+    const QString out = engineRun(work.path(), "lineshape.azr", &code);
+    ok("charged spectator: engine accepts", code == 0, out.right(400));
+    const QString report = slurp(work.filePath("output/thm_experiments.out"));
+    QRegExp rowE("\\nE\\s+([-+0-9.eE]+)\\s+([-+0-9.eE]+)"), rowZ("zeta\\[\\d+\\]\\s+([-+0-9.eE]+)\\s+([-+0-9.eE]+)");
+    const bool haveE = rowE.indexIn(report) >= 0, haveZ = rowZ.indexIn(report) >= 0;
+    ok("charged spectator: engine reports E and zeta", haveE && haveZ, report.right(600));
+    if(haveE && haveZ) {
+      ok("data range = the engine's lowest/highest point",
+         std::fabs(lo - rowE.cap(1).toDouble()) < 1e-5 * std::fabs(lo) &&
+             std::fabs(hi - rowE.cap(2).toDouble()) < 1e-5 * std::fabs(hi),
+         QString("%1 %2 | %3").arg(lo).arg(hi).arg(rowE.cap(0)));
+      const QString z = QString::fromUtf8("\u03b6 = %1 \u2026 %2 into")
+                            .arg(QString::number(rowZ.cap(1).toDouble(), 'g', 3), QString::number(rowZ.cap(2).toDouble(), 'g', 3));
+      ok("page shows the engine's zeta at the ends", shown.contains(z) && rowZ.cap(1).toDouble() < 0.0,
+         shown + " | " + rowZ.cap(0));
+    }
+  }
+
+#ifdef AZURE2_THM_DIAGNOSTICS
+  // 9. Diagnostics page.
+  {
+    // A weight ramp on segment 1 as well.
+    spit(work.filePath("ramp.dat"), "0.0 1.0\n1.0 4.0\n8.0 40.0\n");
+    const QString diagPath = work.filePath("diag.azr");
+    spit(diagPath, plain + "<thm>\n" + lsBlock + "weight[1]=ramp.dat\n</thm>\n");
+    w.open(diagPath);
+    w.saveProject();
+    const QString saved = slurp(diagPath);
+    ThmSettings s;
+    QString err;
+    ok("diagnostics: block opens", w.thmSettings(s, &err), err);
+    ThmWorkspace ws(&w, s);
+    ThmDiagnosticsPage* d = ws.diagnosticsPage;
+    ok("diagnostics: page, one THM segment offered", d && d->segmentCombo->count() == 1 &&
+                                                        d->segmentCombo->currentText().startsWith("experiment E1: segment 1"),
+       d ? d->segmentCombo->currentText() : QString());
+
+    // The snapshot is Accept + save, and leaves the project as it was.
+    QLineEdit* b = qobject_cast<QLineEdit*>(ws.channelsPage->pairTable->cellWidget(0, 3));
+    b->setText("2.3");
+    ws.modelPage->kinematicsCombo->setCurrentText("triple");
+    QString snap;
+    ok("snapshot written", ws.projectSnapshot(snap, &err), err);
+    w.saveProject();
+    ok("snapshot leaves the project untouched", slurp(diagPath) == saved);
+    ThmSettings s2;
+    w.thmSettings(s2);
+    {
+      ThmWorkspace copy(&w, s2);
+      qobject_cast<QLineEdit*>(copy.channelsPage->pairTable->cellWidget(0, 3))->setText("2.3");
+      copy.modelPage->kinematicsCombo->setCurrentText("triple");
+      copy.accept();
+    }
+    w.saveProject();
+    ok("snapshot = the file Accept + save writes", snap == slurp(diagPath));
+    spit(diagPath, saved);  // back to the original project
+    w.open(diagPath);
+  }
+  {
+    const QString diagPath = work.filePath("diag.azr");
+    ThmSettings s;
+    w.thmSettings(s);
+    ThmWorkspace ws(&w, s);
+    ThmDiagnosticsPage* d = ws.diagnosticsPage;
+    ok("diagnostics: computed", d->computeNow(), d->result().error);
+    const ThmDiagnosticsResult& r = d->result();
+    auto finite = [](const QVector<double>& v, bool positive) {
+      if(v.isEmpty()) return false;
+      for(double x : v)
+        if(!std::isfinite(x) || (positive && x < 0.0)) return false;
+      return true;
+    };
+    ok("diagnostics: grid over the data", r.energy.size() == 201 && std::fabs(r.energy.first() - r.eLo) < 1e-12 &&
+                                              std::fabs(r.energy.last() - r.eHi) < 1e-9);
+    bool vertexOk = !r.vertex.isEmpty();
+    int nodes = 0;
+    for(const ThmDiagnosticsResult::VertexGroup& g : r.vertex)
+      for(const ThmDiagnosticsCurve& c : g.curves) {
+        vertexOk = vertexOk && c.y.size() == r.energy.size() && finite(c.y, true);
+        nodes += c.nodes.size();
+      }
+    ok("diagnostics: vertex curves finite", vertexOk && r.vertexMode == "constant" && !r.vertexComplex);
+    ok("diagnostics: HOES and on-shell finite, positive somewhere",
+       finite(r.hoes, true) && finite(r.onShell, true) && *std::max_element(r.hoes.begin(), r.hoes.end()) > 0.0 &&
+           *std::max_element(r.onShell.begin(), r.onShell.end()) > 0.0);
+    bool lsOk = r.lineshape && finite(r.zeta, false) && r.zeta.first() < 0.0 && !r.nc2.isEmpty();
+    for(const ThmDiagnosticsCurve& c : r.nc2) lsOk = lsOk && finite(c.y, true);
+    ok("diagnostics: line shape finite, zeta < 0 (Z_B < Z_F)", lsOk);
+    // |N_C|^2 is the engine's factor at the level's pole and width.
+    bool ncOk = !r.nc2.isEmpty();
+    for(const ThmDiagnosticsCurve& c : r.nc2)
+      for(int i = 0; i < r.energy.size(); i += 50)
+        ncOk = ncOk && std::fabs(c.y[i] - ThmLineshapeFactorSq(r.zeta[i], c.pole - r.energy[i], c.width)) <= 1e-12 * c.y[i];
+    ok("diagnostics: |N_C|^2 = exp[2 zeta arctan(2 (E_l - E)/G_l)]", ncOk);
+    // The weight: the engine's log-linear interpolation of the table.
+    bool wOk = r.weight.size() == r.energy.size();
+    for(int i = 0; wOk && i < r.energy.size(); i += 40) {
+      const double e = r.energy[i];
+      const double expect = e <= 1.0 ? std::exp(std::log(4.0) * e) : 4.0 * std::exp(std::log(10.0) * (e - 1.0) / 7.0);
+      wOk = std::fabs(r.weight[i] - expect) < 1e-9 * expect;
+    }
+    ok("diagnostics: weight = the table, log-linear", wOk);
+
+    // Nodes: where the engine's own M_l changes sign.
+    const QList<PairsData> pairList = w.getPairsTab()->getPairsModel()->getPairs();
+    const PairsData& pr = pairList.at(4);
+    const double mu = pr.lightM * pr.heavyM / (pr.lightM + pr.heavyM) * uconv;
+    bool nodesOk = true;
+    int engineNodes = 0;
+    for(const ThmDiagnosticsResult::VertexGroup& g : r.vertex)
+      for(const ThmDiagnosticsCurve& c : g.curves) {
+        const int l = c.label.mid(4).toInt();
+        auto M = [&](double e) { return ThmFormFactor(l, c.boundary, mu, e, pr.bindingEnergy, pr.channelRadius); };
+        for(double e : c.nodes) {
+          nodesOk = nodesOk && M(e - 1e-6) * M(e + 1e-6) < 0.0;
+          std::cout << "        node of " << g.jpi.toStdString() << ", " << c.label.toStdString() << ": E = " << e
+                    << " MeV (B_c = " << c.boundary << ")" << std::endl;
+        }
+        for(int i = 1; i < 4000; i++) {
+          const double e0 = r.eLo + (r.eHi - r.eLo) * (i - 1) / 3999.0, e1 = r.eLo + (r.eHi - r.eLo) * i / 3999.0;
+          if(M(e0) * M(e1) < 0.0) engineNodes++;
+        }
+      }
+    ok("diagnostics: vertex nodes where the engine's M_l changes sign", nodesOk && nodes == engineNodes,
+       QString("%1 nodes, engine %2").arg(nodes).arg(engineNodes));
+    std::cout << "        (" << nodes << " vertex node(s) in " << r.vertex.size() << " J^pi group(s))" << std::endl;
+
+    // The panels.
+    ok("diagnostics: vertex panel", d->vertexGroupCombo->count() == r.vertex.size() &&
+                                        d->vertexPlot->series().size() == r.vertex[0].curves.size() &&
+                                        !d->vertexPlot->title().isEmpty());
+    int markers = 0;
+    for(const ThmDiagnosticsCurve& c : r.vertex[0].curves) markers += c.nodes.size();
+    ok("diagnostics: nodes marked", d->vertexPlot->markers().size() == markers);
+    ok("diagnostics: HOES panel, log scale, two curves", d->hoesPlot->logY() && d->hoesPlot->series().size() == 2);
+    ok("diagnostics: line shape panels shown", d->lineshapePlot->isVisibleTo(d) && d->zetaPlot->isVisibleTo(d) &&
+                                                   d->lineshapePlot->series().size() == r.nc2.size());
+    ok("diagnostics: weight panel shown", d->weightPlot->isVisibleTo(d) && d->weightPlot->series().size() == 1);
+    QPixmap shot(d->size().expandedTo(QSize(900, 800)));
+    d->resize(shot.size());
+    d->render(&shot);  // paints every panel once
+    ok("diagnostics: page paints", !shot.isNull());
+    // THM_DIAGNOSTICS_PNG=<file>: keep the rendering, to look at it.
+    if(qEnvironmentVariableIsSet("THM_DIAGNOSTICS_PNG")) shot.save(qEnvironmentVariable("THM_DIAGNOSTICS_PNG"));
+
+    // Off the GUI thread, with the busy bar.
+    ThmSettings s3;
+    spit(diagPath, plain + "<thm>\nexperiment[E1] segments=1\n</thm>\n");
+    w.open(diagPath);
+    w.thmSettings(s3);
+    ThmWorkspace ws3(&w, s3);
+    ThmDiagnosticsPage* d3 = ws3.diagnosticsPage;
+    QEventLoop loop;
+    QObject::connect(d3, &ThmDiagnosticsPage::computed, &loop, &QEventLoop::quit);
+    QTimer::singleShot(300000, &loop, &QEventLoop::quit);
+    d3->compute();
+    const bool wasBusy = d3->busy() && d3->busyBar->isVisibleTo(d3) && !d3->computeButton->isEnabled();
+    loop.exec();
+    ok("diagnostics: Compute runs in a thread with the busy bar", wasBusy);
+    ok("diagnostics: thread result", !d3->busy() && d3->result().error.isEmpty() && !d3->busyBar->isVisibleTo(d3) &&
+                                         d3->computeButton->isEnabled(),
+       d3->result().error);
+    ok("diagnostics: no line shape, no weight: panels hidden",
+       !d3->result().lineshape && d3->result().weight.isEmpty() && !d3->lineshapePlot->isVisibleTo(d3) &&
+           !d3->weightPlot->isVisibleTo(d3));
+  }
+#endif
 
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;
   return fails ? 1 : 0;

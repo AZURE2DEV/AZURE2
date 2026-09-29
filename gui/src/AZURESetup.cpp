@@ -738,6 +738,18 @@ bool AZURESetup::writeFile(QString filename) {
   QString directory = info.absolutePath();
 
   QTextStream out(&file);
+  if (!this->writeProject(out, directory)) return false;
+
+  GetConfig().configfile = QDir::fromNativeSeparators(info.absoluteFilePath()).toStdString();
+  setWindowTitle(QString("AZURE2 -- %1").arg(QString::fromStdString(GetConfig().configfile)));
+  QDir::setCurrent(directory);
+
+  out.flush();
+  file.close();
+  return true;
+}
+
+bool AZURESetup::writeProject(QTextStream &out, const QString &directory) {
   out << "<config>" << Qt::endl;
   if (!this->writeConfig(out, directory)) return false;
   out << "</config>" << Qt::endl;
@@ -784,13 +796,6 @@ bool AZURESetup::writeFile(QString filename) {
 #ifdef USE_MCMC
   if (!mcmcTab->writeMCMCSettings(out)) return false;
 #endif
-
-  GetConfig().configfile = QDir::fromNativeSeparators(info.absoluteFilePath()).toStdString();
-  setWindowTitle(QString("AZURE2 -- %1").arg(QString::fromStdString(GetConfig().configfile)));
-  QDir::setCurrent(directory);
-
-  out.flush();
-  file.close();
   return true;
 }
 

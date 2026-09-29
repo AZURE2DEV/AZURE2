@@ -1,6 +1,10 @@
 #include "ThmExperimentsPage.h"
 
+#include <QCheckBox>
 #include <QComboBox>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -16,11 +20,14 @@
 #include <QVBoxLayout>
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 #include <sstream>
 
 #include "PairsModel.h"
 #include "SegmentsDataModel.h"
+#include "DataLine.h"
 #include "ThmExperiment.h"
+#include "ThmLineshape.h"
 
 namespace {
 
@@ -57,10 +64,12 @@ QStringList ThmExperimentsPage::nuclideNames() {
 }
 
 ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, SegmentsDataModel *segments,
-                                       PairsModel *pairs, QWidget *parent) :
+                                       PairsModel *pairs, const QString &projectDir, bool brune, QWidget *parent) :
   QWidget(parent),
   segments_(segments),
   pairs_(pairs),
+  projectDir_(projectDir),
+  brune_(brune),
   oldLines_(experimentLines) {
   oldRecords_ = ThmExperimentRecord::read(experimentLines);
   records_ = oldRecords_;
@@ -125,10 +134,17 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   beamEnergyEdit = new QLineEdit;
   beamEnergyEdit->setToolTip(tr("Ebeam=: the lab beam energy, MeV (> 0)."));
   connect(beamEnergyEdit, SIGNAL(textEdited(const QString &)), this, SLOT(kinematicsEdited()));
+  lineshapeCheck = new QCheckBox(tr("Coulomb line shape of the spectator"));
+  lineshapeCheck->setToolTip(
+      tr("lineshape=on: the final-state Coulomb interaction of the charged spectator with the resonance and its "
+         "decay products skews and shifts each resonance (the factor N_C per level, inside the coherent level sum; "
+         "Mukhamedzhanov, Kadyrov & Pang, EPJA 56 (2020) 233; Mukhamedzhanov, EPJA 58 (2022) 71). Needs the "
+         "three-body reaction and the Brune parameterization. zeta is shown at the ends of the data."));
+  connect(lineshapeCheck, SIGNAL(toggled(bool)), this, SLOT(lineshapeToggled(bool)));
   derivedLabel = new QLabel;
   derivedLabel->setWordWrap(true);
   derivedLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-  derivedLabel->setMinimumHeight(2 * derivedLabel->fontMetrics().lineSpacing());  // two lines, always
+  derivedLabel->setMinimumHeight(3 * derivedLabel->fontMetrics().lineSpacing());  // three lines, always
 
   kinematicsBox = new QGroupBox(tr("Three-body reaction"));
   kinematicsBox->setCheckable(true);
@@ -136,7 +152,7 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   kinematicsBox->setToolTip(
       tr("beam, target, spectator and Ebeam go together (all four or none). One of beam and target must be a "
          "nucleus of the segments' entrance pair and the other the second nucleus plus the spectator. AZURE2 "
-         "reports B(x+s) and the quasi-free energy; the fit does not use them yet."));
+         "reports B(x+s) and the quasi-free energy; the Coulomb line shape uses them."));
   connect(kinematicsBox, SIGNAL(toggled(bool)), this, SLOT(kinematicsEdited()));
   QGridLayout *kl = new QGridLayout;
   kl->addWidget(new QLabel(tr("Beam:")), 0, 0, Qt::AlignRight);
@@ -147,7 +163,8 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   kl->addWidget(spectatorCombo, 1, 1);
   kl->addWidget(new QLabel(tr("Beam energy (lab, MeV):")), 1, 2, Qt::AlignRight);
   kl->addWidget(beamEnergyEdit, 1, 3);
-  kl->addWidget(derivedLabel, 2, 0, 1, 4);
+  kl->addWidget(lineshapeCheck, 2, 0, 1, 4);
+  kl->addWidget(derivedLabel, 3, 0, 1, 4);
   kl->setColumnStretch(1, 1);
   kl->setColumnStretch(3, 1);
   kinematicsBox->setLayout(kl);
@@ -194,7 +211,8 @@ void ThmExperimentsPage::refreshRow(int row) {
   if (r.hasKinematics())
     reaction = tr("%1 + %2 at %3 MeV, spectator %4")
                    .arg(r.beam.isEmpty() ? "?" : r.beam, r.target.isEmpty() ? "?" : r.target,
-                        r.beamEnergy.isEmpty() ? "?" : r.beamEnergy, r.spectator.isEmpty() ? "?" : r.spectator);
+                        r.beamEnergy.isEmpty() ? "?" : r.beamEnergy, r.spectator.isEmpty() ? "?" : r.spectator) +
+               (r.lineshape ? tr(", line shape") : QString());
   const QString cells[4] = {r.name, ThmExperimentRecord::segmentsListText(r.segments), r.background, reaction};
   for (int c = 0; c < 4; c++) {
     QTableWidgetItem *item = experimentTable->item(row, c);
@@ -320,9 +338,16 @@ void ThmExperimentsPage::loadEditor() {
   targetCombo->setEditText(r.target);
   spectatorCombo->setEditText(r.spectator);
   beamEnergyEdit->setText(r.beamEnergy);
-  QString why, info = derivedInfo(r, &why);
-  derivedLabel->setText(!info.isEmpty() ? info : why);
+  lineshapeCheck->setChecked(r.lineshape);
+  lineshapeCheck->setEnabled(!r.beam.isEmpty() && !r.target.isEmpty() && !r.spectator.isEmpty() &&
+                             !r.beamEnergy.isEmpty());
+  showDerived(r);
   loading_ = false;
+}
+
+void ThmExperimentsPage::showDerived(const ThmExperimentRecord &r) {
+  QString why, info = derivedInfo(r, &why);
+  derivedLabel->setText(info.isEmpty() ? why : why.isEmpty() ? info : info + "\n" + why);
 }
 
 void ThmExperimentsPage::nameEdited(const QString &text) {
@@ -346,8 +371,7 @@ void ThmExperimentsPage::storeSegments(const QList<int> &segments) {
   if (!ThmExperimentRecord::expandSegments(r.segmentsText, written) || written != sorted) r.segmentsText.clear();
   r.segments = sorted;
   refreshRow(current_);
-  QString why, info = derivedInfo(r, &why);
-  derivedLabel->setText(!info.isEmpty() ? info : why);
+  showDerived(r);
 }
 
 void ThmExperimentsPage::segmentItemChanged(QListWidgetItem *) {
@@ -372,29 +396,45 @@ void ThmExperimentsPage::kinematicsEdited() {
   r.target = on ? targetCombo->currentText().trimmed() : QString();
   r.spectator = on ? spectatorCombo->currentText().trimmed() : QString();
   r.beamEnergy = on ? beamEnergyEdit->text().trimmed() : QString();
+  // The line shape needs the reaction: offered once all four keys are given,
+  // and dropped with them.
+  lineshapeCheck->setEnabled(on && !r.beam.isEmpty() && !r.target.isEmpty() && !r.spectator.isEmpty() &&
+                             !r.beamEnergy.isEmpty());
+  if (!on && lineshapeCheck->isChecked()) {
+    lineshapeCheck->blockSignals(true);
+    lineshapeCheck->setChecked(false);
+    lineshapeCheck->blockSignals(false);
+  }
+  r.lineshape = on && lineshapeCheck->isChecked();
   refreshRow(current_);
-  QString why, info = derivedInfo(r, &why);
-  derivedLabel->setText(!info.isEmpty() ? info : why);
+  showDerived(r);
+}
+
+void ThmExperimentsPage::lineshapeToggled(bool on) {
+  if (loading_ || current_ < 0) return;
+  records_[current_].lineshape = on && kinematicsBox->isChecked();
+  refreshRow(current_);
+  showDerived(records_.at(current_));
 }
 
 // ---------------------------------------------------------------------------
 // The engine's rules
 
-QString ThmExperimentsPage::derivedInfo(const ThmExperimentRecord &x, QString *error) const {
+bool ThmExperimentsPage::reaction(const ThmExperimentRecord &x, Reaction &out, QString *error) const {
   if (error) error->clear();
-  if (x.beam.isEmpty() || x.target.isEmpty() || x.spectator.isEmpty() || x.beamEnergy.isEmpty()) return QString();
+  if (x.beam.isEmpty() || x.target.isEmpty() || x.spectator.isEmpty() || x.beamEnergy.isEmpty()) return false;
   ThmNuclide b, t, sp;
   std::string why;
   if (!(why = ThmNuclide::Parse(x.beam.toStdString(), b)).empty() ||
       !(why = ThmNuclide::Parse(x.target.toStdString(), t)).empty() ||
       !(why = ThmNuclide::Parse(x.spectator.toStdString(), sp)).empty()) {
     if (error) *error = QString::fromStdString(why);
-    return QString();
+    return false;
   }
   double ebeam;
   if (!readWholeDouble(x.beamEnergy, ebeam) || !(ebeam > 0.0)) {
     if (error) *error = tr("Ebeam='%1': expected the lab beam energy in MeV, > 0").arg(x.beamEnergy);
-    return QString();
+    return false;
   }
   // The entrance pair x + A of the segments in use (EData::SetupThmExperiments).
   const QList<SegmentsDataData> lines = segments_->getLines();
@@ -408,10 +448,10 @@ QString ThmExperimentsPage::derivedInfo(const ThmExperimentRecord &x, QString *e
     else if (e != pairKey) {
       if (error)
         *error = tr("beam/target/spectator describe one reaction, but its segments have different entrance pairs.");
-      return QString();
+      return false;
     }
   }
-  if (pairKey < 1 || pairKey > pairs.size()) return QString();  // nothing to compare with yet
+  if (pairKey < 1 || pairKey > pairs.size()) return false;  // nothing to compare with yet
   const PairsData &pair = pairs.at(pairKey - 1);
   const int Z[2] = {pair.lightZ, pair.heavyZ};
   const int A[2] = {(int)std::lround(pair.lightM), (int)std::lround(pair.heavyM)};
@@ -437,19 +477,121 @@ QString ThmExperimentsPage::derivedInfo(const ThmExperimentRecord &x, QString *e
                    .arg(A[0])
                    .arg(Z[1])
                    .arg(A[1]);
-    return QString();
+    return false;
   }
   const ThmNuclide &th = horse == 0 ? b : t, &nA = horse == 0 ? t : b;
   const ThmNuclide *tabX = ThmNuclide::Find(th.Z - sp.Z, th.A - sp.A);
   const double mX = tabX ? tabX->mass : M[1 - other];
   const double mA = nA.mass;
-  const double bind = (mX + sp.mass - th.mass) * kAmu;
-  const double exa = horse == 0 ? ebeam * mX / th.mass * mA / (mX + mA) : ebeam * mX / (mA + mX);
-  return tr("B(x+s) = %3 MeV (Trojan horse %1 = x + %2)\nquasi-free E(x+A) = %4 MeV, E_qf = E(x+A) - B = %5 MeV")
-      .arg(QString::fromStdString(th.name), QString::fromStdString(sp.name))
-      .arg(QString::number(bind, 'g', 6))
-      .arg(QString::number(exa, 'g', 6))
-      .arg(QString::number(exa - bind, 'g', 6));
+  out.beam = b;
+  out.target = t;
+  out.spectator = sp;
+  out.horse = th;
+  out.pairKey = pairKey;
+  out.beamEnergy = ebeam;
+  out.bind = (mX + sp.mass - th.mass) * kAmu;
+  out.exa = horse == 0 ? ebeam * mX / th.mass * mA / (mX + mA) : ebeam * mX / (mA + mX);
+  return true;
+}
+
+QString ThmExperimentsPage::derivedInfo(const ThmExperimentRecord &x, QString *error) const {
+  Reaction r;
+  if (!reaction(x, r, error)) return QString();
+  QString text =
+      tr("B(x+s) = %3 MeV (Trojan horse %1 = x + %2)\nquasi-free E(x+A) = %4 MeV, E_qf = E(x+A) - B = %5 MeV")
+          .arg(QString::fromStdString(r.horse.name), QString::fromStdString(r.spectator.name))
+          .arg(QString::number(r.bind, 'g', 6))
+          .arg(QString::number(r.exa, 'g', 6))
+          .arg(QString::number(r.exa - r.bind, 'g', 6));
+  if (x.lineshape) {
+    const QString shape = lineshapeInfo(x, error);
+    if (!shape.isEmpty()) text += "\n" + shape;
+  }
+  return text;
+}
+
+bool ThmExperimentsPage::pointRange(const QList<int> &segments, double &lo, double &hi) const {
+  // The c.m. energies of the points AZURE2 reads (ESegment::FillData): rows
+  // of the data file inside the segment's lab energy range (and angle range
+  // if differential), converted with the entrance pair's masses.
+  const QList<SegmentsDataData> lines = segments_->getLines();
+  const QList<PairsData> pairs = pairs_->getPairs();
+  lo = 1.0e300;
+  hi = -1.0e300;
+  for (int k : segments) {
+    if (k < 1 || k > lines.size() || !lines.at(k - 1).isActive) continue;
+    const SegmentsDataData &s = lines.at(k - 1);
+    if (s.entrancePairIndex < 1 || s.entrancePairIndex > pairs.size()) return false;
+    const PairsData &pair = pairs.at(s.entrancePairIndex - 1);
+    const double factor = pair.heavyM / (pair.lightM + pair.heavyM);
+    const bool differential = s.dataType == 1 || s.dataType == 4 || s.dataType == 7 || s.dataType == 8;
+    QString path = s.dataFile;
+    if (QFileInfo(path).isRelative()) path = QDir(projectDir_).filePath(path);
+    std::ifstream in(QFile::encodeName(path).constData());
+    if (!in) return false;
+    while (true) {
+      DataLine line(in);
+      if (line.atEnd()) break;
+      if (!line.valid()) return false;
+      if (line.energy() < s.lowEnergy || line.energy() > s.highEnergy) continue;
+      if (differential && (line.angle() < s.lowAngle || line.angle() > s.highAngle)) continue;
+      lo = std::min(lo, line.energy() * factor);
+      hi = std::max(hi, line.energy() * factor);
+    }
+  }
+  return lo <= hi;
+}
+
+QString ThmExperimentsPage::lineshapeInfo(const ThmExperimentRecord &x, QString *error) const {
+  Reaction r;
+  if (!reaction(x, r, error)) return QString();
+  if (!brune_) {
+    if (error)
+      *error = tr("lineshape=on uses the observed level energies and widths as the resonance poles; it needs the "
+                  "Brune parameterization.");
+    return QString();
+  }
+  const QList<PairsData> pairs = pairs_->getPairs();
+  const PairsData &entrance = pairs.at(r.pairKey - 1);
+  ThmLineshape shape;  // as EData::BuildThmGroups sets it up
+  shape.Zs = r.spectator.Z;
+  shape.ms = r.spectator.mass;
+  shape.ZF = entrance.lightZ + entrance.heavyZ;
+  shape.mF = entrance.lightM + entrance.heavyM;
+  shape.eAA = r.beamEnergy * r.target.mass / (r.beam.mass + r.target.mass);
+  shape.bind = r.bind;
+  double lo, hi;
+  if (!pointRange(x.segments, lo, hi)) return QString();  // the engine reports an unreadable file itself
+  if (!(shape.EsF(hi) > 0.0)) {
+    if (error)
+      *error = tr("lineshape=on: at E = %1 MeV the spectator has no energy left (E_sF = E_aA - B - E = %2 - %3 - "
+                  "%1 MeV <= 0); check Ebeam.")
+                   .arg(QString::number(hi, 'g', 6), QString::number(shape.eAA, 'g', 6),
+                        QString::number(shape.bind, 'g', 6));
+    return QString();
+  }
+  // zeta per exit pair of the segments, at the lowest and highest point energy.
+  const QList<SegmentsDataData> lines = segments_->getLines();
+  QList<int> exits;
+  QStringList parts;
+  for (int k : x.segments) {
+    if (k < 1 || k > lines.size() || !lines.at(k - 1).isActive) continue;
+    const int key = lines.at(k - 1).exitPairIndex;
+    if (exits.contains(key) || key < 1 || key > pairs.size()) continue;
+    exits << key;
+    const PairsData &p = pairs.at(key - 1);
+    const bool lightFirst = p.lightM <= p.heavyM;
+    const int ZB = lightFirst ? p.heavyZ : p.lightZ;
+    const double mB = lightFirst ? p.heavyM : p.lightM;
+    parts << tr("%1 into %2")
+                 .arg(QString::fromUtf8("%1 \u2026 %2")
+                          .arg(QString::number(shape.Zeta(lo, ZB, mB), 'g', 3),
+                               QString::number(shape.Zeta(hi, ZB, mB), 'g', 3)),
+                      plain(pairs_->getParticleLabel(p, 0)) + "+" + plain(pairs_->getParticleLabel(p, 1)));
+  }
+  return QString::fromUtf8("\u03b6 = ") + parts.join("; ") +
+         tr(" at E = %1 \u2026 %2 MeV (the ends of the data)")
+             .arg(QString::number(lo, 'g', 4), QString::number(hi, 'g', 4));
 }
 
 QString ThmExperimentsPage::check() const {
