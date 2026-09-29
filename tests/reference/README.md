@@ -96,3 +96,21 @@ rho ~ 1-4, checked against mpmath.)
 It also checks that E <= 0 gives a real result and that C_l is continuous
 through threshold (E = +-1e-4 MeV against the E = 0 limit). `-v` prints every
 value and the time per call (~0.05-1 ms).
+
+## thm_distortion_test
+
+The THM distortion factor (`src/ThmDistortion.cpp`,
+docs/source/theory/thm_implementation.rst, "Distortion factor R(E)"): the
+zero-range DWBA amplitude M = <χ⁻_sF φ_sx χ⁺_aA(βr)> and its plane-wave limit.
+`thm_distortion_reference.py` evaluates both independently -- mpmath's
+Coulomb functions and adaptive quadrature for point Coulomb, scipy's DOP853
+with mpmath matching for a complex Woods-Saxon potential -- and prints the
+table hard-coded in the test (a few minutes; the 18O(3He,d) cases need
+l ≈ 80 and take longest).
+
+What it checks: |M|² and M_PW for 12C(14N,d) at 30 MeV (forward, 90° with a
+Yukawa tail, a 3 fm cutoff, a Woods-Saxon in both channels) and a made-up
+18O(3He,d) at 115 MeV with the Trojan horse as target (forward and 60°);
+plane waves in both channels against 4π/(κ² + q²) (R ≡ 1); an optical
+potential with the nuclear part off against point Coulomb; the interpolated
+weight against R between the grid nodes.

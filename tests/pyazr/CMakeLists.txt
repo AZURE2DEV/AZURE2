@@ -92,3 +92,10 @@ add_test(NAME pyazr_thm_spectator_window
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_spectator_window_test.py)
 set_tests_properties(pyazr_thm_spectator_window PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Distortion factor R(E) of a THM experiment (experiment[...] distortion=...):
+# AzrModel, CLI == pyazr, thm_distortion against mpmath, model ratio, a table.
+add_test(NAME pyazr_thm_distortion
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_distortion_test.py)
+set_tests_properties(pyazr_thm_distortion PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
