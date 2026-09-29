@@ -493,6 +493,16 @@ Rules that will bite you:
   width the GUI shows. Seed a new channel with a small nonzero value (fits from
   exactly 0 have zero gradient) and set `fixed=False` to free it.
 - Levels are renumbered (`levelID`) automatically on every edit.
+- **Deactivating or removing a level renumbers every later R-matrix parameter
+  name** (`energy_<n>`, `width_<n>_<c>` count *active* levels), exactly like
+  removing a `<segmentsData>` row renumbers the segment names. A `param.sav`
+  written before the edit then puts every later value on the wrong level, with
+  no error. Remap it: list the parameters before and after (pyazr
+  `[p.name for p in m.parameters if p.kind in ("energy", "width")]` on both
+  `.azr` files), drop the removed level's names, pair the rest by ordinal, and
+  check each pair's value is identical before trusting the mapping (11B+alpha,
+  2026-09-26: the 7/2- level off took 279 names to 271; `energy_31` then named
+  the next level).
 
 **Removing a level: file-level vs runtime.** Two different tools:
 
@@ -1204,6 +1214,15 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
 - `<parameterSettings>` — free/fixed, limits, nuisance, category, Minuit index.
 - `<mcmc>` — walkers, steps, threads.
 
+  **The same key collision reaches the parameter file.** A mode-3 run given a
+  fit's `param.sav` applies `segment_<k>_energy_shift` (and `_norm`) of *data*
+  segment k to *test* segment k, because parameters are matched by name. Seen
+  2026-09-27: an (a,n) Legendre-coefficient test segment at key 15 came out
+  5.8 keV (lab) high -- data segment 15's fitted shift. For extrapolations,
+  pass a parameter file with every `segment_*` line removed (the R-matrix
+  parameters are all a test segment needs), or check the output energy grid
+  against the requested one.
+
 ## Data file format (`.dat`)
 
 Four whitespace-delimited columns, **lab frame, forward kinematics**:
@@ -1224,6 +1243,18 @@ and its **angle column is centre-of-mass**, not lab.
   quickest scalar check that a run succeeded.**
 - `param.par` initial / `param.sav` best-fit formal params (reload as the
   external parameter file); `parameters.out` physical/observable params.
+- `param.fit` is rewritten while MINUIT runs, but **its R-matrix entries stay at
+  the starting values** (its third column is 10 % of each value, a step size,
+  for fixed parameters too); only the segment norms/shifts in it are current.
+  It cannot be used to restart a fit whose levels were free: a restart built
+  from it (2026-09-29) started at 290,000 instead of the killed run's 26,646.
+  To save a long fit from a crash, restart from a *finished* fit's `param.sav`
+  or from the interim `parameters.out` (physical values, baked into `<levels>`
+  and verified with a mode-1 run). Taking only the `segment_*` lines from
+  `param.fit` is fine (used for a norms-only stage-1 fit handing over to stage 2).
+- **A missing `checks/` directory stops a CLI run before it starts**
+  ("Could not find checks directory: checks/"); the job still ends normally and
+  writes no output. Create it in every new run directory.
 - `normalizations.out` — fitted segment norms (auto-loaded with `param.sav`).
 - `param.errors`, `covariance_matrix.out` — MINOS (mode 4).
 - `reactionrates.dat` (mode 5); `samples.mcmc` (mode 6).
