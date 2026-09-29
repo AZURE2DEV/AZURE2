@@ -69,6 +69,7 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   is_phase_ = parent->IsPhase();
   is_thm_ = parent->IsTHM();
   thm_weight_ = parent->GetThmWeight();
+  thm_lineshape_ = parent->GetThmLineshape();
   is_ang_dist_ = parent->IsAngularDist();
   max_ang_dist_order_ = parent->GetMaxAngDistOrder();
   j_value_ = parent->GetJ();
@@ -115,6 +116,7 @@ EPoint::EPoint(double angle, double energy, ESegment *parent) {
   is_phase_ = parent->IsPhase();
   is_thm_ = parent->IsTHM();
   thm_weight_ = parent->GetThmWeight();
+  thm_lineshape_ = parent->GetThmLineshape();
   is_ang_dist_ = parent->IsAngularDist();
   max_ang_dist_order_ = parent->GetMaxAngDistOrder();
   j_value_ = parent->GetJ();
@@ -1862,6 +1864,12 @@ void EPoint::ClearLocalMappedPoints() {
 
 void EPoint::SetTargetEffectNum(int targetEffectNum) {
   targetEffectNum_ = targetEffectNum;
+}
+
+/// Sets the line shape of the point and of its sub-points.
+void EPoint::SetThmLineshape(const ThmLineshape *l) {
+  thm_lineshape_ = l;
+  for (EPoint &sub : integrationPoints_) sub.thm_lineshape_ = l;
 }
 
 /*!

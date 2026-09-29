@@ -152,7 +152,7 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
     if (eq == std::string::npos || eq == 0 || eq + 1 == token.size())
       return where + "'" + token + "' is not key=value";
     std::string key = token.substr(0, eq), value = token.substr(eq + 1);
-    if (key == "ps" || key == "theta" || key == "lineshape" || key == "distortion")
+    if (key == "ps" || key == "theta" || key == "distortion")
       return where + "key '" + key + "' is reserved for a later version (not implemented yet)";
     if (std::find(work.keys.begin(), work.keys.end(), key) != work.keys.end())
       return where + "key '" + key + "' is given twice";
@@ -173,8 +173,15 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
     } else if (key == "Ebeam") {
       if (!ReadWholeDouble(value, work.beamEnergy) || !(work.beamEnergy > 0.0))
         why = "Ebeam='" + value + "': expected the lab beam energy in MeV, > 0";
+    } else if (key == "lineshape") {
+      if (value == "on")
+        work.lineshape = true;
+      else if (value == "off")
+        work.lineshape = false;
+      else
+        why = "lineshape='" + value + "': expected on or off";
     } else {
-      why = "unknown key '" + key + "' (keys: segments, background, beam, target, spectator, Ebeam)";
+      why = "unknown key '" + key + "' (keys: segments, background, beam, target, spectator, Ebeam, lineshape)";
     }
     if (!why.empty()) return where + why;
     work.keys.push_back(key);
@@ -195,6 +202,8 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
     if (!has("segments")) return where + "segments= is required";
     int kin = has("beam") + has("target") + has("spectator") + has("Ebeam");
     if (kin != 0 && kin != 4) return where + "beam, target, spectator and Ebeam go together (all four or none)";
+    if (x.lineshape && kin != 4)
+      return where + "lineshape=on needs the kinematics of the reaction: beam, target, spectator and Ebeam";
     for (int k : x.segments) {
       auto it = owner.find(k);
       if (it != owner.end()) {

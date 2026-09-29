@@ -5,6 +5,8 @@
 #include "TargetEffect.h"
 #include "EDataIterator.h"
 #include "ThmExperiment.h"
+#include "ThmLineshape.h"
+#include <memory>
 #include <deque>
 #include <ios>
 
@@ -117,6 +119,8 @@ class EData {
     /// ESegment::ProfileNormChiSquared, which then handles it.
     bool trivial = false;
     ThmProfile profile;         ///< the last profile (ProfileThmGroup)
+    /// Coulomb line shape (lineshape=on), or null; shared with its segments.
+    std::shared_ptr<const ThmLineshape> lineshape;
   };
   int NumThmGroups() const { return (int)thmGroups_.size(); }
   const ThmGroup &GetThmGroup(int g) const { return thmGroups_[g]; }
@@ -141,6 +145,16 @@ class EData {
   double ThmBackgroundAt(int i, double energy);
   /// Profile of every experiment, trivial ones included, for the output and pyazr.
   std::vector<ThmExperimentReport> ThmExperimentReports();
+  /*!
+   * The Coulomb line shape of THM experiment `name` (lineshape=on) at the
+   * c.m. energies `energies` (MeV, x + A) and the current fit parameters of
+   * `compound`: E_sF, eta_0, and per exit pair of its segments zeta, the
+   * eta_sb estimate and, per level of the J groups coupling entrance and
+   * exit, the pole and |N_C|^2.  False (and `why`) if there is no such
+   * experiment or it has no line shape.
+   */
+  bool ThmLineshapeTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
+                         const Config &configure, ThmLineshapeReport &out, std::string &why);
   TargetEffect *GetTargetEffect(int);
   EDataIterator begin();
   EDataIterator end();

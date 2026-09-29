@@ -1,5 +1,6 @@
 #include "AZUREOutput.h"
 #include "CNuc.h"
+#include "PPair.h"
 #include "Config.h"
 #include "CovarianceBand.h"
 #include "EData.h"
@@ -3003,6 +3004,62 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
           << th.name << " = x + " << sp.name << ", B(x+s) = " << bind << " MeV; quasi-free E(x+A) = " << exa
           << " MeV, E_qf = E(x+A) - B = " << exa - bind << " MeV.";
         configure.outStream << k.str() << std::endl;
+
+        if (x.lineshape) {
+          // Coulomb line shape of the spectator (ThmLineshape.h).  The level
+          // energies and widths it uses are the observed ones of Brune.
+          if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
+            configure.outStream << where << "lineshape=on uses the observed level energies and widths "
+                                   "as the resonance poles; it needs the Brune parameterization."
+                                << std::endl;
+            return -1;
+          }
+          std::shared_ptr<ThmLineshape> shape = std::make_shared<ThmLineshape>();
+          shape->experiment = x.name;
+          shape->spectator = sp.name;
+          shape->Zs = sp.Z;
+          shape->ms = sp.mass;
+          shape->ZF = pair->GetZ(1) + pair->GetZ(2);
+          shape->mF = pair->GetM(1) + pair->GetM(2);
+          shape->eAA = x.beamEnergy * t.mass / (b.mass + t.mass);
+          shape->bind = bind;
+          // Every data point must leave the spectator some energy.
+          double eMax = -1.0e300;
+          for (int s : group.segments)
+            for (int p = 1; p <= GetSegment(s)->NumPoints(); p++)
+              eMax = std::max(eMax, GetSegment(s)->GetPoint(p)->GetCMEnergy());
+          if (!(shape->EsF(eMax) > 0.0)) {
+            configure.outStream << where << "lineshape=on: at E = " << eMax
+                                << " MeV the spectator has no energy left (E_sF = E_aA - B - E = "
+                                << shape->eAA << " - " << bind << " - " << eMax << " MeV <= 0); check Ebeam."
+                                << std::endl;
+            return -1;
+          }
+          std::ostringstream l;
+          l.precision(6);
+          l << "  Coulomb line shape on: E_sF = E_aA - B - E with E_aA = " << shape->eAA << " MeV, eta_0 = "
+            << shape->Eta0(eMax) << " at the highest point energy (E = " << eMax << " MeV)"
+            << (sp.Z == 0 ? "; the spectator is neutral, so N_C = 1." : ".");
+          configure.outStream << l.str() << std::endl;
+          for (int s : group.segments) {
+            int key = GetSegment(s)->GetExitKey();
+            bool seen = false;
+            for (const ThmLineshape::Exit &e : shape->exits) seen = seen || e.pairKey == key;
+            if (seen || !theCNuc->IsPairKey(key)) continue;
+            PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(key));
+            int light = exitPair->GetM(1) <= exitPair->GetM(2) ? 1 : 2;
+            ThmLineshape::Exit e;
+            e.pairKey = key;
+            e.Zb = exitPair->GetZ(light);
+            e.ZB = exitPair->GetZ(3 - light);
+            e.mb = exitPair->GetM(light);
+            e.mB = exitPair->GetM(3 - light);
+            e.q = pair->GetSepE() + pair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
+            shape->exits.push_back(e);
+          }
+          group.lineshape = shape;
+          for (int s : group.segments) GetSegment(s)->SetThmLineshape(shape);
+        }
       }
     }
     thmGroups_.push_back(group);
@@ -3156,5 +3213,109 @@ void EData::WriteThmExperiments(const Config &configure) {
       for (int j = 0; j < q; j++) out << std::setw(18) << r.covariance[i * 4 + j];
       out << "\n";
     }
+    // Coulomb line shape (lineshape=on): the ranges over the experiment's points.
+    for (const ThmGroup &group : thmGroups_) {
+      if (group.name != r.name || !group.lineshape) continue;
+      const ThmLineshape &ls = *group.lineshape;
+      double eLo = 1.0e300, eHi = -1.0e300;
+      for (int s : group.segments)
+        for (int p = 1; p <= GetSegment(s)->NumPoints(); p++) {
+          eLo = std::min(eLo, GetSegment(s)->GetPoint(p)->GetCMEnergy());
+          eHi = std::max(eHi, GetSegment(s)->GetPoint(p)->GetCMEnergy());
+        }
+      out << "lineshape: on (spectator " << ls.spectator << ", Z_s = " << ls.Zs << ", Z_F = " << ls.ZF
+          << "; E_aA = " << ls.eAA << " MeV, B = " << ls.bind << " MeV)\n"
+          << "# |N_C|^2 = exp[2 zeta arctan(2 (E_lambda - E)/Gamma_lambda)] per level, zeta = eta_sB - eta_0\n"
+          << "# (Mukhamedzhanov et al. EPJA 56 (2020) 233 eqs. 56-62, case 2: m_B >> m_s, m_b, eta_sb\n"
+          << "# neglected); zeta < 0 moves the peaks up in E.  eta_sb is the neglected s-b term, averaged\n"
+          << "# over the b direction: the approximation assumes |eta_sb| << 1.  Rows: the value at the\n"
+          << "# lowest and at the highest point energy E (MeV); [k] is the exit pair key.\n";
+      auto row = [&](const char *name, double a, double b) {
+        out << std::left << std::setw(16) << name << std::right << std::setw(18) << a << std::setw(18) << b << "\n";
+      };
+      row("E", eLo, eHi);
+      row("E_sF", ls.EsF(eLo), ls.EsF(eHi));
+      row("eta_0", ls.Eta0(eLo), ls.Eta0(eHi));
+      for (const ThmLineshape::Exit &e : ls.exits) {
+        std::ostringstream key;
+        key << "zeta[" << e.pairKey << "]";
+        row(key.str().c_str(), ls.Zeta(eLo, e.ZB, e.mB), ls.Zeta(eHi, e.ZB, e.mB));
+        key.str("");
+        key << "eta_sb[" << e.pairKey << "]";
+        row(key.str().c_str(), ls.EtaSbEstimate(eLo, eLo + e.q, e.Zb, e.mb, e.mB),
+            ls.EtaSbEstimate(eHi, eHi + e.q, e.Zb, e.mb, e.mB));
+      }
+    }
   }
+}
+
+bool EData::ThmLineshapeTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
+                              const Config &configure, ThmLineshapeReport &out, std::string &why) {
+  const ThmGroup *group = nullptr;
+  for (const ThmGroup &g : thmGroups_)
+    if (g.name == name) group = &g;
+  if (!group) {
+    why = "no THM experiment '" + name + "' in use";
+    return false;
+  }
+  if (!group->lineshape) {
+    why = "THM experiment '" + name + "' has no line shape (lineshape=on)";
+    return false;
+  }
+  const ThmLineshape &ls = *group->lineshape;
+  out = ThmLineshapeReport();
+  out.experiment = name;
+  out.spectator = ls.spectator;
+  out.Zs = ls.Zs;
+  out.ZF = ls.ZF;
+  out.eAA = ls.eAA;
+  out.bind = ls.bind;
+  out.energy = energies;
+  for (double e : energies) {
+    out.esf.push_back(ls.EsF(e));
+    out.eta0.push_back(ls.Eta0(e));
+  }
+  int entranceKey = GetSegment(group->segments[0])->GetEntranceKey();
+  int aa = compound->GetPairNumFromKey(entranceKey);
+  PPair *entrance = compound->GetPair(aa);
+  double threshold = entrance->GetSepE() + entrance->GetExE();
+  for (const ThmLineshape::Exit &x : ls.exits) {
+    ThmLineshapeReport::Exit ex;
+    ex.pairKey = x.pairKey;
+    ex.Zb = x.Zb;
+    ex.ZB = x.ZB;
+    ex.mb = x.mb;
+    ex.mB = x.mB;
+    for (double e : energies) {
+      ex.zeta.push_back(ls.Zeta(e, x.ZB, x.mB));
+      ex.etaSb.push_back(ls.EtaSbEstimate(e, e + x.q, x.Zb, x.mb, x.mB));
+    }
+    int exitNum = compound->GetPairNumFromKey(x.pairKey);
+    for (int j = 1; j <= compound->NumJGroups(); j++) {
+      JGroup *jg = compound->GetJGroup(j);
+      if (!jg->IsInRMatrix()) continue;
+      bool in = false, outCh = false;
+      for (int ch = 1; ch <= jg->NumChannels(); ch++) {
+        in = in || jg->GetChannel(ch)->GetPairNum() == aa;
+        outCh = outCh || jg->GetChannel(ch)->GetPairNum() == exitNum;
+      }
+      if (!in || !outCh) continue;
+      for (int la = 1; la <= jg->NumLevels(); la++) {
+        ALevel *level = jg->GetLevel(la);
+        if (!level->IsInRMatrix()) continue;
+        ThmLineshapeReport::Level lv;
+        lv.jgroup = j;
+        lv.level = la;
+        lv.J = jg->GetJ();
+        lv.pi = jg->GetPi();
+        lv.energy = level->GetFitE() - threshold;
+        lv.width = ThmLevelWidth(compound, jg, level, configure);
+        for (size_t k = 0; k < energies.size(); k++)
+          lv.nc2.push_back(ThmLineshapeFactorSq(ex.zeta[k], lv.energy - energies[k], lv.width));
+        ex.levels.push_back(lv);
+      }
+    }
+    out.exits.push_back(ex);
+  }
+  return true;
 }

@@ -29,6 +29,7 @@ class TargetEffect;
 class DataLine;
 class Config;
 struct ThmWeightTable;
+struct ThmLineshape;
 
 /// How a target-effect point's sub-point grid was built.
 
@@ -79,6 +80,10 @@ class EPoint {
   /// Weight table multiplying the THM model cross section (<thm> weight[k]=),
   /// or null.  Owned by the parent ESegment.
   const ThmWeightTable *GetThmWeight() const { return thm_weight_; }
+  /// Coulomb line shape of the point's THM experiment (lineshape=on), or
+  /// null.  Owned by the parent ESegment.
+  const ThmLineshape *GetThmLineshape() const { return thm_lineshape_; }
+  void SetThmLineshape(const ThmLineshape *l);
   /// Is this point calculated by another? Points at equal energies are mapped onto one so the energy-dependent work is done once.
   bool IsMapped() const;
   /// Does the point carry target effects?
@@ -330,6 +335,7 @@ class EPoint {
   bool is_phase_;
   bool is_thm_;
   const ThmWeightTable *thm_weight_ = nullptr;
+  const ThmLineshape *thm_lineshape_ = nullptr;
   bool is_mapped_;
   bool is_ang_dist_;
   bool is_analyzing_power_ = false;

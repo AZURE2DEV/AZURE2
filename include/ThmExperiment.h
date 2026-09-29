@@ -40,6 +40,9 @@ struct ThmExperiment {
   bool hasKinematics = false;
   ThmNuclide beam, target, spectator;
   double beamEnergy = 0.0;  ///< lab MeV
+  /// Coulomb line-shape factor N_C of the spectator (`lineshape=on`,
+  /// ThmLineshape.h); needs the kinematics.  Off by default.
+  bool lineshape = false;
   /// Keys given so far (a key may not be repeated).
   std::vector<std::string> keys;
   static const char *BackgroundName(int terms);
@@ -49,13 +52,13 @@ struct ThmExperiment {
  * Parses one `experiment[<name>] key=value ...` line (comment already
  * stripped, trimmed) into `experiments`, merging with an earlier line of the
  * same name.  Returns "" or what is wrong.  Keys: segments (required),
- * background, beam, target, spectator, Ebeam; ps, theta, lineshape and
- * distortion are reserved and refused ("not implemented yet").
+ * background, beam, target, spectator, Ebeam, lineshape (on|off); ps, theta
+ * and distortion are reserved and refused ("not implemented yet").
  */
 std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExperiment> &experiments);
 
 /// Checks the complete set once the block is read: segments given, kinematics
-/// all-or-none, no segment in two experiments.  "" or what is wrong.
+/// all-or-none, lineshape=on only with them, no segment in two experiments.  "" or what is wrong.
 std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments);
 
 /*!

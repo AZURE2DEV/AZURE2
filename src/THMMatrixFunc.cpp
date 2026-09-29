@@ -10,6 +10,7 @@
 #include "ChannelFunc.h"
 #include "CoulFunc.h"
 #include "ShftFunc.h"
+#include "ThmLineshape.h"
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -85,6 +86,21 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
     }
   }
 
+  // Coulomb line shape of the spectator (<thm> experiment[...] lineshape=on,
+  // ThmLineshape.h): the exit amplitude of level lambda -- the level that
+  // decays to b + B -- carries N_C(zeta, E_lambda - E, Gamma_lambda), inside
+  // the coherent level sum.  zeta depends on the energy and the exit pair only.
+  const ThmLineshape *lineshape = point->GetThmLineshape();
+  double zeta = 0.0;
+  if (lineshape) {
+    int light = exitPair->GetM(1) <= exitPair->GetM(2) ? 1 : 2;
+    zeta = lineshape->Zeta(point->GetCMEnergy(), exitPair->GetZ(3 - light), exitPair->GetM(3 - light));
+    if (!(lineshape->EsF(point->GetCMEnergy()) > 0.0) && !lineshape->warned.exchange(true))
+      configure().outStream << "WARNING: <thm> experiment[" << lineshape->experiment << "] lineshape: at E = "
+                            << point->GetCMEnergy() << " MeV the spectator has no energy left (E_sF <= 0); "
+                            << "E_sF = 1 keV is used there (reported once)." << std::endl;
+  }
+
   double sigma = 0.0;
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
     JGroup *jg = compound()->GetJGroup(j);
@@ -157,6 +173,19 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
     }
     if (!hasEntrance) continue;  // this J group does not couple the entrance pair
 
+    // N_C of each level (lineshape=on); the pole is the observed energy and
+    // total width of the level (Brune).
+    std::vector<complex> nc;
+    if (lineshape) {
+      nc.assign(numLevels + 1, complex(1.0, 0.0));
+      for (int la = 1; la <= numLevels; la++) {
+        ALevel *level = jg->GetLevel(la);
+        if (!level->IsInRMatrix()) continue;
+        nc[la] = ThmLineshapeFactor(zeta, level->GetFitE() - inEnergy,
+                                    ThmLevelWidth(compound(), jg, level, configure()));
+      }
+    }
+
     // Exit channels (incoherent), each with sqrt(2 P) folded in as 2 P outside.
     for (int ch = 1; ch <= numChannels; ch++) {
       AChannel *c = jg->GetChannel(ch);
@@ -174,6 +203,14 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
           if (!jg->GetLevel(la)->IsInRMatrix()) continue;
           double gEx = jg->GetLevel(la)->GetFitGamma(ch);
           if (std::fabs(gEx) < 1.0e-12) continue;
+          if (lineshape) {
+            complex gExC = gEx * nc[la];
+            for (int lap = 1; lap <= numLevels; lap++) {
+              if (!jg->GetLevel(lap)->IsInRMatrix()) continue;
+              amp += gExC * this->GetAMatrixElement(j, act[la], act[lap]) * vertex[lap];
+            }
+            continue;
+          }
           for (int lap = 1; lap <= numLevels; lap++) {
             if (!jg->GetLevel(lap)->IsInRMatrix()) continue;
             amp += gEx * this->GetAMatrixElement(j, act[la], act[lap]) * vertex[lap];
