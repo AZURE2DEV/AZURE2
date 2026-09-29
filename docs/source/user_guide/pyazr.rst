@@ -194,7 +194,11 @@ zero-range DWBA distortion factor :math:`R(E)`, with ``opticalAA``,
 ``opticalSF``, ``spectatorAngle``, ``distortionRef``, ``distortionRatio`` and
 ``boundState``, and ``thm_distortion(name, energies)`` returns :math:`R`, the
 interpolated :math:`R` the model uses, :math:`|M|^2`, :math:`|M_\mathrm{PW}|^2`,
-:math:`E_{sF}`, :math:`\eta_{sF}` and the spectator angle). Every edit keeps the rest of the file
+:math:`E_{sF}`, :math:`\eta_{sF}` and the spectator angle;
+``set_thm_experiment(..., theta="50-70")`` (or ``theta=(50, 70)``) turns the
+model into the fixed-angle observable, :math:`d\sigma/d\Omega` of the exit
+pair averaged over that c.m. window, and residuals, Jacobian and output files
+follow). Every edit keeps the rest of the file
 byte for byte, including whether it ends with a newline.
 
 To snapshot a fit, prefer :meth:`~pyazr.azure2.azure2.save_fit`, which wraps

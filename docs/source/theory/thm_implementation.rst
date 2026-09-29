@@ -47,6 +47,7 @@ with every key at its default, gives identical results
    weightTest[2]=R_E.dat    # the same for <segmentsTest> line 2
    experiment[E1] segments=1,2 background=linear   # see "THM experiments" below
    experiment[E2] segments=3 beam=14N target=12C spectator=d Ebeam=30 distortion=coulomb
+   experiment[E3] segments=4 theta=50-70   # dsigma/dOmega averaged over theta_cm = 50-70 deg
    </thm>
 
 An unknown key, an unknown value, a negative spectator energy, a missing
@@ -100,8 +101,13 @@ engine would refuse is not opened in the editor (it is kept as it is).
    so the :math:`l \ne l'` cross terms vanish. The :math:`1/(2l+1)` cancels
    against :math:`|Y_{l0}(\hat z)|^2 = (2l+1)/4\pi` of the plane-wave
    expansion, leaving the :math:`l`-independent weight :math:`2J+1`. The
-   coherent sum is exact only in the limit of the exit direction fixed along
-   :math:`\hat p_{xA}`; it is kept for comparison with older fits.
+   coherent sum is not the fixed-angle limit either: along
+   :math:`\hat p_{xA}` the partial waves add with Clebsch-Gordan weights
+   :math:`\sqrt{2l+1}\,\langle s\,\nu\,l\,0|J\,\nu\rangle` and the
+   :math:`J^\pi` groups interfere ("Fixed-angle observable" below, which
+   computes that observable with ``theta=``). ``coherent`` is kept for
+   comparison with older fits, and cannot be combined with a ``theta``
+   window.
    ``tests/7Li_p_a`` (two entrance :math:`l` in one channel spin): 2138.48
    incoherent, 3196.77 coherent, same parameters (2181.45 / 2741.85 with
    ``vertex=perlevel``; 2180.69 / 2740.48 were the pins before 2026-09-25).
@@ -387,9 +393,11 @@ letters, digits and ``_ - . +``.
    The distortion factor :math:`R(E)` multiplying the model of every
    segment (default ``none``; ``coulomb`` and ``optical`` need the four
    kinematics keys), below ("Distortion factor R(E)").
-``theta=``
-   Reserved for a later version (angular acceptance): refused with ``not
-   implemented yet``, so that no file can rely on it silently.
+``theta=all|<thmin>-<thmax>``
+   The angular window of the exit pair (degrees): the model of every segment
+   is the HOES :math:`d\sigma/d\Omega` averaged over it instead of the
+   angle-integrated cross section (default ``all``), below ("Fixed-angle
+   observable").
 
 Anything else -- an unknown key or nuclide, a malformed value, partial
 kinematics, a segment that does not exist, is not THM, has a fixed norm or is
@@ -1019,11 +1027,221 @@ at 115 MeV (:math:`E_{sF} \approx 10` MeV, above the barrier): :math:`R` =
 
 *Scope and limits.* Zero range at the :math:`x`-:math:`A` vertex, the
 :math:`s`-:math:`x` bound state in :math:`l_{sx} = 0` and in its asymptotic
-form, one spectator angle rather than the experimental acceptance (``theta=``
-is reserved for it), no spin-orbit term, no three-body (line-shape) Coulomb
+form, one spectator angle rather than the experimental acceptance, no
+spin-orbit term, no three-body (line-shape) Coulomb
 effects -- those are ``lineshape=on``, which multiplies independently.
 Whether a DWBA vertex should replace the PWA one at all is the question the
 papers debate; the factor lets a fit show what it would change.
+
+Fixed-angle observable
+----------------------
+
+A THM measurement rarely covers the full solid angle of the exit pair. The
+three-body yield is binned in the c.m. angle of the two detected particles,
+:math:`\theta_\mathrm{cm} = \arccos(\hat k_{xA}\cdot\hat k_{bB})` (Tribble et
+al., RPP 77 (2014) 106901, section 4.3), and either integrated over the whole
+range after an angular-distribution fit (La Cognata et al., arXiv:0909.4716,
+18O(p,α)15N) or kept in a window: :math:`\theta_\mathrm{cm}` = 50–70° for
+7Li(p,α)α (Tumino et al., EPJA 27 s01 (2006) 243), 95–110° for
+6Li(n,α)3H (Gulino et al. 2010, Tribble Fig. 32). A window observable is
+:math:`d\sigma/d\Omega` averaged over the window, not :math:`\sigma/4\pi`:
+at a fixed angle the entrance partial waves of one channel spin and the
+:math:`J^\pi` groups interfere, and only the :math:`4\pi` integral removes
+the cross terms. ``theta=<thmin>-<thmax>`` on an experiment line computes it
+for every segment of the experiment (``ThmAngular.h``,
+``THMMatrixFunc::CalculateTHMCrossSection``).
+
+*Angle.* :math:`\theta` is the c.m. angle of particle 1 of the segment's exit
+pair relative to particle 2, measured from the relative momentum of particle
+1 of the entrance pair relative to particle 2 -- the convention of AZURE2's
+ordinary differential segments (``EPoint::ConvertLabAngle``). When the
+transferred particle :math:`x` is particle 1 of the entrance pair and the
+angle of the papers refers to particle 1 of the exit pair, it is their
+:math:`\theta_\mathrm{cm}`; otherwise give the supplementary window
+:math:`180 - \theta_\mathrm{max}` to :math:`180 - \theta_\mathrm{min}`. The
+direction of :math:`\vec k_{xA}` is that of the off-shell :math:`x`
+(:math:`\vec p_x = \vec p_a - \vec p_s` in the quasi-free picture), which
+the experiments reconstruct event by event. Degrees,
+:math:`0 \le \theta_\mathrm{min} \le \theta_\mathrm{max} \le 180`;
+:math:`\theta_\mathrm{min} = \theta_\mathrm{max}` is a single angle. ``theta=all``
+(the default) is the angle-integrated observable of the previous sections,
+bit for bit.
+
+*Amplitude.* With the quantization axis along :math:`\hat p_{xA}` the plane
+wave of :math:`x` contributes only :math:`m_l = 0`, with
+:math:`Y_{l0}(\hat z)\propto\sqrt{2l+1}` -- exactly the structure of an
+ordinary unpolarized beam along :math:`z`, whose Coulomb or plane wave also
+has :math:`m_l = 0` only. The HOES amplitude for entrance channel spin
+projection :math:`\nu` and exit :math:`\nu'` is therefore the ordinary
+reaction amplitude (Lane & Thomas, RMP 30 (1958) 257, section VIII) with the
+T-matrix element of each :math:`J^\pi` group replaced by the HOES partial
+amplitude:
+
+.. math::
+
+   F_{\nu\nu'}(\theta) = \sum_{J l l'} \sqrt{2l+1}\,
+   \langle s\,\nu\,l\,0|J\,\nu\rangle
+   \langle s'\,\nu'\,l'\,m'|J\,\nu\rangle\,
+   x^J_{(s'l'),(sl)}\, Y_{l'}^{m'}(\theta, 0),
+   \qquad m' = \nu - \nu',
+
+.. math::
+
+   x^J_{(s'l'),(sl)} = \sqrt{K(E)\,2P_{c'}}\; e^{i(\omega_{c'} - \phi_{c'})}
+   \sum_{\lambda\lambda'} \gamma_{\lambda c'} N_\lambda A_{\lambda\lambda'}
+   V_{\lambda'}^{(s,l)} ,
+
+:math:`c' = (s', l')` an exit channel of the group,
+:math:`V^{(s,l)}` the vertex of the first section, :math:`N_\lambda` the line
+shape (1 without ``lineshape=on``), :math:`e^{i\omega}` and
+:math:`e^{-i\phi}` the Coulomb and hard-sphere phases of the exit channel as
+in AZURE2's T matrix (``AMatrixFunc::CalculateTMatrix``). The ordinary
+entrance factor :math:`e^{i(\omega_c - \phi_c)}\sqrt{P_c}` -- the incident
+Coulomb wave's :math:`e^{i\sigma_l}` and the surface value of :math:`F_l` --
+is replaced by the vertex :math:`M_l` of the plane wave, which has neither
+(both waves carry the same :math:`i^l` of the partial-wave expansion, which
+AZURE2's phase convention absorbs). This is the structure of Tribble et al.
+eqs. (2.75) and (2.79): the on-shell S-matrix element with its entrance
+factor :math:`P_l^{-1/2} e^{i\delta^\mathrm{hs}_l}` taken out and the
+plane-wave vertex put in, times the spherical harmonics of
+:math:`\hat k_{bB}` and :math:`\hat p_{xA}`. The exit phases matter only here: the
+angle-integrated sum is incoherent in the exit channels.
+
+*Legendre form.* Summing :math:`|F|^2` over the spin projections with the
+Racah algebra gives the Blatt-Biedenharn form (RMP 24 (1952) 258) that
+AZURE2 uses for ordinary angular distributions (``CNuc::CalcAngularDists``,
+the same :math:`\bar Z` and the same :math:`(-1)^{s'-s}/4`):
+
+.. math::
+
+   \sum_{\nu\nu'} |F_{\nu\nu'}(\theta)|^2 = \frac{1}{\pi}\sum_L b_L P_L(\cos\theta),
+   \qquad
+   b_L = \sum_{ij} \frac{(-1)^{s'-s}}{4}\,
+   \bar Z(l_i J_i l_j J_j; s L)\,\bar Z(l'_i J_i l'_j J_j; s' L)\,
+   \mathrm{Re}\,x_i x_j^*,
+
+.. math::
+
+   \bar Z(l_1 J_1 l_2 J_2; s L) = \sqrt{(2l_1+1)(2l_2+1)(2J_1+1)(2J_2+1)}\,
+   \langle l_1\,0\,l_2\,0|L\,0\rangle\, W(l_1 J_1 l_2 J_2; s L),
+
+the double sum over the partial amplitudes of all :math:`J^\pi` groups with
+the same entrance channel spin :math:`s` and the same exit :math:`s'` (the
+spins are unpolarized and unobserved: different channel spins add
+incoherently). The Decay/KGroup objects of ordinary segments are not reused
+-- the THM segment has no T matrix -- but the algebra is theirs, and the
+direct sum above equals it (checked to :math:`10^{-16}`, below). Since
+:math:`4 b_0 = \sum_J (2J+1)\sum |x|^2`, the :math:`4\pi` integral of the
+observable is the angle-integrated HOES cross section of the first section
+(the :math:`1/(2l+1)` argument of ``entranceL`` is the :math:`L = 0` term).
+The model of a point is
+
+.. math::
+
+   \Bigl\langle \frac{d\sigma}{d\Omega} \Bigr\rangle
+   = \frac{1}{\pi}\sum_L b_L\,
+     \frac{\int_{\cos\theta_\mathrm{max}}^{\cos\theta_\mathrm{min}} P_L(u)\,du}
+          {\cos\theta_\mathrm{min} - \cos\theta_\mathrm{max}},
+
+the average over the window's solid angle; 0–180 gives
+:math:`\sigma_\mathrm{HOES}/4\pi` (with the exact :math:`\pi`; AZURE2's
+constant ``pi`` is 3.14159265). The averages of :math:`P_L` are taken once
+at startup by 48-point Gauss-Legendre in :math:`\cos\theta` (nodes by
+Newton's method), exact for :math:`L \le 95`; orders up to 80 are kept, so a
+model with an exit :math:`l' > 40` is refused. The geometric coefficients
+depend only on the list of partial waves and are cached per thread; the cost
+is not measurable (7Li(p,α): 2.9 s either way).
+
+*Limit* :math:`\theta \to 0`. Along the axis :math:`Y_{l'}^{m'}(0) =
+\delta_{m'0}\sqrt{(2l'+1)/4\pi}`, so :math:`\nu' = \nu` and
+
+.. math::
+
+   \frac{d\sigma}{d\Omega}(0) = \frac{1}{4\pi}\sum_{s s'\nu}
+   \Bigl|\sum_{J l l'}\sqrt{(2l+1)(2l'+1)}\,
+   \langle s\,\nu\,l\,0|J\,\nu\rangle\langle s'\,\nu\,l'\,0|J\,\nu\rangle\,
+   x^J_{(s'l'),(sl)}\Bigr|^2 ,
+
+coherent in :math:`l` *and* :math:`J`, with Clebsch-Gordan weights. For an
+:math:`\alpha + \alpha` exit (:math:`s' = 0`, :math:`l' = J`) only
+:math:`\nu = 0` survives, and for 7Li + p the channel spin :math:`s = 2`
+drops out entirely at 0° (:math:`\langle 2\,0\,l\,0|2\,0\rangle = 0` for odd
+:math:`l`). This is not ``entranceL=coherent`` (equal weights, :math:`J^\pi`
+groups incoherent), which is therefore neither the angle-integrated nor the
+fixed-angle observable; ``tests/7Li_p_a``: :math:`\chi^2` 1747.26 at
+``theta=0-0``, 3196.77 with ``entranceL=coherent``, 2138.48
+angle-integrated (same parameters, profiled norm).
+
+*Identical particles.* A channel of two identical nuclei is admitted only
+with :math:`l + s` even (``CNuc``), so the exit waves of an
+:math:`\alpha + \alpha` pair all have even :math:`l'` and the distribution
+has even :math:`L` only: it is symmetric about 90°, and a window and its
+mirror give the same model. No factor is applied, as in AZURE2's
+differential branch for an identical exit pair and in the angle-integrated
+THM observable: the model is per event, its :math:`4\pi` integral is the
+angle-integrated one, and a detector that counts either particle sees twice
+it -- a constant, absorbed by the norm. An identical entrance pair (12C+12C)
+also gives even :math:`L` only (both amplitudes of a :math:`b_L` term have
+the same :math:`s`, so :math:`l_i + l_j` is even).
+
+*Everything else combines unchanged.* A spectator-momentum window averages
+the observable over its nodes with their weights (each node its own set of
+:math:`x`); the line shape sits inside :math:`x`; ``weight[k]`` and the
+distortion factor multiply the result before the resolution folding; the
+folding, the shared norm and the background of the experiment act on the
+model as before. The distortion factor is computed at one spectator angle and
+does not depend on :math:`\theta`. ``entranceL=coherent`` with a window is
+refused (the window computes the :math:`l` interference exactly).
+
+Errors (``ERROR: <thm> experiment[<name>]: ...``, exit non-zero): a value
+that is not ``all`` or two numbers ``a-b`` with
+:math:`0 \le a \le b \le 180` (a single number, a reversed or negative window,
+beyond 180°), ``theta`` twice, a window together with
+``entranceL=coherent``. ``pyazr``: ``AzrModel.set_thm_experiment(...,
+theta="50-70")`` (or ``(50, 70)``, ``"all"``) with the same rules; the
+session's residuals, Jacobian and output files follow. The GUI keeps the key
+as written.
+
+*Validation.* ``tests/reference/thm_fixed_angle_test`` (ctest
+``thm_fixed_angle``) takes the partial amplitudes of a toy two-level model
+(7Li+p→α+α-like: :math:`J = 2^+` with two levels and :math:`(s,l)` = (1,1),
+(1,3), (2,1), (2,3), plus :math:`0^+`; and a spin-1/2 case with
+:math:`1/2^\pm`, :math:`3/2^-` and odd :math:`L`) from
+``thm_fixed_angle_reference.py``, which does the literal M-sum above with
+sympy's exact Clebsch-Gordan coefficients, mpmath's spherical harmonics and
+quadrature: :math:`b_L`, :math:`d\sigma/d\Omega` at 0, 37, 90, 143, 180° and
+five windows agree to :math:`5\times 10^{-16}`; 0–180 equals
+:math:`\sum(2J+1)|x|^2/4\pi` to :math:`3\times 10^{-16}`;
+:math:`\theta = 0` equals the axis sum (:math:`\nu' = \nu`) and windows
+:math:`0`–:math:`t` approach it as :math:`t^2`; the identical-boson case has
+no odd :math:`b_L` and is symmetric, the spin-1/2 case is not.
+``tests/thm_fixed_angle/check.sh`` (CLI): ``theta=all`` byte-identical to no
+key (and the model to no block); 0–180 times :math:`4\pi` equals the
+angle-integrated model to :math:`4\times 10^{-11}` (the output file's 11
+digits) for 7Li(p,α) and 17O(n,α), with the same :math:`\chi^2`; the
+one-group 18O(p,α) model (:math:`1/2^+`, isotropic) gives the same shape for
+any window, also with a ``ps`` window and a linear background; windows
+0–0.5° and 0–1° approach 0–0 as :math:`t^2` (ratio 3.998–4.003);
+30–60° equals 120–150° for 7Li(p,α)α and 10–40° equals 140–170° for
+6Li(d,α)α, while 17O(n,α)14C (1\ :sup:`-`, 2\ :sup:`+`, 3\ :sup:`-`,
+5\ :sup:`-`) differs by up to 27 % between 20–60° and 120–160°; refusals.
+``tests/pyazr/thm_fixed_angle_test.py``: ``AzrModel``, CLI == session,
+:math:`4\pi` model(0–180) == model to :math:`2\times 10^{-15}` in double
+precision, residuals and Jacobian unchanged, symmetry.
+
+*Size* (``tests/7Li_p_a``, Paneru parameters, not refitted, 30 keV folding,
+profiled norm). The Tumino 2006 window ``theta=50-70`` changes the shape of
+the THM model by 14 % rms and up to 45 % over the 66 points (both scaled to
+the same mean): relative to the angle-integrated curve it is 16 % higher at
+0.08 MeV, 14 % lower across the 2.6 MeV peak (0.86 at 2.1–2.7 MeV) and 25 %
+higher across the 5 MeV one (1.25–1.27 at 4.3–5.1 MeV); :math:`\chi^2`
+2138.48 → 2349.86. (``theta=30-60``: 1765.64; ``theta=0-0``: 1747.26.)
+The data are penetrability-corrected and normalized to direct data (see
+``tests/7Li_p_a/README.md``), so this is the size of the effect, not a
+statement about the fit. 18O(p,α)15N (``tests/18O_p_a_thm``): the data are
+integrated over the whole angular range (La Cognata et al.,
+arXiv:0909.4716), and with one :math:`1/2^+` group the model is isotropic
+anyway -- no change for any window.
 
 Normalization, gradients and uncertainty bands
 ----------------------------------------------
