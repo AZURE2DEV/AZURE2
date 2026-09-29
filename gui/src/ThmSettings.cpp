@@ -257,7 +257,9 @@ bool ThmExperimentRecord::sameAs(const ThmExperimentRecord &o) const {
   return name == o.name && segments == o.segments && background == o.background &&
          hasBackgroundKey == o.hasBackgroundKey && beam == o.beam && target == o.target &&
          spectator == o.spectator && beamEnergy == o.beamEnergy && lineshape == o.lineshape && ps == o.ps &&
-         psNodes == o.psNodes && extraTokens == o.extraTokens;
+         psNodes == o.psNodes && distortion == o.distortion && opticalAA == o.opticalAA && opticalSF == o.opticalSF &&
+         spectatorAngle == o.spectatorAngle && distortionRef == o.distortionRef &&
+         distortionRatio == o.distortionRatio && boundState == o.boundState && extraTokens == o.extraTokens;
 }
 
 QString ThmExperimentRecord::segmentsListText(const QList<int> &segments) {
@@ -295,6 +297,12 @@ QString ThmExperimentRecord::line() const {
   if (lineshape) tokens << "lineshape=on";
   if (!ps.isEmpty()) tokens << "ps=" + ps;
   if (!psNodes.isEmpty()) tokens << "psNodes=" + psNodes;
+  const QString distortionKeys[7][2] = {{"distortion", distortion},         {"opticalAA", opticalAA},
+                                        {"opticalSF", opticalSF},           {"spectatorAngle", spectatorAngle},
+                                        {"distortionRef", distortionRef},   {"distortionRatio", distortionRatio},
+                                        {"boundState", boundState}};
+  for (const auto &kv : distortionKeys)
+    if (!kv[1].isEmpty()) tokens << kv[0] + "=" + kv[1];
   tokens << extraTokens;
   return QString("experiment[%1] %2").arg(name, tokens.join(' '));
 }
@@ -339,6 +347,20 @@ QList<ThmExperimentRecord> ThmExperimentRecord::read(const QStringList &lines) {
         r.ps = value;
       } else if (key == "psNodes") {
         r.psNodes = value;
+      } else if (key == "distortion") {
+        r.distortion = value;
+      } else if (key == "opticalAA") {
+        r.opticalAA = value;
+      } else if (key == "opticalSF") {
+        r.opticalSF = value;
+      } else if (key == "spectatorAngle") {
+        r.spectatorAngle = value;
+      } else if (key == "distortionRef") {
+        r.distortionRef = value;
+      } else if (key == "distortionRatio") {
+        r.distortionRatio = value;
+      } else if (key == "boundState") {
+        r.boundState = value;
       } else {
         r.extraTokens << token;
       }

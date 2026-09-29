@@ -95,6 +95,10 @@ struct ThmExperimentRecord {
   /// ps= (spectator-momentum window) and psNodes= as written; "" = key absent.
   /// The page composes them from its controls (psText) only when edited.
   QString ps, psNodes;
+  /// The distortion factor keys (distortion=, opticalAA=, opticalSF=,
+  /// spectatorAngle=, distortionRef=, distortionRatio=, boundState=) as
+  /// written; "" = key absent.  The page changes one key at a time.
+  QString distortion, opticalAA, opticalSF, spectatorAngle, distortionRef, distortionRatio, boundState;
   QStringList extraTokens;   ///< other key=value tokens, verbatim, in order
 
   bool hasKinematics() const {
@@ -102,6 +106,10 @@ struct ThmExperimentRecord {
   }
   /// A ps window is set (ps= other than delta).
   bool hasWindow() const { return !ps.isEmpty() && ps != "delta"; }
+  /// distortion=coulomb or optical: R(E) computed from the reaction.
+  bool hasComputedDistortion() const { return distortion == "coulomb" || distortion == "optical"; }
+  /// Any distortion (coulomb, optical or a table).
+  bool hasDistortion() const { return !distortion.isEmpty() && distortion != "none"; }
   /// Same content (originName aside; segment sets compared, not their text).
   bool sameAs(const ThmExperimentRecord &o) const;
   /// The record as one experiment[...] line.

@@ -1,9 +1,11 @@
 #ifndef THMEXPERIMENTSPAGE_H
 #define THMEXPERIMENTSPAGE_H
 
+#include <QDialog>
 #include <QList>
 #include <QStringList>
 #include <QWidget>
+#include <QVector>
 #include <functional>
 
 #include "ThmExperiment.h"
@@ -37,7 +39,10 @@ struct ThmSpectatorWindow;
  * beam energy -- all four or none -- with the binding and quasi-free
  * energies AZURE2 prints for it, and the line shape, lineshape=on, with zeta
  * at the ends of the data) and Spectator momentum window (ps=, psNodes=, with the
- * mean spectator energy <T_s> the engine's ThmSpectatorWindow gives).
+ * mean spectator energy <T_s> the engine's ThmSpectatorWindow gives) and
+ * Distortion (distortion= and its keys, with R(E) at the ends of the data
+ * from the engine's ThmDistortion).  When B(x+s) from the masses and the
+ * entrance pair's B (field 32) disagree, the reaction section says so.
  * Numbers are spin boxes with their unit that give back the text they were
  * read with until changed (ThmNumberSpin).  Keys the page does not show are
  * kept as written.
@@ -83,6 +88,26 @@ class ThmExperimentsPage : public QWidget {
       refuse it (a bad table, a spectator energy for the same pair). */
   QString windowInfo(const ThmExperimentRecord &record, QString *error = nullptr,
                      ThmSpectatorWindow *window = nullptr) const;
+  /*! For a record with a distortion: R(E) (coulomb, optical: the engine's
+      ThmDistortion set up as EData::BuildThmGroups does, evaluated directly)
+      or w(E) (a table, read by ThmWeightTable) at the lowest and highest point
+      energy of its segments, and the whole text; "" and the reason in
+      *error, in the engine's words, when AZURE2 would refuse it. */
+  QString distortionInfo(const ThmExperimentRecord &record, QString *error = nullptr, double *lo = nullptr,
+                         double *hi = nullptr, double *rLo = nullptr, double *rHi = nullptr) const;
+  /*! When B(x+s) from the masses of a record's reaction differs from its
+      entrance pair's B (field 32) by more than 1 keV, as the engine warns:
+      the one-line note (*detail: the engine's whole warning); else "". */
+  QString bindingMismatch(const ThmExperimentRecord &record, QString *detail = nullptr) const;
+  /// The same for every experiment whose entrance pair is `pairKey`, with
+  /// that pair's B taken as `pairB` (the Channels page).  "" if none.
+  QString bindingMismatchOfPair(int pairKey, double pairB) const;
+  /// The entrance pair's B (field 32) per pair key; the Channels page's
+  /// values in the workspace (default: the project's).
+  void setPairBinding(std::function<double(int pairKey)> binding) { pairBinding_ = binding; }
+  /// Sets opticalAA= (channel 0) or opticalSF= (1) of the selected
+  /// experiment to ten numbers, as the Woods-Saxon dialog does on OK.
+  void setOpticalText(int channel, const QString &tenNumbers);
   /// The ps= value the spectator-momentum controls describe ("" for a point).
   QString psText() const;
   /// A file chosen for ps=table: relative to the project directory when inside it.
@@ -126,8 +151,25 @@ class ThmExperimentsPage : public QWidget {
   QLineEdit *psTableEdit;
   QPushButton *psTableButton;
   QSpinBox *psNodesSpin;     ///< psNodes=, 1-64, default 16
-  /// Derived values (the reaction, zeta, the window), and why AZURE2 would refuse the experiment.
-  QLabel *bindingValue, *qfValue, *zetaValue, *meanTsValue;
+  /// Distortion (distortion= ...): the kind, and for coulomb/optical the
+  /// spectator angle, E_ref, the ratio, the bound state and (optical) the
+  /// two channels; for a table its file.
+  QGroupBox *distortionBox;
+  QComboBox *distortionCombo;   ///< item data: none | coulomb | optical | table
+  QComboBox *angleKindCombo;    ///< item data: qf | lab | cm
+  ThmNumberSpin *angleEdit;     ///< deg
+  ThmNumberSpin *distortionRefEdit;  ///< MeV; the minimum (shown as "auto") = not given
+  QComboBox *ratioCombo;        ///< item data: dwpw | dw
+  QComboBox *boundCombo;        ///< item data: whittaker | yukawa
+  ThmNumberSpin *rminEdit;      ///< fm; the minimum (a dash) = not given
+  QComboBox *opticalCombo[2];   ///< a + A, s + F; item data: plane | coulomb | ws
+  QPushButton *opticalButton[2];  ///< "Edit..." the ten Woods-Saxon numbers
+  QLineEdit *distortionTableEdit;
+  QPushButton *distortionTableButton;
+  /// Derived values (the reaction, zeta, the window, R at the ends), and why AZURE2 would refuse the experiment.
+  QLabel *bindingValue, *qfValue, *zetaValue, *meanTsValue, *distortionValue;
+  /// B(x+s) from the masses differs from the pair's B: icon and one line in the reaction section.
+  QLabel *bindingWarningIcon, *bindingWarningLabel;
   QLabel *messageLabel;
   QLabel *messageIcon;
 
@@ -141,6 +183,11 @@ class ThmExperimentsPage : public QWidget {
   void psEdited();
   void psNodesChanged(int n);
   void chooseTable();
+  void distortionKindChanged();
+  void distortionEdited();
+  void opticalKindChanged();
+  void chooseDistortionTable();
+  void editOptical(int channel);
 
  private:
   struct Reaction {
@@ -148,6 +195,8 @@ class ThmExperimentsPage : public QWidget {
     int pairKey = 0;
     double beamEnergy = 0.0, bind = 0.0, exa = 0.0;
     double mX = 0.0;  ///< mass of x = Trojan horse - spectator (u), as the engine takes it
+    bool horseIsBeam = true;
+    ThmNuclide other;  ///< A, the nucleus that is not the Trojan horse
   };
   /// The reaction of a record with all four keys, as EData::SetupThmExperiments checks it.
   bool reaction(const ThmExperimentRecord &x, Reaction &out, QString *error) const;
@@ -155,6 +204,11 @@ class ThmExperimentsPage : public QWidget {
   QString derivedText_;
   void loadEditor();
   void loadPs(const ThmExperimentRecord &r);
+  void loadDistortion(const ThmExperimentRecord &r);
+  void showDistortionRows();
+  void updateDistortionItems(bool complete);
+  /// The c.m. energies of the points of the segments, in the engine's order.
+  bool pointEnergies(const QList<int> &segments, QVector<double> &energies) const;
   void showPsRows();
   void fillSegmentList();
   void storeSegments(const QList<int> &segments);
@@ -170,9 +224,30 @@ class ThmExperimentsPage : public QWidget {
   QList<ThmExperimentRecord> oldRecords_;
   QList<ThmExperimentRecord> records_;
   QList<QWidget *> psWindowRow_, psHulthenRow_, psGaussRow_, psTableRow_, psNodesRow_;
+  QList<QWidget *> distortionComputedRows_, distortionOpticalRow_, distortionTableRow_, distortionValueRow_;
+  QString lastOptical_[2];  ///< the ten numbers last shown per channel (kept across plane/coulomb)
+  std::function<double(int)> pairBinding_;
+  /// distortionInfo of the last line asked for (the setup takes milliseconds to a second).
+  mutable QString cacheKey_, cacheText_, cacheError_;
+  mutable double cache_[4] = {0.0, 0.0, 0.0, 0.0};
   std::function<double(int)> spectatorEnergy_ = [](int) { return 0.0; };
   int current_ = -1;
   bool loading_ = false;
+};
+
+/*!
+ * The ten numbers of a Woods-Saxon optical potential (opticalAA= /
+ * opticalSF= V,R,a,W,RW,aW,WD,RD,aD,RC) in a compact form: real volume,
+ * imaginary volume, imaginary surface (depth, radius, diffuseness) and the
+ * Coulomb radius, each a spin box with its unit.  The text gives back each
+ * number as it was written until it is changed.
+ */
+class ThmOpticalDialog : public QDialog {
+ public:
+  explicit ThmOpticalDialog(const QString &title, const QString &tenNumbers, QWidget *parent = nullptr);
+  /// V,R,a,W,RW,aW,WD,RD,aD,RC as the fields give them.
+  QString text() const;
+  ThmNumberSpin *fields[10];
 };
 
 #endif

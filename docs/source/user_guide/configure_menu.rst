@@ -152,8 +152,8 @@ reaction) that share one profiled normalization and, optionally, a smooth
 background. The list on the left shows the experiments (name and segments;
 the background and the reaction in the tooltip of a row), with **Add** and
 **Remove** below it. The editor on the right shows the selected experiment
-in three sections -- *Experiment*, *Three-body reaction* and *Spectator
-momentum window*:
+in four sections -- *Experiment*, *Three-body reaction*, *Spectator
+momentum window* and *Distortion*:
 
 - **Name** -- letters, digits and ``_ - . +``.
 - **Segments** -- a check list of the Data segments that can be added: THM
@@ -166,7 +166,14 @@ momentum window*:
   When they are complete, the section shows what AZURE2 prints for them: the
   binding energy **B(x+s)** of the Trojan horse and the quasi-free energy
   **E_qf** (E(x+A) in its tooltip). The fit uses them only for the
-  spectator's Coulomb line shape and momentum window, below.
+  spectator's Coulomb line shape, momentum window and distortion factor,
+  below. B(x+s) comes from the masses, while the THM vertex takes B from the
+  entrance pair (field 32, **Channels** page); when the two differ by more
+  than 1 keV, a warning row in this section says so, e.g. *B from masses
+  5.493 MeV ≠ pair B 2.225 MeV (vertex uses the pair value)* (its tooltip:
+  AZURE2's startup ``WARNING``), and the **Channels** page marks that pair's
+  B with a warning icon. This is not a refusal: a made-up Trojan horse can
+  stand in for the real one, but the kinematics then belong to it.
 - **Line shape: Coulomb** (``lineshape=on``) -- the last row of the
   three-body reaction section, offered once its four fields are filled. The
   charged spectator leaves in the Coulomb field of the resonance and of its
@@ -213,6 +220,48 @@ momentum window*:
   the three-body reaction drops the window with it. Details:
   :doc:`../theory/thm_implementation`, "Spectator-momentum window".
 
+- **Distortion** (``distortion``, ``opticalAA``, ``opticalSF``,
+  ``spectatorAngle``, ``distortionRef``, ``distortionRatio``,
+  ``boundState``) -- its own section. The PWA data reduction takes the
+  transfer amplitude as constant; with the distortions of the a + A and
+  s + F relative motion it varies with E, by orders of magnitude for a
+  charged spectator below the s + F barrier (12C+12C). AZURE2 multiplies the
+  model of every segment of the experiment, before the folding, by
+  :math:`R(E) = \rho(E)/\rho(E_\mathrm{ref})` from a zero-range DWBA
+  (Mukhamedzhanov & Pang, PRC 99 (2019) 064618). **Distortion**: *None* (the
+  default; only this combo is shown), *Coulomb* (point-Coulomb waves in both
+  channels), *Optical* (per channel) or *Table*. Coulomb and optical need the
+  three-body reaction: they are offered once its four fields are filled, and
+  unticking the reaction drops them. With Coulomb or optical the section
+  shows **Angle** (``spectatorAngle``: *quasi-free*, the default; *lab*, an
+  angle to the beam converted at every E; *c.m.*, fixed; degrees in the spin
+  box beside it), **E_ref** (``distortionRef``, MeV, where R = 1; *auto* is
+  the middle of the data -- only the scale, which the profiled norm absorbs),
+  **Ratio** (``distortionRatio``: *DWBA/PWBA*, :math:`\rho = |M/M_{PW}|^2`,
+  the default, or *DWBA*, :math:`\rho = |M|^2`, the papers' ratio) and
+  **Bound state** (``boundState``: *Whittaker*, the default, or *Yukawa*
+  tail of the s-x bound state, with an optional cut-off **r_min** in fm).
+  Optical adds a row for the two channels, **a + A** (``opticalAA``) and
+  **s + F** (``opticalSF``): *plane* (no distortion), *Coulomb* (the default)
+  or *Woods–Saxon*, whose **Edit…** button opens the ten parameters in a
+  compact form -- real volume V, R, a; imaginary volume W, R_W, a_W;
+  imaginary surface W_D, R_D, a_D (MeV and fm, depths > 0 attractive or
+  absorptive, 0 switches a term off) and the Coulomb radius R_C (0: a point
+  charge). *Table* shows the file (two columns, E and w, the ``weight[k]``
+  format; every data point inside it), whose **...** button stores a file
+  inside the project directory relative to it; a table needs no reaction.
+  The **R(E)** row shows R at the lowest and highest point energy of the
+  experiment's data (a table: its w there), computed with AZURE2's own code;
+  its tooltip has the rest of what AZURE2 prints at startup
+  (:math:`k_{aA}`, :math:`\eta_{aA}`, :math:`\kappa`, :math:`\eta_b`,
+  :math:`\beta`, E_ref, and :math:`E_{sF}`, :math:`\eta_{sF}` and the
+  spectator's c.m. angle at the two ends). Every control changes only its own
+  key; the others stay as written. The page refuses what AZURE2 refuses, in
+  its words: a malformed value, a key without its kind, a data point where
+  the spectator has no energy left or a lab angle it cannot reach, a table
+  that cannot be read or does not cover the data. Details:
+  :doc:`../theory/thm_implementation`, "Distortion factor R(E)".
+
 Keys of an experiment line that the page does not show are kept as written.
 
 **Channels** -- the THM columns of the ``<levels>`` lines:
@@ -220,6 +269,9 @@ Keys of an experiment line that the page does not show are kept as written.
 - **Binding energy** B (MeV, field 32) of the transferred particle in the
   Trojan horse, for each particle pair that is the entrance of a THM segment.
   It is a property of the pair and is written on every line of the pair.
+  A warning icon inside the field marks a pair whose B differs from B(x+s)
+  of an experiment's reaction (from the masses, **Experiments** page) by
+  more than 1 keV; its tooltip names the experiment and both values.
 - **Width input convention** (field 33) of each particle channel of those
   pairs: ticked, the width entered in the Levels tab is a reduced width
   amplitude (MeV\ :sup:`1/2`) rather than a partial width or ANC -- for a
@@ -272,6 +324,14 @@ and each plot carries the reaction in bold:
   :math:`|M_l|^2`: the window fills the vertex nodes. The status line's
   tooltip gives :math:`\langle T_s\rangle`. A table named relative to the project is found
   although the engine runs on a copy elsewhere.
+- **Distortion R(E)** (only for an experiment with ``distortion=``) -- the
+  factor that multiplies the model, as AZURE2 interpolates it, on a
+  logarithmic scale when it spans decades, with :math:`|M|^2` (dashed; not
+  for the DWBA ratio, where it is R itself) and :math:`|M_{PW}|^2` (dotted),
+  each 1 at :math:`E_\mathrm{ref}`, which a vertical line marks: R is their
+  ratio. A table: its :math:`w(E)`, found although the engine runs on a copy
+  elsewhere. The status line's tooltip gives the settings and
+  :math:`E_\mathrm{ref}`.
 
 The page needs a build with the engine API (``USE_API=ON``, the default),
 as the Plot tab needs Qwt.

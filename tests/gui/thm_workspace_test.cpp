@@ -51,6 +51,7 @@
 #include <QRadioButton>
 #include <QRegExp>
 #include <QScrollArea>
+#include <QStandardItemModel>
 #include <QTabWidget>
 #include <QTableView>
 #include <QTableWidget>
@@ -184,12 +185,12 @@ int main(int argc, char** argv) {
   // 1. Records and the nuclide table.
   {
     const QStringList lines = QStringList() << "experiment[A] segments=1-3   # three runs"
-                                            << "experiment[B] segments=4 distortion=3 background=const"
+                                            << "experiment[B] segments=4 future=3 background=const"
                                             << "experiment[A] beam=7Li target=d spectator=n Ebeam=19";
     QList<ThmExperimentRecord> r = ThmExperimentRecord::read(lines);
     ok("records merged by name", r.size() == 2 && r[0].name == "A" && r[1].name == "B");
     ok("segment ranges expanded", r.size() == 2 && r[0].segments == (QList<int>() << 1 << 2 << 3));
-    ok("unshown key kept aside", r.size() == 2 && r[1].extraTokens == QStringList("distortion=3"));
+    ok("unshown key kept aside", r.size() == 2 && r[1].extraTokens == QStringList("future=3"));
     QList<ThmExperimentRecord> ls = ThmExperimentRecord::read(QStringList() << "experiment[C] segments=1 lineshape=on"
                                                                             << "experiment[D] segments=2 lineshape=off");
     ok("lineshape read as a field", ls.size() == 2 && ls[0].lineshape && !ls[1].lineshape && ls[0].extraTokens.isEmpty() &&
@@ -208,7 +209,7 @@ int main(int argc, char** argv) {
     e[1].background = "linear";
     ok("edited record keeps the key it does not show",
        ThmExperimentRecord::compose(lines, r, e) ==
-           (QStringList() << lines[0] << "experiment[B] segments=4 background=linear distortion=3" << lines[2]),
+           (QStringList() << lines[0] << "experiment[B] segments=4 background=linear future=3" << lines[2]),
        ThmExperimentRecord::compose(lines, r, e).join("|"));
     e = r;
     e[0].background = "quadratic";  // two lines of A become one, in place of the first
@@ -217,6 +218,35 @@ int main(int argc, char** argv) {
            (QStringList() << "experiment[A] segments=1-3 background=quadratic beam=7Li target=d spectator=n Ebeam=19"
                           << lines[1]),
        ThmExperimentRecord::compose(lines, r, e).join("|"));
+    // Stage D: every distortion key, the ten-number lists included, comes
+    // back verbatim when the page rewrites the line (another key edited).
+    {
+      const QStringList stageD = {"distortion=optical", "opticalAA=50.0,4.5,0.60,10,4.5,0.6,0,0,0,4.50",
+                                  "opticalSF=12,5.0,0.7,0.0,0,0,8,5.5,0.65,0", "spectatorAngle=cm:8.0",
+                                  "distortionRef=2.664", "distortionRatio=dw", "boundState=yukawa:3.0"};
+      const QStringList dLines = {"experiment[S] boundState=yukawa:3.0 segments=1 beam=14N target=12C spectator=d "
+                                  "Ebeam=30 " + stageD.mid(0, 6).join(' ')};
+      QList<ThmExperimentRecord> d = ThmExperimentRecord::read(dLines);
+      ok("stage D keys read as fields, as written",
+         d.size() == 1 && d[0].distortion == "optical" && d[0].opticalAA == "50.0,4.5,0.60,10,4.5,0.6,0,0,0,4.50" &&
+             d[0].opticalSF == "12,5.0,0.7,0.0,0,0,8,5.5,0.65,0" && d[0].spectatorAngle == "cm:8.0" &&
+             d[0].distortionRef == "2.664" && d[0].distortionRatio == "dw" && d[0].boundState == "yukawa:3.0" &&
+             d[0].extraTokens.isEmpty() && d[0].hasComputedDistortion());
+      ok("stage D: unchanged line verbatim", ThmExperimentRecord::compose(dLines, d, d) == dLines);
+      QList<ThmExperimentRecord> e2 = d;
+      e2[0].background = "const";
+      const QStringList rewritten = ThmExperimentRecord::compose(dLines, d, e2);
+      bool all = rewritten.size() == 1;
+      for(const QString& t : stageD) all = all && rewritten.value(0).split(' ').contains(t);
+      ok("stage D: every key verbatim through a rewrite", all, rewritten.join("|"));
+      ok("stage D: the rewritten line passes the engine's parser and check",
+         ThmSettings::checkExperimentLines(rewritten).isEmpty(), ThmSettings::checkExperimentLines(rewritten));
+      ok("table distortion needs no kinematics",
+         ThmExperimentRecord::read(QStringList() << "experiment[T] segments=1 distortion=table:w.dat")[0].hasDistortion() &&
+             !ThmExperimentRecord::read(QStringList() << "experiment[T] segments=1 distortion=table:w.dat")[0]
+                  .hasComputedDistortion() &&
+             ThmSettings::checkExperimentLines(QStringList() << "experiment[T] segments=1 distortion=table:w.dat").isEmpty());
+    }
     ok("segment list text", ThmExperimentRecord::segmentsListText(QList<int>() << 1 << 2 << 3 << 5 << 7 << 8) ==
                                 "1-3,5,7,8");
 
@@ -1217,6 +1247,485 @@ int main(int argc, char** argv) {
     for(double v : r.windowW) flat = flat && std::fabs(v - 1.0 / 20.0) < 1e-12;
     for(double p : r.nodeP) flat = flat && p > 20.0 && p < 40.0;
     ok("table: flat w(p) = 1/20 per MeV/c on [20, 40], nodes inside", flat);
+  }
+#endif
+
+  // 12. Distortion factor (distortion= ...) on a 12C+12C-like project: the
+  //     four THM segments of examples/c12c12_tumino2018 (12C(14N,a/p)d at 30
+  //     MeV) with free norms and nothing else (no pair 6, the 12C+12C pair
+  //     without B that the other data use), no extrapolation, no folding.
+  const QString c12Dir = work.filePath("c12");
+  QDir(c12Dir).mkpath("data");
+  QString c12;
+  {
+    const QString c12src = QString(AZURE2_SOURCE_DIR) + "/examples/c12c12_tumino2018";
+    for(const QString& f : QDir(c12src + "/data").entryList(QDir::Files))
+      QFile::copy(c12src + "/data/" + f, c12Dir + "/data/" + f);
+    const QStringList in = slurp(c12src + "/c12c12_tumino2018.azr").split('\n');
+    QStringList out;
+    QString block;
+    bool skip = false;
+    for(const QString& line : in) {
+      if(line.startsWith("<")) block = line;
+      if(line == "<thm>") { skip = true; continue; }
+      if(line == "</thm>") { skip = false; continue; }
+      if(skip) continue;
+      QStringList f = line.split(QRegExp("\\s+"), Qt::SkipEmptyParts);
+      if(block == "<levels>" && f.size() > 5 && f[5] == "6") continue;  // pair 6 (12C+12C, no B): unused here
+      if(block == "<segmentsData>" && f.size() > 10 && !line.startsWith("<")) {
+        if(f[7] != "10") continue;  // the THM segments only
+        f[9] = "1";                 // with a free norm
+        out << f.join("  ");
+      } else if((block == "<segmentsTest>" || block == "<targetInt>") && !line.startsWith("<")) {
+        continue;  // no extrapolation, no folding
+      } else {
+        out << line;
+      }
+    }
+    c12 = out.join('\n');
+    if(!c12.endsWith('\n')) c12 += '\n';
+  }
+  ok("c12: project prepared", c12.contains("data/thm_a0.dat") && !c12.contains("<thm>"));
+  spit(c12Dir + "/rtable.dat", "# E w\n0.5 1\n3.0 4\n");
+  spit(c12Dir + "/rshort.dat", "0.5 1\n1.5 4\n");
+  const QString c12Reaction = "beam=14N target=12C spectator=d Ebeam=30";
+  const QString c12Path = c12Dir + "/c12.azr";
+  auto c12Open = [&](const QString& block) {
+    spit(c12Path, c12 + "<thm>\n" + block + "</thm>\n");
+    w.open(c12Path);
+  };
+  // Drives the distortion controls to the given key=value tokens.
+  auto setDistortion = [&](ThmExperimentsPage* p, const QString& tokens) {
+    for(const QString& t : tokens.split(' ', Qt::SkipEmptyParts)) {
+      const QString key = t.section('=', 0, 0), value = t.section('=', 1);
+      if(key == "distortion") {
+        const QString kind = value.startsWith("table:") ? "table" : value;
+        p->distortionCombo->setCurrentIndex(p->distortionCombo->findData(kind));
+        if(kind == "table") type(p->distortionTableEdit, value.mid(6));
+      } else if(key == "opticalAA" || key == "opticalSF") {
+        const int c = key == "opticalAA" ? 0 : 1;
+        if(value == "plane" || value == "coulomb") {
+          p->opticalCombo[c]->setCurrentIndex(p->opticalCombo[c]->findData(value));
+        } else {
+          p->opticalCombo[c]->setCurrentIndex(p->opticalCombo[c]->findData("ws"));
+          p->setOpticalText(c, value);
+        }
+      } else if(key == "spectatorAngle") {
+        const QString kind = value == "qf" ? "qf" : value.startsWith("cm:") ? "cm" : "lab";
+        p->angleKindCombo->setCurrentIndex(p->angleKindCombo->findData(kind));
+        if(kind != "qf") typeNumber(p->angleEdit, kind == "cm" ? value.mid(3) : value);
+      } else if(key == "distortionRef") {
+        typeNumber(p->distortionRefEdit, value);
+      } else if(key == "distortionRatio") {
+        p->ratioCombo->setCurrentIndex(p->ratioCombo->findData(value));
+      } else if(key == "boundState") {
+        p->boundCombo->setCurrentIndex(p->boundCombo->findData(value.section(':', 0, 0)));
+        if(value.contains(':')) typeNumber(p->rminEdit, value.section(':', 1));
+      }
+    }
+  };
+  {
+    // Enabling: coulomb and optical need the complete reaction, a table does not.
+    c12Open("");
+    ThmSettings s;
+    QString err;
+    ok("c12: opens", w.thmSettings(s, &err), err);
+    ThmWorkspace ws(&w, s);
+    ThmExperimentsPage* p = ws.experimentsPage;
+    p->addExperiment();
+    segmentItem(p->segmentList, 3)->setCheckState(Qt::Checked);
+    auto itemEnabled = [p](const QString& kind) {
+      QStandardItemModel* m = qobject_cast<QStandardItemModel*>(p->distortionCombo->model());
+      return m && (m->item(p->distortionCombo->findData(kind))->flags() & Qt::ItemIsEnabled);
+    };
+    ok("distortion: none by default, only the combo shown",
+       p->distortionCombo->currentData().toString() == "none" && p->distortionCombo->isVisibleTo(p) &&
+           !p->angleKindCombo->isVisibleTo(p) && !p->opticalCombo[0]->isVisibleTo(p) &&
+           !p->distortionTableEdit->isVisibleTo(p) && !p->distortionValue->isVisibleTo(p));
+    ok("distortion: without the reaction coulomb and optical disabled, table enabled",
+       !itemEnabled("coulomb") && !itemEnabled("optical") && itemEnabled("table") && itemEnabled("none"));
+    p->kinematicsBox->setChecked(true);
+    p->beamCombo->setEditText("14N");
+    p->targetCombo->setEditText("12C");
+    p->spectatorCombo->setEditText("d");
+    ok("distortion: incomplete reaction, still disabled", !itemEnabled("coulomb") && !itemEnabled("optical"));
+    typeNumber(p->beamEnergyEdit, "30");
+    ok("distortion: complete reaction, enabled", itemEnabled("coulomb") && itemEnabled("optical"));
+    p->distortionCombo->setCurrentIndex(p->distortionCombo->findData("coulomb"));
+    ok("distortion: coulomb written, its rows shown, optical row hidden",
+       p->records().at(0).distortion == "coulomb" && p->angleKindCombo->isVisibleTo(p) &&
+           p->ratioCombo->isVisibleTo(p) && p->boundCombo->isVisibleTo(p) && p->distortionRefEdit->isVisibleTo(p) &&
+           !p->opticalCombo[0]->isVisibleTo(p) && !p->distortionTableEdit->isVisibleTo(p) &&
+           p->distortionValue->isVisibleTo(p));
+    ok("distortion: quasi-free angle, the degrees disabled", !p->angleEdit->isEnabled());
+    ok("distortion: R at the ends shown", p->distortionValue->text().contains(QString::fromUtf8(" … ")) &&
+                                              p->derivedText().contains("R = "),
+       p->distortionValue->text() + " | " + p->derivedText());
+    p->distortionCombo->setCurrentIndex(p->distortionCombo->findData("optical"));
+    ok("distortion: optical shows both channels, Edit only for Woods-Saxon",
+       p->opticalCombo[0]->isVisibleTo(p) && p->opticalCombo[1]->isVisibleTo(p) &&
+           p->opticalCombo[0]->currentData().toString() == "coulomb" && !p->opticalButton[0]->isEnabled());
+    p->opticalCombo[1]->setCurrentIndex(p->opticalCombo[1]->findData("ws"));
+    ok("distortion: Woods-Saxon starts at ten zeros, Edit enabled",
+       p->records().at(0).opticalSF == "0,0,0,0,0,0,0,0,0,0" && p->opticalButton[1]->isEnabled());
+    typeNumber(p->distortionRefEdit, "2.664");
+    p->distortionCombo->setCurrentIndex(p->distortionCombo->findData("coulomb"));
+    ok("distortion: coulomb drops opticalAA/SF, keeps E_ref",
+       p->records().at(0).opticalSF.isEmpty() && p->records().at(0).distortionRef == "2.664");
+    p->distortionCombo->setCurrentIndex(p->distortionCombo->findData("none"));
+    ok("distortion: none drops every distortion key",
+       p->records().at(0).distortion.isEmpty() && p->records().at(0).distortionRef.isEmpty() &&
+           !p->distortionValue->isVisibleTo(p));
+    p->distortionCombo->setCurrentIndex(p->distortionCombo->findData("coulomb"));
+    p->kinematicsBox->setChecked(false);
+    ok("distortion: coulomb dropped with the reaction, now disabled",
+       p->records().at(0).distortion.isEmpty() && p->distortionCombo->currentData().toString() == "none" &&
+           !itemEnabled("coulomb"));
+    p->distortionCombo->setCurrentIndex(p->distortionCombo->findData("table"));
+    type(p->distortionTableEdit, "rtable.dat");
+    ok("distortion: a table without the reaction", p->records().at(0).distortion == "table:rtable.dat" &&
+                                                       ws.validate().isEmpty() && p->distortionValue->isVisibleTo(p),
+       ws.validate());
+    ok("distortion: table stored relative to the project",
+       ThmExperimentsPage::projectRelative(c12Dir + "/rtable.dat", c12Dir) == "rtable.dat");
+    // The table's w(E) at the ends: log-linear between (0.5, 1) and (3, 4).
+    double lo = 0, hi = 0;
+    p->pointRange(QList<int>() << 3, lo, hi);
+    auto w = [](double e) { return std::exp(std::log(4.0) * (e - 0.5) / 2.5); };
+    ok("distortion: table value field is w at the ends",
+       p->distortionValue->text() == QString::fromUtf8("%1 … %2").arg(QString::number(w(lo), 'g', 3),
+                                                                            QString::number(w(hi), 'g', 3)),
+       p->distortionValue->text());
+  }
+  {
+    // The Woods-Saxon dialog: the ten numbers in their fields, as written until changed.
+    ThmOpticalDialog d("test", "50.0,4.5,0.60,10,4.5,0.6,0,0,0,4.50");
+    ok("optical dialog: fields as written", d.text() == "50.0,4.5,0.60,10,4.5,0.6,0,0,0,4.50" &&
+                                                d.fields[0]->value() == 50.0 && d.fields[9]->value() == 4.5 &&
+                                                d.fields[0]->suffix() == " MeV" && d.fields[1]->suffix() == " fm",
+       d.text());
+    typeNumber(d.fields[3], "12");
+    ok("optical dialog: one number changed", d.text() == "50.0,4.5,0.60,12,4.5,0.6,0,0,0,4.50", d.text());
+  }
+  // Round trip of every form: set through the controls, written, read by the
+  // engine's parser, shown again on reopening, untouched byte for byte.
+  const QString c12Base = "experiment[E1] segments=3 " + c12Reaction;
+  {
+    const QStringList forms = {"distortion=coulomb",
+                               "distortion=coulomb spectatorAngle=8",
+                               "distortion=coulomb spectatorAngle=cm:90",
+                               "distortion=coulomb distortionRef=2.664 distortionRatio=dw",
+                               "distortion=coulomb boundState=yukawa:3",
+                               "distortion=coulomb boundState=whittaker:3",
+                               "distortion=coulomb boundState=yukawa",
+                               "distortion=optical opticalAA=plane",
+                               "distortion=optical opticalAA=50,4.5,0.6,10,4.5,0.6,0,0,0,4.5 opticalSF=plane",
+                               "distortion=optical opticalSF=0,0,0,0,0,0,8,5.5,0.65,5 spectatorAngle=cm:8",
+                               "distortion=table:rtable.dat"};
+    for(const QString& form : forms) {
+      c12Open(c12Base + "\n");
+      ThmSettings s;
+      w.thmSettings(s);
+      {
+        ThmWorkspace ws(&w, s);
+        setDistortion(ws.experimentsPage, form);
+        ok(qPrintable("distortion " + form + ": accepted"), ws.validate().isEmpty(), ws.validate());
+        if(ws.validate().isEmpty()) ws.accept();
+      }
+      w.saveProject();
+      if(form == "distortion=coulomb")
+        ok("c12: a 15-character norm is written apart from the free-norm flag",
+           slurp(c12Path).contains("3.659747237e-06 1 "), slurp(c12Path).section("<segmentsData>", 1).left(400));
+      const QString expect = c12Base + " " + form + "\n";
+      ok(qPrintable("distortion " + form + ": written"), blockOf(slurp(c12Path)) == expect, blockOf(slurp(c12Path)));
+      ThmSettings back;
+      QString err;
+      ok(qPrintable("distortion " + form + ": read back by the engine's parser"), w.thmSettings(back, &err), err);
+      w.open(work.filePath("plain.azr"));
+      w.open(c12Path);
+      w.saveProject();
+      const QString before = slurp(c12Path);
+      w.thmSettings(back);
+      {
+        ThmWorkspace ws(&w, back);
+        const ThmExperimentRecord& r = ws.experimentsPage->records().at(0);
+        const QString kind = r.distortion.startsWith("table:") ? "table" : r.distortion;
+        ok(qPrintable("distortion " + form + ": controls read back"),
+           ws.experimentsPage->distortionCombo->currentData().toString() == kind &&
+               (kind != "table" || ws.experimentsPage->distortionTableEdit->text() == r.distortion.mid(6)) &&
+               ws.experimentsPage->experimentLines() == QStringList(c12Base + " " + form),
+           ws.experimentsPage->experimentLines().join("|"));
+        ok(qPrintable("distortion " + form + ": reopened, accepted"), ws.validate().isEmpty(), ws.validate());
+        if(!ws.validate().isEmpty()) continue;
+        if(ws.validate().isEmpty()) ws.accept();
+      }
+      w.saveProject();
+      ok(qPrintable("distortion " + form + ": untouched, byte-identical"), slurp(c12Path) == before);
+    }
+  }
+  {
+    // Written by hand: verbatim until edited; an edit rewrites only its key.
+    const QString hand = c12Base + " distortion=optical   opticalAA=50.0,4.50,0.60,10,4.5,0.6,0,0,0,4.5 "
+                                   "spectatorAngle=cm:8.0 boundState=whittaker:3.0 distortionRatio=dwpw  # by hand\n";
+    c12Open(hand);
+    w.saveProject();
+    ThmSettings s;
+    w.thmSettings(s);
+    {
+      ThmWorkspace ws(&w, s);
+      ThmExperimentsPage* p = ws.experimentsPage;
+      ok("distortion by hand: controls", p->distortionCombo->currentData().toString() == "optical" &&
+                                             p->opticalCombo[0]->currentData().toString() == "ws" &&
+                                             p->opticalCombo[1]->currentData().toString() == "coulomb" &&
+                                             p->angleKindCombo->currentData().toString() == "cm" &&
+                                             p->angleEdit->writtenText() == "8.0" && p->rminEdit->writtenText() == "3.0" &&
+                                             p->ratioCombo->currentData().toString() == "dwpw");
+      if(ws.validate().isEmpty()) ws.accept();
+    }
+    w.saveProject();
+    ok("distortion by hand: untouched block verbatim", blockOf(slurp(c12Path)) == hand, blockOf(slurp(c12Path)));
+    w.thmSettings(s);
+    {
+      ThmWorkspace ws(&w, s);
+      ws.experimentsPage->ratioCombo->setCurrentIndex(ws.experimentsPage->ratioCombo->findData("dw"));
+      if(ws.validate().isEmpty()) ws.accept();
+    }
+    w.saveProject();
+    ok("distortion by hand: edited ratio rewritten, the rest as written",
+       blockOf(slurp(c12Path)) == c12Base + " distortion=optical opticalAA=50.0,4.50,0.60,10,4.5,0.6,0,0,0,4.5 "
+                                            "spectatorAngle=cm:8.0 distortionRatio=dw boundState=whittaker:3.0\n",
+       blockOf(slurp(c12Path)));
+  }
+  {
+    // Refusals, in the engine's words (the engine refuses the same files).
+    struct Refusal {
+      QString tokens, words;
+      bool run;
+    };
+    const QList<Refusal> refusals = {
+        {"distortion=optical opticalAA=1,2,3", "opticalAA='1,2,3': expected plane, coulomb or ten numbers", true},
+        {"distortion=coulomb spectatorAngle=190", "spectatorAngle='190': expected qf, a lab angle", false},
+        {"spectatorAngle=8", "spectatorAngle= needs distortion=coulomb or distortion=optical", false},
+        {"distortion=coulomb opticalSF=plane", "opticalAA= and opticalSF= need distortion=optical", false},
+        {"distortion=table:rshort.dat", "distortion: the points span E_cm = ", true},
+        {"distortion=table:nothere.dat", "distortion: cannot read the weight file", false},
+        {"distortion=coulomb spectatorAngle=60", "is beyond the reach of the spectator", true},
+    };
+    for(const Refusal& r : refusals) {
+      c12Open(c12Base + " " + r.tokens + "\n");
+      ThmSettings s;
+      QString err;
+      if(!w.thmSettings(s, &err)) {
+        // Refused already by the parser: the engine's message, from its own parser.
+        ok(qPrintable("refused: " + r.tokens), err.contains(r.words), err);
+        if(r.run) {
+          int code = -1;
+          const QString out = engineRun(c12Dir, "c12.azr", &code);
+          ok(qPrintable("the engine refuses " + r.tokens + " with the same words"), code != 0 && out.contains("ERROR: " + err),
+             err + " | " + out.right(400));
+        }
+        continue;
+      }
+      ThmWorkspace ws(&w, s);
+      const QString why = ws.validate();
+      ok(qPrintable("refused: " + r.tokens), why.contains(r.words) && why.startsWith("<thm> experiment[E1]: "), why);
+      ok(qPrintable("refusal shown on the page: " + r.tokens),
+         ws.experimentsPage->messageLabel->isVisibleTo(ws.experimentsPage), ws.experimentsPage->messageLabel->text());
+      if(r.run) {
+        int code = -1;
+        const QString out = engineRun(c12Dir, "c12.azr", &code);
+        ok(qPrintable("the engine refuses " + r.tokens + " with the same words"), code != 0 && out.contains("ERROR: " + why),
+           why + " | " + out.right(400));
+      }
+    }
+    // On the page: a malformed Woods-Saxon list refused at once, in the parser's words.
+    c12Open(c12Base + " distortion=optical\n");
+    {
+      ThmSettings s;
+      w.thmSettings(s);
+      ThmWorkspace ws(&w, s);
+      ThmExperimentsPage* p = ws.experimentsPage;
+      p->opticalCombo[0]->setCurrentIndex(p->opticalCombo[0]->findData("ws"));
+      p->setOpticalText(0, "1,2,3");
+      ok("optical: a short list refused on the page", p->messageLabel->text().startsWith("opticalAA='1,2,3': expected plane") &&
+                                                          p->messageLabel->isVisibleTo(p) &&
+                                                          ws.validate().contains("opticalAA='1,2,3'"),
+         p->messageLabel->text());
+      p->setOpticalText(0, "50,4.5,0.6,10,4.5,0.6,0,0,0,4.5");
+      ok("optical: ten numbers accepted", ws.validate().isEmpty() && !p->messageLabel->isVisibleTo(p), ws.validate());
+    }
+    // Coulomb without the reaction: the engine's check.
+    ThmExperimentsPage noKin(QStringList() << "experiment[W] segments=3 distortion=coulomb",
+                             w.getSegmentsTab()->getSegmentsDataModel(), w.getPairsTab()->getPairsModel(), c12Dir, true);
+    ok("refused: coulomb without the reaction", noKin.check().contains("distortion=coulomb needs the kinematics"),
+       noKin.check());
+  }
+  {
+    // R at the ends of the data on the page = the engine's (its startup line),
+    // the B(x+s) note hidden (masses and field 32 agree).
+    c12Open(c12Base + " distortion=coulomb\n");
+    ThmSettings s;
+    w.thmSettings(s);
+    ThmWorkspace ws(&w, s);
+    ThmExperimentsPage* p = ws.experimentsPage;
+    const QString shown = p->derivedText();
+    int code = -1;
+    const QString out = engineRun(c12Dir, "c12.azr", &code);
+    QRegExp rx("R = ([-+0-9.eE]+) at E = ([-+0-9.eE]+) MeV \\(E_sF = [^)]*\\), ([-+0-9.eE]+) at E = ([-+0-9.eE]+) "
+               "MeV \\(E_sF = [^)]*\\)\\.");
+    const bool found = code == 0 && rx.indexIn(out) >= 0;
+    ok("distortion: the engine runs it and prints R at the ends", found, out.right(600));
+    if(found) {
+      ok("distortion: the page shows the engine's R line", shown.contains(rx.cap(0)), shown + " | " + rx.cap(0));
+      ok("distortion: the R field shows the engine's numbers",
+         p->distortionValue->text() == QString::fromUtf8("%1 … %2")
+                                           .arg(QString::number(rx.cap(1).toDouble(), 'g', 3),
+                                                QString::number(rx.cap(3).toDouble(), 'g', 3)) &&
+             rx.cap(1).toDouble() > 1.0 && rx.cap(3).toDouble() < 1.0,
+         p->distortionValue->text());
+      std::cout << "        engine: " << rx.cap(0).toStdString() << std::endl;
+    }
+    ok("B(x+s): masses and field 32 agree, no note", p->bindingWarningLabel->isHidden() &&
+                                                         ws.channelsPage->bindingWarning(1).isEmpty() &&
+                                                         !out.contains("B(x+s) from the masses"));
+    // B edited on the Channels page: the note on both pages, and away again.
+    ws.channelsPage->setBindingText(1, "5");
+    p->refreshDerived();
+    const QString note = QString::fromUtf8("B from masses 10.27 MeV ≠ pair B 5 MeV (vertex uses the pair value)");
+    ok("B(x+s): note in the reaction section", !p->bindingWarningLabel->isHidden() && !p->bindingWarningIcon->isHidden() &&
+                                                   p->bindingWarningLabel->text() == note,
+       p->bindingWarningLabel->text());
+    ok("B(x+s): warning icon beside the pair's B", ws.channelsPage->bindingWarning(1) == "experiment[E1]: " + note,
+       ws.channelsPage->bindingWarning(1));
+    ws.channelsPage->setBindingText(1, "10.272312");
+    p->refreshDerived();
+    ok("B(x+s): back to the file's B, no note", p->bindingWarningLabel->isHidden() &&
+                                                    ws.channelsPage->bindingWarning(1).isEmpty());
+    if(qEnvironmentVariableIsSet("THM_PNG_DIR")) {
+      ws.resize(900, 700);
+      ws.show();
+      ws.pages->setCurrentWidget(p);
+      QApplication::processEvents();
+      if(QScrollArea* a = p->findChild<QScrollArea*>()) a->ensureWidgetVisible(p->distortionBox);
+      QApplication::processEvents();
+      QPixmap page(ws.size());
+      ws.render(&page);
+      page.save(QDir(qEnvironmentVariable("THM_PNG_DIR")).filePath("experiments_distortion.png"));
+    }
+  }
+  {
+    // The B(x+s) note in the engine's words: 3He = p + d against the pair's
+    // 2.2246 MeV (7Li(p,a) through a made-up 3He(7Li,aa)d).
+    w.open(lsPath);
+    ThmSettings s;
+    w.thmSettings(s);
+    ThmWorkspace ws(&w, s);
+    ThmExperimentsPage* p = ws.experimentsPage;
+    int code = -1;
+    const QString out = engineRun(work.path(), "lineshape.azr", &code);
+    const QString detail = p->bindingWarningLabel->toolTip();
+    ok("B(x+s): note shown for 3He = p + d",
+       !p->bindingWarningLabel->isHidden() &&
+           p->bindingWarningLabel->text() ==
+               QString::fromUtf8("B from masses 5.493 MeV ≠ pair B 2.225 MeV (vertex uses the pair value)"),
+       p->bindingWarningLabel->text());
+    ok("B(x+s): the note's detail is the engine's warning",
+       code == 0 && !detail.isEmpty() && out.contains("WARNING: <thm> experiment[E1]: " + detail), detail + " | " + out.right(600));
+    ok("B(x+s): Channels page marks pair 5", ws.channelsPage->bindingWarning(5).contains("B from masses 5.493 MeV"),
+       ws.channelsPage->bindingWarning(5));
+    ok("B(x+s): not a refusal", ws.validate().isEmpty(), ws.validate());
+  }
+#ifdef AZURE2_THM_DIAGNOSTICS
+  {
+    // Diagnostics: the distortion card, R the engine's (thm_distortion), the
+    // page's R at the ends the same numbers.
+    c12Open(c12Base + " distortion=coulomb\n");
+    ThmSettings s;
+    w.thmSettings(s);
+    ThmWorkspace ws(&w, s);
+    ThmDiagnosticsPage* d = ws.diagnosticsPage;
+    d->segmentCombo->setCurrentIndex(d->segmentCombo->findData(3));
+    ok("distortion diagnostics: computed", d->computeNow(), d->result().error);
+    const ThmDiagnosticsResult& r = d->result();
+    const int n = r.energy.size();
+    ok("distortion diagnostics: R, |M|^2, |M_PW|^2 on the grid", r.distortion && r.distortionError.isEmpty() &&
+                                                                      r.distortionKind == "coulomb" && r.distortionR.size() == n &&
+                                                                      r.distortionDirect.size() == n &&
+                                                                      r.distortionM2.size() == n && r.distortionPW2.size() == n,
+       r.distortionError);
+    double worstModel = 0.0, worstRatio = 0.0;
+    for(int i = 0; i < n && r.distortionDirect.size() == n && r.distortionM2.size() == n; i++) {
+      worstModel = std::max(worstModel, std::fabs(r.distortionR[i] / r.distortionDirect[i] - 1.0));
+      worstRatio = std::max(worstRatio, std::fabs(r.distortionM2[i] / r.distortionPW2[i] / r.distortionDirect[i] - 1.0));
+    }
+    ok("distortion diagnostics: R as the model uses it = R direct (grid, 1e-5)", n > 0 && worstModel < 1e-5,
+       QString::number(worstModel));
+    ok("distortion diagnostics: R = (|M|^2/|M_PW|^2) over its value at E_ref (dwpw)", n > 0 && worstRatio < 1e-10,
+       QString::number(worstRatio));
+    double lo = 0, hi = 0, rLo = 0, rHi = 0;
+    QString why;
+    ws.experimentsPage->distortionInfo(ws.experimentsPage->records().at(0), &why, &lo, &hi, &rLo, &rHi);
+    ok("distortion: the page's R at the ends = the engine's thm_distortion there",
+       why.isEmpty() && n > 0 && std::fabs(lo - r.energy.first()) < 1e-12 && std::fabs(hi - r.energy.last()) < 1e-9 &&
+           std::fabs(rLo / r.distortionDirect.first() - 1.0) < 1e-9 && std::fabs(rHi / r.distortionDirect.last() - 1.0) < 1e-6,
+       QString("%1 %2 | %3 %4").arg(rLo, 0, 'g', 12).arg(rHi, 0, 'g', 12).arg(r.distortionDirect.value(0), 0, 'g', 12)
+           .arg(r.distortionDirect.value(n - 1), 0, 'g', 12));
+    ok("distortion card: shown, log scale, R + |M|^2 + |M_PW|^2, E_ref marked",
+       d->distortionPlot->isVisibleTo(d) && d->distortionPlot->logY() && d->distortionPlot->series().size() == 3 &&
+           d->distortionPlot->series()[0].y == r.distortionR && d->distortionPlot->markers().size() == 1 &&
+           std::fabs(d->distortionPlot->markers()[0].x - r.distortionRef) < 1e-12 && !d->distortionPlot->title().isEmpty());
+    ok("distortion: the status tooltip names it", d->statusLabel->toolTip().contains("Distortion: coulomb"),
+       d->statusLabel->toolTip());
+    if(qEnvironmentVariableIsSet("THM_PNG_DIR")) {
+      ws.resize(900, 700);
+      ws.show();
+      ws.pages->setCurrentWidget(d);
+      QApplication::processEvents();
+      QPixmap page(ws.size());
+      ws.render(&page);
+      page.save(QDir(qEnvironmentVariable("THM_PNG_DIR")).filePath("diagnostics_distortion.png"));
+    }
+  }
+  {
+    // distortion=dw: |M|^2 is R, so not drawn twice.
+    c12Open(c12Base + " distortion=coulomb distortionRatio=dw\n");
+    ThmSettings s;
+    w.thmSettings(s);
+    ThmWorkspace ws(&w, s);
+    ThmDiagnosticsPage* d = ws.diagnosticsPage;
+    d->segmentCombo->setCurrentIndex(d->segmentCombo->findData(3));
+    ok("distortion dw: computed", d->computeNow(), d->result().error);
+    ok("distortion dw: R and |M_PW|^2", d->distortionPlot->series().size() == 2);
+  }
+  {
+    // A table relative to the project: made absolute in the engine's copy only.
+    c12Open(c12Base + " distortion=table:rtable.dat\n");
+    ThmSettings s;
+    w.thmSettings(s);
+    ThmWorkspace ws(&w, s);
+    QString snap, err;
+    ok("distortion table: the snapshot keeps the relative path",
+       ws.projectSnapshot(snap, &err) && snap.contains(" distortion=table:rtable.dat\n"), err);
+    ThmDiagnosticsPage* d = ws.diagnosticsPage;
+    d->segmentCombo->setCurrentIndex(d->segmentCombo->findData(3));
+    ok("distortion table: computed from a copy elsewhere (path made absolute)", d->computeNow(), d->result().error);
+    const ThmDiagnosticsResult& r = d->result();
+    bool same = r.distortionKind == "table" && r.distortionR.size() == r.energy.size();
+    for(int i = 0; same && i < r.energy.size(); i++)
+      same = std::fabs(r.distortionR[i] / std::exp(std::log(4.0) * (r.energy[i] - 0.5) / 2.5) - 1.0) < 1e-12;
+    ok("distortion table: w(E) of the table, one curve", same && d->distortionPlot->series().size() == 1 &&
+                                                             d->distortionPlot->isVisibleTo(d));
+  }
+  {
+    // No distortion: the card stays hidden.
+    c12Open(c12Base + "\n");
+    ThmSettings s;
+    w.thmSettings(s);
+    ThmWorkspace ws(&w, s);
+    ThmDiagnosticsPage* d = ws.diagnosticsPage;
+    d->segmentCombo->setCurrentIndex(d->segmentCombo->findData(3));
+    ok("no distortion: computed", d->computeNow(), d->result().error);
+    ok("no distortion: no card", !d->result().distortion && !d->distortionPlot->isVisibleTo(d));
   }
 #endif
 

@@ -85,6 +85,10 @@ ThmDiagnosticsPage::ThmDiagnosticsPage(std::function<QString(int, ThmDiagnostics
   windowPlot = makePlot(tr("p_s (MeV/c)"), tr("w (per MeV/c)"));
   windowPlot->setToolTip(tr("w(p) = |phi(p)|^2 p^2 over [p_min, p_max] (a table: as given), unit area; dots: the "
                             "Gauss-Legendre nodes at which AZURE2 evaluates the vertex."));
+  distortionPlot = makePlot(tr(kEcm), tr("R"));
+  distortionPlot->setToolTip(tr("R(E) = rho(E)/rho(E_ref), rho = |M|^2/|M_PW|^2 (dwpw) or |M|^2 (dw), as the model "
+                                "is multiplied by it (distortion=); dashed and dotted: |M|^2 and |M_PW|^2, each 1 at "
+                                "E_ref. A table: its w(E)."));
 
   // Each plot in a card: a framed panel with a short bold title.
   auto card = [this](ThmPlotWidget *plot, const QString &title) {
@@ -114,6 +118,7 @@ ThmDiagnosticsPage::ThmDiagnosticsPage(std::function<QString(int, ThmDiagnostics
   card(zetaPlot, QString::fromUtf8("Line shape ζ(E)"));
   card(weightPlot, tr("Weight w(E)"));
   card(windowPlot, QString::fromUtf8("Spectator window w(p<sub>s</sub>)"));
+  card(distortionPlot, tr("Distortion R(E)"));
 
   QWidget *panels = new QWidget;
   grid_ = new QGridLayout;
@@ -171,11 +176,11 @@ QString ThmDiagnosticsPage::reactionOf(int segment) const {
 }
 
 void ThmDiagnosticsPage::clearPlots(const QString &message) {
-  for (ThmPlotWidget *p : {vertexPlot, hoesPlot, lineshapePlot, zetaPlot, weightPlot, windowPlot}) {
+  for (ThmPlotWidget *p : plots()) {
     p->clear();
     p->setMessage(message);
   }
-  for (ThmPlotWidget *p : {lineshapePlot, zetaPlot, weightPlot, windowPlot}) cards_[p]->hide();
+  for (ThmPlotWidget *p : plots().mid(2)) cards_[p]->hide();
   vertexGroupCombo->clear();
   statusLabel->setToolTip(QString());
 }
@@ -253,6 +258,11 @@ void ThmDiagnosticsPage::showResult(const ThmDiagnosticsResult &result) {
                            .arg(result.nodeP.size())
                            .arg(result.meanTs, 0, 'g', 6)
                      : QString()) +
+      (result.distortion && result.distortionError.isEmpty()
+           ? (result.distortionKind == "table"
+                  ? tr(" Distortion: %1.").arg(result.distortionText)
+                  : tr(" Distortion: %1; E_ref = %2 MeV.").arg(result.distortionText).arg(result.distortionRef, 0, 'g', 6))
+           : QString()) +
       (result.lineshape && result.nc2Hidden
            ? tr(" Line shape: %1 level(s) with a pole outside the data range, or beyond the first four, not drawn.")
                  .arg(result.nc2Hidden)
@@ -347,6 +357,59 @@ void ThmDiagnosticsPage::showResult(const ThmDiagnosticsResult &result) {
       windowPlot->setMessage(tr("one node, p_s = %1 MeV/c").arg(result.nodeP.value(0), 0, 'g', 6));
     }
   }
+
+  // Distortion factor.
+  if (result.distortion) {
+    cards_[distortionPlot]->show();
+    distortionPlot->setTitle(reaction);
+    if (!result.distortionError.isEmpty()) {
+      distortionPlot->setMessage(tr("not tabulated: %1").arg(result.distortionError));
+    } else {
+      const bool table = result.distortionKind == "table";
+      ThmPlotWidget::Series r;
+      r.x = result.energy;
+      r.y = result.distortionR;
+      r.color = thmPlotColor(0);
+      r.label = table ? tr("w (table)") : tr("R");
+      distortionPlot->addSeries(r);
+      // |M|^2 alone is R for dw: drawn only for dwpw.
+      if (!table && result.distortionRatioPW && result.distortionM2.size() == result.energy.size()) {
+        ThmPlotWidget::Series m;
+        m.x = result.energy;
+        m.y = result.distortionM2;
+        m.color = thmPlotColor(1);
+        m.style = Qt::DashLine;
+        m.label = QString::fromUtf8("|M|²");
+        distortionPlot->addSeries(m);
+      }
+      if (!table && result.distortionPW2.size() == result.energy.size()) {
+        ThmPlotWidget::Series pw;
+        pw.x = result.energy;
+        pw.y = result.distortionPW2;
+        pw.color = thmPlotColor(2);
+        pw.style = Qt::DotLine;
+        pw.label = QString::fromUtf8("|M_PW|²");
+        distortionPlot->addSeries(pw);
+      }
+      if (!table && result.distortionRef >= result.energy.first() && result.distortionRef <= result.energy.last()) {
+        ThmPlotWidget::Marker ref;
+        ref.x = result.distortionRef;
+        ref.color = QColor(Qt::gray);
+        ref.label = "E_ref";
+        distortionPlot->addMarker(ref);
+      }
+      // Log scale when the curves span decades.
+      bool positive = true;
+      double lo = 1e300, hi = 0.0;
+      for (const ThmPlotWidget::Series &s : distortionPlot->series())
+        for (double v : s.y) {
+          positive = positive && v > 0.0;
+          lo = std::min(lo, v);
+          hi = std::max(hi, v);
+        }
+      distortionPlot->setLogY(positive && hi > 20.0 * lo);
+    }
+  }
   layoutPanels();
 }
 
@@ -367,17 +430,19 @@ void ThmDiagnosticsPage::layoutPanels() {
   // so none leaves a hole; the plots of a row share their frame top and those
   // of a column their left edge (ThmPlotWidget::setAlignedWith).
   QList<ThmPlotWidget *> shown;
-  for (ThmPlotWidget *p : {vertexPlot, hoesPlot, lineshapePlot, zetaPlot, weightPlot, windowPlot}) {
+  const QList<ThmPlotWidget *> all = plots();
+  for (ThmPlotWidget *p : all) {
     grid_->removeWidget(cards_[p]);
     if (panelShown(p)) shown << p;
   }
   columns_ = columnsFor(shown.size());
   const int rows = (shown.size() + columns_ - 1) / columns_;
+  const int maxRows = (all.size() + 1) / 2;  // two columns
   for (int c = 0; c < 3; c++) grid_->setColumnStretch(c, c < columns_ ? 1 : 0);
-  for (int r = 0; r < 3; r++) grid_->setRowStretch(r, r < rows ? 1 : 0);
+  for (int r = 0; r < maxRows; r++) grid_->setRowStretch(r, r < rows ? 1 : 0);
   for (int i = 0; i < shown.size(); i++) grid_->addWidget(cards_[shown[i]], i / columns_, i % columns_);
-  for (ThmPlotWidget *p : {lineshapePlot, zetaPlot, weightPlot, windowPlot})
-    if (!panelShown(p)) grid_->addWidget(cards_[p], 3, 0);  // parked
+  for (ThmPlotWidget *p : all)
+    if (!panelShown(p)) grid_->addWidget(cards_[p], maxRows, 0);  // parked
   for (int i = 0; i < shown.size(); i++) {
     QList<ThmPlotWidget *> row, column;
     for (int j = 0; j < shown.size(); j++) {
@@ -391,7 +456,7 @@ void ThmDiagnosticsPage::layoutPanels() {
 void ThmDiagnosticsPage::resizeEvent(QResizeEvent *event) {
   QWidget::resizeEvent(event);
   int shown = 0;
-  for (ThmPlotWidget *p : {vertexPlot, hoesPlot, lineshapePlot, zetaPlot, weightPlot, windowPlot})
+  for (ThmPlotWidget *p : plots())
     if (panelShown(p)) shown++;
   if (columnsFor(shown) != columns_) layoutPanels();
 }

@@ -1,6 +1,8 @@
 #include "ThmChannelsPage.h"
 
+#include <QAction>
 #include <QCheckBox>
+#include <QStyle>
 #include <QDoubleValidator>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -95,6 +97,11 @@ ThmChannelsPage::ThmChannelsPage(PairsModel *pairs, LevelsModel *levels, Channel
     v->setLocale(QLocale::c());
     edit->setValidator(v);
     edit->setProperty("shown", edit->text());
+    // B(x+s) from an experiment's masses differs: a warning icon inside the field.
+    QAction *warning = edit->addAction(style()->standardIcon(QStyle::SP_MessageBoxWarning), QLineEdit::LeadingPosition);
+    warning->setVisible(false);
+    warningActions_ << warning;
+    connect(edit, &QLineEdit::textChanged, this, [this]() { refreshWarnings(); });
     pairTable->setCellWidget(row, 3, edit);
   }
   pairTable->resizeColumnsToContents();
@@ -200,4 +207,32 @@ void ThmChannelsPage::apply() {
     if (rwa == item->data(Qt::UserRole).toBool() || c >= channelList.size()) continue;  // as read
     channels_->setData(channels_->index(c, 7), rwa ? 1 : 0, Qt::EditRole);
   }
+}
+
+double ThmChannelsPage::bindingOf(int pairKey) const {
+  const int row = pairRow(pairKey);
+  double x;
+  if (row >= 0 && readWholeDouble(qobject_cast<QLineEdit *>(pairTable->cellWidget(row, 3))->text(), x)) return x;
+  const QList<PairsData> pairs = pairs_->getPairs();
+  return pairKey >= 1 && pairKey <= pairs.size() ? pairs.at(pairKey - 1).bindingEnergy : 0.0;
+}
+
+void ThmChannelsPage::setBindingWarning(std::function<QString(int, double)> warning) {
+  warning_ = warning;
+  refreshWarnings();
+}
+
+void ThmChannelsPage::refreshWarnings() {
+  for (int row = 0; row < pairRows_.size() && row < warningActions_.size(); row++) {
+    const QString text = warning_ ? warning_(pairRows_.at(row), bindingOf(pairRows_.at(row))) : QString();
+    warningActions_[row]->setVisible(!text.isEmpty());
+    warningActions_[row]->setToolTip(text);
+    pairTable->cellWidget(row, 3)->setToolTip(text);
+  }
+}
+
+QString ThmChannelsPage::bindingWarning(int pairKey) const {
+  const int row = pairRow(pairKey);
+  if (row < 0 || row >= warningActions_.size() || !warningActions_[row]->isVisible()) return QString();
+  return warningActions_[row]->toolTip();
 }

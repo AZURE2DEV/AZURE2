@@ -2,6 +2,7 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
@@ -19,6 +20,7 @@
 #include <QSet>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QStandardItemModel>
 #include <QStyle>
 #include <QTableWidget>
 #include <QTextDocument>
@@ -34,6 +36,9 @@
 #include "ThmExperiment.h"
 #include "ThmLineshape.h"
 #include "ThmNumberSpin.h"
+#include "Config.h"
+#include "Constants.h"
+#include "ThmDistortion.h"
 
 namespace {
 
@@ -74,6 +79,10 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   oldLines_(experimentLines) {
   oldRecords_ = ThmExperimentRecord::read(experimentLines);
   records_ = oldRecords_;
+  pairBinding_ = [this](int pairKey) {
+    const QList<PairsData> pairs = pairs_->getPairs();
+    return pairKey >= 1 && pairKey <= pairs.size() ? pairs.at(pairKey - 1).bindingEnergy : 0.0;
+  };
 
   experimentTable = new QTableWidget(0, 4);
   experimentTable->setHorizontalHeaderLabels(QStringList() << tr("Name") << tr("Segments") << tr("Background")
@@ -198,6 +207,71 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   psNodesSpin->setToolTip(tr("psNodes=: Gauss-Legendre nodes on the window (1-64, default 16)."));
   connect(psNodesSpin, SIGNAL(valueChanged(int)), this, SLOT(psNodesChanged(int)));
 
+  // Distortion factor (distortion= and its keys).
+  distortionCombo = new QComboBox;
+  distortionCombo->addItem(tr("None"), "none");
+  distortionCombo->addItem(tr("Coulomb"), "coulomb");
+  distortionCombo->addItem(tr("Optical"), "optical");
+  distortionCombo->addItem(tr("Table"), "table");
+  distortionCombo->setToolTip(
+      tr("distortion=: R(E) multiplies the model of every segment before the folding (zero-range DWBA; "
+         "Mukhamedzhanov & Pang PRC 99 (2019) 064618). Coulomb: point-Coulomb waves in a + A and s + F; optical: "
+         "per channel; table: w(E) from a file. Coulomb and optical need the three-body reaction."));
+  connect(distortionCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(distortionKindChanged()));
+  angleKindCombo = new QComboBox;
+  angleKindCombo->addItem(tr("quasi-free"), "qf");
+  angleKindCombo->addItem(tr("lab"), "lab");
+  angleKindCombo->addItem(tr("c.m."), "cm");
+  angleKindCombo->setToolTip(tr("spectatorAngle=: the direction of the spectator. Quasi-free: k_sF along k_aA "
+                                "(default); lab: an angle to the beam converted at every E; c.m.: fixed."));
+  connect(angleKindCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(distortionEdited()));
+  angleEdit = new ThmNumberSpin(QString::fromUtf8("°"), 0.0, 180.0, 1.0);
+  angleEdit->setToolTip(tr("The spectator angle to the beam (0-180)."));
+  connect(angleEdit, SIGNAL(valueChanged(double)), this, SLOT(distortionEdited()));
+  distortionRefEdit = new ThmNumberSpin(" MeV", 0.0, 1.0e3, 0.1);
+  distortionRefEdit->setSpecialValueText(tr("auto"));
+  distortionRefEdit->setToolTip(tr("distortionRef=: E_ref, where R = 1 (c.m. of x + A). Auto: the middle of the "
+                                   "data. Only the scale, which the profiled norm absorbs."));
+  connect(distortionRefEdit, SIGNAL(valueChanged(double)), this, SLOT(distortionEdited()));
+  ratioCombo = new QComboBox;
+  ratioCombo->addItem(tr("DWBA/PWBA"), "dwpw");
+  ratioCombo->addItem(tr("DWBA"), "dw");
+  ratioCombo->setToolTip(tr("distortionRatio=: rho = |M/M_PW|^2 (dwpw, default: the correction to data divided by "
+                            "the momentum distribution) or |M|^2 (dw, the papers' ratio); R = rho(E)/rho(E_ref)."));
+  connect(ratioCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(distortionEdited()));
+  boundCombo = new QComboBox;
+  boundCombo->addItem(tr("Whittaker"), "whittaker");
+  boundCombo->addItem(tr("Yukawa"), "yukawa");
+  boundCombo->setToolTip(tr("boundState=: the s-x bound state tail, W(2 kappa r)/r (default) or exp(-kappa r)/r."));
+  connect(boundCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(distortionEdited()));
+  rminEdit = new ThmNumberSpin(" fm", 0.0, 50.0, 0.5);
+  rminEdit->setSpecialValueText(QString::fromUtf8("—"));
+  rminEdit->setToolTip(tr("boundState=...:rmin: the bound state is zero below r_min (0-50 fm)."));
+  connect(rminEdit, SIGNAL(valueChanged(double)), this, SLOT(distortionEdited()));
+  const char *channelKeys[2] = {"opticalAA", "opticalSF"};
+  for (int c = 0; c < 2; c++) {
+    opticalCombo[c] = new QComboBox;
+    opticalCombo[c]->addItem(tr("plane"), "plane");
+    opticalCombo[c]->addItem(tr("Coulomb"), "coulomb");
+    opticalCombo[c]->addItem(QString::fromUtf8("Woods–Saxon"), "ws");
+    opticalCombo[c]->setToolTip(tr("%1=: plane (no distortion), point Coulomb (default) or a Woods-Saxon optical "
+                                   "potential plus Coulomb.")
+                                    .arg(channelKeys[c]));
+    connect(opticalCombo[c], SIGNAL(currentIndexChanged(int)), this, SLOT(opticalKindChanged()));
+    opticalButton[c] = new QPushButton(QString::fromUtf8("Edit…"));
+    opticalButton[c]->setAutoDefault(false);
+    connect(opticalButton[c], &QPushButton::clicked, this, [this, c]() { editOptical(c); });
+  }
+  distortionTableEdit = new QLineEdit;
+  distortionTableEdit->setPlaceholderText(tr("file"));
+  distortionTableEdit->setToolTip(tr("distortion=table:<file>: two columns, E (c.m. of x + A, MeV, increasing) and "
+                                     "w > 0, the weight[k] format; every point inside it. Relative to the project "
+                                     "directory."));
+  connect(distortionTableEdit, SIGNAL(textEdited(const QString &)), this, SLOT(distortionEdited()));
+  distortionTableButton = new QPushButton("...");
+  distortionTableButton->setToolTip(psTableButton->toolTip());
+  connect(distortionTableButton, SIGNAL(clicked()), this, SLOT(chooseDistortionTable()));
+
   // Derived values, as AZURE2 prints them (the whole text: derivedText, in the tooltips).
   auto value = [this]() {
     QLabel *l = new QLabel(QString::fromUtf8("—"));
@@ -208,6 +282,13 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   qfValue = value();
   zetaValue = value();
   meanTsValue = value();
+  distortionValue = value();
+  bindingWarningIcon = new QLabel;
+  bindingWarningIcon->setPixmap(
+      style()->standardIcon(QStyle::SP_MessageBoxWarning)
+          .pixmap(style()->pixelMetric(QStyle::PM_SmallIconSize), style()->pixelMetric(QStyle::PM_SmallIconSize)));
+  bindingWarningLabel = new QLabel;
+  bindingWarningLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
   messageIcon = new QLabel;
   const int icon = style()->pixelMetric(QStyle::PM_SmallIconSize);
   messageIcon->setPixmap(style()->standardIcon(QStyle::SP_MessageBoxWarning).pixmap(icon, icon));
@@ -273,6 +354,12 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   kl->addWidget(label(QString::fromUtf8("\u03b6:"), false, tr("zeta at the lowest and highest data point")), 3, 2,
                 right);
   kl->addWidget(zetaValue, 3, 3);
+  // B from the masses against the pair's B (field 32): one line when they differ.
+  QHBoxLayout *bw = new QHBoxLayout;
+  bw->setContentsMargins(0, 0, 0, 0);
+  bw->addWidget(bindingWarningIcon);
+  bw->addWidget(bindingWarningLabel, 1);
+  kl->addLayout(bw, 4, 1, 1, 3);
   kinematicsBox->setLayout(kl);
 
   psBox = new QGroupBox(tr("Spectator momentum window"));
@@ -316,6 +403,65 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   psNodesRow_ = {nodesLabel, psNodesSpin, meanLabel, meanTsValue};
   psBox->setLayout(pl);
 
+  distortionBox = new QGroupBox(tr("Distortion"));
+  distortionBox->setToolTip(distortionCombo->toolTip());
+  // Only the fields of the chosen kind are shown (showDistortionRows).
+  QGridLayout *dl = form();
+  dl->addWidget(label(tr("Distortion:"), true), 0, 0, right);
+  dl->addWidget(distortionCombo, 0, 1);
+  QLabel *ratioLabel = label(tr("Ratio:"), false);
+  dl->addWidget(ratioLabel, 0, 2, right);
+  dl->addWidget(ratioCombo, 0, 3);
+  QLabel *angleLabel = label(tr("Angle:"), true, tr("Spectator direction"));
+  QHBoxLayout *al = new QHBoxLayout;
+  al->setContentsMargins(0, 0, 0, 0);
+  al->addWidget(angleKindCombo, 1);
+  al->addWidget(angleEdit, 1);
+  QWidget *angleBox = new QWidget;
+  angleBox->setLayout(al);
+  dl->addWidget(angleLabel, 1, 0, right);
+  dl->addWidget(angleBox, 1, 1);
+  QLabel *refLabel = label(QString::fromUtf8("E<sub>ref</sub>:"), false, tr("Reference energy, R(E_ref) = 1"));
+  dl->addWidget(refLabel, 1, 2, right);
+  dl->addWidget(distortionRefEdit, 1, 3);
+  QLabel *boundLabel = label(tr("Bound state:"), true);
+  dl->addWidget(boundLabel, 2, 0, right);
+  dl->addWidget(boundCombo, 2, 1);
+  QLabel *rminLabel = label(QString::fromUtf8("r<sub>min</sub>:"), false);
+  dl->addWidget(rminLabel, 2, 2, right);
+  dl->addWidget(rminEdit, 2, 3);
+  QWidget *opticalBox[2];
+  QLabel *opticalLabel[2] = {label("a + A:", true, tr("opticalAA=: the entrance channel")),
+                             label("s + F:", false, tr("opticalSF=: the spectator's exit channel"))};
+  for (int c = 0; c < 2; c++) {
+    QHBoxLayout *ol = new QHBoxLayout;
+    ol->setContentsMargins(0, 0, 0, 0);
+    ol->addWidget(opticalCombo[c], 1);
+    ol->addWidget(opticalButton[c]);
+    opticalBox[c] = new QWidget;
+    opticalBox[c]->setLayout(ol);
+    dl->addWidget(opticalLabel[c], 3, 2 * c, right);
+    dl->addWidget(opticalBox[c], 3, 2 * c + 1);
+  }
+  QLabel *distortionTableLabel = label(tr("Table:"), true);
+  QHBoxLayout *dtl = new QHBoxLayout;
+  dtl->setContentsMargins(0, 0, 0, 0);
+  dtl->addWidget(distortionTableEdit, 1);
+  dtl->addWidget(distortionTableButton);
+  QWidget *distortionTableBox = new QWidget;
+  distortionTableBox->setLayout(dtl);
+  dl->addWidget(distortionTableLabel, 4, 0, right);
+  dl->addWidget(distortionTableBox, 4, 1, 1, 3);
+  QLabel *rLabel = label("R(E):", true, tr("R at the lowest and highest data point"));
+  dl->addWidget(rLabel, 5, 0, right);
+  dl->addWidget(distortionValue, 5, 1, 1, 3);
+  distortionComputedRows_ = {ratioLabel, ratioCombo, angleLabel, angleBox, refLabel, distortionRefEdit,
+                             boundLabel, boundCombo, rminLabel, rminEdit};
+  distortionOpticalRow_ = {opticalLabel[0], opticalBox[0], opticalLabel[1], opticalBox[1]};
+  distortionTableRow_ = {distortionTableLabel, distortionTableBox};
+  distortionValueRow_ = {rLabel, distortionValue};
+  distortionBox->setLayout(dl);
+
   int leftWidth = 0, rightWidth = 0;
   for (QLabel *l : leftLabels) leftWidth = std::max(leftWidth, l->sizeHint().width());
   for (QLabel *l : rightLabels) rightWidth = std::max(rightWidth, l->sizeHint().width());
@@ -336,6 +482,7 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   el->addWidget(experimentBox);
   el->addWidget(kinematicsBox);
   el->addWidget(psBox);
+  el->addWidget(distortionBox);
   el->addLayout(message);
   el->addStretch(1);
   editorBox->setLayout(el);
@@ -370,6 +517,7 @@ void ThmExperimentsPage::refreshRow(int row) {
                    .arg(r.beam.isEmpty() ? "?" : r.beam, r.target.isEmpty() ? "?" : r.target,
                         r.beamEnergy.isEmpty() ? "?" : r.beamEnergy, r.spectator.isEmpty() ? "?" : r.spectator) +
                (r.lineshape ? tr(", line shape") : QString()) + (r.hasWindow() ? tr(", p_s window") : QString());
+  if (r.hasDistortion()) reaction += tr(", distortion %1").arg(r.distortion);
   const QString cells[4] = {r.name, ThmExperimentRecord::segmentsListText(r.segments), r.background, reaction};
   for (int c = 0; c < 4; c++) {
     QTableWidgetItem *item = experimentTable->item(row, c);
@@ -501,12 +649,28 @@ void ThmExperimentsPage::loadEditor() {
   lineshapeCheck->setEnabled(complete);
   loadPs(r);
   psBox->setEnabled(complete);
+  loadDistortion(r);
+  updateDistortionItems(complete);
   showDerived(r);
   loading_ = false;
 }
 
 void ThmExperimentsPage::showDerived(const ThmExperimentRecord &x) {
   QString why, info = derivedInfo(x, &why);
+  // R (or the table's w) at the ends of the data.
+  double rLo = 0.0, rHi = 0.0;
+  QString distortionWhy;
+  const QString distortion = x.hasDistortion() ? distortionInfo(x, &distortionWhy, nullptr, nullptr, &rLo, &rHi)
+                                               : QString();
+  if (!distortion.isEmpty()) info += (info.isEmpty() ? "" : "\n") + distortion;
+  if (why.isEmpty()) why = distortionWhy;
+  if (why.isEmpty() && !x.segments.isEmpty()) {
+    // The engine's refusal of a distortion key (a malformed value, a key
+    // without its kind), at once rather than on Accept.
+    const QString parse = ThmSettings::checkExperimentLines(QStringList() << x.line());
+    for (const char *key : {"distortion", "optical", "spectatorAngle", "boundState"})
+      if (parse.contains(key)) why = parse.mid(parse.indexOf("]: ") + 3);
+  }
   derivedText_ = info.isEmpty() ? why : why.isEmpty() ? info : info + "\n" + why;
   // The values in the sections, compact; the whole text in their tooltips.
   const QString none = QString::fromUtf8("\u2014");
@@ -524,6 +688,18 @@ void ThmExperimentsPage::showDerived(const ThmExperimentRecord &x) {
   const bool haveWindow = haveReaction && x.hasWindow() && !windowInfo(x, &ignored, &window).isEmpty();
   meanTsValue->setText(haveWindow ? mev(window.MeanEs()) : none);
   for (QLabel *l : {bindingValue, zetaValue, meanTsValue}) l->setToolTip(info);
+  distortionValue->setText(distortion.isEmpty() ? none
+                                                : QString::fromUtf8("%1 … %2")
+                                                      .arg(QString::number(rLo, 'g', 3), QString::number(rHi, 'g', 3)));
+  distortionValue->setToolTip(distortion);
+  // B(x+s) from the masses against the pair's B.
+  QString detail;
+  const QString mismatch = haveReaction ? bindingMismatch(x, &detail) : QString();
+  bindingWarningLabel->setText(mismatch);
+  bindingWarningLabel->setToolTip(detail);
+  bindingWarningIcon->setToolTip(detail);
+  bindingWarningLabel->setVisible(!mismatch.isEmpty());
+  bindingWarningIcon->setVisible(!mismatch.isEmpty());
   messageLabel->setText(why);
   messageLabel->setVisible(!why.isEmpty());
   messageIcon->setVisible(!why.isEmpty());
@@ -594,6 +770,20 @@ void ThmExperimentsPage::kinematicsEdited() {
     loadPs(r);
     loading_ = false;
   }
+  // Coulomb and optical distortion need it too (a table does not).
+  if (!on && r.hasComputedDistortion()) {
+    r.distortion.clear();
+    r.opticalAA.clear();
+    r.opticalSF.clear();
+    r.spectatorAngle.clear();
+    r.distortionRef.clear();
+    r.distortionRatio.clear();
+    r.boundState.clear();
+    loading_ = true;
+    loadDistortion(r);
+    loading_ = false;
+  }
+  updateDistortionItems(lineshapeCheck->isEnabled());
   refreshRow(current_);
   showDerived(r);
 }
@@ -678,6 +868,8 @@ bool ThmExperimentsPage::reaction(const ThmExperimentRecord &x, Reaction &out, Q
   out.pairKey = pairKey;
   out.beamEnergy = ebeam;
   out.mX = mX;
+  out.horseIsBeam = horse == 0;
+  out.other = nA;
   out.bind = (mX + sp.mass - th.mass) * kAmu;
   out.exa = horse == 0 ? ebeam * mX / th.mass * mA / (mX + mA) : ebeam * mX / (mA + mX);
   return true;
@@ -706,13 +898,24 @@ QString ThmExperimentsPage::derivedInfo(const ThmExperimentRecord &x, QString *e
 }
 
 bool ThmExperimentsPage::pointRange(const QList<int> &segments, double &lo, double &hi) const {
+  QVector<double> energies;
+  lo = 1.0e300;
+  hi = -1.0e300;
+  if (!pointEnergies(segments, energies)) return false;
+  for (double e : energies) {
+    lo = std::min(lo, e);
+    hi = std::max(hi, e);
+  }
+  return lo <= hi;
+}
+
+bool ThmExperimentsPage::pointEnergies(const QList<int> &segments, QVector<double> &energies) const {
   // The c.m. energies of the points AZURE2 reads (ESegment::FillData): rows
   // of the data file inside the segment's lab energy range (and angle range
   // if differential), converted with the entrance pair's masses.
   const QList<SegmentsDataData> lines = segments_->getLines();
   const QList<PairsData> pairs = pairs_->getPairs();
-  lo = 1.0e300;
-  hi = -1.0e300;
+  energies.clear();
   for (int k : segments) {
     if (k < 1 || k > lines.size() || !lines.at(k - 1).isActive) continue;
     const SegmentsDataData &s = lines.at(k - 1);
@@ -730,11 +933,10 @@ bool ThmExperimentsPage::pointRange(const QList<int> &segments, double &lo, doub
       if (!line.valid()) return false;
       if (line.energy() < s.lowEnergy || line.energy() > s.highEnergy) continue;
       if (differential && (line.angle() < s.lowAngle || line.angle() > s.highAngle)) continue;
-      lo = std::min(lo, line.energy() * factor);
-      hi = std::max(hi, line.energy() * factor);
+      energies << line.energy() * factor;
     }
   }
-  return lo <= hi;
+  return !energies.isEmpty();
 }
 
 QString ThmExperimentsPage::lineshapeInfo(const ThmExperimentRecord &x, QString *error, QString *compact) const {
@@ -811,6 +1013,10 @@ QString ThmExperimentsPage::check() const {
     QString error;
     derivedInfo(x, &error);
     if (!error.isEmpty()) return where + error;
+    if (x.hasDistortion()) {
+      distortionInfo(x, &error);
+      if (!error.isEmpty()) return where + error;
+    }
   }
   return QString();
 }
@@ -1000,4 +1206,389 @@ QString ThmExperimentsPage::windowInfo(const ThmExperimentRecord &x, QString *er
       .arg(QString::number(window.es.front(), 'g', 6))
       .arg(QString::number(window.es.back(), 'g', 6))
       .arg(QString::number(window.MeanEs(), 'g', 6));
+}
+
+// ---------------------------------------------------------------------------
+// Distortion factor
+
+namespace {
+
+// A key the page sets to `value`: "" for the engine's default, unless the
+// file wrote the default out ("qf", "dwpw", ...), which is then kept.
+QString keyValue(const QString &old, const QString &value, const QString &byDefault) {
+  if (value != byDefault) return value;
+  return old == byDefault ? old : QString();
+}
+
+const char *kTenZeros = "0,0,0,0,0,0,0,0,0,0";
+
+// opticalAA/SF as written -> combo data.
+QString opticalKind(const QString &value) {
+  if (value == "plane") return "plane";
+  if (value.isEmpty() || value == "coulomb") return "coulomb";
+  return "ws";
+}
+
+}  // namespace
+
+void ThmExperimentsPage::loadDistortion(const ThmExperimentRecord &r) {
+  const bool was = loading_;
+  loading_ = true;
+  QString kind = "none", table;
+  if (r.distortion == "coulomb" || r.distortion == "optical") kind = r.distortion;
+  if (r.distortion.startsWith("table:")) {
+    kind = "table";
+    table = r.distortion.mid(6);
+  }
+  int at = distortionCombo->findData(kind);
+  distortionCombo->setCurrentIndex(at >= 0 ? at : 0);
+  distortionTableEdit->setText(table);
+  QString angleKind = "qf", angle;
+  if (r.spectatorAngle.startsWith("cm:")) {
+    angleKind = "cm";
+    angle = r.spectatorAngle.mid(3);
+  } else if (!r.spectatorAngle.isEmpty() && r.spectatorAngle != "qf") {
+    angleKind = "lab";
+    angle = r.spectatorAngle;
+  }
+  angleKindCombo->setCurrentIndex(std::max(0, angleKindCombo->findData(angleKind)));
+  angleEdit->setWrittenText(angle);
+  distortionRefEdit->setWrittenText(r.distortionRef);
+  ratioCombo->setCurrentIndex(r.distortionRatio == "dw" ? 1 : 0);
+  const QStringList bound = r.boundState.split(':');
+  boundCombo->setCurrentIndex(bound.value(0) == "yukawa" ? 1 : 0);
+  rminEdit->setWrittenText(bound.size() > 1 ? bound.value(1) : QString());
+  const QString *optical[2] = {&r.opticalAA, &r.opticalSF};
+  for (int c = 0; c < 2; c++) {
+    const QString k = opticalKind(*optical[c]);
+    opticalCombo[c]->setCurrentIndex(std::max(0, opticalCombo[c]->findData(k)));
+    lastOptical_[c] = k == "ws" ? *optical[c] : QString(kTenZeros);
+  }
+  loading_ = was;
+  showDistortionRows();
+}
+
+void ThmExperimentsPage::showDistortionRows() {
+  // Only the fields of the chosen kind; none: the combo alone.
+  const QString kind = distortionCombo->currentData().toString();
+  const bool computed = kind == "coulomb" || kind == "optical";
+  for (QWidget *w : distortionComputedRows_) w->setVisible(computed);
+  for (QWidget *w : distortionOpticalRow_) w->setVisible(kind == "optical");
+  for (QWidget *w : distortionTableRow_) w->setVisible(kind == "table");
+  for (QWidget *w : distortionValueRow_) w->setVisible(kind != "none");
+  angleEdit->setEnabled(angleKindCombo->currentData().toString() != "qf");
+  for (int c = 0; c < 2; c++) {
+    const bool ws = opticalCombo[c]->currentData().toString() == "ws";
+    opticalButton[c]->setEnabled(ws);
+    opticalButton[c]->setToolTip(ws ? tr("V,R,a,W,RW,aW,WD,RD,aD,RC = %1").arg(lastOptical_[c])
+                                    : tr("The ten Woods-Saxon numbers"));
+  }
+}
+
+void ThmExperimentsPage::updateDistortionItems(bool complete) {
+  // Coulomb and optical need the three-body reaction (all four keys), as the
+  // engine's CheckThmExperiments; the current kind stays selectable, so that
+  // its refusal can be seen.
+  QStandardItemModel *m = qobject_cast<QStandardItemModel *>(distortionCombo->model());
+  if (!m) return;
+  for (int i = 0; i < distortionCombo->count(); i++) {
+    const QString kind = distortionCombo->itemData(i).toString();
+    const bool needs = kind == "coulomb" || kind == "optical";
+    QStandardItem *item = m->item(i);
+    const bool enabled = !needs || complete || distortionCombo->currentIndex() == i;
+    item->setFlags(enabled ? item->flags() | Qt::ItemIsEnabled : item->flags() & ~Qt::ItemIsEnabled);
+    item->setToolTip(needs && !complete ? tr("Needs the three-body reaction (beam, target, spectator, Ebeam).")
+                                        : QString());
+  }
+}
+
+void ThmExperimentsPage::distortionKindChanged() {
+  showDistortionRows();
+  if (loading_ || current_ < 0) return;
+  ThmExperimentRecord &r = records_[current_];
+  const QString kind = distortionCombo->currentData().toString();
+  if (kind == "table")
+    r.distortion = "table:" + distortionTableEdit->text().trimmed();
+  else
+    r.distortion = keyValue(r.distortion, kind, "none");
+  // Keys the new kind does not take (the engine refuses them) go.
+  if (kind != "optical") {
+    r.opticalAA.clear();
+    r.opticalSF.clear();
+  }
+  if (kind != "coulomb" && kind != "optical") {
+    r.spectatorAngle.clear();
+    r.distortionRef.clear();
+    r.distortionRatio.clear();
+    r.boundState.clear();
+  }
+  loadDistortion(r);
+  updateDistortionItems(lineshapeCheck->isEnabled());
+  refreshRow(current_);
+  showDerived(r);
+}
+
+void ThmExperimentsPage::distortionEdited() {
+  showDistortionRows();
+  if (loading_ || current_ < 0) return;
+  ThmExperimentRecord &r = records_[current_];
+  // Only the key of the control that changed is rewritten; the others stay as written.
+  QObject *from = sender();
+  if (from == distortionTableEdit) {
+    r.distortion = "table:" + distortionTableEdit->text().trimmed();
+  } else if (from == angleKindCombo || from == angleEdit) {
+    const QString kind = angleKindCombo->currentData().toString();
+    r.spectatorAngle = kind == "qf"    ? keyValue(r.spectatorAngle, "qf", "qf")
+                       : kind == "cm" ? "cm:" + angleEdit->writtenText()
+                                      : angleEdit->writtenText();
+  } else if (from == distortionRefEdit) {
+    r.distortionRef = distortionRefEdit->writtenText();
+  } else if (from == ratioCombo) {
+    r.distortionRatio = keyValue(r.distortionRatio, ratioCombo->currentData().toString(), "dwpw");
+  } else if (from == boundCombo || from == rminEdit) {
+    const QString rmin = rminEdit->writtenText();
+    r.boundState = keyValue(r.boundState, boundCombo->currentData().toString() + (rmin.isEmpty() ? "" : ":" + rmin),
+                            "whittaker");
+  }
+  refreshRow(current_);
+  showDerived(r);
+}
+
+void ThmExperimentsPage::opticalKindChanged() {
+  showDistortionRows();
+  if (loading_ || current_ < 0) return;
+  ThmExperimentRecord &r = records_[current_];
+  QString *optical[2] = {&r.opticalAA, &r.opticalSF};
+  for (int c = 0; c < 2; c++) {
+    if (sender() != opticalCombo[c]) continue;
+    const QString kind = opticalCombo[c]->currentData().toString();
+    *optical[c] = kind == "ws" ? lastOptical_[c] : keyValue(*optical[c], kind, "coulomb");
+  }
+  showDistortionRows();
+  refreshRow(current_);
+  showDerived(r);
+}
+
+void ThmExperimentsPage::setOpticalText(int channel, const QString &tenNumbers) {
+  if (current_ < 0 || channel < 0 || channel > 1) return;
+  ThmExperimentRecord &r = records_[current_];
+  lastOptical_[channel] = tenNumbers;
+  (channel == 0 ? r.opticalAA : r.opticalSF) = tenNumbers;
+  loadDistortion(r);
+  refreshRow(current_);
+  showDerived(r);
+}
+
+void ThmExperimentsPage::editOptical(int channel) {
+  ThmOpticalDialog dialog(channel == 0 ? tr("a + A optical potential (opticalAA)")
+                                       : tr("s + F optical potential (opticalSF)"),
+                          lastOptical_[channel], this);
+  if (dialog.exec() == QDialog::Accepted && dialog.text() != lastOptical_[channel])
+    setOpticalText(channel, dialog.text());
+}
+
+void ThmExperimentsPage::chooseDistortionTable() {
+  const QString start = projectDir_.isEmpty() ? QDir::currentPath() : projectDir_;
+  const QString file = QFileDialog::getOpenFileName(this, tr("Distortion table"), start,
+                                                    tr("Tables (*.dat *.txt);;All files (*)"));
+  if (file.isEmpty() || current_ < 0) return;
+  distortionTableEdit->setText(projectRelative(file, projectDir_));
+  records_[current_].distortion = "table:" + distortionTableEdit->text();
+  refreshRow(current_);
+  showDerived(records_.at(current_));
+}
+
+QString ThmExperimentsPage::distortionInfo(const ThmExperimentRecord &x, QString *error, double *loOut,
+                                           double *hiOut, double *rLo, double *rHi) const {
+  if (error) error->clear();
+  if (!x.hasDistortion()) return QString();
+  // The engine's parse of the line (the keys' own checks are
+  // ThmSettings::checkExperimentLines').
+  std::vector<ThmExperiment> parsed;
+  if (!ParseThmExperimentLine(x.line().toStdString(), parsed).empty() || parsed.empty()) return QString();
+  const ThmExperiment &e = parsed.front();
+  QVector<double> energies;
+  if (!pointEnergies(x.segments, energies)) return QString();  // the engine reports an unreadable file itself
+  double lo = 1.0e300, hi = -1.0e300;
+  for (double v : energies) {
+    lo = std::min(lo, v);
+    hi = std::max(hi, v);
+  }
+  if (loOut) *loOut = lo;
+  if (hiOut) *hiOut = hi;
+  auto number = [](double v) { return QString::number(v, 'g', 6); };
+  const QString key = x.line() + "|" + projectDir_ + "|" + number(lo) + "|" + number(hi);
+  if (key == cacheKey_) {
+    if (error) *error = cacheError_;
+    if (rLo) *rLo = cache_[0];
+    if (rHi) *rHi = cache_[1];
+    return cacheText_;
+  }
+  QString text, why;
+  double r0 = 0.0, r1 = 0.0;
+  if (e.distortion == ThmExperiment::DIST_TABLE) {
+    // Config::ReadThmBlock reads the table relative to the .azr;
+    // EData::BuildThmGroups wants every point inside it.
+    QString path = QString::fromStdString(e.distortionTable);
+    if (QFileInfo(path).isRelative() && !projectDir_.isEmpty()) path = QDir(projectDir_).filePath(path);
+    ThmWeightTable table;
+    table.name = e.distortionTable;
+    const std::string bad = table.Read(QFile::encodeName(path).toStdString());
+    if (!bad.empty()) {
+      why = "distortion: " + QString::fromStdString(bad);
+    } else if (!table.Covers(lo) || !table.Covers(hi)) {
+      why = tr("distortion: the points span E_cm = %1 to %2 MeV, beyond the table '%3' [%4, %5] MeV.")
+                .arg(number(lo), number(hi), QString::fromStdString(table.name), number(table.e.front()),
+                     number(table.e.back()));
+    } else {
+      r0 = table(lo);
+      r1 = table(hi);
+      text = tr("w(E) from the table '%1': %2 at E = %3 MeV, %4 at E = %5 MeV")
+                 .arg(QString::fromStdString(table.name), number(r0), number(lo), number(r1), number(hi));
+    }
+  } else {
+    Reaction r;
+    QString ignored;
+    if (!reaction(x, r, &ignored)) return QString();
+    // As EData::BuildThmGroups sets it up.
+    ThmDistortion::Kinematics dk;
+    dk.Za = r.horse.Z;
+    dk.ZA = r.other.Z;
+    dk.Zs = r.spectator.Z;
+    dk.Zx = r.horse.Z - r.spectator.Z;
+    dk.ma = r.horse.mass;
+    dk.mA = r.other.mass;
+    dk.ms = r.spectator.mass;
+    dk.mx = r.mX;
+    dk.horseIsBeam = r.horseIsBeam;
+    dk.mBeam = r.beam.mass;
+    dk.mTarget = r.target.mass;
+    dk.beamEnergy = r.beamEnergy;
+    dk.bind = r.bind;
+    ThmDistortion d;
+    d.experiment = e.name;
+    d.kin = dk;
+    d.eAA = dk.beamEnergy * dk.mTarget / (dk.mBeam + dk.mTarget);
+    d.angleKind = e.angleKind == 1 ? ThmDistortion::LAB : e.angleKind == 2 ? ThmDistortion::CM : ThmDistortion::QF;
+    d.angle = e.angle;
+    d.sf.kind = e.distortion == ThmExperiment::DIST_OPTICAL && e.opticalSF.kind == 0 ? ThmDistortion::Channel::PLANE
+                                                                                      : ThmDistortion::Channel::POINT_COULOMB;
+    d.sf.mu = dk.ms * (dk.mx + dk.mA) / (dk.ms + dk.mx + dk.mA) * uconv;
+    d.vcm = std::sqrt(2.0 * dk.mBeam * uconv * dk.beamEnergy) / ((dk.mBeam + dk.mTarget) * uconv);
+    for (double v : energies) {
+      const std::string bad = d.CheckEnergy(v);
+      if (!bad.empty()) {
+        why = "distortion: " + QString::fromStdString(bad) + ".";
+        break;
+      }
+    }
+    if (why.isEmpty()) {
+      // The same radial grid and waves as the engine's (they depend on the
+      // lower end of its ln R grid), without its grid of R: R is evaluated
+      // directly at the ends, as AZURE2 prints it.
+      const std::string bad = d.Build(e, dk, lo - 0.5, lo - 0.5, 0.5 * (lo + hi));
+      if (!bad.empty()) why = "distortion: " + QString::fromStdString(bad) + ".";
+    }
+    if (why.isEmpty()) {
+      const ThmDistortion::Point a = d.Evaluate(lo), b = d.Evaluate(hi);
+      r0 = a.ok ? d.R(a) : 0.0;
+      r1 = b.ok ? d.R(b) : 0.0;
+      auto point = [&](const ThmDistortion::Point &p) {
+        return tr("(E_sF = %1, eta_sF = %2, theta_cm = %3 deg)")
+            .arg(number(p.esf), number(p.etasf), number(p.thetaCm));
+      };
+      text = tr("Distortion factor R(E), zero-range DWBA: %1.\n").arg(QString::fromStdString(d.description)) +
+             tr("k_aA = %1 fm^-1, eta_aA = %2, kappa = %3 fm^-1, eta_b = %4, beta = m_s/m_a = %5; E_ref = %6 MeV\n")
+                 .arg(number(d.aa.k), number(d.aa.eta), number(d.kappa), number(d.etaB), number(d.beta),
+                      number(d.eRef)) +
+             tr("R = %1 at E = %2 MeV %3, %4 at E = %5 MeV %6.")
+                 .arg(number(r0), number(lo), point(a), number(r1), number(hi), point(b));
+    }
+  }
+  cacheKey_ = key;
+  cacheText_ = text;
+  cacheError_ = why;
+  cache_[0] = r0;
+  cache_[1] = r1;
+  if (error) *error = why;
+  if (rLo) *rLo = r0;
+  if (rHi) *rHi = r1;
+  return text;
+}
+
+QString ThmExperimentsPage::bindingMismatch(const ThmExperimentRecord &x, QString *detail) const {
+  if (detail) detail->clear();
+  Reaction r;
+  QString ignored;
+  if (!reaction(x, r, &ignored)) return QString();
+  const double pairB = pairBinding_(r.pairKey);
+  if (!(std::fabs(pairB - r.bind) > 1.0e-3)) return QString();
+  if (detail)
+    *detail = tr("B(x+s) from the masses of %1 = x + %2 is %3 MeV, but the entrance pair %4 carries B = %5 MeV "
+                 "(field 32 of its channel lines); the THM vertex uses field 32, the kinematics of this experiment "
+                 "(the quasi-free energy above, E_sF of the line shape and of the distortion factor) use the masses.")
+                  .arg(QString::fromStdString(r.horse.name), QString::fromStdString(r.spectator.name))
+                  .arg(QString::number(r.bind, 'g', 6))
+                  .arg(r.pairKey)
+                  .arg(QString::number(pairB, 'g', 6));
+  return QString::fromUtf8("B from masses %1 MeV ≠ pair B %2 MeV (vertex uses the pair value)")
+      .arg(QString::number(r.bind, 'g', 4), QString::number(pairB, 'g', 4));
+}
+
+QString ThmExperimentsPage::bindingMismatchOfPair(int pairKey, double pairB) const {
+  QStringList out;
+  for (const ThmExperimentRecord &x : records_) {
+    Reaction r;
+    QString ignored;
+    if (!reaction(x, r, &ignored) || r.pairKey != pairKey) continue;
+    if (std::fabs(pairB - r.bind) > 1.0e-3)
+      out << QString::fromUtf8("experiment[%1]: B from masses %2 MeV ≠ pair B %3 MeV (vertex uses the pair value)")
+                 .arg(x.name, QString::number(r.bind, 'g', 4), QString::number(pairB, 'g', 4));
+  }
+  return out.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Woods-Saxon dialog
+
+ThmOpticalDialog::ThmOpticalDialog(const QString &title, const QString &tenNumbers, QWidget *parent) :
+  QDialog(parent) {
+  setWindowTitle(title);
+  const QStringList values = tenNumbers.split(',');
+  const char *names[10] = {"V", "R", "a", "W", "R<sub>W</sub>", "a<sub>W</sub>", "W<sub>D</sub>", "R<sub>D</sub>",
+                           "a<sub>D</sub>", "R<sub>C</sub>"};
+  const QString rows[4] = {tr("Real volume"), tr("Imaginary volume"), tr("Imaginary surface"), tr("Coulomb")};
+  QGridLayout *g = new QGridLayout;
+  g->setHorizontalSpacing(8);
+  g->setVerticalSpacing(6);
+  for (int k = 0; k < 10; k++) {
+    const bool depth = k < 9 && k % 3 == 0;
+    fields[k] = depth ? new ThmNumberSpin(" MeV", -1.0e4, 1.0e4, 1.0) : new ThmNumberSpin(" fm", 0.0, 100.0, 0.1);
+    fields[k]->setWrittenText(values.value(k, "0"));
+    const int row = k / 3, col = k % 3;
+    if (col == 0) {
+      QLabel *r = new QLabel(rows[row]);
+      g->addWidget(r, row, 0);
+    }
+    QLabel *l = new QLabel(QString(names[k]) + ":");
+    g->addWidget(l, row, 1 + 2 * col, Qt::AlignRight | Qt::AlignVCenter);
+    g->addWidget(fields[k], row, 2 + 2 * col);
+  }
+  fields[0]->setToolTip(tr("Real depth (> 0 attractive); 0 switches the term off."));
+  fields[3]->setToolTip(tr("Imaginary volume depth (> 0 absorptive); 0 switches the term off."));
+  fields[6]->setToolTip(tr("Imaginary surface depth, 4 W_D e^x/(1+e^x)^2; 0 switches the term off."));
+  fields[9]->setToolTip(tr("Uniform-sphere Coulomb radius; 0: a point charge."));
+  QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+  connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+  QVBoxLayout *l = new QVBoxLayout;
+  l->addLayout(g);
+  l->addWidget(buttons);
+  setLayout(l);
+}
+
+QString ThmOpticalDialog::text() const {
+  QStringList out;
+  for (ThmNumberSpin *f : fields) out << f->writtenText();
+  return out.join(',');
 }

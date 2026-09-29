@@ -31,13 +31,15 @@ class ThmPlotWidget;
  *   weight           w(E) (only with a weight table);
  *   p_s window       w(p) = |phi(p)|^2 p^2 over the window with its quadrature
  *                    nodes (only for an experiment with ps=), and the vertex
- *                    panel adds <|M_l|^2> over the window, dashed.
+ *                    panel adds <|M_l|^2> over the window, dashed;
+ *   distortion       R(E) of the experiment (only with distortion=), log
+ *                    scale, with |M|^2 and |M_PW|^2 normalized at E_ref.
  * Each panel is a framed card with a short bold title; the cards fill a
  * grid of equal cells (two or three columns, by width) and their axes line
  * up (ThmPlotWidget::setAlignedWith).  Every plot carries the reaction as a
  * bold label inside the axes.  One toolbar row holds the controls (segment,
  * J^pi of the vertex panel, Compute); the status is one line, its details in
- * its tooltip.  Later stages add panels here (distortion), not controls.
+ * its tooltip.  Later stages add panels here, not controls.
  */
 class ThmDiagnosticsPage : public QWidget {
   Q_OBJECT
@@ -78,6 +80,7 @@ class ThmDiagnosticsPage : public QWidget {
   ThmPlotWidget *zetaPlot;
   ThmPlotWidget *weightPlot;
   ThmPlotWidget *windowPlot;
+  ThmPlotWidget *distortionPlot;
   QWidget *vertexPanel;  ///< the card of vertexPlot
 
  signals:
@@ -94,6 +97,10 @@ class ThmDiagnosticsPage : public QWidget {
  private:
   int columnsFor(int shown) const;
   bool panelShown(ThmPlotWidget *plot) const;
+  /// Every plot, in reading order; the first two are always shown.
+  QList<ThmPlotWidget *> plots() const {
+    return {vertexPlot, hoesPlot, lineshapePlot, zetaPlot, weightPlot, windowPlot, distortionPlot};
+  }
   QHash<ThmPlotWidget *, QFrame *> cards_;
   int columns_ = 2;
   void clearPlots(const QString &message);

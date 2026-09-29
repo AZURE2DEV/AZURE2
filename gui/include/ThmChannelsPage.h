@@ -4,8 +4,10 @@
 #include <QList>
 #include <QSet>
 #include <QWidget>
+#include <functional>
 
 QT_BEGIN_NAMESPACE
+class QAction;
 class QTableWidget;
 QT_END_NAMESPACE
 
@@ -23,7 +25,9 @@ class SegmentsTestModel;
  * those pairs, the width input flag (field 33: the width column is a reduced
  * width amplitude in MeV^(1/2) rather than a partial width or ANC).  A pair
  * with B != 0 or a channel with the flag set is listed even when no THM
- * segment uses its pair, so that nothing in the file is out of reach.
+ * segment uses its pair, so that nothing in the file is out of reach.  A
+ * warning icon beside B marks a pair whose B differs from B(x+s) of an
+ * experiment's reaction (the masses), as the engine warns at startup.
  */
 class ThmChannelsPage : public QWidget {
   Q_OBJECT
@@ -46,6 +50,16 @@ class ThmChannelsPage : public QWidget {
   /// For the tests: set a binding energy / a flag as the widgets do.
   void setBindingText(int pairKey, const QString &text);
   void setReducedWidthFlag(int channelIndex, bool rwa);
+  /// B of a pair as the page shows it (the edited value if it reads as a
+  /// number, else the project's).
+  double bindingOf(int pairKey) const;
+  /// The warning for a pair and B ("" none): the Experiments page's
+  /// B(x+s) of the reactions on that pair against B.
+  void setBindingWarning(std::function<QString(int pairKey, double pairB)> warning);
+  /// Recomputes the warning icons (B or the experiments changed).
+  void refreshWarnings();
+  /// The warning shown beside a pair's B ("" if none), as its tooltip says it.
+  QString bindingWarning(int pairKey) const;
 
   QTableWidget *pairTable;     ///< Pair | Nuclei | THM segments | B (MeV) (a line edit)
   QTableWidget *channelTable;  ///< Level | Pair | l | s | Width (as entered) | Amplitude (check: field 33)
@@ -55,6 +69,8 @@ class ThmChannelsPage : public QWidget {
   ChannelsModel *channels_;
   QList<int> pairRows_;     // pair key per row
   QList<int> channelRows_;  // ChannelsModel row per row
+  QList<QAction *> warningActions_;  // per pair row: the icon inside the B field
+  std::function<QString(int, double)> warning_;
 };
 
 #endif

@@ -79,9 +79,21 @@ ThmWorkspace::ThmWorkspace(AZURESetup *setup, const ThmSettings &settings, QWidg
   QPointer<ThmModelPage> model(modelPage);
   experimentsPage->setSpectatorEnergy(
       [model](int pairKey) { return model ? model->settings().spectatorEnergyOf(pairKey) : 0.0; });
-  experimentsPage->refreshDerived();
   channelsPage = new ThmChannelsPage(pairs, setup->getLevelsTab()->getLevelsModel(),
                                      setup->getLevelsTab()->getChannelsModel(), data, test);
+  // B(x+s) from the masses against the pair's B: the Experiments page takes
+  // B from the Channels page, which marks the pairs that disagree.
+  QPointer<ThmChannelsPage> channelsGuard(channelsPage);
+  QPointer<ThmExperimentsPage> experimentsGuard(experimentsPage);
+  experimentsPage->setPairBinding([channelsGuard, pairs](int pairKey) {
+    if (channelsGuard) return channelsGuard->bindingOf(pairKey);
+    const QList<PairsData> list = pairs->getPairs();
+    return pairKey >= 1 && pairKey <= list.size() ? list.at(pairKey - 1).bindingEnergy : 0.0;
+  });
+  channelsPage->setBindingWarning([experimentsGuard](int pairKey, double pairB) {
+    return experimentsGuard ? experimentsGuard->bindingMismatchOfPair(pairKey, pairB) : QString();
+  });
+  experimentsPage->refreshDerived();
   pages = new QTabWidget;
   pages->addTab(modelPage, tr("Model"));
   pages->addTab(experimentsPage, tr("Experiments"));
@@ -99,13 +111,14 @@ ThmWorkspace::ThmWorkspace(AZURESetup *setup, const ThmSettings &settings, QWidg
       [this]() { return diagnosticsTargets(setup_, experimentsPage); });
   pages->addTab(diagnosticsPage, tr("Diagnostics"));
   pages->setTabToolTip(3, tr("Read-only plots computed by AZURE2 on request: entrance vertex, HOES and on-shell "
-                             "cross sections, line shape, weight, spectator-momentum window"));
+                             "cross sections, line shape, weight, spectator-momentum window, distortion"));
   connect(pages, &QTabWidget::currentChanged, this, [this](int) {
     if (pages->currentWidget() == diagnosticsPage) diagnosticsPage->refreshTargets();
   });
 #endif
   connect(pages, &QTabWidget::currentChanged, experimentsPage, [this](int) {
     if (pages->currentWidget() == experimentsPage) experimentsPage->refreshDerived();
+    if (pages->currentWidget() == channelsPage) channelsPage->refreshWarnings();
   });
   pages->setTabToolTip(0, tr("Options of the THM observable: the <thm> block"));
   pages->setTabToolTip(1, tr("Segments sharing one profiled norm and a background: experiment[...] lines"));

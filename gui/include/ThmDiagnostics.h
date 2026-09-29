@@ -22,7 +22,10 @@
  *   window     with a spectator-momentum window (ps=): the event weight
  *              w(p) = |phi(p)|^2 p^2 over [pmin, pmax] with the engine's
  *              Gauss-Legendre nodes, and in the vertex panel the window
- *              average <|M_l|^2> (AZUREAPI::GetThmVertex, EData::ThmVertexTable).
+ *              average <|M_l|^2> (AZUREAPI::GetThmVertex, EData::ThmVertexTable);
+ *   distortion with distortion=: R(E) as the model uses it and, for coulomb
+ *              and optical, |M|^2 and |M_PW|^2 normalized at E_ref
+ *              (AZUREAPI::GetThmDistortion, EData::ThmDistortionTable).
  *
  * Nothing here is written into the project: the engine runs on a copy in a
  * temporary directory.  ComputeThmDiagnostics does the work and may take a
@@ -84,6 +87,17 @@ struct ThmDiagnosticsResult {
   QVector<double> nodeP, nodeWeight, nodeTs;  ///< nodes (MeV/c), normalized weights, T_s (MeV)
   QVector<double> windowP, windowW;  ///< w(p) on [pmin, pmax], normalized to unit area (per MeV/c)
   QVector<double> nodeW;             ///< the same w(p) at the nodes
+
+  // Distortion factor (distortion=), from AZUREAPI::GetThmDistortion.
+  bool distortion = false;
+  QString distortionKind;         ///< coulomb | optical | table
+  QString distortionText;         ///< the engine's description
+  QString distortionError;        ///< the engine's reason if it could not be tabulated on the grid
+  double distortionRef = 0.0;     ///< E_ref (MeV; coulomb, optical)
+  QVector<double> distortionR;    ///< R(E) as the model uses it (interpolated; a table: w(E))
+  QVector<double> distortionDirect;  ///< R(E) evaluated directly (coulomb, optical)
+  QVector<double> distortionM2, distortionPW2;  ///< |M|^2 and |M_PW|^2 over their values at E_ref
+  bool distortionRatioPW = true;  ///< dwpw (R = |M|^2/|M_PW|^2 ...) or dw
 };
 
 ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request);

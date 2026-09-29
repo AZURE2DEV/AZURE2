@@ -63,13 +63,14 @@ void setThmLines(QString &text, const QStringList &lines) {
   text.replace(a, b - a, lines.isEmpty() ? QString() : lines.join('\n') + '\n');
 }
 
-/// weight[k]= / weightTest[k]= paths and ps=table:<file> of experiment lines
-/// made absolute (the copy of the project is not in the project's directory,
-/// and the engine resolves them against it).
+/// weight[k]= / weightTest[k]= paths, and ps=table:<file> and
+/// distortion=table:<file> of experiment lines, made absolute (the copy of the
+/// project is not in the project's directory, and the engine resolves them
+/// against it).
 QStringList absoluteWeights(const QStringList &lines, const QString &dir) {
   QStringList out;
   QRegularExpression rx("^(\\s*weight(?:Test)?\\s*\\[\\s*\\d+\\s*\\]\\s*=\\s*)([^#\\s][^#]*?)(\\s*(#.*)?)$");
-  QRegularExpression table("(^|[ \\t])ps=table:([^ \\t#]+)");
+  QRegularExpression table("(^|[ \\t])(?:ps|distortion)=table:([^ \\t#]+)");
   for (const QString &line : lines) {
     QRegularExpressionMatch m = rx.match(line);
     if (m.hasMatch() && QFileInfo(m.captured(2)).isRelative()) {
@@ -78,14 +79,16 @@ QStringList absoluteWeights(const QStringList &lines, const QString &dir) {
     }
     const int hash = line.indexOf('#');
     const QString code = hash < 0 ? line : line.left(hash);
-    m = table.match(code);
-    if (code.trimmed().startsWith("experiment[") && m.hasMatch() && QFileInfo(m.captured(2)).isRelative()) {
-      QString changed = line;
-      changed.replace(m.capturedStart(2), m.capturedLength(2), QDir(dir).absoluteFilePath(m.captured(2)));
-      out << changed;
-      continue;
+    QString changed = line;
+    if (code.trimmed().startsWith("experiment[")) {
+      // From the last match back, so that the earlier positions stay valid.
+      QList<QRegularExpressionMatch> matches;
+      for (QRegularExpressionMatchIterator it = table.globalMatch(code); it.hasNext();) matches.prepend(it.next());
+      for (const QRegularExpressionMatch &t : matches)
+        if (QFileInfo(t.captured(2)).isRelative())
+          changed.replace(t.capturedStart(2), t.capturedLength(2), QDir(dir).absoluteFilePath(t.captured(2)));
     }
-    out << line;
+    out << changed;
   }
   return out;
 }
@@ -403,6 +406,32 @@ ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request)
             r.nc2 << c;
           }
         }
+      }
+    }
+  }
+
+  // Distortion factor of the segment's experiment (EData::ThmDistortionTable).
+  if (experiment && experiment->distortion != ThmExperiment::DIST_NONE) {
+    r.distortion = true;
+    r.distortionRatioPW = experiment->distortionRatioPW;
+    ThmDistortionReport report;
+    std::string whyNot;
+    if (!api.GetThmDistortion(experiment->name, grid, report, whyNot)) {
+      r.distortionError = QString::fromStdString(whyNot);
+    } else {
+      r.distortionKind = QString::fromStdString(report.kind);
+      r.distortionText = QString::fromStdString(report.description);
+      r.distortionR = QVector<double>(report.rModel.begin(), report.rModel.end());
+      if (report.kind != "table") {
+        r.distortionRef = report.eRef;
+        r.distortionDirect = QVector<double>(report.r.begin(), report.r.end());
+        ThmDistortionReport ref;
+        if (api.GetThmDistortion(experiment->name, std::vector<double>(1, report.eRef), ref, whyNot) &&
+            !ref.m2.empty() && ref.m2[0] > 0.0 && ref.mpw2[0] > 0.0)
+          for (size_t i = 0; i < report.m2.size(); i++) {
+            r.distortionM2 << report.m2[i] / ref.m2[0];
+            r.distortionPW2 << report.mpw2[i] / ref.mpw2[0];
+          }
       }
     }
   }
