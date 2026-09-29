@@ -29,6 +29,10 @@ struct ThmSettings {
   QMap<int, double> spectatorByPair;  // spectatorEnergy[<pair key>]
   QMap<int, QString> weight;          // weight[<segmentsData line>]
   QMap<int, QString> weightTest;      // weightTest[<segmentsTest line>]
+  /// experiment[<name>] ... lines (THM experiments), kept as they are: the
+  /// dialog does not edit them (the engine validates them at startup), but a
+  /// block that has them is never removed as "all default".
+  QStringList experimentLines;
 
   bool operator==(const ThmSettings &o) const;
   bool operator!=(const ThmSettings &o) const { return !(*this == o); }
@@ -102,6 +106,7 @@ class ThmOptionsDialog : public QDialog {
 
  private:
   QString projectDir_;
+  QStringList experimentLines_;  // carried through unchanged (ThmSettings::experimentLines)
 };
 
 #endif

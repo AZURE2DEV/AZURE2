@@ -271,6 +271,49 @@ int main(int argc, char** argv) {
     ok("defaults: the file is the plain project's save", saved == slurp(work.filePath("plain.azr")));
   }
 
+  // 5. THM experiment lines (experiment[<name>] ...) are not the dialog's to
+  // edit: they are accepted, kept verbatim through any edit, and a block that
+  // has one is not removed when every option is back to its default.
+  {
+    ThmSettings s;
+    QString err;
+    ok("experiment lines parse",
+       ThmSettings::parse(QStringList() << "experiment[E1] segments=1 background=linear  # note"
+                                        << "vertex=onshell",
+                          s, &err),
+       err);
+    ok("experiment lines kept aside", s.experimentLines.size() == 1 && s.vertex == "onshell");
+    ok("a block with only an experiment line is not default",
+       ThmSettings::parse(QStringList() << "experiment[E1] segments=1", s) && !s.isDefault());
+
+    const QString expBlock = "# grouped segments\nexperiment[E1] segments=1   # the only THM line\n"
+                             "kinematics=kf3body\n";
+    spit(work.filePath("exp.azr"), plain + "<thm>\n" + expBlock + "</thm>\n");
+    w.open(work.filePath("exp.azr"));
+    w.saveProject();
+    const QString before = slurp(work.filePath("exp.azr"));
+    ok("experiment block kept verbatim on save", blockOf(before) == expBlock, blockOf(before));
+    ThmSettings cur;
+    ok("experiment block parses in the GUI", w.thmSettings(cur, &err), err);
+    {
+      ThmOptionsDialog d(cur, w.projectDirectory());
+      ok("dialog round trip keeps the experiment lines", d.settings() == cur);
+      w.setThmSettings(d.settings());
+      w.saveProject();
+      ok("untouched dialog: byte-identical save with an experiment", slurp(work.filePath("exp.azr")) == before);
+      d.kinematicsCombo->setCurrentText("lacognata");  // every option back to its default
+      w.setThmSettings(d.settings());
+      w.saveProject();
+    }
+    const QString saved = slurp(work.filePath("exp.azr"));
+    ok("options at default: block kept for its experiment line",
+       blockOf(saved) == "# grouped segments\nexperiment[E1] segments=1   # the only THM line\n", blockOf(saved));
+    // A one-segment experiment without background is the per-segment profile.
+    const QString c0 = engineChi2(work.path(), "plain.azr");
+    const QString c1 = engineChi2(work.path(), "exp.azr");
+    ok("engine runs the block with the experiment line, same chi2", !c0.isEmpty() && c0 == c1, c0 + " / " + c1);
+  }
+
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;
   return fails ? 1 : 0;
 }

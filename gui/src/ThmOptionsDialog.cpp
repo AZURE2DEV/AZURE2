@@ -58,7 +58,8 @@ const char *kDocs =
 bool ThmSettings::operator==(const ThmSettings &o) const {
   return entranceL == o.entranceL && vertex == o.vertex && kinematics == o.kinematics &&
          coulombIntegral == o.coulombIntegral && spectatorEnergy == o.spectatorEnergy &&
-         spectatorByPair == o.spectatorByPair && weight == o.weight && weightTest == o.weightTest;
+         spectatorByPair == o.spectatorByPair && weight == o.weight && weightTest == o.weightTest &&
+         experimentLines == o.experimentLines;
 }
 
 QList<QPair<QString, QString>> ThmSettings::keyValues() const {
@@ -87,6 +88,12 @@ bool ThmSettings::parseLine(const QString &rawLine, QString &key, QString &value
   if (hash >= 0) line.truncate(hash);
   line = line.trimmed();
   if (line.isEmpty()) return true;
+  if (line.startsWith("experiment[")) {
+    // A THM experiment record: not an option of this dialog.  Kept verbatim
+    // (an empty key, as a comment); Config::ReadThmBlock validates it.
+    s.experimentLines << rawLine;
+    return true;
+  }
   int eq = line.indexOf('=');
   if (eq < 0) return false;
   QString k = line.left(eq);
@@ -396,6 +403,7 @@ void ThmOptionsDialog::setSettings(const ThmSettings &s) {
   // The spin box rounds to its decimals; keep the exact value that was read so
   // that an untouched dialog gives back exactly the settings it was given.
   spectatorEnergySpin->setProperty("exactValue", s.spectatorEnergy);
+  experimentLines_ = s.experimentLines;
 }
 
 ThmSettings ThmOptionsDialog::settings() const {
@@ -422,6 +430,7 @@ ThmSettings ThmOptionsDialog::settings() const {
     QLineEdit *file = qobject_cast<QLineEdit *>(weightTable->cellWidget(r, 2));
     (block->currentIndex() == 1 ? s.weightTest : s.weight)[segment->value()] = file->text().trimmed();
   }
+  s.experimentLines = experimentLines_;
   return s;
 }
 
