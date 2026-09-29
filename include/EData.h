@@ -7,6 +7,7 @@
 #include "ThmExperiment.h"
 #include "ThmLineshape.h"
 #include "ThmDistortion.h"
+#include "ThmAngular.h"
 #include <memory>
 #include <deque>
 #include <ios>
@@ -127,6 +128,9 @@ class EData {
     std::shared_ptr<const ThmSpectatorWindow> window;
     /// Distortion factor R(E) (distortion=...), or null; shared with its segments.
     std::shared_ptr<const ThmDistortion> distortion;
+    /// Angular window of the exit pair (theta=thmin-thmax), or null; shared
+    /// with its segments.
+    std::shared_ptr<const ThmAngleWindow> angle;
     /// Entrance pair key of its segments (0 if they differ).
     int pairKey = 0;
   };

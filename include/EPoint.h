@@ -30,6 +30,7 @@ class DataLine;
 class Config;
 struct ThmWeightTable;
 class ThmDistortion;
+struct ThmAngleWindow;
 struct ThmLineshape;
 struct ThmSpectatorWindow;
 
@@ -94,6 +95,10 @@ class EPoint {
   /// or null.  Owned by the parent ESegment.
   const ThmDistortion *GetThmDistortion() const { return thm_distortion_; }
   void SetThmDistortion(const ThmDistortion *d);
+  /// Angular window of the point's THM experiment (theta=thmin-thmax), or
+  /// null (the angle-integrated observable).  Owned by the parent ESegment.
+  const ThmAngleWindow *GetThmAngleWindow() const { return thm_angle_; }
+  void SetThmAngleWindow(const ThmAngleWindow *w);
   /// Is this point calculated by another? Points at equal energies are mapped onto one so the energy-dependent work is done once.
   bool IsMapped() const;
   /// Does the point carry target effects?
@@ -355,6 +360,7 @@ class EPoint {
   const ThmLineshape *thm_lineshape_ = nullptr;
   const ThmSpectatorWindow *thm_window_ = nullptr;
   const ThmDistortion *thm_distortion_ = nullptr;
+  const ThmAngleWindow *thm_angle_ = nullptr;
   bool is_mapped_;
   bool is_ang_dist_;
   bool is_analyzing_power_ = false;

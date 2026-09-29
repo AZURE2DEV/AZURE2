@@ -89,6 +89,15 @@ struct ThmExperiment {
   bool distortionRatioPW = true;  ///< distortionRatio=dwpw (default) or dw
   bool boundYukawa = false;       ///< boundState=yukawa (default whittaker)
   double boundRmin = 0.0;         ///< boundState=...:rmin (fm)
+  /*!
+   * Angular window of the exit pair (`theta=`, ThmAngular.h): the model of
+   * every segment is the HOES dsigma/dOmega averaged over theta_cm in
+   * [thetaMin, thetaMax] (degrees, c.m. of the exit pair relative to p_xA)
+   * instead of the angle-integrated cross section.  `theta=all` (default)
+   * keeps the latter.
+   */
+  bool hasTheta = false;
+  double thetaMin = 0.0, thetaMax = 180.0;
   /// Keys given so far (a key may not be repeated).
   std::vector<std::string> keys;
   static const char *BackgroundName(int terms);
@@ -102,7 +111,7 @@ struct ThmExperiment {
  * (delta | hulthen:pmin-pmax | hulthen:a,b:pmin-pmax | gauss:FWHM:pmin-pmax |
  * table:file), psNodes, distortion (none | coulomb | optical | table:file),
  * opticalAA, opticalSF, spectatorAngle, distortionRef, distortionRatio,
- * boundState; theta is reserved and refused ("not implemented yet").
+ * boundState, theta (all | thmin-thmax, degrees, 0 <= thmin <= thmax <= 180).
  */
 std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExperiment> &experiments);
 

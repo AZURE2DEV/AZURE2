@@ -12,6 +12,7 @@
 #include "ShftFunc.h"
 #include "ThmLineshape.h"
 #include "ThmDistortion.h"
+#include "ThmAngular.h"
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -104,6 +105,17 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
 
   const ThmSpectatorWindow *window = point->GetThmSpectatorWindow();
   const int numNodes = window ? point->NumThmPsNodes() : 0;
+
+  // Angular window of the exit pair (theta=thmin-thmax; ThmAngular.h): at a
+  // fixed angle the J^pi groups and the entrance l of one channel spin
+  // interfere, so the partial amplitudes of every J group are collected --
+  // x = sqrt(K 2P) e^{i(omega - phi)} (amplitude of the exit channel), the exit
+  // phase as in the T matrix of AMatrixFunc::CalculateTMatrix, with the
+  // entrance vertex M_l in place of e^{i(omega-phi)} sqrt(P) -- and combined in
+  // the Legendre sum after the loop, one set per spectator-window node.
+  const ThmAngleWindow *angle = point->GetThmAngleWindow();
+  std::vector<ThmPartialWave> waves;
+  std::vector<std::vector<complex>> partial(angle ? std::max(numNodes, 1) : 0);
 
   double sigma = 0.0;
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
@@ -232,12 +244,36 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
             }
           }
           term += std::norm(amp);  // |amp|^2, incoherent over (s, l)
+          if (angle) {
+            if (pass == 0) {
+              ThmPartialWave w;
+              w.J = jg->GetJ();
+              w.s = it->first.first;
+              w.l = it->first.second;
+              w.sp = c->GetS();
+              w.lp = c->GetL();
+              waves.push_back(w);
+            }
+            partial[pass].push_back(std::sqrt(fluxFactor * 2.0 * pex) * point->GetExpCoulombPhase(j, ch) *
+                                    point->GetExpHardSpherePhase(j, ch) * amp);
+          }
         }
+        if (angle) continue;
         if (node < 0)
           sigma += spinWeight * fluxFactor * 2.0 * pex * term;
         else
           sigma += window->weight[node] * (spinWeight * fluxFactor * 2.0 * pex * term);
       }
+    }
+  }
+
+  if (angle) {
+    // sum_spins |F|^2 = (1/pi) sum_L b_L P_L(cos theta), averaged over the
+    // window (and over the spectator-window nodes with their weights).
+    std::vector<double> b;
+    for (size_t k = 0; k < partial.size(); k++) {
+      ThmLegendreCoefficients(waves, partial[k], b);
+      sigma += (numNodes > 0 ? window->weight[k] : 1.0) * angle->Mean(b);
     }
   }
 

@@ -232,8 +232,6 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
     if (eq == std::string::npos || eq == 0 || eq + 1 == token.size())
       return where + "'" + token + "' is not key=value";
     std::string key = token.substr(0, eq), value = token.substr(eq + 1);
-    if (key == "theta")
-      return where + "key '" + key + "' is reserved for a later version (not implemented yet)";
     if (std::find(work.keys.begin(), work.keys.end(), key) != work.keys.end())
       return where + "key '" + key + "' is given twice";
     std::string why;
@@ -314,10 +312,25 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
         work.boundRmin = rmin;
       } else
         why = "boundState='" + value + "': expected whittaker or yukawa, optionally :rmin in fm (0-50)";
+    } else if (key == "theta") {
+      double lo = 0.0, hi = 0.0;
+      if (value == "all") {
+        work.hasTheta = false;
+        work.thetaMin = 0.0;
+        work.thetaMax = 180.0;
+      } else if (ReadWindow(value, lo, hi) && hi <= 180.0) {
+        work.hasTheta = true;
+        work.thetaMin = lo;
+        work.thetaMax = hi;
+      } else
+        why = "theta='" + value +
+              "': expected all or thmin-thmax, the c.m. angles of the exit pair relative to p_xA in "
+              "degrees, 0 <= thmin <= thmax <= 180";
     } else {
       why = "unknown key '" + key +
             "' (keys: segments, background, beam, target, spectator, Ebeam, lineshape, ps, psNodes, "
-            "distortion, opticalAA, opticalSF, spectatorAngle, distortionRef, distortionRatio, boundState)";
+            "distortion, opticalAA, opticalSF, spectatorAngle, distortionRef, distortionRatio, boundState, "
+            "theta)";
     }
     if (!why.empty()) return where + why;
     work.keys.push_back(key);

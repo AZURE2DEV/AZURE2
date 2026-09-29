@@ -9,6 +9,7 @@
 #include "SegLine.h"
 #include "ThmLineshape.h"
 #include "ThmDistortion.h"
+#include "ThmAngular.h"
 
 /*!
  * This constructor is used if the segment contains actual experimental data.  The segment
@@ -1178,6 +1179,11 @@ void ESegment::SetThmLineshape(std::shared_ptr<const ThmLineshape> l) {
 void ESegment::SetThmDistortion(std::shared_ptr<const ThmDistortion> d) {
   thmDistortion_ = d;
   for (EPoint &point : points_) point.SetThmDistortion(d.get());
+}
+
+void ESegment::SetThmAngleWindow(std::shared_ptr<const ThmAngleWindow> w) {
+  thmAngle_ = w;
+  for (EPoint &point : points_) point.SetThmAngleWindow(w.get());
 }
 
 void ESegment::SetThmSpectatorWindow(std::shared_ptr<const ThmSpectatorWindow> w) {

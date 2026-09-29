@@ -3197,6 +3197,38 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
         for (int s : group.segments) GetSegment(s)->SetThmDistortion(d);
       }
     }
+    if (x.hasTheta) {
+      // Angular window of the exit pair (ThmAngular.h): the model of every
+      // segment is dsigma/dOmega averaged over theta_cm in the window.
+      if (configure.thm.coherentL) {
+        configure.outStream << where << "theta= computes the interference of the entrance partial waves "
+                               "exactly (at fixed angle they interfere); entranceL=coherent is an approximation "
+                               "of the angle-integrated observable and cannot be combined with it."
+                            << std::endl;
+        return -1;
+      }
+      int maxLp = 0;
+      for (int j = 1; j <= theCNuc->NumJGroups(); j++)
+        for (int ch = 1; ch <= theCNuc->GetJGroup(j)->NumChannels(); ch++)
+          maxLp = std::max(maxLp, theCNuc->GetJGroup(j)->GetChannel(ch)->GetL());
+      if (2 * maxLp > ThmAngleWindow::kMaxL) {
+        configure.outStream << where << "theta= carries Legendre orders up to " << ThmAngleWindow::kMaxL
+                            << "; the model has a channel with l = " << maxLp << "." << std::endl;
+        return -1;
+      }
+      std::shared_ptr<ThmAngleWindow> w = std::make_shared<ThmAngleWindow>();
+      w->experiment = x.name;
+      BuildThmAngleWindow(x.thetaMin, x.thetaMax, *w);
+      std::ostringstream a;
+      a.precision(6);
+      a << "  Angular window: theta_cm = " << x.thetaMin << "-" << x.thetaMax
+        << " deg (exit particle 1 relative to 2, from p_xA = entrance particle 1 relative to 2); the model "
+           "is the HOES dsigma/dOmega averaged over it (4 pi times it is the angle-integrated cross section "
+           "for 0-180).";
+      configure.outStream << a.str() << std::endl;
+      group.angle = w;
+      for (int s : group.segments) GetSegment(s)->SetThmAngleWindow(w);
+    }
     thmGroups_.push_back(group);
   }
   return 0;
