@@ -67,12 +67,23 @@ public:
     double calculateZieglerStoppingPower(double energy_keV, const SRIMElementData& data);
     
     /*!
-     * Calculate stopping power for a compound
-     * @param energy_keV Energy in keV  
+     * Calculate the stopping cross section of a compound (Bragg's rule).
+     *
+     * Target integration uses the stopping cross section and the areal
+     * density only through their product, so the two must count the same
+     * entity. With activeElement set to the Z of the reacting nucleus the
+     * result is per active atom -- x eps_A + y eps_B divided by the
+     * stoichiometry of A -- and pairs with the areal density of active
+     * atoms (the "Active Density" field). With activeElement 0, or a Z
+     * that is not in the compound, it is the average per atom of the
+     * compound, which pairs with the areal density of ALL atoms.
+     * @param energy_keV Energy in keV
      * @param elements Vector of compound elements with stoichiometry
-     * @return Weighted stopping power in MeV⋅cm²/mg
+     * @param activeElement Z of the reacting nucleus, 0 for the per-atom average
+     * @return Stopping cross section in MeV cm^2 per atom (of the chosen entity)
      */
-    double calculateCompoundStoppingPower(double energy_keV, const std::vector<CompoundElement>& elements);
+    double calculateCompoundStoppingPower(double energy_keV, const std::vector<CompoundElement>& elements,
+                                          int activeElement = 0);
     
     /*!
      * Generate AZURE2-compatible equation string for single element
@@ -83,12 +94,23 @@ public:
     std::string generateAZUREEquation(int elementNumber, std::vector<double>& parameters);
     
     /*!
-     * Generate AZURE2-compatible equation string for compound
+     * Generate AZURE2-compatible equation string for compound, normalized
+     * the same way as calculateCompoundStoppingPower: per active atom when
+     * activeElement is the Z of the reacting nucleus, per average atom of
+     * the compound when it is 0.
      * @param elements Vector of compound elements with stoichiometry
-     * @param parameters Output vector to store equation parameters  
+     * @param parameters Output vector to store equation parameters
+     * @param activeElement Z of the reacting nucleus, 0 for the per-atom average
      * @return Equation string compatible with Equation.cpp
      */
-    std::string generateCompoundAZUREEquation(const std::vector<CompoundElement>& elements, std::vector<double>& parameters);
+    std::string generateCompoundAZUREEquation(const std::vector<CompoundElement>& elements, std::vector<double>& parameters,
+                                              int activeElement = 0);
+
+    /*!
+     * Stoichiometry the compound stopping power is divided by: that of the
+     * active element when it is in the compound, otherwise the total.
+     */
+    static double compoundNormalization(const std::vector<CompoundElement>& elements, int activeElement);
     
     /*!
      * Parse compound formula (e.g., "CH4", "SiO2") into compound elements

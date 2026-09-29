@@ -41,6 +41,7 @@ class AddTargetIntDialog : public QDialog {
   QLineEdit *stoppingPowerEqText;
   QComboBox *elementComboBox;
   QLineEdit *compoundText;
+  QComboBox *activeElementComboBox;
   QPushButton *fetchStoppingPowerButton;
   QCheckBox *isStraggling;
   QLineEdit *stragglingCoefficientText;
@@ -91,6 +92,7 @@ class AddTargetIntDialog : public QDialog {
   void beamProfileChanged(int row, int column);
 
   void elementSelectionChanged(int index);
+  void compoundFormulaChanged(const QString &formula);
   void fetchStoppingPowerParameters();
   void calculateDeltaE();
 
@@ -103,6 +105,7 @@ class AddTargetIntDialog : public QDialog {
   QGroupBox *beamProfileBox;
 
   int selectedElement_;
+  int activeElementNumber() const;
   void populateElementComboBox();
   void updateStoppingPowerFromElement(int element);
   void updateStoppingPowerFromCompound(const std::string &formula);

@@ -1479,11 +1479,16 @@ complete:
   "Active Density" label means); per molecule x eps_A + y eps_B with N = molecules/cm2; per
   average atom (x eps_A + y eps_B)/(x+y) with N = ALL atoms/cm2. Wrong: pure-element eps_A
   with the active density (loss missing (y/x) eps_B), or average-atom with the active
-  density (loss too small by (x+y)/x). TRAP: the GUI's "Fetch from ERYA" compound path
-  (`SRIMUtilities::generateCompoundAZUREEquation`) weights each element by
-  stoichiometry/TOTAL stoichiometry, i.e. it returns the average-atom value -- pair it with
-  the total atoms/cm2, or scale it by (x+y)/x before using the active density. When a paper
-  quotes the energy loss in keV, set eps(E0)*N to reproduce it and skip the stoichiometry.
+  density (loss too small by (x+y)/x). Until 2026-09-28 the GUI's "Fetch from ERYA" compound
+  path (`SRIMUtilities::generateCompoundAZUREEquation`) weighted each element by
+  stoichiometry/TOTAL stoichiometry, i.e. returned the average-atom value: any compound
+  `<targetInt>` equation written by an older GUI is consistent only with the total atoms/cm2
+  (scale it by (x+y)/x to use the active density). Now the dialog has an "Active Element"
+  box next to the formula and both the equation and the Calculate-dE preview are per active
+  atom (`activeElement` argument, 0 = legacy average; `tests/reference/
+  compound_stopping_reference_test.cpp` pins the identities against the elemental values).
+  When a paper quotes the energy loss in keV, set eps(E0)*N to reproduce it and skip the
+  stoichiometry.
   Written up in docs/source/user_guide/experimental_effects.rst (which also had "Sigma" of
   the Gaussian documented as the FWHM; the code uses it as the standard deviation -- fixed).
 

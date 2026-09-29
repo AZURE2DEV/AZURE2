@@ -10,3 +10,16 @@ add_executable(beam_profile_reference_test beam_profile_reference_test.cpp)
 target_link_libraries(beam_profile_reference_test PRIVATE AZURE2Core)
 
 add_test(NAME beam_profile_reference COMMAND beam_profile_reference_test)
+
+# Compound stopping cross section (Bragg's rule) against the single-element
+# values: per active atom and per average atom.  Reads erya/data/SRIM2013.xml,
+# so it runs from external/.
+if(USE_ERYA)
+  add_executable(compound_stopping_reference_test compound_stopping_reference_test.cpp)
+  target_include_directories(compound_stopping_reference_test PRIVATE
+      ${CMAKE_SOURCE_DIR}/external/erya/include)
+  target_link_libraries(compound_stopping_reference_test PRIVATE srim_utilities)
+  add_test(NAME compound_stopping_reference
+           COMMAND compound_stopping_reference_test
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/external)
+endif()

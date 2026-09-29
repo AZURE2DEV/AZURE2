@@ -154,16 +154,21 @@ be normalized to the same thing the density counts.**
    large fraction of it), or a per-average-atom value with the active
    density (the loss is too small by :math:`(x+y)/x`).
 
+   **Fetch from ERYA** with a compound formula does this for you: choose the
+   reacting nucleus in the **Active Element** box next to the formula (it is
+   filled from the formula; the first element is preselected) and the fetched
+   equation is the per-active-atom sum, ready to pair with the Active
+   Density. The **Calculate ΔE** preview uses the same normalization.
+
    .. warning::
 
-      **Fetch from ERYA** with a compound formula returns the *average-atom*
-      stopping cross section -- each element weighted by its stoichiometry
-      divided by the *total* stoichiometry -- so it must be paired with the
-      areal density of **all** atoms in the target, not the active ones,
-      despite the field's name. To use the active density instead, multiply
-      the ERYA result by :math:`(x+y)/x` (the number of atoms per active
-      atom), or build the per-active-atom sum from the elemental equations
-      yourself.
+      Before September 2026 the ERYA compound fetch returned the
+      *average-atom* value (each element weighted by its stoichiometry divided
+      by the *total* stoichiometry) with no way to choose otherwise. A
+      ``<targetInt>`` entry written by an older GUI for a compound target is
+      therefore consistent only with the areal density of **all** atoms; with
+      the active density it makes the target too thin by :math:`(x+y)/x`.
+      Re-fetch it, or multiply its equation by that factor.
 
    If the experiment reports the energy loss in the target directly (for
    example "the target thickness corresponded to 1.5 keV at the resonance"),

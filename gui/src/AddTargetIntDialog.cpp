@@ -92,6 +92,15 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   compoundText = new QLineEdit;
   compoundText->setPlaceholderText("Enter compound (e.g., CH4, SiO2)");
   compoundText->setToolTip("Enter chemical formula for compounds. Leave empty for single elements.");
+  connect(compoundText, SIGNAL(textChanged(const QString &)), this, SLOT(compoundFormulaChanged(const QString &)));
+
+  // The reacting nucleus in the compound: the stopping cross section is
+  // normalized per atom of it, so that it pairs with the Active Density.
+  activeElementComboBox = new QComboBox;
+  activeElementComboBox->setEnabled(false);
+  activeElementComboBox->setToolTip(tr("The element whose nuclei produce the reaction. The fetched stopping cross section "
+                                       "is per atom of this element (Bragg sum over the formula divided by its stoichiometry), "
+                                       "so it pairs with the Active Density of these atoms."));
 
   fetchStoppingPowerButton = new QPushButton(tr("Fetch from ERYA"));
   connect(fetchStoppingPowerButton, SIGNAL(clicked()), this, SLOT(fetchStoppingPowerParameters()));
@@ -309,6 +318,8 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   QHBoxLayout *compoundLayout = new QHBoxLayout;
   compoundLayout->addWidget(new QLabel(tr("Or Compound Formula:")));
   compoundLayout->addWidget(compoundText);
+  compoundLayout->addWidget(new QLabel(tr("Active Element:")));
+  compoundLayout->addWidget(activeElementComboBox);
   compoundLayout->addWidget(fetchStoppingPowerButton);
   stoppingPowerLayout->addLayout(compoundLayout);
 
@@ -681,6 +692,34 @@ void AddTargetIntDialog::elementSelectionChanged(int index) {
   }
 }
 
+int AddTargetIntDialog::activeElementNumber() const {
+  int index = activeElementComboBox->currentIndex();
+  return (activeElementComboBox->isEnabled() && index >= 0) ? activeElementComboBox->itemData(index).toInt() : 0;
+}
+
+void AddTargetIntDialog::compoundFormulaChanged(const QString &formula) {
+  activeElementComboBox->clear();
+  activeElementComboBox->setEnabled(false);
+#ifdef USE_ERYA
+  std::string trimmed = formula.trimmed().toStdString();
+  if (trimmed.empty()) return;
+  SRIMUtilities *srimUtils = getSRIMUtilities();
+  if (!srimUtils->isDataLoaded()) return;
+  std::vector<CompoundElement> elements = srimUtils->parseCompoundFormula(trimmed);
+  for (const auto &element : elements) {
+    if (activeElementComboBox->findData(element.elementNumber) >= 0) continue;
+    SRIMElementData data = srimUtils->readSRIMDataForElement(element.elementNumber);
+    QString name = data.isValid ? QString::fromStdString(data.elementName) : tr("Z=%1").arg(element.elementNumber);
+    activeElementComboBox->addItem(tr("%1 (x%2)").arg(name).arg(element.stoichiometry), element.elementNumber);
+  }
+  // The reacting nucleus is conventionally written first (SiO2, TiN, Ta2O5, LiF).
+  if (activeElementComboBox->count() > 0) {
+    activeElementComboBox->setCurrentIndex(0);
+    activeElementComboBox->setEnabled(true);
+  }
+#endif
+}
+
 void AddTargetIntDialog::fetchStoppingPowerParameters() {
 #ifdef USE_ERYA
   // Check if compound formula is provided
@@ -788,13 +827,22 @@ void AddTargetIntDialog::updateStoppingPowerFromCompound(const std::string &form
                           .arg(element.stoichiometry);
     }
   }
-  compoundInfo += tr("\nStopping power will be calculated as weighted average.");
+  int activeZ = activeElementNumber();
+  SRIMElementData activeData = srimUtils->readSRIMDataForElement(activeZ);
+  if (activeZ > 0 && activeData.isValid) {
+    compoundInfo += tr("\nStopping cross section per %1 atom (Bragg sum over the formula divided by the "
+                       "stoichiometry of %1): enter the areal density of %1 atoms as the Active Density.")
+                        .arg(QString::fromStdString(activeData.elementName));
+  } else {
+    compoundInfo += tr("\nNo active element chosen: the stopping cross section is the average per atom of the "
+                       "compound and must be paired with the areal density of ALL atoms.");
+  }
 
   QMessageBox::information(this, tr("ERYA Compound Integration"), compoundInfo);
 
   // Generate AZURE2-compatible stopping power equation for compound
   std::vector<double> parameters;
-  std::string equation = srimUtils->generateCompoundAZUREEquation(elements, parameters);
+  std::string equation = srimUtils->generateCompoundAZUREEquation(elements, parameters, activeZ);
 
   if (equation.empty()) {
     QMessageBox::warning(this, tr("ERYA SRIM Error"),
@@ -881,7 +929,7 @@ void AddTargetIntDialog::calculateDeltaE() {
       // Calculate stopping power for compound
       std::vector<CompoundElement> elements = srimUtils->parseCompoundFormula(compoundFormula.toStdString());
       if (!elements.empty()) {
-        stoppingPower = srimUtils->calculateCompoundStoppingPower(energy_keV, elements);
+        stoppingPower = srimUtils->calculateCompoundStoppingPower(energy_keV, elements, activeElementNumber());
       }
     } else {
       // Calculate stopping power for single element
