@@ -224,7 +224,10 @@ engine would refuse is not opened in the editor (it is kept as it is).
    ``spectatorEnergy[k]=`` to the entrance pair with key ``k`` (the pair
    number that the segment's entrance key refers to) and overrides the global
    value for it. Default 0. ``tests/7Li_p_a``: 2195.75 at 0.5 MeV (2088.91 with
-   ``vertex=perlevel``).
+   ``vertex=perlevel``). A single :math:`T_s` stands for the whole accepted
+   range of spectator momenta; ``ps=`` on a THM experiment line averages over
+   that range instead ("Spectator-momentum window" below). The two exclude
+   each other for one entrance pair.
 
 ``weight`` — energy-dependent weight of one segment's model
    ``weight[k]=<file>`` multiplies the THM model cross section of segment
@@ -362,7 +365,7 @@ letters, digits and ``_ - . +``.
    6Li 7Li 9Be 10B 11B 12C 13C 14N 15N 16O 17O 18O 19F 20Ne 23Na 24Mg; AME2020
    atomic masses minus the electrons plus their binding, i.e. nuclear masses in
    u) or ``Z,A,mass`` (nuclear mass in u), and the lab beam energy in MeV. All
-   four or none. Only ``lineshape=on`` uses them: AZURE2 checks that one of beam and
+   four or none. Only ``lineshape=on`` and a ``ps`` window use them: AZURE2 checks that one of beam and
    target is a nucleus of the segments' entrance pair and the other is the
    second nucleus plus the spectator (the Trojan horse :math:`a = x + s`), and
    prints :math:`B_{xs}` and the quasi-free energy
@@ -371,8 +374,13 @@ letters, digits and ``_ - . +``.
 ``lineshape=on|off``
    The Coulomb line-shape factor of the spectator (default ``off``; needs the
    four kinematics keys), below.
-``ps=``, ``theta=``, ``distortion=``
-   Reserved for later versions (phase space, angular acceptance, distortion):
+``ps=delta|hulthen:...|gauss:...|table:<file>``, ``psNodes=``
+   The spectator-momentum window over which the HOES cross section is
+   averaged (default ``delta``, the quasi-free point; the other forms need the
+   four kinematics keys), and its number of Gauss-Legendre nodes (1-64,
+   default 16), below.
+``theta=``, ``distortion=``
+   Reserved for later versions (angular acceptance, distortion):
    refused with ``not implemented yet``, so that no file can rely on them
    silently.
 
@@ -445,8 +453,9 @@ gives the shared :math:`n^*` for each segment. ``AzrModel.thm_experiments()``,
 spectator=..., Ebeam=...)`` (replaces the record with one line) and
 ``clear_thm_experiment(name)`` edit the lines with the engine's rules. In the
 GUI, *Configure > THM Workspace...*, page *Experiments*, edits them
-(:doc:`../user_guide/configure_menu`, "THM Workspace"); keys it does not show,
-such as ``lineshape``, are kept as written.
+(:doc:`../user_guide/configure_menu`, "THM Workspace"), including
+``lineshape``; keys it does not show, such as ``ps`` and ``psNodes``, are kept
+as written.
 
 *Derivatives.* Where the model Jacobian :math:`J_m = \partial m/\partial p`
 is used (MIGRAD's THM gradient, ``pyazr``'s ``residual_jacobian`` and
@@ -605,6 +614,180 @@ parameters goes from 61 to 479 (shared norm profiled): a fit with
 :math:`N_C` would move the levels. The neglected :math:`\eta_{sb}` is
 0.26-0.29 into the α channels (half of :math:`|\zeta|`) and 0.07-0.10 into
 the p channels: the case-2 limit is marginal for α.
+
+Spectator-momentum window
+-------------------------
+
+*Kinematics.* In :math:`A + a \to s + F^*`, :math:`a = (s\,x)`, the
+transferred particle :math:`x` is virtual, and energy-momentum conservation at
+the vertices :math:`a \to s + x` and :math:`x + A \to F` gives the off-shell
+:math:`x`-:math:`A` momentum
+
+.. math::
+
+   \frac{p_{xA}^2}{2\mu_{xA}} = E + B_{xs} + \frac{p_{s}^2}{2\mu_{sx}}
+
+(Mukhamedzhanov et al., PRC 96 (2017) 024623, eqs. 29-32; Typel & Baur, Ann.
+Phys. 305 (2003) 228, eq. 11), :math:`p_s = p_{sx}` the :math:`s`-:math:`x`
+relative momentum in :math:`a`, which is the spectator momentum in the rest
+frame of :math:`a` (2017 eq. 30). The quasi-free point is :math:`p_s = 0`.
+Experiments accept events with :math:`|p_s|` up to some tens of MeV/c (for
+the deuteron typically 30-40 MeV/c, below :math:`\kappa_{sx}\hbar c = 45.7`
+MeV/c; Tribble et al., RPP 77 (2014) 106901, sec. 4.1), and across that
+window :math:`\rho = p_{xA} a` changes -- for a deuteron by up to
+:math:`T_s = p_s^2/2\mu_{sx} = 1.7` MeV at 40 MeV/c on top of
+:math:`E + B = 2.2`-3 MeV. The vertex
+:math:`M_l(\rho) = (B_c - 1)j_l(\rho) - \rho j_l'(\rho)\,(+\,C_l)` sees this,
+and most strongly near its nodes.
+
+*What is averaged.* At one :math:`p_s` the THM double differential cross
+section is
+
+.. math::
+
+   \frac{d^2\sigma}{d\Omega_{sF}\,dE} \propto |\phi_a(p_s)|^2 \sum_l
+   \Bigl|\dots M_l\bigl(p_{xA}(p_s)\bigr)\Bigr|^2
+
+(2017 eq. 34): :math:`\phi_a` multiplies the whole cross section and the
+vertex is evaluated at that event's :math:`p_{xA}`. Events with different
+:math:`p_s` are different final states (the spectator's momentum is measured),
+so they add incoherently: the *cross section* is averaged, not the amplitude.
+The HOES "data" are then obtained (2017 eq. 35; Tribble 2014 eq. 4.1) by
+dividing the yield of an energy bin by the product of the kinematic factor
+and :math:`|\phi_a|^2`, computed by a Monte Carlo simulation of the setup over
+the same bin and :math:`p_s` window (Pizzone et al., PRC 83 (2011) 045801;
+Spitaleri et al., PRC 95 (2017) 035801, eqs. 3-4 with :math:`|p_n| \le 30`
+MeV/c), i.e. :math:`N(E)/\int_W |\phi_a|^2\,d^3p_s`. The
+yield itself is :math:`\int_W |\phi_a(p_s)|^2 \sigma(E; p_s)\,d^3p_s`, so the
+datum at :math:`E` is the event-weighted mean
+
+.. math::
+
+   \bar\sigma(E) = \frac{\int_{p_{\min}}^{p_{\max}} w(p)\,\sigma(E; p)\,dp}
+                        {\int_{p_{\min}}^{p_{\max}} w(p)\,dp},
+   \qquad w(p) = |\phi_a(p)|^2 p^2
+
+for an isotropic window :math:`p_{\min} \le |p_s| \le p_{\max}` (the kinematic
+factor taken as constant across one bin). This is what AZURE2 computes: with
+``ps=`` on the experiment line, every THM point of the experiment (and every
+sub-point of its resolution folding) evaluates the entrance vertex -- the
+surface term and the Coulomb term :math:`C_l`, which depends on :math:`p_{xA}`
+too -- at the nodes :math:`p_k` of a Gauss-Legendre rule on
+:math:`[p_{\min}, p_{\max}]` with :math:`T_k = p_k^2/2\mu_{sx}` added to
+:math:`E + B` (exactly what ``spectatorEnergy`` does with one value), and sums
+the HOES cross section of each node with the normalized weights
+:math:`w_k \propto \omega_k w(p_k)`, :math:`\sum_k w_k = 1`, :math:`\omega_k`
+the Gauss-Legendre weights. The level matrix is common to the nodes; only the
+vertex changes. If the data were instead divided by :math:`|\phi_a|^2`
+event by event, the weight is the phase space :math:`p^2` alone -- use a
+table.
+
+*Syntax* (momenta in MeV/c, :math:`0 \le p_{\min} \le p_{\max}`):
+
+``ps=delta``
+   The quasi-free point (default): the vertex at :math:`E + B`, or at
+   :math:`E + B + T_s` with ``spectatorEnergy``. Byte-identical to no key.
+``ps=hulthen:pmin-pmax``, ``ps=hulthen:a,b:pmin-pmax``
+   :math:`\phi(p) \propto (a^2 + q^2)^{-1} - (b^2 + q^2)^{-1}`, :math:`q =
+   p/\hbar c`, the Hulthén function of the deuteron with :math:`a = 0.2317`,
+   :math:`b = 1.202` fm\ :sup:`-1` (Tribble 2014 eq. 4.4), or other
+   :math:`0 < a < b` -- the same form is the Eckart function used for
+   :sup:`3`\ He and :sup:`6`\ Li (Tribble 2014 sec. 4.1), with :math:`a`
+   usually :math:`\sqrt{2\mu_{sx}B_{xs}}/\hbar c`.
+``ps=gauss:FWHM:pmin-pmax``
+   :math:`|\phi(p)|^2 = \exp(-4\ln 2\,p^2/\mathrm{FWHM}^2)` (the FWHM of
+   :math:`|\phi|^2` along a line through :math:`p = 0`, as momentum
+   distributions are quoted).
+``ps=table:<file>``
+   The event weight itself, :math:`w(p)` per unit :math:`p` -- i.e.
+   :math:`|\phi|^2 p^2`, or :math:`p^2` alone, or a measured :math:`|p_s|`
+   distribution of the accepted events -- two columns, :math:`p` (MeV/c,
+   strictly increasing, :math:`\ge 0`) and :math:`w \ge 0`, ``#`` comments, at
+   least two rows, some positive weight; linear between rows. The window is
+   the table's range. A relative path is taken from the directory of the
+   ``.azr``, exactly as for ``weight[k]=`` files (the same resolution in
+   ``Config::ReadThmBlock``: a leading ``/`` or ``\`` or a drive letter is
+   absolute), so a copy of the project elsewhere must make it absolute or
+   copy the table; the name cannot contain blanks or ``#``.
+``psNodes=N``
+   Gauss-Legendre nodes (1-64, default 16) on the whole window. With
+   :math:`p_{\min} = p_{\max}` the window is one node of weight 1. A table
+   with kinks is integrated to :math:`O(h^2)` only; raise ``psNodes`` or
+   smooth it.
+
+:math:`\mu_{sx}` comes from the experiment's kinematics (spectator and the
+nucleus :math:`x` = Trojan horse minus spectator; built-in table masses), so a
+window needs ``beam``, ``target``, ``spectator`` and ``Ebeam`` (``Ebeam`` is
+not used by the window). Refused, with ``ERROR: <thm> experiment[...]``: a
+window without kinematics, a malformed ``ps`` or ``psNodes``, ``psNodes``
+without a window, an unreadable or invalid table, and a window together with
+a non-zero ``spectatorEnergy`` (global or for the experiment's entrance pair).
+The window is printed at startup (nodes, :math:`\mu_{sx}`, the range of
+:math:`T_s` and :math:`\langle T_s \rangle`) and written to
+``thm_experiments.out`` (one ``ps_node`` row per node: :math:`p_k`,
+:math:`w_k`, :math:`T_k`). Extrapolation segments (``<segmentsTest>``) are in
+no experiment and keep the quasi-free vertex. Cost: the vertex and the
+exit-channel sums once per node (the level matrix once); the 7Li and 12C+12C
+examples below run in about 1.8 and 1.1 times the time without a window.
+
+*pyazr.* ``AzrModel.set_thm_experiment(..., ps="hulthen:0-40", psNodes=16)``;
+``session.thm_vertex(name, energies)`` returns the nodes, weights,
+:math:`T_k`, :math:`\rho` at every node and energy, and per entrance channel
+and level the window average :math:`\langle |M_l|^2 \rangle` and the
+quasi-free :math:`|M_l(p_s = 0)|^2` with the boundary the vertex uses for
+that level (for a ``delta`` experiment one node, :math:`p_s = 0`,
+:math:`T` = its ``spectatorEnergy``).
+
+*Checks* (``tests/thm_spectator_window``, ``tests/pyazr/thm_spectator_window_test.py``,
+on ``tests/18O_p_a_thm`` with its deuteron Trojan horse, :math:`\mu_{sx} =
+469.46` MeV): ``ps=delta`` byte-identical to no key; a window shrinking to a
+point equals ``spectatorEnergy`` :math:`= p^2/2\mu_{sx}` (one node: exactly; a
+:math:`2\times 10^{-4}` MeV/c window: :math:`6\times 10^{-10}`); a flat table on
+[20, 40] MeV/c equals the Simpson average of 41 single-``spectatorEnergy``
+runs to :math:`8\times 10^{-8}` (the Simpson error); two nodes equal
+:math:`w_1 m(T_1) + w_2 m(T_2)` from two sessions to :math:`10^{-15}`; the
+Hulthén window [0, 40] with 16 nodes agrees with 32 to :math:`10^{-10}` (8
+nodes: :math:`2\times 10^{-8}`); ``thm_vertex`` against an independent
+evaluation of nodes, weights, :math:`\rho` and :math:`\langle|M_0|^2\rangle`.
+
+*Size* (models at fixed parameters, not refitted; scratch studies, not in
+the repository).
+
+- A vertex node. With the spectator at a fixed :math:`p_s = 24` MeV/c,
+  ``tests/18O_p_a_thm`` (no folding) puts :math:`M_0 = 0` at :math:`E \approx
+  0.70` MeV: the model there drops to :math:`2.4\times 10^{-4}` of its
+  maximum. The Hulthén window [0, 40] fills it to 0.42 of the maximum
+  (:math:`5\times 10^{4}` times the point value). Across the whole data
+  range the window changes the (folded) model by up to 73 % against the
+  quasi-free point.
+- :sup:`7`\ Li(p,α) (``examples/li7_tumino2006``, deuteron Trojan horse as
+  its :math:`B = 2.2246` MeV, Hulthén [0, 40]): the THM model rises by
+  1.14-1.18 below 1 MeV and by 1.15-1.29 up to 3 MeV (0.92 at 4.5 MeV), so
+  the shape changes by ~3 % below 1 MeV and ~40 % over 0.08-6.9 MeV; the THM
+  :math:`\chi^2` (norm profiled) goes 847 → 933. Replacing the window by its
+  mean, ``spectatorEnergy`` :math:`= \langle T_s\rangle = 0.88` MeV, gives the
+  window's model to 1 % (:math:`\chi^2` 942): here the window acts as a shift
+  of :math:`E + B`. With a :sup:`3`\ He Trojan horse (:math:`B = 5.4935` MeV,
+  Eckart :math:`a = 0.42`, :math:`b = 1.2` fm\ :sup:`-1`,
+  :math:`\mu_{sx} = 625.4` MeV, [0, 40]): 0.91-1.15, :math:`\chi^2` 1154 →
+  1227.
+- 12C+12C (``examples/c12c12_tumino2018``, 12C(14N,α/p)d at 30 MeV, the four
+  THM segments one experiment with a free norm; :math:`B = 10.27` MeV,
+  :math:`\mu_{sx} = 1606` MeV; the d-12C distribution in 14N as an Eckart
+  function with :math:`a = \sqrt{2\mu_{sx}B}/\hbar c = 0.918` fm\ :sup:`-1`,
+  :math:`b = 2.5` fm\ :sup:`-1`, nearly flat over [0, 40] MeV/c, so the
+  weight is close to :math:`p^2`; :math:`T_s \le 0.49` MeV): :math:`\rho
+  \approx 13.4`-14.7 moves by up to 0.25, a fair part of the oscillation of
+  :math:`j_l` for :math:`l \le 8`. The model changes by 0.32-1.73 level by
+  level (α\ :sub:`0` 0.34-1.12, p\ :sub:`1` 0.43-1.73), and the THM
+  :math:`\chi^2` at the published parameters goes 61 → 1578; with
+  ``spectatorEnergy`` = :math:`\langle T_s\rangle = 0.295` MeV instead it is
+  1707, and the window differs from that mean by up to 1.73: near the nodes
+  the average matters, not only the shift. ``thm_vertex``: the :math:`l = 4`
+  vertex has a node at :math:`E = 2.02` MeV (:math:`|M_4|^2 = 8\times
+  10^{-6}` against a maximum of 0.68), which the window fills to
+  :math:`4.8\times 10^{-2}`. Published 12C+12C THM fits assume the
+  quasi-free vertex; with the window the parameters would move.
 
 Normalization, gradients and uncertainty bands
 ----------------------------------------------

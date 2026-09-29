@@ -88,8 +88,14 @@ P₀e^{2πη} gives 2.85 against on-shell 1.25. A χ² that does not discriminat
   `background=const|linear|quadratic` added to the folded model (e.g. the linear
   background of ApJ 723), both closed-form linear least squares; coefficients and
   covariance in `output/thm_experiments.out` and `session.thm_background(name)`.
-  `AzrModel.set_thm_experiment(...)`; `ps/theta/distortion` are reserved
+  `AzrModel.set_thm_experiment(...)`; `theta/distortion` are reserved
   (refused). Details: thm_implementation.rst, "THM experiments".
+- **Spectator-momentum window**: `ps=hulthen:0-40` (or `hulthen:a,b:..`, `gauss:FWHM:..`,
+  `table:file`; `psNodes=`, needs kinematics, excludes `spectatorEnergy`) averages the HOES
+  cross section (incoherently) over p_s with weight |φ|²p², T_s = p²/2μ_sx added to E + B at
+  each node; fills vertex nodes, changes 12C+12C by 0.3–1.7× (χ² 61 → 1578 unrefitted), 7Li
+  ~3 % in shape below 1 MeV. `session.thm_vertex(name, E)`; thm_implementation.rst,
+  "Spectator-momentum window".
 - **Coulomb line shape** (charged spectator): `lineshape=on` on the experiment line
   (needs `beam/target/spectator/Ebeam`, Brune) multiplies each level's exit
   amplitude, inside the coherent sum, by N_C = e^{πζ/2}(E_λ−E−iΓ_λ/2)^{−iζ},
