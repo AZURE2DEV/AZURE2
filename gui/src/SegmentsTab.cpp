@@ -1310,23 +1310,29 @@ static QString quotePathIfNeeded(const QString &path) {
 
 bool SegmentsTab::writeSegDataFile(QTextStream &outStream) {
   QList<SegmentsDataData> lines = segmentsDataModel->getLines();
+  // A column is 15 characters, left-aligned; a number that fills it (e.g.
+  // 3.659747237e-06) would run into the next one, so it gets a space.
+  auto number = [](double x) {
+    QString text = roundTripNumber(x);
+    return text.size() >= 15 ? text + " " : text;
+  };
 
   for (int i = 0; i < lines.size(); i++) {
     outStream << qSetFieldWidth(15) << lines.at(i).isActive
               << qSetFieldWidth(15) << lines.at(i).entrancePairIndex
               << qSetFieldWidth(15) << lines.at(i).exitPairIndex
-              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).lowEnergy)
-              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).highEnergy)
-              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).lowAngle)
-              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).highAngle)
+              << qSetFieldWidth(15) << number(lines.at(i).lowEnergy)
+              << qSetFieldWidth(15) << number(lines.at(i).highEnergy)
+              << qSetFieldWidth(15) << number(lines.at(i).lowAngle)
+              << qSetFieldWidth(15) << number(lines.at(i).highAngle)
               << qSetFieldWidth(15) << (lines.at(i).dataType + (lines.at(i).isTHM ? 10 : 0));
-    if (lines.at(i).dataType == 2) outStream << qSetFieldWidth(15) << roundTripNumber(lines.at(i).phaseJ)
+    if (lines.at(i).dataType == 2) outStream << qSetFieldWidth(15) << number(lines.at(i).phaseJ)
                                              << qSetFieldWidth(15) << lines.at(i).phaseL;
-    outStream << qSetFieldWidth(15) << roundTripNumber(lines.at(i).dataNorm)
+    outStream << qSetFieldWidth(15) << number(lines.at(i).dataNorm)
               << qSetFieldWidth(15) << lines.at(i).varyNorm
-              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).dataNormError)
-              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).energyShift)
-              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).energyShiftError)
+              << qSetFieldWidth(15) << number(lines.at(i).dataNormError)
+              << qSetFieldWidth(15) << number(lines.at(i).energyShift)
+              << qSetFieldWidth(15) << number(lines.at(i).energyShiftError)
               << qSetFieldWidth(15) << lines.at(i).varyEnergyShift
               << qSetFieldWidth(0) << " " << quotePathIfNeeded(lines.at(i).dataFile);
 

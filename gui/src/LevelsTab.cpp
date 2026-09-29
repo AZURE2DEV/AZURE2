@@ -763,6 +763,10 @@ bool LevelsTab::writeNuclearFile(QTextStream &outStream) {
   QList<ChannelsData> channels = channelsModel->getChannels();
 
   outStream.setFieldAlignment(QTextStream::AlignRight);
+  // Right-aligned columns; a value as wide as its column (a round-trip
+  // number such as 16.499949983821764) gets a space so that it cannot run
+  // into the column before it.
+  auto col = [](int width, const QString &text) { return text.size() >= width ? " " + text : text.rightJustified(width); };
 
   const QList<int> order = writeOrder();
   int levelId = 1;
@@ -770,37 +774,37 @@ bool LevelsTab::writeNuclearFile(QTextStream &outStream) {
     const LevelsData &level = levels.at(la);
     for (int ch = 0; ch < channels.size(); ch++) {
       if (channels.at(ch).levelIndex == la) {
-        outStream << qSetFieldWidth(4) << roundTripNumber(level.jValue)
-                  << qSetFieldWidth(5) << level.piValue
-                  << qSetFieldWidth(13) << roundTripNumber(level.energy)
-                  << qSetFieldWidth(5) << level.isFixed
-                  << qSetFieldWidth(5) << "1"
-                  << qSetFieldWidth(5) << channels.at(ch).pairIndex + 1
-                  << qSetFieldWidth(5) << int(channels.at(ch).sValue * 2)
-                  << qSetFieldWidth(5) << int(channels.at(ch).lValue * 2)
-                  << qSetFieldWidth(5) << levelId
-                  << qSetFieldWidth(5) << level.isActive
-                  << qSetFieldWidth(5) << channels.at(ch).isFixed
-                  << qSetFieldWidth(20) << roundTripNumber(channels.at(ch).reducedWidth)
-                  << qSetFieldWidth(5) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).lightJ)
-                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightPi
-                  << qSetFieldWidth(5) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).heavyJ)
-                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyPi
-                  << qSetFieldWidth(13) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).excitationEnergy)
-                  << qSetFieldWidth(8) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).lightM)
-                  << qSetFieldWidth(8) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).heavyM)
-                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightZ
-                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyZ
-                  << qSetFieldWidth(13) << roundTripNumber(pairs.at(0).seperationEnergy)
-                  << qSetFieldWidth(13) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).seperationEnergy)
+        outStream << qSetFieldWidth(0) << col(4, QString("%1").arg(roundTripNumber(level.jValue)))
+                  << col(5, QString("%1").arg(level.piValue))
+                  << col(13, QString("%1").arg(roundTripNumber(level.energy)))
+                  << col(5, QString("%1").arg(level.isFixed))
+                  << col(5, QString("%1").arg("1"))
+                  << col(5, QString("%1").arg(channels.at(ch).pairIndex + 1))
+                  << col(5, QString("%1").arg(int(channels.at(ch).sValue * 2)))
+                  << col(5, QString("%1").arg(int(channels.at(ch).lValue * 2)))
+                  << col(5, QString("%1").arg(levelId))
+                  << col(5, QString("%1").arg(level.isActive))
+                  << col(5, QString("%1").arg(channels.at(ch).isFixed))
+                  << col(20, QString("%1").arg(roundTripNumber(channels.at(ch).reducedWidth)))
+                  << col(5, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).lightJ)))
+                  << col(5, QString("%1").arg(pairs.at(channels.at(ch).pairIndex).lightPi))
+                  << col(5, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).heavyJ)))
+                  << col(5, QString("%1").arg(pairs.at(channels.at(ch).pairIndex).heavyPi))
+                  << col(13, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).excitationEnergy)))
+                  << col(8, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).lightM)))
+                  << col(8, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).heavyM)))
+                  << col(5, QString("%1").arg(pairs.at(channels.at(ch).pairIndex).lightZ))
+                  << col(5, QString("%1").arg(pairs.at(channels.at(ch).pairIndex).heavyZ))
+                  << col(13, QString("%1").arg(roundTripNumber(pairs.at(0).seperationEnergy)))
+                  << col(13, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).seperationEnergy)))
                   << "    0    0          0.0"
-                  << qSetFieldWidth(6) << pairs.at(channels.at(ch).pairIndex).pairType
-                  << qSetFieldWidth(8) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).channelRadius)
-                  << qSetFieldWidth(13) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).lightG)
-                  << qSetFieldWidth(13) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).heavyG)
-                  << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).ecMultMask
-                  << qSetFieldWidth(9) << roundTripNumber(pairs.at(channels.at(ch).pairIndex).bindingEnergy)
-                  << qSetFieldWidth(4) << (channels.at(ch).radType == 'P' ? channels.at(ch).gammaIsRWA : 0)
+                  << col(6, QString("%1").arg(pairs.at(channels.at(ch).pairIndex).pairType))
+                  << col(8, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).channelRadius)))
+                  << col(13, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).lightG)))
+                  << col(13, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).heavyG)))
+                  << col(8, QString("%1").arg(pairs.at(channels.at(ch).pairIndex).ecMultMask))
+                  << col(9, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).bindingEnergy)))
+                  << col(4, QString("%1").arg((channels.at(ch).radType == 'P' ? channels.at(ch).gammaIsRWA : 0)))
                   << qSetFieldWidth(0) << Qt::endl;
       }
     }
