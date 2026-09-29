@@ -58,10 +58,12 @@ static void ok(const char* what, bool cond, const QString& detail = QString()) {
   if(!cond) fails++;
 }
 
+// Read as LF text: a Windows checkout gives the test projects CRLF endings,
+// and the insertions below anchor on "\n"-terminated lines.
 static QString slurp(const QString& path) {
   QFile f(path);
   if(!f.open(QIODevice::ReadOnly)) return QString();
-  return QString::fromUtf8(f.readAll());
+  return QString::fromUtf8(f.readAll()).remove('\r');
 }
 static void spit(const QString& path, const QString& text) {
   QFile f(path);
@@ -100,7 +102,9 @@ static QString withSettings(QString text, const QStringList& rows) {
     return text.replace(a, b + end.size() - a, block);
   }
   const QString anchor = "</targetInt>\n";
-  return text.insert(text.indexOf(anchor) + anchor.size(), block);
+  const int at = text.indexOf(anchor);
+  if(at < 0) return QString();   // no anchor: fail the checks, never write mid-line
+  return text.insert(at + anchor.size(), block);
 }
 
 // AZURE2's own names for the level parameters of a file, with the value it
