@@ -108,8 +108,8 @@ _THM_NUCLIDES = {
 _THM_BACKGROUNDS = ("none", "const", "linear", "quadratic")
 _THM_EXPERIMENT_KEYS = ("segments", "background", "beam", "target", "spectator", "Ebeam",
                         "lineshape", "ps", "psNodes", "distortion", "opticalAA", "opticalSF",
-                        "spectatorAngle", "distortionRef", "distortionRatio", "boundState")
-_THM_EXPERIMENT_RESERVED = ("theta",)
+                        "spectatorAngle", "distortionRef", "distortionRatio", "boundState",
+                        "theta")
 _THM_DISTORTION_DETAIL = ("spectatorAngle", "distortionRef", "distortionRatio", "boundState")
 _THM_NAME = re.compile(r"[A-Za-z0-9_.+-]+")
 _THM_WHOLE_INT = re.compile(r"[+-]?\d+")
@@ -299,9 +299,6 @@ def _thm_parse_experiment(line, experiments):
         if eq <= 0 or eq + 1 == len(token):
             raise ValueError(where + f"'{token}' is not key=value")
         key, value = token[:eq], token[eq + 1:]
-        if key in _THM_EXPERIMENT_RESERVED:
-            raise ValueError(where + f"key '{key}' is reserved for a later version "
-                             "(not implemented yet)")
         if key in work["keys"]:
             raise ValueError(where + f"key '{key}' is given twice")
         if key == "segments":
@@ -345,11 +342,18 @@ def _thm_parse_experiment(line, experiments):
                 work[key] = _thm_parse_distortion_key(key, value)
             except ValueError as err:
                 raise ValueError(where + str(err)) from None
+        elif key == "theta":
+            window = None if value == "all" else _thm_ps_window(value)
+            if value != "all" and (window is None or window[1] > 180.0):
+                raise ValueError(where + f"theta='{value}': expected all or thmin-thmax, "
+                                 "the c.m. angles of the exit pair relative to p_xA in "
+                                 "degrees, 0 <= thmin <= thmax <= 180")
+            work["theta"] = value
         else:
             raise ValueError(where + f"unknown key '{key}' (keys: segments, "
                              "background, beam, target, spectator, Ebeam, lineshape, ps, "
                              "psNodes, distortion, opticalAA, opticalSF, spectatorAngle, "
-                             "distortionRef, distortionRatio, boundState)")
+                             "distortionRef, distortionRatio, boundState, theta)")
         work["keys"].append(key)
     experiments[name] = work
 
@@ -409,6 +413,8 @@ def _thm_experiment_record(x):
     for key in ("distortion", "opticalAA", "opticalSF") + _THM_DISTORTION_DETAIL:
         if key in x:
             out[key] = x[key]
+    if "theta" in x:
+        out["theta"] = x["theta"]
     return out
 
 
@@ -431,6 +437,8 @@ def _thm_experiment_line(name, rec):
     for key in ("distortion", "opticalAA", "opticalSF") + _THM_DISTORTION_DETAIL:
         if key in rec:
             parts.append(f"{key}={rec[key]}")
+    if "theta" in rec:
+        parts.append(f"theta={rec['theta']}")
     return " ".join(parts)
 
 
@@ -2037,6 +2045,12 @@ class AzrModel:
             raise ValueError(f"<thm> {key!r}: not an option.")
         if canon_key.startswith("weight"):
             self._thm_check_weight_file(canon_key, canon_value)
+        if s["entranceL"] == "coherent":
+            for name, x in s["experiments"].items():
+                if x.get("theta", "all") != "all":
+                    raise ValueError(f"<thm> experiment[{name}]: theta= computes the "
+                                     "interference of the entrance partial waves exactly; "
+                                     "entranceL=coherent cannot be combined with it.")
         self._thm_write(s)
         return self
 
@@ -2106,8 +2120,10 @@ class AzrModel:
         ``const``, ``linear`` or ``quadratic``) and, if given, ``beam``,
         ``target``, ``spectator`` (nuclide names or ``Z,A,mass``) and
         ``Ebeam`` (lab MeV), ``lineshape: True`` when the Coulomb line
-        shape of the spectator is on, and ``ps`` / ``psNodes`` when given
-        (spectator-momentum window).  All segments of an experiment share one
+        shape of the spectator is on, ``ps`` / ``psNodes`` when given
+        (spectator-momentum window), the distortion keys, and ``theta`` when
+        given (the angular window of the fixed-angle observable, "all" or
+        "thmin-thmax" as written).  All segments of an experiment share one
         profiled norm and the background; see
         docs/source/theory/thm_implementation.rst, "THM experiments" and
         "Coulomb line shape".  Raises ValueError if the block has a line AZURE2
@@ -2120,7 +2136,7 @@ class AzrModel:
                            target=None, spectator=None, Ebeam=None, lineshape=False,
                            ps=None, psNodes=None, distortion=None, opticalAA=None,
                            opticalSF=None, spectatorAngle=None, distortionRef=None,
-                           distortionRatio=None, boundState=None):
+                           distortionRatio=None, boundState=None, theta=None):
         """Define (or replace) ``experiment[<name>]`` in the ``<thm>`` block.
 
         ``segments`` is a list of ``<segmentsData>`` line numbers (or the
@@ -2154,6 +2170,13 @@ class AzrModel:
         ``"cm:<deg>"``), ``distortionRef`` (E_ref, MeV), ``distortionRatio``
         (``"dwpw"`` or ``"dw"``), ``boundState`` (``"whittaker"`` or
         ``"yukawa"``, optionally ``":rmin"`` in fm).
+        ``theta`` turns the model of every segment into the fixed-angle HOES
+        observable: dsigma/dOmega averaged over the c.m. angle of the exit
+        pair (particle 1 relative to 2, from p_xA = entrance particle 1
+        relative to 2) in a window, ``"50-70"`` or ``(50, 70)`` in degrees
+        (0 <= min <= max <= 180; min == max is one angle); ``"all"`` (or None)
+        keeps the angle-integrated cross section.  0-180 gives it / 4 pi.  Not
+        with ``entranceL=coherent``.
         The record replaces every
         earlier line of that name with one line; other lines stay as they
         are.  Raises ValueError (model unchanged) for anything AZURE2 would
@@ -2189,6 +2212,11 @@ class AzrModel:
             elif key in ("distortionRef", "spectatorAngle") and not isinstance(value, str):
                 value = _thm_plain_number(value)
             text += f" {key}={value}"
+        if theta is not None:
+            if not isinstance(theta, str):
+                lo, hi = theta
+                theta = f"{_thm_plain_number(lo)}-{_thm_plain_number(hi)}"
+            text += f" theta={theta}"
         if any(c in text for c in "#\r\n"):
             raise ValueError(f"<thm> experiment[{name}]: a value cannot contain '#' "
                              "or a line break.")
@@ -2198,6 +2226,11 @@ class AzrModel:
         _thm_parse_experiment(text, trial)
         _thm_check_experiments(trial)
         rec = _thm_experiment_record(trial[name])
+        if rec.get("theta", "all") != "all" and s["entranceL"] == "coherent":
+            raise ValueError(f"<thm> experiment[{name}]: theta= computes the interference "
+                             "of the entrance partial waves exactly (at fixed angle they "
+                             "interfere); entranceL=coherent is an approximation of the "
+                             "angle-integrated observable and cannot be combined with it.")
         seg_lines = self._block_lines("segmentsData") or []
         for k in rec["segments"]:
             if k > len(seg_lines):
