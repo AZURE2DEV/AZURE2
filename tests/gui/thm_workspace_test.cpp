@@ -23,7 +23,16 @@
 //     is what Accept + save would write and leaves the project untouched; the
 //     engine's curves are finite, the vertex nodes are where the engine's
 //     ThmFormFactor changes sign, the line shape and weight panels appear
-//     with their options, Compute runs off the GUI thread.
+//     with their options, Compute runs off the GUI thread;
+// 10. the spectator-momentum window (ps=, psNodes=): controls offered with a
+//     complete reaction, only the chosen distribution's fields shown, write /
+//     read back / verbatim for every distribution, a table stored relative to
+//     the project, refusals (no reaction, bad table, with spectatorEnergy --
+//     the engine refuses with the same words), <T_s> = the engine's;
+// 11. Diagnostics with a window: nodes, weights, mu_sx and <T_s> are the
+//     engine's, w(p) the Hulthen weight with the nodes on it, <|M_l|^2> =
+//     sum_k w_k M_l^2 with the engine's ThmFormFactor, the nodes filled; a
+//     relative ps table read from the engine's temporary copy.
 //
 // Runs without a display; the CMake target passes QT_QPA_PLATFORM=offscreen.
 
@@ -41,6 +50,7 @@
 #include <QPushButton>
 #include <QRadioButton>
 #include <QRegExp>
+#include <QScrollArea>
 #include <QTabWidget>
 #include <QTableView>
 #include <QTableWidget>
@@ -61,6 +71,7 @@
 #include "Constants.h"
 #include "ThmFunc.h"
 #include "ThmLineshape.h"
+#include <algorithm>
 #ifdef AZURE2_THM_DIAGNOSTICS
 #include <QEventLoop>
 #include <QProgressBar>
@@ -165,12 +176,12 @@ int main(int argc, char** argv) {
   // 1. Records and the nuclide table.
   {
     const QStringList lines = QStringList() << "experiment[A] segments=1-3   # three runs"
-                                            << "experiment[B] segments=4 ps=3 background=const"
+                                            << "experiment[B] segments=4 distortion=3 background=const"
                                             << "experiment[A] beam=7Li target=d spectator=n Ebeam=19";
     QList<ThmExperimentRecord> r = ThmExperimentRecord::read(lines);
     ok("records merged by name", r.size() == 2 && r[0].name == "A" && r[1].name == "B");
     ok("segment ranges expanded", r.size() == 2 && r[0].segments == (QList<int>() << 1 << 2 << 3));
-    ok("unshown key kept aside", r.size() == 2 && r[1].extraTokens == QStringList("ps=3"));
+    ok("unshown key kept aside", r.size() == 2 && r[1].extraTokens == QStringList("distortion=3"));
     QList<ThmExperimentRecord> ls = ThmExperimentRecord::read(QStringList() << "experiment[C] segments=1 lineshape=on"
                                                                             << "experiment[D] segments=2 lineshape=off");
     ok("lineshape read as a field", ls.size() == 2 && ls[0].lineshape && !ls[1].lineshape && ls[0].extraTokens.isEmpty() &&
@@ -180,12 +191,16 @@ int main(int argc, char** argv) {
     ok("lineshape off is not written (the default)",
        ThmExperimentRecord::compose(QStringList() << "experiment[C] segments=1 lineshape=on", ls.mid(0, 1),
                                     lsOff.mid(0, 1)) == QStringList("experiment[C] segments=1"));
+    QList<ThmExperimentRecord> ps = ThmExperimentRecord::read(QStringList() << "experiment[P] psNodes=24 segments=1 ps=gauss:50:0-40.0");
+    ok("ps and psNodes read as fields, as written", ps.size() == 1 && ps[0].ps == "gauss:50:0-40.0" &&
+                                                        ps[0].psNodes == "24" && ps[0].extraTokens.isEmpty() && ps[0].hasWindow());
+    ok("ps=delta is no window", !ThmExperimentRecord::read(QStringList() << "experiment[P] segments=1 ps=delta")[0].hasWindow());
     ok("unchanged records: lines verbatim", ThmExperimentRecord::compose(lines, r, r) == lines);
     QList<ThmExperimentRecord> e = r;
     e[1].background = "linear";
     ok("edited record keeps the key it does not show",
        ThmExperimentRecord::compose(lines, r, e) ==
-           (QStringList() << lines[0] << "experiment[B] segments=4 background=linear ps=3" << lines[2]),
+           (QStringList() << lines[0] << "experiment[B] segments=4 background=linear distortion=3" << lines[2]),
        ThmExperimentRecord::compose(lines, r, e).join("|"));
     e = r;
     e[0].background = "quadratic";  // two lines of A become one, in place of the first
@@ -612,14 +627,6 @@ int main(int argc, char** argv) {
     ThmWorkspace ws(&w, s);
     ThmExperimentsPage* p = ws.experimentsPage;
     const QString shown = p->derivedLabel->text();
-    // THM_EXPERIMENTS_PNG=<file>: keep a rendering of the page, to look at it.
-    if(qEnvironmentVariableIsSet("THM_EXPERIMENTS_PNG")) {
-      ws.resize(760, 720);
-      ws.pages->setCurrentWidget(p);
-      QPixmap shot(ws.size());
-      ws.render(&shot);
-      shot.save(qEnvironmentVariable("THM_EXPERIMENTS_PNG"));
-    }
     double lo = 0, hi = 0;
     ok("charged spectator: data range read", p->pointRange(QList<int>() << 1, lo, hi) && hi > lo);
     int code = -1;
@@ -638,6 +645,263 @@ int main(int argc, char** argv) {
                             .arg(QString::number(rowZ.cap(1).toDouble(), 'g', 3), QString::number(rowZ.cap(2).toDouble(), 'g', 3));
       ok("page shows the engine's zeta at the ends", shown.contains(z) && rowZ.cap(1).toDouble() < 0.0,
          shown + " | " + rowZ.cap(0));
+    }
+  }
+
+
+  // 10. The spectator-momentum window (ps=, psNodes=) on the Experiments page.
+  auto type = [](QLineEdit* e, const QString& text) {
+    e->setText(text);
+    emit e->textEdited(text);
+  };
+  const QString reaction = "beam=7Li target=d spectator=n Ebeam=19";
+  spit(work.filePath("psflat.dat"), "# p_s  w\n20 1\n40 1\n");
+  {
+    spit(fourPath, four);
+    w.open(fourPath);
+    ThmSettings s;
+    w.thmSettings(s);
+    ThmWorkspace ws(&w, s);
+    ThmExperimentsPage* p = ws.experimentsPage;
+    p->addExperiment();
+    segmentItem(p->segmentList, 1)->setCheckState(Qt::Checked);
+    ok("ps: disabled without the reaction", !p->psBox->isEnabled());
+    p->kinematicsBox->setChecked(true);
+    p->beamCombo->setEditText("7Li");
+    p->targetCombo->setEditText("d");
+    p->spectatorCombo->setEditText("n");
+    ok("ps: disabled with an incomplete reaction", !p->psBox->isEnabled());
+    type(p->beamEnergyEdit, "19");
+    ok("ps: enabled with the complete reaction", p->psBox->isEnabled());
+    ok("ps: point by default, only the distribution shown",
+       p->psKindCombo->currentData().toString() == "delta" && !p->psMinEdit->isVisibleTo(p) &&
+           !p->psNodesSpin->isVisibleTo(p) && !p->psTableEdit->isVisibleTo(p) && !p->psFwhmEdit->isVisibleTo(p));
+    p->psKindCombo->setCurrentIndex(p->psKindCombo->findData("hulthen"));
+    ok("ps: Hulthen shows the window, a,b (standard, read-only) and the nodes",
+       p->psMinEdit->isVisibleTo(p) && p->psAEdit->isVisibleTo(p) && !p->psAEdit->isEnabled() &&
+           p->psAEdit->text() == "0.2317" && p->psBEdit->text() == "1.202" && p->psNodesSpin->isVisibleTo(p) &&
+           p->psNodesSpin->value() == 16 && !p->psFwhmEdit->isVisibleTo(p) && !p->psTableEdit->isVisibleTo(p));
+    type(p->psMinEdit, "0");
+    type(p->psMaxEdit, "40");
+    ok("ps: hulthen:0-40", p->records().at(0).ps == "hulthen:0-40" && p->records().at(0).psNodes.isEmpty(),
+       p->records().at(0).ps);
+    ok("ps: <T_s> shown", p->derivedLabel->text().contains("<T_s> = ") && p->derivedLabel->text().contains("16 Gauss-Legendre"),
+       p->derivedLabel->text());
+    p->psCustomCheck->setChecked(true);
+    ok("ps: custom a,b editable", p->psAEdit->isEnabled() && p->psBEdit->isEnabled());
+    type(p->psAEdit, "0.42");
+    type(p->psBEdit, "1.2");
+    ok("ps: hulthen:a,b:pmin-pmax", p->records().at(0).ps == "hulthen:0.42,1.2:0-40", p->records().at(0).ps);
+    p->psNodesSpin->setValue(24);
+    ok("ps: psNodes", p->records().at(0).psNodes == "24");
+    p->psKindCombo->setCurrentIndex(p->psKindCombo->findData("gauss"));
+    ok("ps: Gaussian shows FWHM, not a,b", p->psFwhmEdit->isVisibleTo(p) && !p->psAEdit->isVisibleTo(p));
+    type(p->psFwhmEdit, "50");
+    ok("ps: gauss:FWHM:pmin-pmax", p->records().at(0).ps == "gauss:50:0-40", p->records().at(0).ps);
+    p->psKindCombo->setCurrentIndex(p->psKindCombo->findData("table"));
+    ok("ps: table shows the file, not the window", p->psTableEdit->isVisibleTo(p) && p->psTableButton->isVisibleTo(p) &&
+                                                       !p->psMinEdit->isVisibleTo(p) && p->psNodesSpin->isVisibleTo(p));
+    type(p->psTableEdit, "psmissing.dat");
+    ok("ps: table:file", p->records().at(0).ps == "table:psmissing.dat");
+    ok("refused: unreadable table (engine's reader)", ws.validate().contains("ps: cannot read the ps table"), ws.validate());
+    type(p->psTableEdit, "psflat.dat");
+    ok("ps: table accepted, <T_s> over its range", ws.validate().isEmpty() && p->derivedLabel->text().contains("[20, 40]"),
+       ws.validate() + " | " + p->derivedLabel->text());
+    ok("ps: chosen file stored relative to the project",
+       ThmExperimentsPage::projectRelative(work.filePath("psflat.dat"), work.path()) == "psflat.dat" &&
+           ThmExperimentsPage::projectRelative("/elsewhere/ps.dat", work.path()) == "/elsewhere/ps.dat");
+    p->psKindCombo->setCurrentIndex(p->psKindCombo->findData("delta"));
+    ok("ps: point drops ps and psNodes", p->records().at(0).ps.isEmpty() && p->records().at(0).psNodes.isEmpty() &&
+                                             p->psNodesSpin->value() == 16);
+    p->psKindCombo->setCurrentIndex(p->psKindCombo->findData("hulthen"));
+    p->psCustomCheck->setChecked(false);
+    ok("ps: unticking custom restores the deuteron's a,b", p->records().at(0).ps == "hulthen:0-40" &&
+                                                                p->psAEdit->text() == "0.2317", p->records().at(0).ps);
+    p->kinematicsBox->setChecked(false);
+    ok("ps: dropped with the reaction", p->records().at(0).ps.isEmpty() && !p->psBox->isEnabled() &&
+                                            p->psKindCombo->currentData().toString() == "delta");
+  }
+  {
+    // Write, read back and keep verbatim, for each distribution.
+    const QStringList values = QStringList() << "hulthen:0-40" << "hulthen:0.42,1.2:0-40 psNodes=24" << "gauss:50:10-40"
+                                             << "table:psflat.dat" << "hulthen:30-30";
+    for(const QString& v : values) {
+      const QString value = v.section(' ', 0, 0), nodes = v.contains("psNodes=") ? v.section('=', -1) : QString();
+      // Through the controls.
+      spit(fourPath, four);
+      w.open(fourPath);
+      ThmSettings s;
+      w.thmSettings(s);
+      {
+        ThmWorkspace ws(&w, s);
+        ThmExperimentsPage* p = ws.experimentsPage;
+        p->addExperiment();
+        segmentItem(p->segmentList, 1)->setCheckState(Qt::Checked);
+        p->kinematicsBox->setChecked(true);
+        p->beamCombo->setEditText("7Li");
+        p->targetCombo->setEditText("d");
+        p->spectatorCombo->setEditText("n");
+        type(p->beamEnergyEdit, "19");
+        const QStringList f = value.split(':');
+        p->psKindCombo->setCurrentIndex(p->psKindCombo->findData(f[0]));
+        if(f[0] == "table") {
+          type(p->psTableEdit, f[1]);
+        } else {
+          const QString window = f.last();
+          type(p->psMinEdit, window.section('-', 0, 0));
+          type(p->psMaxEdit, window.section('-', 1));
+          if(f[0] == "gauss") type(p->psFwhmEdit, f[1]);
+          if(f[0] == "hulthen" && f.size() == 3) {
+            p->psCustomCheck->setChecked(true);
+            type(p->psAEdit, f[1].section(',', 0, 0));
+            type(p->psBEdit, f[1].section(',', 1));
+          }
+        }
+        if(!nodes.isEmpty()) p->psNodesSpin->setValue(nodes.toInt());
+        ok(qPrintable("ps " + v + ": accepted"), ws.validate().isEmpty(), ws.validate());
+        ws.accept();
+      }
+      w.saveProject();
+      const QString expect = "experiment[E1] segments=1 " + reaction + " ps=" + v + "\n";
+      ok(qPrintable("ps " + v + ": written"), blockOf(slurp(fourPath)) == expect, blockOf(slurp(fourPath)));
+      // The engine's parser takes it.
+      ThmSettings back;
+      QString err;
+      ok(qPrintable("ps " + v + ": read back by the engine's parser"), w.thmSettings(back, &err), err);
+      // Reopened: the controls show it; untouched it stays byte for byte.
+      w.open(work.filePath("plain.azr"));
+      w.open(fourPath);
+      w.saveProject();
+      const QString before = slurp(fourPath);
+      w.thmSettings(back);
+      {
+        ThmWorkspace ws(&w, back);
+        ThmExperimentsPage* p = ws.experimentsPage;
+        ok(qPrintable("ps " + v + ": controls read back"),
+           p->psKindCombo->currentData().toString() == value.section(':', 0, 0) && p->psText() == value &&
+               p->psNodesSpin->value() == (nodes.isEmpty() ? 16 : nodes.toInt()) && p->psBox->isEnabled(),
+           p->psText());
+        ws.accept();
+      }
+      w.saveProject();
+      ok(qPrintable("ps " + v + ": untouched, byte-identical"), slurp(fourPath) == before);
+    }
+    // As written by hand (spacing, key order, ps=delta): verbatim until edited.
+    const QString block = "experiment[H] psNodes=8 segments=1   ps=hulthen:0.0-40.00 " + reaction + "  # by hand\n"
+                          "experiment[D] segments=2 ps=delta\n";
+    spit(fourPath, four + "<thm>\n" + block + "</thm>\n");
+    w.open(fourPath);
+    w.saveProject();
+    ThmSettings s;
+    QString err;
+    ok("ps by hand: opens", w.thmSettings(s, &err), err);
+    {
+      ThmWorkspace ws(&w, s);
+      ok("ps by hand: controls", ws.experimentsPage->psMinEdit->text() == "0.0" &&
+                                     ws.experimentsPage->psMaxEdit->text() == "40.00" &&
+                                     ws.experimentsPage->psNodesSpin->value() == 8);
+      ws.accept();
+    }
+    w.saveProject();
+    ok("ps by hand: untouched block verbatim", blockOf(slurp(fourPath)) == block, blockOf(slurp(fourPath)));
+    w.thmSettings(s);
+    {
+      ThmWorkspace ws(&w, s);
+      type(ws.experimentsPage->psMaxEdit, "30");
+      ws.accept();
+    }
+    w.saveProject();
+    ok("ps by hand: edited window rewritten, the rest as written",
+       blockOf(slurp(fourPath)) == "experiment[H] segments=1 " + reaction + " ps=hulthen:0.0-30 psNodes=8\n"
+                                   "experiment[D] segments=2 ps=delta\n",
+       blockOf(slurp(fourPath)));
+  }
+  {
+    // Refused: a window without the reaction (engine's check), and a window
+    // with a spectator energy for its pair (the engine's startup rule).
+    ThmExperimentsPage noKin(QStringList() << "experiment[W] segments=1 ps=hulthen:0-40",
+                             w.getSegmentsTab()->getSegmentsDataModel(), w.getPairsTab()->getPairsModel(),
+                             w.projectDirectory(), true);
+    ok("refused: a window without the reaction", noKin.check().contains("needs the kinematics"), noKin.check());
+    ok("refused: psNodes without a window",
+       ThmSettings::checkExperimentLines(QStringList() << "experiment[W] segments=1 psNodes=8").contains("psNodes= needs a ps window"));
+    const QString wBlock = "experiment[W] segments=1 " + reaction + " ps=hulthen:0-40\n";
+    const QString path = work.filePath("psrefuse.azr");
+    const QStringList energies = {"spectatorEnergy=0.1\n", "spectatorEnergy[5]=0.1\n"};
+    for(const QString& energy : energies) {
+      spit(path, plain + "<thm>\n" + energy + wBlock + "</thm>\n");
+      w.open(path);
+      ThmSettings s;
+      w.thmSettings(s);
+      ThmWorkspace ws(&w, s);
+      const QString why = ws.validate();
+      ok(qPrintable("refused: window with " + energy.trimmed()),
+         why == "<thm> experiment[W]: a ps window and spectatorEnergy both set the spectator motion of entrance pair 5; "
+                "use one (ps=delta keeps spectatorEnergy).",
+         why);
+      ok("refusal shown on the Experiments page", ws.pages->currentWidget() == ws.experimentsPage &&
+                                                      ws.experimentsPage->derivedLabel->text().contains("spectatorEnergy both"));
+    }
+    int code = -1;
+    const QString out = engineRun(work.path(), "psrefuse.azr", &code);
+    ok("the engine refuses it with the same words",
+       code != 0 && out.contains("ERROR: <thm> experiment[W]: a ps window and spectatorEnergy both set the spectator "
+                                 "motion of entrance pair 5; use one (ps=delta keeps spectatorEnergy)."),
+       out.right(400));
+    // The Model page's value, changed in the workspace, is what counts.
+    spit(path, plain + "<thm>\n" + wBlock + "</thm>\n");
+    w.open(path);
+    ThmSettings s;
+    w.thmSettings(s);
+    ThmWorkspace ws(&w, s);
+    ok("window alone accepted", ws.validate().isEmpty(), ws.validate());
+    ws.modelPage->spectatorEnergySpin->setValue(0.2);
+    ok("refused after setting the spectator energy on the Model page",
+       ws.validate().contains("a ps window and spectatorEnergy both"), ws.validate());
+  }
+  {
+    // <T_s> on the page = the engine's (startup message), for a Hulthen window
+    // and for a table relative to the project.
+    const QStringList means = {"hulthen:0-40", "table:psflat.dat"};
+    for(const QString& value : means) {
+      const QString path = work.filePath("psmean.azr");
+      spit(path, plain + "<thm>\nexperiment[W] segments=1 " + reaction + " ps=" + value + "\n</thm>\n");
+      w.open(path);
+      ThmSettings s;
+      w.thmSettings(s);
+      ThmWorkspace ws(&w, s);
+      const QString shown = ws.experimentsPage->derivedLabel->text();
+      int code = -1;
+      const QString out = engineRun(work.path(), "psmean.azr", &code);
+      QRegExp rx("mu_sx = ([-+0-9.eE]+) MeV, T_s = p_s\\^2/2mu_sx from ([-+0-9.eE]+) to ([-+0-9.eE]+) MeV, "
+                 "<T_s> = ([-+0-9.eE]+) MeV");
+      const bool found = code == 0 && rx.indexIn(out) >= 0;
+      ok(qPrintable("ps " + value + ": the engine prints the window"), found, out.right(400));
+      if(found)
+        ok(qPrintable("ps " + value + ": page shows the engine's mu_sx, T_s range and <T_s>"),
+           shown.contains("mu_sx = " + rx.cap(1) + " MeV") && shown.contains("from " + rx.cap(2) + " to " + rx.cap(3)) &&
+               shown.contains("<T_s> = " + rx.cap(4) + " MeV"),
+           shown + " | " + rx.cap(0));
+    }
+    // THM_EXPERIMENTS_PNG=<file>: keep a rendering of the page, to look at it
+    // (charged spectator, line shape and a Hulthen window).
+    const QString path = work.filePath("pspng.azr");
+    spit(path, plain + "<thm>\nexperiment[E1] segments=1 beam=3He target=7Li spectator=d Ebeam=20 lineshape=on "
+                       "ps=hulthen:0-40\n</thm>\n");
+    w.open(path);
+    ThmSettings s;
+    w.thmSettings(s);
+    ThmWorkspace ws(&w, s);
+    ok("charged spectator with a window: accepted", ws.validate().isEmpty(), ws.validate());
+    if(qEnvironmentVariableIsSet("THM_EXPERIMENTS_PNG")) {
+      ws.resize(760, 900);
+      ws.pages->setCurrentWidget(ws.experimentsPage);
+      ws.show();  // lays the page out, so that its editor can be scrolled to the window
+      QApplication::processEvents();
+      if(QScrollArea* a = ws.experimentsPage->findChild<QScrollArea*>()) a->ensureWidgetVisible(ws.experimentsPage->derivedLabel);
+      QPixmap shot(ws.size());
+      ws.render(&shot);
+      shot.save(qEnvironmentVariable("THM_EXPERIMENTS_PNG"));
     }
   }
 
@@ -765,8 +1029,6 @@ int main(int argc, char** argv) {
     d->resize(shot.size());
     d->render(&shot);  // paints every panel once
     ok("diagnostics: page paints", !shot.isNull());
-    // THM_DIAGNOSTICS_PNG=<file>: keep the rendering, to look at it.
-    if(qEnvironmentVariableIsSet("THM_DIAGNOSTICS_PNG")) shot.save(qEnvironmentVariable("THM_DIAGNOSTICS_PNG"));
 
     // Off the GUI thread, with the busy bar.
     ThmSettings s3;
@@ -788,6 +1050,144 @@ int main(int argc, char** argv) {
     ok("diagnostics: no line shape, no weight: panels hidden",
        !d3->result().lineshape && d3->result().weight.isEmpty() && !d3->lineshapePlot->isVisibleTo(d3) &&
            !d3->weightPlot->isVisibleTo(d3));
+  }
+  {
+    // 11. Diagnostics with a spectator-momentum window: charged spectator,
+    //     line shape, weight and a Hulthen window (every panel).
+    const QString line = "experiment[E1] segments=1 beam=3He target=7Li spectator=d Ebeam=20 lineshape=on ps=hulthen:0-40";
+    const QString path = work.filePath("diagps.azr");
+    spit(path, plain + "<thm>\n" + line + "\nweight[1]=ramp.dat\n</thm>\n");
+    w.open(path);
+    ThmSettings s;
+    QString err;
+    ok("window diagnostics: block opens", w.thmSettings(s, &err), err);
+    ThmWorkspace ws(&w, s);
+    ThmDiagnosticsPage* d = ws.diagnosticsPage;
+    ok("window diagnostics: computed", d->computeNow(), d->result().error);
+    const ThmDiagnosticsResult& r = d->result();
+    double sum = 0.0;
+    for(double x : r.nodeWeight) sum += x;
+    ok("window: 16 nodes, weights sum to 1", r.window && r.nodeP.size() == 16 && r.nodeWeight.size() == 16 &&
+                                                 std::fabs(sum - 1.0) < 1e-12);
+    // The nodes and weights are the engine's BuildThmSpectatorWindow; mu_sx of p + d.
+    std::vector<ThmExperiment> xs;
+    const bool parsed = ParseThmExperimentLine(line.toStdString(), xs).empty() && xs.size() == 1;
+    const ThmNuclide *np = ThmNuclide::Find(1, 1), *nd = ThmNuclide::Find(1, 2);
+    const double muSx = np->mass * nd->mass / (np->mass + nd->mass) * 931.49410242;
+    ThmSpectatorWindow win;
+    const bool built = parsed && BuildThmSpectatorWindow(xs[0], muSx, win).empty();
+    bool same = built && win.p.size() == (size_t)r.nodeP.size() && std::fabs(r.muSx - muSx) < 1e-12 * muSx;
+    for(size_t k = 0; same && k < win.p.size(); k++)
+      same = win.p[k] == r.nodeP[k] && win.weight[k] == r.nodeWeight[k] && win.es[k] == r.nodeTs[k];
+    ok("window: nodes, weights, T_s and mu_sx are the engine's", same,
+       QString("mu_sx %1 vs %2").arg(r.muSx, 0, 'g', 12).arg(muSx, 0, 'g', 12));
+    ok("window: <T_s> is the engine's", built && std::fabs(r.meanTs - win.MeanEs()) < 1e-14 * win.MeanEs(),
+       QString("%1 vs %2").arg(r.meanTs, 0, 'g', 15).arg(win.MeanEs(), 0, 'g', 15));
+    std::cout << "        mu_sx = " << r.muSx << " MeV, <T_s> = " << r.meanTs << " MeV" << std::endl;
+    // w(p) = |phi|^2 p^2 of the deuteron Hulthen function, unit area; the
+    // engine's normalized weights are omega_k w(p_k) (checked above), so the
+    // curve at the nodes is w(p_k) itself.
+    auto hulthen = [](double p) {
+      const double q2 = (p / hbarc) * (p / hbarc), phi = 1.0 / (0.2317 * 0.2317 + q2) - 1.0 / (1.202 * 1.202 + q2);
+      return phi * phi * p * p;
+    };
+    double area = 0.0, lo = 1e300, hi = -1e300;
+    for(int i = 0; i < r.windowP.size(); i++) {
+      if(i > 0) area += 0.5 * (r.windowW[i] + r.windowW[i - 1]) * (r.windowP[i] - r.windowP[i - 1]);
+      if(r.windowP[i] > 0.0) {
+        lo = std::min(lo, r.windowW[i] / hulthen(r.windowP[i]));
+        hi = std::max(hi, r.windowW[i] / hulthen(r.windowP[i]));
+      }
+    }
+    bool atNodes = r.nodeW.size() == r.nodeP.size();
+    for(int k = 0; atNodes && k < r.nodeP.size(); k++)
+      atNodes = std::fabs(r.nodeW[k] / hulthen(r.nodeP[k]) - lo) < 1e-12 * lo;
+    ok("window: w(p) is |phi|^2 p^2 over [0, 40] MeV/c, unit area, nodes on the curve",
+       r.windowP.size() > 100 && r.windowP.first() == 0.0 && r.windowP.last() == 40.0 && std::fabs(area - 1.0) < 1e-12 &&
+           hi - lo < 1e-12 * lo && atNodes,
+       QString("area %1, spread %2").arg(area, 0, 'g', 15).arg((hi - lo) / lo));
+    // <|M_l|^2> = sum_k w_k M_l(E; B + T_k)^2 with the engine's ThmFormFactor.
+    const PairsData& pr = w.getPairsTab()->getPairsModel()->getPairs().at(4);
+    const double mu = pr.lightM * pr.heavyM / (pr.lightM + pr.heavyM) * uconv;
+    bool avgOk = !r.vertex.isEmpty(), qfOk = avgOk, filled = true;
+    double worst = 0.0;
+    int curves = 0, nodes = 0;
+    for(const ThmDiagnosticsResult::VertexGroup& g : r.vertex)
+      for(const ThmDiagnosticsCurve& c : g.curves) {
+        curves++;
+        const int l = c.label.mid(4).toInt();
+        avgOk = avgOk && c.yWindow.size() == r.energy.size();
+        if(!avgOk) break;
+        const double scale = *std::max_element(c.y.begin(), c.y.end());
+        for(int i = 0; i < r.energy.size(); i += 10) {
+          double expect = 0.0;
+          for(int k = 0; k < r.nodeP.size(); k++) {
+            const double m = ThmFormFactor(l, c.boundary, mu, r.energy[i], pr.bindingEnergy + r.nodeTs[k], pr.channelRadius);
+            expect += r.nodeWeight[k] * m * m;
+          }
+          const double qf = ThmFormFactor(l, c.boundary, mu, r.energy[i], pr.bindingEnergy, pr.channelRadius);
+          worst = std::max(worst, std::fabs(c.yWindow[i] - expect) / scale);
+          qfOk = qfOk && std::fabs(c.y[i] - qf * qf) <= 1e-12 * scale;
+        }
+        // The window fills the quasi-free nodes.
+        for(double e : c.nodes) {
+          nodes++;
+          int at = 0;
+          for(int i = 1; i < r.energy.size(); i++)
+            if(std::fabs(r.energy[i] - e) < std::fabs(r.energy[at] - e)) at = i;
+          filled = filled && c.yWindow[at] > c.y[at];
+          std::cout << "        " << g.jpi.toStdString() << ", " << c.label.toStdString() << ": node at " << e
+                    << " MeV, |M|^2 = " << c.y[at] << " -> <|M|^2> = " << c.yWindow[at] << " (max " << scale << ")"
+                    << std::endl;
+        }
+      }
+    ok("window: <|M_l|^2> = sum_k w_k M_l(p_xA(p_k))^2 (engine's ThmFormFactor)", avgOk && worst < 1e-10,
+       QString("worst %1 of the maximum").arg(worst));
+    ok("window: quasi-free curve unchanged (p_s = 0)", qfOk);
+    ok("window: the average fills the vertex nodes", filled);
+    // The panels: the window with its nodes, and the average next to each quasi-free curve.
+    ok("window panel shown: w(p) and the nodes as points",
+       d->windowPlot->isVisibleTo(d) && d->windowPlot->series().size() == 2 && !d->windowPlot->series()[0].symbols &&
+           d->windowPlot->series()[1].symbols && d->windowPlot->series()[1].x == r.nodeP && !d->windowPlot->title().isEmpty());
+    ok("vertex panel: <|M_l|^2> dashed next to each |M_l|^2",
+       d->vertexPlot->series().size() == 2 * r.vertex[0].curves.size() &&
+           d->vertexPlot->series()[1].style == Qt::DashLine && d->vertexPlot->series()[1].y == r.vertex[0].curves[0].yWindow);
+    ok("status names <T_s>", d->statusLabel->text().contains("<T_s> = "), d->statusLabel->text());
+    ok("every panel shown", d->lineshapePlot->isVisibleTo(d) && d->zetaPlot->isVisibleTo(d) && d->weightPlot->isVisibleTo(d));
+    std::cout << "        (" << curves << " vertex curve(s), " << nodes << " node(s))" << std::endl;
+    // Shown: a J^pi group whose vertex has a node, to see it filled.
+    for(int g = 0; g < r.vertex.size(); g++)
+      if(!r.vertex[g].curves.isEmpty() && !r.vertex[g].curves[0].nodes.isEmpty()) {
+        d->vertexGroupCombo->setCurrentIndex(g);
+        break;
+      }
+    ws.resize(1000, 1250);
+    ws.pages->setCurrentWidget(d);
+    QPixmap shot(ws.size());
+    ws.render(&shot);
+    ok("window diagnostics: page paints", !shot.isNull());
+    // THM_DIAGNOSTICS_PNG=<file>: keep the rendering, to look at it.
+    if(qEnvironmentVariableIsSet("THM_DIAGNOSTICS_PNG")) shot.save(qEnvironmentVariable("THM_DIAGNOSTICS_PNG"));
+  }
+  {
+    // ps=table:<file> relative to the project: made absolute in the engine's
+    // temporary copy only.
+    const QString path = work.filePath("diagtable.azr");
+    spit(path, plain + "<thm>\nexperiment[E1] segments=1 " + reaction + " ps=table:psflat.dat\n</thm>\n");
+    w.open(path);
+    ThmSettings s;
+    w.thmSettings(s);
+    ThmWorkspace ws(&w, s);
+    QString snap, err;
+    ok("table: the snapshot keeps the relative path", ws.projectSnapshot(snap, &err) &&
+                                                          snap.contains(" ps=table:psflat.dat\n"), err);
+    ThmDiagnosticsPage* d = ws.diagnosticsPage;
+    ok("table: computed from a copy elsewhere (path made absolute)", d->computeNow(), d->result().error);
+    const ThmDiagnosticsResult& r = d->result();
+    bool flat = r.window && !r.windowW.isEmpty() && r.windowP.first() == 20.0 && r.windowP.last() == 40.0;
+    for(double v : r.windowW) flat = flat && std::fabs(v - 1.0 / 20.0) < 1e-12;
+    for(double p : r.nodeP) flat = flat && p > 20.0 && p < 40.0;
+    ok("table: flat w(p) = 1/20 per MeV/c on [20, 40], nodes inside", flat);
   }
 #endif
 

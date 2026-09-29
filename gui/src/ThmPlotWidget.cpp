@@ -196,8 +196,11 @@ void ThmPlotWidget::paintEvent(QPaintEvent *) {
     const double px = X(t);
     p.drawLine(QPointF(px, frame.bottom()), QPointF(px, frame.bottom() - tick));
     p.drawLine(QPointF(px, frame.top()), QPointF(px, frame.top() + tick));
-    p.drawText(QRectF(px - 40, frame.bottom() + 3, 80, fm.height()), Qt::AlignHCenter | Qt::AlignTop,
-               tickText(t, xstep));
+    // Centred under the tick, but kept inside the widget at the right end.
+    const QString text = tickText(t, xstep);
+    const double half = fm.horizontalAdvance(text) / 2.0 + 1.0;
+    const double cx = std::min(px, width() - 2.0 - half);
+    p.drawText(QRectF(cx - half, frame.bottom() + 3, 2.0 * half, fm.height()), Qt::AlignHCenter | Qt::AlignTop, text);
   }
   if (logY_) {
     const int d0 = (int)std::ceil(ylo - 1e-9), d1 = (int)std::floor(yhi + 1e-9);
@@ -245,7 +248,17 @@ void ThmPlotWidget::paintEvent(QPaintEvent *) {
         path.moveTo(q);
       pen = true;
     }
-    p.setPen(QPen(s.color.isValid() ? s.color : ink, 2.0, s.style));
+    const QColor c = s.color.isValid() ? s.color : ink;
+    if (s.symbols) {
+      p.setPen(QPen(c, 1.0));
+      p.setBrush(c);
+      for (int i = 0; i < s.x.size() && i < s.y.size(); i++)
+        if (std::isfinite(s.x[i]) && std::isfinite(s.y[i]) && (!logY_ || s.y[i] > 0.0))
+          p.drawEllipse(QPointF(X(s.x[i]), Y(s.y[i])), 3.5, 3.5);
+      p.setBrush(Qt::NoBrush);
+      continue;
+    }
+    p.setPen(QPen(c, 2.0, s.style));
     p.drawPath(path);
   }
   p.restore();
@@ -290,6 +303,10 @@ void ThmPlotWidget::paintEvent(QPaintEvent *) {
           continue;
         }
         const QPointF q(X(s.x[i]), Y(s.y[i]));
+        if (s.symbols) {
+          for (int k = 0; k < 8; k++) count(q + QPointF(4.0 * std::cos(k * M_PI / 4), 4.0 * std::sin(k * M_PI / 4)));
+          continue;
+        }
         if (have) {
           const int n = std::max(1, (int)(std::hypot(q.x() - prev.x(), q.y() - prev.y()) / 2.0));
           for (int k = 0; k <= n; k++) count(prev + (q - prev) * (double(k) / n));
@@ -322,8 +339,16 @@ void ThmPlotWidget::paintEvent(QPaintEvent *) {
   // Legend, above the axes.
   for (const Entry &e : legend) {
     const double yy = e.r.center().y();
-    p.setPen(QPen(e.s->color.isValid() ? e.s->color : ink, 2.0, e.s->style));
-    p.drawLine(QPointF(e.r.left(), yy), QPointF(e.r.left() + lineLen, yy));
+    const QColor c = e.s->color.isValid() ? e.s->color : ink;
+    if (e.s->symbols) {
+      p.setPen(QPen(c, 1.0));
+      p.setBrush(c);
+      p.drawEllipse(QPointF(e.r.left() + lineLen / 2.0, yy), 3.5, 3.5);
+      p.setBrush(Qt::NoBrush);
+    } else {
+      p.setPen(QPen(c, 2.0, e.s->style));
+      p.drawLine(QPointF(e.r.left(), yy), QPointF(e.r.left() + lineLen, yy));
+    }
     p.setPen(ink);
     p.drawText(QRect(e.r.left() + lineLen + 6, e.r.top(), e.r.width() - lineLen - 6, e.r.height()),
                Qt::AlignLeft | Qt::AlignVCenter, e.s->label);

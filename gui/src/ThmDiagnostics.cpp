@@ -15,6 +15,7 @@
 #include "ALevel.h"
 #include "AChannel.h"
 #include "AZUREAPI.h"
+#include "Constants.h"
 #include "CNuc.h"
 #include "ChannelFunc.h"
 #include "Config.h"
@@ -62,19 +63,55 @@ void setThmLines(QString &text, const QStringList &lines) {
   text.replace(a, b - a, lines.isEmpty() ? QString() : lines.join('\n') + '\n');
 }
 
-/// weight[k]= / weightTest[k]= paths made absolute (the copy of the project
-/// is not in the project's directory, and the engine resolves them against it).
+/// weight[k]= / weightTest[k]= paths and ps=table:<file> of experiment lines
+/// made absolute (the copy of the project is not in the project's directory,
+/// and the engine resolves them against it).
 QStringList absoluteWeights(const QStringList &lines, const QString &dir) {
   QStringList out;
   QRegularExpression rx("^(\\s*weight(?:Test)?\\s*\\[\\s*\\d+\\s*\\]\\s*=\\s*)([^#\\s][^#]*?)(\\s*(#.*)?)$");
+  QRegularExpression table("(^|[ \\t])ps=table:([^ \\t#]+)");
   for (const QString &line : lines) {
     QRegularExpressionMatch m = rx.match(line);
-    if (m.hasMatch() && QFileInfo(m.captured(2)).isRelative())
+    if (m.hasMatch() && QFileInfo(m.captured(2)).isRelative()) {
       out << m.captured(1) + QDir(dir).absoluteFilePath(m.captured(2)) + m.captured(3);
-    else
-      out << line;
+      continue;
+    }
+    const int hash = line.indexOf('#');
+    const QString code = hash < 0 ? line : line.left(hash);
+    m = table.match(code);
+    if (code.trimmed().startsWith("experiment[") && m.hasMatch() && QFileInfo(m.captured(2)).isRelative()) {
+      QString changed = line;
+      changed.replace(m.capturedStart(2), m.capturedLength(2), QDir(dir).absoluteFilePath(m.captured(2)));
+      out << changed;
+      continue;
+    }
+    out << line;
   }
   return out;
+}
+
+/// The event weight per unit p_s of a window (ThmLineshape.cpp
+/// BuildThmSpectatorWindow's w(p)), for the plot between the nodes.
+double windowWeight(const ThmExperiment &x, double p) {
+  switch (x.psKind) {
+    case ThmExperiment::PS_HULTHEN: {
+      const double q2 = (p / hbarc) * (p / hbarc);
+      const double phi = 1.0 / (x.psA * x.psA + q2) - 1.0 / (x.psB * x.psB + q2);
+      return phi * phi * p * p;
+    }
+    case ThmExperiment::PS_GAUSS:
+      return std::exp(-4.0 * std::log(2.0) * p * p / (x.psFwhm * x.psFwhm)) * p * p;
+    case ThmExperiment::PS_TABLE: {
+      const std::vector<double> &tp = x.psTableP, &tw = x.psTableW;
+      if (tp.empty()) return 0.0;
+      if (p <= tp.front()) return tw.front();
+      if (p >= tp.back()) return tw.back();
+      const size_t hi = std::upper_bound(tp.begin(), tp.end(), p) - tp.begin(), lo = hi - 1;
+      return tw[lo] + (tw[hi] - tw[lo]) * (p - tp[lo]) / (tp[hi] - tp[lo]);
+    }
+    default:
+      return 0.0;
+  }
 }
 
 QString jpiText(double J, int pi) {
@@ -202,13 +239,56 @@ ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request)
                                                                   : "perlevel";
   const bool onShell = cfg.thm.vertex == Config::ThmOptions::ON_SHELL;
   r.vertexComplex = onShell || (coulomb && hi > 0.0);
+
+  // The segment's experiment and its spectator-momentum window: the nodes and
+  // <|M_l|^2> over them from the engine (EData::ThmVertexTable).
+  const ThmExperiment *experiment = nullptr;
+  for (const ThmExperiment &x : cfg.thm.experiments)
+    if (std::find(x.segments.begin(), x.segments.end(), request.segment) != x.segments.end()) experiment = &x;
+  ThmVertexReport windowReport;
+  if (experiment && experiment->psKind != ThmExperiment::PS_DELTA) {
+    std::string whyNot;
+    if (!api.GetThmVertex(experiment->name, grid, windowReport, whyNot)) {
+      r.error = QObject::tr("Spectator-momentum window: %1").arg(QString::fromStdString(whyNot));
+      return r;
+    }
+    r.window = true;
+    r.windowText = QString::fromStdString(windowReport.window);
+    r.muSx = windowReport.muSx;
+    r.nodeP = QVector<double>(windowReport.p.begin(), windowReport.p.end());
+    r.nodeWeight = QVector<double>(windowReport.weight.begin(), windowReport.weight.end());
+    r.nodeTs = QVector<double>(windowReport.es.begin(), windowReport.es.end());
+    for (int k = 0; k < r.nodeTs.size(); k++) r.meanTs += r.nodeWeight[k] * r.nodeTs[k];
+    // w(p) between the nodes, normalized to unit area (trapezoid on a fine grid).
+    const double p0 = experiment->psKind == ThmExperiment::PS_TABLE ? experiment->psTableP.front() : experiment->psMin;
+    const double p1 = experiment->psKind == ThmExperiment::PS_TABLE ? experiment->psTableP.back() : experiment->psMax;
+    if (p1 > p0) {
+      const int m = 401;
+      double area = 0.0;
+      for (int i = 0; i < m; i++) {
+        const double p = p0 + (p1 - p0) * i / (m - 1);
+        r.windowP << p;
+        r.windowW << windowWeight(*experiment, p);
+        if (i > 0) area += 0.5 * (r.windowW[i] + r.windowW[i - 1]) * (p1 - p0) / (m - 1);
+      }
+      if (area > 0.0) {
+        for (double &v : r.windowW) v /= area;
+        for (double p : r.nodeP) r.nodeW << windowWeight(*experiment, p) / area;
+      }
+    }
+  }
+
   for (int j = 1; j <= compound->NumJGroups(); j++) {
     JGroup *jg = compound->GetJGroup(j);
     if (!jg->IsInRMatrix()) continue;
     ALevel *lowest = nullptr;
+    int lowestIndex = 0;
     for (int la = 1; la <= jg->NumLevels(); la++) {
       ALevel *level = jg->GetLevel(la);
-      if (level->IsInRMatrix() && (!lowest || level->GetFitE() < lowest->GetFitE())) lowest = level;
+      if (level->IsInRMatrix() && (!lowest || level->GetFitE() < lowest->GetFitE())) {
+        lowest = level;
+        lowestIndex = la;
+      }
     }
     if (!lowest) continue;
     ThmDiagnosticsResult::VertexGroup group;
@@ -247,6 +327,13 @@ ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request)
         curve.y << std::norm(m);
         re[i] = m.real();
       }
+      if (r.window) {
+        // The engine's window average for this channel and the level whose boundary is used.
+        for (const ThmVertexReport::Channel &rc : windowReport.channels)
+          if (rc.jgroup == j && rc.channel == ch)
+            for (const ThmVertexReport::Level &lv : rc.levels)
+              if (lv.level == lowestIndex) curve.yWindow = QVector<double>(lv.m2.begin(), lv.m2.end());
+      }
       if (!r.vertexComplex) {
         // Nodes: sign changes on the grid, refined by bisection of the same M_l.
         auto value = [&](double e) {
@@ -277,8 +364,9 @@ ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request)
   }
 
   // Line shape of the segment's experiment, if on.
-  for (const ThmExperiment &x : cfg.thm.experiments)
-    if (std::find(x.segments.begin(), x.segments.end(), request.segment) != x.segments.end()) {
+  if (experiment) {
+    const ThmExperiment &x = *experiment;
+    {
       r.experiment = QString::fromStdString(x.name);
       if (x.lineshape) {
         ThmLineshapeReport report;
@@ -317,6 +405,7 @@ ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request)
         }
       }
     }
+  }
 
   // Weight table of the segment.
   auto w = cfg.thm.weightBySegment.find(request.segment);

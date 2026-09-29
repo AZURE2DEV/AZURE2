@@ -27,7 +27,8 @@ class ThmModelPage;
  *                (field 32) and width input flag (field 33) (ThmChannelsPage);
  *   Diagnostics  read-only plots the engine computes on request for one THM
  *                segment: entrance vertex, HOES and on-shell cross sections,
- *                line shape, weight (ThmDiagnosticsPage; built with USE_API,
+ *                line shape, weight, spectator-momentum window
+ *                (ThmDiagnosticsPage; built with USE_API,
  *                as the Plot tab is with USE_QWT).
  * It writes nothing else, and nothing at all when its values are left as
  * they were read: such a project saves byte for byte as before.  Without a

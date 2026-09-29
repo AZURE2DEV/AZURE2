@@ -12,8 +12,9 @@
  * page.  It needs no plotting library, so the page works in every build (the
  * Plot tab's Qwt is optional).  Deliberately plain: one frame, inward ticks,
  * large tick labels, a bold label inside the axes (the reaction), a legend of
- * a few entries, optional vertical markers (e.g. the nodes of a form factor)
- * and a linear or logarithmic y axis.
+ * a few entries, optional vertical markers (e.g. the nodes of a form factor),
+ * series drawn as points (e.g. quadrature nodes) and a linear or logarithmic
+ * y axis.
  */
 class ThmPlotWidget : public QWidget {
   Q_OBJECT
@@ -24,6 +25,7 @@ class ThmPlotWidget : public QWidget {
     QColor color;
     Qt::PenStyle style = Qt::SolidLine;
     QString label;  ///< legend text; "" = not in the legend
+    bool symbols = false;  ///< filled circles at the points, no line (e.g. quadrature nodes)
   };
   struct Marker {
     double x = 0.0;

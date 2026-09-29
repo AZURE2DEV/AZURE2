@@ -59,7 +59,8 @@ ThmDiagnosticsPage::ThmDiagnosticsPage(std::function<QString(int, ThmDiagnostics
   vertexPlot->setToolTip(
       tr("Entrance vertex |M_l(E)|^2 = |(B_c - 1) j_l(pa) - pa j_l'(pa) [+ C_l]|^2 at the quasi-free point "
          "(spectator at rest), with the boundary B_c of the <thm> vertex option; dashed lines: its nodes. A "
-         "resonance near a node is suppressed in the HOES cross section."));
+         "resonance near a node is suppressed in the HOES cross section. With a spectator-momentum window (ps=) "
+         "the dashed curve is <|M_l|^2> over the window, as AZURE2 uses it: the window fills the nodes."));
   vertexPanel = new QWidget;
   QVBoxLayout *vl = new QVBoxLayout;
   vl->setContentsMargins(0, 0, 0, 0);
@@ -83,14 +84,20 @@ ThmDiagnosticsPage::ThmDiagnosticsPage(std::function<QString(int, ThmDiagnostics
   zetaPlot->setToolTip(tr("zeta(E) = eta_sB - eta_0 of the segment's exit pair (lineshape=on)."));
   weightPlot = makePlot(tr(kEcm), tr("w(E)"));
   weightPlot->setToolTip(tr("The weight table of the segment (weight[k]), as the engine interpolates it."));
+  windowPlot = makePlot(tr("p_s (MeV/c)"), tr("w(p_s) per MeV/c"));
+  windowPlot->setToolTip(tr("The spectator-momentum window of the segment's experiment (ps=): the event weight "
+                            "w(p) = |phi(p)|^2 p^2 (a table: as given) over [p_min, p_max], normalized to unit "
+                            "area; dots: the Gauss-Legendre nodes at which AZURE2 evaluates the vertex."));
 
   QWidget *panels = new QWidget;
   QGridLayout *grid = new QGridLayout;
+  grid_ = grid;
   grid->addWidget(vertexPanel, 0, 0);
   grid->addWidget(hoesPlot, 0, 1);
   grid->addWidget(lineshapePlot, 1, 0);
   grid->addWidget(zetaPlot, 1, 1);
   grid->addWidget(weightPlot, 2, 0);
+  grid->addWidget(windowPlot, 2, 1);
   grid->setColumnStretch(0, 1);
   grid->setColumnStretch(1, 1);
   panels->setLayout(grid);
@@ -142,13 +149,14 @@ QString ThmDiagnosticsPage::reactionOf(int segment) const {
 }
 
 void ThmDiagnosticsPage::clearPlots(const QString &message) {
-  for (ThmPlotWidget *p : {vertexPlot, hoesPlot, lineshapePlot, zetaPlot, weightPlot}) {
+  for (ThmPlotWidget *p : {vertexPlot, hoesPlot, lineshapePlot, zetaPlot, weightPlot, windowPlot}) {
     p->clear();
     p->setMessage(message);
   }
   lineshapePlot->hide();
   zetaPlot->hide();
   weightPlot->hide();
+  windowPlot->hide();
   vertexGroupCombo->clear();
 }
 
@@ -214,6 +222,10 @@ void ThmDiagnosticsPage::showResult(const ThmDiagnosticsResult &result) {
           .arg(result.eHi, 0, 'g', 4)
           .arg(result.vertexMode)
           .arg(result.binding, 0, 'g', 6) +
+      (result.window ? tr(" Spectator window: %1 nodes, <T_s> = %2 MeV.")
+                           .arg(result.nodeP.size())
+                           .arg(result.meanTs, 0, 'g', 6)
+                     : QString()) +
       (result.lineshape && result.nc2Hidden
            ? tr(" Line shape: %1 level(s) with a pole outside the data range, or beyond the first four, not drawn.")
                  .arg(result.nc2Hidden)
@@ -285,6 +297,45 @@ void ThmDiagnosticsPage::showResult(const ThmDiagnosticsResult &result) {
     }
     weightPlot->setLogY(positive && hi > 20.0 * lo);  // a factor that varies by decades
   }
+
+  // Spectator-momentum window.
+  if (result.window) {
+    windowPlot->show();
+    windowPlot->setTitle(reaction);
+    if (!result.windowP.isEmpty()) {
+      ThmPlotWidget::Series w;
+      w.x = result.windowP;
+      w.y = result.windowW;
+      w.color = thmPlotColor(0);
+      w.label = QString::fromUtf8("|φ|² p²");
+      windowPlot->addSeries(w);
+      ThmPlotWidget::Series n;
+      n.x = result.nodeP;
+      n.y = result.nodeW;
+      n.color = thmPlotColor(1);
+      n.symbols = true;
+      n.label = tr("%1 nodes").arg(result.nodeP.size());
+      windowPlot->addSeries(n);
+    } else {
+      windowPlot->setMessage(tr("one node, p_s = %1 MeV/c").arg(result.nodeP.value(0), 0, 'g', 6));
+    }
+  }
+  layoutPanels();
+}
+
+void ThmDiagnosticsPage::layoutPanels() {
+  // The first row is fixed; the optional panels that are shown fill the
+  // following cells in reading order, so none leaves a hole.
+  int at = 0;
+  for (ThmPlotWidget *p : {lineshapePlot, zetaPlot, weightPlot, windowPlot}) {
+    grid_->removeWidget(p);
+    if (p->isHidden()) {
+      grid_->addWidget(p, 3, 0);  // hidden: parked
+      continue;
+    }
+    grid_->addWidget(p, 1 + at / 2, at % 2);
+    at++;
+  }
 }
 
 void ThmDiagnosticsPage::drawVertex() {
@@ -302,6 +353,15 @@ void ThmDiagnosticsPage::drawVertex() {
     s.color = thmPlotColor(i);
     s.label = group.curves[i].label;
     vertexPlot->addSeries(s);
+    if (!group.curves[i].yWindow.isEmpty()) {
+      ThmPlotWidget::Series a;
+      a.x = result_.energy;
+      a.y = group.curves[i].yWindow;
+      a.color = thmPlotColor(i);
+      a.style = Qt::DashLine;
+      a.label = group.curves[i].label + tr(", p_s window");
+      vertexPlot->addSeries(a);
+    }
     for (double e : group.curves[i].nodes) {
       ThmPlotWidget::Marker m;
       m.x = e;

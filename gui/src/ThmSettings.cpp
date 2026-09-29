@@ -256,8 +256,8 @@ QStringList ThmSettings::compose(const QStringList &oldLines) const {
 bool ThmExperimentRecord::sameAs(const ThmExperimentRecord &o) const {
   return name == o.name && segments == o.segments && background == o.background &&
          hasBackgroundKey == o.hasBackgroundKey && beam == o.beam && target == o.target &&
-         spectator == o.spectator && beamEnergy == o.beamEnergy && lineshape == o.lineshape &&
-         extraTokens == o.extraTokens;
+         spectator == o.spectator && beamEnergy == o.beamEnergy && lineshape == o.lineshape && ps == o.ps &&
+         psNodes == o.psNodes && extraTokens == o.extraTokens;
 }
 
 QString ThmExperimentRecord::segmentsListText(const QList<int> &segments) {
@@ -293,6 +293,8 @@ QString ThmExperimentRecord::line() const {
   if (!spectator.isEmpty()) tokens << "spectator=" + spectator;
   if (!beamEnergy.isEmpty()) tokens << "Ebeam=" + beamEnergy;
   if (lineshape) tokens << "lineshape=on";
+  if (!ps.isEmpty()) tokens << "ps=" + ps;
+  if (!psNodes.isEmpty()) tokens << "psNodes=" + psNodes;
   tokens << extraTokens;
   return QString("experiment[%1] %2").arg(name, tokens.join(' '));
 }
@@ -333,6 +335,10 @@ QList<ThmExperimentRecord> ThmExperimentRecord::read(const QStringList &lines) {
         r.beamEnergy = value;
       } else if (key == "lineshape") {
         r.lineshape = value == "on";  // on | off, checked by the engine's parser
+      } else if (key == "ps") {
+        r.ps = value;
+      } else if (key == "psNodes") {
+        r.psNodes = value;
       } else {
         r.extraTokens << token;
       }

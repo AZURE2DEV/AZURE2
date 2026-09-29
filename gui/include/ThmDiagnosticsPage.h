@@ -8,6 +8,7 @@
 
 QT_BEGIN_NAMESPACE
 class QComboBox;
+class QGridLayout;
 class QLabel;
 class QProgressBar;
 class QPushButton;
@@ -25,9 +26,12 @@ class ThmPlotWidget;
  *   HOES / on-shell  the two cross sections of the segment's channel, log scale;
  *   line shape       |N_C|^2 of the levels near the data, and zeta(E)
  *                    (only for an experiment with lineshape=on);
- *   weight           w(E) (only with a weight table).
+ *   weight           w(E) (only with a weight table);
+ *   p_s window       w(p) = |phi(p)|^2 p^2 over the window with its quadrature
+ *                    nodes (only for an experiment with ps=), and the vertex
+ *                    panel adds <|M_l|^2> over the window, dashed.
  * Every panel carries the reaction as a bold label inside the axes.  Later
- * stages add panels here (spectator window, distortion), not controls.
+ * stages add panels here (distortion), not controls.
  */
 class ThmDiagnosticsPage : public QWidget {
   Q_OBJECT
@@ -67,6 +71,7 @@ class ThmDiagnosticsPage : public QWidget {
   ThmPlotWidget *lineshapePlot;
   ThmPlotWidget *zetaPlot;
   ThmPlotWidget *weightPlot;
+  ThmPlotWidget *windowPlot;
   QWidget *vertexPanel;  ///< vertexGroupCombo + vertexPlot
 
  signals:
@@ -79,6 +84,8 @@ class ThmDiagnosticsPage : public QWidget {
 
  private:
   void clearPlots(const QString &message);
+  /// The optional panels that are shown, in reading order after the first row.
+  void layoutPanels();
   QString reactionOf(int segment) const;
 
   std::function<QString(int, ThmDiagnosticsRequest &)> prepare_;
@@ -88,6 +95,7 @@ class ThmDiagnosticsPage : public QWidget {
   ThmDiagnosticsResult result_;
   QString computedText_;  ///< the project text of the shown result
   int computedSegment_ = 0;
+  QGridLayout *grid_ = nullptr;
 };
 
 #endif

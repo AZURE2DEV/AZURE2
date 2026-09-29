@@ -174,6 +174,36 @@ selected experiment:
   :math:`\zeta = 0`, i.e. no change. Details:
   :doc:`../theory/thm_implementation`, "Coulomb line shape".
 
+- **Spectator momentum** (``ps``, ``psNodes``) -- inside the three-body
+  reaction group, offered once its four fields are filled. The off-shell x-A
+  momentum of the entrance vertex depends on the spectator momentum
+  :math:`p_s` (:math:`p_{xA}^2/2\mu_{xA} = E + B + p_s^2/2\mu_{sx}`), and THM
+  data are averaged over the accepted :math:`p_s` window; AZURE2 then averages
+  the HOES cross section over the window with the weight
+  :math:`w(p) = |\phi(p)|^2 p^2`. This matters most near the nodes of the
+  vertex. **Distribution**: *point* (the quasi-free :math:`p_s = 0`, the
+  default; nothing is written), *Hulthén*, *Gaussian* or *table*. Only the
+  fields of the chosen distribution are shown: **p_min** and **p_max** in
+  MeV/c (Hulthén and Gaussian); the Hulthén **a** and **b** in
+  fm\ :sup:`-1`, shown with the deuteron's standard values 0.2317 and 1.202
+  and editable once **custom a, b** is ticked (e.g. an Eckart function for
+  :sup:`3`\ He or :sup:`6`\ Li); the Gaussian **FWHM** of
+  :math:`|\phi|^2` in MeV/c; the **table** file (two columns, :math:`p_s` and
+  the event weight per unit :math:`p_s`; its range is the window), whose
+  **...** button stores a file inside the project directory relative to it,
+  as for weight tables. **Nodes (advanced)** is the number of Gauss-Legendre
+  nodes (1-64, default 16; ``psNodes`` is written only when it is not 16).
+  The page writes ``ps=hulthen:pmin-pmax``, ``ps=hulthen:a,b:pmin-pmax``,
+  ``ps=gauss:FWHM:pmin-pmax`` or ``ps=table:<file>``, keeping numbers as
+  they were typed. With a window set, it shows what AZURE2 prints at startup:
+  the window, :math:`\mu_{sx}`, the range of :math:`T_s = p_s^2/2\mu_{sx}`
+  over the nodes and the mean spectator energy :math:`\langle T_s\rangle`,
+  computed with AZURE2's own code. A window cannot be combined with a
+  non-zero **Spectator energy** (Model page) for the same entrance pair -- the
+  window replaces it; AZURE2 refuses the pair, and so does the page. Unticking
+  the three-body reaction drops the window with it. Details:
+  :doc:`../theory/thm_implementation`, "Spectator-momentum window".
+
 Keys of an experiment line that the page does not show are kept as written.
 
 **Channels** -- the THM columns of the ``<levels>`` lines:
@@ -218,6 +248,15 @@ each carries the reaction in bold:
   :math:`\zeta(E)` of the segment's exit pair.
 - **Weight** (only when the segment has a weight table) -- :math:`w(E)` as the
   engine interpolates the table.
+- **Spectator-momentum window** (only for an experiment with ``ps=``) --
+  the event weight :math:`w(p_s) = |\phi(p_s)|^2 p_s^2` (a table: as given)
+  over :math:`[p_\mathrm{min}, p_\mathrm{max}]`, normalized to unit area,
+  with dots at the Gauss-Legendre nodes where AZURE2 evaluates the vertex.
+  The **Entrance vertex** panel then also shows, dashed, the window average
+  :math:`\langle |M_l|^2\rangle` that AZURE2 uses, next to the quasi-free
+  :math:`|M_l|^2`: the window fills the vertex nodes. The status line gives
+  :math:`\langle T_s\rangle`. A table named relative to the project is found
+  although the engine runs on a copy elsewhere.
 
 The page needs a build with the engine API (``USE_API=ON``, the default),
 as the Plot tab needs Qwt.

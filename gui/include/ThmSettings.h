@@ -31,6 +31,8 @@ struct ThmSettings {
   bool operator==(const ThmSettings &o) const;
   bool operator!=(const ThmSettings &o) const { return !(*this == o); }
   bool isDefault() const { return *this == ThmSettings(); }
+  /// The spectator energy of one entrance pair (Config::ThmOptions::SpectatorEnergy).
+  double spectatorEnergyOf(int pairKey) const { return spectatorByPair.value(pairKey, spectatorEnergy); }
 
   /// The non-default keys, canonical key -> canonical value, in the order
   /// they are written (experiment lines are not keys).
@@ -90,11 +92,16 @@ struct ThmExperimentRecord {
   /// lineshape=on (the Coulomb line shape of the spectator); written only
   /// when on, since off is the engine's default.
   bool lineshape = false;
+  /// ps= (spectator-momentum window) and psNodes= as written; "" = key absent.
+  /// The page composes them from its controls (psText) only when edited.
+  QString ps, psNodes;
   QStringList extraTokens;   ///< other key=value tokens, verbatim, in order
 
   bool hasKinematics() const {
     return !beam.isEmpty() || !target.isEmpty() || !spectator.isEmpty() || !beamEnergy.isEmpty();
   }
+  /// A ps window is set (ps= other than delta).
+  bool hasWindow() const { return !ps.isEmpty() && ps != "delta"; }
   /// Same content (originName aside; segment sets compared, not their text).
   bool sameAs(const ThmExperimentRecord &o) const;
   /// The record as one experiment[...] line.

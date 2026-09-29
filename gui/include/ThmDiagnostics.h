@@ -18,7 +18,11 @@
  *              on-shell angle-integrated cross section of the same channel;
  *   line shape with lineshape=on: zeta(E) and |N_C|^2 per level
  *              (AZUREAPI::GetThmLineshape);
- *   weight     with weight[k]: w(E) (ThmWeightTable, the engine's reader).
+ *   weight     with weight[k]: w(E) (ThmWeightTable, the engine's reader);
+ *   window     with a spectator-momentum window (ps=): the event weight
+ *              w(p) = |phi(p)|^2 p^2 over [pmin, pmax] with the engine's
+ *              Gauss-Legendre nodes, and in the vertex panel the window
+ *              average <|M_l|^2> (AZUREAPI::GetThmVertex, EData::ThmVertexTable).
  *
  * Nothing here is written into the project: the engine runs on a copy in a
  * temporary directory.  ComputeThmDiagnostics does the work and may take a
@@ -35,6 +39,7 @@ struct ThmDiagnosticsRequest {
 struct ThmDiagnosticsCurve {
   QString label;
   QVector<double> y;
+  QVector<double> yWindow;  ///< vertex: <|M_l|^2> over the ps window (the engine's), or empty
   QVector<double> nodes;  ///< zeros of a real vertex (MeV)
   double boundary = 0.0;  ///< vertex: the real boundary B_c used (constant / perlevel)
   double pole = 0.0, width = 0.0;  ///< line shape: E_lambda (x + A c.m.) and Gamma_lambda (MeV)
@@ -71,6 +76,14 @@ struct ThmDiagnosticsResult {
   // Weight table (weight[k]).
   QString weightFile;
   QVector<double> weight;
+
+  // Spectator-momentum window (ps=), from AZUREAPI::GetThmVertex.
+  bool window = false;
+  QString windowText;           ///< the engine's description
+  double muSx = 0.0, meanTs = 0.0;  ///< MeV
+  QVector<double> nodeP, nodeWeight, nodeTs;  ///< nodes (MeV/c), normalized weights, T_s (MeV)
+  QVector<double> windowP, windowW;  ///< w(p) on [pmin, pmax], normalized to unit area (per MeV/c)
+  QVector<double> nodeW;             ///< the same w(p) at the nodes
 };
 
 ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request);

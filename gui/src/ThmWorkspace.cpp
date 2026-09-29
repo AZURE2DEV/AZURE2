@@ -6,6 +6,7 @@
 #include <QTextDocument>
 #include <QLabel>
 #include <QMessageBox>
+#include <QPointer>
 #include <QPushButton>
 #include <QTabWidget>
 #include <QVBoxLayout>
@@ -68,6 +69,12 @@ ThmWorkspace::ThmWorkspace(AZURESetup *setup, const ThmSettings &settings, QWidg
   modelPage = new ThmModelPage(settings, setup->projectDirectory());
   experimentsPage = new ThmExperimentsPage(settings.experimentLines, data, pairs, setup->projectDirectory(),
                                            !!(setup->GetConfig().paramMask & Config::USE_BRUNE_FORMALISM));
+  // A ps window is refused with a spectator energy for its pair: the Model page's values.
+  // (Guarded: the pages go one by one when the dialog is destroyed.)
+  QPointer<ThmModelPage> model(modelPage);
+  experimentsPage->setSpectatorEnergy(
+      [model](int pairKey) { return model ? model->settings().spectatorEnergyOf(pairKey) : 0.0; });
+  experimentsPage->refreshDerived();
   channelsPage = new ThmChannelsPage(pairs, setup->getLevelsTab()->getLevelsModel(),
                                      setup->getLevelsTab()->getChannelsModel(), data, test);
   pages = new QTabWidget;
@@ -87,11 +94,14 @@ ThmWorkspace::ThmWorkspace(AZURESetup *setup, const ThmSettings &settings, QWidg
       [this]() { return diagnosticsTargets(setup_, experimentsPage); });
   pages->addTab(diagnosticsPage, tr("Diagnostics"));
   pages->setTabToolTip(3, tr("Read-only plots computed by AZURE2 on request: entrance vertex, HOES and on-shell "
-                             "cross sections, line shape, weight"));
+                             "cross sections, line shape, weight, spectator-momentum window"));
   connect(pages, &QTabWidget::currentChanged, this, [this](int) {
     if (pages->currentWidget() == diagnosticsPage) diagnosticsPage->refreshTargets();
   });
 #endif
+  connect(pages, &QTabWidget::currentChanged, experimentsPage, [this](int) {
+    if (pages->currentWidget() == experimentsPage) experimentsPage->refreshDerived();
+  });
   pages->setTabToolTip(0, tr("Options of the THM observable: the <thm> block"));
   pages->setTabToolTip(1, tr("Segments sharing one profiled norm and a background: experiment[...] lines"));
   pages->setTabToolTip(2, tr("Binding energy and width input flag of the THM entrance channels"));
