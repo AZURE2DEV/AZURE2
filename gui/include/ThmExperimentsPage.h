@@ -35,7 +35,8 @@ struct ThmSpectatorWindow;
  * experiments").  A compact list of the experiments on the left and an
  * editor of the selected one on the right, in sections: Experiment (name,
  * segments -- THM data segments with a free norm that no other experiment
- * has --, background), Three-body reaction (beam, target, spectator, lab
+ * has --, background, the exit angle: angle-integrated or a theta= window),
+ * Three-body reaction (beam, target, spectator, lab
  * beam energy -- all four or none -- with the binding and quasi-free
  * energies AZURE2 prints for it, and the line shape, lineshape=on, with zeta
  * at the ends of the data) and Spectator momentum window (ps=, psNodes=, with the
@@ -115,6 +116,13 @@ class ThmExperimentsPage : public QWidget {
   /// The spectator energy per entrance pair (the Model page's values); a ps
   /// window is refused together with a non-zero one for its pair.
   void setSpectatorEnergy(std::function<double(int pairKey)> energy) { spectatorEnergy_ = energy; }
+  /// entranceL of the <thm> block (the Model page's value); a theta window is
+  /// refused together with entranceL=coherent.
+  void setEntranceL(std::function<QString()> entranceL) { entranceL_ = entranceL; }
+  /// The engine's refusal of a theta window with entranceL=coherent (EData::BuildThmGroups).
+  static QString coherentRefusal();
+  /// The theta= value the exit-angle controls describe ("all" for angle-integrated).
+  QString thetaText() const;
   /// Recomputes the derived text of the selected experiment (other pages changed).
   void refreshDerived();
   /// The lowest and highest c.m. point energy of the given data segments, as
@@ -136,6 +144,9 @@ class ThmExperimentsPage : public QWidget {
   QLineEdit *nameEdit;
   QListWidget *segmentList;  ///< checkable; item data Qt::UserRole = segment number
   QComboBox *backgroundCombo;
+  /// theta=: the exit angle, item data all | window; the window's ends in degrees.
+  QComboBox *thetaCombo;
+  ThmNumberSpin *thetaMinEdit, *thetaMaxEdit;
   QGroupBox *kinematicsBox;  ///< checkable: the four keys as a unit
   QComboBox *beamCombo;
   QComboBox *targetCombo;
@@ -178,6 +189,7 @@ class ThmExperimentsPage : public QWidget {
   void nameEdited(const QString &text);
   void segmentItemChanged(QListWidgetItem *item);
   void backgroundChanged(int index);
+  void thetaEdited();
   void kinematicsEdited();
   void lineshapeToggled(bool on);
   void psEdited();
@@ -210,6 +222,12 @@ class ThmExperimentsPage : public QWidget {
   /// The c.m. energies of the points of the segments, in the engine's order.
   bool pointEnergies(const QList<int> &segments, QVector<double> &energies) const;
   void showPsRows();
+  void loadTheta(const ThmExperimentRecord &r);
+  void showThetaRows();
+  /// The window item is not offered with entranceL=coherent (unless it is the current one).
+  void updateThetaItems();
+  QList<QWidget *> thetaWindowRow_;
+  std::function<QString()> entranceL_ = []() { return QString("incoherent"); };
   void fillSegmentList();
   void storeSegments(const QList<int> &segments);
   void refreshRow(int row);

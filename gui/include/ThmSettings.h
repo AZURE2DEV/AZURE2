@@ -99,6 +99,9 @@ struct ThmExperimentRecord {
   /// spectatorAngle=, distortionRef=, distortionRatio=, boundState=) as
   /// written; "" = key absent.  The page changes one key at a time.
   QString distortion, opticalAA, opticalSF, spectatorAngle, distortionRef, distortionRatio, boundState;
+  /// theta= as written ("" = key absent): all, or thmin-thmax (degrees), the
+  /// c.m. angle window of exit particle 1 relative to p_xA.
+  QString theta;
   QStringList extraTokens;   ///< other key=value tokens, verbatim, in order
 
   bool hasKinematics() const {
@@ -110,6 +113,8 @@ struct ThmExperimentRecord {
   bool hasComputedDistortion() const { return distortion == "coulomb" || distortion == "optical"; }
   /// Any distortion (coulomb, optical or a table).
   bool hasDistortion() const { return !distortion.isEmpty() && distortion != "none"; }
+  /// An angular window of the exit pair (theta= other than all).
+  bool hasTheta() const { return !theta.isEmpty() && theta != "all"; }
   /// Same content (originName aside; segment sets compared, not their text).
   bool sameAs(const ThmExperimentRecord &o) const;
   /// The record as one experiment[...] line.

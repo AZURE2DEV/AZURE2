@@ -34,6 +34,14 @@
 //     sum_k w_k M_l^2 with the engine's ThmFormFactor, the nodes filled; a
 //     relative ps table read from the engine's temporary copy.
 //
+// 12. the distortion factor (Stage D) on a 12C+12C-like project;
+// 13. the exit angle (theta=, Stage E): read/written verbatim, the window
+//     row only for a window, 0-0 a single angle, refusals in the engine's
+//     words (a reversed window; entranceL=coherent on the Model page, live,
+//     and the engine refuses the same file); Diagnostics: the angular
+//     distribution card, 4 pi <dsigma/dOmega> over 0-180 = the engine's
+//     angle-integrated HOES, the window average = the curve's average.
+//
 // Runs without a display; the CMake target passes QT_QPA_PLATFORM=offscreen.
 
 #include <QApplication>
@@ -246,6 +254,23 @@ int main(int argc, char** argv) {
              !ThmExperimentRecord::read(QStringList() << "experiment[T] segments=1 distortion=table:w.dat")[0]
                   .hasComputedDistortion() &&
              ThmSettings::checkExperimentLines(QStringList() << "experiment[T] segments=1 distortion=table:w.dat").isEmpty());
+    }
+    // Stage E: theta= read as a field, verbatim, and through a rewrite.
+    {
+      const QStringList tLines = {"experiment[T] segments=1 theta=50.0-70 future=1", "experiment[U] segments=2 theta=all"};
+      QList<ThmExperimentRecord> t = ThmExperimentRecord::read(tLines);
+      ok("theta read as a field, as written", t.size() == 2 && t[0].theta == "50.0-70" && t[0].hasTheta() &&
+                                                  t[0].extraTokens == QStringList("future=1") && t[1].theta == "all" &&
+                                                  !t[1].hasTheta() && t[1].extraTokens.isEmpty());
+      ok("theta: unchanged lines verbatim", ThmExperimentRecord::compose(tLines, t, t) == tLines);
+      QList<ThmExperimentRecord> e2 = t;
+      e2[0].background = "const";
+      e2[1].background = "const";
+      const QStringList rewritten = ThmExperimentRecord::compose(tLines, t, e2);
+      ok("theta: verbatim through a rewrite",
+         rewritten == QStringList({"experiment[T] segments=1 background=const theta=50.0-70 future=1",
+                                   "experiment[U] segments=2 background=const theta=all"}),
+         rewritten.join("|"));
     }
     ok("segment list text", ThmExperimentRecord::segmentsListText(QList<int>() << 1 << 2 << 3 << 5 << 7 << 8) ==
                                 "1-3,5,7,8");
@@ -1726,6 +1751,223 @@ int main(int argc, char** argv) {
     d->segmentCombo->setCurrentIndex(d->segmentCombo->findData(3));
     ok("no distortion: computed", d->computeNow(), d->result().error);
     ok("no distortion: no card", !d->result().distortion && !d->distortionPlot->isVisibleTo(d));
+  }
+#endif
+
+  // 13. The exit angle (theta=) on tests/7Li_p_a (Tumino's 50-70 degrees).
+  {
+    const QString path = work.filePath("theta.azr");
+    auto thetaOpen = [&](const QString& block) {
+      spit(path, plain + "<thm>\n" + block + "</thm>\n");
+      w.open(path);
+    };
+    const QString hand = "experiment[E1] segments=1 theta=50.0-70   # Tumino 2006\n";
+    thetaOpen(hand);
+    ThmSettings s;
+    QString err;
+    ok("theta: block opens", w.thmSettings(s, &err), err);
+    {
+      ThmWorkspace ws(&w, s);
+      ThmExperimentsPage* p = ws.experimentsPage;
+      ok("theta: window shown as written", p->thetaCombo->currentData().toString() == "window" &&
+                                               p->thetaMinEdit->writtenText() == "50.0" &&
+                                               p->thetaMaxEdit->writtenText() == "70" &&
+                                               p->thetaMinEdit->isVisibleTo(p) && p->thetaMinEdit->suffix() == QString::fromUtf8("°") &&
+                                               p->thetaMaxEdit->maximum() == 180.0 && ws.validate().isEmpty(),
+         ws.validate());
+      ok("theta: tooltip names the angle and the supplementary window",
+         p->thetaCombo->toolTip().contains("exit particle 1") && p->thetaCombo->toolTip().contains("supplementary"));
+      ws.accept();
+    }
+    w.saveProject();
+    ok("theta: untouched block verbatim", blockOf(slurp(path)) == hand, blockOf(slurp(path)));
+    w.thmSettings(s);
+    {
+      ThmWorkspace ws(&w, s);
+      typeNumber(ws.experimentsPage->thetaMaxEdit, "80");
+      ok("theta: edited max accepted", ws.validate().isEmpty(), ws.validate());
+      ws.accept();
+    }
+    w.saveProject();
+    ok("theta: edited max rewritten, min as written", blockOf(slurp(path)) == "experiment[E1] segments=1 theta=50.0-80\n",
+       blockOf(slurp(path)));
+    w.thmSettings(s);
+    {
+      ThmWorkspace ws(&w, s);
+      ThmExperimentsPage* p = ws.experimentsPage;
+      p->thetaCombo->setCurrentIndex(p->thetaCombo->findData("all"));
+      ok("theta: all hides the window", !p->thetaMinEdit->isVisibleTo(p) && !p->thetaMaxEdit->isVisibleTo(p));
+      ws.accept();
+    }
+    w.saveProject();
+    ok("theta: all (the default) not written", blockOf(slurp(path)) == "experiment[E1] segments=1\n", blockOf(slurp(path)));
+    w.thmSettings(s);
+    {
+      ThmWorkspace ws(&w, s);
+      ThmExperimentsPage* p = ws.experimentsPage;
+      p->thetaCombo->setCurrentIndex(p->thetaCombo->findData("window"));
+      ok("theta: a new window starts at 0-180", p->records().at(0).theta == "0-180", p->records().at(0).theta);
+      typeNumber(p->thetaMaxEdit, "0");
+      ws.accept();
+    }
+    w.saveProject();
+    ok("theta: one angle, 0-0", blockOf(slurp(path)) == "experiment[E1] segments=1 theta=0-0\n", blockOf(slurp(path)));
+    ok("theta: 0-0 passes the engine's parser", w.thmSettings(s, &err), err);
+    // Refusals in the engine's words: a reversed window (the parser) ...
+    thetaOpen("experiment[E1] segments=1\n");
+    w.thmSettings(s);
+    {
+      ThmWorkspace ws(&w, s);
+      ThmExperimentsPage* p = ws.experimentsPage;
+      p->thetaCombo->setCurrentIndex(p->thetaCombo->findData("window"));
+      typeNumber(p->thetaMinEdit, "90");
+      typeNumber(p->thetaMaxEdit, "80");
+      ok("theta: reversed window refused on the page", p->messageLabel->isVisibleTo(p) &&
+                                                          p->messageLabel->text().startsWith("theta='90-80': expected all or thmin-thmax"),
+         p->messageLabel->text());
+      ok("theta: reversed window refused on Accept", ws.validate().startsWith("<thm> experiment[E1]: theta='90-80'"),
+         ws.validate());
+      typeNumber(p->thetaMaxEdit, "100");
+      ok("theta: 90-100 accepted", ws.validate().isEmpty() && !p->messageLabel->isVisibleTo(p), ws.validate());
+    }
+    // ... and a window with entranceL=coherent, read live from the Model page.
+    thetaOpen("experiment[E1] segments=1 theta=50-70\n");
+    w.thmSettings(s);
+    {
+      ThmWorkspace ws(&w, s);
+      ThmExperimentsPage* p = ws.experimentsPage;
+      QStandardItemModel* m = qobject_cast<QStandardItemModel*>(p->thetaCombo->model());
+      ok("theta: window offered with incoherent", m && (m->item(1)->flags() & Qt::ItemIsEnabled) && ws.validate().isEmpty());
+      ws.modelPage->entranceLCombo->setCurrentText("coherent");
+      ws.pages->setCurrentWidget(ws.channelsPage);
+      ws.pages->setCurrentWidget(p);  // the workspace refreshes the page when it is shown
+      const QString words = ThmExperimentsPage::coherentRefusal();
+      ok("theta + coherent: refused on the page in the engine's words",
+         p->messageLabel->isVisibleTo(p) && p->messageLabel->text() == words, p->messageLabel->text());
+      ok("theta + coherent: refused on Accept", ws.validate() == "<thm> experiment[E1]: " + words, ws.validate());
+      ok("theta + coherent: the window item stays selectable while current", m && (m->item(1)->flags() & Qt::ItemIsEnabled));
+      p->thetaCombo->setCurrentIndex(p->thetaCombo->findData("all"));
+      ok("theta + coherent: all accepted, window no longer offered",
+         ws.validate().isEmpty() && !p->messageLabel->isVisibleTo(p) && m && !(m->item(1)->flags() & Qt::ItemIsEnabled) &&
+             m->item(1)->toolTip() == words,
+         ws.validate());
+    }
+    {
+      // The engine refuses the same file with the same words.
+      thetaOpen("entranceL=coherent\nexperiment[E1] segments=1 theta=50-70\n");
+      w.thmSettings(s);
+      ThmWorkspace ws(&w, s);
+      const QString why = ws.validate();
+      int code = -1;
+      const QString out = engineRun(work.path(), "theta.azr", &code);
+      ok("theta + coherent: the engine refuses it with the same words",
+         why == "<thm> experiment[E1]: " + ThmExperimentsPage::coherentRefusal() && code != 0 && out.contains("ERROR: " + why),
+         why + " | " + out.right(400));
+    }
+    if(qEnvironmentVariableIsSet("THM_PNG_DIR")) {
+      thetaOpen("experiment[E1] segments=1 beam=7Li target=d spectator=n Ebeam=19 theta=50-70\n");
+      w.thmSettings(s);
+      ThmWorkspace ws(&w, s);
+      ws.resize(900, 700);
+      ws.show();
+      ws.pages->setCurrentWidget(ws.experimentsPage);
+      QApplication::processEvents();
+      QPixmap page(ws.size());
+      ws.render(&page);
+      page.save(QDir(qEnvironmentVariable("THM_PNG_DIR")).filePath("experiments_theta.png"));
+    }
+  }
+#ifdef AZURE2_THM_DIAGNOSTICS
+  {
+    // Diagnostics: the angular distribution at one energy.
+    const QString path = work.filePath("theta.azr");
+    spit(path, plain + "<thm>\nexperiment[E1] segments=1 theta=50-70\n</thm>\n");
+    w.open(path);
+    ThmSettings s;
+    w.thmSettings(s);
+    ThmWorkspace ws(&w, s);
+    ThmDiagnosticsPage* d = ws.diagnosticsPage;
+    ok("angular: computed", d->computeNow(), d->result().error);
+    const ThmDiagnosticsResult& r = d->result();
+    bool finite = r.angular && r.angularError.isEmpty() && r.angle.size() == 19 && r.dsdo.size() == 19 &&
+                  r.angle.first() == 0.0 && r.angle.last() == 180.0 && r.windowMean > 0.0;
+    for(double v : r.dsdo) finite = finite && std::isfinite(v) && v >= 0.0;
+    ok("angular: 19 angles over 0-180, finite, a window average", finite, r.angularError);
+    ok("angular: at the middle of the data by default (rounded)",
+       std::fabs(r.angularEnergy - 0.5 * (r.eLo + r.eHi)) <= 0.05 * (r.eHi - r.eLo),
+       QString::number(r.angularEnergy, 'g', 12));
+    ok("angular card: shown, window shaded, curve and average",
+       d->angularPlot->isVisibleTo(d) && d->angularPlot->bands().size() == 1 && d->angularPlot->bands()[0].x0 == 50.0 &&
+           d->angularPlot->bands()[0].x1 == 70.0 && d->angularPlot->series().size() == 2 &&
+           d->angularPlot->series()[0].y == r.dsdo && d->angularPlot->series()[1].y.value(0) == r.windowMean &&
+           !d->angularPlot->title().isEmpty());
+    ok("angular: the energy box holds the energy, within the data",
+       std::fabs(d->angularEnergyEdit->value() - r.angularEnergy) < 1e-9 &&
+           d->angularEnergyEdit->minimum() <= r.eLo + 1e-9 && d->angularEnergyEdit->maximum() >= r.eHi - 1e-9,
+       QString("%1 in [%2, %3]").arg(d->angularEnergyEdit->value(), 0, 'g', 12).arg(d->angularEnergyEdit->minimum(), 0, 'g', 12)
+           .arg(d->angularEnergyEdit->maximum(), 0, 'g', 12));
+    if(qEnvironmentVariableIsSet("THM_PNG_DIR")) {
+      ws.resize(900, 700);
+      ws.show();
+      ws.pages->setCurrentWidget(d);
+      QApplication::processEvents();
+      if(QScrollArea* a = d->findChild<QScrollArea*>()) a->ensureWidgetVisible(d->angularPlot);
+      QApplication::processEvents();
+      QPixmap page(ws.size());
+      ws.render(&page);
+      page.save(QDir(qEnvironmentVariable("THM_PNG_DIR")).filePath("diagnostics_angular.png"));
+    }
+    // The next Compute uses the energy in the box: a point of the HOES grid
+    // (not the middle, where the first one was).
+    const int k = r.hoesEnergy.size() / 3;
+    const double e = r.hoesEnergy.value(k), hoes = r.hoes.value(k) / r.hoesScale;
+    d->angularEnergyEdit->setValue(e);
+    ok("angular: an energy in the box marks the result as changed", d->statusLabel->text().contains("Compute again"),
+       d->statusLabel->text());
+    ok("angular: recomputed at the chosen energy", d->computeNow() && std::fabs(d->result().angularEnergy - e) < 1e-9,
+       d->result().error);
+    // 4 pi <dsigma/dOmega> over 0-180 is the angle-integrated HOES cross
+    // section (docs, "Fixed-angle observable"); the window average is the
+    // curve's average over the solid angle of the window.  1-degree steps, Simpson.
+    ThmDiagnosticsRequest q;
+    QString err;
+    ok("angular: snapshot", ws.projectSnapshot(q.projectText, &err), err);
+    q.projectDir = work.path();
+    q.paramMask = w.GetConfig().paramMask;
+    q.segment = 1;
+    q.angularEnergy = e;
+    q.angularPoints = 181;
+    const ThmDiagnosticsResult fine = ComputeThmDiagnostics(q);
+    auto simpson = [&](int a, int b) {  // integral of f sin(theta) dtheta over [a, b] degrees
+      double sum = 0.0;
+      const double h = M_PI / 180.0;
+      for(int i = a; i <= b; i++) {
+        const double w8 = (i == a || i == b) ? 1.0 : ((i - a) % 2 ? 4.0 : 2.0);
+        sum += w8 * fine.dsdo[i] * std::sin(i * h);
+      }
+      return sum * h / 3.0;
+    };
+    const bool have = fine.error.isEmpty() && fine.angularError.isEmpty() && fine.dsdo.size() == 181;
+    const double total = have ? 2.0 * M_PI * simpson(0, 180) : 0.0;
+    const double mean = have ? simpson(50, 70) / (std::cos(50 * M_PI / 180) - std::cos(70 * M_PI / 180)) : 0.0;
+    ok("angular: 4 pi <dsigma/dOmega> = the engine's angle-integrated HOES (1e-5)",
+       have && hoes > 0.0 && std::fabs(total / hoes - 1.0) < 1e-5,
+       QString("%1 vs %2 %3").arg(total, 0, 'g', 12).arg(hoes, 0, 'g', 12).arg(fine.error + fine.angularError));
+    ok("angular: the window average = the curve's average over 50-70 (1e-5)",
+       have && std::fabs(mean / fine.windowMean - 1.0) < 1e-5,
+       QString("%1 vs %2").arg(mean, 0, 'g', 12).arg(fine.windowMean, 0, 'g', 12));
+    std::cout << "        E = " << e << " MeV: 4 pi <dsigma/dOmega> = " << total << ", HOES = " << hoes
+              << "; <50-70> = " << fine.windowMean << std::endl;
+  }
+  {
+    // No theta: no card.
+    w.open(work.filePath("plain.azr"));
+    ThmSettings s;
+    w.thmSettings(s);
+    ThmWorkspace ws(&w, s);
+    ThmDiagnosticsPage* d = ws.diagnosticsPage;
+    ok("no theta: computed", d->computeNow(), d->result().error);
+    ok("no theta: no angular card", !d->result().angular && !d->angularPlot->isVisibleTo(d));
   }
 #endif
 

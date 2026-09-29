@@ -30,6 +30,7 @@ void ThmPlotWidget::clear() {
   series_.clear();
   legendOnly_.clear();
   markers_.clear();
+  bands_.clear();
   message_.clear();
   changed();
 }
@@ -57,6 +58,11 @@ void ThmPlotWidget::addSeries(const Series &s) {
 
 void ThmPlotWidget::addMarker(const Marker &m) {
   markers_ << m;
+  changed();
+}
+
+void ThmPlotWidget::addBand(const Band &b) {
+  bands_ << b;
   changed();
 }
 
@@ -360,6 +366,13 @@ void ThmPlotWidget::paintEvent(QPaintEvent *) {
   // Markers and curves, clipped to the frame.
   p.save();
   p.setClipRect(frame.adjusted(1, 1, -1, -1));
+  for (const Band &b : bands_) {
+    QColor c = b.color.isValid() ? b.color : QColor(Qt::gray);
+    c.setAlpha(60);
+    const double x0 = X(std::max(std::min(b.x0, b.x1), xlo)), x1 = X(std::min(std::max(b.x0, b.x1), xhi));
+    if (x1 < x0) continue;
+    p.fillRect(QRectF(x0, frame.top(), std::max(2.0, x1 - x0), frame.height()), c);
+  }
   for (const Marker &m : markers_) {
     if (m.x < xlo || m.x > xhi) continue;
     p.setPen(QPen(m.color.isValid() ? m.color : ink, 1.0, Qt::DashLine));

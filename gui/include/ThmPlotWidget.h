@@ -13,6 +13,7 @@
  * Plot tab's Qwt is optional).  Deliberately plain: one frame, inward ticks,
  * large tick labels, a bold label inside the axes (the reaction), a legend of
  * a few entries, optional vertical markers (e.g. the nodes of a form factor),
+ * shaded x ranges (e.g. an angular window),
  * series drawn as points (e.g. quadrature nodes) and a linear or logarithmic
  * y axis.  Plots side by side can be aligned (setAlignedWith): the frames of
  * a row share their top (the tallest legend of the row) and those of a column
@@ -36,6 +37,11 @@ class ThmPlotWidget : public QWidget {
     QString label;  ///< drawn at the top of the line
   };
 
+  struct Band {
+    double x0 = 0.0, x1 = 0.0;  ///< a shaded x range (x0 == x1: a line)
+    QColor color;
+  };
+
   explicit ThmPlotWidget(QWidget *parent = 0);
 
   void clear();
@@ -45,6 +51,8 @@ class ThmPlotWidget : public QWidget {
   void setLogY(bool log);
   void addSeries(const Series &s);
   void addMarker(const Marker &m);
+  /// A shaded x range behind the curves (e.g. an angular window).
+  void addBand(const Band &b);
   /// A legend entry that is no curve (e.g. "dashed: window average").
   void addLegendEntry(const QString &label, Qt::PenStyle style, const QColor &color = QColor());
   /// The plots whose frame top (`row`) and left edge (`column`) this one
@@ -55,6 +63,7 @@ class ThmPlotWidget : public QWidget {
 
   const QList<Series> &series() const { return series_; }
   const QList<Marker> &markers() const { return markers_; }
+  const QList<Band> &bands() const { return bands_; }
   QString title() const { return title_; }
   bool logY() const { return logY_; }
 
@@ -95,6 +104,7 @@ class ThmPlotWidget : public QWidget {
   QList<Series> legendOnly_;
   QList<Series> series_;
   QList<Marker> markers_;
+  QList<Band> bands_;
   QString title_, xLabel_, yLabel_, message_;
   bool logY_ = false;
 };

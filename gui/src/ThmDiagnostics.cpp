@@ -9,6 +9,7 @@
 #include <QTextStream>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <sstream>
 
@@ -156,6 +157,103 @@ struct Engine {
     return QString();
   }
 };
+
+/// The <segmentsData> line `key` (1-based, every line counted) of a project text.
+QString segmentsDataLine(const QString &text, int key) {
+  const int a = text.indexOf("<segmentsData>\n");
+  const int b = text.indexOf("</segmentsData>", a);
+  if (a < 0 || b < 0) return QString();
+  const QStringList lines = text.mid(a + 15, b - a - 15).split('\n', Qt::SkipEmptyParts);
+  int k = 0;
+  for (const QString &line : lines)
+    if (!line.trimmed().isEmpty() && ++k == key) return line;
+  return QString();
+}
+
+/*!
+ * dsigma/dOmega(theta) at one lab energy of the segment's entrance pair: a
+ * copy of the project whose data are that energy (two points: an experiment
+ * needs more points than profiled parameters) in one THM segment per angle,
+ * each in its own experiment with theta=t-t and the segment's experiment's
+ * other keys (reaction, line shape, spectator window); the last segment has
+ * the experiment's own window.  No folding, weight, distortion or background:
+ * at one energy they only scale the curve.  Fills r.angle, r.dsdo and
+ * r.windowMean; returns "" or the reason.
+ */
+QString angularDistribution(const ThmDiagnosticsRequest &request, const ThmExperiment &experiment, double eLab,
+                            const QString &dir, ThmDiagnosticsResult &r) {
+  QString text = request.projectText;
+  const QStringList fields = segmentsDataLine(text, request.segment).split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+  if (fields.size() < 8) return QObject::tr("segment %1 not found in <segmentsData>.").arg(request.segment);
+  // The experiment's keys but those the copy sets or leaves out.
+  const QStringList dropped = {"segments", "background", "theta", "distortion", "opticalAA", "opticalSF",
+                               "spectatorAngle", "distortionRef", "distortionRatio", "boundState"};
+  QStringList keep, thm;
+  for (const QString &line : absoluteWeights(thmLines(text), request.projectDir)) {
+    const QString code = line.left(line.indexOf('#')).trimmed();
+    if (code.startsWith("weight")) continue;
+    if (!code.startsWith("experiment[")) {
+      thm << line;
+      continue;
+    }
+    if (code.mid(11, code.indexOf(']') - 11) != QString::fromStdString(experiment.name)) continue;
+    for (const QString &token : code.mid(code.indexOf(']') + 1).split(QRegularExpression("[ \t]+"), Qt::SkipEmptyParts))
+      if (!dropped.contains(token.left(token.indexOf('=')))) keep << token;
+  }
+  const int n = std::max(2, request.angularPoints);
+  const int segments = n + 1;
+  QString data, dataLines;
+  QTextStream ds(&data), ls(&dataLines);
+  ds.setRealNumberPrecision(17);
+  ls.setRealNumberPrecision(17);
+  const QString file = QDir(dir).filePath("angular.dat");
+  if (file.contains(QRegularExpression("\\s"))) return QObject::tr("The temporary directory has a space in its path.");
+  ds << eLab << " 90 1 0.1\n" << eLab << " 90 1 0.1\n";
+  ds.flush();
+  const double width = std::max(1.0e-6, 1.0e-9 * std::fabs(eLab));
+  for (int k = 1; k <= segments; k++) {
+    ls << "1 " << fields[1] << " " << fields[2] << " " << eLab - width << " " << eLab + width << " 0 180 " << fields[7]
+       << " 1 1 0 0 0 0 " << file << "\n";
+    const QString window = k <= n ? QString("%1-%1").arg(180.0 * (k - 1) / (n - 1), 0, 'g', 17)
+                                  : QString("%1-%2").arg(experiment.thetaMin, 0, 'g', 17).arg(experiment.thetaMax, 0, 'g', 17);
+    thm << QString("experiment[a%1] segments=%1 theta=%2 %3").arg(k).arg(window, keep.join(' ')).trimmed();
+  }
+  ls.flush();
+  {
+    QFile f(file);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return QObject::tr("Cannot write %1.").arg(file);
+    f.write(data.toUtf8());
+  }
+  setThmLines(text, thm);
+  if (!replaceBlock(text, "segmentsData", dataLines) || !replaceBlock(text, "segmentsTest", QString()) ||
+      !replaceBlock(text, "targetInt", QString()))
+    return QObject::tr("The project has no <segmentsData>, <segmentsTest> or <targetInt> block.");
+  const QString projectFile = QDir(dir).filePath("diagnostics_angular.azr");
+  {
+    QFile f(projectFile);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return QObject::tr("Cannot write %1.").arg(projectFile);
+    f.write(text.toUtf8());
+  }
+  QDir(dir).mkpath("angular_run");
+  Engine engine;
+  const QString why = engine.start(projectFile, QDir(dir).filePath("angular_run"), request.paramMask, true);
+  if (!why.isEmpty()) return why;
+  vector_r p = engine.api->params_values_rwa();
+  if (engine.api->UpdateSegmentsRWA(p) != segments)
+    return QObject::tr("AZURE2 could not evaluate the angles:\n%1").arg(lastLines(engine.log.str()));
+  for (int k = 0; k < segments; k++) {
+    const vector_r v = engine.api->calculated_segments(k), e = engine.api->calculated_energies(k);
+    if (v.empty() || e.empty()) return QObject::tr("AZURE2 could not evaluate the angles:\n%1").arg(lastLines(engine.log.str()));
+    if (k == 0) r.angularEnergy = e[0];
+    if (k < n) {
+      r.angle << 180.0 * k / (n - 1);
+      r.dsdo << v[0];
+    } else {
+      r.windowMean = v[0];
+    }
+  }
+  return QString();
+}
 
 }  // namespace
 
@@ -508,6 +606,19 @@ ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request)
       }
     r.hoesScale = count ? std::exp(sum / count) : 1.0;
     for (double &v : r.hoes) v *= r.hoesScale;
+  }
+
+  // 3. Angular distribution of an experiment with a theta window.
+  if (experiment && experiment->hasTheta) {
+    r.angular = true;
+    r.thetaMin = experiment->thetaMin;
+    r.thetaMax = experiment->thetaMax;
+    // By default the middle of the data, rounded (to the power of ten below a
+    // twentieth of their range, the step of the energy box).
+    const double step = std::pow(10.0, std::floor(std::log10(std::max(r.eHi - r.eLo, 1e-3) / 20.0)));
+    r.angularEnergy = std::isfinite(request.angularEnergy) ? request.angularEnergy
+                                                           : std::round(0.5 * (r.eLo + r.eHi) / step) * step;
+    r.angularError = angularDistribution(request, *experiment, r.angularEnergy * toLab, tmp.path(), r);
   }
   return r;
 }

@@ -131,7 +131,8 @@ disabled: tick *THM* on a segment in the Segments tab first.
 **Model** -- the options of the ``<thm>`` block:
 
 - **Entrance partial waves** (``entranceL``) -- incoherent (default) or
-  coherent sum over the entrance orbital momenta.
+  coherent sum over the entrance orbital momenta; coherent cannot be combined
+  with an exit-angle window (**Experiments** page).
 - **Vertex boundary** (``vertex``) -- constant (default), perlevel or onshell
   boundary term in the transfer vertex.
 - **Kinematic factors** (``kinematics``) -- lacognata (default), triple,
@@ -160,6 +161,25 @@ momentum window* and *Distortion*:
   segments with a free norm that are in no other experiment (the segments of an
   experiment share one norm, so a fixed one is refused).
 - **Background** (``background``) -- none, const, linear or quadratic.
+- **Exit angle** (``theta``) -- *all (angle-integrated)*, the default
+  (nothing written), or *window*, with :math:`\theta_\mathrm{min}` and
+  :math:`\theta_\mathrm{max}` in degrees (0-180) beside it. With a window
+  the model of every segment of the experiment is
+  :math:`d\sigma/d\Omega` averaged over the window, where at a fixed angle
+  the entrance partial waves and the J\ :sup:`π` groups interfere. The angle
+  is the c.m. angle of particle 1 of the exit pair relative to particle 2,
+  measured from the x-A direction (entrance particle 1 relative to 2) -- the
+  :math:`\theta_\mathrm{cm}` of the Catania analyses when x is entrance
+  particle 1; if the paper quotes the other exit particle's angle, give the
+  supplementary window :math:`180-\theta_\mathrm{max}` to
+  :math:`180-\theta_\mathrm{min}`. Equal ends are one angle (``theta=0-0``).
+  The page writes ``theta=<min>-<max>``, the numbers as read or typed. A
+  window cannot be combined with *coherent* **Entrance partial waves**
+  (Model page): AZURE2 refuses it, and so does the page, in its words, as
+  soon as the Experiments page is shown again; *window* is then not offered
+  for an experiment that has none. AZURE2 also refuses a model with an exit
+  orbital momentum above 40. Details: :doc:`../theory/thm_implementation`,
+  "Fixed-angle observable".
 - **Three-body reaction** -- beam, target and spectator (a nuclide of the
   built-in table, or ``Z,A,mass`` with the nuclear mass in u) and the lab beam
   energy in MeV. The four are a unit: untick the group to write none of them.
@@ -332,6 +352,19 @@ and each plot carries the reaction in bold:
   ratio. A table: its :math:`w(E)`, found although the engine runs on a copy
   elsewhere. The status line's tooltip gives the settings and
   :math:`E_\mathrm{ref}`.
+- **Angular distribution** (only for an experiment with a ``theta``
+  window) -- :math:`d\sigma/d\Omega(\theta)` of the HOES observable over
+  0-180° at one energy, the experiment's window shaded, and the window
+  average -- the model of a point -- dashed across it (a dot for a single
+  angle). The energy is the spin box **E** in the card's header, within the
+  data; the first **Compute** takes the middle of the data, and a changed
+  energy is used by the next **Compute**. AZURE2 has no call for the
+  distribution at arbitrary angles, so the curve comes from a copy of the
+  project run at that energy with 19 single-angle windows (every 10°) and
+  the segment's experiment otherwise (reaction, line shape, momentum window);
+  without resolution, weight, distortion or background, which at one energy
+  only scale it. :math:`4\pi` times its average over 0-180° is the
+  angle-integrated HOES cross section.
 
 The page needs a build with the engine API (``USE_API=ON``, the default),
 as the Plot tab needs Qwt.

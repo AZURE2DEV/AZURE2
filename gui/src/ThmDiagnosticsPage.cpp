@@ -10,9 +10,12 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
+#include <algorithm>
 #include <cmath>
 
+#include "ThmNumberSpin.h"
 #include "ThmPlotWidget.h"
 
 namespace {
@@ -90,8 +93,24 @@ ThmDiagnosticsPage::ThmDiagnosticsPage(std::function<QString(int, ThmDiagnostics
                                 "is multiplied by it (distortion=); dashed and dotted: |M|^2 and |M_PW|^2, each 1 at "
                                 "E_ref. A table: its w(E)."));
 
-  // Each plot in a card: a framed panel with a short bold title.
-  auto card = [this](ThmPlotWidget *plot, const QString &title) {
+  angularPlot = makePlot(QString::fromUtf8("θ_cm (deg)"), QString::fromUtf8("dσ/dΩ"));
+  angularPlot->setToolTip(
+      tr("dsigma/dOmega of the HOES observable at one energy against the c.m. angle of exit particle 1 relative to "
+         "the x-A direction (theta=), computed by AZURE2 angle by angle; shaded: the experiment's window, with the "
+         "average over it that the model of a point is. No resolution, weight or distortion: at one energy they "
+         "only scale it."));
+  angularEnergyEdit = new ThmNumberSpin(" MeV", -1.0e3, 1.0e3, 0.01);
+  angularEnergyEdit->setMaximumWidth(angularEnergyEdit->fontMetrics().horizontalAdvance("0.000 MeV") + 30);
+  angularEnergyEdit->setToolTip(tr("c.m. energy of the angular distribution, within the data; used by the next "
+                                   "Compute."));
+  connect(angularEnergyEdit, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double e) {
+    if (!busy() && result_.angular && e != result_.angularEnergy)
+      statusLabel->setText(tr("Changed since the last Compute: press Compute again."));
+  });
+
+  // Each plot in a card: a framed panel with a short bold title (and, for
+  // the angular distribution, its energy).
+  auto card = [this](ThmPlotWidget *plot, const QString &title, QWidget *header = nullptr) {
     QFrame *f = new QFrame;
     f->setFrameShape(QFrame::StyledPanel);
     f->setFrameShadow(QFrame::Plain);
@@ -105,7 +124,16 @@ ThmDiagnosticsPage::ThmDiagnosticsPage(std::function<QString(int, ThmDiagnostics
     QVBoxLayout *l = new QVBoxLayout;
     l->setContentsMargins(8, 6, 8, 6);
     l->setSpacing(2);
-    l->addWidget(t);
+    if (header) {
+      QHBoxLayout *h = new QHBoxLayout;
+      h->setContentsMargins(0, 0, 0, 0);
+      t->setMinimumWidth(t->sizeHint().width());  // the title stays whole; the box gives way
+      h->addWidget(t, 1);
+      h->addWidget(header);
+      l->addLayout(h);
+    } else {
+      l->addWidget(t);
+    }
     l->addWidget(plot, 1);
     f->setLayout(l);
     f->setMinimumHeight(220);
@@ -119,6 +147,16 @@ ThmDiagnosticsPage::ThmDiagnosticsPage(std::function<QString(int, ThmDiagnostics
   card(weightPlot, tr("Weight w(E)"));
   card(windowPlot, QString::fromUtf8("Spectator window w(p<sub>s</sub>)"));
   card(distortionPlot, tr("Distortion R(E)"));
+  {
+    QWidget *energy = new QWidget;
+    QHBoxLayout *h = new QHBoxLayout;
+    h->setContentsMargins(0, 0, 0, 0);
+    h->setSpacing(4);
+    h->addWidget(new QLabel("E:"));
+    h->addWidget(angularEnergyEdit);
+    energy->setLayout(h);
+    card(angularPlot, tr("Angular distribution"), energy);
+  }
 
   QWidget *panels = new QWidget;
   grid_ = new QGridLayout;
@@ -193,6 +231,7 @@ void ThmDiagnosticsPage::compute() {
     statusLabel->setText(why);
     return;
   }
+  prepareAngular(request);
   computedText_ = request.projectText;
   computedSegment_ = request.segment;
   thread_ = new ThmDiagnosticsThread(request);
@@ -212,10 +251,16 @@ bool ThmDiagnosticsPage::computeNow() {
     statusLabel->setText(why);
     return false;
   }
+  prepareAngular(request);
   computedText_ = request.projectText;
   computedSegment_ = request.segment;
   showResult(ComputeThmDiagnostics(request));
   return result_.error.isEmpty();
+}
+
+void ThmDiagnosticsPage::prepareAngular(ThmDiagnosticsRequest &request) const {
+  // The energy chosen for this segment; the middle of its data until one is shown.
+  if (angularSegment_ == request.segment) request.angularEnergy = angularEnergyEdit->value();
 }
 
 void ThmDiagnosticsPage::threadFinished() {
@@ -410,6 +455,43 @@ void ThmDiagnosticsPage::showResult(const ThmDiagnosticsResult &result) {
       distortionPlot->setLogY(positive && hi > 20.0 * lo);
     }
   }
+  // Angular distribution (theta=).
+  if (result.angular) {
+    cards_[angularPlot]->show();
+    angularPlot->setTitle(reaction);
+    {
+      // The energy box spans the data; it shows the energy computed.
+      const QSignalBlocker block(angularEnergyEdit);
+      const double step = std::pow(10.0, std::floor(std::log10(std::max(result.eHi - result.eLo, 1e-3) / 20.0)));
+      angularEnergyEdit->setRange(std::min(result.eLo, result.angularEnergy), std::max(result.eHi, result.angularEnergy));
+      angularEnergyEdit->setSingleStep(step);
+      angularEnergyEdit->setValue(result.angularEnergy);
+      angularSegment_ = result.segment;
+    }
+    if (!result.angularError.isEmpty()) {
+      angularPlot->setMessage(tr("not computed: %1").arg(result.angularError));
+    } else {
+      ThmPlotWidget::Band b;
+      b.x0 = result.thetaMin;
+      b.x1 = result.thetaMax;
+      b.color = thmPlotColor(0);
+      angularPlot->addBand(b);
+      ThmPlotWidget::Series s;
+      s.x = result.angle;
+      s.y = result.dsdo;
+      s.color = thmPlotColor(0);
+      s.label = tr("E = %1 MeV").arg(result.angularEnergy, 0, 'g', 4);
+      angularPlot->addSeries(s);
+      ThmPlotWidget::Series m;
+      m.x = {result.thetaMin, result.thetaMax};
+      m.y = {result.windowMean, result.windowMean};
+      m.color = thmPlotColor(1);
+      m.style = Qt::DashLine;
+      m.symbols = result.thetaMin == result.thetaMax;  // one angle: a point
+      m.label = m.symbols ? tr("the model (one angle)") : tr("window average");
+      angularPlot->addSeries(m);
+    }
+  }
   layoutPanels();
 }
 
@@ -420,8 +502,12 @@ bool ThmDiagnosticsPage::panelShown(ThmPlotWidget *plot) const {
 
 int ThmDiagnosticsPage::columnsFor(int shown) const {
   // Three columns when there are more panels than two rows of two hold (or
-  // three), and the page is wide enough for panels of ~280 px; else two.
-  const bool wide = width() >= 3 * 280;
+  // three), and the page is wide enough for panels of ~280 px (or the widest
+  // card shown, e.g. the angular one with its energy box); else two.
+  int panel = 280;
+  for (ThmPlotWidget *p : plots())
+    if (panelShown(p)) panel = std::max(panel, cards_.value(p)->minimumSizeHint().width() + 8);
+  const bool wide = width() >= 3 * panel;
   return wide && (shown == 3 || shown > 4) ? 3 : 2;
 }
 

@@ -50,7 +50,8 @@ ThmModelPage::ThmModelPage(const ThmSettings &settings, const QString &projectDi
   entranceLCombo->addItems(QStringList() << "incoherent" << "coherent");
   entranceLCombo->setToolTip(
       tr("entranceL: incoherent (default): the l cross terms vanish once the exit direction is integrated; "
-         "coherent: one amplitude, as mrmpy and AZURE2 before September 2026."));
+         "coherent: one amplitude, as mrmpy and AZURE2 before September 2026; not with an exit-angle window "
+         "(Experiments page)."));
   vertexCombo = new QComboBox;
   vertexCombo->addItems(QStringList() << "constant" << "perlevel" << "onshell");
   vertexCombo->setToolTip(

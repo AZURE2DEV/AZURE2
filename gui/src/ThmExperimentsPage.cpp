@@ -52,6 +52,8 @@ bool readWholeDouble(const QString &text, double &x) {
   return !!(s >> x) && !(s >> rest) && std::isfinite(x);
 }
 
+void splitWindow(const QString &text, QString &lo, QString &hi);
+
 QString plain(const QString &html) {
   QTextDocument d;
   d.setHtml(html);
@@ -134,6 +136,25 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
       tr("background=: b0 + b1 E + b2 E^2 (E: c.m. energy of the THM entrance pair) added to the folded model, "
          "profiled with the norm."));
   connect(backgroundCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(backgroundChanged(int)));
+  // The exit angle (theta=): angle-integrated, or dsigma/dOmega averaged over a window.
+  const QString thetaTip =
+      tr("theta=: with a window the observable is dsigma/dOmega averaged over the window of the c.m. angle of exit "
+         "particle 1 relative to the x-A direction (entrance particle 1 relative to 2); min = max: one angle. If "
+         "the paper quotes the other exit particle's angle, give the supplementary window, 180 - max to 180 - min. "
+         "Not with entranceL=coherent (Model page).");
+  thetaCombo = new QComboBox;
+  thetaCombo->addItem(tr("all (angle-integrated)"), "all");
+  thetaCombo->addItem(tr("window"), "window");
+  thetaCombo->setToolTip(thetaTip);
+  connect(thetaCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(thetaEdited()));
+  thetaMinEdit = new ThmNumberSpin(QString::fromUtf8("°"), 0.0, 180.0, 5.0);
+  thetaMaxEdit = new ThmNumberSpin(QString::fromUtf8("°"), 0.0, 180.0, 5.0);
+  thetaMinEdit->setToolTip(tr("theta_min, c.m. (0-180)."));
+  thetaMaxEdit->setToolTip(tr("theta_max, c.m. (theta_min-180)."));
+  thetaMinEdit->setWrittenText("0");
+  thetaMaxEdit->setWrittenText("180");
+  connect(thetaMinEdit, SIGNAL(valueChanged(double)), this, SLOT(thetaEdited()));
+  connect(thetaMaxEdit, SIGNAL(valueChanged(double)), this, SLOT(thetaEdited()));
 
   const QStringList nuclides = nuclideNames();
   auto nuclideCombo = [&](const QString &tip) {
@@ -326,6 +347,19 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   xl->addWidget(backgroundCombo, 0, 3);
   xl->addWidget(label(tr("Segments:"), true), 1, 0, Qt::AlignRight | Qt::AlignTop);
   xl->addWidget(segmentList, 1, 1, 1, 3);
+  xl->addWidget(label(tr("Exit angle:"), true, thetaTip), 2, 0, right);
+  xl->addWidget(thetaCombo, 2, 1);
+  QLabel *thetaLabel = label(QString::fromUtf8("θ<sub>cm</sub>:"), false, thetaTip);
+  QHBoxLayout *thl = new QHBoxLayout;
+  thl->setContentsMargins(0, 0, 0, 0);
+  thl->addWidget(thetaMinEdit, 1);
+  thl->addWidget(new QLabel(QString::fromUtf8("–")));
+  thl->addWidget(thetaMaxEdit, 1);
+  QWidget *thetaBox = new QWidget;
+  thetaBox->setLayout(thl);
+  xl->addWidget(thetaLabel, 2, 2, right);
+  xl->addWidget(thetaBox, 2, 3);
+  thetaWindowRow_ = {thetaLabel, thetaBox};
   experimentBox->setLayout(xl);
 
   kinematicsBox = new QGroupBox(tr("Three-body reaction"));
@@ -518,6 +552,7 @@ void ThmExperimentsPage::refreshRow(int row) {
                         r.beamEnergy.isEmpty() ? "?" : r.beamEnergy, r.spectator.isEmpty() ? "?" : r.spectator) +
                (r.lineshape ? tr(", line shape") : QString()) + (r.hasWindow() ? tr(", p_s window") : QString());
   if (r.hasDistortion()) reaction += tr(", distortion %1").arg(r.distortion);
+  if (r.hasTheta()) reaction += QString::fromUtf8(", θ %1°").arg(r.theta);
   const QString cells[4] = {r.name, ThmExperimentRecord::segmentsListText(r.segments), r.background, reaction};
   for (int c = 0; c < 4; c++) {
     QTableWidgetItem *item = experimentTable->item(row, c);
@@ -639,6 +674,7 @@ void ThmExperimentsPage::loadEditor() {
   fillSegmentList();
   int bg = backgroundCombo->findText(r.background);
   backgroundCombo->setCurrentIndex(bg >= 0 ? bg : 0);
+  loadTheta(r);
   kinematicsBox->setChecked(r.hasKinematics());
   beamCombo->setEditText(r.beam);
   targetCombo->setEditText(r.target);
@@ -668,9 +704,12 @@ void ThmExperimentsPage::showDerived(const ThmExperimentRecord &x) {
     // The engine's refusal of a distortion key (a malformed value, a key
     // without its kind), at once rather than on Accept.
     const QString parse = ThmSettings::checkExperimentLines(QStringList() << x.line());
-    for (const char *key : {"distortion", "optical", "spectatorAngle", "boundState"})
+    for (const char *key : {"distortion", "optical", "spectatorAngle", "boundState", "theta"})
       if (parse.contains(key)) why = parse.mid(parse.indexOf("]: ") + 3);
   }
+  // A theta window with entranceL=coherent (the Model page), as the engine refuses it.
+  if (why.isEmpty() && x.hasTheta() && entranceL_() == "coherent") why = coherentRefusal();
+  updateThetaItems();
   derivedText_ = info.isEmpty() ? why : why.isEmpty() ? info : info + "\n" + why;
   // The values in the sections, compact; the whole text in their tooltips.
   const QString none = QString::fromUtf8("\u2014");
@@ -741,6 +780,59 @@ void ThmExperimentsPage::backgroundChanged(int) {
   if (loading_ || current_ < 0) return;
   records_[current_].background = backgroundCombo->currentText();
   refreshRow(current_);
+}
+
+// ---------------------------------------------------------------------------
+// Exit angle (theta=)
+
+QString ThmExperimentsPage::coherentRefusal() {
+  // EData::BuildThmGroups' words.
+  return tr("theta= computes the interference of the entrance partial waves exactly (at fixed angle they "
+            "interfere); entranceL=coherent is an approximation of the angle-integrated observable and cannot be "
+            "combined with it.");
+}
+
+QString ThmExperimentsPage::thetaText() const {
+  if (thetaCombo->currentData().toString() != "window") return "all";
+  return thetaMinEdit->writtenText() + "-" + thetaMaxEdit->writtenText();
+}
+
+void ThmExperimentsPage::loadTheta(const ThmExperimentRecord &r) {
+  const bool was = loading_;
+  loading_ = true;
+  thetaCombo->setCurrentIndex(r.hasTheta() ? 1 : 0);
+  QString lo = "0", hi = "180";
+  if (r.hasTheta()) splitWindow(r.theta, lo, hi);
+  thetaMinEdit->setWrittenText(lo);
+  thetaMaxEdit->setWrittenText(hi);
+  loading_ = was;
+  showThetaRows();
+  updateThetaItems();
+}
+
+void ThmExperimentsPage::showThetaRows() {
+  for (QWidget *w : thetaWindowRow_) w->setVisible(thetaCombo->currentData().toString() == "window");
+}
+
+void ThmExperimentsPage::updateThetaItems() {
+  QStandardItemModel *m = qobject_cast<QStandardItemModel *>(thetaCombo->model());
+  if (!m) return;
+  const bool coherent = entranceL_() == "coherent";
+  QStandardItem *item = m->item(1);
+  const bool enabled = !coherent || thetaCombo->currentIndex() == 1;
+  item->setFlags(enabled ? item->flags() | Qt::ItemIsEnabled : item->flags() & ~Qt::ItemIsEnabled);
+  item->setToolTip(coherent ? coherentRefusal() : QString());
+}
+
+void ThmExperimentsPage::thetaEdited() {
+  showThetaRows();
+  if (loading_ || current_ < 0) return;
+  ThmExperimentRecord &r = records_[current_];
+  const QString text = thetaText();
+  // "all" is the default: written only if the file wrote it.
+  r.theta = text == "all" ? (r.theta == "all" ? r.theta : QString()) : text;
+  refreshRow(current_);
+  showDerived(r);
 }
 
 void ThmExperimentsPage::kinematicsEdited() {
@@ -1010,6 +1102,7 @@ QString ThmExperimentsPage::check() const {
                           "(profiled) norm, so free it.")
                            .arg(k);
     }
+    if (x.hasTheta() && entranceL_() == "coherent") return where + coherentRefusal();
     QString error;
     derivedInfo(x, &error);
     if (!error.isEmpty()) return where + error;

@@ -17,6 +17,7 @@ class QPushButton;
 QT_END_NAMESPACE
 
 class ThmPlotWidget;
+class ThmNumberSpin;
 
 /*!
  * The Diagnostics page of the THM workspace: read-only plots, computed by the
@@ -33,7 +34,11 @@ class ThmPlotWidget;
  *                    nodes (only for an experiment with ps=), and the vertex
  *                    panel adds <|M_l|^2> over the window, dashed;
  *   distortion       R(E) of the experiment (only with distortion=), log
- *                    scale, with |M|^2 and |M_PW|^2 normalized at E_ref.
+ *                    scale, with |M|^2 and |M_PW|^2 normalized at E_ref;
+ *   angular          dsigma/dOmega(theta) over 0-180 degrees at one energy, the
+ *                    window shaded and its average drawn across it (only with
+ *                    theta=); the energy is a spin box in the card's header,
+ *                    used by the next Compute.
  * Each panel is a framed card with a short bold title; the cards fill a
  * grid of equal cells (two or three columns, by width) and their axes line
  * up (ThmPlotWidget::setAlignedWith).  Every plot carries the reaction as a
@@ -81,6 +86,9 @@ class ThmDiagnosticsPage : public QWidget {
   ThmPlotWidget *weightPlot;
   ThmPlotWidget *windowPlot;
   ThmPlotWidget *distortionPlot;
+  ThmPlotWidget *angularPlot;
+  /// c.m. energy of the angular distribution (MeV), within the data; the next Compute uses it.
+  ThmNumberSpin *angularEnergyEdit;
   QWidget *vertexPanel;  ///< the card of vertexPlot
 
  signals:
@@ -99,7 +107,7 @@ class ThmDiagnosticsPage : public QWidget {
   bool panelShown(ThmPlotWidget *plot) const;
   /// Every plot, in reading order; the first two are always shown.
   QList<ThmPlotWidget *> plots() const {
-    return {vertexPlot, hoesPlot, lineshapePlot, zetaPlot, weightPlot, windowPlot, distortionPlot};
+    return {vertexPlot, hoesPlot, lineshapePlot, zetaPlot, weightPlot, windowPlot, distortionPlot, angularPlot};
   }
   QHash<ThmPlotWidget *, QFrame *> cards_;
   int columns_ = 2;
@@ -115,6 +123,9 @@ class ThmDiagnosticsPage : public QWidget {
   ThmDiagnosticsResult result_;
   QString computedText_;  ///< the project text of the shown result
   int computedSegment_ = 0;
+  /// The segment whose data range angularEnergyEdit holds (0: none yet, the middle is used).
+  int angularSegment_ = 0;
+  void prepareAngular(ThmDiagnosticsRequest &request) const;
   QGridLayout *grid_ = nullptr;
 };
 

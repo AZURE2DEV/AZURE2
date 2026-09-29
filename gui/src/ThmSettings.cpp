@@ -259,7 +259,8 @@ bool ThmExperimentRecord::sameAs(const ThmExperimentRecord &o) const {
          spectator == o.spectator && beamEnergy == o.beamEnergy && lineshape == o.lineshape && ps == o.ps &&
          psNodes == o.psNodes && distortion == o.distortion && opticalAA == o.opticalAA && opticalSF == o.opticalSF &&
          spectatorAngle == o.spectatorAngle && distortionRef == o.distortionRef &&
-         distortionRatio == o.distortionRatio && boundState == o.boundState && extraTokens == o.extraTokens;
+         distortionRatio == o.distortionRatio && boundState == o.boundState && theta == o.theta &&
+         extraTokens == o.extraTokens;
 }
 
 QString ThmExperimentRecord::segmentsListText(const QList<int> &segments) {
@@ -303,6 +304,7 @@ QString ThmExperimentRecord::line() const {
                                         {"boundState", boundState}};
   for (const auto &kv : distortionKeys)
     if (!kv[1].isEmpty()) tokens << kv[0] + "=" + kv[1];
+  if (!theta.isEmpty()) tokens << "theta=" + theta;
   tokens << extraTokens;
   return QString("experiment[%1] %2").arg(name, tokens.join(' '));
 }
@@ -361,6 +363,8 @@ QList<ThmExperimentRecord> ThmExperimentRecord::read(const QStringList &lines) {
         r.distortionRatio = value;
       } else if (key == "boundState") {
         r.boundState = value;
+      } else if (key == "theta") {
+        r.theta = value;
       } else {
         r.extraTokens << token;
       }

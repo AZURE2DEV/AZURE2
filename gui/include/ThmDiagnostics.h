@@ -5,6 +5,7 @@
 #include <QString>
 #include <QThread>
 #include <QVector>
+#include <limits>
 
 /*!
  * What the Diagnostics page of the THM workspace shows for one THM data
@@ -25,7 +26,15 @@
  *              average <|M_l|^2> (AZUREAPI::GetThmVertex, EData::ThmVertexTable);
  *   distortion with distortion=: R(E) as the model uses it and, for coulomb
  *              and optical, |M|^2 and |M_PW|^2 normalized at E_ref
- *              (AZUREAPI::GetThmDistortion, EData::ThmDistortionTable).
+ *              (AZUREAPI::GetThmDistortion, EData::ThmDistortionTable);
+ *   angular    with an exit-angle window (theta=): dsigma/dOmega(theta) at one
+ *              energy over 0-180 degrees, and its average over the window.
+ *              AZUREAPI has no call for the distribution at arbitrary angles,
+ *              so the engine runs a copy of the project whose data are one
+ *              energy in several single-angle experiments (theta=t-t, the
+ *              segment's experiment otherwise: reaction, line shape, window;
+ *              no resolution, weight, distortion or background -- the last
+ *              three only scale it at one energy).
  *
  * Nothing here is written into the project: the engine runs on a copy in a
  * temporary directory.  ComputeThmDiagnostics does the work and may take a
@@ -37,6 +46,10 @@ struct ThmDiagnosticsRequest {
   unsigned int paramMask = 0;  ///< Config::paramMask of the GUI (formalism, Coulomb functions, ...)
   int segment = 0;      ///< <segmentsData> line (1-based, counting inactive lines)
   int points = 201;     ///< grid points over the data range
+  /// Angular distribution (an experiment with theta=): the c.m. energy (MeV;
+  /// NaN: the middle of the data) and the number of angles over 0-180.
+  double angularEnergy = std::numeric_limits<double>::quiet_NaN();
+  int angularPoints = 19;
 };
 
 struct ThmDiagnosticsCurve {
@@ -98,6 +111,14 @@ struct ThmDiagnosticsResult {
   QVector<double> distortionDirect;  ///< R(E) evaluated directly (coulomb, optical)
   QVector<double> distortionM2, distortionPW2;  ///< |M|^2 and |M_PW|^2 over their values at E_ref
   bool distortionRatioPW = true;  ///< dwpw (R = |M|^2/|M_PW|^2 ...) or dw
+
+  // Angular distribution (theta= window), from single-angle engine runs.
+  bool angular = false;
+  QString angularError;           ///< the engine's reason if it could not be computed
+  double thetaMin = 0.0, thetaMax = 180.0;  ///< the experiment's window (degrees)
+  double angularEnergy = 0.0;     ///< c.m. energy of the distribution (MeV)
+  QVector<double> angle, dsdo;    ///< theta (degrees) and dsigma/dOmega (HOES, per sr)
+  double windowMean = 0.0;        ///< dsigma/dOmega averaged over the window, as the model of a point
 };
 
 ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request);
