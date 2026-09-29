@@ -99,3 +99,10 @@ add_test(NAME pyazr_thm_distortion
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_distortion_test.py)
 set_tests_properties(pyazr_thm_distortion PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Fixed-angle THM observable (experiment[...] theta=...): AzrModel, CLI ==
+# pyazr, 0-180 == angle-integrated / 4 pi, symmetry of an identical exit.
+add_test(NAME pyazr_thm_fixed_angle
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_fixed_angle_test.py)
+set_tests_properties(pyazr_thm_fixed_angle PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

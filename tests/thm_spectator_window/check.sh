@@ -191,7 +191,7 @@ refuse with_se "spectatorEnergy both set" "spectatorEnergy=0.4
 experiment[A] segments=1,2 $KIN ps=hulthen:0-40"
 refuse with_se_pair "spectatorEnergy both set" "spectatorEnergy[1]=0.4
 experiment[A] segments=1,2 $KIN ps=gauss:60:0-40"
-refuse theta "reserved for a later version" "experiment[A] segments=1,2 theta=0-10"
+refuse theta "expected all or thmin-thmax" "experiment[A] segments=1,2 theta=10-0"
 
 echo
 if [ "$fail" -eq 0 ]; then echo "PASS: THM spectator-momentum window"; else echo "FAIL"; exit 1; fi

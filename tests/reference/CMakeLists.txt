@@ -34,3 +34,11 @@ target_link_libraries(thm_distortion_test PRIVATE AZURE2Core)
 
 add_test(NAME thm_distortion COMMAND thm_distortion_test)
 set_tests_properties(thm_distortion PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Reference calculation for the fixed-angle THM observable (ThmAngular): the
+# Legendre form and its window average against the literal M-sum of
+# thm_fixed_angle_reference.py (sympy Clebsch-Gordan, mpmath quadrature).
+add_executable(thm_fixed_angle_test thm_fixed_angle_test.cpp)
+target_link_libraries(thm_fixed_angle_test PRIVATE AZURE2Core)
+
+add_test(NAME thm_fixed_angle COMMAND thm_fixed_angle_test)

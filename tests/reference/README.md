@@ -114,3 +114,25 @@ Yukawa tail, a 3 fm cutoff, a Woods-Saxon in both channels) and a made-up
 plane waves in both channels against 4π/(κ² + q²) (R ≡ 1); an optical
 potential with the nuclear part off against point Coulomb; the interpolated
 weight against R between the grid nodes.
+
+## thm_fixed_angle_test
+
+The fixed-angle THM observable (`include/ThmAngular.h`): the spin-summed
+angular distribution of the exit pair for an entrance with m_l = 0 along
+p_xA, in the Blatt–Biedenharn form the engine uses (GSL 3j/6j symbols,
+Gauss–Legendre window averages), against `thm_fixed_angle_reference.py`,
+which does the literal M-sum
+F = Σ √(2l+1) ⟨s ν l 0|J ν⟩⟨s′ ν′ l′ m′|J ν⟩ x Y_l′^m′(θ, 0) with sympy's
+exact Clebsch–Gordan coefficients and mpmath's spherical harmonics and
+quadrature. The amplitudes x come from a toy two-level R-matrix with two
+entrance l per channel spin (a 7Li+p → α+α-like case and a spin-1/2 case with
+odd L), assembled as `THMMatrixFunc` does.
+
+What it checks: the Legendre coefficients, dσ/dΩ at five angles and five
+window averages (agreement 5e-16, tolerance 1e-12); the 0–180 window equals
+Σ(2J+1)|x|²/4π (the angle-integrated observable); θ = 0 equals the m_l = 0
+amplitude along the axis and small windows approach it as t²; for an α+α
+exit θ = 0 is the Clebsch–Gordan-weighted coherent sum, not the
+`entranceL=coherent` recipe; no odd L and symmetry about 90° for identical
+bosons, asymmetry for the spin-1/2 case.
+

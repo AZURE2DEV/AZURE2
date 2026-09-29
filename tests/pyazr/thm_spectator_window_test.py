@@ -131,12 +131,12 @@ with tempfile.TemporaryDirectory() as tmp:
             check(f"refused: window with {opt}", "spectatorEnergy both set" in str(err), str(err))
     path = os.path.join(proj, "bad.azr")
     with open(path, "w") as f:
-        f.write(open(src).read().rstrip("\n") + "\n<thm>\nexperiment[A] segments=1 theta=1\n</thm>\n")
+        f.write(open(src).read().rstrip("\n") + "\n<thm>\nexperiment[A] segments=1 theta=10-0\n</thm>\n")
     try:
         AzrModel.from_file(path).thm_experiments()
-        check("theta still reserved", False, "no ValueError")
+        check("a reversed theta window is refused", False, "no ValueError")
     except ValueError as err:
-        check("theta still reserved", "reserved for a later version" in str(err), str(err))
+        check("a reversed theta window is refused", "expected all or thmin-thmax" in str(err), str(err))
 
     # -- the engine -----------------------------------------------------------
     try:

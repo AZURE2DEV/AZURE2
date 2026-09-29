@@ -206,7 +206,7 @@ refuse angle_value "expected qf, a lab angle" "experiment[A] segments=1,2 $KIN d
 refuse angle_alone "needs distortion=coulomb or distortion=optical" "experiment[A] segments=1,2 $KIN spectatorAngle=10"
 refuse ratio_value "expected dwpw or dw" "experiment[A] segments=1,2 $KIN distortion=coulomb distortionRatio=pw"
 refuse bound_value "expected whittaker or yukawa" "experiment[A] segments=1,2 $KIN distortion=coulomb boundState=hulthen"
-refuse theta "not implemented yet" "experiment[A] segments=1,2 $KIN theta=5"
+refuse theta "expected all or thmin-thmax" "experiment[A] segments=1,2 $KIN theta=5"
 refuse twice "is given twice" "experiment[A] segments=1,2 $KIN distortion=coulomb distortion=none"
 refuse table_missing "cannot read" "experiment[A] segments=1,2 distortion=table:$WORK/none_such.dat"
 refuse table_short "beyond the table" "experiment[A] segments=1,2 distortion=table:$WORK/short.dat"

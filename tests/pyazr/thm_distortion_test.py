@@ -10,7 +10,7 @@ Checked on tests/18O_p_a_thm with a made-up charged spectator,
 
   1. AzrModel: set_thm_experiment(..., distortion=..., opticalAA=...) round
      trip and canonical line; values AZURE2 refuses raise ValueError the same
-     way (theta stays reserved).  Pure Python: runs without numpy.
+     way.  Pure Python: runs without numpy.
   2. The engine against the CLI: calculate_chi2_rwa (rel 1e-9) and the output
      files written by write_output_files (thm_experiments.out included).
   3. thm_distortion: |M|^2 and M_PW at E = 0.6 MeV against the mpmath values
@@ -122,7 +122,7 @@ with tempfile.TemporaryDirectory() as tmp:
             (f"experiment[A] segments=1 {KIN} distortion=coulomb distortionRatio=pw", "expected dwpw or dw"),
             (f"experiment[A] segments=1 {KIN} distortion=coulomb boundState=hulthen",
              "expected whittaker or yukawa"),
-            (f"experiment[A] segments=1 {KIN} theta=5", "not implemented yet"),
+            (f"experiment[A] segments=1 {KIN} theta=5", "expected all or thmin-thmax"),
             ("experiment[A] segments=1 distortionRef=0.6", "needs distortion=coulomb")]:
         path = os.path.join(proj, "bad.azr")
         with open(path, "w") as f:

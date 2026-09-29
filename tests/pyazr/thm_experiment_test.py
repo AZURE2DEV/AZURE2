@@ -18,7 +18,7 @@ THM segments with free norms) with its six R-matrix parameters freed:
      residual_jacobian against central differences of the residuals,
      chi2_and_grad against 2 J^T r and against differences of chi2.
   4. A one-segment experiment without background gives residuals identical
-     to no experiment (bit for bit); a session refuses a reserved key.
+     to no experiment (bit for bit); a session refuses a bad theta window.
 
 Needs the compiled engine and an AZURE2 binary; skips cleanly without them.
 
@@ -127,7 +127,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # Engine-side refusals seen by the parser too.
     for line, frag in [("experiment[A] segments=1 distortion=on", "expected none, coulomb, optical"),
-                       ("experiment[A] segments=1 theta=20", "not implemented yet"),
+                       ("experiment[A] segments=1 theta=20", "expected all or thmin-thmax"),
                        ("experiment[A] segments=1 foo=1", "unknown key"),
                        ("experiment[A] segments=1\nexperiment[B] segments=1", "already in"),
                        ("experiment[A] segments=1 beam=p", "all four")]:
@@ -282,7 +282,7 @@ with tempfile.TemporaryDirectory() as tmp:
             check(f"d chi2/d x[{c}] vs central differences (rel {rel(g[c], fd):.1e})",
                   rel(g[c], fd) < 1e-4 or abs(g[c] - fd) < 1e-6 * np.max(np.abs(g)), f"{g[c]} vs {fd}")
 
-    print("4. one-segment experiments == no experiment; a session refuses a reserved key")
+    print("4. one-segment experiments == no experiment; a session refuses a bad theta window")
     plain_dir = project("plain", "")
     one_dir = project("one", "experiment[A] segments=1\nexperiment[B] segments=2")
     with azure2(os.path.join(plain_dir, "run.azr"), cwd=plain_dir) as s:
@@ -298,9 +298,9 @@ with tempfile.TemporaryDirectory() as tmp:
     try:
         with azure2(os.path.join(bad_dir, "run.azr"), cwd=bad_dir):
             pass
-        check("a session refuses a reserved key", False, "it loaded")
+        check("a session refuses a bad theta", False, "it loaded")
     except Exception as err:
-        check("a session refuses a reserved key", True)
+        check("a session refuses a bad theta", True)
 
 print()
 if failures:

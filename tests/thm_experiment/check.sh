@@ -151,7 +151,8 @@ refuse() {  # refuse NAME MESSAGE-FRAGMENT BLOCK [AWK]
     bad "$1: not refused with '$2' (status $(cat "$WORK/$1/status"))"; tail -3 "$WORK/$1/log" | sed 's/^/        /'
   fi
 }
-refuse reserved_theta "not implemented yet" "experiment[A] segments=1,2 theta=1"  # ps: tests/thm_spectator_window
+# theta= is implemented since Stage E (tests/thm_fixed_angle); a bad value is refused.
+refuse bad_theta "expected all or thmin-thmax" "experiment[A] segments=1,2 theta=1"  # ps: tests/thm_spectator_window
 # distortion= is implemented since Stage D (tests/thm_distortion); a bad value is refused.
 refuse bad_distortion "expected none, coulomb, optical or table" "experiment[A] segments=1,2 distortion=1"
 refuse unknown_key "unknown key 'foo'" "experiment[A] segments=1 foo=1"
