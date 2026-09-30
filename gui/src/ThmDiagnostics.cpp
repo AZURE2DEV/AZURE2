@@ -182,6 +182,9 @@ QString segmentsDataLine(const QString &text, int key) {
  */
 QString angularDistribution(const ThmDiagnosticsRequest &request, const ThmExperiment &experiment, double eLab,
                             const QString &dir, ThmDiagnosticsResult &r) {
+  if (experiment.vertexDW)
+    return QObject::tr("the angular distribution is the fixed-angle observable (theta=), which is not available "
+                       "with vertexModel=dw.");
   QString text = request.projectText;
   const QStringList fields = segmentsDataLine(text, request.segment).split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
   if (fields.size() < 8) return QObject::tr("segment %1 not found in <segmentsData>.").arg(request.segment);
