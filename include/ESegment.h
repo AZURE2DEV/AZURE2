@@ -13,6 +13,7 @@ class CNuc;
 class Config;
 struct ThmWeightTable;
 class ThmDistortion;
+class ThmDwVertex;
 struct ThmAngleWindow;
 struct ThmLineshape;
 struct ThmSpectatorWindow;
@@ -167,6 +168,8 @@ class ESegment {
   /// (distortion=...), as SetThmLineshape.
   void SetThmDistortion(std::shared_ptr<const ThmDistortion> d);
   const ThmDistortion *GetThmDistortion() const { return thmDistortion_.get(); }
+  void SetThmDwVertex(std::shared_ptr<const ThmDwVertex> v);
+  const ThmDwVertex *GetThmDwVertex() const { return thmDwVertex_.get(); }
   /// Attach the angular window of this segment's THM experiment
   /// (theta=thmin-thmax), as SetThmLineshape.
   void SetThmAngleWindow(std::shared_ptr<const ThmAngleWindow> w);
@@ -229,6 +232,7 @@ class ESegment {
   std::shared_ptr<const ThmLineshape> thmLineshape_;
   std::shared_ptr<const ThmSpectatorWindow> thmWindow_;
   std::shared_ptr<const ThmDistortion> thmDistortion_;
+  std::shared_ptr<const ThmDwVertex> thmDwVertex_;
   std::shared_ptr<const ThmAngleWindow> thmAngle_;
   /// Which cross section component to compare against: 0 = full, 1 = E1 only, 2 = E2 only.
   int crossSectionComponent_;

@@ -14,6 +14,7 @@
 #include "GSLException.h"
 #include "NuclearPotentialManager.h"
 #include <algorithm>
+#include <gsl/gsl_sf_bessel.h>
 #include <cinttypes>
 #include <cmath>
 #include <cstdio>
@@ -3059,7 +3060,11 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
             << " MeV, <T_s> = " << window->MeanEs() << " MeV.";
           configure.outStream << w.str() << std::endl;
           group.window = window;
-          for (int s : group.segments) GetSegment(s)->SetThmSpectatorWindow(window);
+          // With vertexModel=dw the DW vertex puts the nodes on the reachable
+          // part of the window itself (ThmDwVertex); the plane-wave nodes are
+          // not used.
+          if (!x.vertexDW)
+            for (int s : group.segments) GetSegment(s)->SetThmSpectatorWindow(window);
         }
 
         if (x.lineshape) {
@@ -3118,7 +3123,85 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
           for (int s : group.segments) GetSegment(s)->SetThmLineshape(shape);
         }
       }
-      if (x.distortion != ThmExperiment::DIST_NONE) {
+      if (x.vertexDW) {
+        // Distorted-wave entrance vertex (ThmDwVertex.h): replaces M_l in the
+        // HOES amplitude of every segment of the experiment; R(E) is not applied.
+        int pairKey = GetSegment(group.segments[0])->GetEntranceKey();
+        int pairNum = theCNuc->GetPairNumFromKey(pairKey);
+        PPair *pair = theCNuc->GetPair(pairNum);
+        if (configure.thm.coulombIntegral) {
+          configure.outStream << where << "vertexModel=dw is the surface term of the DWBA vertex; its external "
+                                 "part (the three-body remnant outside the channel radius, whose plane-wave limit "
+                                 "is the Coulomb term C_l) is not computed, so it cannot be combined with "
+                                 "coulombIntegral=1."
+                              << std::endl;
+          return -1;
+        }
+        if (configure.thm.coherentL) {
+          configure.outStream << where << "vertexModel=dw sums the entrance partial waves (and their projections) "
+                                 "incoherently, as the angle-integrated observable requires; entranceL=coherent "
+                                 "cannot be combined with it."
+                              << std::endl;
+          return -1;
+        }
+        if (configure.thm.SpectatorEnergy(pairKey) != 0.0) {
+          configure.outStream << where << "with vertexModel=dw the spectator kinematics come from Ebeam and the "
+                                 "spectator direction; spectatorEnergy for entrance pair "
+                              << pairKey << " must be 0." << std::endl;
+          return -1;
+        }
+        std::vector<int> ls;
+        for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
+          JGroup *jg = theCNuc->GetJGroup(j);
+          if (!jg->IsInRMatrix()) continue;
+          for (int ch = 1; ch <= jg->NumChannels(); ch++)
+            if (jg->GetChannel(ch)->GetPairNum() == pairNum) ls.push_back(jg->GetChannel(ch)->GetL());
+        }
+        std::vector<double> energies;
+        double eLo = 1.0e300, eHi = -1.0e300;
+        for (int s : group.segments)
+          for (int p = 1; p <= GetSegment(s)->NumPoints(); p++) {
+            double e = GetSegment(s)->GetPoint(p)->GetCMEnergy();
+            energies.push_back(e);
+            eLo = std::min(eLo, e);
+            eHi = std::max(eHi, e);
+          }
+        std::shared_ptr<ThmDwVertex> v = std::make_shared<ThmDwVertex>();
+        double eAA = dk.beamEnergy * dk.mTarget / (dk.mBeam + dk.mTarget);
+        if (!(eAA - dk.bind - eHi > 0.0)) {
+          configure.outStream << where << "vertexModel=dw: at E = " << eHi
+                              << " MeV the spectator has no energy left (E_sF = E_aA - B - E = " << eAA << " - "
+                              << dk.bind << " - " << eHi << " MeV <= 0); check Ebeam." << std::endl;
+          return -1;
+        }
+        double gridHi = std::min(eHi + 0.3, eAA - dk.bind - 0.5 * (eAA - dk.bind - eHi));
+        std::string why = ls.empty() ? std::string("the entrance pair has no channel in the R matrix")
+                                     : v->Build(x, dk, pair->GetChRad(), ls, eLo - 0.3, gridHi, energies);
+        if (!why.empty()) {
+          configure.outStream << where << "vertexModel=dw: " << why << "." << std::endl;
+          return -1;
+        }
+        std::ostringstream l;
+        l.precision(6);
+        l << "  Entrance vertex: " << v->description << ".\n"
+          << "  alpha = m_A/m_F = " << v->alpha << ", beta = m_s/m_a = " << v->beta << ", k_aA = " << v->dist.aa.k
+          << " fm^-1, eta_aA = " << v->dist.aa.eta << ", kappa = " << v->dist.kappa << " fm^-1, eta_b = "
+          << v->dist.etaB << "; channel radius " << v->radius << " fm, l =";
+        for (int lv : v->lvals) l << " " << lv;
+        l << "; L <= " << v->laMax << " (a + A), " << v->lsMax << " (s + F); u to " << v->uMax << " fm on "
+          << v->uNodes << " x " << v->cNodes << " nodes; grid " << v->gridLo << " to "
+          << v->gridLo + (v->nE - 1) * v->gridStep << " MeV (" << v->nE << " energies, " << v->nNodes
+          << " node(s) each), " << v->buildSeconds << " s.\n"
+          << "  The distortion factor R(E) is not applied: the DW vertex carries the energy dependence.";
+        for (int s : group.segments)
+          if (GetSegment(s)->GetThmWeight())
+            l << "\nWARNING: <thm> experiment[" << x.name << "]: segment " << GetSegment(s)->GetSegmentKey()
+              << " also has weight[" << GetSegment(s)->GetSegmentKey()
+              << "]=; it multiplies the model with the DW vertex.";
+        configure.outStream << l.str() << std::endl;
+        group.dwVertex = v;
+        for (int s : group.segments) GetSegment(s)->SetThmDwVertex(v);
+      } else if (x.distortion != ThmExperiment::DIST_NONE) {
         // Distortion factor R(E) (ThmDistortion.h): multiplies the model of
         // every segment of the experiment before the folding.
         double eLo = 1.0e300, eHi = -1.0e300;
@@ -3418,6 +3501,35 @@ void EData::WriteThmExperiments(const Config &configure) {
             << std::setw(18) << (p.ok ? d.R(p) : 0.0) << std::setw(6) << p.lmax << "\n";
       }
     }
+    // Distorted-wave entrance vertex (vertexModel=dw): the Gram entries at the
+    // lowest, the middle and the highest point.
+    for (const ThmGroup &group : thmGroups_) {
+      if (group.name != r.name || !group.dwVertex) continue;
+      const ThmDwVertex &v = *group.dwVertex;
+      double eLo = 1.0e300, eHi = -1.0e300;
+      for (int s : group.segments)
+        for (int p = 1; p <= GetSegment(s)->NumPoints(); p++) {
+          eLo = std::min(eLo, GetSegment(s)->GetPoint(p)->GetCMEnergy());
+          eHi = std::max(eHi, GetSegment(s)->GetPoint(p)->GetCMEnergy());
+        }
+      out << "vertex: " << v.description << "\n"
+          << "# Surface term of the prior-form DWBA (Mukhamedzhanov PRC 84 (2011) 044616; Mukhamedzhanov,\n"
+          << "# Kadyrov & Pang EPJA 56 (2020) 233 eqs. 28-32) replaces M_l; R(E) is not applied.\n"
+          << "# G = (4pi/(2l+1)) sum_m (s_m, d_m)^+ (s_m, d_m), (s_m, d_m) = (S_lm(a), a S_lm'(a))/(4pi phi~(q)),\n"
+          << "# |M_l|^2 = c^+ G c with c = (B - 1, -1); plane waves: G11 = j_l(pa)^2, G22 = (pa j_l'(pa))^2.\n"
+          << "# k_aA = " << v.dist.aa.k << " fm^-1, eta_aA = " << v.dist.aa.eta << ", kappa = " << v.dist.kappa
+          << " fm^-1, alpha = " << v.alpha << ", beta = " << v.beta << ", a = " << v.radius << " fm\n"
+          << "# Columns: E (MeV), q (MeV/c), p a, l, G11, G22, Re G12, Im G12 (spectatorAngle direction).\n";
+      for (double e : {eLo, 0.5 * (eLo + eHi), eHi}) {
+        std::vector<double> w, q, g, gd;
+        double qd, pd;
+        v.Interpolate(e, w, q, g, gd, qd, pd);
+        for (size_t li = 0; li < v.lvals.size(); li++)
+          out << "dw_vertex_point" << std::setw(18) << e << std::setw(18) << qd * hbarc << std::setw(18)
+              << pd * v.radius << std::setw(4) << v.lvals[li] << std::setw(18) << gd[li * 4] << std::setw(18)
+              << gd[li * 4 + 1] << std::setw(18) << gd[li * 4 + 2] << std::setw(18) << gd[li * 4 + 3] << "\n";
+      }
+    }
     // Coulomb line shape (lineshape=on): the ranges over the experiment's points.
     for (const ThmGroup &group : thmGroups_) {
       if (group.name != r.name || !group.lineshape) continue;
@@ -3619,6 +3731,7 @@ bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &e
     out.es.push_back(configure.thm.SpectatorEnergy(group->pairKey));
   }
   out.energy = energies;
+  const ThmDwVertex *dw = group->dwVertex.get();
   const double mu = pair->GetRedMass() * uconv;
   // M_l = (B - 1) j_l - rho j_l' + C_l at E with T_s = es added to E + B (EPoint::CalcEDependentValues).
   struct Pieces {
@@ -3635,11 +3748,37 @@ bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &e
     }
     return q;
   };
-  for (double e : energies) {
-    std::vector<double> row;
-    for (double es : out.es) row.push_back(e + out.bind + es > 0.0 ? ThmRho(mu, e, out.bind + es, out.radius) : 0.0);
-    out.rho.push_back(row);
-  }
+  // vertexModel=dw: the Gram matrices of the DW vertex on the grid.
+  std::vector<std::vector<double>> dwG, dwGd;
+  if (dw) {
+    out.model = "dw";
+    for (double e : energies) {
+      std::vector<double> w, q, g, gd;
+      double qd, pd;
+      dw->Interpolate(e, w, q, g, gd, qd, pd);
+      const double ks = std::sqrt(2.0 * dw->dist.sf.mu * std::max(dw->dist.EsF(e), 0.0)) / hbarc;
+      const double ka = dw->dist.aa.k, kb = dw->beta * ka;
+      std::vector<double> row;
+      for (double qk : q) {
+        double qq = qk / hbarc, x = ks > 0.0 ? (ks * ks + kb * kb - qq * qq) / (2.0 * ks * kb) : 1.0;
+        x = std::max(-1.0, std::min(1.0, x));
+        row.push_back(std::sqrt(std::max(0.0, ka * ka + dw->alpha * dw->alpha * ks * ks - 2.0 * ka * dw->alpha * ks * x)) *
+                      out.radius);
+      }
+      out.rho.push_back(row);
+      out.dwQ.push_back(q);
+      out.dwWeight.push_back(w);
+      out.dwQDelta.push_back(qd * hbarc);
+      out.dwPDelta.push_back(pd);
+      dwG.push_back(g);
+      dwGd.push_back(gd);
+    }
+  } else
+    for (double e : energies) {
+      std::vector<double> row;
+      for (double es : out.es) row.push_back(e + out.bind + es > 0.0 ? ThmRho(mu, e, out.bind + es, out.radius) : 0.0);
+      out.rho.push_back(row);
+    }
   // Vertex boundary, as THMMatrixFunc::CalculateTHMCrossSection chooses it.
   const bool perLevel = (configure.paramMask & Config::USE_BRUNE_FORMALISM) &&
                         configure.thm.vertex == Config::ThmOptions::PER_LEVEL;
@@ -3671,10 +3810,12 @@ bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &e
       // The pieces on the grid: [E][node] and the quasi-free [E].
       std::vector<std::vector<Pieces>> grid(energies.size());
       std::vector<Pieces> qf(energies.size());
-      for (size_t i = 0; i < energies.size(); i++) {
-        for (double es : out.es) grid[i].push_back(pieces(cr.l, energies[i], es));
-        qf[i] = pieces(cr.l, energies[i], 0.0);
-      }
+      if (!dw)
+        for (size_t i = 0; i < energies.size(); i++) {
+          for (double es : out.es) grid[i].push_back(pieces(cr.l, energies[i], es));
+          qf[i] = pieces(cr.l, energies[i], 0.0);
+        }
+      const int li = dw ? dw->LIndex(cr.l) : -1;
       for (int la = 1; la <= jg->NumLevels(); la++) {
         ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
@@ -3687,6 +3828,20 @@ bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &e
         for (size_t i = 0; i < energies.size(); i++) {
           complex B(fixedB, 0.0);
           if (onShell) B = complex(channelFunc.Shift(cr.l, energies[i]), channelFunc.Penetrability(cr.l, energies[i]));
+          if (dw) {
+            const int nl = (int)dw->lvals.size();
+            double avg = 0.0;
+            for (size_t k = 0; k < out.dwWeight[i].size(); k++)
+              avg += out.dwWeight[i][k] * (li < 0 ? 0.0 : ThmDwVertex::Vertex2Factored(&dwG[i][(k * nl + li) * 4], B));
+            lr.m2.push_back(avg);
+            lr.m2qf.push_back(li < 0 ? 0.0 : ThmDwVertex::Vertex2Factored(&dwGd[i][li * 4], B));
+            // Plane waves at the same kinematics: M_l(p), analytic j_l'.
+            double rho = out.dwPDelta[i] * out.radius;
+            double jl = gsl_sf_bessel_jl(cr.l, rho);
+            double djl = rho > 0.0 ? cr.l * jl / rho - gsl_sf_bessel_jl(cr.l + 1, rho) : (cr.l == 1 ? 1.0 / 3.0 : 0.0);
+            lr.m2pw.push_back(std::norm((B - 1.0) * jl - rho * djl));
+            continue;
+          }
           auto m2 = [&](const Pieces &q) { return std::norm((B - 1.0) * q.jl - q.rhoDjl + q.coul); };
           double avg = 0.0;
           for (size_t k = 0; k < out.es.size(); k++) avg += out.weight[k] * m2(grid[i][k]);

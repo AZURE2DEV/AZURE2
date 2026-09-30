@@ -30,6 +30,7 @@ class DataLine;
 class Config;
 struct ThmWeightTable;
 class ThmDistortion;
+class ThmDwVertex;
 struct ThmAngleWindow;
 struct ThmLineshape;
 struct ThmSpectatorWindow;
@@ -95,6 +96,10 @@ class EPoint {
   /// or null.  Owned by the parent ESegment.
   const ThmDistortion *GetThmDistortion() const { return thm_distortion_; }
   void SetThmDistortion(const ThmDistortion *d);
+  /// Distorted-wave entrance vertex of the point's THM experiment
+  /// (vertexModel=dw), or null (the plane-wave vertex).
+  const ThmDwVertex *GetThmDwVertex() const { return thm_dw_; }
+  void SetThmDwVertex(const ThmDwVertex *v);
   /// Angular window of the point's THM experiment (theta=thmin-thmax), or
   /// null (the angle-integrated observable).  Owned by the parent ESegment.
   const ThmAngleWindow *GetThmAngleWindow() const { return thm_angle_; }
@@ -360,6 +365,7 @@ class EPoint {
   const ThmLineshape *thm_lineshape_ = nullptr;
   const ThmSpectatorWindow *thm_window_ = nullptr;
   const ThmDistortion *thm_distortion_ = nullptr;
+  const ThmDwVertex *thm_dw_ = nullptr;
   const ThmAngleWindow *thm_angle_ = nullptr;
   bool is_mapped_;
   bool is_ang_dist_;

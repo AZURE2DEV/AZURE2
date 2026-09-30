@@ -125,6 +125,34 @@ double ThmSpectatorWindow::MeanEs() const {
   return m;
 }
 
+std::function<double(double)> ThmPsEventWeight(const ThmExperiment &x) {
+  switch (x.psKind) {
+    case ThmExperiment::PS_HULTHEN: {
+      const double a2 = x.psA * x.psA, b2 = x.psB * x.psB;
+      return [a2, b2](double p) {
+        double q2 = (p / hbarc) * (p / hbarc);
+        double phi = 1.0 / (a2 + q2) - 1.0 / (b2 + q2);
+        return phi * phi * p * p;
+      };
+    }
+    case ThmExperiment::PS_GAUSS: {
+      const double c = 4.0 * std::log(2.0) / (x.psFwhm * x.psFwhm);
+      return [c](double p) { return std::exp(-c * p * p) * p * p; };
+    }
+    case ThmExperiment::PS_TABLE: {
+      const std::vector<double> tp = x.psTableP, tw = x.psTableW;
+      return [tp, tw](double p) {
+        if (p <= tp.front()) return tw.front();
+        if (p >= tp.back()) return tw.back();
+        size_t hi = std::upper_bound(tp.begin(), tp.end(), p) - tp.begin(), lo = hi - 1;
+        return tw[lo] + (tw[hi] - tw[lo]) * (p - tp[lo]) / (tp[hi] - tp[lo]);
+      };
+    }
+    default:
+      return nullptr;
+  }
+}
+
 std::string BuildThmSpectatorWindow(const ThmExperiment &x, double muSx, ThmSpectatorWindow &out) {
   out = ThmSpectatorWindow();
   out.experiment = x.name;
@@ -134,35 +162,17 @@ std::string BuildThmSpectatorWindow(const ThmExperiment &x, double muSx, ThmSpec
   std::ostringstream d;
   d.precision(8);
   // Event weight per unit p_s.
-  std::function<double(double)> w;
+  std::function<double(double)> w = ThmPsEventWeight(x);
   switch (x.psKind) {
-    case ThmExperiment::PS_HULTHEN: {
-      const double a2 = x.psA * x.psA, b2 = x.psB * x.psB;
-      w = [a2, b2](double p) {
-        double q2 = (p / hbarc) * (p / hbarc);
-        double phi = 1.0 / (a2 + q2) - 1.0 / (b2 + q2);
-        return phi * phi * p * p;
-      };
+    case ThmExperiment::PS_HULTHEN:
       d << "hulthen a=" << x.psA << " b=" << x.psB << " fm^-1";
       break;
-    }
-    case ThmExperiment::PS_GAUSS: {
-      const double c = 4.0 * std::log(2.0) / (x.psFwhm * x.psFwhm);
-      w = [c](double p) { return std::exp(-c * p * p) * p * p; };
+    case ThmExperiment::PS_GAUSS:
       d << "gauss FWHM=" << x.psFwhm << " MeV/c";
       break;
-    }
-    case ThmExperiment::PS_TABLE: {
-      const std::vector<double> &tp = x.psTableP, &tw = x.psTableW;
-      w = [&tp, &tw](double p) {
-        if (p <= tp.front()) return tw.front();
-        if (p >= tp.back()) return tw.back();
-        size_t hi = std::upper_bound(tp.begin(), tp.end(), p) - tp.begin(), lo = hi - 1;
-        return tw[lo] + (tw[hi] - tw[lo]) * (p - tp[lo]) / (tp[hi] - tp[lo]);
-      };
+    case ThmExperiment::PS_TABLE:
       d << "table " << x.psTable;
       break;
-    }
     default:
       return "no ps window";
   }

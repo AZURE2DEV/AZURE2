@@ -4,6 +4,7 @@
 #include "Constants.h"
 
 #include <atomic>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -157,6 +158,10 @@ struct ThmSpectatorWindow {
  */
 std::string BuildThmSpectatorWindow(const ThmExperiment &x, double muSx, ThmSpectatorWindow &out);
 
+/// The event weight w(p) per unit p_s (MeV/c) of experiment x's ps window, as
+/// BuildThmSpectatorWindow uses it; null for ps=delta.
+std::function<double(double)> ThmPsEventWeight(const ThmExperiment &x);
+
 /// The window-averaged entrance vertex of one experiment (EData::ThmVertexTable).
 struct ThmVertexReport {
   std::string experiment;
@@ -168,11 +173,21 @@ struct ThmVertexReport {
   std::vector<double> p, weight, es;  ///< nodes (a delta: one node, p = 0, T = spectatorEnergy)
   std::vector<double> energy;         ///< E (MeV)
   std::vector<std::vector<double>> rho;  ///< [E][node] p_xA a / hbar c
+  /// "pw" (the plane-wave vertex) or "dw" (vertexModel=dw, ThmDwVertex.h).
+  /// For dw, m2 is the DW vertex averaged over the nodes the DW vertex uses
+  /// (the reachable part of the window at each E), m2qf the DW vertex at the
+  /// spectatorAngle direction, and the nodes are per energy:
+  std::string model = "pw";
+  std::vector<std::vector<double>> dwQ, dwWeight;  ///< [E][node] q (MeV/c), weight
+  std::vector<double> dwQDelta, dwPDelta;          ///< spectatorAngle node: q (MeV/c), p (fm^-1)
   struct Level {
     int level = 0;          ///< 1-based in the J group
     double boundary = 0.0;  ///< Re of the vertex boundary B used for this level
     std::vector<double> m2;   ///< <|M_l|^2> over the window, on the grid
     std::vector<double> m2qf; ///< |M_l|^2 at p_s = 0 (quasi-free), on the grid
+    /// vertexModel=dw: the plane-wave |M_l|^2 at the spectatorAngle node's
+    /// p = |k_aA - alpha k_sF| (the DW vertex without distortion); empty for pw.
+    std::vector<double> m2pw;
   };
   struct Channel {
     int jgroup = 0, channel = 0;  ///< 1-based

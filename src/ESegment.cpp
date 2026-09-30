@@ -1181,6 +1181,11 @@ void ESegment::SetThmDistortion(std::shared_ptr<const ThmDistortion> d) {
   for (EPoint &point : points_) point.SetThmDistortion(d.get());
 }
 
+void ESegment::SetThmDwVertex(std::shared_ptr<const ThmDwVertex> v) {
+  thmDwVertex_ = v;
+  for (EPoint &point : points_) point.SetThmDwVertex(v.get());
+}
+
 void ESegment::SetThmAngleWindow(std::shared_ptr<const ThmAngleWindow> w) {
   thmAngle_ = w;
   for (EPoint &point : points_) point.SetThmAngleWindow(w.get());

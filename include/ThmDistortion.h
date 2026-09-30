@@ -128,6 +128,14 @@ class ThmDistortion {
 
   /// Sets up everything and fills the grid on [eLo, eHi] (MeV).  "" or what is wrong.
   std::string Build(const ThmExperiment &x, const Kinematics &k, double eLo, double eHi, double eRefDefault);
+  /// The settings, kinematics, channels, bound state and radial step h (as Build
+  /// uses them) without the grid of R: what the DW vertex (ThmDwVertex.h)
+  /// shares.  eLo is the lowest energy (the largest k_sF).  "" or what is wrong.
+  std::string Setup(const ThmExperiment &x, const Kinematics &k, double eLo);
+  /// The s-x bound state phi(r) as Build tabulates it (0 below rmin).
+  double Phi(double r) const;
+  /// Sum of the Woods-Saxon depths of a channel (0 unless WOODS_SAXON), MeV.
+  static double Depth(const Channel &c);
   /// Direct evaluation at E (not the grid).
   Point Evaluate(double energy) const;
   /// rho(E) as R uses it, from a Point.
@@ -141,11 +149,16 @@ class ThmDistortion {
   double Weight(double energy, bool *outside = nullptr) const;
   /// Kinematics at E only (E_sF > 0, eta_sF, a reachable lab angle): "" or what is wrong.
   std::string CheckEnergy(double energy) const;
+  /// cos of the angle between k_sF and k_aA at the spectator direction of
+  /// spectatorAngle= (Evaluate), for the s + F wave number ksf (fm^-1).  Sets
+  /// the spectator c.m. angle to the beam (deg) and whether a lab angle was
+  /// beyond reach (the largest reachable one is used) when asked.
+  double SpectatorCos(double ksf, double *thetaCm = nullptr, bool *clamped = nullptr) const;
   /// E_sF(E) = E_aA - B - E.
   double EsF(double energy) const { return eAA - kin.bind - energy; }
 
- private:
-  /// u_l of channel c on the grid r_j = j step, j = 0..nStore-1; false if it fails.
+  /// u_l of channel c on the grid r_j = j step, j = 0..nStore-1 (Numerov from
+  /// the origin, normalized to F_l + T_l H_l^+); false if it fails.
   bool Wave(const Channel &c, int l, double step, int nStore, std::vector<complex> &u) const;
 };
 

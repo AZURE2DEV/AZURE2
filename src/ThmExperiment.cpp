@@ -326,11 +326,18 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
         why = "theta='" + value +
               "': expected all or thmin-thmax, the c.m. angles of the exit pair relative to p_xA in "
               "degrees, 0 <= thmin <= thmax <= 180";
+    } else if (key == "vertexModel") {
+      if (value == "pw")
+        work.vertexDW = false;
+      else if (value == "dw")
+        work.vertexDW = true;
+      else
+        why = "vertexModel='" + value + "': expected pw or dw";
     } else {
       why = "unknown key '" + key +
             "' (keys: segments, background, beam, target, spectator, Ebeam, lineshape, ps, psNodes, "
             "distortion, opticalAA, opticalSF, spectatorAngle, distortionRef, distortionRatio, boundState, "
-            "theta)";
+            "theta, vertexModel)";
     }
     if (!why.empty()) return where + why;
     work.keys.push_back(key);
@@ -367,6 +374,21 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
     for (const char *key : {"spectatorAngle", "distortionRef", "distortionRatio", "boundState"})
       if (has(key) && !computed)
         return where + key + "= needs distortion=coulomb or distortion=optical";
+    if (x.vertexDW) {
+      if (!computed)
+        return where + "vertexModel=dw builds the vertex from the distorted waves of a + A and s + F: it needs "
+                       "distortion=coulomb or distortion=optical (and the kinematics)";
+      for (const char *key : {"distortionRef", "distortionRatio"})
+        if (has(key))
+          return where + key + "= belongs to the distortion factor R(E), which vertexModel=dw replaces (R is "
+                               "not applied; the DW vertex carries the energy dependence)";
+      if (x.psKind != ThmExperiment::PS_DELTA && has("spectatorAngle"))
+        return where + "with vertexModel=dw a ps window sets the spectator direction at every node; "
+                       "spectatorAngle= applies without a window only";
+      if (x.hasTheta)
+        return where + "theta= (fixed-angle observable) is not available with vertexModel=dw: the distorted "
+                       "source has every m_l about p_xA, which the fixed-angle sum does not carry";
+    }
     for (int k : x.segments) {
       auto it = owner.find(k);
       if (it != owner.end()) {

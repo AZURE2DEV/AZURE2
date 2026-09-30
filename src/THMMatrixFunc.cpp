@@ -12,6 +12,7 @@
 #include "ShftFunc.h"
 #include "ThmLineshape.h"
 #include "ThmDistortion.h"
+#include "ThmDwVertex.h"
 #include "ThmAngular.h"
 #include <algorithm>
 #include <cmath>
@@ -104,7 +105,22 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
   }
 
   const ThmSpectatorWindow *window = point->GetThmSpectatorWindow();
-  const int numNodes = window ? point->NumThmPsNodes() : 0;
+  int numNodes = window ? point->NumThmPsNodes() : 0;
+
+  // Distorted-wave entrance vertex (vertexModel=dw, ThmDwVertex.h): per node
+  // (one, or the reachable ps window at this energy) and entrance l, two
+  // incoherent components M^(k)(B) = a_k (B - 1) - d_k replace M_l.
+  const ThmDwVertex *dw = point->GetThmDwVertex();
+  ThmDwVertex::At dwAt;
+  if (dw) {
+    dw->Evaluate(point->GetCMEnergy(), dwAt);
+    if (dwAt.outside && !dw->warned.exchange(true))
+      configure().outStream << "WARNING: <thm> experiment[" << dw->experiment
+                            << "]: the DW vertex is evaluated at E = " << point->GetCMEnergy()
+                            << " MeV, outside its grid; the end value is used there (reported once)." << std::endl;
+    window = nullptr;
+    numNodes = dwAt.nodes;
+  }
 
   // Angular window of the exit pair (theta=thmin-thmax; ThmAngular.h): at a
   // fixed angle the J^pi groups and the entrance l of one channel spin
@@ -182,8 +198,13 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
       for (int ch = 1; ch <= numChannels; ch++) {
         AChannel *c = jg->GetChannel(ch);
         if (c->GetPairNum() != aa) continue;
-        std::vector<complex> &vertex = vbys[std::make_pair(c->GetS(), coherentL ? 0 : c->GetL())];
-        if (vertex.empty()) vertex.assign(numLevels + 1, complex(0.0, 0.0));
+        // Buckets: (s, l), or (s, 0) for entranceL=coherent; with the DW vertex
+        // (s, 2 l + k), k = 0, 1 its two components.
+        std::vector<complex> *pwVertex = nullptr;
+        if (!dw) {
+          pwVertex = &vbys[std::make_pair(c->GetS(), coherentL ? 0 : c->GetL())];
+          if (pwVertex->empty()) pwVertex->assign(numLevels + 1, complex(0.0, 0.0));
+        }
         complex onShellL = point->GetLoElement(j, ch) + c->GetBoundaryCondition();
         // `constant`: S_c at the lowest level of the J group, whatever the order
         // of the levels in the file (the channel boundary constant of the
@@ -201,6 +222,29 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
           constantB = ShiftAtLevelEnergy(compound()->GetPair(aa), c->GetL(), eMin,
                                          !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC));
         }
+        if (dw) {
+          // Two components per (s, l): buckets 2 l + k.
+          const int li = dw->LIndex(c->GetL());
+          std::vector<complex> &vertex1 = vbys[std::make_pair(c->GetS(), 2 * c->GetL() + 1)];
+          if (vertex1.empty()) vertex1.assign(numLevels + 1, complex(0.0, 0.0));
+          std::vector<complex> &vertex0 = vbys[std::make_pair(c->GetS(), 2 * c->GetL())];
+          if (vertex0.empty()) vertex0.assign(numLevels + 1, complex(0.0, 0.0));
+          if (li < 0) continue;
+          const complex *ak = &dwAt.a[((size_t)pass * dwAt.nl + li) * 2];
+          const complex *dk = &dwAt.d[((size_t)pass * dwAt.nl + li) * 2];
+          for (int la = 1; la <= numLevels; la++) {
+            ALevel *level = jg->GetLevel(la);
+            if (!level->IsInRMatrix()) continue;
+            complex boundary = onShell ? onShellL
+                               : constantVertex ? constantB
+                               : complex(perLevel ? level->GetShiftFunction(ch)
+                                                  : c->GetBoundaryCondition(), 0.0);
+            double g = level->GetFitGamma(ch);
+            vertex0[la] += g * (ak[0] * (boundary - 1.0) - dk[0]);
+            vertex1[la] += g * (ak[1] * (boundary - 1.0) - dk[1]);
+          }
+          continue;
+        }
         for (int la = 1; la <= numLevels; la++) {
           ALevel *level = jg->GetLevel(la);
           if (!level->IsInRMatrix()) continue;
@@ -208,8 +252,8 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
                              : constantVertex ? constantB
                              : complex(perLevel ? level->GetShiftFunction(ch)
                                                 : c->GetBoundaryCondition(), 0.0);
-          vertex[la] += level->GetFitGamma(ch) * (node < 0 ? point->GetThmFormFactor(j, ch, boundary)
-                                                           : point->GetThmFormFactor(j, ch, boundary, node));
+          (*pwVertex)[la] += level->GetFitGamma(ch) * (node < 0 ? point->GetThmFormFactor(j, ch, boundary)
+                                                                : point->GetThmFormFactor(j, ch, boundary, node));
         }
       }
 
@@ -259,7 +303,9 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
           }
         }
         if (angle) continue;
-        if (node < 0)
+        if (dw)
+          sigma += dwAt.weight[pass] * (spinWeight * fluxFactor * 2.0 * pex * term);
+        else if (node < 0)
           sigma += spinWeight * fluxFactor * 2.0 * pex * term;
         else
           sigma += window->weight[node] * (spinWeight * fluxFactor * 2.0 * pex * term);

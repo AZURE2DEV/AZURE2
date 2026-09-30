@@ -73,6 +73,7 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   thm_lineshape_ = parent->GetThmLineshape();
   thm_window_ = parent->GetThmSpectatorWindow();
   thm_distortion_ = parent->GetThmDistortion();
+  thm_dw_ = parent->GetThmDwVertex();
   thm_angle_ = parent->GetThmAngleWindow();
   is_ang_dist_ = parent->IsAngularDist();
   max_ang_dist_order_ = parent->GetMaxAngDistOrder();
@@ -123,6 +124,7 @@ EPoint::EPoint(double angle, double energy, ESegment *parent) {
   thm_lineshape_ = parent->GetThmLineshape();
   thm_window_ = parent->GetThmSpectatorWindow();
   thm_distortion_ = parent->GetThmDistortion();
+  thm_dw_ = parent->GetThmDwVertex();
   thm_angle_ = parent->GetThmAngleWindow();
   is_ang_dist_ = parent->IsAngularDist();
   max_ang_dist_order_ = parent->GetMaxAngDistOrder();
@@ -1945,6 +1947,11 @@ void EPoint::SetThmSpectatorWindow(const ThmSpectatorWindow *w) {
 void EPoint::SetThmDistortion(const ThmDistortion *d) {
   thm_distortion_ = d;
   for (EPoint &sub : integrationPoints_) sub.thm_distortion_ = d;
+}
+
+void EPoint::SetThmDwVertex(const ThmDwVertex *v) {
+  thm_dw_ = v;
+  for (EPoint &sub : integrationPoints_) sub.thm_dw_ = v;
 }
 
 void EPoint::SetThmAngleWindow(const ThmAngleWindow *w) {

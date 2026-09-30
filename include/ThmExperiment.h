@@ -90,6 +90,13 @@ struct ThmExperiment {
   bool boundYukawa = false;       ///< boundState=yukawa (default whittaker)
   double boundRmin = 0.0;         ///< boundState=...:rmin (fm)
   /*!
+   * Entrance vertex (`vertexModel=`, ThmDwVertex.h): pw (default) the
+   * plane-wave M_l of the first section, dw the surface term of the prior-form
+   * DWBA with the experiment's distorted waves (distortion=coulomb|optical),
+   * which then replaces R(E) (not applied).
+   */
+  bool vertexDW = false;
+  /*!
    * Angular window of the exit pair (`theta=`, ThmAngular.h): the model of
    * every segment is the HOES dsigma/dOmega averaged over theta_cm in
    * [thetaMin, thetaMax] (degrees, c.m. of the exit pair relative to p_xA)
@@ -111,7 +118,8 @@ struct ThmExperiment {
  * (delta | hulthen:pmin-pmax | hulthen:a,b:pmin-pmax | gauss:FWHM:pmin-pmax |
  * table:file), psNodes, distortion (none | coulomb | optical | table:file),
  * opticalAA, opticalSF, spectatorAngle, distortionRef, distortionRatio,
- * boundState, theta (all | thmin-thmax, degrees, 0 <= thmin <= thmax <= 180).
+ * boundState, theta (all | thmin-thmax, degrees, 0 <= thmin <= thmax <= 180),
+ * vertexModel (pw | dw).
  */
 std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExperiment> &experiments);
 

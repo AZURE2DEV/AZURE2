@@ -207,6 +207,27 @@ std::string ThmDistortion::CheckEnergy(double energy) const {
   return "";
 }
 
+double ThmDistortion::SpectatorCos(double ksf, double *thetaCm, bool *clamped) const {
+  // Spectator direction in the c.m. (angle to the beam) and x = cos(k_sF, k_aA).
+  double theta = 0.0;
+  if (angleKind == QF) {
+    theta = kin.horseIsBeam ? 0.0 : M_PI;
+  } else if (angleKind == CM) {
+    theta = angle * M_PI / 180.0;
+  } else {
+    double vs = hbarc * ksf / (kin.ms * uconv);
+    double tl = angle * M_PI / 180.0;
+    double s = vcm / vs * std::sin(tl);
+    if (s > 1.0) {
+      s = 1.0;
+      if (clamped) *clamped = true;
+    }
+    theta = tl + std::asin(s);
+  }
+  if (thetaCm) *thetaCm = theta * 180.0 / M_PI;
+  return (kin.horseIsBeam ? 1.0 : -1.0) * std::cos(theta);
+}
+
 ThmDistortion::Point ThmDistortion::Evaluate(double energy) const {
   Point p;
   p.energy = energy;
@@ -217,24 +238,7 @@ ThmDistortion::Point ThmDistortion::Evaluate(double energy) const {
   }
   p.ksf = std::sqrt(2.0 * sf.mu * p.esf) / hbarc;
   p.etasf = sf.kind == Channel::PLANE ? 0.0 : kin.Zs * (kin.Zx + kin.ZA) * fstruc * sf.mu / (hbarc * p.ksf);
-  // Spectator direction in the c.m. (angle to the beam) and x = cos(k_sF, k_aA).
-  double theta = 0.0;
-  if (angleKind == QF) {
-    theta = kin.horseIsBeam ? 0.0 : M_PI;
-  } else if (angleKind == CM) {
-    theta = angle * M_PI / 180.0;
-  } else {
-    double vs = hbarc * p.ksf / (kin.ms * uconv);
-    double tl = angle * M_PI / 180.0;
-    double s = vcm / vs * std::sin(tl);
-    if (s > 1.0) {
-      s = 1.0;
-      p.angleClamped = true;
-    }
-    theta = tl + std::asin(s);
-  }
-  p.thetaCm = theta * 180.0 / M_PI;
-  p.x = (kin.horseIsBeam ? 1.0 : -1.0) * std::cos(theta);
+  p.x = SpectatorCos(p.ksf, &p.thetaCm, &p.angleClamped);
   const double kb = beta * aa.k;
   p.q = std::sqrt(std::max(0.0, p.ksf * p.ksf + kb * kb - 2.0 * p.ksf * kb * p.x));
   // Plane-wave limit: the Fourier transform of phi at q.
@@ -292,8 +296,7 @@ ThmDistortion::Point ThmDistortion::Evaluate(double energy) const {
   return p;
 }
 
-std::string ThmDistortion::Build(const ThmExperiment &x, const Kinematics &k, double eLo, double eHi,
-                                 double eRefDefault) {
+std::string ThmDistortion::Setup(const ThmExperiment &x, const Kinematics &k, double eLo) {
   experiment = x.name;
   kin = k;
   kind = x.distortion == ThmExperiment::DIST_OPTICAL ? OPTICAL : COULOMB;
@@ -325,11 +328,8 @@ std::string ThmDistortion::Build(const ThmExperiment &x, const Kinematics &k, do
   aa.eta = aa.kind == Channel::PLANE ? 0.0 : aa.Z1 * aa.Z2 * fstruc * aa.mu / (hbarc * aa.k);
 
   // Radial step: h = 0.02 fm, or k_local h <= 0.1 in both channels.
-  auto depth = [](const Channel &c) {
-    return c.kind == Channel::WOODS_SAXON ? std::fabs(c.p[0]) + std::fabs(c.p[3]) + std::fabs(c.p[6]) : 0.0;
-  };
-  double kSF = std::sqrt(2.0 * sf.mu * (std::max(EsF(eLo), 0.0) + depth(sf))) / hbarc;
-  double kAA = std::sqrt(2.0 * aa.mu * (eAA + depth(aa))) / hbarc;
+  double kSF = std::sqrt(2.0 * sf.mu * (std::max(EsF(eLo), 0.0) + Depth(sf))) / hbarc;
+  double kAA = std::sqrt(2.0 * aa.mu * (eAA + Depth(aa))) / hbarc;
   h = std::min(0.02, std::min(0.1 / std::max(kSF, 1.0e-6), 0.1 / std::max(beta * kAA, 1.0e-6)));
   h = std::min(h, 0.2 / kappa);
   rmin = x.boundRmin;
@@ -338,6 +338,27 @@ std::string ThmDistortion::Build(const ThmExperiment &x, const Kinematics &k, do
     i0 = (int)std::ceil(rmin / h - 1.0e-9);
     h = rmin / i0;
   }
+  return "";
+}
+
+double ThmDistortion::Depth(const Channel &c) {
+  return c.kind == Channel::WOODS_SAXON ? std::fabs(c.p[0]) + std::fabs(c.p[3]) + std::fabs(c.p[6]) : 0.0;
+}
+
+double ThmDistortion::Phi(double r) const {
+  if (!(r > 0.0) || r < rmin - 1.0e-12) return 0.0;
+  if (yukawa || etaB == 0.0) return std::exp(-kappa * r) / r;
+  gsl_error_handler_t *old = gsl_set_error_handler_off();
+  gsl_sf_result U;
+  int status = gsl_sf_hyperg_U_e(1.0 + etaB, 2.0, 2.0 * kappa * r, &U);
+  gsl_set_error_handler(old);
+  return status == GSL_SUCCESS || status == GSL_EUNDRFLW ? 2.0 * kappa * std::exp(-kappa * r) * U.val : 0.0;
+}
+
+std::string ThmDistortion::Build(const ThmExperiment &x, const Kinematics &k, double eLo, double eHi,
+                                 double eRefDefault) {
+  std::string setup = Setup(x, k, eLo);
+  if (!setup.empty()) return setup;
   const double rEnd = rmin + 50.0 / kappa;
   int intervals = (int)std::ceil((rEnd - rmin) / h);
   if (intervals % 2) intervals++;
