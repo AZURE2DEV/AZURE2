@@ -1302,26 +1302,29 @@ and its **angle column is centre-of-mass**, not lab.
   quickest scalar check that a run succeeded.**
 - `param.par` initial / `param.sav` best-fit formal params (reload as the
   external parameter file); `parameters.out` physical/observable params.
-- `param.fit` is rewritten while MINUIT runs, but **its R-matrix entries stay at
-  the starting values** (its third column is 10 % of each value, a step size,
-  for fixed parameters too); only the segment norms/shifts in it are current.
-  It cannot be used to restart a fit whose levels were free: a restart built
-  from it (2026-09-29) started at 290,000 instead of the killed run's 26,646.
-  To save a long fit from a crash, restart from a *finished* fit's `param.sav`
-  or from the interim `parameters.out` (physical values, baked into `<levels>`
-  and verified with a mode-1 run). Taking only the `segment_*` lines from
-  `param.fit` is fine (used for a norms-only stage-1 fit handing over to stage 2).
-  How it is written: every 100th objective evaluation (`kOutputInterval`,
-  `AZURECalc::WriteIterationOutput`) rewrites `param.fit` *and* the
-  `AZUREOut_*`/`normalizations.out`/`parameters.out` files from the point being
-  evaluated **at that call** -- which may be a line-search or gradient probe, not
-  MIGRAD's best point -- while `param.fit`'s own R-matrix entries are the
-  unfitted input values (`FillMnParams` reads the level's input gamma). So the interim
-  output files are not the current best fit either, and the norms in them can be
-  a probe's: on 12C+alpha (2026-09) a restart built from `param.fit` gave 134,068
-  against a 123,501 plateau, and one written at the call where a crashed run
-  printed χ² = 8.5e40 held values giving 1.8e40. Verify any recovery with a
-  mode-1 calculate; if it doesn't reproduce the log's plateau, rerun instead.
+- `param.fit` is rewritten while MINUIT runs: every 100th objective evaluation
+  (`kOutputInterval`, `AZURECalc::WriteIterationOutput`) rewrites `param.fit`
+  *and* the `AZUREOut_*`/`normalizations.out`/`parameters.out` files from the
+  point being evaluated **at that call** -- which may be a line-search or
+  gradient probe, not MIGRAD's best point. Its third column is 10 % of each
+  value (a step size), not an error.
+  **Fixed 2026-09-30 (binaries built after that date):** until then `param.fit`'s
+  R-matrix entries (energies, widths) were the unfitted *input* values
+  (`CNuc::FillMnParams` reads the level's input gamma); only its norms/shifts
+  were current. A restart built from such a file started far off (13C+alpha
+  2026-09-29: 290,000 vs the killed run's 26,646; 12C+alpha: 134,068 vs a
+  123,501 plateau). Now the whole file is the evaluated point: on
+  `tests/identical_pp_res` a mode-1 run from `param.fit` reproduces the log's
+  chi2 at the autosave call exactly (103.129; the old binary gave 120, the
+  starting value). Runs started on an older binary still write the old form.
+  Because the point can be a probe, a recovery can still land on a bad one (a
+  crashed 12C+alpha run's last autosave was at the call that printed chi2 =
+  8.5e40): check the log's chi2 at the last multiple of 100, restart from
+  `param.fit` only if that value is on the plateau, and verify with a mode-1
+  calculate. Otherwise restart from a *finished* fit's `param.sav`, or from the
+  interim `parameters.out` (physical values, baked into `<levels>`, verified
+  with a mode-1 run). Taking only the `segment_*` lines from `param.fit` has
+  always been fine (norms-only stage-1 fit handing over to stage 2).
 - **A missing `checks/` directory stops a CLI run before it starts**
   ("Could not find checks directory: checks/"); the job still ends normally and
   writes no output. Create it in every new run directory.
