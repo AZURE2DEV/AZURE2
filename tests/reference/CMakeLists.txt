@@ -42,3 +42,13 @@ add_executable(thm_fixed_angle_test thm_fixed_angle_test.cpp)
 target_link_libraries(thm_fixed_angle_test PRIVATE AZURE2Core)
 
 add_test(NAME thm_fixed_angle COMMAND thm_fixed_angle_test)
+
+# Reference calculation for the distorted-wave THM entrance vertex
+# (ThmDwVertex): its plane-wave limit against the plane-wave vertex, and the
+# Coulomb-distorted Gram matrix against a direct quadrature of the source
+# (thm_dw_vertex_reference.py).
+add_executable(thm_dw_vertex_test thm_dw_vertex_test.cpp)
+target_link_libraries(thm_dw_vertex_test PRIVATE AZURE2Core)
+
+add_test(NAME thm_dw_vertex COMMAND thm_dw_vertex_test)
+set_tests_properties(thm_dw_vertex PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

@@ -136,3 +136,26 @@ exit θ = 0 is the Clebsch–Gordan-weighted coherent sum, not the
 `entranceL=coherent` recipe; no odd L and symmetry about 90° for identical
 bosons, asymmetry for the spin-1/2 case.
 
+
+## thm_dw_vertex_test
+
+The distorted-wave THM entrance vertex (`src/ThmDwVertex.cpp`,
+docs/source/theory/thm_implementation.rst, "Distorted-wave entrance vertex"):
+the surface term (B − 1) S_lm(a) − a S′_lm(a) of the source
+S(r) = ∫d³u φ(u) χ⁻*_sF(αr + u) χ⁺_aA(r + βu), summed over m as the Gram matrix
+G of (S_lm(a), a S′_lm(a))/4πφ̃(q). The engine reduces it to partial-wave
+amplitudes h^l_{Ls La}; `thm_dw_vertex_reference.py` does not: it integrates
+S(r) on a three-dimensional grid around r = a with the closed-form Coulomb wave
+e^{−πη/2}Γ(1+iη)e^{ikz}₁F₁(−iη, 1, ik(R − z)) (mpmath, splined in R − z),
+projects on Y_l0 and differentiates by five points (about ten minutes; two
+resolutions, converged to 3e-8).
+
+What it checks: plane waves in both channels give the plane-wave vertex
+M_l = (B − 1)j_l(pa) − pa j_l′(pa) at p = |k_aA − αk_sF| -- the Gram entries
+to 1e-9 and the ratios |M_l/M_0|² for real and complex B to 1e-8 -- for
+19F(d,n) at the quasi-free direction, 12C(14N,d) at 40° (every m enters) and
+a Hulthén window (nodes, weights, q); point Coulomb in d + 19F at 55 MeV
+(l = 0 at 324 keV, l = 1 at 213 keV, a = 5.136 fm) against the direct
+quadrature to 2e-7 of the largest entry; the Clebsch-Gordan coefficients
+against GSL and in orthonormality at L = 60; the Cholesky components against
+c†Gc; the interpolation between grid nodes.

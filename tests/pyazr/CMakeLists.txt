@@ -106,3 +106,11 @@ add_test(NAME pyazr_thm_fixed_angle
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_fixed_angle_test.py)
 set_tests_properties(pyazr_thm_fixed_angle PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Distorted-wave entrance vertex (experiment[...] vertexModel=dw): AzrModel and
+# its refusals, CLI == pyazr, thm_vertex (plane-wave limit), model ratio ==
+# vertex ratio.
+add_test(NAME pyazr_thm_dw_vertex
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_dw_vertex_test.py)
+set_tests_properties(pyazr_thm_dw_vertex PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
