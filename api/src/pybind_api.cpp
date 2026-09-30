@@ -487,6 +487,16 @@ class Session {
     py::list rho;
     for (const std::vector<double> &row : r.rho) rho.append(to_array(row));
     d["rho"] = rho;
+    d["model"] = r.model;
+    if (r.model == "dw") {
+      py::list q, w;
+      for (const std::vector<double> &row : r.dwQ) q.append(to_array(row));
+      for (const std::vector<double> &row : r.dwWeight) w.append(to_array(row));
+      d["dw_q"] = q;
+      d["dw_weights"] = w;
+      d["dw_q_delta"] = to_array(r.dwQDelta);
+      d["dw_p_delta"] = to_array(r.dwPDelta);
+    }
     py::list channels;
     for (const ThmVertexReport::Channel &c : r.channels) {
       py::dict cd;
@@ -503,6 +513,7 @@ class Session {
         ld["boundary"] = l.boundary;
         ld["M2"] = to_array(l.m2);
         ld["M2_qf"] = to_array(l.m2qf);
+        if (!l.m2pw.empty()) ld["M2_pw"] = to_array(l.m2pw);
         levels.append(ld);
       }
       cd["levels"] = levels;

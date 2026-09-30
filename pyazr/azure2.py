@@ -1046,6 +1046,20 @@ class azure2:
                       NaN for ``vertex=onshell``, where it is S(E) + iP(E)),
                       ``M2`` (<|M_l|^2> over the window) and ``M2_qf``
                       (|M_l|^2 at p_s = 0) on the grid.
+        ``model``     ``"pw"``, or ``"dw"`` for an experiment with
+                      ``vertexModel=dw``: then the vertex is the surface term of
+                      the prior-form DWBA (docs, "Distorted-wave entrance
+                      vertex"), ``M2`` is its average over the nodes the engine
+                      uses (the reachable part of the ``ps`` window at each E, or
+                      the one ``spectatorAngle`` node), ``M2_qf`` its value at
+                      the ``spectatorAngle`` direction and ``M2_pw`` the
+                      plane-wave |M_l(p)|^2 there, p = |k_aA - alpha k_sF| (what
+                      the DW vertex becomes without distortion); ``rho`` is p a
+                      at each node, ``dw_q``/``dw_weights`` the nodes (q in MeV/c)
+                      and weights per energy, ``dw_q_delta`` (MeV/c) and
+                      ``dw_p_delta`` (fm^-1) those of the ``spectatorAngle``
+                      node.  ``p_s``, ``weights``, ``T_s`` stay the nominal
+                      window of the line.
 
         Raises the engine error if the experiment is unknown.
         """

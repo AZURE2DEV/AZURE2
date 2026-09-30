@@ -109,7 +109,7 @@ _THM_BACKGROUNDS = ("none", "const", "linear", "quadratic")
 _THM_EXPERIMENT_KEYS = ("segments", "background", "beam", "target", "spectator", "Ebeam",
                         "lineshape", "ps", "psNodes", "distortion", "opticalAA", "opticalSF",
                         "spectatorAngle", "distortionRef", "distortionRatio", "boundState",
-                        "theta")
+                        "theta", "vertexModel")
 _THM_DISTORTION_DETAIL = ("spectatorAngle", "distortionRef", "distortionRatio", "boundState")
 _THM_NAME = re.compile(r"[A-Za-z0-9_.+-]+")
 _THM_WHOLE_INT = re.compile(r"[+-]?\d+")
@@ -349,11 +349,16 @@ def _thm_parse_experiment(line, experiments):
                                  "the c.m. angles of the exit pair relative to p_xA in "
                                  "degrees, 0 <= thmin <= thmax <= 180")
             work["theta"] = value
+        elif key == "vertexModel":
+            if value not in ("pw", "dw"):
+                raise ValueError(where + f"vertexModel='{value}': expected pw or dw")
+            work["vertexModel"] = value
         else:
             raise ValueError(where + f"unknown key '{key}' (keys: segments, "
                              "background, beam, target, spectator, Ebeam, lineshape, ps, "
                              "psNodes, distortion, opticalAA, opticalSF, spectatorAngle, "
-                             "distortionRef, distortionRatio, boundState, theta)")
+                             "distortionRef, distortionRatio, boundState, theta, "
+                             "vertexModel)")
         work["keys"].append(key)
     experiments[name] = work
 
@@ -389,6 +394,27 @@ def _thm_check_experiments(experiments):
             if key in x["keys"] and not computed:
                 raise ValueError(where + f"{key}= needs distortion=coulomb or "
                                  "distortion=optical")
+        if x.get("vertexModel", "pw") == "dw":
+            if not computed:
+                raise ValueError(where + "vertexModel=dw builds the vertex from the "
+                                 "distorted waves of a + A and s + F: it needs "
+                                 "distortion=coulomb or distortion=optical (and the "
+                                 "kinematics)")
+            for key in ("distortionRef", "distortionRatio"):
+                if key in x["keys"]:
+                    raise ValueError(where + f"{key}= belongs to the distortion factor "
+                                     "R(E), which vertexModel=dw replaces (R is not "
+                                     "applied; the DW vertex carries the energy "
+                                     "dependence)")
+            if x.get("ps", "delta") != "delta" and "spectatorAngle" in x["keys"]:
+                raise ValueError(where + "with vertexModel=dw a ps window sets the "
+                                 "spectator direction at every node; spectatorAngle= "
+                                 "applies without a window only")
+            if x.get("theta", "all") != "all":
+                raise ValueError(where + "theta= (fixed-angle observable) is not "
+                                 "available with vertexModel=dw: the distorted source has "
+                                 "every m_l about p_xA, which the fixed-angle sum does "
+                                 "not carry")
         for k in x["segments"]:
             if k in owner:
                 raise ValueError(where + f"segment {k} is already in "
@@ -415,6 +441,8 @@ def _thm_experiment_record(x):
             out[key] = x[key]
     if "theta" in x:
         out["theta"] = x["theta"]
+    if "vertexModel" in x:
+        out["vertexModel"] = x["vertexModel"]
     return out
 
 
@@ -439,6 +467,8 @@ def _thm_experiment_line(name, rec):
             parts.append(f"{key}={rec[key]}")
     if "theta" in rec:
         parts.append(f"theta={rec['theta']}")
+    if "vertexModel" in rec:
+        parts.append(f"vertexModel={rec['vertexModel']}")
     return " ".join(parts)
 
 
@@ -2051,8 +2081,39 @@ class AzrModel:
                     raise ValueError(f"<thm> experiment[{name}]: theta= computes the "
                                      "interference of the entrance partial waves exactly; "
                                      "entranceL=coherent cannot be combined with it.")
+        self._thm_check_dw_globals(s)
         self._thm_write(s)
         return self
+
+    def _thm_check_dw_globals(self, s, only=None):
+        """The global options a vertexModel=dw experiment refuses (EData::
+        BuildThmGroups): coulombIntegral=1, entranceL=coherent, a spectator
+        energy for its entrance pair."""
+        seg_lines = self._block_lines("segmentsData") or []
+        for name, x in s["experiments"].items():
+            if x.get("vertexModel", "pw") != "dw" or (only is not None and name != only):
+                continue
+            where = f"<thm> experiment[{name}]: "
+            if s["coulombIntegral"]:
+                raise ValueError(where + "vertexModel=dw is the surface term of the DWBA "
+                                 "vertex; its external part (the three-body remnant outside "
+                                 "the channel radius, whose plane-wave limit is the Coulomb "
+                                 "term C_l) is not computed, so it cannot be combined with "
+                                 "coulombIntegral=1.")
+            if s["entranceL"] == "coherent":
+                raise ValueError(where + "vertexModel=dw sums the entrance partial waves "
+                                 "(and their projections) incoherently, as the "
+                                 "angle-integrated observable requires; entranceL=coherent "
+                                 "cannot be combined with it.")
+            for k in x.get("segments", []):
+                if k > len(seg_lines):
+                    continue
+                tok = seg_lines[k - 1].split()
+                key = int(float(tok[1])) if len(tok) > 1 and _isnum(tok[1]) else None
+                if s["spectatorEnergy"] != 0.0 or s["spectatorByPair"].get(key, 0.0) != 0.0:
+                    raise ValueError(where + "with vertexModel=dw the spectator kinematics "
+                                     "come from Ebeam and the spectator direction; "
+                                     f"spectatorEnergy for entrance pair {key} must be 0.")
 
     def set_thm_weight(self, segment, path, test=False):
         """``weight[<segment>]=<path>`` (``weightTest`` with ``test=True``): the
@@ -2136,7 +2197,8 @@ class AzrModel:
                            target=None, spectator=None, Ebeam=None, lineshape=False,
                            ps=None, psNodes=None, distortion=None, opticalAA=None,
                            opticalSF=None, spectatorAngle=None, distortionRef=None,
-                           distortionRatio=None, boundState=None, theta=None):
+                           distortionRatio=None, boundState=None, theta=None,
+                           vertexModel=None):
         """Define (or replace) ``experiment[<name>]`` in the ``<thm>`` block.
 
         ``segments`` is a list of ``<segmentsData>`` line numbers (or the
@@ -2177,6 +2239,14 @@ class AzrModel:
         (0 <= min <= max <= 180; min == max is one angle); ``"all"`` (or None)
         keeps the angle-integrated cross section.  0-180 gives it / 4 pi.  Not
         with ``entranceL=coherent``.
+        ``vertexModel`` is ``"pw"`` (the plane-wave vertex M_l, the default) or
+        ``"dw"``: the entrance vertex of every segment becomes the surface term
+        of the prior-form DWBA built from the experiment's distorted waves
+        (needs ``distortion="coulomb"`` or ``"optical"``; R(E) is then not
+        applied, so ``distortionRef``/``distortionRatio`` are refused, as are
+        ``theta``, ``spectatorAngle`` together with a ``ps`` window,
+        ``coulombIntegral=1``, ``entranceL=coherent`` and a spectator energy
+        for the entrance pair; see :meth:`pyazr.azure2.azure2.thm_vertex`).
         The record replaces every
         earlier line of that name with one line; other lines stay as they
         are.  Raises ValueError (model unchanged) for anything AZURE2 would
@@ -2217,6 +2287,8 @@ class AzrModel:
                 lo, hi = theta
                 theta = f"{_thm_plain_number(lo)}-{_thm_plain_number(hi)}"
             text += f" theta={theta}"
+        if vertexModel is not None:
+            text += f" vertexModel={vertexModel}"
         if any(c in text for c in "#\r\n"):
             raise ValueError(f"<thm> experiment[{name}]: a value cannot contain '#' "
                              "or a line break.")
@@ -2253,6 +2325,9 @@ class AzrModel:
                                      "spectatorEnergy both set the spectator motion of "
                                      f"entrance pair {key}; use one (ps=delta keeps "
                                      "spectatorEnergy).")
+        trial_settings = dict(s)
+        trial_settings["experiments"] = trial
+        self._thm_check_dw_globals(trial_settings, only=name)
         body = self._thm_body_without_experiment(name)
         body.append(_thm_experiment_line(name, rec))
         self._thm_set_body(body)
