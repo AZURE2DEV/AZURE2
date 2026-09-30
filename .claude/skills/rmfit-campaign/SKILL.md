@@ -1505,3 +1505,53 @@ before putting it in a job.
   segment's declared energy window with its data file (a segment's nominal `maxE` can be a leftover
   broad cut), and for tail-effect candidates call `Campaign.run_level_add(cand, half_width=2.5)` directly
   (`12C+a_onefile/9-8-26_rmfit_campaign/run_level_add_wide.py`).
+
+## 2026-09-30 — export refuses a model with a free width at exactly 0 (guard added)
+
+AZURE2 writes no parameter for a zero width, so a baked model re-read by the engine has one key fewer
+per zero and `bake()` rejects it ("different free-parameter set").  Seen on the merged 13C+α fit F
+(the low-energy session's `9-30-26_merged/export_fix.py` nudged zeros to 1e-6).  `engine.bake` now
+does that itself (`nudge_zero_widths`, logged; `tests/test_nudge_zero_widths.py`).
+
+## 2026-09-30 — what the 13C+α window campaigns taught about windowed fits (both sessions)
+
+Context: the high-Ex window (Ex 10.9–13.24) was fitted with the Ex ≤ 11.2 block frozen from the
+low-energy fit while that fit kept moving; DeBoer then asked for a MERGED fit (all data, levels ≥ 10 MeV
+free), driven by the low-energy session (`13C+a/9-30-26_merged*`).  Lessons, in the order they bit:
+
+- **Never refit frozen-block levels against window data alone.**  Freeing the six 10.9–11.2 levels in
+  the window gained 46k there (three widths shrank 3–7×), but pinned into the low-energy fit they cost
+  +159k frozen / +22k refitted, and the merged fit made them BROADER than either separate fit.  A
+  window-only "boundary polish" measures what the window wants, not what is true; the seam belongs to
+  a joint fit.  Corollary: a MeV-wide level at the window's low edge (the 2 MeV 7/2⁺ at 11.27) is a
+  block-mismatch absorber, not a resonance.
+- **A window model's background is not transferable.**  Poles/absorbers fitted with the low-energy data
+  absent (the 12.5 MeV poles, the 14 MeV 1/2⁻) put 18M of χ² into the low-energy data when both are
+  present; the merged seeds that worked (D2 → E → F: 403k → 394k → 386k) took the window's 22 physical
+  resonances and the low-energy model's own poles.  Hand over resonances, not background.
+- **One free-width background pole per J^π group, added and freed, nothing removed:** −16k on the
+  window (control-matched), and the missing 1/2⁺ pole held on the full data (−3.3k).  Replacing the
+  broad levels by poles alone (the first version of that test) started at 3.9M and was stopped at
+  DeBoer's request: "I don't think you are going to be able to replace the strength of the broad levels
+  with only background levels."  Groups with NO pole (here 1/2⁺, 5/2⁻, 7/2⁺, 9/2⁺) grow resonances into
+  background; check `cap_for`/pole coverage per group before a level search.
+- **Switching the objective (plain → scaled) needs its own polishes before any level test**: the control
+  alone moved 1,400 on the scaled objective and the first verdict was judged against a moving target.
+  Compute the per-data-set scales at a POLISHED plain baseline (a raw seed's scales over-forgive exactly
+  the sets a block mismatch hits), then polish ×2 under the new objective, then test.
+- **Second attempts at a feature after a bounded first level mostly come back `splits` or `marginal`**
+  (5 of 6 on 13C+α): the narrow structure saturates fast once the broad component is right.  Treat two
+  consecutive splits/marginals in a queue as the stop signal.
+- **Campaign copies:** `fanout/make_copy.sh` (repoint `structures.azr`), `os.path.realpath` for a copy
+  reached through a symlink, and an export in a copy is named by the copy's BASE (rm_… variant), not the
+  reaction, when the base is a variant — check the name before a downstream script looks for
+  `13C+a.azr`.  The rmfit reaction-name fallback also lets an export OVERWRITE the seed file.
+- **Cross-session data hand-over:** two sessions had different files under the same name
+  (`Cx_Azure2_NoFeed_Ge1_13Caa_1.txt` at 65.3° and at 80°) and the same data under different names
+  (`Cx_MANA_NoFeed_*` = `Cx_Azure2_NoFeed_*_clean`).  Compare values at common energies before merging;
+  never merge by file name.
+- **Merge-seed faults the low-energy session found (from its reports):** a double-counted total-cross-
+  section segment after merging shared files; the α₃-threshold spike at Ex 10.2132 in a summed n-total
+  (cut the point); cap-3 pole tails at the 5U data's 13.2 MeV edge; a 50 MeV pole needs far larger
+  reduced widths than a 13.5 MeV one for the same effect at 12–13 MeV (they moved their 13.0 poles to
+  13.5 and it worked).  Details in `13C+a/9-30-26_merged*/readme`.
