@@ -127,17 +127,22 @@ pipe. `tests/run_tests.sh` is the working reference.
 | 6 | MCMC Bayesian Sampling (`samples.mcmc`) |
 | 7 | Exit |
 
-Mode 2's Minuit2 fit (MIGRAD) has a **hard-coded cap of 50,000 iterations** —
-the run simply stops there regardless of whether it has actually converged.
-On a large model (hundreds of free parameters), a flat-looking plateau near
-iteration 50,000 is not proof of a true minimum; it may just be wherever the
-fit happened to be sitting when the cap cut it off, and small stepwise
-improvements (long flat stretches punctuated by discrete drops) can keep
-recurring throughout the whole run, including near the very end. Don't infer
-convergence from a plateau of a few hundred iterations — only trust an
-explicit MIGRAD convergence message, or accept the iteration-50,000 result as
-final-for-this-run while noting it may still improve with a further
-warm-started refit.
+Mode 2's Minuit2 fit (MIGRAD) is called as `migrad(50000)` (`AZUREMain.cpp`):
+**50,000 is MIGRAD's function-call budget (maxfcn), not an iteration cap.** The
+`Iteration: N` counter in the log is AZURE2's own count of objective
+evaluations (`AZURECalc.cpp`, printed every 10th call), and MIGRAD only checks
+its budget between its own steps, so runs overshoot it: 12C+alpha mode-2 fits
+with 300-650 free parameters logged 56k, 63k, 68k, 110k and 136k before
+stopping (2026-09). "The log reached ~50,000" therefore does not mean "the cap
+cut it off", and a run can keep going long after it has plateaued.
+On a large model (hundreds of free parameters), a flat-looking plateau is not
+proof of a true minimum, and small stepwise improvements (long flat stretches
+punctuated by discrete drops) can recur throughout the whole run, including
+near the very end. Don't infer convergence from a plateau of a few hundred
+evaluations — only trust an explicit MIGRAD convergence message, or accept the
+result as final-for-this-run while noting it may still improve with a further
+warm-started refit. A fit's results are written only when it ends: killing a
+long run (or a crash) loses it — see `param.fit` under Output files.
 
 Mode 5's numerical integration (GSL adaptive quadrature over the excitation
 curve) is unreliable for narrow resonances — the manual advises caution below
@@ -503,6 +508,25 @@ Rules that will bite you:
   check each pair's value is identical before trusting the mapping (11B+alpha,
   2026-09-26: the 7/2- level off took 279 names to 271; `energy_31` then named
   the next level).
+- **How the names are assigned (`CNuc::FillMnParams`):** `energy_<N>` counts
+  levels in **J-group order** -- J-groups in order of first appearance in
+  `<levels>`, then the group's levels in file order -- not in raw file order and
+  not by `levelID`. `width_<N>_<c>` is channel `c` of the J-group's channel
+  set (the same order as that level's channel lines). So adding a level shifts
+  the names of every later level in J-group order, exactly like removing one.
+- **Do not trust pyazr's own `m.parameters` names to equal `param.sav` names.**
+  On 12C+alpha (2026-09) pyazr's `energy_39` was the 14.72 MeV level while
+  `param.sav`'s `energy_39` was the 16.77 MeV one (pyazr's value was the `.azr`
+  seed, `param.sav` held the fit). Identify which physical level a `param.sav`
+  name is by (a) `parameters.out`, which lists `J = ... E_level = ...` blocks
+  in the same order, or (b) a one-line CLI probe: change that entry in a scratch
+  copy of the seed, run mode 1, and see which `E_level`/width line changed.
+- **After adding or removing a level, a plain copy of the old `param.sav` is
+  unsafe even as a starting point.** On 12C+alpha a new 3+ level's energy was
+  silently set to 40.0 MeV by a name that now belonged to a background pole
+  (calc-check 2.7e8 instead of ~7.7e5). Safe options: bake the fit into
+  `<levels>` before the structural edit and seed only the `segment_*` lines
+  afterwards, or remap by physical identity and verify every pair's value.
 
 **Removing a level: file-level vs runtime.** Two different tools:
 
@@ -672,6 +696,22 @@ Consequences, each rediscovered the hard way on the 11B+alpha archive:
 - **Plotting and the GUI.** The GUI's segment table shows the nominals; its plots
   come from `output/`. Data scaled "by the fit norm" must use the `.sav` value
   (`normalizations.out` prints it), not the `.azr` field.
+- **A norm or shift that is NOT varied comes from the `.azr` field; the `.sav`
+  value is ignored.** Fixed *level* parameters do take the `.sav` value; fixed
+  segment norms and shifts do not. To freeze norms at a fit's values (e.g. a
+  local refit of a few level parameters with everything else held), write the
+  fitted norm and shift into each segment's `dataNorm`/`energyShift` fields as
+  well as setting `varyNorm`/`varyShift` to 0 -- flipping the flags alone gave
+  204,302 instead of the fit's 126,366 on 12C+alpha (2026-09-30), with
+  `Total-Norm-Chi-Squared 0`. Fixed norms carry no penalty, so expect that line
+  to read 0 even when the data chi2 reproduces exactly.
+- **Freeing a previously fixed norm or shift starts it from whatever value is in
+  the file.** Check for legacy non-default values before freeing: on 12C+alpha
+  six segments carried a forgotten fixed `energyShift` of 1.0 MeV from an old
+  file conversion; freeing them started MIGRAD 50 sigma from centre (20 keV
+  prior) and the old `param.sav` carried the same stale value, so it has to be
+  reset in both places. The segment norms had also been fitted around the stale
+  shift (one 20x off its nominal) and needed re-seeding -- see "Verifying a run".
 
 ```python
 # nominal vs fitted, penalized segments only
@@ -1180,8 +1220,16 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
   matrix) wins with many channels and few levels; R-matrix (channel matrix)
   wins with many levels and few channels.
 - `<levels>` — one line **per channel of each level**, 31 fields matching
-  `NucLine` (`include/NucLine.h`); the file stores `2J`, `2S`, `2L` as integers.
-  Blank line between levels; `levelID` groups them.
+  `NucLine` (`include/NucLine.h`). **J is stored as J itself; the channel spin
+  and orbital angular momentum are stored doubled** (`2S`, `2L`). Blank line
+  between levels; `levelID` groups them. Token map (0-based, whitespace split),
+  confirmed against pyazr and `parameters.out` on 12C+alpha: `t0` J, `t1` parity,
+  `t2` level energy, `t3` energy-fixed flag, `t5` pair key (the file's pair key,
+  not pyazr's engine pair number), `t6` 2S, `t7` 2L, `t8` levelID, `t10`
+  channel-fixed flag, `t11` gamma (physical: eV, or ANC for a closed channel).
+  Reading `t0` as 2J turned a 3- level into "3/2-" and cost days of reasoning on
+  the wrong level (12C+alpha, 2026-09). Prefer `AzrModel` (`lv.J`, `lv.parity`,
+  `lv.energy`, `c.pair/L/S`) to hand-parsing.
 - `<segmentsData>` — one line per data segment: `isActive entranceKey exitKey
   minE maxE minA maxA isDiff [phaseJ phaseL] dataNorm varyNorm dataNormError
   [energyShift …] dataFile`. A `+10` on `isDiff` marks a THM/HOES segment.
@@ -1238,6 +1286,17 @@ and its **angle column is centre-of-mass**, not lab.
   σ, fit S, **data** σ, data σ err, data S, data S err. For an analyzing-power
   segment, cols 4 and 6 hold `A_y` instead of σ (dimensionless, may be negative). `TOTAL_CAPTURE` in place
   of `R=<out>` for summed capture. `.band` files carry the covariance band.
+  **The normalization multiplies the DATA and ERROR columns, not the fit
+  column:** col 6 = d·n, col 7 = e·n, col 4 = the bare calculation c, and the
+  segment's χ² = Σ((c − d·n)/(e·n))² = Σ((c/n − d)/e)². Lowering n *raises* χ²
+  when c is too big -- the intuitive "scale the model down" formula is backwards
+  (it produced a 5.9e9 calc-check on 12C+alpha). The χ²-optimal norm for a
+  segment at fixed R-matrix parameters, from one output file: with d = col6/n,
+  e = col7/n, c = col4, u* = Σ(c·d/e²)/Σ(c²/e²) and **n* = 1/u***. A
+  segment's blocks appear in the output file in `<segmentsData>` order among the
+  active segments of that entrance/exit pair, blank-line separated.
+  **A large χ²/N that no n* removes is a shape problem, not a normalization
+  one** -- compare the fit column's angular or energy shape to the data's.
 - `AZUREOut_*.extrap` — 5 cols: cm E, excitation E, cm angle, σ, S (mode 3).
 - `chiSquared.out` — per-segment χ²/N and norms; last line total χ². **The
   quickest scalar check that a run succeeded.**
@@ -1252,6 +1311,17 @@ and its **angle column is centre-of-mass**, not lab.
   or from the interim `parameters.out` (physical values, baked into `<levels>`
   and verified with a mode-1 run). Taking only the `segment_*` lines from
   `param.fit` is fine (used for a norms-only stage-1 fit handing over to stage 2).
+  How it is written: every 100th objective evaluation (`kOutputInterval`,
+  `AZURECalc::WriteIterationOutput`) rewrites `param.fit` *and* the
+  `AZUREOut_*`/`normalizations.out`/`parameters.out` files from the point being
+  evaluated **at that call** -- which may be a line-search or gradient probe, not
+  MIGRAD's best point -- while `param.fit`'s own R-matrix entries are the
+  unfitted input values (`FillMnParams` reads the level's input gamma). So the interim
+  output files are not the current best fit either, and the norms in them can be
+  a probe's: on 12C+alpha (2026-09) a restart built from `param.fit` gave 134,068
+  against a 123,501 plateau, and one written at the call where a crashed run
+  printed χ² = 8.5e40 held values giving 1.8e40. Verify any recovery with a
+  mode-1 calculate; if it doesn't reproduce the log's plateau, rerun instead.
 - **A missing `checks/` directory stops a CLI run before it starts**
   ("Could not find checks directory: checks/"); the job still ends normally and
   writes no output. Create it in every new run directory.
@@ -1281,7 +1351,26 @@ parameter file, or `m.objective(m.params_rwa)` in pyazr — in a throwaway outpu
 dir, and check the total against the old total adjusted for exactly what
 changed (the removed segment's own χ² and N, from the old `chiSquared.out`).
 It costs seconds and catches a corrupted starting point before it burns a
-50,000-iteration cluster job on it, rather than after.
+multi-day cluster job on it, rather than after.
+
+**A starting point far above the baseline is a problem even when it is "explained."**
+If the calc-check is orders of magnitude above the model's known total because of a
+deliberate change (e.g. a corrected energy shift, with norms still fitted around the
+old value), fix the start before fitting rather than trusting MIGRAD to walk down
+from it: re-seed the affected norms with the n* formula (Output files) or otherwise
+bring the start near the baseline. On 12C+alpha three consecutive fits from a
+1.28e7 start (98% from one segment whose norm was 20x off) converged to ~2.2-2.4e6
+with a different level running away each time -- it looked like a level-structure
+problem and was chased as one for days -- while the same model from a re-seeded
+start (126,476) converged cleanly to 126,169 with no runaway (2026-09-21).
+
+**Tolerance for "the numbers don't match."** pyazr vs CLI, and session vs session,
+differ by up to ~1e-3 relative on an ill-conditioned model (see the noise-floor note
+under "What a snapshot still cannot carry"; 12C+alpha measured 6e-5 to 1e-3 per data
+set, largest in the channels coupled to broad background poles). Below ~1e-3, treat
+it as noise and move on; around 1e-2 note it; only a larger gap, or one that grows
+into a failed fit, is worth investigating -- and then investigate what parameter
+moved, not the noise floor.
 
 ## Checking what the data and the figures mean
 
