@@ -203,6 +203,11 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
     AZUREParams params;
     lc->FillMnParams(params.GetMinuitParams(), &configure());
     ld->FillMnParams(params.GetMinuitParams());
+    // FillMnParams reads the levels' input values (GetE/GetGamma), not the
+    // point being evaluated; copy p in so param.fit matches this snapshot.
+    ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
+    if (mp.Params().size() == p.size())
+      for (unsigned int i = 0; i < p.size(); i++) mp.SetValue(i, p[i]);
     WriteParameters(params, configure());
     ld->WriteOutputFiles(configure(), true);
     lc->TransformOut(configure());
