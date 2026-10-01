@@ -1566,3 +1566,12 @@ every csh job script, right after `source ~/.login`:
     module unload python
     module load python/3.12.13
 (the version the earlier jobs ran under).  All of this session's reusable job templates now carry it.
+CORRECTION (same day, from the low-energy session): the `python/3.12.13` modulefile was removed too;
+`module load python/3.12.13` now fails SILENTLY and the job runs the system Python 3.9, which cannot
+import the cp312 pyazr extension.  What works -- the 3.12.13 install still exists:
+    module unload python
+    setenv PATH /software/p/python/3.12.13/gcc/11.5.0/bin:${PATH}
+    setenv LD_LIBRARY_PATH /software/p/python/3.12.13/gcc/11.5.0/lib:${LD_LIBRARY_PATH}
+    python3 -c "import sqlite3, sys; sys.path.insert(0, '/users/rdeboer1/AZURE2'); import pyazr._azure2" || exit 1
+The last line is the guard: a job must prove both imports on its own node before the first rmfit step.
+Login-node shells inherit the old module and prove nothing.
