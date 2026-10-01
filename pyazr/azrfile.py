@@ -211,10 +211,42 @@ def _thm_parse_ps(value):
     raise ValueError(usage)
 
 
+# Global optical potentials (src/ThmOptical.cpp): name -> projectiles (Z, A),
+# reference, target mass range, projectile lab-energy range (MeV).
+_THM_GLOBAL_OPTICALS = {
+    "ancai06": (((1, 2),), "An & Cai, PRC 73 (2006) 054605", 12, 238, 0.0, 183.0),
+    "daehnick80": (((1, 2),), "Daehnick, Childs & Vrcelj, PRC 21 (1980) 2253 "
+                   "(global set)", 27, 238, 11.8, 90.0),
+    "kd03": (((0, 1), (1, 1)), "Koning & Delaroche, NPA 713 (2003) 231 (global)", 24, 209,
+             0.001, 200.0),
+    "bg71": (((1, 3), (2, 3)), "Becchetti & Greenlees (1971)", 40, 208, 1.0, 40.0),
+    "liang09": (((2, 3),), "Liang, Li & Cai, J. Phys. G 36 (2009) 085104", 9, 208, 0.0, 270.0),
+    "mcfadden66": (((2, 4),), "McFadden & Satchler, NPA 84 (1966) 177", 16, 208, 1.0, 25.0),
+    "avrigeanu94": (((2, 4),), "Avrigeanu, Hodgson & Avrigeanu, PRC 49 (1994) 2136", 16, 250,
+                    1.0, 73.0),
+}
+_THM_SPECIES = {(0, 1): "n", (1, 1): "p", (1, 2): "d", (1, 3): "t", (2, 3): "3He", (2, 4): "4He"}
+
+
+def _thm_global_optical(value):
+    """(name, extrapolate) of a global optical potential value, or None."""
+    name, colon, option = value.partition(":")
+    if name in _THM_GLOBAL_OPTICALS and (not colon or option == "extrapolate"):
+        return name, bool(colon)
+    return None
+
+
 def _thm_parse_optical(key, value):
-    """ParseOptical (src/ThmExperiment.cpp): plane | coulomb | ten numbers
-    V,R,a,W,RW,aW,WD,RD,aD,RC; the value as given, or ValueError."""
+    """ParseOptical (src/ThmExperiment.cpp): plane | coulomb | a global
+    optical potential <name>[:extrapolate] | ten numbers V,R,a,W,RW,aW,WD,RD,aD,RC;
+    the value as given, or ValueError."""
     if value in ("plane", "coulomb"):
+        return value
+    if value[:1].isalpha():
+        if _thm_global_optical(value) is None:
+            raise ValueError(f"{key}='{value}': expected plane, coulomb, a global optical "
+                             f"potential ({', '.join(_THM_GLOBAL_OPTICALS)}, optionally "
+                             ":extrapolate) or ten numbers V,R,a,W,RW,aW,WD,RD,aD,RC")
         return value
     f = value.split(",")
     p = [_thm_whole_double(t) for t in f] if len(f) == 10 else None
@@ -423,11 +455,65 @@ def _thm_check_experiments(experiments):
                              "spectator direction; a ps window already weights the model "
                              "with |phi(p_s)|^2 of data divided by it, so it would count "
                              "twice. Use distortionRatio=dwpw (the default) with a window")
+        if dist == "optical" and kin == 4:
+            _thm_check_global_optical(where, x)
         for k in x["segments"]:
             if k in owner:
                 raise ValueError(where + f"segment {k} is already in "
                                  f"experiment[{owner[k]}]")
             owner[k] = name
+
+
+def _thm_nucleus_name(Z, A):
+    for name, (z, a, _m) in _THM_NUCLIDES.items():
+        if (z, a) == (Z, A):
+            return name
+    return f"(Z,A)=({Z},{A})"
+
+
+def _thm_check_global_optical(where, x):
+    """The checks of ThmDistortion::Setup that need no data: the global
+    potential describes a partner of its channel, and the target mass (and the
+    a + A lab energy) lies in its validity range unless :extrapolate.  The
+    s + F lab energy follows E and is checked by the engine over the data."""
+    beam, target, spec = x["beam"], x["target"], x["spectator"]
+    eaa = x["Ebeam"] * target[3] / (beam[3] + target[3])
+    sfF = (beam[1] + target[1] - spec[1], beam[2] + target[2] - spec[2],
+           beam[3] + target[3] - spec[3])
+    channels = (("opticalAA", "a + A", (beam[1], beam[2], beam[3]),
+                 (target[1], target[2], target[3]), eaa),
+                ("opticalSF", "s + F", (spec[1], spec[2], spec[3]), sfF, None))
+    for key, label, one, two, ecm in channels:
+        g = _thm_global_optical(x.get(key, "coulomb"))
+        if g is None:
+            continue
+        name, extrapolate = g
+        projectiles, ref, amin, amax, emin, emax = _THM_GLOBAL_OPTICALS[name]
+        if (one[0], one[1]) in projectiles:
+            proj, targ = one, two
+        elif (two[0], two[1]) in projectiles:
+            proj, targ = two, one
+        else:
+            species = " ".join(_THM_SPECIES[p] for p in projectiles)
+            raise ValueError(where + f"{key}={name} ({ref}, for {species}): the {label} "
+                             f"channel is {_thm_nucleus_name(one[0], one[1])} + "
+                             f"{_thm_nucleus_name(two[0], two[1])}, which it does not "
+                             "describe (heavy-ion and other channels take the ten numbers "
+                             "V,R,a,W,RW,aW,WD,RD,aD,RC)")
+        problems = []
+        if not amin <= targ[1] <= amax:
+            problems.append(f"target A = {targ[1]} (valid {amin}-{amax})")
+        if ecm is not None:
+            elab = ecm * (proj[2] + targ[2]) / targ[2]
+            if not emin <= elab <= emax:
+                problems.append(f"lab energy of {_thm_nucleus_name(proj[0], proj[1])} "
+                                f"{elab:.4g} MeV (valid {emin:g}-{emax:g} MeV)")
+        if problems and not extrapolate:
+            raise ValueError(where + f"{key}={name} ({ref}) is outside its validity range "
+                             f"for {_thm_nucleus_name(proj[0], proj[1])} + "
+                             f"{_thm_nucleus_name(targ[0], targ[1])}: " + ", ".join(problems)
+                             + f". Write {name}:extrapolate to use it there anyway (warned), "
+                             "or give the ten numbers")
 
 
 def _thm_experiment_record(x):
@@ -2249,7 +2335,11 @@ class AzrModel:
         distortion factor R(E) (see :meth:`pyazr.azure2.azure2.thm_distortion`):
         ``"coulomb"`` (point-Coulomb waves in a + A and s + F), ``"optical"``
         (per channel ``opticalAA`` / ``opticalSF``: ``"plane"``,
-        ``"coulomb"`` or ten numbers ``"V,R,a,W,RW,aW,WD,RD,aD,RC"`` in MeV and
+        ``"coulomb"``, a global optical potential -- ``"ancai06"``,
+        ``"daehnick80"`` (d), ``"kd03"`` (n, p), ``"bg71"`` (t, 3He),
+        ``"liang09"`` (3He), ``"mcfadden66"``, ``"avrigeanu94"`` (4He), with
+        ``":extrapolate"`` to allow it outside its validity range -- or ten
+        numbers ``"V,R,a,W,RW,aW,WD,RD,aD,RC"`` in MeV and
         fm, or a sequence of them) -- both need the kinematics keys -- or
         ``"table:<file>"`` (E, w columns as ``weight[k]``).  With coulomb or
         optical: ``spectatorAngle`` (``"qf"``, a lab angle in degrees or

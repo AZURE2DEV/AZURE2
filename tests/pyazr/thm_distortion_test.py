@@ -12,7 +12,8 @@ Checked on tests/18O_p_a_thm with a made-up charged spectator,
      trip and canonical line; values AZURE2 refuses raise ValueError the same
      way; the Coulomb consistency rules (coulombIntegral=1 with R(E) on a
      distorted a + A wave, a ps window with distortionRatio=dw) refused as
-     AZURE2 refuses them.  Pure Python: runs without numpy.
+     AZURE2 refuses them; global optical potentials (names, :extrapolate,
+     the projectile, the mass range).  Pure Python: runs without numpy.
   2. The engine against the CLI: calculate_chi2_rwa (rel 1e-9) and the output
      files written by write_output_files (thm_experiments.out included).
   3. thm_distortion: |M|^2 and M_PW at E = 0.6 MeV against the mpmath values
@@ -21,7 +22,8 @@ Checked on tests/18O_p_a_thm with a made-up charged spectator,
   4. No folding: calculate_rwa(on)/calculate_rwa(off) equals R_model at the data
      energies (1e-12); a table (distortion=table:<file>) multiplies by its w(E);
      an experiment without distortion, an unknown one and an energy that
-     leaves the spectator no energy raise.
+     leaves the spectator no energy raise.  3b: global potentials run and
+     are described; one outside its range is refused by the engine.
 
 Needs the compiled engine and an AZURE2 binary for 2-4; skips them cleanly.
 
@@ -171,6 +173,33 @@ with tempfile.TemporaryDirectory() as tmp:
                                                distortion="coulomb", distortionRatio="dwpw")
     check("ps window with distortionRatio=dwpw accepted", True)
 
+    # Global optical potentials (src/ThmOptical.cpp): 3He + 18O and d + 19F here.
+    print("1c. AzrModel: global optical potentials")
+    mg = AzrModel.from_file(src)
+    mg.set_thm_experiment("G", [1, 2], **kin, distortion="optical", opticalAA="liang09",
+                          opticalSF="ancai06")
+    check("names kept", mg.thm_experiments()["G"]["opticalAA"] == "liang09"
+          and mg.thm_experiments()["G"]["opticalSF"] == "ancai06", mg.thm_experiments()["G"])
+    gl = os.path.join(proj, "global.azr")
+    mg.write(gl)
+    check("canonical line with names",
+          f"experiment[G] segments=1,2 {KIN} distortion=optical opticalAA=liang09 opticalSF=ancai06\n"
+          in open(gl).read())
+    mg.set_thm_experiment("G", [1, 2], **kin, distortion="optical", opticalAA="bg71:extrapolate")
+    check("name:extrapolate accepted", mg.thm_experiments()["G"]["opticalAA"] == "bg71:extrapolate")
+    for kwargs, frag in [
+            (dict(opticalAA="liang"), "a global optical potential (ancai06, daehnick80"),
+            (dict(opticalAA="liang09:extra"), "a global optical potential"),
+            (dict(opticalAA="kd03"), "the a + A channel is 18O + 3He, which it does not describe"),
+            (dict(opticalSF="mcfadden66"), "the s + F channel is d + 19F, which it does not describe"),
+            (dict(opticalAA="bg71"), "target A = 18 (valid 40-208). Write bg71:extrapolate"),
+            (dict(opticalSF="daehnick80"), "target A = 19 (valid 27-238)")]:
+        try:
+            AzrModel.from_file(src).set_thm_experiment("G", [1, 2], **kin, distortion="optical", **kwargs)
+            check(f"refused: {kwargs}", False, "no ValueError")
+        except ValueError as err:
+            check(f"refused like AZURE2: {frag}", frag in str(err), str(err))
+
     # -- the engine -----------------------------------------------------------
     try:
         import numpy as np
@@ -256,6 +285,30 @@ with tempfile.TemporaryDirectory() as tmp:
                 check(f"raises: {bad}", False)
             except Exception as err:
                 check(f"raises ({err})", frag in str(err), str(err))
+
+    print("3b. thm_distortion with global potentials (liang09 for 3He + 18O, ancai06 for d + 19F)")
+    gd = project("global", f"experiment[A] segments=1,2 {KIN} distortion=optical "
+                 "opticalAA=liang09 opticalSF=ancai06")
+    with azure2(os.path.join(gd, "run.azr"), cwd=gd) as s:
+        r = s.thm_distortion("A", [0.45, 0.6, 0.75])
+        check(f"runs, R(E_ref) scale: {r['kind']}, R = {np.round(r['R'], 4)}",
+              r["kind"] == "optical" and np.all(np.isfinite(r["R"])) and np.all(r["R"] > 0))
+        check("the description names both potentials",
+              "liang09 (3He on 18O)" in r["description"] and "ancai06 (d on 19F)" in r["description"],
+              r["description"])
+    bad = project("global_bad", f"experiment[A] segments=1,2 {KIN} distortion=optical "
+                  "opticalSF=daehnick80")
+    try:
+        with azure2(os.path.join(bad, "run.azr"), cwd=bad) as s:
+            s.thm_distortion("A", [0.6])
+        check("the session refuses daehnick80 for d + 19F", False, "no error")
+    except Exception as err:
+        check("the session refuses daehnick80 for d + 19F", "could not initialize" in str(err), str(err))
+    proc = subprocess.run([binary, "--no-gui", "--no-readline", "run.azr"], cwd=bad, input="1\n\n\n7\n",
+                          text=True, capture_output=True, timeout=600)
+    check("the engine says why: outside the range, :extrapolate",
+          "opticalSF=daehnick80" in proc.stdout and "target A = 19 (valid 27-238)" in proc.stdout
+          and "daehnick80:extrapolate" in proc.stdout, proc.stdout[-600:])
 
     print("4. no folding: the model ratio is R_model; a table is its w(E)")
     table = os.path.join(tmp, "w.dat")
