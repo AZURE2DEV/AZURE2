@@ -122,3 +122,10 @@ add_test(NAME pyazr_thm_spectator_angles
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_spectator_angles_test.py)
 set_tests_properties(pyazr_thm_spectator_angles PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
+# THM coherent background (cbackground=): AzrModel, CLI == session, Jacobian
+# of the R-matrix and cbkg columns against differences, save_fit.
+add_test(NAME pyazr_thm_coherent_background
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_coherent_background_test.py)
+set_tests_properties(pyazr_thm_coherent_background PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
