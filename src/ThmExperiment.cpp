@@ -339,6 +339,29 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
         why = "theta='" + value +
               "': expected all or thmin-thmax, the c.m. angles of the exit pair relative to p_xA in "
               "degrees, 0 <= thmin <= thmax <= 180";
+    } else if (key == "spectatorAngles") {
+      // [cm:]thmin-thmax | [cm:]table:<file>
+      std::string v = value;
+      work.angleCm = v.compare(0, 3, "cm:") == 0;
+      if (work.angleCm) v = v.substr(3);
+      work.angleTable.clear();
+      work.angleTableT.clear();
+      work.angleTableW.clear();
+      double lo = 0.0, hi = 0.0;
+      if (v.compare(0, 6, "table:") == 0 && v.size() > 6) {
+        work.angleWindow = 2;
+        work.angleTable = v.substr(6);
+      } else if (ReadWindow(v, lo, hi) && hi <= 180.0) {
+        work.angleWindow = 1;
+        work.angleMin = lo;
+        work.angleMax = hi;
+      } else
+        why = "spectatorAngles='" + value +
+              "': expected thmin-thmax (lab polar angles of the spectator to the beam, degrees, 0 <= thmin "
+              "<= thmax <= 180), cm:thmin-thmax (c.m.), table:<file> or cm:table:<file> (angle, acceptance)";
+    } else if (key == "spectatorAngleNodes") {
+      if (!ReadWholeInt(value, work.angleNodes) || work.angleNodes < 1 || work.angleNodes > 64)
+        why = "spectatorAngleNodes='" + value + "': expected a whole number of Gauss-Legendre nodes, 1 to 64";
     } else if (key == "vertexModel") {
       if (value == "pw")
         work.vertexDW = false;
@@ -350,7 +373,7 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
       why = "unknown key '" + key +
             "' (keys: segments, background, beam, target, spectator, Ebeam, lineshape, ps, psNodes, "
             "distortion, opticalAA, opticalSF, spectatorAngle, distortionRef, distortionRatio, boundState, "
-            "theta, vertexModel)";
+            "theta, vertexModel, spectatorAngles, spectatorAngleNodes)";
     }
     if (!why.empty()) return where + why;
     work.keys.push_back(key);
@@ -402,6 +425,21 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
         return where + "theta= (fixed-angle observable) is not available with vertexModel=dw: the distorted "
                        "source has every m_l about p_xA, which the fixed-angle sum does not carry";
     }
+    // Spectator-direction window: the direction enters only through the
+    // distorted waves (R(E), the DW vertex); at fixed E it fixes q, so a ps
+    // window only cuts it there.
+    if (x.angleWindow) {
+      if (!computed)
+        return where + "spectatorAngles= averages the distortion factor R(E) or the DW vertex over the "
+                       "spectator directions; it needs distortion=coulomb or distortion=optical (the plane-wave "
+                       "vertex depends on |p_s| alone, which ps= averages)";
+      if (has("spectatorAngle"))
+        return where + "spectatorAngle= (one direction) and spectatorAngles= (a window) exclude each other";
+      if (x.vertexDW && has("psNodes"))
+        return where + "with vertexModel=dw and spectatorAngles= the nodes are spectatorAngleNodes=; the ps window "
+                       "only cuts |p_s| (the direction fixes it at each energy), so psNodes= has no effect";
+    } else if (has("spectatorAngleNodes"))
+      return where + "spectatorAngleNodes= needs a spectator-direction window (spectatorAngles=)";
     // The momentum distribution once: a ps window averages the model with the
     // event weight |phi(p_s)|^2 p_s^2 of data divided by |phi|^2; R with
     // distortionRatio=dw is |M|^2 itself, which carries |phi(q(E))|^2 again.
@@ -446,6 +484,38 @@ std::string CheckThmCoulombConsistency(const std::vector<ThmExperiment> &experim
                                   "distorted a + A wave, its a + A Coulomb interaction already contains the "
                                   "x-A Coulomb term C_l, which is then counted twice.");
   }
+  return "";
+}
+
+std::string ReadThmAngleTable(const std::string &path, std::vector<double> &theta, std::vector<double> &w) {
+  theta.clear();
+  w.clear();
+  std::ifstream in(path.c_str());
+  if (!in) return "cannot read the angle table '" + path + "'";
+  std::string line;
+  int lineNumber = 0;
+  double total = 0.0;
+  while (std::getline(in, line)) {
+    lineNumber++;
+    size_t hash = line.find('#');
+    if (hash != std::string::npos) line = line.substr(0, hash);
+    if (line.find_first_not_of(" \t\r\n") == std::string::npos) continue;
+    std::istringstream ls(line);
+    double tv, wv;
+    std::string extra;
+    std::ostringstream where;
+    where << "'" << path << "' line " << lineNumber << ": ";
+    if (!(ls >> tv >> wv) || (ls >> extra))
+      return where.str() + "expected two numbers, the angle (deg) and the acceptance";
+    if (!std::isfinite(tv) || !std::isfinite(wv) || tv < 0.0 || tv > 180.0 || wv < 0.0)
+      return where.str() + "the angle must be 0-180 deg and the acceptance finite and >= 0";
+    if (!theta.empty() && !(tv > theta.back())) return where.str() + "the angles must be strictly increasing";
+    theta.push_back(tv);
+    w.push_back(wv);
+    total += wv;
+  }
+  if (theta.size() < 2) return "'" + path + "' needs at least two rows (angle acceptance)";
+  if (!(total > 0.0)) return "'" + path + "': every acceptance is zero";
   return "";
 }
 

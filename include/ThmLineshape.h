@@ -180,6 +180,11 @@ struct ThmVertexReport {
   std::string model = "pw";
   std::vector<std::vector<double>> dwQ, dwWeight;  ///< [E][node] q (MeV/c), weight
   std::vector<double> dwQDelta, dwPDelta;          ///< spectatorAngle node: q (MeV/c), p (fm^-1)
+  /// spectatorAngles=: the accepted directions at the grid energy nearest to
+  /// each E, [E][node]: the c.m. angle of the spectator to the beam (deg), q
+  /// (MeV/c) and the normalized weight (d cos theta_cm x acceptance x
+  /// |phi~(q)|^2); dwQ/dwWeight are then the one node of the averaged vertex.
+  std::vector<std::vector<double>> dwTheta, dwAngleQ, dwAngleWeight;
   struct Level {
     int level = 0;          ///< 1-based in the J group
     double boundary = 0.0;  ///< Re of the vertex boundary B used for this level

@@ -496,6 +496,15 @@ class Session {
       d["dw_weights"] = w;
       d["dw_q_delta"] = to_array(r.dwQDelta);
       d["dw_p_delta"] = to_array(r.dwPDelta);
+      if (!r.dwTheta.empty()) {
+        py::list th, aq, aw;
+        for (const std::vector<double> &row : r.dwTheta) th.append(to_array(row));
+        for (const std::vector<double> &row : r.dwAngleQ) aq.append(to_array(row));
+        for (const std::vector<double> &row : r.dwAngleWeight) aw.append(to_array(row));
+        d["angle_theta_cm"] = th;
+        d["angle_q"] = aq;
+        d["angle_weights"] = aw;
+      }
     }
     py::list channels;
     for (const ThmVertexReport::Channel &c : r.channels) {

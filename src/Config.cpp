@@ -407,6 +407,17 @@ int Config::ReadThmBlock() {
         x.psMin = x.psTableP.front();
         x.psMax = x.psTableP.back();
       }
+      // spectatorAngles=[cm:]table:<file>, relative to the .azr as weight[k]=.
+      for (ThmExperiment &x : thm.experiments) {
+        if (x.angleWindow != 2) continue;
+        why = ReadThmAngleTable(thmRelativePath(x.angleTable), x.angleTableT, x.angleTableW);
+        if (!why.empty()) {
+          outStream << "ERROR: <thm> experiment[" << x.name << "]: spectatorAngles: " << why << std::endl;
+          return -1;
+        }
+        x.angleMin = x.angleTableT.front();
+        x.angleMax = x.angleTableT.back();
+      }
       // distortion=table:<file>, the weight[k] format, relative to the .azr.
       for (ThmExperiment &x : thm.experiments) {
         if (x.distortion != ThmExperiment::DIST_TABLE) continue;

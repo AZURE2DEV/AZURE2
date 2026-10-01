@@ -271,10 +271,19 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   const double rmin = dist.rmin;
   uMax = rmin + kTail / kappa;
 
-  // Window.
-  window = x.psKind != ThmExperiment::PS_DELTA;
+  // Window: the spectator directions (spectatorAngles=, the ps window then
+  // only cuts q), or the ps window in q.
+  angles = dist.angWindow;
+  window = !angles && x.psKind != ThmExperiment::PS_DELTA;
   nNodes = 1;
-  if (window) {
+  nAng = 0;
+  if (angles) {
+    // The model is linear in G (sum over the Cholesky components of
+    // |X a_k + Y d_k|^2 = |X|^2 G11 + |Y|^2 G22 + 2 Re(X* Y G12)), so the
+    // average over the directions is one vertex with the averaged G: one node.
+    dist.SetAngleSlots(eHi);
+    nAng = dist.angSlots * dist.angNodes;
+  } else if (window) {
     pMin = x.psMin;
     pMax = x.psMax;
     psNodes = pMin == pMax ? 1 : x.psNodes;
@@ -449,6 +458,9 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   q.assign((size_t)nE * nNodes, 0.0);
   G.assign((size_t)nE * nNodes * nl * 4, 0.0);
   Gd.assign((size_t)nE * nl * 4, 0.0);
+  aw.assign((size_t)nE * nAng, 0.0);
+  aq.assign((size_t)nE * nAng, 0.0);
+  ath.assign((size_t)nE * nAng, 0.0);
   qd.assign(nE, 0.0);
   pd.assign(nE, 0.0);
   thd.assign(nE, 0.0);
@@ -524,6 +536,44 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
       if (!(std::fabs(phit) > 0.0) || !std::isfinite(phit))
         return "the plane-wave source phi~(q) vanishes at E = " + Number(eLo + e * gridStep) + " MeV";
     }
+    if (angles) {
+      // The accepted directions: event weight d cos(theta_cm) x acceptance x
+      // |phi~(q)|^2 (the data are divided by |phi|^2 averaged over the same
+      // events, and G is normalized by phi~ of its own node).
+      std::vector<ThmDistortion::AngleNode> an;
+      if (!dist.AngleNodes(ks, an)) {
+        valid[e] = 0;
+        continue;
+      }
+      double total = 0.0;
+      std::vector<double> gk((size_t)nAng * nl * 4, 0.0);
+      for (int i = 0; i < nAng; i++) {
+        const ThmDistortion::AngleNode &n = an[i];
+        double *ai = &aw[(size_t)e * nAng + i];
+        aq[(size_t)e * nAng + i] = n.q * hbarc;
+        ath[(size_t)e * nAng + i] = n.theta;
+        if (!(n.w > 0.0)) continue;  // an empty branch
+        double phit = gram(n.x, n.q, &gk[(size_t)i * nl * 4]);
+        if (!(std::fabs(phit) > 0.0) || !std::isfinite(phit))
+          return "the plane-wave source phi~(q) vanishes at E = " + Number(eLo + e * gridStep) + " MeV, q = " +
+                 Number(n.q * hbarc) + " MeV/c";
+        *ai = n.w * phit * phit;
+        total += *ai;
+      }
+      if (!(total > 0.0) || !std::isfinite(total)) {
+        valid[e] = 0;
+        continue;
+      }
+      double qm = 0.0;
+      for (int i = 0; i < nAng; i++) {
+        const double wi = aw[(size_t)e * nAng + i] /= total;
+        qm += wi * aq[(size_t)e * nAng + i];
+        for (int c = 0; c < nl * 4; c++) G[(size_t)e * nl * 4 + c] += wi * gk[(size_t)i * nl * 4 + c];
+      }
+      w[e] = 1.0;
+      q[e] = qm;
+      continue;
+    }
     if (!window) {
       w[e] = 1.0;
       q[e] = qd[e] * hbarc;
@@ -569,6 +619,11 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   for (double e : points) {
     double t = (e - gridLo) / gridStep;
     int i0 = std::max(0, std::min(nE - 1, (int)std::floor(t))), i1 = std::min(nE - 1, i0 + 1);
+    if ((!valid[i0] || !valid[i1]) && angles) {
+      std::string why = dist.CheckWindow(e);
+      return why.empty() ? "at E = " + Number(e) + " MeV the spectator-direction window is out of reach next to it"
+                         : why;
+    }
     if (!valid[i0] || !valid[i1]) {
       std::ostringstream m;
       m << "at E = " << e << " MeV the spectator momenta the kinematics reach, " << std::fabs(ksE[i0] - beta * ka) * hbarc
@@ -582,7 +637,13 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
     int best = -1;
     for (int f = 0; f < nE; f++)
       if (valid[f] && (best < 0 || std::abs(f - e) < std::abs(best - e))) best = f;
-    if (best < 0) return "the ps window is out of reach at every energy";
+    if (best < 0) return angles ? "the spectator-direction window is out of reach at every energy"
+                                : "the ps window is out of reach at every energy";
+    for (int i = 0; i < nAng; i++) {
+      aw[(size_t)e * nAng + i] = aw[(size_t)best * nAng + i];
+      aq[(size_t)e * nAng + i] = aq[(size_t)best * nAng + i];
+      ath[(size_t)e * nAng + i] = ath[(size_t)best * nAng + i];
+    }
     for (int i = 0; i < nNodes; i++) {
       w[(size_t)e * nNodes + i] = w[(size_t)best * nNodes + i];
       q[(size_t)e * nNodes + i] = q[(size_t)best * nNodes + i];
@@ -596,7 +657,11 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   d << "vertexModel=dw: surface term of the prior-form DWBA; a + A: " << dist.ChannelText(0)
     << "; s + F: " << dist.ChannelText(1) << "; bound state " << (dist.yukawa ? "yukawa" : "whittaker")
     << (rmin > 0.0 ? ", r >= " + Number(rmin) + " fm" : "") << "; "
-    << (window ? "the ps window on its reachable part at each energy"
+    << (angles ? "spectator directions " + dist.AngleText() + " (" + Number(dist.angNodes) +
+                     " nodes in cos theta_cm" + (dist.angSlots > 1 ? " per branch" : "") +
+                     (dist.qCut ? ", |p_s| cut by the ps window" : "") +
+                     "; weight d cos theta_cm x acceptance x |phi~(q)|^2)"
+        : window ? "the ps window on its reachable part at each energy"
                : std::string("spectator angle ") +
                      (dist.angleKind == ThmDistortion::QF
                           ? "qf (k_sF along k_aA)"
@@ -604,6 +669,20 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   description = d.str();
   buildSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
   return "";
+}
+
+void ThmDwVertex::AngleNodesAt(double energy, std::vector<double> &weight, std::vector<double> &qk,
+                               std::vector<double> &theta) const {
+  weight.clear();
+  qk.clear();
+  theta.clear();
+  if (!angles || nE == 0) return;
+  const int e = std::max(0, std::min(nE - 1, (int)std::lround((energy - gridLo) / gridStep)));
+  for (int i = 0; i < nAng; i++) {
+    weight.push_back(aw[(size_t)e * nAng + i]);
+    qk.push_back(aq[(size_t)e * nAng + i]);
+    theta.push_back(ath[(size_t)e * nAng + i]);
+  }
 }
 
 void ThmDwVertex::Interpolate(double energy, std::vector<double> &weight, std::vector<double> &qk,

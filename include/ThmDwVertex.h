@@ -59,6 +59,10 @@ class ThmDwVertex {
   double pMin = 0.0, pMax = 0.0;
   int psNodes = 1;
   std::function<double(double)> psWeight;
+  /// Spectator-direction window (spectatorAngles=, ThmDistortion::AngleNodes):
+  /// the nodes are the accepted directions at each energy, weighted by
+  /// d cos(theta_cm) x acceptance x |phi~(q)|^2; a ps window only cuts q.
+  bool angles = false;
   // Quadrature and partial waves (for the output).
   int laMax = 0, lsMax = 0, uNodes = 0, cNodes = 0;
   double uMax = 0.0;
@@ -70,6 +74,12 @@ class ThmDwVertex {
   /// MeV/c, and per l index li the Gram entries g11, g22, Re g12, Im g12 at
   /// G[((e nNodes + k) nl + li) 4 + c].
   std::vector<double> w, q, G;
+  /// spectatorAngles: nAng directions per grid energy e (nNodes is then 1,
+  /// with the weight-averaged G, since the model is linear in G): normalized
+  /// weight aw, q (MeV/c) and the c.m. angle of the spectator to the beam
+  /// (deg) ath at [e nAng + k], for the report.
+  int nAng = 0;
+  std::vector<double> aw, aq, ath;
   /// The same at the spectatorAngle direction (the vertex without a window):
   /// Gd[(e nl + li) 4 + c], qd, pd (fm^-1), thd (deg, between k_sF and k_aA).
   std::vector<double> Gd, qd, pd, thd;
@@ -100,6 +110,10 @@ class ThmDwVertex {
   /// direction (gd, nl x 4), with the node weights and q (MeV/c).
   void Interpolate(double energy, std::vector<double> &weight, std::vector<double> &qk, std::vector<double> &g,
                    std::vector<double> &gd, double &qDelta, double &pDelta, bool *outside = nullptr) const;
+  /// spectatorAngles: the directions at the grid energy nearest to E (weight,
+  /// q in MeV/c, c.m. angle to the beam in deg); empty without the window.
+  void AngleNodesAt(double energy, std::vector<double> &weight, std::vector<double> &qk,
+                    std::vector<double> &theta) const;
   /// Index of l in lvals, or -1.
   int LIndex(int l) const;
   /// G = L^+ L for g = (g11, g22, Re g12, Im g12): the components

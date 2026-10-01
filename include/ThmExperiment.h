@@ -87,6 +87,23 @@ struct ThmExperiment {
   /// spectatorAngle=: 0 qf (k_sF along k_aA, default), 1 lab degrees, 2 cm:degrees.
   int angleKind = 0;
   double angle = 0.0;
+  /*!
+   * Spectator-direction window (`spectatorAngles=`, ThmDistortion.h
+   * AngleNodes): R(E) and the DW vertex are averaged over the spectator
+   * directions of the acceptance instead of taken at one.  At fixed E the
+   * direction fixes q = |k_sF - beta k_aA|, so a ps window only cuts q
+   * there.  0 none (default), 1 a uniform window [angleMin, angleMax], 2 the
+   * acceptance table angleTableT (deg, increasing) / angleTableW (>= 0, linear
+   * between rows); angleCm: the angles are c.m. (else lab) polar angles of the
+   * spectator to the beam.  The measure is d cos(theta_cm) (azimuthal
+   * symmetry about the beam).
+   */
+  int angleWindow = 0;
+  bool angleCm = false;
+  double angleMin = 0.0, angleMax = 0.0;  ///< deg (a table: its first and last angle)
+  std::string angleTable;                 ///< table: the file as written
+  std::vector<double> angleTableT, angleTableW;  ///< table rows (Config::ReadThmBlock loads them)
+  int angleNodes = 8;                     ///< Gauss-Legendre nodes in cos(theta_cm) per interval
   bool hasDistortionRef = false;
   double distortionRef = 0.0;  ///< MeV (default: the middle of the data range)
   bool distortionRatioPW = true;  ///< distortionRatio=dwpw (default) or dw
@@ -122,7 +139,8 @@ struct ThmExperiment {
  * table:file), psNodes, distortion (none | coulomb | optical | table:file),
  * opticalAA, opticalSF, spectatorAngle, distortionRef, distortionRatio,
  * boundState, theta (all | thmin-thmax, degrees, 0 <= thmin <= thmax <= 180),
- * vertexModel (pw | dw).
+ * vertexModel (pw | dw), spectatorAngles ([cm:]thmin-thmax | [cm:]table:file),
+ * spectatorAngleNodes.
  */
 std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExperiment> &experiments);
 
@@ -152,6 +170,11 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments);
  */
 std::string CheckThmCoulombConsistency(const std::vector<ThmExperiment> &experiments, bool coulombIntegral,
                                        std::vector<std::string> *warnings = nullptr);
+
+/// Reads a `spectatorAngles=table:` file: two columns, the spectator polar
+/// angle (deg, 0-180, strictly increasing) and the acceptance A >= 0; '#'
+/// starts a comment; at least two rows and some positive weight.
+std::string ReadThmAngleTable(const std::string &path, std::vector<double> &theta, std::vector<double> &w);
 
 /// Reads a `ps=table:` file: two columns, p_s (MeV/c, >= 0, strictly
 /// increasing) and the event weight w >= 0 per unit p_s; '#' starts a comment;

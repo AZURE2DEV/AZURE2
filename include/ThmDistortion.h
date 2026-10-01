@@ -102,6 +102,12 @@ class ThmDistortion {
     std::string why;       ///< if !ok
     bool angleClamped = false;  ///< lab angle beyond the reach of the forward branch
     double tail = 0.0;  ///< |integrand(r_end)|/(kappa |M|), l = 0: the radial cutoff's size
+    /// Spectator-direction window (spectatorAngles=): the nodes with a
+    /// weight, and the acceptance averages <|M|^2>, <|M_PW|^2> (thetaCm, x, q
+    /// are then the acceptance-weighted means, m and mpw those of the first
+    /// node).  0 without a window.
+    int nodes = 0;
+    double m2 = 0.0, mpw2 = 0.0;
   };
 
   Kind kind = COULOMB;
@@ -111,6 +117,34 @@ class ThmDistortion {
   enum AngleKind { QF, LAB, CM };
   AngleKind angleKind = QF;
   double angle = 0.0;  ///< deg
+  /*!
+   * Spectator-direction window (spectatorAngles=, docs "Experimental
+   * acceptance"): instead of one direction, the accepted directions at each
+   * energy.  At fixed E, |k_sF| is fixed, so the direction (azimuthal symmetry
+   * about the beam: its polar angle) is the only variable, and it fixes
+   * q = |k_sF - beta k_aA|; a ps window (qCut) restricts it to q in
+   * [qCutLo, qCutHi].  The measure is d cos(theta_cm) (the three-body phase
+   * space at fixed E) times the acceptance A(theta) (1 in a uniform window, a
+   * table otherwise, in the lab or c.m. angle).  A lab window maps to one
+   * c.m. interval, or two when the spectator is slower in the c.m. than the
+   * c.m. itself (gamma = V_cm/v_s > 1: forward and backward branch); each
+   * interval gets angNodes Gauss-Legendre nodes in cos(theta_cm).
+   */
+  bool angWindow = false;
+  bool angCm = false;
+  double angLo = 0.0, angHi = 0.0;  ///< deg
+  std::vector<double> angT, angW;   ///< acceptance table (empty: uniform)
+  int angNodes = 8;                 ///< per interval
+  int angSlots = 1;                 ///< intervals (SetAngleSlots)
+  bool qCut = false;
+  double qCutLo = 0.0, qCutHi = 0.0;  ///< MeV/c
+  std::vector<double> angGx, angGw;   ///< Gauss-Legendre rule on [-1, 1]
+  struct AngleNode {
+    double theta = 0.0;  ///< c.m. angle of the spectator to the beam (deg)
+    double x = 1.0;      ///< cos of the angle between k_sF and k_aA
+    double q = 0.0;      ///< |k_sF - beta k_aA| (fm^-1)
+    double w = 0.0;      ///< Gauss-Legendre weight in cos(theta_cm) times the acceptance
+  };
   bool ratioPW = true; ///< dwpw (else dw)
   bool yukawa = false;
   double rmin = 0.0;   ///< fm (as used: snapped to the grid)
@@ -165,10 +199,15 @@ class ThmDistortion {
   /// lab energies and the ten numbers at the data ends E = lo and hi (for
   /// a + A both are the same).  False if the channel is not global.
   bool GlobalEnds(int c, double lo, double hi, double elab[2], double p[2][10]) const;
-  /// Direct evaluation at E (not the grid).
+  /// Direct evaluation at E (not the grid); with a spectator-direction
+  /// window the acceptance averages (EvaluateWindow).
   Point Evaluate(double energy) const;
+  /// The window at E: M and M_PW at every node from one set of radial
+  /// integrals (only P_l(x) depends on the direction).
+  Point EvaluateWindow(double energy) const;
   /// rho(E) as R uses it, from a Point.
   double Ratio(const Point &p) const {
+    if (p.nodes) return ratioPW ? p.m2 / p.mpw2 : p.m2;
     return ratioPW ? std::norm(p.m) / (p.mpw * p.mpw) : std::norm(p.m);
   }
   /// R(E) = rho(E)/rho(E_ref) directly.
@@ -185,6 +224,22 @@ class ThmDistortion {
   double SpectatorCos(double ksf, double *thetaCm = nullptr, bool *clamped = nullptr) const;
   /// E_sF(E) = E_aA - B - E.
   double EsF(double energy) const { return eAA - kin.bind - energy; }
+  /// The nodes of the spectator-direction window at the s + F wave number ksf
+  /// (fm^-1): angSlots x angNodes entries (w = 0 in an empty interval).
+  /// False if no direction is accepted.  A window of zero width is its point
+  /// (one interval: equal weights; a lab angle on two branches: the limit of
+  /// a shrinking window, weight |d cos(theta_cm)/d theta_lab| per branch).
+  bool AngleNodes(double ksf, std::vector<AngleNode> &out) const;
+  /// "" or why no direction of the window is accepted at E.
+  std::string CheckWindow(double energy) const;
+  /// angSlots = 2 for a lab window if gamma = V_cm/v_s exceeds 1 at E = eHi
+  /// (the slowest spectator), else 1.
+  void SetAngleSlots(double eHi);
+  /// The window for the output ("" without one).
+  std::string AngleText() const;
+  /// <|M|^2> and <|M_PW|^2> of a Point (the single direction without a window).
+  static double M2(const Point &p) { return p.nodes ? p.m2 : std::norm(p.m); }
+  static double MPW2(const Point &p) { return p.nodes ? p.mpw2 : p.mpw * p.mpw; }
 
   /// u_l of channel c on the grid r_j = j step, j = 0..nStore-1 (Numerov from
   /// the origin, normalized to F_l + T_l H_l^+, T_l = (S_l - 1)/2i the nuclear

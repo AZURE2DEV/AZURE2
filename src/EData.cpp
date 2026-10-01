@@ -3250,6 +3250,10 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
           d->dataLo = eLo;
           d->dataHi = eHi;
           std::string why = d->Build(x, dk, eLo - 0.5, gridHi, 0.5 * (eLo + eHi));
+          // spectatorAngles=: every data point needs an accepted direction.
+          for (int s = 0; why.empty() && d->angWindow && s < (int)group.segments.size(); s++)
+            for (int p = 1; why.empty() && p <= GetSegment(group.segments[s])->NumPoints(); p++)
+              why = d->CheckWindow(GetSegment(group.segments[s])->GetPoint(p)->GetCMEnergy());
           if (!why.empty()) {
             configure.outStream << where << "distortion: " << why << "." << std::endl;
             return -1;
@@ -3264,6 +3268,9 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
             << "  R = " << d->R(lo) << " at E = " << eLo << " MeV (E_sF = " << lo.esf << ", eta_sF = " << lo.etasf
             << ", theta_cm = " << lo.thetaCm << " deg), " << d->R(hi) << " at E = " << eHi << " MeV (E_sF = "
             << hi.esf << ", eta_sF = " << hi.etasf << ", theta_cm = " << hi.thetaCm << " deg).";
+          if (d->angWindow)
+            l << "\n  Spectator directions: " << lo.nodes << " accepted node(s) at the lowest point, " << hi.nodes
+              << " at the highest; theta_cm above is their acceptance-weighted mean.";
           if (d->pwSignChange && d->ratioPW)
             l << "\nWARNING: <thm> experiment[" << x.name << "]: the plane-wave amplitude M_PW changes sign on "
                  "the grid (a node of the momentum distribution at this angle); R = |M/M_PW|^2 is singular "
@@ -3512,12 +3519,15 @@ void EData::WriteThmExperiments(const Config &configure) {
           << "# plane-wave limit; the model is multiplied by R(E) before folding (PWA-extracted S* / R).\n"
           << "# E_aA = " << d.eAA << " MeV, B = " << d.kin.bind << " MeV, k_aA = " << d.aa.k << " fm^-1, eta_aA = "
           << d.aa.eta << ", kappa = " << d.kappa << " fm^-1, eta_b = " << d.etaB << ", beta = " << d.beta << "\n"
+          << (d.angWindow ? "# spectatorAngles: |M|^2 and |M_PW|^2 are averages over the accepted directions\n"
+                            "# (weight d cos theta_cm x acceptance), theta_cm their weighted mean.\n"
+                          : "")
           << "# Columns: E, E_sF (MeV), eta_sF, theta_cm (deg), |M|^2, |M_PW|^2, R, l_max.\n";
       for (double e : {eLo, d.eRef, eHi}) {
         ThmDistortion::Point p = d.Evaluate(e);
         out << "distortion_point" << std::setw(18) << e << std::setw(18) << p.esf << std::setw(18) << p.etasf
-            << std::setw(18) << p.thetaCm << std::setw(18) << std::norm(p.m) << std::setw(18) << p.mpw * p.mpw
-            << std::setw(18) << (p.ok ? d.R(p) : 0.0) << std::setw(6) << p.lmax << "\n";
+            << std::setw(18) << p.thetaCm << std::setw(18) << ThmDistortion::M2(p) << std::setw(18)
+            << ThmDistortion::MPW2(p) << std::setw(18) << (p.ok ? d.R(p) : 0.0) << std::setw(6) << p.lmax << "\n";
       }
     }
     // Distorted-wave entrance vertex (vertexModel=dw): the Gram entries at the
@@ -3702,8 +3712,8 @@ bool EData::ThmDistortionTable(const std::string &name, const std::vector<double
     out.thetaCm.push_back(p.thetaCm);
     out.x.push_back(p.x);
     out.q.push_back(p.q);
-    out.m2.push_back(std::norm(p.m));
-    out.mpw2.push_back(p.mpw * p.mpw);
+    out.m2.push_back(ThmDistortion::M2(p));
+    out.mpw2.push_back(ThmDistortion::MPW2(p));
     out.r.push_back(d.R(p));
     out.rModel.push_back(d.Weight(e));
     out.lmax.push_back(p.lmax);
@@ -3775,6 +3785,14 @@ bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &e
       std::vector<double> w, q, g, gd;
       double qd, pd;
       dw->Interpolate(e, w, q, g, gd, qd, pd);
+      if (dw->angles) {
+        // The directions (at the nearest grid energy); M2 uses the averaged G (one node).
+        std::vector<double> aw, aq, th;
+        dw->AngleNodesAt(e, aw, aq, th);
+        out.dwTheta.push_back(th);
+        out.dwAngleQ.push_back(aq);
+        out.dwAngleWeight.push_back(aw);
+      }
       const double ks = std::sqrt(2.0 * dw->dist.sf.mu * std::max(dw->dist.EsF(e), 0.0)) / hbarc;
       const double ka = dw->dist.aa.k, kb = dw->beta * ka;
       std::vector<double> row;
