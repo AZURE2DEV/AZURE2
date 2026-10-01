@@ -109,7 +109,7 @@ _THM_BACKGROUNDS = ("none", "const", "linear", "quadratic")
 _THM_EXPERIMENT_KEYS = ("segments", "background", "beam", "target", "spectator", "Ebeam",
                         "lineshape", "ps", "psNodes", "distortion", "opticalAA", "opticalSF",
                         "spectatorAngle", "distortionRef", "distortionRatio", "boundState",
-                        "theta", "vertexModel")
+                        "theta", "vertexModel", "spectatorAngles", "spectatorAngleNodes")
 _THM_DISTORTION_DETAIL = ("spectatorAngle", "distortionRef", "distortionRatio", "boundState")
 _THM_NAME = re.compile(r"[A-Za-z0-9_.+-]+")
 _THM_WHOLE_INT = re.compile(r"[+-]?\d+")
@@ -385,12 +385,28 @@ def _thm_parse_experiment(line, experiments):
             if value not in ("pw", "dw"):
                 raise ValueError(where + f"vertexModel='{value}': expected pw or dw")
             work["vertexModel"] = value
+        elif key == "spectatorAngles":
+            v = value[3:] if value.startswith("cm:") else value
+            window = None if v.startswith("table:") else _thm_ps_window(v)
+            if not ((v.startswith("table:") and len(v) > 6)
+                    or (window is not None and window[1] <= 180.0)):
+                raise ValueError(where + f"spectatorAngles='{value}': expected thmin-thmax "
+                                 "(lab polar angles of the spectator to the beam, degrees, "
+                                 "0 <= thmin <= thmax <= 180), cm:thmin-thmax (c.m.), "
+                                 "table:<file> or cm:table:<file> (angle, acceptance)")
+            work["spectatorAngles"] = value
+        elif key == "spectatorAngleNodes":
+            n = _thm_whole_int(value)
+            if n is None or not 1 <= n <= 64:
+                raise ValueError(where + f"spectatorAngleNodes='{value}': expected a whole "
+                                 "number of Gauss-Legendre nodes, 1 to 64")
+            work["spectatorAngleNodes"] = n
         else:
             raise ValueError(where + f"unknown key '{key}' (keys: segments, "
                              "background, beam, target, spectator, Ebeam, lineshape, ps, "
                              "psNodes, distortion, opticalAA, opticalSF, spectatorAngle, "
                              "distortionRef, distortionRatio, boundState, theta, "
-                             "vertexModel)")
+                             "vertexModel, spectatorAngles, spectatorAngleNodes)")
         work["keys"].append(key)
     experiments[name] = work
 
@@ -447,6 +463,25 @@ def _thm_check_experiments(experiments):
                                  "available with vertexModel=dw: the distorted source has "
                                  "every m_l about p_xA, which the fixed-angle sum does "
                                  "not carry")
+        # Spectator-direction window (ThmExperiment.cpp CheckThmExperiments).
+        if "spectatorAngles" in x:
+            if not computed:
+                raise ValueError(where + "spectatorAngles= averages the distortion factor "
+                                 "R(E) or the DW vertex over the spectator directions; it "
+                                 "needs distortion=coulomb or distortion=optical (the "
+                                 "plane-wave vertex depends on |p_s| alone, which ps= "
+                                 "averages)")
+            if "spectatorAngle" in x["keys"]:
+                raise ValueError(where + "spectatorAngle= (one direction) and "
+                                 "spectatorAngles= (a window) exclude each other")
+            if x.get("vertexModel", "pw") == "dw" and "psNodes" in x["keys"]:
+                raise ValueError(where + "with vertexModel=dw and spectatorAngles= the "
+                                 "nodes are spectatorAngleNodes=; the ps window only cuts "
+                                 "|p_s| (the direction fixes it at each energy), so "
+                                 "psNodes= has no effect")
+        elif "spectatorAngleNodes" in x["keys"]:
+            raise ValueError(where + "spectatorAngleNodes= needs a spectator-direction "
+                             "window (spectatorAngles=)")
         if (computed and x.get("vertexModel", "pw") != "dw"
                 and x.get("ps", "delta") != "delta"
                 and x.get("distortionRatio", "dwpw") == "dw"):
@@ -537,6 +572,9 @@ def _thm_experiment_record(x):
         out["theta"] = x["theta"]
     if "vertexModel" in x:
         out["vertexModel"] = x["vertexModel"]
+    for key in ("spectatorAngles", "spectatorAngleNodes"):
+        if key in x:
+            out[key] = x[key]
     return out
 
 
@@ -563,6 +601,10 @@ def _thm_experiment_line(name, rec):
         parts.append(f"theta={rec['theta']}")
     if "vertexModel" in rec:
         parts.append(f"vertexModel={rec['vertexModel']}")
+    if "spectatorAngles" in rec:
+        parts.append(f"spectatorAngles={rec['spectatorAngles']}")
+    if "spectatorAngleNodes" in rec:
+        parts.append(f"spectatorAngleNodes={int(rec['spectatorAngleNodes'])}")
     return " ".join(parts)
 
 
@@ -2308,7 +2350,8 @@ class AzrModel:
                            ps=None, psNodes=None, distortion=None, opticalAA=None,
                            opticalSF=None, spectatorAngle=None, distortionRef=None,
                            distortionRatio=None, boundState=None, theta=None,
-                           vertexModel=None):
+                           vertexModel=None, spectatorAngles=None,
+                           spectatorAngleNodes=None):
         """Define (or replace) ``experiment[<name>]`` in the ``<thm>`` block.
 
         ``segments`` is a list of ``<segmentsData>`` line numbers (or the
@@ -2361,6 +2404,17 @@ class AzrModel:
         ``theta``, ``spectatorAngle`` together with a ``ps`` window,
         ``coulombIntegral=1``, ``entranceL=coherent`` and a spectator energy
         for the entrance pair; see :meth:`pyazr.azure2.azure2.thm_vertex`).
+        ``spectatorAngles`` averages R(E) or the DW vertex over the accepted
+        spectator directions instead of taking one (``spectatorAngle``, which
+        it excludes): ``"10-30"`` or ``(10, 30)`` (lab polar angles of the
+        spectator to the beam, degrees), ``"cm:150-180"`` (c.m.),
+        ``"table:<file>"`` / ``"cm:table:<file>"`` (angle and acceptance
+        columns, relative to the .azr); weight d cos(theta_cm) x acceptance; a
+        ``ps`` window then only cuts |p_s| for the DW vertex and for R.
+        ``spectatorAngleNodes`` (1-64, default 8) Gauss-Legendre nodes per
+        c.m. interval (a lab window can map to two).  Needs ``distortion=
+        "coulomb"`` or ``"optical"``; with ``vertexModel="dw"`` not together
+        with ``psNodes``.
         The record replaces every
         earlier line of that name with one line; other lines stay as they
         are.  Raises ValueError (model unchanged) for anything AZURE2 would
@@ -2403,6 +2457,13 @@ class AzrModel:
             text += f" theta={theta}"
         if vertexModel is not None:
             text += f" vertexModel={vertexModel}"
+        if spectatorAngles is not None:
+            if not isinstance(spectatorAngles, str):
+                lo, hi = spectatorAngles
+                spectatorAngles = f"{_thm_plain_number(lo)}-{_thm_plain_number(hi)}"
+            text += f" spectatorAngles={spectatorAngles}"
+        if spectatorAngleNodes is not None:
+            text += f" spectatorAngleNodes={spectatorAngleNodes}"
         if any(c in text for c in "#\r\n"):
             raise ValueError(f"<thm> experiment[{name}]: a value cannot contain '#' "
                              "or a line break.")

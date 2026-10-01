@@ -1059,7 +1059,13 @@ class azure2:
                       and weights per energy, ``dw_q_delta`` (MeV/c) and
                       ``dw_p_delta`` (fm^-1) those of the ``spectatorAngle``
                       node.  ``p_s``, ``weights``, ``T_s`` stay the nominal
-                      window of the line.
+                      window of the line.  With ``spectatorAngles=`` the
+                      vertex is averaged over the accepted spectator
+                      directions (the model is linear in the Gram matrix, so
+                      that is one node with the averaged matrix: ``dw_q`` its
+                      weighted mean q), and ``angle_theta_cm`` (deg, c.m. to
+                      the beam), ``angle_q`` (MeV/c), ``angle_weights`` give
+                      the directions at the grid energy nearest to each E.
 
         Raises the engine error if the experiment is unknown.
         """
@@ -1097,6 +1103,11 @@ class azure2:
         ``theta_cm``, ``x``, ``q``  spectator c.m. angle to the beam (deg),
                                     cos(k_sF, k_aA), |k_sF - beta k_aA|
         ``lmax``                    the highest partial wave summed
+
+        With ``spectatorAngles=`` (a window of spectator directions) ``M2``
+        and ``M2_PW`` are the averages over the accepted directions (weight
+        d cos theta_cm x acceptance), R is their ratio (``dwpw``), and
+        ``theta_cm``, ``x``, ``q`` are weighted means.
         ``E_ref``, ``E_aA``, ``B``, ``k_aA``, ``eta_aA``, ``kappa``,
         ``eta_b``, ``beta``         scalars of the experiment
 
