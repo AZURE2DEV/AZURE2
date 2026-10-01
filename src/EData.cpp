@@ -546,8 +546,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
 
     if (segment->IsTargetEffect()) {
       TargetEffect *targetEffect = this->GetTargetEffect(segment->GetTargetEffectNum());
-      double sigma = targetEffect->GetSigma();
-      targetEffect->SetSigma(cmConversion * sigma);
+      targetEffect->ConvertSigmaToCM(cmConversion);
       if (targetEffect->IsBeamProfile()) targetEffect->ConvertBeamProfileToCM(cmConversion);
 
       for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
@@ -690,8 +689,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
       for (auto component : segment->GetComponentSegments()) {
         if (component->IsTargetEffect()) {
           TargetEffect *targetEffect = this->GetTargetEffect(component->GetTargetEffectNum());
-          double sigma = targetEffect->GetSigma();
-          targetEffect->SetSigma(cmConversion * sigma);
+          targetEffect->ConvertSigmaToCM(cmConversion);
           if (targetEffect->IsBeamProfile()) targetEffect->ConvertBeamProfileToCM(cmConversion);
 
           for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {

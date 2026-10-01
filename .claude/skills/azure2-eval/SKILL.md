@@ -1687,3 +1687,18 @@ complete:
     WITH `tol = 1e-6` and still carry it -- the source revert did not touch them.  They are
     to be rebuilt from reverted source once the running jobs finish; until then, results
     from those builds used 1 eV.  Pre-change CLI binary: ~/bin/AZURE2.bak-2026-09-13_tol1e-3.
+
+- 2026-10-01 (22Ne+a/10-1-26_claude) -- A <targetInt> LINE SHARED BY SEVERAL SEGMENTS
+  CONVOLVED ALL OF THEM WITH TOO NARROW A GAUSSIAN. Every segment named on one line (and
+  every component of a SUM/RATIO segment) points to one TargetEffect, and
+  `EData::ReadTargetEffectsFile` converted its fixed sigma lab -> c.m. once per segment,
+  so a line naming N segments applied sigma * (m_t/(m_p+m_t))^N to all of them. On
+  22Ne+a a "4-6" Harms line gave chi2 2037 for segment 4 vs 1379 with separate lines; on
+  tests/target_effect_ranges ("1,2") the reference moved 3861.43 -> 3838.73. It also made
+  composite (SUM) segments look broken: adding an n1 component re-converted the shared
+  sigma and under-smoothed the parent's own n0 curve (Jaeger chi2 1510 -> 3320, with
+  +-40 % swings below the n1 threshold). Fixed by `TargetEffect::ConvertSigmaToCM` (once,
+  like ConvertBeamProfileToCM already was); regression test tests/target_effect_shared
+  (shared line == separate lines, fails on the old binary). Any fit with a multi-segment
+  convolution line or a convolved composite segment done with an older binary used the
+  narrower kernel; old binary + one line per segment reproduces the fixed result exactly.

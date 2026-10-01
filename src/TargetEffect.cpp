@@ -341,6 +341,20 @@ void TargetEffect::ConvertBeamProfileToCM(double factor) {
   beamProfileConverted_ = true;
 }
 
+/*!
+ * Converts the fixed convolution sigma from the frame of the input file (lab)
+ * to the centre of mass, exactly once, however many segments share the effect.
+ * Every segment listed on a <targetInt> line, and every component of an
+ * advanced (SUM/RATIO) segment, points to the same TargetEffect; converting it
+ * once per segment shrank the kernel by the mass ratio for each extra one.
+ */
+
+void TargetEffect::ConvertSigmaToCM(double factor) {
+  if (sigmaConverted_) return;
+  sigma_ *= factor;
+  sigmaConverted_ = true;
+}
+
 const std::vector<TargetEffect::BeamProfileComponent> &TargetEffect::GetBeamProfile() const {
   return beamProfile_;
 }
