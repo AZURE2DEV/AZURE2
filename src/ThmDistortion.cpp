@@ -1,6 +1,7 @@
 #include "ThmDistortion.h"
 #include "Config.h"
 #include "ThmExperiment.h"
+#include "ThmOptical.h"
 #include "cwfcomp_accurate.H"
 
 #include <algorithm>
@@ -90,6 +91,19 @@ std::string Number(double x) {
 
 }  // namespace
 
+// A nucleus by name if the built-in table has it, else (Z,A).
+static std::string NucleusName(int Z, int A) {
+  if (const ThmNuclide *n = ThmNuclide::Find(Z, A)) return n->name;
+  std::ostringstream s;
+  s << "(Z,A)=(" << Z << "," << A << ")";
+  return s.str();
+}
+
+void ThmDistortion::Channel::SetEnergy(double ecm) {
+  if (global < 0) return;
+  ThmGlobalOpticalEvaluate(global, Zp, Ap, Zt, At, LabEnergy(ecm), p);
+}
+
 std::string ThmDistortion::Channel::Describe() const {
   std::ostringstream s;
   s.precision(6);
@@ -98,13 +112,17 @@ std::string ThmDistortion::Channel::Describe() const {
     s << "point Coulomb (Z1 Z2 = " << Z1 * Z2 << ")";
     return s.str();
   }
+  if (global >= 0)
+    s << ThmGlobalOpticals()[global].name << (extrapolate ? ":extrapolate" : "") << " (" << NucleusName(Zp, Ap)
+      << " on " << NucleusName(Zt, At) << ") ";
   s << "Woods-Saxon V=" << p[0] << " R=" << p[1] << " a=" << p[2] << ", W=" << p[3] << " RW=" << p[4]
     << " aW=" << p[5] << ", WD=" << p[6] << " RD=" << p[7] << " aD=" << p[8] << ", Coulomb "
     << (p[9] > 0.0 ? "RC=" + Number(p[9]) : std::string("point")) << " (Z1 Z2 = " << Z1 * Z2 << ")";
   return s.str();
 }
 
-bool ThmDistortion::Wave(const Channel &c, int l, double step, int nStore, std::vector<complex> &u) const {
+bool ThmDistortion::Wave(const Channel &c, int l, double step, int nStore, std::vector<complex> &u,
+                         complex *T) const {
   const double k = c.k;
   const bool plane = c.kind == Channel::PLANE;
   const bool ws = c.kind == Channel::WOODS_SAXON;
@@ -177,6 +195,7 @@ bool ThmDistortion::Wave(const Channel &c, int l, double step, int nStore, std::
   if (!(std::abs(norm) > 0.0) || !std::isfinite(std::abs(norm))) return false;
   u.assign(nStore, complex(0.0, 0.0));
   for (int i = 0; i < nStore; i++) u[i] = v[i] / norm;
+  if (T) *T = cg / norm;
   return true;
 }
 
@@ -251,9 +270,7 @@ ThmDistortion::Point ThmDistortion::Evaluate(double energy) const {
   }
   p.mpw = 4.0 * M_PI * mpw;
   // Partial waves.
-  Channel c = sf;
-  c.k = p.ksf;
-  c.eta = p.etasf;
+  Channel c = SfAt(energy);
   const int lCap = (int)uAA.size() - 1;
   std::vector<complex> sigma = CoulombPhases(c.eta, lCap);
   std::vector<complex> u;
@@ -311,7 +328,10 @@ std::string ThmDistortion::Setup(const ThmExperiment &x, const Kinematics &k, do
   muSx = k.ms * k.mx / (k.ms + k.mx) * uconv;
   kappa = std::sqrt(2.0 * muSx * k.bind) / hbarc;
   etaB = k.Zs * k.Zx * fstruc * muSx / (hbarc * kappa);
-  auto channel = [&](const ThmExperiment::Optical &o, int z1, int z2, double m1, double m2, Channel &c) {
+  warnings.clear();
+  const char *keys[2] = {"opticalAA", "opticalSF"}, *labels[2] = {"a + A", "s + F"};
+  auto channel = [&](int which, const ThmExperiment::Optical &o, int z1, int a1, double m1, int z2, int a2,
+                     double m2, Channel &c) -> std::string {
     c = Channel();
     c.kind = kind == COULOMB ? Channel::POINT_COULOMB
              : o.kind == 0   ? Channel::PLANE
@@ -321,11 +341,72 @@ std::string ThmDistortion::Setup(const ThmExperiment &x, const Kinematics &k, do
     c.Z1 = z1;
     c.Z2 = z2;
     c.mu = m1 * m2 / (m1 + m2) * uconv;
+    if (kind != OPTICAL || o.kind != 3) return "";
+    // A global potential: its projectile is the partner it is made for.
+    const ThmGlobalOptical &g = ThmGlobalOpticals()[o.global];
+    const std::string what = std::string(keys[which]) + "=" + g.name + " (" + g.reference + ", for " +
+                             g.projectiles + "): the " + labels[which] + " channel is " + NucleusName(z1, a1) +
+                             " + " + NucleusName(z2, a2);
+    if (a1 <= 0 || a2 <= 0) return std::string(keys[which]) + "=" + g.name + ": the mass numbers are not known";
+    const bool first = ThmGlobalOpticalFor(o.global, z1, a1);
+    if (!first && !ThmGlobalOpticalFor(o.global, z2, a2))
+      return what + ", which it does not describe (heavy-ion and other channels take the ten numbers "
+                    "V,R,a,W,RW,aW,WD,RD,aD,RC)";
+    c.global = o.global;
+    c.extrapolate = o.extrapolate;
+    c.Zp = first ? z1 : z2;
+    c.Ap = first ? a1 : a2;
+    c.mp = first ? m1 : m2;
+    c.Zt = first ? z2 : z1;
+    c.At = first ? a2 : a1;
+    c.mt = first ? m2 : m1;
+    return "";
   };
-  channel(x.opticalAA, k.Za, k.ZA, k.ma, k.mA, aa);
-  channel(x.opticalSF, k.Zs, k.Zx + k.ZA, k.ms, k.mx + k.mA, sf);
+  std::string bad = channel(0, x.opticalAA, k.Za, k.Aa, k.ma, k.ZA, k.AA, k.mA, aa);
+  if (bad.empty()) bad = channel(1, x.opticalSF, k.Zs, k.As, k.ms, k.Zx + k.ZA, k.Ax + k.AA, k.mx + k.mA, sf);
+  if (!bad.empty()) return bad;
   aa.k = std::sqrt(2.0 * aa.mu * eAA) / hbarc;
   aa.eta = aa.kind == Channel::PLANE ? 0.0 : aa.Z1 * aa.Z2 * fstruc * aa.mu / (hbarc * aa.k);
+  // Global potentials: a + A at E_aA; s + F follows E_sF, so the radial step
+  // takes the largest depth over (0, E_sF(eLo)]; both checked against the
+  // validity range over the data.
+  const double lo = dataLo <= dataHi ? dataLo : eLo, hi = dataLo <= dataHi ? dataHi : eLo;
+  for (int which = 0; which < 2; which++) {
+    Channel &c = which == 0 ? aa : sf;
+    if (c.global < 0) continue;
+    const ThmGlobalOptical &g = ThmGlobalOpticals()[c.global];
+    double e0 = which == 0 ? eAA : EsF(hi), e1 = which == 0 ? eAA : EsF(lo);
+    double l0 = c.LabEnergy(e0), l1 = c.LabEnergy(e1);
+    if (which == 0) {
+      c.SetEnergy(eAA);
+      c.depthMax = std::fabs(c.p[0]) + std::fabs(c.p[3]) + std::fabs(c.p[6]);
+    } else {
+      const double top = std::max(EsF(eLo), e1);
+      for (int i = 1; i <= 40; i++) {
+        c.SetEnergy(top * i / 40.0);
+        c.depthMax = std::max(c.depthMax, std::fabs(c.p[0]) + std::fabs(c.p[3]) + std::fabs(c.p[6]));
+      }
+      c.SetEnergy(0.5 * (e0 + e1));
+    }
+    const bool massOk = c.At >= g.aMin && c.At <= g.aMax;
+    const bool energyOk = l0 >= g.eMin && l1 <= g.eMax;
+    if (massOk && energyOk) continue;
+    std::ostringstream why;
+    why.precision(4);
+    why << keys[which] << "=" << g.name << " (" << g.reference << ") is outside its validity range for "
+        << NucleusName(c.Zp, c.Ap) << " + " << NucleusName(c.Zt, c.At) << ":";
+    if (!massOk) why << " target A = " << c.At << " (valid " << g.aMin << "-" << g.aMax << ")";
+    if (!energyOk) {
+      why << (massOk ? "" : ",") << " lab energy of " << NucleusName(c.Zp, c.Ap) << " " << l0;
+      if (which == 1 && l1 != l0) why << "-" << l1;
+      why << " MeV over the data (valid " << g.eMin << "-" << g.eMax << " MeV)";
+    }
+    if (c.extrapolate) {
+      warnings.push_back(why.str() + "; extrapolated as asked (:extrapolate).");
+      continue;
+    }
+    return why.str() + ". Write " + g.name + ":extrapolate to use it there anyway (warned), or give the ten numbers";
+  }
 
   // Radial step: h = 0.02 fm, or k_local h <= 0.1 in both channels.
   double kSF = std::sqrt(2.0 * sf.mu * (std::max(EsF(eLo), 0.0) + Depth(sf))) / hbarc;
@@ -342,7 +423,47 @@ std::string ThmDistortion::Setup(const ThmExperiment &x, const Kinematics &k, do
 }
 
 double ThmDistortion::Depth(const Channel &c) {
+  if (c.kind == Channel::WOODS_SAXON && c.global >= 0) return c.depthMax;
   return c.kind == Channel::WOODS_SAXON ? std::fabs(c.p[0]) + std::fabs(c.p[3]) + std::fabs(c.p[6]) : 0.0;
+}
+
+std::string ThmDistortion::ChannelText(int which) const {
+  const Channel &c = which == 0 ? aa : sf;
+  if (c.global < 0) return c.Describe();
+  std::ostringstream t;
+  t.precision(6);
+  if (which == 0) {
+    t << c.Describe() << " at E_lab = " << c.LabEnergy(eAA) << " MeV";
+    return t.str();
+  }
+  // The s + F potential follows E_sF: at the two ends of the data.
+  const double lo = dataLo <= dataHi ? dataLo : 0.0, hi = dataLo <= dataHi ? dataHi : 0.0;
+  Channel c0 = SfAt(lo), c1 = SfAt(hi);
+  t << c1.Describe() << " at E_lab = " << c.LabEnergy(EsF(hi)) << " MeV (E = " << hi << " MeV) to V=" << c0.p[0]
+    << " R=" << c0.p[1] << " a=" << c0.p[2] << ", W=" << c0.p[3] << " RW=" << c0.p[4] << " aW=" << c0.p[5]
+    << ", WD=" << c0.p[6] << " RD=" << c0.p[7] << " aD=" << c0.p[8] << " at E_lab = " << c.LabEnergy(EsF(lo))
+    << " MeV (E = " << lo << " MeV)";
+  return t.str();
+}
+
+ThmDistortion::Channel ThmDistortion::SfAt(double energy) const {
+  Channel c = sf;
+  const double esf = EsF(energy);
+  c.k = std::sqrt(2.0 * c.mu * std::max(esf, 0.0)) / hbarc;
+  c.eta = c.kind == Channel::PLANE ? 0.0 : kin.Zs * (kin.Zx + kin.ZA) * fstruc * c.mu / (hbarc * c.k);
+  c.SetEnergy(esf);
+  return c;
+}
+
+bool ThmDistortion::GlobalEnds(int which, double lo, double hi, double elab[2], double p[2][10]) const {
+  const Channel &c = which == 0 ? aa : sf;
+  if (c.global < 0) return false;
+  for (int end = 0; end < 2; end++) {
+    const double ecm = which == 0 ? eAA : EsF(end == 0 ? lo : hi);
+    elab[end] = c.LabEnergy(ecm);
+    ThmGlobalOpticalEvaluate(c.global, c.Zp, c.Ap, c.Zt, c.At, elab[end], p[end]);
+  }
+  return true;
 }
 
 double ThmDistortion::Phi(double r) const {
@@ -357,6 +478,10 @@ double ThmDistortion::Phi(double r) const {
 
 std::string ThmDistortion::Build(const ThmExperiment &x, const Kinematics &k, double eLo, double eHi,
                                  double eRefDefault) {
+  if (!(dataLo <= dataHi)) {
+    dataLo = eLo;
+    dataHi = eHi;
+  }
   std::string setup = Setup(x, k, eLo);
   if (!setup.empty()) return setup;
   const double rEnd = rmin + 50.0 / kappa;
@@ -406,7 +531,7 @@ std::string ThmDistortion::Build(const ThmExperiment &x, const Kinematics &k, do
 
   std::ostringstream d;
   d.precision(6);
-  d << (kind == COULOMB ? "coulomb" : "optical") << "; a + A: " << aa.Describe() << "; s + F: " << sf.Describe()
+  d << (kind == COULOMB ? "coulomb" : "optical") << "; a + A: " << ChannelText(0) << "; s + F: " << ChannelText(1)
     << "; spectator angle "
     << (angleKind == QF ? std::string("qf (k_sF along k_aA)")
                         : (angleKind == LAB ? "lab " : "cm ") + Number(angle) + " deg")

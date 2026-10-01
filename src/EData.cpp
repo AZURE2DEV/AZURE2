@@ -3006,6 +3006,10 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
         dk.ZA = nA.Z;
         dk.Zs = sp.Z;
         dk.Zx = th.Z - sp.Z;
+        dk.Aa = th.A;
+        dk.AA = nA.A;
+        dk.As = sp.A;
+        dk.Ax = th.A - sp.A;
         dk.ma = th.mass;
         dk.mA = nA.mass;
         dk.ms = sp.mass;
@@ -3187,6 +3191,8 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
           << v->gridLo + (v->nE - 1) * v->gridStep << " MeV (" << v->nE << " energies, " << v->nNodes
           << " node(s) each), " << v->buildSeconds << " s.\n"
           << "  The distortion factor R(E) is not applied: the DW vertex carries the energy dependence.";
+        for (const std::string &w : v->dist.warnings)
+          l << "\nWARNING: <thm> experiment[" << x.name << "]: " << w;
         for (int s : group.segments)
           if (GetSegment(s)->GetThmWeight())
             l << "\nWARNING: <thm> experiment[" << x.name << "]: segment " << GetSegment(s)->GetSegmentKey()
@@ -3241,6 +3247,8 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
               }
             }
           double gridHi = std::min(eHi + 0.5, d->eAA - dk.bind - 0.5 * d->EsF(eHi));
+          d->dataLo = eLo;
+          d->dataHi = eHi;
           std::string why = d->Build(x, dk, eLo - 0.5, gridHi, 0.5 * (eLo + eHi));
           if (!why.empty()) {
             configure.outStream << where << "distortion: " << why << "." << std::endl;
@@ -3260,6 +3268,7 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
             l << "\nWARNING: <thm> experiment[" << x.name << "]: the plane-wave amplitude M_PW changes sign on "
                  "the grid (a node of the momentum distribution at this angle); R = |M/M_PW|^2 is singular "
                  "there (distortionRatio=dw avoids it).";
+          for (const std::string &w : d->warnings) l << "\nWARNING: <thm> experiment[" << x.name << "]: " << w;
           if (d->tailWorst > 1.0e-8)
             l << "\nWARNING: <thm> experiment[" << x.name << "]: the radial integrals are cut at r = "
               << (d->n - 1) * d->h << " fm with a remainder up to " << d->tailWorst << " of |M|.";

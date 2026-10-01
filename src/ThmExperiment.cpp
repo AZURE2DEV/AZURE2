@@ -1,4 +1,5 @@
 #include "ThmExperiment.h"
+#include "ThmOptical.h"
 
 #include <algorithm>
 #include <cctype>
@@ -131,7 +132,7 @@ std::string ParsePs(const std::string &value, ThmExperiment &x) {
   return usage;
 }
 
-// opticalAA= / opticalSF=: plane | coulomb | V,R,a,W,RW,aW,WD,RD,aD,RC.
+// opticalAA= / opticalSF=: plane | coulomb | <global name>[:extrapolate] | V,R,a,W,RW,aW,WD,RD,aD,RC.
 std::string ParseOptical(const std::string &key, const std::string &value, ThmExperiment::Optical &o) {
   o = ThmExperiment::Optical();
   if (value == "plane") {
@@ -140,6 +141,18 @@ std::string ParseOptical(const std::string &key, const std::string &value, ThmEx
   }
   if (value == "coulomb") {
     o.kind = 1;
+    return "";
+  }
+  if (!value.empty() && std::isalpha((unsigned char)value[0])) {
+    const size_t colon = value.find(':');
+    const std::string name = value.substr(0, colon), option = colon == std::string::npos ? "" : value.substr(colon + 1);
+    const int index = ThmGlobalOpticalIndex(name);
+    if (index < 0 || (colon != std::string::npos && option != "extrapolate"))
+      return key + "='" + value + "': expected plane, coulomb, a global optical potential (" +
+             ThmGlobalOpticalNames() + ", optionally :extrapolate) or ten numbers V,R,a,W,RW,aW,WD,RD,aD,RC";
+    o.kind = 3;
+    o.global = index;
+    o.extrapolate = colon != std::string::npos;
     return "";
   }
   std::vector<std::string> f = Split(value, ',');

@@ -254,6 +254,10 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   gridLo = eLo;
   gridStep = kGridStep;
   nE = std::max(4, (int)std::ceil((eHi - eLo) / kGridStep - 1.0e-9) + 1);
+  if (!points.empty()) {
+    dist.dataLo = *std::min_element(points.begin(), points.end());
+    dist.dataHi = *std::max_element(points.begin(), points.end());
+  }
   std::string why = dist.Setup(x, k, eLo);
   if (!why.empty()) return why;
   for (int e = 0; e < nE; e++) {
@@ -366,10 +370,7 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
     std::vector<std::string> errors(nb);
 #pragma omp parallel for schedule(dynamic)
     for (int b = 0; b < nb; b++) {
-      ThmDistortion::Channel c = dist.sf;
-      c.k = ksE[e0 + b];
-      c.eta = c.kind == ThmDistortion::Channel::PLANE ? 0.0
-                                                       : k.Zs * (k.Zx + k.ZA) * fstruc * c.mu / (hbarc * c.k);
+      ThmDistortion::Channel c = dist.SfAt(eLo + (e0 + b) * gridStep);
       int badL = -1;
       if (!WaveTable(dist, c, lsMax, stepS, nS, uS[b], badL))
         errors[b] = "the s + F wave l = " + Number(badL) + " at E = " + Number(eLo + (e0 + b) * gridStep) +
@@ -592,8 +593,8 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
 
   std::ostringstream d;
   d.precision(6);
-  d << "vertexModel=dw: surface term of the prior-form DWBA; a + A: " << dist.aa.Describe()
-    << "; s + F: " << dist.sf.Describe() << "; bound state " << (dist.yukawa ? "yukawa" : "whittaker")
+  d << "vertexModel=dw: surface term of the prior-form DWBA; a + A: " << dist.ChannelText(0)
+    << "; s + F: " << dist.ChannelText(1) << "; bound state " << (dist.yukawa ? "yukawa" : "whittaker")
     << (rmin > 0.0 ? ", r >= " + Number(rmin) + " fm" : "") << "; "
     << (window ? "the ps window on its reachable part at each energy"
                : std::string("spectator angle ") +

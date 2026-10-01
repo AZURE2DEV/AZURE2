@@ -55,7 +55,9 @@ class ThmDistortion {
   enum Kind { COULOMB, OPTICAL, TABLE };
   /// One channel's distortion: none (plane wave), point Coulomb, or a
   /// Woods-Saxon potential p[] = V,R,a, W,RW,aW, WD,RD,aD, RC (MeV, fm;
-  /// RC = 0 a point charge) plus Coulomb.
+  /// RC = 0 a point charge) plus Coulomb.  A global optical potential
+  /// (ThmOptical.h, global >= 0) is a Woods-Saxon channel whose p[] follow
+  /// the energy: SetEnergy evaluates the model at the projectile's lab energy.
   struct Channel {
     enum Kind { PLANE, POINT_COULOMB, WOODS_SAXON };
     Kind kind = POINT_COULOMB;
@@ -64,11 +66,22 @@ class ThmDistortion {
     double mu = 0.0;  ///< reduced mass (MeV)
     double k = 0.0;   ///< wave number (fm^-1)
     double eta = 0.0; ///< Sommerfeld parameter (0 for PLANE)
+    // Global optical potential.
+    int global = -1;           ///< index in ThmGlobalOpticals(), or -1
+    bool extrapolate = false;  ///< allowed outside the validity range
+    int Zp = 0, Ap = 0, Zt = 0, At = 0;  ///< projectile (the model's light ion) and target
+    double mp = 0.0, mt = 0.0;           ///< their masses (u)
+    double depthMax = 0.0;     ///< largest summed depth over the energies the channel takes (MeV)
+    /// The projectile lab energy at the channel's c.m. energy ecm (MeV).
+    double LabEnergy(double ecm) const { return ecm * (mp + mt) / mt; }
+    /// p[] of the global model at the channel's c.m. energy ecm (no-op otherwise).
+    void SetEnergy(double ecm);
     std::string Describe() const;
   };
   /// The three-body kinematics (BuildThmGroups fills it from the experiment line).
   struct Kinematics {
     int Za = 0, ZA = 0, Zs = 0, Zx = 0;  ///< Trojan horse a, the other nucleus A, spectator s, x = a - s
+    int Aa = 0, AA = 0, As = 0, Ax = 0;  ///< mass numbers (global optical potentials only)
     double ma = 0.0, mA = 0.0, ms = 0.0, mx = 0.0;  ///< nuclear masses (u)
     bool horseIsBeam = true;
     double mBeam = 0.0, mTarget = 0.0;  ///< u
@@ -102,6 +115,12 @@ class ThmDistortion {
   bool yukawa = false;
   double rmin = 0.0;   ///< fm (as used: snapped to the grid)
   double eRef = 0.0;   ///< MeV
+  /// The data range (c.m. of x + A, MeV) over which a global optical potential
+  /// is checked against its validity range (Setup); dataLo > dataHi: the grid ends.
+  double dataLo = 1.0, dataHi = 0.0;
+  /// WARNINGs of Setup (a global potential used outside its range with
+  /// :extrapolate), without the "WARNING: " prefix.
+  std::vector<std::string> warnings;
   // Derived.
   Kinematics kin;
   Channel aa, sf;
@@ -134,8 +153,18 @@ class ThmDistortion {
   std::string Setup(const ThmExperiment &x, const Kinematics &k, double eLo);
   /// The s-x bound state phi(r) as Build tabulates it (0 below rmin).
   double Phi(double r) const;
-  /// Sum of the Woods-Saxon depths of a channel (0 unless WOODS_SAXON), MeV.
+  /// Sum of the Woods-Saxon depths of a channel (0 unless WOODS_SAXON; for a
+  /// global potential the largest over its energies), MeV.
   static double Depth(const Channel &c);
+  /// Channel 0 (a + A) or 1 (s + F) for the output; a global s + F potential
+  /// at both ends of the data.
+  std::string ChannelText(int which) const;
+  /// The s + F channel at E (k, eta and, for a global potential, p[] at E_sF).
+  Channel SfAt(double energy) const;
+  /// For a global potential in channel c (0 a + A, 1 s + F): the projectile
+  /// lab energies and the ten numbers at the data ends E = lo and hi (for
+  /// a + A both are the same).  False if the channel is not global.
+  bool GlobalEnds(int c, double lo, double hi, double elab[2], double p[2][10]) const;
   /// Direct evaluation at E (not the grid).
   Point Evaluate(double energy) const;
   /// rho(E) as R uses it, from a Point.
@@ -158,8 +187,10 @@ class ThmDistortion {
   double EsF(double energy) const { return eAA - kin.bind - energy; }
 
   /// u_l of channel c on the grid r_j = j step, j = 0..nStore-1 (Numerov from
-  /// the origin, normalized to F_l + T_l H_l^+); false if it fails.
-  bool Wave(const Channel &c, int l, double step, int nStore, std::vector<complex> &u) const;
+  /// the origin, normalized to F_l + T_l H_l^+, T_l = (S_l - 1)/2i the nuclear
+  /// part, returned in *T if asked); false if it fails.
+  bool Wave(const Channel &c, int l, double step, int nStore, std::vector<complex> &u,
+            complex *T = nullptr) const;
 };
 
 /// What the output file and pyazr report for one experiment's distortion.

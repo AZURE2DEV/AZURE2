@@ -75,10 +75,13 @@ struct ThmExperiment {
   std::string distortionTable;  ///< table: the file as written
   std::shared_ptr<const ThmWeightTable> distortionWeights;  ///< table rows (Config::ReadThmBlock)
   /// opticalAA= / opticalSF=: 0 plane, 1 coulomb, 2 Woods-Saxon with p[10] =
-  /// V,R,a,W,RW,aW,WD,RD,aD,RC (MeV, fm).
+  /// V,R,a,W,RW,aW,WD,RD,aD,RC (MeV, fm), 3 a global optical potential
+  /// (ThmOptical.h: `<name>` or `<name>:extrapolate`, index `global`).
   struct Optical {
     int kind = 1;
     double p[10] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    int global = -1;           ///< kind 3: index in ThmGlobalOpticals()
+    bool extrapolate = false;  ///< kind 3: allowed outside its validity range (warned)
   };
   Optical opticalAA, opticalSF;
   /// spectatorAngle=: 0 qf (k_sF along k_aA, default), 1 lab degrees, 2 cm:degrees.
