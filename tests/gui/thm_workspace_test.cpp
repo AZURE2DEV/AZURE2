@@ -1348,6 +1348,9 @@ int main(int argc, char** argv) {
         const int c = key == "opticalAA" ? 0 : 1;
         if(value == "plane" || value == "coulomb") {
           p->opticalCombo[c]->setCurrentIndex(p->opticalCombo[c]->findData(value));
+        } else if(value.at(0).isLetter()) {
+          p->opticalCombo[c]->setCurrentIndex(p->opticalCombo[c]->findData("global"));
+          p->setGlobalText(c, value);
         } else {
           p->opticalCombo[c]->setCurrentIndex(p->opticalCombo[c]->findData("ws"));
           p->setOpticalText(c, value);
@@ -1440,6 +1443,40 @@ int main(int argc, char** argv) {
        p->distortionValue->text());
   }
   {
+    // Global optical potentials: the mode, the name, the dialog.
+    c12Open("experiment[E1] segments=3 " + c12Reaction + " distortion=optical\n");
+    ThmSettings s;
+    w.thmSettings(s);
+    ThmWorkspace ws(&w, s);
+    ThmExperimentsPage* p = ws.experimentsPage;
+    ok("global: name combo hidden for Coulomb", !p->globalCombo[1]->isVisibleTo(p));
+    p->opticalCombo[1]->setCurrentIndex(p->opticalCombo[1]->findData("global"));
+    ok("global: the first deuteron potential for d + 24Mg, its combo shown, Edit enabled",
+       p->records().at(0).opticalSF == "ancai06" && p->globalCombo[1]->isVisibleTo(p) &&
+           p->globalCombo[1]->currentData().toString() == "ancai06" && p->opticalButton[1]->isEnabled() &&
+           ws.validate().isEmpty(),
+       p->records().at(0).opticalSF + " | " + ws.validate());
+    ok("global: the tooltip gives the numbers at the data ends",
+       p->opticalButton[1]->toolTip().startsWith("ancai06 at E_lab = ") && p->opticalButton[1]->toolTip().contains("V = "),
+       p->opticalButton[1]->toolTip());
+    double elab[2], pe[2][10], lo = 0, hi = 0;
+    ok("global: ends evaluated", p->globalEnds(p->records().at(0), 1, elab, pe, &lo, &hi) && elab[0] > elab[1] &&
+                                     std::fabs(elab[1] - (3.573 - hi) * (2.0135532134 + 23.9784646239) / 23.9784646239) < 0.02);
+    p->globalCombo[1]->setCurrentIndex(p->globalCombo[1]->findData("daehnick80"));
+    ok("global: another name written, refused below its range",
+       p->records().at(0).opticalSF == "daehnick80" && ws.validate().contains("daehnick80:extrapolate"), ws.validate());
+    p->setGlobalText(1, "daehnick80:extrapolate");
+    ok("global: :extrapolate accepted", ws.validate().isEmpty(), ws.validate());
+    p->opticalCombo[1]->setCurrentIndex(p->opticalCombo[1]->findData("coulomb"));
+    p->opticalCombo[1]->setCurrentIndex(p->opticalCombo[1]->findData("global"));
+    ok("global: the last name kept across modes", p->records().at(0).opticalSF == "daehnick80:extrapolate");
+    ThmGlobalOpticalDialog d("test", "kd03", true, elab, pe, lo, hi);
+    ok("global dialog: name, values, no extrapolation", d.text() == "kd03" && !d.extrapolateCheck->isChecked() &&
+                                                            d.valueLabels[0][0]->text().endsWith(" MeV"));
+    d.extrapolateCheck->setChecked(true);
+    ok("global dialog: extrapolation", d.text() == "kd03:extrapolate");
+  }
+  {
     // The Woods-Saxon dialog: the ten numbers in their fields, as written until changed.
     ThmOpticalDialog d("test", "50.0,4.5,0.60,10,4.5,0.6,0,0,0,4.50");
     ok("optical dialog: fields as written", d.text() == "50.0,4.5,0.60,10,4.5,0.6,0,0,0,4.50" &&
@@ -1463,6 +1500,8 @@ int main(int argc, char** argv) {
                                "distortion=optical opticalAA=plane",
                                "distortion=optical opticalAA=50,4.5,0.6,10,4.5,0.6,0,0,0,4.5 opticalSF=plane",
                                "distortion=optical opticalSF=0,0,0,0,0,0,8,5.5,0.65,5 spectatorAngle=cm:8",
+                               "distortion=optical opticalSF=ancai06",
+                               "distortion=optical opticalSF=daehnick80:extrapolate",
                                "distortion=table:rtable.dat"};
     for(const QString& form : forms) {
       c12Open(c12Base + "\n");
@@ -1552,6 +1591,10 @@ int main(int argc, char** argv) {
         {"distortion=table:rshort.dat", "distortion: the points span E_cm = ", true},
         {"distortion=table:nothere.dat", "distortion: cannot read the weight file", false},
         {"distortion=coulomb spectatorAngle=60", "is beyond the reach of the spectator", true},
+        {"distortion=optical opticalSF=ancai6", "expected plane, coulomb, a global optical potential", true},
+        {"distortion=optical opticalSF=kd03", "which it does not describe", true},
+        {"distortion=optical opticalAA=ancai06", "the a + A channel is 14N + 12C, which it does not describe", false},
+        {"distortion=optical opticalSF=daehnick80", "Write daehnick80:extrapolate", true},
     };
     for(const Refusal& r : refusals) {
       c12Open(c12Base + " " + r.tokens + "\n");

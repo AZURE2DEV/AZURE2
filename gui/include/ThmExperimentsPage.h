@@ -27,6 +27,7 @@ QT_END_NAMESPACE
 class PairsModel;
 class SegmentsDataModel;
 class ThmNumberSpin;
+class ThmDistortion;
 struct ThmSpectatorWindow;
 
 /*!
@@ -109,6 +110,17 @@ class ThmExperimentsPage : public QWidget {
   /// Sets opticalAA= (channel 0) or opticalSF= (1) of the selected
   /// experiment to ten numbers, as the Woods-Saxon dialog does on OK.
   void setOpticalText(int channel, const QString &tenNumbers);
+  /// Sets opticalAA= / opticalSF= of the selected experiment to a global
+  /// optical potential, `name` or `name:extrapolate` (ThmOptical.h).
+  void setGlobalText(int channel, const QString &value);
+  /*! For a record whose channel (0 a + A, 1 s + F) has a global optical
+      potential and a complete reaction: its ten numbers at the lowest and
+      highest point energy (the projectile lab energies in elab; for a + A
+      both ends are E_aA), as the engine evaluates them; false if they cannot
+      be evaluated (no reaction, no data, a projectile the model does not
+      describe). */
+  bool globalEnds(const ThmExperimentRecord &record, int channel, double elab[2], double p[2][10],
+                  double *lo = nullptr, double *hi = nullptr) const;
   /// The ps= value the spectator-momentum controls describe ("" for a point).
   QString psText() const;
   /// A file chosen for ps=table: relative to the project directory when inside it.
@@ -176,8 +188,9 @@ class ThmExperimentsPage : public QWidget {
   QComboBox *ratioCombo;        ///< item data: dwpw | dw
   QComboBox *boundCombo;        ///< item data: whittaker | yukawa
   ThmNumberSpin *rminEdit;      ///< fm; the minimum (a dash) = not given
-  QComboBox *opticalCombo[2];   ///< a + A, s + F; item data: plane | coulomb | ws
-  QPushButton *opticalButton[2];  ///< "Edit..." the ten Woods-Saxon numbers
+  QComboBox *opticalCombo[2];   ///< a + A, s + F; item data: plane | coulomb | global | ws
+  QComboBox *globalCombo[2];    ///< the global potential (item data: its name); shown for global
+  QPushButton *opticalButton[2];  ///< "Edit..." the ten Woods-Saxon numbers, or the global potential's
   QLineEdit *distortionTableEdit;
   QPushButton *distortionTableButton;
   /// Derived values (the reaction, zeta, the window, R at the ends), and why AZURE2 would refuse the experiment.
@@ -201,6 +214,7 @@ class ThmExperimentsPage : public QWidget {
   void distortionKindChanged();
   void distortionEdited();
   void opticalKindChanged();
+  void globalNameChanged();
   void chooseDistortionTable();
   void editOptical(int channel);
 
@@ -248,6 +262,11 @@ class ThmExperimentsPage : public QWidget {
   QList<QWidget *> psWindowRow_, psHulthenRow_, psGaussRow_, psTableRow_, psNodesRow_;
   QList<QWidget *> distortionComputedRows_, distortionOpticalRow_, distortionTableRow_, distortionValueRow_;
   QString lastOptical_[2];  ///< the ten numbers last shown per channel (kept across plane/coulomb)
+  QString lastGlobal_[2];   ///< the global potential last shown per channel (name[:extrapolate])
+  /// d.kin (and d.eAA) of a record with a complete reaction, as EData::BuildThmGroups sets them.
+  bool fillKinematics(const ThmExperimentRecord &record, ThmDistortion &d) const;
+  /// The Edit button's tooltip for a global potential: its numbers at the data ends.
+  QString globalSummary(const ThmExperimentRecord &record, int channel) const;
   std::function<double(int)> pairBinding_;
   /// distortionInfo of the last line asked for (the setup takes milliseconds to a second).
   mutable QString cacheKey_, cacheText_, cacheError_;
@@ -270,6 +289,26 @@ class ThmOpticalDialog : public QDialog {
   /// V,R,a,W,RW,aW,WD,RD,aD,RC as the fields give them.
   QString text() const;
   ThmNumberSpin *fields[10];
+};
+
+/*!
+ * A global optical potential of a channel (opticalAA= / opticalSF=
+ * <name>[:extrapolate]): its reference and validity range, the ten numbers
+ * it gives at the two ends of the data (read only), and whether it may be
+ * used outside its validity range.
+ */
+class ThmGlobalOpticalDialog : public QDialog {
+ public:
+  /// `value` is name[:extrapolate]; `elab`/`p` the ends (have = false: not available).
+  ThmGlobalOpticalDialog(const QString &title, const QString &value, bool have, const double elab[2],
+                         const double p[2][10], double lo, double hi, QWidget *parent = nullptr);
+  /// name or name:extrapolate.
+  QString text() const;
+  QCheckBox *extrapolateCheck;
+  QLabel *valueLabels[2][10];
+
+ private:
+  QString name_;
 };
 
 #endif

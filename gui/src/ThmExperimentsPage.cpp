@@ -39,6 +39,7 @@
 #include "Config.h"
 #include "Constants.h"
 #include "ThmDistortion.h"
+#include "ThmOptical.h"
 
 namespace {
 
@@ -274,11 +275,28 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
     opticalCombo[c] = new QComboBox;
     opticalCombo[c]->addItem(tr("plane"), "plane");
     opticalCombo[c]->addItem(tr("Coulomb"), "coulomb");
+    opticalCombo[c]->addItem(tr("global"), "global");
     opticalCombo[c]->addItem(QString::fromUtf8("Woods–Saxon"), "ws");
-    opticalCombo[c]->setToolTip(tr("%1=: plane (no distortion), point Coulomb (default) or a Woods-Saxon optical "
-                                   "potential plus Coulomb.")
+    opticalCombo[c]->setToolTip(tr("%1=: plane (no distortion), point Coulomb (default), a global optical "
+                                   "potential evaluated at the channel's energy, or a Woods-Saxon optical potential "
+                                   "plus Coulomb.")
                                     .arg(channelKeys[c]));
     connect(opticalCombo[c], SIGNAL(currentIndexChanged(int)), this, SLOT(opticalKindChanged()));
+    globalCombo[c] = new QComboBox;
+    for (const ThmGlobalOptical &g : ThmGlobalOpticals()) {
+      globalCombo[c]->addItem(g.name, g.name);
+      globalCombo[c]->setItemData(globalCombo[c]->count() - 1,
+                                  QString::fromUtf8("%1 — %2; %3 on A = %4–%5, E_lab = %6–%7 MeV")
+                                      .arg(g.name, g.reference, g.projectiles)
+                                      .arg(g.aMin)
+                                      .arg(g.aMax)
+                                      .arg(g.eMin)
+                                      .arg(g.eMax),
+                                  Qt::ToolTipRole);
+    }
+    globalCombo[c]->setToolTip(tr("The global optical potential (spin-orbit dropped), evaluated at the projectile's "
+                                  "lab energy: fixed for a + A, following E_sF for s + F."));
+    connect(globalCombo[c], SIGNAL(currentIndexChanged(int)), this, SLOT(globalNameChanged()));
     opticalButton[c] = new QPushButton(QString::fromUtf8("Edit…"));
     opticalButton[c]->setAutoDefault(false);
     connect(opticalButton[c], &QPushButton::clicked, this, [this, c]() { editOptical(c); });
@@ -471,6 +489,7 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
     QHBoxLayout *ol = new QHBoxLayout;
     ol->setContentsMargins(0, 0, 0, 0);
     ol->addWidget(opticalCombo[c], 1);
+    ol->addWidget(globalCombo[c], 1);
     ol->addWidget(opticalButton[c]);
     opticalBox[c] = new QWidget;
     opticalBox[c]->setLayout(ol);
@@ -1319,7 +1338,15 @@ const char *kTenZeros = "0,0,0,0,0,0,0,0,0,0";
 QString opticalKind(const QString &value) {
   if (value == "plane") return "plane";
   if (value.isEmpty() || value == "coulomb") return "coulomb";
+  if (!value.isEmpty() && value.at(0).isLetter()) return "global";
   return "ws";
+}
+
+// The first global potential that describes a partner (Z, A) of a channel, or "".
+QString defaultGlobal(int z1, int a1, int z2, int a2) {
+  for (int m = 0; m < (int)ThmGlobalOpticals().size(); m++)
+    if (ThmGlobalOpticalFor(m, z1, a1) || ThmGlobalOpticalFor(m, z2, a2)) return ThmGlobalOpticals()[m].name;
+  return QString();
 }
 
 }  // namespace
@@ -1356,6 +1383,11 @@ void ThmExperimentsPage::loadDistortion(const ThmExperimentRecord &r) {
     const QString k = opticalKind(*optical[c]);
     opticalCombo[c]->setCurrentIndex(std::max(0, opticalCombo[c]->findData(k)));
     lastOptical_[c] = k == "ws" ? *optical[c] : QString(kTenZeros);
+    if (k == "global") {
+      lastGlobal_[c] = *optical[c];
+      const int at = globalCombo[c]->findData(optical[c]->section(':', 0, 0));
+      if (at >= 0) globalCombo[c]->setCurrentIndex(at);
+    }
   }
   loading_ = was;
   showDistortionRows();
@@ -1371,10 +1403,14 @@ void ThmExperimentsPage::showDistortionRows() {
   for (QWidget *w : distortionValueRow_) w->setVisible(kind != "none");
   angleEdit->setEnabled(angleKindCombo->currentData().toString() != "qf");
   for (int c = 0; c < 2; c++) {
-    const bool ws = opticalCombo[c]->currentData().toString() == "ws";
-    opticalButton[c]->setEnabled(ws);
-    opticalButton[c]->setToolTip(ws ? tr("V,R,a,W,RW,aW,WD,RD,aD,RC = %1").arg(lastOptical_[c])
-                                    : tr("The ten Woods-Saxon numbers"));
+    const QString mode = opticalCombo[c]->currentData().toString();
+    const bool ws = mode == "ws", global = mode == "global";
+    globalCombo[c]->setVisible(global && kind == "optical");
+    opticalButton[c]->setEnabled(ws || global);
+    QString tip = tr("The ten Woods-Saxon numbers");
+    if (ws) tip = tr("V,R,a,W,RW,aW,WD,RD,aD,RC = %1").arg(lastOptical_[c]);
+    if (global && current_ >= 0 && current_ < records_.size()) tip = globalSummary(records_.at(current_), c);
+    opticalButton[c]->setToolTip(tip);
   }
 }
 
@@ -1455,9 +1491,47 @@ void ThmExperimentsPage::opticalKindChanged() {
   for (int c = 0; c < 2; c++) {
     if (sender() != opticalCombo[c]) continue;
     const QString kind = opticalCombo[c]->currentData().toString();
-    *optical[c] = kind == "ws" ? lastOptical_[c] : keyValue(*optical[c], kind, "coulomb");
+    if (kind == "global") {
+      if (lastGlobal_[c].isEmpty()) {
+        // The first model for the channel's light partner.
+        Reaction re;
+        QString ignored;
+        if (reaction(r, re, &ignored)) {
+          const ThmNuclide &s = re.spectator, &h = re.horse, &o = re.other;
+          lastGlobal_[c] = c == 0 ? defaultGlobal(h.Z, h.A, o.Z, o.A)
+                                  : defaultGlobal(s.Z, s.A, h.Z - s.Z + o.Z, h.A - s.A + o.A);
+        }
+        if (lastGlobal_[c].isEmpty()) lastGlobal_[c] = globalCombo[c]->currentData().toString();
+      }
+      *optical[c] = lastGlobal_[c];
+      loading_ = true;
+      const int at = globalCombo[c]->findData(lastGlobal_[c].section(':', 0, 0));
+      if (at >= 0) globalCombo[c]->setCurrentIndex(at);
+      loading_ = false;
+    } else {
+      *optical[c] = kind == "ws" ? lastOptical_[c] : keyValue(*optical[c], kind, "coulomb");
+    }
   }
   showDistortionRows();
+  refreshRow(current_);
+  showDerived(r);
+}
+
+void ThmExperimentsPage::globalNameChanged() {
+  if (loading_ || current_ < 0) return;
+  for (int c = 0; c < 2; c++) {
+    if (sender() != globalCombo[c] || opticalCombo[c]->currentData().toString() != "global") continue;
+    const bool extrapolate = lastGlobal_[c].endsWith(":extrapolate");
+    setGlobalText(c, globalCombo[c]->currentData().toString() + (extrapolate ? ":extrapolate" : ""));
+  }
+}
+
+void ThmExperimentsPage::setGlobalText(int channel, const QString &value) {
+  if (current_ < 0 || channel < 0 || channel > 1) return;
+  ThmExperimentRecord &r = records_[current_];
+  lastGlobal_[channel] = value;
+  (channel == 0 ? r.opticalAA : r.opticalSF) = value;
+  loadDistortion(r);
   refreshRow(current_);
   showDerived(r);
 }
@@ -1473,6 +1547,17 @@ void ThmExperimentsPage::setOpticalText(int channel, const QString &tenNumbers) 
 }
 
 void ThmExperimentsPage::editOptical(int channel) {
+  if (opticalCombo[channel]->currentData().toString() == "global") {
+    if (current_ < 0) return;
+    double elab[2] = {0.0, 0.0}, p[2][10], lo = 0.0, hi = 0.0;
+    const bool have = globalEnds(records_.at(current_), channel, elab, p, &lo, &hi);
+    ThmGlobalOpticalDialog dialog(channel == 0 ? tr("a + A optical potential (opticalAA)")
+                                               : tr("s + F optical potential (opticalSF)"),
+                                  lastGlobal_[channel], have, elab, p, lo, hi, this);
+    if (dialog.exec() == QDialog::Accepted && dialog.text() != lastGlobal_[channel])
+      setGlobalText(channel, dialog.text());
+    return;
+  }
   ThmOpticalDialog dialog(channel == 0 ? tr("a + A optical potential (opticalAA)")
                                        : tr("s + F optical potential (opticalSF)"),
                           lastOptical_[channel], this);
@@ -1540,28 +1625,11 @@ QString ThmExperimentsPage::distortionInfo(const ThmExperimentRecord &x, QString
                  .arg(QString::fromStdString(table.name), number(r0), number(lo), number(r1), number(hi));
     }
   } else {
-    Reaction r;
-    QString ignored;
-    if (!reaction(x, r, &ignored)) return QString();
     // As EData::BuildThmGroups sets it up.
-    ThmDistortion::Kinematics dk;
-    dk.Za = r.horse.Z;
-    dk.ZA = r.other.Z;
-    dk.Zs = r.spectator.Z;
-    dk.Zx = r.horse.Z - r.spectator.Z;
-    dk.ma = r.horse.mass;
-    dk.mA = r.other.mass;
-    dk.ms = r.spectator.mass;
-    dk.mx = r.mX;
-    dk.horseIsBeam = r.horseIsBeam;
-    dk.mBeam = r.beam.mass;
-    dk.mTarget = r.target.mass;
-    dk.beamEnergy = r.beamEnergy;
-    dk.bind = r.bind;
     ThmDistortion d;
+    if (!fillKinematics(x, d)) return QString();
+    const ThmDistortion::Kinematics dk = d.kin;
     d.experiment = e.name;
-    d.kin = dk;
-    d.eAA = dk.beamEnergy * dk.mTarget / (dk.mBeam + dk.mTarget);
     d.angleKind = e.angleKind == 1 ? ThmDistortion::LAB : e.angleKind == 2 ? ThmDistortion::CM : ThmDistortion::QF;
     d.angle = e.angle;
     d.sf.kind = e.distortion == ThmExperiment::DIST_OPTICAL && e.opticalSF.kind == 0 ? ThmDistortion::Channel::PLANE
@@ -1579,6 +1647,8 @@ QString ThmExperimentsPage::distortionInfo(const ThmExperimentRecord &x, QString
       // The same radial grid and waves as the engine's (they depend on the
       // lower end of its ln R grid), without its grid of R: R is evaluated
       // directly at the ends, as AZURE2 prints it.
+      d.dataLo = lo;
+      d.dataHi = hi;
       const std::string bad = d.Build(e, dk, lo - 0.5, lo - 0.5, 0.5 * (lo + hi));
       if (!bad.empty()) why = "distortion: " + QString::fromStdString(bad) + ".";
     }
@@ -1607,6 +1677,67 @@ QString ThmExperimentsPage::distortionInfo(const ThmExperimentRecord &x, QString
   if (rLo) *rLo = r0;
   if (rHi) *rHi = r1;
   return text;
+}
+
+bool ThmExperimentsPage::fillKinematics(const ThmExperimentRecord &x, ThmDistortion &d) const {
+  Reaction r;
+  QString ignored;
+  if (!reaction(x, r, &ignored)) return false;
+  ThmDistortion::Kinematics &dk = d.kin;
+  dk.Za = r.horse.Z;
+  dk.ZA = r.other.Z;
+  dk.Zs = r.spectator.Z;
+  dk.Zx = r.horse.Z - r.spectator.Z;
+  dk.Aa = r.horse.A;
+  dk.AA = r.other.A;
+  dk.As = r.spectator.A;
+  dk.Ax = r.horse.A - r.spectator.A;
+  dk.ma = r.horse.mass;
+  dk.mA = r.other.mass;
+  dk.ms = r.spectator.mass;
+  dk.mx = r.mX;
+  dk.horseIsBeam = r.horseIsBeam;
+  dk.mBeam = r.beam.mass;
+  dk.mTarget = r.target.mass;
+  dk.beamEnergy = r.beamEnergy;
+  dk.bind = r.bind;
+  d.eAA = dk.beamEnergy * dk.mTarget / (dk.mBeam + dk.mTarget);
+  return true;
+}
+
+bool ThmExperimentsPage::globalEnds(const ThmExperimentRecord &x, int channel, double elab[2], double p[2][10],
+                                    double *loOut, double *hiOut) const {
+  std::vector<ThmExperiment> parsed;
+  if (!ParseThmExperimentLine(x.line().toStdString(), parsed).empty() || parsed.empty()) return false;
+  const ThmExperiment &e = parsed.front();
+  if (e.distortion != ThmExperiment::DIST_OPTICAL) return false;
+  QVector<double> energies;
+  if (!pointEnergies(x.segments, energies) || energies.isEmpty()) return false;
+  const double lo = *std::min_element(energies.begin(), energies.end());
+  const double hi = *std::max_element(energies.begin(), energies.end());
+  ThmDistortion d;
+  if (!fillKinematics(x, d)) return false;
+  d.dataLo = lo;
+  d.dataHi = hi;
+  d.Setup(e, d.kin, lo);  // a range refusal still leaves the channels set up
+  if (!d.GlobalEnds(channel, lo, hi, elab, p)) return false;
+  if (loOut) *loOut = lo;
+  if (hiOut) *hiOut = hi;
+  return true;
+}
+
+QString ThmExperimentsPage::globalSummary(const ThmExperimentRecord &x, int channel) const {
+  double elab[2], p[2][10], lo = 0.0, hi = 0.0;
+  const QString name = (channel == 0 ? x.opticalAA : x.opticalSF).section(':', 0, 0);
+  if (!globalEnds(x, channel, elab, p, &lo, &hi)) return name;
+  auto pair = [](double a, double b, const QString &unit) {
+    return std::fabs(a - b) <= 5.0e-4 * std::max(std::fabs(a), 1.0)
+               ? QString::number(a, 'g', 4) + unit
+               : QString::fromUtf8("%1–%2%3").arg(QString::number(a, 'g', 4), QString::number(b, 'g', 4), unit);
+  };
+  return tr("%1 at E_lab = %2: V = %3, W = %4, WD = %5 (E = %6 to %7 MeV)")
+      .arg(name, pair(elab[0], elab[1], " MeV"), pair(p[0][0], p[1][0], " MeV"), pair(p[0][3], p[1][3], " MeV"),
+           pair(p[0][6], p[1][6], " MeV"), QString::number(lo, 'g', 4), QString::number(hi, 'g', 4));
 }
 
 QString ThmExperimentsPage::bindingMismatch(const ThmExperimentRecord &x, QString *detail) const {
@@ -1678,6 +1809,70 @@ ThmOpticalDialog::ThmOpticalDialog(const QString &title, const QString &tenNumbe
   l->addLayout(g);
   l->addWidget(buttons);
   setLayout(l);
+}
+
+ThmGlobalOpticalDialog::ThmGlobalOpticalDialog(const QString &title, const QString &value, bool have,
+                                               const double elab[2], const double p[2][10], double lo, double hi,
+                                               QWidget *parent) :
+  QDialog(parent), name_(value.section(':', 0, 0)) {
+  setWindowTitle(title);
+  const int m = ThmGlobalOpticalIndex(name_.toStdString());
+  QGridLayout *g = new QGridLayout;
+  g->setHorizontalSpacing(12);
+  g->setVerticalSpacing(4);
+  int row = 0;
+  if (m >= 0) {
+    const ThmGlobalOptical &model = ThmGlobalOpticals()[m];
+    QLabel *ref = new QLabel(QString::fromUtf8("<b>%1</b> — %2").arg(name_, model.reference));
+    g->addWidget(ref, row++, 0, 1, 3);
+    QLabel *range = new QLabel(QString::fromUtf8("Valid for %1 on A = %2–%3, E<sub>lab</sub> = %4–%5 MeV")
+                                   .arg(model.projectiles)
+                                   .arg(model.aMin)
+                                   .arg(model.aMax)
+                                   .arg(model.eMin)
+                                   .arg(model.eMax));
+    g->addWidget(range, row++, 0, 1, 3);
+  }
+  const char *names[10] = {"V", "R", "a", "W", "R<sub>W</sub>", "a<sub>W</sub>", "W<sub>D</sub>", "R<sub>D</sub>",
+                           "a<sub>D</sub>", "R<sub>C</sub>"};
+  for (int end = 0; end < 2; end++) {
+    QLabel *h = new QLabel(have ? QString::fromUtf8("E = %1 MeV<br>E<sub>lab</sub> = %2 MeV")
+                                      .arg(QString::number(end == 0 ? lo : hi, 'g', 4),
+                                           QString::number(elab[end], 'g', 4))
+                                : QString::fromUtf8("—"));
+    h->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    g->addWidget(h, row, 1 + end);
+  }
+  row++;
+  for (int k = 0; k < 10; k++) {
+    const bool depth = k < 9 && k % 3 == 0;
+    g->addWidget(new QLabel(QString(names[k]) + ":"), row + k, 0, Qt::AlignRight | Qt::AlignVCenter);
+    for (int end = 0; end < 2; end++) {
+      valueLabels[end][k] = new QLabel(have ? QString::number(p[end][k], 'f', depth ? 3 : 4) + (depth ? " MeV" : " fm")
+                                            : QString::fromUtf8("—"));
+      valueLabels[end][k]->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+      valueLabels[end][k]->setTextInteractionFlags(Qt::TextSelectableByMouse);
+      g->addWidget(valueLabels[end][k], row + k, 1 + end);
+    }
+  }
+  row += 10;
+  extrapolateCheck = new QCheckBox(tr("Use outside the validity range (:extrapolate)"));
+  extrapolateCheck->setChecked(value.endsWith(":extrapolate"));
+  extrapolateCheck->setToolTip(tr("Without it AZURE2 refuses the potential where the target mass or the "
+                                  "projectile's lab energy over the data lies outside the range above; with it, a "
+                                  "WARNING."));
+  g->addWidget(extrapolateCheck, row++, 0, 1, 3);
+  QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+  connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+  QVBoxLayout *l = new QVBoxLayout;
+  l->addLayout(g);
+  l->addWidget(buttons);
+  setLayout(l);
+}
+
+QString ThmGlobalOpticalDialog::text() const {
+  return name_ + (extrapolateCheck->isChecked() ? ":extrapolate" : "");
 }
 
 QString ThmOpticalDialog::text() const {
