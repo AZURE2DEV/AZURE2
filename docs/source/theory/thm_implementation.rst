@@ -921,7 +921,9 @@ pair disagree on :math:`B_{xs}` by more than 1 keV AZURE2 prints a
 channels. ``distortion=optical``: per channel, ``opticalAA=`` (:math:`a + A`)
 and ``opticalSF=`` (:math:`s + F`), each ``coulomb`` (default), ``plane`` (no
 distortion at all, as the 2026 Figs. 5-6 switch one channel off) or ten
-numbers ``V,R,a,W,RW,aW,WD,RD,aD,RC``:
+numbers ``V,R,a,W,RW,aW,WD,RD,aD,RC``, or the name of a built-in global
+optical potential (``ancai06``, ``kd03``, ... -- "Global optical potentials"
+below):
 
 .. math::
 
@@ -931,7 +933,9 @@ numbers ``V,R,a,W,RW,aW,WD,RD,aD,RC``:
 
 depths in MeV (positive: attractive and absorptive), radii in fm (not
 reduced radii), :math:`V_C` a uniform sphere of radius ``RC`` or, for
-``RC=0``, a point charge. A depth 0 switches its term off.
+``RC=0``, a point charge. A depth 0 switches its term off. A global
+potential is evaluated at the channel's energy: fixed for :math:`a + A`, at
+:math:`E_{sF}(E)` of every tabulated energy for :math:`s + F`.
 
 *Numerics* (``src/ThmDistortion.cpp``). The radial equations are integrated
 outward from the origin by Numerov's method (complex for an optical
@@ -1439,8 +1443,9 @@ also with a window.
 :math:`J^\pi` group, the −448 keV 1\ :sup:`+` for :math:`l = 0` and the 213
 keV 2\ :sup:`−` for :math:`l = 1`), :math:`a_p` of the p + 19F pairs varied,
 nothing refitted. Optical potentials: :math:`d` + 19F with the An & Cai (PRC
-73 (2006) 054605) global parameters at :math:`E_d` = 5.8 MeV (below their
-range), n + 20Ne Koning-Delaroche-like at 2.6 MeV (``opticalAA=92.57,3.066,
+73 (2006) 054605) global parameters at :math:`E_d` = 5.8 MeV, n + 20Ne
+Koning-Delaroche at 2.6 MeV (outside its mass range, :math:`A \ge 24`), both
+written out at one energy (``opticalAA=92.57,3.066,
 0.753,1.467,3.581,0.588,10.65,3.711,0.696,3.477``, ``opticalSF=53.4,3.13,
 0.675,0.39,3.13,0.675,6.86,3.53,0.541,0``); window: Hulthén 0-50 MeV/c (the
 :math:`p_s` cut of Su et al., PRL 135 (2025) 182701).
@@ -1633,6 +1638,201 @@ the normalization :math:`\tilde\varphi(q)` can pass through zero at large
 normalized vertex is singular; an exact zero on the grid is refused. ``vertexModel=pw`` against ``dw`` (with
 Coulomb and with optical waves) belongs in the model-dependence protocol of
 any analysis that converts peak areas of different :math:`l` into strengths.
+
+Global optical potentials
+-------------------------
+
+*Why.* With ``vertexModel=dw`` the ratios between entrance partial waves
+hardly depend on the channel radius any more, but they depend on the distorted
+waves (previous section: a factor 1.5-3 between Coulomb and optical waves).
+To scan that dependence with standard choices instead of typing ten numbers
+per channel, ``opticalAA=`` and ``opticalSF=`` also take the name of a
+built-in global parametrisation (``src/ThmOptical.cpp``), for the distortion
+factor and the DW vertex alike:
+
+================ ========= ======================================================= =========== ====================
+name             for       reference                                               target A    :math:`E_\mathrm{lab}`
+                                                                                               (MeV)
+================ ========= ======================================================= =========== ====================
+``ancai06``      d         An & Cai, PRC 73 (2006) 054605                          12-238      0-183
+``daehnick80``   d         Daehnick, Childs & Vrcelj, PRC 21 (1980) 2253           27-238      11.8-90
+``kd03``         n, p      Koning & Delaroche, NPA 713 (2003) 231, global set      24-209      0.001-200
+``bg71``         t, 3He    Becchetti & Greenlees (1971; RIPL-3 7100, 8100)         40-208      1-40
+``liang09``      3He       Liang, Li & Cai, J. Phys. G 36 (2009) 085104            9-208       0-270
+``mcfadden66``   4He       McFadden & Satchler, NPA 84 (1966) 177                  16-208      1-25
+``avrigeanu94``  4He       Avrigeanu, Hodgson & Avrigeanu, PRC 49 (1994) 2136      16-250      1-73
+================ ========= ======================================================= =========== ====================
+
+The validity ranges are the papers' (as summarised in RIPL-3, Capote et al.,
+Nucl. Data Sheets 110 (2009) 3107, and for the deuteron sets in Chin. Phys. C, doi:10.1088/1674-1137/acb2bc
+(2023)); a lower energy limit that a paper does not
+state is 0. Heavy ions have no entry: there is no standard Woods-Saxon
+global set for them (the São Paulo potential is a double folding; the
+Akyüz-Winther Woods-Saxon parametrisation of the proximity potential exists
+in several versions and has no imaginary part), and the imaginary part near
+the barrier is a modelling choice -- 14N + 12C and the like take the ten
+numbers.
+
+*Which nucleus, which energy.* The projectile is the partner of the channel
+the model is made for (:math:`a` or :math:`A` in :math:`a + A`, :math:`s` or
+:math:`F = x + A` in :math:`s + F`), the other is the target, whose
+:math:`A`, :math:`Z` and :math:`N` set the depths and radii; a model that
+describes neither partner is refused. The energy is the projectile's lab
+energy on the target at rest at the channel's c.m. energy,
+:math:`E_\mathrm{lab} = E_\mathrm{cm}(m_p + m_t)/m_t` (non-relativistic, as
+all THM kinematics in AZURE2): :math:`E_{aA}` for :math:`a + A`, fixed by
+the beam, and :math:`E_{sF} = E_{aA} - B_{xs} - E` for :math:`s + F`, which
+changes across the data. The :math:`s + F` potential is therefore evaluated
+anew at every energy at which a wave is computed -- each node of the
+:math:`\ln R` grid (10 keV), of the DW vertex grid (20 keV), and every direct
+evaluation (``thm_distortion``, the output rows) -- and the radial step takes
+the deepest potential over :math:`0 < E_{sF} \le E_{sF}(E_\mathrm{low})`. For
+19F + d (neutron spectator) the n + 20Ne potential goes from
+:math:`E_n` = 3.30 MeV at the lowest THM point to 2.73 MeV at the highest
+(:math:`W_D` 7.05 → 6.90 MeV); for 12C(14N,d), d + 24Mg from 3.0 to 1.0 MeV.
+
+*Conventions* (mapped onto ``V,R,a,W,RW,aW,WD,RD,aD,RC``). Radii are
+:math:`r_0 A_t^{1/3}` in fm (target mass number only, as in all these
+papers); the Coulomb term is a uniform sphere of radius
+:math:`r_C A_t^{1/3}` (none for neutrons). The surface absorption of every
+model is the derivative form :math:`-4a_DW_D\,df/dr = 4W_De^x/(1+e^x)^2`
+(Koning & Delaroche, An & Cai, Daehnick, Liang), exactly AZURE2's,
+so :math:`W_D` maps one to one; Becchetti-Greenlees, McFadden-Satchler and
+Avrigeanu have volume absorption only. Dropped or changed: the spin-orbit
+terms (real and, for KD, imaginary) -- the distorted waves have no spin;
+negative imaginary depths are set to 0 (Liang's volume term below 23 MeV, on
+light targets the surface term carries the absorption); KD's relativistic
+kinematics (its energy argument is the lab energy as here, its wave numbers
+are not used); KD's Coulomb correction of the proton real depth,
+:math:`V_C v_1(v_2 - 2v_3(E - E_F) + 3v_4(E - E_F)^2)` with
+:math:`V_C = 1.73 Z/r_C A^{1/3}`, is kept. ``daehnick80`` is the global set
+as the FRONT front end of TWOFNR (J. A. Tostevin, Surrey) codes it --
+:math:`V = 88.5 - 0.26E + 0.88ZA^{-1/3}`, :math:`a = 0.709 + 0.0017E`,
+:math:`W_V = (12.2 + 0.026E)(1 - e^{-(E/100)^2})`, :math:`W_D = (12.2 +
+0.026E)e^{-(E/100)^2}`, :math:`a_I = 0.53 + 0.07A^{1/3} - 0.04\sum_i
+e^{-((M_i - N)/2)^2}` over the neutron magic numbers -- with
+non-relativistic kinematics; the paper's relativistic variant is not
+offered (we could not check its table labels against the paper itself).
+
+*Validity.* At startup the target mass and the projectile's lab energy over
+the data (both ends for :math:`s + F`) are compared with the range above;
+outside, the experiment is refused with the range in the message. Written as
+``<name>:extrapolate`` the potential is used there anyway and AZURE2 prints a
+``WARNING`` with what lies outside. Refusing by default keeps an
+extrapolation visible in the input: THM channels are light and slow, and
+several of them are outside every global set -- n + 20Ne is below the KD
+mass range (:math:`A \ge 24`) and d + 19F below Daehnick's in mass and energy
+(:math:`E_d` = 5.8 MeV), while An & Cai covers d + 19F and d + 24Mg
+(12C(14N,d), :math:`E_d` = 1-3 MeV). The grid beyond the data (up to
+0.5 MeV for :math:`R`, 0.3 MeV for the vertex) is evaluated without a check.
+
+*Syntax, output, pyazr, GUI.* ``opticalAA=ancai06 opticalSF=kd03:extrapolate``
+with ``distortion=optical``; a misspelt name or option is refused with the
+list of names. The startup summary (and ``thm_experiments.out``) gives each
+global channel with its parameters, for :math:`s + F` at both ends of the
+data, e.g. ``s + F: kd03:extrapolate (n on 20Ne) Woods-Saxon V=53.3201 ...
+at E_lab = 2.72825 MeV (E = 0.45 MeV) to V=53.0977 ... at E_lab = 3.29548
+MeV (E = -0.09 MeV)``. ``AzrModel.set_thm_experiment(..., opticalAA="ancai06",
+opticalSF="kd03:extrapolate")`` checks the name, the projectile, the target
+mass range and the :math:`a + A` energy as the engine does (the :math:`s + F`
+energy needs the data and is the engine's). The GUI's optical row offers
+*plane*, *Coulomb*, *global* (with a combo of the names; the first one that
+describes the channel's light partner is chosen) and *Woods–Saxon*; for a
+global potential **Edit…** shows the reference, the validity range, the ten
+numbers at the two ends of the data, and the *:extrapolate* switch, and the
+button's tooltip the depths at the ends.
+
+*Checks.* ``tests/reference/thm_optical_test`` (ctest ``thm_optical``): (a)
+the ten numbers of every model at 23 (projectile, target, energy) points --
+including d + 19F at 5.83 MeV, d + 24Mg at 2 MeV and n + 20Ne at 2.6 MeV --
+against ``tests/reference/thm_optical_reference.py``, which reads the RIPL-3
+library file ``om-parameter-u.dat`` and evaluates its entries by the
+library's own coefficient formulas (standard and Koning forms: 6200, 2405,
+5405, 7100, 8100, 9100, 9600) and transcribes FRONT21 for Daehnick and Liang
+(RIPL's Daehnick entries 6112-6116 are polynomial refits of the imaginary
+part for single nuclei; their real depth and :math:`a_I` agree with the
+formulas to 4 digits for 40Ca, 90Zr, 120Sn and 208Pb, the absorptive depths
+to 1 %), to :math:`10^{-9}`; the An & Cai d + 19F numbers reproduce the ten
+numbers used before for ``examples/f19_pag_thm``. (b) Elastic scattering,
+d + 40Ca at 56 MeV with ``daehnick80`` and no spin-orbit term: the ratio to
+Rutherford from the engine's waves (``ThmDistortion::Wave``, Numerov + COUL,
+which now also returns :math:`T_l`) agrees with scipy's DOP853 and mpmath's
+Coulomb functions to :math:`1.3\times 10^{-4}` at 12 angles, and with the
+measured ratio (Hatanaka et al. 1980, EXFOR E0682-022) within 0.16 dex at
+15-78° (0.066 dex rms) -- the potential is used as published and the
+solver handles it. (c) In the distortion factor the global :math:`s + F`
+amplitude at :math:`E` equals the one with the ten numbers written out at
+:math:`E_{sF}(E)` (identical); the refusals and the ``:extrapolate`` warning;
+the parser. ``tests/thm_distortion`` (CLI): ``opticalAA=ancai06`` equals its
+ten numbers at :math:`E_{aA}` in the model, ``kd03:extrapolate`` for n + 19F
+is warned and reported at both ends, four refusals.
+``tests/pyazr/thm_distortion_test.py`` and ``tests/gui/thm_workspace_test``:
+the same checks in ``AzrModel`` and on the page, round trips byte for byte.
+
+*Size: the spread of standard choices, 19F(p,αγ)16O.* ``examples/f19_pag_thm``
+(19F + d at 55 MeV, :math:`a_p` = 5.136 fm, ``vertex=constant``, as in the
+radius table of the previous section), ``vertexModel=dw``; :math:`l` ratios
+from the whole THM range (so that 828 keV lies on the vertex grid), the THM
+:math:`\chi^2` of the adopted window (28 points) at the example's parameters
+(fitted with the plane-wave vertex; profiled norm and linear background,
+nothing refitted). "custom" are the ten numbers used before (An & Cai and
+Koning-Delaroche written out at :math:`E_d` = 5.83 MeV and :math:`E_n` = 2.6
+MeV); the global :math:`s + F` potential instead follows :math:`E_n` = 3.30-2.73
+MeV.
+
+============================================ ================================ ===============================
+:math:`a + A` / :math:`s + F`                quasi-free                       window (Hulthén 0-50 MeV/c)
+                                             :math:`|M_1(213)/M_0(324)|^2`,   same, :math:`\chi^2`
+                                             :math:`|M_1(828)/M_0(324)|^2`,
+                                             :math:`|M_0(11)/M_0(324)|^2`,
+                                             :math:`\chi^2`
+============================================ ================================ ===============================
+plane-wave vertex                            3.00, 2.83, 1.55; 63.9           11.9, 10.1; 1525
+Coulomb / (neutral: plane)                   0.235, 0.333, 1.04; 680          0.634, 0.725; 479
+custom / custom                              0.407, 0.486, 1.083; 611         1.242, 1.179; 176
+``ancai06`` / ``kd03:extrapolate``           0.406, 0.487, 1.080; 611         1.242, 1.183; 177
+``daehnick80:extrapolate`` / ``kd03:extr.``  0.402, 0.487, 1.079; 614         1.243, 1.194; 180
+``ancai06`` / plane                          0.562, 0.632, 1.095; 541
+============================================ ================================ ===============================
+
+The two deuteron sets give the same ratios to 1 % (Daehnick far below its
+range, :math:`E_d` = 5.8 MeV against 11.8 MeV, and below its mass range), and
+the energy-dependent KD potential the same as its value at 2.6 MeV to
+0.3 %. The steps that matter are elsewhere: point Coulomb to an optical
+potential in :math:`d` + 19F (a factor 1.7), the n + 20Ne absorption (1.4),
+and the momentum window (3). With standard choices the optical-model spread
+of the 19F :math:`l` ratios is about 1 %, well below the window and vertex
+model dependences.
+
+*Size: 12C+12C.* ``examples/c12c12_tumino2018``, 12C(14N,α/p)d at 30 MeV,
+the four THM segments one experiment with free norm (192 points), the
+quasi-free direction, ``vertexModel=dw``, the THM :math:`\chi^2` at the
+published parameters (61 with the plane-wave vertex). 14N + 12C has no
+global entry: the :math:`a + A` wave is point Coulomb throughout, and the
+d + 24Mg potential is varied (:math:`E_d` = 1.0-3.0 MeV; ``ancai06`` in
+range, ``daehnick80`` extrapolated in mass and energy). Ratios at
+:math:`E` = 1.5 MeV, and the energy dependence of the vertex,
+:math:`\sum_l|M_l|^2` at 0.9 MeV over that at 2.6 MeV:
+
+=============================== ====================================== ================== ============
+:math:`s + F` (d + 24Mg)        :math:`|M_l/M_0|^2`, l = 2, 4, 6, 8    0.9 / 2.6 MeV      :math:`\chi^2`
+=============================== ====================================== ================== ============
+plane-wave vertex               0.726, 0.138, 0.331, 1.67              1.25               61
+point Coulomb                   1.18, 1.09, 3.96, 4.75                 383                4713
+``ancai06``                     0.059, 0.423, 0.420, 0.053             258                4598
+``daehnick80:extrapolate``      0.058, 0.426, 0.434, 0.061             269                4624
+plane (no s + F distortion)     0.316, 0.075, 0.695, 0.578             1.08               9396
+=============================== ====================================== ================== ============
+
+The deuteron absorption in d + 24Mg reshapes the partial-wave pattern
+(:math:`|M_2/M_0|^2` from 1.18 to 0.06, :math:`|M_8/M_0|^2` from 4.8 to
+0.06) and softens the barrier energy dependence by a third, but the two
+standard deuteron sets agree to 3 % for :math:`l \le 6` (15 % for
+:math:`l = 8`) and 4 % in the energy dependence. As for 19F, the spread among
+standard global potentials is small next to the choice between Coulomb and
+optical waves; for 12C+12C the remaining open input is the 14N + 12C
+potential, which no global set covers and which stays the user's ten
+numbers.
 
 Fixed-angle observable
 ----------------------

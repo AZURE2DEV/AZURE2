@@ -191,8 +191,10 @@ averages the HOES cross section over a spectator-momentum window, and
 the window-averaged :math:`|M_l|^2` per entrance channel and level;
 ``set_thm_experiment(..., distortion="coulomb")`` multiplies the model by the
 zero-range DWBA distortion factor :math:`R(E)`, with ``opticalAA``,
-``opticalSF``, ``spectatorAngle``, ``distortionRef``, ``distortionRatio`` and
-``boundState``, and ``thm_distortion(name, energies)`` returns :math:`R`, the
+``opticalSF`` (``"plane"``, ``"coulomb"``, ten numbers, or a global optical
+potential such as ``"ancai06"`` or ``"kd03:extrapolate"``, checked against
+the channel and its validity range), ``spectatorAngle``, ``distortionRef``,
+``distortionRatio`` and ``boundState``, and ``thm_distortion(name, energies)`` returns :math:`R`, the
 interpolated :math:`R` the model uses, :math:`|M|^2`, :math:`|M_\mathrm{PW}|^2`,
 :math:`E_{sF}`, :math:`\eta_{sF}` and the spectator angle;
 ``set_thm_experiment(..., theta="50-70")`` (or ``theta=(50, 70)``) turns the

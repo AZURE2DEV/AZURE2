@@ -266,12 +266,22 @@ momentum window* and *Distortion*:
   **Bound state** (``boundState``: *Whittaker*, the default, or *Yukawa*
   tail of the s-x bound state, with an optional cut-off **r_min** in fm).
   Optical adds a row for the two channels, **a + A** (``opticalAA``) and
-  **s + F** (``opticalSF``): *plane* (no distortion), *Coulomb* (the default)
-  or *Woods–Saxon*, whose **Edit…** button opens the ten parameters in a
+  **s + F** (``opticalSF``): *plane* (no distortion), *Coulomb* (the default),
+  *global* or *Woods–Saxon*, whose **Edit…** button opens the ten parameters in a
   compact form -- real volume V, R, a; imaginary volume W, R_W, a_W;
   imaginary surface W_D, R_D, a_D (MeV and fm, depths > 0 attractive or
   absorptive, 0 switches a term off) and the Coulomb radius R_C (0: a point
-  charge). *Table* shows the file (two columns, E and w, the ``weight[k]``
+  charge). *global* shows a second combo with the built-in global optical
+  potentials (``ancai06``, ``daehnick80`` for deuterons, ``kd03`` for
+  nucleons, ``bg71`` and ``liang09`` for t/3He, ``mcfadden66`` and
+  ``avrigeanu94`` for alphas; the first one that describes the channel's
+  light partner is chosen); its **Edit…** shows the reference, the validity
+  range, the ten numbers the potential gives at the lowest and highest data
+  energy (the s + F potential follows E_sF) and **Use outside the validity
+  range** (``:extrapolate``), and the button's tooltip the depths at the two
+  ends. A potential outside its range is refused, on the page as by AZURE2,
+  unless that box is ticked (AZURE2 then warns). Details:
+  :doc:`../theory/thm_implementation`, "Global optical potentials". *Table* shows the file (two columns, E and w, the ``weight[k]``
   format; every data point inside it), whose **...** button stores a file
   inside the project directory relative to it; a table needs no reaction.
   The **R(E)** row shows R at the lowest and highest point energy of the
