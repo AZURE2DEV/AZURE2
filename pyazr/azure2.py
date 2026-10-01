@@ -9,6 +9,7 @@ independent; drive them from one thread, as the engine is not reentrant.
 """
 
 import os
+import re
 import shutil
 import tempfile
 from contextlib import contextmanager
@@ -659,6 +660,7 @@ class azure2:
         model = AzrModel.from_file(self.file)
         model.apply_fit(self.parameters, want, physical=True, pairs=self.pairs,
                         include_fixed=True)
+        self._save_cbkg(model, np.asarray(self._all_rwa(x), float))
         model.write(path)
 
         sav = None
@@ -712,6 +714,43 @@ class azure2:
                     "disagree); it has been removed. This means the .azr and "
                     "the parameter set do not describe the same model.")
         return path, sav
+
+    _CBKG_NAME = re.compile(r"([0-9/]+[+-])_(\d+)_([^_]+)_(re|im)([01])")
+
+    def _save_cbkg(self, model, values):
+        """Write the THM coherent-background parameters (``cbkg_*``) back into
+        the ``cbackground=`` values of their experiments, one explicit term
+        per (entrance, exit) combination with its values (``f`` for fixed),
+        so the snapshot reads back as the fit.  ``values`` is the full
+        parameter vector in the session's order (the cbkg entries are not
+        transformed)."""
+        cb = [(i, p) for i, p in enumerate(self.parameters) if p.kind == "cbkg"]
+        if not cb:
+            return
+        for name in model.thm_experiments():
+            prefix = f"cbkg_{name}_"
+            combos = {}
+            for i, p in cb:
+                if not p.name.startswith(prefix):
+                    continue
+                m = self._CBKG_NAME.fullmatch(p.name[len(prefix):])
+                if not m:
+                    continue
+                key = (m.group(1), m.group(2), m.group(3))
+                slot = (0 if m.group(4) == "re" else 1) + 2 * int(m.group(5))
+                combos.setdefault(key, {})[slot] = (float(values[i]),
+                                                    bool(self.fixed_params[i]))
+            if not combos:
+                continue
+            terms = []
+            for (jpi, exit_key, chans), v in combos.items():
+                n = 4 if 2 in v or 3 in v else 2
+                vals = ",".join(repr(v.get(k, (0.0, False))[0])
+                                + ("f" if v.get(k, (0.0, False))[1] else "")
+                                for k in range(n))
+                terms.append(f"{jpi}:{exit_key}:{chans}"
+                             + (":linear" if n == 4 else "") + "=" + vals)
+            model.set_thm_cbackground(name, terms)
 
     @staticmethod
     def _discard(*paths):
@@ -943,6 +982,11 @@ class azure2:
                 "cov": cov,
                 "sigma": np.sqrt(np.maximum(np.diag(cov), 0.0)),
             }
+            if "cbkg_names" in r:
+                # Coherent background (cbackground=): its fit parameters,
+                # name -> value, as they are in the parameter vector.
+                out[r["name"]]["cbkg"] = dict(zip(r["cbkg_names"],
+                                                  map(float, r["cbkg_values"])))
         return out
 
     def thm_background(self, experiment, params=None):

@@ -17,7 +17,7 @@ from typing import Optional
 
 
 # Parameter kinds, indexed by the integer ``type`` code in the C++ record.
-_KINDS = {0: "energy", 1: "width", 2: "norm", 3: "shift"}
+_KINDS = {0: "energy", 1: "width", 2: "norm", 3: "shift", 4: "cbkg"}
 
 
 @dataclass(frozen=True)
@@ -67,7 +67,7 @@ class Parameter:
 
     index: int                      # position among *all* parameters
     name: str                       # raw AZURE2 parameter name
-    kind: str                       # 'energy' | 'width' | 'norm' | 'shift'
+    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'cbkg'
     fixed: bool                     # held fixed during the fit?
     value: float                    # current (physical) value
     free_index: Optional[int]       # position among the non-fixed parameters
@@ -168,6 +168,11 @@ class Parameter:
                 bits.append("input=RWA")
         if self.kind in ("norm", "shift"):
             bits.append(f"segment={self.segment_key}")
+        if self.kind == "cbkg":
+            bits.append(f"J^pi={self.jpi}")
+            bits.append(f"L={self.L}")
+            bits.append(f"S={self.S}")
+            bits.append(f"exit pair={self.pair}")
         return "Parameter(" + ", ".join(bits) + ")"
 
 
@@ -390,6 +395,14 @@ class ParameterSet(list):
     def shifts(self):
         """The energy-shift parameters."""
         return ParameterSet(p for p in self if p.kind == "shift")
+
+    @property
+    def cbkg(self):
+        """The THM coherent-background parameters (``cbackground=``): Re and
+        Im of each amplitude, with its J group (``jgroup``, ``J``,
+        ``parity``), entrance channel (``channel``, ``L``, ``S``) and exit
+        pair number (``pair``)."""
+        return ParameterSet(p for p in self if p.kind == "cbkg")
 
     # -- lookups --------------------------------------------------------------
 

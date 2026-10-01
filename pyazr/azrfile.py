@@ -109,7 +109,8 @@ _THM_BACKGROUNDS = ("none", "const", "linear", "quadratic")
 _THM_EXPERIMENT_KEYS = ("segments", "background", "beam", "target", "spectator", "Ebeam",
                         "lineshape", "ps", "psNodes", "distortion", "opticalAA", "opticalSF",
                         "spectatorAngle", "distortionRef", "distortionRatio", "boundState",
-                        "theta", "vertexModel", "spectatorAngles", "spectatorAngleNodes")
+                        "theta", "vertexModel", "spectatorAngles", "spectatorAngleNodes",
+                        "cbackground")
 _THM_DISTORTION_DETAIL = ("spectatorAngle", "distortionRef", "distortionRatio", "boundState")
 _THM_NAME = re.compile(r"[A-Za-z0-9_.+-]+")
 _THM_WHOLE_INT = re.compile(r"[+-]?\d+")
@@ -306,6 +307,108 @@ def _thm_parse_distortion_key(key, value):
     raise KeyError(key)
 
 
+def _thm_spin(text):
+    """ReadSpin (ThmExperiment.cpp): "1/2", "0.5", "2" -> a multiple of 1/2, or None."""
+    if not text or text[0] in "+-":
+        return None
+    if "/" in text:
+        num, _, den = text.partition("/")
+        n = _thm_whole_int(num)
+        return n / 2.0 if den == "2" and n is not None and n >= 0 else None
+    x = _thm_whole_double(text)
+    if x is None or x < 0.0 or abs(2.0 * x - round(2.0 * x)) > 1e-9:
+        return None
+    return x
+
+
+def _thm_spin_text(j):
+    twice = int(round(2.0 * j))
+    return str(twice // 2) if twice % 2 == 0 else f"{twice}/2"
+
+
+def _thm_parse_cbackground(value):
+    """ParseThmCoherentBackground: a list of term dicts, ValueError if AZURE2
+    would refuse the value."""
+    form = ("expected <J><+|->:<exit pair key>[:<s>,<l>,<s'>,<l'>][:const|:linear]"
+            "[=<Re c0>,<Im c0>[,<Re c1>,<Im c1>]] terms separated by ';' (a value "
+            "followed by f is fixed)")
+    items = value.split(";")
+    terms = []
+    for item in items:
+        bad = f"cbackground: '{item}': "
+        if not item:
+            raise ValueError(f"cbackground='{value}': an empty term; " + form)
+        spec, eq, values = item.partition("=")
+        f = spec.split(":")
+        if not 2 <= len(f) <= 4:
+            raise ValueError(bad + form)
+        jpi = f[0]
+        J = _thm_spin(jpi[:-1]) if len(jpi) >= 2 and jpi[-1] in "+-" else None
+        if J is None:
+            raise ValueError(bad + f"J^pi '{jpi}': expected e.g. 1/2+ or 2-")
+        key = _thm_whole_int(f[1])
+        if key is None or key < 1 or f[1][0] in "+-":
+            raise ValueError(bad + f"exit pair key '{f[1]}': expected a positive whole number")
+        t = {"J": J, "parity": 1 if jpi[-1] == "+" else -1, "exit": key,
+             "channels": None, "form": "const", "values": None}
+        have_form = False
+        for x in f[2:]:
+            if x in ("const", "linear"):
+                if have_form:
+                    raise ValueError(bad + form)
+                have_form = True
+                t["form"] = x
+                continue
+            if t["channels"] is not None or have_form:
+                raise ValueError(bad + form)
+            c = x.split(",")
+            ok = len(c) == 4
+            if ok:
+                s_in, l_in = _thm_spin(c[0]), _thm_whole_int(c[1])
+                s_out, l_out = _thm_spin(c[2]), _thm_whole_int(c[3])
+                ok = (None not in (s_in, l_in, s_out, l_out) and l_in >= 0 and l_out >= 0
+                      and c[1][0] != "+" and c[3][0] != "+")
+            if not ok:
+                raise ValueError(bad + f"channels '{x}': expected <s>,<l>,<s'>,<l'> "
+                                 "(entrance and exit channel spin and l)")
+            t["channels"] = (s_in, l_in, s_out, l_out)
+        if eq:
+            v = values.split(",")
+            n = 2 if t["form"] == "const" else 4
+            if len(v) != n:
+                raise ValueError(bad + f"expected {n} values after '=' (" +
+                                 ("Re c0, Im c0" if n == 2 else "Re c0, Im c0, Re c1, Im c1")
+                                 + ")")
+            vals = []
+            for w in v:
+                fixed = w.endswith("f")
+                x = _thm_whole_double(w[:-1] if fixed else w)
+                if x is None:
+                    raise ValueError(bad + f"value '{w}': expected a number, optionally "
+                                     "followed by f (fixed)")
+                vals.append((x, fixed))
+            t["values"] = vals
+        terms.append(t)
+    return terms
+
+
+def _thm_format_cbackground(terms):
+    """FormatThmCoherentBackground: the canonical value of a term list."""
+    out = []
+    for t in terms:
+        s = f"{_thm_spin_text(t['J'])}{'+' if t['parity'] > 0 else '-'}:{t['exit']}"
+        if t["channels"] is not None:
+            a, b, c, d = t["channels"]
+            s += f":{_thm_spin_text(a)},{b},{_thm_spin_text(c)},{d}"
+        if t["form"] == "linear":
+            s += ":linear"
+        if t["values"] is not None:
+            s += "=" + ",".join(_thm_plain_number(x) + ("f" if fx else "")
+                                for x, fx in t["values"])
+        out.append(s)
+    return ";".join(out)
+
+
 def _thm_parse_experiment(line, experiments):
     """ParseThmExperimentLine: merge one experiment line (comment stripped,
     trimmed) into ``experiments`` (name -> record); ValueError if AZURE2
@@ -401,12 +504,18 @@ def _thm_parse_experiment(line, experiments):
                 raise ValueError(where + f"spectatorAngleNodes='{value}': expected a whole "
                                  "number of Gauss-Legendre nodes, 1 to 64")
             work["spectatorAngleNodes"] = n
+        elif key == "cbackground":
+            try:
+                work["cbackground"] = _thm_format_cbackground(_thm_parse_cbackground(value))
+            except ValueError as err:
+                raise ValueError(where + str(err)) from None
         else:
             raise ValueError(where + f"unknown key '{key}' (keys: segments, "
                              "background, beam, target, spectator, Ebeam, lineshape, ps, "
                              "psNodes, distortion, opticalAA, opticalSF, spectatorAngle, "
                              "distortionRef, distortionRatio, boundState, theta, "
-                             "vertexModel, spectatorAngles, spectatorAngleNodes)")
+                             "vertexModel, spectatorAngles, spectatorAngleNodes, "
+                             "cbackground)")
         work["keys"].append(key)
     experiments[name] = work
 
@@ -576,7 +685,7 @@ def _thm_experiment_record(x):
         out["theta"] = x["theta"]
     if "vertexModel" in x:
         out["vertexModel"] = x["vertexModel"]
-    for key in ("spectatorAngles", "spectatorAngleNodes"):
+    for key in ("spectatorAngles", "spectatorAngleNodes", "cbackground"):
         if key in x:
             out[key] = x[key]
     return out
@@ -609,6 +718,8 @@ def _thm_experiment_line(name, rec):
         parts.append(f"spectatorAngles={rec['spectatorAngles']}")
     if "spectatorAngleNodes" in rec:
         parts.append(f"spectatorAngleNodes={int(rec['spectatorAngleNodes'])}")
+    if "cbackground" in rec:
+        parts.append(f"cbackground={rec['cbackground']}")
     return " ".join(parts)
 
 
@@ -2221,6 +2332,10 @@ class AzrModel:
                     raise ValueError(f"<thm> experiment[{name}]: theta= computes the "
                                      "interference of the entrance partial waves exactly; "
                                      "entranceL=coherent cannot be combined with it.")
+                if "cbackground" in x:
+                    raise ValueError(f"<thm> experiment[{name}]: cbackground= adds an "
+                                     "amplitude per entrance bucket (s, l); "
+                                     "entranceL=coherent cannot be combined with it.")
         self._thm_check_dw_globals(s)
         self._thm_write(s)
         return self
@@ -2355,7 +2470,7 @@ class AzrModel:
                            opticalSF=None, spectatorAngle=None, distortionRef=None,
                            distortionRatio=None, boundState=None, theta=None,
                            vertexModel=None, spectatorAngles=None,
-                           spectatorAngleNodes=None):
+                           spectatorAngleNodes=None, cbackground=None):
         """Define (or replace) ``experiment[<name>]`` in the ``<thm>`` block.
 
         ``segments`` is a list of ``<segmentsData>`` line numbers (or the
@@ -2419,6 +2534,19 @@ class AzrModel:
         c.m. interval (a lab window can map to two).  Needs ``distortion=
         "coulomb"`` or ``"optical"``; with ``vertexModel="dw"`` not together
         with ``psNodes``.
+        ``cbackground`` adds a coherent (interfering) THM-only background
+        amplitude c(E) M_l to the resonant HOES amplitude before squaring
+        (docs/source/theory/thm_implementation.rst, "Coherent background"):
+        a term ``"<J><+|->:<exit pair key>[:<s>,<l>,<s'>,<l'>][:const|:linear]
+        [=<Re c0>,<Im c0>[,<Re c1>,<Im c1>]]"`` or a list of them (joined
+        with ``;``); without the channels every (entrance (s,l), exit
+        (s',l')) combination of the J^pi group gets its own amplitude; start
+        values default to 0, a value followed by ``f`` is fixed.  The real
+        and imaginary parts are ordinary fit parameters (``cbkg_*`` in the
+        parameter vector, kind ``"cbkg"``).  Not with ``entranceL=coherent``;
+        the J^pi must be a group of the model and the exit pair that of a
+        segment of the experiment (the engine checks the channels when the
+        session opens).
         The record replaces every
         earlier line of that name with one line; other lines stay as they
         are.  Raises ValueError (model unchanged) for anything AZURE2 would
@@ -2468,6 +2596,10 @@ class AzrModel:
             text += f" spectatorAngles={spectatorAngles}"
         if spectatorAngleNodes is not None:
             text += f" spectatorAngleNodes={spectatorAngleNodes}"
+        if cbackground is not None:
+            if not isinstance(cbackground, str):
+                cbackground = ";".join(str(t) for t in cbackground)
+            text += f" cbackground={cbackground}"
         if any(c in text for c in "#\r\n"):
             raise ValueError(f"<thm> experiment[{name}]: a value cannot contain '#' "
                              "or a line break.")
@@ -2482,6 +2614,10 @@ class AzrModel:
                              "of the entrance partial waves exactly (at fixed angle they "
                              "interfere); entranceL=coherent is an approximation of the "
                              "angle-integrated observable and cannot be combined with it.")
+        if "cbackground" in rec and s["entranceL"] == "coherent":
+            raise ValueError(f"<thm> experiment[{name}]: cbackground= adds an amplitude "
+                             "per entrance bucket (s, l); entranceL=coherent merges the l "
+                             "of a channel spin, so it cannot be combined with it.")
         seg_lines = self._block_lines("segmentsData") or []
         for k in rec["segments"]:
             if k > len(seg_lines):
@@ -2504,6 +2640,26 @@ class AzrModel:
                                      "spectatorEnergy both set the spectator motion of "
                                      f"entrance pair {key}; use one (ps=delta keeps "
                                      "spectatorEnergy).")
+        if "cbackground" in rec:
+            # What can be checked without the compound nucleus (EData::
+            # BuildThmGroups checks the channels): the exit pair is that of a
+            # segment of the experiment, the J^pi a group of <levels>.
+            exits = set()
+            for k in rec["segments"]:
+                tok = seg_lines[k - 1].split()
+                if len(tok) > 2 and _isnum(tok[2]):
+                    exits.add(int(float(tok[2])))
+            groups = {(round(2 * float(lv.J)), 1 if lv.parity > 0 else -1)
+                      for lv in self.levels}
+            for t in _thm_parse_cbackground(rec["cbackground"]):
+                jpi = f"{_thm_spin_text(t['J'])}{'+' if t['parity'] > 0 else '-'}"
+                if t["exit"] not in exits:
+                    raise ValueError(f"<thm> experiment[{name}]: cbackground {jpi}:"
+                                     f"{t['exit']}: no segment of the experiment has exit "
+                                     f"pair {t['exit']}.")
+                if (round(2 * t["J"]), t["parity"]) not in groups:
+                    raise ValueError(f"<thm> experiment[{name}]: cbackground {jpi}:"
+                                     f"{t['exit']}: the model has no J^pi = {jpi} group.")
         trial_settings = dict(s)
         trial_settings["experiments"] = trial
         self._thm_check_dw_globals(trial_settings, only=name)
@@ -2527,6 +2683,36 @@ class AzrModel:
             body = []
         self._thm_set_body(body)
         return self
+
+    def set_thm_cbackground(self, name, cbackground):
+        """Replace the ``cbackground=`` value of ``experiment[<name>]`` in
+        place (the line that carries it; other keys and lines untouched), e.g.
+        with fitted start values.  ``cbackground`` as in
+        :meth:`set_thm_experiment`.  KeyError if the experiment has no
+        cbackground; ValueError (model unchanged) if AZURE2 would refuse it."""
+        if not isinstance(cbackground, str):
+            cbackground = ";".join(str(t) for t in cbackground)
+        text = _thm_format_cbackground(_thm_parse_cbackground(cbackground))
+        body = self._thm_body()
+        head = f"experiment[{name}]"
+        for i, line in enumerate(body):
+            code, hash_, comment = line.partition("#")
+            stripped = code.strip()
+            if not (stripped.startswith(head) and stripped[len(head):][:1] in ("", " ", "\t")):
+                continue
+            tokens = code.split()
+            for k, tok in enumerate(tokens):
+                if tok.startswith("cbackground="):
+                    new = re.sub(r"(?<!\S)cbackground=\S+", "cbackground=" + text, code, count=1)
+                    trial = list(body)
+                    trial[i] = new + hash_ + comment
+                    s = _thm_default_settings()
+                    for ln in trial:
+                        _thm_parse_line(ln, s)
+                    _thm_check_experiments(s["experiments"])
+                    self._thm_set_body(trial)
+                    return self
+        raise KeyError(f"<thm> experiment[{name}] has no cbackground= to replace")
 
     def _thm_body_without_experiment(self, name):
         out = []
