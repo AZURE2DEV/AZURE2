@@ -1,6 +1,7 @@
 #ifndef THM_EXPERIMENT_H
 #define THM_EXPERIMENT_H
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -125,6 +126,26 @@ struct ThmExperiment {
    */
   bool hasTheta = false;
   double thetaMin = 0.0, thetaMax = 180.0;
+  /*!
+   * Coherent (interfering) background (`cbackground=`, ThmCoherentBackground
+   * below): a THM-only complex amplitude c(E) = c0 + c1 E added to the
+   * resonant HOES amplitude of one J^pi group, entrance bucket (s, l) and exit
+   * channel (s', l') before squaring, times the bucket's entrance vertex
+   * M_l.  Its real and imaginary parts are ordinary fit parameters.
+   */
+  struct CoherentTerm {
+    double J = 0.0;
+    int parity = 1;      ///< +1 or -1
+    int exitKey = 0;     ///< exit pair key
+    bool hasChannels = false;  ///< one (s,l)/(s',l') combination; else every one of the group
+    double s = 0.0, sp = 0.0;
+    int l = 0, lp = 0;
+    int form = 1;        ///< 1 const (c0), 2 linear (c0 + c1 E)
+    bool hasValues = false;
+    double value[4] = {0.0, 0.0, 0.0, 0.0};  ///< Re c0, Im c0, Re c1, Im c1 (start values)
+    bool fixed[4] = {false, false, false, false};
+  };
+  std::vector<CoherentTerm> cbackground;
   /// Keys given so far (a key may not be repeated).
   std::vector<std::string> keys;
   static const char *BackgroundName(int terms);
@@ -143,6 +164,70 @@ struct ThmExperiment {
  * spectatorAngleNodes.
  */
 std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExperiment> &experiments);
+
+/*!
+ * Parses a `cbackground=` value: terms separated by ';',
+ *   <J><+|->:<exit pair key>[:<s>,<l>,<s'>,<l'>][:const|:linear][=<v>,<v>[,<v>,<v>]]
+ * J and the channel spins as 1/2 or 0.5; the values Re c0, Im c0 (and Re c1,
+ * Im c1 for linear), each optionally followed by 'f' (fixed).  "" or what is
+ * wrong.
+ */
+std::string ParseThmCoherentBackground(const std::string &value, std::vector<ThmExperiment::CoherentTerm> &out);
+/// The value of `cbackground=` that ParseThmCoherentBackground reads back as `terms`.
+std::string FormatThmCoherentBackground(const std::vector<ThmExperiment::CoherentTerm> &terms);
+/// A spin as written in AZURE2 parameter names: "1/2", "3/2", "2".
+std::string ThmSpinText(double j);
+/*!
+ * The fit-parameter names of one coherent-background combination are this
+ * stem followed by re0, im0 (and re1, im1 for linear):
+ *   cbkg_<experiment>_<J><pi>_<exit pair key>_<s>,<l>,<s'>,<l'>_
+ */
+std::string ThmCoherentParamStem(const std::string &experiment, double J, int parity, int exitKey, double s, int l,
+                                 double sp, int lp);
+/*!
+ * `value` (a cbackground= value of experiment `experiment`) with start
+ * values taken from `values` (parameter name -> value, e.g. a fit's
+ * param.sav), into `out`.  `names` are all the experiment's parameter
+ * names in the engine's order (EData::BuildThmGroups); a term that covers
+ * several combinations is written as one explicit term per combination
+ * (s,l,s',l') so each can carry its own values; fixed flags and forms are
+ * kept, a value not in `values` keeps its start value, a term with no name
+ * in `names` is kept as it is.  "" or why `value` is refused.
+ */
+std::string ApplyThmCoherentValues(const std::string &experiment, const std::string &value,
+                                   const std::vector<std::string> &names, const std::map<std::string, double> &values,
+                                   std::string &out);
+
+/*!
+ * The coherent background of one THM experiment as the model sees it
+ * (EData::BuildThmGroups resolves the terms against the compound nucleus).
+ * One entry per (J group, entrance channel, exit channel) combination, each
+ * with 2 (const) or 4 (linear) real fit parameters at `index` in the
+ * compound's coherent-background values (CNuc::ThmCoherentValues).  In the
+ * HOES amplitude of the J group j, entrance bucket of channel `entrance`
+ * and exit channel `exit`,
+ *   x -> x + c(E) M_l(entrance),   c(E) = (v[0] + i v[1]) + (v[2] + i v[3]) E,
+ * with M_l the bucket's vertex (the same boundary, spectator-window node and
+ * DW component as the levels' vertex, without a width): c is the THM-only
+ * analogue of the level-matrix element sum gamma_f A gamma_c.
+ */
+struct ThmCoherentBackground {
+  std::string experiment;
+  struct Combo {
+    int jGroup = 0;    ///< 1-based J group
+    int entrance = 0;  ///< 1-based channel of the J group (entrance pair)
+    int exit = 0;      ///< 1-based channel of the J group (exit pair)
+    int form = 1;      ///< 1 const, 2 linear
+    int index = 0;     ///< first of its 2*form values in CNuc::ThmCoherentValues
+  };
+  std::vector<Combo> combos;
+  /// The combination of (j, entrance channel, exit channel), or null.
+  const Combo *Find(int j, int entrance, int exit) const {
+    for (const Combo &c : combos)
+      if (c.jGroup == j && c.entrance == entrance && c.exit == exit) return &c;
+    return nullptr;
+  }
+};
 
 /// Checks the complete set once the block is read: segments given, kinematics
 /// all-or-none, lineshape=on and a ps window only with them, psNodes only with a
@@ -259,6 +344,11 @@ struct ThmExperimentReport {
   double value[4] = {1.0, 0.0, 0.0, 0.0};  ///< norm, b0, b1, b2
   double covariance[16] = {0.0};
   std::string status;
+  /// Coherent background (cbackground=): parameter names, current values and
+  /// whether each is fixed (empty without the key).
+  std::vector<std::string> coherentNames;
+  std::vector<double> coherentValues;
+  std::vector<bool> coherentFixed;
 };
 
 #endif

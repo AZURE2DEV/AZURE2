@@ -15,6 +15,7 @@ struct ThmWeightTable;
 class ThmDistortion;
 class ThmDwVertex;
 struct ThmAngleWindow;
+struct ThmCoherentBackground;
 struct ThmLineshape;
 struct ThmSpectatorWindow;
 
@@ -174,6 +175,9 @@ class ESegment {
   /// (theta=thmin-thmax), as SetThmLineshape.
   void SetThmAngleWindow(std::shared_ptr<const ThmAngleWindow> w);
   const ThmAngleWindow *GetThmAngleWindow() const { return thmAngle_.get(); }
+  /// THM coherent background (cbackground=), as SetThmLineshape.
+  void SetThmCoherent(std::shared_ptr<const ThmCoherentBackground> c);
+  const ThmCoherentBackground *GetThmCoherent() const { return thmCoherent_.get(); }
   /// Set the normalization applied to the data.
   void SetNorm(double);
   /// Set the energy shift; UpdatePointEnergiesWithShift applies it to the points.
@@ -234,6 +238,7 @@ class ESegment {
   std::shared_ptr<const ThmDistortion> thmDistortion_;
   std::shared_ptr<const ThmDwVertex> thmDwVertex_;
   std::shared_ptr<const ThmAngleWindow> thmAngle_;
+  std::shared_ptr<const ThmCoherentBackground> thmCoherent_;
   /// Which cross section component to compare against: 0 = full, 1 = E1 only, 2 = E2 only.
   int crossSectionComponent_;
   bool isTargetEffect_;

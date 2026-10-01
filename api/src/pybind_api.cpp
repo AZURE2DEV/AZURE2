@@ -419,6 +419,10 @@ class Session {
       d["status"] = r.status;
       d["value"] = std::vector<double>(r.value, r.value + 4);
       d["covariance"] = std::vector<double>(r.covariance, r.covariance + 16);
+      if (!r.coherentNames.empty()) {
+        d["cbkg_names"] = r.coherentNames;
+        d["cbkg_values"] = r.coherentValues;
+      }
       out.append(d);
     }
     return out;

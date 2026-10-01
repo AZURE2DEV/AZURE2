@@ -407,7 +407,10 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
     if (idx < nMn && fixedMask[idx]) continue;
     ParamKind kind = pmap.Desc(idx).kind;
-    if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm)) {
+    // A THM coherent background (cbackground=) moves THM points only: the
+    // THM-only chi^2 below differentiates it completely.
+    if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
+               kind == ParamKind::ThmCoherent)) {
       if (!haveTHM) continue;  // fully analytic
       if (kind == ParamKind::Norm) {
         // A norm belongs to exactly one segment: non-THM norms are fully

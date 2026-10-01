@@ -195,6 +195,13 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
     }
   }
 
+  // --- THM coherent backgrounds (cbackground=): the last block, if any. ---
+  if (data)
+    for (int k = 0; k < data->NumThmCoherentParams(); k++) {
+      map.desc_.push_back(ParamDesc{ParamKind::ThmCoherent, -1, -1, -1, -1, false});
+      i++;
+    }
+
   // --- Apply the fixed mask and build packed<->full lookups. ---
   const int nFull = (int)map.desc_.size();
   map.fullToPacked_.assign(nFull, -1);
@@ -682,10 +689,27 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, const Config &config,
     rows[t].J.assign(m0[t].size() * (size_t)nCols, 0.0);
   }
 
-  // d m / d p by central differences, E and gamma columns only.
+  // d m / d p by central differences, E and gamma columns -- and the THM
+  // coherent backgrounds (cbackground=), which only THM points see.
   for (int c = 0; c < nCols; c++) {
     const int f = pmap.PackedToFull(c);
     const ParamKind kind = pmap.Desc(f).kind;
+    if (kind == ParamKind::ThmCoherent) {
+      const double x0 = full[f];
+      const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+      vector_r pp = full;
+      pp[f] = x0 + h;
+      ld->FillThmCoherentFromParams(pp, lc);
+      models(mp);
+      pp[f] = x0 - h;
+      ld->FillThmCoherentFromParams(pp, lc);
+      models(mm);
+      ld->FillThmCoherentFromParams(full, lc);
+      for (size_t t = 0; t < rows.size(); t++)
+        for (size_t i = 0; i < m0[t].size(); i++)
+          rows[t].Jm[i * nCols + c] = (mp[t][i] - mm[t][i]) / (2.0 * h);
+      continue;
+    }
     if (kind != ParamKind::LevelEnergy && kind != ParamKind::Gamma) continue;
     const double x0 = full[f];
     const double h = 1.0e-6 * (std::fabs(x0) + 1.0);

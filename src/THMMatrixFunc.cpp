@@ -14,6 +14,7 @@
 #include "ThmDistortion.h"
 #include "ThmDwVertex.h"
 #include "ThmAngular.h"
+#include "ThmExperiment.h"
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -133,6 +134,12 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
   std::vector<ThmPartialWave> waves;
   std::vector<std::vector<complex>> partial(angle ? std::max(numNodes, 1) : 0);
 
+  // Coherent background of the experiment (cbackground=,
+  // ThmCoherentBackground): c(E) times the bucket's vertex M_l (no width),
+  // added to the resonant amplitude of its combinations before squaring.
+  const ThmCoherentBackground *coherent = point->GetThmCoherent();
+  const std::vector<double> &coherentValues = compound()->ThmCoherentValues();
+
   double sigma = 0.0;
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
     JGroup *jg = compound()->GetJGroup(j);
@@ -192,10 +199,16 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
     // w_k (|phi|^2 d cos theta_cm), since each direction is a distinct final
     // state (Mukhamedzhanov et al. 2017 eq. 34).  Without a window one
     // pass with the stored single-node vertex (node -1), as before.
+    bool coherentJ = false;
+    if (coherent)
+      for (const ThmCoherentBackground::Combo &cb : coherent->combos) coherentJ = coherentJ || cb.jGroup == j;
+
     const int passes = numNodes > 0 ? numNodes : 1;
     for (int pass = 0; pass < passes; pass++) {
       const int node = numNodes > 0 ? pass : -1;
       std::map<std::pair<double, int>, std::vector<complex>> vbys;
+      // cbackground=: per bucket its entrance channel and the vertex without a width.
+      std::map<std::pair<double, int>, std::pair<int, complex>> unitVertex;
       for (int ch = 1; ch <= numChannels; ch++) {
         AChannel *c = jg->GetChannel(ch);
         if (c->GetPairNum() != aa) continue;
@@ -233,6 +246,11 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
           if (li < 0) continue;
           const complex *ak = &dwAt.a[((size_t)pass * dwAt.nl + li) * 2];
           const complex *dk = &dwAt.d[((size_t)pass * dwAt.nl + li) * 2];
+          if (coherentJ) {
+            complex b = onShell ? onShellL : constantVertex ? constantB : complex(c->GetBoundaryCondition(), 0.0);
+            unitVertex[std::make_pair(c->GetS(), 2 * c->GetL())] = std::make_pair(ch, ak[0] * (b - 1.0) - dk[0]);
+            unitVertex[std::make_pair(c->GetS(), 2 * c->GetL() + 1)] = std::make_pair(ch, ak[1] * (b - 1.0) - dk[1]);
+          }
           for (int la = 1; la <= numLevels; la++) {
             ALevel *level = jg->GetLevel(la);
             if (!level->IsInRMatrix()) continue;
@@ -245,6 +263,11 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
             vertex1[la] += g * (ak[1] * (boundary - 1.0) - dk[1]);
           }
           continue;
+        }
+        if (coherentJ) {
+          complex b = onShell ? onShellL : constantVertex ? constantB : complex(c->GetBoundaryCondition(), 0.0);
+          unitVertex[std::make_pair(c->GetS(), c->GetL())] =
+              std::make_pair(ch, node < 0 ? point->GetThmFormFactor(j, ch, b) : point->GetThmFormFactor(j, ch, b, node));
         }
         for (int la = 1; la <= numLevels; la++) {
           ALevel *level = jg->GetLevel(la);
@@ -286,6 +309,17 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
             for (int lap = 1; lap <= numLevels; lap++) {
               if (!jg->GetLevel(lap)->IsInRMatrix()) continue;
               amp += gEx * this->GetAMatrixElement(j, act[la], act[lap]) * vertex[lap];
+            }
+          }
+          if (coherentJ) {
+            std::map<std::pair<double, int>, std::pair<int, complex>>::const_iterator u = unitVertex.find(it->first);
+            const ThmCoherentBackground::Combo *cb = u != unitVertex.end() ? coherent->Find(j, u->second.first, ch)
+                                                                           : nullptr;
+            if (cb && cb->index + 2 * cb->form <= (int)coherentValues.size()) {
+              const double *v = &coherentValues[cb->index];
+              complex cE(v[0], v[1]);
+              if (cb->form == 2) cE += complex(v[2], v[3]) * point->GetCMEnergy();
+              amp += cE * u->second.second;
             }
           }
           term += std::norm(amp);  // |amp|^2, incoherent over (s, l)

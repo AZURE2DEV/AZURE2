@@ -34,7 +34,8 @@ enum class ParamKind {
   LevelEnergy,  ///< E_lambda  for a (jGroup, level)
   Gamma,        ///< gamma_lambda,c for a (jGroup, level, channel)
   Norm,         ///< dataset normalization n_k for a segment
-  EnergyShift   ///< per-segment energy shift
+  EnergyShift,  ///< per-segment energy shift
+  ThmCoherent   ///< Re or Im of a THM coherent-background amplitude (cbackground=)
 };
 
 /// Description of one entry in the full (unfiltered) flat parameter vector.
@@ -55,6 +56,7 @@ struct ParamDesc {
  *   - for each JGroup j, for each level la:  E_{j,la}, then gamma_{j,la,ch} for ch=1..NumChannels
  *   - the norm parameters (starting at normOffset)
  *   - the energy-shift parameters (starting at energyShiftOffset)
+ *   - the THM coherent-background parameters (cbackground=; none without it)
  *
  * "Full" indices run over every entry above (matching the `all_rwa_` vector in
  * AZUREAPI).  The "packed" index is the position within the non-fixed subset

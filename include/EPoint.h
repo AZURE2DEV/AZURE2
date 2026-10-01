@@ -33,6 +33,7 @@ struct ThmWeightTable;
 class ThmDistortion;
 class ThmDwVertex;
 struct ThmAngleWindow;
+struct ThmCoherentBackground;
 struct ThmLineshape;
 struct ThmSpectatorWindow;
 
@@ -105,6 +106,9 @@ class EPoint {
   /// null (the angle-integrated observable).  Owned by the parent ESegment.
   const ThmAngleWindow *GetThmAngleWindow() const { return thm_angle_; }
   void SetThmAngleWindow(const ThmAngleWindow *w);
+  /// THM coherent background of the point's experiment (cbackground=), or null.
+  const ThmCoherentBackground *GetThmCoherent() const { return thm_coherent_; }
+  void SetThmCoherent(const ThmCoherentBackground *c);
   /// Is this point calculated by another? Points at equal energies are mapped onto one so the energy-dependent work is done once.
   bool IsMapped() const;
   /// Does the point carry target effects?
@@ -371,6 +375,7 @@ class EPoint {
   const ThmDistortion *thm_distortion_ = nullptr;
   const ThmDwVertex *thm_dw_ = nullptr;
   const ThmAngleWindow *thm_angle_ = nullptr;
+  const ThmCoherentBackground *thm_coherent_ = nullptr;
   bool is_mapped_;
   bool is_ang_dist_;
   bool is_analyzing_power_ = false;

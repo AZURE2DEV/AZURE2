@@ -322,7 +322,8 @@ void ParameterLimitsManager::ApplyParameterSetting(const std::string &paramName,
     }
 
     // Normalization parameters: paramName="segment_1_norm" should match guiName="segment_1_norm"
-    else if (paramName.find("_norm") != std::string::npos || paramName.find("_energy_shift") != std::string::npos) {
+    else if (paramName.find("_norm") != std::string::npos || paramName.find("_energy_shift") != std::string::npos ||
+             paramName.compare(0, 5, "cbkg_") == 0) {
       if (guiName == paramName) {
         setting = &entry.second;
         matchedName = guiName;

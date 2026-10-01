@@ -137,7 +137,28 @@ class EData {
     std::shared_ptr<const ThmAngleWindow> angle;
     /// Entrance pair key of its segments (0 if they differ).
     int pairKey = 0;
+    /// Coherent background (cbackground=), or null; shared with its segments.
+    std::shared_ptr<const ThmCoherentBackground> coherent;
   };
+  /*!
+   * The fit parameters of the THM coherent backgrounds (cbackground=), the
+   * last block of the parameter vector after the energy shifts (none without
+   * the key): Re c0, Im c0 [, Re c1, Im c1] of each combination, in the order
+   * of the experiments and their terms.  `value` is the current value.
+   */
+  struct ThmCoherentParam {
+    std::string name;
+    std::string experiment;
+    double value = 0.0;
+    bool fixed = false;
+  };
+  int NumThmCoherentParams() const { return (int)thmCoherentParams_.size(); }
+  const ThmCoherentParam &GetThmCoherentParam(int k) const { return thmCoherentParams_[k]; }
+  int GetThmCoherentParamOffset() const { return thmCoherentParamOffset_; }
+  /// Reads the coherent-background block of a full parameter vector (if it
+  /// has one) into the parameters and, if given, the compound the HOES model
+  /// reads them from.  Called by FillEnergyShiftsFromParams.
+  void FillThmCoherentFromParams(const vector_r &p, CNuc *theCNuc);
   int NumThmGroups() const { return (int)thmGroups_.size(); }
   const ThmGroup &GetThmGroup(int g) const { return thmGroups_[g]; }
   /// The (non-trivial) THM experiment that profiles segment i jointly with
@@ -212,6 +233,8 @@ class EData {
   std::string ecSignature_;   // Signature of the calculation being set up (see ECSignature)
   std::string ecOutputFile_;  // The intEC file being written, when not reading one back
   std::vector<ThmGroup> thmGroups_;  // THM experiments (BuildThmGroups), empty without them
+  std::vector<ThmCoherentParam> thmCoherentParams_;  // cbackground= parameters, empty without the key
+  int thmCoherentParamOffset_ = -1;                 // their first index in the parameter vector (FillMnParams)
   /// Builds thmGroups_ from the <thm> experiments once the segments are read; -1 after an ERROR.
   int BuildThmGroups(const Config &, CNuc *, int numLines);
   /// Writes output/thm_experiments.out.

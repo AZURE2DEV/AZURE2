@@ -119,11 +119,20 @@ class CNuc {
   /// writes the fitted parameters into the object it runs on.
   CNuc *Clone() const;
 
+  /// Current values of the THM coherent backgrounds (`cbackground=`,
+  /// ThmCoherentBackground in ThmExperiment.h), in parameter order: the data
+  /// own the parameters (EData::FillThmCoherentFromParams), the HOES model
+  /// (THMMatrixFunc) reads them here, on the compound it is handed.  Empty
+  /// without the key.
+  const std::vector<double> &ThmCoherentValues() const { return thmCoherentValues_; }
+  void SetThmCoherentValues(const std::vector<double> &v) { thmCoherentValues_ = v; }
+
  private:
   std::vector<PPair> pairs_;
   std::vector<JGroup> jgroups_;
   int maxLValue_;
   bool transformedIn_ = false;
+  std::vector<double> thmCoherentValues_;
 };
 
 extern double DoubleFactorial(int);

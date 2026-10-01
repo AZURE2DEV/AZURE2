@@ -1041,7 +1041,10 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
   for (int f = 0; f < (int)full.size() && f < pmap.NumFull(); f++) {
     if (fixed_[f]) continue;
     ParamKind kind = pmap.Desc(f).kind;
-    if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm)) continue;
+    // THM coherent backgrounds (cbackground=) are columns of the THM rows above.
+    if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
+               kind == ParamKind::ThmCoherent))
+      continue;
     int packed = pmap.FullToPacked(f);
     if (packed < 0 || packed >= (int)params.size()) continue;
     double x0 = params[packed];
@@ -1359,6 +1362,21 @@ vector_r AZUREAPI::GetParameterInfo() const {
   for (size_t s = 0; s < segments.size(); ++s) {
     push(3, -1, -1, 0, -1, 0, -1, -1, -1, -1, -1,
          segments[s].GetSegmentKey(), -1, -1);
+  }
+
+  // THM coherent backgrounds (cbackground=), last: Re c0, Im c0 [, Re c1,
+  // Im c1] per combination, with its J group, entrance channel (channel, L,
+  // S) and exit pair number (pair).
+  for (int g = 0; g < data()->NumThmGroups(); ++g) {
+    const ThmCoherentBackground *cb = data()->GetThmGroup(g).coherent.get();
+    if (!cb) continue;
+    for (const ThmCoherentBackground::Combo &c : cb->combos) {
+      JGroup *jg = nuc->GetJGroup(c.jGroup);
+      AChannel *in = jg->GetChannel(c.entrance);
+      for (int k = 0; k < 2 * c.form; ++k)
+        push(4, c.jGroup, jg->GetJ(), jg->GetPi(), -1, 0, c.entrance, in->GetL(), in->GetS(),
+             jg->GetChannel(c.exit)->GetPairNum(), -1, -1, -1, -1);
+    }
   }
 
   return info;

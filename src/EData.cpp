@@ -2605,6 +2605,22 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
       p.Fix(varname);  // Fix parameter if not varying
     }
   }
+
+  // THM coherent backgrounds (cbackground=): Re/Im of each amplitude, last.
+  thmCoherentParamOffset_ = thmCoherentParams_.empty() ? -1 : (int)p.Params().size();
+  for (const ThmCoherentParam &c : thmCoherentParams_) {
+    p.Add(c.name, c.value, c.value != 0.0 ? 0.1 * std::fabs(c.value) : 0.1);
+    if (c.fixed) p.Fix(c.name);
+  }
+}
+
+void EData::FillThmCoherentFromParams(const vector_r &p, CNuc *theCNuc) {
+  if (thmCoherentParams_.empty() || thmCoherentParamOffset_ < 0) return;
+  const size_t n = thmCoherentParams_.size();
+  if (p.size() < (size_t)thmCoherentParamOffset_ + n) return;
+  std::vector<double> v(n);
+  for (size_t k = 0; k < n; k++) v[k] = thmCoherentParams_[k].value = p[thmCoherentParamOffset_ + k];
+  if (theCNuc) theCNuc->SetThmCoherentValues(v);
 }
 
 
@@ -2636,6 +2652,10 @@ void EData::FillNormsFromParams(const vector_r &p) {
  */
 
 void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *theCNuc, const Config *configure) {
+  // The THM coherent backgrounds, the block after the shifts (none without
+  // cbackground=): every caller fills the shifts right after the norms, with
+  // the compound the model will run on.
+  FillThmCoherentFromParams(p, theCNuc);
   int i = GetEnergyShiftParamOffset();
   int k = 0;
   bool anyEnergyShifted = false;
@@ -2793,6 +2813,8 @@ EData *EData::Clone() const {
   dataCopy->segments_ = this->segments_;
   dataCopy->componentSegments_ = this->componentSegments_;
   dataCopy->thmGroups_ = this->thmGroups_;
+  dataCopy->thmCoherentParams_ = this->thmCoherentParams_;
+  dataCopy->thmCoherentParamOffset_ = this->thmCoherentParamOffset_;
 
   // Build a mapping from component segment keys to cloned component segments
   std::unordered_map<int, ESegment *> clonedComponentMap;
@@ -2898,6 +2920,8 @@ std::vector<ESegment> &EData::GetSegments() {
 
 int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) {
   thmGroups_.clear();
+  thmCoherentParams_.clear();
+  thmCoherentParamOffset_ = -1;
   const double amu = 931.49410242;  // MeV/u (CODATA 2018)
   for (const ThmExperiment &x : configure.thm.experiments) {
     const std::string where = "ERROR: <thm> experiment[" + x.name + "]: ";
@@ -3340,7 +3364,122 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
       group.angle = w;
       for (int s : group.segments) GetSegment(s)->SetThmAngleWindow(w);
     }
+    if (!x.cbackground.empty()) {
+      // Coherent background (cbackground=, ThmCoherentBackground): one complex
+      // amplitude per (J^pi, entrance (s,l), exit (s',l')) combination, whose
+      // real and imaginary parts are fit parameters.
+      if (configure.thm.coherentL) {
+        configure.outStream << where << "cbackground= adds an amplitude per entrance bucket (s, l); "
+                               "entranceL=coherent merges the l of a channel spin, so it cannot be combined "
+                               "with it."
+                            << std::endl;
+        return -1;
+      }
+      if (group.pairKey == 0) {
+        configure.outStream << where << "cbackground= needs one entrance pair; the segments have different ones."
+                            << std::endl;
+        return -1;
+      }
+      const int aa = theCNuc->GetPairNumFromKey(group.pairKey);
+      std::shared_ptr<ThmCoherentBackground> cb = std::make_shared<ThmCoherentBackground>();
+      cb->experiment = x.name;
+      std::ostringstream c;
+      c << "  Coherent background (cbackground=): ";
+      for (const ThmExperiment::CoherentTerm &t : x.cbackground) {
+        const std::string jpi = ThmSpinText(t.J) + (t.parity > 0 ? "+" : "-");
+        const std::string term = "cbackground " + jpi + ":" + std::to_string(t.exitKey) + ": ";
+        bool exitUsed = false;
+        for (int s : group.segments) exitUsed = exitUsed || GetSegment(s)->GetExitKey() == t.exitKey;
+        if (!exitUsed || !theCNuc->IsPairKey(t.exitKey)) {
+          configure.outStream << where << term << "no segment of the experiment has exit pair " << t.exitKey << "."
+                              << std::endl;
+          return -1;
+        }
+        const int exitNum = theCNuc->GetPairNumFromKey(t.exitKey);
+        int j = 0;
+        for (int jj = 1; jj <= theCNuc->NumJGroups(); jj++) {
+          JGroup *jg = theCNuc->GetJGroup(jj);
+          if (jg->IsInRMatrix() && std::fabs(jg->GetJ() - t.J) < 1.0e-6 && jg->GetPi() == t.parity) j = jj;
+        }
+        if (j == 0) {
+          configure.outStream << where << term << "the model has no J^pi = " << jpi
+                              << " group with a level in the R matrix." << std::endl;
+          return -1;
+        }
+        JGroup *jg = theCNuc->GetJGroup(j);
+        int found = 0;
+        for (int in = 1; in <= jg->NumChannels(); in++) {
+          AChannel *ci = jg->GetChannel(in);
+          if (ci->GetPairNum() != aa) continue;
+          if (t.hasChannels && (std::fabs(ci->GetS() - t.s) > 1.0e-6 || ci->GetL() != t.l)) continue;
+          for (int out = 1; out <= jg->NumChannels(); out++) {
+            AChannel *co = jg->GetChannel(out);
+            if (co->GetPairNum() != exitNum) continue;
+            if (t.hasChannels && (std::fabs(co->GetS() - t.sp) > 1.0e-6 || co->GetL() != t.lp)) continue;
+            for (const ThmCoherentBackground::Combo &o : cb->combos)
+              if (o.jGroup == j && o.entrance == in && o.exit == out) {
+                configure.outStream << where << term << "the combination (s,l) = (" << ThmSpinText(ci->GetS())
+                                    << "," << ci->GetL() << ") -> (s',l') = (" << ThmSpinText(co->GetS()) << ","
+                                    << co->GetL() << ") is given twice." << std::endl;
+                return -1;
+              }
+            ThmCoherentBackground::Combo combo;
+            combo.jGroup = j;
+            combo.entrance = in;
+            combo.exit = out;
+            combo.form = t.form;
+            combo.index = (int)thmCoherentParams_.size();
+            cb->combos.push_back(combo);
+            const std::string stem = ThmCoherentParamStem(x.name, t.J, t.parity, t.exitKey, ci->GetS(), ci->GetL(),
+                                                          co->GetS(), co->GetL());
+            static const char *parts[4] = {"re0", "im0", "re1", "im1"};
+            for (int k = 0; k < 2 * t.form; k++) {
+              ThmCoherentParam par;
+              par.name = stem + parts[k];
+              par.experiment = x.name;
+              par.value = t.hasValues ? t.value[k] : 0.0;
+              par.fixed = t.hasValues && t.fixed[k];
+              thmCoherentParams_.push_back(par);
+            }
+            c << (found || cb->combos.size() > 1 ? "; " : "") << jpi << " (" << ThmSpinText(ci->GetS()) << ","
+              << ci->GetL() << ") -> " << t.exitKey << " (" << ThmSpinText(co->GetS()) << "," << co->GetL()
+              << ") " << (t.form == 1 ? "const" : "linear");
+            found++;
+          }
+        }
+        if (!found) {
+          configure.outStream << where << term
+                              << (t.hasChannels ? "the J^pi group has no entrance channel (s,l) = (" + ThmSpinText(t.s) +
+                                                      "," + std::to_string(t.l) + ") with an exit channel (s',l') = (" +
+                                                      ThmSpinText(t.sp) + "," + std::to_string(t.lp) + ")."
+                                                : std::string("the J^pi group does not couple the entrance pair to the "
+                                                              "exit pair."))
+                              << std::endl;
+          return -1;
+        }
+      }
+      c << ".  The amplitude c(E) M_l is added to the resonant HOES amplitude of each before squaring; "
+           "Re and Im of c are fit parameters (cbkg_*).";
+      configure.outStream << c.str() << std::endl;
+      group.coherent = cb;
+      for (int s : group.segments) GetSegment(s)->SetThmCoherent(cb);
+    }
     thmGroups_.push_back(group);
+  }
+  // The coherent backgrounds are the last block of the parameter vector
+  // (FillMnParams sets the offset again when it lays the vector out).
+  if (!thmCoherentParams_.empty()) {
+    int offset = 0;
+    for (int j = 1; j <= theCNuc->NumJGroups(); j++)
+      offset += theCNuc->GetJGroup(j)->NumLevels() * (1 + theCNuc->GetJGroup(j)->NumChannels());
+    for (int s = 1; s <= NumSegments(); s++) {
+      if (GetSegment(s)->IsVaryNorm() && !GetSegment(s)->IsProfiledNorm()) offset++;
+      offset++;  // energy shift
+    }
+    thmCoherentParamOffset_ = offset;
+    std::vector<double> v;
+    for (const ThmCoherentParam &par : thmCoherentParams_) v.push_back(par.value);
+    theCNuc->SetThmCoherentValues(v);
   }
   return 0;
 }
@@ -3455,6 +3594,12 @@ std::vector<ThmExperimentReport> EData::ThmExperimentReports() {
     r.points = p.points;
     p.Reported(r.value, r.covariance);
     r.status = r.segments.empty() ? "not profiled: no segment of it has a free norm" : p.status;
+    for (const ThmCoherentParam &c : thmCoherentParams_)
+      if (c.experiment == group.name) {
+        r.coherentNames.push_back(c.name);
+        r.coherentValues.push_back(c.value);
+        r.coherentFixed.push_back(c.fixed);
+      }
     out.push_back(r);
   }
   return out;
@@ -3490,6 +3635,15 @@ void EData::WriteThmExperiments(const Config &configure) {
       out << std::left << std::setw(6) << names[i] << std::right;
       for (int j = 0; j < q; j++) out << std::setw(18) << r.covariance[i * 4 + j];
       out << "\n";
+    }
+    // Coherent background (cbackground=): its fit parameters (their errors
+    // are the fit's, in param.par).
+    if (!r.coherentNames.empty()) {
+      out << "cbackground: " << r.coherentNames.size() << " parameter(s); c(E) = c0 + c1 E times the vertex M_l "
+          << "is added to the resonant amplitude\n";
+      for (size_t k = 0; k < r.coherentNames.size(); k++)
+        out << "cbkg " << std::left << std::setw(40) << r.coherentNames[k] << std::right << std::setw(18)
+            << r.coherentValues[k] << (r.coherentFixed[k] ? "  fixed" : "") << "\n";
     }
     // Spectator-momentum window (ps=...): the nodes.
     for (const ThmGroup &group : thmGroups_) {

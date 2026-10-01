@@ -216,6 +216,168 @@ const char *ThmExperiment::BackgroundName(int terms) {
   return (terms >= 0 && terms <= 3) ? names[terms] : "?";
 }
 
+namespace {
+// A spin or J: "1/2", "3/2", "0.5", "2" -> a non-negative multiple of 1/2.
+bool ReadSpin(const std::string &text, double &j) {
+  size_t slash = text.find('/');
+  if (slash != std::string::npos) {
+    int num = 0;
+    if (text.substr(slash + 1) != "2" || !ReadWholeInt(text.substr(0, slash), num) || num < 0 || text[0] == '+' ||
+        text[0] == '-')
+      return false;
+    j = num / 2.0;
+    return true;
+  }
+  if (!ReadWholeDouble(text, j) || j < 0.0 || text[0] == '+' || text[0] == '-') return false;
+  return std::fabs(2.0 * j - std::round(2.0 * j)) < 1.0e-9;
+}
+// A start value, optionally followed by 'f' (fixed).
+bool ReadCoherentValue(const std::string &text, double &v, bool &fixed) {
+  std::string t = text;
+  fixed = !t.empty() && t.back() == 'f';
+  if (fixed) t.pop_back();
+  return ReadWholeDouble(t, v);
+}
+// The shortest of 15 or 17 significant digits that reads back as v.
+std::string ValueText(double v) {
+  for (int digits : {15, 17}) {
+    std::ostringstream o;
+    o.precision(digits);
+    o << v;
+    double back = 0.0;
+    if (digits == 17 || (std::istringstream(o.str()) >> back && back == v)) return o.str();
+  }
+  return "";
+}
+}  // namespace
+
+std::string ThmSpinText(double j) {
+  long twice = std::lround(2.0 * j);
+  if (twice % 2 == 0) return std::to_string(twice / 2);
+  return std::to_string(twice) + "/2";
+}
+
+std::string ThmCoherentParamStem(const std::string &experiment, double J, int parity, int exitKey, double s, int l,
+                                 double sp, int lp) {
+  return "cbkg_" + experiment + "_" + ThmSpinText(J) + (parity > 0 ? "+" : "-") + "_" + std::to_string(exitKey) +
+         "_" + ThmSpinText(s) + "," + std::to_string(l) + "," + ThmSpinText(sp) + "," + std::to_string(lp) + "_";
+}
+
+std::string ApplyThmCoherentValues(const std::string &experiment, const std::string &value,
+                                   const std::vector<std::string> &names, const std::map<std::string, double> &values,
+                                   std::string &out) {
+  std::vector<ThmExperiment::CoherentTerm> terms, result;
+  std::string why = ParseThmCoherentBackground(value, terms);
+  if (!why.empty()) return why;
+  static const char *parts[4] = {"re0", "im0", "re1", "im1"};
+  for (const ThmExperiment::CoherentTerm &t : terms) {
+    const std::string prefix = "cbkg_" + experiment + "_" + ThmSpinText(t.J) + (t.parity > 0 ? "+" : "-") + "_" +
+                               std::to_string(t.exitKey) + "_";
+    // The combinations (s,l,s',l') of this term among the names, in order.
+    std::vector<std::string> combos;
+    for (const std::string &n : names) {
+      if (n.compare(0, prefix.size(), prefix) != 0) continue;
+      size_t last = n.rfind('_');
+      if (last == std::string::npos || last < prefix.size()) continue;
+      std::string channels = n.substr(prefix.size(), last - prefix.size());
+      if (t.hasChannels && channels != ThmSpinText(t.s) + "," + std::to_string(t.l) + "," + ThmSpinText(t.sp) + "," +
+                                           std::to_string(t.lp))
+        continue;
+      if (std::find(combos.begin(), combos.end(), channels) == combos.end()) combos.push_back(channels);
+    }
+    if (combos.empty()) {
+      result.push_back(t);
+      continue;
+    }
+    for (const std::string &channels : combos) {
+      ThmExperiment::CoherentTerm c = t;
+      std::vector<std::string> f = Split(channels, ',');
+      if (f.size() != 4 || !ReadSpin(f[0], c.s) || !ReadWholeInt(f[1], c.l) || !ReadSpin(f[2], c.sp) ||
+          !ReadWholeInt(f[3], c.lp))
+        return "cbackground: parameter name with channels '" + channels + "' is not one AZURE2 makes";
+      c.hasChannels = true;
+      c.hasValues = true;
+      for (int k = 0; k < 2 * c.form; k++) {
+        std::map<std::string, double>::const_iterator it = values.find(prefix + channels + "_" + parts[k]);
+        if (it != values.end()) c.value[k] = it->second;
+      }
+      result.push_back(c);
+    }
+  }
+  out = FormatThmCoherentBackground(result);
+  return "";
+}
+
+std::string ParseThmCoherentBackground(const std::string &value, std::vector<ThmExperiment::CoherentTerm> &out) {
+  out.clear();
+  const std::string form =
+      "expected <J><+|->:<exit pair key>[:<s>,<l>,<s'>,<l'>][:const|:linear][=<Re c0>,<Im c0>[,<Re c1>,<Im c1>]] "
+      "terms separated by ';' (a value followed by f is fixed)";
+  for (const std::string &item : Split(value, ';')) {
+    const std::string bad = "cbackground: '" + item + "': ";
+    if (item.empty()) return "cbackground='" + value + "': an empty term; " + form;
+    ThmExperiment::CoherentTerm t;
+    std::string spec = item, values;
+    size_t eq = item.find('=');
+    if (eq != std::string::npos) {
+      spec = item.substr(0, eq);
+      values = item.substr(eq + 1);
+      t.hasValues = true;
+    }
+    std::vector<std::string> f = Split(spec, ':');
+    if (f.size() < 2 || f.size() > 4) return bad + form;
+    // J^pi
+    const std::string &jpi = f[0];
+    if (jpi.size() < 2 || (jpi.back() != '+' && jpi.back() != '-') || !ReadSpin(jpi.substr(0, jpi.size() - 1), t.J))
+      return bad + "J^pi '" + jpi + "': expected e.g. 1/2+ or 2-";
+    t.parity = jpi.back() == '+' ? 1 : -1;
+    if (!ReadWholeInt(f[1], t.exitKey) || t.exitKey < 1 || f[1][0] == '+' || f[1][0] == '-')
+      return bad + "exit pair key '" + f[1] + "': expected a positive whole number";
+    bool haveForm = false;
+    for (size_t k = 2; k < f.size(); k++) {
+      if (f[k] == "const" || f[k] == "linear") {
+        if (haveForm) return bad + form;
+        haveForm = true;
+        t.form = f[k] == "const" ? 1 : 2;
+        continue;
+      }
+      if (t.hasChannels || haveForm) return bad + form;
+      std::vector<std::string> c = Split(f[k], ',');
+      if (c.size() != 4 || !ReadSpin(c[0], t.s) || !ReadWholeInt(c[1], t.l) || t.l < 0 || !ReadSpin(c[2], t.sp) ||
+          !ReadWholeInt(c[3], t.lp) || t.lp < 0 || c[1][0] == '+' || c[3][0] == '+')
+        return bad + "channels '" + f[k] + "': expected <s>,<l>,<s'>,<l'> (entrance and exit channel spin and l)";
+      t.hasChannels = true;
+    }
+    if (t.hasValues) {
+      std::vector<std::string> v = Split(values, ',');
+      if ((int)v.size() != 2 * t.form)
+        return bad + "expected " + std::to_string(2 * t.form) + " values after '=' (" +
+               (t.form == 1 ? "Re c0, Im c0" : "Re c0, Im c0, Re c1, Im c1") + ")";
+      for (size_t k = 0; k < v.size(); k++)
+        if (!ReadCoherentValue(v[k], t.value[k], t.fixed[k]))
+          return bad + "value '" + v[k] + "': expected a number, optionally followed by f (fixed)";
+    }
+    out.push_back(t);
+  }
+  return "";
+}
+
+std::string FormatThmCoherentBackground(const std::vector<ThmExperiment::CoherentTerm> &terms) {
+  std::string s;
+  for (const ThmExperiment::CoherentTerm &t : terms) {
+    if (!s.empty()) s += ";";
+    s += ThmSpinText(t.J) + (t.parity > 0 ? "+" : "-") + ":" + std::to_string(t.exitKey);
+    if (t.hasChannels)
+      s += ":" + ThmSpinText(t.s) + "," + std::to_string(t.l) + "," + ThmSpinText(t.sp) + "," + std::to_string(t.lp);
+    if (t.form == 2) s += ":linear";
+    if (t.hasValues) {
+      s += "=";
+      for (int k = 0; k < 2 * t.form; k++) s += (k ? "," : "") + ValueText(t.value[k]) + (t.fixed[k] ? "f" : "");
+    }
+  }
+  return s;
+}
+
 std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExperiment> &experiments) {
   const std::string head = "experiment[";
   size_t close = line.find(']');
@@ -362,6 +524,8 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
     } else if (key == "spectatorAngleNodes") {
       if (!ReadWholeInt(value, work.angleNodes) || work.angleNodes < 1 || work.angleNodes > 64)
         why = "spectatorAngleNodes='" + value + "': expected a whole number of Gauss-Legendre nodes, 1 to 64";
+    } else if (key == "cbackground") {
+      why = ParseThmCoherentBackground(value, work.cbackground);
     } else if (key == "vertexModel") {
       if (value == "pw")
         work.vertexDW = false;
@@ -373,7 +537,7 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
       why = "unknown key '" + key +
             "' (keys: segments, background, beam, target, spectator, Ebeam, lineshape, ps, psNodes, "
             "distortion, opticalAA, opticalSF, spectatorAngle, distortionRef, distortionRatio, boundState, "
-            "theta, vertexModel, spectatorAngles, spectatorAngleNodes)";
+            "theta, vertexModel, spectatorAngles, spectatorAngleNodes, cbackground)";
     }
     if (!why.empty()) return where + why;
     work.keys.push_back(key);
