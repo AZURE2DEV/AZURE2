@@ -491,12 +491,16 @@ complex EPoint::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary
 }
 
 complex EPoint::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary, int node) const {
-  if (node < 0 || node >= (int)thm_jl_ps_.size()) return 0.0;
-  const matrix_r &jl = thm_jl_ps_[node];
-  if (jGroupNum - 1 >= (int)jl.size()) return 0.0;
-  if (channelNum - 1 >= (int)jl[jGroupNum - 1].size()) return 0.0;
-  return (boundary - 1.0) * jl[jGroupNum - 1][channelNum - 1] - thm_rhodjl_ps_[node][jGroupNum - 1][channelNum - 1]
-         + thm_coul_ps_[node][jGroupNum - 1][channelNum - 1];
+  const ThmPsTable *t = thm_ps_.get();
+  if (!t || node < 0 || node >= t->nodes) return 0.0;
+  if (jGroupNum < 1 || jGroupNum >= (int)t->offset.size() || channelNum < 1) return 0.0;
+  const int flat = t->offset[jGroupNum - 1] + channelNum - 1;
+  if (flat >= t->offset[jGroupNum]) return 0.0;
+  const int k = t->slot[flat];
+  if (k < 0) return 0.0;
+  const size_t i = (size_t)k * t->nodes + node;
+  const complex coul = t->coul.empty() ? complex(0.0, 0.0) : t->coul[i];
+  return (boundary - 1.0) * t->jl[i] - t->rhodjl[i] + coul;
 }
 
 /*!
@@ -1154,7 +1158,26 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
   this->SetGeometricalFactor(geofactor);
   this->SetSFactorConversion(sfactorconv);
 
+  // Every table below is rebuilt from scratch: a second call (a parent
+  // point's CalcEDependentValues reaches its sub-points again, e.g. after an
+  // energy shift) used to append a second copy to the sub-points' tables.
+  lo_elements_.clear();
+  penetrabilities_.clear();
+  thm_jl_.clear();
+  thm_rhodjl_.clear();
+  thm_coul_.clear();
+  thm_ps_.reset();
+  coulombphase_.clear();
+  hardspherephase_.clear();
+  std::shared_ptr<ThmPsTable> psTable;
+  bool psCoul = false;
+  if (this->IsTHM() && thm_window_) {
+    psTable = std::make_shared<ThmPsTable>();
+    psTable->nodes = (int)thm_window_->p.size();
+    psTable->offset.assign(theCNuc->NumJGroups() + 1, 0);
+  }
   for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
+    if (psTable) psTable->offset[j - 1] = (int)psTable->slot.size();
     if (theCNuc->GetJGroup(j)->IsInRMatrix()) {
       JGroup *theJGroup = theCNuc->GetJGroup(j);
       for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
@@ -1250,11 +1273,13 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
           // Spectator-momentum window (ps=..., ThmLineshape.h): the pieces at
           // every node p_k, with T_k = p_k^2/2 mu_sx added to E + B (a window
           // and spectatorEnergy for the same pair are refused at startup).
-          // Stored for every channel, as below; the single-node ones stay 0.
-          for (size_t k = 0; k < window->p.size(); k++) {
-            double jl = 0.0, rhoDjl = 0.0;
-            complex coul(0.0, 0.0);
-            if (thePair == entrancePair && thePair->GetPType() == 0) {
+          // Only the entrance-pair channels are stored (ThmPsTable: every
+          // other channel reads 0); the single-node pieces stay 0.
+          if (thePair == entrancePair && thePair->GetPType() == 0) {
+            psTable->slot.push_back(psTable->slots++);
+            for (size_t k = 0; k < window->p.size(); k++) {
+              double jl = 0.0, rhoDjl = 0.0;
+              complex coul(0.0, 0.0);
               double muMeV = thePair->GetRedMass() * uconv;
               double bindingE = thePair->GetBindingEnergy() + window->es[k];
               if (localEnergy + bindingE > 0.0) {
@@ -1263,8 +1288,13 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
                   coul = ThmCoulombTerm(thePair, lValue, localEnergy, ThmRho(muMeV, localEnergy, bindingE, 1.0),
                                         !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
               }
+              psTable->jl.push_back(jl);
+              psTable->rhodjl.push_back(rhoDjl);
+              psTable->coul.push_back(coul);
+              if (coul != complex(0.0, 0.0)) psCoul = true;
             }
-            this->AddThmFormFactorNode((int)k, j, ch, jl, rhoDjl, coul);
+          } else {
+            psTable->slot.push_back(-1);
           }
         } else if (this->IsTHM() && thePair == entrancePair && thePair->GetPType() == 0) {
           double muMeV = thePair->GetRedMass() * uconv;
@@ -1299,6 +1329,15 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
       }
     }
   }
+  if (psTable) psTable->offset.back() = (int)psTable->slot.size();
+  if (psTable && !psTable->slot.empty()) {  // no channel at all: no nodes, as before
+    if (!psCoul) psTable->coul.clear();
+    psTable->slot.shrink_to_fit();
+    psTable->jl.shrink_to_fit();
+    psTable->rhodjl.shrink_to_fit();
+    psTable->coul.shrink_to_fit();
+    thm_ps_ = psTable;
+  }
   for (int i = 1; i <= this->NumSubPoints(); i++) {
     this->GetSubPoint(i)->CalcEDependentValues(theCNuc, configure);
   }
@@ -1311,9 +1350,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
     mappedPoint->thm_jl_ = thm_jl_;
     mappedPoint->thm_rhodjl_ = thm_rhodjl_;
     mappedPoint->thm_coul_ = thm_coul_;
-    mappedPoint->thm_jl_ps_ = thm_jl_ps_;
-    mappedPoint->thm_rhodjl_ps_ = thm_rhodjl_ps_;
-    mappedPoint->thm_coul_ps_ = thm_coul_ps_;
+    mappedPoint->thm_ps_ = thm_ps_;
     mappedPoint->coulombphase_ = coulombphase_;
     mappedPoint->hardspherephase_ = hardspherephase_;
     for (int ii = 1; ii <= this->NumSubPoints(); ii++) {
@@ -1325,9 +1362,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
       subMappedPoint->thm_jl_ = this->GetSubPoint(ii)->thm_jl_;
       subMappedPoint->thm_rhodjl_ = this->GetSubPoint(ii)->thm_rhodjl_;
       subMappedPoint->thm_coul_ = this->GetSubPoint(ii)->thm_coul_;
-      subMappedPoint->thm_jl_ps_ = this->GetSubPoint(ii)->thm_jl_ps_;
-      subMappedPoint->thm_rhodjl_ps_ = this->GetSubPoint(ii)->thm_rhodjl_ps_;
-      subMappedPoint->thm_coul_ps_ = this->GetSubPoint(ii)->thm_coul_ps_;
+      subMappedPoint->thm_ps_ = this->GetSubPoint(ii)->thm_ps_;
       subMappedPoint->coulombphase_ = this->GetSubPoint(ii)->coulombphase_;
       subMappedPoint->hardspherephase_ = this->GetSubPoint(ii)->hardspherephase_;
     }
@@ -1353,9 +1388,7 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure) {
   thm_jl_.clear();
   thm_rhodjl_.clear();
   thm_coul_.clear();
-  thm_jl_ps_.clear();
-  thm_rhodjl_ps_.clear();
-  thm_coul_ps_.clear();
+  thm_ps_.reset();
   coulombphase_.clear();
   hardspherephase_.clear();
 
@@ -1407,25 +1440,6 @@ void EPoint::AddThmFormFactor(int jGroupNum, int channelNum, double jl, double r
   thm_rhodjl_[jGroupNum - 1].push_back(rhoDjl);
   thm_coul_[jGroupNum - 1].push_back(coul);
   assert(channelNum == (int)thm_jl_[jGroupNum - 1].size());
-}
-
-void EPoint::AddThmFormFactorNode(int node, int jGroupNum, int channelNum, double jl, double rhoDjl, complex coul) {
-  while (node >= (int)thm_jl_ps_.size()) {
-    thm_jl_ps_.emplace_back();
-    thm_rhodjl_ps_.emplace_back();
-    thm_coul_ps_.emplace_back();
-  }
-  matrix_r &j = thm_jl_ps_[node], &r = thm_rhodjl_ps_[node];
-  matrix_c &c = thm_coul_ps_[node];
-  while (jGroupNum > (int)j.size()) {
-    j.emplace_back();
-    r.emplace_back();
-    c.emplace_back();
-  }
-  j[jGroupNum - 1].push_back(jl);
-  r[jGroupNum - 1].push_back(rhoDjl);
-  c[jGroupNum - 1].push_back(coul);
-  assert(channelNum == (int)j[jGroupNum - 1].size());
 }
 
 /*!

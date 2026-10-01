@@ -3475,6 +3475,22 @@ void EData::WriteThmExperiments(const Config &configure) {
         out << "ps_node" << std::setw(18) << w.p[k] << std::setw(18) << w.weight[k] << std::setw(18) << w.es[k]
             << "\n";
       out << std::left << std::setw(16) << "<T_s>" << std::right << std::setw(18) << w.MeanEs() << "\n";
+      // Memory of the per-point node tables (EPoint::ThmPsTable): points
+      // including the folding sub-points, the stored entrance channels summed
+      // over the points (x nodes = entries), and their bytes.
+      size_t tablePoints = 0, tableBytes = 0;
+      for (int s : group.segments)
+        for (int p = 1; p <= GetSegment(s)->NumPoints(); p++) {
+          EPoint *point = GetSegment(s)->GetPoint(p);
+          tablePoints++;
+          tableBytes += point->ThmPsTableBytes();
+          for (int q = 1; q <= point->NumSubPoints(); q++) {
+            tablePoints++;
+            tableBytes += point->GetSubPoint(q)->ThmPsTableBytes();
+          }
+        }
+      out << "# Node tables of the vertex: points (with folding sub-points), bytes.\n"
+          << "ps_table" << std::setw(18) << (double)tablePoints << std::setw(18) << (double)tableBytes << "\n";
     }
     // Distortion factor (distortion=...): R at the lowest point, E_ref and the highest point.
     for (const ThmGroup &group : thmGroups_) {

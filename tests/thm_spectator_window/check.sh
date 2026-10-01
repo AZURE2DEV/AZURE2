@@ -19,7 +19,9 @@
 #       pmin = pmax (one node) and a 2e-4 MeV/c wide window, to 1e-8;
 #   (c) a flat table (constant weight on [20, 40] MeV/c) equals the average
 #       of 41 single-point spectatorEnergy runs by Simpson's rule, to 1e-6;
-#       and the 16-node Hulthen window [0, 40] agrees with 32 nodes;
+#       and the 16-node Hulthen window [0, 40] agrees with 32 nodes; the
+#       node tables (ps_table in thm_experiments.out) grow linearly with the
+#       nodes and stay below 4 kB per point at 32 nodes;
 #   (d) near a node of the vertex M_0 (a point p_s = 24 MeV/c puts it at
 #       E ~ 0.70 MeV, no folding) the window fills it;
 #   (e) refusals.
@@ -148,6 +150,19 @@ if ran h16 && ran h8 && ran h32; then
   ok "(size) hulthen [0, 40] vs the quasi-free point p_s = 0: worst rel $w"
   grep -q "^ps: hulthen a=0.2317 b=1.202 fm^-1, p_s in \[0, 40\] MeV/c, 16 Gauss-Legendre nodes" \
     "$WORK/h16/output/thm_experiments.out" && ok "thm_experiments.out lists the window" || bad "no ps: line in thm_experiments.out"
+  # Memory of the node tables (EPoint::ThmPsTable): entrance channels only,
+  # flat, so linear in the nodes and a few hundred bytes per point.  The
+  # per-node [J group][channel] vectors of every channel they replace held
+  # ~4.5 kB per point and node on the 19F THM model (2.2 GB with 16 nodes).
+  pst() { awk '$1 == "ps_table" { printf "%.0f %.0f", $2, $3 }' "$WORK/$1/output/thm_experiments.out"; }
+  read -r np8 b8 <<< "$(pst h8)"; read -r np16 b16 <<< "$(pst h16)"; read -r np32 b32 <<< "$(pst h32)"
+  if [ -n "${b32:-}" ] && [ "$np8" = "$np16" ] && [ "$np16" = "$np32" ] && [ "$np32" -gt 0 ]; then
+    awk -v n="$np32" -v a="$b8" -v b="$b16" -v c="$b32" 'BEGIN { exit !(c / n < 4096 && (c - b) * 8 == (b - a) * 16 && b > a) }' \
+      && ok "ps_table: $np32 points (with sub-points), $b8 / $b16 / $b32 bytes at 8 / 16 / 32 nodes ($(awk -v n="$np32" -v c="$b32" 'BEGIN { printf "%.0f", c / n }') B per point at 32)" \
+      || bad "ps_table not bounded/linear: $np32 points, $b8 / $b16 / $b32 bytes at 8 / 16 / 32 nodes"
+  else
+    bad "no ps_table line in thm_experiments.out (h8/h16/h32: '$np8 $b8' '$np16 $b16' '$np32 ${b32:-}')"
+  fi
 fi
 
 # (d) ----------------------------------------------------------------------

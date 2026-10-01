@@ -19,6 +19,7 @@ struct EnergyMap {
   int point;
 };
 
+#include <memory>
 #include <vector>
 
 class ESegment;
@@ -199,7 +200,10 @@ class EPoint {
   /// (0-based; ps=...).  0 if not stored.
   complex GetThmFormFactor(int, int, complex, int node) const;
   /// Number of nodes of the point's spectator-momentum window (0: none).
-  int NumThmPsNodes() const { return (int)thm_jl_ps_.size(); }
+  int NumThmPsNodes() const { return thm_ps_ ? thm_ps_->nodes : 0; }
+  /// Bytes held by the point's spectator-window table (0 without one; shared
+  /// tables are counted by every point that refers to them).
+  size_t ThmPsTableBytes() const { return thm_ps_ ? thm_ps_->Bytes() : 0; }
   /// Total spin. Phase-shift points only.
   double GetJ() const;
   /// Stopping cross section at this sub-point, for a yield-curve target integration.
@@ -294,8 +298,6 @@ class EPoint {
   void AddSqrtPenetrability(int, int, double);
   /// Store the pieces of the THM form factor at (J-group, channel).
   void AddThmFormFactor(int, int, double, double, complex = complex(0.0, 0.0));
-  /// The same at node `node` (0-based) of the spectator-momentum window.
-  void AddThmFormFactorNode(int node, int, int, double, double, complex);
   /// Store a Coulomb phase factor at (J-group, channel).
   void AddExpCoulombPhase(int, int, complex);
   /// Store a hard-sphere phase factor at (J-group, channel).
@@ -434,11 +436,25 @@ class EPoint {
   /// External Coulomb term of the THM vertex, same indexing (0 when not used).
   matrix_c thm_coul_;
   /// With a spectator-momentum window (ps=...): the same three pieces per
-  /// Gauss-Legendre node k of the window, [k][jGroup-1][channel-1]; the
-  /// single-node matrices above are then unused (zero).
-  std::vector<matrix_r> thm_jl_ps_;
-  std::vector<matrix_r> thm_rhodjl_ps_;
-  std::vector<matrix_c> thm_coul_ps_;
+  /// Gauss-Legendre node of the window, for the entrance-pair channels only
+  /// (every other channel is 0).  One flat, immutable table per point,
+  /// shared by its mapped points; the single-node matrices above are then
+  /// unused (zero).  It used to be [node][jGroup][channel] vectors of every
+  /// channel: ~117 MB per node for the 19F THM model (16 nodes did not fit).
+  struct ThmPsTable {
+    int nodes = 0;
+    int slots = 0;                  ///< entrance channels stored
+    std::vector<int> offset;        ///< J group j -> first flat index of its channels (j = 1..N, N+1 entries)
+    std::vector<int> slot;          ///< flat (J group, channel) -> slot, -1 when not stored
+    std::vector<double> jl;         ///< [slot * nodes + node]
+    std::vector<double> rhodjl;
+    std::vector<complex> coul;      ///< empty unless an external Coulomb term was computed
+    size_t Bytes() const {
+      return sizeof(*this) + offset.capacity() * sizeof(int) + slot.capacity() * sizeof(int) +
+             (jl.capacity() + rhodjl.capacity()) * sizeof(double) + coul.capacity() * sizeof(complex);
+    }
+  };
+  std::shared_ptr<const ThmPsTable> thm_ps_;
   matrix_c coulombphase_;
   matrix_c hardspherephase_;
   // Energy at which CalcEDependentValues last ran: RecalcEDependentValues is
