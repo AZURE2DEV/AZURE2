@@ -1,6 +1,7 @@
 #include "ThmWorkspace.h"
 
 #include <QCoreApplication>
+#include <cmath>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFileInfo>
@@ -19,6 +20,8 @@
 
 #include "AZURESetup.h"
 #include "ChannelsModel.h"
+#include "LevelsModel.h"
+#include "LevelsTab.h"
 #include "Config.h"
 #include "ThmChannelsPage.h"
 #ifdef AZURE2_THM_DIAGNOSTICS
@@ -83,6 +86,19 @@ ThmWorkspace::ThmWorkspace(AZURESetup *setup, const ThmSettings &settings, QWidg
   experimentsPage->setEntranceL([model]() { return model ? model->settings().entranceL : QString("incoherent"); });
   // coulombIntegral=1 is refused with a DW vertex or a distorted a + A wave in R(E).
   experimentsPage->setCoulombIntegral([model]() { return model && model->settings().coulombIntegral; });
+  // A coherent background term names a J^pi of the model's (active) levels.
+  LevelsModel *levelsModel = setup->getLevelsTab()->getLevelsModel();
+  experimentsPage->setJpiChoices([levelsModel]() {
+    QStringList out;
+    for (const LevelsData &l : levelsModel->getLevels()) {
+      if (!l.isActive) continue;
+      const int twice = (int)std::lround(2.0 * l.jValue);
+      const QString jpi = (twice % 2 ? QString("%1/2").arg(twice) : QString::number(twice / 2)) +
+                          (l.piValue > 0 ? "+" : "-");
+      if (!out.contains(jpi)) out << jpi;
+    }
+    return out;
+  });
   channelsPage = new ThmChannelsPage(pairs, setup->getLevelsTab()->getLevelsModel(),
                                      setup->getLevelsTab()->getChannelsModel(), data, test);
   // B(x+s) from the masses against the pair's B: the Experiments page takes

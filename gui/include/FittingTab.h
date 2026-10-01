@@ -2,12 +2,15 @@
 #define FITTINGTAB_H
 
 #include <QWidget>
+#include "ThmSettings.h"
 #include <QSignalMapper>
 #include <QPointer>
 #include <QTextStream>
 #include "LevelsModel.h"
 #include "ChannelsModel.h"
 #include "SegmentsDataModel.h"
+
+class AZURESetup;
 
 // Forward declarations
 class InfoDialog;
@@ -23,7 +26,7 @@ struct FittingParameter {
   double error;
   double fitError;  // NEW: Error from fitting (separate from nuisance calculation error)
   bool useAsNuisance;
-  QString category;  // "level", "norm", "shift"
+  QString category;  // "level", "norm", "shift", "cbkg" (THM coherent background)
   int minuitIndex;   // Index in Minuit parameters
 
   // For level parameters
@@ -63,6 +66,9 @@ class FittingTab : public QWidget {
   void refreshFromMinuitParameters();
   void populateFromCurrentGUIState();
   void setTabReferences(LevelsTab *levelsTab, SegmentsTab *segmentsTab);
+  /// Writes `values` (cbkg_* name -> value) into the cbackground= values of
+  /// the THM block (ApplyThmCoherentValues); false if nothing was changed.
+  bool applyCoherentValues(const QMap<QString, double> &values);
 
  protected:
   void showEvent(QShowEvent *event) override;
@@ -100,6 +106,15 @@ class FittingTab : public QWidget {
   double convertReducedToPhysical(double reducedWidth, int levelIndex, int channelIndex);
   double convertPhysicalToReduced(double physicalWidth, int levelIndex, int channelIndex);
   double transformRWAParameterToPhysical(const QString &paramName, double rwaValue);
+  /// The THM coherent backgrounds (cbackground= of the <thm> experiments):
+  /// their free parameters, last, as EData::FillMnParams adds them.
+  void appendCoherentParameters();
+  /*! Every cbkg_* parameter name of the experiment `record`, in AZURE2's
+      order (EData::BuildThmGroups, mirrored on the Levels and Segments tabs),
+      with each one's start value and fixed flag. */
+  QStringList coherentNames(const ThmExperimentRecord &record, QList<double> *values = nullptr,
+                            QList<bool> *fixed = nullptr) const;
+  AZURESetup *setup() const;
 
  public:
   // Getter for fitting parameters (for MCMCTab access)
@@ -110,6 +125,7 @@ class FittingTab : public QWidget {
   QTableWidget *levelParamsTable;
   QTableWidget *normParamsTable;
   QTableWidget *shiftParamsTable;
+  QTableWidget *cbkgParamsTable;  ///< THM coherent background; its tab only when there are some
 
   QPushButton *refreshButton;
   QPushButton *loadButton;

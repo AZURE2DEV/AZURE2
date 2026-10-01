@@ -106,6 +106,9 @@ struct ThmExperimentRecord {
   /// theta= as written ("" = key absent): all, or thmin-thmax (degrees), the
   /// c.m. angle window of exit particle 1 relative to p_xA.
   QString theta;
+  /// cbackground= as written ("" = key absent): the coherent background
+  /// terms (ParseThmCoherentBackground); the page rewrites it only when edited.
+  QString cbackground;
   QStringList extraTokens;   ///< other key=value tokens, verbatim, in order
 
   bool hasKinematics() const {

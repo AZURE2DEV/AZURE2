@@ -262,7 +262,7 @@ bool ThmExperimentRecord::sameAs(const ThmExperimentRecord &o) const {
          spectatorAngle == o.spectatorAngle && distortionRef == o.distortionRef &&
          distortionRatio == o.distortionRatio && boundState == o.boundState && theta == o.theta &&
          spectatorAngles == o.spectatorAngles && spectatorAngleNodes == o.spectatorAngleNodes &&
-         extraTokens == o.extraTokens;
+         cbackground == o.cbackground && extraTokens == o.extraTokens;
 }
 
 QString ThmExperimentRecord::segmentsListText(const QList<int> &segments) {
@@ -309,6 +309,7 @@ QString ThmExperimentRecord::line() const {
   if (!spectatorAngles.isEmpty()) tokens << "spectatorAngles=" + spectatorAngles;
   if (!spectatorAngleNodes.isEmpty()) tokens << "spectatorAngleNodes=" + spectatorAngleNodes;
   if (!theta.isEmpty()) tokens << "theta=" + theta;
+  if (!cbackground.isEmpty()) tokens << "cbackground=" + cbackground;
   tokens << extraTokens;
   return QString("experiment[%1] %2").arg(name, tokens.join(' '));
 }
@@ -373,6 +374,8 @@ QList<ThmExperimentRecord> ThmExperimentRecord::read(const QStringList &lines) {
         r.spectatorAngles = value;
       } else if (key == "spectatorAngleNodes") {
         r.spectatorAngleNodes = value;
+      } else if (key == "cbackground") {
+        r.cbackground = value;
       } else {
         r.extraTokens << token;
       }

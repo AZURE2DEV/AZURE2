@@ -144,6 +144,13 @@ class ThmExperimentsPage : public QWidget {
   static QString coherentRefusal();
   /// The theta= value the exit-angle controls describe ("all" for angle-integrated).
   QString thetaText() const;
+  /// The J^pi of the model's levels ("1/2+", ...), offered for a coherent
+  /// background term (the Levels tab's values).
+  void setJpiChoices(std::function<QStringList()> choices);
+  /// The cbackground= value the coherent-background table describes ("" for none).
+  QString coherentText() const;
+  /// Adds a coherent-background term to the selected experiment (the + button).
+  void addCoherentTerm();
   /// Recomputes the derived text of the selected experiment (other pages changed).
   void refreshDerived();
   /// The lowest and highest c.m. point energy of the given data segments, as
@@ -207,6 +214,12 @@ class ThmExperimentsPage : public QWidget {
   QPushButton *opticalButton[2];  ///< "Edit..." the ten Woods-Saxon numbers, or the global potential's
   QLineEdit *distortionTableEdit;
   QPushButton *distortionTableButton;
+  /// Coherent background (cbackground=): checkable, unchecked = no key; one
+  /// table row per term -- J^pi, exit pair, channels (all, or s,l,s',l'),
+  /// form, Re/Im of c0 and c1, a ticked value is fixed in the fit.
+  QGroupBox *coherentBox;
+  QTableWidget *coherentTable;
+  QPushButton *coherentAddButton, *coherentRemoveButton;
   /// Derived values (the reaction, zeta, the window, R at the ends), and why AZURE2 would refuse the experiment.
   QLabel *bindingValue, *qfValue, *zetaValue, *meanTsValue, *distortionValue;
   /// B(x+s) from the masses differs from the pair's B: icon and one line in the reaction section.
@@ -234,6 +247,9 @@ class ThmExperimentsPage : public QWidget {
   void globalNameChanged();
   void chooseDistortionTable();
   void editOptical(int channel);
+  void coherentToggled(bool on);
+  void coherentEdited();
+  void removeCoherentTerm();
 
  private:
   struct Reaction {
@@ -263,6 +279,13 @@ class ThmExperimentsPage : public QWidget {
   /// The window item is not offered with entranceL=coherent (unless it is the current one).
   void updateThetaItems();
   QList<QWidget *> thetaWindowRow_;
+  void loadCoherent(const ThmExperimentRecord &r);
+  /// What EData::BuildThmGroups refuses in a record's cbackground= without
+  /// the compound nucleus (syntax, exit pair, J^pi, entranceL); "" if nothing.
+  QString coherentCheck(const ThmExperimentRecord &x) const;
+  void addCoherentRow(const ThmExperiment::CoherentTerm &t, const QStringList &valueText);
+  void showCoherentRows();
+  std::function<QStringList()> jpiChoices_ = []() { return QStringList(); };
   std::function<QString()> entranceL_ = []() { return QString("incoherent"); };
   std::function<bool()> coulombIntegral_ = []() { return false; };
   void fillSegmentList();

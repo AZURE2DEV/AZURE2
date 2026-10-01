@@ -597,11 +597,54 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   message->addWidget(messageIcon);
   message->addWidget(messageLabel, 1);
 
+  // Coherent background (cbackground=): a THM-only amplitude that interferes
+  // with the resonances; its Re and Im are fit parameters.  Unchecked: no key.
+  coherentBox = new QGroupBox(tr("Coherent background"));
+  coherentBox->setCheckable(true);
+  coherentBox->setChecked(false);
+  coherentBox->setToolTip(
+      tr("cbackground=: c(E) = c0 + c1 E times the entrance vertex, added to the resonant HOES amplitude of one "
+         "J^pi, entrance (s,l) and exit (s',l') before squaring; THM only (not in direct data). Re and Im of c "
+         "are fit parameters; a ticked value is fixed."));
+  connect(coherentBox, SIGNAL(toggled(bool)), this, SLOT(coherentToggled(bool)));
+  coherentTable = new QTableWidget(0, 8);
+  coherentTable->setHorizontalHeaderLabels(QStringList() << QString::fromUtf8("Jπ") << tr("Exit") << tr("Channels")
+                                                         << tr("Form") << "Re c0" << "Im c0" << "Re c1" << "Im c1");
+  coherentTable->horizontalHeaderItem(1)->setToolTip(tr("Exit pair key (a segment of the experiment)"));
+  coherentTable->horizontalHeaderItem(2)->setToolTip(
+      tr("all: every entrance (s,l) and exit (s',l') of the J^pi group, each its own amplitude; or one: "
+         "s,l,s',l' (e.g. 1/2,0,1/2,1)"));
+  coherentTable->horizontalHeaderItem(3)->setToolTip(tr("const: c0; linear: c0 + c1 E (E: c.m. energy, MeV)"));
+  for (int k = 4; k < 8; k++) coherentTable->horizontalHeaderItem(k)->setToolTip(tr("Start value; ticked: fixed"));
+  coherentTable->verticalHeader()->hide();
+  coherentTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+  coherentTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+  coherentTable->setSelectionMode(QAbstractItemView::SingleSelection);
+  coherentTable->setMaximumHeight(coherentTable->horizontalHeader()->sizeHint().height() + 4 * 30);
+  connect(coherentTable, SIGNAL(itemChanged(QTableWidgetItem *)), this, SLOT(coherentEdited()));
+  coherentAddButton = new QPushButton("+");
+  coherentRemoveButton = new QPushButton(QString::fromUtf8("−"));
+  coherentAddButton->setToolTip(tr("Add a term"));
+  coherentRemoveButton->setToolTip(tr("Remove the selected term"));
+  for (QPushButton *b : {coherentAddButton, coherentRemoveButton}) b->setFixedWidth(32);
+  connect(coherentAddButton, &QPushButton::clicked, this, [this]() { addCoherentTerm(); });
+  connect(coherentRemoveButton, SIGNAL(clicked()), this, SLOT(removeCoherentTerm()));
+  QHBoxLayout *cbButtons = new QHBoxLayout;
+  cbButtons->setContentsMargins(0, 0, 0, 0);
+  cbButtons->addWidget(coherentAddButton);
+  cbButtons->addWidget(coherentRemoveButton);
+  cbButtons->addStretch(1);
+  QVBoxLayout *cl = new QVBoxLayout;
+  cl->addWidget(coherentTable);
+  cl->addLayout(cbButtons);
+  coherentBox->setLayout(cl);
+
   editorBox = new QWidget;
   QVBoxLayout *el = new QVBoxLayout;
   el->setContentsMargins(0, 0, 0, 0);
   el->setSpacing(8);
   el->addWidget(experimentBox);
+  el->addWidget(coherentBox);
   el->addWidget(kinematicsBox);
   el->addWidget(psBox);
   el->addWidget(distortionBox);
@@ -776,6 +819,7 @@ void ThmExperimentsPage::loadEditor() {
   loadDistortion(r);
   loadDirections(r);
   updateDistortionItems(complete);
+  loadCoherent(r);
   showDerived(r);
   loading_ = false;
 }
@@ -793,9 +837,10 @@ void ThmExperimentsPage::showDerived(const ThmExperimentRecord &x) {
     // The engine's refusal of a distortion key (a malformed value, a key
     // without its kind), at once rather than on Accept.
     const QString parse = ThmSettings::checkExperimentLines(QStringList() << x.line());
-    for (const char *key : {"distortion", "optical", "spectatorAngle", "boundState", "theta"})
+    for (const char *key : {"distortion", "optical", "spectatorAngle", "boundState", "theta", "cbackground"})
       if (parse.contains(key)) why = parse.mid(parse.indexOf("]: ") + 3);
   }
+  if (why.isEmpty() && !x.cbackground.isEmpty()) why = coherentCheck(x);
   // A theta window with entranceL=coherent (the Model page), as the engine refuses it.
   if (why.isEmpty() && x.hasTheta() && entranceL_() == "coherent") why = coherentRefusal();
   updateThetaItems();
@@ -1200,6 +1245,10 @@ QString ThmExperimentsPage::check() const {
                            .arg(k);
     }
     if (x.hasTheta() && entranceL_() == "coherent") return where + coherentRefusal();
+    if (!x.cbackground.isEmpty()) {
+      const QString c = coherentCheck(x);
+      if (!c.isEmpty()) return where + c;
+    }
     QString error;
     derivedInfo(x, &error);
     if (!error.isEmpty()) return where + error;
@@ -2133,4 +2182,214 @@ QString ThmOpticalDialog::text() const {
   QStringList out;
   for (ThmNumberSpin *f : fields) out << f->writtenText();
   return out.join(',');
+}
+
+// ---------------------------------------------------------------------------
+// Coherent background (cbackground=)
+
+namespace {
+const char *const kCoherentForms[2] = {"const", "linear"};
+}
+
+QString ThmExperimentsPage::coherentCheck(const ThmExperimentRecord &x) const {
+  std::vector<ThmExperiment::CoherentTerm> terms;
+  const std::string why = ParseThmCoherentBackground(x.cbackground.toStdString(), terms);
+  if (!why.empty()) return QString::fromStdString(why);
+  // What EData::BuildThmGroups checks without the compound nucleus.
+  if (entranceL_() == "coherent")
+    return tr("cbackground= adds an amplitude per entrance bucket (s, l); entranceL=coherent merges the l of a "
+              "channel spin, so it cannot be combined with it.");
+  const QList<SegmentsDataData> lines = segments_->getLines();
+  QSet<int> exits;
+  for (int k : x.segments)
+    if (k >= 1 && k <= lines.size()) exits << lines.at(k - 1).exitPairIndex;
+  QStringList jpis = jpiChoices_();
+  for (const ThmExperiment::CoherentTerm &t : terms) {
+    const QString jpi = QString::fromStdString(ThmSpinText(t.J)) + (t.parity > 0 ? "+" : "-");
+    if (!exits.contains(t.exitKey))
+      return tr("cbackground %1:%2: no segment of the experiment has exit pair %2.").arg(jpi).arg(t.exitKey);
+    if (!jpis.isEmpty() && !jpis.contains(jpi))
+      return tr("cbackground %1:%2: the model has no J^pi = %1 group.").arg(jpi).arg(t.exitKey);
+  }
+  return QString();
+}
+
+void ThmExperimentsPage::addCoherentRow(const ThmExperiment::CoherentTerm &t, const QStringList &valueText) {
+  const QSignalBlocker blocker(coherentTable);
+  const int row = coherentTable->rowCount();
+  coherentTable->insertRow(row);
+  QComboBox *jpi = new QComboBox;
+  jpi->setEditable(true);
+  jpi->addItems(jpiChoices_());
+  jpi->setEditText(QString::fromStdString(ThmSpinText(t.J)) + (t.parity > 0 ? "+" : "-"));
+  QComboBox *exit = new QComboBox;
+  exit->setEditable(true);
+  QStringList keys;
+  if (current_ >= 0) {
+    const QList<SegmentsDataData> lines = segments_->getLines();
+    for (int k : records_.at(current_).segments)
+      if (k >= 1 && k <= lines.size() && !keys.contains(QString::number(lines.at(k - 1).exitPairIndex)))
+        keys << QString::number(lines.at(k - 1).exitPairIndex);
+  }
+  exit->addItems(keys);
+  exit->setEditText(QString::number(t.exitKey));
+  QComboBox *form = new QComboBox;
+  form->addItems(QStringList() << kCoherentForms[0] << kCoherentForms[1]);
+  form->setCurrentIndex(t.form == 2 ? 1 : 0);
+  coherentTable->setCellWidget(row, 0, jpi);
+  coherentTable->setCellWidget(row, 1, exit);
+  coherentTable->setCellWidget(row, 3, form);
+  coherentTable->setItem(row, 2,
+                         new QTableWidgetItem(t.hasChannels ? QString::fromStdString(ThmSpinText(t.s)) + "," +
+                                                                  QString::number(t.l) + "," +
+                                                                  QString::fromStdString(ThmSpinText(t.sp)) + "," +
+                                                                  QString::number(t.lp)
+                                                            : QString("all")));
+  for (int k = 0; k < 4; k++) {
+    QTableWidgetItem *v = new QTableWidgetItem(k < valueText.size() ? valueText.at(k) : QString("0"));
+    v->setCheckState(t.fixed[k] ? Qt::Checked : Qt::Unchecked);
+    coherentTable->setItem(row, 4 + k, v);
+  }
+  connect(jpi, &QComboBox::editTextChanged, this, [this]() { coherentEdited(); });
+  connect(exit, &QComboBox::editTextChanged, this, [this]() { coherentEdited(); });
+  connect(form, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]() {
+    showCoherentRows();
+    coherentEdited();
+  });
+}
+
+// c1 is shown for a linear term only.
+void ThmExperimentsPage::showCoherentRows() {
+  const QSignalBlocker blocker(coherentTable);
+  for (int row = 0; row < coherentTable->rowCount(); row++) {
+    QComboBox *form = qobject_cast<QComboBox *>(coherentTable->cellWidget(row, 3));
+    const bool linear = form && form->currentIndex() == 1;
+    for (int k = 6; k < 8; k++) {
+      QTableWidgetItem *v = coherentTable->item(row, k);
+      if (!v) continue;
+      v->setFlags(linear ? (Qt::ItemIsEnabled | Qt::ItemIsEditable | Qt::ItemIsUserCheckable | Qt::ItemIsSelectable)
+                         : Qt::ItemFlags());
+    }
+  }
+  coherentTable->setVisible(coherentBox->isChecked());
+  coherentAddButton->setVisible(coherentBox->isChecked());
+  coherentRemoveButton->setVisible(coherentBox->isChecked());
+  coherentRemoveButton->setEnabled(coherentTable->rowCount() > 0);
+}
+
+void ThmExperimentsPage::loadCoherent(const ThmExperimentRecord &r) {
+  const QSignalBlocker blocker(coherentBox);
+  coherentTable->setRowCount(0);
+  coherentBox->setChecked(!r.cbackground.isEmpty());
+  std::vector<ThmExperiment::CoherentTerm> terms;
+  if (!r.cbackground.isEmpty() && ParseThmCoherentBackground(r.cbackground.toStdString(), terms).empty()) {
+    // The values as written (the engine's parse gives the numbers).
+    const QStringList items = r.cbackground.split(';');
+    for (size_t i = 0; i < terms.size(); i++) {
+      QStringList values;
+      const QString item = i < (size_t)items.size() ? items.at(i) : QString();
+      const int eq = item.indexOf('=');
+      if (eq >= 0)
+        for (QString v : item.mid(eq + 1).split(',')) values << (v.endsWith('f') ? v.left(v.size() - 1) : v);
+      addCoherentRow(terms[i], values);
+    }
+  }
+  showCoherentRows();
+}
+
+QString ThmExperimentsPage::coherentText() const {
+  QStringList terms;
+  for (int row = 0; row < coherentTable->rowCount(); row++) {
+    QComboBox *jpi = qobject_cast<QComboBox *>(coherentTable->cellWidget(row, 0));
+    QComboBox *exit = qobject_cast<QComboBox *>(coherentTable->cellWidget(row, 1));
+    QComboBox *form = qobject_cast<QComboBox *>(coherentTable->cellWidget(row, 3));
+    const QTableWidgetItem *channels = coherentTable->item(row, 2);
+    if (!jpi || !exit || !form || !channels) continue;
+    const bool linear = form->currentIndex() == 1;
+    QString term = jpi->currentText().trimmed() + ":" + exit->currentText().trimmed();
+    const QString ch = channels->text().trimmed();
+    if (!ch.isEmpty() && ch != "all") term += ":" + ch;
+    if (linear) term += ":linear";
+    QStringList values;
+    bool needed = false;
+    for (int k = 0; k < (linear ? 4 : 2); k++) {
+      const QTableWidgetItem *v = coherentTable->item(row, 4 + k);
+      QString text = v ? v->text().trimmed() : QString("0");
+      if (text.isEmpty()) text = "0";
+      const bool fixed = v && v->checkState() == Qt::Checked;
+      double x = 0.0;
+      needed = needed || fixed || !readWholeDouble(text, x) || x != 0.0;
+      values << text + (fixed ? "f" : "");
+    }
+    if (needed) term += "=" + values.join(',');
+    terms << term;
+  }
+  return terms.join(';');
+}
+
+void ThmExperimentsPage::addCoherentTerm() {
+  if (current_ < 0) return;
+  ThmExperiment::CoherentTerm t;
+  const QStringList jpis = jpiChoices_();
+  if (!jpis.isEmpty()) {
+    std::vector<ThmExperiment::CoherentTerm> parsed;
+    if (ParseThmCoherentBackground((jpis.first() + ":1").toStdString(), parsed).empty()) t = parsed.front();
+  }
+  const QList<SegmentsDataData> lines = segments_->getLines();
+  for (int k : records_.at(current_).segments)
+    if (k >= 1 && k <= lines.size()) {
+      t.exitKey = lines.at(k - 1).exitPairIndex;
+      break;
+    }
+  {
+    const QSignalBlocker blocker(coherentBox);
+    coherentBox->setChecked(true);
+  }
+  addCoherentRow(t, QStringList());
+  showCoherentRows();
+  coherentEdited();
+}
+
+void ThmExperimentsPage::removeCoherentTerm() {
+  int row = coherentTable->currentRow();
+  if (row < 0) row = coherentTable->rowCount() - 1;
+  if (row < 0) return;
+  coherentTable->removeRow(row);
+  if (coherentTable->rowCount() == 0) {
+    const QSignalBlocker blocker(coherentBox);
+    coherentBox->setChecked(false);
+  }
+  showCoherentRows();
+  coherentEdited();
+}
+
+void ThmExperimentsPage::coherentToggled(bool on) {
+  if (on && coherentTable->rowCount() == 0) {
+    addCoherentTerm();  // a checked box always has a term to edit
+    return;
+  }
+  if (!on) coherentTable->setRowCount(0);
+  showCoherentRows();
+  coherentEdited();
+}
+
+void ThmExperimentsPage::coherentEdited() {
+  if (loading_ || current_ < 0) return;
+  ThmExperimentRecord &r = records_[current_];
+  r.cbackground = coherentBox->isChecked() ? coherentText() : QString();
+  refreshRow(current_);
+  showDerived(r);
+}
+
+void ThmExperimentsPage::setJpiChoices(std::function<QStringList()> choices) {
+  jpiChoices_ = choices;
+  // Rows already shown (the page loads its first experiment on construction).
+  for (int row = 0; row < coherentTable->rowCount(); row++)
+    if (QComboBox *jpi = qobject_cast<QComboBox *>(coherentTable->cellWidget(row, 0))) {
+      const QSignalBlocker blocker(jpi);
+      const QString text = jpi->currentText();
+      jpi->clear();
+      jpi->addItems(jpiChoices_());
+      jpi->setEditText(text);
+    }
 }
