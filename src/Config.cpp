@@ -388,6 +388,14 @@ int Config::ReadThmBlock() {
         outStream << "ERROR: <thm> " << why << std::endl;
         return -1;
       }
+      // Coulomb consistency of the experiments with the global options.
+      std::vector<std::string> warnings;
+      why = CheckThmCoulombConsistency(thm.experiments, thm.coulombIntegral, &warnings);
+      if (!why.empty()) {
+        outStream << "ERROR: <thm> " << why << std::endl;
+        return -1;
+      }
+      for (const std::string &w : warnings) outStream << "WARNING: <thm> " << w << std::endl;
       // ps=table:<file>, relative to the .azr as weight[k]=.
       for (ThmExperiment &x : thm.experiments) {
         if (x.psKind != ThmExperiment::PS_TABLE) continue;

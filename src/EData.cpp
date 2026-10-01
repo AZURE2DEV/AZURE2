@@ -3129,14 +3129,8 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
         int pairKey = GetSegment(group.segments[0])->GetEntranceKey();
         int pairNum = theCNuc->GetPairNumFromKey(pairKey);
         PPair *pair = theCNuc->GetPair(pairNum);
-        if (configure.thm.coulombIntegral) {
-          configure.outStream << where << "vertexModel=dw is the surface term of the DWBA vertex; its external "
-                                 "part (the three-body remnant outside the channel radius, whose plane-wave limit "
-                                 "is the Coulomb term C_l) is not computed, so it cannot be combined with "
-                                 "coulombIntegral=1."
-                              << std::endl;
-          return -1;
-        }
+        // coulombIntegral=1 is refused with it by Config::ReadThmBlock
+        // (CheckThmCoulombConsistency).
         if (configure.thm.coherentL) {
           configure.outStream << where << "vertexModel=dw sums the entrance partial waves (and their projections) "
                                  "incoherently, as the angle-integrated observable requires; entranceL=coherent "

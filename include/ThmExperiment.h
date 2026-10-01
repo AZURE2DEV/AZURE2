@@ -125,9 +125,30 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
 
 /// Checks the complete set once the block is read: segments given, kinematics
 /// all-or-none, lineshape=on and a ps window only with them, psNodes only with a
-/// window, no segment in two experiments, distortion keys consistent.  "" or
-/// what is wrong.
+/// window, no segment in two experiments, distortion keys consistent (and
+/// distortionRatio=dw not with a ps window, which would weight the model by the
+/// momentum distribution twice).  "" or what is wrong.
 std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments);
+
+/*!
+ * The rules that keep the Coulomb treatment of a THM experiment consistent
+ * with the global options of the <thm> block
+ * (docs/source/theory/thm_implementation.rst, "Coulomb effects: what each
+ * option contains").  Refused ("" or the reason, prefixed by the experiment):
+ *  - coulombIntegral=1 with vertexModel=dw: the DW vertex is the surface term;
+ *    its external prior term, whose plane-wave limit is C_l, is not computed.
+ *  - coulombIntegral=1 with the computed distortion factor R(E) and a
+ *    distorted a + A wave (distortion=coulomb, or optical with opticalAA not
+ *    plane): the a + A Coulomb wave of R already contains the x-A Coulomb
+ *    interaction that C_l adds (Z_a = Z_x + Z_s; the prior operator outside
+ *    the radius, V_xA + V_sA - U_aA, vanishes in the zero range of R), so C_l
+ *    would count it twice.
+ * Warned (appended to `warnings` if given, without the "WARNING: " prefix):
+ *  - coulombIntegral=1 with distortion=table: if the table is a DWBA with a
+ *    distorted a + A wave, the same double counting.
+ */
+std::string CheckThmCoulombConsistency(const std::vector<ThmExperiment> &experiments, bool coulombIntegral,
+                                       std::vector<std::string> *warnings = nullptr);
 
 /// Reads a `ps=table:` file: two columns, p_s (MeV/c, >= 0, strictly
 /// increasing) and the event weight w >= 0 per unit p_s; '#' starts a comment;

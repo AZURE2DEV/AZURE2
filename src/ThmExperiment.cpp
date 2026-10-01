@@ -389,6 +389,14 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
         return where + "theta= (fixed-angle observable) is not available with vertexModel=dw: the distorted "
                        "source has every m_l about p_xA, which the fixed-angle sum does not carry";
     }
+    // The momentum distribution once: a ps window averages the model with the
+    // event weight |phi(p_s)|^2 p_s^2 of data divided by |phi|^2; R with
+    // distortionRatio=dw is |M|^2 itself, which carries |phi(q(E))|^2 again.
+    if (computed && !x.vertexDW && x.psKind != ThmExperiment::PS_DELTA && !x.distortionRatioPW)
+      return where + "distortionRatio=dw multiplies the model by |M|^2, which carries the momentum "
+                     "distribution |phi(q)|^2 at the spectator direction; a ps window already weights the "
+                     "model with |phi(p_s)|^2 of data divided by it, so it would count twice. Use "
+                     "distortionRatio=dwpw (the default) with a window";
     for (int k : x.segments) {
       auto it = owner.find(k);
       if (it != owner.end()) {
@@ -398,6 +406,32 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
       }
       owner[k] = x.name;
     }
+  }
+  return "";
+}
+
+std::string CheckThmCoulombConsistency(const std::vector<ThmExperiment> &experiments, bool coulombIntegral,
+                                       std::vector<std::string> *warnings) {
+  if (!coulombIntegral) return "";
+  for (const ThmExperiment &x : experiments) {
+    std::string where = "experiment[" + x.name + "]: ";
+    if (x.vertexDW)
+      return where + "vertexModel=dw is the surface term of the DWBA vertex; its external part (the three-body "
+                     "remnant outside the channel radius, whose plane-wave limit is the Coulomb term C_l) is not "
+                     "computed, so it cannot be combined with coulombIntegral=1.";
+    const bool distortedAA = x.distortion == ThmExperiment::DIST_COULOMB ||
+                             (x.distortion == ThmExperiment::DIST_OPTICAL && x.opticalAA.kind != 0);
+    if (distortedAA)
+      return where + "coulombIntegral=1 adds the x-A Coulomb interaction outside the channel radius (C_l) to "
+                     "the vertex, and the a + A Coulomb wave of the distortion factor R(E) already contains it "
+                     "(Z_a = Z_x + Z_s; in the zero range of R the prior operator V_xA + V_sA - U_aA outside the "
+                     "radius vanishes), so it would be counted twice. Use coulombIntegral=0 with distortion=" +
+             std::string(x.distortion == ThmExperiment::DIST_COULOMB ? "coulomb" : "optical") +
+             ", or opticalAA=plane.";
+    if (x.distortion == ThmExperiment::DIST_TABLE && warnings)
+      warnings->push_back(where + "coulombIntegral=1 with distortion=table: if the table is a DWBA with a "
+                                  "distorted a + A wave, its a + A Coulomb interaction already contains the "
+                                  "x-A Coulomb term C_l, which is then counted twice.");
   }
   return "";
 }
