@@ -718,8 +718,13 @@ int main(int argc, char** argv) {
     e->setText(text);
     emit e->textEdited(text);
   };
-  const QString reaction = "beam=7Li target=d spectator=n Ebeam=19";
-  spit(work.filePath("psflat.dat"), "# p_s  w\n20 1\n40 1\n");
+  // 60 MeV: a window is the spectator directions whose |p_s| lies in it at
+  // each E (fixed-E kinematics), and the 7Li data (0.08-6.9 MeV) need it --
+  // at 19 MeV no |p_s| below 40 MeV/c is reached above E = 1.92 MeV, and no
+  // energy is left for the spectator above 2.01 MeV; at 60 MeV the smallest
+  // reachable |p_s| stays below 38 MeV/c over the data.
+  const QString reaction = "beam=7Li target=d spectator=n Ebeam=60";
+  spit(work.filePath("psflat.dat"), "# p_s  |phi|^2\n20 1\n40 1\n");
   {
     spit(fourPath, four);
     w.open(fourPath);
@@ -735,7 +740,7 @@ int main(int argc, char** argv) {
     p->targetCombo->setEditText("d");
     p->spectatorCombo->setEditText("n");
     ok("ps: disabled with an incomplete reaction", !p->psBox->isEnabled());
-    typeNumber(p->beamEnergyEdit, "19");
+    typeNumber(p->beamEnergyEdit, "60");
     ok("ps: enabled with the complete reaction", p->psBox->isEnabled());
     ok("ps: point by default, only the distribution shown",
        p->psKindCombo->currentData().toString() == "delta" && !p->psMinEdit->isVisibleTo(p) &&
@@ -751,6 +756,22 @@ int main(int argc, char** argv) {
        p->records().at(0).ps);
     ok("ps: <T_s> shown", p->derivedText().contains("<T_s> = ") && p->derivedText().contains("16 Gauss-Legendre"),
        p->derivedText());
+    // One acceptance: with a momentum window the Directions are offered
+    // without a distortion ("all inside the p_s window" by default), and a
+    // direction window takes over the nodes (psNodes= is refused with it).
+    ok("ps: directions offered with a window, no distortion",
+       p->directionCombo->isVisibleTo(p) && p->directionCombo->itemText(0).contains("all inside the p_s window"),
+       p->directionCombo->itemText(0));
+    p->directionCombo->setCurrentIndex(p->directionCombo->findData("cm"));
+    typeNumber(p->directionMinEdit, "150");
+    typeNumber(p->directionMaxEdit, "180");
+    ok("ps: a c.m. direction window, the momentum nodes off",
+       p->records().at(0).spectatorAngles == "cm:150-180" && !p->psNodesSpin->isEnabled() &&
+           ws.validate().isEmpty(),
+       p->records().at(0).spectatorAngles + " | " + ws.validate());
+    p->directionCombo->setCurrentIndex(p->directionCombo->findData("one"));
+    ok("ps: back to every direction in the window",
+       p->records().at(0).spectatorAngles.isEmpty() && p->psNodesSpin->isEnabled());
     p->psCustomCheck->setChecked(true);
     ok("ps: custom a,b editable", p->psAEdit->isEnabled() && p->psBEdit->isEnabled());
     typeNumber(p->psAEdit, "0.42");
@@ -788,7 +809,7 @@ int main(int argc, char** argv) {
   {
     // Write, read back and keep verbatim, for each distribution.
     const QStringList values = QStringList() << "hulthen:0-40" << "hulthen:0.42,1.2:0-40 psNodes=24" << "gauss:50:10-40"
-                                             << "table:psflat.dat" << "hulthen:30-30";
+                                             << "table:psflat.dat" << "hulthen:50-50";
     for(const QString& v : values) {
       const QString value = v.section(' ', 0, 0), nodes = v.contains("psNodes=") ? v.section('=', -1) : QString();
       // Through the controls.
@@ -805,7 +826,7 @@ int main(int argc, char** argv) {
         p->beamCombo->setEditText("7Li");
         p->targetCombo->setEditText("d");
         p->spectatorCombo->setEditText("n");
-        typeNumber(p->beamEnergyEdit, "19");
+        typeNumber(p->beamEnergyEdit, "60");
         const QStringList f = value.split(':');
         p->psKindCombo->setCurrentIndex(p->psKindCombo->findData(f[0]));
         if(f[0] == "table") {
@@ -871,12 +892,13 @@ int main(int argc, char** argv) {
     w.thmSettings(s);
     {
       ThmWorkspace ws(&w, s);
-      typeNumber(ws.experimentsPage->psMaxEdit, "30");
+      // (45, not less: below ~38 MeV/c the window is out of reach at the lowest point.)
+      typeNumber(ws.experimentsPage->psMaxEdit, "45");
       ws.accept();
     }
     w.saveProject();
     ok("ps by hand: edited window rewritten, the rest as written",
-       blockOf(slurp(fourPath)) == "experiment[H] segments=1 " + reaction + " ps=hulthen:0.0-30 psNodes=8\n"
+       blockOf(slurp(fourPath)) == "experiment[H] segments=1 " + reaction + " ps=hulthen:0.0-45 psNodes=8\n"
                                    "experiment[D] segments=2 ps=delta\n",
        blockOf(slurp(fourPath)));
   }
@@ -937,23 +959,33 @@ int main(int argc, char** argv) {
       const QString shown = ws.experimentsPage->derivedText();
       int code = -1;
       const QString out = engineRun(work.path(), "psmean.azr", &code);
-      QRegExp rx("mu_sx = ([-+0-9.eE]+) MeV, T_s = p_s\\^2/2mu_sx from ([-+0-9.eE]+) to ([-+0-9.eE]+) MeV, "
-                 "<T_s> = ([-+0-9.eE]+) MeV");
+      // <T_s> follows E (the accepted directions do): the engine prints it at
+      // the lowest and the highest point.
+      QRegExp rx("mu_sx = ([-+0-9.eE]+) MeV; at the lowest point \\(E = ([-+0-9.eE]+) MeV\\) [0-9]+ node\\(s\\), "
+                 "\\|p_s\\| = [-+0-9.eE]+-[-+0-9.eE]+ MeV/c, <T_s> = ([-+0-9.eE]+) MeV; at the highest \\(E = "
+                 "([-+0-9.eE]+) MeV\\) [0-9]+ node\\(s\\), \\|p_s\\| = [-+0-9.eE]+-[-+0-9.eE]+ MeV/c, <T_s> = "
+                 "([-+0-9.eE]+) MeV");
       const bool found = code == 0 && rx.indexIn(out) >= 0;
       ok(qPrintable("ps " + value + ": the engine prints the window"), found, out.right(400));
       if(found)
-        ok(qPrintable("ps " + value + ": page shows the engine's mu_sx, T_s range and <T_s>"),
-           shown.contains("mu_sx = " + rx.cap(1) + " MeV") && shown.contains("from " + rx.cap(2) + " to " + rx.cap(3)) &&
-               shown.contains("<T_s> = " + rx.cap(4) + " MeV"),
+        ok(qPrintable("ps " + value + ": page shows the engine's mu_sx and <T_s> at the ends of the data"),
+           shown.contains("mu_sx = " + rx.cap(1) + " MeV") &&
+               shown.contains("<T_s> = " + rx.cap(3) + " MeV at E = " + rx.cap(2) + " MeV, " + rx.cap(5) +
+                              " MeV at E = " + rx.cap(4) + " MeV"),
            shown + " | " + rx.cap(0));
       if(found)
         ok(qPrintable("ps " + value + ": the <T_s> field shows the engine's"),
-           ws.experimentsPage->meanTsValue->text() == rx.cap(4) + " MeV", ws.experimentsPage->meanTsValue->text());
+           ws.experimentsPage->meanTsValue->text() ==
+               QString::fromUtf8("%1 … %2 MeV")
+                   .arg(QString::number(rx.cap(3).toDouble(), 'g', 3), QString::number(rx.cap(5).toDouble(), 'g', 3)),
+           ws.experimentsPage->meanTsValue->text());
     }
     // THM_EXPERIMENTS_PNG=<file>: keep a rendering of the page, to look at it
     // (charged spectator, line shape and a Hulthen window).
     const QString path = work.filePath("pspng.azr");
-    spit(path, plain + "<thm>\nexperiment[E1] segments=1 beam=3He target=7Li spectator=d Ebeam=20 lineshape=on "
+    // (30 MeV: at 20 MeV the smallest reachable |p_s| exceeds 40 MeV/c above
+    // ~4 MeV, and the window would be refused there.)
+    spit(path, plain + "<thm>\nexperiment[E1] segments=1 beam=3He target=7Li spectator=d Ebeam=30 lineshape=on "
                        "ps=hulthen:0-40\n</thm>\n");
     w.open(path);
     ThmSettings s;
@@ -1137,7 +1169,7 @@ int main(int argc, char** argv) {
   {
     // 11. Diagnostics with a spectator-momentum window: charged spectator,
     //     line shape, weight and a Hulthen window (every panel).
-    const QString line = "experiment[E1] segments=1 beam=3He target=7Li spectator=d Ebeam=20 lineshape=on ps=hulthen:0-40";
+    const QString line = "experiment[E1] segments=1 beam=3He target=7Li spectator=d Ebeam=30 lineshape=on ps=hulthen:0-40";
     const QString path = work.filePath("diagps.azr");
     spit(path, plain + "<thm>\n" + line + "\nweight[1]=ramp.dat\n</thm>\n");
     w.open(path);
@@ -1152,28 +1184,44 @@ int main(int argc, char** argv) {
     for(double x : r.nodeWeight) sum += x;
     ok("window: 16 nodes, weights sum to 1", r.window && r.nodeP.size() == 16 && r.nodeWeight.size() == 16 &&
                                                  std::fabs(sum - 1.0) < 1e-12);
-    // The nodes and weights are the engine's BuildThmSpectatorWindow; mu_sx of p + d.
+    // The nodes and weights (at the middle of the grid; they follow E) are
+    // the engine's BuildThmSpectatorWindow on the reaction 3He + 7Li at 30
+    // MeV, 3He = p + d; mu_sx of p + d.
     std::vector<ThmExperiment> xs;
     const bool parsed = ParseThmExperimentLine(line.toStdString(), xs).empty() && xs.size() == 1;
-    const ThmNuclide *np = ThmNuclide::Find(1, 1), *nd = ThmNuclide::Find(1, 2);
+    const ThmNuclide *np = ThmNuclide::Find(1, 1), *nd = ThmNuclide::Find(1, 2), *nh = ThmNuclide::Find(2, 3),
+                     *nl = ThmNuclide::Find(3, 7);
     const double muSx = np->mass * nd->mass / (np->mass + nd->mass) * 931.49410242;
+    ThmDistortion::Kinematics kin;
+    kin.Za = 2, kin.ZA = 3, kin.Zs = 1, kin.Zx = 1;
+    kin.Aa = 3, kin.AA = 7, kin.As = 2, kin.Ax = 1;
+    kin.ma = nh->mass, kin.mA = nl->mass, kin.ms = nd->mass, kin.mx = np->mass;
+    kin.horseIsBeam = true;
+    kin.mBeam = nh->mass, kin.mTarget = nl->mass, kin.beamEnergy = 30.0;
+    kin.bind = (np->mass + nd->mass - nh->mass) * 931.49410242;
     ThmSpectatorWindow win;
-    const bool built = parsed && BuildThmSpectatorWindow(xs[0], muSx, win).empty();
-    bool same = built && win.p.size() == (size_t)r.nodeP.size() && std::fabs(r.muSx - muSx) < 1e-12 * muSx;
-    for(size_t k = 0; same && k < win.p.size(); k++)
-      same = win.p[k] == r.nodeP[k] && win.weight[k] == r.nodeWeight[k] && win.es[k] == r.nodeTs[k];
+    std::vector<ThmSpectatorWindow::Node> wn;
+    const bool built = parsed && BuildThmSpectatorWindow(xs[0], muSx, kin, {r.windowE}, win).empty() &&
+                       win.NodesAt(r.windowE, wn);
+    bool same = built && wn.size() == (size_t)r.nodeP.size() && std::fabs(r.muSx - muSx) < 1e-12 * muSx;
+    for(size_t k = 0; same && k < wn.size(); k++)
+      same = wn[k].p == r.nodeP[k] && wn[k].weight == r.nodeWeight[k] && wn[k].es == r.nodeTs[k];
     ok("window: nodes, weights, T_s and mu_sx are the engine's", same,
        QString("mu_sx %1 vs %2").arg(r.muSx, 0, 'g', 12).arg(muSx, 0, 'g', 12));
-    ok("window: <T_s> is the engine's", built && std::fabs(r.meanTs - win.MeanEs()) < 1e-14 * win.MeanEs(),
-       QString("%1 vs %2").arg(r.meanTs, 0, 'g', 15).arg(win.MeanEs(), 0, 'g', 15));
-    std::cout << "        mu_sx = " << r.muSx << " MeV, <T_s> = " << r.meanTs << " MeV" << std::endl;
-    // w(p) = |phi|^2 p^2 of the deuteron Hulthen function, unit area; the
-    // engine's normalized weights are omega_k w(p_k) (checked above), so the
-    // curve at the nodes is w(p_k) itself.
+    ok("window: <T_s> is the engine's",
+       built && std::fabs(r.meanTs - win.MeanEs(r.windowE)) < 1e-14 * win.MeanEs(r.windowE),
+       QString("%1 vs %2").arg(r.meanTs, 0, 'g', 15).arg(built ? win.MeanEs(r.windowE) : 0.0, 0, 'g', 15));
+    std::cout << "        mu_sx = " << r.muSx << " MeV, <T_s> = " << r.meanTs << " MeV at E = " << r.windowE << " MeV"
+              << std::endl;
+    // The event weight per unit p_s at fixed E, |phi|^2 p of the deuteron
+    // Hulthen function (d cos theta_cm = p dp/(beta k_sF k_aA)), unit area
+    // over the reachable part of [0, 40] MeV/c; the nodes sit on the curve.
     auto hulthen = [](double p) {
       const double q2 = (p / hbarc) * (p / hbarc), phi = 1.0 / (0.2317 * 0.2317 + q2) - 1.0 / (1.202 * 1.202 + q2);
-      return phi * phi * p * p;
+      return phi * phi * p;
     };
+    double qLo = 0.0, qHi = 0.0;
+    const bool reach = built && win.Reach(r.windowE, qLo, qHi);
     double area = 0.0, lo = 1e300, hi = -1e300;
     for(int i = 0; i < r.windowP.size(); i++) {
       if(i > 0) area += 0.5 * (r.windowW[i] + r.windowW[i - 1]) * (r.windowP[i] - r.windowP[i - 1]);
@@ -1185,16 +1233,17 @@ int main(int argc, char** argv) {
     bool atNodes = r.nodeW.size() == r.nodeP.size();
     for(int k = 0; atNodes && k < r.nodeP.size(); k++)
       atNodes = std::fabs(r.nodeW[k] / hulthen(r.nodeP[k]) - lo) < 1e-12 * lo;
-    ok("window: w(p) is |phi|^2 p^2 over [0, 40] MeV/c, unit area, nodes on the curve",
-       r.windowP.size() > 100 && r.windowP.first() == 0.0 && r.windowP.last() == 40.0 && std::fabs(area - 1.0) < 1e-12 &&
-           hi - lo < 1e-12 * lo && atNodes,
-       QString("area %1, spread %2").arg(area, 0, 'g', 15).arg((hi - lo) / lo));
+    ok("window: w(p) is |phi|^2 p over the reachable part of [0, 40] MeV/c, unit area, nodes on the curve",
+       reach && r.windowP.size() > 100 && r.windowP.first() == std::max(qLo, 0.0) &&
+           r.windowP.last() == std::min(qHi, 40.0) && std::fabs(area - 1.0) < 1e-12 && hi - lo < 1e-12 * lo && atNodes,
+       QString("area %1, spread %2, p %3-%4").arg(area, 0, 'g', 15).arg((hi - lo) / lo).arg(r.windowP.value(0))
+           .arg(r.windowP.isEmpty() ? 0.0 : r.windowP.last()));
     // <|M_l|^2> = sum_k w_k M_l(E; B + T_k)^2 with the engine's ThmFormFactor.
     const PairsData& pr = w.getPairsTab()->getPairsModel()->getPairs().at(4);
     const double mu = pr.lightM * pr.heavyM / (pr.lightM + pr.heavyM) * uconv;
     bool avgOk = !r.vertex.isEmpty(), qfOk = avgOk, filled = true;
     double worst = 0.0;
-    int curves = 0, nodes = 0;
+    int curves = 0, nodes = 0, checked = 0;
     for(const ThmDiagnosticsResult::VertexGroup& g : r.vertex)
       for(const ThmDiagnosticsCurve& c : g.curves) {
         curves++;
@@ -1203,14 +1252,19 @@ int main(int argc, char** argv) {
         if(!avgOk) break;
         const double scale = *std::max_element(c.y.begin(), c.y.end());
         for(int i = 0; i < r.energy.size(); i += 10) {
+          const double qf = ThmFormFactor(l, c.boundary, mu, r.energy[i], pr.bindingEnergy, pr.channelRadius);
+          qfOk = qfOk && std::fabs(c.y[i] - qf * qf) <= 1e-12 * scale;
+        }
+        // The average at the energy of the nodes shown (they follow E).
+        for(int i = 0; i < r.energy.size(); i++) {
+          if(r.energy[i] != r.windowE) continue;
           double expect = 0.0;
           for(int k = 0; k < r.nodeP.size(); k++) {
             const double m = ThmFormFactor(l, c.boundary, mu, r.energy[i], pr.bindingEnergy + r.nodeTs[k], pr.channelRadius);
             expect += r.nodeWeight[k] * m * m;
           }
-          const double qf = ThmFormFactor(l, c.boundary, mu, r.energy[i], pr.bindingEnergy, pr.channelRadius);
           worst = std::max(worst, std::fabs(c.yWindow[i] - expect) / scale);
-          qfOk = qfOk && std::fabs(c.y[i] - qf * qf) <= 1e-12 * scale;
+          checked++;
         }
         // The window fills the quasi-free nodes.
         for(double e : c.nodes) {
@@ -1224,7 +1278,8 @@ int main(int argc, char** argv) {
                     << std::endl;
         }
       }
-    ok("window: <|M_l|^2> = sum_k w_k M_l(p_xA(p_k))^2 (engine's ThmFormFactor)", avgOk && worst < 1e-10,
+    ok("window: <|M_l|^2> = sum_k w_k M_l(p_xA(p_k))^2 at the nodes' energy (engine's ThmFormFactor)",
+       avgOk && checked == curves && worst < 1e-10,
        QString("worst %1 of the maximum").arg(worst));
     ok("window: quasi-free curve unchanged (p_s = 0)", qfOk);
     ok("window: the average fills the vertex nodes", filled);
@@ -1285,10 +1340,11 @@ int main(int argc, char** argv) {
     ThmDiagnosticsPage* d = ws.diagnosticsPage;
     ok("table: computed from a copy elsewhere (path made absolute)", d->computeNow(), d->result().error);
     const ThmDiagnosticsResult& r = d->result();
+    // A flat |phi|^2: the event weight per unit p_s is p / Int p dp = p/600.
     bool flat = r.window && !r.windowW.isEmpty() && r.windowP.first() == 20.0 && r.windowP.last() == 40.0;
-    for(double v : r.windowW) flat = flat && std::fabs(v - 1.0 / 20.0) < 1e-12;
+    for(int i = 0; flat && i < r.windowW.size(); i++) flat = std::fabs(r.windowW[i] - r.windowP[i] / 600.0) < 1e-12;
     for(double p : r.nodeP) flat = flat && p > 20.0 && p < 40.0;
-    ok("table: flat w(p) = 1/20 per MeV/c on [20, 40], nodes inside", flat);
+    ok("table: flat |phi|^2 gives w(p) = p/600 per MeV/c on [20, 40], nodes inside", flat);
   }
 #endif
 
@@ -1653,7 +1709,7 @@ int main(int argc, char** argv) {
         {"distortion=optical opticalSF=kd03", "which it does not describe", true},
         {"distortion=optical opticalAA=ancai06", "the a + A channel is 14N + 12C, which it does not describe", false},
         {"distortion=optical opticalSF=daehnick80", "Write daehnick80:extrapolate", true},
-        {"spectatorAngles=cm:0-60", "spectatorAngles= averages the distortion factor", true},
+        {"spectatorAngles=cm:0-60", "with neither it has nothing to average", true},
         {"distortion=coulomb spectatorAngle=8 spectatorAngles=cm:0-60", "exclude each other", true},
         {"distortion=coulomb spectatorAngleNodes=4", "needs a spectator-direction window", false},
         {"distortion=coulomb spectatorAngles=cm:60-10", "spectatorAngles='cm:60-10': expected thmin-thmax", false},

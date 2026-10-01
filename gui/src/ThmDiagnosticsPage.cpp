@@ -86,8 +86,11 @@ ThmDiagnosticsPage::ThmDiagnosticsPage(std::function<QString(int, ThmDiagnostics
   weightPlot = makePlot(tr(kEcm), tr("w"));
   weightPlot->setToolTip(tr("The weight table of the segment (weight[k]), as the engine interpolates it."));
   windowPlot = makePlot(tr("p_s (MeV/c)"), tr("w (per MeV/c)"));
-  windowPlot->setToolTip(tr("w(p) = |phi(p)|^2 p^2 over [p_min, p_max] (a table: as given), unit area; dots: the "
-                            "Gauss-Legendre nodes at which AZURE2 evaluates the vertex."));
+  windowPlot->setToolTip(tr("The event weight per unit p_s at one energy (the middle of the segment): at fixed E the "
+                            "spectator direction fixes p_s and d cos(theta_cm) = p_s dp_s/(beta k_sF k_aA), so "
+                            "w(p) = A |phi(p)|^2 p over the accepted p_s (inside [p_min, p_max], reachable at E, "
+                            "and the acceptance A of the directions), unit area; dots: the nodes at which AZURE2 "
+                            "evaluates the vertex there (they follow E)."));
   distortionPlot = makePlot(tr(kEcm), tr("R"));
   distortionPlot->setToolTip(tr("R(E) = rho(E)/rho(E_ref), rho = |M|^2/|M_PW|^2 (dwpw) or |M|^2 (dw), as the model "
                                 "is multiplied by it (distortion=); dashed and dotted: |M|^2 and |M_PW|^2, each 1 at "
@@ -145,7 +148,7 @@ ThmDiagnosticsPage::ThmDiagnosticsPage(std::function<QString(int, ThmDiagnostics
   card(lineshapePlot, QString::fromUtf8("Line shape |N<sub>C</sub>|²"));
   card(zetaPlot, QString::fromUtf8("Line shape ζ(E)"));
   card(weightPlot, tr("Weight w(E)"));
-  card(windowPlot, QString::fromUtf8("Spectator window w(p<sub>s</sub>)"));
+  card(windowPlot, QString::fromUtf8("Spectator window |φ|² p<sub>s</sub> dp<sub>s</sub>"));
   card(distortionPlot, tr("Distortion R(E)"));
   {
     QWidget *energy = new QWidget;
@@ -299,9 +302,10 @@ void ThmDiagnosticsPage::showResult(const ThmDiagnosticsResult &result) {
           .arg(result.eHi, 0, 'g', 4)
           .arg(result.vertexMode)
           .arg(result.binding, 0, 'g', 6) +
-      (result.window ? tr(" Spectator window: %1 nodes, <T_s> = %2 MeV.")
+      (result.window ? tr(" Spectator window: %1 nodes, <T_s> = %2 MeV at E = %3 MeV.")
                            .arg(result.nodeP.size())
                            .arg(result.meanTs, 0, 'g', 6)
+                           .arg(result.windowE, 0, 'g', 6)
                      : QString()) +
       (result.distortion && result.distortionError.isEmpty()
            ? (result.distortionKind == "table"
@@ -389,7 +393,7 @@ void ThmDiagnosticsPage::showResult(const ThmDiagnosticsResult &result) {
       w.x = result.windowP;
       w.y = result.windowW;
       w.color = thmPlotColor(0);
-      w.label = QString::fromUtf8("|φ|² p²");
+      w.label = QString::fromUtf8("|φ|² p at E = %1 MeV").arg(result.windowE, 0, 'g', 4);
       windowPlot->addSeries(w);
       ThmPlotWidget::Series n;
       n.x = result.nodeP;

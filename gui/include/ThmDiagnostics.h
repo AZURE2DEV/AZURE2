@@ -96,10 +96,13 @@ struct ThmDiagnosticsResult {
   // Spectator-momentum window (ps=), from AZUREAPI::GetThmVertex.
   bool window = false;
   QString windowText;           ///< the engine's description
-  double muSx = 0.0, meanTs = 0.0;  ///< MeV
-  QVector<double> nodeP, nodeWeight, nodeTs;  ///< nodes (MeV/c), normalized weights, T_s (MeV)
-  QVector<double> windowP, windowW;  ///< w(p) on [pmin, pmax], normalized to unit area (per MeV/c)
-  QVector<double> nodeW;             ///< the same w(p) at the nodes
+  double muSx = 0.0, meanTs = 0.0;  ///< MeV (<T_s> at windowE)
+  double windowE = 0.0;             ///< the energy of the nodes below (the middle of the grid, MeV)
+  QVector<double> nodeP, nodeWeight, nodeTs;  ///< nodes at windowE (MeV/c), normalized weights, T_s (MeV)
+  /// The event weight per unit p_s at windowE, A |phi(p)|^2 p over the
+  /// accepted p_s (ThmSpectatorWindow::Density), normalized to unit area.
+  QVector<double> windowP, windowW;
+  QVector<double> nodeW;             ///< the same at the nodes
 
   // Distortion factor (distortion=), from AZUREAPI::GetThmDistortion.
   bool distortion = false;

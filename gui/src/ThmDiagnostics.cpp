@@ -94,30 +94,6 @@ QStringList absoluteWeights(const QStringList &lines, const QString &dir) {
   return out;
 }
 
-/// The event weight per unit p_s of a window (ThmLineshape.cpp
-/// BuildThmSpectatorWindow's w(p)), for the plot between the nodes.
-double windowWeight(const ThmExperiment &x, double p) {
-  switch (x.psKind) {
-    case ThmExperiment::PS_HULTHEN: {
-      const double q2 = (p / hbarc) * (p / hbarc);
-      const double phi = 1.0 / (x.psA * x.psA + q2) - 1.0 / (x.psB * x.psB + q2);
-      return phi * phi * p * p;
-    }
-    case ThmExperiment::PS_GAUSS:
-      return std::exp(-4.0 * std::log(2.0) * p * p / (x.psFwhm * x.psFwhm)) * p * p;
-    case ThmExperiment::PS_TABLE: {
-      const std::vector<double> &tp = x.psTableP, &tw = x.psTableW;
-      if (tp.empty()) return 0.0;
-      if (p <= tp.front()) return tw.front();
-      if (p >= tp.back()) return tw.back();
-      const size_t hi = std::upper_bound(tp.begin(), tp.end(), p) - tp.begin(), lo = hi - 1;
-      return tw[lo] + (tw[hi] - tw[lo]) * (p - tp[lo]) / (tp[hi] - tp[lo]);
-    }
-    default:
-      return 0.0;
-  }
-}
-
 QString jpiText(double J, int pi) {
   const int twice = (int)std::lround(2.0 * J);
   const QString j = twice % 2 ? QString("%1/2").arg(twice) : QString::number(twice / 2);
@@ -357,28 +333,41 @@ ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request)
       r.error = QObject::tr("Spectator-momentum window: %1").arg(QString::fromStdString(whyNot));
       return r;
     }
-    r.window = true;
-    r.windowText = QString::fromStdString(windowReport.window);
-    r.muSx = windowReport.muSx;
-    r.nodeP = QVector<double>(windowReport.p.begin(), windowReport.p.end());
-    r.nodeWeight = QVector<double>(windowReport.weight.begin(), windowReport.weight.end());
-    r.nodeTs = QVector<double>(windowReport.es.begin(), windowReport.es.end());
-    for (int k = 0; k < r.nodeTs.size(); k++) r.meanTs += r.nodeWeight[k] * r.nodeTs[k];
-    // w(p) between the nodes, normalized to unit area (trapezoid on a fine grid).
-    const double p0 = experiment->psKind == ThmExperiment::PS_TABLE ? experiment->psTableP.front() : experiment->psMin;
-    const double p1 = experiment->psKind == ThmExperiment::PS_TABLE ? experiment->psTableP.back() : experiment->psMax;
-    if (p1 > p0) {
-      const int m = 401;
-      double area = 0.0;
-      for (int i = 0; i < m; i++) {
-        const double p = p0 + (p1 - p0) * i / (m - 1);
-        r.windowP << p;
-        r.windowW << windowWeight(*experiment, p);
-        if (i > 0) area += 0.5 * (r.windowW[i] + r.windowW[i - 1]) * (p1 - p0) / (m - 1);
-      }
-      if (area > 0.0) {
-        for (double &v : r.windowW) v /= area;
-        for (double p : r.nodeP) r.nodeW << windowWeight(*experiment, p) / area;
+    // The plane-wave window (the DW vertex averages over the directions itself).
+    const ThmSpectatorWindow *w = windowReport.windowObject.get();
+    if (w) {
+      r.window = true;
+      r.windowText = QString::fromStdString(windowReport.window);
+      r.muSx = windowReport.muSx;
+      // The nodes follow the accepted directions, which depend on E: those at
+      // the middle of the grid, and the event weight per unit p_s there,
+      // A |phi(p)|^2 p (d cos theta_cm = p dp/(beta k_sF k_aA)), unit area.
+      const int mid = n / 2;
+      r.windowE = grid[mid];
+      r.nodeP = QVector<double>(windowReport.p[mid].begin(), windowReport.p[mid].end());
+      r.nodeWeight = QVector<double>(windowReport.weight[mid].begin(), windowReport.weight[mid].end());
+      r.nodeTs = QVector<double>(windowReport.es[mid].begin(), windowReport.es[mid].end());
+      for (int k = 0; k < r.nodeTs.size(); k++) r.meanTs += r.nodeWeight[k] * r.nodeTs[k];
+      double qLo = 0.0, qHi = 0.0;
+      if (w->Reach(r.windowE, qLo, qHi)) {
+        const double p0 = std::max(qLo, w->pMin), p1 = std::min(qHi, w->pMax);
+        if (p1 > p0) {
+          const int m = 401;
+          double area = 0.0;
+          for (int i = 0; i < m; i++) {
+            const double p = p0 + (p1 - p0) * i / (m - 1);
+            r.windowP << p;
+            r.windowW << w->Density(r.windowE, p);
+            if (i > 0) area += 0.5 * (r.windowW[i] + r.windowW[i - 1]) * (p1 - p0) / (m - 1);
+          }
+          if (area > 0.0) {
+            for (double &v : r.windowW) v /= area;
+            for (double p : r.nodeP) r.nodeW << w->Density(r.windowE, p) / area;
+          } else {
+            r.windowP.clear();
+            r.windowW.clear();
+          }
+        }
       }
     }
   }

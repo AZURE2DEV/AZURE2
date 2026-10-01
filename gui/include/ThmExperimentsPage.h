@@ -41,9 +41,9 @@ struct ThmSpectatorWindow;
  * beam energy -- all four or none -- with the binding and quasi-free
  * energies AZURE2 prints for it, and the line shape, lineshape=on, with zeta
  * at the ends of the data) and Spectator acceptance (the momentum window ps=,
- * psNodes=, with the mean spectator energy <T_s> the engine's
- * ThmSpectatorWindow gives; with a computed distortion also the directions,
- * spectatorAngles=, spectatorAngleNodes=) and
+ * psNodes=, with the mean spectator energy <T_s> at the ends of the data the
+ * engine's ThmSpectatorWindow gives; with a momentum window or a computed
+ * distortion also the directions, spectatorAngles=, spectatorAngleNodes=) and
  * Distortion (distortion= and its keys, with R(E) at the ends of the data
  * from the engine's ThmDistortion).  When B(x+s) from the masses and the
  * entrance pair's B (field 32) disagree, the reaction section says so.
@@ -87,9 +87,11 @@ class ThmExperimentsPage : public QWidget {
   QString derivedText() const { return derivedText_; }
   /*! For a record with a ps window and a complete reaction: the window as
       the engine builds it (BuildThmSpectatorWindow on the engine's parse of
-      the line, the table read by ReadThmPsTable, mu_sx from the reaction),
-      described with <T_s>; or "" and the reason in *error when AZURE2 would
-      refuse it (a bad table, a spectator energy for the same pair). */
+      the line, the tables read by ReadThmPsTable and ReadThmAngleTable, the
+      kinematics and the point energies of its segments), described with
+      <T_s> at the lowest and highest point; or "" and the reason in *error
+      when AZURE2 would refuse it (a bad table, a spectator energy for the
+      same pair, a point out of the window's reach). */
   QString windowInfo(const ThmExperimentRecord &record, QString *error = nullptr,
                      ThmSpectatorWindow *window = nullptr) const;
   /*! For a record with a distortion: R(E) (coulomb, optical: the engine's
@@ -184,7 +186,7 @@ class ThmExperimentsPage : public QWidget {
   /// Spectator directions (spectatorAngles=, spectatorAngleNodes=): shown
   /// with a computed distortion; item data one | lab | cm | labtable | cmtable
   /// (one: the distortion's single spectatorAngle direction, nothing written).
-  QComboBox *directionCombo;
+  QComboBox *directionCombo = nullptr;
   ThmNumberSpin *directionMinEdit, *directionMaxEdit;  ///< deg
   QLineEdit *directionTableEdit;
   QPushButton *directionTableButton;
@@ -193,9 +195,9 @@ class ThmExperimentsPage : public QWidget {
   /// spectator angle, E_ref, the ratio, the bound state and (optical) the
   /// two channels; for a table its file.
   QGroupBox *distortionBox;
-  QComboBox *distortionCombo;   ///< item data: none | coulomb | optical | table
-  QComboBox *angleKindCombo;    ///< item data: qf | lab | cm
-  ThmNumberSpin *angleEdit;     ///< deg
+  QComboBox *distortionCombo = nullptr;  ///< item data: none | coulomb | optical | table
+  QComboBox *angleKindCombo = nullptr;   ///< item data: qf | lab | cm
+  ThmNumberSpin *angleEdit = nullptr;    ///< deg
   ThmNumberSpin *distortionRefEdit;  ///< MeV; the minimum (shown as "auto") = not given
   QComboBox *ratioCombo;        ///< item data: dwpw | dw
   QComboBox *boundCombo;        ///< item data: whittaker | yukawa

@@ -184,9 +184,11 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
 
   // Spectator-momentum window (ps=, psNodes=).
   const QString psPhysics =
-      tr("The vertex is averaged over the accepted spectator momenta p_s with the weight |phi(p_s)|^2 p_s^2 "
-         "(p_xA^2/2mu_xA = E + B + p_s^2/2mu_sx). Not together with a non-zero spectator energy (Model page) for "
-         "the same entrance pair.");
+      tr("At fixed E the spectator direction fixes |p_s|, and the three-body phase space is d cos(theta_cm) = "
+         "|p_s| d|p_s|/(beta k_sF k_aA): the vertex is averaged over the accepted directions -- |p_s| inside "
+         "[p_min, p_max] and reachable at E, and the Directions below -- with the weight |phi(p_s)|^2 "
+         "d cos(theta_cm), p_xA^2/2mu_xA = E + B + p_s^2/2mu_sx. Not together with a non-zero spectator energy "
+         "(Model page) for the same entrance pair.");
   psKindCombo = new QComboBox;
   psKindCombo->addItem(tr("point (quasi-free)"), "delta");
   psKindCombo->addItem(QString::fromUtf8("Hulthén"), "hulthen");
@@ -216,8 +218,9 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   psFwhmEdit = psSpin(" MeV/c", 1.0e4, 1.0, tr("FWHM of |phi(p_s)|^2 = exp(-4 ln2 p^2/FWHM^2) (> 0)."));
   psTableEdit = new QLineEdit;
   psTableEdit->setPlaceholderText(tr("file"));
-  psTableEdit->setToolTip(tr("ps=table:<file>: two columns, p_s (MeV/c, increasing) and the weight per unit p_s; "
-                             "the window is its range. Relative to the project directory."));
+  psTableEdit->setToolTip(tr("ps=table:<file>: two columns, p_s (MeV/c, increasing) and the momentum distribution "
+                             "|phi(p_s)|^2 (any scale; e.g. the measured yield over the kinematic factor); the "
+                             "window is its range. Relative to the project directory."));
   connect(psTableEdit, SIGNAL(textEdited(const QString &)), this, SLOT(psEdited()));
   psTableButton = new QPushButton("...");
   psTableButton->setToolTip(tr("Choose the table; a file inside the project directory is stored relative to it."));
@@ -226,7 +229,8 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   psNodesSpin->setRange(1, 64);
   psNodesSpin->setValue(16);
   psNodesSpin->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-  psNodesSpin->setToolTip(tr("psNodes=: Gauss-Legendre nodes on the window (1-64, default 16)."));
+  psNodesSpin->setToolTip(tr("psNodes=: Gauss-Legendre nodes in cos(theta_cm) on the directions inside the "
+                             "window (1-64, default 16); with a direction window its own nodes are used."));
   connect(psNodesSpin, SIGNAL(valueChanged(int)), this, SLOT(psNodesChanged(int)));
 
   // Spectator directions (spectatorAngles=, spectatorAngleNodes=): with a
@@ -240,9 +244,10 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   directionCombo->addItem(tr("c.m. table"), "cmtable");
   directionCombo->setToolTip(
       tr("spectatorAngles=: the accepted spectator directions (polar angle to the beam, lab or c.m.) over which "
-         "R(E) or the DW vertex are averaged, weight d cos(theta_cm) x acceptance. At fixed E the direction fixes "
-         "|p_s|, so the momentum window above only cuts it. A table gives the acceptance per angle. One: the "
-         "single direction of the Distortion section's angle."));
+         "the vertex (with a distribution above) and R(E) or the DW vertex are averaged, weight d cos(theta_cm) x "
+         "acceptance x |phi|^2. At fixed E the direction fixes |p_s|, so the momentum window above cuts the same "
+         "directions. A table gives the acceptance per angle. All: every direction inside the momentum window; "
+         "one: the single direction of the Distortion section's angle."));
   connect(directionCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(directionEdited()));
   auto dirSpin = [&](const QString &tip) {
     ThmNumberSpin *e = new ThmNumberSpin(QString::fromUtf8("°"), 0.0, 180.0, 1.0);
@@ -809,7 +814,12 @@ void ThmExperimentsPage::showDerived(const ThmExperimentRecord &x) {
   zetaValue->setText(zeta.isEmpty() ? none : zeta);
   ThmSpectatorWindow window;
   const bool haveWindow = haveReaction && x.hasWindow() && !windowInfo(x, &ignored, &window).isEmpty();
-  meanTsValue->setText(haveWindow ? mev(window.MeanEs()) : none);
+  if (haveWindow) {
+    const double a = window.MeanEs(window.dataE.front()), b = window.MeanEs(window.dataE.back());
+    meanTsValue->setText(QString::fromUtf8("%1 … %2 MeV").arg(QString::number(a, 'g', 3), QString::number(b, 'g', 3)));
+  } else {
+    meanTsValue->setText(none);
+  }
   for (QLabel *l : {bindingValue, zetaValue, meanTsValue}) l->setToolTip(info);
   distortionValue->setText(distortion.isEmpty() ? none
                                                 : QString::fromUtf8("%1 … %2")
@@ -1301,6 +1311,9 @@ QString ThmExperimentsPage::psText() const {
 
 void ThmExperimentsPage::psEdited() {
   showPsRows();
+  // The Directions rows depend on the distribution (not while the page is
+  // still being built: the spin boxes of the window signal as they are set up).
+  if (directionCombo && distortionCombo && angleKindCombo && angleEdit) showDirectionRows();
   if (loading_ || current_ < 0) return;
   ThmExperimentRecord &r = records_[current_];
   if (!psCustomCheck->isChecked()) {
@@ -1310,6 +1323,15 @@ void ThmExperimentsPage::psEdited() {
     psBEdit->setWrittenText("1.202");
   }
   r.ps = psText();
+  if (!r.ps.isEmpty() && !r.spectatorAngle.isEmpty()) {
+    // A momentum window is a set of directions: the one direction is dropped
+    // (the engine refuses both).
+    r.spectatorAngle.clear();
+    loading_ = true;
+    angleKindCombo->setCurrentIndex(std::max(0, angleKindCombo->findData("qf")));
+    angleEdit->setWrittenText(QString());
+    loading_ = false;
+  }
   if (r.ps.isEmpty() && !r.psNodes.isEmpty()) {
     // psNodes needs a window: dropped with it.
     r.psNodes.clear();
@@ -1374,11 +1396,18 @@ void ThmExperimentsPage::loadDirections(const ThmExperimentRecord &r) {
 }
 
 void ThmExperimentsPage::showDirectionRows() {
-  // Only with a computed distortion (the engine refuses the window without
-  // one); the window's or the table's fields by the kind.
+  // With a computed distortion or a momentum distribution (the engine
+  // refuses the window with neither); the window's or the table's fields by
+  // the kind.
   const QString distortion = distortionCombo->currentData().toString();
-  const bool computed = distortion == "coulomb" || distortion == "optical";
+  const bool psWindow = psKindCombo->currentData().toString() != "delta";
+  const bool computed = distortion == "coulomb" || distortion == "optical" || psWindow;
   const QString kind = directionCombo->currentData().toString();
+  // Without a direction window, a momentum window accepts every direction
+  // inside it; otherwise the one direction of the Distortion section.
+  directionCombo->setItemText(0, psWindow ? tr("all inside the p_s window") : tr("one (Distortion: angle)"));
+  // psNodes= counts the nodes of the momentum window alone.
+  psNodesSpin->setEnabled(kind == "one");
   for (QWidget *w : directionWindowRow_) w->setVisible(false);
   for (QWidget *w : directionTableRow_) w->setVisible(false);
   for (QWidget *w : directionRow_) w->setVisible(computed);
@@ -1387,7 +1416,7 @@ void ThmExperimentsPage::showDirectionRows() {
   if (computed && kind.endsWith("table"))
     for (QWidget *w : directionTableRow_) w->setVisible(true);
   // A window sets the directions: the Distortion section's one angle is off.
-  const bool window = computed && kind != "one";
+  const bool window = (computed && kind != "one") || psWindow;
   angleKindCombo->setEnabled(!window);
   angleEdit->setEnabled(!window && angleKindCombo->currentData().toString() != "qf");
   angleKindCombo->setToolTip(window ? tr("The spectator directions are set by the window in Spectator acceptance.")
@@ -1411,6 +1440,13 @@ void ThmExperimentsPage::directionEdited() {
   if (loading_ || current_ < 0) return;
   ThmExperimentRecord &r = records_[current_];
   r.spectatorAngles = directionText();
+  if (!r.spectatorAngles.isEmpty() && !r.psNodes.isEmpty()) {
+    // The direction window has its own nodes (the engine refuses psNodes= with it).
+    r.psNodes.clear();
+    loading_ = true;
+    psNodesSpin->setValue(16);
+    loading_ = false;
+  }
   if (r.spectatorAngles.isEmpty() && !r.spectatorAngleNodes.isEmpty()) {
     // The nodes need a window: dropped with it.
     r.spectatorAngleNodes.clear();
@@ -1477,21 +1513,39 @@ QString ThmExperimentsPage::windowInfo(const ThmExperimentRecord &x, QString *er
     e.psMin = e.psTableP.front();
     e.psMax = e.psTableP.back();
   }
-  // mu_sx as EData::BuildThmGroups takes it: x and the spectator.
+  if (e.angleWindow == 2) {
+    // spectatorAngles=[cm:]table:<file>, relative to the .azr (Config::ReadThmBlock).
+    QString path = QString::fromStdString(e.angleTable);
+    if (QFileInfo(path).isRelative() && !projectDir_.isEmpty()) path = QDir(projectDir_).filePath(path);
+    why = ReadThmAngleTable(QFile::encodeName(path).toStdString(), e.angleTableT, e.angleTableW);
+    if (!why.empty()) {
+      if (error) *error = "spectatorAngles: " + QString::fromStdString(why);
+      return QString();
+    }
+    e.angleMin = e.angleTableT.front();
+    e.angleMax = e.angleTableT.back();
+  }
+  // mu_sx, the kinematics and the data energies as EData::BuildThmGroups takes them.
   const double muSx = r.mX * r.spectator.mass / (r.mX + r.spectator.mass) * kAmu;
+  ThmDistortion d;
+  QVector<double> energies;
+  if (!fillKinematics(x, d) || !pointEnergies(x.segments, energies) || energies.isEmpty()) return QString();
   ThmSpectatorWindow window;
-  why = BuildThmSpectatorWindow(e, muSx, window);
+  why = BuildThmSpectatorWindow(e, muSx, d.kin, std::vector<double>(energies.begin(), energies.end()), window);
   if (!why.empty()) {
     if (error) *error = "ps: " + QString::fromStdString(why);
     return QString();
   }
   if (out) *out = window;
-  return tr("p_s window: %1; mu_sx = %2 MeV, T_s = p_s^2/2mu_sx from %3 to %4 MeV, <T_s> = %5 MeV")
-      .arg(QString::fromStdString(window.description))
-      .arg(QString::number(muSx, 'g', 6))
-      .arg(QString::number(window.es.front(), 'g', 6))
-      .arg(QString::number(window.es.back(), 'g', 6))
-      .arg(QString::number(window.MeanEs(), 'g', 6));
+  const double lo = window.dataE.front(), hi = window.dataE.back();
+  auto number = [](double v) { return QString::number(v, 'g', 6); };
+  QString text = tr("p_s window: %1; mu_sx = %2 MeV, <T_s> = %3 MeV at E = %4 MeV, %5 MeV at E = %6 MeV")
+                     .arg(QString::fromStdString(window.description), number(muSx), number(window.MeanEs(lo)),
+                          number(lo), number(window.MeanEs(hi)), number(hi));
+  if (e.vertexDW)
+    text += tr(" (the DW vertex weights these directions with the |phi~(q)|^2 of its own bound state; the "
+               "distribution above sets only the cut)");
+  return text;
 }
 
 // ---------------------------------------------------------------------------
