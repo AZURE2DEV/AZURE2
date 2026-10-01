@@ -198,7 +198,13 @@ interpolated :math:`R` the model uses, :math:`|M|^2`, :math:`|M_\mathrm{PW}|^2`,
 ``set_thm_experiment(..., theta="50-70")`` (or ``theta=(50, 70)``) turns the
 model into the fixed-angle observable, :math:`d\sigma/d\Omega` of the exit
 pair averaged over that c.m. window, and residuals, Jacobian and output files
-follow). Every edit keeps the rest of the file
+follow; ``set_thm_experiment(..., distortion="optical", opticalAA=[...],
+vertexModel="dw")`` replaces the plane-wave entrance vertex by the surface
+term of the prior-form DWBA built from those distorted waves (:math:`R(E)` is
+then not applied), and ``thm_vertex`` returns that vertex -- ``model`` is
+``"dw"``, ``M2`` the DW vertex over the nodes the engine uses, ``M2_qf`` at
+the spectator direction and ``M2_pw`` the plane-wave vertex at the same
+kinematics). Every edit keeps the rest of the file
 byte for byte, including whether it ends with a newline.
 
 To snapshot a fit, prefer :meth:`~pyazr.azure2.azure2.save_fit`, which wraps

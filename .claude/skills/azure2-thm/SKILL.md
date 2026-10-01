@@ -107,6 +107,7 @@ P₀e^{2πη} gives 2.85 against on-shell 1.25. A χ² that does not discriminat
   η_sb (validity: ≪ 1) and |N_C|² per level. Details: thm_implementation.rst,
   "Coulomb line shape".
 - **Distortion factor R(E)**: `distortion=coulomb|optical|table:file` on the experiment line (kinematics needed; `opticalAA/SF=plane|coulomb|V,R,a,W,RW,aW,WD,RD,aD,RC`, `spectatorAngle=qf|<lab deg>|cm:<deg>`, `distortionRatio=dwpw|dw`, `boundState=whittaker|yukawa[:rmin]`, `distortionRef=`) multiplies the model by the zero-range DWBA |M/M_PW|² ratio (= dividing PWA S* by R); reproduces Mukhamedzhanov's 2019 12C+12C curve with defaults, the 2026 one with `dw` and E_sF +50 keV; 12C+12C χ² 61 → 3247 unrefitted, 18O(d,n) R = 0.93–1.08. `session.thm_distortion(name, E)`; thm_implementation.rst, "Distortion factor R(E)".
+- **Distorted-wave entrance vertex**: `vertexModel=dw` on the experiment line (with `distortion=coulomb|optical` and its keys) replaces M_l by the surface term of the prior-form DWBA (Mukhamedzhanov 2011; 2020 eqs. 28–32): the source S(r) = ∫d³u φ(u) χ⁽⁻⁾*_sF(αr+u) χ⁽⁺⁾_aA(r+βu) (α = m_A/m_F, β = m_s/m_a, finite-range s–x tail of `boundState`), V_lm = (B−1)S_lm(a) − a S′_lm(a), |M_l|² → (4π/(2l+1))Σ_m|V_lm/4πφ̃(q)|² (two incoherent components for per-level B). Plane waves give M_l(p) exactly, p = |k_aA − αk_sF| (checked 1e-9); R(E) = its r_xA → 0, l-independent limit (12C+12C: the l-summed DW/PW ratio follows R to 0.06 dex), so R is **not** applied with dw (distortionRef/Ratio refused). Surface term only: `coulombIntegral=1`, `theta`, `entranceL=coherent`, `spectatorEnergy`, `spectatorAngle`+`ps` refused; a `ps` window puts its nodes on the kinematically reachable q range at each E. 19F+d (55 MeV): |M1(213)/M0(324)|² 1.10/3.00/19.7 (pw, a_p 4.1/5.1/6.1) → 0.17/0.24/0.34 (dw Coulomb), 0.33/0.41/0.52 (dw optical), 1.29/1.24/1.32 (dw optical, ps 0–50 MeV/c): the radius dependence nearly disappears, the optical potentials and the window now carry the l ratio. `session.thm_vertex` gives `model`, `M2` (dw), `M2_pw` (same p). Startup 4–6 s. 19F joint refits (a_p 5.136, all at their nfev limit): full window ωγ(828) pw 184 eV → dw 667–727 (493 with window) vs direct 775(35), penalty χ² 342 → 83–122, but THM χ² not better (199–242 vs 204) and 790 keV still ~0 — the full window still does not fit; adopted window: dw qf worse (THM χ² 115–166 vs 64, lifts ωγ(225) ×4), dw+window 77. pw+window (no dw) is the worst (ωγ(213) −6.8σ, ωγ(828) 56 eV). Memory: a pw `ps` window stores entrance channels only (`ps_table` row in thm_experiments.out); before Oct 2026 it took ~117 MB per node on the 19F model and OOM-killed refits. thm_implementation.rst, "Distorted-wave entrance vertex".
 - **Fixed-angle observable**: `theta=50-70` on the experiment line (degrees, c.m. angle of exit particle 1 vs 2 from p_xA = entrance particle 1 vs 2; Tribble θ_cm = arccos k̂_xA·k̂_bB; `0-0` one angle, `all` default) makes the model ⟨dσ/dΩ⟩ over the window: Blatt–Biedenharn Z̄ sum over the HOES partial amplitudes of all Jπ (l and J interfere; exit phase e^{i(ω−φ)}); 0–180 = σ/4π; identical exit symmetric, no factor; refused with `entranceL=coherent`. 7Li(p,α) Tumino 50–70° unrefitted: shape 14 % rms / 45 % max (−14 % at 2.6 MeV, +25 % at 5 MeV), χ² 2138 → 2350; 18O one 1/2⁺ group: isotropic, no change. `AzrModel.set_thm_experiment(..., theta=(50, 70))`; thm_implementation.rst, "Fixed-angle observable".
 - **Recommended `<thm>` defaults** and why:
   - `entranceL=incoherent`: exact for a 4π-integrated, spin-summed observable. In a
@@ -181,6 +182,7 @@ some E), vary one ingredient at a time from the adopted fit:
 | entrance channel radius | adopted ± 1 fm | **full refit** — it also changes the on-shell model (7Li joint χ² 1498 / 1329 / 1143) |
 | `spectatorEnergy` | 0 / 0.5 MeV (30–50 MeV/c cuts give 0.5–1.4 MeV for a d spectator) | refit, or fixed-area estimate; the 18O doublet fit breaks down (ρ near a zero of M₀) |
 | Coulomb-distortion weight `weight[k]=` R(E) | none / published R(E) curves / spectator penetrability ratio | heavy or sub-barrier spectators only (12C+12C); **full refit** — a restricted refit gave χ²_THM 147, a full one 56 (the weight is absorbed into widths) |
+| entrance vertex `vertexModel` | pw / dw (Coulomb) / dw (optical a+A and s+F) / dw (optical) with the experiment's `ps` window | **mandatory whenever peak areas of different l are converted into strengths**; full refit. With dw, report the optical potentials and redo the radius variation (it shrinks, 19F ×18 → ×1.6); do not combine with R(E) (the engine refuses) |
 | resolution σ | quoted ± 10 %, or free | refit (fitted σ: 18O 17.0 ± 0.8, 17O 22.2 ± 1.2 keV) |
 | data treatment | HOES vs on-shell reading; carrier B; background on/off; anchor dataset | full refit |
 
@@ -210,6 +212,7 @@ Calibration (index):
 | 17O(n,α) anchored ratio | ωγ(2⁺)/ωγ(3⁻); ωγ(5⁻) | radius | 1.54; 1.76 (spectator 1.35*) |
 | 18O narrow, peak areas | ωγ(20), ωγ(90 keV) | radius a_p 4.1–6.1 fm | **×25** (spectator 3.4*, C_l 1.7, vertex/KF ≤ 1.03) |
 | 12C+12C, peak areas | Σωγ(E < 1.5 MeV); ωγ(0.985 0⁺) | radius 6.5–8.5 fm | **×180–200** |
+| 19F(p,αγ) l ratios | \|M1(213)/M0(324)\|², \|M1(828)/M0(324)\|² | radius 4.1–6.1 fm | pw ×18, ×13; dw Coulomb ×2.0, ×1.8; dw optical ×1.6, ×1.4; dw optical + window ×1.06 — but pw ↔ dw moves the ratio ×7–13 and Coulomb ↔ optical ↔ window ×1.5–3 |
 | | same | Coulomb weight R(E) | **×15–32** (spectator 30* for the sum, KF 1.6–2.6*, vertex ≤ 1.2) |
 
 Pattern: when overlapping direct data fix the widths and scale, every THM option
@@ -270,6 +273,9 @@ and ±1 fm radii with nodes marked, next to the level energies.
 - Odd-J / unnatural-parity levels in identical-boson systems: THM-only (section 2).
 - Plane-wave vertex for heavy systems: pa ≈ 14 for 12C+12C, M_l has nodes in the
   window; plane-wave Coulomb neglect of a sub-barrier spectator (d+²⁴Mg η ≥ 1.55).
+  Near-barrier Trojan horses (19F+d at 5.3 MeV c.m., barrier ≈ 2.5 MeV): the
+  entrance deceleration halves the local p = k_aA − αk_sF at the surface, and the
+  plane-wave l ratios are off by an order of magnitude — compare with `vertexModel=dw`.
 - pyazr units: `calculate_rwa` takes reduced-width amplitudes (Brune session);
   `calculate` takes physical widths (eV); `transform_rwa` maps; never convert a
   `gammaIsRWA` channel by hand. `Parameter.wigner_limit` is 3ħ²/(2μa²).

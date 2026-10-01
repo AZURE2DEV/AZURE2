@@ -398,6 +398,11 @@ letters, digits and ``_ - . +``.
    is the HOES :math:`d\sigma/d\Omega` averaged over it instead of the
    angle-integrated cross section (default ``all``), below ("Fixed-angle
    observable").
+``vertexModel=pw|dw``
+   The entrance vertex of every segment: the plane-wave :math:`M_l`
+   (default ``pw``) or the surface term of the prior-form DWBA built from the
+   experiment's distorted waves (``dw``; needs ``distortion=coulomb|optical``,
+   and then replaces :math:`R(E)`), below ("Distorted-wave entrance vertex").
 
 Anything else -- an unknown key or nuclide, a malformed value, partial
 kinematics, a segment that does not exist, is not THM, has a fixed norm or is
@@ -744,6 +749,14 @@ The window is printed at startup (nodes, :math:`\mu_{sx}`, the range of
 no experiment and keep the quasi-free vertex. Cost: the vertex and the
 exit-channel sums once per node (the level matrix once); the 7Li and 12C+12C
 examples below run in about 1.8 and 1.1 times the time without a window.
+Memory: every point and folding sub-point stores the vertex pieces of its
+entrance-pair channels at every node (16 bytes per channel and node, shared
+with its mapped points); the total is the ``ps_table`` row of
+``thm_experiments.out`` (points with sub-points, bytes). Until October 2026
+the pieces of every channel were kept, about 117 MB per node for the 19F
+model of ``examples/f19_pag_thm`` with its full window, and 16 nodes did not
+fit in 2 GB; now that model needs 470 MB in all with 16 nodes (403 MB
+without a window).
 
 *pyazr.* ``AzrModel.set_thm_experiment(..., ps="hulthen:0-40", psNodes=16)``;
 ``session.thm_vertex(name, energies)`` returns the nodes, weights,
@@ -1031,7 +1044,588 @@ form, one spectator angle rather than the experimental acceptance, no
 spin-orbit term, no three-body (line-shape) Coulomb
 effects -- those are ``lineshape=on``, which multiplies independently.
 Whether a DWBA vertex should replace the PWA one at all is the question the
-papers debate; the factor lets a fit show what it would change.
+papers debate; the factor lets a fit show what it would change. The
+:math:`l`-dependent vertex of the same amplitude, of which :math:`R(E)` is the
+zero-range limit, is ``vertexModel=dw`` (next section).
+
+Distorted-wave entrance vertex
+------------------------------
+
+*Why.* The plane-wave vertex :math:`M_l = (B - 1)\, j_l(pa) - pa\, j_l'(pa)`
+sets how much each entrance partial wave contributes, and the ratio between
+partial waves is the largest model dependence of a THM analysis that
+converts peak areas into strengths. For 19F(p,αγ)16O (19F + d at 55 MeV)
+:math:`|M_1(213\,\mathrm{keV})/M_0(324\,\mathrm{keV})|^2` is 1.10, 3.00 and
+19.7 at :math:`a_p` = 4.1, 5.1 and 6.1 fm, and the THM strength of the
+213 keV resonance follows it. The distortion factor :math:`R(E)` of the
+previous section multiplies every partial wave by the same number and cannot
+change such a ratio. ``vertexModel=dw`` on an experiment line replaces
+:math:`M_l` by the vertex computed from the distorted waves of :math:`a + A`
+and :math:`s + F`, with the experiment's distortion settings
+(``distortion=coulomb|optical``, ``opticalAA``, ``opticalSF``,
+``spectatorAngle``, ``boundState``). ``vertexModel=pw`` (the default) is the
+plane-wave vertex of the first section, byte for byte.
+
+*Amplitude.* Three structureless particles :math:`s`, :math:`x`, :math:`A`;
+the Trojan horse :math:`a = (s\,x)` is bound in :math:`l_{sx} = 0` with wave
+function :math:`\varphi(r_{sx})`, and :math:`F = x + A`. The prior-form DWBA
+amplitude of :math:`a + A \to s + F^*` is (Mukhamedzhanov, PRC 84 (2011)
+044616, sec. III; Mukhamedzhanov, Kadyrov & Pang, EPJA 56 (2020) 233,
+eqs. 19-20)
+
+.. math::
+
+   M = \bigl\langle \chi^{(-)}_{sF}\, \Upsilon_{xA} \bigm| U_{sA} + V_{xA} - U_{aA}
+       \bigm| \varphi\, \chi^{(+)}_{aA} \bigr\rangle ,
+
+:math:`\Upsilon_{xA}` the :math:`x`-:math:`A` scattering state with
+:math:`F^*`. Split the :math:`\mathbf r_{xA}` integral at :math:`r_{xA} = a`.
+Inside, the operator is :math:`[V_{xA} + U_{sF}] + (U_{sA} + V_{sx} -
+U_{sF}) - [V_{sx} + U_{aA}]`, and the bracketed terms are the Hamiltonians of
+the final and the initial channel at the same total energy. Green's theorem
+in :math:`\mathbf r_{xA}` (the kinetic energy is :math:`T_{xA} + T_{sF}`,
+and the :math:`\mathbf r_{sF}` integral runs over all space) turns the
+internal prior amplitude into the internal post amplitude plus a surface
+term (2011 eqs. 36-38; 2020 eqs. 28-31). The internal post amplitude is
+dropped, as it is for the plane-wave vertex (2020: "we disregard
+:math:`M_\mathrm{int}^{DW(post)}`"), which leaves
+
+.. math::
+
+   M \simeq M_S + M^{\mathrm{prior}}_{\mathrm{ext}} .
+
+In the Jacobi coordinates :math:`\mathbf r \equiv \mathbf r_{xA}` and
+:math:`\mathbf u \equiv \mathbf r_{sx}`,
+
+.. math::
+
+   \mathbf r_{sF} = \alpha\,\mathbf r + \mathbf u, \qquad
+   \mathbf r_{aA} = \mathbf r + \beta\,\mathbf u, \qquad
+   \alpha = \frac{m_A}{m_F}, \quad \beta = \frac{m_s}{m_a}
+
+(2020 eq. 34), and :math:`d^3r_{sF} = d^3u` at fixed :math:`\mathbf r`. The
+*source* of the vertex is the initial state projected on the final
+spectator wave at fixed :math:`\mathbf r_{xA}`:
+
+.. math::
+
+   S(\mathbf r) = \int d^3r_{sF}\; \chi^{(-)*}_{\mathbf k_{sF}}(\mathbf r_{sF})\,
+                  \varphi(r_{sx})\, \chi^{(+)}_{\mathbf k_{aA}}(\mathbf r_{aA})
+                = \int d^3u\; \varphi(u)\,
+                  \chi^{(-)*}_{\mathbf k_{sF}}(\alpha\mathbf r + \mathbf u)\,
+                  \chi^{(+)}_{\mathbf k_{aA}}(\mathbf r + \beta\mathbf u) .
+
+The surface term is the Wronskian of :math:`\Upsilon` and :math:`S` on the
+sphere :math:`r = a` (2020 eqs. 31-32; the derivative is taken at fixed
+:math:`\mathbf r_{sF}`, which is how :math:`S` is defined). Outside,
+:math:`\Upsilon` of channel :math:`c = (s, l, J)` is the R-matrix external
+wave :math:`O_l(kr)/O_l(ka)` times the level-matrix combination
+:math:`\sum_{\lambda\lambda'} \gamma_{\lambda f} A_{\lambda\lambda'}
+\gamma_{\lambda' c}` of the first section. With
+
+.. math::
+
+   S_{lm}(r) = \int d\Omega_r\, Y^*_{lm}(\hat r)\, S(\mathbf r),
+
+the surface term of channel :math:`c` and projection :math:`m` is that
+combination times
+
+.. math::
+
+   V_{lm}(B) = (B - 1)\, S_{lm}(a) - a\, S'_{lm}(a),
+   \qquad B = a\,\frac{O_l'(ka)}{O_l(ka)} ,
+
+and the external prior term adds
+
+.. math::
+
+   E_{lm} = \frac{2\mu_{xA}}{\hbar^2}\int_a^\infty dr\, r\, \frac{O_l(kr)}{O_l(ka)}
+            \bigl[(V^C_{xA} + U_{sA} - U_{aA})\, S\bigr]_{lm}(r)
+
+(:math:`[\dots]_{lm}` the projection of the operator acting inside the
+:math:`\mathbf u` integral). Replacing the on-shell logarithmic derivative
+:math:`B` by a boundary constant of the R-matrix (``vertex=constant``,
+``perlevel``) is the same step as for the plane-wave vertex: it concerns
+:math:`\Upsilon`, not the source, so ``vertex=`` works as before, and
+``onshell`` gives the complex :math:`B = S_c + iP_c`.
+
+*Plane-wave limit.* With plane waves in both channels, the substitution
+:math:`\mathbf u \to \mathbf r_{sF} - \alpha\mathbf r` and
+:math:`\alpha\beta + m_x (m_a + m_A)/(m_a m_F) = 1` give
+
+.. math::
+
+   S_\mathrm{PW}(\mathbf r) = \tilde\varphi(q)\, e^{i\mathbf p\cdot\mathbf r},
+   \qquad
+   \mathbf q = \mathbf k_{sF} - \beta\,\mathbf k_{aA}, \quad
+   \mathbf p = \mathbf k_{aA} - \alpha\,\mathbf k_{sF}, \quad
+   \tilde\varphi(q) = \int d^3u\, e^{-i\mathbf q\cdot\mathbf u}\varphi(u) :
+
+:math:`\mathbf p` is the off-shell :math:`x`-:math:`A` momentum and
+:math:`\mathbf q` the :math:`s`-:math:`x` momentum of 2017 eqs. 29-30 (2020
+eq. 36). Since :math:`\alpha/\mu_{xA} = \beta/\mu_{sx} = 1/m_x`,
+
+.. math::
+
+   \frac{p^2}{2\mu_{xA}} - \frac{q^2}{2\mu_{sx}}
+   = \frac{k_{aA}^2}{2\mu_{aA}} - \frac{k_{sF}^2}{2\mu_{sF}} = E + B_{xs} ,
+
+the spectator relation of the ``ps`` window (2017 eq. 31); with nuclear
+masses (:math:`m_a < m_s + m_x`) it holds to :math:`O(B_{xs}/m_a c^2)`, about
+:math:`10^{-3}` for a deuteron. The plane-wave expansion
+:math:`e^{i\mathbf p\cdot\mathbf r} = 4\pi\sum_{lm} i^l j_l(pr)\,
+Y^*_{lm}(\hat p)Y_{lm}(\hat r)` gives
+
+.. math::
+
+   S^\mathrm{PW}_{lm}(r) = 4\pi\,\tilde\varphi(q)\, i^l\, Y^*_{lm}(\hat p)\, j_l(pr),
+   \qquad
+   V^\mathrm{PW}_{lm}(B) = 4\pi\,\tilde\varphi(q)\, i^l\, Y^*_{lm}(\hat p)\,
+   \bigl[(B - 1)\, j_l(pa) - pa\, j_l'(pa)\bigr],
+
+exactly the plane-wave vertex :math:`M_l(p)`. The operator of the external
+term is then :math:`V^C_{xA}` alone (no :math:`s`-:math:`A` or
+:math:`a`-:math:`A` interaction), :math:`[V^C_{xA} S]_{lm} = (\hbar^2/2\mu)
+(2\eta k/r)\, S^\mathrm{PW}_{lm}`, and :math:`E_{lm}` becomes
+:math:`4\pi\tilde\varphi\, i^l Y^*_{lm}(\hat p)\, C_l(E)` with the Coulomb
+term of ``coulombIntegral`` (Tribble 2014 eq. 2.79; Typel & Baur eq. A.4). The
+distorted-wave vertex contains the present one as its limit, :math:`M_l` and
+:math:`M_l + C_l`, up to the factor :math:`4\pi\tilde\varphi(q)\, i^l\,
+Y^*_{lm}(\hat p)`, whose :math:`l` dependence drops out of the observable
+(next paragraph).
+
+*Orbital projections and the observable.* A plane-wave source has only
+:math:`m = 0` along :math:`\hat p`; a distorted one does not, since it
+depends on the directions of both :math:`\mathbf k_{aA}` and
+:math:`\mathbf k_{sF}`. The angle-integrated HOES observable sums over the
+exit direction and all spin projections, and
+:math:`\sum_{M m_s}\langle s\,m_s\,l\,m|J\,M\rangle
+\langle s\,m_s\,l'\,m'|J\,M\rangle = \delta_{ll'}\delta_{mm'}(2J+1)/(2l+1)`
+makes it incoherent in :math:`l` *and* :math:`m`. The vertex squared of the
+first section is therefore replaced by
+
+.. math::
+
+   |M_l|^2 \;\to\; \frac{4\pi}{2l+1}\sum_{m=-l}^{l}
+   \Bigl|\frac{V_{lm}(B)}{4\pi\tilde\varphi(q)}\Bigr|^2 ,
+
+which does not depend on a quantization axis and equals :math:`|M_l(p)|^2`
+for plane waves, since :math:`\sum_m |Y_{lm}(\hat p)|^2 = (2l+1)/4\pi`.
+:math:`V_{lm}` is linear in :math:`B`: with :math:`s_m = S_{lm}(a)/4\pi
+\tilde\varphi` and :math:`d_m = a S'_{lm}(a)/4\pi\tilde\varphi`,
+
+.. math::
+
+   \frac{4\pi}{2l+1}\sum_m |c_1 s_m + c_2 d_m|^2 = c^\dagger G\, c, \qquad
+   G = \frac{4\pi}{2l+1}\begin{pmatrix} \sum|s_m|^2 & \sum s_m^* d_m \\
+                                   \sum d_m^* s_m & \sum |d_m|^2\end{pmatrix},
+
+:math:`c = (B - 1, -1)`. With a level-dependent :math:`B` (``perlevel``) the
+level sum sits inside the modulus; writing :math:`G = L^\dagger L`
+(Cholesky, pivoted on the larger diagonal) the amplitude splits into two
+components :math:`M^{(k)}(B) = L_{k1}(B - 1) - L_{k2}`, each summed over the
+levels coherently and squared, and the two are added: the vertex of an
+entrance channel becomes two incoherent buckets. For plane waves :math:`G`
+has rank one, the second component vanishes and the first is :math:`M_l`
+up to a phase. At the ``qf`` direction (below) only :math:`m = 0` enters and
+:math:`G` has rank one with distortion too.
+
+*Finite range in* :math:`s`-:math:`x`. The source keeps the full
+:math:`\mathbf r_{sx}` dependence, with the bound state of the distortion
+factor (``boundState=whittaker|yukawa[:rmin]``: the Whittaker or Yukawa tail,
+:math:`l_{sx} = 0`). A zero-range :math:`\varphi` would be a poor
+approximation here: in the prior form :math:`\varphi` itself enters, not
+:math:`V_{sx}\varphi`, and for a deuteron (:math:`1/\kappa = 4.3` fm) it
+spreads :math:`\mathbf r_{aA}` by :math:`\beta/\kappa \approx 2` fm and
+:math:`\mathbf r_{sF}` by 4 fm around a surface point at 4-6 fm, which is
+where the distortions act. The plane-wave limit holds for any
+:math:`\varphi`, and with finite range the source at the centre is
+:math:`S(\mathbf 0) = M(E)` of the distortion factor exactly, which ties the
+two together.
+
+*Normalization, and the relation to* :math:`R(E)`. The data are divided by
+:math:`|\varphi(p_s)|^2` at the event's momentum, so the vertex is divided by
+:math:`4\pi\tilde\varphi(q)` of its own kinematics (the ``dwpw`` convention
+of :math:`R`); without distortion it is the plane-wave vertex at
+:math:`p(E)`. The distortion factor is the same source at the centre of
+:math:`F`: :math:`R_\mathrm{dwpw}(E) \propto |S(\mathbf 0)/S_\mathrm{PW}(\mathbf
+0)|^2`. If the distortion were constant across the surface,
+:math:`S(\mathbf r) = [S(\mathbf 0)/\tilde\varphi]\, S_\mathrm{PW}(\mathbf r)`
+for :math:`r \le a`, the DW vertex would be :math:`R^{1/2}` times the
+plane-wave one for every :math:`l`, and the model would be :math:`R(E)` times
+the plane-wave model. That factorization is the step of 2020 eqs. 35-39,
+where the off-shell :math:`\mathbf p_{xA}` of the distorted waves' momentum
+distribution is replaced by :math:`\mathbf k_{xA} = \mathbf k_{aA} -
+\alpha\mathbf k_{sF}` and the surface term becomes the zero-range amplitude
+times the plane-wave off-shell factor :math:`W_l`: :math:`R(E)` is the
+:math:`r_{xA} \to 0`, :math:`l`-independent limit of the DW vertex.
+``vertexModel=dw`` evaluates eq. 32 without that replacement, and the
+distortion of the source across the surface differs between partial waves,
+most visibly through the local momentum of the Trojan horse in the
+:math:`a + A` potential. The two carry the same overall energy dependence
+(12C+12C below), so they are never applied together: with
+``vertexModel=dw`` the experiment's distortion settings build the vertex
+and :math:`R(E)` is not applied; ``distortionRatio`` and ``distortionRef``,
+which only concern :math:`R`, are refused.
+
+*The external term is not computed.* Outside :math:`a` the DW operator is the
+three-body remnant :math:`V^C_{xA} + U_{sA} - U_{aA}`. For point charges
+(2020 eq. 26) it is :math:`e^2 Z_A (Z_x/r_{xA} + Z_s/r_{sA} - Z_a/r_{aA})`,
+whose monopole cancels (:math:`Z_x + Z_s = Z_a`): the :math:`x`-:math:`A`
+Coulomb force that :math:`C_l` describes in the plane-wave limit is mostly
+already in the :math:`a + A` Coulomb wave, and what remains falls off like a
+dipole, :math:`1/r^2`. Its nuclear part needs the :math:`s`-:math:`A`
+optical potential, which is not an input here, and the source would be
+needed on :math:`a \le r < \infty`, where the number of partial waves grows
+with :math:`r`. The DW vertex is therefore the surface term alone: the
+counterpart of ``coulombIntegral=0`` (the default, and the setting of every
+example), to which it reduces without distortion. ``coulombIntegral=1``
+together with ``vertexModel=dw`` is refused. 2011 and 2020 describe
+:math:`M^\mathrm{prior}_\mathrm{ext}` as small and neglect it "in some cases
+with a reasonable choice of the channel radius".
+
+*Kinematics of a node.* Without a ``ps`` window the vertex is taken at the
+spectator direction of ``spectatorAngle`` (default ``qf``,
+:math:`\hat k_{sF} = \hat k_{aA}`), as :math:`R(E)` is; :math:`q = |\mathbf
+k_{sF} - \beta\mathbf k_{aA}|` is then small but not zero, and the vertex
+without distortion is the plane-wave one with ``spectatorEnergy``
+:math:`= q^2/2\mu_{sx}` at that energy. With a ``ps`` window the node
+:math:`p_k` *is* :math:`q`: the angle between :math:`\mathbf k_{sF}` and
+:math:`\mathbf k_{aA}` follows from
+:math:`\cos\theta = (k_{sF}^2 + \beta^2 k_{aA}^2 - q^2)/(2\beta k_{sF}
+k_{aA})`, and only :math:`|k_{sF} - \beta k_{aA}| \le q \le k_{sF} + \beta
+k_{aA}` can be reached at a given energy. At every energy the window is
+intersected with that range and the Gauss-Legendre nodes and weights (the
+same :math:`w(p)`) are put on the intersection, as a simulation of the
+accepted events would; without distortion and with the window inside the
+reachable range this is the plane-wave window. ``spectatorAngle`` together
+with a window is refused (the window sets the direction), and a data point
+whose window is out of reach is refused at startup.
+
+*Numerics* (``src/ThmDwVertex.cpp``). With the distorted waves in partial
+waves (the conventions of the previous section,
+:math:`\chi^{(+)}_{\mathbf k}(\mathbf R) = (4\pi/kR)\sum_L i^L e^{i\sigma_L}
+u_L(kR) \sum_M Y^*_{LM}(\hat k) Y_{LM}(\hat R)` and
+:math:`\chi^{(-)*}_{\mathbf k} = \chi^{(+)}_{-\mathbf k}`), rotational
+invariance reduces the six-dimensional surface integral to reduced
+amplitudes that do not depend on the directions of :math:`\mathbf k_{aA}`
+and :math:`\mathbf k_{sF}`:
+
+.. math::
+
+   S_{lm}(r) = \frac{(4\pi)^2}{k_{sF} k_{aA}} \sum_{L_s L_a} (-i)^{L_s} i^{L_a}
+   e^{i(\sigma^{sF}_{L_s} + \sigma^{aA}_{L_a})}\, h^l_{L_s L_a}(r)\,
+   \bigl\{Y_{L_s}(\hat k_{sF}) \otimes Y_{L_a}(\hat k_{aA})\bigr\}^*_{lm},
+
+.. math::
+
+   h^l_{L_s L_a}(r) = \sqrt{\frac{4\pi}{2l+1}}\; 2\pi \int u^2 du\,
+   \varphi(u) \int_{-1}^{1} d\cos\theta_u\; f_{L_s}(R_s)\, f_{L_a}(R_a)\,
+   K^l_{L_s L_a}(\theta_s, \theta_a),
+
+with :math:`f_L(R) = u_L(kR)/R`, :math:`\mathbf r` along :math:`z` and
+:math:`\mathbf u` in the :math:`xz` plane, :math:`\mathbf R_s = \alpha r\hat
+z + \mathbf u` and :math:`\mathbf R_a = r\hat z + \beta\mathbf u` at polar
+angles :math:`\theta_s`, :math:`\theta_a` (the azimuth of :math:`\mathbf u`
+integrates to :math:`2\pi`; only :math:`L_s + L_a + l` even contributes).
+:math:`K = \sum_M \langle L_s\,M\,L_a\,{-M}|l\,0\rangle\,\bar Y_{L_s
+M}(\theta_s)\, \bar Y_{L_a, -M}(\theta_a)`, :math:`\bar Y_{LM}(\theta) =
+Y_{LM}(\theta, 0)`, is the zero component of a bipolar harmonic; rotating
+:math:`\hat R_s` onto :math:`z` leaves
+
+.. math::
+
+   K^l_{L_s L_a} = \sqrt{\frac{2L_s+1}{2l+1}} \sum_{|\nu| \le l} (-1)^\nu
+   \langle L_s\,0\,L_a\,\nu|l\,\nu\rangle\, \bar Y_{l\nu}(\theta_s)\,
+   \bar Y_{L_a\nu}(\theta_a - \theta_s),
+
+:math:`O(l)` terms instead of :math:`O(L)`. :math:`S'_{lm}(a)` is the same
+integral with the :math:`r` derivative of the integrand at fixed
+:math:`\mathbf u`. In the frame :math:`\hat k_{aA} = \hat z` the bipolar
+harmonic is :math:`\langle L_s\,m\,L_a\,0|l\,m\rangle\, \bar
+Y_{L_s m}(\theta_{sa}) \sqrt{(2L_a+1)/4\pi}`, so every node of a window (an
+angle :math:`\theta_{sa}` between :math:`\mathbf k_{sF}` and
+:math:`\mathbf k_{aA}`) costs only this sum. The geometry and
+:math:`f_{L_a}` do not depend on :math:`E`; per energy only
+:math:`f_{L_s}` changes, and batches of energies share one pass over the
+quadrature points. The waves are the radial waves of the distortion factor
+(Numerov from the origin, matched to COUL; a plane wave is the
+Riccati-Bessel function), tabulated at 0.02 fm (less where a local wave
+number exceeds 5 fm\ :sup:`-1`) and read by six-point Lagrange
+interpolation (value and derivative). The :math:`u` integral runs from
+:math:`r_\mathrm{min}` to :math:`r_\mathrm{min} + 26/\kappa` (the Yukawa tail
+beyond is below :math:`10^{-10}`) in 16-point Gauss-Legendre panels of at
+most 4 radians of :math:`(k_{sF} + \beta k_{aA})u` and 5 fm;
+:math:`\cos\theta_u` on :math:`1.2\,L_\mathrm{max} + 20` nodes;
+:math:`L \le kR_\mathrm{max} + 14` in each channel, :math:`R_\mathrm{max} =
+a + \beta u_\mathrm{max}` and :math:`\alpha a + u_\mathrm{max}`. The
+Clebsch-Gordan coefficients come from the Racah sum in long double
+(checked against GSL, and to :math:`10^{-12}` in orthonormality at
+:math:`L = 60`). :math:`G` is tabulated per :math:`l` and node at 20 keV
+steps from 0.3 MeV below the lowest point to 0.3 MeV above the highest (short
+of the spectator threshold) and interpolated by cubic Lagrange (the node
+weights of a window likewise, renormalized); points beyond take the end value
+with one ``WARNING``. Cost at startup, two threads: 6 s for 19F + d
+(:math:`\kappa = 0.23` fm\ :sup:`-1`, :math:`l \le 4`, 58 energies,
+:math:`L \le 61`), 4 s for 12C(14N,d) (:math:`l \le 8`, 125 energies); per
+evaluation the tables cost nothing measurable (a ``ps`` window multiplies the
+vertex and exit sums by its nodes as with plane waves: 19F full window, 0.74
+s per evaluation without and 4.2 s with 16 nodes). Memory: the 19F session
+peaks at about 400 MB with or without the window.
+
+*Syntax, output, pyazr.* ``vertexModel=pw|dw`` on the experiment line.
+``dw`` needs ``distortion=coulomb`` or ``optical`` (and so the kinematics);
+refused, with ``ERROR: <thm> experiment[...]``: any other ``vertexModel``,
+``dw`` without a computed distortion, with ``distortionRef``,
+``distortionRatio``, ``theta`` (the fixed-angle sum carries only
+:math:`m_l = 0` about :math:`\hat p_{xA}`), ``spectatorAngle`` with a
+``ps`` window, with ``coulombIntegral=1``, ``entranceL=coherent`` or a
+``spectatorEnergy`` for the entrance pair, and a window out of reach at a
+data point. The startup summary gives :math:`\alpha`, :math:`\beta`,
+:math:`k_{aA}`, :math:`\eta_{aA}`, :math:`\kappa`, the entrance :math:`l`,
+the partial waves, the quadrature, the grid and the time;
+``thm_experiments.out`` a ``vertex:`` line and ``dw_vertex_point`` rows
+(:math:`E`, :math:`q`, :math:`pa`, :math:`l`, :math:`G_{11}`,
+:math:`G_{22}`, :math:`G_{12}`) at the lowest, middle and highest point.
+``AzrModel.set_thm_experiment(..., distortion="optical",
+opticalAA=[...], vertexModel="dw")`` checks the same rules (also
+``set_thm_option`` against an existing dw experiment);
+``session.thm_vertex(name, energies)`` returns ``model = "dw"``, ``M2`` (the
+DW vertex over the nodes the engine uses), ``M2_qf`` (at the
+``spectatorAngle`` direction), ``M2_pw`` (the plane-wave vertex at the same
+:math:`p`), the nodes per energy (``dw_q``, ``dw_weights``) and
+``dw_q_delta``, ``dw_p_delta``. The GUI keeps the key as written; its
+angular-distribution diagnostic says it is not available with ``dw``.
+
+*Checks.* ``tests/reference/thm_dw_vertex_test`` (ctest ``thm_dw_vertex``):
+(b) plane waves in both channels give the plane-wave Gram matrix at
+:math:`p = |\mathbf k_{aA} - \alpha\mathbf k_{sF}|` to :math:`10^{-9}` and
+the ratios :math:`|M_l|^2/|M_0|^2` for real and complex :math:`B` to
+:math:`10^{-8}`, for 19F(d,n) at the quasi-free direction (:math:`l \le 4`),
+12C(14N,d) at 40° in the c.m. (:math:`l \le 8`, every :math:`m` enters) and
+a Hulthén window whose nodes, weights and :math:`q` are checked on their own;
+(c) point Coulomb in :math:`d` + 19F: :math:`G` for :math:`l = 0` (324 keV)
+and :math:`l = 1` (213 keV) at 5.136 fm against
+``thm_dw_vertex_reference.py``, a direct three-dimensional quadrature of
+:math:`S(\mathbf r)` with the closed-form Coulomb wave
+:math:`e^{-\pi\eta/2}\Gamma(1+i\eta)e^{ikz}\,{}_1F_1(-i\eta, 1, ik(R-z))`
+(mpmath), projected on :math:`Y_{l0}` -- no partial waves, Numerov or tables
+shared -- to :math:`2\times 10^{-7}` of the largest entry (the reference is
+converged to :math:`3\times 10^{-8}`); the Cholesky components reproduce
+:math:`c^\dagger G c`; interpolation between grid nodes to :math:`10^{-6}`.
+``tests/thm_dw_vertex/check.sh`` (CLI, ``tests/18O_p_a_thm``, 2H(18O,α15N)n
+at 54 MeV): ``vertexModel=pw`` byte-identical to no key, with and without
+``distortion=coulomb``; plane waves: the ``dw_vertex_point`` rows are
+:math:`j_0^2`, :math:`(\rho j_0')^2`, :math:`j_0\rho j_0'` to
+:math:`10^{-9}` and the model is the plane-wave one within 5 % (3.5 % found; the
+kinematic :math:`p(E)` against :math:`q = 0`, largest near the node of
+:math:`M_0`); Coulomb: no :math:`R(E)`, a window changes the model; eleven
+refusals. ``tests/pyazr/thm_dw_vertex_test.py``: ``AzrModel`` and its
+refusals, CLI == session, ``thm_vertex`` (plane waves: ``M2_qf`` ==
+``M2_pw`` to :math:`10^{-8}`), and without folding the model ratio dw/pw
+equals the vertex ratio of ``thm_vertex`` at every point (:math:`10^{-8}`),
+also with a window.
+
+*Size: the radius dependence of the* :math:`l` *ratios*. 19F(p,αγ)16O,
+``examples/f19_pag_thm`` (19F + d at 55 MeV, neutron spectator,
+``vertex=constant``: :math:`B` is :math:`S_l` at the lowest level of the
+:math:`J^\pi` group, the −448 keV 1\ :sup:`+` for :math:`l = 0` and the 213
+keV 2\ :sup:`−` for :math:`l = 1`), :math:`a_p` of the p + 19F pairs varied,
+nothing refitted. Optical potentials: :math:`d` + 19F with the An & Cai (PRC
+73 (2006) 054605) global parameters at :math:`E_d` = 5.8 MeV (below their
+range), n + 20Ne Koning-Delaroche-like at 2.6 MeV (``opticalAA=92.57,3.066,
+0.753,1.467,3.581,0.588,10.65,3.711,0.696,3.477``, ``opticalSF=53.4,3.13,
+0.675,0.39,3.13,0.675,6.86,3.53,0.541,0``); window: Hulthén 0-50 MeV/c (the
+:math:`p_s` cut of Su et al., PRL 135 (2025) 182701).
+
+======================== ====================== ====================== ======================
+vertex                   :math:`|M_1(213)/`     :math:`|M_1(828)/`     :math:`|M_0(11)/`
+                         :math:`M_0(324)|^2`    :math:`M_0(324)|^2`    :math:`M_0(324)|^2`
+                         (4.1 / 5.1 / 6.1 fm)   (4.1 / 5.1 / 6.1 fm)   (4.1 / 5.1 / 6.1 fm)
+======================== ====================== ====================== ======================
+pw, :math:`q = 0`        1.10 / 3.00 / 19.7     1.16 / 2.83 / 15.7     1.24 / 1.55 / 3.17
+pw, window               2.94 / 11.9 / 3.78     2.86 / 10.1 / 2.52     1.33 / 1.64 / 0.74
+dw, plane waves (qf)     1.11 / 3.01 / 19.9     1.16 / 2.87 / 16.4     1.21 / 1.47 / 2.81
+dw, Coulomb (qf)         0.171 / 0.235 / 0.341  0.242 / 0.319 / 0.433  0.99 / 1.04 / 1.10
+dw, Coulomb, window      0.42 / 0.63 / 1.04     0.50 / 0.71 / 1.10     0.98 / 1.03 / 1.11
+dw, optical :math:`aA`   0.44 / 0.56 / 0.70     0.51 / 0.62 / 0.74     1.06 / 1.09 / 1.14
+dw, optical (qf)         0.33 / 0.41 / 0.52     0.40 / 0.48 / 0.58     1.04 / 1.08 / 1.13
+dw, optical, window      1.29 / 1.24 / 1.32     1.28 / 1.19 / 1.21     1.08 / 1.08 / 1.10
+======================== ====================== ====================== ======================
+
+The plane-wave ratios change by factors 18, 13 and 2.6 over the three radii;
+with the distortion they change by 1.6-2.5 (quasi-free) and by 1.01-1.08
+with the optical potentials and the window. The DW source is the Trojan horse
+decelerated by the 19F Coulomb field where it breaks up: at 5-6 fm the
+deuteron has about 3 of its 5.3 MeV, and :math:`p` (a difference of
+:math:`k_{aA}` and :math:`\alpha k_{sF}`) roughly halves, which moves the
+:math:`l = 1` to :math:`l = 0` ratio down by an order of magnitude; the
+nuclear attraction at the surface gives part of the momentum back. The
+:math:`l` ratios themselves are therefore model dependent at the level of the
+optical potentials and of the window (a factor 1.5-2 between Coulomb and
+optical waves at the quasi-free direction, 1.3-3 with the window, and 3
+between the quasi-free direction and the window with optical waves), but
+they hardly depend on the channel radius any more. The PWIA stripping conversion of Su et al.
+corresponds to :math:`|M_1(213)/M_0(324)|^2 \approx 2.1` and
+:math:`|M_1(828)/M_0(324)|^2 \approx 0.66` in these units (the plane-wave
+vertex at 4.7 fm, and a conversion factor 4.3 times ours at 5.1 fm).
+
+*Size: 12C+12C against* :math:`R(E)`. ``examples/c12c12_tumino2018``,
+12C(14N,α/p)d at 30 MeV, point Coulomb in both channels, quasi-free: the
+ratio :math:`F_l(E) = |M_l^\mathrm{dw}|^2/|M_l^\mathrm{pw}(p)|^2`,
+normalized at 1.75 MeV, against the distortion factor :math:`R(E)` (dwpw,
+same :math:`E_\mathrm{ref}`) over 0.85-2.65 MeV. The sum over the entrance
+channels, :math:`\sum|M^\mathrm{dw}|^2/\sum|M^\mathrm{pw}|^2`, follows
+:math:`R` to 0.06 dex rms (0.10 dex at most) while both fall by a factor 330:
+the energy dependence of the vertex is the :math:`s + F` Coulomb barrier of
+the deuteron, common to all :math:`l`, and :math:`R(E)` is indeed its
+:math:`l`-summed limit. The single partial waves deviate from :math:`R` by
+0.03 (:math:`l = 8`) to 0.43 dex rms (:math:`l = 2`, 0.15 for :math:`l = 0`,
+0.32 for :math:`l = 6`); where the plane-wave vertex has a node (:math:`l =
+4` at 1.95 MeV) the DW vertex has none, and the ratio is not defined there.
+
+*Size: refits of 19F(p,αγ)16O.* The joint fit of ``examples/f19_pag_thm``
+(THM of Su et al., JUNA and Spyrou direct data, and penalty rows for 17
+direct :math:`\omega\gamma` and :math:`\Gamma`, all :math:`a_p` = 5.136 fm,
+the THM energy shifted by −9.17 keV lab) refitted with each vertex, in the
+adopted THM window (:math:`E \le 0.45` MeV, 28 points) and the full one (53
+points); optical potentials and window as above. Strengths in eV; every fit
+stopped at its evaluation limit (``least_squares``, 20-60 Jacobians, from
+the plane-wave fit or a previous stage), so differences of a few units of
+:math:`\chi^2` are not significant.
+
+.. list-table::
+   :header-rows: 1
+
+   * - fit
+     - THM χ²/N
+     - JUNA, Spyrou
+     - penalty (17)
+     - ωγ(11) [1e-29]
+     - ωγ(213)
+     - ωγ(226)
+     - ωγ(828)
+   * - adopted window, pw
+     - 63.8 / 28
+     - 12.8, 5.2
+     - 7.5
+     - 3.68
+     - 0.0116
+     - 9.3e-5
+     - 775
+   * - adopted, pw + window
+     - 57.8 / 28
+     - 19.6, 3.3
+     - 54.9
+     - 3.65
+     - 0.0038
+     - 4e-9
+     - 775
+   * - adopted, dw Coulomb
+     - 166.4 / 28
+     - 14.6, 6.7
+     - 102.0
+     - 4.32
+     - 0.0135
+     - 4.9e-3
+     - 776
+   * - adopted, dw optical
+     - 114.8 / 28
+     - 14.2, 6.6
+     - 60.7
+     - 4.53
+     - 0.0136
+     - 4.0e-3
+     - 776
+   * - adopted, dw optical + window
+     - 76.7 / 28
+     - 13.2, 5.8
+     - 5.8
+     - 5.39
+     - 0.0128
+     - 2.0e-4
+     - 775
+   * - full window, pw
+     - 204.0 / 53
+     - 13.8, 3.6
+     - 342.3
+     - 5.04
+     - 0.0104
+     - 2.3e-4
+     - 184
+   * - full, pw + window
+     - 278.5 / 53
+     - 29.3, 3.6
+     - 542.6
+     - 5.89
+     - 0.0036
+     - 1.4e-5
+     - 56
+   * - full, dw Coulomb
+     - 242.1 / 53
+     - 19.8, 7.0
+     - 122.4
+     - 4.63
+     - 0.0130
+     - 5.0e-3
+     - 727
+   * - full, dw optical
+     - 199.4 / 53
+     - 18.0, 6.8
+     - 83.0
+     - 5.06
+     - 0.0130
+     - 4.3e-3
+     - 667
+   * - full, dw optical + window
+     - 223.3 / 53
+     - 12.9, 5.0
+     - 98.7
+     - 7.40
+     - 0.0118
+     - 3.0e-4
+     - 493
+   * - direct (penalty rows)
+     - 
+     - 
+     - 
+     - (7.5 ± 3.0) NACRE
+     - 0.0126(13)
+     - 0.0011(4)
+     - 775(35)
+
+In the full window the plane-wave vertex cannot hold the 828 keV (l = 1)
+strength at its direct value: the fit trades 184 eV (56 eV with the window)
+against the THM peak shape. With the DW vertex the same fit keeps 667-727 eV
+at the quasi-free direction (493 eV with the window), the penalty rows fall
+from 342 to 83-122 and the total :math:`\chi^2` from 566 to 309 (optical);
+the THM :math:`\chi^2` itself does not improve (199-242 against 204), the
+790 keV (l = 2) strength stays at 0-10 eV against 17(5), and with the window
+the 564 keV strength drops to 29 eV against 48(7). So the DW vertex removes
+most of the l = 1 conflict but the full window still does not fit together
+with the direct strengths; the adopted window stays. Inside it the DW vertex
+at the quasi-free direction is worse than the plane-wave one (THM
+:math:`\chi^2` 115-166 against 64), mainly because it lifts the 225 keV
+(l = 3) strength to 4-5 × 10\ :sup:`-3` eV against 1.1(4) × 10\ :sup:`-3`;
+with the window it is close (77 against 64, penalty 6 against 8).
+:math:`\omega\gamma(11)` moves from 3.7 to 4.3-4.5 × 10\ :sup:`-29` eV
+(quasi-free DW, at the upper end of the plane-wave radius range 2.3-4.4)
+and to 5.4 with the window; the window with plane waves moves the 213 keV
+strength to a third of its direct value (−6.8σ).
+
+*Scope and limits.* The surface term of the prior-form DWBA with the
+internal post amplitude neglected (as for the plane-wave vertex) and without
+the external prior term (``coulombIntegral=1`` refused); the angle-integrated
+observable only (no ``theta``); the :math:`s`-:math:`x` bound state in
+:math:`l_{sx} = 0` and in its asymptotic form; one spectator direction or the
+isotropic ``ps`` window rather than the experimental acceptance; no
+spin-orbit term; the optical potentials are an input whose choice now
+carries the :math:`l` dependence. With a cutoff :math:`r_\mathrm{min} > 0`
+the normalization :math:`\tilde\varphi(q)` can pass through zero at large
+:math:`q` (as :math:`M_\mathrm{PW}` of the distortion factor can), where the
+normalized vertex is singular; an exact zero on the grid is refused. ``vertexModel=pw`` against ``dw`` (with
+Coulomb and with optical waves) belongs in the model-dependence protocol of
+any analysis that converts peak areas of different :math:`l` into strengths.
 
 Fixed-angle observable
 ----------------------
