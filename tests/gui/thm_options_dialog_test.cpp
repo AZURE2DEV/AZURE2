@@ -128,6 +128,41 @@ int main(int argc, char** argv) {
     ok("defaults are default", ThmSettings().isDefault() && ThmSettings().keyValues().isEmpty());
   }
 
+  // 1b. Coulomb consistency (CheckThmCoulombConsistency): coulombIntegral=1
+  // with a DW vertex or with R(E) on a distorted a + A wave is refused, as
+  // the engine does; a ps window with distortionRatio=dw too.
+  {
+    const QString kin = "experiment[T] segments=1 beam=14N target=12C spectator=d Ebeam=30 ";
+    ThmSettings r;
+    QString err;
+    ok("coulombIntegral=1 with distortion=coulomb refused",
+       !ThmSettings::parse(QStringList() << "coulombIntegral=1" << kin + "distortion=coulomb", r, &err) &&
+           err.contains("counted twice"),
+       err);
+    ok("the same, experiment line first",
+       !ThmSettings::parse(QStringList() << kin + "distortion=optical" << "coulombIntegral=1", r, &err) &&
+           err.contains("counted twice"),
+       err);
+    ok("coulombIntegral=1 with vertexModel=dw refused",
+       !ThmSettings::parse(QStringList() << "coulombIntegral=1" << kin + "distortion=coulomb vertexModel=dw", r,
+                           &err) &&
+           err.contains("cannot be combined with coulombIntegral=1"),
+       err);
+    ok("coulombIntegral=1 with opticalAA=plane accepted",
+       ThmSettings::parse(QStringList() << "coulombIntegral=1" << kin + "distortion=optical opticalAA=plane", r,
+                          &err),
+       err);
+    ok("distortion=coulomb alone accepted", ThmSettings::parse(QStringList() << kin + "distortion=coulomb", r, &err),
+       err);
+    ok("checkExperimentLines takes coulombIntegral",
+       ThmSettings::checkExperimentLines(QStringList() << kin + "distortion=coulomb").isEmpty() &&
+           ThmSettings::checkExperimentLines(QStringList() << kin + "distortion=coulomb", true).contains("twice"));
+    ok("ps window with distortionRatio=dw refused",
+       ThmSettings::checkExperimentLines(QStringList()
+                                         << kin + "ps=hulthen:0-40 distortion=coulomb distortionRatio=dw")
+           .contains("distortionRatio=dwpw"));
+  }
+
   // 2. compose().
   {
     const QStringList old = QStringList() << "# my notes" << "kinematics=kf3body   # data / KF3"

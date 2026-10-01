@@ -971,6 +971,23 @@ int main(int argc, char** argv) {
     }
   }
 
+  {
+    // coulombIntegral=1 (Model page) with R(E) on a distorted a + A wave
+    // (Experiments page) is refused, as the engine refuses it.
+    const QString rPath = work.filePath("coulomb_consistency.azr");
+    spit(rPath, plain + "<thm>\nexperiment[E1] segments=1 beam=3He target=7Li spectator=d Ebeam=20 "
+                        "distortion=coulomb\n</thm>\n");
+    w.open(rPath);
+    ThmSettings rs;
+    w.thmSettings(rs);
+    ThmWorkspace rws(&w, rs);
+    ok("R(E) without coulombIntegral: accepted", rws.validate().isEmpty(), rws.validate());
+    rws.modelPage->coulombIntegralCheck->setChecked(true);
+    ok("R(E) with coulombIntegral=1: refused", rws.validate().contains("would be counted twice"), rws.validate());
+    rws.modelPage->coulombIntegralCheck->setChecked(false);
+    ok("and accepted again", rws.validate().isEmpty(), rws.validate());
+  }
+
 #ifdef AZURE2_THM_DIAGNOSTICS
   // 9. Diagnostics page.
   {

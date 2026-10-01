@@ -10,7 +10,9 @@ Checked on tests/18O_p_a_thm with a made-up charged spectator,
 
   1. AzrModel: set_thm_experiment(..., distortion=..., opticalAA=...) round
      trip and canonical line; values AZURE2 refuses raise ValueError the same
-     way.  Pure Python: runs without numpy.
+     way; the Coulomb consistency rules (coulombIntegral=1 with R(E) on a
+     distorted a + A wave, a ps window with distortionRatio=dw) refused as
+     AZURE2 refuses them.  Pure Python: runs without numpy.
   2. The engine against the CLI: calculate_chi2_rwa (rel 1e-9) and the output
      files written by write_output_files (thm_experiments.out included).
   3. thm_distortion: |M|^2 and M_PW at E = 0.6 MeV against the mpmath values
@@ -132,6 +134,42 @@ with tempfile.TemporaryDirectory() as tmp:
             check(f"file refused: {text!r}", False, "no ValueError")
         except ValueError as err:
             check(f"file refused like AZURE2: {frag}", frag in str(err), str(err))
+
+    # Coulomb consistency (CheckThmCoulombConsistency, CheckThmExperiments):
+    # C_l with R(E) on a distorted a + A wave counts the x-A Coulomb twice; a
+    # ps window with distortionRatio=dw counts |phi|^2 twice.
+    print("1b. AzrModel: the Coulomb consistency rules")
+    kin = dict(beam="18O", target="3He", spectator="d", Ebeam=115)
+    mc = AzrModel.from_file(src)
+    mc.set_thm_option("coulombIntegral", True)
+    for kwargs in (dict(distortion="coulomb"), dict(distortion="optical", opticalSF="plane"),
+                   dict(distortion="optical", opticalAA=ws)):
+        try:
+            mc.set_thm_experiment("C", [1, 2], **kin, **kwargs)
+            check(f"coulombIntegral=1 refused with {kwargs}", False, "no ValueError")
+        except ValueError as err:
+            check(f"coulombIntegral=1 refused with {kwargs}", "counted twice" in str(err), str(err))
+    mc.set_thm_experiment("C", [1, 2], **kin, distortion="optical", opticalAA="plane")
+    check("coulombIntegral=1 with opticalAA=plane accepted",
+          mc.thm_experiments()["C"]["opticalAA"] == "plane")
+    mr = AzrModel.from_file(src)
+    mr.set_thm_experiment("C", [1, 2], **kin, distortion="coulomb")
+    before = mr.thm_options()
+    try:
+        mr.set_thm_option("coulombIntegral", True)
+        check("set_thm_option(coulombIntegral) refused with R(E)", False, "no ValueError")
+    except ValueError as err:
+        check("set_thm_option(coulombIntegral) refused with R(E), model unchanged",
+              "counted twice" in str(err) and mr.thm_options() == before, str(err))
+    try:
+        AzrModel.from_file(src).set_thm_experiment("C", [1, 2], **kin, ps="hulthen:0-30",
+                                                   distortion="coulomb", distortionRatio="dw")
+        check("ps window with distortionRatio=dw refused", False, "no ValueError")
+    except ValueError as err:
+        check("ps window with distortionRatio=dw refused", "distortionRatio=dwpw" in str(err), str(err))
+    AzrModel.from_file(src).set_thm_experiment("C", [1, 2], **kin, ps="hulthen:0-30",
+                                               distortion="coulomb", distortionRatio="dwpw")
+    check("ps window with distortionRatio=dwpw accepted", True)
 
     # -- the engine -----------------------------------------------------------
     try:
