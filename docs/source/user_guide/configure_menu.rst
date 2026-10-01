@@ -213,7 +213,8 @@ momentum window* and *Distortion*:
   :math:`\zeta = 0`, i.e. no change. Details:
   :doc:`../theory/thm_implementation`, "Coulomb line shape".
 
-- **Spectator momentum window** (``ps``, ``psNodes``) -- its own section,
+- **Spectator acceptance** (``ps``, ``psNodes``; ``spectatorAngles``,
+  ``spectatorAngleNodes``) -- its own section,
   offered once the four fields of the three-body reaction are filled. The off-shell x-A
   momentum of the entrance vertex depends on the spectator momentum
   :math:`p_s` (:math:`p_{xA}^2/2\mu_{xA} = E + B + p_s^2/2\mu_{sx}`), and THM
@@ -243,6 +244,25 @@ momentum window* and *Distortion*:
   window replaces it; AZURE2 refuses the pair, and so does the page. Unticking
   the three-body reaction drops the window with it. Details:
   :doc:`../theory/thm_implementation`, "Spectator-momentum window".
+
+  With a Coulomb or optical **Distortion** (below) the section also shows
+  **Directions**: the spectator directions over which the distortion factor
+  R(E), or the distorted-wave vertex, is averaged instead of being taken at
+  the one **Angle** of the Distortion section. *one* (the default, nothing
+  written), *lab window* or *c.m. window* -- the polar angle of the spectator
+  to the beam, **θ_min** and **θ_max** in degrees -- or *lab table* /
+  *c.m. table*, a file of two columns, the angle and the acceptance (its
+  range is the window; **...** stores it relative to the project directory);
+  **Nodes** is the number of Gauss-Legendre nodes in cos θ_cm per c.m.
+  interval (1-64, default 8; ``spectatorAngleNodes`` is written only when it
+  is not 8). The page writes ``spectatorAngles=7-30``,
+  ``spectatorAngles=cm:135-180`` or ``spectatorAngles=[cm:]table:<file>``;
+  a window drops ``spectatorAngle`` and switches the Distortion section's
+  **Angle** off (AZURE2 refuses both together), and going back to *one*, to no
+  computed distortion or to no reaction drops it. At fixed E the direction
+  fixes the spectator momentum, so a momentum window then only cuts it. The
+  **R(E)** row shows the window's average. Details:
+  :doc:`../theory/thm_implementation`, "Experimental acceptance".
 
 - **Distortion** (``distortion``, ``opticalAA``, ``opticalSF``,
   ``spectatorAngle``, ``distortionRef``, ``distortionRatio``,

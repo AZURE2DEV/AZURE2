@@ -20,7 +20,7 @@
  *      integrates to the brute-force sum of the ramp.
  *
  * Kinematics: 12C(14N,d) at 30 MeV (Trojan horse = beam; the deuteron is
- * slower in the c.m. than the c.m. below E_sF ~ 1.7 MeV) and the made-up
+ * slower in the c.m. than the c.m. above E = 2.2 MeV) and the made-up
  * 18O(3He,d) at 115 MeV (Trojan horse = target).
  *
  * Run:  tests/reference/thm_spectator_angles_test      (ctest: thm_spectator_angles)

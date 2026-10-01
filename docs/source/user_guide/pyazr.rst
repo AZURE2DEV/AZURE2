@@ -206,7 +206,12 @@ term of the prior-form DWBA built from those distorted waves (:math:`R(E)` is
 then not applied), and ``thm_vertex`` returns that vertex -- ``model`` is
 ``"dw"``, ``M2`` the DW vertex over the nodes the engine uses, ``M2_qf`` at
 the spectator direction and ``M2_pw`` the plane-wave vertex at the same
-kinematics). Every edit keeps the rest of the file
+kinematics); ``set_thm_experiment(..., spectatorAngles="cm:135-180")`` (or
+``(7, 30)`` for a lab window, or ``"table:<file>"``, with
+``spectatorAngleNodes``) averages :math:`R(E)` or the DW vertex over the
+accepted spectator directions, and ``thm_distortion`` / ``thm_vertex``
+return the window averages and, for the DW vertex, the directions
+(``angle_theta_cm``, ``angle_q``, ``angle_weights``). Every edit keeps the rest of the file
 byte for byte, including whether it ends with a newline.
 
 To snapshot a fit, prefer :meth:`~pyazr.azure2.azure2.save_fit`, which wraps
