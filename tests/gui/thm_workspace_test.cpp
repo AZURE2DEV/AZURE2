@@ -75,6 +75,7 @@
 #include "ThmChannelsPage.h"
 #include "ThmExperiment.h"
 #include "ThmExperimentsPage.h"
+#include "FittingTab.h"
 #include "ThmModelPage.h"
 #include "ThmNumberSpin.h"
 #include "ThmWorkspace.h"
@@ -2055,6 +2056,114 @@ int main(int argc, char** argv) {
       ws.render(&page);
       page.save(QDir(qEnvironmentVariable("THM_PNG_DIR")).filePath("experiments_theta.png"));
     }
+  }
+
+  // 14. The coherent background (cbackground=) on tests/7Li_p_a: the
+  // Experiments page's section and the Fitting tab's parameters.
+  {
+    const QString path = work.filePath("cbkg.azr");
+    auto cbOpen = [&](const QString& block) {
+      spit(path, plain + "<thm>\n" + block + "</thm>\n");
+      w.open(path);
+    };
+    const QString hand = "experiment[E1] segments=1 cbackground=2+:4=0.50,-0.25f   # non-QF\n";
+    cbOpen(hand);
+    ThmSettings s;
+    QString err;
+    ok("cbkg: block opens", w.thmSettings(s, &err), err);
+    {
+      ThmWorkspace ws(&w, s);
+      ThmExperimentsPage* p = ws.experimentsPage;
+      QTableWidget* t = p->coherentTable;
+      QComboBox* jpi = t->rowCount() ? qobject_cast<QComboBox*>(t->cellWidget(0, 0)) : nullptr;
+      QComboBox* ex = t->rowCount() ? qobject_cast<QComboBox*>(t->cellWidget(0, 1)) : nullptr;
+      ok("cbkg: shown as written", p->coherentBox->isChecked() && t->rowCount() == 1 && jpi && jpi->currentText() == "2+" &&
+                                       ex && ex->currentText() == "4" && t->item(0, 2)->text() == "all" &&
+                                       t->item(0, 4)->text() == "0.50" && t->item(0, 4)->checkState() == Qt::Unchecked &&
+                                       t->item(0, 5)->text() == "-0.25" && t->item(0, 5)->checkState() == Qt::Checked &&
+                                       !(t->item(0, 6)->flags() & Qt::ItemIsEditable) && ws.validate().isEmpty(),
+         ws.validate());
+      QStringList offered;
+      for(int k = 0; jpi && k < jpi->count(); k++) offered << jpi->itemText(k);
+      ok("cbkg: J^pi offered from the levels", offered.contains("2+") && offered.contains("1-"), offered.join(" "));
+      ws.accept();
+    }
+    w.saveProject();
+    ok("cbkg: untouched block verbatim", blockOf(slurp(path)) == hand, blockOf(slurp(path)));
+    // The Fitting tab lists the free parameters with the engine's names.
+    {
+      FittingTab* f = w.getFittingTab();
+      f->populateFromCurrentGUIState();
+      QStringList gui;
+      for(const FittingParameter& q : f->getFittingParameters())
+        if(q.category == "cbkg") gui << q.name;
+      int code = -1;
+      const QString out = engineRun(work.path(), "cbkg.azr", &code);
+      QStringList engine;
+      for(const QString& line : slurp(work.filePath("output/param.par")).split('\n')) {
+        const QStringList tok = line.split(' ', Qt::SkipEmptyParts);
+        if(!tok.isEmpty() && tok[0].startsWith("cbkg_") && !tok[0].endsWith("_im0")) engine << tok[0];
+      }
+      ok("cbkg: the Fitting tab's free parameters are the engine's (4 combinations, Re c0)",
+         code == 0 && gui.size() == 4 && gui == engine, gui.join(" ") + " | " + engine.join(" ") + out.right(300));
+      ok("cbkg: names", gui.contains("cbkg_E1_2+_4_1,1,0,2_re0") && gui.contains("cbkg_E1_2+_4_2,3,0,2_re0"),
+         gui.join(" "));
+      // A value from a .sav (or typed in the Fitting tab) goes into cbackground=.
+      QMap<QString, double> v;
+      v["cbkg_E1_2+_4_2,1,0,2_re0"] = 1.5;
+      ok("cbkg: a fitted value is written into the key", f->applyCoherentValues(v));
+      w.saveProject();
+      const QString b = blockOf(slurp(path));
+      ok("cbkg: one explicit term per combination, the value set, the others kept",
+         b == "experiment[E1] segments=1 cbackground=2+:4:1,1,0,2=0.5,-0.25f;2+:4:1,3,0,2=0.5,-0.25f;"
+              "2+:4:2,1,0,2=1.5,-0.25f;2+:4:2,3,0,2=0.5,-0.25f\n" &&
+             w.thmSettings(s, &err),
+         b + err);
+    }
+    cbOpen(hand);
+    w.thmSettings(s);
+    {
+      ThmWorkspace ws(&w, s);
+      ThmExperimentsPage* p = ws.experimentsPage;
+      p->coherentTable->item(0, 4)->setText("0.75");
+      ok("cbkg: edited value accepted", ws.validate().isEmpty(), ws.validate());
+      ws.accept();
+    }
+    w.saveProject();
+    ok("cbkg: edited value rewritten", blockOf(slurp(path)) == "experiment[E1] segments=1 cbackground=2+:4=0.75,-0.25f\n",
+       blockOf(slurp(path)));
+    w.thmSettings(s);
+    {
+      ThmWorkspace ws(&w, s);
+      ThmExperimentsPage* p = ws.experimentsPage;
+      qobject_cast<QComboBox*>(p->coherentTable->cellWidget(0, 1))->setEditText("3");
+      ok("cbkg: an exit pair of no segment refused on the page",
+         p->messageLabel->text().contains("no segment of the experiment has exit pair 3"), p->messageLabel->text());
+      qobject_cast<QComboBox*>(p->coherentTable->cellWidget(0, 1))->setEditText("4");
+      qobject_cast<QComboBox*>(p->coherentTable->cellWidget(0, 3))->setCurrentIndex(1);
+      ok("cbkg: linear shows c1", (p->coherentTable->item(0, 6)->flags() & Qt::ItemIsEditable) &&
+                                     p->records().at(0).cbackground == "2+:4:linear=0.75,-0.25f,0,0",
+         p->records().at(0).cbackground);
+      p->coherentBox->setChecked(false);
+      ok("cbkg: unchecked removes the key, hides the table",
+         p->records().at(0).cbackground.isEmpty() && !p->coherentTable->isVisibleTo(p));
+      p->coherentBox->setChecked(true);
+      ok("cbkg: checked again starts with one term", p->coherentTable->rowCount() == 1 &&
+                                                         !p->records().at(0).cbackground.isEmpty() && ws.validate().isEmpty(),
+         ws.validate());
+      ws.modelPage->entranceLCombo->setCurrentText("coherent");
+      ok("cbkg + coherent: refused on Accept", ws.validate().contains("entranceL=coherent"), ws.validate());
+    }
+    cbOpen("experiment[E1] segments=1\n");
+    w.thmSettings(s);
+    {
+      ThmWorkspace ws(&w, s);
+      ok("cbkg: no key, section unchecked and table hidden",
+         !ws.experimentsPage->coherentBox->isChecked() && !ws.experimentsPage->coherentTable->isVisibleTo(ws.experimentsPage));
+      ws.accept();
+    }
+    w.saveProject();
+    ok("cbkg: no key, block verbatim", blockOf(slurp(path)) == "experiment[E1] segments=1\n", blockOf(slurp(path)));
   }
 #ifdef AZURE2_THM_DIAGNOSTICS
   {
