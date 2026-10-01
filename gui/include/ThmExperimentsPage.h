@@ -119,6 +119,9 @@ class ThmExperimentsPage : public QWidget {
   /// entranceL of the <thm> block (the Model page's value); a theta window is
   /// refused together with entranceL=coherent.
   void setEntranceL(std::function<QString()> entranceL) { entranceL_ = entranceL; }
+  /// coulombIntegral of the <thm> block (the Model page's value); refused with
+  /// vertexModel=dw and with a computed R(E) whose a + A wave is distorted.
+  void setCoulombIntegral(std::function<bool()> coulombIntegral) { coulombIntegral_ = coulombIntegral; }
   /// The engine's refusal of a theta window with entranceL=coherent (EData::BuildThmGroups).
   static QString coherentRefusal();
   /// The theta= value the exit-angle controls describe ("all" for angle-integrated).
@@ -228,6 +231,7 @@ class ThmExperimentsPage : public QWidget {
   void updateThetaItems();
   QList<QWidget *> thetaWindowRow_;
   std::function<QString()> entranceL_ = []() { return QString("incoherent"); };
+  std::function<bool()> coulombIntegral_ = []() { return false; };
   void fillSegmentList();
   void storeSegments(const QList<int> &segments);
   void refreshRow(int row);

@@ -1085,7 +1085,7 @@ QString ThmExperimentsPage::lineshapeInfo(const ThmExperimentRecord &x, QString 
 }
 
 QString ThmExperimentsPage::check() const {
-  QString why = ThmSettings::checkExperimentLines(experimentLines());
+  QString why = ThmSettings::checkExperimentLines(experimentLines(), coulombIntegral_());
   if (!why.isEmpty()) return why;
   // The startup checks of EData::SetupThmExperiments that need the project.
   const QList<SegmentsDataData> lines = segments_->getLines();

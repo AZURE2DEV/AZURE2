@@ -138,7 +138,7 @@ bool ThmSettings::parseLine(const QString &rawLine, QString &key, QString &value
   return true;
 }
 
-QString ThmSettings::checkExperimentLines(const QStringList &lines) {
+QString ThmSettings::checkExperimentLines(const QStringList &lines, bool coulombIntegral) {
   std::vector<ThmExperiment> experiments;
   for (const QString &line : lines) {
     QString code = codeOf(line);
@@ -147,6 +147,7 @@ QString ThmSettings::checkExperimentLines(const QStringList &lines) {
     if (!why.empty()) return "<thm> " + QString::fromStdString(why);
   }
   std::string why = CheckThmExperiments(experiments);
+  if (why.empty()) why = CheckThmCoulombConsistency(experiments, coulombIntegral);
   return why.empty() ? QString() : "<thm> " + QString::fromStdString(why);
 }
 
@@ -159,7 +160,7 @@ bool ThmSettings::parse(const QStringList &lines, ThmSettings &out, QString *err
       return false;
     }
   }
-  QString why = checkExperimentLines(s.experimentLines);
+  QString why = checkExperimentLines(s.experimentLines, s.coulombIntegral);
   if (!why.isEmpty()) {
     if (error) *error = why;
     return false;

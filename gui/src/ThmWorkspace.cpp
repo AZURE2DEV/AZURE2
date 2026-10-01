@@ -81,6 +81,8 @@ ThmWorkspace::ThmWorkspace(AZURESetup *setup, const ThmSettings &settings, QWidg
       [model](int pairKey) { return model ? model->settings().spectatorEnergyOf(pairKey) : 0.0; });
   // A theta window is refused with entranceL=coherent: the Model page's value.
   experimentsPage->setEntranceL([model]() { return model ? model->settings().entranceL : QString("incoherent"); });
+  // coulombIntegral=1 is refused with a DW vertex or a distorted a + A wave in R(E).
+  experimentsPage->setCoulombIntegral([model]() { return model && model->settings().coulombIntegral; });
   channelsPage = new ThmChannelsPage(pairs, setup->getLevelsTab()->getLevelsModel(),
                                      setup->getLevelsTab()->getChannelsModel(), data, test);
   // B(x+s) from the masses against the pair's B: the Experiments page takes

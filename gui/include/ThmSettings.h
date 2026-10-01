@@ -51,9 +51,10 @@ struct ThmSettings {
   static bool parseLine(const QString &line, QString &key, QString &value, ThmSettings &into);
 
   /*! The engine's verdict on a set of experiment lines (comments allowed):
-      ParseThmExperimentLine on each, then CheckThmExperiments.  An empty
-      string, or "<thm> experiment[<name>]: ..." as AZURE2 prints it. */
-  static QString checkExperimentLines(const QStringList &lines);
+      ParseThmExperimentLine on each, then CheckThmExperiments and, with the
+      block's coulombIntegral, CheckThmCoulombConsistency.  An empty string,
+      or "<thm> experiment[<name>]: ..." as AZURE2 prints it. */
+  static QString checkExperimentLines(const QStringList &lines, bool coulombIntegral = false);
   /// The <name> of an experiment[<name>] line, or "" if the line is not one.
   static QString experimentName(const QString &line);
 
