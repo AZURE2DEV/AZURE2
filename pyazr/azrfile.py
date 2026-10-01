@@ -428,7 +428,8 @@ def _thm_check_experiments(experiments):
         if x.get("ps", "delta") != "delta" and kin != 4:
             raise ValueError(where + "a ps window (ps=hulthen|gauss|table) needs the "
                              "kinematics of the reaction: beam, target, spectator and "
-                             "Ebeam (mu_sx from the spectator and x masses)")
+                             "Ebeam (mu_sx and the spectator momenta reached at each "
+                             "energy)")
         if "psNodes" in x["keys"] and x.get("ps", "delta") == "delta":
             raise ValueError(where + "psNodes= needs a ps window (ps=hulthen|gauss|table)")
         dist = x.get("distortion", "none")
@@ -454,31 +455,34 @@ def _thm_check_experiments(experiments):
                                      "R(E), which vertexModel=dw replaces (R is not "
                                      "applied; the DW vertex carries the energy "
                                      "dependence)")
-            if x.get("ps", "delta") != "delta" and "spectatorAngle" in x["keys"]:
-                raise ValueError(where + "with vertexModel=dw a ps window sets the "
-                                 "spectator direction at every node; spectatorAngle= "
-                                 "applies without a window only")
             if x.get("theta", "all") != "all":
                 raise ValueError(where + "theta= (fixed-angle observable) is not "
                                  "available with vertexModel=dw: the distorted source has "
                                  "every m_l about p_xA, which the fixed-angle sum does "
                                  "not carry")
-        # Spectator-direction window (ThmExperiment.cpp CheckThmExperiments).
-        if "spectatorAngles" in x:
-            if not computed:
-                raise ValueError(where + "spectatorAngles= averages the distortion factor "
-                                 "R(E) or the DW vertex over the spectator directions; it "
-                                 "needs distortion=coulomb or distortion=optical (the "
-                                 "plane-wave vertex depends on |p_s| alone, which ps= "
-                                 "averages)")
-            if "spectatorAngle" in x["keys"]:
+        # The acceptance (ThmExperiment.cpp CheckThmExperiments): ps= (a |p_s|
+        # cut with the momentum distribution) and spectatorAngles= describe one
+        # set of directions at fixed E.
+        has_ps = x.get("ps", "delta") != "delta"
+        if ("spectatorAngles" in x or has_ps) and "spectatorAngle" in x["keys"]:
+            if "spectatorAngles" in x:
                 raise ValueError(where + "spectatorAngle= (one direction) and "
                                  "spectatorAngles= (a window) exclude each other")
-            if x.get("vertexModel", "pw") == "dw" and "psNodes" in x["keys"]:
-                raise ValueError(where + "with vertexModel=dw and spectatorAngles= the "
-                                 "nodes are spectatorAngleNodes=; the ps window only cuts "
-                                 "|p_s| (the direction fixes it at each energy), so "
-                                 "psNodes= has no effect")
+            raise ValueError(where + "spectatorAngle= (one direction) and a ps window "
+                             "exclude each other: the window accepts every direction "
+                             "whose |p_s| lies in it (write spectatorAngles=cm:t-t for one "
+                             "direction with the cut)")
+        if "spectatorAngles" in x:
+            if not computed and not has_ps:
+                raise ValueError(where + "spectatorAngles= averages over the accepted "
+                                 "spectator directions the plane-wave vertex (with the "
+                                 "momentum distribution of ps=hulthen|gauss|table), or R(E) "
+                                 "and the DW vertex (distortion=coulomb|optical); with "
+                                 "neither it has nothing to average")
+            if "psNodes" in x["keys"]:
+                raise ValueError(where + "with spectatorAngles= the nodes are "
+                                 "spectatorAngleNodes= (per c.m. interval); psNodes= is the "
+                                 "node count of a ps window without spectatorAngles=")
         elif "spectatorAngleNodes" in x["keys"]:
             raise ValueError(where + "spectatorAngleNodes= needs a spectator-direction "
                              "window (spectatorAngles=)")
