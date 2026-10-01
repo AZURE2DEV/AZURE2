@@ -438,6 +438,13 @@ std::string ThmDistortion::CheckWindow(double energy) const {
   std::vector<AngleNode> nodes;
   if (AngleNodes(std::sqrt(2.0 * sf.mu * esf) / hbarc, nodes)) return "";
   std::ostringstream why;
+  if (angAll) {
+    const double ks = std::sqrt(2.0 * sf.mu * esf) / hbarc, kb = beta * aa.k;
+    why << "at E = " << energy << " MeV the spectator momenta the kinematics reach, " << std::fabs(ks - kb) * hbarc
+        << " to " << (ks + kb) * hbarc << " MeV/c, do not overlap the ps window [" << qCutLo << ", " << qCutHi
+        << "] MeV/c";
+    return why.str();
+  }
   why << "at E = " << energy << " MeV no spectator direction of spectatorAngles=" << AngleText()
       << " is accepted";
   const double vs = hbarc * std::sqrt(2.0 * sf.mu * esf) / hbarc / (kin.ms * uconv);
@@ -451,6 +458,10 @@ std::string ThmDistortion::AngleText() const {
   if (!angWindow) return "";
   std::ostringstream t;
   t.precision(6);
+  if (angAll) {
+    t << "every direction with |p_s| in [" << qCutLo << ", " << qCutHi << "] MeV/c";
+    return t.str();
+  }
   t << (angCm ? "cm:" : "") << angLo << "-" << angHi;
   if (!angT.empty()) t << " (acceptance table, " << angT.size() << " rows)";
   return t.str();
@@ -566,14 +577,18 @@ std::string ThmDistortion::Setup(const ThmExperiment &x, const Kinematics &k, do
   kind = x.distortion == ThmExperiment::DIST_OPTICAL ? OPTICAL : COULOMB;
   angleKind = x.angleKind == 1 ? LAB : x.angleKind == 2 ? CM : QF;
   angle = x.angle;
-  angWindow = x.angleWindow != 0;
-  angCm = x.angleCm;
-  angLo = x.angleMin;
-  angHi = x.angleMax;
+  // The acceptance: spectatorAngles= and/or the |p_s| cut of a ps window;
+  // a ps window alone accepts every direction whose q lies in it (angAll),
+  // with psNodes nodes (one for a window of zero width).
+  angWindow = x.angleWindow != 0 || x.psKind != ThmExperiment::PS_DELTA;
+  angAll = angWindow && x.angleWindow == 0;
+  angCm = angAll ? true : x.angleCm;
+  angLo = angAll ? 0.0 : x.angleMin;
+  angHi = angAll ? 180.0 : x.angleMax;
   angT = x.angleWindow == 2 ? x.angleTableT : std::vector<double>();
   angW = x.angleWindow == 2 ? x.angleTableW : std::vector<double>();
-  angNodes = x.angleNodes;
-  qCut = angWindow && x.psKind != ThmExperiment::PS_DELTA;
+  angNodes = !angAll ? x.angleNodes : x.psMin == x.psMax ? 1 : x.psNodes;
+  qCut = x.psKind != ThmExperiment::PS_DELTA;
   qCutLo = x.psMin;
   qCutHi = x.psMax;
   angGx.assign(angNodes, 0.0);

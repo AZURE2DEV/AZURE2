@@ -398,7 +398,7 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
       return where + "lineshape=on needs the kinematics of the reaction: beam, target, spectator and Ebeam";
     if (x.psKind != ThmExperiment::PS_DELTA && kin != 4)
       return where + "a ps window (ps=hulthen|gauss|table) needs the kinematics of the reaction: beam, target, "
-                     "spectator and Ebeam (mu_sx from the spectator and x masses)";
+                     "spectator and Ebeam (mu_sx and the spectator momenta reached at each energy)";
     if (has("psNodes") && x.psKind == ThmExperiment::PS_DELTA)
       return where + "psNodes= needs a ps window (ps=hulthen|gauss|table)";
     const bool computed = x.distortion == ThmExperiment::DIST_COULOMB || x.distortion == ThmExperiment::DIST_OPTICAL;
@@ -418,30 +418,35 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
         if (has(key))
           return where + key + "= belongs to the distortion factor R(E), which vertexModel=dw replaces (R is "
                                "not applied; the DW vertex carries the energy dependence)";
-      if (x.psKind != ThmExperiment::PS_DELTA && has("spectatorAngle"))
-        return where + "with vertexModel=dw a ps window sets the spectator direction at every node; "
-                       "spectatorAngle= applies without a window only";
       if (x.hasTheta)
         return where + "theta= (fixed-angle observable) is not available with vertexModel=dw: the distorted "
                        "source has every m_l about p_xA, which the fixed-angle sum does not carry";
     }
-    // Spectator-direction window: the direction enters only through the
-    // distorted waves (R(E), the DW vertex); at fixed E it fixes q, so a ps
-    // window only cuts it there.
+    // The acceptance (docs "Experimental acceptance"): at fixed E the
+    // spectator direction fixes |p_s|, so ps= (a |p_s| cut with the momentum
+    // distribution) and spectatorAngles= (the accepted directions) describe
+    // one set of directions; R(E), the DW vertex and, with a distribution,
+    // the plane-wave vertex are averaged over it.  A ps window alone is every
+    // direction with |p_s| inside it.
+    const bool window = x.angleWindow || x.psKind != ThmExperiment::PS_DELTA;
+    if (window && has("spectatorAngle"))
+      return where + std::string(x.angleWindow ? "spectatorAngle= (one direction) and spectatorAngles= (a window) "
+                                                 "exclude each other"
+                                               : "spectatorAngle= (one direction) and a ps window exclude each "
+                                                 "other: the window accepts every direction whose |p_s| lies in "
+                                                 "it (write spectatorAngles=cm:t-t for one direction with the cut)");
     if (x.angleWindow) {
-      if (!computed)
-        return where + "spectatorAngles= averages the distortion factor R(E) or the DW vertex over the "
-                       "spectator directions; it needs distortion=coulomb or distortion=optical (the plane-wave "
-                       "vertex depends on |p_s| alone, which ps= averages)";
-      if (has("spectatorAngle"))
-        return where + "spectatorAngle= (one direction) and spectatorAngles= (a window) exclude each other";
-      if (x.vertexDW && has("psNodes"))
-        return where + "with vertexModel=dw and spectatorAngles= the nodes are spectatorAngleNodes=; the ps window "
-                       "only cuts |p_s| (the direction fixes it at each energy), so psNodes= has no effect";
+      if (!computed && x.psKind == ThmExperiment::PS_DELTA)
+        return where + "spectatorAngles= averages over the accepted spectator directions the plane-wave vertex "
+                       "(with the momentum distribution of ps=hulthen|gauss|table), or R(E) and the DW vertex "
+                       "(distortion=coulomb|optical); with neither it has nothing to average";
+      if (has("psNodes"))
+        return where + "with spectatorAngles= the nodes are spectatorAngleNodes= (per c.m. interval); psNodes= "
+                       "is the node count of a ps window without spectatorAngles=";
     } else if (has("spectatorAngleNodes"))
       return where + "spectatorAngleNodes= needs a spectator-direction window (spectatorAngles=)";
     // The momentum distribution once: a ps window averages the model with the
-    // event weight |phi(p_s)|^2 p_s^2 of data divided by |phi|^2; R with
+    // event weight |phi(p_s)|^2 d cos(theta_cm) of data divided by |phi|^2; R with
     // distortionRatio=dw is |M|^2 itself, which carries |phi(q(E))|^2 again.
     if (computed && !x.vertexDW && x.psKind != ThmExperiment::PS_DELTA && !x.distortionRatioPW)
       return where + "distortionRatio=dw multiplies the model by |M|^2, which carries the momentum "
@@ -537,16 +542,16 @@ std::string ReadThmPsTable(const std::string &path, std::vector<double> &p, std:
     std::string extra;
     std::ostringstream where;
     where << "'" << path << "' line " << lineNumber << ": ";
-    if (!(ls >> pv >> wv) || (ls >> extra)) return where.str() + "expected two numbers, p_s (MeV/c) and w";
+    if (!(ls >> pv >> wv) || (ls >> extra)) return where.str() + "expected two numbers, p_s (MeV/c) and |phi(p_s)|^2";
     if (!std::isfinite(pv) || !std::isfinite(wv) || pv < 0.0 || wv < 0.0)
-      return where.str() + "p_s and the weight must be finite and >= 0";
+      return where.str() + "p_s and |phi|^2 must be finite and >= 0";
     if (!p.empty() && !(pv > p.back())) return where.str() + "p_s must be strictly increasing";
     p.push_back(pv);
     w.push_back(wv);
     total += wv;
   }
-  if (p.size() < 2) return "'" + path + "' needs at least two rows (p_s w)";
-  if (!(total > 0.0)) return "'" + path + "': every weight is zero";
+  if (p.size() < 2) return "'" + path + "' needs at least two rows (p_s |phi|^2)";
+  if (!(total > 0.0)) return "'" + path + "': |phi|^2 is zero in every row";
   return "";
 }
 

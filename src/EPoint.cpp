@@ -1171,10 +1171,15 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
   hardspherephase_.clear();
   std::shared_ptr<ThmPsTable> psTable;
   bool psCoul = false;
+  std::vector<ThmSpectatorWindow::Node> psNodes;
   if (this->IsTHM() && thm_window_) {
+    // The accepted directions at this point's energy (or, for a folding
+    // sub-point beyond the reach of the window, at the nearest data point).
+    thm_window_->Nodes(this->GetCMEnergy(), psNodes);
     psTable = std::make_shared<ThmPsTable>();
-    psTable->nodes = (int)thm_window_->p.size();
+    psTable->nodes = (int)psNodes.size();
     psTable->offset.assign(theCNuc->NumJGroups() + 1, 0);
+    for (const ThmSpectatorWindow::Node &k : psNodes) psTable->weight.push_back(k.weight);
   }
   for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
     if (psTable) psTable->offset[j - 1] = (int)psTable->slot.size();
@@ -1271,17 +1276,18 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
         const ThmSpectatorWindow *window = this->IsTHM() ? thm_window_ : nullptr;
         if (window) {
           // Spectator-momentum window (ps=..., ThmLineshape.h): the pieces at
-          // every node p_k, with T_k = p_k^2/2 mu_sx added to E + B (a window
-          // and spectatorEnergy for the same pair are refused at startup).
-          // Only the entrance-pair channels are stored (ThmPsTable: every
-          // other channel reads 0); the single-node pieces stay 0.
+          // every node p_k of this energy, with T_k = p_k^2/2 mu_sx added to
+          // E + B (a window and spectatorEnergy for the same pair are refused
+          // at startup).  Only the entrance-pair channels are stored
+          // (ThmPsTable: every other channel reads 0); the single-node pieces
+          // stay 0.
           if (thePair == entrancePair && thePair->GetPType() == 0) {
             psTable->slot.push_back(psTable->nSlots++);
-            for (size_t k = 0; k < window->p.size(); k++) {
+            for (size_t k = 0; k < psNodes.size(); k++) {
               double jl = 0.0, rhoDjl = 0.0;
               complex coul(0.0, 0.0);
               double muMeV = thePair->GetRedMass() * uconv;
-              double bindingE = thePair->GetBindingEnergy() + window->es[k];
+              double bindingE = thePair->GetBindingEnergy() + psNodes[k].es;
               if (localEnergy + bindingE > 0.0) {
                 ThmBesselParts(lValue, muMeV, localEnergy, bindingE, thePair->GetChRad(), jl, rhoDjl);
                 if (configure.thm.coulombIntegral && thePair->GetZ(1) * thePair->GetZ(2) != 0)
@@ -1336,6 +1342,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
     psTable->jl.shrink_to_fit();
     psTable->rhodjl.shrink_to_fit();
     psTable->coul.shrink_to_fit();
+    psTable->weight.shrink_to_fit();
     thm_ps_ = psTable;
   }
   for (int i = 1; i <= this->NumSubPoints(); i++) {

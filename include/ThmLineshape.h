@@ -2,9 +2,11 @@
 #define THM_LINESHAPE_H
 
 #include "Constants.h"
+#include "ThmDistortion.h"
 
 #include <atomic>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -112,9 +114,10 @@ double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config
 struct ThmExperiment;
 
 /*!
- * The spectator-momentum window of a THM experiment (<thm> experiment[...]
- * ps=...; docs/source/theory/thm_implementation.rst, "Spectator-momentum
- * window").
+ * The spectator-momentum window of a THM experiment with the plane-wave
+ * vertex (<thm> experiment[...] ps=..., with or without spectatorAngles=;
+ * docs/source/theory/thm_implementation.rst, "Spectator-momentum window" and
+ * "Experimental acceptance").
  *
  * The off-shell x-A momentum of the entrance vertex depends on the
  * spectator momentum p_s = p_sx (the s-x relative momentum in a, = the
@@ -123,44 +126,77 @@ struct ThmExperiment;
  *   p_xA^2 / 2 mu_xA = E + B_xs + p_s^2 / 2 mu_sx
  *
  * (Mukhamedzhanov et al., PRC 96 (2017) 024623, eq. 31; Typel & Baur, Ann.
- * Phys. 305 (2003) 228, eq. 11).  The THM double differential cross section
- * at one p_s is |phi_a(p_s)|^2 times sum_l |...M_l(p_xA)|^2 (2017 eq. 34); the
- * data are divided by |phi_a|^2 bin by bin over events with p_s in the
- * accepted window, so the HOES "data" at E are the event-weighted average of
- * the HOES cross section over the window, incoherent in p_s (distinct final
- * states):
+ * Phys. 305 (2003) 228, eq. 11).  At fixed E the three-body phase space is
+ * d Omega_sF (|k_sF| is fixed by energy conservation), and the TH double
+ * differential cross section per d Omega_sF dE is |phi_a(p_s)|^2 times the
+ * HOES cross section at p_xA(p_s) (2017 eq. 34); the direction of k_sF fixes
+ * p_s = |k_sF - beta k_aA|.  The data are the yield of an energy bin over the
+ * Monte Carlo integral of KF |phi|^2 over the same events (KF times the
+ * Jacobian of the measured variables is the phase-space density, a function
+ * of E alone), so the HOES "datum" at E is the mean of the HOES cross
+ * section over the accepted directions with the event weight
  *
- *   sigma(E) = Int w(p) sigma(E; p) dp / Int w(p) dp,   w = |phi(p)|^2 p^2
+ *   A(theta) |phi(q)|^2 d cos(theta_cm),   d cos(theta_cm) = q dq / (beta k_sF k_aA),
  *
- * evaluated by Gauss-Legendre in p on [pmin, pmax]: sigma = sum_k w_k
- * sigma(E; p_k) with sum_k w_k = 1.  Each node k adds T_k = p_k^2 / 2 mu_sx to
+ * A the acceptance (spectatorAngles=; 1 without), q restricted to the ps
+ * window [pmin, pmax] and to what the kinematics reach at E,
+ * |k_sF - beta k_aA| <= q <= k_sF + beta k_aA.  Not |phi|^2 p^2 dp: that is
+ * the measure of events integrated over E as well (d^3 p_s = d^3 k_sF).
+ * The nodes are Gauss-Legendre in cos(theta_cm) on every accepted interval
+ * (ThmDistortion::AngleNodes, the same directions R(E) and the DW vertex
+ * average over), so they depend on E: every point and folding sub-point
+ * takes its own (EPoint::ThmPsTable), node k adding T_k = q_k^2 / 2 mu_sx to
  * E + B in the vertex (and in the Coulomb term C_l), as spectatorEnergy does.
  */
 struct ThmSpectatorWindow {
   std::string experiment;
-  std::string description;  ///< for the output: kind and parameters
+  std::string description;  ///< for the output: distribution, cut, acceptance, nodes
   double muSx = 0.0;        ///< reduced mass of s + x (MeV)
-  double pMin = 0.0, pMax = 0.0;  ///< MeV/c
-  std::vector<double> p;       ///< nodes (MeV/c)
-  std::vector<double> weight;  ///< normalized weights, sum 1
-  std::vector<double> es;      ///< T_k = p_k^2 / 2 mu_sx (MeV)
-  /// <T_s> = sum_k w_k T_k (MeV).
-  double MeanEs() const;
+  double pMin = 0.0, pMax = 0.0;  ///< |p_s| cut (MeV/c)
+  /// |phi(p)|^2 of the spectator momentum distribution (p in MeV/c, any scale).
+  std::function<double(double)> phi2;
+  /// Kinematics and accepted directions (ThmDistortion::Setup without waves).
+  std::shared_ptr<const ThmDistortion> acc;
+  /// Energies of the data points (sorted): a folding sub-point beyond the
+  /// reach of the window takes the nodes of the nearest of them.
+  std::vector<double> dataE;
+  struct Node {
+    double theta = 0.0;   ///< c.m. angle of the spectator to the beam (deg)
+    double p = 0.0;       ///< |p_s| = q (MeV/c)
+    double weight = 0.0;  ///< normalized (sum 1 over the nodes of one energy)
+    double es = 0.0;      ///< T = p^2 / 2 mu_sx (MeV)
+  };
+  /// The accepted nodes at E (weight > 0); false if no direction is accepted.
+  bool NodesAt(double energy, std::vector<Node> &out) const;
+  /// NodesAt, or (no direction accepted at E) the nodes of the nearest data
+  /// energy; *moved is set then.
+  void Nodes(double energy, std::vector<Node> &out, bool *moved = nullptr) const;
+  /// <T_s> = sum_k w_k T_k at E (MeV), 0 if nothing is accepted there.
+  double MeanEs(double energy) const;
+  /// The |p_s| the kinematics reach at E (MeV/c): |k_sF - beta k_aA| to
+  /// k_sF + beta k_aA; false if E_sF <= 0.
+  bool Reach(double energy, double &qLo, double &qHi) const;
+  /// The event weight per unit |p_s| at E, unnormalized: A(theta(q)) |phi(q)|^2 q
+  /// (d cos theta_cm = q dq / beta k_sF k_aA), 0 outside the acceptance or the
+  /// reach (q in MeV/c).  What the nodes integrate; for plots.
+  double Density(double energy, double q) const;
 };
 
 /*!
- * The nodes and weights of experiment x's ps window (not PS_DELTA), for the
- * spectator + x reduced mass muSx (MeV).  |phi|^2: Hulthen, (1/(a^2 + q^2) -
+ * The window of experiment x (not PS_DELTA) for the s + x reduced mass muSx
+ * (MeV), the kinematics k (ThmDistortion::Kinematics, as BuildThmGroups fills
+ * them) and the data energies (c.m. of x + A, MeV), every one of which must
+ * have an accepted direction.  |phi|^2: Hulthen, (1/(a^2 + q^2) -
  * 1/(b^2 + q^2))^2 with q = p/hbar c (Tribble et al., RPP 77 (2014) 106901,
- * eq. 4.4); gauss, exp(-4 ln 2 p^2/FWHM^2); both times p^2.  A table gives the
- * event weight per unit p directly (linear between rows).  pmin == pmax is one
- * node of weight 1.  "" or what is wrong.
+ * eq. 4.4); gauss, exp(-4 ln 2 p^2/FWHM^2); a table gives |phi(p)|^2 itself
+ * (linear between rows; its range is the cut).  "" or what is wrong.
  */
-std::string BuildThmSpectatorWindow(const ThmExperiment &x, double muSx, ThmSpectatorWindow &out);
+std::string BuildThmSpectatorWindow(const ThmExperiment &x, double muSx, const ThmDistortion::Kinematics &k,
+                                    const std::vector<double> &dataE, ThmSpectatorWindow &out);
 
-/// The event weight w(p) per unit p_s (MeV/c) of experiment x's ps window, as
+/// |phi(p)|^2 (p in MeV/c) of experiment x's ps distribution, as
 /// BuildThmSpectatorWindow uses it; null for ps=delta.
-std::function<double(double)> ThmPsEventWeight(const ThmExperiment &x);
+std::function<double(double)> ThmPsDistribution(const ThmExperiment &x);
 
 /// The window-averaged entrance vertex of one experiment (EData::ThmVertexTable).
 struct ThmVertexReport {
@@ -170,9 +206,15 @@ struct ThmVertexReport {
   double muSx = 0.0;   ///< MeV (0 without a window)
   double bind = 0.0;   ///< B_xs as the vertex uses it (the entrance pair's), MeV
   double radius = 0.0; ///< channel radius a (fm)
-  std::vector<double> p, weight, es;  ///< nodes (a delta: one node, p = 0, T = spectatorEnergy)
   std::vector<double> energy;         ///< E (MeV)
+  /// The nodes at each E, [E][node]: |p_s| (MeV/c), normalized weight, T_s
+  /// (MeV) and the c.m. angle of the spectator to the beam (deg).  A delta:
+  /// one node, p = 0, T = spectatorEnergy (theta empty).  With the DW vertex
+  /// the plane-wave nodes are not used (empty).
+  std::vector<std::vector<double>> p, weight, es, theta;
   std::vector<std::vector<double>> rho;  ///< [E][node] p_xA a / hbar c
+  /// The plane-wave window itself (null without one), e.g. for its Density.
+  std::shared_ptr<const ThmSpectatorWindow> windowObject;
   /// "pw" (the plane-wave vertex) or "dw" (vertexModel=dw, ThmDwVertex.h).
   /// For dw, m2 is the DW vertex averaged over the nodes the DW vertex uses
   /// (the reachable part of the window at each E), m2qf the DW vertex at the

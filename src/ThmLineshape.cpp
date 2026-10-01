@@ -119,25 +119,97 @@ double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config
   return width;
 }
 
-double ThmSpectatorWindow::MeanEs() const {
+bool ThmSpectatorWindow::NodesAt(double energy, std::vector<Node> &out) const {
+  out.clear();
+  if (!acc) return false;
+  const double esf = acc->EsF(energy);
+  if (!(esf > 0.0)) return false;
+  const double ksf = std::sqrt(2.0 * acc->sf.mu * esf) / hbarc;
+  std::vector<ThmDistortion::AngleNode> an;
+  if (!acc->AngleNodes(ksf, an)) return false;
+  double total = 0.0;
+  for (const ThmDistortion::AngleNode &n : an) {
+    if (!(n.w > 0.0)) continue;
+    Node k;
+    k.theta = n.theta;
+    k.p = n.q * hbarc;
+    k.weight = n.w * phi2(k.p);
+    k.es = k.p * k.p / (2.0 * muSx);
+    if (!(k.weight > 0.0)) continue;
+    total += k.weight;
+    out.push_back(k);
+  }
+  if (!(total > 0.0) || !std::isfinite(total)) {
+    out.clear();
+    return false;
+  }
+  for (Node &k : out) k.weight /= total;
+  return true;
+}
+
+void ThmSpectatorWindow::Nodes(double energy, std::vector<Node> &out, bool *moved) const {
+  if (moved) *moved = false;
+  if (NodesAt(energy, out) || dataE.empty()) return;
+  // The nearest data energy (every one has accepted directions).
+  size_t i = std::lower_bound(dataE.begin(), dataE.end(), energy) - dataE.begin();
+  if (i == dataE.size() || (i > 0 && energy - dataE[i - 1] < dataE[i] - energy)) i = i == 0 ? 0 : i - 1;
+  if (moved) *moved = true;
+  NodesAt(dataE[i], out);
+}
+
+double ThmSpectatorWindow::MeanEs(double energy) const {
+  std::vector<Node> nodes;
+  if (!NodesAt(energy, nodes)) return 0.0;
   double m = 0.0;
-  for (size_t k = 0; k < es.size(); k++) m += weight[k] * es[k];
+  for (const Node &k : nodes) m += k.weight * k.es;
   return m;
 }
 
-std::function<double(double)> ThmPsEventWeight(const ThmExperiment &x) {
+bool ThmSpectatorWindow::Reach(double energy, double &qLo, double &qHi) const {
+  if (!acc) return false;
+  const double esf = acc->EsF(energy);
+  if (!(esf > 0.0)) return false;
+  const double ks = std::sqrt(2.0 * acc->sf.mu * esf) / hbarc, kb = acc->beta * acc->aa.k;
+  qLo = std::fabs(ks - kb) * hbarc;
+  qHi = (ks + kb) * hbarc;
+  return true;
+}
+
+double ThmSpectatorWindow::Density(double energy, double q) const {
+  double qLo, qHi;
+  if (!Reach(energy, qLo, qHi) || q < qLo || q > qHi || q < pMin || q > pMax) return 0.0;
+  const ThmDistortion &d = *acc;
+  const double ks = std::sqrt(2.0 * d.sf.mu * d.EsF(energy)) / hbarc, kb = d.beta * d.aa.k, qq = q / hbarc;
+  const double x = std::max(-1.0, std::min(1.0, (ks * ks + kb * kb - qq * qq) / (2.0 * ks * kb)));
+  const double theta = std::acos(d.kin.horseIsBeam ? x : -x);  // c.m. angle to the beam
+  double a = 1.0;
+  if (!d.angAll) {
+    const double vs = hbarc * ks / (d.kin.ms * uconv), g = vs > 0.0 ? d.vcm / vs : HUGE_VAL;
+    const double t = (d.angCm ? theta : std::atan2(std::sin(theta), std::cos(theta) + g)) * 180.0 / M_PI;
+    if (t < d.angLo || t > d.angHi) return 0.0;
+    if (!d.angT.empty()) {
+      size_t j = std::upper_bound(d.angT.begin(), d.angT.end(), t) - d.angT.begin();
+      j = std::max<size_t>(1, std::min(j, d.angT.size() - 1));
+      const double f = (t - d.angT[j - 1]) / (d.angT[j] - d.angT[j - 1]);
+      a = d.angW[j - 1] + f * (d.angW[j] - d.angW[j - 1]);
+    }
+  }
+  return a * phi2(q) * q;
+}
+
+std::function<double(double)> ThmPsDistribution(const ThmExperiment &x) {
   switch (x.psKind) {
     case ThmExperiment::PS_HULTHEN: {
       const double a2 = x.psA * x.psA, b2 = x.psB * x.psB;
       return [a2, b2](double p) {
         double q2 = (p / hbarc) * (p / hbarc);
         double phi = 1.0 / (a2 + q2) - 1.0 / (b2 + q2);
-        return phi * phi * p * p;
+        return phi * phi;
       };
     }
     case ThmExperiment::PS_GAUSS: {
       const double c = 4.0 * std::log(2.0) / (x.psFwhm * x.psFwhm);
-      return [c](double p) { return std::exp(-c * p * p) * p * p; };
+      return [c](double p) { return std::exp(-c * p * p); };
     }
     case ThmExperiment::PS_TABLE: {
       const std::vector<double> tp = x.psTableP, tw = x.psTableW;
@@ -153,16 +225,18 @@ std::function<double(double)> ThmPsEventWeight(const ThmExperiment &x) {
   }
 }
 
-std::string BuildThmSpectatorWindow(const ThmExperiment &x, double muSx, ThmSpectatorWindow &out) {
+std::string BuildThmSpectatorWindow(const ThmExperiment &x, double muSx, const ThmDistortion::Kinematics &k,
+                                    const std::vector<double> &dataE, ThmSpectatorWindow &out) {
   out = ThmSpectatorWindow();
   out.experiment = x.name;
   out.muSx = muSx;
   out.pMin = x.psMin;
   out.pMax = x.psMax;
+  out.phi2 = ThmPsDistribution(x);
+  if (!out.phi2) return "no ps window";
+  if (!(muSx > 0.0)) return "the s + x reduced mass is not positive";
   std::ostringstream d;
   d.precision(8);
-  // Event weight per unit p_s.
-  std::function<double(double)> w = ThmPsEventWeight(x);
   switch (x.psKind) {
     case ThmExperiment::PS_HULTHEN:
       d << "hulthen a=" << x.psA << " b=" << x.psB << " fm^-1";
@@ -170,37 +244,43 @@ std::string BuildThmSpectatorWindow(const ThmExperiment &x, double muSx, ThmSpec
     case ThmExperiment::PS_GAUSS:
       d << "gauss FWHM=" << x.psFwhm << " MeV/c";
       break;
-    case ThmExperiment::PS_TABLE:
+    default:
       d << "table " << x.psTable;
       break;
-    default:
-      return "no ps window";
   }
   d << ", p_s in [" << x.psMin << ", " << x.psMax << "] MeV/c";
-  if (!(muSx > 0.0)) return "the s + x reduced mass is not positive";
-  if (x.psMax == x.psMin) {
-    out.p.push_back(x.psMin);
-    out.weight.push_back(1.0);
-    d << ", one node";
-  } else {
-    const int n = x.psNodes;
-    gsl_integration_glfixed_table *t = gsl_integration_glfixed_table_alloc(n);
-    double total = 0.0;
-    for (int i = 0; i < n; i++) {
-      double xi, wi;
-      gsl_integration_glfixed_point(x.psMin, x.psMax, i, &xi, &wi, t);
-      double v = wi * w(xi);
-      out.p.push_back(xi);
-      out.weight.push_back(v);
-      total += v;
-    }
-    gsl_integration_glfixed_table_free(t);
-    if (!(total > 0.0) || !std::isfinite(total))
-      return "the weight vanishes at every Gauss-Legendre node of the window (widen it or raise psNodes)";
-    for (double &v : out.weight) v /= total;
-    d << ", " << n << " Gauss-Legendre nodes";
+  // The kinematics and the accepted directions as R(E) and the DW vertex take
+  // them (ThmDistortion::Setup), without waves: plane s + F and a + A
+  // channels, so that only E_sF > 0 is asked of an energy.
+  ThmExperiment xc = x;
+  xc.distortion = ThmExperiment::DIST_OPTICAL;
+  xc.opticalAA = ThmExperiment::Optical();
+  xc.opticalSF = ThmExperiment::Optical();
+  xc.opticalAA.kind = xc.opticalSF.kind = 0;
+  std::shared_ptr<ThmDistortion> acc = std::make_shared<ThmDistortion>();
+  out.dataE = dataE;
+  std::sort(out.dataE.begin(), out.dataE.end());
+  const double eLo = out.dataE.empty() ? 0.0 : out.dataE.front(), eHi = out.dataE.empty() ? 0.0 : out.dataE.back();
+  std::string why = acc->Setup(xc, k, eLo);
+  if (!why.empty()) return why;
+  // The branches of a lab window up to 0.5 MeV above the data, short of the
+  // spectator's threshold (EData::BuildThmGroups for R(E)).
+  acc->SetAngleSlots(std::min(eHi + 0.5, acc->eAA - k.bind - 0.5 * acc->EsF(eHi)));
+  out.acc = acc;
+  for (double e : out.dataE) {
+    std::vector<ThmSpectatorWindow::Node> nodes;
+    if (out.NodesAt(e, nodes)) continue;
+    why = acc->CheckWindow(e);
+    return why.empty() ? "at E = " + std::to_string(e) + " MeV the window has no weight (|phi|^2 = 0 there)" : why;
   }
-  for (double p : out.p) out.es.push_back(p * p / (2.0 * muSx));
+  if (x.angleWindow)
+    d << "; spectator directions " << acc->AngleText() << ", " << acc->angNodes << " nodes in cos theta_cm"
+      << (acc->angSlots > 1 ? " per branch" : "");
+  else if (acc->angNodes == 1)
+    d << ", one node";
+  else
+    d << ", " << acc->angNodes << " Gauss-Legendre nodes in cos theta_cm";
+  d << "; weight |phi(p_s)|^2 d cos theta_cm" << (acc->angT.empty() ? "" : " x acceptance");
   out.description = d.str();
   return "";
 }

@@ -271,10 +271,9 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   const double rmin = dist.rmin;
   uMax = rmin + kTail / kappa;
 
-  // Window: the spectator directions (spectatorAngles=, the ps window then
-  // only cuts q), or the ps window in q.
+  // The acceptance: the accepted spectator directions (spectatorAngles=
+  // and/or the |p_s| cut of a ps window; ThmDistortion::AngleNodes).
   angles = dist.angWindow;
-  window = !angles && x.psKind != ThmExperiment::PS_DELTA;
   nNodes = 1;
   nAng = 0;
   if (angles) {
@@ -283,12 +282,6 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
     // average over the directions is one vertex with the averaged G: one node.
     dist.SetAngleSlots(eHi);
     nAng = dist.angSlots * dist.angNodes;
-  } else if (window) {
-    pMin = x.psMin;
-    pMax = x.psMax;
-    psNodes = pMin == pMax ? 1 : x.psNodes;
-    psWeight = ThmPsEventWeight(x);
-    nNodes = psNodes;
   }
 
   // Partial waves and the u, cos theta_u quadrature.
@@ -465,7 +458,6 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   pd.assign(nE, 0.0);
   thd.assign(nE, 0.0);
   valid.assign(nE, 1);
-  gsl_integration_glfixed_table *glw = window && psNodes > 1 ? gsl_integration_glfixed_table_alloc(psNodes) : nullptr;
   std::vector<double> ys, dys;
   for (int e = 0; e < nE; e++) {
     const double ks = ksE[e];
@@ -574,62 +566,20 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
       q[e] = qm;
       continue;
     }
-    if (!window) {
-      w[e] = 1.0;
-      q[e] = qd[e] * hbarc;
-      std::copy(&Gd[(size_t)e * nl * 4], &Gd[(size_t)e * nl * 4] + nl * 4, &G[(size_t)e * nl * 4]);
-      continue;
-    }
-    // Window nodes on its reachable part.
-    const double kb = beta * ka;
-    const double lo = std::max(pMin, std::fabs(ks - kb) * hbarc), hi = std::min(pMax, (ks + kb) * hbarc);
-    if (lo > hi) {
-      valid[e] = 0;
-      continue;
-    }
-    std::vector<double> pk(nNodes), wk(nNodes);
-    double total = 0.0;
-    for (int i = 0; i < nNodes; i++) {
-      double xi = lo, wi = 1.0;
-      if (glw) gsl_integration_glfixed_point(lo, hi, i, &xi, &wi, glw);
-      if (glw && hi == lo) wi = 1.0 / nNodes;
-      pk[i] = xi;
-      wk[i] = wi * psWeight(xi);
-      total += wk[i];
-    }
-    if (!(total > 0.0) || !std::isfinite(total)) {
-      valid[e] = 0;
-      continue;
-    }
-    for (int i = 0; i < nNodes; i++) {
-      const double qq = pk[i] / hbarc;
-      const double xsa = (ks * ks + kb * kb - qq * qq) / (2.0 * ks * kb);
-      w[(size_t)e * nNodes + i] = wk[i] / total;
-      q[(size_t)e * nNodes + i] = pk[i];
-      double phit = gram(xsa, qq, &G[((size_t)e * nNodes + i) * nl * 4]);
-      if (!(std::fabs(phit) > 0.0) || !std::isfinite(phit))
-        return "the plane-wave source phi~(q) vanishes at E = " + Number(eLo + e * gridStep) + " MeV, q = " +
-               Number(pk[i]) + " MeV/c";
-    }
+    w[e] = 1.0;
+    q[e] = qd[e] * hbarc;
+    std::copy(&Gd[(size_t)e * nl * 4], &Gd[(size_t)e * nl * 4] + nl * 4, &G[(size_t)e * nl * 4]);
   }
-  if (glw) gsl_integration_glfixed_table_free(glw);
 
   // Every data point needs a reachable window; grid energies without one take
   // the nearest valid entry (they are beyond the data).
   for (double e : points) {
     double t = (e - gridLo) / gridStep;
     int i0 = std::max(0, std::min(nE - 1, (int)std::floor(t))), i1 = std::min(nE - 1, i0 + 1);
-    if ((!valid[i0] || !valid[i1]) && angles) {
+    if (!valid[i0] || !valid[i1]) {
       std::string why = dist.CheckWindow(e);
       return why.empty() ? "at E = " + Number(e) + " MeV the spectator-direction window is out of reach next to it"
                          : why;
-    }
-    if (!valid[i0] || !valid[i1]) {
-      std::ostringstream m;
-      m << "at E = " << e << " MeV the spectator momenta the kinematics reach, " << std::fabs(ksE[i0] - beta * ka) * hbarc
-        << " to " << (ksE[i0] + beta * ka) * hbarc << " MeV/c, do not overlap the ps window [" << pMin << ", "
-        << pMax << "] MeV/c";
-      return m.str();
     }
   }
   for (int e = 0; e < nE; e++) {
@@ -637,8 +587,7 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
     int best = -1;
     for (int f = 0; f < nE; f++)
       if (valid[f] && (best < 0 || std::abs(f - e) < std::abs(best - e))) best = f;
-    if (best < 0) return angles ? "the spectator-direction window is out of reach at every energy"
-                                : "the ps window is out of reach at every energy";
+    if (best < 0) return "the spectator-direction window is out of reach at every energy";
     for (int i = 0; i < nAng; i++) {
       aw[(size_t)e * nAng + i] = aw[(size_t)best * nAng + i];
       aq[(size_t)e * nAng + i] = aq[(size_t)best * nAng + i];
@@ -659,9 +608,8 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
     << (rmin > 0.0 ? ", r >= " + Number(rmin) + " fm" : "") << "; "
     << (angles ? "spectator directions " + dist.AngleText() + " (" + Number(dist.angNodes) +
                      " nodes in cos theta_cm" + (dist.angSlots > 1 ? " per branch" : "") +
-                     (dist.qCut ? ", |p_s| cut by the ps window" : "") +
+                     (dist.qCut && !dist.angAll ? ", |p_s| cut by the ps window" : "") +
                      "; weight d cos theta_cm x acceptance x |phi~(q)|^2)"
-        : window ? "the ps window on its reachable part at each energy"
                : std::string("spectator angle ") +
                      (dist.angleKind == ThmDistortion::QF
                           ? "qf (k_sF along k_aA)"

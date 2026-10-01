@@ -118,9 +118,9 @@ class ThmDistortion {
   AngleKind angleKind = QF;
   double angle = 0.0;  ///< deg
   /*!
-   * Spectator-direction window (spectatorAngles=, docs "Experimental
-   * acceptance"): instead of one direction, the accepted directions at each
-   * energy.  At fixed E, |k_sF| is fixed, so the direction (azimuthal symmetry
+   * Spectator-direction window (spectatorAngles= and/or the |p_s| cut of a
+   * ps window, docs "Experimental acceptance"): instead of one direction,
+   * the accepted directions at each energy.  At fixed E, |k_sF| is fixed, so the direction (azimuthal symmetry
    * about the beam: its polar angle) is the only variable, and it fixes
    * q = |k_sF - beta k_aA|; a ps window (qCut) restricts it to q in
    * [qCutLo, qCutHi].  The measure is d cos(theta_cm) (the three-body phase
@@ -131,6 +131,7 @@ class ThmDistortion {
    * interval gets angNodes Gauss-Legendre nodes in cos(theta_cm).
    */
   bool angWindow = false;
+  bool angAll = false;  ///< a ps window alone: every direction (c.m. 0-180) whose q is in the cut
   bool angCm = false;
   double angLo = 0.0, angHi = 0.0;  ///< deg
   std::vector<double> angT, angW;   ///< acceptance table (empty: uniform)

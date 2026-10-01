@@ -3050,25 +3050,43 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
                                 << pairKey << "; use one (ps=delta keeps spectatorEnergy)." << std::endl;
             return -1;
           }
-          double muSx = mX * sp.mass / (mX + sp.mass) * amu;
-          std::shared_ptr<ThmSpectatorWindow> window = std::make_shared<ThmSpectatorWindow>();
-          std::string why = BuildThmSpectatorWindow(x, muSx, *window);
-          if (!why.empty()) {
-            configure.outStream << where << "ps: " << why << "." << std::endl;
-            return -1;
-          }
-          std::ostringstream w;
-          w.precision(6);
-          w << "  Spectator-momentum window: " << window->description << "; mu_sx = " << muSx
-            << " MeV, T_s = p_s^2/2mu_sx from " << window->es.front() << " to " << window->es.back()
-            << " MeV, <T_s> = " << window->MeanEs() << " MeV.";
-          configure.outStream << w.str() << std::endl;
-          group.window = window;
-          // With vertexModel=dw the DW vertex puts the nodes on the reachable
-          // part of the window itself (ThmDwVertex); the plane-wave nodes are
-          // not used.
-          if (!x.vertexDW)
+          // With vertexModel=dw the DW vertex averages over the accepted
+          // directions itself (ThmDwVertex); the plane-wave nodes are not used.
+          if (!x.vertexDW) {
+            double muSx = mX * sp.mass / (mX + sp.mass) * amu;
+            std::vector<double> dataE;
+            for (int s : group.segments)
+              for (int p = 1; p <= GetSegment(s)->NumPoints(); p++)
+                dataE.push_back(GetSegment(s)->GetPoint(p)->GetCMEnergy());
+            std::shared_ptr<ThmSpectatorWindow> window = std::make_shared<ThmSpectatorWindow>();
+            std::string why = BuildThmSpectatorWindow(x, muSx, dk, dataE, *window);
+            if (!why.empty()) {
+              configure.outStream << where << "ps: " << why << "." << std::endl;
+              return -1;
+            }
+            std::vector<ThmSpectatorWindow::Node> lo, hi;
+            window->NodesAt(window->dataE.front(), lo);
+            window->NodesAt(window->dataE.back(), hi);
+            auto range = [](const std::vector<ThmSpectatorWindow::Node> &n) {
+              double a = n.front().p, b = a;
+              for (const ThmSpectatorWindow::Node &k : n) a = std::min(a, k.p), b = std::max(b, k.p);
+              std::ostringstream t;
+              t.precision(6);
+              t << a << "-" << b;
+              return t.str();
+            };
+            std::ostringstream w;
+            w.precision(6);
+            w << "  Spectator-momentum window: " << window->description << "; mu_sx = " << muSx
+              << " MeV; at the lowest point (E = " << window->dataE.front() << " MeV) " << lo.size()
+              << " node(s), |p_s| = " << range(lo) << " MeV/c, <T_s> = " << window->MeanEs(window->dataE.front())
+              << " MeV; at the highest (E = " << window->dataE.back() << " MeV) " << hi.size()
+              << " node(s), |p_s| = " << range(hi) << " MeV/c, <T_s> = " << window->MeanEs(window->dataE.back())
+              << " MeV.";
+            configure.outStream << w.str() << std::endl;
+            group.window = window;
             for (int s : group.segments) GetSegment(s)->SetThmSpectatorWindow(window);
+          }
         }
 
         if (x.lineshape) {
@@ -3478,13 +3496,20 @@ void EData::WriteThmExperiments(const Config &configure) {
       if (group.name != r.name || !group.window) continue;
       const ThmSpectatorWindow &w = *group.window;
       out << "ps: " << w.description << "; mu_sx = " << w.muSx << " MeV\n"
-          << "# The model at E is the average of the HOES cross section over the spectator momentum\n"
-          << "# p_s, weight |phi(p_s)|^2 p_s^2 (a table: its w(p_s)), incoherent; node k adds\n"
-          << "# T_s = p_s^2/2mu_sx to E + B in the vertex.  Columns: p_s (MeV/c), weight, T_s (MeV).\n";
-      for (size_t k = 0; k < w.p.size(); k++)
-        out << "ps_node" << std::setw(18) << w.p[k] << std::setw(18) << w.weight[k] << std::setw(18) << w.es[k]
-            << "\n";
-      out << std::left << std::setw(16) << "<T_s>" << std::right << std::setw(18) << w.MeanEs() << "\n";
+          << "# The model at E is the average of the HOES cross section over the accepted spectator\n"
+          << "# directions, weight |phi(p_s)|^2 d cos(theta_cm) (x the acceptance), incoherent; at fixed E\n"
+          << "# the direction fixes p_s, and node k adds T_s = p_s^2/2mu_sx to E + B in the vertex.  The\n"
+          << "# nodes at the lowest and the highest point; columns: E (MeV), theta_cm (deg), p_s (MeV/c),\n"
+          << "# weight, T_s (MeV).\n";
+      for (double e : {w.dataE.front(), w.dataE.back()}) {
+        std::vector<ThmSpectatorWindow::Node> nodes;
+        w.NodesAt(e, nodes);
+        for (const ThmSpectatorWindow::Node &k : nodes)
+          out << "ps_node" << std::setw(18) << e << std::setw(18) << k.theta << std::setw(18) << k.p
+              << std::setw(18) << k.weight << std::setw(18) << k.es << "\n";
+        out << std::left << std::setw(16) << "<T_s>" << std::right << std::setw(18) << e << std::setw(18)
+            << w.MeanEs(e) << "\n";
+      }
       // Memory of the per-point node tables (EPoint::ThmPsTable): points
       // including the folding sub-points, the stored entrance channels summed
       // over the points (x nodes = entries), and their bytes.
@@ -3746,21 +3771,39 @@ bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &e
   out.pairKey = group->pairKey;
   out.bind = pair->GetBindingEnergy();
   out.radius = pair->GetChRad();
+  const ThmDwVertex *dw = group->dwVertex.get();
+  out.energy = energies;
   if (group->window) {
     const ThmSpectatorWindow &w = *group->window;
     out.window = w.description;
     out.muSx = w.muSx;
-    out.p = w.p;
-    out.weight = w.weight;
-    out.es = w.es;
+    out.windowObject = group->window;
+    for (double e : energies) {
+      std::vector<ThmSpectatorWindow::Node> nodes;
+      w.Nodes(e, nodes);
+      std::vector<double> p, wt, es, th;
+      for (const ThmSpectatorWindow::Node &k : nodes) {
+        p.push_back(k.p);
+        wt.push_back(k.weight);
+        es.push_back(k.es);
+        th.push_back(k.theta);
+      }
+      out.p.push_back(p);
+      out.weight.push_back(wt);
+      out.es.push_back(es);
+      out.theta.push_back(th);
+    }
+  } else if (dw) {
+    out.window = dw->angles ? dw->dist.AngleText() : "delta";
+    if (dw->angles) out.muSx = dw->dist.muSx;
   } else {
     out.window = "delta";
-    out.p.push_back(0.0);
-    out.weight.push_back(1.0);
-    out.es.push_back(configure.thm.SpectatorEnergy(group->pairKey));
+    for (size_t i = 0; i < energies.size(); i++) {
+      out.p.push_back({0.0});
+      out.weight.push_back({1.0});
+      out.es.push_back({configure.thm.SpectatorEnergy(group->pairKey)});
+    }
   }
-  out.energy = energies;
-  const ThmDwVertex *dw = group->dwVertex.get();
   const double mu = pair->GetRedMass() * uconv;
   // M_l = (B - 1) j_l - rho j_l' + C_l at E with T_s = es added to E + B (EPoint::CalcEDependentValues).
   struct Pieces {
@@ -3813,7 +3856,8 @@ bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &e
   } else
     for (double e : energies) {
       std::vector<double> row;
-      for (double es : out.es) row.push_back(e + out.bind + es > 0.0 ? ThmRho(mu, e, out.bind + es, out.radius) : 0.0);
+      for (double es : out.es[out.rho.size()])
+        row.push_back(e + out.bind + es > 0.0 ? ThmRho(mu, e, out.bind + es, out.radius) : 0.0);
       out.rho.push_back(row);
     }
   // Vertex boundary, as THMMatrixFunc::CalculateTHMCrossSection chooses it.
@@ -3849,7 +3893,7 @@ bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &e
       std::vector<Pieces> qf(energies.size());
       if (!dw)
         for (size_t i = 0; i < energies.size(); i++) {
-          for (double es : out.es) grid[i].push_back(pieces(cr.l, energies[i], es));
+          for (double es : out.es[i]) grid[i].push_back(pieces(cr.l, energies[i], es));
           qf[i] = pieces(cr.l, energies[i], 0.0);
         }
       const int li = dw ? dw->LIndex(cr.l) : -1;
@@ -3881,7 +3925,7 @@ bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &e
           }
           auto m2 = [&](const Pieces &q) { return std::norm((B - 1.0) * q.jl - q.rhoDjl + q.coul); };
           double avg = 0.0;
-          for (size_t k = 0; k < out.es.size(); k++) avg += out.weight[k] * m2(grid[i][k]);
+          for (size_t k = 0; k < out.es[i].size(); k++) avg += out.weight[i][k] * m2(grid[i][k]);
           lr.m2.push_back(avg);
           lr.m2qf.push_back(m2(qf[i]));
         }

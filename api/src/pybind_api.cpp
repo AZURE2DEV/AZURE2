@@ -480,9 +480,17 @@ class Session {
     d["mu_sx"] = r.muSx;
     d["B"] = r.bind;
     d["radius"] = r.radius;
-    d["p_s"] = to_array(r.p);
-    d["weights"] = to_array(r.weight);
-    d["T_s"] = to_array(r.es);
+    // The nodes at each energy (they follow the accepted directions): lists
+    // over E of arrays over the nodes; empty lists with the DW vertex.
+    auto rows = [&](const std::vector<std::vector<double>> &v) {
+      py::list l;
+      for (const std::vector<double> &row : v) l.append(to_array(row));
+      return l;
+    };
+    d["p_s"] = rows(r.p);
+    d["weights"] = rows(r.weight);
+    d["T_s"] = rows(r.es);
+    if (!r.theta.empty()) d["theta_cm"] = rows(r.theta);
     d["E"] = to_array(r.energy);
     py::list rho;
     for (const std::vector<double> &row : r.rho) rho.append(to_array(row));
@@ -729,8 +737,8 @@ PYBIND11_MODULE(_azure2, m) {
            "level poles of the last evaluation's parameters.")
       .def("thm_vertex", &Session::thm_vertex, py::arg("name"), py::arg("energies"),
            "THM entrance vertex of experiment `name` at c.m. energies: the spectator-momentum "
-           "window (nodes, weights, rho) and, per entrance channel and level, <|M_l|^2> over "
-           "the window and |M_l|^2 at p_s = 0.")
+           "window at every energy (nodes p_s, weights, T_s, theta_cm, rho: lists over E) and, per "
+           "entrance channel and level, <|M_l|^2> over the window and |M_l|^2 at p_s = 0.")
       .def("thm_distortion", &Session::thm_distortion, py::arg("name"), py::arg("energies"),
            "Distortion factor R(E) of THM experiment `name` (distortion=coulomb|optical|table) at "
            "c.m. energies: E_sF, eta_sF, the spectator angle, |M|^2, |M_PW|^2, R directly and as the "

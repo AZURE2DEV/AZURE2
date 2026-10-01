@@ -108,7 +108,7 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
   int numNodes = window ? point->NumThmPsNodes() : 0;
 
   // Distorted-wave entrance vertex (vertexModel=dw, ThmDwVertex.h): per node
-  // (one, or the reachable ps window at this energy) and entrance l, two
+  // (one: the spectatorAngle direction or the acceptance average) and entrance l, two
   // incoherent components M^(k)(B) = a_k (B - 1) - d_k replace M_l.
   const ThmDwVertex *dw = point->GetThmDwVertex();
   ThmDwVertex::At dwAt;
@@ -187,9 +187,10 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
     }
 
     // Spectator-momentum window (ps=..., ThmLineshape.h ThmSpectatorWindow):
-    // the cross section -- not the amplitude -- is averaged over the nodes
-    // p_k with the normalized event weights w_k, since each p_s is a distinct
-    // final state (Mukhamedzhanov et al. 2017 eq. 34).  Without a window one
+    // the cross section -- not the amplitude -- is averaged over the accepted
+    // directions at this energy (nodes p_k) with the normalized event weights
+    // w_k (|phi|^2 d cos theta_cm), since each direction is a distinct final
+    // state (Mukhamedzhanov et al. 2017 eq. 34).  Without a window one
     // pass with the stored single-node vertex (node -1), as before.
     const int passes = numNodes > 0 ? numNodes : 1;
     for (int pass = 0; pass < passes; pass++) {
@@ -308,7 +309,7 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
         else if (node < 0)
           sigma += spinWeight * fluxFactor * 2.0 * pex * term;
         else
-          sigma += window->weight[node] * (spinWeight * fluxFactor * 2.0 * pex * term);
+          sigma += point->GetThmPsWeight(node) * (spinWeight * fluxFactor * 2.0 * pex * term);
       }
     }
   }
@@ -319,7 +320,8 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
     std::vector<double> b;
     for (size_t k = 0; k < partial.size(); k++) {
       ThmLegendreCoefficients(waves, partial[k], b);
-      sigma += (numNodes > 0 ? window->weight[k] : 1.0) * angle->Mean(b);
+      sigma += (numNodes > 0 && !dw ? point->GetThmPsWeight((int)k) : numNodes > 0 ? dwAt.weight[k] : 1.0) *
+               angle->Mean(b);
     }
   }
 

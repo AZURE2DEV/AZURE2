@@ -53,15 +53,10 @@ class ThmDwVertex {
   double radius = 0.0;      ///< channel radius a of the entrance pair (fm)
   std::vector<int> lvals;   ///< entrance orbital momenta, ascending
   double alpha = 0.0, beta = 0.0;
-  // Spectator-momentum window (ps=): the nodes are put on the part of
-  // [pMin, pMax] (MeV/c) that the kinematics reach at each energy.
-  bool window = false;
-  double pMin = 0.0, pMax = 0.0;
-  int psNodes = 1;
-  std::function<double(double)> psWeight;
-  /// Spectator-direction window (spectatorAngles=, ThmDistortion::AngleNodes):
-  /// the nodes are the accepted directions at each energy, weighted by
-  /// d cos(theta_cm) x acceptance x |phi~(q)|^2; a ps window only cuts q.
+  /// The acceptance (spectatorAngles= and/or the |p_s| cut of a ps window,
+  /// ThmDistortion::AngleNodes): the nodes are the accepted directions at
+  /// each energy, weighted by d cos(theta_cm) x acceptance x |phi~(q)|^2 --
+  /// the bound state of the vertex itself; the distribution of ps= is not used.
   bool angles = false;
   // Quadrature and partial waves (for the output).
   int laMax = 0, lsMax = 0, uNodes = 0, cNodes = 0;

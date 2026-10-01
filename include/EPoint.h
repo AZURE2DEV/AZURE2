@@ -201,6 +201,8 @@ class EPoint {
   complex GetThmFormFactor(int, int, complex, int node) const;
   /// Number of nodes of the point's spectator-momentum window (0: none).
   int NumThmPsNodes() const { return thm_ps_ ? thm_ps_->nodes : 0; }
+  /// Normalized weight of node `node` of that window at the point's energy.
+  double GetThmPsWeight(int node) const { return thm_ps_->weight[node]; }
   /// Bytes held by the point's spectator-window table (0 without one; shared
   /// tables are counted by every point that refers to them).
   size_t ThmPsTableBytes() const { return thm_ps_ ? thm_ps_->Bytes() : 0; }
@@ -436,7 +438,8 @@ class EPoint {
   /// External Coulomb term of the THM vertex, same indexing (0 when not used).
   matrix_c thm_coul_;
   /// With a spectator-momentum window (ps=...): the same three pieces per
-  /// Gauss-Legendre node of the window, for the entrance-pair channels only
+  /// node of the window at the point's energy (the accepted directions,
+  /// ThmSpectatorWindow::Nodes) with its weight, for the entrance-pair channels only
   /// (every other channel is 0).  One flat, immutable table per point,
   /// shared by its mapped points; the single-node matrices above are then
   /// unused (zero).  It used to be [node][jGroup][channel] vectors of every
@@ -449,9 +452,11 @@ class EPoint {
     std::vector<double> jl;         ///< [slot * nodes + node]
     std::vector<double> rhodjl;
     std::vector<complex> coul;      ///< empty unless an external Coulomb term was computed
+    std::vector<double> weight;     ///< [node], normalized
     size_t Bytes() const {
       return sizeof(*this) + offset.capacity() * sizeof(int) + slot.capacity() * sizeof(int) +
-             (jl.capacity() + rhodjl.capacity()) * sizeof(double) + coul.capacity() * sizeof(complex);
+             (jl.capacity() + rhodjl.capacity() + weight.capacity()) * sizeof(double) +
+             coul.capacity() * sizeof(complex);
     }
   };
   std::shared_ptr<const ThmPsTable> thm_ps_;
