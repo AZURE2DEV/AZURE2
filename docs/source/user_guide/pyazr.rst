@@ -186,8 +186,10 @@ shared norm and background with ``thm_background(name)``, and with
 ``lineshape=on`` the spectator's Coulomb line shape -- :math:`\zeta(E)`,
 :math:`E_{sF}(E)` and :math:`|N_C|^2` per level -- with
 ``thm_lineshape(name, energies)``; ``set_thm_experiment(..., ps="hulthen:0-40")``
-averages the HOES cross section over a spectator-momentum window, and
-``thm_vertex(name, energies)`` returns its nodes, weights, :math:`\rho` and
+averages the HOES cross section over the accepted spectator directions
+(weight :math:`|\phi(p_s)|^2\,d\cos\theta_\mathrm{cm}` at fixed :math:`E`),
+and ``thm_vertex(name, energies)`` returns its nodes, weights and :math:`\rho`
+at every energy (lists over the energies), and
 the window-averaged :math:`|M_l|^2` per entrance channel and level;
 ``set_thm_experiment(..., distortion="coulomb")`` multiplies the model by the
 zero-range DWBA distortion factor :math:`R(E)`, with ``opticalAA``,

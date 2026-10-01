@@ -389,9 +389,11 @@ letters, digits and ``_ - . +``.
    The Coulomb line-shape factor of the spectator (default ``off``; needs the
    four kinematics keys), below.
 ``ps=delta|hulthen:...|gauss:...|table:<file>``, ``psNodes=``
-   The spectator-momentum window over which the HOES cross section is
-   averaged (default ``delta``, the quasi-free point; the other forms need the
-   four kinematics keys), and its number of Gauss-Legendre nodes (1-64,
+   The spectator-momentum window: the HOES cross section is averaged over
+   the spectator directions whose :math:`|p_s|` lies in it, with the weight
+   :math:`|\phi(p_s)|^2\,d\cos\theta_\mathrm{cm}` (default ``delta``, the
+   quasi-free point; the other forms need the four kinematics keys), and its
+   number of Gauss-Legendre nodes in :math:`\cos\theta_\mathrm{cm}` (1-64,
    default 16), below.
 ``distortion=none|coulomb|optical|table:<file>``, ``opticalAA=``, ``opticalSF=``, ``spectatorAngle=``, ``distortionRef=``, ``distortionRatio=``, ``boundState=``
    The distortion factor :math:`R(E)` multiplying the model of every
@@ -665,47 +667,148 @@ window :math:`\rho = p_{xA} a` changes -- for a deuteron by up to
 :math:`M_l(\rho) = (B_c - 1)j_l(\rho) - \rho j_l'(\rho)\,(+\,C_l)` sees this,
 and most strongly near its nodes.
 
-*What is averaged.* At one :math:`p_s` the THM double differential cross
-section is
+*The measure at fixed* :math:`E`. In :math:`A + a \to s + F^*`,
+:math:`F^* \to b + B`, the c.m. energy :math:`E` of :math:`x + A` fixes the
+:math:`s`-:math:`F` energy, :math:`E_{sF} = E_{aA} - B_{xs} - E`, so
+:math:`k_{sF}` has a fixed length, and the spectator momentum in :math:`a`
+(2017 eqs. 29-30, :math:`\mathbf q = \mathbf p_{sx}`, with :math:`\beta =
+m_s/m_a`)
 
 .. math::
 
-   \frac{d^2\sigma}{d\Omega_{sF}\,dE} \propto |\phi_a(p_s)|^2 \sum_l
-   \Bigl|\dots M_l\bigl(p_{xA}(p_s)\bigr)\Bigr|^2
+   q^2 = k_{sF}^2 + \beta^2 k_{aA}^2 - 2\beta k_{sF}k_{aA}\,x, \qquad
+   x = \hat k_{sF}\cdot\hat k_{aA},
 
-(2017 eq. 34): :math:`\phi_a` multiplies the whole cross section and the
-vertex is evaluated at that event's :math:`p_{xA}`. Events with different
-:math:`p_s` are different final states (the spectator's momentum is measured),
-so they add incoherently: the *cross section* is averaged, not the amplitude.
-The HOES "data" are then obtained (2017 eq. 35; Tribble 2014 eq. 4.1) by
-dividing the yield of an energy bin by the product of the kinematic factor
-and :math:`|\phi_a|^2`, computed by a Monte Carlo simulation of the setup over
-the same bin and :math:`p_s` window (Pizzone et al., PRC 83 (2011) 045801;
-Spitaleri et al., PRC 95 (2017) 035801, eqs. 3-4 with :math:`|p_n| \le 30`
-MeV/c), i.e. :math:`N(E)/\int_W |\phi_a|^2\,d^3p_s`. The
-yield itself is :math:`\int_W |\phi_a(p_s)|^2 \sigma(E; p_s)\,d^3p_s`, so the
-datum at :math:`E` is the event-weighted mean
+is fixed by the direction of :math:`\mathbf k_{sF}`: at fixed :math:`E`,
+:math:`|p_s|` and the spectator direction are one variable, and only
+:math:`|k_{sF} - \beta k_{aA}| \le q \le k_{sF} + \beta k_{aA}` is reached.
+The derivation of the weight of a datum, step by step:
 
-.. math::
+1. *Cross section.* The PWIA triple differential cross section in the c.m.
+   variables (2017 eq. 33; Typel & Baur eqs. 13-14) is
 
-   \bar\sigma(E) = \frac{\int_{p_{\min}}^{p_{\max}} w(p)\,\sigma(E; p)\,dp}
-                        {\int_{p_{\min}}^{p_{\max}} w(p)\,dp},
-   \qquad w(p) = |\phi_a(p)|^2 p^2
+   .. math::
 
-for an isotropic window :math:`p_{\min} \le |p_s| \le p_{\max}` (the kinematic
-factor taken as constant across one bin). This is what AZURE2 computes: with
-``ps=`` on the experiment line, every THM point of the experiment (and every
-sub-point of its resolution folding) evaluates the entrance vertex -- the
-surface term and the Coulomb term :math:`C_l`, which depends on :math:`p_{xA}`
-too -- at the nodes :math:`p_k` of a Gauss-Legendre rule on
-:math:`[p_{\min}, p_{\max}]` with :math:`T_k = p_k^2/2\mu_{sx}` added to
-:math:`E + B` (exactly what ``spectatorEnergy`` does with one value), and sums
-the HOES cross section of each node with the normalized weights
-:math:`w_k \propto \omega_k w(p_k)`, :math:`\sum_k w_k = 1`, :math:`\omega_k`
-the Gauss-Legendre weights. The level matrix is common to the nodes; only the
-vertex changes. If the data were instead divided by :math:`|\phi_a|^2`
-event by event, the weight is the phase space :math:`p^2` alone -- use a
-table.
+      \frac{d^3\sigma}{d\Omega_{bB}\,d\Omega_{sF}\,dE} = K(E)\,\overline{|\mathcal M|^2},
+      \qquad K(E) = \frac{\mu_{aA}\mu_{sF}\mu_{bB}\,k_{sF}k_{bB}}{(2\pi)^5 k_{aA}}\quad(\hbar = 1),
+
+   and :math:`K` depends on :math:`E` only. Integrated over
+   :math:`\Omega_{bB}` (2017 eq. 34),
+
+   .. math::
+
+      \frac{d^2\sigma}{d\Omega_{sF}\,dE} \propto |\phi_a(q)|^2 \sum_l P_l^{-1} S_l(E)\,
+      |\tilde M_l(p_{xA})|^2 \equiv |\phi_a(q)|^2\,\sigma(E; q),
+
+   per unit solid angle of :math:`\mathbf k_{sF}`, with :math:`p_{xA}^2/2\mu_{xA}
+   = E + B_{xs} + q^2/2\mu_{sx}` (2017 eq. 31). The phase space at fixed
+   :math:`E` is :math:`d\Omega_{sF}`, uniform.
+2. *The lab form and KF.* The measured variables are, e.g., :math:`(E_b,
+   \Omega_b, \Omega_B)`, and :math:`d^3\sigma/dE_b\,d\Omega_b\,d\Omega_B = KF\,
+   |\phi_a(q)|^2\,d\sigma^\mathrm{HOES}/d\Omega` (Tribble 2014 eq. 4.1;
+   Spitaleri et al. 2017 eq. 3). KF "contains the final-state phase-space
+   factor": it is :math:`K` times the Jacobian of
+   :math:`(E, \Omega_{sF}, \Omega_{bB}) \to (E_b, \Omega_b, \Omega_B)`
+   (Typel & Baur eqs. 15-16; Tumino et al., ARNPS 71 (2021) 345, eqs.
+   15-16), so :math:`KF\,dE_b\,d\Omega_b\,d\Omega_B = K(E)\,dE\,d\Omega_{sF}\,
+   d\Omega_{bB}`. KF varies across the acceptance in the lab variables only
+   because the lab volume element does; in the c.m. variables it is
+   :math:`K(E)`. The same holds for the ratio :math:`\lambda_3/\lambda_2` of
+   Pizzone et al., PRC 83 (2011) 045801 eqs. 3-10 (:math:`\lambda_2` depends
+   on :math:`E` alone).
+3. *The data.* The HOES datum of an energy bin is the yield of the bin
+   divided by the Monte Carlo integral of :math:`KF\,|\phi_a|^2` over the
+   same bin and acceptance (Spitaleri 2017 eq. 15 and text: "the product
+   :math:`KF\cdot|\Phi|^2_\mathrm{exp}` is calculated by using a Monte Carlo
+   simulation"; Pizzone 2011 p. 045801-5). With the detection probability
+   :math:`\varepsilon`,
+
+   .. math::
+
+      \bar\sigma_\mathrm{bin} = \frac{\int_\mathrm{bin} \varepsilon\,KF\,|\phi_a|^2\,
+      \frac{d\sigma^\mathrm{HOES}}{d\Omega}\,dE_b\,d\Omega_b\,d\Omega_B}
+      {\int_\mathrm{bin} \varepsilon\,KF\,|\phi_a|^2\,dE_b\,d\Omega_b\,d\Omega_B}
+      = \frac{\int dE\,K(E) \int d\Omega_{sF}\,A\,|\phi_a(q)|^2\,\sigma(E; q)}
+             {\int dE\,K(E) \int d\Omega_{sF}\,A\,|\phi_a(q)|^2},
+
+   :math:`A(\theta)` the acceptance of a spectator direction integrated over
+   its azimuth and over the :math:`b`-:math:`B` direction. It is a ratio of
+   integrals: the division by :math:`|\phi_a|^2` is not event by event, and
+   :math:`|\phi_a|^2` stays in the weight (the datum is the
+   :math:`|\phi_a|^2`-weighted mean; only a cross section constant across the
+   accepted :math:`q` makes it drop out). KF does not appear: it is the
+   Jacobian. AZURE2 evaluates the model at fixed :math:`E` and folds it with
+   the resolution, which takes care of the bin; :math:`K(E)` varies by
+   :math:`O(\Delta E/E_{sF})` across one.
+4. *At fixed* :math:`E`, with :math:`d\Omega_{sF} = d\cos\theta_\mathrm{cm}\,
+   d\varphi` (:math:`\theta_\mathrm{cm}` the angle of :math:`\mathbf k_{sF}`
+   to the beam, :math:`x = \pm\cos\theta_\mathrm{cm}`) and
+   :math:`d\cos\theta_\mathrm{cm} = q\,dq/(\beta k_{sF}k_{aA})`:
+
+   .. math::
+
+      \bar\sigma(E) = \frac{\int A\,|\phi_a(q)|^2\,\sigma(E; q)\;q\,dq}
+                           {\int A\,|\phi_a(q)|^2\;q\,dq}
+      \qquad (\text{plane-wave vertex}),
+
+   over the accepted :math:`q`: inside :math:`[p_\mathrm{min},
+   p_\mathrm{max}]`, reached at :math:`E`, and in the directions of the
+   acceptance. The weight is :math:`|\phi|^2 q\,dq`, not :math:`|\phi|^2
+   q^2\,dq`.
+
+   With the DW vertex and :math:`R(E)` the amplitude depends on
+   :math:`\mathbf k_{sF}` through :math:`x` and the distorted waves, not on
+   :math:`q` alone, and :math:`|\phi_a|^2` is replaced by the plane-wave limit
+   :math:`|\tilde\varphi(q)|^2` of the vertex's own bound state (the DW
+   source is normalized by :math:`4\pi\tilde\varphi(q)`): the same measure,
+
+   .. math::
+
+      \langle |M_l|^2 \rangle = \frac{\int A\,|\tilde\varphi(q)|^2\,
+      |M_l(x)|^2\,dx}{\int A\,|\tilde\varphi(q)|^2\,dx}, \qquad
+      \bar R \propto \frac{\int A\,|M(x)|^2\,dx}{\int A\,|M_\mathrm{PW}(x)|^2\,dx},
+
+   ("Experimental acceptance" below). Both assume that the :math:`|\phi|^2`
+   of the Monte Carlo is the model's (the ``ps`` distribution, or
+   :math:`\tilde\varphi` for the DW vertex); otherwise the datum carries the
+   smooth factor :math:`\int A|\phi_\mathrm{model}|^2/\int
+   A|\phi_\mathrm{MC}|^2`.
+
+*The isotropic measure* :math:`|\phi|^2 p^2\,dp` *(AZURE2 before October
+2026).* :math:`p^2\,dp\,d\Omega_p` is :math:`d^3q = d^3k_{sF} = \mu_{sF}k_{sF}\,
+dE_{sF}\,d\Omega_{sF}`: the measure of events integrated over :math:`E` as
+well, e.g. the :math:`|p_s|` spectrum of all coincidences. A HOES datum is
+at one :math:`E` bin, where only the sphere :math:`|\mathbf k_{sF}| =
+\mathrm{const}` is left; the isotropic weight also put nodes at :math:`q`
+the kinematics do not reach at that :math:`E`. No HOES data convention
+corresponds to it, so it was removed rather than kept as an option. (Dividing
+each event by its own :math:`KF\,|\phi|^2` and normalizing by the accepted
+phase space, which no extraction we know of does, would give
+:math:`A\,K(E)/KF\,d\Omega_{sF}`: the fixed-:math:`E` measure again, not
+:math:`p^2\,dp`.) The experimental momentum distribution
+:math:`|\Phi(p_s)|^2_\mathrm{exp} \propto Y/KF` in narrow :math:`E` and angle
+windows (Spitaleri 2017 eq. 9; Pizzone 2011 Fig. 8) is :math:`|\phi|^2`
+itself -- what a ``ps`` table holds.
+
+*Implementation.* With ``ps=`` on the experiment line every THM point of the
+experiment (and every sub-point of its resolution folding) takes the
+accepted directions at its own :math:`E` -- Gauss-Legendre nodes in
+:math:`\cos\theta_\mathrm{cm}` on every accepted interval, the directions
+``ThmDistortion::AngleNodes`` gives :math:`R(E)` and the DW vertex --
+evaluates the entrance vertex (the surface term and the Coulomb term
+:math:`C_l`, which depends on :math:`p_{xA}` too) at :math:`T_k =
+q_k^2/2\mu_{sx}` added to :math:`E + B` (what ``spectatorEnergy`` does with
+one value), and sums the HOES cross section of the nodes with the normalized
+weights :math:`w_k \propto \omega_k A_k |\phi(q_k)|^2`, :math:`\omega_k` the
+Gauss-Legendre weights in :math:`\cos\theta_\mathrm{cm}`. The level matrix
+is common to the nodes; only the vertex changes. A ``ps`` window alone
+accepts every direction whose :math:`q` lies in it (``psNodes`` nodes); with
+``spectatorAngles=`` ("Experimental acceptance") the window is the
+intersection, with ``spectatorAngleNodes`` nodes per c.m. interval: one
+acceptance for the plane-wave vertex, :math:`R(E)` and the DW vertex. A
+folding sub-point beyond the reach of the window (no accepted direction)
+takes the nodes of the nearest data point; a data point without one is
+refused.
 
 *Syntax* (momenta in MeV/c, :math:`0 \le p_{\min} \le p_{\max}`):
 
@@ -724,48 +827,59 @@ table.
    :math:`|\phi|^2` along a line through :math:`p = 0`, as momentum
    distributions are quoted).
 ``ps=table:<file>``
-   The event weight itself, :math:`w(p)` per unit :math:`p` -- i.e.
-   :math:`|\phi|^2 p^2`, or :math:`p^2` alone, or a measured :math:`|p_s|`
-   distribution of the accepted events -- two columns, :math:`p` (MeV/c,
-   strictly increasing, :math:`\ge 0`) and :math:`w \ge 0`, ``#`` comments, at
-   least two rows, some positive weight; linear between rows. The window is
-   the table's range. A relative path is taken from the directory of the
+   The momentum distribution :math:`|\phi(p)|^2` itself (any scale; e.g. the
+   experimental :math:`|\Phi(p_s)|^2_\mathrm{exp} \propto Y/KF` of Spitaleri
+   2017 eq. 9) -- not a :math:`|p_s|` spectrum of accepted events, which
+   contains the measure and the acceptance (divide it by :math:`p` and by the
+   acceptance first). Until October 2026 the table was the event weight per
+   unit :math:`p`; a table written for that convention changes meaning. Two
+   columns, :math:`p` (MeV/c, strictly increasing, :math:`\ge 0`) and
+   :math:`|\phi|^2 \ge 0`, ``#`` comments, at least two rows, some positive
+   value; linear between rows. The window is the table's range. A relative path is taken from the directory of the
    ``.azr``, exactly as for ``weight[k]=`` files (the same resolution in
    ``Config::ReadThmBlock``: a leading ``/`` or ``\`` or a drive letter is
    absolute), so a copy of the project elsewhere must make it absolute or
    copy the table; the name cannot contain blanks or ``#``.
 ``psNodes=N``
-   Gauss-Legendre nodes (1-64, default 16) on the whole window. With
-   :math:`p_{\min} = p_{\max}` the window is one node of weight 1. A table
+   Gauss-Legendre nodes in :math:`\cos\theta_\mathrm{cm}` (1-64, default 16)
+   on the directions inside the window, at every energy; with
+   ``spectatorAngles=`` its ``spectatorAngleNodes`` instead (``psNodes`` is
+   then refused). With :math:`p_{\min} = p_{\max}` the window is one
+   direction of weight 1 (the vertex at :math:`T_s = p^2/2\mu_{sx}`). A table
    with kinks is integrated to :math:`O(h^2)` only; raise ``psNodes`` or
    smooth it.
 
-:math:`\mu_{sx}` comes from the experiment's kinematics (spectator and the
-nucleus :math:`x` = Trojan horse minus spectator; built-in table masses), so a
-window needs ``beam``, ``target``, ``spectator`` and ``Ebeam`` (``Ebeam`` is
-not used by the window). Refused, with ``ERROR: <thm> experiment[...]``: a
-window without kinematics, a malformed ``ps`` or ``psNodes``, ``psNodes``
-without a window, an unreadable or invalid table, and a window together with
-a non-zero ``spectatorEnergy`` (global or for the experiment's entrance pair).
-The window is printed at startup (nodes, :math:`\mu_{sx}`, the range of
-:math:`T_s` and :math:`\langle T_s \rangle`) and written to
-``thm_experiments.out`` (one ``ps_node`` row per node: :math:`p_k`,
-:math:`w_k`, :math:`T_k`). Extrapolation segments (``<segmentsTest>``) are in
-no experiment and keep the quasi-free vertex. Cost: the vertex and the
-exit-channel sums once per node (the level matrix once); the 7Li and 12C+12C
-examples below run in about 1.8 and 1.1 times the time without a window.
-Memory: every point and folding sub-point stores the vertex pieces of its
-entrance-pair channels at every node (16 bytes per channel and node, shared
-with its mapped points); the total is the ``ps_table`` row of
+:math:`\mu_{sx}` and the reachable :math:`q` come from the experiment's
+kinematics (beam, target, spectator, :math:`x` = Trojan horse minus
+spectator; built-in table masses), so a window needs ``beam``, ``target``,
+``spectator`` and ``Ebeam``. Refused, with ``ERROR: <thm> experiment[...]``:
+a window without kinematics, a malformed ``ps`` or ``psNodes``, ``psNodes``
+without a window or with ``spectatorAngles``, an unreadable or invalid table,
+a window together with a non-zero ``spectatorEnergy`` (global or for the
+experiment's entrance pair) or with ``spectatorAngle`` (one direction), and a
+data point at which no direction of the window is accepted (the window
+beyond the reachable :math:`q`). The window is printed at startup (the
+distribution, the cut, the nodes, :math:`\mu_{sx}`, and at the lowest and
+the highest point the number of nodes, their :math:`|p_s|` range and
+:math:`\langle T_s \rangle`) and written to ``thm_experiments.out``
+(``ps_node`` rows at those two energies: :math:`E`,
+:math:`\theta_\mathrm{cm}`, :math:`p_k`, :math:`w_k`, :math:`T_k`; a
+``<T_s>`` row after each). Extrapolation segments (``<segmentsTest>``) are
+in no experiment and keep the quasi-free vertex. Cost: the vertex and the
+exit-channel sums once per node (the level matrix once). Memory: every point
+and folding sub-point stores the vertex pieces of its entrance-pair channels
+at its own nodes and their weights (16 bytes per channel and node, 8 per
+node, shared with its mapped points); the total is the ``ps_table`` row of
 ``thm_experiments.out`` (points with sub-points, bytes). Until October 2026
 the pieces of every channel were kept, about 117 MB per node for the 19F
 model of ``examples/f19_pag_thm`` with its full window, and 16 nodes did not
-fit in 2 GB; now that model needs 470 MB in all with 16 nodes (403 MB
-without a window).
+fit in 2 GB; now that model needs 481 MB in all with 16 nodes in a pyazr
+session (398 MB without a window; the CLI 636 and 520 MB, getrusage).
 
 *pyazr.* ``AzrModel.set_thm_experiment(..., ps="hulthen:0-40", psNodes=16)``;
-``session.thm_vertex(name, energies)`` returns the nodes, weights,
-:math:`T_k`, :math:`\rho` at every node and energy, and per entrance channel
+``session.thm_vertex(name, energies)`` returns, per energy (lists over
+:math:`E` of arrays over its nodes), the nodes ``p_s``, ``weights``, ``T_s``,
+``theta_cm`` and ``rho``, and per entrance channel
 and level the window average :math:`\langle |M_l|^2 \rangle` and the
 quasi-free :math:`|M_l(p_s = 0)|^2` with the boundary the vertex uses for
 that level (for a ``delta`` experiment one node, :math:`p_s = 0`,
@@ -773,15 +887,29 @@ that level (for a ``delta`` experiment one node, :math:`p_s = 0`,
 
 *Checks* (``tests/thm_spectator_window``, ``tests/pyazr/thm_spectator_window_test.py``,
 on ``tests/18O_p_a_thm`` with its deuteron Trojan horse, :math:`\mu_{sx} =
-469.46` MeV): ``ps=delta`` byte-identical to no key; a window shrinking to a
-point equals ``spectatorEnergy`` :math:`= p^2/2\mu_{sx}` (one node: exactly; a
-:math:`2\times 10^{-4}` MeV/c window: :math:`6\times 10^{-10}`); a flat table on
-[20, 40] MeV/c equals the Simpson average of 41 single-``spectatorEnergy``
-runs to :math:`8\times 10^{-8}` (the Simpson error); two nodes equal
-:math:`w_1 m(T_1) + w_2 m(T_2)` from two sessions to :math:`10^{-15}`; the
-Hulthén window [0, 40] with 16 nodes agrees with 32 to :math:`10^{-10}` (8
-nodes: :math:`2\times 10^{-8}`); ``thm_vertex`` against an independent
-evaluation of nodes, weights, :math:`\rho` and :math:`\langle|M_0|^2\rangle`.
+469.46` MeV, 2H(18O,α15N)n at 54 MeV, reachable :math:`|p_s|` from 3-8 to
+beyond 130 MeV/c): ``ps=delta`` byte-identical to no key; a window shrinking
+to a point equals ``spectatorEnergy`` :math:`= p^2/2\mu_{sx}` (one node and a
+:math:`2\times 10^{-4}` MeV/c window: :math:`4\times 10^{-10}`); a flat
+:math:`|\phi|^2` table on [20, 40] MeV/c equals :math:`\int q\,\sigma\,dq/
+\int q\,dq` by Simpson's rule over 41 single-``spectatorEnergy`` runs to
+:math:`1.6\times 10^{-8}` (the Simpson error); one direction
+(``hulthen:30-30``) equals a ``spectatorEnergy`` session to
+:math:`10^{-9}`; the Hulthén window [0, 40] with 16 nodes agrees with 32 to
+:math:`1.3\times 10^{-10}` (8 nodes: :math:`1.6\times 10^{-10}`); ``ps``
+alone is byte-identical to ``spectatorAngles=cm:0-180`` with as many nodes;
+``thm_vertex`` at every energy against an independent evaluation of the
+three-body kinematics (nodes in :math:`\cos\theta_\mathrm{cm}`, weights
+:math:`\omega_k|\phi(q_k)|^2`, :math:`T_k`, :math:`\rho`: :math:`10^{-10}`)
+and of :math:`\langle|M_0|^2\rangle`; refusals (out of reach, with
+``spectatorAngle``, ``psNodes`` with ``spectatorAngles``, and the others
+above). ``tests/reference/thm_spectator_angles_test``: a ``ps`` window alone
+has the measure of every direction inside the cut (brute force,
+:math:`4\times 10^{-6}`). Without ``ps`` and ``spectatorAngles`` every output
+file is byte-identical to the previous build (``tests/18O_p_a_thm`` in eight
+configurations -- no experiment, kinematics, R(E) Coulomb and optical at
+qf, lab and c.m. angles, DW, ``theta``, ``spectatorEnergy`` -- and the
+7Li, 12C+12C, 19F and 18O(p,α) 2010 examples).
 
 *Size* (models at fixed parameters, not refitted; scratch studies, not in
 the repository).
@@ -789,38 +917,46 @@ the repository).
 - A vertex node. With the spectator at a fixed :math:`p_s = 24` MeV/c,
   ``tests/18O_p_a_thm`` (no folding) puts :math:`M_0 = 0` at :math:`E \approx
   0.70` MeV: the model there drops to :math:`2.4\times 10^{-4}` of its
-  maximum. The Hulthén window [0, 40] fills it to 0.42 of the maximum
-  (:math:`5\times 10^{4}` times the point value). Across the whole data
-  range the window changes the (folded) model by up to 73 % against the
-  quasi-free point.
-- :sup:`7`\ Li(p,α) (``examples/li7_tumino2006``, deuteron Trojan horse as
-  its :math:`B = 2.2246` MeV, Hulthén [0, 40]): the THM model rises by
-  1.14-1.18 below 1 MeV and by 1.15-1.29 up to 3 MeV (0.92 at 4.5 MeV), so
-  the shape changes by ~3 % below 1 MeV and ~40 % over 0.08-6.9 MeV; the THM
-  :math:`\chi^2` (norm profiled) goes 847 → 933. Replacing the window by its
-  mean, ``spectatorEnergy`` :math:`= \langle T_s\rangle = 0.88` MeV, gives the
-  window's model to 1 % (:math:`\chi^2` 942): here the window acts as a shift
-  of :math:`E + B`. With a :sup:`3`\ He Trojan horse (:math:`B = 5.4935` MeV,
-  Eckart :math:`a = 0.42`, :math:`b = 1.2` fm\ :sup:`-1`,
-  :math:`\mu_{sx} = 625.4` MeV, [0, 40]): 0.91-1.15, :math:`\chi^2` 1154 →
-  1227.
+  maximum. The Hulthén window [0, 40] fills it to 0.48 of the maximum
+  (:math:`5\times 10^{4}` times the point value; 0.42 with the isotropic
+  measure). Across the whole data range the window changes the (folded) model
+  by up to 67 % (73 %) against the quasi-free point.
+- :sup:`7`\ Li(p,α) (``examples/li7_tumino2006``, 2H(7Li,αα)n at 19 MeV,
+  deuteron Trojan horse as its :math:`B = 2.2246` MeV, Hulthén [0, 40]). The
+  fixed-:math:`E` kinematics bound what such a window can mean: at 19 MeV
+  :math:`E_{sF} > 0` needs :math:`E < 2.01` MeV, and above 1.92 MeV the
+  smallest reachable :math:`|p_s|` is above 40 MeV/c (43-68 MeV/c at 1.92
+  MeV), so the window is refused there; the example's THM data reach 6.9
+  MeV (several beam energies in the experiment), which the isotropic measure
+  did not notice. On the 18 THM points below 1.83 MeV (the segment cut at
+  :math:`E_\mathrm{lab}` = 2.15 MeV) the THM model rises by 1.12-1.17 below
+  1 MeV and 1.18-1.31 up to 1.82 MeV, :math:`\langle T_s\rangle` goes from
+  0.69 MeV at 0.08 MeV to 1.61 MeV at 1.82 MeV (only 38-40 MeV/c reachable
+  there), and the THM :math:`\chi^2` (norm profiled) goes 341 → 310. With a
+  :sup:`3`\ He Trojan horse (33 MeV, :math:`B = 5.4935` MeV, Eckart
+  :math:`a = 0.42`, :math:`b = 1.2` fm\ :sup:`-1`, :math:`\mu_{sx} = 625.4`
+  MeV, [0, 40]) the window is out of reach above 1.62 MeV; on the 15 points
+  below 1.51 MeV: 0.98-1.16 below 1 MeV, 1.17-1.18 above, :math:`\chi^2` 218
+  → 176. (With the isotropic measure on all points: 1.14-1.29,
+  :math:`\chi^2` 847 → 933; 3He 0.91-1.15, 1154 → 1227.)
 - 12C+12C (``examples/c12c12_tumino2018``, 12C(14N,α/p)d at 30 MeV, the four
   THM segments one experiment with a free norm; :math:`B = 10.27` MeV,
   :math:`\mu_{sx} = 1606` MeV; the d-12C distribution in 14N as an Eckart
   function with :math:`a = \sqrt{2\mu_{sx}B}/\hbar c = 0.918` fm\ :sup:`-1`,
-  :math:`b = 2.5` fm\ :sup:`-1`, nearly flat over [0, 40] MeV/c, so the
-  weight is close to :math:`p^2`; :math:`T_s \le 0.49` MeV): :math:`\rho
-  \approx 13.4`-14.7 moves by up to 0.25, a fair part of the oscillation of
-  :math:`j_l` for :math:`l \le 8`. The model changes by 0.32-1.73 level by
-  level (α\ :sub:`0` 0.34-1.12, p\ :sub:`1` 0.43-1.73), and the THM
-  :math:`\chi^2` at the published parameters goes 61 → 1578; with
-  ``spectatorEnergy`` = :math:`\langle T_s\rangle = 0.295` MeV instead it is
-  1707, and the window differs from that mean by up to 1.73: near the nodes
-  the average matters, not only the shift. ``thm_vertex``: the :math:`l = 4`
-  vertex has a node at :math:`E = 2.02` MeV (:math:`|M_4|^2 = 8\times
-  10^{-6}` against a maximum of 0.68), which the window fills to
-  :math:`4.8\times 10^{-2}`. Published 12C+12C THM fits assume the
-  quasi-free vertex; with the window the parameters would move.
+  :math:`b = 2.5` fm\ :sup:`-1`): with [0, 40] MeV/c the kinematics reach
+  only 38.9-40 MeV/c at the lowest point (0.82 MeV; :math:`\langle
+  T_s\rangle` = 0.48 MeV) and 4.5-40 MeV/c at the highest (2.69 MeV, 0.25
+  MeV), so :math:`\rho \approx 13.4`-14.7 moves by up to 0.25, a fair part of
+  the oscillation of :math:`j_l` for :math:`l \le 8`. The model changes by
+  0.19-2.26 level by level (p\ :sub:`0` 0.21-1.10, p\ :sub:`1` 0.27-2.26,
+  α\ :sub:`0` 0.19-1.60, α\ :sub:`1` 0.26-1.18), and the THM :math:`\chi^2`
+  at the published parameters goes 61 → 2863 (1578 with the isotropic
+  measure); with the 80 MeV/c that the setup accepts ("Experimental
+  acceptance") 7406. ``thm_vertex``: the :math:`l = 4` vertex has a node at
+  :math:`E = 2.02` MeV (:math:`|M_4|^2 = 8\times 10^{-6}` against a maximum of
+  0.68), which the window fills to :math:`4.3\times 10^{-2}` (4.8\ :math:`\times
+  10^{-2}` isotropic). Published 12C+12C THM fits assume the quasi-free
+  vertex; with the window the parameters would move.
 
 Distortion factor R(E)
 ----------------------
@@ -1301,18 +1437,20 @@ spectator direction of ``spectatorAngle`` (default ``qf``,
 :math:`\hat k_{sF} = \hat k_{aA}`), as :math:`R(E)` is; :math:`q = |\mathbf
 k_{sF} - \beta\mathbf k_{aA}|` is then small but not zero, and the vertex
 without distortion is the plane-wave one with ``spectatorEnergy``
-:math:`= q^2/2\mu_{sx}` at that energy. With a ``ps`` window the node
-:math:`p_k` *is* :math:`q`: the angle between :math:`\mathbf k_{sF}` and
-:math:`\mathbf k_{aA}` follows from
+:math:`= q^2/2\mu_{sx}` at that energy. With a ``ps`` window (or
+``spectatorAngles``) the vertex is averaged over the accepted directions
+("Experimental acceptance"): :math:`q` and the direction are one variable,
 :math:`\cos\theta = (k_{sF}^2 + \beta^2 k_{aA}^2 - q^2)/(2\beta k_{sF}
-k_{aA})`, and only :math:`|k_{sF} - \beta k_{aA}| \le q \le k_{sF} + \beta
-k_{aA}` can be reached at a given energy. At every energy the window is
-intersected with that range and the Gauss-Legendre nodes and weights (the
-same :math:`w(p)`) are put on the intersection, as a simulation of the
-accepted events would; without distortion and with the window inside the
-reachable range this is the plane-wave window. ``spectatorAngle`` together
-with a window is refused (the window sets the direction), and a data point
-whose window is out of reach is refused at startup.
+k_{aA})`, only :math:`|k_{sF} - \beta k_{aA}| \le q \le k_{sF} + \beta
+k_{aA}` is reached at a given energy, and the nodes are Gauss-Legendre in
+:math:`\cos\theta_\mathrm{cm}` on the directions whose :math:`q` is inside
+the cut, weight :math:`|\tilde\varphi(q)|^2\,d\cos\theta_\mathrm{cm}` (the
+fixed-:math:`E` measure, "Spectator-momentum window"); without distortion
+this is the plane-wave window with :math:`\tilde\varphi` for :math:`\phi`.
+(Until October 2026 the nodes were Gauss-Legendre in :math:`q` with the
+weight :math:`|\phi|^2 q^2`.) ``spectatorAngle`` together with a window is
+refused (the window sets the direction), and a data point whose window is
+out of reach is refused at startup.
 
 *Numerics* (``src/ThmDwVertex.cpp``). With the distorted waves in partial
 waves (the conventions of the previous section,
@@ -1380,10 +1518,10 @@ weights of a window likewise, renormalized); points beyond take the end value
 with one ``WARNING``. Cost at startup, two threads: 6 s for 19F + d
 (:math:`\kappa = 0.23` fm\ :sup:`-1`, :math:`l \le 4`, 58 energies,
 :math:`L \le 61`), 4 s for 12C(14N,d) (:math:`l \le 8`, 125 energies); per
-evaluation the tables cost nothing measurable (a ``ps`` window multiplies the
-vertex and exit sums by its nodes as with plane waves: 19F full window, 0.74
-s per evaluation without and 4.2 s with 16 nodes). Memory: the 19F session
-peaks at about 400 MB with or without the window.
+evaluation the tables cost nothing measurable (a window averages the Gram
+matrix of the directions, one node: the same time per evaluation as without
+it). Memory: the 19F session peaks at about 400 MB with or without the
+window.
 
 *Syntax, output, pyazr.* ``vertexModel=pw|dw`` on the experiment line.
 ``dw`` needs ``distortion=coulomb`` or ``optical`` (and so the kinematics);
@@ -1415,7 +1553,10 @@ angular-distribution diagnostic says it is not available with ``dw``.
 the ratios :math:`|M_l|^2/|M_0|^2` for real and complex :math:`B` to
 :math:`10^{-8}`, for 19F(d,n) at the quasi-free direction (:math:`l \le 4`),
 12C(14N,d) at 40° in the c.m. (:math:`l \le 8`, every :math:`m` enters) and
-a Hulthén window whose nodes, weights and :math:`q` are checked on their own;
+a ``ps`` window: the directions with :math:`q` in the cut, their
+:math:`q` and weights :math:`\omega_k|\tilde\varphi(q_k)|^2` (against an
+independent radial quadrature of :math:`\tilde\varphi`, :math:`10^{-9}`),
+and the averaged :math:`G` against the weighted plane-wave Gram matrices;
 (c) point Coulomb in :math:`d` + 19F: :math:`G` for :math:`l = 0` (324 keV)
 and :math:`l = 1` (213 keV) at 5.136 fm against
 ``thm_dw_vertex_reference.py``, a direct three-dimensional quadrature of
@@ -1457,18 +1598,21 @@ vertex                   :math:`|M_1(213)/`     :math:`|M_1(828)/`     :math:`|M
                          (4.1 / 5.1 / 6.1 fm)   (4.1 / 5.1 / 6.1 fm)   (4.1 / 5.1 / 6.1 fm)
 ======================== ====================== ====================== ======================
 pw, :math:`q = 0`        1.10 / 3.00 / 19.7     1.16 / 2.83 / 15.7     1.24 / 1.55 / 3.17
-pw, window               2.94 / 11.9 / 3.78     2.86 / 10.1 / 2.52     1.33 / 1.64 / 0.74
+pw, window               2.23 / 8.07 / 6.49     2.21 / 7.04 / 4.56     1.26 / 1.57 / 0.86
 dw, plane waves (qf)     1.11 / 3.01 / 19.9     1.16 / 2.87 / 16.4     1.21 / 1.47 / 2.81
 dw, Coulomb (qf)         0.171 / 0.235 / 0.341  0.242 / 0.319 / 0.433  0.99 / 1.04 / 1.10
-dw, Coulomb, window      0.42 / 0.63 / 1.04     0.50 / 0.71 / 1.10     0.98 / 1.03 / 1.11
+dw, Coulomb, window      0.36 / 0.52 / 0.81     0.43 / 0.60 / 0.88     0.98 / 1.03 / 1.10
 dw, optical :math:`aA`   0.44 / 0.56 / 0.70     0.51 / 0.62 / 0.74     1.06 / 1.09 / 1.14
 dw, optical (qf)         0.33 / 0.41 / 0.52     0.40 / 0.48 / 0.58     1.04 / 1.08 / 1.13
-dw, optical, window      1.29 / 1.24 / 1.32     1.28 / 1.19 / 1.21     1.08 / 1.08 / 1.10
+dw, optical, window      0.89 / 0.94 / 1.06     0.91 / 0.93 / 1.00     1.05 / 1.07 / 1.09
 ======================== ====================== ====================== ======================
 
 The plane-wave ratios change by factors 18, 13 and 2.6 over the three radii;
-with the distortion they change by 1.6-2.5 (quasi-free) and by 1.01-1.08
-with the optical potentials and the window. The DW source is the Trojan horse
+with the distortion they change by 1.6-2.5 (quasi-free) and by 1.04-1.19
+with the optical potentials and the window (the window rows: the accepted
+directions with the fixed-:math:`E` measure; before October 2026 the
+isotropic one gave pw 2.94 / 11.9 / 3.78, dw Coulomb 0.42 / 0.63 / 1.04, dw
+optical 1.29 / 1.24 / 1.32 for the first column). The DW source is the Trojan horse
 decelerated by the 19F Coulomb field where it breaks up: at 5-6 fm the
 deuteron has about 3 of its 5.3 MeV, and :math:`p` (a difference of
 :math:`k_{aA}` and :math:`\alpha k_{sF}`) roughly halves, which moves the
@@ -1476,8 +1620,8 @@ deuteron has about 3 of its 5.3 MeV, and :math:`p` (a difference of
 nuclear attraction at the surface gives part of the momentum back. The
 :math:`l` ratios themselves are therefore model dependent at the level of the
 optical potentials and of the window (a factor 1.5-2 between Coulomb and
-optical waves at the quasi-free direction, 1.3-3 with the window, and 3
-between the quasi-free direction and the window with optical waves), but
+optical waves at the quasi-free direction, 1.1-2.5 with the window, and
+1.7-2.7 between the quasi-free direction and the window with optical waves), but
 they hardly depend on the channel radius any more. The PWIA stripping conversion of Su et al.
 corresponds to :math:`|M_1(213)/M_0(324)|^2 \approx 2.1` and
 :math:`|M_1(828)/M_0(324)|^2 \approx 0.66` in these units (the plane-wave
@@ -1624,15 +1768,19 @@ with the window it is close (77 against 64, penalty 6 against 8).
 :math:`\omega\gamma(11)` moves from 3.7 to 4.3-4.5 × 10\ :sup:`-29` eV
 (quasi-free DW, at the upper end of the plane-wave radius range 2.3-4.4)
 and to 5.4 with the window; the window with plane waves moves the 213 keV
-strength to a third of its direct value (−6.8σ).
+strength to a third of its direct value (−6.8σ). The fits "with the window"
+in this table were made before October 2026 with the isotropic measure
+:math:`|\phi|^2 p^2\,dp` of the ``ps`` window; with the fixed-:math:`E`
+measure the window changes the vertex ratios as in the table above (dw
+optical 1.24 → 0.94 at 5.136 fm), and these rows have not been refitted.
 
 *Scope and limits.* The surface term of the prior-form DWBA with the
 internal post amplitude neglected (as for the plane-wave vertex) and without
 the external prior term (``coulombIntegral=1`` refused); the angle-integrated
 observable only (no ``theta``); the :math:`s`-:math:`x` bound state in
-:math:`l_{sx} = 0` and in its asymptotic form; one spectator direction, the
-isotropic ``ps`` window, or the acceptance in the spectator's polar angle
-(``spectatorAngles``, "Experimental acceptance"); no
+:math:`l_{sx} = 0` and in its asymptotic form; one spectator direction or
+the acceptance in the spectator's polar angle
+(``spectatorAngles`` and ``ps``, "Experimental acceptance"); no
 spin-orbit term; the optical potentials are an input whose choice now
 carries the :math:`l` dependence. With a cutoff :math:`r_\mathrm{min} > 0`
 the normalization :math:`\tilde\varphi(q)` can pass through zero at large
@@ -1839,13 +1987,15 @@ numbers.
 Experimental acceptance
 -----------------------
 
-*Why.* The distortion factor :math:`R(E)` and the distorted-wave vertex are
-evaluated at one spectator direction (``spectatorAngle``: the quasi-free
-direction or one lab or c.m. angle). The data integrate over the detector
-acceptance: ranges of the angles of the two detected particles, and so of
-the spectator direction, together with the accepted :math:`|p_s|` window.
-``spectatorAngles=`` gives the accepted spectator directions, and
-:math:`R(E)` and the DW vertex become averages over them.
+*Why.* Without an acceptance the distortion factor :math:`R(E)` and the
+distorted-wave vertex are evaluated at one spectator direction
+(``spectatorAngle``: the quasi-free direction or one lab or c.m. angle). The
+data integrate over the detector acceptance: ranges of the angles of the two
+detected particles, and so of the spectator direction, together with the
+accepted :math:`|p_s|` window. ``spectatorAngles=`` gives the accepted
+spectator directions; with ``ps=`` (the :math:`|p_s|` cut and the momentum
+distribution) it is one acceptance, over which the plane-wave vertex,
+:math:`R(E)` and the DW vertex are averaged.
 
 *Kinematics: one variable at fixed* :math:`E`. In :math:`a + A \to s + c + C`
 through :math:`F^* \to c + C`, the energy :math:`E` of :math:`x + A` fixes
@@ -1874,8 +2024,10 @@ and the spectator angle are the same variable, and a two-dimensional
 :math:`(|p_s|, \theta_s)` quadrature would be degenerate. A ``ps`` window
 (the cut of the data reduction) is then a cut on :math:`x`: the accepted
 directions are those of the angle window whose :math:`q` lies in
-:math:`[p_\mathrm{min}, p_\mathrm{max}]`; its distribution
-(Hulthén, Gauss, table) does not enter.
+:math:`[p_\mathrm{min}, p_\mathrm{max}]` (a ``ps`` window alone: every
+direction whose :math:`q` lies in it). Its distribution (Hulthén, Gauss,
+table) weights the plane-wave vertex; :math:`R(E)` and the DW vertex carry
+:math:`|\tilde\varphi(q)|^2` of their own bound state instead.
 
 *What is averaged.* At fixed :math:`E` the three-body phase space is
 :math:`d\Omega_s` (the length of :math:`k_{sF}` is fixed), i.e.
@@ -1916,27 +2068,23 @@ nothing per evaluation. Without distortion both averages reduce to the
 plane-wave quantities (:math:`R \equiv 1`; the DW vertex with plane waves
 is the plane-wave vertex at the :math:`p` of each direction).
 
-*Relation to the* ``ps`` *window.* ``ps`` averages over :math:`|p_s|` with
-:math:`w(p) = |\phi(p)|^2 p^2\,dp`: an isotropic distribution of
-:math:`\mathbf p_s` independent of :math:`E`, the convention of the
-plane-wave vertex (2017 eq. 34), whose :math:`p_{xA}` follows from
-:math:`E + B + p_s^2/2\mu_{sx}`. At fixed :math:`E` the accepted
-:math:`\mathbf q` lie on a sphere of radius :math:`k_{sF}` about
-:math:`\beta\mathbf k_{aA}`, and :math:`d\cos\theta_\mathrm{cm} =
-q\,dq/(\beta k_{sF}k_{aA})`: the fixed-:math:`E` measure is
-:math:`|\phi|^2 q\,dq`, not :math:`q^2\,dq`. For the plane-wave vertex
-AZURE2 keeps the ``ps`` convention, and the direction does not enter it, so
-``spectatorAngles`` is refused without a computed distortion (the
-plane-wave vertex at the kinematic :math:`p` of each accepted direction is
-``vertexModel=dw`` with ``opticalAA=plane opticalSF=plane``). For the DW
-vertex the two differ: a ``ps`` window alone places its nodes on the
-reachable :math:`q` range with the :math:`q^2` weight, while
-``spectatorAngles=cm:0-180`` with the same ``ps`` window weights the same
-directions with the fixed-:math:`E` measure. For 19F (below) the adopted-window
-THM :math:`\chi^2` at fixed parameters is 176 with ``ps=hulthen:0-50``
-and 296 with ``spectatorAngles=cm:0-180`` and that window; a ``ps`` table of
-weight :math:`|\phi_\mathrm{H}|^2 p` (the fixed-:math:`E` measure, Hulthén)
-gives 302, so the measure, not :math:`\phi`, makes the difference.
+*Relation to the* ``ps`` *window.* The measure is the one derived in
+"Spectator-momentum window": :math:`d\cos\theta_\mathrm{cm} = q\,dq/(\beta
+k_{sF}k_{aA})` at fixed :math:`E`. Until October 2026 the ``ps`` window
+averaged instead with :math:`|\phi|^2 q^2\,dq` (an isotropic
+:math:`\mathbf p_s`, the measure of events integrated over :math:`E`), the
+plane-wave vertex on the whole :math:`[p_\mathrm{min}, p_\mathrm{max}]` and
+the DW vertex on its reachable part; for 19F (below) the adopted-window THM
+:math:`\chi^2` of the DW vertex was 176 with ``ps=hulthen:0-50`` that way
+and 296 with ``spectatorAngles=cm:0-180`` and the same cut, and a ``ps``
+table of weight :math:`|\phi_\mathrm{H}|^2 p` reproduced 302: the measure,
+not :math:`\phi`, made the difference. Now a ``ps`` window alone is
+``spectatorAngles=cm:0-180`` with its cut (``tests/thm_spectator_window``:
+byte-identical with as many nodes), for every vertex model. For the
+plane-wave vertex, ``spectatorAngles`` with a ``ps`` distribution averages
+:math:`|M_l(p_{xA}(q))|^2` with :math:`A\,|\phi(q)|^2\,d\cos\theta_\mathrm{cm}`;
+without a distribution (``ps=delta``) and without a computed distortion it
+has nothing to average and is refused.
 
 *Lab windows.* The spectator's lab angle follows from
 :math:`\tan\theta_\mathrm{lab} = \sin\theta_\mathrm{cm}/(\cos\theta_\mathrm{cm} +
@@ -1982,13 +2130,13 @@ forward branch only.
 ``spectatorAngleNodes=N``
    Gauss-Legendre nodes per c.m. interval (1-64, default 8).
 
-It needs ``distortion=coulomb`` or ``optical``. Refused, with ``ERROR:
-<thm> experiment[...]``: without a computed distortion, together with
-``spectatorAngle``, ``spectatorAngleNodes`` without a window, ``psNodes``
-with ``vertexModel=dw`` (the ``ps`` window only cuts), malformed values, an
-unreadable or invalid table, and a data point at which no direction of the
-window is accepted (for a lab window beyond :math:`\theta_m`, or nothing
-inside the ``ps`` cut). Grid energies beyond the data without an accepted
+It needs ``distortion=coulomb`` or ``optical``, or a ``ps`` distribution
+(plane-wave vertex). Refused, with ``ERROR: <thm> experiment[...]``: with
+neither, together with ``spectatorAngle``, ``spectatorAngleNodes`` without a
+window, ``psNodes`` with a window (its nodes are ``spectatorAngleNodes``),
+malformed values, an unreadable or invalid table, and a data point at which
+no direction of the window is accepted (for a lab window beyond
+:math:`\theta_m`, or nothing inside the ``ps`` cut). Grid energies beyond the data without an accepted
 direction take the nearest value. ``distortionRatio=dw`` with a ``ps``
 window stays refused (:math:`|\phi|^2` twice).
 
@@ -2001,12 +2149,13 @@ below :math:`10^{-13}` of the smallest node amplitude. DW vertex: the Gram
 matrix of every direction from the reduced amplitudes the vertex has
 anyway, :math:`\bar G` per grid energy; tables :math:`n_E \times n_l \times
 4` as without a window (plus the directions for the report), the same
-evaluation time. Memory, 19F full data window (53 points, 30 keV folding):
-peak RSS 642 MB with :math:`R(E)`, ``ps=hulthen:0-50`` (16 nodes) and
-``spectatorAngles=cm:135-180``, the same without the angle window (the
-``ps`` tables of the plane-wave vertex dominate; 630 MB without
-:math:`R`), and 524 MB with ``vertexModel=dw``, the ``ps`` window and the
-angle window (526 MB without the angle window). Eight nodes are
+evaluation time. Memory, 19F full data window (53 points, 30 keV folding;
+CLI, getrusage): peak RSS 603 MB with :math:`R(E)`, ``ps=hulthen:0-50`` (8
+nodes per point with ``spectatorAngles=cm:135-180``), 649 MB with the
+``ps`` window alone (16 nodes; the plane-wave vertex tables dominate; 636 MB
+without :math:`R`, 520 MB without a window), and 522 MB with
+``vertexModel=dw``, the ``ps`` window and the angle window (523 MB without
+the angle window). Eight nodes are
 converged for the cases below: 16 nodes change no :math:`\chi^2` beyond
 :math:`10^{-8}`.
 
@@ -2049,7 +2198,9 @@ for :math:`R` and the DW vertex, ``thm_distortion``, and the reported
 the key every output file is byte-identical to the previous build (nine
 configurations of ``tests/18O_p_a_thm``: no experiment, R(E) Coulomb and
 optical at qf, lab and c.m. angles, DW with and without ``ps``, the
-plane-wave ``ps`` window, ``theta``).
+plane-wave ``ps`` window, ``theta``; at the time of that change -- the
+``ps`` window itself moved to the fixed-:math:`E` measure in October 2026,
+"Spectator-momentum window").
 
 *The windows of two experiments.* 19F(p,αγ)16O, 2H(19F,α16O)n at 55 MeV
 (Su et al., PRL 135 (2025) 182701, supplement secs. III-V): position-sensitive
@@ -2085,21 +2236,31 @@ vertex / distortion                    :math:`|M_1(213)/`   :math:`|M_1(828)/`  
 pw                                     3.00                 2.83                 1.55                63.9        3101
 pw, R(E) optical, qf                                                                                 87.0        3106
 pw, R(E) optical, cm:135-180                                                                         76.5        3106
+pw, ps 0-50                            8.07                 7.04                 1.57                1114        3112
+pw, R(E) optical, ps 0-50                                                                            1139        (a)
 dw optical, qf                         0.41                 0.49                 1.08                611         2203
 dw optical, cm:135-180                 0.95                 0.96                 1.04                281         3043
-dw optical, ps 0-50 (:math:`q^2dq`)    1.24                 1.18                 1.08                176         3082
+dw optical, ps 0-50                    0.94                 0.93                 1.07                296         3038
 dw optical, cm:135-180 + ps cut        0.94                 0.93                 1.07                296         3038
 dw optical, cm:140-176 + ps cut        0.93                 0.94                 1.04                315         3027
 dw Coulomb, qf                         0.24                 0.33                 1.04                680         1861
-dw Coulomb, ps 0-50                    0.63                 0.73                 1.03                479         2895
+dw Coulomb, ps 0-50                    0.52                 0.60                 1.03                536         2775
 dw Coulomb, cm:135-180 + ps cut        0.52                 0.61                 1.03                536         2775
 ====================================== ==================== ==================== =================== =========== ========
 
-With the acceptance the :math:`l = 1` to :math:`l = 0` ratio of the DW
-vertex more than doubles against the quasi-free direction (0.41 → 0.94
-optical, 0.24 → 0.52 Coulomb) and is a quarter below the ``ps`` window's
-1.24 (the :math:`q^2` against the :math:`q` measure); narrowing the window to
-the central 90 % changes it by 1 %. For :math:`R(E)` (neutral spectator,
+(a) The profile of norm and linear background is degenerate there.
+``ps 0-50`` alone is the cut on every direction, which here is
+:math:`\theta_\mathrm{cm} \ge 131.7°`: the same directions as
+``cm:135-180`` with the cut (the :math:`\chi^2` agree to :math:`10^{-9}`,
+16 against 8 nodes); before October 2026 the ``ps`` rows used the isotropic
+measure (dw optical 1.24, 1.18, 1.08 and :math:`\chi^2` 176 / 3082; dw
+Coulomb 0.63, 0.73, 1.03 and 479 / 2895; pw 1525 adopted). With the
+acceptance the :math:`l = 1` to :math:`l = 0` ratio of the DW vertex more
+than doubles against the quasi-free direction (0.41 → 0.94 optical, 0.24 →
+0.52 Coulomb); narrowing the window to the central 90 % changes it by 1 %.
+With the plane-wave vertex the window raises it from 3.0 to 8.1 at 5.136 fm
+and the adopted-window :math:`\chi^2` at the published parameters from 64 to
+1114. For :math:`R(E)` (neutral spectator,
 only the a + A wave distorted) the window moves :math:`\chi^2` from 87 to 77
 (64 without :math:`R`). 12C+12C (``examples/c12c12_tumino2018``, the four THM
 segments one experiment, 30 keV folding, point Coulomb): :math:`R` = 5.44 at
@@ -2486,14 +2647,15 @@ are never applied together (``vertexModel=dw`` does not apply :math:`R`).
 ``distortionRatio=dw`` makes :math:`R = |M|^2`, which carries the momentum
 distribution :math:`|\tilde\varphi(q)|^2` at the spectator direction; a
 ``ps`` window already averages the model with the event weight
-:math:`|\varphi(p_s)|^2 p_s^2` of data divided by :math:`|\varphi|^2`, so
-the pair is refused (``dwpw`` divides it out and is allowed). :math:`R` is
-taken at one spectator direction (``spectatorAngle``, default ``qf``) while
-the nodes of a window correspond to other directions (12C(14N,d), window
-0-40 MeV/c: the reachable nodes lie within about 25° of the beam); :math:`R`
-at 20° in the c.m. differs from the quasi-free one by 0.993-1.003 over the
-data, so this approximation is kept (``vertexModel=dw`` evaluates the
-distortion at every node). ``weight[k]`` on a segment with :math:`R` or the
+:math:`|\varphi(p_s)|^2\,d\cos\theta_\mathrm{cm}` of data divided by
+:math:`|\varphi|^2`, so the pair is refused (``dwpw`` divides it out and is
+allowed). With a ``ps`` window :math:`R` is averaged over the same accepted
+directions as the plane-wave vertex ("Experimental acceptance"); the model
+is then the product of the two averages rather than the average of the
+product, an approximation of the size of the variation of :math:`R` across
+the window (12C(14N,d): :math:`R` at 20° in the c.m. differs from the
+quasi-free one by 0.993-1.003 over the data; ``vertexModel=dw`` evaluates
+the distortion in every direction). ``weight[k]`` on a segment with :math:`R` or the
 DW vertex is warned, as before. ``theta`` does not touch the Coulomb
 factors.
 

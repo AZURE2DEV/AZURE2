@@ -218,10 +218,12 @@ momentum window* and *Distortion*:
   offered once the four fields of the three-body reaction are filled. The off-shell x-A
   momentum of the entrance vertex depends on the spectator momentum
   :math:`p_s` (:math:`p_{xA}^2/2\mu_{xA} = E + B + p_s^2/2\mu_{sx}`), and THM
-  data are averaged over the accepted :math:`p_s` window; AZURE2 then averages
-  the HOES cross section over the window with the weight
-  :math:`w(p) = |\phi(p)|^2 p^2`. This matters most near the nodes of the
-  vertex. **Distribution**: *point* (the quasi-free :math:`p_s = 0`, the
+  data are averaged over the accepted :math:`p_s` window. At fixed :math:`E`
+  the spectator direction fixes :math:`p_s`, and AZURE2 averages the HOES
+  cross section over the accepted directions with the fixed-:math:`E` event
+  weight :math:`|\phi(p_s)|^2\,d\cos\theta_\mathrm{cm}`, i.e.
+  :math:`|\phi|^2 p_s\,dp_s` over the :math:`p_s` the kinematics reach. This
+  matters most near the nodes of the vertex. **Distribution**: *point* (the quasi-free :math:`p_s = 0`, the
   default; nothing is written), *Hulthén*, *Gaussian* or *table*. Only the
   fields of the chosen distribution are shown: **p_min** and **p_max** in
   MeV/c (Hulthén and Gaussian); the Hulthén **a** and **b** in
@@ -229,27 +231,32 @@ momentum window* and *Distortion*:
   and editable once **custom a, b** (next to the distribution) is ticked (e.g. an Eckart function for
   :sup:`3`\ He or :sup:`6`\ Li); the Gaussian **FWHM** of
   :math:`|\phi|^2` in MeV/c; the **table** file (two columns, :math:`p_s` and
-  the event weight per unit :math:`p_s`; its range is the window), whose
+  the momentum distribution :math:`|\phi(p_s)|^2`; its range is the window), whose
   **...** button stores a file inside the project directory relative to it,
   as for weight tables. **Nodes** is the number of Gauss-Legendre
-  nodes (1-64, default 16; ``psNodes`` is written only when it is not 16).
+  nodes in :math:`\cos\theta_\mathrm{cm}` (1-64, default 16; ``psNodes`` is
+  written only when it is not 16; disabled with a direction window, which has
+  its own).
   The page writes ``ps=hulthen:pmin-pmax``, ``ps=hulthen:a,b:pmin-pmax``,
   ``ps=gauss:FWHM:pmin-pmax`` or ``ps=table:<file>``, keeping numbers as
   they were read or typed. With a window set, the section shows the mean
-  spectator energy :math:`\langle T_s\rangle`; its tooltip has the rest of
-  what AZURE2 prints at startup (the window, :math:`\mu_{sx}` and the range
-  of :math:`T_s = p_s^2/2\mu_{sx}` over the nodes), computed with AZURE2's
-  own code. A window cannot be combined with a
+  spectator energy :math:`\langle T_s\rangle` at the lowest and the highest
+  point (the accepted directions, and so the nodes, follow :math:`E`); its
+  tooltip has the rest of what AZURE2 prints at startup (the window,
+  :math:`\mu_{sx}`), computed with AZURE2's own code. A window drops the
+  Distortion section's single **Angle** (the window sets the directions). A window cannot be combined with a
   non-zero **Spectator energy** (Model page) for the same entrance pair -- the
   window replaces it; AZURE2 refuses the pair, and so does the page. Unticking
   the three-body reaction drops the window with it. Details:
   :doc:`../theory/thm_implementation`, "Spectator-momentum window".
 
-  With a Coulomb or optical **Distortion** (below) the section also shows
-  **Directions**: the spectator directions over which the distortion factor
-  R(E), or the distorted-wave vertex, is averaged instead of being taken at
-  the one **Angle** of the Distortion section. *one* (the default, nothing
-  written), *lab window* or *c.m. window* -- the polar angle of the spectator
+  With a momentum window or a Coulomb or optical **Distortion** (below) the
+  section also shows **Directions**: the spectator directions over which the
+  vertex (with a momentum distribution), the distortion factor R(E), or the
+  distorted-wave vertex, is averaged. *all inside the p_s window* / *one*
+  (the default, nothing written: every direction inside the momentum window,
+  or without one the single **Angle** of the Distortion section), *lab
+  window* or *c.m. window* -- the polar angle of the spectator
   to the beam, **θ_min** and **θ_max** in degrees -- or *lab table* /
   *c.m. table*, a file of two columns, the angle and the acceptance (its
   range is the window; **...** stores it relative to the project directory);
@@ -369,10 +376,13 @@ and each plot carries the reaction in bold:
   :math:`\zeta(E)` of the segment's exit pair.
 - **Weight** (only when the segment has a weight table) -- :math:`w(E)` as the
   engine interpolates the table.
-- **Spectator-momentum window** (only for an experiment with ``ps=``) --
-  the event weight :math:`w(p_s) = |\phi(p_s)|^2 p_s^2` (a table: as given)
-  over :math:`[p_\mathrm{min}, p_\mathrm{max}]`, normalized to unit area,
-  with dots at the Gauss-Legendre nodes where AZURE2 evaluates the vertex.
+- **Spectator-momentum window** (only for an experiment with ``ps=`` and the
+  plane-wave vertex) -- the event weight per unit :math:`p_s` at the middle
+  energy of the segment, :math:`A\,|\phi(p_s)|^2 p_s` (the fixed-:math:`E`
+  measure; :math:`A` the acceptance of a direction window) over the accepted
+  :math:`p_s` (inside :math:`[p_\mathrm{min}, p_\mathrm{max}]` and reachable
+  at that energy), normalized to unit area, with dots at the nodes where
+  AZURE2 evaluates the vertex there (they follow the energy).
   The **Entrance vertex** panel then also shows, dashed, the window average
   :math:`\langle |M_l|^2\rangle` that AZURE2 uses, next to the quasi-free
   :math:`|M_l|^2`: the window fills the vertex nodes. The status line's
