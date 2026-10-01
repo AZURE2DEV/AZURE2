@@ -443,7 +443,7 @@ class EPoint {
   /// channel: ~117 MB per node for the 19F THM model (16 nodes did not fit).
   struct ThmPsTable {
     int nodes = 0;
-    int slots = 0;                  ///< entrance channels stored
+    int nSlots = 0;                 ///< entrance channels stored (not `slots`: a Qt keyword in the GUI)
     std::vector<int> offset;        ///< J group j -> first flat index of its channels (j = 1..N, N+1 entries)
     std::vector<int> slot;          ///< flat (J group, channel) -> slot, -1 when not stored
     std::vector<double> jl;         ///< [slot * nodes + node]

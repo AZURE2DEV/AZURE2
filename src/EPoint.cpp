@@ -1276,7 +1276,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
           // Only the entrance-pair channels are stored (ThmPsTable: every
           // other channel reads 0); the single-node pieces stay 0.
           if (thePair == entrancePair && thePair->GetPType() == 0) {
-            psTable->slot.push_back(psTable->slots++);
+            psTable->slot.push_back(psTable->nSlots++);
             for (size_t k = 0; k < window->p.size(); k++) {
               double jl = 0.0, rhoDjl = 0.0;
               complex coul(0.0, 0.0);
