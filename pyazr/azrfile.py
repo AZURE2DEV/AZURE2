@@ -415,6 +415,14 @@ def _thm_check_experiments(experiments):
                                  "available with vertexModel=dw: the distorted source has "
                                  "every m_l about p_xA, which the fixed-angle sum does "
                                  "not carry")
+        if (computed and x.get("vertexModel", "pw") != "dw"
+                and x.get("ps", "delta") != "delta"
+                and x.get("distortionRatio", "dwpw") == "dw"):
+            raise ValueError(where + "distortionRatio=dw multiplies the model by |M|^2, "
+                             "which carries the momentum distribution |phi(q)|^2 at the "
+                             "spectator direction; a ps window already weights the model "
+                             "with |phi(p_s)|^2 of data divided by it, so it would count "
+                             "twice. Use distortionRatio=dwpw (the default) with a window")
         for k in x["segments"]:
             if k in owner:
                 raise ValueError(where + f"segment {k} is already in "
@@ -2086,14 +2094,30 @@ class AzrModel:
         return self
 
     def _thm_check_dw_globals(self, s, only=None):
-        """The global options a vertexModel=dw experiment refuses (EData::
-        BuildThmGroups): coulombIntegral=1, entranceL=coherent, a spectator
-        energy for its entrance pair."""
+        """The global options an experiment refuses: coulombIntegral=1 with
+        vertexModel=dw or with a computed R(E) whose a + A wave is distorted
+        (CheckThmCoulombConsistency); entranceL=coherent and a spectator
+        energy for its entrance pair with vertexModel=dw (EData::
+        BuildThmGroups)."""
         seg_lines = self._block_lines("segmentsData") or []
         for name, x in s["experiments"].items():
-            if x.get("vertexModel", "pw") != "dw" or (only is not None and name != only):
+            if only is not None and name != only:
                 continue
             where = f"<thm> experiment[{name}]: "
+            dist = x.get("distortion", "none")
+            if (s["coulombIntegral"] and x.get("vertexModel", "pw") != "dw"
+                    and (dist == "coulomb"
+                         or (dist == "optical" and x.get("opticalAA", "coulomb") != "plane"))):
+                raise ValueError(where + "coulombIntegral=1 adds the x-A Coulomb "
+                                 "interaction outside the channel radius (C_l) to the "
+                                 "vertex, and the a + A Coulomb wave of the distortion "
+                                 "factor R(E) already contains it (Z_a = Z_x + Z_s; in the "
+                                 "zero range of R the prior operator V_xA + V_sA - U_aA "
+                                 "outside the radius vanishes), so it would be counted "
+                                 f"twice. Use coulombIntegral=0 with distortion={dist}, or "
+                                 "opticalAA=plane.")
+            if x.get("vertexModel", "pw") != "dw":
+                continue
             if s["coulombIntegral"]:
                 raise ValueError(where + "vertexModel=dw is the surface term of the DWBA "
                                  "vertex; its external part (the three-body remnant outside "
