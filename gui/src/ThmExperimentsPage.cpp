@@ -229,6 +229,46 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   psNodesSpin->setToolTip(tr("psNodes=: Gauss-Legendre nodes on the window (1-64, default 16)."));
   connect(psNodesSpin, SIGNAL(valueChanged(int)), this, SLOT(psNodesChanged(int)));
 
+  // Spectator directions (spectatorAngles=, spectatorAngleNodes=): with a
+  // computed distortion, R(E) or the DW vertex averaged over the accepted
+  // directions instead of the one spectatorAngle direction.
+  directionCombo = new QComboBox;
+  directionCombo->addItem(tr("one (Distortion: angle)"), "one");
+  directionCombo->addItem(tr("lab window"), "lab");
+  directionCombo->addItem(tr("c.m. window"), "cm");
+  directionCombo->addItem(tr("lab table"), "labtable");
+  directionCombo->addItem(tr("c.m. table"), "cmtable");
+  directionCombo->setToolTip(
+      tr("spectatorAngles=: the accepted spectator directions (polar angle to the beam, lab or c.m.) over which "
+         "R(E) or the DW vertex are averaged, weight d cos(theta_cm) x acceptance. At fixed E the direction fixes "
+         "|p_s|, so the momentum window above only cuts it. A table gives the acceptance per angle. One: the "
+         "single direction of the Distortion section's angle."));
+  connect(directionCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(directionEdited()));
+  auto dirSpin = [&](const QString &tip) {
+    ThmNumberSpin *e = new ThmNumberSpin(QString::fromUtf8("°"), 0.0, 180.0, 1.0);
+    e->setToolTip(tip);
+    connect(e, SIGNAL(valueChanged(double)), this, SLOT(directionEdited()));
+    return e;
+  };
+  directionMinEdit = dirSpin(tr("The smallest accepted polar angle of the spectator to the beam (0-180)."));
+  directionMaxEdit = dirSpin(tr("The largest accepted polar angle (>= the smallest; equal: one direction)."));
+  directionTableEdit = new QLineEdit;
+  directionTableEdit->setPlaceholderText(tr("file"));
+  directionTableEdit->setToolTip(tr("spectatorAngles=[cm:]table:<file>: two columns, the angle (deg, increasing) "
+                                    "and the acceptance (>= 0); the window is its range. Relative to the project "
+                                    "directory."));
+  connect(directionTableEdit, SIGNAL(textEdited(const QString &)), this, SLOT(directionEdited()));
+  directionTableButton = new QPushButton("...");
+  directionTableButton->setToolTip(psTableButton->toolTip());
+  connect(directionTableButton, SIGNAL(clicked()), this, SLOT(chooseDirectionTable()));
+  directionNodesSpin = new QSpinBox;
+  directionNodesSpin->setRange(1, 64);
+  directionNodesSpin->setValue(8);
+  directionNodesSpin->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+  directionNodesSpin->setToolTip(tr("spectatorAngleNodes=: Gauss-Legendre nodes in cos(theta_cm) per interval "
+                                    "(1-64, default 8; a lab window can map to two c.m. intervals)."));
+  connect(directionNodesSpin, SIGNAL(valueChanged(int)), this, SLOT(directionNodesChanged(int)));
+
   // Distortion factor (distortion= and its keys).
   distortionCombo = new QComboBox;
   distortionCombo->addItem(tr("None"), "none");
@@ -414,7 +454,7 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   kl->addLayout(bw, 4, 1, 1, 3);
   kinematicsBox->setLayout(kl);
 
-  psBox = new QGroupBox(tr("Spectator momentum window"));
+  psBox = new QGroupBox(tr("Spectator acceptance"));
   psBox->setToolTip(psPhysics);
   // Only the fields of the chosen distribution are shown (showPsRows).
   QGridLayout *pl = form();
@@ -453,6 +493,30 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   psGaussRow_ = {fwhmLabel, psFwhmEdit};
   psTableRow_ = {tableLabel, psTableEdit, psTableButton};
   psNodesRow_ = {nodesLabel, psNodesSpin, meanLabel, meanTsValue};
+  QLabel *directionLabel = label(tr("Directions:"), true, tr("Spectator directions (spectatorAngles=)"));
+  QLabel *directionNodesLabel = label(tr("Nodes:"), false);
+  pl->addWidget(directionLabel, 4, 0, right);
+  pl->addWidget(directionCombo, 4, 1);
+  pl->addWidget(directionNodesLabel, 4, 2, right);
+  pl->addWidget(directionNodesSpin, 4, 3);
+  QLabel *thMinLabel = label(QString::fromUtf8("θ<sub>min</sub>:"), true);
+  QLabel *thMaxLabel = label(QString::fromUtf8("θ<sub>max</sub>:"), false);
+  pl->addWidget(thMinLabel, 5, 0, right);
+  pl->addWidget(directionMinEdit, 5, 1);
+  pl->addWidget(thMaxLabel, 5, 2, right);
+  pl->addWidget(directionMaxEdit, 5, 3);
+  QLabel *directionTableLabel = label(tr("Table:"), true);
+  QHBoxLayout *dirl = new QHBoxLayout;
+  dirl->setContentsMargins(0, 0, 0, 0);
+  dirl->addWidget(directionTableEdit, 1);
+  dirl->addWidget(directionTableButton);
+  pl->addWidget(directionTableLabel, 5, 0, right);
+  pl->addLayout(dirl, 5, 1, 1, 3);
+  directionRow_ = {directionLabel, directionCombo};
+  directionWindowRow_ = {thMinLabel, directionMinEdit, thMaxLabel, directionMaxEdit, directionNodesLabel,
+                         directionNodesSpin};
+  directionTableRow_ = {directionTableLabel, directionTableEdit, directionTableButton, directionNodesLabel,
+                        directionNodesSpin};
   psBox->setLayout(pl);
 
   distortionBox = new QGroupBox(tr("Distortion"));
@@ -705,6 +769,7 @@ void ThmExperimentsPage::loadEditor() {
   loadPs(r);
   psBox->setEnabled(complete);
   loadDistortion(r);
+  loadDirections(r);
   updateDistortionItems(complete);
   showDerived(r);
   loading_ = false;
@@ -890,8 +955,11 @@ void ThmExperimentsPage::kinematicsEdited() {
     r.distortionRef.clear();
     r.distortionRatio.clear();
     r.boundState.clear();
+    r.spectatorAngles.clear();
+    r.spectatorAngleNodes.clear();
     loading_ = true;
     loadDistortion(r);
+    loadDirections(r);
     loading_ = false;
   }
   updateDistortionItems(lineshapeCheck->isEnabled());
@@ -1273,6 +1341,112 @@ void ThmExperimentsPage::refreshDerived() {
   if (current_ >= 0) showDerived(records_.at(current_));
 }
 
+// ---------------------------------------------------------------------------
+// Spectator directions
+
+void ThmExperimentsPage::loadDirections(const ThmExperimentRecord &r) {
+  // As written, so that directionText gives it back unchanged.
+  QString kind = "one", lo, hi, table, v = r.spectatorAngles;
+  const bool cm = v.startsWith("cm:");
+  if (cm) v = v.mid(3);
+  if (v.startsWith("table:")) {
+    kind = cm ? "cmtable" : "labtable";
+    table = v.mid(6);
+  } else if (!v.isEmpty()) {
+    kind = cm ? "cm" : "lab";
+    splitWindow(v, lo, hi);
+  }
+  const bool was = loading_;
+  loading_ = true;
+  directionCombo->setCurrentIndex(std::max(0, directionCombo->findData(kind)));
+  directionMinEdit->setWrittenText(lo);
+  directionMaxEdit->setWrittenText(hi);
+  directionTableEdit->setText(table);
+  int nodes = 8;
+  if (!r.spectatorAngleNodes.isEmpty()) {
+    bool ok = false;
+    const int n = r.spectatorAngleNodes.trimmed().toInt(&ok);
+    if (ok) nodes = n;
+  }
+  directionNodesSpin->setValue(std::min(64, std::max(1, nodes)));
+  loading_ = was;
+  showDirectionRows();
+}
+
+void ThmExperimentsPage::showDirectionRows() {
+  // Only with a computed distortion (the engine refuses the window without
+  // one); the window's or the table's fields by the kind.
+  const QString distortion = distortionCombo->currentData().toString();
+  const bool computed = distortion == "coulomb" || distortion == "optical";
+  const QString kind = directionCombo->currentData().toString();
+  for (QWidget *w : directionWindowRow_) w->setVisible(false);
+  for (QWidget *w : directionTableRow_) w->setVisible(false);
+  for (QWidget *w : directionRow_) w->setVisible(computed);
+  if (computed && (kind == "lab" || kind == "cm"))
+    for (QWidget *w : directionWindowRow_) w->setVisible(true);
+  if (computed && kind.endsWith("table"))
+    for (QWidget *w : directionTableRow_) w->setVisible(true);
+  // A window sets the directions: the Distortion section's one angle is off.
+  const bool window = computed && kind != "one";
+  angleKindCombo->setEnabled(!window);
+  angleEdit->setEnabled(!window && angleKindCombo->currentData().toString() != "qf");
+  angleKindCombo->setToolTip(window ? tr("The spectator directions are set by the window in Spectator acceptance.")
+                                    : tr("spectatorAngle=: the direction of the spectator. Quasi-free: k_sF along "
+                                         "k_aA (default); lab: an angle to the beam converted at every E; c.m.: "
+                                         "fixed."));
+}
+
+QString ThmExperimentsPage::directionText() const {
+  const QString kind = directionCombo->currentData().toString();
+  const QString window = directionMinEdit->writtenText() + "-" + directionMaxEdit->writtenText();
+  if (kind == "lab") return window;
+  if (kind == "cm") return "cm:" + window;
+  if (kind == "labtable") return "table:" + directionTableEdit->text().trimmed();
+  if (kind == "cmtable") return "cm:table:" + directionTableEdit->text().trimmed();
+  return QString();
+}
+
+void ThmExperimentsPage::directionEdited() {
+  showDirectionRows();
+  if (loading_ || current_ < 0) return;
+  ThmExperimentRecord &r = records_[current_];
+  r.spectatorAngles = directionText();
+  if (r.spectatorAngles.isEmpty() && !r.spectatorAngleNodes.isEmpty()) {
+    // The nodes need a window: dropped with it.
+    r.spectatorAngleNodes.clear();
+    loading_ = true;
+    directionNodesSpin->setValue(8);
+    loading_ = false;
+  }
+  if (!r.spectatorAngles.isEmpty() && !r.spectatorAngle.isEmpty()) {
+    // One direction and a window exclude each other (the engine refuses both).
+    r.spectatorAngle.clear();
+    loading_ = true;
+    angleKindCombo->setCurrentIndex(std::max(0, angleKindCombo->findData("qf")));
+    angleEdit->setWrittenText(QString());
+    loading_ = false;
+    showDirectionRows();
+  }
+  refreshRow(current_);
+  showDerived(r);
+}
+
+void ThmExperimentsPage::directionNodesChanged(int n) {
+  if (loading_ || current_ < 0) return;
+  ThmExperimentRecord &r = records_[current_];
+  r.spectatorAngleNodes = n == 8 ? QString() : QString::number(n);  // 8 is the engine's default
+  showDerived(r);
+}
+
+void ThmExperimentsPage::chooseDirectionTable() {
+  const QString start = projectDir_.isEmpty() ? QDir::currentPath() : projectDir_;
+  const QString file = QFileDialog::getOpenFileName(this, tr("Spectator acceptance table"), start,
+                                                    tr("Tables (*.dat *.txt);;All files (*)"));
+  if (file.isEmpty()) return;
+  directionTableEdit->setText(projectRelative(file, projectDir_));
+  directionEdited();
+}
+
 QString ThmExperimentsPage::windowInfo(const ThmExperimentRecord &x, QString *error, ThmSpectatorWindow *out) const {
   Reaction r;
   if (!reaction(x, r, error)) return QString();
@@ -1412,6 +1586,7 @@ void ThmExperimentsPage::showDistortionRows() {
     if (global && current_ >= 0 && current_ < records_.size()) tip = globalSummary(records_.at(current_), c);
     opticalButton[c]->setToolTip(tip);
   }
+  showDirectionRows();
 }
 
 void ThmExperimentsPage::updateDistortionItems(bool complete) {
@@ -1450,6 +1625,9 @@ void ThmExperimentsPage::distortionKindChanged() {
     r.distortionRef.clear();
     r.distortionRatio.clear();
     r.boundState.clear();
+    r.spectatorAngles.clear();
+    r.spectatorAngleNodes.clear();
+    loadDirections(r);
   }
   loadDistortion(r);
   updateDistortionItems(lineshapeCheck->isEnabled());
@@ -1584,7 +1762,7 @@ QString ThmExperimentsPage::distortionInfo(const ThmExperimentRecord &x, QString
   // ThmSettings::checkExperimentLines').
   std::vector<ThmExperiment> parsed;
   if (!ParseThmExperimentLine(x.line().toStdString(), parsed).empty() || parsed.empty()) return QString();
-  const ThmExperiment &e = parsed.front();
+  ThmExperiment &e = parsed.front();
   QVector<double> energies;
   if (!pointEnergies(x.segments, energies)) return QString();  // the engine reports an unreadable file itself
   double lo = 1.0e300, hi = -1.0e300;
@@ -1643,6 +1821,16 @@ QString ThmExperimentsPage::distortionInfo(const ThmExperimentRecord &x, QString
         break;
       }
     }
+    if (why.isEmpty() && e.angleWindow == 2) {
+      // spectatorAngles=[cm:]table:<file>, relative to the .azr (Config::ReadThmBlock).
+      QString path = QString::fromStdString(e.angleTable);
+      if (QFileInfo(path).isRelative() && !projectDir_.isEmpty()) path = QDir(projectDir_).filePath(path);
+      const std::string bad = ReadThmAngleTable(QFile::encodeName(path).toStdString(), e.angleTableT, e.angleTableW);
+      if (!bad.empty())
+        why = "spectatorAngles: " + QString::fromStdString(bad);
+      else
+        e.angleMin = e.angleTableT.front(), e.angleMax = e.angleTableT.back();
+    }
     if (why.isEmpty()) {
       // The same radial grid and waves as the engine's (they depend on the
       // lower end of its ln R grid), without its grid of R: R is evaluated
@@ -1651,6 +1839,18 @@ QString ThmExperimentsPage::distortionInfo(const ThmExperimentRecord &x, QString
       d.dataHi = hi;
       const std::string bad = d.Build(e, dk, lo - 0.5, lo - 0.5, 0.5 * (lo + hi));
       if (!bad.empty()) why = "distortion: " + QString::fromStdString(bad) + ".";
+    }
+    if (why.isEmpty() && d.angWindow) {
+      // The branches up to the highest point, and every point with an accepted
+      // direction (EData::BuildThmGroups).
+      d.SetAngleSlots(hi + 0.5 < d.eAA - d.kin.bind ? hi + 0.5 : hi);
+      for (double v : energies) {
+        const std::string bad = d.CheckWindow(v);
+        if (!bad.empty()) {
+          why = "distortion: " + QString::fromStdString(bad) + ".";
+          break;
+        }
+      }
     }
     if (why.isEmpty()) {
       const ThmDistortion::Point a = d.Evaluate(lo), b = d.Evaluate(hi);

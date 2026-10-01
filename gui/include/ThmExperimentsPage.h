@@ -40,8 +40,10 @@ struct ThmSpectatorWindow;
  * Three-body reaction (beam, target, spectator, lab
  * beam energy -- all four or none -- with the binding and quasi-free
  * energies AZURE2 prints for it, and the line shape, lineshape=on, with zeta
- * at the ends of the data) and Spectator momentum window (ps=, psNodes=, with the
- * mean spectator energy <T_s> the engine's ThmSpectatorWindow gives) and
+ * at the ends of the data) and Spectator acceptance (the momentum window ps=,
+ * psNodes=, with the mean spectator energy <T_s> the engine's
+ * ThmSpectatorWindow gives; with a computed distortion also the directions,
+ * spectatorAngles=, spectatorAngleNodes=) and
  * Distortion (distortion= and its keys, with R(E) at the ends of the data
  * from the engine's ThmDistortion).  When B(x+s) from the masses and the
  * entrance pair's B (field 32) disagree, the reaction section says so.
@@ -123,6 +125,8 @@ class ThmExperimentsPage : public QWidget {
                   double *lo = nullptr, double *hi = nullptr) const;
   /// The ps= value the spectator-momentum controls describe ("" for a point).
   QString psText() const;
+  /// The spectatorAngles= value the direction controls describe ("" for one direction).
+  QString directionText() const;
   /// A file chosen for ps=table: relative to the project directory when inside it.
   static QString projectRelative(const QString &file, const QString &projectDir);
   /// The spectator energy per entrance pair (the Model page's values); a ps
@@ -177,6 +181,14 @@ class ThmExperimentsPage : public QWidget {
   QLineEdit *psTableEdit;
   QPushButton *psTableButton;
   QSpinBox *psNodesSpin;     ///< psNodes=, 1-64, default 16
+  /// Spectator directions (spectatorAngles=, spectatorAngleNodes=): shown
+  /// with a computed distortion; item data one | lab | cm | labtable | cmtable
+  /// (one: the distortion's single spectatorAngle direction, nothing written).
+  QComboBox *directionCombo;
+  ThmNumberSpin *directionMinEdit, *directionMaxEdit;  ///< deg
+  QLineEdit *directionTableEdit;
+  QPushButton *directionTableButton;
+  QSpinBox *directionNodesSpin;  ///< spectatorAngleNodes=, 1-64, default 8
   /// Distortion (distortion= ...): the kind, and for coulomb/optical the
   /// spectator angle, E_ref, the ratio, the bound state and (optical) the
   /// two channels; for a table its file.
@@ -211,6 +223,9 @@ class ThmExperimentsPage : public QWidget {
   void psEdited();
   void psNodesChanged(int n);
   void chooseTable();
+  void directionEdited();
+  void directionNodesChanged(int n);
+  void chooseDirectionTable();
   void distortionKindChanged();
   void distortionEdited();
   void opticalKindChanged();
@@ -239,6 +254,8 @@ class ThmExperimentsPage : public QWidget {
   /// The c.m. energies of the points of the segments, in the engine's order.
   bool pointEnergies(const QList<int> &segments, QVector<double> &energies) const;
   void showPsRows();
+  void loadDirections(const ThmExperimentRecord &r);
+  void showDirectionRows();
   void loadTheta(const ThmExperimentRecord &r);
   void showThetaRows();
   /// The window item is not offered with entranceL=coherent (unless it is the current one).
@@ -260,6 +277,7 @@ class ThmExperimentsPage : public QWidget {
   QList<ThmExperimentRecord> oldRecords_;
   QList<ThmExperimentRecord> records_;
   QList<QWidget *> psWindowRow_, psHulthenRow_, psGaussRow_, psTableRow_, psNodesRow_;
+  QList<QWidget *> directionRow_, directionWindowRow_, directionTableRow_;
   QList<QWidget *> distortionComputedRows_, distortionOpticalRow_, distortionTableRow_, distortionValueRow_;
   QString lastOptical_[2];  ///< the ten numbers last shown per channel (kept across plane/coulomb)
   QString lastGlobal_[2];   ///< the global potential last shown per channel (name[:extrapolate])

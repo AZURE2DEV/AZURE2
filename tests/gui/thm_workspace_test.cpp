@@ -1330,6 +1330,7 @@ int main(int argc, char** argv) {
   ok("c12: project prepared", c12.contains("data/thm_a0.dat") && !c12.contains("<thm>"));
   spit(c12Dir + "/rtable.dat", "# E w\n0.5 1\n3.0 4\n");
   spit(c12Dir + "/rshort.dat", "0.5 1\n1.5 4\n");
+  spit(c12Dir + "/atable.dat", "# lab angle, acceptance\n7 1\n20 1\n30 0.5\n");
   const QString c12Reaction = "beam=14N target=12C spectator=d Ebeam=30";
   const QString c12Path = c12Dir + "/c12.azr";
   auto c12Open = [&](const QString& block) {
@@ -1359,6 +1360,21 @@ int main(int argc, char** argv) {
         const QString kind = value == "qf" ? "qf" : value.startsWith("cm:") ? "cm" : "lab";
         p->angleKindCombo->setCurrentIndex(p->angleKindCombo->findData(kind));
         if(kind != "qf") typeNumber(p->angleEdit, kind == "cm" ? value.mid(3) : value);
+      } else if(key == "spectatorAngles") {
+        QString v = value;
+        const bool cm = v.startsWith("cm:");
+        if(cm) v = v.mid(3);
+        const bool table = v.startsWith("table:");
+        p->directionCombo->setCurrentIndex(
+            p->directionCombo->findData(table ? (cm ? "cmtable" : "labtable") : (cm ? "cm" : "lab")));
+        if(table) {
+          type(p->directionTableEdit, v.mid(6));
+        } else {
+          typeNumber(p->directionMinEdit, v.section('-', 0, 0));
+          typeNumber(p->directionMaxEdit, v.section('-', 1));
+        }
+      } else if(key == "spectatorAngleNodes") {
+        p->directionNodesSpin->setValue(value.toInt());
       } else if(key == "distortionRef") {
         typeNumber(p->distortionRefEdit, value);
       } else if(key == "distortionRatio") {
@@ -1486,6 +1502,44 @@ int main(int argc, char** argv) {
     typeNumber(d.fields[3], "12");
     ok("optical dialog: one number changed", d.text() == "50.0,4.5,0.60,12,4.5,0.6,0,0,0,4.50", d.text());
   }
+  {
+    // Spectator directions: shown with a computed distortion only; a window
+    // takes over the one spectatorAngle direction.
+    c12Open("experiment[E1] segments=3 " + c12Reaction + " distortion=coulomb spectatorAngle=8\n");
+    ThmSettings s;
+    QString err;
+    ok("directions: opens", w.thmSettings(s, &err), err);
+    ThmWorkspace ws(&w, s);
+    ThmExperimentsPage* p = ws.experimentsPage;
+    ok("directions: one direction, the row shown, no window fields",
+       p->directionCombo->isVisibleTo(p) && p->directionCombo->currentData().toString() == "one" &&
+           !p->directionMinEdit->isVisibleTo(p) && !p->directionTableEdit->isVisibleTo(p) &&
+           p->angleKindCombo->isEnabled());
+    p->directionCombo->setCurrentIndex(p->directionCombo->findData("lab"));
+    typeNumber(p->directionMinEdit, "7");
+    typeNumber(p->directionMaxEdit, "30");
+    ok("directions: lab window written, spectatorAngle dropped, the angle off",
+       p->records().at(0).spectatorAngles == "7-30" && p->records().at(0).spectatorAngle.isEmpty() &&
+           !p->angleKindCombo->isEnabled() && !p->angleEdit->isEnabled() &&
+           p->directionMinEdit->suffix() == QString::fromUtf8("°") && p->directionNodesSpin->value() == 8,
+       p->experimentLines().join("|"));
+    ok("directions: accepted, R at the ends shown", ws.validate().isEmpty() && p->derivedText().contains("R = ") &&
+                                                         p->derivedText().contains("spectator directions 7-30"),
+       ws.validate() + " | " + p->derivedText());
+    p->directionNodesSpin->setValue(12);
+    ok("directions: nodes written", p->records().at(0).spectatorAngleNodes == "12");
+    p->directionCombo->setCurrentIndex(p->directionCombo->findData("one"));
+    ok("directions: back to one direction drops both keys",
+       p->records().at(0).spectatorAngles.isEmpty() && p->records().at(0).spectatorAngleNodes.isEmpty() &&
+           p->angleKindCombo->isEnabled());
+    p->directionCombo->setCurrentIndex(p->directionCombo->findData("cm"));
+    typeNumber(p->directionMinEdit, "0");
+    typeNumber(p->directionMaxEdit, "60");
+    p->distortionCombo->setCurrentIndex(p->distortionCombo->findData("none"));
+    ok("directions: hidden and dropped without a computed distortion",
+       !p->directionCombo->isVisibleTo(p) && p->records().at(0).spectatorAngles.isEmpty(),
+       p->experimentLines().join("|"));
+  }
   // Round trip of every form: set through the controls, written, read by the
   // engine's parser, shown again on reopening, untouched byte for byte.
   const QString c12Base = "experiment[E1] segments=3 " + c12Reaction;
@@ -1502,7 +1556,11 @@ int main(int argc, char** argv) {
                                "distortion=optical opticalSF=0,0,0,0,0,0,8,5.5,0.65,5 spectatorAngle=cm:8",
                                "distortion=optical opticalSF=ancai06",
                                "distortion=optical opticalSF=daehnick80:extrapolate",
-                               "distortion=table:rtable.dat"};
+                               "distortion=table:rtable.dat",
+                               "distortion=coulomb spectatorAngles=7-30",
+                               "distortion=coulomb spectatorAngles=cm:10-60 spectatorAngleNodes=12",
+                               "distortion=optical opticalAA=plane spectatorAngles=table:atable.dat",
+                               "distortion=coulomb spectatorAngles=cm:table:atable.dat"};
     for(const QString& form : forms) {
       c12Open(c12Base + "\n");
       ThmSettings s;
@@ -1595,6 +1653,11 @@ int main(int argc, char** argv) {
         {"distortion=optical opticalSF=kd03", "which it does not describe", true},
         {"distortion=optical opticalAA=ancai06", "the a + A channel is 14N + 12C, which it does not describe", false},
         {"distortion=optical opticalSF=daehnick80", "Write daehnick80:extrapolate", true},
+        {"spectatorAngles=cm:0-60", "spectatorAngles= averages the distortion factor", true},
+        {"distortion=coulomb spectatorAngle=8 spectatorAngles=cm:0-60", "exclude each other", true},
+        {"distortion=coulomb spectatorAngleNodes=4", "needs a spectator-direction window", false},
+        {"distortion=coulomb spectatorAngles=cm:60-10", "spectatorAngles='cm:60-10': expected thmin-thmax", false},
+        {"distortion=coulomb spectatorAngles=table:nothere.dat", "cannot read the angle table", false},
     };
     for(const Refusal& r : refusals) {
       c12Open(c12Base + " " + r.tokens + "\n");

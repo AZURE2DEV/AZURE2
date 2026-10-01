@@ -71,7 +71,7 @@ void setThmLines(QString &text, const QStringList &lines) {
 QStringList absoluteWeights(const QStringList &lines, const QString &dir) {
   QStringList out;
   QRegularExpression rx("^(\\s*weight(?:Test)?\\s*\\[\\s*\\d+\\s*\\]\\s*=\\s*)([^#\\s][^#]*?)(\\s*(#.*)?)$");
-  QRegularExpression table("(^|[ \\t])(?:ps|distortion)=table:([^ \\t#]+)");
+  QRegularExpression table("(^|[ \\t])(?:ps|distortion|spectatorAngles)=(?:cm:)?table:([^ \\t#]+)");
   for (const QString &line : lines) {
     QRegularExpressionMatch m = rx.match(line);
     if (m.hasMatch() && QFileInfo(m.captured(2)).isRelative()) {
@@ -190,7 +190,8 @@ QString angularDistribution(const ThmDiagnosticsRequest &request, const ThmExper
   if (fields.size() < 8) return QObject::tr("segment %1 not found in <segmentsData>.").arg(request.segment);
   // The experiment's keys but those the copy sets or leaves out.
   const QStringList dropped = {"segments", "background", "theta", "distortion", "opticalAA", "opticalSF",
-                               "spectatorAngle", "distortionRef", "distortionRatio", "boundState"};
+                               "spectatorAngle", "distortionRef", "distortionRatio", "boundState",
+                               "spectatorAngles", "spectatorAngleNodes"};
   QStringList keep, thm;
   for (const QString &line : absoluteWeights(thmLines(text), request.projectDir)) {
     const QString code = line.left(line.indexOf('#')).trimmed();
