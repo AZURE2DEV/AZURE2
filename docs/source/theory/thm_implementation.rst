@@ -218,7 +218,11 @@ engine would refuse is not opened in the editor (it is kept as it is).
    charged entrance pairs at energies well below the barrier. It is skipped
    for :math:`Z_1 Z_2 = 0` and costs about a factor 3–4 in run time.
    ``tests/7Li_p_a``: 2112.47 (2146.48 with ``vertex=perlevel``).
-   Implementation and numerics:
+   ``coulombIntegral=1`` is refused together with an experiment whose
+   :math:`a + A` wave is distorted (``distortion=coulomb``, ``optical``
+   without ``opticalAA=plane``, or ``vertexModel=dw``), which contains the
+   same :math:`x`-:math:`A` Coulomb force ("Coulomb effects: what each option
+   contains" below). Implementation and numerics:
    ``ThmCoulombTerm`` (``src/ThmFunc.cpp``), checked against
    ``tests/reference/thm_coulomb_term_reference.py``.
 
@@ -392,7 +396,8 @@ letters, digits and ``_ - . +``.
 ``distortion=none|coulomb|optical|table:<file>``, ``opticalAA=``, ``opticalSF=``, ``spectatorAngle=``, ``distortionRef=``, ``distortionRatio=``, ``boundState=``
    The distortion factor :math:`R(E)` multiplying the model of every
    segment (default ``none``; ``coulomb`` and ``optical`` need the four
-   kinematics keys), below ("Distortion factor R(E)").
+   kinematics keys), below ("Distortion factor R(E)"). With a ``ps`` window
+   ``distortionRatio=dw`` is refused ("Coulomb effects" below).
 ``theta=all|<thmin>-<thmax>``
    The angular window of the exit pair (degrees): the model of every segment
    is the HOES :math:`d\sigma/d\Omega` averaged over it instead of the
@@ -1042,7 +1047,9 @@ at 115 MeV (:math:`E_{sF} \approx 10` MeV, above the barrier): :math:`R` =
 :math:`s`-:math:`x` bound state in :math:`l_{sx} = 0` and in its asymptotic
 form, one spectator angle rather than the experimental acceptance, no
 spin-orbit term, no three-body (line-shape) Coulomb
-effects -- those are ``lineshape=on``, which multiplies independently.
+effects -- those are ``lineshape=on``, which multiplies independently and
+does not overlap with :math:`R` ("Coulomb effects: what each option
+contains" below).
 Whether a DWBA vertex should replace the PWA one at all is the question the
 papers debate; the factor lets a fit show what it would change. The
 :math:`l`-dependent vertex of the same amplitude, of which :math:`R(E)` is the
@@ -1836,6 +1843,264 @@ statement about the fit. 18O(p,α)15N (``tests/18O_p_a_thm``): the data are
 integrated over the whole angular range (La Cognata et al.,
 arXiv:0909.4716), and with one :math:`1/2^+` group the model is isotropic
 anyway -- no change for any window.
+
+Coulomb effects: what each option contains
+------------------------------------------
+
+Four options describe Coulomb physics of the same three-body reaction
+:math:`a(x+s) + A \to s + F^* \to s + b + B` in factorised approximations:
+the Coulomb term :math:`C_l` (``coulombIntegral=1``), the line shape
+:math:`N_C` (``lineshape=on``), the distortion factor :math:`R(E)`
+(``distortion=``) and the DW vertex (``vertexModel=dw``). Which combinations
+count an interaction twice follows from where each one sits in the amplitude
+of Mukhamedzhanov, Kadyrov & Pang, EPJA 56 (2020) 233 (arXiv:2007.13331),
+Appendix A. The resonant part of the Green's function of the
+:math:`s + F` system is decomposed over the :math:`s`-:math:`F` Coulomb
+scattering states (eqs. 129, 136),
+
+.. math::
+
+   M \propto \int \frac{d\mathbf k_{sF}}{(2\pi)^3}\,
+   \frac{\langle \Phi^{C(-)}_{f} | \Psi^{C(-)}_{\mathbf k_{sF}} \rangle\;
+         M^{(tr)}(\mathbf k_{sF}, \mathbf k_{aA})}{k_R^2 - k_{sF}^2},
+   \qquad
+   M^{(tr)} = \bigl\langle \Psi^{C(-)}_{\mathbf k_{sF}} \tilde\varphi_{R(xA)}
+   \bigm| \Delta V \bigm| \varphi_a \Psi^{C(+)}_{\mathbf k_{aA}} \bigr\rangle
+
+(eqs. 138-140). The intermediate :math:`s`-:math:`F` Coulomb state appears
+twice, once on each side of the completeness relation: as the bra of the
+*formation* amplitude :math:`M^{(tr)}` (eqs. 23-42), and as the ket whose
+overlap with the final three-body Coulomb state :math:`\Phi^{C(-)}_f`
+(:math:`s`-:math:`b` and :math:`s`-:math:`B` after :math:`F^*` has decayed)
+gives the factor :math:`N_C(E_0 - E - i\Gamma/2)^{-1-i\zeta}` of eqs. 55-57.
+The result is the product :math:`M^{(tr)} N_C/(E_0 - E - i\Gamma/2)`
+(eq. 55); Mukhamedzhanov, EPJA 58 (2022) 71, eq. 18 with eqs. 24-26
+multiplies :math:`|N_C|^2` by the zero-range DWBA cross section in the same
+way, with the :math:`s + F` wave at :math:`k_{sF} = \sqrt{2\mu_{sF}E_{sF}}`
+of the event. In AZURE2:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 16 34 34 16
+
+   * - option
+     - interaction, region
+     - where in the amplitude
+     - :math:`l`, level
+   * - vertex :math:`M_l` (``pw``)
+     - :math:`x`-:math:`A` at the channel radius; plane :math:`a + A`,
+       :math:`s + F`
+     - surface term of :math:`M^{(tr)}` with plane waves (2020 eqs. 37-41)
+     - per :math:`l`; common to the levels
+   * - ``coulombIntegral=1``
+     - :math:`x`-:math:`A` Coulomb outside :math:`a`, plane :math:`a + A`
+     - external prior term of :math:`M^{(tr)}` with :math:`U_{aA} = U_{sA} =
+       0` (eq. 33; Tribble eq. 2.79)
+     - per :math:`l`
+   * - ``distortion`` (:math:`R`)
+     - :math:`a + A` (Coulomb of :math:`Z_a = Z_x + Z_s`, optional nuclear)
+       and :math:`s + F` (:math:`Z_sZ_F`) in the formation region
+     - :math:`M^{(tr)}` in zero range, :math:`r_{xA} \to 0` (eqs. 35-39),
+       at the running :math:`E_{sF}`
+     - common to all :math:`l` and levels
+   * - ``vertexModel=dw``
+     - the same distortions, finite range in :math:`s`-:math:`x`, at the
+       channel radius
+     - surface term of :math:`M^{(tr)}` (eq. 32) at the running
+       :math:`E_{sF}`; no external term
+     - per :math:`l`; common to the levels
+   * - ``lineshape=on`` (:math:`N_C`)
+     - :math:`s`-:math:`F^*` beyond the formation region while :math:`F^*`
+       lives; :math:`s`-:math:`b`, :math:`s`-:math:`B` after its decay
+       (post-collision interaction)
+     - the ket side: overlap of the intermediate with the final three-body
+       Coulomb state (eqs. 55-62)
+     - per level (its pole)
+
+The window ``ps`` (spectator momentum) and ``theta`` (exit angle) carry no
+Coulomb interaction; ``weight[k]`` and ``distortion=table`` are whatever the
+table holds.
+
+*(a) DW vertex and* :math:`N_C` *do not overlap.* The DW vertex is
+:math:`M^{(tr)}` (its surface term); :math:`N_C` is the other side of the
+completeness relation. Two limits separate them. When the decay does not
+change the Coulomb field the spectator sees (:math:`Z_b = 0`, :math:`m_B
+\gg m_b`: :math:`\eta_{sB} = \eta_0`, :math:`\zeta = 0`), the final state
+is the intermediate :math:`s`-:math:`F` Coulomb wave,
+:math:`\langle\Phi^{C(-)}_{\mathbf p}|\Psi^{C(-)}_{\mathbf k}\rangle =
+(2\pi)^3\delta(\mathbf p - \mathbf k)`, the integral collapses to
+:math:`M^{(tr)}(\mathbf p)/(k_R^2 - p^2)` -- the vertex with its full
+:math:`s + F` Coulomb distortion at the running energy, as ``dw`` and
+:math:`R` evaluate it -- and :math:`N_C = 1`. Conversely, with the
+:math:`s + F` wave of the vertex switched off (``opticalSF=plane``)
+:math:`N_C` is unchanged. The :math:`-\eta_0` in :math:`\zeta = \eta_{sb} +
+\eta_{sB} - \eta_0` is therefore not a subtraction of the vertex's
+:math:`s`-:math:`F` distortion: it is the long-range Coulomb phase of the
+intermediate state, which ends when :math:`F^*` decays, replaced by that of
+the products. Both factors use the same :math:`k_{sF}(E)` (``lineshape``
+takes :math:`\eta_0` at the point's :math:`k_{sF}`, the DW vertex and
+:math:`R` their :math:`s + F` wave there), so they are consistent with each
+other. What is left over is a cross term: with :math:`\zeta \ne 0` the
+integral samples :math:`M^{(tr)}` between the pole and the final momentum,
+an error of order :math:`\delta E\, \partial_E \ln|M^{(tr)}|^2`, with
+:math:`\delta E` the post-collision energy transfer. 2020 eq. 55 takes
+:math:`M^{(tr)}` at the pole :math:`k_{0(sF)}` instead, as does the
+per-pole formation amplitude of Lei (arXiv:2605.16890); AZURE2's running
+energy is exact at :math:`\zeta = 0` and agrees with the pole value at each
+peak of a narrow level. For 12C(14N,d) the peaks move by up to 15 keV and
+:math:`\partial_E \ln R \approx 3.2` MeV\ :sup:`-1`, so the cross term is at
+most about 5 % of the vertex at a peak -- not implemented. ``lineshape=on``
+with ``vertexModel=dw`` (or with :math:`R`) is allowed.
+
+*(b) The external terms.* In the plane-wave limit the external prior term
+of the DW vertex is :math:`C_l` ("Distorted-wave entrance vertex", plane-wave
+limit). With a distorted :math:`a + A` wave the operator outside the
+radius is :math:`V^C_{xA} + V^C_{sA} - U^C_{aA} = e^2 Z_A(Z_x/r_{xA} +
+Z_s/r_{sA} - Z_a/r_{aA})` (2020 eq. 26), whose monopole cancels; with
+:math:`\mathbf r_{sA} = \mathbf r + \mathbf u`, :math:`\mathbf r_{aA} =
+\mathbf r + \beta\mathbf u`, what remains is the dipole
+:math:`-e^2Z_A(Z_s m_x - Z_x m_s)/m_a\; \hat r\cdot\mathbf u/r^2`, and in
+the zero range of :math:`R` (:math:`\mathbf u \to 0`) nothing. The
+:math:`x`-:math:`A` Coulomb force that :math:`C_l` adds is the :math:`x`
+part of the :math:`a`-:math:`A` force that generated the :math:`a + A`
+Coulomb wave; adding :math:`C_l` to a model built on that wave counts it
+twice. Hence ``coulombIntegral=1`` is refused with ``vertexModel=dw`` (as
+before) *and* with :math:`R(E)` whenever its :math:`a + A` wave is
+distorted (``distortion=coulomb``, or ``optical`` with ``opticalAA``
+``coulomb`` or a potential); with ``opticalAA=plane`` :math:`C_l` is the
+external term of that plane wave and is allowed. ``distortion=table``
+with ``coulombIntegral=1`` is warned (the table's content is not known).
+The zero range of :math:`R` does not carry the *energy dependence* of
+:math:`C_l` (the :math:`x`-:math:`A` outgoing wave outside :math:`a` at
+the energy :math:`E`): the two are different approximations of the same
+force, of which one may be chosen. For 12C(14N,d) the dipole vanishes too
+(:math:`Z_s m_x = Z_x m_s`, both :math:`N = Z`).
+
+*(c)* :math:`R(E)` *and* :math:`N_C` *do not overlap*, for the reason of
+(a): :math:`R` is the zero-range, :math:`l`-summed limit of the same
+:math:`M^{(tr)}`. 2022 eqs. 18 and 40 contain both. Without folding the
+model with both is the product of the two factors exactly
+(``tests/thm_coulomb_consistency``: :math:`7\times 10^{-11}`).
+
+*(d) Other combinations.* :math:`R` and ``dw`` are the same amplitude and
+are never applied together (``vertexModel=dw`` does not apply :math:`R`).
+``distortionRatio=dw`` makes :math:`R = |M|^2`, which carries the momentum
+distribution :math:`|\tilde\varphi(q)|^2` at the spectator direction; a
+``ps`` window already averages the model with the event weight
+:math:`|\varphi(p_s)|^2 p_s^2` of data divided by :math:`|\varphi|^2`, so
+the pair is refused (``dwpw`` divides it out and is allowed). :math:`R` is
+taken at one spectator direction (``spectatorAngle``, default ``qf``) while
+the nodes of a window correspond to other directions (12C(14N,d), window
+0-40 MeV/c: the reachable nodes lie within about 25° of the beam); :math:`R`
+at 20° in the c.m. differs from the quasi-free one by 0.993-1.003 over the
+data, so this approximation is kept (``vertexModel=dw`` evaluates the
+distortion at every node). ``weight[k]`` on a segment with :math:`R` or the
+DW vertex is warned, as before. ``theta`` does not touch the Coulomb
+factors.
+
+*Allowed combinations.*
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 18 20 22 18
+
+   * -
+     - ``coulombIntegral=1``
+     - ``lineshape=on``
+     - ``distortion`` (:math:`R`)
+     - ``vertexModel=dw``
+   * - ``coulombIntegral=1``
+     - --
+     - allowed
+     - refused (``coulomb``; ``optical`` unless ``opticalAA=plane``);
+       ``table`` warned
+     - refused
+   * - ``lineshape=on``
+     - allowed
+     - --
+     - allowed
+     - allowed
+   * - ``distortion`` (:math:`R`)
+     - see above
+     - allowed
+     - --
+     - :math:`R` not applied
+   * - ``ps`` window
+     - allowed
+     - allowed
+     - ``distortionRatio=dw`` refused; ``dwpw`` allowed
+     - allowed (per node)
+
+The rules are in ``CheckThmExperiments`` and ``CheckThmCoulombConsistency``
+(``src/ThmExperiment.cpp``), called by ``Config::ReadThmBlock`` and by the
+GUI's THM workspace; ``pyazr.AzrModel`` applies them in
+``set_thm_experiment`` and ``set_thm_option``. Files without these
+combinations give results identical to before, byte for byte.
+
+*Size* (models at the published parameters, not refitted; THM :math:`\chi^2`
+with the shared norm profiled). 12C(14N,α/p)d at 30 MeV
+(``examples/c12c12_tumino2018``, the four THM segments one experiment, 30 keV
+folding; plane-wave vertex :math:`\chi^2` 61.0):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 15 45
+
+   * - model
+     - THM :math:`\chi^2`
+     - factor on the model (per channel)
+   * - plane-wave vertex
+     - 61.0
+     - --
+   * - :math:`C_l`
+     - 66.1
+     - 0.29-0.42 (shape 1.09-1.45)
+   * - :math:`N_C`
+     - 479
+     - shape 2.0-6.9
+   * - :math:`R` (coulomb, qf, dwpw)
+     - 3247
+     - 0.012-5.4 (shape 181-440)
+   * - :math:`R` + :math:`N_C`
+     - 2861
+     - :math:`N_C` shape 2.0-6.7 on :math:`R`
+   * - :math:`R` + :math:`C_l` (now refused)
+     - 3224
+     - :math:`C_l` again 0.29-0.42 (shape 1.09-1.42)
+   * - dw (Coulomb)
+     - 4713
+     - --
+   * - dw + :math:`N_C`
+     - 5120
+     - :math:`N_C` shape 1.9-8.2 on dw
+   * - :math:`C_l` + :math:`N_C`
+     - 529
+     - --
+   * - :math:`R` + window (Eckart, 0-40 MeV/c)
+     - 5746
+     - --
+   * - same, ``distortionRatio=dw`` (now refused)
+     - 5647
+     - :math:`|\tilde\varphi(q)|^2` again, 0.952-1.020
+   * - :math:`R` at ``spectatorAngle=cm:20``
+     - 3231
+     - 0.993-1.003 against qf
+
+The double-counted pieces that are now refused are small next to :math:`R`
+here: :math:`C_l` changes the shape by up to 45 % and the second
+:math:`|\tilde\varphi|^2` by 7 %. :math:`N_C` multiplies the :math:`R` model
+as it does the plane-wave one (the shape factors differ by the 30 keV folding
+of the steep :math:`R`); on the DW vertex its effect differs (1.9-8.2)
+because the DW vertex changes the relative weights of the entrance partial
+waves in the coherent level sum, not because of an overlap. 19F(p,αγ)16O
+from 19F(d,n) at 55 MeV (``examples/f19_pag_thm``, THM :math:`\chi^2` 63.9):
+the spectator is a neutron, :math:`N_C = 1` (byte-identical);
+:math:`C_l` (:math:`p` + 19F, :math:`Z_xZ_A = 9`, deep below the barrier)
+changes the model by 0.26-1.0 (:math:`\chi^2` 133); :math:`R` (only the
+:math:`d` + 19F wave is distorted) by 0.94-1.16 (:math:`\chi^2` 76.5); both
+together, now refused, 204, the :math:`C_l` factor 0.28-1.0 on :math:`R`:
+for this deep sub-barrier proton the double count would have been the
+largest effect of the model.
 
 Normalization, gradients and uncertainty bands
 ----------------------------------------------

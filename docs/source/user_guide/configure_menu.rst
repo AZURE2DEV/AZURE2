@@ -137,7 +137,11 @@ disabled: tick *THM* on a segment in the Segments tab first.
   boundary term in the transfer vertex.
 - **Kinematic factors** (``kinematics``) -- lacognata (default), triple,
   kf3body or lambda32, matching how the HOES data were extracted.
-- **External Coulomb term in the vertex** (``coulombIntegral``).
+- **External Coulomb term in the vertex** (``coulombIntegral``); refused on
+  Accept with an experiment whose a + A wave is distorted (distortion coulomb
+  or optical without a plane a + A wave, or the DW vertex), which already
+  contains that Coulomb force (:doc:`../theory/thm_implementation`, "Coulomb
+  effects: what each option contains").
 - **Spectator energy** (``spectatorEnergy``, MeV) for every THM entrance pair,
   and a table of per-pair values (``spectatorEnergy[<pair>]``).
 - **Energy-dependent weight per segment** (``weight[<segment>]``,
