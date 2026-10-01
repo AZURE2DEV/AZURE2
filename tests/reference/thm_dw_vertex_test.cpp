@@ -14,8 +14,10 @@
  *      alpha k_sF| -- the plane-wave vertex M_l = (B - 1) j_l - rho j_l' --
  *      and the ratios |M_l|^2/|M_0|^2 for any B equal the plane-wave ones
  *      (1e-8).  19F(d,n) (Trojan horse as target, qf), 12C(14N,d) (horse as
- *      beam, 40 deg in the c.m.: every m_l enters), and a ps window whose
- *      nodes are placed on the reachable part at each energy.
+ *      beam, 40 deg in the c.m.: every m_l enters), and a ps window: every
+ *      direction whose q lies in the cut, Gauss-Legendre in cos(theta_cm)
+ *      with the fixed-E weight |phi~(q)|^2 d cos(theta_cm) (against an
+ *      independent quadrature of phi~), one node of averaged G.
  *  (c) Point-Coulomb a + A wave for 19F(d,n) at 55 MeV: G for l = 0 and 1
  *      against thm_dw_vertex_reference.py, a direct three-dimensional
  *      quadrature of S(r) near r = a with mpmath Coulomb functions, projected
@@ -27,6 +29,7 @@
  * Run:  tests/reference/thm_dw_vertex_test      (ctest: thm_dw_vertex)
  *       tests/reference/thm_dw_vertex_test -v   (print every value)
  */
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -237,7 +240,9 @@ int main(int argc, char **argv) {
     }
   }
   {
-    // A ps window: nodes on its reachable part, p from q at each node.
+    // A ps window: every direction whose q = |k_sF - beta k_aA| lies in the
+    // cut, Gauss-Legendre in cos(theta_cm) with the fixed-E event weight
+    // d cos(theta_cm) |phi~(q)|^2; the averaged G is one node.
     ThmExperiment x = Plane();
     x.psKind = ThmExperiment::PS_HULTHEN;
     x.psMin = 5.0;
@@ -245,44 +250,88 @@ int main(int argc, char **argv) {
     x.psNodes = 8;
     ThmDwVertex v;
     std::string why = v.Build(x, F19(), 5.136, {0, 1, 3}, 0.0, 0.8, {0.1, 0.5});
-    if (!why.empty()) {
-      std::printf("  FAIL  19F window: %s\n", why.c_str());
+    if (!why.empty() || !v.angles || v.nAng != x.psNodes) {
+      std::printf("  FAIL  19F window: %s (angles %d, %d directions)\n", why.c_str(), (int)v.angles, v.nAng);
       failures++;
     } else {
-      std::function<double(double)> w = ThmPsEventWeight(x);
       const int nl = (int)v.lvals.size();
+      // phi~(q) = 4 pi Int r^2 j_0(q r) phi(r) dr (Simpson, independent of the engine's u rule).
+      auto phit = [&](double q) {
+        const int n = 40000;
+        const double rEnd = v.dist.rmin + 60.0 / v.dist.kappa, h = rEnd / n;
+        double s = 0.0;
+        for (int i = 0; i <= n; i++) {
+          double r = i * h, qr = q * r, j0 = qr < 1.0e-6 ? 1.0 - qr * qr / 6.0 : std::sin(qr) / qr;
+          s += (i == 0 || i == n ? 1.0 : i % 2 ? 4.0 : 2.0) * r * r * j0 * v.dist.Phi(r);
+        }
+        return 4.0 * M_PI * s * h / 3.0;
+      };
+      gsl_integration_glfixed_table *t = gsl_integration_glfixed_table_alloc(x.psNodes);
       for (int i : {2, 25}) {
         double e = v.gridLo + i * v.gridStep;
         double ks = Ksf(v, e), ka = v.dist.aa.k, kb = v.beta * ka;
-        double lo = std::max(x.psMin, std::fabs(ks - kb) * hbarc), hi = std::min(x.psMax, (ks + kb) * hbarc);
-        gsl_integration_glfixed_table *t = gsl_integration_glfixed_table_alloc(x.psNodes);
-        std::vector<double> pk(x.psNodes), wk(x.psNodes);
+        // The cut as a range of x = k^_sF . k^_aA.
+        double ql = x.psMin / hbarc, qh = x.psMax / hbarc;
+        double xlo = std::max(-1.0, (ks * ks + kb * kb - qh * qh) / (2.0 * ks * kb));
+        double xhi = std::min(1.0, (ks * ks + kb * kb - ql * ql) / (2.0 * ks * kb));
+        std::vector<std::pair<double, double>> want;  // (q MeV/c, weight)
+        std::vector<double> pk;
         double total = 0.0;
         for (int k = 0; k < x.psNodes; k++) {
-          double wi;
-          gsl_integration_glfixed_point(lo, hi, k, &pk[k], &wi, t);
-          wk[k] = wi * w(pk[k]);
-          total += wk[k];
+          double xk, wk;
+          gsl_integration_glfixed_point(xlo, xhi, k, &xk, &wk, t);
+          double q = std::sqrt(ks * ks + kb * kb - 2.0 * ks * kb * xk), f = phit(q);
+          want.push_back({q * hbarc, wk * f * f});
+          total += wk * f * f;
+          pk.push_back(std::sqrt(ka * ka + v.alpha * v.alpha * ks * ks - 2.0 * ka * v.alpha * ks * xk));
         }
-        gsl_integration_glfixed_table_free(t);
+        std::vector<std::pair<double, double>> got;
+        for (int k = 0; k < v.nAng; k++) got.push_back({v.aq[(size_t)i * v.nAng + k], v.aw[(size_t)i * v.nAng + k]});
+        std::sort(want.begin(), want.end());
+        std::sort(got.begin(), got.end());
         for (int k = 0; k < x.psNodes; k++) {
           char tag[64];
           std::snprintf(tag, sizeof tag, "19F window E=%.2f node %d", e, k);
-          Check(std::string(tag) + " q", v.q[(size_t)i * v.nNodes + k], pk[k], 1.0e-13);
-          Check(std::string(tag) + " weight", v.w[(size_t)i * v.nNodes + k], wk[k] / total, 1.0e-12);
-          // |k_aA - alpha k_sF| with the angle of |k_sF - beta k_aA| = q.
-          double q = pk[k] / hbarc, xsa = (ks * ks + kb * kb - q * q) / (2.0 * ks * kb);
-          double p = std::sqrt(ka * ka + v.alpha * v.alpha * ks * ks - 2.0 * ka * v.alpha * ks * xsa);
-          // The spectator relation p^2/2mu_xA = E + B + q^2/2mu_sx holds up to
-          // the mass defect of the Trojan horse, O(B/m_a c^2) = 1.2e-3 (the
-          // identity needs m_a = m_s + m_x; nuclear masses are used).
-          double muxA = kP * kF19 / (kP + kF19) * uconv, musx = kN * kP / (kN + kP) * uconv;
-          Check(std::string(tag) + " p^2/2mu_xA - q^2/2mu_sx", p * p * hbarc * hbarc / (2.0 * muxA) -
-                                                                  q * q * hbarc * hbarc / (2.0 * musx),
-                e + v.dist.kin.bind, 4.0e-3);
-          if (k == 0 || k == x.psNodes - 1) CheckPlaneNode(tag, v, &v.G[((size_t)i * v.nNodes + k) * nl * 4], p);
+          Check(std::string(tag) + " q", got[k].first, want[k].first, 1.0e-12);
+          Check(std::string(tag) + " weight", got[k].second, want[k].second / total, 1.0e-9);
+        }
+        // The averaged Gram matrix = the weight-averaged plane-wave ones at
+        // p = |k_aA - alpha k_sF| of each direction (the engine's weights).
+        std::vector<double> avg((size_t)nl * 4, 0.0);
+        for (int k = 0; k < v.nAng; k++) {
+          const double q = v.aq[(size_t)i * v.nAng + k] / hbarc;
+          const double xk = (ks * ks + kb * kb - q * q) / (2.0 * ks * kb);
+          const double p = std::sqrt(ka * ka + v.alpha * v.alpha * ks * ks - 2.0 * ka * v.alpha * ks * xk);
+          for (int li = 0; li < nl; li++) {
+            double g[4];
+            PlaneGram(v.lvals[li], p * v.radius, g);
+            for (int c = 0; c < 4; c++) avg[li * 4 + c] += v.aw[(size_t)i * v.nAng + k] * g[c];
+          }
+        }
+        for (int li = 0; li < nl; li++) {
+          const double scale = std::max(avg[li * 4], avg[li * 4 + 1]);
+          for (int c = 0; c < 4; c++) {
+            char label[96];
+            std::snprintf(label, sizeof label, "19F window E=%.2f l=%d <G>[%d]", e, v.lvals[li], c);
+            Check(label, v.G[(size_t)i * nl * 4 + c + li * 4], avg[li * 4 + c], 1.0e-9, scale);
+          }
+        }
+        // The spectator relation p^2/2mu_xA = E + B + q^2/2mu_sx holds up to
+        // the mass defect of the Trojan horse, O(B/m_a c^2) = 1.2e-3 (the
+        // identity needs m_a = m_s + m_x; nuclear masses are used).
+        const double muxA = kP * kF19 / (kP + kF19) * uconv, musx = kN * kP / (kN + kP) * uconv;
+        for (int k : {0, x.psNodes - 1}) {
+          const double q = want[k].first / hbarc;
+          const double xk = (ks * ks + kb * kb - q * q) / (2.0 * ks * kb);
+          const double p = std::sqrt(ka * ka + v.alpha * v.alpha * ks * ks - 2.0 * ka * v.alpha * ks * xk);
+          char tag[64];
+          std::snprintf(tag, sizeof tag, "19F window E=%.2f node %d", e, k);
+          Check(std::string(tag) + " p^2/2mu_xA - q^2/2mu_sx",
+                p * p * hbarc * hbarc / (2.0 * muxA) - q * q * hbarc * hbarc / (2.0 * musx), e + v.dist.kin.bind,
+                4.0e-3);
         }
       }
+      gsl_integration_glfixed_table_free(t);
     }
   }
 

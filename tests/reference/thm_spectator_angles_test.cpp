@@ -85,6 +85,7 @@ struct Window {
   bool cut = false;
   double qlo = 0.0, qhi = 0.0;
   std::vector<double> t, w;  // table
+  bool all = false;          // a ps window alone (no spectatorAngles=): cm 0-180 with the cut
 };
 
 // A ThmDistortion set up for a window (Setup; the s + F channel, vcm, beta,
@@ -94,13 +95,14 @@ bool Make(ThmDistortion &d, const ThmDistortion::Kinematics &k, const Window &wi
   ThmExperiment x;
   x.name = "test";
   x.distortion = ThmExperiment::DIST_COULOMB;
-  x.angleWindow = win.t.empty() ? 1 : 2;
+  x.angleWindow = win.all ? 0 : win.t.empty() ? 1 : 2;
   x.angleCm = win.cm;
   x.angleMin = win.t.empty() ? win.lo : win.t.front();
   x.angleMax = win.t.empty() ? win.hi : win.t.back();
   x.angleTableT = win.t;
   x.angleTableW = win.w;
   x.angleNodes = nodes;
+  x.psNodes = nodes;
   if (win.cut) {
     x.psKind = ThmExperiment::PS_HULTHEN;
     x.psMin = win.qlo;
@@ -204,6 +206,12 @@ int main(int argc, char **argv) {
   w = Window();
   w.cm = false, w.lo = 0.0, w.hi = 180.0;
   Measure("he3 lab 0-180", He3(), w, 0.6);
+
+  w = Window();
+  w.all = true, w.cm = true, w.lo = 0.0, w.hi = 180.0, w.cut = true, w.qlo = 10.0, w.qhi = 60.0;
+  Measure("he3 ps window alone, 10 <= q <= 60 MeV/c (every direction in the cut)", He3(), w, 0.6, 2.0e-5);
+  w.qlo = 0.0, w.qhi = 40.0;
+  Measure("c12 ps window alone, q <= 40 MeV/c", C12(), w, 2.4);
 
   std::printf("(c) a lab window of zero width on two branches\n");
   for (double th : {0.0, 10.0}) {

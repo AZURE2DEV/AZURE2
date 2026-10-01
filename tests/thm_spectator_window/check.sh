@@ -3,28 +3,37 @@
 # Spectator-momentum window of a THM experiment: `ps=` on an
 # `experiment[<name>]` line of the <thm> block (ThmLineshape.h
 # ThmSpectatorWindow; docs/source/theory/thm_implementation.rst,
-# "Spectator-momentum window").  The HOES model at E is the average of the
-# cross section over the spectator momentum p_s in the window,
-#   sigma(E) = Int w(p) sigma(E; p) dp / Int w(p) dp,  w = |phi(p)|^2 p^2,
-# where node p adds T_s = p^2/2mu_sx to E + B in the entrance vertex (as the
-# scalar spectatorEnergy does), by Gauss-Legendre in p.
+# "Spectator-momentum window").  At fixed E the spectator direction fixes
+# q = |p_s| = |k_sF - beta k_aA|, and the three-body phase space is
+# d cos(theta_cm) = q dq/(beta k_sF k_aA), so the HOES model at E is
+#   sigma(E) = Int |phi(q)|^2 sigma(E; q) q dq / Int |phi(q)|^2 q dq
+# over the q in the window that the kinematics reach at E, where node q adds
+# T_s = q^2/2mu_sx to E + B in the entrance vertex (as the scalar
+# spectatorEnergy does), by Gauss-Legendre in cos(theta_cm).  (Until October
+# 2026 the weight was |phi|^2 p^2 dp, the measure of events integrated over E
+# as well; the pins of (c) and (d) changed with it.)
 #
 # Model: tests/18O_p_a_thm (19F: p+18O -> a+15N, l = 0 entrance, B = 2.2246
 # MeV, two THM segments with free norms), whose reaction 2H(18O,a15N)n has a
-# deuteron Trojan horse: x = p, s = n, mu_sx = m_p m_n/(m_p + m_n).
+# deuteron Trojan horse: x = p, s = n, mu_sx = m_p m_n/(m_p + m_n); at 54 MeV
+# the reachable q runs from |k_sF - beta k_aA| (<= 8 MeV/c over the data) to
+# beyond 130 MeV/c.
 #
 #   (a) ps=delta changes nothing: byte-identical to the same line without the
 #       key (with and without kinematics, and with spectatorEnergy set);
 #   (b) a window shrinking to a point reproduces spectatorEnergy = p^2/2mu_sx:
 #       pmin = pmax (one node) and a 2e-4 MeV/c wide window, to 1e-8;
-#   (c) a flat table (constant weight on [20, 40] MeV/c) equals the average
-#       of 41 single-point spectatorEnergy runs by Simpson's rule, to 1e-6;
-#       and the 16-node Hulthen window [0, 40] agrees with 32 nodes; the
-#       node tables (ps_table in thm_experiments.out) grow linearly with the
-#       nodes and stay below 4 kB per point at 32 nodes;
+#   (c) a flat table (|phi|^2 constant on [20, 40] MeV/c) equals the average
+#       of 41 single-point spectatorEnergy runs with the weight q (Simpson's
+#       rule), to 1e-6; and the 16-node Hulthen window [0, 40] agrees with 32
+#       nodes; the node tables (ps_table in thm_experiments.out) grow
+#       linearly with the nodes and stay below 4 kB per point at 32 nodes;
 #   (d) near a node of the vertex M_0 (a point p_s = 24 MeV/c puts it at
 #       E ~ 0.70 MeV, no folding) the window fills it;
-#   (e) refusals.
+#   (e) refusals;
+#   (f) one acceptance: ps= alone is spectatorAngles=cm:0-180 with the same
+#       cut (byte-identical with as many nodes), and a c.m. angle window
+#       narrows it.
 #
 #   ./tests/thm_spectator_window/check.sh path/to/AZURE2
 
@@ -115,7 +124,7 @@ if ran pt_se && ran pt_one && ran pt_narrow && ran pt_gauss; then
 fi
 
 # (c) ----------------------------------------------------------------------
-echo "(c) flat table on [20, 40] MeV/c == Simpson average of 41 spectatorEnergy runs"
+echo "(c) flat |phi|^2 on [20, 40] MeV/c == Simpson average, weight q, of 41 spectatorEnergy runs"
 TABLE='# p_s (MeV/c)  w\n20 1\n40 1\n' run flat "experiment[A] segments=1,2 $KIN ps=table:ps.dat"
 ran flat
 : > "$WORK/simpson.txt"
@@ -125,10 +134,10 @@ for i in $(seq 0 40); do
 experiment[A] segments=1,2 $KIN"
   ran "se$i" || continue
   c=$(( i == 0 || i == 40 ? 1 : (i % 2 == 1 ? 4 : 2) ))
-  model "se$i" | awk -v c=$c '{ printf "%d %s %.15e\n", NR, $1, c * $2 }' >> "$WORK/simpson.txt"
+  model "se$i" | awk -v c=$c -v p="$p" '{ printf "%d %s %.15e\n", NR, $1, c * p * $2 }' >> "$WORK/simpson.txt"
 done
-# (1/20) Int sigma dp = (1/20) (h/3) sum c_i sigma_i, h = 0.5 MeV/c.
-awk '{ s[$1] += $3; e[$1] = $2; n = ($1 > n ? $1 : n) } END { for (i = 1; i <= n; i++) printf "%s %.12e\n", e[i], s[i] / 120 }' \
+# Int q sigma dq / Int q dq = (h/3) sum c_i q_i sigma_i / 600, h = 0.5 MeV/c.
+awk '{ s[$1] += $3; e[$1] = $2; n = ($1 > n ? $1 : n) } END { for (i = 1; i <= n; i++) printf "%s %.12e\n", e[i], s[i] / 3600 }' \
   "$WORK/simpson.txt" > "$WORK/simpson.avg"
 read -r n w <<< "$(paste -d' ' <(model flat) "$WORK/simpson.avg" |
   awk '{ if ($1 != $3) { print "0 ENERGY"; exit } d = $2 / $4 - 1; if (d < 0) d = -d; if (d > w) w = d; n++ } END { printf "%d %.3e\n", n, w }')"
@@ -148,7 +157,7 @@ if ran h16 && ran h8 && ran h32; then
     || bad "hulthen [0, 40]: 16 vs 32 nodes worst rel $w16"
   read -r n w <<< "$(worst h16 nokey)"
   ok "(size) hulthen [0, 40] vs the quasi-free point p_s = 0: worst rel $w"
-  grep -q "^ps: hulthen a=0.2317 b=1.202 fm^-1, p_s in \[0, 40\] MeV/c, 16 Gauss-Legendre nodes" \
+  grep -q "^ps: hulthen a=0.2317 b=1.202 fm^-1, p_s in \[0, 40\] MeV/c, 16 Gauss-Legendre nodes in cos theta_cm" \
     "$WORK/h16/output/thm_experiments.out" && ok "thm_experiments.out lists the window" || bad "no ps: line in thm_experiments.out"
   # Memory of the node tables (EPoint::ThmPsTable): entrance channels only,
   # flat, so linear in the nodes and a few hundred bytes per point.  The
@@ -196,7 +205,7 @@ refuse bad_ab "Hulthen a,b" "experiment[A] segments=1,2 $KIN ps=hulthen:1.2,0.2:
 refuse bad_fwhm "FWHM" "experiment[A] segments=1,2 $KIN ps=gauss:0:0-40"
 refuse no_table "cannot read the ps table" "experiment[A] segments=1,2 $KIN ps=table:missing.dat"
 TABLE='20 1\n10 1\n' refuse table_order "strictly increasing" "experiment[A] segments=1,2 $KIN ps=table:ps.dat"
-TABLE='20 0\n40 0\n' refuse table_zero "every weight is zero" "experiment[A] segments=1,2 $KIN ps=table:ps.dat"
+TABLE='20 0\n40 0\n' refuse table_zero "zero in every row" "experiment[A] segments=1,2 $KIN ps=table:ps.dat"
 TABLE='20 1\n' refuse table_short "at least two rows" "experiment[A] segments=1,2 $KIN ps=table:ps.dat"
 refuse nodes_range "1 to 64" "experiment[A] segments=1,2 $KIN ps=hulthen:0-40 psNodes=65"
 refuse nodes_alone "psNodes= needs a ps window" "experiment[A] segments=1,2 $KIN psNodes=8"
@@ -207,6 +216,24 @@ experiment[A] segments=1,2 $KIN ps=hulthen:0-40"
 refuse with_se_pair "spectatorEnergy both set" "spectatorEnergy[1]=0.4
 experiment[A] segments=1,2 $KIN ps=gauss:60:0-40"
 refuse theta "expected all or thmin-thmax" "experiment[A] segments=1,2 theta=10-0"
+refuse out_of_reach "do not overlap the ps window" "experiment[A] segments=1,2 $KIN ps=hulthen:200-300"
+refuse with_angle "spectatorAngle= (one direction) and a ps window" \
+  "experiment[A] segments=1,2 $KIN ps=hulthen:0-40 distortion=coulomb spectatorAngle=10"
+refuse angle_nodes "the nodes are spectatorAngleNodes" \
+  "experiment[A] segments=1,2 $KIN ps=hulthen:0-40 psNodes=8 spectatorAngles=cm:120-180"
+refuse angles_alone "it has nothing to average" "experiment[A] segments=1,2 $KIN spectatorAngles=cm:120-180"
+
+# (f) ----------------------------------------------------------------------
+echo "(f) one acceptance: ps= alone == spectatorAngles=cm:0-180 with the cut"
+run all16 "experiment[A] segments=1,2 $KIN ps=hulthen:0-40 spectatorAngles=cm:0-180 spectatorAngleNodes=16"
+run cm160 "experiment[A] segments=1,2 $KIN ps=hulthen:0-40 spectatorAngles=cm:160-180 spectatorAngleNodes=16"
+if ran h16 && ran all16 && ran cm160; then
+  same "$WORK/h16/output/$OUT" "$WORK/all16/output/$OUT" && ok "ps=hulthen:0-40 == + spectatorAngles=cm:0-180 (16 nodes): byte-identical" \
+    || { read -r n w <<< "$(worst h16 all16)"; bad "ps alone vs cm:0-180: $n points, worst rel $w"; }
+  read -r n w <<< "$(worst cm160 h16)"
+  awk -v w="$w" 'BEGIN { exit !(w > 1e-3) }' && ok "(size) cm:160-180 with the cut (q <= 40 MeV/c needs theta_cm >= ~147 deg) vs the cut alone: worst rel $w" \
+    || bad "cm:160-180 changes nothing: worst rel $w"
+fi
 
 echo
 if [ "$fail" -eq 0 ]; then echo "PASS: THM spectator-momentum window"; else echo "FAIL"; exit 1; fi

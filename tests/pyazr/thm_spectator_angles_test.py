@@ -97,12 +97,12 @@ with tempfile.TemporaryDirectory() as tmp:
           m2.thm_experiments()["A"].get("spectatorAngles") == "10-30.5", m2.thm_experiments())
     base = dict(beam="18O", target="d", spectator="n", Ebeam=54)
     for kwargs, frag in [
-            (dict(spectatorAngles="cm:120-180"), "it needs distortion=coulomb or distortion=optical"),
+            (dict(spectatorAngles="cm:120-180"), "with neither it has nothing to average"),
             (dict(distortion="coulomb", spectatorAngle=20, spectatorAngles="cm:120-180"),
              "exclude each other"),
             (dict(distortion="coulomb", spectatorAngleNodes=4), "needs a spectator-direction window"),
             (dict(distortion="coulomb", vertexModel="dw", ps="hulthen:0-40", psNodes=8,
-                  spectatorAngles="cm:120-180"), "so psNodes= has no effect"),
+                  spectatorAngles="cm:120-180"), "the nodes are spectatorAngleNodes="),
             (dict(distortion="coulomb", spectatorAngles="cm:50-20"), "expected thmin-thmax"),
             (dict(distortion="coulomb", spectatorAngles="10-200"), "expected thmin-thmax"),
             (dict(distortion="coulomb", spectatorAngles="cm:120-180", spectatorAngleNodes=65),

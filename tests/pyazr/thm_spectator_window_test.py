@@ -1,26 +1,31 @@
 #!/usr/bin/env python3
 """The spectator-momentum window of a THM experiment in pyazr (``ps=``).
 
-The HOES model at E is the average of the cross section over the spectator
-momentum p_s in the window, weight |phi(p_s)|^2 p_s^2, each node adding
-T_s = p_s^2/2mu_sx to E + B in the entrance vertex (ThmLineshape.h
-ThmSpectatorWindow; docs/source/theory/thm_implementation.rst,
-"Spectator-momentum window").  Checked on tests/18O_p_a_thm, whose reaction
-2H(18O,a15N)n has a deuteron Trojan horse (x = p, s = n):
+At fixed E the spectator direction fixes q = |p_s| = |k_sF - beta k_aA|, and
+the HOES model at E is the average of the cross section over the accepted
+directions with the event weight |phi(q)|^2 d cos(theta_cm) (the three-body
+phase space at fixed E, = |phi|^2 q dq), each node adding T_s = q^2/2mu_sx to
+E + B in the entrance vertex (ThmLineshape.h ThmSpectatorWindow;
+docs/source/theory/thm_implementation.rst, "Spectator-momentum window").
+Until October 2026 the weight was |phi|^2 p^2 dp; the checks of 3 and 4
+changed with it.  Checked on tests/18O_p_a_thm, whose reaction 2H(18O,a15N)n
+has a deuteron Trojan horse (x = p, s = n):
 
   1. AzrModel: set_thm_experiment(..., ps=..., psNodes=...) round trip; the
      refusals AZURE2 makes (no kinematics, bad values, psNodes alone, a window
      together with spectatorEnergy for the same pair).
   2. The engine against the CLI with a Hulthen window: calculate_chi2_rwa
      (rel 1e-9) and the output files written by write_output_files.
-  3. thm_vertex: the Gauss-Legendre nodes and Hulthen weights, T_s and rho
-     against an independent evaluation here (1e-12), the window-averaged
-     |M_0|^2 against M_0 = B sin(rho)/rho - cos(rho) to 1e-5 of its largest
-     value (the engine's forward difference for j_l' costs ~1e-6); a delta
-     experiment has one node.
-  4. Linearity: a two-node window equals w_1 m(T_1) + w_2 m(T_2) from two
-     sessions with spectatorEnergy = T_k (rel 1e-12); ps=delta residuals are
-     bit for bit those without the key.
+  3. thm_vertex: at every energy the Gauss-Legendre nodes in cos(theta_cm) on
+     the part of the sphere with q in [0, 40] MeV/c, the Hulthen weights
+     |phi(q)|^2, T_s and rho against an independent evaluation of the
+     three-body kinematics here (1e-10), the window-averaged |M_0|^2 against
+     M_0 = B sin(rho)/rho - cos(rho) to 1e-5 of its largest value (the
+     engine's forward difference for j_l' costs ~1e-6); a delta experiment
+     has one node.
+  4. One direction: ps=hulthen:30-30 equals spectatorEnergy = 30^2/2mu_sx at
+     every point (rel 1e-9); ps=delta residuals are bit for bit those without
+     the key.
 
 Needs the compiled engine and an AZURE2 binary for 2-4; skips them cleanly.
 
@@ -83,6 +88,31 @@ MU_SX = 1.0072764675 * 1.0086649159 / (1.0072764675 + 1.0086649159) * AMU
 MU_XA = 1.00727647 * 17.99477097 / (1.00727647 + 17.99477097) * UCONV
 B, RADIUS = 2.224566, 5.1
 HA, HB = 0.2317, 1.202                                         # Hulthen, fm^-1
+# Three-body kinematics (ThmDistortion::Setup): 18O on a deuteron target at
+# 54 MeV, the Trojan horse d = p + n is the target, so x = k^_sF.k^_aA is
+# -cos(theta_cm); masses of the engine's nuclide table, reduced masses in
+# uconv as the engine's channels.
+M_N, M_P, M_D, M_O18 = 1.0086649159, 1.0072764675, 2.0135532134, 17.9947732059
+E_AA = 54.0 * M_D / (M_O18 + M_D)
+K_AA = math.sqrt(2 * M_D * M_O18 / (M_D + M_O18) * UCONV * E_AA) / HBARC
+KB = M_N / M_D * K_AA
+MU_SF = M_N * (M_P + M_O18) / (M_N + M_P + M_O18) * UCONV
+B_MASS = (M_P + M_N - M_D) * AMU
+
+
+def nodes(e, pmin, pmax, n):
+    """The accepted directions at E: q (MeV/c) and normalized weights."""
+    import numpy as np
+    ks = math.sqrt(2 * MU_SF * (E_AA - B_MASS - e)) / HBARC
+    x_lo = max(-1.0, (ks * ks + KB * KB - (pmax / HBARC) ** 2) / (2 * ks * KB))
+    x_hi = min(1.0, (ks * ks + KB * KB - (pmin / HBARC) ** 2) / (2 * ks * KB))
+    t, w = np.polynomial.legendre.leggauss(n)
+    x = 0.5 * (x_lo + x_hi) + 0.5 * (x_hi - x_lo) * t
+    q = np.sqrt(ks * ks + KB * KB - 2 * ks * KB * x) * HBARC
+    q2 = (q / HBARC) ** 2
+    ww = w * (1.0 / (HA ** 2 + q2) - 1.0 / (HB ** 2 + q2)) ** 2
+    order = np.argsort(q)
+    return q[order], (ww / ww.sum())[order]
 
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -193,24 +223,34 @@ with tempfile.TemporaryDirectory() as tmp:
         print("3. thm_vertex against an independent evaluation")
         grid = np.linspace(0.45, 0.95, 11)
         r = s.thm_vertex("A", grid, x)
-        t, w = np.polynomial.legendre.leggauss(16)
-        p = 20.0 * (t + 1.0)
-        q2 = (p / HBARC) ** 2
-        ww = w * (1.0 / (HA ** 2 + q2) - 1.0 / (HB ** 2 + q2)) ** 2 * p * p
-        ww /= ww.sum()
-        check("16 nodes on [0, 40] MeV/c", r["p_s"].size == 16
-              and np.max(np.abs(r["p_s"] - p)) < 1e-12, f"{r['p_s']} vs {p}")
-        check("Hulthen weights |phi|^2 p^2, normalized (1e-12)",
-              np.max(np.abs(r["weights"] - ww)) < 1e-12 and abs(r["weights"].sum() - 1) < 1e-14,
-              f"{r['weights']} vs {ww}")
+        d_q = d_w = d_t = d_rho = 0.0
+        ww_rows, rho_rows = [], []
+        n_ok = True
+        for i, e in enumerate(grid):
+            q, ww = nodes(e, 0.0, 40.0, 16)
+            got_q = np.asarray(r["p_s"][i])
+            order = np.argsort(got_q)
+            n_ok = n_ok and got_q.size == 16
+            if got_q.size != 16:
+                continue
+            d_q = max(d_q, np.max(np.abs(got_q[order] - q)))
+            d_w = max(d_w, np.max(np.abs(np.asarray(r["weights"][i])[order] - ww)))
+            d_t = max(d_t, np.max(np.abs(np.asarray(r["T_s"][i])[order] - q * q / (2 * MU_SX))))
+            rho = np.sqrt(2 * MU_XA * (e + B + q * q / (2 * MU_SX))) * RADIUS / HBARC
+            d_rho = max(d_rho, np.max(np.abs(np.asarray(r["rho"][i])[order] / rho - 1)))
+            ww_rows.append(ww)
+            rho_rows.append(rho)
+        check(f"16 nodes at every energy, q in [|k_sF - beta k_aA|, 40] MeV/c ({d_q:.1e} MeV/c)",
+              n_ok and d_q < 1e-9, r["p_s"])
+        check(f"weights |phi(q)|^2 d cos(theta_cm), normalized ({d_w:.1e})",
+              n_ok and d_w < 1e-10 and all(abs(np.sum(w) - 1) < 1e-14 for w in r["weights"]))
+        check("theta_cm reported for every node", len(r["theta_cm"]) == grid.size
+              and all(np.all((np.asarray(t) >= 0) & (np.asarray(t) <= 180)) for t in r["theta_cm"]))
         check(f"mu_sx = {r['mu_sx']:.6f} MeV", rel(r["mu_sx"], MU_SX) < 1e-12, r["mu_sx"])
-        check("T_s = p_s^2/2mu_sx", np.max(np.abs(r["T_s"] - p * p / (2 * MU_SX))) < 1e-12)
+        check(f"T_s = p_s^2/2mu_sx ({d_t:.1e} MeV)", d_t < 1e-10)
         check("B and radius", rel(r["B"], B) < 1e-12 and rel(r["radius"], RADIUS) < 1e-12,
               f"{r['B']} {r['radius']}")
-        rho = np.sqrt(2 * MU_XA * (grid[:, None] + B + p[None, :] * p[None, :] / (2 * MU_SX))) \
-            * RADIUS / HBARC
-        d_rho = max(np.max(np.abs(np.asarray(row) / want - 1)) for row, want in zip(r["rho"], rho))
-        check(f"rho = p_xA a/hbar c at every node ({d_rho:.1e})", d_rho < 1e-12)
+        check(f"rho = p_xA a/hbar c at every node ({d_rho:.1e})", d_rho < 1e-10)
         chans = r["channels"]
         check("one entrance channel, l = 0, two levels",
               len(chans) == 1 and chans[0]["l"] == 0 and len(chans[0]["levels"]) == 2, chans)
@@ -222,7 +262,7 @@ with tempfile.TemporaryDirectory() as tmp:
         def m0(rh):                        # (B - 1) j0 - rho j0' = B sin(rho)/rho - cos(rho)
             return Bc * np.sin(rh) / rh - np.cos(rh)
 
-        want = (ww[None, :] * m0(rho) ** 2).sum(axis=1)
+        want = np.array([(w * m0(rh) ** 2).sum() for w, rh in zip(ww_rows, rho_rows)])
         rho0 = np.sqrt(2 * MU_XA * (grid + B)) * RADIUS / HBARC
         scale = np.max(want)
         d_avg = np.max(np.abs(levels[0]["M2"] - want)) / scale
@@ -242,25 +282,23 @@ with tempfile.TemporaryDirectory() as tmp:
     for name in sorted(n for n in from_cli if n.startswith("AZUREOut_") or n in
                        ("chiSquared.out", "normalizations.out", "thm_experiments.out")):
         check(f"write_output_files: {name} identical to the CLI's", from_py.get(name) == from_cli[name])
-    check("thm_experiments.out lists the nodes", from_cli["thm_experiments.out"].count("ps_node") == 16)
+    check("thm_experiments.out lists the nodes at the lowest and highest point",
+          from_cli["thm_experiments.out"].count("ps_node") == 32)
 
-    print("4. linearity: two nodes == the weighted sum of two spectatorEnergy runs")
-    two_dir = project("two", f"experiment[A] segments=1,2 {KIN} ps=gauss:50:10-40 psNodes=2")
-    with azure2(os.path.join(two_dir, "run.azr"), cwd=two_dir) as s:
+    print("4. one direction: ps=hulthen:30-30 == spectatorEnergy = 30^2/2mu_sx")
+    one_dir = project("one", f"experiment[A] segments=1,2 {KIN} ps=hulthen:30-30")
+    with azure2(os.path.join(one_dir, "run.azr"), cwd=one_dir) as s:
         x = np.asarray(s.params_rwa, float)
-        m_two = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
+        m_one = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
         r = s.thm_vertex("A", [0.6], x)
-    parts = []
-    for k in range(2):
-        d = project(f"se{k}", f"spectatorEnergy={float(r['T_s'][k])!r}\n"
-                              f"experiment[A] segments=1,2 {KIN}")
-        with azure2(os.path.join(d, "run.azr"), cwd=d) as s:
-            parts.append(np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)]))
-    combo = r["weights"][0] * parts[0] + r["weights"][1] * parts[1]
-    worst = float(np.max(np.abs(m_two / combo - 1)))
-    check(f"model = w1 m(T1) + w2 m(T2) at {m_two.size} points (worst {worst:.1e}; "
-          f"T = {r['T_s'][0]:.4f}, {r['T_s'][1]:.4f} MeV, w = {r['weights'][0]:.4f}, "
-          f"{r['weights'][1]:.4f})", worst < 1e-12)
+    d = project("se30", f"spectatorEnergy={30.0 * 30.0 / (2 * MU_SX)!r}\n"
+                        f"experiment[A] segments=1,2 {KIN}")
+    with azure2(os.path.join(d, "run.azr"), cwd=d) as s:
+        m_se = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
+    worst = float(np.max(np.abs(m_one / m_se - 1)))
+    check(f"one node at q = 30 MeV/c, weight 1 ({r['p_s'][0]})",
+          len(r["p_s"][0]) == 1 and abs(r["p_s"][0][0] - 30.0) < 1e-9 and r["weights"][0][0] == 1.0)
+    check(f"model == spectatorEnergy session at {m_one.size} points (worst {worst:.1e})", worst < 1e-9)
     nokey_dir = project("nokey", f"experiment[A] segments=1,2 {KIN}")
     delta_dir = project("delta", f"experiment[A] segments=1,2 {KIN} ps=delta")
     with azure2(os.path.join(nokey_dir, "run.azr"), cwd=nokey_dir) as s:
@@ -271,7 +309,8 @@ with tempfile.TemporaryDirectory() as tmp:
         r = s.thm_vertex("A", [0.6, 0.8], x)
         lv = r["channels"][0]["levels"][0]
         check("delta: one node at p_s = 0, M2 == M2_qf",
-              r["window"] == "delta" and list(r["p_s"]) == [0.0] and list(r["weights"]) == [1.0]
+              r["window"] == "delta" and [list(v) for v in r["p_s"]] == [[0.0], [0.0]]
+              and [list(v) for v in r["weights"]] == [[1.0], [1.0]]
               and np.array_equal(lv["M2"], lv["M2_qf"]), r)
 
 print()

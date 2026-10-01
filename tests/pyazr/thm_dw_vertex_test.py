@@ -102,7 +102,7 @@ with tempfile.TemporaryDirectory() as tmp:
             (dict(distortion="coulomb", distortionRatio="dw", vertexModel="dw"),
              "belongs to the distortion factor R(E)"),
             (dict(distortion="coulomb", spectatorAngle=10, ps="hulthen:0-30", vertexModel="dw"),
-             "applies without a window only"),
+             "spectatorAngle= (one direction) and a ps window"),
             (dict(distortion="coulomb", theta="30-60", vertexModel="dw"), "not available with vertexModel=dw"),
             (dict(distortion="coulomb", vertexModel="dwba"), "expected pw or dw")]:
         try:

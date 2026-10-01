@@ -153,7 +153,7 @@ refuse no_distortion "needs distortion=coulomb or distortion=optical" "$L vertex
 refuse table "needs distortion=coulomb or distortion=optical" "experiment[A] segments=1,2 distortion=table:$WORK/w.dat vertexModel=dw"
 refuse ref "belongs to the distortion factor R(E)" "$L distortion=coulomb distortionRef=0.7 vertexModel=dw"
 refuse ratio "belongs to the distortion factor R(E)" "$L distortion=coulomb distortionRatio=dw vertexModel=dw"
-refuse angle_ps "spectatorAngle= applies without a window only" "$L distortion=coulomb spectatorAngle=10 ps=hulthen:0-30 vertexModel=dw"
+refuse angle_ps "spectatorAngle= (one direction) and a ps window" "$L distortion=coulomb spectatorAngle=10 ps=hulthen:0-30 vertexModel=dw"
 refuse theta "theta= (fixed-angle observable) is not available" "$L distortion=coulomb theta=30-60 vertexModel=dw"
 refuse coulomb_integral "cannot be combined with coulombIntegral=1" "$L distortion=coulomb vertexModel=dw" "coulombIntegral=1"
 refuse coherent "entranceL=coherent" "$L distortion=coulomb vertexModel=dw" "entranceL=coherent"
