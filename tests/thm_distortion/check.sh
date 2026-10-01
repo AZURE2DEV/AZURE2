@@ -32,7 +32,11 @@
 #   (e) an optical potential with the nuclear part off (ten zeros) is
 #       byte-identical to distortion=coulomb in the model; a real one is not;
 #   (f) refusals, and the warning when the masses and field 32 disagree on
-#       B(x+s).
+#       B(x+s);
+#   (g) global optical potentials (ThmOptical.h): opticalAA=ancai06 equals
+#       its ten numbers written out at E_aA (1e-6), kd03:extrapolate for
+#       n + 19F is warned and reported at both data ends, refusals (outside
+#       the range, a projectile the model does not describe, a bad name).
 #
 #   ./tests/thm_distortion/check.sh path/to/AZURE2
 
@@ -219,6 +223,31 @@ grep -q "WARNING: <thm> experiment\[A\]: B(x+s) from the masses of 3He = x + d i
   && ok "B(x+s) warning: masses 5.49343 MeV vs field 32 2.22457 MeV" || bad "no B(x+s) warning for 3He"
 grep -q "B(x+s) from the masses" "$WORK/n_off/log" && bad "B(x+s) warning for the d kinematics (they agree)" \
   || ok "no B(x+s) warning when masses and field 32 agree (d)"
+
+# (g) ----------------------------------------------------------------------
+echo "(g) global optical potentials (2H(18O,a15N)n: d + 18O, n + 19F)"
+# ancai06 for d + 18O at E_d = 6.0424 MeV, the ten numbers written out (An & Cai 2006).
+ANCAI="92.3094248915,3.01133408613,0.752021341567,1.47983816455,3.51976751944,0.592925860579,10.6451021248,3.64806901987,0.693485966441,3.41482603665"
+run g_name "experiment[A] segments=1,2 $KINN distortion=optical opticalAA=ancai06 opticalSF=plane"
+run g_ten "experiment[A] segments=1,2 $KINN distortion=optical opticalAA=$ANCAI opticalSF=plane"
+if ran g_name && ran g_ten; then
+  ratios g_name g_ten | awk '{ d = $2 - 1; if (d < 0) d = -d; if (d > m) m = d; n++ }
+    END { printf "%d %.2e\n", n, m; exit !(n > 0 && m <= 1e-6) }' > "$WORK/g.cmp" \
+    && ok "opticalAA=ancai06 == its ten numbers at E_aA: $(cat "$WORK/g.cmp") (points, max |ratio - 1|)" \
+    || bad "ancai06 against its ten numbers: $(cat "$WORK/g.cmp")"
+  grep -q "WARNING" "$WORK/g_name/log" && bad "a warning for ancai06 inside its range" || ok "no warning inside the range"
+fi
+run g_extra "experiment[A] segments=1,2 $KINN distortion=optical opticalAA=ancai06 opticalSF=kd03:extrapolate"
+if ran g_extra; then
+  grep -q "WARNING: <thm> experiment\[A\]: opticalSF=kd03 (Koning & Delaroche, NPA 713 (2003) 231 (global)) is outside its validity range for n + 19F: target A = 19 (valid 24-209); extrapolated" "$WORK/g_extra/log" \
+    && ok "kd03:extrapolate for n + 19F: warned" || bad "no extrapolation warning for kd03"
+  grep -q "s + F: kd03:extrapolate (n on 19F) Woods-Saxon V=.* at E_lab = .* MeV (E = .* MeV) to V=" "$WORK/g_extra/log" \
+    && ok "the s + F potential is reported at both ends of the data" || bad "no s + F potential at both ends"
+fi
+refuse g_range "Write kd03:extrapolate" "experiment[A] segments=1,2 $KINN distortion=optical opticalSF=kd03"
+refuse g_species "which it does not describe" "experiment[A] segments=1,2 $KINN distortion=optical opticalAA=kd03"
+refuse g_mass "outside its validity range for d + 18O: target A = 18 (valid 27-238)" "experiment[A] segments=1,2 $KINN distortion=optical opticalAA=daehnick80"
+refuse g_name_bad "a global optical potential (ancai06, daehnick80" "experiment[A] segments=1,2 $KINN distortion=optical opticalAA=ancai"
 
 echo
 if [ "$fail" -eq 0 ]; then echo "PASS: THM distortion factor"; else echo "FAIL"; exit 1; fi

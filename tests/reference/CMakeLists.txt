@@ -35,6 +35,16 @@ target_link_libraries(thm_distortion_test PRIVATE AZURE2Core)
 add_test(NAME thm_distortion COMMAND thm_distortion_test)
 set_tests_properties(thm_distortion PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# Global optical potentials (ThmOptical): the parameters against the RIPL-3
+# library and the FRONT21 code (thm_optical_reference.py), d + 40Ca elastic
+# scattering against DOP853 and the measured ratio to Rutherford, and their use
+# in the distortion factor.
+add_executable(thm_optical_test thm_optical_test.cpp)
+target_link_libraries(thm_optical_test PRIVATE AZURE2Core)
+
+add_test(NAME thm_optical COMMAND thm_optical_test)
+set_tests_properties(thm_optical PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # Reference calculation for the fixed-angle THM observable (ThmAngular): the
 # Legendre form and its window average against the literal M-sum of
 # thm_fixed_angle_reference.py (sympy Clebsch-Gordan, mpmath quadrature).

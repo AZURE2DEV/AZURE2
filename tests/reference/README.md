@@ -159,3 +159,28 @@ a Hulthén window (nodes, weights, q); point Coulomb in d + 19F at 55 MeV
 quadrature to 2e-7 of the largest entry; the Clebsch-Gordan coefficients
 against GSL and in orthonormality at L = 60; the Cholesky components against
 c†Gc; the interpolation between grid nodes.
+
+## thm_optical_test
+
+The global optical potentials of the THM distorted waves (`src/ThmOptical.cpp`,
+docs/source/theory/thm_implementation.rst, "Global optical potentials").
+`thm_optical_reference.py` reads the RIPL-3 optical-model library
+(`om-parameter-u.dat`, www-nds.iaea.org/RIPL-3/optical/om-data/; give its path
+on the command line) and evaluates its entries by the library's own
+coefficient formulas -- standard and Koning forms -- for An & Cai (6200),
+Koning & Delaroche (2405, 5405), Becchetti & Greenlees (7100, 8100),
+McFadden & Satchler (9100) and Avrigeanu (9600); Daehnick and Liang come from
+a transcription of the FRONT21 front end of TWOFNR, since RIPL carries only
+nucleus-specific refits of Daehnick's imaginary part (it prints the
+comparison: real depth and imaginary diffuseness agree to 4 digits). It also
+solves d + 40Ca elastic scattering at 56 MeV with Daehnick's potential by
+scipy's DOP853 and mpmath's Coulomb functions (about a minute).
+
+What it checks: the ten numbers of every model at 23 points to 1e-9; the
+engine's S matrix (Numerov + COUL) against DOP853 in the ratio to Rutherford
+at 12 angles to 2e-4, and the measured ratio (Hatanaka et al. 1980, EXFOR
+E0682-022) within 0.2 dex everywhere and 0.08 dex rms; in the distortion
+factor the global s + F potential is re-evaluated at E_sF of each energy (the
+amplitude equals that of its ten numbers written out there), the refusals
+outside the validity range and for a projectile a model does not describe,
+`:extrapolate` with one warning, and the parser.
