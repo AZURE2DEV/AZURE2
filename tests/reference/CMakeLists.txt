@@ -62,3 +62,12 @@ target_link_libraries(thm_dw_vertex_test PRIVATE AZURE2Core)
 
 add_test(NAME thm_dw_vertex COMMAND thm_dw_vertex_test)
 set_tests_properties(thm_dw_vertex PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The spectator-direction window of a THM experiment (spectatorAngles=,
+# ThmDistortion::AngleNodes): the measure of the accepted c.m. directions
+# against a brute-force sum, lab windows with one and two c.m. branches, the q
+# cut of a ps window, zero-width windows and acceptance tables.
+add_executable(thm_spectator_angles_test thm_spectator_angles_test.cpp)
+target_link_libraries(thm_spectator_angles_test PRIVATE AZURE2Core)
+
+add_test(NAME thm_spectator_angles COMMAND thm_spectator_angles_test)

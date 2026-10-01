@@ -114,3 +114,11 @@ add_test(NAME pyazr_thm_dw_vertex
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_dw_vertex_test.py)
 set_tests_properties(pyazr_thm_dw_vertex PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Spectator-direction window (experiment[...] spectatorAngles=...): AzrModel and
+# its refusals, CLI == pyazr for R(E) and the DW vertex, thm_distortion and
+# thm_vertex with a window (the reported vertex is the one the model uses).
+add_test(NAME pyazr_thm_spectator_angles
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_spectator_angles_test.py)
+set_tests_properties(pyazr_thm_spectator_angles PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
