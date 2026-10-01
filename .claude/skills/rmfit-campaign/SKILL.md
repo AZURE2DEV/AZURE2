@@ -1555,3 +1555,14 @@ free), driven by the low-energy session (`13C+a/9-30-26_merged*`).  Lessons, in 
   (cut the point); cap-3 pole tails at the 5U data's 13.2 MeV edge; a 50 MeV pole needs far larger
   reduced widths than a 13.5 MeV one for the same effect at 12–13 MeV (they moved their 13.0 poles to
   13.5 and it worked).  Details in `13C+a/9-30-26_merged*/readme`.
+
+## 2026-10-01 — CRC default Python moved to 3.12.15; its sqlite3 is broken on compute nodes
+
+Found by the low-energy session: from 2026-10-01 12:25 the cluster's default `python3` is 3.12.15,
+and on at least d32cepyc223 `import sqlite3` fails ("undefined symbol: sqlite3_deserialize"), so
+`from rmfit.ledger import Ledger` dies and every rmfit step exits in one second.  The login node
+imports fine under both versions, so a login-node dry run does not catch it.  Pin the interpreter in
+every csh job script, right after `source ~/.login`:
+    module unload python
+    module load python/3.12.13
+(the version the earlier jobs ran under).  All of this session's reusable job templates now carry it.
