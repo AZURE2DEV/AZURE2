@@ -48,6 +48,7 @@ with every key at its default, gives identical results
    experiment[E1] segments=1,2 background=linear   # see "THM experiments" below
    experiment[E2] segments=3 beam=14N target=12C spectator=d Ebeam=30 distortion=coulomb
    experiment[E3] segments=4 theta=50-70   # dsigma/dOmega averaged over theta_cm = 50-70 deg
+   experiment[E4] segments=5 cbackground=1/2+:2=0.1,-0.05   # interfering THM-only background
    </thm>
 
 An unknown key, an unknown value, a negative spectator energy, a missing
@@ -405,6 +406,10 @@ letters, digits and ``_ - . +``.
    is the HOES :math:`d\sigma/d\Omega` averaged over it instead of the
    angle-integrated cross section (default ``all``), below ("Fixed-angle
    observable").
+``cbackground=<term>[;<term>...]``
+   A coherent (interfering) THM-only background amplitude per J\ :sup:`π`,
+   entrance and exit channel, whose real and imaginary parts are fit
+   parameters (default: none), below ("Coherent background").
 ``vertexModel=pw|dw``
    The entrance vertex of every segment: the plane-wave :math:`M_l`
    (default ``pw``) or the surface term of the prior-form DWBA built from the
@@ -508,6 +513,202 @@ differences in ``tests/pyazr/thm_experiment_test.py`` (all six parameters of
 ``tests/18O_p_a_thm``, linear background, rel. :math:`\le 5\times 10^{-6}`)
 and, for the band, in ``tests/thm_band/check.sh``. The band row of a point is
 the derivative of the curve the output shows, :math:`(s J_m + A\dot c)/s`.
+
+Coherent background
+-------------------
+
+``background=`` adds a smooth term to the *cross section*: whatever it stands
+for, it does not interfere with the resonances. Two kinds of non-resonant
+physics can interfere, and AZURE2 treats them differently.
+
+*Non-resonant x + A → b + B in the same partial wave.* Direct coupling of the
+entrance and exit channels and the tails of distant levels belong to the
+two-body reaction itself. They are in the direct data as well as in the HOES
+amplitude, with the same reduced widths, and the R matrix describes them with
+a **background pole**: a broad level of the same J\ :sup:`π` far above the
+data, with widths in the entrance and exit channels. In the HOES amplitude
+:math:`\sum_{\lambda\lambda'}\gamma_{\lambda f}A_{\lambda\lambda'}V_{\lambda'}`
+such a level enters through the level matrix exactly as the resonances do, so
+it acts on THM and direct segments consistently and keeps the S matrix unitary
+(its phase relative to the resonances is fixed by the widths, not free). It
+needs no option: add the level on the Levels tab (or ``<levels>``) and free
+its widths. This is the term Mukhamedzhanov et al. drop from the THM amplitude
+when they "neglect the direct coupling between the initial x + A and final
+b + B channels" (J. Phys. G 35 (2008) 014016, p. 2) and the non-resonant
+:math:`V^N_{bB}\,G\,V_{sx}` term of Mukhamedzhanov, Kadyrov & Pang, EPJA 56
+(2020) 233, eqs. (48)–(49), which "does not produce the resonance peak ... and
+can be treated as a background".
+
+*Non-quasi-free mechanisms.* Sequential decay through other two-body
+resonances, direct breakup and other three-body processes feed the same final
+state :math:`c + B + s` at the same kinematics but do not go through the
+x + A system. They are absent from direct data. The THM analyses remove them by
+kinematic cuts (spectator momentum :math:`p_s \lesssim 30`–50 MeV/c, the loci
+of the relative energies, angular correlations) and fit what is left with an
+incoherent polynomial (Tribble et al., RPP 77 (2014) 106901, §4.2–4.3 and
+Fig. 31: three Gaussians plus a first-order polynomial for 18O(p,α); La
+Cognata et al. 2010: a linear background subtracted; Spitaleri et al.,
+PRC 95 (2017) 035801, eq. (11): an incoherent sum with a non-resonant
+polynomial). None of these analyses models an interference between a non-QF
+and the QF amplitude, and none estimates it; ``background=`` is that
+incoherent term. A residue of a non-QF amplitude in the same final state can,
+however, interfere: projected on the partial waves of the b + B relative
+motion at the quasi-free kinematics it has a component in every J\ :sup:`π`
+and exit channel. ``cbackground=`` models that component.
+
+``cbackground=<term>[;<term>...]`` on an experiment line, a term being
+
+.. code-block:: text
+
+   <J><+|->:<exit pair key>[:<s>,<l>,<s'>,<l'>][:const|:linear][=<Re c0>,<Im c0>[,<Re c1>,<Im c1>]]
+
+adds, for each combination of an entrance channel :math:`(s,l)` and an exit
+channel :math:`(s',l')` of the J\ :sup:`π` group (all of them, or the one
+named), a complex amplitude to the HOES amplitude of that combination before
+it is squared:
+
+.. math::
+
+   x^J_{(s'l'),(sl)} \to \sqrt{K\,2P_{c'}}\;e^{i(\omega_{c'}-\phi_{c'})}
+   \Bigl[\sum_{\lambda\lambda'}\gamma_{\lambda c'}N_\lambda A_{\lambda\lambda'}V^{(s,l)}_{\lambda'}
+   + c(E)\,M_l(p, B_c)\Bigr],
+   \qquad c(E) = c_0 + c_1 E,
+
+:math:`M_l` the vertex of the entrance channel without a width (the boundary
+:math:`B_c` of ``vertex``: :math:`S_c` at the lowest level for ``constant``,
+:math:`L_c(E)` for ``onshell``, the channel boundary condition for
+``perlevel``; the node of a spectator window; the two components of the DW
+vertex), :math:`E` the c.m. energy of the entrance pair in MeV. :math:`c` takes
+the place of :math:`\sum\gamma_{\lambda c'}A_{\lambda\lambda'}\gamma_{\lambda' c}`:
+dimensionless, it is the THM-only analogue of a level-matrix element, and it
+carries the threshold behaviour of the exit channel (:math:`\sqrt{P_{c'}}`) and
+the energy dependence of the vertex as a background pole would. It has no line
+shape (:math:`N_\lambda` belongs to a level). For the angle-integrated
+observable the result is
+:math:`(2J+1)\,K\,2P_{c'}\,|M_l|^2\,|\sum\gamma A\gamma + c|^2` for one level
+and one channel; at a fixed angle (``theta=``) the background interferes across
+J\ :sup:`π` groups like the resonant amplitudes. One complex :math:`c` per
+combination: without the channels a term gives every combination its own
+amplitude (all starting at the given values); ``const`` (default) has
+:math:`c_1 = 0`. Values default to 0; a value followed by ``f`` is fixed.
+
+*Fit parameters.* :math:`c` enters the model quadratically, so unlike the
+incoherent background it cannot be profiled linearly: Re and Im of
+:math:`c_0` (and :math:`c_1`) are ordinary fit parameters, the last block of
+the parameter vector after the energy shifts (none without the key), named
+``cbkg_<experiment>_<J><π>_<exit>_<s>,<l>,<s'>,<l'>_re0`` (``im0``, ``re1``,
+``im1``). They are in ``param.par`` / ``param.sav`` (an external parameter file
+sets them by name), MIGRAD fits them with the THM part of its gradient (central
+differences of the THM χ² only), the CLI writes their values to
+``output/thm_experiments.out`` (``cbkg`` lines), and ``<parameterSettings>`` can
+limit them by name. Their derivatives in ``ComputeTHMRows`` are central
+differences of the HOES model, exact up to round-off since the model is
+quadratic in them; covariance bands keep to the R-matrix parameters, as they do
+for norms. ``pyazr``: kind ``"cbkg"`` (``parameters.cbkg``, with the J group,
+entrance channel and exit pair), ``residual_jacobian`` and ``chi2_and_grad``
+carry their columns, ``thm_experiments()[name]["cbkg"]`` their values;
+``save_fit`` writes the fitted values back into ``cbackground=`` (one explicit
+term per combination); ``AzrModel.set_thm_experiment(..., cbackground=...)``
+and ``set_thm_cbackground(name, value)`` edit the key with the engine's rules.
+The GUI: *THM Workspace*, page *Experiments*, section *Coherent background*;
+the free parameters appear on the Fitting tab (tab *THM Background*), and
+loading a ``.sav`` there writes their values into the key.
+
+*Refused* (``ERROR: <thm> experiment[<name>]: cbackground ...``): a malformed
+term, a J\ :sup:`π` the model has no level of, an exit pair that no segment of
+the experiment has, a J\ :sup:`π` group that does not couple the entrance pair
+to that exit pair or has no such channels, a combination given twice,
+segments with different entrance pairs, and ``entranceL=coherent`` (its
+buckets merge the l of a channel spin). Without the key nothing changes, and a
+background fixed at zero gives the files of none.
+
+*Which one to use.* For non-resonant physics of the x + A system --
+anything that is also in direct data -- use a background pole: it constrains
+THM and direct data together and preserves unitarity. Use ``cbackground`` only
+for what direct data cannot contain, as a test of whether a THM-direct tension
+can be a non-QF interference. Read a good fit with care: :math:`c` is
+strongly correlated with the resonance parameters (a constant :math:`c`
+shifts and skews a peak much as a nearby level does), the quadratic form has
+in general two solutions of equal χ² that differ in the phase of :math:`c`,
+and the incoherent ``background=`` and the coherent term compete for the same
+smooth part of the spectrum. A background that the data require only through
+the interference is evidence of a missing amplitude, not of its origin.
+
+*Validation.* ``tests/thm_coherent_background/check.sh``: (a, b) without the
+key, and with a background fixed at zero (angle-integrated, ``theta`` window,
+``ps`` window with a linear incoherent background, DW vertex), the output is
+byte-identical; (c) a toy model with one 1/2\ :sup:`+` level and neutral
+:math:`l = 0` channels against the closed form
+:math:`2\,(k_f/\mu_f)\,2P_f\,|M_0(\gamma_f\gamma_c A + c(E))|^2`, constant and
+linear :math:`c`, to :math:`4\times10^{-9}` (the formula's own difference
+quotient), and :math:`m(c)/m(0) = |\gamma_f\gamma_cA + c|^2/|\gamma_f\gamma_cA|^2`
+to :math:`1.4\times10^{-10}`; a 0–180° window times :math:`4\pi` equals the
+angle-integrated model with the background to :math:`6\times10^{-11}`; (d)
+synthetic 18O(p,α) data made with :math:`c_0 = 0.3 - 0.2i` are fitted by
+MIGRAD from :math:`c_0 = 0` back to :math:`0.29999897 - 0.19999902i`; (f) the
+refusals. ``tests/pyazr/thm_coherent_background_test.py``: ``AzrModel``, CLI ==
+session, the Jacobian of all ten free parameters (six R-matrix, four ``cbkg``
+of a linear term) against central differences (rel. about :math:`10^{-9}` for
+the ``cbkg`` columns; the test asks for :math:`10^{-4}`), ``save_fit`` round trip, a fixed zero background bit
+for bit equal to none.
+
+*Effect study* (October 2026; joint least-squares fits with ``pyazr``'s
+``residual_jacobian``, the fitter in the user's script; not part of the
+tests).
+
+18O(p,α)15N, ``examples/o18_lacognata2010`` (THM 39 points, La Cognata
+2010 with their linear background subtracted; Mak 1978, 32; Amsel 1967, 90;
+the two 1/2\ :sup:`+` levels' energies and four widths and the two direct
+norms free). χ² per data set:
+
+======================================================  =========  ========  =========
+THM model                                               THM (39)   Mak (32)  Amsel (90)
+======================================================  =========  ========  =========
+no background                                           410.2      52.8      119.3
+``background=linear`` (incoherent)                      410.9      54.2      117.2
+``cbackground=1/2+:2`` (const)                          324.1      50.8      125.2
+``cbackground=1/2+:2:linear``                           306.0      55.3      117.6
+``background=linear cbackground=1/2+:2``                291.9      46.0      133.7
+THM alone, no background (no direct data)               198.1      --        --
+THM alone, ``cbackground=1/2+:2``                       192.2      --        --
+======================================================  =========  ========  =========
+
+The constant term converges to :math:`c_0 = -0.019 + 0.069i` from six
+starting points (0, ±0.3, ±0.3i, 1 + i), one minimum. Of the
+212 units of χ² that the direct data cost the THM shape (410 jointly
+against 198 alone) the coherent background recovers 86 (constant), 104
+(linear) and 118 (with the incoherent term too, at +8 on the direct data);
+the THM alone barely needs it (198 → 192). It does not resolve the tension:
+:math:`\chi^2/N` of the THM stays 7.5–8.3 with the direct data, and 5.1
+without them, i.e. the published points scatter beyond their errors about
+any smooth model.
+
+19F(p,α\ :sub:`2`)16O, the full 53-point THM window of Su et al. 2025
+(``examples/f19_pag_thm`` model, stage J2 parameters -- 22 R-matrix
+parameters free, JUNA and Spyrou with 10 % norm priors, the direct ωγ and
+Γ as penalty rows, the −9.17 keV THM shift; start ``J2_s9``):
+
+==================================  =========  ==========  ===========  =========  ==============  ==============
+model                               THM (53)   JUNA (20)   Spyrou (9)   penalty    ωγ(828) (eV)    ωγ(564) (eV)
+==================================  =========  ==========  ===========  =========  ==============  ==============
+no coherent term                    203.3      13.8        3.6          343.0      183             9.6
+``cbackground=2-:6``                145.8      14.1        3.2          240.3      315             3.0
+``cbackground=1-:6;2-:6``           147.2      14.1        3.2          238.5      318             3.0
+==================================  =========  ==========  ===========  =========  ==============  ==============
+
+(direct: ωγ(828) = 775(35) eV, ωγ(564) = 48(7) eV, ωγ(790) = 17(5) eV, which
+stays at about 0.) Of the eight 2\ :sup:`-` amplitudes only
+:math:`(s,l) = (1,1) \to (s',l') = (3,2)` moves, to
+:math:`c_0 = -0.27 - 0.82i`; the 1\ :sup:`-` ones stay near zero
+(:math:`|c_0| \approx 0.03`). The interference lowers the THM χ² by 58 and
+the penalty by 103, but the full window still does not fit with the direct
+strengths: ωγ(828) rises from 183 to 315 eV, not to 775 eV, and ωγ(564)
+falls further. The tension there is the l-dependence of the vertex
+(``thm_19F/RESULTS.md``, section 4), which a smooth amplitude in one
+partial wave cannot undo. In both cases the coherent background is a
+useful diagnostic -- it says how much of a THM-direct mismatch a smooth
+interfering amplitude can absorb -- and in neither does it make the THM and
+the direct data consistent.
 
 Coulomb line shape
 ------------------

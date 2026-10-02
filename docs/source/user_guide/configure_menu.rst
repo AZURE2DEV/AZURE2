@@ -165,6 +165,26 @@ momentum window* and *Distortion*:
   segments with a free norm that are in no other experiment (the segments of an
   experiment share one norm, so a fixed one is refused).
 - **Background** (``background``) -- none, const, linear or quadratic.
+- **Coherent background** (``cbackground``) -- a checkable section below
+  *Experiment*; unchecked (the default) writes nothing. Checked, it shows a
+  table with one row per term: **J**\ :sup:`π` (offered from the levels),
+  **Exit** (the exit pair key of a segment of the experiment), **Channels**
+  (*all*: every entrance :math:`(s,l)` and exit :math:`(s',l')` of the group,
+  each with its own amplitude; or one, ``s,l,s',l'`` such as ``1/2,0,1/2,1``),
+  **Form** (*const* or *linear*) and the start values **Re c0**, **Im c0**
+  (and **Re c1**, **Im c1** for *linear*); a ticked value is fixed in the
+  fit. **+** and **−** add and remove a term. The complex amplitude
+  :math:`c_0 + c_1 E` times the entrance vertex is added to the resonant HOES
+  amplitude before squaring: a THM-only background that interferes with the
+  resonances (for non-resonant physics that is also in direct data, add a
+  broad background level of the same J\ :sup:`π` on the Levels tab instead).
+  Its free parameters appear on the **Fitting** tab (sub-tab *THM
+  Background*), and a ``.sav`` loaded there writes their fitted values into
+  the key (one explicit term per channel combination). The page refuses, in
+  AZURE2's words, a malformed term, an exit pair of no segment of the
+  experiment, a J\ :sup:`π` the levels do not have, and ``entranceL``
+  *coherent*. Details: :doc:`../theory/thm_implementation`, "Coherent
+  background".
 - **Exit angle** (``theta``) -- *all (angle-integrated)*, the default
   (nothing written), or *window*, with :math:`\theta_\mathrm{min}` and
   :math:`\theta_\mathrm{max}` in degrees (0-180) beside it. With a window

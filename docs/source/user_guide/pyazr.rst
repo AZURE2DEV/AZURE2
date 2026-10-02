@@ -185,7 +185,12 @@ Also available: ``set_channel_radius``, ``set_segment_norm``,
 shared norm and background with ``thm_background(name)``, and with
 ``lineshape=on`` the spectator's Coulomb line shape -- :math:`\zeta(E)`,
 :math:`E_{sF}(E)` and :math:`|N_C|^2` per level -- with
-``thm_lineshape(name, energies)``; ``set_thm_experiment(..., ps="hulthen:0-40")``
+``thm_lineshape(name, energies)``; ``set_thm_experiment(..., cbackground="1/2+:2")``
+adds a coherent THM-only background amplitude whose Re and Im are fit
+parameters of kind ``"cbkg"`` (``parameters.cbkg``; their values in
+``thm_experiments()[name]["cbkg"]``, written back into the key by
+``save_fit``; ``set_thm_cbackground(name, value)`` edits the key in place);
+``set_thm_experiment(..., ps="hulthen:0-40")``
 averages the HOES cross section over the accepted spectator directions
 (weight :math:`|\phi(p_s)|^2\,d\cos\theta_\mathrm{cm}` at fixed :math:`E`),
 and ``thm_vertex(name, energies)`` returns its nodes, weights and :math:`\rho`

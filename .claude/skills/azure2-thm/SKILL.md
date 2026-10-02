@@ -90,6 +90,12 @@ P₀e^{2πη} gives 2.85 against on-shell 1.25. A χ² that does not discriminat
   covariance in `output/thm_experiments.out` and `session.thm_background(name)`.
   `AzrModel.set_thm_experiment(...)`.
   Details: thm_implementation.rst, "THM experiments".
+- **Interfering background**: non-resonant x+A physics (also in direct data) = a broad
+  background level of the same J^π (Levels tab). A THM-only non-QF amplitude that
+  interferes: `cbackground=<Jπ>:<exit>[:s,l,s',l'][:linear][=Re,Im,...]` on the experiment
+  line (GUI: Experiments page section; pyazr `cbackground=`); Re/Im are fit parameters
+  `cbkg_*` (not profiled). Strongly correlated with the level parameters; a test of a
+  THM-direct tension, not evidence of a mechanism. thm_implementation.rst, "Coherent background".
 - **Spectator-momentum window**: `ps=hulthen:0-40` (or `hulthen:a,b:..`, `gauss:FWHM:..`,
   `table:file` = |φ(p)|² itself; `psNodes=`, needs kinematics, excludes `spectatorEnergy` and
   `spectatorAngle`) averages the HOES cross section (incoherently) over the accepted spectator
