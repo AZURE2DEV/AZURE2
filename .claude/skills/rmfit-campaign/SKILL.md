@@ -1,6 +1,6 @@
 ---
 name: rmfit-campaign
-description: The rmfit process for global R-matrix fitting with AZURE2 -- start a campaign on any reaction, drive or resume one (sharded pyazr evaluation, bound-tightening polish, interference-sign rounds, level add/remove rounds, dataset-off diagnostics, ledger + STATUS.md), judge results, export for GUI review, and refine the method. Use whenever the task mentions rmfit, a campaign directory, STATUS.md, sign rounds, a tightening polish, a level-add test, fitting a new reaction "the rmfit way", or continuing a fit that a previous session left running on the cluster.
+description: The rmfit process for global R-matrix fitting with AZURE2 -- start a campaign on any reaction, drive or resume one, use idle time while jobs run for input-file / data audits and literature review (sharded pyazr evaluation, bound-tightening polish, interference-sign rounds, level add/remove rounds, dataset-off diagnostics, ledger + STATUS.md), judge results, export for GUI review, and refine the method. Use whenever the task mentions rmfit, a campaign directory, STATUS.md, sign rounds, a tightening polish, a level-add test, fitting a new reaction "the rmfit way", or continuing a fit that a previous session left running on the cluster.
 ---
 
 # The rmfit process
@@ -163,6 +163,84 @@ model's objective.
 Ordinary additions: `touch <dir>/STOP` ends a `round --rounds N` loop after the current
 round; `verify <cid>` re-scores a candidate; `log "..."` appends to the readme;
 `report` writes `REPORT.md` (per-dataset chi2/N, theta^2 table, structure decisions).
+
+## 3b. While jobs run: audit and read (idle time is work time)
+
+DeBoer, 2026-10-02: "You're spending most of your time thinking about just doing the fit
+minimization, but what about spending some of the idle time doing things like checking over the
+data and input file for mistakes or looking through the literature to try to identify ways to
+improve the fitting technique?" -- and, asked whether this belongs in the process: "add this type
+of activity to the skill files so you start doing this type of things for all of our projects."
+
+A polish or a sign round takes hours and needs no attention between milestones.  Whenever a job
+is running and nothing is actionable, do NOT just wait for the next log line: run the three
+reviews below.  They are read-only, they cost no node, and on 13C+alpha every large gain of the
+merged fit came from this kind of work rather than from more minimization (a free unpenalized
+normalization on the n-total data, a 2019 data file with statistical-only errors, a width window
+that swallowed a neighbouring level, a wrong elastic / inelastic partition that only independent
+data exposed).
+
+**When.**  At the first idle window of every campaign, and again whenever data are added, a
+structure change is adopted, or a fit stalls.  Mandatory, not optional, when: a fitted
+normalization leaves 0.7-1.4; a frozen or pinned part of the model carries a large share of the
+objective; two fits of the same data disagree in absolute scale; a level sits at a bound or at a
+threshold guard; a new data set is about to enter the fit.
+
+**How.**  One background subagent per review (Agent tool, `model` set to a cheaper model than the
+session's so the reviews do not consume the main budget), at most three at a time, each with a
+self-contained prompt (paths, file-format facts, what is already known and must not be
+re-reported), each writing ONE report into `<reaction>/<M-D-YY>_audit/` next to a `readme` that
+quotes why it was run.  The reviews never edit a fit directory, never submit jobs.  A report's
+findings are CANDIDATES: verify each one against the files yourself (numbers, line, segment key)
+before telling the evaluator, and change nothing in a fit on the strength of a report alone --
+data treatment stays the evaluator's decision (section 5).  Worked example with the three prompts:
+`13C+a/10-2-26_audit/`.
+
+**1. Input-file audit** (the `.azr` of the current seed):
+- particle pairs: mass, charge, spin, parity, excitation and separation energy, radius identical
+  on every level line and right against the nuclear data; thresholds reproduce to ~1 keV;
+- channel sets: every (pair, L, S) allowed by angular momentum and parity, none missing at low L,
+  the same set on every level of a J^pi group;
+- levels: same-J^pi pairs within 1.5 keV; free amplitudes that are exactly 0 (they never move);
+  levels within 3 keV of a threshold; fixed / free flags against the campaign's rules;
+- segments: file exists; entrance / exit keys match what the file holds; energy window against
+  the data's range and the exit threshold; isDiff against the angle column and its frame; "sum"
+  tails complete for every channel open in the window;
+- normalizations: every `varyNorm 1` with `normError 0` is a FREE UNPENALIZED norm -- list them
+  with their fitted values and ask whether each is intended; list fitted norms outside 0.7-1.4;
+  check every norm / shift setting against the evaluator's recorded decisions;
+- `<targetInt>` keys bind to the intended segments; in sharded runs only angle-integrated
+  segments may be convolved (log entry 2026-10-02).
+
+**2. Data audit** (every file of an active segment):
+- integrity: non-numeric rows, zero or negative values or errors, duplicated rows;
+- units and scale: ratios between overlapping sets of the same reaction, band by band; an
+  absolute anchor (a total cross section, a unitarity constraint) compared with EVERY independent
+  measurement of the same quantity, not only the one in the fit;
+- frames: lab energy of the right projectile (test against thresholds), lab vs c.m. angles and
+  cross sections against the segment type; a converted file is cross-checked by evaluating it
+  frozen in both frames with identical errors (the chi-squares must agree exactly);
+- uncertainties: statistical-only where the source gives a systematic one; an advertised error
+  floor that does not hold; implausibly small or constant errors;
+- double counting: the same measurement under two names or in two overlapping windows;
+- against the source: re-fetch the EXFOR entry (`pyazr.nds`, skill `nds-explorer`; fallback in
+  `13C+a/10-2-26_n16O_exfor/readme`) and compare values, units and error columns row by row.
+
+**3. Literature review**: earlier evaluations of the same compound system (what data, channels,
+radii, energy limits, how they treated normalizations and backgrounds), measurements of channels
+the fit does not yet constrain, and method papers on the specific difficulty the campaign is
+stuck on.  Every claim carries a citation; a paper that could not be read is listed as such;
+nothing is quoted from memory.  The output is a short list of actionable ideas, each with a cheap
+test, not a survey.
+
+**Cheap in-session checks that belong to the same habit** (minutes each, no node):
+- decompose a summed observable into its partial cross sections by extrapolation and compare each
+  partial with independent data -- a total can be right with the wrong partition;
+- the clip check before every qsub: sanity + bounds + clipped objective of the seed under the
+  policy the job will use (`13C+a/9-30-26_merged/clip_check.py`); a start-up clip that costs more
+  than a fraction of a per cent means a window or a cap is wrong;
+- a coverage plot of what EXFOR holds against what the fit uses
+  (`13C+a/10-2-26_n16O_exfor/plot_coverage.py`).
 
 ## 4. Judging results
 
@@ -1575,3 +1653,26 @@ import the cp312 pyazr extension.  What works -- the 3.12.13 install still exist
     python3 -c "import sqlite3, sys; sys.path.insert(0, '/users/rdeboer1/AZURE2'); import pyazr._azure2" || exit 1
 The last line is the guard: a job must prove both imports on its own node before the first rmfit step.
 Login-node shells inherit the old module and prove nothing.
+
+## 2026-10-02 — idle-time reviews are part of the process (section 3b); four lessons from the 13C+α merged fit
+- IDLE TIME: while jobs run, audit the input file and the data and read the literature (section 3b, DeBoer's
+  instruction).  First run: `13C+a/10-2-26_audit/` (three background reviews on a cheaper model).
+- A FREE UNPENALIZED NORM (varyNorm 1, normError 0) is a hidden degree of freedom on the absolute scale.  The
+  n-total transmission data of 13C+α carried three (1.06 / 1.13 / 1.72); the 1.72 hid a 72 % over-prediction of
+  sigma_tot by the high-Ex levels' elastic and inelastic neutron widths.  Fixing them (DeBoer) cost 4.9M frozen,
+  recovered to +18k in 400 evaluations, and exposed that the frozen low-energy block had been fitted with the same
+  free norms.  List these norms in every audit.
+- WINDOWS ACT BY ENERGY, NOT BY LEVEL.  `width_bound_windows` / `theta2_cap_windows` apply to every level whose seed
+  energy falls inside.  A level that moves next to a windowed level during a fit is clipped at the NEXT start (here
+  +100,910 on 372,793; the polish then "recovers" into a wrong constraint and a sign round screens every flip against
+  the penalty).  `13C+a/9-30-26_merged/recenter_policy.py` shrinks a width-bound window to 45 % of the distance to the
+  nearest other level; run the clip check before every qsub.
+- SHARDED CONVOLUTION IS ANGLE-INTEGRATED ONLY.  `model.build_conv_spec` expands a convolved segment into sub-points
+  built from energy, value and error; every sub-point has angle 0.  A differential segment with an active
+  `<targetInt>` line evaluates to NaN in every shard ("non-finite residuals" at the first polish evaluation) although
+  a single session, where AZURE2 does the convolution, is fine.  Until differential convolution exists: convolve
+  only angle-integrated segments, and evaluate the SHARDED objective once before submitting (to-do: refuse at init).
+- SIGN-ROUND PRE-SCREEN SIZE.  With `enumerate_channels` and `max_patterns` 256 a 1,170-parameter model produced
+  7,407 frozen pre-screen patterns = 11 h of silence before the first log line.  Count the patterns before submitting
+  (`moves.channel_pair_flips` / `channel_enumeration` on the seed vector) and cap `max_patterns` (32 gave 3,643).
+
