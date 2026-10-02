@@ -214,6 +214,8 @@ Report the table (reaction × quantity × option) and the model range (envelope 
 the accepted variants). For tensions use z_tot = ln(r)/σ, r = this work/literature,
 with half the log-range added in quadrature to the statistical errors.
 
+**Model averaging** (full refits only): `scripts/thm_model_average.py <azr> --radius-pairs .. --radii .. --vertex-model pw dw --optical AA/SF --strength 213=2-@13.057 ..` fits the grid sequentially and calls `pyazr.model_average` (Akaike weights by default; `--rescale best` when χ²/ν of the best variant is well above 1, else the weights are over-confident). Quote mean ± stat (weighted mean of the variances) ± model (weighted variance of the means) separately, next to the flat-weight range; thm_implementation.rst, "Model averaging".
+
 Calibration (index):
 
 | case | quantity | dominant option | index |

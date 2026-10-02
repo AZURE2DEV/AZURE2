@@ -510,6 +510,58 @@ calculation, which is why the Coulomb functions they need are memoized.
 few of their entries were being asked for twice --- which is what a *varying*
 energy shift produces, since it moves every point energy at every iteration.
 
+Model averaging
+---------------
+
+A result that depends on choices the data cannot make (channel radius,
+plane- or distorted-wave THM vertex, optical potentials, spectator window) is
+quoted from several fitted *variants*. ``pyazr.modelavg`` does the
+bookkeeping of that average and nothing else: the fits are yours.
+
+.. code-block:: python
+
+   from pyazr import Variant, model_average, parameter_label, write_averaged_azr
+
+   # after fitting one variant: physical values keyed by a file-stable name
+   names  = [parameter_label(p, azr.pairs) for p in free_params]  # "G[2-#1;p1;L1;S1]"
+   v = Variant("r5.1_dw", {"radius": 5.1, "vertexModel": "dw"},
+               chi2=chi2, npoints=N, nfree=k, values=dict(zip(names, phys)),
+               covariance=(names, cov_phys),            # or errors={name: sigma}
+               derived={"wg(213)": (wg, wg_err)}, prior=1.0)
+
+   avg = model_average(variants, weights="aic", rescale=None)  # "bic", "chi2", "flat"; "best"
+   avg.weights                      # one row per variant: chi2, N, k, dIC, prior, weight
+   a = avg.derived["wg(213)"]       # a.mean, a.stat, a.model, a.total
+   print(avg.summary())
+   write_averaged_azr("adopted.azr", "averaged.azr", avg)    # means into a copy
+
+The weights are :math:`w_i \propto \pi_i\,e^{-\mathrm{IC}_i/2}` with
+:math:`\mathrm{IC} = \chi^2 + 2k` (Akaike, the default), :math:`\chi^2 + k\ln N`
+(BIC), :math:`\chi^2` alone, or 1 (flat), and :math:`\pi_i` an optional prior
+per variant. ``rescale="best"`` divides every :math:`\chi^2` by
+:math:`\max(1, \chi^2/\nu)` of the best variant first. Each quantity gets the
+weighted mean, the **statistical** spread (square root of the weighted mean of
+the variances), the **model** spread (square root of the weighted variance of
+the means) and their quadrature sum, all kept separate. ``avg.covariance()``
+gives the averaged matrices. Variants are matched by name; a quantity missing
+from some variants is averaged over those that have it (``coverage`` is their
+summed weight).
+
+``parameter_label`` names a level energy ``E[<Jπ>#<n>]`` and a width
+``G[<Jπ>#<n>;p<pair key>;L<l>;S<s>]``, with ``n`` the engine's level number
+within the :math:`J^\pi` group, so the name depends on the ``.azr`` and not on
+the radius or the THM options. ``write_averaged_azr`` sets the averaged energies
+and widths of a template through ``AzrModel`` (names it does not find are
+skipped with a warning) and keeps everything else, so the result opens in the
+GUI. It is a representative model, not a fit.
+
+The module is pure Python (no numpy). ``scripts/thm_model_average.py`` drives a
+whole THM grid: one project per variant, fitted sequentially with scipy's
+``least_squares`` on ``residuals``/``residual_jacobian`` plus the penalty
+rows, refused variants skipped with the reason, ``--dry-run`` to list the
+grid. The theory and the caveats are in
+:doc:`../theory/thm_implementation`, "Model averaging".
+
 Examples
 --------
 

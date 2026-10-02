@@ -2994,3 +2994,153 @@ parameters that only rescales :math:`m` is absorbed by :math:`n^*` and gives
 no band, as it should: the THM scale is arbitrary.
 ``tests/thm_band/check.sh`` checks the band against finite differences of the
 CLI's own output on ``tests/18O_p_a_thm`` with six free parameters.
+
+Model averaging
+---------------
+
+The THM options above are not parameters the data determine: the channel
+radius, ``vertexModel`` (pw or dw), ``vertex``, the optical potentials and the
+``ps`` window each define a different model, and a strength or an S factor
+read off a THM fit moves with them (the 19F :math:`l` ratios by factors 1.1-18
+in "Distorted-wave entrance vertex"). The model-dependence protocol fits
+every variant on its own and quotes the spread. ``pyazr.modelavg`` turns the
+fitted variants into one number per quantity; ``scripts/thm_model_average.py``
+produces the variants (one project per variant through ``AzrModel``, fitted
+one after the other with scipy's ``least_squares`` on ``residuals`` and
+``residual_jacobian`` plus the norm and shift penalty rows; pyazr itself does
+no fitting).
+
+*Weights.* For variant :math:`i` with minimised :math:`\chi^2_i`, :math:`N`
+points and :math:`k_i` free parameters (the THM norms and backgrounds that
+are profiled count: they are eliminated in closed form, but they are fitted),
+
+.. math::
+
+   w_i = \frac{\pi_i\, e^{-\Delta_i/2}}{\sum_j \pi_j\, e^{-\Delta_j/2}}, \qquad
+   \Delta_i = \mathrm{IC}_i - \min_j \mathrm{IC}_j, \qquad
+   \mathrm{IC} = \chi^2/s + 2k \;\;\text{(Akaike)}
+
+with the alternatives :math:`\chi^2/s + k\ln N` (BIC), :math:`\chi^2/s`
+alone, and flat weights; :math:`\pi_i` is an optional prior weight (e.g. 0.5 for
+the extreme radii of a scan). Akaike weights estimate the relative expected
+Kullback-Leibler distance of each model from the truth and need no nesting:
+a 4.1 fm and a 6.1 fm model, or a plane- and a distorted-wave vertex, are not
+special cases of one another, so a likelihood-ratio test does not apply,
+while :math:`\Delta\mathrm{AIC}` does. :math:`\Delta = 2` gives a weight ratio
+0.37, :math:`\Delta = 10` gives 0.007. Variations of the radius, the vertex
+or the potentials do not change :math:`k`, so for such a grid Akaike, BIC and
+:math:`\chi^2`-only weights are identical; they differ only when a variant adds
+parameters (a background, a coherent background term, a free energy shift).
+The weights compare models of the same data: variants with different
+:math:`N` (another energy window) are not comparable this way, and the module
+warns.
+
+*Spreads.* For a quantity with value :math:`m_i` and statistical variance
+:math:`s_i^2` in variant :math:`i`,
+
+.. math::
+
+   \bar m = \sum_i w_i m_i, \qquad
+   S^2 = \sum_i w_i s_i^2, \qquad
+   M^2 = \sum_i w_i (m_i - \bar m)^2, \qquad
+   T^2 = S^2 + M^2 .
+
+:math:`S` is the statistical error of a typical variant (the weighted mean of
+the variances, not reduced by the number of variants: they all fit the same
+data); :math:`M` is the model spread, the scatter of the best-fit values
+between models at their weights; :math:`T` is the total of the law of total
+variance. They are kept separate in the output because they answer different
+questions: :math:`S` shrinks with more or better data, :math:`M` does not,
+and it is :math:`M` that says how much the reaction theory still matters. The
+averaged covariance matrices are :math:`\sum_i w_i C_i` and
+:math:`\sum_i w_i (m_i-\bar m)(m_i-\bar m)^T`. The driver takes
+:math:`C_i = D (J^TJ)^{-1} D^T` at each variant's end point, with :math:`J` the
+residual Jacobian (data and penalty rows) and :math:`D` the derivative of the
+physical quantities (Brune-transformed energies and widths, strengths) with
+respect to the reduced-width amplitudes, by central differences of the
+transform; :math:`(J^TJ)^{-1}` is taken from the SVD of :math:`J` with its
+columns scaled to unit norm, since the columns of one model differ by many
+orders of magnitude and the product :math:`J^TJ` loses the poorly constrained
+directions to round-off. It is not scaled by :math:`\chi^2/\nu`, it is a
+linearization (meaningless for a width the data do not constrain, whose
+error comes out larger than any physical value), and a fit stopped at its
+evaluation limit gives only an approximate one.
+
+*Over-confident weights.* :math:`\Delta\chi^2` between variants scales as
+:math:`1/\sigma^2` of the data. With underestimated errors (THM points with
+statistical errors only, digitised errors, :math:`\chi^2/\nu` of 2-3) a
+difference that is really a few units becomes tens, and the Akaike weights put
+everything on one variant: the model spread then vanishes for the wrong
+reason. Rescaling every :math:`\chi^2` by :math:`s = \max(1, \chi^2/\nu)` of
+the best variant (``rescale="best"``, ``--rescale best``; the PDG scale factor)
+is the minimum correction, and we recommend it whenever the best variant has
+:math:`\chi^2/\nu` well above 1. Even then the weights only say which model
+reproduces the *shape* of these data best, which for THM includes everything
+the HOES model leaves out (resolution, background, digitisation); quote the
+flat-weight range next to the weighted one, and treat a variant that takes
+all the weight with suspicion rather than as a selection.
+
+*Names and the averaged model.* Quantities are matched across variants by
+name: :func:`pyazr.modelavg.parameter_label` names a level energy
+``E[<Jπ>#<n>]`` and a width ``G[<Jπ>#<n>;p<pair key>;L<l>;S<s>]`` (``n`` the
+engine's level number in the :math:`J^\pi` group, the pair key as the file
+writes it), which depends on the level scheme only. ``write_averaged_azr``
+writes the averaged energies and widths into a copy of a template ``.azr``
+through ``AzrModel``'s setters (a name the template does not have is skipped
+with a warning); the radii and THM settings stay the template's. Physical
+(observed) widths are averaged, which is meaningful across radii; reduced-width
+amplitudes are not, and channels entered as amplitudes (``gammaIsRWA``) carry
+them. A width carries the sign of its amplitude; where the sign differs
+between variants of appreciable weight the mean is not meaningful (the driver
+lists such quantities in its summary). The averaged file is a representative
+model that opens in the GUI, not a fit: its :math:`\chi^2` is not any
+variant's.
+
+*Size: 19F(p,αγ)16O.* ``examples/f19_pag_thm`` (THM in the adopted window
+:math:`E \le 0.45` MeV with JUNA and Spyrou, 25 free widths, 57 points, no
+penalty rows for the direct strengths), :math:`a_p` of the three p + 19F
+pairs 4.1 / 5.1 / 6.1 fm × ``vertexModel`` pw / dw (``ancai06/kd03:extrapolate``,
+quasi-free, no window), each refitted from the example (40 evaluations; the
+5.1 fm dw fit stopped on ``xtol`` after 17). :math:`\chi^2` 73.9 / 70.5 / 71.3
+(pw) and 87.6 / 91.4 / 84.2 (dw), :math:`\chi^2/\nu` 2.4-3.2. Akaike weights:
+pw 0.10 / 0.54 / 0.36, dw ≤ 0.001 (:math:`\Delta\mathrm{AIC}` 14-21); with
+``rescale="best"`` (:math:`s = 2.43`) pw 0.20 / 0.41 / 0.35 and dw 0.006-0.024.
+In eV (Akaike, unscaled; mean, stat, model; range over the six variants):
+
+====================  ==============  ===========  ===========  ==================
+quantity              mean            stat         model        range
+====================  ==============  ===========  ===========  ==================
+ωγ(213)               0.0065          0.059        0.0037       0.0027-0.020
+ωγ(324)               21.4            335          8.1          12.2-32.2
+ωγ(11) [1e-29]        2.69            28           0.23         2.48-4.25
+====================  ==============  ===========  ===========  ==================
+
+With flat weights ωγ(213) = 0.0138 (model 0.0065) and ωγ(11) = 3.10 (model
+0.57) × 10\ :sup:`-29`: the dw variants carry the larger 213 keV strengths
+(0.018-0.020 against 0.003-0.016 for pw), and the Akaike weights, which give
+them nothing, decide the quoted value. The linearised statistical errors are
+larger than the values: without the direct-strength rows the THM scale is
+free and the absolute widths rest on the direct data below 0.35 MeV, so in
+this example the model spread is the informative number, and the statistical
+one says that the data alone do not fix the strengths.
+
+*The driver.* ``scripts/thm_model_average.py <project.azr> --out <dir>``
+with the axes ``--radius-pairs K.. --radii R..``, ``--vertex-model pw dw``,
+``--vertex constant perlevel onshell``, ``--optical AA/SF ..`` (global
+potential names, e.g. ``ancai06/kd03:extrapolate``, or ``coulomb``; applied to
+the dw variants), ``--ps delta hulthen:0-50``, or a JSON ``--spec``; the grid
+is their product. ``--strength NAME=Jπ@E`` with ``--strength-in`` /
+``--strength-out`` (file pair keys) adds
+:math:`\omega\gamma = \frac{2J+1}{(2j_1+1)(2j_2+1)}\Gamma_\mathrm{in}\Gamma_\mathrm{out}/\Gamma`
+(open channels, eV) as a derived quantity with its propagated error;
+``--weights``, ``--rescale``, ``--prior radius=6.1:0.5``. A variant AzrModel
+or the engine refuses (``vertexModel=dw`` without ``distortion=``, an
+optical potential outside its range) is recorded with the reason and
+skipped. ``--dry-run`` lists the grid and the refusals AzrModel already
+knows, without numpy or the engine. Output: ``variants.csv`` (one row per
+variant), ``variants.json``, ``average.json``/``.csv``, ``summary.txt``,
+``averaged/<project>_avg.azr`` beside a copy of the data, and ``work/`` with
+each variant's project and fitted snapshot. One engine session at a time, by
+design. ``tests/pyazr/model_average_test.py`` checks the weights and spreads
+against closed forms and the writer; ``tests/pyazr/thm_model_average_test.py``
+runs the driver on ``tests/18O_p_a_thm``.
