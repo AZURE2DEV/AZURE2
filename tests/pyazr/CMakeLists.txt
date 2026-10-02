@@ -146,3 +146,11 @@ add_test(NAME pyazr_thm_model_average
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_model_average_test.py)
 set_tests_properties(pyazr_thm_model_average PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1"
                      TIMEOUT 600)
+
+# vertex=constant: the S_c(E_lowest) memo follows the channel radius across
+# sessions in one process and after set_channel_radius on a live session.
+add_test(NAME pyazr_thm_vertex_memo_sessions
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_vertex_memo_sessions_test.py)
+set_tests_properties(pyazr_thm_vertex_memo_sessions PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1"
+                     TIMEOUT 300)
