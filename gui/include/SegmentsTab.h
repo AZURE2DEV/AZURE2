@@ -34,9 +34,11 @@ class SegmentsTab : public QWidget {
 
  public slots:
   void addSegDataLine();
-  void addSegDataLine(SegmentsDataData line);
+  // fromFile: a line read from the project is kept as it is, as the engine
+  // reads it; only one added here is refused as a duplicate.
+  void addSegDataLine(SegmentsDataData line, bool fromFile = false);
   void addSegTestLine();
-  void addSegTestLine(SegmentsTestData line);
+  void addSegTestLine(SegmentsTestData line, bool fromFile = false);
   void editSegDataLine();
   void editSegTestLine();
   void deleteSegDataLine();

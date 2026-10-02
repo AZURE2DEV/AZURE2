@@ -309,9 +309,9 @@ void SegmentsTab::addSegDataLine() {
   }
 }
 
-void SegmentsTab::addSegDataLine(SegmentsDataData line) {
+void SegmentsTab::addSegDataLine(SegmentsDataData line, bool fromFile) {
   QList<SegmentsDataData> lines = segmentsDataModel->getLines();
-  if (segmentsDataModel->isSegDataLine(line) == -1) {
+  if (fromFile || segmentsDataModel->isSegDataLine(line) == -1) {
     segmentsDataModel->insertRows(lines.size(), 1, QModelIndex());
     QModelIndex index = segmentsDataModel->index(lines.size(), 0, QModelIndex());
     segmentsDataModel->setData(index, line.isActive, Qt::EditRole);
@@ -409,9 +409,9 @@ void SegmentsTab::addSegTestLine() {
   }
 }
 
-void SegmentsTab::addSegTestLine(SegmentsTestData line) {
+void SegmentsTab::addSegTestLine(SegmentsTestData line, bool fromFile) {
   QList<SegmentsTestData> lines = segmentsTestModel->getLines();
-  if (segmentsTestModel->isSegTestLine(line) == -1) {
+  if (fromFile || segmentsTestModel->isSegTestLine(line) == -1) {
     segmentsTestModel->insertRows(lines.size(), 1, QModelIndex());
     QModelIndex index = segmentsTestModel->index(lines.size(), 0, QModelIndex());
     segmentsTestModel->setData(index, line.isActive, Qt::EditRole);
@@ -1291,7 +1291,7 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
 
       SegmentsDataData newLine = {isActive, entrancePairIndex, exitPairIndex, lowEnergy, highEnergy, lowAngle,
                                   highAngle, dataType, dataFile, dataNorm, dataNormError, varyNorm, phaseJ, phaseL, energyShift, energyShiftError, varyEnergyShift, isAdvanced, operationType, componentsList, isUPOS, secondaryDecayL, finalJ, delta, isTHM};
-      addSegDataLine(newLine);
+      addSegDataLine(newLine, true);
     }
   }
   if (line.trimmed() != QString("</segmentsData>")) return false;
@@ -1537,7 +1537,7 @@ bool SegmentsTab::readSegTestFile(QTextStream &inStream) {
 
       SegmentsTestData newLine = {isActive, entrancePairIndex, exitPairIndex, lowEnergy, highEnergy, energyStep, lowAngle,
                                   highAngle, angleStep, dataType, phaseJ, phaseL, maxAngDistOrder, isAdvanced, operationType, componentsList, isTHM};
-      addSegTestLine(newLine);
+      addSegTestLine(newLine, true);
     }
   }
   if (line.trimmed() != QString("</segmentsTest>")) return false;

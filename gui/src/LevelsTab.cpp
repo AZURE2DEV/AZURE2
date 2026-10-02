@@ -3,6 +3,7 @@
 #include <QFile>
 
 #include "LevelsTab.h"
+#include <QSet>
 #include "RoundTripNumber.h"
 #include "LevelsHeaderView.h"
 #include "AddLevelDialog.h"
@@ -864,6 +865,7 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
   int lastPair;
   int currentPair = 0;
   int thisNumMult = 0;
+  QSet<int> readPairKeys;
 
   QString line("");
   while (!inStream.atEnd() && line.trimmed() != QString("</levels>")) {
@@ -904,11 +906,17 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
       PairsData newPair = {lightJ, lightPi, lightZ, lightM, lightG, heavyJ, heavyPi, heavyZ, heavyM,
                            heavyG, excitationEnergy, seperationEnergyOut, channelRadius, pairType, ecMultMask,
                            bindingEnergy};
+      // A pair is its key (column 6), as in the engine's CNuc::Fill: the first
+      // line with a key defines that pair, later lines with it only add
+      // channels.  Pairs alike in everything else stay apart.
       int pairIndex = ir - 1;
-      if (pairsModel->numPairs() < ir) {
-        emit(readNewPair(newPair, pairIndex, true));
-      } else if (pairsModel->isPair(newPair) == -1) {
-        emit(readExistingPair(newPair, pairIndex, true));
+      if (ir < 1) return false;
+      if (!readPairKeys.contains(ir)) {
+        readPairKeys.insert(ir);
+        if (pairsModel->numPairs() < ir)
+          emit(readNewPair(newPair, pairIndex, true));
+        else
+          emit(readExistingPair(newPair, pairIndex, true));
       }
       LevelsData newLevel = {levelYN, levelFix, levelJ, levelPi, levelEnergy};
       int levelIndex = levelsModel->isLevel(newLevel);

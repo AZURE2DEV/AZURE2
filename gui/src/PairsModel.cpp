@@ -196,7 +196,7 @@ bool PairsModel::insertRows(int position, int rows, const QModelIndex &index) {
   if (rows > 0) {
     beginInsertRows(QModelIndex(), position, position + rows - 1);
     for (int row = 0; row < rows; row++) {
-      PairsData tempData;
+      PairsData tempData = PairsData();  // zeroed: a placeholder row is written as such if nothing fills it
       pairsList.insert(position, tempData);
     }
     endInsertRows();
@@ -234,7 +234,8 @@ int PairsModel::isPair(const PairsData &pair) const {
         tempPair.excitationEnergy == pair.excitationEnergy &&
         tempPair.channelRadius == pair.channelRadius &&
         tempPair.pairType == pair.pairType &&
-        tempPair.ecMultMask == pair.ecMultMask) {
+        tempPair.ecMultMask == pair.ecMultMask &&
+        tempPair.bindingEnergy == pair.bindingEnergy) {
       foundPair = i;
       break;
     }

@@ -130,8 +130,12 @@ void PairsTab::addPair() {
 }
 
 void PairsTab::addPair(PairsData pair, int pairIndex, bool fromFile) {
-  if (pairsModel->isPair(pair) == -1) {
-    pairsModel->insertRows(pairsModel->numPairs(), pairIndex + 1 - pairsModel->numPairs(), QModelIndex());
+  // A pair read from a file is the pair its key names, as in the engine
+  // (CNuc::IsPair compares keys only): two pairs alike in everything may both
+  // be there, e.g. a 12C+12C pair with a THM binding energy and one without.
+  if (fromFile || pairsModel->isPair(pair) == -1) {
+    if (pairIndex + 1 > pairsModel->numPairs())
+      pairsModel->insertRows(pairsModel->numPairs(), pairIndex + 1 - pairsModel->numPairs(), QModelIndex());
 
     QModelIndex index = pairsModel->index(pairIndex, 0, QModelIndex());
     pairsModel->setData(index, pair.lightJ, Qt::EditRole);
@@ -373,7 +377,7 @@ void PairsTab::editPair(PairsData pair, int pairIndex, bool fromFile) {
   if (pair.pairType != var.toInt()) pairsModel->setData(i, pair.pairType, Qt::EditRole);
   i = pairsModel->index(pairIndex, 14, QModelIndex());
   var = pairsModel->data(i, Qt::EditRole);
-  if (pair.pairType != var.toInt()) pairsModel->setData(i, pair.ecMultMask, Qt::EditRole);
+  if (pair.ecMultMask != var.toInt()) pairsModel->setData(i, pair.ecMultMask, Qt::EditRole);
   i = pairsModel->index(pairIndex, 15, QModelIndex());
   var = pairsModel->data(i, Qt::EditRole);
   if (pair.bindingEnergy != var.toDouble()) pairsModel->setData(i, pair.bindingEnergy, Qt::EditRole);
