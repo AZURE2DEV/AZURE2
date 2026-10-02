@@ -657,7 +657,9 @@ for bit equal to none.
 tests).
 
 18O(p,α)15N, ``examples/o18_lacognata2010`` (THM 39 points, La Cognata
-2010 with their linear background subtracted; Mak 1978, 32; Amsel 1967, 90;
+2010, with the linear S-factor background of an earlier joint fit,
+:math:`-5152 + 7002\,E` MeV b, subtracted -- not the authors' dashed line
+of their Fig. 4, which lies above it below 0.84 MeV; Mak 1978, 32; Amsel 1967, 90;
 the two 1/2\ :sup:`+` levels' energies and four widths and the two direct
 norms free). χ² per data set:
 
