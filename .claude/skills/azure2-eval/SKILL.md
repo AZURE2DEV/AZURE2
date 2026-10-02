@@ -675,6 +675,43 @@ it cannot place. It does not verify — `save_fit` does that.
 the stale `intEC` caches), writes the `.azr` plus a companion `param.sav` with
 the norms, and fails loudly if the result does not round-trip.
 
+### A background pole can be restricted to the channels that need it
+
+A background pole written with every channel of its J^pi couples all of them
+together: strength added for one reaction is strength added for every reaction
+that shares those levels. When the extra strength is only wanted in one data
+set, give the pole widths **only in that data set's channels** and leave every
+other channel at zero (which the engine then fixes -- see the Golden rule
+above, and seed the ones you do want).
+
+The worked example is 16O. 15N(p,gamma_0) could not be described together with
+12C(alpha,gamma_0): the shared photon widths of the 12-13.3 MeV levels want to
+be ~2.4x larger in amplitude for (p,gamma_0) than (alpha,gamma_0) tolerates.
+With a free, unpenalized segment normalization the fit hides this (the
+normalization slid to 0.17 and the data set was effectively dropped while still
+contributing leverage); with the normalization anchored and only ordinary
+40 MeV background poles free, the fit reached for a 3- pole at 1e4 W.u. The
+solution used in deBoer et al. (2017) is a 1- pole at Ex = 17.09 MeV carrying
+**only** a p+15N width (L=0, S=1, fixed at 500 keV) and a free gamma_0 E1 width
+(~500 eV, i.e. 0.23 W.u.), with every alpha and cascade channel at zero. Because
+it has no alpha channel it cannot touch 12C(alpha,gamma_0) at all.
+
+Two practical points:
+
+- **Fix one of the two widths.** A pole feeding one reaction through an
+  entrance and an exit channel determines only the product
+  gamma_in * gamma_out, so fitting both is degenerate. Hold the particle width
+  at a plausible value and fit the photon width.
+- **Adding a level renumbers the parameters.** AZURE2 builds level parameter
+  names as `width_<levelIndex>_<channelIndex>` from its own internal ordering,
+  not from anything in the file, so inserting a level shifts the indices of
+  others: the same name then means a different channel. A saved vector
+  (`param.sav`, an `.npz`, an MCMC chain) therefore **cannot** be carried into
+  the edited model by name -- doing so here matched 327 of 367 names and
+  started the fit at chi2 = 3e9. Map by physical identity instead (kind, level
+  energy, J^pi, pair key, L, radiation type; segment key for normalizations)
+  and let genuinely new parameters keep the value the new `.azr` carries.
+
 ### Normalizations live in two places -- and they mean different things
 
 Every data segment's normalization and energy shift exist twice, and the two
