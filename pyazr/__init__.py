@@ -22,6 +22,9 @@ from .tabulate import tabulate, TabulatedCrossSection
 from .bands import (Band, load_covariance, rmatrix_columns, best_fit_params,
                     live_parameters, step_sizes, sensitivities, trimmed_model,
                     uncertainty_bands, extrapolation_bands)
+from .modelavg import (Variant, Averaged, ModelAverage, model_average,
+                       parameter_label, azr_parameter_slots,
+                       write_averaged_azr)
 
 __all__ = ["azure2",
            "tabulate", "TabulatedCrossSection",
@@ -43,5 +46,7 @@ __all__ = ["azure2",
            "penetrability", "shift", "shift_derivative", "whittaker",
            "Band", "load_covariance", "rmatrix_columns", "best_fit_params",
            "live_parameters", "step_sizes", "sensitivities", "trimmed_model",
-           "uncertainty_bands", "extrapolation_bands"]
+           "uncertainty_bands", "extrapolation_bands",
+           "Variant", "Averaged", "ModelAverage", "model_average",
+           "parameter_label", "azr_parameter_slots", "write_averaged_azr"]
 __version__ = '2.8.0'

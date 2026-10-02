@@ -129,3 +129,12 @@ add_test(NAME pyazr_thm_coherent_background
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_coherent_background_test.py)
 set_tests_properties(pyazr_thm_coherent_background PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
+# Model averaging (pyazr/modelavg.py): Akaike/BIC/chi2/flat weights, priors
+# and the chi2 rescale, stat/model/total spreads against closed forms, the
+# averaged .azr writer.  Pure Python but for its last (engine) part.
+add_test(NAME pyazr_model_average
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/model_average_test.py)
+set_tests_properties(pyazr_model_average PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1"
+                     TIMEOUT 300)
