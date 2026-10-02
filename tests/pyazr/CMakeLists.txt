@@ -138,3 +138,11 @@ add_test(NAME pyazr_model_average
                  ${CMAKE_CURRENT_SOURCE_DIR}/model_average_test.py)
 set_tests_properties(pyazr_model_average PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1"
                      TIMEOUT 300)
+
+# scripts/thm_model_average.py end to end on tests/18O_p_a_thm: dry run,
+# 2 radii x pw/dw (dw refused and skipped), weights, averaged .azr.
+add_test(NAME pyazr_thm_model_average
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_model_average_test.py)
+set_tests_properties(pyazr_thm_model_average PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1"
+                     TIMEOUT 600)
