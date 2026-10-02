@@ -243,3 +243,36 @@ add_test(NAME thm_workspace COMMAND thm_workspace_test)
 set_tests_properties(thm_workspace PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     TIMEOUT 300)
+
+# A pair is its key, as in the engine: examples/c12c12_tumino2018's pairs 1
+# and 6 (12C+12C, with and without the THM binding energy) both open, every
+# channel keeps its pair, open + save changes no number, the GUI's own output
+# saves byte for byte, an edit round-trips, the engine's chi-squared is the
+# original's, and the THM workspace leaves the project alone.
+add_executable(pair_identity_test pair_identity_test.cpp)
+set_target_properties(pair_identity_test PROPERTIES AUTOMOC OFF)
+target_include_directories(pair_identity_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(pair_identity_test PRIVATE
+    AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    AZURE2_BINARY="$<TARGET_FILE:AZURE2>")
+target_link_libraries(pair_identity_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(pair_identity_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(pair_identity_test PRIVATE pugixml srim_utilities)
+endif()
+add_dependencies(pair_identity_test AZURE2)
+add_test(NAME pair_identity COMMAND pair_identity_test)
+# A modal dialog on a failed open would wait forever offscreen; fail instead.
+set_tests_properties(pair_identity PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 300)
