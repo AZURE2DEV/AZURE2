@@ -1347,6 +1347,24 @@ the other two — genuine ill-conditioning in a background level that a
 fit, check `param.sav` updated and compare `parameters.out` widths — and their
 θ² — against expectations.
 
+**Data points too close to a channel threshold can make the whole χ² explode
+(10³⁰–10⁷²) from one point.** This is a known failure of AZURE2's Coulomb-function
+routine near a threshold and is not going to be fixed in the code: the remedy is to
+remove the offending point(s) from the fit. It bites when a point's c.m. energy --
+*after* the segment's energy shift, and including the sub-points of any beam
+convolution or target integration (`<targetInt>`) -- lands within a few keV of
+*another* charged-particle channel's threshold. It can appear only for some
+parameter sets, or only after a code change (11B+alpha, 2026-10-01: Henderson
+14C(p,p) at 165 deg, E_lab 0.8357 MeV, 2.3 keV below the alpha+11B threshold once its
+-18 keV shift is applied, fitted at 2.5e34 b; fine on the 09-17 binary, 1e70-1e72 on
+the 09-30 one with the convolution-window fix, and only with the no-polarization
+parameters). Diagnose: sort `chiSquared.out` by segment χ², find the row of that
+segment in `AZUREOut_*.out` whose fit column (4) is absurd, and convert its
+E_c.m. to E_x against every particle threshold. Fix: write a new data file without
+the point (keep the original; never edit a file a running job reads), repoint the
+segment(s), and verify with a mode-1 run. List the other points within ~5 keV of a
+threshold and watch them during the next fit.
+
 **Before submitting a fit job after any structural edit (a segment or level
 add/remove) plus a reparameterization (a remapped `param.sav`, a fresh
 `save_fit` snapshot), run a plain calculate first** — CLI mode 1 with the new
@@ -1421,7 +1439,9 @@ file for the same segment. It catches the following:
 - **grids too coarse for narrow resonances**: a 5 keV grid misdrew peaks by up
   to ×11; 0.25–0.5 keV is needed for keV-wide levels;
 - **single-point spikes at channel thresholds**: a grid point that lands on a
-  threshold can return nonsense (10²⁸ b). Drop a point that departs by more than
+  threshold can return nonsense (10²⁸ b). The same failure hits *data* points and wrecks
+  the fit's χ² -- see "Data points too close to a channel threshold" under
+  Verifying a run. Drop a point that departs by more than
   ~5 % from its neighbours' mean within a few keV of a threshold, testing the
   *total*. A partial cross section's own opening is steep but genuine.
 
