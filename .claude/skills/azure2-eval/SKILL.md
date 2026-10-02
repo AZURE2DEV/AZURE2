@@ -42,6 +42,20 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   not a rounded mass number — the Separation Energy field is entered
   independently and precisely already, so an imprecise particle mass is an easy
   thing to overlook as the one remaining low-precision input.
+- **A width of exactly 0 is a fixed parameter, whatever its fix flag says.**
+  `CNuc.cpp:1621` adds every channel as `p.Add(name, gamma, 0.1*gamma)` and then
+  `if (gamma == 0.0) p.Fix(name)`, so a channel written with value `0` and
+  `chanFix=0` ("free") is frozen at zero for the whole fit — and because the
+  Minuit step is `0.1 * gamma`, a token seed like `1e-12` gives a step of
+  `1e-13` and the parameter still never moves. **Freeing a width is not enough;
+  give it a seed of physically plausible magnitude.** The symptom is that the
+  model's free-parameter count does not change when you free a channel: on a
+  12C+alpha fit, freeing the six 40 MeV capture background poles (`chanFix`
+  1 -> 0, values left at 0) left the model at 366 free parameters, and only
+  seeding them at 0.01 eV made it 372 and let the fit use them at all. This
+  applies to particle and photon channels alike, and to `gamma=0.0` channels
+  handed to `AzrModel.add_level`. It is also why `deactivate_level` both zeroes
+  *and* fixes a level's widths — zeroing alone would already have fixed them.
 - **Input is LAB frame, forward kinematics** (light particle = projectile).
   **All output files and API results are CENTER-OF-MASS.** Never mix them.
   This includes `add_extrapolation(e_min, e_max, e_step)` — those are **lab**
@@ -472,7 +486,9 @@ mdl.find(jpi="5/2+", energy=10.253, tol=2e-2)     # -> [AzrLevel]
 mdl.remove_level(jpi="1/2+", energy=20)           # drop a background pole entirely
 mdl.add_level(J=1.5, parity=+1, energy=8.6,       # add a 3/2+ resonance
               channels=[dict(pair=1, L=2, S=0.5, gamma=1000.0, fixed=False),
-                        dict(pair=2, L=1, S=0.5, gamma=0.1)],
+                        dict(pair=2, L=1, S=0.5, gamma=0.1)],   # never gamma=0 on a
+                                                                # channel meant to be fitted
+                                                                # (see Golden rules)
               level_fixed=False)                  # level_fixed=False -> energy is a fit parameter
 mdl.deactivate_level(jpi="7/2-", energy=4.572)    # keep in file, zero+fix every gamma
 path = mdl.write("_test.azr")
