@@ -17,6 +17,8 @@
 // records); settings written in the engine's numbering of an unsorted file land
 // on the intended parameters; and a file written by an earlier GUI, in its
 // model-row numbering, keeps its settings on the parameters it meant.
+// Explicit prior centres ("segment_N_norm prior_centre c") survive open ->
+// save, stale ones are dropped, and the Prior Centre cell edits them.
 //
 // Runs without a display; the CMake target passes QT_QPA_PLATFORM=offscreen.
 
@@ -26,6 +28,7 @@
 #include <QRegExp>
 #include <QString>
 #include <QStringList>
+#include <QTableWidget>
 #include <QTemporaryDir>
 #include <QTextStream>
 #include <cmath>
@@ -286,6 +289,56 @@ int main(int argc, char** argv) {
     spit(work.filePath("n3.in"), first);
     const QStringList bad = rowsNotNamingEngineParameter(work.filePath("n3.in"));
     ok("every level row names AZURE2's parameter of that name", bad.isEmpty(), bad.mid(0, 3).join(" | "));
+  }
+
+  // 4. Explicit prior centres ("segment_N_norm prior_centre c" rows,
+  //    EData::ReadPriorCentres): kept through open -> save, written after the
+  //    settings rows in segment order, a row for a segment the project does
+  //    not have is dropped, and the Prior Centre cell of the Normalization
+  //    and Energy Shifts tables edits them (empty = classic, no row).
+  std::cout << "\n4. explicit prior centres\n";
+  {
+    const QStringList rows = QStringList()
+        << "segment_1_energy_shift prior_centre 0.002"
+        << "segment_9_norm prior_centre 1"
+        << "segment_1_norm prior_centre 0.0006";
+    spit(work.filePath("pc.in"), withSettings(plain7Li, rows));
+    const QString first = openAndSave(w, work.filePath("pc.in"), work.filePath("pc.azr"));
+    spit(work.filePath("pc2.in"), first);
+    const QString second = openAndSave(w, work.filePath("pc2.in"), work.filePath("pc.azr"));
+    ok("second save is byte-identical to the first", second == first);
+    const QStringList saved = settingRows(first).filter("prior_centre");
+    ok("kept, norm before shift; the stale segment 9 row dropped",
+       saved == (QStringList() << "segment_1_norm prior_centre 0.0006"
+                               << "segment_1_energy_shift prior_centre 0.002"),
+       saved.join(" | "));
+    const int at = first.indexOf("segment_1_norm prior_centre");
+    ok("after the settings rows, inside the block",
+       at > first.lastIndexOf(" norm ") && at < first.indexOf("</parameterSettings>"));
+    ok("a classic project gets no row",
+       !openAndSave(w, work.filePath("li.in"), work.filePath("li.azr")).contains("prior_centre"));
+
+    // The table cells.
+    w.open(work.filePath("pc.azr"));
+    QTableWidget* norms = nullptr;
+    for(QTableWidget* t : w.findChildren<QTableWidget*>())
+      if(t->columnCount() == 8 && t->rowCount() > 0 && t->item(0, 0) &&
+         t->item(0, 0)->text() == "segment_1_norm") norms = t;
+    ok("the Normalization table has a Prior Centre column showing it",
+       norms && norms->horizontalHeaderItem(7)->text() == "Prior Centre" &&
+           norms->item(0, 7)->text() == "0.0006",
+       norms ? norms->item(0, 7)->text() : QString("no table"));
+    if(norms) {
+      norms->item(0, 7)->setText("1");
+      w.saveProject();
+      ok("an edited centre is saved",
+         settingRows(slurp(work.filePath("pc.azr"))).contains("segment_1_norm prior_centre 1"));
+      norms->item(0, 7)->setText("");
+      w.saveProject();
+      ok("an emptied cell removes the row (the field is the centre again)",
+         settingRows(slurp(work.filePath("pc.azr"))).filter("prior_centre") ==
+             QStringList("segment_1_energy_shift prior_centre 0.002"));
+    }
   }
 
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;

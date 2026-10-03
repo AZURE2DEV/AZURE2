@@ -46,36 +46,63 @@ its normalization is genuinely unconstrained.
 
 .. _nominal-norm:
 
-**The nominal normalization is the Data Norm. column.** A segment line has
-one normalization field, and AZURE2 reads it as two things at once: the
-*start value* of the fit (or the value a calculation uses) and the *centre*
-:math:`n_s^{\text{nom}}` of the penalty above (which also scales its width,
-:math:`n_s^{\text{nom}}\epsilon_s/100`). A fit leaves the column alone and
-writes the fitted normalizations to ``param.sav`` and ``normalizations.out``,
-so the prior stays where it was put. Anything that copies fitted values into
-the column moves the prior with them:
+**The nominal normalization: the Data Norm. column, or an explicit prior
+centre.** A segment line has one normalization field, and AZURE2 reads it as
+the *start value* of the fit (or the value a calculation uses) and, in a
+classic file, also as the *centre* :math:`n_s^{\text{nom}}` of the penalty
+above (which also scales its width, :math:`n_s^{\text{nom}}\epsilon_s/100`).
+A fit leaves the column alone and writes the fitted normalizations to
+``param.sav`` and ``normalizations.out``, so the prior stays where it was put.
+Anything that copies fitted values into the column moves the prior with
+them -- unless the centre is held explicitly. A row
 
-- the Fitting tab, when it loads a ``param.sav``, writes the normalizations
-  into the column, and a fit started from the saved project is then centred
-  on them (not on the experimental value);
-- pyazr's ``save_fit`` writes them too by default (``norms="fitted"``), so
-  the snapshot run on its own -- CLI, GUI or a fresh session -- reproduces the
-  fitted data :math:`\chi^2`; ``save_fit(..., norms="nominal")`` keeps the
-  column (the prior centres) and puts the fitted values only in the ``.sav``,
-  which then has to be given as the parameter file (Run tab, *Parameters
-  File*; CLI "use previous parameters") to reproduce the fit.
+.. code-block:: text
 
-No classic field holds the two separately, so neither tool can keep both
-without a change of file format; it is the user's choice. To refit with the
-experimental priors, set the column back to the nominal value (usually 1)
-first: the fit then starts at that value and returns to the same minimum.
-The examples ``n15_lacognata2007``, ``li7_tumino2006`` and
-``li6_pizzone2011`` are stored that way: their direct norms with a prior sit
-at 1 (the experimental value), their R-matrix parameters are the best fit
-with those priors. A calculation of the file alone is then at the nominal
-norms, not at the minimum; a fit started from it returns to the minimum.
-Both numbers are quoted in the THM documentation ("Examples"). The same
-holds for the energy-shift column and its penalty below.
+   <parameterSettings>
+   ...
+   segment_3_norm prior_centre 1
+   segment_3_energy_shift prior_centre 0
+   </parameterSettings>
+
+centres the prior of segment 3's normalization on 1 (and of its energy shift
+on 0), whatever the Data Norm. (Energy Shift) column holds; the column is then
+only the start value. ``3`` is the segment key, the line's position in
+``<segmentsData>`` counting inactive lines, as in ``segment_3_norm`` of
+``param.sav``. A normalization centre must be positive; a row naming no
+active segment is reported and ignored. Without a row nothing changes: a file
+that has none behaves exactly as before, and AZURE2 versions without the
+feature skip these three-token rows (the other ``<parameterSettings>`` rows
+have 9, 12 or 14) and centre the prior on the column.
+
+With an explicit centre a file can carry the fitted normalizations *and* the
+experimental priors, so that run on its own it is the best fit (data and
+priors) and a fit started from it is pulled to the experimental values, not
+to its own previous result:
+
+- the Fitting tab shows the centre in the **Prior Centre** column of the
+  Normalization and Energy Shifts tables (empty: the column value) and keeps
+  it when it loads a ``param.sav``; loading one still writes the fitted
+  normalizations into the column, so in a project without explicit centres a
+  fit started from the saved project is centred on them -- type the
+  experimental value (usually 1) into **Prior Centre** first;
+- pyazr's ``save_fit`` (default ``norms="fitted"``) writes the fitted norms
+  and shifts into the columns and, for every prior that thereby leaves its
+  column, the centre the fit used as an explicit row; the snapshot run on its
+  own reproduces the fitted data :math:`\chi^2` and priors.
+  ``save_fit(..., norms="nominal")`` keeps the columns and puts the fitted
+  values only in the ``.sav`` (to be given as the parameter file: Run tab,
+  *Parameters File*; CLI "use previous parameters").
+
+The examples are stored this way: every direct normalization with a quoted
+error (``n15_lacognata2007``, ``li7_tumino2006``, ``li6_pizzone2011``,
+``o18_lacognata2010``, ``f19_pag_thm``, ``c12c12_tumino2018``) holds its
+fitted value in the column and ``prior_centre 1``; the file alone gives the
+best-fit total (the "Total Chi-Squared" on the CLI, data plus priors), listed
+in the THM documentation ("Examples"). A fixed normalization pays its
+penalty too when it sits away from an explicit centre (``f19_pag_thm`` and
+``c12c12_tumino2018`` store fitted norms fixed), as it would after a
+``param.sav`` moved it. The same holds for the energy-shift column and its
+penalty below.
 
 The energy-shift penalty
 ------------------------

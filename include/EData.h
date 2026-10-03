@@ -44,6 +44,19 @@ class EData {
   int GetNormParamOffset() const;
   /// Index at which the energy-shift parameters start in the Minuit vector.
   int GetEnergyShiftParamOffset() const;
+  /*!
+   * Explicit prior centres of normalizations and energy shifts: rows
+   *   segment_N_norm prior_centre c
+   *   segment_N_energy_shift prior_centre c
+   * of <parameterSettings> (N the segment key, the 1-based <segmentsData> line
+   * counting inactive lines).  Such a row moves only the centre of that prior
+   * (for a norm also the scale of its percentage width); the norm/shift field
+   * of the segment line stays the start value.  Without a row the field is
+   * both, as it always was.  Three-token rows are skipped by the older
+   * <parameterSettings> readers (engine and GUI), which then fall back to the
+   * field.  Returns -1 on a malformed row.
+   */
+  int ReadPriorCentres(const Config &);
   /// Read the target-effects input file and build the TargetEffect objects.
   int ReadTargetEffectsFile(const Config &, CNuc *);
   /// Is this a fit? AZURECalc clones the compound nucleus and data per thread only when it is.

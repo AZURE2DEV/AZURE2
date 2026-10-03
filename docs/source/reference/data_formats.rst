@@ -93,7 +93,10 @@ The file contains sections for:
 - Data segment definitions
 - Test segment definitions
 - Experimental effects configuration
-- Fitting parameter settings
+- Fitting parameter settings (``<parameterSettings>``: limits, errors and
+  nuisance flags, and optional ``segment_N_norm prior_centre c`` rows that
+  hold the centre of a normalization or energy-shift prior apart from the
+  segment's own value; see :ref:`nominal-norm`)
 - MCMC settings (if enabled)
 
 .. tip::

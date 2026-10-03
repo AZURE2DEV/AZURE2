@@ -12,11 +12,18 @@ segments with free norms):
   1. AzrModel.segment_values / set_segment_values: the engine's segment keys,
      only the norm/shift fields of the named lines change (the rest of the
      line byte for byte), an unknown key is refused.  Pure Python.
+  1b. AzrModel.prior_centres / set_prior_centres (explicit prior centres,
+     "segment_N_norm prior_centre c" rows of <parameterSettings>): the block
+     is created after </targetInt> when the file has none, rows are kept in
+     key order, CLASSIC removes a row, a non-positive norm centre and an
+     unknown key are refused.  Pure Python.
   2. save_fit (norms="fitted", the default) at a vector with moved norms:
-     the segment lines carry them, the snapshot reopened alone gives the fit's
-     chi-squared (rel 1e-9) and so does the AZURE2 binary run on it
-     (chiSquared.out, rel 1e-6); the prior centre is now the fitted norm
-     (Total-Norm-Chi-Squared 0).
+     the segment lines carry them and the prior of the one norm with an
+     error (segment 3, 15 %) keeps its loaded centre as an explicit row; the
+     snapshot reopened alone gives the fit's chi-squared (rel 1e-9) and the
+     fit's prior terms, and so does the AZURE2 binary run on it
+     (chiSquared.out, rel 1e-6).  Between October 3 and this change the
+     prior moved to the fitted norm (Total-Norm-Chi-Squared 0).
   (A Python list handed to calculate_chi2_rwa, as here, used to crash the
   process: the GIL-free binding reference-counted the converted array.)
   3. norms="nominal": the segment lines keep the loaded values (the prior
@@ -106,6 +113,44 @@ with tempfile.TemporaryDirectory() as tmp:
     except KeyError:
         check("an unknown key is refused", True)
 
+print("1b. AzrModel prior centres")
+with tempfile.TemporaryDirectory() as tmp:
+    src = os.path.join(SOURCE, AZR)
+    plain = os.path.join(ROOT, "tests", "7Li_p_a", "7Li_p_a.azr")
+    text = open(plain).read()
+    check("tests/7Li_p_a has no <parameterSettings>", "<parameterSettings>" not in text)
+    m = AzrModel.from_file(plain)
+    check("no centres in a classic file", m.prior_centres() == {})
+    m.set_prior_centres({1: (0.0006, 0.002)})
+    out = os.path.join(tmp, "p.azr")
+    m.write(out)
+    got = open(out).read()
+    check("block created after </targetInt>",
+          "</targetInt>\n<parameterSettings>\n# Prior centres" in got
+          and "segment_1_norm prior_centre 0.0006\nsegment_1_energy_shift prior_centre 0.002\n"
+              "</parameterSettings>\n" in got)
+    check("read back", AzrModel.from_file(out).prior_centres() == {1: (0.0006, 0.002)})
+    m.set_prior_centres({1: (None, _azrfile.CLASSIC)})
+    check("CLASSIC removes one row", m.prior_centres() == {1: (0.0006, None)})
+    m.set_prior_centres({1: (_azrfile.CLASSIC, None)})
+    m.write(out)
+    check("and the last one: no row and no comment left",
+          AzrModel.from_file(out).prior_centres() == {}
+          and "prior_centre" not in open(out).read() and "# Prior centres" not in open(out).read())
+    for bad, exc in (({1: (0.0, None)}, ValueError), ({1: (-1.0, None)}, ValueError),
+                     ({2: (1.0, None)}, KeyError)):
+        try:
+            m.set_prior_centres(bad)
+            check(f"refused {bad}", False, "no error")
+        except exc:
+            check(f"refused {bad}", True)
+    m15 = AzrModel.from_file(src)
+    m15.set_prior_centres({3: (1.0, None), 1: (0.5, None)})
+    rows = [l for l in m15.to_text().splitlines() if l.startswith("segment_") and "prior_centre" in l]
+    check("rows in key order, inside the existing block",
+          rows == ["segment_1_norm prior_centre 0.5", "segment_3_norm prior_centre 1"]
+          and m15.to_text().count("<parameterSettings>") == 1, rows)
+
 try:
     from pyazr import azure2
 except Exception as err:                                   # engine not built
@@ -150,23 +195,31 @@ if azure2 is not None:
             # 2. ---------------------------------------------------------------
             print("2. norms='fitted' (default)")
             fit_azr, fit_sav = s.save_fit(os.path.join(work, "fit.azr"), x)
-            got = AzrModel.from_file(fit_azr).segment_values()
+            snap = AzrModel.from_file(fit_azr)
+            got = snap.segment_values()
             check("the segment lines carry the fitted norms",
                   all(abs(got[k][0] - want[k]) <= 1e-15 * abs(want[k]) for k in want), got)
+            check("the prior of segment 3 keeps its loaded centre (explicit row)",
+                  snap.prior_centres() == {3: (0.9950877877494786, None)}, snap.prior_centres())
+            pen_fit = s.penalties(x)
+            pen_fit_norm = float(pen_fit["norm"].sum())
+            check("the fit pays a norm prior", pen_fit_norm > 0.1, pen_fit)
             with azure2(fit_azr, cwd=work) as t:
                 chi_alone = t.calculate_chi2_rwa(t.params_rwa)[0]
                 pen = t.penalties(t.params_rwa)
             check("the snapshot alone gives the fit's chi2", rel(chi_alone, chi_fit) < 1e-9,
                   (chi_alone, chi_fit))
             print(f"        chi2 fit {chi_fit:.6f}, snapshot alone {chi_alone:.6f}, "
-                  f"at the loaded norms {chi_old:.6f}")
-            check("its prior is centred on the fitted norm (penalty 0)",
-                  sum(float(v.sum()) for v in pen.values()) == 0.0, pen)
+                  f"at the loaded norms {chi_old:.6f}; norm prior {pen_fit_norm:.6f}")
+            check("and the fit's priors (centred where the fit had them)",
+                  rel(float(pen["norm"].sum()), pen_fit_norm) < 1e-9
+                  and float(pen["shift"].sum()) == 0.0, (pen, pen_fit))
             if binary:
                 c, n = cli_chi2(work, "fit.azr")
                 check("the binary run on the snapshot gives it too", rel(c, chi_fit) < 1e-6,
                       (c, chi_fit))
-                check("with Total-Norm-Chi-Squared 0", n == 0.0, n)
+                check("with the fit's Total-Norm-Chi-Squared", rel(n, pen_fit_norm) < 1e-5,
+                      (n, pen_fit_norm))
             else:
                 print("        skip: no AZURE2 binary for the CLI check")
 

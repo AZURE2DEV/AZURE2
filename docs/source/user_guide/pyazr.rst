@@ -232,12 +232,16 @@ It converts the fit to the physical values a ``<levels>`` line holds, writes
 the fitted free normalizations and energy shifts into their ``<segmentsData>``
 lines, writes the companion ``param.sav`` carrying every parameter, and then
 reopens what it wrote and checks it against the fit (the parameters, and the
-data :math:`\chi^2` of the snapshot run alone) --- removing both files and
-raising if they disagree.  A segment's norm (shift) field is also the centre
-of its prior, so a fit started from the snapshot is centred on the fitted
-values; ``save_fit(path, x, norms="nominal")`` keeps the loaded file's values
-there and the fitted ones in the ``.sav`` only (run with it as the parameter
-file to reproduce the fit).  See :ref:`nominal-norm`.  ``path`` is always
+data :math:`\chi^2` and the prior terms of the snapshot run alone) ---
+removing both files and raising if they disagree.  A prior whose field now
+holds the fitted value keeps its centre as an explicit ``prior_centre`` row
+of ``<parameterSettings>`` (the centre the fit used), so a fit started from
+the snapshot is pulled to the same centres, not to the fitted values;
+``save_fit(path, x, norms="nominal")`` keeps the loaded file's values in the
+fields and the fitted ones in the ``.sav`` only (run with it as the parameter
+file to reproduce the fit).  ``AzrModel.prior_centres()`` /
+``set_prior_centres({key: (norm, shift)})`` read and write the rows.  See
+:ref:`nominal-norm`.  ``path`` is always
 explicit; nothing is written in place.  Note a ``.azr`` names its data files
 relative to itself, so a snapshot runs from the directory the original did.
 

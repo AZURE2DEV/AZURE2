@@ -669,32 +669,34 @@ class azure2:
 
         - **Normalizations and energy shifts are not in it.** They live in the
           ``<segmentsData>`` lines, whose norm (and shift) field AZURE2 reads
-          as two things at once: the *start value* of a fit or calculation,
-          and the *centre of the prior* (the penalty
-          ``((n - n0)/(n0 sigma%/100))^2``, likewise for the shift).  A classic
-          ``.azr`` has one field for both, and a CLI/GUI fit leaves it alone:
-          the fitted values go to ``param.sav``.  ``norms`` chooses:
+          as the *start value* of a fit or calculation and, unless the file
+          has an explicit ``prior_centre`` row for it in
+          ``<parameterSettings>``, also as the *centre of the prior* (the
+          penalty ``((n - n0)/(n0 sigma%/100))^2``, likewise for the shift).
+          ``norms`` chooses:
 
           ``"fitted"`` (default)
               the free norms and free shifts of the fit are written into
-              their segment lines.  The snapshot run on its own -- CLI
-              calculate, GUI, a fresh pyazr session -- gives the fitted data
-              chi-squared exactly (checked by ``verify``).  The price: the
-              prior of a fit started from the snapshot is centred on the
-              fitted value, not on the original nominal value (its
-              Norm-chi-squared is 0 at the start).  Before October 2026 this
-              wrote the norms to the ``.sav`` only, and a ``_fit.azr`` run
-              alone gave another chi-squared (18O 2010: 7483 against 1872).
+              their segment lines, and the centre of every prior that thereby
+              leaves its field is written as an explicit ``prior_centre`` row
+              (the centre the fit used: the loaded field, or the loaded
+              row).  The snapshot run on its own -- CLI calculate, GUI, a
+              fresh pyazr session -- gives the fitted data chi-squared *and*
+              the fit's priors (both checked by ``verify``), and a fit
+              started from it is pulled to the same centres, not to the
+              fitted values.  Before October 2026 this wrote the norms to the
+              ``.sav`` only (a ``_fit.azr`` run alone gave another
+              chi-squared: 18O 2010, 7483 against 1872), and in between
+              without the centre rows (a refit was centred on the fitted
+              norms).  AZURE2 versions before the rows existed skip them and
+              centre the prior on the field.
           ``"nominal"``
-              the segment lines keep the loaded file's values, i.e. the prior
-              centres; the fitted norms and shifts are in the ``.sav`` only
-              (needs ``param_sav``).  Run with that ``.sav`` as the external
+              the segment lines keep the loaded file's values; the fitted
+              norms and shifts are in the ``.sav`` only (needs
+              ``param_sav``).  Run with that ``.sav`` as the external
               parameter file (CLI: "use previous parameters"; GUI: Run tab,
-              Parameters File) and the chi-squared and the priors are both
-              those of the fit; run on its own it is not the fit.
+              Parameters File) to reproduce the fit.
 
-          No classic field holds the two separately, and adding one would
-          change the file format, so the choice is the caller's.
           ``param_sav`` (the default) writes the companion ``<name>.sav``
           beside the file, carrying every parameter, free and fixed.
         - **A written file is not a fit until it reads back as one.** With
@@ -702,8 +704,8 @@ class azure2:
           parameters transformed back; if any R-matrix value disagrees the
           files are removed and this raises, rather than leaving a snapshot
           that is quietly a mixture.  With ``norms="fitted"`` (data mode) the
-          reopened file's data chi-squared must also equal the fit's (rel.
-          1e-6).
+          reopened file's data chi-squared and its prior terms
+          (:meth:`penalties`) must also equal the fit's (rel. 1e-6).
 
         A ``.azr`` names its data files and its output directory *relative to
         itself*, so a snapshot only runs from the directory the original did.
@@ -726,15 +728,29 @@ class azure2:
                         include_fixed=True)
         self._save_cbkg(model, np.asarray(self._all_rwa(x), float))
         if norms == "fitted":
-            values = {}
+            values, centres = {}, {}
+            datasets = self.datasets
             for p in self.parameters:
                 if p.kind not in ("norm", "shift") or p.fixed or p.free_index is None:
                     continue
                 n, sh = values.get(p.segment_key, (None, None))
                 v = float(x[p.free_index])
                 values[p.segment_key] = (v, sh) if p.kind == "norm" else (n, v)
+                # Keep the prior where the fit had it: an explicit centre for
+                # every prior whose field now holds another value.
+                d = datasets.by_key(p.segment_key)
+                cn, cs = centres.get(p.segment_key, (None, None))
+                if p.kind == "norm" and d.norm_error and v != d.nominal_norm:
+                    cn = d.nominal_norm
+                elif (p.kind == "shift" and d.vary_shift and d.energy_shift_error
+                      and v != d.nominal_shift):
+                    cs = d.nominal_shift
+                if cn is not None or cs is not None:
+                    centres[p.segment_key] = (cn, cs)
             if values:
                 model.set_segment_values(values)
+            if centres:
+                model.set_prior_centres(centres)
         model.write(path)
 
         sav = None
@@ -770,6 +786,7 @@ class azure2:
                     chi_got = chi_want = None
                     if norms == "fitted" and self.mode == "data":
                         chi_got = check.calculate_chi2_rwa(check.params_rwa)[0]
+                        pen_got = check.penalties(check.params_rwa)
             except Exception as err:
                 self._discard(path, sav)
                 raise RuntimeError(
@@ -797,6 +814,14 @@ class azure2:
                     raise RuntimeError(
                         f"the snapshot run on its own gives chi2 = {chi_got:.10g}, "
                         f"the fit {chi_want:.10g}; it has been removed.")
+                pen_want = self.penalties(x)
+                got_p = sum(float(np.sum(v)) for v in pen_got.values())
+                want_p = sum(float(np.sum(v)) for v in pen_want.values())
+                if not np.isclose(got_p, want_p, rtol=1e-6, atol=1e-9):
+                    self._discard(path, sav)
+                    raise RuntimeError(
+                        f"the snapshot's priors give {got_p:.10g}, the fit's "
+                        f"{want_p:.10g}; it has been removed.")
         return path, sav
 
     _CBKG_NAME = re.compile(r"([0-9/]+[+-])_(\d+)_([^_]+)_(re|im)([01])")
@@ -1388,6 +1413,11 @@ class azure2:
         least-squares fit against :meth:`objective`, not
         :meth:`calculate_chi2_rwa`.
 
+        ``nominal`` is the segment's ``nominal_norm`` (``nominal_shift``): the
+        norm (shift) field of its ``<segmentsData>`` line, or its explicit
+        ``prior_centre`` row in ``<parameterSettings>`` when it has one (the
+        field is then only the start value).  A fixed norm away from an
+        explicit centre pays its penalty too, as in the engine.
         Note the denominator uses the *nominal* normalization, and that
         ``norm_error`` is a percentage.  A THM segment with a free norm has no
         norm penalty: its scale is profiled out, not a parameter.  Returns ``{"norm": array, "shift":
@@ -1403,15 +1433,15 @@ class azure2:
             value = (float(x[p.free_index])
                      if p is not None and not p.fixed and p.free_index is not None
                      and p.free_index < x.size else d.norm)
-            sigma = d.norm / 100.0 * d.norm_error
+            sigma = d.nominal_norm / 100.0 * d.norm_error
             if sigma:
-                norm[i] = ((value - d.norm) / sigma) ** 2
+                norm[i] = ((value - d.nominal_norm) / sigma) ** 2
             if d.vary_shift and d.energy_shift_error:
                 q = shifting.get(d.key)
                 sval = (float(x[q.free_index])
                         if q is not None and not q.fixed and q.free_index is not None
                         and q.free_index < x.size else d.energy_shift)
-                shift[i] = ((sval - d.energy_shift) / d.energy_shift_error) ** 2
+                shift[i] = ((sval - d.nominal_shift) / d.energy_shift_error) ** 2
         return {"norm": norm, "shift": shift}
 
     def objective(self, params=None):

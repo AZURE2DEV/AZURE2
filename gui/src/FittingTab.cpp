@@ -48,11 +48,11 @@ FittingTab::FittingTab(QWidget *parent) :
   paramTabWidget->addTab(levelParamsTable, "Level Parameters");
 
   normParamsTable = new QTableWidget;
-  setupParameterTable(normParamsTable, "Normalization Parameters");
+  setupParameterTable(normParamsTable, "Normalization Parameters", true);
   paramTabWidget->addTab(normParamsTable, "Normalization");
 
   shiftParamsTable = new QTableWidget;
-  setupParameterTable(shiftParamsTable, "Energy Shift Parameters");
+  setupParameterTable(shiftParamsTable, "Energy Shift Parameters", true);
   paramTabWidget->addTab(shiftParamsTable, "Energy Shifts");
 
   // THM coherent backgrounds (cbackground=): a tab only when there are some.
@@ -83,11 +83,14 @@ FittingTab::FittingTab(QWidget *parent) :
   setLayout(mainLayout);
 }
 
-void FittingTab::setupParameterTable(QTableWidget *table, const QString &title) {
+void FittingTab::setupParameterTable(QTableWidget *table, const QString &title, bool priorCentreColumn) {
   // Set up columns (removed Fixed column - show only unfixed parameters)
   QStringList headers;
   headers << "Parameter" << "Value" << "Lower Limit" << "Upper Limit"
           << "Error" << "Fit Error" << "Use as Nuisance";
+  // Normalizations and energy shifts: the centre of the prior, when it is not
+  // the Value (an explicit prior_centre row; empty = the Value, as classic).
+  if (priorCentreColumn) headers << "Prior Centre";
 
   table->setColumnCount(headers.size());
   table->setHorizontalHeaderLabels(headers);
@@ -101,6 +104,14 @@ void FittingTab::setupParameterTable(QTableWidget *table, const QString &title) 
   table->setColumnWidth(4, 100);  // Error
   table->setColumnWidth(5, 100);  // Fit Error
   table->setColumnWidth(6, 120);  // Nuisance checkbox
+  if (priorCentreColumn) {
+    table->setColumnWidth(7, 100);  // Prior centre
+    table->horizontalHeaderItem(7)->setToolTip(
+        "Centre of the prior on this parameter. Empty: the value in the Segments tab "
+        "is both the start value and the centre (classic). A number keeps the prior "
+        "there whatever value the fit starts from (e.g. 1 for a normalization whose "
+        "fitted value is stored in the Segments tab).");
+  }
 
   table->setAlternatingRowColors(true);
   table->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -146,6 +157,11 @@ void FittingTab::addParameterRow(QTableWidget *table, const FittingParameter &pa
   nuisanceItem->setCheckState(param.useAsNuisance ? Qt::Checked : Qt::Unchecked);
   nuisanceItem->setFlags(nuisanceItem->flags() & ~Qt::ItemIsEditable);
   table->setItem(row, 6, nuisanceItem);
+
+  if (table->columnCount() > 7) {
+    QMap<QString, double>::const_iterator c = priorCentres_.constFind(param.name);
+    table->setItem(row, 7, new QTableWidgetItem(c == priorCentres_.constEnd() ? QString() : roundTripNumber(*c)));
+  }
 }
 
 void FittingTab::updateParameterTables() {
@@ -183,6 +199,7 @@ void FittingTab::updateParameterTables() {
 void FittingTab::reset() {
   fittingParameters.clear();
   savedParameterSettings.clear();
+  priorCentres_.clear();
   updateParameterTables();
 }
 
@@ -620,6 +637,25 @@ void FittingTab::parameterItemChanged(QTableWidgetItem *item) {
       writeSegmentColumn(p, p.category == "norm" ? 10 : 15, value);
     }
 
+  } else if (col == 7) {  // Prior centre (norms and shifts): empty = the Value
+    const QString text = item->text().trimmed();
+    if (text.isEmpty()) {
+      priorCentres_.remove(paramName);
+      return;
+    }
+    bool ok;
+    const double centre = text.toDouble(&ok);
+    const bool norm = fittingParameters[paramIndex].category == "norm";
+    if (!ok || !std::isfinite(centre) || (norm && centre <= 0.0)) {
+      QMessageBox::warning(this, "Invalid Input",
+                           norm ? "Enter a positive number, or leave the cell empty to centre the prior on the Value."
+                                : "Enter a number, or leave the cell empty to centre the prior on the Value.");
+      const QSignalBlocker blocker(table);
+      QMap<QString, double>::const_iterator c = priorCentres_.constFind(paramName);
+      item->setText(c == priorCentres_.constEnd() ? QString() : roundTripNumber(*c));
+      return;
+    }
+    priorCentres_[paramName] = centre;
   } else if (col == 6) {  // Nuisance checkbox
     fittingParameters[paramIndex].useAsNuisance = (item->checkState() == Qt::Checked);
     // Likewise, the user changed the fit freedom, so write only the vary
@@ -1717,7 +1753,23 @@ bool FittingTab::writeParameterSettings(QTextStream &outStream) {
               << param.category << " "
               << param.minuitIndex << "\n";
   }
+  const QStringList priorRows = priorCentreRows();
+  if (!priorRows.isEmpty()) {
+    outStream << "# Prior centres: segment_N_norm|segment_N_energy_shift prior_centre value\n";
+    for (const QString &row : priorRows) outStream << row << "\n";
+  }
   return true;
+}
+
+QStringList FittingTab::priorCentreRows() const {
+  QRegExp entry("^segment_(\\d+)_(norm|energy_shift)$");
+  QMap<QPair<int, int>, QString> ordered;  // (segment, 0 norm / 1 shift) -> row
+  for (QMap<QString, double>::const_iterator c = priorCentres_.constBegin(); c != priorCentres_.constEnd(); ++c) {
+    if (entry.indexIn(c.key()) == -1) continue;
+    ordered[qMakePair(entry.cap(1).toInt(), entry.cap(2) == "norm" ? 0 : 1)] =
+        c.key() + " prior_centre " + roundTripNumber(c.value());
+  }
+  return ordered.values();
 }
 
 bool FittingTab::readParameterSettings(QTextStream &inStream) {
@@ -1789,6 +1841,8 @@ bool FittingTab::readParameterSettings(QTextStream &inStream) {
   };
   QList<LevelEntry> levelEntries;
 
+  priorCentres_.clear();
+
   QString line;
   while (!inStream.atEnd()) {
     line = inStream.readLine().trimmed();
@@ -1796,7 +1850,15 @@ bool FittingTab::readParameterSettings(QTextStream &inStream) {
     if (line.isEmpty() || line.startsWith("#")) continue;  // Skip empty lines and comments
 
     QStringList parts = line.split(" ", Qt::SkipEmptyParts);
-    if (parts.size() == 9) {
+    if (parts.size() == 3 && parts[1] == "prior_centre") {
+      // An explicit prior centre (EData::ReadPriorCentres); a stale or
+      // malformed one is dropped, as the entries below.
+      bool ok;
+      const double centre = parts[2].toDouble(&ok);
+      if (!ok || segmentEntry.indexIn(parts[0]) == -1) continue;
+      if (numSegments > 0 && segmentEntry.cap(1).toInt() > numSegments) continue;
+      priorCentres_[parts[0]] = centre;
+    } else if (parts.size() == 9) {
       FittingParameter param;
       param.name = parts[0];
       param.value = parts[1].toDouble();  // This will be overridden by current model values

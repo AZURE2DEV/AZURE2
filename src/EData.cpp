@@ -281,6 +281,8 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
 
   in.close();
 
+  if (ReadPriorCentres(configure) != 0) return -1;
+
   if (CheckThmWeights(configure, configure.thm.weightBySegment, "weight", "<segmentsData>",
                       numTotalSegments, this) != 0)
     return -1;
@@ -291,6 +293,85 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
     this->MapData();
   }
 
+  return 0;
+}
+
+/*!
+ * Reads the explicit prior centres of <parameterSettings> (see EData.h) and
+ * moves the nominal normalization / energy shift of the segments they name.
+ * Only rows of exactly three tokens whose second token is "prior_centre" are
+ * read; every other row is left to ParameterLimitsManager, as before.  A row
+ * for a segment key with no active segment is reported and ignored (an
+ * inactive line keeps its key); a malformed row, or a normalization centre
+ * that is not positive, fails the run.
+ */
+
+int EData::ReadPriorCentres(const Config &configure) {
+  std::ifstream in(configure.configfile.c_str());
+  if (!in) return 0;
+  std::string line;
+  bool inside = false;
+  while (getline(in, line)) {
+    const size_t a = line.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) continue;
+    const size_t b = line.find_last_not_of(" \t\r\n");
+    const std::string trimmed = line.substr(a, b - a + 1);
+    if (trimmed == "<parameterSettings>") {
+      inside = true;
+      continue;
+    }
+    if (trimmed[0] == '<') {
+      inside = false;
+      continue;
+    }
+    if (!inside || trimmed[0] == '#') continue;
+    std::istringstream stm(trimmed);
+    std::vector<std::string> tok;
+    std::string t;
+    while (stm >> t) tok.push_back(t);
+    if (tok.size() != 3 || tok[1] != "prior_centre") continue;
+
+    const std::string &name = tok[0];
+    bool isNorm = false;
+    std::string number;
+    const std::string normTail = "_norm", shiftTail = "_energy_shift";
+    if (name.compare(0, 8, "segment_") == 0 && name.size() > 8 + normTail.size() &&
+        name.compare(name.size() - normTail.size(), normTail.size(), normTail) == 0) {
+      isNorm = true;
+      number = name.substr(8, name.size() - 8 - normTail.size());
+    } else if (name.compare(0, 8, "segment_") == 0 && name.size() > 8 + shiftTail.size() &&
+               name.compare(name.size() - shiftTail.size(), shiftTail.size(), shiftTail) == 0) {
+      number = name.substr(8, name.size() - 8 - shiftTail.size());
+    }
+    const bool digits = !number.empty() && number.find_first_not_of("0123456789") == std::string::npos;
+    char *end = NULL;
+    const double centre = strtod(tok[2].c_str(), &end);
+    if (!digits || end == tok[2].c_str() || *end != '\0' || !std::isfinite(centre)) {
+      configure.outStream << "ERROR: <parameterSettings> row \"" << trimmed
+                          << "\" is not \"segment_N_norm prior_centre value\" or "
+                             "\"segment_N_energy_shift prior_centre value\"." << std::endl;
+      return -1;
+    }
+    if (isNorm && centre <= 0.) {
+      configure.outStream << "ERROR: <parameterSettings> row \"" << trimmed
+                          << "\": a normalization prior centre must be positive." << std::endl;
+      return -1;
+    }
+    const int key = atoi(number.c_str());
+    bool found = false;
+    for (int s = 1; s <= this->NumSegments(); s++) {
+      ESegment *segment = this->GetSegment(s);
+      if (segment->GetSegmentKey() != key) continue;
+      found = true;
+      if (isNorm)
+        segment->SetNominalNorm(centre);
+      else
+        segment->SetNominalEnergyShift(centre);
+    }
+    if (!found)
+      configure.outStream << "WARNING: <parameterSettings> row \"" << trimmed
+                          << "\" names no active data segment; ignored." << std::endl;
+  }
   return 0;
 }
 

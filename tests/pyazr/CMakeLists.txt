@@ -156,8 +156,10 @@ set_tests_properties(pyazr_thm_vertex_memo_sessions PROPERTIES ENVIRONMENT "OMP_
                      TIMEOUT 300)
 
 # save_fit writes the fitted direct-segment norms into the snapshot (the
-# default), so it reproduces the fit's chi-squared when run alone; or keeps
-# the prior centres (norms="nominal") with the fitted values in the .sav.
+# default) with explicit prior_centre rows, so it reproduces the fit's
+# chi-squared and priors when run alone; or keeps the segment lines
+# (norms="nominal") with the fitted values in the .sav.  AzrModel.
+# prior_centres / set_prior_centres.
 add_test(NAME pyazr_save_fit_norms
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/save_fit_norms_test.py)

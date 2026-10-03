@@ -90,7 +90,7 @@ class FittingTab : public QWidget {
   void onSegmentEnergyShiftVaryChanged(int segmentIndex, bool vary);
 
  private:
-  void setupParameterTable(QTableWidget *table, const QString &title);
+  void setupParameterTable(QTableWidget *table, const QString &title, bool priorCentreColumn = false);
   void addParameterRow(QTableWidget *table, const FittingParameter &param);
   void updateParameterFromTable(const QString &paramName, int column, const QVariant &value);
   void syncSegmentVaryStates();
@@ -138,6 +138,15 @@ class FittingTab : public QWidget {
 
   QList<FittingParameter> fittingParameters;
   QList<FittingParameter> savedParameterSettings;  // Settings from <parameterSettings> section
+  /*! Explicit prior centres ("segment_N_norm prior_centre c" and
+      "segment_N_energy_shift prior_centre c" rows of <parameterSettings>,
+      EData::ReadPriorCentres), by parameter name.  A norm or shift without one
+      has its prior centred on the Segments-tab value, as in every classic
+      file.  Kept apart from fittingParameters, which is rebuilt from the tabs
+      (and by a .sav load): a centre survives both. */
+  QMap<QString, double> priorCentres_;
+  /// The rows above, in segment order (norm before shift), as written.
+  QStringList priorCentreRows() const;
 
   // Tab references for reading current GUI state
   LevelsTab *levelsTab_;

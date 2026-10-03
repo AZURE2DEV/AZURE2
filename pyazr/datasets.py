@@ -34,6 +34,7 @@ AZURE2 itself acts on.
 """
 
 import os
+import re
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -109,6 +110,17 @@ class Segment:
     thm: bool = False              # Trojan Horse (half-off-shell) segment?
     operation: Optional[str] = None    # 'sum' | 'ratio' for a composite segment
     components: tuple = ()             # (entrance, exit, angle, scaling) each
+    # Centres of the norm and shift priors.  The norm / shift field above is
+    # the start value; it is also the centre unless <parameterSettings> has
+    # an explicit "segment_<key>_norm prior_centre c" (..._energy_shift) row.
+    nominal_norm: Optional[float] = None
+    nominal_shift: Optional[float] = None
+
+    def __post_init__(self):
+        if self.nominal_norm is None:
+            self.nominal_norm = self.norm
+        if self.nominal_shift is None:
+            self.nominal_shift = self.energy_shift
 
     @property
     def composite(self) -> bool:
@@ -177,6 +189,24 @@ class SegmentSet(list):
                 continue
             key += 1
             segs.append(cls._parse(raw.split(), key))
+        # Explicit prior centres (EData::ReadPriorCentres).
+        prior = re.compile(r"^\s*segment_(\d+)_(norm|energy_shift)\s+prior_centre\s+(\S+)\s*$")
+        inside = False
+        for raw in lines:
+            t = raw.strip()
+            if t == "<parameterSettings>":
+                inside = True
+                continue
+            if t.startswith("<"):
+                inside = False
+            m = prior.match(raw) if inside else None
+            if m:
+                seg = segs.by_key(int(m.group(1)))
+                if seg is not None:
+                    if m.group(2) == "norm":
+                        seg.nominal_norm = float(m.group(3))
+                    else:
+                        seg.nominal_shift = float(m.group(3))
         return segs
 
     @staticmethod

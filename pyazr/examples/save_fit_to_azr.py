@@ -2,8 +2,9 @@
 
 ``azure2.save_fit`` does the whole thing: it converts the fit to the physical
 values a ``<levels>`` line holds, writes the fitted normalizations and energy
-shifts into their ``<segmentsData>`` lines (``norms="nominal"`` keeps the
-prior centres there and the fitted values in the ``.sav`` only), writes a
+shifts into their ``<segmentsData>`` lines and keeps their priors where the
+fit had them (explicit ``prior_centre`` rows; ``norms="nominal"`` leaves the
+lines alone and the fitted values in the ``.sav`` only), writes a
 companion ``param.sav`` with every parameter, and verifies the result before
 handing it back.  This example is the wrapper around it -- load a
 fit from ``param.sav`` or a numpy file, optionally re-radius the model, and

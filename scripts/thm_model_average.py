@@ -278,16 +278,19 @@ def penalty_rows(np, m, x):
     for d in m.active_datasets:
         p = norms.get(d.key)
         if p is not None and not p.fixed and p.free_index is not None:
-            sig = d.norm / 100.0 * d.norm_error
+            # nominal_norm: the explicit prior centre, else the norm field.
+            nom = getattr(d, "nominal_norm", d.norm)
+            sig = nom / 100.0 * d.norm_error
             if sig:
-                rows.append((x[p.free_index] - d.norm) / sig)
+                rows.append((x[p.free_index] - nom) / sig)
                 j = np.zeros(n)
                 j[p.free_index] = 1.0 / sig
                 jac.append(j)
         q = shifts.get(d.key)
         if (d.vary_shift and d.energy_shift_error and q is not None
                 and not q.fixed and q.free_index is not None):
-            rows.append((x[q.free_index] - d.energy_shift) / d.energy_shift_error)
+            rows.append((x[q.free_index] - getattr(d, "nominal_shift", d.energy_shift))
+                        / d.energy_shift_error)
             j = np.zeros(n)
             j[q.free_index] = 1.0 / d.energy_shift_error
             jac.append(j)

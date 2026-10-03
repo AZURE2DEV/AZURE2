@@ -119,7 +119,8 @@ class ESegment {
   double GetJ() const;
   /// Current normalization applied to the data.
   double GetNorm() const;
-  /// Normalization as declared in the input file, the value the fit penalty pulls towards.
+  /// Centre of the normalization prior: the norm field of the input file, or
+  /// its explicit prior_centre in <parameterSettings> when it has one.
   double GetNominalNorm() const;
   /// Fractional systematic uncertainty on the normalization.
   double GetNormError() const;
@@ -131,7 +132,8 @@ class ESegment {
   double GetEnergyShift() const;
   /// Shift last applied, so a change can be undone before applying the new one.
   double GetLastEnergyShift() const;
-  /// Energy shift as declared in the input file.
+  /// Centre of the energy-shift prior: the shift field of the input file, or
+  /// its explicit prior_centre in <parameterSettings>.
   double GetNominalEnergyShift() const;
   /// Uncertainty on the energy shift.
   double GetEnergyShiftError() const;
@@ -152,6 +154,12 @@ class ESegment {
   /// Point the segment at a TargetEffect in the parent EData.
   void SetTargetEffectNum(int);
   void SetSegmentKey(int);
+  /// Move the centre of the normalization prior away from the norm field (an
+  /// explicit "segment_N_norm prior_centre c" row of <parameterSettings>).
+  /// The current normalization (the start value) is left alone.
+  void SetNominalNorm(double norm) { dataNormNominal_ = norm; }
+  /// Same for the energy-shift prior ("segment_N_energy_shift prior_centre c").
+  void SetNominalEnergyShift(double shift) { energyShiftNominal_ = shift; }
   /// Attach the <thm> weight table of this segment; points created afterwards
   /// carry it.  The segment keeps the table alive.
   void SetThmWeight(std::shared_ptr<const ThmWeightTable> w) { thmWeight_ = w; }

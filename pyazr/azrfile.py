@@ -83,6 +83,22 @@ _THM_FLOAT_PREFIX = re.compile(r"[ \t\n\r\f\v]*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\
 _THM_INT_PREFIX = re.compile(r"[ \t\n\r\f\v]*[+-]?\d+")
 
 
+# An explicit prior centre in <parameterSettings> (EData::ReadPriorCentres).
+_PRIOR_ROW = re.compile(r"^\s*segment_(\d+)_(norm|energy_shift)\s+prior_centre\s+(\S+)\s*$")
+_PRIOR_COMMENT = "# Prior centres: segment_N_norm|segment_N_energy_shift prior_centre value"
+
+
+class _Classic:
+    """Marker for :meth:`AzrModel.set_prior_centres`: remove the explicit
+    centre, so that the segment field is the centre again."""
+
+    def __repr__(self):
+        return "CLASSIC"
+
+
+CLASSIC = _Classic()
+
+
 def _thm_default_settings():
     s = dict(_THM_GLOBAL_DEFAULTS)
     s.update(spectatorByPair={}, weight={}, weightTest={}, experiments={})
@@ -1859,6 +1875,96 @@ class AzrModel:
             raise KeyError(f"no <segmentsData> line with key(s) {sorted(missing)}.")
         self._set_suffix_lines(lines)
         return changed
+
+    # -- explicit prior centres (rows of the <parameterSettings> block) -------
+
+    def prior_centres(self):
+        """The explicit prior centres of the file, ``{key: (norm, shift)}``.
+
+        A row ``segment_<key>_norm prior_centre <c>`` (or
+        ``segment_<key>_energy_shift prior_centre <c>``) in
+        ``<parameterSettings>`` holds the centre of that segment's
+        normalization (energy-shift) prior apart from the norm (shift) field
+        of its ``<segmentsData>`` line, which is then only the start value.
+        Without a row the field is both, as in every classic file.  Only the
+        keys with a row are listed; the other entry of a pair is None.
+        """
+        out = {}
+        for line in self._parameter_settings_lines():
+            m = _PRIOR_ROW.match(line)
+            if not m:
+                continue
+            key = int(m.group(1))
+            n, sh = out.get(key, (None, None))
+            v = float(m.group(3))
+            out[key] = (v, sh) if m.group(2) == "norm" else (n, v)
+        return out
+
+    def _parameter_settings_lines(self):
+        lines, inside = [], False
+        for line in self._suffix.splitlines():
+            s = line.strip()
+            if s == "<parameterSettings>":
+                inside = True
+            elif s.startswith("<"):
+                inside = False
+            elif inside:
+                lines.append(line)
+        return lines
+
+    def set_prior_centres(self, values):
+        """Pin the prior centres of normalizations and energy shifts.
+
+        ``values`` maps a segment key (see :meth:`segment_values`) to
+        ``(norm, shift)``: a number writes that centre, None leaves it as it
+        is, and :data:`CLASSIC` removes the row (the field is the centre
+        again).  The rows are kept together, in key order, at the end of
+        ``<parameterSettings>`` -- the order the GUI writes them in; the block
+        is created after ``</targetInt>`` if the file has none.  Older
+        AZURE2 versions skip these three-token rows and read the field as the
+        centre.  Returns the model.
+        """
+        have = self.prior_centres()
+        keys = set(self.segment_values())
+        for key, (n, sh) in values.items():
+            if key not in keys:
+                raise KeyError(f"no <segmentsData> line with key {key}.")
+            old = list(have.get(key, (None, None)))
+            for i, v in enumerate((n, sh)):
+                if v is CLASSIC:
+                    old[i] = None
+                elif v is not None:
+                    v = float(v)
+                    if not math.isfinite(v) or (i == 0 and v <= 0.0):
+                        raise ValueError(f"segment {key}: prior centre {v!r} "
+                                         "(a norm centre must be positive).")
+                    old[i] = v
+            have[key] = tuple(old)
+        rows = []
+        for key in sorted(have):
+            for name, v in zip(("norm", "energy_shift"), have[key]):
+                if v is not None:
+                    rows.append(f"segment_{key}_{name} prior_centre {_fmt(v)}")
+        lines = self._suffix.splitlines()
+        lines = [l for l in lines
+                 if not _PRIOR_ROW.match(l) and l.strip() != _PRIOR_COMMENT]
+        block = [_PRIOR_COMMENT] + rows if rows else []
+        try:
+            start = next(i for i, l in enumerate(lines)
+                         if l.strip() == "<parameterSettings>")
+            end = next(i for i in range(start + 1, len(lines))
+                       if lines[i].strip().startswith("<"))
+            if lines[end].strip() != "</parameterSettings>":
+                raise ValueError("<parameterSettings> is not closed.")
+            lines[end:end] = block
+        except StopIteration:
+            if rows:
+                at = next((i + 1 for i, l in enumerate(lines)
+                           if l.strip() == "</targetInt>"), len(lines))
+                lines[at:at] = (["<parameterSettings>"] + block
+                                + ["</parameterSettings>"])
+        self._set_suffix_lines(lines)
+        return self
 
     def engine_level_keys(self):
         """``{(jgroup, level): AzrLevel}`` -- the numbering AZURE2 itself uses.
