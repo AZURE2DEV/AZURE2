@@ -23,7 +23,8 @@
 //  3. every <parameterSettings> level row the GUI (Fitting tab) wrote names
 //     AZURE2's parameter of that name, as the value it records;
 //  4. the engine's total chi-squared of the GUI-saved file is the original's
-//     (111.651);
+//     (112.0758: data 111.651 + the direct norms' priors centred on 1, kept by
+//     the GUI as prior_centre rows of <parameterSettings>);
 //  5. a trivial edit (one width of a pair-6 channel) round-trips: written,
 //     read back on the pair-6 channel, nothing else moved, saved again
 //     byte-identical;
@@ -350,7 +351,8 @@ int main(int argc, char** argv) {
     const QString c1 = engineChi2(guiDir, "run.azr");
     std::cout << "  chi2 original " << c0.toStdString() << "   GUI-saved " << c1.toStdString() << std::endl;
     ok("engine chi-squared of the GUI-saved file equals the original's", !c0.isEmpty() && c0 == c1);
-    ok("and is the example's 111.651", std::fabs(c0.toDouble() - 111.651) < 0.01, c0);
+    ok("and is the example's 112.0758 (data 111.651 + priors 0.4248)",
+       std::fabs(c0.toDouble() - 112.0758) < 0.01, c0);
   }
 
   // 5. A trivial edit: the width of the first pair-6 channel.

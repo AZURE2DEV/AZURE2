@@ -371,10 +371,10 @@ none                                                                            
 </levels>
 <segmentsData>
 1  5  4  0  8.2  0  180  4  0.003958420582150352  1  0  0  0  0  data/tumino_thm.dat  0  0
-1  5  4  0  20  0  180  0  1.0  1  8  0  0  0  data/rolfs1986.dat  0  0
-1  5  4  0  20  0  180  0  1.0  1  6  0  0  0  data/cruz2009.dat  0  0
+1  5  4  0  20  0  180  0  0.9495485549942783  1  8  0  0  0  data/rolfs1986.dat  0  0
+1  5  4  0  20  0  180  0  0.910779248948017  1  6  0  0  0  data/cruz2009.dat  0  0
 1  5  4  0  20  0  180  0  1.8658547048219758  1  0  0  0  0  data/cassagnou1962.dat  0  0
-1  5  4  0  20  0  180  0  1.0  1  10  0  0  0  data/mani1964.dat  0  0
+1  5  4  0  20  0  180  0  1.2619559569430414  1  10  0  0  0  data/mani1964.dat  0  0
 </segmentsData>
 <segmentsTest>
 0              5              5              1.905          1.905          0              1              180            0.1            1
@@ -384,6 +384,12 @@ none                                                                            
 <targetInt>
 1              "1"            50             1              0.030          0              0               "" 0               0              0               0               "" 0               0 0.04 5 50
 </targetInt>
+<parameterSettings>
+# Prior centres: segment_N_norm|segment_N_energy_shift prior_centre value
+segment_2_norm prior_centre 1
+segment_3_norm prior_centre 1
+segment_5_norm prior_centre 1
+</parameterSettings>
 <thm>
 entranceL=incoherent
 vertex=constant

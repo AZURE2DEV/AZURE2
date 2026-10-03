@@ -371,10 +371,10 @@ none                                                                            
 </levels>
 <segmentsData>
 1  1  4  0  7  0  180  0  0.8900275957355619  1  0  0  0  0  data/pizzone_thm.dat  0  0
-1  1  4  0  20  0  180  0  1.0  1  7  0  0  0  data/engstler1992inv.dat  0  0
-1  1  4  0  20  0  180  0  1.0  1  7  0  0  0  data/elwyn1977.dat  0  0
-1  1  4  0  20  0  180  0  1.0  1  5  0  0  0  data/mcclenahan1975.dat  0  0
-1  1  4  0  20  0  180  0  1.0  1  10  0  0  0  data/jeronymo1962.dat  0  0
+1  1  4  0  20  0  180  0  0.9389916602883406  1  7  0  0  0  data/engstler1992inv.dat  0  0
+1  1  4  0  20  0  180  0  0.97524173821356  1  7  0  0  0  data/elwyn1977.dat  0  0
+1  1  4  0  20  0  180  0  1.0454422519230147  1  5  0  0  0  data/mcclenahan1975.dat  0  0
+1  1  4  0  20  0  180  0  0.9535421501595004  1  10  0  0  0  data/jeronymo1962.dat  0  0
 </segmentsData>
 <segmentsTest>
 0              5              5              1.905          1.905          0              1              180            0.1            1
@@ -384,6 +384,13 @@ none                                                                            
 <targetInt>
 1              "1"            50             1              0.030          0              0               "" 0               0              0               0               "" 0               0 0.04 5 50
 </targetInt>
+<parameterSettings>
+# Prior centres: segment_N_norm|segment_N_energy_shift prior_centre value
+segment_2_norm prior_centre 1
+segment_3_norm prior_centre 1
+segment_4_norm prior_centre 1
+segment_5_norm prior_centre 1
+</parameterSettings>
 <thm>
 entranceL=incoherent
 vertex=constant

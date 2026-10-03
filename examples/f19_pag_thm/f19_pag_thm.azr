@@ -474,6 +474,9 @@ a=0.6
 <parameterSettings>
 # Fitting parameter settings (only non-fixed parameters shown)
 # Format: name value lower_limit upper_limit error fit_error nuisance category minuit_index
+# Prior centres: segment_N_norm|segment_N_energy_shift prior_centre value
+segment_2_norm prior_centre 1
+segment_3_norm prior_centre 1
 </parameterSettings>
 <lastRun>
 9985

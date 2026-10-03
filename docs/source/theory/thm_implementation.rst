@@ -715,8 +715,9 @@ profiled ``background=linear`` on the experiment line, the 3/2\ :sup:`−`
 = 2`) at the LUNA widths, held fixed (:math:`\Gamma_p` = 36 eV,
 :math:`\Gamma_\alpha` = 2.5 keV), and the DW entrance vertex
 (``distortion=optical opticalAA=ancai06 opticalSF=kd03:extrapolate
-vertexModel=dw``): :math:`\chi^2` 329.62 (THM 247.15 / 39, Mak 28.29 / 32,
-Amsel 54.19 / 90; :math:`E_{r1}` 604.4 keV, :math:`\Gamma_{p1}` 5.13 keV,
+vertexModel=dw``): :math:`\chi^2` 330.05 with the Mak prior (0.36, centred
+on 1) included; data 329.69 (THM 247.14 / 39, Mak 28.32 / 32, Amsel
+54.23 / 90; :math:`E_{r1}` 604.4 keV, :math:`\Gamma_{p1}` 5.14 keV,
 :math:`\Gamma_{\alpha 1}` 179.5 keV), against 582.80 before. The level is
 seen in the THM spectrum as the step at 0.58-0.62 MeV and is consistent with
 the direct widths only with the DW vertex (18O cross-check, October 2026; dw,
@@ -878,7 +879,7 @@ c12c12_tumino2018`` at its parameters, the four THM segments one experiment,
 as the example's own line ``experiment[E1] segments=1-4 beam=14N
 target=12C spectator=d Ebeam=30`` has them: ``lineshape=on`` and
 ``distortion=`` can be switched on there, also in the GUI's THM workspace;
-with both off the example gives :math:`\chi^2` 111.651, THM 61.02):
+with both off the example gives data :math:`\chi^2` 111.651, THM 61.02):
 :math:`E_{sF}` = 2.76-0.88 MeV over :math:`E` = 0.82-2.69 MeV,
 :math:`\eta_0` = 1.55-2.74, :math:`\zeta` = -0.28 to -0.49 into
 :math:`\alpha_{0,1}` and -0.13 to -0.24 into :math:`p_{0,1}`; the folded
@@ -3094,35 +3095,44 @@ Examples
 The THM cases in ``examples/`` (each ``<name>.azr`` holds the best fit,
 ``data/`` headers name the sources). "File alone" is the CLI calculation of
 the file as stored (``printf '1\n\n\n7\n' | AZURE2 --no-gui
---no-readline <name>.azr``), the number to compare against after a change;
-"best fit" is the minimum including the norm priors, where it differs (the
-direct norms with a prior are stored at their nominal value 1, so the file
-alone is not at the minimum; see :ref:`nominal-norm`). October 2026.
+--no-readline <name>.azr``), the number to compare against after a change:
+the "Total Chi-Squared" line, data plus the norm priors (the data part,
+``Total-Chi-Squared`` of ``chiSquared.out``, in brackets where they differ).
+Every direct norm with a quoted error holds its fitted value in the norm
+column and an explicit ``prior_centre 1`` row in ``<parameterSettings>``
+(see :ref:`nominal-norm`), so the file alone is the best fit and a fit
+started from it is pulled to 1, not to the stored values. October 2026.
 
-======================  =========================================  =============  ===================================
-example                 what is fitted                             file alone     best fit (data + priors)
-======================  =========================================  =============  ===================================
-``f19_pag_thm``         HOES (Su 2025 Fig. 1, E ≤ 0.45 MeV), JUNA  77.640 / 59    same (direct norms stored fitted,
-                        Table I, Spyrou; pw, 5.136 fm                             fixed; the fit had 17 penalty rows)
-``o18_lacognata2008``   HOES, three narrow levels                  35.877 / 30    same
-``o18_lacognata2010``   HOES (authors' background + linear), Mak,  329.62 / 161   329.62 + 0.35
+======================  =========================================  ==================================
+example                 what is fitted                             file alone (data + priors) / N
+======================  =========================================  ==================================
+``f19_pag_thm``         HOES (Su 2025 Fig. 1, E ≤ 0.45 MeV), JUNA  79.408 (77.640 + 1.768) / 59;
+                        Table I, Spyrou; pw, 5.136 fm              direct norms stored fixed (the fit
+                                                                   had 17 more penalty rows)
+``o18_lacognata2008``   HOES, three narrow levels                  35.877 / 30
+``o18_lacognata2010``   HOES (authors' background + linear), Mak,  330.054 (329.692 + 0.362) / 161
                         Amsel; 3/2\ :sup:`−` at LUNA widths; DW
-``c12c12_tumino2018``   HOES, four channels one experiment         111.651 / 247  same
-                        (``experiment[E1]``), direct data
-``o17_guardo2017_fit``  HOES                                       12.996 / 23    same
-``n15_lacognata2007``   on-shell (Table 3), Redder, Schardt        282.15 / 208   223.41 + 1.01
-``li7_tumino2006``      on-shell-equivalent THM, Rolfs, Cruz,      1299.34 / 294  439.10 + 9.47
+``c12c12_tumino2018``   HOES, four channels one experiment         112.076 (111.651 + 0.425) / 247;
+                        (``experiment[E1]``), direct data          direct norms stored fixed
+``o17_guardo2017_fit``  HOES                                       12.996 / 23
+``n15_lacognata2007``   on-shell (Table 3), Redder, Schardt        224.425 (223.414 + 1.012) / 208
+``li7_tumino2006``      on-shell-equivalent THM, Rolfs, Cruz,      448.575 (439.104 + 9.471) / 294
                         Cassagnou, Mani
-``li6_pizzone2011``     on-shell-equivalent THM, Engstler, Elwyn,  210.88 / 132   156.99 + 1.93
+``li6_pizzone2011``     on-shell-equivalent THM, Engstler, Elwyn,  158.918 (156.991 + 1.927) / 132
                         McClenahan, Jeronymo
-======================  =========================================  =============  ===================================
+======================  =========================================  ==================================
 
 Earlier values, at which the size studies on this page that name an example
 were computed: ``f19_pag_thm`` 81.971 (THM 63.93 / 28, digitized JUNA, hidden
 bars ≤ 0.0096), ``o18_lacognata2010`` 582.80 (THM 414.31, joint-fit
 background, plane-wave vertex, no 3/2\ :sup:`−` level), ``n15_lacognata2007``
 223.085, ``li7_tumino2006`` 439.100 and ``li6_pizzone2011`` 229.310 (fitted
-norms as prior centres; before that, as HOES, 1279.69 and 133.504).
+norms as prior centres; before that, as HOES, 1279.69 and 133.504). Between
+these and the table, for a few hours on October 3 2026, the 15N/7Li/6Li
+files stored their direct norms at 1 (file alone 282.15, 1299.34, 210.88)
+and 18O 2010 had its Mak prior centred on an earlier fitted 0.9966 (329.62 +
+0.35); the refit with it centred on 1 moves the doublet by < 15 eV and Mak
+0.9671 -> 0.9699.
 
 Model averaging
 ---------------

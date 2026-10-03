@@ -19,16 +19,19 @@ fit, `data/` headers name the sources): `li7_tumino2006`, `li6_pizzone2011`,
 `n15_lacognata2007`, `o17_guardo2017_fit`, `o18_lacognata2008` (narrow 20/90/144 keV),
 `o18_lacognata2010` (1/2⁺ doublet), `c12c12_tumino2018`, plus `f19_pag_thm`. Regression pins:
 `tests/18O_p_a_thm`, `tests/7Li_p_a`, `tests/6Li_d`, `tests/17O`, `tests/thm_options`.
-Example χ² (CLI, file alone; Oct 2026, thm_implementation.rst "Examples"): f19 77.640
-(JUNA PRC 106 Table I, hidden THM bars ≤ 0.0092), o18 2008 35.877, o18 2010 329.62
-(authors' background + `background=linear`, 3/2⁻ 597 keV at LUNA widths, `vertexModel=dw`),
-c12c12 111.651 (`experiment[E1] segments=1-4`: switch `lineshape`/`distortion` on there),
-o17 12.996; n15 282.15, li7 1299.34, li6 210.88 with the prior-carrying direct norms at
-their nominal 1 (best fits 224.43, 448.58, 158.92 incl. priors). The Li examples are
+Example χ² (CLI "Total Chi-Squared", file alone = best fit, data + norm priors; Oct 2026,
+thm_implementation.rst "Examples"): f19 79.408 (data 77.640; JUNA PRC 106 Table I, hidden
+THM bars ≤ 0.0092), o18 2008 35.877, o18 2010 330.054 (data 329.692; authors' background +
+`background=linear`, 3/2⁻ 597 keV at LUNA widths, `vertexModel=dw`), c12c12 112.076 (data
+111.651; `experiment[E1] segments=1-4`: switch `lineshape`/`distortion` on there), o17
+12.996; n15 224.425, li7 448.575, li6 158.918. The Li examples are
 **on-shell** fits of published penetrability-corrected points; HOES yields would be
-needed for a true THM fit. A norm column is start value *and* prior centre: refit with
-the experimental priors means the column at 1 (`save_fit(norms="nominal")` keeps it;
-the default writes the fitted norms so the file alone reproduces the fit).
+needed for a true THM fit. A norm (shift) column is the start value; the prior centre is
+the column unless `<parameterSettings>` has `segment_N_norm prior_centre c` (GUI: Fitting
+tab, Prior Centre column; pyazr: `AzrModel.set_prior_centres`). Every example direct norm
+with an error stores its fitted value + `prior_centre 1`; `save_fit` (default) writes
+fitted norms and pins the centres the fit used, so the snapshot is the fit and a refit
+does not drift.
 
 The one-sentence lesson: **THM data fix shapes, energies and ratios of γ_x²|M_l|²; the
 absolute widths and the conversion to on-shell strengths depend on the reaction

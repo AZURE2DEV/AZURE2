@@ -35,14 +35,19 @@ none                                                                            
 </levels>
 <segmentsData>
 1  1  2  0.000000  2.000000  0  180  0  0.9747205860300547  1  0  0  0  0  data/thm_lc2007_tab3_sigma.dat  0  0
-1  1  2  0.000000  2.000000  0  180  0  1.0  1  5  0  0  0  data/redder82.dat  0  0
-1  1  2  0.000000  2.000000  0  180  0  1.0  1  15  0  0  0  data/schardt52.dat  0  0
+1  1  2  0.000000  2.000000  0  180  0  1.0427830056156089  1  5  0  0  0  data/redder82.dat  0  0
+1  1  2  0.000000  2.000000  0  180  0  1.0793010900668574  1  15  0  0  0  data/schardt52.dat  0  0
 </segmentsData>
 <segmentsTest>
 </segmentsTest>
 <targetInt>
 
 </targetInt>
+<parameterSettings>
+# Prior centres: segment_N_norm|segment_N_energy_shift prior_centre value
+segment_2_norm prior_centre 1
+segment_3_norm prior_centre 1
+</parameterSettings>
 <thm>
 # no THM segment here: Table 3 is fitted as an on-shell S(E); the options are those of the HOES variants in thm_lit
 entranceL=incoherent
