@@ -1,4 +1,8 @@
-# E_lab(MeV) angle sigma(b) err ; Pizzone et al. PRC 83 (2011) 045801, THM 6Li(d,alpha) via 3He breakup, EXFOR D0649002; penetrability-corrected, normalised to direct data
+# E_lab(MeV) angle sigma(b) err ; Pizzone et al. PRC 83 (2011) 045801, 6Li(d,alpha)4He from the 3He break-up 6Li(3He,aa)H,
+# E(3He) = 17.5 MeV on 6LiF (Rez); Trojan horse 3He = d + p, spectator p, |p_s| < 35 MeV/c; EXFOR D0649002.
+# The published points are corrected for the penetrability factor (an l = 0 and an l = 2 term, each normalised to direct data
+# over E_cm = 0.4-5 MeV): an on-shell-equivalent cross section, fitted here as the angle-integrated sigma with a free norm.
+# E_lab = E_cm (m_d + m_6Li)/m_6Li; EXFOR has no uncertainties for this entry: err = 10 % assigned.
 0.57398  0.0  3.64000e-02  3.640e-03
 0.66742  0.0  3.19000e-02  3.190e-03
 0.77421  0.0  2.86000e-02  2.860e-03
