@@ -656,12 +656,14 @@ for bit equal to none.
 ``residual_jacobian``, the fitter in the user's script; not part of the
 tests).
 
-18O(p,α)15N, ``examples/o18_lacognata2010`` (THM 39 points, La Cognata
+18O(p,α)15N, ``examples/o18_lacognata2010`` as it was before October 2026
+(plane-wave vertex, no 3/2\ :sup:`−` level; THM 39 points, La Cognata
 2010, with the linear S-factor background of an earlier joint fit,
 :math:`-5152 + 7002\,E` MeV b, subtracted -- not the authors' dashed line
 of their Fig. 4, which lies above it below 0.84 MeV; Mak 1978, 32; Amsel 1967, 90;
 the two 1/2\ :sup:`+` levels' energies and four widths and the two direct
-norms free). χ² per data set:
+norms free; since then the example subtracts the authors' line instead,
+see the note after the table). χ² per data set:
 
 ======================================================  =========  ========  =========
 THM model                                               THM (39)   Mak (32)  Amsel (90)
@@ -684,6 +686,26 @@ the THM alone barely needs it (198 → 192). It does not resolve the tension:
 :math:`\chi^2/N` of the THM stays 7.5–8.3 with the direct data, and 5.1
 without them, i.e. the published points scatter beyond their errors about
 any smooth model.
+
+*The example now.* ``examples/o18_lacognata2010`` (October 2026) fits the
+THM points with the authors' background subtracted (their dashed line,
+:math:`2186\,E - 1109` MeV b, ``data/thm_lc2010_hoes_authbkg.dat``) and a
+profiled ``background=linear`` on the experiment line, the 3/2\ :sup:`−`
+597.6 keV level (:math:`E_x` = 8.5912 MeV, :math:`l_p = 1`, :math:`l_\alpha
+= 2`) at the LUNA widths, held fixed (:math:`\Gamma_p` = 36 eV,
+:math:`\Gamma_\alpha` = 2.5 keV), and the DW entrance vertex
+(``distortion=optical opticalAA=ancai06 opticalSF=kd03:extrapolate
+vertexModel=dw``): :math:`\chi^2` 329.62 (THM 247.15 / 39, Mak 28.29 / 32,
+Amsel 54.19 / 90; :math:`E_{r1}` 604.4 keV, :math:`\Gamma_{p1}` 5.13 keV,
+:math:`\Gamma_{\alpha 1}` 179.5 keV), against 582.80 before. The level is
+seen in the THM spectrum as the step at 0.58-0.62 MeV and is consistent with
+the direct widths only with the DW vertex (18O cross-check, October 2026; dw,
+5.1 fm, joint χ² without / with the level 480.7 / 330.0, free
+:math:`\Gamma_p` = 44(6) eV against LUNA 36(2)); with the plane-wave vertex
+the LUNA widths predict a peak twice the doublet's height (THM χ² +1300) and
+a free fit puts :math:`\Gamma_p` at 0.6 eV, so the level and the DW vertex
+go together. The tables of this page that quote 410-414 for this THM
+segment are at the earlier example.
 
 19F(p,α\ :sub:`2`)16O, the full 53-point THM window of Su et al. 2025
 (``examples/f19_pag_thm`` model, stage J2 parameters -- 22 R-matrix
@@ -1408,7 +1430,8 @@ changes by a factor 0.012-5.4 across the data (a factor 440), and the THM
 :math:`\chi^2` goes 61 → 3247 (192 points); with the 2026-like ``dw``,
 Ebeam 30.11: 61 → 2999. Published 12C+12C :math:`S^*` would move by 2-3
 orders of magnitude below 1.5 MeV. For a light system with a neutron
-spectator, 2H(18O,α15N)n at 54 MeV (``examples/o18_lacognata2010``, only the
+spectator, 2H(18O,α15N)n at 54 MeV (``examples/o18_lacognata2010`` before
+October 2026, plane-wave vertex, THM :math:`\chi^2` 414; only the
 :math:`d + {}^{18}`\ O Coulomb wave, :math:`\eta_{aA} = 0.73`, is
 distorted): :math:`R` = 0.93-1.08 over 0.51-0.89 MeV and the THM
 :math:`\chi^2` 414 → 397 (``dw``: 398); for the made-up charged 18O(3He,d)
