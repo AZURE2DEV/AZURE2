@@ -154,3 +154,30 @@ add_test(NAME pyazr_thm_vertex_memo_sessions
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_vertex_memo_sessions_test.py)
 set_tests_properties(pyazr_thm_vertex_memo_sessions PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1"
                      TIMEOUT 300)
+
+# save_fit writes the fitted direct-segment norms into the snapshot (the
+# default), so it reproduces the fit's chi-squared when run alone; or keeps
+# the prior centres (norms="nominal") with the fitted values in the .sav.
+add_test(NAME pyazr_save_fit_norms
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/save_fit_norms_test.py)
+set_tests_properties(pyazr_save_fit_norms PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# write_output_files returns the project's own output directory.
+add_test(NAME pyazr_output_dir
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/output_dir_test.py)
+set_tests_properties(pyazr_output_dir PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# thm_vertex flags (warns / raises) the energies its window does not reach.
+add_test(NAME pyazr_thm_vertex_reach
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_vertex_reach_test.py)
+set_tests_properties(pyazr_thm_vertex_reach PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# calculate_energies & co. run no observed-to-formal transformation, so an
+# RWA vector no longer prints "Denominator less than zero".
+add_test(NAME pyazr_geometry_no_transform
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/geometry_no_transform_test.py)
+set_tests_properties(pyazr_geometry_no_transform PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

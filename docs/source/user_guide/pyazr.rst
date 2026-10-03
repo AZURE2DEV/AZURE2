@@ -229,9 +229,15 @@ To snapshot a fit, prefer :meth:`~pyazr.azure2.azure2.save_fit`, which wraps
    azr, sav = m.save_fit("7Be_fit.azr")        # or save_fit(path, x_best)
 
 It converts the fit to the physical values a ``<levels>`` line holds, writes
-the companion ``param.sav`` carrying the normalizations and energy shifts that
-block cannot hold, and then reopens what it wrote and checks it against the fit
---- removing both files and raising if they disagree.  ``path`` is always
+the fitted free normalizations and energy shifts into their ``<segmentsData>``
+lines, writes the companion ``param.sav`` carrying every parameter, and then
+reopens what it wrote and checks it against the fit (the parameters, and the
+data :math:`\chi^2` of the snapshot run alone) --- removing both files and
+raising if they disagree.  A segment's norm (shift) field is also the centre
+of its prior, so a fit started from the snapshot is centred on the fitted
+values; ``save_fit(path, x, norms="nominal")`` keeps the loaded file's values
+there and the fitted ones in the ``.sav`` only (run with it as the parameter
+file to reproduce the fit).  See :ref:`nominal-norm`.  ``path`` is always
 explicit; nothing is written in place.  Note a ``.azr`` names its data files
 relative to itself, so a snapshot runs from the directory the original did.
 

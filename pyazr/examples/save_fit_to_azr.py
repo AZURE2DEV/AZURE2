@@ -1,9 +1,11 @@
 """Save a fit back into a .azr you can reopen in the GUI.
 
 ``azure2.save_fit`` does the whole thing: it converts the fit to the physical
-values a ``<levels>`` line holds, writes a companion ``param.sav`` for the
-normalizations and energy shifts that block cannot carry, and verifies the
-result before handing it back.  This example is the wrapper around it -- load a
+values a ``<levels>`` line holds, writes the fitted normalizations and energy
+shifts into their ``<segmentsData>`` lines (``norms="nominal"`` keeps the
+prior centres there and the fitted values in the ``.sav`` only), writes a
+companion ``param.sav`` with every parameter, and verifies the result before
+handing it back.  This example is the wrapper around it -- load a
 fit from ``param.sav`` or a numpy file, optionally re-radius the model, and
 write the snapshot:
 

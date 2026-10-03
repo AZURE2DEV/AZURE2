@@ -213,6 +213,11 @@ struct ThmVertexReport {
   /// the plane-wave nodes are not used (empty).
   std::vector<std::vector<double>> p, weight, es, theta;
   std::vector<std::vector<double>> rho;  ///< [E][node] p_xA a / hbar c
+  /// 1 where the vertex at E is E's own, 0 where the window (or the DW grid)
+  /// does not reach E and the nodes and vertex are those of the nearest data
+  /// point or grid energy, as for a folding sub-point (ThmSpectatorWindow::Nodes,
+  /// ThmDwVertex::Interpolate).  Always 1 for a delta experiment.
+  std::vector<char> reached;
   /// The plane-wave window itself (null without one), e.g. for its Density.
   std::shared_ptr<const ThmSpectatorWindow> windowObject;
   /// "pw" (the plane-wave vertex) or "dw" (vertexModel=dw, ThmDwVertex.h).

@@ -44,6 +44,33 @@ it absorb every discrepancy in the model.
 A segment with **Vary Norm?** enabled but no quoted error has no penalty, and
 its normalization is genuinely unconstrained.
 
+.. _nominal-norm:
+
+**The nominal normalization is the Data Norm. column.** A segment line has
+one normalization field, and AZURE2 reads it as two things at once: the
+*start value* of the fit (or the value a calculation uses) and the *centre*
+:math:`n_s^{\text{nom}}` of the penalty above (which also scales its width,
+:math:`n_s^{\text{nom}}\epsilon_s/100`). A fit leaves the column alone and
+writes the fitted normalizations to ``param.sav`` and ``normalizations.out``,
+so the prior stays where it was put. Anything that copies fitted values into
+the column moves the prior with them:
+
+- the Fitting tab, when it loads a ``param.sav``, writes the normalizations
+  into the column, and a fit started from the saved project is then centred
+  on them (not on the experimental value);
+- pyazr's ``save_fit`` writes them too by default (``norms="fitted"``), so
+  the snapshot run on its own -- CLI, GUI or a fresh session -- reproduces the
+  fitted data :math:`\chi^2`; ``save_fit(..., norms="nominal")`` keeps the
+  column (the prior centres) and puts the fitted values only in the ``.sav``,
+  which then has to be given as the parameter file (Run tab, *Parameters
+  File*; CLI "use previous parameters") to reproduce the fit.
+
+No classic field holds the two separately, so neither tool can keep both
+without a change of file format; it is the user's choice. To refit with the
+experimental priors, set the column back to the nominal value (usually 1)
+first: the fit then starts at that value and returns to the same minimum.
+The same holds for the energy-shift column and its penalty below.
+
 The energy-shift penalty
 ------------------------
 

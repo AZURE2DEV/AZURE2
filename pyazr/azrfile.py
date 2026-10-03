@@ -1780,6 +1780,86 @@ class AzrModel:
             raise KeyError(f"no <segmentsData> line matches {file_substr!r}.")
         return changed
 
+    def segment_values(self):
+        """``{key: (norm, shift)}`` of every ``<segmentsData>`` line, ``key``
+        the engine's segment key (1-based line number, inactive lines
+        counted: the ``segment_<key>_norm`` names of the parameters); shift
+        is None on a line without the energy-shift fields."""
+        out = {}
+        for key, (t, i) in self._segment_lines().items():
+            shift = float(t[i + 3]) if len(t) > i + 3 and _isnum(t[i + 3]) else None
+            out[key] = (float(t[i]), shift)
+        return out
+
+    def _segment_lines(self):
+        """``{key: (tokens, norm index)}`` of the ``<segmentsData>`` lines."""
+        out, inside, key = {}, False, 0
+        for line in self._suffix.splitlines():
+            s = line.strip()
+            if s == "<segmentsData>":
+                inside = True
+            elif s == "</segmentsData>":
+                inside = False
+            elif inside and s:
+                key += 1
+                t = line.split()
+                isDiff = int(float(t[7]))
+                out[key] = (t, 8 + (2 if isDiff % 10 == 2 else 0))
+        return out
+
+    def set_segment_values(self, values):
+        """Write normalizations and energy shifts into ``<segmentsData>``.
+
+        ``values`` maps the engine's segment key (see :meth:`segment_values`)
+        to ``(norm, shift)``; either may be None to leave it.  Only those two
+        fields of those lines change (the rest of each line, spacing
+        included, is kept).  **The norm field is also the centre of the
+        segment's normalization prior** (and of its percentage error) when a
+        fit starts from this file, and the shift field the centre of the
+        shift prior: writing fitted values here moves those centres -- see
+        :meth:`pyazr.azure2.azure2.save_fit`.  Returns the number of lines
+        changed; KeyError for a key with no line.
+        """
+        lines = self._suffix.splitlines()
+        inside, key, changed, seen = False, 0, 0, set()
+        for n, line in enumerate(lines):
+            s = line.strip()
+            if s == "<segmentsData>":
+                inside = True
+                continue
+            if s == "</segmentsData>":
+                inside = False
+                continue
+            if not (inside and s):
+                continue
+            key += 1
+            if key not in values:
+                continue
+            seen.add(key)
+            norm, shift = values[key]
+            spans = _token_spans(line)
+            t = [line[a:b] for a, b in spans]
+            i = 8 + (2 if int(float(t[7])) % 10 == 2 else 0)
+            edits = {}
+            if norm is not None:
+                edits[i] = repr(float(norm))
+            if shift is not None:
+                if not (len(t) > i + 3 and _isnum(t[i + 3])):
+                    raise ValueError(f"segment {key} has no energy-shift field to write.")
+                edits[i + 3] = repr(float(shift))
+            if not edits:
+                continue
+            for k in sorted(edits, reverse=True):
+                a, b = spans[k]
+                line = line[:a] + edits[k] + line[b:]
+            lines[n] = line
+            changed += 1
+        missing = set(values) - seen
+        if missing:
+            raise KeyError(f"no <segmentsData> line with key(s) {sorted(missing)}.")
+        self._set_suffix_lines(lines)
+        return changed
+
     def engine_level_keys(self):
         """``{(jgroup, level): AzrLevel}`` -- the numbering AZURE2 itself uses.
 

@@ -46,6 +46,24 @@ def _in_dir(path):
 
 _THM_BACKGROUND_TERMS = {"none": 0, "const": 1, "linear": 2, "quadratic": 3}
 
+
+def _config_output_dir(path):
+    """The output directory of a ``.azr``, parsed as Config::ReadConfigFile
+    does: the line after the first one of ``<config>``, cut at its last
+    ``#`` and trimmed ("" if there is none)."""
+    with open(path) as fh:
+        lines = fh.read().splitlines()
+    try:
+        i = next(k for k, line in enumerate(lines) if line == "<config>")
+    except StopIteration:
+        return ""
+    if i + 2 >= len(lines):
+        return ""
+    line = lines[i + 2]
+    if "#" in line:
+        line = line[:line.rindex("#")]
+    return line.strip(" \n\t\r")
+
 class _Engine:
     """A ``_azure2.Session`` whose every call is made from the model's directory.
 
@@ -163,6 +181,19 @@ class azure2:
     def is_alive(self):
         """Is the engine still open? False once close() has run."""
         return self._sess is not None
+
+    @property
+    def output_dir(self):
+        """The project's output directory, as the engine resolves it.
+
+        The second line of ``<config>`` (up to its ``#`` comment, trimmed),
+        relative to :attr:`cwd` unless absolute -- the directory AZURE2
+        writes ``AZUREOut_*``, ``chiSquared.out`` and ``param.sav`` to.  It is
+        read from the file each time, so a project whose output lives
+        elsewhere than ``output/`` is reported as such.
+        """
+        outdir = _config_output_dir(self.file)
+        return os.path.normpath(os.path.join(self.cwd, outdir)) if outdir else self.cwd
 
     def configure(self):
         """Re-read the parameter, pair and dataset metadata from the engine, after anything that rebuilt the model."""
@@ -581,7 +612,8 @@ class azure2:
     def update_rwa_params_from_sav(self):
         """Reload params_rwa from the run's param.sav."""
         with _in_dir(self.cwd):
-            all_rwa_params = np.loadtxt('output/param.sav', usecols=(1,))
+            all_rwa_params = np.loadtxt(os.path.join(self.output_dir, 'param.sav'),
+                                        usecols=(1,))
         self.params_rwa = []
         for i in range(len(all_rwa_params)):
             if self.fixed_params[i]:
@@ -592,8 +624,9 @@ class azure2:
     def update_sav_from_rwa_params(self, best):
         """Write a free RWA vector back out to param.sav."""
         params_full = []
+        sav = os.path.join(self.output_dir, 'param.sav')
         with _in_dir(self.cwd):
-            with open('output/param.sav', 'r') as f:
+            with open(sav, 'r') as f:
                 for line in f.readlines():
                     l = line.split()
                     params_full.append([l[0], float(l[1]), float(l[2])])
@@ -606,11 +639,11 @@ class azure2:
                     params_full[i][1] = best[idx]
                     idx += 1
 
-            with open('output/param.sav.new', 'w') as f:
+            with open(sav + '.new', 'w') as f:
                 for param in params_full:
                     f.write(f"{param[0]} {param[1]} {param[2]}\n")
 
-    def save_fit(self, path, x=None, param_sav=True, verify=True):
+    def save_fit(self, path, x=None, param_sav=True, verify=True, norms="fitted"):
         """Snapshot a fit as a ``.azr`` you can reopen, plot, or hand over.
 
         ``path`` is required and is written to explicitly -- nothing is ever
@@ -634,17 +667,43 @@ class azure2:
         Two things a ``<levels>`` block cannot carry, which is why this is not
         just :meth:`~pyazr.azrfile.AzrModel.apply_fit`:
 
-        - **Normalizations and energy shifts are not in it.** A calculate run
-          on a bare snapshot uses 1.0 for every dataset, so its chi-squared sits
-          above the fit's by whatever the normalizations were absorbing. With
-          ``param_sav`` (the default) a companion ``<name>.sav`` is written
-          beside the file carrying every parameter, free and fixed; hand that to
-          AZURE2 as the external parameter file and the model is whole.
+        - **Normalizations and energy shifts are not in it.** They live in the
+          ``<segmentsData>`` lines, whose norm (and shift) field AZURE2 reads
+          as two things at once: the *start value* of a fit or calculation,
+          and the *centre of the prior* (the penalty
+          ``((n - n0)/(n0 sigma%/100))^2``, likewise for the shift).  A classic
+          ``.azr`` has one field for both, and a CLI/GUI fit leaves it alone:
+          the fitted values go to ``param.sav``.  ``norms`` chooses:
+
+          ``"fitted"`` (default)
+              the free norms and free shifts of the fit are written into
+              their segment lines.  The snapshot run on its own -- CLI
+              calculate, GUI, a fresh pyazr session -- gives the fitted data
+              chi-squared exactly (checked by ``verify``).  The price: the
+              prior of a fit started from the snapshot is centred on the
+              fitted value, not on the original nominal value (its
+              Norm-chi-squared is 0 at the start).  Before October 2026 this
+              wrote the norms to the ``.sav`` only, and a ``_fit.azr`` run
+              alone gave another chi-squared (18O 2010: 7483 against 1872).
+          ``"nominal"``
+              the segment lines keep the loaded file's values, i.e. the prior
+              centres; the fitted norms and shifts are in the ``.sav`` only
+              (needs ``param_sav``).  Run with that ``.sav`` as the external
+              parameter file (CLI: "use previous parameters"; GUI: Run tab,
+              Parameters File) and the chi-squared and the priors are both
+              those of the fit; run on its own it is not the fit.
+
+          No classic field holds the two separately, and adding one would
+          change the file format, so the choice is the caller's.
+          ``param_sav`` (the default) writes the companion ``<name>.sav``
+          beside the file, carrying every parameter, free and fixed.
         - **A written file is not a fit until it reads back as one.** With
           ``verify`` (the default) the result is reopened and its own
           parameters transformed back; if any R-matrix value disagrees the
           files are removed and this raises, rather than leaving a snapshot
-          that is quietly a mixture.
+          that is quietly a mixture.  With ``norms="fitted"`` (data mode) the
+          reopened file's data chi-squared must also equal the fit's (rel.
+          1e-6).
 
         A ``.azr`` names its data files and its output directory *relative to
         itself*, so a snapshot only runs from the directory the original did.
@@ -652,6 +711,11 @@ class azure2:
 
         Returns ``(azr_path, sav_path_or_None)``.
         """
+        if norms not in ("fitted", "nominal"):
+            raise ValueError(f"norms must be 'fitted' or 'nominal', not {norms!r}.")
+        if norms == "nominal" and not param_sav:
+            raise ValueError("norms='nominal' keeps the fitted norms in the .sav "
+                             "only; it needs param_sav=True.")
         x = np.asarray(self.params_rwa if x is None else x, float).ravel()
         # Every parameter's physical value, fixed ones included (see above).
         want = np.asarray(self.transform_all_rwa(self._all_rwa(x), include_fixed=True), float)
@@ -661,6 +725,16 @@ class azure2:
         model.apply_fit(self.parameters, want, physical=True, pairs=self.pairs,
                         include_fixed=True)
         self._save_cbkg(model, np.asarray(self._all_rwa(x), float))
+        if norms == "fitted":
+            values = {}
+            for p in self.parameters:
+                if p.kind not in ("norm", "shift") or p.fixed or p.free_index is None:
+                    continue
+                n, sh = values.get(p.segment_key, (None, None))
+                v = float(x[p.free_index])
+                values[p.segment_key] = (v, sh) if p.kind == "norm" else (n, v)
+            if values:
+                model.set_segment_values(values)
         model.write(path)
 
         sav = None
@@ -693,6 +767,9 @@ class azure2:
                             data_mode=(self.mode == "data")) as check:
                     got = np.asarray(check.transform_all_rwa(
                         check._all_rwa(check.params_rwa), include_fixed=True), float)
+                    chi_got = chi_want = None
+                    if norms == "fitted" and self.mode == "data":
+                        chi_got = check.calculate_chi2_rwa(check.params_rwa)[0]
             except Exception as err:
                 self._discard(path, sav)
                 raise RuntimeError(
@@ -713,6 +790,13 @@ class azure2:
                     f"from ({n or 'a different number of'} parameter(s) "
                     "disagree); it has been removed. This means the .azr and "
                     "the parameter set do not describe the same model.")
+            if chi_got is not None:
+                chi_want = self.calculate_chi2_rwa(x)[0]
+                if not np.isclose(chi_got, chi_want, rtol=1e-6, atol=1e-9):
+                    self._discard(path, sav)
+                    raise RuntimeError(
+                        f"the snapshot run on its own gives chi2 = {chi_got:.10g}, "
+                        f"the fit {chi_want:.10g}; it has been removed.")
         return path, sav
 
     _CBKG_NAME = re.compile(r"([0-9/]+[+-])_(\d+)_([^_]+)_(re|im)([01])")
@@ -1058,7 +1142,7 @@ class azure2:
         r = self.sess.thm_lineshape(str(experiment), np.asarray(energies, float).ravel())
         return r
 
-    def thm_vertex(self, experiment, energies, params=None):
+    def thm_vertex(self, experiment, energies, params=None, strict=False):
         """The THM entrance vertex of an experiment, averaged over its
         spectator-momentum window (``ps=`` on the experiment line).
 
@@ -1110,13 +1194,39 @@ class azure2:
                       weighted mean q), and ``angle_theta_cm`` (deg, c.m. to
                       the beam), ``angle_q`` (MeV/c), ``angle_weights`` give
                       the directions at the grid energy nearest to each E.
+        ``reached``   bool array over E: False where the window (or, for
+                      ``dw``, the vertex grid) does not reach E.  The engine
+                      then uses the nodes and vertex of the nearest data point
+                      (nearest grid energy for ``dw``) -- right for a folding
+                      sub-point next to the data, but the row at such an E is
+                      not the vertex *at* E (several rows can come out
+                      identical).
+
+        Energies out of reach are not silent: a ``UserWarning`` names them,
+        or with ``strict=True`` a ``ValueError`` is raised instead.
 
         Raises the engine error if the experiment is unknown.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         if self.mode == "data":
             self.sess.calculate_chi2_rwa(x)
-        return self.sess.thm_vertex(str(experiment), np.asarray(energies, float).ravel())
+        r = self.sess.thm_vertex(str(experiment), np.asarray(energies, float).ravel())
+        reached = np.asarray(r.get("reached", []), bool)
+        if reached.size and not reached.all():
+            far = np.asarray(r["E"], float)[~reached]
+            shown = ", ".join(f"{e:.6g}" for e in far[:8]) + (" ..." if far.size > 8 else "")
+            where = ("outside the DW vertex grid or beyond the reach of its spectator "
+                     "directions" if r.get("model") == "dw" else
+                     "beyond the reach of the experiment's spectator window")
+            msg = (f"thm_vertex({experiment!r}): {far.size} of {reached.size} energies "
+                   f"are {where} ({r.get('window', '')}); the vertex reported there "
+                   f"is that of the nearest data point / grid energy, not the vertex "
+                   f"at E (E = {shown} MeV; see the 'reached' entry)")
+            if strict:
+                raise ValueError(msg)
+            import warnings
+            warnings.warn(msg, UserWarning, stacklevel=2)
+        return r
 
     def thm_distortion(self, experiment, energies):
         """The distortion factor R(E) of a THM experiment (``distortion=`` on
@@ -1184,7 +1294,9 @@ class azure2:
         default), so the files describe the parameters you asked about rather
         than whatever was evaluated last.
 
-        Returns the output directory.
+        Returns the output directory the engine wrote to (:attr:`output_dir`:
+        the ``<config>`` one, relative to :attr:`cwd`), not a fixed
+        ``cwd/output``.
         """
         x = np.asarray(self.params_rwa if params is None else params, float).ravel()
         with _in_dir(self.cwd):
@@ -1202,7 +1314,7 @@ class azure2:
                 self.sess.update_segments_rwa(x)
             if not self.sess.write_output_files():
                 raise RuntimeError("AZURE2 has no data object to write from.")
-        return os.path.join(self.cwd, "output")
+        return self.output_dir
 
     # -- chi-squared, per segment and per dataset -----------------------------
 
@@ -1552,21 +1664,50 @@ class azure2:
 
     # -- calculations ---------------------------------------------------------
 
-    def calculate_excitation_energy(self, params):
-        """Compound-nucleus excitation energy per segment -- the one axis every entrance pair shares."""
+    def _geometry_rwa(self, params):
+        """The free RWA vector a geometry query (energies, angles) runs at.
+
+        Point energies and angles do not depend on the R-matrix parameters,
+        only on the energy shifts (and nothing on the norms): so the R-matrix
+        block is the session's own amplitudes, and the rest -- norms, shifts,
+        THM coherent-background terms, identical in the physical and the RWA
+        vector -- is taken from ``params``.  Running the RWA path means no
+        observed-to-formal transformation, which is what used to print
+        "Denominator less than zero while transforming" when a caller handed
+        these methods ``params_rwa``: an amplitude read as a width (or a
+        sub-threshold ANC) that no reduced width reproduces.  The CLI never
+        transforms an RWA vector, so it never printed it.
+        """
+        rwa = np.array(self.params_rwa, float).ravel()
+        if params is None:
+            return rwa
+        p = np.asarray(params, float).ravel()
+        if p.size != rwa.size:
+            raise ValueError(f"expected {rwa.size} free parameters, got {p.size}.")
+        n = self.n_rmatrix
+        rwa[n:] = p[n:]
+        return rwa
+
+    def calculate_excitation_energy(self, params=None):
+        """Compound-nucleus excitation energy per segment -- the one axis every entrance pair shares.
+
+        ``params`` may be the physical or the RWA free vector (or None): only
+        its energy shifts matter (see :meth:`calculate_energies`).
+        """
         s = self.sess
-        nsegments = int(s.update_segments(params))
+        nsegments = int(s.update_segments_rwa(self._geometry_rwa(params)))
         return [s.calculated_excitation_energies(i) for i in range(nsegments)]
 
-    def calculate_angles(self, params):
+    def calculate_angles(self, params=None):
         """Per-segment angles of the calculated points, one array per segment.
 
         The companion to :meth:`calculate_energies`: for a differential segment
         the returned angles are AZURE2's own (center-of-mass) values, which
-        differ from the lab angles declared in the ``.azr`` file.
+        differ from the lab angles declared in the ``.azr`` file.  ``params``
+        as for :meth:`calculate_energies`.
         """
         s = self.sess
-        nsegments = int(s.update_segments(params))
+        nsegments = int(s.update_segments_rwa(self._geometry_rwa(params)))
         return [s.calculated_angles(i) for i in range(nsegments)]
 
     @staticmethod
@@ -1658,17 +1799,21 @@ class azure2:
         nsegments = int(s.update_segments_all_rwa(params))
         return [s.calculated_segments(i) for i in range(nsegments)]
 
-    def calculate_energies(self, params):
+    def calculate_energies(self, params=None):
         """Centre-of-mass energies of the calculated points, per segment.
 
-        Takes a physical parameter vector, as :meth:`calculate` does. The
-        energies do not depend on the widths, but the vector still goes through
-        the observed-to-formal transformation. Passing ``params_rwa`` here reads
-        each amplitude as a width in eV and can print "Denominator less than zero
-        while transforming".
+        The energies do not depend on the R-matrix parameters, only on the
+        segments' energy shifts, so ``params`` may be the physical vector (as
+        :meth:`calculate` takes), the RWA vector (:attr:`params_rwa`) or None
+        (the session's own): its norm/shift tail is used, its R-matrix block
+        is not.  The evaluation runs on the session's amplitudes without the
+        observed-to-formal transformation -- before October 2026 it took the
+        physical path, and ``params_rwa`` passed here was read as widths and
+        ANCs (a sub-threshold ANC channel then printed "Denominator less than
+        zero while transforming", which the CLI never does).
         """
         s = self.sess
-        nsegments = int(s.update_segments(params))
+        nsegments = int(s.update_segments_rwa(self._geometry_rwa(params)))
         return [s.calculated_energies(i) for i in range(nsegments)]
 
     def calculate_sfactor(self, params):

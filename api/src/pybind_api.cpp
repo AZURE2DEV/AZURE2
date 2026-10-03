@@ -66,7 +66,11 @@ py::array_t<double> to_array(const vector_r &v) {
 }
 
 // The mirror image: a flat copy of any float64-coercible array.  The engine
-// takes vector_r&, so it needs its own buffer either way.
+// takes vector_r&, so it needs its own buffer either way.  Bindings that
+// release the GIL take their array by const reference: a by-value py::array
+// is reference-counted inside the GIL-free call (copy in, destroy out), and a
+// temporary converted from a Python list then crashed (segfault on
+// calculate_chi2_rwa([...]), October 2026).
 vector_r to_vector(const py::array_t<double, py::array::forcecast> &a) {
   vector_r v(a.size());
   if (a.size() > 0) std::memcpy(v.data(), a.data(), v.size() * sizeof(double));
@@ -325,17 +329,17 @@ class Session {
 
   // -- segment updates (return the number of segments) ------------------------
 
-  int update_segments(py::array_t<double, py::array::forcecast> p) {
+  int update_segments(const py::array_t<double, py::array::forcecast> &p) {
     ConfigScope guard(config_);
     vector_r v = to_vector(p);
     return api_->UpdateSegments(v);
   }
-  int update_segments_rwa(py::array_t<double, py::array::forcecast> p) {
+  int update_segments_rwa(const py::array_t<double, py::array::forcecast> &p) {
     ConfigScope guard(config_);
     vector_r v = to_vector(p);
     return api_->UpdateSegmentsRWA(v);
   }
-  int update_segments_all_rwa(py::array_t<double, py::array::forcecast> p) {
+  int update_segments_all_rwa(const py::array_t<double, py::array::forcecast> &p) {
     ConfigScope guard(config_);
     vector_r v = to_vector(p);
     return api_->UpdateSegmentsAllRWA(v);
@@ -364,12 +368,12 @@ class Session {
 
   // -- chi-squared and derivatives -------------------------------------------
 
-  double calculate_chi2_rwa(py::array_t<double, py::array::forcecast> p) {
+  double calculate_chi2_rwa(const py::array_t<double, py::array::forcecast> &p) {
     ConfigScope guard(config_);
     vector_r v = to_vector(p);
     return api_->CalculateChi2RWA(v);
   }
-  double calculate_chi2_physical(py::array_t<double, py::array::forcecast> p) {
+  double calculate_chi2_physical(const py::array_t<double, py::array::forcecast> &p) {
     ConfigScope guard(config_);
     vector_r v = to_vector(p);
     return api_->CalculateChi2Physical(v);
@@ -496,6 +500,15 @@ class Session {
     d["T_s"] = rows(r.es);
     if (!r.theta.empty()) d["theta_cm"] = rows(r.theta);
     d["E"] = to_array(r.energy);
+    {
+      // Where the window (or the DW grid) does not reach E, the engine uses
+      // the nodes of the nearest data point / grid energy (as for a folding
+      // sub-point): flagged False here.
+      py::array_t<bool> reached(r.reached.size());
+      auto m = reached.mutable_unchecked<1>();
+      for (size_t i = 0; i < r.reached.size(); i++) m(i) = r.reached[i] != 0;
+      d["reached"] = reached;
+    }
     py::list rho;
     for (const std::vector<double> &row : r.rho) rho.append(to_array(row));
     d["rho"] = rho;

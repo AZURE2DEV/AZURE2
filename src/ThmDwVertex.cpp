@@ -619,6 +619,14 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   return "";
 }
 
+bool ThmDwVertex::Reached(double energy) const {
+  if (nE == 0) return false;
+  const double t = (energy - gridLo) / gridStep;
+  if (t < 0.0 || t > nE - 1.0) return false;
+  const int i0 = std::max(0, std::min(nE - 1, (int)std::floor(t))), i1 = std::min(nE - 1, i0 + 1);
+  return valid.empty() || (valid[i0] && valid[i1]);
+}
+
 void ThmDwVertex::AngleNodesAt(double energy, std::vector<double> &weight, std::vector<double> &qk,
                                std::vector<double> &theta) const {
   weight.clear();

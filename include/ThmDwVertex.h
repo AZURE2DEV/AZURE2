@@ -105,6 +105,10 @@ class ThmDwVertex {
   /// direction (gd, nl x 4), with the node weights and q (MeV/c).
   void Interpolate(double energy, std::vector<double> &weight, std::vector<double> &qk, std::vector<double> &g,
                    std::vector<double> &gd, double &qDelta, double &pDelta, bool *outside = nullptr) const;
+  /// Is E inside the grid and between two grid energies where the window is
+  /// reachable?  Elsewhere Evaluate/Interpolate return the end or the nearest
+  /// valid entry.
+  bool Reached(double energy) const;
   /// spectatorAngles: the directions at the grid energy nearest to E (weight,
   /// q in MeV/c, c.m. angle to the beam in deg); empty without the window.
   void AngleNodesAt(double energy, std::vector<double> &weight, std::vector<double> &qk,

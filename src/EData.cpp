@@ -3934,7 +3934,9 @@ bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &e
     out.windowObject = group->window;
     for (double e : energies) {
       std::vector<ThmSpectatorWindow::Node> nodes;
-      w.Nodes(e, nodes);
+      bool moved = false;
+      w.Nodes(e, nodes, &moved);
+      out.reached.push_back(moved ? 0 : 1);
       std::vector<double> p, wt, es, th;
       for (const ThmSpectatorWindow::Node &k : nodes) {
         p.push_back(k.p);
@@ -3950,12 +3952,14 @@ bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &e
   } else if (dw) {
     out.window = dw->angles ? dw->dist.AngleText() : "delta";
     if (dw->angles) out.muSx = dw->dist.muSx;
+    for (double e : energies) out.reached.push_back(dw->Reached(e) ? 1 : 0);
   } else {
     out.window = "delta";
     for (size_t i = 0; i < energies.size(); i++) {
       out.p.push_back({0.0});
       out.weight.push_back({1.0});
       out.es.push_back({configure.thm.SpectatorEnergy(group->pairKey)});
+      out.reached.push_back(1);
     }
   }
   const double mu = pair->GetRedMass() * uconv;
