@@ -252,10 +252,10 @@ a=0.6
 
 </levels>
 <segmentsData>
-1  1  2  0  7  0  180  10  3.659747237e-06  0  0  0  0  0  data/thm_p0.dat  0  0
-1  1  3  0  7  0  180  10  3.659747237e-06  0  0  0  0  0  data/thm_p1.dat  0  0
-1  1  4  0  7  0  180  10  3.659747237e-06  0  0  0  0  0  data/thm_a0.dat  0  0
-1  1  5  0  7  0  180  10  3.659747237e-06  0  0  0  0  0  data/thm_a1.dat  0  0
+1  1  2  0  7  0  180  10  3.659747237e-06  1  0  0  0  0  data/thm_p0.dat  0  0
+1  1  3  0  7  0  180  10  3.659747237e-06  1  0  0  0  0  data/thm_p1.dat  0  0
+1  1  4  0  7  0  180  10  3.659747237e-06  1  0  0  0  0  data/thm_a0.dat  0  0
+1  1  5  0  7  0  180  10  3.659747237e-06  1  0  0  0  0  data/thm_a1.dat  0  0
 1  6  5  0  5.441  0  180  0  0.95469614  0  15  0  0  0  data/spillane2007_g1634.dat  0  0
 1  6  3  0  5.441  0  180  0  1.0278368  0  15  0  0  0  data/spillane2007_g440.dat  0  0
 1  6  5  0  5.441  0  180  0  1.0422867  0  11  0  0  0  data/tan2024_a1.dat  0  0
@@ -283,6 +283,7 @@ entranceL=incoherent
 vertex=constant
 kinematics=lacognata
 coulombIntegral=0
+experiment[E1] segments=1-4 beam=14N target=12C spectator=d Ebeam=30
 </thm>
 <targetInt>
 1  "1"  60  1  0.06  0  0  ""  0  0  0  0  ""  0  0  0.04  20  50

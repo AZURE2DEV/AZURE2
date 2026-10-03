@@ -832,7 +832,11 @@ experiment and carry no line shape. ``tests/thm_lineshape`` and
 it -- but the neglected :math:`\eta_{sb} \approx 0.13` is as large as
 :math:`\zeta`. For 2H(18O,α15N)n the spectator is a neutron: :math:`N_C = 1`.
 For 12C(14N,α20Ne / p23Na)d at 30 MeV (Tumino et al. 2018; ``examples/
-c12c12_tumino2018`` at its parameters, the four THM segments one experiment):
+c12c12_tumino2018`` at its parameters, the four THM segments one experiment,
+as the example's own line ``experiment[E1] segments=1-4 beam=14N
+target=12C spectator=d Ebeam=30`` has them: ``lineshape=on`` and
+``distortion=`` can be switched on there, also in the GUI's THM workspace;
+with both off the example gives :math:`\chi^2` 111.651, THM 61.02):
 :math:`E_{sF}` = 2.76-0.88 MeV over :math:`E` = 0.82-2.69 MeV,
 :math:`\eta_0` = 1.55-2.74, :math:`\zeta` = -0.28 to -0.49 into
 :math:`\alpha_{0,1}` and -0.13 to -0.24 into :math:`p_{0,1}`; the folded
