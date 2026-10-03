@@ -1124,24 +1124,49 @@ the repository).
   (:math:`5\times 10^{4}` times the point value; 0.42 with the isotropic
   measure). Across the whole data range the window changes the (folded) model
   by up to 67 % (73 %) against the quasi-free point.
-- :sup:`7`\ Li(p,α) (``examples/li7_tumino2006``, 2H(7Li,αα)n at 19 MeV,
-  deuteron Trojan horse as its :math:`B = 2.2246` MeV, Hulthén [0, 40]). The
-  fixed-:math:`E` kinematics bound what such a window can mean: at 19 MeV
-  :math:`E_{sF} > 0` needs :math:`E < 2.01` MeV, and above 1.92 MeV the
-  smallest reachable :math:`|p_s|` is above 40 MeV/c (43-68 MeV/c at 1.92
-  MeV), so the window is refused there; the example's THM data reach 6.9
-  MeV (several beam energies in the experiment), which the isotropic measure
-  did not notice. On the 18 THM points below 1.83 MeV (the segment cut at
-  :math:`E_\mathrm{lab}` = 2.15 MeV) the THM model rises by 1.12-1.17 below
-  1 MeV and 1.18-1.31 up to 1.82 MeV, :math:`\langle T_s\rangle` goes from
-  0.69 MeV at 0.08 MeV to 1.61 MeV at 1.82 MeV (only 38-40 MeV/c reachable
-  there), and the THM :math:`\chi^2` (norm profiled) goes 341 → 310. With a
-  :sup:`3`\ He Trojan horse (33 MeV, :math:`B = 5.4935` MeV, Eckart
-  :math:`a = 0.42`, :math:`b = 1.2` fm\ :sup:`-1`, :math:`\mu_{sx} = 625.4`
-  MeV, [0, 40]) the window is out of reach above 1.62 MeV; on the 15 points
-  below 1.51 MeV: 0.98-1.16 below 1 MeV, 1.17-1.18 above, :math:`\chi^2` 218
-  → 176. (With the isotropic measure on all points: 1.14-1.29,
-  :math:`\chi^2` 847 → 933; 3He 0.91-1.15, 1154 → 1227.)
+- :sup:`7`\ Li(p,α): the HOES model of ``examples/li7_tumino2006`` as it
+  was before its THM points were refitted as on-shell-equivalent cross
+  sections (October 2026). It used :math:`B = 2.2246` MeV and is placed
+  here in a deuteron Trojan horse, 2H(7Li,αα)n at 19 MeV, with Hulthén
+  [0, 40]. That is the set-up of Lattuada et al. (2001), not of these data.
+  The fixed-:math:`E` kinematics bound what such a window can mean: at
+  19 MeV :math:`E_{sF} > 0` needs :math:`E < 2.01` MeV, and above 1.92 MeV
+  the smallest reachable :math:`|p_s|` is above 40 MeV/c (43-68 MeV/c at
+  1.92 MeV), so the window is refused there. The THM points reach 6.9 MeV,
+  which the isotropic measure did not notice.
+
+  On the 18 THM points below 1.83 MeV (the segment cut at
+  :math:`E_\mathrm{lab}` = 2.15 MeV):
+
+  * the THM model rises by 1.12-1.17 below 1 MeV and by 1.18-1.31 up to
+    1.82 MeV;
+  * :math:`\langle T_s\rangle` goes from 0.69 MeV at 0.08 MeV to 1.61 MeV
+    at 1.82 MeV, where only 38-40 MeV/c is reachable;
+  * the THM :math:`\chi^2` (norm profiled) goes 341 → 310.
+
+  Refitted jointly with the direct data, the window raises the model's
+  bare :math:`S(0)` from 45.9 to 50.8 keV b. On the scale of the direct
+  data (:math:`S(0)` divided by the fitted low-energy norm) it goes only
+  from 61.5 to 63.0 keV b.
+
+  The points were measured differently. Tumino et al. (2006) used a
+  33 MeV :sup:`3`\ He beam on :sup:`7`\ Li, with the spectator d and
+  :math:`B = 5.4935` MeV, which puts the quasi-free point at
+  :math:`E = 4.15` MeV. With Hulthén :math:`a = 0.42`, :math:`b = 1.2`
+  fm\ :sup:`-1` and the paper's [0, 30] MeV/c, the window is reachable at
+  every point from 0.08 to 6.9 MeV. The smallest reachable :math:`|p_s|` is
+  2.3 MeV/c near 4 MeV and 28 MeV/c at 0.08 MeV; :math:`\langle T_s\rangle`
+  is 0.34-0.67 MeV. A joint HOES refit with that window changes the total
+  :math:`\chi^2` from 1105 to 1063 and the direct-scale :math:`S(0)` from
+  66.5 to 66.4 keV b.
+
+  An earlier version of this paragraph took a 33 MeV :sup:`7`\ Li beam on
+  :sup:`3`\ He (:math:`E_{qf} = -1.35` MeV), the inverse of the experiment,
+  and found the window out of reach above 1.62 MeV. Its numbers describe
+  that set-up only: on the 15 points below 1.51 MeV, 0.98-1.16 below 1 MeV,
+  1.17-1.18 above, and :math:`\chi^2` 218 → 176. With the isotropic measure
+  on all points the deuteron set-up gave 1.14-1.29 and :math:`\chi^2`
+  847 → 933, and that inverse set-up 0.91-1.15 and 1154 → 1227.
 - 12C+12C (``examples/c12c12_tumino2018``, 12C(14N,α/p)d at 30 MeV, the four
   THM segments one experiment with a free norm; :math:`B = 10.27` MeV,
   :math:`\mu_{sx} = 1606` MeV; the d-12C distribution in 14N as an Eckart
