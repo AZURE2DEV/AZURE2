@@ -1676,3 +1676,16 @@ Login-node shells inherit the old module and prove nothing.
   7,407 frozen pre-screen patterns = 11 h of silence before the first log line.  Count the patterns before submitting
   (`moves.channel_pair_flips` / `channel_enumeration` on the seed vector) and cap `max_patterns` (32 gave 3,643).
 
+## 2026-10-03 — local release: judge a flip or a new level after its neighbours have moved
+DeBoer: "Just switching the sign and doing a chi2 test seems like it could easily miss incorrectly assigned or missing levels
+because the rest of the fit has to change to accomindate them."  Until now the sign round's screen (one GN step) and stage-1
+polish freed only the flipped level's own J^pi group (+ norms), and the level-add test only the new level's widths before a short
+global polish -- a move that pays off only once a nearby level of ANOTHER J^pi or a background pole re-partitions was ranked low
+and never polished (13C+alpha Ex 9.4 MeV: a ~400 keV backward-angle (a,n0) deficit that every search called null).
+New, opt-in: `local.local_mask(ev, x, centers, half_width, bg_energy)` = every level of any J^pi within +-half_width MeV, all
+background widths (>= policy.bg_energy), the norms.  `SearchConfig.local_release` (CLI `round --local-release W`) uses it for the
+screen's GN step and the stage-1 polish; `structure add --local-release W --local-nfev N` inserts a local polish between the pinned
+and the global stage, and gives the CONTROL the same local + global budget (so the neighbours' rearrangement is not credited to the
+new level).  Cost: minutes per move instead of seconds -> restrict to residual-run energies.  Test: tests/test_local_release_13n.py
+(13N 3/2- 3.5032 vs 5/2+ 3.5453).  First use: 13C+a/10-3-26_ex94_local.
+
