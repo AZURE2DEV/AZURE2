@@ -1874,12 +1874,12 @@ the plane-wave fit or a previous stage), so differences of a few units of
      - 9.3e-5
      - 775
    * - adopted, pw + window
-     - 57.8 / 28
-     - 19.6, 3.3
-     - 54.9
-     - 3.65
-     - 0.0038
-     - 4e-9
+     - 61.3 / 28
+     - 16.0, 3.4
+     - 36.1
+     - 3.68
+     - 0.0058
+     - 1e-8
      - 775
    * - adopted, dw Coulomb
      - 166.4 / 28
@@ -1898,12 +1898,12 @@ the plane-wave fit or a previous stage), so differences of a few units of
      - 4.0e-3
      - 776
    * - adopted, dw optical + window
-     - 76.7 / 28
-     - 13.2, 5.8
-     - 5.8
-     - 5.39
-     - 0.0128
-     - 2.0e-4
+     - 81.3 / 28
+     - 13.0, 5.8
+     - 3.8
+     - 5.53
+     - 0.0127
+     - 4.0e-4
      - 775
    * - full window, pw
      - 204.0 / 53
@@ -1914,13 +1914,13 @@ the plane-wave fit or a previous stage), so differences of a few units of
      - 2.3e-4
      - 184
    * - full, pw + window
-     - 278.5 / 53
-     - 29.3, 3.6
-     - 542.6
-     - 5.89
-     - 0.0036
-     - 1.4e-5
-     - 56
+     - 217.4 / 53
+     - 23.7, 3.1
+     - 508.8
+     - 5.01
+     - 0.0049
+     - 2e-5
+     - 67
    * - full, dw Coulomb
      - 242.1 / 53
      - 19.8, 7.0
@@ -1937,14 +1937,22 @@ the plane-wave fit or a previous stage), so differences of a few units of
      - 0.0130
      - 4.3e-3
      - 667
-   * - full, dw optical + window
-     - 223.3 / 53
-     - 12.9, 5.0
-     - 98.7
-     - 7.40
+   * - full, dw Coulomb + window
+     - 170.6 / 53
+     - 13.5, 5.6
+     - 32.7
+     - 6.70
      - 0.0118
-     - 3.0e-4
-     - 493
+     - 1.9e-3
+     - 655
+   * - full, dw optical + window
+     - 204.1 / 53
+     - 12.2, 5.2
+     - 62.3
+     - 7.22
+     - 0.0118
+     - 5.4e-4
+     - 564
    * - direct (penalty rows)
      - 
      - 
@@ -1955,27 +1963,34 @@ the plane-wave fit or a previous stage), so differences of a few units of
      - 775(35)
 
 In the full window the plane-wave vertex cannot hold the 828 keV (l = 1)
-strength at its direct value: the fit trades 184 eV (56 eV with the window)
+strength at its direct value: the fit trades 184 eV (67 eV with the window)
 against the THM peak shape. With the DW vertex the same fit keeps 667-727 eV
-at the quasi-free direction (493 eV with the window), the penalty rows fall
-from 342 to 83-122 and the total :math:`\chi^2` from 566 to 309 (optical);
-the THM :math:`\chi^2` itself does not improve (199-242 against 204), the
-790 keV (l = 2) strength stays at 0-10 eV against 17(5), and with the window
-the 564 keV strength drops to 29 eV against 48(7). So the DW vertex removes
-most of the l = 1 conflict but the full window still does not fit together
-with the direct strengths; the adopted window stays. Inside it the DW vertex
-at the quasi-free direction is worse than the plane-wave one (THM
-:math:`\chi^2` 115-166 against 64), mainly because it lifts the 225 keV
-(l = 3) strength to 4-5 × 10\ :sup:`-3` eV against 1.1(4) × 10\ :sup:`-3`;
-with the window it is close (77 against 64, penalty 6 against 8).
+at the quasi-free direction (564 eV with optical waves and the window, 655 eV
+with Coulomb waves and the window), the penalty rows fall from 342 to 83-122
+(33-62 with the window) and the total :math:`\chi^2` from 566 to 309
+(optical); the THM :math:`\chi^2` improves little (199-242 at the quasi-free
+direction, 171-204 with the window, against 204), the 790 keV (l = 2)
+strength stays at 0-10 eV against 17(5) in every vertex model, and with
+optical waves and the window the 564 keV strength drops to 34 eV against
+48(7). So the DW vertex removes most of the l = 1 conflict but the full
+window still does not fit together with the direct strengths; the adopted
+window stays. Inside it the DW vertex at the quasi-free direction is worse
+than the plane-wave one (THM :math:`\chi^2` 115-166 against 64), mainly
+because it lifts the 225 keV (l = 3) strength to 4-5 × 10\ :sup:`-3` eV
+against 1.1(4) × 10\ :sup:`-3`; with the window it keeps the 213 keV
+strength at its direct value with small penalties (3.8 against 7.5) but is
+still worse in the THM :math:`\chi^2` (81 against 64).
 :math:`\omega\gamma(11)` moves from 3.7 to 4.3-4.5 × 10\ :sup:`-29` eV
 (quasi-free DW, at the upper end of the plane-wave radius range 2.3-4.4)
-and to 5.4 with the window; the window with plane waves moves the 213 keV
-strength to a third of its direct value (−6.8σ). The fits "with the window"
-in this table were made before October 2026 with the isotropic measure
-:math:`|\phi|^2 p^2\,dp` of the ``ps`` window; with the fixed-:math:`E`
-measure the window changes the vertex ratios as in the table above (dw
-optical 1.24 → 0.94 at 5.136 fm), and these rows have not been refitted.
+and to 5.5 with the window; the window with plane waves moves the 213 keV
+strength to half its direct value (−5.2σ). The rows "with the window" are
+refits (October 2026) with the fixed-:math:`E` measure of the ``ps`` window
+and ``spectatorAngles=cm:135-180`` (equal to ``ps`` alone, "Experimental
+acceptance"), each from the earlier best fit; the full-window dw optical fit
+moved by 0.1 in :math:`\chi^2` over a further 60 evaluations. The fits made
+before October 2026 with the isotropic measure :math:`|\phi|^2 p^2\,dp`
+gave 76.7 / 223.3 (dw optical, adopted / full window) and 57.8 / 278.5 (pw)
+for the THM :math:`\chi^2`, ωγ(11) 5.39 and ωγ(828) 493 eV (dw optical).
 
 *Scope and limits.* The surface term of the prior-form DWBA with the
 internal post amplitude neglected (as for the plane-wave vertex) and without
@@ -3112,7 +3127,7 @@ In eV (Akaike, unscaled; mean, stat, model; range over the six variants):
 ====================  ==============  ===========  ===========  ==================
 quantity              mean            stat         model        range
 ====================  ==============  ===========  ===========  ==================
-ωγ(213)               0.0065          0.059        0.0037       0.0027-0.020
+ωγ(213)               0.0065          0.060        0.0037       0.0027-0.020
 ωγ(324)               21.4            335          8.1          12.2-32.2
 ωγ(11) [1e-29]        2.69            28           0.23         2.48-4.25
 ====================  ==============  ===========  ===========  ==================
@@ -3124,7 +3139,12 @@ them nothing, decide the quoted value. The linearised statistical errors are
 larger than the values: without the direct-strength rows the THM scale is
 free and the absolute widths rest on the direct data below 0.35 MeV, so in
 this example the model spread is the informative number, and the statistical
-one says that the data alone do not fix the strengths.
+one says that the data alone do not fix the strengths. (These numbers are
+from a rerun with every variant in its own process, after the
+``vertex=constant`` memo fix of October 2026: the first run, all six
+variants in one process, had the 5.1 and 6.1 fm fits differ by up to
+4 × 10\ :sup:`-5` in :math:`\chi^2` and 4 × 10\ :sup:`-6` in the strengths, and
+the statistical error of ωγ(213) was 0.059.)
 
 *The driver.* ``scripts/thm_model_average.py <project.azr> --out <dir>``
 with the axes ``--radius-pairs K.. --radii R..``, ``--vertex-model pw dw``,
