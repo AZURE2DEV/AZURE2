@@ -69,7 +69,13 @@ No classic field holds the two separately, so neither tool can keep both
 without a change of file format; it is the user's choice. To refit with the
 experimental priors, set the column back to the nominal value (usually 1)
 first: the fit then starts at that value and returns to the same minimum.
-The same holds for the energy-shift column and its penalty below.
+The examples ``n15_lacognata2007``, ``li7_tumino2006`` and
+``li6_pizzone2011`` are stored that way: their direct norms with a prior sit
+at 1 (the experimental value), their R-matrix parameters are the best fit
+with those priors. A calculation of the file alone is then at the nominal
+norms, not at the minimum; a fit started from it returns to the minimum.
+Both numbers are quoted in the THM documentation ("Examples"). The same
+holds for the energy-shift column and its penalty below.
 
 The energy-shift penalty
 ------------------------
