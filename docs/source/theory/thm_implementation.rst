@@ -2168,7 +2168,8 @@ the same checks in ``AzrModel`` and on the page, round trips byte for byte.
 
 *Size: the spread of standard choices, 19F(p,αγ)16O.* ``examples/f19_pag_thm``
 (19F + d at 55 MeV, :math:`a_p` = 5.136 fm, ``vertex=constant``, as in the
-radius table of the previous section), ``vertexModel=dw``; :math:`l` ratios
+radius table of the previous section; the example before October 2026,
+THM :math:`\chi^2` 63.9), ``vertexModel=dw``; :math:`l` ratios
 from the whole THM range (so that 828 keV lies on the vertex grid), the THM
 :math:`\chi^2` of the adopted window (28 points) at the example's parameters
 (fitted with the plane-wave vertex; profiled norm and linear background,
@@ -2471,7 +2472,8 @@ changes little anyway (DW :math:`\chi^2` 5670.0 with, 5669.9 without the
 cut).
 
 *Size* (models at the parameters of the examples, not refitted).
-19F (``examples/f19_pag_thm``, :math:`a_p` = 5.136 fm, ``vertex=constant``;
+19F (``examples/f19_pag_thm`` before October 2026 -- THM :math:`\chi^2` 63.9
+in the adopted window; the refitted example has 54.2 --, :math:`a_p` = 5.136 fm, ``vertex=constant``;
 optical potentials of the DW section): the :math:`l` ratios of the DW vertex
 and the THM :math:`\chi^2` of the adopted window (28 points) and of all 53
 points:
@@ -3001,7 +3003,9 @@ as it does the plane-wave one (the shape factors differ by the 30 keV folding
 of the steep :math:`R`); on the DW vertex its effect differs (1.9-8.2)
 because the DW vertex changes the relative weights of the entrance partial
 waves in the coherent level sum, not because of an overlap. 19F(p,αγ)16O
-from 19F(d,n) at 55 MeV (``examples/f19_pag_thm``, THM :math:`\chi^2` 63.9):
+from 19F(d,n) at 55 MeV (``examples/f19_pag_thm`` as it was before October
+2026, THM :math:`\chi^2` 63.9; the current example, with the published JUNA
+table and the 0.0092 cap on the hidden THM bars, has 54.2):
 the spectator is a neutron, :math:`N_C = 1` (byte-identical);
 :math:`C_l` (:math:`p` + 19F, :math:`Z_xZ_A = 9`, deep below the barrier)
 changes the model by 0.26-1.0 (:math:`\chi^2` 133); :math:`R` (only the
