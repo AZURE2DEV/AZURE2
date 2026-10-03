@@ -1,3 +1,5 @@
+# E_lab(MeV) angle sigma(b) err ; Redder et al. Z. Phys. A 305 (1982) 325, Tbl. 1 = EXFOR A0142002: 15N(p,a0)12C sigma, E_p lab, mb -> b.
+# err = EXFOR DATA-ERR: 5 % (counts, absolute cross section, beam energy) except the three lowest points. Segment norm error 5 %.
 0.0776 0 2.4e-08 5e-09
 0.0785 0 2e-08 4e-09
 0.0923 0 1.8e-07 3e-08

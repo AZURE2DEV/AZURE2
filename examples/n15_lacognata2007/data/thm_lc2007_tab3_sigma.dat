@@ -1,4 +1,9 @@
-# E_lab(MeV) angle sigma(b) err ; Table 3 S(E) converted to sigma = S/E exp(-2 pi eta) (on-shell-equivalent; free scale)
+# E_lab(MeV) angle sigma(b) err ; La Cognata et al. PRC 76 (2007) 065804, Table 3 = EXFOR C1788004: 15N(p,a0)12C S(E) from the
+# quasi-free 2H(15N,a12C)n, 60 MeV 15N on CD2 (TAMU K500); Trojan horse d = p + n, spectator n, B = 2.2246 MeV (field 32 of the p+15N lines).
+# Table 3 is the A+B / A+C average, corrected for the penetrability and normalised to direct data (area of the 312 keV resonance;
+# Tribble et al. RPP 77 (2014) 106901): an on-shell-equivalent S(E), not a HOES yield; fitted as the on-shell sigma, free norm, no folding.
+# EXFOR EN-CM is labelled MEV but is keV (19.2-576 keV); DATA in MeV b. sigma = S/E exp(-2 pi eta), E_lab = E_cm (m_p + m_15N)/m_15N.
+# err = EXFOR ERR-T; it contains a 16 % 'deconvolution' systematic (EXFOR ERR-SYS, common to all points), treated here as point-to-point.
 0.0204896346 0 2.78376008e-18 5.06138196e-19
 0.0409792693 0 2.72989618e-12 5.07887661e-13
 0.0614689039 0 1.17741742e-09 2.19322852e-10
