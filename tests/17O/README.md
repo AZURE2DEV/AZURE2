@@ -10,11 +10,14 @@ the gradient code but diverge at the observable.
 <sup>17</sup>O(n,α)<sup>14</sup>C, extracted from the three-body
 <sup>2</sup>H(<sup>17</sup>O,α<sup>14</sup>C)H quasi-free breakup.
 
-M. L. Sergi, C. Spitaleri, M. La Cognata *et al.*,
-*Improvement of the high-accuracy* <sup>17</sup>O(n,α)<sup>14</sup>C
-*reaction-rate measurement via the Trojan Horse method for application to*
-<sup>17</sup>O *nucleosynthesis*, Phys. Rev. C **91** (2015) 065803 —
-data as distributed with the THM example, DOI 10.1103/PhysRevC.95.025807.
+G. L. Guardo, C. Spitaleri, L. Lamia *et al.*,
+*Assessing the near threshold cross section of the*
+<sup>17</sup>O(n,α)<sup>14</sup>C *reaction by means of the Trojan horse
+method*, Phys. Rev. C **95** (2017) 025807, DOI 10.1103/PhysRevC.95.025807
+(the earlier measurement: M. Gulino *et al.*, Phys. Rev. C **87** (2013)
+012801(R)) — data as distributed with the THM example. (Sergi *et al.*,
+Phys. Rev. C **91** (2015) 065803, cited here before, is the
+<sup>17</sup>O(p,α)<sup>14</sup>N THM paper, not these data.)
 
 23 points, one segment.
 

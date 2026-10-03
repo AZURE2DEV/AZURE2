@@ -15,7 +15,7 @@ interference between the 312 and 962 keV resonances.
 
 Data:
 - data/lacognata_a.dat, lacognata_b.dat — M. La Cognata et al., PRC 76,
-  035801 (2007), EXFOR C17880031/2: the THM-derived on-shell cross section
+  065804 (2007), EXFOR C17880031/2: the THM-derived on-shell cross section
   (two spectator-momentum selections), E_cm = 20-500 keV. EXFOR carries no
   point errors; 10% assigned. These are *derived* sigma, already
   penetrability-corrected, so unlike 6Li_d and 7Li_p_a they enter as

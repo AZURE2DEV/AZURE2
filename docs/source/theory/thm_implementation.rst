@@ -352,6 +352,26 @@ Which ``kinematics=`` to use
    arbitrary normalization, so only the energy dependence of :math:`K(E)`
    matters.
 
+HOES yields or on-shell-equivalent points?
+   Before any of the above, check what the published points are. Many THM
+   papers divide the extracted cross section by the penetrability (and
+   normalize it to direct data), so the points are an *on-shell-equivalent*
+   :math:`\sigma(E)` or :math:`S(E)`, not a HOES yield; they are fitted with
+   the ordinary on-shell observable and a free norm, not as a THM segment.
+   ``examples/li7_tumino2006`` (Tumino et al. 2006, EXFOR O1653002) and
+   ``examples/li6_pizzone2011`` (Pizzone et al. 2011, EXFOR D0649002) use the
+   published, penetrability-corrected points, so **they are on-shell fits**:
+   neither the THM vertex, the Trojan-horse binding energy, the spectator
+   window nor any other option of this page acts on them, and they test
+   nothing THM-specific. Fitting them as HOES (as these examples did before
+   October 2026) halves the 7Li :math:`S(0)` through the direct norms. The
+   HOES yields themselves (after the division by :math:`\lambda_3/\lambda_2
+   |\phi|^2`, before the penetrability step), published with the per-:math:`l`
+   constants used, would allow true THM fits of these reactions.
+   ``examples/n15_lacognata2007`` (Table 3) is on-shell for the same reason;
+   ``examples/o17_guardo2017_fit``, the 18O, 19F and 12C+12C examples fit
+   genuine HOES yields.
+
 THM experiments
 ---------------
 
@@ -3067,6 +3087,42 @@ parameters that only rescales :math:`m` is absorbed by :math:`n^*` and gives
 no band, as it should: the THM scale is arbitrary.
 ``tests/thm_band/check.sh`` checks the band against finite differences of the
 CLI's own output on ``tests/18O_p_a_thm`` with six free parameters.
+
+Examples
+--------
+
+The THM cases in ``examples/`` (each ``<name>.azr`` holds the best fit,
+``data/`` headers name the sources). "File alone" is the CLI calculation of
+the file as stored (``printf '1\n\n\n7\n' | AZURE2 --no-gui
+--no-readline <name>.azr``), the number to compare against after a change;
+"best fit" is the minimum including the norm priors, where it differs (the
+direct norms with a prior are stored at their nominal value 1, so the file
+alone is not at the minimum; see :ref:`nominal-norm`). October 2026.
+
+======================  =========================================  =============  ===================================
+example                 what is fitted                             file alone     best fit (data + priors)
+======================  =========================================  =============  ===================================
+``f19_pag_thm``         HOES (Su 2025 Fig. 1, E ≤ 0.45 MeV), JUNA  77.640 / 59    same (direct norms stored fitted,
+                        Table I, Spyrou; pw, 5.136 fm                             fixed; the fit had 17 penalty rows)
+``o18_lacognata2008``   HOES, three narrow levels                  35.877 / 30    same
+``o18_lacognata2010``   HOES (authors' background + linear), Mak,  329.62 / 161   329.62 + 0.35
+                        Amsel; 3/2\ :sup:`−` at LUNA widths; DW
+``c12c12_tumino2018``   HOES, four channels one experiment         111.651 / 247  same
+                        (``experiment[E1]``), direct data
+``o17_guardo2017_fit``  HOES                                       12.996 / 23    same
+``n15_lacognata2007``   on-shell (Table 3), Redder, Schardt        282.15 / 208   223.41 + 1.01
+``li7_tumino2006``      on-shell-equivalent THM, Rolfs, Cruz,      1299.34 / 294  439.10 + 9.47
+                        Cassagnou, Mani
+``li6_pizzone2011``     on-shell-equivalent THM, Engstler, Elwyn,  210.88 / 132   156.99 + 1.93
+                        McClenahan, Jeronymo
+======================  =========================================  =============  ===================================
+
+Earlier values, at which the size studies on this page that name an example
+were computed: ``f19_pag_thm`` 81.971 (THM 63.93 / 28, digitized JUNA, hidden
+bars ≤ 0.0096), ``o18_lacognata2010`` 582.80 (THM 414.31, joint-fit
+background, plane-wave vertex, no 3/2\ :sup:`−` level), ``n15_lacognata2007``
+223.085, ``li7_tumino2006`` 439.100 and ``li6_pizzone2011`` 229.310 (fitted
+norms as prior centres; before that, as HOES, 1279.69 and 133.504).
 
 Model averaging
 ---------------
