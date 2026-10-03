@@ -6,13 +6,18 @@ and the four widths freed:
 
   1. --dry-run (no numpy, no engine): the variant grid of 2 radii x pw/dw is
      listed with its priors, and the dw variants are reported as refused
-     (no distortion=), as AzrModel refuses them.
+     (no distortion=), as AzrModel refuses them.  The line-shape and R(E)
+     axes: labels, R(E) collapsed for dw, and the refusals of a project
+     without the kinematics keys.
   2. The run (needs numpy, scipy and the engine; skips cleanly otherwise),
-     a few least-squares steps per variant: two variants fitted, two
-     skipped with the reason, the chi2 of each fitted variant is that of
-     its saved snapshot, the weights are Akaike weights of the table, the
-     averaged values are the weighted means of the variants, and the
-     averaged .azr loads and carries them.
+     a few least-squares steps per variant, each in its own subprocess: two
+     variants fitted, two skipped with the reason, the chi2 of each fitted
+     variant is that of its saved snapshot, the weights are Akaike weights
+     of the table, the averaged values are the weighted means of the
+     variants, and the averaged .azr loads and carries them.
+  3. lineshape=on + distortion=coulomb with a --penalty-hook row of 3 and
+     --x-scale 1, no fit steps: the chi2 is that of the same project edited
+     by hand plus 9, in a subprocess and with --in-process alike.
 
 Run from anywhere:  python3 tests/pyazr/thm_model_average_test.py
 """
@@ -91,6 +96,28 @@ try:
           and not any("refused" in l for l in lines if "_pw" in l))
     check("dry run writes nothing", not os.path.exists(os.path.join(tmp, "out")))
 
+    kin = AzrModel.from_file(azr)
+    kin.set_thm_experiment("A", [1, 2], beam="18O", target="d", spectator="n",
+                           Ebeam=54)
+    kazr = kin.write(os.path.join(proj, "kin.azr"))
+    axes = ["--vertex-model", "pw", "dw", "--optical", "coulomb",
+            "--lineshape", "on", "off", "--distortion", "none", "coulomb"]
+    labels = ["pw_ls-on_R-none", "pw_ls-on_R-coulomb", "pw_ls-off_R-none",
+              "pw_ls-off_R-coulomb", "dw_coulomb_ls-on", "dw_coulomb_ls-off"]
+    r = subprocess.run([sys.executable, SCRIPT, kazr] + axes + ["--dry-run"],
+                       capture_output=True, text=True, env=env, timeout=120)
+    lines = [l for l in r.stdout.splitlines() if l.startswith("  ")]
+    check("N_C x R(E) x vertex: 6 variants, R(E) collapsed for dw",
+          r.returncode == 0 and [l.split()[0] for l in lines] == labels, r.stdout + r.stderr)
+    check("with the kinematics keys none is refused",
+          not any("refused" in l for l in lines), lines)
+    r = subprocess.run([sys.executable, SCRIPT, azr] + axes + ["--dry-run"],
+                       capture_output=True, text=True, env=env, timeout=120)
+    ref = {l.split()[0]: "refused" in l for l in r.stdout.splitlines() if l.startswith("  ")}
+    check("without them N_C and R(E) are refused, the plain pw variant is not",
+          ref.get("pw_ls-off_R-none") is False and ref.get("pw_ls-on_R-none")
+          and ref.get("pw_ls-off_R-coulomb"), r.stdout)
+
     print("\n2. the run")
     try:
         import numpy                                             # noqa: F401
@@ -153,6 +180,34 @@ try:
         check("it opens in the engine", len(s.params_rwa) == 4)
     summ = open(os.path.join(out, "summary.txt")).read()
     check("summary lists the skipped variants", "r5.1_dw" in summ and "weight" in summ)
+    check("the subprocesses' fit lines are in run.log",
+          open(os.path.join(out, "run.log")).read().count("end chi2") == 2)
+
+    print("\n3. line shape, R(E), penalty hook, in a subprocess and in-process")
+    hook = os.path.join(tmp, "hook.py")
+    with open(hook, "w") as fh:
+        fh.write("def penalty(session, x):\n    return [3.0]\n")
+    hand = AzrModel.from_file(kazr)
+    hand.set_thm_experiment("A", [1, 2], beam="18O", target="d", spectator="n",
+                            Ebeam=54, lineshape=True, distortion="coulomb")
+    hazr = hand.write(os.path.join(proj, "hand.azr"))
+    with azure2(hazr, cwd=proj) as s:
+        want = float(np.sum(s.calculate_chi2_rwa(np.asarray(s.params_rwa, float)))) + 9.0
+    with azure2(kazr, cwd=proj) as s:
+        plain = float(np.sum(s.calculate_chi2_rwa(np.asarray(s.params_rwa, float))))
+    got = []
+    for extra in ([], ["--in-process"]):
+        o3 = os.path.join(tmp, "out3" + "".join(extra))
+        r = subprocess.run([sys.executable, SCRIPT, kazr, "--out", o3, "--lineshape", "on",
+                            "--distortion", "coulomb", "--max-nfev", "0", "--x-scale", "1",
+                            "--penalty-hook", hook] + extra,
+                           capture_output=True, text=True, env=env, timeout=600)
+        v = json.load(open(os.path.join(o3, "variants.json")))
+        got.append(v[0]["chi2"] if r.returncode == 0 and len(v) == 1 else float("nan"))
+        check(f"{' '.join(extra) or 'subprocess'}: chi2 = hand-edited project + 9",
+              close(got[-1], want, 1e-7) and v[0]["fit"]["npenalty"] == 1,
+              f"{got[-1]} vs {want}; {(r.stdout + r.stderr)[-800:]}")
+    check("the axes changed the model", not close(want - 9.0, plain, 1e-4), (want, plain))
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 

@@ -12,7 +12,12 @@ the statistical and the model spread apart.  See
 docs/source/theory/thm_implementation.rst, "Model averaging".
 
 One engine session at a time, by design: a THM session of a realistic model
-takes 0.4-2 GB, and the variants are fitted sequentially in this process.
+takes 0.4-2 GB, and the variants are fitted one after the other.  Each
+variant is fitted in a fresh Python process (this script, re-run with
+--fit-one), which sends its result back as JSON: no engine state (a cache, a
+memo, memory the allocator keeps) can leak from one variant into the next.
+--in-process fits them all in this process instead (faster start-up; only
+for engines known to keep no state between sessions).
 
 Variant axes (a product over every axis given; one value = not varied):
 
@@ -29,12 +34,29 @@ Variant axes (a product over every axis given; one value = not varied):
         distortion unless --pw-distortion (then R(E) is applied to them).
   --ps W [W ...]                 the spectator-momentum window: "delta" (none)
         or e.g. "hulthen:0-50"
+  --lineshape on off             the spectator's Coulomb line shape N_C
+        (lineshape= of the experiment; "on" needs its beam/target/spectator/
+        Ebeam keys)
+  --distortion none coulomb optical      the distortion factor R(E) of a pw
+        variant (distortion= of the experiment; "optical" takes the a+A and
+        s+F potentials of the --optical axis when it gives AA/SF, else the
+        project's opticalAA/opticalSF).  A dw variant keeps its vertex
+        distortion (the --optical axis): this axis collapses for it.
   --experiment NAME              the THM experiment(s) edited (default all)
 
 or a JSON spec (``--spec file.json``) with the same keys: {"radius_pairs":
 [1], "radii": [...], "vertex_model": [...], "vertex": [...], "optical":
-[...], "ps": [...], "experiment": [...], "priors": {"radius=6.1": 0.5}}.
-CLI flags override the spec.
+[...], "ps": [...], "lineshape": [...], "distortion": [...], "experiment":
+[...], "priors": {"radius=6.1": 0.5}}.  CLI flags override the spec.
+
+Fit options: --max-nfev, --ftol, --x-scale (least_squares' x_scale: "jac",
+the default, or a number; 1 when penalty rows of very different column
+norms make "jac" reject every step), and --penalty-hook file.py[:func]:
+func(session, x) returns extra signed residual rows (a direct strength
+against its measured value, a prior), or (rows, jacobian); without a
+Jacobian it is formed by central differences of func, so func must not
+evaluate the data.  The rows enter the fit, the chi2, the weights and the
+covariance like the norm and shift priors.
 
 Derived quantities (optional): ``--strength NAME=JPI@E`` (e.g.
 ``213=2-@13.057``: the level of that J^pi nearest E, excitation energy in
@@ -98,7 +120,9 @@ ma = _load("modelavg")
 #  The variant grid
 # ---------------------------------------------------------------------------
 
-AXES = ("radius", "vertex_model", "vertex", "optical", "ps")
+AXES = ("radius", "vertex_model", "vertex", "optical", "ps", "lineshape",
+        "distortion")
+GRID_KEYS = ("vertex_model", "vertex", "optical", "ps", "lineshape", "distortion")
 
 
 def _fmt_radius(r):
@@ -110,8 +134,7 @@ def build_spec(args):
     if args.spec:
         with open(args.spec) as fh:
             spec = json.load(fh)
-    for key in ("radius_pairs", "radii", "vertex_model", "vertex", "optical",
-                "ps", "experiment"):
+    for key in ("radius_pairs", "radii") + GRID_KEYS + ("experiment",):
         v = getattr(args, key)
         if v:
             spec[key] = v
@@ -125,7 +148,7 @@ def variant_grid(spec, pw_distortion=False):
     axes = []
     if spec.get("radii"):
         axes.append(("radius", [_fmt_radius(r) for r in spec["radii"]]))
-    for key in ("vertex_model", "vertex", "optical", "ps"):
+    for key in GRID_KEYS:
         if spec.get(key):
             axes.append((key, [str(v) for v in spec[key]]))
     if not axes:
@@ -133,11 +156,19 @@ def variant_grid(spec, pw_distortion=False):
     out, seen = [], set()
     for combo in itertools.product(*[vals for _, vals in axes]):
         s = dict(zip([k for k, _ in axes], combo))
-        # the optical axis only means something for a dw vertex (or with
-        # --pw-distortion); collapse it otherwise
-        if ("optical" in s and s.get("vertex_model", "pw") != "dw"
-                and not pw_distortion):
-            s["optical"] = "-"
+        dw = s.get("vertex_model", "pw") == "dw"
+        # R(E) (the distortion axis) is a pw notion: a dw vertex carries its
+        # distortion itself
+        if "distortion" in s and dw:
+            s["distortion"] = "-"
+        # the optical axis only means something for a dw vertex, for a pw
+        # R(E) with optical potentials, or with --pw-distortion; collapse it
+        # otherwise
+        if "optical" in s and not dw:
+            keep = (s["distortion"] == "optical" if "distortion" in s
+                    else pw_distortion)
+            if not keep:
+                s["optical"] = "-"
         key = tuple(sorted(s.items()))
         if key in seen:
             continue
@@ -159,6 +190,10 @@ def label_of(s):
                     .replace(",", "_"))
     if "ps" in s:
         bits.append("ps-" + s["ps"].replace(":", "~").replace(",", "_"))
+    if "lineshape" in s:
+        bits.append("ls-" + s["lineshape"])
+    if s.get("distortion", "-") != "-":
+        bits.append("R-" + s["distortion"])
     return "_".join(bits) or "project"
 
 
@@ -172,7 +207,8 @@ def apply_variant(model, s, spec):
         model.set_thm_option("vertex", s["vertex"])
     exps = model.thm_experiments()
     want = spec.get("experiment") or list(exps)
-    if any(k in s for k in ("vertex_model", "optical", "ps")):
+    if any(k in s for k in ("vertex_model", "optical", "ps", "lineshape",
+                            "distortion")):
         if not exps:
             raise ValueError("the project has no THM experiment[...] line to "
                              "carry vertexModel/optical/ps.")
@@ -202,6 +238,27 @@ def apply_variant(model, s, spec):
                     rec.pop("psNodes", None)
                 else:
                     rec["ps"] = s["ps"]
+            if "lineshape" in s:
+                if s["lineshape"] not in ("on", "off"):
+                    raise ValueError(f"--lineshape {s['lineshape']!r}: on or off.")
+                rec["lineshape"] = s["lineshape"] == "on"
+            d = s.get("distortion", "-")
+            if d == "none":
+                for k in ("distortion", "opticalAA", "opticalSF", "distortionRef",
+                          "distortionRatio", "spectatorAngle", "boundState"):
+                    rec.pop(k, None)
+            elif d == "coulomb":
+                rec["distortion"] = "coulomb"
+                rec.pop("opticalAA", None)
+                rec.pop("opticalSF", None)
+            elif d == "optical":
+                if not (rec.get("opticalAA") and rec.get("opticalSF")):
+                    raise ValueError("distortion=optical needs the a+A and s+F "
+                                     "potentials: an AA/SF --optical value or "
+                                     "opticalAA/opticalSF in the project.")
+                rec["distortion"] = "optical"
+            elif d != "-":
+                raise ValueError(f"--distortion {d!r}: none, coulomb or optical.")
             seg = rec.pop("segments")
             model.set_thm_experiment(name, seg, **rec)
     return model
@@ -235,6 +292,34 @@ def penalty_rows(np, m, x):
             j[q.free_index] = 1.0 / d.energy_shift_error
             jac.append(j)
     return np.asarray(rows, float), (np.asarray(jac) if jac else np.zeros((0, n)))
+
+
+def hook_rows(np, hook, m, x):
+    """The --penalty-hook rows at x and their Jacobian (the hook's own, or
+    central differences of the hook)."""
+    if hook is None:
+        return np.zeros(0), np.zeros((0, len(x)))
+    out = hook(m, x)
+    if isinstance(out, tuple) and len(out) == 2:
+        rows = np.atleast_1d(np.asarray(out[0], float))
+        return rows, np.asarray(out[1], float).reshape(rows.size, len(x))
+    rows = np.atleast_1d(np.asarray(out, float))
+    jac = np.zeros((rows.size, len(x)))
+    for i in range(len(x)):
+        h = 1e-6 * max(abs(x[i]), 1e-12)
+        xp = np.array(x, float); xp[i] += h
+        xm = np.array(x, float); xm[i] -= h
+        jac[:, i] = (np.atleast_1d(np.asarray(hook(m, xp), float))
+                     - np.atleast_1d(np.asarray(hook(m, xm), float))) / (2 * h)
+    return rows, jac
+
+
+def all_penalties(np, m, x, hook):
+    """The norm/shift priors and the hook rows, with their Jacobian."""
+    pr, pj = penalty_rows(np, m, x)
+    hr, hj = hook_rows(np, hook, m, x)
+    return (np.concatenate([pr, hr]),
+            np.vstack([pj.reshape(-1, len(x)), hj]))
 
 
 def profiled_count(m, x):
@@ -338,6 +423,7 @@ def fit_variant(path, cwd, args, strengths, log):
     from pyazr import azure2
 
     t0 = time.time()
+    phook = load_hook(args.penalty_hook, "penalty") if args.penalty_hook else None
     with azure2(path, cwd=cwd) as m:
         x0 = np.asarray(m.params_rwa, float)
         nres = len(m.residuals(x0))
@@ -351,20 +437,20 @@ def fit_variant(path, cwd, args, strengths, log):
             except Exception as err:           # keep the optimiser alive
                 log(f"    residuals failed: {err}")
                 r = np.full(nres, 1e3)
-            pr, _ = penalty_rows(np, m, x)
+            pr, _ = all_penalties(np, m, x, phook)
             out = np.concatenate([r, pr])
             nev[0] += 1
             return np.where(np.isfinite(out), out, 1e3)
 
         def jac(x):
             r, J = m.residual_jacobian(x)
-            _, pj = penalty_rows(np, m, x)
+            _, pj = all_penalties(np, m, x, phook)
             return np.vstack([np.asarray(J, float), pj])
 
         c0 = float(np.sum(resid(x0) ** 2))
         log(f"    start chi2 {c0:.3f}, {x0.size} free, {nres} points")
         if args.max_nfev > 0 and x0.size:
-            sol = least_squares(resid, x0, jac=jac, method="trf", x_scale="jac",
+            sol = least_squares(resid, x0, jac=jac, method="trf", x_scale=args.x_scale,
                                 max_nfev=args.max_nfev, xtol=1e-10, ftol=args.ftol,
                                 gtol=1e-10)
             x, fun, J, status = sol.x, sol.fun, sol.jac, sol.status
@@ -427,21 +513,93 @@ def fit_variant(path, cwd, args, strengths, log):
             m.save_fit(fitpath, x)
         except Exception as err:
             log(f"    save_fit failed: {err}")
-        thm = {n: dict(norm=r["norm"], b=[float(v) for v in r["b"]], chi2=r["chi2"])
+        thm = {n: dict(norm=float(r["norm"]), b=[float(v) for v in r["b"]],
+                       chi2=float(r["chi2"]))
                for n, r in m.thm_experiments(x).items()}
         seg = [float(c) for c in m.segment_chi2(x)]
-    return dict(chi2=chi2, npoints=nres, nfree=int(x.size) + kprof,
+        npen = int(fun.size - nres)
+    return dict(chi2=chi2, npoints=nres, nfree=int(x.size) + kprof, npenalty=npen,
                 values=values, covariance=cov, derived=derived,
                 status=int(status), nev=nev[0], seconds=time.time() - t0,
                 start_chi2=c0, segment_chi2=seg, thm=thm)
 
 
-def load_hook(spec):
+_HOOK_MODULES = {}
+
+
+def load_hook(spec, default="derived"):
+    """file.py[:func] -> the function (default name: the --derived-hook's
+    "derived"; the --penalty-hook's is "penalty").  A file is loaded once."""
     path, _, func = spec.partition(":")
-    sp = importlib.util.spec_from_file_location("derived_hook", path)
-    mod = importlib.util.module_from_spec(sp)
-    sp.loader.exec_module(mod)
-    return getattr(mod, func or "derived")
+    path = os.path.abspath(path)
+    mod = _HOOK_MODULES.get(path)
+    if mod is None:
+        sp = importlib.util.spec_from_file_location(
+            f"hook_{len(_HOOK_MODULES)}", path)
+        mod = importlib.util.module_from_spec(sp)
+        sp.loader.exec_module(mod)
+        _HOOK_MODULES[path] = mod
+    return getattr(mod, func or default)
+
+
+def fit_in_subprocess(path, cwd, argv, logpath):
+    """fit_variant(path) in a fresh interpreter running this same entry
+    script (so a wrapper that imports and patches this module is re-run
+    too), its result back as JSON.  The child appends its log lines to
+    logpath; its stdout and stderr (the engine's messages) are this
+    process's.  Raises RuntimeError on a refusal or a crash."""
+    import subprocess
+    import tempfile
+    # run directly: this file; imported by a wrapper script: that script
+    entry = (os.path.abspath(__file__) if __name__ == "__main__"
+             else os.path.abspath(sys.argv[0]))
+    fd, res = tempfile.mkstemp(prefix="fit_", suffix=".json", dir=cwd)
+    os.close(fd)
+    os.remove(res)
+    cmd = [sys.executable, entry] + list(argv) + [
+        "--fit-one", path, "--fit-cwd", cwd, "--fit-result", res,
+        "--fit-log", logpath]
+    env = dict(os.environ, THM_MODEL_AVERAGE_CHILD="1")
+    try:
+        rc = subprocess.call(cmd, stdin=subprocess.DEVNULL, env=env)
+        if not os.path.exists(res):
+            raise RuntimeError(f"variant subprocess exited with {rc} and no "
+                               "result (killed, out of memory?)")
+        with open(res) as fh:
+            out = json.load(fh)
+    finally:
+        if os.path.exists(res):
+            os.remove(res)
+    if "error" in out:
+        raise RuntimeError(out["error"])
+    out["covariance"] = tuple(out["covariance"])
+    return out
+
+
+def fit_one_main(args):
+    """--fit-one: fit one written variant project, write the result JSON."""
+    logf = open(args.fit_log, "a") if args.fit_log else None
+
+    def log(msg):
+        print(msg, flush=True)
+        if logf:
+            logf.write(msg + "\n")
+            logf.flush()
+    try:
+        r = fit_variant(args.fit_one, args.fit_cwd, args,
+                        parse_strengths(args.strength), log)
+    except Exception as err:
+        r = dict(error=f"{type(err).__name__}: {err}".replace("\n", " "),
+                 traceback=traceback.format_exc())
+        if not isinstance(err, (ValueError, KeyError, RuntimeError)):
+            log("    " + r["traceback"].replace("\n", "\n    "))
+    tmp = args.fit_result + ".part"
+    with open(tmp, "w") as fh:
+        json.dump(r, fh, default=float)
+    os.replace(tmp, args.fit_result)
+    if logf:
+        logf.close()
+    return 0 if "error" not in r else 3
 
 
 # ---------------------------------------------------------------------------
@@ -490,9 +648,22 @@ def main(argv=None):
     ap.add_argument("--experiment", nargs="+")
     ap.add_argument("--pw-distortion", action="store_true",
                     help="apply the --optical axis to pw variants too (R(E))")
+    ap.add_argument("--lineshape", nargs="+", choices=("on", "off"))
+    ap.add_argument("--distortion", nargs="+", choices=("none", "coulomb", "optical"),
+                    help="R(E) of the pw variants")
     ap.add_argument("--max-nfev", dest="max_nfev", type=int, default=30,
                     help="least_squares evaluation limit per variant (0: no fit)")
     ap.add_argument("--ftol", type=float, default=1e-8)
+    ap.add_argument("--x-scale", dest="x_scale", default="jac",
+                    help="least_squares x_scale: 'jac' (default) or a number")
+    ap.add_argument("--penalty-hook", dest="penalty_hook",
+                    help="file.py[:func]; func(session, x) -> signed rows or "
+                         "(rows, jacobian), added to the residuals")
+    ap.add_argument("--in-process", dest="subprocess", action="store_false",
+                    help="fit every variant in this process (default: each in "
+                         "a fresh subprocess)")
+    for a in ("--fit-one", "--fit-cwd", "--fit-result", "--fit-log"):
+        ap.add_argument(a, help=argparse.SUPPRESS)
     ap.add_argument("--weights", default="aic", choices=ma.WEIGHT_METHODS)
     ap.add_argument("--rescale", default=None,
                     help="'best' (chi2/nu of the best variant) or a number")
@@ -506,7 +677,19 @@ def main(argv=None):
                     help="file.py[:func]; func(session, x) -> {name: value or "
                          "(value, sigma)}")
     ap.add_argument("--dry-run", action="store_true", help="list the variants and stop")
+    argv = list(sys.argv[1:] if argv is None else argv)
     args = ap.parse_args(argv)
+    if args.x_scale != "jac":
+        try:
+            args.x_scale = float(args.x_scale)
+        except ValueError:
+            raise SystemExit(f"--x-scale {args.x_scale!r}: 'jac' or a number")
+    if args.fit_one:
+        return fit_one_main(args)
+    if os.environ.get("THM_MODEL_AVERAGE_CHILD"):
+        raise SystemExit("a variant subprocess was started without --fit-one: a "
+                         "wrapper that imports this script must hand its command "
+                         "line to main() (or pass --in-process).")
 
     project = os.path.abspath(args.project)
     src_dir, azr_name = os.path.split(project)
@@ -544,7 +727,10 @@ def main(argv=None):
         shutil.rmtree(work)
     os.makedirs(out, exist_ok=True)
     copy_project(src_dir, work, azr_name)
-    logf = open(os.path.join(out, "run.log"), "w")
+    open(os.path.join(out, "run.log"), "w").close()
+    # append mode: a variant subprocess appends to the same file, and each
+    # write must land at the end, not at this handle's own offset
+    logf = open(os.path.join(out, "run.log"), "a")
 
     def log(msg):
         print(msg, flush=True)
@@ -562,7 +748,10 @@ def main(argv=None):
             vdir = os.path.join(work, f"output_{label}")
             mdl.set_output_dir(vdir)          # own caches: the radius changes them
             path = mdl.write(os.path.join(work, f"{label}.azr"))
-            r = fit_variant(path, work, args, strengths, log)
+            if args.subprocess:
+                r = fit_in_subprocess(path, work, argv, os.path.join(out, "run.log"))
+            else:
+                r = fit_variant(path, work, args, strengths, log)
         except Exception as err:               # refused or failed: record, go on
             reason = f"{type(err).__name__}: {err}".replace("\n", " ")
             log(f"    skipped -- {reason}")
@@ -593,7 +782,8 @@ def main(argv=None):
             wr.writerow(row)
     with open(os.path.join(out, "variants.json"), "w") as fh:
         json.dump([dict(v.to_dict(), fit={k: r[k] for k in
-                   ("status", "nev", "seconds", "start_chi2", "segment_chi2", "thm")})
+                   ("status", "nev", "seconds", "start_chi2", "segment_chi2", "thm",
+                    "npenalty")})
                    for v, r in variants], fh, indent=1)
     if not variants:
         log("no variant could be fitted; nothing to average.")

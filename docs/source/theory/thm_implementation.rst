@@ -3150,12 +3150,26 @@ the statistical error of ωγ(213) was 0.059.)
 with the axes ``--radius-pairs K.. --radii R..``, ``--vertex-model pw dw``,
 ``--vertex constant perlevel onshell``, ``--optical AA/SF ..`` (global
 potential names, e.g. ``ancai06/kd03:extrapolate``, or ``coulomb``; applied to
-the dw variants), ``--ps delta hulthen:0-50``, or a JSON ``--spec``; the grid
-is their product. ``--strength NAME=Jπ@E`` with ``--strength-in`` /
+the dw variants), ``--ps delta hulthen:0-50``, ``--lineshape on off`` (the spectator's
+:math:`N_C`), ``--distortion none coulomb optical`` (:math:`R(E)` of the pw
+variants; ``optical`` takes the potentials of an ``AA/SF`` ``--optical``
+value or the project's; the axis collapses for dw variants, whose distortion
+is the vertex's own), or a JSON ``--spec``; the grid is their product. ``--strength NAME=Jπ@E`` with ``--strength-in`` /
 ``--strength-out`` (file pair keys) adds
 :math:`\omega\gamma = \frac{2J+1}{(2j_1+1)(2j_2+1)}\Gamma_\mathrm{in}\Gamma_\mathrm{out}/\Gamma`
 (open channels, eV) as a derived quantity with its propagated error;
-``--weights``, ``--rescale``, ``--prior radius=6.1:0.5``. A variant AzrModel
+``--weights``, ``--rescale``, ``--prior radius=6.1:0.5``.
+``--penalty-hook file.py[:func]`` adds signed residual rows ``func(session,
+x)`` (direct strengths against their measured values, priors; with their
+Jacobian, or by central differences of ``func``) to the fit, the
+:math:`\chi^2`, the weights and the covariance; ``--x-scale`` sets
+``least_squares``' ``x_scale`` (``jac`` by default; 1 when such rows have
+column norms many orders of magnitude apart from the data's -- on the 19F
+model with 17 strength rows ``jac`` rejected every step). Each variant is
+fitted in a fresh Python process that hands its result back as JSON, so no
+engine state can pass from one variant to the next (a ``vertex=constant``
+memo keyed by object address did, before October 2026); ``--in-process``
+fits them in the driver's process. A variant AzrModel
 or the engine refuses (``vertexModel=dw`` without ``distortion=``, an
 optical potential outside its range) is recorded with the reason and
 skipped. ``--dry-run`` lists the grid and the refusals AzrModel already
@@ -3163,6 +3177,6 @@ knows, without numpy or the engine. Output: ``variants.csv`` (one row per
 variant), ``variants.json``, ``average.json``/``.csv``, ``summary.txt``,
 ``averaged/<project>_avg.azr`` beside a copy of the data, and ``work/`` with
 each variant's project and fitted snapshot. One engine session at a time, by
-design. ``tests/pyazr/model_average_test.py`` checks the weights and spreads
+design: the driver itself holds none. ``tests/pyazr/model_average_test.py`` checks the weights and spreads
 against closed forms and the writer; ``tests/pyazr/thm_model_average_test.py``
 runs the driver on ``tests/18O_p_a_thm``.
