@@ -49,6 +49,8 @@ AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_distortion.XXXXXX")"
+# The engine is a native binary: on MSYS2 give it a Windows path for files it reads.
+WP="$WORK"; if command -v cygpath > /dev/null 2>&1; then WP="$(cygpath -m "$WORK")"; fi
 trap 'rm -rf "$WORK"' EXIT
 if command -v timeout >/dev/null 2>&1; then RUN="timeout ${TEST_TIMEOUT:-300}"; else RUN=""; fi
 OUT="AZUREOut_aa=1_R=2.out"
@@ -212,8 +214,8 @@ refuse ratio_value "expected dwpw or dw" "experiment[A] segments=1,2 $KIN distor
 refuse bound_value "expected whittaker or yukawa" "experiment[A] segments=1,2 $KIN distortion=coulomb boundState=hulthen"
 refuse theta "expected all or thmin-thmax" "experiment[A] segments=1,2 $KIN theta=5"
 refuse twice "is given twice" "experiment[A] segments=1,2 $KIN distortion=coulomb distortion=none"
-refuse table_missing "cannot read" "experiment[A] segments=1,2 distortion=table:$WORK/none_such.dat"
-refuse table_short "beyond the table" "experiment[A] segments=1,2 distortion=table:$WORK/short.dat"
+refuse table_missing "cannot read" "experiment[A] segments=1,2 distortion=table:$WP/none_such.dat"
+refuse table_short "beyond the table" "experiment[A] segments=1,2 distortion=table:$WP/short.dat"
 refuse no_energy "the spectator has no energy left" "experiment[A] segments=1,2 beam=18O target=3He spectator=d Ebeam=40 distortion=coulomb"
 # 12C(14N,d): above E = 2.3 MeV the deuteron cannot reach 75 deg in the lab.
 refuse lab_reach "beyond the reach of the spectator" "experiment[T] segments=1 $K12 Ebeam=30 distortion=coulomb spectatorAngle=75" "C12MIN" c12

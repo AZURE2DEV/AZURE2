@@ -38,6 +38,8 @@ AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_spectator_angles.XXXXXX")"
+# The engine is a native binary: on MSYS2 give it a Windows path for files it reads.
+WP="$WORK"; if command -v cygpath > /dev/null 2>&1; then WP="$(cygpath -m "$WORK")"; fi
 trap 'rm -rf "$WORK"' EXIT
 if command -v timeout >/dev/null 2>&1; then RUN="timeout ${TEST_TIMEOUT:-300}"; else RUN=""; fi
 OUT="AZUREOut_aa=1_R=2.out"
@@ -177,7 +179,7 @@ fi
 echo "(d) the ps window cuts q; acceptance tables"
 run d_nocut "$L distortion=coulomb vertexModel=dw spectatorAngles=cm:120-180 ps=hulthen:0-1000" "NOFOLD"
 printf '# flat acceptance\n120 1\n150 1\n180 1\n' > "$WORK/flat.dat"
-run d_table "$L distortion=coulomb vertexModel=dw spectatorAngles=cm:table:$WORK/flat.dat" "NOFOLD"
+run d_table "$L distortion=coulomb vertexModel=dw spectatorAngles=cm:table:$WP/flat.dat" "NOFOLD"
 run d_plain "$L distortion=coulomb vertexModel=dw spectatorAngles=cm:120-180" "NOFOLD"
 run r_cut "$L distortion=coulomb spectatorAngles=cm:120-180 ps=hulthen:0-20"
 run r_plain "$L distortion=coulomb spectatorAngles=cm:120-180"
@@ -206,15 +208,15 @@ refuse() {  # refuse NAME MESSAGE-FRAGMENT BLOCK
 printf '0.4 1.0\n1.0 2.0\n' > "$WORK/w.dat"
 printf '10 1\n' > "$WORK/short.dat"
 refuse no_distortion "with neither it has nothing to average" "$L spectatorAngles=cm:120-180"
-refuse table_distortion "with neither it has nothing to average" "$L distortion=table:$WORK/w.dat spectatorAngles=cm:120-180"
+refuse table_distortion "with neither it has nothing to average" "$L distortion=table:$WP/w.dat spectatorAngles=cm:120-180"
 refuse both "exclude each other" "$L distortion=coulomb spectatorAngle=20 spectatorAngles=cm:120-180"
 refuse nodes_alone "needs a spectator-direction window" "$L distortion=coulomb spectatorAngleNodes=4"
 refuse ps_nodes "the nodes are spectatorAngleNodes=" "$L distortion=coulomb vertexModel=dw ps=hulthen:0-40 psNodes=8 spectatorAngles=cm:120-180"
 refuse order "expected thmin-thmax" "$L distortion=coulomb spectatorAngles=cm:50-20"
 refuse range "expected thmin-thmax" "$L distortion=coulomb spectatorAngles=10-200"
 refuse nodes "1 to 64" "$L distortion=coulomb spectatorAngles=cm:120-180 spectatorAngleNodes=65"
-refuse no_file "cannot read the angle table" "$L distortion=coulomb spectatorAngles=cm:table:$WORK/none.dat"
-refuse short_table "at least two rows" "$L distortion=coulomb spectatorAngles=table:$WORK/short.dat"
+refuse no_file "cannot read the angle table" "$L distortion=coulomb spectatorAngles=cm:table:$WP/none.dat"
+refuse short_table "at least two rows" "$L distortion=coulomb spectatorAngles=table:$WP/short.dat"
 refuse reach_r "no spectator direction of spectatorAngles=cm:0-10 is accepted" "$L distortion=coulomb spectatorAngles=cm:0-10 ps=hulthen:0-40"
 refuse reach_dw "no spectator direction of spectatorAngles=cm:0-10 is accepted" "$L distortion=coulomb vertexModel=dw spectatorAngles=cm:0-10 ps=hulthen:0-40"
 

@@ -75,7 +75,9 @@ for v in "$c0" "$c1" "$cz" "$ch" "$cx"; do
   [ -n "$v" ] || { echo "  FAIL  a run produced no chi-squared"; exit 1; }
 done
 
-if cmp -s "$d0/run.log" "$ds/run.log" && cmp -s "$d0/output/chiSquared.out" "$ds/output/chiSquared.out"; then
+# Byte-identical files without cmp (not in every MSYS2 image); \r stripped for CRLF builds.
+same() { [ "$(tr -d '\r' < "$1")" = "$(tr -d '\r' < "$2")" ]; }
+if same "$d0/run.log" "$ds/run.log" && same "$d0/output/chiSquared.out" "$ds/output/chiSquared.out"; then
   pass "a centre equal to the field changes nothing (stdout and chiSquared.out byte-identical)"
 else
   fail "a centre equal to the field changed the output"

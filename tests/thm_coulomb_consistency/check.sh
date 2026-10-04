@@ -34,6 +34,8 @@ AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_coulomb_consistency.XXXXXX")"
+# The engine is a native binary: on MSYS2 give it a Windows path for files it reads.
+WP="$WORK"; if command -v cygpath > /dev/null 2>&1; then WP="$(cygpath -m "$WORK")"; fi
 trap 'rm -rf "$WORK"' EXIT
 if command -v timeout >/dev/null 2>&1; then RUN="timeout ${TEST_TIMEOUT:-300}"; else RUN=""; fi
 OUT="AZUREOut_aa=1_R=2.out"
@@ -105,7 +107,7 @@ if ran plain_aa && ran plain_aa_ci; then
     ok "C_l applied with opticalAA=plane"
 fi
 run table_ci "coulombIntegral=1
-$L distortion=table:$WORK/w.dat"
+$L distortion=table:$WP/w.dat"
 if ran table_ci; then
   grep -q "WARNING: <thm> experiment\[A\]: coulombIntegral=1 with distortion=table" "$WORK/table_ci/log" &&
     ok "distortion=table with coulombIntegral=1: runs, warned" || bad "distortion=table with coulombIntegral=1: no warning"
