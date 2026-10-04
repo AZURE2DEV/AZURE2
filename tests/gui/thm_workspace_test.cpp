@@ -1360,7 +1360,8 @@ int main(int argc, char** argv) {
     const QString c12src = QString(AZURE2_SOURCE_DIR) + "/examples/c12c12_tumino2018";
     for(const QString& f : QDir(c12src + "/data").entryList(QDir::Files))
       QFile::copy(c12src + "/data/" + f, c12Dir + "/data/" + f);
-    const QStringList in = slurp(c12src + "/c12c12_tumino2018.azr").split('\n');
+    // \r stripped: a CRLF checkout (Windows) would hide the "<thm>" lines from the filter below.
+    const QStringList in = slurp(c12src + "/c12c12_tumino2018.azr").remove('\r').split('\n');
     QStringList out;
     QString block;
     bool skip = false;
