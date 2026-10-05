@@ -210,6 +210,8 @@ class EPoint {
   void CalcEDependentValues(CNuc *, const Config &);
   /// Recompute those at the current, possibly shifted, energy.
   void RecalcEDependentValues(CNuc *, const Config &);
+  /// Empties the per-JGroup rows of the energy-dependent arrays, keeping their storage.
+  void ClearEDependentRows();
   /// Store an \f$L_o\f$ element at (J-group, channel).
   void AddLoElement(int, int, complex);
   /// Store a \f$\sqrt{P_c}\f$ at (J-group, channel).

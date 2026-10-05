@@ -1197,6 +1197,16 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
 }
 
 /*!
+ * Empties the per-JGroup rows of the energy-dependent arrays, keeping their storage.
+ */
+void EPoint::ClearEDependentRows() {
+  for (auto &row : lo_elements_) row.clear();
+  for (auto &row : penetrabilities_) row.clear();
+  for (auto &row : coulombphase_) row.clear();
+  for (auto &row : hardspherephase_) row.clear();
+}
+
+/*!
  * Recalculates energy-dependent values using the current (possibly shifted) energy.
  * This is needed when energy shifts are applied after initialization.
  */
@@ -1207,11 +1217,19 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure) {
   // functions for each channel, serial): 40 s per evaluation for two
   // convolved 16N beta-delayed alpha spectra on the 12C+alpha model.
   if (eDependentValid_ && this->GetCMEnergy() == eDependentEnergy_) return;
-  // Clear existing energy-dependent values first
-  lo_elements_.clear();
-  penetrabilities_.clear();
-  coulombphase_.clear();
-  hardspherephase_.clear();
+  // Clear existing energy-dependent values first.  The per-JGroup rows are
+  // emptied in place rather than destroyed, so CalcEDependentValues refills the
+  // same storage instead of freeing and re-allocating every row of every point
+  // on every energy-shift step.  That churn, done on the pooled data sets by
+  // whichever OpenMP thread happens to evaluate them, fragmented the malloc
+  // arenas and made resident memory creep up for the whole fit.  The Add*
+  // methods index the rows by J-group, so the values stored are unchanged.
+  this->ClearEDependentRows();
+  // CalcEDependentValues also refills the sub-points (appending to their rows),
+  // so empty theirs too: otherwise every call doubled their rows, and the
+  // doubled storage would now be kept.  The callers re-energise and recalculate
+  // each sub-point afterwards in any case.
+  for (int i = 1; i <= this->NumSubPoints(); i++) this->GetSubPoint(i)->ClearEDependentRows();
 
   // Recalculate with current energy
   this->CalcEDependentValues(theCNuc, configure);

@@ -179,10 +179,17 @@ double AZURECalc::operator()(const vector_r &p) const {
 }
 
 void AZURECalc::WriteIterationOutput(const vector_r &p) const {
-  // Work on clones: this runs in the middle of a fit and must not disturb the
-  // objects the minimizer is stepping.
-  CNuc *lc = compound()->Clone();
-  EData *ld = data()->Clone();
+  // Work on private copies: this runs in the middle of a fit and must not
+  // disturb the objects the minimizer is stepping.  The copies are made once
+  // and reused (every snapshot refills them from p below, exactly as the pooled
+  // objects are refilled in operator()), instead of being cloned and deleted at
+  // every snapshot -- see output_data_ in AZURECalc.h.  The lock also keeps two
+  // threads from writing the snapshot files at the same time.
+  std::lock_guard<std::mutex> outputLock(output_mutex_);
+  if (!output_compound_) output_compound_.reset(compound()->Clone());
+  if (!output_data_) output_data_.reset(data()->Clone());
+  CNuc *lc = output_compound_.get();
+  EData *ld = output_data_.get();
 
   try {
     lc->FillCompoundFromParams(p);
@@ -214,10 +221,11 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
     lc->PrintTransformParams(configure());
   } catch (...) {
     // An intermediate snapshot is a convenience, never a reason to abort a fit.
+    // A failure may leave the copies half-filled: drop them so the next
+    // snapshot starts from fresh clones.
+    output_compound_.reset();
+    output_data_.reset();
   }
-
-  delete lc;
-  delete ld;
 }
 
 double AZURECalc::Chi2Value(const vector_r &p) const {
