@@ -43,3 +43,10 @@ add_test(NAME pyazr_output_files
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/output_files_test.py)
 set_tests_properties(pyazr_output_files PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The sqrt(E) energy-shift block on a segment line: read, written, and (with
+# the engine) counted and penalised exactly as AZURE2 does.
+add_test(NAME pyazr_sqrt_shift
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/sqrt_shift_test.py)
+set_tests_properties(pyazr_sqrt_shift PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

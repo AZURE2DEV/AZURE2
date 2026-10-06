@@ -38,6 +38,8 @@ class EData {
   int GetNormParamOffset() const;
   /// Index at which the energy-shift parameters start in the Minuit vector.
   int GetEnergyShiftParamOffset() const;
+  /// Index at which the sqrt(E) energy-shift coefficients start in the Minuit vector.
+  int GetEnergyShiftSqrtParamOffset() const;
   /// Read the target-effects input file and build the TargetEffect objects.
   int ReadTargetEffectsFile(const Config &, CNuc *);
   /// Is this a fit? AZURECalc clones the compound nucleus and data per thread only when it is.
@@ -90,6 +92,7 @@ class EData {
   void AddTargetEffect(TargetEffect);
   void SetNormParamOffset(int);
   void SetEnergyShiftParamOffset(int);
+  void SetEnergyShiftSqrtParamOffset(int);
   /// Seed the Minuit parameter array with the normalizations and energy shifts.
   void FillMnParams(ROOT::Minuit2::MnUserParameters &);
   /// Write the normalizations back from a Minuit parameter vector.
@@ -115,6 +118,7 @@ class EData {
   int iterations_;
   int normParamOffset_;
   int energyShiftParamOffset_;
+  int energyShiftSqrtParamOffset_;
   bool isFit_;
   bool isErrorAnalysis_;
   std::streampos ecReadPos_;  // File offset where component-segment EC integrals begin in the intEC file

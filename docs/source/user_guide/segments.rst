@@ -94,6 +94,35 @@ appears with the following fields:
 **Vary Energy Shift?**
    Check this box to allow the energy shift to be varied during fitting.
 
+**sqrt(E) energy shift** (input file only)
+   A second, optional shift term that grows with the beam energy. With it a
+   segment's energies are shifted as
+
+   .. math::
+
+      E' = E + \Delta E + b\,\sqrt{E/\mathrm{MeV}}
+
+   where :math:`\Delta E` is the constant **Energy Shift** above and :math:`b`
+   (in MeV\ :sup:`1/2`) is the new coefficient. An additive offset in the
+   field reading of an analyzing magnet (:math:`E = kB^2`) produces exactly
+   this :math:`\sqrt{E}` dependence, whereas the constant term describes a
+   fixed offset; a calibration that is right at low energy and drifts at high
+   energy needs the second form. The two terms are independent: each has its
+   own value, uncertainty and vary flag, and a segment may use either, both
+   or neither.
+
+   The term is written at the very end of the segment's ``<segmentsData>``
+   line, after the data file and any composite/UPOS fields, as the keyword
+   block ``sqrtshift <b> <bError> <vary>`` (``vary`` 1 or 0), e.g.::
+
+      1 2 3 0 10 0 0 4 1 1 10 0 0.02 1 data/yield_0deg.dat 0 0 sqrtshift 0 0.01 1
+
+   frees :math:`b` from 0 with a penalty width of 0.01 MeV\ :sup:`1/2`
+   (:doc:`chi_squared`). A line without the block behaves exactly as before.
+   The fit parameter is named ``segment_<key>_energy_shift_sqrt`` in
+   ``param.sav``, and ``shifts.out`` reports it in its last column. The GUI
+   preserves the block when it loads and saves a file but does not edit it.
+
 **Data File**
    Path to the experimental data file. Use the **Choose...** button to browse,
    or enter the path directly. Paths can be absolute or relative to the Input

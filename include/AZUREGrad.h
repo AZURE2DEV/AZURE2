@@ -34,7 +34,8 @@ enum class ParamKind {
   LevelEnergy,  ///< E_lambda  for a (jGroup, level)
   Gamma,        ///< gamma_lambda,c for a (jGroup, level, channel)
   Norm,         ///< dataset normalization n_k for a segment
-  EnergyShift   ///< per-segment energy shift
+  EnergyShift,  ///< per-segment energy shift (constant term)
+  EnergyShiftSqrt  ///< per-segment sqrt(E) energy-shift coefficient
 };
 
 /// Description of one entry in the full (unfiltered) flat parameter vector.
@@ -43,7 +44,7 @@ struct ParamDesc {
   int jGroup;   ///< 1-based JGroup index   (LevelEnergy/Gamma only, else -1)
   int level;    ///< 1-based level index    (LevelEnergy/Gamma only, else -1)
   int channel;  ///< 1-based channel index  (Gamma only, else -1)
-  int segment;  ///< 1-based segment index  (Norm/EnergyShift only, else -1)
+  int segment;  ///< 1-based segment index  (Norm/EnergyShift/EnergyShiftSqrt only, else -1)
   bool fixed;   ///< whether this parameter is fixed (excluded from packed vector)
 };
 
@@ -55,6 +56,7 @@ struct ParamDesc {
  *   - for each JGroup j, for each level la:  E_{j,la}, then gamma_{j,la,ch} for ch=1..NumChannels
  *   - the norm parameters (starting at normOffset)
  *   - the energy-shift parameters (starting at energyShiftOffset)
+ *   - the sqrt(E) energy-shift coefficients (starting at energyShiftSqrtOffset)
  *
  * "Full" indices run over every entry above (matching the `all_rwa_` vector in
  * AZUREAPI).  The "packed" index is the position within the non-fixed subset
@@ -72,6 +74,8 @@ class ParamIndexMap {
   int NormIndex(int segment) const;
   /// Full index of the energy-shift parameter for a 1-based segment, or -1.
   int EnergyShiftIndex(int segment) const;
+  /// Full index of the sqrt(E) energy-shift coefficient for a 1-based segment, or -1.
+  int EnergyShiftSqrtIndex(int segment) const;
 
   /// Number of entries in the full (unfiltered) parameter vector.
   int NumFull() const { return (int)desc_.size(); }
@@ -88,6 +92,7 @@ class ParamIndexMap {
 
   int NormOffset() const { return normOffset_; }
   int EnergyShiftOffset() const { return energyShiftOffset_; }
+  int EnergyShiftSqrtOffset() const { return energyShiftSqrtOffset_; }
 
   friend ParamIndexMap BuildParamIndexMap(CNuc *, EData *, const std::vector<bool> &);
 
@@ -97,11 +102,13 @@ class ParamIndexMap {
   std::map<std::tuple<int, int, int>, int> gammaIndex_;  ///< (j,la,ch) -> full idx
   std::map<int, int> normIndex_;                         ///< segment -> full idx
   std::map<int, int> shiftIndex_;                        ///< segment -> full idx
+  std::map<int, int> sqrtShiftIndex_;                    ///< segment -> full idx
   std::vector<int> fullToPacked_;
   std::vector<int> packedToFull_;
   int numPacked_ = 0;
   int normOffset_ = 0;
   int energyShiftOffset_ = 0;
+  int energyShiftSqrtOffset_ = 0;
 };
 
 /*!

@@ -72,6 +72,10 @@ class SegLine {
     secondaryDecayL_ = 0;
     Ic_ = 0.0;
     delta_ = 0.0;
+    // sqrt(E) energy-shift term: off unless a trailing "sqrtshift" block is present
+    energyShiftSqrt_ = 0.0;
+    energyShiftSqrtError_ = 0.0;
+    varyEnergyShiftSqrt_ = 0;
 
     // Try to parse energy shift from the remaining line, default to 0.0 for backward compatibility
     std::istringstream restStream(dummyString);
@@ -157,6 +161,24 @@ class SegLine {
             secondaryDecayL_ = 0;
             Ic_ = 0.0;
             delta_ = 0.0;
+          }
+        }
+        // Optional keyword block at the very end of the line:
+        //   sqrtshift <b> <bError> <vary>
+        // adds a sqrt(E) term to the segment's energy shift,
+        //   E' = E + energyShift + b * sqrt(E / MeV)   (E in MeV, b in MeV^1/2),
+        // the form an additive offset in an analyzing-magnet field reading
+        // produces.  A keyword rather than a positional token, so that a line
+        // without it (every file written before 2026-10) and the positional
+        // UPOS block before it parse exactly as they always have; a failed
+        // numeric read above leaves the stream positioned on the keyword.
+        advancedStream.clear();
+        std::string keyword;
+        if (advancedStream >> keyword && keyword == "sqrtshift") {
+          if (!(advancedStream >> energyShiftSqrt_ >> energyShiftSqrtError_ >> varyEnergyShiftSqrt_)) {
+            energyShiftSqrt_ = 0.0;
+            energyShiftSqrtError_ = 0.0;
+            varyEnergyShiftSqrt_ = 0;
           }
         }
       } else {
@@ -256,6 +278,18 @@ class SegLine {
    */
   int varyEnergyShift() const { return varyEnergyShift_; };
   /*!
+   * Returns the coefficient b of the sqrt(E) energy-shift term (MeV^1/2).
+   */
+  double energyShiftSqrt() const { return energyShiftSqrt_; };
+  /*!
+   * Returns the uncertainty of the sqrt(E) energy-shift coefficient (MeV^1/2).
+   */
+  double energyShiftSqrtError() const { return energyShiftSqrtError_; };
+  /*!
+   * Returns non-zero if the sqrt(E) energy-shift coefficient is to be fit.
+   */
+  int varyEnergyShiftSqrt() const { return varyEnergyShiftSqrt_; };
+  /*!
    * Returns non-zero if this is an advanced segment (sum/ratio).
    */
   int isAdvanced() const { return isAdvanced_; };
@@ -302,6 +336,9 @@ class SegLine {
   double energyShift_;
   double energyShiftError_;
   int varyEnergyShift_;
+  double energyShiftSqrt_;
+  double energyShiftSqrtError_;
+  int varyEnergyShiftSqrt_;
   int isAdvanced_;
   int operationType_;
   std::string componentsList_;

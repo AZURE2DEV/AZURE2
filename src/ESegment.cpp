@@ -1,3 +1,4 @@
+#include <cmath>
 #include "CNuc.h"
 #include "Config.h"
 #include "DataLine.h"
@@ -65,6 +66,10 @@ ESegment::ESegment(SegLine segLine) {
     varyEnergyShift_ = true;
   else
     varyEnergyShift_ = false;
+  energyShiftSqrt_ = energyShiftSqrtNominal_ = segLine.energyShiftSqrt();
+  lastEnergyShiftSqrt_ = 0.0;
+  energyShiftSqrtError_ = segLine.energyShiftSqrtError();
+  varyEnergyShiftSqrt_ = (segLine.varyEnergyShiftSqrt() == 1);
   if (segLine.varyNorm() == 1)
     varyNorm_ = true;
   else
@@ -138,6 +143,10 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   energyShiftError_ = 0.0;
   lastEnergyShift_ = 0.0;
   varyEnergyShift_ = false;
+  energyShiftSqrt_ = energyShiftSqrtNominal_ = 0.0;
+  lastEnergyShiftSqrt_ = 0.0;
+  energyShiftSqrtError_ = 0.0;
+  varyEnergyShiftSqrt_ = false;
   varyNorm_ = false;
 
   // Read advanced segment data from ExtrapLine
@@ -595,6 +604,66 @@ void ESegment::SetLastEnergyShift(double lastEnergyShift) {
   lastEnergyShift_ = lastEnergyShift;
 }
 
+/*!
+ * Returns the coefficient of the sqrt(E) energy-shift term currently applied.
+ */
+
+double ESegment::GetEnergyShiftSqrt() const {
+  return energyShiftSqrt_;
+}
+
+/*!
+ * Returns the sqrt(E) coefficient last applied to the points.
+ */
+
+double ESegment::GetLastEnergyShiftSqrt() const {
+  return lastEnergyShiftSqrt_;
+}
+
+/*!
+ * Returns the sqrt(E) coefficient as declared in the input file.
+ */
+
+double ESegment::GetNominalEnergyShiftSqrt() const {
+  return energyShiftSqrtNominal_;
+}
+
+/*!
+ * Returns the uncertainty of the sqrt(E) coefficient.
+ */
+
+double ESegment::GetEnergyShiftSqrtError() const {
+  return energyShiftSqrtError_;
+}
+
+/*!
+ * Returns true if the sqrt(E) coefficient is a fit parameter.
+ */
+
+bool ESegment::IsVaryEnergyShiftSqrt() const {
+  return varyEnergyShiftSqrt_;
+}
+
+/*!
+ * The complete lab-energy shift of a point whose original lab energy is
+ * labEnergy: the constant term plus b*sqrt(E/MeV).  The sqrt term is
+ * evaluated at the point's own (unshifted) energy, so the mapping is the
+ * same function E -> E + a + b*sqrt(E) for every point and every call.
+ */
+
+double ESegment::TotalEnergyShift(double labEnergy) const {
+  if (energyShiftSqrt_ == 0.0) return energyShift_;
+  return energyShift_ + energyShiftSqrt_ * sqrt(fabs(labEnergy));
+}
+
+void ESegment::SetEnergyShiftSqrt(double energyShiftSqrt) {
+  energyShiftSqrt_ = energyShiftSqrt;
+}
+
+void ESegment::SetLastEnergyShiftSqrt(double lastEnergyShiftSqrt) {
+  lastEnergyShiftSqrt_ = lastEnergyShiftSqrt;
+}
+
 namespace {
 
 /*!
@@ -636,7 +705,7 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
     EPoint *point = GetPoint(i + 1);
     if (point && point->GetOriginalEnergy() > 0) {
       double originalEnergy = point->GetOriginalEnergy();
-      double shiftedEnergy = ShiftedEnergy(originalEnergy, energyShift_);
+      double shiftedEnergy = ShiftedEnergy(originalEnergy, TotalEnergyShift(originalEnergy));
 
       // Set the shifted energy
       point->SetLabEnergy(shiftedEnergy);
@@ -695,7 +764,10 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
           EPoint *subPoint = point->GetSubPoint(j);
           if (subPoint && subPoint->GetOriginalEnergy() > 0) {
             double subOriginalEnergy = subPoint->GetOriginalEnergy();
-            double energyShiftCM = (entrancePair->GetM(2)) / (entrancePair->GetM(1) + entrancePair->GetM(2)) * energyShift_;
+            // Subpoints hold c.m. energies: evaluate the lab shift at the
+            // subpoint's own lab energy and convert it to the c.m. frame.
+            double cmFactor = (entrancePair->GetM(2)) / (entrancePair->GetM(1) + entrancePair->GetM(2));
+            double energyShiftCM = cmFactor * TotalEnergyShift(subOriginalEnergy / cmFactor);
             double subShiftedEnergy = ShiftedEnergy(subOriginalEnergy, energyShiftCM);
 
             // Set the shifted energy for subpoint

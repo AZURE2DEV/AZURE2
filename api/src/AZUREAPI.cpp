@@ -1034,7 +1034,8 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params) const {
     int nc = 0;
     for (int f = 0; f < pmap.NumFull(); f++) {
       if (fixed_[f]) continue;
-      if (pmap.Desc(f).kind != ParamKind::EnergyShift) continue;
+      if (pmap.Desc(f).kind != ParamKind::EnergyShift &&
+          pmap.Desc(f).kind != ParamKind::EnergyShiftSqrt) continue;
       const int packed = pmap.FullToPacked(f);
       if (packed < 0 || packed >= (int)params.size()) continue;
 
@@ -1182,7 +1183,8 @@ vector_r AZUREAPI::GetEnergyShiftIndices() {
 
 // Structured metadata for every parameter.  The parameters are walked in the
 // exact order CNuc::FillMnParams (energies + widths) then EData::FillMnParams
-// (norms then energy shifts) emit them, so the records line up one-to-one with
+// (norms, energy shifts, then sqrt(E) shift coefficients) emit them, so the
+// records line up one-to-one with
 // names_ / all_ / fixed_.  See AZUREAPI.h for the field layout.
 vector_r AZUREAPI::GetParameterInfo() const {
   vector_r info;
@@ -1244,6 +1246,12 @@ vector_r AZUREAPI::GetParameterInfo() const {
   // Energy-shift parameters: one per segment (always emitted).
   for (size_t s = 0; s < segments.size(); ++s) {
     push(3, -1, -1, 0, -1, 0, -1, -1, -1, -1, -1,
+         segments[s].GetSegmentKey(), -1);
+  }
+
+  // sqrt(E) energy-shift coefficients: one per segment (always emitted).
+  for (size_t s = 0; s < segments.size(); ++s) {
+    push(4, -1, -1, 0, -1, 0, -1, -1, -1, -1, -1,
          segments[s].GetSegmentKey(), -1);
   }
 

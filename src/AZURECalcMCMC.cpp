@@ -361,6 +361,7 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   //   per J-group, per level: one energy, then one width per channel
   //   one norm per segment with IsVaryNorm()
   //   one energy shift per segment (all segments)
+  //   one sqrt(E) energy-shift coefficient per segment (all segments)
   // AZUREAPI::GetParameterInfo() walks the same sequence.
   std::vector<int> allKinds;
   std::vector<double> allAutoMean;
@@ -399,6 +400,13 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     allKinds.push_back(PARAM_SHIFT);
     allAutoMean.push_back(segments[s].GetNominalEnergyShift());
     allAutoStd.push_back(segments[s].GetEnergyShiftError());
+  }
+
+  // sqrt(E) energy-shift coefficients, one per segment, same prior rule.
+  for (size_t s = 0; s < segments.size(); ++s) {
+    allKinds.push_back(PARAM_SHIFT);
+    allAutoMean.push_back(segments[s].GetNominalEnergyShiftSqrt());
+    allAutoStd.push_back(segments[s].GetEnergyShiftSqrtError());
   }
 
   if (allKinds.size() != fixed_.size()) {

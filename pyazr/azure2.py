@@ -961,6 +961,9 @@ class azure2:
 
             ((shift - nominal_shift) / shift_error)^2
 
+        and the same again for a free sqrt(E) shift coefficient (the b of
+        E' = E + shift + b*sqrt(E), key ``"shift_sqrt"``).
+
         Minimize the bare chi-squared instead and the normalizations drift to
         absorb every discrepancy -- a "better" number AZURE2 would never have
         found, worth -480 on the 7Be model.  Roll your own Minuit or
@@ -969,13 +972,15 @@ class azure2:
 
         Note the denominator uses the *nominal* normalization, and that
         ``norm_error`` is a percentage.  Returns ``{"norm": array, "shift":
-        array}``, one entry per segment.
+        array, "shift_sqrt": array}``, one entry per segment.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         norm = np.zeros(self.nsegments)
         shift = np.zeros(self.nsegments)
+        shift_sqrt = np.zeros(self.nsegments)
         current = {p.segment_key: p for p in self.parameters.norms}
         shifting = {p.segment_key: p for p in self.parameters.shifts}
+        sqrting = {p.segment_key: p for p in self.parameters.sqrt_shifts}
         for i, d in enumerate(self.active_datasets):
             p = current.get(d.key)
             value = (float(x[p.free_index])
@@ -990,7 +995,14 @@ class azure2:
                         if q is not None and not q.fixed and q.free_index is not None
                         and q.free_index < x.size else d.energy_shift)
                 shift[i] = ((sval - d.energy_shift) / d.energy_shift_error) ** 2
-        return {"norm": norm, "shift": shift}
+            if d.vary_shift_sqrt and d.energy_shift_sqrt_error:
+                q = sqrting.get(d.key)
+                bval = (float(x[q.free_index])
+                        if q is not None and not q.fixed and q.free_index is not None
+                        and q.free_index < x.size else d.energy_shift_sqrt)
+                shift_sqrt[i] = ((bval - d.energy_shift_sqrt)
+                                 / d.energy_shift_sqrt_error) ** 2
+        return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt}
 
     def objective(self, params=None):
         """What AZURE2's own fit minimizes: chi-squared plus the penalties.
@@ -1002,7 +1014,8 @@ class azure2:
         x = np.asarray(self.params_rwa if params is None else params, float)
         pen = self.penalties(x)
         return (float(np.sum(self.calculate_chi2_rwa(x)))
-                + float(np.sum(pen["norm"])) + float(np.sum(pen["shift"])))
+                + float(np.sum(pen["norm"])) + float(np.sum(pen["shift"]))
+                + float(np.sum(pen["shift_sqrt"])))
 
     def chi2_and_grad(self, params):
         """Value and analytic gradient of the (data) chi-squared.

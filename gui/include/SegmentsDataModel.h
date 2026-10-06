@@ -33,6 +33,10 @@ struct SegmentsDataData {
   int secondaryDecayL;
   double finalJ;
   double delta;
+  // Trailing "sqrtshift <b> <bError> <vary>" block (sqrt(E) energy-shift
+  // term, see SegLine.h).  Carried through verbatim so a file that uses it
+  // survives a GUI load/save; the GUI does not edit it yet.
+  QString sqrtShiftTokens;
 };
 
 /*!

@@ -1285,7 +1285,8 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
   `lv.energy`, `c.pair/L/S`) to hand-parsing.
 - `<segmentsData>` — one line per data segment: `isActive entranceKey exitKey
   minE maxE minA maxA isDiff [phaseJ phaseL] dataNorm varyNorm dataNormError
-  [energyShift …] dataFile`. A `+10` on `isDiff` marks a THM/HOES segment.
+  [energyShift …] dataFile [tail tokens, incl. the optional sqrtshift block]`.
+  A `+10` on `isDiff` marks a THM/HOES segment.
   **If hand-editing a line (e.g. appending a new segment, flipping a flag)**,
   match the existing fixed-width column formatting exactly — each field padded
   to its own column, not just whitespace-separated. A plain tab-joined line
@@ -1298,7 +1299,21 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
   missing them has repeatedly led to wrong curves and wrong conclusions.
   Parser: `include/SegLine.h`. Before the file name come
   `energyShift energyShiftError varyEnergyShift`; after it, whitespace-separated:
-  `isAdvanced [operationType nComp {entrance exit angle [scaling]}...] isUPOS [L Ic delta]`
+  `isAdvanced [operationType nComp {entrance exit angle [scaling]}...] isUPOS [L Ic delta] [sqrtshift b bErr vary]`
+  - `sqrtshift b bErr vary` (keyword block, always last; added 2026-10-05) is
+    the second energy-shift option: E' = E + energyShift + b*sqrt(E/MeV), b in
+    MeV^1/2, with its own penalty `((b-b_nom)/bErr)^2` and vary flag,
+    independent of the constant shift. It is what an additive offset in an
+    analyzing-magnet field reading produces (E = kB^2 -> dE ~ sqrt(E)); use it
+    when a set fits at low energy and drifts at high energy (12C+a Bashkin
+    15N(p,a1g) 0 deg: -15 keV at 3 MeV, 0 at 1.2 MeV). Parameter name
+    `segment_<key>_energy_shift_sqrt` (one per segment, fixed at 0 without the
+    block; appended after all `_energy_shift` names, so old .sav files stay
+    valid). `shifts.out` has it as the last column. pyazr: `Segment.
+    energy_shift_sqrt/_error/vary_shift_sqrt`, `parameters.sqrt_shifts`,
+    `penalties()["shift_sqrt"]`, `add_data_segment(energy_shift_sqrt=...)`.
+    The GUI preserves the block but cannot edit it. Test:
+    `tests/energy_shift_sqrt` (check.sh fits a known a, b back).
   - `isAdvanced` 1 = composite segment. `operationType` 0 = SUM of the listed
     components (the segment's own exit is included), 1 = RATIO (dimensionless:
     the lab->c.m. cross-section conversion is skipped). `nComp` = -1 is a

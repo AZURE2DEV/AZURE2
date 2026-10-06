@@ -16,7 +16,10 @@ Layout of a ``<segmentsData>`` line (see ``include/SegLine.h``)::
         [phaseJ phaseL if isDiff==2]
         dataNorm varyNorm dataNormError
         [energyShift energyShiftError varyEnergyShift]      (optional)
-        dataFile  [advanced flags ...]
+        dataFile  [advanced flags ...]  [sqrtshift b bError varyB]
+
+The trailing ``sqrtshift`` keyword block adds a sqrt(E) term to the segment's
+energy shift, E' = E + energyShift + b*sqrt(E/MeV), b in MeV^1/2.
 
 Layout of a ``<segmentsTest>`` line (see ``include/ExtrapLine.h``)::
 
@@ -92,6 +95,9 @@ class Segment:
     energy_shift: float = 0.0      # applied beam-energy shift (MeV)
     energy_shift_error: float = 0.0    # its systematic (MeV)
     vary_shift: bool = False       # is the energy shift a fit parameter?
+    energy_shift_sqrt: float = 0.0         # b in E' = E + shift + b*sqrt(E) (MeV^1/2)
+    energy_shift_sqrt_error: float = 0.0   # its systematic (MeV^1/2)
+    vary_shift_sqrt: bool = False          # is b a fit parameter?
     operation: Optional[str] = None    # 'sum' | 'ratio' for a composite segment
     components: tuple = ()             # (entrance, exit, angle, scaling) each
 
@@ -194,6 +200,20 @@ class SegmentSet(list):
         # carries a per-component scaling factor.  See SegLine.h.
         operation, components = None, []
         tail = t[i + 1:]
+
+        # The sqrt(E) energy-shift term is a keyword block at the very end:
+        #   sqrtshift b bError vary
+        # Split it off first so the positional composite parse never sees it.
+        shift_sqrt = shift_sqrt_error = 0.0
+        vary_shift_sqrt = False
+        for k, tok in enumerate(tail):
+            if tok.lower() == "sqrtshift":
+                blk = tail[k + 1:k + 4]
+                if len(blk) == 3 and all(_isfloat(b) for b in blk):
+                    shift_sqrt, shift_sqrt_error = float(blk[0]), float(blk[1])
+                    vary_shift_sqrt = int(float(blk[2])) == 1
+                tail = tail[:k]
+                break
         if tail and _isfloat(tail[0]) and int(float(tail[0])) == 1:
             operation = "ratio" if (len(tail) > 1 and
                                     int(float(tail[1])) == 1) else "sum"
@@ -227,6 +247,9 @@ class SegmentSet(list):
             norm_error=norm_error, data_file=data_file,
             energy_shift=shift, energy_shift_error=shift_error,
             vary_shift=vary_shift,
+            energy_shift_sqrt=shift_sqrt,
+            energy_shift_sqrt_error=shift_sqrt_error,
+            vary_shift_sqrt=vary_shift_sqrt,
             operation=operation, components=tuple(components))
 
     # -- views ----------------------------------------------------------------

@@ -1106,7 +1106,8 @@ class AzrModel:
                          norm=1.0, vary_norm=False, norm_error=0.0,
                          energy_shift=0.0, energy_shift_error=0.0,
                          vary_shift=False, phase_J=None, phase_L=None,
-                         active=True):
+                         active=True, energy_shift_sqrt=0.0,
+                         energy_shift_sqrt_error=0.0, vary_shift_sqrt=False):
         """Append one data segment (a ``<segmentsData>`` line).
 
         ``data_file`` is the data file path (relative to the run directory,
@@ -1120,7 +1121,11 @@ class AzrModel:
         ``norm`` is the normalization applied to the data, ``norm_error`` its
         systematic error (percent, as stored in the file), ``energy_shift``
         the beam-energy shift (MeV) with its ``_error``.  ``vary_norm`` /
-        ``vary_shift`` free the corresponding parameter.
+        ``vary_shift`` free the corresponding parameter.  ``energy_shift_sqrt``
+        is the coefficient b of a sqrt(E) shift term, E' = E + shift +
+        b*sqrt(E/MeV) (b in MeV^1/2), with its ``_error`` and
+        ``vary_shift_sqrt``; the block is written only when one of the three
+        is set, so a plain segment line is unchanged.
 
         Returns ``self`` so calls chain.
         """
@@ -1139,6 +1144,9 @@ class AzrModel:
         toks += [_fmt(norm), 1 if vary_norm else 0, _fmt(norm_error),
                  _fmt(energy_shift), _fmt(energy_shift_error),
                  1 if vary_shift else 0, str(data_file), 0, 0]
+        if energy_shift_sqrt or energy_shift_sqrt_error or vary_shift_sqrt:
+            toks += ["sqrtshift", _fmt(energy_shift_sqrt),
+                     _fmt(energy_shift_sqrt_error), 1 if vary_shift_sqrt else 0]
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
         lines = self._suffix.splitlines()
         if "<segmentsData>" not in lines:

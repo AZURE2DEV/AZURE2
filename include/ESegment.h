@@ -110,6 +110,18 @@ class ESegment {
   double GetEnergyShiftError() const;
   /// Is the energy shift a free fit parameter?
   bool IsVaryEnergyShift() const;
+  /// Coefficient b of the sqrt(E) energy-shift term, E' = E + a + b*sqrt(E/MeV) (MeV^1/2).
+  double GetEnergyShiftSqrt() const;
+  /// sqrt(E) coefficient last applied to the points.
+  double GetLastEnergyShiftSqrt() const;
+  /// sqrt(E) coefficient as declared in the input file (the penalty's reference).
+  double GetNominalEnergyShiftSqrt() const;
+  /// Uncertainty on the sqrt(E) coefficient (MeV^1/2).
+  double GetEnergyShiftSqrtError() const;
+  /// Is the sqrt(E) coefficient a free fit parameter?
+  bool IsVaryEnergyShiftSqrt() const;
+  /// The whole lab-energy shift at a point's original lab energy: a + b*sqrt(E).
+  double TotalEnergyShift(double labEnergy) const;
   /// Is this a composite segment, combining others by sum or ratio?
   bool IsAdvanced() const;
   /// Combination type as an integer: 0 sum, 1 ratio.
@@ -130,6 +142,9 @@ class ESegment {
   /// Set the energy shift; UpdatePointEnergiesWithShift applies it to the points.
   void SetEnergyShift(double);
   void SetLastEnergyShift(double);
+  /// Set the sqrt(E) coefficient; UpdatePointEnergiesWithShift applies it to the points.
+  void SetEnergyShiftSqrt(double);
+  void SetLastEnergyShiftSqrt(double);
   /// Re-apply the current energy shift to every point, undoing the previous one.
   void UpdatePointEnergiesWithShift(CNuc *theCNuc = NULL, const Config *configure = NULL);
   /// Change the exit pair key.
@@ -211,6 +226,11 @@ class ESegment {
   double energyShiftNominal_;
   double energyShiftError_;
   bool varyEnergyShift_;
+  double energyShiftSqrt_;
+  double lastEnergyShiftSqrt_;  // To track last applied sqrt(E) coefficient
+  double energyShiftSqrtNominal_;
+  double energyShiftSqrtError_;
+  bool varyEnergyShiftSqrt_;
   bool isAdvanced_;
   int operationType_;
   std::string componentsList_;

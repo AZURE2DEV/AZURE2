@@ -31,6 +31,7 @@ EData::EData() {
   iterations_ = 0;
   normParamOffset_ = 0;
   energyShiftParamOffset_ = 0;
+  energyShiftSqrtParamOffset_ = 0;
   isFit_ = true;
   isErrorAnalysis_ = false;
   ecReadPos_ = std::streampos(0);
@@ -485,6 +486,15 @@ int EData::GetNormParamOffset() const {
  */
 int EData::GetEnergyShiftParamOffset() const {
   return energyShiftParamOffset_;
+}
+
+/*!
+ * Returns the index at which the sqrt(E) energy-shift coefficients start in
+ * the Minuit parameter vector (one per segment, after the energy shifts).
+ */
+
+int EData::GetEnergyShiftSqrtParamOffset() const {
+  return energyShiftSqrtParamOffset_;
 }
 
 /*!
@@ -1558,10 +1568,10 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
       configure.outStream << "Could not write normalization file." << std::endl;
   }
 
-  // Check if any energy shifts are varied
+  // Check if any energy shifts (constant or sqrt(E) term) are varied
   bool isVaryEnergyShift = false;
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-    if (segment->IsVaryEnergyShift()) {
+    if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt()) {
       isVaryEnergyShift = true;
       break;
     }
@@ -1574,12 +1584,15 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
     if (out) {
       out.precision(4);
       out << std::scientific;
-      out << "segment_key_#, file_name, low_angle_bound, high_angle_bound, aframe, low_energy_bound, high_energy_bound, eframe, norm, shift" << std::endl;
+      // One complete row per segment with a free shift term; sqrt_shift is the
+      // coefficient b of E' = E + shift + b*sqrt(E/MeV), in MeV^1/2.
+      out << "segment_key_#, file_name, low_angle_bound, high_angle_bound, aframe, low_energy_bound, high_energy_bound, eframe, norm, shift, sqrt_shift" << std::endl;
       for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-        if (segment->IsVaryEnergyShift()) out << segment->GetSegmentKey() << ","
-                                              << segment->GetDataFile() << ","
-                                              << segment->GetMinAngle() << ","
-                                              << segment->GetMaxAngle() << ",";
+        if (!(segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt())) continue;
+        out << segment->GetSegmentKey() << ","
+            << segment->GetDataFile() << ","
+            << segment->GetMinAngle() << ","
+            << segment->GetMaxAngle() << ",";
         if (segment->IsCMDifferential() == true) {
           out << "CM,";
         } else
@@ -1591,7 +1604,8 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
         } else
           out << "Lab,";
         out << segment->GetNorm() << ","
-            << segment->GetEnergyShift() << std::endl;
+            << segment->GetEnergyShift() << ","
+            << segment->GetEnergyShiftSqrt() << std::endl;
       }
       out.flush();
       out.close();
@@ -2442,6 +2456,10 @@ void EData::SetEnergyShiftParamOffset(int offset) {
   energyShiftParamOffset_ = offset;
 }
 
+void EData::SetEnergyShiftSqrtParamOffset(int offset) {
+  energyShiftSqrtParamOffset_ = offset;
+}
+
 /*!
  * Fills the Minuit parameter array from initial values in the EData object.
  */
@@ -2471,6 +2489,18 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
     if (!segment->IsVaryEnergyShift()) {
       p.Fix(varname);  // Fix parameter if not varying
     }
+  }
+
+  // sqrt(E) energy-shift coefficients, again one per segment so the layout
+  // (and every parameter index downstream) depends only on the segment count.
+  // A segment without a "sqrtshift" block carries a fixed 0 here, so a model
+  // written before the term existed fits exactly as before.
+  SetEnergyShiftSqrtParamOffset(p.Params().size());
+  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+    snprintf(varname, sizeof(varname), "segment_%d_energy_shift_sqrt", segment->GetSegmentKey());
+    double stepSize = (segment->GetEnergyShiftSqrtError() > 0.0) ? segment->GetEnergyShiftSqrtError() * 0.01 : 0.0005;
+    p.Add(varname, segment->GetEnergyShiftSqrt(), stepSize);
+    if (!segment->IsVaryEnergyShiftSqrt()) p.Fix(varname);
   }
 }
 
@@ -2504,6 +2534,7 @@ void EData::FillNormsFromParams(const vector_r &p) {
 
 void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *theCNuc, const Config *configure) {
   int i = GetEnergyShiftParamOffset();
+  int j = GetEnergyShiftSqrtParamOffset();
   int k = 0;
   bool anyEnergyShifted = false;
 
@@ -2511,16 +2542,26 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
     for (ESegmentIterator segment = data->GetSegments().begin(); segment < data->GetSegments().end(); segment++) {
       k++;
 
-      // Always apply energy shift since parameters are always present for all segments
-      if (segment->IsVaryEnergyShift() || p[i] != 0.0) {
+      // Both terms are present for every segment: the constant shift at p[i]
+      // and the sqrt(E) coefficient at p[j].  Either moving the points means
+      // the segment must be re-shifted (the mapping E -> E + a + b*sqrt(E) is
+      // applied from the original energies, so one update covers both).
+      const double shiftConst = p[i];
+      const double shiftSqrt = (j >= 0 && j < (int)p.size()) ? p[j] : 0.0;
+      const bool shiftActive = segment->IsVaryEnergyShift() || shiftConst != 0.0 ||
+                               segment->IsVaryEnergyShiftSqrt() || shiftSqrt != 0.0;
+      if (shiftActive) {
         // Check if energy is the same, if so, continue
-        if (segment->GetLastEnergyShift() == p[i]) {
+        if (segment->GetLastEnergyShift() == shiftConst && segment->GetLastEnergyShiftSqrt() == shiftSqrt) {
           i++;
+          j++;
           continue;
         }
 
-        segment->SetEnergyShift(p[i]);
-        segment->SetLastEnergyShift(p[i]);
+        segment->SetEnergyShift(shiftConst);
+        segment->SetLastEnergyShift(shiftConst);
+        segment->SetEnergyShiftSqrt(shiftSqrt);
+        segment->SetLastEnergyShiftSqrt(shiftSqrt);
         segment->UpdatePointEnergiesWithShift(theCNuc, configure);
         anyEnergyShifted = true;
 
@@ -2529,6 +2570,7 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
           for (ESegment *componentSegment : segment->GetComponentSegments()) {
             if (componentSegment) {
               componentSegment->SetEnergyShift(segment->GetEnergyShift());
+              componentSegment->SetEnergyShiftSqrt(segment->GetEnergyShiftSqrt());
               componentSegment->UpdatePointEnergiesWithShift(theCNuc, configure);
             }
           }
@@ -2537,23 +2579,26 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
 
       // Apply the same energy shift to all component segments in total capture segments
       if (segment->IsTotalCapture() && segment->HasComponents()) {
-        if (segment->IsVaryEnergyShift() || p[i] != 0.0) {
+        if (shiftActive) {
           // Apply energy shift to all component segments
           const std::vector<ESegment *> &componentSegments = segment->GetComponentSegments();
           for (ESegment *componentSegment : componentSegments) {
             if (componentSegment) {
               // Check if energy is the same, if so, skip the recompute.
-              // NOTE: do NOT advance i here. All components of a total-capture
-              // segment share this segment's single energy-shift parameter p[i];
-              // i is advanced exactly once per segment at the end of the loop.
-              // Advancing it inside the component loop desyncs the
+              // NOTE: do NOT advance i or j here. All components of a total-capture
+              // segment share this segment's single pair of shift parameters;
+              // i and j are advanced exactly once per segment at the end of the
+              // loop.  Advancing them inside the component loop desyncs the
               // parameter-to-segment mapping for every subsequent segment.
-              if (componentSegment->GetLastEnergyShift() == p[i]) {
+              if (componentSegment->GetLastEnergyShift() == shiftConst &&
+                  componentSegment->GetLastEnergyShiftSqrt() == shiftSqrt) {
                 continue;
               }
 
-              componentSegment->SetEnergyShift(p[i]);
-              componentSegment->SetLastEnergyShift(p[i]);
+              componentSegment->SetEnergyShift(shiftConst);
+              componentSegment->SetLastEnergyShift(shiftConst);
+              componentSegment->SetEnergyShiftSqrt(shiftSqrt);
+              componentSegment->SetLastEnergyShiftSqrt(shiftSqrt);
               componentSegment->UpdatePointEnergiesWithShift(theCNuc, configure);
               anyEnergyShifted = true;
             }
@@ -2561,8 +2606,9 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
         }
       }
 
-      // Always increment i since energy shift parameters are now present for ALL segments
+      // Always increment i and j since both shift parameters are present for ALL segments
       i++;
+      j++;
     }
 
     // Critical fix: Rebuild energy-based mapping system after energy shifts
@@ -2654,6 +2700,7 @@ EData *EData::Clone() const {
   dataCopy->iterations_ = this->iterations_;
   dataCopy->normParamOffset_ = this->normParamOffset_;
   dataCopy->energyShiftParamOffset_ = this->energyShiftParamOffset_;
+  dataCopy->energyShiftSqrtParamOffset_ = this->energyShiftSqrtParamOffset_;
   dataCopy->isFit_ = this->isFit_;
   dataCopy->isErrorAnalysis_ = this->isErrorAnalysis_;
   dataCopy->targetEffects_ = this->targetEffects_;

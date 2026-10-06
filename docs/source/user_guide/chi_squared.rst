@@ -55,6 +55,11 @@ this time with an absolute rather than a percentage error:
    \chi^2_{\text{shift},s} =
    \left(\frac{\Delta E_s - \Delta E_s^{\text{nom}}}{\delta(\Delta E_s)}\right)^2
 
+A segment whose :math:`\sqrt{E}` shift coefficient :math:`b_s` is free (the
+``sqrtshift`` block, see :doc:`segments`) adds the same kind of term,
+:math:`((b_s - b_s^{\text{nom}})/\delta b_s)^2`, with :math:`\delta b_s` in
+MeV\ :sup:`1/2`.
+
 Nuisance parameters
 -------------------
 

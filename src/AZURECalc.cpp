@@ -57,6 +57,12 @@ double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config,
     double she = segment->GetEnergyShiftError();
     if (she != 0.0) chi += pow((sh - shn) / she, 2.0);
   }
+  if (segment->IsVaryEnergyShiftSqrt()) {
+    double sq = segment->GetEnergyShiftSqrt();
+    double sqn = segment->GetNominalEnergyShiftSqrt();
+    double sqe = segment->GetEnergyShiftSqrtError();
+    if (sqe != 0.0) chi += pow((sq - sqn) / sqe, 2.0);
+  }
   return chi;
 }
 
@@ -135,6 +141,15 @@ double AZURECalc::operator()(const vector_r &p) const {
         double energyShiftError = segment->GetEnergyShiftError();
         if (energyShiftError != 0.) {
           chiSquared += pow((energyShift - energyShiftNominal) / energyShiftError, 2.0);
+        }
+      }
+      // ... and the same for the sqrt(E) energy-shift coefficient
+      if (segment->IsVaryEnergyShiftSqrt()) {
+        double sq = segment->GetEnergyShiftSqrt();
+        double sqn = segment->GetNominalEnergyShiftSqrt();
+        double sqe = segment->GetEnergyShiftSqrtError();
+        if (sqe != 0.) {
+          chiSquared += pow((sq - sqn) / sqe, 2.0);
         }
       }
 
@@ -262,6 +277,12 @@ double AZURECalc::Chi2Value(const vector_r &p) const {
       double she = segment->GetEnergyShiftError();
       if (she != 0.0) chiSquared += pow((sh - shn) / she, 2.0);
     }
+    if (segment->IsVaryEnergyShiftSqrt()) {
+      double sq = segment->GetEnergyShiftSqrt();
+      double sqn = segment->GetNominalEnergyShiftSqrt();
+      double sqe = segment->GetEnergyShiftSqrtError();
+      if (sqe != 0.0) chiSquared += pow((sq - sqn) / sqe, 2.0);
+    }
     chiSquared += segChi;
   }
   if (limitsManager_) chiSquared += CalculateNuisanceChiSquared(p);
@@ -383,18 +404,24 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     // Fast path: a free energy shift on a self-contained segment only moves that
     // segment's points, so finite-difference just that segment's chi^2 on the
     // already-filled clone instead of re-solving the entire dataset twice.
-    if (kind == ParamKind::EnergyShift && localShiftOk) {
+    if ((kind == ParamKind::EnergyShift || kind == ParamKind::EnergyShiftSqrt) && localShiftOk) {
       int s = pmap.Desc(idx).segment;
       ESegment *seg = (s >= 1) ? ld->GetSegment(s) : nullptr;
       if (seg && !seg->HasComponents() && !seg->IsTotalCapture()) {
-        double d0 = seg->GetEnergyShift();
-        seg->SetEnergyShift(x0 + h);
+        // The constant shift and the sqrt(E) coefficient enter the same
+        // E -> E + a + b*sqrt(E) mapping; difference whichever one this is.
+        const bool isSqrt = (kind == ParamKind::EnergyShiftSqrt);
+        auto setShift = [&](double v) {
+          if (isSqrt) seg->SetEnergyShiftSqrt(v); else seg->SetEnergyShift(v);
+        };
+        double d0 = isSqrt ? seg->GetEnergyShiftSqrt() : seg->GetEnergyShift();
+        setShift(x0 + h);
         seg->UpdatePointEnergiesWithShift(lc, &configure());
         double chiP = SegmentLocalChi2(seg, lc, configure(), ld);
-        seg->SetEnergyShift(x0 - h);
+        setShift(x0 - h);
         seg->UpdatePointEnergiesWithShift(lc, &configure());
         double chiM = SegmentLocalChi2(seg, lc, configure(), ld);
-        seg->SetEnergyShift(d0);  // restore base state on the clone
+        setShift(d0);  // restore base state on the clone
         seg->UpdatePointEnergiesWithShift(lc, &configure());
         grad[idx] = (chiP - chiM) / (2.0 * h);
 
@@ -471,7 +498,8 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     int nc = 0;
     for (int f = 0; f < pmap.NumFull() && f < (int)full.size(); f++) {
       if (fixed[f]) continue;
-      if (pmap.Desc(f).kind != ParamKind::EnergyShift) continue;
+      if (pmap.Desc(f).kind != ParamKind::EnergyShift &&
+          pmap.Desc(f).kind != ParamKind::EnergyShiftSqrt) continue;
       const int packed = pmap.FullToPacked(f);
       if (packed < 0 || packed >= nCols) continue;
       const double x0 = full[f];
@@ -673,13 +701,22 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
     } else if (name.find("shift") != std::string::npos) {
       for (int s = 1; s <= data()->NumSegments(); s++) {
         ESegment *seg = data()->GetSegment(s);
-        if (!seg || !seg->IsVaryEnergyShift()) continue;
-        char vn[64];
+        if (!seg) continue;
+        char vn[64], vs[64];
         snprintf(vn, sizeof(vn), "segment_%d_energy_shift", seg->GetSegmentKey());
-        if (name == vn) {
+        snprintf(vs, sizeof(vs), "segment_%d_energy_shift_sqrt", seg->GetSegmentKey());
+        if (name == vn && seg->IsVaryEnergyShift()) {
           double sig = seg->GetEnergyShiftError();
           if (sig != 0.0) {
             pen_nom[a] = seg->GetNominalEnergyShift();
+            pen_inv2[a] = 1.0 / (sig * sig);
+          }
+          break;
+        }
+        if (name == vs && seg->IsVaryEnergyShiftSqrt()) {
+          double sig = seg->GetEnergyShiftSqrtError();
+          if (sig != 0.0) {
+            pen_nom[a] = seg->GetNominalEnergyShiftSqrt();
             pen_inv2[a] = 1.0 / (sig * sig);
           }
           break;

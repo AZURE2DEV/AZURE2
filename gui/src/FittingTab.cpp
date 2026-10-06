@@ -734,7 +734,7 @@ void FittingTab::loadSettings() {
           }
         }
         // Match energy shift parameters and extract segment identifier
-        else if (key.contains("shift", Qt::CaseInsensitive) && !key.contains("_rwa")) {
+        else if (key.contains("shift", Qt::CaseInsensitive) && !key.contains("_rwa") && !key.contains("_sqrt")) {
           // Try multiple patterns to extract segment identifier
           QRegExp segmentNumRegex("segment_(\\d+)_energy_shift", Qt::CaseInsensitive);
           QRegExp segmentShiftRegex("segment_(\\d+)_shift", Qt::CaseInsensitive);
@@ -1164,7 +1164,7 @@ void FittingTab::loadSettings() {
                     param.fitError = it.value().second;
                     // Find the exact parameter name from params.sav
                     for (const QString &savKey : savParams.keys()) {
-                      if (savKey.contains("shift", Qt::CaseInsensitive) && !savKey.contains("_rwa")) {
+                      if (savKey.contains("shift", Qt::CaseInsensitive) && !savKey.contains("_rwa") && !savKey.contains("_sqrt")) {
                         // Check if this savKey corresponds to this segmentId
                         QRegExp segmentNumRegex("segment_(\\d+)_energy_shift", Qt::CaseInsensitive);
                         QRegExp segmentShiftRegex("segment_(\\d+)_shift", Qt::CaseInsensitive);

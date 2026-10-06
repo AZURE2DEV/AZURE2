@@ -144,11 +144,20 @@ int ParamIndexMap::EnergyShiftIndex(int segment) const {
 }
 
 /*!
+ * Returns the full-vector index of the sqrt(E) energy-shift coefficient for a segment.
+ */
+int ParamIndexMap::EnergyShiftSqrtIndex(int segment) const {
+  auto it = sqrtShiftIndex_.find(segment);
+  return (it == sqrtShiftIndex_.end()) ? -1 : it->second;
+}
+
+/*!
  * Builds the parameter-index map by mirroring, in the exact same order, the
  * assignment loops in:
  *   - CNuc::FillCompoundFromParams      (level energies + gammas)
  *   - EData::FillNormsFromParams        (norms, only for IsVaryNorm segments)
- *   - EData::FillEnergyShiftsFromParams (one energy shift per segment)
+ *   - EData::FillEnergyShiftsFromParams (one energy shift per segment, then
+ *                                        one sqrt(E) coefficient per segment)
  *
  * Keeping this in lock-step with those routines is what guarantees the returned
  * gradient vector is a permutation-correct match for the sampler's parameter
@@ -197,6 +206,19 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
       if (segment) {
         map.shiftIndex_[s] = i;
         map.desc_.push_back(ParamDesc{ParamKind::EnergyShift, -1, -1, -1, s, false});
+        i++;
+      }
+    }
+  }
+
+  // --- sqrt(E) energy-shift coefficients: one per segment (all segments). ---
+  map.energyShiftSqrtOffset_ = i;
+  if (data) {
+    for (int s = 1; s <= data->NumSegments(); s++) {
+      ESegment *segment = data->GetSegment(s);
+      if (segment) {
+        map.sqrtShiftIndex_[s] = i;
+        map.desc_.push_back(ParamDesc{ParamKind::EnergyShiftSqrt, -1, -1, -1, s, false});
         i++;
       }
     }
