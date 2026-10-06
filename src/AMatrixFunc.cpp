@@ -146,6 +146,7 @@ void AMatrixFunc::FillMatrices(EPoint *point) {
     inEnergy = point->GetCMEnergy() +
         compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetSepE() +
         compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetExE();
+  const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
     if (compound()->GetJGroup(j)->IsInRMatrix()) {
       // Cache JGroup pointer to avoid repeated calls
@@ -188,6 +189,7 @@ void AMatrixFunc::FillMatrices(EPoint *point) {
             if (jGroup->GetLevel(lap)->IsInRMatrix()) {
               ALevel *levelp = jGroup->GetLevel(lap);
               complex sum(0.0, 0.0);
+              double parkOverlap = 0.0;
               for (int ch = 1; ch <= numChannels; ch++) {
                 double gammaCh = levelGammas_[la][ch];
                 double gammaChp = levelGammas_[lap][ch];
@@ -206,7 +208,15 @@ void AMatrixFunc::FillMatrices(EPoint *point) {
                     la == lap &&
                     (configure().paramMask & Config::USE_RMC_FORMALISM))
                   sum += complex(0.0, 1.0) * gammaCh * gammaChp;
-                if ((configure().paramMask & Config::USE_BRUNE_FORMALISM) && radType == 'P') {
+                if (park && radType == 'P') {
+                  // Park (2021) Eq. (22) with B_{lambda c} = S_c(E_lambda), Eq. (26):
+                  // the kernel is S_c(E) - S_c(E_lambda) + i P_c, where loElement
+                  // is S_c(E) - B_c + i P_c.  Eq. (9) gives the off-diagonal overlap.
+                  sum += gammaCh * gammaChp * (channel->GetBoundaryCondition() - shiftFunctions_[la][ch]);
+                  if (la != lap)
+                    parkOverlap -= gammaCh * gammaChp * (shiftFunctions_[la][ch] - shiftFunctions_[lap][ch]) /
+                        (levelEnergies_[la] - levelEnergies_[lap]);
+                } else if ((configure().paramMask & Config::USE_BRUNE_FORMALISM) && radType == 'P') {
                   sum += gammaCh * gammaChp * channel->GetBoundaryCondition();
                   if (la == lap)
                     sum -= gammaCh * gammaChp * shiftFunctions_[la][ch];
@@ -216,7 +226,12 @@ void AMatrixFunc::FillMatrices(EPoint *point) {
                         (levelEnergies_[la] - levelEnergies_[lap]);
                 }
               }
-              if (la == lap) {
+              if (park) {
+                // Park (2021) Eqs. (21)-(22): A^-1 = (E_lambda - E) J - gamma (S - B_lambda + iP) gamma^T,
+                // with the diagonal overlap J_{lambda lambda} of Eq. (28).
+                if (la == lap) parkOverlap = level->GetParkNorm();
+                this->AddAInvMatrixElement(j, la, lap, (levelEnergies_[la] - inEnergy) * parkOverlap - sum);
+              } else if (la == lap) {
                 double resenergy = levelEnergies_[la];
                 this->AddAInvMatrixElement(j, la, lap, resenergy - inEnergy - sum);
               } else
@@ -510,6 +525,9 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
 
   // --- Common gating. ---
   if (configure().paramMask & Config::USE_RMC_FORMALISM) return false;
+  // The adjoint below differentiates Brune's level matrix; Park's has a
+  // different diagonal and parameter-dependent overlaps.
+  if (configure().paramMask & Config::USE_PARK_FORMALISM) return false;
   if (point->IsAngularDist()) return false;  // angular-dist coefficients
   // E1/E2 component selection only applies to the angle-integrated capture XS.
   if (xsComponent != 0 && (point->IsDifferential() || point->IsPhase())) return false;

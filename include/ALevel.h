@@ -82,6 +82,10 @@ class ALevel {
 
   /// Shift function for a channel, evaluated at the resonance energy.
   double GetShiftFunction(int) const;
+  /// Park (2021) Eq. (28): the squared norm of the basis state,
+  /// \f$J_{\lambda\lambda}=1-\sum_c\gamma_{\lambda c}^2 (dS_c/dE)_{E_\lambda}\f$.
+  /// 1 unless the Park formalism is in use.
+  double GetParkNorm() const;
 
   /// Append a channel, taking its initial width from the input file line.
   void AddGamma(NucLine);
@@ -100,6 +104,7 @@ class ALevel {
   void SetTransformIterations(int);
   void SetExternalGamma(int, complex);
   void SetShiftFunction(int, double);
+  void SetParkNorm(double);
   /// Mark the level as an external-capture final state of a pair, with its
   /// multipolarity mask.
   void SetECParams(int, unsigned char);
@@ -115,6 +120,7 @@ class ALevel {
   double fitlevel_e_;
   double sqrt_nf_factor_;
   double transform_e_;
+  double park_norm_ = 1.0;
   std::vector<bool> channelfixed_;
   vector_r gammas_;
   vector_r fitgammas_;

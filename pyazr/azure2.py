@@ -76,7 +76,8 @@ class azure2:
 
     def __init__(self, file, cwd=None, data_mode=True, use_brune=True,
                  ignore_externals=True, transform=True,
-                 use_long_wavelength=True, use_gsl_coul=False, use_rmc=False):
+                 use_long_wavelength=True, use_gsl_coul=False, use_rmc=False,
+                 use_park=False):
         """Build the R-matrix engine for ``file`` in this interpreter.
 
         Parameters
@@ -96,6 +97,11 @@ class azure2:
         use_gsl_coul : use GSL's Coulomb functions instead of AZURE2's own.
         use_rmc : use the R-matrix-with-channels (RMC) formalism instead of
             Brune; mutually exclusive with ``use_brune`` (Brune wins).
+        use_park : use Park's level-dependent boundary conditions (Phys. Rev.
+            C 104, 064612), the CLI's ``--use-park``.  The rwa vector then
+            holds the *observed* reduced width amplitudes,
+            ``Gamma = 2 P gamma**2`` with no shift-derivative factor.  Switches
+            ``use_brune`` on; no analytic derivatives.
 
         Raises
         ------
@@ -116,7 +122,8 @@ class azure2:
             data_mode=bool(data_mode), use_brune=bool(use_brune),
             ignore_externals=bool(ignore_externals), transform=bool(transform),
             use_long_wavelength=bool(use_long_wavelength),
-            use_gsl_coul=bool(use_gsl_coul), use_rmc=bool(use_rmc))
+            use_gsl_coul=bool(use_gsl_coul), use_rmc=bool(use_rmc),
+            use_park=bool(use_park))
 
         opts = _azure2.RuntimeOptions()
         for name, value in self.options.items():

@@ -87,6 +87,7 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--no-transform:" << std::setw(0) << "Do not perform initial parameter transformations." << std::endl
             << std::setw(25) << std::left << "\t--no-long-wavelenth:" << std::setw(0) << "Do not use long wavelength approximation for EL capture." << std::endl
             << std::setw(25) << std::left << "\t--use-brune:" << std::setw(0) << "Use the alternative level matrix of C.R. Brune." << std::endl
+            << std::setw(25) << std::left << "\t--use-park:" << std::setw(0) << "Use the level-dependent boundary conditions of T.-S. Park (PRC 104, 064612)." << std::endl
             << std::setw(25) << std::left << "\t--ignore-externals:" << std::setw(0) << "Ignore external resonant capture amplitude if internal width is zero." << std::endl
             << std::setw(25) << std::left << "\t--use-rmc:" << std::setw(0) << "Use Reich-Moore approximation for capture (neutron capture only)." << std::endl
             << std::setw(25) << std::left << "\t--gsl-coul:" << std::setw(0) << "Use GSL Coulomb functions (faster, but less accurate)." << std::endl
@@ -151,6 +152,8 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
       configure.paramMask &= ~Config::USE_LONGWAVELENGTH_APPROX;
     else if (*it == "--use-brune")
       configure.paramMask |= Config::USE_BRUNE_FORMALISM;
+    else if (*it == "--use-park")
+      configure.paramMask |= (Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
     else if (*it == "--gsl-coul")
       configure.paramMask |= Config::USE_GSL_COULOMB_FUNC;
     else if (*it == "--ignore-externals")
@@ -1394,6 +1397,7 @@ int main(int argc, char *argv[]) {
   if ((configure.paramMask & Config::USE_RMC_FORMALISM) && (configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
     configure.outStream << "WARNING: --use-brune is incompatible with --use-rmc. Ignoring --use-brune." << std::endl;
     configure.paramMask &= ~Config::USE_BRUNE_FORMALISM;
+    configure.paramMask &= ~Config::USE_PARK_FORMALISM;
   }
   if ((configure.paramMask & Config::USE_BRUNE_FORMALISM) || (configure.paramMask & Config::IGNORE_ZERO_WIDTHS)) {
     if (!(configure.paramMask & Config::USE_AMATRIX))

@@ -66,7 +66,11 @@ class Config {
     USE_LM_MINIMIZER = (1 << 20),
     CALCULATE_COVARIANCE_BAND = (1 << 21),
     SCALE_COVARIANCE_BY_CHI2 = (1 << 22),
-    USE_GSL_LM_MINIMIZER = (1 << 23)
+    USE_GSL_LM_MINIMIZER = (1 << 23),
+    /// Park (2021) level-dependent boundary conditions: the fit parameters are
+    /// the observed reduced width amplitudes.  Always set together with
+    /// USE_BRUNE_FORMALISM, whose per-level shift functions it shares.
+    USE_PARK_FORMALISM = (1 << 24)
   };
   /*!
    * Bit flags for check file control in AZURE2.

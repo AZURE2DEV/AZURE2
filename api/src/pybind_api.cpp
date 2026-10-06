@@ -83,6 +83,7 @@ struct RuntimeOptions {
   bool use_long_wavelength = true;  // USE_LONGWAVELENGTH_APPROX
   bool use_gsl_coul = false;        // USE_GSL_COULOMB_FUNC
   bool use_rmc = false;             // USE_RMC_FORMALISM
+  bool use_park = false;            // USE_PARK_FORMALISM (implies Brune)
 };
 
 void apply_options(Config &config, const RuntimeOptions &opt) {
@@ -114,6 +115,11 @@ void apply_options(Config &config, const RuntimeOptions &opt) {
     config.paramMask |= Config::USE_RMC_FORMALISM;
   else
     config.paramMask &= ~Config::USE_RMC_FORMALISM;
+  // Park shares Brune's per-level shift functions, so it switches Brune on.
+  if (opt.use_park)
+    config.paramMask |= (Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
+  else
+    config.paramMask &= ~Config::USE_PARK_FORMALISM;
 }
 
 }  // namespace
@@ -453,7 +459,8 @@ PYBIND11_MODULE(_azure2, m) {
       .def_readwrite("transform", &RuntimeOptions::transform)
       .def_readwrite("use_long_wavelength", &RuntimeOptions::use_long_wavelength)
       .def_readwrite("use_gsl_coul", &RuntimeOptions::use_gsl_coul)
-      .def_readwrite("use_rmc", &RuntimeOptions::use_rmc);
+      .def_readwrite("use_rmc", &RuntimeOptions::use_rmc)
+      .def_readwrite("use_park", &RuntimeOptions::use_park);
 
   py::class_<Session>(m, "Session")
       .def(py::init<const std::string &, const RuntimeOptions &>(),

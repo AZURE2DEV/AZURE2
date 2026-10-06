@@ -336,6 +336,22 @@ void ALevel::SetShiftFunction(int channelNum, double shiftFunction) {
 }
 
 /*!
+ * Returns the Park (2021) diagonal overlap \f$J_{\lambda\lambda}\f$ of the level.
+ */
+
+double ALevel::GetParkNorm() const {
+  return park_norm_;
+}
+
+/*!
+ * Sets the Park (2021) diagonal overlap \f$J_{\lambda\lambda}\f$ of the level.
+ */
+
+void ALevel::SetParkNorm(double parkNorm) {
+  park_norm_ = parkNorm;
+}
+
+/*!
  * Sets the external capture parameters for the level.
  */
 
