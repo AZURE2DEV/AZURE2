@@ -1293,6 +1293,36 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
   the **GUI's segment editor silently mis-displays/fails to load it correctly**,
   because it expects the columns at fixed character offsets. Diff a hand-edited
   line against an unmodified neighbor before trusting it in the GUI.
+- **Read the tokens AFTER the data file name before modelling, plotting or
+  extrapolating any segment** — they change what the segment computes, and
+  missing them has repeatedly led to wrong curves and wrong conclusions.
+  Parser: `include/SegLine.h`. Before the file name come
+  `energyShift energyShiftError varyEnergyShift`; after it, whitespace-separated:
+  `isAdvanced [operationType nComp {entrance exit angle [scaling]}...] isUPOS [L Ic delta]`
+  - `isAdvanced` 1 = composite segment. `operationType` 0 = SUM of the listed
+    components (the segment's own exit is included), 1 = RATIO (dimensionless:
+    the lab->c.m. cross-section conversion is skipped). `nComp` = -1 is a
+    marker for the newer format: the next integer is the real count and each
+    component carries a 4th `scaling` token. A component angle <= -900 means unset.
+  - `isUPOS` is read next **whether or not the segment is advanced**. 1 =
+    Unobserved Primary, Observed Secondary: the observable is the secondary
+    gamma ray from the decay of the state the exit pair is left in (e.g. the
+    4.44 MeV gamma of 12C(2+) for 15N(p,a1 gamma)), NOT the primary particle's
+    cross section. Then `L` = multipolarity of that secondary gamma, `Ic` =
+    spin of the state it decays to, `delta` = its multipole mixing ratio.
+  - Reading a tail: `file 0 0` = plain segment; `file 0 1 2 0 0` = UPOS, E2
+    gamma to a 0+ state, no mixing (12C+a 8-6-26 segment 391, Bashkin
+    15N(p,a1 gamma) at 0 deg); `file 1 0 3 ...` = sum of three components.
+  - **An extrapolation cannot reproduce a UPOS segment.** A `<segmentsTest>` /
+    mode-3 / `set_extrapolations` line with the same entrance, exit and angle
+    computes the primary (a1) cross section, which differed from segment 391's
+    UPOS gamma yield by 0.1-3.5x point to point (2026-10-05). To draw or scan a
+    UPOS curve, copy the segment line unchanged, point it at a pseudo-data grid
+    file (`E 0 1000 100` rows), run mode 1 with the `.sav`, and read column 4
+    of that segment's `AZUREOut` block. Then check it against the real
+    segment's column 4 at the data energies (agreed to 1e-5 there).
+  - Audit one-liner (lists every segment with a non-trivial tail):
+    `awk '/<segmentsData>/{f=1;n=0;next}/<\/segmentsData>/{f=0}f{n++;s=$0;sub(/.*\.dat/,"",s);if(s!~/^ *0 +0 *$/)print n": "$0}' model.azr`
 - `<segmentsTest>` — extrapolation grids (see above).
 - `<targetInt>` — target/experimental effects (integration, convolution) —
   **matched to a `<segmentsData>` or `<segmentsTest>` line purely by its own

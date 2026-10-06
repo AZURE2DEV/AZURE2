@@ -206,6 +206,12 @@ data treatment stays the evaluator's decision (section 5).  Worked example with 
 - segments: file exists; entrance / exit keys match what the file holds; energy window against
   the data's range and the exit threshold; isDiff against the angle column and its frame; "sum"
   tails complete for every channel open in the window;
+- segment tails: list every segment with tokens after the file name other than `0 0`
+  (azure2-eval SKILL, ".azr file anatomy", has the field meanings and an awk one-liner) and
+  record which are composite SUM / RATIO segments and which are UPOS (secondary-gamma)
+  segments. A UPOS segment's observable is the secondary gamma, not the primary cross section,
+  and no extrapolation reproduces it, so curves, scans and post-hoc tests on it must run in data
+  mode on a pseudo-data grid (12C+alpha 2026-10-05: 39 UPOS and 138 RATIO segments in one model);
 - normalizations: every `varyNorm 1` with `normError 0` is a FREE UNPENALIZED norm -- list them
   with their fitted values and ask whether each is intended; list fitted norms outside 0.7-1.4;
   check every norm / shift setting against the evaluator's recorded decisions;
