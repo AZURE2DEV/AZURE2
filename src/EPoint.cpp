@@ -61,7 +61,7 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   cm_energy_ = dataLine.energy();
   lab_energy_ = shiftedEnergy;
   excitation_energy_ = dataLine.energy();
-  parentSegment_ = parent;
+  crossSectionComponent_ = parent ? parent->GetCrossSectionComponent() : 0;
   segment_key_ = parent->GetSegmentKey();
   cm_crosssection_ = dataLine.crossSection();
   cm_dcrosssection_ = dataLine.error();
@@ -113,7 +113,7 @@ EPoint::EPoint(double angle, double energy, ESegment *parent) {
   lab_energy_ = energy;
   cm_energy_ = energy;
   excitation_energy_ = energy;
-  parentSegment_ = parent;
+  crossSectionComponent_ = parent ? parent->GetCrossSectionComponent() : 0;
   segment_key_ = parent->GetSegmentKey();
   cm_crosssection_ = 0.;
   cm_dcrosssection_ = 0.1;
@@ -167,7 +167,7 @@ EPoint::EPoint(double angle, double energy, int entranceKey,
   lab_energy_ = energy;
   cm_energy_ = energy;
   excitation_energy_ = energy;
-  parentSegment_ = nullptr;
+  crossSectionComponent_ = 0;
   cm_crosssection_ = 0.;
   cm_dcrosssection_ = 0.1;
   lab_crosssection_ = 0.;
@@ -1183,14 +1183,14 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
   // Every table below is rebuilt from scratch: a second call (a parent
   // point's CalcEDependentValues reaches its sub-points again, e.g. after an
   // energy shift) used to append a second copy to the sub-points' tables.
-  lo_elements_.clear();
-  penetrabilities_.clear();
+  // The classic per-J-group rows are emptied in place (ClearEDependentRows),
+  // keeping their storage, as RecalcEDependentValues does; the THM tables
+  // (empty for a classic point) are dropped.
+  this->ClearEDependentRows();
   thm_jl_.clear();
   thm_rhodjl_.clear();
   thm_coul_.clear();
   thm_ps_.reset();
-  coulombphase_.clear();
-  hardspherephase_.clear();
   std::shared_ptr<ThmPsTable> psTable;
   bool psCoul = false;
   std::vector<ThmSpectatorWindow::Node> psNodes;
@@ -1407,6 +1407,16 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
 }
 
 /*!
+ * Empties the per-JGroup rows of the energy-dependent arrays, keeping their storage.
+ */
+void EPoint::ClearEDependentRows() {
+  for (auto &row : lo_elements_) row.clear();
+  for (auto &row : penetrabilities_) row.clear();
+  for (auto &row : coulombphase_) row.clear();
+  for (auto &row : hardspherephase_) row.clear();
+}
+
+/*!
  * Recalculates energy-dependent values using the current (possibly shifted) energy.
  * This is needed when energy shifts are applied after initialization.
  */
@@ -1417,15 +1427,19 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure) {
   // functions for each channel, serial): 40 s per evaluation for two
   // convolved 16N beta-delayed alpha spectra on the 12C+alpha model.
   if (eDependentValid_ && this->GetCMEnergy() == eDependentEnergy_) return;
-  // Clear existing energy-dependent values first
-  lo_elements_.clear();
-  penetrabilities_.clear();
-  thm_jl_.clear();
-  thm_rhodjl_.clear();
-  thm_coul_.clear();
-  thm_ps_.reset();
-  coulombphase_.clear();
-  hardspherephase_.clear();
+  // Clear existing energy-dependent values first.  The per-JGroup rows are
+  // emptied in place rather than destroyed, so CalcEDependentValues refills the
+  // same storage instead of freeing and re-allocating every row of every point
+  // on every energy-shift step.  That churn, done on the pooled data sets by
+  // whichever OpenMP thread happens to evaluate them, fragmented the malloc
+  // arenas and made resident memory creep up for the whole fit.  The Add*
+  // methods index the rows by J-group, so the values stored are unchanged.
+  this->ClearEDependentRows();
+  // CalcEDependentValues also refills the sub-points (appending to their rows),
+  // so empty theirs too: otherwise every call doubled their rows, and the
+  // doubled storage would now be kept.  The callers re-energise and recalculate
+  // each sub-point afterwards in any case.
+  for (int i = 1; i <= this->NumSubPoints(); i++) this->GetSubPoint(i)->ClearEDependentRows();
 
   // Recalculate with current energy
   this->CalcEDependentValues(theCNuc, configure);
@@ -1882,7 +1896,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
  * sub-points' cross-section slot, exactly as the analyzing power is handled.
  */
 void EPoint::IntegrateTargetEffectComponents(const Config &configure) {
-  if (!parentSegment_ || parentSegment_->GetCrossSectionComponent() == 0) return;
+  if (crossSectionComponent_ == 0) return;
   const int n = this->NumSubPoints();
   if (n <= 0) return;
   std::vector<double> sigma(n);
@@ -2029,7 +2043,6 @@ void EPoint::AddSubPoint(EPoint subPoint) {
   // also carries target effects is integrated as though it were a cross
   // section, and A_y is never computed at all.
   subPoint.is_analyzing_power_ = this->is_analyzing_power_;
-  subPoint.is_polarization_product_ = this->is_polarization_product_;
   subPoint.is_sub_point_ = true;
   integrationPoints_.push_back(subPoint);
 }
@@ -2133,10 +2146,13 @@ bool EPoint::RefreshSubPointGrid(CNuc *theCNuc, const Config &configure) {
         if (theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) return false;
   }
   if (this->NumLocalMappedPoints() > 0 || !this->GetParentData()) return false;
-  // The segment of this copy of the data (parentSegment_ is not remapped when
-  // the data are cloned for a fit, and the energy shift lives on the copy).
+  // The segment of this copy of the data (the energy shift lives on the copy
+  // the fit evaluates).
   ESegment *segment = this->GetParentData()->GetSegmentFromKey(segment_key_);
   if (!segment) return false;
+  // A sqrt(E) shift term moves each sub-point by its own amount: the grid is
+  // no longer a translation of the one built at the input parameters.
+  if (segment->IsVaryEnergyShiftSqrt() || segment->GetEnergyShiftSqrt() != 0.) return false;
   // The c.m. shift of the sub-points, as UpdatePointEnergiesWithShift applies it.
   double shiftCM = 0.0;
   const bool shifted = segment->IsVaryEnergyShift() || segment->GetEnergyShift() != 0.;

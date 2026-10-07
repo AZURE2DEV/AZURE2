@@ -17,7 +17,7 @@ from typing import Optional
 
 
 # Parameter kinds, indexed by the integer ``type`` code in the C++ record.
-_KINDS = {0: "energy", 1: "width", 2: "norm", 3: "shift", 4: "cbkg"}
+_KINDS = {0: "energy", 1: "width", 2: "norm", 3: "shift", 4: "shift_sqrt", 5: "cbkg"}
 
 
 @dataclass(frozen=True)
@@ -67,7 +67,7 @@ class Parameter:
 
     index: int                      # position among *all* parameters
     name: str                       # raw AZURE2 parameter name
-    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'cbkg'
+    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'cbkg'
     fixed: bool                     # held fixed during the fit?
     value: float                    # current (physical) value
     free_index: Optional[int]       # position among the non-fixed parameters
@@ -166,7 +166,7 @@ class Parameter:
                 bits.append(f"wigner={self.wigner_limit:.4g}")
             if self.input_is_rwa:
                 bits.append("input=RWA")
-        if self.kind in ("norm", "shift"):
+        if self.kind in ("norm", "shift", "shift_sqrt"):
             bits.append(f"segment={self.segment_key}")
         if self.kind == "cbkg":
             bits.append(f"J^pi={self.jpi}")
@@ -393,8 +393,18 @@ class ParameterSet(list):
 
     @property
     def shifts(self):
-        """The energy-shift parameters."""
+        """The (constant) energy-shift parameters, one per segment."""
         return ParameterSet(p for p in self if p.kind == "shift")
+
+    @property
+    def sqrt_shifts(self):
+        """The sqrt(E) energy-shift coefficients, one per segment.
+
+        Segment energies are shifted as E' = E + a + b*sqrt(E/MeV); these are
+        the b's (MeV^1/2), fixed at 0 unless the segment line carries a
+        ``sqrtshift`` block.
+        """
+        return ParameterSet(p for p in self if p.kind == "shift_sqrt")
 
     @property
     def cbkg(self):

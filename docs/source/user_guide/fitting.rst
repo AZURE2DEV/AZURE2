@@ -59,7 +59,10 @@ Energy Shift Parameters
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
 Lists the energy shift parameters for each data segment that has **Vary Energy
-Shift?** enabled, with the same **Prior Centre** column.
+Shift?** enabled, with the same **Prior Centre** column. A segment's
+:math:`\sqrt{E}` shift coefficient (the ``sqrtshift`` block in the input file,
+see :doc:`segments`) is fitted by the engine under the name
+``segment_<key>_energy_shift_sqrt`` but is not listed here.
 
 Controls
 --------

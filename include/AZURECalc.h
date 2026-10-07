@@ -232,6 +232,16 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   mutable std::stack<std::unique_ptr<EData>> edata_pool_;
   mutable std::mutex pool_mutex_;
   mutable bool pools_initialized_;
+
+  // Working copies for WriteIterationOutput, cloned on first use and reused for
+  // every later snapshot.  Cloning the whole data set afresh every 100
+  // evaluations (several GB for a large target-effect model) and freeing it
+  // again fragments the per-thread malloc arenas: the freed copy is not reused
+  // by the next snapshot, so resident memory climbed by roughly one data-set
+  // copy per snapshot until long fits were OOM-killed.
+  mutable std::unique_ptr<CNuc> output_compound_;
+  mutable std::unique_ptr<EData> output_data_;
+  mutable std::mutex output_mutex_;
 };
 
 #endif

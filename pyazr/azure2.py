@@ -97,7 +97,8 @@ class azure2:
 
     def __init__(self, file, cwd=None, data_mode=True, use_brune=True,
                  ignore_externals=True, transform=True,
-                 use_long_wavelength=True, use_gsl_coul=False, use_rmc=False):
+                 use_long_wavelength=True, use_gsl_coul=False, use_rmc=False,
+                 use_park=False):
         """Build the R-matrix engine for ``file`` in this interpreter.
 
         Parameters
@@ -117,6 +118,13 @@ class azure2:
         use_gsl_coul : use GSL's Coulomb functions instead of AZURE2's own.
         use_rmc : use the R-matrix-with-channels (RMC) formalism instead of
             Brune; mutually exclusive with ``use_brune`` (Brune wins).
+        use_park : use Park's level-dependent boundary conditions (Phys. Rev.
+            C 104, 064612), the CLI's ``--use-park``.  The rwa vector then
+            holds the *observed* reduced width amplitudes,
+            ``Gamma = 2 P gamma**2`` with no shift-derivative factor.  Switches
+            ``use_brune`` on.  Analytic derivatives are available; the engine
+            adds a penalty to chi-squared for any level whose overlap
+            ``J = 1 - sum gamma**2 dS/dE`` is not positive (:meth:`park_norms`).
 
         Raises
         ------
@@ -137,7 +145,8 @@ class azure2:
             data_mode=bool(data_mode), use_brune=bool(use_brune),
             ignore_externals=bool(ignore_externals), transform=bool(transform),
             use_long_wavelength=bool(use_long_wavelength),
-            use_gsl_coul=bool(use_gsl_coul), use_rmc=bool(use_rmc))
+            use_gsl_coul=bool(use_gsl_coul), use_rmc=bool(use_rmc),
+            use_park=bool(use_park))
 
         opts = _azure2.RuntimeOptions()
         for name, value in self.options.items():
@@ -609,39 +618,91 @@ class azure2:
     # param.sav lives beside the model, so these read and write from the
     # session's directory rather than wherever the caller happens to be.
 
+    @staticmethod
+    def read_sav(path):
+        """``{name: value}`` from a ``param.par`` / ``param.sav`` / ``param.fit``.
+
+        Blank lines, ``#`` comments (the ``#parametrization`` tag) and a bare
+        ``parametrization`` row (files written 2026-10-06, before the tag became
+        a comment) are skipped.  Read parameter files by NAME, never by row
+        position: AZURE2 itself matches names (``AZUREParams::
+        ReadUserParameters``), new parameters are appended as the code grows
+        (the ``segment_<key>_energy_shift_sqrt`` rows of 2026-10-05), and a
+        positional read of a file from another layout is silently off by one
+        or more rows (an 8Be+alpha rate came out exactly 2x that way).
+        """
+        vals = {}
+        with open(path) as fh:
+            for line in fh:
+                t = line.split()
+                if len(t) < 2 or t[0].startswith("#") or t[0] == "parametrization":
+                    continue
+                try:
+                    vals[t[0]] = float(t[1])
+                except ValueError:
+                    continue
+        return vals
+
+    def full_rwa_from_sav(self, path):
+        """The model's full RWA vector (fixed parameters included, ``p.index``
+        order) with the values a parameter file names applied.
+
+        A name the file lacks keeps the session's current value, exactly as
+        AZURE2 does on read; a file with no name in common with the model is
+        refused rather than applied to nothing.
+        """
+        vals = self.read_sav(path)
+        full = np.asarray(self.sess.params_all_rwa(), float).copy()
+        hit = 0
+        for p in self.parameters:
+            if p.name in vals and 0 <= p.index < full.size:
+                full[p.index] = vals[p.name]
+                hit += 1
+        if hit == 0:
+            raise ValueError(f"{path}: no parameter name matches this model "
+                             f"(is it a file from another project?)")
+        return full
+
     def update_rwa_params_from_sav(self):
-        """Reload params_rwa from the run's param.sav."""
+        """Reload params_rwa from the run's param.sav (matched by name)."""
         with _in_dir(self.cwd):
-            all_rwa_params = np.loadtxt(os.path.join(self.output_dir, 'param.sav'),
-                                        usecols=(1,))
-        self.params_rwa = []
-        for i in range(len(all_rwa_params)):
-            if self.fixed_params[i]:
-                continue
-            else:
-                self.params_rwa.append(all_rwa_params[i])
+            full = self.full_rwa_from_sav(os.path.join(self.output_dir, 'param.sav'))
+        self.params_rwa = [float(v) for v, f in zip(full, self.fixed_params) if not f]
 
     def update_sav_from_rwa_params(self, best):
-        """Write a free RWA vector back out to param.sav."""
-        params_full = []
+        """Write a free RWA vector back out to param.sav.new, by name.
+
+        Rows the file already has are updated in place (other columns and the
+        tag line kept); a free parameter the file does not list is appended, so
+        the result describes the whole model.
+        """
+        best = np.asarray(best, float).ravel()
+        free = {p.name: float(best[p.free_index]) for p in self.parameters
+                if not p.fixed and p.free_index is not None and p.free_index < best.size}
         sav = os.path.join(self.output_dir, 'param.sav')
         with _in_dir(self.cwd):
-            with open(sav, 'r') as f:
-                for line in f.readlines():
-                    l = line.split()
-                    params_full.append([l[0], float(l[1]), float(l[2])])
-
-            idx = 0
-            for i in range(len(params_full)):
-                if self.fixed_params[i]:
-                    continue
-                else:
-                    params_full[i][1] = best[idx]
-                    idx += 1
-
+            rows, tag, seen = [], None, set()
+            with open(sav) as fh:
+                for line in fh:
+                    t = line.split()
+                    if not t:
+                        continue
+                    if t[0].startswith("#") or t[0] == "parametrization":
+                        tag = t
+                        continue
+                    rows.append(t)
+            for t in rows:
+                if t[0] in free:
+                    t[1] = repr(free[t[0]])
+                    seen.add(t[0])
+            for name, value in free.items():
+                if name not in seen:
+                    rows.append([name, repr(value), "0.0"])
             with open(sav + '.new', 'w') as f:
-                for param in params_full:
-                    f.write(f"{param[0]} {param[1]} {param[2]}\n")
+                if tag is not None:
+                    f.write(" ".join(tag) + "\n")
+                for t in rows:
+                    f.write(" ".join(t) + "\n")
 
     def save_fit(self, path, x=None, param_sav=True, verify=True, norms="fitted",
                  close_session=False):
@@ -768,6 +829,12 @@ class azure2:
             allrwa = list(np.asarray(self.sess.params_all_rwa(), float))
             free = iter(range(len(x)))
             with open(sav, "w") as fh:
+                # AZURE2 tags every parameter file with the amplitudes it holds
+                # (0 standard, 1 Brune, 2 Park) and converts on read when a run
+                # in the other alternative basis loads it.  The '#' keeps
+                # numpy.loadtxt-based readers, which index rows by position,
+                # unaffected.
+                fh.write(f"{'#parametrization':>28s} {float(self.basis): .7e} {0.0: .7e}\n")
                 for i, p in enumerate(self.parameters):
                     v = x[next(free)] if not self.fixed_params[i] else allrwa[i]
                     fh.write(f"{p.name:>28s} {float(v): .7e} {0.0: .7e}\n")
@@ -1421,6 +1488,9 @@ class azure2:
 
             ((shift - nominal_shift) / shift_error)^2
 
+        and the same again for a free sqrt(E) shift coefficient (the b of
+        E' = E + shift + b*sqrt(E), key ``"shift_sqrt"``).
+
         Minimize the bare chi-squared instead and the normalizations drift to
         absorb every discrepancy -- a "better" number AZURE2 would never have
         found, worth -480 on the 7Be model.  Roll your own Minuit or
@@ -1434,14 +1504,17 @@ class azure2:
         explicit centre pays its penalty too, as in the engine.
         Note the denominator uses the *nominal* normalization, and that
         ``norm_error`` is a percentage.  A THM segment with a free norm has no
-        norm penalty: its scale is profiled out, not a parameter.  Returns ``{"norm": array, "shift":
-        array}``, one entry per segment.
+        norm penalty: its scale is profiled out, not a parameter.  Returns
+        ``{"norm": array, "shift": array, "shift_sqrt": array, "park": float}``,
+        one entry per segment (``park`` is one number).
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         norm = np.zeros(self.nsegments)
         shift = np.zeros(self.nsegments)
+        shift_sqrt = np.zeros(self.nsegments)
         current = {p.segment_key: p for p in self.parameters.norms}
         shifting = {p.segment_key: p for p in self.parameters.shifts}
+        sqrting = {p.segment_key: p for p in self.parameters.sqrt_shifts}
         for i, d in enumerate(self.active_datasets):
             p = current.get(d.key)
             value = (float(x[p.free_index])
@@ -1456,7 +1529,46 @@ class azure2:
                         if q is not None and not q.fixed and q.free_index is not None
                         and q.free_index < x.size else d.energy_shift)
                 shift[i] = ((sval - d.nominal_shift) / d.energy_shift_error) ** 2
-        return {"norm": norm, "shift": shift}
+            if d.vary_shift_sqrt and d.energy_shift_sqrt_error:
+                q = sqrting.get(d.key)
+                bval = (float(x[q.free_index])
+                        if q is not None and not q.fixed and q.free_index is not None
+                        and q.free_index < x.size else d.energy_shift_sqrt)
+                shift_sqrt[i] = ((bval - d.energy_shift_sqrt)
+                                 / d.energy_shift_sqrt_error) ** 2
+        # Park formalism: the J > 0 wall, sum (J/1e-3)^2 over levels with J < 0.
+        # The engine adds it to calculate_chi2_rwa itself (it is part of what
+        # AZURE2 minimizes), so objective() does not add it again; it is
+        # reported here so a fit can see when it is active.  Always 0 in Brune
+        # mode.  Note this is one number, not one per segment.
+        park = 0.0
+        if self.options.get("use_park"):
+            J = np.asarray(self.sess.park_norms(x), float)
+            park = float(np.sum((J[J < 0] / 1.0e-3) ** 2))
+        return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "park": park}
+
+    @property
+    def basis(self):
+        """Which amplitudes ``params_rwa`` are: 0 standard (constant boundary
+        condition), 1 Brune, 2 Park -- the ``#parametrization`` tag AZURE2 writes
+        first in ``param.sav``."""
+        if self.options.get("use_park"):
+            return 2
+        return 1 if self.options.get("use_brune") else 0
+
+    def park_norms(self, params=None):
+        """Park formalism: the overlap J = 1 - sum_c gamma_c^2 dS_c/dE of every
+        R-matrix level, in ``physical_levels()`` order.
+
+        J is the squared norm of the level's basis state (Park 2021, Eq. 28)
+        and the factor between the two parametrizations,
+        ``gamma_Park = gamma_Brune * sqrt(J)``.  Every real Brune parameter set
+        has 0 < J <= 1; a Park parameter set with J <= 0 has no R-matrix
+        counterpart (its widths exceed what the channel radii allow) and the
+        engine penalizes it -- see :meth:`penalties`.  All ones in Brune mode.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        return np.asarray(self.sess.park_norms(x), float)
 
     def objective(self, params=None):
         """What AZURE2's own fit minimizes: chi-squared plus the penalties.
@@ -1467,8 +1579,10 @@ class azure2:
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         pen = self.penalties(x)
+        # pen["park"] is already inside calculate_chi2_rwa (engine side).
         return (float(np.sum(self.calculate_chi2_rwa(x)))
-                + float(np.sum(pen["norm"])) + float(np.sum(pen["shift"])))
+                + float(np.sum(pen["norm"])) + float(np.sum(pen["shift"]))
+                + float(np.sum(pen["shift_sqrt"])))
 
     def chi2_and_grad(self, params):
         """Value and analytic gradient of the (data) chi-squared.

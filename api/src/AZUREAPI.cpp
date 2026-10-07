@@ -866,7 +866,10 @@ double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
   // One request at a time: operate on the canonical compound/data in place
   // (re-filled here from these parameters) instead of cloning.
   FillFromFullRWA(MapPackedToFull(rwaParams, all_rwa_, fixed_));
-  return EvaluateFilledChi2(nullptr);
+  double chiSquared = EvaluateFilledChi2(nullptr);
+  // Park formalism: the J > 0 wall, part of what a fit must minimize.
+  if (configure().paramMask & Config::USE_PARK_FORMALISM) chiSquared += compound()->ParkNormPenalty();
+  return chiSquared;
 }
 
 vector_r AZUREAPI::CalculateResidualsRWA(const vector_r &params) const {
@@ -885,6 +888,23 @@ vector_r AZUREAPI::GetCurrentNorms() const {
     if (prevKey == newKey) continue;
     prevKey = newKey;
     out.push_back(segments[i].GetNorm());
+  }
+  return out;
+}
+
+vector_r AZUREAPI::ParkNorms(const vector_r &rwaParams) const {
+  vector_r params_ = all_rwa_;
+  for (int i = 0, k = 0; i < (int)all_rwa_.size(); ++i)
+    if (!fixed_[i] && k < (int)rwaParams.size()) params_[i] = rwaParams[k++];
+  CNuc *localCompound = compound();
+  localCompound->FillCompoundFromParams(params_);
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  vector_r out;
+  for (int j = 1; j <= localCompound->NumJGroups(); j++) {
+    JGroup *jg = localCompound->GetJGroup(j);
+    if (!jg->IsInRMatrix()) continue;
+    for (int la = 1; la <= jg->NumLevels(); la++)
+      if (jg->GetLevel(la)->IsInRMatrix()) out.push_back(jg->GetLevel(la)->GetParkNorm());
   }
   return out;
 }
@@ -983,6 +1003,10 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
 
   bool ok = AccumulateEGammaGradient(lc, ld, configure(), pmap, sdp, fb, accum);
   if (ok) {
+    if (configure().paramMask & Config::USE_PARK_FORMALISM) {
+      AddParkPenaltyGradient(lc, configure(), accum);
+      chi2 += lc->ParkNormPenalty();
+    }
     accum.Scatter(pmap, gradFull);
     for (int s = 1; s <= ld->NumSegments(); s++) {
       ESegment *seg = ld->GetSegment(s);
@@ -1134,7 +1158,8 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params) const {
     vector_r rPlus, rMinus;
     for (int f = 0; f < pmap.NumFull(); f++) {
       if (fixed_[f]) continue;
-      if (pmap.Desc(f).kind != ParamKind::EnergyShift) continue;
+      if (pmap.Desc(f).kind != ParamKind::EnergyShift &&
+          pmap.Desc(f).kind != ParamKind::EnergyShiftSqrt) continue;
       const int packed = pmap.FullToPacked(f);
       if (packed < 0 || packed >= (int)params.size()) continue;
 
@@ -1298,7 +1323,8 @@ vector_r AZUREAPI::GetEnergyShiftIndices() {
 
 // Structured metadata for every parameter.  The parameters are walked in the
 // exact order CNuc::FillMnParams (energies + widths) then EData::FillMnParams
-// (norms then energy shifts) emit them, so the records line up one-to-one with
+// (norms, energy shifts, sqrt(E) shift coefficients, then the THM coherent
+// backgrounds) emit them, so the records line up one-to-one with
 // names_ / all_ / fixed_.  See AZUREAPI.h for the field layout.
 vector_r AZUREAPI::GetParameterInfo() const {
   vector_r info;
@@ -1366,6 +1392,12 @@ vector_r AZUREAPI::GetParameterInfo() const {
          segments[s].GetSegmentKey(), -1, -1);
   }
 
+  // sqrt(E) energy-shift coefficients: one per segment (always emitted).
+  for (size_t s = 0; s < segments.size(); ++s) {
+    push(4, -1, -1, 0, -1, 0, -1, -1, -1, -1, -1,
+         segments[s].GetSegmentKey(), -1, -1);
+  }
+
   // THM coherent backgrounds (cbackground=), last: Re c0, Im c0 [, Re c1,
   // Im c1] per combination, with its J group, entrance channel (channel, L,
   // S) and exit pair number (pair).
@@ -1376,7 +1408,7 @@ vector_r AZUREAPI::GetParameterInfo() const {
       JGroup *jg = nuc->GetJGroup(c.jGroup);
       AChannel *in = jg->GetChannel(c.entrance);
       for (int k = 0; k < 2 * c.form; ++k)
-        push(4, c.jGroup, jg->GetJ(), jg->GetPi(), -1, 0, c.entrance, in->GetL(), in->GetS(),
+        push(5, c.jGroup, jg->GetJ(), jg->GetPi(), -1, 0, c.entrance, in->GetL(), in->GetS(),
              jg->GetChannel(c.exit)->GetPairNum(), -1, -1, -1, -1);
     }
   }

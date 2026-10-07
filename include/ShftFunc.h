@@ -43,6 +43,11 @@ class ShftFunc {
    */
   double EnergyDerivative(int l, double energy, double step = 1.0e-6);
   /*!
+   * Returns the second energy derivative of the shift function (a central
+   * difference of EnergyDerivative with a 1 keV step).
+   */
+  double EnergySecondDerivative(int l, double energy);
+  /*!
    * The threshold (E = 0) value S_l(0), common limit of the positive- and
    * negative-energy shift functions: -l - (x/2) K_{2l}(x)/K_{2l+1}(x) with
    * x = sqrt(8 eta k a), or -l without Coulomb.
@@ -61,6 +66,7 @@ class ShftFunc {
   double radius() const { return radius_; };
   /// GSL adaptor for the shift function, for differentiation.
   static double thisShftFunc(double, void *);
+  static double thisShftFuncDeriv(double, void *);
   typedef struct Params {
     int lValue;
     double bindingEnergy;

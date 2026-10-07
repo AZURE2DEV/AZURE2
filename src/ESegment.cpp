@@ -1,3 +1,4 @@
+#include <cmath>
 #include "CNuc.h"
 #include "Config.h"
 #include "DataLine.h"
@@ -39,14 +40,11 @@ ESegment::ESegment(SegLine segLine) {
   // tested against the offset-stripped code, so it composes with THM the way
   // every other observable does.
   isAnalyzingPower_ = (diff == 7);
-  // isDiff 8 is P dsigma/dOmega: differential in the centre-of-mass frame
-  // like the analysing power, but an extensive quantity.
-  isPolarizationProduct_ = (diff == 8);
-  if (diff == 1 || diff == 4 || diff == 7 || diff == 8)
+  if (diff == 1 || diff == 4 || diff == 7)
     isdifferential_ = true;
   else
     isdifferential_ = false;
-  if (diff == 4 || diff == 7 || diff == 8)
+  if (diff == 4 || diff == 7)
     iscmdifferential_ = true;
   else
     iscmdifferential_ = false;
@@ -80,6 +78,10 @@ ESegment::ESegment(SegLine segLine) {
     varyEnergyShift_ = true;
   else
     varyEnergyShift_ = false;
+  energyShiftSqrt_ = energyShiftSqrtNominal_ = segLine.energyShiftSqrt();
+  lastEnergyShiftSqrt_ = 0.0;
+  energyShiftSqrtError_ = segLine.energyShiftSqrtError();
+  varyEnergyShiftSqrt_ = (segLine.varyEnergyShiftSqrt() == 1);
   if (segLine.varyNorm() == 1)
     varyNorm_ = true;
   else
@@ -124,14 +126,11 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   isTHM_ = (extrapLine.isDiff() >= 10);
   int diff = isTHM_ ? extrapLine.isDiff() - 10 : extrapLine.isDiff();
   isAnalyzingPower_ = (diff == 7);
-  // isDiff 8 is P dsigma/dOmega: differential in the centre-of-mass frame
-  // like the analysing power, but an extensive quantity.
-  isPolarizationProduct_ = (diff == 8);
-  if (diff == 1 || diff == 5 || diff == 7 || diff == 8)
+  if (diff == 1 || diff == 5 || diff == 7)
     isdifferential_ = true;
   else
     isdifferential_ = false;
-  if (diff == 5 || diff == 7 || diff == 8)
+  if (diff == 5 || diff == 7)
     iscmdifferential_ = true;
   else
     iscmdifferential_ = false;
@@ -160,6 +159,10 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   energyShiftError_ = 0.0;
   lastEnergyShift_ = 0.0;
   varyEnergyShift_ = false;
+  energyShiftSqrt_ = energyShiftSqrtNominal_ = 0.0;
+  lastEnergyShiftSqrt_ = 0.0;
+  energyShiftSqrtError_ = 0.0;
+  varyEnergyShiftSqrt_ = false;
   varyNorm_ = false;
 
   // Read advanced segment data from ExtrapLine
@@ -396,27 +399,6 @@ int ESegment::GetExitKey() const {
  */
 
 int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
-  // isDiff 8 computes the vector polarization of a spin-1/2 ejectile from the
-  // amplitude matrix, and a photon exit has no such matrix.  The capture
-  // analyzing power AZURE2 already computes is NOT the same observable: it is
-  // the ANALYZING power, indexed on the polarized entrance channel, which by
-  // time reversal is the outgoing polarization of the INVERSE reaction, not of
-  // capture.  Photon polarization data -- linear or circular -- needs its own
-  // formalism.  Refuse the combination outright rather than evaluate to zero:
-  // a segment that silently returns 0 still contributes a finite chi2 against
-  // real data, so it would drag every other parameter in the fit without ever
-  // announcing itself.
-  if (this->IsPolarizationProduct() && theCNuc->IsPairKey(this->GetExitKey()) &&
-      theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()))->GetPType() == 10) {
-    configure.outStream
-        << "ERROR: Polarization x Cross Section (isDiff 8) is not implemented for a capture"
-        << " exit channel." << std::endl
-        << "       Data file: " << this->GetDataFile() << std::endl
-        << "       The polarization of an outgoing photon is not the ejectile polarization"
-        << " this observable computes, and the capture analyzing power is a different"
-        << " quantity again." << std::endl;
-    return -1;
-  }
   std::string infile = this->GetDataFile();
   std::ifstream in(infile.c_str());
   if (!in) return -1;
@@ -697,6 +679,66 @@ void ESegment::SetLastEnergyShift(double lastEnergyShift) {
   lastEnergyShift_ = lastEnergyShift;
 }
 
+/*!
+ * Returns the coefficient of the sqrt(E) energy-shift term currently applied.
+ */
+
+double ESegment::GetEnergyShiftSqrt() const {
+  return energyShiftSqrt_;
+}
+
+/*!
+ * Returns the sqrt(E) coefficient last applied to the points.
+ */
+
+double ESegment::GetLastEnergyShiftSqrt() const {
+  return lastEnergyShiftSqrt_;
+}
+
+/*!
+ * Returns the sqrt(E) coefficient as declared in the input file.
+ */
+
+double ESegment::GetNominalEnergyShiftSqrt() const {
+  return energyShiftSqrtNominal_;
+}
+
+/*!
+ * Returns the uncertainty of the sqrt(E) coefficient.
+ */
+
+double ESegment::GetEnergyShiftSqrtError() const {
+  return energyShiftSqrtError_;
+}
+
+/*!
+ * Returns true if the sqrt(E) coefficient is a fit parameter.
+ */
+
+bool ESegment::IsVaryEnergyShiftSqrt() const {
+  return varyEnergyShiftSqrt_;
+}
+
+/*!
+ * The complete lab-energy shift of a point whose original lab energy is
+ * labEnergy: the constant term plus b*sqrt(E/MeV).  The sqrt term is
+ * evaluated at the point's own (unshifted) energy, so the mapping is the
+ * same function E -> E + a + b*sqrt(E) for every point and every call.
+ */
+
+double ESegment::TotalEnergyShift(double labEnergy) const {
+  if (energyShiftSqrt_ == 0.0) return energyShift_;
+  return energyShift_ + energyShiftSqrt_ * sqrt(fabs(labEnergy));
+}
+
+void ESegment::SetEnergyShiftSqrt(double energyShiftSqrt) {
+  energyShiftSqrt_ = energyShiftSqrt;
+}
+
+void ESegment::SetLastEnergyShiftSqrt(double lastEnergyShiftSqrt) {
+  lastEnergyShiftSqrt_ = lastEnergyShiftSqrt;
+}
+
 namespace {
 
 /*!
@@ -745,7 +787,8 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
     EPoint *point = GetPoint(i + 1);
     if (point && (thm || point->GetOriginalEnergy() > 0)) {
       double originalEnergy = point->GetOriginalEnergy();
-      double shiftedEnergy = thm ? originalEnergy + energyShift_ : ShiftedEnergy(originalEnergy, energyShift_);
+      double shiftedEnergy = thm ? originalEnergy + TotalEnergyShift(originalEnergy)
+                                 : ShiftedEnergy(originalEnergy, TotalEnergyShift(originalEnergy));
 
       // Set the shifted energy
       point->SetLabEnergy(shiftedEnergy);
@@ -804,7 +847,10 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
           EPoint *subPoint = point->GetSubPoint(j);
           if (subPoint && (thm || subPoint->GetOriginalEnergy() > 0)) {
             double subOriginalEnergy = subPoint->GetOriginalEnergy();
-            double energyShiftCM = (entrancePair->GetM(2)) / (entrancePair->GetM(1) + entrancePair->GetM(2)) * energyShift_;
+            // Subpoints hold c.m. energies: evaluate the lab shift at the
+            // subpoint's own lab energy and convert it to the c.m. frame.
+            double cmFactor = (entrancePair->GetM(2)) / (entrancePair->GetM(1) + entrancePair->GetM(2));
+            double energyShiftCM = cmFactor * TotalEnergyShift(subOriginalEnergy / cmFactor);
             double subShiftedEnergy = thm ? subOriginalEnergy + energyShiftCM
                                           : ShiftedEnergy(subOriginalEnergy, energyShiftCM);
 
@@ -872,7 +918,6 @@ void ESegment::AddPoint(EPoint point) {
   // The observable is a property of the segment; stamp it on the point so the
   // calculation does not have to look back up.
   point.SetIsAnalyzingPower(this->IsAnalyzingPower());
-  point.SetIsPolarizationProduct(this->IsPolarizationProduct());
   points_.push_back(point);
 }
 

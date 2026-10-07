@@ -574,6 +574,11 @@ void CNuc::PrintCompoundFromParams() {
 
 bool CNuc::TransformIn(const Config &configure) {
   transformedIn_ = true;
+  // Park (2021): the fit parameter is the observed reduced width amplitude,
+  // Gamma = 2 P gamma^2 (Eqs. 31-33), so the 1 - sum gamma^2 dS/dE factor that
+  // turns an observed width into Brune's reduced width is not applied.  It is
+  // still accumulated, because it is Park's J (Eq. 28) and must stay positive.
+  const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   for (int j = 1; j <= this->NumJGroups(); j++) {
     JGroup *theJGroup = this->GetJGroup(j);
     if (theJGroup->IsInRMatrix()) {
@@ -731,7 +736,23 @@ bool CNuc::TransformIn(const Config &configure) {
               passThrough.push_back(false);
             }
           }
-          if (denom < 0.) {
+          // Park's J_lambda,lambda = 1 - sum_c gamma_c^2 dS_c/dE over every particle
+          // channel: the observed-width channels (denom / 2 = 1 - sum their
+          // gamma_obs^2 dS/dE) and the amplitude-input ones (numer - 1 = sum
+          // their gamma^2 dS/dE, already Park amplitudes in that formalism).
+          const double parkNorm = denom / 2.0 - (numer - 1.0);
+          if (park && parkNorm <= 0.) {
+            // In Brune's parametrization this limit is only reached for an
+            // infinite reduced width; in Park's it is an ordinary point of
+            // the parameter space, with nothing in the level matrix to stop it.
+            configure.outStream << "**WARNING: Park norm J = 1 - sum gamma^2 dS/dE = " << parkNorm
+                                << " is not positive" << std::endl
+                                << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
+                                << "  The widths of this level exceed what the channel radii allow; no"
+                                << std::endl
+                                << "  standard R-matrix (real reduced widths) corresponds to it."
+                                << std::endl;
+          } else if (!park && denom < 0.) {
             // An observed width Gamma_c = 2 P_c gamma_c^2 / (1 + sum gamma^2 dS/dE)
             // saturates at 2 P_c / (dS_c/dE) as gamma_c -> infinity, so the
             // input is out of reach of any reduced width when
@@ -775,12 +796,27 @@ bool CNuc::TransformIn(const Config &configure) {
             configure.outStream << "  The transformation may not have been successful for this level."
                                 << std::endl;
           }
-          double nFSum = 1.0;
+          // parkNorm is Park's J_lambda,lambda (above).  The bound-state
+          // normalization is defined with Brune's reduced widths
+          // gamma_obs^2 / J, so with Park's amplitudes it becomes
+          // 1 / sqrt(J + sum_c A_c gamma_obs^2) -- see CalcShiftFunctions.
+          // Park's amplitudes are the observed ones: no Brune renormalization.
+          if (park) {
+            theLevel->SetParkNorm(parkNorm);
+            denom = 2.0;
+            numer = 1.0;
+          }
+          double nFSum = park ? parkNorm : 1.0;
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
             AChannel *theChannel = theJGroup->GetChannel(ch);
-            if (theChannel->GetRadType() != 'F' && theChannel->GetRadType() != 'G' &&
-                !passThrough[ch - 1])
-              tempGammas[ch - 1] = sqrt(fabs(tempGammas[ch - 1] / penes[ch - 1] * numer / denom));
+            if (theChannel->GetRadType() != 'F' && theChannel->GetRadType() != 'G') {
+              if (!passThrough[ch - 1])
+                tempGammas[ch - 1] = sqrt(fabs(tempGammas[ch - 1] / penes[ch - 1] * numer / denom));
+            } else if (park)
+              // The input beta-decay feeding amplitude is Brune's.  It rescales
+              // with the basis state like every other amplitude of the level,
+              // B_Park = sqrt(J) B_Brune.
+              tempGammas[ch - 1] *= sqrt(fabs(parkNorm));
             if (isNegative[ch - 1]) tempGammas[ch - 1] = -tempGammas[ch - 1];
             theLevel->SetGamma(ch, tempGammas[ch - 1]);
             if (ch <= theLevel->NumNFIntegrals()) nFSum += 2.0 *
@@ -1766,6 +1802,25 @@ void CNuc::FillCompoundFromParams(const vector_r &p) {
  */
 
 void CNuc::TransformOut(const Config &configure) {
+  // Park (2021): the fit parameters already are the observed reduced width
+  // amplitudes, so Gamma = 2 P gamma^2 with no 1 + sum gamma^2 dS/dE factor.
+  // Refresh J and the bound-state normalization for the current parameters.
+  const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
+  if (park) {
+    this->CalcShiftFunctions(configure);
+    for (int j = 1; j <= this->NumJGroups(); j++)
+      for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
+        ALevel *theLevel = this->GetJGroup(j)->GetLevel(la);
+        if (theLevel->IsInRMatrix() && theLevel->GetParkNorm() <= 0.0)
+          configure.outStream << "**WARNING: Park norm J = " << theLevel->GetParkNorm() << " is not positive"
+                              << std::endl
+                              << "    " << AZURELabel::Level(this->GetJGroup(j), theLevel, j, la) << std::endl
+                              << "  The widths of this level exceed what the channel radii allow; no"
+                              << std::endl
+                              << "  standard R-matrix (real reduced widths) corresponds to it."
+                              << std::endl;
+      }
+  }
   if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
     int maxIterations = 1000;
     double energyTolerance = 1e-6;
@@ -1983,9 +2038,11 @@ void CNuc::TransformOut(const Config &configure) {
         double bigGamma;
         if (theChannel->GetRadType() != 'F' && theChannel->GetRadType() != 'G')
           bigGamma = tempSign * 2.0 * real(totalWidth * conj(totalWidth)) * tempPene[ch - 1] /
-              (1.0 + normSum);
+              (park ? 1.0 : (1.0 + normSum));
         else
-          bigGamma = real(totalWidth);
+          // Beta-decay feeding amplitudes are reported in Brune's normalization
+          // in both parametrizations (the inverse of the step in TransformIn).
+          bigGamma = park ? real(totalWidth) / sqrt(fabs(theLevel->GetParkNorm())) : real(totalWidth);
         theLevel->SetBigGamma(ch, bigGamma);
       }
     }
@@ -2063,7 +2120,8 @@ void CNuc::CheckRadiativeWidths(const Config &configure, const vector_r &params)
         // than abort the calculation.
         continue;
       }
-      if (1.0 + normSum > 0.0) particleWidth /= (1.0 + normSum);
+      if (!(configure.paramMask & Config::USE_PARK_FORMALISM) && 1.0 + normSum > 0.0)
+        particleWidth /= (1.0 + normSum);
       if (particleWidth <= 0.0 || radiativeWidth <= 0.0) continue;
 
       double ratio = radiativeWidth / particleWidth;
@@ -2266,28 +2324,165 @@ void CNuc::SetMaxLValue(int maxL) {
  */
 
 void CNuc::CalcShiftFunctions(const Config &configure) {
+  const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   for (int j = 1; j <= this->NumJGroups(); j++) {
     if (this->GetJGroup(j)->IsInRMatrix()) {
       JGroup *theJGroup = this->GetJGroup(j);
       for (int la = 1; la <= theJGroup->NumLevels(); la++) {
         ALevel *theLevel = theJGroup->GetLevel(la);
         if (theLevel->IsInRMatrix()) {
+          const double levelEnergy = theLevel->GetFitE();
+          // The shift functions depend on the level energy alone, and a
+          // minimizer moves one parameter at a time, so most levels have not
+          // moved since the last call.  Park's J below depends on the widths
+          // too and is always refreshed.
+          const bool recompute = !theLevel->ShiftFunctionsValidAt(levelEnergy);
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
             AChannel *theChannel = theJGroup->GetChannel(ch);
             PPair *thePair = this->GetPair(theChannel->GetPairNum());
             if (thePair->GetPType() == 0) {
+              if (!recompute) continue;
               int lValue = theChannel->GetL();
-              double levelEnergy = theLevel->GetFitE();
               double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
-              theLevel->SetShiftFunction(ch, ChannelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC)).Shift(lValue, resonanceEnergy));
+              ChannelFunc channelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+              theLevel->SetShiftFunction(ch, channelFunc.Shift(lValue, resonanceEnergy));
+              if (park && theChannel->GetRadType() == 'P') {
+                // dS/dE as everywhere else (ChannelFunc); d2S/dE2 from the
+                // branch the level is on.
+                double second;
+                if (resonanceEnergy < 0.0) {
+                  ShftFunc theShiftFunction(thePair);
+                  second = theShiftFunction.EnergySecondDerivative(lValue, levelEnergy);
+                } else {
+                  CoulFunc theCoulombFunction(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+                  second = theCoulombFunction.PEShift_d2E(lValue, thePair->GetChRad(), resonanceEnergy);
+                }
+                theLevel->SetShiftDerivatives(ch, channelFunc.ShiftDerivative(lValue, resonanceEnergy), second);
+              }
             } else {
               theLevel->SetShiftFunction(ch, theJGroup->GetLevel(1)->GetShiftFunction(1));
             }
+          }
+          if (recompute) theLevel->SetShiftFunctionsEnergy(levelEnergy);
+          if (park) {
+            // Park (2021) Eq. (28): J = 1 - sum_c gamma_c^2 (dS_c/dE) at E_lambda.
+            double parkNorm = 1.0;
+            for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
+              AChannel *theChannel = theJGroup->GetChannel(ch);
+              if (theChannel->GetRadType() == 'P' && this->GetPair(theChannel->GetPairNum())->GetPType() == 0)
+                parkNorm -= pow(theLevel->GetFitGamma(ch), 2.0) * theLevel->GetShiftDerivative(ch);
+            }
+            theLevel->SetParkNorm(parkNorm);
+            // N_f^{1/2} multiplies the level's reduced width amplitude wherever
+            // it serves as an external-capture final state.  It is defined with
+            // Brune's amplitudes, gamma_Park / sqrt(J); folding the 1/sqrt(J)
+            // in here keeps gamma * N_f^{1/2} the same number in both
+            // parametrizations.
+            double nFSum = parkNorm;
+            for (int ch = 1; ch <= theJGroup->NumChannels() && ch <= theLevel->NumNFIntegrals(); ch++) {
+              PPair *thePair = this->GetPair(theJGroup->GetChannel(ch)->GetPairNum());
+              nFSum += 2.0 * thePair->GetChRad() * thePair->GetRedMass() * uconv / pow(hbarc, 2.0) *
+                  pow(theLevel->GetFitGamma(ch), 2.0) * theLevel->GetNFIntegral(ch);
+            }
+            theLevel->SetSqrtNFFactor(1.0 / sqrt(nFSum));
           }
         }
       }
     }
   }
+}
+
+/*!
+ * Converts a parameter set read from a file written in the other alternative
+ * parametrization.  Brune -> Park multiplies every amplitude of a level by
+ * sqrt(J), J = 1/(1 + sum_c gamma~^2 dS_c/dE); Park -> Brune divides by
+ * sqrt(J), J = 1 - sum_c gamma^2 dS_c/dE.  Photon and beta amplitudes rescale
+ * with the level like the particle ones.  Levels outside the R matrix
+ * (external-capture final states) are the same in both and are left alone.
+ * The parameter order is that of FillMnParams.
+ */
+
+bool CNuc::ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &p, int from, int to, const Config &configure) {
+  if (from == to) return true;
+  const bool toPark = (to == 2);
+  if (!((from == 1 && to == 2) || (from == 2 && to == 1))) return false;
+  int i = 0;
+  for (int j = 1; j <= this->NumJGroups(); j++) {
+    JGroup *theJGroup = this->GetJGroup(j);
+    for (int la = 1; la <= theJGroup->NumLevels(); la++) {
+      ALevel *theLevel = theJGroup->GetLevel(la);
+      const int energyIndex = i++;
+      const int firstWidth = i;
+      i += theJGroup->NumChannels();
+      if (!theJGroup->IsInRMatrix() || !theLevel->IsInRMatrix()) continue;
+      const double levelEnergy = p.Value(energyIndex);
+      double sum = 0.0;  // sum_c gamma_c^2 dS_c/dE at the level energy
+      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
+        AChannel *theChannel = theJGroup->GetChannel(ch);
+        PPair *thePair = this->GetPair(theChannel->GetPairNum());
+        if (theChannel->GetRadType() != 'P' || thePair->GetPType() != 0) continue;
+        double gamma = p.Value(firstWidth + ch - 1);
+        if (gamma == 0.0) continue;
+        double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
+        // dS/dE as in TransformIn and CalcShiftFunctions (ChannelFunc).
+        double dS = ChannelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC))
+                        .ShiftDerivative(theChannel->GetL(), resonanceEnergy);
+        sum += gamma * gamma * dS;
+      }
+      double factor;
+      if (toPark) {
+        factor = sqrt(1.0 / (1.0 + sum));  // sqrt(J) from Brune amplitudes
+      } else {
+        double parkNorm = 1.0 - sum;
+        if (parkNorm <= 0.0) {
+          configure.outStream << "**ERROR: Park norm J = " << parkNorm << " is not positive for" << std::endl
+                              << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
+                              << "  No Brune (or standard) parameters correspond to these widths." << std::endl;
+          return false;
+        }
+        factor = 1.0 / sqrt(parkNorm);
+      }
+      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
+        int idx = firstWidth + ch - 1;
+        p.SetValue(idx, p.Value(idx) * factor);
+        p.SetError(idx, p.Error(idx) * factor);
+      }
+    }
+  }
+  return true;
+}
+
+/*!
+ * Forgets the cached shift functions of every level.
+ */
+
+void CNuc::InvalidateShiftFunctions() {
+  for (int j = 1; j <= this->NumJGroups(); j++)
+    for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++)
+      this->GetJGroup(j)->GetLevel(la)->InvalidateShiftFunctions();
+}
+
+/*!
+ * Park formalism: sum over the R-matrix levels of (J/kParkNormScale)^2 for
+ * J < 0.  CalcShiftFunctions must have run for the current parameters.  A
+ * level with J <= 0 has no standard R-matrix counterpart (its Brune reduced
+ * widths would be imaginary), and nothing in the level matrix itself keeps a
+ * minimizer out of that region, so this is the wall.
+ */
+
+double CNuc::ParkNormPenalty() {
+  double penalty = 0.0;
+  for (int j = 1; j <= this->NumJGroups(); j++) {
+    JGroup *theJGroup = this->GetJGroup(j);
+    if (!theJGroup->IsInRMatrix()) continue;
+    for (int la = 1; la <= theJGroup->NumLevels(); la++) {
+      ALevel *theLevel = theJGroup->GetLevel(la);
+      if (!theLevel->IsInRMatrix()) continue;
+      double parkNorm = theLevel->GetParkNorm();
+      if (parkNorm < 0.0) penalty += pow(parkNorm / kParkNormScale, 2.0);
+    }
+  }
+  return penalty;
 }
 
 /*!

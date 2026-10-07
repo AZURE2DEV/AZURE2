@@ -67,32 +67,15 @@ appears with the following fields:
           ratio, **Vary Norm?** is disabled for it -- a normalization factor has
           no meaning for a quantity that is already normalized. See
           :doc:`../theory/polarization_theory`.
-      * - **Polarization x Cross Section**
-        - The product :math:`P(\theta)\,d\sigma/d\Omega` of the outgoing
-          polarization and the differential cross section, for a **particle**
-          exit channel. This is the form in which most polarization
-          measurements are published -- Niecke *et al.* report
-          :sup:`11`\ B(:math:`\alpha`,n) and :sup:`14`\ C(p,n) this way --
-          so the data can be fitted as measured, without first dividing by a
-          cross section taken from somewhere else. Angles are centre-of-mass
-          and the data file carries
-          ``E_lab  theta_cm  P*dsdo  d(P*dsdo)``, in the same units as a
-          differential cross section (b/sr). Unlike the analyzing power this
-          is an extensive quantity, so **Vary Norm?** is available and a
-          target integration averages it exactly as it averages a cross
-          section. See :doc:`../theory/polarization_theory`.
 
 .. note::
 
-   **Polarization x Cross Section** is not implemented for a capture exit
-   channel, and a segment that asks for one is rejected when the model is read
-   rather than silently evaluated. The observable is the vector polarization of
-   a spin-1/2 ejectile, obtained from the amplitude matrix, and a photon exit
-   has no such matrix. The capture analyzing power AZURE2 computes is a
-   different quantity and cannot stand in for it: that is the *analyzing*
-   power, indexed on the polarized entrance channel, which by time reversal is
-   the outgoing polarization of the **inverse** reaction, not of capture.
-   Published photon polarization, linear or circular, needs its own formalism.
+   A measured **outgoing polarization** :math:`P` of :math:`A(a,b)B` is, by
+   time reversal, the analyzing power of the inverse reaction
+   :math:`B(b,a)A`, so it is entered as an **Analyzing Power** segment on the
+   inverse channel (entrance :math:`b+B`, exit :math:`a+A`). Data published
+   as the product :math:`P\,d\sigma/d\Omega` must be divided by the
+   differential cross section first.
 
 **THM (modified R-matrix)**
    Shown when **Use Trojan Horse Method (THM)** is ticked in
@@ -117,6 +100,35 @@ appears with the following fields:
 
 **Vary Energy Shift?**
    Check this box to allow the energy shift to be varied during fitting.
+
+**sqrt(E) energy shift** (input file only)
+   A second, optional shift term that grows with the beam energy. With it a
+   segment's energies are shifted as
+
+   .. math::
+
+      E' = E + \Delta E + b\,\sqrt{E/\mathrm{MeV}}
+
+   where :math:`\Delta E` is the constant **Energy Shift** above and :math:`b`
+   (in MeV\ :sup:`1/2`) is the new coefficient. An additive offset in the
+   field reading of an analyzing magnet (:math:`E = kB^2`) produces exactly
+   this :math:`\sqrt{E}` dependence, whereas the constant term describes a
+   fixed offset; a calibration that is right at low energy and drifts at high
+   energy needs the second form. The two terms are independent: each has its
+   own value, uncertainty and vary flag, and a segment may use either, both
+   or neither.
+
+   The term is written at the very end of the segment's ``<segmentsData>``
+   line, after the data file and any composite/UPOS fields, as the keyword
+   block ``sqrtshift <b> <bError> <vary>`` (``vary`` 1 or 0), e.g.::
+
+      1 2 3 0 10 0 0 4 1 1 10 0 0.02 1 data/yield_0deg.dat 0 0 sqrtshift 0 0.01 1
+
+   frees :math:`b` from 0 with a penalty width of 0.01 MeV\ :sup:`1/2`
+   (:doc:`chi_squared`). A line without the block behaves exactly as before.
+   The fit parameter is named ``segment_<key>_energy_shift_sqrt`` in
+   ``param.sav``, and ``shifts.out`` reports it in its last column. The GUI
+   preserves the block when it loads and saves a file but does not edit it.
 
 **Data File**
    Path to the experimental data file. Use the **Choose...** button to browse,
@@ -196,9 +208,6 @@ segment dialog but includes:
      coefficients. Requires specifying the polynomial order.
    - **Analyzing Power** -- the vector analyzing power on the chosen energy and
      angle grid, in the centre-of-mass frame.
-   - **Polarization x Cross Section** -- the product
-     :math:`P(\theta)\,d\sigma/d\Omega` on the chosen energy and angle grid,
-     in the centre-of-mass frame.
 
 .. warning::
 
@@ -215,11 +224,8 @@ segment dialog but includes:
    average towards zero. This is physical, and it is explained in
    :doc:`../theory/polarization_implementation`.
 
-   When an analyzing-power or **Polarization x Cross Section** segment is
-   plotted, the Plot tab switches the y-axis to a linear scale and to
-   *Cross Section* automatically: a logarithmic axis cannot display a quantity
-   that goes negative, and it drops such points silently rather than
-   complaining, so the curve would look merely sparse. Both observables take
-   negative values -- :math:`P\,d\sigma/d\Omega` wherever the polarization
-   is negative, which is 4 of the 10 published Niecke
-   :sup:`11`\ B(:math:`\alpha`,n) points.
+   When an analyzing-power segment is plotted, the Plot tab switches the
+   y-axis to a linear scale and to *Cross Section* automatically: a
+   logarithmic axis cannot display a quantity that goes negative, and it drops
+   such points silently rather than complaining, so the curve would look
+   merely sparse.

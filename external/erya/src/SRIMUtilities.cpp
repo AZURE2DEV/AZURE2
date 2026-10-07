@@ -206,29 +206,34 @@ double SRIMUtilities::calculateZieglerStoppingPower(double energy_keV, const SRI
     return ((stoppingLow * stoppingHigh) / (stoppingHigh + stoppingLow)) / 1e+21;
 }
 
-double SRIMUtilities::calculateCompoundStoppingPower(double energy_keV, const std::vector<CompoundElement>& elements) {
-    if (elements.empty()) return 0.0;
-    
-    double totalStoppingPower = 0.0;
-    double totalStoichiometry = 0.0;
-    
-    // Calculate total stoichiometry for normalization
+double SRIMUtilities::compoundNormalization(const std::vector<CompoundElement>& elements, int activeElement) {
+    double active = 0.0, total = 0.0;
     for (const auto& element : elements) {
-        totalStoichiometry += element.stoichiometry;
+        total += element.stoichiometry;
+        if (element.elementNumber == activeElement) active += element.stoichiometry;
     }
-    
-    if (totalStoichiometry <= 0.0) return 0.0;
-    
-    // Calculate weighted stopping power
+    return (activeElement > 0 && active > 0.0) ? active : total;
+}
+
+double SRIMUtilities::calculateCompoundStoppingPower(double energy_keV, const std::vector<CompoundElement>& elements,
+                                                     int activeElement) {
+    if (elements.empty()) return 0.0;
+
+    double normalization = compoundNormalization(elements, activeElement);
+    if (normalization <= 0.0) return 0.0;
+
+    // Bragg's rule: the stoichiometric sum of the elemental stopping cross
+    // sections, per active atom (or per average atom when none is given)
+    double totalStoppingPower = 0.0;
     for (const auto& element : elements) {
         SRIMElementData data = readSRIMDataForElement(element.elementNumber);
         if (data.isValid) {
             double elementStoppingPower = calculateZieglerStoppingPower(energy_keV, data);
-            double weight = element.stoichiometry / totalStoichiometry;
+            double weight = element.stoichiometry / normalization;
             totalStoppingPower += weight * elementStoppingPower;
         }
     }
-    
+
     return totalStoppingPower;
 }
 
@@ -259,7 +264,8 @@ std::string SRIMUtilities::generateAZUREEquation(int elementNumber, std::vector<
     return equation;
 }
 
-std::string SRIMUtilities::generateCompoundAZUREEquation(const std::vector<CompoundElement>& elements, std::vector<double>& parameters) {
+std::string SRIMUtilities::generateCompoundAZUREEquation(const std::vector<CompoundElement>& elements, std::vector<double>& parameters,
+                                                         int activeElement) {
     if (elements.empty()) {
         return "";
     }
@@ -269,14 +275,8 @@ std::string SRIMUtilities::generateCompoundAZUREEquation(const std::vector<Compo
     // For compounds, we'll create a weighted equation
     // This is more complex and requires dynamic parameter generation
     std::ostringstream equation;
-    double totalStoichiometry = 0.0;
-    
-    // Calculate total stoichiometry
-    for (const auto& element : elements) {
-        totalStoichiometry += element.stoichiometry;
-    }
-    
-    if (totalStoichiometry <= 0.0) return "";
+    double normalization = compoundNormalization(elements, activeElement);
+    if (normalization <= 0.0) return "";
     
     equation << "(";
     
@@ -287,7 +287,7 @@ std::string SRIMUtilities::generateCompoundAZUREEquation(const std::vector<Compo
         SRIMElementData data = readSRIMDataForElement(element.elementNumber);
         if (!data.isValid) continue;
         
-        double weight = element.stoichiometry / totalStoichiometry;
+        double weight = element.stoichiometry / normalization;
         
         if (!first) {
             equation << " + ";

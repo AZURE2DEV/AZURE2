@@ -202,3 +202,26 @@ set_tests_properties(pyazr_tabulate_thm PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=
 # numpy-free roundtrip test never exits 77.
 get_property(_pyazr_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${_pyazr_tests} PROPERTIES SKIP_RETURN_CODE 77)
+
+# The sqrt(E) energy-shift block on a segment line: read, written, and (with
+# the engine) counted and penalised exactly as AZURE2 does.
+add_test(NAME pyazr_sqrt_shift
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/sqrt_shift_test.py)
+set_tests_properties(pyazr_sqrt_shift PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
+# Park parametrization (--use-park): Brune equivalence of the cross sections,
+# analytic gradient and residual Jacobian against finite differences (the
+# adjoint differentiates Park's level matrix and its J-dependent terms), and
+# the J > 0 penalty with its gradient.
+add_test(NAME pyazr_park_gradient
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/park_gradient_test.py)
+set_tests_properties(pyazr_park_gradient PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=4;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
+# Parameter files are read by name: old layouts, the #parametrization tag,
+# write-back by name, foreign files refused.
+add_test(NAME pyazr_sav_readers
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/sav_readers_test.py)
+set_tests_properties(pyazr_sav_readers PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")

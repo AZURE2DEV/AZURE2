@@ -224,6 +224,8 @@ void ALevel::AddGamma(NucLine nucLine) {
     channelfixed_.push_back(false);
   gamma_is_rwa_.push_back(nucLine.gammaIsRWA() == 1);
   shifts_.push_back(0.0);
+  shift_derivs_.push_back(0.0);
+  shift_derivs2_.push_back(0.0);
 }
 
 /*!
@@ -239,6 +241,9 @@ void ALevel::AddGamma(double reducedWidth) {
   external_gammas_.push_back(complex(0.0, 0.0));
   channelfixed_.push_back(false);
   gamma_is_rwa_.push_back(false);
+  shifts_.push_back(0.0);
+  shift_derivs_.push_back(0.0);
+  shift_derivs2_.push_back(0.0);
 }
 
 /*!
@@ -345,6 +350,66 @@ void ALevel::SetExternalGamma(int channelNum, complex reducedWidth) {
 
 void ALevel::SetShiftFunction(int channelNum, double shiftFunction) {
   shifts_[channelNum - 1] = shiftFunction;
+}
+
+/*!
+ * Returns the Park (2021) diagonal overlap \f$J_{\lambda\lambda}\f$ of the level.
+ */
+
+double ALevel::GetParkNorm() const {
+  return park_norm_;
+}
+
+/*!
+ * Sets the Park (2021) diagonal overlap \f$J_{\lambda\lambda}\f$ of the level.
+ */
+
+void ALevel::SetParkNorm(double parkNorm) {
+  park_norm_ = parkNorm;
+}
+
+/*!
+ * Returns dS_c/dE at the level energy (Park formalism only).
+ */
+
+double ALevel::GetShiftDerivative(int channelNum) const {
+  return shift_derivs_[channelNum - 1];
+}
+
+/*!
+ * Returns d^2S_c/dE^2 at the level energy (Park formalism only).
+ */
+
+double ALevel::GetShiftSecondDerivative(int channelNum) const {
+  return shift_derivs2_[channelNum - 1];
+}
+
+/*!
+ * Stores the first and second energy derivatives of a channel's shift
+ * function at the level energy.
+ */
+
+void ALevel::SetShiftDerivatives(int channelNum, double first, double second) {
+  shift_derivs_[channelNum - 1] = first;
+  shift_derivs2_[channelNum - 1] = second;
+}
+
+/*!
+ * True when the stored shift functions were computed at exactly this level
+ * energy.  They depend on nothing else that changes during a fit (the channel
+ * radii and potentials are fixed once the compound nucleus is built).
+ */
+
+bool ALevel::ShiftFunctionsValidAt(double energy) const {
+  return shift_cache_energy_ == energy;
+}
+
+void ALevel::SetShiftFunctionsEnergy(double energy) {
+  shift_cache_energy_ = energy;
+}
+
+void ALevel::InvalidateShiftFunctions() {
+  shift_cache_energy_ = std::numeric_limits<double>::quiet_NaN();
 }
 
 /*!

@@ -3,6 +3,8 @@
 
 #include "Constants.h"
 
+#include <limits>
+
 class NucLine;
 
 /// An AZURE level object.
@@ -85,6 +87,14 @@ class ALevel {
 
   /// Shift function for a channel, evaluated at the resonance energy.
   double GetShiftFunction(int) const;
+  /// Park (2021) Eq. (28): the squared norm of the basis state,
+  /// \f$J_{\lambda\lambda}=1-\sum_c\gamma_{\lambda c}^2 (dS_c/dE)_{E_\lambda}\f$.
+  /// 1 unless the Park formalism is in use.
+  double GetParkNorm() const;
+  /// dS_c/dE and d^2S_c/dE^2 at the level energy, filled by
+  /// CNuc::CalcShiftFunctions in the Park formalism (0 otherwise).
+  double GetShiftDerivative(int) const;
+  double GetShiftSecondDerivative(int) const;
 
   /// Append a channel, taking its initial width from the input file line.
   void AddGamma(NucLine);
@@ -103,6 +113,14 @@ class ALevel {
   void SetTransformIterations(int);
   void SetExternalGamma(int, complex);
   void SetShiftFunction(int, double);
+  void SetParkNorm(double);
+  void SetShiftDerivatives(int, double, double);
+  /// Energy at which the shift functions (and their derivatives) were last
+  /// computed, so CNuc::CalcShiftFunctions can skip a level that has not
+  /// moved; NaN means "never".
+  bool ShiftFunctionsValidAt(double) const;
+  void SetShiftFunctionsEnergy(double);
+  void InvalidateShiftFunctions();
   /// Mark the level as an external-capture final state of a pair, with its
   /// multipolarity mask.
   void SetECParams(int, unsigned char);
@@ -118,6 +136,8 @@ class ALevel {
   double fitlevel_e_;
   double sqrt_nf_factor_;
   double transform_e_;
+  double park_norm_ = 1.0;
+  double shift_cache_energy_ = std::numeric_limits<double>::quiet_NaN();
   std::vector<bool> channelfixed_;
   /// Per-channel input convention: true = gamma column was a reduced width
   /// amplitude (MeV^(1/2)), false = physical partial width/ANC (legacy default).
@@ -129,6 +149,8 @@ class ALevel {
   vector_r transform_gammas_;
   vector_r big_gammas_;
   vector_r shifts_;
+  vector_r shift_derivs_;
+  vector_r shift_derivs2_;
   vector_c external_gammas_;
 };
 

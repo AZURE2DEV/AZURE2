@@ -523,6 +523,11 @@ bool AZURESetup::readLastRun(QTextStream &inStream) {
   else
     GetConfig().paramMask &= ~Config::USE_BRUNE_FORMALISM;
 
+  if (paramMask & Config::USE_PARK_FORMALISM)
+    GetConfig().paramMask |= (Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
+  else
+    GetConfig().paramMask &= ~Config::USE_PARK_FORMALISM;
+
   if (paramMask & Config::IGNORE_ZERO_WIDTHS)
     GetConfig().paramMask |= Config::IGNORE_ZERO_WIDTHS;
   else
@@ -1106,6 +1111,11 @@ void AZURESetup::editOptions() {
   else
     aDialog.useBruneCheck->setChecked(false);
 
+  if (GetConfig().paramMask & Config::USE_PARK_FORMALISM)
+    aDialog.useParkCheck->setChecked(true);
+  else
+    aDialog.useParkCheck->setChecked(false);
+
   if (GetConfig().paramMask & Config::IGNORE_ZERO_WIDTHS)
     aDialog.ignoreExternalsCheck->setChecked(true);
   else
@@ -1142,6 +1152,11 @@ void AZURESetup::editOptions() {
       GetConfig().paramMask |= Config::USE_BRUNE_FORMALISM;
     else
       GetConfig().paramMask &= ~Config::USE_BRUNE_FORMALISM;
+
+    if (aDialog.useParkCheck->isChecked())
+      GetConfig().paramMask |= (Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
+    else
+      GetConfig().paramMask &= ~Config::USE_PARK_FORMALISM;
 
     if (aDialog.ignoreExternalsCheck->isChecked()) {
       GetConfig().paramMask |= Config::IGNORE_ZERO_WIDTHS;

@@ -63,6 +63,8 @@ class EData {
    * field.  Returns -1 on a malformed row.
    */
   int ReadPriorCentres(const Config &);
+  /// Index at which the sqrt(E) energy-shift coefficients start in the Minuit vector.
+  int GetEnergyShiftSqrtParamOffset() const;
   /// Read the target-effects input file and build the TargetEffect objects.
   int ReadTargetEffectsFile(const Config &, CNuc *);
   /// Is this a fit? AZURECalc clones the compound nucleus and data per thread only when it is.
@@ -94,6 +96,10 @@ class EData {
   void PrintCoulombAmplitude(const Config &, CNuc *);
   /// Write AZUREOut_*, chiSquared.out and the rest of the run's output files.
   void WriteOutputFiles(const Config &, bool = false, const BandData * = nullptr);
+  /// Park formalism: the J > 0 penalty of the last objective evaluation, for
+  /// chiSquared.out (set by AZURECalc::operator(); 0 otherwise).
+  void SetParkPenalty(double penalty) { parkPenalty_ = penalty; }
+  double GetParkPenalty() const { return parkPenalty_; }
   /// External-capture amplitudes for every point that has an EC component.
   int CalculateECAmplitudes(CNuc *, const Config &);
   /// How many external-capture amplitudes this model expects in an intEC file.
@@ -115,6 +121,7 @@ class EData {
   void AddTargetEffect(TargetEffect);
   void SetNormParamOffset(int);
   void SetEnergyShiftParamOffset(int);
+  void SetEnergyShiftSqrtParamOffset(int);
   /// Seed the Minuit parameter array with the normalizations and energy shifts.
   void FillMnParams(ROOT::Minuit2::MnUserParameters &);
   /// Write the normalizations back from a Minuit parameter vector.
@@ -243,6 +250,7 @@ class EData {
   int iterations_;
   int normParamOffset_;
   int energyShiftParamOffset_;
+  int energyShiftSqrtParamOffset_;
   bool isFit_;
   bool isErrorAnalysis_;
   std::streampos ecReadPos_;  // File offset where component-segment EC integrals begin in the intEC file
@@ -258,6 +266,7 @@ class EData {
   int BuildThmGroups(const Config &, CNuc *, int numLines);
   /// Writes output/thm_experiments.out.
   void WriteThmExperiments(const Config &);
+  double parkPenalty_ = 0.0;
 };
 
 #endif

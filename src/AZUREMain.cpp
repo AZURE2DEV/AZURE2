@@ -131,6 +131,7 @@ int AZUREMain::operator()() {
   } else {
     configure().outStream << "Reading User Parameter File..." << std::endl;
     params.ReadUserParameters(configure());
+    if (!params.ReconcileBasis(compound(), configure())) return -1;
   }
 
   if (!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {

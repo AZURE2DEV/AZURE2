@@ -494,11 +494,6 @@ QString AZUREPlot::yAxisTitleText() const {
   switch (yAxisQuantity) {
     case YQ_ANALYZING_POWER:
       return QString("Analyzing Power");
-    case YQ_POLARIZATION_PRODUCT:
-      // P dsigma/dOmega, written with the Greek letters the observable is
-      // normally printed with.  Escaped rather than typed so the source stays
-      // pure ASCII and cannot be mangled by a re-encoding.
-      return QString("P d") + QChar(0x03C3) + QString("/d") + QChar(0x03A9) + QString(" [b/sr]");
     case YQ_PHASE_SHIFT:
       return QString("Phase Shift [degrees]");
     case YQ_ANGDIST_COEFF:

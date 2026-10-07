@@ -140,7 +140,7 @@ int NumParameters(CNuc *compound, EData *data) {
     std::vector<ESegment> &segments = data->GetSegments();
     for (size_t s = 0; s < segments.size(); s++)
       if (segments[s].IsVaryNorm()) n++;
-    n += (int)segments.size();
+    n += 2 * (int)segments.size();  // energy shift and sqrt(E) coefficient, every segment
   }
   return n;
 }
@@ -188,6 +188,15 @@ std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
     if (index == minuitIndex) {
       std::ostringstream out;
       out << "energy shift of segment " << segments[s].GetSegmentKey()
+          << " (" << segments[s].GetDataFile() << ")";
+      return out.str();
+    }
+    index++;
+  }
+  for (size_t s = 0; s < segments.size(); s++) {
+    if (index == minuitIndex) {
+      std::ostringstream out;
+      out << "sqrt(E) energy-shift coefficient of segment " << segments[s].GetSegmentKey()
           << " (" << segments[s].GetDataFile() << ")";
       return out.str();
     }

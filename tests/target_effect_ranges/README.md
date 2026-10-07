@@ -27,3 +27,10 @@ segment, so both were convolved with 30 x 0.875^2 = 23 keV (p+7Li) instead of
 30 x 0.875 = 26 keV. Each listed segment now gets its own copy, converted
 once. 3861.54 -> 3838.66 (segments 2323.50 -> 2313.79, 1538.04 -> 1524.87);
 the fully convolved value 3800.8 -> 3764.57, the bare one is unchanged.
+
+dev fixed the same bug independently (f0444ab, 2026-10-01: TargetEffect::ConvertSigmaToCM
+converts a shared effect once) and pinned 3838.73; the 7e-5 between the two pins is
+the classic shift-function and dS/dE changes above.  Both fixes are kept after the
+merge of dev into thm: each listed segment has its own copy, and each copy is
+converted once.  tests/target_effect_shared (dev) checks a shared line against one
+line per segment.

@@ -62,6 +62,8 @@ class CoulFunc {
   double PEShift(int, double, double);
   /// Energy derivative \f$dS_l/dE\f$ -- the term that makes the observed-width transformation singular when it grows too large.
   double PEShift_dE(int, double, double, double step = 1.0e-6);
+  /// Second energy derivative of the shift function (numerical).
+  double PEShift_d2E(int, double, double);
 
   // Hybrid method support
   /// Override this instance's nuclear potential.
@@ -97,6 +99,7 @@ class CoulFunc {
   CoulWaves computeHybrid(int l, double radius, double energy);
 
   static double thisPEShift(double, void *);
+  static double thisPEShift_dE(double, void *);
   typedef struct DEShiftParams {
     CoulFunc *coulFunc;
     int lValue;

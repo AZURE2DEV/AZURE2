@@ -101,7 +101,8 @@ class AZUREAPI {
    * The result is a flat vector of kParamInfoFields doubles per parameter; the
    * fields (and -1 for "not applicable") are:
    *   0  type          0=energy, 1=width, 2=norm, 3=energy-shift,
-   *                    4=THM coherent background (cbkg; cbackground=)
+   *                    4=sqrt(E) energy-shift coefficient,
+   *                    5=THM coherent background (cbkg; cbackground=)
    *   1  jgroup        1-based J-group index (R-matrix params only)
    *   2  J             total spin of the J-group / level
    *   3  parity        +1 / -1
@@ -291,6 +292,15 @@ class AZUREAPI {
    * Calculate chi-squared from physical parameters
    */
   double CalculateChi2Physical(const vector_r &physicalParams) const;
+
+  /*!
+   * Park formalism: the overlap J = 1 - sum_c gamma_c^2 dS_c/dE of every
+   * R-matrix level at the given non-fixed RWA parameters, in the order of
+   * CNuc::FillMnParams (J-groups, then levels).  Every entry is 1 in the Brune
+   * formalism.  A fit must keep them positive; CalculateChi2RWA adds
+   * CNuc::ParkNormPenalty for any that are not.
+   */
+  vector_r ParkNorms(const vector_r &rwaParams) const;
 
   /*!
    * Value and analytic gradient of the (data) chi-squared with respect to the

@@ -24,7 +24,8 @@ namespace AZURELabel {
 
 /*!
  * Whether a fit-parameter name is a segment normalization ("segment_<k>_norm")
- * or energy shift ("segment_<k>_energy_shift").  Matched by form, not by a
+ * or energy shift ("segment_<k>_energy_shift", or its sqrt(E) coefficient
+ * "segment_<k>_energy_shift_sqrt").  Matched by form, not by a
  * substring: a THM coherent-background name, cbkg_<experiment>_..., carries
  * the experiment's own name and may contain "norm" or "shift".
  */
@@ -35,7 +36,8 @@ inline bool IsNormName(const std::string &name) {
   return name.compare(0, 8, "segment_") == 0 && EndsWith(name, "_norm");
 }
 inline bool IsEnergyShiftName(const std::string &name) {
-  return name.compare(0, 8, "segment_") == 0 && EndsWith(name, "_energy_shift");
+  return name.compare(0, 8, "segment_") == 0 &&
+         (EndsWith(name, "_energy_shift") || EndsWith(name, "_energy_shift_sqrt"));
 }
 
 /*! Spin as a fraction: 1.5 -> "3/2", 2.0 -> "2". */

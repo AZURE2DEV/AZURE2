@@ -64,6 +64,12 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
     localData->FillNormsFromParams(p);
     localData->FillEnergyShiftsFromParams(p, localData, localCompound, &configure());
     if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+    // Park formalism: a level with J <= 0 has no R-matrix meaning -- outside the prior.
+    if ((configure().paramMask & Config::USE_PARK_FORMALISM) && localCompound->ParkNormPenalty() > 0.0) {
+      ReturnPooledCNuc(localCompound);
+      ReturnPooledEData(localData);
+      return -std::numeric_limits<double>::infinity();
+    }
 
     // Sub-segments are now integrated into ESegment, no separate initialization needed
   } catch (GSLException &e) {
@@ -164,6 +170,12 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
 
   // Fill Compound Nucleus From Minuit Parameters
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  // Park formalism: observed widths beyond the J > 0 bound are outside the prior.
+  if ((configure().paramMask & Config::USE_PARK_FORMALISM) && localCompound->ParkNormPenalty() > 0.0) {
+    ReturnPooledCNuc(localCompound);
+    ReturnPooledEData(localData);
+    return -std::numeric_limits<double>::infinity();
+  }
 
   // Sub-segments are now integrated into ESegment, no separate initialization needed
 
@@ -225,6 +237,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) const
   data()->FillMnParams(params.GetMinuitParams());
   if (configure().paramMask & Config::USE_PREVIOUS_PARAMETERS) {
     params.ReadUserParameters(configure());
+    params.ReconcileBasis(compound(), configure());
   }
 
   compound()->FillCompoundFromParams(params.GetMinuitParams().Params());
@@ -361,6 +374,7 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   //   per J-group, per level: one energy, then one width per channel
   //   one norm per segment with IsVaryNorm()
   //   one energy shift per segment (all segments)
+  //   one sqrt(E) energy-shift coefficient per segment (all segments)
   // AZUREAPI::GetParameterInfo() walks the same sequence.
   std::vector<int> allKinds;
   std::vector<double> allAutoMean;
@@ -399,6 +413,13 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     allKinds.push_back(PARAM_SHIFT);
     allAutoMean.push_back(segments[s].GetNominalEnergyShift());
     allAutoStd.push_back(segments[s].GetEnergyShiftError());
+  }
+
+  // sqrt(E) energy-shift coefficients, one per segment, same prior rule.
+  for (size_t s = 0; s < segments.size(); ++s) {
+    allKinds.push_back(PARAM_SHIFT);
+    allAutoMean.push_back(segments[s].GetNominalEnergyShiftSqrt());
+    allAutoStd.push_back(segments[s].GetEnergyShiftSqrtError());
   }
 
   if (allKinds.size() != fixed_.size()) {

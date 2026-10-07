@@ -27,6 +27,7 @@ std::tuple<int, int, int, int> IdentityKey(const ParamDesc &d) {
     case ParamKind::Gamma: return std::make_tuple(kind, d.jGroup, d.level, d.channel);
     case ParamKind::Norm: return std::make_tuple(kind, d.segment, -1, -1);
     case ParamKind::EnergyShift: return std::make_tuple(kind, d.segment, -1, -1);
+    case ParamKind::EnergyShiftSqrt: return std::make_tuple(kind, d.segment, -1, -1);
     case ParamKind::ThmCoherent: return std::make_tuple(kind, d.channel, -1, -1);  // channel = its index
   }
   return std::make_tuple(kind, -1, -1, -1);

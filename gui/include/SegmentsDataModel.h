@@ -36,6 +36,10 @@ struct SegmentsDataData {
   // THM (modified R-matrix / half-off-shell) flag; written as isDiff offset +10.
   // Last field so existing brace-initializers (which omit it) default it to 0.
   int isTHM;
+  // Trailing "sqrtshift <b> <bError> <vary>" block (sqrt(E) energy-shift
+  // term, see SegLine.h).  Carried through verbatim so a file that uses it
+  // survives a GUI load/save; the GUI does not edit it yet.
+  QString sqrtShiftTokens;
 };
 
 /*!

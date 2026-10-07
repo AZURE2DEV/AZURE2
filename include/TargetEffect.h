@@ -120,6 +120,8 @@ class TargetEffect {
   bool IsBeamPhotodissociation() const;
   /// Scale every beam-profile energy (xi, omega, tpc sigma) once, lab -> c.m.
   void ConvertBeamProfileToCM(double factor);
+  /// Scale the fixed convolution sigma once, lab -> c.m.
+  void ConvertSigmaToCM(double factor);
   const std::vector<BeamProfileComponent> &GetBeamProfile() const;
 
  private:
@@ -160,6 +162,7 @@ class TargetEffect {
   double beamTruncation_ = 0.0;
   bool beamPhotodissociation_ = false;
   bool beamProfileConverted_ = false;
+  bool sigmaConverted_ = false;
 };
 
 #endif

@@ -87,3 +87,16 @@ add_executable(thm_spectator_angles_test thm_spectator_angles_test.cpp)
 target_link_libraries(thm_spectator_angles_test PRIVATE AZURE2Core)
 
 add_test(NAME thm_spectator_angles COMMAND thm_spectator_angles_test)
+
+# Compound stopping cross section (Bragg's rule) against the single-element
+# values: per active atom and per average atom.  Reads erya/data/SRIM2013.xml,
+# so it runs from external/.
+if(USE_ERYA)
+  add_executable(compound_stopping_reference_test compound_stopping_reference_test.cpp)
+  target_include_directories(compound_stopping_reference_test PRIVATE
+      ${CMAKE_SOURCE_DIR}/external/erya/include)
+  target_link_libraries(compound_stopping_reference_test PRIVATE srim_utilities)
+  add_test(NAME compound_stopping_reference
+           COMMAND compound_stopping_reference_test
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/external)
+endif()

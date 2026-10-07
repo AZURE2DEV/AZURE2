@@ -51,6 +51,33 @@ vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure) {
 }
 
 /*!
+ * d/dx of sum_lambda (J_lambda/s)^2 over J < 0, with J = 1 - sum_d g_d^2 S'_d:
+ *   d/d g_d  = 2 J/s^2 (-2 g_d S'_d),    d/d E = 2 J/s^2 (-sum_d g_d^2 S''_d).
+ */
+void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum) {
+  if (!(configure.paramMask & Config::USE_PARK_FORMALISM)) return;
+  const double s2 = CNuc::kParkNormScale * CNuc::kParkNormScale;
+  for (int j = 1; j <= compound->NumJGroups(); j++) {
+    JGroup *jg = compound->GetJGroup(j);
+    if (!jg->IsInRMatrix()) continue;
+    for (int la = 1; la <= jg->NumLevels(); la++) {
+      ALevel *level = jg->GetLevel(la);
+      if (!level->IsInRMatrix() || level->GetParkNorm() >= 0.0) continue;
+      const double factor = 2.0 * level->GetParkNorm() / s2;
+      double dE = 0.0;
+      for (int ch = 1; ch <= jg->NumChannels(); ch++) {
+        AChannel *channel = jg->GetChannel(ch);
+        if (channel->GetRadType() != 'P' || compound->GetPair(channel->GetPairNum())->GetPType() != 0) continue;
+        double g = level->GetFitGamma(ch);
+        accum.AddGamma(j, la, ch, factor * (-2.0 * g * level->GetShiftDerivative(ch)));
+        dE -= g * g * level->GetShiftSecondDerivative(ch);
+      }
+      accum.AddE(j, la, factor * dE);
+    }
+  }
+}
+
+/*!
  * Allocates and zeroes the physics-coordinate gradient accumulators.
  */
 void GradAccum::Init(CNuc *compound) {
@@ -137,11 +164,20 @@ int ParamIndexMap::EnergyShiftIndex(int segment) const {
 }
 
 /*!
+ * Returns the full-vector index of the sqrt(E) energy-shift coefficient for a segment.
+ */
+int ParamIndexMap::EnergyShiftSqrtIndex(int segment) const {
+  auto it = sqrtShiftIndex_.find(segment);
+  return (it == sqrtShiftIndex_.end()) ? -1 : it->second;
+}
+
+/*!
  * Builds the parameter-index map by mirroring, in the exact same order, the
  * assignment loops in:
  *   - CNuc::FillCompoundFromParams      (level energies + gammas)
  *   - EData::FillNormsFromParams        (norms, only for IsVaryNorm segments)
- *   - EData::FillEnergyShiftsFromParams (one energy shift per segment)
+ *   - EData::FillEnergyShiftsFromParams (one energy shift per segment, then
+ *                                        one sqrt(E) coefficient per segment)
  *
  * Keeping this in lock-step with those routines is what guarantees the returned
  * gradient vector is a permutation-correct match for the sampler's parameter
@@ -190,6 +226,19 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
       if (segment) {
         map.shiftIndex_[s] = i;
         map.desc_.push_back(ParamDesc{ParamKind::EnergyShift, -1, -1, -1, s, false});
+        i++;
+      }
+    }
+  }
+
+  // --- sqrt(E) energy-shift coefficients: one per segment (all segments). ---
+  map.energyShiftSqrtOffset_ = i;
+  if (data) {
+    for (int s = 1; s <= data->NumSegments(); s++) {
+      ESegment *segment = data->GetSegment(s);
+      if (segment) {
+        map.sqrtShiftIndex_[s] = i;
+        map.desc_.push_back(ParamDesc{ParamKind::EnergyShiftSqrt, -1, -1, -1, s, false});
         i++;
       }
     }

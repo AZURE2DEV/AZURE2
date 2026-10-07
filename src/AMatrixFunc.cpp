@@ -146,6 +146,7 @@ void AMatrixFunc::FillMatrices(EPoint *point) {
     inEnergy = point->GetCMEnergy() +
         compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetSepE() +
         compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetExE();
+  const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
     if (compound()->GetJGroup(j)->IsInRMatrix()) {
       // Cache JGroup pointer to avoid repeated calls
@@ -188,6 +189,7 @@ void AMatrixFunc::FillMatrices(EPoint *point) {
             if (jGroup->GetLevel(lap)->IsInRMatrix()) {
               ALevel *levelp = jGroup->GetLevel(lap);
               complex sum(0.0, 0.0);
+              double parkOverlap = 0.0;
               for (int ch = 1; ch <= numChannels; ch++) {
                 double gammaCh = levelGammas_[la][ch];
                 double gammaChp = levelGammas_[lap][ch];
@@ -206,7 +208,15 @@ void AMatrixFunc::FillMatrices(EPoint *point) {
                     la == lap &&
                     (configure().paramMask & Config::USE_RMC_FORMALISM))
                   sum += complex(0.0, 1.0) * gammaCh * gammaChp;
-                if ((configure().paramMask & Config::USE_BRUNE_FORMALISM) && radType == 'P') {
+                if (park && radType == 'P') {
+                  // Park (2021) Eq. (22) with B_{lambda c} = S_c(E_lambda), Eq. (26):
+                  // the kernel is S_c(E) - S_c(E_lambda) + i P_c, where loElement
+                  // is S_c(E) - B_c + i P_c.  Eq. (9) gives the off-diagonal overlap.
+                  sum += gammaCh * gammaChp * (channel->GetBoundaryCondition() - shiftFunctions_[la][ch]);
+                  if (la != lap)
+                    parkOverlap -= gammaCh * gammaChp * (shiftFunctions_[la][ch] - shiftFunctions_[lap][ch]) /
+                        (levelEnergies_[la] - levelEnergies_[lap]);
+                } else if ((configure().paramMask & Config::USE_BRUNE_FORMALISM) && radType == 'P') {
                   sum += gammaCh * gammaChp * channel->GetBoundaryCondition();
                   if (la == lap)
                     sum -= gammaCh * gammaChp * shiftFunctions_[la][ch];
@@ -216,7 +226,12 @@ void AMatrixFunc::FillMatrices(EPoint *point) {
                         (levelEnergies_[la] - levelEnergies_[lap]);
                 }
               }
-              if (la == lap) {
+              if (park) {
+                // Park (2021) Eqs. (21)-(22): A^-1 = (E_lambda - E) J - gamma (S - B_lambda + iP) gamma^T,
+                // with the diagonal overlap J_{lambda lambda} of Eq. (28).
+                if (la == lap) parkOverlap = level->GetParkNorm();
+                this->AddAInvMatrixElement(j, la, lap, (levelEnergies_[la] - inEnergy) * parkOverlap - sum);
+              } else if (la == lap) {
                 double resenergy = levelEnergies_[la];
                 this->AddAInvMatrixElement(j, la, lap, resenergy - inEnergy - sum);
               } else
@@ -519,6 +534,11 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
   // explicit E_lambda dependence through S(E_lambda) (handled in the structural
   // energy step using shiftDeriv = dS/dE).
   const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
+  // Park: the level matrix is (E_r - E) J[r][c] - sum_d g_r g_c (L_d + B_d - S_r,d),
+  // with the overlap J of Park's Eqs. (9) and (28) depending on the widths and,
+  // through dS/dE at E_lambda, on the level energies.  Its derivatives come from
+  // the per-level values CNuc::CalcShiftFunctions stores (S, S', S'').
+  const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
 
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
   int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
@@ -685,39 +705,6 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
           if (!includeInternal(mg)) continue;
           tBar[k - 1][m - 1] += fitBar * M.PathwayAdjoint(mg->GetJNum(), mg->GetChNum(), mg->GetChpNum(), bar);
         }
-      }
-    }
-  } else if (point->IsPolarizationProduct()) {
-    // ---- P dsigma/dOmega. The observable is the bare numerator
-    //        N = -2 Im(sum u' conj(d'))
-    //      of the outgoing polarization: P_y's denominator is exactly the spin
-    //      sum the cross section divides by, so the product carries no ratio
-    //      (verified -- P_y sigma / N is 1/nEntrance to twelve digits at every
-    //      angle). N is bilinear in M, so the adjoint is exact and has no
-    //      1/D^2, making it better conditioned than the A_y adjoint above.
-    const int exitPairNum2 = compound()->GetPairNumFromKey(point->GetExitKey());
-    if (compound()->GetPair(exitPairNum2)->GetPType() != 0) return false;
-    Polarization::AmplitudeMatrix M(compound(), point, aa, exitPairNum2);
-    for (int k = 1; k <= nK; k++) {
-      for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-        MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
-        M.AddPathway(mg->GetJNum(), mg->GetChNum(), mg->GetChpNum(),
-                     this->GetTMatrixElement(k, m));
-      }
-    }
-    if (aa == exitPairNum2) M.AddCoulomb();
-    if (M.size() == 0) return false;
-    const std::vector<complex> bar = M.OutgoingPolarizationNumeratorBar();
-    // model = scale * N, so the cotangent carries the same constant. Without it
-    // the Jacobian rows are scaled inconsistently across energies and the search
-    // directions are wrong even though each column is individually proportional
-    // to the truth.
-    const double polScale = point->GetPolarizationScale();
-    for (int k = 1; k <= nK; k++) {
-      for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-        MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
-        if (!includeInternal(mg)) continue;
-        tBar[k - 1][m - 1] += fitBar * polScale * M.PathwayAdjoint(mg->GetJNum(), mg->GetChNum(), mg->GetChpNum(), bar);
       }
     }
   } else if (isPhase) {
@@ -1025,12 +1012,21 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
         // sqrtNF couples to every NF channel d of the final level:
         //   nFSum = 1 + sum_d A_d gamma_d^2,  A_d = 2 chRad redMass uconv/hbarc^2 NF_d,
         //   sqrtNF = nFSum^{-1/2},  d sqrtNF / d gamma_d = -A_d gamma_d sqrtNF^3.
+        // Park: sqrtNF = (J + sum_d A_d gamma_d^2)^{-1/2} with J = 1 - sum_d gamma_d^2 S'_d
+        // over the particle channels (CNuc::CalcShiftFunctions), so every particle
+        // channel contributes  d sqrtNF / d gamma_d = (S'_d - A_d) gamma_d sqrtNF^3.
         complex pre = gamma_fc * conv * effAmp;  // d T_ec / d sqrtNF
         int numNF = finalLevel->NumNFIntegrals();
         double sqrtNF3 = sqrtNF * sqrtNF * sqrtNF;
-        for (int d = 1; d <= numNF; d++) {
+        const bool parkFinal = park && finalLevel->IsInRMatrix();
+        int numD = parkFinal ? jgf->NumChannels() : numNF;
+        for (int d = 1; d <= numD; d++) {
           PPair *pd = compound()->GetPair(jgf->GetChannel(d)->GetPairNum());
-          double Ad = 2.0 * pd->GetChRad() * pd->GetRedMass() * uconv / (hbarc * hbarc) * finalLevel->GetNFIntegral(d);
+          double Ad = (d <= numNF) ? 2.0 * pd->GetChRad() * pd->GetRedMass() * uconv / (hbarc * hbarc) * finalLevel->GetNFIntegral(d)
+                                   : 0.0;
+          if (parkFinal && jgf->GetChannel(d)->GetRadType() == 'P' && pd->GetPType() == 0)
+            Ad -= finalLevel->GetShiftDerivative(d);
+          if (Ad == 0.0) continue;
           double gd = finalLevel->GetFitGamma(d);
           double dSqrtNF = -Ad * gd * sqrtNF3;
           accum.AddGamma(jf, lf, d, std::real(conj(eb) * (pre * dSqrtNF)));
@@ -1131,7 +1127,98 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     //   K_ch[r][c] = L + B - D_ch[r][c],  D diagonal = S_r,  off-diag = Q_{rc}.
     // so dlnL/dE_nu += sum_{r,c} Re(conj(Mbar[r][c]) * sum_ch g_r g_c dD/dE_nu).
     // dD/dE only couples to E_r and E_c; using S'(E) = shiftDeriv.
-    if (brune && shiftDeriv) {
+    if (park) {
+      // Park:  M[r][c] = (E_r - inE) J[r][c] - sum_d g_r,d g_c,d K_d[r][c],
+      //   K_d[r][c] = L_d + B_d - S_r,d   (row-indexed shift; particle channels),
+      //   J[r][r]   = 1 - sum_d g_r,d^2 S'_r,d,
+      //   J[r][c]   = -sum_d g_r,d g_c,d (S_r,d - S_c,d)/(E_r - E_c).
+      // The delta term above already gave d M[r][r]/dE_r = 1; here it is J_rr
+      // instead, so the difference J_rr - 1 is added, plus the J and S_r,d
+      // derivatives.  M is real-coefficient in E, so only Re(Mbar) enters.
+      int numChannels = jg->NumChannels();
+      auto isParticle = [&](int d) {
+        return jg->GetChannel(d)->GetRadType() == 'P' &&
+               compound()->GetPair(jg->GetChannel(d)->GetPairNum())->GetPType() == 0;
+      };
+      for (int r = 1; r <= n; r++) {
+        ALevel *lr = jg->GetLevel(r);
+        double Er = lr->GetFitE();
+        for (int c = 1; c <= n; c++) {
+          double reM = std::real(Mbar[r - 1][c - 1]);
+          if (reM == 0.0) continue;
+          if (r == c) {
+            double dJ = 0.0, sumS1 = 0.0;
+            for (int d = 1; d <= numChannels; d++) {
+              if (!isParticle(d)) continue;
+              double g2 = lr->GetFitGamma(d) * lr->GetFitGamma(d);
+              if (g2 == 0.0) continue;
+              dJ -= g2 * lr->GetShiftSecondDerivative(d);
+              sumS1 += g2 * lr->GetShiftDerivative(d);
+            }
+            accum.AddE(jNum, r, reM * ((lr->GetParkNorm() - 1.0) + (Er - inEnergy) * dJ + sumS1));
+          } else {
+            ALevel *lc = jg->GetLevel(c);
+            double Ec = lc->GetFitE();
+            double den = Er - Ec;
+            double Jrc = 0.0, dJdEr = 0.0, dJdEc = 0.0, sumS1 = 0.0;
+            for (int d = 1; d <= numChannels; d++) {
+              if (!isParticle(d)) continue;
+              double g = lr->GetFitGamma(d) * lc->GetFitGamma(d);
+              if (g == 0.0) continue;
+              double Sr = lr->GetShiftFunction(d), Sc = lc->GetShiftFunction(d);
+              double dSr = lr->GetShiftDerivative(d), dSc = lc->GetShiftDerivative(d);
+              double q = (Sr - Sc) / den;
+              Jrc -= g * q;
+              dJdEr -= g * (dSr - q) / den;
+              dJdEc -= g * (-dSc + q) / den;
+              sumS1 += g * dSr;
+            }
+            accum.AddE(jNum, r, reM * (Jrc + (Er - inEnergy) * dJdEr + sumS1));
+            accum.AddE(jNum, c, reM * (Er - inEnergy) * dJdEc);
+          }
+        }
+      }
+
+      // Structural gamma gradient, Park.  For M[a][c] and M[c][a] (both carry
+      // Mbar) the kernel is row-indexed, K_d[a][c] = L_d + B_d - S_a,d and
+      // K_d[c][a] = L_d + B_d - S_c,d, and J contributes
+      //   d J[a][a]/d g_a,d = -2 g_a,d S'_a,d,
+      //   d J[a][c]/d g_a,d = d J[c][a]/d g_a,d = -g_c,d (S_a,d - S_c,d)/(E_a - E_c).
+      for (int d = 1; d <= numChannels; d++) {
+        complex Ld = point->GetLoElement(jNum, d);
+        const bool pd = isParticle(d);
+        double Bd = pd ? jg->GetChannel(d)->GetBoundaryCondition() : 0.0;
+        for (int a = 1; a <= n; a++) {
+          ALevel *la_ = jg->GetLevel(a);
+          double Ea = la_->GetFitE();
+          double ga = la_->GetFitGamma(d);
+          double Sa = pd ? la_->GetShiftFunction(d) : 0.0;
+          double grad = 0.0;
+          for (int c = 1; c <= n; c++) {
+            ALevel *lc_ = jg->GetLevel(c);
+            double gc = lc_->GetFitGamma(d);
+            if (c == a) {
+              complex Kaa = pd ? (Ld + Bd - Sa) : Ld;
+              grad += -2.0 * ga * std::real(conj(Mbar[a - 1][a - 1]) * Kaa);
+              if (pd) grad += std::real(Mbar[a - 1][a - 1]) * (Ea - inEnergy) * (-2.0 * ga * la_->GetShiftDerivative(d));
+            } else {
+              if (gc == 0.0) continue;
+              double Sc = pd ? lc_->GetShiftFunction(d) : 0.0;
+              complex Kac = pd ? (Ld + Bd - Sa) : Ld;
+              complex Kca = pd ? (Ld + Bd - Sc) : Ld;
+              grad += -gc * std::real(conj(Mbar[a - 1][c - 1]) * Kac + conj(Mbar[c - 1][a - 1]) * Kca);
+              if (pd) {
+                double Ec = lc_->GetFitE();
+                double delta = (Sa - Sc) / (Ea - Ec);
+                grad += -gc * delta * (std::real(Mbar[a - 1][c - 1]) * (Ea - inEnergy) +
+                                       std::real(Mbar[c - 1][a - 1]) * (Ec - inEnergy));
+              }
+            }
+          }
+          accum.AddGamma(jNum, a, d, grad);
+        }
+      }
+    } else if (brune && shiftDeriv) {
       const std::vector<std::vector<double>> &sd = (*shiftDeriv)[jNum - 1];
       int numChannels = jg->NumChannels();
       for (int ch = 1; ch <= numChannels; ch++) {
@@ -1175,7 +1262,7 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     //                        : (S_r,d (inE-E_c) - S_c,d (inE-E_r)) / (E_r - E_c)
     // exactly mirroring FillMatrices.
     int numChannels = jg->NumChannels();
-    for (int d = 1; d <= numChannels; d++) {
+    for (int d = 1; d <= numChannels && !park; d++) {
       complex Ld = point->GetLoElement(jNum, d);
       AChannel *channel = jg->GetChannel(d);
       bool bruneP = brune && (channel->GetRadType() == 'P');

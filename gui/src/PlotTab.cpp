@@ -480,7 +480,7 @@ void PlotTab::testChannelFilterChanged() {
  * The data and test segment lists do NOT share a code set, which is the trap
  * here: 3 is total capture among data segments but angular distribution
  * coefficients among test segments, and 4 is c.m. differential among data
- * segments but total capture among test segments.  Only 1, 2, 7 and 8 mean the
+ * segments but total capture among test segments.  Only 1, 2 and 7 mean the
  * same thing in both.  The classification therefore has to be told which list
  * the code came from; the grouping mirrors ESegment's two constructors.
  */
@@ -488,8 +488,6 @@ void PlotTab::noteSelectionQuantity(int dataType, bool isTestSegment) {
   int q;
   if (dataType == 7) {
     q = AZUREPlot::YQ_ANALYZING_POWER;
-  } else if (dataType == 8) {
-    q = AZUREPlot::YQ_POLARIZATION_PRODUCT;
   } else if (dataType == 2) {
     q = AZUREPlot::YQ_PHASE_SHIFT;
   } else if (isTestSegment) {
@@ -515,7 +513,7 @@ QList<PlotEntry *> PlotTab::getDataSegments() {
     int exitKey = segDataProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toInt();
     sourceIndex = segDataProxyModel->mapToSource(segDataProxyModel->index(indexes[i].row(), 7, QModelIndex()));
     int dataType = segDataProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toInt();
-    if (dataType == 7 || dataType == 8) selectionHasSignedObservable_ = true;
+    if (dataType == 7) selectionHasSignedObservable_ = true;
     noteSelectionQuantity(dataType, false);
     QString filename = (dataType == 3) ? QString::fromStdString(configure.outputdir) + QString("AZUREOut_aa=%1_TOTAL_CAPTURE.out").arg(entranceKey) : QString::fromStdString(configure.outputdir) + QString("AZUREOut_aa=%1_R=%2.out").arg(entranceKey).arg(exitKey);
     sourceIndex = segDataProxyModel->mapToSource(segDataProxyModel->index(indexes[i].row(), 8, QModelIndex()));
@@ -529,7 +527,7 @@ QList<PlotEntry *> PlotTab::getDataSegments() {
       if (previousEntranceKey == entranceKey && previousExitKey == exitKey) numPreviousInBlock++;
     }
     PlotEntry *newPlotEntry = new PlotEntry(0, entranceKey, exitKey, numPreviousInBlock, filename);
-    newPlotEntry->setAllowNonPositive(dataType == 7 || dataType == 8);
+    newPlotEntry->setAllowNonPositive(dataType == 7);
     if (!segmentDataFile.isEmpty()) {
       newPlotEntry->setLabel(PlotEntry::labelFromFilename(segmentDataFile));
     }
@@ -552,7 +550,7 @@ QList<PlotEntry *> PlotTab::getTestSegments() {
     int exitKey = segTestProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toInt();
     sourceIndex = segTestProxyModel->mapToSource(segTestProxyModel->index(indexes[i].row(), 9, QModelIndex()));
     int dataType = segTestProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toInt();
-    if (dataType == 7 || dataType == 8) selectionHasSignedObservable_ = true;
+    if (dataType == 7) selectionHasSignedObservable_ = true;
     noteSelectionQuantity(dataType, true);
     QString filename = (dataType == 4) ? QString::fromStdString(configure.outputdir) + QString("AZUREOut_aa=%1_TOTAL_CAPTURE.extrap").arg(entranceKey) : QString::fromStdString(configure.outputdir) + QString("AZUREOut_aa=%1_R=%2.extrap").arg(entranceKey).arg(exitKey);
     int numPreviousInBlock = 0;
@@ -564,7 +562,7 @@ QList<PlotEntry *> PlotTab::getTestSegments() {
       if (previousEntranceKey == entranceKey && previousExitKey == exitKey) numPreviousInBlock++;
     }
     PlotEntry *newPlotEntry = new PlotEntry(1, entranceKey, exitKey, numPreviousInBlock, filename);
-    newPlotEntry->setAllowNonPositive(dataType == 7 || dataType == 8);
+    newPlotEntry->setAllowNonPositive(dataType == 7);
     sourceIndex = segTestProxyModel->mapToSource(segTestProxyModel->index(indexes[i].row(), 16, QModelIndex()));
     if (segTestProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toInt() != 0)
       newPlotEntry->setLabel(newPlotEntry->label() + " (THM)");

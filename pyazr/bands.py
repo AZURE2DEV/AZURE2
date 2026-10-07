@@ -135,9 +135,10 @@ def load_covariance(path="output/covariance.dat", ncols=None):
 
 _RMATRIX_KINDS = (0, 1)      # GET_PARAMS_INFO type codes: 0 energy, 1 width
 # What a band spans (the engine's BandPackedColumns): the R-matrix parameters
-# and the THM coherent background (4, cbkg), which enters the HOES amplitude.
-_BAND_KINDS = (0, 1, 4)
-_NFIELDS = 15                # doubles per parameter record
+# and the THM coherent background (5, cbkg), which enters the HOES amplitude.
+# (4 is the sqrt(E) energy-shift coefficient, a segment parameter.)
+_BAND_KINDS = (0, 1, 5)
+_NFIELDS = 16                # doubles per parameter record (kParamInfoFields)
 
 
 def live_parameters(model):
@@ -208,11 +209,12 @@ def best_fit_params(model, path=None):
             f"{path} not found: the band must be evaluated at the fitted "
             f"parameters the covariance belongs to.  Pass params= explicitly "
             f"to override.")
-    full = np.loadtxt(path, usecols=(1,))
+    # By NAME (azure2.full_rwa_from_sav): a parameter the file does not list
+    # keeps the session's value, so a file from an older layout (no
+    # segment_*_energy_shift_sqrt rows, no #parametrization tag) still fits,
+    # and in extrapolation mode the file's segment rows simply find no home.
+    full = model.full_rwa_from_sav(path)
     fixed = np.asarray(model.fixed_params, float).round().astype(bool)
-    if full.size != fixed.size:
-        raise ValueError(f"{path} has {full.size} parameters but the model has "
-                         f"{fixed.size}.")
     free = full[~fixed]
 
     kinds, _ = live_parameters(model)

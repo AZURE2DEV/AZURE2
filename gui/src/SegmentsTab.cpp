@@ -1199,6 +1199,18 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
       }
       if (dataParts.isEmpty()) dataParts = remainingData.split(" ", Qt::SkipEmptyParts);
 
+      // A trailing "sqrtshift b bError vary" block (sqrt(E) energy-shift term)
+      // is split off before the positional composite/UPOS parsing below, which
+      // must not see it, and is written back verbatim by writeSegDataFile.
+      QString sqrtShiftTokens;
+      for (int k = 1; k < dataParts.size(); k++) {
+        if (dataParts[k].compare("sqrtshift", Qt::CaseInsensitive) == 0) {
+          sqrtShiftTokens = QStringList(dataParts.mid(k)).join(" ");
+          dataParts = dataParts.mid(0, k);
+          break;
+        }
+      }
+
       if (dataParts.size() > 1) {
         // Extract the actual file path (first part)
         dataFile = dataParts[0];
@@ -1340,6 +1352,7 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
 
       SegmentsDataData newLine = {isActive, entrancePairIndex, exitPairIndex, lowEnergy, highEnergy, lowAngle,
                                   highAngle, dataType, dataFile, dataNorm, dataNormError, varyNorm, phaseJ, phaseL, energyShift, energyShiftError, varyEnergyShift, isAdvanced, operationType, componentsList, isUPOS, secondaryDecayL, finalJ, delta, isTHM};
+      newLine.sqrtShiftTokens = sqrtShiftTokens;
       addSegDataLine(newLine, true);
     }
   }
@@ -1454,6 +1467,8 @@ bool SegmentsTab::writeSegDataFile(QTextStream &outStream) {
     } else {
       outStream << " 0";
     }
+    // sqrt(E) energy-shift block, last on the line (see SegLine.h)
+    if (!lines.at(i).sqrtShiftTokens.isEmpty()) outStream << " " << lines.at(i).sqrtShiftTokens;
     outStream << Qt::endl;
   }
 
