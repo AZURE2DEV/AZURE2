@@ -1709,7 +1709,13 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
     // T-matrix cross section. Kept fully per-segment so a project may mix THM
     // and conventional data against the same levels.
     if (this->IsTHM()) {
-      THMMatrixFunc thmFunc(theCNuc, configure);
+      // Reused across the points of this thread, as the A-matrix function
+      // below: its per-J-group buffers are sized once, then only refilled
+      // (Reset repoints it at this compound and configuration first, so
+      // nothing of an earlier session is read).
+      static thread_local THMMatrixFunc reusableThmFunc(theCNuc, configure);
+      reusableThmFunc.Reset(theCNuc, configure);
+      THMMatrixFunc &thmFunc = reusableThmFunc;
       thmFunc.ClearMatrices();
       thmFunc.FillMatrices(this);
       thmFunc.InvertMatrices();

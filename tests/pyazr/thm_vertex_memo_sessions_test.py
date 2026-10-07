@@ -16,7 +16,12 @@ On tests/18O_p_a_thm (two interfering 1/2+ levels, vertex=constant):
      equal the in-process values in the orders 4.1, 6.1, 4.1 and 6.1, 4.1
      (rel 1e-10);
   2. set_channel_radius(1, 6.1) on a live 4.1 fm session gives the fresh
-     6.1 fm chi2 (rel 1e-10), and back.
+     6.1 fm chi2 (rel 1e-10), and back;
+  3. sessions of different THM models (18O_p_a_thm, 7Li_p_a, 6Li_d) evaluated
+     in turn in one process: a model's chi2 is the same to the bit after
+     the other's, and its fresh-process chi2 to 1e-12 (the per-thread THM
+     level-matrix function carries buffers, not values; the 1e-12 is the
+     classic Coulomb memo's energy match).
 
 Needs the compiled engine; skips cleanly without it.
 Run from anywhere:  python3 tests/pyazr/thm_vertex_memo_sessions_test.py
@@ -111,6 +116,39 @@ with tempfile.TemporaryDirectory() as tmp:
     check("4.1 fm session == fresh", rel(c0, fresh[4.1]) < 1e-10, f"{c0!r}")
     check("-> 6.1 fm in place == fresh 6.1 fm", rel(c1, fresh[6.1]) < 1e-10, f"{c1!r} vs {fresh[6.1]!r}")
     check("-> back to 4.1 fm == fresh 4.1 fm", rel(c2, fresh[4.1]) < 1e-10, f"{c2!r}")
+
+    # 3. The THM level-matrix function is reused by every point of a thread
+    # (EPoint::Calculate, as the classic A-matrix function): its buffers carry
+    # over from one session to the next, its values must not.  Two models of
+    # different J-group structure alive at once, evaluated in turn, give their
+    # fresh-process chi2 exactly.
+    print("3. two different THM models evaluated in turn in one process")
+    other = {}
+    for name in ("7Li_p_a", "6Li_d"):
+        d = os.path.join(tmp, name)
+        shutil.copytree(os.path.join(ROOT, "tests", name), d)
+        for junk in ("output", "checks"):
+            shutil.rmtree(os.path.join(d, junk), ignore_errors=True)
+            os.makedirs(os.path.join(d, junk))
+        out = subprocess.run([sys.executable, "-c", CHI2, os.path.join(d, name + ".azr"), d],
+                             capture_output=True, text=True, env=dict(os.environ))
+        other[name] = (d, float([ln for ln in out.stdout.splitlines() if ln.startswith("CHI2=")][-1][5:]))
+    with azure2(os.path.join(proj[4.1], AZR), cwd=proj[4.1]) as a, \
+            azure2(os.path.join(other["7Li_p_a"][0], "7Li_p_a.azr"), cwd=other["7Li_p_a"][0]) as b:
+        values = [(chi2(a), fresh[4.1]), (chi2(b), other["7Li_p_a"][1]), (chi2(a), fresh[4.1]),
+                  (chi2(b), other["7Li_p_a"][1])]
+    with azure2(os.path.join(other["6Li_d"][0], "6Li_d.azr"), cwd=other["6Li_d"][0]) as c:
+        values.append((chi2(c), other["6Li_d"][1]))
+    # To the bit within a session (the Coulomb functions are on the points);
+    # against a fresh process to 1e-12: the process-wide Coulomb memo
+    # (CoulFuncCache, classic) takes an energy within 1e-12 MeV of one it holds
+    # as that one, so a warm memo moves the last digits (6Li_d after any session
+    # with its pairs: 682.1465248015013 against 682.1465248016414 fresh, with
+    # or without the reuse).
+    check("18O, 7Li, 18O, 7Li: each model's chi2 the same, to the bit, after the other's",
+          values[0][0] == values[2][0] and values[1][0] == values[3][0], values)
+    check("18O, 7Li, 18O, 7Li, then 6Li_d: each == its fresh process (rel 1e-12)",
+          all(rel(got, want) < 1e-12 for got, want in values), values)
 
 print("FAILED: " + ", ".join(failures) if failures else "all passed")
 sys.exit(1 if failures else 0)
