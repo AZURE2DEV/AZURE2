@@ -27,7 +27,8 @@ AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/fixed_param_par.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
-if command -v timeout >/dev/null 2>&1; then RUN="timeout ${TEST_TIMEOUT:-120}"; else RUN=""; fi
+. "$HERE/../lib/guard.sh"
+RUN="$(guard_command "${TEST_TIMEOUT:-120}")"
 fail=0
 
 mkdir -p "$WORK/proj/data"

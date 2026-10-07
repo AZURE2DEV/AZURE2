@@ -28,7 +28,8 @@ AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_threshold_grid.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
-if command -v timeout >/dev/null 2>&1; then RUN="timeout ${TEST_TIMEOUT:-900}"; else RUN=""; fi
+. "$HERE/../lib/guard.sh"
+RUN="$(guard_command "${TEST_TIMEOUT:-900}")"
 
 # The smooth curve moves by < 0.5 % per keV here; the spike was 1e21.
 MAXRATIO=1.02

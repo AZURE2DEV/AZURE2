@@ -31,7 +31,8 @@ SRC="$HERE/../17O"
 AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
-if command -v timeout >/dev/null 2>&1; then RUN="timeout ${TEST_TIMEOUT:-900}"; else RUN=""; fi
+. "$HERE/../lib/guard.sh"
+RUN="$(guard_command "${TEST_TIMEOUT:-900}")"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_narrow_fold.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 fail=0

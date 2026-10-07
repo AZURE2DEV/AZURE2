@@ -29,6 +29,8 @@
 set -uo pipefail
 export LC_ALL=C
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/../lib/guard.sh"
+RUN="$(guard_command "${TEST_TIMEOUT:-300}")"
 SRC="$HERE/../7Li_p_a"
 AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
@@ -48,7 +50,8 @@ run() {
   # Relative to the run directory: read from stdin, a POSIX /tmp/... path is
   # not translated by MSYS and the native Windows binary cannot open it.
   [ -z "$par" ] || { cp "$par" "$d/start.par"; par="start.par"; }
-  (cd "$d" && printf '1\n%s\n\n7\n' "$par" | "$AZURE2_BIN" --no-gui --no-readline run.azr > run.log 2>&1)
+  (cd "$d" && printf '1\n%s\n\n7\n' "$par" | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 \
+     | head -c 2000000 > run.log)
   grep -oE 'Total Chi-Squared: [0-9.eE+-]+' "$d/run.log" | awk '{print $3}'
 }
 

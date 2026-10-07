@@ -25,6 +25,8 @@
 set -uo pipefail
 export LC_ALL=C
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/../lib/guard.sh"
+RUN="$(guard_command "${TEST_TIMEOUT:-300}")"
 SRC="$HERE/../15N_p_a"
 AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
@@ -48,7 +50,7 @@ run() {
     /^<\/parameterSettings>/ && rows != "" {print rows}
     {print}
   ' "$SRC/15N_p_a.azr" > "$d/run.azr"
-  (cd "$d" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline run.azr > run.log 2>&1)
+  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 2000000 > run.log)
   echo "$d"
 }
 total() { grep -oE 'Total Chi-Squared: [0-9.eE+-]+' "$1/run.log" | awk '{print $3}'; }

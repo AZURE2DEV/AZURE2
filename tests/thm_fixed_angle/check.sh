@@ -40,7 +40,8 @@ AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_fixed_angle.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
-if command -v timeout >/dev/null 2>&1; then RUN="timeout ${TEST_TIMEOUT:-600}"; else RUN=""; fi
+. "$HERE/../lib/guard.sh"
+RUN="$(guard_command "${TEST_TIMEOUT:-600}")"
 KIN18="beam=18O target=d spectator=n Ebeam=54"
 FOURPI="12.566370614359172"
 fail=0

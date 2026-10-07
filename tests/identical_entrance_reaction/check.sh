@@ -32,7 +32,8 @@ AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/identical_entrance.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
-if command -v timeout >/dev/null 2>&1; then RUN="timeout ${TEST_TIMEOUT:-600}"; else RUN=""; fi
+. "$HERE/../lib/guard.sh"
+RUN="$(guard_command "${TEST_TIMEOUT:-600}")"
 TOL=1e-6
 fail=0
 

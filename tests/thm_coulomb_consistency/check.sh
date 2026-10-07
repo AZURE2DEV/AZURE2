@@ -37,7 +37,8 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_coulomb_consistency.XXXXXX")"
 # The engine is a native binary: on MSYS2 give it a Windows path for files it reads.
 WP="$WORK"; if command -v cygpath > /dev/null 2>&1; then WP="$(cygpath -m "$WORK")"; fi
 trap 'rm -rf "$WORK"' EXIT
-if command -v timeout >/dev/null 2>&1; then RUN="timeout ${TEST_TIMEOUT:-300}"; else RUN=""; fi
+. "$HERE/../lib/guard.sh"
+RUN="$(guard_command "${TEST_TIMEOUT:-300}")"
 OUT="AZUREOut_aa=1_R=2.out"
 KIN="beam=18O target=3He spectator=d Ebeam=115"
 KINN="beam=18O target=d spectator=n Ebeam=54"
