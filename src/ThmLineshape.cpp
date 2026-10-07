@@ -45,6 +45,9 @@ double ThmLineshape::EtaSbEstimate(double energy, double eBB, int Zb, double mb,
 
 complex ThmLineshapeFactor(double zeta, double x, double Gamma) {
   if (zeta == 0.0) return complex(1.0, 0.0);
+  // A width that is not a number makes the model one too (it used to give the
+  // Gamma = 0 limit with phase 0, a finite and wrong value).
+  if (std::isnan(Gamma)) return complex(std::nan(""), std::nan(""));
   double modulus = std::sqrt(ThmLineshapeFactorSq(zeta, x, Gamma));
   double r = std::hypot(x, 0.5 * std::max(Gamma, 0.0));
   double phase = r > 0.0 ? -zeta * std::log(r) : 0.0;
