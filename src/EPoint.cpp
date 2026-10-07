@@ -1136,6 +1136,20 @@ void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect *targetEffect) 
 }
 
 
+namespace {
+/* Below E = -B the half-off-shell momentum is imaginary and the form factor
+   (hence the HOES cross section) is left identically zero.  Physically the QF
+   relative energy satisfies E + B > 0, so points here should only be far
+   Gaussian-tail sub-points.  Reported once per session, so that a wrong
+   binding energy cannot silently null a whole segment. */
+void WarnThmBelowB(const Config &configure, double energy, double bindingE) {
+  if (configure.thm.belowBWarned->exchange(true)) return;
+  configure.outStream << "WARNING: THM point at E_cm = " << energy << " MeV lies below E = -B (B = " << bindingE
+                      << " MeV); the transfer form factor and HOES cross section are set to zero there. Check the "
+                      << "binding energy if this is unexpected. (warning shown once)" << std::endl;
+}
+}  // namespace
+
 /*!
  * This function calculates several energy dependent quantities simultaniously.
  * This includes the geometrical cross section, the s-factor conversion, the \f$ L_o \f$ matrix
@@ -1295,7 +1309,9 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
               complex coul(0.0, 0.0);
               double muMeV = thePair->GetRedMass() * uconv;
               double bindingE = thePair->GetBindingEnergy() + psNodes[k].es;
-              if (localEnergy + bindingE > 0.0) {
+              if (!(localEnergy + bindingE > 0.0)) {
+                WarnThmBelowB(configure, localEnergy, bindingE);
+              } else {
                 ThmBesselParts(lValue, muMeV, localEnergy, bindingE, thePair->GetChRad(), jl, rhoDjl);
                 if (configure.thm.coulombIntegral && thePair->GetZ(1) * thePair->GetZ(2) != 0)
                   coul = ThmCoulombTerm(thePair, lValue, localEnergy, ThmRho(muMeV, localEnergy, bindingE, 1.0),
@@ -1323,19 +1339,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
                                        ThmRho(muMeV, localEnergy, bindingE, 1.0),
                                        !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
           } else {
-            /* Below E = -B the half-off-shell momentum is imaginary and the form
-            factor (hence the HOES cross section) is left identically zero.
-            Physically the QF relative energy satisfies E + B > 0, so points
-            here should only be far Gaussian-tail sub-points.
-      Emit a warning once so a wrong binding energy cannot silently null a whole segment.*/
-            static std::atomic_flag thmBelowBWarned = ATOMIC_FLAG_INIT;
-            if (!thmBelowBWarned.test_and_set())
-              std::cout << "WARNING: THM point at E_cm = " << localEnergy
-                        << " MeV lies below E = -B (B = " << bindingE
-                        << " MeV); the transfer form factor and HOES cross "
-                        << "section are set to zero there. Check the binding "
-                        << "energy if this is unexpected. (warning shown once)"
-                        << std::endl;
+            WarnThmBelowB(configure, localEnergy, bindingE);
           }
         }
         this->AddThmFormFactor(j, ch, thmJl, thmRhoDjl, thmCoul);

@@ -196,6 +196,9 @@ class Config {
     /// segments sharing one profiled norm and an optional background.  Empty
     /// unless the block has such lines; then nothing changes.
     std::vector<ThmExperiment> experiments;
+    /// Set once a THM point below E = -B has been reported (once per session:
+    /// copies of this Config share it).
+    std::shared_ptr<std::atomic<bool>> belowBWarned = std::make_shared<std::atomic<bool>>(false);
   };
   ThmOptions thm;
   /// A constant indicating the maximum order of the Legendre polynomials to calculate.
