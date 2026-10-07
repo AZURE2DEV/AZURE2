@@ -662,6 +662,11 @@ PYBIND11_MODULE(_azure2, m) {
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
 
   py::register_exception<AZURE2Error>(m, "AZURE2Error", PyExc_RuntimeError);
+
+  // The engine's reading of a <thm> block, for AzrModel (pyazr/azrfile.py),
+  // which edits files without a session.  No files are read.
+  m.def("check_thm_block", &CheckThmBlockLines, py::arg("lines"), py::arg("global_rules") = false,
+        "The lines of a <thm> block as AZURE2 reads them: \"\" or the message it reports.");
   py::register_exception<GSLException>(m, "GSLError", PyExc_ArithmeticError);
 
   py::class_<RuntimeOptions>(m, "RuntimeOptions")

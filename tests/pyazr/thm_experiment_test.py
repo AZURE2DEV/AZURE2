@@ -178,6 +178,35 @@ with tempfile.TemporaryDirectory() as tmp:
         print("skip the engine part: no AZURE2 binary to compare against")
         sys.exit(1 if failures else 77)
 
+    # The port and the engine's own reading (_azure2.check_thm_block) take and
+    # refuse the same blocks; AzrModel asks the engine too when it is built.
+    from pyazr import _azure2
+
+    def port_ok(lines):
+        st = _azrfile._thm_default_settings()
+        try:
+            for ln in lines:
+                _azrfile._thm_parse_line(ln, st)
+            _azrfile._thm_check_experiments(st["experiments"])
+            return True
+        except ValueError:
+            return False
+
+    blocks = [["vertex=onshell", "kinematics=kf3body", "entranceL=coherent"], ["coulombIntegral=on"],
+              ["spectatorEnergy=0.4", "spectatorEnergy[2]=0.6"], ["weight[1]=w.dat", "weightTest[3]=v.dat"],
+              ["experiment[A] segments=1-2 background=linear  # comment"], ["vertex=real"],
+              ["vertex=foo"], ["spectatorEnergy=0.4junk"], ["spectatorEnergy=-1"], ["weight[0]=w.dat"],
+              ["weightTest[x]=a"], ["weight[1]="], ["frobnicate=1"], ["vertex"], ["experiment[A] segments=1,x"],
+              ["experiment[A]segments=1"], ["experiment[A] segments=1 lineshape=on"],
+              ["experiment[A] segments=1", "experiment[B] segments=1"]]
+    for b in blocks:
+        engine = _azure2.check_thm_block(b) == ""
+        check(f"port and engine agree on {b}", port_ok(b) == engine, (port_ok(b), _azure2.check_thm_block(b)))
+    both = ["coulombIntegral=1",
+            "experiment[A] segments=1 beam=18O target=d spectator=n Ebeam=54 distortion=coulomb"]
+    check("the engine's global rule: coulombIntegral=1 with R(E)",
+          _azure2.check_thm_block(both) == "" and "counted twice" in _azure2.check_thm_block(both, True))
+
     def project(name, block):
         d = os.path.join(tmp, name)
         fresh_copy(d)

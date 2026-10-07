@@ -100,6 +100,30 @@ class _Classic:
 CLASSIC = _Classic()
 
 
+_ENGINE_CHECK = []      # [function] once looked up; [None] without the engine
+
+
+def _engine_thm_check(lines, global_rules=False):
+    """The engine's verdict on the lines of a <thm> block, when the compiled
+    module is there (``_azure2.check_thm_block``: the parser AZURE2 itself
+    runs, without the files the block names).  The Python port below decides
+    first, with its own messages; this catches what the port would let
+    through.  Raises ValueError with AZURE2's message; nothing without the
+    module."""
+    if not _ENGINE_CHECK:
+        try:
+            from . import _azure2
+            _ENGINE_CHECK.append(getattr(_azure2, "check_thm_block", None))
+        except Exception:                           # not built: the port alone
+            _ENGINE_CHECK.append(None)
+    check = _ENGINE_CHECK[0]
+    if check is None:
+        return
+    why = check([str(ln) for ln in lines], global_rules)
+    if why:
+        raise ValueError(f"{why} (AZURE2 refuses the file).")
+
+
 def _thm_default_settings():
     s = dict(_THM_GLOBAL_DEFAULTS)
     s.update(spectatorByPair={}, weight={}, weightTest={}, experiments={})
@@ -2482,9 +2506,11 @@ class AzrModel:
         """The block parsed into the GUI's ThmSettings (a dict); ValueError on
         a line the engine would refuse."""
         s = _thm_default_settings()
-        for line in self._thm_body():
+        body = self._thm_body()
+        for line in body:
             _thm_parse_line(line, s)
         _thm_check_experiments(s["experiments"])
+        _engine_thm_check(body)
         return s
 
     def thm_options(self, defaults=False):
@@ -2505,6 +2531,7 @@ class AzrModel:
         """
         s = self._thm_settings()
         self._thm_check_globals(s)
+        _engine_thm_check(self._thm_body(), global_rules=True)
         out = {}
         d = _thm_default_settings()
         for key in ("entranceL", "vertex", "kinematics", "coulombIntegral",
@@ -3005,6 +3032,7 @@ class AzrModel:
                 setattr(self, attr, "".join(lines[:i] + lines[j + 1:]))
             return
         body = _thm_compose(self._thm_body(), s)
+        _engine_thm_check(body)                  # before anything is changed
         if loc is not None:
             attr, lines, i, j = loc
             nl = "\r\n" if lines[i].endswith("\r\n") else "\n"

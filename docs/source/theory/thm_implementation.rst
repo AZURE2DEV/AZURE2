@@ -3016,9 +3016,13 @@ factors.
      - allowed (per node)
 
 The rules are in ``CheckThmExperiments`` and ``CheckThmCoulombConsistency``
-(``src/ThmExperiment.cpp``), called by ``Config::ReadThmBlock`` and by the
-GUI's THM workspace; ``pyazr.AzrModel`` applies them in
-``set_thm_experiment`` and ``set_thm_option``. Files without these
+(``src/ThmExperiment.cpp``), called by ``Config::ReadThmBlock``
+(``src/ConfigThm.cpp``) and by the GUI's THM workspace, which also read the
+global keys with one function, ``ParseThmOptionLine``; ``pyazr.AzrModel``
+applies them in ``set_thm_experiment`` and ``set_thm_option`` with its Python
+port, and, when the compiled module is there, also asks the engine
+(``_azure2.check_thm_block``, the same parser without the files the block
+names), so that what the port would let through is refused all the same. Files without these
 combinations give results identical to before, byte for byte.
 
 *Size* (models at the published parameters, not refitted; THM :math:`\chi^2`

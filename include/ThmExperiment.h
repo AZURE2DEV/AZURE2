@@ -177,6 +177,15 @@ struct ThmOptionLine {
 bool ParseThmOptionLine(const std::string &key, const std::string &value, ThmOptionLine &out);
 
 /*!
+ * The lines of a <thm> block (between the tags) as Config::ReadThmBlock reads
+ * them, without the files they name: every line parsed (ParseThmOptionLine,
+ * ParseThmExperimentLine), then CheckThmExperiments and, with `global`,
+ * CheckThmCoulombConsistency.  "" or what AZURE2 reports, "<thm> ..." (for
+ * pyazr, which edits files without the engine and asks it when it is there).
+ */
+std::string CheckThmBlockLines(const std::vector<std::string> &lines, bool global);
+
+/*!
  * Parses one `experiment[<name>] key=value ...` line (comment already
  * stripped, trimmed) into `experiments`, merging with an earlier line of the
  * same name.  Returns "" or what is wrong.  Keys: segments (required),

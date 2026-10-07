@@ -219,7 +219,11 @@ kinematics); ``set_thm_experiment(..., spectatorAngles="cm:135-180")`` (or
 accepted spectator directions, and ``thm_distortion`` / ``thm_vertex``
 return the window averages and, for the DW vertex, the directions
 (``angle_theta_cm``, ``angle_q``, ``angle_weights``). Every edit keeps the rest of the file
-byte for byte, including whether it ends with a newline.
+byte for byte, including whether it ends with a newline.  The ``<thm>`` edits
+check what they write with a Python port of AZURE2's rules and, when the
+compiled module is there, with the engine's own parser as well
+(``_azure2.check_thm_block``); a refusal raises ``ValueError`` with AZURE2's
+message and leaves the model unchanged.
 
 To snapshot a fit, prefer :meth:`~pyazr.azure2.azure2.save_fit`, which wraps
 ``apply_fit``:

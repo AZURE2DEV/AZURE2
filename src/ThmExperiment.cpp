@@ -438,6 +438,36 @@ bool ParseThmOptionLine(const std::string &key, const std::string &value, ThmOpt
   return false;
 }
 
+std::string CheckThmBlockLines(const std::vector<std::string> &lines, bool global) {
+  std::vector<ThmExperiment> experiments;
+  bool coulombIntegral = false;
+  for (std::string line : lines) {
+    size_t hash = line.find('#');
+    if (hash != std::string::npos) line = line.substr(0, hash);
+    size_t b = line.find_first_not_of(" \t\r\n");
+    if (b == std::string::npos) continue;
+    size_t e = line.find_last_not_of(" \t\r\n");
+    const std::string trimmed = line.substr(b, e - b + 1);
+    if (trimmed.compare(0, 11, "experiment[") == 0) {
+      std::string why = ParseThmExperimentLine(trimmed, experiments);
+      if (!why.empty()) return "<thm> " + why;
+      continue;
+    }
+    size_t eq = trimmed.find('=');
+    std::string key = trimmed.substr(0, eq);
+    std::string value = eq == std::string::npos ? std::string() : trimmed.substr(eq + 1);
+    key.erase(key.find_last_not_of(" \t") + 1);
+    value.erase(0, value.find_first_not_of(" \t"));
+    ThmOptionLine o;
+    if (eq == std::string::npos || !ParseThmOptionLine(key, value, o))
+      return "<thm> line not understood: '" + trimmed + "'";
+    if (o.kind == ThmOptionLine::COULOMB_INTEGRAL) coulombIntegral = o.flag;
+  }
+  std::string why = CheckThmExperiments(experiments);
+  if (why.empty() && global) why = CheckThmCoulombConsistency(experiments, coulombIntegral);
+  return why.empty() ? why : "<thm> " + why;
+}
+
 std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExperiment> &experiments) {
   const std::string head = "experiment[";
   size_t close = line.find(']');
