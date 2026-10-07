@@ -12,6 +12,7 @@
 #include <QLineEdit>
 #include <QLocale>
 #include <QTableWidget>
+#include <QTextDocument>
 #include <QVBoxLayout>
 #include <algorithm>
 #include <cmath>
@@ -92,6 +93,13 @@ ThmChannelsPage::ThmChannelsPage(PairsModel *pairs, LevelsModel *levels, Channel
     pairTable->setCellWidget(row, 3, edit);
   }
   pairTable->resizeColumnsToContents();
+  // The nuclei are rich text: as wide as their plain text (resizing measures the markup).
+  for (int row = 0; row < pairTable->rowCount(); row++) {
+    QTextDocument d;
+    d.setHtml(pairTable->item(row, 1)->text());
+    pairTable->setColumnWidth(1, std::max(pairTable->columnWidth(1),
+                                          fontMetrics().horizontalAdvance(d.toPlainText()) + 16));
+  }
   pairTable->horizontalHeader()->setStretchLastSection(false);
   pairTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
   pairTable->setColumnWidth(3, std::max(pairTable->columnWidth(3), fontMetrics().horizontalAdvance("0000.000000") + 16));
@@ -122,12 +130,15 @@ ThmChannelsPage::ThmChannelsPage(PairsModel *pairs, LevelsModel *levels, Channel
     int row = channelTable->rowCount();
     channelTable->insertRow(row);
     channelRows_ << c;
+    // Six digits, as the Levels tab shows them; every digit in the tooltip.
     channelTable->setItem(row, 0, new QTableWidgetItem(levels->getSpinLabel(level) + ", " +
-                                                        ThmText::number(level.energy) + " MeV"));
+                                                        QString::number(level.energy, 'g', 6) + " MeV"));
+    channelTable->item(row, 0)->setToolTip(ThmText::number(level.energy) + " MeV");
     channelTable->setItem(row, 1, new QTableWidgetItem(QString::number(ch.pairIndex + 1)));
     channelTable->setItem(row, 2, new QTableWidgetItem(QString::number(ch.lValue)));
     channelTable->setItem(row, 3, new QTableWidgetItem(channels->getSpinLabel(ch)));
-    channelTable->setItem(row, 4, new QTableWidgetItem(ThmText::number(ch.reducedWidth)));
+    channelTable->setItem(row, 4, new QTableWidgetItem(QString::number(ch.reducedWidth, 'g', 6)));
+    channelTable->item(row, 4)->setToolTip(ThmText::number(ch.reducedWidth));
     for (int c : {1, 2, 4}) channelTable->item(row, c)->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
     channelTable->item(row, 3)->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
     QTableWidgetItem *flag = new QTableWidgetItem;

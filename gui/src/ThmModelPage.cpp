@@ -102,7 +102,7 @@ ThmModelPage::ThmModelPage(const ThmSettings &settings, const QString &projectDi
   QGroupBox *spectatorBox = tableBox(tr("Spectator energy per pair"), spectatorTable, addSpectator, removeSpectator);
 
   weightTable = new QTableWidget(0, 4);
-  weightTable->setHorizontalHeaderLabels(QStringList() << tr("Segments") << tr("Segment")
+  weightTable->setHorizontalHeaderLabels(QStringList() << tr("Data/Test") << tr("Segment")
                                                        << tr("Weight file (E_cm MeV, w)") << QString());
   weightTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
   weightTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
