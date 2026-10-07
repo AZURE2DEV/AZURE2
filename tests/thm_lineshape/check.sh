@@ -144,8 +144,15 @@ if ran c3_off && ran c3_on; then
   keep=$fail
   ratio_check two c3_on c3_off > "$WORK/two.txt" 2>&1  # expected to fail
   fail=$keep
-  grep -q FAIL "$WORK/two.txt" && ok "two decaying levels: the ratio is no longer the one-level factor" \
-    || bad "two decaying levels: ratio equals the one-level factor"
+  # The comparison itself must have run (points counted) and found the
+  # factor off by far more than its 1e-6 (0.53 when this was written); a
+  # ratio_check that failed for another reason does not count.
+  read -r n w _ < "$WORK/two.ratio"
+  if [ -n "${w:-}" ] && awk -v w="$w" -v n="$n" 'BEGIN { exit !(n > 30 && w > 1e-2) }'; then
+    ok "two decaying levels: the ratio is no longer the one-level factor (worst rel $w at $n points)"
+  else
+    bad "two decaying levels: ratio equals the one-level factor, or not compared ($(cat "$WORK/two.ratio"))"
+  fi
 fi
 
 # (d) ----------------------------------------------------------------------

@@ -163,7 +163,10 @@ if ran h16 && ran h8 && ran h32; then
   pst() { awk '$1 == "ps_table" { printf "%.0f %.0f", $2, $3 }' "$WORK/$1/output/thm_experiments.out"; }
   read -r np8 b8 <<< "$(pst h8)"; read -r np16 b16 <<< "$(pst h16)"; read -r np32 b32 <<< "$(pst h32)"
   if [ -n "${b32:-}" ] && [ "$np8" = "$np16" ] && [ "$np16" = "$np32" ] && [ "$np32" -gt 0 ]; then
-    awk -v n="$np32" -v a="$b8" -v b="$b16" -v c="$b32" 'BEGIN { exit !(c / n < 4096 && (c - b) * 8 == (b - a) * 16 && b > a) }' \
+    # Linear in the nodes to 1 % (the bytes are vector capacities, which an
+    # implementation may round up), not byte for byte.
+    awk -v n="$np32" -v a="$b8" -v b="$b16" -v c="$b32" 'BEGIN { d = (c - b) * 8 - (b - a) * 16; if (d < 0) d = -d
+      exit !(c / n < 4096 && d <= 0.01 * c && b > a) }' \
       && ok "ps_table: $np32 points (with sub-points), $b8 / $b16 / $b32 bytes at 8 / 16 / 32 nodes ($(awk -v n="$np32" -v c="$b32" 'BEGIN { printf "%.0f", c / n }') B per point at 32)" \
       || bad "ps_table not bounded/linear: $np32 points, $b8 / $b16 / $b32 bytes at 8 / 16 / 32 nodes"
   else
