@@ -1312,10 +1312,7 @@ bool SegmentsTab::writeSegDataFile(QTextStream &outStream) {
   QList<SegmentsDataData> lines = segmentsDataModel->getLines();
   // A column is 15 characters, left-aligned; a number that fills it (e.g.
   // 3.659747237e-06) would run into the next one, so it gets a space.
-  auto number = [](double x) {
-    QString text = roundTripNumber(x);
-    return text.size() >= 15 ? text + " " : text;
-  };
+  auto number = [](double x) { return roundTripField(x); };
 
   for (int i = 0; i < lines.size(); i++) {
     outStream << qSetFieldWidth(15) << lines.at(i).isActive
@@ -1551,15 +1548,15 @@ bool SegmentsTab::writeSegTestFile(QTextStream &outStream) {
     outStream << qSetFieldWidth(15) << lines.at(i).isActive
               << qSetFieldWidth(15) << lines.at(i).entrancePairIndex
               << qSetFieldWidth(15) << lines.at(i).exitPairIndex
-              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).lowEnergy)
-              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).highEnergy)
-              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).energyStep)
-              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).lowAngle)
-              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).highAngle)
-              << qSetFieldWidth(15) << roundTripNumber(lines.at(i).angleStep);
+              << qSetFieldWidth(15) << roundTripField(lines.at(i).lowEnergy)
+              << qSetFieldWidth(15) << roundTripField(lines.at(i).highEnergy)
+              << qSetFieldWidth(15) << roundTripField(lines.at(i).energyStep)
+              << qSetFieldWidth(15) << roundTripField(lines.at(i).lowAngle)
+              << qSetFieldWidth(15) << roundTripField(lines.at(i).highAngle)
+              << qSetFieldWidth(15) << roundTripField(lines.at(i).angleStep);
     if (lines.at(i).dataType == 2) {
       outStream << qSetFieldWidth(15) << lines.at(i).dataType
-                << qSetFieldWidth(15) << roundTripNumber(lines.at(i).phaseJ)
+                << qSetFieldWidth(15) << roundTripField(lines.at(i).phaseJ)
                 << qSetFieldWidth(0) << lines.at(i).phaseL;
     } else if (lines.at(i).dataType == 3) {
       outStream << qSetFieldWidth(15) << lines.at(i).dataType

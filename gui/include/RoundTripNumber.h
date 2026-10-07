@@ -22,4 +22,15 @@ inline QString roundTripNumber(double x) {
   return QString::number(x, 'g', 17);
 }
 
+/*!
+ * roundTripNumber for a fixed-width column of a left-aligned QTextStream
+ * (qSetFieldWidth(width)): a field pads only up to its width, so text that
+ * fills it gets a trailing space -- 0.30000000000000004 would otherwise run
+ * into the next column and the engine would read one fused token.
+ */
+inline QString roundTripField(double x, int width = 15) {
+  QString text = roundTripNumber(x);
+  return text.size() >= width ? text + " " : text;
+}
+
 #endif

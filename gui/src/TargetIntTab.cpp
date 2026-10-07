@@ -536,13 +536,13 @@ bool TargetIntTab::writeFile(QTextStream &outStream) {
       outStream << qSetFieldWidth(15) << '1';
     else
       outStream << qSetFieldWidth(15) << '0';
-    outStream << qSetFieldWidth(15) << roundTripNumber(lines.at(i).sigma);
+    outStream << qSetFieldWidth(15) << roundTripField(lines.at(i).sigma);
 
     if (lines.at(i).isTargetIntegration)
       outStream << qSetFieldWidth(15) << '1';
     else
       outStream << qSetFieldWidth(15) << '0';
-    outStream << qSetFieldWidth(15) << roundTripNumber(lines.at(i).density) << qSetFieldWidth(0) << " \"" + lines[i].stoppingPowerEq.remove(' ') + "\" " << qSetFieldWidth(0) << lines.at(i).numParameters << qSetFieldWidth(0) << ' ';
+    outStream << qSetFieldWidth(15) << roundTripField(lines.at(i).density) << qSetFieldWidth(0) << " \"" + lines[i].stoppingPowerEq.remove(' ') + "\" " << qSetFieldWidth(0) << lines.at(i).numParameters << qSetFieldWidth(0) << ' ';
     for (int j = 0; j < lines.at(i).numParameters; j++) outStream << roundTripNumber(lines.at(i).parameters.at(j)) << qSetFieldWidth(0) << ' ';
 
     if (lines.at(i).isQCoefficients)

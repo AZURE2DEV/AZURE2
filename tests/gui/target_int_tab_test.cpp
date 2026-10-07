@@ -176,6 +176,29 @@ int main(int argc, char** argv) {
   QString out8 = roundTrip(tab, legacy, readOk);
   ok("no beam-profile token invented", !out8.contains("beamprofile"), out8);
 
+  // 9. A sigma or density whose round-trip text fills the 15-wide column (17
+  //    digits, as Python writes 0.1 + 0.2) keeps a space before the next field.
+  QString longNumbers =
+      "1 \"1\" 50 1 0.30000000000000004 1 0.12345678901234566 \"\" 0 0 0 0 \"\" 0 0 0.04 5 50\n</targetInt>\n";
+  // Left-aligned, as AZURESetup::writeConfig leaves the project stream.
+  QString out9;
+  {
+    tab.reset();
+    QString in(longNumbers);
+    QTextStream inStream(&in);
+    readOk = tab.readFile(inStream);
+    QTextStream outStream(&out9);
+    outStream.setFieldAlignment(QTextStream::AlignLeft);
+    tab.writeFile(outStream);
+  }
+  ok("read a line with 17-digit numbers", readOk);
+  ok("sigma and the next field stay two tokens", out9.contains("0.30000000000000004 "), out9);
+  ok("density and the next field stay two tokens", out9.contains("0.12345678901234566 "), out9);
+  bool readOk9 = false;
+  QString out9b = roundTrip(tab, out9 + "</targetInt>\n", readOk9);
+  lines = tab.getTargetIntModel()->getLines();
+  ok("re-read: sigma exact", readOk9 && lines.size() == 1 && lines.at(0).sigma == 0.30000000000000004, out9b);
+
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;
   return fails ? 1 : 0;
 }
