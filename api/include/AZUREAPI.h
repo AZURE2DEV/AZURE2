@@ -278,6 +278,15 @@ class AZUREAPI {
   double CalculateChi2Physical(const vector_r &physicalParams) const;
 
   /*!
+   * Park formalism: the overlap J = 1 - sum_c gamma_c^2 dS_c/dE of every
+   * R-matrix level at the given non-fixed RWA parameters, in the order of
+   * CNuc::FillMnParams (J-groups, then levels).  Every entry is 1 in the Brune
+   * formalism.  A fit must keep them positive; CalculateChi2RWA adds
+   * CNuc::ParkNormPenalty for any that are not.
+   */
+  vector_r ParkNorms(const vector_r &rwaParams) const;
+
+  /*!
    * Value and analytic gradient of the (data) chi-squared with respect to the
    * non-fixed RWA parameters.  Input: the non-fixed RWA parameters (energies,
    * reduced widths, normalizations), as for CalculateChi2RWA.  Returns

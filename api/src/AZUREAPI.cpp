@@ -800,7 +800,27 @@ double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
     }
   }
 
+  // Park formalism: the J > 0 wall, part of what a fit must minimize.
+  if (configure().paramMask & Config::USE_PARK_FORMALISM) chiSquared += localCompound->ParkNormPenalty();
+
   return chiSquared;
+}
+
+vector_r AZUREAPI::ParkNorms(const vector_r &rwaParams) const {
+  vector_r params_ = all_rwa_;
+  for (int i = 0, k = 0; i < (int)all_rwa_.size(); ++i)
+    if (!fixed_[i] && k < (int)rwaParams.size()) params_[i] = rwaParams[k++];
+  CNuc *localCompound = compound();
+  localCompound->FillCompoundFromParams(params_);
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  vector_r out;
+  for (int j = 1; j <= localCompound->NumJGroups(); j++) {
+    JGroup *jg = localCompound->GetJGroup(j);
+    if (!jg->IsInRMatrix()) continue;
+    for (int la = 1; la <= jg->NumLevels(); la++)
+      if (jg->GetLevel(la)->IsInRMatrix()) out.push_back(jg->GetLevel(la)->GetParkNorm());
+  }
+  return out;
 }
 
 double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
@@ -931,6 +951,10 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
 
   bool ok = AccumulateEGammaGradient(lc, ld, configure(), pmap, sdp, fb, accum);
   if (ok) {
+    if (configure().paramMask & Config::USE_PARK_FORMALISM) {
+      AddParkPenaltyGradient(lc, configure(), accum);
+      chi2 += lc->ParkNormPenalty();
+    }
     accum.Scatter(pmap, gradFull);
     for (int s = 1; s <= ld->NumSegments(); s++) {
       ESegment *seg = ld->GetSegment(s);

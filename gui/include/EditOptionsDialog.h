@@ -23,6 +23,7 @@ class EditOptionsDialog : public QDialog {
  public:
   EditOptionsDialog(QWidget *parent = 0);
   QCheckBox *useBruneCheck;
+  QCheckBox *useParkCheck;
   QCheckBox *useGSLCoulCheck;
   QCheckBox *ignoreExternalsCheck;
   QCheckBox *useRMCCheck;
@@ -33,6 +34,7 @@ class EditOptionsDialog : public QDialog {
 
  private slots:
   void useBruneCheckChanged(int);
+  void useParkCheckChanged(int);
   void useRMCCheckChanged(int);
 
  private:

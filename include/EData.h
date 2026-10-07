@@ -71,6 +71,10 @@ class EData {
   void PrintCoulombAmplitude(const Config &, CNuc *);
   /// Write AZUREOut_*, chiSquared.out and the rest of the run's output files.
   void WriteOutputFiles(const Config &, bool = false, const BandData * = nullptr);
+  /// Park formalism: the J > 0 penalty of the last objective evaluation, for
+  /// chiSquared.out (set by AZURECalc::operator(); 0 otherwise).
+  void SetParkPenalty(double penalty) { parkPenalty_ = penalty; }
+  double GetParkPenalty() const { return parkPenalty_; }
   /// External-capture amplitudes for every point that has an EC component.
   int CalculateECAmplitudes(CNuc *, const Config &);
   /// How many external-capture amplitudes this model expects in an intEC file.
@@ -127,6 +131,7 @@ class EData {
   bool ecUsePrevious_;
   std::string ecSignature_;   // Signature of the calculation being set up (see ECSignature)
   std::string ecOutputFile_;  // The intEC file being written, when not reading one back
+  double parkPenalty_ = 0.0;
 };
 
 #endif

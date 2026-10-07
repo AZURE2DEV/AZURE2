@@ -9,6 +9,7 @@ EditOptionsDialog::EditOptionsDialog(QWidget *parent) :
   QDialog(parent) {
   useGSLCoulCheck = new QCheckBox(tr("Use GSL Coulomb functions"));
   useBruneCheck = new QCheckBox(tr("Use Brune formalism"));
+  useParkCheck = new QCheckBox(tr("Use Park parametrization\n(observed reduced widths; implies Brune)"));
   ignoreExternalsCheck = new QCheckBox(tr("Ignore external width\nif internal width is zeroed"));
   useRMCCheck = new QCheckBox(tr("Use RMC capture formalism\n(neutron capture only)"));
   noTransformCheck = new QCheckBox(tr("Do not perform parameter\ntransformations"));
@@ -18,12 +19,14 @@ EditOptionsDialog::EditOptionsDialog(QWidget *parent) :
   //					   "approximation for EL external capture"));
 
   connect(useBruneCheck, SIGNAL(stateChanged(int)), this, SLOT(useBruneCheckChanged(int)));
+  connect(useParkCheck, SIGNAL(stateChanged(int)), this, SLOT(useParkCheckChanged(int)));
   connect(useRMCCheck, SIGNAL(stateChanged(int)), this, SLOT(useRMCCheckChanged(int)));
 
   QGroupBox *optionsBox = new QGroupBox(tr("AZURE2 Options"));
   QVBoxLayout *optionsLayout = new QVBoxLayout;
   optionsLayout->addWidget(useGSLCoulCheck);
   optionsLayout->addWidget(useBruneCheck);
+  optionsLayout->addWidget(useParkCheck);
   optionsLayout->addWidget(ignoreExternalsCheck);
   optionsLayout->addWidget(useRMCCheck);
   optionsLayout->addWidget(noTransformCheck);
@@ -52,14 +55,35 @@ void EditOptionsDialog::useBruneCheckChanged(int state) {
   if (state == Qt::Checked) {
     useRMCCheck->setChecked(false);
     useRMCCheck->setEnabled(false);
-  } else
+  } else {
+    // Park's parametrization is Brune's level matrix with rescaled amplitudes;
+    // it cannot be on without Brune.
+    useParkCheck->setChecked(false);
     useRMCCheck->setEnabled(true);
+  }
+}
+
+void EditOptionsDialog::useParkCheckChanged(int state) {
+  if (state == Qt::Checked) {
+    // Park is Brune's level matrix with rescaled amplitudes: Brune is implied
+    // and shown as such (checked, greyed out) while Park is on.
+    useBruneCheck->setChecked(true);
+    useBruneCheck->setEnabled(false);
+    useRMCCheck->setChecked(false);
+    useRMCCheck->setEnabled(false);
+  } else {
+    useBruneCheck->setEnabled(!useRMCCheck->isChecked());
+  }
 }
 
 void EditOptionsDialog::useRMCCheckChanged(int state) {
   if (state == Qt::Checked) {
     useBruneCheck->setChecked(false);
     useBruneCheck->setEnabled(false);
-  } else
+    useParkCheck->setChecked(false);
+    useParkCheck->setEnabled(false);
+  } else {
     useBruneCheck->setEnabled(true);
+    useParkCheck->setEnabled(true);
+  }
 }

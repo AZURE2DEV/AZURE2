@@ -50,7 +50,10 @@ Available Options
      - Disable readline support for command-line input.
    * - ``--use-brune``
      - Use the Brune parameterization (equivalent to the GUI's
-       "Use Brune formalism" option).
+       "Use Brune formalism" option).  This is the default.
+   * - ``--no-brune``
+     - Use the standard Lane-Thomas parameterization (constant boundary
+       conditions) instead of Brune's or Park's.
    * - ``--use-park``
      - Use Park's level-dependent boundary conditions (Phys. Rev. C 104,
        064612) in place of Brune's alternative level matrix.  The fit
@@ -97,17 +100,28 @@ unchanged, so ``--use-park`` reproduces the default calculation
 minimizer works in:
 
 * a Park amplitude is the observed width, :math:`\Gamma_c = 2P_c\gamma_c^2`
-  (an ANC for a closed channel), with no factor depending on the other channels;
+  (an ANC for a closed channel), with no factor depending on the other channels
+  of the level.  Fixing, bounding or putting a prior on a width therefore acts
+  on one parameter, and the parameters of a level are less correlated;
 * every real Brune amplitude is a valid model, but Park amplitudes must satisfy
-  :math:`J_\lambda > 0`.  Nothing in the level matrix enforces that, and a
-  level with :math:`J_\lambda \le 0` has no standard R-matrix counterpart;
-* ``--use-park`` has no analytic derivatives (the fit falls back to numerical
-  ones), and the Wigner-limit bounds act on the Park amplitudes.
+  :math:`J_\lambda > 0`; a level with :math:`J_\lambda \le 0` has no standard
+  R-matrix counterpart (its widths exceed what the channel radii allow).  The
+  fit objective therefore carries a penalty :math:`\sum_\lambda (J_\lambda/10^{-3})^2`
+  over levels with :math:`J_\lambda < 0`, MCMC rejects such points, and a run
+  that ends there prints a warning naming the level;
+* analytic derivatives (``--use-lm``, the analytic-gradient minimizer, the
+  covariance band, pyazr's ``chi2_and_grad`` / ``residual_jacobian``) are
+  available in both modes;
+* the Wigner-limit bounds act on the Park amplitudes, i.e. on the observed
+  :math:`\theta^2`.
 
 Input and output files are the same in both modes: energies, partial widths and
-ANCs in ``<levels>`` and ``parameters.out``.  Only ``param.par`` / ``param.sav``
-hold the mode's own amplitudes, so a ``param.sav`` written in one mode must not
-be read in the other.
+ANCs in ``<levels>`` and ``parameters.out``.  ``param.par`` / ``param.sav`` hold
+the mode's own amplitudes; their first line, ``parametrization`` (0 standard,
+1 Brune, 2 Park), says which, and a file written in the other alternative mode
+is converted on read (``gamma_Park = gamma_Brune sqrt(J)``), with a message.  A
+file without the tag (written before it existed) is taken as Brune's.  The GUI
+offers the mode as "Use Park parametrization" under Runtime Options.
 
 Examples
 --------

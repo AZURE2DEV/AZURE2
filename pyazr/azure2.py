@@ -101,7 +101,9 @@ class azure2:
             C 104, 064612), the CLI's ``--use-park``.  The rwa vector then
             holds the *observed* reduced width amplitudes,
             ``Gamma = 2 P gamma**2`` with no shift-derivative factor.  Switches
-            ``use_brune`` on; no analytic derivatives.
+            ``use_brune`` on.  Analytic derivatives are available; the engine
+            adds a penalty to chi-squared for any level whose overlap
+            ``J = 1 - sum gamma**2 dS/dE`` is not positive (:meth:`park_norms`).
 
         Raises
         ------
@@ -585,7 +587,9 @@ class azure2:
     def update_rwa_params_from_sav(self):
         """Reload params_rwa from the run's param.sav."""
         with _in_dir(self.cwd):
-            all_rwa_params = np.loadtxt('output/param.sav', usecols=(1,))
+            rows = [l.split() for l in open('output/param.sav') if l.split()]
+        # the first line may be the `parametrization` tag (see save_fit)
+        all_rwa_params = [float(r[1]) for r in rows if r[0] != "parametrization"]
         self.params_rwa = []
         for i in range(len(all_rwa_params)):
             if self.fixed_params[i]:
@@ -597,9 +601,15 @@ class azure2:
         """Write a free RWA vector back out to param.sav."""
         params_full = []
         with _in_dir(self.cwd):
+            tag = None
             with open('output/param.sav', 'r') as f:
                 for line in f.readlines():
                     l = line.split()
+                    if not l:
+                        continue
+                    if l[0] == "parametrization":
+                        tag = l
+                        continue
                     params_full.append([l[0], float(l[1]), float(l[2])])
 
             idx = 0
@@ -611,6 +621,8 @@ class azure2:
                     idx += 1
 
             with open('output/param.sav.new', 'w') as f:
+                if tag is not None:
+                    f.write(" ".join(tag) + "\n")
                 for param in params_full:
                     f.write(f"{param[0]} {param[1]} {param[2]}\n")
 
@@ -661,6 +673,10 @@ class azure2:
             allrwa = list(np.asarray(self.sess.params_all_rwa(), float))
             free = iter(range(len(x)))
             with open(sav, "w") as fh:
+                # AZURE2 tags every parameter file with the amplitudes it holds
+                # (0 standard, 1 Brune, 2 Park) and converts on read when a run
+                # in the other alternative basis loads it.
+                fh.write(f"{'parametrization':>28s} {float(self.basis): .7e} {0.0: .7e}\n")
                 for i, p in enumerate(self.parameters):
                     v = x[next(free)] if not self.fixed_params[i] else allrwa[i]
                     fh.write(f"{p.name:>28s} {float(v): .7e} {0.0: .7e}\n")
@@ -1009,7 +1025,39 @@ class azure2:
                         and q.free_index < x.size else d.energy_shift_sqrt)
                 shift_sqrt[i] = ((bval - d.energy_shift_sqrt)
                                  / d.energy_shift_sqrt_error) ** 2
-        return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt}
+        # Park formalism: the J > 0 wall, sum (J/1e-3)^2 over levels with J < 0.
+        # The engine adds it to calculate_chi2_rwa itself (it is part of what
+        # AZURE2 minimizes), so objective() does not add it again; it is
+        # reported here so a fit can see when it is active.  Always 0 in Brune
+        # mode.  Note this is one number, not one per segment.
+        park = 0.0
+        if self.options.get("use_park"):
+            J = np.asarray(self.sess.park_norms(x), float)
+            park = float(np.sum((J[J < 0] / 1.0e-3) ** 2))
+        return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "park": park}
+
+    @property
+    def basis(self):
+        """Which amplitudes ``params_rwa`` are: 0 standard (constant boundary
+        condition), 1 Brune, 2 Park -- the ``parametrization`` tag AZURE2 writes
+        first in ``param.sav``."""
+        if self.options.get("use_park"):
+            return 2
+        return 1 if self.options.get("use_brune") else 0
+
+    def park_norms(self, params=None):
+        """Park formalism: the overlap J = 1 - sum_c gamma_c^2 dS_c/dE of every
+        R-matrix level, in ``physical_levels()`` order.
+
+        J is the squared norm of the level's basis state (Park 2021, Eq. 28)
+        and the factor between the two parametrizations,
+        ``gamma_Park = gamma_Brune * sqrt(J)``.  Every real Brune parameter set
+        has 0 < J <= 1; a Park parameter set with J <= 0 has no R-matrix
+        counterpart (its widths exceed what the channel radii allow) and the
+        engine penalizes it -- see :meth:`penalties`.  All ones in Brune mode.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        return np.asarray(self.sess.park_norms(x), float)
 
     def objective(self, params=None):
         """What AZURE2's own fit minimizes: chi-squared plus the penalties.
@@ -1020,6 +1068,7 @@ class azure2:
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         pen = self.penalties(x)
+        # pen["park"] is already inside calculate_chi2_rwa (engine side).
         return (float(np.sum(self.calculate_chi2_rwa(x)))
                 + float(np.sum(pen["norm"])) + float(np.sum(pen["shift"]))
                 + float(np.sum(pen["shift_sqrt"])))

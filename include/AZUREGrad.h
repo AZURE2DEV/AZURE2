@@ -166,6 +166,13 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
 vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure);
 
 /*!
+ * \brief Gradient of CNuc::ParkNormPenalty with respect to the level energies and
+ * reduced widths, added to `accum` in physics coordinates.  Zero unless a level
+ * has J < 0; a no-op outside the Park formalism.
+ */
+void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum);
+
+/*!
  * \brief Shared analytic gradient engine used by both AZUREAPI (log-likelihood)
  *        and the built-in Minuit2 fitter (chi-squared).
  *

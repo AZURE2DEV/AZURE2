@@ -523,11 +523,14 @@ def _rotate_group(group: Sequence[Level], this_level: int,
 
 def _normalize(level_energy: float, gammas: Sequence[float],
                channels: Sequence[Channel], input_energy: float,
-               J: Optional[float], parity: Optional[int]):
+               J: Optional[float], parity: Optional[int], park: bool = False):
     """The block every branch of ``TransformOut`` ends in.
 
     Builds ``normSum = sum_c gamma_c^2 dS_c/dE`` over particle channels, the
-    per-channel penetrability, and ``bigGamma``.
+    per-channel penetrability, and ``bigGamma``.  With ``park=True`` the
+    amplitudes are Park's observed ones and the ``1 + normSum`` factor is not
+    applied (``Gamma = 2 P gamma^2``); ``norm_sum`` is still returned, as
+    ``1 - J``.
     """
     norm_sum = 0.0
     penes = []
@@ -546,9 +549,10 @@ def _normalize(level_energy: float, gammas: Sequence[float],
         total = complex(g) + c.external_gamma
         sign = -1.0 if total.real < 0.0 else 1.0
         if c.radiation_type in ("F", "G"):
-            big = total.real
+            # Beta feeding amplitudes are reported in Brune's normalization.
+            big = total.real / math.sqrt(abs(1.0 - norm_sum)) if park else total.real
         else:
-            big = sign * 2.0 * abs(total) ** 2 * p / (1.0 + norm_sum)
+            big = sign * 2.0 * abs(total) ** 2 * p / (1.0 if park else (1.0 + norm_sum))
         out.append(TransformedChannel(channel=c, gamma=g, big_gamma=big,
                                       penetrability=p,
                                       is_open=c.is_open(level_energy)))
@@ -576,9 +580,13 @@ def _photon_penetrability(c: Channel, level_energy: float, input_energy: float,
 
 
 def transform_out(levels: Sequence[Level], *, brune: bool = True,
-                  tolerance: float = 1e-6,
+                  park: bool = False, tolerance: float = 1e-6,
                   max_iterations: int = 1000) -> List[TransformedLevel]:
     """Transform reduced-width amplitudes into AZURE2's physical parameters.
+
+    ``park=True`` (a fit run with ``--use-park``): the amplitudes are the
+    observed reduced widths, ``Gamma = 2 P gamma^2`` with no level-shift
+    factor; implies ``brune``.
 
     ``levels`` may span several J-groups; levels sharing a ``jgroup`` are
     transformed together (they mix when ``brune=False``).  Set ``brune=True``
@@ -602,7 +610,7 @@ def transform_out(levels: Sequence[Level], *, brune: bool = True,
                 f"got {[len(lv.channels) for lv in group]} channels")
 
         for i, lv in enumerate(group):
-            if brune:
+            if brune or park:
                 # The Brune parameters already sit at B_c = S_c(E_lambda); only
                 # the normalisation below applies.
                 energy, gammas, iters = lv.energy, lv.gammas, 0
@@ -611,7 +619,7 @@ def transform_out(levels: Sequence[Level], *, brune: bool = True,
                                                       max_iterations)
 
             chans, norm_sum = _normalize(energy, gammas, lv.channels,
-                                         lv.energy, lv.J, lv.parity)
+                                         lv.energy, lv.J, lv.parity, park)
             results[id(lv)] = TransformedLevel(
                 energy=energy, channels=chans, norm_sum=norm_sum,
                 iterations=iters, J=lv.J, parity=lv.parity,
@@ -621,7 +629,8 @@ def transform_out(levels: Sequence[Level], *, brune: bool = True,
 
 
 def partial_widths(level: Level, gammas: Optional[Sequence[float]] = None, *,
-                   brune: bool = True, unit: str = "eV") -> List[Optional[float]]:
+                   brune: bool = True, park: bool = False,
+                   unit: str = "eV") -> List[Optional[float]]:
     """Convenience: the partial widths of one level, one number per channel.
 
     ``gammas`` overrides the channels' own values, so a chain sample can be fed
@@ -635,7 +644,7 @@ def partial_widths(level: Level, gammas: Optional[Sequence[float]] = None, *,
         for c, g in zip(level.channels, gammas):
             c.gamma = float(g)
     scale = {"eV": 1.0, "keV": 1e-3, "MeV": 1e-6}[unit]
-    out = transform_out([level], brune=brune)[0]
+    out = transform_out([level], brune=brune, park=park)[0]
     return [None if c.width_eV is None else c.width_eV * scale for c in out.channels]
 
 

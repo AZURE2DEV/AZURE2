@@ -204,7 +204,10 @@ def best_fit_params(model, path=None):
             f"{path} not found: the band must be evaluated at the fitted "
             f"parameters the covariance belongs to.  Pass params= explicitly "
             f"to override.")
-    full = np.loadtxt(path, usecols=(1,))
+    # Skip the `parametrization` tag AZURE2 writes first (which amplitudes the
+    # file holds); it is not a parameter.
+    full = np.asarray([float(l.split()[1]) for l in open(path)
+                       if l.split() and l.split()[0] != "parametrization"], float)
     fixed = np.asarray(model.fixed_params, float).round().astype(bool)
     if full.size != fixed.size:
         raise ValueError(f"{path} has {full.size} parameters but the model has "

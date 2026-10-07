@@ -162,6 +162,12 @@ double AZURECalc::operator()(const vector_r &p) const {
   if (limitsManager_) {
     chiSquared += CalculateNuisanceChiSquared(p);
   }
+  // Park formalism: keep every level's overlap J positive.
+  if (configure().paramMask & Config::USE_PARK_FORMALISM) {
+    double parkPenalty = localCompound->ParkNormPenalty();
+    chiSquared += parkPenalty;
+    localData->SetParkPenalty(parkPenalty);
+  }
 
   if (!localData->IsErrorAnalysis() && thisIteration != 0) {
     if (thisIteration % 10 == 0) configure().outStream
@@ -350,6 +356,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
               << std::endl;
   }
   if (eg) {
+    AddParkPenaltyGradient(lc, configure(), accum); // Park J > 0 wall
     accum.Scatter(pmap, grad);                      // energies + reduced widths
     AddNuisanceGradient(p, grad);                   // nuisance penalty
     for (int s = 1; s <= ld->NumSegments(); s++) {  // normalizations

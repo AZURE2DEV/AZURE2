@@ -86,8 +86,9 @@ void printHelp() {
 #endif
             << std::setw(25) << std::left << "\t--no-transform:" << std::setw(0) << "Do not perform initial parameter transformations." << std::endl
             << std::setw(25) << std::left << "\t--no-long-wavelenth:" << std::setw(0) << "Do not use long wavelength approximation for EL capture." << std::endl
-            << std::setw(25) << std::left << "\t--use-brune:" << std::setw(0) << "Use the alternative level matrix of C.R. Brune." << std::endl
-            << std::setw(25) << std::left << "\t--use-park:" << std::setw(0) << "Use the level-dependent boundary conditions of T.-S. Park (PRC 104, 064612)." << std::endl
+            << std::setw(25) << std::left << "\t--use-brune:" << std::setw(0) << "Use the alternative level matrix of C.R. Brune (the default)." << std::endl
+            << std::setw(25) << std::left << "\t--no-brune:" << std::setw(0) << "Use the standard Lane-Thomas parametrization (constant boundary conditions) instead." << std::endl
+            << std::setw(25) << std::left << "\t--use-park:" << std::setw(0) << "Fit the observed reduced width amplitudes (T.-S. Park, PRC 104, 064612); implies --use-brune." << std::endl
             << std::setw(25) << std::left << "\t--ignore-externals:" << std::setw(0) << "Ignore external resonant capture amplitude if internal width is zero." << std::endl
             << std::setw(25) << std::left << "\t--use-rmc:" << std::setw(0) << "Use Reich-Moore approximation for capture (neutron capture only)." << std::endl
             << std::setw(25) << std::left << "\t--gsl-coul:" << std::setw(0) << "Use GSL Coulomb functions (faster, but less accurate)." << std::endl
@@ -154,6 +155,8 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
       configure.paramMask |= Config::USE_BRUNE_FORMALISM;
     else if (*it == "--use-park")
       configure.paramMask |= (Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
+    else if (*it == "--no-brune")
+      configure.paramMask &= ~(Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
     else if (*it == "--gsl-coul")
       configure.paramMask |= Config::USE_GSL_COULOMB_FUNC;
     else if (*it == "--ignore-externals")
@@ -1054,6 +1057,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
     if (configure.paramMask & Config::USE_PREVIOUS_PARAMETERS) {
       configure.outStream << "Reading User Parameter File..." << std::endl;
       params.ReadUserParameters(configure);
+      if (!params.ReconcileBasis(compound, configure)) return -1;
     } else {
       configure.outStream << "Creating New param.par File..." << std::endl;
       params.WriteUserParameters(configure, false);

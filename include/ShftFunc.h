@@ -41,6 +41,11 @@ class ShftFunc {
    * angular momentum and energy in the compound system.
    */
   double EnergyDerivative(int l, double energy);
+  /*!
+   * Returns the second energy derivative of the shift function (a central
+   * difference of EnergyDerivative with a 1 keV step).
+   */
+  double EnergySecondDerivative(int l, double energy);
 
  private:
   /// Separation plus excitation energy of the pair, the threshold this is measured from.
@@ -49,6 +54,7 @@ class ShftFunc {
   double radius() const { return radius_; };
   /// GSL adaptor for the shift function, for differentiation.
   static double thisShftFunc(double, void *);
+  static double thisShftFuncDeriv(double, void *);
   /// GSL adaptor for the Whittaker function.
   static double theWhitFunc(double, void *);
   typedef struct Params {

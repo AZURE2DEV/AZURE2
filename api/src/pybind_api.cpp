@@ -245,6 +245,9 @@ class Session {
       config_->paramMask |= Config::USE_HYBRID_COULOMB;
     else
       config_->paramMask &= ~Config::USE_HYBRID_COULOMB;
+    // The shift functions cached on the levels were computed with the old
+    // potential (CNuc::CalcShiftFunctions skips a level that has not moved).
+    if (api_ && api_->compound()) api_->compound()->InvalidateShiftFunctions();
   }
 
   void clear_potential(int pair) {
@@ -258,6 +261,9 @@ class Session {
       config_->paramMask |= Config::USE_HYBRID_COULOMB;
     else
       config_->paramMask &= ~Config::USE_HYBRID_COULOMB;
+    // The shift functions cached on the levels were computed with the old
+    // potential (CNuc::CalcShiftFunctions skips a level that has not moved).
+    if (api_ && api_->compound()) api_->compound()->InvalidateShiftFunctions();
   }
 
   // (enabled, type, V0, R, a, r0, has_own_setting) for the given pair,
@@ -376,6 +382,11 @@ class Session {
     ConfigScope guard(config_);
     vector_r v = to_vector(p);
     return api_->CalculateChi2Physical(v);
+  }
+  py::array_t<double> park_norms(py::array_t<double, py::array::forcecast> p) {
+    ConfigScope guard(config_);
+    vector_r v = to_vector(p);
+    return to_array(api_->ParkNorms(v));
   }
   py::array_t<double> calculate_chi2_grad_rwa(py::array_t<double, py::array::forcecast> p) {
     vector_r v = to_vector(p), out;
@@ -541,6 +552,8 @@ PYBIND11_MODULE(_azure2, m) {
       .def("transform_all_rwa", &Session::transform_all_rwa, py::arg("params"))
       .def("calculate_chi2_rwa", &Session::calculate_chi2_rwa,
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
+      .def("park_norms", &Session::park_norms, py::arg("params"),
+           "Park overlap J of every R-matrix level (1 in Brune mode).")
       .def("calculate_chi2_physical", &Session::calculate_chi2_physical,
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
       .def("calculate_chi2_grad_rwa", &Session::calculate_chi2_grad_rwa,

@@ -270,6 +270,38 @@ double CoulFunc::PEShift_dE(int l, double radius, double energy) {
   return result;
 }
 
+double CoulFunc::thisPEShift_dE(double x, void *p) {
+  DEShiftParams *params = (DEShiftParams *)p;
+  return params->coulFunc->PEShift_dE(params->lValue, params->radius, x);
+}
+
+/*!
+ * Returns the second energy derivative of the shift function, as the central
+ * second difference of PEShift with a step of 1 keV (smaller close to the
+ * threshold, where the function is only defined for positive energies).  The
+ * Park level matrix needs it for the energy gradient of the overlap J.
+ */
+
+double CoulFunc::PEShift_d2E(int l, double radius, double energy) {
+  // Richardson-extrapolated central second difference, O(h^4), with a 10 keV
+  // step: the Coulomb functions are good to ~1e-10, so a 1 keV step would
+  // leave ~1e-4 of rounding noise in S''.  Within 4h of the threshold, where
+  // the function is only defined for positive energies, a forward stencil.
+  const double h = 1.0e-2;
+  if (energy < 4.0 * h) {
+    const double f = 1.0e-3;
+    double s0 = PEShift(l, radius, energy);
+    double s1 = PEShift(l, radius, energy + f);
+    double s2 = PEShift(l, radius, energy + 2.0 * f);
+    double s3 = PEShift(l, radius, energy + 3.0 * f);
+    return (2.0 * s0 - 5.0 * s1 + 4.0 * s2 - s3) / (f * f);
+  }
+  double s0 = PEShift(l, radius, energy);
+  double d1 = (PEShift(l, radius, energy + h) - 2.0 * s0 + PEShift(l, radius, energy - h)) / (h * h);
+  double d2 = (PEShift(l, radius, energy + 2.0 * h) - 2.0 * s0 + PEShift(l, radius, energy - 2.0 * h)) / (4.0 * h * h);
+  return (4.0 * d1 - d2) / 3.0;
+}
+
 /*!
  * Hybrid method: Numerov integration with nuclear potential using GSL or COUL boundary conditions.
  * This method integrates the Schrödinger equation inward from a matching radius where pure

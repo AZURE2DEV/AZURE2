@@ -1,5 +1,6 @@
 #include "AZUREParams.h"
 #include "Config.h"
+#include "CNuc.h"
 
 /*!
  * This function returns the MnUserParameters object used by Minuit to store
@@ -31,6 +32,10 @@ void AZUREParams::ReadUserParameters(const Config &configure) {
       in >> tempname >> tempvalue >> temperror;
       getline(in, tempfixed);
       if (!in.eof()) {
+        if (tempname == "parametrization") {
+          basisTag_ = (int)tempvalue;
+          continue;
+        }
         names.push_back(tempname);
         values.push_back(tempvalue);
         errors.push_back(temperror);
@@ -78,6 +83,10 @@ void AZUREParams::ReadUserParameters(const std::string &filename) {
       in >> tempname >> tempvalue >> temperror;
       getline(in, tempfixed);
       if (!in.eof()) {
+        if (tempname == "parametrization") {
+          basisTag_ = (int)tempvalue;
+          continue;
+        }
         names.push_back(tempname);
         values.push_back(tempvalue);
         errors.push_back(temperror);
@@ -124,6 +133,12 @@ void AZUREParams::WriteUserParameters(const Config &configure, bool fitParameter
   out.open(filename);
   if (out) {
     out.precision(7);
+    // First line: which amplitudes the file holds (standard, Brune or Park
+    // reduced widths differ by level-dependent factors).  Written as a
+    // pseudo-parameter so older readers skip it as an unknown name.
+    out << std::setw(20) << "parametrization"
+        << std::scientific << std::setw(20) << (double)BasisForConfig(configure)
+        << std::scientific << std::setw(20) << 0.0 << std::endl;
     for (int i = 0; i < GetMinuitParams().Params().size(); i++) {
       out << std::setw(20) << GetMinuitParams().GetName(i)
           << std::scientific << std::setw(20) << GetMinuitParams().Value(i)
@@ -133,6 +148,21 @@ void AZUREParams::WriteUserParameters(const Config &configure, bool fitParameter
     out.close();
   } else
     configure.outStream << "Could not save param.par file." << std::endl;
+}
+
+int AZUREParams::BasisForConfig(const Config &configure) {
+  if (configure.paramMask & Config::USE_PARK_FORMALISM) return kBasisPark;
+  if (configure.paramMask & Config::USE_BRUNE_FORMALISM) return kBasisBrune;
+  return kBasisStandard;
+}
+
+const char *AZUREParams::BasisName(int basis) {
+  switch (basis) {
+    case kBasisStandard: return "standard (constant boundary condition)";
+    case kBasisBrune: return "Brune";
+    case kBasisPark: return "Park (observed)";
+    default: return "untagged";
+  }
 }
 
 /*!
@@ -157,4 +187,27 @@ void AZUREParams::WriteParameterErrors(const std::vector<std::pair<double, doubl
     out.close();
   } else
     configure.outStream << "Could not save param.errors file." << std::endl;
+}
+
+bool AZUREParams::ReconcileBasis(CNuc *compound, const Config &configure) {
+  const int mode = BasisForConfig(configure);
+  int tag = basisTag_;
+  if (tag == kBasisUnknown) {
+    // Files written before the tag existed hold the amplitudes of the mode
+    // that wrote them, which could not have been Park's.
+    if (mode != kBasisPark) return true;
+    configure.outStream << "The parameter file carries no parametrization tag; taking its amplitudes as Brune's."
+                        << std::endl;
+    tag = kBasisBrune;
+  }
+  if (tag == mode) return true;
+  if (compound->ConvertAmplitudeBasis(params_, tag, mode, configure)) {
+    configure.outStream << "Converted the parameter file from " << BasisName(tag) << " to "
+                        << BasisName(mode) << " amplitudes." << std::endl;
+    basisTag_ = mode;
+    return true;
+  }
+  configure.outStream << "**ERROR: the parameter file holds " << BasisName(tag) << " amplitudes and this run uses "
+                      << BasisName(mode) << " ones; they cannot be converted level by level." << std::endl;
+  return false;
 }

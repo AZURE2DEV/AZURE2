@@ -1531,8 +1531,11 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
            << " Total-Norm-Chi-Squared: "
            << totalNormChiSquared
            << " Total-N: "
-           << totalN
-           << std::endl
+           << totalN;
+    // Park formalism: the J > 0 wall, when a level sits beyond it.
+    if (configure.paramMask & Config::USE_PARK_FORMALISM)
+      chiOut << " Total-Park-Chi-Squared: " << parkPenalty_;
+    chiOut << std::endl
            << std::endl;
     chiOut.flush();
     chiOut.close();
