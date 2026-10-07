@@ -7,8 +7,7 @@
 #include "AZUREGrad.h"
 #include <vector>
 #include "ThmExperiment.h"
-#include "ThmLineshape.h"
-#include "ThmDistortion.h"
+#include "ThmReports.h"
 
 class Config;
 class EData;

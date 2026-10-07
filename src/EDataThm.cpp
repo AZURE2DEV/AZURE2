@@ -16,6 +16,7 @@
 #include "GSLException.h"
 #include "NuclearPotentialManager.h"
 #include "ThmLineshape.h"
+#include "ThmReports.h"
 #include "ThmDistortion.h"
 #include "ThmDwVertex.h"
 #include "ThmAngular.h"

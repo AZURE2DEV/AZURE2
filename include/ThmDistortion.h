@@ -252,12 +252,4 @@ class ThmDistortion {
             complex *T = nullptr) const;
 };
 
-/// What the output file and pyazr report for one experiment's distortion.
-struct ThmDistortionReport {
-  std::string experiment, kind, description;
-  double eRef = 0.0, eAA = 0.0, bind = 0.0, kAA = 0.0, etaAA = 0.0, kappa = 0.0, etaB = 0.0, beta = 0.0;
-  std::vector<double> energy, esf, ksf, etasf, thetaCm, x, q, m2, mpw2, r, rModel;
-  std::vector<int> lmax;
-};
-
 #endif

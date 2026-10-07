@@ -28,6 +28,7 @@
 #include "ThmExperiment.h"
 #include "ThmFunc.h"
 #include "ThmLineshape.h"
+#include "ThmReports.h"
 #include "ThmVertexBoundary.h"
 
 namespace {
