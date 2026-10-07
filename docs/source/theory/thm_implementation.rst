@@ -3081,8 +3081,12 @@ analytic adjoint differentiates the T-matrix observable, not the HOES one, so
 every derivative of a THM point is taken by central differences of the HOES
 model, :math:`J_m`, with the dependence of the profiled scale
 :math:`s = 1/n^*` added analytically (``ComputeTHMRows`` in ``AZUREGrad.h``;
-used by the MIGRAD gradient, ``pyazr``'s Jacobian and gradients, and the CLI
-band).
+used by ``pyazr``'s Jacobian and gradients and the CLI band). The MIGRAD
+gradient (``AZURECalc::Gradient``) takes the THM part instead as central
+differences of the re-profiled THM :math:`\chi^2` itself (``Chi2Value``), one
+pair of evaluations per free parameter -- the same derivative (the profiled
+scale and background are at their optimum, so their own dependence drops out
+of the gradient), computed serially on a clone of the data.
 
 The cross-section band (``--covariance-band``) of a THM point is that of the
 model *as it lies against the data*. The output file shows the model

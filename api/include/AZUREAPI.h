@@ -128,7 +128,7 @@ class AZUREAPI {
 
   // Number of numeric fields packed per particle pair by GetPairsInfo().
   // Keep this in sync with pyazr/parameters.py (Pair._NFIELDS).
-  static const int kPairInfoFields = 16;
+  static const int kPairInfoFields = 17;
   /*!
    * Returns structured metadata describing every particle pair, in 1-based
    * pair-number order (the same number stored in field 9 -- "pair" -- of

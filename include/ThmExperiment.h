@@ -50,8 +50,10 @@ struct ThmExperiment {
   /*!
    * Spectator-momentum window (`ps=`, ThmLineshape.h ThmSpectatorWindow):
    * the HOES model at E is the average of the cross section over the
-   * spectator momentum p_s in [psMin, psMax] (MeV/c) with the weight of the
-   * accepted events, |phi(p_s)|^2 p_s^2 dp_s.  DELTA (default) is the
+   * accepted spectator directions at fixed E, whose |p_s| lies in [psMin,
+   * psMax] (MeV/c), with the weight of the accepted events, |phi(q)|^2
+   * d cos(theta_cm), i.e. |phi(q)|^2 q dq (not the E-integrated p^2 dp; docs
+   * "Spectator-momentum window").  DELTA (default) is the
    * quasi-free point p_s = 0 (or the scalar spectatorEnergy).  Needs the
    * kinematics.
    */
