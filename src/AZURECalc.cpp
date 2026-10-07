@@ -236,8 +236,14 @@ double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
   // used when invoking Gradient() to finite-difference the THM contribution (in this
   // way the computing cost scales with the number of THM points alone, rather than the whole dataset).
   // The nuisance penalty is excluded there because it is per-parameter and it is analitically treated by Gradient().
-  CNuc *lc = compound()->Clone();
-  EData *ld = data()->Clone();
+  // In a MIGRAD fit the copies come from the pools operator() fills (no copy
+  // of the whole data per call; a pooled copy is refilled from p, and its
+  // sub-point grids are rebuilt where their anchors differ, so the values are
+  // those of a fresh clone).  Elsewhere (LM, GSL-LM) fresh clones, as before:
+  // a pool holds max(4, threads) copies, which those fits do not need.
+  const bool pooled = pools_initialized_;
+  CNuc *lc = pooled ? GetPooledCNuc() : compound()->Clone();
+  EData *ld = pooled ? GetPooledEData() : data()->Clone();
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
   ld->FillEnergyShiftsFromParams(p, ld, lc, &configure());
@@ -285,8 +291,13 @@ double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
   }
   if (!thmOnly && limitsManager_) chiSquared += CalculateNuisanceChiSquared(p);
 
-  delete lc;
-  delete ld;
+  if (pooled) {
+    ReturnPooledCNuc(lc);
+    ReturnPooledEData(ld);
+  } else {
+    delete lc;
+    delete ld;
+  }
   return chiSquared;
 }
 
@@ -295,8 +306,10 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
 
   // --- Analytic energy / reduced-width block via the shared adjoint engine. ---
-  CNuc *lc = compound()->Clone();
-  EData *ld = data()->Clone();
+  // Pooled copies in a MIGRAD fit, as in Chi2Value.
+  const bool pooled = pools_initialized_;
+  CNuc *lc = pooled ? GetPooledCNuc() : compound()->Clone();
+  EData *ld = pooled ? GetPooledEData() : data()->Clone();
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
   ld->FillEnergyShiftsFromParams(p, ld, lc, &configure());
@@ -513,8 +526,13 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     }
   }
 
-  delete lc;
-  delete ld;
+  if (pooled) {
+    ReturnPooledCNuc(lc);
+    ReturnPooledEData(ld);
+  } else {
+    delete lc;
+    delete ld;
+  }
 
   return grad;
 }
