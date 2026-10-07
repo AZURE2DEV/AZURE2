@@ -14,7 +14,9 @@
 //     (both files parsed to doubles; the GUI writes the levels sorted and
 //     renumbers the level-id field, so lines are compared as a set with that
 //     field left out, and the optional fields 32-33 it adds are read as 0);
-//   - the engine's total chi-squared of the saved file equals the original's.
+//   - the engine's total chi-squared of the saved file equals the original's;
+//   - a width conversion (GuiStateSnapshot) leaves the open project's file
+//     name and the working directory as they were, so Save goes to the project.
 //
 // Runs without a display; the CMake target passes QT_QPA_PLATFORM=offscreen.
 
@@ -159,6 +161,14 @@ int main(int argc, char** argv) {
   {
     AZURESetup w;
     w.open(guiDir + "/run.azr");
+    // A width conversion runs on a temporary snapshot of the GUI state
+    // (GuiStateSnapshot); it must not make that snapshot the open project.
+    const std::string before = w.GetConfig().configfile;
+    const QString cwdBefore = QDir::currentPath();
+    w.ConvertRWAToPhysical("no_such_parameter", 1.0);
+    ok("a conversion leaves the open project's file name alone", w.GetConfig().configfile == before,
+       QString::fromStdString(w.GetConfig().configfile));
+    ok("and the working directory", QDir::currentPath() == cwdBefore, QDir::currentPath());
     w.saveProject();
   }
   const QString saved = slurp(guiDir + "/run.azr");

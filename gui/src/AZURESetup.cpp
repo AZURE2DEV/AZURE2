@@ -1616,7 +1616,8 @@ void AZURESetup::openWebsite() {
  * been converted, changing it by orders of magnitude.
  *
  * The snapshot is written to a temporary file that is removed when the returned
- * guard goes out of scope.  If writing fails the original Config is returned
+ * guard goes out of scope; the open project (its file name, the window title,
+ * the working directory) is left as it was.  If writing fails the original Config is returned
  * unchanged, so the conversion degrades to the old behaviour rather than
  * failing outright.
  */
@@ -1625,8 +1626,14 @@ AZURESetup::GuiStateSnapshot::GuiStateSnapshot(AZURESetup *setup) :
   ok(false) {
   file.setFileTemplate(QDir::tempPath() + "/azure2_gui_state_XXXXXX.azr");
   if (!file.open()) return;
+  // writeProject, not writeFile: writeFile makes the file the open project
+  // (configfile, window title, working directory), and this one is deleted
+  // with the guard.  Relative data paths stay relative to the project.
+  QTextStream out(&file);
+  const bool written = setup->writeProject(out, setup->projectDirectory());
+  out.flush();
   file.close();
-  if (!setup->writeFile(file.fileName())) return;
+  if (!written) return;
   config.configfile = file.fileName().toStdString();
   ok = true;
 }
