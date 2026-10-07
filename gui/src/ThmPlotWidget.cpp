@@ -123,6 +123,14 @@ QFont ThmPlotWidget::tickFont() const {
   return f;
 }
 
+void ThmPlotWidget::layoutTitle(QTextDocument &doc) const {
+  QFont f = tickFont();
+  f.setBold(true);
+  doc.setDefaultFont(f);
+  doc.setDocumentMargin(1);
+  doc.setHtml(QString("<b>%1</b>").arg(title_));
+}
+
 ThmPlotWidget::Axes ThmPlotWidget::axes() const {
   Axes a;
   double x0 = 1e300, x1 = -1e300, y0 = 1e300, y1 = -1e300;
@@ -142,6 +150,9 @@ ThmPlotWidget::Axes ThmPlotWidget::axes() const {
   if (logY_) {
     ylo = std::log10(y0);
     yhi = std::log10(y1);
+    // Ten decades below the largest value at most: a cross section that
+    // vanishes at a threshold would otherwise squeeze the rest into a band.
+    ylo = std::max(ylo, yhi - 10.0);
     if (yhi - ylo < 1.0) {
       const double mid = 0.5 * (ylo + yhi);
       ylo = mid - 0.5;
@@ -158,6 +169,16 @@ ThmPlotWidget::Axes ThmPlotWidget::axes() const {
     const double pad = 0.06 * (yhi - ylo);
     ylo -= pad;
     yhi += pad + 0.15 * (yhi - ylo);
+  }
+  // The reaction label sits in a top corner of the axes: the band it needs
+  // (with the corner padding and a symbol's radius) stays above the data.
+  if (!title_.isEmpty()) {
+    QTextDocument doc;
+    layoutTitle(doc);
+    const double frameHeight = std::max(10, height() - bottomMargin() - top());
+    const double f = std::min(0.5, (doc.size().height() + 16.0) / frameHeight);
+    const double dataTop = logY_ ? std::log10(y1) : y1;
+    if (yhi - dataTop < f * (yhi - ylo)) yhi = (dataTop - f * ylo) / (1.0 - f);
   }
   a.xlo = x0;
   a.xhi = x1;
@@ -415,15 +436,11 @@ void ThmPlotWidget::paintEvent(QPaintEvent *) {
   }
 
   // The reaction, bold, inside the axes, in the corner the curves and marker
-  // lines cross least (upper left on a tie), over a light box so it stays
-  // readable where no corner is free.
+  // lines cross least (upper left on a tie; axes() keeps the top band free of
+  // curves), over a light box so it stays readable across a marker line.
   if (!title_.isEmpty()) {
     QTextDocument doc;
-    QFont f = font;
-    f.setBold(true);
-    doc.setDefaultFont(f);
-    doc.setDocumentMargin(1);
-    doc.setHtml(QString("<b>%1</b>").arg(title_));
+    layoutTitle(doc);
     const QSizeF ts = doc.size();
     const double pad = 5;
     const QRectF inner = QRectF(frame).adjusted(pad, pad, -pad, -pad);

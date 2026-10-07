@@ -20,6 +20,8 @@
  * their left edge (the widest tick labels of the column), so that the axes
  * line up in a grid of equally sized panels.
  */
+class QTextDocument;
+
 class ThmPlotWidget : public QWidget {
   Q_OBJECT
 
@@ -88,6 +90,8 @@ class ThmPlotWidget : public QWidget {
     QString text;  ///< "" = unlabelled
   };
   QFont tickFont() const;
+  /// The reaction label, laid out as it is drawn (empty size without a title).
+  void layoutTitle(QTextDocument &doc) const;
   Axes axes() const;
   QList<Tick> yTicks(const Axes &a, int frameHeight) const;
   QList<Series> legendSeries() const;
