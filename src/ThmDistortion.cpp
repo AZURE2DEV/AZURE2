@@ -797,8 +797,14 @@ std::string ThmDistortion::Build(const ThmExperiment &x, const Kinematics &k, do
   std::vector<double> amp;
   double ampMax = 0.0;
   const int kLCap = 400;
+  // The waves are kept, (l + 1) n complex numbers: bound them before they
+  // grow (n <= 400000 and l <= 400 alone would allow 2.6 GB).
+  const double kMaxWaveMB = 512.0;
   for (int l = 0;; l++) {
     if (l > kLCap) return "the partial-wave sum does not converge by l = " + Number(kLCap);
+    if ((l + 1.0) * n * sizeof(complex) / 1048576.0 > kMaxWaveMB)
+      return "the a + A partial waves would need more than " + Number(kMaxWaveMB) + " MB (" + Number(n) +
+             " radial points, l = " + Number(l) + ")";
     std::vector<complex> u;
     if (!Wave(aa, l, beta * h, n, u)) return "the a + A wave l = " + Number(l) + " could not be normalized";
     double a = 0.0;
