@@ -611,11 +611,15 @@ ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request)
     const vector_r oe = extrap.api->calculated_energies(1), ox = extrap.api->calculated_segments(1);
     r.onShellEnergy = QVector<double>(oe.begin(), oe.end());
     r.onShell = QVector<double>(ox.begin(), ox.end());
-    // The THM scale is arbitrary: match it to the on-shell curve (geometric mean of the ratio).
+    // The THM scale is arbitrary: match it to the on-shell curve (geometric
+    // mean of the ratio), where that is within six decades of its largest
+    // value -- not where it vanishes below a barrier or threshold.
+    double peak = 0.0;
+    for (double v : r.onShell) peak = std::max(peak, v);
     double sum = 0.0;
     int count = 0;
     for (int i = 0; i < r.hoes.size() && i < r.onShell.size(); i++)
-      if (r.hoes[i] > 0.0 && r.onShell[i] > 0.0) {
+      if (r.hoes[i] > 0.0 && r.onShell[i] > 1e-6 * peak) {
         sum += std::log(r.onShell[i] / r.hoes[i]);
         count++;
       }
