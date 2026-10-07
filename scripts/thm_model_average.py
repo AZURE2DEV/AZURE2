@@ -548,12 +548,18 @@ _HOOK_MODULES = {}
 def load_hook(spec, default="derived"):
     """file.py[:func] -> the function (default name: the --derived-hook's
     "derived"; the --penalty-hook's is "penalty").  A file is loaded once."""
-    path, _, func = spec.partition(":")
+    # Split at the last colon only when what follows is a name: a Windows
+    # path ("D:/x/hook.py") has a colon of its own.
+    path, sep, func = spec.rpartition(":")
+    if not sep or not func.isidentifier():
+        path, func = spec, ""
     path = os.path.abspath(path)
     mod = _HOOK_MODULES.get(path)
     if mod is None:
         sp = importlib.util.spec_from_file_location(
             f"hook_{len(_HOOK_MODULES)}", path)
+        if sp is None:
+            raise ValueError(f"cannot load hook file {path!r} (from {spec!r})")
         mod = importlib.util.module_from_spec(sp)
         sp.loader.exec_module(mod)
         _HOOK_MODULES[path] = mod
