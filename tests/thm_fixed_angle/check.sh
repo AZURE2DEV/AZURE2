@@ -67,9 +67,11 @@ chi2() { tr -d '\r' < "$WORK/$1/log" | awk '/Total Chi-Squared:/ { v = $NF } END
 # worst |model(A) * F / model(B) - 1| (energies must agree): "n worst"
 worst() {
   paste -d' ' <(model "$1") <(model "$2") |
-    awk -v f="${3:-1}" '{ if ($1 != $3) { print "0 ENERGY"; exit } d = $2 * f / $4 - 1; if (d < 0) d = -d; if (d > w) w = d; n++ }
-         END { printf "%d %.3e\n", n, w }'
+    awk -v f="${3:-1}" '{ if ($1 != $3) { e = 1; exit } d = $2 * f / $4 - 1; if (d < 0) d = -d; if (d > w) w = d; n++ }
+         END { if (e) print "0 ENERGY-MISMATCH"; else printf "%d %.3e\n", n, w }'
 }
+# counted N: the comparison ran over points (an energy mismatch gives N = 0)
+counted() { awk -v n="$1" 'BEGIN { exit !(n + 0 > 0) }'; }
 # check_worst A B FACTOR TOL LABEL
 check_worst() {
   local n w
@@ -157,7 +159,7 @@ run 17O o17_f "experiment[A] segments=1 theta=20-60"
 run 17O o17_b "experiment[A] segments=1 theta=120-160"
 if ran o17_f && ran o17_b; then
   read -r n w <<< "$(worst o17_f o17_b)"
-  awk -v w="$w" 'BEGIN { exit !(w > 1e-3) }' && ok "17O(n,a)14C (1-, 2+, 3-, 5- interfere): 20-60 vs 120-160 differ by up to $w" \
+  counted "$n" && awk -v w="$w" 'BEGIN { exit !(w > 1e-3) }' && ok "17O(n,a)14C (1-, 2+, 3-, 5- interfere): 20-60 vs 120-160 differ by up to $w" \
     || bad "17O(n,a): forward and backward windows agree ($w): no odd L"
 fi
 

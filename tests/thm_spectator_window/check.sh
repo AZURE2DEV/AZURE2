@@ -77,9 +77,11 @@ model() { tr -d '\r' < "$WORK/$1/output/$OUT" | awk 'NF > 4 { print $1, $4 }'; }
 # worst relative difference of the model columns of two runs (energies must agree)
 worst() {
   paste -d' ' <(model "$1") <(model "$2") |
-    awk '{ if ($1 != $3) { print "ENERGY"; exit } d = $2 / $4 - 1; if (d < 0) d = -d; if (d > w) w = d; n++ }
-         END { printf "%d %.3e\n", n, w }'
+    awk '{ if ($1 != $3) { e = 1; exit } d = $2 / $4 - 1; if (d < 0) d = -d; if (d > w) w = d; n++ }
+         END { if (e) print "0 ENERGY-MISMATCH"; else printf "%d %.3e\n", n, w }'
 }
+# counted N: the comparison ran over points (an energy mismatch gives N = 0)
+counted() { awk -v n="$1" 'BEGIN { exit !(n + 0 > 0) }'; }
 T_of() { awk -v p="$1" -v mu="$MUSX" 'BEGIN { printf "%.17g", p * p / (2 * mu) }'; }
 
 NOFOLD='/<targetInt>/ { print; T = 1; next } /<\/targetInt>/ { T = 0 } T { next } { print }'
@@ -153,7 +155,7 @@ run h32 "experiment[A] segments=1,2 $KIN ps=hulthen:0-40 psNodes=32"
 if ran h16 && ran h8 && ran h32; then
   read -r n w16 <<< "$(worst h16 h32)"
   read -r n w8 <<< "$(worst h8 h32)"
-  awk -v w="$w16" 'BEGIN { exit !(w < 1e-6) }' && ok "hulthen [0, 40]: 16 vs 32 nodes worst rel $w16 (8 vs 32: $w8)" \
+  counted "$n" && awk -v w="$w16" 'BEGIN { exit !(w < 1e-6) }' && ok "hulthen [0, 40]: 16 vs 32 nodes worst rel $w16 (8 vs 32: $w8)" \
     || bad "hulthen [0, 40]: 16 vs 32 nodes worst rel $w16"
   read -r n w <<< "$(worst h16 nokey)"
   ok "(size) hulthen [0, 40] vs the quasi-free point p_s = 0: worst rel $w"
@@ -231,7 +233,7 @@ if ran h16 && ran all16 && ran cm160; then
   same "$WORK/h16/output/$OUT" "$WORK/all16/output/$OUT" && ok "ps=hulthen:0-40 == + spectatorAngles=cm:0-180 (16 nodes): byte-identical" \
     || { read -r n w <<< "$(worst h16 all16)"; bad "ps alone vs cm:0-180: $n points, worst rel $w"; }
   read -r n w <<< "$(worst cm160 h16)"
-  awk -v w="$w" 'BEGIN { exit !(w > 1e-3) }' && ok "(size) cm:160-180 with the cut (q <= 40 MeV/c needs theta_cm >= ~147 deg) vs the cut alone: worst rel $w" \
+  counted "$n" && awk -v w="$w" 'BEGIN { exit !(w > 1e-3) }' && ok "(size) cm:160-180 with the cut (q <= 40 MeV/c needs theta_cm >= ~147 deg) vs the cut alone: worst rel $w" \
     || bad "cm:160-180 changes nothing: worst rel $w"
 fi
 

@@ -90,6 +90,8 @@ for w in "theta=50-70" "beam=18O target=d spectator=n Ebeam=54 ps=hulthen:0-40 b
   same "$WORK/w0/output/$OUT" "$WORK/w1/output/$OUT" && [ "$(total "$WORK/w0")" = "$(total "$WORK/w1")" ] &&
     ok "c = 0 with $w: model and chi2 identical" || bad "c = 0 with $w differs"
   run w2 "$O18" 18O_p_a_thm.azr "experiment[E] segments=1,2 $w cbackground=1/2+:2=0.3,-0.2"
+  # a failed w2 run has no output: that is a failure, not "moves the model"
+  [ -f "$WORK/w2/output/$OUT" ] || { started w2; continue; }
   same "$WORK/w0/output/$OUT" "$WORK/w2/output/$OUT" && bad "c != 0 with $w: no effect" || ok "c != 0 with $w moves the model"
 done
 
