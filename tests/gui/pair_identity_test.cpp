@@ -66,6 +66,7 @@
 #include "ThmChannelsPage.h"
 #include "ThmSettings.h"
 #include "ThmWorkspace.h"
+#include "ThmExperimentsPage.h"
 struct SegPairs {int firstPair; int secondPair;};
 
 // Defined by AZURE2.cpp, which belongs to the executable rather than the GUI
@@ -241,6 +242,7 @@ int main(int argc, char** argv) {
   QTemporaryDir settingsDir;
   qputenv("XDG_CONFIG_HOME", settingsDir.path().toUtf8());
   QApplication app(argc, argv);
+  ThmExperimentsPage::setDerivedDelay(0);  // derived values at once, as the checks read them
   QCoreApplication::setOrganizationName("AZURE2-tests");
   QCoreApplication::setApplicationName("pair_identity_test");
 

@@ -21,6 +21,7 @@
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStandardItemModel>
+#include <QTimer>
 #include <QStyle>
 #include <QTableWidget>
 #include <QTextDocument>
@@ -820,11 +821,36 @@ void ThmExperimentsPage::loadEditor() {
   loadDirections(r);
   updateDistortionItems(complete);
   loadCoherent(r);
-  showDerived(r);
+  if (derivedTimer_) derivedTimer_->stop();
+  showDerivedNow(r);
   loading_ = false;
 }
 
+int ThmExperimentsPage::derivedDelayMs_ = 200;
+
 void ThmExperimentsPage::showDerived(const ThmExperimentRecord &x) {
+  if (derivedDelayMs_ <= 0) {
+    showDerivedNow(x);
+    return;
+  }
+  if (!derivedTimer_) {
+    derivedTimer_ = new QTimer(this);
+    derivedTimer_->setSingleShot(true);
+    connect(derivedTimer_, &QTimer::timeout, this, [this]() {
+      if (current_ >= 0 && current_ < records_.size()) showDerivedNow(records_.at(current_));
+    });
+  }
+  derivedTimer_->start(derivedDelayMs_);
+}
+
+void ThmExperimentsPage::settleDerived() {
+  if (!derivedTimer_ || !derivedTimer_->isActive()) return;
+  derivedTimer_->stop();
+  if (current_ >= 0 && current_ < records_.size()) showDerivedNow(records_.at(current_));
+}
+
+void ThmExperimentsPage::showDerivedNow(const ThmExperimentRecord &x) {
+  derivedCount_++;
   QString why, info = derivedInfo(x, &why);
   // R (or the table's w) at the ends of the data.
   double rLo = 0.0, rHi = 0.0;

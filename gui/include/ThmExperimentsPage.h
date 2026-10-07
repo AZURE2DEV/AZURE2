@@ -8,6 +8,8 @@
 #include <QVector>
 #include <functional>
 
+class QTimer;
+
 #include "ThmExperiment.h"
 #include "ThmSettings.h"
 
@@ -85,6 +87,16 @@ class ThmExperimentsPage : public QWidget {
   /// Everything derivedInfo gives for the selected experiment, and the reason
   /// AZURE2 would refuse it, as the tooltips of the page's values show it.
   QString derivedText() const { return derivedText_; }
+  /*! The derived values (binding, R(E), the window, the engine's refusal)
+      follow an edit after this many ms without another (default 200): with
+      a computed distortion one evaluation takes ~0.4 s, which stalled every
+      keystroke and spin step.  0 = at once, as the tests use it.  Selecting
+      an experiment always shows them at once. */
+  static void setDerivedDelay(int ms) { derivedDelayMs_ = ms; }
+  /// The derived values of a pending edit, now (a no-op without one).
+  void settleDerived();
+  /// How many times the derived values were computed (for the tests).
+  int derivedCount() const { return derivedCount_; }
   /*! For a record with a ps window and a complete reaction: the window as
       the engine builds it (BuildThmSpectatorWindow on the engine's parse of
       the line, the tables read by ReadThmPsTable and ReadThmAngleTable, the
@@ -262,8 +274,13 @@ class ThmExperimentsPage : public QWidget {
   };
   /// The reaction of a record with all four keys, as EData::SetupThmExperiments checks it.
   bool reaction(const ThmExperimentRecord &x, Reaction &out, QString *error) const;
+  /// After an edit: showDerivedNow at once or after setDerivedDelay ms.
   void showDerived(const ThmExperimentRecord &r);
+  void showDerivedNow(const ThmExperimentRecord &r);
   QString derivedText_;
+  QTimer *derivedTimer_ = nullptr;
+  int derivedCount_ = 0;
+  static int derivedDelayMs_;
   void loadEditor();
   void loadPs(const ThmExperimentRecord &r);
   void loadDistortion(const ThmExperimentRecord &r);

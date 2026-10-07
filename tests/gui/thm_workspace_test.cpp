@@ -48,6 +48,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QGroupBox>
 #include <QLabel>
@@ -190,6 +191,8 @@ int main(int argc, char** argv) {
   QApplication app(argc, argv);
   QCoreApplication::setOrganizationName("AZURE2-tests");
   QCoreApplication::setApplicationName("thm_workspace_test");
+  // The derived values follow each edit at once (the page's delay is checked below).
+  ThmExperimentsPage::setDerivedDelay(0);
 
   // 1. Records and the nuclide table.
   {
@@ -554,6 +557,43 @@ int main(int argc, char** argv) {
     again.accept();
     w.saveProject();
     ok("lineshape: removed", blockOf(slurp(fourPath)) == "experiment[E1] segments=1\n", blockOf(slurp(fourPath)));
+
+    // A burst of edits computes the derived values once, after the delay: with
+    // a computed distortion one evaluation takes ~0.4 s (examples/o18_lacognata2010),
+    // which stalled every keystroke and spin step.
+    {
+      ThmSettings s3;
+      w.thmSettings(s3);
+      ThmWorkspace ws3(&w, s3);
+      ThmExperimentsPage* q = ws3.experimentsPage;
+      q->selectExperiment(0);
+      ThmExperimentsPage::setDerivedDelay(200);
+      const int before = q->derivedCount();
+      q->kinematicsBox->setChecked(true);
+      q->beamCombo->setEditText("7Li");
+      q->targetCombo->setEditText("d");
+      q->spectatorCombo->setEditText("n");
+      for(int i = 0; i < 5; i++) typeNumber(q->beamEnergyEdit, QString::number(60 + i));
+      ok("debounce: nothing computed during a burst of edits", q->derivedCount() == before,
+         QString::number(q->derivedCount() - before));
+      q->settleDerived();
+      ok("debounce: computed once after it", q->derivedCount() == before + 1, QString::number(q->derivedCount() - before));
+      const QString debounced = q->derivedText();
+      ThmExperimentsPage::setDerivedDelay(0);
+      typeNumber(q->beamEnergyEdit, "64");
+      ok("debounce: the values computed at once are the same", q->derivedText() == debounced && !debounced.isEmpty(),
+         debounced);
+      ThmExperimentsPage::setDerivedDelay(200);
+      typeNumber(q->beamEnergyEdit, "61");
+      const int pending = q->derivedCount();
+      QElapsedTimer clock;
+      clock.start();
+      while(q->derivedCount() == pending && clock.elapsed() < 10000) app.processEvents(QEventLoop::AllEvents, 50);
+      ok("debounce: the timer shows them by itself", q->derivedCount() == pending + 1 &&
+                                                       q->derivedText() != debounced,
+         q->derivedText());
+      ThmExperimentsPage::setDerivedDelay(0);
+    }
 
     // Without Brune the engine refuses the line shape; the page says so.
     ThmExperimentsPage noBrune(QStringList() << "experiment[E1] segments=1 beam=7Li target=d spectator=n Ebeam=60 lineshape=on",
