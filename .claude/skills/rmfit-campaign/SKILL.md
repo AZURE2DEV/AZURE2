@@ -69,6 +69,12 @@ python3 -m rmfit.cli <dir> init --base <dir>/<base>.azr [--sav <base>.sav] --nsh
     --search '{"top_k": 6, "pairs_per_group": 4, "stage1_nfev": 30, "stage2_nfev": 60, "union_nfev": 100}'
 ```
 
+`--flags` is passed straight to `pyazr.azure2()`, so the parametrization is chosen there:
+`"use_brune": true` (Brune, the archive default), `"use_park": true` (Park: the fit vector
+holds the observed reduced width amplitudes, `Gamma = 2 P gamma^2`; see the AZURE2 skill's
+"Park's parametrization"), `"use_brune": false` (standard Lane-Thomas). One basis per
+campaign -- the ledger's vectors, `.npz` snapshots and `.sav` companions are all in it.
+
 Optional `--objective JSON` (campaign.json `objective`, deBoer et al. 2017 Sec. on fitting):
 `{"dataset_weight": "reduced", "dataset_key": "file", "loss": "sivia"}`.
 `dataset_weight: reduced` is the reduced-chi-squared method (every data set's chi-squared
@@ -253,6 +259,47 @@ test, not a survey.
 - a coverage plot of what EXFOR holds against what the fit uses
   (`13C+a/10-2-26_n16O_exfor/plot_coverage.py`).
 
+## 3c. A structure you can see but no search finds: the width-floor recipe (13C+α, Ex 9.4 MeV, 2026-10-05/07)
+
+The evaluator pointed at a broad backward-angle (α,n₀) resonance near Ex 9.4 MeV ("see segment 25") that every tool had declared
+null: levelscan at 9.47/9.51/9.56 (all J^π, 50-400 keV), sign rounds over the groups there, a seed/re-partition test, and the first
+local-release level add (all 11 J^π: every candidate collapsed to 11-183 eV and came out "marginal", best +239).  The level that was
+finally accepted (1/2⁻, 9.348 MeV, Γ_n0 198 keV, Γ_α0 15 eV, +10,950 vs its control) had been within reach of the very first test: it
+was lost because a released polish lets a broad seed shrink to nothing while the neighbours re-absorb the misfit, and a collapsed
+candidate is then scored as "nothing there".  The recipe that found it:
+
+1. **Localise and characterise the deficit before fitting anything.**  Band map of χ² per 0.2 MeV of Ex by data set (from the
+   incumbent's per-point residuals, e.g. a summary page's curves json), then per 10 keV with the MEAN PULL per band and per angle group.
+   A broad deficit shows as the model under the data by 2-3 σ at EVERY angle over ≥ 50 keV with the same pull sign (9.74-9.78 here;
+   at 9.4 it was the backward angles 0.35-0.71 of the data over 400 keV).  A narrow spike (two 10 keV bands, pull changing sign) is a
+   lineshape / resolution question, not a level search.  Write the anatomy into the readme first.
+2. **Width-floor level add, every J^π, with the local release and a same-budget control.**  `structure add --local-release 0.5
+   --local-nfev 80 --pinned-nfev 60 --nfev 150` with `width_floor_windows: [[E-0.0005, E+0.0005, 100000, <pair>]]` (the found width's
+   channel; here n₀ ≥ 100 keV); seeds Γ_n0 150 + Γ_α0 30 keV in the lowest L; one campaign directory per J^π (an accepted level is
+   adopted into its base, so groups must not share one), three groups per node job.  The floor is one-sided on the sign the amplitude
+   starts with and never above 0.95 of the cap; it is skipped for an amplitude that is exactly 0 (the control's "level off" state --
+   the first run had the control carrying the floored level, start 42k too high; a control whose start differs from the incumbent is
+   broken, check it before reading any delta).  Verdict = delta vs the control, tau from k; "at_bound" empty at the end means the data,
+   not the floor, chose the width.
+3. **Cross-checks that make the verdict believable.**  (a) The same recipe on the OTHER plausible hypotheses: widen the existing
+   neighbour instead (a floor on its width: here the 3/2⁻ 9.36 → pinned at 400/500 keV, +2,349/+9,938 = rejected); (b) a data-only
+   window multi-start on the complaining data set (`10-5-26_an0_only`: ±0.5 MeV window, norms fixed, random a₀ sign patterns, 11 J^π
+   with a level, 250 evaluations each, ~1 h on one node) -- a SCREEN that must agree on J^π and width (it did: 1/2⁻ ≈ 5/2⁻ tied; the full
+   data broke the tie 1/2⁻ +10,950 vs 5/2⁻ -14,965), never a start vector (transplants came back +3k..+83k, see the 10-06 entry);
+   (c) per-dataset and per-angle attribution of the gain (here 72 % ND 2021, all at the backward angles -- the symptom the evaluator named).
+4. **Full free refit of the accepted fit** (every parameter, no floor, 400 evaluations): the level must hold on its own (it did:
+   9.3474 / 198.8 keV / 16 eV, objective -312, nothing else moved) -- then that export is the incumbent.
+5. **Propagate.**  Any model that freezes this block (the merged fit's Ex < 10) gets a NEW seed with the refreshed levels
+   (10-6-26_merged_refresh/refresh_frozen.py: copy energies and channel gamma fields by (J^π, energy order), add new levels fixed, keep
+   fixed flags, partial .sav, frozen check, recentre the policy windows) and a refit; the splice cost is normal (0.25M here) because
+   the free levels above the cut were tuned to the old block.
+6. **Then the next region**, by the band map, with the SAME recipe -- and expect most J^π to be rejected quickly (the high-spin ones by
+   10⁴-10⁵: a 100 keV floor is above their Wigner limit); a candidate that passes on a data set other than the one you aimed at still
+   counts (DeBoer 2026-10-07: "our goal is to fit the entirety of the data sets").
+
+Cost: 11 J^π = 4 node jobs × 6-8 h; the anatomy and the window screen are login-node work.  Full narrative: 13C+a/10-5-26_ex94_floor/readme
+(and 10-3-26_ex94_local, 10-5-26_an0_only, 10-5-26_an0_reconcile, 10-6-26_32m_widen, 10-6-26_lowE_12m_refit, 10-6-26_merged_refresh).
+
 ## 4. Judging results
 
 - Acceptance thresholds scale with s^2 = objective / N because errors are
@@ -347,6 +394,21 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
   that matters; coordinated multi-level flips need several backtracking GN iterations
   (`search.gn_iters_multi`) and their own polish quota (`search.multi_top`).
 - Job mail: `-m abe` (start, end, abort) so a silent crash is noticed.
+- **Park-mode campaigns (`"use_park": true`, since 2026-10-06).** (1) The J > 0 wall
+  (`sum (J/1e-3)^2` over levels with `J = 1 - sum gamma^2 dS/dE < 0`) is inside the
+  engine's scalar chi2, so the `plain` objective sees it, but the least-squares rows
+  (`rows_objective`, the LM polish) do not: a Park polish can step a saturating level
+  past J = 0 unnoticed. Check `m.park_norms(x)` (or `Total-Park-Chi-Squared` in a mode-1
+  `chiSquared.out`) on every candidate before accepting it; a level there has no
+  R-matrix meaning. Adding the J rows to the residual vector is the fix, not done yet.
+  (2) `--sav` seeds are applied by parameter NAME with no basis conversion: a Brune
+  campaign's `.sav` seeded into a Park campaign (or back) gives amplitudes in the wrong
+  basis. Convert first: a CLI mode-1 run in the target mode with that `.sav` as the
+  external file writes a converted, tagged `output/param.par`; seed from that. `bake()`
+  writes the `#parametrization` tag (0/1/2) so the CLI converts its exports correctly.
+  (3) The `theta2_cap` policy bounds the fit amplitudes: in Park mode that is the
+  observed theta^2 (what the GUI shows), in Brune mode the formal one -- the same
+  number means a tighter bound in Park mode for broad levels.
 
 ## 9. Refinement log (append dated entries; code changes get a test in rmfit/tests)
 
@@ -973,6 +1035,16 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
   by what the model loses when a level is switched OFF; a redundancy only shows up when the
   partner is refit.  So for a suspected same-J^pi degeneracy, test the specific level with a
   targeted remove-and-refit, not with the ranking.
+
+## 2026-10-06 — Park parametrization available (`"use_park": true`)
+
+AZURE2 dev 397668d adds `--use-park` / `use_park=True` (observed reduced width amplitudes,
+Brune's level matrix rescaled by sqrt J) and `--no-brune` (standard Lane-Thomas). rmfit
+forwards `--flags` unchanged, so a campaign can run in Park mode; `bake()` now writes the
+`#parametrization` line the CLI uses to convert parameter files between bases. Not yet
+exercised in a campaign; the three gotchas (wall not in the LM rows, no `--sav` basis
+conversion, `theta2_cap` meaning) are in section 8. Background:
+`R-matrix/Brune_vs_Park_Claude_eval/readme`.
 
 ## 2026-09-17 — audit the pair table before fitting (13C+α)
 
@@ -1700,3 +1772,60 @@ and the global stage, and gives the CONTROL the same local + global budget (so t
 new level).  Cost: minutes per move instead of seconds -> restrict to residual-run energies.  Test: tests/test_local_release_13n.py
 (13N 3/2- 3.5032 vs 5/2+ 3.5453).  First use: 13C+a/10-3-26_ex94_local.
 
+
+## 2026-10-05 — a released level that collapses never answers "is a BROAD level wanted?"; width floors and per-channel bounds
+The 13C+alpha Ex 9.4 test (10-3-26_ex94_local): all 11 J^pi seeded at Gamma ~180 keV collapsed to 11-183 eV levels in the released
+stage, each "marginal" -- so the question that motivated it (a ~400 keV backward-angle (a,n0) deficit) was never asked of a broad
+level.  A collapse verdict says only that the fit prefers no level to a narrow one.  To test a hypothesis about a WIDTH, hold it:
+`BoundsPolicy.width_floor_windows = [[e_min, e_max, gamma_min_ev, pair], ...]` keeps a level's (seed energy in the window) partial
+width in `pair` at Gamma_c >= gamma_min_ev in every stage -- a one-sided sign lock on the side the amplitude is on at x_ref (flipping a
+whole level is a symmetry, so one side suffices while its other channels are free), at most 0.95 of the cap.  Use a +-0.5 keV window
+on the candidate's seed energy so no other level is caught.  Test: tests/test_width_floor.py.  First use: 13C+a/10-5-26_ex94_floor.
+Also: `width_bound_windows` entries take an optional 4th element, a pair key, to bound ONE channel instead of every partial width
+(13C+a/10-5-26_mergedN4_n2bound: n2 widths of three levels the (n,n2) data reject).  The bound is PER CHANNEL: a level with two
+channels in that pair (two channel spins) keeps up to twice the bound -- halve it if the intent is a bound on the pair's total.
+Test: tests/test_width_bound.py (pair cases).
+Diagnosing an EXCESS (model above data) is not a level-scan job: a residual-driven scan adds strength where the model is low.  Do a
+frozen attribution instead -- zero each level's amplitudes in the offending pair, one at a time, and tabulate the per-dataset change
+(13C+a/10-5-26_n2_excess/attribute.py): the levels whose removal helps the complaining set least expensively are the ones to bound.
+   2026-10-05 later: the first floor run exposed a trap -- run_level_add's control switches the new level OFF by zeroing its widths,
+   and the floor clipped that zero back up to the floor (the control then carried a broad level; its start was 42k too high).  A
+   floor now skips an amplitude that is exactly 0.  General rule: any new bound that can push a parameter AWAY from zero must exempt
+   the "level off" state, and a control whose start objective differs from the incumbent's is broken -- check it before reading a delta.
+   2026-10-05 later still: any script that opens an rmfit evaluator (SingleSession, Sharded, Campaign) MUST keep its work under
+   `if __name__ == "__main__": main()`.  The engine starts its workers with multiprocessing's spawn method, which re-imports the
+   script in each child; module-level code then runs again in the child (a second `rmfit init`, a second session ...) and the
+   parent dies with "An attempt has been made to start a new process before the current process has finished its bootstrapping
+   phase" / EOFError.  Bitten twice today (probe.py, inject_copy.py in 13C+a/10-5-26_an0_only / _reconcile).
+   And: carrying a fit between models by writing it into <levels> is not safe -- AZURE2's read of a width seeded there
+   (150000 / 30000 in the gamma field) gave amplitudes worth 4.5M-198M of chi2 where the same seed set in the vector gave ~320k, and a
+   solution with amplitudes at the Wigner limit does not survive the Brune transform of bake().  Move vectors by ParamKey
+   (rmfit.keys.take + Campaign.verify_candidate, then `polish --candidate`), never through the file.
+
+## 2026-10-06 — data-only window fits are a screen, not a start vector
+DeBoer's "fit only the (a,n0) data and see if any solution fits it alone, then reconcile" was run on 13C+alpha Ex 9.4
+(13C+a/10-5-26_an0_only, 90 multi-starts on the ND 2021 angular distributions in a +-0.5 MeV window, 1 h on one node).  It worked as
+a SCREEN: the best solutions put a broad 1/2- (or 5/2-) at 9.40 and fixed exactly the backward-angle deficit; on all the data the
+1/2- was then ACCEPTED by a floored level add (+10,950) while the 5/2- was rejected.  It failed as a START: transplanting the window
+solution's vector into the full model (10-5-26_an0_reconcile; by key, since its Wigner-limit amplitudes do not survive the Brune
+transform) gave 8M / 1.5M frozen and +3k..+83k vs the control after 200 evaluations -- the window fit's rearranged neighbours and
+background are what the unseen data reject, and a polish cannot undo them in time.  Rule: window fit -> read off J^pi, energy, width
+-> `structure add --local-release` with a `width_floor_windows` floor on the found width, from the incumbent.  Also: with alpha
+scattering absent from a window, the alpha channel is unconstrained and amplitudes run to the Wigner limit -- fix or cap them, or
+read only the neutron-side result.
+
+## 2026-10-07 — a candidate is judged on the whole data set, not on the data set it was aimed at
+DeBoer: "Our goal is to fit the entirety of the data sets. If one of our tests happens to fix something else accidentally, that's great,
+we should consider it as well."  The width-floor test at Ex 10.16 (aimed at an (a,n0) deficit) produced a 1/2+ that mainly improves the
+n-total: +1,765 vs tau 536, classified "redistributes" (rho 0.54).  Rule: the verified global delta vs the same-budget control decides;
+rho and the top-dataset share are reported so the evaluator can see the split, and the ABSOLUTE losses matter (here BandH +191, ND 2021
++183) -- a rho > 0.5 built from small numbers is not a redistribution problem.  `classify`'s "redistributes" outcome stays as a flag,
+not a veto; the readme records the split and the evaluator decides.
+   2026-10-07 note: AZURE2 commit 692e7f8 (10-06) adds a `parametrization` first row to every .sav; rmfit's readers (init --sav,
+   preflight, bake companions) are name-based and unaffected -- but any ad-hoc positional reader is off by one from now on, and a
+   campaign directory can hold a mix of old and new .sav files.  Rule stands: never read a .sav by position.
+
+## 2026-10-07 — the Ex 9.4 recipe is now section 3c
+The six-step process that found the broad 1/2⁻ at 9.348 MeV (localise with a band map and pulls → width-floor level add with local
+release and controls over all J^π → cross-checks: widen-the-neighbour, data-only window screen, per-dataset/angle attribution → full free
+refit → propagate to models that freeze the block → next region) is written up as section 3c, with the traps met on the way.

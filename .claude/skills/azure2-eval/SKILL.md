@@ -83,11 +83,16 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   wrote. The engine is not *thread*-safe, so parallelism is one session per
   process, not per thread.
 - CLI mode does **not** read Runtime Options from the `.azr` — pass them as
-  flags every time (`--gsl-coul`, `--ignore-externals`, …). Note the Brune
-  parameterization is **on by default** and there is no flag to turn it off;
-  `--use-rmc` selects the mutually exclusive RMC formalism, and pyazr takes
-  `use_brune=False` directly. **RMC is restricted to (n,γ) reactions** — the
-  manual warns of unexpected errors if it is selected for anything else.
+  flags every time (`--gsl-coul`, `--ignore-externals`, …). **Three
+  parametrizations** (since 2026-10-06, dev 397668d): the Brune
+  parameterization is **on by default**; `--use-park` fits Park's observed
+  reduced width amplitudes; `--no-brune` selects the standard Lane-Thomas
+  parametrization with constant boundary conditions (until that date the
+  standard one had no CLI switch). pyazr: `use_brune=True` (default) /
+  `use_park=True` / `use_brune=False`. See "Park's parametrization" below
+  before choosing. `--use-rmc` selects the mutually exclusive RMC formalism
+  (it switches Brune and Park off). **RMC is restricted to (n,γ) reactions** —
+  the manual warns of unexpected errors if it is selected for anything else.
   **pyazr's own defaults can just as easily disagree with what a project's
   fits actually use** — `azure2()` defaults `use_long_wavelength=True`, but a
   project whose `run_crc_*` job scripts always pass `--no-long-wavelength`
@@ -244,7 +249,9 @@ worker gets its own, under either `spawn` or `fork`.
 - **`*_rwa` methods** (`calculate_rwa`, `calculate_chi2_rwa`,
   `calculate_sfactor_rwa`, `chi2_and_grad`, `residual_jacobian`) take the
   **reduced-width-amplitude** vector `m.params_rwa`. This is the natural fit
-  space and the only one with analytic derivatives. **Default to it.**
+  space and the only one with analytic derivatives. **Default to it.** Which
+  amplitudes it holds depends on the session's parametrization (`m.basis`:
+  1 Brune, 2 Park, 0 standard) — a vector from one is meaningless in another.
 - **plain methods** (`calculate`, `calculate_chi2`) take the transformed
   **physical** vector `m.params` (level energies in MeV, partial widths in eV).
 - `m.transform_rwa(x)` maps rwa → physical; it takes either the full free
@@ -255,6 +262,65 @@ worker gets its own, under either `spawn` or `fork`.
 Both vectors hold only the **free** parameters, in `.azr` order:
 `p.free_index` is the position in that vector, `p.index` the position among all
 parameters (`m.fixed_params`, `param.sav` lines).
+
+### Park's parametrization (`--use-park`, `use_park=True`)
+
+Park (PRC 104, 064612) is Brune's parametrization with every amplitude of a
+level rescaled, `gamma_Park = gamma_Brune * sqrt(J)`,
+`J = 1 - sum_c gamma_Park^2 dS_c/dE` at the level energy — the same collision
+matrix (the two agree to rounding on every test model; `tests/park_formalism`,
+`tests/pyazr/park_gradient_test.py`) and the same `.azr`, `parameters.out`
+and `chiSquared.out`. What changes is the fit space:
+
+- **A Park amplitude is that channel's observed width alone**,
+  `Gamma_c = 2 P_c gamma_c^2` (an ANC for a closed channel), with no factor
+  from the level's other channels. Fixing, bounding or putting a prior on a
+  width constrains one parameter; Wigner-limit bounds act on the observed
+  theta^2; the parameters of a level are less correlated (p+p test: parabolic
+  errors 0.4 % vs 1.3 % Brune on the same channel). Use it for fits whose
+  purpose is to constrain or report widths, for MCMC, and when exchanging
+  parameters with codes that quote observed amplitudes.
+- **J must stay positive.** Every real Brune amplitude has 0 < J <= 1, but a
+  Park parameter set with J <= 0 has no R-matrix meaning (its widths exceed
+  what the channel radii allow; one channel: Gamma < 2P/(dS/dE)). The engine
+  adds `sum (J/1e-3)^2` over J < 0 to the fit objective (reported as
+  `Total-Park-Chi-Squared` in `chiSquared.out`, non-zero only beyond the
+  wall), MCMC rejects such points, and a run ending there prints
+  `**WARNING: Park norm J = ... is not positive`. pyazr: `m.park_norms(x)`
+  (one J per level, `physical_levels()` order), `m.penalties(x)["park"]`.
+  Levels that saturate — the 13C+a 9-5-26 fit had seven with J down to 2e-7
+  and Brune amplitudes of 10^2-10^3 MeV^1/2 — show up in Park mode as J -> 0
+  instead of as runaway amplitudes.
+- **Parameter files carry the basis.** `param.par`/`param.sav`/`param.fit`
+  start with a `#parametrization <0|1|2>` line (0 standard, 1 Brune, 2 Park).
+  A file in the other alternative basis is converted on read
+  (`Converted the parameter file from Brune to Park (observed) amplitudes.`
+  in the log); an untagged file (written before 2026-10-06) read by a Park run
+  is taken as Brune's. Standard <-> Brune/Park cannot be converted level by
+  level — the run stops with an error. `save_fit` and rmfit's `bake` write the
+  tag; pyazr's readers skip it. The line is a `#` comment on purpose: files
+  written by dev 692e7f8 (10-06 22:06) up to the fix on 10-07 carried it as a
+  plain `parametrization` row, and every script that reads a `.sav` BY ROW
+  POSITION (`np.loadtxt(sav, usecols=(1,))[p.index]`) was then off by one
+  line with no error — the 8Be+a triple-alpha rate came out exactly 2x too
+  high because the grid was built at the ground state's energy instead of
+  the Hoyle state's. Files from that window: strip or `#`-prefix the first
+  line. Reading a `.sav` by NAME (first column) is immune to both.
+- **Analytic derivatives work** (`chi2_and_grad`, `residual_jacobian`,
+  `--use-lm`, the covariance band). Checking them against finite differences
+  resolves only ~1e-5 in Park mode, not Brune's 1e-7: the level matrix
+  contains dS/dE, which AZURE2 differentiates numerically, and a step in a
+  level energy picks up that noise. Not a defect; the test documents it.
+- **Same physics, so do not expect a different minimum**: the p+p test fitted
+  in both modes reaches chi2 99.6121 vs 99.6123 with widths equal to 2e-5.
+  Near J -> 0 the Park form loses precision by cancellation (17O: Brune vs
+  Park 8e-7 at the worst point, 1e-10 median).
+- GUI: "Use Park parametrization" under Runtime Options (greys out Brune,
+  which it implies, and RMC). `pyazr.transform.transform_out(..., park=True)`
+  for the physical widths of a Park vector. Not separately tested: Park-mode
+  MCMC and covariance bands (same code paths as Brune's).
+
+Background and the numerical comparisons: `R-matrix/Brune_vs_Park_Claude_eval/readme`.
 
 ### Data mode vs extrapolation mode
 
@@ -530,6 +596,17 @@ Rules that will bite you:
   not by `levelID`. `width_<N>_<c>` is channel `c` of the J-group's channel
   set (the same order as that level's channel lines). So adding a level shifts
   the names of every later level in J-group order, exactly like removing one.
+- **Read `.sav` files by parameter NAME, never by row position.** `param.par`/`.sav` now carry a parametrization
+  tag (Brune = 1, Park = 2, formal = 0). Between commits 692e7f8 (2026-10-06 22:06) and 8cdc841 (2026-10-07 03:39) it
+  was a bare first row `parametrization  1.0  0.0`, so a reader that indexes rows (`np.loadtxt(sav, usecols=(1,))[p.index]`)
+  was off by one, silently: in the 8Be+α rate work it took the ground state for the Hoyle state and the rate came out
+  exactly 2× high. Since 8cdc841 the tag is a comment line `#parametrization 1 0` (numpy skips it, AZURE2 old or new
+  parses it), but files written in that window still have the bare row, and a directory can hold old, bare-row and
+  tagged files side by side. AZURE2's own external-parameter reader and `rmfit` read by name and were never affected
+  (fits and χ² identical). A name-based reader that copes with all three:
+  `vals = {t[0]: float(t[1]) for t in (l.split() for l in open(sav)) if len(t) >= 2 and not t[0].startswith("#") and t[0] != "parametrization"}`
+  (worked example `8Be+a/10-6-26_rate_v5/v5_compat.py`). Related: since 1c3e7e3 (2026-10-05)
+  `pyazr.bands.best_fit_params` raises "has N parameters but the model has M" on an old-format `.sav` in data mode.
 - **Do not trust pyazr's own `m.parameters` names to equal `param.sav` names.**
   On 12C+alpha (2026-09) pyazr's `energy_39` was the 14.72 MeV level while
   `param.sav`'s `energy_39` was the 16.77 MeV one (pyazr's value was the `.azr`
@@ -1559,6 +1636,43 @@ definition at the current parameters (CLI mode 1 with the `.sav`) — the right
 definition usually wins before any refit; (2) plot two total measurements
 against each other across the threshold — two sets that track each other with
 no step where a channel opens measure the same (total) quantity.
+
+**Two segment lines that share a data file are NOT summed (2026-10-06,
+17O+a/10-6-26_claude).** Older archive files define a total as several plain
+lines naming the same data file under different exit pairs, with no tail
+tokens: 17O+a has `combined_an.dat` as n+20Ne -> n0, n1, alpha0 from
+`4-12-19_total` on, `Kunz_ntotal.dat`/`Bair_total.dat` as alpha+17O -> n0, n1
+in June-July 2025, and `Junghans_ntotal.dat` as n0, alpha0 in every directory
+from `7-6-25_Hammache_levels` to `7-17-25_subthreshold_state`. The builds those
+runs used summed such lines; their `chiSquared.out` shows it. That summing is
+not in this repository's history (`6c7032d`, 2025-06-30, sums only total
+capture; `git log --all -S` finds no data-file matching), so it came from a
+build whose source is not here (`<lastRun>` in those files points at
+`AZURE2_base` on AFS). Current builds read the lines as independent segments,
+so every line but the first compares ONE partial cross section with the total:
+on the 17O file (n,alpha0) alone against the neutron total was 5,131,470 of a
+5,948,710 chi2, where the stored output said 839,610. No warning is printed
+and the file loads cleanly.
+- The tell is in the old output, not the input: a `chiSquared.out` showing
+  exactly `0` for every line of a same-file group but the last, which carries
+  the whole chi2 (`Segment #1 Chi-Squared/N: 0`, or `Chi-Squared: 0 N: 725`
+  in the 2019-2020 format).
+- Find them (prints `file[ent>exit ...]` for every data file used on more than
+  one active line):
+  `awk '/<segmentsData>/{f=1;next}/<\/segmentsData>/{f=0}f&&$1==1{n=split($0,t," ");for(i=1;i<=n;i++)if(t[i]~/\.dat$/){c[t[i]]++;e[t[i]]=e[t[i]]" "$2">"$3}}END{for(k in c)if(c[k]>1)print k"["e[k]" ]"}' model.azr`
+  The same file under ONE exit (energy windows, or one line per angle) is
+  legitimate; the same file under DIFFERENT exits is this trap.
+- Fix: one composite line, the other(s) set inactive rather than deleted (a
+  deleted line renumbers the segment keys that `<targetInt>` and `param.sav`
+  use). An old-format line has no energy-shift tokens and the tail is only
+  parsed after them, so add `0 0 0` before the file name:
+  `... 1 0 0  0 0 0  data/Junghans_ntotal.dat 1 0 2 2 1 -999 2 3 -999 0`
+  (own exit n0 plus components alpha0 and n1). Check in two steps: first the
+  sum the old file defined, which must reproduce the old number (n0 + alpha0
+  gave 698,808 against 203.497 x 3434 = 698,809); then add the channels the old
+  definition left out (here n1, open above E_n = 1.716 MeV: 723,978).
+- A stored `output/` in such a directory cannot be reproduced from the unedited
+  `.azr` with a current build; say so before comparing chi2 across the edit.
 
 **A large, angle-dependent normalization is a symptom, not a result.** When a
 set needs norms of 1.7–1.9 that change with angle, look for a definition error
