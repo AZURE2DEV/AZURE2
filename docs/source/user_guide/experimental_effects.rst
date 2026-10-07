@@ -95,7 +95,9 @@ Target Integration
 ^^^^^^^^^^^^^^^^^^
 
 Check **Include Target Integration** to account for beam energy loss in the
-target.
+target. It does not apply to a THM segment (its energies are reconstructed
+x + A energies, not beam energies in a target), and AZURE2 refuses it there;
+use the Gaussian convolution for the THM resolution.
 
 **Active Density** (atoms/cm\ :sup:`2`)
    The areal density of the active target material (the nuclei producing the

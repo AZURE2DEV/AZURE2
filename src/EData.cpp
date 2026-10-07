@@ -729,6 +729,17 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
         for (int i = 1; i <= segmentsList.size(); i++) {
           if (this->IsSegmentKey(segmentsList[i - 1])) {
             ESegment *segment = this->GetSegmentFromKey(segmentsList[i - 1]);
+            if (segment && segment->IsTHM() && targetEffect.IsTargetIntegration()) {
+              // A THM energy is the x + A energy reconstructed from the
+              // three-body kinematics, not a beam energy slowing down in the
+              // target; its sub-points also go below the entrance threshold,
+              // where a stopping power is evaluated at E < 0 (NaN).
+              configure.outStream << "ERROR: <targetInt>: segment " << segmentsList[i - 1]
+                                  << " is a THM segment: target integration does not apply to it "
+                                     "(use the Gaussian convolution for the THM energy resolution)."
+                                  << std::endl;
+              return -1;
+            }
             if (segment) {
               this->AddTargetEffect(targetEffect);
               segment->SetTargetEffectNum(this->NumTargetEffects());

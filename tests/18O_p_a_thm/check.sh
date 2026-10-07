@@ -23,7 +23,8 @@
 # i.e. it encodes the verdict of the reproduction: the formal vertex with the
 # channel constant B_c reproduces the band, the per-level S_c(E_lambda) vertex
 # does not.  It also checks that the project's shared "1,2" <targetInt> line
-# folds both segments as one line per segment would.  Pure bash + awk.
+# folds both segments as one line per segment would, and that target
+# integration on a THM segment is refused.  Pure bash + awk.
 #
 #   ./tests/18O_p_a_thm/check.sh path/to/AZURE2
 
@@ -125,6 +126,22 @@ else
   else
     echo "  FAIL  vertex=perlevel is no longer clearly worse (peak rms $pk %, want >= 15 %)"; fail=1
   fi
+fi
+
+# Target integration does not apply to a THM segment: its energies are the
+# reconstructed x + A energies, and its sub-points go below the entrance
+# threshold, where the stopping power was evaluated at E < 0 (chi2 = nan).
+d="$WORK/thick"
+mkdir -p "$d/output" "$d/checks"
+cp -r "$HERE/data" "$d/"
+awk '/<targetInt>/ { print; print "1  \"1\"  20  0  0.0001  1  1e+21  \"a0/sqrt(x)\"  1  1e-14  0  0  0  \"\"  0  0  0.8  5  50"; T = 1; next }
+     /<\/targetInt>/ { T = 0 } !T { print }' "$HERE/18O_p_a_thm.azr" > "$d/run.azr"
+(cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log)
+if grep -q "segment 1 is a THM segment: target integration does not apply to it" "$d/log" &&
+   [ ! -f "$d/output/chiSquared.out" ]; then
+  echo "  ok    target integration on a THM segment refused"
+else
+  echo "  FAIL  target integration on a THM segment not refused"; tail -3 "$d/log" | sed 's/^/        /'; fail=1
 fi
 
 if [ "$fail" -eq 0 ]; then
