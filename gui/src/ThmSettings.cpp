@@ -77,48 +77,38 @@ bool ThmSettings::parseLine(const QString &rawLine, QString &key, QString &value
   QString v = line.mid(eq + 1);
   while (!v.isEmpty() && (v.startsWith(' ') || v.startsWith('\t'))) v.remove(0, 1);
 
-  if (k == "vertex") {
-    if (v == "real") v = "perlevel";
-    if (v != "onshell" && v != "constant" && v != "perlevel") return false;
-    s.vertex = v;
-  } else if (k == "kinematics") {
-    if (v != "lacognata" && v != "triple" && v != "kf3body" && v != "lambda32") return false;
-    s.kinematics = v;
-  } else if (k == "entranceL") {
-    if (v != "coherent" && v != "incoherent") return false;
-    s.entranceL = v;
-  } else if (k == "coulombIntegral") {
-    if (v == "1" || v == "true" || v == "on")
-      s.coulombIntegral = true;
-    else if (v == "0" || v == "false" || v == "off")
-      s.coulombIntegral = false;
-    else
-      return false;
-    v = s.coulombIntegral ? "1" : "0";
-  } else if (k.startsWith("spectatorEnergy")) {
-    double x;
-    if (!ThmText::readDouble(v, x, true) || !(x >= 0.0)) return false;
-    v = ThmText::number(x);
-    if (k == "spectatorEnergy") {
-      s.spectatorEnergy = x;
-    } else if (k.size() > 17 && k[15] == '[' && k.endsWith(']')) {
-      int pair;
-      if (!ThmText::readInt(k.mid(16, k.size() - 17), pair, false)) return false;
-      s.spectatorByPair[pair] = x;
-      k = QString("spectatorEnergy[%1]").arg(pair);
-    } else {
-      return false;
-    }
-  } else if (k.startsWith("weight")) {
-    bool test = k.startsWith("weightTest[");
-    int open = test ? 10 : 6;
-    int segment;
-    if (!(k.size() > open + 2 && k[open] == '[' && k.endsWith(']') && !v.isEmpty())) return false;
-    if (!ThmText::readInt(k.mid(open + 1, k.size() - open - 2), segment, true) || segment < 1) return false;
-    (test ? s.weightTest : s.weight)[segment] = v;
-    k = QString(test ? "weightTest[%1]" : "weight[%1]").arg(segment);
-  } else {
-    return false;
+  // The engine's rule for the global keys (ParseThmOptionLine), so that the
+  // GUI takes exactly the lines AZURE2 takes; the canonical text from it.
+  ThmOptionLine o;
+  if (!ParseThmOptionLine(k.toStdString(), v.toStdString(), o)) return false;
+  switch (o.kind) {
+    case ThmOptionLine::VERTEX:
+      v = QString::fromStdString(o.word);  // "real" reads as perlevel
+      s.vertex = v;
+      break;
+    case ThmOptionLine::KINEMATICS:
+      s.kinematics = v;
+      break;
+    case ThmOptionLine::ENTRANCE_L:
+      s.entranceL = v;
+      break;
+    case ThmOptionLine::COULOMB_INTEGRAL:
+      s.coulombIntegral = o.flag;
+      v = o.flag ? "1" : "0";
+      break;
+    case ThmOptionLine::SPECTATOR_ENERGY:
+      v = ThmText::number(o.energy);
+      if (k == "spectatorEnergy") {
+        s.spectatorEnergy = o.energy;
+      } else {
+        s.spectatorByPair[o.pairKey] = o.energy;
+        k = QString("spectatorEnergy[%1]").arg(o.pairKey);
+      }
+      break;
+    case ThmOptionLine::WEIGHT:
+      (o.test ? s.weightTest : s.weight)[o.segment] = v;
+      k = QString(o.test ? "weightTest[%1]" : "weight[%1]").arg(o.segment);
+      break;
   }
   key = k;
   value = v;

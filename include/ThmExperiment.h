@@ -154,6 +154,29 @@ struct ThmExperiment {
 };
 
 /*!
+ * One global key of the <thm> block (every line but experiment[...]), parsed
+ * by ParseThmOptionLine for the engine (Config::ReadThmBlock) and the GUI
+ * (ThmSettings::parseLine), so that both take exactly the same lines.
+ */
+struct ThmOptionLine {
+  enum Kind { VERTEX, KINEMATICS, ENTRANCE_L, COULOMB_INTEGRAL, SPECTATOR_ENERGY, WEIGHT };
+  Kind kind = VERTEX;
+  /// vertex (onshell | constant | perlevel; "real" reads as perlevel),
+  /// kinematics (lacognata | triple | kf3body | lambda32), entranceL
+  /// (coherent | incoherent): the canonical value.
+  std::string word;
+  bool flag = false;     ///< coulombIntegral (1/true/on or 0/false/off)
+  double energy = 0.0;   ///< spectatorEnergy (MeV, >= 0)
+  int pairKey = 0;       ///< the key of spectatorEnergy[<pair key>] (unused for spectatorEnergy=)
+  bool test = false;     ///< weightTest[k] (else weight[k])
+  int segment = 0;       ///< the k of weight[k] / weightTest[k] (>= 1)
+  std::string file;      ///< the weight file as written
+};
+/// Parses `key=value` (key and value trimmed) of a global <thm> key; false if
+/// the key is unknown or the value is not one AZURE2 takes.
+bool ParseThmOptionLine(const std::string &key, const std::string &value, ThmOptionLine &out);
+
+/*!
  * Parses one `experiment[<name>] key=value ...` line (comment already
  * stripped, trimmed) into `experiments`, merging with an earlier line of the
  * same name.  Returns "" or what is wrong.  Keys: segments (required),

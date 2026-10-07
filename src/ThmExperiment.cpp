@@ -387,6 +387,57 @@ std::string FormatThmCoherentBackground(const std::vector<ThmExperiment::Coheren
   return s;
 }
 
+bool ParseThmOptionLine(const std::string &key, const std::string &value, ThmOptionLine &out) {
+  out = ThmOptionLine();
+  if (key == "vertex") {
+    out.kind = ThmOptionLine::VERTEX;
+    out.word = value == "real" ? std::string("perlevel") : value;
+    return out.word == "onshell" || out.word == "constant" || out.word == "perlevel";
+  }
+  if (key == "kinematics") {
+    out.kind = ThmOptionLine::KINEMATICS;
+    out.word = value;
+    return value == "lacognata" || value == "triple" || value == "kf3body" || value == "lambda32";
+  }
+  if (key == "entranceL") {
+    out.kind = ThmOptionLine::ENTRANCE_L;
+    out.word = value;
+    return value == "coherent" || value == "incoherent";
+  }
+  if (key == "coulombIntegral") {
+    out.kind = ThmOptionLine::COULOMB_INTEGRAL;
+    if (value == "1" || value == "true" || value == "on") out.flag = true;
+    else if (value == "0" || value == "false" || value == "off") out.flag = false;
+    else return false;
+    return true;
+  }
+  if (key.compare(0, 15, "spectatorEnergy") == 0) {
+    out.kind = ThmOptionLine::SPECTATOR_ENERGY;
+    std::istringstream vs(value);
+    std::string rest;
+    if (!(vs >> out.energy) || !(out.energy >= 0.0) || (vs >> rest)) return false;  // "0.4junk" is not a number
+    if (key == "spectatorEnergy") return true;
+    if (!(key.size() > 17 && key[15] == '[' && key.back() == ']')) return false;
+    std::istringstream ks(key.substr(16, key.size() - 17));
+    return !!(ks >> out.pairKey);
+  }
+  if (key.compare(0, 6, "weight") == 0) {
+    // weight[<k>]=<file> (k-th <segmentsData> line) or weightTest[<k>]=<file>
+    // (k-th <segmentsTest> line).  Which segments exist, and whether they are
+    // THM, is checked once the data are read (EData::Fill / MakePoints).
+    out.kind = ThmOptionLine::WEIGHT;
+    out.test = key.compare(0, 11, "weightTest[") == 0;
+    const size_t open = out.test ? 10 : 6;
+    if (!(key.size() > open + 2 && key[open] == '[' && key.back() == ']' && !value.empty())) return false;
+    std::istringstream ks(key.substr(open + 1, key.size() - open - 2));
+    std::string rest;
+    if (!(ks >> out.segment) || out.segment < 1 || (ks >> rest)) return false;
+    out.file = value;
+    return true;
+  }
+  return false;
+}
+
 std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExperiment> &experiments) {
   const std::string head = "experiment[";
   size_t close = line.find(']');

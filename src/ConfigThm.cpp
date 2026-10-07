@@ -52,12 +52,6 @@ int Config::ReadThmBlock() {
                                        (value.size() > 1 && value[1] == ':' && std::isalpha((unsigned char)value[0])));
     return (absolute || dir.empty()) ? value : dir + value;
   };
-  auto flag = [](const std::string &v, bool &out) {
-    if (v == "1" || v == "true" || v == "on") out = true;
-    else if (v == "0" || v == "false" || v == "off") out = false;
-    else return false;
-    return true;
-  };
   while (!in.eof()) {
     getline(in, line);
     size_t hash = line.find('#');
@@ -131,62 +125,50 @@ int Config::ReadThmBlock() {
     std::string value = eq == std::string::npos ? std::string() : trimmed.substr(eq + 1);
     key.erase(key.find_last_not_of(" \t") + 1);
     value.erase(0, value.find_first_not_of(" \t"));
-    bool ok = eq != std::string::npos;
-    if (!ok) {
-    } else if (key == "vertex") {
-      if (value == "onshell") thm.vertex = ThmOptions::ON_SHELL;
-      else if (value == "constant") thm.vertex = ThmOptions::CONSTANT;
-      else if (value == "perlevel" || value == "real") thm.vertex = ThmOptions::PER_LEVEL;
-      else ok = false;
-    } else if (key == "kinematics") {
-      if (value == "lacognata") thm.kinematics = ThmOptions::LA_COGNATA;
-      else if (value == "triple") thm.kinematics = ThmOptions::TRIPLE;
-      else if (value == "kf3body") thm.kinematics = ThmOptions::KF_THREE_BODY;
-      else if (value == "lambda32") thm.kinematics = ThmOptions::LAMBDA32;
-      else ok = false;
-    } else if (key == "entranceL") {
-      if (value == "coherent") thm.coherentL = true;
-      else if (value == "incoherent") thm.coherentL = false;
-      else ok = false;
-    } else if (key == "coulombIntegral") {
-      ok = flag(value, thm.coulombIntegral);
-    } else if (key.compare(0, 15, "spectatorEnergy") == 0) {
-      std::istringstream vs(value);
-      double x;
-      std::string rest;
-      ok = !!(vs >> x) && x >= 0.0 && !(vs >> rest);  // "0.4junk" is not a number
-      if (ok && key == "spectatorEnergy") thm.spectatorEnergy = x;
-      else if (ok && key.size() > 17 && key[15] == '[' && key.back() == ']') {
-        std::istringstream ks(key.substr(16, key.size() - 17));
-        int pairKey;
-        ok = !!(ks >> pairKey);
-        if (ok) thm.spectatorEnergyByPair[pairKey] = x;
-      } else ok = false;
-    } else if (key.compare(0, 6, "weight") == 0) {
-      // weight[<k>]=<file> (k-th <segmentsData> line) or weightTest[<k>]=<file>
-      // (k-th <segmentsTest> line).  Which segments exist, and whether they are
-      // THM, is checked once the data are read (EData::Fill / MakePoints).
-      bool test = key.compare(0, 11, "weightTest[") == 0;
-      size_t open = test ? 10 : 6;
-      int segKey = 0;
-      ok = key.size() > open + 2 && key[open] == '[' && key.back() == ']' && !value.empty();
-      if (ok) {
-        std::istringstream ks(key.substr(open + 1, key.size() - open - 2));
-        std::string rest;
-        ok = !!(ks >> segKey) && segKey >= 1 && !(ks >> rest);
-      }
-      if (ok) {
-        std::shared_ptr<ThmWeightTable> table = std::make_shared<ThmWeightTable>();
-        table->name = value;
-        table->path = thmRelativePath(value);
-        std::string why = table->Read(table->path);
-        if (!why.empty()) {
-          outStream << "ERROR: <thm> " << key << ": " << why << std::endl;
-          return -1;
+    // The global keys: ParseThmOptionLine, as the GUI reads them.
+    ThmOptionLine o;
+    bool ok = eq != std::string::npos && ParseThmOptionLine(key, value, o);
+    if (ok) {
+      switch (o.kind) {
+        case ThmOptionLine::VERTEX:
+          thm.vertex = o.word == "onshell" ? ThmOptions::ON_SHELL
+                       : o.word == "constant" ? ThmOptions::CONSTANT
+                                              : ThmOptions::PER_LEVEL;
+          break;
+        case ThmOptionLine::KINEMATICS:
+          thm.kinematics = o.word == "lacognata" ? ThmOptions::LA_COGNATA
+                           : o.word == "triple"  ? ThmOptions::TRIPLE
+                           : o.word == "kf3body" ? ThmOptions::KF_THREE_BODY
+                                                 : ThmOptions::LAMBDA32;
+          break;
+        case ThmOptionLine::ENTRANCE_L:
+          thm.coherentL = o.word == "coherent";
+          break;
+        case ThmOptionLine::COULOMB_INTEGRAL:
+          thm.coulombIntegral = o.flag;
+          break;
+        case ThmOptionLine::SPECTATOR_ENERGY:
+          if (key == "spectatorEnergy")
+            thm.spectatorEnergy = o.energy;
+          else
+            thm.spectatorEnergyByPair[o.pairKey] = o.energy;
+          break;
+        case ThmOptionLine::WEIGHT: {
+          // Which segments exist, and whether they are THM, is checked once
+          // the data are read (EData::Fill / MakePoints).
+          std::shared_ptr<ThmWeightTable> table = std::make_shared<ThmWeightTable>();
+          table->name = o.file;
+          table->path = thmRelativePath(o.file);
+          std::string why = table->Read(table->path);
+          if (!why.empty()) {
+            outStream << "ERROR: <thm> " << key << ": " << why << std::endl;
+            return -1;
+          }
+          (o.test ? thm.weightByTestSegment : thm.weightBySegment)[o.segment] = table;
+          break;
         }
-        (test ? thm.weightByTestSegment : thm.weightBySegment)[segKey] = table;
       }
-    } else ok = false;
+    }
     if (!ok) {
       outStream << "ERROR: <thm> line not understood: '" << trimmed << "'" << std::endl;
       return -1;
