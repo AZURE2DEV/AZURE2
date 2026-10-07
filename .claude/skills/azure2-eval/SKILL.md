@@ -786,6 +786,55 @@ for k, t in enumerate(rows, 1):
 Whenever you hand over, plot from, or build a variant on a `.azr`, say which of
 the two homes the numbers came from.
 
+### Fitting a data set's energy scale (constant vs sqrt(E) shift) -- and seed it where the scan says
+
+When an excitation function fits well at low energy and drifts at high energy,
+the data's energy calibration is the first suspect, and the constant
+`energyShift` cannot describe it. In order (12C+alpha, Bashkin 15N(p,a1g)
+0 deg, 2026-10-05/07):
+
+1. **Post-hoc scan on the frozen curve first** -- minutes, no refit. Get the
+   model in the data's own observable on a fine grid: a `<segmentsTest>` line
+   for an ordinary segment, but for a UPOS / ratio / composite segment a copy
+   of the SEGMENT line pointed at a pseudo-data file (`E 0 1000 100` rows,
+   0.5 keV steps) run in mode 1, and check it against the real segment's
+   `AZUREOut` column 4 at the data energies (agreed to 1e-5). Then move the
+   data energies, E' = E + dE(E), re-optimizing the norm analytically for every
+   trial (1/n = sum(M y/s^2) / sum(M^2/s^2)), and fit the forms none / a /
+   a+b*sqrt(E) / a+c*E / a+b*sqrt(E)+c*E by Nelder-Mead from a grid of starts.
+   Script: `12C+a_onefile/8-6-26_claude_fit_fix/eshift_fit.py`. Bashkin, 201
+   points: 1953 / 1733 / 1102 / 1123 / 1075; dE = 0 at 1.2 MeV, -15 keV at
+   3 MeV, with the misfit concentrated where the narrow levels are.
+2. **Which form.** An analyzing magnet gives E = k B^2: an offset in the field
+   reading gives dE ~ sqrt(E), an error in k gives dE ~ E (the relativistic
+   term ~ E^2, ~8 keV at 4 MeV). Over a factor-3 energy range sqrt(E) and
+   linear are indistinguishable (1102 vs 1123) -- choose by the apparatus,
+   not by chi2. AZURE2 fits a and b (the `sqrtshift` block, ".azr file
+   anatomy" below); there is no linear term.
+3. **Free the segment's shifts, but SEED them at the scan optimum.** MIGRAD
+   started from zero shift sits in a local minimum next to zero: trial122 (a
+   and b freed from 0 with 20 keV / 0.02 MeV^1/2 widths) ended at a = -0.12
+   keV, b = -1e-4, segment chi2 1,956 -> 1,885, total -193; the same model
+   with the scan values seeded (a = +25.5 keV, b = -0.02335) evaluated to
+   segment 1,158 and total -795 before any fitting (trial123). The frozen
+   one-parameter scans show isolated spikes next to zero (a = -1.0 keV: 2713
+   between 1879 and 1746; b = -0.0005: 2408) -- data points crossing narrow
+   structure -- enough to stop a local optimizer whose initial step is 0.01 x
+   the penalty width (0.2 keV). Seed through the `.sav`
+   (`segment_K_energy_shift`, `segment_K_energy_shift_sqrt`; a varied shift
+   takes the `.sav` value) and verify by mode 1 that the seeded start
+   reproduces the scan's segment chi2 (1,158 vs 1,102 at its own norm) before
+   submitting. Every freed shift that starts at 0 carries this risk; the
+   usual "give it 20 keV and let it fit" is only safe when the scan says the
+   optimum is a keV or two away.
+4. Engine checks already done, so they need not be repeated: the shift is
+   applied correctly on a UPOS segment (constant -2 keV: engine 1,733.7 vs
+   frozen 1,733; the pair above); `tests/energy_shift_sqrt` recovers a known
+   (a, b) to 5e-7. Keep the penalty widths honest -- 20 keV / 0.02 MeV^1/2
+   cost ~1.5 at the Bashkin optimum; a width tight enough to bias the result
+   only hides the calibration problem. deBoer et al. 2021 report a residual
+   alpha- vs proton-induced calibration difference in the same data.
+
 ### What a snapshot still cannot carry
 
 `save_fit` verifies the `.azr` it writes, so a mismatched snapshot no longer

@@ -229,6 +229,11 @@ data treatment stays the evaluator's decision (section 5).  Worked example with 
 - uncertainties: statistical-only where the source gives a systematic one; an advertised error
   floor that does not hold; implausibly small or constant errors;
 - double counting: the same measurement under two names or in two overlapping windows;
+- energy scale: for a set with narrow structure, run a post-hoc shift scan on the frozen model
+  curve BEFORE any refit (none / constant / a+b*sqrt(E) / a+c*E, norm re-optimized; azure2-eval
+  SKILL, "Fitting a data set's energy scale"); a shift freed afterwards must be SEEDED at the scan
+  optimum -- MIGRAD from zero stalls in a local minimum next to zero (12C+alpha 2026-10-07: -193
+  from zero vs -795 seeded);
 - against the source: re-fetch the EXFOR entry (`pyazr.nds`, skill `nds-explorer`; fallback in
   `13C+a/10-2-26_n16O_exfor/readme`) and compare values, units and error columns row by row.
 
