@@ -31,6 +31,7 @@
 #include <iostream>
 #include <assert.h>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <mutex>
 
@@ -1193,6 +1194,11 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
   std::shared_ptr<ThmPsTable> psTable;
   bool psCoul = false;
   std::vector<ThmSpectatorWindow::Node> psNodes;
+  // The Coulomb terms C_l at the window nodes depend on l, the energy and the
+  // node only, not on the channel: one set per l for this point (several
+  // channels of the entrance pair share an l; ThmCoulombTerm's small memo
+  // cannot hold them once a window has more than 32 nodes).
+  std::map<int, std::vector<complex>> psCoulByL;
   if (this->IsTHM() && thm_window_) {
     // The accepted directions at this point's energy (or, for a folding
     // sub-point beyond the reach of the window, at the nearest data point).
@@ -1304,6 +1310,13 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
           // stay 0.
           if (thePair == entrancePair && thePair->GetPType() == 0) {
             psTable->slot.push_back(psTable->nSlots++);
+            std::vector<complex> *coulOfL = nullptr;
+            bool newL = false;
+            if (configure.thm.coulombIntegral && thePair->GetZ(1) * thePair->GetZ(2) != 0) {
+              auto at = psCoulByL.emplace(lValue, std::vector<complex>(psNodes.size(), complex(0.0, 0.0)));
+              coulOfL = &at.first->second;
+              newL = at.second;
+            }
             for (size_t k = 0; k < psNodes.size(); k++) {
               double jl = 0.0, rhoDjl = 0.0;
               complex coul(0.0, 0.0);
@@ -1313,9 +1326,13 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
                 WarnThmBelowB(configure, localEnergy, bindingE);
               } else {
                 ThmBesselParts(lValue, muMeV, localEnergy, bindingE, thePair->GetChRad(), jl, rhoDjl);
-                if (configure.thm.coulombIntegral && thePair->GetZ(1) * thePair->GetZ(2) != 0)
-                  coul = ThmCoulombTerm(thePair, lValue, localEnergy, ThmRho(muMeV, localEnergy, bindingE, 1.0),
-                                        !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+                if (coulOfL) {
+                  if (newL)
+                    (*coulOfL)[k] = ThmCoulombTerm(thePair, lValue, localEnergy,
+                                                   ThmRho(muMeV, localEnergy, bindingE, 1.0),
+                                                   !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+                  coul = (*coulOfL)[k];
+                }
               }
               psTable->jl.push_back(jl);
               psTable->rhodjl.push_back(rhoDjl);
