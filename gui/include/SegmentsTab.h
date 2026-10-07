@@ -30,6 +30,8 @@ class SegmentsTab : public QWidget {
   SegmentsTestModel *getSegmentsTestModel();
   SegmentsDataModel *getSegmentsDataModel();
   void reset();
+  /// THM on (AZURESetup::setThmEnabled): the segment dialogs show their THM tick.
+  void setThmEnabled(bool on) { thmEnabled_ = on; }
 
   /*! Moves data (test) segment line `from` to `to` (0-based rows) or removes
       line `row`, as the up/down and delete buttons do, and emits
@@ -121,6 +123,7 @@ class SegmentsTab : public QWidget {
   QPushButton *infoButton[5];
   static const std::vector<QString> infoText;
   QPointer<InfoDialog> infoDialog[5];
+  bool thmEnabled_ = false;
 };
 
 #endif

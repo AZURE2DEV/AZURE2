@@ -290,6 +290,7 @@ void SegmentsTab::deleteSegTestLine() {
 
 void SegmentsTab::addSegDataLine() {
   AddSegDataDialog aDialog;
+  aDialog.thmCheck->setVisible(thmEnabled_);
   if (aDialog.exec()) {
     SegmentsDataData newLine;
     newLine.isActive = 1;
@@ -417,6 +418,7 @@ void SegmentsTab::addSegDataLine(SegmentsDataData line, bool fromFile) {
 
 void SegmentsTab::addSegTestLine() {
   AddSegTestDialog aDialog;
+  aDialog.thmCheck->setVisible(thmEnabled_);
   if (aDialog.exec()) {
     SegmentsTestData newLine;
     newLine.isActive = 1;
@@ -578,6 +580,7 @@ void SegmentsTab::editSegDataLine() {
   QString delta = var.toString();
 
   AddSegDataDialog aDialog;
+  aDialog.thmCheck->setVisible(thmEnabled_);
   aDialog.setWindowTitle(tr("Edit a Segment From Data"));
   aDialog.entrancePairIndexSpin->setValue(entrancePairIndex);
   aDialog.exitPairIndexSpin->setValue(exitPairIndex);
@@ -819,6 +822,7 @@ void SegmentsTab::editSegTestLine() {
   QString componentsList = var.toString();
 
   AddSegTestDialog aDialog;
+  aDialog.thmCheck->setVisible(thmEnabled_);
   aDialog.setWindowTitle(tr("Edit a Segment Without Data"));
   aDialog.entrancePairIndexSpin->setValue(entrancePairIndex);
   aDialog.exitPairIndexSpin->setValue(exitPairIndex);

@@ -77,6 +77,8 @@ class FittingTab : public QWidget {
       background parameters of an experiment that is gone; a line added at
       the end gets its parameters. */
   void followSegments(const QVector<int> &newNumber);
+  /// THM on (AZURESetup::setThmEnabled): the THM Background tab is offered.
+  void setThmEnabled(bool on);
 
  protected:
   void showEvent(QShowEvent *event) override;
@@ -126,8 +128,9 @@ class FittingTab : public QWidget {
                             QList<bool> *fixed = nullptr) const;
   /// Every cbkg_* name of the project's experiments (coherentNames of each).
   QSet<QString> coherentParameterNames() const;
-  /// The THM Background tab, shown when it has rows.
+  /// The THM Background tab, shown when THM is on and it has rows.
   void showCoherentTab();
+  bool thmEnabled_ = false;
   AZURESetup *setup() const;
 
  public:

@@ -1,6 +1,6 @@
 // The THM part of the Fitting tab: the coherent-background parameters
 // (cbackground= of the <thm> experiments), on a tab of their own that is
-// shown only when there are some.
+// shown only while THM is on (AZURESetup::setThmEnabled) and there are some.
 
 #include <QSet>
 #include <QTabWidget>
@@ -15,9 +15,14 @@
 #include "ThmExperiment.h"
 #include "ThmSettings.h"
 
+void FittingTab::setThmEnabled(bool on) {
+  thmEnabled_ = on;
+  showCoherentTab();
+}
+
 void FittingTab::showCoherentTab() {
   const int cbkgTab = paramTabWidget->indexOf(cbkgParamsTable);
-  const bool shown = cbkgParamsTable->rowCount() > 0;
+  const bool shown = thmEnabled_ && cbkgParamsTable->rowCount() > 0;
   if (shown && cbkgTab < 0)
     paramTabWidget->addTab(cbkgParamsTable, "THM Background");
   else if (!shown && cbkgTab >= 0)

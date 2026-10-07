@@ -127,6 +127,35 @@ set_tests_properties(thm_block PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     TIMEOUT 120)
 
+# THM is opt-in (Configure > Runtime Options), as the nuclear potential is:
+# off for a classic project, on for one with THM content; switching it hides
+# or shows the THM controls and changes no byte of a save.
+add_executable(thm_opt_in_test thm_opt_in_test.cpp)
+set_target_properties(thm_opt_in_test PROPERTIES AUTOMOC OFF)
+target_include_directories(thm_opt_in_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(thm_opt_in_test PRIVATE
+    AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(thm_opt_in_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(thm_opt_in_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(thm_opt_in_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME thm_opt_in COMMAND thm_opt_in_test)
+# A modal dialog left open would wait forever offscreen; fail instead.
+set_tests_properties(thm_opt_in PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 120)
+
 # Moving, adding or deleting a data segment line: the <thm> experiments and
 # weights, the Experimental Effects lists and the segment_N rows of
 # <parameterSettings> follow the line; a save round-trips.

@@ -1,13 +1,56 @@
-// The THM part of the main window: the <thm> block, which the GUI keeps
-// verbatim unless the THM workspace changes it, and what follows a
+// The THM part of the main window: the opt-in, the <thm> block, which the
+// GUI keeps verbatim unless the THM workspace changes it, and what follows a
 // renumbering of the segment lines in it.
 
+#include <QAction>
 #include <QFile>
 #include <QMessageBox>
 #include <QTextStream>
 
 #include "AZURESetup.h"
+#include "FittingTab.h"
 #include "ThmWorkspace.h"
+
+void AZURESetup::setThmEnabled(bool on) {
+  thmEnabled_ = on;
+  thmWorkspaceAction->setVisible(on);
+  segmentsTab->setThmEnabled(on);
+  fittingTab->setThmEnabled(on);
+}
+
+QString AZURESetup::thmContent() const {
+  QStringList parts;
+  if (hasThmBlock) parts << tr("a <thm> block");
+  int segments = 0;
+  for (const SegmentsDataData &s : segmentsTab->getSegmentsDataModel()->getLines()) segments += s.isTHM ? 1 : 0;
+  for (const SegmentsTestData &s : segmentsTab->getSegmentsTestModel()->getLines()) segments += s.isTHM ? 1 : 0;
+  if (segments) parts << tr("%n THM segment(s)", "", segments);
+  bool binding = false, amplitude = false;
+  for (const PairsData &p : pairsTab->getPairsModel()->getPairs()) binding = binding || p.bindingEnergy != 0.0;
+  for (const ChannelsData &c : levelsTab->getChannelsModel()->getChannels())
+    amplitude = amplitude || (c.radType == QChar('P') && c.gammaIsRWA != 0);
+  if (binding) parts << tr("THM binding energies");
+  if (amplitude) parts << tr("widths entered as reduced width amplitudes");
+  return parts.join(", ");
+}
+
+void AZURESetup::applyThmOption(bool on) {
+  if (!on && thmEnabled_) {
+    const QString content = thmContent();
+    if (!content.isEmpty()) {
+      // Nothing is deleted: the content is saved as read and AZURE2 uses it.
+      QMessageBox box(QMessageBox::Warning, tr("Trojan Horse Method"),
+                      tr("This project has %1.\nThey stay in the project and AZURE2 still uses them; "
+                         "only their controls are hidden.")
+                          .arg(content),
+                      QMessageBox::Ok | QMessageBox::Cancel, this);
+      box.setTextFormat(Qt::PlainText);
+      box.setDefaultButton(QMessageBox::Cancel);
+      if (box.exec() != QMessageBox::Ok) return;
+    }
+  }
+  setThmEnabled(on);
+}
 
 bool AZURESetup::readThmContent(const QString &filename) {
   // The <thm> block may sit anywhere (the engine searches the whole file), so
@@ -15,7 +58,10 @@ bool AZURESetup::readThmContent(const QString &filename) {
   QFile file(filename);
   if (!file.open(QIODevice::ReadOnly)) return false;
   QTextStream in(&file);
-  return readThmBlock(in, thmBlockLines, hasThmBlock);
+  if (!readThmBlock(in, thmBlockLines, hasThmBlock)) return false;
+  // The rest of the project is read: THM is on if any of it is THM.
+  setThmEnabled(!thmContent().isEmpty());
+  return true;
 }
 
 bool AZURESetup::readThmBlock(QTextStream &in, QStringList &lines, bool &present) {
@@ -87,6 +133,7 @@ QStringList AZURESetup::followThmSegments(const QVector<int> &newNumber, bool te
 void AZURESetup::followTestSegments(const QVector<int> &newNumber) { followThmSegments(newNumber, true); }
 
 void AZURESetup::editThmWorkspace() {
+  if (!thmEnabled_) return;
   ThmSettings current;
   QString error;
   if (!thmSettings(current, &error)) {

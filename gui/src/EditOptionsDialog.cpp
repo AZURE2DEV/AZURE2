@@ -14,6 +14,8 @@ EditOptionsDialog::EditOptionsDialog(QWidget *parent) :
   noTransformCheck = new QCheckBox(tr("Do not perform parameter\ntransformations"));
   useHybridMethodCheck = new QCheckBox(tr("Use Hybrid Coulomb method"));
   useAdaptiveGridCheck = new QCheckBox(tr("Use adaptive integration grid\nfor target effects"));
+  useThmCheck = new QCheckBox(tr("Use Trojan Horse Method (THM)"));
+  useThmCheck->setToolTip(tr("Shows the THM Workspace and the THM controls of the tabs"));
   // noLongWavelengthCheck = new QCheckBox(tr("Do not use long wavelength\n"
   //					   "approximation for EL external capture"));
 
@@ -29,6 +31,7 @@ EditOptionsDialog::EditOptionsDialog(QWidget *parent) :
   optionsLayout->addWidget(noTransformCheck);
   optionsLayout->addWidget(useHybridMethodCheck);
   optionsLayout->addWidget(useAdaptiveGridCheck);
+  optionsLayout->addWidget(useThmCheck);
   // optionsLayout->addWidget(noLongWavelengthCheck);
   optionsBox->setLayout(optionsLayout);
 

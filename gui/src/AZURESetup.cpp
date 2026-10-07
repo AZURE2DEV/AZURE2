@@ -129,6 +129,7 @@ AZURESetup::AZURESetup() :
 
   createActions();
   createMenus();
+  setThmEnabled(false);
 
 
   setWindowTitle(tr("AZURE2 -- untitled"));
@@ -1126,6 +1127,7 @@ void AZURESetup::editOptions() {
     aDialog.useHybridMethodCheck->setChecked(false);
 
   aDialog.useAdaptiveGridCheck->setChecked(GetConfig().useAdaptiveGrid);
+  aDialog.useThmCheck->setChecked(thmEnabled());
 
   // if(!(GetConfig().paramMask & Config::USE_LONGWAVELENGTH_APPROX)) aDialog.noLongWavelengthCheck->setChecked(true);
   // else aDialog.noLongWavelengthCheck->setChecked(false);
@@ -1171,6 +1173,7 @@ void AZURESetup::editOptions() {
 
     // Update tab visibility based on hybrid method setting
     updateNuclearPotentialTabVisibility();
+    applyThmOption(aDialog.useThmCheck->isChecked());
 
     // if(aDialog.noLongWavelengthCheck->isChecked()) GetConfig().paramMask &= ~Config::USE_LONGWAVELENGTH_APPROX;
     // else GetConfig().paramMask |= Config::USE_LONGWAVELENGTH_APPROX;
@@ -1557,6 +1560,7 @@ void AZURESetup::reset() {
 #endif
   hasThmBlock = false;
   thmBlockLines.clear();
+  setThmEnabled(false);
   setWindowTitle(tr("AZURE2 -- untitled"));
   GetConfig().configfile = "";
 }

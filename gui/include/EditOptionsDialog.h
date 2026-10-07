@@ -28,6 +28,7 @@ class EditOptionsDialog : public QDialog {
   QCheckBox *useRMCCheck;
   QCheckBox *noTransformCheck;
   QCheckBox *useHybridMethodCheck;
+  QCheckBox *useThmCheck;
   QCheckBox *useAdaptiveGridCheck;
   // QCheckBox* noLongWavelengthCheck;
 

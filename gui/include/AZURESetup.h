@@ -115,6 +115,16 @@ class AZURESetup : public QMainWindow {
       settings that are all default remove the block, comments included. */
   void setThmSettings(const ThmSettings &settings);
   bool hasThmOptionsBlock() const { return hasThmBlock; }
+  /*! THM is opt-in, as the nuclear potential is: off for a new project, on
+      when an opened one has THM content (thmContent), switched with "Use
+      Trojan Horse Method (THM)" in Configure > Runtime Options.  Off hides the
+      THM Workspace entry and the THM controls of the classic tabs; the content
+      itself is kept, saved as read and used by AZURE2.  Not stored in the
+      file: a project with THM content opens with THM on. */
+  bool thmEnabled() const { return thmEnabled_; }
+  void setThmEnabled(bool on);
+  /// The project's THM content, e.g. "a <thm> block, 2 THM segments" ("" if none).
+  QString thmContent() const;
   const QStringList &thmOptionsLines() const { return thmBlockLines; }
   /// Directory of the project file, against which relative paths resolve.
   QString projectDirectory();
@@ -177,6 +187,9 @@ class AZURESetup : public QMainWindow {
   // only when the file had one (see readThmBlock).
   bool hasThmBlock = false;
   QStringList thmBlockLines;
+  bool thmEnabled_ = false;
+  /// The Runtime Options' THM switch: turning it off asks first when the project has THM content.
+  void applyThmOption(bool on);
 
   QAction *aboutAction;
   QAction *resetAction;
