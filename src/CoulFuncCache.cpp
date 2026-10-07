@@ -1,6 +1,7 @@
 #include "CoulFuncCache.h"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -28,10 +29,25 @@ CoulFuncCache *g_coulFuncCache = nullptr;
  *
  * Neither guard changes any computed value: a miss just recomputes the Coulomb
  * functions exactly as an uncached build would.
+ *
+ * A key given up on keeps its values in an exact-energy table (hash of the
+ * bits of E), whose hit is the value recomputing gives, bit for bit: within
+ * one run nothing changes (those energies did not recur), and a later
+ * session in the same process -- pyazr, the GUI's THM diagnostics, a
+ * save_fit check -- finds them (the 12C+12C THM example: a second session
+ * opens in 2.6 s instead of 24.5 s, the first in 45.5 s instead of 49 s, as
+ * energies do recur after the shutoff).  The table is capped like the memo and dropped
+ * for good if it fills without paying off (the varying-shift case).
  */
 static const std::size_t kMaxEntriesPerKey = 32768;
 static const long kMinQueriesBeforeJudging = 4096;
 static const double kMinUsefulHitRate = 0.05;
+
+static std::uint64_t EnergyBits(double energy) {
+  std::uint64_t bits;
+  std::memcpy(&bits, &energy, sizeof(bits));
+  return bits;
+}
 
 CoulFuncCache::CoulFuncCache() {
 #ifdef _OPENMP
@@ -83,7 +99,16 @@ void CoulFuncCache::AddCoulWaves(const CoulFuncKey &key, double energy, const Co
   // Get or create the data structure for this key
   CoulFuncData &data = localCache()[key];
 
-  if (data.disabled) return;
+  if (data.dead) return;
+  if (data.disabled) {
+    if (data.exact.size() < kMaxEntriesPerKey) {
+      data.exact.emplace(EnergyBits(energy), waves);
+    } else if (double(data.exactHits) < kMinUsefulHitRate * double(data.exactQueries)) {
+      data.dead = true;
+      std::unordered_map<std::uint64_t, CoulWaves>().swap(data.exact);
+    }
+    return;
+  }
 
   // Give up on a key whose energies do not recur, and release what it holds.
   // Judged only after enough queries to be past the initial fill, where misses
@@ -95,6 +120,7 @@ void CoulFuncCache::AddCoulWaves(const CoulFuncKey &key, double energy, const Co
     std::vector<CoulWaves>().swap(data.coulwaves);
     data.minEnergy = 0.0;
     data.maxEnergy = 0.0;
+    data.exact.emplace(EnergyBits(energy), waves);
     return;
   }
 
@@ -138,7 +164,15 @@ bool CoulFuncCache::TryGetCoulWaves(const CoulFuncKey &key, double energy, CoulW
   if (it == cache.end()) return false;
 
   CoulFuncData &data = it->second;
-  if (data.disabled) return false;
+  if (data.disabled) {
+    if (data.dead) return false;
+    data.exactQueries++;
+    auto e = data.exact.find(EnergyBits(energy));
+    if (e == data.exact.end()) return false;
+    out = e->second;
+    data.exactHits++;
+    return true;
+  }
 
   data.queries++;
 
@@ -185,9 +219,9 @@ CoulFuncCache::Stats CoulFuncCache::GetStats() const {
   for (const auto &cache : threadCaches_) {
     s.keys += static_cast<long>(cache.size());
     for (const auto &kv : cache) {
-      s.queries += kv.second.queries;
-      s.hits += kv.second.hits;
-      s.entries += static_cast<long>(kv.second.energies.size());
+      s.queries += kv.second.queries + kv.second.exactQueries;
+      s.hits += kv.second.hits + kv.second.exactHits;
+      s.entries += static_cast<long>(kv.second.energies.size() + kv.second.exact.size());
       if (kv.second.disabled) ++s.disabledKeys;
     }
   }

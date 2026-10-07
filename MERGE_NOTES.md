@@ -59,6 +59,25 @@ cache guard.
 - pyazr: add_extrapolation(frame="cm") (7a35b9a; "lab" is the old default), tabulate() (7bbab4e), composite segments (f8bcd5e), transform_all_rwa(include_fixed=) (8def2ab), modelavg and scripts/thm_model_average.py (88fa280, 884571a).
 - New classic test: tests/15N_p_a (0ee7ee7, pin 4601.32).
 
+## D. Speed and structure (values unchanged)
+
+- this branch, October 2026: CoulFuncCache keeps the values of a key whose
+  near-energy memo it gives up (4096 queries, under 5 % hits) in an
+  exact-energy table (bits of E, capped at 32768, dropped if it fills without
+  hits).  An exact hit is what recomputing gives, so every output is byte
+  for byte the same; a second session in one process (pyazr, the GUI's THM
+  diagnostics, a save_fit check) finds them (12C+12C THM example: 24.5 s ->
+  2.6 s; the first session 49 -> 45.5 s, as such energies do recur).  Peak
+  RSS +13 MB there.  The near-energy memo itself (energies within 1e-12 MeV
+  taken as equal) is dev's and unchanged; it makes a warm-memo session differ
+  from a fresh process in the last digits (6Li_d: 682.1465248015013 against
+  682.1465248016414), on dev as here.
+- this branch, October 2026: the classic files lost their THM blocks where
+  they could move unchanged: EData.cpp -> EDataThm.cpp (second pass),
+  Config.cpp -> ConfigThm.cpp and Config.h -> ThmOptions.h (Config::ThmOptions
+  is a typedef of ::ThmOptions).  Config.cpp/Config.h now differ from dev by
+  6 and 10 lines.
+
 ## To check at the merge
 
 - 79358bb: whether dev ever recomputes a classic sub-point twice (energy-shifted folded segments); if not, the row moves to "no effect".

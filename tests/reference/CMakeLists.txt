@@ -34,6 +34,14 @@ target_link_libraries(gsl_quiet_test PRIVATE AZURE2Core)
 add_test(NAME gsl_quiet COMMAND gsl_quiet_test)
 set_tests_properties(gsl_quiet PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=4")
 
+# CoulFuncCache: a memo key given up on keeps exact energies only, and is
+# dropped when that fills without hits.
+add_executable(coul_func_cache_test coul_func_cache_test.cpp)
+target_link_libraries(coul_func_cache_test PRIVATE AZURE2Core)
+
+add_test(NAME coul_func_cache COMMAND coul_func_cache_test)
+set_tests_properties(coul_func_cache PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
 # Reference calculation for the THM distortion factor (ThmDistortion): the
 # zero-range DWBA amplitude against mpmath / scipy values from
 # thm_distortion_reference.py, its plane-wave limit against the closed form.

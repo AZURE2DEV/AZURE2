@@ -1,7 +1,9 @@
 #ifndef COULFUNCCACHE_H
 #define COULFUNCCACHE_H
 
+#include <cstdint>
 #include <map>
+#include <unordered_map>
 #include <vector>
 #include <math.h>
 #include "CoulFunc.h"
@@ -60,6 +62,16 @@ class CoulFuncCache {
     long queries = 0;
     long hits = 0;
     bool disabled = false;
+
+    // Once disabled, the values are still kept, but looked up only at the
+    // bit-identical energy (an exact hit returns what recomputing would): a
+    // later session in the same process (pyazr, the GUI's THM diagnostics, a
+    // save_fit check) finds them again.  Given up for good (dead) if this too
+    // fills without paying off.  See AddCoulWaves().
+    std::unordered_map<std::uint64_t, CoulWaves> exact;
+    long exactQueries = 0;
+    long exactHits = 0;
+    bool dead = false;
   };
 
  private:
@@ -105,7 +117,7 @@ class CoulFuncCache {
     long hits = 0;          ///< lookups that found an exact stored energy
     long entries = 0;       ///< memoized (key, energy) pairs currently held
     long keys = 0;          ///< distinct (Z1,Z2,mu,l,a) keys
-    long disabledKeys = 0;  ///< keys that gave up and released their memo
+    long disabledKeys = 0;  ///< keys that gave up their near-energy memo (exact energies only since)
     int threads = 0;        ///< per-thread caches in existence
   };
   Stats GetStats() const;

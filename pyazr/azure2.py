@@ -1693,7 +1693,10 @@ class azure2:
         ``keys``, ``disabled_keys`` and ``threads``.  ``disabled_keys`` counts
         the keys that gave up on their memo because too few of their entries
         were being asked for twice -- which is what happens when a free energy
-        shift moves every point energy at every iteration.
+        shift moves every point energy at every iteration.  Such a key keeps
+        its values for the exact same energy only (counted in the totals), so
+        a later session in this process finds them; it drops even those if
+        they fill up without being asked for again.
         """
         resp = np.asarray(self.sess.cache_stats(), dtype=float)
         q, h = float(resp[0]), float(resp[1])

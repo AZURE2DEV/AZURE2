@@ -526,6 +526,12 @@ calculation, which is why the Coulomb functions they need are memoized.
 82% to 91%. ``disabled_keys`` counts the memos that have given up because too
 few of their entries were being asked for twice --- which is what a *varying*
 energy shift produces, since it moves every point energy at every iteration.
+Such a key keeps its values for the bit-identical energy only (a hit is what
+recomputing gives), so a second session in the same process finds them: the
+12C+12C THM example opens in 2.6 s instead of 24.5 s the second time (49 s
+the first), and the GUI's THM diagnostics recompute it in 1-3 s instead of
+37 s.  Those are dropped too if they fill up (32 768 per key) without being
+asked for again.
 
 Model averaging
 ---------------
