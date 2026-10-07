@@ -6,6 +6,7 @@
 #include "ChannelFunc.h"
 #include "Config.h"
 #include "JGroup.h"
+#include "NuclearPotentialManager.h"
 #include "PPair.h"
 #include "ThmExperiment.h"
 
@@ -67,23 +68,37 @@ double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config
   const double energy = level->GetFitE();
 
   // Per-thread memo: within one evaluation every point asks for the same few
-  // levels.  The key is everything the width depends on.
+  // levels.  The key is everything the width depends on, by value: the memo
+  // outlives a CNuc (thread_local), and a later session can get the same
+  // level address back (the S_c memo of THMMatrixFunc was keyed by address
+  // once and leaked across sessions, 49b6c30).
   struct Entry {
-    const ALevel *level;
-    double e;
-    std::vector<double> key;  // gammas, then the channel radii
+    std::vector<double> key;
     double width;
   };
   static const int kMemo = 64;
   thread_local std::vector<Entry> memo;
   thread_local int next = 0;
-  std::vector<double> key;
-  key.reserve(2 * numChannels);
-  for (int ch = 1; ch <= numChannels; ch++) key.push_back(level->GetFitGamma(ch));
-  for (int ch = 1; ch <= numChannels; ch++)
-    key.push_back(compound->GetPair(jgroup->GetChannel(ch)->GetPairNum())->GetChRad());
+  thread_local std::vector<double> key;  // reused: no allocation per call
+  key.clear();
+  key.push_back(useGSL);
+  key.push_back(rmc);
+  key.push_back(jgroup->GetJ());
+  key.push_back(jgroup->GetPi());
+  key.push_back(energy);
+  const bool hybridOn = g_config ? g_config->useHybridMethod : false;
+  for (int ch = 1; ch <= numChannels; ch++) {
+    AChannel *channel = jgroup->GetChannel(ch);
+    PPair *pair = compound->GetPair(channel->GetPairNum());
+    const bool hybrid = hybridOn && NuclearPotentialManager::instance().isPairEnabled(pair->GetPairKey());
+    const double values[] = {level->GetFitGamma(ch), (double)channel->GetL(), (double)channel->GetRadType(),
+                             (double)pair->GetZ(1), (double)pair->GetZ(2), pair->GetRedMass(), pair->GetChRad(),
+                             pair->GetSepE(), pair->GetExE(), pair->GetJ(2), (double)pair->GetPi(2),
+                             hybrid ? (double)NuclearPotentialManager::instance().tagFor(pair->GetPairKey()) : 0.0};
+    key.insert(key.end(), values, values + sizeof(values) / sizeof(values[0]));
+  }
   for (const Entry &m : memo)
-    if (m.level == level && m.e == energy && m.key == key) return m.width;
+    if (m.key == key) return m.width;
 
   double particle = 0.0, radiative = 0.0, normSum = 0.0;
   for (int ch = 1; ch <= numChannels; ch++) {
@@ -111,9 +126,9 @@ double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config
   if (!(1.0 + normSum > 0.0) || !std::isfinite(width)) width = particle + radiative;
 
   if ((int)memo.size() < kMemo) {
-    memo.push_back(Entry{level, energy, key, width});
+    memo.push_back(Entry{key, width});
   } else {
-    memo[next] = Entry{level, energy, key, width};
+    memo[next] = Entry{key, width};
     next = (next + 1) % kMemo;
   }
   return width;

@@ -21,6 +21,8 @@
 #include "TargetEffect.h"
 #include "Straggling.h"
 #include "IntegratedFermiFunc.h"
+#include "NuclearPotentialManager.h"
+#include "AChannel.h"
 #include <atomic>
 #include <cstdint>
 #include <iostream>
@@ -2014,17 +2016,35 @@ everything it depends on.
 */
 const std::vector<AdaptiveIntegrationGrid::ResonanceInfo> &
 CurrentGridAnchors(CNuc *compound, int entranceKey, bool formal, double frameShift) {
+  // By value, not by the compound's address: the memo is thread_local and
+  // outlives a CNuc, and a later session can get the same address back (the
+  // S_c memo of THMMatrixFunc leaked across sessions that way, 49b6c30).
   thread_local std::vector<double> key;
+  thread_local std::vector<double> newKey;
   thread_local std::vector<AdaptiveIntegrationGrid::ResonanceInfo> anchors;
-  std::vector<double> newKey;
-  newKey.push_back((double)(uintptr_t)compound);
+  newKey.clear();
   newKey.push_back(entranceKey);
   newKey.push_back(formal ? 1. : 0.);
   newKey.push_back(frameShift);
-  for (int p = 1; p <= compound->NumPairs(); p++) newKey.push_back(compound->GetPair(p)->GetChRad());
+  const bool hybridOn = g_config ? g_config->useHybridMethod : false;
+  for (int p = 1; p <= compound->NumPairs(); p++) {
+    PPair *pair = compound->GetPair(p);
+    const bool hybrid = hybridOn && NuclearPotentialManager::instance().isPairEnabled(pair->GetPairKey());
+    const double values[] = {(double)pair->GetPairKey(), (double)pair->GetPType(), (double)pair->GetZ(1),
+                             (double)pair->GetZ(2), pair->GetRedMass(), pair->GetSepE(), pair->GetExE(),
+                             pair->GetChRad(),
+                             hybrid ? (double)NuclearPotentialManager::instance().tagFor(pair->GetPairKey()) : 0.0};
+    newKey.insert(newKey.end(), values, values + sizeof(values) / sizeof(values[0]));
+  }
   for (int j = 1; j <= compound->NumJGroups(); j++) {
     JGroup *jgroup = compound->GetJGroup(j);
     newKey.push_back(jgroup->IsInRMatrix() ? 1. : 0.);
+    for (int ch = 1; ch <= jgroup->NumChannels(); ch++) {
+      AChannel *channel = jgroup->GetChannel(ch);
+      newKey.push_back(channel->GetPairNum());
+      newKey.push_back(channel->GetL());
+      newKey.push_back(channel->GetRadType());
+    }
     for (int l = 1; l <= jgroup->NumLevels(); l++) {
       ALevel *level = jgroup->GetLevel(l);
       newKey.push_back(level->IsInRMatrix() ? 1. : 0.);
@@ -2039,7 +2059,7 @@ CurrentGridAnchors(CNuc *compound, int entranceKey, bool formal, double frameShi
     config.formalParameters = formal;
     AdaptiveIntegrationGrid generator(config);
     anchors = generator.Anchors(compound, frameShift);
-    key.swap(newKey);
+    key = newKey;
   }
   return anchors;
 }
