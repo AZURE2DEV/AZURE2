@@ -73,6 +73,7 @@
 #include "ChannelDetails.h"
 #include "ChannelsModel.h"
 #include "Config.h"
+#include "NuclearPotentialManager.h"
 #include "ThmChannelsPage.h"
 #include "ThmExperiment.h"
 #include "ThmExperimentsPage.h"
@@ -1108,6 +1109,30 @@ int main(int argc, char** argv) {
     ThmWorkspace ws(&w, s);
     ThmDiagnosticsPage* d = ws.diagnosticsPage;
     ok("diagnostics: computed", d->computeNow(), d->result().error);
+    {
+      // The computation runs on a worker thread in the GUI: it must not
+      // write process-wide state the GUI thread reads -- the nuclear
+      // potentials (the engine re-read them from the copy's <potential>
+      // block, resetting the singleton: a new tag for every pair) or the
+      // working directory.
+      NuclearPotentialManager& potentials = NuclearPotentialManager::instance();
+      const bool wasOn = potentials.getDefaultEnabled();
+      potentials.setDefaultEnabled(true);
+      const long tagBefore = potentials.tagFor(1);
+      const QString cwdBefore = QDir::currentPath();
+      ThmDiagnosticsRequest q;
+      QString err;
+      ws.projectSnapshot(q.projectText, &err);
+      q.projectDir = work.path();
+      q.paramMask = w.GetConfig().paramMask;
+      q.segment = 1;
+      const ThmDiagnosticsResult hybrid = ComputeThmDiagnostics(q);
+      ok("diagnostics: the nuclear potentials and the working directory left alone",
+         hybrid.error.isEmpty() && tagBefore != 0 && potentials.tagFor(1) == tagBefore && QDir::currentPath() == cwdBefore,
+         QString("%1 tag %2 -> %3, %4 -> %5").arg(hybrid.error).arg(tagBefore).arg(potentials.tagFor(1))
+             .arg(cwdBefore, QDir::currentPath()));
+      potentials.setDefaultEnabled(wasOn);
+    }
     const ThmDiagnosticsResult& r = d->result();
     auto finite = [](const QVector<double>& v, bool positive) {
       if(v.isEmpty()) return false;

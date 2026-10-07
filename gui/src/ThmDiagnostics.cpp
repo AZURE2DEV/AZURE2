@@ -23,6 +23,7 @@
 #include "ESegment.h"
 #include "EPoint.h"
 #include "JGroup.h"
+#include "NuclearPotentialManager.h"
 #include "PPair.h"
 #include "ThmExperiment.h"
 #include "ThmFunc.h"
@@ -113,6 +114,31 @@ struct Engine {
   std::unique_ptr<AZUREAPI> api;
   Engine() : config(log) {}
   QString start(const QString &file, const QString &outDir, unsigned int mask, bool withData) {
+    // The copy's <potential> block is the GUI's own NuclearPotentialManager
+    // written out (AZURESetup::writeProject).  Read back, Config::
+    // ReadPotentialBlock would reset and refill that process-wide singleton
+    // from this worker thread while the GUI thread may read it (the
+    // workspace's other pages stay live during a computation).  So the block
+    // is taken out, its useAdaptiveGrid kept, and the engine uses the
+    // manager as it is -- the same settings, never written here.
+    bool adaptiveGrid = true;
+    {
+      QFile f(file);
+      if (!f.open(QIODevice::ReadOnly)) return QObject::tr("Cannot read %1.").arg(file);
+      QString text = QString::fromUtf8(f.readAll());
+      f.close();
+      QRegularExpression block("(^|\\n)[ \\t]*<potential>[^\\n]*\\n(.*?\\n)?[ \\t]*</potential>[^\\n]*(\\n|$)",
+                               QRegularExpression::DotMatchesEverythingOption);
+      QRegularExpressionMatch m = block.match(text);
+      if (m.hasMatch()) {
+        QRegularExpressionMatch grid = QRegularExpression("(^|\\n)[ \\t]*useAdaptiveGrid[ \\t]*=[ \\t]*(\\d+)").match(m.captured(0));
+        if (grid.hasMatch()) adaptiveGrid = grid.captured(2).toInt() == 1;
+        text.replace(m.capturedStart(), m.capturedLength(), m.captured(1));
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return QObject::tr("Cannot write %1.").arg(file);
+        f.write(text.toUtf8());
+        f.close();
+      }
+    }
     config.configfile = QDir::toNativeSeparators(file).toStdString();
     config.paramMask = mask;
     config.paramMask &= ~(Config::PERFORM_FIT | Config::PERFORM_ERROR_ANALYSIS | Config::CALCULATE_REACTION_RATE |
@@ -123,6 +149,9 @@ struct Engine {
     const int status = config.ReadConfigFile();
     if (status == -1) return QObject::tr("AZURE2 could not read the copy of the project.");
     if (status < 0) return QObject::tr("AZURE2 refuses the project:\n%1").arg(lastLines(log.str()));
+    // What ReadPotentialBlock sets from the block.
+    config.useAdaptiveGrid = adaptiveGrid;
+    config.useHybridMethod = NuclearPotentialManager::instance().isAnyEnabled();
     // Nothing of this run goes to the project's output or checks directories.
     config.outputdir = QDir::toNativeSeparators(outDir).toStdString() + "/";
     config.checkdir = config.outputdir;
@@ -247,12 +276,19 @@ ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request)
   }
   // The engine reads data files relative to the working directory, as a run
   // from the main window does (the project's directory).
+  // The main window keeps the working directory there (AZURESetup::readFile
+  // and writeFile), so this is normally a no-op: the process-wide directory
+  // is only touched if it is somewhere else.
   const QString oldCwd = QDir::currentPath();
-  QDir::setCurrent(request.projectDir);
+  const bool moved = QDir(oldCwd) != QDir(request.projectDir);
+  if (moved) QDir::setCurrent(request.projectDir);
   struct RestoreCwd {
     QString dir;
-    ~RestoreCwd() { QDir::setCurrent(dir); }
-  } restore{oldCwd};
+    bool moved;
+    ~RestoreCwd() {
+      if (moved) QDir::setCurrent(dir);
+    }
+  } restore{oldCwd, moved};
 
   // 1. The project as it is, with data: the segment's points, the compound
   //    nucleus at the current parameters, the line shape and the weight.
