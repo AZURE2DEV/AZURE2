@@ -67,6 +67,9 @@ using:
 - Ranges: ``3-9``
 - Combinations: ``3,6,7-14``
 
+The list follows the data segments when they are moved or deleted in the
+**Segments** tab (see :doc:`segments`).
+
 Integration Points
 ^^^^^^^^^^^^^^^^^^^
 

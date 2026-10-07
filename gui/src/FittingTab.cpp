@@ -22,6 +22,7 @@
 
 #include "FittingTab.h"
 #include <QSignalBlocker>
+#include <QSet>
 #include "RoundTripNumber.h"
 #include "InfoDialog.h"
 #include "LevelsTab.h"
@@ -297,6 +298,23 @@ QList<int> FittingTab::engineLevelOrder(const QList<int> &fileOrder) {
   return order;
 }
 
+FittingParameter FittingTab::segmentParameter(int i, const SegmentsDataData &segment, bool norm) {
+  FittingParameter param;
+  // Use params.sav naming convention: segment_x_norm, segment_x_energy_shift
+  param.name = QString(norm ? "segment_%1_norm" : "segment_%1_energy_shift").arg(i + 1);
+  param.value = norm ? segment.dataNorm : segment.energyShift;
+  param.lowerLimit = 0;
+  param.upperLimit = 0;
+  param.error = norm ? segment.dataNormError : segment.energyShiftError;
+  param.fitError = 0.0;  // No fit error initially
+  // Active only when the parameter varies
+  param.useAsNuisance = norm ? (segment.varyNorm == 1) : (segment.varyEnergyShift == 1);
+  param.category = norm ? "norm" : "shift";
+  param.levelIndex = -1;
+  param.channelIndex = i;  // Store segment index for reverse lookup
+  return param;
+}
+
 void FittingTab::populateFromCurrentGUIState() {
   if (!levelsTab_ || !segmentsTab_) return;
 
@@ -379,23 +397,8 @@ void FittingTab::populateFromCurrentGUIState() {
       const SegmentsDataData &segment = segments[i];
 
       // Only process active segments
-      if (segment.isActive == 1) {
-        // Always show norm parameter for active segments, but only add to Minuit if varyNorm=1 (like EData)
-        FittingParameter normParam;
-        // Use params.sav naming convention: segment_x_norm
-        normParam.name = QString("segment_%1_norm").arg(i + 1);
-        normParam.value = segment.dataNorm;
-        normParam.lowerLimit = 0;
-        normParam.upperLimit = 0;
-        normParam.error = segment.dataNormError;
-        normParam.fitError = 0.0;  // No fit error initially
-        normParam.useAsNuisance = (segment.varyNorm == 1);
-        normParam.category = "norm";
-        normParam.levelIndex = -1;
-        normParam.channelIndex = i;  // Store segment index for reverse lookup
-
-        fittingParameters.append(normParam);
-      }
+      // Always show norm parameter for active segments, but only add to Minuit if varyNorm=1 (like EData)
+      if (segment.isActive == 1) fittingParameters.append(segmentParameter(i, segment, true));
     }
 
     // Second pass: Add energy shift parameters (only for ACTIVE segments, like EData::FillMnParams)
@@ -403,23 +406,8 @@ void FittingTab::populateFromCurrentGUIState() {
       const SegmentsDataData &segment = segments[i];
 
       // Only process active segments
-      if (segment.isActive == 1) {
-        // Always add energy shift parameter to GUI and Minuit for active segments (like EData), but useAsNuisance depends on varyEnergyShift
-        FittingParameter shiftParam;
-        // Use params.sav naming convention: segment_x_energy_shift
-        shiftParam.name = QString("segment_%1_energy_shift").arg(i + 1);
-        shiftParam.value = segment.energyShift;
-        shiftParam.lowerLimit = 0;
-        shiftParam.upperLimit = 0;
-        shiftParam.error = segment.energyShiftError;
-        shiftParam.fitError = 0.0;                                  // No fit error initially
-        shiftParam.useAsNuisance = (segment.varyEnergyShift == 1);  // Active only when parameter varies
-        shiftParam.category = "shift";
-        shiftParam.levelIndex = -1;
-        shiftParam.channelIndex = i;  // Store segment index for reverse lookup
-
-        fittingParameters.append(shiftParam);
-      }
+      // Always add energy shift parameter to GUI and Minuit for active segments (like EData), but useAsNuisance depends on varyEnergyShift
+      if (segment.isActive == 1) fittingParameters.append(segmentParameter(i, segment, false));
     }
   }
 
@@ -2169,6 +2157,80 @@ QStringList FittingTab::coherentNames(const ThmExperimentRecord &record, QList<d
     }
   }
   return names;
+}
+
+void FittingTab::followSegments(const QVector<int> &newNumber) {
+  QRegExp entry("^segment_(\\d+)_(norm|energy_shift)$");
+  // The new name of a segment-keyed name, "" if its segment is gone; other names are kept.
+  auto renamed = [&](const QString &name) {
+    if (entry.indexIn(name) == -1) return name;
+    const int k = entry.cap(1).toInt();
+    if (k < 1 || k > newNumber.size()) return name;
+    return newNumber[k - 1] ? QString("segment_%1_%2").arg(newNumber[k - 1]).arg(entry.cap(2)) : QString();
+  };
+  QSet<QString> coherent;  // the cbkg_* names that still exist
+  {
+    AZURESetup *s = setup();
+    ThmSettings thm;
+    if (s && s->thmSettings(thm))
+      for (const ThmExperimentRecord &r : ThmExperimentRecord::read(thm.experimentLines))
+        if (!r.cbackground.isEmpty())
+          for (const QString &n : coherentNames(r)) coherent.insert(n);
+  }
+  // In the order populateFromCurrentGUIState builds: levels, norms and
+  // shifts by segment, then the THM background.
+  QList<FittingParameter> levels, norms, shifts, rest;
+  for (FittingParameter p : fittingParameters) {
+    if (p.category == "norm" || p.category == "shift") {
+      p.name = renamed(p.name);
+      if (p.name.isEmpty()) continue;
+      if (p.channelIndex >= 0 && p.channelIndex < newNumber.size()) p.channelIndex = newNumber[p.channelIndex] - 1;
+      (p.category == "norm" ? norms : shifts) << p;
+    } else if (p.category == "cbkg") {
+      if (coherent.contains(p.name)) rest << p;
+    } else if (p.category == "level") {
+      levels << p;
+    } else {
+      rest << p;
+    }
+  }
+  // A line added at the end (newNumber covers the lines before it) gets its
+  // parameters as populateFromCurrentGUIState gives them, with any saved settings.
+  QList<SegmentsDataData> segments;
+  if (segmentsTab_ && segmentsTab_->getSegmentsDataModel()) segments = segmentsTab_->getSegmentsDataModel()->getLines();
+  for (int i = newNumber.size(); i < segments.size(); i++) {
+    if (segments[i].isActive != 1) continue;
+    for (int norm = 1; norm >= 0; norm--) {
+      FittingParameter p = segmentParameter(i, segments[i], norm);
+      for (const FittingParameter &saved : savedParameterSettings)
+        if (saved.name == p.name) {
+          p.lowerLimit = saved.lowerLimit;
+          p.upperLimit = saved.upperLimit;
+          p.error = saved.error;
+          p.useAsNuisance = saved.useAsNuisance;
+          break;
+        }
+      (norm ? norms : shifts) << p;
+    }
+  }
+  auto bySegment = [](const FittingParameter &a, const FittingParameter &b) { return a.channelIndex < b.channelIndex; };
+  std::stable_sort(norms.begin(), norms.end(), bySegment);
+  std::stable_sort(shifts.begin(), shifts.end(), bySegment);
+  fittingParameters = levels + norms + shifts + rest;
+
+  QList<FittingParameter> saved;
+  for (FittingParameter p : savedParameterSettings) {
+    p.name = renamed(p.name);
+    if (!p.name.isEmpty()) saved << p;
+  }
+  savedParameterSettings = saved;
+  QMap<QString, double> centres;
+  for (auto c = priorCentres_.constBegin(); c != priorCentres_.constEnd(); ++c)
+    if (!renamed(c.key()).isEmpty()) centres[renamed(c.key())] = c.value();
+  priorCentres_ = centres;
+
+  assignMinuitIndices();
+  updateParameterTables();
 }
 
 void FittingTab::appendCoherentParameters() {

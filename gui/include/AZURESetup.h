@@ -90,6 +90,7 @@ class AZURESetup : public QMainWindow {
   PairsTab *getPairsTab() const { return pairsTab; }
   LevelsTab *getLevelsTab() const { return levelsTab; }
   SegmentsTab *getSegmentsTab() const { return segmentsTab; }
+  TargetIntTab *getTargetIntTab() const { return targetIntTab; }
 
   /*! The optional <thm> block (THM options, read by the engine's
       Config::ReadThmBlock) is edited in the THM workspace; the GUI keeps its
@@ -142,6 +143,14 @@ class AZURESetup : public QMainWindow {
   void editDirs();
   void editOptions();
   void editThmWorkspace();
+  /*! What refers to data (test) segment lines by number follows them when
+      they are moved or deleted (SegmentsTab::dataSegmentsRenumbered): the
+      <thm> block's experiment segments= and weight[k] (weightTest[k]), the
+      Experimental Effects lines (data segments) and the segment_N rows of
+      <parameterSettings>.  An experiment or an Experimental Effects line
+      left without segments is removed, and the status bar says so. */
+  void followDataSegments(const QVector<int> &newNumber);
+  void followTestSegments(const QVector<int> &newNumber);
   void showAbout();
   void showTabInfo();
   void openWebsite();

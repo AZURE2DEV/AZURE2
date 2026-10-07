@@ -6,6 +6,7 @@
 #include <QPair>
 #include <QString>
 #include <QStringList>
+#include <QVector>
 
 /*!
  * The options of the optional <thm> block (Config::ThmOptions), as the GUI
@@ -75,6 +76,15 @@ struct ThmSettings {
       lines of an experiment that is gone are dropped; the lines of new
       experiments are appended last. */
   QStringList compose(const QStringList &oldLines) const;
+
+  /*! Follows a renumbering of the <segmentsData> lines (test = false) or of
+      the <segmentsTest> lines (test = true): line k is line newNumber[k - 1]
+      now, 0 if it was deleted; numbers beyond the table are left alone.
+      Data: the weight[k] keys and the segments= of every experiment line (a
+      line whose set did not change keeps its text, otherwise only the value
+      of segments= is rewritten); an experiment left without segments is
+      removed and its name returned.  Test: the weightTest[k] keys. */
+  QStringList renumberSegments(const QVector<int> &newNumber, bool test);
 };
 
 /*!

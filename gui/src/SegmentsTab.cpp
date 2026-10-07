@@ -231,12 +231,51 @@ SegmentsDataModel *SegmentsTab::getSegmentsDataModel() {
   return segmentsDataModel;
 }
 
+namespace {
+// Line k (1-based) of n after moving row `from` to `to` (0-based), or after removing row `from` (to < 0).
+QVector<int> renumbering(int n, int from, int to) {
+  QVector<int> order;
+  for (int k = 0; k < n; k++) order << k;
+  order.remove(from);
+  if (to >= 0) order.insert(to, from);
+  QVector<int> newNumber(n, 0);
+  for (int i = 0; i < order.size(); i++) newNumber[order[i]] = i + 1;
+  return newNumber;
+}
+}  // namespace
+
+void SegmentsTab::deleteDataSegment(int row) {
+  const int n = segmentsDataModel->getLines().size();
+  if (row < 0 || row >= n) return;
+  segmentsDataModel->removeRows(row, 1, QModelIndex());
+  emit dataSegmentsRenumbered(renumbering(n, row, -1));
+}
+
+void SegmentsTab::deleteTestSegment(int row) {
+  const int n = segmentsTestModel->getLines().size();
+  if (row < 0 || row >= n) return;
+  segmentsTestModel->removeRows(row, 1, QModelIndex());
+  emit testSegmentsRenumbered(renumbering(n, row, -1));
+}
+
+bool SegmentsTab::moveDataSegment(int from, int to) {
+  if (!segmentsDataModel->moveLine(from, to)) return false;
+  emit dataSegmentsRenumbered(renumbering(segmentsDataModel->getLines().size(), from, to));
+  return true;
+}
+
+bool SegmentsTab::moveTestSegment(int from, int to) {
+  if (!segmentsTestModel->moveLine(from, to)) return false;
+  emit testSegmentsRenumbered(renumbering(segmentsTestModel->getLines().size(), from, to));
+  return true;
+}
+
 void SegmentsTab::deleteSegDataLine() {
   QItemSelectionModel *selectionModel = segmentsDataView->selectionModel();
   QModelIndexList indexes = selectionModel->selectedRows();
   QModelIndex index = indexes.at(0);
 
-  segmentsDataModel->removeRows(index.row(), 1, QModelIndex());
+  deleteDataSegment(index.row());
   updateSegDataButtons(selectionModel->selection());
 }
 
@@ -245,7 +284,7 @@ void SegmentsTab::deleteSegTestLine() {
   QModelIndexList indexes = selectionModel->selectedRows();
   QModelIndex index = indexes.at(0);
 
-  segmentsTestModel->removeRows(index.row(), 1, QModelIndex());
+  deleteTestSegment(index.row());
   updateSegTestButtons(selectionModel->selection());
 }
 
@@ -365,6 +404,12 @@ void SegmentsTab::addSegDataLine(SegmentsDataData line, bool fromFile) {
     segmentsDataModel->setData(index, line.isTHM, Qt::EditRole);
     segmentsDataView->resizeRowToContents(lines.size());
     updateSegDataButtons(segmentsDataView->selectionModel()->selection());
+    if (!fromFile) {
+      // Added at the end: no line is renumbered, but its parameters are new.
+      QVector<int> same;
+      for (int k = 1; k <= lines.size(); k++) same << k;
+      emit dataSegmentsRenumbered(same);
+    }
   } else {
     QMessageBox::information(this, tr("Duplicate Line"), tr("This line already exists."));
   }
@@ -916,7 +961,7 @@ void SegmentsTab::moveSegDataLine(unsigned int upDown) {
     future = previous + 1;
   else
     future = previous - 1;
-  if (!segmentsDataModel->moveLine(previous, future)) return;
+  if (!moveDataSegment(previous, future)) return;
   segmentsDataView->resizeRowToContents(future);
 
   selectionModel->select(segmentsDataModel->index(future, 0, QModelIndex()),
@@ -943,7 +988,7 @@ void SegmentsTab::moveSegTestLine(unsigned int upDown) {
   else
     future = previous - 1;
 
-  if (!segmentsTestModel->moveLine(previous, future)) return;
+  if (!moveTestSegment(previous, future)) return;
   segmentsTestView->resizeRowToContents(future);
 
   selectionModel->select(segmentsTestModel->index(future, 0, QModelIndex()),

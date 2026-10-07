@@ -133,6 +133,16 @@ Editing and Managing Data Segments
 - Use the **entrance** and **exit pair filter** dropdowns to show only segments
   for specific particle pairs.
 
+A segment is referred to by its line number elsewhere in the project: the
+``segment_N_norm`` and ``segment_N_energy_shift`` rows of the fitting settings
+(limits, nuisance flag, prior centre), the segment lists of the experimental
+effects, and the THM experiments and ``weight[k]`` of the ``<thm>`` block.
+When a data segment is moved or deleted, these follow it. The rows of a
+deleted segment are dropped; an experimental effect or a THM experiment left
+without segments is removed, and the status bar says so. Moving a test
+segment renumbers ``weightTest[k]``; the experimental effect lists follow the
+data segments.
+
 .. tip::
 
    Data from different experiments should be placed in separate files. Multiple

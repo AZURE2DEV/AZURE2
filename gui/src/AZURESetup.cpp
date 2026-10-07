@@ -10,6 +10,8 @@
 #include <QSettings>
 #include <QTextStream>
 #include <QDesktopServices>
+#include <QStatusBar>
+#include <algorithm>
 
 #include "AZURESetup.h"
 #include "ThmWorkspace.h"
@@ -90,6 +92,9 @@ AZURESetup::AZURESetup() :
   fittingTab = new FittingTab();
   fittingTab->setTabReferences(levelsTab, segmentsTab);
   fittingTab->setConfig(&GetConfig());
+  // Segment lines are numbered by position: what names them by number follows a move or a delete.
+  connect(segmentsTab, SIGNAL(dataSegmentsRenumbered(QVector<int>)), this, SLOT(followDataSegments(QVector<int>)));
+  connect(segmentsTab, SIGNAL(testSegmentsRenumbered(QVector<int>)), this, SLOT(followTestSegments(QVector<int>)));
 
   runTab = new RunTab();
   connect(runTab->calcButton, SIGNAL(clicked()), this, SLOT(SaveAndRun()));
@@ -449,6 +454,70 @@ void AZURESetup::setThmSettings(const ThmSettings &settings) {
 QString AZURESetup::projectDirectory() {
   QString file = QString::fromStdString(GetConfig().configfile);
   return file.isEmpty() ? QDir::currentPath() : QFileInfo(file).absolutePath();
+}
+
+namespace {
+// An Experimental Effects segment list ("1,3-5", TargetEffect::GetSegmentsList)
+// after a renumbering; the text unchanged when its set is, "" when no segment
+// is left, and `ok` false (text unchanged) for a list this does not read.
+QString renumberedSegmentList(const QString &text, const QVector<int> &newNumber, bool &ok) {
+  ok = false;
+  QList<int> before;
+  for (const QString &part : text.split(',', Qt::SkipEmptyParts)) {
+    const QStringList ends = part.split('-');
+    bool a = false, b = true;
+    const int lo = ends[0].trimmed().toInt(&a);
+    const int hi = ends.size() == 2 ? ends[1].trimmed().toInt(&b) : lo;
+    if (!a || !b || ends.size() > 2 || lo < 1 || hi < lo || hi - lo > 100000) return text;
+    for (int k = lo; k <= hi; k++) before << k;
+  }
+  ok = true;
+  QList<int> after;
+  for (int k : before) {
+    const int n = k <= newNumber.size() ? newNumber[k - 1] : k;
+    if (n > 0 && !after.contains(n)) after << n;
+  }
+  std::sort(after.begin(), after.end());
+  std::sort(before.begin(), before.end());
+  if (after == before) return text;
+  return ThmExperimentRecord::segmentsListText(after);
+}
+}  // namespace
+
+void AZURESetup::followDataSegments(const QVector<int> &newNumber) {
+  QStringList notes;
+  ThmSettings thm;
+  if (hasThmBlock && thmSettings(thm)) {
+    const QStringList removed = thm.renumberSegments(newNumber, false);
+    setThmSettings(thm);
+    if (!removed.isEmpty())
+      notes << tr("THM experiment %1 removed: no segments left.").arg(removed.join(", "));
+  }
+  TargetIntModel *effects = targetIntTab->getTargetIntModel();
+  const QList<TargetIntData> lines = effects->getLines();
+  int dropped = 0;
+  for (int i = lines.size() - 1; i >= 0; i--) {
+    bool ok;
+    const QString list = renumberedSegmentList(lines[i].segmentsList, newNumber, ok);
+    if (!ok || list == lines[i].segmentsList) continue;
+    if (list.isEmpty()) {
+      effects->removeRows(i, 1);
+      dropped++;
+    } else {
+      effects->setData(effects->index(i, 1), list, Qt::EditRole);
+    }
+  }
+  if (dropped) notes << tr("%n experimental effect line(s) removed: no segments left.", "", dropped);
+  fittingTab->followSegments(newNumber);
+  if (!notes.isEmpty()) statusBar()->showMessage(notes.join(' '));
+}
+
+void AZURESetup::followTestSegments(const QVector<int> &newNumber) {
+  ThmSettings thm;
+  if (hasThmBlock && thmSettings(thm)) {
+    thm.renumberSegments(newNumber, true);
+    setThmSettings(thm);
+  }
 }
 
 void AZURESetup::editThmWorkspace() {

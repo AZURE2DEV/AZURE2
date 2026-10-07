@@ -69,6 +69,13 @@ class FittingTab : public QWidget {
   /// Writes `values` (cbkg_* name -> value) into the cbackground= values of
   /// the THM block (ApplyThmCoherentValues); false if nothing was changed.
   bool applyCoherentValues(const QMap<QString, double> &values);
+  /*! Follows a renumbering of the data segments (SegmentsTab::
+      dataSegmentsRenumbered): the segment_N_norm / segment_N_energy_shift
+      parameters, their saved settings and prior centres take the new
+      numbers, those of a deleted segment are dropped, and so are the THM
+      background parameters of an experiment that is gone; a line added at
+      the end gets its parameters. */
+  void followSegments(const QVector<int> &newNumber);
 
  protected:
   void showEvent(QShowEvent *event) override;
@@ -109,6 +116,8 @@ class FittingTab : public QWidget {
   /// The THM coherent backgrounds (cbackground= of the <thm> experiments):
   /// their free parameters, last, as EData::FillMnParams adds them.
   void appendCoherentParameters();
+  /// The segment_<i+1>_norm (norm) or _energy_shift parameter of segment line i.
+  static FittingParameter segmentParameter(int i, const SegmentsDataData &segment, bool norm);
   /*! Every cbkg_* parameter name of the experiment `record`, in AZURE2's
       order (EData::BuildThmGroups, mirrored on the Levels and Segments tabs),
       with each one's start value and fixed flag. */

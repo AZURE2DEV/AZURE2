@@ -1,8 +1,10 @@
 #include "ThmSettings.h"
 
 #include <QDir>
+#include <QRegExp>
 #include <QLocale>
 #include <QSet>
+#include <algorithm>
 #include <sstream>
 #include <vector>
 
@@ -249,6 +251,45 @@ QStringList ThmSettings::compose(const QStringList &oldLines) const {
   for (int i = 0; i < experimentLines.size(); i++)
     if (!used[i]) out << experimentLines[i];
   return out;
+}
+
+QStringList ThmSettings::renumberSegments(const QVector<int> &newNumber, bool test) {
+  auto renumber = [&](int k) { return k >= 1 && k <= newNumber.size() ? newNumber[k - 1] : k; };
+  QMap<int, QString> &keyed = test ? weightTest : weight;
+  QMap<int, QString> moved;
+  for (auto it = keyed.begin(); it != keyed.end(); ++it)
+    if (renumber(it.key()) > 0) moved[renumber(it.key())] = it.value();
+  keyed = moved;
+  if (test) return QStringList();
+
+  // segments= is given once per experiment (the engine refuses a repeated key).
+  QStringList removed;
+  QRegExp token("(^|[ \t])segments=([^ \t]+)");
+  for (QString &raw : experimentLines) {
+    const QString name = experimentName(raw);
+    if (name.isEmpty()) continue;
+    const int hash = raw.indexOf('#');
+    const QString code = hash < 0 ? raw : raw.left(hash);
+    const int at = token.indexIn(code);
+    if (at < 0) continue;
+    QList<int> before, after;
+    if (!ThmExperimentRecord::expandSegments(token.cap(2), before)) continue;
+    for (int k : before)
+      if (renumber(k) > 0) after << renumber(k);
+    std::sort(after.begin(), after.end());
+    std::sort(before.begin(), before.end());
+    if (after.isEmpty())
+      removed << name;
+    else if (after != before) {
+      const int value = at + token.cap(1).size() + 9;  // after "segments="
+      raw.replace(value, token.cap(2).size(), ThmExperimentRecord::segmentsListText(after));
+    }
+  }
+  QStringList kept;
+  for (const QString &raw : experimentLines)
+    if (!removed.contains(experimentName(raw))) kept << raw;
+  experimentLines = kept;
+  return removed;
 }
 
 // ---------------------------------------------------------------------------
