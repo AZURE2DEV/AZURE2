@@ -69,8 +69,7 @@ ThmWorkspace::ThmWorkspace(AZURESetup *setup, const ThmSettings &settings, QWidg
   SegmentsTestModel *test = setup->getSegmentsTab()->getSegmentsTestModel();
   hasThm_ = !ThmChannelsPage::thmEntrancePairs(data, test).isEmpty();
 
-  noThmLabel = new QLabel(tr("This project has no THM segment: tick \"THM\" on a segment in the Segments tab "
-                             "(isDiff >= 10), then open the workspace again."));
+  noThmLabel = new QLabel(tr("The project has no THM segment: tick THM on one in the Segments tab."));
   noThmLabel->setWordWrap(true);
   noThmLabel->setVisible(!hasThm_);
 
@@ -115,9 +114,10 @@ ThmWorkspace::ThmWorkspace(AZURESetup *setup, const ThmSettings &settings, QWidg
   });
   experimentsPage->refreshDerived();
   pages = new QTabWidget;
-  pages->addTab(modelPage, tr("Model"));
-  pages->addTab(experimentsPage, tr("Experiments"));
-  pages->addTab(channelsPage, tr("Channels"));
+  // Alt+letter, as the main window's tabs.
+  pages->addTab(modelPage, tr("&Model"));
+  pages->addTab(experimentsPage, tr("&Experiments"));
+  pages->addTab(channelsPage, tr("&Channels"));
 #ifdef AZURE2_THM_DIAGNOSTICS
   diagnosticsPage = new ThmDiagnosticsPage(
       [this](int segment, ThmDiagnosticsRequest &request) {
@@ -129,7 +129,7 @@ ThmWorkspace::ThmWorkspace(AZURESetup *setup, const ThmSettings &settings, QWidg
         return QString();
       },
       [this]() { return diagnosticsTargets(setup_, experimentsPage); }, [this]() { return editState(); });
-  pages->addTab(diagnosticsPage, tr("Diagnostics"));
+  pages->addTab(diagnosticsPage, tr("&Diagnostics"));
   pages->setTabToolTip(3, tr("Read-only plots computed by AZURE2 on request: entrance vertex, HOES and on-shell "
                              "cross sections, line shape, weight, spectator-momentum window, distortion"));
   connect(pages, &QTabWidget::currentChanged, this, [this](int) {
