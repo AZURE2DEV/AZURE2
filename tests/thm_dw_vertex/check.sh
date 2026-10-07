@@ -21,7 +21,8 @@
 #   (c) point Coulomb in d + 18O: R(E) is not applied (no distortion rows),
 #       the vertex rows are there, and the model moves; with a ps window the
 #       nodes are placed on its reachable part (runs, differs from delta);
-#   (d) refusals.
+#   (d) refusals;
+#   (e) the output is byte-identical on 1 and 4 threads.
 #   The vertex itself is checked against the plane-wave limit (1e-9) and an
 #   independent quadrature in tests/reference (ctest thm_dw_vertex), and in
 #   the session by tests/pyazr/thm_dw_vertex_test.py.
@@ -162,6 +163,23 @@ refuse reach "do not overlap the ps window" "$L distortion=coulomb vertexModel=d
 # a lab angle the spectator cannot reach at a data point (max 79.6 deg at 0.715 MeV) is
 # refused as for R(E), not clamped to another direction
 refuse lab_reach "is beyond the reach of the spectator" "$L distortion=coulomb spectatorAngle=100 vertexModel=dw"
+
+# (e) ----------------------------------------------------------------------
+echo "(e) the same numbers on 1 and 4 threads"
+# The vertex sums its quadrature points in a fixed order, so the output is the
+# same to the last digit whatever the thread count (and the schedule).
+threads_saved="$OMP_NUM_THREADS"
+export OMP_NUM_THREADS=1
+run t1 "experiment[A] segments=1,2 $KIN distortion=coulomb vertexModel=dw spectatorAngles=cm:0-180" "NOFOLD"
+export OMP_NUM_THREADS=4
+run t4 "experiment[A] segments=1,2 $KIN distortion=coulomb vertexModel=dw spectatorAngles=cm:0-180" "NOFOLD"
+export OMP_NUM_THREADS="$threads_saved"
+if ran t1 && ran t4; then
+  for f in chiSquared.out thm_experiments.out "$OUT"; do
+    same "$WORK/t1/output/$f" "$WORK/t4/output/$f" && ok "$f byte-identical on 1 and 4 threads" \
+      || bad "$f differs between 1 and 4 threads"
+  done
+fi
 
 echo
 if [ "$fail" -eq 0 ]; then echo "PASS: THM distorted-wave vertex"; else echo "FAIL"; exit 1; fi

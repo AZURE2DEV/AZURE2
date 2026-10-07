@@ -55,6 +55,8 @@ const double kPanelMax = 5.0;    // fm
 const int kLMargin = 14;
 const int kLCap = 200;
 const int kBatch = 8;            // energies per pass over the points
+const int kSumBlocks = 64;        // blocks of the sum over the points (fixed order, any thread count)
+const size_t kSumBytes = (size_t)32 << 20;  // at most this for their buffers
 
 inline int Idx(int L, int M) { return L * (L + 1) / 2 + M; }
 
@@ -387,64 +389,77 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
     }
     for (const std::string &err : errors)
       if (!err.empty()) return err;
+    // The sum over the points in a fixed order, whatever the number of
+    // threads and the schedule: up to kSumBlocks blocks of consecutive points
+    // (fewer if their buffers would pass kSumBytes), each summed in point
+    // order into its own buffer, and the buffers added in block order.
+    const size_t blockSize = (size_t)nT * nb * 2;
+    const int nBlocks = (int)std::max<size_t>(
+        1, std::min<size_t>({(size_t)nPts, (size_t)kSumBlocks, kSumBytes / (blockSize * sizeof(complex))}));
+    std::vector<complex> blockSums((size_t)nBlocks * blockSize, complex(0.0, 0.0));
 #pragma omp parallel
     {
-      std::vector<complex> acc((size_t)nT * nb * 2, complex(0.0, 0.0));
       std::vector<double> yl, dyl, ya, dya;
       std::vector<complex> fa(laMax + 1), dfa(laMax + 1), fs((size_t)nb * (lsMax + 1)), dfs((size_t)nb * (lsMax + 1));
       Lagrange6 lagA, lagS;
-#pragma omp for schedule(dynamic, 32)
-      for (int ip = 0; ip < nPts; ip++) {
-        const int iu = ip / cNodes, ic = ip % cNodes;
-        const double u = uNode[iu], ct = cNode[ic], st = std::sqrt(std::max(0.0, 1.0 - ct * ct));
-        const double wgt = 2.0 * M_PI * u * u * phiU[iu] * uWt[iu] * cWt[ic];
-        if (wgt == 0.0) continue;
-        const double xs = u * st, zs = alpha * a + u * ct, xa = beta * u * st, za = a + beta * u * ct;
-        const double Rs = std::hypot(xs, zs), Ra = std::hypot(xa, za);
-        if (!(Rs > 0.0) || !(Ra > 0.0)) continue;
-        const double ths = std::atan2(xs, zs), tha = std::atan2(xa, za);
-        const double cs = zs / Rs, ss = xs / Rs, ca = za / Ra, sa = xa / Ra;
-        YTable(lTop, lTop, ths, yl, dyl);
-        YTable(laMax, lTop, tha - ths, ya, dya);
-        lagA.Set(Ra, stepA, nA);
-        for (int L = 0; L <= laMax; L++) {
-          complex v, dv;
-          lagA.Apply(uA[L].data(), v, dv);
-          fa[L] = v / Ra;
-          dfa[L] = dv / Ra - v / (Ra * Ra);
-        }
-        lagS.Set(Rs, stepS, nS);
-        for (int b = 0; b < nb; b++)
-          for (int L = 0; L <= lsMax; L++) {
+#pragma omp for schedule(dynamic, 1)
+      for (int blk = 0; blk < nBlocks; blk++) {
+        complex *acc = &blockSums[(size_t)blk * blockSize];
+        const int ipEnd = (int)((long long)nPts * (blk + 1) / nBlocks);
+        for (int ip = (int)((long long)nPts * blk / nBlocks); ip < ipEnd; ip++) {
+          const int iu = ip / cNodes, ic = ip % cNodes;
+          const double u = uNode[iu], ct = cNode[ic], st = std::sqrt(std::max(0.0, 1.0 - ct * ct));
+          const double wgt = 2.0 * M_PI * u * u * phiU[iu] * uWt[iu] * cWt[ic];
+          if (wgt == 0.0) continue;
+          const double xs = u * st, zs = alpha * a + u * ct, xa = beta * u * st, za = a + beta * u * ct;
+          const double Rs = std::hypot(xs, zs), Ra = std::hypot(xa, za);
+          if (!(Rs > 0.0) || !(Ra > 0.0)) continue;
+          const double ths = std::atan2(xs, zs), tha = std::atan2(xa, za);
+          const double cs = zs / Rs, ss = xs / Rs, ca = za / Ra, sa = xa / Ra;
+          YTable(lTop, lTop, ths, yl, dyl);
+          YTable(laMax, lTop, tha - ths, ya, dya);
+          lagA.Set(Ra, stepA, nA);
+          for (int L = 0; L <= laMax; L++) {
             complex v, dv;
-            lagS.Apply(uS[b][L].data(), v, dv);
-            fs[b * (lsMax + 1) + L] = v / Rs;
-            dfs[b * (lsMax + 1) + L] = dv / Rs - v / (Rs * Rs);
+            lagA.Apply(uA[L].data(), v, dv);
+            fa[L] = v / Ra;
+            dfa[L] = dv / Ra - v / (Ra * Ra);
           }
-        const double dthsdr = -alpha * ss / Rs, dthadr = -sa / Ra;
-        for (int t = 0; t < nT; t++) {
-          const Triple &tr = triples[t];
-          double K = 0.0, Ks = 0.0, Ka = 0.0;  // K and dK/dtheta_s, dK/dtheta_a
-          for (int nu = 0; nu < (int)tr.c.size(); nu++) {
-            const double yln = yl[Idx(tr.l, nu)], dyln = dyl[Idx(tr.l, nu)];
-            const double yan = ya[Idx(tr.la, nu)], dyan = dya[Idx(tr.la, nu)];
-            K += tr.c[nu] * yln * yan;
-            Ka += tr.c[nu] * yln * dyan;
-            Ks += tr.c[nu] * (dyln * yan - yln * dyan);
-          }
-          const complex fA = fa[tr.la], dfA = dfa[tr.la];
-          const complex A1 = wgt * fA * K;
-          const complex A2 = wgt * alpha * cs * fA * K;
-          const complex A3 = wgt * (fA * (Ks * dthsdr + Ka * dthadr) + ca * dfA * K);
-          complex *out = &acc[(size_t)t * nb * 2];
-          for (int b = 0; b < nb; b++) {
-            const complex f = fs[b * (lsMax + 1) + tr.ls], df = dfs[b * (lsMax + 1) + tr.ls];
-            out[2 * b] += A1 * f;
-            out[2 * b + 1] += A2 * df + A3 * f;
+          lagS.Set(Rs, stepS, nS);
+          for (int b = 0; b < nb; b++)
+            for (int L = 0; L <= lsMax; L++) {
+              complex v, dv;
+              lagS.Apply(uS[b][L].data(), v, dv);
+              fs[b * (lsMax + 1) + L] = v / Rs;
+              dfs[b * (lsMax + 1) + L] = dv / Rs - v / (Rs * Rs);
+            }
+          const double dthsdr = -alpha * ss / Rs, dthadr = -sa / Ra;
+          for (int t = 0; t < nT; t++) {
+            const Triple &tr = triples[t];
+            double K = 0.0, Ks = 0.0, Ka = 0.0;  // K and dK/dtheta_s, dK/dtheta_a
+            for (int nu = 0; nu < (int)tr.c.size(); nu++) {
+              const double yln = yl[Idx(tr.l, nu)], dyln = dyl[Idx(tr.l, nu)];
+              const double yan = ya[Idx(tr.la, nu)], dyan = dya[Idx(tr.la, nu)];
+              K += tr.c[nu] * yln * yan;
+              Ka += tr.c[nu] * yln * dyan;
+              Ks += tr.c[nu] * (dyln * yan - yln * dyan);
+            }
+            const complex fA = fa[tr.la], dfA = dfa[tr.la];
+            const complex A1 = wgt * fA * K;
+            const complex A2 = wgt * alpha * cs * fA * K;
+            const complex A3 = wgt * (fA * (Ks * dthsdr + Ka * dthadr) + ca * dfA * K);
+            complex *out = &acc[(size_t)t * nb * 2];
+            for (int b = 0; b < nb; b++) {
+              const complex f = fs[b * (lsMax + 1) + tr.ls], df = dfs[b * (lsMax + 1) + tr.ls];
+              out[2 * b] += A1 * f;
+              out[2 * b + 1] += A2 * df + A3 * f;
+            }
           }
         }
       }
-#pragma omp critical
+    }
+    for (int blk = 0; blk < nBlocks; blk++) {
+      const complex *acc = &blockSums[(size_t)blk * blockSize];
       for (int t = 0; t < nT; t++)
         for (int b = 0; b < nb; b++) {
           hh[((size_t)t * nE + e0 + b) * 2] += acc[((size_t)t * nb + b) * 2];

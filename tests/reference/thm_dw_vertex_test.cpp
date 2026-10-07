@@ -24,7 +24,8 @@
  *      on Y_l0 -- nothing shared with the engine's reduced amplitudes,
  *      Numerov/COUL waves or Lagrange tables.
  *  Also: ThmCG against AngCoeff::ClebGord; the Cholesky factor reproduces
- *  c^+ G c; interpolation between grid nodes.
+ *  c^+ G c; interpolation between grid nodes; G is the same to the last bit
+ *  on 1 and 4 threads.
  *
  * Run:  tests/reference/thm_dw_vertex_test      (ctest: thm_dw_vertex)
  *       tests/reference/thm_dw_vertex_test -v   (print every value)
@@ -45,6 +46,9 @@
 #include "ThmLineshape.h"
 #include <gsl/gsl_integration.h>
 #include <gsl/gsl_sf_bessel.h>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 // Each consumer of the engine defines this itself (see thm_coulomb_term_test).
 Config *g_config = nullptr;
@@ -418,6 +422,39 @@ int main(int argc, char **argv) {
         }
       }
     }
+  }
+
+  std::printf("the same vertex, bit for bit, on 1 and 4 threads\n");
+  {
+    // The sum over the (u, cos theta) points is taken in a fixed order (fixed
+    // blocks, added in block order), so the thread count and the schedule do
+    // not move the last bits of G (they did with the arrival-order sum).
+    ThmExperiment x;
+    x.name = "coulomb";
+    x.distortion = ThmExperiment::DIST_COULOMB;
+    std::vector<double> g1, gd1;
+    bool same = true;
+    std::string why;
+    for (int threads : {1, 4, 1, 4}) {
+#ifdef _OPENMP
+      omp_set_num_threads(threads);
+#endif
+      ThmDwVertex v;
+      why = v.Build(x, F19(), 5.136, {0, 1, 2}, 0.1, 0.5, {});
+      if (!why.empty()) break;
+      if (g1.empty()) {
+        g1 = v.G;
+        gd1 = v.Gd;
+      } else {
+        same = same && v.G.size() == g1.size() && v.Gd.size() == gd1.size() &&
+               std::memcmp(v.G.data(), g1.data(), g1.size() * sizeof(double)) == 0 &&
+               std::memcmp(v.Gd.data(), gd1.data(), gd1.size() * sizeof(double)) == 0;
+      }
+    }
+    const bool ok = why.empty() && same && !g1.empty();
+    if (!ok) failures++;
+    std::printf("  %s  G and Gd identical on 1, 4, 1, 4 threads (%zu values)%s%s\n", ok ? "ok  " : "FAIL", g1.size() + gd1.size(),
+                why.empty() ? "" : ": ", why.c_str());
   }
 
   if (failures) {

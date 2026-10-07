@@ -1812,7 +1812,9 @@ with one ``WARNING``. Cost at startup, two threads: 6 s for 19F + d
 :math:`L \le 61`), 4 s for 12C(14N,d) (:math:`l \le 8`, 125 energies); per
 evaluation the tables cost nothing measurable (a window averages the Gram
 matrix of the directions, one node: the same time per evaluation as without
-it). Memory: the 19F session peaks at about 400 MB with or without the
+it). The quadrature is summed in a fixed order (up to 64 blocks of
+consecutive points, added in block order), so :math:`G` is the same to the
+last bit whatever the number of threads. Memory: the 19F session peaks at about 400 MB with or without the
 window.
 
 *Syntax, output, pyazr.* ``vertexModel=pw|dw`` on the experiment line.
