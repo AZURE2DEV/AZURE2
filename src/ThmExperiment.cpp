@@ -560,6 +560,15 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
     if (kin != 0 && kin != 4) return where + "beam, target, spectator and Ebeam go together (all four or none)";
     if (x.lineshape && kin != 4)
       return where + "lineshape=on needs the kinematics of the reaction: beam, target, spectator and Ebeam";
+    // N_C carries (E_lambda - E - i Gamma/2)^(-i zeta): its energy unit is a
+    // common phase only while every term of the amplitude carries it.  The
+    // background c(E) does not, and zeta varies with E, so the model would
+    // depend on the unit (MeV vs keV moves the relative phase by
+    // zeta(E) ln 1000, ~1.4 rad across the 12C(14N,d) data).
+    if (x.lineshape && !x.cbackground.empty())
+      return where + "lineshape=on and cbackground= cannot be combined: the Coulomb line shape N_C multiplies "
+                     "the level amplitudes only, and its phase (E_lambda - E - i Gamma/2)^(-i zeta) depends on the "
+                     "energy unit unless every term of the amplitude carries it";
     if (x.psKind != ThmExperiment::PS_DELTA && kin != 4)
       return where + "a ps window (ps=hulthen|gauss|table) needs the kinematics of the reaction: beam, target, "
                      "spectator and Ebeam (mu_sx and the spectator momenta reached at each energy)";

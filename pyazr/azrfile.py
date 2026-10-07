@@ -550,6 +550,12 @@ def _thm_check_experiments(experiments):
         if x.get("lineshape") and kin != 4:
             raise ValueError(where + "lineshape=on needs the kinematics of the reaction: "
                              "beam, target, spectator and Ebeam")
+        if x.get("lineshape") and x.get("cbackground"):
+            raise ValueError(where + "lineshape=on and cbackground= cannot be combined: "
+                             "the Coulomb line shape N_C multiplies the level amplitudes "
+                             "only, and its phase (E_lambda - E - i Gamma/2)^(-i zeta) "
+                             "depends on the energy unit unless every term of the "
+                             "amplitude carries it")
         if x.get("ps", "delta") != "delta" and kin != 4:
             raise ValueError(where + "a ps window (ps=hulthen|gauss|table) needs the "
                              "kinematics of the reaction: beam, target, spectator and "

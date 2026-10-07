@@ -119,6 +119,9 @@ with tempfile.TemporaryDirectory() as tmp:
          "no J^pi = 3/2- group"),
         ("set_thm_cbackground: bad value", lambda: m2.set_thm_cbackground("E", "1/2+:2=a,b"), "value 'a'"),
         ("entranceL=coherent after", lambda: m2.set_thm_option("entranceL", "coherent"), "entranceL=coherent"),
+        ("with lineshape=on", lambda: m2.set_thm_experiment("E", [1], beam="18O", target="d", spectator="n",
+                                                             Ebeam=54, lineshape=True, cbackground="1/2+:2"),
+         "lineshape=on and cbackground= cannot be combined"),
     ]:
         refuses(what, fn, frag)
     check("model unchanged after the refusals", str(m2._suffix) + str(m2._prefix) == before)

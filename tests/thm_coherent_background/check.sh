@@ -183,6 +183,8 @@ refuse no_channel "no entrance channel (s,l) = (1/2,1)" "$X cbackground=1/2+:2:1
 refuse twice "is given twice" "$X cbackground=1/2+:2;1/2+:2:1/2,0,1/2,1"
 refuse coherentL "entranceL=coherent" "entranceL=coherent
 $X cbackground=1/2+:2"
+refuse lineshape "lineshape=on and cbackground= cannot be combined" \
+  "$X beam=18O target=d spectator=n Ebeam=54 lineshape=on cbackground=1/2+:2"
 
 echo
 if [ "$fail" -eq 0 ]; then echo "PASS: THM coherent background"; else echo "FAIL"; exit 1; fi

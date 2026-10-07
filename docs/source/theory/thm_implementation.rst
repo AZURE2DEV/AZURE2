@@ -638,8 +638,14 @@ loading a ``.sav`` there writes their values into the key.
 term, a J\ :sup:`π` the model has no level of, an exit pair that no segment of
 the experiment has, a J\ :sup:`π` group that does not couple the entrance pair
 to that exit pair or has no such channels, a combination given twice,
-segments with different entrance pairs, and ``entranceL=coherent`` (its
-buckets merge the l of a channel spin). Without the key nothing changes, and a
+segments with different entrance pairs, ``entranceL=coherent`` (its
+buckets merge the l of a channel spin), and ``lineshape=on`` on the same
+experiment: :math:`N_C` multiplies the level amplitudes only, and its phase
+:math:`(E_\lambda - E - i\Gamma_\lambda/2)^{-i\zeta}` is independent of the
+energy unit only while every term of the amplitude carries it -- with
+:math:`c(E)` added, MeV and keV would give different models (the relative
+phase moves by :math:`\zeta(E)\ln 1000`, about 1.4 rad across the
+12C(14N,d) data). Without the key nothing changes, and a
 background fixed at zero gives the files of none.
 
 *Which one to use.* For non-resonant physics of the x + A system --
@@ -853,7 +859,8 @@ and the factor on the exit index is an approximation; for a broad level
 (:math:`\Gamma \gtrsim` the scale on which :math:`\zeta` varies) the
 narrow-resonance form of eq. (62) is itself an approximation.
 
-*Checks and output.* Every data point must leave :math:`E_{sF} > 0` (refused
+*Checks and output.* ``cbackground=`` on the same experiment is refused (see
+"Coherent background"). Every data point must leave :math:`E_{sF} > 0` (refused
 otherwise; a sub-point of a folding grid beyond the limit takes
 :math:`E_{sF} = 1` keV with a ``WARNING``). A neutral spectator gives
 :math:`\zeta = 0` and results identical to ``lineshape=off`` bit for bit.
