@@ -1389,8 +1389,11 @@ the highest point (short of the spectator threshold) and interpolated by
 cubic Lagrange (error :math:`< 10^{-6}`); points beyond take the end value
 with one ``WARNING``. Cost: about 1 s at startup for 12C(14N,d), nothing per
 evaluation. With ``dwpw`` and a cutoff :math:`r_\mathrm{min} > 0`,
-:math:`M_\mathrm{PW}` can pass through zero at large :math:`q`; AZURE2 warns,
-and ``dw`` avoids the singularity.
+:math:`M_\mathrm{PW}` can pass through zero at large :math:`q`; with one
+spectator direction AZURE2 warns, and ``dw`` avoids the singularity (a window
+of directions divides by :math:`\langle M_\mathrm{PW}^2\rangle`, which a sign
+change of one direction's :math:`M_\mathrm{PW}` does not make vanish: no
+warning).
 
 *Output.* The startup summary gives :math:`k_{aA}`, :math:`\eta_{aA}`,
 :math:`\kappa`, :math:`\eta_b`, :math:`\beta`, :math:`E_\mathrm{ref}`, the

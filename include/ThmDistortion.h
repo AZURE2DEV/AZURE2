@@ -173,7 +173,8 @@ class ThmDistortion {
   std::vector<double> lnR;
   double tailWorst = 0.0;  ///< largest |integrand at r_end|/(kappa |M|) seen on the grid
   /// M_PW changes sign on the grid (a node of the momentum distribution;
-  /// possible with rmin > 0 at large q): dwpw is then singular there.
+  /// possible with rmin > 0 at large q): dwpw is then singular there.  Only
+  /// without a window of directions (one direction).
   bool pwSignChange = false;
   /// Table form (distortion=table:<file>).
   std::shared_ptr<const ThmWeightTable> table;

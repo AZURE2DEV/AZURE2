@@ -850,8 +850,12 @@ std::string ThmDistortion::Build(const ThmExperiment &x, const Kinematics &k, do
     }
   }
   tailWorst = std::max(ref.tail, *std::max_element(tails.begin(), tails.end()));
+  // One direction: rho = |M|^2/M_PW^2 is singular where M_PW changes sign.  A
+  // window of directions divides by <M_PW^2>, which a sign change of one
+  // node's M_PW does not make vanish.
   pwSignChange = false;
-  for (int i = 0; i < nodes; i++) pwSignChange = pwSignChange || (pw[i] > 0.0) != (ref.mpw > 0.0);
+  if (!angWindow)
+    for (int i = 0; i < nodes; i++) pwSignChange = pwSignChange || (pw[i] > 0.0) != (ref.mpw > 0.0);
   return "";
 }
 
