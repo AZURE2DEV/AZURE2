@@ -1110,6 +1110,20 @@ int main(int argc, char** argv) {
     ThmDiagnosticsPage* d = ws.diagnosticsPage;
     ok("diagnostics: computed", d->computeNow(), d->result().error);
     {
+      // Coming back to the page tells a stale result by the pages' state,
+      // without writing the project (it used to, at every switch).
+      const QString shown = d->statusLabel->text();
+      d->refreshTargets();
+      ok("diagnostics: unchanged pages, the result is not marked stale", d->statusLabel->text() == shown,
+         d->statusLabel->text());
+      const int vertex = ws.modelPage->vertexCombo->currentIndex();
+      ws.modelPage->vertexCombo->setCurrentIndex(vertex == 0 ? 1 : 0);
+      d->refreshTargets();
+      ok("diagnostics: an edit marks it stale", d->statusLabel->text().contains("Changed since the last Compute"),
+         d->statusLabel->text());
+      ws.modelPage->vertexCombo->setCurrentIndex(vertex);
+    }
+    {
       // The computation runs on a worker thread in the GUI: it must not
       // write process-wide state the GUI thread reads -- the nuclear
       // potentials (the engine re-read them from the copy's <potential>

@@ -58,9 +58,12 @@ class ThmDiagnosticsPage : public QWidget {
   };
   /// `prepare` fills a request for a segment (the project text and the
   /// engine flags as the workspace would leave them), or returns the reason
-  /// it cannot; `targets` lists the segments to offer.
+  /// it cannot; `targets` lists the segments to offer; `state` (optional) is
+  /// a cheap text of the settings that changes when they do, which tells
+  /// whether a shown result is stale (without it, `prepare` is called).
   ThmDiagnosticsPage(std::function<QString(int segment, ThmDiagnosticsRequest &)> prepare,
-                     std::function<QList<Target>()> targets, QWidget *parent = 0);
+                     std::function<QList<Target>()> targets, std::function<QString()> state = nullptr,
+                     QWidget *parent = 0);
   ~ThmDiagnosticsPage();
 
   /// Refills the segment list (the workspace calls it when the page is shown).
@@ -118,10 +121,12 @@ class ThmDiagnosticsPage : public QWidget {
 
   std::function<QString(int, ThmDiagnosticsRequest &)> prepare_;
   std::function<QList<Target>()> targets_;
+  std::function<QString()> state_;
   QList<Target> list_;
   ThmDiagnosticsThread *thread_ = nullptr;
   ThmDiagnosticsResult result_;
-  QString computedText_;  ///< the project text of the shown result
+  QString computedText_;   ///< the project text of the shown result
+  QString computedState_;  ///< state_() when it was computed
   int computedSegment_ = 0;
   /// The segment whose data range angularEnergyEdit holds (0: none yet, the middle is used).
   int angularSegment_ = 0;

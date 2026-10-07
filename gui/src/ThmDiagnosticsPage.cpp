@@ -31,10 +31,12 @@ const char *kEcm = "E_cm (MeV)";
 }  // namespace
 
 ThmDiagnosticsPage::ThmDiagnosticsPage(std::function<QString(int, ThmDiagnosticsRequest &)> prepare,
-                                       std::function<QList<Target>()> targets, QWidget *parent) :
+                                       std::function<QList<Target>()> targets, std::function<QString()> state,
+                                       QWidget *parent) :
   QWidget(parent),
   prepare_(prepare),
-  targets_(targets) {
+  targets_(targets),
+  state_(state) {
   segmentCombo = new QComboBox;
   segmentCombo->setToolTip(tr("The THM data segment to look at; its experiment, if any, in front."));
   segmentCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
@@ -202,11 +204,17 @@ void ThmDiagnosticsPage::refreshTargets() {
   segmentCombo->blockSignals(false);
   computeButton->setEnabled(!list_.isEmpty() && !busy());
   if (list_.isEmpty()) statusLabel->setText(tr("No active THM data segment."));
-  // Results of settings that have changed since are marked as such.
+  // Results of settings that have changed since are marked as such: by the
+  // cheap state if there is one, else by writing the project again.
   if (!computedText_.isEmpty() && !busy()) {
-    ThmDiagnosticsRequest now;
-    if (prepare_(computedSegment_, now).isEmpty() && now.projectText != computedText_)
-      statusLabel->setText(tr("Changed since the last Compute: press Compute again."));
+    bool changed = false;
+    if (state_) {
+      changed = state_() != computedState_;
+    } else {
+      ThmDiagnosticsRequest now;
+      changed = prepare_(computedSegment_, now).isEmpty() && now.projectText != computedText_;
+    }
+    if (changed) statusLabel->setText(tr("Changed since the last Compute: press Compute again."));
   }
 }
 
@@ -236,6 +244,7 @@ void ThmDiagnosticsPage::compute() {
   }
   prepareAngular(request);
   computedText_ = request.projectText;
+  computedState_ = state_ ? state_() : QString();
   computedSegment_ = request.segment;
   thread_ = new ThmDiagnosticsThread(request);
   connect(thread_, SIGNAL(finished()), this, SLOT(threadFinished()));
@@ -256,6 +265,7 @@ bool ThmDiagnosticsPage::computeNow() {
   }
   prepareAngular(request);
   computedText_ = request.projectText;
+  computedState_ = state_ ? state_() : QString();
   computedSegment_ = request.segment;
   showResult(ComputeThmDiagnostics(request));
   return result_.error.isEmpty();

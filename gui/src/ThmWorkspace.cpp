@@ -128,7 +128,7 @@ ThmWorkspace::ThmWorkspace(AZURESetup *setup, const ThmSettings &settings, QWidg
         request.segment = segment;
         return QString();
       },
-      [this]() { return diagnosticsTargets(setup_, experimentsPage); });
+      [this]() { return diagnosticsTargets(setup_, experimentsPage); }, [this]() { return editState(); });
   pages->addTab(diagnosticsPage, tr("Diagnostics"));
   pages->setTabToolTip(3, tr("Read-only plots computed by AZURE2 on request: entrance vertex, HOES and on-shell "
                              "cross sections, line shape, weight, spectator-momentum window, distortion"));
@@ -188,6 +188,12 @@ QUrl ThmWorkspace::helpUrl() {
     }
   }
   return QUrl("https://rdeboer1.github.io/AZURE2/" + page + "#thm-workspace");
+}
+
+QString ThmWorkspace::editState() const {
+  ThmSettings s = modelPage->settings();
+  s.experimentLines = experimentsPage->experimentLines();
+  return s.compose(QStringList()).join('\n') + "\n--\n" + channelsPage->editState();
 }
 
 bool ThmWorkspace::projectSnapshot(QString &text, QString *error) {

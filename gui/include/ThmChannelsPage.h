@@ -60,6 +60,8 @@ class ThmChannelsPage : public QWidget {
   void refreshWarnings();
   /// The warning shown beside a pair's B ("" if none), as its tooltip says it.
   QString bindingWarning(int pairKey) const;
+  /// The page's fields as text (the B fields and the flags): changes when an edit does.
+  QString editState() const;
 
   QTableWidget *pairTable;     ///< Pair | Nuclei | THM segments | B (MeV) (a line edit)
   QTableWidget *channelTable;  ///< Level | Pair | l | s | Width (as entered) | Amplitude (check: field 33)

@@ -376,8 +376,9 @@ experiment, if any, named in front), the J\ :sup:`π` group of the entrance
 vertex panel and **Compute**. Below it, one status line gives the segment,
 the number of points and the energy range; its tooltip has the details
 (vertex option, B + T\ :sub:`s`, the spectator window's
-:math:`\langle T_s\rangle`, line-shape levels not drawn). If the project or
-the workspace changes after a computation, the status line says so; press
+:math:`\langle T_s\rangle`, line-shape levels not drawn). If a page of the
+workspace changes after a computation, the status line says so (the
+workspace is modal, so nothing else changes the project meanwhile); press
 **Compute** again. The panels are framed cards of equal size in a grid (three
 columns when the window is wide enough, else two) whose axes line up; the
 energy axis is the data range of the segment (c.m. of the THM entrance pair),

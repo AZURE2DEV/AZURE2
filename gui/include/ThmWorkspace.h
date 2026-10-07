@@ -55,6 +55,10 @@ class ThmWorkspace : public QDialog {
       installed for the time of writing only.  The project is left as it was.
       False (and the reason) for a project that has no file yet. */
   bool projectSnapshot(QString &text, QString *error = nullptr);
+  /*! What the pages hold, as text: changes when an edit does.  Cheap, unlike
+      projectSnapshot, which writes the whole project (the workspace is
+      modal, so nothing else changes the project while it is open). */
+  QString editState() const;
 
   QLabel *noThmLabel;
   QTabWidget *pages;

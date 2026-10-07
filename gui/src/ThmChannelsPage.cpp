@@ -196,6 +196,15 @@ void ThmChannelsPage::apply() {
   }
 }
 
+QString ThmChannelsPage::editState() const {
+  QStringList out;
+  for (int row = 0; row < pairRows_.size(); row++)
+    out << qobject_cast<QLineEdit *>(pairTable->cellWidget(row, 3))->text();
+  for (int row = 0; row < channelRows_.size(); row++)
+    out << (channelTable->item(row, 5)->checkState() == Qt::Checked ? "1" : "0");
+  return out.join('\n');
+}
+
 double ThmChannelsPage::bindingOf(int pairKey) const {
   const int row = pairRow(pairKey);
   double x;
