@@ -6,6 +6,7 @@
 #include <gsl/gsl_errno.h>
 #include <cmath>
 #include "Constants.h"
+#include "GSLException.h"
 
 #include <iostream>
 
@@ -85,9 +86,11 @@ class WhitFunc {
     if (a != a || b != b || z != z || !(z > 0.0)) return 0.0;
 
     gsl_sf_result_e10 u;
-    gsl_error_handler_t *oldHandler = gsl_set_error_handler_off();
-    int status = gsl_sf_hyperg_U_e10_e(a, b, z, &u);
-    gsl_set_error_handler(oldHandler);
+    int status;
+    {
+      GslQuiet quiet;  // status checked here; thread-safe (GSLException.h)
+      status = gsl_sf_hyperg_U_e10_e(a, b, z, &u);
+    }
     if (status != GSL_SUCCESS || u.val == 0.0) return 0.0;
 
     const double log10W = (-z / 2.0) / M_LN10 + (m + 0.5) * log10(z) + log10(fabs(u.val)) + (double)u.e10;

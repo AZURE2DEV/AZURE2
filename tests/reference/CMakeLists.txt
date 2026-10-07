@@ -26,6 +26,14 @@ target_link_libraries(channel_threshold_test PRIVATE AZURE2Core)
 
 add_test(NAME channel_threshold COMMAND channel_threshold_test)
 
+# GslQuiet: quiet GSL calls from many OpenMP threads leave the process-wide GSL
+# error handler as it was (a bare save/off/restore could lose it for good).
+add_executable(gsl_quiet_test gsl_quiet_test.cpp)
+target_link_libraries(gsl_quiet_test PRIVATE AZURE2Core)
+
+add_test(NAME gsl_quiet COMMAND gsl_quiet_test)
+set_tests_properties(gsl_quiet PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=4")
+
 # Reference calculation for the THM distortion factor (ThmDistortion): the
 # zero-range DWBA amplitude against mpmath / scipy values from
 # thm_distortion_reference.py, its plane-wave limit against the closed form.

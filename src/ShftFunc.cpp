@@ -1,5 +1,6 @@
 #include "ShftFunc.h"
 #include "Constants.h"
+#include "GSLException.h"
 #include <algorithm>
 #include <cmath>
 #include <math.h>
@@ -31,10 +32,12 @@ double ShftFunc::ZeroEnergyLimit(int l) const {
   if (!(c > 0.0)) return -(double)l;
   const double x = std::sqrt(8.0 * c * radius());
   gsl_sf_result kl, kl1;
-  gsl_error_handler_t *oldHandler = gsl_set_error_handler_off();
-  int s1 = gsl_sf_bessel_Kn_scaled_e(2 * l, x, &kl);
-  int s2 = gsl_sf_bessel_Kn_scaled_e(2 * l + 1, x, &kl1);
-  gsl_set_error_handler(oldHandler);
+  int s1, s2;
+  {
+    GslQuiet quiet;  // statuses checked here; thread-safe (GSLException.h)
+    s1 = gsl_sf_bessel_Kn_scaled_e(2 * l, x, &kl);
+    s2 = gsl_sf_bessel_Kn_scaled_e(2 * l + 1, x, &kl1);
+  }
   if (s1 != GSL_SUCCESS || s2 != GSL_SUCCESS || kl1.val == 0.0) return -(double)l;
   return -(double)l - 0.5 * x * kl.val / kl1.val;
 }
@@ -59,10 +62,12 @@ bool ShftFunc::WhittakerShift(int l, double binding, double &s) const {
   const double b = 2.0 * l + 2.0;
 
   gsl_sf_result_e10 uA, uA1;
-  gsl_error_handler_t *oldHandler = gsl_set_error_handler_off();
-  int s1 = gsl_sf_hyperg_U_e10_e(A, b, z, &uA);
-  int s2 = gsl_sf_hyperg_U_e10_e(A - 1.0, b, z, &uA1);
-  gsl_set_error_handler(oldHandler);
+  int s1, s2;
+  {
+    GslQuiet quiet;  // statuses checked here; thread-safe (GSLException.h)
+    s1 = gsl_sf_hyperg_U_e10_e(A, b, z, &uA);
+    s2 = gsl_sf_hyperg_U_e10_e(A - 1.0, b, z, &uA1);
+  }
   if (s1 != GSL_SUCCESS || s2 != GSL_SUCCESS || uA.val == 0.0 || !std::isfinite(uA.val) ||
       !std::isfinite(uA1.val))
     return false;

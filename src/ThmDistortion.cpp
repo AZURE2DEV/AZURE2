@@ -1,5 +1,6 @@
 #include "ThmDistortion.h"
 #include "Config.h"
+#include "GSLException.h"
 #include "ThmExperiment.h"
 #include "ThmOptical.h"
 #include "cwfcomp_accurate.H"
@@ -749,10 +750,12 @@ bool ThmDistortion::GlobalEnds(int which, double lo, double hi, double elab[2], 
 double ThmDistortion::Phi(double r) const {
   if (!(r > 0.0) || r < rmin - 1.0e-12) return 0.0;
   if (yukawa || etaB == 0.0) return std::exp(-kappa * r) / r;
-  gsl_error_handler_t *old = gsl_set_error_handler_off();
   gsl_sf_result U;
-  int status = gsl_sf_hyperg_U_e(1.0 + etaB, 2.0, 2.0 * kappa * r, &U);
-  gsl_set_error_handler(old);
+  int status;
+  {
+    GslQuiet quiet;  // status checked here; thread-safe (GSLException.h)
+    status = gsl_sf_hyperg_U_e(1.0 + etaB, 2.0, 2.0 * kappa * r, &U);
+  }
   return status == GSL_SUCCESS || status == GSL_EUNDRFLW ? 2.0 * kappa * std::exp(-kappa * r) * U.val : 0.0;
 }
 
@@ -771,18 +774,19 @@ std::string ThmDistortion::Build(const ThmExperiment &x, const Kinematics &k, do
   if (n > 400000) return "the radial grid would need " + Number(n) + " points (kappa too small)";
   phi.assign(n, 0.0);
   simpson.assign(n, 0.0);
-  gsl_error_handler_t *old = gsl_set_error_handler_off();
-  for (int i = std::max(i0, 1); i < n; i++) {
-    double r = i * h;
-    if (yukawa || etaB == 0.0) {
-      phi[i] = std::exp(-kappa * r) / r;
-    } else {
-      gsl_sf_result U;
-      int status = gsl_sf_hyperg_U_e(1.0 + etaB, 2.0, 2.0 * kappa * r, &U);
-      phi[i] = status == GSL_SUCCESS || status == GSL_EUNDRFLW ? 2.0 * kappa * std::exp(-kappa * r) * U.val : 0.0;
+  {
+    GslQuiet quiet;  // statuses checked below; thread-safe (GSLException.h)
+    for (int i = std::max(i0, 1); i < n; i++) {
+      double r = i * h;
+      if (yukawa || etaB == 0.0) {
+        phi[i] = std::exp(-kappa * r) / r;
+      } else {
+        gsl_sf_result U;
+        int status = gsl_sf_hyperg_U_e(1.0 + etaB, 2.0, 2.0 * kappa * r, &U);
+        phi[i] = status == GSL_SUCCESS || status == GSL_EUNDRFLW ? 2.0 * kappa * std::exp(-kappa * r) * U.val : 0.0;
+      }
     }
   }
-  gsl_set_error_handler(old);
   for (int i = i0; i < n; i++) {
     int j = i - i0;
     simpson[i] = h / 3.0 * ((i == i0 || i == n - 1) ? 1.0 : (j % 2 ? 4.0 : 2.0));
