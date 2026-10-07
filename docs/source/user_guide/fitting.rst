@@ -9,9 +9,10 @@ Parameter Tables
 ----------------
 
 Parameters are organized into three sub-tabs, and a fourth, *THM Background*,
-when a THM experiment has a coherent background (``cbackground=``, THM
-Workspace, Experiments page): its free ``cbkg_*`` parameters, whose values
-edited here (or loaded from a ``.sav``) go into the ``cbackground=`` key:
+when THM is on (:doc:`configure_menu`, Runtime Options) and a THM experiment
+has a coherent background (``cbackground=``, THM Workspace, Experiments
+page): its free ``cbkg_*`` parameters, whose values edited here (or loaded
+from a ``.sav``) go into the ``cbackground=`` key:
 
 Level Parameters
 ^^^^^^^^^^^^^^^^

@@ -96,6 +96,15 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
        the Nuclear Potential tab then chooses which particle pairs it applies
        to, one at a time. Enables the Nuclear Potential
        tab.
+   * - **Use Trojan Horse Method (THM)**
+     - Shows the **THM Workspace...** entry of this menu and the THM controls
+       of the tabs: the *THM* tick of the segment dialogs and the *THM
+       Background* sub-tab of Fitting Settings. Off for a new project. A
+       project with THM content -- a ``<thm>`` block, a THM segment, a THM
+       binding energy or a width entered as an amplitude -- opens with it on;
+       the state is not saved in the file. Unticking it hides the controls
+       only: the content stays in the project, is saved as it was read and
+       AZURE2 still uses it; the GUI says so and asks first.
 
 .. note::
 
@@ -111,8 +120,9 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
 THM Workspace
 -------------
 
-Selecting **THM Workspace...** opens one window for everything that belongs to
-the Trojan Horse (half-off-energy-shell) observable of THM segments
+Selecting **THM Workspace...** (in the menu while **Use Trojan Horse Method
+(THM)** is ticked in Runtime Options) opens one window for everything that
+belongs to the Trojan Horse (half-off-energy-shell) observable of THM segments
 (observable code 10 or more): the optional ``<thm>`` block and the two THM
 columns of the ``<levels>`` lines. The classic tabs do not show these; they
 are edited here only. The window has three pages that edit and a fourth,
@@ -127,7 +137,8 @@ derives are shown as short label--value pairs next to the fields they come
 from (their full text, as AZURE2 prints it, in their tooltips).
 
 If the project has no THM segment, the window says so and its pages are
-disabled: tick *THM* on a segment in the Segments tab first.
+disabled: tick *THM* on a segment in the Segments tab first (Segments,
+"Creating a Data Segment").
 
 **Model** -- the options of the ``<thm>`` block:
 
@@ -148,9 +159,10 @@ disabled: tick *THM* on a segment in the Segments tab first.
 - **Energy-dependent weight per segment** (``weight[<segment>]``,
   ``weightTest[<segment>]``) -- a two-column table w(E) multiplying the THM
   model of one segment, e.g. a Coulomb-distortion correction. The segment
-  number is the line number in the Data (or Test) segments table, counting
-  inactive lines. The **...** button picks the file; a file inside the project
-  directory is stored relative to it.
+  number (**Segment**) is the line number in the Data (or Test, column
+  **Data/Test**) segments table, counting inactive lines. The **...**
+  button picks the file; a file inside the project directory is stored
+  relative to it.
 
 **Experiments** -- the ``experiment[<name>]`` lines: THM data segments
 measured together (exit channels, angular bins or runs of one three-body
@@ -315,8 +327,9 @@ momentum window* and *Distortion*:
   the default, or *DWBA*, :math:`\rho = |M|^2`, the papers' ratio) and
   **Bound state** (``boundState``: *Whittaker*, the default, or *Yukawa*
   tail of the s-x bound state, with an optional cut-off **r_min** in fm).
-  Optical adds a row for the two channels, **a + A** (``opticalAA``) and
-  **s + F** (``opticalSF``): *plane* (no distortion), *Coulomb* (the default),
+  Optical adds a row for each of the two channels, **a + A**
+  (``opticalAA``) and **s + F** (``opticalSF``): *plane* (no distortion),
+  *Coulomb* (the default),
   *global* or *Woods–Saxon*, whose **Edit…** button opens the ten parameters in a
   compact form -- real volume V, R, a; imaginary volume W, R_W, a_W;
   imaginary surface W_D, R_D, a_D (MeV and fm, depths > 0 attractive or
@@ -335,7 +348,9 @@ momentum window* and *Distortion*:
   format; every data point inside it), whose **...** button stores a file
   inside the project directory relative to it; a table needs no reaction.
   The **R(E)** row shows R at the lowest and highest point energy of the
-  experiment's data (a table: its w there), computed with AZURE2's own code;
+  experiment's data (a table: its w there), computed with AZURE2's own code,
+  or *not applied* with the DW vertex (``vertexModel=dw``, kept as written),
+  which carries the distortion itself;
   its tooltip has the rest of what AZURE2 prints at startup
   (:math:`k_{aA}`, :math:`\eta_{aA}`, :math:`\kappa`, :math:`\eta_b`,
   :math:`\beta`, E_ref, and :math:`E_{sF}`, :math:`\eta_{sF}` and the
@@ -382,7 +397,8 @@ workspace is modal, so nothing else changes the project meanwhile); press
 **Compute** again. The panels are framed cards of equal size in a grid (three
 columns when the window is wide enough, else two) whose axes line up; the
 energy axis is the data range of the segment (c.m. of the THM entrance pair),
-and each plot carries the reaction in bold:
+and each plot carries the reaction in bold, in a corner kept clear of the
+curves:
 
 - **Entrance vertex** -- :math:`|M_l(E)|^2` at the quasi-free point, one curve
   per entrance orbital momentum of the J\ :sup:`π` group chosen in the
@@ -412,7 +428,8 @@ and each plot carries the reaction in bold:
   :math:`|M_l|^2`: the window fills the vertex nodes. The status line's
   tooltip gives :math:`\langle T_s\rangle`. A table named relative to the project is found
   although the engine runs on a copy elsewhere.
-- **Distortion R(E)** (only for an experiment with ``distortion=``) -- the
+- **Distortion R(E)** (only for an experiment with ``distortion=`` and the
+  plane-wave vertex) -- the
   factor that multiplies the model, as AZURE2 interpolates it, on a
   logarithmic scale when it spans decades, with :math:`|M|^2` (dashed; not
   for the DWBA ratio, where it is R itself) and :math:`|M_{PW}|^2` (dotted),

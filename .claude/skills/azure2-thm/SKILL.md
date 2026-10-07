@@ -12,7 +12,7 @@ keys, `AzrModel.set_thm_option`) is in **`azure2-eval`**, section "Trojan Horse
 `docs/source/theory/thm_implementation.rst`. Level choice and Brune/formal
 questions: **`r-matrix-analysis`**. Fetching data: **`nds-explorer`**. New
 compound nucleus: **`azr-project-builder`**.
-GUI: all of it (`<thm>` options, experiments, fields 32/33) is edited in *Configure > THM Workspace...*, not in the classic tabs.
+GUI: THM is opt-in, like the hybrid nuclear potential: *Configure > Runtime Options > Use Trojan Horse Method (THM)* (off for a new or classic project; on by itself when an opened project has a `<thm>` block, a THM segment, a binding energy or an amplitude width; not stored in the file; off hides the controls only, the content is kept and used). With it on, all of it (`<thm>` options, experiments, fields 32/33) is edited in *Configure > THM Workspace...*; the classic tabs add only the segment dialogs' *THM* tick and the Fitting tab's *THM Background* sub-tab.
 
 Calibration comes from seven cases, all in `examples/` (`.azr` holds the best
 fit, `data/` headers name the sources): `li7_tumino2006`, `li6_pizzone2011`,

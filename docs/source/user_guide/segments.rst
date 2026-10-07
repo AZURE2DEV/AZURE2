@@ -94,6 +94,13 @@ appears with the following fields:
    the outgoing polarization of the **inverse** reaction, not of capture.
    Published photon polarization, linear or circular, needs its own formalism.
 
+**THM (modified R-matrix)**
+   Shown when **Use Trojan Horse Method (THM)** is ticked in
+   :doc:`configure_menu`, Runtime Options. Ticked, the segment is a Trojan
+   Horse (half-off-shell) measurement (observable code + 10); see "THM
+   Workspace" there. Not offered for phase shifts and angular-distribution
+   coefficients.
+
 **Data Normalization**
    A normalization factor applied to the data yield. Default is ``1.0``.
 

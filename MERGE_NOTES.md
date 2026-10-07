@@ -58,6 +58,13 @@ cache guard.
 - 5832bee, 0871c99: level-line field 33 gammaIsRWA (the channel value is an amplitude in MeV^1/2).
 - pyazr: add_extrapolation(frame="cm") (7a35b9a; "lab" is the old default), tabulate() (7bbab4e), composite segments (f8bcd5e), transform_all_rwa(include_fixed=) (8def2ab), modelavg and scripts/thm_model_average.py (88fa280, 884571a).
 - New classic test: tests/15N_p_a (0ee7ee7, pin 4601.32).
+- GUI, October 2026: THM is opt-in, as the hybrid nuclear potential is
+  (Configure > Runtime Options > Use Trojan Horse Method).  Off for a new or
+  classic project: no THM Workspace entry, no THM tick in the segment
+  dialogs, no THM Background sub-tab.  On by itself when an opened project
+  has THM content; not stored in the file.  Switching it off hides the
+  controls only.  The THM code of the main window and the Fitting tab is in
+  AZURESetupThm.cpp and FittingTabThm.cpp.
 
 ## D. Speed and structure (values unchanged)
 
