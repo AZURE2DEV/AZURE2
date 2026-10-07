@@ -1556,6 +1556,26 @@ int main(int argc, char** argv) {
     p->distortionCombo->setCurrentIndex(p->distortionCombo->findData("coulomb"));
     ok("distortion: coulomb drops opticalAA/SF, keeps E_ref",
        p->records().at(0).opticalSF.isEmpty() && p->records().at(0).distortionRef == "2.664");
+    {
+      // ThmNumberSpin reads what it shows (exponents) and keeps every digit.
+      ThmNumberSpin* e = p->distortionRefEdit;
+      QString t = "1e-05 MeV";
+      int pos = 0;
+      ok("number field: an exponent is accepted", e->validate(t, pos) == QValidator::Acceptable);
+      t = "1e- MeV";
+      ok("number field: '1e-' is on the way", e->validate(t, pos) == QValidator::Intermediate);
+      t = "1x MeV";
+      ok("number field: '1x' is refused", e->validate(t, pos) == QValidator::Invalid);
+      ok("number field: valueFromText reads 2.5e-3", e->valueFromText("2.5e-3 MeV") == 2.5e-3);
+      const double before = e->value();
+      e->setValue(1.2345678901234567e-7);
+      ok("number field: the value keeps 17 digits", e->value() == 1.2345678901234567e-7,
+         QString::number(e->value(), 'g', 17));
+      e->setValue(0.1 + 0.2);
+      ok("number field: 0.1 + 0.2 stays 0.30000000000000004", e->value() == 0.1 + 0.2 &&
+         e->text() == "0.30000000000000004 MeV", e->text());
+      e->setValue(before);
+    }
     p->distortionCombo->setCurrentIndex(p->distortionCombo->findData("none"));
     ok("distortion: none drops every distortion key",
        p->records().at(0).distortion.isEmpty() && p->records().at(0).distortionRef.isEmpty() &&

@@ -121,7 +121,8 @@ AZURE2 applies at startup (a refusal shows AZURE2's own message and the page
 it concerns) before anything is changed. **Cancel** changes nothing.
 **Help** opens this section of the user guide. The pages carry no
 explanatory text of their own: every field explains itself in its tooltip,
-numbers are entered in spin boxes that show their unit, and values AZURE2
+numbers are entered in spin boxes that show their unit (typed as AZURE2
+reads them, ``1e-05`` included, and kept to the last digit), and values AZURE2
 derives are shown as short label--value pairs next to the fields they come
 from (their full text, as AZURE2 prints it, in their tooltips).
 

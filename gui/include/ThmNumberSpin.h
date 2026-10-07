@@ -3,6 +3,8 @@
 
 #include <QDoubleSpinBox>
 #include <QLocale>
+#include <QRegularExpression>
+#include <QValidator>
 #include <cmath>
 #include <limits>
 #include <sstream>
@@ -14,7 +16,10 @@
  * value has not been changed, so a number written by hand ("0.0", "40.00")
  * reads back verbatim; a changed value, or one loaded from a text that is no
  * number in range, gives the shortest text of the value shown.  With a
- * special value text, the minimum stands for "not given" and gives "".
+ * special value text, the minimum stands for "not given" and gives "".  What
+ * is typed is read as the engine reads a number (C locale, exponents allowed:
+ * "1e-05", the way the field shows small values), and the value is kept to
+ * the last bit, not rounded to a number of decimals.
  * No Q_OBJECT: it adds no signal or slot.
  */
 class ThmNumberSpin : public QDoubleSpinBox {
@@ -23,7 +28,10 @@ class ThmNumberSpin : public QDoubleSpinBox {
                          QWidget *parent = nullptr) :
     QDoubleSpinBox(parent) {
     setLocale(QLocale::c());
-    setDecimals(10);  // the value keeps what is typed; the text is the shortest
+    // QDoubleSpinBox rounds every value to this many decimals: the most it
+    // allows, so that the value keeps what is typed (1e-12 stays 1e-12); the
+    // text is the shortest (textFromValue).
+    setDecimals(323);
     setRange(lo, hi);
     setSingleStep(step);
     if (!suffix.isEmpty()) setSuffix(suffix);
@@ -51,10 +59,35 @@ class ThmNumberSpin : public QDoubleSpinBox {
   }
   static QString shortest(double x) { return QString::number(x, 'g', QLocale::FloatingPointShortest); }
 
+  /// Acceptable: a number in range; Intermediate: on the way to one ("", "-", "1e", "2.", out of range).
+  QValidator::State validate(QString &text, int &pos) const override {
+    (void)pos;
+    const QString t = bare(text);
+    if (t.isEmpty()) return QValidator::Intermediate;
+    bool ok = false;
+    const double x = QLocale::c().toDouble(t, &ok);
+    if (ok)
+      return std::isfinite(x) && x >= minimum() && x <= maximum() ? QValidator::Acceptable : QValidator::Intermediate;
+    static const QRegularExpression partial("^[+-]?[0-9]*\\.?[0-9]*([eE][+-]?[0-9]*)?$");
+    return partial.match(t).hasMatch() ? QValidator::Intermediate : QValidator::Invalid;
+  }
+  double valueFromText(const QString &text) const override {
+    bool ok = false;
+    const double x = QLocale::c().toDouble(bare(text), &ok);
+    return ok ? x : value();
+  }
+
  protected:
   QString textFromValue(double value) const override { return shortest(value); }
 
  private:
+  /// The text without the prefix and the suffix, trimmed.
+  QString bare(const QString &text) const {
+    QString t = text;
+    if (!prefix().isEmpty() && t.startsWith(prefix())) t.remove(0, prefix().size());
+    if (!suffix().isEmpty() && t.endsWith(suffix())) t.chop(suffix().size());
+    return t.trimmed();
+  }
   QString written_;
   double writtenValue_ = std::numeric_limits<double>::quiet_NaN();
   bool readable_ = false;
