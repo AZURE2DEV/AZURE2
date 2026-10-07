@@ -134,6 +134,9 @@ def load_covariance(path="output/covariance.dat", ncols=None):
 
 
 _RMATRIX_KINDS = (0, 1)      # GET_PARAMS_INFO type codes: 0 energy, 1 width
+# What a band spans (the engine's BandPackedColumns): the R-matrix parameters
+# and the THM coherent background (4, cbkg), which enters the HOES amplitude.
+_BAND_KINDS = (0, 1, 4)
 _NFIELDS = 15                # doubles per parameter record
 
 
@@ -173,12 +176,13 @@ def rmatrix_columns(model):
     """Packed indices of the free R-matrix parameters, in ``params_rwa`` order.
 
     These are the columns ``covariance.dat`` spans: level energies and reduced
-    width amplitudes.  Normalizations and energy shifts are excluded -- no
-    calculated observable depends on them.  Queried live, so the answer is
+    width amplitudes, and the THM coherent background (``cbackground=``, kind
+    ``cbkg``) when the project has one.  Normalizations and energy shifts are
+    excluded -- no calculated observable depends on them.  Queried live, so the answer is
     right for the mode the session is in now.
     """
     kinds, _ = live_parameters(model)
-    cols = [j for j, k in enumerate(kinds) if k in _RMATRIX_KINDS]
+    cols = [j for j, k in enumerate(kinds) if k in _BAND_KINDS]
     if not cols:
         raise RuntimeError("the model has no free R-matrix parameters.")
     return cols
@@ -513,7 +517,7 @@ def uncertainty_bands(model, segments=None, keys=None, params=None,
         ``{1-based segment key: Band}``.
     """
     kinds, _ = live_parameters(model)
-    cols = [j for j, k in enumerate(kinds) if k in _RMATRIX_KINDS]
+    cols = [j for j, k in enumerate(kinds) if k in _BAND_KINDS]
     if not cols:
         raise RuntimeError("the model has no free R-matrix parameters.")
 

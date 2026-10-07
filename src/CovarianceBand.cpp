@@ -18,7 +18,8 @@ inline int TriIndex(int i, int j) {
 
 // A parameter's identity, used to match columns across runs.  R-matrix columns
 // are keyed on (kind, jGroup, level, channel); norm/shift columns on
-// (kind, segment) with the unused slots set to -1.
+// (kind, segment), THM coherent-background ones on (kind, index), with the
+// unused slots set to -1.
 std::tuple<int, int, int, int> IdentityKey(const ParamDesc &d) {
   int kind = (int)d.kind;
   switch (d.kind) {
@@ -26,19 +27,19 @@ std::tuple<int, int, int, int> IdentityKey(const ParamDesc &d) {
     case ParamKind::Gamma: return std::make_tuple(kind, d.jGroup, d.level, d.channel);
     case ParamKind::Norm: return std::make_tuple(kind, d.segment, -1, -1);
     case ParamKind::EnergyShift: return std::make_tuple(kind, d.segment, -1, -1);
-    case ParamKind::ThmCoherent: break;  // not an R-matrix column (no band entry)
+    case ParamKind::ThmCoherent: return std::make_tuple(kind, d.channel, -1, -1);  // channel = its index
   }
   return std::make_tuple(kind, -1, -1, -1);
 }
 
 }  // namespace
 
-std::vector<int> RMatrixPackedColumns(const ParamIndexMap &pmap) {
+std::vector<int> BandPackedColumns(const ParamIndexMap &pmap) {
   std::vector<int> cols;
   const int n = pmap.NumPacked();
   for (int a = 0; a < n; a++) {
     ParamKind k = pmap.Desc(pmap.PackedToFull(a)).kind;
-    if (k == ParamKind::LevelEnergy || k == ParamKind::Gamma) cols.push_back(a);
+    if (k == ParamKind::LevelEnergy || k == ParamKind::Gamma || k == ParamKind::ThmCoherent) cols.push_back(a);
   }
   return cols;
 }
@@ -51,11 +52,12 @@ BandCovariance BuildBandCovarianceFromMinuit(const std::vector<double> &covData,
   // Minuit stores the lower triangle: n(n+1)/2 entries for n variable params.
   if ((int)covData.size() != n * (n + 1) / 2) return cov;
 
-  // Keep only the R-matrix sub-block: the band is insensitive to norms and
+  // Keep only the band columns (R-matrix, and THM coherent background if any):
+  // the band is insensitive to norms and
   // energy shifts, so their rows/columns never contribute to dXS.  Dropping them
   // makes the saved matrix and the free-parameter count reflect the R-matrix
   // parameters alone (stable across fit and extrapolation runs).
-  const std::vector<int> rc = RMatrixPackedColumns(pmap);
+  const std::vector<int> rc = BandPackedColumns(pmap);
   const int m = (int)rc.size();
   cov.cols.resize(m);
   for (int a = 0; a < m; a++) cov.cols[a] = pmap.Desc(pmap.PackedToFull(rc[a]));
@@ -109,14 +111,14 @@ bool LoadBandCovariance(const std::string &path, BandCovariance &cov) {
 
 std::vector<std::vector<double>> RemapCovarianceToParamMap(const BandCovariance &saved,
                                                            const ParamIndexMap &pmap) {
-  // Target columns are the current run's free R-matrix parameters.
-  const std::vector<int> rc = RMatrixPackedColumns(pmap);
+  // Target columns are the current run's free band parameters (BandPackedColumns).
+  const std::vector<int> rc = BandPackedColumns(pmap);
   const int m = (int)rc.size();
   std::vector<std::vector<double>> M(m, std::vector<double>(m, 0.0));
   if (saved.empty() || m <= 0) return M;
 
   // A covariance loaded from covariance.dat has no column identities, so its
-  // columns are taken to be in R-matrix order.  Copy it through when the
+  // columns are taken to be in BandPackedColumns order.  Copy it through when the
   // dimension matches the R-matrix count; a mismatch is reported and rejected by
   // BuildBandData, so here it simply leaves M zero.
   if (saved.cols.empty()) {
@@ -183,17 +185,21 @@ bool BuildBandData(CNuc *compound, EData *data, const Config &config,
   ParamIndexMap pmap = BuildParamIndexMap(compound, data, fixed);
 
   // The band spans only the free R-matrix parameters (level energies and reduced
-  // widths); norms and energy shifts have zero sensitivity and are excluded.
-  const std::vector<int> rc = RMatrixPackedColumns(pmap);
+  // widths) and THM coherent-background ones; norms and energy shifts have zero
+  // sensitivity and are excluded.
+  const std::vector<int> rc = BandPackedColumns(pmap);
   const int m = (int)rc.size();
 
   // A covariance loaded from covariance.dat has no column identities; its
-  // dimension must then equal the number of free R-matrix parameters.
+  // dimension must then equal the number of free band parameters.
   if (savedCov.cols.empty() && savedCov.size() != m) {
+    const bool coherent = data->NumThmCoherentParams() > 0;
     config.outStream << "Data covariance size mismatch: covariance.dat has "
                      << savedCov.size() << " rows/columns but the model has " << m
-                     << " free R-matrix parameters (level energies and reduced widths; "
-                        "normalizations and energy shifts are excluded). "
+                     << (coherent ? " free R-matrix and THM coherent-background parameters (level energies, "
+                                    "reduced widths and cbkg values; "
+                                  : " free R-matrix parameters (level energies and reduced widths; ")
+                     << "normalizations and energy shifts are excluded). "
                         "Skipping the uncertainty band."
                      << std::endl;
     return false;
@@ -207,10 +213,10 @@ bool BuildBandData(CNuc *compound, EData *data, const Config &config,
     sdp = &shiftDeriv;
   }
 
-  out.M = RemapCovarianceToParamMap(savedCov, pmap);  // m x m, R-matrix order
+  out.M = RemapCovarianceToParamMap(savedCov, pmap);  // m x m, BandPackedColumns order
 
-  // ComputeModelGradients yields full packed rows; reduce each to R-matrix
-  // columns so the sensitivities line up with the (R-matrix-only) covariance.
+  // ComputeModelGradients yields full packed rows; reduce each to the band
+  // columns so the sensitivities line up with the covariance.
   std::map<EPoint *, vector_r> fullGrad;
   if (!ComputeModelGradients(compound, data, config, pmap, sdp, fullGrad, /*skipTHM=*/true))
     return false;

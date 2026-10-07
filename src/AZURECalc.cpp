@@ -942,9 +942,10 @@ void AZURECalc::FinalizeLeastSquaresCovariance(const vector_r &full,
     if (bandCovOut) {
       ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), FixedMask());
       if (pmap.NumPacked() == nFree) {
-        // Keep only the R-matrix sub-block: the band is insensitive to norms
-        // and energy shifts, so they are dropped from the saved covariance.
-        const std::vector<int> rc = RMatrixPackedColumns(pmap);
+        // Keep only the band columns (R-matrix, THM coherent background): the
+        // band is insensitive to norms and energy shifts, so they are dropped
+        // from the saved covariance.
+        const std::vector<int> rc = BandPackedColumns(pmap);
         const int m = (int)rc.size();
         bandCovOut->cols.resize(m);
         for (int a = 0; a < m; a++) bandCovOut->cols[a] = pmap.Desc(pmap.PackedToFull(rc[a]));

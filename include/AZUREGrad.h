@@ -43,7 +43,7 @@ struct ParamDesc {
   ParamKind kind;
   int jGroup;   ///< 1-based JGroup index   (LevelEnergy/Gamma only, else -1)
   int level;    ///< 1-based level index    (LevelEnergy/Gamma only, else -1)
-  int channel;  ///< 1-based channel index  (Gamma only, else -1)
+  int channel;  ///< 1-based channel index  (Gamma; ThmCoherent: its 1-based index in that block; else -1)
   int segment;  ///< 1-based segment index  (Norm/EnergyShift only, else -1)
   bool fixed;   ///< whether this parameter is fixed (excluded from packed vector)
 };

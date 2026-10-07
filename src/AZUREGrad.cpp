@@ -198,7 +198,7 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
   // --- THM coherent backgrounds (cbackground=): the last block, if any. ---
   if (data)
     for (int k = 0; k < data->NumThmCoherentParams(); k++) {
-      map.desc_.push_back(ParamDesc{ParamKind::ThmCoherent, -1, -1, -1, -1, false});
+      map.desc_.push_back(ParamDesc{ParamKind::ThmCoherent, -1, -1, k + 1, -1, false});
       i++;
     }
 

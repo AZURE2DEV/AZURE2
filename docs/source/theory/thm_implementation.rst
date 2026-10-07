@@ -623,8 +623,12 @@ differences of the THM χ² only), the CLI writes their values to
 ``output/thm_experiments.out`` (``cbkg`` lines), and ``<parameterSettings>`` can
 limit them by name. Their derivatives in ``ComputeTHMRows`` are central
 differences of the HOES model, exact up to round-off since the model is
-quadratic in them; covariance bands keep to the R-matrix parameters, as they do
-for norms. ``pyazr``: kind ``"cbkg"`` (``parameters.cbkg``, with the J group,
+quadratic in them. Unlike norms and shifts they move the model, so the
+covariance band (CLI ``--covariance-band``, ``pyazr.bands``) carries their
+columns next to the R-matrix ones: ``covariance.dat`` then spans the free
+level energies, reduced widths and ``cbkg`` values, in that order (before
+October 2026 the band dropped them and was too narrow wherever :math:`c(E)`
+is uncertain). ``pyazr``: kind ``"cbkg"`` (``parameters.cbkg``, with the J group,
 entrance channel and exit pair), ``residual_jacobian`` and ``chi2_and_grad``
 carry their columns, ``thm_experiments()[name]["cbkg"]`` their values;
 ``save_fit`` writes the fitted values back into ``cbackground=`` (one explicit

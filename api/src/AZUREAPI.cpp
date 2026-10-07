@@ -1195,10 +1195,11 @@ vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) const {
 
   ParamIndexMap pmap = BuildParamIndexMap(lc, ld, fixed_);
 
-  // A band is sensitive only to the R-matrix parameters, and covariance.dat
-  // spans exactly those columns -- so reduce each full packed row to them here
+  // A band is sensitive only to the R-matrix (and THM coherent-background)
+  // parameters, and covariance.dat spans exactly those columns
+  // (BandPackedColumns) -- so reduce each full packed row to them here
   // rather than shipping zero columns for every normalization.
-  const std::vector<int> rc = RMatrixPackedColumns(pmap);
+  const std::vector<int> rc = BandPackedColumns(pmap);
   const int nCols = (int)rc.size();
 
   // THM (HOES) rows come from central differences of the HOES model (the

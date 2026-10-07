@@ -1538,7 +1538,8 @@ class azure2:
         Returns a list with one ``(npoints, ncols)`` array per calculated
         segment, in the order and point ordering of :meth:`calculate_rwa`.  The
         columns are the free **R-matrix** parameters -- level energies and
-        reduced-width amplitudes, in ``params_rwa`` order -- which is exactly
+        reduced-width amplitudes, in ``params_rwa`` order -- and the THM
+        coherent background (``cbkg``) when there is one, which is exactly
         what ``output/covariance.dat`` spans; normalizations and energy shifts
         are omitted because no calculated observable depends on them.
 

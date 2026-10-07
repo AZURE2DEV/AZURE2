@@ -101,7 +101,8 @@ class AZUREAPI {
    *
    * The result is a flat vector of kParamInfoFields doubles per parameter; the
    * fields (and -1 for "not applicable") are:
-   *   0  type          0=energy, 1=width, 2=norm, 3=energy-shift
+   *   0  type          0=energy, 1=width, 2=norm, 3=energy-shift,
+   *                    4=THM coherent background (cbkg; cbackground=)
    *   1  jgroup        1-based J-group index (R-matrix params only)
    *   2  J             total spin of the J-group / level
    *   3  parity        +1 / -1
