@@ -45,7 +45,7 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   cm_energy_ = dataLine.energy();
   lab_energy_ = shiftedEnergy;
   excitation_energy_ = dataLine.energy();
-  parentSegment_ = parent;
+  crossSectionComponent_ = parent ? parent->GetCrossSectionComponent() : 0;
   segment_key_ = parent->GetSegmentKey();
   cm_crosssection_ = dataLine.crossSection();
   cm_dcrosssection_ = dataLine.error();
@@ -89,7 +89,7 @@ EPoint::EPoint(double angle, double energy, ESegment *parent) {
   lab_energy_ = energy;
   cm_energy_ = energy;
   excitation_energy_ = energy;
-  parentSegment_ = parent;
+  crossSectionComponent_ = parent ? parent->GetCrossSectionComponent() : 0;
   segment_key_ = parent->GetSegmentKey();
   cm_crosssection_ = 0.;
   cm_dcrosssection_ = 0.1;
@@ -135,7 +135,7 @@ EPoint::EPoint(double angle, double energy, int entranceKey,
   lab_energy_ = energy;
   cm_energy_ = energy;
   excitation_energy_ = energy;
-  parentSegment_ = nullptr;
+  crossSectionComponent_ = 0;
   cm_crosssection_ = 0.;
   cm_dcrosssection_ = 0.1;
   lab_crosssection_ = 0.;
@@ -1626,7 +1626,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
  * sub-points' cross-section slot, exactly as the analyzing power is handled.
  */
 void EPoint::IntegrateTargetEffectComponents(const Config &configure) {
-  if (!parentSegment_ || parentSegment_->GetCrossSectionComponent() == 0) return;
+  if (crossSectionComponent_ == 0) return;
   const int n = this->NumSubPoints();
   if (n <= 0) return;
   std::vector<double> sigma(n);

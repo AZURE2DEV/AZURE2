@@ -342,7 +342,11 @@ class EPoint {
   std::vector<EPoint *> local_mapped_points_;
   std::vector<EPoint> integrationPoints_;
   EData *parentData_;
-  ESegment *parentSegment_;
+  // Which cross-section component the owning segment is compared against (0 full,
+  // 1 E1, 2 E2), copied in at construction.  Not a pointer to the segment: points are
+  // copied with their segments (segment vector growth, component segments, the fit's
+  // pooled EData clones), and a stored ESegment* then dangles.
+  int crossSectionComponent_;
 };
 
 #endif
