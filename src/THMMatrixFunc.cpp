@@ -298,11 +298,11 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
   if (angle) {
     // sum_spins |F|^2 = (1/pi) sum_L b_L P_L(cos theta), averaged over the
     // window (and over the spectator-window nodes with their weights).
+    // (theta= with vertexModel=dw is refused, CheckThmExperiments: no DW weights here.)
     std::vector<double> b;
     for (size_t k = 0; k < partial.size(); k++) {
       ThmLegendreCoefficients(waves, partial[k], b);
-      sigma += (numNodes > 0 && !dw ? point->GetThmPsWeight((int)k) : numNodes > 0 ? dwAt.weight[k] : 1.0) *
-               angle->Mean(b);
+      sigma += (numNodes > 0 ? point->GetThmPsWeight((int)k) : 1.0) * angle->Mean(b);
     }
   }
 
