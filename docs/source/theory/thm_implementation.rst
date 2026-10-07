@@ -1364,7 +1364,9 @@ reduced radii), :math:`V_C` a uniform sphere of radius ``RC`` or, for
 potential is evaluated at the channel's energy: fixed for :math:`a + A`, at
 :math:`E_{sF}(E)` of every tabulated energy for :math:`s + F`.
 
-*Numerics* (``src/ThmDistortion.cpp``). The radial equations are integrated
+*Numerics* (``src/ThmDistortion.cpp``; the Coulomb phases, the s-x bound
+state and the cubic Lagrange interpolation of the grid are shared with the DW
+vertex, ``src/ThmNumerics.cpp``). The radial equations are integrated
 outward from the origin by Numerov's method (complex for an optical
 potential), started from the power series, with step :math:`h = 0.02` fm for
 :math:`r` (smaller if a local wave number exceeds :math:`0.1/h`) and

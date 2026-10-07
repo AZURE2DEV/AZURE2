@@ -2,16 +2,14 @@
 #include "Config.h"
 #include "GSLException.h"
 #include "ThmExperiment.h"
+#include "ThmNumerics.h"
 #include "ThmOptical.h"
 #include "cwfcomp_accurate.H"
 
 #include <algorithm>
 #include <cmath>
 #include <sstream>
-#include <gsl/gsl_errno.h>
 #include <gsl/gsl_integration.h>
-#include <gsl/gsl_sf_gamma.h>
-#include <gsl/gsl_sf_hyperg.h>
 
 /*
  * Numerics (docs/source/theory/thm_implementation.rst, "Distortion factor R(E)").
@@ -48,31 +46,25 @@
 namespace {
 
 const double kGridStep = 0.01;  // MeV, the ln R grid
+const double kExpMax = 700.0;   // e^x beyond this: the Woods-Saxon form is 0 (no overflow)
+const double kWsRange = 12.0;   // the Woods-Saxon terms end at R + 12 a (below e^-12)
+const double kRescale = 1.0e150;    // the Numerov solution is rescaled beyond this
+const double kRescaleBy = 1.0e-150;  // ... by this factor
+const double kTailKappa = 50.0;   // the radial integrals end at rmin + 50/kappa
+const int kMaxRadial = 400000;    // radial nodes at most
+const double kWaveCut = 1.0e-17;  // a + A partial waves until A_l < 1e-17 of the largest
+const double kSumCut = 1.0e-13;   // the l sum stops once what is left is below 1e-13 |M|
 
 double WoodsSaxon(double r, double R, double a) {
   double x = (r - R) / a;
-  return x > 700.0 ? 0.0 : 1.0 / (1.0 + std::exp(x));
+  return x > kExpMax ? 0.0 : 1.0 / (1.0 + std::exp(x));
 }
 // 4 e^x/(1 + e^x)^2 = -4 a d/dr of the Woods-Saxon form factor.
 double SurfaceShape(double r, double R, double a) {
   double x = (r - R) / a;
-  if (std::fabs(x) > 700.0) return 0.0;
+  if (std::fabs(x) > kExpMax) return 0.0;
   double e = std::exp(-std::fabs(x));
   return 4.0 * e / ((1.0 + e) * (1.0 + e));
-}
-
-// Coulomb phases sigma_l = arg Gamma(l + 1 + i eta), l = 0..lmax, as e^{i sigma_l}.
-std::vector<complex> CoulombPhases(double eta, int lmax) {
-  std::vector<complex> out(lmax + 1, complex(1.0, 0.0));
-  if (eta == 0.0) return out;
-  gsl_sf_result lnr, arg;
-  gsl_sf_lngamma_complex_e(1.0, eta, &lnr, &arg);
-  double sigma = arg.val;
-  for (int l = 0; l <= lmax; l++) {
-    if (l > 0) sigma += std::atan(eta / l);
-    out[l] = std::polar(1.0, sigma);
-  }
-  return out;
 }
 
 // F_l, G_l at rho (eta real).
@@ -82,13 +74,6 @@ void CoulombFG(int l, double eta, double rho, double &F, double &G) {
   coul.compute(complex(rho, 0.0), f, df, g, dg);
   F = f.real();
   G = g.real();
-}
-
-std::string Number(double x) {
-  std::ostringstream s;
-  s.precision(6);
-  s << x;
-  return s.str();
 }
 
 }  // namespace
@@ -119,7 +104,7 @@ std::string ThmDistortion::Channel::Describe() const {
       << " on " << NucleusName(Zt, At) << ") ";
   s << "Woods-Saxon V=" << p[0] << " R=" << p[1] << " a=" << p[2] << ", W=" << p[3] << " RW=" << p[4]
     << " aW=" << p[5] << ", WD=" << p[6] << " RD=" << p[7] << " aD=" << p[8] << ", Coulomb "
-    << (p[9] > 0.0 ? "RC=" + Number(p[9]) : std::string("point")) << " (Z1 Z2 = " << Z1 * Z2 << ")";
+    << (p[9] > 0.0 ? "RC=" + ThmNumberText(p[9]) : std::string("point")) << " (Z1 Z2 = " << Z1 * Z2 << ")";
   return s.str();
 }
 
@@ -137,7 +122,7 @@ bool ThmDistortion::Wave(const Channel &c, int l, double step, int nStore, std::
   double rPot = rc;
   if (ws)
     for (int t = 0; t < 3; t++)
-      if (c.p[3 * t] != 0.0) rPot = std::max(rPot, c.p[3 * t + 1] + 12.0 * c.p[3 * t + 2]);
+      if (c.p[3 * t] != 0.0) rPot = std::max(rPot, c.p[3 * t + 1] + kWsRange * c.p[3 * t + 2]);
   // w(r) = 2 mu (V_C + U)/hbar^2 without the point-Coulomb 1/r part.
   auto w = [&](double r) {
     complex v(0.0, 0.0);
@@ -181,8 +166,8 @@ bool ThmDistortion::Wave(const Channel &c, int l, double step, int nStore, std::
   v[2] = std::pow(2.0, l + 1.0) * series(2.0 * step);
   for (int i = 2; i + 1 < nInt; i++) {
     v[i + 1] = ((12.0 - 10.0 * f[i]) * v[i] - f[i - 1] * v[i - 1]) / f[i + 1];
-    if (std::abs(v[i + 1]) > 1.0e150)
-      for (int j = 0; j <= i + 1; j++) v[j] *= 1.0e-150;
+    if (std::abs(v[i + 1]) > kRescale)
+      for (int j = 0; j <= i + 1; j++) v[j] *= kRescaleBy;
   }
   // Match c1 F + c2 G at m1 and m2 = m1 - d.
   const int m2 = m1 - d;
@@ -249,6 +234,18 @@ double ThmDistortion::SpectatorCos(double ksf, double *thetaCm, bool *clamped) c
   return (kin.horseIsBeam ? 1.0 : -1.0) * std::cos(theta);
 }
 
+double ThmDistortion::PlaneWaveSource(double q) const {
+  // The Fourier transform of phi at q.
+  double mpw = 0.0;
+  for (int i = i0; i < n; i++) {
+    double r = i * h;
+    double qr = q * r;
+    double j0 = qr < 1.0e-6 ? 1.0 - qr * qr / 6.0 : std::sin(qr) / qr;
+    mpw += simpson[i] * r * r * j0 * phi[i];
+  }
+  return 4.0 * M_PI * mpw;
+}
+
 ThmDistortion::Point ThmDistortion::Evaluate(double energy) const {
   if (angWindow) return EvaluateWindow(energy);
   Point p;
@@ -260,22 +257,14 @@ ThmDistortion::Point ThmDistortion::Evaluate(double energy) const {
   }
   p.ksf = std::sqrt(2.0 * sf.mu * p.esf) / hbarc;
   p.etasf = sf.kind == Channel::PLANE ? 0.0 : kin.Zs * (kin.Zx + kin.ZA) * fstruc * sf.mu / (hbarc * p.ksf);
-  p.x = SpectatorCos(p.ksf, &p.thetaCm, &p.angleClamped);
+  p.x = SpectatorCos(p.ksf, &p.thetaCm);
   const double kb = beta * aa.k;
   p.q = std::sqrt(std::max(0.0, p.ksf * p.ksf + kb * kb - 2.0 * p.ksf * kb * p.x));
-  // Plane-wave limit: the Fourier transform of phi at q.
-  double mpw = 0.0;
-  for (int i = i0; i < n; i++) {
-    double r = i * h;
-    double qr = p.q * r;
-    double j0 = qr < 1.0e-6 ? 1.0 - qr * qr / 6.0 : std::sin(qr) / qr;
-    mpw += simpson[i] * r * r * j0 * phi[i];
-  }
-  p.mpw = 4.0 * M_PI * mpw;
+  p.mpw = PlaneWaveSource(p.q);
   // Partial waves.
   Channel c = SfAt(energy);
   const int lCap = (int)uAA.size() - 1;
-  std::vector<complex> sigma = CoulombPhases(c.eta, lCap);
+  std::vector<complex> sigma = ThmCoulombPhases(c.eta, lCap);
   std::vector<complex> u;
   complex sum(0.0, 0.0);
   double pPrev = 1.0, pl = 1.0;  // Legendre recurrence
@@ -303,7 +292,7 @@ ThmDistortion::Point ThmDistortion::Evaluate(double energy) const {
     sum += (2.0 * l + 1.0) * sigma[l] * sigmaAA[l] * pl * integral;
     if (l == 0) p.tail = std::abs(phi[n - 1] * u[n - 1] * uAA[0][n - 1]) / kappa;
     p.lmax = l;
-    if (l >= 1 && l < lCap && tailAA[l + 1] * std::max(2.0, umax) < 1.0e-13 * std::abs(sum)) break;
+    if (l >= 1 && l < lCap && tailAA[l + 1] * std::max(2.0, umax) < kSumCut * std::abs(sum)) break;
   }
   p.m = 4.0 * M_PI / (p.ksf * kb) * sum;
   p.tail = std::abs(sum) > 0.0 ? p.tail / std::abs(sum) : HUGE_VAL;
@@ -491,20 +480,11 @@ ThmDistortion::Point ThmDistortion::EvaluateWindow(double energy) const {
   const double kb = beta * aa.k;
   // Plane-wave limits.
   std::vector<double> mpw(nk, 0.0);
-  for (int k = 0; k < nk; k++) {
-    double s = 0.0;
-    for (int i = i0; i < n; i++) {
-      double r = i * h;
-      double qr = act[k].q * r;
-      double j0 = qr < 1.0e-6 ? 1.0 - qr * qr / 6.0 : std::sin(qr) / qr;
-      s += simpson[i] * r * r * j0 * phi[i];
-    }
-    mpw[k] = 4.0 * M_PI * s;
-  }
+  for (int k = 0; k < nk; k++) mpw[k] = PlaneWaveSource(act[k].q);
   // Partial waves: the radial integrals once, P_l(x_k) per node.
   Channel c = SfAt(energy);
   const int lCap = (int)uAA.size() - 1;
-  std::vector<complex> sigma = CoulombPhases(c.eta, lCap);
+  std::vector<complex> sigma = ThmCoulombPhases(c.eta, lCap);
   std::vector<complex> u, sum(nk, complex(0.0, 0.0));
   std::vector<double> pPrev(nk, 1.0), pl(nk, 1.0);
   for (int l = 0; l <= lCap; l++) {
@@ -537,7 +517,7 @@ ThmDistortion::Point ThmDistortion::EvaluateWindow(double energy) const {
     }
     if (l == 0) p.tail = std::abs(phi[n - 1] * u[n - 1] * uAA[0][n - 1]) / kappa;
     p.lmax = l;
-    if (l >= 1 && l < lCap && tailAA[l + 1] * std::max(2.0, umax) < 1.0e-13 * smallest) break;
+    if (l >= 1 && l < lCap && tailAA[l + 1] * std::max(2.0, umax) < kSumCut * smallest) break;
   }
   double wsum = 0.0, m2 = 0.0, mpw2 = 0.0, th = 0.0, xs = 0.0, qs = 0.0, smallest = HUGE_VAL;
   bool finite = true;
@@ -602,7 +582,7 @@ std::string ThmDistortion::Setup(const ThmExperiment &x, const Kinematics &k, do
   }
   ratioPW = x.distortionRatioPW;
   yukawa = x.boundYukawa;
-  if (!(k.bind > 0.0)) return "the Trojan horse is not bound: B(x+s) = " + Number(k.bind) + " MeV";
+  if (!(k.bind > 0.0)) return "the Trojan horse is not bound: B(x+s) = " + ThmNumberText(k.bind) + " MeV";
   eAA = k.beamEnergy * k.mTarget / (k.mBeam + k.mTarget);
   vcm = std::sqrt(2.0 * k.mBeam * uconv * k.beamEnergy) / ((k.mBeam + k.mTarget) * uconv);
   beta = k.ms / k.ma;
@@ -749,14 +729,9 @@ bool ThmDistortion::GlobalEnds(int which, double lo, double hi, double elab[2], 
 
 double ThmDistortion::Phi(double r) const {
   if (!(r > 0.0) || r < rmin - 1.0e-12) return 0.0;
-  if (yukawa || etaB == 0.0) return std::exp(-kappa * r) / r;
-  gsl_sf_result U;
-  int status;
-  {
-    GslQuiet quiet;  // status checked here; thread-safe (GSLException.h)
-    status = gsl_sf_hyperg_U_e(1.0 + etaB, 2.0, 2.0 * kappa * r, &U);
-  }
-  return status == GSL_SUCCESS || status == GSL_EUNDRFLW ? 2.0 * kappa * std::exp(-kappa * r) * U.val : 0.0;
+  if (yukawa || etaB == 0.0) return ThmBoundStateTail(r, kappa, etaB, yukawa);
+  GslQuiet quiet;  // status checked in ThmBoundStateTail; thread-safe (GSLException.h)
+  return ThmBoundStateTail(r, kappa, etaB, yukawa);
 }
 
 std::string ThmDistortion::Build(const ThmExperiment &x, const Kinematics &k, double eLo, double eHi,
@@ -767,25 +742,16 @@ std::string ThmDistortion::Build(const ThmExperiment &x, const Kinematics &k, do
   }
   std::string setup = Setup(x, k, eLo);
   if (!setup.empty()) return setup;
-  const double rEnd = rmin + 50.0 / kappa;
+  const double rEnd = rmin + kTailKappa / kappa;
   int intervals = (int)std::ceil((rEnd - rmin) / h);
   if (intervals % 2) intervals++;
   n = i0 + intervals + 1;
-  if (n > 400000) return "the radial grid would need " + Number(n) + " points (kappa too small)";
+  if (n > kMaxRadial) return "the radial grid would need " + ThmNumberText(n) + " points (kappa too small)";
   phi.assign(n, 0.0);
   simpson.assign(n, 0.0);
   {
-    GslQuiet quiet;  // statuses checked below; thread-safe (GSLException.h)
-    for (int i = std::max(i0, 1); i < n; i++) {
-      double r = i * h;
-      if (yukawa || etaB == 0.0) {
-        phi[i] = std::exp(-kappa * r) / r;
-      } else {
-        gsl_sf_result U;
-        int status = gsl_sf_hyperg_U_e(1.0 + etaB, 2.0, 2.0 * kappa * r, &U);
-        phi[i] = status == GSL_SUCCESS || status == GSL_EUNDRFLW ? 2.0 * kappa * std::exp(-kappa * r) * U.val : 0.0;
-      }
-    }
+    GslQuiet quiet;  // statuses checked in ThmBoundStateTail; thread-safe (GSLException.h)
+    for (int i = std::max(i0, 1); i < n; i++) phi[i] = ThmBoundStateTail(i * h, kappa, etaB, yukawa);
   }
   for (int i = i0; i < n; i++) {
     int j = i - i0;
@@ -798,38 +764,38 @@ std::string ThmDistortion::Build(const ThmExperiment &x, const Kinematics &k, do
   double ampMax = 0.0;
   const int kLCap = 400;
   // The waves are kept, (l + 1) n complex numbers: bound them before they
-  // grow (n <= 400000 and l <= 400 alone would allow 2.6 GB).
+  // grow (n <= kMaxRadial and l <= 400 alone would allow 2.6 GB).
   const double kMaxWaveMB = 512.0;
   for (int l = 0;; l++) {
-    if (l > kLCap) return "the partial-wave sum does not converge by l = " + Number(kLCap);
+    if (l > kLCap) return "the partial-wave sum does not converge by l = " + ThmNumberText(kLCap);
     if ((l + 1.0) * n * sizeof(complex) / 1048576.0 > kMaxWaveMB)
-      return "the a + A partial waves would need more than " + Number(kMaxWaveMB) + " MB (" + Number(n) +
-             " radial points, l = " + Number(l) + ")";
+      return "the a + A partial waves would need more than " + ThmNumberText(kMaxWaveMB) + " MB (" + ThmNumberText(n) +
+             " radial points, l = " + ThmNumberText(l) + ")";
     std::vector<complex> u;
-    if (!Wave(aa, l, beta * h, n, u)) return "the a + A wave l = " + Number(l) + " could not be normalized";
+    if (!Wave(aa, l, beta * h, n, u)) return "the a + A wave l = " + ThmNumberText(l) + " could not be normalized";
     double a = 0.0;
     for (int i = i0; i < n; i++) a += simpson[i] * std::fabs(phi[i]) * std::abs(u[i]);
     a *= 2.0 * l + 1.0;
     uAA.push_back(u);
     amp.push_back(a);
     ampMax = std::max(ampMax, a);
-    if (l >= 2 && a < 1.0e-17 * ampMax && a < amp[l - 1]) break;
+    if (l >= 2 && a < kWaveCut * ampMax && a < amp[l - 1]) break;
   }
   tailAA.assign(amp.size() + 1, 0.0);
   for (size_t l = amp.size(); l-- > 0;) tailAA[l] = tailAA[l + 1] + amp[l];
-  sigmaAA = CoulombPhases(aa.eta, (int)uAA.size() - 1);
+  sigmaAA = ThmCoulombPhases(aa.eta, (int)uAA.size() - 1);
 
   SetAngleSlots(eHi);
   std::ostringstream d;
   d.precision(6);
   d << (kind == COULOMB ? "coulomb" : "optical") << "; a + A: " << ChannelText(0) << "; s + F: " << ChannelText(1)
-    << (angWindow ? "; spectator directions " + AngleText() + " (" + Number(angNodes) + " nodes in cos theta_cm" +
+    << (angWindow ? "; spectator directions " + AngleText() + " (" + ThmNumberText(angNodes) + " nodes in cos theta_cm" +
                         (angSlots > 1 ? " per branch" : "") + (qCut ? ", |p_s| cut by the ps window" : "") +
                         "), acceptance-averaged |M|^2 and |M_PW|^2"
                   : "; spectator angle " +
                         (angleKind == QF ? std::string("qf (k_sF along k_aA)")
-                                         : (angleKind == LAB ? "lab " : "cm ") + Number(angle) + " deg"))
-    << "; bound state " << (yukawa ? "yukawa" : "whittaker") << (rmin > 0.0 ? ", r >= " + Number(rmin) + " fm" : "")
+                                         : (angleKind == LAB ? "lab " : "cm ") + ThmNumberText(angle) + " deg"))
+    << "; bound state " << (yukawa ? "yukawa" : "whittaker") << (rmin > 0.0 ? ", r >= " + ThmNumberText(rmin) + " fm" : "")
     << "; R = " << (ratioPW ? "(|M|^2/|M_PW|^2)(E) / (same)(E_ref)" : "|M(E)|^2/|M(E_ref)|^2");
   description = d.str();
 
@@ -899,8 +865,8 @@ double ThmDistortion::Weight(double energy, bool *outside) const {
   if (t >= nodes - 1.0) return std::exp(lnR.back());
   // Cubic Lagrange through the four nearest nodes.
   int j = std::min(std::max((int)std::floor(t), 1), nodes - 3);
-  double s = t - j;  // nodes j-1, j, j+1, j+2 at s = -1, 0, 1, 2
-  double v = -s * (s - 1.0) * (s - 2.0) / 6.0 * lnR[j - 1] + (s + 1.0) * (s - 1.0) * (s - 2.0) / 2.0 * lnR[j] -
-             (s + 1.0) * s * (s - 2.0) / 2.0 * lnR[j + 1] + (s + 1.0) * s * (s - 1.0) / 6.0 * lnR[j + 2];
+  double c[4];
+  ThmCubicLagrange(t - j, c);  // nodes j-1, j, j+1, j+2 at s = -1, 0, 1, 2
+  double v = c[0] * lnR[j - 1] + c[1] * lnR[j] + c[2] * lnR[j + 1] + c[3] * lnR[j + 2];
   return std::exp(v);
 }

@@ -73,7 +73,8 @@ bool ThmGlobalOpticalFor(int index, int Zp, int Ap) {
   }
 }
 
-void ThmGlobalOpticalEvaluate(int index, int Zp, int Ap, int Zt, int At, double elab, double p[10]) {
+// The projectile enters by its charge Zp; its mass number does not.
+void ThmGlobalOpticalEvaluate(int index, int Zp, int /*Ap*/, int Zt, int At, double elab, double p[10]) {
   for (int k = 0; k < 10; k++) p[k] = 0.0;
   const double A = At, Z = Zt, N = At - Zt, E = elab;
   const double a13 = std::cbrt(A), eta = (N - Z) / A;
@@ -179,7 +180,6 @@ void ThmGlobalOpticalEvaluate(int index, int Zp, int Ap, int Zt, int At, double 
     default:
       return;
   }
-  (void)Ap;
   p[0] = v;
   p[1] = rv * a13;
   p[2] = av;

@@ -100,7 +100,6 @@ class ThmDistortion {
     int lmax = 0;          ///< highest l summed
     bool ok = false;
     std::string why;       ///< if !ok
-    bool angleClamped = false;  ///< lab angle beyond the reach of the forward branch
     double tail = 0.0;  ///< |integrand(r_end)|/(kappa |M|), l = 0: the radial cutoff's size
     /// Spectator-direction window (spectatorAngles=): the nodes with a
     /// weight, and the acceptance averages <|M|^2>, <|M_PW|^2> (thetaCm, x, q
@@ -188,6 +187,9 @@ class ThmDistortion {
   std::string Setup(const ThmExperiment &x, const Kinematics &k, double eLo);
   /// The s-x bound state phi(r) as Build tabulates it (0 below rmin).
   double Phi(double r) const;
+  /// The plane-wave limit of the amplitude, M_PW(q) = 4 pi Int r^2 j_0(q r)
+  /// phi(r) dr on the radial grid (Simpson), q in fm^-1.
+  double PlaneWaveSource(double q) const;
   /// Sum of the Woods-Saxon depths of a channel (0 unless WOODS_SAXON; for a
   /// global potential the largest over its energies), MeV.
   static double Depth(const Channel &c);

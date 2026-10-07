@@ -1,15 +1,14 @@
 #include "ThmDwVertex.h"
 #include "ThmExperiment.h"
 #include "ThmLineshape.h"
+#include "ThmNumerics.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <sstream>
-#include <gsl/gsl_errno.h>
 #include <gsl/gsl_integration.h>
 #include <gsl/gsl_sf_bessel.h>
-#include <gsl/gsl_sf_gamma.h>
 
 /*
  * Numerics (docs/source/theory/thm_implementation.rst, "Distorted-wave
@@ -136,20 +135,6 @@ struct Lagrange6 {
   }
 };
 
-// e^{i sigma_L}, L = 0..lMax (eta = 0: 1).
-std::vector<complex> CoulombPhases(double eta, int lMax) {
-  std::vector<complex> out(lMax + 1, complex(1.0, 0.0));
-  if (eta == 0.0) return out;
-  gsl_sf_result lnr, arg;
-  gsl_sf_lngamma_complex_e(1.0, eta, &lnr, &arg);
-  double sigma = arg.val;
-  for (int l = 0; l <= lMax; l++) {
-    if (l > 0) sigma += std::atan(eta / l);
-    out[l] = std::polar(1.0, sigma);
-  }
-  return out;
-}
-
 // u_L(kR) for L = 0..lMax on j step, j < n: Riccati-Bessel for a plane wave,
 // else ThmDistortion::Wave.  False (and the L) if a wave cannot be normalized.
 bool WaveTable(const ThmDistortion &d, const ThmDistortion::Channel &c, int lMax, double step, int n,
@@ -171,13 +156,6 @@ bool WaveTable(const ThmDistortion &d, const ThmDistortion::Channel &c, int lMax
       return false;
     }
   return true;
-}
-
-std::string Number(double x) {
-  std::ostringstream s;
-  s.precision(6);
-  s << x;
-  return s.str();
 }
 
 }  // namespace
@@ -305,7 +283,7 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   laMax = (int)std::ceil(ka * rA) + kLMargin;
   lsMax = (int)std::ceil(ksMax * rS) + kLMargin;
   if (laMax > kLCap || lsMax > kLCap)
-    return "the partial-wave sums would need L up to " + Number(std::max(laMax, lsMax)) + " (kappa too small)";
+    return "the partial-wave sums would need L up to " + ThmNumberText(std::max(laMax, lsMax)) + " (kappa too small)";
   std::vector<double> uNode, uWt;
   {
     double width = std::min(kPanelMax, kPanelPhase / (ksMax + beta * ka));
@@ -367,8 +345,8 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   std::vector<std::vector<complex>> uA;
   int bad = -1;
   if (!WaveTable(dist, dist.aa, laMax, stepA, nA, uA, bad))
-    return "the a + A wave l = " + Number(bad) + " could not be normalized";
-  std::vector<complex> sigA = CoulombPhases(dist.aa.eta, laMax);
+    return "the a + A wave l = " + ThmNumberText(bad) + " could not be normalized";
+  std::vector<complex> sigA = ThmCoulombPhases(dist.aa.eta, laMax);
   const double stepS = tableStep(dist.sf, *std::max_element(esfE.begin(), esfE.end()));
   const int nS = (int)std::ceil(rS / stepS) + 8;
 
@@ -384,7 +362,7 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
       ThmDistortion::Channel c = dist.SfAt(eLo + (e0 + b) * gridStep);
       int badL = -1;
       if (!WaveTable(dist, c, lsMax, stepS, nS, uS[b], badL))
-        errors[b] = "the s + F wave l = " + Number(badL) + " at E = " + Number(eLo + (e0 + b) * gridStep) +
+        errors[b] = "the s + F wave l = " + ThmNumberText(badL) + " at E = " + ThmNumberText(eLo + (e0 + b) * gridStep) +
                     " MeV could not be normalized";
     }
     for (const std::string &err : errors)
@@ -488,7 +466,7 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
     const double etas = dist.sf.kind == ThmDistortion::Channel::PLANE
                             ? 0.0
                             : k.Zs * (k.Zx + k.ZA) * fstruc * dist.sf.mu / (hbarc * ks);
-    std::vector<complex> sigS = CoulombPhases(etas, lsMax);
+    std::vector<complex> sigS = ThmCoulombPhases(etas, lsMax);
     // Reduced amplitudes (4pi)^2/(ks ka) (-i)^Ls i^La e^{i(sigma+sigma)} sqrt(4pi/(2l+1)) h.
     std::vector<complex> H(nT), dH(nT);
     for (int t = 0; t < nT; t++) {
@@ -550,7 +528,7 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
       thd[e] = std::acos(std::max(-1.0, std::min(1.0, xsa))) * 180.0 / M_PI;
       double phit = gram(xsa, qd[e], &Gd[(size_t)e * nl * 4]);
       if (!(std::fabs(phit) > 0.0) || !std::isfinite(phit))
-        return "the plane-wave source phi~(q) vanishes at E = " + Number(eLo + e * gridStep) + " MeV";
+        return "the plane-wave source phi~(q) vanishes at E = " + ThmNumberText(eLo + e * gridStep) + " MeV";
       phiSign[e] = phit > 0.0 ? 1 : -1;
     }
     if (angles) {
@@ -572,8 +550,8 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
         if (!(n.w > 0.0)) continue;  // an empty branch
         double phit = gram(n.x, n.q, &gk[(size_t)i * nl * 4]);
         if (!(std::fabs(phit) > 0.0) || !std::isfinite(phit))
-          return "the plane-wave source phi~(q) vanishes at E = " + Number(eLo + e * gridStep) + " MeV, q = " +
-                 Number(n.q * hbarc) + " MeV/c";
+          return "the plane-wave source phi~(q) vanishes at E = " + ThmNumberText(eLo + e * gridStep) + " MeV, q = " +
+                 ThmNumberText(n.q * hbarc) + " MeV/c";
         *ai = n.w * phit * phit;
         total += *ai;
       }
@@ -606,9 +584,9 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
     for (int e = 0; e + 1 < nE; e++) {
       const double e0 = gridLo + e * gridStep, e1 = e0 + gridStep;
       if (e1 < lo || e0 > hi || phiSign[e] == 0 || phiSign[e + 1] == 0 || phiSign[e] == phiSign[e + 1]) continue;
-      dist.warnings.push_back("the plane-wave source phi~(q) of the vertex changes sign between E = " + Number(e0) +
-                              " and " + Number(e1) + " MeV (q = " + Number(qd[e] * hbarc) + " to " +
-                              Number(qd[e + 1] * hbarc) +
+      dist.warnings.push_back("the plane-wave source phi~(q) of the vertex changes sign between E = " + ThmNumberText(e0) +
+                              " and " + ThmNumberText(e1) + " MeV (q = " + ThmNumberText(qd[e] * hbarc) + " to " +
+                              ThmNumberText(qd[e + 1] * hbarc) +
                               " MeV/c in the spectatorAngle direction): a node of the momentum distribution, "
                               "where the vertex, normalized by phi~(q), is singular and interpolated across the "
                               "pole; another spectatorAngle or boundState= moves it");
@@ -623,7 +601,7 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
     int i0 = std::max(0, std::min(nE - 1, (int)std::floor(t))), i1 = std::min(nE - 1, i0 + 1);
     if (!valid[i0] || !valid[i1]) {
       std::string why = dist.CheckWindow(e);
-      return why.empty() ? "at E = " + Number(e) + " MeV the spectator-direction window is out of reach next to it"
+      return why.empty() ? "at E = " + ThmNumberText(e) + " MeV the spectator-direction window is out of reach next to it"
                          : why;
     }
   }
@@ -650,15 +628,15 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   d.precision(6);
   d << "vertexModel=dw: surface term of the prior-form DWBA; a + A: " << dist.ChannelText(0)
     << "; s + F: " << dist.ChannelText(1) << "; bound state " << (dist.yukawa ? "yukawa" : "whittaker")
-    << (rmin > 0.0 ? ", r >= " + Number(rmin) + " fm" : "") << "; "
-    << (angles ? "spectator directions " + dist.AngleText() + " (" + Number(dist.angNodes) +
+    << (rmin > 0.0 ? ", r >= " + ThmNumberText(rmin) + " fm" : "") << "; "
+    << (angles ? "spectator directions " + dist.AngleText() + " (" + ThmNumberText(dist.angNodes) +
                      " nodes in cos theta_cm" + (dist.angSlots > 1 ? " per branch" : "") +
                      (dist.qCut && !dist.angAll ? ", |p_s| cut by the ps window" : "") +
                      "; weight d cos theta_cm x acceptance x |phi~(q)|^2)"
                : std::string("spectator angle ") +
                      (dist.angleKind == ThmDistortion::QF
                           ? "qf (k_sF along k_aA)"
-                          : (dist.angleKind == ThmDistortion::LAB ? "lab " : "cm ") + Number(dist.angle) + " deg"));
+                          : (dist.angleKind == ThmDistortion::LAB ? "lab " : "cm ") + ThmNumberText(dist.angle) + " deg"));
   description = d.str();
   buildSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
   return "";
@@ -695,9 +673,8 @@ void ThmDwVertex::Interpolate(double energy, std::vector<double> &weight, std::v
   if (outside) *outside = out;
   t = std::max(0.0, std::min(nE - 1.0, t));
   int j = std::min(std::max((int)std::floor(t), 1), nE - 3);
-  double s = t - j;
-  const double c[4] = {-s * (s - 1.0) * (s - 2.0) / 6.0, (s + 1.0) * (s - 1.0) * (s - 2.0) / 2.0,
-                       -(s + 1.0) * s * (s - 2.0) / 2.0, (s + 1.0) * s * (s - 1.0) / 6.0};
+  double c[4];
+  ThmCubicLagrange(t - j, c);
   auto lag = [&](const std::vector<double> &v, size_t stride, size_t off) {
     double r = 0.0;
     for (int i = 0; i < 4; i++) r += c[i] * v[(size_t)(j - 1 + i) * stride + off];
