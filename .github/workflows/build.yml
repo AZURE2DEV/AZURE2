@@ -23,6 +23,10 @@ jobs:
     # is to see every platform's errors in one run.
     strategy:
       fail-fast: false
+      # pyazr_engine: pybind11, numpy and scipy are installed, so the _azure2
+      # module is built and the pyazr tests that drive the engine must run.
+      # One of them reported Skipped fails the job (see Unit tests); 'OFF'
+      # would turn that into a warning, for a platform that cannot have them.
       matrix:
         include:
           - name: linux
@@ -37,6 +41,7 @@ jobs:
             os: ubuntu-22.04
             use_qwt: 'ON'
             use_readline: 'ON'
+            pyazr_engine: 'ON'
           - name: macos
             # Intel runner on purpose: Homebrew's qt@5 and qwt-qt5 bottles are
             # x86_64 here, and an arm64 build could not link against them. The
@@ -47,10 +52,12 @@ jobs:
             os: macos-15-intel
             use_qwt: 'ON'
             use_readline: 'ON'
+            pyazr_engine: 'ON'
           - name: windows
             os: windows-latest
             use_qwt: 'ON'
             use_readline: 'ON'
+            pyazr_engine: 'ON'
 
     defaults:
       run:
@@ -68,7 +75,13 @@ jobs:
             build-essential cmake ninja-build pkg-config \
             libgsl-dev libreadline-dev \
             qtbase5-dev qtbase5-dev-tools qttools5-dev libqt5svg5-dev \
-            libqwt-qt5-dev
+            libqwt-qt5-dev \
+            pybind11-dev python3-dev python3-numpy python3-scipy
+          # The interpreter the _azure2 module is built for and the pyazr
+          # tests run under -- the one apt installed numpy and scipy into.
+          PY=/usr/bin/python3
+          "$PY" -c 'import numpy, scipy; print("numpy", numpy.__version__, "scipy", scipy.__version__)'
+          echo "PYAZR_PYTHON=$PY" >> "$GITHUB_ENV"
 
       # ---------------------------------------------------------------- macos
       # Qt5 and Qwt come from Homebrew rather than install-qt-action, because
@@ -83,7 +96,24 @@ jobs:
       - name: Install dependencies (macos)
         if: matrix.name == 'macos'
         run: |
-          brew install ninja gsl readline libomp qt@5 qwt-qt5
+          brew install ninja gsl readline libomp qt@5 qwt-qt5 pybind11 numpy scipy
+          # Homebrew's numpy and scipy live in one of its python@3.x kegs, not
+          # in the runner's own Python that a bare find_package(Python) may
+          # pick first.  Take the newest keg numpy depends on in which both
+          # import, and hand it to CMake explicitly (Configure), so _azure2 is
+          # built for, and the pyazr tests run under, that interpreter.
+          PY=""
+          for f in $(brew deps --direct numpy | grep '^python@' | sort -t. -k2 -rn); do
+            c="$(brew --prefix "$f")/bin/python${f#python@}"
+            if "$c" -c 'import numpy, scipy' 2>/dev/null; then PY="$c"; break; fi
+          done
+          if [ -z "$PY" ]; then
+            echo "No Homebrew Python imports both numpy and scipy; numpy depends on:"
+            brew deps --direct numpy
+            exit 1
+          fi
+          "$PY" -c 'import sys, numpy, scipy; print(sys.executable, "numpy", numpy.__version__, "scipy", scipy.__version__)'
+          echo "PYAZR_PYTHON=$PY" >> "$GITHUB_ENV"
           echo "LIBOMP=$(brew --prefix libomp)" >> "$GITHUB_ENV"
           # Both are keg-only, so they are not on the default search paths.
           echo "QT5_PREFIX=$(brew --prefix qt@5)" >> "$GITHUB_ENV"
@@ -137,6 +167,19 @@ jobs:
             mingw-w64-ucrt-x86_64-qt5-svg
             mingw-w64-ucrt-x86_64-qt5-tools
             mingw-w64-ucrt-x86_64-qwt-qt5
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-python-numpy
+            mingw-w64-ucrt-x86_64-python-scipy
+            mingw-w64-ucrt-x86_64-pybind11
+
+      # The UCRT64 Python, the one pacman installed numpy and scipy into, as a
+      # Windows path: CMake is a native mingw program and cannot read /ucrt64.
+      - name: Python for pyazr (windows)
+        if: matrix.name == 'windows'
+        run: |
+          PY="$(cygpath -m "$(command -v python3)")"
+          "$PY" -c 'import sys, numpy, scipy; print(sys.executable, "numpy", numpy.__version__, "scipy", scipy.__version__)'
+          echo "PYAZR_PYTHON=$PY" >> "$GITHUB_ENV"
 
       # --------------------------------------------------------------- build
       - name: Configure
@@ -159,6 +202,15 @@ jobs:
             EXTRA+=(-DQWT_INCLUDE_DIR="$QWT_INCLUDE_DIR")
             EXTRA+=(-DQWT_LIBRARY="$QWT_LIBRARY")
           fi
+          # One interpreter for everything Python: pybind11 builds _azure2
+          # against Python_EXECUTABLE (FindPython, which PYBIND11_FINDPYTHON
+          # selects over FindPythonInterp, removed by CMake 3.27's CMP0148), and
+          # tests/pyazr runs the tests with Python3_EXECUTABLE.  Two different
+          # interpreters would build a module the tests cannot import -- which
+          # they would report as Skipped.
+          EXTRA+=(-DPYBIND11_FINDPYTHON=ON)
+          EXTRA+=(-DPython_EXECUTABLE="$PYAZR_PYTHON")
+          EXTRA+=(-DPython3_EXECUTABLE="$PYAZR_PYTHON")
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_GUI=ON \
@@ -213,10 +265,25 @@ jobs:
       # and nothing else: the GUI widgets (the Nuclear Potential tab once
       # shipped with a selector that could never list a channel) and the .azr
       # round-trip. Neither needs a display.
+      #
+      # ctest counts a skipped test (exit 77, SKIP_RETURN_CODE) as no failure,
+      # so its status alone cannot tell "the pyazr engine tests ran" from "the
+      # _azure2 module or numpy went missing and every one of them skipped" --
+      # which is how none of them had ever run in CI.  Every skipped test
+      # is therefore listed in a warning annotation, and a skipped pyazr test
+      # fails the job where matrix.pyazr_engine says it must run.
       - name: Unit tests
         run: |
           set -o pipefail
-          if ! ctest --test-dir build --output-on-failure 2>&1 | tee unit-tests.log; then
+          rc=0
+          ctest --test-dir build --output-on-failure 2>&1 | tee unit-tests.log || rc=$?
+          # ctest's closing "The following tests did not run:" block, one
+          # "<n> - <name> (Skipped)" line per test.
+          SKIPPED="$(awk '/ - .* \(Skipped\)/ { sub(/^[ \t]*[0-9]+ - /, ""); sub(/ \(Skipped\).*$/, ""); print }' unit-tests.log)"
+          if [ -n "$SKIPPED" ]; then
+            echo "::warning::${{ matrix.name }}: $(echo "$SKIPPED" | wc -l | tr -d ' ') test(s) skipped:%0A$(echo "$SKIPPED" | paste -sd ' ' -)"
+          fi
+          if [ "$rc" -ne 0 ]; then
             echo "::error::unit tests failed on ${{ matrix.name }}"
             # One annotation per failed test with the tail of its own output
             # (%0A = newline), so the reason shows without the log download.
@@ -227,6 +294,14 @@ jobs:
               /^ *[0-9]+\/[0-9]+ Test +#[0-9]+: / { flush(); if ($0 ~ /Failed|Timeout|Exception|Not Run/) name = $0; next }
               name != "" { gsub(/%/, "%25"); gsub(/\r/, ""); buf = buf $0 "\n" }
               END { flush() }' unit-tests.log | head -9
+            exit 1
+          fi
+          if [ "${{ matrix.pyazr_engine }}" = "ON" ] && echo "$SKIPPED" | grep -q '^pyazr_'; then
+            # Why: the import every engine test starts with, run here so the
+            # reason reaches the annotation rather than only the test's output.
+            WHY="$("$PYAZR_PYTHON" -c 'import numpy, scipy, pyazr._azure2' 2>&1 | tail -3 \
+                   | awk '{ gsub(/%/, "%25"); gsub(/\r/, ""); printf "%s%s", (NR > 1 ? "%0A" : ""), $0 }')"
+            echo "::error::${{ matrix.name }}: pyazr engine tests skipped although pybind11, numpy and scipy were installed:%0A$(echo "$SKIPPED" | grep '^pyazr_' | paste -sd ' ' -)%0A${WHY:-the import succeeds here; see unit-tests.log}"
             exit 1
           fi
 
