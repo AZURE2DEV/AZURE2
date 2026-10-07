@@ -1,4 +1,5 @@
 #include "ThmSettings.h"
+#include "ThmNumberText.h"
 
 #include <QDir>
 #include <QRegExp>
@@ -12,24 +13,6 @@
 #include "ThmExperiment.h"
 
 namespace {
-
-// Shortest text that reads back as the same double.
-QString numberText(double x) { return QString::number(x, 'g', QLocale::FloatingPointShortest); }
-
-// The engine reads numbers with operator>> on an istringstream; so does this,
-// so that "0.5 " or "5" are taken exactly as AZURE2 takes them.
-bool readDouble(const QString &text, double &x, bool strict = false) {
-  std::istringstream s(text.toStdString());
-  if (!(s >> x)) return false;
-  std::string rest;
-  return !strict || !(s >> rest);
-}
-bool readInt(const QString &text, int &x, bool strict) {
-  std::istringstream s(text.toStdString());
-  if (!(s >> x)) return false;
-  std::string rest;
-  return !strict || !(s >> rest);
-}
 
 // The code part of a line: comment stripped, trimmed (as the engine reads it).
 QString codeOf(const QString &line) {
@@ -59,9 +42,9 @@ QList<QPair<QString, QString>> ThmSettings::keyValues() const {
   if (kinematics != d.kinematics) kv << qMakePair(QString("kinematics"), kinematics);
   if (coulombIntegral != d.coulombIntegral) kv << qMakePair(QString("coulombIntegral"), QString("1"));
   if (spectatorEnergy != d.spectatorEnergy)
-    kv << qMakePair(QString("spectatorEnergy"), numberText(spectatorEnergy));
+    kv << qMakePair(QString("spectatorEnergy"), ThmText::number(spectatorEnergy));
   for (auto it = spectatorByPair.begin(); it != spectatorByPair.end(); ++it)
-    kv << qMakePair(QString("spectatorEnergy[%1]").arg(it.key()), numberText(it.value()));
+    kv << qMakePair(QString("spectatorEnergy[%1]").arg(it.key()), ThmText::number(it.value()));
   for (auto it = weight.begin(); it != weight.end(); ++it)
     kv << qMakePair(QString("weight[%1]").arg(it.key()), it.value());
   for (auto it = weightTest.begin(); it != weightTest.end(); ++it)
@@ -114,13 +97,13 @@ bool ThmSettings::parseLine(const QString &rawLine, QString &key, QString &value
     v = s.coulombIntegral ? "1" : "0";
   } else if (k.startsWith("spectatorEnergy")) {
     double x;
-    if (!readDouble(v, x, true) || !(x >= 0.0)) return false;
-    v = numberText(x);
+    if (!ThmText::readDouble(v, x, true) || !(x >= 0.0)) return false;
+    v = ThmText::number(x);
     if (k == "spectatorEnergy") {
       s.spectatorEnergy = x;
     } else if (k.size() > 17 && k[15] == '[' && k.endsWith(']')) {
       int pair;
-      if (!readInt(k.mid(16, k.size() - 17), pair, false)) return false;
+      if (!ThmText::readInt(k.mid(16, k.size() - 17), pair, false)) return false;
       s.spectatorByPair[pair] = x;
       k = QString("spectatorEnergy[%1]").arg(pair);
     } else {
@@ -131,7 +114,7 @@ bool ThmSettings::parseLine(const QString &rawLine, QString &key, QString &value
     int open = test ? 10 : 6;
     int segment;
     if (!(k.size() > open + 2 && k[open] == '[' && k.endsWith(']') && !v.isEmpty())) return false;
-    if (!readInt(k.mid(open + 1, k.size() - open - 2), segment, true) || segment < 1) return false;
+    if (!ThmText::readInt(k.mid(open + 1, k.size() - open - 2), segment, true) || segment < 1) return false;
     (test ? s.weightTest : s.weight)[segment] = v;
     k = QString(test ? "weightTest[%1]" : "weight[%1]").arg(segment);
   } else {

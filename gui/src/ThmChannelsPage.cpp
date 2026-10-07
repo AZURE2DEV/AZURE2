@@ -1,4 +1,5 @@
 #include "ThmChannelsPage.h"
+#include "ThmNumberText.h"
 
 #include <QAction>
 #include <QCheckBox>
@@ -22,20 +23,6 @@
 #include "RichTextDelegate.h"
 #include "SegmentsDataModel.h"
 #include "SegmentsTestModel.h"
-
-namespace {
-
-// Shortest text that reads back as the same double.
-QString numberText(double x) { return QString::number(x, 'g', QLocale::FloatingPointShortest); }
-
-// A whole token as a number, read as the engine reads a <levels> column.
-bool readWholeDouble(const QString &text, double &x) {
-  std::istringstream s(text.trimmed().toStdString());
-  std::string rest;
-  return !!(s >> x) && !(s >> rest) && std::isfinite(x);
-}
-
-}  // namespace
 
 QSet<int> ThmChannelsPage::thmEntrancePairs(SegmentsDataModel *segmentsData, SegmentsTestModel *segmentsTest) {
   QSet<int> keys;
@@ -90,7 +77,7 @@ ThmChannelsPage::ThmChannelsPage(PairsModel *pairs, LevelsModel *levels, Channel
     pairTable->setItem(row, 1, new QTableWidgetItem(nuclei));
     pairTable->setItem(row, 2, new QTableWidgetItem(users.contains(key) ? users[key].join(", ")
                                                                         : tr("none (B kept as in the file)")));
-    QLineEdit *edit = new QLineEdit(numberText(p.bindingEnergy));
+    QLineEdit *edit = new QLineEdit(ThmText::number(p.bindingEnergy));
     edit->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     edit->setFrame(false);
     QDoubleValidator *v = new QDoubleValidator(edit);
@@ -136,11 +123,11 @@ ThmChannelsPage::ThmChannelsPage(PairsModel *pairs, LevelsModel *levels, Channel
     channelTable->insertRow(row);
     channelRows_ << c;
     channelTable->setItem(row, 0, new QTableWidgetItem(levels->getSpinLabel(level) + ", " +
-                                                        numberText(level.energy) + " MeV"));
+                                                        ThmText::number(level.energy) + " MeV"));
     channelTable->setItem(row, 1, new QTableWidgetItem(QString::number(ch.pairIndex + 1)));
     channelTable->setItem(row, 2, new QTableWidgetItem(QString::number(ch.lValue)));
     channelTable->setItem(row, 3, new QTableWidgetItem(channels->getSpinLabel(ch)));
-    channelTable->setItem(row, 4, new QTableWidgetItem(numberText(ch.reducedWidth)));
+    channelTable->setItem(row, 4, new QTableWidgetItem(ThmText::number(ch.reducedWidth)));
     for (int c : {1, 2, 4}) channelTable->item(row, c)->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
     channelTable->item(row, 3)->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
     QTableWidgetItem *flag = new QTableWidgetItem;
@@ -185,7 +172,7 @@ QString ThmChannelsPage::check() const {
   for (int row = 0; row < pairRows_.size(); row++) {
     const QString text = qobject_cast<QLineEdit *>(pairTable->cellWidget(row, 3))->text();
     double x;
-    if (!readWholeDouble(text, x))
+    if (!ThmText::readWholeDouble(text, x))
       return tr("Pair %1: the binding energy '%2' is not a number (MeV).").arg(pairRows_.at(row)).arg(text);
   }
   return QString();
@@ -196,7 +183,7 @@ void ThmChannelsPage::apply() {
     QLineEdit *edit = qobject_cast<QLineEdit *>(pairTable->cellWidget(row, 3));
     if (edit->text().trimmed() == edit->property("shown").toString()) continue;  // exactly as read
     double x;
-    if (!readWholeDouble(edit->text(), x)) continue;
+    if (!ThmText::readWholeDouble(edit->text(), x)) continue;
     pairs_->setData(pairs_->index(pairRows_.at(row) - 1, 15), x, Qt::EditRole);
   }
   const QList<ChannelsData> channelList = channels_->getChannels();
@@ -212,7 +199,7 @@ void ThmChannelsPage::apply() {
 double ThmChannelsPage::bindingOf(int pairKey) const {
   const int row = pairRow(pairKey);
   double x;
-  if (row >= 0 && readWholeDouble(qobject_cast<QLineEdit *>(pairTable->cellWidget(row, 3))->text(), x)) return x;
+  if (row >= 0 && ThmText::readWholeDouble(qobject_cast<QLineEdit *>(pairTable->cellWidget(row, 3))->text(), x)) return x;
   const QList<PairsData> pairs = pairs_->getPairs();
   return pairKey >= 1 && pairKey <= pairs.size() ? pairs.at(pairKey - 1).bindingEnergy : 0.0;
 }

@@ -1,4 +1,5 @@
 #include "ThmExperimentsPage.h"
+#include "ThmNumberText.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -46,13 +47,6 @@ namespace {
 
 // MeV/u, the value EData::SetupThmExperiments converts the binding with.
 const double kAmu = 931.49410242;
-
-// A whole token as a number, as the engine reads Ebeam.
-bool readWholeDouble(const QString &text, double &x) {
-  std::istringstream s(text.toStdString());
-  std::string rest;
-  return !!(s >> x) && !(s >> rest) && std::isfinite(x);
-}
 
 void splitWindow(const QString &text, QString &lo, QString &hi);
 
@@ -1070,7 +1064,7 @@ bool ThmExperimentsPage::reaction(const ThmExperimentRecord &x, Reaction &out, Q
     return false;
   }
   double ebeam;
-  if (!readWholeDouble(x.beamEnergy, ebeam) || !(ebeam > 0.0)) {
+  if (!ThmText::readWholeDouble(x.beamEnergy, ebeam) || !(ebeam > 0.0)) {
     if (error) *error = tr("Ebeam='%1': expected the lab beam energy in MeV, > 0").arg(x.beamEnergy);
     return false;
   }
@@ -1297,7 +1291,7 @@ void splitWindow(const QString &text, QString &lo, QString &hi) {
   for (int k = 1; k + 1 < text.size(); k++) {
     if (text[k] != '-') continue;
     double a, b;
-    if (readWholeDouble(text.left(k), a) && readWholeDouble(text.mid(k + 1), b)) {
+    if (ThmText::readWholeDouble(text.left(k), a) && ThmText::readWholeDouble(text.mid(k + 1), b)) {
       lo = text.left(k);
       hi = text.mid(k + 1);
       return;
@@ -2344,7 +2338,7 @@ QString ThmExperimentsPage::coherentText() const {
       if (text.isEmpty()) text = "0";
       const bool fixed = v && v->checkState() == Qt::Checked;
       double x = 0.0;
-      needed = needed || fixed || !readWholeDouble(text, x) || x != 0.0;
+      needed = needed || fixed || !ThmText::readWholeDouble(text, x) || x != 0.0;
       values << text + (fixed ? "f" : "");
     }
     if (needed) term += "=" + values.join(',');

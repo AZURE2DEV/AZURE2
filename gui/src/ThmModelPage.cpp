@@ -1,4 +1,5 @@
 #include "ThmModelPage.h"
+#include "ThmNumberText.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -26,19 +27,6 @@
 
 #include "ChooseFileButton.h"
 #include "Config.h"
-
-namespace {
-
-// Shortest text that reads back as the same double.
-QString numberText(double x) { return QString::number(x, 'g', QLocale::FloatingPointShortest); }
-
-// The engine reads numbers with operator>> on an istringstream; so does this,
-// so that "0.5 " or "5" are taken exactly as AZURE2 takes them.
-bool readDouble(const QString &text, double &x) {
-  std::istringstream s(text.toStdString());
-  return !!(s >> x);
-}
-}  // namespace
 
 // ---------------------------------------------------------------------------
 // ThmModelPage
@@ -156,7 +144,7 @@ void ThmModelPage::addSpectatorRow(int pair, double energy) {
   pairSpin->setFrame(false);
   pairSpin->setRange(1, 9999);
   pairSpin->setValue(pair);
-  QLineEdit *energyEdit = new QLineEdit(numberText(energy));
+  QLineEdit *energyEdit = new QLineEdit(ThmText::number(energy));
   energyEdit->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
   energyEdit->setFrame(false);
   QDoubleValidator *v = new QDoubleValidator(0.0, 1.0e6, 12, energyEdit);
@@ -221,7 +209,7 @@ ThmSettings ThmModelPage::settings() const {
     QSpinBox *pair = qobject_cast<QSpinBox *>(spectatorTable->cellWidget(r, 0));
     QLineEdit *energy = qobject_cast<QLineEdit *>(spectatorTable->cellWidget(r, 1));
     double x = -1.0;
-    if (!readDouble(energy->text().trimmed(), x)) x = -1.0;  // refused by validate
+    if (!ThmText::readDouble(energy->text().trimmed(), x)) x = -1.0;  // refused by validate
     s.spectatorByPair[pair->value()] = x;
   }
   for (int r = 0; r < weightTable->rowCount(); r++) {
