@@ -273,9 +273,11 @@ void PlotEntry::attach(QwtPlot *plot, int xAxisType, int yAxisType, bool showBan
   QVector<QPointF> fit;
   QVector<QPointF> data;
   QVector<QwtIntervalSample> error;
+  QVector<double> fitError;  // band half-width, index-aligned with fit
   for (int i = 0; i < points_.size(); i++) {
     const PlotPoint &p = points_[i];
     if (yAxisType == 0 ? !p.validXSec : !p.validSFactor) continue;
+    fitError.append(yAxisType == 0 ? p.fitCrossSectionError : p.fitSFactorError);
     double x = (xAxisType == 0) ? p.energy : (xAxisType == 1) ? p.excitationEnergy
                                                               : p.angle;
     if (yAxisType == 0) {
@@ -326,11 +328,11 @@ void PlotEntry::attach(QwtPlot *plot, int xAxisType, int yAxisType, bool showBan
   // calculation curve, drawn behind everything else.  The band half-width is the
   // cross-section or S-factor uncertainty depending on the current y axis.
   if (showBand && hasBand_) {
-    QVector<QwtIntervalSample> band(points_.size());
+    // Over the samples of fit (points not valid for this y axis are not in it).
+    QVector<QwtIntervalSample> band(fit.size());
     bool any = false;
-    for (int i = 0; i < points_.size(); i++) {
-      double err = (yAxisType == 0) ? points_[i].fitCrossSectionError
-                                    : points_[i].fitSFactorError;
+    for (int i = 0; i < fit.size(); i++) {
+      double err = fitError[i];
       double yc = fit[i].y();
       double lo = yc - err, hi = yc + err;
       if (err > 0.) any = true;
