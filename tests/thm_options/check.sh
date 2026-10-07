@@ -177,6 +177,7 @@ refuse() {   # refuse NAME TEXT PATTERN
 refuse misspelt     "$(block vertx=onshell)"             "ERROR: <thm> line not understood: 'vertx=onshell'"
 refuse badvalue     "$(block kinematics=kf2body)"        "ERROR: <thm> line not understood"
 refuse negative     "$(block spectatorEnergy=-0.1)"      "ERROR: <thm> line not understood"
+refuse junk         "$(block spectatorEnergy=0.4junk)"   "ERROR: <thm> line not understood"
 refuse unterminated "\n<thm>\nvertex=onshell\n"          "ERROR: <thm> block is not terminated"
 
 # (i) weight[k]=<file>: w(E) multiplying the THM model of segment k (every point

@@ -18,9 +18,11 @@ QString numberText(double x) { return QString::number(x, 'g', QLocale::FloatingP
 
 // The engine reads numbers with operator>> on an istringstream; so does this,
 // so that "0.5 " or "5" are taken exactly as AZURE2 takes them.
-bool readDouble(const QString &text, double &x) {
+bool readDouble(const QString &text, double &x, bool strict = false) {
   std::istringstream s(text.toStdString());
-  return !!(s >> x);
+  if (!(s >> x)) return false;
+  std::string rest;
+  return !strict || !(s >> rest);
 }
 bool readInt(const QString &text, int &x, bool strict) {
   std::istringstream s(text.toStdString());
@@ -112,7 +114,7 @@ bool ThmSettings::parseLine(const QString &rawLine, QString &key, QString &value
     v = s.coulombIntegral ? "1" : "0";
   } else if (k.startsWith("spectatorEnergy")) {
     double x;
-    if (!readDouble(v, x) || !(x >= 0.0)) return false;
+    if (!readDouble(v, x, true) || !(x >= 0.0)) return false;
     v = numberText(x);
     if (k == "spectatorEnergy") {
       s.spectatorEnergy = x;

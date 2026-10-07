@@ -117,7 +117,7 @@ int main(int argc, char** argv) {
                           s.entranceL == "coherent");
     ok("per-pair spectator energy read", s.spectatorByPair.value(5, -1) == 0.6);
     ok("weights read", s.weight.value(2) == "R.dat" && s.weightTest.value(1) == "/abs/R.dat");
-    const char* refused[] = {"vertx=onshell", "kinematics=kf2body", "spectatorEnergy=-0.1",
+    const char* refused[] = {"vertx=onshell", "kinematics=kf2body", "spectatorEnergy=-0.1", "spectatorEnergy=0.4junk",
                              "coulombIntegral=2", "weight[0]=a.dat", "weight[1]=", "weight=a.dat",
                              "weight[1x]=a.dat", "vertex"};
     for(const char* line : refused) {

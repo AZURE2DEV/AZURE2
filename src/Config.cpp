@@ -469,7 +469,8 @@ int Config::ReadThmBlock() {
     } else if (key.compare(0, 15, "spectatorEnergy") == 0) {
       std::istringstream vs(value);
       double x;
-      ok = !!(vs >> x) && x >= 0.0;
+      std::string rest;
+      ok = !!(vs >> x) && x >= 0.0 && !(vs >> rest);  // "0.4junk" is not a number
       if (ok && key == "spectatorEnergy") thm.spectatorEnergy = x;
       else if (ok && key.size() > 17 && key[15] == '[' && key.back() == ']') {
         std::istringstream ks(key.substr(16, key.size() - 17));

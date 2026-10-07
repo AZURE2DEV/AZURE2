@@ -788,10 +788,13 @@ def _thm_number(x):
     return ("-" if sign else "") + t
 
 
-def _thm_read_double(text):
-    """operator>> on an istringstream: a leading number, the rest ignored."""
+def _thm_read_double(text, strict=False):
+    """operator>> on an istringstream: a leading number, the rest ignored
+    (``strict``: nothing but blanks may follow)."""
     m = _THM_FLOAT_PREFIX.match(text)
-    return float(m.group(0)) if m else None
+    if not m or (strict and text[m.end():].strip()):
+        return None
+    return float(m.group(0))
 
 
 def _thm_read_int(text, strict):
@@ -844,7 +847,7 @@ def _thm_parse_line(raw, s):
             raise bad
         v = "1" if s["coulombIntegral"] else "0"
     elif k.startswith("spectatorEnergy"):
-        x = _thm_read_double(v)
+        x = _thm_read_double(v, strict=True)
         if x is None or not x >= 0.0:
             raise bad
         v = _thm_number(x)
