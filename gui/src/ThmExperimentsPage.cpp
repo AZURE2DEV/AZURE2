@@ -1096,46 +1096,24 @@ bool ThmExperimentsPage::reaction(const ThmExperimentRecord &x, Reaction &out, Q
   if (pairKey < 1 || pairKey > pairs.size()) return false;  // nothing to compare with yet
   const PairsData &pair = pairs.at(pairKey - 1);
   const int Z[2] = {pair.lightZ, pair.heavyZ};
-  const int A[2] = {(int)std::lround(pair.lightM), (int)std::lround(pair.heavyM)};
   const double M[2] = {pair.lightM, pair.heavyM};
-  int horse = -1, other = -1;
-  for (int h = 0; h < 2 && horse < 0; h++) {
-    const ThmNuclide &th = h == 0 ? b : t, &tg = h == 0 ? t : b;
-    for (int k = 0; k < 2; k++)
-      if (tg.Z == Z[k] && tg.A == A[k] && th.Z - sp.Z == Z[1 - k] && th.A - sp.A == A[1 - k]) {
-        horse = h;
-        other = k;
-        break;
-      }
-  }
-  if (horse < 0) {
-    if (error)
-      *error = tr("beam %1 + target %2 with spectator %3 does not give the entrance pair of its segments (Z,A) = "
-                  "(%4,%5) + (%6,%7): one of beam/target must be a nucleus of the pair and the other the second "
-                  "nucleus plus the spectator.")
-                   .arg(QString::fromStdString(b.name), QString::fromStdString(t.name),
-                        QString::fromStdString(sp.name))
-                   .arg(Z[0])
-                   .arg(A[0])
-                   .arg(Z[1])
-                   .arg(A[1]);
+  ThmReactionKinematics rk;  // the engine's rule (ThmResolveReaction)
+  why = ThmResolveReaction(b, t, sp, ebeam, Z, M, rk);
+  if (!why.empty()) {
+    if (error) *error = QString::fromStdString(why);
     return false;
   }
-  const ThmNuclide &th = horse == 0 ? b : t, &nA = horse == 0 ? t : b;
-  const ThmNuclide *tabX = ThmNuclide::Find(th.Z - sp.Z, th.A - sp.A);
-  const double mX = tabX ? tabX->mass : M[1 - other];
-  const double mA = nA.mass;
   out.beam = b;
   out.target = t;
   out.spectator = sp;
-  out.horse = th;
+  out.horse = rk.horse;
   out.pairKey = pairKey;
   out.beamEnergy = ebeam;
-  out.mX = mX;
-  out.horseIsBeam = horse == 0;
-  out.other = nA;
-  out.bind = (mX + sp.mass - th.mass) * kAmu;
-  out.exa = horse == 0 ? ebeam * mX / th.mass * mA / (mX + mA) : ebeam * mX / (mA + mX);
+  out.mX = rk.mX;
+  out.horseIsBeam = rk.horseIsBeam;
+  out.other = rk.nucleusA;
+  out.bind = rk.bind;
+  out.exa = rk.exa;
   return true;
 }
 

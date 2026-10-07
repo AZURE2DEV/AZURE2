@@ -33,6 +33,26 @@ struct ThmNuclide {
   static const ThmNuclide *Find(int Z, int A);
 };
 
+/// The three-body reaction of an experiment line, as ThmResolveReaction finds it.
+struct ThmReactionKinematics {
+  bool horseIsBeam = true;
+  ThmNuclide horse;     ///< the Trojan horse a = x + s
+  ThmNuclide nucleusA;  ///< A, the nucleus that is not the Trojan horse
+  int other = 0;        ///< 0 or 1: which nucleus of the entrance pair is A
+  double mX = 0.0;      ///< mass of x (u): the table's, else the pair's
+  double bind = 0.0;    ///< B(x+s) from the masses (MeV)
+  double exa = 0.0;     ///< quasi-free E(x+A) (MeV)
+};
+/*!
+ * beam + target at beamEnergy (MeV, lab) with the spectator, for the entrance
+ * pair x + A whose nuclei have charges Z and masses M (u; mass numbers their
+ * rounding): one of beam/target must be a nucleus of the pair and the other
+ * the second nucleus plus the spectator.  "" or what is wrong, as AZURE2
+ * reports it (EData's THM experiments and the GUI's Experiments page).
+ */
+std::string ThmResolveReaction(const ThmNuclide &beam, const ThmNuclide &target, const ThmNuclide &spectator,
+                               double beamEnergy, const int Z[2], const double M[2], ThmReactionKinematics &out);
+
 /// One experiment[<name>] record, merged over the lines that name it.
 struct ThmExperiment {
   std::string name;

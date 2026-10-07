@@ -387,6 +387,46 @@ std::string FormatThmCoherentBackground(const std::vector<ThmExperiment::Coheren
   return s;
 }
 
+std::string ThmResolveReaction(const ThmNuclide &b, const ThmNuclide &t, const ThmNuclide &sp, double beamEnergy,
+                               const int Z[2], const double M[2], ThmReactionKinematics &out) {
+  const double amu = 931.49410242;  // MeV/u (CODATA 2018)
+  const int A[2] = {(int)std::lround(M[0]), (int)std::lround(M[1])};
+  // horse: 0 beam, 1 target; other: index of the pair nucleus that is the other one.
+  int horse = -1, other = -1;
+  for (int h = 0; h < 2 && horse < 0; h++) {
+    const ThmNuclide &th = h == 0 ? b : t, &tg = h == 0 ? t : b;
+    for (int k = 0; k < 2; k++)
+      if (tg.Z == Z[k] && tg.A == A[k] && th.Z - sp.Z == Z[1 - k] && th.A - sp.A == A[1 - k]) {
+        horse = h;
+        other = k;
+        break;
+      }
+  }
+  if (horse < 0) {
+    std::ostringstream why;
+    why << "beam " << b.name << " + target " << t.name << " with spectator " << sp.name
+        << " does not give the entrance pair of its segments (Z,A) = (" << Z[0] << "," << A[0] << ") + (" << Z[1]
+        << "," << A[1]
+        << "): one of beam/target must be a nucleus of the pair and the other the second nucleus plus the "
+           "spectator.";
+    return why.str();
+  }
+  const ThmNuclide &th = horse == 0 ? b : t, &nA = horse == 0 ? t : b;
+  const ThmNuclide *tabX = ThmNuclide::Find(th.Z - sp.Z, th.A - sp.A);
+  const double mX = tabX ? tabX->mass : M[1 - other];  // the pair nucleus that is x
+  const double mA = nA.mass;
+  out.horseIsBeam = horse == 0;
+  out.horse = th;
+  out.nucleusA = nA;
+  out.other = other;
+  out.mX = mX;
+  out.bind = (mX + sp.mass - th.mass) * amu;
+  // Quasi-free x + A energy: the spectator keeps the Trojan horse's velocity
+  // (horse = beam) or stays at rest (horse = target).
+  out.exa = horse == 0 ? beamEnergy * mX / th.mass * mA / (mX + mA) : beamEnergy * mX / (mA + mX);
+  return "";
+}
+
 bool ParseThmOptionLine(const std::string &key, const std::string &value, ThmOptionLine &out) {
   out = ThmOptionLine();
   if (key == "vertex") {

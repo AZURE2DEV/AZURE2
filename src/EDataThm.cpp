@@ -86,34 +86,17 @@ bool ThmResolveKinematics(EData &data, const Config &configure, CNuc *theCNuc, c
       return false;
     }
   PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(pairKey));
-  int Z[2] = {pair->GetZ(1), pair->GetZ(2)};
-  int A[2] = {(int)std::lround(pair->GetM(1)), (int)std::lround(pair->GetM(2))};
+  const int Z[2] = {pair->GetZ(1), pair->GetZ(2)};
+  const double M[2] = {pair->GetM(1), pair->GetM(2)};
   const ThmNuclide &b = x.beam, &t = x.target, &sp = x.spectator;
-  // horse: 0 beam, 1 target; other: index of the pair nucleus that is the other one.
-  int horse = -1, other = -1;
-  for (int h = 0; h < 2 && horse < 0; h++) {
-    const ThmNuclide &th = h == 0 ? b : t, &tg = h == 0 ? t : b;
-    for (int k = 0; k < 2; k++)
-      if (tg.Z == Z[k] && tg.A == A[k] && th.Z - sp.Z == Z[1 - k] && th.A - sp.A == A[1 - k]) {
-        horse = h;
-        other = k;
-        break;
-      }
-  }
-  if (horse < 0) {
-    configure.outStream << where << "beam " << b.name << " + target " << t.name << " with spectator "
-                        << sp.name << " does not give the entrance pair of its segments (Z,A) = ("
-                        << Z[0] << "," << A[0] << ") + (" << Z[1] << "," << A[1]
-                        << "): one of beam/target must be a nucleus of the pair and the other the "
-                           "second nucleus plus the spectator."
-                        << std::endl;
+  ThmReactionKinematics rk;
+  const std::string why = ThmResolveReaction(b, t, sp, x.beamEnergy, Z, M, rk);
+  if (!why.empty()) {
+    configure.outStream << where << why << std::endl;
     return false;
   }
-  const ThmNuclide &th = horse == 0 ? b : t, &nA = horse == 0 ? t : b;
-  const ThmNuclide *tabX = ThmNuclide::Find(th.Z - sp.Z, th.A - sp.A);
-  double mX = tabX ? tabX->mass : pair->GetM(2 - other);  // the pair nucleus that is x
-  double mA = nA.mass;
-  double bind = (mX + sp.mass - th.mass) * kAmu;
+  const ThmNuclide &th = rk.horse, &nA = rk.nucleusA;
+  const double mX = rk.mX, bind = rk.bind, exa = rk.exa;
   dk.Za = th.Z;
   dk.ZA = nA.Z;
   dk.Zs = sp.Z;
@@ -126,14 +109,11 @@ bool ThmResolveKinematics(EData &data, const Config &configure, CNuc *theCNuc, c
   dk.mA = nA.mass;
   dk.ms = sp.mass;
   dk.mx = mX;
-  dk.horseIsBeam = horse == 0;
+  dk.horseIsBeam = rk.horseIsBeam;
   dk.mBeam = b.mass;
   dk.mTarget = t.mass;
   dk.beamEnergy = x.beamEnergy;
   dk.bind = bind;
-  // Quasi-free x + A energy: the spectator keeps the Trojan horse's
-  // velocity (horse = beam) or stays at rest (horse = target).
-  double exa = horse == 0 ? x.beamEnergy * mX / th.mass * mA / (mX + mA) : x.beamEnergy * mX / (mA + mX);
   std::ostringstream k;
   k.precision(6);
   k << "  " << b.name << " + " << t.name << " at " << x.beamEnergy << " MeV (lab), Trojan horse "
