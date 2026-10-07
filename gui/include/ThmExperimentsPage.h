@@ -217,7 +217,8 @@ class ThmExperimentsPage : public QWidget {
   QComboBox *distortionCombo = nullptr;  ///< item data: none | coulomb | optical | table
   QComboBox *angleKindCombo = nullptr;   ///< item data: qf | lab | cm
   ThmNumberSpin *angleEdit = nullptr;    ///< deg
-  ThmNumberSpin *distortionRefEdit;  ///< MeV; the minimum (shown as "auto") = not given
+  ThmNumberSpin *distortionRefEdit;  ///< MeV; any value (disabled while distortionRefAuto is checked)
+  QCheckBox *distortionRefAuto;      ///< checked: no distortionRef= key (E_ref = the middle of the data)
   QComboBox *ratioCombo;        ///< item data: dwpw | dw
   QComboBox *boundCombo;        ///< item data: whittaker | yukawa
   ThmNumberSpin *rminEdit;      ///< fm; the minimum (a dash) = not given

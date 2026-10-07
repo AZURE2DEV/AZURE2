@@ -307,8 +307,10 @@ momentum window* and *Distortion*:
   unticking the reaction drops them. With Coulomb or optical the section
   shows **Angle** (``spectatorAngle``: *quasi-free*, the default; *lab*, an
   angle to the beam converted at every E; *c.m.*, fixed; degrees in the spin
-  box beside it), **E_ref** (``distortionRef``, MeV, where R = 1; *auto* is
-  the middle of the data -- only the scale, which the profiled norm absorbs),
+  box beside it), **E_ref** (``distortionRef``, MeV, where R = 1; any value,
+  0 and negative ones included; tick *auto* beside it for the middle of the
+  data, which drops the key -- only the scale, which the profiled norm
+  absorbs),
   **Ratio** (``distortionRatio``: *DWBA/PWBA*, :math:`\rho = |M/M_{PW}|^2`,
   the default, or *DWBA*, :math:`\rho = |M|^2`, the papers' ratio) and
   **Bound state** (``boundState``: *Whittaker*, the default, or *Yukawa*

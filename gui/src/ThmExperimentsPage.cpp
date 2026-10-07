@@ -290,11 +290,15 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   angleEdit = new ThmNumberSpin(QString::fromUtf8("°"), 0.0, 180.0, 1.0);
   angleEdit->setToolTip(tr("The spectator angle to the beam (0-180)."));
   connect(angleEdit, SIGNAL(valueChanged(double)), this, SLOT(distortionEdited()));
-  distortionRefEdit = new ThmNumberSpin(" MeV", 0.0, 1.0e3, 0.1);
-  distortionRefEdit->setSpecialValueText(tr("auto"));
-  distortionRefEdit->setToolTip(tr("distortionRef=: E_ref, where R = 1 (c.m. of x + A). Auto: the middle of the "
-                                   "data. Only the scale, which the profiled norm absorbs."));
+  // E_ref may be any energy the engine accepts (0 and below threshold
+  // included): "auto" is a separate check box, not a value of the field.
+  distortionRefEdit = new ThmNumberSpin(" MeV", -1.0e3, 1.0e3, 0.1);
+  distortionRefEdit->setToolTip(tr("distortionRef=: E_ref, where R = 1 (c.m. of x + A). Only the scale, which the "
+                                   "profiled norm absorbs."));
   connect(distortionRefEdit, SIGNAL(valueChanged(double)), this, SLOT(distortionEdited()));
+  distortionRefAuto = new QCheckBox(tr("auto"));
+  distortionRefAuto->setToolTip(tr("No distortionRef= key: E_ref is the middle of the data."));
+  connect(distortionRefAuto, SIGNAL(toggled(bool)), this, SLOT(distortionEdited()));
   ratioCombo = new QComboBox;
   ratioCombo->addItem(tr("DWBA/PWBA"), "dwpw");
   ratioCombo->addItem(tr("DWBA"), "dw");
@@ -539,7 +543,13 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   dl->addWidget(angleBox, 1, 1);
   QLabel *refLabel = label(QString::fromUtf8("E<sub>ref</sub>:"), false, tr("Reference energy, R(E_ref) = 1"));
   dl->addWidget(refLabel, 1, 2, right);
-  dl->addWidget(distortionRefEdit, 1, 3);
+  QHBoxLayout *rl = new QHBoxLayout;
+  rl->setContentsMargins(0, 0, 0, 0);
+  rl->addWidget(distortionRefEdit, 1);
+  rl->addWidget(distortionRefAuto);
+  QWidget *refBox = new QWidget;
+  refBox->setLayout(rl);
+  dl->addWidget(refBox, 1, 3);
   QLabel *boundLabel = label(tr("Bound state:"), true);
   dl->addWidget(boundLabel, 2, 0, right);
   dl->addWidget(boundCombo, 2, 1);
@@ -572,7 +582,7 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   QLabel *rLabel = label("R(E):", true, tr("R at the lowest and highest data point"));
   dl->addWidget(rLabel, 5, 0, right);
   dl->addWidget(distortionValue, 5, 1, 1, 3);
-  distortionComputedRows_ = {ratioLabel, ratioCombo, angleLabel, angleBox, refLabel, distortionRefEdit,
+  distortionComputedRows_ = {ratioLabel, ratioCombo, angleLabel, angleBox, refLabel, refBox,
                              boundLabel, boundCombo, rminLabel, rminEdit};
   distortionOpticalRow_ = {opticalLabel[0], opticalBox[0], opticalLabel[1], opticalBox[1]};
   distortionTableRow_ = {distortionTableLabel, distortionTableBox};
@@ -1670,7 +1680,9 @@ void ThmExperimentsPage::loadDistortion(const ThmExperimentRecord &r) {
   }
   angleKindCombo->setCurrentIndex(std::max(0, angleKindCombo->findData(angleKind)));
   angleEdit->setWrittenText(angle);
-  distortionRefEdit->setWrittenText(r.distortionRef);
+  // Not given: "auto", the field at 0 until a value is typed.
+  distortionRefAuto->setChecked(r.distortionRef.isEmpty());
+  distortionRefEdit->setWrittenText(r.distortionRef.isEmpty() ? QString("0") : r.distortionRef);
   ratioCombo->setCurrentIndex(r.distortionRatio == "dw" ? 1 : 0);
   const QStringList bound = r.boundState.split(':');
   boundCombo->setCurrentIndex(bound.value(0) == "yukawa" ? 1 : 0);
@@ -1699,6 +1711,7 @@ void ThmExperimentsPage::showDistortionRows() {
   for (QWidget *w : distortionTableRow_) w->setVisible(kind == "table");
   for (QWidget *w : distortionValueRow_) w->setVisible(kind != "none");
   angleEdit->setEnabled(angleKindCombo->currentData().toString() != "qf");
+  distortionRefEdit->setEnabled(!distortionRefAuto->isChecked());
   for (int c = 0; c < 2; c++) {
     const QString mode = opticalCombo[c]->currentData().toString();
     const bool ws = mode == "ws", global = mode == "global";
@@ -1771,8 +1784,14 @@ void ThmExperimentsPage::distortionEdited() {
     r.spectatorAngle = kind == "qf"    ? keyValue(r.spectatorAngle, "qf", "qf")
                        : kind == "cm" ? "cm:" + angleEdit->writtenText()
                                       : angleEdit->writtenText();
-  } else if (from == distortionRefEdit) {
-    r.distortionRef = distortionRefEdit->writtenText();
+  } else if (from == distortionRefEdit || from == distortionRefAuto) {
+    // A value typed in takes the key out of "auto".
+    if (from == distortionRefEdit && distortionRefAuto->isChecked()) {
+      const QSignalBlocker block(distortionRefAuto);
+      distortionRefAuto->setChecked(false);
+      distortionRefEdit->setEnabled(true);
+    }
+    r.distortionRef = distortionRefAuto->isChecked() ? QString() : distortionRefEdit->writtenText();
   } else if (from == ratioCombo) {
     r.distortionRatio = keyValue(r.distortionRatio, ratioCombo->currentData().toString(), "dwpw");
   } else if (from == boundCombo || from == rminEdit) {

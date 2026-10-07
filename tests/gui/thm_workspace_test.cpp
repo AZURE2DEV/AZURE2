@@ -1552,10 +1552,28 @@ int main(int argc, char** argv) {
     p->opticalCombo[1]->setCurrentIndex(p->opticalCombo[1]->findData("ws"));
     ok("distortion: Woods-Saxon starts at ten zeros, Edit enabled",
        p->records().at(0).opticalSF == "0,0,0,0,0,0,0,0,0,0" && p->opticalButton[1]->isEnabled());
+    ok("distortion: E_ref auto at first, its field disabled",
+       p->distortionRefAuto->isChecked() && !p->distortionRefEdit->isEnabled() &&
+           p->records().at(0).distortionRef.isEmpty());
     typeNumber(p->distortionRefEdit, "2.664");
     p->distortionCombo->setCurrentIndex(p->distortionCombo->findData("coulomb"));
     ok("distortion: coulomb drops opticalAA/SF, keeps E_ref",
-       p->records().at(0).opticalSF.isEmpty() && p->records().at(0).distortionRef == "2.664");
+       p->records().at(0).opticalSF.isEmpty() && p->records().at(0).distortionRef == "2.664" &&
+           !p->distortionRefAuto->isChecked() && p->distortionRefEdit->isEnabled());
+    // An explicit 0 or a negative E_ref is a value, not "auto" (it used to show as auto).
+    typeNumber(p->distortionRefEdit, "0");
+    ok("distortion: E_ref = 0 is written", p->records().at(0).distortionRef == "0" && !p->distortionRefAuto->isChecked(),
+       p->records().at(0).distortionRef);
+    typeNumber(p->distortionRefEdit, "-0.25");
+    ok("distortion: a negative E_ref is written", p->records().at(0).distortionRef == "-0.25",
+       p->records().at(0).distortionRef);
+    p->distortionRefAuto->setChecked(true);
+    ok("distortion: auto drops the key and disables the field",
+       p->records().at(0).distortionRef.isEmpty() && !p->distortionRefEdit->isEnabled());
+    p->distortionRefAuto->setChecked(false);
+    ok("distortion: unticking auto writes the field", p->records().at(0).distortionRef == "-0.25",
+       p->records().at(0).distortionRef);
+    typeNumber(p->distortionRefEdit, "2.664");
     {
       // ThmNumberSpin reads what it shows (exponents) and keeps every digit.
       ThmNumberSpin* e = p->distortionRefEdit;
