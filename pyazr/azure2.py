@@ -643,7 +643,8 @@ class azure2:
                 for param in params_full:
                     f.write(f"{param[0]} {param[1]} {param[2]}\n")
 
-    def save_fit(self, path, x=None, param_sav=True, verify=True, norms="fitted"):
+    def save_fit(self, path, x=None, param_sav=True, verify=True, norms="fitted",
+                 close_session=False):
         """Snapshot a fit as a ``.azr`` you can reopen, plot, or hand over.
 
         ``path`` is required and is written to explicitly -- nothing is ever
@@ -711,6 +712,14 @@ class azure2:
         itself*, so a snapshot only runs from the directory the original did.
         Write it beside the model, or move its ``data/`` with it.
 
+        ``close_session`` closes this session once the files are written and
+        what the check compares with has been computed, *before* the
+        snapshot is reopened: one engine in memory instead of two (a 19F THM
+        session is about 220 MB, 390 MB with the verifying one beside it).
+        The session is unusable afterwards (:meth:`is_alive` is False); use
+        it as the last call of a fit, as ``scripts/thm_model_average.py``
+        does.
+
         Returns ``(azr_path, sav_path_or_None)``.
         """
         if norms not in ("fitted", "nominal"):
@@ -763,6 +772,16 @@ class azure2:
                     v = x[next(free)] if not self.fixed_params[i] else allrwa[i]
                     fh.write(f"{p.name:>28s} {float(v): .7e} {0.0: .7e}\n")
 
+        # What the check compares with, from this session before it may close.
+        chi_want = pen_want = None
+        if verify and norms == "fitted" and self.mode == "data":
+            chi_want = self.calculate_chi2_rwa(x)[0]
+            pen_want = self.penalties(x)
+        check_options = {k: v for k, v in self.options.items() if k != "data_mode"}
+        check_options["data_mode"] = self.mode == "data"
+        if close_session:
+            self.close()
+
         if verify:
             # Verify a *copy*, in the session's own directory and with its
             # output redirected. A .azr resolves its data files and output
@@ -777,14 +796,11 @@ class azure2:
                 fd, probe = tempfile.mkstemp(suffix=".azr", dir=self.cwd)
                 os.close(fd)
                 copy.write(probe)
-                with azure2(probe, cwd=self.cwd,
-                            **{k: v for k, v in self.options.items()
-                               if k != "data_mode"},
-                            data_mode=(self.mode == "data")) as check:
+                with azure2(probe, cwd=self.cwd, **check_options) as check:
                     got = np.asarray(check.transform_all_rwa(
                         check._all_rwa(check.params_rwa), include_fixed=True), float)
-                    chi_got = chi_want = None
-                    if norms == "fitted" and self.mode == "data":
+                    chi_got = None
+                    if chi_want is not None:
                         chi_got = check.calculate_chi2_rwa(check.params_rwa)[0]
                         pen_got = check.penalties(check.params_rwa)
             except Exception as err:
@@ -808,13 +824,11 @@ class azure2:
                     "disagree); it has been removed. This means the .azr and "
                     "the parameter set do not describe the same model.")
             if chi_got is not None:
-                chi_want = self.calculate_chi2_rwa(x)[0]
                 if not np.isclose(chi_got, chi_want, rtol=1e-6, atol=1e-9):
                     self._discard(path, sav)
                     raise RuntimeError(
                         f"the snapshot run on its own gives chi2 = {chi_got:.10g}, "
                         f"the fit {chi_want:.10g}; it has been removed.")
-                pen_want = self.penalties(x)
                 got_p = sum(float(np.sum(v)) for v in pen_got.values())
                 want_p = sum(float(np.sum(v)) for v in pen_want.values())
                 if not np.isclose(got_p, want_p, rtol=1e-6, atol=1e-9):

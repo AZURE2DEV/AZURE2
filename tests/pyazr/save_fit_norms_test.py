@@ -30,6 +30,9 @@ segments with free norms):
      centres), the .sav has the fitted norms, and the snapshot alone does not
      reproduce the fit (the documented trade-off); without a .sav it is
      refused.
+  4. close_session=True (one engine in memory while verifying): the session
+     is closed before the snapshot is reopened, the snapshot is verified and
+     reproduces the fit's chi-squared, and the closed session refuses work.
 
 Needs the compiled engine (and the binary for the CLI check of 2); skips
 those parts cleanly.
@@ -241,6 +244,22 @@ if azure2 is not None:
             except ValueError:
                 check("nominal without a .sav is refused",
                       not os.path.exists(os.path.join(work, "bad.azr")))
+
+        # 4. -------------------------------------------------------------------
+        print("4. close_session=True")
+        s = azure2(os.path.join(work, AZR), cwd=work)
+        last_azr, _ = s.save_fit(os.path.join(work, "last.azr"), x, close_session=True)
+        check("the session is closed", not s.is_alive())
+        check("the snapshot is written and verified (same norms as 2)",
+              AzrModel.from_file(last_azr).segment_values() == AzrModel.from_file(fit_azr).segment_values())
+        with azure2(last_azr, cwd=work) as t:
+            chi_last = t.calculate_chi2_rwa(t.params_rwa)[0]
+        check("alone it gives the fit's chi2", rel(chi_last, chi_fit) < 1e-9, (chi_last, chi_fit))
+        try:
+            s.calculate_chi2_rwa(x)
+            check("a closed session refuses further work", False, "no error")
+        except RuntimeError:
+            check("a closed session refuses further work", True)
 
 print()
 if failures:

@@ -526,16 +526,18 @@ def fit_variant(path, cwd, args, strengths, log):
             hook = load_hook(args.derived_hook)
             for k, v in hook(m, x).items():
                 derived[str(k)] = v
-        fitpath = os.path.splitext(path)[0] + "_fit.azr"
-        try:
-            m.save_fit(fitpath, x)
-        except Exception as err:
-            log(f"    save_fit failed: {err}")
         thm = {n: dict(norm=float(r["norm"]), b=[float(v) for v in r["b"]],
                        chi2=float(r["chi2"]))
                for n, r in m.thm_experiments(x).items()}
         seg = [float(c) for c in m.segment_chi2(x)]
         npen = int(fun.size - nres)
+        # Last: the session closes before the snapshot is reopened to verify
+        # it, so that only one engine is in memory.
+        fitpath = os.path.splitext(path)[0] + "_fit.azr"
+        try:
+            m.save_fit(fitpath, x, close_session=True)
+        except Exception as err:
+            log(f"    save_fit failed: {err}")
     return dict(chi2=chi2, npoints=nres, nfree=int(x.size) + kprof, npenalty=npen,
                 values=values, covariance=cov, derived=derived,
                 status=int(status), nev=nev[0], seconds=time.time() - t0,

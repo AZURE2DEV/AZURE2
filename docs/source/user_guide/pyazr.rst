@@ -241,7 +241,10 @@ the snapshot is pulled to the same centres, not to the fitted values;
 fields and the fitted ones in the ``.sav`` only (run with it as the parameter
 file to reproduce the fit).  ``AzrModel.prior_centres()`` /
 ``set_prior_centres({key: (norm, shift)})`` read and write the rows.  See
-:ref:`nominal-norm`.  ``path`` is always
+:ref:`nominal-norm`.  The check opens a second engine beside the fit's; as
+the last call of a fit, ``save_fit(path, x, close_session=True)`` closes the
+fit's session first, so that only one is in memory (a 19F THM session is
+about 220 MB, 390 MB with the verifying one beside it).  ``path`` is always
 explicit; nothing is written in place.  Note a ``.azr`` names its data files
 relative to itself, so a snapshot runs from the directory the original did.
 
