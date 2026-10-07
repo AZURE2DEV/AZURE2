@@ -42,7 +42,7 @@ try:
     from pyazr import azure2, AzrModel
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
-    sys.exit(0)
+    sys.exit(77)
 
 grid = np.array([0.1, 0.2, 0.3, 0.4, 0.5])
 

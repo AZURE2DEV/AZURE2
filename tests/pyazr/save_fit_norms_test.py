@@ -246,4 +246,9 @@ print()
 if failures:
     print(f"FAILED: {len(failures)} check(s): {', '.join(failures)}")
     sys.exit(1)
+if azure2 is None:
+    # 77 is SKIP_RETURN_CODE in tests/pyazr/CMakeLists.txt: ctest reports a
+    # test whose engine part could not run as Skipped, not as Passed.
+    print("save_fit norm check 1 passed; 2-3 skipped (no engine)")
+    sys.exit(77)
 print("all save_fit norm checks passed")

@@ -46,7 +46,7 @@ try:
     from pyazr.azrfile import AzrModel
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
-    sys.exit(0)
+    sys.exit(77)
 
 # 13N is the fixture with a photon channel to move: reversing each level's
 # channels puts it first, which is the condition that used to crash.

@@ -139,6 +139,7 @@ except ValueError:
 
 # --------------------------------------------------------------------------
 print("\n5. a snapshot reads back as the fit it was made from")
+engine_skipped = False
 try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
@@ -146,6 +147,7 @@ try:
     from pyazr import azure2
 except Exception as err:                                  # engine not built
     print(f"  skip  engine not available ({type(err).__name__})")
+    engine_skipped = True
 else:
     project = os.path.join(ROOT, "tests", "hybrid_potential")
     azr = os.path.join(project, "hybrid_potential.azr")
@@ -177,4 +179,9 @@ print()
 if failures:
     print(f"FAILED: {len(failures)} check(s): {', '.join(failures)}")
     sys.exit(1)
+if engine_skipped:
+    # 77 is SKIP_RETURN_CODE in tests/pyazr/CMakeLists.txt: ctest reports a
+    # test whose engine part could not run as Skipped, not as Passed.
+    print("apply_fit checks 1-4 passed; 5 skipped (no engine)")
+    sys.exit(77)
 print("all apply_fit checks passed")

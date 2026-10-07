@@ -160,7 +160,7 @@ try:
         from pyazr import azure2
     except Exception as err:
         print(f"skip the run: engine or scipy not available ({type(err).__name__}: {err})")
-        sys.exit(1 if failures else 0)
+        sys.exit(1 if failures else 77)
     out = os.path.join(tmp, "out")
     r = subprocess.run(common + ["--out", out, "--max-nfev", "4"],
                        capture_output=True, text=True, env=env, timeout=540)   # inside ctest's 600 s

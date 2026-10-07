@@ -42,7 +42,7 @@ try:
     from pyazr import azure2
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
-    sys.exit(0)
+    sys.exit(77)
 
 # The newest binary, as run_tests.sh takes it: several build directories can
 # coexist, and the first in sorted order (build-gui/ sorts before build/) may
@@ -54,7 +54,7 @@ if not binary:
     binary = max(cands, key=os.path.getmtime) if cands else None
 if binary is None:
     print("skip: no AZURE2 binary to compare against")
-    sys.exit(0)
+    sys.exit(77)
 
 # hybrid_potential is the quick one: three elastic segments, no external
 # capture, so a full run is seconds rather than minutes.

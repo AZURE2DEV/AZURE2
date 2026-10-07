@@ -325,7 +325,7 @@ try:
         from pyazr import azure2
     except Exception as err:                                   # engine not built
         print(f"skip the engine part: engine not available ({type(err).__name__}: {err})")
-        sys.exit(1 if failures else 0)
+        sys.exit(1 if failures else 77)
     for junk in ("output", "checks"):
         os.makedirs(os.path.join(work, junk), exist_ok=True)
     free = AzrModel.from_file(template)

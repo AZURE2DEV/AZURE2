@@ -59,7 +59,7 @@ try:
     from pyazr import azure2
 except Exception as err:                                       # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
-    sys.exit(0)
+    sys.exit(77)
 
 CHI2 = ("import sys, numpy as np; sys.path.insert(0, %r); from pyazr import azure2\n"
         "with azure2(sys.argv[1], cwd=sys.argv[2]) as m:\n"

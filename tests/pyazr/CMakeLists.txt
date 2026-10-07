@@ -192,3 +192,13 @@ add_test(NAME pyazr_tabulate_thm
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/tabulate_thm_test.py)
 set_tests_properties(pyazr_tabulate_thm PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
+# A test that cannot run its engine part -- numpy, scipy or the compiled
+# _azure2 module missing (pybind11 absent at configure time builds no module),
+# or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so
+# ctest lists it as Skipped rather than Passed.  An exit of 0 there once hid
+# that CI had never run a single CLI == pyazr comparison.  Set on every test
+# in this directory, so a new one only has to follow the convention; the
+# numpy-free roundtrip test never exits 77.
+get_property(_pyazr_tests DIRECTORY PROPERTY TESTS)
+set_tests_properties(${_pyazr_tests} PROPERTIES SKIP_RETURN_CODE 77)

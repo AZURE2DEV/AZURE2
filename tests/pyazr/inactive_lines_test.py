@@ -51,7 +51,7 @@ try:
     from pyazr.azrfile import AzrLevel
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
-    sys.exit(0)
+    sys.exit(77)
 
 
 def chi2_line(work):

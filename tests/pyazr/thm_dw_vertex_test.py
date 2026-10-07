@@ -133,7 +133,7 @@ with tempfile.TemporaryDirectory() as tmp:
         from pyazr import azure2
     except Exception as err:                                   # engine not built
         print(f"skip the engine part: engine not available ({type(err).__name__}: {err})")
-        sys.exit(1 if failures else 0)
+        sys.exit(1 if failures else 77)
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -141,7 +141,7 @@ with tempfile.TemporaryDirectory() as tmp:
         binary = max(cands, key=os.path.getmtime) if cands else None
     if binary is None:
         print("skip the engine part: no AZURE2 binary to compare against")
-        sys.exit(1 if failures else 0)
+        sys.exit(1 if failures else 77)
 
     def project(name, block, fold=True):
         d = os.path.join(tmp, name)

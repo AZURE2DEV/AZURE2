@@ -55,7 +55,7 @@ try:
     from pyazr import azure2, AzrModel
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
-    sys.exit(0)
+    sys.exit(77)
 
 binary = os.environ.get("AZURE2_BIN")
 if not binary:
@@ -64,7 +64,7 @@ if not binary:
     binary = max(cands, key=os.path.getmtime) if cands else None
 if binary is None:
     print("skip: no AZURE2 binary to compare against")
-    sys.exit(0)
+    sys.exit(77)
 
 
 def fresh_copy(dst):
