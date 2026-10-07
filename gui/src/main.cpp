@@ -19,6 +19,11 @@ int start_gui(int argc, char *argv[]) {
   QFont::insertSubstitution(".SF NS Text", "Helvetica Neue");
 #endif
 
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+  // Layouts and pixel sizes follow the screen's scale factor (always so in Qt 6).
+  QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+  QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+#endif
   QApplication app(argc, argv);
 
 #ifdef WIN_SPACING
