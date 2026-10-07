@@ -481,6 +481,8 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   thd.assign(nE, 0.0);
   valid.assign(nE, 1);
   std::vector<double> ys, dys;
+  // The sign of phi~(q) in the spectatorAngle direction, per grid energy.
+  std::vector<signed char> phiSign(nE, 0);
   for (int e = 0; e < nE; e++) {
     const double ks = ksE[e];
     const double etas = dist.sf.kind == ThmDistortion::Channel::PLANE
@@ -549,6 +551,7 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
       double phit = gram(xsa, qd[e], &Gd[(size_t)e * nl * 4]);
       if (!(std::fabs(phit) > 0.0) || !std::isfinite(phit))
         return "the plane-wave source phi~(q) vanishes at E = " + Number(eLo + e * gridStep) + " MeV";
+      phiSign[e] = phit > 0.0 ? 1 : -1;
     }
     if (angles) {
       // The accepted directions: event weight d cos(theta_cm) x acceptance x
@@ -591,6 +594,26 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
     w[e] = 1.0;
     q[e] = qd[e] * hbarc;
     std::copy(&Gd[(size_t)e * nl * 4], &Gd[(size_t)e * nl * 4] + nl * 4, &G[(size_t)e * nl * 4]);
+  }
+
+  // One direction: G is normalized by phi~(q)^2 of that direction, so a node
+  // of phi~ between two grid energies is a pole of G that the cubic
+  // interpolation runs across.  (With a window of directions the average is
+  // weighted by phi~^2 and stays finite.)  Said where it reaches the data:
+  // within two grid steps, the span of the interpolation.
+  if (!angles && !points.empty()) {
+    const double lo = dist.dataLo - 2.0 * gridStep, hi = dist.dataHi + 2.0 * gridStep;
+    for (int e = 0; e + 1 < nE; e++) {
+      const double e0 = gridLo + e * gridStep, e1 = e0 + gridStep;
+      if (e1 < lo || e0 > hi || phiSign[e] == 0 || phiSign[e + 1] == 0 || phiSign[e] == phiSign[e + 1]) continue;
+      dist.warnings.push_back("the plane-wave source phi~(q) of the vertex changes sign between E = " + Number(e0) +
+                              " and " + Number(e1) + " MeV (q = " + Number(qd[e] * hbarc) + " to " +
+                              Number(qd[e + 1] * hbarc) +
+                              " MeV/c in the spectatorAngle direction): a node of the momentum distribution, "
+                              "where the vertex, normalized by phi~(q), is singular and interpolated across the "
+                              "pole; another spectatorAngle or boundState= moves it");
+      break;
+    }
   }
 
   // Every data point needs a reachable window; grid energies without one take

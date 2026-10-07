@@ -1651,6 +1651,13 @@ first section is therefore replaced by
 
 which does not depend on a quantization axis and equals :math:`|M_l(p)|^2`
 for plane waves, since :math:`\sum_m |Y_{lm}(\hat p)|^2 = (2l+1)/4\pi`.
+At a node of :math:`\tilde\varphi(q)` (a source cut at :math:`r \ge
+r_\mathrm{min}` has them) this ratio has a pole. With one spectator
+direction AZURE2 refuses an exact zero at a grid energy, and prints a
+``WARNING`` when :math:`\tilde\varphi` changes sign between two grid energies
+within reach of the data (the tabulated :math:`G` is interpolated across the
+pole there); a window of directions weights each by
+:math:`|\tilde\varphi|^2` and stays finite.
 :math:`V_{lm}` is linear in :math:`B`: with :math:`s_m = S_{lm}(a)/4\pi
 \tilde\varphi` and :math:`d_m = a S'_{lm}(a)/4\pi\tilde\varphi`,
 

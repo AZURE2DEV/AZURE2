@@ -22,7 +22,9 @@
 #       the vertex rows are there, and the model moves; with a ps window the
 #       nodes are placed on its reachable part (runs, differs from delta);
 #   (d) refusals;
-#   (e) the output is byte-identical on 1 and 4 threads.
+#   (e) the output is byte-identical on 1 and 4 threads;
+#   (f) a node of the plane-wave source phi~(q) in the one spectator
+#       direction (a pole of G) is warned about.
 #   The vertex itself is checked against the plane-wave limit (1e-9) and an
 #   independent quadrature in tests/reference (ctest thm_dw_vertex), and in
 #   the session by tests/pyazr/thm_dw_vertex_test.py.
@@ -180,6 +182,20 @@ if ran t1 && ran t4; then
     same "$WORK/t1/output/$f" "$WORK/t4/output/$f" && ok "$f byte-identical on 1 and 4 threads" \
       || bad "$f differs between 1 and 4 threads"
   done
+fi
+
+# (f) ----------------------------------------------------------------------
+echo "(f) a node of phi~(q) in the spectatorAngle direction is reported"
+# With a cut r >= rmin the Yukawa source phi~(q) has nodes (tan(q rmin) =
+# -q/kappa); at a lab angle of 50 deg q runs over 90-81 MeV/c on the data,
+# and rmin = 4.8 fm puts a node at 85 MeV/c, where G ~ 1/phi~^2 has a pole
+# (G11 jumped from 8.5 to 226 at the 0.7 MeV grid node, without a word).
+run node "experiment[A] segments=1,2 $KIN distortion=coulomb vertexModel=dw spectatorAngle=50 boundState=yukawa:4.8" "NOFOLD"
+run nonode "experiment[A] segments=1,2 $KIN distortion=coulomb vertexModel=dw spectatorAngle=50 boundState=yukawa:4" "NOFOLD"
+if ran node && ran nonode; then
+  grep -q "WARNING: <thm> experiment\[A\]: the plane-wave source phi~(q) of the vertex changes sign between E = 0.725 and 0.745 MeV" \
+    "$WORK/node/log" && ok "node between 0.725 and 0.745 MeV: warned" || bad "no warning for the node of phi~(q)"
+  grep -q "changes sign" "$WORK/nonode/log" && bad "a warning without a node (rmin = 4 fm)" || ok "no warning without a node"
 fi
 
 echo
