@@ -29,10 +29,10 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ec_signature.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
+. "$HERE/../lib/check_common.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-900}")"
 
 failures=0
-ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 # make_variant NAME STRAGGLING RADIUS: a copy of the model with only segment 1

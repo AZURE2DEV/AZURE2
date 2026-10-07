@@ -9,9 +9,8 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/../lib/guard.sh"
+. "$HERE/../lib/check_common.sh"
 fail=0
-ok() { echo "  ok    $1"; }
-bad() { echo "  FAIL  $1"; fail=1; }
 
 run_guard 5 true && ok "a quick command: status 0" || bad "a quick command failed"
 run_guard 5 false; [ $? -ne 0 ] && ok "a failing command keeps its status" || bad "a failure was passed"

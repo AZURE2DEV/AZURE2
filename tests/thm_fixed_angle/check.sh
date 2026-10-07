@@ -41,6 +41,7 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_fixed_angle.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
+. "$HERE/../lib/check_common.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-600}")"
 KIN18="beam=18O target=d spectator=n Ebeam=54"
 FOURPI="12.566370614359172"
@@ -58,9 +59,6 @@ run() {
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
    echo "${PIPESTATUS[1]}" > status)
 }
-ok() { echo "  ok    $1"; }
-bad() { echo "  FAIL  $1"; fail=1; }
-same() { [ -f "$1" ] && [ -f "$2" ] && [ "$(tr -d '\r' < "$1")" = "$(tr -d '\r' < "$2")" ]; }
 out() { ls "$WORK/$1/output/" | grep '^AZUREOut_aa=' | head -1; }
 ran() { [ "$(cat "$WORK/$1/status")" = 0 ] && [ -n "$(out "$1")" ] || { bad "run $1 failed"; tail -5 "$WORK/$1/log" | sed 's/^/        /'; return 1; }; }
 model() { tr -d '\r' < "$WORK/$1/output/$(out "$1")" | awk 'NF > 4 { print $1, $4 }'; }
@@ -71,8 +69,6 @@ worst() {
     awk -v f="${3:-1}" '{ if ($1 != $3) { e = 1; exit } d = $2 * f / $4 - 1; if (d < 0) d = -d; if (d > w) w = d; n++ }
          END { if (e) print "0 ENERGY-MISMATCH"; else printf "%d %.3e\n", n, w }'
 }
-# counted N: the comparison ran over points (an energy mismatch gives N = 0)
-counted() { awk -v n="$1" 'BEGIN { exit !(n + 0 > 0) }'; }
 # check_worst A B FACTOR TOL LABEL
 check_worst() {
   local n w

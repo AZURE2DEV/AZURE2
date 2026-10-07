@@ -38,6 +38,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_coulomb_consistency.XXXXXX")"
 WP="$WORK"; if command -v cygpath > /dev/null 2>&1; then WP="$(cygpath -m "$WORK")"; fi
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
+. "$HERE/../lib/check_common.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-300}")"
 OUT="AZUREOut_aa=1_R=2.out"
 KIN="beam=18O target=3He spectator=d Ebeam=115"
@@ -60,10 +61,6 @@ run() {
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
    echo "${PIPESTATUS[1]}" > status)
 }
-ok() { echo "  ok    $1"; }
-bad() { echo "  FAIL  $1"; fail=1; }
-same() { [ -f "$1" ] && [ -f "$2" ] && [ "$(tr -d '\r' < "$1")" = "$(tr -d '\r' < "$2")" ]; }
-ran() { [ "$(cat "$WORK/$1/status")" = 0 ] && [ -f "$WORK/$1/output/$OUT" ] || { bad "run $1 failed"; tail -5 "$WORK/$1/log" | sed 's/^/        /'; return 1; }; }
 # "E ratio" per point: model(A)/model(B), energies must agree.
 ratios() {
   paste -d' ' <(tr -d '\r' < "$WORK/$1/output/$OUT" | awk 'NF > 4 { print $1, $4 }') \

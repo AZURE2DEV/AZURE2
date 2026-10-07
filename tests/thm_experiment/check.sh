@@ -35,6 +35,7 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_experiment.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
+. "$HERE/../lib/check_common.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-300}")"
 OUT="AZUREOut_aa=1_R=2.out"
 fail=0
@@ -52,10 +53,7 @@ run() {
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
    echo "${PIPESTATUS[1]}" > status)
 }
-ok() { echo "  ok    $1"; }
-bad() { echo "  FAIL  $1"; fail=1; }
 # Byte-identical files, without cmp (not in every MSYS2 image); \r stripped.
-same() { [ -f "$1" ] && [ -f "$2" ] && [ "$(tr -d '\r' < "$1")" = "$(tr -d '\r' < "$2")" ]; }
 # field FILE KEY -> the value after "KEY" in thm_experiments.out (first match)
 field() { tr -d '\r' < "$1" | awk -v k="$2" '$1 == k || $1 == k ":" { print $2; exit }'; }
 

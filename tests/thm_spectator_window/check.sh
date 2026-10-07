@@ -47,6 +47,7 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_spectator_window.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
+. "$HERE/../lib/check_common.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-300}")"
 OUT="AZUREOut_aa=1_R=2.out"
 KIN="beam=18O target=d spectator=n Ebeam=54"
@@ -70,19 +71,12 @@ run() {
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
    echo "${PIPESTATUS[1]}" > status)
 }
-ok() { echo "  ok    $1"; }
-bad() { echo "  FAIL  $1"; fail=1; }
-same() { [ -f "$1" ] && [ -f "$2" ] && [ "$(tr -d '\r' < "$1")" = "$(tr -d '\r' < "$2")" ]; }
-ran() { [ "$(cat "$WORK/$1/status")" = 0 ] && [ -f "$WORK/$1/output/$OUT" ] || { bad "run $1 failed"; tail -5 "$WORK/$1/log" | sed 's/^/        /'; return 1; }; }
-model() { tr -d '\r' < "$WORK/$1/output/$OUT" | awk 'NF > 4 { print $1, $4 }'; }
 # worst relative difference of the model columns of two runs (energies must agree)
 worst() {
   paste -d' ' <(model "$1") <(model "$2") |
     awk '{ if ($1 != $3) { e = 1; exit } d = $2 / $4 - 1; if (d < 0) d = -d; if (d > w) w = d; n++ }
          END { if (e) print "0 ENERGY-MISMATCH"; else printf "%d %.3e\n", n, w }'
 }
-# counted N: the comparison ran over points (an energy mismatch gives N = 0)
-counted() { awk -v n="$1" 'BEGIN { exit !(n + 0 > 0) }'; }
 T_of() { awk -v p="$1" -v mu="$MUSX" 'BEGIN { printf "%.17g", p * p / (2 * mu) }'; }
 
 NOFOLD='/<targetInt>/ { print; T = 1; next } /<\/targetInt>/ { T = 0 } T { next } { print }'

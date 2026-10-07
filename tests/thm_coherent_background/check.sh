@@ -45,6 +45,7 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_cbkg.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
+. "$HERE/../lib/check_common.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-300}")"
 OUT="AZUREOut_aa=1_R=2.out"
 fail=0
@@ -62,9 +63,6 @@ run() {
   (cd "$d" && printf '%s\n\n\n7\n' "${5:-1}" | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
    echo "${PIPESTATUS[1]}" > status)
 }
-ok() { echo "  ok    $1"; }
-bad() { echo "  FAIL  $1"; fail=1; }
-same() { [ -f "$1" ] && [ -f "$2" ] && [ "$(tr -d '\r' < "$1")" = "$(tr -d '\r' < "$2")" ]; }
 total() { tr -d '\r' < "$1/log" | awk '/Total Chi-Squared:/ { c = $3 } END { print c }'; }
 # worst |a/b - 1| of column 4 (the model) of two output files, data lines only
 worst4() { paste <(tr -d '\r' < "$1" | awk 'NF > 3 { print $4 }') <(tr -d '\r' < "$2" | awk 'NF > 3 { print $4 }') |
