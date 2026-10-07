@@ -156,6 +156,7 @@ refuse bad_theta "expected all or thmin-thmax" "experiment[A] segments=1,2 theta
 # distortion= is implemented since Stage D (tests/thm_distortion); a bad value is refused.
 refuse bad_distortion "expected none, coulomb, optical or table" "experiment[A] segments=1,2 distortion=1"
 refuse unknown_key "unknown key 'foo'" "experiment[A] segments=1 foo=1"
+refuse huge_range "segment numbers go up to 100000" "experiment[A] segments=1-100000000"
 refuse bad_nuclide "unknown nuclide '8Be'" "experiment[A] segments=1-2 beam=8Be target=d spectator=n Ebeam=54"
 refuse bad_explicit "expected Z,A,mass" "experiment[A] segments=1-2 beam=18O target=2,1,2.0135 spectator=n Ebeam=54"
 refuse partial_kinematics "all four or none" "experiment[A] segments=1-2 beam=18O target=d"

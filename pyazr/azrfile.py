@@ -174,9 +174,13 @@ def _thm_segment_list(text):
         if not ok or lo < 1:
             raise ValueError(f"segments='{text}': expected segment numbers >= 1 "
                              "like 1,2,4-6")
+        if hi > 100000:                       # ThmExperiment.cpp kMaxThmSegment
+            raise ValueError(f"segments='{text}': segment numbers go up to 100000")
+        seen = set(out)
         for k in range(lo, hi + 1):
-            if k in out:
+            if k in seen:
                 raise ValueError(f"segments='{text}': segment {k} is listed twice")
+            seen.add(k)
             out.append(k)
     return sorted(out)
 

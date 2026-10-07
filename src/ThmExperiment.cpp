@@ -52,6 +52,9 @@ std::vector<std::string> Split(const std::string &text, char sep) {
   return out;
 }
 
+// Far above any project's number of segment lines (each is a file).
+static const int kMaxThmSegment = 100000;
+
 // "1,2,5-7" -> {1,2,5,6,7}.  "" or what is wrong.
 std::string ParseSegmentList(const std::string &text, std::vector<int> &out) {
   out.clear();
@@ -67,6 +70,12 @@ std::string ParseSegmentList(const std::string &text, std::vector<int> &out) {
       ok = ReadWholeInt(item.substr(0, dash), lo) && ReadWholeInt(item.substr(dash + 1), hi) && hi >= lo;
     }
     if (!ok || lo < 1) return "segments='" + text + "': expected segment numbers >= 1 like 1,2,4-6";
+    // A bound before the range is expanded: 1-100000000 would fill memory.
+    if (hi > kMaxThmSegment) {
+      std::ostringstream why;
+      why << "segments='" << text << "': segment numbers go up to " << kMaxThmSegment;
+      return why.str();
+    }
     for (int k = lo; k <= hi; k++) {
       if (!seen.insert(k).second) {
         std::ostringstream why;

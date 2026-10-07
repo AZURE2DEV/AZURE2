@@ -130,7 +130,8 @@ with tempfile.TemporaryDirectory() as tmp:
                        ("experiment[A] segments=1 theta=20", "expected all or thmin-thmax"),
                        ("experiment[A] segments=1 foo=1", "unknown key"),
                        ("experiment[A] segments=1\nexperiment[B] segments=1", "already in"),
-                       ("experiment[A] segments=1 beam=p", "all four")]:
+                       ("experiment[A] segments=1 beam=p", "all four"),
+                       ("experiment[A] segments=1-100000000", "go up to 100000")]:
         path = os.path.join(proj, "bad.azr")
         with open(path, "w") as f:
             f.write(open(src).read().rstrip("\n") + "\n<thm>\n" + line + "\n</thm>\n")
