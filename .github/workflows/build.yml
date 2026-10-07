@@ -84,8 +84,8 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/pyazr-venv"
           PY="$RUNNER_TEMP/pyazr-venv/bin/python"
           "$PY" -m pip install --quiet --upgrade pip
-          "$PY" -m pip install --quiet pybind11 numpy scipy
-          "$PY" -c 'import numpy, scipy, pybind11; print("numpy", numpy.__version__, "scipy", scipy.__version__, "pybind11", pybind11.__version__)'
+          "$PY" -m pip install --quiet pybind11 numpy scipy mpmath
+          "$PY" -c 'import numpy, scipy, mpmath, pybind11; print("numpy", numpy.__version__, "scipy", scipy.__version__, "pybind11", pybind11.__version__)'
           echo "PYAZR_PYTHON=$PY" >> "$GITHUB_ENV"
           echo "PYBIND11_DIR=$("$PY" -m pybind11 --cmakedir)" >> "$GITHUB_ENV"
 
@@ -110,9 +110,9 @@ jobs:
             { echo "::error::macos: could not create the pyazr venv with $(command -v python3)"; exit 1; }
           PY="$RUNNER_TEMP/pyazr-venv/bin/python"
           "$PY" -m pip install --quiet --upgrade pip
-          "$PY" -m pip install --quiet pybind11 numpy scipy ||
+          "$PY" -m pip install --quiet pybind11 numpy scipy mpmath ||
             { echo "::error::macos: pip install pybind11 numpy scipy failed"; exit 1; }
-          "$PY" -c 'import sys, numpy, scipy, pybind11; print(sys.executable, "numpy", numpy.__version__, "scipy", scipy.__version__, "pybind11", pybind11.__version__)'
+          "$PY" -c 'import sys, numpy, scipy, mpmath, pybind11; print(sys.executable, "numpy", numpy.__version__, "scipy", scipy.__version__, "pybind11", pybind11.__version__)'
           echo "PYAZR_PYTHON=$PY" >> "$GITHUB_ENV"
           echo "PYBIND11_DIR=$("$PY" -m pybind11 --cmakedir)" >> "$GITHUB_ENV"
           echo "LIBOMP=$(brew --prefix libomp)" >> "$GITHUB_ENV"
@@ -171,6 +171,7 @@ jobs:
             mingw-w64-ucrt-x86_64-python
             mingw-w64-ucrt-x86_64-python-numpy
             mingw-w64-ucrt-x86_64-python-scipy
+            mingw-w64-ucrt-x86_64-python-mpmath
             mingw-w64-ucrt-x86_64-pybind11
 
       # The UCRT64 Python, the one pacman installed numpy and scipy into, as a
@@ -301,7 +302,7 @@ jobs:
           if [ "${{ matrix.pyazr_engine }}" = "ON" ] && echo "$SKIPPED" | grep -q '^pyazr_'; then
             # Why: the import every engine test starts with, run here so the
             # reason reaches the annotation rather than only the test's output.
-            WHY="$( { "$PYAZR_PYTHON" -c 'import numpy, scipy, pyazr._azure2' 2>&1 || true; } | tail -3 \
+            WHY="$( { "$PYAZR_PYTHON" -c 'import numpy, scipy, mpmath, pyazr._azure2' 2>&1 || true; } | tail -3 \
                    | awk '{ gsub(/%/, "%25"); gsub(/\r/, ""); printf "%s%s", (NR > 1 ? "%0A" : ""), $0 }')"
             echo "::error::${{ matrix.name }}: pyazr engine tests skipped although pybind11, numpy and scipy were installed:%0A$(echo "$SKIPPED" | grep '^pyazr_' | paste -sd ' ' -)%0Amodule files: $(ls pyazr/_azure2* 2>/dev/null | paste -sd ' ' - || true)%0A${WHY:-the import succeeds here; see unit-tests.log}"
             exit 1
