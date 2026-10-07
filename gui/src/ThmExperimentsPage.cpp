@@ -898,7 +898,10 @@ void ThmExperimentsPage::showDerivedNow(const ThmExperimentRecord &x) {
     meanTsValue->setText(none);
   }
   for (QLabel *l : {bindingValue, zetaValue, meanTsValue}) l->setToolTip(info);
+  // The DW vertex (vertexModel=dw, kept as written) carries the distortion: R(E) is not applied.
+  const bool dwVertex = x.extraTokens.contains("vertexModel=dw");
   distortionValue->setText(distortion.isEmpty() ? none
+                           : dwVertex           ? tr("not applied (vertexModel=dw)")
                                                 : QString::fromUtf8("%1 … %2")
                                                       .arg(QString::number(rLo, 'g', 3), QString::number(rHi, 'g', 3)));
   distortionValue->setToolTip(distortion);

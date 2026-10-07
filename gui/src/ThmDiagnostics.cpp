@@ -522,8 +522,9 @@ ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request)
     }
   }
 
-  // Distortion factor of the segment's experiment (EData::ThmDistortionTable).
-  if (experiment && experiment->distortion != ThmExperiment::DIST_NONE) {
+  // Distortion factor of the segment's experiment (EData::ThmDistortionTable);
+  // none with the DW vertex, which carries the distortion and replaces R(E).
+  if (experiment && experiment->distortion != ThmExperiment::DIST_NONE && !experiment->vertexDW) {
     r.distortion = true;
     r.distortionRatioPW = experiment->distortionRatioPW;
     ThmDistortionReport report;
