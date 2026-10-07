@@ -5,13 +5,19 @@
 #include "TargetEffect.h"
 #include "EDataIterator.h"
 #include "ThmExperiment.h"
-#include "ThmLineshape.h"
-#include "ThmDistortion.h"
-#include "ThmDwVertex.h"
-#include "ThmAngular.h"
 #include <memory>
 #include <deque>
 #include <ios>
+
+// THM types EData holds by pointer or takes by reference (EDataThm.cpp).
+struct ThmLineshape;
+struct ThmSpectatorWindow;
+struct ThmAngleWindow;
+struct ThmVertexReport;
+struct ThmLineshapeReport;
+struct ThmDistortionReport;
+class ThmDistortion;
+class ThmDwVertex;
 
 class CNuc;
 struct BandData;

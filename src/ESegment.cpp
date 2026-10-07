@@ -10,6 +10,7 @@
 #include "ThmLineshape.h"
 #include "ThmDistortion.h"
 #include "ThmAngular.h"
+#include "ThmDwVertex.h"
 
 /*!
  * This constructor is used if the segment contains actual experimental data.  The segment

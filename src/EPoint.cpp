@@ -23,6 +23,9 @@
 #include "IntegratedFermiFunc.h"
 #include "NuclearPotentialManager.h"
 #include "AChannel.h"
+#include "ThmDistortion.h"
+#include "ThmDwVertex.h"
+#include "ThmAngular.h"
 #include <atomic>
 #include <cstdint>
 #include <iostream>
