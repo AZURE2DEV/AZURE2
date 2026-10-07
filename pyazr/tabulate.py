@@ -139,6 +139,15 @@ def tabulate(azr_file, pairs, e_min, e_max, rel_tol=5e-3, frame="cm",
                  "checks/                                    \\1", txt, flags=re.M)
     stripped = os.path.join(work, "_stripped.azr")
     open(stripped, "w").write(txt)
+    # The data segments are gone, and with them what the <thm> block keys by
+    # their line numbers: experiment[...] segments= and weight[k] would name
+    # the tabulation segments (not THM) and the engine would refuse the file.
+    sm = AzrModel.from_file(stripped)
+    for name in list(sm.thm_experiments()):
+        sm.clear_thm_experiment(name)
+    for key in [k for k in sm.thm_options() if k.startswith("weight[")]:
+        sm.clear_thm_option(key)
+    sm.write(stripped)
 
     knots = {p: None for p in pairs}     # (E_cm sorted, sigma) arrays
     active = {p: None for p in pairs}    # list of (lo, hi) c.m. intervals

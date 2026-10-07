@@ -183,3 +183,10 @@ add_test(NAME pyazr_geometry_no_transform
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/geometry_no_transform_test.py)
 set_tests_properties(pyazr_geometry_no_transform PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# pyazr.tabulate drops the <thm> keys that name data segments (experiment
+# lines, weight[k]) along with the segments, so a THM project tabulates.
+add_test(NAME pyazr_tabulate_thm
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/tabulate_thm_test.py)
+set_tests_properties(pyazr_tabulate_thm PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
