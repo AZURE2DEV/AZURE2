@@ -204,14 +204,12 @@ def best_fit_params(model, path=None):
             f"{path} not found: the band must be evaluated at the fitted "
             f"parameters the covariance belongs to.  Pass params= explicitly "
             f"to override.")
-    # Skip the `parametrization` tag AZURE2 writes first (which amplitudes the
-    # file holds); it is not a parameter.
-    full = np.asarray([float(l.split()[1]) for l in open(path)
-                       if l.split() and l.split()[0] != "parametrization"], float)
+    # By NAME (azure2.full_rwa_from_sav): a parameter the file does not list
+    # keeps the session's value, so a file from an older layout (no
+    # segment_*_energy_shift_sqrt rows, no #parametrization tag) still fits,
+    # and in extrapolation mode the file's segment rows simply find no home.
+    full = model.full_rwa_from_sav(path)
     fixed = np.asarray(model.fixed_params, float).round().astype(bool)
-    if full.size != fixed.size:
-        raise ValueError(f"{path} has {full.size} parameters but the model has "
-                         f"{fixed.size}.")
     free = full[~fixed]
 
     kinds, _ = live_parameters(model)

@@ -32,7 +32,7 @@ void AZUREParams::ReadUserParameters(const Config &configure) {
       in >> tempname >> tempvalue >> temperror;
       getline(in, tempfixed);
       if (!in.eof()) {
-        if (tempname == "parametrization") {
+        if (tempname == "#parametrization" || tempname == "parametrization") {
           basisTag_ = (int)tempvalue;
           continue;
         }
@@ -83,7 +83,7 @@ void AZUREParams::ReadUserParameters(const std::string &filename) {
       in >> tempname >> tempvalue >> temperror;
       getline(in, tempfixed);
       if (!in.eof()) {
-        if (tempname == "parametrization") {
+        if (tempname == "#parametrization" || tempname == "parametrization") {
           basisTag_ = (int)tempvalue;
           continue;
         }
@@ -135,8 +135,11 @@ void AZUREParams::WriteUserParameters(const Config &configure, bool fitParameter
     out.precision(7);
     // First line: which amplitudes the file holds (standard, Brune or Park
     // reduced widths differ by level-dependent factors).  Written as a
-    // pseudo-parameter so older readers skip it as an unknown name.
-    out << std::setw(20) << "parametrization"
+    // '#'-prefixed pseudo-parameter: numpy.loadtxt skips it as a comment, so
+    // scripts that read the file by row position are unaffected; readers that
+    // key on the first column see an unknown name; older AZURE2 binaries
+    // parse it as a parameter no model has and ignore it.
+    out << std::setw(20) << "#parametrization"
         << std::scientific << std::setw(20) << (double)BasisForConfig(configure)
         << std::scientific << std::setw(20) << 0.0 << std::endl;
     for (int i = 0; i < GetMinuitParams().Params().size(); i++) {

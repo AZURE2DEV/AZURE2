@@ -584,47 +584,90 @@ class azure2:
     # param.sav lives beside the model, so these read and write from the
     # session's directory rather than wherever the caller happens to be.
 
+    @staticmethod
+    def read_sav(path):
+        """``{name: value}`` from a ``param.par`` / ``param.sav`` / ``param.fit``.
+
+        Blank lines, ``#`` comments (the ``#parametrization`` tag) and a bare
+        ``parametrization`` row (files written 2026-10-06, before the tag became
+        a comment) are skipped.  Read parameter files by NAME, never by row
+        position: AZURE2 itself matches names (``AZUREParams::
+        ReadUserParameters``), new parameters are appended as the code grows
+        (the ``segment_<key>_energy_shift_sqrt`` rows of 2026-10-05), and a
+        positional read of a file from another layout is silently off by one
+        or more rows (an 8Be+alpha rate came out exactly 2x that way).
+        """
+        vals = {}
+        with open(path) as fh:
+            for line in fh:
+                t = line.split()
+                if len(t) < 2 or t[0].startswith("#") or t[0] == "parametrization":
+                    continue
+                try:
+                    vals[t[0]] = float(t[1])
+                except ValueError:
+                    continue
+        return vals
+
+    def full_rwa_from_sav(self, path):
+        """The model's full RWA vector (fixed parameters included, ``p.index``
+        order) with the values a parameter file names applied.
+
+        A name the file lacks keeps the session's current value, exactly as
+        AZURE2 does on read; a file with no name in common with the model is
+        refused rather than applied to nothing.
+        """
+        vals = self.read_sav(path)
+        full = np.asarray(self.sess.params_all_rwa(), float).copy()
+        hit = 0
+        for p in self.parameters:
+            if p.name in vals and 0 <= p.index < full.size:
+                full[p.index] = vals[p.name]
+                hit += 1
+        if hit == 0:
+            raise ValueError(f"{path}: no parameter name matches this model "
+                             f"(is it a file from another project?)")
+        return full
+
     def update_rwa_params_from_sav(self):
-        """Reload params_rwa from the run's param.sav."""
+        """Reload params_rwa from the run's param.sav (matched by name)."""
         with _in_dir(self.cwd):
-            rows = [l.split() for l in open('output/param.sav') if l.split()]
-        # the first line may be the `parametrization` tag (see save_fit)
-        all_rwa_params = [float(r[1]) for r in rows if r[0] != "parametrization"]
-        self.params_rwa = []
-        for i in range(len(all_rwa_params)):
-            if self.fixed_params[i]:
-                continue
-            else:
-                self.params_rwa.append(all_rwa_params[i])
+            full = self.full_rwa_from_sav('output/param.sav')
+        self.params_rwa = [float(v) for v, f in zip(full, self.fixed_params) if not f]
 
     def update_sav_from_rwa_params(self, best):
-        """Write a free RWA vector back out to param.sav."""
-        params_full = []
+        """Write a free RWA vector back out to param.sav.new, by name.
+
+        Rows the file already has are updated in place (other columns and the
+        tag line kept); a free parameter the file does not list is appended, so
+        the result describes the whole model.
+        """
+        best = np.asarray(best, float).ravel()
+        free = {p.name: float(best[p.free_index]) for p in self.parameters
+                if not p.fixed and p.free_index is not None and p.free_index < best.size}
         with _in_dir(self.cwd):
-            tag = None
-            with open('output/param.sav', 'r') as f:
-                for line in f.readlines():
-                    l = line.split()
-                    if not l:
+            rows, tag, seen = [], None, set()
+            with open('output/param.sav') as fh:
+                for line in fh:
+                    t = line.split()
+                    if not t:
                         continue
-                    if l[0] == "parametrization":
-                        tag = l
+                    if t[0].startswith("#") or t[0] == "parametrization":
+                        tag = t
                         continue
-                    params_full.append([l[0], float(l[1]), float(l[2])])
-
-            idx = 0
-            for i in range(len(params_full)):
-                if self.fixed_params[i]:
-                    continue
-                else:
-                    params_full[i][1] = best[idx]
-                    idx += 1
-
+                    rows.append(t)
+            for t in rows:
+                if t[0] in free:
+                    t[1] = repr(free[t[0]])
+                    seen.add(t[0])
+            for name, value in free.items():
+                if name not in seen:
+                    rows.append([name, repr(value), "0.0"])
             with open('output/param.sav.new', 'w') as f:
                 if tag is not None:
                     f.write(" ".join(tag) + "\n")
-                for param in params_full:
-                    f.write(f"{param[0]} {param[1]} {param[2]}\n")
+                for t in rows:
+                    f.write(" ".join(t) + "\n")
 
     def save_fit(self, path, x=None, param_sav=True, verify=True):
         """Snapshot a fit as a ``.azr`` you can reopen, plot, or hand over.
@@ -675,8 +718,10 @@ class azure2:
             with open(sav, "w") as fh:
                 # AZURE2 tags every parameter file with the amplitudes it holds
                 # (0 standard, 1 Brune, 2 Park) and converts on read when a run
-                # in the other alternative basis loads it.
-                fh.write(f"{'parametrization':>28s} {float(self.basis): .7e} {0.0: .7e}\n")
+                # in the other alternative basis loads it.  The '#' keeps
+                # numpy.loadtxt-based readers, which index rows by position,
+                # unaffected.
+                fh.write(f"{'#parametrization':>28s} {float(self.basis): .7e} {0.0: .7e}\n")
                 for i, p in enumerate(self.parameters):
                     v = x[next(free)] if not self.fixed_params[i] else allrwa[i]
                     fh.write(f"{p.name:>28s} {float(v): .7e} {0.0: .7e}\n")
@@ -1039,7 +1084,7 @@ class azure2:
     @property
     def basis(self):
         """Which amplitudes ``params_rwa`` are: 0 standard (constant boundary
-        condition), 1 Brune, 2 Park -- the ``parametrization`` tag AZURE2 writes
+        condition), 1 Brune, 2 Park -- the ``#parametrization`` tag AZURE2 writes
         first in ``param.sav``."""
         if self.options.get("use_park"):
             return 2

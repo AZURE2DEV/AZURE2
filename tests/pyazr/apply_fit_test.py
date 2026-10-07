@@ -160,11 +160,15 @@ else:
             written, savfile = m.save_fit(out)
             check("snapshot written", os.path.exists(written))
             check("companion param.sav written", savfile and os.path.exists(savfile))
-            # the first line is the `parametrization` tag, not a parameter
+            # the first line is the `#parametrization` tag, not a parameter; as a
+            # comment line it is invisible to numpy.loadtxt, so positional readers
+            # still see exactly the parameters
             check("param.sav has every parameter",
-                  sum(1 for l in open(savfile) if l.split()[0] != "parametrization") == len(m.parameters))
+                  sum(1 for l in open(savfile) if l.split() and not l.split()[0].startswith("#")) == len(m.parameters))
             check("param.sav tagged with its parametrization",
-                  open(savfile).readline().split()[0] == "parametrization")
+                  open(savfile).readline().split()[0] == "#parametrization")
+            check("numpy.loadtxt sees only the parameters",
+                  np.loadtxt(savfile, usecols=(1,)).size == len(m.parameters))
         with azure2(out, cwd=project) as back:
             got = np.asarray(back.transform_rwa(back.params_rwa), float)
         check("every R-matrix value round-trips",

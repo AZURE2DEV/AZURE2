@@ -32,8 +32,8 @@ class AZUREParams {
   /// Write Minos asymmetric errors to param.errors.
   void WriteParameterErrors(const std::vector<std::pair<double, double>> &, const Config &);
 
-  /// Which amplitudes a parameter file holds: the pseudo-parameter line
-  /// `parametrization` that WriteUserParameters puts first.  Files written
+  /// Which amplitudes a parameter file holds: the comment-style line
+  /// `#parametrization` that WriteUserParameters puts first.  Files written
   /// before the line existed carry none and read back as kBasisUnknown.
   enum Basis { kBasisUnknown = -1, kBasisStandard = 0, kBasisBrune = 1, kBasisPark = 2 };
   /// The basis the last ReadUserParameters found in its file.

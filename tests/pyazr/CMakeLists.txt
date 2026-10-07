@@ -59,3 +59,10 @@ add_test(NAME pyazr_park_gradient
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/park_gradient_test.py)
 set_tests_properties(pyazr_park_gradient PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=4")
+
+# Parameter files are read by name: old layouts, the #parametrization tag,
+# write-back by name, foreign files refused.
+add_test(NAME pyazr_sav_readers
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/sav_readers_test.py)
+set_tests_properties(pyazr_sav_readers PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

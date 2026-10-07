@@ -73,8 +73,8 @@ for project in 13N identical_pp_res; do
   if cmp -s "$WORK/$project.brune/output/param.par" "$WORK/$project.park/output/param.par"; then
     bad "$project: param.par identical in both modes (--use-park had no effect)"
   else ok "$project: reduced width amplitudes differ between the modes"; fi
-  grep -q "^ *parametrization *1\." "$WORK/$project.brune/output/param.par" && \
-  grep -q "^ *parametrization *2\." "$WORK/$project.park/output/param.par" && \
+  grep -q "^ *#parametrization *1\." "$WORK/$project.brune/output/param.par" && \
+  grep -q "^ *#parametrization *2\." "$WORK/$project.park/output/param.par" && \
     ok "$project: param.par tagged with its parametrization" || bad "$project: param.par not tagged"
 done
 
@@ -109,7 +109,7 @@ paste <(width_column "$WORK/fit.brune/output/parameters.out") \
       <(width_column "$WORK/fit.park/output/parameters.out") | \
   awk 'BEGIN { bad = 0 } { d = $1 - $2; if (d < 0) d = -d; if (d > 1e-3 * ($1 < 0 ? -$1 : $1)) { bad++; print "        width " $1 " vs " $2 } } END { exit bad }'
 [ $? -eq 0 ] && ok "p+p fit: physical widths agree to 1e-3 in both modes" || bad "p+p fit: physical widths differ between the modes"
-grep -q "^ *parametrization *2\." "$WORK/fit.park/output/param.sav" && ok "p+p fit: param.sav tagged Park" || bad "p+p fit: param.sav not tagged"
+grep -q "^ *#parametrization *2\." "$WORK/fit.park/output/param.sav" && ok "p+p fit: param.sav tagged Park" || bad "p+p fit: param.sav not tagged"
 
 # ---- 4. the J > 0 wall ------------------------------------------------------
 # Multiply the p+p 0+ level's width by 170 (300 keV -> 51 MeV, past the bound
