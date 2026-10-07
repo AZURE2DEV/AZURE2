@@ -249,7 +249,9 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   }
   for (int e = 0; e < nE; e++) {
     std::string w = dist.CheckEnergy(eLo + e * gridStep);
-    if (!w.empty() && dist.angleKind != ThmDistortion::LAB) return w;
+    if (!w.empty() && dist.angleKind != ThmDistortion::LAB)
+      return "the vertex grid, " + ThmNumberText(eLo) + " to " + ThmNumberText(eLo + (nE - 1) * gridStep) +
+             " MeV (the data and up to 0.3 MeV beyond, for the folding sub-points), cannot be built: " + w;
   }
   alpha = k.mA / (k.mx + k.mA);
   beta = k.ms / k.ma;
