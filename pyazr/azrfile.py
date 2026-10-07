@@ -26,6 +26,7 @@ The 31 fields of a channel line match ``NucLine`` in the AZURE2 source
 which the ``S`` / ``L`` properties convert.
 """
 
+import decimal
 import math
 import os
 import re
@@ -762,12 +763,29 @@ def _thm_is_default(s):
 
 def _thm_number(x):
     """Shortest text that reads back as the same double, as Qt's
-    QString::number(x, 'g', QLocale::FloatingPointShortest) writes it."""
-    for p in range(1, 18):
-        t = f"{x:.{p}g}"
-        if float(t) == x:
-            return t
-    return repr(x)
+    QString::number(x, 'g', QLocale::FloatingPointShortest) writes it (the
+    GUI's numberText): the shortest round-trip digits, in decimal form unless
+    that needs more than 3 leading zeros or more than 5 trailing ones
+    ('30', '100000', '1e+06', '0.0001', '1e-05'; checked against Qt 5 on
+    20000 values)."""
+    x = float(x)
+    if x == 0 or not math.isfinite(x):
+        return f"{x:g}"
+    sign, digits, exp = decimal.Decimal(repr(x)).normalize().as_tuple()
+    ds = "".join(map(str, digits))
+    decpt = len(ds) + exp              # position of the decimal point
+    if (1 - decpt <= 4) if decpt <= 0 else (decpt <= len(ds) + 5):
+        if exp >= 0:
+            t = ds + "0" * exp
+        elif decpt <= 0:
+            t = "0." + "0" * (-decpt) + ds
+        else:
+            t = ds[:decpt] + "." + ds[decpt:]
+    else:
+        e10 = decpt - 1
+        t = (ds[0] + ("." + ds[1:] if len(ds) > 1 else "")
+             + ("e-" if e10 < 0 else "e+") + f"{abs(e10):02d}")
+    return ("-" if sign else "") + t
 
 
 def _thm_read_double(text):

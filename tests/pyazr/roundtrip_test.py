@@ -211,6 +211,20 @@ for what, fn in bad:
 check("refusals leave the model unchanged", m.to_text() == base)
 check("clear of an unknown key refused", refuses("clear", lambda: m.clear_thm_option("foo")))
 
+# Numbers in the <thm> block are written as the GUI writes them (Qt's
+# QString::number(x, 'g', FloatingPointShortest)): these pairs are Qt 5's own
+# output.  The first round-trip %g used to write 30 as '3e+01'.
+qt = [(30, "30"), (20, "20"), (100, "100"), (1500, "1500"), (54, "54"), (0.04, "0.04"),
+      (5.49, "5.49"), (100000, "100000"), (1e6, "1e+06"), (1500000, "1500000"),
+      (15000000, "1.5e+07"), (123456789, "123456789"), (1e16, "1e+16"), (0.0001, "0.0001"),
+      (1e-5, "1e-05"), (2.5e-4, "0.00025"), (3.14159e-05, "3.14159e-05"),
+      (0.1 + 0.2, "0.30000000000000004"), (-200000, "-200000"), (0.0, "0")]
+bad_numbers = [(x, azrfile._thm_number(x), t) for x, t in qt if azrfile._thm_number(x) != t]
+check("<thm> numbers written as Qt writes them", not bad_numbers, str(bad_numbers))
+m.set_thm_option("spectatorEnergy", 20)
+check("spectatorEnergy=20 written as '20'", "spectatorEnergy=20\n" in m.to_text(), m.to_text()[-200:])
+m.clear_thm_option("spectatorEnergy")
+
 
 def table(name, rows):
     with open(os.path.join(tmpdir, name), "w") as fh:
