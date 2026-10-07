@@ -15,6 +15,7 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QRegExp>
+#include <QRegularExpression>
 #include <QShowEvent>
 #include <cmath>
 #include <algorithm>
@@ -1753,11 +1754,12 @@ bool FittingTab::writeParameterSettings(QTextStream &outStream) {
 }
 
 QStringList FittingTab::priorCentreRows() const {
-  QRegExp entry("^segment_(\\d+)_(norm|energy_shift)$");
+  const QRegularExpression entry("^segment_(\\d+)_(norm|energy_shift)$");
   QMap<QPair<int, int>, QString> ordered;  // (segment, 0 norm / 1 shift) -> row
   for (QMap<QString, double>::const_iterator c = priorCentres_.constBegin(); c != priorCentres_.constEnd(); ++c) {
-    if (entry.indexIn(c.key()) == -1) continue;
-    ordered[qMakePair(entry.cap(1).toInt(), entry.cap(2) == "norm" ? 0 : 1)] =
+    const QRegularExpressionMatch m = entry.match(c.key());
+    if (!m.hasMatch()) continue;
+    ordered[qMakePair(m.captured(1).toInt(), m.captured(2) == "norm" ? 0 : 1)] =
         c.key() + " prior_centre " + roundTripNumber(c.value());
   }
   return ordered.values();
@@ -2098,13 +2100,14 @@ const std::vector<QString> FittingTab::infoText = {
             "These parameters shift the energy scale of experimental data points.")};
 
 void FittingTab::followSegments(const QVector<int> &newNumber) {
-  QRegExp entry("^segment_(\\d+)_(norm|energy_shift)$");
+  const QRegularExpression entry("^segment_(\\d+)_(norm|energy_shift)$");
   // The new name of a segment-keyed name, "" if its segment is gone; other names are kept.
   auto renamed = [&](const QString &name) {
-    if (entry.indexIn(name) == -1) return name;
-    const int k = entry.cap(1).toInt();
+    const QRegularExpressionMatch m = entry.match(name);
+    if (!m.hasMatch()) return name;
+    const int k = m.captured(1).toInt();
     if (k < 1 || k > newNumber.size()) return name;
-    return newNumber[k - 1] ? QString("segment_%1_%2").arg(newNumber[k - 1]).arg(entry.cap(2)) : QString();
+    return newNumber[k - 1] ? QString("segment_%1_%2").arg(newNumber[k - 1]).arg(m.captured(2)) : QString();
   };
   const QSet<QString> coherent = coherentParameterNames();  // the cbkg_* names that still exist
   // In the order populateFromCurrentGUIState builds: levels, norms and

@@ -2,7 +2,7 @@
 #include "ThmNumberText.h"
 
 #include <QDir>
-#include <QRegExp>
+#include <QRegularExpression>
 #include <QLocale>
 #include <QSet>
 #include <algorithm>
@@ -239,16 +239,17 @@ QStringList ThmSettings::renumberSegments(const QVector<int> &newNumber, bool te
 
   // segments= is given once per experiment (the engine refuses a repeated key).
   QStringList removed;
-  QRegExp token("(^|[ \t])segments=([^ \t]+)");
+  const QRegularExpression token("(^|[ \t])segments=([^ \t]+)");
   for (QString &raw : experimentLines) {
     const QString name = experimentName(raw);
     if (name.isEmpty()) continue;
     const int hash = raw.indexOf('#');
     const QString code = hash < 0 ? raw : raw.left(hash);
-    const int at = token.indexIn(code);
-    if (at < 0) continue;
+    const QRegularExpressionMatch match = token.match(code);
+    if (!match.hasMatch()) continue;
+    const int at = match.capturedStart();
     QList<int> before, after;
-    if (!ThmExperimentRecord::expandSegments(token.cap(2), before)) continue;
+    if (!ThmExperimentRecord::expandSegments(match.captured(2), before)) continue;
     for (int k : before)
       if (renumber(k) > 0) after << renumber(k);
     std::sort(after.begin(), after.end());
@@ -256,8 +257,8 @@ QStringList ThmSettings::renumberSegments(const QVector<int> &newNumber, bool te
     if (after.isEmpty())
       removed << name;
     else if (after != before) {
-      const int value = at + token.cap(1).size() + 9;  // after "segments="
-      raw.replace(value, token.cap(2).size(), ThmExperimentRecord::segmentsListText(after));
+      const int value = at + match.captured(1).size() + 9;  // after "segments="
+      raw.replace(value, match.captured(2).size(), ThmExperimentRecord::segmentsListText(after));
     }
   }
   QStringList kept;
@@ -346,7 +347,7 @@ QList<ThmExperimentRecord> ThmExperimentRecord::read(const QStringList &lines) {
     }
     ThmExperimentRecord &r = records[at];
     QString code = codeOf(raw);
-    const QStringList tokens = code.mid(code.indexOf(']') + 1).split(QRegExp("[ \t]+"), Qt::SkipEmptyParts);
+    const QStringList tokens = code.mid(code.indexOf(']') + 1).split(QRegularExpression("[ \t]+"), Qt::SkipEmptyParts);
     for (const QString &token : tokens) {
       int eq = token.indexOf('=');
       QString key = token.left(eq), value = token.mid(eq + 1);
