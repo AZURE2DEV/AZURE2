@@ -5,6 +5,7 @@
 #include <QSet>
 #include <QTabWidget>
 #include <QTableWidget>
+#include <algorithm>
 #include <cmath>
 #include <map>
 
@@ -23,6 +24,12 @@ void FittingTab::setThmEnabled(bool on) {
 void FittingTab::showCoherentTab() {
   const int cbkgTab = paramTabWidget->indexOf(cbkgParamsTable);
   const bool shown = thmEnabled_ && cbkgParamsTable->rowCount() > 0;
+  // The names (cbkg_<experiment>_<J^pi>_<exit>_<s,l,s',l'>_re0 ...) are long: the column fits them.
+  if (shown) {
+    const int was = cbkgParamsTable->columnWidth(0);
+    cbkgParamsTable->resizeColumnToContents(0);
+    cbkgParamsTable->setColumnWidth(0, std::max(was, cbkgParamsTable->columnWidth(0)));
+  }
   if (shown && cbkgTab < 0)
     paramTabWidget->addTab(cbkgParamsTable, "THM Background");
   else if (!shown && cbkgTab >= 0)
