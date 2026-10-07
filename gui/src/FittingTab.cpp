@@ -104,8 +104,16 @@ void FittingTab::setupParameterTable(QTableWidget *table, const QString &title, 
   table->setColumnWidth(4, 100);  // Error
   table->setColumnWidth(5, 100);  // Fit Error
   table->setColumnWidth(6, 120);  // Nuisance checkbox
+  if (priorCentreColumn) table->setColumnWidth(7, 100);  // Prior centre
+  // At least as wide as the header and a six-digit number in this font, so
+  // that neither is cut (large fonts, HiDPI).
+  const QFontMetrics fm(table->font());
+  for (int c = 0; c < headers.size(); c++) {
+    int need = fm.horizontalAdvance(headers[c]) + 24;
+    if (c >= 1 && c != 6) need = std::max(need, fm.horizontalAdvance("-0.000123457") + 16);
+    table->setColumnWidth(c, std::max(table->columnWidth(c), need));
+  }
   if (priorCentreColumn) {
-    table->setColumnWidth(7, 100);  // Prior centre
     table->horizontalHeaderItem(7)->setToolTip(
         "Centre of the prior on this parameter. Empty: the value in the Segments tab "
         "is both the start value and the centre (classic). A number keeps the prior "
