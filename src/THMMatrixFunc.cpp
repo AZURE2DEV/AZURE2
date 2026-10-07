@@ -7,15 +7,12 @@
 #include "AChannel.h"
 #include "PPair.h"
 #include "Constants.h"
-#include "ChannelFunc.h"
-#include "CoulFunc.h"
-#include "ShftFunc.h"
 #include "ThmLineshape.h"
 #include "ThmDistortion.h"
 #include "ThmDwVertex.h"
 #include "ThmAngular.h"
 #include "ThmExperiment.h"
-#include "NuclearPotentialManager.h"
+#include "ThmVertexBoundary.h"
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -23,48 +20,6 @@
 
 THMMatrixFunc::THMMatrixFunc(CNuc *compound, const Config &configure) :
   AMatrixFunc(compound, configure) {}
-
-/*!
- * Shift function S_c at a level energy (compound-system excitation, MeV), the
- * value CNuc::CalcShiftFunctions stores per level under Brune.  A per-thread
- * memo keeps it cheap: within one evaluation every point asks for the same
- * few (pair, l, energy) triples.
- *
- * The memo is keyed by what S_c depends on -- charges, reduced mass, channel
- * radius, the hybrid-potential state of the pair, l, the resonance energy and
- * the Coulomb routine -- not by the PPair address: the memo outlives a CNuc
- * (thread_local), a later CNuc in the same process (pyazr sessions one after
- * the other, a radius scan) can get the same address back from the allocator,
- * and a pair's radius can change in place.  Keyed by the address, a session at
- * 6.1 fm read S_c of an earlier 4.1 fm session (18O(p,a) narrow levels: chi2
- * 35.99 instead of 208.6 for the same parameters).
- */
-static double ShiftAtLevelEnergy(PPair *pair, int l, double levelEnergy, bool useGSL) {
-  struct Entry {
-    int z1, z2; double redmass, radius; long hybridTag; int l; double e; bool gsl; double s;
-  };
-  static const int kMemo = 32;
-  thread_local Entry memo[kMemo];
-  thread_local int filled = 0, next = 0;
-  const int z1 = pair->GetZ(1), z2 = pair->GetZ(2);
-  const double redmass = pair->GetRedMass(), radius = pair->GetChRad();
-  const bool hybrid = (g_config ? g_config->useHybridMethod : false) &&
-      NuclearPotentialManager::instance().isPairEnabled(pair->GetPairKey());
-  const long hybridTag = hybrid ? NuclearPotentialManager::instance().tagFor(pair->GetPairKey()) : 0;
-  double resonanceEnergy = levelEnergy - (pair->GetSepE() + pair->GetExE());
-  for (int i = 0; i < filled; i++) {
-    const Entry &m = memo[i];
-    if (m.z1 == z1 && m.z2 == z2 && m.redmass == redmass && m.radius == radius &&
-        m.hybridTag == hybridTag && m.l == l && m.e == resonanceEnergy && m.gsl == useGSL)
-      return m.s;
-  }
-  // Continuous through threshold, and at it (ChannelFunc).
-  double s = ChannelFunc(pair, useGSL).Shift(l, resonanceEnergy);
-  memo[next] = Entry{z1, z2, redmass, radius, hybridTag, l, resonanceEnergy, useGSL, s};
-  next = (next + 1) % kMemo;
-  if (filled < kMemo) filled++;
-  return s;
-}
 
 /*!
  * HOES cross section of the modified R-matrix formalism (arbitrary units).
@@ -185,16 +140,8 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
     // removes the l cross terms.  `entranceL=coherent` keeps one bucket per s,
     // as mrmpy does.
     //
-    // Vertex boundary (Config::ThmOptions::vertex): the per-level shift
-    // S_c(E_lambda) under Brune (mrmpy vertex_boundary="per_level"; Tumino et
-    // al. 2021 eq. 51), else the channel boundary constant; `constant` uses the
-    // channel constant in either formalism; `onshell` the log-derivative of the
-    // outgoing wave L_c(E) = S_c(E) + i P_c(E) (Tribble et al. 2014 eq. 2.76),
-    // recovered from L_o = L_c - B_c.
-    bool perLevel = (configure().paramMask & Config::USE_BRUNE_FORMALISM) &&
-                    configure().thm.vertex == Config::ThmOptions::PER_LEVEL;
-    bool onShell = configure().thm.vertex == Config::ThmOptions::ON_SHELL;
-    bool constantVertex = configure().thm.vertex == Config::ThmOptions::CONSTANT;
+    // Vertex boundary B: ThmVertexBoundary (Config::ThmOptions::vertex), with
+    // the on-shell L_c(E) = S_c(E) + i P_c(E) recovered from L_o = L_c - B_c.
     bool coherentL = configure().thm.coherentL;
     bool hasEntrance = false;
     for (int ch = 1; ch <= numChannels; ch++)
@@ -240,23 +187,8 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
           pwVertex = &vbys[std::make_pair(c->GetS(), coherentL ? 0 : c->GetL())];
           if (pwVertex->empty()) pwVertex->assign(numLevels + 1, complex(0.0, 0.0));
         }
-        complex onShellL = point->GetLoElement(j, ch) + c->GetBoundaryCondition();
-        // `constant`: S_c at the lowest level of the J group, whatever the order
-        // of the levels in the file (the channel boundary constant of the
-        // R-matrix is tied to the first level read, which is not physical).
-        complex constantB(0.0, 0.0);
-        if (constantVertex) {
-          double eMin = 0.0;
-          bool found = false;
-          for (int la = 1; la <= numLevels; la++) {
-            ALevel *level = jg->GetLevel(la);
-            if (!level->IsInRMatrix()) continue;
-            if (!found || level->GetFitE() < eMin) eMin = level->GetFitE();
-            found = true;
-          }
-          constantB = ShiftAtLevelEnergy(compound()->GetPair(aa), c->GetL(), eMin,
-                                         !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC));
-        }
+        const ThmVertexBoundary boundaryOf(configure(), compound()->GetPair(aa), jg, ch);
+        const complex onShellL = point->GetLoElement(j, ch) + c->GetBoundaryCondition();
         if (dw) {
           // Two components per (s, l): buckets 2 l + k.
           const int li = dw->LIndex(c->GetL());
@@ -268,17 +200,14 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
           const complex *ak = &dwAt.a[((size_t)pass * dwAt.nl + li) * 2];
           const complex *dk = &dwAt.d[((size_t)pass * dwAt.nl + li) * 2];
           if (coherentJ) {
-            complex b = onShell ? onShellL : constantVertex ? constantB : complex(c->GetBoundaryCondition(), 0.0);
+            complex b = boundaryOf.At(nullptr, onShellL);
             unitVertex[std::make_pair(c->GetS(), 2 * c->GetL())] = std::make_pair(ch, ak[0] * (b - 1.0) - dk[0]);
             unitVertex[std::make_pair(c->GetS(), 2 * c->GetL() + 1)] = std::make_pair(ch, ak[1] * (b - 1.0) - dk[1]);
           }
           for (int la = 1; la <= numLevels; la++) {
             ALevel *level = jg->GetLevel(la);
             if (!level->IsInRMatrix()) continue;
-            complex boundary = onShell ? onShellL
-                               : constantVertex ? constantB
-                               : complex(perLevel ? level->GetShiftFunction(ch)
-                                                  : c->GetBoundaryCondition(), 0.0);
+            complex boundary = boundaryOf.At(level, onShellL);
             double g = level->GetFitGamma(ch);
             vertex0[la] += g * (ak[0] * (boundary - 1.0) - dk[0]);
             vertex1[la] += g * (ak[1] * (boundary - 1.0) - dk[1]);
@@ -286,17 +215,14 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
           continue;
         }
         if (coherentJ) {
-          complex b = onShell ? onShellL : constantVertex ? constantB : complex(c->GetBoundaryCondition(), 0.0);
+          complex b = boundaryOf.At(nullptr, onShellL);
           unitVertex[std::make_pair(c->GetS(), c->GetL())] =
               std::make_pair(ch, node < 0 ? point->GetThmFormFactor(j, ch, b) : point->GetThmFormFactor(j, ch, b, node));
         }
         for (int la = 1; la <= numLevels; la++) {
           ALevel *level = jg->GetLevel(la);
           if (!level->IsInRMatrix()) continue;
-          complex boundary = onShell ? onShellL
-                             : constantVertex ? constantB
-                             : complex(perLevel ? level->GetShiftFunction(ch)
-                                                : c->GetBoundaryCondition(), 0.0);
+          complex boundary = boundaryOf.At(level, onShellL);
           (*pwVertex)[la] += level->GetFitGamma(ch) * (node < 0 ? point->GetThmFormFactor(j, ch, boundary)
                                                                 : point->GetThmFormFactor(j, ch, boundary, node));
         }

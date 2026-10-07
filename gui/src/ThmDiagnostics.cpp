@@ -18,7 +18,6 @@
 #include "AZUREAPI.h"
 #include "Constants.h"
 #include "CNuc.h"
-#include "ChannelFunc.h"
 #include "Config.h"
 #include "EData.h"
 #include "ESegment.h"
@@ -28,6 +27,7 @@
 #include "ThmExperiment.h"
 #include "ThmFunc.h"
 #include "ThmLineshape.h"
+#include "ThmVertexBoundary.h"
 
 namespace {
 
@@ -302,14 +302,12 @@ ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request)
   r.energy = QVector<double>(grid.begin(), grid.end());
   const Config &cfg = data.config;
   const bool useGSL = !!(cfg.paramMask & Config::USE_GSL_COULOMB_FUNC);
-  const bool brune = !!(cfg.paramMask & Config::USE_BRUNE_FORMALISM);
 
   // Entrance vertex M_l = (B_c - 1) j_l(pa) - pa j_l'(pa) [+ C_l] at the
   // quasi-free point (EPoint::CalcEDependentValues), with the boundary
   // THMMatrixFunc::CalculateTHMCrossSection chooses.
   const int aa = compound->GetPairNumFromKey(r.entranceKey);
   PPair *pair = compound->GetPair(aa);
-  const double threshold = pair->GetSepE() + pair->GetExE();
   const double mu = pair->GetRedMass() * uconv;
   const double bind = pair->GetBindingEnergy() + cfg.thm.SpectatorEnergy(r.entranceKey);
   const double radius = pair->GetChRad();
@@ -375,29 +373,19 @@ ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request)
   for (int j = 1; j <= compound->NumJGroups(); j++) {
     JGroup *jg = compound->GetJGroup(j);
     if (!jg->IsInRMatrix()) continue;
-    ALevel *lowest = nullptr;
-    int lowestIndex = 0;
-    for (int la = 1; la <= jg->NumLevels(); la++) {
-      ALevel *level = jg->GetLevel(la);
-      if (level->IsInRMatrix() && (!lowest || level->GetFitE() < lowest->GetFitE())) {
-        lowest = level;
-        lowestIndex = la;
-      }
-    }
-    if (!lowest) continue;
     ThmDiagnosticsResult::VertexGroup group;
     group.jpi = jpiText(jg->GetJ(), jg->GetPi());
     QList<int> ls;
     for (int ch = 1; ch <= jg->NumChannels(); ch++) {
       AChannel *c = jg->GetChannel(ch);
       if (c->GetPairNum() != aa || pair->GetPType() != 0 || ls.contains(c->GetL())) continue;
+      // The boundary the model uses, for the lowest level of the J group.
+      const ThmVertexBoundary boundaryOf(cfg, pair, jg, ch);
+      const int lowestIndex = boundaryOf.LowestLevel();
+      if (!lowestIndex) break;  // no level in the R matrix
       const int l = c->GetL();
       ls << l;
-      double b = 0.0;
-      if (cfg.thm.vertex == Config::ThmOptions::CONSTANT)
-        b = ChannelFunc(pair, useGSL).Shift(l, lowest->GetFitE() - threshold);
-      else if (!onShell)
-        b = brune ? lowest->GetShiftFunction(ch) : c->GetBoundaryCondition();
+      const double b = onShell ? 0.0 : boundaryOf.Level(jg->GetLevel(lowestIndex));
       ThmDiagnosticsCurve curve;
       curve.label = QString("l = %1").arg(l);
       curve.boundary = b;
@@ -411,11 +399,7 @@ ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request)
         }
         double jl, rhoDjl;
         ThmBesselParts(l, mu, e, bind, radius, jl, rhoDjl);
-        complex boundary(b, 0.0);
-        if (onShell) {
-          ChannelFunc f(pair, useGSL);
-          boundary = complex(f.Shift(l, e), f.Penetrability(l, e));
-        }
+        const complex boundary = onShell ? boundaryOf.OnShellAt(e) : complex(b, 0.0);
         complex m = (boundary - 1.0) * jl - rhoDjl;
         if (coulomb) m += ThmCoulombTerm(pair, l, e, ThmRho(mu, e, bind, 1.0), useGSL);
         curve.y << std::norm(m);

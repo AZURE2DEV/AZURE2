@@ -1,8 +1,8 @@
 #include "AZUREOutput.h"
 #include "CNuc.h"
 #include "PPair.h"
-#include "ChannelFunc.h"
 #include "ThmFunc.h"
+#include "ThmVertexBoundary.h"
 #include "Config.h"
 #include "CovarianceBand.h"
 #include "EData.h"
@@ -4099,13 +4099,6 @@ bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &e
         row.push_back(e + out.bind + es > 0.0 ? ThmRho(mu, e, out.bind + es, out.radius) : 0.0);
       out.rho.push_back(row);
     }
-  // Vertex boundary, as THMMatrixFunc::CalculateTHMCrossSection chooses it.
-  const bool perLevel = (configure.paramMask & Config::USE_BRUNE_FORMALISM) &&
-                        configure.thm.vertex == Config::ThmOptions::PER_LEVEL;
-  const bool onShell = configure.thm.vertex == Config::ThmOptions::ON_SHELL;
-  const bool constantVertex = configure.thm.vertex == Config::ThmOptions::CONSTANT;
-  const double threshold = pair->GetSepE() + pair->GetExE();
-  ChannelFunc channelFunc(pair, useGSL);
   for (int j = 1; j <= compound->NumJGroups(); j++) {
     JGroup *jg = compound->GetJGroup(j);
     if (!jg->IsInRMatrix()) continue;
@@ -4119,14 +4112,8 @@ bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &e
       cr.pi = jg->GetPi();
       cr.l = c->GetL();
       cr.s = c->GetS();
-      double eMin = 0.0;
-      bool found = false;
-      for (int la = 1; la <= jg->NumLevels(); la++) {
-        ALevel *level = jg->GetLevel(la);
-        if (!level->IsInRMatrix()) continue;
-        if (!found || level->GetFitE() < eMin) eMin = level->GetFitE();
-        found = true;
-      }
+      // The vertex boundary of the model (THMMatrixFunc::CalculateTHMCrossSection).
+      const ThmVertexBoundary boundaryOf(configure, pair, jg, ch);
       // The pieces on the grid: [E][node] and the quasi-free [E].
       std::vector<std::vector<Pieces>> grid(energies.size());
       std::vector<Pieces> qf(energies.size());
@@ -4141,13 +4128,9 @@ bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &e
         if (!level->IsInRMatrix()) continue;
         ThmVertexReport::Level lr;
         lr.level = la;
-        double fixedB = constantVertex ? channelFunc.Shift(cr.l, eMin - threshold)
-                        : perLevel     ? channelFunc.Shift(cr.l, level->GetFitE() - threshold)
-                                       : c->GetBoundaryCondition();
-        lr.boundary = onShell ? std::nan("") : fixedB;
+        lr.boundary = boundaryOf.OnShell() ? std::nan("") : boundaryOf.Level(level);
         for (size_t i = 0; i < energies.size(); i++) {
-          complex B(fixedB, 0.0);
-          if (onShell) B = complex(channelFunc.Shift(cr.l, energies[i]), channelFunc.Penetrability(cr.l, energies[i]));
+          const complex B = boundaryOf.OnShell() ? boundaryOf.OnShellAt(energies[i]) : complex(lr.boundary, 0.0);
           if (dw) {
             const int nl = (int)dw->lvals.size();
             double avg = 0.0;

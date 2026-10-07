@@ -143,6 +143,11 @@ engine would refuse is not opened in the editor (it is kept as it is).
       real choices where :math:`P_c` is not small next to :math:`S_c - L_c`,
       i.e. near and above the entrance barrier.
 
+   A term without a level, the coherent background :math:`c(E) M_l`
+   (``cbackground=``), takes :math:`B_c` under ``perlevel`` and the value
+   above otherwise. One routine makes this choice for the model, the vertex
+   report (``thm_vertex``) and the GUI diagnostics (``ThmVertexBoundary``).
+
    *Why* ``constant``. The level matrix sandwiched between the widths,
    :math:`\gamma^T A \gamma`, is the same matrix in the Brune and in the
    formal representation — that is why every on-shell observable agrees
