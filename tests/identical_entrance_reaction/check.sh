@@ -46,7 +46,8 @@ run() {
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline "$@" "$p.azr" > log 2>&1)
 }
 # row FILE N COL -> column COL of the N-th non-blank line
-row() { awk -v n="$2" -v c="$3" 'NF { if (++i == n) { print $c; exit } }' "$1"; }
+# (\r stripped first: Windows writes CRLF, and a bare "\r" line has NF = 1)
+row() { awk -v n="$2" -v c="$3" '{ sub(/\r$/, "") } NF { if (++i == n) { print $c; exit } }' "$1"; }
 
 # peak M1 M2 ECM G SYM GA GB -> (pi/k^2)/100 g sym 4 GA GB/(GA+GB)^2 in barn
 peak() {

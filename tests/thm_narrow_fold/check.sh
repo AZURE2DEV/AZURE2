@@ -73,7 +73,8 @@ run() {
      | head -c 1000000 > log)
   [ -s "$1/output/AZUREOut_aa=1_R=2.out" ] || { echo "  FAIL  no output in $(basename "$1")"; tail -3 "$1/log" | sed 's/^/        /'; exit 1; }
 }
-curve() { awk 'NF { print $1, $4 }' "$1/output/AZUREOut_aa=1_R=2.out"; }   # E_cm, fit
+# E_cm, fit; \r stripped first (Windows writes CRLF, and a bare "\r" line has NF = 1)
+curve() { awk '{ sub(/\r$/, "") } NF { print $1, $4 }' "$1/output/AZUREOut_aa=1_R=2.out"; }
 
 # Evaluation energies, E_cm 20-131 keV every 3 keV, and the dense grid (0.5 eV
 # within 2 keV of the level, 20 eV elsewhere, covering +-5 sigma beyond them);
