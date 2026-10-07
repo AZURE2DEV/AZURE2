@@ -208,15 +208,22 @@ done
 # A test directory can carry an executable check.sh for that: it is run with
 # the binary as its argument, does its own work in a temporary directory, and
 # passes when it exits 0.
+# Its log is check.log: a directory with an .azr as well (18O_p_a_thm) keeps
+# the project's run.log from the loop above.
 for check in "$REPO_ROOT"/tests/*/check.sh; do
-  [ -x "$check" ] || continue
   name="$(basename "$(dirname "$check")")"
+  if [ ! -x "$check" ]; then
+    echo "WARNING: $name/check.sh is not executable; not run"
+    echo
+    continue
+  fi
   echo "=== $name (check.sh) ==="
-  if "$check" "$AZURE2_BIN" > "$(dirname "$check")/run.log" 2>&1; then
-    tail -1 "$(dirname "$check")/run.log"
+  log="$(dirname "$check")/check.log"
+  if "$check" "$AZURE2_BIN" > "$log" 2>&1; then
+    tail -1 "$log"
     pass=$((pass + 1))
   else
-    sed 's/^/  /' "$(dirname "$check")/run.log" | tail -30
+    sed 's/^/  /' "$log" | tail -30
     echo "  FAIL"
     fail=$((fail + 1))
   fi

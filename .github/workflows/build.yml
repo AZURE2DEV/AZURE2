@@ -240,6 +240,7 @@ jobs:
           path: |
             physics-tests.log
             tests/*/run.log
+            tests/*/check.log
             tests/*/output/chiSquared.out
           if-no-files-found: warn
 
