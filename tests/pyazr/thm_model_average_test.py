@@ -163,7 +163,7 @@ try:
         sys.exit(1 if failures else 0)
     out = os.path.join(tmp, "out")
     r = subprocess.run(common + ["--out", out, "--max-nfev", "4"],
-                       capture_output=True, text=True, env=env, timeout=900)
+                       capture_output=True, text=True, env=env, timeout=540)   # inside ctest's 600 s
     check("exit 0", r.returncode == 0, (r.stdout + r.stderr)[-1500:])
     rows = list(csv.DictReader(open(os.path.join(out, "variants.csv"))))
     check("one row per variant", [x["label"] for x in rows]
