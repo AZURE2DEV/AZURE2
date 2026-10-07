@@ -1230,10 +1230,26 @@ the whole scattering solution — untouched, so it decomposes the capture
 amplitude cleanly. Zero *all* γ widths at once and what remains is the
 **external (direct) capture**.
 
-**S-factor.** `calculate_sfactor_rwa` = cross section × an energy-only
-conversion factor, so linear combinations of cross sections may be converted
-after the fact: `conv = sfactor_full / xs_full` (guard the zeros) and multiply
-each curve by it. Units: MeV b — ×10³ for keV b, ×10⁶ for eV b.
+**S-factor. Never re-derive the conversion — AZURE2 already outputs S.** Both
+sides of a data-versus-model plot are available directly:
+
+| want | use |
+|---|---|
+| model S per segment | `m.calculate_sfactor_rwa(x)` (or `calculate_sfactor` for a physical vector) |
+| **data** S per point | **`m.sfactor[i]` and `m.sfactor_err[i]`** (`azure2.py`: `sfactor = cross * conv`, per point) |
+| either, from a finished run | the S-factor columns of `output/AZUREOut_*.out` — fit S, data S and data S uncertainty, all c.m.; `.extrap` carries the extrapolated S (`docs/source/reference/output_files.rst`) |
+
+So a plot of data against the R-matrix curve needs no Sommerfeld factor, no
+`E*exp(2*pi*eta)`, and no interpolation of a conversion off the model grid.
+Writing one of those by hand is a recurring mistake; it is also the only way to
+get the factor evaluated at the wrong energy.
+
+`calculate_sfactor_rwa` is the cross section × an energy-only factor, so *linear
+combinations* of cross sections (a level decomposition, an E1/E2 component) can
+still be converted after the fact: `conv = sfactor_full / xs_full` (guard the
+zeros) and multiply each curve by it. That trick is for curves you built
+yourself out of cross sections — not for data points, which already have
+`m.sfactor`. Units: MeV b — ×10³ for keV b, ×10⁶ for eV b.
 
 ## Evaluation recipes
 
