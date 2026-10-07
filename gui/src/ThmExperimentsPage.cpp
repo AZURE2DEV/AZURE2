@@ -556,9 +556,11 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   QLabel *rminLabel = label(QString::fromUtf8("r<sub>min</sub>:"), false);
   dl->addWidget(rminLabel, 2, 2, right);
   dl->addWidget(rminEdit, 2, 3);
+  // One channel a row: two side by side made the section wider than the
+  // workspace (a combo, the potential and Edit... each).
   QWidget *opticalBox[2];
   QLabel *opticalLabel[2] = {label("a + A:", true, tr("opticalAA=: the entrance channel")),
-                             label("s + F:", false, tr("opticalSF=: the spectator's exit channel"))};
+                             label("s + F:", true, tr("opticalSF=: the spectator's exit channel"))};
   for (int c = 0; c < 2; c++) {
     QHBoxLayout *ol = new QHBoxLayout;
     ol->setContentsMargins(0, 0, 0, 0);
@@ -567,8 +569,8 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
     ol->addWidget(opticalButton[c]);
     opticalBox[c] = new QWidget;
     opticalBox[c]->setLayout(ol);
-    dl->addWidget(opticalLabel[c], 3, 2 * c, right);
-    dl->addWidget(opticalBox[c], 3, 2 * c + 1);
+    dl->addWidget(opticalLabel[c], 3 + c, 0, right);
+    dl->addWidget(opticalBox[c], 3 + c, 1, 1, 3);
   }
   QLabel *distortionTableLabel = label(tr("Table:"), true);
   QHBoxLayout *dtl = new QHBoxLayout;
@@ -577,11 +579,11 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   dtl->addWidget(distortionTableButton);
   QWidget *distortionTableBox = new QWidget;
   distortionTableBox->setLayout(dtl);
-  dl->addWidget(distortionTableLabel, 4, 0, right);
-  dl->addWidget(distortionTableBox, 4, 1, 1, 3);
+  dl->addWidget(distortionTableLabel, 5, 0, right);
+  dl->addWidget(distortionTableBox, 5, 1, 1, 3);
   QLabel *rLabel = label("R(E):", true, tr("R at the lowest and highest data point"));
-  dl->addWidget(rLabel, 5, 0, right);
-  dl->addWidget(distortionValue, 5, 1, 1, 3);
+  dl->addWidget(rLabel, 6, 0, right);
+  dl->addWidget(distortionValue, 6, 1, 1, 3);
   distortionComputedRows_ = {ratioLabel, ratioCombo, angleLabel, angleBox, refLabel, refBox,
                              boundLabel, boundCombo, rminLabel, rminEdit};
   distortionOpticalRow_ = {opticalLabel[0], opticalBox[0], opticalLabel[1], opticalBox[1]};
