@@ -2497,9 +2497,14 @@ class AzrModel:
         written (weights).  Only the options that differ from the engine's
         defaults are listed -- with ``defaults=True`` the five global options
         are always there.  Raises ValueError if the block has a line AZURE2
-        would refuse.  See docs/source/theory/thm_implementation.rst.
+        would refuse, or a combination of global options and experiments it
+        refuses (coulombIntegral=1 with a distorted a + A wave or
+        vertexModel=dw, entranceL=coherent with theta=, cbackground= or
+        vertexModel=dw, a spectator energy with vertexModel=dw).  See
+        docs/source/theory/thm_implementation.rst.
         """
         s = self._thm_settings()
+        self._thm_check_globals(s)
         out = {}
         d = _thm_default_settings()
         for key in ("entranceL", "vertex", "kinematics", "coulombIntegral",
@@ -2543,6 +2548,14 @@ class AzrModel:
             raise ValueError(f"<thm> {key!r}: not an option.")
         if canon_key.startswith("weight"):
             self._thm_check_weight_file(canon_key, canon_value)
+        self._thm_check_globals(s)
+        self._thm_write(s)
+        return self
+
+    def _thm_check_globals(self, s):
+        """The rules that tie the global options to the experiments:
+        entranceL=coherent refuses theta= and cbackground=, and
+        :meth:`_thm_check_dw_globals`."""
         if s["entranceL"] == "coherent":
             for name, x in s["experiments"].items():
                 if x.get("theta", "all") != "all":
@@ -2554,8 +2567,6 @@ class AzrModel:
                                      "amplitude per entrance bucket (s, l); "
                                      "entranceL=coherent cannot be combined with it.")
         self._thm_check_dw_globals(s)
-        self._thm_write(s)
-        return self
 
     def _thm_check_dw_globals(self, s, only=None):
         """The global options an experiment refuses: coulombIntegral=1 with

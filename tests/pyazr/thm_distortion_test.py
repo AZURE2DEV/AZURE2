@@ -163,6 +163,17 @@ with tempfile.TemporaryDirectory() as tmp:
     except ValueError as err:
         check("set_thm_option(coulombIntegral) refused with R(E), model unchanged",
               "counted twice" in str(err) and mr.thm_options() == before, str(err))
+    # A file written by hand with both: thm_options() refuses it as the engine
+    # does (Config::ReadThmBlock, CheckThmCoulombConsistency).
+    both = os.path.join(proj, "both.azr")
+    with open(both, "w") as fh:
+        fh.write(mr.to_text().replace("<thm>\n", "<thm>\ncoulombIntegral=1\n", 1))
+    try:
+        AzrModel.from_file(both).thm_options()
+        check("thm_options() refuses coulombIntegral=1 with R(E) in the file", False, "no ValueError")
+    except ValueError as err:
+        check("thm_options() refuses coulombIntegral=1 with R(E) in the file",
+              "counted twice" in str(err), str(err))
     try:
         AzrModel.from_file(src).set_thm_experiment("C", [1, 2], **kin, ps="hulthen:0-30",
                                                    distortion="coulomb", distortionRatio="dw")
