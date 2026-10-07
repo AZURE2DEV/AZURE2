@@ -260,6 +260,13 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   }
   std::string why = dist.Setup(x, k, eLo);
   if (!why.empty()) return why;
+  // Every data point must be reachable, as for R(E) (EData): a lab angle the
+  // spectator cannot reach would otherwise be clamped (SpectatorCos) to a
+  // different direction.  Grid energies beyond the data may be out of reach.
+  for (double e : points) {
+    std::string w = dist.CheckEnergy(e);
+    if (!w.empty()) return w;
+  }
   for (int e = 0; e < nE; e++) {
     std::string w = dist.CheckEnergy(eLo + e * gridStep);
     if (!w.empty() && dist.angleKind != ThmDistortion::LAB) return w;

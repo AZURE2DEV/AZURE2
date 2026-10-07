@@ -159,6 +159,9 @@ refuse coulomb_integral "cannot be combined with coulombIntegral=1" "$L distorti
 refuse coherent "entranceL=coherent" "$L distortion=coulomb vertexModel=dw" "entranceL=coherent"
 refuse spectator_energy "spectatorEnergy for entrance pair" "$L distortion=coulomb vertexModel=dw" "spectatorEnergy=0.3"
 refuse reach "do not overlap the ps window" "$L distortion=coulomb vertexModel=dw ps=hulthen:150-200"
+# a lab angle the spectator cannot reach at a data point (max 79.6 deg at 0.715 MeV) is
+# refused as for R(E), not clamped to another direction
+refuse lab_reach "is beyond the reach of the spectator" "$L distortion=coulomb spectatorAngle=100 vertexModel=dw"
 
 echo
 if [ "$fail" -eq 0 ]; then echo "PASS: THM distorted-wave vertex"; else echo "FAIL"; exit 1; fi
