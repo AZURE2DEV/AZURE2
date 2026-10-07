@@ -47,7 +47,9 @@ namespace {
 // potential model is on, and construction happens deep inside a calculation.
 // With several live sessions a single global is not enough: this publishes the
 // calling session's Config for the duration of the call and puts back whatever
-// was there before, so sessions cannot silently reconfigure each other.
+// was there before, so sessions cannot silently reconfigure each other.  It is
+// not a lock: calls run with the GIL released, so two Python threads driving
+// sessions at once would race on g_config -- hence "one thread" above.
 struct ConfigScope {
   explicit ConfigScope(Config *c) :
     previous_(g_config) { g_config = c; }
@@ -67,10 +69,14 @@ py::array_t<double> to_array(const vector_r &v) {
 
 // The mirror image: a flat copy of any float64-coercible array.  The engine
 // takes vector_r&, so it needs its own buffer either way.  Bindings that
-// release the GIL take their array by const reference: a by-value py::array
-// is reference-counted inside the GIL-free call (copy in, destroy out), and a
-// temporary converted from a Python list then crashed (segfault on
-// calculate_chi2_rwa([...]), October 2026).
+// release the GIL for the whole call (py::call_guard) take their array by
+// const reference: a by-value py::array is reference-counted inside the
+// GIL-free call (copy in, destroy out), and a temporary converted from a
+// Python list then crashed (segfault on calculate_chi2_rwa([...]), October
+// 2026).  The others convert their argument with the GIL held and release it
+// only around the engine call (an inner block: gil_scoped_release, then
+// ConfigScope, so that the scope ends before the GIL is taken back); they may
+// take the array by value.
 vector_r to_vector(const py::array_t<double, py::array::forcecast> &a) {
   vector_r v(a.size());
   if (a.size() > 0) std::memcpy(v.data(), a.data(), v.size() * sizeof(double));
@@ -477,10 +483,17 @@ class Session {
   }
   // The window-averaged THM entrance vertex of an experiment at the current parameters.
   py::dict thm_vertex(const std::string &name, py::array_t<double, py::array::forcecast> e) {
-    ConfigScope guard(config_);
     ThmVertexReport r;
     std::string why;
-    if (!api_->GetThmVertex(name, to_vector(e), r, why)) throw AZURE2Error(why);
+    const vector_r energies = to_vector(e);
+    bool ok;
+    {
+      // The DW vertex and R(E) can take seconds: without the GIL.
+      py::gil_scoped_release release;
+      ConfigScope guard(config_);
+      ok = api_->GetThmVertex(name, energies, r, why);
+    }
+    if (!ok) throw AZURE2Error(why);
     py::dict d;
     d["experiment"] = r.experiment;
     d["window"] = r.window;
@@ -558,10 +571,16 @@ class Session {
   }
   // The distortion factor R(E) of a THM experiment (distortion=...).
   py::dict thm_distortion(const std::string &name, py::array_t<double, py::array::forcecast> e) {
-    ConfigScope guard(config_);
     ThmDistortionReport r;
     std::string why;
-    if (!api_->GetThmDistortion(name, to_vector(e), r, why)) throw AZURE2Error(why);
+    const vector_r energies = to_vector(e);
+    bool ok;
+    {
+      py::gil_scoped_release release;
+      ConfigScope guard(config_);
+      ok = api_->GetThmDistortion(name, energies, r, why);
+    }
+    if (!ok) throw AZURE2Error(why);
     py::dict d;
     d["experiment"] = r.experiment;
     d["kind"] = r.kind;
