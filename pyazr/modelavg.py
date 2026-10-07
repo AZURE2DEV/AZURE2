@@ -454,19 +454,21 @@ def model_average(variants: Sequence[Variant], weights="aic", rescale=None,
             return c
         return 0.0
 
+    pri = [priors.get(v.label, v.prior) for v in variants]
     if rescale is None:
         s = 1.0
     elif isinstance(rescale, str):
         if rescale.lower() != "best":
             raise ValueError(f"rescale must be None, 'best' or a number, got {rescale!r}")
-        best = min(variants, key=lambda v: ic(v, 1.0))
-        s = (max(1.0, best.chi2 / best.dof) if best.dof > 0 else 1.0)
+        # among the variants that take part (a prior-0 variant is excluded)
+        best = min((v for v, p in zip(variants, pri) if p > 0),
+                   key=lambda v: ic(v, 1.0), default=None)
+        s = (max(1.0, best.chi2 / best.dof) if best is not None and best.dof > 0 else 1.0)
     else:
         s = float(rescale)
         if not s > 0:
             raise ValueError("rescale must be > 0")
 
-    pri = [priors.get(v.label, v.prior) for v in variants]
     ics = [ic(v, s) for v in variants]
     live = [c for c, p in zip(ics, pri) if p > 0]
     if not live:
@@ -491,8 +493,10 @@ def model_average(variants: Sequence[Variant], weights="aic", rescale=None,
                     names.append(k)
         out = {}
         for k in names:
+            # a prior-0 variant is excluded: not in the mean, the
+            # stat (a missing error), or the min/max range
             items = [(v.label, wi, get_values(v)[k], get_errors(v).get(k))
-                     for v, wi in zip(variants, w) if k in get_values(v)]
+                     for v, wi, p in zip(variants, w, pri) if p > 0 and k in get_values(v)]
             a = _average(k, items)
             if a is not None:
                 out[k] = a

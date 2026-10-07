@@ -119,6 +119,15 @@ want = normalised([0.0, 1.0, math.exp(-5.0)])
 check("prior 0 drops the variant, deltas from the live best",
       all(close(g, w) for g, w in zip(got(pz), want)) and pz.weights[1]["delta"] == 0.0)
 check("weight(label)", close(aic.weight("b"), got(aic)[1]))
+# A prior-0 variant takes no part at all: not as the 'best' of rescale, not
+# through a missing error (stat), not in the min/max range.
+Z = Variant("z", chi2=1.0, npoints=50, nfree=2, values={"x": 9.0}, prior=0.0)
+pz2 = ma.model_average([A, B, Z], rescale="best")
+xz = pz2.parameters["x"]
+check("prior 0: rescale from the best live variant",
+      pz2.rescale is None or close(pz2.rescale, max(1.0, 10.0 / 48)), str(pz2.rescale))
+check("prior 0: its missing error leaves stat defined", xz.stat is not None, repr(xz))
+check("prior 0: not in the min/max range", xz.min == 1.0 and xz.max == 2.0, f"{xz.min} {xz.max}")
 
 H = [Variant("h1", chi2=96.0, npoints=50, nfree=2, values={"x": 1.0}),
      Variant("h2", chi2=100.0, npoints=50, nfree=2, values={"x": 2.0}),
