@@ -177,6 +177,17 @@ with tempfile.TemporaryDirectory() as tmp:
         sys.exit(1)
     cli_chi2 = float(hit[-1])
 
+    # An experiment whose name holds "norm" and "shift": its cbkg parameters
+    # are neither (they were taken for both by a substring test).
+    named = project("named", "experiment[normshift] segments=1,2 cbackground=1/2+:2=0.3,-0.2")
+    with azure2(os.path.join(named, "run.azr"), cwd=named) as s:
+        cbi = [p.free_index for p in s.parameters.cbkg]
+        norms = {int(round(i)) for i in s.norm_indices()}
+        shifts = {int(round(i)) for i in s.shift_indices()}
+        check("cbkg of experiment[normshift]: not norm_indices / shift_indices",
+              len(cbi) == 2 and not set(cbi) & norms and not set(cbi) & shifts,
+              f"cbkg {cbi} norms {sorted(norms)} shifts {sorted(shifts)}")
+
     print("2. the engine: parameters, chi2, report, zero background")
     names = ["cbkg_E_1/2+_2_1/2,0,1/2,1_" + p for p in ("re0", "im0", "re1", "im1")]
     with azure2(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:

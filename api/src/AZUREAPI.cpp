@@ -3,6 +3,7 @@
 #include "AZUREParams.h"
 
 #include "GSLException.h"
+#include "ParameterLabel.h"
 #include "CoulFuncCache.h"
 #include "ECAmplitudeCache.h"
 
@@ -1266,8 +1267,8 @@ vector_r AZUREAPI::GetNormalizationIndices() {
   int totalParams = all_rwa_.size();
   for (int i = 0; i < totalParams; ++i) {
     if (!fixed_[i]) {
-      // Check if "norm" is in the parameter name
-      if (names_[i].find("norm") != std::string::npos) {
+      // A segment norm (by form: a cbkg name can contain "norm")
+      if (AZURELabel::IsNormName(names_[i])) {
         indices.push_back(k);
       }
       ++k;
@@ -1284,8 +1285,8 @@ vector_r AZUREAPI::GetEnergyShiftIndices() {
   int totalParams = all_rwa_.size();
   for (int i = 0; i < totalParams; ++i) {
     if (!fixed_[i]) {
-      // Check if "Eshift" is in the parameter name
-      if (names_[i].find("shift") != std::string::npos) {
+      // A segment energy shift (by form: a cbkg name can contain "shift")
+      if (AZURELabel::IsEnergyShiftName(names_[i])) {
         indices.push_back(k);
       }
       ++k;

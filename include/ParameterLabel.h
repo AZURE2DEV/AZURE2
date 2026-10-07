@@ -22,6 +22,22 @@ class ALevel;
  */
 namespace AZURELabel {
 
+/*!
+ * Whether a fit-parameter name is a segment normalization ("segment_<k>_norm")
+ * or energy shift ("segment_<k>_energy_shift").  Matched by form, not by a
+ * substring: a THM coherent-background name, cbkg_<experiment>_..., carries
+ * the experiment's own name and may contain "norm" or "shift".
+ */
+inline bool EndsWith(const std::string &s, const std::string &tail) {
+  return s.size() >= tail.size() && s.compare(s.size() - tail.size(), tail.size(), tail) == 0;
+}
+inline bool IsNormName(const std::string &name) {
+  return name.compare(0, 8, "segment_") == 0 && EndsWith(name, "_norm");
+}
+inline bool IsEnergyShiftName(const std::string &name) {
+  return name.compare(0, 8, "segment_") == 0 && EndsWith(name, "_energy_shift");
+}
+
 /*! Spin as a fraction: 1.5 -> "3/2", 2.0 -> "2". */
 /// Spin as text, half-integers as "3/2".
 std::string Spin(double j);

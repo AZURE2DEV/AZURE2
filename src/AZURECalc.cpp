@@ -755,7 +755,7 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
     // (x-nominal)/sigma^2 to the gradient.  Norm / shift / nuisance penalties
     // are identified the same way operator()/CalculateNuisanceChiSquared do.
     std::string name = par.GetName();
-    if (name.find("norm") != std::string::npos) {
+    if (AZURELabel::IsNormName(name)) {
       for (int s = 1; s <= data()->NumSegments(); s++) {
         ESegment *seg = data()->GetSegment(s);
         if (!seg || !seg->IsVaryNorm()) continue;
@@ -771,7 +771,7 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
           break;
         }
       }
-    } else if (name.find("shift") != std::string::npos) {
+    } else if (AZURELabel::IsEnergyShiftName(name)) {
       for (int s = 1; s <= data()->NumSegments(); s++) {
         ESegment *seg = data()->GetSegment(s);
         if (!seg || !seg->IsVaryEnergyShift()) continue;

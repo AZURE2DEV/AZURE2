@@ -3,6 +3,7 @@
 #include "CNuc.h"
 #include "EData.h"
 #include "AZUREParams.h"
+#include "ParameterLabel.h"
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -253,7 +254,7 @@ void ParameterLimitsManager::BuildIndexMap(const ROOT::Minuit2::MnUserParameters
     if (!setting || !setting->useAsNuisance) continue;
     const int actualIndex = nonFixedToActualIndex[nonFixedIndex];
     const std::string &name = p.Parameter(actualIndex).GetName();
-    if (name.find("norm") != std::string::npos || name.find("shift") != std::string::npos) continue;
+    if (AZURELabel::IsNormName(name) || AZURELabel::IsEnergyShiftName(name)) continue;
     priorByActualIndex_[actualIndex] = setting;
   }
 }
