@@ -44,11 +44,440 @@ void EData::FillThmCoherentFromParams(const vector_r &p, CNuc *theCNuc) {
 // ---------------------------------------------------------------------------
 // THM experiments (<thm> experiment[<name>] ...): see ThmExperiment.h.
 
+namespace {
+
+const double kAmu = 931.49410242;  // MeV/u (CODATA 2018)
+
+// The lowest and highest c.m. energy of the points of a group's segments.
+void ThmGroupEnergyRange(EData &data, const EData::ThmGroup &group, double &eLo, double &eHi) {
+  eLo = 1.0e300;
+  eHi = -1.0e300;
+  for (int s : group.segments)
+    for (int p = 1; p <= data.GetSegment(s)->NumPoints(); p++) {
+      eLo = std::min(eLo, data.GetSegment(s)->GetPoint(p)->GetCMEnergy());
+      eHi = std::max(eHi, data.GetSegment(s)->GetPoint(p)->GetCMEnergy());
+    }
+}
+
+// What the kinematics of an experiment line give (ThmResolveKinematics).
+struct ThmReaction {
+  ThmDistortion::Kinematics dk;  ///< for distortion=coulomb|optical and the DW vertex
+  PPair *pair = nullptr;         ///< the entrance pair x + A
+  int pairKey = 0;
+  double mX = 0.0;               ///< u, the pair nucleus that is x
+  double bind = 0.0;             ///< B(x+s) from the masses (MeV)
+};
+
+/*
+ * The three-body reaction of experiment x (beam, target, spectator, Ebeam):
+ * the entrance pair x + A of its segments, which of beam and target is the
+ * Trojan horse a = x + s, the kinematics, and the startup lines that say so.
+ * False (and the ERROR written) if they do not describe the segments.
+ */
+bool ThmResolveKinematics(EData &data, const Config &configure, CNuc *theCNuc, const ThmExperiment &x,
+                          const EData::ThmGroup &group, const std::string &where, ThmReaction &r) {
+  ThmDistortion::Kinematics &dk = r.dk;
+  int pairKey = data.GetSegment(group.segments[0])->GetEntranceKey();
+  for (int s : group.segments)
+    if (data.GetSegment(s)->GetEntranceKey() != pairKey) {
+      configure.outStream << where << "beam/target/spectator describe one reaction, but its segments "
+                             "have different entrance pairs."
+                          << std::endl;
+      return false;
+    }
+  PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(pairKey));
+  int Z[2] = {pair->GetZ(1), pair->GetZ(2)};
+  int A[2] = {(int)std::lround(pair->GetM(1)), (int)std::lround(pair->GetM(2))};
+  const ThmNuclide &b = x.beam, &t = x.target, &sp = x.spectator;
+  // horse: 0 beam, 1 target; other: index of the pair nucleus that is the other one.
+  int horse = -1, other = -1;
+  for (int h = 0; h < 2 && horse < 0; h++) {
+    const ThmNuclide &th = h == 0 ? b : t, &tg = h == 0 ? t : b;
+    for (int k = 0; k < 2; k++)
+      if (tg.Z == Z[k] && tg.A == A[k] && th.Z - sp.Z == Z[1 - k] && th.A - sp.A == A[1 - k]) {
+        horse = h;
+        other = k;
+        break;
+      }
+  }
+  if (horse < 0) {
+    configure.outStream << where << "beam " << b.name << " + target " << t.name << " with spectator "
+                        << sp.name << " does not give the entrance pair of its segments (Z,A) = ("
+                        << Z[0] << "," << A[0] << ") + (" << Z[1] << "," << A[1]
+                        << "): one of beam/target must be a nucleus of the pair and the other the "
+                           "second nucleus plus the spectator."
+                        << std::endl;
+    return false;
+  }
+  const ThmNuclide &th = horse == 0 ? b : t, &nA = horse == 0 ? t : b;
+  const ThmNuclide *tabX = ThmNuclide::Find(th.Z - sp.Z, th.A - sp.A);
+  double mX = tabX ? tabX->mass : pair->GetM(2 - other);  // the pair nucleus that is x
+  double mA = nA.mass;
+  double bind = (mX + sp.mass - th.mass) * kAmu;
+  dk.Za = th.Z;
+  dk.ZA = nA.Z;
+  dk.Zs = sp.Z;
+  dk.Zx = th.Z - sp.Z;
+  dk.Aa = th.A;
+  dk.AA = nA.A;
+  dk.As = sp.A;
+  dk.Ax = th.A - sp.A;
+  dk.ma = th.mass;
+  dk.mA = nA.mass;
+  dk.ms = sp.mass;
+  dk.mx = mX;
+  dk.horseIsBeam = horse == 0;
+  dk.mBeam = b.mass;
+  dk.mTarget = t.mass;
+  dk.beamEnergy = x.beamEnergy;
+  dk.bind = bind;
+  // Quasi-free x + A energy: the spectator keeps the Trojan horse's
+  // velocity (horse = beam) or stays at rest (horse = target).
+  double exa = horse == 0 ? x.beamEnergy * mX / th.mass * mA / (mX + mA) : x.beamEnergy * mX / (mA + mX);
+  std::ostringstream k;
+  k.precision(6);
+  k << "  " << b.name << " + " << t.name << " at " << x.beamEnergy << " MeV (lab), Trojan horse "
+    << th.name << " = x + " << sp.name << ", B(x+s) = " << bind << " MeV; quasi-free E(x+A) = " << exa
+    << " MeV, E_qf = E(x+A) - B = " << exa - bind << " MeV.";
+  configure.outStream << k.str() << std::endl;
+  // The vertex takes B from the entrance pair's channel lines (field 32),
+  // the kinematics from the masses; say so when they disagree.
+  if (std::fabs(pair->GetBindingEnergy() - bind) > 1.0e-3) {
+    std::ostringstream w;
+    w.precision(6);
+    w << "WARNING: <thm> experiment[" << x.name << "]: B(x+s) from the masses of " << th.name << " = x + "
+      << sp.name << " is " << bind << " MeV, but the entrance pair " << pairKey
+      << " carries B = " << pair->GetBindingEnergy()
+      << " MeV (field 32 of its channel lines); the THM vertex uses field 32, the kinematics of this "
+         "experiment (the quasi-free energy above, E_sF of the line shape and of the distortion "
+         "factor) use the masses.";
+    configure.outStream << w.str() << std::endl;
+  }
+  r.pair = pair;
+  r.pairKey = pairKey;
+  r.mX = mX;
+  r.bind = bind;
+  return true;
+}
+
+// Spectator-momentum window (ThmLineshape.h ThmSpectatorWindow) of a ps= line.
+bool ThmBuildWindow(EData &data, const Config &configure, const ThmExperiment &x, EData::ThmGroup &group,
+                    const std::string &where, const ThmReaction &r) {
+  if (configure.thm.SpectatorEnergy(r.pairKey) != 0.0) {
+    configure.outStream << where << "a ps window and spectatorEnergy both set the spectator motion of "
+                           "entrance pair "
+                        << r.pairKey << "; use one (ps=delta keeps spectatorEnergy)." << std::endl;
+    return false;
+  }
+  // With vertexModel=dw the DW vertex averages over the accepted
+  // directions itself (ThmDwVertex); the plane-wave nodes are not used.
+  if (x.vertexDW) return true;
+  const ThmNuclide &sp = x.spectator;
+  double muSx = r.mX * sp.mass / (r.mX + sp.mass) * kAmu;
+  std::vector<double> dataE;
+  for (int s : group.segments)
+    for (int p = 1; p <= data.GetSegment(s)->NumPoints(); p++)
+      dataE.push_back(data.GetSegment(s)->GetPoint(p)->GetCMEnergy());
+  std::shared_ptr<ThmSpectatorWindow> window = std::make_shared<ThmSpectatorWindow>();
+  std::string why = BuildThmSpectatorWindow(x, muSx, r.dk, dataE, *window);
+  if (!why.empty()) {
+    configure.outStream << where << "ps: " << why << "." << std::endl;
+    return false;
+  }
+  std::vector<ThmSpectatorWindow::Node> lo, hi;
+  window->NodesAt(window->dataE.front(), lo);
+  window->NodesAt(window->dataE.back(), hi);
+  auto range = [](const std::vector<ThmSpectatorWindow::Node> &n) {
+    double a = n.front().p, b = a;
+    for (const ThmSpectatorWindow::Node &k : n) a = std::min(a, k.p), b = std::max(b, k.p);
+    std::ostringstream t;
+    t.precision(6);
+    t << a << "-" << b;
+    return t.str();
+  };
+  std::ostringstream w;
+  w.precision(6);
+  w << "  Spectator-momentum window: " << window->description << "; mu_sx = " << muSx
+    << " MeV; at the lowest point (E = " << window->dataE.front() << " MeV) " << lo.size()
+    << " node(s), |p_s| = " << range(lo) << " MeV/c, <T_s> = " << window->MeanEs(window->dataE.front())
+    << " MeV; at the highest (E = " << window->dataE.back() << " MeV) " << hi.size()
+    << " node(s), |p_s| = " << range(hi) << " MeV/c, <T_s> = " << window->MeanEs(window->dataE.back())
+    << " MeV.";
+  configure.outStream << w.str() << std::endl;
+  group.window = window;
+  for (int s : group.segments) data.GetSegment(s)->SetThmSpectatorWindow(window);
+  return true;
+}
+
+// Coulomb line shape of the spectator (ThmLineshape.h), lineshape=on.  The
+// level energies and widths it uses are the observed ones of Brune.
+bool ThmBuildLineshape(EData &data, const Config &configure, CNuc *theCNuc, const ThmExperiment &x,
+                       EData::ThmGroup &group, const std::string &where, const ThmReaction &r) {
+  if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
+    configure.outStream << where << "lineshape=on uses the observed level energies and widths "
+                           "as the resonance poles; it needs the Brune parameterization."
+                        << std::endl;
+    return false;
+  }
+  const ThmNuclide &b = x.beam, &t = x.target, &sp = x.spectator;
+  PPair *pair = r.pair;
+  std::shared_ptr<ThmLineshape> shape = std::make_shared<ThmLineshape>();
+  shape->experiment = x.name;
+  shape->spectator = sp.name;
+  shape->Zs = sp.Z;
+  shape->ms = sp.mass;
+  shape->ZF = pair->GetZ(1) + pair->GetZ(2);
+  shape->mF = pair->GetM(1) + pair->GetM(2);
+  shape->eAA = x.beamEnergy * t.mass / (b.mass + t.mass);
+  shape->bind = r.bind;
+  // Every data point must leave the spectator some energy.
+  double eMax = -1.0e300;
+  for (int s : group.segments)
+    for (int p = 1; p <= data.GetSegment(s)->NumPoints(); p++)
+      eMax = std::max(eMax, data.GetSegment(s)->GetPoint(p)->GetCMEnergy());
+  if (!(shape->EsF(eMax) > 0.0)) {
+    configure.outStream << where << "lineshape=on: at E = " << eMax
+                        << " MeV the spectator has no energy left (E_sF = E_aA - B - E = "
+                        << shape->eAA << " - " << r.bind << " - " << eMax << " MeV <= 0); check Ebeam."
+                        << std::endl;
+    return false;
+  }
+  std::ostringstream l;
+  l.precision(6);
+  l << "  Coulomb line shape on: E_sF = E_aA - B - E with E_aA = " << shape->eAA << " MeV, eta_0 = "
+    << shape->Eta0(eMax) << " at the highest point energy (E = " << eMax << " MeV)"
+    << (sp.Z == 0 ? "; the spectator is neutral, so N_C = 1." : ".");
+  configure.outStream << l.str() << std::endl;
+  for (int s : group.segments) {
+    int key = data.GetSegment(s)->GetExitKey();
+    bool seen = false;
+    for (const ThmLineshape::Exit &e : shape->exits) seen = seen || e.pairKey == key;
+    if (seen || !theCNuc->IsPairKey(key)) continue;
+    PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(key));
+    int light = exitPair->GetM(1) <= exitPair->GetM(2) ? 1 : 2;
+    ThmLineshape::Exit e;
+    e.pairKey = key;
+    e.Zb = exitPair->GetZ(light);
+    e.ZB = exitPair->GetZ(3 - light);
+    e.mb = exitPair->GetM(light);
+    e.mB = exitPair->GetM(3 - light);
+    e.q = pair->GetSepE() + pair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
+    shape->exits.push_back(e);
+  }
+  group.lineshape = shape;
+  for (int s : group.segments) data.GetSegment(s)->SetThmLineshape(shape);
+  return true;
+}
+
+// Distorted-wave entrance vertex (ThmDwVertex.h): replaces M_l in the HOES
+// amplitude of every segment of the experiment; R(E) is not applied.
+bool ThmBuildDwVertex(EData &data, const Config &configure, CNuc *theCNuc, const ThmExperiment &x,
+                      EData::ThmGroup &group, const std::string &where, const ThmDistortion::Kinematics &dk) {
+  int pairKey = data.GetSegment(group.segments[0])->GetEntranceKey();
+  int pairNum = theCNuc->GetPairNumFromKey(pairKey);
+  PPair *pair = theCNuc->GetPair(pairNum);
+  // coulombIntegral=1 is refused with it by Config::ReadThmBlock
+  // (CheckThmCoulombConsistency).
+  if (configure.thm.coherentL) {
+    configure.outStream << where << "vertexModel=dw sums the entrance partial waves (and their projections) "
+                           "incoherently, as the angle-integrated observable requires; entranceL=coherent "
+                           "cannot be combined with it."
+                        << std::endl;
+    return false;
+  }
+  if (configure.thm.SpectatorEnergy(pairKey) != 0.0) {
+    configure.outStream << where << "with vertexModel=dw the spectator kinematics come from Ebeam and the "
+                           "spectator direction; spectatorEnergy for entrance pair "
+                        << pairKey << " must be 0." << std::endl;
+    return false;
+  }
+  std::vector<int> ls;
+  for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
+    JGroup *jg = theCNuc->GetJGroup(j);
+    if (!jg->IsInRMatrix()) continue;
+    for (int ch = 1; ch <= jg->NumChannels(); ch++)
+      if (jg->GetChannel(ch)->GetPairNum() == pairNum) ls.push_back(jg->GetChannel(ch)->GetL());
+  }
+  std::vector<double> energies;
+  for (int s : group.segments)
+    for (int p = 1; p <= data.GetSegment(s)->NumPoints(); p++)
+      energies.push_back(data.GetSegment(s)->GetPoint(p)->GetCMEnergy());
+  double eLo, eHi;
+  ThmGroupEnergyRange(data, group, eLo, eHi);
+  std::shared_ptr<ThmDwVertex> v = std::make_shared<ThmDwVertex>();
+  double eAA = dk.beamEnergy * dk.mTarget / (dk.mBeam + dk.mTarget);
+  if (!(eAA - dk.bind - eHi > 0.0)) {
+    configure.outStream << where << "vertexModel=dw: at E = " << eHi
+                        << " MeV the spectator has no energy left (E_sF = E_aA - B - E = " << eAA << " - "
+                        << dk.bind << " - " << eHi << " MeV <= 0); check Ebeam." << std::endl;
+    return false;
+  }
+  double gridHi = std::min(eHi + 0.3, eAA - dk.bind - 0.5 * (eAA - dk.bind - eHi));
+  std::string why = ls.empty() ? std::string("the entrance pair has no channel in the R matrix")
+                               : v->Build(x, dk, pair->GetChRad(), ls, eLo - 0.3, gridHi, energies);
+  if (!why.empty()) {
+    configure.outStream << where << "vertexModel=dw: " << why << "." << std::endl;
+    return false;
+  }
+  std::ostringstream l;
+  l.precision(6);
+  l << "  Entrance vertex: " << v->description << ".\n"
+    << "  alpha = m_A/m_F = " << v->alpha << ", beta = m_s/m_a = " << v->beta << ", k_aA = " << v->dist.aa.k
+    << " fm^-1, eta_aA = " << v->dist.aa.eta << ", kappa = " << v->dist.kappa << " fm^-1, eta_b = "
+    << v->dist.etaB << "; channel radius " << v->radius << " fm, l =";
+  for (int lv : v->lvals) l << " " << lv;
+  l << "; L <= " << v->laMax << " (a + A), " << v->lsMax << " (s + F); u to " << v->uMax << " fm on "
+    << v->uNodes << " x " << v->cNodes << " nodes; grid " << v->gridLo << " to "
+    << v->gridLo + (v->nE - 1) * v->gridStep << " MeV (" << v->nE << " energies, " << v->nNodes
+    << " node(s) each), " << v->buildSeconds << " s.\n"
+    << "  The distortion factor R(E) is not applied: the DW vertex carries the energy dependence.";
+  for (const std::string &w : v->dist.warnings) l << "\nWARNING: <thm> experiment[" << x.name << "]: " << w;
+  for (int s : group.segments)
+    if (data.GetSegment(s)->GetThmWeight())
+      l << "\nWARNING: <thm> experiment[" << x.name << "]: segment " << data.GetSegment(s)->GetSegmentKey()
+        << " also has weight[" << data.GetSegment(s)->GetSegmentKey()
+        << "]=; it multiplies the model with the DW vertex.";
+  configure.outStream << l.str() << std::endl;
+  group.dwVertex = v;
+  for (int s : group.segments) data.GetSegment(s)->SetThmDwVertex(v);
+  return true;
+}
+
+// Distortion factor R(E) (ThmDistortion.h): multiplies the model of every
+// segment of the experiment before the folding.
+bool ThmBuildDistortion(EData &data, const Config &configure, const ThmExperiment &x, EData::ThmGroup &group,
+                        const std::string &where, const ThmDistortion::Kinematics &dk) {
+  double eLo, eHi;
+  ThmGroupEnergyRange(data, group, eLo, eHi);
+  std::shared_ptr<ThmDistortion> d = std::make_shared<ThmDistortion>();
+  d->experiment = x.name;
+  std::ostringstream l;
+  l.precision(6);
+  if (x.distortion == ThmExperiment::DIST_TABLE) {
+    d->kind = ThmDistortion::TABLE;
+    d->table = x.distortionWeights;
+    const ThmWeightTable &table = *d->table;
+    if (!table.Covers(eLo) || !table.Covers(eHi)) {
+      configure.outStream << where << "distortion: the points span E_cm = " << eLo << " to " << eHi
+                          << " MeV, beyond the table '" << table.name << "' [" << table.e.front() << ", "
+                          << table.e.back() << "] MeV." << std::endl;
+      return false;
+    }
+    d->description = "table " + table.name;
+    l << "  Distortion factor: w(E) from the table '" << table.name << "' multiplies the model.";
+  } else {
+    d->kin = dk;
+    d->eAA = dk.beamEnergy * dk.mTarget / (dk.mBeam + dk.mTarget);
+    // Every data point must be reachable (the grid then extends 0.5
+    // MeV beyond the points, short of the spectator's threshold).
+    d->angleKind = x.angleKind == 1 ? ThmDistortion::LAB : x.angleKind == 2 ? ThmDistortion::CM : ThmDistortion::QF;
+    d->angle = x.angle;
+    d->sf.kind = x.distortion == ThmExperiment::DIST_OPTICAL && x.opticalSF.kind == 0
+                     ? ThmDistortion::Channel::PLANE
+                     : ThmDistortion::Channel::POINT_COULOMB;
+    d->sf.mu = dk.ms * (dk.mx + dk.mA) / (dk.ms + dk.mx + dk.mA) * uconv;
+    d->vcm = std::sqrt(2.0 * dk.mBeam * uconv * dk.beamEnergy) / ((dk.mBeam + dk.mTarget) * uconv);
+    for (int s : group.segments)
+      for (int p = 1; p <= data.GetSegment(s)->NumPoints(); p++) {
+        std::string why = d->CheckEnergy(data.GetSegment(s)->GetPoint(p)->GetCMEnergy());
+        if (!why.empty()) {
+          configure.outStream << where << "distortion: " << why << "." << std::endl;
+          return false;
+        }
+      }
+    double gridHi = std::min(eHi + 0.5, d->eAA - dk.bind - 0.5 * d->EsF(eHi));
+    d->dataLo = eLo;
+    d->dataHi = eHi;
+    std::string why = d->Build(x, dk, eLo - 0.5, gridHi, 0.5 * (eLo + eHi));
+    // spectatorAngles=: every data point needs an accepted direction.
+    for (int s = 0; why.empty() && d->angWindow && s < (int)group.segments.size(); s++)
+      for (int p = 1; why.empty() && p <= data.GetSegment(group.segments[s])->NumPoints(); p++)
+        why = d->CheckWindow(data.GetSegment(group.segments[s])->GetPoint(p)->GetCMEnergy());
+    if (!why.empty()) {
+      configure.outStream << where << "distortion: " << why << "." << std::endl;
+      return false;
+    }
+    ThmDistortion::Point lo = d->Evaluate(eLo), hi = d->Evaluate(eHi);
+    l << "  Distortion factor R(E), zero-range DWBA: " << d->description << ".\n"
+      << "  k_aA = " << d->aa.k << " fm^-1, eta_aA = " << d->aa.eta << ", kappa = " << d->kappa
+      << " fm^-1, eta_b = " << d->etaB << ", beta = m_s/m_a = " << d->beta << "; E_ref = " << d->eRef
+      << " MeV, grid " << d->gridLo << " to " << d->gridLo + (d->lnR.size() - 1) * d->gridStep
+      << " MeV, radial step " << d->h << " fm to " << (d->n - 1) * d->h << " fm, l <= " << d->uAA.size() - 1
+      << ".\n"
+      << "  R = " << d->R(lo) << " at E = " << eLo << " MeV (E_sF = " << lo.esf << ", eta_sF = " << lo.etasf
+      << ", theta_cm = " << lo.thetaCm << " deg), " << d->R(hi) << " at E = " << eHi << " MeV (E_sF = "
+      << hi.esf << ", eta_sF = " << hi.etasf << ", theta_cm = " << hi.thetaCm << " deg).";
+    if (d->angWindow)
+      l << "\n  Spectator directions: " << lo.nodes << " accepted node(s) at the lowest point, " << hi.nodes
+        << " at the highest; theta_cm above is their acceptance-weighted mean.";
+    if (d->pwSignChange && d->ratioPW)
+      l << "\nWARNING: <thm> experiment[" << x.name << "]: the plane-wave amplitude M_PW changes sign on "
+           "the grid (a node of the momentum distribution at this angle); R = |M/M_PW|^2 is singular "
+           "there (distortionRatio=dw avoids it).";
+    for (const std::string &w : d->warnings) l << "\nWARNING: <thm> experiment[" << x.name << "]: " << w;
+    if (d->tailWorst > 1.0e-8)
+      l << "\nWARNING: <thm> experiment[" << x.name << "]: the radial integrals are cut at r = "
+        << (d->n - 1) * d->h << " fm with a remainder up to " << d->tailWorst << " of |M|.";
+  }
+  for (int s : group.segments)
+    if (data.GetSegment(s)->GetThmWeight())
+      l << "\nWARNING: <thm> experiment[" << x.name << "]: segment " << data.GetSegment(s)->GetSegmentKey()
+        << " also has weight[" << data.GetSegment(s)->GetSegmentKey()
+        << "]=; both multiply its model (the distortion factor and the weight).";
+  configure.outStream << l.str() << std::endl;
+  group.distortion = d;
+  for (int s : group.segments) data.GetSegment(s)->SetThmDistortion(d);
+  return true;
+}
+
+// Angular window of the exit pair (ThmAngular.h), theta=: the model of every
+// segment is dsigma/dOmega averaged over theta_cm in the window.
+bool ThmBuildAngleWindow(EData &data, const Config &configure, CNuc *theCNuc, const ThmExperiment &x,
+                         EData::ThmGroup &group, const std::string &where) {
+  if (configure.thm.coherentL) {
+    configure.outStream << where << "theta= computes the interference of the entrance partial waves "
+                           "exactly (at fixed angle they interfere); entranceL=coherent is an approximation "
+                           "of the angle-integrated observable and cannot be combined with it."
+                        << std::endl;
+    return false;
+  }
+  int maxLp = 0;
+  for (int j = 1; j <= theCNuc->NumJGroups(); j++)
+    for (int ch = 1; ch <= theCNuc->GetJGroup(j)->NumChannels(); ch++)
+      maxLp = std::max(maxLp, theCNuc->GetJGroup(j)->GetChannel(ch)->GetL());
+  if (2 * maxLp > ThmAngleWindow::kMaxL) {
+    configure.outStream << where << "theta= carries Legendre orders up to " << ThmAngleWindow::kMaxL
+                        << "; the model has a channel with l = " << maxLp << "." << std::endl;
+    return false;
+  }
+  std::shared_ptr<ThmAngleWindow> w = std::make_shared<ThmAngleWindow>();
+  w->experiment = x.name;
+  BuildThmAngleWindow(x.thetaMin, x.thetaMax, *w);
+  std::ostringstream a;
+  a.precision(6);
+  a << "  Angular window: theta_cm = " << x.thetaMin << "-" << x.thetaMax
+    << " deg (exit particle 1 relative to 2, from p_xA = entrance particle 1 relative to 2); the model "
+       "is the HOES dsigma/dOmega averaged over it (4 pi times it is the angle-integrated cross section "
+       "for 0-180).";
+  configure.outStream << a.str() << std::endl;
+  group.angle = w;
+  for (int s : group.segments) data.GetSegment(s)->SetThmAngleWindow(w);
+  return true;
+}
+
+}  // namespace
+
+/*
+ * One group per experiment line, in order; per group, in this order: its
+ * segments, the profile, the kinematics, the ps window, the line shape, the
+ * DW vertex or the distortion factor, the angular window and the coherent
+ * background.  The first refusal ends it (the order of the checks is what a
+ * user sees, so it is kept).
+ */
 int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) {
   thmGroups_.clear();
   thmCoherentParams_.clear();
   thmCoherentParamOffset_ = -1;
-  const double amu = 931.49410242;  // MeV/u (CODATA 2018)
   for (const ThmExperiment &x : configure.thm.experiments) {
     const std::string where = "ERROR: <thm> experiment[" + x.name + "]: ";
     ThmGroup group;
@@ -110,386 +539,19 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
             << ", background " << ThmExperiment::BackgroundName(group.terms) << ".";
     configure.outStream << summary.str() << std::endl;
 
-    {
-      ThmDistortion::Kinematics dk;  // for distortion=coulomb|optical
-      if (x.hasKinematics) {
-        // The entrance pair x + A of the THM segments, and which of beam and
-        // target is the Trojan horse a = x + s.
-        int pairKey = GetSegment(group.segments[0])->GetEntranceKey();
-        for (int s : group.segments)
-          if (GetSegment(s)->GetEntranceKey() != pairKey) {
-            configure.outStream << where << "beam/target/spectator describe one reaction, but its segments "
-                                   "have different entrance pairs."
-                                << std::endl;
-            return -1;
-          }
-        PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(pairKey));
-        int Z[2] = {pair->GetZ(1), pair->GetZ(2)};
-        int A[2] = {(int)std::lround(pair->GetM(1)), (int)std::lround(pair->GetM(2))};
-        const ThmNuclide &b = x.beam, &t = x.target, &sp = x.spectator;
-        // horse: 0 beam, 1 target; other: index of the pair nucleus that is the other one.
-        int horse = -1, other = -1;
-        for (int h = 0; h < 2 && horse < 0; h++) {
-          const ThmNuclide &th = h == 0 ? b : t, &tg = h == 0 ? t : b;
-          for (int k = 0; k < 2; k++)
-            if (tg.Z == Z[k] && tg.A == A[k] && th.Z - sp.Z == Z[1 - k] && th.A - sp.A == A[1 - k]) {
-              horse = h;
-              other = k;
-              break;
-            }
-        }
-        if (horse < 0) {
-          configure.outStream << where << "beam " << b.name << " + target " << t.name << " with spectator "
-                              << sp.name << " does not give the entrance pair of its segments (Z,A) = ("
-                              << Z[0] << "," << A[0] << ") + (" << Z[1] << "," << A[1]
-                              << "): one of beam/target must be a nucleus of the pair and the other the "
-                                 "second nucleus plus the spectator."
-                              << std::endl;
-          return -1;
-        }
-        const ThmNuclide &th = horse == 0 ? b : t, &nA = horse == 0 ? t : b;
-        const ThmNuclide *tabX = ThmNuclide::Find(th.Z - sp.Z, th.A - sp.A);
-        double mX = tabX ? tabX->mass : pair->GetM(2 - other);  // the pair nucleus that is x
-        double mA = nA.mass;
-        double bind = (mX + sp.mass - th.mass) * amu;
-        dk.Za = th.Z;
-        dk.ZA = nA.Z;
-        dk.Zs = sp.Z;
-        dk.Zx = th.Z - sp.Z;
-        dk.Aa = th.A;
-        dk.AA = nA.A;
-        dk.As = sp.A;
-        dk.Ax = th.A - sp.A;
-        dk.ma = th.mass;
-        dk.mA = nA.mass;
-        dk.ms = sp.mass;
-        dk.mx = mX;
-        dk.horseIsBeam = horse == 0;
-        dk.mBeam = b.mass;
-        dk.mTarget = t.mass;
-        dk.beamEnergy = x.beamEnergy;
-        dk.bind = bind;
-        // Quasi-free x + A energy: the spectator keeps the Trojan horse's
-        // velocity (horse = beam) or stays at rest (horse = target).
-        double exa = horse == 0 ? x.beamEnergy * mX / th.mass * mA / (mX + mA) : x.beamEnergy * mX / (mA + mX);
-        std::ostringstream k;
-        k.precision(6);
-        k << "  " << b.name << " + " << t.name << " at " << x.beamEnergy << " MeV (lab), Trojan horse "
-          << th.name << " = x + " << sp.name << ", B(x+s) = " << bind << " MeV; quasi-free E(x+A) = " << exa
-          << " MeV, E_qf = E(x+A) - B = " << exa - bind << " MeV.";
-        configure.outStream << k.str() << std::endl;
-        // The vertex takes B from the entrance pair's channel lines (field 32),
-        // the kinematics from the masses; say so when they disagree.
-        if (std::fabs(pair->GetBindingEnergy() - bind) > 1.0e-3) {
-          std::ostringstream w;
-          w.precision(6);
-          w << "WARNING: <thm> experiment[" << x.name << "]: B(x+s) from the masses of " << th.name << " = x + "
-            << sp.name << " is " << bind << " MeV, but the entrance pair " << pairKey
-            << " carries B = " << pair->GetBindingEnergy()
-            << " MeV (field 32 of its channel lines); the THM vertex uses field 32, the kinematics of this "
-               "experiment (the quasi-free energy above, E_sF of the line shape and of the distortion "
-               "factor) use the masses.";
-          configure.outStream << w.str() << std::endl;
-        }
-
-        if (x.psKind != ThmExperiment::PS_DELTA) {
-          // Spectator-momentum window (ThmLineshape.h ThmSpectatorWindow).
-          if (configure.thm.SpectatorEnergy(pairKey) != 0.0) {
-            configure.outStream << where << "a ps window and spectatorEnergy both set the spectator motion of "
-                                   "entrance pair "
-                                << pairKey << "; use one (ps=delta keeps spectatorEnergy)." << std::endl;
-            return -1;
-          }
-          // With vertexModel=dw the DW vertex averages over the accepted
-          // directions itself (ThmDwVertex); the plane-wave nodes are not used.
-          if (!x.vertexDW) {
-            double muSx = mX * sp.mass / (mX + sp.mass) * amu;
-            std::vector<double> dataE;
-            for (int s : group.segments)
-              for (int p = 1; p <= GetSegment(s)->NumPoints(); p++)
-                dataE.push_back(GetSegment(s)->GetPoint(p)->GetCMEnergy());
-            std::shared_ptr<ThmSpectatorWindow> window = std::make_shared<ThmSpectatorWindow>();
-            std::string why = BuildThmSpectatorWindow(x, muSx, dk, dataE, *window);
-            if (!why.empty()) {
-              configure.outStream << where << "ps: " << why << "." << std::endl;
-              return -1;
-            }
-            std::vector<ThmSpectatorWindow::Node> lo, hi;
-            window->NodesAt(window->dataE.front(), lo);
-            window->NodesAt(window->dataE.back(), hi);
-            auto range = [](const std::vector<ThmSpectatorWindow::Node> &n) {
-              double a = n.front().p, b = a;
-              for (const ThmSpectatorWindow::Node &k : n) a = std::min(a, k.p), b = std::max(b, k.p);
-              std::ostringstream t;
-              t.precision(6);
-              t << a << "-" << b;
-              return t.str();
-            };
-            std::ostringstream w;
-            w.precision(6);
-            w << "  Spectator-momentum window: " << window->description << "; mu_sx = " << muSx
-              << " MeV; at the lowest point (E = " << window->dataE.front() << " MeV) " << lo.size()
-              << " node(s), |p_s| = " << range(lo) << " MeV/c, <T_s> = " << window->MeanEs(window->dataE.front())
-              << " MeV; at the highest (E = " << window->dataE.back() << " MeV) " << hi.size()
-              << " node(s), |p_s| = " << range(hi) << " MeV/c, <T_s> = " << window->MeanEs(window->dataE.back())
-              << " MeV.";
-            configure.outStream << w.str() << std::endl;
-            group.window = window;
-            for (int s : group.segments) GetSegment(s)->SetThmSpectatorWindow(window);
-          }
-        }
-
-        if (x.lineshape) {
-          // Coulomb line shape of the spectator (ThmLineshape.h).  The level
-          // energies and widths it uses are the observed ones of Brune.
-          if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
-            configure.outStream << where << "lineshape=on uses the observed level energies and widths "
-                                   "as the resonance poles; it needs the Brune parameterization."
-                                << std::endl;
-            return -1;
-          }
-          std::shared_ptr<ThmLineshape> shape = std::make_shared<ThmLineshape>();
-          shape->experiment = x.name;
-          shape->spectator = sp.name;
-          shape->Zs = sp.Z;
-          shape->ms = sp.mass;
-          shape->ZF = pair->GetZ(1) + pair->GetZ(2);
-          shape->mF = pair->GetM(1) + pair->GetM(2);
-          shape->eAA = x.beamEnergy * t.mass / (b.mass + t.mass);
-          shape->bind = bind;
-          // Every data point must leave the spectator some energy.
-          double eMax = -1.0e300;
-          for (int s : group.segments)
-            for (int p = 1; p <= GetSegment(s)->NumPoints(); p++)
-              eMax = std::max(eMax, GetSegment(s)->GetPoint(p)->GetCMEnergy());
-          if (!(shape->EsF(eMax) > 0.0)) {
-            configure.outStream << where << "lineshape=on: at E = " << eMax
-                                << " MeV the spectator has no energy left (E_sF = E_aA - B - E = "
-                                << shape->eAA << " - " << bind << " - " << eMax << " MeV <= 0); check Ebeam."
-                                << std::endl;
-            return -1;
-          }
-          std::ostringstream l;
-          l.precision(6);
-          l << "  Coulomb line shape on: E_sF = E_aA - B - E with E_aA = " << shape->eAA << " MeV, eta_0 = "
-            << shape->Eta0(eMax) << " at the highest point energy (E = " << eMax << " MeV)"
-            << (sp.Z == 0 ? "; the spectator is neutral, so N_C = 1." : ".");
-          configure.outStream << l.str() << std::endl;
-          for (int s : group.segments) {
-            int key = GetSegment(s)->GetExitKey();
-            bool seen = false;
-            for (const ThmLineshape::Exit &e : shape->exits) seen = seen || e.pairKey == key;
-            if (seen || !theCNuc->IsPairKey(key)) continue;
-            PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(key));
-            int light = exitPair->GetM(1) <= exitPair->GetM(2) ? 1 : 2;
-            ThmLineshape::Exit e;
-            e.pairKey = key;
-            e.Zb = exitPair->GetZ(light);
-            e.ZB = exitPair->GetZ(3 - light);
-            e.mb = exitPair->GetM(light);
-            e.mB = exitPair->GetM(3 - light);
-            e.q = pair->GetSepE() + pair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
-            shape->exits.push_back(e);
-          }
-          group.lineshape = shape;
-          for (int s : group.segments) GetSegment(s)->SetThmLineshape(shape);
-        }
-      }
-      if (x.vertexDW) {
-        // Distorted-wave entrance vertex (ThmDwVertex.h): replaces M_l in the
-        // HOES amplitude of every segment of the experiment; R(E) is not applied.
-        int pairKey = GetSegment(group.segments[0])->GetEntranceKey();
-        int pairNum = theCNuc->GetPairNumFromKey(pairKey);
-        PPair *pair = theCNuc->GetPair(pairNum);
-        // coulombIntegral=1 is refused with it by Config::ReadThmBlock
-        // (CheckThmCoulombConsistency).
-        if (configure.thm.coherentL) {
-          configure.outStream << where << "vertexModel=dw sums the entrance partial waves (and their projections) "
-                                 "incoherently, as the angle-integrated observable requires; entranceL=coherent "
-                                 "cannot be combined with it."
-                              << std::endl;
-          return -1;
-        }
-        if (configure.thm.SpectatorEnergy(pairKey) != 0.0) {
-          configure.outStream << where << "with vertexModel=dw the spectator kinematics come from Ebeam and the "
-                                 "spectator direction; spectatorEnergy for entrance pair "
-                              << pairKey << " must be 0." << std::endl;
-          return -1;
-        }
-        std::vector<int> ls;
-        for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
-          JGroup *jg = theCNuc->GetJGroup(j);
-          if (!jg->IsInRMatrix()) continue;
-          for (int ch = 1; ch <= jg->NumChannels(); ch++)
-            if (jg->GetChannel(ch)->GetPairNum() == pairNum) ls.push_back(jg->GetChannel(ch)->GetL());
-        }
-        std::vector<double> energies;
-        double eLo = 1.0e300, eHi = -1.0e300;
-        for (int s : group.segments)
-          for (int p = 1; p <= GetSegment(s)->NumPoints(); p++) {
-            double e = GetSegment(s)->GetPoint(p)->GetCMEnergy();
-            energies.push_back(e);
-            eLo = std::min(eLo, e);
-            eHi = std::max(eHi, e);
-          }
-        std::shared_ptr<ThmDwVertex> v = std::make_shared<ThmDwVertex>();
-        double eAA = dk.beamEnergy * dk.mTarget / (dk.mBeam + dk.mTarget);
-        if (!(eAA - dk.bind - eHi > 0.0)) {
-          configure.outStream << where << "vertexModel=dw: at E = " << eHi
-                              << " MeV the spectator has no energy left (E_sF = E_aA - B - E = " << eAA << " - "
-                              << dk.bind << " - " << eHi << " MeV <= 0); check Ebeam." << std::endl;
-          return -1;
-        }
-        double gridHi = std::min(eHi + 0.3, eAA - dk.bind - 0.5 * (eAA - dk.bind - eHi));
-        std::string why = ls.empty() ? std::string("the entrance pair has no channel in the R matrix")
-                                     : v->Build(x, dk, pair->GetChRad(), ls, eLo - 0.3, gridHi, energies);
-        if (!why.empty()) {
-          configure.outStream << where << "vertexModel=dw: " << why << "." << std::endl;
-          return -1;
-        }
-        std::ostringstream l;
-        l.precision(6);
-        l << "  Entrance vertex: " << v->description << ".\n"
-          << "  alpha = m_A/m_F = " << v->alpha << ", beta = m_s/m_a = " << v->beta << ", k_aA = " << v->dist.aa.k
-          << " fm^-1, eta_aA = " << v->dist.aa.eta << ", kappa = " << v->dist.kappa << " fm^-1, eta_b = "
-          << v->dist.etaB << "; channel radius " << v->radius << " fm, l =";
-        for (int lv : v->lvals) l << " " << lv;
-        l << "; L <= " << v->laMax << " (a + A), " << v->lsMax << " (s + F); u to " << v->uMax << " fm on "
-          << v->uNodes << " x " << v->cNodes << " nodes; grid " << v->gridLo << " to "
-          << v->gridLo + (v->nE - 1) * v->gridStep << " MeV (" << v->nE << " energies, " << v->nNodes
-          << " node(s) each), " << v->buildSeconds << " s.\n"
-          << "  The distortion factor R(E) is not applied: the DW vertex carries the energy dependence.";
-        for (const std::string &w : v->dist.warnings)
-          l << "\nWARNING: <thm> experiment[" << x.name << "]: " << w;
-        for (int s : group.segments)
-          if (GetSegment(s)->GetThmWeight())
-            l << "\nWARNING: <thm> experiment[" << x.name << "]: segment " << GetSegment(s)->GetSegmentKey()
-              << " also has weight[" << GetSegment(s)->GetSegmentKey()
-              << "]=; it multiplies the model with the DW vertex.";
-        configure.outStream << l.str() << std::endl;
-        group.dwVertex = v;
-        for (int s : group.segments) GetSegment(s)->SetThmDwVertex(v);
-      } else if (x.distortion != ThmExperiment::DIST_NONE) {
-        // Distortion factor R(E) (ThmDistortion.h): multiplies the model of
-        // every segment of the experiment before the folding.
-        double eLo = 1.0e300, eHi = -1.0e300;
-        for (int s : group.segments)
-          for (int p = 1; p <= GetSegment(s)->NumPoints(); p++) {
-            eLo = std::min(eLo, GetSegment(s)->GetPoint(p)->GetCMEnergy());
-            eHi = std::max(eHi, GetSegment(s)->GetPoint(p)->GetCMEnergy());
-          }
-        std::shared_ptr<ThmDistortion> d = std::make_shared<ThmDistortion>();
-        d->experiment = x.name;
-        std::ostringstream l;
-        l.precision(6);
-        if (x.distortion == ThmExperiment::DIST_TABLE) {
-          d->kind = ThmDistortion::TABLE;
-          d->table = x.distortionWeights;
-          const ThmWeightTable &table = *d->table;
-          if (!table.Covers(eLo) || !table.Covers(eHi)) {
-            configure.outStream << where << "distortion: the points span E_cm = " << eLo << " to " << eHi
-                                << " MeV, beyond the table '" << table.name << "' [" << table.e.front() << ", "
-                                << table.e.back() << "] MeV." << std::endl;
-            return -1;
-          }
-          d->description = "table " + table.name;
-          l << "  Distortion factor: w(E) from the table '" << table.name << "' multiplies the model.";
-        } else {
-          d->kin = dk;
-          d->eAA = dk.beamEnergy * dk.mTarget / (dk.mBeam + dk.mTarget);
-          // Every data point must be reachable (the grid then extends 0.5
-          // MeV beyond the points, short of the spectator's threshold).
-          d->angleKind = x.angleKind == 1 ? ThmDistortion::LAB : x.angleKind == 2 ? ThmDistortion::CM : ThmDistortion::QF;
-          d->angle = x.angle;
-          d->sf.kind = x.distortion == ThmExperiment::DIST_OPTICAL && x.opticalSF.kind == 0
-                           ? ThmDistortion::Channel::PLANE
-                           : ThmDistortion::Channel::POINT_COULOMB;
-          d->sf.mu = dk.ms * (dk.mx + dk.mA) / (dk.ms + dk.mx + dk.mA) * uconv;
-          d->vcm = std::sqrt(2.0 * dk.mBeam * uconv * dk.beamEnergy) / ((dk.mBeam + dk.mTarget) * uconv);
-          for (int s : group.segments)
-            for (int p = 1; p <= GetSegment(s)->NumPoints(); p++) {
-              std::string why = d->CheckEnergy(GetSegment(s)->GetPoint(p)->GetCMEnergy());
-              if (!why.empty()) {
-                configure.outStream << where << "distortion: " << why << "." << std::endl;
-                return -1;
-              }
-            }
-          double gridHi = std::min(eHi + 0.5, d->eAA - dk.bind - 0.5 * d->EsF(eHi));
-          d->dataLo = eLo;
-          d->dataHi = eHi;
-          std::string why = d->Build(x, dk, eLo - 0.5, gridHi, 0.5 * (eLo + eHi));
-          // spectatorAngles=: every data point needs an accepted direction.
-          for (int s = 0; why.empty() && d->angWindow && s < (int)group.segments.size(); s++)
-            for (int p = 1; why.empty() && p <= GetSegment(group.segments[s])->NumPoints(); p++)
-              why = d->CheckWindow(GetSegment(group.segments[s])->GetPoint(p)->GetCMEnergy());
-          if (!why.empty()) {
-            configure.outStream << where << "distortion: " << why << "." << std::endl;
-            return -1;
-          }
-          ThmDistortion::Point lo = d->Evaluate(eLo), hi = d->Evaluate(eHi);
-          l << "  Distortion factor R(E), zero-range DWBA: " << d->description << ".\n"
-            << "  k_aA = " << d->aa.k << " fm^-1, eta_aA = " << d->aa.eta << ", kappa = " << d->kappa
-            << " fm^-1, eta_b = " << d->etaB << ", beta = m_s/m_a = " << d->beta << "; E_ref = " << d->eRef
-            << " MeV, grid " << d->gridLo << " to " << d->gridLo + (d->lnR.size() - 1) * d->gridStep
-            << " MeV, radial step " << d->h << " fm to " << (d->n - 1) * d->h << " fm, l <= " << d->uAA.size() - 1
-            << ".\n"
-            << "  R = " << d->R(lo) << " at E = " << eLo << " MeV (E_sF = " << lo.esf << ", eta_sF = " << lo.etasf
-            << ", theta_cm = " << lo.thetaCm << " deg), " << d->R(hi) << " at E = " << eHi << " MeV (E_sF = "
-            << hi.esf << ", eta_sF = " << hi.etasf << ", theta_cm = " << hi.thetaCm << " deg).";
-          if (d->angWindow)
-            l << "\n  Spectator directions: " << lo.nodes << " accepted node(s) at the lowest point, " << hi.nodes
-              << " at the highest; theta_cm above is their acceptance-weighted mean.";
-          if (d->pwSignChange && d->ratioPW)
-            l << "\nWARNING: <thm> experiment[" << x.name << "]: the plane-wave amplitude M_PW changes sign on "
-                 "the grid (a node of the momentum distribution at this angle); R = |M/M_PW|^2 is singular "
-                 "there (distortionRatio=dw avoids it).";
-          for (const std::string &w : d->warnings) l << "\nWARNING: <thm> experiment[" << x.name << "]: " << w;
-          if (d->tailWorst > 1.0e-8)
-            l << "\nWARNING: <thm> experiment[" << x.name << "]: the radial integrals are cut at r = "
-              << (d->n - 1) * d->h << " fm with a remainder up to " << d->tailWorst << " of |M|.";
-        }
-        for (int s : group.segments)
-          if (GetSegment(s)->GetThmWeight())
-            l << "\nWARNING: <thm> experiment[" << x.name << "]: segment " << GetSegment(s)->GetSegmentKey()
-              << " also has weight[" << GetSegment(s)->GetSegmentKey()
-              << "]=; both multiply its model (the distortion factor and the weight).";
-        configure.outStream << l.str() << std::endl;
-        group.distortion = d;
-        for (int s : group.segments) GetSegment(s)->SetThmDistortion(d);
-      }
-    }
-    if (x.hasTheta) {
-      // Angular window of the exit pair (ThmAngular.h): the model of every
-      // segment is dsigma/dOmega averaged over theta_cm in the window.
-      if (configure.thm.coherentL) {
-        configure.outStream << where << "theta= computes the interference of the entrance partial waves "
-                               "exactly (at fixed angle they interfere); entranceL=coherent is an approximation "
-                               "of the angle-integrated observable and cannot be combined with it."
-                            << std::endl;
+    ThmReaction reaction;  // its kinematics are those of distortion=coulomb|optical and the DW vertex
+    if (x.hasKinematics) {
+      if (!ThmResolveKinematics(*this, configure, theCNuc, x, group, where, reaction)) return -1;
+      if (x.psKind != ThmExperiment::PS_DELTA && !ThmBuildWindow(*this, configure, x, group, where, reaction))
         return -1;
-      }
-      int maxLp = 0;
-      for (int j = 1; j <= theCNuc->NumJGroups(); j++)
-        for (int ch = 1; ch <= theCNuc->GetJGroup(j)->NumChannels(); ch++)
-          maxLp = std::max(maxLp, theCNuc->GetJGroup(j)->GetChannel(ch)->GetL());
-      if (2 * maxLp > ThmAngleWindow::kMaxL) {
-        configure.outStream << where << "theta= carries Legendre orders up to " << ThmAngleWindow::kMaxL
-                            << "; the model has a channel with l = " << maxLp << "." << std::endl;
-        return -1;
-      }
-      std::shared_ptr<ThmAngleWindow> w = std::make_shared<ThmAngleWindow>();
-      w->experiment = x.name;
-      BuildThmAngleWindow(x.thetaMin, x.thetaMax, *w);
-      std::ostringstream a;
-      a.precision(6);
-      a << "  Angular window: theta_cm = " << x.thetaMin << "-" << x.thetaMax
-        << " deg (exit particle 1 relative to 2, from p_xA = entrance particle 1 relative to 2); the model "
-           "is the HOES dsigma/dOmega averaged over it (4 pi times it is the angle-integrated cross section "
-           "for 0-180).";
-      configure.outStream << a.str() << std::endl;
-      group.angle = w;
-      for (int s : group.segments) GetSegment(s)->SetThmAngleWindow(w);
+      if (x.lineshape && !ThmBuildLineshape(*this, configure, theCNuc, x, group, where, reaction)) return -1;
     }
+    if (x.vertexDW) {
+      if (!ThmBuildDwVertex(*this, configure, theCNuc, x, group, where, reaction.dk)) return -1;
+    } else if (x.distortion != ThmExperiment::DIST_NONE) {
+      if (!ThmBuildDistortion(*this, configure, x, group, where, reaction.dk)) return -1;
+    }
+    if (x.hasTheta && !ThmBuildAngleWindow(*this, configure, theCNuc, x, group, where)) return -1;
     if (!x.cbackground.empty()) {
       // Coherent background (cbackground=, ThmCoherentBackground): one complex
       // amplitude per (J^pi, entrance (s,l), exit (s',l')) combination, whose
@@ -813,12 +875,8 @@ void EData::WriteThmExperiments(const Config &configure) {
       const ThmDistortion &d = *group.distortion;
       out << "distortion: " << d.description << "\n";
       if (d.kind == ThmDistortion::TABLE) continue;
-      double eLo = 1.0e300, eHi = -1.0e300;
-      for (int s : group.segments)
-        for (int p = 1; p <= GetSegment(s)->NumPoints(); p++) {
-          eLo = std::min(eLo, GetSegment(s)->GetPoint(p)->GetCMEnergy());
-          eHi = std::max(eHi, GetSegment(s)->GetPoint(p)->GetCMEnergy());
-        }
+      double eLo, eHi;
+      ThmGroupEnergyRange(*this, group, eLo, eHi);
       out << "# Zero-range DWBA transfer amplitude M(E) = <chi(-)_sF phi_sx chi(+)_aA(beta r)> (Mukhamedzhanov &\n"
           << "# Pang PRC 99 (2019) 064618 eqs. 20-24; Mukhamedzhanov arXiv:2609.04498 eqs. 22-30), M_PW its\n"
           << "# plane-wave limit; the model is multiplied by R(E) before folding (PWA-extracted S* / R).\n"
@@ -840,12 +898,8 @@ void EData::WriteThmExperiments(const Config &configure) {
     for (const ThmGroup &group : thmGroups_) {
       if (group.name != r.name || !group.dwVertex) continue;
       const ThmDwVertex &v = *group.dwVertex;
-      double eLo = 1.0e300, eHi = -1.0e300;
-      for (int s : group.segments)
-        for (int p = 1; p <= GetSegment(s)->NumPoints(); p++) {
-          eLo = std::min(eLo, GetSegment(s)->GetPoint(p)->GetCMEnergy());
-          eHi = std::max(eHi, GetSegment(s)->GetPoint(p)->GetCMEnergy());
-        }
+      double eLo, eHi;
+      ThmGroupEnergyRange(*this, group, eLo, eHi);
       out << "vertex: " << v.description << "\n"
           << "# Surface term of the prior-form DWBA (Mukhamedzhanov PRC 84 (2011) 044616; Mukhamedzhanov,\n"
           << "# Kadyrov & Pang EPJA 56 (2020) 233 eqs. 28-32) replaces M_l; R(E) is not applied.\n"
@@ -868,12 +922,8 @@ void EData::WriteThmExperiments(const Config &configure) {
     for (const ThmGroup &group : thmGroups_) {
       if (group.name != r.name || !group.lineshape) continue;
       const ThmLineshape &ls = *group.lineshape;
-      double eLo = 1.0e300, eHi = -1.0e300;
-      for (int s : group.segments)
-        for (int p = 1; p <= GetSegment(s)->NumPoints(); p++) {
-          eLo = std::min(eLo, GetSegment(s)->GetPoint(p)->GetCMEnergy());
-          eHi = std::max(eHi, GetSegment(s)->GetPoint(p)->GetCMEnergy());
-        }
+      double eLo, eHi;
+      ThmGroupEnergyRange(*this, group, eLo, eHi);
       out << "lineshape: on (spectator " << ls.spectator << ", Z_s = " << ls.Zs << ", Z_F = " << ls.ZF
           << "; E_aA = " << ls.eAA << " MeV, B = " << ls.bind << " MeV)\n"
           << "# |N_C|^2 = exp[2 zeta arctan(2 (E_lambda - E)/Gamma_lambda)] per level, zeta = eta_sB - eta_0\n"
