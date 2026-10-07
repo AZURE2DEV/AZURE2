@@ -127,7 +127,12 @@ GRID_KEYS = ("vertex_model", "vertex", "optical", "ps", "lineshape", "distortion
 
 
 def _fmt_radius(r):
-    return f"{float(r):g}"
+    """The radius as written in labels and files: %g where that is the same
+    number (6.1, 5), else the shortest text that is (5.1234567, not 5.12346:
+    the label is also the value the variant runs with)."""
+    r = float(r)
+    g = f"{r:g}"
+    return g if float(g) == r else repr(r)
 
 
 def build_spec(args):
@@ -738,13 +743,19 @@ def main(argv=None):
         rule, _, w = p.rpartition(":")
         if not rule or "=" not in rule:
             raise SystemExit(f"--prior {p!r}: expected AXIS=VALUE:WEIGHT")
-        rules[rule] = float(w)
+        try:
+            rules[rule] = float(w)
+        except ValueError:
+            raise SystemExit(f"--prior {p!r}: the weight {w!r} is not a number")
     priors = priors_for(grid, rules)
     strengths = parse_strengths(args.strength)
     if strengths and not (args.strength_in and args.strength_out):
         raise SystemExit("--strength needs --strength-in and --strength-out (file pair keys).")
     if args.rescale not in (None, "best"):
-        args.rescale = float(args.rescale)
+        try:
+            args.rescale = float(args.rescale)
+        except ValueError:
+            raise SystemExit(f"--rescale {args.rescale!r}: 'best' or a number")
 
     print(f"{len(grid)} variant(s) of {azr_name}:")
     checked = []
