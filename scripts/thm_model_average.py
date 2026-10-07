@@ -90,6 +90,7 @@ import itertools
 import json
 import math
 import os
+import re
 import shutil
 import sys
 import time
@@ -143,7 +144,7 @@ def build_spec(args):
     return spec
 
 
-def variant_grid(spec, pw_distortion=False):
+def variant_grid(spec, pw_distortion=False, project_dw=False):
     """[(label, settings)] over the product of the axes given."""
     axes = []
     if spec.get("radii"):
@@ -156,7 +157,8 @@ def variant_grid(spec, pw_distortion=False):
     out, seen = [], set()
     for combo in itertools.product(*[vals for _, vals in axes]):
         s = dict(zip([k for k, _ in axes], combo))
-        dw = s.get("vertex_model", "pw") == "dw"
+        # without a --vertex-model axis the project's own vertex decides
+        dw = s.get("vertex_model", "dw" if project_dw else "pw") == "dw"
         # R(E) (the distortion axis) is a pw notion: a dw vertex carries its
         # distortion itself
         if "distortion" in s and dw:
@@ -173,7 +175,13 @@ def variant_grid(spec, pw_distortion=False):
         if key in seen:
             continue
         seen.add(key)
-        out.append((label_of(s), s))
+        label = label_of(s)
+        # distinct values can sanitize to one label (a/b and a_b): keep apart
+        base, n = label, 1
+        while label in (l for l, _ in out):
+            n += 1
+            label = f"{base}~{n}"
+        out.append((label, s))
     return out
 
 
@@ -194,7 +202,9 @@ def label_of(s):
         bits.append("ls-" + s["lineshape"])
     if s.get("distortion", "-") != "-":
         bits.append("R-" + s["distortion"])
-    return "_".join(bits) or "project"
+    # the label names files (work/<label>.azr, output_<label>/): a ps=table:
+    # path or any other separator would make it a path
+    return re.sub(r"[^A-Za-z0-9_.+~=-]", "_", "_".join(bits)) or "project"
 
 
 def apply_variant(model, s, spec):
@@ -609,8 +619,16 @@ def fit_one_main(args):
 
 def copy_project(src_dir, dst_dir, azr_name):
     """The project directory without its outputs and other .azr files."""
+    dst = os.path.abspath(dst_dir)
+
     def ignore(d, names):
         skip = set()
+        for n in names:
+            # the destination itself, or a directory that holds it (--out
+            # inside the project): copying it would recurse into the copy
+            p = os.path.abspath(os.path.join(d, n))
+            if p == dst or dst.startswith(p + os.sep):
+                skip.add(n)
         if os.path.abspath(d) == os.path.abspath(src_dir):
             for n in names:
                 if n in ("output", "checks") or (n.endswith(".azr") and n != azr_name):
@@ -622,15 +640,29 @@ def copy_project(src_dir, dst_dir, azr_name):
 
 
 def priors_for(grid, rules):
-    """{label: prior} from rules {"axis=value": prior} (multiplied)."""
-    out = {}
-    for label, s in grid:
-        p = 1.0
-        for rule, val in rules.items():
-            k, _, v = rule.partition("=")
-            if k in s and str(s[k]) == v:
-                p *= float(val)
-        out[label] = p
+    """{label: prior} from rules {"axis=value": prior} (multiplied).  The axis
+    may be written as on the command line (vertex-model); a radius is compared
+    as a number (6.10 == 6.1).  A rule that matches no variant is refused: it
+    would leave every prior at 1 without a word."""
+    def norm(k, v):
+        k = k.replace("-", "_")
+        if k == "radius":
+            try:
+                v = _fmt_radius(v)
+            except ValueError:
+                pass
+        return k, v
+
+    out = {label: 1.0 for label, _ in grid}
+    for rule, val in rules.items():
+        k, _, v = rule.partition("=")
+        k, v = norm(k, v)
+        hit = [label for label, s in grid if k in s and str(s[k]) == v]
+        if not hit:
+            raise SystemExit(f"prior rule {rule!r} matches no variant "
+                             f"(axes: {sorted({a for _, s in grid for a in s})})")
+        for label in hit:
+            out[label] *= float(val)
     return out
 
 
@@ -697,7 +729,10 @@ def main(argv=None):
     project = os.path.abspath(args.project)
     src_dir, azr_name = os.path.split(project)
     spec = build_spec(args)
-    grid = variant_grid(spec, args.pw_distortion)
+    exps = AzrModel.from_file(project).thm_experiments()
+    project_dw = any(exps[n].get("vertexModel") == "dw"
+                     for n in (spec.get("experiment") or list(exps)) if n in exps)
+    grid = variant_grid(spec, args.pw_distortion, project_dw)
     rules = dict(spec.get("priors", {}))
     for p in args.prior:
         rule, _, w = p.rpartition(":")

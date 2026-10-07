@@ -118,6 +118,40 @@ try:
           ref.get("pw_ls-off_R-none") is False and ref.get("pw_ls-on_R-none")
           and ref.get("pw_ls-off_R-coulomb"), r.stdout)
 
+    # The script's helpers, without a subprocess (pure Python).
+    sspec = importlib.util.spec_from_file_location("thm_model_average", SCRIPT)
+    tma = importlib.util.module_from_spec(sspec)
+    sspec.loader.exec_module(tma)
+    # --optical on a project whose experiment is already dw: one variant per
+    # potential pair, not one collapsed (pw) variant
+    g = tma.variant_grid({"optical": ["ancai06/kd03", "daehnick80/kd03"]}, project_dw=True)
+    check("project already dw: the optical axis is kept",
+          [l for l, _ in g] == ["ancai06+kd03", "daehnick80+kd03"], g)
+    g = tma.variant_grid({"optical": ["ancai06/kd03", "daehnick80/kd03"]})
+    check("project pw: the optical axis collapses", len(g) == 1, g)
+    # a ps=table: path does not make the label (a file name) a path
+    g = tma.variant_grid({"ps": ["table:tabs/ps.dat", "hulthen:0-40"]})
+    check("labels are file names", all(os.sep not in l and "/" not in l for l, _ in g)
+          and len({l for l, _ in g}) == 2, g)
+    # prior rules as typed: CLI axis spelling, radius as a number; one that
+    # matches nothing is refused instead of leaving every prior at 1
+    g = tma.variant_grid({"radius_pairs": [1], "radii": [4.6, 6.1], "vertex_model": ["pw", "dw"]})
+    pr = tma.priors_for(g, {"radius=6.10": 0.5, "vertex-model=dw": 0.1})
+    check("prior rules: radius=6.10 and vertex-model=dw apply",
+          pr == {"r4.6_pw": 1.0, "r4.6_dw": 0.1, "r6.1_pw": 0.5, "r6.1_dw": 0.05}, pr)
+    try:
+        tma.priors_for(g, {"radius=7": 0.5})
+        check("a prior rule that matches nothing is refused", False)
+    except SystemExit:
+        check("a prior rule that matches nothing is refused", True)
+    # --out inside the project directory: no copy of the copy
+    inner = os.path.join(proj, "modelavg", "work")
+    tma.copy_project(proj, inner, AZR)
+    check("copy_project with the destination inside the source",
+          os.path.isfile(os.path.join(inner, AZR))
+          and not os.path.exists(os.path.join(inner, "modelavg")), os.listdir(inner))
+    shutil.rmtree(os.path.join(proj, "modelavg"))
+
     print("\n2. the run")
     try:
         import numpy                                             # noqa: F401
