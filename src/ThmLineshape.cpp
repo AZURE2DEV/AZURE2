@@ -89,6 +89,7 @@ double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config
   key.push_back(jgroup->GetJ());
   key.push_back(jgroup->GetPi());
   key.push_back(energy);
+  key.push_back(level->GetE());  // the ground-state test below
   const bool hybridOn = g_config ? g_config->useHybridMethod : false;
   for (int ch = 1; ch <= numChannels; ch++) {
     AChannel *channel = jgroup->GetChannel(ch);
@@ -117,8 +118,10 @@ double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config
       if (!channelFunc.IsClosed(localEnergy))
         particle += 2.0 * gamma * gamma * channelFunc.Penetrability(channel->GetL(), localEnergy);
     } else if (type == 'M' || type == 'E') {
-      // A ground-state transition parametrizes a moment, not a width.
-      if (std::fabs(energy - pair->GetExE()) < 1.0e-3 && jgroup->GetJ() == pair->GetJ(2) &&
+      // A ground-state transition parametrizes a moment, not a width.  Told
+      // by the level's energy as read, as CNuc::TransformOut does, so that a
+      // fit moving the level does not change what its gamma means.
+      if (std::fabs(level->GetE() - pair->GetExE()) < 1.0e-3 && jgroup->GetJ() == pair->GetJ(2) &&
           jgroup->GetPi() == pair->GetPi(2))
         continue;
       double pene = rmc ? 1.0 : std::pow(std::fabs(localEnergy) / hbarc, 2.0 * channel->GetL() + 1.0);
