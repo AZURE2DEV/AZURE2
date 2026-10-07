@@ -18,6 +18,8 @@
 #   (c) background: data made as s m + a0 + a1 E (m the model of run (a),
 #       E the c.m. energy) are fitted with n = 1/s, b_k = a_k/s recovered to
 #       1e-8 and chi2 ~ 0, and the fitted curve written is the model plus b(E);
+#       the same for background=const (a0 only) and background=quadratic
+#       (+ a2 E^2; b1, b2 to 1e-7);
 #   (d) what AZURE2 refuses (ERROR line, non-zero exit): the reserved key theta, a bad distortion,
 #       an unknown key or nuclide, a malformed value, partial kinematics, a
 #       segment in two experiments, a segment that is not THM or has a fixed
@@ -139,6 +141,41 @@ cp "$WORK/syn/"*.dat "$WORK/nobkg/data/"
 awk -v c="$(field "$WORK/nobkg/output/thm_experiments.out" chi2)" 'BEGIN { exit !(c > 1) }' \
   && ok "without the background the same data give chi2 > 1" || bad "no-background chi2 is small"
 
+# The other two forms: a constant and a quadratic background are recovered
+# the same way (data made with a0 only, and with a0 + a1 E + a2 E^2).
+bkgform() {  # bkgform NAME FORM A0 A1 A2: synthetic data, fit, and the recovered n, b0, b1, b2
+  mkdir -p "$WORK/syn_$1"
+  for s in 1 2; do
+    f=$([ $s = 1 ] && echo lc723_thm_points.dat || echo lc723_band_mid.dat)
+    awk -v s="$s" -v S="$S_TRUE" -v a0="$3" -v a1="$4" -v a2="$5" -v F="$SRC/data/$f" '
+      $1 == s { k++; y[k] = S * $3 + a0 + a1 * $2 + a2 * $2 * $2; z[k] = ($5 == 0) ? 0 : 0.05 * y[k] }
+      END { i = 0; while ((getline line < F) > 0) { split(line, t, " "); if (t[1] == "") continue; i++
+              printf "%s %s %.17e %.17e\n", t[1], t[2], y[i], z[i] } }' "$WORK/model.txt" > "$WORK/syn_$1/$f"
+  done
+  run "$1" "experiment[A] segments=1-2 background=$2"
+  cp "$WORK/syn_$1/"*.dat "$WORK/$1/data/"
+  (cd "$WORK/$1" && rm -rf output && mkdir output && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+  local X="$WORK/$1/output/thm_experiments.out"
+  near "$(field "$X" norm)" "$(awk -v s="$S_TRUE" 'BEGIN { printf "%.17e", 1 / s }')" 1e-8 \
+    && near "$(field "$X" b0)" "$(awk -v s="$S_TRUE" -v a="$3" 'BEGIN { printf "%.17e", a / s }')" 1e-8 \
+    && awk -v c="$(field "$X" chi2)" 'BEGIN { exit !(c != "" && c < 1e-8) }'
+}
+if bkgform bconst const "$A0" 0 0; then
+  ok "background=const: n and b0 = a0/s recovered, chi2 ~ 0"
+else
+  bad "background=const not recovered: $(tr -d '\r' < "$WORK/bconst/output/thm_experiments.out" | grep -E '^(norm|b0|chi2)' | tr '\n' ' ')"
+fi
+A2=0.047
+if bkgform bquad quadratic "$A0" "$A1" "$A2"; then
+  X="$WORK/bquad/output/thm_experiments.out"
+  near "$(field "$X" b1)" "$(awk -v s="$S_TRUE" -v a="$A1" 'BEGIN { printf "%.17e", a / s }')" 1e-7 \
+    && near "$(field "$X" b2)" "$(awk -v s="$S_TRUE" -v a="$A2" 'BEGIN { printf "%.17e", a / s }')" 1e-7 \
+    && ok "background=quadratic: n, b0, b1 and b2 = a_k/s recovered, chi2 ~ 0" \
+    || bad "background=quadratic: b1 $(field "$X" b1), b2 $(field "$X" b2)"
+else
+  bad "background=quadratic not recovered: $(tr -d '\r' < "$WORK/bquad/output/thm_experiments.out" | grep -E '^(norm|b0|chi2)' | tr '\n' ' ')"
+fi
+
 # (d) ----------------------------------------------------------------------
 echo "(d) refused"
 refuse() {  # refuse NAME MESSAGE-FRAGMENT BLOCK [AWK]
@@ -163,6 +200,7 @@ refuse bad_background "expected none, const, linear or quadratic" "experiment[A]
 refuse bad_segments "expected segment numbers" "experiment[A] segments=1,x"
 refuse bad_ebeam "Ebeam='-3'" "experiment[A] segments=1-2 beam=18O target=d spectator=n Ebeam=-3"
 refuse no_segments "segments= is required" "experiment[A] background=linear"
+refuse no_space "expected a space after ']'" "experiment[A]segments=1,2"
 refuse repeated_key "is given twice" "experiment[A] segments=1
 experiment[A] segments=2"
 refuse two_experiments "already in experiment\[A\]" "experiment[A] segments=1,2

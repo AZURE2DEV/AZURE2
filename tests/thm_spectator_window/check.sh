@@ -207,6 +207,8 @@ refuse no_table "cannot read the ps table" "experiment[A] segments=1,2 $KIN ps=t
 TABLE='20 1\n10 1\n' refuse table_order "strictly increasing" "experiment[A] segments=1,2 $KIN ps=table:ps.dat"
 TABLE='20 0\n40 0\n' refuse table_zero "zero in every row" "experiment[A] segments=1,2 $KIN ps=table:ps.dat"
 TABLE='20 1\n' refuse table_short "at least two rows" "experiment[A] segments=1,2 $KIN ps=table:ps.dat"
+TABLE='20 1\n30\n' refuse table_columns "line 2: expected two numbers" "experiment[A] segments=1,2 $KIN ps=table:ps.dat"
+TABLE='20 -1\n30 1\n' refuse table_negative "must be finite and >= 0" "experiment[A] segments=1,2 $KIN ps=table:ps.dat"
 refuse nodes_range "1 to 64" "experiment[A] segments=1,2 $KIN ps=hulthen:0-40 psNodes=65"
 refuse nodes_alone "psNodes= needs a ps window" "experiment[A] segments=1,2 $KIN psNodes=8"
 refuse twice "given twice" "experiment[A] segments=1,2 $KIN ps=hulthen:0-40

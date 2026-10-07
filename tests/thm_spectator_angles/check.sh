@@ -205,6 +205,9 @@ refuse() {  # refuse NAME MESSAGE-FRAGMENT BLOCK
 }
 printf '0.4 1.0\n1.0 2.0\n' > "$WORK/w.dat"
 printf '10 1\n' > "$WORK/short.dat"
+printf '10 1\n20\n' > "$WORK/onecol.dat"
+printf '10 1\n200 1\n' > "$WORK/far.dat"
+printf '20 1\n10 1\n' > "$WORK/back.dat"
 refuse no_distortion "with neither it has nothing to average" "$L spectatorAngles=cm:120-180"
 refuse table_distortion "with neither it has nothing to average" "$L distortion=table:$WP/w.dat spectatorAngles=cm:120-180"
 refuse both "exclude each other" "$L distortion=coulomb spectatorAngle=20 spectatorAngles=cm:120-180"
@@ -215,6 +218,9 @@ refuse range "expected thmin-thmax" "$L distortion=coulomb spectatorAngles=10-20
 refuse nodes "1 to 64" "$L distortion=coulomb spectatorAngles=cm:120-180 spectatorAngleNodes=65"
 refuse no_file "cannot read the angle table" "$L distortion=coulomb spectatorAngles=cm:table:$WP/none.dat"
 refuse short_table "at least two rows" "$L distortion=coulomb spectatorAngles=table:$WP/short.dat"
+refuse table_columns "line 2: expected two numbers" "$L distortion=coulomb spectatorAngles=table:$WP/onecol.dat"
+refuse table_angle "the angle must be 0-180 deg" "$L distortion=coulomb spectatorAngles=table:$WP/far.dat"
+refuse table_order "the angles must be strictly increasing" "$L distortion=coulomb spectatorAngles=table:$WP/back.dat"
 refuse reach_r "no spectator direction of spectatorAngles=cm:0-10 is accepted" "$L distortion=coulomb spectatorAngles=cm:0-10 ps=hulthen:0-40"
 refuse reach_dw "no spectator direction of spectatorAngles=cm:0-10 is accepted" "$L distortion=coulomb vertexModel=dw spectatorAngles=cm:0-10 ps=hulthen:0-40"
 

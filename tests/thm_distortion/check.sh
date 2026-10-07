@@ -35,8 +35,9 @@
 #       B(x+s);
 #   (g) global optical potentials (ThmOptical.h): opticalAA=ancai06 equals
 #       its ten numbers written out at E_aA (1e-6), kd03:extrapolate for
-#       n + 19F is warned and reported at both data ends, refusals (outside
-#       the range, a projectile the model does not describe, a bad name).
+#       n + 19F is warned and reported at both data ends, liang09 and
+#       bg71:extrapolate run for 3He + 18O, refusals (outside the range, a
+#       projectile the model does not describe, a bad name).
 #
 #   ./tests/thm_distortion/check.sh path/to/AZURE2
 
@@ -243,6 +244,22 @@ if ran g_extra; then
     && ok "kd03:extrapolate for n + 19F: warned" || bad "no extrapolation warning for kd03"
   grep -q "s + F: kd03:extrapolate (n on 19F) Woods-Saxon V=.* at E_lab = .* MeV (E = .* MeV) to V=" "$WORK/g_extra/log" \
     && ok "the s + F potential is reported at both ends of the data" || bad "no s + F potential at both ends"
+fi
+# The 3He potentials in an engine run (3He + 18O at E_3He = 19.2 MeV): liang09
+# inside its range, bg71 (A >= 40) extrapolated with a warning.  (Their
+# formulas: tests/reference/thm_optical_reference.py against RIPL-3; the 4He
+# ones, mcfadden66 and avrigeanu94, have no alpha channel in these projects.)
+run g_liang "experiment[A] segments=1,2 $KIN distortion=optical opticalAA=liang09 opticalSF=plane"
+if ran g_liang; then
+  grep -q "a + A: liang09 (3He on 18O) Woods-Saxon V=" "$WORK/g_liang/log" && ! grep -q "WARNING.*liang09" "$WORK/g_liang/log" \
+    && ok "opticalAA=liang09 for 3He + 18O: run, reported, no warning" || bad "liang09 for 3He + 18O"
+fi
+run g_bg "experiment[A] segments=1,2 $KIN distortion=optical opticalAA=bg71:extrapolate opticalSF=plane"
+if ran g_bg; then
+  grep -q "opticalAA=bg71 (Becchetti & Greenlees (1971)) is outside its validity range for 3He + 18O: target A = 18 (valid 40-208); extrapolated" "$WORK/g_bg/log" \
+    && ok "opticalAA=bg71:extrapolate for 3He + 18O: run, warned" || bad "no extrapolation warning for bg71"
+  same "$WORK/g_bg/output/$OUT" "$WORK/g_liang/output/$OUT" && bad "bg71 and liang09 give the same model" \
+    || ok "bg71 and liang09 give different R(E)"
 fi
 refuse g_range "Write kd03:extrapolate" "experiment[A] segments=1,2 $KINN distortion=optical opticalSF=kd03"
 refuse g_species "which it does not describe" "experiment[A] segments=1,2 $KINN distortion=optical opticalAA=kd03"
