@@ -655,8 +655,11 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
         param.useGaussianPrior = false;
         param.autoPrior = false;
 
-        // Determine category based on parameter name
-        if (paramName.contains("norm", Qt::CaseInsensitive)) {
+        // Determine category based on parameter name (a THM coherent
+        // background's names carry its experiment's, which may hold "norm").
+        if (paramName.startsWith("cbkg_")) {
+          param.category = "cbkg";
+        } else if (paramName.contains("norm", Qt::CaseInsensitive)) {
           param.category = "norm";
         } else if (paramName.contains("shift", Qt::CaseInsensitive)) {
           param.category = "shift";
