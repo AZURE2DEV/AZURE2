@@ -237,6 +237,10 @@ void AddSegTestDialog::setDataTypeCode(int code) {
 }
 
 void AddSegTestDialog::dataTypeChanged(int index) {
+  // Phase shifts and angular-distribution coefficients have no THM form (the
+  // engine reads their extra fields only for an isDiff of exactly 2 or 3).
+  thmCheck->setEnabled(index != 2 && index != 3);
+  if (index == 2 || index == 3) thmCheck->setChecked(false);
   if (index == 2) {
     angDistLabel->setVisible(false);
     angDistSpin->setVisible(false);

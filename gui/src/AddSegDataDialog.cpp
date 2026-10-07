@@ -317,6 +317,10 @@ void AddSegDataDialog::setDataTypeCode(int code) {
 }
 
 void AddSegDataDialog::dataTypeChanged(int index) {
+  // A phase shift has no THM form: the engine reads the phase J and l only
+  // for an isDiff of exactly 2, so a THM phase-shift line would be misread.
+  thmCheck->setEnabled(index != 2);
+  if (index == 2) thmCheck->setChecked(false);
   if (index == 2) {
     phaseJValueLabel->setVisible(true);
     phaseLValueLabel->setVisible(true);
