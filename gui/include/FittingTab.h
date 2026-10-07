@@ -2,15 +2,16 @@
 #define FITTINGTAB_H
 
 #include <QWidget>
-#include "ThmSettings.h"
 #include <QSignalMapper>
 #include <QPointer>
 #include <QTextStream>
+#include <QSet>
 #include "LevelsModel.h"
 #include "ChannelsModel.h"
 #include "SegmentsDataModel.h"
 
 class AZURESetup;
+struct ThmExperimentRecord;
 
 // Forward declarations
 class InfoDialog;
@@ -123,6 +124,10 @@ class FittingTab : public QWidget {
       with each one's start value and fixed flag. */
   QStringList coherentNames(const ThmExperimentRecord &record, QList<double> *values = nullptr,
                             QList<bool> *fixed = nullptr) const;
+  /// Every cbkg_* name of the project's experiments (coherentNames of each).
+  QSet<QString> coherentParameterNames() const;
+  /// The THM Background tab, shown when it has rows.
+  void showCoherentTab();
   AZURESetup *setup() const;
 
  public:

@@ -70,7 +70,7 @@ set(AZURESETUP_SOURCES
     AboutAZURE2Dialog.cpp InfoDialog.cpp InTabDocs.cpp
     IAEALevelData.cpp IAEALevelDialog.cpp NuclearPotentialTab.cpp
     ExforData.cpp ExforDialog.cpp ThmSettings.cpp ThmModelPage.cpp
-    ThmExperimentsPage.cpp ThmChannelsPage.cpp ThmWorkspace.cpp
+    ThmExperimentsPage.cpp ThmChannelsPage.cpp ThmWorkspace.cpp AZURESetupThm.cpp FittingTabThm.cpp
 )
 
 set(AZURESETUP_HEADERS

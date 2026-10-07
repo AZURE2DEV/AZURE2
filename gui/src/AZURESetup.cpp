@@ -14,7 +14,6 @@
 #include <algorithm>
 
 #include "AZURESetup.h"
-#include "ThmWorkspace.h"
 #include "FittingTab.h"
 #include "EditChecksDialog.h"
 #include "EditDirsDialog.h"
@@ -369,13 +368,7 @@ bool AZURESetup::readFile(QString filename) {
   }
   file2.close();
 
-  // The <thm> block may sit anywhere (the engine searches the whole file), so
-  // it gets a pass of its own from the top.
-  QFile file3(filename);
-  if (!file3.open(QIODevice::ReadOnly)) return false;
-  QTextStream in3(&file3);
-  if (!readThmBlock(in3, thmBlockLines, hasThmBlock)) return false;
-  file3.close();
+  if (!readThmContent(filename)) return false;
 
   GetConfig().configfile = QDir::fromNativeSeparators(info.absoluteFilePath()).toStdString();
   setWindowTitle(QString("AZURE2 -- %1").arg(QString::fromStdString(GetConfig().configfile)));
@@ -395,60 +388,6 @@ bool AZURESetup::readFile(QString filename) {
   updateRecent();
 
   return true;
-}
-
-bool AZURESetup::readThmBlock(QTextStream &in, QStringList &lines, bool &present) {
-  lines.clear();
-  present = false;
-  QString line;
-  // Same tests as Config::ReadThmBlock: the block opens at the first line whose
-  // first non-blank characters are <thm>, and closes at a line that is </thm>
-  // once a # comment and surrounding blanks are removed.
-  while (!in.atEnd()) {
-    line = in.readLine();
-    if (line.trimmed().startsWith(QString("<thm>"))) {
-      present = true;
-      break;
-    }
-  }
-  if (!present) return true;
-  while (!in.atEnd()) {
-    line = in.readLine();
-    QString code = line;
-    int hash = code.indexOf('#');
-    if (hash >= 0) code.truncate(hash);
-    if (code.trimmed() == QString("</thm>")) return true;
-    lines << line;
-  }
-  lines.clear();
-  present = false;
-  return false;
-}
-
-void AZURESetup::writeThmBlock(QTextStream &out, const QStringList &lines) {
-  out << "<thm>" << Qt::endl;
-  for (const QString &line : lines) out << line << Qt::endl;
-  out << "</thm>" << Qt::endl;
-}
-
-bool AZURESetup::thmSettings(ThmSettings &settings, QString *error) const {
-  if (!hasThmBlock) {
-    settings = ThmSettings();
-    return true;
-  }
-  return ThmSettings::parse(thmBlockLines, settings, error);
-}
-
-void AZURESetup::setThmSettings(const ThmSettings &settings) {
-  ThmSettings current;
-  if (thmSettings(current) && current == settings) return;  // untouched: keep the block verbatim
-  if (settings.isDefault()) {
-    hasThmBlock = false;
-    thmBlockLines.clear();
-    return;
-  }
-  thmBlockLines = settings.compose(hasThmBlock ? thmBlockLines : QStringList());
-  hasThmBlock = true;
 }
 
 QString AZURESetup::projectDirectory() {
@@ -485,14 +424,7 @@ QString renumberedSegmentList(const QString &text, const QVector<int> &newNumber
 }  // namespace
 
 void AZURESetup::followDataSegments(const QVector<int> &newNumber) {
-  QStringList notes;
-  ThmSettings thm;
-  if (hasThmBlock && thmSettings(thm)) {
-    const QStringList removed = thm.renumberSegments(newNumber, false);
-    setThmSettings(thm);
-    if (!removed.isEmpty())
-      notes << tr("THM experiment %1 removed: no segments left.").arg(removed.join(", "));
-  }
+  QStringList notes = followThmSegments(newNumber, false);
   TargetIntModel *effects = targetIntTab->getTargetIntModel();
   const QList<TargetIntData> lines = effects->getLines();
   int dropped = 0;
@@ -510,28 +442,6 @@ void AZURESetup::followDataSegments(const QVector<int> &newNumber) {
   if (dropped) notes << tr("%n experimental effect line(s) removed: no segments left.", "", dropped);
   fittingTab->followSegments(newNumber);
   if (!notes.isEmpty()) statusBar()->showMessage(notes.join(' '));
-}
-
-void AZURESetup::followTestSegments(const QVector<int> &newNumber) {
-  ThmSettings thm;
-  if (hasThmBlock && thmSettings(thm)) {
-    thm.renumberSegments(newNumber, true);
-    setThmSettings(thm);
-  }
-}
-
-void AZURESetup::editThmWorkspace() {
-  ThmSettings current;
-  QString error;
-  if (!thmSettings(current, &error)) {
-    QMessageBox::warning(this, tr("THM Workspace"),
-                         tr("The <thm> block of this project has a line the engine would refuse:\n%1\n"
-                            "Correct it in the .azr file; the block is kept as it is.")
-                             .arg(error));
-    return;
-  }
-  ThmWorkspace workspace(this, current, this);
-  workspace.exec();  // Accept installs the pages' values (ThmWorkspace::apply)
 }
 
 bool AZURESetup::readLastRun(QTextStream &inStream) {

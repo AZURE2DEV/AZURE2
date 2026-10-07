@@ -166,6 +166,10 @@ class AZURESetup : public QMainWindow {
   void createMenus();
   void updateRecent();
   void updateNuclearPotentialTabVisibility();  // Show/hide Nuclear Potential tab based on config
+  /// Reads the <thm> block of `filename` (AZURESetupThm.cpp); false if it is not terminated.
+  bool readThmContent(const QString &filename);
+  /// The <thm> block follows a renumbering of the data (test) segments; the notes for the status bar.
+  QStringList followThmSegments(const QVector<int> &newNumber, bool test);
 
   Config config;
 
