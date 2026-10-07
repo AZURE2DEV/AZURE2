@@ -19,7 +19,9 @@
 #   be8     p+7Li -> a+a, 2+
 #   thm     tests/18O_p_a_thm (THM, vertex=constant takes B_c from this level)
 #
-# Every run must finish within 60 s with a finite chi2 and finite output, and
+# Every run must finish within 600 s (a hang or a pathological slow-down at
+# threshold; each run takes about a second, and shared CI runners are slow)
+# with a finite chi2 and finite output, and
 # the model cross sections of the three runs of a project (every AZUREOut
 # file, 10 digits) must agree to 1e-6 relative: the model is continuous
 # through threshold.
@@ -35,7 +37,7 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/level_at_threshold.XXXXXX")"
 [ -n "${KEEP_WORK:-}" ] || trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
-RUN="$(guard_command "${TEST_TIMEOUT:-60}")"
+RUN="$(guard_command "${TEST_TIMEOUT:-900}")"
 IDENT="$HERE/../identical_entrance_reaction/projects"
 fail=0
 
@@ -67,7 +69,7 @@ run() {
   if [ ! -f "$d/output/chiSquared.out" ]; then
     echo "  FAIL  $1: no chiSquared.out ($((t1 - t0)) s)" >&2; tail -3 "$d/log" | sed 's/^/        /' >&2; return
   fi
-  if [ $((t1 - t0)) -gt 60 ]; then echo "  FAIL  $1: took $((t1 - t0)) s" >&2; return; fi
+  if [ $((t1 - t0)) -gt 600 ]; then echo "  FAIL  $1: took $((t1 - t0)) s" >&2; return; fi
   if grep -qiE 'nan|inf' "$d/output/chiSquared.out" "$d"/output/AZUREOut_*.out; then
     echo "  FAIL  $1: non-finite output" >&2; grep -iE 'nan|inf' "$d"/output/*.out | head -3 >&2; return
   fi

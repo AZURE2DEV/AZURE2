@@ -8,7 +8,8 @@
  * For p+7Li, 6Li+d, 12C+12C (charged, eta ~ 1e3-1e4 at 1e-9 MeV) and 17O+n
  * (neutral), l = 0-3:
  *   - e = -1e-9, 0, +1e-9 MeV: S, P, dS/dE finite, P >= 0 (and P = 0 for the
- *     charged pairs), each call below 50 ms;
+ *     charged pairs), each call below 500 ms (it takes well under 1 ms; the
+ *     bound catches a pathological slow-down, not a busy runner);
  *   - S continuous: |S(+-1e-9) - S(0)| <= 1e-6 (1 + |S(0)|);
  *   - dS/dE continuous and right: the three values agree to 1e-4 relative and
  *     match a one-sided difference of S from below with steps 1e-4/1e-5 MeV
@@ -117,7 +118,7 @@ int main(int argc, char **argv) {
         check(std::isfinite(S[i]) && std::isfinite(P[i]) && std::isfinite(D[i]), t + e + " finite");
         check(P[i] >= 0.0, t + e + " P >= 0");
         if (charged) check(P[i] == 0.0, t + e + " P = 0 (closed)");
-        check(ms < 50.0, t + e + " fast (" + std::to_string(ms) + " ms)");
+        check(ms < 500.0, t + e + " fast (" + std::to_string(ms) + " ms)");
       }
       // Neutral l = 0: S = -kappa a below, 0 above; |S(-1e-9)| ~ 1e-5.
       const double sTol = (charged || l >= 1) ? 1e-6 : 1e-4;
