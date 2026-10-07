@@ -143,7 +143,9 @@ with tempfile.TemporaryDirectory() as tmp:
             # --- residual Jacobian vs central differences.
             r, Jac = m.residual_jacobian(x)
             Jac = np.asarray(Jac, float)
-            Jfd = fd_jacobian(lambda z: np.asarray(m.residual_jacobian(z)[0], float), x, h)
+            # three-point differences: a tenth of the gradient's step keeps the
+            # truncation error below the tolerance on 13N's sharp 1/2+ resonance
+            Jfd = fd_jacobian(lambda z: np.asarray(m.residual_jacobian(z)[0], float), x, 0.1 * h)
             d = rel(Jac, Jfd)
             check(f"{name}: residual Jacobian = finite differences (rel {d:.1e})", d < max(1e-4, 3.0 * ref))
             check(f"{name}: sum(r^2) = chi2", abs(np.sum(np.asarray(r) ** 2) - val) < 1e-6 * val)
