@@ -103,7 +103,19 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
 - **Several sessions can be open at once**, each an independent engine that
   enters its own directory per call — that is how `save_fit` verifies what it
   wrote. The engine is not *thread*-safe, so parallelism is one session per
-  process, not per thread.
+  process, not per thread. **True only from dev 2026-10-07 on** (the commit
+  after 8cdc841): before it, the external-capture amplitude cache was one
+  process-global object with session-blind keys, so the FIRST session opened
+  in a process computed wrong capture cross sections from the moment a SECOND
+  session on the same model was created (data beside extrapolation, or two
+  data sessions), by up to 28 %, silently, for the rest of the process --
+  found on the 8Be+a photodisintegration rate (native chi2 148.55 right, probe
+  6718 instead of 231.71). Sessions opened and closed one after another were
+  fine. Any multi-session result (a custom objective combining a data session
+  with an extrapolation probe, `save_fit`'s verification while the fit session
+  is open, rmfit's sharded workers if they ever shared a process) computed
+  with an older `_azure2*.so` in one process is suspect for capture channels;
+  check the `.so` date. Regression test: `tests/pyazr/shared_state_test.py`.
 - CLI mode does **not** read Runtime Options from the `.azr` — pass them as
   flags every time (`--gsl-coul`, `--ignore-externals`, …). **Three
   parametrizations** (since 2026-10-06, dev 397668d): the Brune
@@ -278,6 +290,10 @@ worker gets its own, under either `spawn` or `fork`.
   1 Brune, 2 Park, 0 standard) — a vector from one is meaningless in another.
 - **plain methods** (`calculate`, `calculate_chi2`) take the transformed
   **physical** vector `m.params` (level energies in MeV, partial widths in eV).
+- `calculate_rwa` returns, per segment, the observable the chi-squared is
+  built from: the E1 or E2 component for an `angle-integrated-E1`/`-E2`
+  segment (since 2026-10-07; before, the total, so it disagreed with
+  `residual_jacobian` on those segments), the total otherwise.
 - `m.transform_rwa(x)` maps rwa → physical; it takes either the full free
   vector or just the leading R-matrix block (energies + widths), so the
   norm/shift tail can be sliced off:
@@ -2026,3 +2042,11 @@ complete:
   (shared line == separate lines, fails on the old binary). Any fit with a multi-segment
   convolution line or a convolved composite segment done with an older binary used the
   narrower kernel; old binary + one line per segment reproduces the fixed result exactly.
+
+- 2026-10-07 (22Ne+a/10-6-26_claude_refit) -- CORRECTION to "A norm or shift that is NOT varied
+  comes from the .azr field; the .sav value is ignored": for ENERGY SHIFTS that is no longer true
+  with the current binary. Every param.sav written by a fit lists segment_<k>_energy_shift (and
+  _shift_sqrt) for every segment, varied or not, and a run given that file applies the listed
+  value. A fixed +2.75 keV centring shift set in the .azr was silently replaced by the 0 in the
+  refit's param.sav (Jaeger chi2 39,315 instead of 7,905). When a fixed shift is set or changed in
+  the .azr, also change it in (or delete it from) any parameter file the run will read.
