@@ -10,3 +10,10 @@ add_executable(beam_profile_reference_test beam_profile_reference_test.cpp)
 target_link_libraries(beam_profile_reference_test PRIVATE AZURE2Core)
 
 add_test(NAME beam_profile_reference COMMAND beam_profile_reference_test)
+
+# Parsing a <targetInt> line saved by an older version, which ends after the Q
+# coefficients.
+add_executable(target_effect_legacy_line_test target_effect_legacy_line_test.cpp)
+target_link_libraries(target_effect_legacy_line_test PRIVATE AZURE2Core)
+
+add_test(NAME target_effect_legacy_line COMMAND target_effect_legacy_line_test)

@@ -28,34 +28,37 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
   transitionWidth_ = 0.0;
   autoTolerance_ = 0.0;
 
-  int isActive;
+  // Zero-initialized: a line written by an older version stops after the
+  // Q coefficients, and a failed extraction leaves later fields untouched, so
+  // an uninitialized count would drive the read loops below.
+  int isActive = 0;
   std::string segmentList;
-  int numIntegrationPoints;
-  int isConvolution;
-  double sigma;
-  int isTargetIntegration;
-  double density;
+  int numIntegrationPoints = 0;
+  int isConvolution = 0;
+  double sigma = 0.;
+  int isTargetIntegration = 0;
+  double density = 0.;
   std::string stoppingPowerEq;
-  int numParameters;
+  int numParameters = 0;
   vector_r parameters;
-  int isQCoefficients;
-  int numQCoefficients;
+  int isQCoefficients = 0;
+  int numQCoefficients = 0;
   vector_r qCoefficients;
-  int isConvCoefficients;
-  int numConvCoefficients;
+  int isConvCoefficients = 0;
+  int numConvCoefficients = 0;
   vector_r convCoefficients;
   std::string convolutionEq;
 
   stream >> isActive >> segmentList >> numIntegrationPoints >> isConvolution >> sigma >> isTargetIntegration >> density >> stoppingPowerEq >> numParameters;
   if (!stream.eof()) {
-    for (int i = 0; i < numParameters; i++) {
+    for (int i = 0; i < numParameters && stream.good(); i++) {
       double tempParameter;
       stream >> tempParameter;
       parameters.push_back(tempParameter);
     }
 
     stream >> isQCoefficients >> numQCoefficients;
-    for (int i = 0; i < numQCoefficients; i++) {
+    for (int i = 0; i < numQCoefficients && stream.good(); i++) {
       double tempQCoefficient;
       stream >> tempQCoefficient;
       qCoefficients.push_back(tempQCoefficient);
@@ -64,7 +67,7 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
     qCoefficients_ = qCoefficients;
 
     stream >> isConvCoefficients >> convolutionEq >> numConvCoefficients;
-    for (int i = 0; i < numConvCoefficients; i++) {
+    for (int i = 0; i < numConvCoefficients && stream.good(); i++) {
       double tempConvCoefficient;
       stream >> tempConvCoefficient;
       convCoefficients.push_back(tempConvCoefficient);
