@@ -298,6 +298,26 @@ worker gets its own, under either `spawn` or `fork`.
   vector or just the leading R-matrix block (energies + widths), so the
   norm/shift tail can be sliced off:
   `nR = 1 + max(p.free_index for p in m.parameters if p.kind in ("energy","width") and not p.fixed and p.free_index is not None)`.
+  **It RETURNS only that block — length `nR`, indexed by `free_index`** — whatever
+  the input length. Confirmed 2026-10-08 on the 12C+a production model: 365 free
+  parameters (14 energies and 69 widths interleaved over free_index 0–82, then
+  264 norms, then 18 shifts); `transform_rwa` returns 83 for an input of 365, 83
+  or 69 alike, and `out[p.free_index]` is the physical value for every parameter
+  in the block.
+- **Never feed a `transform_rwa` result back into `calculate`, `calculate_sfactor`
+  or `calculate_chi2`.** Those take the FULL physical free vector. Since dev
+  2026-10-08 (the commit after fc69e3b) every free-vector entry point of the
+  binding checks the length and raises `AZURE2Error: <call>: expected the free
+  parameter vector (N values ...), got n`; before it they accepted a short one
+  *silently* — no exception, 400 segments returned as usual — and the missing
+  normalizations and energy shifts were then whatever the engine last held. The damage is selective, which is what makes it dangerous:
+  S-factors and cross sections come out right, because they do not use the norms,
+  while chi-squared is nonsense. Seen 2026-10-08: a scan that passed the 83-vector
+  to `calculate` gave a total chi2 of 1e34 and sent the 15N+p data sets to 1e12
+  while one alpha ANC was the only thing being changed, and the chi2 was
+  non-monotonic in it — the signature to watch for. Change a physical value by
+  editing the `.azr` and rebuilding the model, and keep every numeric call on the
+  full free rwa vector.
 
 Both vectors hold only the **free** parameters, in `.azr` order:
 `p.free_index` is the position in that vector, `p.index` the position among all
@@ -2020,6 +2040,42 @@ complete:
   narrower window moved the model by <= 1.5e-3 (chi2 247.5 -> 248.9 of 111 points), which
   is also the size of the +-3 sigma truncation itself. The kernel is renormalized by its own
   integral over the window, so a constant cross section is always reproduced exactly.
+
+- 2026-10-08 -- USER-DEFINED NUMERICAL RESOLUTION FUNCTION (SAMMY UDR) in AZURE2, branch
+  `feature/udr-resolution` (worktree `~/AZURE2-udr`, separate build dir). A `<targetInt>` line
+  can end with `udr "<file>" L_m burstFWHM_ns channel_ns centred`: the file is SAMMY's UDR
+  format (text, a line of hyphens, then blocks "energy_eV" + "(delay_us, density)" pairs,
+  blank-line separated), which is what n_TOF distributes (`RF_EAR1_v2_CORR.txt`: 600 energies
+  x 9000 delays, 146 MB; only the blocks within a decade of the segment are read). Semantics
+  copied from SAMMY's mudr3/mudr2: linear interpolation between the two bracketing tabulated
+  energies, re-centring on the centroid (SAMMY always does; `centred 0` switches it off),
+  Gaussian burst and rectangular channel in time, and per-point weights from the EXACT integral
+  of the piecewise-linear kernel against hat functions of the sub-points on the delay axis.
+  Delay -> energy: t(E') = t(E0) - tau with relativistic t(E) = L/v, so a positive delay maps
+  to a HIGHER true energy (moderated neutrons look slower). Channel width -n means n bins per
+  decade (n_TOF: 10 below 300 keV, 100 above). Reference test `tests/reference/
+  udr_reference_test.cpp` (moments, centring, widths in quadrature, interpolation, kinematics);
+  GUI round trip in `tests/gui/target_int_tab_test.cpp`; `AzrModel.add_target_effect(udr_file=,
+  flight_path=, udr_burst=, udr_channel=, udr_centred=)`. The analytic Jacobian needs nothing
+  new: `GradTargetEffectAdjoint` finite-differences the combiner per sub-point.
+  CAVEATS: (1) the 14N(n,p) Torres-Sanchez 2023 data in 11B+a are from n_TOF EAR-2 (L =
+  19.75 m, DSSSD) -- the uploaded file is the EAR1 response, so it is a mechanism test only;
+  the EAR2 RF file is needed for the real fit -- and per n_TOF-PUB-2021-001 (now in ~/SAMMY)
+  there is NO general EAR2 file: it is made per experiment (flight path, sample size, alignment)
+  with the Transport Code + RF2sammy at CERN, so ask the authors for the one their SAMMY fit
+  used, or get EOS access (`11B+a/10-8-26_udr_ntof/readme` has the paths). (2) The n_TOF files
+  ALREADY CONTAIN THE PROTON BURST (Transport Code `-S 7e-9`; the EAR1 file's delay rms stays
+  6-7 ns up to 500 MeV, where moderation is nil): use `burstFWHM 0` for them, and the HI (7 ns)
+  and LI (14 ns) pulse types have separate files. Check a new file by the width of its top-energy
+  blocks. (3) n_TOF's own EAR2 validation (Dec 2022 talk, ~/SAMMY) does NOT re-centre the RF
+  in SAMMY and fits L0 instead -> `centred 0` with L = the length the data's TOF->E used; use
+  `centred 1` only if that L already includes the mean lambda. (4) The kernel is evaluated at
+  the point's NOMINAL energy (as SAMMY does), not at each sub-point's true energy. (5) One
+  channel value per line: n_TOF DSSSD data are 10 bpd below 300 keV and 100 above -- split the
+  segment at 300 keV if the low part ever matters. (6) Validation and benchmark runs go to the
+  queue (user instruction 2026-10-08): `13C+a/10-8-26_udr_validation` (synthetic Gaussian-in-
+  time UDR vs numpy fold on the Cierjacks segment, 7.6e-4 worst rel. diff) and
+  `11B+a/10-8-26_udr_ntof` (analytic sigma(E) vs UDR on segment 103).
 
 - **A regression reference is not a correctness check.** `tests/run_tests.sh` pins each
   project's chi-squared against a number this code produced, so it catches a change and
