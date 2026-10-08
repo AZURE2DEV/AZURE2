@@ -737,10 +737,13 @@ bool CNuc::TransformIn(const Config &configure) {
             }
           }
           // Park's J_lambda,lambda = 1 - sum_c gamma_c^2 dS_c/dE over every particle
-          // channel: the observed-width channels (denom / 2 = 1 - sum their
-          // gamma_obs^2 dS/dE) and the amplitude-input ones (numer - 1 = sum
-          // their gamma^2 dS/dE, already Park amplitudes in that formalism).
-          const double parkNorm = denom / 2.0 - (numer - 1.0);
+          // channel.  An amplitude-input channel (gammaIsRWA) holds Brune's
+          // amplitude in either mode, so that a file means the same model in
+          // both; its Park amplitude is gamma sqrt(J).  With the observed-width
+          // channels contributing denom / 2 = 1 - sum Gamma dS/dE / (2 P) and
+          // the amplitude-input ones J (numer - 1), J = denom / 2 - J (numer - 1),
+          // i.e. J = denom / (2 numer): Brune's 1 / (1 + sum gamma^2 dS/dE).
+          const double parkNorm = denom / (2.0 * numer);
           if (park && parkNorm <= 0.) {
             // In Brune's parametrization this limit is only reached for an
             // infinite reduced width; in Park's it is an ordinary point of
@@ -812,6 +815,9 @@ bool CNuc::TransformIn(const Config &configure) {
             if (theChannel->GetRadType() != 'F' && theChannel->GetRadType() != 'G') {
               if (!passThrough[ch - 1])
                 tempGammas[ch - 1] = sqrt(fabs(tempGammas[ch - 1] / penes[ch - 1] * numer / denom));
+              else if (park)
+                // Brune's amplitude as read -> Park's (see parkNorm above).
+                tempGammas[ch - 1] *= sqrt(fabs(parkNorm));
             } else if (park)
               // The input beta-decay feeding amplitude is Brune's.  It rescales
               // with the basis state like every other amplitude of the level,
@@ -2265,6 +2271,7 @@ void CNuc::PrintTransformParams(const Config &configure) {
 /* Gets the transformet parameters*/
 
 vector_r CNuc::GetTransformParams(const Config &configure) {
+  const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   vector_r params;
   for (int j = 1; j <= this->NumJGroups(); j++) {
     JGroup *theJGroup = this->GetJGroup(j);
@@ -2280,7 +2287,12 @@ vector_r CNuc::GetTransformParams(const Config &configure) {
           // amplitude: return it as-is (physical-convention internal
           // amplitude; equals the fit amplitude under Brune) so
           // saving fitted values never flips the input convention.
-          params.push_back(theLevel->GetTransformGamma(ch));
+          // That amplitude is Brune's in both modes (TransformIn): under
+          // Park the fit amplitude is gamma_Brune sqrt(J).
+          double gamma = theLevel->GetTransformGamma(ch);
+          if (park && theLevel->IsInRMatrix() && theLevel->GetParkNorm() > 0.0)
+            gamma /= sqrt(theLevel->GetParkNorm());
+          params.push_back(gamma);
         } else if (localEnergy < 0.0 && theChannel->GetRadType() == 'P') {
           int tempSign = (theLevel->GetBigGamma(ch) < 0) ? (-1) : (1);
           params.push_back(tempSign * sqrt(fabs(theLevel->GetBigGamma(ch))));

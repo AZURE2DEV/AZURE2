@@ -962,7 +962,10 @@ class azure2:
         ``include_fixed`` of every parameter.  A *fixed* width holds its
         reduced-width amplitude (as in the CLI's fits), so its physical value
         is not constant: it follows the level's other widths through the
-        Brune denominator ``1 + sum_c gamma_c^2 dS_c/dE``.
+        Brune denominator ``1 + sum_c gamma_c^2 dS_c/dE``.  Under Park
+        (``use_park``) the amplitude is the observed width and stays put.  A
+        channel entered as an amplitude (``gammaIsRWA``) is returned as
+        Brune's amplitude in both modes, the convention of the .azr.
         """
         return self.sess.transform_all_rwa(params, include_fixed=bool(include_fixed))
 
