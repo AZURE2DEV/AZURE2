@@ -49,14 +49,34 @@ namespace {
 // calling session's Config for the duration of the call and puts back whatever
 // was there before, so sessions cannot silently reconfigure each other.
 struct ConfigScope {
-  explicit ConfigScope(Config *c) :
-    previous_(g_config) { g_config = c; }
-  ~ConfigScope() { g_config = previous_; }
+  // Besides the Config, every call swaps in the session's own external-capture
+  // amplitude cache.  `g_ecAmplitudeCache` is process-global and its keys
+  // (k-group, EC m-group, entrance, exit, segment key) say nothing about which
+  // session they belong to, so with one shared object a second session on the
+  // same model -- an extrapolation grid beside a data session, say -- first
+  // deleted the first session's entries (InitializeECAmplitudeCache) and then
+  // filled the cache under colliding keys, and the first session interpolated
+  // its capture amplitudes from the wrong grid: residuals off by up to 28 %,
+  // silently, for as long as the process lived (8Be+alpha, 2026-10-07).
+  // `slot` is the session's cache pointer; whatever the call leaves in the
+  // global (Initialize re-creates it) is captured back into the slot on exit.
+  ConfigScope(Config *c, ECAmplitudeCache **slot) :
+    previous_(g_config), previousCache_(g_ecAmplitudeCache), slot_(slot) {
+    g_config = c;
+    g_ecAmplitudeCache = *slot_;
+  }
+  ~ConfigScope() {
+    *slot_ = g_ecAmplitudeCache;
+    g_ecAmplitudeCache = previousCache_;
+    g_config = previous_;
+  }
   ConfigScope(const ConfigScope &) = delete;
   ConfigScope &operator=(const ConfigScope &) = delete;
 
  private:
   Config *previous_;
+  ECAmplitudeCache *previousCache_;
+  ECAmplitudeCache **slot_;
 };
 
 // Convert a std::vector<double> to a new float64 numpy array (a copy, so the
@@ -134,7 +154,7 @@ class Session {
     config_->paramMask |= Config::USE_API;  // silence the "Calculating ..." chatter
     apply_options(*config_, opt);
 
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
 
     // The API stub used to guard the CLI's reads against --use-api; the binding
     // is the API, so mirror the checks main() performed for a headless run.
@@ -160,6 +180,10 @@ class Session {
     // another is live must not pull the config out from under it.
     if (g_config == config_) g_config = nullptr;
     if (config_ != nullptr) delete config_;
+    if (ecCache_ != nullptr) {
+      if (g_ecAmplitudeCache == ecCache_) g_ecAmplitudeCache = nullptr;
+      delete ecCache_;
+    }
   }
 
   Session(const Session &) = delete;
@@ -184,21 +208,21 @@ class Session {
   // -- lifecycle -----------------------------------------------------------
 
   bool rebuild() {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     return api_->Rebuild();
   }
 
   bool write_output_files() {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     return api_->WriteOutputFiles();
   }
 
   bool initialize() {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     return api_->Initialize() == 0;
   }
   bool calculate_external_capture() {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     return api_->CalculateExternalCapture();
   }
 
@@ -207,7 +231,7 @@ class Session {
   void set_data() { api_->SetData(); }
   void set_extrap() { api_->SetExtrap(); }
   bool set_radius(int idx, double radius) {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     return api_->SetRadius(idx, radius);
   }
 
@@ -282,7 +306,7 @@ class Session {
   // -- data bookkeeping ------------------------------------------------------
 
   int update_data() {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     return api_->UpdateData();
   }
   void update_norms() { api_->UpdateNorms(); }
@@ -335,17 +359,17 @@ class Session {
   // -- segment updates (return the number of segments) ------------------------
 
   int update_segments(py::array_t<double, py::array::forcecast> p) {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
     return api_->UpdateSegments(v);
   }
   int update_segments_rwa(py::array_t<double, py::array::forcecast> p) {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
     return api_->UpdateSegmentsRWA(v);
   }
   int update_segments_all_rwa(py::array_t<double, py::array::forcecast> p) {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
     return api_->UpdateSegmentsAllRWA(v);
   }
@@ -356,7 +380,7 @@ class Session {
     vector_r v = to_vector(p), out;
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_);
+      ConfigScope guard(config_, &ecCache_);
       out = api_->TransformRWAParameters(v);
     }
     return to_array(out);
@@ -365,7 +389,7 @@ class Session {
     vector_r v = to_vector(p), out;
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_);
+      ConfigScope guard(config_, &ecCache_);
       out = api_->TransformAllRWAParameters(v);
     }
     return to_array(out);
@@ -374,17 +398,17 @@ class Session {
   // -- chi-squared and derivatives -------------------------------------------
 
   double calculate_chi2_rwa(py::array_t<double, py::array::forcecast> p) {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
     return api_->CalculateChi2RWA(v);
   }
   double calculate_chi2_physical(py::array_t<double, py::array::forcecast> p) {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
     return api_->CalculateChi2Physical(v);
   }
   py::array_t<double> park_norms(py::array_t<double, py::array::forcecast> p) {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
     return to_array(api_->ParkNorms(v));
   }
@@ -392,7 +416,7 @@ class Session {
     vector_r v = to_vector(p), out;
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_);
+      ConfigScope guard(config_, &ecCache_);
       out = api_->CalculateChi2GradRWA(v);
     }
     return to_array(out);
@@ -401,7 +425,7 @@ class Session {
     vector_r v = to_vector(p), out;
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_);
+      ConfigScope guard(config_, &ecCache_);
       out = api_->CalculateResidualJacobianRWA(v);
     }
     return to_array(out);
@@ -410,7 +434,7 @@ class Session {
     vector_r v = to_vector(p), out;
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_);
+      ConfigScope guard(config_, &ecCache_);
       out = api_->CalculateModelGradientsRWA(v);
     }
     return to_array(out);
@@ -422,7 +446,7 @@ class Session {
     vector_r v = to_vector(request), out;
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_);
+      ConfigScope guard(config_, &ecCache_);
       out = api_->GetCoulombFunctions(v);
     }
     return to_array(out);
@@ -431,7 +455,7 @@ class Session {
     vector_r v = to_vector(request), out;
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_);
+      ConfigScope guard(config_, &ecCache_);
       out = api_->GetECIntegrals(v);
     }
     return to_array(out);
@@ -447,6 +471,7 @@ class Session {
 
  private:
   Config *config_;
+  ECAmplitudeCache *ecCache_ = nullptr;  // this session's external-capture amplitude cache
   AZUREAPI *api_;
 };
 

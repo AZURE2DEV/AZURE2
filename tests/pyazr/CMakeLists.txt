@@ -66,3 +66,10 @@ add_test(NAME pyazr_sav_readers
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/sav_readers_test.py)
 set_tests_properties(pyazr_sav_readers PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Two sessions in one process share no state: a data session's residuals are
+# unchanged by an extrapolation (or second data) session opened beside it.
+add_test(NAME pyazr_shared_state
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shared_state_test.py)
+set_tests_properties(pyazr_shared_state PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

@@ -1423,23 +1423,44 @@ class azure2:
         return [self._unpack_angular_dists(s.calculated_angular_dists(i))
                 for i in range(nsegments)]
 
-    def calculate(self, params):
-        """Calculated observable per segment, from a physical parameter vector. Cross sections are centre-of-mass, in b or b/sr."""
+    def _segment_values(self, i):
+        """The calculated observable of result segment ``i`` -- the E1 or E2
+        component for an ``angle-integrated-E1`` / ``-E2`` data segment, which is
+        what its chi-squared and residuals are built from, the total otherwise.
+
+        The engine stores the total and the two multipole components side by
+        side; until 2026-10-07 this returned the total for every segment, so
+        ``calculate_rwa`` and ``residual_jacobian`` disagreed on component
+        segments (8Be+alpha photodisintegration E2 data).
+        """
         s = self.sess
-        nsegments = int(s.update_segments(params))
-        return [s.calculated_segments(i) for i in range(nsegments)]
+        if self.mode == "data":
+            try:
+                obs = self.active_datasets[i].observable
+            except Exception:
+                obs = ""
+            if obs == "angle-integrated-E1":
+                return s.calculated_segments_e1(i)
+            if obs == "angle-integrated-E2":
+                return s.calculated_segments_e2(i)
+        return s.calculated_segments(i)
+
+    def calculate(self, params):
+        """Calculated observable per segment, from a physical parameter vector.
+        Cross sections are centre-of-mass, in b or b/sr; an E1/E2 component
+        segment gets its component (see :meth:`_segment_values`)."""
+        nsegments = int(self.sess.update_segments(params))
+        return [self._segment_values(i) for i in range(nsegments)]
 
     def calculate_rwa(self, params):
         """As calculate, from a free RWA vector. This is the usual entry point."""
-        s = self.sess
-        nsegments = int(s.update_segments_rwa(params))
-        return [s.calculated_segments(i) for i in range(nsegments)]
+        nsegments = int(self.sess.update_segments_rwa(params))
+        return [self._segment_values(i) for i in range(nsegments)]
 
     def calculate_all_rwa(self, params):
         """As calculate_rwa, taking every parameter rather than the free ones."""
-        s = self.sess
-        nsegments = int(s.update_segments_all_rwa(params))
-        return [s.calculated_segments(i) for i in range(nsegments)]
+        nsegments = int(self.sess.update_segments_all_rwa(params))
+        return [self._segment_values(i) for i in range(nsegments)]
 
     def calculate_energies(self, params):
         """Centre-of-mass energies of the calculated points, per segment."""
