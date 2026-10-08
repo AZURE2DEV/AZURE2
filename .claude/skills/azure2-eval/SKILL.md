@@ -72,6 +72,28 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   this for you via `cwd=`, defaulting to the `.azr`'s directory), because the
   `.azr` stores `output/`, `checks/` and data paths *relative to itself*.
 - The `output/` directory must exist; AZURE2 writes results there.
+- **STOP before any extrapolation (mode 3, `extrap_mode()`, `set_extrapolations`):
+  `<targetInt>` resolution/target-integration entries are matched by segment
+  NUMBER and are applied to `<segmentsTest>` lines too.** Test segment k silently
+  inherits the convolution of whatever `<targetInt>` line lists key k. The
+  output looks like a smooth, plausible cross section, so nothing flags it. For
+  a bare (unfolded) cross section, run mode 3 on a copy of the `.azr` with every
+  `<targetInt>` line set inactive (first field `0`). Keep any mode-1 χ² check on
+  the original file, because switching the entries off changes the data χ². This
+  has bitten more than once:
+  - 13C+a/9-9-26_seg92_9halfplus (2026-09-10).
+  - 22Ne+a/10-8-26_composite_rate (2026-10-08): (α,γ) came out folded with
+    Jaeger's 2.6 keV Gaussian, n1 with Wolke's resolution and n2 with Harms's.
+    A dense-grid rerun then gave different σ at identical energies. Two cluster
+    jobs were wasted; details are in "The same key collision" further down.
+
+  **Symptom to watch for:** a mode-3 run that is slow or memory-hungry is
+  convolving. On 22Ne+a, 13k points took 224 s and 65k points used 30 GB of RSS
+  with `<targetInt>` active. The same grids ran in about 1 s with it off.
+  Related: a fit's `param.sav` also carries `segment_k_energy_shift` / `_norm`
+  for data segment k. Shifts are applied to test segment k; on 22Ne+a the norms
+  were verified not to change the extrapolated σ. Zero shifts are harmless;
+  otherwise strip the `segment_*` lines.
 - **Delete `output/intEC.extrap` whenever the `<segmentsTest>` grid changes.**
   AZURE2 caches external-capture integrals there and silently reuses them on a
   different grid — this corrupts capture cross sections *and* data-mode χ²
@@ -189,8 +211,10 @@ printf '2\nn\n\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 # Fit starting from saved params:
 printf '2\nn\noutput/param.sav\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 
-# Extrapolate (no data) using saved params:
-printf '3\nn\noutput/param.sav\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
+# Extrapolate (no data) using saved params.
+# !! First deactivate every <targetInt> line (first field 0) in a COPY of the .azr,
+# !! or test segments get folded with the data segments' resolution (Golden rules).
+printf '3\nn\noutput/param.sav\n\n7\n' | AZURE2 --no-gui --no-readline 7Be_extrap.azr
 ```
 
 **Get this ordering wrong and the run silently ignores your parameter file.**
@@ -981,6 +1005,9 @@ mdl.set_extrapolations([
 (needs `order=`), `phase-shift` (needs `phase_J=`, `phase_L=`). Energies are
 **lab** (`cm2lab = m_target/(m_beam+m_target)`; ³He+α 0.5703, p+⁶Li 0.8565 —
 divide c.m. by it). Remember to delete `output/intEC.extrap` afterwards.
+**And check `<targetInt>`:** any active entry whose segment list includes a
+test segment's key folds that extrapolation (Golden rules). For bare cross
+sections, deactivate the entries in a copy of the `.azr` first.
 
 Note the `isDiff` codes differ between the two blocks: in `<segmentsData>` 3 is
 total-capture and 4 is differential-cm; in `<segmentsTest>` 3 is angular
