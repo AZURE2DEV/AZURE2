@@ -356,21 +356,45 @@ class Session {
   py::array_t<double> calculated_excitation_energies(int i) const { return to_array(api_->calculated_excitation_energies(i)); }
   py::array_t<double> calculated_conv(int i) const { return to_array(api_->calculated_conv(i)); }
 
+  // -- argument checks ---------------------------------------------------------
+  // The engine copies p[k] for every free parameter without looking at p's
+  // length.  A short vector therefore read past its end and left the norms and
+  // shifts at whatever the engine last held: cross sections and S-factors still
+  // right (they use no norm), chi2 garbage, no error (12C+alpha, 2026-10-08).
+  void expect_free(const vector_r &v, const char *what) const {
+    std::vector<bool> fixed = api_->params_fixed();
+    size_t nfree = 0;
+    for (bool f : fixed) if (!f) nfree++;
+    if (v.size() != nfree)
+      throw AZURE2Error(std::string(what) + ": expected the free parameter vector (" +
+                        std::to_string(nfree) + " values, params_rwa / params order), got " +
+                        std::to_string(v.size()) + ".");
+  }
+  void expect_all(const vector_r &v, const char *what) const {
+    size_t nall = api_->params_fixed().size();
+    if (v.size() != nall)
+      throw AZURE2Error(std::string(what) + ": expected every parameter (" + std::to_string(nall) +
+                        " values, fixed ones included), got " + std::to_string(v.size()) + ".");
+  }
+
   // -- segment updates (return the number of segments) ------------------------
 
   int update_segments(py::array_t<double, py::array::forcecast> p) {
     ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
+    expect_free(v, "update_segments");
     return api_->UpdateSegments(v);
   }
   int update_segments_rwa(py::array_t<double, py::array::forcecast> p) {
     ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
+    expect_free(v, "update_segments_rwa");
     return api_->UpdateSegmentsRWA(v);
   }
   int update_segments_all_rwa(py::array_t<double, py::array::forcecast> p) {
     ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
+    expect_all(v, "update_segments_all_rwa");
     return api_->UpdateSegmentsAllRWA(v);
   }
 
@@ -387,6 +411,7 @@ class Session {
   }
   py::array_t<double> transform_all_rwa(py::array_t<double, py::array::forcecast> p) {
     vector_r v = to_vector(p), out;
+    expect_all(v, "transform_all_rwa");
     {
       py::gil_scoped_release release;
       ConfigScope guard(config_, &ecCache_);
@@ -400,20 +425,24 @@ class Session {
   double calculate_chi2_rwa(py::array_t<double, py::array::forcecast> p) {
     ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
+    expect_free(v, "calculate_chi2_rwa");
     return api_->CalculateChi2RWA(v);
   }
   double calculate_chi2_physical(py::array_t<double, py::array::forcecast> p) {
     ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
+    expect_free(v, "calculate_chi2_physical");
     return api_->CalculateChi2Physical(v);
   }
   py::array_t<double> park_norms(py::array_t<double, py::array::forcecast> p) {
     ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
+    expect_free(v, "park_norms");
     return to_array(api_->ParkNorms(v));
   }
   py::array_t<double> calculate_chi2_grad_rwa(py::array_t<double, py::array::forcecast> p) {
     vector_r v = to_vector(p), out;
+    expect_free(v, "calculate_chi2_grad_rwa");
     {
       py::gil_scoped_release release;
       ConfigScope guard(config_, &ecCache_);
@@ -423,6 +452,7 @@ class Session {
   }
   py::array_t<double> calculate_residual_jacobian_rwa(py::array_t<double, py::array::forcecast> p) {
     vector_r v = to_vector(p), out;
+    expect_free(v, "calculate_residual_jacobian_rwa");
     {
       py::gil_scoped_release release;
       ConfigScope guard(config_, &ecCache_);
@@ -432,6 +462,7 @@ class Session {
   }
   py::array_t<double> calculate_model_gradients_rwa(py::array_t<double, py::array::forcecast> p) {
     vector_r v = to_vector(p), out;
+    expect_free(v, "calculate_model_gradients_rwa");
     {
       py::gil_scoped_release release;
       ConfigScope guard(config_, &ecCache_);
