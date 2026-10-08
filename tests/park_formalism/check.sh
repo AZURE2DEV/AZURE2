@@ -119,7 +119,11 @@ grep -q "^ *#parametrization *2\." "$WORK/fit.park/output/param.sav" && ok "p+p 
 # 2P/(dS/dE) at this radius).  Both modes warn; Park's chi2 then carries the
 # penalty on top of the data chi2.
 stage identical_pp_res wall
-sed -i '0,/ 300000\.0 / s/ 300000\.0 / 51000000 /' "$WORK/wall/identical_pp_res.azr"
+# First " 300000.0 " only; awk to a temporary file (BSD/macOS sed has no
+# -i without a suffix and no 0,/re/ address).
+awk '!done && index($0, " 300000.0 ") { sub(/ 300000\.0 /, " 51000000 "); done = 1 } { print }' \
+  "$WORK/wall/identical_pp_res.azr" > "$WORK/wall/identical_pp_res.azr.tmp" &&
+  mv "$WORK/wall/identical_pp_res.azr.tmp" "$WORK/wall/identical_pp_res.azr"
 w="$(run wall identical_pp_res calc "" --use-park)"
 grep -q "Park norm J = .* is not positive" "$WORK/wall/run.log" && ok "wall: J <= 0 reported (--use-park)" || bad "wall: no J <= 0 warning"
 penw="$(awk '/^Total-Chi-Squared:/ { for (i = 1; i < NF; i++) if ($i == "Total-Park-Chi-Squared:") print $(i+1) }' "$WORK/wall/output/chiSquared.out")"
