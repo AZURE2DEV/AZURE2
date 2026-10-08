@@ -6,9 +6,10 @@ something for such a project. The THM machinery itself (HOES cross section,
 `<thm>` keys, experiments, R(E), the DW vertex, the ps and angle windows,
 cbackground=, thm_experiments.out) is new and does nothing unless it is used.
 
-`origin/dev` (d801ba5) is the merge base, so all of dev is already in `thm`.
-The dev changes merged by 18c49ea, f56c150, da72def, 497548a and e191991 are
-not differences: the Wigner-limit bound, the elastic identical-pair factor
+`origin/dev` 6f3228e is merged into `thm` (3628a87, October 2026; see
+"Merge of origin/dev 6f3228e" below), so all of dev is already in `thm`.
+The dev changes merged by 18c49ea, f56c150, da72def, 497548a, e191991 and
+3628a87 are not differences: the Wigner-limit bound, the elastic identical-pair factor
 (7c34992), the adaptive-grid convergence work, target-integration anchoring,
 the beam profile, the LM energy-shift Jacobian, CR line endings and the EC
 cache guard.
@@ -23,8 +24,8 @@ cache guard.
 | 02ae97b | adaptive grid: geometric tails beyond the resonance core; anchors quantised (width to 1.25^n, energy to width/4); only the finest of overlapping lattices kept; a pure Gaussian convolution whose `<targetInt>` line omits the multiplier uses a 2-width core (an explicit value, and target integration, keep 20) | narrow resonances folded 16-38 % high; the union of lattices tripled the sub-points | thick_target_resonance 19.0249 -> 30.8444, hybrid_potential (+1.6e-3) |
 | 02ae97b, 528b672 | sub-point grid refresh: a folded point rebuilds its sub-points when a fit moves a narrow level's anchor (Brune; 528b672 formal parameters too). Not for components, beam profiles, energy-shifted segments or EC models | the grid was built once at the input parameters | fits only; no fixed-parameter pin |
 | df8c2c8 | (1 + delta_12) = 2 for every cross section out of an identical entrance pair (reactions, capture, differential); none for an identical exit pair; the adjoint gradient follows; a rate run prints a note | dev applied it to elastic only: 12C(12C,a), d(d,p), d(d,g) were a factor 2 low | none (new tests/identical_entrance_reaction) |
-| 76888ad | a `<targetInt>` line listing several segments gives each segment its own copy, so sigma lab -> c.m. is converted once | the shared object was converted once per listed segment | target_effect_ranges 3861.5 -> 3838.66 |
-| 79358bb | EPoint::CalcEDependentValues clears its L_o, P and phase tables before refilling | a second call appended copies; lookups read the stale first copy | none |
+| 76888ad | a `<targetInt>` line listing several segments gives each segment its own copy, so sigma lab -> c.m. is converted once | the shared object was converted once per listed segment | target_effect_ranges 3861.5 -> 3838.66. dev fixed the same bug with a once-only guard (f0444ab, pin 3838.73); both are kept, and the 7e-5 between the pins is the shift-function rows above. A line shared by segments of different entrance pairs still differs: thm converts each copy with its own pair's factor, dev uses the first segment's |
+| 79358bb | EPoint::CalcEDependentValues clears its L_o, P and phase tables before refilling | a second call appended copies; lookups read the stale first copy | none. dev fixed the same doubling in RecalcEDependentValues (797c2ea, rows emptied in place); since the merge both functions use dev's ClearEDependentRows, so no output difference remains |
 | 953486f | nuisance priors looked up by full Minuit index in chi2, gradient and LM setup | a fixed parameter before the prior's moved the prior to another parameter (also on dev) | none (new tests/nuisance_prior) |
 | 178ae16 | AZURECalc::FixedMask from the minimizer: LM, GSL-LM, the band covariance and the FD gradient honour the fixed flags | --use-lm / --use-gsl-lm fitted fixed parameters | none (new tests/fixed_param_par); covariance.dat has one row per free parameter |
 
@@ -85,8 +86,108 @@ cache guard.
   is a typedef of ::ThmOptions).  Config.cpp/Config.h now differ from dev by
   6 and 10 lines.
 
-## To check at the merge
+## Merge of origin/dev 6f3228e (3628a87, October 2026)
 
-- 79358bb: whether dev ever recomputes a classic sub-point twice (energy-shifted folded segments); if not, the row moves to "no effect".
-- 02ae97b: the GUI's Add Experimental Effect dialog writes the multiplier (default 20), so GUI-made projects keep the 20-width core.
-- 12fe484: the narrower GSL U trust region could move S slightly for light pairs at large eta that no test covers.
+dev between d801ba5 and 6f3228e: the sqrt(E) energy-shift term (1c3e7e3),
+Park's parametrization (c1ec777, 692e7f8, 397668d, `--use-park`,
+`--no-brune`), isDiff 8 removed (330dc1e), the energy-dependent convolution
+window from the c.m. energy (313c7d5), a shared `<targetInt>` sigma converted
+once (f0444ab), the resident-memory fix (797c2ea), param.fit at the
+evaluated point (67ac25d), EPoint::parentSegment_ dropped (588c584), the
+`#parametrization` tag and name-keyed .sav readers (8cdc841), compound
+stopping per active atom in the GUI (751bec5), skill notes.  All of it is in.
+
+Decisions taken at the merge (they are differences from dev only where
+marked):
+
+- Parameter order: levels, norms, energy shifts, sqrt(E) coefficients (dev),
+  then the THM cbkg block.  A classic project has dev's layout.
+- `GetParameterInfo` type codes: 4 = sqrt(E) coefficient (dev), 5 = THM cbkg
+  (was 4 on thm).  pyazr `_KINDS` and `bands._BAND_KINDS` follow;
+  `bands._NFIELDS` is 16, the record length since thm added `input_is_rwa`
+  (it was 15 on thm: a latent bug in `live_parameters`).
+- `AZURELabel::IsEnergyShiftName` also matches `_energy_shift_sqrt`, so the
+  LM penalties, the limits manager and `GetEnergyShiftIndices` treat the sqrt
+  coefficient as dev's substring tests did.
+- Park and thm's amplitude input (gammaIsRWA): Park's J in TransformIn is
+  1 - sum gamma^2 dS/dE over the observed-width and the amplitude-input
+  channels; no Brune renormalization under Park.  Classic projects without
+  the flag: as dev.
+- Park's dS/dE (CalcShiftFunctions, ConvertAmplitudeBasis) is ChannelFunc's,
+  as every other dS/dE on thm (row ec416de); d2S/dE2 is dev's.  **Differs
+  from dev** in the last digits under `--use-park`; tests/park_formalism and
+  pyazr_park_gradient pass.
+- THM is refused under `--use-park` (a THM data or test segment is an
+  ERROR): the THM amplitude, line shape and gradients were validated with
+  Brune's level matrix only.  Lift this when it has been checked.
+- isDiff 18 (THM + P dsigma/dOmega) is refused like 8.
+- Sub-grid refresh (02ae97b) skips a segment with a sqrt(E) shift (not a
+  translation of the grid).
+- The THM segment's unfloored shift (thm) uses dev's TotalEnergyShift, so a
+  THM segment can carry the sqrt(E) term.
+- EPoint: dev's in-place row clearing is used by thm's CalcEDependentValues
+  too, so dev's memory fix is kept.
+- The Park penalty is added in CalculateChi2RWA only (as dev), not in
+  thm's shared EvaluateFilledChi2 (residuals, Chi2Physical).
+- Dev's three new check.sh scripts take thm's time guard (tests/lib/guard.sh).
+- c8d8db5: the GUI keeps a segment line's `sqrtshift` block on save.  **Differs
+  from dev**, whose GUI drops it (the tokens never reached the model).
+
+Verified after the merge (one heavy process at a time, OMP_NUM_THREADS=1):
+classic test projects give the same files as 101e028 (thm before the merge)
+byte for byte, except param.par's new `#parametrization` line and
+`segment_N_energy_shift_sqrt` rows (dev's format) and the new
+energy_shift_sqrt project; against dev they differ only by the rows of
+section A (largest: thick_target_resonance, 02ae97b; hybrid_potential and 13N,
+b6cc41b/ec416de/02ae97b; parameters.out may print a width at exactly 1 keV as
+"1.000000 keV" where dev prints "1000.000000 eV").  Every THM example and THM
+test project gives 101e028's files byte for byte, apart from the same two
+param.par format rows.
+
+dev's own suite (its tests/run_tests.sh and check.sh scripts) passes 16/16
+with dev's binary and 15/16 with the merged one: thick_target_resonance moves
+19.03 -> 30.84 (02ae97b, re-pinned on thm); the other pins agree within the
+suite's tolerance.  All THM check.sh scripts of 101e028 give 101e028's files
+byte for byte (3250 files), apart from param.par/.sav/.fit format rows, the
+temporary directory names they print and dev's shifts.out format (sqrt_shift
+column, complete rows only).  GUI: the merged GUI's code differs from 101e028
+by exactly dev's GUI changes; an opened and saved classic project differs
+from dev's save only by section B (fields 32/33, round-trip precision,
+AZURE2's level numbering in `<parameterSettings>`, pairs by key) and every
+classic and THM project saves byte for byte on a second open + save; the
+`<thm>` blocks are kept verbatim.
+
+Resolved from the old "to check" list:
+
+- 79358bb: dev did recompute sub-points twice and fixed it the same way
+  (797c2ea); no difference left.
+- 02ae97b: the GUI's Add Experimental Effect dialog writes the multiplier
+  (default 20), so GUI-made projects keep the 20-width core.
+
+Still open:
+
+- 12fe484: the narrower GSL U trust region could move S slightly for light
+  pairs at large eta that no test covers.
+
+## Merging thm into dev later
+
+1. `git fetch`; merge the newest origin/dev into thm first (as 3628a87 did),
+   not the other way round, and get CI green on thm.
+2. Re-read sections A-D: each row is a deliberate difference that dev takes
+   with the merge.  Re-pin dev's tests/*/expected that A moves (the thm pins
+   are already moved; a new dev test may need it).
+3. Parameter layout and type codes: classic as dev; check that a newer dev
+   did not add parameters after the sqrt(E) block (the cbkg block must stay
+   last) or reuse type code 5.
+4. Engine seams to re-check: EData.cpp/EDataThm.cpp hooks, EPoint THM
+   tables and RefreshSubPointGrid, AZURECalc/AZUREGrad/AZUREAPI THM paths,
+   CNuc TransformIn (gammaIsRWA, Park), ChannelFunc users, Config.h flags.
+5. GUI: SegmentsDataData/SegmentsTestData fields (isTHM last before any new
+   dev field), level lines 32/33, parameterSettings rows and prior_centre,
+   the Runtime Options box; open + save of a classic project must stay byte
+   for byte (tests/gui/thm_opt_in, parameter_settings, level_precision).
+6. pyazr: `_KINDS`, `_NFIELDS`, `penalties()`, the sav readers (by name).
+7. Tests and CI: tests/pyazr/CMakeLists.txt (AZURE2_BIN), tests/reference,
+   tests/gui, .github/workflows/build.yml; run build/ and build-gui ctest and
+   tests/run_tests.sh under the memory cap.
+8. Decide whether to lift the THM + `--use-park` refusal.
