@@ -113,11 +113,12 @@ void startMessage(const Config&) {}
 #endif
 
 static int fails = 0;
+static std::vector<std::string> failedChecks;  // repeated at the end: CI shows the tail
 static void ok(const char* what, bool cond, const QString& detail = QString()) {
   std::cout << (cond ? "  ok    " : "  FAIL  ") << what;
   if(!cond && !detail.isEmpty()) std::cout << "  -- " << detail.toStdString();
   std::cout << std::endl;
-  if(!cond) fails++;
+  if(!cond) { fails++; failedChecks.push_back(what); }
 }
 
 static QString slurp(const QString& path) {
@@ -1461,12 +1462,15 @@ int main(int argc, char** argv) {
         if(!(std::fabs(a[i] - b[i]) <= tol * scale)) return false;
       return true;
     };
-    ok("Park: HOES curve = Brune's", close(brune.hoes, parkResult.hoes, 1e-10));
-    ok("Park: on-shell curve = Brune's", close(brune.onShell, parkResult.onShell, 1e-10));
+    ok("Park: HOES curve = Brune's", close(brune.hoes, parkResult.hoes, 1e-8));
+    ok("Park: on-shell curve = Brune's", close(brune.onShell, parkResult.onShell, 1e-8));
     bool poles = parkResult.lineshape && brune.nc2.size() == parkResult.nc2.size() && !brune.nc2.isEmpty();
     for(int i = 0; poles && i < brune.nc2.size(); i++)
-      poles = std::fabs(brune.nc2[i].width - parkResult.nc2[i].width) <= 1e-12 * brune.nc2[i].width &&
-              brune.nc2[i].pole == parkResult.nc2[i].pole && close(brune.nc2[i].y, parkResult.nc2[i].y, 1e-12);
+      // 1e-8: Park's widths go through a numerical dS/dE, whose last bits
+      // differ between compilers (the model check in thm_park uses 1e-8 too).
+      poles = std::fabs(brune.nc2[i].width - parkResult.nc2[i].width) <= 1e-8 * brune.nc2[i].width &&
+              std::fabs(brune.nc2[i].pole - parkResult.nc2[i].pole) <= 1e-8 * std::fabs(brune.nc2[i].pole) &&
+              close(brune.nc2[i].y, parkResult.nc2[i].y, 1e-8);
     ok("Park: line-shape poles, widths and |N_C|^2 = Brune's", poles);
   }
 #endif
@@ -2420,6 +2424,7 @@ int main(int argc, char** argv) {
   }
 #endif
 
+  for(const std::string& f : failedChecks) std::cout << "  failed: " << f << std::endl;
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;
   return fails ? 1 : 0;
 }
