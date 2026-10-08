@@ -1454,6 +1454,12 @@ int main(int argc, char** argv) {
     const ThmDiagnosticsResult parkResult = ComputeThmDiagnostics(q);
     ok("Park: diagnostics computed in both modes", brune.error.isEmpty() && parkResult.error.isEmpty(),
        brune.error + " / " + parkResult.error);
+    {  // The same project with CRLF line ends (a Windows checkout or editor).
+      ThmDiagnosticsRequest crlf = q;
+      crlf.projectText.replace("\n", "\r\n");
+      const ThmDiagnosticsResult c = ComputeThmDiagnostics(crlf);
+      ok("CRLF project: diagnostics computed, same HOES curve", c.error.isEmpty() && c.hoes == parkResult.hoes, c.error);
+    }
     auto close = [](const QVector<double>& a, const QVector<double>& b, double tol) {
       if(a.isEmpty() || a.size() != b.size()) return false;
       double scale = 0.0;

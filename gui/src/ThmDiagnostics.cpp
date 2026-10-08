@@ -192,6 +192,7 @@ QString angularDistribution(const ThmDiagnosticsRequest &request, const ThmExper
     return QObject::tr("the angular distribution is the fixed-angle observable (theta=), which is not available "
                        "with vertexModel=dw.");
   QString text = request.projectText;
+  text.remove('\r');  // a CRLF project (Windows) would hide its block tags
   const QStringList fields = segmentsDataLine(text, request.segment).split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
   if (fields.size() < 8) return QObject::tr("segment %1 not found in <segmentsData>.").arg(request.segment);
   // The experiment's keys but those the copy sets or leaves out.
@@ -294,6 +295,7 @@ ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request)
   // 1. The project as it is, with data: the segment's points, the compound
   //    nucleus at the current parameters, the line shape and the weight.
   QString text = request.projectText;
+  text.remove('\r');  // a CRLF project (Windows) would hide its block tags
   setThmLines(text, absoluteWeights(thmLines(text), request.projectDir));
   const QString dataFile = tmp.filePath("diagnostics.azr");
   {
@@ -560,6 +562,7 @@ ThmDiagnosticsResult ComputeThmDiagnostics(const ThmDiagnosticsRequest &request)
   //    two extrapolation segments of the segment's channel and nothing else
   //    (no resolution, no weight, no experiment, hence no line shape).
   text = request.projectText;
+  text.remove('\r');
   QStringList kept;
   for (const QString &line : thmLines(text)) {
     const QString code = line.left(line.indexOf('#')).trimmed();
