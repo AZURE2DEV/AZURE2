@@ -261,6 +261,18 @@ int main(int argc, char** argv) {
   w.open(thmPath);
   ok("THM project: reopened with THM on", w.thmEnabled());
 
+  // A segment line's sqrtshift block (dev 1c3e7e3) survives open + save.
+  {
+    const QString path = work.filePath("sqrtshift.azr");
+    spit(path, slurp(src + "energy_shift_sqrt/energy_shift_sqrt.azr"));
+    w.open(path);
+    const QString saved = save(w);
+    ok("sqrtshift: both blocks kept", saved.count("sqrtshift") == 2 && saved.contains("sqrtshift 0.003 0 0") &&
+                                          saved.contains("sqrtshift -0.002 0 0"));
+    w.open(path);
+    ok("sqrtshift: open + save byte for byte", save(w) == saved);
+  }
+
   // A THM project followed by a classic one: THM goes off.
   w.open(classicPath);
   expectThm(w, false, "classic after THM");

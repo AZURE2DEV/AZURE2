@@ -403,6 +403,9 @@ void SegmentsTab::addSegDataLine(SegmentsDataData line, bool fromFile) {
     segmentsDataModel->setData(index, line.delta, Qt::EditRole);
     index = segmentsDataModel->index(lines.size(), 24, QModelIndex());
     segmentsDataModel->setData(index, line.isTHM, Qt::EditRole);
+    // Not a column: without this the sqrtshift block read from the file never
+    // reached the model and a save dropped it.
+    segmentsDataModel->setSqrtShiftTokens(lines.size(), line.sqrtShiftTokens);
     segmentsDataView->resizeRowToContents(lines.size());
     updateSegDataButtons(segmentsDataView->selectionModel()->selection());
     if (!fromFile) {

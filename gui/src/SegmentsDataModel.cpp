@@ -522,6 +522,10 @@ QString SegmentsDataModel::getReactionLabel(const QModelIndex &index) {
  * anything.
  */
 
+void SegmentsDataModel::setSqrtShiftTokens(int row, const QString &tokens) {
+  if (row >= 0 && row < segDataLineList.size()) segDataLineList[row].sqrtShiftTokens = tokens;
+}
+
 bool SegmentsDataModel::moveLine(int from, int to) {
   if (from < 0 || to < 0 || from >= segDataLineList.size() || to >= segDataLineList.size() || from == to) return false;
   int destination = (to > from) ? to + 1 : to;

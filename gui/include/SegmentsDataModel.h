@@ -61,6 +61,8 @@ class SegmentsDataModel : public QAbstractTableModel {
   /// Relocate one row wholesale.  The whole struct moves, so fields added
   /// later can never be forgotten the way a per-column copy forgets them.
   bool moveLine(int from, int to);
+  /// The verbatim "sqrtshift ..." block of a row (not a table column).
+  void setSqrtShiftTokens(int row, const QString &tokens);
   Qt::ItemFlags flags(const QModelIndex &index) const;
   int isSegDataLine(const SegmentsDataData &line) const;
   QList<SegmentsDataData> getLines() const { return segDataLineList; };
