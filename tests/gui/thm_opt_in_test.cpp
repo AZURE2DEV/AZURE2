@@ -9,7 +9,10 @@
 //     with THM content asks first (Cancel keeps it on) and hides the controls
 //     without touching the content; switching on shows them again;
 //  4. every save in between is byte for byte the project's own text, classic
-//     or THM, and toggling changes no byte.
+//     or THM, and toggling changes no byte;
+//  5. Park's parametrization and THM together: ticking Park on a THM project
+//     keeps THM on (Brune implied), both stay ticked, saved and reopened;
+//     unticking Park restores the configuration and the file.
 //
 // Runs without a display; the CMake target passes QT_QPA_PLATFORM=offscreen.
 
@@ -260,6 +263,52 @@ int main(int argc, char** argv) {
   ok("THM project, on again: save byte for byte", save(w) == thm);
   w.open(thmPath);
   ok("THM project: reopened with THM on", w.thmEnabled());
+
+  // 5. Park's parametrization and THM together (THM under --use-park).
+  {
+    auto options = [&](const std::function<void(EditOptionsDialog*)>& set) {
+      QAction* a = menuAction(w, "Runtime Options");
+      if(!a) return;
+      QTimer t;
+      t.setInterval(20);
+      QObject::connect(&t, &QTimer::timeout, [&]() {
+        if(EditOptionsDialog* d = qobject_cast<EditOptionsDialog*>(QApplication::activeModalWidget())) {
+          set(d);
+          d->accept();
+        }
+      });
+      t.start();
+      a->trigger();
+      t.stop();
+    };
+    const unsigned int park = Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM;
+    const unsigned int before = w.GetConfig().paramMask;
+    bool thmBox = false, bruneBox = false, bruneEnabled = true;
+    options([&](EditOptionsDialog* d) {
+      d->useParkCheck->setChecked(true);
+      thmBox = d->useThmCheck->isChecked();
+      bruneBox = d->useBruneCheck->isChecked();
+      bruneEnabled = d->useBruneCheck->isEnabled();
+    });
+    ok("Park ticked on a THM project: the THM box stays ticked, Brune implied", thmBox && bruneBox && !bruneEnabled);
+    ok("Park + THM: Park and Brune in the configuration", (w.GetConfig().paramMask & park) == park);
+    expectThm(w, true, "Park + THM", true);
+    bool parkShown = false;
+    thmBox = false;
+    options([&](EditOptionsDialog* d) {
+      parkShown = d->useParkCheck->isChecked();
+      thmBox = d->useThmCheck->isChecked();
+    });
+    ok("Park + THM: both boxes ticked when the dialog opens again", parkShown && thmBox);
+    const QString withPark = save(w);
+    w.open(thmPath);
+    ok("Park + THM: reopened with both", w.thmEnabled() && (w.GetConfig().paramMask & park) == park);
+    ok("Park + THM: open + save byte for byte", save(w) == withPark);
+    options([&](EditOptionsDialog* d) { d->useParkCheck->setChecked(false); });
+    ok("Park unticked: the configuration as before", w.GetConfig().paramMask == before);
+    expectThm(w, true, "Park unticked", true);
+    ok("Park unticked: save byte for byte as before Park", save(w) == thm);
+  }
 
   // A segment line's sqrtshift block (dev 1c3e7e3) survives open + save.
   {

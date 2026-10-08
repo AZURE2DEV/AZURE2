@@ -34,6 +34,8 @@
 //     sum_k w_k M_l^2 with the engine's ThmFormFactor, the nodes filled; a
 //     relative ps table read from the engine's temporary copy.
 //
+// 11b. Diagnostics under Park's parametrization: the curves and line-shape
+//     widths of tests/18O_p_a_thm are Brune's;
 // 12. the distortion factor (Stage D) on a 12C+12C-like project;
 // 13. the exit angle (theta=, Stage E): read/written verbatim, the window
 //     row only for a window, 0-0 a single angle, refusals in the engine's
@@ -1425,6 +1427,47 @@ int main(int argc, char** argv) {
     for(int i = 0; flat && i < r.windowW.size(); i++) flat = std::fabs(r.windowW[i] - r.windowP[i] / 600.0) < 1e-12;
     for(double p : r.nodeP) flat = flat && p > 20.0 && p < 40.0;
     ok("table: flat |phi|^2 gives w(p) = p/600 per MeV/c on [20, 40], nodes inside", flat);
+  }
+#endif
+
+#ifdef AZURE2_THM_DIAGNOSTICS
+  // 11b. Diagnostics under Park's parametrization (THM under --use-park): on
+  //      tests/18O_p_a_thm (two interfering levels, amplitude input) with the
+  //      line shape, the curves and the line-shape poles and widths are
+  //      Brune's.
+  {
+    const QString dir = work.filePath("park");
+    const QString o18 = QString(AZURE2_SOURCE_DIR) + "/tests/18O_p_a_thm";
+    QDir().mkpath(dir + "/data");
+    for(const QString& f : QDir(o18 + "/data").entryList(QDir::Files))
+      QFile::copy(o18 + "/data/" + f, dir + "/data/" + f);
+    ThmDiagnosticsRequest q;
+    q.projectText = slurp(o18 + "/18O_p_a_thm.azr") +
+                    "<thm>\nexperiment[A] segments=1,2 beam=18O target=3He spectator=d Ebeam=115 lineshape=on\n</thm>\n";
+    q.projectDir = dir;
+    q.segment = 1;
+    const unsigned int park = Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM;
+    q.paramMask = (w.GetConfig().paramMask & ~park) | Config::USE_BRUNE_FORMALISM;
+    const ThmDiagnosticsResult brune = ComputeThmDiagnostics(q);
+    q.paramMask |= park;
+    const ThmDiagnosticsResult parkResult = ComputeThmDiagnostics(q);
+    ok("Park: diagnostics computed in both modes", brune.error.isEmpty() && parkResult.error.isEmpty(),
+       brune.error + " / " + parkResult.error);
+    auto close = [](const QVector<double>& a, const QVector<double>& b, double tol) {
+      if(a.isEmpty() || a.size() != b.size()) return false;
+      double scale = 0.0;
+      for(double x : a) scale = std::max(scale, std::fabs(x));
+      for(int i = 0; i < a.size(); i++)
+        if(!(std::fabs(a[i] - b[i]) <= tol * scale)) return false;
+      return true;
+    };
+    ok("Park: HOES curve = Brune's", close(brune.hoes, parkResult.hoes, 1e-10));
+    ok("Park: on-shell curve = Brune's", close(brune.onShell, parkResult.onShell, 1e-10));
+    bool poles = parkResult.lineshape && brune.nc2.size() == parkResult.nc2.size() && !brune.nc2.isEmpty();
+    for(int i = 0; poles && i < brune.nc2.size(); i++)
+      poles = std::fabs(brune.nc2[i].width - parkResult.nc2[i].width) <= 1e-12 * brune.nc2[i].width &&
+              brune.nc2[i].pole == parkResult.nc2[i].pole && close(brune.nc2[i].y, parkResult.nc2[i].y, 1e-12);
+    ok("Park: line-shape poles, widths and |N_C|^2 = Brune's", poles);
   }
 #endif
 
