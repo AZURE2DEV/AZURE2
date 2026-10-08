@@ -267,6 +267,80 @@ writes the tokens, so a project can be loaded, edited and saved without
 losing them.  ``pyazr.AzrModel.add_target_effect`` writes the same line
 from a script.
 
+User-defined numerical resolution function (SAMMY UDR)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Time-of-flight facilities increasingly publish their resolution function
+as a *numerical* distribution of flight-time delays, obtained from a
+simulation of the neutron source and the beam line, rather than as an
+analytic parametrization: n_TOF at CERN distributes the response of each
+experimental area this way, in the format of SAMMY's **user-defined
+resolution function** (UDR).  AZURE2 reads the same files.
+
+The file holds, for each of a set of neutron energies, the probability
+density :math:`R(\tau;E)` that a neutron of energy :math:`E` is detected
+with a delay :math:`\tau` (microseconds) relative to its true flight time
+over the nominal path.  A positive delay -- moderation in the target, a
+longer path in the detector -- makes the neutron look slower than it is,
+so the true energies :math:`E'` contributing to a data point at nominal
+energy :math:`E_0` are those with
+
+.. math::
+
+   t(E') = t(E_0) - \tau, \qquad t(E) = \frac{L}{v(E)},
+
+:math:`L` the nominal flight path and :math:`v` the (relativistic) velocity.
+The fitted value of the point is the exact integral of the piecewise-linear
+tabulated kernel against the cross section interpolated linearly between
+the sub-points of the integration grid,
+
+.. math::
+
+   \langle\sigma\rangle(E_0) = \frac{\sum_i w_i\,\sigma(E_i)}{\sum_i w_i},
+   \qquad
+   w_i = \int R(\tau;E_0)\,\phi_i(\tau)\,d\tau ,
+
+with :math:`\phi_i` the hat function of sub-point :math:`i` on the delay
+axis -- the scheme of SAMMY's ``Udr_Resb``.  Before use the tabulated
+function at the point's energy is obtained by linear interpolation between
+the two bracketing tabulated energies, re-centred on its centroid (so that
+the mean delay, which is part of the nominal flight path, is removed --
+SAMMY does the same; it can be switched off), and convolved with a Gaussian
+**burst width** and a rectangular **channel width** in time, both given in
+nanoseconds.
+
+File format (SAMMY Table III C5.1): any descriptive text, a line containing
+at least five hyphens, then blocks of an energy line (eV; anything after the
+number is ignored) followed by ``time  density`` pairs in microseconds and
+per microsecond, blocks separated by blank lines.  The normalisation of the
+tabulated density is irrelevant; the kernel is normalised numerically.  Only
+the energies within a decade of the segment's range are read, so the 146 MB
+n_TOF files load in a few seconds.
+
+The effect is written as a trailing block of the ``targetInt`` line, after
+the optional ranges and beam-profile tokens::
+
+   udr "<file>"  L  burstFWHM  channel  centred
+
+with ``L`` in metres, the widths in ns (0 = none) and ``centred`` 1 or 0.
+A *negative* channel value ``-n`` stands for ``n`` bins per decade of
+energy, the logarithmic binning of n_TOF data, and gives each point a
+channel of :math:`t\,\ln 10/(2n)` at its own flight time (SAMMY manual
+eq. III C3 a.14).
+The flight path must be the one the experiment used to turn flight times
+into the energies of the data file.  The sub-point grid of each point covers
+the kernel's support in true energy, on the adaptive grid described for the
+other effects, so the usual advice on ``resonance_width_multiplier`` and
+``points_per_width`` applies.  The kernel applies to any observable of the
+segment and is supported by the analytic gradient.
+
+In the GUI, check **Include User-Defined Resolution Function** in the
+*Add/Edit Experimental Effect* dialog and give the file (``Browse...``),
+the flight path, the burst and channel widths and the centring choice.
+``pyazr.AzrModel.add_target_effect(..., udr_file=, flight_path=,
+udr_burst=, udr_channel=, udr_centred=)`` writes the same line from a
+script.
+
 Straggling
 ^^^^^^^^^^
 

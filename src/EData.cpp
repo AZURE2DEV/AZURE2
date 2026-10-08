@@ -558,6 +558,14 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
       TargetEffect *targetEffect = this->GetTargetEffect(segment->GetTargetEffectNum());
       targetEffect->ConvertSigmaToCM(cmConversion);
       if (targetEffect->IsBeamProfile()) targetEffect->ConvertBeamProfileToCM(cmConversion);
+      if (targetEffect->IsUdr()) {
+        double eMin = 1.0e300, eMax = 0.0;
+        for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
+          eMin = std::min(eMin, point->GetLabEnergy());
+          eMax = std::max(eMax, point->GetLabEnergy());
+        }
+        if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream)) return -1;
+      }
 
       for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
         // An effect restricted to energy ranges leaves points outside them
@@ -665,6 +673,23 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             point->SetPhotoKinematics(entrancePair->GetSepE() - exitPair->GetExE(),
                                       (entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv);
           }
+          if (targetEffect->IsUdr()) {
+            // A delay tau maps the point's nominal flight time t0 to a true
+            // flight time t0 - tau: the kernel's support in delay becomes a
+            // window in true energy, extending above the point for positive
+            // delays (moderation) and below it for negative ones.
+            double mass = entrancePair->GetM(1) * uconv;
+            std::shared_ptr<const UdrKernel> kernel = targetEffect->BuildUdrKernel(point->GetLabEnergy(), mass);
+            point->SetUdrKernel(kernel, mass);
+            double t0 = UdrKinematics::TimeOfFlight(point->GetLabEnergy(), mass, targetEffect->GetUdrFlightPath());
+            double eHighLab = UdrKinematics::EnergyFromTime(t0 - kernel->tauMax, mass, targetEffect->GetUdrFlightPath());
+            double eLowLab = UdrKinematics::EnergyFromTime(t0 - kernel->tauMin, mass, targetEffect->GetUdrFlightPath());
+            double cmPerLab = point->GetCMEnergy() / point->GetLabEnergy();
+            if (eHighLab <= point->GetLabEnergy()) eHighLab = point->GetLabEnergy() * 1.0001;
+            if (eLowLab <= 0.0 || eLowLab >= point->GetLabEnergy()) eLowLab = point->GetLabEnergy() * 0.9999;
+            startEnergy = eHighLab * cmPerLab;
+            endEnergy = std::max(eLowLab * cmPerLab, 0.001);
+          }
           std::vector<double> energyGrid;
           int numPoints = targetEffect->NumSubPoints();
           if (configure.useAdaptiveGrid) {
@@ -701,6 +726,14 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
           TargetEffect *targetEffect = this->GetTargetEffect(component->GetTargetEffectNum());
           targetEffect->ConvertSigmaToCM(cmConversion);
           if (targetEffect->IsBeamProfile()) targetEffect->ConvertBeamProfileToCM(cmConversion);
+          if (targetEffect->IsUdr()) {
+            double eMin = 1.0e300, eMax = 0.0;
+            for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
+              eMin = std::min(eMin, point->GetLabEnergy());
+              eMax = std::max(eMax, point->GetLabEnergy());
+            }
+            if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream)) return -1;
+          }
 
           for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
             double blendWeight = targetEffect->BlendWeight(point->GetLabEnergy());
@@ -801,6 +834,19 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 endEnergy = low;
                 point->SetPhotoKinematics(entrancePair->GetSepE() - exitPair->GetExE(),
                                           (entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv);
+              }
+              if (targetEffect->IsUdr()) {
+                double mass = entrancePair->GetM(1) * uconv;
+                std::shared_ptr<const UdrKernel> kernel = targetEffect->BuildUdrKernel(point->GetLabEnergy(), mass);
+                point->SetUdrKernel(kernel, mass);
+                double t0 = UdrKinematics::TimeOfFlight(point->GetLabEnergy(), mass, targetEffect->GetUdrFlightPath());
+                double eHighLab = UdrKinematics::EnergyFromTime(t0 - kernel->tauMax, mass, targetEffect->GetUdrFlightPath());
+                double eLowLab = UdrKinematics::EnergyFromTime(t0 - kernel->tauMin, mass, targetEffect->GetUdrFlightPath());
+                double cmPerLab = point->GetCMEnergy() / point->GetLabEnergy();
+                if (eHighLab <= point->GetLabEnergy()) eHighLab = point->GetLabEnergy() * 1.0001;
+                if (eLowLab <= 0.0 || eLowLab >= point->GetLabEnergy()) eLowLab = point->GetLabEnergy() * 0.9999;
+                startEnergy = eHighLab * cmPerLab;
+                endEnergy = std::max(eLowLab * cmPerLab, 0.001);
               }
               std::vector<double> energyGrid;
               int numPoints = targetEffect->NumSubPoints();

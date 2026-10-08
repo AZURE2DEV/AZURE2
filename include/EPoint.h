@@ -1,9 +1,11 @@
 #ifndef EPOINT_H
 #define EPOINT_H
 #include <limits>
+#include <memory>
 
 #include <cstring>
 #include "Constants.h"
+#include "UdrKernel.h"
 
 /// A container structure for a reference to a data point.
 
@@ -60,6 +62,14 @@ class EPoint {
   //! target-effect integration needs the cross section as the weight.
   double GetAnalyzingPower() const { return analyzing_power_; };
   void SetAnalyzingPower(double v) { analyzing_power_ = v; };
+  //! The user-defined resolution kernel built for this point (shared, so
+  //! copies of the point and of the data set do not duplicate it), and the
+  //! projectile rest energy (MeV) its time-of-flight conversion uses.
+  void SetUdrKernel(std::shared_ptr<const UdrKernel> k, double projectileMass) {
+    udr_kernel_ = k; udr_mass_ = projectileMass;
+  };
+  const UdrKernel *GetUdrKernel() const { return udr_kernel_.get(); };
+  double GetUdrProjectileMass() const { return udr_mass_; };
   /// Is this one of the sub-points a target-effect integral is built from?
   bool IsSubPoint() const { return is_sub_point_; };
   /// Unobserved-primary, observed-secondary point?
@@ -292,6 +302,8 @@ class EPoint {
   double cm_energy_;
   double lab_energy_;
   double excitation_energy_;
+  std::shared_ptr<const UdrKernel> udr_kernel_;
+  double udr_mass_ = 0.0;
   double cm_crosssection_;
   double cm_dcrosssection_;
   double lab_crosssection_;

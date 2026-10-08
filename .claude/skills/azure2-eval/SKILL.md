@@ -1982,6 +1982,31 @@ complete:
   is also the size of the +-3 sigma truncation itself. The kernel is renormalized by its own
   integral over the window, so a constant cross section is always reproduced exactly.
 
+- 2026-10-08 -- USER-DEFINED NUMERICAL RESOLUTION FUNCTION (SAMMY UDR) in AZURE2, branch
+  `feature/udr-resolution` (worktree `~/AZURE2-udr`, separate build dir). A `<targetInt>` line
+  can end with `udr "<file>" L_m burstFWHM_ns channel_ns centred`: the file is SAMMY's UDR
+  format (text, a line of hyphens, then blocks "energy_eV" + "(delay_us, density)" pairs,
+  blank-line separated), which is what n_TOF distributes (`RF_EAR1_v2_CORR.txt`: 600 energies
+  x 9000 delays, 146 MB; only the blocks within a decade of the segment are read). Semantics
+  copied from SAMMY's mudr3/mudr2: linear interpolation between the two bracketing tabulated
+  energies, re-centring on the centroid (SAMMY always does; `centred 0` switches it off),
+  Gaussian burst and rectangular channel in time, and per-point weights from the EXACT integral
+  of the piecewise-linear kernel against hat functions of the sub-points on the delay axis.
+  Delay -> energy: t(E') = t(E0) - tau with relativistic t(E) = L/v, so a positive delay maps
+  to a HIGHER true energy (moderated neutrons look slower). Channel width -n means n bins per
+  decade (n_TOF: 10 below 300 keV, 100 above). Reference test `tests/reference/
+  udr_reference_test.cpp` (moments, centring, widths in quadrature, interpolation, kinematics);
+  GUI round trip in `tests/gui/target_int_tab_test.cpp`; `AzrModel.add_target_effect(udr_file=,
+  flight_path=, udr_burst=, udr_channel=, udr_centred=)`. The analytic Jacobian needs nothing
+  new: `GradTargetEffectAdjoint` finite-differences the combiner per sub-point.
+  CAVEATS: (1) the 14N(n,p) Torres-Sanchez 2023 data in 11B+a are from n_TOF EAR-2 (L =
+  19.75 m, DSSSD) -- the uploaded file is the EAR1 response, so it is a mechanism test only;
+  the EAR2 RF file is needed for the real fit. (2) The kernel is evaluated at the point's
+  NOMINAL energy (as SAMMY does), not at each sub-point's true energy. (3) Validation and
+  benchmark runs go to the queue (user instruction 2026-10-08): `13C+a/10-8-26_udr_validation`
+  (synthetic Gaussian-in-time UDR vs numpy fold on the Cierjacks segment) and
+  `11B+a/10-8-26_udr_ntof` (analytic sigma(E) vs UDR on segment 103).
+
 - **A regression reference is not a correctness check.** `tests/run_tests.sh` pins each
   project's chi-squared against a number this code produced, so it catches a change and
   nothing else. `tests/reference/` is the other kind: it recomputes the same quantity from

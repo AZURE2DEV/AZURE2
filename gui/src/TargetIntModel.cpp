@@ -97,6 +97,24 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
         return QString(tr("YES"));
       else
         return QString(tr("NO"));
+    } else if (index.column() == 27) {
+      if (targetInt.isUdr)
+        return QString(tr("YES"));
+      else
+        return QString(tr("NO"));
+    } else if (index.column() == 28)
+      return targetInt.udrFile;
+    else if (index.column() == 29)
+      return targetInt.udrFlightPath;
+    else if (index.column() == 30)
+      return targetInt.udrBurstFwhm;
+    else if (index.column() == 31)
+      return targetInt.udrChannelWidth;
+    else if (index.column() == 32) {
+      if (targetInt.udrCentred)
+        return QString(tr("YES"));
+      else
+        return QString(tr("NO"));
     }
   } else if (role == Qt::EditRole) {
     TargetIntData targetInt = targetIntList.at(index.row());
@@ -126,6 +144,12 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
     if (index.column() == 24) return targetInt.beamTpcSigma;
     if (index.column() == 25) return targetInt.beamTruncation;
     if (index.column() == 26) return targetInt.beamPhotodissociation;
+    if (index.column() == 27) return targetInt.isUdr;
+    if (index.column() == 28) return targetInt.udrFile;
+    if (index.column() == 29) return targetInt.udrFlightPath;
+    if (index.column() == 30) return targetInt.udrBurstFwhm;
+    if (index.column() == 31) return targetInt.udrChannelWidth;
+    if (index.column() == 32) return targetInt.udrCentred;
   } else if (role == Qt::CheckStateRole && index.column() == 0) {
     TargetIntData targetInt = targetIntList.at(index.row());
     if (targetInt.isActive == 1)
@@ -195,6 +219,18 @@ QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, in
         return tr("Profile Truncation");
       case 26:
         return tr("Detailed Balance Weight?");
+      case 27:
+        return tr("User-Defined Resolution?");
+      case 28:
+        return tr("UDR File");
+      case 29:
+        return tr("Flight Path [m]");
+      case 30:
+        return tr("Burst FWHM [ns]");
+      case 31:
+        return tr("Channel Width [ns]");
+      case 32:
+        return tr("UDR Centred?");
       default:
         return QVariant();
     }
@@ -261,6 +297,18 @@ bool TargetIntModel::setData(const QModelIndex &index, const QVariant &value, in
       tempData.beamTruncation = value.toDouble();
     else if (index.column() == 26)
       tempData.beamPhotodissociation = value.toBool();
+    else if (index.column() == 27)
+      tempData.isUdr = value.toBool();
+    else if (index.column() == 28)
+      tempData.udrFile = value.toString();
+    else if (index.column() == 29)
+      tempData.udrFlightPath = value.toDouble();
+    else if (index.column() == 30)
+      tempData.udrBurstFwhm = value.toDouble();
+    else if (index.column() == 31)
+      tempData.udrChannelWidth = value.toDouble();
+    else if (index.column() == 32)
+      tempData.udrCentred = value.toBool();
     else
       return false;
     targetIntList.replace(row, tempData);

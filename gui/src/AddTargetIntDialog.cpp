@@ -10,6 +10,7 @@
 #include <QPushButton>
 #include <QComboBox>
 #include <QMessageBox>
+#include <QFileDialog>
 #include <vector>
 #include <cmath>
 #include <iomanip>
@@ -252,6 +253,31 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   beamPhotodissociationCheck->setChecked(false);
   beamPhotodissociationCheck->setToolTip(tr("Average the cross section the way the inverse photodissociation measurement averaged it, by weighting the integrand with the detailed-balance factor relative to its value at the point's own energy."));
 
+  // User-defined numerical resolution function (SAMMY UDR): time-of-flight
+  // delay distributions tabulated at a set of energies, read from a file in
+  // SAMMY's UDR format (the format n_TOF distributes its response functions
+  // in), convolved with the burst and channel widths.
+  isUdrCheck = new QCheckBox(tr("Include User-Defined Resolution Function (SAMMY UDR)"));
+  isUdrCheck->setChecked(false);
+  isUdrCheck->setToolTip(tr("Fold the cross section with a numerical time-of-flight resolution function tabulated in a SAMMY UDR file."));
+  connect(isUdrCheck, SIGNAL(toggled(bool)), this, SLOT(udrCheckChanged(bool)));
+  udrFileText = new QLineEdit;
+  udrFileText->setToolTip(tr("SAMMY UDR file: free text, a line of hyphens, then blocks of an energy in eV followed by (delay in microseconds, probability) pairs."));
+  udrBrowseButton = new QPushButton(tr("Browse..."));
+  connect(udrBrowseButton, SIGNAL(clicked()), this, SLOT(udrBrowse()));
+  udrFlightPathText = new QLineEdit;
+  udrFlightPathText->setText("0");
+  udrFlightPathText->setToolTip(tr("Nominal flight path in metres, the one the energies of the data were derived with."));
+  udrBurstText = new QLineEdit;
+  udrBurstText->setText("0");
+  udrBurstText->setToolTip(tr("FWHM in ns of a Gaussian burst width convolved with the tabulated function; 0 for none."));
+  udrChannelText = new QLineEdit;
+  udrChannelText->setText("0");
+  udrChannelText->setToolTip(tr("Width in ns of a rectangular time-of-flight channel convolved with the tabulated function; 0 for none. A negative value -n means n bins per decade of energy (logarithmic binning), i.e. a width of t ln(10)/(2n) at each point's flight time."));
+  udrCentredCheck = new QCheckBox(tr("Re-centre the function on its centroid"));
+  udrCentredCheck->setChecked(true);
+  udrCentredCheck->setToolTip(tr("Shift each tabulated function so that its mean delay is zero, as SAMMY does: the mean delay is then part of the nominal flight path. Uncheck to apply the delays exactly as tabulated."));
+
   cancelButton = new QPushButton(tr("Cancel"));
   okButton = new QPushButton(tr("Accept"));
   okButton->setDefault(true);
@@ -395,6 +421,21 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   beamProfileBox->setLayout(beamProfileLayout);
   beamProfileBox->hide();
 
+  udrBox = new QGroupBox(tr("User-Defined Resolution Function (SAMMY UDR)"));
+  QGridLayout *udrLayout = new QGridLayout;
+  udrLayout->addWidget(new QLabel(tr("UDR File:")), 0, 0, Qt::AlignRight);
+  udrLayout->addWidget(udrFileText, 0, 1, 1, 4);
+  udrLayout->addWidget(udrBrowseButton, 0, 5);
+  udrLayout->addWidget(new QLabel(tr("Flight Path [m]:")), 1, 0, Qt::AlignRight);
+  udrLayout->addWidget(udrFlightPathText, 1, 1);
+  udrLayout->addWidget(new QLabel(tr("Burst FWHM [ns]:")), 1, 2, Qt::AlignRight);
+  udrLayout->addWidget(udrBurstText, 1, 3);
+  udrLayout->addWidget(new QLabel(tr("Channel Width [ns]:")), 1, 4, Qt::AlignRight);
+  udrLayout->addWidget(udrChannelText, 1, 5);
+  udrLayout->addWidget(udrCentredCheck, 2, 0, 1, 6);
+  udrBox->setLayout(udrLayout);
+  udrBox->hide();
+
   QHBoxLayout *buttonBox = new QHBoxLayout;
   buttonBox->addWidget(cancelButton);
   buttonBox->addWidget(okButton);
@@ -410,6 +451,8 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   mainLayout->addWidget(convCoefficientBox);
   mainLayout->addLayout(beamProfileCheckBoxLayout);
   mainLayout->addWidget(beamProfileBox);
+  mainLayout->addWidget(isUdrCheck);
+  mainLayout->addWidget(udrBox);
   mainLayout->addLayout(buttonBox);
 
   setLayout(mainLayout);
@@ -684,6 +727,26 @@ void AddTargetIntDialog::populateElementComboBox() {
   if (alIndex >= 0) {
     elementComboBox->setCurrentIndex(alIndex);
   }
+}
+
+void AddTargetIntDialog::udrCheckChanged(bool checked) {
+  if (checked) {
+    udrBox->show();
+    numPointsSpin->setEnabled(true);
+    resonanceWidthMultiplierSpin->setEnabled(true);
+    pointsPerWidthSpin->setEnabled(true);
+  } else {
+    udrBox->hide();
+    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked() &&
+        !isConvolutionDependentCheck->isChecked() && !isBeamProfileCheck->isChecked())
+      numPointsSpin->setEnabled(false);
+  }
+}
+
+void AddTargetIntDialog::udrBrowse() {
+  QString file = QFileDialog::getOpenFileName(this, tr("Select a SAMMY UDR resolution-function file"),
+                                              udrFileText->text(), tr("All files (*)"));
+  if (!file.isEmpty()) udrFileText->setText(file);
 }
 
 void AddTargetIntDialog::elementSelectionChanged(int index) {

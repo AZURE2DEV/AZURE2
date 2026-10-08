@@ -52,6 +52,13 @@ class AddTargetIntDialog : public QDialog {
   QLineEdit *beamTpcSigmaText;
   QLineEdit *beamTruncationText;
   QList<double> tempBeamProfile;   // flattened (xi, omega, alpha, weight) quadruples
+  QCheckBox *isUdrCheck;
+  QLineEdit *udrFileText;
+  QPushButton *udrBrowseButton;
+  QLineEdit *udrFlightPathText;
+  QLineEdit *udrBurstText;
+  QLineEdit *udrChannelText;
+  QCheckBox *udrCentredCheck;
   QLineEdit *applyRangesText;
   QLineEdit *transitionWidthText;
   QLineEdit *autoToleranceText;
@@ -91,6 +98,9 @@ class AddTargetIntDialog : public QDialog {
   void beamComponentSpinChanged(int newNumber);
   void beamProfileChanged(int row, int column);
 
+  void udrCheckChanged(bool checked);
+  void udrBrowse();
+
   void elementSelectionChanged(int index);
   void compoundFormulaChanged(const QString &formula);
   void fetchStoppingPowerParameters();
@@ -103,6 +113,7 @@ class AddTargetIntDialog : public QDialog {
   QGroupBox *qCoefficientBox;
   QGroupBox *convCoefficientBox;
   QGroupBox *beamProfileBox;
+  QGroupBox *udrBox;
 
   int selectedElement_;
   int activeElementNumber() const;

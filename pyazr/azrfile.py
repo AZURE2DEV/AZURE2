@@ -1231,7 +1231,8 @@ class AzrModel:
                           beam_profile=None, tpc_sigma=0.0, truncation=0.0,
                           photodissociation=False, q_coefficients=None,
                           resonance_width_multiplier=20.0, points_per_width=50.0,
-                          active=True):
+                          udr_file=None, flight_path=None, udr_burst=0.0,
+                          udr_channel=0.0, udr_centred=True, active=True):
         """Append one experimental effect (a ``<targetInt>`` line).
 
         ``segments`` is the segment-key list as AZURE2 writes it (``"3"``,
@@ -1249,8 +1250,17 @@ class AzrModel:
         inverse reaction of a photodissociation measurement,
         ``photodissociation=True`` to weight the average with the
         detailed-balance factor.  ``q_coefficients`` are the finite-geometry
-        attenuation coefficients Q_0..Q_n.  Target integration and straggling
-        are not exposed here.  Returns ``self``.
+        attenuation coefficients Q_0..Q_n.
+
+        ``udr_file`` is a user-defined numerical resolution function in
+        SAMMY's UDR format (time-of-flight delay distributions, microseconds
+        vs. probability, tabulated at energies in eV -- the format n_TOF
+        distributes its resolution functions in).  It needs the nominal
+        ``flight_path`` in metres; ``udr_burst`` (Gaussian FWHM, ns) and
+        ``udr_channel`` (rectangular width, ns) are convolved on top, and
+        ``udr_centred`` re-centres the tabulated function on its centroid as
+        SAMMY does.  Target integration and straggling are not exposed here.
+        Returns ``self``.
         """
         if not isinstance(segments, str):
             segments = ",".join(str(int(k)) for k in segments)
@@ -1271,6 +1281,11 @@ class AzrModel:
             for xi, omega, alpha, weight in beam_profile:
                 toks += [_fmt(xi), _fmt(omega), _fmt(alpha), _fmt(weight)]
             toks += [_fmt(tpc_sigma), _fmt(truncation), 1 if photodissociation else 0]
+        if udr_file:
+            if not flight_path or flight_path <= 0:
+                raise ValueError("udr_file needs a positive flight_path in metres")
+            toks += ["udr", f'"{udr_file}"', _fmt(flight_path), _fmt(udr_burst),
+                     _fmt(udr_channel), 1 if udr_centred else 0]
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
         lines = self._suffix.splitlines()
         if "<targetInt>" in lines:

@@ -147,30 +147,45 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
         }
       }
     }
-    // Optional beam-profile kernel, introduced by a keyword so that older
-    // readers (which only ever probe for digits or a quote) stop in front of
-    // it:  beamprofile N {xi omega alpha weight}xN tpcSigma nCut dbFlag
-    if (stream.good()) {
+    // Optional keyword blocks, introduced by a word so that older readers
+    // (which only ever probe for digits or a quote) stop in front of them:
+    //   beamprofile N {xi omega alpha weight}xN tpcSigma nCut dbFlag
+    //   udr "<file>" flightPath_m burstFWHM_ns channel_ns centred
+    while (stream.good()) {
       stream >> std::ws;
-      if (stream.good() && std::isalpha(stream.peek())) {
-        std::string keyword;
-        stream >> keyword;
-        if (keyword == "beamprofile") {
-          int numComponents = 0;
-          stream >> numComponents;
-          for (int i = 0; i < numComponents && stream.good(); i++) {
-            BeamProfileComponent c;
-            stream >> c.xi >> c.omega >> c.alpha >> c.weight;
-            beamProfile_.push_back(c);
-          }
-          int dbFlag = 0;
-          stream >> beamTpcSigma_ >> beamTruncation_ >> dbFlag;
-          beamPhotodissociation_ = (dbFlag == 1);
-          isBeamProfile_ = !beamProfile_.empty() && !stream.fail();
-          if (beamProfile_.empty()) stream.setstate(std::ios_base::failbit);
-        } else {
-          stream.setstate(std::ios_base::failbit);
+      if (!(stream.good() && std::isalpha(stream.peek()))) break;
+      std::string keyword;
+      stream >> keyword;
+      if (keyword == "beamprofile") {
+        int numComponents = 0;
+        stream >> numComponents;
+        for (int i = 0; i < numComponents && stream.good(); i++) {
+          BeamProfileComponent c;
+          stream >> c.xi >> c.omega >> c.alpha >> c.weight;
+          beamProfile_.push_back(c);
         }
+        int dbFlag = 0;
+        stream >> beamTpcSigma_ >> beamTruncation_ >> dbFlag;
+        beamPhotodissociation_ = (dbFlag == 1);
+        isBeamProfile_ = !beamProfile_.empty() && !stream.fail();
+        if (beamProfile_.empty()) stream.setstate(std::ios_base::failbit);
+      } else if (keyword == "udr") {
+        stream >> std::ws;
+        std::string file;
+        if (stream.peek() == '"') {
+          stream.get();
+          std::getline(stream, file, '"');
+        } else {
+          stream >> file;
+        }
+        int centred = 1;
+        stream >> udrFlightPath_ >> udrBurstFwhm_ >> udrChannelWidth_ >> centred;
+        udrFile_ = file;
+        udrCentred_ = (centred != 0);
+        isUdr_ = !udrFile_.empty() && udrFlightPath_ > 0.0 && !stream.fail();
+        if (!isUdr_) stream.setstate(std::ios_base::failbit);
+      } else {
+        stream.setstate(std::ios_base::failbit);
       }
     }
     // A line consumed exactly to its end during the optional probes is not a
@@ -265,7 +280,194 @@ bool TargetEffect::IsBeamProfile() const {
  */
 
 bool TargetEffect::IsSubPointEffect() const {
-  return isConvolution_ || isTargetIntegration_ || isConvCoefficients_ || isBeamProfile_;
+  return isConvolution_ || isTargetIntegration_ || isConvCoefficients_ || isBeamProfile_ || isUdr_;
+}
+
+bool TargetEffect::IsUdr() const { return isUdr_; }
+const std::string &TargetEffect::GetUdrFile() const { return udrFile_; }
+double TargetEffect::GetUdrFlightPath() const { return udrFlightPath_; }
+double TargetEffect::GetUdrBurstFwhm() const { return udrBurstFwhm_; }
+double TargetEffect::GetUdrChannelWidth() const { return udrChannelWidth_; }
+bool TargetEffect::IsUdrCentred() const { return udrCentred_; }
+
+/*!
+ * Reads the SAMMY UDR file: free text up to a line containing "-----", then
+ * blocks of an energy line (eV; anything after the number is ignored)
+ * followed by (time microseconds, density) pairs, blocks separated by blank
+ * lines.  Only the blocks whose energy lies within a decade of the requested
+ * range, plus the two that bracket it, are kept: the n_TOF files tabulate
+ * 600 energies over twelve decades with 9000 points each.
+ */
+
+bool TargetEffect::LoadUdrTable(double eMinLab, double eMaxLab, std::ostream &log) {
+  if (!isUdr_) return false;
+  const double keepMin = eMinLab / 10.0, keepMax = eMaxLab * 10.0;
+  if (udrTable_ && udrTable_->file == udrFile_ && !udrTable_->energy.empty() &&
+      udrTable_->loadedMin <= keepMin && udrTable_->loadedMax >= keepMax)
+    return true;
+  std::ifstream in(udrFile_.c_str());
+  if (!in) {
+    log << "ERROR: cannot open the user-defined resolution file " << udrFile_ << std::endl;
+    return false;
+  }
+  std::shared_ptr<UdrTable> table = std::make_shared<UdrTable>();
+  table->file = udrFile_;
+  table->loadedMin = udrTable_ ? std::min(udrTable_->loadedMin, keepMin) : keepMin;
+  table->loadedMax = udrTable_ ? std::max(udrTable_->loadedMax, keepMax) : keepMax;
+  std::string line;
+  bool pastHeader = false;
+  // Keep every block inside the range, and the last one below and the first
+  // one above it, so that interpolation at the ends has both brackets.
+  std::vector<double> pendingTau, pendingR;
+  double pendingEnergy = -1.0, belowEnergy = -1.0;
+  std::vector<double> belowTau, belowR;
+  bool haveAbove = false;
+  auto flush = [&]() {
+    if (pendingEnergy < 0.0 || pendingTau.size() < 2) { pendingTau.clear(); pendingR.clear(); pendingEnergy = -1.0; return; }
+    if (pendingEnergy < table->loadedMin) {
+      belowEnergy = pendingEnergy; belowTau.swap(pendingTau); belowR.swap(pendingR);
+    } else if (pendingEnergy <= table->loadedMax || !haveAbove) {
+      if (belowEnergy >= 0.0 && table->energy.empty()) {
+        table->energy.push_back(belowEnergy); table->tau.push_back(belowTau); table->r.push_back(belowR);
+        belowEnergy = -1.0;
+      }
+      if (pendingEnergy > table->loadedMax) haveAbove = true;
+      table->energy.push_back(pendingEnergy);
+      table->tau.push_back(std::vector<double>()); table->tau.back().swap(pendingTau);
+      table->r.push_back(std::vector<double>()); table->r.back().swap(pendingR);
+    }
+    pendingTau.clear(); pendingR.clear(); pendingEnergy = -1.0;
+  };
+  while (std::getline(in, line)) {
+    if (!pastHeader) {
+      if (line.find("-----") != std::string::npos) pastHeader = true;
+      continue;
+    }
+    size_t first = line.find_first_not_of(" \t\r");
+    if (first == std::string::npos) { flush(); if (haveAbove) break; continue; }
+    if (line[first] == '#') continue;
+    const char *s = line.c_str() + first;
+    char *end = nullptr;
+    double a = std::strtod(s, &end);
+    if (end == s) continue;
+    while (*end == ' ' || *end == '\t') end++;
+    if (*end == '\0' || *end == '#' || *end == '\r' || *end == '!') {
+      flush();
+      if (haveAbove) break;
+      pendingEnergy = a * 1.0e-6;  // eV -> MeV
+      continue;
+    }
+    char *end2 = nullptr;
+    double b = std::strtod(end, &end2);
+    if (end2 == end) continue;
+    if (pendingEnergy >= 0.0) { pendingTau.push_back(a); pendingR.push_back(b); }
+  }
+  flush();
+  if (table->energy.empty()) {
+    log << "ERROR: no resolution functions between " << keepMin << " and " << keepMax
+        << " MeV in " << udrFile_ << std::endl;
+    return false;
+  }
+  log << "Read " << table->energy.size() << " user-defined resolution functions from "
+      << udrFile_ << " (" << table->energy.front() << " - " << table->energy.back() << " MeV)" << std::endl;
+  udrTable_ = table;
+  return true;
+}
+
+/*!
+ * Linear interpolation of the two bracketing tabulated functions (both the
+ * delay grid and the density, as SAMMY does), then centring, burst/channel
+ * convolution and normalisation.
+ */
+
+std::shared_ptr<const UdrKernel> TargetEffect::BuildUdrKernel(double eLab, double mass) const {
+  std::shared_ptr<UdrKernel> k = std::make_shared<UdrKernel>();
+  if (!udrTable_ || udrTable_->energy.empty()) return k;
+  const UdrTable &t = *udrTable_;
+  size_t hi = 0;
+  while (hi < t.energy.size() && t.energy[hi] < eLab) hi++;
+  if (hi == 0 || hi == t.energy.size()) {
+    size_t i = (hi == 0) ? 0 : t.energy.size() - 1;
+    k->tau = t.tau[i];
+    k->r = t.r[i];
+  } else {
+    size_t lo = hi - 1;
+    double f = (eLab - t.energy[lo]) / (t.energy[hi] - t.energy[lo]);
+    size_t n = std::min(t.tau[lo].size(), t.tau[hi].size());
+    k->tau.resize(n);
+    k->r.resize(n);
+    for (size_t j = 0; j < n; j++) {
+      k->tau[j] = (1.0 - f) * t.tau[lo][j] + f * t.tau[hi][j];
+      k->r[j] = (1.0 - f) * t.r[lo][j] + f * t.r[hi][j];
+    }
+  }
+  const size_t n = k->tau.size();
+  if (n < 2) return k;
+  for (size_t j = 0; j < n; j++) if (k->r[j] < 0.0) k->r[j] = 0.0;
+  // Centroid of the tabulated function (trapezoid on the piecewise-linear
+  // density); SAMMY realigns the function so that its centroid is at zero,
+  // the mean delay being part of the nominal flight path.
+  if (udrCentred_) {
+    double norm = 0.0, first = 0.0;
+    for (size_t j = 0; j + 1 < n; j++) {
+      double dt = k->tau[j + 1] - k->tau[j];
+      norm += 0.5 * (k->r[j] + k->r[j + 1]) * dt;
+      first += dt * (k->r[j] * (2.0 * k->tau[j] + k->tau[j + 1]) + k->r[j + 1] * (k->tau[j] + 2.0 * k->tau[j + 1])) / 6.0;
+    }
+    if (norm > 0.0) {
+      double centroid = first / norm;
+      for (size_t j = 0; j < n; j++) k->tau[j] -= centroid;
+    }
+  }
+  // Burst (Gaussian, FWHM) and channel width (rectangular) in time, both in
+  // nanoseconds on the line; their convolution has the closed form
+  // [erf((x + c/2)/(s sqrt2)) - erf((x - c/2)/(s sqrt2))] / (2c).
+  const double sigma = udrBurstFwhm_ * 1.0e-3 / 2.3548200450309493;
+  // A negative channel width means |n| bins per decade of energy, the
+  // logarithmic binning of n_TOF data: a bin then spans t ln(10)/(2n) in
+  // time at this point's flight time t (SAMMY manual eq. III C3 a.14).
+  double width = udrChannelWidth_ * 1.0e-3;
+  if (udrChannelWidth_ < 0.0)
+    width = UdrKinematics::TimeOfFlight(eLab, mass, udrFlightPath_) * std::log(10.0) / (2.0 * std::fabs(udrChannelWidth_));
+  if (sigma > 0.0 || width > 0.0) {
+    double dt = (k->tau.back() - k->tau.front()) / (n - 1);
+    double half = 5.0 * sigma + 0.5 * width;
+    int m = static_cast<int>(std::ceil(half / dt));
+    std::vector<double> h(2 * m + 1);
+    double hsum = 0.0;
+    for (int i = -m; i <= m; i++) {
+      double x = i * dt, v;
+      if (sigma > 0.0 && width > 0.0)
+        v = 0.5 * (std::erf((x + 0.5 * width) / (sigma * std::sqrt(2.0))) - std::erf((x - 0.5 * width) / (sigma * std::sqrt(2.0)))) / width;
+      else if (sigma > 0.0)
+        v = std::exp(-0.5 * x * x / (sigma * sigma)) / (sigma * std::sqrt(2.0 * pi));
+      else
+        v = (std::fabs(x) <= 0.5 * width) ? 1.0 / width : 0.0;
+      h[i + m] = v;
+      hsum += v;
+    }
+    for (double &v : h) v /= hsum;  // discrete normalisation: the response sums to one
+    std::vector<double> tau2(n + 2 * m), r2(n + 2 * m, 0.0);
+    for (size_t j = 0; j < tau2.size(); j++) tau2[j] = k->tau.front() + (static_cast<double>(j) - m) * dt;
+    for (size_t j = 0; j < n; j++) {
+      if (k->r[j] == 0.0) continue;
+      for (int i = -m; i <= m; i++) r2[j + m + i] += k->r[j] * h[i + m];
+    }
+    k->tau.swap(tau2);
+    k->r.swap(r2);
+  }
+  // Support and normalisation.
+  double peak = 0.0;
+  for (double v : k->r) peak = std::max(peak, v);
+  size_t a = 0, b = k->r.size() - 1;
+  while (a < b && k->r[a] <= 1.0e-9 * peak) a++;
+  while (b > a && k->r[b] <= 1.0e-9 * peak) b--;
+  k->tauMin = k->tau[a];
+  k->tauMax = k->tau[b];
+  double norm = 0.0;
+  for (size_t j = 0; j + 1 < k->tau.size(); j++) norm += 0.5 * (k->r[j] + k->r[j + 1]) * (k->tau[j + 1] - k->tau[j]);
+  if (norm > 0.0) for (double &v : k->r) v /= norm;
+  return k;
 }
 
 /*!

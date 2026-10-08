@@ -176,6 +176,48 @@ int main(int argc, char** argv) {
   QString out8 = roundTrip(tab, legacy, readOk);
   ok("no beam-profile token invented", !out8.contains("beamprofile"), out8);
 
+  // 9. A user-defined resolution block: quoted path with a space, flight
+  //    path, burst, channel width and the centring flag; alone and after a
+  //    beam-profile block on the same line.
+  QString udrLine =
+      "1 \"4\" 200 0 0 0 0 \"\" 0 0 0 0 \"\" 0 0 0.04 20 50 "
+      "udr \"data/RF EAR1_v2.txt\" 183.5 7 0 1\n</targetInt>\n";
+  QString out9 = roundTrip(tab, udrLine, readOk);
+  ok("read a line carrying a UDR block", readOk);
+  lines = tab.getTargetIntModel()->getLines();
+  if (lines.size() == 1) {
+    const TargetIntData& d = lines.at(0);
+    ok("UDR flag read", d.isUdr);
+    ok("UDR path with a space kept", d.udrFile == "data/RF EAR1_v2.txt", d.udrFile);
+    ok("flight path read", d.udrFlightPath == 183.5);
+    ok("burst read", d.udrBurstFwhm == 7.);
+    ok("channel width read", d.udrChannelWidth == 0.);
+    ok("centring read", d.udrCentred);
+    ok("no beam profile invented", !d.isBeamProfile);
+    ok("grid parameters before the keyword still read", d.resonanceWidthMultiplier == 20. && d.pointsPerWidth == 50.);
+  }
+  ok("UDR block written back", out9.contains("udr \"data/RF EAR1_v2.txt\" 183.5 7 0 1"), out9);
+  bool readOk9 = false;
+  QString out9b = roundTrip(tab, out9 + "</targetInt>\n", readOk9);
+  ok("UDR round trip stable", readOk9 && out9b == out9, out9b);
+  ok("no UDR token on a legacy line", !out8.contains(" udr "), out8);
+
+  QString bothBlocks =
+      "1 \"3\" 200 0 0 0 0 \"\" 0 0 0 0 \"\" 0 0 0.04 20 50 "
+      "beamprofile 1 2.5 0.3 -1.5 1 0.07 0 1 udr nTOF.txt 185 0 3.2 0\n</targetInt>\n";
+  QString out10 = roundTrip(tab, bothBlocks, readOk);
+  ok("read beam-profile and UDR blocks together", readOk);
+  lines = tab.getTargetIntModel()->getLines();
+  if (lines.size() == 1) {
+    const TargetIntData& d = lines.at(0);
+    ok("beam profile still read beside UDR", d.isBeamProfile && d.beamProfile.size() == 4);
+    ok("unquoted UDR path read", d.isUdr && d.udrFile == "nTOF.txt", d.udrFile);
+    ok("uncentred flag read", !d.udrCentred);
+    ok("channel width read beside burst zero", d.udrChannelWidth == 3.2 && d.udrBurstFwhm == 0.);
+  }
+  ok("both blocks written back in order",
+     out10.indexOf("beamprofile 1 ") >= 0 && out10.indexOf(" udr \"nTOF.txt\" 185 0 3.2 0") > out10.indexOf("beamprofile 1 "), out10);
+
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;
   return fails ? 1 : 0;
 }

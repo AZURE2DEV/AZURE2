@@ -6,6 +6,7 @@
 #include <QPushButton>
 #include <QTextStream>
 #include <QHeaderView>
+#include <QRegularExpression>
 
 #include "TargetIntTab.h"
 #include "InfoDialog.h"
@@ -128,6 +129,13 @@ void TargetIntTab::addLine() {
     newLine.beamTruncation = aDialog.beamTruncationText->text().toDouble();
     newLine.beamPhotodissociation = aDialog.beamPhotodissociationCheck->isChecked();
 
+    newLine.isUdr = aDialog.isUdrCheck->isChecked();
+    newLine.udrFile = aDialog.udrFileText->text().trimmed();
+    newLine.udrFlightPath = aDialog.udrFlightPathText->text().toDouble();
+    newLine.udrBurstFwhm = aDialog.udrBurstText->text().toDouble();
+    newLine.udrChannelWidth = aDialog.udrChannelText->text().toDouble();
+    newLine.udrCentred = aDialog.udrCentredCheck->isChecked();
+
     addLine(newLine);
   }
 }
@@ -191,6 +199,18 @@ void TargetIntTab::addLine(TargetIntData line) {
   targetIntModel->setData(index, line.beamTruncation, Qt::EditRole);
   index = targetIntModel->index(lines.size(), 26, QModelIndex());
   targetIntModel->setData(index, line.beamPhotodissociation, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 27, QModelIndex());
+  targetIntModel->setData(index, line.isUdr, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 28, QModelIndex());
+  targetIntModel->setData(index, line.udrFile, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 29, QModelIndex());
+  targetIntModel->setData(index, line.udrFlightPath, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 30, QModelIndex());
+  targetIntModel->setData(index, line.udrBurstFwhm, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 31, QModelIndex());
+  targetIntModel->setData(index, line.udrChannelWidth, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 32, QModelIndex());
+  targetIntModel->setData(index, line.udrCentred, Qt::EditRole);
 
   targetIntView->resizeRowsToContents();
 }
@@ -282,6 +302,24 @@ void TargetIntTab::editLine() {
   i = targetIntModel->index(index.row(), 26, QModelIndex());
   var = targetIntModel->data(i, Qt::EditRole);
   bool beamPhotodissociation = var.toBool();
+  i = targetIntModel->index(index.row(), 27, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  bool isUdr = var.toBool();
+  i = targetIntModel->index(index.row(), 28, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  QString udrFile = var.toString();
+  i = targetIntModel->index(index.row(), 29, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  double udrFlightPath = var.toDouble();
+  i = targetIntModel->index(index.row(), 30, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  double udrBurstFwhm = var.toDouble();
+  i = targetIntModel->index(index.row(), 31, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  double udrChannelWidth = var.toDouble();
+  i = targetIntModel->index(index.row(), 32, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  bool udrCentred = var.toBool();
 
   AddTargetIntDialog aDialog;
   aDialog.setWindowTitle(tr("Edit an Experimental Effect Line"));
@@ -335,6 +373,13 @@ void TargetIntTab::editLine() {
   // unchecked box seeds the spin with 1.
   aDialog.isBeamProfileCheck->setChecked(isBeamProfile);
   aDialog.numBeamComponentSpin->setValue(beamProfile.size() / 4);
+
+  aDialog.udrFileText->setText(udrFile);
+  aDialog.udrFlightPathText->setText(QString::number(udrFlightPath, 'g', 10));
+  aDialog.udrBurstText->setText(QString::number(udrBurstFwhm, 'g', 10));
+  aDialog.udrChannelText->setText(QString::number(udrChannelWidth, 'g', 10));
+  aDialog.udrCentredCheck->setChecked(udrCentred);
+  aDialog.isUdrCheck->setChecked(isUdr);
 
   if (aDialog.exec()) {
     QString newSegmentsList = aDialog.segmentsListText->text();
@@ -494,6 +539,36 @@ void TargetIntTab::editLine() {
       i = targetIntModel->index(index.row(), 26, QModelIndex());
       targetIntModel->setData(i, newBeamPhotodissociation, Qt::EditRole);
     }
+    bool newIsUdr = aDialog.isUdrCheck->isChecked();
+    if (isUdr != newIsUdr) {
+      i = targetIntModel->index(index.row(), 27, QModelIndex());
+      targetIntModel->setData(i, newIsUdr, Qt::EditRole);
+    }
+    QString newUdrFile = aDialog.udrFileText->text().trimmed();
+    if (udrFile != newUdrFile) {
+      i = targetIntModel->index(index.row(), 28, QModelIndex());
+      targetIntModel->setData(i, newUdrFile, Qt::EditRole);
+    }
+    double newUdrFlightPath = aDialog.udrFlightPathText->text().toDouble();
+    if (udrFlightPath != newUdrFlightPath) {
+      i = targetIntModel->index(index.row(), 29, QModelIndex());
+      targetIntModel->setData(i, newUdrFlightPath, Qt::EditRole);
+    }
+    double newUdrBurstFwhm = aDialog.udrBurstText->text().toDouble();
+    if (udrBurstFwhm != newUdrBurstFwhm) {
+      i = targetIntModel->index(index.row(), 30, QModelIndex());
+      targetIntModel->setData(i, newUdrBurstFwhm, Qt::EditRole);
+    }
+    double newUdrChannelWidth = aDialog.udrChannelText->text().toDouble();
+    if (udrChannelWidth != newUdrChannelWidth) {
+      i = targetIntModel->index(index.row(), 31, QModelIndex());
+      targetIntModel->setData(i, newUdrChannelWidth, Qt::EditRole);
+    }
+    bool newUdrCentred = aDialog.udrCentredCheck->isChecked();
+    if (udrCentred != newUdrCentred) {
+      i = targetIntModel->index(index.row(), 32, QModelIndex());
+      targetIntModel->setData(i, newUdrCentred, Qt::EditRole);
+    }
   }
 }
 
@@ -590,6 +665,16 @@ bool TargetIntTab::writeFile(QTextStream &outStream) {
       outStream << " " << QString::number(lines.at(i).beamTpcSigma, 'g', 12)
                 << " " << QString::number(lines.at(i).beamTruncation, 'g', 12)
                 << " " << (lines.at(i).beamPhotodissociation ? 1 : 0);
+    }
+    // Optional user-defined resolution function, likewise keyword-introduced
+    // and last on the line; the file name is quoted so that paths with spaces
+    // survive.
+    if (lines.at(i).isUdr && !lines.at(i).udrFile.trimmed().isEmpty()) {
+      outStream << " udr \"" << lines.at(i).udrFile.trimmed() << "\" "
+                << QString::number(lines.at(i).udrFlightPath, 'g', 12)
+                << " " << QString::number(lines.at(i).udrBurstFwhm, 'g', 12)
+                << " " << QString::number(lines.at(i).udrChannelWidth, 'g', 12)
+                << " " << (lines.at(i).udrCentred ? 1 : 0);
     }
     outStream << Qt::endl;
   }
@@ -700,6 +785,36 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
       double beamTpcSigma = 0.;
       double beamTruncation = 0.;
       int beamPhotodissociation = 0;
+      // The user-defined-resolution block is split off first: it is written
+      // after the beam profile, and its quoted path must not be seen by the
+      // ranges parser below.
+      bool tempIsUdr = false;
+      QString udrFile;
+      double udrFlightPath = 0., udrBurst = 0., udrChannel = 0.;
+      int udrCentred = 1;
+      int udrPos = remaining.indexOf(QRegularExpression("(^|\\s)udr\\s"));
+      if (udrPos >= 0) {
+        QString udrPart = remaining.mid(udrPos).trimmed().mid(3).trimmed();
+        remaining = remaining.left(udrPos).trimmed();
+        if (udrPart.startsWith('"')) {
+          int closeQuote = udrPart.indexOf('"', 1);
+          if (closeQuote > 0) {
+            udrFile = udrPart.mid(1, closeQuote - 1);
+            udrPart = udrPart.mid(closeQuote + 1).trimmed();
+          }
+        } else {
+          int space = udrPart.indexOf(QRegularExpression("\\s"));
+          udrFile = (space > 0) ? udrPart.left(space) : udrPart;
+          udrPart = (space > 0) ? udrPart.mid(space).trimmed() : QString();
+        }
+        QTextStream udrStream(&udrPart);
+        udrStream >> udrFlightPath;
+        if (udrStream.status() == QTextStream::Ok) udrStream >> udrBurst;
+        if (udrStream.status() == QTextStream::Ok) udrStream >> udrChannel;
+        if (udrStream.status() == QTextStream::Ok) udrStream >> udrCentred;
+        tempIsUdr = !udrFile.isEmpty() && udrFlightPath > 0.;
+        if (!tempIsUdr) udrFile.clear();
+      }
       const QString beamKeyword("beamprofile");
       int beamPos = remaining.indexOf(beamKeyword);
       if (beamPos >= 0) {
@@ -767,7 +882,7 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
       bool tempIsTargetIntegration = false;
       if (isTargetIntegration == 1) tempIsTargetIntegration = true;
 
-      TargetIntData newLine = {isActive, segmentsList.remove('\"'), numPoints, tempIsConvolution, sigma, tempIsTargetIntegration, density, stoppingPowerEq.remove('\"'), numParameters, parameters, tempIsQCoefficient, qCoefficients, tempIsConvCoefficient, convCoefficients, convolutionEq.remove('\"'), tempIsStraggling, stragglingCoefficient, resonanceWidthMultiplier, pointsPerWidth, applyRanges, transitionWidth, autoTolerance, tempIsBeamProfile, beamProfile, beamTpcSigma, beamTruncation, beamPhotodissociation == 1};
+      TargetIntData newLine = {isActive, segmentsList.remove('\"'), numPoints, tempIsConvolution, sigma, tempIsTargetIntegration, density, stoppingPowerEq.remove('\"'), numParameters, parameters, tempIsQCoefficient, qCoefficients, tempIsConvCoefficient, convCoefficients, convolutionEq.remove('\"'), tempIsStraggling, stragglingCoefficient, resonanceWidthMultiplier, pointsPerWidth, applyRanges, transitionWidth, autoTolerance, tempIsBeamProfile, beamProfile, beamTpcSigma, beamTruncation, beamPhotodissociation == 1, tempIsUdr, udrFile, udrFlightPath, udrBurst, udrChannel, udrCentred != 0};
       addLine(newLine);
     }
   }

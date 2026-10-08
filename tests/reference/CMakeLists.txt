@@ -11,6 +11,14 @@ target_link_libraries(beam_profile_reference_test PRIVATE AZURE2Core)
 
 add_test(NAME beam_profile_reference COMMAND beam_profile_reference_test)
 
+# User-defined numerical resolution function: kernel moments against closed
+# forms (unit integral, centring, burst/channel widths in quadrature, energy
+# interpolation) and the time-of-flight conversions.  Writes and removes a
+# temporary file in its working directory.
+add_executable(udr_reference_test udr_reference_test.cpp)
+target_link_libraries(udr_reference_test PRIVATE AZURE2Core)
+add_test(NAME udr_reference COMMAND udr_reference_test)
+
 # Compound stopping cross section (Bragg's rule) against the single-element
 # values: per active atom and per average atom.  Reads erya/data/SRIM2013.xml,
 # so it runs from external/.

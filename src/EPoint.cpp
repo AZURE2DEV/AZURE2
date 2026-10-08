@@ -2185,6 +2185,69 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
     }
 
     yield = integral / integralC;
+  } else if (targetEffect->IsUdr()) {
+    // User-defined numerical resolution function (SAMMY UDR).  The kernel
+    // R(tau) is the density of time-of-flight delays at this point's energy;
+    // a sub-point at true lab energy E' is seen at the delay
+    //   tau(E') = t(E0) - t(E'),
+    // so the fitted value is  sum_i w_i sigma_i / sum_i w_i  with
+    //   w_i = int R(tau) phi_i(tau) dtau,
+    // phi_i the hat function of sub-point i on the delay axis: the exact
+    // integral of the piecewise-linear kernel against the linearly
+    // interpolated cross section, as in SAMMY's Udr_Resb.  Each product is a
+    // quadratic on every piece between breakpoints of either grid, so
+    // Simpson's rule evaluates it exactly.
+    const UdrKernel *kernel = this->GetUdrKernel();
+    int numPoints = this->NumSubPoints();
+    if (!kernel || kernel->tau.size() < 2 || numPoints < 2) {
+      this->SetFitCrossSection(0.0);
+      return;
+    }
+    const double mass = this->GetUdrProjectileMass();
+    const double path = targetEffect->GetUdrFlightPath();
+    const double cmPerLab = (lab_energy_ != 0.0) ? cm_energy_ / lab_energy_ : 1.0;
+    const double t0 = UdrKinematics::TimeOfFlight(lab_energy_, mass, path);
+    // Sub-points run from high to low energy, i.e. from large to small delay;
+    // collect them in ascending delay.
+    std::vector<double> tauSub(numPoints), sigmaSub(numPoints);
+    for (int i = 1; i <= numPoints; i++) {
+      const EPoint *sp = this->GetSubPoint(i);
+      tauSub[numPoints - i] = t0 - UdrKinematics::TimeOfFlight(sp->GetCMEnergy() / cmPerLab, mass, path);
+      sigmaSub[numPoints - i] = sp->GetFitCrossSection();
+    }
+    std::vector<double> w(numPoints, 0.0);
+    const std::vector<double> &T = kernel->tau;
+    const std::vector<double> &R = kernel->r;
+    size_t j = 0;  // sub-point interval [tauSub[j], tauSub[j+1]]
+    for (size_t k = 0; k + 1 < T.size(); k++) {
+      double ta = T[k], tb = T[k + 1];
+      if (tb <= tauSub.front() || ta >= tauSub.back()) continue;
+      while (j + 1 < static_cast<size_t>(numPoints) && tauSub[j + 1] <= ta) j++;
+      double lo = std::max(ta, tauSub.front());
+      double hiAll = std::min(tb, tauSub.back());
+      size_t jj = j;
+      while (lo < hiAll && jj + 1 < static_cast<size_t>(numPoints)) {
+        double hi = std::min(hiAll, tauSub[jj + 1]);
+        if (hi > lo) {
+          double sa = tauSub[jj], sb = tauSub[jj + 1], ds = sb - sa;
+          auto rOf = [&](double x) { return R[k] + (R[k + 1] - R[k]) * (x - ta) / (tb - ta); };
+          double mid = 0.5 * (lo + hi);
+          double fl = rOf(lo), fm = rOf(mid), fh = rOf(hi);
+          double h = (hi - lo) / 6.0;
+          // hat of jj:  (sb - x)/ds ;  hat of jj+1:  (x - sa)/ds
+          w[jj] += h * (fl * (sb - lo) + 4.0 * fm * (sb - mid) + fh * (sb - hi)) / ds;
+          w[jj + 1] += h * (fl * (lo - sa) + 4.0 * fm * (mid - sa) + fh * (hi - sa)) / ds;
+        }
+        lo = hi;
+        if (lo >= tauSub[jj + 1]) jj++;
+      }
+    }
+    double numerator = 0.0, denominator = 0.0;
+    for (int i = 0; i < numPoints; i++) {
+      numerator += w[i] * sigmaSub[i];
+      denominator += w[i];
+    }
+    yield = (denominator > 0.0) ? numerator / denominator : 0.0;
   } else if (targetEffect->IsBeamProfile()) {
     // Beam-profile kernel (photodissociation in a broad, skewed gamma beam
     // with an event-by-event reconstructed energy, cf. Haverson 2026 App. A):

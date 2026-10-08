@@ -4,9 +4,12 @@
 #include <string>
 #include <fstream>
 #include <vector>
+#include <memory>
+#include <iosfwd>
 #include "Constants.h"
 #include "Equation.h"
 #include "Straggling.h"
+#include "UdrKernel.h"
 
 /// An AZURE target effect entry
 
@@ -112,7 +115,44 @@ class TargetEffect {
   void ConvertSigmaToCM(double factor);
   const std::vector<BeamProfileComponent> &GetBeamProfile() const;
 
+  /// User-defined numerical resolution function (SAMMY's UDR): a file of
+  /// time-of-flight delay distributions tabulated at a set of energies, in
+  /// SAMMY's UDR format, convolved with a Gaussian burst and a rectangular
+  /// channel width.  Written as the trailing block
+  /// `udr "<file>" flightPath_m burstFWHM_ns channel_ns centred` of a
+  /// targetInt line; a negative channel value is |n| bins per decade of
+  /// energy (logarithmic binning), i.e. a width of t ln(10)/(2n) in time.
+  bool IsUdr() const;
+  const std::string &GetUdrFile() const;
+  double GetUdrFlightPath() const;
+  double GetUdrBurstFwhm() const;
+  double GetUdrChannelWidth() const;
+  bool IsUdrCentred() const;
+  /// Read the tabulated functions whose energies lie within a decade of
+  /// [eMin, eMax] (lab MeV), plus the bracketing ones; merges with what is
+  /// already loaded.  Returns false if the file cannot be read.
+  bool LoadUdrTable(double eMinLab, double eMaxLab, std::ostream &log);
+  /// The kernel for a point at lab energy eLab (MeV) for a projectile of rest
+  /// energy mass (MeV): the table interpolated in energy, centred if asked,
+  /// convolved with the burst and channel width, normalised.
+  std::shared_ptr<const UdrKernel> BuildUdrKernel(double eLab, double mass) const;
+
  private:
+  struct UdrTable {
+    std::string file;
+    std::vector<double> energy;                ///< lab MeV, ascending
+    std::vector<std::vector<double> > tau;     ///< microseconds, per energy
+    std::vector<std::vector<double> > r;       ///< per microsecond, per energy
+    double loadedMin = 0.0, loadedMax = 0.0;   ///< lab MeV range the table covers
+  };
+  bool isUdr_ = false;
+  std::string udrFile_;
+  double udrFlightPath_ = 0.0;   ///< metres
+  double udrBurstFwhm_ = 0.0;    ///< nanoseconds
+  double udrChannelWidth_ = 0.0; ///< nanoseconds
+  bool udrCentred_ = true;
+  std::shared_ptr<UdrTable> udrTable_;  ///< shared between copies of the effect
+
   bool isConvolution_;
   bool isTargetIntegration_;
   bool isActive_;
