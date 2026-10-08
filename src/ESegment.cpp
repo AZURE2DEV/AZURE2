@@ -766,7 +766,14 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
             double subOriginalEnergy = subPoint->GetOriginalEnergy();
             // Subpoints hold c.m. energies: evaluate the lab shift at the
             // subpoint's own lab energy and convert it to the c.m. frame.
-            double cmFactor = (entrancePair->GetM(2)) / (entrancePair->GetM(1) + entrancePair->GetM(2));
+            double cmFactor;
+            // A beta-delayed segment (entrance ptype 20) carries the light decay
+            // particle's lab energy; c.m. = lab*(M1+M2)/M2 of the EXIT pair
+            // (EPoint::ConvertDecayEnergy), not the entrance-pair ratio.
+            if (entrancePair->GetPType() == 20)
+              cmFactor = (exitPair->GetM(1) + exitPair->GetM(2)) / exitPair->GetM(2);
+            else
+              cmFactor = (entrancePair->GetM(2)) / (entrancePair->GetM(1) + entrancePair->GetM(2));
             double energyShiftCM = cmFactor * TotalEnergyShift(subOriginalEnergy / cmFactor);
             double subShiftedEnergy = ShiftedEnergy(subOriginalEnergy, energyShiftCM);
 
@@ -777,7 +784,11 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
 
             // Recalculate energy dependent values for subpoint
             if (entrancePair->GetPType() == 20) {
-              subPoint->ConvertDecayEnergy(exitPair);
+              // The c.m. energy was set above. ConvertDecayEnergy would read the lab
+              // slot (now holding the c.m. value) and multiply by (M1+M2)/M2 again,
+              // pushing every convolution sub-point of a beta-delayed spectrum up by
+              // 4/3 and corrupting the folded yield; only the excitation energy needs updating.
+              subPoint->ConvertExcitationEnergy(exitPair);
             } else if (this->IsCMDifferential()) {
               // subPoint->ConvertLabEnergy(entrancePair);
             } else if (!this->IsCMDifferential()) {
