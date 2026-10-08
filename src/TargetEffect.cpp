@@ -456,6 +456,16 @@ std::shared_ptr<const UdrKernel> TargetEffect::BuildUdrKernel(double eLab, doubl
     k->tau.swap(tau2);
     k->r.swap(r2);
   }
+  // A delay cannot approach the flight time itself: t0 - tau is the true
+  // flight time, and as it goes to zero the true energy diverges.  Drop the
+  // part of the tabulation that would put the true energy above 100 times
+  // the nominal one (no real resolution function has weight there; a badly
+  // scaled or uncentred table can), so the sub-point window stays finite.
+  {
+    const double t0 = UdrKinematics::TimeOfFlight(eLab, mass, udrFlightPath_);
+    const double tauCap = t0 - UdrKinematics::TimeOfFlight(100.0 * eLab, mass, udrFlightPath_);
+    for (size_t j = 0; j < k->tau.size(); j++) if (k->tau[j] > tauCap) k->r[j] = 0.0;
+  }
   // Support and normalisation.
   double peak = 0.0;
   for (double v : k->r) peak = std::max(peak, v);

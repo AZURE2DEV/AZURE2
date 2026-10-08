@@ -156,6 +156,23 @@ int main() {
     moments(*te.BuildUdrKernel(10.0, mn), norm, mean, var);
     check("above the table: last tabulation used", std::sqrt(var), 3.0 * s, 1e-4 * s);
   }
+  // Delay cap: a tabulation reaching delays close to the flight time (true
+  // energy above 100 x nominal) is cut there and renormalised, so a badly
+  // scaled or uncentred table cannot send the sub-point window to infinity.
+  {
+    const double t0 = UdrKinematics::TimeOfFlight(1.0, mn, 100.0);
+    const double cap = t0 - UdrKinematics::TimeOfFlight(100.0, mn, 100.0);
+    std::string late = writeUdr(0.1, cap + 0.15, 1.0, one);  // Gaussian, 0.1 us wide, centred 0.15 us past the cap
+    TargetEffect te = makeEffect(config, late, 0.0, 0.0, 0);
+    std::ostringstream log;
+    te.LoadUdrTable(0.5, 2.0, log);
+    std::shared_ptr<const UdrKernel> k = te.BuildUdrKernel(1.0, mn);
+    double norm, mean, var;
+    moments(*k, norm, mean, var);
+    check("delay cap: support ends at the cap", k->tauMax, cap, 3e-3);
+    check("delay cap: integral still one", norm, 1.0, 1e-9);
+    check("delay cap: mean below the cap", mean < cap ? 1 : 0, 1, 0);
+  }
   // Kinematics: a 1 MeV neutron over 100 m takes 7.2356 us (7.2296 us
   // non-relativistically; beta = 0.046101), and the inverse conversion
   // recovers the energy.
