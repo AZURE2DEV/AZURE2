@@ -861,7 +861,9 @@ energy and total width at the current parameters, Brune (required:
 ``lineshape=on`` with the formal parameterization is refused):
 :math:`\Gamma_\lambda = \sum_c 2\gamma_c^2P_c(E_\lambda) /
 (1 + \sum_c\gamma_c^2\,dS_c/dE)` over the open particle channels plus the
-radiative widths, as ``parameters.out`` writes them. The papers derive
+radiative widths, as ``parameters.out`` writes them (under ``--use-park``,
+:math:`\sum_c 2\gamma_c^2P_c` of Park's amplitudes: the same width; "Brune
+and Park" below). The papers derive
 :math:`N_C` for one isolated narrow level. For overlapping levels the poles of
 the level matrix are not exactly the Brune :math:`(E_\lambda, \Gamma_\lambda)`,
 and the factor on the exit index is an approximation; for a broad level
@@ -3126,6 +3128,87 @@ parameters that only rescales :math:`m` is absorbed by :math:`n^*` and gives
 no band, as it should: the THM scale is arbitrary.
 ``tests/thm_band/check.sh`` checks the band against finite differences of the
 CLI's own output on ``tests/18O_p_a_thm`` with six free parameters.
+
+Brune and Park
+--------------
+
+Park's parametrization (``--use-park``, the GUI's "Use Park parametrization";
+:doc:`../reference/command_line`) applies to THM segments as to on-shell ones,
+and gives the same model. Park's amplitudes are Brune's rescaled level by level,
+:math:`\gamma^\mathrm{P}_{\lambda c} = \gamma^\mathrm{B}_{\lambda c}\sqrt{J_\lambda}`,
+and Park's level matrix is Brune's with :math:`D = \mathrm{diag}(\sqrt{J_\lambda})`
+on both sides, :math:`(A^\mathrm{P})^{-1} = D\,(A^\mathrm{B})^{-1} D`. The HOES
+amplitude
+
+.. math::
+
+   \sum_{\lambda\mu} N_{C,\lambda}\,\gamma_{\lambda f}\,A_{\lambda\mu}
+   \sum_{c} \gamma_{\mu c}\, M_l(p, B_{\mu c})
+
+is bilinear in the amplitudes, and everything else in it is diagonal in the
+levels: the vertex boundary (a constant per :math:`J^\pi` group, or
+:math:`S_c(E_\mu)` with ``vertex=perlevel``, or the level-free ``onshell``
+:math:`L_c(E)`) and the line-shape factor. Diagonal factors commute with
+:math:`D`, so :math:`\gamma^\mathrm{P\,T} A^\mathrm{P} \gamma^\mathrm{P} =
+\gamma^\mathrm{B\,T} A^\mathrm{B}\gamma^\mathrm{B}` term by term, as for the
+collision matrix. The coherent background :math:`c(E)\,M_l` carries no width
+and is added unchanged; the kinematic factors, :math:`R(E)`, the DW vertex,
+the spectator window, the angular window and the profiled norm and background
+do not see the amplitudes at all.
+
+Three places read the amplitudes as widths and know the parametrization: the
+line-shape pole :math:`\Gamma_\lambda` (``ThmLevelWidth``: Brune's
+:math:`2P\gamma^2/(1+\sum\gamma^2 S')` is :math:`2P\gamma^2` of Park's
+amplitudes), the resonance widths that size the adaptive integration grid
+during a fit (``AdaptiveIntegrationGrid``, ``GridConfig::parkAmplitudes``: the
+estimate of the same Brune parameters, so that both modes put the sub-points
+at the same energies), and a channel entered as an amplitude
+(``gammaIsRWA``): the value in the file is Brune's amplitude in either mode,
+read under Park as :math:`\gamma\sqrt{J}` and written back (``save_fit``, the
+GUI's parameter-file load) as :math:`\gamma^\mathrm{P}/\sqrt{J}`, so the
+same file is the same model in both modes.
+
+``tests/thm_park/check.sh`` runs every THM example and test project, and
+``tests/18O_p_a_thm`` with each THM option, in both modes: the models agree to
+:math:`10^{-8}` at every point (most of them bit for bit; ``f19_pag_thm``, with
+levels of :math:`J` down to 0.02, to :math:`4\times10^{-10}`), the widths in
+``parameters.out`` to :math:`10^{-5}` (Brune's round trip of the input). A
+parameter file written in one mode reproduces the model in the other (to the
+8 digits of ``param.par``), and independent fits find the same minimum.
+The THM rows of the Jacobian are central differences of the HOES model in the
+fit's own amplitudes, so under Park they include the dependence of
+:math:`J_\lambda` on every amplitude and on the energy of the level;
+``tests/pyazr/thm_park_test.py`` checks them against differences of the
+residuals and against the Brune Jacobian times
+:math:`\partial x^\mathrm{B}/\partial x^\mathrm{P}`.
+
+Two limits. A level whose observed widths exceed what the channel radii allow
+(:math:`J_\lambda \le 0` under Park, "Denominator less than zero" under Brune)
+has no counterpart in the other mode: Brune's transformation then returns
+some other widths, Park takes them as given, reports the level and penalizes
+the fit objective by :math:`\sum_\lambda (J_\lambda/10^{-3})^2`; MCMC rejects
+such points. ``tests/7Li_p_a`` and ``tests/6Li_d`` are such files (both are
+compared through their parameter files). And :math:`J_\lambda` needs
+:math:`dS/dE` at the level energy, a numerical derivative: levels with
+:math:`J \ll 1` (a reduced width far above the Wigner limit) agree between the
+modes to a few :math:`10^{-10}` rather than bit for bit.
+
+*When Park helps a THM fit.* A Park amplitude is the observed width,
+:math:`\Gamma_c = 2P_c\gamma_c^2`, with no factor from the other channels of
+the level. A THM analysis typically fixes or constrains some partial widths
+from other experiments (the exit width from direct data, a total width from a
+compilation) and fits the entrance amplitude: under Park fixing a width fixes
+one parameter, a prior on one width is a prior on one parameter, and the
+Wigner-limit bound acts on the observed :math:`\theta^2`. Under Brune, the
+observed width of one channel depends on all the amplitudes of the level, so a
+fixed Brune amplitude does not keep its width fixed when the others move
+(``save_fit`` writes the width as the fit had it for that reason), and
+amplitudes of a broad level are correlated through
+:math:`1+\sum\gamma^2\,dS/dE`. The model, the minimum :math:`\chi^2` and the
+physical widths are the same; the parameters MIGRAD and MCMC move, their
+errors and their correlations, and how a constraint on a width is expressed,
+are not. Park asks one thing in return: parameters must stay within
+:math:`J > 0`.
 
 Examples
 --------

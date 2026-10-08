@@ -77,6 +77,12 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
      - Use the Brune parameterization for R-matrix parameters
        (C.R. Brune, *Physical Review C* **66**, 044611, 2002). Recommended and
        enabled by default. More numerically stable than the classical approach.
+   * - **Use Park parametrization**
+     - Fit Park's amplitudes, which are the observed widths
+       (:math:`\Gamma_c = 2P_c\gamma_c^2`), instead of Brune's; implies the
+       Brune formalism and gives the same calculation, THM segments included
+       (:doc:`/reference/command_line`, "Brune and Park parametrizations").
+       Fixing or constraining one width then acts on one parameter.
    * - **Ignore external width if internal width is zeroed**
      - When enabled, the external gamma-ray width of a level is set to zero if
        no total gamma-ray width is specified.

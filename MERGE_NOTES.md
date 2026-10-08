@@ -109,17 +109,20 @@ marked):
 - `AZURELabel::IsEnergyShiftName` also matches `_energy_shift_sqrt`, so the
   LM penalties, the limits manager and `GetEnergyShiftIndices` treat the sqrt
   coefficient as dev's substring tests did.
-- Park and thm's amplitude input (gammaIsRWA): Park's J in TransformIn is
-  1 - sum gamma^2 dS/dE over the observed-width and the amplitude-input
-  channels; no Brune renormalization under Park.  Classic projects without
-  the flag: as dev.
+- Park and thm's amplitude input (gammaIsRWA): the value in the file is
+  Brune's amplitude in both modes (October 2026, with THM under Park, below);
+  under Park it is read as gamma sqrt(J), J = denom / (2 numer) =
+  1 / (1 + sum gamma_Brune^2 dS/dE), and written back
+  (CNuc::GetTransformParams: save_fit, the GUI's parameter-file load) as
+  gamma_Park / sqrt(J).  At the merge it had been taken as Park's amplitude,
+  which made one file two different models.  Classic projects without the
+  flag: as dev.
 - Park's dS/dE (CalcShiftFunctions, ConvertAmplitudeBasis) is ChannelFunc's,
   as every other dS/dE on thm (row ec416de); d2S/dE2 is dev's.  **Differs
   from dev** in the last digits under `--use-park`; tests/park_formalism and
   pyazr_park_gradient pass.
-- THM is refused under `--use-park` (a THM data or test segment is an
-  ERROR): the THM amplitude, line shape and gradients were validated with
-  Brune's level matrix only.  Lift this when it has been checked.
+- THM under `--use-park`: refused at the merge, allowed since October 2026
+  (see "THM under Park" below).
 - isDiff 18 (THM + P dsigma/dOmega) is refused like 8.
 - Sub-grid refresh (02ae97b) skips a segment with a sqrt(E) shift (not a
   translation of the grid).
@@ -190,4 +193,35 @@ Still open:
 7. Tests and CI: tests/pyazr/CMakeLists.txt (AZURE2_BIN), tests/reference,
    tests/gui, .github/workflows/build.yml; run build/ and build-gui ctest and
    tests/run_tests.sh under the memory cap.
-8. Decide whether to lift the THM + `--use-park` refusal.
+8. THM + `--use-park` is allowed (see "THM under Park"); dev has neither
+   THM nor gammaIsRWA, so only the adaptive-grid row there touches dev's
+   classic Park projects.
+
+## THM under Park (October 2026)
+
+The refusal of THM segments under `--use-park` (EData.cpp, data and test
+segments) is lifted.  Park's level matrix is Brune's with diag(sqrt J) on both
+sides and the HOES amplitude is bilinear in the amplitudes with level-diagonal
+factors only (vertex boundary, line shape), so it is invariant; the coherent
+background, kinematic factors, R(E), the DW vertex and the windows do not see
+the amplitudes.  Three readers of the amplitudes did not know the
+parametrization and are fixed:
+
+| change | before | effect |
+|---|---|---|
+| ThmLevelWidth (line-shape pole): Gamma = sum 2 P gamma^2 under Park; the parametrization is part of its memo key | Brune's 2 P gamma^2 / (1 + sum gamma^2 dS/dE) of Park's amplitudes: Gamma low by J | 18O_p_a_thm + lineshape: 2.6 % in the model |
+| gammaIsRWA under Park: Brune's amplitude in the file (row above) | read as Park's | 18O_p_a_thm (all channels amplitudes): chi2 2228.94 vs 2630.55 |
+| AdaptiveIntegrationGrid, fit-time anchors (EPoint::RefreshSubPointGrid): GridConfig::parkAmplitudes gives the widths of the same Brune parameters (particle sum / (J + sum_open gamma^2 dS/dE), radiative / J); the parametrization is part of the anchor memo key | Park's amplitudes divided by Brune's 1 + sum: a narrower width, other quantized anchors, another sub-point grid | f19_pag_thm 1e-5, li7_tumino2006 4e-4, tests/17O 2e-5 in the model.  **Differs from dev** for a classic Park project with target effects whose levels have J well below 1 (dev's grid is the "before" column) |
+
+Brune and classic results are unchanged against e591d33: the 133 output files
+of every tests/ and examples/ project byte for byte, and the logs of the 28
+other check.sh scripts identical apart from temporary names and timings.  Under Park every THM
+example and test project gives Brune's model to 1e-8 (most bit for bit;
+f19_pag_thm 4e-10, levels with J down to 0.02); tests/7Li_p_a and tests/6Li_d
+have input widths beyond Brune's reach ("Denominator less than zero"), so
+their .azr is a different model in the two modes and they are compared
+through converted parameter files (8e-8).  tests/thm_park/check.sh,
+tests/pyazr/thm_park_test.py (THM Jacobian under Park: finite differences and
+the chain rule through J), tests/gui/thm_opt_in (the Park and THM boxes
+together) and thm_workspace (GUI diagnostics in both modes).
+

@@ -94,6 +94,16 @@ P₀e^{2πη} gives 2.85 against on-shell 1.25. A χ² that does not discriminat
   against an independent formal calculation (agreed to 1e-5). Brune fails when
   γ²dS/dE is large (12C+12C θ² = 26 at 6.41 fm is not representable): use a larger
   radius or smaller seeds.
+- **Park (`--use-park`, GUI "Use Park parametrization", pyazr `use_park=True`).**
+  Works with THM and gives the same model (tests/thm_park: every example and THM
+  option, ≤ 1e-8; fits land on the same minimum). The fit amplitude is then the
+  observed width (Γ_c = 2Pγ²): fixing, bounding or putting a prior on one width is
+  one parameter, and a broad level's amplitudes are less correlated — use it when
+  the analysis constrains single partial widths (exit widths from direct data) or
+  fixes widths across stages. Keep J > 0 (a warning and a penalty otherwise; MCMC
+  rejects). A `gammaIsRWA` channel is Brune's amplitude in the file in both modes.
+  A .azr whose widths Brune cannot reach ("Denominator less than zero") is a
+  different model in the two modes — fix the input first.
 - **THM segment.** Observable 10 (angle-integrated) or 11; B in field 32 of every
   entrance-pair channel line; one `<targetInt>` Gaussian per THM segment (60 uniform
   sub-points for 12C+12C; check convergence, section 6); THM norm free → AZURE2
@@ -181,8 +191,9 @@ anchored numbers.
   dcad73e); if slow, forward-difference `residuals()` yourself.
 - **Stages.** Direct only → THM only (to see what it wants) → joint with the few
   parameters the data constrain → free more. Fixed widths in `<levels>` are fixed as
-  amplitudes, not physical widths (they drift through the Brune denominator): keep all
-  free in the engine and mask in Python; carry the amplitude vector between stages.
+  amplitudes, not physical widths (under Brune they drift through the denominator;
+  under Park they do not): keep all free in the engine and mask in Python, or run
+  Park; carry the amplitude vector between stages.
 - **Priors** (12C+12C, 200+ parameters): Gaussian in ln Γ_c, σ = 1 (factor 2.7)
   around the table; E σ = 30 keV; penalty ln(θ²)/0.5 for θ² > 1; box bounds ±40 keV.
   A width whose posterior error is not below half the prior width is **not measured**
@@ -307,7 +318,8 @@ and ±1 fm radii with nodes marked, next to the level energies.
   Near-barrier Trojan horses (19F+d at 5.3 MeV c.m., barrier ≈ 2.5 MeV): the
   entrance deceleration halves the local p = k_aA − αk_sF at the surface, and the
   plane-wave l ratios are off by an order of magnitude — compare with `vertexModel=dw`.
-- pyazr units: `calculate_rwa` takes reduced-width amplitudes (Brune session);
+- pyazr units: `calculate_rwa` takes reduced-width amplitudes (Brune's, or Park's in
+  a `use_park` session);
   `calculate` takes physical widths (eV); `transform_rwa` maps; never convert a
   `gammaIsRWA` channel by hand. `Parameter.wigner_limit` is 3ħ²/(2μa²).
 - Extrapolation grids: `add_extrapolation(..., frame="lab")` is the default; pass

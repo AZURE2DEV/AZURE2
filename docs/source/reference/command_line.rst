@@ -96,8 +96,13 @@ level are normalized:
 Park's level matrix is Brune's multiplied from both sides by
 :math:`\mathrm{diag}(\sqrt{J_\lambda})`, which leaves the collision matrix
 unchanged, so ``--use-park`` reproduces the default calculation
-(``tests/park_formalism/check.sh``).  What changes is the parameter space the
-minimizer works in:
+(``tests/park_formalism/check.sh``), THM (HOES) segments included: their
+amplitude is bilinear in the reduced widths with level-diagonal factors only
+(:doc:`../theory/thm_implementation`, "Brune and Park";
+``tests/thm_park/check.sh``).  A channel entered as an amplitude
+(``gammaIsRWA``, the 33rd field of a level line) holds Brune's amplitude in
+either mode, so a file is the same model in both.  What changes is the
+parameter space the minimizer works in:
 
 * a Park amplitude is the observed width, :math:`\Gamma_c = 2P_c\gamma_c^2`
   (an ANC for a closed channel), with no factor depending on the other channels
