@@ -296,16 +296,6 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
   if (CheckThmWeights(configure, configure.thm.weightBySegment, "weight", "<segmentsData>",
                       numTotalSegments, this) != 0)
     return -1;
-  // THM (HOES) segments are built and validated with Brune's level matrix;
-  // Park's parametrization (--use-park) has not been checked for them.
-  if (configure.paramMask & Config::USE_PARK_FORMALISM)
-    for (int s = 1; s <= this->NumSegments(); s++)
-      if (this->GetSegment(s)->IsTHM()) {
-        configure.outStream << "ERROR: Data segment " << this->GetSegment(s)->GetSegmentKey()
-                            << " is a THM segment (isDiff >= 10); THM is not available with --use-park."
-                            << std::endl;
-        return -1;
-      }
   if (BuildThmGroups(configure, theCNuc, numTotalSegments) != 0) return -1;
 
   if (this->NumSegments() > 0) {
@@ -445,12 +435,6 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
           }
           if (isValidTotal || theCNuc->IsPairKey(NewSegment.GetExitKey())) {
             NewSegment.SetSegmentKey(numTotalSegments);
-            if (NewSegment.IsTHM() && (configure.paramMask & Config::USE_PARK_FORMALISM)) {
-              configure.outStream << "ERROR: Test segment " << numTotalSegments
-                                  << " is a THM segment (isDiff >= 10); THM is not available with --use-park."
-                                  << std::endl;
-              return -1;
-            }
             if (NewSegment.IsTHM()) NewSegment.SetThmWeight(ThmWeightFor(configure.thm.weightByTestSegment, numTotalSegments));
             this->AddSegment(NewSegment);
             ESegment *theSegment = this->GetSegment(this->NumSegments());

@@ -193,6 +193,14 @@ add_test(NAME pyazr_tabulate_thm
                  ${CMAKE_CURRENT_SOURCE_DIR}/tabulate_thm_test.py)
 set_tests_properties(pyazr_tabulate_thm PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
+# THM under Park's parametrization: the same model as Brune's from the same
+# file, and the THM Jacobian rows (central differences in Park's amplitudes)
+# against differences of the residuals and the chain rule through J.
+add_test(NAME pyazr_thm_park
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_park_test.py)
+set_tests_properties(pyazr_thm_park PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so
