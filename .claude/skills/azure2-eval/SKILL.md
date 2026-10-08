@@ -2001,10 +2001,21 @@ complete:
   new: `GradTargetEffectAdjoint` finite-differences the combiner per sub-point.
   CAVEATS: (1) the 14N(n,p) Torres-Sanchez 2023 data in 11B+a are from n_TOF EAR-2 (L =
   19.75 m, DSSSD) -- the uploaded file is the EAR1 response, so it is a mechanism test only;
-  the EAR2 RF file is needed for the real fit. (2) The kernel is evaluated at the point's
-  NOMINAL energy (as SAMMY does), not at each sub-point's true energy. (3) Validation and
-  benchmark runs go to the queue (user instruction 2026-10-08): `13C+a/10-8-26_udr_validation`
-  (synthetic Gaussian-in-time UDR vs numpy fold on the Cierjacks segment) and
+  the EAR2 RF file is needed for the real fit -- and per n_TOF-PUB-2021-001 (now in ~/SAMMY)
+  there is NO general EAR2 file: it is made per experiment (flight path, sample size, alignment)
+  with the Transport Code + RF2sammy at CERN, so ask the authors for the one their SAMMY fit
+  used, or get EOS access (`11B+a/10-8-26_udr_ntof/readme` has the paths). (2) The n_TOF files
+  ALREADY CONTAIN THE PROTON BURST (Transport Code `-S 7e-9`; the EAR1 file's delay rms stays
+  6-7 ns up to 500 MeV, where moderation is nil): use `burstFWHM 0` for them, and the HI (7 ns)
+  and LI (14 ns) pulse types have separate files. Check a new file by the width of its top-energy
+  blocks. (3) n_TOF's own EAR2 validation (Dec 2022 talk, ~/SAMMY) does NOT re-centre the RF
+  in SAMMY and fits L0 instead -> `centred 0` with L = the length the data's TOF->E used; use
+  `centred 1` only if that L already includes the mean lambda. (4) The kernel is evaluated at
+  the point's NOMINAL energy (as SAMMY does), not at each sub-point's true energy. (5) One
+  channel value per line: n_TOF DSSSD data are 10 bpd below 300 keV and 100 above -- split the
+  segment at 300 keV if the low part ever matters. (6) Validation and benchmark runs go to the
+  queue (user instruction 2026-10-08): `13C+a/10-8-26_udr_validation` (synthetic Gaussian-in-
+  time UDR vs numpy fold on the Cierjacks segment, 7.6e-4 worst rel. diff) and
   `11B+a/10-8-26_udr_ntof` (analytic sigma(E) vs UDR on segment 103).
 
 - **A regression reference is not a correctness check.** `tests/run_tests.sh` pins each

@@ -328,7 +328,21 @@ energy, the logarithmic binning of n_TOF data, and gives each point a
 channel of :math:`t\,\ln 10/(2n)` at its own flight time (SAMMY manual
 eq. III C3 a.14).
 The flight path must be the one the experiment used to turn flight times
-into the energies of the data file.  The sub-point grid of each point covers
+into the energies of the data file.
+
+Two points about the n_TOF files in particular (n_TOF-PUB-2021-001).  The
+proton burst is already folded into them -- the Transport Code that makes
+the histogram smooths in time with the nominal 7 ns r.m.s. pulse, and the
+tabulated delay distribution keeps a 6-7 ns r.m.s. width up to the highest
+energies, where moderation contributes nothing -- so ``burstFWHM`` should
+be 0 for them, and a separate file exists per pulse type (7 ns high
+intensity, 14 ns low intensity).  Check any new file the same way: the
+width of its highest-energy blocks is the burst it contains.  And the EAR2
+file is specific to one experiment (flight path, sample size and alignment
+change its shape), produced for that measurement with the Transport Code
+and ``RF2sammy``; the n_TOF validation of EAR2 does not let SAMMY re-centre
+the function but fits the flight path instead, which here is ``centred 0``
+with ``L`` the length the data's time-to-energy conversion used.  The sub-point grid of each point covers
 the kernel's support in true energy, on the adaptive grid described for the
 other effects, so the usual advice on ``resonance_width_multiplier`` and
 ``points_per_width`` applies.  The kernel applies to any observable of the
