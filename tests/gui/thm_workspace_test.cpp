@@ -118,7 +118,7 @@ static void ok(const char* what, bool cond, const QString& detail = QString()) {
   std::cout << (cond ? "  ok    " : "  FAIL  ") << what;
   if(!cond && !detail.isEmpty()) std::cout << "  -- " << detail.toStdString();
   std::cout << std::endl;
-  if(!cond) { fails++; failedChecks.push_back(what); }
+  if(!cond) { fails++; failedChecks.push_back(std::string(what) + (detail.isEmpty() ? "" : "  -- " + detail.left(300).toStdString())); }
 }
 
 static QString slurp(const QString& path) {
