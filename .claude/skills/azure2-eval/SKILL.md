@@ -1617,6 +1617,45 @@ and its **angle column is centre-of-mass**, not lab.
 - `intEC.dat` / `intEC.extrap` — external-capture integral caches; see the
   golden rule above.
 
+### Long fits on the cluster: memory, kills and restarting from `param.fit`
+
+**Memory footprint.** A mode-2 fit holds a pool of max(4, `OMP_NUM_THREADS`) + 1
+copies of the model and data (CNuc + EData), plus one persistent copy for the
+`param.fit` snapshots (since 797c2ea).  Each copy is the whole data set
+*including every target-integration and convolution sub-point*, so heavy
+target-effect models are large.  11B+a (4,600 points, many `<targetInt>`
+segments): ~3.4 GB per copy, ~80-100 GB at 24 threads, steady for days.
+Measure it with `qstat -j <id> | grep usage` (`maxvmem`) and reserve it on the
+node; see the `crc-cluster-jobs` skill (`-l m_mem_free=<GB per slot>`).
+
+**Binaries older than 797c2ea (2026-10-05) leak.**  Freed but unreusable memory
+piled up in glibc's per-thread arenas: whole-model clones at every snapshot, plus
+per-shift reallocation in `EPoint::RecalcEDependentValues`.  Resident memory grew
+6-17 MB per evaluation at 24 threads until the node killed the fit (~250 GB after
+a day).  Investigation: `11B+a/10-4-26_memleak/readme`.  If a long fit's memory
+climbs, check the build date first.  Separately, 588c584 (2026-10-07) removed a
+dangling `EPoint::parentSegment_` pointer read on every target-effect point; it
+is the likely cause of an occasional segfault (exit 139) on such models.
+
+**When a fit is killed, the job script keeps going.**  Only the AZURE2 process
+dies ("Killed" / exit 137 for out-of-memory; "Bus error" when its binary was
+replaced on NFS; exit 139 for a segfault).  So the job itself can restart the fit
+from the last snapshot, losing at most 100 evaluations:
+
+- Template: `11B+a/10-3-26_an_newcut_refits/make_autorestart.py <dir> <azr>
+  <outdir> <start.sav> <jobname>` writes `run_crc_auto`, a csh loop.  After each
+  pass it treats `<outdir>/chiSquared.out` as "finished": that file is written
+  only at the end of a fit, never by the snapshots.  Otherwise it copies
+  `param.fit` to `restart_<JOB_ID>_<n>.sav` and runs mode 2 again from it.
+- Guards: at most 15 restarts, and the job stops after two passes die within 10
+  minutes of starting.  That pattern means the node is out of memory, so resubmit
+  elsewhere rather than burning restarts.  The script requests `m_mem_free=5G`
+  per slot.
+- A restart resets MINUIT's covariance, so the first few hundred evaluations
+  after each restart rebuild the gradient (expect brief chi2 excursions).
+- The `param.fit` caveat above still applies: if the last snapshot fell on a bad
+  probe, verify with a mode-1 calculate before trusting the restart.
+
 ## Verifying a run
 
 `cat output/chiSquared.out` — a finite total χ² and the expected N per segment.
