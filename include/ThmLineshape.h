@@ -107,7 +107,10 @@ double ThmLineshapeFactorSq(double zeta, double x, double Gamma);
  * over the open particle channels (the normalization over all particle
  * channels), plus the radiative widths, as CNuc::TransformOut writes them to
  * parameters.out (internal part; a ground-state moment and closed channels
- * carry no width).  Memoized per thread on the level and its parameters.
+ * carry no width).  Under Park (--use-park, which implies Brune) the
+ * amplitudes are the observed ones, gamma_Park^2 = gamma_Brune^2 / (1 + sum),
+ * and Gamma = sum_c 2 gamma_c^2 P_c: the same width.  Memoized per thread on
+ * the level, its parameters and the parametrization.
  */
 double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config &configure);
 

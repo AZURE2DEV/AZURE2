@@ -68,6 +68,9 @@ double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config
   const int numChannels = jgroup->NumChannels();
   const bool useGSL = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
   const bool rmc = !!(configure.paramMask & Config::USE_RMC_FORMALISM);
+  // Park's amplitudes are the observed ones: Gamma = 2 P gamma^2 with no
+  // 1 + sum gamma^2 dS/dE (Brune's gamma^2 / (1 + sum) is Park's gamma^2).
+  const bool park = !!(configure.paramMask & Config::USE_PARK_FORMALISM);
   const double energy = level->GetFitE();
 
   // Per-thread memo: within one evaluation every point asks for the same few
@@ -86,6 +89,7 @@ double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config
   key.clear();
   key.push_back(useGSL);
   key.push_back(rmc);
+  key.push_back(park);
   key.push_back(jgroup->GetJ());
   key.push_back(jgroup->GetPi());
   key.push_back(energy);
@@ -128,7 +132,7 @@ double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config
       radiative += 2.0 * gamma * gamma * pene;
     }
   }
-  double width = (particle + radiative) / (1.0 + normSum);
+  double width = park ? particle + radiative : (particle + radiative) / (1.0 + normSum);
   if (!(1.0 + normSum > 0.0) || !std::isfinite(width)) width = particle + radiative;
 
   if ((int)memo.size() < kMemo) {
