@@ -480,7 +480,31 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
                   2.0 * gamma * gamma * pene * 1.0e6);
         }
       }
-      if (1.0 + normSum > 0.0) totalWidth /= (1.0 + normSum);
+      // Park's amplitudes (--use-park) are Brune's times sqrt(J), with
+      // J = 1 - sum gamma^2 dS/dE over every particle channel, closed ones
+      // included.  The estimate is the one of the same Brune parameters --
+      // the particle sum over the open channels normalized by them alone,
+      // the radiative widths not normalized -- so that both parametrizations
+      // anchor the grid at the same places:
+      //   sum 2 P gamma_B^2 / (1 + sum_open gamma_B^2 S') = sum 2 P gamma^2 / (J + normSum).
+      double radiativeScale = 1.0;
+      if (config_.parkAmplitudes) {
+        double parkNorm = 1.0;
+        for (int ch = 1; ch <= numChannels; ch++) {
+          AChannel *channel = jgroup->GetChannel(ch);
+          PPair *chPair = compound->GetPair(channel->GetPairNum());
+          if (channel->GetRadType() != 'P' || chPair->GetPType() != 0) continue;
+          double gamma = levelGamma(level, ch);
+          if (gamma == 0.0) continue;
+          double localEnergy = levelEnergy(level) - chPair->GetExE() - chPair->GetSepE();
+          parkNorm -= gamma * gamma * ChannelFunc(chPair, false).ShiftDerivative(channel->GetL(), localEnergy);
+        }
+        if (parkNorm > 0.0) {
+          if (parkNorm + normSum > 0.0) totalWidth /= (parkNorm + normSum);
+          radiativeScale = 1.0 / parkNorm;
+        }
+      } else if (1.0 + normSum > 0.0)
+        totalWidth /= (1.0 + normSum);
 
       double particleWidth = totalWidth;  // before radiative channels
 
@@ -508,7 +532,7 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
         } else {
           pene = pow(std::abs(localEnergy) / hbarc, 2.0 * channel->GetL() + 1.0);
         }
-        totalWidth += 2.0 * gamma * gamma * std::abs(pene);
+        totalWidth += 2.0 * gamma * gamma * std::abs(pene) * radiativeScale;
       }
 
       // The resonance in sigma(E) is shaped by the particle width, so the grid

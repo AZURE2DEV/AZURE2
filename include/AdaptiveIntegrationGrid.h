@@ -57,6 +57,11 @@ class AdaptiveIntegrationGrid {
     /// observed energy, E_lambda - sum_c gamma_c^2 (S_c - B_c) / (1 + sum_c
     /// gamma_c^2 dS_c/dE), with the widths taken there.
     bool formalParameters;
+    /// With useFitParameters: the fit amplitudes are Park's (--use-park),
+    /// gamma_Park = gamma_Brune sqrt(J), J = 1 - sum_c gamma_c^2 dS_c/dE.  The
+    /// widths are then those of the same Brune parameters, so that both
+    /// parametrizations anchor the grid at the same places.
+    bool parkAmplitudes;
 
     GridConfig() :
       maxPoints(1000),
@@ -71,7 +76,8 @@ class AdaptiveIntegrationGrid {
       entranceKey(0),
       inputWidthsArePhysical(false),
       useFitParameters(false),
-      formalParameters(false) {}
+      formalParameters(false),
+      parkAmplitudes(false) {}
   };
 
   /// Tail step / distance for a convolutionCoreWidths core: tailRatio /

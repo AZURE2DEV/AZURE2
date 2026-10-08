@@ -2058,7 +2058,7 @@ asks for the same ones, so the last result is kept per thread, keyed by
 everything it depends on.
 */
 const std::vector<AdaptiveIntegrationGrid::ResonanceInfo> &
-CurrentGridAnchors(CNuc *compound, int entranceKey, bool formal, double frameShift) {
+CurrentGridAnchors(CNuc *compound, int entranceKey, bool formal, bool park, double frameShift) {
   // By value, not by the compound's address: the memo is thread_local and
   // outlives a CNuc, and a later session can get the same address back (the
   // S_c memo of THMMatrixFunc leaked across sessions that way, 49b6c30).
@@ -2068,6 +2068,7 @@ CurrentGridAnchors(CNuc *compound, int entranceKey, bool formal, double frameShi
   newKey.clear();
   newKey.push_back(entranceKey);
   newKey.push_back(formal ? 1. : 0.);
+  newKey.push_back(park ? 1. : 0.);
   newKey.push_back(frameShift);
   const bool hybridOn = g_config ? g_config->useHybridMethod : false;
   for (int p = 1; p <= compound->NumPairs(); p++) {
@@ -2100,6 +2101,7 @@ CurrentGridAnchors(CNuc *compound, int entranceKey, bool formal, double frameShi
     config.entranceKey = entranceKey;
     config.useFitParameters = true;
     config.formalParameters = formal;
+    config.parkAmplitudes = park;
     AdaptiveIntegrationGrid generator(config);
     anchors = generator.Anchors(compound, frameShift);
     key = newKey;
@@ -2125,8 +2127,10 @@ CurrentGridAnchors(CNuc *compound, int entranceKey, bool formal, double frameShi
  * Under the Brune formalism the fit energies are the observed resonance
  * energies; with formal parameters (Brune off) each level is anchored at the
  * Thomas estimate of its observed energy (AdaptiveIntegrationGrid::GridConfig::
- * formalParameters).  A segment with an energy shift keeps its sub-points in
- * the frame of its unshifted data, each evaluated at its energy plus the
+ * formalParameters); under Park the widths are read from Park's amplitudes
+ * (GridConfig::parkAmplitudes), so both give the same grid.  A segment with
+ * an energy shift keeps its sub-points in the frame of its unshifted data,
+ * each evaluated at its energy plus the
  * shift (ESegment::UpdatePointEnergiesWithShift); its grid is built there,
  * around the anchors moved back by the shift and quantized in that frame, so
  * the lattice stays on a narrow level however the shift moves.
@@ -2140,6 +2144,7 @@ CurrentGridAnchors(CNuc *compound, int entranceKey, bool formal, double frameShi
 bool EPoint::RefreshSubPointGrid(CNuc *theCNuc, const Config &configure) {
   if (!subGrid_.refreshable || !configure.useAdaptiveGrid) return false;
   const bool formal = !(configure.paramMask & Config::USE_BRUNE_FORMALISM);
+  const bool park = !!(configure.paramMask & Config::USE_PARK_FORMALISM);
   if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
     for (int j = 1; j <= theCNuc->NumJGroups(); j++)
       for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++)
@@ -2173,7 +2178,7 @@ bool EPoint::RefreshSubPointGrid(CNuc *theCNuc, const Config &configure) {
   gridConfig.pointsPerWidth = subGrid_.pointsPerWidth;
   AdaptiveIntegrationGrid generator(gridConfig);
   const std::vector<AdaptiveIntegrationGrid::ResonanceInfo> &anchors =
-      CurrentGridAnchors(theCNuc, subGrid_.entranceKey, formal, shiftCM);
+      CurrentGridAnchors(theCNuc, subGrid_.entranceKey, formal, park, shiftCM);
   std::vector<double> inReach;
   for (const AdaptiveIntegrationGrid::ResonanceInfo &r :
        generator.AnchorsInReach(subGrid_.startEnergy, subGrid_.endEnergy, anchors)) {
