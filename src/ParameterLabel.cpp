@@ -171,11 +171,12 @@ std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
 
   if (!data) return std::string();
 
-  // Then EData::FillMnParams: norms for segments that vary one, then an energy
-  // shift for every segment.
+  // Then EData::FillMnParams: norms for segments that vary one (a free THM
+  // norm is profiled, not a parameter), then an energy shift and a sqrt(E)
+  // coefficient for every segment, then the THM coherent backgrounds.
   std::vector<ESegment> &segments = data->GetSegments();
   for (size_t s = 0; s < segments.size(); s++) {
-    if (!segments[s].IsVaryNorm()) continue;
+    if (!segments[s].IsVaryNorm() || segments[s].IsProfiledNorm()) continue;
     if (index == minuitIndex) {
       std::ostringstream out;
       out << "normalization of segment " << segments[s].GetSegmentKey()
@@ -200,6 +201,11 @@ std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
           << " (" << segments[s].GetDataFile() << ")";
       return out.str();
     }
+    index++;
+  }
+  for (int k = 0; k < data->NumThmCoherentParams(); k++) {
+    if (index == minuitIndex)
+      return "THM coherent background " + data->GetThmCoherentParam(k).name;
     index++;
   }
 

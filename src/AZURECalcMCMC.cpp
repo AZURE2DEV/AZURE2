@@ -17,6 +17,7 @@
 #include <string>
 #include <thread>
 #include <algorithm>
+#include <cstdlib>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -230,6 +231,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) const
   rwa_.clear();
   physical_.clear();
   fixed_.clear();
+  paramNames_.clear();
   g_param_names.clear();
 
   AZUREParams params;
@@ -247,6 +249,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) const
   for (int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
     all_rwa_.push_back(params.GetMinuitParams().Parameter(i).Value());
     fixed_.push_back(params.GetMinuitParams().Parameter(i).IsFixed());
+    paramNames_.push_back(params.GetMinuitParams().GetName(i));
     g_param_names.push_back(params.GetMinuitParams().GetName(i));
     // If not fixed, add to rwa
     if (!params.GetMinuitParams().Parameter(i).IsFixed()) {
@@ -369,64 +372,68 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     return;
   }
 
-  // Walk the parameters in exactly the order CNuc::FillMnParams and then
-  // EData::FillMnParams add them, which is the order fixed_ is indexed in:
-  //   per J-group, per level: one energy, then one width per channel
-  //   one norm per segment with IsVaryNorm()
-  //   one energy shift per segment (all segments)
-  //   one sqrt(E) energy-shift coefficient per segment (all segments)
-  // AZUREAPI::GetParameterInfo() walks the same sequence.
+  // Classify every parameter by its name in the parameter vector, so that the
+  // classification has the vector's length and order whatever blocks
+  // CNuc::FillMnParams and EData::FillMnParams put in it.  Re-walking the
+  // levels and segments instead (as this did) gave an entry to a free THM norm,
+  // which is profiled and not a parameter, and none to a THM coherent
+  // background: the lengths then differed, and the automatic priors and the
+  // level-energy spread were dropped for the whole run.
   std::vector<int> allKinds;
   std::vector<double> allAutoMean;
   std::vector<double> allAutoStd;  // <= 0 means "no automatic prior available"
+  std::vector<std::string> unknownNames;
 
-  CNuc *nuc = compound();
-  for (int j = 1; j <= nuc->NumJGroups(); ++j) {
-    JGroup *jgroup = nuc->GetJGroup(j);
-    for (int la = 1; la <= jgroup->NumLevels(); ++la) {
-      allKinds.push_back(PARAM_ENERGY);
-      allAutoMean.push_back(0.0);
-      allAutoStd.push_back(-1.0);
-      for (int ch = 1; ch <= jgroup->NumChannels(); ++ch) {
-        allKinds.push_back(PARAM_WIDTH);
-        allAutoMean.push_back(0.0);
-        allAutoStd.push_back(-1.0);
-      }
+  // segment_<k>_<tail>: the segment of key k, or null.
+  auto segmentOf = [&](const std::string &name, const std::string &tail) -> ESegment * {
+    if (name.compare(0, 8, "segment_") != 0 || !AZURELabel::EndsWith(name, tail)) return nullptr;
+    const std::string key = name.substr(8, name.size() - 8 - tail.size());
+    if (key.empty() || key.find_first_not_of("0123456789") != std::string::npos) return nullptr;
+    if (!data()->IsSegmentKey(std::atoi(key.c_str()))) return nullptr;
+    return data()->GetSegmentFromKey(std::atoi(key.c_str()));
+  };
+
+  for (size_t i = 0; i < paramNames_.size(); ++i) {
+    const std::string &name = paramNames_[i];
+    int kind = -1;
+    double mean = 0.0, std = -1.0;
+    ESegment *seg = nullptr;
+    if (name.compare(0, 7, "energy_") == 0) {
+      kind = PARAM_ENERGY;
+    } else if (name.compare(0, 6, "width_") == 0) {
+      kind = PARAM_WIDTH;
+    } else if ((seg = segmentOf(name, "_norm"))) {
+      // GetNormError() is a percentage of the nominal norm; this reproduces
+      // the penalty AZURECalc::operator() adds during a Minuit fit.
+      kind = PARAM_NORM;
+      mean = seg->GetNominalNorm();
+      std = mean / 100.0 * seg->GetNormError();
+    } else if ((seg = segmentOf(name, "_energy_shift_sqrt"))) {
+      kind = PARAM_SHIFT_SQRT;
+      mean = seg->GetNominalEnergyShiftSqrt();
+      std = seg->GetEnergyShiftSqrtError();
+    } else if ((seg = segmentOf(name, "_energy_shift"))) {
+      kind = PARAM_SHIFT;
+      mean = seg->GetNominalEnergyShift();
+      std = seg->GetEnergyShiftError();
+    } else if (name.compare(0, 5, "cbkg_") == 0) {
+      kind = PARAM_CBKG;
+    } else {
+      unknownNames.push_back(name);
     }
+    allKinds.push_back(kind);
+    allAutoMean.push_back(mean);
+    allAutoStd.push_back(std);
   }
 
-  std::vector<ESegment> &segments = data()->GetSegments();
-
-  // Normalizations. GetNormError() is a percentage of the nominal norm; this
-  // reproduces the penalty AZURECalc::operator() adds during a Minuit fit.
-  for (size_t s = 0; s < segments.size(); ++s) {
-    if (segments[s].IsVaryNorm()) {
-      double nominal = segments[s].GetNominalNorm();
-      allKinds.push_back(PARAM_NORM);
-      allAutoMean.push_back(nominal);
-      allAutoStd.push_back(nominal / 100.0 * segments[s].GetNormError());
-    }
-  }
-
-  // Energy shifts, one per segment whether it varies or not.
-  for (size_t s = 0; s < segments.size(); ++s) {
-    allKinds.push_back(PARAM_SHIFT);
-    allAutoMean.push_back(segments[s].GetNominalEnergyShift());
-    allAutoStd.push_back(segments[s].GetEnergyShiftError());
-  }
-
-  // sqrt(E) energy-shift coefficients, one per segment, same prior rule.
-  for (size_t s = 0; s < segments.size(); ++s) {
-    allKinds.push_back(PARAM_SHIFT);
-    allAutoMean.push_back(segments[s].GetNominalEnergyShiftSqrt());
-    allAutoStd.push_back(segments[s].GetEnergyShiftSqrtError());
-  }
-
-  if (allKinds.size() != fixed_.size()) {
+  if (allKinds.size() != fixed_.size() || !unknownNames.empty()) {
     configure().outStream << "Warning: parameter classification produced "
-                          << allKinds.size() << " entries but there are "
-                          << fixed_.size() << " parameters; automatic priors "
-                          << "skipped to avoid mis-assigning them.\n";
+                          << allKinds.size() << " entries for "
+                          << fixed_.size() << " parameters";
+    if (!unknownNames.empty())
+      configure().outStream << ", " << unknownNames.size() << " not recognised (first: "
+                            << unknownNames[0] << ")";
+    configure().outStream << "; automatic priors skipped to avoid mis-assigning them.\n";
     freeKinds_.clear();
     return;
   }
@@ -455,13 +462,14 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   usePriors_.resize(nfree, false);
 
   int nAutoNorm = 0, nAutoShift = 0, nNoError = 0, nUserNeeded = 0, nUserSet = 0;
+  int nCbkg = 0, nCbkgSet = 0;
   std::vector<std::string> noErrorLabels;
   std::vector<std::string> noPriorLabels;
 
   for (size_t i = 0; i < nfree; ++i) {
     const int kind = freeKinds_[i];
 
-    if (kind == PARAM_NORM || kind == PARAM_SHIFT) {
+    if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_SHIFT_SQRT) {
       // Derived from the data, so it always wins over whatever the GUI holds.
       if (freeAutoStd[i] > 0.0) {
         priorMeans_[i] = freeAutoMean[i];
@@ -478,6 +486,11 @@ void AZURECalcMCMC::BuildAutoPriors() const {
         nNoError++;
         noErrorLabels.push_back(AZURELabel::Parameter(compound(), data(), freeAllIndex[i]));
       }
+    } else if (kind == PARAM_CBKG) {
+      // THM coherent background: nothing in the data quotes an error on it,
+      // so no automatic prior; a prior the caller defined is kept.
+      nCbkg++;
+      if (usePriors_[i] && priorStds_[i] > 0.0) nCbkgSet++;
     } else {
       // Level energies and widths: the user's business.
       nUserNeeded++;
@@ -516,6 +529,11 @@ void AZURECalcMCMC::BuildAutoPriors() const {
       configure().outStream << "      ...and " << (noPriorLabels.size() - maxListed)
                             << " more\n";
   }
+  if (nCbkg > 0)
+    configure().outStream << "  " << nCbkg << " THM coherent-background parameter"
+                          << (nCbkg == 1 ? "" : "s") << ": " << nCbkgSet
+                          << " with a user-defined prior, the others uniform "
+                          << "(no automatic prior)\n";
   configure().outStream.flush();
 }
 
@@ -987,7 +1005,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
       if (kind == PARAM_ENERGY) {
         spread = energySpreadMeV;
         nEnergyCapped++;
-      } else if (kind == PARAM_NORM || kind == PARAM_SHIFT) {
+      } else if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_SHIFT_SQRT) {
         // Starting outside the prior only wastes steps walking back into it.
         if (j < (int)priorStds_.size() && j < (int)usePriors_.size() &&
             usePriors_[j] && priorStds_[j] > 0.0 && priorStds_[j] < spread) {

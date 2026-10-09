@@ -62,7 +62,9 @@ class AZURECalcMCMC {
   enum ParamKind { PARAM_ENERGY = 0,
                    PARAM_WIDTH = 1,
                    PARAM_NORM = 2,
-                   PARAM_SHIFT = 3 };
+                   PARAM_SHIFT = 3,
+                   PARAM_SHIFT_SQRT = 4,  // sqrt(E) energy-shift coefficient
+                   PARAM_CBKG = 5 };      // THM coherent background (cbkg_*)
 
   /*!
    * Run MCMC sampling with specified parameters.
@@ -96,7 +98,14 @@ class AZURECalcMCMC {
    * during a Minuit fit -- ((norm - nominal)/(nominal/100 * normError))^2 and
    * ((shift - nominal)/shiftError)^2 -- so a posterior mode coincides with a
    * fit minimum.  Level energies and widths are left to the user, since no
-   * error on them is implied by the data.
+   * error on them is implied by the data; so are THM coherent backgrounds
+   * (uniform unless the caller set a prior for them).
+   *
+   * Each parameter is classified by its name in the parameter vector
+   * (energy_<n>, width_<n>_<c>, segment_<k>_norm, segment_<k>_energy_shift,
+   * segment_<k>_energy_shift_sqrt, cbkg_...), so the classification has the
+   * vector's length and order whatever blocks it holds: a free THM norm is
+   * profiled and has no entry, a coherent background has one.
    *
    * Requires UpdateParameterVectors() to have run first.
    */
@@ -207,6 +216,8 @@ class AZURECalcMCMC {
   mutable vector_r all_rwa_;
   mutable vector_r all_indexes;
   mutable std::vector<bool> fixed_;
+  // Name of every parameter (fixed or not), in the order of fixed_
+  mutable std::vector<std::string> paramNames_;
   mutable bool parametersInitialized_;
 
   // Prior information for Bayesian analysis, indexed over varying parameters
