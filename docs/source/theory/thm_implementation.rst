@@ -25,6 +25,35 @@ and the transfer form factor
 106901 eqs. 2.76, 2.79). :math:`K(E)` collects the kinematic factors. The
 choices in this expression are set by the ``<thm>`` block.
 
+*Opt-in.* Nothing on this page acts on a project without a THM segment and
+without a ``<thm>`` block: such a classic project gives the results of an
+AZURE2 without THM (``MERGE_NOTES.md`` in the repository lists what the
+branch changes for classic projects). The engine and ``pyazr`` need no
+switch -- a segment with observable code 10 or more is a THM segment, and
+the ``<thm>`` block is optional, every key off or at its default when it is
+absent. In the GUI the THM controls are hidden until *Configure > Runtime
+Options > Use Trojan Horse Method (THM)* is ticked; a project with THM
+content opens with it ticked, and the setting is not stored in the file
+(:doc:`../user_guide/configure_menu`, "Runtime Options" and "THM
+Workspace"). Observable code 18 (THM on the removed polarization-times-cross
+section, code 8) is refused at startup like 8 itself.
+
+*Identical particles.* The channels of an identical pair are generated with
+:math:`l + s` even only (``CNuc``); a level line naming a forbidden channel
+of a spin-0 pair draws a ``WARNING`` and one of a pair with spin is refused.
+The on-shell cross sections out of an identical entrance pair carry
+:math:`1 + \delta_{12} = 2` (reactions, capture and differential alike; an
+identical exit pair takes no factor), which matters for the direct data
+fitted together with THM data (12C+12C). The HOES observable applies no such
+factor: its scale is arbitrary and profiled. At a fixed angle the
+distribution of an identical entrance or exit pair has even Legendre orders
+only ("Fixed-angle observable" below). Data that count both particles of an
+identical exit pair (:math:`\alpha + \alpha`) need a factor 1/2 in the data
+file. Two identical spin-0 nuclei fuse only through even-:math:`J`
+natural-parity levels; a channel of that pair on a level of odd :math:`J`
+(populated in THM by transfer) breaks the exchange symmetry of every
+observable of the pair and carries the ``WARNING`` above.
+
 Options (``<thm>`` block)
 -------------------------
 
@@ -405,7 +434,9 @@ letters, digits and ``_ - . +``.
    6Li 7Li 9Be 10B 11B 12C 13C 14N 15N 16O 17O 18O 19F 20Ne 23Na 24Mg; AME2020
    atomic masses minus the electrons plus their binding, i.e. nuclear masses in
    u) or ``Z,A,mass`` (nuclear mass in u), and the lab beam energy in MeV. All
-   four or none. Only ``lineshape=on`` and a ``ps`` window use them: AZURE2 checks that one of beam and
+   four or none. They are used only by ``lineshape=on``, a ``ps`` window,
+   ``spectatorAngles=``, ``distortion=coulomb|optical`` and
+   ``vertexModel=dw``: AZURE2 checks that one of beam and
    target is a nucleus of the segments' entrance pair and the other is the
    second nucleus plus the spectator (the Trojan horse :math:`a = x + s`), and
    prints :math:`B_{xs}` and the quasi-free energy
@@ -510,9 +541,9 @@ gives the shared :math:`n^*` for each segment. ``AzrModel.thm_experiments()``,
 spectator=..., Ebeam=...)`` (replaces the record with one line) and
 ``clear_thm_experiment(name)`` edit the lines with the engine's rules. In the
 GUI, *Configure > THM Workspace...*, page *Experiments*, edits them
-(:doc:`../user_guide/configure_menu`, "THM Workspace"), including
-``lineshape``; keys it does not show, such as ``ps`` and ``psNodes``, are kept
-as written.
+(:doc:`../user_guide/configure_menu`, "THM Workspace"): every key of this
+section except ``vertexModel``, which the page keeps as written (as it keeps
+any token it does not know).
 
 *Derivatives.* Where the model Jacobian :math:`J_m = \partial m/\partial p`
 is used (MIGRAD's THM gradient, ``pyazr``'s ``residual_jacobian`` and
@@ -764,7 +795,7 @@ stays at about 0.) Of the eight 2\ :sup:`-` amplitudes only
 the penalty by 103, but the full window still does not fit with the direct
 strengths: ωγ(828) rises from 183 to 315 eV, not to 775 eV, and ωγ(564)
 falls further. The tension there is the l-dependence of the vertex
-(``thm_19F/RESULTS.md``, section 4), which a smooth amplitude in one
+("Distorted-wave entrance vertex" below), which a smooth amplitude in one
 partial wave cannot undo. In both cases the coherent background is a
 useful diagnostic -- it says how much of a THM-direct mismatch a smooth
 interfering amplitude can absorb -- and in neither does it make the THM and
@@ -2785,8 +2816,8 @@ that is not ``all`` or two numbers ``a-b`` with
 beyond 180°), ``theta`` twice, a window together with
 ``entranceL=coherent``. ``pyazr``: ``AzrModel.set_thm_experiment(...,
 theta="50-70")`` (or ``(50, 70)``, ``"all"``) with the same rules; the
-session's residuals, Jacobian and output files follow. The GUI keeps the key
-as written.
+session's residuals, Jacobian and output files follow. The GUI edits the key
+on the Experiments page (*Exit angle*).
 
 *Validation.* ``tests/reference/thm_fixed_angle_test`` (ctest
 ``thm_fixed_angle``) takes the partial amplitudes of a toy two-level model
@@ -3186,8 +3217,10 @@ Two limits. A level whose observed widths exceed what the channel radii allow
 (:math:`J_\lambda \le 0` under Park, "Denominator less than zero" under Brune)
 has no counterpart in the other mode: Brune's transformation then returns
 some other widths, Park takes them as given, reports the level and penalizes
-the fit objective by :math:`\sum_\lambda (J_\lambda/10^{-3})^2`; MCMC rejects
-such points. ``tests/7Li_p_a`` and ``tests/6Li_d`` are such files (both are
+the fit objective by :math:`\sum_\lambda (J_\lambda/10^{-3})^2` (in every
+minimizer's cost, the finite-difference gradient's included); MCMC rejects
+such points and refuses to start from an ensemble that lies entirely there
+(:doc:`../user_guide/mcmc`). ``tests/7Li_p_a`` and ``tests/6Li_d`` are such files (both are
 compared through their parameter files). And :math:`J_\lambda` needs
 :math:`dS/dE` at the level energy, a numerical derivative: levels with
 :math:`J \ll 1` (a reduced width far above the Wigner limit) agree between the
@@ -3213,47 +3246,23 @@ are not. Park asks one thing in return: parameters must stay within
 Examples
 --------
 
-The THM cases in ``examples/`` (each ``<name>.azr`` holds the best fit,
-``data/`` headers name the sources). "File alone" is the CLI calculation of
-the file as stored (``printf '1\n\n\n7\n' | AZURE2 --no-gui
---no-readline <name>.azr``), the number to compare against after a change:
-the "Total Chi-Squared" line, data plus the norm priors (the data part,
-``Total-Chi-Squared`` of ``chiSquared.out``, in brackets where they differ).
+The THM cases in ``examples/`` are listed, with their reactions, data sources
+and "file alone" :math:`\chi^2`, in :doc:`../getting_started/examples`. "File
+alone" is the CLI calculation of the file as stored (``printf '1\n\n\n7\n' |
+AZURE2 --no-gui --no-readline <name>.azr``), the number to compare against
+after a change: the "Total Chi-Squared" line, data plus the norm priors.
 Every direct norm with a quoted error holds its fitted value in the norm
 column and an explicit ``prior_centre 1`` row in ``<parameterSettings>``
 (see :ref:`nominal-norm`), so the file alone is the best fit and a fit
-started from it is pulled to 1, not to the stored values. October 2026.
-
-======================  =========================================  ==================================
-example                 what is fitted                             file alone (data + priors) / N
-======================  =========================================  ==================================
-``f19_pag_thm``         HOES (Su 2025 Fig. 1, E ≤ 0.45 MeV), JUNA  79.408 (77.640 + 1.768) / 59;
-                        Table I, Spyrou; pw, 5.136 fm              direct norms stored fixed (the fit
-                                                                   had 17 more penalty rows)
-``o18_lacognata2008``   HOES, three narrow levels                  35.877 / 30
-``o18_lacognata2010``   HOES (authors' background + linear), Mak,  330.054 (329.692 + 0.362) / 161
-                        Amsel; 3/2\ :sup:`−` at LUNA widths; DW
-``c12c12_tumino2018``   HOES, four channels one experiment         112.076 (111.651 + 0.425) / 247;
-                        (``experiment[E1]``), direct data          direct norms stored fixed
-``o17_guardo2017_fit``  HOES                                       12.996 / 23
-``n15_lacognata2007``   on-shell (Table 3), Redder, Schardt        224.425 (223.414 + 1.012) / 208
-``li7_tumino2006``      on-shell-equivalent THM, Rolfs, Cruz,      448.575 (439.104 + 9.471) / 294
-                        Cassagnou, Mani
-``li6_pizzone2011``     on-shell-equivalent THM, Engstler, Elwyn,  158.918 (156.991 + 1.927) / 132
-                        McClenahan, Jeronymo
-======================  =========================================  ==================================
+started from it is pulled to 1, not to the stored values.
 
 Earlier values, at which the size studies on this page that name an example
-were computed: ``f19_pag_thm`` 81.971 (THM 63.93 / 28, digitized JUNA, hidden
-bars ≤ 0.0096), ``o18_lacognata2010`` 582.80 (THM 414.31, joint-fit
+were computed (the example files have changed since; the current values are
+those of the index): ``f19_pag_thm`` 81.971 (THM 63.93 / 28, digitized JUNA,
+hidden bars ≤ 0.0096), ``o18_lacognata2010`` 582.80 (THM 414.31, joint-fit
 background, plane-wave vertex, no 3/2\ :sup:`−` level), ``n15_lacognata2007``
 223.085, ``li7_tumino2006`` 439.100 and ``li6_pizzone2011`` 229.310 (fitted
-norms as prior centres; before that, as HOES, 1279.69 and 133.504). Between
-these and the table, for a few hours on October 3 2026, the 15N/7Li/6Li
-files stored their direct norms at 1 (file alone 282.15, 1299.34, 210.88)
-and 18O 2010 had its Mak prior centred on an earlier fitted 0.9966 (329.62 +
-0.35); the refit with it centred on 1 moves the doublet by < 15 eV and Mak
-0.9671 -> 0.9699.
+norms as prior centres; before that, as HOES, 1279.69 and 133.504).
 
 Model averaging
 ---------------
@@ -3266,9 +3275,9 @@ in "Distorted-wave entrance vertex"). The model-dependence protocol fits
 every variant on its own and quotes the spread. ``pyazr.modelavg`` turns the
 fitted variants into one number per quantity; ``scripts/thm_model_average.py``
 produces the variants (one project per variant through ``AzrModel``, fitted
-one after the other with scipy's ``least_squares`` on ``residuals`` and
-``residual_jacobian`` plus the norm and shift penalty rows; pyazr itself does
-no fitting).
+one after the other, each in a fresh Python process, with scipy's
+``least_squares`` on ``residuals`` and ``residual_jacobian`` plus the norm
+and shift penalty rows; pyazr itself does no fitting).
 
 *Weights.* For variant :math:`i` with minimised :math:`\chi^2_i`, :math:`N`
 points and :math:`k_i` free parameters (the THM norms and backgrounds that
@@ -3390,18 +3399,28 @@ variants in one process, had the 5.1 and 6.1 fm fits differ by up to
 the statistical error of ωγ(213) was 0.059.)
 
 *The driver.* ``scripts/thm_model_average.py <project.azr> --out <dir>``
-with the axes ``--radius-pairs K.. --radii R..``, ``--vertex-model pw dw``,
+(default ``modelavg``) with the axes ``--radius-pairs K.. --radii R..`` (the
+radius of the file pair keys K, run as given), ``--vertex-model pw dw``,
 ``--vertex constant perlevel onshell``, ``--optical AA/SF ..`` (global
-potential names, e.g. ``ancai06/kd03:extrapolate``, or ``coulomb``; applied to
-the dw variants), ``--ps delta hulthen:0-50``, ``--lineshape on off`` (the spectator's
+potential names, e.g. ``ancai06/kd03:extrapolate``, ``coulomb``, ``plane``
+or ten numbers; applied to the dw variants, and with ``--pw-distortion`` to
+the pw variants as :math:`R(E)` too), ``--ps delta hulthen:0-50``, ``--lineshape on off`` (the spectator's
 :math:`N_C`), ``--distortion none coulomb optical`` (:math:`R(E)` of the pw
 variants; ``optical`` takes the potentials of an ``AA/SF`` ``--optical``
 value or the project's; the axis collapses for dw variants, whose distortion
-is the vertex's own), or a JSON ``--spec``; the grid is their product. ``--strength NAME=Jπ@E`` with ``--strength-in`` /
+is the vertex's own), or a JSON ``--spec`` with the same keys (flags
+override it); the grid is their product, and ``--experiment NAME ..`` limits
+the edits to the named THM experiments (default all). Fit options:
+``--max-nfev`` (default 30; 0 evaluates without fitting), ``--ftol``
+(default :math:`10^{-8}`). ``--strength NAME=Jπ@E`` (:math:`E` the
+excitation energy in MeV) with ``--strength-in`` /
 ``--strength-out`` (file pair keys) adds
 :math:`\omega\gamma = \frac{2J+1}{(2j_1+1)(2j_2+1)}\Gamma_\mathrm{in}\Gamma_\mathrm{out}/\Gamma`
-(open channels, eV) as a derived quantity with its propagated error;
-``--weights``, ``--rescale``, ``--prior radius=6.1:0.5``.
+(open channels, eV) as a derived quantity with its propagated error, and
+``--derived-hook file.py[:func]`` any other (``func(session, x)`` returns
+``{name: value}`` or ``{name: (value, sigma)}``); ``--weights aic|bic|chi2|flat``
+(default ``aic``), ``--rescale best`` or a number, ``--prior
+radius=6.1:0.5`` (repeatable).
 ``--penalty-hook file.py[:func]`` adds signed residual rows ``func(session,
 x)`` (direct strengths against their measured values, priors; with their
 Jacobian, or by central differences of ``func``) to the fit, the
