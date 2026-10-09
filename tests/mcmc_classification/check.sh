@@ -70,7 +70,8 @@ energy_ranges() {
   # \r stripped: a Windows build writes the log with CRLF, which hides "^-+$".
   cols="$(tr -d '\r' < "$d/log" | awk '/^Free Parameters for MCMC:/ { t = 1; next }
                t == 1 && /^-+$/ { t = 2; next }
-               t == 2 && NF == 0 { exit }
+               t == 2 && NF == 0 { next }   # the Windows build puts a blank line after every row
+               t == 2 && !/(Yes|No) \(/ { exit }
                t == 2 { k++; if (index($0, "Energy (MeV)")) printf "%d ", 5 + k }')"
   [ -n "$cols" ] || return
   tr -d '\r' < "$d/output/samples.mcmc" | awk -F, -v cols="$cols" '
