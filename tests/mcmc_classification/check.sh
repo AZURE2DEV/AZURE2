@@ -67,10 +67,11 @@ stage() {  # NAME SOURCE_DIR AZR
 energy_ranges() {
   local d="$WORK/$1"
   local cols
-  cols="$(awk '/^Free Parameters for MCMC:/ { t = 1; next }
+  # \r stripped: a Windows build writes the log with CRLF, which hides "^-+$".
+  cols="$(tr -d '\r' < "$d/log" | awk '/^Free Parameters for MCMC:/ { t = 1; next }
                t == 1 && /^-+$/ { t = 2; next }
                t == 2 && NF == 0 { exit }
-               t == 2 { k++; if (index($0, "Energy (MeV)")) printf "%d ", 5 + k }' "$d/log")"
+               t == 2 { k++; if (index($0, "Energy (MeV)")) printf "%d ", 5 + k }')"
   [ -n "$cols" ] || return
   tr -d '\r' < "$d/output/samples.mcmc" | awk -F, -v cols="$cols" '
     NR == 1 { n = split(cols, c, " "); next }
