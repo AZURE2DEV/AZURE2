@@ -34,8 +34,10 @@
 #      1e-6) and physical widths within $TOL_FIT (the 8.6 MeV level's widths
 #      are determined to ~30 %);
 #   4. J <= 0 in a THM project: an observed width beyond the bound is reported
-#      under Park and penalised (Total-Park-Chi-Squared); MCMC rejects every
-#      such point (logP = -inf, acceptance 0) and samples a valid one.
+#      under Park and penalised (Total-Park-Chi-Squared); MCMC started there
+#      reports the level and refuses to run (no walker of the starting
+#      ensemble inside J > 0; before eb7deb6 it ran with acceptance 0), and
+#      samples a valid start.
 #
 # The analytic THM Jacobian under Park (chain rule through J) is checked by
 # tests/pyazr/thm_park_test.py.  About ten minutes.
@@ -257,11 +259,12 @@ MCMC='6\n\n12\n100\n1\n0.5\n1\nyes\nyes\n'
 if grep -q "Perform MCMC" "$WORK/wall/log"; then
   stage_wall wall.mcmc
   run wall.mcmc "$MCMC" --use-park
-  acc="$(tr -d '\r' < "$WORK/wall.mcmc/log" | grep -o 'Acceptance fraction: [0-9.]*' | awk '{ print $3 }')"
-  if [ "$acc" = "0.000" ] && tr -d '\r' < "$WORK/wall.mcmc/output/samples.mcmc" | awk -F, 'NR > 1 { n++; if ($3 != "-inf") b++ } END { exit !(n > 0 && b == 0) }'; then
-    ok "MCMC: every point beyond J > 0 rejected (logP = -inf, acceptance $acc)"
+  if grep -q "WARNING: the MCMC starting point is outside Park's parameter space" "$WORK/wall.mcmc/log" &&
+     grep -q "MCMC not started" "$WORK/wall.mcmc/log" && [ "$(cat "$WORK/wall.mcmc/status")" != 0 ] &&
+     [ ! -f "$WORK/wall.mcmc/output/samples.mcmc" ]; then
+    ok "MCMC: a start beyond J > 0 is reported and refused (status $(cat "$WORK/wall.mcmc/status"), no samples)"
   else
-    bad "MCMC: points beyond J > 0 not rejected (acceptance '$acc')"
+    bad "MCMC: a start beyond J > 0 not refused (status $(cat "$WORK/wall.mcmc/status"))"
   fi
   stage mcmc "$T18" "" "$FREE"
   run mcmc "$MCMC" --use-park
