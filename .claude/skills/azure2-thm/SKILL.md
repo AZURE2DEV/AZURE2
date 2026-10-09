@@ -1,339 +1,458 @@
 ---
 name: azure2-thm
-description: R-matrix analysis of Trojan Horse Method (THM) data with AZURE2, with the emphasis on assessing and quantifying the model (theory) dependence of THM results. Covers establishing what published THM points actually are (HOES vs penetrability-corrected, carrier, KF convention, resolution), building the HOES model (<thm> options, binding-energy field, identical particles), joint fits with direct data, the model-dependence protocol and its "theory dependence index", reproducing a published THM analysis, and the pitfalls met in 7Li, 6Li, 15N, 17O, 18O and 12C+12C. Use whenever the task involves THM/HOES data, a <thm> block, modified R-matrix, THM strengths or S factors, or comparing THM results with direct data or literature. Generic AZURE2 usage (running, fitting, file anatomy, the THM segment mechanics) is in azure2-eval.
+description: Step-by-step procedure for a complete Trojan Horse Method (THM) evaluation with AZURE2, from published THM spectra and direct data to model-averaged results with a stated model dependence. Covers vetting what published THM points are (HOES yields vs penetrability-corrected on-shell-equivalent values, carrier, binding energy, kinematic-factor convention, resolution, subtracted background, digitised error bars), building the project (THM opt-in, THM segments, experiment lines, binding energy, prior centres), choosing the baseline model (vertex, kinematics, line shape, distortion R(E), DW vertex, spectator window and acceptance, fixed angle, backgrounds, Brune vs Park), staged joint THM + direct fits, deriving strengths through the anchor formula, the model-averaging driver scripts/thm_model_average.py with Akaike/flat weights and the robustness rule, cross-checks, and reporting. Use for any THM fit, HOES data, modified R-matrix, Trojan Horse analysis, THM-derived strengths, S factors or rates, or the model (theory) dependence of THM results. Generic AZURE2 mechanics are in azure2-eval; new compound nuclei in azr-project-builder.
 ---
 
-# THM analysis with AZURE2, and how model-dependent the answer is
+# THM evaluation with AZURE2
 
-This skill is the procedure, not the mechanics. How a THM segment is declared
-(observable code +10, field 32 binding energy, field 33 `gammaIsRWA`, the `<thm>`
-keys, `AzrModel.set_thm_option`) is in **`azure2-eval`**, section "Trojan Horse
-(THM) segments"; the equations behind each option are in
-`docs/source/theory/thm_implementation.rst`. Level choice and Brune/formal
-questions: **`r-matrix-analysis`**. Fetching data: **`nds-explorer`**. New
-compound nucleus: **`azr-project-builder`**.
-GUI: THM is opt-in, like the hybrid nuclear potential: *Configure > Runtime Options > Use Trojan Horse Method (THM)* (off for a new or classic project; on by itself when an opened project has a `<thm>` block, a THM segment, a binding energy or an amplitude width; not stored in the file; off hides the controls only, the content is kept and used). With it on, all of it (`<thm>` options, experiments, fields 32/33) is edited in *Configure > THM Workspace...*; the classic tabs add only the segment dialogs' *THM* tick and the Fitting tab's *THM Background* sub-tab.
+The procedure for turning published THM material into an evaluated, model-averaged
+result. Mechanics of segments and files: **`azure2-eval`** ("Trojan Horse (THM)
+segments"). Equations and option reference:
+`docs/source/theory/thm_implementation.rst` (cited below as *impl*, "Section").
+Level schemes and formalism: **`r-matrix-analysis`**. Data fetching: **`nds-explorer`**.
+New compound nucleus: **`azr-project-builder`**. Detailed checklists:
+`references/` in this skill folder.
 
-Calibration comes from seven cases, all in `examples/` (`.azr` holds the best
-fit, `data/` headers name the sources): `li7_tumino2006`, `li6_pizzone2011`,
-`n15_lacognata2007`, `o17_guardo2017_fit`, `o18_lacognata2008` (narrow 20/90/144 keV),
-`o18_lacognata2010` (1/2⁺ doublet), `c12c12_tumino2018`, plus `f19_pag_thm`. Regression pins:
-`tests/18O_p_a_thm`, `tests/7Li_p_a`, `tests/6Li_d`, `tests/17O`, `tests/thm_options`.
-Example χ² (CLI "Total Chi-Squared", file alone = best fit, data + norm priors; Oct 2026,
-thm_implementation.rst "Examples"): f19 79.408 (data 77.640; JUNA PRC 106 Table I, hidden
-THM bars ≤ 0.0092), o18 2008 35.877, o18 2010 330.054 (data 329.692; authors' background +
-`background=linear`, 3/2⁻ 597 keV at LUNA widths, `vertexModel=dw`), c12c12 112.076 (data
-111.651; `experiment[E1] segments=1-4`: switch `lineshape`/`distortion` on there), o17
-12.996; n15 224.425, li7 448.575, li6 158.918. The Li examples are
-**on-shell** fits of published penetrability-corrected points; HOES yields would be
-needed for a true THM fit. A norm (shift) column is the start value; the prior centre is
-the column unless `<parameterSettings>` has `segment_N_norm prior_centre c` (GUI: Fitting
-tab, Prior Centre column; pyazr: `AzrModel.set_prior_centres`). Every example direct norm
-with an error stores its fitted value + `prior_centre 1`; `save_fit` (default) writes
-fitted norms and pins the centres the fit used, so the snapshot is the fit and a refit
-does not drift.
+What THM data can and cannot give (the lesson of every cross-check so far):
 
-The one-sentence lesson: **THM data fix shapes, energies and ratios of γ_x²|M_l|²; the
-absolute widths and the conversion to on-shell strengths depend on the reaction
-model, by ≤ 20 % when overlapping direct data anchor the widths and by factors
-1.5–200 when strengths come from HOES peak areas.** Quote that dependence with every
-number.
+- A THM spectrum with a free scale fixes **resonance energies, line shapes, ratios
+  γ_x²|M_l|² between levels, and ratios of exit widths** (several channels, one scale).
+- It never fixes **absolute widths**. The scale comes from overlapping direct data or
+  from one directly measured strength (the anchor).
+- When direct data overlap, reaction-model choices move results by ≤ 3 %. When
+  strengths come from peak areas against an anchor of different l or far away in ρ,
+  they move by 20 % to factors of 100. Quote that spread with every number.
 
-## 1. Establish what the published points are — before any modelling
+## When to use
+- A fit that includes THM points (HOES or penetrability-corrected), alone or with direct data.
+- A strength, S(0), rate or ANC derived from a THM spectrum.
+- Reproducing or checking a published THM analysis.
+- Any question of how model-dependent a THM result is.
 
-Published "THM data" are rarely the raw HOES excitation function. Settle, per
-dataset, and write it down:
+Prerequisites:
 
-| question | what we found | consequence |
+1. AZURE2 built from the `thm` branch, with **both** targets current: the CLI
+   (`build/src/AZURE2`) and the pyazr module `_azure2`. They are separate CMake
+   targets; `make AZURE2` does not rebuild `_azure2`, and a stale module reproduces
+   engine bugs that are already fixed. Build with `make -j2` at most on small machines.
+2. Python with numpy, scipy and mpmath (pyazr's core dependencies); `import pyazr`
+   from the repository root picks up `_azure2` from `pyazr/`.
+3. Memory: a realistic THM session takes 0.2–2 GB. On a machine with ~3 GB and no swap,
+   run **one engine process at a time** (section "Memory and process discipline").
+4. Keep per-evaluation notes, scripts and fit outputs **outside the repository**
+   (a sibling working directory). Only generic features, tests and examples go in the repo.
+
+## The evaluation path
+
+Eight stages. Do not start a stage before the previous checkpoint holds.
+
+### Stage 1. Gather and vet the data
+
+The reading of the published points can matter more than any reaction-model choice.
+Fill in the per-dataset record of `references/provenance-checklist.md` first.
+
+1. **Decide HOES or on-shell-equivalent.** This decides the observable of every later fit.
+   - *HOES yield*: d³σ/(KF|φ|²) in arbitrary units, no penetrability. It stays finite
+     or rises toward threshold, can have points below threshold, and narrow
+     high-l levels show peaks comparable with broad ones.
+   - *On-shell-equivalent*: penetrability restored (often per l, each l with its own
+     normalisation to direct data). It falls like e^{−2πη} toward threshold and usually
+     carries absolute units.
+   - *Already fitted*: an S factor that went through an R-matrix or polynomial fit.
+   - The answer is in the data-reduction section of the primary paper, not in the file
+     or in EXFOR.
+2. **Record the reaction.** Note the carrier a = x + s, the spectator, B_xs, the beam
+   and its energy, normal or inverse kinematics, the spectator-momentum cut, the
+   angular acceptance, the resolution (σ or FWHM, which frame), the energy frame of
+   the tabulated points, and the background the authors subtracted (its formula).
+3. **Record what was divided out.** Possible conventions: the full three-body KF,
+   λ₃/λ₂, |φ|² only, or a fit with La Cognata's working formula. This sets
+   `kinematics=` (Stage 3).
+4. **Check digitised points and errors** against the figure:
+   - Prefer PDF vector paths. For a tick-calibrated raster, check every major tick to ≤ 1 px.
+   - Compare digitised bars with the visible ones. A bar hidden by the marker is
+     bounded by the marker radius: cap it there, do not invent it.
+   - Use published tables whenever they exist, even if the paper says "not public".
+   - Record the digitisation error.
+5. **Check the scatter.** Fit a smooth model (for example one Gaussian per peak) to the
+   THM points with the published bars. If χ²/ν ≫ 1, the bars are smaller than the
+   scatter (statistical only). Note the factor; Stage 4 uses it.
+6. **Collect the direct data.** Use EXFOR (`nds-explorer`, `pyazr.nds`) and the
+   published tables. Record units, lab or c.m. frame, systematic (norm) errors, and
+   whether per-point errors are given or assigned. Put the source in the data file's
+   `#` header.
+
+Checkpoint: every THM dataset has a written reading (HOES / on-shell /
+already fitted), carrier, B, frame, KF convention, resolution and background, each with
+its source.
+
+Pitfalls met:
+
+- **7Li(p,α) Tumino 2006 and 6Li(d,α) Pizzone 2011 are on-shell-equivalent**
+  (penetrability restored, normalised to direct data), with a ³He carrier
+  (B = 5.4935 MeV). They were once fitted as HOES with B = 2.2246 / 1.4735 MeV. The
+  HOES fit pulled the direct norms to 0.4–0.6 and halved the 7Li S(0) (25–37 against
+  63.5 keV b), with −10 to −14σ residuals below 0.4 MeV. For 6Li the χ² even
+  preferred the wrong reading: the paper text decides, not χ².
+- 15N(p,α₀) La Cognata 2007 Table 3 is on-shell (fitted scale 0.98). 17O(n,α)
+  Guardo 2017 is genuine HOES: it has points below threshold, a visible f-wave 5⁻ peak,
+  and "arb. units". 18O, 19F and 12C+12C spectra are HOES.
+- Paper misprints: Tumino 2006 quotes the deuteron's Hulthén parameters for ³He and
+  "5.85 MeV" for 5.49 MeV. A momentum-window limit derived with the wrong
+  (inverse) kinematics removed 48 of 66 points that the real kinematics reach.
+- Frames: the 17O energies are lab (χ² 13.0 against 17.0 as c.m.; the source figure
+  confirms it). The 12C+12C files have E_lab = 2 E_cm. A table may mix frames
+  (Guardo Table II). An EXFOR EN-CM column labelled MeV held keV (15N).
+- Digitisation: one digitised JUNA point was 17 % low against the published Table I.
+  The 19F hidden bars were 30–45 % optimistic in the valleys. Bars ≈ cap size need
+  ~5 % added in quadrature.
+- Error bars smaller than the scatter: the 19F published bars give χ²/ν ≈ 9 for the
+  authors' own Gaussian model. The quoted χ²/ν = 2.0 needs ~15 % errors.
+- Background provenance: an example THM file once carried a background tuned to one
+  joint fit (plane wave, 5.1 fm), not the authors' line. It biased every other variant
+  (6.1 fm: THM χ² 2866 against 540 with the authors' background). Digitise the authors'
+  background, subtract it, and let `background=linear` absorb the rest.
+- Identical exit particles (α+α): data that count both α need ×½. A free norm far from 1
+  (Cassagnou ~1.9) can be a disagreement between datasets, not a double count.
+
+### Stage 2. Build the project
+
+Start with **`azr-project-builder`** (pairs, levels, channels) or an existing `.azr`.
+Then:
+
+1. **Enable THM.** In the GUI, tick *Configure > Runtime Options > Use Trojan Horse
+   Method (THM)*. It is off for a new project and turns on by itself for a project
+   with THM content; it is not stored in the file. All THM editing is in
+   *Configure > THM Workspace...* (pages Model, Experiments, Channels, Diagnostics).
+   pyazr and the CLI need no switch.
+2. **Segments.**
+   - HOES data become a THM segment: observable code + 10 (10 angle-integrated,
+     11 differential). In the GUI, tick *THM* in the segment dialog; in pyazr,
+     `AzrModel.add_data_segment(..., thm=True)`. Free norm, no norm error: AZURE2
+     profiles it analytically, n* = S_mm/S_md, with no parameter and no penalty.
+   - On-shell-equivalent points become an ordinary segment (σ or dσ/dΩ, converted
+     from S if needed) with a free norm. None of the THM options acts on them.
+3. **Binding energy.** B_xs of the carrier goes in field 32 of **every** channel line
+   of the THM entrance pair (THM Workspace > Channels; pyazr `AzrChannel.binding_energy`).
+   The Channels page flags a B that differs from the experiment's masses by > 1 keV.
+4. **Experiment lines.** Group the segments of one measurement (several exit channels,
+   angular bins, runs) in `<thm>`:
+   `experiment[E1] segments=1-4 beam=14N target=12C spectator=d Ebeam=30`
+   - One shared profiled norm makes the relative channel heights carry exit-width
+     ratios. For 12C+12C, four free scales came out within ±5 % of their mean.
+   - `beam/target/spectator/Ebeam` (all four or none) are needed by `lineshape`,
+     `ps`, `distortion=coulomb|optical` and `vertexModel=dw`.
+   - `background=const|linear|quadratic` is a smooth incoherent term, profiled linearly
+     with the norm. Results are in `output/thm_experiments.out` and
+     `session.thm_background(name)`.
+   - pyazr: `AzrModel.set_thm_experiment(name, segments, ...)`.
+5. **Resolution.** Use one `<targetInt>` Gaussian per THM segment. Its σ is a
+   **lab** standard deviation: convert c.m. σ by ×(m₁+m₂)/m₂, and convert FWHM to σ
+   (÷2.355). Example: 17 keV c.m. gives ≈ 0.01795 MeV for p+18O. Without a stated value,
+   start at σ ≈ 30 keV c.m. and fit or scan it. pyazr: `add_target_effect(segments,
+   gaussian_sigma=...)`.
+6. **Direct-data norms.** Give each direct segment a norm error equal to its quoted
+   systematic. Centre the prior on the nominal scale with
+   `segment_N_norm prior_centre 1` in `<parameterSettings>` (GUI: Fitting tab,
+   *Prior Centre* column; pyazr `AzrModel.set_prior_centres`). Without the row, the
+   norm column is both start value and prior centre. A saved fit then re-centres every
+   later refit on its own result (15N S(0) 70.7 → 74).
+7. **Level scheme.** Take it from ENSDF and direct R-matrix analyses, not from the THM
+   paper alone. Include every level the THM spectrum shows, narrow ones too, and check
+   that no data window cuts a level.
+   - Example: the 18O 3/2⁻ 597.6 keV level (Γ ≈ 2 keV) shows as a step at
+     0.58–0.62 MeV in the 2010 spectrum. With LUNA widths and the DW vertex it lowers
+     the joint χ² from 481 to 330 with no new parameter.
+   - Identical 0⁺ bosons: only even-J natural-parity levels fuse. THM-only levels
+     (odd J, unnatural parity) need the workaround in `references/model-choices.md`.
+
+Checkpoint:
+- The project runs on the CLI (`printf '1\n\n\n7\n' | build/src/AZURE2 --no-gui
+  --no-readline x.azr`).
+- `<thm>` is accepted: AZURE2 exits with `ERROR: <thm> ...` otherwise.
+- B, σ and the norm priors are as recorded in Stage 1.
+- THM Workspace > Diagnostics shows |M_l|² and the HOES/on-shell shapes as expected.
+
+### Stage 3. Baseline model: choices and why
+
+Each choice gets a default, the condition to change it, and its place on the variant
+grid of Stage 6. Details and effect sizes: `references/model-choices.md`.
+
+| choice | key | default / when to change |
 |---|---|---|
-| Raw HOES, or penetrability-corrected / normalised S(E) or σ? | 7Li (Tumino 2006, EXFOR O1653002) and 6Li (Pizzone 2011, D0649002): penetrability divided out, normalised to direct data → on-shell-equivalent. 15N Table 3 (C1788004): deconvolved S(E), already normalised (fitted scale 0.97, priors at 1). 18O ApJ 723: PWIA S factor σ_HOES·P₀e^{2πη} + linear background. 18O PRL 2008, 17O Guardo 2017, 12C+12C Nature 2018: HOES, arbitrary units | on-shell-equivalent points are fitted with the **on-shell** observable and a free scale, not as a THM segment |
-| Carrier nucleus and B (field 32) | 7Li and 6Li both used ³He (B = 5.49 MeV), while `tests/7Li_p_a` / `tests/6Li_d` carry 2.2246 / 1.4735 MeV. d carrier 2.224566; ¹⁴N → ¹²C+d 10.2723 | wrong B shifts p = √(2μ(E+B))/ħ and every vertex node |
-| KF convention (what was divided out) | full three-body density (Typel & Baur eq. 16, Tumino 2021 eq. 15) → `kf3body`; λ₃/λ₂ with on-shell p_Ax (Pizzone 2011, Tumino 2021 eq. 22) → `lambda32`; only |φ|² → `triple`; La Cognata's working formula or unknown → `lacognata` | only the energy dependence matters (norm is free); `lambda32` leaves 1/k_i, a factor 7 over 0.02–1 MeV |
-| Resolution σ (and σ vs FWHM, frame) | 18O: 40 keV FWHM = 17 keV σ (ApJ 708 says σ). 17O: σ 20/30 keV (Gulino) vs 35 keV FWHM (EXFOR); fitted 22.2 ± 1.2. 7Li: "80–120 keV", convention not stated. 12C+12C: σ 30 keV (scan minimum 30–35) | fit σ as a check; `<targetInt>` σ is **lab**: ×(m₁+m₂)/m₂ (0.017 → 0.017948 MeV for p+¹⁸O; 0.030 → 0.060 for ¹²C+¹²C) |
-| Angular window | 7Li: θ_cm 50–70°; 18O: 4π via direct angular distributions | incoherent entrance-l sum is exact only for 4π (below) |
-| Energy offset, background subtracted? | 18O narrow: per-level offsets −1…+9 keV; ApJ 723: linear background (digitise the dashed line); 17O energies read as neutron-lab (χ² 13.0 vs 17.0 as c.m.) | fit an energy shift; test lab vs c.m. reading of the energy column |
-| Channel radius and boundary | usually **not stated** (table below) | radius becomes a model variation, not an input |
+| entrance l coherence | `entranceL=` | `incoherent`: exact for 4π, spin-summed data. For a restricted angular range use `theta=` (below), not `coherent` |
+| vertex boundary | `vertex=` | `constant` (B_c = S_c(E₁) of the lowest level of each Jπ): representation-invariant. `onshell` (S+iP) as a variant. `perlevel` only to reproduce pre-Sep-2026 numbers (18O band 23 % vs 5 % peak rms) |
+| kinematic factor | `kinematics=` | Match what the data divided by: full three-body KF → `kf3body`; λ₃/λ₂ → `lambda32`; \|φ\|² only → `triple`; La Cognata's formula or unknown → `lacognata`. λ₃/λ₂ leaves 1/k_i (×7 over 0.02–1 MeV) |
+| entrance vertex model | `vertexModel=` | `pw` default. Make `dw` (with `distortion=coulomb\|optical`, `opticalAA=`, `opticalSF=`) a variant whenever peak areas of different l, or levels far apart in ρ, become strengths |
+| Coulomb integral C_l | `coulombIntegral=` | `0` (no published analysis uses it). `1` only with a plane a+A wave (refused with `dw` or a distorted R(E)); ×3–4 run time |
+| Coulomb line shape N_C | `lineshape=on` | Charged spectator only (N_C ≡ 1 for a neutron). Off in published fits; make it a variant (17O, p spectator: +10–17 % on strengths). Refused with `cbackground=` |
+| distortion R(E) | `distortion=` | For a charged spectator below its s+F barrier (heavy systems). It multiplies the pw model. Not applied with `dw` (the DW vertex contains it). `distortionRatio=dw` refused with a `ps` window |
+| spectator window | `ps=hulthen:0-40`, `gauss:...`, `table:<file>` | Average over the accepted \|p_s\| when the vertex is not smooth over it (near nodes). Excludes `spectatorEnergy` for that pair |
+| acceptance | `spectatorAngles=[cm:]a-b`, `table:<file>` | Accepted spectator directions; with `ps` one acceptance (19F: `spectatorAngles=cm:135-180`) |
+| fixed angle | `theta=50-70` | Data in a restricted c.m. angular range of the exit pair (7Li θ_cm 50–70°: shape 14 % rms) |
+| backgrounds | `background=`, background pole, `cbackground=` | Physics also in direct data → background pole (broad level, same Jπ). Non-quasi-free residue → `background=` (incoherent). `cbackground=` (interfering, THM-only) is a diagnostic, not a model |
+| parametrization | CLI `--use-park` / `--no-brune`, pyazr `use_park=True` | Brune (default). Park gives the same THM model (`tests/thm_park`, ≤ 1e-8) and is preferable when single partial widths are fixed, bounded or given priors |
 
-What the papers state (open copies only):
+Rules that the engine enforces (*impl*, "Coulomb effects: what each option contains"):
+`coulombIntegral=1` is refused with `vertexModel=dw` and with R(E) on a distorted a+A
+wave; `lineshape=on` is allowed with R(E) and with `dw`; `ps` is allowed with `dw`
+(averaged per node). Do not work around a refusal: it marks double counting.
 
-| paper | radius | boundary / vertex | KF | resolution |
-|---|---|---|---|---|
-| La Cognata PRL 2008, ApJ 708 (18O narrow) | symbol only ("5 % from the radius", double ratio) | Breit–Wigner with M_i(E) | three-body (Dolinsky), not written | 40 keV FWHM = σ 17 |
-| La Cognata ApJ 723 (18O doublet) | 5.1 fm p, 5.7 fm α (from Yagi/Mak) | B = S(E₁) labels the representation; **no M_l**, a fitted complex ratio L21 = (γ₁/γ₂)m21e^{iφ21} | not written | 17 keV |
-| La Cognata 2006/07 (15N) | symbol only | PWIA + penetrability | "KF", not written | not quoted |
-| Gulino 2013 (17O) | 4.1 fm for the penetrability only | outgoing-wave (on-shell) Wronskian | MC KF|φ|² | σ 20/30 keV |
-| Tumino 2006 (7Li) | none | PWIA + penetrability | eq. 4 (p_c³ misprint) | 80–120 keV |
-| Pizzone 2011 (6Li) | none | PWIA | λ₃/λ₂, on-shell p_ax | none |
-| Tumino 2018 + Reply (12C+12C) | none (¹²C+d 3 fm only) | per level (Tumino 2021 eq. 51) | not stated | 30 keV σ |
+Checkpoint: write the adopted baseline and the reason for each row. Plot |M_l(E)|² at
+the adopted radius and at ±1 fm with the level energies (THM Workspace > Diagnostics,
+or `session.thm_vertex(name, E, strict=True)`). A level next to a vertex node warns
+that its strength will be model-dependent.
 
-No primary analysis includes the external Coulomb term C_l. No paper tabulates its
-fitted curve.
+### Stage 4. Fit
 
-**Test provenance by fitting.** Fit the same model two ways — the points as a HOES
-THM segment, and as an on-shell observable with a free scale — and compare THM χ²/N,
-the direct norms, and the residual pattern near threshold. 7Li: on-shell χ²/N
-**3.5** against HOES **12.8** (12.5 with B = 5.49 MeV); direct norms return from
-1.25–1.5 to 0.94–0.98; HOES residuals of −10 to −14σ below 0.4 MeV (HOES rises
-toward threshold where the data fall: penetrability already divided out). 6Li: the
-free on-shell scale comes out **1.11**, i.e. the points are absolute. 15N: HOES ×
-P₀e^{2πη} gives 2.85 against on-shell 1.25. A χ² that does not discriminate (6Li
-0.98 vs 1.32) leaves the question to the paper text.
+AZURE2 computes χ², residuals and Jacobians. pyazr does not fit: the fit loop is
+yours (scipy `least_squares` on `residuals()` / `residual_jacobian()`), or the CLI
+minimizers. THM Jacobian rows are central differences (the adjoint does not cover
+HOES), with the profiled scale included exactly.
 
-## 2. Building the model
+1. **Stage the fit.**
+   1. Fit direct data only, to learn what they fix.
+   2. Fit THM only, to see what shape it wants (absolute widths will be wrong).
+   3. Fit jointly, freeing the few parameters both constrain.
+   4. Free the rest step by step. Carry the parameter vector between steps.
+2. **Joint fit rules.**
+   - The THM scale is profiled; the absolute scale comes only from the direct data
+     (norm priors) or from penalty rows of measured strengths.
+   - Fixed widths in `<levels>` are fixed amplitudes. Under Brune the physical width
+     drifts with the other amplitudes; under Park it stays fixed.
+   - Large models (12C+12C, 200+ parameters) need priors: Gaussian in ln Γ_c
+     (σ = 1), E (σ ≈ 30 keV), and a penalty above the Wigner limit. A width whose
+     posterior error is not below half its prior width is not measured; mark it.
+3. **Convergence.**
+   - Stop on a Δχ² rule (for example < 0.1 over 10 evaluations), not only on an
+     evaluation cap. A fit stopped at the cap gives only an approximate covariance.
+   - Restart from perturbed points; the same χ² should come back to < 0.01.
+   - With penalty rows whose column norms differ by orders of magnitude, use
+     `x_scale=1` (driver `--x-scale 1`). `jac` rejected every step on the 19F model.
+   - Converge the resolution fold: raise the `<targetInt>` sub-point tokens (for
+     example `0.04 5 50` against `0.04 10 200`) until χ² stops moving. Dense grids
+     cost memory (a 30-level model: 2.2 GB against 360 MB).
+4. **Assess the fit.**
+   - Check χ²/N per dataset, not only the total.
+   - Direct norms should sit near 1. Norms of 1.25–1.5 signal a wrong THM observable
+     or a wrong vertex (18O 597 keV with pw: 1.33).
+   - Check θ² against the Wigner limit (`pyazr.widths`), parameters at bounds,
+     super-Wigner high-l entrance amplitudes used as HOES shape knobs, and the residual
+     pattern near threshold.
+5. **Error model.**
+   - If the THM bars are smaller than the scatter (Stage 1), scale the statistical
+     errors by √(χ²/ν) from the THM points alone and say so.
+   - Test alternative error models (10 %, 15 %, c√y): the strengths should not move
+     (19F: ≤ 4 %).
+   - Bars that are generous (12C+12C THM χ²/N ≈ 0.24) make Akaike weights meaningless
+     later.
 
-- **Level scheme** from direct R-matrix analyses and ENSDF (`nds-explorer`), not from
-  the THM paper alone. Check the windows: the 18O 3/2⁻ 597.6 keV (Γ = 2 keV) was cut
-  out by an old excluded window although it dominates the direct data locally; it is
-  also visible in the 2010 THM spectrum (step at 0.58–0.62 MeV) and consistent with the
-  LUNA widths only with the DW vertex (free Γ_p 44(6) eV vs 36(2); pw 0.6 eV), joint χ²
-  481 → 330 with no new parameter — the example now carries it.
-- **Parameters.** AZURE2 inputs are Brune (observed) parameters and the CLI runs
-  Brune by default (no switch to turn it off; `pyazr.azure2(..., use_brune=False)`
-  does). Convert a published formal set (ApJ 723 Table 3) by solving the Brune
-  eigenproblem and enter the amplitudes with `gammaIsRWA` = 1; check the on-shell σ
-  against an independent formal calculation (agreed to 1e-5). Brune fails when
-  γ²dS/dE is large (12C+12C θ² = 26 at 6.41 fm is not representable): use a larger
-  radius or smaller seeds.
-- **Park (`--use-park`, GUI "Use Park parametrization", pyazr `use_park=True`).**
-  Works with THM and gives the same model (tests/thm_park: every example and THM
-  option, ≤ 1e-8; fits land on the same minimum). The fit amplitude is then the
-  observed width (Γ_c = 2Pγ²): fixing, bounding or putting a prior on one width is
-  one parameter, and a broad level's amplitudes are less correlated — use it when
-  the analysis constrains single partial widths (exit widths from direct data) or
-  fixes widths across stages. Keep J > 0 (a warning and a penalty otherwise; MCMC
-  rejects). A `gammaIsRWA` channel is Brune's amplitude in the file in both modes.
-  A .azr whose widths Brune cannot reach ("Denominator less than zero") is a
-  different model in the two modes — fix the input first.
-- **THM segment.** Observable 10 (angle-integrated) or 11; B in field 32 of every
-  entrance-pair channel line; one `<targetInt>` Gaussian per THM segment (60 uniform
-  sub-points for 12C+12C; check convergence, section 6); THM norm free → AZURE2
-  profiles it analytically (n* = S_mm/S_md, no penalty). Several channels of one
-  experiment share **one** scale (12C+12C: free per-channel scales came out 0.96–1.07). Declare
-  such segments one THM experiment, `experiment[<name>] segments=1,2,5-7` in `<thm>`:
-  one shared profiled norm (n* from the summed S sums), optional
-  `background=const|linear|quadratic` added to the folded model (e.g. the linear
-  background of ApJ 723), both closed-form linear least squares; coefficients and
-  covariance in `output/thm_experiments.out` and `session.thm_background(name)`.
-  `AzrModel.set_thm_experiment(...)`.
-  Details: thm_implementation.rst, "THM experiments".
-- **Interfering background**: non-resonant x+A physics (also in direct data) = a broad
-  background level of the same J^π (Levels tab). A THM-only non-QF amplitude that
-  interferes: `cbackground=<Jπ>:<exit>[:s,l,s',l'][:linear][=Re,Im,...]` on the experiment
-  line (GUI: Experiments page section; pyazr `cbackground=`); Re/Im are fit parameters
-  `cbkg_*` (not profiled). Strongly correlated with the level parameters; a test of a
-  THM-direct tension, not evidence of a mechanism. thm_implementation.rst, "Coherent background".
-- **Spectator-momentum window**: `ps=hulthen:0-40` (or `hulthen:a,b:..`, `gauss:FWHM:..`,
-  `table:file` = |φ(p)|² itself; `psNodes=`, needs kinematics, excludes `spectatorEnergy` and
-  `spectatorAngle`) averages the HOES cross section (incoherently) over the accepted spectator
-  directions: at fixed E the direction fixes q = |p_s| (only |k_sF − βk_aA| ≤ q ≤ k_sF + βk_aA is
-  reached), and data = yield/MC∫KF|φ|² over the bin (KF is the Jacobian, it cancels) give the
-  weight |φ(q)|² d cosθ_cm = |φ|² q dq — **not** |φ|²p²dp (the E-integrated measure; AZURE2 used
-  it before Oct 2026). Nodes in cosθ_cm per point and folding sub-point, T_s = q²/2μ_sx added to
-  E + B. One acceptance with `spectatorAngles=` (ps alone = cm:0-180 with the cut). Effect
-  sizes: thm_implementation.rst, "Spectator-momentum window". `session.thm_vertex(name, E)`
-  (nodes per energy).
-- **Coulomb line shape** (charged spectator): `lineshape=on` on the experiment line
-  (needs `beam/target/spectator/Ebeam`, Brune) multiplies each level's exit
-  amplitude, inside the coherent sum, by N_C = e^{πζ/2}(E_λ−E−iΓ_λ/2)^{−iζ},
-  |N_C|² = exp[2ζ arctan(2(E_λ−E)/Γ_λ)] (Mukhamedzhanov 2020 eqs. 56–62), with
-  ζ = η_sB − η_0 = Z_s α(Z_B μ_sB − Z_F μ_sF)/k_sF, E_sF = E_aA − B − E (paper's case 2,
-  η_sb dropped; ζ < 0 → peaks move up). Off by default and 1 for a neutron
-  spectator; published fits assume N_C = 1, so turning it on changes the shape a lot
-  for 12C(14N,d) (ζ ≈ −0.13…−0.49). `session.thm_lineshape(name, E)` gives ζ, E_sF,
-  η_sb (validity: ≪ 1) and |N_C|² per level. Details: thm_implementation.rst,
-  "Coulomb line shape".
-- **Distortion factor R(E)**: `distortion=coulomb|optical|table:file` on the experiment line (kinematics needed; `opticalAA/SF=plane|coulomb|V,R,a,W,RW,aW,WD,RD,aD,RC`, `spectatorAngle=qf|<lab deg>|cm:<deg>`, `distortionRatio=dwpw|dw`, `boundState=whittaker|yukawa[:rmin]`, `distortionRef=`) multiplies the model by the zero-range DWBA |M/M_PW|² ratio (= dividing PWA S* by R); reproduces Mukhamedzhanov's 2019 12C+12C curve with defaults, the 2026 one with `dw` and E_sF +50 keV; 12C+12C χ² 61 → 3247 unrefitted, 18O(d,n) R = 0.93–1.08. `session.thm_distortion(name, E)`; thm_implementation.rst, "Distortion factor R(E)".
-- **Distorted-wave entrance vertex**: `vertexModel=dw` on the experiment line (with `distortion=coulomb|optical` and its keys) replaces M_l by the surface term of the prior-form DWBA (Mukhamedzhanov 2011; 2020 eqs. 28–32): the source S(r) = ∫d³u φ(u) χ⁽⁻⁾*_sF(αr+u) χ⁽⁺⁾_aA(r+βu) (α = m_A/m_F, β = m_s/m_a, finite-range s–x tail of `boundState`), V_lm = (B−1)S_lm(a) − a S′_lm(a), |M_l|² → (4π/(2l+1))Σ_m|V_lm/4πφ̃(q)|² (two incoherent components for per-level B). Plane waves give M_l(p) exactly, p = |k_aA − αk_sF| (checked 1e-9); R(E) = its r_xA → 0, l-independent limit (12C+12C: the l-summed DW/PW ratio follows R to 0.06 dex), so R is **not** applied with dw (distortionRef/Ratio refused). Surface term only: `coulombIntegral=1`, `theta`, `entranceL=coherent`, `spectatorEnergy`, `spectatorAngle`+`ps` refused; a `ps` window averages over the accepted directions (weight |φ̃(q)|² d cosθ_cm, one averaged Gram node). 19F+d (55 MeV): |M1(213)/M0(324)|² 1.10/3.00/19.7 (pw, a_p 4.1/5.1/6.1) → 0.17/0.24/0.34 (dw Coulomb), 0.33/0.41/0.52 (dw optical), 0.89/0.94/1.06 (dw optical, ps 0–50 MeV/c, fixed-E measure; 1.29/1.24/1.32 with the old isotropic one): the radius dependence nearly disappears, the optical potentials and the window now carry the l ratio. `session.thm_vertex` gives `model`, `M2` (dw), `M2_pw` (same p). Startup 4–6 s. 19F joint refits (a_p 5.136, all at their nfev limit; example data before Oct 2026): full window ωγ(828) pw 184 eV → dw 667–727 (564 optical + window, 655 Coulomb + window) vs direct 775(35), penalty χ² 342 → 83–122 (33–62 with window), THM χ² hardly better (199–242 qf, 171–204 window, vs 204) and 790 keV ~0 in every vertex — the full window still does not fit; adopted window: dw qf worse (THM χ² 115–166 vs 64, lifts ωγ(225) ×4), dw + window 81 with penalty 3.8, ωγ(11) 5.5 vs 3.7 (pw). pw + window (no dw) is the worst (ωγ(213) −5.2σ; full window ωγ(828) 67 eV). (The "+window" rows are Oct-2026 refits with the fixed-E measure; the isotropic-measure ones gave dw optical 77 / 223, ωγ(828) 493.) Memory: a pw `ps` window stores entrance channels only (`ps_table` row in thm_experiments.out); before Oct 2026 it took ~117 MB per node on the 19F model and OOM-killed refits. thm_implementation.rst, "Distorted-wave entrance vertex".
-- **Global optical potentials**: `opticalAA=`/`opticalSF=` also take `ancai06`, `daehnick80` (d), `kd03` (n, p; global KD), `bg71` (t, 3He), `liang09` (3He), `mcfadden66`, `avrigeanu94` (4He), optionally `:extrapolate` (src/ThmOptical.cpp); evaluated at the projectile's lab energy (a+A fixed, s+F re-evaluated at E_sF of every grid energy), spin-orbit dropped, W_D the −4a dF/dr form 1:1, radii r0·A_t^1/3. Outside the stated mass/energy range refused unless `:extrapolate` (WARNING); no heavy-ion entry (14N+12C takes ten numbers). Checked against RIPL-3 / FRONT21 (1e-9) and d+40Ca 56 MeV elastic (0.066 dex rms vs data). Spread of standard choices is small: 19F l-ratios 1 % (ancai06 vs daehnick80), 12C+12C d+24Mg ≤3 % (l ≤ 6) — far below Coulomb→optical (×1.7–20). thm_implementation.rst, "Global optical potentials".
-- **Experimental acceptance** (`spectatorAngles=[cm:]thmin-thmax|[cm:]table:file`, `spectatorAngleNodes=` default 8; needs `distortion=coulomb|optical` or a `ps` distribution, excludes `spectatorAngle` and `psNodes`): one acceptance with `ps` (the q cut) — the plane-wave vertex (|φ|² of ps), R(E) and the DW vertex (|φ̃|² of their bound state) are averaged over the accepted directions, weight d cos θ_cm × acceptance × |φ|²; at fixed E the direction fixes q (no 2D grid); a lab window maps to one or two c.m. branches. DW cost nil (model linear in G: one averaged node). Effect sizes (19F, 12C+12C): thm_implementation.rst, "Experimental acceptance".
-- **Coulomb consistency** (thm_implementation.rst, "Coulomb effects: what each option contains"): the DW vertex / R(E) is the formation amplitude M^(tr) (bra of the s–F Coulomb completeness, 2020 App. A eqs. 136–140), N_C its ket side (post-collision; 2020 eq. 55, 2022 eq. 18 multiply them) — `lineshape=on` with `distortion` or `dw` is allowed, no overlap (cross term ≲5 % at 12C(14N,d) peaks). C_l is the x part of the a–A Coulomb force already in a distorted a+A wave: `coulombIntegral=1` is **refused** with `vertexModel=dw` and with R(E) on a distorted a+A wave (`coulomb`, `optical` unless `opticalAA=plane`), warned with `distortion=table`; a `ps` window with `distortionRatio=dw` is refused (|φ|² twice). Rules in CheckThmExperiments/CheckThmCoulombConsistency (engine, GUI, pyazr). Sizes at published parameters: 12C+12C R+C_l χ² 3224 vs 3247 (C_l shape ≤1.45), R+N_C 2861; 19F R+C_l 204 vs 76.5 (C_l ×0.26–1.0, p+19F deep sub-barrier).
-- **Fixed-angle observable**: `theta=50-70` on the experiment line (degrees, c.m. angle of exit particle 1 vs 2 from p_xA = entrance particle 1 vs 2; Tribble θ_cm = arccos k̂_xA·k̂_bB; `0-0` one angle, `all` default) makes the model ⟨dσ/dΩ⟩ over the window: Blatt–Biedenharn Z̄ sum over the HOES partial amplitudes of all Jπ (l and J interfere; exit phase e^{i(ω−φ)}); 0–180 = σ/4π; identical exit symmetric, no factor; refused with `entranceL=coherent`. 7Li(p,α) Tumino 50–70° unrefitted: shape 14 % rms / 45 % max (−14 % at 2.6 MeV, +25 % at 5 MeV), χ² 2138 → 2350; 18O one 1/2⁺ group: isotropic, no change. `AzrModel.set_thm_experiment(..., theta=(50, 70))`; thm_implementation.rst, "Fixed-angle observable".
-- **Recommended `<thm>` defaults** and why:
-  - `entranceL=incoherent`: exact for a 4π-integrated, spin-summed observable. In a
-    restricted window the l ≠ l′ (and J) cross terms survive (7Li 50–70°: +77 % for s = 1,
-    −9 % for s = 2) -- use `theta=` then, which computes them; `coherent` is not the
-    θ = 0 limit either. Regression pin 2138 vs 3197 coherent (θ = 0: 1747).
-  - `vertex=constant`: B = S(E₁) of the lowest level of each Jπ, factors out of the
-    level sum, representation-invariant. `perlevel` mixes representations once two
-    levels of one Jπ interfere (18O band 23 % vs 5 % peak rms; 7Li χ²/N 19.0 vs 12.8;
-    15N HOES 10.3 vs 2.85) — use only to reproduce pre-Sep-2026 numbers. `onshell`
-    (S + iP) is the physically cleanest and a mandatory variation.
-  - `kinematics=` per the KF convention of section 1.
-  - `coulombIntegral=0` for comparison with published analyses (none uses it); `1`
-    is physically part of the amplitude (|C_l| = 20–45 % of the surface term) and is a
-    variation; costs ×3–4 run time; nothing for neutrons.
-- **Identical particles.**
-  - Two identical 0⁺ bosons form only even-J natural-parity levels. AZURE2 applies
-    (1+δ) = 2 to every cross section out of an identical *entrance* pair (df8c2c8;
-    older builds were ×0.5 low). An identical *exit* pair (α+α) gets no factor: data
-    that count both particles (4π α yield: Mani, Jeronymo at 2.03×, 2.1× the model)
-    need ×½.
-  - THM-only levels (odd J or unnatural parity, populated by transfer but unable to
-    fuse: 12C+12C 0.877 MeV 1⁻, which carries the largest published S* peak). AZURE2
-    keeps l = J with a Bose-symmetry warning and cannot average l = J±1. Current
-    workaround: a second, identical entrance pair for the on-shell segments; odd-J
-    levels couple to the THM pair only, allowed levels to both with the same width.
-    Cost: the second channel enters the level matrix and Brune denominator twice
-    (χ² 110.69 → 111.65 for levels near the Wigner limit). Exact alternative: two
-    sessions, forbidden amplitudes zeroed for on-shell observables.
+Checkpoint: a converged adopted fit saved with `save_fit(path, x)`. It writes the
+fitted norms, adds `prior_centre` rows and verifies the snapshot. As the last call
+of a fit, use `close_session=True`. Running the snapshot alone on the CLI reproduces
+the fitted χ² (data + priors).
 
-## 3. Joint fits with direct data
+### Stage 5. Derive the quantities
 
-THM alone fixes shapes and ratios, not absolute widths: THM-only fits reach low χ²
-with widths wrong by large factors on shell (7Li stage B: THM χ²/N 3.1, Rolfs χ²/N 186;
-18O doublet THM-only: Γ_p → 0; 15N: widths unconstrained). Only joint fits give
-anchored numbers.
+1. **Widths and strengths.** Take physical widths from the Brune transform
+   (`transform_rwa`, `parameters.out`). Keep signs. Never convert a `gammaIsRWA`
+   channel by hand. ωγ = g_J Γ_in Γ_out / Γ, × (1+δ₁₂) for identical entrance nuclei.
+2. **Anchor formula.** It turns peak areas into strengths (narrow, isolated levels):
 
-- **Loop.** Own scipy `least_squares` (TRF) over pyazr `residuals()`; pyazr does not
-  own fitting. THM scale profiled; each direct norm profiled or fitted with a Gaussian
-  penalty of its quoted systematic, so the absolute scale comes **only** from direct
-  data. THM Jacobian rows are finite differences (engine-side, parallel since
-  dcad73e); if slow, forward-difference `residuals()` yourself.
-- **Stages.** Direct only → THM only (to see what it wants) → joint with the few
-  parameters the data constrain → free more. Fixed widths in `<levels>` are fixed as
-  amplitudes, not physical widths (under Brune they drift through the denominator;
-  under Park they do not): keep all free in the engine and mask in Python, or run
-  Park; carry the amplitude vector between stages.
-- **Priors** (12C+12C, 200+ parameters): Gaussian in ln Γ_c, σ = 1 (factor 2.7)
-  around the table; E σ = 30 keV; penalty ln(θ²)/0.5 for θ² > 1; box bounds ±40 keV.
-  A width whose posterior error is not below half the prior width is **not measured**
-  — mark it (only 23 of 136 exit widths passed).
-- **Checks.** Per-dataset χ²/N (not only the total); direct norms near 1 (norms of
-  1.25–1.5 signal a wrong THM observable); θ² against 3ħ²/(2μa²) (use `pyazr.widths`);
-  parameters at bounds; super-Wigner high-l entrance amplitudes used as HOES shape
-  knobs (7Li p+⁷Li l = 3 θ² = 6.5 — no entrance penetrability in HOES, so on-shell data
-  cannot veto it); the ½ for identical exit particles; a χ² profile of the THM scale
-  (12C+12C: factor 10 costs Δχ² = 28 from the direct data; the Wigner limit caps it
-  from above).
-- **Errors** from JᵀJ, × √(χ²/ν) when > 1; derived Γ, ωγ, θ² by linear propagation
-  through `transform_rwa` (signed: keep the sign). Fit errors exclude the model
-  dependence of section 4, which is often larger by 1–3 orders of magnitude.
+   ωγ_i/ωγ_ref = (Y_i/Y_ref) · [C_{l_i}(E_i)/C_{l_ref}(E_ref)] · [K(E_ref)/K(E_i)] · (b_ref/b_i),
+   with C_l = P_l/|M_l|².
 
-## 4. Model-dependence protocol (the core)
+   Only the vertex ratio |M_{l_ref}(E_ref)/M_{l_i}(E_i)|² carries reaction-model
+   dependence.
+   - Choose anchors with the **same l and small |Δρ|/d₀**, where ρ = p_xA·a and d₀ is
+     the distance to the nearest zero of M_l.
+   - 18O: ωγ(20)/ωγ(90) (both l = 2, |Δρ|/d₀ = 0.009) is stable to 1.5 %. ωγ(20) via
+     the 144 keV s-wave anchor (near the M₀ zero) varies ×25 over ±1 fm.
+   - A peak displaced from E_i is measured at the peak and moved to E_i with P_l. The
+     20 keV level moves ×4.6 per keV, so the E_r uncertainty can dominate.
+3. **S(E), extrapolations, rates.**
+   - Add an extrapolation grid with `add_extrapolation(..., frame="cm")` for c.m.
+     energies (the default is lab).
+   - Integrate rates numerically on a resonance-resolving grid, or as a narrow-resonance
+     sum checked against the integral.
+   - State what sets the low-T rate. For 19F below T₉ ≈ 0.05 it is the unconstrained
+     Γ_α2(11), not the THM strength.
+4. **ANCs.** Sub-threshold levels give ANCs from the fitted widths. A resonance ANC of
+   a narrow level adds nothing beyond Γ_p.
 
-For every quantity you will quote (ωγ, Γ_x, S(0), a ratio of strengths, Σωγ below
-some E), vary one ingredient at a time from the adopted fit:
+Checkpoint: each quantity has a value, a propagated statistical error from the fit
+covariance, and its anchor (direct data, a named strength, or a ratio) written next to it.
 
-| variation | values | what to redo |
-|---|---|---|
-| `vertex` | constant / onshell / perlevel | refit; perlevel only as a check (representation-dependent) |
-| `kinematics` | lacognata / triple / kf3body (+ lambda32 only if the data were divided by λ₃/λ₂; list it, exclude from the range otherwise) | refit; for multi-channel data the convention moves the α/p weight by k_f² (≈ 5 for 12C+12C) → refit the exit widths |
-| `coulombIntegral` | 0 / 1 | refit |
-| entrance channel radius | adopted ± 1 fm | **full refit** — it also changes the on-shell model (7Li joint χ² 1498 / 1329 / 1143) |
-| `spectatorEnergy` | 0 / 0.5 MeV (30–50 MeV/c cuts give 0.5–1.4 MeV for a d spectator) | refit, or fixed-area estimate; the 18O doublet fit breaks down (ρ near a zero of M₀) |
-| Coulomb-distortion weight `weight[k]=` R(E) | none / published R(E) curves / spectator penetrability ratio | heavy or sub-barrier spectators only (12C+12C); **full refit** — a restricted refit gave χ²_THM 147, a full one 56 (the weight is absorbed into widths) |
-| entrance vertex `vertexModel` | pw / dw (Coulomb) / dw (optical a+A and s+F) / dw (optical) with the experiment's `ps` window | **mandatory whenever peak areas of different l are converted into strengths**; full refit. With dw, report the optical potentials and redo the radius variation (it shrinks, 19F ×18 → ×1.6); do not combine with R(E) (the engine refuses) |
-| resolution σ | quoted ± 10 %, or free | refit (fitted σ: 18O 17.0 ± 0.8, 17O 22.2 ± 1.2 keV) |
-| data treatment | HOES vs on-shell reading; carrier B; background on/off; anchor dataset | full refit |
+### Stage 6. Model dependence: refit, average, classify
 
-**Refit vs estimate.** Re-profiling the THM scale at fixed parameters only measures
-goodness of fit (7Li lambda32: 70.7 re-profiled, 65.5 refit), never parameter shifts.
-The fixed-peak-area estimate — γ_x² scales as [|M_l|²K]_old/[|M_l|²K]_new per level,
-the anchor removes a common factor — reproduced refits to ≤ 5 % for isolated 12C+12C
-levels below 1.75 MeV, and **fails near vertex nodes** (1.955 MeV 4⁺; 2.339 MeV 4⁺
-moved ×490) and for interfering levels. Plot |M_l(pa)|² over the window first
-(nodes for l = 0 at 3.15/1.32/0.283 MeV for a_p = 4.1/5.1/6.1 fm in
-p+¹⁸O; 12C+12C l = 4 at 1.98 MeV for 7.5 fm, l = 0 at 0.88 MeV for 6.5 fm). Mark
-estimates with `*`.
+Every final number is a model average over **full refits** (a re-profiled χ² at fixed
+parameters measures goodness of fit only, never parameter shifts).
 
-**Theory-dependence index** = max/min of the quantity over the values of one option.
-Report the table (reaction × quantity × option) and the model range (envelope over
-the accepted variants). For tensions use z_tot = ln(r)/σ, r = this work/literature,
-with half the log-range added in quadrature to the statistical errors.
+1. **Choose the axes.** Use only those that apply to the data:
+   - always: the entrance channel radius (adopted ± 1 fm);
+   - HOES peak-area strengths: `vertexModel` pw/dw (dw with each reasonable pair of
+     optical potentials), and `ps` delta / window;
+   - charged spectator: `lineshape` on/off; below its barrier also `distortion`
+     none/coulomb;
+   - data treatment as separate grids: reading (HOES/on-shell), background, anchor.
+   - On-shell-equivalent data: only the radius axis acts.
+2. **Run the driver.** It fits one variant per fresh subprocess, so no engine state
+   leaks between variants. Do not use `--in-process` across radii.
 
-**Model averaging** (full refits only): `scripts/thm_model_average.py <azr> --radius-pairs .. --radii .. --vertex-model pw dw --optical AA/SF --strength 213=2-@13.057 ..` (also `--lineshape on off`, `--distortion none coulomb optical`, `--ps`, `--vertex`; `--penalty-hook f.py:func` for direct-strength rows, `--x-scale 1` with them) fits the grid one variant per fresh subprocess (`--in-process` to opt out) and calls `pyazr.model_average` (Akaike weights by default; `--rescale best` when χ²/ν of the best variant is well above 1, else the weights are over-confident). Quote mean ± stat (weighted mean of the variances) ± model (weighted variance of the means) separately, next to the flat-weight range; thm_implementation.rst, "Model averaging".
+   ```bash
+   OMP_NUM_THREADS=1 prlimit --as=1600000000 -- \
+   python3 scripts/thm_model_average.py examples/f19_pag_thm/f19_pag_thm.azr \
+       --out ../f19_modelavg --radius-pairs 1 4 5 --radii 4.136 5.136 6.136 \
+       --vertex-model pw dw --optical ancai06/kd03:extrapolate \
+       --ps delta hulthen:0-50 --strength 213=2-@13.057 --strength-in 1 --strength-out 6 \
+       --penalty-hook strengths.py:rows --x-scale 1 --max-nfev 40 --rescale best
+   ```
 
-Calibration (index):
+   - Run `--dry-run` first: it lists the grid and the known refusals without the engine.
+   - `--strength NAME=Jπ@E` takes the **excitation** energy in MeV.
+   - `--penalty-hook file.py:func` adds signed rows (direct strengths, priors) to the fit,
+     the χ² and the weights. Other quantities go through `--derived-hook`.
+   - Other axes: `--vertex constant perlevel onshell`, `--lineshape on off`,
+     `--distortion none coulomb optical`, `--pw-distortion`, or a JSON `--spec`.
+   - Large prior-held models (12C+12C) need your own fit loop with priors. Average
+     those fits with `pyazr.modelavg` (`Variant`, `model_average`, `write_averaged_azr`).
+3. **Weights.**
+   - Compute both Akaike (`--weights aic`, default) and flat weights.
+   - Rescale χ² by s_χ = max(1, χ²/ν of the best variant) (`--rescale best`) whenever
+     the best χ²/ν is well above 1. Otherwise Δχ² is inflated and one variant takes all
+     the weight for the wrong reason.
+   - **ν rule:** ν = N − k. N counts data points (THM + direct) only; penalty and
+     prior rows add to χ², not to N. k counts free parameters including profiled
+     scales, backgrounds and direct norms. The driver counts this way.
+   - 12C+12C counted its 211 prior rows as data once (N = 458). Corrected
+     (N = 247, k = 212, ν = 35, s_χ = 2.59), the AIC weights went from 0.87/0.12 to
+     0.54/0.25/0.10/0.07.
+   - Where AIC weights are not meaningful (generous bars with χ²/N ≪ 1, priors centred
+     on one variant), quote flat weights as primary and say so. Treat a variant that
+     takes all the weight with suspicion, not as a selection.
+4. **Spreads.** Compute m̄ = Σwᵢmᵢ, σ_stat² = Σwᵢσᵢ² and σ_mod² = Σwᵢ(mᵢ − m̄)².
+   Quote m̄ ± σ_stat ± σ_mod. Average quantities spanning decades in log₁₀ (dex).
+5. **Robustness rule.** Evaluate (i) σ_mod ≤ σ_stat and (ii) σ_mod ≤ 0.2|m̄|
+   (≤ 0.08 dex in log₁₀), with Akaike and with flat weights.
+   - **robust**: both conditions hold with both weightings.
+   - **model-dependent**: neither condition holds with either weighting.
+   - **marginal**: everything else.
+   - Two further labels: **undetermined** (depends on an input no data constrain) and
+     **held by a direct value** (a penalty row fixes it, so it is not a THM result).
+6. **Leading ingredient.** Name the axis along which the mean moves most with the other
+   axes fixed. Report σ_mod/σ_stat, σ_mod/|m̄|, the range over variants, Δl and
+   |Δρ|/d₀ to the anchor, and the spectator charge.
 
-| case | quantity | dominant option | index |
-|---|---|---|---|
-| 7Li(p,α) joint | S(0); ωγ(2⁺ 20.1) | radius; vertex | 1.10; 1.15–1.21 (S(0) ≤ 4 % for every THM option) |
-| 6Li(d,α) joint | S(0) | radius, spectator | ≤ 1.01 |
-| 15N(p,α₀) joint | ωγ(312 keV); S(0) | vertex | 1.11; 1.14 (radius 1.04–1.08) |
-| 18O doublet joint | Γ_p, ωγ(0.60, 0.80 MeV) | vertex | 1.16–1.19 (radius 1.04–1.12) |
-| 17O(n,α) anchored ratio | ωγ(2⁺)/ωγ(3⁻); ωγ(5⁻) | radius | 1.54; 1.76 (spectator 1.35*) |
-| 18O narrow, peak areas | ωγ(20), ωγ(90 keV) | radius a_p 4.1–6.1 fm | **×25** (spectator 3.4*, C_l 1.7, vertex/KF ≤ 1.03) |
-| 12C+12C, peak areas | Σωγ(E < 1.5 MeV); ωγ(0.985 0⁺) | radius 6.5–8.5 fm | **×180–200** |
-| 19F(p,αγ) l ratios | \|M1(213)/M0(324)\|², \|M1(828)/M0(324)\|² | radius 4.1–6.1 fm | pw ×18, ×13; dw Coulomb ×2.0, ×1.8; dw optical ×1.6, ×1.4; dw optical + window ×1.19 — but pw ↔ dw moves the ratio ×7–13 and Coulomb ↔ optical ↔ window ×1.1–2.7 |
-| | same | Coulomb weight R(E) | **×15–32** (spectator 30* for the sum, KF 1.6–2.6*, vertex ≤ 1.2) |
+Checkpoint: per quantity, m̄ ± stat ± model with both weightings, the class, the
+leading ingredient, and the variant table (χ², N, k, weights). Calibration values from
+the cross-checks are in `references/calibration.md`.
 
-Pattern: when overlapping direct data fix the widths and scale, every THM option
-moves results by ≤ 20 %; when strengths come from HOES peak areas relative to an
-anchor, |M_l(pa)|² enters directly and the radius (and for heavy systems the Coulomb
-weight and spectator energy) dominate. Quoted THM errors (10–40 %) contain none of
-this. Note also that an anchored joint fit sees only R(E)/R(E_anchor): 12C+12C
-strengths fell ×12–45, not the ×250 applied to the published S*.
+### Stage 7. Cross-checks
 
-**Figures that communicate it.** (i) Forest plot: one row per quantity, ratio this
-work/literature on a log axis, statistical error bar, grey bar for the model range,
-literature sources as marker shapes, a vertical line at 1. (ii) Index chart: bars (or
-a colour grid, log₁₀) of max/min per option for each reaction/quantity, estimates
-hatched or starred, "not applicable" shown as such. (iii) |M_l|² vs E for the adopted
-and ±1 fm radii with nodes marked, next to the level energies.
+1. **Engine sanity.** Run `tests/18O_p_a_thm/check.sh build/src/AZURE2`. It reproduces
+   the La Cognata et al. ApJ 723 (2010) band: `vertex=constant` ≤ 7 % rms in the peak
+   region, `perlevel` ≥ 15 %. Rerun the examples' "file alone" χ² (*impl*, "Examples")
+   after any rebuild.
+2. **Reproduce the published analysis** where its inputs are public, before replacing
+   it. Use one free normalisation over a stated range, the same formula, and an
+   independent Python evaluation of that formula. Protocol and verdict wording:
+   `references/reproduction.md`.
+3. **Pulls against direct data**: (ours − lit)/σ with σ = (stat ⊕ model) ⊕ σ_lit. Use
+   independent direct data not in the fit where possible (17O: Koehler & Graff
+   0.2–20 keV / model = 0.88 ± 0.07 with the DW vertex).
+4. **Consistency of spreads.**
+   - σ_stat should not exceed the physical range (a linearised error above any value
+     means the data do not fix that width).
+   - σ_mod should come from acceptable fits. Flat spreads driven by variants rejected
+     at Δχ² ≥ 200 are not model uncertainty.
+   - Check that every variant ended converged, not at its evaluation cap.
+5. **Data-treatment checks** as separate grids (reading, background, digitisation,
+   error model). Keep them out of the reaction-model average unless they are real
+   alternatives.
 
-## 5. Reproducing a published THM analysis
+### Stage 8. Report
 
-1. **Triage** (open sources only; do not bypass paywalls or captchas): full parameter
-   set? resolution? data? fitted curve or only a band? formula? Most papers fail one;
-   ApJ 723 was the only complete multilevel case.
-2. **Collect**: formula (and its variants), formal vs observed tables, radii, B,
-   carrier, KF, σ, windows, normalisation region, background.
-3. **Digitise.** Prefer PDF vector path data (exact); otherwise tick-calibrated
-   raster (check every major tick to ≤ 1 px; 18O: 0.7 keV, 9 MeV b). Record the
-   digitisation error (≈ 1 %, 0.03 dex) and cross-check against any vector-exact
-   replot by others. Cap-sized error bars: add ~5 % in quadrature.
-4. **Compare** with exactly one free normalisation over a stated range: rms and max %
-   (log data: rms dex), peak-region numbers, fraction of points inside the band.
-   Compute the floor (e.g. free Lorentzian per level × channel: 12C+12C 0.8–1.9 %
-   rms, 0.11 dex) so you know what "reproduced" can mean. Run an independent Python
-   version of the paper's formula to separate engine from interpretation (18O:
-   ≤ 0.04 %).
-5. **Diagnose non-reproduction.** Internal consistency first (ΣΓ_c = Γ; formal vs
-   observed tables: ApJ 723 Γ_p1 8.2 vs 11.1 keV). Then column permutations — all 24
-   for four width columns; the 12C+12C Γp0/Γp1 swap beat the next by ×11 in χ², and
-   per-level swap tests showed a transposition, not scattered typos. Formula variants
-   (ApJ 723 literal eq. 14 with an extra E vs the OES-shaped reading; φ21 radians vs
-   degrees). Missing background. Representation (Brune vs formal B; perlevel vs
-   constant). Frames (E_lab = 2E_cm for 12C+12C files).
-6. **Verdict wording**: REPRODUCED / PARTIALLY REPRODUCED / NOT REPRODUCED, then the
-   exact condition ("only with the Γp0/Γp1 columns exchanged"; "with the constant
-   vertex at B = S(E₁), 5 % peak rms, while the authors used a fitted L21") and a
-   numbered list of what the authors would need to publish.
+1. **Per quantity, quote** the value ± stat ± model, the weighting (AIC rescaled or
+   flat, and why), the class, the leading ingredient, the anchor, the radii, the l
+   values, and the options of the baseline.
+2. **State the model dependence plainly.** For example: "model-dependent: the 8 variants
+   span 0.16–16 × 10⁻¹⁹ eV, set by the radius through the zero of M₀ near the
+   anchor". A model-dependent result is a result, not a failure.
+3. **Compare with published analyses constructively.** Locate each difference in a
+   step of the analysis: the reading of the points, the area-to-strength conversion,
+   the normalisation window, the extrapolation shape, or a table transposition. Phrase
+   it as an observation plus what information would resolve it (the list in
+   `references/provenance-checklist.md`, "What to ask authors to publish"). Never
+   phrase it as an error in the measurement.
+4. **Figures.** Data and our fits only (a reproduction figure is the exception); a
+   forest plot (ratio to literature, log axis, stat bar, grey model band); |M_l|² vs E
+   with nodes at ±1 fm. PRC style, residual panels, the reaction as a bold label inside
+   the axes, PDF + PNG; captions state the fold (σ, frame) and χ² per dataset.
 
-## 6. Pitfalls met
+## Pitfalls checklist
 
-- Lab vs c.m.: AZURE2 data input is lab (E, angle, dσ/dΩ); Amsel 1967 dσ/dΩ(165°) is
-  lab — enter it as such, convert once, compare in c.m. outputs.
-- Folding eV–keV-wide levels at σ ≈ 17–30 keV: raise `<targetInt>` sub-points until
-  the folded curve stops changing, or fold in Python on a tan-spaced grid around each
-  level; a sub-point at E = 0 can return 1e18 spikes (clip, move the grid).
-- Data windows that cut real narrow levels (18O 597 keV 3/2⁻: its tail changes the
-  direct χ² far outside ±20 keV). The same level put into the HOES model predicts a
-  THM peak 3× the broad structure that the published spectrum does not show — ask.
-- Unfolded models against resolution-broadened data: Koehler & Graff 17O(n,α) TOF has
-  ΔE ≈ ±16 keV (E/100 keV)^{3/2}; compare the folded, bin-averaged model.
-- Odd-J / unnatural-parity levels in identical-boson systems: THM-only (section 2).
-- Plane-wave vertex for heavy systems: pa ≈ 14 for 12C+12C, M_l has nodes in the
-  window; plane-wave Coulomb neglect of a sub-barrier spectator (d+²⁴Mg η ≥ 1.55).
-  Near-barrier Trojan horses (19F+d at 5.3 MeV c.m., barrier ≈ 2.5 MeV): the
-  entrance deceleration halves the local p = k_aA − αk_sF at the surface, and the
-  plane-wave l ratios are off by an order of magnitude — compare with `vertexModel=dw`.
-- pyazr units: `calculate_rwa` takes reduced-width amplitudes (Brune's, or Park's in
-  a `use_park` session);
-  `calculate` takes physical widths (eV); `transform_rwa` maps; never convert a
-  `gammaIsRWA` channel by hand. `Parameter.wigner_limit` is 3ħ²/(2μa²).
-- Extrapolation grids: `add_extrapolation(..., frame="lab")` is the default; pass
-  `frame="cm"` for c.m. energies (before 7a35b9a the c.m. doc was wrong).
-- Regression-test projects are pins, not physics (`tests/7Li_p_a`, `tests/6Li_d`:
-  wrong carrier, on-shell points fitted as HOES).
+- [ ] Penetrability-corrected points fitted as HOES (7Li/6Li: S(0) halved through direct norms 0.4–0.6).
+- [ ] Wrong carrier or B in field 32 (³He 5.4935, not d 2.2246 or 6Li 1.4735).
+- [ ] Wrong `kinematics=`: the KF convention changes relative peak heights, and for several exit channels their α/p weight (×5 for 12C+12C).
+- [ ] Lab vs c.m. energy column (17O lab; 12C+12C E_lab = 2E_cm); `<targetInt>` σ is lab and a standard deviation, not FWHM.
+- [ ] Digitised bars not checked against visible ones; hidden bars invented rather than capped.
+- [ ] Published bars smaller than the scatter, taken at face value (19F χ²/ν ≈ 9).
+- [ ] A subtracted background tuned to one model, reused for all variants.
+- [ ] A narrow level missing or cut by a data window (18O 597 keV).
+- [ ] Norm column used as prior centre after a saved fit: add `prior_centre 1` rows.
+- [ ] Fixed Brune amplitudes treated as fixed widths.
+- [ ] Fits stopped at the evaluation cap and reported as converged.
+- [ ] Resolution fold not converged on eV–keV levels.
+- [ ] Strength from a peak area against an anchor of other l, or near a vertex node, quoted without a radius and vertex scan.
+- [ ] `vertex=perlevel` used for new work (representation-dependent).
+- [ ] `coherent` used as a fixed-angle observable (use `theta=`).
+- [ ] Prior or penalty rows counted in N for ν; AIC weights without `--rescale best` at χ²/ν ≫ 1.
+- [ ] Several radius variants fitted in one process (`--in-process`). An engine memo once leaked B_c between sessions (fixed in 49b6c30; `tests/pyazr/thm_vertex_memo_sessions_test.py`).
+- [ ] Stale `_azure2` after an engine change; stale `output/intEC.dat`/`intEC.extrap` before an extrapolation with external capture (delete them).
+- [ ] Old snapshot files run without checking that the "file alone" χ² reproduces the fit.
+- [ ] `thm_vertex` read at an energy the window cannot reach (use `strict=True`).
+- [ ] Identical exit pair without ×½ in data that count both particles; odd-J levels of an identical-boson entrance pair.
+- [ ] Interfering background (`cbackground=`) read as evidence of a mechanism.
+- [ ] Rates for heavy systems quoted without the normalisation window, R(E) choice and ≥ 2 radii (12C+12C: plain fit ×14 above the N_C×R fit at 0.5 GK).
 
-## 7. Plot conventions
+## Pointers
 
-PRC style: serif, inward ticks on all sides, Okabe–Ito colours with distinct markers,
-residual panels under fits, PDF + 300 dpi PNG drawn at final size (full 6.5 in, half
-3.25 in; labels 11 pt, ticks 10 pt — large enough to read in print). Every panel
-carries the **reaction as a bold label inside the axes**
-(`r'$\mathbf{{}^{18}O(p,\alpha){}^{15}N}$'`). Show data and our fits only — no
-published curves stacked on top unless the figure is a reproduction. Scale data by
-fitted norms (say so in the caption), give χ² per set in the caption, and state the
-fold (σ, frame) of every model curve.
+| topic | where |
+|---|---|
+| HOES observable, `<thm>` keys, KF table, HOES vs on-shell | `docs/source/theory/thm_implementation.rst`, "Options (``<thm>`` block)" |
+| experiment lines, shared norm, background | same, "THM experiments"; `tests/thm_experiment`, `tests/pyazr/thm_experiment_test.py` |
+| interfering background | same, "Coherent background"; `tests/thm_coherent_background` |
+| line shape N_C | same, "Coulomb line shape"; `tests/thm_lineshape` |
+| spectator window, acceptance | same, "Spectator-momentum window", "Experimental acceptance"; `tests/thm_spectator_window`, `tests/thm_spectator_angles` |
+| R(E), DW vertex, optical potentials | same, "Distortion factor R(E)", "Distorted-wave entrance vertex", "Global optical potentials"; `tests/thm_distortion`, `tests/thm_dw_vertex` |
+| fixed angle | same, "Fixed-angle observable"; `tests/thm_fixed_angle` |
+| Coulomb combination rules | same, "Coulomb effects: what each option contains"; `tests/thm_coulomb_consistency` |
+| profiled norm, Jacobian, band | same, "Normalization, gradients and uncertainty bands"; `tests/thm_band` |
+| Brune and Park | same, "Brune and Park"; `tests/thm_park` |
+| example pins ("file alone") | same, "Examples" |
+| model averaging | same, "Model averaging"; `docs/source/user_guide/pyazr.rst`, "Model averaging"; `scripts/thm_model_average.py --help`; `pyazr/modelavg.py`; `tests/pyazr/thm_model_average_test.py` |
+| GUI opt-in, THM Workspace | `docs/source/user_guide/configure_menu.rst`, "THM Workspace" |
+| prior centres | `docs/source/user_guide/chi_squared.rst` (nominal-norm); `docs/source/user_guide/fitting.rst`; `tests/prior_centre` |
+| pyazr THM calls | `docs/source/user_guide/pyazr.rst` (`set_thm_experiment`, `thm_vertex`, `thm_distortion`, `thm_lineshape`, `thm_background`, `save_fit`) |
+| option regression, reproduction | `tests/thm_options`, `tests/18O_p_a_thm` (ApJ 723 band) |
+| folding, threshold | `tests/thm_narrow_fold`, `tests/thm_threshold_grid`, `tests/thm_energy_shift` |
+| identical nuclei | `tests/identical_entrance_reaction` |
+| worked examples | `examples/o18_lacognata2008` (narrow, anchor), `examples/o18_lacognata2010` (doublet, DW, authors' background), `examples/o17_guardo2017_fit` (n entrance, p spectator), `examples/f19_pag_thm` (HOES + direct, linear background, direct strengths), `examples/c12c12_tumino2018` (four channels, one experiment, identical nuclei), `examples/li7_tumino2006`, `examples/li6_pizzone2011`, `examples/n15_lacognata2007` (on-shell-equivalent) |
+| classic-project differences of the branch | `MERGE_NOTES.md` |
+| detailed checklists | `references/provenance-checklist.md`, `references/model-choices.md`, `references/calibration.md`, `references/reproduction.md` |
+
+## Memory and process discipline (small machines)
+
+- Run **one engine process at a time**: the CLI, a pyazr session, the GUI's
+  Diagnostics and builds all count. Check `ps` for AZURE2, make or python first.
+  Parallel refits (1–2 GB each) have triggered the OOM killer.
+- Run every engine job under a cap: `prlimit --as=1600000000 -- <command>`.
+- Set `OMP_NUM_THREADS=1` before the first numpy import; the driver does this itself.
+  Without it, evaluations under load stalled for tens of minutes.
+- Model averaging runs one fresh subprocess per variant (the driver's default), one at
+  a time. The driver holds no session itself.
+- Close sessions before opening another (`save_fit(..., close_session=True)`); closed
+  memory is reused, not returned to the OS.
+- Keep `<targetInt>` sub-point density and `ps` node counts as low as convergence
+  allows; check one evaluation's memory before a long fit. Run long fits with `nohup`
+  and checkpoint the parameter vector so a capped or killed fit can resume.
