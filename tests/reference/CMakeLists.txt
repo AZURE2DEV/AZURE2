@@ -19,6 +19,13 @@ add_executable(udr_reference_test udr_reference_test.cpp)
 target_link_libraries(udr_reference_test PRIVATE AZURE2Core)
 add_test(NAME udr_reference COMMAND udr_reference_test)
 
+# Equation::Evaluate (compiled postfix program) against Equation::EvaluateTokens,
+# the original string-rewriting evaluator, for every supported construct.
+add_executable(equation_reference_test equation_reference_test.cpp)
+target_link_libraries(equation_reference_test PRIVATE AZURE2Core)
+
+add_test(NAME equation_reference COMMAND equation_reference_test)
+
 # Compound stopping cross section (Bragg's rule) against the single-element
 # values: per active atom and per average atom.  Reads erya/data/SRIM2013.xml,
 # so it runs from external/.

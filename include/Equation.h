@@ -64,6 +64,11 @@ class Equation {
   std::vector<double> GetParameters() const;
   /// Evaluate at \p x.
   double Evaluate(const Config &, double x = 0.0) const;
+  /// Evaluate at \p x by rewriting the postfix token list as strings (the
+  /// original algorithm, rounding every intermediate result to 15 significant
+  /// digits).  Kept as the reference that Evaluate's compiled program is
+  /// checked against; Evaluate falls back to it if no program was compiled.
+  double EvaluateTokens(const Config &, double x = 0.0) const;
   std::string GetEquation() const {
     return infixEquation_;
   };
@@ -99,10 +104,27 @@ class Equation {
   OperatorType GetOperatorType(char) const;
   Associativity GetOperatorAssociativity(char) const;
   std::string BinaryOperation(double left, double right, char op, const Config &) const;
+  /// The arithmetic of BinaryOperation, without the string round trip.
+  double ApplyOperator(double left, double right, char op, const Config &) const;
   double FunctionOperation(TokenPair token, double x, const Config &) const;
   double GetTokenValue(TokenPair token, double x, const Config &) const;
+  /// Translate output_ into program_ (called at the end of Parse).
+  void Compile();
+  /// One step of the compiled postfix program.  Evaluate walks these on a
+  /// plain double stack: no string formatting or parsing per call, which made
+  /// energy-dependent convolution kernels (evaluated ~1e7 times by the
+  /// target-effect Jacobian) dominate the run time.
+  struct Instruction {
+    enum Kind : unsigned char { NUMBER, VARIABLE, PARAMETER, OPERATOR, NEGATE, FUNCTION, ZERO };
+    Kind kind = ZERO;
+    char op = 0;
+    int index = 0;       // parameter number or sub-equation index
+    double value = 0.0;  // NUMBER
+    GenericFunction function;
+  };
   std::string infixEquation_;
   std::vector<TokenPair> output_;
+  std::vector<Instruction> program_;
   std::vector<double> parameters_;
   std::vector<Equation> subEquations_;
   std::map<std::string, GenericFunction> functionList_;

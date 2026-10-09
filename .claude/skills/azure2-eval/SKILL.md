@@ -298,6 +298,26 @@ worker gets its own, under either `spawn` or `fork`.
   vector or just the leading R-matrix block (energies + widths), so the
   norm/shift tail can be sliced off:
   `nR = 1 + max(p.free_index for p in m.parameters if p.kind in ("energy","width") and not p.fixed and p.free_index is not None)`.
+  **It RETURNS only that block — length `nR`, indexed by `free_index`** — whatever
+  the input length. Confirmed 2026-10-08 on the 12C+a production model: 365 free
+  parameters (14 energies and 69 widths interleaved over free_index 0–82, then
+  264 norms, then 18 shifts); `transform_rwa` returns 83 for an input of 365, 83
+  or 69 alike, and `out[p.free_index]` is the physical value for every parameter
+  in the block.
+- **Never feed a `transform_rwa` result back into `calculate`, `calculate_sfactor`
+  or `calculate_chi2`.** Those take the FULL physical free vector. Since dev
+  2026-10-08 (the commit after fc69e3b) every free-vector entry point of the
+  binding checks the length and raises `AZURE2Error: <call>: expected the free
+  parameter vector (N values ...), got n`; before it they accepted a short one
+  *silently* — no exception, 400 segments returned as usual — and the missing
+  normalizations and energy shifts were then whatever the engine last held. The damage is selective, which is what makes it dangerous:
+  S-factors and cross sections come out right, because they do not use the norms,
+  while chi-squared is nonsense. Seen 2026-10-08: a scan that passed the 83-vector
+  to `calculate` gave a total chi2 of 1e34 and sent the 15N+p data sets to 1e12
+  while one alpha ANC was the only thing being changed, and the chi2 was
+  non-monotonic in it — the signature to watch for. Change a physical value by
+  editing the `.azr` and rebuilding the model, and keep every numeric call on the
+  full free rwa vector.
 
 Both vectors hold only the **free** parameters, in `.azr` order:
 `p.free_index` is the position in that vector, `p.index` the position among all
@@ -1617,6 +1637,45 @@ and its **angle column is centre-of-mass**, not lab.
 - `intEC.dat` / `intEC.extrap` — external-capture integral caches; see the
   golden rule above.
 
+### Long fits on the cluster: memory, kills and restarting from `param.fit`
+
+**Memory footprint.** A mode-2 fit holds a pool of max(4, `OMP_NUM_THREADS`) + 1
+copies of the model and data (CNuc + EData), plus one persistent copy for the
+`param.fit` snapshots (since 797c2ea).  Each copy is the whole data set
+*including every target-integration and convolution sub-point*, so heavy
+target-effect models are large.  11B+a (4,600 points, many `<targetInt>`
+segments): ~3.4 GB per copy, ~80-100 GB at 24 threads, steady for days.
+Measure it with `qstat -j <id> | grep usage` (`maxvmem`) and reserve it on the
+node; see the `crc-cluster-jobs` skill (`-l m_mem_free=<GB per slot>`).
+
+**Binaries older than 797c2ea (2026-10-05) leak.**  Freed but unreusable memory
+piled up in glibc's per-thread arenas: whole-model clones at every snapshot, plus
+per-shift reallocation in `EPoint::RecalcEDependentValues`.  Resident memory grew
+6-17 MB per evaluation at 24 threads until the node killed the fit (~250 GB after
+a day).  Investigation: `11B+a/10-4-26_memleak/readme`.  If a long fit's memory
+climbs, check the build date first.  Separately, 588c584 (2026-10-07) removed a
+dangling `EPoint::parentSegment_` pointer read on every target-effect point; it
+is the likely cause of an occasional segfault (exit 139) on such models.
+
+**When a fit is killed, the job script keeps going.**  Only the AZURE2 process
+dies ("Killed" / exit 137 for out-of-memory; "Bus error" when its binary was
+replaced on NFS; exit 139 for a segfault).  So the job itself can restart the fit
+from the last snapshot, losing at most 100 evaluations:
+
+- Template: `11B+a/10-3-26_an_newcut_refits/make_autorestart.py <dir> <azr>
+  <outdir> <start.sav> <jobname>` writes `run_crc_auto`, a csh loop.  After each
+  pass it treats `<outdir>/chiSquared.out` as "finished": that file is written
+  only at the end of a fit, never by the snapshots.  Otherwise it copies
+  `param.fit` to `restart_<JOB_ID>_<n>.sav` and runs mode 2 again from it.
+- Guards: at most 15 restarts, and the job stops after two passes die within 10
+  minutes of starting.  That pattern means the node is out of memory, so resubmit
+  elsewhere rather than burning restarts.  The script requests `m_mem_free=5G`
+  per slot.
+- A restart resets MINUIT's covariance, so the first few hundred evaluations
+  after each restart rebuild the gradient (expect brief chi2 excursions).
+- The `param.fit` caveat above still applies: if the last snapshot fell on a bad
+  probe, verify with a mode-1 calculate before trusting the restart.
+
 ## Verifying a run
 
 `cat output/chiSquared.out` — a finite total χ² and the expected N per segment.
@@ -2017,6 +2076,18 @@ complete:
   queue (user instruction 2026-10-08): `13C+a/10-8-26_udr_validation` (synthetic Gaussian-in-
   time UDR vs numpy fold on the Cierjacks segment, 7.6e-4 worst rel. diff) and
   `11B+a/10-8-26_udr_ntof` (analytic sigma(E) vs UDR on segment 103).
+
+- 2026-10-08 -- CHANNEL-THRESHOLD BLOW-UP CAUGHT BY SUB-POINT GRIDS. AZURE2's bare cross section
+  is not merely bumpy at a channel threshold: on a 10 eV grid across the 11B+alpha threshold in the
+  11B+a model (E_cm = 0.1579 MeV, 0.1698 MeV lab for 14N+n) it reaches 1.7e37 b within ~20 eV of
+  the threshold (`11B+a/10-8-26_udr_ntof/diag_spike/`). Any target effect that integrates over
+  sub-points (Gaussian, target integration, beam profile, UDR) catches it whenever the adaptive grid
+  drops a sub-point there: isolated folded values of 1e24-1e37 b, at grid energies that MOVE when
+  the sub-point count changes (150 vs 151 gave different bad energies), while the same curve on the
+  data points can be clean by luck. Symptom in a mode-3 curve: one-point spikes far from any
+  resonance, up to a kernel's width away from the threshold. Workaround: drop them (running-median
+  outlier test, `plot_initial.py` there) or move the grid; the fix belongs in the threshold
+  handling of the bare calculation (penetrability/shift at E_cm -> 0), not in the effects.
 
 - **A regression reference is not a correctness check.** `tests/run_tests.sh` pins each
   project's chi-squared against a number this code produced, so it catches a change and
