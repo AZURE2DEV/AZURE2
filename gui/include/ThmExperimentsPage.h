@@ -46,8 +46,8 @@ struct ThmSpectatorWindow;
  * psNodes=, with the mean spectator energy <T_s> at the ends of the data the
  * engine's ThmSpectatorWindow gives; with a momentum window or a computed
  * distortion also the directions, spectatorAngles=, spectatorAngleNodes=) and
- * Distortion (distortion= and its keys, with R(E) at the ends of the data
- * from the engine's ThmDistortion).  When B(x+s) from the masses and the
+ * Distortion (distortion= and its keys, the entrance vertex vertexModel=,
+ * with R(E) at the ends of the data from the engine's ThmDistortion).  When B(x+s) from the masses and the
  * entrance pair's B (field 32) disagree, the reaction section says so.
  * Numbers are spin boxes with their unit that give back the text they were
  * read with until changed (ThmNumberSpin).  Keys the page does not show are
@@ -223,6 +223,10 @@ class ThmExperimentsPage : public QWidget {
   QComboBox *boundCombo;        ///< item data: whittaker | yukawa
   ThmNumberSpin *rminEdit;      ///< fm; the minimum (a dash) = not given
   QComboBox *opticalCombo[2];   ///< a + A, s + F; item data: plane | coulomb | global | ws
+  /// vertexModel=: the entrance vertex, item data pw | dw; shown with a
+  /// computed distortion (dw needs one).  With dw R(E) is not applied, so
+  /// its ratio and E_ref are hidden.
+  QComboBox *vertexCombo = nullptr;
   QComboBox *globalCombo[2];    ///< the global potential (item data: its name); shown for global
   QPushButton *opticalButton[2];  ///< "Edit..." the ten Woods-Saxon numbers, or the global potential's
   QLineEdit *distortionTableEdit;
@@ -256,6 +260,7 @@ class ThmExperimentsPage : public QWidget {
   void chooseDirectionTable();
   void distortionKindChanged();
   void distortionEdited();
+  void vertexModelChanged();
   void opticalKindChanged();
   void globalNameChanged();
   void chooseDistortionTable();
@@ -294,7 +299,7 @@ class ThmExperimentsPage : public QWidget {
   void showDirectionRows();
   void loadTheta(const ThmExperimentRecord &r);
   void showThetaRows();
-  /// The window item is not offered with entranceL=coherent (unless it is the current one).
+  /// The window item is not offered with entranceL=coherent or the DW vertex (unless it is the current one).
   void updateThetaItems();
   QList<QWidget *> thetaWindowRow_;
   void loadCoherent(const ThmExperimentRecord &r);
@@ -322,6 +327,10 @@ class ThmExperimentsPage : public QWidget {
   QList<QWidget *> psWindowRow_, psHulthenRow_, psGaussRow_, psTableRow_, psNodesRow_;
   QList<QWidget *> directionRow_, directionWindowRow_, directionTableRow_;
   QList<QWidget *> distortionComputedRows_, distortionOpticalRow_, distortionTableRow_, distortionValueRow_;
+  QList<QWidget *> distortionRRows_;  ///< ratio and E_ref: R(E) only, hidden with the DW vertex
+  /// The refusal of vertexModel=dw by the <thm> block's options (entranceL,
+  /// the pair's spectatorEnergy), in the engine's words; "" if none.
+  QString dwVertexRefusal(const ThmExperimentRecord &x) const;
   QString lastOptical_[2];  ///< the ten numbers last shown per channel (kept across plane/coulomb)
   QString lastGlobal_[2];   ///< the global potential last shown per channel (name[:extrapolate])
   /// d.kin (and d.eAA) of a record with a complete reaction, as EData::BuildThmGroups sets them.

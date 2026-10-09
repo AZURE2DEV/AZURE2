@@ -312,7 +312,7 @@ momentum window* and *Distortion*:
 
 - **Distortion** (``distortion``, ``opticalAA``, ``opticalSF``,
   ``spectatorAngle``, ``distortionRef``, ``distortionRatio``,
-  ``boundState``) -- its own section. The PWA data reduction takes the
+  ``boundState``, ``vertexModel``) -- its own section. The PWA data reduction takes the
   transfer amplitude as constant; with the distortions of the a + A and
   s + F relative motion it varies with E, by orders of magnitude for a
   charged spectator below the s + F barrier (12C+12C). AZURE2 multiplies the
@@ -333,6 +333,16 @@ momentum window* and *Distortion*:
   the default, or *DWBA*, :math:`\rho = |M|^2`, the papers' ratio) and
   **Bound state** (``boundState``: *Whittaker*, the default, or *Yukawa*
   tail of the s-x bound state, with an optional cut-off **r_min** in fm).
+  **Vertex** (``vertexModel``) beside the kind: *plane wave* (the default,
+  nothing written) or *distorted wave*, the surface term of the prior-form
+  DWBA built from the same waves, bound state and directions, which carries
+  the energy dependence itself: R(E) is then not applied, so **E_ref** and
+  **Ratio** are hidden and their keys dropped. Switching to *None* or *Table*
+  drops ``vertexModel=dw``. The DW vertex is refused, on the page as by
+  AZURE2, with ``coulombIntegral=1`` (Model page), ``entranceL=coherent``, a
+  non-zero spectator energy for the pair, and an exit-angle window
+  (``theta=``). Details: :doc:`../theory/thm_implementation`,
+  "Distorted-wave entrance vertex".
   Optical adds a row for each of the two channels, **a + A**
   (``opticalAA``) and **s + F** (``opticalSF``): *plane* (no distortion),
   *Coulomb* (the default),
@@ -355,8 +365,8 @@ momentum window* and *Distortion*:
   inside the project directory relative to it; a table needs no reaction.
   The **R(E)** row shows R at the lowest and highest point energy of the
   experiment's data (a table: its w there), computed with AZURE2's own code,
-  or *not applied* with the DW vertex (``vertexModel=dw``, kept as written),
-  which carries the distortion itself;
+  or *not applied* with the DW vertex (``vertexModel=dw``), which carries
+  the distortion itself;
   its tooltip has the rest of what AZURE2 prints at startup
   (:math:`k_{aA}`, :math:`\eta_{aA}`, :math:`\kappa`, :math:`\eta_b`,
   :math:`\beta`, E_ref, and :math:`E_{sF}`, :math:`\eta_{sF}` and the

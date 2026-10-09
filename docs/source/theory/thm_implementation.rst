@@ -542,8 +542,7 @@ spectator=..., Ebeam=...)`` (replaces the record with one line) and
 ``clear_thm_experiment(name)`` edit the lines with the engine's rules. In the
 GUI, *Configure > THM Workspace...*, page *Experiments*, edits them
 (:doc:`../user_guide/configure_menu`, "THM Workspace"): every key of this
-section except ``vertexModel``, which the page keeps as written (as it keeps
-any token it does not know).
+section, and keeps any token it does not know as written.
 
 *Derivatives.* Where the model Jacobian :math:`J_m = \partial m/\partial p`
 is used (MIGRAD's THM gradient, ``pyazr``'s ``residual_jacobian`` and

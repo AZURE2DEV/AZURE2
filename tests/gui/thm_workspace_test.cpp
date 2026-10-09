@@ -1864,6 +1864,147 @@ int main(int argc, char** argv) {
        blockOf(slurp(c12Path)));
   }
   {
+    // The entrance vertex (vertexModel=): a combo in the Distortion section,
+    // shown with a computed distortion; with the DW vertex R(E) is not
+    // applied, so its ratio and E_ref are hidden and their keys dropped.
+    c12Open(c12Base + "\n");
+    ThmSettings s;
+    w.thmSettings(s);
+    {
+      ThmWorkspace ws(&w, s);
+      ThmExperimentsPage* p = ws.experimentsPage;
+      p->selectExperiment(0);
+      ok("vertex: hidden without a distortion", !p->vertexCombo->isVisibleTo(p));
+      setDistortion(p, "distortion=coulomb distortionRef=2.664 distortionRatio=dw");
+      ok("vertex: shown with a computed distortion, plane wave, R(E) fields shown",
+         p->vertexCombo->isVisibleTo(p) && p->vertexCombo->currentData().toString() == "pw" &&
+             p->ratioCombo->isVisibleTo(p) && p->distortionRefEdit->isVisibleTo(p) &&
+             p->records().at(0).vertexModel.isEmpty());
+      p->vertexCombo->setCurrentIndex(p->vertexCombo->findData("dw"));
+      const ThmExperimentRecord& r = p->records().at(0);
+      ok("vertex: dw written, R(E) keys dropped",
+         r.vertexModel == "dw" && r.distortionRef.isEmpty() && r.distortionRatio.isEmpty() && r.distortion == "coulomb",
+         p->experimentLines().join("|"));
+      ok("vertex: dw shows only its fields",
+         !p->ratioCombo->isVisibleTo(p) && !p->distortionRefEdit->isVisibleTo(p) &&
+             !p->distortionRefAuto->isVisibleTo(p) && p->angleKindCombo->isVisibleTo(p) &&
+             p->boundCombo->isVisibleTo(p) && p->vertexCombo->isVisibleTo(p) && p->distortionValue->isVisibleTo(p) &&
+             p->distortionValue->text() == "not applied (vertexModel=dw)",
+         p->distortionValue->text());
+      ok("vertex: dw accepted", ws.validate().isEmpty() && !p->messageLabel->isVisibleTo(p), ws.validate());
+      QStandardItemModel* thetaItems = qobject_cast<QStandardItemModel*>(p->thetaCombo->model());
+      ok("vertex: no exit-angle window offered with dw",
+         thetaItems && !(thetaItems->item(1)->flags() & Qt::ItemIsEnabled));
+      p->distortionCombo->setCurrentIndex(p->distortionCombo->findData("optical"));
+      ok("vertex: kept from Coulomb to optical", p->records().at(0).vertexModel == "dw" &&
+                                                     p->vertexCombo->currentData().toString() == "dw");
+      p->distortionCombo->setCurrentIndex(p->distortionCombo->findData("coulomb"));
+      if(ws.validate().isEmpty()) ws.accept();
+    }
+    w.saveProject();
+    const QString dwLine = c12Base + " distortion=coulomb vertexModel=dw\n";
+    ok("vertex: written", blockOf(slurp(c12Path)) == dwLine, blockOf(slurp(c12Path)));
+    ThmSettings back;
+    QString err;
+    ok("vertex: read back by the engine's parser", w.thmSettings(back, &err), err);
+    w.open(work.filePath("plain.azr"));
+    w.open(c12Path);
+    w.saveProject();
+    const QString before = slurp(c12Path);
+    w.thmSettings(back);
+    {
+      ThmWorkspace ws(&w, back);
+      ThmExperimentsPage* p = ws.experimentsPage;
+      ok("vertex: reopened as dw, R(E) fields hidden",
+         p->vertexCombo->currentData().toString() == "dw" && p->vertexCombo->isVisibleTo(p) &&
+             !p->ratioCombo->isVisibleTo(p) && p->experimentLines() == QStringList(dwLine.trimmed()),
+         p->experimentLines().join("|"));
+      ok("vertex: reopened, accepted", ws.validate().isEmpty(), ws.validate());
+      // Refused with coulombIntegral=1 (Model page), in the engine's words.
+      ws.modelPage->coulombIntegralCheck->setChecked(true);
+      ok("vertex: dw with coulombIntegral=1 refused",
+         ws.validate().contains("vertexModel=dw is the surface term of the DWBA vertex"), ws.validate());
+      ws.modelPage->coulombIntegralCheck->setChecked(false);
+      // ... and with entranceL=coherent or a spectator energy, as the engine refuses them when it builds the vertex.
+      ws.modelPage->entranceLCombo->setCurrentIndex(ws.modelPage->entranceLCombo->findText("coherent"));
+      ok("vertex: dw with entranceL=coherent refused",
+         ws.validate().contains("entranceL=coherent cannot be combined with it"), ws.validate());
+      ws.modelPage->entranceLCombo->setCurrentIndex(ws.modelPage->entranceLCombo->findText("incoherent"));
+      ws.modelPage->spectatorEnergySpin->setValue(0.5);
+      ok("vertex: dw with a spectator energy refused", ws.validate().contains("must be 0."), ws.validate());
+      ws.modelPage->spectatorEnergySpin->setValue(0.0);
+      ok("vertex: accepted again", ws.validate().isEmpty(), ws.validate());
+      ws.accept();
+    }
+    w.saveProject();
+    ok("vertex: untouched dw project, byte-identical", slurp(c12Path) == before);
+    w.thmSettings(back);
+    {
+      ThmWorkspace ws(&w, back);
+      ThmExperimentsPage* p = ws.experimentsPage;
+      p->vertexCombo->setCurrentIndex(p->vertexCombo->findData("pw"));
+      ok("vertex: back to plane wave drops the key, R(E) fields back",
+         p->records().at(0).vertexModel.isEmpty() && p->ratioCombo->isVisibleTo(p) &&
+             p->experimentLines() == QStringList(c12Base + " distortion=coulomb"),
+         p->experimentLines().join("|"));
+      p->vertexCombo->setCurrentIndex(p->vertexCombo->findData("dw"));
+      p->distortionCombo->setCurrentIndex(p->distortionCombo->findData("table"));
+      ok("vertex: a table drops the DW vertex, the combo hidden",
+         p->records().at(0).vertexModel.isEmpty() && !p->vertexCombo->isVisibleTo(p));
+    }
+    // Written by hand: vertexModel=pw (the default) stays as written, untouched
+    // and through an edit of another key; no vertexModel stays without one.
+    for(const QString& tail : {QString(" distortion=coulomb vertexModel=pw"), QString(" distortion=coulomb")}) {
+      c12Open(c12Base + tail + "  # by hand\n");
+      w.saveProject();
+      const QString untouched = slurp(c12Path);
+      w.thmSettings(back);
+      {
+        ThmWorkspace ws(&w, back);
+        ok(qPrintable("vertex by hand" + tail + ": plane wave shown"),
+           ws.experimentsPage->vertexCombo->currentData().toString() == "pw");
+        if(ws.validate().isEmpty()) ws.accept();
+      }
+      w.saveProject();
+      ok(qPrintable("vertex by hand" + tail + ": untouched, byte-identical"), slurp(c12Path) == untouched);
+      w.thmSettings(back);
+      {
+        ThmWorkspace ws(&w, back);
+        ws.experimentsPage->boundCombo->setCurrentIndex(ws.experimentsPage->boundCombo->findData("yukawa"));
+        if(ws.validate().isEmpty()) ws.accept();
+      }
+      w.saveProject();
+      ok(qPrintable("vertex by hand" + tail + ": another key edited, vertexModel as written"),
+         blockOf(slurp(c12Path)) == c12Base + " distortion=coulomb boundState=yukawa" +
+                                        (tail.contains("vertexModel=pw") ? " vertexModel=pw\n" : "\n"),
+         blockOf(slurp(c12Path)));
+    }
+    // The engine refuses what the page refuses, in the same words (it stops
+    // before the vertex is built).
+    c12Open("entranceL=coherent\n" + dwLine);
+    ok("vertex: coherent block opens (refused at startup, not by the parser)", w.thmSettings(back, &err), err);
+    {
+      ThmWorkspace ws(&w, back);
+      const QString why = ws.validate();
+      ok("vertex: coherent refused on the page", why.startsWith("<thm> experiment[E1]: vertexModel=dw sums") &&
+                                                     ws.experimentsPage->messageLabel->isVisibleTo(ws.experimentsPage),
+         why);
+      int code = -1;
+      const QString out = engineRun(c12Dir, "c12.azr", &code);
+      ok("vertex: the engine refuses entranceL=coherent with the same words",
+         code != 0 && out.contains("ERROR: " + why), why + " | " + out.right(400));
+    }
+    c12Open("coulombIntegral=1\n" + dwLine);
+    ok("vertex: coulombIntegral=1 refused by the parser",
+       !w.thmSettings(back, &err) && err.contains("vertexModel=dw is the surface term"), err);
+    {
+      int code = -1;
+      const QString out = engineRun(c12Dir, "c12.azr", &code);
+      ok("vertex: the engine refuses coulombIntegral=1 with the same words", code != 0 && out.contains("ERROR: " + err),
+         err + " | " + out.right(400));
+    }
+  }
+  {
     // Refusals, in the engine's words (the engine refuses the same files).
     struct Refusal {
       QString tokens, words;
@@ -1886,6 +2027,11 @@ int main(int argc, char** argv) {
         {"distortion=coulomb spectatorAngleNodes=4", "needs a spectator-direction window", false},
         {"distortion=coulomb spectatorAngles=cm:60-10", "spectatorAngles='cm:60-10': expected thmin-thmax", false},
         {"distortion=coulomb spectatorAngles=table:nothere.dat", "cannot read the angle table", false},
+        {"distortion=table:rtable.dat vertexModel=dw", "vertexModel=dw builds the vertex from the distorted waves", true},
+        {"vertexModel=dw", "it needs distortion=coulomb or distortion=optical", false},
+        {"distortion=coulomb vertexModel=dw distortionRatio=dw", "which vertexModel=dw replaces", false},
+        {"distortion=coulomb vertexModel=dw theta=10-20", "is not available with vertexModel=dw", false},
+        {"distortion=coulomb vertexModel=xx", "vertexModel='xx': expected pw or dw", false},
     };
     for(const Refusal& r : refusals) {
       c12Open(c12Base + " " + r.tokens + "\n");

@@ -769,6 +769,20 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
   return "";
 }
 
+std::string CheckThmDwVertexOptions(bool coherentL, double spectatorEnergy, int pairKey) {
+  if (coherentL)
+    return "vertexModel=dw sums the entrance partial waves (and their projections) incoherently, as the "
+           "angle-integrated observable requires; entranceL=coherent cannot be combined with it.";
+  if (spectatorEnergy != 0.0) {
+    std::ostringstream why;
+    why << "with vertexModel=dw the spectator kinematics come from Ebeam and the spectator direction; "
+           "spectatorEnergy for entrance pair "
+        << pairKey << " must be 0.";
+    return why.str();
+  }
+  return "";
+}
+
 std::string CheckThmCoulombConsistency(const std::vector<ThmExperiment> &experiments, bool coulombIntegral,
                                        std::vector<std::string> *warnings) {
   if (!coulombIntegral) return "";

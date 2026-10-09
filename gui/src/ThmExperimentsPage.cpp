@@ -305,6 +305,13 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   ratioCombo->setToolTip(tr("distortionRatio=: rho = |M/M_PW|^2 (dwpw, default: the correction to data divided by "
                             "the momentum distribution) or |M|^2 (dw, the papers' ratio); R = rho(E)/rho(E_ref)."));
   connect(ratioCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(distortionEdited()));
+  vertexCombo = new QComboBox;
+  vertexCombo->addItem(tr("plane wave"), "pw");
+  vertexCombo->addItem(tr("distorted wave"), "dw");
+  vertexCombo->setToolTip(tr("vertexModel=: the entrance vertex. Plane wave (default): M_l, times R(E). Distorted "
+                             "wave: the surface term of the prior-form DWBA with these distorted waves, bound state "
+                             "and directions; it carries the energy dependence, so R(E) is not applied."));
+  connect(vertexCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(vertexModelChanged()));
   boundCombo = new QComboBox;
   boundCombo->addItem(tr("Whittaker"), "whittaker");
   boundCombo->addItem(tr("Yukawa"), "yukawa");
@@ -529,9 +536,9 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   QGridLayout *dl = form();
   dl->addWidget(label(tr("Distortion:"), true), 0, 0, right);
   dl->addWidget(distortionCombo, 0, 1);
-  QLabel *ratioLabel = label(tr("Ratio:"), false);
-  dl->addWidget(ratioLabel, 0, 2, right);
-  dl->addWidget(ratioCombo, 0, 3);
+  QLabel *vertexLabel = label(tr("Vertex:"), false, tr("vertexModel=: the entrance vertex"));
+  dl->addWidget(vertexLabel, 0, 2, right);
+  dl->addWidget(vertexCombo, 0, 3);
   QLabel *angleLabel = label(tr("Angle:"), true, tr("Spectator direction"));
   QHBoxLayout *al = new QHBoxLayout;
   al->setContentsMargins(0, 0, 0, 0);
@@ -583,9 +590,12 @@ ThmExperimentsPage::ThmExperimentsPage(const QStringList &experimentLines, Segme
   dl->addWidget(distortionTableBox, 5, 1, 1, 3);
   QLabel *rLabel = label("R(E):", true, tr("R at the lowest and highest data point"));
   dl->addWidget(rLabel, 6, 0, right);
-  dl->addWidget(distortionValue, 6, 1, 1, 3);
-  distortionComputedRows_ = {ratioLabel, ratioCombo, angleLabel, angleBox, refLabel, refBox,
-                             boundLabel, boundCombo, rminLabel, rminEdit};
+  dl->addWidget(distortionValue, 6, 1);
+  QLabel *ratioLabel = label(tr("Ratio:"), false);
+  dl->addWidget(ratioLabel, 6, 2, right);
+  dl->addWidget(ratioCombo, 6, 3);
+  distortionComputedRows_ = {vertexLabel, vertexCombo, angleLabel, angleBox, boundLabel, boundCombo, rminLabel, rminEdit};
+  distortionRRows_ = {ratioLabel, ratioCombo, refLabel, refBox};
   distortionOpticalRow_ = {opticalLabel[0], opticalBox[0], opticalLabel[1], opticalBox[1]};
   distortionTableRow_ = {distortionTableLabel, distortionTableBox};
   distortionValueRow_ = {rLabel, distortionValue};
@@ -690,6 +700,7 @@ void ThmExperimentsPage::refreshRow(int row) {
                         r.beamEnergy.isEmpty() ? "?" : r.beamEnergy, r.spectator.isEmpty() ? "?" : r.spectator) +
                (r.lineshape ? tr(", line shape") : QString()) + (r.hasWindow() ? tr(", p_s window") : QString());
   if (r.hasDistortion()) reaction += tr(", distortion %1").arg(r.distortion);
+  if (r.hasDwVertex()) reaction += tr(", DW vertex");
   if (r.hasTheta()) reaction += QString::fromUtf8(", θ %1°").arg(r.theta);
   const QString cells[4] = {r.name, ThmExperimentRecord::segmentsListText(r.segments), r.background, reaction};
   for (int c = 0; c < 4; c++) {
@@ -868,10 +879,12 @@ void ThmExperimentsPage::showDerivedNow(const ThmExperimentRecord &x) {
   if (why.isEmpty() && !x.segments.isEmpty()) {
     // The engine's refusal of a distortion key (a malformed value, a key
     // without its kind), at once rather than on Accept.
-    const QString parse = ThmSettings::checkExperimentLines(QStringList() << x.line());
-    for (const char *key : {"distortion", "optical", "spectatorAngle", "boundState", "theta", "cbackground"})
+    const QString parse = ThmSettings::checkExperimentLines(QStringList() << x.line(), coulombIntegral_());
+    for (const char *key : {"distortion", "optical", "spectatorAngle", "boundState", "theta", "cbackground",
+                            "vertexModel"})
       if (parse.contains(key)) why = parse.mid(parse.indexOf("]: ") + 3);
   }
+  if (why.isEmpty()) why = dwVertexRefusal(x);
   if (why.isEmpty() && !x.cbackground.isEmpty()) why = coherentCheck(x);
   // A theta window with entranceL=coherent (the Model page), as the engine refuses it.
   if (why.isEmpty() && x.hasTheta() && entranceL_() == "coherent") why = coherentRefusal();
@@ -898,8 +911,8 @@ void ThmExperimentsPage::showDerivedNow(const ThmExperimentRecord &x) {
     meanTsValue->setText(none);
   }
   for (QLabel *l : {bindingValue, zetaValue, meanTsValue}) l->setToolTip(info);
-  // The DW vertex (vertexModel=dw, kept as written) carries the distortion: R(E) is not applied.
-  const bool dwVertex = x.extraTokens.contains("vertexModel=dw");
+  // The DW vertex (vertexModel=dw) carries the distortion: R(E) is not applied.
+  const bool dwVertex = x.hasDwVertex();
   distortionValue->setText(distortion.isEmpty() ? none
                            : dwVertex           ? tr("not applied (vertexModel=dw)")
                                                 : QString::fromUtf8("%1 … %2")
@@ -992,10 +1005,14 @@ void ThmExperimentsPage::updateThetaItems() {
   QStandardItemModel *m = qobject_cast<QStandardItemModel *>(thetaCombo->model());
   if (!m) return;
   const bool coherent = entranceL_() == "coherent";
+  // Nor with the DW vertex (the engine refuses theta= with vertexModel=dw).
+  const bool dw = current_ >= 0 && current_ < records_.size() && records_.at(current_).hasDwVertex();
   QStandardItem *item = m->item(1);
-  const bool enabled = !coherent || thetaCombo->currentIndex() == 1;
+  const bool enabled = (!coherent && !dw) || thetaCombo->currentIndex() == 1;
   item->setFlags(enabled ? item->flags() | Qt::ItemIsEnabled : item->flags() & ~Qt::ItemIsEnabled);
-  item->setToolTip(coherent ? coherentRefusal() : QString());
+  item->setToolTip(coherent ? coherentRefusal()
+                   : dw     ? tr("Not available with the distorted-wave vertex (vertexModel=dw).")
+                            : QString());
 }
 
 void ThmExperimentsPage::thetaEdited() {
@@ -1258,6 +1275,8 @@ QString ThmExperimentsPage::check() const {
                            .arg(k);
     }
     if (x.hasTheta() && entranceL_() == "coherent") return where + coherentRefusal();
+    const QString dw = dwVertexRefusal(x);
+    if (!dw.isEmpty()) return where + dw;
     if (!x.cbackground.isEmpty()) {
       const QString c = coherentCheck(x);
       if (!c.isEmpty()) return where + c;
@@ -1667,6 +1686,7 @@ void ThmExperimentsPage::loadDistortion(const ThmExperimentRecord &r) {
   distortionRefAuto->setChecked(r.distortionRef.isEmpty());
   distortionRefEdit->setWrittenText(r.distortionRef.isEmpty() ? QString("0") : r.distortionRef);
   ratioCombo->setCurrentIndex(r.distortionRatio == "dw" ? 1 : 0);
+  vertexCombo->setCurrentIndex(r.hasDwVertex() ? 1 : 0);
   const QStringList bound = r.boundState.split(':');
   boundCombo->setCurrentIndex(bound.value(0) == "yukawa" ? 1 : 0);
   rminEdit->setWrittenText(bound.size() > 1 ? bound.value(1) : QString());
@@ -1690,6 +1710,9 @@ void ThmExperimentsPage::showDistortionRows() {
   const QString kind = distortionCombo->currentData().toString();
   const bool computed = kind == "coulomb" || kind == "optical";
   for (QWidget *w : distortionComputedRows_) w->setVisible(computed);
+  // R(E) is not applied with the DW vertex: its ratio and E_ref go.
+  const bool dw = vertexCombo->currentData().toString() == "dw";
+  for (QWidget *w : distortionRRows_) w->setVisible(computed && !dw);
   for (QWidget *w : distortionOpticalRow_) w->setVisible(kind == "optical");
   for (QWidget *w : distortionTableRow_) w->setVisible(kind == "table");
   for (QWidget *w : distortionValueRow_) w->setVisible(kind != "none");
@@ -1746,6 +1769,7 @@ void ThmExperimentsPage::distortionKindChanged() {
     r.boundState.clear();
     r.spectatorAngles.clear();
     r.spectatorAngleNodes.clear();
+    if (r.hasDwVertex()) r.vertexModel.clear();
     loadDirections(r);
   }
   loadDistortion(r);
@@ -1784,6 +1808,31 @@ void ThmExperimentsPage::distortionEdited() {
   }
   refreshRow(current_);
   showDerived(r);
+}
+
+void ThmExperimentsPage::vertexModelChanged() {
+  showDistortionRows();
+  if (loading_ || current_ < 0) return;
+  ThmExperimentRecord &r = records_[current_];
+  const QString model = vertexCombo->currentData().toString();
+  r.vertexModel = keyValue(r.vertexModel, model, "pw");
+  if (model == "dw") {
+    // Keys of R(E), which the DW vertex replaces (the engine refuses them).
+    r.distortionRef.clear();
+    r.distortionRatio.clear();
+    loadDistortion(r);
+  }
+  refreshRow(current_);
+  showDerived(r);
+}
+
+QString ThmExperimentsPage::dwVertexRefusal(const ThmExperimentRecord &x) const {
+  if (!x.hasDwVertex()) return QString();
+  Reaction r;
+  QString ignored;
+  const int pairKey = reaction(x, r, &ignored) ? r.pairKey : 0;
+  return QString::fromStdString(CheckThmDwVertexOptions(entranceL_() == "coherent",
+                                                        pairKey ? spectatorEnergy_(pairKey) : 0.0, pairKey));
 }
 
 void ThmExperimentsPage::opticalKindChanged() {

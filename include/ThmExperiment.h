@@ -310,6 +310,16 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments);
 std::string CheckThmCoulombConsistency(const std::vector<ThmExperiment> &experiments, bool coulombIntegral,
                                        std::vector<std::string> *warnings = nullptr);
 
+/*!
+ * The refusals of vertexModel=dw by the global options of the <thm> block,
+ * made when the vertex is built (EData, ThmBuildDwVertex): entranceL=coherent
+ * (the DW vertex sums the entrance partial waves incoherently) and a non-zero
+ * spectatorEnergy for the experiment's entrance pair `pairKey` (the spectator
+ * kinematics come from Ebeam and the direction).  "" or the reason, without
+ * the experiment's prefix; the GUI shows the same words.
+ */
+std::string CheckThmDwVertexOptions(bool coherentL, double spectatorEnergy, int pairKey);
+
 /// Reads a `spectatorAngles=table:` file: two columns, the spectator polar
 /// angle (deg, 0-180, strictly increasing) and the acceptance A >= 0; '#'
 /// starts a comment; at least two rows and some positive weight.

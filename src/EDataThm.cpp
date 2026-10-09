@@ -258,17 +258,10 @@ bool ThmBuildDwVertex(EData &data, const Config &configure, CNuc *theCNuc, const
   PPair *pair = theCNuc->GetPair(pairNum);
   // coulombIntegral=1 is refused with it by Config::ReadThmBlock
   // (CheckThmCoulombConsistency).
-  if (configure.thm.coherentL) {
-    configure.outStream << where << "vertexModel=dw sums the entrance partial waves (and their projections) "
-                           "incoherently, as the angle-integrated observable requires; entranceL=coherent "
-                           "cannot be combined with it."
-                        << std::endl;
-    return false;
-  }
-  if (configure.thm.SpectatorEnergy(pairKey) != 0.0) {
-    configure.outStream << where << "with vertexModel=dw the spectator kinematics come from Ebeam and the "
-                           "spectator direction; spectatorEnergy for entrance pair "
-                        << pairKey << " must be 0." << std::endl;
+  const std::string refused =
+      CheckThmDwVertexOptions(configure.thm.coherentL, configure.thm.SpectatorEnergy(pairKey), pairKey);
+  if (!refused.empty()) {
+    configure.outStream << where << refused << std::endl;
     return false;
   }
   std::vector<int> ls;

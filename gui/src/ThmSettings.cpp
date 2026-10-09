@@ -279,7 +279,7 @@ bool ThmExperimentRecord::sameAs(const ThmExperimentRecord &o) const {
          spectatorAngle == o.spectatorAngle && distortionRef == o.distortionRef &&
          distortionRatio == o.distortionRatio && boundState == o.boundState && theta == o.theta &&
          spectatorAngles == o.spectatorAngles && spectatorAngleNodes == o.spectatorAngleNodes &&
-         cbackground == o.cbackground && extraTokens == o.extraTokens;
+         vertexModel == o.vertexModel && cbackground == o.cbackground && extraTokens == o.extraTokens;
 }
 
 QString ThmExperimentRecord::segmentsListText(const QList<int> &segments) {
@@ -323,6 +323,7 @@ QString ThmExperimentRecord::line() const {
                                         {"boundState", boundState}};
   for (const auto &kv : distortionKeys)
     if (!kv[1].isEmpty()) tokens << kv[0] + "=" + kv[1];
+  if (!vertexModel.isEmpty()) tokens << "vertexModel=" + vertexModel;
   if (!spectatorAngles.isEmpty()) tokens << "spectatorAngles=" + spectatorAngles;
   if (!spectatorAngleNodes.isEmpty()) tokens << "spectatorAngleNodes=" + spectatorAngleNodes;
   if (!theta.isEmpty()) tokens << "theta=" + theta;
@@ -391,6 +392,8 @@ QList<ThmExperimentRecord> ThmExperimentRecord::read(const QStringList &lines) {
         r.spectatorAngles = value;
       } else if (key == "spectatorAngleNodes") {
         r.spectatorAngleNodes = value;
+      } else if (key == "vertexModel") {
+        r.vertexModel = value;
       } else if (key == "cbackground") {
         r.cbackground = value;
       } else {
