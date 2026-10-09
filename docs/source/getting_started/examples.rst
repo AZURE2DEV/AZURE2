@@ -84,8 +84,7 @@ THM (HOES) fits
      - 17O(n,α)14C, the Guardo et al. 2017 points as first added to the
        repository
      - the original input: channel widths entered as reduced-width
-       amplitudes (field 33) and no ``<thm>`` block (all defaults); its
-       ``output/`` holds the files it was committed with
+       amplitudes (field 33) and no ``<thm>`` block (all defaults)
      - 67.594 / 23
 
 On-shell-equivalent THM data

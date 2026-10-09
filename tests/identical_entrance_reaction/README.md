@@ -46,8 +46,8 @@ Also verified when the change went in (not scripted here):
 - 12C+12C → α+20Ne from 1.8 to 2.2 MeV, against the full one-level formula
   with P_c(E), S_c(E) and the level shift (mpmath Coulomb functions):
   AZURE2/analytic = 1.0000000–1.0000003, default and Brune.
-- The 34 single-level Tumino-2018 projects of
-  ~/thm_12C12C_repro/azr/split, against the independent Python OES
+- 34 single-level projects, one per level of the Tumino et al. (Nature 557,
+  687 (2018)) analysis, against the independent Python OES
   (π/k²)(2J+1)(1+δ)ΓₓΓ_c/D: the per-level on-peak ratio went from 0.5002 to
   1.0004. The THM (HOES) curves are unchanged, since their scale is
   arbitrary.

@@ -109,11 +109,12 @@ Jπ it is not the vertex of any single R-matrix representation.
 
 ## Regenerating
 
-The inputs come from the reproduction tree (`/home/almalinux/thm_repro`,
-report `REPRO.md`; digitization in `digitize/`, the Coulomb functions and the
-formal→Brune conversion in `model/rmat.py`):
+The inputs come from an independent reproduction of the paper that is not part
+of this repository (the digitized Fig. 4 in `digitize/`, the Coulomb functions
+and the formal→Brune conversion in `model/rmat.py`, the level lines from
+`azure/build_azr.py`); `THM_REPRO` names its directory:
 
-    THM_REPRO=/home/almalinux/thm_repro python3 tests/18O_p_a_thm/make_inputs.py
+    THM_REPRO=/path/to/reproduction python3 tests/18O_p_a_thm/make_inputs.py
 
 (numpy, scipy, mpmath). Then re-pin `expected/chiSquared.out` from a run of the
 project (menu 1, as `tests/run_tests.sh` does) and re-measure the table above

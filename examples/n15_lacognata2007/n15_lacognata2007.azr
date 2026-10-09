@@ -49,7 +49,7 @@ segment_2_norm prior_centre 1
 segment_3_norm prior_centre 1
 </parameterSettings>
 <thm>
-# no THM segment here: Table 3 is fitted as an on-shell S(E); the options are those of the HOES variants in thm_lit
+# no THM segment here: Table 3 is fitted as an on-shell S(E), so these options act on no segment
 entranceL=incoherent
 vertex=constant
 kinematics=lacognata

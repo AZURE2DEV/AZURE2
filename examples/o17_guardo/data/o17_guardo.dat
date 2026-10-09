@@ -1,3 +1,5 @@
+# E_lab(MeV,n+17O) angle HOES(arb) err ; Guardo et al. PRC 95 (2017) 025807: 17O(n,a)14C from the quasi-free 2H(17O,a14C)p,
+# angle-integrated HOES cross section in arbitrary units (the points of tests/17O, as first added to the repository); not in EXFOR.
 -0.054000	0	17.02619	5.30987
 -0.039176	0	36.54033	7.75471
 -0.024353	0	89.63380	10.23945

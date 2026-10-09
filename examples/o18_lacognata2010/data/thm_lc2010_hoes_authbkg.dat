@@ -1,4 +1,4 @@
-# E_lab(MeV,p+18O) angle HOES(arb) err ; La Cognata, Spitaleri & Mukhamedzhanov ApJ 723 (2010) 1512 Fig.4 S(E) digitized (thm_repro), 5% added in quadrature, AUTHORS' linear background 2185.98*E_cm-1108.70 (MeV b, dashed line of Fig. 4) subtracted, divided by P_0(E) exp(2 pi eta) (a_p = 5.1 fm)
+# E_lab(MeV,p+18O) angle HOES(arb) err ; La Cognata, Spitaleri & Mukhamedzhanov ApJ 723 (2010) 1512 Fig.4 S(E) digitized from the published figure, 5% added in quadrature, AUTHORS' linear background 2185.98*E_cm-1108.70 (MeV b, dashed line of Fig. 4) subtracted, divided by P_0(E) exp(2 pi eta) (a_p = 5.1 fm)
 0.533468548 0 1.33281782 0.106792174
 0.543795994 0 1.26808559 0.101019189
 0.554461352 0 1.51432773 0.11623363

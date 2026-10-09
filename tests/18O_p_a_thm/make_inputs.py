@@ -1,10 +1,10 @@
 """Regenerate the inputs of tests/18O_p_a_thm from the reproduction of
 La Cognata, Spitaleri & Mukhamedzhanov, ApJ 723 (2010) 1512.
 
-Not run by the test.  Needs the reproduction tree (THM_REPRO, default
-/home/almalinux/thm_repro: model/rmat.py for the Coulomb functions and the
-formal->Brune conversion, azure/build_azr.py for the level lines, digitize/ for
-the digitized Fig. 4) and numpy, scipy, mpmath.
+Not run by the test.  Needs an independent reproduction of the paper, not
+part of this repository, in the directory named by THM_REPRO (model/rmat.py for
+the Coulomb functions and the formal->Brune conversion, azure/build_azr.py for
+the level lines, digitize/ for the digitized Fig. 4) and numpy, scipy, mpmath.
 
 Writes, next to this file:
   18O_p_a_thm.azr            Table 3 row R (B_c = S_c(E1)) as Brune parameters,
@@ -18,7 +18,9 @@ at the proton lab energy.
 """
 import os, sys
 import numpy as np
-REPRO = os.environ.get('THM_REPRO', '/home/almalinux/thm_repro')
+REPRO = os.environ.get('THM_REPRO')
+if not REPRO:
+    sys.exit('make_inputs.py: set THM_REPRO to the directory of the reproduction')
 sys.path.insert(0, os.path.join(REPRO, 'model'))
 sys.path.insert(0, os.path.join(REPRO, 'azure'))
 from rmat import CH_P, M_P, M_18O
