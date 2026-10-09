@@ -29,9 +29,9 @@ parameters to minimize the chi-squared.
 
 During the fit:
 
-- The :math:`\chi^2` values are updated every 1000 iterations.
-- Output files are written periodically so progress can be monitored in the
-  **Plot** tab.
+- The :math:`\chi^2` value is printed every 10 evaluations.
+- Output files (and ``param.fit``) are written every 100 evaluations, so
+  progress can be monitored in the **Plot** tab.
 - The final :math:`\chi^2` is printed to the output area and to
   ``chiSquared.out``.
 
@@ -102,9 +102,21 @@ Minimizer Selection
 -------------------
 
 **Minuit2** (default)
-   The standard MINUIT2 minimizer from CERN.
+   The standard MINUIT2 minimizer (MIGRAD) from CERN, with numerical
+   derivatives.
 
-**NLopt** (if available)
+**Minuit2 (analytic grad.)**
+   MIGRAD with the analytic gradient (CLI ``--use-gradient``).
+
+**Levenberg-Marquardt**
+   Least squares on the analytic Jacobian (CLI ``--use-lm``); falls back to
+   MIGRAD where the Jacobian is not available.
+
+**GSL Trust-Region**
+   GSL's trust-region least squares with geodesic acceleration (CLI
+   ``--use-gsl-lm``); falls back to MIGRAD likewise.
+
+**NLopt** (if built with ``USE_NLOPT``)
    Alternative minimizer with several algorithms:
    SBPLX, COBYLA, BOBYQA, NEWUOA, PRAXIS, Nelder-Mead.
 
@@ -113,6 +125,18 @@ The minimizer selection is only available for fitting modes.
 **Chi-squared Variance**
    The target variance for the chi-squared minimization (default: 1.0). Only
    applies to fitting modes.
+
+**Uncertainty**
+   Compute the analytic cross-section uncertainty band from the fitted
+   parameter covariance (CLI ``--covariance-band``): at the data energies for
+   a fit, on the extrapolation grid for "Calculate Segments Without Data",
+   from the covariance a previous fit saved (``covariance.dat``).
+   **Scale covariance** inflates the covariance by the reduced chi-squared
+   when it exceeds 1 (``--scale-covariance``).
+
+**Set Wigner limits**
+   Bound every reduced-width parameter by its Wigner (single-particle)
+   limit during the fit.
 
 Parameter and Integral Files
 ----------------------------
