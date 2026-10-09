@@ -75,7 +75,9 @@ appears with the following fields:
    :math:`B(b,a)A`, so it is entered as an **Analyzing Power** segment on the
    inverse channel (entrance :math:`b+B`, exit :math:`a+A`). Data published
    as the product :math:`P\,d\sigma/d\Omega` must be divided by the
-   differential cross section first.
+   differential cross section first. The former observable code 8
+   (Polarization x Cross Section), and 18 on a THM segment, are refused at
+   startup with this advice.
 
 **THM (modified R-matrix)**
    Shown when **Use Trojan Horse Method (THM)** is ticked in
