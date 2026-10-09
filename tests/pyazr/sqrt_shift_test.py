@@ -6,14 +6,15 @@ include/SegLine.h): E' = E + shift + b*sqrt(E/MeV).  pyazr must read the
 block, write it, and -- with the engine -- count its parameter and its penalty
 exactly as AZURE2 does.
 
+Needs numpy and the compiled engine (importing the pyazr package loads
+both); exits 77 (skipped) without them.
+
 Run from anywhere:  python3 tests/pyazr/sqrt_shift_test.py
 """
 import os
 import shutil
 import sys
 import tempfile
-
-import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
@@ -28,8 +29,13 @@ def check(name, ok, detail=""):
         failures.append(name)
 
 
-from pyazr.datasets import SegmentSet          # noqa: E402
-from pyazr.azrfile import AzrModel             # noqa: E402
+try:
+    import numpy as np
+    from pyazr.datasets import SegmentSet
+    from pyazr.azrfile import AzrModel
+except Exception as err:                       # numpy or the engine missing
+    print(f"skip: pyazr not importable ({type(err).__name__}: {err})")
+    sys.exit(77)
 
 AZR = os.path.join(ROOT, "tests", "energy_shift_sqrt", "energy_shift_sqrt.azr")
 
@@ -122,4 +128,7 @@ print()
 if failures:
     print(f"FAILED: {len(failures)} check(s): " + ", ".join(failures))
     sys.exit(1)
+if not have_engine:
+    print("sections 1-2 passed; section 3 skipped (no engine)")
+    sys.exit(77)
 print("all checks passed")

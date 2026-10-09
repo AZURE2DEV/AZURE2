@@ -201,16 +201,6 @@ add_test(NAME pyazr_thm_park
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_park_test.py)
 set_tests_properties(pyazr_thm_park PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
-# A test that cannot run its engine part -- numpy, scipy or the compiled
-# _azure2 module missing (pybind11 absent at configure time builds no module),
-# or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so
-# ctest lists it as Skipped rather than Passed.  An exit of 0 there once hid
-# that CI had never run a single CLI == pyazr comparison.  Set on every test
-# in this directory, so a new one only has to follow the convention; the
-# numpy-free roundtrip test never exits 77.
-get_property(_pyazr_tests DIRECTORY PROPERTY TESTS)
-set_tests_properties(${_pyazr_tests} PROPERTIES SKIP_RETURN_CODE 77)
-
 # The sqrt(E) energy-shift block on a segment line: read, written, and (with
 # the engine) counted and penalised exactly as AZURE2 does.
 add_test(NAME pyazr_sqrt_shift
@@ -233,3 +223,15 @@ add_test(NAME pyazr_sav_readers
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/sav_readers_test.py)
 set_tests_properties(pyazr_sav_readers PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
+# A test that cannot run its engine part -- numpy, scipy or the compiled
+# _azure2 module missing (pybind11 absent at configure time builds no module),
+# or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so
+# ctest lists it as Skipped rather than Passed.  An exit of 0 there once hid
+# that CI had never run a single CLI == pyazr comparison.  Set on every test
+# in this directory, so a new one only has to follow the convention; the
+# numpy-free roundtrip test never exits 77.  Keep this block LAST: it applies
+# to the tests registered above it only (sqrt_shift, park_gradient and
+# sav_readers, added after it, went without it until October 2026).
+get_property(_pyazr_tests DIRECTORY PROPERTY TESTS)
+set_tests_properties(${_pyazr_tests} PROPERTIES SKIP_RETURN_CODE 77)
