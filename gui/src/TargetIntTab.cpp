@@ -19,30 +19,24 @@ TargetIntTab::TargetIntTab(QWidget *parent) :
   targetIntView->verticalHeader()->setHighlightSections(false);
   targetIntView->horizontalHeader()->setHighlightSections(false);
 
-  targetIntView->setColumnHidden(4, true);
-  targetIntView->setColumnHidden(6, true);
-  targetIntView->setColumnHidden(7, true);
-  targetIntView->setColumnHidden(8, true);
-  targetIntView->setColumnHidden(9, true);
-  targetIntView->setColumnHidden(11, true);
-  targetIntView->setColumnHidden(13, true);
-  targetIntView->setColumnHidden(14, true);
-  targetIntView->setColumnHidden(15, true);
-  targetIntView->setColumnHidden(16, true);
-  targetIntView->setColumnHidden(17, true);
-  targetIntView->setColumnHidden(18, true);
-  targetIntView->setColumnHidden(23, true);
-  targetIntView->setColumnHidden(24, true);
-  targetIntView->setColumnHidden(25, true);
-  targetIntView->setColumnHidden(26, true);
+  // The table shows only what most effect types share; each type's own
+  // parameters (sigma, density, stopping power, coefficients, beam profile,
+  // UDR file ...) are in the Add/Edit dialog.  Shown: the active flag, the
+  // segments, a one-line summary of the effect types (column 33, derived),
+  // the sub-point grid (integration points, width multiplier, points per
+  // width; all but the attenuation coefficients) and the energy-range options
+  // (all types).
+  const QList<int> shown = {0, 1, 33, 2, 17, 18, 19, 20, 21};
+  for (int c = 0; c < TargetIntData::SIZE; c++)
+    targetIntView->setColumnHidden(c, !shown.contains(c));
+  QHeaderView *header = targetIntView->horizontalHeader();
+  header->moveSection(header->visualIndex(33), 2);  // summary right after the segment list
 
   targetIntView->setColumnWidth(0, 27);
-  targetIntView->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
-  targetIntView->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-  targetIntView->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
-  targetIntView->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
-  targetIntView->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
-  targetIntView->horizontalHeader()->setSectionResizeMode(10, QHeaderView::Stretch);
+  header->setSectionResizeMode(QHeaderView::ResizeToContents);
+  header->setSectionResizeMode(0, QHeaderView::Fixed);
+  header->setSectionResizeMode(19, QHeaderView::Stretch);  // range lists can be long; they take the spare width
+  targetIntView->setWordWrap(false);                        // one line per entry
   targetIntView->setSelectionBehavior(QAbstractItemView::SelectRows);
   targetIntView->setSelectionMode(QAbstractItemView::SingleSelection);
   targetIntView->setEditTriggers(QAbstractItemView::NoEditTriggers);

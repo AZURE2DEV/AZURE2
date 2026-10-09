@@ -7,7 +7,7 @@
 Q_DECLARE_METATYPE(QList<double>);
 
 struct TargetIntData {
-  static const int SIZE = 33;
+  static const int SIZE = 34;  // column 33: derived, display-only summary of the effect types
   int isActive;
   QString segmentsList;
   int numPoints;
