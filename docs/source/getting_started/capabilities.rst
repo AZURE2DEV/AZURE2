@@ -21,10 +21,12 @@ formulation of Lane and Thomas. You describe a compound nucleus in terms of:
   grids of energies and angles for prediction
   (:doc:`../user_guide/segments`).
 
-Both the standard R-matrix parametrisation and the **alternative level matrix
-of C. R. Brune** are supported, the latter with ``--use-brune``. Capture may
-use the **Reich–Moore approximation** (``--use-rmc``), and external (direct)
-capture is included.
+The **alternative level matrix of C. R. Brune** (the default), the standard
+Lane-Thomas parametrisation (``--no-brune``) and **Park's parametrization**
+(``--use-park``, the observed widths as fit parameters; the same cross
+sections as Brune's) are supported (:doc:`../reference/command_line`).
+Capture may use the **Reich–Moore approximation** (``--use-rmc``), and
+external (direct) capture is included.
 
 Observables
 -----------
@@ -36,6 +38,9 @@ Observables
 - **Phase shifts**
 - **Total capture**, summed over final states
 - **Reaction rates** as a function of temperature
+- **Analyzing powers** :math:`A_y` (:doc:`../theory/polarization_theory`)
+- **Trojan Horse (THM) half-off-energy-shell excitation functions**, fitted
+  together with direct data (below)
 
 All output is centre-of-mass, regardless of the frame the input used
 (:doc:`../reference/output_files`).
@@ -49,9 +54,29 @@ a point cross section (:doc:`../user_guide/experimental_effects`):
 - **Target integration** — finite target thickness, with SRIM stopping powers
 - **Beam energy convolution** — finite beam resolution and straggling
 - **Detector geometry** — angular acceptance via Q-coefficients
-- **Per-segment normalizations** and **energy shifts**, either fixed or
-  treated as free parameters constrained by their quoted experimental
-  uncertainties
+- **Per-segment normalizations** and **energy shifts** (a constant shift
+  and, optionally, a term in :math:`\sqrt{E}`), either fixed or treated as
+  free parameters constrained by their quoted experimental uncertainties,
+  with prior centres that can be held apart from the start values
+  (:ref:`nominal-norm`)
+
+Trojan Horse Method
+-------------------
+
+THM segments (observable code 10 or more) are fitted with the HOES
+excitation function of the modified R-matrix, with the options of the
+``<thm>`` block: the vertex boundary and kinematic factors, THM experiments
+that share one profiled normalization and background, a coherent background,
+the Coulomb line shape, the spectator-momentum window and angular
+acceptance, the distortion factor :math:`R(E)` and a distorted-wave entrance
+vertex with global optical potentials, a fixed-angle observable, under
+Brune's or Park's parametrization. THM is opt-in: a project without THM
+content is unaffected, and the GUI shows the THM controls only when
+*Use Trojan Horse Method (THM)* is ticked (:doc:`../user_guide/configure_menu`).
+The model dependence of THM results is quoted from model averages over
+refitted variants (``scripts/thm_model_average.py``, ``pyazr.modelavg``).
+Theory and every option: :doc:`../theory/thm_implementation`; worked
+projects: :doc:`examples`.
 
 Fitting
 -------
@@ -84,7 +109,7 @@ Scripting
 ---------
 
 Everything above is reachable from Python through :doc:`../user_guide/pyazr`,
-which runs headless AZURE2 processes and talks to them over a socket. That
+which runs the AZURE2 engine in-process through a pybind11 module. That
 covers custom minimizers, external samplers (``emcee``, ``zeus``, ``dynesty``),
 parameter scans, cross-section decomposition into individual level and
 interference contributions, dimensionless widths, and programmatic editing of
@@ -111,8 +136,13 @@ wanted repeatedly. There is one situation where that stops being true: if an
 energy shift is free, the energies move every iteration and a stored value is
 never asked for twice. A cache that simply accumulated would grow without bound
 and get slower as it grew. Each cache therefore watches its own hit rate and,
-if too few of its entries are earning their keep, stops storing and releases
-what it holds — degrading to the uncached speed rather than past it.
+if too few of its entries are earning their keep, stops storing for nearby
+energies — degrading to the uncached speed rather than past it. It keeps the
+values at exactly the energies it has seen, in a bounded table (32 768 per
+key), so a second session in the same process (``pyazr``, the GUI's THM
+diagnostics) finds them: the 12C+12C THM example opens in 2.6 s instead of
+24.5 s the second time, for 13 MB of memory. Values from such a table are
+what recomputing gives, bit for bit.
 
 Interfaces
 ----------
