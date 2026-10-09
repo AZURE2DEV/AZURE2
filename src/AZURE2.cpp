@@ -188,8 +188,51 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
 }
 
 /*!
+ * Ends the run when the input is exhausted at a prompt that needs an answer.
+ *
+ * A prompt loop re-asks until it gets a valid answer; at end of file (a piped
+ * script one line short, a closed stdin, Ctrl-D) getline() fails at once on
+ * every pass, so such a loop used to print its prompt forever -- one run wrote
+ * 10 GB of "Number of Threads" prompts.  Prompts whose blank answer is a
+ * documented default (the parameter and integral file names, the band and
+ * overwrite questions, the MCMC spreads) take that default at end of file
+ * instead, as before.
+ */
+
+[[noreturn]] static void inputEnded(const Config &configure, const char *prompt) {
+  configure.outStream << std::endl
+                      << "ERROR: the input ended (end of file) at the prompt \"" << prompt
+                      << "\", which needs an answer.  AZURE2 stops." << std::endl;
+  configure.outStream.flush();
+  std::exit(1);
+}
+
+/*!
+ * One answer from std::cin for the prompt \p prompt (named in the error);
+ * ends the run at end of file (inputEnded).
+ */
+
+static std::string readAnswer(const Config &configure, const char *prompt) {
+  std::string answer;
+  if (!getline(std::cin, answer)) inputEnded(configure, prompt);
+  return answer;
+}
+
+/*!
+ * One answer for a prompt whose blank answer means its default: at end of
+ * file the answer is blank, i.e. the default.
+ */
+
+static std::string readAnswerOrDefault() {
+  std::string answer;
+  if (!getline(std::cin, answer)) answer.clear();
+  return answer;
+}
+
+/*!
  * This function handles the command shell in AZURE2.  The function will not terminate until the user
- * enters a valid integer option.  Upon successful entry, the integer option is returned.
+ * enters a valid integer option, or the input ends (an error).  Upon successful entry, the integer
+ * option is returned.
  */
 
 int commandShell(const Config &configure) {
@@ -214,8 +257,7 @@ int commandShell(const Config &configure) {
   while (command < 1 || command > 6) {
 #endif
     configure.outStream << "azure2: ";
-    std::string inString;
-    getline(std::cin, inString);
+    std::string inString = readAnswer(configure, "azure2: (menu option)");
     if (inString.empty()) continue;
     std::istringstream in;
     in.str(inString);
@@ -273,8 +315,7 @@ void processCommand(int command, Config &configure) {
     bool goodAnswer = false;
     while (!goodAnswer) {
       configure.outStream << std::setw(30) << "Allowed Chi-Squared Variance: ";
-      std::string inString;
-      getline(std::cin, inString);
+      std::string inString = readAnswer(configure, "Allowed Chi-Squared Variance");
       std::istringstream stm;
       stm.str(inString);
       if (!(stm >> configure.chiVariance) || configure.chiVariance < 0.)
@@ -450,8 +491,9 @@ void getTemperatureFile(bool useReadline, Config &configure) {
   if (!useReadline) configure.outStream << std::setw(38) << "Temperature File Name: ";
   while (!validInfile) {
     std::string inFile;
-    // No file name can be obtained at EOF; give up rather than reprompt forever.
-    if (!getInputLine(useReadline, "               Temperature File Name: ", inFile)) return;
+    // No file name can be obtained at EOF, and the rate needs one.
+    if (!getInputLine(useReadline, "               Temperature File Name: ", inFile))
+      inputEnded(configure, "Temperature File Name");
     if (!inFile.empty()) {
       std::ifstream in;
       in.open(inFile.c_str());
@@ -503,8 +545,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   // Get number of walkers
   while (mcmcParams.nwalkers < 2 || mcmcParams.nwalkers > 1000) {
     configure.outStream << std::setw(38) << "Number of Walkers (2-1000): ";
-    std::string inString;
-    getline(std::cin, inString);
+    std::string inString = readAnswer(configure, "Number of Walkers");
     std::istringstream stm;
     stm.str(inString);
     if (!(stm >> mcmcParams.nwalkers) || mcmcParams.nwalkers < 2 || mcmcParams.nwalkers > 1000)
@@ -514,8 +555,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   // Get number of steps
   while (mcmcParams.nsteps < 100 || mcmcParams.nsteps > 10000000) {
     configure.outStream << std::setw(38) << "Number of Steps (100-10000000): ";
-    std::string inString;
-    getline(std::cin, inString);
+    std::string inString = readAnswer(configure, "Number of Steps");
     std::istringstream stm;
     stm.str(inString);
     if (!(stm >> mcmcParams.nsteps) || mcmcParams.nsteps < 100 || mcmcParams.nsteps > 10000000)
@@ -525,8 +565,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   // Get initial parameter spread percentage
   while (mcmcParams.chainSpread <= 0.0 || mcmcParams.chainSpread > 50.0) {
     configure.outStream << std::setw(38) << "Initial Parameter Spread % (0.001-50) [default=5]: ";
-    std::string inString;
-    getline(std::cin, inString);
+    std::string inString = readAnswerOrDefault();
 
     // Allow empty input for default
     if (inString.empty() || inString.find_first_not_of(" \t\n") == std::string::npos) {
@@ -544,8 +583,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   // a percentage of the level energy.
   while (mcmcParams.energySpreadKeV <= 0.0 || mcmcParams.energySpreadKeV > kMaxEnergySpreadKeV) {
     configure.outStream << std::setw(38) << "Level Energy Spread keV (0.001-1) [default=1]: ";
-    std::string inString;
-    getline(std::cin, inString);
+    std::string inString = readAnswerOrDefault();
 
     // Allow empty input for default
     if (inString.empty() || inString.find_first_not_of(" \t\n") == std::string::npos) {
@@ -565,8 +603,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   mcmcParams.nthreads = 0;
   while (mcmcParams.nthreads < 1) {
     configure.outStream << std::setw(38) << "Number of Threads (1 or more): ";
-    std::string inString;
-    getline(std::cin, inString);
+    std::string inString = readAnswer(configure, "Number of Threads");
     std::istringstream stm;
     stm.str(inString);
     if (!(stm >> mcmcParams.nthreads) || mcmcParams.nthreads < 1)
@@ -578,7 +615,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   std::string rwaAnswer = "";
   while (!goodAnswer) {
     configure.outStream << std::setw(38) << "Use Reduced Width Amplitudes (yes/no): ";
-    getline(std::cin, rwaAnswer);
+    rwaAnswer = readAnswer(configure, "Use Reduced Width Amplitudes");
     std::string trimmedAnswer;
     for (int i = 0; i < rwaAnswer.length(); i++)
       if (rwaAnswer[i] != ' ' && rwaAnswer[i] != '\t' && rwaAnswer[i] != '\n')
@@ -597,7 +634,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   std::string overwriteAnswer = "";
   while (!goodAnswer) {
     configure.outStream << std::setw(38) << "Overwrite existing samples.mcmc? (yes/no) [default=no]: ";
-    getline(std::cin, overwriteAnswer);
+    overwriteAnswer = readAnswerOrDefault();
 
     // Allow empty input for default (no)
     if (overwriteAnswer.empty() || overwriteAnswer.find_first_not_of(" \t\n") == std::string::npos) {
@@ -633,8 +670,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
   while (configure.rateParams.entrancePair == configure.rateParams.exitPair) {
     while (!configure.rateParams.entrancePair) {
       configure.outStream << std::setw(38) << "Reaction Rate Entrance Pair: ";
-      std::string inString;
-      getline(std::cin, inString);
+      std::string inString = readAnswer(configure, "Reaction Rate Entrance Pair");
       std::istringstream stm;
       stm.str(inString);
       if (!(stm >> configure.rateParams.entrancePair) || configure.rateParams.entrancePair == 0)
@@ -642,8 +678,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
     }
     while (!configure.rateParams.exitPair) {
       configure.outStream << std::setw(38) << "Reaction Rate Exit Pair: ";
-      std::string inString;
-      getline(std::cin, inString);
+      std::string inString = readAnswer(configure, "Reaction Rate Exit Pair");
       std::istringstream stm;
       stm.str(inString);
       if (!(stm >> configure.rateParams.exitPair) || configure.rateParams.exitPair == 0)
@@ -661,7 +696,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
   std::string fileAnswer = "";
   while (!goodAnswer) {
     configure.outStream << std::setw(38) << "Use temperatures from file (yes/no): ";
-    getline(std::cin, fileAnswer);
+    fileAnswer = readAnswer(configure, "Use temperatures from file");
     std::string trimmedAnswer;
     for (int i = 0; i < fileAnswer.length(); i++)
       if (fileAnswer[i] != ' ' && fileAnswer[i] != '\t' && fileAnswer[i] != '\n')
@@ -679,8 +714,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
   else {
     while (configure.rateParams.minTemp < 0.) {
       configure.outStream << std::setw(38) << "Reaction Rate Min Temp [GK]: ";
-      std::string inString;
-      getline(std::cin, inString);
+      std::string inString = readAnswer(configure, "Reaction Rate Min Temp");
       std::istringstream stm;
       stm.str(inString);
       if (!(stm >> configure.rateParams.minTemp) || configure.rateParams.minTemp < 0.)
@@ -688,8 +722,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
     }
     while (configure.rateParams.maxTemp < 0.) {
       configure.outStream << std::setw(38) << "Reaction Rate Max Temp [GK]: ";
-      std::string inString;
-      getline(std::cin, inString);
+      std::string inString = readAnswer(configure, "Reaction Rate Max Temp");
       std::istringstream stm;
       stm.str(inString);
       if (!(stm >> configure.rateParams.maxTemp) || configure.rateParams.maxTemp < 0.)
@@ -697,8 +730,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
     }
     while (configure.rateParams.tempStep < 0.) {
       configure.outStream << std::setw(38) << "Reaction Rate Temp Step [GK]: ";
-      std::string inString;
-      getline(std::cin, inString);
+      std::string inString = readAnswer(configure, "Reaction Rate Temp Step");
       std::istringstream stm;
       stm.str(inString);
       if (!(stm >> configure.rateParams.tempStep) || configure.rateParams.tempStep < 0.)

@@ -32,6 +32,16 @@ available in the GUI are accessible from the command line.
    project file are **not** applied automatically. They must be specified as
    command-line flags each time.
 
+The answers to the prompts can be piped in, one per line, e.g.
+``printf '1\n\n\n7\n' | AZURE2 --no-gui --no-readline project.azr`` (calculate
+with data, parameters and external-capture integrals from the project).  If
+the input ends at a prompt that needs an answer (the menu, the MINOS variance,
+the reaction-rate and MCMC questions without a default), AZURE2 stops with
+``ERROR: the input ended (end of file) at the prompt ...`` and exit status 1.
+A prompt whose blank answer is its default (the parameter and integral file
+names, the uncertainty-band questions, the MCMC spreads, overwriting
+``samples.mcmc``) takes that default at end of input.
+
 Available Options
 -----------------
 

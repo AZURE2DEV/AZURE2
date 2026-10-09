@@ -139,8 +139,9 @@ for project_dir in "$REPO_ROOT"/tests/*/; do
 
     # Menu: 1 = Calculate Segments From Data, then the external parameter file
     # and external capture amplitude file prompts (blank = build from the .azr),
-    # then 7 = Exit. The prompt loops spin on EOF, so the output is capped as a
-    # backstop -- SIGPIPE from head then stops the process.
+    # then 7 = Exit. The prompt loops used to spin on EOF (they stop with an
+    # error since tests/cli_eof); the output stays capped as a backstop --
+    # SIGPIPE from head then stops the process.
     # A hang must FAIL, not stall the suite (tests/lib/guard.sh: GNU timeout,
     # gtimeout, or a shell watchdog where neither exists, as on macOS).
     RUN="$(guard_command "${TEST_TIMEOUT:-1800}")"
