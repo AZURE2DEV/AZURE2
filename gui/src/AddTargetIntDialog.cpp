@@ -282,21 +282,26 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   okButton = new QPushButton(tr("Accept"));
   okButton->setDefault(true);
 
-  QHBoxLayout *segListLayout = new QHBoxLayout;
-  segListLayout->addWidget(new QLabel(tr("Segments List:")));
-  segListLayout->addWidget(segmentsListText);
+  // The two free-text lists (segments, energy windows) each get a full-width
+  // row: sharing one row with the numeric options squeezed them to a few
+  // characters as the dialog grew.  The short numeric fields share the third row.
+  const int listMinWidth = segmentsListText->fontMetrics().horizontalAdvance(QString(48, QLatin1Char('0')));
+  segmentsListText->setMinimumWidth(listMinWidth);
+  applyRangesText->setMinimumWidth(listMinWidth);
+  const int numberWidth = transitionWidthText->fontMetrics().horizontalAdvance(QString(12, QLatin1Char('0')));
+  transitionWidthText->setMaximumWidth(numberWidth);
+  autoToleranceText->setMaximumWidth(numberWidth);
 
-  QHBoxLayout *applyRangesLayout = new QHBoxLayout;
-  applyRangesLayout->addWidget(new QLabel(tr("Apply in Energy Ranges (lab, MeV):")));
-  applyRangesLayout->addWidget(applyRangesText);
-  applyRangesLayout->addWidget(new QLabel(tr("Blend Width:")));
-  applyRangesLayout->addWidget(transitionWidthText);
-  applyRangesLayout->addWidget(new QLabel(tr("Auto Tolerance:")));
-  applyRangesLayout->addWidget(autoToleranceText);
-
-  QHBoxLayout *numPointsLayout = new QHBoxLayout;
-  numPointsLayout->addWidget(new QLabel(tr("Number of Integration Points:")));
-  numPointsLayout->addWidget(numPointsSpin);
+  QHBoxLayout *optionsRowLayout = new QHBoxLayout;
+  optionsRowLayout->addWidget(new QLabel(tr("Blend Width [MeV]:")));
+  optionsRowLayout->addWidget(transitionWidthText);
+  optionsRowLayout->addSpacing(12);
+  optionsRowLayout->addWidget(new QLabel(tr("Auto Tolerance:")));
+  optionsRowLayout->addWidget(autoToleranceText);
+  optionsRowLayout->addSpacing(12);
+  optionsRowLayout->addWidget(new QLabel(tr("Number of Integration Points:")));
+  optionsRowLayout->addWidget(numPointsSpin);
+  optionsRowLayout->addStretch(1);
 
   QHBoxLayout *adaptiveGridLayout = new QHBoxLayout;
   adaptiveGridLayout->addWidget(new QLabel(tr("Resonance Width Multiplier:")));
@@ -305,10 +310,13 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   adaptiveGridLayout->addWidget(new QLabel(tr("Points Per Width:")));
   adaptiveGridLayout->addWidget(pointsPerWidthSpin);
 
-  QHBoxLayout *topLayout = new QHBoxLayout;
-  topLayout->addLayout(segListLayout);
-  topLayout->addLayout(applyRangesLayout);
-  topLayout->addLayout(numPointsLayout);
+  QGridLayout *topLayout = new QGridLayout;
+  topLayout->addWidget(new QLabel(tr("Segments List:")), 0, 0);
+  topLayout->addWidget(segmentsListText, 0, 1);
+  topLayout->addWidget(new QLabel(tr("Apply in Energy Ranges (lab, MeV):")), 1, 0);
+  topLayout->addWidget(applyRangesText, 1, 1);
+  topLayout->addLayout(optionsRowLayout, 2, 0, 1, 2);
+  topLayout->setColumnStretch(1, 1);
 
   QGridLayout *checkBoxLayout = new QGridLayout;
   checkBoxLayout->addWidget(isConvolutionCheck, 0, 0);
