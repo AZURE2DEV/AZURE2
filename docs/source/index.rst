@@ -24,6 +24,7 @@ A. M. Lane and R. G. Thomas, *Reviews of Modern Physics* **30**, 257 (1958).
    getting_started/installation
    getting_started/overview
    getting_started/capabilities
+   getting_started/examples
 
 .. toctree::
    :maxdepth: 2
