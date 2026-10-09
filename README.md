@@ -5,7 +5,8 @@ AZURE2 is a software package for performing multi-channel, multi-level
 nuclear reaction and scattering data. It provides a Qt graphical setup utility,
 a fast C++ calculation engine, parameter fitting via Minuit2, optional Bayesian
 (MCMC) sampling, and an in-process Python interface (`pyazr`, built on pybind11)
-for scripting and external samplers.
+for scripting and external samplers. The `thm` branch adds the Trojan Horse
+Method (see [Trojan Horse Method](#trojan-horse-method-thm) below).
 
 **Documentation:** <https://rdeboer1.github.io/AZURE2/> — user guide, the
 physics and conventions, and the C++ API reference at
@@ -31,7 +32,7 @@ Upstream project: <https://azure.nd.edu/> · Source:
 | `cmake/`       | Custom CMake find-modules (e.g. `FindQwt.cmake`) and toolchains. |
 | `packaging/`   | Distribution: `docker/` images; the AppImage, Windows and macOS packaging live in the CI workflow. |
 | `scripts/`     | Convenience build scripts (Linux, macOS, Windows, Docker). |
-| `examples/`    | Example run scripts (GUI / MCMC via Docker). |
+| `examples/`    | Example THM evaluations (`<name>.azr`, `data/`), and Docker run scripts for the GUI and MCMC. |
 | `docs/`        | Documentation sources: Sphinx under `source/`, Doxygen via `Doxyfile`. |
 | `.github/`     | Continuous integration. |
 | `.claude/`     | [Claude Code](https://claude.com/claude-code) project skills (see below). |
@@ -100,8 +101,10 @@ bundled in-tree.
 - [Readline](https://tiswww.case.edu/php/chet/readline/rltop.html) — for CLI input (`USE_READLINE`)
 
 **For the Python client (`pyazr`)**
-- Python 3 with [NumPy](https://numpy.org/)
-- [pybind11](https://pybind11.readthedocs.io/) ≥ 2.6 (to build the `_azure2` module)
+- Python 3.8+ with [NumPy](https://numpy.org/), [SciPy](https://scipy.org/)
+  and [mpmath](https://mpmath.org/) (`pip install -e .` installs them)
+- [pybind11](https://pybind11.readthedocs.io/) ≥ 2.6 (to build the `_azure2`
+  module; without it CMake warns and builds no module)
 
 ### Installing dependencies
 
@@ -145,9 +148,12 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
 
-The resulting executable is `build/src/AZURE2`. `CMAKE_BUILD_TYPE` defaults to
-`Release`; set it to `Debug` explicitly if you want an unoptimized build with
-symbols.
+The resulting executable is `build/src/AZURE2` (the GUI is built into it with
+`BUILD_GUI=ON`), and the `_azure2` module for `pyazr` lands in `pyazr/`. The
+two are separate targets: `cmake --build build --target AZURE2` does not
+rebuild `_azure2`, so build both after an engine change. `CMAKE_BUILD_TYPE`
+defaults to `Release`; set it to `Debug` explicitly if you want an unoptimized
+build with symbols.
 
 ### Convenience scripts
 
@@ -205,11 +211,43 @@ Useful flags (`AZURE2 --help` for the full list):
 | Flag                  | Effect |
 |-----------------------|--------|
 | `--no-gui`            | Run without the graphical setup utility. |
-| `--use-brune`         | Use the alternative level matrix of C. R. Brune. |
+| `--use-brune`         | Use the alternative level matrix of C. R. Brune (the default). |
+| `--no-brune`          | Use the standard Lane–Thomas parametrization instead. |
+| `--use-park`          | Fit Park's amplitudes (the observed widths); same cross sections as Brune's. |
+| `--use-lm`            | Levenberg–Marquardt on the analytic Jacobian (falls back to MIGRAD). |
 | `--gsl-coul`          | Use GSL Coulomb functions (faster, less accurate). |
 | `--use-rmc`           | Reich–Moore approximation for capture (neutron capture). |
 | `--ignore-externals`  | Ignore external resonant capture when the internal width is zero. |
 | `--no-transform`      | Skip the initial parameter transformations. |
+
+A run that fails exits non-zero; piped answers that end at a prompt needing an
+answer stop the run with exit status 1.
+
+---
+
+## Trojan Horse Method (THM)
+
+The `thm` branch fits Trojan Horse (half-off-energy-shell) data with the
+modified R-matrix, together with direct data: THM segments, experiments with a
+shared profiled normalization and background, the vertex and kinematic-factor
+conventions of the data reduction, the spectator-momentum window and angular
+acceptance, the distortion factor R(E), a distorted-wave entrance vertex with
+global optical potentials, the Coulomb line shape, a coherent background, a
+fixed-angle observable, Brune's and Park's parametrizations, and model
+averaging over refitted variants (`scripts/thm_model_average.py`). THM is
+opt-in: a project without THM content is unaffected, and the GUI shows the THM
+controls only after *Configure > Runtime Options > Use Trojan Horse Method
+(THM)* (ticked by itself for a project with THM content).
+
+- Theory and every option: `docs/source/theory/thm_implementation.rst`
+- The GUI: `docs/source/user_guide/configure_menu.rst`, "THM Workspace"
+- Worked projects with their file-alone chi-squared:
+  `docs/source/getting_started/examples.rst` and `examples/`
+- What the branch changes, also for classic projects:
+  `docs/source/getting_started/whats_new.rst` and `MERGE_NOTES.md`
+
+The published site follows the default branch; build these pages locally with
+`make -C docs html` (see [Documentation](#documentation)).
 
 ---
 
@@ -343,6 +381,11 @@ discovered automatically; nothing in the runner needs editing. The comparison
 covers the total χ², each segment's χ², and each segment's point count (that
 one exactly — a change there means data was dropped or misread).
 
+The runner also runs every executable `tests/*/check.sh`, and `ctest
+--test-dir build` runs the reference, GUI and `pyazr` tests. The conventions
+(time guard, shared check helpers, exit status 77 for a skipped test, what CI
+requires) are in `docs/source/developer/contributing.rst`.
+
 ---
 
 ## Documentation
@@ -360,16 +403,22 @@ make -C docs api      # C++ internals via Doxygen -> docs/api/html/index.html
 
 ---
 
-## Claude Code skill
+## Claude Code skills
 
-`.claude/skills/azure2-eval/SKILL.md` is a project-scoped
-[Claude Code](https://claude.com/claude-code) skill describing how to drive
-AZURE2 — the CLI menu modes, the `pyazr` API, adding and removing levels,
-decomposing cross sections, and the conventions that are easy to get wrong
-(lab vs. centre-of-mass frames, segment indexing, the external-capture integral
-caches). It is picked up automatically when Claude Code runs in this
-repository; no setup is needed. Editing it is the way to teach Claude something
-new about the project.
+`.claude/skills/` holds project-scoped
+[Claude Code](https://claude.com/claude-code) skills, picked up automatically
+when Claude Code runs in this repository; no setup is needed. Editing them is
+the way to teach Claude something new about the project.
+
+| Skill | Covers |
+|---|---|
+| `azure2-eval` | Driving AZURE2: the CLI menu modes, the `pyazr` API, adding and removing levels, decomposing cross sections, and the conventions that are easy to get wrong (frames, segment indexing, the external-capture caches). |
+| `azure2-thm` | A complete THM evaluation, from vetting published THM data to model-averaged results. |
+| `azr-project-builder` | A new `.azr` project without the GUI. |
+| `azure2-drop-dataset` | Removing or restoring data segments without corrupting the model. |
+| `r-matrix-analysis` | The R-matrix picture behind resonance selection and interference. |
+| `rmfit-campaign` | Global R-matrix fitting campaigns with AZURE2. |
+| `nds-explorer` | Finding data in EXFOR and the IAEA NDS services. |
 
 ---
 
