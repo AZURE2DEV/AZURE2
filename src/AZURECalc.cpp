@@ -330,6 +330,11 @@ double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
     chiSquared += segChi;
   }
   if (!thmOnly && limitsManager_) chiSquared += CalculateNuisanceChiSquared(p);
+  // Park's J > 0 wall, as operator() adds it: the finite-difference fallback of
+  // Gradient() differentiates this function, and LM / GSL-LM take it as their
+  // cost.  Not in the THM-only part, whose differences are added to an
+  // analytic gradient that already carries the wall (AddParkPenaltyGradient).
+  if (!thmOnly && (configure().paramMask & Config::USE_PARK_FORMALISM)) chiSquared += lc->ParkNormPenalty();
 
   if (pooled) {
     ReturnPooledCNuc(lc);
