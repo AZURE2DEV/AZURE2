@@ -63,6 +63,25 @@ sleep 2; ps -eo pid,cmd | grep "[b]in/AZURE2 <name>.azr"
 pid,cmd | grep "[b]in/AZURE2"` is the check that actually tells you whether the
 process is alive.
 
+## Open it on the screen the person is looking at
+
+A Claude session inside tmux keeps the `DISPLAY` it had when it started. After the
+person logs in again, that X forwarding is gone, and the GUI dies at once with
+"The X11 connection broke (error 1). Did the X11 server die?" in its log. Nothing
+appears, and `nohup` hides it. Seen 2026-10-08: the session had `localhost:12.0`,
+whose port 6012 was no longer listening.
+
+Find the display of the login that is showing this session, and pass it explicitly:
+
+```bash
+tmux list-clients -F '#{client_tty} #{session_name}'      # which login tty shows which session
+p=$(ps -t pts/0 -o pid= | head -1)                          # the shell on that tty
+tr '\0' '\n' < /proc/$p/environ | grep '^DISPLAY='          # its DISPLAY
+ss -ltn | grep 127.0.0.1:60                                 # live forwards: 60NN = localhost:NN
+DISPLAY=localhost:NN.0 nohup <binary> <name>.azr > azure2_gui.log 2>&1 &
+sleep 5; cat azure2_gui.log                                 # must be empty of X11 errors
+```
+
 ## Things that make the picture wrong in ways the GUI will not tell you
 
 **Pass the project's own CLI flags.** CLI mode does not read Runtime Options
