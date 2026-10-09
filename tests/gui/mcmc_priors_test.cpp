@@ -12,6 +12,8 @@
 // Checked on tests/energy_shift_sqrt with segment 1's norm (5 %), shift
 // (0.004 +- 0.002 MeV) and sqrt(E) coefficient (0.003 +- 0.001) free: each
 // gets its own kind and prior; the name classification itself on every form.
+// With Use Reduced Widths the tab reads param.par: by name, as AZURE2 does
+// (a positional read took the #parametrization line for a parameter).
 //
 // Runs without a display; the CMake target passes QT_QPA_PLATFORM=offscreen.
 
@@ -19,8 +21,10 @@
 #include <QDir>
 #include <QFile>
 #include <QMetaObject>
+#include <QProcess>
 #include <QString>
 #include <QTemporaryDir>
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 
@@ -124,6 +128,44 @@ int main(int argc, char** argv) {
     ok("norm: its 5 % prior", normPrior);
     ok("energy shift: 0.004 +- 0.002 MeV", shiftPrior);
     ok("sqrt(E) coefficient: its own prior, 0.003 +- 0.001", sqrtPrior);
+  }
+
+  // 3. Use Reduced Widths: param.par read by name, as AZURE2 reads it.  The
+  //    file starts with its #parametrization line (since October 2026); a
+  //    positional read took that line for the first parameter and shifted
+  //    every value by one row.  The engine's own param.par, the same without
+  //    the line (a file of an older AZURE2) and with its rows reversed must
+  //    give the same values.
+  if(tab) {
+    QProcess engine;
+    engine.setWorkingDirectory(work.path());
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    if(!env.contains("OMP_NUM_THREADS")) env.insert("OMP_NUM_THREADS", "1");
+    engine.setProcessEnvironment(env);
+    engine.start(AZURE2_BINARY, QStringList() << "--no-gui" << "--no-readline" << "sqrt.azr");
+    engine.waitForStarted(30000);
+    engine.write("1\n\n\n7\n");
+    engine.closeWriteChannel();
+    engine.waitForFinished(300000);
+    const QString par = slurp(work.filePath("output/param.par"));
+    ok("the engine wrote a tagged param.par", par.startsWith(QString("#parametrization").rightJustified(20)), par.left(80));
+    QStringList rows = par.split('\n', Qt::SkipEmptyParts);
+    const QString tag = rows.takeFirst();
+    QStringList reversed = rows;
+    std::reverse(reversed.begin(), reversed.end());
+    auto loaded = [&](const QString& fileText) {
+      spit(work.filePath("output/param.par"), fileText);
+      QMetaObject::invokeMethod(tab, "loadFromReduced");
+      QVector<double> v;
+      for(const MCMCParameter& p : tab->parameters()) v << p.value;
+      return v;
+    };
+    const QVector<double> asWritten = loaded(par);
+    const QVector<double> untagged = loaded(rows.join('\n') + '\n');
+    const QVector<double> backwards = loaded(tag + '\n' + reversed.join('\n') + '\n');
+    ok("RWA load: some free parameters", !untagged.isEmpty());
+    ok("RWA load: the tagged file gives the untagged file's values", asWritten == untagged);
+    ok("RWA load: rows in another order, the same values", backwards == untagged);
   }
 
   std::cout << (fails ? "FAILED" : "PASSED") << " (" << fails << " failure(s))" << std::endl;

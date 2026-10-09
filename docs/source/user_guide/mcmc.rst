@@ -61,7 +61,9 @@ you wish to impose on each:
      - ``level`` or ``level_rwa``, or ``cbkg`` for a THM coherent background.
 
 Populate the table with **Load Physical Parameters** or **Load RWA
-Parameters**.
+Parameters**. The latter reads ``param.par`` of the output directory by
+parameter name, as AZURE2 reads a parameter file (a file in the other of
+Brune's and Park's bases is converted).
 
 .. note::
 

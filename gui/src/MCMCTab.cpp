@@ -595,26 +595,18 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
                                 .arg(QString::fromStdString(filename)));
         return;
       }
-      // The second column contains the RWA values
-      std::string line;
-      int i = 0;
-      while (std::getline(paramFile, line)) {
-        std::istringstream iss(line);
-        std::string paramName;
-        double rwaValue;
-        if (!(iss >> paramName >> rwaValue)) {
-          logTextEdit->append(QString("Error: Invalid line in RWA parameter file: %1")
-                                  .arg(QString::fromStdString(line)));
-          continue;
-        }
-        if (i >= (int)azureParams.GetMinuitParams().Params().size()) {
-          logTextEdit->append(QString("Warning: param.par has more entries than expected parameters (%1). Stopping at line %2.")
-                                  .arg(azureParams.GetMinuitParams().Params().size())
-                                  .arg(i));
-          break;
-        }
-        azureParams.GetMinuitParams().SetValue(i, rwaValue);
-        i++;
+      // By name, as AZURE2 reads a parameter file (AZUREMain, AZURECalcMCMC):
+      // the file starts with its #parametrization line and rows are appended
+      // as parameters are added, so a positional read is off by one or more.
+      // A file in the other alternative basis (Brune / Park) is converted.
+      paramFile.close();
+      azureParams.ReadUserParameters(filename);
+      if (!azureParams.ReconcileBasis(compound, config)) {
+        delete compound;
+        delete data;
+        logTextEdit->append(QString("Error: the parameter file %1 holds amplitudes of another parametrization.")
+                                .arg(QString::fromStdString(filename)));
+        return;
       }
     } else {
       compound->FillMnParams(azureParams.GetMinuitParams(), &config);
