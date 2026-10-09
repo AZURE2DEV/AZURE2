@@ -1259,10 +1259,13 @@ class azure2:
         (Mukhamedzhanov et al., PRC 96 (2017) 024623, eq. 31), so the vertex
         ``M_l = (B_c - 1) j_l(rho) - rho j_l'(rho) (+ C_l)``, ``rho = p_xA a``,
         changes with the spectator momentum p_s inside the accepted window.
-        The engine averages the cross section (not the amplitude) over the
-        window with the event weight |phi(p_s)|^2 p_s^2; this reports the
-        vertex part of it.  See docs/source/theory/thm_implementation.rst,
-        "Spectator-momentum window".
+        At fixed E the spectator direction fixes |p_s|, and the engine
+        averages the cross section (not the amplitude) over the accepted
+        directions with the fixed-E event weight |phi(q)|^2 d cos(theta_cm),
+        i.e. |phi(q)|^2 q dq over the q = |p_s| the kinematics reach (not the
+        E-integrated |phi|^2 p_s^2 dp_s); this reports the vertex part of it.
+        See docs/source/theory/thm_implementation.rst, "Spectator-momentum
+        window".
 
         ``energies``: c.m. energies E of x + A (MeV).  The per-level vertex
         boundaries are those of ``params`` (default: the current parameters;
@@ -1270,9 +1273,12 @@ class azure2:
         dict:
 
         ``window``    description (``"delta"`` without a window)
-        ``p_s``, ``weights``, ``T_s``   the Gauss-Legendre nodes (MeV/c), their
-                      normalized weights and T_s = p_s^2/2mu_sx (MeV); a delta
-                      experiment has one node, p_s = 0 and T_s the
+        ``p_s``, ``weights``, ``T_s``   lists over E: at each E the nodes
+                      (Gauss-Legendre in cos theta_cm on the directions inside
+                      the window) as |p_s| (MeV/c), their normalized weights
+                      and T_s = p_s^2/2mu_sx (MeV); ``theta_cm`` (deg) their
+                      spectator c.m. angles to the beam.  A delta experiment
+                      has one node at each E, p_s = 0 and T_s the
                       ``spectatorEnergy`` of its pair
         ``mu_sx``, ``B``, ``radius``, ``pair``   (MeV, MeV, fm, entrance key)
         ``E``         the grid; ``rho``: list over E of the rho at each node
@@ -1295,8 +1301,9 @@ class azure2:
                       at each node, ``dw_q``/``dw_weights`` the nodes (q in MeV/c)
                       and weights per energy, ``dw_q_delta`` (MeV/c) and
                       ``dw_p_delta`` (fm^-1) those of the ``spectatorAngle``
-                      node.  ``p_s``, ``weights``, ``T_s`` stay the nominal
-                      window of the line.  With ``spectatorAngles=`` the
+                      node.  ``p_s``, ``weights``, ``T_s`` are the nodes of
+                      the line's ``ps`` window (empty lists without one).
+                      With ``spectatorAngles=`` the
                       vertex is averaged over the accepted spectator
                       directions (the model is linear in the Gram matrix, so
                       that is one node with the averaged matrix: ``dw_q`` its

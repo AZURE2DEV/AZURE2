@@ -2747,14 +2747,16 @@ class AzrModel:
         the Coulomb line-shape factor N_C of the spectator (needs the four
         kinematics keys; see :meth:`pyazr.azure2.azure2.thm_lineshape`).
         ``ps`` sets the spectator-momentum window over which the HOES cross
-        section is averaged (weight |phi(p_s)|^2 p_s^2, momenta in MeV/c):
+        section is averaged (weight |phi(q)|^2 d cos(theta_cm), i.e. |phi|^2
+        q dq over the reachable q = |p_s| at fixed E; momenta in MeV/c):
         ``"delta"`` (the quasi-free point, the default), ``"hulthen:0-40"``,
         ``"hulthen:a,b:0-40"`` (a, b in fm^-1; default the deuteron's 0.2317,
-        1.202), ``"gauss:FWHM:0-40"`` or ``"table:<file>"`` (p_s and the event
-        weight per unit p_s; relative to the .azr, read by the engine); a
-        window needs the kinematics keys and excludes ``spectatorEnergy`` for
-        the experiment's entrance pair.  ``psNodes`` (1-64, default 16) is the
-        number of Gauss-Legendre nodes in p_s (see
+        1.202), ``"gauss:FWHM:0-40"`` or ``"table:<file>"`` (p_s and the
+        momentum distribution |phi(p_s)|^2 itself, not a spectrum of accepted
+        events; relative to the .azr, read by the engine); a window needs the
+        kinematics keys and excludes ``spectatorEnergy`` for the experiment's
+        entrance pair.  ``psNodes`` (1-64, default 16) is the number of
+        Gauss-Legendre nodes in cos(theta_cm) on the reachable directions (see
         :meth:`pyazr.azure2.azure2.thm_vertex`).
         ``distortion`` multiplies the model of every segment by the
         distortion factor R(E) (see :meth:`pyazr.azure2.azure2.thm_distortion`):

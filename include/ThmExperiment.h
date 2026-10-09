@@ -84,7 +84,7 @@ struct ThmExperiment {
   double psMin = 0.0, psMax = 0.0;   ///< window (MeV/c); a table: its first and last p
   std::string psTable;               ///< table: the file as written
   std::vector<double> psTableP, psTableW;  ///< table rows (Config::ReadThmBlock loads them)
-  int psNodes = 16;                  ///< Gauss-Legendre nodes in p_s (`psNodes=`)
+  int psNodes = 16;                  ///< Gauss-Legendre nodes in cos(theta_cm) (`psNodes=`)
   /*!
    * Distortion factor R(E) multiplying the model of every segment
    * (`distortion=`, ThmDistortion.h): none (default), coulomb (point-Coulomb
@@ -316,8 +316,9 @@ std::string CheckThmCoulombConsistency(const std::vector<ThmExperiment> &experim
 std::string ReadThmAngleTable(const std::string &path, std::vector<double> &theta, std::vector<double> &w);
 
 /// Reads a `ps=table:` file: two columns, p_s (MeV/c, >= 0, strictly
-/// increasing) and the event weight w >= 0 per unit p_s; '#' starts a comment;
-/// at least two rows and some positive weight.  "" or what is wrong.
+/// increasing) and the momentum distribution |phi(p_s)|^2 >= 0 (any scale; the
+/// window weights it with d cos(theta_cm)); '#' starts a comment; at least two
+/// rows and some positive value.  "" or what is wrong.
 std::string ReadThmPsTable(const std::string &path, std::vector<double> &p, std::vector<double> &w);
 
 /*!
