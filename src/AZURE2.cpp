@@ -1334,13 +1334,20 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
 
     // Run MCMC sampling
     std::vector<std::vector<double>> samples;
-    mcmcCalc.RunMCMCSampling(mcmcParams.nwalkers, mcmcParams.nsteps, initialParams,
-                             samples, mcmcParams.chainSpread, mcmcParams.nthreads, mcmcParams.useRWA,
-                             mcmcParams.energySpreadKeV);
+    const bool sampled = mcmcCalc.RunMCMCSampling(mcmcParams.nwalkers, mcmcParams.nsteps, initialParams,
+                                                  samples, mcmcParams.chainSpread, mcmcParams.nthreads,
+                                                  mcmcParams.useRWA, mcmcParams.energySpreadKeV);
 
     // Clear callbacks
     AZURECalcMCMC::SetGUIProgressCallback(nullptr);
     AZURECalcMCMC::SetGUIIterationCallback(nullptr);
+
+    if (!sampled) {
+      if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) CleanupECAmplitudeCache();
+      delete compound;
+      delete data;
+      return -1;
+    }
 
     configure.outStream << std::endl
                         << std::endl;
@@ -1532,6 +1539,7 @@ int main(int argc, char *argv[]) {
 
       if (returnValue != 0) {
         configure.outStream << "MCMC sampling failed." << std::endl;
+        runStatus = returnValue;
       }
     } else {
 #endif

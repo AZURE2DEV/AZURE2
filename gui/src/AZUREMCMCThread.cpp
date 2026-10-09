@@ -237,21 +237,32 @@ void AZUREMCMCWorker::run() {
       }
     });
 
+    // The sampler's start check (a Park start with J <= 0, a refused start).
+    AZURECalcMCMC::SetGUIMessageCallback([](const std::string &text) {
+      if (g_currentWorker) emit g_currentWorker->logMessage(QString::fromStdString(text).trimmed());
+    });
+
     try {
+      bool sampled;
       if (useReducedWidths) {
         // Use reduced width amplitudes (RWA) for fitting
         emit logMessage("Running MCMC with reduced width amplitudes...");
-        mcmcCalculator->RunMCMCSampling(nWalkers, nSteps, initialParams, samples, chainSpread, nThreads, true, energySpreadKeV);
+        sampled = mcmcCalculator->RunMCMCSampling(nWalkers, nSteps, initialParams, samples, chainSpread, nThreads, true, energySpreadKeV);
       } else {
         // Use physical parameters for fitting
         emit logMessage("Running MCMC with physical parameters...");
-        mcmcCalculator->RunMCMCSampling(nWalkers, nSteps, initialParams, samples, chainSpread, nThreads, false, energySpreadKeV);
+        sampled = mcmcCalculator->RunMCMCSampling(nWalkers, nSteps, initialParams, samples, chainSpread, nThreads, false, energySpreadKeV);
       }
 
-      emit logMessage(QString("MCMC sampling completed! Generated %1 samples")
-                          .arg(samples.size()));
+      if (sampled) {
+        emit logMessage(QString("MCMC sampling completed! Generated %1 samples")
+                            .arg(samples.size()));
 
-      emit samplingComplete(samples);
+        emit samplingComplete(samples);
+      } else {
+        // The reason (e.g. a start with Park's J <= 0) is in the log above.
+        emit samplingError("MCMC sampling did not run: see the log above for the reason.");
+      }
     } catch (const std::exception &e) {
       emit samplingError(QString("MCMC sampling failed: %1").arg(e.what()));
       return;
@@ -261,6 +272,7 @@ void AZUREMCMCWorker::run() {
     AZURECalcMCMC::SetGUIProgressCallback(nullptr);
     AZURECalcMCMC::SetGUIIterationCallback(nullptr);
     AZURECalcMCMC::SetGUIResultsCallback(nullptr);
+    AZURECalcMCMC::SetGUIMessageCallback(nullptr);
     g_currentWorker = nullptr;
 
     // Cleanup

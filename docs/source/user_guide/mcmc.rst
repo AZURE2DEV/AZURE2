@@ -77,6 +77,9 @@ Parameters**.
    unbounded uniform prior; the run log lists them by name so nothing is
    unconstrained without you being told.
 
+   A THM coherent background (``cbkg_*``) gets no automatic prior either: it
+   is uniform unless you define one, and the run log counts them.
+
 Sampling settings
 -----------------
 
@@ -132,6 +135,20 @@ The run log additionally reports, at the end:
   not yet a usable posterior; a warning is printed below 0.05.
 - any **walkers that started at zero posterior probability** and therefore
   cannot move — reduce the initial spread or check the priors.
+
+Before the first step the starting ensemble is checked. Under Park's
+parametrization (``--use-park``) a starting point where a level has
+:math:`J = 1-\sum_c\gamma_c^2\,dS_c/dE \le 0` is reported, the level named
+with its :math:`J`: the posterior is zero there (:math:`J<0` is rejected), so
+walkers near it are rejected. If **no** walker of the starting ensemble has a
+finite posterior probability — under Park, typically every walker of the ball
+around such a point — the run is refused ("MCMC not started"): an ensemble
+entirely outside the support carries no information on the posterior, and
+the chain would be the start repeated with acceptance zero. No
+``samples.mcmc`` is written and the command line exits with a non-zero status.
+Start from a fit made under ``--use-park`` (its penalty keeps :math:`J>0`), from
+a Brune parameter file (converted on read) or with smaller widths. A start
+from which part of the ensemble is inside the support runs, with the warning.
 
 Output files
 ------------

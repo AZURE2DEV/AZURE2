@@ -122,8 +122,10 @@ parameter space the minimizer works in:
   :math:`J_\lambda > 0`; a level with :math:`J_\lambda \le 0` has no standard
   R-matrix counterpart (its widths exceed what the channel radii allow).  The
   fit objective therefore carries a penalty :math:`\sum_\lambda (J_\lambda/10^{-3})^2`
-  over levels with :math:`J_\lambda < 0`, MCMC rejects such points, and a run
-  that ends there prints a warning naming the level;
+  over levels with :math:`J_\lambda < 0`, MCMC rejects such points (a chain
+  started from such a point is reported, and refused if its whole starting
+  ensemble is outside: :doc:`../user_guide/mcmc`), and a run that ends there
+  prints a warning naming the level;
 * analytic derivatives (``--use-lm``, the analytic-gradient minimizer, the
   covariance band, pyazr's ``chi2_and_grad`` / ``residual_jacobian``) are
   available in both modes;

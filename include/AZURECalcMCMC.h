@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <stack>
+#include <string>
 
 class Config;
 class EData;
@@ -73,8 +74,21 @@ class AZURECalcMCMC {
    * parameters in keV.  Level energies must not be scattered by a percentage of
    * their value the way widths are: a few tens of keV of scatter puts walkers on
    * completely different resonance structures and the ensemble never contracts.
+   *
+   * The start is checked before any step: under Park's parametrization a
+   * level with J <= 0 at the starting point is named in a warning (the prior
+   * excludes J < 0, so walkers near it are rejected), and if no walker of the
+   * initial ensemble has a finite posterior probability the run is refused:
+   * such an ensemble carries no information on the posterior, every walker
+   * stays where it started unless a blind stretch move happens to land inside
+   * the support, and the "chain" would be the start repeated with acceptance
+   * 0.  A refused run writes no samples (a samples.mcmc it created is
+   * removed) and leaves walkers.mcmc alone.
+   *
+   * Returns false when the run was refused or failed, true when it ran
+   * (completed, stopped early on request, or was already complete).
    */
-  void RunMCMCSampling(int nwalkers, int nsteps, const std::vector<double> &initialParams,
+  bool RunMCMCSampling(int nwalkers, int nsteps, const std::vector<double> &initialParams,
                        std::vector<std::vector<double>> &samples, double chainSpreadPercent = 1.0, int nthreads = 1, bool useRWA = false,
                        double energySpreadKeV = 1.0) const;
 
@@ -152,6 +166,13 @@ class AZURECalcMCMC {
   static void SetGUIResultsCallback(void (*callback)(int, int, const std::vector<std::vector<double>> &));
 
   /*!
+   * Set GUI message callback: receives the start-check report of
+   * RunMCMCSampling (a Park start with J <= 0, a refused start), which also
+   * goes to the Config output stream (std::cout in the GUI).
+   */
+  static void SetGUIMessageCallback(void (*callback)(const std::string &));
+
+  /*!
    * Returns a reference to the Config structure.
    */
   const Config &configure() const { return configure_; };
@@ -183,6 +204,16 @@ class AZURECalcMCMC {
    * Update parameter vectors for parameter transformation handling
    */
   void UpdateParameterVectors(const vector_r &initialParams) const;
+
+  /*!
+   * Park's parametrization: the R-matrix levels whose J = 1 - sum gamma^2
+   * dS/dE is not positive at the varying-parameter point \p p (RWA or
+   * physical, as \p useRWA says), each as its label with its J.  \p filled
+   * is false when the point could not be turned into a level matrix at all
+   * (a transformation that fails).
+   */
+  std::vector<std::string> ParkNonPositiveLevels(const std::vector<double> &p, bool useRWA,
+                                                 bool &filled) const;
 
   /*!
    * Reconstruct full parameter array from varying physical parameters (for output file writing)

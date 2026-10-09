@@ -6,6 +6,8 @@
 #include "ParameterLimitsManager.h"
 #include "AZUREParams.h"
 #include "GSLException.h"
+#include "JGroup.h"
+#include "ALevel.h"
 #include <iostream>
 #include <iomanip>
 #include <cmath>
@@ -18,6 +20,7 @@
 #include <thread>
 #include <algorithm>
 #include <cstdlib>
+#include <cstdio>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -717,6 +720,7 @@ void mcmc_sample_callback(int current_step,
 static void (*g_gui_progress_callback)(int, int, double, double, double) = nullptr;
 static void (*g_gui_iteration_callback)(int, int) = nullptr;
 static void (*g_gui_results_callback)(int, int, const std::vector<std::vector<double>> &) = nullptr;
+static void (*g_gui_message_callback)(const std::string &) = nullptr;
 static const AZURECalcMCMC *g_mcmc_for_callbacks = nullptr;
 static nu::Mcmc *g_mcmc_sampler = nullptr;
 static bool g_using_rwa_parameters = false;
@@ -907,7 +911,54 @@ void AZURECalcMCMC::SetGUIResultsCallback(void (*callback)(int, int, const std::
   g_gui_results_callback = callback;
 }
 
-void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<double> &initialParams,
+void AZURECalcMCMC::SetGUIMessageCallback(void (*callback)(const std::string &)) {
+  g_gui_message_callback = callback;
+}
+
+std::vector<std::string> AZURECalcMCMC::ParkNonPositiveLevels(const std::vector<double> &p, bool useRWA,
+                                                             bool &filled) const {
+  std::vector<std::string> labels;
+  filled = false;
+  if (!parametersInitialized_) return labels;
+  if (!pools_initialized_) InitializePools();
+  CNuc *lc = GetPooledCNuc();
+  try {
+    if (useRWA) {
+      lc->FillCompoundFromParams(ReconstructFullParameters(p));
+      filled = true;
+    } else {
+      // As CalculateLogLikelihoodPhysical: observed widths -> Park's amplitudes.
+      lc->FillCompoundFromParamsPhysical(ReconstructFullParametersPhysical(p));
+      if (lc->TransformIn(configure())) {
+        AZUREParams params;
+        lc->FillMnParams(params.GetMinuitParams(), &configure());
+        lc->FillCompoundFromParams(params.GetMinuitParams().Params());
+        filled = true;
+      }
+    }
+    if (filled) {
+      lc->CalcShiftFunctions(configure());
+      for (int j = 1; j <= lc->NumJGroups(); j++) {
+        JGroup *jg = lc->GetJGroup(j);
+        if (!jg->IsInRMatrix()) continue;
+        for (int la = 1; la <= jg->NumLevels(); la++) {
+          ALevel *level = jg->GetLevel(la);
+          if (!level->IsInRMatrix() || level->GetParkNorm() > 0.0) continue;
+          std::ostringstream text;
+          text << AZURELabel::Level(jg, level, j, la) << ": J = " << level->GetParkNorm();
+          labels.push_back(text.str());
+        }
+      }
+    }
+  } catch (...) {
+    filled = false;
+    labels.clear();
+  }
+  ReturnPooledCNuc(lc);
+  return labels;
+}
+
+bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<double> &initialParams,
                                     std::vector<std::vector<double>> &samples, double chainSpreadPercent, int nthreads, bool useRWA,
                                     double energySpreadKeV) const {
   try {
@@ -923,7 +974,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
 
     if (ndim == 0) {
       configure().outStream << "Error: No parameters provided for MCMC sampling\n";
-      return;
+      return false;
     }
 
     // Set up CSV file for saving samples with enhanced format
@@ -959,7 +1010,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
         if (startStep >= nsteps) {
           configure().outStream << "Sampling already completed! Loading existing samples.\n";
           LoadExistingSamples(samplesFile, samples);
-          return;
+          return true;
         }
 
         resuming = true;
@@ -1049,6 +1100,64 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
           pos[j] += init_distribution(generator);
         }
         initial_positions.push_back(pos);
+      }
+    }
+
+    // Check the start before any step (see RunMCMCSampling in the header).
+    // The report goes to the output stream and to the GUI's log.
+    auto report = [&](const std::string &text) {
+      configure().outStream << text;
+      configure().outStream.flush();
+      if (g_gui_message_callback) g_gui_message_callback(text);
+    };
+    // The initial ensemble (evaluated first, so that the transformation
+    // warnings of its walkers come before the report).
+    int nFinite = 0;
+    {
+      std::vector<double> startLogP(nwalkers, -std::numeric_limits<double>::infinity());
+#pragma omp parallel for num_threads(std::max(1, nthreads)) schedule(dynamic)
+      for (int k = 0; k < nwalkers; k++) {
+        const std::vector<double> &x = initial_positions[k];
+        const double lp = CalculateLogPrior(x);
+        if (std::isfinite(lp)) startLogP[k] = lp + (useRWA ? LogLikelihood(x) : LogLikelihoodPhysical(x));
+      }
+      for (int k = 0; k < nwalkers; k++)
+        if (std::isfinite(startLogP[k])) nFinite++;
+    }
+    // Park: name the levels with J <= 0 at the starting point.
+    if (configure().paramMask & Config::USE_PARK_FORMALISM) {
+      bool filled = true;
+      std::vector<std::string> badLevels = ParkNonPositiveLevels(initialParams, useRWA, filled);
+      std::ostringstream msg;
+      if (!badLevels.empty()) {
+        msg << "WARNING: the MCMC starting point is outside Park's parameter space: "
+            << badLevels.size() << " level" << (badLevels.size() == 1 ? " has" : "s have")
+            << " J = 1 - sum gamma^2 dS/dE <= 0\n";
+        for (size_t i = 0; i < badLevels.size(); ++i) msg << "    " << badLevels[i] << "\n";
+        msg << "  Their widths exceed what the channel radii allow; the posterior is zero "
+            << "there (J < 0 is rejected), so walkers near this point are rejected.\n"
+            << "  Start from a fit under --use-park (its penalty keeps J > 0), or from a "
+            << "Brune parameter file (converted on read), or reduce these widths.\n";
+      } else if (!filled) {
+        msg << "WARNING: the MCMC starting point could not be transformed to "
+            << "Park's amplitudes; its posterior probability is zero.\n";
+      }
+      if (!msg.str().empty()) report(msg.str());
+    }
+    // Every walker of the initial ensemble outside the support: refuse.
+    {
+      if (nFinite == 0) {
+        std::ostringstream msg;
+        msg << "ERROR: none of the " << nwalkers << " walkers of the initial "
+            << "ensemble has a finite posterior probability";
+        if (configure().paramMask & Config::USE_PARK_FORMALISM)
+          msg << " (under Park, a level with J < 0 is outside the prior)";
+        msg << ".\n  The sampler cannot move from there: every walker would stay "
+            << "at its start with acceptance 0.  MCMC not started.\n";
+        report(msg.str());
+        csvFile.close();
+        if (!resuming) std::remove(samplesFile.c_str());  // only its header was written
+        return false;
       }
     }
 
@@ -1156,7 +1265,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
       configure().outStream << "MCMC sampling stopped early by user request.\n";
     } else if (result != 0) {
       configure().outStream << "MCMC sampling failed with error code: " << result << "\n";
-      return;
+      return false;
     }
 
     // Get samples from the sampler
@@ -1174,6 +1283,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     configure().outStream << "MCMC sampling completed successfully. Generated "
                           << samples.size() << " total samples.\n";
     configure().outStream << "Samples saved to: " << samplesFile << "\n";
+    return true;
 
   } catch (const std::exception &e) {
     configure().outStream << "Error during MCMC sampling: " << e.what() << "\n";
@@ -1186,6 +1296,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     g_sample_file = nullptr;
     g_using_rwa_parameters = false;
   }
+  return false;
 }
 
 void AZURECalcMCMC::LoadExistingSamples(const std::string &filename, std::vector<std::vector<double>> &samples) const {
