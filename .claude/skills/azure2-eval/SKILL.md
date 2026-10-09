@@ -2042,7 +2042,7 @@ complete:
   integral over the window, so a constant cross section is always reproduced exactly.
 
 - 2026-10-08 -- USER-DEFINED NUMERICAL RESOLUTION FUNCTION (SAMMY UDR) in AZURE2, branch
-  `feature/udr-resolution` (worktree `~/AZURE2-udr`, separate build dir). A `<targetInt>` line
+  `feature/udr-resolution`, merged into dev 2026-10-09 (2e109f8) and installed in `~/bin/AZURE2`. A `<targetInt>` line
   can end with `udr "<file>" L_m burstFWHM_ns channel_ns centred`: the file is SAMMY's UDR
   format (text, a line of hyphens, then blocks "energy_eV" + "(delay_us, density)" pairs,
   blank-line separated), which is what n_TOF distributes (`RF_EAR1_v2_CORR.txt`: 600 energies
