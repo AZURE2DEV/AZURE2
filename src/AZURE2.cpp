@@ -75,9 +75,12 @@ void exitMessage(const Config &configure) {
  */
 
 void printHelp() {
+  // Every flag parseOptions (and main) accepts, and only those
+  // (tests/cli_help/check.sh compares the two).
   std::cout << "Syntax: AZURE2 <options> configfile" << std::endl
             << std::endl
             << "Options:" << std::endl
+            << std::setw(25) << std::left << "\t--help:" << std::setw(0) << "Print this list and exit." << std::endl
             << std::setw(25) << std::left << "\t--no-gui:" << std::setw(0) << "Do not use graphical setup utility (if built)." << std::endl
             << std::setw(25) << std::left << "\t" << std::setw(0) << "If this flag is not set all other options are ignored," << std::endl
             << std::setw(25) << std::left << "\t" << std::setw(0) << "and configuration occurs within the setup utility." << std::endl
@@ -85,7 +88,7 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--no-readline:" << std::setw(0) << "Do not use readline package." << std::endl
 #endif
             << std::setw(25) << std::left << "\t--no-transform:" << std::setw(0) << "Do not perform initial parameter transformations." << std::endl
-            << std::setw(25) << std::left << "\t--no-long-wavelenth:" << std::setw(0) << "Do not use long wavelength approximation for EL capture." << std::endl
+            << std::setw(25) << std::left << "\t--no-long-wavelength:" << std::setw(0) << "Do not use long wavelength approximation for EL capture." << std::endl
             << std::setw(25) << std::left << "\t--use-brune:" << std::setw(0) << "Use the alternative level matrix of C.R. Brune (the default)." << std::endl
             << std::setw(25) << std::left << "\t--no-brune:" << std::setw(0) << "Use the standard Lane-Thomas parametrization (constant boundary conditions) instead." << std::endl
             << std::setw(25) << std::left << "\t--use-park:" << std::setw(0) << "Fit the observed reduced width amplitudes (T.-S. Park, PRC 104, 064612); implies --use-brune." << std::endl
@@ -97,7 +100,10 @@ void printHelp() {
 #endif
             << std::setw(25) << std::left << "\t--use-gradient:" << std::setw(0) << "Use Minuit2 (MIGRAD) with the analytic gradient (default: numerical)." << std::endl
             << std::setw(25) << std::left << "\t--use-lm:" << std::setw(0) << "Use the Levenberg-Marquardt minimizer (analytic Jacobian; falls back to MIGRAD)." << std::endl
-            << std::setw(25) << std::left << "\t--use-gsl-lm:" << std::setw(0) << "Use the GSL trust-region least-squares minimizer with geodesic acceleration (analytic Jacobian; falls back to MIGRAD)." << std::endl;
+            << std::setw(25) << std::left << "\t--use-gsl-lm:" << std::setw(0) << "Use the GSL trust-region least-squares minimizer with geodesic acceleration (analytic Jacobian; falls back to MIGRAD)." << std::endl
+            << std::setw(25) << std::left << "\t--covariance-band:" << std::setw(0) << "Compute the cross-section uncertainty band without asking (from covariance.dat)." << std::endl
+            << std::setw(25) << std::left << "\t--scale-covariance:" << std::setw(0) << "Scale the band's covariance to a reduced chi-squared of 1." << std::endl
+            << std::setw(25) << std::left << "\t--use-api:" << std::setw(0) << "Removed (the socket API is gone): exits with a pointer to pyazr." << std::endl;
 }
 
 /*!

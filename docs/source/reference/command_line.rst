@@ -105,6 +105,15 @@ Available Options
        reuses it).
    * - ``--scale-covariance``
      - Scale the band's covariance to a reduced chi-squared of 1.
+   * - ``--use-nlopt``
+     - Fit with NLopt (BOBYQA) instead of Minuit2. Only in a build configured
+       with ``-DUSE_NLOPT=ON``; elsewhere it is an unknown flag.
+   * - ``--use-api``
+     - Removed: AZURE2 no longer serves a socket API. The flag stops the run
+       with an error pointing to ``pyazr`` (:doc:`../user_guide/pyazr`).
+
+``AZURE2 --help`` prints this list as the binary was built
+(``tests/cli_help/check.sh`` keeps the two, and this table, in step).
 
 Flags can also be put in a file, one per line, named by the environment
 variable ``AZURE_OPTIONS_FILE``; they are applied after those of the command

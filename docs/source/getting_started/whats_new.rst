@@ -84,7 +84,8 @@ from it.
 
 *Behaviour*: the CLI exits non-zero when a run fails; a malformed
 ``<potential>`` block is refused; the console total is printed to twelve
-digits and includes every prior. The GUI saves doubles with round-trip
+digits and includes every prior; ``--help`` lists exactly the flags the
+command line takes. The GUI saves doubles with round-trip
 precision, keeps level lines' fields 32 and 33, and renumbers what refers to
 a data segment by number when segments are moved, added or deleted.
 ``pyazr``'s ``save_fit`` writes the fitted norms and the matching
