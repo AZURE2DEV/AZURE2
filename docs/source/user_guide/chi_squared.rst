@@ -129,6 +129,30 @@ Level energies and widths flagged **Use as Nuisance** in the Fitting tab add a
 Gaussian term of the same shape, using the **Error** column as the width. This
 is how prior knowledge of a resonance energy enters a least-squares fit.
 
+THM segments
+------------
+
+A THM (half-off-energy-shell) segment with a free normalization has an
+arbitrary scale. It is not a fit parameter and pays no penalty: at every
+evaluation the scale is profiled out in closed form,
+:math:`n^* = S_{mm}/S_{md}` and
+:math:`\chi^2 = S_{dd} - S_{md}^2/S_{mm}` with the weighted sums of model
+:math:`\times` model, model :math:`\times` data and data :math:`\times`
+data, and the segments of one THM experiment share it (with an optional
+smooth background, profiled with it). The coherent THM background
+(``cbkg_*``) is an ordinary parameter without a penalty. See
+:doc:`../theory/thm_implementation`, "THM experiments" and "Normalization,
+gradients and uncertainty bands".
+
+Park's parametrization
+----------------------
+
+Under ``--use-park`` a level whose overlap :math:`J_\lambda` is negative adds
+:math:`(J_\lambda/10^{-3})^2` to the objective (zero inside the physical
+region), in every minimizer's cost and in the gradient. A calculation reports
+it as ``Total-Park-Chi-Squared`` in ``chiSquared.out``. See
+:doc:`../reference/command_line`, "Brune and Park parametrizations".
+
 What ``chiSquared.out`` actually reports
 ----------------------------------------
 
@@ -146,9 +170,14 @@ The file separates the two contributions::
   penalty.
 - **N** is the number of points in the segment, and **Total-N** their sum.
 
-The quantity the minimizer actually descends is the sum of all of them. Quoting
+The quantity the minimizer actually descends is the sum of all of them, plus
+the energy-shift and nuisance terms, which the file does not list. Quoting
 ``Total-Chi-Squared`` as "the χ²" of a fit with free normalizations understates
-the objective.
+the objective. A calculation prints the whole objective, data and every prior,
+on the console as ``Total Chi-Squared:`` (twelve significant digits); this is
+the number the examples quote as "file alone"
+(:doc:`../getting_started/examples`). Under ``--use-park`` the total line of
+the file ends with ``Total-Park-Chi-Squared``.
 
 .. note::
 

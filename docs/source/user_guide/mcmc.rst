@@ -58,7 +58,7 @@ you wish to impose on each:
    * - **Use Gaussian Prior**
      - Impose the prior. Unchecked means an unbounded uniform prior.
    * - **Category**
-     - ``level`` or ``level_rwa``.
+     - ``level`` or ``level_rwa``, or ``cbkg`` for a THM coherent background.
 
 Populate the table with **Load Physical Parameters** or **Load RWA
 Parameters**.
@@ -67,10 +67,13 @@ Parameters**.
 
    **Normalizations and energy shifts are not listed, and do not need to be.**
    They are still sampled — AZURE2 builds their priors automatically from the
-   errors quoted in the Segments tab, reproducing exactly the χ² penalties a
-   Minuit fit would apply (see :doc:`chi_squared`). A normalization with no
-   quoted error gets a uniform prior instead of an invented one, and the run
-   log says so.
+   errors quoted in the Segments tab (and, for a :math:`\sqrt{E}` shift
+   coefficient, from its ``sqrtshift`` block), centred where the Minuit
+   penalties are centred, prior centre rows included, so that they reproduce
+   exactly the χ² penalties a Minuit fit would apply (see :doc:`chi_squared`).
+   A normalization with no quoted error gets a uniform prior instead of an
+   invented one, and the run log says so. The free norm of a THM segment is
+   not a parameter at all: it is profiled at every evaluation.
 
    Level energies and widths carry no experimentally implied uncertainty, so
    those are yours to specify. Any left without a prior are sampled with an
@@ -79,6 +82,12 @@ Parameters**.
 
    A THM coherent background (``cbkg_*``) gets no automatic prior either: it
    is uniform unless you define one, and the run log counts them.
+
+   The sampler tells the kinds apart by the engine's parameter names
+   (``energy_*``, ``width_*``, ``segment_N_norm``, ``segment_N_energy_shift``,
+   ``segment_N_energy_shift_sqrt``, ``cbkg_*``). If a name is not recognised
+   the run log says so and no automatic prior is set, rather than one being
+   put on the wrong parameter.
 
 Sampling settings
 -----------------
@@ -145,7 +154,8 @@ finite posterior probability — under Park, typically every walker of the ball
 around such a point — the run is refused ("MCMC not started"): an ensemble
 entirely outside the support carries no information on the posterior, and
 the chain would be the start repeated with acceptance zero. No
-``samples.mcmc`` is written and the command line exits with a non-zero status.
+``samples.mcmc`` is written, the GUI shows the report, and the command line
+exits with a non-zero status (as it does for any MCMC run that fails).
 Start from a fit made under ``--use-park`` (its penalty keeps :math:`J>0`), from
 a Brune parameter file (converted on read) or with smaller widths. A start
 from which part of the ensemble is inside the support runs, with the warning.

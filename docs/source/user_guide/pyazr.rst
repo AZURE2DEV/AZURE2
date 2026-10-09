@@ -63,6 +63,21 @@ data — rather than waiting for the garbage collector; without it, call
    ``.azr``'s own directory, so paths you pass ``pyazr`` are resolved from
    wherever *you* are.
 
+Session options
+---------------
+
+``azure2(file, cwd=None, data_mode=True, use_brune=True,
+ignore_externals=True, transform=True, use_long_wavelength=True,
+use_gsl_coul=False, use_rmc=False, use_park=False)`` takes the runtime
+options of the CLI (:doc:`../reference/command_line`) as keywords; as on the
+CLI they are not read from the ``.azr``. ``use_park=True`` is ``--use-park``:
+``params_rwa`` then holds Park's amplitudes, ``park_norms()`` gives every
+level's overlap :math:`J`, and ``basis`` is 0, 1 or 2 (standard, Brune, Park:
+the ``#parametrization`` tag of ``param.sav``). With ``transform=False``
+(``--no-transform``) nothing is converted: the numbers of the file are taken
+as they stand as formal level energies and reduced-width amplitudes, so a
+file that holds physical widths (eV) and energies is a different model.
+
 Two parameter conventions
 -------------------------
 
@@ -115,8 +130,24 @@ name like ``width_1_2``:
        print(w.name, w.jpi, "L =", w.L, "S =", w.S, "pair", w.pair)
 
 Filtered views (``.free``, ``.energies``, ``.widths``, ``.norms``,
-``.shifts``) and lookups (``.by_level(...)``, ``.by_name(...)``,
-``.by_physical_level()``) are all available. A ``LevelKey`` prints as
+``.shifts``, ``.sqrt_shifts``, ``.cbkg``) and lookups (``.by_level(...)``,
+``.by_name(...)``, ``.by_physical_level()``) are all available. A
+parameter's ``kind`` is the engine's type code, in the order of the
+parameter vector:
+
+======  ===============  ===================================================
+code    ``kind``         parameters
+======  ===============  ===================================================
+0       ``energy``       level energies (``energy_*``)
+1       ``width``        reduced-width amplitudes (``width_*``)
+2       ``norm``         segment normalizations (``segment_N_norm``)
+3       ``shift``        segment energy shifts (``segment_N_energy_shift``)
+4       ``shift_sqrt``   :math:`\sqrt{E}` shift coefficients
+                         (``segment_N_energy_shift_sqrt``)
+5       ``cbkg``         THM coherent background (``cbkg_*``), last
+======  ===============  ===================================================
+
+A THM segment's free norm is profiled, not a parameter, and has no entry. A ``LevelKey`` prints as
 ``5/2-#2@6.588MeV``; ``(jgroup, level)`` is its identity, since AZURE2 restarts
 level numbering inside every J-group.
 
@@ -193,9 +224,13 @@ parameters of kind ``"cbkg"`` (``parameters.cbkg``; their values in
 ``set_thm_experiment(..., ps="hulthen:0-40")``
 averages the HOES cross section over the accepted spectator directions
 (weight :math:`|\phi(p_s)|^2\,d\cos\theta_\mathrm{cm}` at fixed :math:`E`),
-and ``thm_vertex(name, energies)`` returns its nodes, weights and :math:`\rho`
-at every energy (lists over the energies), and
-the window-averaged :math:`|M_l|^2` per entrance channel and level;
+and ``thm_vertex(name, energies, strict=False)`` returns its nodes, weights
+and :math:`\rho` at every energy (lists over the energies), and the
+window-averaged :math:`|M_l|^2` per entrance channel and level; its
+``reached`` entry is False at an energy the window (or the DW vertex grid)
+does not reach, where the row is that of the nearest data point or grid
+energy, and such energies raise a ``UserWarning`` -- with ``strict=True`` a
+``ValueError``;
 ``set_thm_experiment(..., distortion="coulomb")`` multiplies the model by the
 zero-range DWBA distortion factor :math:`R(E)`, with ``opticalAA``,
 ``opticalSF`` (``"plane"``, ``"coulomb"``, ten numbers, or a global optical
@@ -232,12 +267,17 @@ To snapshot a fit, prefer :meth:`~pyazr.azure2.azure2.save_fit`, which wraps
 
    azr, sav = m.save_fit("7Be_fit.azr")        # or save_fit(path, x_best)
 
-It converts the fit to the physical values a ``<levels>`` line holds, writes
+``save_fit(path, x=None, param_sav=True, verify=True, norms="fitted",
+close_session=False)`` converts the fit to the physical values a
+``<levels>`` line holds (fixed widths included, at the physical value the fit
+had: a fixed Brune amplitude keeps its amplitude, not its width), writes
 the fitted free normalizations and energy shifts into their ``<segmentsData>``
 lines, writes the companion ``param.sav`` carrying every parameter, and then
-reopens what it wrote and checks it against the fit (the parameters, and the
-data :math:`\chi^2` and the prior terms of the snapshot run alone) ---
-removing both files and raising if they disagree.  A prior whose field now
+reopens what it wrote and checks it against the fit (``verify``: the
+parameters, and with ``norms="fitted"`` the data :math:`\chi^2` and the prior
+terms of the snapshot run alone, to :math:`10^{-6}`) --- removing both files
+and raising if they disagree. A coherent THM background is written back into
+its ``cbackground=`` key.  A prior whose field now
 holds the fitted value keeps its centre as an explicit ``prior_centre`` row
 of ``<parameterSettings>`` (the centre the fit used), so a fit started from
 the snapshot is pulled to the same centres, not to the fitted values;
@@ -263,6 +303,32 @@ relative to itself, so a snapshot runs from the directory the original did.
    output directory) so the integrals are recomputed;
    ``azure2.recalculate_external_capture()`` forces it inside a live session.
    See ``pyazr/examples/edit_model.py``.
+
+Parameter and output files
+--------------------------
+
+Parameter files (``param.par``, ``param.sav``, ``param.fit``) are read by
+**name**, as AZURE2 reads them: ``azure2.read_sav(path)`` returns
+``{name: value}`` (the ``#parametrization`` line and comments skipped),
+``full_rwa_from_sav(path)`` applies a file to the session's full vector
+(a name the file lacks keeps the session's value; a file with no name in
+common is refused), ``update_rwa_params_from_sav()`` and
+``update_sav_from_rwa_params(x)`` (writes ``param.sav.new``, rows updated in
+place, missing free rows appended) do the same with the run's own
+``param.sav``, and ``pyazr.bands.best_fit_params`` loads a fit for the
+bands. Do not read these files by row position: rows are added as the code
+grows (the :math:`\sqrt{E}` coefficients, the tag line), and a positional
+read of a file from another layout is silently off by one or more rows.
+
+``write_output_files(params=None)`` writes the CLI's output files
+(``AZUREOut_*``, ``chiSquared.out``, ...) for a parameter vector, into
+``output_dir``: the output directory of the project's ``<config>``, relative
+to ``cwd``, as the engine resolves it (not necessarily ``output/``).
+
+``pyazr.bands`` (``sensitivities``, ``uncertainty_bands``,
+``extrapolation_bands``) spans the columns the CLI's ``covariance.dat`` spans:
+level energies, reduced widths and THM ``cbkg`` values (kinds 0, 1 and 5);
+norms and shifts only rescale or move the data and carry no band.
 
 Decomposing a cross section
 ---------------------------
@@ -531,7 +597,12 @@ recomputing gives), so a second session in the same process finds them: the
 12C+12C THM example opens in 2.6 s instead of 24.5 s the second time (49 s
 the first), and the GUI's THM diagnostics recompute it in 1-3 s instead of
 37 s.  Those are dropped too if they fill up (32 768 per key) without being
-asked for again.
+asked for again. The table costs memory: 13 MB of peak resident memory on the
+12C+12C example. The memo itself takes energies within
+:math:`10^{-12}` MeV as equal, so a second session in one process can differ
+from a fresh process in the last digits (``tests/6Li_d``: 682.1465248015013
+against 682.1465248016414); compare multi-session results to
+:math:`10^{-12}`, not bit for bit.
 
 Model averaging
 ---------------
@@ -579,11 +650,20 @@ skipped with a warning) and keeps everything else, so the result opens in the
 GUI. It is a representative model, not a fit.
 
 The module is pure Python (no numpy). ``scripts/thm_model_average.py`` drives a
-whole THM grid: one project per variant, fitted sequentially with scipy's
-``least_squares`` on ``residuals``/``residual_jacobian`` plus the penalty
-rows, refused variants skipped with the reason, ``--dry-run`` to list the
-grid. The theory and the caveats are in
-:doc:`../theory/thm_implementation`, "Model averaging".
+whole THM grid: one project per variant along the axes ``--radius-pairs`` /
+``--radii``, ``--vertex-model``, ``--vertex``, ``--optical``, ``--ps``,
+``--lineshape`` and ``--distortion`` (or a JSON ``--spec``), each fitted in a
+fresh Python process (``--in-process`` to keep them in one), one after the
+other, with scipy's ``least_squares`` on ``residuals``/``residual_jacobian``
+plus the penalty rows. ``--penalty-hook file.py:func`` adds rows of your own
+(measured strengths, priors) to the fit, the :math:`\chi^2`, the weights and
+the covariance; ``--x-scale 1`` replaces ``least_squares``' default
+``x_scale="jac"`` when those rows make it reject every step;
+``--strength`` and ``--derived-hook`` add derived quantities. Each fit ends
+with ``save_fit(..., close_session=True)``, so one engine is in memory at a
+time; refused variants are skipped with the reason, and ``--dry-run`` lists
+the grid without numpy or the engine. The theory, every option and the
+caveats are in :doc:`../theory/thm_implementation`, "Model averaging".
 
 Examples
 --------
