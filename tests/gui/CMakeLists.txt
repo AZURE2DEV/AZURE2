@@ -333,3 +333,36 @@ add_test(NAME pair_identity COMMAND pair_identity_test)
 set_tests_properties(pair_identity PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     TIMEOUT 300)
+
+# The MCMC tab's parameter list: each varying parameter's kind and automatic
+# prior from its name, as the sampler takes them (the sqrt(E) shift
+# coefficient has its own prior, not the energy shift's).
+if(USE_MCMC)
+    add_executable(mcmc_priors_test mcmc_priors_test.cpp)
+    set_target_properties(mcmc_priors_test PROPERTIES AUTOMOC OFF)
+    target_include_directories(mcmc_priors_test PRIVATE
+        ${AZURE2_SOURCE_DIR}/gui/include
+        ${AZURE2_SOURCE_DIR}/include
+    )
+    target_compile_definitions(mcmc_priors_test PRIVATE
+        AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        AZURE2_BINARY="$<TARGET_FILE:AZURE2>")
+    target_link_libraries(mcmc_priors_test PRIVATE
+        ${AZURESETUP_LIBRARIES}
+        ${AZUREAPI_LIBRARIES}
+        AZURE2Core
+        Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+    )
+    if(USE_QWT)
+        target_link_libraries(mcmc_priors_test PRIVATE ${QWT_LIBRARIES})
+    endif()
+    if(USE_ERYA)
+        target_link_libraries(mcmc_priors_test PRIVATE pugixml srim_utilities)
+    endif()
+    add_dependencies(mcmc_priors_test AZURE2)
+    add_test(NAME mcmc_priors COMMAND mcmc_priors_test)
+    # A modal dialog on a failed open would wait forever offscreen; fail instead.
+    set_tests_properties(mcmc_priors PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        TIMEOUT 300)
+endif()

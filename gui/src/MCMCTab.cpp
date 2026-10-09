@@ -206,10 +206,29 @@ MCMCTab::MCMCTab(QWidget *parent) :
 }
 
 bool MCMCTab::isAutoPriorCategory(const QString &category) {
-  // Normalizations and energy shifts carry an experimental error in the
-  // segment definition, so AZURECalcMCMC::BuildAutoPriors() derives their
-  // priors from the data and overrides whatever this table holds.
-  return category == "norm" || category == "shift";
+  // Normalizations, energy shifts and sqrt(E) shift coefficients carry an
+  // experimental error in the segment definition, so
+  // AZURECalcMCMC::BuildAutoPriors() derives their priors from the data and
+  // overrides whatever this table holds.
+  return category == "norm" || category == "shift" || category == "shift_sqrt";
+}
+
+QString MCMCTab::categoryOfName(const QString &name, bool isRWA, int *segmentKey) {
+  // By the form of the name, as AZURECalcMCMC::BuildAutoPriors() classifies
+  // (a THM coherent background's name carries its experiment's, which may
+  // hold "norm" or "shift").
+  auto segment = [&](const QString &tail) {
+    if (!name.startsWith("segment_") || !name.endsWith(tail)) return false;
+    bool numeric = false;
+    const int key = name.mid(8, name.size() - 8 - tail.size()).toInt(&numeric);
+    if (numeric && segmentKey) *segmentKey = key;
+    return numeric;
+  };
+  if (segment("_norm")) return "norm";
+  if (segment("_energy_shift_sqrt")) return "shift_sqrt";
+  if (segment("_energy_shift")) return "shift";
+  if (name.startsWith("cbkg_")) return "cbkg";
+  return isRWA ? "level_rwa" : "level";
 }
 
 QString MCMCTab::categoryFromStoredName(const QString &name) {
@@ -217,6 +236,9 @@ QString MCMCTab::categoryFromStoredName(const QString &name) {
   // ("normalization of segment 3 (data/x.dat)"). Older files carry the
   // previous forms, "Segment N Normalization" or "Parameter
   // (segment_N_norm)"; all of them are recognised here.
+  if (name.startsWith("THM coherent background")) return "cbkg";
+  if (name.contains("sqrt(E) energy-shift", Qt::CaseInsensitive) || name.contains("_energy_shift_sqrt"))
+    return "shift_sqrt";
   if (name.contains("norm", Qt::CaseInsensitive)) return "norm";
   if (name.contains("shift", Qt::CaseInsensitive)) return "shift";
   return "loaded";
@@ -606,6 +628,7 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
     // Collected before `data` is released.
     QMap<int, QPair<double, double>> autoNormPrior;  // key -> (mean, sigma)
     QMap<int, QPair<double, double>> autoShiftPrior;
+    QMap<int, QPair<double, double>> autoShiftSqrtPrior;
 
     // Physical descriptions of every parameter, gathered here because the
     // compound nucleus and data are released a few lines below.
@@ -625,6 +648,8 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
         autoShiftPrior[key] = qMakePair(
             segments[s].GetNominalEnergyShift(),
             segments[s].GetEnergyShiftError());
+        autoShiftSqrtPrior[key] = qMakePair(segments[s].GetNominalEnergyShiftSqrt(),
+                                            segments[s].GetEnergyShiftSqrtError());
       }
     }
 
@@ -655,33 +680,17 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
         param.useGaussianPrior = false;
         param.autoPrior = false;
 
-        // Determine category based on parameter name (a THM coherent
-        // background's names carry its experiment's, which may hold "norm").
-        if (paramName.startsWith("cbkg_")) {
-          param.category = "cbkg";
-        } else if (paramName.contains("norm", Qt::CaseInsensitive)) {
-          param.category = "norm";
-        } else if (paramName.contains("shift", Qt::CaseInsensitive)) {
-          param.category = "shift";
-        } else {
-          if (isRWA) {
-            param.category = "level_rwa";
-          } else {
-            param.category = "level";
-          }
-        }
-
-        // Parameter names are "segment_<key>_norm" and
-        // "segment_<key>_energy_shift" (see EData::FillMnParams).
+        // The kind from the name's form, as the engine classifies: names
+        // are "segment_<key>_norm", "segment_<key>_energy_shift" and
+        // "segment_<key>_energy_shift_sqrt" (EData::FillMnParams).
+        int segmentKey = 0;
+        param.category = categoryOfName(paramName, isRWA, &segmentKey);
         if (isAutoPriorCategory(param.category)) {
-          const QStringList tokens = paramName.split('_');
-          bool haveKey = false;
-          int segmentKey = tokens.size() > 1 ? tokens[1].toInt(&haveKey) : 0;
+          const QMap<int, QPair<double, double>> &source = param.category == "norm"    ? autoNormPrior
+                                                           : param.category == "shift" ? autoShiftPrior
+                                                                                       : autoShiftSqrtPrior;
 
-          const QMap<int, QPair<double, double>> &source =
-              (param.category == "norm") ? autoNormPrior : autoShiftPrior;
-
-          if (haveKey && source.contains(segmentKey)) {
+          if (source.contains(segmentKey)) {
             param.priorMean = source[segmentKey].first;
             param.priorStd = source[segmentKey].second;
             // A segment with no quoted error gets no prior rather

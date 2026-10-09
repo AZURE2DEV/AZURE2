@@ -55,7 +55,7 @@ struct MCMCParameter {
   double priorMean = 0.0;
   double priorStd = 0.0;
   bool useGaussianPrior = false;
-  QString category;  // "level", "level_rwa", "norm", "shift"
+  QString category;  // "level", "level_rwa", "norm", "shift", "shift_sqrt", "cbkg"
   int minuitIndex = -1;
 
   // Normalizations and energy shifts carry a prior derived from the error
@@ -127,8 +127,14 @@ class MCMCTab : public QWidget {
   void setupParameterTable();
   void refreshParameterTable();                                // Rebuild the table rows from mcmcParameters
   int paramIndexForRow(int row) const;                         // Table row -> index into mcmcParameters
-  static bool isAutoPriorCategory(const QString &category);    // norm / shift
+  static bool isAutoPriorCategory(const QString &category);    // norm / shift / shift_sqrt
   static QString categoryFromStoredName(const QString &name);  // for .azr reload
+ public:
+  /// The category of a fit-parameter name, by its form as the engine's
+  /// BuildAutoPriors classifies it; *segmentKey: the k of segment_<k>_...
+  static QString categoryOfName(const QString &name, bool isRWA, int *segmentKey = nullptr);
+
+ private:
   void setupSamplingControls(QWidget *samplingWidget);
   void setupProgressControls();
   void updateParameterFromTable(int row);

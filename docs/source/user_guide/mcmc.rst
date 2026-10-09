@@ -85,7 +85,8 @@ Parameters**.
 
    The sampler tells the kinds apart by the engine's parameter names
    (``energy_*``, ``width_*``, ``segment_N_norm``, ``segment_N_energy_shift``,
-   ``segment_N_energy_shift_sqrt``, ``cbkg_*``). If a name is not recognised
+   ``segment_N_energy_shift_sqrt``, ``cbkg_*``), and so does the tab when it
+   loads the parameters. If a name is not recognised
    the run log says so and no automatic prior is set, rather than one being
    put on the wrong parameter.
 
