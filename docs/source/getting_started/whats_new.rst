@@ -78,7 +78,9 @@ rows by name.
 prompt that needs an answer stops the run (exit 1) instead of looping; MCMC
 classifies the parameters by name; an MCMC start under Park with no valid
 walker is refused, and a failed MCMC run exits non-zero; the Park
-:math:`J > 0` penalty is part of every minimizer's cost.
+:math:`J > 0` penalty is part of every minimizer's cost; ``param.fit``
+carries the ``#parametrization`` line, so a fit under ``--use-park`` resumes
+from it.
 
 *Behaviour*: the CLI exits non-zero when a run fails; a malformed
 ``<potential>`` block is refused; the console total is printed to twelve

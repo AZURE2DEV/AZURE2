@@ -36,9 +36,10 @@ param.fit
 ^^^^^^^^^
 
 The parameters at the point being evaluated, written during a fit every 100
-evaluations, in the format of ``param.sav`` but without the
-``#parametrization`` line: the state of an interrupted fit. A run that reads a
-file without that line under ``--use-park`` takes its amplitudes as Brune's.
+evaluations, in the format of ``param.sav`` (``#parametrization`` line
+included): the state of an interrupted fit, which can be read back as a
+parameter file in either mode. Files written before October 2026 lack the
+line, and a run under ``--use-park`` takes their amplitudes as Brune's.
 
 parameters.out
 ^^^^^^^^^^^^^^

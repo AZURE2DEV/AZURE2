@@ -1370,6 +1370,12 @@ void AZURECalc::WriteParameters(AZUREParams &params, const Config &configure) co
   out.open(filename);
   if (out) {
     out.precision(7);
+    // The basis line of param.par / param.sav (AZUREParams::WriteUserParameters):
+    // without it a --use-park run that reads this file back takes its Park
+    // amplitudes for Brune's and converts them.
+    out << std::setw(20) << "#parametrization"
+        << std::scientific << std::setw(20) << (double)AZUREParams::BasisForConfig(configure)
+        << std::scientific << std::setw(20) << 0.0 << std::endl;
     for (int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
       out << std::setw(20) << params.GetMinuitParams().GetName(i)
           << std::scientific << std::setw(20) << params.GetMinuitParams().Value(i)

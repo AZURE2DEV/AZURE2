@@ -161,8 +161,8 @@ parameter space the minimizer works in:
   :math:`\theta^2`.
 
 Input and output files are the same in both modes: energies, partial widths and
-ANCs in ``<levels>`` and ``parameters.out``.  ``param.par`` / ``param.sav`` hold
-the mode's own amplitudes; their first line, ``#parametrization`` (0 standard,
+ANCs in ``<levels>`` and ``parameters.out``.  ``param.par`` / ``param.sav`` /
+``param.fit`` hold the mode's own amplitudes; their first line, ``#parametrization`` (0 standard,
 1 Brune, 2 Park), says which (a comment line, so ``numpy.loadtxt`` and other
 positional readers are unaffected), and a file written in the other alternative mode
 is converted on read (``gamma_Park = gamma_Brune sqrt(J)``), with a message.  A

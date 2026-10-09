@@ -13,7 +13,9 @@
 #
 #   1. mode-1 calculate: same chi2 from the same .azr, different param.par;
 #   2. mode-2 fit (p+p): same minimum and same parameters.out, from
-#      independent MIGRAD runs in each mode's own amplitudes;
+#      independent MIGRAD runs in each mode's own amplitudes; the Park
+#      fit's param.fit (its 100th-evaluation snapshot) read back gives the
+#      snapshot's chi2 in both modes (tagged Park, converted for Brune);
 #   3. parameter files: a Brune-mode param.sav read by a Park-mode run (and
 #      the other way round) is converted on read and reproduces the chi2;
 #   4. a width above the J > 0 bound is reported, and the penalty makes the
@@ -113,6 +115,32 @@ paste <(width_column "$WORK/fit.brune/output/parameters.out") \
   awk 'BEGIN { bad = 0 } { d = $1 - $2; if (d < 0) d = -d; if (d > 1e-3 * ($1 < 0 ? -$1 : $1)) { bad++; print "        width " $1 " vs " $2 } } END { exit bad }'
 [ $? -eq 0 ] && ok "p+p fit: physical widths agree to 1e-3 in both modes" || bad "p+p fit: physical widths differ between the modes"
 grep -q "^ *#parametrization *2\." "$WORK/fit.park/output/param.sav" && ok "p+p fit: param.sav tagged Park" || bad "p+p fit: param.sav not tagged"
+
+# ---- 2b. param.fit, the snapshot of a running fit, resumes it ---------------
+# Written every 100 evaluations at the point evaluated; the log prints that
+# point's chi2 ("Iteration: N00 Chi-Squared: X").  Without the tag a Park run
+# took the file's Park amplitudes for Brune's and converted them: another model.
+pfit="$WORK/fit.park/output/param.fit"
+snap="$(tr '\r' '\n' < "$WORK/fit.park/run.log" | awk '/Iteration: *[0-9]*00 Chi-Squared:/ { x = $NF } END { print x }')"
+if [ ! -f "$pfit" ] || [ -z "$snap" ]; then
+  bad "p+p fit: no param.fit or no 100th-evaluation chi2 in the log"
+else
+  grep -q "^ *#parametrization *2\." "$pfit" && ok "p+p fit: param.fit tagged Park" || bad "p+p fit: param.fit not tagged"
+  for mode in park brune; do
+    stage identical_pp_res "resume.$mode"
+    cp "$pfit" "$WORK/resume.$mode/snapshot.fit"
+  done
+  rp="$(run resume.park identical_pp_res calc snapshot.fit --use-park)"
+  rb="$(run resume.brune identical_pp_res calc snapshot.fit)"
+  if grep -q "Converted the parameter file" "$WORK/resume.park/run.log"; then
+    bad "p+p fit: param.fit converted when read back under --use-park"
+  else ok "p+p fit: param.fit read back under --use-park as Park amplitudes"; fi
+  grep -q "Converted the parameter file from Park (observed) to Brune" "$WORK/resume.brune/run.log" && \
+    ok "p+p fit: param.fit converted to Brune on read" || bad "p+p fit: param.fit not converted (Park -> Brune)"
+  if close "$snap" "$rp" "$TOL" && close "$snap" "$rb" "$TOL"; then
+    ok "p+p fit: param.fit gives the snapshot's chi2 $snap (Park $rp, Brune $rb)"
+  else bad "p+p fit: param.fit gives $rp (Park) and $rb (Brune), the snapshot $snap"; fi
+fi
 
 # ---- 4. the J > 0 wall ------------------------------------------------------
 # Multiply the p+p 0+ level's width by 170 (300 keV -> 51 MeV, past the bound
