@@ -100,7 +100,13 @@ check() {
   local ranges nr
   ranges="$(energy_ranges "$1")"
   nr="$(printf '%s\n' "$ranges" | awk 'NF { n++ } END { print n + 0 }')"
-  if [ "$nr" != "$2" ]; then bad "$1: $nr level-energy columns in samples.mcmc, expected $2"; return; fi
+  if [ "$nr" != "$2" ]; then
+    bad "$1: $nr level-energy columns in samples.mcmc, expected $2"
+    # What the parser saw (sed l shows \r and other invisible characters).
+    awk '/Free Parameters for MCMC/ { t = 14 } t > 0 { print; t-- }' "$d/log" | sed -n 'l' | sed 's/^/        log: /'
+    head -2 "$d/output/samples.mcmc" 2>&1 | cut -c1-200 | sed 's/^/        samples: /'
+    return
+  fi
   if printf '%s\n' "$ranges" | awk '{ if (!($1 > 0 && $1 < 0.01)) bad = 1 } END { exit bad }'; then
     ok "$1: walkers start within $(printf '%s\n' "$ranges" | sort -g | tail -1 | awk '{ printf "%.2g", $1 * 1000 }') keV of each level"
   else bad "$1: level-energy ranges over the first step (MeV): $(echo $ranges)"; fi
