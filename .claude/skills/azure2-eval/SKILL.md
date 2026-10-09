@@ -2077,6 +2077,18 @@ complete:
   time UDR vs numpy fold on the Cierjacks segment, 7.6e-4 worst rel. diff) and
   `11B+a/10-8-26_udr_ntof` (analytic sigma(E) vs UDR on segment 103).
 
+- 2026-10-08 -- CHANNEL-THRESHOLD BLOW-UP CAUGHT BY SUB-POINT GRIDS. AZURE2's bare cross section
+  is not merely bumpy at a channel threshold: on a 10 eV grid across the 11B+alpha threshold in the
+  11B+a model (E_cm = 0.1579 MeV, 0.1698 MeV lab for 14N+n) it reaches 1.7e37 b within ~20 eV of
+  the threshold (`11B+a/10-8-26_udr_ntof/diag_spike/`). Any target effect that integrates over
+  sub-points (Gaussian, target integration, beam profile, UDR) catches it whenever the adaptive grid
+  drops a sub-point there: isolated folded values of 1e24-1e37 b, at grid energies that MOVE when
+  the sub-point count changes (150 vs 151 gave different bad energies), while the same curve on the
+  data points can be clean by luck. Symptom in a mode-3 curve: one-point spikes far from any
+  resonance, up to a kernel's width away from the threshold. Workaround: drop them (running-median
+  outlier test, `plot_initial.py` there) or move the grid; the fix belongs in the threshold
+  handling of the bare calculation (penetrability/shift at E_cm -> 0), not in the effects.
+
 - **A regression reference is not a correctness check.** `tests/run_tests.sh` pins each
   project's chi-squared against a number this code produced, so it catches a change and
   nothing else. `tests/reference/` is the other kind: it recomputes the same quantity from
