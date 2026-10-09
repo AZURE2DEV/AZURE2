@@ -42,6 +42,13 @@ A prompt whose blank answer is its default (the parameter and integral file
 names, the uncertainty-band questions, the MCMC spreads, overwriting
 ``samples.mcmc``) takes that default at end of input.
 
+Exit status: 0 for a run that completed; 1 when the input ended at a prompt
+that needs an answer; non-zero (-1, i.e. 255 on POSIX systems) when a run
+fails -- a project AZURE2 refuses (``ERROR: ...``, e.g. a malformed ``<thm>``
+block), a failed fill, initialization or parameter transformation, and an
+MCMC run that is refused or fails. Scripts can therefore test the status
+instead of parsing the log.
+
 Available Options
 -----------------
 
@@ -81,6 +88,27 @@ Available Options
    * - ``--no-transform``
      - Do not perform parameter transformations; input formal R-matrix
        parameters directly (equivalent to the GUI option).
+   * - ``--no-long-wavelength``
+     - Do not use the long-wavelength approximation for electric capture.
+   * - ``--use-gradient``
+     - Fit with MIGRAD and the analytic gradient (default: MIGRAD with
+       numerical derivatives).
+   * - ``--use-lm``
+     - Fit with the Levenberg-Marquardt minimizer on the analytic Jacobian
+       (falls back to MIGRAD).
+   * - ``--use-gsl-lm``
+     - Fit with GSL's trust-region least squares with geodesic acceleration
+       (analytic Jacobian; falls back to MIGRAD).
+   * - ``--covariance-band``
+     - Compute the cross-section uncertainty band without asking (a fit saves
+       its covariance to ``covariance.dat``; a calculation without data
+       reuses it).
+   * - ``--scale-covariance``
+     - Scale the band's covariance to a reduced chi-squared of 1.
+
+Flags can also be put in a file, one per line, named by the environment
+variable ``AZURE_OPTIONS_FILE``; they are applied after those of the command
+line. An unknown flag draws a ``WARNING`` and is ignored.
 
 Multiple options can be combined:
 

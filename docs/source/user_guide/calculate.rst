@@ -89,7 +89,7 @@ Additional fields appear for this mode:
    - **Grid** -- specify minimum, maximum, and step temperatures (in GK).
    - **File** -- provide a file listing specific temperatures (single column, in GK).
 
-Results are written to ``reactionrates.dat``.
+Results are written to ``reactionrates.out``.
 
 .. warning::
 

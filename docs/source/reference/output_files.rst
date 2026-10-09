@@ -22,6 +22,24 @@ Contains the best-fit formal R-matrix parameters after a fit is completed. This
 file can be loaded back into AZURE2 to reproduce a fit or to use as starting
 parameters for subsequent calculations (extrapolation, reaction rate, etc.).
 
+``param.par`` and ``param.sav`` hold one row per parameter, ``name value
+error``, after a first line ``#parametrization`` with the basis 0, 1 or 2
+(standard, Brune, Park; :doc:`command_line`, "Brune and Park
+parametrizations"), a comment line to positional readers such as
+``numpy.loadtxt``. The rows are
+matched **by name** when a file is read, by AZURE2 and by ``pyazr``: a name
+the file lacks keeps its value from the project, and rows are appended as
+parameters are added (``segment_N_energy_shift_sqrt``, the THM ``cbkg_*``),
+so read them by name in your own scripts too.
+
+param.fit
+^^^^^^^^^
+
+The parameters at the point being evaluated, written during a fit every 100
+evaluations, in the format of ``param.sav`` but without the
+``#parametrization`` line: the state of an interrupted fit. A run that reads a
+file without that line under ``--use-park`` takes its amplitudes as Brune's.
+
 parameters.out
 ^^^^^^^^^^^^^^
 
@@ -35,14 +53,27 @@ normalizations.out
 Contains the fitted normalization factors for data segments where normalization
 was varied. This file is automatically loaded when ``param.sav`` is selected.
 
+shifts.out
+^^^^^^^^^^
+
+Written when a segment's energy shift or :math:`\sqrt{E}` shift coefficient
+is varied: one row per such segment with its key, data file, angle and energy
+bounds, norm, ``shift`` (MeV) and ``sqrt_shift`` (MeV\ :sup:`1/2`).
+
 thm_experiments.out
 ^^^^^^^^^^^^^^^^^^^
 
-Written when the ``<thm>`` block defines THM experiments (``experiment[<name>]``
-lines): per experiment its segments, background, number of points,
-chi-squared, the shared profiled norm and the background coefficients with
-their uncertainties and covariance. See :doc:`../theory/thm_implementation`,
-"THM experiments".
+Written by a calculation with data when the ``<thm>`` block defines THM
+experiments (``experiment[<name>]`` lines): per experiment its segments,
+background, number of points, chi-squared, status, the shared profiled norm
+and the background coefficients with their uncertainties and covariance, and,
+where the experiment has them, the coherent-background values (``cbkg``
+rows), the line-shape :math:`\zeta` and :math:`E_{sF}`, the spectator window
+(``ps_node``, ``<T_s>`` and ``ps_table`` rows), the distortion factor
+(``distortion:`` and ``distortion_point`` rows) and the DW vertex
+(``vertex:`` and ``dw_vertex_point`` rows). See
+:doc:`../theory/thm_implementation`, "THM experiments" and the sections of
+each option.
 
 Cross Section Output
 --------------------
@@ -125,7 +156,10 @@ One line per data segment, then a total::
 
 ``Chi-Squared`` and ``Total-Chi-Squared`` are the **data** term only;
 ``Norm-Chi-Squared`` is the separate penalty on a varied normalization, and
-``N`` counts data points (not degrees of freedom). The quantity a fit actually
+``N`` counts data points (not degrees of freedom). The ``Norm`` of a THM
+segment is its profiled scale (shared by the segments of a THM experiment).
+Under ``--use-park`` the total line ends with ``Total-Park-Chi-Squared``, the
+:math:`J > 0` penalty. The quantity a fit actually
 minimises is the sum of both — see :doc:`../user_guide/chi_squared`.
 
 This file is the quickest scalar check that a run succeeded.
@@ -141,6 +175,15 @@ covariance_matrix.out
 
 Contains the covariance and correlation matrices from a MINOS calculation,
 providing a complete description of parameter correlations.
+
+covariance.dat
+^^^^^^^^^^^^^^
+
+The parameter covariance a fit saves for the cross-section uncertainty band
+(``--covariance-band``, or the band question of the CLI): the free level
+energies, reduced widths and THM ``cbkg`` values, one row per free parameter.
+A later calculation without data reads it for the band of an extrapolation;
+``pyazr.bands.load_covariance`` reads it too.
 
 Other Files
 -----------
@@ -179,7 +222,7 @@ intEC.extrap
 Same as ``intEC.dat``, but for the calculation (extrapolation) segments; its
 signature is ``intEC.extrap.sig``.
 
-reactionrates.dat
+reactionrates.out
 ^^^^^^^^^^^^^^^^^
 
 Contains temperatures (in GK) and calculated reaction rates
