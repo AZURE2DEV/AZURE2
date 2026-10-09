@@ -172,6 +172,31 @@ Still open:
 - 12fe484: the narrower GSL U trust region could move S slightly for light
   pairs at large eta that no test covers.
 
+## Bugs from origin/dev fixed on thm (October 2026)
+
+Found after the merge of 6f3228e; each came with dev's code, so `dev` has it
+too and can take the commit (cherry-pick, or the same change by hand where
+the THM lines differ).  Verified against c4890ab: the 133 output files of
+every tests/ and examples/ project byte for byte (run logs differ in timings
+and progress bars only); c4890ab's 29 check.sh scripts give the same 2409
+files, apart from temporary names and the MCMC runs of tests/thm_park, which
+are the cases fixed: its 18O THM project (two profiled norms) printed
+"parameter classification produced 12 entries but there are 10 parameters"
+and now gets the 0.5 keV energy spread (other samples), and its J < 0 start
+is now refused (the check expects that since baa6642).
+
+| commit | bug (on dev too) | fix | test |
+|---|---|---|---|
+| 53154cb | Every CLI prompt loop (menu, MINOS variance, reaction-rate pairs and temperatures, MCMC walkers, steps, threads, RWA) printed its prompt forever at end of input: one MCMC run wrote 10 GB | `src/AZURE2.cpp`: `readAnswer` stops with "ERROR: the input ended (end of file) at the prompt ..." and exit 1; prompts whose blank answer is a default take it, as before; the temperature-file prompt stops too (it returned with no file) | tests/cli_eof (c4890ab: 26 failures) |
+| fcf3a24 | MCMC `BuildAutoPriors` re-walked the levels and segments: a free THM norm (profiled, not a parameter) got an entry, a coherent background none, so the lengths differed ("12 entries but there are 10 parameters"), and the automatic priors and the level-energy spread were dropped (walkers 1 MeV apart).  **On dev** the walk is the same but cannot mismatch (no THM); the sqrt(E) block is classified correctly in both.  `AZURELabel::Parameter` had the same walk | kinds from the parameter names; `PARAM_SHIFT_SQRT` = 4, `PARAM_CBKG` = 5 (GetParameterInfo's codes); cbkg: no automatic prior, a user prior kept; labels skip profiled norms and name cbkg | tests/mcmc_classification (c4890ab fails the two THM runs) |
+| eb7deb6 | MCMC under `--use-park` from a point with J <= 0: no word, acceptance 0, the chain is the start | the start ensemble is evaluated first; levels with J <= 0 at the start are named with their J; with no walker of finite posterior the run is refused ("MCMC not started", no samples.mcmc).  `RunMCMCSampling` returns bool; an MCMC failure exits the CLI non-zero (it exited 0); the GUI gets the report through `SetGUIMessageCallback` | tests/mcmc_park_start (c4890ab: 11 failures) |
+| dcb8064 | `AZURECalc::Chi2Value` lacked the Park J > 0 penalty that `operator()` adds: the finite-difference fallback of `Gradient()` (all of it when the adjoint bails) differentiated another function beyond the wall, and LM / GSL-LM took the penalty-free value as their cost | penalty added (not to the THM-only part, which adds to an analytic gradient that has it).  Dev's `Chi2Value` has no `thmOnly`: add it unconditionally under Park | tests/reference/park_chi2_fallback (ctest; c4890ab: 4 failures) |
+| 90cfb62 | pyazr_sqrt_shift, pyazr_park_gradient, pyazr_sav_readers were registered after the SKIP_RETURN_CODE 77 block and exited 0 (or crashed) without numpy or the engine.  **On dev** there is no 77 convention at all (the block is thm's) | block moved to the end of tests/pyazr/CMakeLists.txt; the three exit 77 | numpy / `_azure2` hidden: 77 in all six cases |
+
+Results that move: none for a converging run.  Behaviour: a CLI fed short
+input now exits 1 instead of looping; a refused or failed MCMC run exits
+non-zero; under Park, LM's cost includes the J penalty (zero where J > 0).
+
 ## Merging thm into dev later
 
 1. `git fetch`; merge the newest origin/dev into thm first (as 3628a87 did),
