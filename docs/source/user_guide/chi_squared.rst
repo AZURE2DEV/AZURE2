@@ -46,8 +46,10 @@ its normalization is genuinely unconstrained.
 
 .. _nominal-norm:
 
-**The nominal normalization: the Data Norm. column, or an explicit prior
-centre.** A segment line has one normalization field, and AZURE2 reads it as
+The nominal normalization: the column, or an explicit prior centre
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A segment line has one normalization field, and AZURE2 reads it as
 the *start value* of the fit (or the value a calculation uses) and, in a
 classic file, also as the *centre* :math:`n_s^{\text{nom}}` of the penalty
 above (which also scales its width, :math:`n_s^{\text{nom}}\epsilon_s/100`).
