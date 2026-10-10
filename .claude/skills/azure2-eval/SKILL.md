@@ -2179,3 +2179,13 @@ complete:
   single-threaded Chi2Value, ~10x slower than a fit evaluation), `AZURE_GRAD_DEBUG=1` (names the
   segment/reason when the adjoint bails and everything falls back to finite differences),
   `AZURE_GRAD_ADJOINT=1` (force the adjoint gradient instead of the Jacobian path).
+  Follow-up the same day (commit "perf(fit): parallel chi2 ..."): a SINGLE chi2 evaluation was serial
+  everywhere (operator(), Chi2Value); numerical MIGRAD only used all cores because Minuit evaluates
+  parameters in parallel, so with --use-gradient every line-search evaluation ran on ONE core. Now
+  all points are computed in one OpenMP pass (skipped inside an existing parallel region, or with
+  AZURE_SERIAL_CHI2=1), and Chi2Value/Gradient/ResidualJacobian reuse the pooled working copies (a
+  fresh Clone() re-applied every energy shift and rebuilt the energy mapping on every call, ~1 s).
+  12C+a local fit: one chi2 3.6 s -> 0.35 s, gradient+G2 step 2.6 s -> 1.3 s, whole fit 3-4x faster
+  with identical results. AZURE_POOL_CHECK=1 compares pooled+parallel against fresh+serial chi2.
+  It exposed a latent race: CNuc::CalcCaptureAnalyzingPower set its "built" flag before filling
+  the tables (capture A_y chi2 varied run to run with >1 thread); now built under a mutex.

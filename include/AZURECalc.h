@@ -79,6 +79,16 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   /// True when the limits manager declares at least one nuisance parameter.
   bool HasNuisanceParameters() const;
   /*!
+   * Calculate every non-mapped point of every segment and component segment in
+   * one OpenMP pass (a point's Calculate also fills its mapped copies), so the
+   * per-segment loops only combine.  Returns false -- and does nothing -- when
+   * already inside a parallel region (Minuit's parallel numerical gradient) or
+   * when AZURE_SERIAL_CHI2 is set; callers then use the per-point path.
+   */
+  bool PrecalculatePoints(CNuc *lc, EData *ld) const;
+  /// chi^2 of `p` evaluated on the given working copies (optionally per segment).
+  double Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<double> *segChis = nullptr) const;
+  /*!
    * Side-effect-free chi-squared evaluation (no iteration counter / file output
    * / object pools), used by the finite-difference part of Gradient().
    */

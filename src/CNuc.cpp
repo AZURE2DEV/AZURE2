@@ -6,6 +6,7 @@
 #include <tuple>
 #include "AngCoeff.h"
 #include "CNuc.h"
+#include <mutex>
 #include "ParameterLabel.h"
 #include "Config.h"
 #include "CoulFunc.h"
@@ -1454,9 +1455,19 @@ struct AyPathway {
  */
 
 void CNuc::CalcCaptureAnalyzingPower(int aa, int decayNum, int maxL) {
+  // Built lazily from the first capture A_y point that needs it, which may be
+  // computed on any OpenMP thread.  Setting the flag before the tables were
+  // filled let a second thread read half-built tables (13N_capture_ay chi2
+  // varied from run to run once all points were computed in one parallel
+  // pass), so the build is serialized and the flag is set only when it is done.
   Decay *theDecay = this->GetPair(aa)->GetDecay(decayNum);
+  static std::mutex captureAyMutex;
+  std::lock_guard<std::mutex> lock(captureAyMutex);
   if (theDecay->IsCaptureAyBuilt()) return;
-  theDecay->SetCaptureAyBuilt();
+  struct MarkBuilt {
+    Decay *d;
+    ~MarkBuilt() { d->SetCaptureAyBuilt(); }
+  } markBuilt{theDecay};  // on every return path below, after the tables are complete
 
   PPair *entrancePair = this->GetPair(aa);
   PPair *exitPair = this->GetPair(theDecay->GetPairNum());

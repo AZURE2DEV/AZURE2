@@ -187,7 +187,13 @@ class ESegment {
 
   // Calculate theoretical cross section including components
   /// Theoretical value at a point, combining the components if this is a composite segment.
-  double CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, const Config &configure, EData *edata);
+  /*!
+   * `precalculated`: every non-mapped point of this segment and of its components
+   * has already been Calculate()d for the current parameters (AZURECalc does
+   * that in one parallel pass), so only the combination is done here.
+   */
+  double CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, const Config &configure, EData *edata,
+                                          bool precalculated = false);
 
  private:
   bool isdifferential_;
