@@ -2589,11 +2589,11 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
   bool anyEnergyShifted = false;
 
   if (data) {
-    // Re-energising a segment (UpdatePointEnergiesWithShift: Coulomb functions
-    // of every point and sub-point) only touches that segment's own points, so
-    // the shift values are set here in the original order and the segments
-    // that moved are re-energised afterwards in parallel, each once, in its
-    // final state.  A line search moves every shift at once; serially that cost
+    // Re-energising a point (ESegment::UpdatePointEnergyWithShift: Coulomb
+    // functions of the point and its sub-points) touches only that point, so
+    // the shift values are set here in the original order and the points of
+    // the segments that moved are re-energised afterwards in parallel, each
+    // segment once, in its final state.  A line search moves every shift at once; serially that cost
     // ~195 s per evaluation on the 11B+a mixed grid against 0.5 s for the
     // points.  Inside an enclosing parallel region (Minuit's numerical
     // gradient) the loop stays serial, as before.
@@ -2674,22 +2674,23 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
     }
 
     if (!toUpdate.empty()) {
-      std::vector<std::pair<double, ESegment *>> work;
-      for (ESegment *s : toUpdate) {
-        double cost = 0.0;
-        for (int i = 1; i <= s->NumPoints(); i++)
-          if (EPoint *pt = s->GetPoint(i)) cost += 1.0 + pt->NumSubPoints();
-        work.push_back({cost, s});
-      }
-      std::stable_sort(work.begin(), work.end(),
-                       [](const std::pair<double, ESegment *> &x, const std::pair<double, ESegment *> &y) { return x.first > y.first; });
+      // One work item per point (with its sub-points), largest first, so a
+      // segment with thousands of sub-points per point does not serialize.
+      struct Item { double cost; ESegment *seg; int i; };
+      std::vector<Item> work;
+      for (ESegment *s : toUpdate)
+        for (int i = 0; i < s->NumPoints(); i++) {
+          EPoint *pt = s->GetPoint(i + 1);
+          work.push_back({1.0 + (pt ? pt->NumSubPoints() : 0), s, i});
+        }
+      std::stable_sort(work.begin(), work.end(), [](const Item &x, const Item &y) { return x.cost > y.cost; });
 #ifdef _OPENMP
       const bool serial = omp_in_parallel();
 #else
       const bool serial = true;
 #endif
 #pragma omp parallel for schedule(dynamic, 1) if (!serial)
-      for (int q = 0; q < (int)work.size(); q++) work[q].second->UpdatePointEnergiesWithShift(theCNuc, configure);
+      for (int q = 0; q < (int)work.size(); q++) work[q].seg->UpdatePointEnergyWithShift(work[q].i, theCNuc, configure);
     }
 
     // Critical fix: Rebuild energy-based mapping system after energy shifts

@@ -147,6 +147,8 @@ class ESegment {
   void SetLastEnergyShiftSqrt(double);
   /// Re-apply the current energy shift to every point, undoing the previous one.
   void UpdatePointEnergiesWithShift(CNuc *theCNuc = NULL, const Config *configure = NULL);
+  /// The same for one point (0-based index) and its sub-points.
+  void UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *configure);
   /// Change the exit pair key.
   void SetExitKey(int);
   /// Change the entrance pair key, for this segment and every point in it.

@@ -949,9 +949,7 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
         if (present[pid]) out.push_back(byPoint[pid]);
     };
 
-    // Segment-local shift columns.  Distinct segments touch disjoint points,
-    // so the segments are processed in parallel (largest first); the shifts of
-    // one segment (constant and sqrt term) run in sequence inside one task.
+    // Segment-local shift columns.
     struct LocalShift { int f, packed; bool isSqrt; };
     std::vector<std::pair<int, std::vector<LocalShift>>> localBySeg;  // (segment, shifts)
     std::vector<int> fullShifts;
@@ -973,21 +971,19 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
         fullShifts.push_back(f);
       }
     }
-    std::vector<double> segCost(localBySeg.size(), 0.0);
-    for (size_t t = 0; t < localBySeg.size(); t++) {
-      ESegment *seg = ld->GetSegment(localBySeg[t].first);
-      for (int pid = 0; pid < seg->NumPoints(); pid++)
-        if (EPoint *pt = seg->GetPoint(pid + 1)) segCost[t] += 1.0 + pt->NumSubPoints();
-    }
-    std::vector<size_t> order(localBySeg.size());
-    for (size_t t = 0; t < order.size(); t++) order[t] = t;
-    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return segCost[a] > segCost[b]; });
+    // Segments in sequence, each one's points in parallel: re-energising a
+    // point (UpdatePointEnergyWithShift) and evaluating it touch only that
+    // point.  (Parallel over segments instead left the largest segment running
+    // alone at the end.)
+    auto updateSegment = [&](ESegment *seg) {
 #pragma omp parallel for schedule(dynamic, 1)
-    for (int q = 0; q < (int)order.size(); q++) {
-      const int sNum = localBySeg[order[q]].first;
+      for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointEnergyWithShift(pid, lc, &configure());
+    };
+    for (size_t t = 0; t < localBySeg.size(); t++) {
+      const int sNum = localBySeg[t].first;
       ESegment *lseg = ld->GetSegment(sNum);
       vector_r rP, rM;
-      for (const LocalShift &ls : localBySeg[order[q]].second) {
+      for (const LocalShift &ls : localBySeg[t].second) {
         const double x0 = full[ls.f];
         const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
         auto setShift = [&](double v) {
@@ -995,13 +991,13 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
         };
         const double d0 = ls.isSqrt ? lseg->GetEnergyShiftSqrt() : lseg->GetEnergyShift();
         setShift(x0 + h);
-        lseg->UpdatePointEnergiesWithShift(lc, &configure());
-        segmentResiduals(lseg, rP, false);
+        updateSegment(lseg);
+        segmentResiduals(lseg, rP, true);
         setShift(x0 - h);
-        lseg->UpdatePointEnergiesWithShift(lc, &configure());
-        segmentResiduals(lseg, rM, false);
+        updateSegment(lseg);
+        segmentResiduals(lseg, rM, true);
         setShift(d0);
-        lseg->UpdatePointEnergiesWithShift(lc, &configure());
+        updateSegment(lseg);
         const size_t r0 = (size_t)rowStart[sNum], nSegRows = (size_t)(rowStart[sNum + 1] - rowStart[sNum]);
         if (rP.size() == nSegRows && rM.size() == nSegRows)
           for (size_t r = 0; r < nSegRows; r++)

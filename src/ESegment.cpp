@@ -701,7 +701,16 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
   // No lock needed since each thread works on independent EData clones
   // after fixing EData::Clone to properly remap component segment pointers
 
-  for (int i = 0; i < NumPoints(); i++) {
+  for (int i = 0; i < NumPoints(); i++) UpdatePointEnergyWithShift(i, theCNuc, configure);
+}
+
+/*!
+ * Applies the segment's energy shift to point i (0-based) and its sub-points
+ * and recalculates their energy-dependent values.  Touches only that point, so
+ * different points may be updated concurrently.
+ */
+void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *configure) {
+  {
     EPoint *point = GetPoint(i + 1);
     if (point && point->GetOriginalEnergy() > 0) {
       double originalEnergy = point->GetOriginalEnergy();
