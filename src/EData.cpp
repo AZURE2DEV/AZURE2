@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <iostream>
 #include <iomanip>
+#include <algorithm>
 #include <set>
 #include <sstream>
 #ifdef _OPENMP
@@ -2588,6 +2589,18 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
   bool anyEnergyShifted = false;
 
   if (data) {
+    // Re-energising a segment (UpdatePointEnergiesWithShift: Coulomb functions
+    // of every point and sub-point) only touches that segment's own points, so
+    // the shift values are set here in the original order and the segments
+    // that moved are re-energised afterwards in parallel, each once, in its
+    // final state.  A line search moves every shift at once; serially that cost
+    // ~195 s per evaluation on the 11B+a mixed grid against 0.5 s for the
+    // points.  Inside an enclosing parallel region (Minuit's numerical
+    // gradient) the loop stays serial, as before.
+    std::vector<ESegment *> toUpdate;
+    auto queueUpdate = [&toUpdate](ESegment *s) {
+      if (std::find(toUpdate.begin(), toUpdate.end(), s) == toUpdate.end()) toUpdate.push_back(s);
+    };
     for (ESegmentIterator segment = data->GetSegments().begin(); segment < data->GetSegments().end(); segment++) {
       k++;
 
@@ -2611,7 +2624,7 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
         segment->SetLastEnergyShift(shiftConst);
         segment->SetEnergyShiftSqrt(shiftSqrt);
         segment->SetLastEnergyShiftSqrt(shiftSqrt);
-        segment->UpdatePointEnergiesWithShift(theCNuc, configure);
+        queueUpdate(&*segment);
         anyEnergyShifted = true;
 
         // Apply the same energy shift to ALL component segments of this master segment
@@ -2620,7 +2633,7 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
             if (componentSegment) {
               componentSegment->SetEnergyShift(segment->GetEnergyShift());
               componentSegment->SetEnergyShiftSqrt(segment->GetEnergyShiftSqrt());
-              componentSegment->UpdatePointEnergiesWithShift(theCNuc, configure);
+              queueUpdate(componentSegment);
             }
           }
         }
@@ -2648,7 +2661,7 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
               componentSegment->SetLastEnergyShift(shiftConst);
               componentSegment->SetEnergyShiftSqrt(shiftSqrt);
               componentSegment->SetLastEnergyShiftSqrt(shiftSqrt);
-              componentSegment->UpdatePointEnergiesWithShift(theCNuc, configure);
+              queueUpdate(componentSegment);
               anyEnergyShifted = true;
             }
           }
@@ -2658,6 +2671,25 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
       // Always increment i and j since both shift parameters are present for ALL segments
       i++;
       j++;
+    }
+
+    if (!toUpdate.empty()) {
+      std::vector<std::pair<double, ESegment *>> work;
+      for (ESegment *s : toUpdate) {
+        double cost = 0.0;
+        for (int i = 1; i <= s->NumPoints(); i++)
+          if (EPoint *pt = s->GetPoint(i)) cost += 1.0 + pt->NumSubPoints();
+        work.push_back({cost, s});
+      }
+      std::stable_sort(work.begin(), work.end(),
+                       [](const std::pair<double, ESegment *> &x, const std::pair<double, ESegment *> &y) { return x.first > y.first; });
+#ifdef _OPENMP
+      const bool serial = omp_in_parallel();
+#else
+      const bool serial = true;
+#endif
+#pragma omp parallel for schedule(dynamic, 1) if (!serial)
+      for (int q = 0; q < (int)work.size(); q++) work[q].second->UpdatePointEnergiesWithShift(theCNuc, configure);
     }
 
     // Critical fix: Rebuild energy-based mapping system after energy shifts
