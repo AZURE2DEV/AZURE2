@@ -131,14 +131,25 @@ double AZURECalc::operator()(const vector_r &p) const {
   }
 
   // Fill Compound Nucleus From Minuit Parameters
+  const auto te0 = std::chrono::steady_clock::now();
   localCompound->FillCompoundFromParams(p);
   localData->FillNormsFromParams(p);
   localData->FillEnergyShiftsFromParams(p, localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  const auto te1 = std::chrono::steady_clock::now();
 
   // Calculate all points in one parallel pass when not already inside a parallel
   // region (MIGRAD with the analytic gradient, line searches, plain calculations).
   const bool pre = PrecalculatePoints(localCompound, localData);
+  if (std::getenv("AZURE_GRAD_TIMING")) {
+    static std::atomic<int> evals{0};
+    const int c = ++evals;
+    if (c <= 20 || c % 50 == 0) {
+      auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
+      std::cerr << "[eval-timing] evaluation " << c << ": parameters + energy shifts " << ms(te0, te1)
+                << " ms, points " << ms(te1, std::chrono::steady_clock::now()) << " ms" << std::endl;
+    }
+  }
 
   // Process segments with components - use new integrated calculation method
   double chiSquared = 0.0;
