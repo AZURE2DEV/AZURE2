@@ -682,8 +682,11 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
 
   // Segment-local energy-shift gradient is exact only when a shift's effect is
   // confined to its own segment's data term.  A dataset that maps points across
-  // segments breaks that confinement, so detect any mapping once and, if
+  // segments breaks that confinement, so detect any such mapping once and, if
   // present, keep every shift on the (correct) full-dataset finite difference.
+  // Mapping within a segment (the only kind EData::MapData makes) keeps it:
+  // host and mapped point move together, and SegmentLocalChi2 walks the
+  // segment in index order, host first.
   // Likewise, nuisance penalties handled by the limits manager can couple a
   // shift to the global chi^2, so disable the local path when one is active.
   bool datasetHasMapping = false;
@@ -692,7 +695,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     if (!seg) continue;
     for (int pid = 0; pid < seg->NumPoints(); pid++) {
       EPoint *pt = seg->GetPoint(pid + 1);
-      if (pt && pt->IsMapped()) {
+      if (pt && pt->IsMapped() && pt->GetMap().segment != s) {
         datasetHasMapping = true;
         break;
       }

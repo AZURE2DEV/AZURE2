@@ -522,6 +522,36 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
   }
 }
 
+// A point mapped onto another point of its segment (EData::MapData) is
+// calculated by that host: the host's EPoint::Calculate fills the mapped
+// point's sub-point cross sections and its integrated value, and
+// ESegment::CalculateTheoreticalCrossSection only reads them back for the
+// mapped point.  The point loops below run in parallel, so a host and its
+// mapped points have to be handled by one thread, host first -- otherwise a
+// mapped point reads values its host is still writing, and the finite
+// differences GradTargetEffectAdjoint takes on its sub-points race with the
+// host overwriting them.  Fills `group` with the 0-based indices to process
+// for loop index pointIdx: empty for a mapped point (its host's iteration
+// handles it).  Returns false if a mapping cannot be resolved inside this
+// segment; the caller then bails, and the gradient falls back to finite
+// differences.
+bool PointGroup(ESegment *segment, int segmentNum, int pointIdx, std::vector<int> &group) {
+  group.clear();
+  EPoint *pt = segment->GetPoint(pointIdx + 1);
+  if (!pt) return true;
+  if (pt->IsMapped()) return pt->GetMap().segment == segmentNum;
+  group.push_back(pointIdx);
+  const int nPoints = segment->NumPoints();
+  EPoint *first = segment->GetPoint(1);
+  for (int m = 1; m <= pt->NumLocalMappedPoints(); m++) {
+    EPoint *mp = pt->GetLocalMappedPoint(m);
+    std::ptrdiff_t idx = mp - first;
+    if (idx < 0 || idx >= nPoints || segment->GetPoint((int)idx + 1) != mp) return false;
+    group.push_back((int)idx);
+  }
+  return true;
+}
+
 }  // namespace
 
 bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
@@ -558,11 +588,20 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
 #else
       GradAccum &local = threadAccum[0];
 #endif
-      double model;
-      if (!GradOnePoint(segment, data, i, pointIdx, compound, config, shiftDeriv,
-                        fitBarFn, local, model)) {
+      std::vector<int> group;
+      if (!PointGroup(segment, i, pointIdx, group)) {
 #pragma omp critical
         bail = true;
+        continue;
+      }
+      for (int g : group) {
+        double model;
+        if (!GradOnePoint(segment, data, i, g, compound, config, shiftDeriv,
+                          fitBarFn, local, model)) {
+#pragma omp critical
+          bail = true;
+          break;
+        }
       }
     }
     if (bail) {
@@ -641,9 +680,19 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
       GradAccum accum;  // per-thread, reused across its rows
       accum.Init(compound);
       vector_r fullRow(pmap.NumFull(), 0.0);
-#pragma omp for
-      for (int pointIdx = 0; pointIdx < nPoints; pointIdx++) {
+      std::vector<int> group;
+      // Dynamic: a host with many mapped points is one long iteration.  Each
+      // row is written by exactly one iteration, so the result does not
+      // depend on the schedule.
+#pragma omp for schedule(dynamic)
+      for (int loopIdx = 0; loopIdx < nPoints; loopIdx++) {
         if (bail) continue;
+        if (!PointGroup(segment, i, loopIdx, group)) {
+#pragma omp critical
+          bail = true;
+          continue;
+        }
+        for (int pointIdx : group) {
         const int row = rowOf[i][pointIdx];
         if (row < 0) continue;
         EPoint *pt = segment->GetPoint(pointIdx + 1);
@@ -663,7 +712,7 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
                           resFitBar, accum, model)) {
 #pragma omp critical
           bail = true;
-          continue;
+          break;
         }
 
         residuals[row] = (denom != 0.0) ? (model - dataval * norm) / denom : 0.0;
@@ -680,6 +729,7 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
           int packed = pmap.FullToPacked(f);
           if (packed >= 0 && packed < nCols) jacobian[base + packed] = fullRow[f];
         }
+        }  // group
       }
     }
     if (bail) {
@@ -753,9 +803,16 @@ bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
       GradAccum accum;  // per-thread, reused across its rows
       accum.Init(compound);
       vector_r fullRow(pmap.NumFull(), 0.0);
-#pragma omp for
-      for (int pointIdx = 0; pointIdx < nPoints; pointIdx++) {
+      std::vector<int> group;
+#pragma omp for schedule(dynamic)
+      for (int loopIdx = 0; loopIdx < nPoints; loopIdx++) {
         if (bail) continue;
+        if (!PointGroup(segment, i, loopIdx, group)) {
+#pragma omp critical
+          bail = true;
+          continue;
+        }
+        for (int pointIdx : group) {
         EPoint *pt = ptsOf[i][pointIdx];
         if (!pt) continue;
 
@@ -768,7 +825,7 @@ bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
                           oneFitBar, accum, model)) {
 #pragma omp critical
           bail = true;
-          continue;
+          break;
         }
 
         std::fill(fullRow.begin(), fullRow.end(), 0.0);
@@ -779,6 +836,7 @@ bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
           int packed = pmap.FullToPacked(f);
           if (packed >= 0 && packed < nCols) row[packed] = fullRow[f];
         }
+        }  // group
       }
     }
     if (bail) {

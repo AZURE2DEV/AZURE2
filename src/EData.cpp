@@ -10,7 +10,10 @@
 #include "Minuit2/MnUserParameters.h"
 #include "GSLException.h"
 #include "NuclearPotentialManager.h"
+#include <algorithm>
 #include <cinttypes>
+#include <cstdlib>
+#include <string>
 #include <cstdio>
 #include <iostream>
 #include <iomanip>
@@ -1147,7 +1150,10 @@ void EData::PrintData(const Config &configure) {
         EnergyMap map = data.point()->GetMap();
         char tempMap[25];
         snprintf(tempMap, sizeof(tempMap), "(%d,%d)", map.segment, map.point);
-        out << std::setw(12) << tempMap << std::endl;
+        // Same columns as an unmapped point: a mapped point has its own
+        // (identical) sub-point grid.
+        out << std::setw(12) << tempMap
+            << std::setw(18) << data.point()->NumSubPoints();
       } else
         out << std::setw(12) << "Not Mapped"
             << std::setw(18) << data.point()->NumSubPoints();
@@ -1796,8 +1802,9 @@ long long WalkECAmplitudes(Segments &segments, CNuc *theCNuc, ECSignatureHash *h
             }
           }
         }
+        // Every point carries its own amplitudes, mapped or not (see
+        // CalculateECAmplitudes), so the intEC file does not depend on mapping.
         for (auto point = segment->GetPoints().begin(); point != segment->GetPoints().end(); point++) {
-          if (point->IsMapped()) continue;
           for (int k = 1; k <= decay->NumKGroups(); k++)
             for (int ecm = 1; ecm <= decay->GetKGroup(k)->NumECMGroups(); ecm++)
               count += 1 + (long long)point->NumSubPoints();
@@ -2053,7 +2060,10 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                 for (int i = 1; i <= numPoints; i++) {
                   if (configure.stopFlag || localStop) continue;
                   EPoint *point = segment->GetPoint(i);
-                  if (!(point->IsMapped())) {
+                  // Mapped points compute their own amplitudes too: the
+                  // amplitudes are a one-off setup cost, and the intEC file
+                  // then has the same layout with and without point mapping.
+                  {
                     try {
                       point->CalculateECAmplitudes(theCNuc, configure);
                     } catch (GSLException e) {
@@ -2094,7 +2104,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
               }
               for (EPointIterator point = segment->GetPoints().begin();
                    point < segment->GetPoints().end(); point++) {
-                if (!(point->IsMapped())) {
+                {
                   for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
                     for (int ecm = 1; ecm <= entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups(); ecm++) {
                       if (!usePrevious) {
@@ -2111,13 +2121,6 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                           ecAmplitude = complex(0.0, 0.0);
                           in >> ecAmplitude;
                           subPoint->AddECAmplitude(k, ecm, ecAmplitude);
-                        }
-                      }
-                      for (EPointMapIterator mappedPoint = point->GetMappedPoints().begin();
-                           mappedPoint < point->GetMappedPoints().begin(); mappedPoint++) {
-                        (*mappedPoint)->AddECAmplitude(k, ecm, point->GetECAmplitude(k, ecm));
-                        for (int i = 1; i <= point->NumSubPoints(); i++) {
-                          (*mappedPoint)->GetSubPoint(i)->AddECAmplitude(k, ecm, point->GetSubPoint(i)->GetECAmplitude(k, ecm));
                         }
                       }
                     }
@@ -2504,17 +2507,109 @@ ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranc
   return componentSegment;
 }
 
+namespace {
+
+// True when the calculation of `b` can be taken from that of `a`: both are
+// points of the SAME segment at the same energy, so they share the energy
+// shift, normalization, target effect and -- checked here, sub-point by
+// sub-point -- the integration grid.  Only the angle (and anything else
+// that enters through GenMatrixFunc::CalculateCrossSection on the point
+// itself) may differ.
+bool SharesCalculation(EPoint &a, EPoint &b) {
+  if (a.GetEntranceKey() != b.GetEntranceKey() || a.GetExitKey() != b.GetExitKey()) return false;
+  if (a.GetOriginalEnergy() != b.GetOriginalEnergy() || a.GetLabEnergy() != b.GetLabEnergy() ||
+      a.GetCMEnergy() != b.GetCMEnergy())
+    return false;
+  if (a.IsTargetEffect() != b.IsTargetEffect() || a.GetTargetEffectNum() != b.GetTargetEffectNum() ||
+      a.GetTargetBlendWeight() != b.GetTargetBlendWeight())
+    return false;
+  if (a.IsAnalyzingPower() != b.IsAnalyzingPower()) return false;
+  if (a.NumSubPoints() != b.NumSubPoints()) return false;
+  std::vector<EPoint> &sa = a.GetSubPoints();
+  std::vector<EPoint> &sb = b.GetSubPoints();
+  for (size_t i = 0; i < sa.size(); i++) {
+    if (sa[i].GetOriginalEnergy() != sb[i].GetOriginalEnergy() ||
+        sa[i].GetCMEnergy() != sb[i].GetCMEnergy() ||
+        sa[i].GetLabEnergy() != sb[i].GetLabEnergy() ||
+        sa[i].GetStoppingPower() != sb[i].GetStoppingPower())
+      return false;
+  }
+  return true;
+}
+
+}  // namespace
+
 /*!
- * This function determined what points should be mapped to another to reduce
- * redundant calculations at like energies.
+ * Maps points onto other points of the SAME segment at the same energy, so the
+ * energy-dependent part of the calculation (the T-matrix of the point and of
+ * each target-effect sub-point) is done once per energy; each mapped point
+ * then only forms its own observable (angle, Coulomb amplitude, A_y) from it
+ * and integrates its own target effect (EPoint::Calculate).
+ *
+ * Mapping across segments, which AZURE2 used to do, stays off: since
+ * per-segment energy shifts and their gradients exist, two segments at the
+ * same nominal energy are not at the same energy in general.  Within one
+ * segment a shift is a function of the original energy alone, so points with
+ * the same original energy stay together whatever the shift.  The host is
+ * always the lowest-index point of a group: every loop that calculates a
+ * segment walks it in index order, so the host is calculated before the
+ * points that read from it (ESegment::CalculateTheoreticalCrossSection,
+ * ESegment::UpdatePointEnergiesWithShift), and the analytic-gradient loops
+ * process a host and its mapped points together (AZUREGrad.cpp).
+ *
+ * Segments with components (SUM/RATIO, total capture) are not mapped.
+ * AZURE_NO_POINT_MAPPING=1 in the environment switches mapping off entirely.
  */
 
 void EData::MapData() {
-  // Disable all point mapping - just clear existing mappings
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
       point->ClearMapping();
       point->ClearLocalMappedPoints();
+    }
+  }
+  const char *off = std::getenv("AZURE_NO_POINT_MAPPING");
+  if (off && *off && std::string(off) != "0") return;
+
+  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+    if (segment->HasComponents() || segment->IsTotalCapture()) continue;
+    std::vector<EPoint> &points = segment->GetPoints();
+    const int n = (int)points.size();
+    if (n < 2) continue;
+    const int segmentNum = (int)(segment - GetSegments().begin()) + 1;
+
+    // Group by energy; a stable sort keeps index order inside a group, so the
+    // first point of a group is its lowest-index point.
+    std::vector<int> order(n);
+    for (int i = 0; i < n; i++) order[i] = i;
+    std::stable_sort(order.begin(), order.end(), [&points](int x, int y) {
+      if (points[x].GetOriginalEnergy() != points[y].GetOriginalEnergy())
+        return points[x].GetOriginalEnergy() < points[y].GetOriginalEnergy();
+      return points[x].GetCMEnergy() < points[y].GetCMEnergy();
+    });
+
+    std::vector<int> hosts;
+    int start = 0;
+    while (start < n) {
+      int end = start + 1;
+      while (end < n && points[order[end]].GetOriginalEnergy() == points[order[start]].GetOriginalEnergy() &&
+             points[order[end]].GetCMEnergy() == points[order[start]].GetCMEnergy())
+        end++;
+      hosts.clear();
+      for (int k = start; k < end; k++) {
+        EPoint &p = points[order[k]];
+        bool mapped = false;
+        for (int h : hosts) {
+          if (SharesCalculation(points[h], p)) {
+            p.SetMap(segmentNum, h + 1);
+            points[h].AddLocalMappedPoint(&p);
+            mapped = true;
+            break;
+          }
+        }
+        if (!mapped) hosts.push_back(order[k]);
+      }
+      start = end;
     }
   }
 }
