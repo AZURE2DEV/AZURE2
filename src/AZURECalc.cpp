@@ -60,6 +60,12 @@ void unsetEnvVar(const char *name) {
 
 namespace {
 
+// AZURE_GRAD_CHECK on the Jacobian path: the Jacobian-path gradient, handed to
+// the finite-difference check that the adjoint gradient runs, so both are
+// compared with the same finite differences before any exit.
+std::vector<double> g_jacGradForCheck;
+bool g_deferCheckExit = false;
+
 // chi^2 contribution of a single segment: its data term plus its own
 // energy-shift nuisance penalty, evaluated at the segment's current shift.
 // Mirrors exactly the per-segment math in AZURECalc::Chi2Value (data term +
@@ -418,7 +424,11 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     static std::atomic<bool> jChecked{false};
     if (std::getenv("AZURE_GRAD_CHECK") && !jChecked.exchange(true)) {
       setEnvVar("AZURE_GRAD_ADJOINT", "1");
+      g_jacGradForCheck = grad;
+      g_deferCheckExit = true;
       std::vector<double> ga = Gradient(p);
+      g_deferCheckExit = false;
+      g_jacGradForCheck.clear();
       unsetEnvVar("AZURE_GRAD_ADJOINT");
       AZUREParams fpc;
       compound()->FillMnParams(fpc.GetMinuitParams(), &configure());
@@ -435,6 +445,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       std::cerr << "[grad-check] Jacobian-path vs adjoint gradient over " << nFree << " free parameters: worst relative difference " << worst << " at idx "
                 << worstIdx << (worstIdx >= 0 ? " (" + std::to_string(grad[worstIdx]) + " vs " + std::to_string(ga[worstIdx]) + ")" : "")
                 << std::endl;
+      if (std::string(std::getenv("AZURE_GRAD_CHECK")) == "exit") std::exit(0);
     }
     return grad;
   }
@@ -625,9 +636,10 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
     if (!gradChecked.exchange(true)) {
       static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt"};
-      struct Row { double score, g, fd; int idx; ParamDesc d; };
+      struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;
-      int nBad[5] = {0, 0, 0, 0, 0}, nAll[5] = {0, 0, 0, 0, 0};
+      int nBad[5] = {0, 0, 0, 0, 0}, nAll[5] = {0, 0, 0, 0, 0}, nBadJ[5] = {0, 0, 0, 0, 0};
+      const bool haveJ = g_jacGradForCheck.size() == grad.size();
       const auto tc0 = std::chrono::steady_clock::now();
       const double f0 = Chi2Value(p);
       std::cerr << "[grad-check] one Chi2Value: " << std::chrono::duration<double>(std::chrono::steady_clock::now() - tc0).count() << " s" << std::endl;
@@ -676,26 +688,39 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         pp[idx] = x0 + h;
         pm[idx] = x0 - h;
         double fd = (Chi2Value(pp) - Chi2Value(pm)) / (2.0 * h);
-        double score = std::fabs(grad[idx] - fd) / (std::fabs(fd) + std::fabs(grad[idx]) + 1.0e-6 * std::fabs(f0) + 1.0);
+        auto scoreOf = [&](double g) {
+          return std::fabs(g - fd) / (std::fabs(fd) + std::fabs(g) + 1.0e-6 * std::fabs(f0) + 1.0);
+        };
+        double score = scoreOf(grad[idx]);
+        double gj = haveJ ? g_jacGradForCheck[idx] : 0.0, scoreJ = haveJ ? scoreOf(gj) : 0.0;
         ParamDesc d = pmap.Desc(idx);
         int k = (int)d.kind;
         nAll[k]++;
         if (score > 1.0e-2) nBad[k]++;
-        rows.push_back({score, grad[idx], fd, idx, d});
+        if (scoreJ > 1.0e-2) nBadJ[k]++;
+        rows.push_back({score, grad[idx], fd, idx, d, gj, scoreJ});
       }
-      std::sort(rows.begin(), rows.end(), [](const Row &a, const Row &b) { return a.score > b.score; });
+      std::sort(rows.begin(), rows.end(),
+                [](const Row &a, const Row &b) { return std::max(a.score, a.scoreJ) > std::max(b.score, b.scoreJ); });
       std::cerr << "[grad-check] chi2 " << f0 << ", analytic block " << (eg ? "used" : "BAILED (all finite differences)")
                 << "; components with relative disagreement > 1e-2:";
       for (int k = 0; k < 5; k++)
         if (nAll[k]) std::cerr << " " << kindName[k] << " " << nBad[k] << "/" << nAll[k];
+      if (haveJ) {
+        std::cerr << "; Jacobian path:";
+        for (int k = 0; k < 5; k++)
+          if (nAll[k]) std::cerr << " " << kindName[k] << " " << nBadJ[k] << "/" << nAll[k];
+      }
       std::cerr << std::endl;
-      for (int r = 0; r < (int)rows.size() && r < 40; r++) {
+      for (int r = 0; r < (int)rows.size() && r < 60; r++) {
         const Row &w = rows[r];
         std::cerr << "[grad-check] idx " << w.idx << " " << kindName[(int)w.d.kind] << " J" << w.d.jGroup << " L" << w.d.level
                   << " ch" << w.d.channel << " seg" << w.d.segment << "  analytic " << w.g << "  fd " << w.fd
-                  << "  rel " << w.score << std::endl;
+                  << "  rel " << w.score;
+        if (haveJ) std::cerr << "  jacobian " << w.gj << "  relJ " << w.scoreJ;
+        std::cerr << std::endl;
       }
-      if (std::string(gc) == "exit") std::exit(0);
+      if (std::string(gc) == "exit" && !g_deferCheckExit) std::exit(0);
     }
   }
 
