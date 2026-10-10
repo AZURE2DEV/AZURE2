@@ -1097,7 +1097,7 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
   }
 
   // Calculate base point if not already calculated
-  if (!precalculated && !basePoint->IsMapped()) {
+  if (!precalculated && (!basePoint->IsMapped() || ScopedPointMappingOff::Active())) {
     try {
       basePoint->Calculate(cnuc, configure);
     } catch (...) {
@@ -1130,7 +1130,7 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
         EPoint *componentPoint = componentSegment->GetPoint(pointIndex + 1);
         if (componentPoint) {
           // No lock needed since each thread works on independent EData clones
-          if (!precalculated && !componentPoint->IsMapped()) {
+          if (!precalculated && (!componentPoint->IsMapped() || ScopedPointMappingOff::Active())) {
             try {
               componentPoint->Calculate(cnuc, configure);
             } catch (...) {
@@ -1158,7 +1158,7 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
       EPoint *denominatorPoint = firstComponent->GetPoint(pointIndex + 1);
       if (denominatorPoint) {
         // No lock needed since each thread works on independent EData clones
-        if (!precalculated && !denominatorPoint->IsMapped()) {
+        if (!precalculated && (!denominatorPoint->IsMapped() || ScopedPointMappingOff::Active())) {
           try {
             denominatorPoint->Calculate(cnuc, configure);
           } catch (...) {

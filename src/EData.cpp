@@ -2554,8 +2554,10 @@ bool SharesCalculation(EPoint &a, EPoint &b) {
  * always the lowest-index point of a group: every loop that calculates a
  * segment walks it in index order, so the host is calculated before the
  * points that read from it (ESegment::CalculateTheoreticalCrossSection,
- * ESegment::UpdatePointEnergiesWithShift), and the analytic-gradient loops
- * process a host and its mapped points together (AZUREGrad.cpp).
+ * ESegment::UpdatePointEnergiesWithShift).  The analytic-gradient loops
+ * (AZUREGrad.cpp), which run the points of a segment in parallel, switch
+ * mapping off on their threads (ScopedPointMappingOff) and calculate every
+ * point on its own.
  *
  * Segments with components (SUM/RATIO, total capture) are not mapped.
  * AZURE_NO_POINT_MAPPING=1 in the environment switches mapping off entirely.

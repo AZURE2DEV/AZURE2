@@ -1509,7 +1509,18 @@ void EPoint::ClearECAmplitudes() {
  * Calculates the cross section for a data point based on the fit parameters in the compound nucleus.
  */
 
+namespace {
+thread_local bool tlPointMappingOff = false;
+}
+
+ScopedPointMappingOff::ScopedPointMappingOff() : previous_(tlPointMappingOff) { tlPointMappingOff = true; }
+ScopedPointMappingOff::~ScopedPointMappingOff() { tlPointMappingOff = previous_; }
+bool ScopedPointMappingOff::Active() { return tlPointMappingOff; }
+
 void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, int subPointNum) {
+  // Points mapped onto this one (EData::MapData), unless mapping is switched
+  // off on this thread (ScopedPointMappingOff).
+  const int numMapped = ScopedPointMappingOff::Active() ? 0 : this->NumLocalMappedPoints();
   if (!this->IsTargetEffect() ||
       !this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsSubPointEffect()) {
     GenMatrixFunc *theMatrixFunc;
@@ -1534,12 +1545,13 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
     theMatrixFunc->CalculateTMatrix(this);
     theMatrixFunc->CalculateCrossSection(this);
     if (subPointNum && parent) {
-      for (int i = 1; i <= parent->NumLocalMappedPoints(); i++) {
+      const int numParentMapped = ScopedPointMappingOff::Active() ? 0 : parent->NumLocalMappedPoints();
+      for (int i = 1; i <= numParentMapped; i++) {
         EPoint *mappedSubPoint = parent->GetLocalMappedPoint(i)->GetSubPoint(subPointNum);
         theMatrixFunc->CalculateCrossSection(mappedSubPoint);
       }
     } else {
-      for (int i = 1; i <= this->NumLocalMappedPoints(); i++) {
+      for (int i = 1; i <= numMapped; i++) {
         EPoint *mappedPoint = this->GetLocalMappedPoint(i);
         theMatrixFunc->CalculateCrossSection(mappedPoint);
       }
@@ -1548,7 +1560,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
     TargetEffect *effect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
     const double blend = this->GetTargetBlendWeight();
     const double autoTol = effect->GetAutoTolerance();
-    const bool hasMapped = this->NumLocalMappedPoints() > 0;
+    const bool hasMapped = numMapped > 0;
 
     // The bare value of the observable at the central energy is needed both
     // for edge blending and for the automatic per-point decision.  It is
@@ -1594,7 +1606,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
           subPoint->Calculate(theCNuc, configure);
       }
       bool allPass = true;
-      for (int m = 0; m <= this->NumLocalMappedPoints() && allPass; m++) {
+      for (int m = 0; m <= numMapped && allPass; m++) {
         EPoint *host = (m == 0) ? this : this->GetLocalMappedPoint(m);
         double sFirst = host->GetSubPoint(iFirst)->GetFitCrossSection();
         double sMid = host->GetSubPoint(iMid)->GetFitCrossSection();
@@ -1605,7 +1617,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
       }
       if (allPass) {
         this->SetFitCrossSection(bareValue);
-        for (int m = 1; m <= this->NumLocalMappedPoints(); m++) {
+        for (int m = 1; m <= numMapped; m++) {
           EPoint *mappedPoint = this->GetLocalMappedPoint(m);
           EPoint mappedProbe(*mappedPoint);
           mappedProbe.SetTargetEffectNum(0);
@@ -1624,7 +1636,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
       if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
         subPoint->RecalcEDependentValues(theCNuc, configure);
       }
-      if (this->NumLocalMappedPoints() > 0)
+      if (numMapped > 0)
         subPoint->Calculate(theCNuc, configure, this, i);
       else
         subPoint->Calculate(theCNuc, configure);
@@ -1632,7 +1644,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
     this->IntegrateTargetEffectForObservable(configure);
     if (blend < 1.0 && haveBare)
       this->SetFitCrossSection(blend * this->GetFitCrossSection() + (1.0 - blend) * bareValue);
-    for (int i = 1; i <= this->NumLocalMappedPoints(); i++) {
+    for (int i = 1; i <= numMapped; i++) {
       EPoint *mappedPoint = this->GetLocalMappedPoint(i);
       mappedPoint->IntegrateTargetEffectForObservable(configure);
       if (blend < 1.0) {
