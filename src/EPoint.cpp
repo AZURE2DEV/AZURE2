@@ -1075,7 +1075,7 @@ void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect *targetEffect) 
  * and hard sphere phase shfits.
  */
 
-void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
+void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints) {
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
 
@@ -1170,8 +1170,10 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
       }
     }
   }
-  for (int i = 1; i <= this->NumSubPoints(); i++) {
-    this->GetSubPoint(i)->CalcEDependentValues(theCNuc, configure);
+  if (includeSubPoints) {
+    for (int i = 1; i <= this->NumSubPoints(); i++) {
+      this->GetSubPoint(i)->CalcEDependentValues(theCNuc, configure);
+    }
   }
   for (int i = 1; i <= this->NumLocalMappedPoints(); i++) {
     EPoint *mappedPoint = this->GetLocalMappedPoint(i);
@@ -1181,6 +1183,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
     mappedPoint->penetrabilities_ = penetrabilities_;
     mappedPoint->coulombphase_ = coulombphase_;
     mappedPoint->hardspherephase_ = hardspherephase_;
+    if (!includeSubPoints) continue;
     for (int ii = 1; ii <= this->NumSubPoints(); ii++) {
       EPoint *subMappedPoint = mappedPoint->GetSubPoint(ii);
       subMappedPoint->geofactor_ = this->GetSubPoint(ii)->geofactor_;
@@ -1209,7 +1212,7 @@ void EPoint::ClearEDependentRows() {
  * Recalculates energy-dependent values using the current (possibly shifted) energy.
  * This is needed when energy shifts are applied after initialization.
  */
-void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure) {
+void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints) {
   // Nothing to do while the energy is the one the values were computed at.
   // Every sub-point of a target-effect point used to pay for this on every
   // evaluation whenever external capture was in use (Coulomb and Whittaker
@@ -1228,13 +1231,44 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure) {
   // so empty theirs too: otherwise every call doubled their rows, and the
   // doubled storage would now be kept.  The callers re-energise and recalculate
   // each sub-point afterwards in any case.
-  for (int i = 1; i <= this->NumSubPoints(); i++) this->GetSubPoint(i)->ClearEDependentRows();
+  //
+  // ESegment::UpdatePointEnergiesWithShift passes includeSubPoints = false: it
+  // moves each sub-point to its shifted energy and recalculates it right
+  // after, so recomputing the sub-points here, still at their OLD energies,
+  // only doubled the cost of every shift step (all Coulomb functions of every
+  // sub-point, twice, serially).
+  if (includeSubPoints)
+    for (int i = 1; i <= this->NumSubPoints(); i++) this->GetSubPoint(i)->ClearEDependentRows();
 
   // Recalculate with current energy
-  this->CalcEDependentValues(theCNuc, configure);
+  this->CalcEDependentValues(theCNuc, configure, includeSubPoints);
 
   // Also recalculate Coulomb amplitude with current energy
-  this->CalcCoulombAmplitude(theCNuc);
+  this->CalcCoulombAmplitude(theCNuc, includeSubPoints);
+}
+
+/*!
+ * Copies the energy-dependent values (geometrical factor, S-factor conversion,
+ * L_o elements, penetrabilities, Coulomb and hard-sphere phases) from another
+ * point at exactly the same c.m. energy and with the same entrance pair --
+ * a host of point mapping (EData::MapData) or its sub-point.  Those values do
+ * not depend on the angle; the Coulomb amplitude does, and is not copied.
+ * Returns false, and copies nothing, if the energies differ.
+ */
+bool EPoint::CopyEDependentValuesFrom(const EPoint &other) {
+  if (other.GetCMEnergy() != this->GetCMEnergy() || other.GetEntranceKey() != this->GetEntranceKey() ||
+      other.GetExitKey() != this->GetExitKey() || !other.eDependentValid_ ||
+      other.eDependentEnergy_ != other.GetCMEnergy())
+    return false;
+  geofactor_ = other.geofactor_;
+  sfactorconv_ = other.sfactorconv_;
+  lo_elements_ = other.lo_elements_;
+  penetrabilities_ = other.penetrabilities_;
+  coulombphase_ = other.coulombphase_;
+  hardspherephase_ = other.hardspherephase_;
+  eDependentEnergy_ = other.eDependentEnergy_;
+  eDependentValid_ = true;
+  return true;
 }
 
 /*!
@@ -1289,7 +1323,7 @@ void EPoint::AddExpHardSpherePhase(int jGroupNum, int channelNum, complex expShi
  * Calculates the Coulomb amplitude \f$ C_\alpha \f$ for the data point.
  */
 
-void EPoint::CalcCoulombAmplitude(CNuc *theCNuc) {
+void EPoint::CalcCoulombAmplitude(CNuc *theCNuc, bool includeSubPoints) {
   if (this->GetEntranceKey() == this->GetExitKey()) {
     PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
     int z1 = entrancePair->GetZ(1);
@@ -1329,6 +1363,7 @@ void EPoint::CalcCoulombAmplitude(CNuc *theCNuc) {
     spinDependentCoulomb_ = false;
     this->SetCoulombAmplitude(complex(0., 0.));
   }
+  if (!includeSubPoints) return;
   for (int i = 1; i <= this->NumSubPoints(); i++) {
     this->GetSubPoint(i)->CalcCoulombAmplitude(theCNuc);
   }

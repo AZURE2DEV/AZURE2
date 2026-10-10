@@ -715,6 +715,24 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
 void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *configure) {
   {
     EPoint *point = GetPoint(i + 1);
+    // A point mapped onto an earlier point of this segment (EData::MapData)
+    // is at the same energy as its host, which this loop has already moved:
+    // its energy-dependent values (and its sub-points') are copied from the
+    // host instead of recomputed.  Only the angle-dependent Coulomb amplitude
+    // is its own.
+    EPoint *host = nullptr;
+    if (point && point->IsMapped()) {
+      EnergyMap map = point->GetMap();
+      if (map.point >= 1 && map.point <= i) {
+        EPoint *candidate = GetPoint(map.point);
+        for (int m = 1; m <= candidate->NumLocalMappedPoints(); m++)
+          if (candidate->GetLocalMappedPoint(m) == point) {
+            host = candidate;
+            break;
+          }
+      }
+      if (host && host->NumSubPoints() != point->NumSubPoints()) host = nullptr;
+    }
     if (point && point->GetOriginalEnergy() > 0) {
       double originalEnergy = point->GetOriginalEnergy();
       double shiftedEnergy = ShiftedEnergy(originalEnergy, TotalEnergyShift(originalEnergy));
@@ -769,7 +787,11 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
           }
           point->CalcLegendreP(configure->maxLOrder, theCNuc, effect);
         }
-        point->RecalcEDependentValues(theCNuc, *configure);
+        // The sub-points are moved and recalculated below, one by one.
+        if (host && point->CopyEDependentValuesFrom(*host))
+          point->CalcCoulombAmplitude(theCNuc, false);
+        else
+          point->RecalcEDependentValues(theCNuc, *configure, false);
 
         // IMPORTANT: Also apply energy shift to all subpoints (used in convolution/target integration)
         for (int j = 1; j <= point->NumSubPoints(); j++) {
@@ -841,7 +863,10 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
               }
               subPoint->CalcLegendreP(configure->maxLOrder, theCNuc, subEffect);
             }
-            subPoint->RecalcEDependentValues(theCNuc, *configure);
+            if (host && subPoint->CopyEDependentValuesFrom(*host->GetSubPoint(j)))
+              subPoint->CalcCoulombAmplitude(theCNuc);
+            else
+              subPoint->RecalcEDependentValues(theCNuc, *configure);
           }
         }
         // The point and its sub-point grid moved: the folded table term of a

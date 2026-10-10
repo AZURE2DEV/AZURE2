@@ -272,9 +272,12 @@ class EPoint {
   /// Compute the Legendre polynomials up to a maximum order.
   void CalcLegendreP(int, CNuc *, TargetEffect *);
   /// Compute the geometrical factor, S-factor conversion, \f$L_o\f$ elements, penetrabilities and phases together.
-  void CalcEDependentValues(CNuc *, const Config &);
+  /// With includeSubPoints false the sub-points are left alone (their energies are updated, and their values recomputed, separately).
+  void CalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true);
   /// Recompute those at the current, possibly shifted, energy.
-  void RecalcEDependentValues(CNuc *, const Config &);
+  void RecalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true);
+  /// Take the energy-dependent values (not the angle-dependent Coulomb amplitude) from a point at the same energy; false if the energies differ.
+  bool CopyEDependentValuesFrom(const EPoint &);
   /// Empties the per-JGroup rows of the energy-dependent arrays, keeping their storage.
   void ClearEDependentRows();
   /// Store an \f$L_o\f$ element at (J-group, channel).
@@ -286,7 +289,7 @@ class EPoint {
   /// Store a hard-sphere phase factor at (J-group, channel).
   void AddExpHardSpherePhase(int, int, complex);
   /// Compute the Coulomb amplitude \f$C_\alpha\f$.
-  void CalcCoulombAmplitude(CNuc *);
+  void CalcCoulombAmplitude(CNuc *, bool includeSubPoints = true);
   /// Set the Coulomb amplitude directly.
   void SetCoulombAmplitude(complex);
   /// Compute the external-capture amplitudes for every matching pathway.
