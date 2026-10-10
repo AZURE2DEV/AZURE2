@@ -217,7 +217,7 @@ inside an energy window :math:`[a, b]` with a Gaussian resolution
 .. math::
 
    \langle\sigma\rangle = \frac{\int G(E)\,W(E)\,D(E)\,\sigma(E)\,dE}
-                                 {\int G(E)\,W(E)\,D(E)\,dE},
+                                 {\int G(E)\,W(E)\,dE},
    \qquad
    W(E) = \tfrac{1}{2}\left[\operatorname{erf}\frac{b-E}{s\sqrt2}
                               - \operatorname{erf}\frac{a-E}{s\sqrt2}\right]
@@ -231,9 +231,12 @@ with :math:`G(E)` the beam profile, a weighted sum of skewed Gaussians
    \left[1+\operatorname{erf}\frac{\alpha\,(E-\xi)}{\omega\sqrt2}\right],
 
 and :math:`D(E)` the detailed-balance factor of the inverse reaction
-relative to its value at the point's own energy (``dbFlag`` = 1), so that a
-capture cross section is averaged the way the photodissociation measurement
-averaged it.  The formalism follows Haverson (2026), appendix A.
+relative to its value at the point's own energy (``dbFlag`` = 1).  The
+measurement spreads its luminosity over :math:`G\,W` and averages the
+photodissociation cross section :math:`f_{db}\,\sigma`; the datum is that
+average divided by :math:`f_{db}` at the point's energy, so :math:`D` weights
+the numerator only (with :math:`D = 1` everywhere when ``dbFlag`` = 0).  The
+formalism follows Haverson (2026), appendix A.
 
 The effect is written as a trailing block of the ``targetInt`` line, after
 the optional straggling and energy-range tokens::

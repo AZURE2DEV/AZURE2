@@ -364,7 +364,9 @@ converted with the point in ``ConvertLabEnergy`` and stored unshifted; the
 branch in ``EPoint::IntegrateTargetEffect`` shifts it by the segment's current
 c.m. energy shift, normalises numerically (numerator and denominator on the
 same Gauss–Legendre points) and applies the detailed-balance weight from the
-kinematics stored by ``EPoint::SetPhotoKinematics``.
+kinematics stored by ``EPoint::SetPhotoKinematics`` to the numerator only
+(normalised at the point's unshifted energy; in the denominator it would
+cancel that normalisation).
 ``TargetEffect::IsSubPointEffect`` is the single gate for every effect that
 integrates over sub-points; ``EPoint::IntegrateTargetEffectComponents``
 re-runs the combiner on the E1 and E2 components for isDiff 5/6 segments.

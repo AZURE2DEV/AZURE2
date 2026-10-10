@@ -2252,8 +2252,7 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
     // Beam-profile kernel (photodissociation in a broad, skewed gamma beam
     // with an event-by-event reconstructed energy, cf. Haverson 2026 App. A):
     //
-    //   Y = sum_i K(E_i) sigma(E_i) / sum_i K(E_i),
-    //   K(E) = G(E) * W(E) * D(E),
+    //   Y = sum_i G(E_i) W(E_i) D(E_i) sigma(E_i) / sum_i G(E_i) W(E_i),
     //
     // G  the absolute beam energy profile (a sum of skewed Gaussians, not
     //    centred on the data point),
@@ -2261,9 +2260,13 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
     //    lands inside the point's energy window [a, b], shifted with the
     //    segment's energy shift; 1 when the point has no window,
     // D  the detailed-balance factor sigma(gamma,a)/sigma(a,gamma) relative
-    //    to its value at the point's own (unshifted) energy, so that a
-    //    capture cross section is averaged the way the inverse
-    //    photodissociation measurement averaged it; 1 unless requested.
+    //    to its value at the point's own (unshifted) energy; 1 unless
+    //    requested.  The measurement spreads its luminosity over G*W and
+    //    averages sigma(gamma,a) = f_db * sigma(a,gamma); the datum is that
+    //    average divided by f_db at the point's energy.  So D weights the
+    //    numerator only: in the denominator too it would replace f_db(E0) by
+    //    its beam average and cancel its own normalisation (a 1-5 % error
+    //    when the kernel's centroid is tens of keV off the point energy).
     // 2-point Gauss-Legendre on each sub-point interval with the cross
     // section interpolated linearly; the numerical normalisation makes the
     // result independent of how far the sub-point grid extends.
@@ -2302,8 +2305,10 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
         else
           k *= (e >= a && e <= b) ? 1.0 : 0.0;
       }
-      if (photo && dbNorm > 0.0) k *= dbWeight(e) / dbNorm;
       return k;
+    };
+    auto detailedBalance = [&](double e) {
+      return (photo && dbNorm > 0.0) ? dbWeight(e) / dbNorm : 1.0;
     };
     double numerator = 0.0;
     double denominator = 0.0;
@@ -2320,7 +2325,7 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
         double frac = (Ea - e) / (Ea - Eb);
         double sigma = (1.0 - frac) * sa + frac * sb;
         double k = kernel(e);
-        numerator += std::fabs(half) * k * sigma;
+        numerator += std::fabs(half) * k * detailedBalance(e) * sigma;
         denominator += std::fabs(half) * k;
       }
     }

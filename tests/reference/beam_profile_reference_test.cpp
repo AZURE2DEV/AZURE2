@@ -19,12 +19,14 @@
  * What the engine computes, for a point of energy E0 whose detector resolution
  * window is [a, b] and whose sub-points carry sigma(E_i):
  *
- *     Y = Int K(E) sigma(E) dE / Int K(E) dE,
- *     K(E) = G(E) * W(E) * D(E),
+ *     Y = Int K(E) D(E) sigma(E) dE / Int K(E) dE,
+ *     K(E) = G(E) * W(E),
  *     G(E) = sum_k w_k / (omega_k sqrt(2 pi)) * exp(-z^2/2) * (1 + erf(alpha_k z / sqrt2)),
  *            z = (E - xi_k) / omega_k,
  *     W(E) = 1/2 [ erf((b - E)/(s sqrt2)) - erf((a - E)/(s sqrt2)) ],  1 if no window,
- *     D(E) = g(E) / g(E0),  g(E) = E / E_gamma(E)^2,  1 unless dbFlag is set,
+ *     D(E) = g(E) / g(E0),  g(E) = E / E_gamma(E)^2,  1 unless dbFlag is set
+ *            (numerator only: the datum is the luminosity-weighted -- G*W --
+ *            average of sigma(gamma,a), divided by f_db at the point energy),
  *     E_gamma(E) = M (1 - sqrt(1 - 2 (E + Q) / M)).
  *
  * Run:  tests/reference/beam_profile_reference_test          (ctest: beam_profile_reference)
@@ -127,7 +129,7 @@ struct Kernel {
     return (norm > 0.0) ? gOf(e) / norm : 1.0;
   }
 
-  double operator()(double e) const { return G(e) * W(e) * D(e); }
+  double operator()(double e) const { return G(e) * W(e); }   // luminosity weight; D is applied to sigma
 };
 
 // Dense Simpson fold of K*sigma / K over [lo, hi]; sigma is evaluated exactly,
@@ -141,7 +143,7 @@ double referenceFold(const Kernel &k, Sigma sigma, double lo, double hi, int int
     double e = lo + i * h;
     double w = (i == 0 || i == intervals) ? 1.0 : (i % 2 ? 4.0 : 2.0);
     double kk = k(e);
-    num += w * kk * sigma(e);
+    num += w * kk * k.D(e) * sigma(e);
     den += w * kk;
   }
   return num / den;
@@ -325,6 +327,16 @@ int main() {
              withDb, referenceFold(kDb, linear, gridLo, gridHi), 1e-6);
   check("and it is not a no-op",
         std::fabs(withDb / referenceFold(kWin, linear, gridLo, gridHi) - 1.0) > 1e-6);
+  // (f) ... and it weights the numerator only.  A constant capture cross section
+  //     comes back as sigma * <D>_{G W}, not as sigma: the luminosity is spread
+  //     over G*W, and f_db is divided out at the point energy.  (Putting D in the
+  //     denominator too would return sigma exactly and fail this check.)
+  auto constantDb = [](double) { return 4.2e-6; };
+  double constWithDb = engineFold(configure, dataDb, effectDb, constantDb, e0, gridLo, gridHi, 800, 0.0, window, qGamma, mass);
+  checkClose("detailed balance: a constant returns sigma * <D> over the luminosity weight",
+             constWithDb, referenceFold(kDb, constantDb, gridLo, gridHi), 1e-6);
+  check("detailed balance is normalised at the point energy, not over the beam",
+        std::fabs(constWithDb / 4.2e-6 - 1.0) > 1e-4);
 
   std::cout << (failures ? "FAILED " : "passed ") << checks - failures << "/" << checks
             << " checks" << std::endl;

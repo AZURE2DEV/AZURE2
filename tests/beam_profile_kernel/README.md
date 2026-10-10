@@ -35,3 +35,10 @@ conversion of the kernel energies done once per effect.  The reference
 chi2 was recorded from the run that was validated point by point against
 an independent numpy implementation of the kernel
 (R-matrix/12C+a_onefile/9-10-26_Haversen_test/kernel_reference.py).
+
+Re-baselined 2026-10-08 (40.4045 -> 40.4477) for the detailed-balance normalisation fix
+in `EPoint::IntegrateTargetEffect`.  The weight D now multiplies the numerator only,
+Y = Int G W D sigma / Int G W; before, it was also in the denominator, which cancelled
+its normalisation at the point energy.  The new value was checked point by point against
+the corrected numpy kernel (Smith 2021 beams, no window: <= 0.05 %) and by
+`tests/reference/beam_profile_reference_test` (26/26).
