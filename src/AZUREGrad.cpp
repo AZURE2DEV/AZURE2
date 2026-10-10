@@ -1,5 +1,7 @@
 #include "AZUREGrad.h"
 #include <atomic>
+#include <chrono>
+#include <iostream>
 #include <cstdlib>
 #include "CNuc.h"
 #include "EData.h"
@@ -291,6 +293,10 @@ namespace {
 //     d<A> = sum_i c_i [ s_i dA_i + (A_i - <A>) ds_i ] / D,
 // so each sub-point contributes an A_y cotangent fitBar c_i s_i / D and a
 // differential-cross-section cotangent fitBar c_i (A_i - <A>) / D.
+// AZURE_GRAD_TIMING: thread-summed time in the target-effect combiner weights
+// (central differences on IntegrateTargetEffect) and in the sub-point adjoints.
+std::atomic<long long> g_teCombinerNs{0}, g_teAdjointNs{0};
+
 bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
                              const vector_matrix_r *shiftDeriv, int xsComponent,
                              CNuc *compound, const Config &config) {
@@ -324,6 +330,7 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
   for (int i = 1; i <= nsp; i++) sigma[i - 1] = point->GetSubPoint(i)->GetFitCrossSection();
   double model = point->GetFitCrossSection();
 
+  const auto tc0 = std::chrono::steady_clock::now();
   std::vector<double> c(nsp, 0.0);
   for (int i = 1; i <= nsp; i++) {
     double s0 = sigma[i - 1];
@@ -357,6 +364,8 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     avg = num / den;
   }
   point->SetFitCrossSection(model);
+  const auto tc1 = std::chrono::steady_clock::now();
+  g_teCombinerNs += std::chrono::duration_cast<std::chrono::nanoseconds>(tc1 - tc0).count();
 
   bool ok = true;
   for (int i = 1; i <= nsp && ok; i++) {
@@ -376,6 +385,7 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     if (ayBar != 0.0 && !amf.PointAdjoint(sp, ayBar, accum, shiftDeriv, 0, false)) ok = false;
     if (ok && xsBar != 0.0 && !amf.PointAdjoint(sp, xsBar, accum, shiftDeriv, 0, true)) ok = false;
   }
+  g_teAdjointNs += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - tc1).count();
   return ok;
 }
 
@@ -581,9 +591,13 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
   jacobian.assign((size_t)totalRows * nCols, 0.0);
 
   bool ok = true;
+  const bool timing = std::getenv("AZURE_GRAD_TIMING") != nullptr;
+  const long long comb0 = g_teCombinerNs.load(), adj0 = g_teAdjointNs.load();
+  std::vector<std::pair<double, int>> segMs;
   for (int i = 1; i <= nSeg && ok; i++) {
     ESegment *segment = data->GetSegment(i);
     if (!segment) continue;
+    const auto ts0 = std::chrono::steady_clock::now();
     const double norm = segment->GetNorm();
     const int normFull = segment->IsVaryNorm() ? pmap.NormIndex(i) : -1;
     const int nPoints = segment->NumPoints();
@@ -645,6 +659,21 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
                   << ", A_y " << (pt && pt->IsAnalyzingPower()) << ", target effect " << (pt && pt->IsTargetEffect())
                   << ")" << std::endl;
       }
+    }
+    if (timing)
+      segMs.push_back({std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - ts0).count(),
+                       segment->GetSegmentKey()});
+  }
+  if (timing) {
+    static std::atomic<int> calls{0};
+    const int c = ++calls;
+    if (c <= 3 || c % 50 == 0) {
+      std::sort(segMs.begin(), segMs.end(), [](const std::pair<double, int> &a, const std::pair<double, int> &b) { return a.first > b.first; });
+      std::cerr << "[grad-timing] Jacobian rows " << c << ": target-effect combiner weights "
+                << (g_teCombinerNs.load() - comb0) / 1.0e6 << " ms, sub-point adjoints " << (g_teAdjointNs.load() - adj0) / 1.0e6
+                << " ms (thread-summed); slowest segments (key:ms)";
+      for (size_t k = 0; k < segMs.size() && k < 6; k++) std::cerr << " " << segMs[k].second << ":" << (long)segMs[k].first;
+      std::cerr << std::endl;
     }
   }
 
