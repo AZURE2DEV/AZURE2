@@ -1,6 +1,8 @@
 #ifndef EPOINT_H
 #define EPOINT_H
 #include <limits>
+#include <vector>
+#include <utility>
 #include <memory>
 
 #include <cstring>
@@ -36,6 +38,47 @@ class Config;
  * measured cross section and uncertainty, s-factor conversions, and
  * several flags that determine the type of data (angle integrated or differential) to be analysed.
  */
+
+/*!
+ * A linear form sum_k c_k s_{j_k} in the sub-point values s_j of a
+ * target-effect point.  EPoint::IntegrateTargetEffect is linear in those
+ * values, so evaluating it on this type instead of double yields its exact
+ * weights in one pass (EPoint::TargetEffectWeights), which the analytic
+ * gradient needs for every target-integrated point.  Only the operations the
+ * integrator performs are provided; a nonzero constant marks the form invalid.
+ */
+class TELinearForm {
+ public:
+  TELinearForm(double v = 0.0) : valid_(v == 0.0) {}
+  static TELinearForm Unit(int j) {
+    TELinearForm f;
+    f.terms_.emplace_back(j, 1.0);
+    return f;
+  }
+  TELinearForm &operator*=(double a) {
+    for (auto &t : terms_) t.second *= a;
+    return *this;
+  }
+  TELinearForm &operator/=(double a) {
+    for (auto &t : terms_) t.second /= a;
+    return *this;
+  }
+  TELinearForm &operator+=(const TELinearForm &o) {
+    terms_.insert(terms_.end(), o.terms_.begin(), o.terms_.end());
+    valid_ = valid_ && o.valid_;
+    return *this;
+  }
+  friend TELinearForm operator*(TELinearForm f, double a) { return f *= a; }
+  friend TELinearForm operator*(double a, TELinearForm f) { return f *= a; }
+  friend TELinearForm operator/(TELinearForm f, double a) { return f /= a; }
+  friend TELinearForm operator+(TELinearForm f, const TELinearForm &o) { return f += o; }
+  bool Valid() const { return valid_; }
+  const std::vector<std::pair<int, double>> &Terms() const { return terms_; }
+
+ private:
+  std::vector<std::pair<int, double>> terms_;
+  bool valid_;
+};
 
 class EPoint {
  public:
@@ -247,6 +290,10 @@ class EPoint {
   void SetTargetEffectNum(int);
   void AddSubPoint(EPoint);
   void IntegrateTargetEffect(const Config &);
+  /// Exact weights c (0-based, one per sub-point) of IntegrateTargetEffect:
+  /// yield = sum_i c[i] * (sub-point i's cross-section slot).  False if the
+  /// integrator is not a pure linear form for this point.
+  bool TargetEffectWeights(const Config &, std::vector<double> &c);
   void IntegrateTargetEffectForObservable(const Config &);
   /// Integrate the E1 and E2 components of the cross section over the same
   /// sub-points as the total, for a segment compared against one component.
@@ -282,6 +329,10 @@ class EPoint {
   void StoreSubpointOffsets();                                                          // Store offsets for adaptive grid preservation
   void ApplySubpointShift(double energyShift, CNuc *theCNuc, const Config &configure);  // Intelligent shift preserving resonance structure
  private:
+  /// Body of IntegrateTargetEffect on a value type V (double or TELinearForm);
+  /// rd(j) supplies sub-point j's value.
+  template <class V, class Read>
+  V IntegrateTargetEffectImpl(const Config &, Read rd);
   bool is_differential_;
   bool is_phase_;
   bool is_mapped_;

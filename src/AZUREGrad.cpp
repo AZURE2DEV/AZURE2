@@ -331,20 +331,50 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
   double model = point->GetFitCrossSection();
 
   const auto tc0 = std::chrono::steady_clock::now();
-  std::vector<double> c(nsp, 0.0);
-  for (int i = 1; i <= nsp; i++) {
-    double s0 = sigma[i - 1];
-    double h = 1.0e-3 * (std::fabs(s0) + 1.0);
-    point->GetSubPoint(i)->SetFitCrossSection(s0 + h);
-    point->IntegrateTargetEffect(config);
-    double yp = point->GetFitCrossSection();
-    point->GetSubPoint(i)->SetFitCrossSection(s0 - h);
-    point->IntegrateTargetEffect(config);
-    double ym = point->GetFitCrossSection();
-    point->GetSubPoint(i)->SetFitCrossSection(s0);
-    c[i - 1] = (yp - ym) / (2.0 * h);
+  // Exact weights in one pass of the integrator on a linear form
+  // (EPoint::TargetEffectWeights).  The central differences used before cost
+  // 2 nsp integrator calls, each O(nsp) or O(nsp^2) (straggling, convolution
+  // + target integration): O(nsp^3) per point, which made one Jacobian of the
+  // 11B+a base grid (CASPAR thick targets, ~2200 sub-points per point) take
+  // longer than 30 min.  They remain as the fallback and as a check
+  // (AZURE_TE_WEIGHTS_CHECK=N compares the first N points).
+  auto fdWeights = [&](std::vector<double> &w) {
+    w.assign(nsp, 0.0);
+    for (int i = 1; i <= nsp; i++) {
+      double s0 = sigma[i - 1];
+      double h = 1.0e-3 * (std::fabs(s0) + 1.0);
+      point->GetSubPoint(i)->SetFitCrossSection(s0 + h);
+      point->IntegrateTargetEffect(config);
+      double yp = point->GetFitCrossSection();
+      point->GetSubPoint(i)->SetFitCrossSection(s0 - h);
+      point->IntegrateTargetEffect(config);
+      double ym = point->GetFitCrossSection();
+      point->GetSubPoint(i)->SetFitCrossSection(s0);
+      w[i - 1] = (yp - ym) / (2.0 * h);
+    }
+  };
+  std::vector<double> c;
+  if (std::getenv("AZURE_TE_WEIGHTS_FD") || !point->TargetEffectWeights(config, c)) {
+    fdWeights(c);
+  } else if (const char *wc = std::getenv("AZURE_TE_WEIGHTS_CHECK")) {
+    static std::atomic<int> nChecked{0};
+    if (nChecked++ < std::atoi(wc)) {
+      std::vector<double> cfd;
+      fdWeights(cfd);
+      double cmax = 0.0, dmax = 0.0, yW = 0.0;
+      for (int i = 0; i < nsp; i++) {
+        cmax = std::max(cmax, std::fabs(cfd[i]));
+        dmax = std::max(dmax, std::fabs(c[i] - cfd[i]));
+        yW += c[i] * sigma[i];
+      }
+      point->IntegrateTargetEffect(config);
+      const double yI = point->GetFitCrossSection();
+#pragma omp critical
+      std::cerr << "[te-weights] entrance " << point->GetEntranceKey() << " exit " << point->GetExitKey() << " E " << point->GetCMEnergy() << " nsp " << nsp
+                << ": max|c - c_fd|/max|c_fd| " << (cmax > 0 ? dmax / cmax : dmax) << ", sum c*s " << yW
+                << " vs integrator " << yI << std::endl;
+    }
   }
-
   // For A_y: the denominator D and the average <A>, from the same integrator
   // calls the forward pass makes.
   double den = 0.0, avg = 0.0;

@@ -1759,8 +1759,9 @@ void EPoint::AddSubPoint(EPoint subPoint) {
  * - Original nested Simpson's still used for convolution+targetIntegration
  */
 
-void EPoint::IntegrateTargetEffect(const Config &configure) {
-  double yield = 0.0;
+template <class V, class Read>
+V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
+  V yield = 0.0;
   TargetEffect *targetEffect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
 
   // All integration now uses Gaussian quadrature which works for non-uniform (adaptive) grids
@@ -1776,8 +1777,7 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
 
     int numPoints = this->NumSubPoints();
     if (numPoints < 2) {
-      this->SetFitCrossSection(0.0);
-      return;
+      return V(0.0);
     }
 
     // Get beam sigma and straggling parameters.  When both flags are set the
@@ -1802,7 +1802,7 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
     double minEnergy = this->GetSubPoint(numPoints)->GetCMEnergy();
     double maxEnergy = this->GetSubPoint(1)->GetCMEnergy();
 
-    double outerIntegral = 0.0;
+    V outerIntegral = 0.0;
 
     // Outer integral: over target depth using Gaussian quadrature
     // Loop over all subpoint intervals and integrate those within target range
@@ -1858,7 +1858,7 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
         if (convLow < minEnergy) convLow = minEnergy;
         if (convHigh > maxEnergy) convHigh = maxEnergy;
 
-        double innerIntegral = 0.0;
+        V innerIntegral = 0.0;
 
         // Inner integral: convolution over energy distribution
         for (int j = 1; j < numPoints; j++) {
@@ -1887,8 +1887,8 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
             // Interpolate cross-section and stopping power at E_conv
             // Use the original (unclipped) interval for interpolation
             double alpha = (Ea_inner - E_conv) / (Ea_inner - Eb_inner);
-            double sigma = (1.0 - alpha) * this->GetSubPoint(j)->GetFitCrossSection() +
-                alpha * this->GetSubPoint(j + 1)->GetFitCrossSection();
+            V sigma = (1.0 - alpha) * rd(j) +
+                alpha * rd(j + 1);
             double stopping = (1.0 - alpha) * this->GetSubPoint(j)->GetStoppingPower() +
                 alpha * this->GetSubPoint(j + 1)->GetStoppingPower();
 
@@ -1896,7 +1896,7 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
             double convFactor = std::pow(2.0 * pi, -0.5) / effectiveSigma *
                 std::exp(-std::pow(E_conv - E_depth, 2.0) / (2.0 * effectiveSigma * effectiveSigma));
 
-            double integrand = sigma / stopping / 1e24 * convFactor;
+            V integrand = sigma / stopping / 1e24 * convFactor;
             innerIntegral += std::abs(half_range_inner) * wi_inner * integrand;
           }
         }
@@ -1909,7 +1909,7 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
   } else if (targetEffect->IsConvolution()) {
     // Gaussian quadrature for non-uniform grids
     // 2-point Gauss-Legendre: exact for cubic polynomials
-    double integral = 0.0;
+    V integral = 0.0;
     double centroid = this->GetCMEnergy();
     int numPoints = this->NumSubPoints();
 
@@ -1935,15 +1935,15 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
       // Evaluate integrand at Gauss points (linear interpolation from grid points)
       // f1 at E_gauss1
       double alpha1 = (Eb - E_gauss1) / (Eb - Ea);
-      double sigma1 = alpha1 * this->GetSubPoint(i + 1)->GetFitCrossSection() +
-          (1.0 - alpha1) * this->GetSubPoint(i + 2)->GetFitCrossSection();
-      double f1 = sigma1 * targetEffect->GetConvolutionFactor(E_gauss1, centroid);
+      V sigma1 = alpha1 * rd(i + 1) +
+          (1.0 - alpha1) * rd(i + 2);
+      V f1 = sigma1 * targetEffect->GetConvolutionFactor(E_gauss1, centroid);
 
       // f2 at E_gauss2
       double alpha2 = (Eb - E_gauss2) / (Eb - Ea);
-      double sigma2 = alpha2 * this->GetSubPoint(i + 1)->GetFitCrossSection() +
-          (1.0 - alpha2) * this->GetSubPoint(i + 2)->GetFitCrossSection();
-      double f2 = sigma2 * targetEffect->GetConvolutionFactor(E_gauss2, centroid);
+      V sigma2 = alpha2 * rd(i + 1) +
+          (1.0 - alpha2) * rd(i + 2);
+      V f2 = sigma2 * targetEffect->GetConvolutionFactor(E_gauss2, centroid);
 
       // Gaussian quadrature formula
       integral += std::abs(half_range) * (w1 * f1 + w2 * f2);
@@ -1954,8 +1954,7 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
     // Target integration with optional straggling
     int numPoints = this->NumSubPoints();
     if (numPoints < 2) {
-      this->SetFitCrossSection(0.0);
-      return;
+      return V(0.0);
     }
 
     bool useStraggling = targetEffect->IsStraggling();
@@ -1984,7 +1983,7 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
       const double x1 = -1.0 / sqrt(3.0);
       const double x2 = 1.0 / sqrt(3.0);
 
-      double outerIntegral = 0.0;
+      V outerIntegral = 0.0;
 
       // Outer integral: over target depth using Gaussian quadrature
       // Loop over all subpoint intervals and integrate those within target range
@@ -2023,7 +2022,7 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
             stragglingSigma = stragglingSigma_keV / 1000.0;
           }
 
-          double innerIntegral = 0.0;
+          V innerIntegral = 0.0;
 
           if (stragglingSigma > 1.0e-10) {
             // Convolve with straggling distribution
@@ -2054,8 +2053,8 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
 
                 // Interpolate cross-section and stopping power
                 double alpha = (Ea_inner - E_conv) / (Ea_inner - Eb_inner);
-                double sigma = (1.0 - alpha) * this->GetSubPoint(j)->GetFitCrossSection() +
-                    alpha * this->GetSubPoint(j + 1)->GetFitCrossSection();
+                V sigma = (1.0 - alpha) * rd(j) +
+                    alpha * rd(j + 1);
                 double stopping = (1.0 - alpha) * this->GetSubPoint(j)->GetStoppingPower() +
                     alpha * this->GetSubPoint(j + 1)->GetStoppingPower();
 
@@ -2063,7 +2062,7 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
                 double convFactor = std::pow(2.0 * pi, -0.5) / stragglingSigma *
                     std::exp(-std::pow(E_conv - E_depth, 2.0) / (2.0 * stragglingSigma * stragglingSigma));
 
-                double integrand = sigma / stopping / 1e24 * convFactor;
+                V integrand = sigma / stopping / 1e24 * convFactor;
                 innerIntegral += std::abs(half_range_inner) * wi_inner * integrand;
               }
             }
@@ -2075,8 +2074,8 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
               double Eb = this->GetSubPoint(j + 1)->GetCMEnergy();
               if (E_depth <= Ea && E_depth >= Eb) {
                 double alpha = (Ea - E_depth) / (Ea - Eb);
-                double sigma = (1.0 - alpha) * this->GetSubPoint(j)->GetFitCrossSection() +
-                    alpha * this->GetSubPoint(j + 1)->GetFitCrossSection();
+                V sigma = (1.0 - alpha) * rd(j) +
+                    alpha * rd(j + 1);
                 double stopping = (1.0 - alpha) * this->GetSubPoint(j)->GetStoppingPower() +
                     alpha * this->GetSubPoint(j + 1)->GetStoppingPower();
                 innerIntegral = sigma / stopping / 1e24;
@@ -2093,7 +2092,7 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
     } else {
       // Standard target integration without straggling
       // Gaussian quadrature for non-uniform grids
-      double integral = 0.0;
+      V integral = 0.0;
 
       // Gauss-Legendre 2-point weights and nodes (on [-1,1])
       const double w1 = 1.0;
@@ -2117,19 +2116,19 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
         // Evaluate integrand at Gauss points (linear interpolation from grid points)
         // f1 at E_gauss1
         double alpha1 = (Eb - E_gauss1) / (Eb - Ea);
-        double sigma1 = alpha1 * this->GetSubPoint(i + 1)->GetFitCrossSection() +
-            (1.0 - alpha1) * this->GetSubPoint(i + 2)->GetFitCrossSection();
+        V sigma1 = alpha1 * rd(i + 1) +
+            (1.0 - alpha1) * rd(i + 2);
         double stopping1 = alpha1 * this->GetSubPoint(i + 1)->GetStoppingPower() +
             (1.0 - alpha1) * this->GetSubPoint(i + 2)->GetStoppingPower();
-        double f1 = sigma1 / stopping1 / 1e24;
+        V f1 = sigma1 / stopping1 / 1e24;
 
         // f2 at E_gauss2
         double alpha2 = (Eb - E_gauss2) / (Eb - Ea);
-        double sigma2 = alpha2 * this->GetSubPoint(i + 1)->GetFitCrossSection() +
-            (1.0 - alpha2) * this->GetSubPoint(i + 2)->GetFitCrossSection();
+        V sigma2 = alpha2 * rd(i + 1) +
+            (1.0 - alpha2) * rd(i + 2);
         double stopping2 = alpha2 * this->GetSubPoint(i + 1)->GetStoppingPower() +
             (1.0 - alpha2) * this->GetSubPoint(i + 2)->GetStoppingPower();
-        double f2 = sigma2 / stopping2 / 1e24;
+        V f2 = sigma2 / stopping2 / 1e24;
 
         // Gaussian quadrature formula
         integral += std::abs(half_range) * (w1 * f1 + w2 * f2);
@@ -2140,7 +2139,7 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
   } else if (targetEffect->IsConvCoefficients()) {
     // Gaussian quadrature for both integrals
     // 2-point Gauss-Legendre: exact for cubic polynomials
-    double integral = 0.0;
+    V integral = 0.0;
     double integralC = 0.0;
     double centroid = this->GetCMEnergy();
     int numPoints = this->NumSubPoints();
@@ -2167,17 +2166,17 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
       // Evaluate integrand at Gauss points (linear interpolation from grid points)
       // Point 1
       double alpha1 = (Eb - E_gauss1) / (Eb - Ea);
-      double sigma1 = alpha1 * this->GetSubPoint(i + 1)->GetFitCrossSection() +
-          (1.0 - alpha1) * this->GetSubPoint(i + 2)->GetFitCrossSection();
+      V sigma1 = alpha1 * rd(i + 1) +
+          (1.0 - alpha1) * rd(i + 2);
       double conv1 = targetEffect->CalculateConvolutionFactor(E_gauss1, centroid, configure);
-      double f1 = sigma1 * conv1;
+      V f1 = sigma1 * conv1;
 
       // Point 2
       double alpha2 = (Eb - E_gauss2) / (Eb - Ea);
-      double sigma2 = alpha2 * this->GetSubPoint(i + 1)->GetFitCrossSection() +
-          (1.0 - alpha2) * this->GetSubPoint(i + 2)->GetFitCrossSection();
+      V sigma2 = alpha2 * rd(i + 1) +
+          (1.0 - alpha2) * rd(i + 2);
       double conv2 = targetEffect->CalculateConvolutionFactor(E_gauss2, centroid, configure);
-      double f2 = sigma2 * conv2;
+      V f2 = sigma2 * conv2;
 
       // Gaussian quadrature formula for both integrals
       integral += std::abs(half_range) * (w1 * f1 + w2 * f2);
@@ -2200,8 +2199,7 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
     const UdrKernel *kernel = this->GetUdrKernel();
     int numPoints = this->NumSubPoints();
     if (!kernel || kernel->tau.size() < 2 || numPoints < 2) {
-      this->SetFitCrossSection(0.0);
-      return;
+      return V(0.0);
     }
     const double mass = this->GetUdrProjectileMass();
     const double path = targetEffect->GetUdrFlightPath();
@@ -2209,11 +2207,12 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
     const double t0 = UdrKinematics::TimeOfFlight(lab_energy_, mass, path);
     // Sub-points run from high to low energy, i.e. from large to small delay;
     // collect them in ascending delay.
-    std::vector<double> tauSub(numPoints), sigmaSub(numPoints);
+    std::vector<double> tauSub(numPoints);
+    std::vector<V> sigmaSub(numPoints);
     for (int i = 1; i <= numPoints; i++) {
       const EPoint *sp = this->GetSubPoint(i);
       tauSub[numPoints - i] = t0 - UdrKinematics::TimeOfFlight(sp->GetCMEnergy() / cmPerLab, mass, path);
-      sigmaSub[numPoints - i] = sp->GetFitCrossSection();
+      sigmaSub[numPoints - i] = rd(i);
     }
     std::vector<double> w(numPoints, 0.0);
     const std::vector<double> &T = kernel->tau;
@@ -2242,12 +2241,13 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
         if (lo >= tauSub[jj + 1]) jj++;
       }
     }
-    double numerator = 0.0, denominator = 0.0;
+    V numerator = 0.0;
+    double denominator = 0.0;
     for (int i = 0; i < numPoints; i++) {
       numerator += w[i] * sigmaSub[i];
       denominator += w[i];
     }
-    yield = (denominator > 0.0) ? numerator / denominator : 0.0;
+    yield = (denominator > 0.0) ? numerator / denominator : V(0.0);
   } else if (targetEffect->IsBeamProfile()) {
     // Beam-profile kernel (photodissociation in a broad, skewed gamma beam
     // with an event-by-event reconstructed energy, cf. Haverson 2026 App. A):
@@ -2272,8 +2272,7 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
     // result independent of how far the sub-point grid extends.
     int numPoints = this->NumSubPoints();
     if (numPoints < 2) {
-      this->SetFitCrossSection(0.0);
-      return;
+      return V(0.0);
     }
     const double x1 = -1.0 / sqrt(3.0);
     const double x2 = 1.0 / sqrt(3.0);
@@ -2310,7 +2309,7 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
     auto detailedBalance = [&](double e) {
       return (photo && dbNorm > 0.0) ? dbWeight(e) / dbNorm : 1.0;
     };
-    double numerator = 0.0;
+    V numerator = 0.0;
     double denominator = 0.0;
     for (int i = 1; i < numPoints; i++) {
       double Ea = this->GetSubPoint(i)->GetCMEnergy();
@@ -2318,20 +2317,38 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
       double mid = 0.5 * (Ea + Eb);
       double half = 0.5 * (Ea - Eb);
       if (std::fabs(half) < 1.0e-12) continue;
-      double sa = this->GetSubPoint(i)->GetFitCrossSection();
-      double sb = this->GetSubPoint(i + 1)->GetFitCrossSection();
+      V sa = rd(i);
+      V sb = rd(i + 1);
       for (int gp = 0; gp < 2; gp++) {
         double e = mid + half * ((gp == 0) ? x1 : x2);
         double frac = (Ea - e) / (Ea - Eb);
-        double sigma = (1.0 - frac) * sa + frac * sb;
+        V sigma = (1.0 - frac) * sa + frac * sb;
         double k = kernel(e);
         numerator += std::fabs(half) * k * detailedBalance(e) * sigma;
         denominator += std::fabs(half) * k;
       }
     }
-    yield = (denominator > 0.0) ? numerator / denominator : 0.0;
+    yield = (denominator > 0.0) ? numerator / denominator : V(0.0);
   }
-  this->SetFitCrossSection(yield);
+  return yield;
+}
+
+void EPoint::IntegrateTargetEffect(const Config &configure) {
+  this->SetFitCrossSection(this->IntegrateTargetEffectImpl<double>(
+      configure, [this](int j) { return this->GetSubPoint(j)->GetFitCrossSection(); }));
+}
+
+bool EPoint::TargetEffectWeights(const Config &configure, std::vector<double> &c) {
+  const int n = this->NumSubPoints();
+  c.assign(n > 0 ? n : 0, 0.0);
+  TELinearForm y = this->IntegrateTargetEffectImpl<TELinearForm>(
+      configure, [](int j) { return TELinearForm::Unit(j); });
+  if (!y.Valid()) return false;
+  for (const auto &t : y.Terms()) {
+    if (t.first < 1 || t.first > n) return false;
+    c[t.first - 1] += t.second;
+  }
+  return true;
 }
 
 /*!
