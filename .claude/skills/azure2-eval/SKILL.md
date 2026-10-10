@@ -2157,3 +2157,25 @@ complete:
   value. A fixed +2.75 keV centring shift set in the .azr was silently replaced by the 0 in the
   refit's param.sav (Jaeger chi2 39,315 instead of 7,905). When a fixed shift is set or changed in
   the .azr, also change it in (or delete it from) any parameter file the run will read.
+
+- 2026-10-10 (12C+a_onefile/8-6-26_claude_fit_fix) -- `--use-gradient` (analytic-gradient MIGRAD)
+  was no faster than the numerical fit until commit "fix(gradient): make --use-gradient actually
+  fast". Two causes: (1) Minuit2 seeds MIGRAD with a full NUMERICAL gradient + G2 pass and
+  NegativeG2LineSearch loops whenever the FCN gives a gradient but no G2 -- a 79-parameter local
+  fit was still in that phase after 20+ min, and the printed "Iteration" counter freezes there
+  (Minuit's parallel numerical-gradient threads do not advance it), so a stalled-looking log is
+  not proof of a hang; (2) the fast per-segment energy-shift derivative was gated on "no limits
+  manager", which the CLI never satisfies. Now AZURECalc supplies a Gauss-Newton G2 from the
+  residual Jacobian (log line "Seeding MIGRAD with the analytic Gauss-Newton G2."; "Analytic G2
+  unavailable ..." means the old numerical seed) and takes gradient + G2 from one Jacobian per
+  step (~2.6 s per step for 79 free parameters on 11k points, 8 threads).
+  Result on that model: the analytic fit went BELOW the numerical fit's final chi2 (which
+  MIGRAD declared converged early on its noisy numerical gradient) and then converged ~490 lower;
+  a numerical-MIGRAD control can therefore overstate a structure test's gain (1+ level: -902 vs
+  the numerical control, -545 vs the analytic one). Compare test and control with the SAME
+  minimizer, preferably `--use-gradient`.
+  Diagnostics: `AZURE_GRAD_TIMING=1` (per-call timing), `AZURE_GRAD_CHECK=1|exit` with
+  `AZURE_GRAD_CHECK_N=12` (sampled analytic vs central finite differences; the FD uses the
+  single-threaded Chi2Value, ~10x slower than a fit evaluation), `AZURE_GRAD_DEBUG=1` (names the
+  segment/reason when the adjoint bails and everything falls back to finite differences),
+  `AZURE_GRAD_ADJOINT=1` (force the adjoint gradient instead of the Jacobian path).
