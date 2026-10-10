@@ -155,6 +155,12 @@ jobs:
           # the python3 that has numpy, or the tests quietly skip.
           PY="$(command -v python3)"
           EXTRA+=(-DPython3_EXECUTABLE="$PY" -DPython_EXECUTABLE="$PY" -DPYTHON_EXECUTABLE="$PY")
+          if [ "${{ matrix.name }}" = "linux" ]; then
+            # Ubuntu 22.04's pybind11-dev (2.9.1) looks for Python through the
+            # old FindPythonInterp module, which CMake 4 no longer ships; this
+            # makes it use FindPython instead.
+            EXTRA+=(-DPYBIND11_FINDPYTHON=ON)
+          fi
           if [ "${{ matrix.name }}" = "macos" ]; then
             EXTRA+=(-Dpybind11_DIR="$PYBIND11_DIR")
             # FindOpenMP cannot infer any of this for AppleClang: the compiler
