@@ -73,3 +73,12 @@ add_test(NAME pyazr_shared_state
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shared_state_test.py)
 set_tests_properties(pyazr_shared_state PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Tests that take minutes rather than seconds (measured 2026-10-10 on a CRC
+# login node at their thread counts: park_gradient 41 min, shared_state 22,
+# objective 7, inactive_lines 6.5, channel_order 6).  CI excludes them with
+# `ctest -LE slow`; run the whole set (`ctest`, or `ctest -L slow` for these
+# alone) before changing pyazr or the engine paths they exercise.
+set_tests_properties(pyazr_channel_order pyazr_objective pyazr_inactive_lines
+                     pyazr_park_gradient pyazr_shared_state
+                     PROPERTIES LABELS slow)
