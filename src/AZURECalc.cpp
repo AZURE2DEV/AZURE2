@@ -760,11 +760,21 @@ bool AZURECalc::HasNuisanceParameters() const {
   AZUREParams fp;
   compound()->FillMnParams(fp.GetMinuitParams(), &configure());
   data()->FillMnParams(fp.GetMinuitParams());
-  int nonFixed = 0;
-  for (const auto &mp : fp.GetMinuitParams().Parameters())
-    if (!mp.IsFixed()) nonFixed++;
-  for (int i = 0; i < nonFixed; i++)
-    if (limitsManager_->IsNuisanceParameterByIndex(i)) return true;
+  // Index the parameters exactly as CalculateNuisanceChiSquared and
+  // AddNuisanceGradient do, and ignore the ones they skip: a nuisance flag on a
+  // norm or shift adds nothing to chi^2 or the gradient (those penalties come
+  // from the segment's own norm/shift error, which G2 already includes), so it
+  // must not switch off the analytic G2 or the segment-local shift derivative.
+  // The GUI writes nuisance = 1 on penalized norms, so without this filter a
+  // model with norm uncertainties lost both (11B+a, 2026-10-10).
+  int nf = 0;
+  for (const auto &mp : fp.GetMinuitParams().Parameters()) {
+    const std::string &name = mp.GetName();
+    if (mp.IsFixed() && name.find("segment") == std::string::npos) continue;
+    const bool inert = name.find("norm") != std::string::npos || name.find("shift") != std::string::npos;
+    if (!inert && limitsManager_->IsNuisanceParameterByIndex(nf)) return true;
+    nf++;
+  }
   return false;
 }
 
