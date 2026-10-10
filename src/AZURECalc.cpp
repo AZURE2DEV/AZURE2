@@ -847,7 +847,10 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
 
   ParamIndexMap pmap = BuildParamIndexMap(lc, ld, fixed);
   int nCols = 0;
+  const auto tj0 = std::chrono::steady_clock::now();
   bool ok = ComputeResidualJacobian(lc, ld, configure(), pmap, sdp, residuals, jac, nCols);
+  const auto tj1 = std::chrono::steady_clock::now();
+  int nShiftLocal = 0, nShiftFull = 0;
 
   // Energy-shift columns by central differences, as AZUREAPI::
   // CalculateResidualJacobianRWA does for pyazr.  The adjoint does not cover a
@@ -859,6 +862,53 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     const size_t nRes = residuals.size();
     vector_r rPlus, rMinus, jTmp;
     int nc = 0;
+
+    // A shift of a self-contained segment (no components, not a total-capture
+    // sum, no cross-segment energy mapping) moves only that segment's rows, so
+    // its column is differenced on those rows alone; every other row of the
+    // full re-evaluation below would difference to exactly zero.  The full
+    // path re-solved the WHOLE Jacobian, adjoints included, twice per shift:
+    // with 55 free shifts on 11B+a one gradient took over an hour.  Same
+    // criterion as the segment-local shift gradient in Gradient().
+    bool datasetHasMapping = false;
+    std::vector<int> rowStart(ld->NumSegments() + 2, 0);
+    {
+      int row = 0;
+      for (int s = 1; s <= ld->NumSegments(); s++) {
+        rowStart[s] = row;
+        ESegment *seg = ld->GetSegment(s);
+        if (!seg) continue;
+        for (int pid = 0; pid < seg->NumPoints(); pid++) {
+          EPoint *pt = seg->GetPoint(pid + 1);
+          if (!pt) continue;
+          row++;
+          if (pt->IsMapped() || pt->NumLocalMappedPoints() > 0) datasetHasMapping = true;
+        }
+      }
+      rowStart[ld->NumSegments() + 1] = row;
+      if ((size_t)row != nRes) datasetHasMapping = true;  // row layout not understood: use the full path
+    }
+    // Residuals of one segment's rows, in row order, exactly as
+    // ComputeResidualJacobian forms them.
+    auto segmentResiduals = [&](ESegment *seg, vector_r &out) {
+      const int nPts = seg->NumPoints();
+      const double norm = seg->GetNorm();
+      std::vector<double> byPoint(nPts, 0.0);
+      std::vector<char> present(nPts, 0);
+#pragma omp parallel for schedule(dynamic)
+      for (int pid = 0; pid < nPts; pid++) {
+        EPoint *pt = seg->GetPoint(pid + 1);
+        if (!pt) continue;
+        present[pid] = 1;
+        const double model = seg->CalculateTheoreticalCrossSection(pid, lc, configure(), ld);
+        const double denom = pt->GetCMCrossSectionError() * norm;
+        byPoint[pid] = (denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0;
+      }
+      out.clear();
+      for (int pid = 0; pid < nPts; pid++)
+        if (present[pid]) out.push_back(byPoint[pid]);
+    };
+
     for (int f = 0; f < pmap.NumFull() && f < (int)full.size(); f++) {
       if (fixed[f]) continue;
       if (pmap.Desc(f).kind != ParamKind::EnergyShift &&
@@ -867,6 +917,31 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
       if (packed < 0 || packed >= nCols) continue;
       const double x0 = full[f];
       const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+
+      const int sNum = pmap.Desc(f).segment;
+      ESegment *lseg = (sNum >= 1 && sNum <= ld->NumSegments()) ? ld->GetSegment(sNum) : nullptr;
+      if (!datasetHasMapping && lseg && !lseg->HasComponents() && !lseg->IsTotalCapture()) {
+        const bool isSqrt = (pmap.Desc(f).kind == ParamKind::EnergyShiftSqrt);
+        auto setShift = [&](double v) {
+          if (isSqrt) lseg->SetEnergyShiftSqrt(v); else lseg->SetEnergyShift(v);
+        };
+        const double d0 = isSqrt ? lseg->GetEnergyShiftSqrt() : lseg->GetEnergyShift();
+        setShift(x0 + h);
+        lseg->UpdatePointEnergiesWithShift(lc, &configure());
+        segmentResiduals(lseg, rPlus);
+        setShift(x0 - h);
+        lseg->UpdatePointEnergiesWithShift(lc, &configure());
+        segmentResiduals(lseg, rMinus);
+        setShift(d0);
+        lseg->UpdatePointEnergiesWithShift(lc, &configure());
+        const size_t r0 = (size_t)rowStart[sNum], nSegRows = (size_t)(rowStart[sNum + 1] - rowStart[sNum]);
+        if (rPlus.size() == nSegRows && rMinus.size() == nSegRows)
+          for (size_t r = 0; r < nSegRows; r++)
+            jac[(r0 + r) * (size_t)nCols + (size_t)packed] = (rPlus[r] - rMinus[r]) / (2.0 * h);
+        nShiftLocal++;
+        continue;
+      }
+      nShiftFull++;
       auto residualsAt = [&](double value, vector_r &out) -> bool {
         vector_r fk = full;
         fk[f] = value;
@@ -886,6 +961,16 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     lc->FillCompoundFromParams(full);
     ld->FillNormsFromParams(full);
     ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+  }
+  if (std::getenv("AZURE_GRAD_TIMING")) {
+    static std::atomic<int> rjCalls{0};
+    const int c = ++rjCalls;
+    if (c <= 5 || c % 50 == 0) {
+      auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
+      std::cerr << "[grad-timing] residual Jacobian " << c << ": adjoint rows " << ms(tj0, tj1) << " ms, energy-shift columns "
+                << ms(tj1, std::chrono::steady_clock::now()) << " ms (" << nShiftLocal << " segment-local, " << nShiftFull
+                << " full)" << std::endl;
+    }
   }
 
   packedToFull.resize(pmap.NumPacked());
