@@ -1,4 +1,6 @@
 #include "AZUREGrad.h"
+#include <atomic>
+#include <cstdlib>
 #include "CNuc.h"
 #include "EData.h"
 #include "JGroup.h"
@@ -469,6 +471,24 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
       }
     }
     if (bail) {
+      if (std::getenv("AZURE_GRAD_DEBUG")) {
+        static std::atomic<bool> told{false};
+        if (!told.exchange(true)) {
+          bool inactiveLevel = false;
+          for (int j = 1; j <= compound->NumJGroups(); j++) {
+            JGroup *jg = compound->GetJGroup(j);
+            if (!jg->IsInRMatrix()) continue;
+            for (int la = 1; la <= jg->NumLevels(); la++)
+              if (!jg->GetLevel(la)->IsInRMatrix()) inactiveLevel = true;
+          }
+          EPoint *pt = segment->GetPoint(1);
+          std::cerr << "[grad] adjoint bailed on segment " << i << " (entrance " << segment->GetEntranceKey()
+                    << ", exit " << segment->GetExitKey() << ", components " << segment->HasComponents()
+                    << ", angular-dist " << (pt && pt->IsAngularDist()) << ", A_y " << (pt && pt->IsAnalyzingPower())
+                    << ", target effect " << (pt && pt->IsTargetEffect()) << "); a level outside the R matrix in an "
+                    << "R-matrix J group: " << (inactiveLevel ? "YES" : "no") << std::endl;
+        }
+      }
       ok = false;
       break;
     }

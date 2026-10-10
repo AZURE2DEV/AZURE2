@@ -1,4 +1,7 @@
 #include "AZURECalc.h"
+#include <algorithm>
+#include <atomic>
+#include <chrono>
 #include "ParameterLabel.h"
 #include "Config.h"
 #include "CNuc.h"
@@ -300,6 +303,42 @@ double AZURECalc::Chi2Value(const vector_r &p) const {
 
 std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   std::vector<double> grad(p.size(), 0.0);
+  const auto tg0 = std::chrono::steady_clock::now();
+  // With G2 enabled, one residual Jacobian gives both the gradient (2 J^T r +
+  // penalties) and Minuit's G2, which it requests at the same point next.
+  if (g2Enabled_ && !std::getenv("AZURE_GRAD_ADJOINT") && GradientFromJacobian(p, grad)) {
+    if (std::getenv("AZURE_GRAD_TIMING")) {
+      static std::atomic<int> jc{0};
+      int c = ++jc;
+      if (c <= 5 || c % 50 == 0)
+        std::cerr << "[grad-timing] call " << c << " (Jacobian path, gradient + G2): "
+                  << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tg0).count() << " ms" << std::endl;
+    }
+    // AZURE_GRAD_CHECK: on the first call also take the adjoint gradient (which
+    // itself runs the sampled finite-difference check) and compare all components.
+    static std::atomic<bool> jChecked{false};
+    if (std::getenv("AZURE_GRAD_CHECK") && !jChecked.exchange(true)) {
+      setenv("AZURE_GRAD_ADJOINT", "1", 1);
+      std::vector<double> ga = Gradient(p);
+      unsetenv("AZURE_GRAD_ADJOINT");
+      AZUREParams fpc;
+      compound()->FillMnParams(fpc.GetMinuitParams(), &configure());
+      data()->FillMnParams(fpc.GetMinuitParams());
+      const int nMnc = fpc.GetMinuitParams().Params().size();
+      double worst = 0.0; int worstIdx = -1, nFree = 0;
+      for (size_t i = 0; i < grad.size() && i < ga.size(); i++) {
+        if ((int)i < nMnc && fpc.GetMinuitParams().Parameter(i).IsFixed()) continue;  // Minuit ignores these
+        nFree++;
+        if (grad[i] == 0.0 && ga[i] == 0.0) continue;
+        const double rel = std::fabs(grad[i] - ga[i]) / (std::fabs(grad[i]) + std::fabs(ga[i]) + 1.0);
+        if (rel > worst) { worst = rel; worstIdx = (int)i; }
+      }
+      std::cerr << "[grad-check] Jacobian-path vs adjoint gradient over " << nFree << " free parameters: worst relative difference " << worst << " at idx "
+                << worstIdx << (worstIdx >= 0 ? " (" + std::to_string(grad[worstIdx]) + " vs " + std::to_string(ga[worstIdx]) + ")" : "")
+                << std::endl;
+    }
+    return grad;
+  }
   const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
 
   // --- Analytic energy / reduced-width block via the shared adjoint engine. ---
@@ -349,6 +388,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   };
 
   bool eg = AccumulateEGammaGradient(lc, ld, configure(), pmap, sdp, fitBarFn, accum);
+  const auto tg1 = std::chrono::steady_clock::now();
   if (!eg && std::getenv("AZURE_GRAD_DEBUG")) {
     std::cerr << "[grad] analytic energy/gamma adjoint bailed -> full finite "
                  "differences (no speed-up). An unsupported segment/config is "
@@ -397,7 +437,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       }
     }
   }
-  const bool localShiftOk = !datasetHasMapping && (limitsManager_ == nullptr);
+  const bool localShiftOk = !datasetHasMapping && !HasNuisanceParameters();
 
   // --- Finite differences only for what is left: non-fixed energy shifts, and
   //     (if the analytic path bailed) the energy/gamma and norm blocks too. ---
@@ -459,10 +499,181 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     grad[idx] = (Chi2Value(pp) - Chi2Value(pm)) / (2.0 * h);
   }
 
+  const auto tg2 = std::chrono::steady_clock::now();
+  static std::atomic<int> gradCalls{0};
+  if (std::getenv("AZURE_GRAD_CHECK") || std::getenv("AZURE_GRAD_TIMING")) {
+    int c = ++gradCalls;
+    if (c <= 5 || c % 50 == 0) {
+      auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
+      int nfd = 0;
+      for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
+        if (idx < nMn && fp.GetMinuitParams().Parameter(idx).IsFixed()) continue;
+        ParamKind kind = pmap.Desc(idx).kind;
+        if (!(eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm))) nfd++;
+      }
+      std::cerr << "[grad-timing] call " << c << ": setup+adjoint " << ms(tg0, tg1) << " ms (analytic " << (eg ? "ok" : "BAILED")
+                << "), finite-difference part " << ms(tg1, tg2) << " ms for " << nfd << " parameters" << std::endl;
+    }
+  }
+
+  // Optional full self-check, AZURE_GRAD_CHECK=1 (or =exit to stop the run after
+  // it): on the first call, compare every non-fixed gradient component with a
+  // central finite difference of the side-effect-free chi-squared and list the
+  // worst disagreements.  Minuit itself never checks (CheckGradient() is false).
+  static std::atomic<bool> gradChecked{false};
+  if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
+    if (!gradChecked.exchange(true)) {
+      static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt"};
+      struct Row { double score, g, fd; int idx; ParamDesc d; };
+      std::vector<Row> rows;
+      int nBad[5] = {0, 0, 0, 0, 0}, nAll[5] = {0, 0, 0, 0, 0};
+      const auto tc0 = std::chrono::steady_clock::now();
+      const double f0 = Chi2Value(p);
+      std::cerr << "[grad-check] one Chi2Value: " << std::chrono::duration<double>(std::chrono::steady_clock::now() - tc0).count() << " s" << std::endl;
+      std::vector<int> freeIdx;
+      for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++)
+        if (!(idx < nMn && fp.GetMinuitParams().Parameter(idx).IsFixed())) freeIdx.push_back(idx);
+      const char *cn = std::getenv("AZURE_GRAD_CHECK_N");
+      const int nCheck = cn ? std::atoi(cn) : 16;
+      const int stride = std::max(1, (int)freeIdx.size() / std::max(1, nCheck));
+      for (int q = 0; q < (int)freeIdx.size(); q += stride) {
+        const int idx = freeIdx[q];
+        double x0 = p[idx], h = 1.0e-6 * (std::fabs(x0) + 1.0);
+        vector_r pp = p, pm = p;
+        pp[idx] = x0 + h;
+        pm[idx] = x0 - h;
+        double fd = (Chi2Value(pp) - Chi2Value(pm)) / (2.0 * h);
+        double score = std::fabs(grad[idx] - fd) / (std::fabs(fd) + std::fabs(grad[idx]) + 1.0e-6 * std::fabs(f0) + 1.0);
+        ParamDesc d = pmap.Desc(idx);
+        int k = (int)d.kind;
+        nAll[k]++;
+        if (score > 1.0e-2) nBad[k]++;
+        rows.push_back({score, grad[idx], fd, idx, d});
+      }
+      std::sort(rows.begin(), rows.end(), [](const Row &a, const Row &b) { return a.score > b.score; });
+      std::cerr << "[grad-check] chi2 " << f0 << ", analytic block " << (eg ? "used" : "BAILED (all finite differences)")
+                << "; components with relative disagreement > 1e-2:";
+      for (int k = 0; k < 5; k++)
+        if (nAll[k]) std::cerr << " " << kindName[k] << " " << nBad[k] << "/" << nAll[k];
+      std::cerr << std::endl;
+      for (int r = 0; r < (int)rows.size() && r < 40; r++) {
+        const Row &w = rows[r];
+        std::cerr << "[grad-check] idx " << w.idx << " " << kindName[(int)w.d.kind] << " J" << w.d.jGroup << " L" << w.d.level
+                  << " ch" << w.d.channel << " seg" << w.d.segment << "  analytic " << w.g << "  fd " << w.fd
+                  << "  rel " << w.score << std::endl;
+      }
+      if (std::string(gc) == "exit") std::exit(0);
+    }
+  }
+
   delete lc;
   delete ld;
 
   return grad;
+}
+
+bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<double> &grad) const {
+  if (configure().paramMask & Config::USE_PARK_FORMALISM) return false;  // Park wall penalty not in J
+  vector_r r, jac;
+  std::vector<int> packedToFull;
+  if (!ResidualJacobian(p, r, jac, packedToFull) || r.empty()) return false;
+  const size_t nCols = packedToFull.size(), nRes = r.size();
+  std::vector<double> g2(p.size(), 0.0);
+  grad.assign(p.size(), 0.0);
+  for (size_t i = 0; i < nRes; i++)
+    for (size_t a = 0; a < nCols; a++) {
+      const double d = jac[i * nCols + a];
+      const int f = packedToFull[a];
+      if (f < 0 || f >= (int)p.size()) continue;
+      grad[f] += 2.0 * r[i] * d;
+      g2[f] += 2.0 * d * d;
+    }
+  // Penalties (x - x0)^2 / sigma^2: gradient 2 (x - x0) / sigma^2, curvature 2 / sigma^2.
+  ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
+  for (int s = 1; s <= data()->NumSegments(); s++) {
+    ESegment *seg = data()->GetSegment(s);
+    if (!seg) continue;
+    int idx;
+    if (seg->IsVaryNorm() && (idx = pmap.NormIndex(s)) >= 0 && idx < (int)p.size()) {
+      const double n0 = seg->GetNominalNorm(), nerr = n0 / 100.0 * seg->GetNormError();
+      if (nerr != 0.0) { grad[idx] += 2.0 * (p[idx] - n0) / (nerr * nerr); g2[idx] += 2.0 / (nerr * nerr); }
+    }
+    if (seg->IsVaryEnergyShift() && (idx = pmap.EnergyShiftIndex(s)) >= 0 && idx < (int)p.size()) {
+      const double e = seg->GetEnergyShiftError();
+      if (e != 0.0) { grad[idx] += 2.0 * (p[idx] - seg->GetNominalEnergyShift()) / (e * e); g2[idx] += 2.0 / (e * e); }
+    }
+    if (seg->IsVaryEnergyShiftSqrt() && (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0 && idx < (int)p.size()) {
+      const double e = seg->GetEnergyShiftSqrtError();
+      if (e != 0.0) { grad[idx] += 2.0 * (p[idx] - seg->GetNominalEnergyShiftSqrt()) / (e * e); g2[idx] += 2.0 / (e * e); }
+    }
+  }
+  g2CacheP_ = p;
+  g2Cache_ = g2;
+  return true;
+}
+
+std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
+  if (!g2Cache_.empty() && g2CacheP_ == p) return g2Cache_;
+  const auto t0 = std::chrono::steady_clock::now();
+  std::vector<double> g2(p.size(), 0.0);
+  vector_r r, jac;
+  std::vector<int> packedToFull;
+  if (!ResidualJacobian(p, r, jac, packedToFull) || r.empty()) return std::vector<double>();
+  const size_t nCols = packedToFull.size(), nRes = r.size();
+  for (size_t i = 0; i < nRes; i++)
+    for (size_t a = 0; a < nCols; a++) {
+      const double d = jac[i * nCols + a];
+      const int f = packedToFull[a];
+      if (f >= 0 && f < (int)g2.size()) g2[f] += 2.0 * d * d;
+    }
+  // Penalty curvatures, (x - x0)^2 / sigma^2 -> 2 / sigma^2.
+  ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
+  for (int s = 1; s <= data()->NumSegments(); s++) {
+    ESegment *seg = data()->GetSegment(s);
+    if (!seg) continue;
+    int idx;
+    if (seg->IsVaryNorm() && (idx = pmap.NormIndex(s)) >= 0 && idx < (int)g2.size()) {
+      const double nerr = seg->GetNominalNorm() / 100.0 * seg->GetNormError();
+      if (nerr != 0.0) g2[idx] += 2.0 / (nerr * nerr);
+    }
+    if (seg->IsVaryEnergyShift() && (idx = pmap.EnergyShiftIndex(s)) >= 0 && idx < (int)g2.size() &&
+        seg->GetEnergyShiftError() != 0.0)
+      g2[idx] += 2.0 / (seg->GetEnergyShiftError() * seg->GetEnergyShiftError());
+    if (seg->IsVaryEnergyShiftSqrt() && (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0 && idx < (int)g2.size() &&
+        seg->GetEnergyShiftSqrtError() != 0.0)
+      g2[idx] += 2.0 / (seg->GetEnergyShiftSqrtError() * seg->GetEnergyShiftSqrtError());
+  }
+  static std::atomic<int> g2Calls{0};
+  if (std::getenv("AZURE_GRAD_TIMING")) {
+    int c = ++g2Calls;
+    if (c <= 5 || c % 50 == 0)
+      std::cerr << "[g2-timing] call " << c << ": " << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count()
+                << " ms" << std::endl;
+  }
+  return g2;
+}
+
+bool AZURECalc::HasNuisanceParameters() const {
+  // The CLI always hands AZURECalc a ParameterLimitsManager, so "a manager
+  // exists" is not the question; whether it declares any nuisance parameter is.
+  if (!limitsManager_) return false;
+  AZUREParams fp;
+  compound()->FillMnParams(fp.GetMinuitParams(), &configure());
+  data()->FillMnParams(fp.GetMinuitParams());
+  int nonFixed = 0;
+  for (const auto &mp : fp.GetMinuitParams().Parameters())
+    if (!mp.IsFixed()) nonFixed++;
+  for (int i = 0; i < nonFixed; i++)
+    if (limitsManager_->IsNuisanceParameterByIndex(i)) return true;
+  return false;
+}
+
+bool AZURECalc::EnableG2(const std::vector<double> &p) {
+  g2Enabled_ = false;
+  if (HasNuisanceParameters()) return false;  // nuisance penalties are not in the Jacobian
+  std::vector<double> g2 = G2(p);
+  g2Enabled_ = !g2.empty();
+  return g2Enabled_;
 }
 
 bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,

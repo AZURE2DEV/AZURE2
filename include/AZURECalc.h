@@ -65,6 +65,20 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    */
   bool CheckGradient() const override { return false; }
   /*!
+   * Diagonal second derivatives for Minuit2 (Gauss-Newton: 2 * sum_i (dr_i/dp)^2
+   * from the analytic residual Jacobian, plus the norm and energy-shift penalty
+   * curvatures).  Without it Minuit2 seeds MIGRAD with a full numerical
+   * gradient + G2 pass and NegativeG2 line searches, which costs as much as the
+   * numerical fit it is meant to replace.  Enabled by EnableG2() only after a
+   * successful probe (an unsupported configuration keeps the numerical seed).
+   */
+  std::vector<double> G2(const std::vector<double> &) const override;
+  bool HasG2() const override { return g2Enabled_; }
+  /// Probe the analytic Jacobian at `p`; enables G2 for Minuit2 when it works.
+  bool EnableG2(const std::vector<double> &p);
+  /// True when the limits manager declares at least one nuisance parameter.
+  bool HasNuisanceParameters() const;
+  /*!
    * Side-effect-free chi-squared evaluation (no iteration counter / file output
    * / object pools), used by the finite-difference part of Gradient().
    */
@@ -217,6 +231,12 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   mutable std::stack<std::unique_ptr<EData>> edata_pool_;
   mutable std::mutex pool_mutex_;
   mutable bool pools_initialized_;
+  bool g2Enabled_ = false;
+  // Gauss-Newton cache: the residual Jacobian taken in Gradient() also gives G2;
+  // Minuit2 asks for G2 at the same point right after the gradient.
+  mutable std::vector<double> g2CacheP_, g2Cache_;
+  /// Gradient and Gauss-Newton G2 from one residual Jacobian; false if unsupported.
+  bool GradientFromJacobian(const std::vector<double> &p, std::vector<double> &grad) const;
 
   // Working copies for WriteIterationOutput, cloned on first use and reused for
   // every later snapshot.  Cloning the whole data set afresh every 100

@@ -402,6 +402,11 @@ int AZUREMain::operator()() {
           ROOT::Minuit2::FunctionMinimum min = [&]() {
             if (configure().paramMask & Config::USE_ANALYTIC_GRADIENT) {
               configure().outStream << "Using analytic gradient for Minuit2." << std::endl;
+              std::vector<double> p0 = params.GetMinuitParams().Params();
+              if (theFunc.EnableG2(p0))
+                configure().outStream << "Seeding MIGRAD with the analytic Gauss-Newton G2." << std::endl;
+              else
+                configure().outStream << "Analytic G2 unavailable for this model; MIGRAD seeds numerically." << std::endl;
               ROOT::Minuit2::MnMigrad migrad(theFunc, params.GetMinuitParams());
               return migrad(50000);
             } else {
