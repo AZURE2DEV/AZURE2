@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
+#include <string>
 #include <set>
 #include "ParameterLabel.h"
 #include "Config.h"
@@ -17,6 +19,7 @@
 #include <iostream>
 #include <iomanip>
 #include <thread>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -29,6 +32,29 @@
 
 #ifdef _OPENMP
 #include <omp.h>
+
+// setenv/unsetenv are POSIX and missing from the Windows (MinGW) runtime.
+// There, _putenv("NAME=value") sets a variable for getenv and "NAME=" removes it.
+namespace {
+void setEnvVar(const char *name, const char *value) {
+#ifdef _WIN32
+  static thread_local std::string entry;
+  entry = std::string(name) + "=" + value;
+  _putenv(entry.c_str());
+#else
+  setenv(name, value, 1);
+#endif
+}
+void unsetEnvVar(const char *name) {
+#ifdef _WIN32
+  static thread_local std::string entry;
+  entry = std::string(name) + "=";
+  _putenv(entry.c_str());
+#else
+  unsetenv(name);
+#endif
+}
+}  // namespace
 #endif
 
 namespace {
@@ -355,9 +381,9 @@ double AZURECalc::Chi2Value(const vector_r &p) const {
       CNuc *fc = compound()->Clone();
       EData *fd = data()->Clone();
       std::vector<double> segFresh;
-      setenv("AZURE_SERIAL_CHI2", "1", 1);  // reference: per-point (serial) path on a fresh copy
+      setEnvVar("AZURE_SERIAL_CHI2", "1");  // reference: per-point (serial) path on a fresh copy
       const double chiFresh = Chi2On(fc, fd, p, &segFresh);
-      unsetenv("AZURE_SERIAL_CHI2");
+      unsetEnvVar("AZURE_SERIAL_CHI2");
       delete fc;
       delete fd;
       std::cerr << "[pool-check] pooled+parallel " << chi << " fresh+serial " << chiFresh << std::endl;
@@ -390,9 +416,9 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     // itself runs the sampled finite-difference check) and compare all components.
     static std::atomic<bool> jChecked{false};
     if (std::getenv("AZURE_GRAD_CHECK") && !jChecked.exchange(true)) {
-      setenv("AZURE_GRAD_ADJOINT", "1", 1);
+      setEnvVar("AZURE_GRAD_ADJOINT", "1");
       std::vector<double> ga = Gradient(p);
-      unsetenv("AZURE_GRAD_ADJOINT");
+      unsetEnvVar("AZURE_GRAD_ADJOINT");
       AZUREParams fpc;
       compound()->FillMnParams(fpc.GetMinuitParams(), &configure());
       data()->FillMnParams(fpc.GetMinuitParams());

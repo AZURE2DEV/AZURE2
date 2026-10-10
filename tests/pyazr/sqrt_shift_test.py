@@ -13,8 +13,6 @@ import shutil
 import sys
 import tempfile
 
-import numpy as np
-
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
@@ -28,8 +26,13 @@ def check(name, ok, detail=""):
         failures.append(name)
 
 
-from pyazr.datasets import SegmentSet          # noqa: E402
-from pyazr.azrfile import AzrModel             # noqa: E402
+try:                                           # pyazr itself needs numpy
+    import numpy as np                         # noqa: E402
+    from pyazr.datasets import SegmentSet      # noqa: E402
+    from pyazr.azrfile import AzrModel         # noqa: E402
+except Exception as err:                       # same skip as the other pyazr tests
+    print(f"skip: pyazr not importable ({type(err).__name__}: {err})")
+    sys.exit(0)
 
 AZR = os.path.join(ROOT, "tests", "energy_shift_sqrt", "energy_shift_sqrt.azr")
 
