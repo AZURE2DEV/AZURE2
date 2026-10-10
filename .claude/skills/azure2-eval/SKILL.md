@@ -2089,6 +2089,20 @@ complete:
   outlier test, `plot_initial.py` there) or move the grid; the fix belongs in the threshold
   handling of the bare calculation (penetrability/shift at E_cm -> 0), not in the effects.
 
+- 2026-10-10 -- CI (GitHub Actions, dev) RULES, after a week of red builds (all fixed in d39ef31,
+  3002ae7, 8687bb7, 42859b6). CI builds and tests on Linux, macOS (BSD userland) and Windows
+  (MinGW), now WITH numpy and pybind11, so the pyazr tests really run there. Before pushing:
+  (1) no `setenv`/`unsetenv` in C++ -- MinGW lacks them; use `setEnvVar`/`unsetEnvVar` at the top
+  of src/AZURECalc.cpp (`_putenv` on Windows); (2) no GNU-only shell in tests (`sed -i` without a
+  suffix, `sed '0,/re/'`, `grep -P`) -- macOS runs BSD tools; awk/perl are portable; (3) a pyazr
+  test must import numpy AND pyazr inside its skip guard (`try: ... except: print("skip: ...");
+  sys.exit(0)`), as all of tests/pyazr/*.py do; (4) CI runs `ctest -LE slow`: a test that takes
+  minutes gets `LABELS slow` in tests/pyazr/CMakeLists.txt, and `ctest -L slow` (park_gradient
+  ~41 min, shared_state ~22, objective, inactive_lines, channel_order ~6-7 each) is run locally
+  when pyazr or the engine paths they cover change. Job logs need a GitHub token (the one in
+  ~/.git-credentials works); annotations are public but capped at 10 per step. Pushing a change
+  to .github/workflows/ needs the token's `workflow` scope (granted 2026-10-10).
+
 - **A regression reference is not a correctness check.** `tests/run_tests.sh` pins each
   project's chi-squared against a number this code produced, so it catches a change and
   nothing else. `tests/reference/` is the other kind: it recomputes the same quantity from
