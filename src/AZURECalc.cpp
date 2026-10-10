@@ -890,12 +890,12 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     }
     // Residuals of one segment's rows, in row order, exactly as
     // ComputeResidualJacobian forms them.
-    auto segmentResiduals = [&](ESegment *seg, vector_r &out) {
+    auto segmentResiduals = [&](ESegment *seg, vector_r &out, bool parallel) {
       const int nPts = seg->NumPoints();
       const double norm = seg->GetNorm();
       std::vector<double> byPoint(nPts, 0.0);
       std::vector<char> present(nPts, 0);
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(dynamic) if (parallel)
       for (int pid = 0; pid < nPts; pid++) {
         EPoint *pt = seg->GetPoint(pid + 1);
         if (!pt) continue;
@@ -909,38 +909,71 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
         if (present[pid]) out.push_back(byPoint[pid]);
     };
 
+    // Segment-local shift columns.  Distinct segments touch disjoint points,
+    // so the segments are processed in parallel (largest first); the shifts of
+    // one segment (constant and sqrt term) run in sequence inside one task.
+    struct LocalShift { int f, packed; bool isSqrt; };
+    std::vector<std::pair<int, std::vector<LocalShift>>> localBySeg;  // (segment, shifts)
+    std::vector<int> fullShifts;
     for (int f = 0; f < pmap.NumFull() && f < (int)full.size(); f++) {
       if (fixed[f]) continue;
       if (pmap.Desc(f).kind != ParamKind::EnergyShift &&
           pmap.Desc(f).kind != ParamKind::EnergyShiftSqrt) continue;
       const int packed = pmap.FullToPacked(f);
       if (packed < 0 || packed >= nCols) continue;
-      const double x0 = full[f];
-      const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
-
       const int sNum = pmap.Desc(f).segment;
       ESegment *lseg = (sNum >= 1 && sNum <= ld->NumSegments()) ? ld->GetSegment(sNum) : nullptr;
       if (!datasetHasMapping && lseg && !lseg->HasComponents() && !lseg->IsTotalCapture()) {
-        const bool isSqrt = (pmap.Desc(f).kind == ParamKind::EnergyShiftSqrt);
+        const LocalShift ls{f, packed, pmap.Desc(f).kind == ParamKind::EnergyShiftSqrt};
+        auto it = std::find_if(localBySeg.begin(), localBySeg.end(),
+                               [sNum](const std::pair<int, std::vector<LocalShift>> &e) { return e.first == sNum; });
+        if (it == localBySeg.end()) localBySeg.push_back({sNum, {ls}});
+        else it->second.push_back(ls);
+      } else {
+        fullShifts.push_back(f);
+      }
+    }
+    std::vector<double> segCost(localBySeg.size(), 0.0);
+    for (size_t t = 0; t < localBySeg.size(); t++) {
+      ESegment *seg = ld->GetSegment(localBySeg[t].first);
+      for (int pid = 0; pid < seg->NumPoints(); pid++)
+        if (EPoint *pt = seg->GetPoint(pid + 1)) segCost[t] += 1.0 + pt->NumSubPoints();
+    }
+    std::vector<size_t> order(localBySeg.size());
+    for (size_t t = 0; t < order.size(); t++) order[t] = t;
+    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return segCost[a] > segCost[b]; });
+#pragma omp parallel for schedule(dynamic, 1)
+    for (int q = 0; q < (int)order.size(); q++) {
+      const int sNum = localBySeg[order[q]].first;
+      ESegment *lseg = ld->GetSegment(sNum);
+      vector_r rP, rM;
+      for (const LocalShift &ls : localBySeg[order[q]].second) {
+        const double x0 = full[ls.f];
+        const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
         auto setShift = [&](double v) {
-          if (isSqrt) lseg->SetEnergyShiftSqrt(v); else lseg->SetEnergyShift(v);
+          if (ls.isSqrt) lseg->SetEnergyShiftSqrt(v); else lseg->SetEnergyShift(v);
         };
-        const double d0 = isSqrt ? lseg->GetEnergyShiftSqrt() : lseg->GetEnergyShift();
+        const double d0 = ls.isSqrt ? lseg->GetEnergyShiftSqrt() : lseg->GetEnergyShift();
         setShift(x0 + h);
         lseg->UpdatePointEnergiesWithShift(lc, &configure());
-        segmentResiduals(lseg, rPlus);
+        segmentResiduals(lseg, rP, false);
         setShift(x0 - h);
         lseg->UpdatePointEnergiesWithShift(lc, &configure());
-        segmentResiduals(lseg, rMinus);
+        segmentResiduals(lseg, rM, false);
         setShift(d0);
         lseg->UpdatePointEnergiesWithShift(lc, &configure());
         const size_t r0 = (size_t)rowStart[sNum], nSegRows = (size_t)(rowStart[sNum + 1] - rowStart[sNum]);
-        if (rPlus.size() == nSegRows && rMinus.size() == nSegRows)
+        if (rP.size() == nSegRows && rM.size() == nSegRows)
           for (size_t r = 0; r < nSegRows; r++)
-            jac[(r0 + r) * (size_t)nCols + (size_t)packed] = (rPlus[r] - rMinus[r]) / (2.0 * h);
-        nShiftLocal++;
-        continue;
+            jac[(r0 + r) * (size_t)nCols + (size_t)ls.packed] = (rP[r] - rM[r]) / (2.0 * h);
       }
+    }
+    for (const auto &e : localBySeg) nShiftLocal += (int)e.second.size();
+
+    for (int f : fullShifts) {
+      const int packed = pmap.FullToPacked(f);
+      const double x0 = full[f];
+      const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
       nShiftFull++;
       auto residualsAt = [&](double value, vector_r &out) -> bool {
         vector_r fk = full;
