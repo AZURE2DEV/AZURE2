@@ -683,7 +683,11 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
             std::find(checkIdx.begin(), checkIdx.end(), v) == checkIdx.end())
           checkIdx.push_back(v);
       for (int idx : checkIdx) {
-        double x0 = p[idx], h = 1.0e-6 * (std::fabs(x0) + 1.0);
+        // AZURE_GRAD_CHECK_H scales the finite-difference step (default 1e-6
+        // relative): a component that moves with it is truncation error of the
+        // FD (e.g. near a narrow level), not of the analytic value.
+        static const double hScale = std::getenv("AZURE_GRAD_CHECK_H") ? std::atof(std::getenv("AZURE_GRAD_CHECK_H")) : 1.0e-6;
+        double x0 = p[idx], h = hScale * (std::fabs(x0) + 1.0);
         vector_r pp = p, pm = p;
         pp[idx] = x0 + h;
         pm[idx] = x0 - h;
