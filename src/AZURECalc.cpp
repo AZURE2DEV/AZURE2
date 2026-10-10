@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <string>
 #include <set>
+#include <sstream>
 #include "ParameterLabel.h"
 #include "Config.h"
 #include "CNuc.h"
@@ -636,8 +637,40 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       const char *cn = std::getenv("AZURE_GRAD_CHECK_N");
       const int nCheck = cn ? std::atoi(cn) : 16;
       const int stride = std::max(1, (int)freeIdx.size() / std::max(1, nCheck));
-      for (int q = 0; q < (int)freeIdx.size(); q += stride) {
-        const int idx = freeIdx[q];
+      std::vector<int> checkIdx;
+      for (int q = 0; q < (int)freeIdx.size(); q += stride) checkIdx.push_back(freeIdx[q]);
+      // Targeted additions: AZURE_GRAD_CHECK_IDX = "i,j,a-b" (parameter
+      // indices) and AZURE_GRAD_CHECK_SEGS = "s,a-b" (1-based segment numbers
+      // in data order: their norm and energy-shift parameters).  Fixed
+      // parameters are skipped.
+      auto parseList = [](const char *spec) {
+        std::vector<int> out;
+        std::stringstream ss(spec);
+        std::string item;
+        while (std::getline(ss, item, ',')) {
+          if (item.empty()) continue;
+          size_t dash = item.find('-', 1);
+          int lo = std::atoi(item.substr(0, dash).c_str());
+          int hi = (dash == std::string::npos) ? lo : std::atoi(item.substr(dash + 1).c_str());
+          for (int v = lo; v <= hi; v++) out.push_back(v);
+        }
+        return out;
+      };
+      std::vector<int> extra;
+      if (const char *ci = std::getenv("AZURE_GRAD_CHECK_IDX"))
+        for (int v : parseList(ci)) extra.push_back(v);
+      if (const char *cs = std::getenv("AZURE_GRAD_CHECK_SEGS"))
+        for (int sNum : parseList(cs)) {
+          if (sNum < 1 || sNum > ld->NumSegments()) continue;
+          extra.push_back(pmap.NormIndex(sNum));
+          extra.push_back(pmap.EnergyShiftIndex(sNum));
+          extra.push_back(pmap.EnergyShiftSqrtIndex(sNum));
+        }
+      for (int v : extra)
+        if (std::find(freeIdx.begin(), freeIdx.end(), v) != freeIdx.end() &&
+            std::find(checkIdx.begin(), checkIdx.end(), v) == checkIdx.end())
+          checkIdx.push_back(v);
+      for (int idx : checkIdx) {
         double x0 = p[idx], h = 1.0e-6 * (std::fabs(x0) + 1.0);
         vector_r pp = p, pm = p;
         pp[idx] = x0 + h;

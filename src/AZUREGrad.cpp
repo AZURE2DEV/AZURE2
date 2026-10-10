@@ -276,23 +276,49 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
 
 namespace {
 
-// Forward + adjoint for one target-effect (sub-point integrated) point.  Its
-// yield is linear in the sub-point cross sections, so the combination weights
-// c_i = d(yield)/d(sigma_i) come from central differences on the cheap
-// IntegrateTargetEffect combiner; each sub-point is then back-propagated.
+// Forward + adjoint for one target-effect (sub-point integrated) point.  The
+// integrator IntegrateTargetEffect is a fixed linear functional of the values
+// in the sub-points' cross-section slots, Y = sum_i c_i s_i, so the weights
+// c_i = dY/ds_i come from central differences on that cheap combiner (exact up
+// to rounding); each sub-point is then back-propagated with PointAdjoint.
+//
+// A cross section (or E1/E2 component) is Y itself.  A target-averaged
+// analyzing power is the ratio of two such functionals with the SAME weights
+// (EPoint::IntegrateTargetEffectForObservable runs the one integrator on s_i
+// and on s_i A_i, s_i being the sub-point's differential cross section at the
+// point's angle):
+//     <A> = N / D,   N = sum_i c_i s_i A_i,   D = sum_i c_i s_i,
+//     d<A> = sum_i c_i [ s_i dA_i + (A_i - <A>) ds_i ] / D,
+// so each sub-point contributes an A_y cotangent fitBar c_i s_i / D and a
+// differential-cross-section cotangent fitBar c_i (A_i - <A>) / D.
 bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
                              const vector_matrix_r *shiftDeriv, int xsComponent,
                              CNuc *compound, const Config &config) {
   int nsp = point->NumSubPoints();
   if (nsp <= 0) return true;
-  // A target-averaged analyzing power is a ratio of two integrals,
-  // Int A_y sigma dE / Int sigma dE (EPoint::IntegrateTargetEffectForObservable),
-  // not a fixed linear combination of the sub-point values.  The weights below
-  // would treat it as one, and each sub-point's own A_y adjoint would then be
-  // combined without the cross-section weighting -- a wrong Jacobian with no
-  // diagnostic.  PointAdjoint refuses such a point, but it is only ever called
-  // here on the sub-points, so the refusal has to be made at this level.
-  if (point->IsAnalyzingPower()) return false;
+
+  // EPoint::Calculate blends the integrated value with the bare one at the
+  // edge of an energy-restricted effect (blend < 1) and, with an automatic
+  // tolerance, may replace it by the bare value altogether.  Neither is the
+  // pure integrator differentiated below, so leave such points to finite
+  // differences.
+  {
+    TargetEffect *te = point->GetParentData()->GetTargetEffect(point->GetTargetEffectNum());
+    if (point->GetTargetBlendWeight() < 1.0) return false;
+    if (te && te->GetAutoTolerance() > 0.) return false;
+  }
+
+  const bool isAy = point->IsAnalyzingPower();
+  if (isAy) {
+    // Supported: particle-exit A_y, full observable, no point mapping (a mapped
+    // point's sub-points are written by another point's calculation).  Capture
+    // A_y keeps its refusal: the attenuation folded into P_k has no
+    // counterpart for the P_k^1 of the numerator.
+    if (xsComponent != 0) return false;
+    if (point->IsMapped() || point->NumLocalMappedPoints() > 0) return false;
+    const int exitPairNum = compound->GetPairNumFromKey(point->GetExitKey());
+    if (compound->GetPair(exitPairNum)->GetPType() != 0) return false;
+  }
 
   std::vector<double> sigma(nsp);
   for (int i = 1; i <= nsp; i++) sigma[i - 1] = point->GetSubPoint(i)->GetFitCrossSection();
@@ -311,6 +337,25 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     point->GetSubPoint(i)->SetFitCrossSection(s0);
     c[i - 1] = (yp - ym) / (2.0 * h);
   }
+
+  // For A_y: the denominator D and the average <A>, from the same integrator
+  // calls the forward pass makes.
+  double den = 0.0, avg = 0.0;
+  if (isAy) {
+    point->IntegrateTargetEffect(config);
+    den = point->GetFitCrossSection();
+    for (int i = 1; i <= nsp; i++)
+      point->GetSubPoint(i)->SetFitCrossSection(sigma[i - 1] * point->GetSubPoint(i)->GetAnalyzingPower());
+    point->IntegrateTargetEffect(config);
+    const double num = point->GetFitCrossSection();
+    for (int i = 1; i <= nsp; i++) point->GetSubPoint(i)->SetFitCrossSection(sigma[i - 1]);
+    // The forward pass returns 0 for D = 0, a constant: no gradient.
+    if (!(std::fabs(den) > 0.0)) {
+      point->SetFitCrossSection(model);
+      return true;
+    }
+    avg = num / den;
+  }
   point->SetFitCrossSection(model);
 
   bool ok = true;
@@ -322,7 +367,14 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     amf.FillMatrices(sp);
     amf.InvertMatrices();
     amf.CalculateTMatrix(sp);
-    if (!amf.PointAdjoint(sp, fitBar * c[i - 1], accum, shiftDeriv, xsComponent)) ok = false;
+    if (!isAy) {
+      if (!amf.PointAdjoint(sp, fitBar * c[i - 1], accum, shiftDeriv, xsComponent)) ok = false;
+      continue;
+    }
+    const double ayBar = fitBar * c[i - 1] * sigma[i - 1] / den;
+    const double xsBar = fitBar * c[i - 1] * (sp->GetAnalyzingPower() - avg) / den;
+    if (ayBar != 0.0 && !amf.PointAdjoint(sp, ayBar, accum, shiftDeriv, 0, false)) ok = false;
+    if (ok && xsBar != 0.0 && !amf.PointAdjoint(sp, xsBar, accum, shiftDeriv, 0, true)) ok = false;
   }
   return ok;
 }
@@ -583,7 +635,17 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
         }
       }
     }
-    if (bail) ok = false;
+    if (bail) {
+      ok = false;
+      if (std::getenv("AZURE_GRAD_DEBUG")) {
+        EPoint *pt = segment->GetPoint(1);
+        std::cerr << "[grad] Jacobian/gradient adjoint bailed on segment " << i << " (key " << segment->GetSegmentKey()
+                  << ", entrance " << segment->GetEntranceKey() << ", exit " << segment->GetExitKey()
+                  << ", components " << segment->HasComponents() << ", angular-dist " << (pt && pt->IsAngularDist())
+                  << ", A_y " << (pt && pt->IsAnalyzingPower()) << ", target effect " << (pt && pt->IsTargetEffect())
+                  << ")" << std::endl;
+      }
+    }
   }
 
   if (!ok) {
@@ -657,7 +719,17 @@ bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
         }
       }
     }
-    if (bail) ok = false;
+    if (bail) {
+      ok = false;
+      if (std::getenv("AZURE_GRAD_DEBUG")) {
+        EPoint *pt = segment->GetPoint(1);
+        std::cerr << "[grad] Jacobian/gradient adjoint bailed on segment " << i << " (key " << segment->GetSegmentKey()
+                  << ", entrance " << segment->GetEntranceKey() << ", exit " << segment->GetExitKey()
+                  << ", components " << segment->HasComponents() << ", angular-dist " << (pt && pt->IsAngularDist())
+                  << ", A_y " << (pt && pt->IsAnalyzingPower()) << ", target effect " << (pt && pt->IsTargetEffect())
+                  << ")" << std::endl;
+      }
+    }
   }
 
   if (!ok) gradByPoint.clear();

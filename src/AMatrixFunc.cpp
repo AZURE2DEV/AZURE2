@@ -520,7 +520,8 @@ void AMatrixFunc::AddAInvMatrixElement(int jGroupNum, int lambdaNum, int muNum, 
  * nothing) for configurations outside the supported standard path.
  */
 bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
-                               const vector_matrix_r *shiftDeriv, int xsComponent) {
+                               const vector_matrix_r *shiftDeriv, int xsComponent,
+                               bool ayCrossSection) {
   const complex I(0.0, 1.0);
 
   // --- Common gating. ---
@@ -588,6 +589,10 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
   const bool isDiff = point->IsDifferential();
   const bool isPhase = point->IsPhase();
   if (isPhase && aa != ir) return false;  // phase output is for elastic only
+  // The cross section carried by an analyzing-power point is the differential
+  // one at the point's angle (GenMatrixFunc computes it before A_y and a
+  // target-effect sub-point keeps it); anything else is not supported.
+  if (ayCrossSection && (!point->IsAnalyzingPower() || !isDiff || isPhase || xsComponent != 0)) return false;
 
   // === Cross-section -> T:  build the T-matrix cotangents. ===
   // tBar  : cotangents of the internal T(k,m).
@@ -621,7 +626,7 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     for (int k = 1; k <= nK; k++)
       for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++)
         tBar[k - 1][m - 1] += fitBar * (2.0 * 25.0 / 100.0) * this->GetTMatrixElement(k, m);
-  } else if (point->IsAnalyzingPower()) {
+  } else if (point->IsAnalyzingPower() && !ayCrossSection) {
     // ---- Vector analyzing power. A_y is built from the channel-spin amplitude
     //      matrix, which is linear in T(k,m) with the coefficients AddPathway
     //      applies, so the whole derivative is a contraction against those same
