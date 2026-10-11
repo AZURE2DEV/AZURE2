@@ -233,11 +233,25 @@ double CoulFunc::Penetrability(int l, double radius, double energy) {
 double CoulFunc::PEShift(int l, double radius, double energy) {
   struct CoulWaves coul = this->operator()(l, radius, energy);
   double rho = sqrt(2. * uconv) / hbarc * radius * sqrt(redmass() * energy);
+  double shift;
   if (pow(coul.F, 2.0) == 0. && coul.F * coul.dF == 0.)
-    return rho * (coul.dG / coul.G);
+    shift = rho * (coul.dG / coul.G);
   else
-    return rho / (pow(coul.F, 2.0) + pow(coul.G, 2.0)) *
+    shift = rho / (pow(coul.F, 2.0) + pow(coul.G, 2.0)) *
         (coul.F * coul.dF + coul.G * coul.dG);
+  // Just above a charged-particle threshold (eta >~ 110; 11B+alpha within ~1 keV)
+  // the products overflow: G^2 or G G' is inf, and with F F' a denormal rather
+  // than exactly 0 the formula above returns NaN or -inf.  For 11B+a that made a
+  // ~50 eV band 0.5 keV above the alpha threshold give bare cross sections of
+  // 1e26-1e37 b, which any target-effect sub-point landing there folded into the
+  // data (Henderson 14C(p,p), key 76; --use-gradient fit 1526734 stopped on it).
+  // Scaling by hypot(F, G) avoids the overflow; it is used only when the plain
+  // formula failed, so every value that formula got right is unchanged.
+  if (!std::isfinite(shift)) {
+    const double h = std::hypot(coul.F, coul.G);
+    shift = rho * ((coul.F / h) * (coul.dF / h) + (coul.G / h) * (coul.dG / h));
+  }
+  return shift;
 }
 
 double CoulFunc::thisPEShift(double x, void *p) {

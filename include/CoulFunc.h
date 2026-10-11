@@ -1,6 +1,8 @@
 #ifndef COULFUNC_H
 #define COULFUNC_H
 
+#include <cmath>
+#include <complex>
 #include <memory>
 #include <gsl/gsl_sf_coulomb.h>
 
@@ -25,6 +27,20 @@ struct CoulWaves {
   /// Derivative of irregular solution with respect to \f$ \rho \f$
   double dG;
 };
+
+/*!
+ * exp(i phi) of the hard-sphere phase, (G - i F)/sqrt(F^2 + G^2).  Just above a
+ * charged-particle threshold (eta >~ 110) G^2 overflows and the plain formula
+ * returns 0 instead of a unit phase; the scaled form (hypot) is used only then,
+ * so every value the plain formula gets right is unchanged to the bit.
+ */
+inline std::complex<double> CoulombHardSpherePhase(const CoulWaves &c) {
+  const double s = std::sqrt(std::pow(c.F, 2.0) + std::pow(c.G, 2.0));
+  const double re = c.G / s, im = -c.F / s;
+  if (std::isfinite(re) && std::isfinite(im) && std::isfinite(s) && s > 0.0) return std::complex<double>(re, im);
+  const double h = std::hypot(c.F, c.G);
+  return std::complex<double>(c.G / h, -c.F / h);
+}
 
 /// A function class to calculate Coulomb functions for positive energy channels
 

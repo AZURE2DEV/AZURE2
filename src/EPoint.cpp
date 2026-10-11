@@ -1136,8 +1136,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
                                eta / sqrt(pow(eta, 2.0) + pow((double)ll, 2.0)));
             struct CoulWaves
                 coul = theCoulombFunction(lValue, radius, localEnergy);
-            complex expHSP(coul.G / sqrt(pow(coul.F, 2.0) + pow(coul.G, 2.0)),
-                           -coul.F / sqrt(pow(coul.F, 2.0) + pow(coul.G, 2.0)));
+            complex expHSP = CoulombHardSpherePhase(coul);
             this->AddLoElement(j, ch, loElement);
             this->AddSqrtPenetrability(j, ch, sqrt(localPene));
             this->AddExpCoulombPhase(j, ch, expCP);
@@ -1376,8 +1375,7 @@ void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                 for (int ll = 1; ll <= theECMGroup->GetL(); ll++)
                   expCP *= complex((double)ll / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)),
                                    eta / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)));
-                complex expHSP(coul.G / sqrt(pow(coul.F, 2.0) + pow(coul.G, 2.0)),
-                               -coul.F / sqrt(pow(coul.F, 2.0) + pow(coul.G, 2.0)));
+                complex expHSP = CoulombHardSpherePhase(coul);
 
                 double levelEnergy = ecLevel->GetE();
                 double sqrtGammaPene = pow((inEnergy - levelEnergy) / hbarc, theECMGroup->GetMult() + 0.5);
