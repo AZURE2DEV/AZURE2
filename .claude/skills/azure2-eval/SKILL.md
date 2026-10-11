@@ -2203,3 +2203,38 @@ complete:
   with identical results. AZURE_POOL_CHECK=1 compares pooled+parallel against fresh+serial chi2.
   It exposed a latent race: CNuc::CalcCaptureAnalyzingPower set its "built" flag before filling
   the tables (capture A_y chi2 varied run to run with >1 thread); now built under a mutex.
+
+- 2026-10-10 (11B+a/10-10-26_speedup) -- --use-gradient ON MODELS WITH PENALIZED NORMS, A_y DATA WITH TARGET
+  INTEGRATION AND MANY FREE SHIFTS (11B+a: 233 free, 55 shifts).  The fit fell back to the numerical seed
+  plus all-FD gradients.  Fixed on dev:
+  (1) HasNuisanceParameters counted the nuisance=1 flag the GUI writes on penalized norms in
+      <parameterSettings>.  Those flags are inert (CalculateNuisanceChiSquared and AddNuisanceGradient skip
+      norm/shift names), but they disabled the analytic G2 AND the segment-local shift derivative.  If the
+      log says "Analytic G2 unavailable" on a model with norm errors, this was it.
+  (2) GradTargetEffectAdjoint refused target-integrated A_y, so the whole analytic block bailed
+      (AZURE_GRAD_DEBUG names the segment).  New adjoint:
+        d<A> = sum c_i [s_i dA_i + (A_i - <A>) ds_i] / sum c_i s_i
+      with the yield weights c_i, plus PointAdjoint(..., ayCrossSection).
+  (3) The residual-Jacobian shift columns rebuilt a full forward+adjoint Jacobian per +-h per free shift
+      (110 per step).  Now segment-local.
+  (4) The target-effect combiner weights came from FD, O(nsp^3) per point (CASPAR ~2200 sub-points: >30 min
+      per Jacobian).  Now exact, in one templated integrator pass.
+  (5) Line-search evaluations re-energised shifted segments serially (195 s per evaluation).  Now in
+      parallel over points; no nested parallel regions inside Minuit's gradient threads.
+  (6) RACE FOUND ON THE WAY: CoulFuncCache::localCache indexed per-thread maps by omp_get_thread_num(),
+      which is 0 for every Minuit thread inside an inactive nested team ("double free" in
+      tests/energy_shift_sqrt).  Now omp_get_ancestor_thread_num(omp_get_active_level()).
+  (7) PRE-EXISTING: the FD step for norms was 1e-6*(|x|+1), i.e. 5% of a 2e-5 thick-target norm, so the
+      FD gradient was wrong by up to 14x (CASPAR).  Dev's FD fallback used it in fits.  Now 1e-6*|x|.
+  Validation: tests 16/16 (x3 runs); 11B+a mode 1 byte-identical on two grids; AZURE_GRAD_CHECK 0/37 >1e-2
+  incl. A_y-only model (1.6e-6), shift_sqrt, the CASPAR norms; remaining 1e-4..1e-3 are FD truncation
+  near narrow levels (shrink as h^2).
+  Measured: the 11B+a fit is dominated by RE-SHIFTING (every sub-point's Coulomb functions are recomputed
+  when a segment shift changes), not by chi2.  249747e's parallel chi2 gave no speed-up there
+  (2420 vs 2430 evaluations in 3 h).  On the 11B+a mixed grid, --use-gradient took the log chi2 from
+  10063.1 to 10048.5 in 30 min (numerical: 10059.0 after 3 h).
+  New diagnostics: AZURE_GRAD_CHECK also checks the Jacobian path; AZURE_GRAD_CHECK_IDX/_SEGS/_H;
+  AZURE_TE_WEIGHTS_CHECK/_FD; AZURE_GRAD_TIMING breakdown.
+  Not merged yet: feature/segment-mapping (same-energy mapping within a segment, re-shift 3x faster).
+  SPEED TIP for any model with target effects: check the points-per-width field (last field of a
+  <targetInt> line).  11B+a used 200-300 where 10 was converged (11B+a/10-10-26_speedup/readme).
