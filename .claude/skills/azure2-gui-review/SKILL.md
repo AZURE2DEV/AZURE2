@@ -167,6 +167,11 @@ Three things, all in `tests/gui/`, all `QT_QPA_PLATFORM=offscreen`:
   write-back differences are expected and are not yours: 2022-era files hold
   `1 0 0` in the three placeholder columns (the GUI writes `0 0 0.0`), and
   pyazr-written files carry more than the 6 significant digits the GUI saves.
+- `AZURE2_SCREENSHOT_DIR=<dir> xvfb-run -a -s "-screen 0 1400x900x24" AZURE2 x.azr < /dev/null`
+  opens the project, saves every tab as `<dir>/tab<n>_<name>.png` and exits: the
+  way to look at the whole GUI without a display, for layout reviews and the
+  docs' figures. `AZURE2_THEME=system` turns the azure theme (Fusion style,
+  palette, Azuma watermark, `gui/src/AzureTheme.cpp`) off for comparison.
 - Only a GUI build goes into `~/bin/AZURE2` (`ldd ~/bin/AZURE2 | grep -c Qt`
   must be > 0). A CLI-only build there opens as a text menu; launched with
   `nohup` on an open stdin it re-prompted forever and its unlinked log grew

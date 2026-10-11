@@ -63,7 +63,7 @@ LevelsTab::LevelsTab(QWidget *parent) :
   maxNumMultSpin->setSingleStep(1);
   maxNumMultSpin->setValue(2);
   QLabel *maxNumMultLabel = new QLabel(tr("Maximum Gamma Multipolarities\nPer Decay"));
-  includeAllJPiCheck = new QCheckBox(tr("Include hard-sphere scattering for every J%1 up to the maximum orbital momentum").arg(QChar(0x03C0)));
+  includeAllJPiCheck = new QCheckBox(tr("Hard-sphere scattering in every J%1 (levels or not)").arg(QChar(0x03C0)));
   includeAllJPiCheck->setToolTip(tr("AZURE2 only includes a J\u03c0 in the calculation when a level carries it. Without this, every J\u03c0 "
                                     "that has no level is missing from elastic scattering (its hard-sphere phase shift), unless a fixed "
                                     "zero-width level is added by hand. With it, every J\u03c0 the particle pairs allow up to the maximum "

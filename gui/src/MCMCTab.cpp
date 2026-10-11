@@ -386,7 +386,7 @@ void MCMCTab::setupProgressControls() {
   QHBoxLayout *iterLayout = new QHBoxLayout();
   iterLayout->addWidget(new QLabel("Current Iteration:"));
   currentIterationLabel = new QLabel("0");
-  currentIterationLabel->setStyleSheet("font-weight: bold; color: white;");
+  currentIterationLabel->setStyleSheet("font-weight: bold; color: #1f4f8f;");
   iterLayout->addWidget(currentIterationLabel);
   iterLayout->addStretch();
   progressLayout->addLayout(iterLayout);
@@ -395,17 +395,17 @@ void MCMCTab::setupProgressControls() {
   QHBoxLayout *probLayout = new QHBoxLayout();
   probLayout->addWidget(new QLabel("Current Log Probability:"));
   logProbLabel = new QLabel("N/A");
-  logProbLabel->setStyleSheet("font-weight: bold; color: white;");
+  logProbLabel->setStyleSheet("font-weight: bold; color: #1f4f8f;");
   probLayout->addWidget(logProbLabel);
 
   probLayout->addWidget(new QLabel("Log Likelihood:"));
   logLikelihoodLabel = new QLabel("N/A");
-  logLikelihoodLabel->setStyleSheet("font-weight: bold; color: white;");
+  logLikelihoodLabel->setStyleSheet("font-weight: bold; color: #1f4f8f;");
   probLayout->addWidget(logLikelihoodLabel);
 
   probLayout->addWidget(new QLabel("Log Prior:"));
   logPriorLabel = new QLabel("N/A");
-  logPriorLabel->setStyleSheet("font-weight: bold; color: white;");
+  logPriorLabel->setStyleSheet("font-weight: bold; color: #1f4f8f;");
   probLayout->addWidget(logPriorLabel);
 
   probLayout->addStretch();

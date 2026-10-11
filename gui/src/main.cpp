@@ -3,7 +3,12 @@
 #include <QResource>
 #include <QOperatingSystemVersion>
 #include <iostream>
+#include <cstdlib>
 #include "AZURESetup.h"
+#include "AzureTheme.h"
+#include <QTimer>
+#include <QIcon>
+#include <QDir>
 
 inline void initResource() { Q_INIT_RESOURCE(AZURESetup); }
 
@@ -28,6 +33,8 @@ int start_gui(int argc, char *argv[]) {
 #endif
 
   initResource();
+  applyAzureTheme(app);
+  app.setWindowIcon(QIcon(":/azure-icon.png"));   // title bar, task bar, dock
   QCoreApplication::setOrganizationName("jina");
   QCoreApplication::setApplicationName("azure2");
 
@@ -41,6 +48,16 @@ int start_gui(int argc, char *argv[]) {
       break;
     }
   if (!filename.trimmed().isEmpty()) azureSetup.open(filename);
+
+  // AZURE2_SCREENSHOT_DIR=<dir>: save every tab of the opened project as <dir>/tab<n>_<name>.png and exit.
+  // For documentation figures and layout reviews without a display (run under xvfb-run).
+  if (const char *shotDir = std::getenv("AZURE2_SCREENSHOT_DIR")) {
+    QString dir = QString::fromLocal8Bit(shotDir);
+    QTimer::singleShot(1500, [&azureSetup, &app, dir]() {
+      azureSetup.saveTabScreenshots(dir);
+      app.quit();
+    });
+  }
 
   return app.exec();
 }

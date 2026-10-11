@@ -52,6 +52,8 @@ class AZURESetup : public QMainWindow {
   Config &GetConfig();
   void open(QString filename);
   void saveProject() { save(); }  // Public wrapper for MCMCTab to use
+  /*! Grabs the window once per tab into dir/tab<n>_<name>.png (see AZURE2_SCREENSHOT_DIR in main.cpp). */
+  void saveTabScreenshots(const QString &dir);
 
   // Convert RWA parameter to physical value using proper R-Matrix transformation
   double ConvertRWAToPhysical(const QString &paramName, double rwaValue);

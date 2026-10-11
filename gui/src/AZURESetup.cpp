@@ -61,6 +61,19 @@ AZURESetup::AZURESetup() :
   setMinimumSize(1000, 640);
 
   tabWidget = new QTabWidget();
+  // The logo at the right end of the tab bar; clicking it opens the About box.
+  QToolButton *logoButton = new QToolButton;
+  logoButton->setIcon(QIcon(":/azure-icon.png"));
+  logoButton->setIconSize(QSize(26, 26));
+  logoButton->setText("AZURE2");
+  logoButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  logoButton->setAutoRaise(true);
+  logoButton->setCursor(Qt::PointingHandCursor);
+  logoButton->setToolTip(tr("AZURE2 -- about this program"));
+  logoButton->setStyleSheet("QToolButton { border: none; padding: 0 8px; color: #1f4f8f; font-weight: bold; }"
+                            "QToolButton:hover { background: #e3edf8; border-radius: 4px; }");
+  connect(logoButton, &QToolButton::clicked, this, [this]() { AboutAZURE2Dialog about(this); about.exec(); });
+  tabWidget->setCornerWidget(logoButton, Qt::TopRightCorner);
 
   pairsTab = new PairsTab;
 
@@ -1847,4 +1860,16 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysicalWithOldStructure(
     }
     return results;
   }
+}
+
+void AZURESetup::saveTabScreenshots(const QString &dir) {
+  QDir().mkpath(dir);
+  int current = tabWidget->currentIndex();
+  for (int i = 0; i < tabWidget->count(); i++) {
+    tabWidget->setCurrentIndex(i);
+    QApplication::processEvents();
+    QString name = tabWidget->tabText(i).remove('&').toLower().replace(' ', '_');
+    this->grab().save(QString("%1/tab%2_%3.png").arg(dir).arg(i).arg(name));
+  }
+  tabWidget->setCurrentIndex(current);
 }
