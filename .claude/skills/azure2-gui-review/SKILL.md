@@ -38,9 +38,10 @@ your edit on exit, and the binary stays mapped (an attempt to replace
 ```bash
 cd <fit directory>
 
-# 2. close any GUI
-pkill -f "bin/AZURE2 <name>.azr"; sleep 1
-ps -eo pid,cmd | grep "[b]in/AZURE2 <name>.azr" || echo "GUI closed"
+# 2. close any GUI -- by pid, then verify (pkill -f takes a REGEX: the + in 11B+a matches nothing)
+pid=$(ps -eo pid,cmd | grep "[b]in/AZURE2 <name>.azr" | grep -v "zsh -c" | awk '{print $1}')
+[ -n "$pid" ] && kill $pid; sleep 1
+ps -eo pid,cmd | grep "[b]in/AZURE2 <name>.azr" | grep -v "zsh -c" || echo "GUI closed"
 
 # 3. calculate -- menu 1, external parameter file, blank EC file, exit
 ~/bin/AZURE2 <project flags> --no-gui --no-readline <name>.azr <<EOF
@@ -54,14 +55,16 @@ EOF
 grep Total-Chi output/chiSquared.out
 ls -la output/AZUREOut_*.out | head       # timestamps must be from just now
 
-# 5. open
-nohup ~/bin/AZURE2 <name>.azr > azure2_gui.log 2>&1 &
-sleep 2; ps -eo pid,cmd | grep "[b]in/AZURE2 <name>.azr"
+# 5. open -- stdin closed and the log capped, in case it falls back to the text menu
+(nohup ~/bin/AZURE2 <name>.azr < /dev/null 2>&1 | head -c 200000 > azure2_gui.log) &
+sleep 5; ps -eo pid,cmd | grep "[b]in/AZURE2 <name>.azr" | grep -v "zsh -c"; wc -c azure2_gui.log
 ```
 
-`pgrep -f` will match your own shell wrapper as well as the GUI; `ps -eo
-pid,cmd | grep "[b]in/AZURE2"` is the check that actually tells you whether the
-process is alive.
+`pgrep -f` and `pkill -f` will match your own shell wrapper as well as the GUI,
+and treat the pattern as a regex; `ps -eo pid,cmd | grep "[b]in/AZURE2"` (minus
+the `zsh -c` wrapper lines) is the check that actually tells you whether the
+process is alive, and `kill <pid>` the way to stop it. Never delete a log until
+that check comes back empty.
 
 ## Open it on the screen the person is looking at
 
@@ -166,8 +169,16 @@ Three things, all in `tests/gui/`, all `QT_QPA_PLATFORM=offscreen`:
   pyazr-written files carry more than the 6 significant digits the GUI saves.
 - Only a GUI build goes into `~/bin/AZURE2` (`ldd ~/bin/AZURE2 | grep -c Qt`
   must be > 0). A CLI-only build there opens as a text menu; launched with
-  `nohup` on an empty stdin it loops on the prompt and filled a 9 GB log
-  (2026-10-11). Launch with `< /dev/null 2>&1 | head -c 200000 > log`.
+  `nohup` on an open stdin it re-prompted forever and its unlinked log grew
+  to 748 GB in 70 min, filling the 5 TB group quota and killing every
+  session's cluster jobs (2026-10-11). Launch with
+  `< /dev/null 2>&1 | head -c 200000 > log`, and 5 s later check the log is
+  small and `ps -eo pid,cmd -u $USER | grep [A]ZURE2` shows one GUI.
+- Stop a GUI by **pid** and verify (`kill $pid; sleep 1; ps -p $pid` empty)
+  before deleting its log. `pkill -f`/`pgrep -f` patterns are regexes: the
+  `+` in `11B+a_udr.azr` matched nothing, `pgrep` printed nothing, and the
+  "stopped" process kept writing into a hidden `.nfs…` file after the `rm`.
+  Never `rm` a log whose writer may be alive; `: > log` truncates safely.
 
 J^π labels in the Levels and Pairs tables and the level dialog use the
 superscript signs U+207A/U+207B as plain text (QComboBox items do not render

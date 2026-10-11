@@ -32,6 +32,18 @@
 #include <readline/history.h>
 #endif
 #include <string.h>
+#include <cstdlib>
+
+// Reads one line of stdin for a prompt. At end of input (a closed or empty
+// stdin: nohup without a here-document, a GUI build falling back to this menu
+// on a display that never opened) the prompt can never be answered, so say so
+// and stop rather than re-prompt forever -- that loop once wrote a 748 GB log
+// and filled the group quota (2026-10-11).
+static bool promptLine(const Config &configure, std::string &line) {
+  if (getline(std::cin, line)) return true;
+  configure.outStream << std::endl << "End of input on stdin: exiting." << std::endl;
+  return false;
+}
 
 // Global Config pointer for use across the codebase
 Config *g_config = nullptr;
@@ -215,7 +227,13 @@ int commandShell(const Config &configure) {
 #endif
     configure.outStream << "azure2: ";
     std::string inString;
-    getline(std::cin, inString);
+    if (!promptLine(configure, inString)) {
+#ifdef USE_MCMC
+      return 7;
+#else
+      return 6;
+#endif
+    }
     if (inString.empty()) continue;
     std::istringstream in;
     in.str(inString);
@@ -274,7 +292,7 @@ void processCommand(int command, Config &configure) {
     while (!goodAnswer) {
       configure.outStream << std::setw(30) << "Allowed Chi-Squared Variance: ";
       std::string inString;
-      getline(std::cin, inString);
+      if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
       std::istringstream stm;
       stm.str(inString);
       if (!(stm >> configure.chiVariance) || configure.chiVariance < 0.)
@@ -504,7 +522,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   while (mcmcParams.nwalkers < 2 || mcmcParams.nwalkers > 1000) {
     configure.outStream << std::setw(38) << "Number of Walkers (2-1000): ";
     std::string inString;
-    getline(std::cin, inString);
+    if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
     std::istringstream stm;
     stm.str(inString);
     if (!(stm >> mcmcParams.nwalkers) || mcmcParams.nwalkers < 2 || mcmcParams.nwalkers > 1000)
@@ -515,7 +533,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   while (mcmcParams.nsteps < 100 || mcmcParams.nsteps > 10000000) {
     configure.outStream << std::setw(38) << "Number of Steps (100-10000000): ";
     std::string inString;
-    getline(std::cin, inString);
+    if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
     std::istringstream stm;
     stm.str(inString);
     if (!(stm >> mcmcParams.nsteps) || mcmcParams.nsteps < 100 || mcmcParams.nsteps > 10000000)
@@ -526,7 +544,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   while (mcmcParams.chainSpread <= 0.0 || mcmcParams.chainSpread > 50.0) {
     configure.outStream << std::setw(38) << "Initial Parameter Spread % (0.001-50) [default=5]: ";
     std::string inString;
-    getline(std::cin, inString);
+    if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
 
     // Allow empty input for default
     if (inString.empty() || inString.find_first_not_of(" \t\n") == std::string::npos) {
@@ -545,7 +563,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   while (mcmcParams.energySpreadKeV <= 0.0 || mcmcParams.energySpreadKeV > kMaxEnergySpreadKeV) {
     configure.outStream << std::setw(38) << "Level Energy Spread keV (0.001-1) [default=1]: ";
     std::string inString;
-    getline(std::cin, inString);
+    if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
 
     // Allow empty input for default
     if (inString.empty() || inString.find_first_not_of(" \t\n") == std::string::npos) {
@@ -566,7 +584,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   while (mcmcParams.nthreads < 1) {
     configure.outStream << std::setw(38) << "Number of Threads (1 or more): ";
     std::string inString;
-    getline(std::cin, inString);
+    if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
     std::istringstream stm;
     stm.str(inString);
     if (!(stm >> mcmcParams.nthreads) || mcmcParams.nthreads < 1)
@@ -634,7 +652,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
     while (!configure.rateParams.entrancePair) {
       configure.outStream << std::setw(38) << "Reaction Rate Entrance Pair: ";
       std::string inString;
-      getline(std::cin, inString);
+      if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
       std::istringstream stm;
       stm.str(inString);
       if (!(stm >> configure.rateParams.entrancePair) || configure.rateParams.entrancePair == 0)
@@ -643,7 +661,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
     while (!configure.rateParams.exitPair) {
       configure.outStream << std::setw(38) << "Reaction Rate Exit Pair: ";
       std::string inString;
-      getline(std::cin, inString);
+      if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
       std::istringstream stm;
       stm.str(inString);
       if (!(stm >> configure.rateParams.exitPair) || configure.rateParams.exitPair == 0)
@@ -680,7 +698,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
     while (configure.rateParams.minTemp < 0.) {
       configure.outStream << std::setw(38) << "Reaction Rate Min Temp [GK]: ";
       std::string inString;
-      getline(std::cin, inString);
+      if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
       std::istringstream stm;
       stm.str(inString);
       if (!(stm >> configure.rateParams.minTemp) || configure.rateParams.minTemp < 0.)
@@ -689,7 +707,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
     while (configure.rateParams.maxTemp < 0.) {
       configure.outStream << std::setw(38) << "Reaction Rate Max Temp [GK]: ";
       std::string inString;
-      getline(std::cin, inString);
+      if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
       std::istringstream stm;
       stm.str(inString);
       if (!(stm >> configure.rateParams.maxTemp) || configure.rateParams.maxTemp < 0.)
@@ -698,7 +716,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
     while (configure.rateParams.tempStep < 0.) {
       configure.outStream << std::setw(38) << "Reaction Rate Temp Step [GK]: ";
       std::string inString;
-      getline(std::cin, inString);
+      if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
       std::istringstream stm;
       stm.str(inString);
       if (!(stm >> configure.rateParams.tempStep) || configure.rateParams.tempStep < 0.)
