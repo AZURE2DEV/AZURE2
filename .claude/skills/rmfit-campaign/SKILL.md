@@ -1829,3 +1829,34 @@ not a veto; the readme records the split and the evaluator decides.
 The six-step process that found the broad 1/2⁻ at 9.348 MeV (localise with a band map and pulls → width-floor level add with local
 release and controls over all J^π → cross-checks: widen-the-neighbour, data-only window screen, per-dataset/angle attribution → full free
 refit → propagate to models that freeze the block → next region) is written up as section 3c, with the traps met on the way.
+
+## 2026-10-10 — near-degenerate BROAD same-J^pi levels are separated at write time, not fixed
+AZURE2 merges same-J^pi levels < 1 keV apart when it reads a model, so a polish can drive two levels into a pair that cannot be
+written. Narrow pairs (the 9/2+ doublet of 09-19) are a lineshape question and still fail. For BROAD levels the fix is a small energy
+adjustment (DeBoer: "give the energy of the broader level a little adjustment"). Measured on the 13C+a merged incumbent: moving a
+~6 MeV-wide 1/2+ by 1 / 2 / 5 keV costs +1.2 / +3.9 / +21 chi2 frozen (of 420,772); the ~0.6 MeV partner costs +2.9 per keV.
+Installed (local.py, engine.py; backups .bak-2026-10-10; tests test_separate_close_levels.py stub, test_bake_separate_13n.py real
+engine):
+- `local.separate_close_levels(ev, x)`: every same-J^pi pair < 1.5 keV apart -> the broader member WITH A FREE ENERGY moves away to
+  2.5 keV separation if the shift is < 1 % of its width (Gamma = sum of its free physical widths); otherwise the pair is refused.
+  If the broader one's energy is fixed, the other moves when it qualifies.
+- `engine.bake(..., separate=True, separate_max_cost=10.0)` applies it before writing, re-scores, and raises if the cost exceeds the
+  cap; the log line names level, shift, width and cost. Refused pairs are printed; < 1 keV refused pairs still fail the key-set check.
+- `sanity`: a < 1 keV pair that bake can separate is listed under `separable_pairs` (ok), not `merge_pairs` (fail).
+Do not fix the energies of such a pair any more (13C+a 10-9-26_merged_next did, before this existed). The 13N trap met while testing:
+at 2.37 MeV the Brune transform caps an L=0 width near 45 keV whatever amplitude or file value is given, so "broad" test levels have to
+sit where the penetrability allows it (the 20 MeV background level).
+
+## 2026-10-10 — shard layout: composite sums are split, free-shift segments get their own shard (~4x per iteration)
+Measured on the 13C+a merged model (44,469 points, 16 shards x 1 thread): one objective 25 s, one Jacobian 115-141 s, although a
+single session takes only 45 s per objective -- the shards were badly balanced. Two causes, both fixed in rmfit/model.py (backup
+.bak-2026-10-10b, test tests/test_shard_layout.py):
+- a composite "sum" segment (the Cierjacks n-total, 13,129 points summed over 8 exits) was never split and sat alone in one shard.
+  plan_pieces now splits sum composites by energy like plain segments, with the cost multiplied by the component count
+  (RMFIT_SPLIT_SUM=0 restores the old rule). Objective 25 s -> 3-4.5 s, bit-identical.
+- a free energy shift is finite-differenced in the Jacobian and each step re-evaluates the WHOLE shard (~0.024 s per point per shift),
+  so shards holding shifted segments took 28-92 s while the rest took 10-17 s. build_shards now gives each free-shift segment a shard
+  of its own while they are no more than half the shards (RMFIT_SHIFT_SOLO=0 restores). Jacobian 115-141 s -> 25-29 s, |J| identical.
+How it was found (reusable): time each shard's eval and Jacobian separately (call each _Worker in turn) -- the slowest shard sets the
+wall time, and its contents say why. Not worth it here: more OpenMP threads per shard (pyazr's objective does not use the parallel
+chi2 path of AZURE2 249747e; 4x4 / 8x2 layouts made the Jacobian 5x slower).
