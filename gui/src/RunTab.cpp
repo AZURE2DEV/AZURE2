@@ -9,6 +9,7 @@
 #include <QFileDialog>
 
 #include "RunTab.h"
+#include "PairKeyCombo.h"
 #include "ChooseFileButton.h"
 #include "FilteredTextEdit.h"
 #include "InfoDialog.h"
@@ -141,12 +142,9 @@ RunTab::RunTab(QWidget *parent) :
   integralsFileGroup->setLayout(integralsFileLayout);
 
   gridTempButton = new QRadioButton(tr("Create Temperatures"));
-  rateEntranceKey = new QLineEdit;
-  rateEntranceKey->setMinimumWidth(50);
-  rateEntranceKey->setMaximumWidth(50);
-  rateExitKey = new QLineEdit;
-  rateExitKey->setMinimumWidth(50);
-  rateExitKey->setMaximumWidth(50);
+  rateEntranceKey = new PairKeyCombo(PairKeyCombo::Entrance);
+  rateExitKey = new PairKeyCombo(PairKeyCombo::Exit);
+  connect(rateEntranceKey, SIGNAL(keyChanged(int)), rateExitKey, SLOT(setEntranceKey(int)));
   minTempText = new QLineEdit;
   minTempText->setMinimumWidth(50);
   minTempText->setMaximumWidth(50);
@@ -165,9 +163,9 @@ RunTab::RunTab(QWidget *parent) :
   rateParamsGroup = new QGroupBox(tr("Reaction Rate Parameters"));
   rateParamsGroup->hide();
   QGridLayout *keyLayout = new QGridLayout;
-  keyLayout->addWidget(new QLabel(tr("Entrance Key:")), 0, 0, Qt::AlignRight);
+  keyLayout->addWidget(new QLabel(tr("Entrance Pair:")), 0, 0, Qt::AlignRight);
   keyLayout->addWidget(rateEntranceKey, 0, 1);
-  keyLayout->addWidget(new QLabel(tr("Exit Key:")), 0, 2, Qt::AlignRight);
+  keyLayout->addWidget(new QLabel(tr("Exit Pair:")), 0, 2, Qt::AlignRight);
   keyLayout->addWidget(rateExitKey, 0, 3);
   keyLayout->addItem(new QSpacerItem(28, 28), 0, 4);
   keyLayout->setColumnStretch(4, 1);
@@ -310,8 +308,8 @@ void RunTab::reset() {
   paramFileText->setText("");
   newIntegralsFileButton->setChecked(true);
   integralsFileText->setText("");
-  rateEntranceKey->setText("");
-  rateExitKey->setText("");
+  rateEntranceKey->setKey(0);
+  rateExitKey->setKey(0);
   gridTempButton->setChecked(true);
   minTempText->setText("");
   maxTempText->setText("");
@@ -329,4 +327,9 @@ void RunTab::showInfo(int which, QString title) {
     } else
       infoDialog[which]->raise();
   }
+}
+
+void RunTab::setPairsModel(PairsModel *model) {
+  rateEntranceKey->setPairsModel(model);
+  rateExitKey->setPairsModel(model);
 }

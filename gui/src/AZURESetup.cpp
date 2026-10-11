@@ -91,6 +91,7 @@ AZURESetup::AZURESetup() :
   fittingTab->setConfig(&GetConfig());
 
   runTab = new RunTab();
+  runTab->setPairsModel(pairsTab->getPairsModel());
   connect(runTab->calcButton, SIGNAL(clicked()), this, SLOT(SaveAndRun()));
 
 #ifdef USE_QWT
@@ -490,8 +491,8 @@ bool AZURESetup::readLastRun(QTextStream &inStream) {
   else
     GetConfig().paramMask &= ~Config::SCALE_COVARIANCE_BY_CHI2;
 
-  if (rateEntrancePair != 0) runTab->rateEntranceKey->setText(QString("%1").arg(rateEntrancePair));
-  if (rateExitPair != 0) runTab->rateExitKey->setText(QString("%1").arg(rateExitPair));
+  runTab->rateEntranceKey->setKey(rateEntrancePair);
+  runTab->rateExitKey->setKey(rateExitPair);
 
   if (minTemp != -1.) runTab->minTempText->setText(QString("%1").arg(minTemp));
   if (maxTemp != -1.) runTab->maxTempText->setText(QString("%1").arg(maxTemp));
@@ -869,14 +870,7 @@ bool AZURESetup::writeLastRun(QTextStream &outStream) {
   outStream << paramMask << Qt::endl;
   outStream << '"' << runTab->paramFileText->text() << '"' << Qt::endl;
   outStream << '"' << runTab->integralsFileText->text() << '"' << Qt::endl;
-  if (!runTab->rateEntranceKey->text().isEmpty())
-    outStream << runTab->rateEntranceKey->text() << ' ';
-  else
-    outStream << "0 ";
-  if (!runTab->rateExitKey->text().isEmpty())
-    outStream << runTab->rateExitKey->text();
-  else
-    outStream << 0;
+  outStream << runTab->rateEntranceKey->key() << ' ' << runTab->rateExitKey->key();
   outStream << Qt::endl;
   if (runTab->fileTempButton->isChecked())
     outStream << "1 ";
@@ -1214,8 +1208,8 @@ void AZURESetup::SaveAndRun() {
   if (!(GetConfig().paramMask & Config::CALCULATE_REACTION_RATE)) {
     if (!readSegmentFile(GetConfig(), segPairs)) return;
   } else {
-    GetConfig().rateParams.entrancePair = runTab->rateEntranceKey->text().toInt();
-    GetConfig().rateParams.exitPair = runTab->rateExitKey->text().toInt();
+    GetConfig().rateParams.entrancePair = runTab->rateEntranceKey->key();
+    GetConfig().rateParams.exitPair = runTab->rateExitKey->key();
     if (GetConfig().rateParams.entrancePair == GetConfig().rateParams.exitPair) {
       QMessageBox::information(this, tr("No Scattering Rates"),
                                tr("Reaction rates cannot be calculated for elastic scattering."));
@@ -1230,8 +1224,8 @@ void AZURESetup::SaveAndRun() {
       GetConfig().rateParams.useFile = true;
       GetConfig().rateParams.temperatureFile = runTab->fileTempText->text().toStdString();
     }
-    SegPairs tempPair = {runTab->rateEntranceKey->text().toInt(),
-                         runTab->rateExitKey->text().toInt()};
+    SegPairs tempPair = {runTab->rateEntranceKey->key(),
+                         runTab->rateExitKey->key()};
     segPairs.push_back(tempPair);
   }
   if (segPairs.size() == 0) {

@@ -175,3 +175,13 @@ rich text); the LaTeX export writes `^{+}` itself. The level dialog lists only
 the J^π that give channels (`LevelsTab::spinParityOptions`, built by trying
 each candidate through `calculateChannels`), so the list and the channels
 cannot disagree.
+
+Pair keys are never typed in the GUI any more: the segment dialogs (main and
+component entrance/exit) and the Run tab's reaction-rate box use `PairKeyCombo`
+(`gui/include/PairKeyCombo.h`), which lists the pairs by name ("2: ¹⁴N+n
+[0.000 MeV]"; exit items as the reaction with the chosen entrance, "2:
+¹¹B(α,n)¹⁴N [0.000 MeV]") and hands back the 1-based key the .azr stores. It
+rebuilds its items from the pairs model whenever it drops down. A key beyond
+the pairs list is kept and marked "(no such pair)". Headless checks:
+`tests/gui/pair_key_combo_test` (AZURE2_PAIR_COMBO_PNG=<stem> saves the
+data-segment dialog).

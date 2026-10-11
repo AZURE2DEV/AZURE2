@@ -143,3 +143,27 @@ endif()
 if(USE_ERYA)
     target_link_libraries(levels_compat_check PRIVATE pugixml srim_utilities)
 endif()
+
+# The particle-pair drop-downs that replaced typed pair keys: labels, key
+# round trip, exit items relabelled as reactions with the entrance pair.
+add_executable(pair_key_combo_test pair_key_combo_test.cpp)
+set_target_properties(pair_key_combo_test PROPERTIES AUTOMOC OFF)
+target_include_directories(pair_key_combo_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(pair_key_combo_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(pair_key_combo_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(pair_key_combo_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME pair_key_combo COMMAND pair_key_combo_test)
+set_tests_properties(pair_key_combo PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

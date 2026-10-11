@@ -69,11 +69,11 @@ set(AZURESETUP_SOURCES
     TargetIntModel.cpp ChannelsModel.cpp main.cpp TargetIntTab.cpp FittingTab.cpp
     AboutAZURE2Dialog.cpp InfoDialog.cpp InTabDocs.cpp
     IAEALevelData.cpp IAEALevelDialog.cpp NuclearPotentialTab.cpp
-    ExforData.cpp ExforDialog.cpp
+    ExforData.cpp ExforDialog.cpp PairKeyCombo.cpp
 )
 
 set(AZURESETUP_HEADERS
-    ../include/AddLevelDialog.h ../include/AddPairDialog.h ../include/AddSegDataDialog.h
+    ../include/AddLevelDialog.h ../include/AddPairDialog.h ../include/AddSegDataDialog.h ../include/PairKeyCombo.h
     ../include/AddSegTestDialog.h ../include/AddTargetIntDialog.h ../include/AZUREMainThread.h
     ../include/AZURESetup.h ../include/ChannelDetails.h ../include/ChannelsModel.h
     ../include/ChooseFileButton.h ../include/EditChecksDialog.h ../include/EditDirsDialog.h

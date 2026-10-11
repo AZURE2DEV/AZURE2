@@ -1,6 +1,7 @@
 #include "PairsModel.h"
 #include "ElementMap.h"
 #include <math.h>
+#include <QRegularExpression>
 
 PairsModel::PairsModel(QObject *parent) :
   QAbstractTableModel(parent) {
@@ -466,4 +467,33 @@ QString PairsModel::getSpinLabel(const PairsData &pair, int which) const {
     tempSpin = QString("%1").arg(tempJ);
   // Superscript plus/minus (U+207A/B), as in the Levels table and the Add/Edit Level dialog.
   return tempSpin + (tempPi == -1 ? QString(QChar(0x207B)) : QString(QChar(0x207A)));
+}
+
+QString PairsModel::getPairLabel(const PairsData &pair) const { return plainText(getParticleLabel(pair, -1)); }
+
+QString PairsModel::plainText(const QString &html) {
+  static const QString superscripts = QString::fromUtf8("\u2070\u00b9\u00b2\u00b3\u2074\u2075\u2076\u2077\u2078\u2079");
+  QString out = html;
+  QRegularExpression sup("<sup>([^<]*)</sup>");
+  QRegularExpressionMatch m;
+  int from = 0;
+  while ((m = sup.match(out, from)).hasMatch()) {
+    QString inner = m.captured(1), repl;
+    for (QChar c : inner) {
+      if (c.isDigit())
+        repl += superscripts.at(c.digitValue());
+      else if (c == '+')
+        repl += QChar(0x207A);
+      else if (c == '-')
+        repl += QChar(0x207B);
+      else
+        repl += c;
+    }
+    out.replace(m.capturedStart(0), m.capturedLength(0), repl);
+    from = m.capturedStart(0) + repl.length();
+  }
+  out.remove(QRegularExpression("<[^>]*>"));
+  out.replace("&alpha;", QString(QChar(0x03B1))).replace("&beta;", QString(QChar(0x03B2))).replace("&gamma;", QString(QChar(0x03B3)));
+  out.replace("&nbsp;", " ").replace("&amp;", "&");
+  return out.simplified();
 }

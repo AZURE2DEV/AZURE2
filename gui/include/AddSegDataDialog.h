@@ -4,6 +4,7 @@
 #include <QDialog>
 #include <QLineEdit>
 #include <QSpinBox>
+#include "PairKeyCombo.h"
 #include <QComboBox>
 #include <QLabel>
 #include <QCheckBox>
@@ -25,8 +26,10 @@ class AddSegDataDialog : public QDialog {
 
  public:
   AddSegDataDialog(QWidget *parent = 0);
-  QSpinBox *entrancePairIndexSpin;
-  QSpinBox *exitPairIndexSpin;
+  /*! Call before exec(): the pair drop-downs list this model's pairs by name and hand back the keys. */
+  void setPairsModel(PairsModel *model);
+  PairKeyCombo *entrancePairCombo;
+  PairKeyCombo *exitPairCombo;
   QLineEdit *lowEnergyText;
   QLineEdit *highEnergyText;
   QLineEdit *lowAngleText;
@@ -59,8 +62,8 @@ class AddSegDataDialog : public QDialog {
   QGroupBox *advancedModeBox;
   QComboBox *operationCombo;
   QListWidget *componentsList;
-  QSpinBox *componentEntranceSpin;
-  QSpinBox *componentExitSpin;
+  PairKeyCombo *componentEntranceCombo;
+  PairKeyCombo *componentExitCombo;
   QCheckBox *useFixedAngleCheck;
   QLineEdit *fixedAngleText;
   QLabel *fixedAngleLabel;

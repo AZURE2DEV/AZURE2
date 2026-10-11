@@ -248,14 +248,15 @@ void SegmentsTab::deleteSegTestLine() {
 
 void SegmentsTab::addSegDataLine() {
   AddSegDataDialog aDialog;
+  aDialog.setPairsModel(pairsModel);
   if (aDialog.exec()) {
     SegmentsDataData newLine;
     newLine.isActive = 1;
-    newLine.entrancePairIndex = aDialog.entrancePairIndexSpin->value();
+    newLine.entrancePairIndex = aDialog.entrancePairCombo->key();
     if (aDialog.dataTypeCode() == 3)
       newLine.exitPairIndex = -1;
     else
-      newLine.exitPairIndex = aDialog.exitPairIndexSpin->value();
+      newLine.exitPairIndex = aDialog.exitPairCombo->key();
     newLine.lowEnergy = aDialog.lowEnergyText->text().toDouble();
     newLine.highEnergy = aDialog.highEnergyText->text().toDouble();
     newLine.lowAngle = aDialog.lowAngleText->text().toDouble();
@@ -366,14 +367,15 @@ void SegmentsTab::addSegDataLine(SegmentsDataData line) {
 
 void SegmentsTab::addSegTestLine() {
   AddSegTestDialog aDialog;
+  aDialog.setPairsModel(pairsModel);
   if (aDialog.exec()) {
     SegmentsTestData newLine;
     newLine.isActive = 1;
-    newLine.entrancePairIndex = aDialog.entrancePairIndexSpin->value();
+    newLine.entrancePairIndex = aDialog.entrancePairCombo->key();
     if (aDialog.dataTypeCode() == 4)
       newLine.exitPairIndex = -1;
     else
-      newLine.exitPairIndex = aDialog.exitPairIndexSpin->value();
+      newLine.exitPairIndex = aDialog.exitPairCombo->key();
     newLine.lowEnergy = aDialog.lowEnergyText->text().toDouble();
     newLine.highEnergy = aDialog.highEnergyText->text().toDouble();
     newLine.energyStep = aDialog.energyStepText->text().toDouble();
@@ -521,9 +523,10 @@ void SegmentsTab::editSegDataLine() {
   QString delta = var.toString();
 
   AddSegDataDialog aDialog;
+  aDialog.setPairsModel(pairsModel);
   aDialog.setWindowTitle(tr("Edit a Segment From Data"));
-  aDialog.entrancePairIndexSpin->setValue(entrancePairIndex);
-  aDialog.exitPairIndexSpin->setValue(exitPairIndex);
+  aDialog.entrancePairCombo->setKey(entrancePairIndex);
+  aDialog.exitPairCombo->setKey(exitPairIndex);
   aDialog.lowEnergyText->setText(lowEnergy);
   aDialog.highEnergyText->setText(highEnergy);
   aDialog.lowAngleText->setText(lowAngle);
@@ -570,12 +573,12 @@ void SegmentsTab::editSegDataLine() {
   aDialog.deltaText->setText(delta);
 
   if (aDialog.exec()) {
-    int newEntrancePairIndex = aDialog.entrancePairIndexSpin->value();
+    int newEntrancePairIndex = aDialog.entrancePairCombo->key();
     if (newEntrancePairIndex != entrancePairIndex) {
       i = segmentsDataModel->index(index.row(), 1, QModelIndex());
       segmentsDataModel->setData(i, newEntrancePairIndex, Qt::EditRole);
     }
-    int newExitPairIndex = (aDialog.dataTypeCode() == 3) ? -1 : aDialog.exitPairIndexSpin->value();
+    int newExitPairIndex = (aDialog.dataTypeCode() == 3) ? -1 : aDialog.exitPairCombo->key();
     if (newExitPairIndex != exitPairIndex) {
       i = segmentsDataModel->index(index.row(), 2, QModelIndex());
       segmentsDataModel->setData(i, newExitPairIndex, Qt::EditRole);
@@ -753,9 +756,10 @@ void SegmentsTab::editSegTestLine() {
   QString componentsList = var.toString();
 
   AddSegTestDialog aDialog;
+  aDialog.setPairsModel(pairsModel);
   aDialog.setWindowTitle(tr("Edit a Segment Without Data"));
-  aDialog.entrancePairIndexSpin->setValue(entrancePairIndex);
-  aDialog.exitPairIndexSpin->setValue(exitPairIndex);
+  aDialog.entrancePairCombo->setKey(entrancePairIndex);
+  aDialog.exitPairCombo->setKey(exitPairIndex);
   aDialog.lowEnergyText->setText(lowEnergy);
   aDialog.highEnergyText->setText(highEnergy);
   aDialog.energyStepText->setText(energyStep);
@@ -783,12 +787,12 @@ void SegmentsTab::editSegTestLine() {
   }
 
   if (aDialog.exec()) {
-    int newEntrancePairIndex = aDialog.entrancePairIndexSpin->value();
+    int newEntrancePairIndex = aDialog.entrancePairCombo->key();
     if (newEntrancePairIndex != entrancePairIndex) {
       i = segmentsTestModel->index(index.row(), 1, QModelIndex());
       segmentsTestModel->setData(i, newEntrancePairIndex, Qt::EditRole);
     }
-    int newExitPairIndex = (aDialog.dataTypeCode() == 4) ? -1 : aDialog.exitPairIndexSpin->value();
+    int newExitPairIndex = (aDialog.dataTypeCode() == 4) ? -1 : aDialog.exitPairCombo->key();
     if (newExitPairIndex != exitPairIndex) {
       i = segmentsTestModel->index(index.row(), 2, QModelIndex());
       segmentsTestModel->setData(i, newExitPairIndex, Qt::EditRole);

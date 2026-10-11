@@ -49,6 +49,11 @@ class PairsModel : public QAbstractTableModel {
   QString getReactionLabel(const PairsData &firstPair, const PairsData &secondPair);
   QString getReactionLabelTotalCapture(const PairsData &firstPair);
   QString getSpinLabel(const PairsData &pair, int which) const;
+  /*! The pair as plain text, "11B+a [0.000 MeV]" with a superscript mass number, for widgets that render no HTML. */
+  QString getPairLabel(const PairsData &pair) const;
+  /*! An HTML label of this model (getParticleLabel, getReactionLabel) as plain text: tags dropped, entities and
+   *  <sup> digits and signs turned into their Unicode characters. */
+  static QString plainText(const QString &html);
 
  private:
   QList<PairsData> pairsList;

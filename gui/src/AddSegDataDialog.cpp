@@ -10,14 +10,10 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   //  this->setMaximumSize(370,420);
   //  this->setMinimumSize(370,420);
 
-  entrancePairIndexSpin = new QSpinBox;
-  entrancePairIndexSpin->setMinimum(1);
-  entrancePairIndexSpin->setMaximum(100);
-  entrancePairIndexSpin->setSingleStep(1);
-  exitPairIndexSpin = new QSpinBox;
-  exitPairIndexSpin->setMinimum(1);
-  exitPairIndexSpin->setMaximum(100);
-  exitPairIndexSpin->setSingleStep(1);
+  entrancePairCombo = new PairKeyCombo(PairKeyCombo::Entrance);
+  exitPairCombo = new PairKeyCombo(PairKeyCombo::Exit);
+  // The exit list reads as reactions with the chosen entrance pair.
+  connect(entrancePairCombo, SIGNAL(keyChanged(int)), exitPairCombo, SLOT(setEntranceKey(int)));
   lowEnergyText = new QLineEdit;
   highEnergyText = new QLineEdit;
   lowAngleText = new QLineEdit;
@@ -109,17 +105,9 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   componentsList = new QListWidget;
   componentsList->setMaximumHeight(100);
 
-  componentEntranceSpin = new QSpinBox;
-  componentEntranceSpin->setMinimum(1);
-  componentEntranceSpin->setMaximum(100);
-  componentEntranceSpin->setSingleStep(1);
-  componentEntranceSpin->setValue(1);
-
-  componentExitSpin = new QSpinBox;
-  componentExitSpin->setMinimum(1);
-  componentExitSpin->setMaximum(100);
-  componentExitSpin->setSingleStep(1);
-  componentExitSpin->setValue(1);
+  componentEntranceCombo = new PairKeyCombo(PairKeyCombo::Entrance);
+  componentExitCombo = new PairKeyCombo(PairKeyCombo::Exit);
+  connect(componentEntranceCombo, SIGNAL(keyChanged(int)), componentExitCombo, SLOT(setEntranceKey(int)));
 
   useFixedAngleCheck = new QCheckBox(tr("Use fixed angle for denominator"));
   useFixedAngleCheck->setVisible(false);
@@ -150,10 +138,10 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   QGroupBox *valueBox = new QGroupBox;
   QGridLayout *valueLayout = new QGridLayout;
   QGridLayout *pairLayout = new QGridLayout;
-  pairLayout->addWidget(new QLabel(tr("Entrance Pair Key:")), 0, 0, Qt::AlignRight);
-  pairLayout->addWidget(entrancePairIndexSpin, 0, 1);
-  pairLayout->addWidget(new QLabel(tr("Exit Pair Key:")), 0, 2, Qt::AlignRight);
-  pairLayout->addWidget(exitPairIndexSpin, 0, 3);
+  pairLayout->addWidget(new QLabel(tr("Entrance Pair:")), 0, 0, Qt::AlignRight);
+  pairLayout->addWidget(entrancePairCombo, 0, 1);
+  pairLayout->addWidget(new QLabel(tr("Exit Pair:")), 0, 2, Qt::AlignRight);
+  pairLayout->addWidget(exitPairCombo, 0, 3);
   totalCaptureLabel = new QLabel(tr("Total Capture"));
   totalCaptureLabel->setVisible(false);
   pairLayout->addWidget(totalCaptureLabel, 0, 4);
@@ -247,10 +235,10 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   advancedLayout->addWidget(componentsList, 1, 1, 4, 1);
 
   // Add component entrance/exit spinboxes above buttons
-  advancedLayout->addWidget(new QLabel(tr("Entrance Pair Key:")), 1, 2);
-  advancedLayout->addWidget(componentEntranceSpin, 1, 3);
-  advancedLayout->addWidget(new QLabel(tr("Exit Pair Key:")), 2, 2);
-  advancedLayout->addWidget(componentExitSpin, 2, 3);
+  advancedLayout->addWidget(new QLabel(tr("Entrance Pair:")), 1, 2);
+  advancedLayout->addWidget(componentEntranceCombo, 1, 3);
+  advancedLayout->addWidget(new QLabel(tr("Exit Pair:")), 2, 2);
+  advancedLayout->addWidget(componentExitCombo, 2, 3);
 
   // Add fixed angle checkbox and input
   advancedLayout->addWidget(useFixedAngleCheck, 3, 2, 1, 2);
@@ -325,11 +313,11 @@ void AddSegDataDialog::dataTypeChanged(int index) {
     highAngleText->setEnabled(false);
   }
   if (index == 3) {
-    exitPairIndexSpin->setVisible(false);
+    exitPairCombo->setVisible(false);
     totalCaptureLabel->setVisible(true);
   } else {
     totalCaptureLabel->setVisible(false);
-    exitPairIndexSpin->setVisible(true);
+    exitPairCombo->setVisible(true);
   }
   if (index == 4 || index == 7) {  // C.M. differential or A_y
     lowAngleText->setEnabled(true);
@@ -357,12 +345,12 @@ void AddSegDataDialog::advancedModeChanged(int state) {
   if (state == Qt::Checked) {
     advancedModeBox->setVisible(true);
     // Keep the spinboxes enabled so users can select pairs to add as components
-    entrancePairIndexSpin->setEnabled(true);
-    exitPairIndexSpin->setEnabled(true);
+    entrancePairCombo->setEnabled(true);
+    exitPairCombo->setEnabled(true);
   } else {
     advancedModeBox->setVisible(false);
-    entrancePairIndexSpin->setEnabled(true);
-    exitPairIndexSpin->setEnabled(true);
+    entrancePairCombo->setEnabled(true);
+    exitPairCombo->setEnabled(true);
   }
   adjustSize();
 }
@@ -395,8 +383,9 @@ void AddSegDataDialog::useFixedAngleChanged(int state) {
 }
 
 void AddSegDataDialog::addComponent() {
-  int entrance = componentEntranceSpin->value();
-  int exit = componentExitSpin->value();
+  int entrance = componentEntranceCombo->key();
+  int exit = componentExitCombo->key();
+  if (entrance < 1 || exit < 1) return;
   QString component = QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit);
 
   // For ratio, only allow one component (the denominator)
@@ -444,4 +433,13 @@ void AddSegDataDialog::uposChanged(int state) {
   deltaLabel->setVisible(visible);
   deltaText->setVisible(visible);
   adjustSize();
+}
+
+void AddSegDataDialog::setPairsModel(PairsModel *model) {
+  for (PairKeyCombo *combo : {entrancePairCombo, exitPairCombo, componentEntranceCombo, componentExitCombo}) combo->setPairsModel(model);
+  // A fresh dialog starts on the first pair, as the key boxes started on 1.
+  if (entrancePairCombo->key() == 0) entrancePairCombo->setKey(1);
+  if (exitPairCombo->key() == 0) exitPairCombo->setKey(1);
+  if (componentEntranceCombo->key() == 0) componentEntranceCombo->setKey(1);
+  if (componentExitCombo->key() == 0) componentExitCombo->setKey(1);
 }
