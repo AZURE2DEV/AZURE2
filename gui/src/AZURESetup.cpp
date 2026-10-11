@@ -307,6 +307,10 @@ bool AZURESetup::readFile(QString filename) {
   }
   if (in.atEnd()) return false;
   if (!levelsTab->readNuclearFile(in)) return false;
+  levelsTab->setIncludeAllJPi(fileIncludeAllJPi);
+  if (fileMaxL > levelsTab->maxL()) levelsTab->setMaxL(fileMaxL);
+  GetConfig().includeAllJPi = fileIncludeAllJPi;
+  GetConfig().hardSphereMaxL = levelsTab->maxL();
 
   line = QString("");
   while (line.trimmed() != QString("<segmentsData>") && !in.atEnd()) line = in.readLine();
@@ -570,9 +574,21 @@ bool AZURESetup::readConfig(QTextStream &inStream) {
   inStream >> angDistsCheck;
   dummyString = inStream.readLine();
 
+  // Optional key=value lines after the fixed ones; absent keys keep the defaults of an older file.
+  fileIncludeAllJPi = false;
+  fileMaxL = -1;
   QString line("");
-  while (line.trimmed() != QString("</config>") && !inStream.atEnd())
+  while (line.trimmed() != QString("</config>") && !inStream.atEnd()) {
     line = inStream.readLine();
+    QString entry = line.section('#', 0, 0);
+    int eq = entry.indexOf('=');
+    if (eq < 0) continue;
+    QString key = entry.left(eq).trimmed(), value = entry.mid(eq + 1).trimmed();
+    if (key == "includeAllJPi")
+      fileIncludeAllJPi = (value == "1" || value == "true");
+    else if (key == "maxOrbitalMomentum")
+      fileMaxL = value.toInt();
+  }
   if (line.trimmed() != QString("</config>")) return false;
 
   if (isAMatrix == "false")
@@ -658,6 +674,11 @@ bool AZURESetup::writeFile(QString filename) {
   QTextStream out(&file);
   out << "<config>" << Qt::endl;
   if (!this->writeConfig(out, directory)) return false;
+  // The hard-sphere option and its limit live in the file so that --no-gui and pyazr runs agree with the GUI.
+  GetConfig().includeAllJPi = levelsTab->includeAllJPi();
+  GetConfig().hardSphereMaxL = levelsTab->maxL();
+  out << "includeAllJPi=" << (levelsTab->includeAllJPi() ? 1 : 0) << " #Hard-sphere scattering in every J^pi up to maxOrbitalMomentum" << Qt::endl;
+  out << "maxOrbitalMomentum=" << levelsTab->maxL() << Qt::endl;
   out << "</config>" << Qt::endl;
 
   // Write potential section after config.  A pair may be switched on while the
@@ -1351,6 +1372,8 @@ void AZURESetup::SaveAndRun() {
     }
   }
 
+  GetConfig().includeAllJPi = levelsTab->includeAllJPi();
+  GetConfig().hardSphereMaxL = levelsTab->maxL();
   azureMain = new AZUREMainThread(runTab, GetConfig());
   connect(azureMain, SIGNAL(finished()), this, SLOT(DeleteThread()));
   setWindowTitle(QString("AZURE2 -- %1 -- Running").arg(QString::fromStdString(GetConfig().configfile)));

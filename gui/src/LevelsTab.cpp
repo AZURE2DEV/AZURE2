@@ -63,6 +63,17 @@ LevelsTab::LevelsTab(QWidget *parent) :
   maxNumMultSpin->setSingleStep(1);
   maxNumMultSpin->setValue(2);
   QLabel *maxNumMultLabel = new QLabel(tr("Maximum Gamma Multipolarities\nPer Decay"));
+  includeAllJPiCheck = new QCheckBox(tr("Include hard-sphere scattering for every J%1 up to the maximum orbital momentum").arg(QChar(0x03C0)));
+  includeAllJPiCheck->setToolTip(tr("AZURE2 only includes a J\u03c0 in the calculation when a level carries it. Without this, every J\u03c0 "
+                                    "that has no level is missing from elastic scattering (its hard-sphere phase shift), unless a fixed "
+                                    "zero-width level is added by hand. With it, every J\u03c0 the particle pairs allow up to the maximum "
+                                    "orbital momentum scatters, levels or not; switching a level off then removes its resonance and keeps "
+                                    "the partial wave. Switch it off to recover the old convention, where a J\u03c0 disappears with its levels."));
+  includeAllJPiCheck->setChecked(true);
+  missingJPiLabel = new QLabel;
+  missingJPiLabel->setWordWrap(true);
+  missingJPiLabel->setTextFormat(Qt::RichText);
+  connect(includeAllJPiCheck, SIGNAL(toggled(bool)), this, SLOT(updateMissingSpinParities()));
   connect(maxLSpin, SIGNAL(valueChanged(int)), this, SLOT(updateChannelsPairAddedEdited()));
   connect(maxMultSpin, SIGNAL(valueChanged(int)), this, SLOT(updateChannelsPairAddedEdited()));
   connect(maxNumMultSpin, SIGNAL(valueChanged(int)), this, SLOT(updateChannelsPairAddedEdited()));
@@ -192,6 +203,8 @@ LevelsTab::LevelsTab(QWidget *parent) :
   configLayout->addWidget(maxMultLabel, 1, 1);
   configLayout->addWidget(maxNumMultSpin, 2, 0);
   configLayout->addWidget(maxNumMultLabel, 2, 1);
+  configLayout->addWidget(includeAllJPiCheck, 3, 0, 1, 2);
+  configLayout->addWidget(missingJPiLabel, 4, 0, 1, 2);
   configLayout->setColumnStretch(0, 0);
   configLayout->setColumnStretch(1, 1);
   configBox->setLayout(configLayout);
@@ -263,6 +276,7 @@ void LevelsTab::addLevel(LevelsData level, bool fromFile) {
     levelsModel->setData(index, level.energy, Qt::EditRole);
     levelsView->resizeRowsToContents();
     if (!fromFile) updateChannelsLevelAdded(levels.size());
+    updateMissingSpinParities();
   } else {
     QMessageBox::information(this, tr("Duplicate Level"), tr("This level already exists."));
   }
@@ -275,6 +289,7 @@ void LevelsTab::removeLevel() {
 
   levelsModel->removeRows(index.row(), 1, QModelIndex());
   updateChannelsLevelDeleted(index.row());
+  updateMissingSpinParities();
   selectionModel->clearSelection();
 }
 
@@ -315,6 +330,7 @@ void LevelsTab::editLevel() {
       levelsModel->setData(i, newEnergy, Qt::EditRole);
     }
     updateChannelsLevelEdited(index.row());
+    updateMissingSpinParities();
   }
 }
 
@@ -510,6 +526,36 @@ void LevelsTab::updateFilter(const QItemSelection &selection) {
   channelsView->resizeRowsToContents();
 }
 
+QStringList LevelsTab::missingSpinParities() {
+  QStringList missing;
+  QList<LevelsData> levels = levelsModel->getLevels();
+  for (const SpinParityOption &option : spinParityOptions()) {
+    // only J^pi with a particle channel scatter; a capture-only J^pi has nothing to add without a level
+    LevelsData probe = {1, 0, option.jValue, option.piValue, 0.};
+    bool particle = false;
+    for (const ChannelsData &c : calculateChannels(probe, -1)) particle |= (c.radType == 'P');
+    if (!particle) continue;
+    bool carried = false;
+    for (const LevelsData &l : levels) carried |= (l.isActive == 1 && l.jValue == option.jValue && l.piValue == option.piValue);
+    if (!carried) missing << AddLevelDialog::spinParityLabel(option.jValue, option.piValue);
+  }
+  return missing;
+}
+
+void LevelsTab::updateMissingSpinParities() {
+  QStringList missing = missingSpinParities();
+  QString jpi = QString("J<sup>%1</sup>").arg(QChar(0x03C0));
+  if (pairsModel == nullptr || pairsModel->getPairs().isEmpty())
+    missingJPiLabel->setText("");
+  else if (missing.isEmpty())
+    missingJPiLabel->setText(tr("Every %1 up to l = %2 has an active level.").arg(jpi).arg(maxLSpin->value()));
+  else if (includeAllJPiCheck->isChecked())
+    missingJPiLabel->setText(tr("Hard-sphere scattering only (no active level): %1").arg(missing.join(", ")));
+  else
+    missingJPiLabel->setText(tr("<font color='#b00020'>Not in the calculation (no active level, and the option above is off): %1</font>")
+                               .arg(missing.join(", ")));
+}
+
 void LevelsTab::updateChannelsPairAddedEdited() {
   QList<LevelsData> levels = levelsModel->getLevels();
   QList<ChannelsData> channels = channelsModel->getChannels();
@@ -546,6 +592,7 @@ void LevelsTab::updateChannelsPairAddedEdited() {
     }
   }
   channelsView->resizeRowsToContents();
+  updateMissingSpinParities();
 }
 
 void LevelsTab::updateChannelsPairRemoved(int pairIndex) {
@@ -958,6 +1005,7 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
   if (maxLValue > maxLSpin->value()) maxLSpin->setValue(maxLValue);
   if (maxMultValue > maxMultSpin->value()) maxMultSpin->setValue(maxMultValue);
   if (maxNumMultValue > maxNumMultSpin->value()) maxNumMultSpin->setValue(maxNumMultValue);
+  updateMissingSpinParities();
   maxLSpin->blockSignals(false);
   maxMultSpin->blockSignals(false);
   maxNumMultSpin->blockSignals(false);
@@ -970,6 +1018,8 @@ void LevelsTab::reset() {
   pairsModel->removeRows(0, pairsModel->getPairs().size(), QModelIndex());
   levelsModel->removeRows(0, levelsModel->getLevels().size(), QModelIndex());
   channelsModel->removeRows(0, channelsModel->getChannels().size(), QModelIndex());
+  includeAllJPiCheck->setChecked(true);
+  missingJPiLabel->setText("");
   maxLSpin->blockSignals(true);
   maxMultSpin->blockSignals(true);
   maxNumMultSpin->blockSignals(true);

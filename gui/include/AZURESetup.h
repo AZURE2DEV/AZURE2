@@ -132,6 +132,8 @@ class AZURESetup : public QMainWindow {
   QMenu *recentFileMenu;
   QMenu *helpMenu;
   QTabWidget *tabWidget;
+  bool fileIncludeAllJPi = false;
+  int fileMaxL = -1;
   PairsTab *pairsTab;
   LevelsTab *levelsTab;
   SegmentsTab *segmentsTab;

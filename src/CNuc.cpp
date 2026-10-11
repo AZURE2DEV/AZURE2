@@ -136,6 +136,13 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
       NucLine Line(stm);
       if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) return -1;
       if (Line.l() > maxLValue && Line.pType() == 0) maxLValue = Line.l();
+      if (Line.isActive() != 1 && configure.includeAllJPi) {
+        // A pair is a property of the system, not of the level that happens to mention it: with every
+        // J^pi scattering through its hard sphere, a pair whose levels are all switched off still has
+        // channels, so it is kept.
+        PPair NewPair(Line);
+        if (!this->IsPair(NewPair)) this->AddPair(NewPair);
+      }
       if (Line.isActive() == 1) {
         PPair NewPair(Line);
         PairNum = this->IsPair(NewPair);
@@ -198,11 +205,79 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
   }
 
   this->SetMaxLValue(maxLValue);
+  if (configure.includeAllJPi) {
+    int hardSphereMaxL = configure.hardSphereMaxL >= 0 ? configure.hardSphereMaxL : maxLValue;
+    if (hardSphereMaxL > maxLValue) this->SetMaxLValue(hardSphereMaxL);
+    this->AddHardSphereGroups(configure, hardSphereMaxL);
+  }
   if (this->CheckIdenticalChannels(configure) == -1) return -1;
   if ((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) && this->NumJGroups() > 0 && this->NumPairs() > 0)
     this->ParseExternalCapture(configure, ecPairs);
 
   return 0;
+}
+
+/*!
+ * Every J^pi group in the calculation scatters through the hard-sphere phases of its channels whether or
+ * not it has levels (the elastic T-matrix diagonal is e^{2i omega} - e^{2i(omega - phi)}(1 + U), and U is
+ * the level sum). The <levels> block, though, only creates a group when an active level carries it, so a
+ * J^pi with no level was simply absent, and an elastic calculation lost its potential scattering in that
+ * partial wave unless the user remembered a zero-width "dummy" level. With includeAllJPi set this adds
+ * the missing groups: for every particle pair, channel spin s and l <= maxL, every (J, pi) that has no
+ * group yet gets one with the particle channels of all pairs and no levels -- the same channel set the
+ * setup utility builds for a level of that J^pi. Capture and beta-decay pairs add nothing here: with no
+ * level there is nothing for a photon or a beta to connect.
+ *
+ * A level switched off in the file still leaves its J^pi scattering, which is what a decomposition into
+ * resonant and potential parts needs; the old convention (the whole partial wave disappears with its
+ * levels) is what includeAllJPi=0 gives.
+ */
+
+int CNuc::AddHardSphereGroups(const Config &configure, int maxL) {
+  int added = 0;
+  for (int aa = 1; aa <= this->NumPairs(); aa++) {
+    PPair *pair = this->GetPair(aa);
+    if (pair->GetPType() != 0) continue;
+    double s1 = pair->GetJ(1), s2 = pair->GetJ(2);
+    int sPi = pair->GetPi(1) * pair->GetPi(2);
+    for (double chS = fabs(s1 - s2); chS <= s1 + s2 + 1.0e-6; chS += 1.0) {
+      for (int chL = 0; chL <= maxL; chL++) {
+        int chPi = sPi * (chL % 2 == 0 ? 1 : -1);
+        for (double jValue = fabs(chS - chL); jValue <= chS + chL + 1.0e-6; jValue += 1.0) {
+          JGroup newJGroup(jValue, chPi);
+          if (this->IsJGroup(newJGroup)) continue;
+          newJGroup.SetInRMatrix(true);
+          this->AddJGroup(newJGroup);
+          int jGroupNum = this->IsJGroup(newJGroup);
+          JGroup *jg = this->GetJGroup(jGroupNum);
+          for (int ir = 1; ir <= this->NumPairs(); ir++) {
+            PPair *chPair = this->GetPair(ir);
+            if (chPair->GetPType() != 0) continue;
+            double t1 = chPair->GetJ(1), t2 = chPair->GetJ(2);
+            int tPi = chPair->GetPi(1) * chPair->GetPi(2);
+            bool identicalPair = chPair->IsIdentical();
+            for (double cS = fabs(t1 - t2); cS <= t1 + t2 + 1.0e-6; cS += 1.0) {
+              for (int cL = 0; cL <= maxL; cL++) {
+                if (tPi * (cL % 2 == 0 ? 1 : -1) != chPi) continue;
+                if (fabs(cS - cL) > jValue + 1.0e-6 || jValue > cS + cL + 1.0e-6) continue;
+                // Bose/Fermi symmetry for an identical pair: only l+s even (CheckIdenticalChannels).
+                if (identicalPair && (cL + (int)(cS + 0.5)) % 2 != 0) continue;
+                AChannel newChannel(cL, cS, ir, 'P');
+                if (jg->IsChannel(newChannel)) continue;
+                jg->AddChannel(newChannel);
+                jg->GetChannel(jg->NumChannels())->SetWignerLimit(chPair->GetRedMass(), chPair->GetChRad());
+              }
+            }
+          }
+          added++;
+          if (configure.screenCheckMask & Config::CHECK_COMPOUND_NUCLEUS)
+            configure.outStream << "Hard-sphere group added: J = " << jValue << (chPi == -1 ? "-" : "+")
+                                << " with " << jg->NumChannels() << " channels" << std::endl;
+        }
+      }
+    }
+  }
+  return added;
 }
 
 /*!
@@ -1207,6 +1282,12 @@ void CNuc::CalcBoundaryConditions(const Config &configure) {
   for (int j = 1; j <= this->NumJGroups(); j++) {
     if (this->GetJGroup(j)->IsInRMatrix()) {
       JGroup *theJGroup = this->GetJGroup(j);
+      if (theJGroup->NumLevels() == 0) {
+        // A hard-sphere group: with no levels its R-matrix is zero and the boundary condition drops out
+        // of the collision matrix, so any value serves. Zero keeps the Lo matrix finite.
+        for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) theJGroup->GetChannel(ch)->SetBoundaryCondition(0.0);
+        continue;
+      }
       ALevel *firstLevel = theJGroup->GetLevel(1);
       if (firstLevel->IsInRMatrix()) {
         for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {

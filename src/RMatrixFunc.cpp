@@ -109,7 +109,8 @@ void RMatrixFunc::FillMatrices(EPoint *point) {
           }
           qMatrixInverse.push_back(tempVector);
         }
-        MatrixInv matrixInv(qMatrixInverse);
+        // A hard-sphere group has no levels: its level matrix is empty and its R-matrix is zero.
+        MatrixInv matrixInv(qMatrixInverse.empty() ? matrix_c(1, vector_c(1, complex(1.0, 0.0))) : qMatrixInverse);
         for (int ch = 1; ch <= compound()->GetJGroup(j)->NumChannels(); ch++) {
           for (int chp = 1; chp <= compound()->GetJGroup(j)->NumChannels(); chp++) {
             complex rTemp(0.0, 0.0);

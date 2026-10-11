@@ -56,6 +56,32 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   applies to particle and photon channels alike, and to `gamma=0.0` channels
   handed to `AzrModel.add_level`. It is also why `deactivate_level` both zeroes
   *and* fixes a level's widths — zeroing alone would already have fixed them.
+- **A J^π is in the calculation only if an active level carries it — unless
+  `includeAllJPi=1` is in the `<config>` block.** The elastic T-matrix diagonal
+  is `e^{2iω} − e^{2i(ω−φ)}(1 + U)`, so a J^π group with channels and no levels
+  still scatters through its hard-sphere phase φ; but `CNuc::Fill` only creates
+  a group from an *active* level line, so a J^π with no level was absent and
+  its potential scattering silently missing from elastic data. The old fix was
+  a fixed zero-width "dummy" level per J^π (easily mistaken for a background
+  pole). Since 2026-10-11 the `.azr` can carry `includeAllJPi=1` and
+  `maxOrbitalMomentum=N` after the fixed `<config>` lines: `CNuc::AddHardSphereGroups`
+  then adds a level-less group with its particle channels for every J^π the
+  pairs allow up to `N` (default: the largest particle-channel l in the file).
+  `tests/hard_sphere/check.sh` shows this is bit-identical to the dummy-level
+  model on both routes, and that without either the p+12C elastic cross
+  section is off by up to 14 %. Consequences for evaluation work:
+  - a file without the key (every project saved before 2026-10-11) computes as
+    before: check the Levels tab's status line ("Not in the calculation: …")
+    or `grep includeAllJPi` before trusting an elastic curve, and add the two
+    lines (or tick the box, on by default for new projects) when the model
+    relies on dummies — the dummies stay harmless;
+  - with the option on, `deactivate_level` / `levelYN=0` removes the resonance
+    and keeps the partial wave (hard-sphere stays), and switching every level
+    off gives the pure hard-sphere + Coulomb curve; with it off, a J^π
+    disappears with its levels, the old decomposition semantics;
+  - pairs on inactive lines are kept when the option is on, so a pair whose
+    levels are all off still has channels;
+  - capture and β pairs get nothing from it: no level, no photon vertex.
 - **Input is LAB frame, forward kinematics** (light particle = projectile).
   **All output files and API results are CENTER-OF-MASS.** Never mix them.
   This includes `add_extrapolation(e_min, e_max, e_step)` — those are **lab**

@@ -51,6 +51,9 @@ class CNuc {
   /// Returns -1 if a file cannot be read. \p radii optionally overrides one
   /// pair's channel radius, as SetRadius does.
   int Fill(const Config &, std::pair<int, double> radii = std::pair<int, double>(0, 0.0));
+  /// Adds a level-less J^pi group, with its particle channels, for every J^pi the particle pairs allow up to
+  /// \p maxL that no active level provides. Such a group contributes hard-sphere scattering only.
+  int AddHardSphereGroups(const Config &, int maxL);
   /// Refuse (return -1) a channel with L+S odd on an identical pair with spin.
   int CheckIdenticalChannels(const Config &);
   /// Read the external-capture file into the ECLevel vector and check each

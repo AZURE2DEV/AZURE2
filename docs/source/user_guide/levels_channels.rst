@@ -114,6 +114,28 @@ Maximum Multipolarities per Decay
    The maximum number of multipolarities to consider per gamma-ray decay. Default
    is 2.
 
+Include hard-sphere scattering for every :math:`J^\pi`
+   On by default for a new project. AZURE2 builds one R-matrix per
+   :math:`J^\pi`, and historically a :math:`J^\pi` entered the calculation only
+   when a level carried it. A :math:`J^\pi` without a level was simply absent,
+   so an elastic-scattering calculation lost the potential (hard-sphere)
+   scattering of that partial wave -- a mistake nothing warned about. With this
+   option every :math:`J^\pi` the particle pairs allow up to the maximum orbital
+   momentum scatters, whether or not a level carries it: a :math:`J^\pi` with
+   no level contributes its hard-sphere phase shifts and nothing else. The line
+   under the box names the :math:`J^\pi` in that situation.
+
+   Switching a level off then removes its resonance and keeps the partial wave,
+   which is the natural decomposition into resonant and potential scattering;
+   switching every level off gives the pure hard-sphere plus Coulomb cross
+   section. To recover the old convention, in which a :math:`J^\pi` disappears
+   with its levels, untick the box.
+
+   The setting is stored in the project file (``includeAllJPi`` and
+   ``maxOrbitalMomentum`` in the ``<config>`` block), so a command-line or
+   ``pyazr`` run of the same file agrees with the GUI. A project saved before
+   this option existed opens with it off and computes exactly as it always did.
+
 .. warning::
 
    The user must carefully check that the channel configuration is set correctly.
@@ -124,17 +146,15 @@ Maximum Multipolarities per Decay
 Dummy Levels
 ^^^^^^^^^^^^
 
-Because the number of levels and angular momenta must be truncated, the code
-only includes those :math:`J^\pi` values that are present in the defined levels.
-To include all necessary hard-sphere phase shifts for scattering and external
-capture calculations, the user may need to add **dummy levels**:
-
-1. Create a level at an arbitrary energy with the missing :math:`J^\pi`.
-2. Fix its energy.
-3. Set all partial widths to zero.
-
-The effects of including these dummy levels should be investigated for each
-allowed spin-parity combination.
+Before the option above existed, the way to include the hard-sphere phase
+shifts of a :math:`J^\pi` that had no level was a **dummy level**: a level at an
+arbitrary (usually high) energy with that :math:`J^\pi`, its energy fixed and
+all partial widths set to zero. Such levels are easily confused with background
+poles, which do carry widths. With the option on, dummy levels are harmless (a
+zero-width level adds nothing to the level sum) and can be deleted; the
+``tests/hard_sphere`` check of the source tree verifies that a model with a
+dummy level per :math:`J^\pi` and the same model with the option on give
+identical cross sections.
 
 Gamma-Ray Calculations
 ----------------------

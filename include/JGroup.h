@@ -24,6 +24,9 @@ class JGroup {
   /// False for a group that exists only to carry a bound state for external
   /// capture -- a subthreshold state has no R-Matrix level of its own.
   bool IsInRMatrix() const;
+  /// Puts a group built from a spin and parity into the R-matrix calculation: a hard-sphere group
+  /// (channels, no levels) scatters through its hard-sphere phases alone, since its level sum is empty.
+  void SetInRMatrix(bool inRMatrix) { isinrmatrix_ = inRMatrix; }
   /// 1-based position of the level in the group, or 0 if it is not there.
   int IsLevel(ALevel);
   /// Parity of the group, \f$\pm1\f$.

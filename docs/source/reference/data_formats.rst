@@ -96,6 +96,21 @@ The file contains sections for:
 - Fitting parameter settings
 - MCMC settings (if enabled)
 
+The ``<config>`` block holds a fixed sequence of lines (formalism, output and
+checks directories, the check-file switches) followed by optional ``key=value``
+lines, which a reader that does not know a key skips:
+
+``includeAllJPi=1``
+   Hard-sphere scattering in every :math:`J^\pi` the particle pairs allow,
+   whether or not a level carries it (see :doc:`../user_guide/levels_channels`).
+   Absent or ``0``: only the :math:`J^\pi` of active levels enter the calculation,
+   as in projects saved before the key existed.
+
+``maxOrbitalMomentum=N``
+   The orbital-momentum limit of that enumeration, i.e. the **Maximum Orbital
+   Momentum** of the Levels and Channels tab. Absent: the largest :math:`l` of
+   any particle channel in the ``<levels>`` block.
+
 .. tip::
 
    The recommended practice is to always use the GUI to create and edit

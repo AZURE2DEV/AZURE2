@@ -12,6 +12,7 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QPushButton>
+#include <QLabel>
 #include <QString>
 #include <cstdlib>
 #include <iostream>
@@ -155,6 +156,39 @@ int main(int argc, char** argv) {
     dialog.setSpinParityOptions(options, 1.0, 1, true);
     ok("1+ inserted between 1/2- and 3/2+", comboLabels(dialog).startsWith(SP("1/2+|1/2-|1+  (no channels)|3/2+")),
        comboLabels(dialog));
+  }
+
+  // 7. the hard-sphere option: on for a new project, and the status line names the J^pi without a level
+  {
+    LevelsTab fresh;
+    fresh.setPairsModel(&pairs);
+    ok("hard-sphere option is on for a new project", fresh.includeAllJPi());
+    LevelsData l1 = {1, 0, 0.5, 1, 10.4}, l2 = {1, 0, 2.5, -1, 11.0}, l3 = {0, 0, 1.5, 1, 11.5};  // l3 inactive
+    fresh.addLevel(l1, false); fresh.addLevel(l2, false); fresh.addLevel(l3, false);
+    QStringList missing = fresh.missingSpinParities();
+    ok("missing J^pi = those with no ACTIVE level (3/2+ counts as missing)",
+       missing.join(" ") == SP("1/2- 3/2+ 3/2- 5/2+ 7/2+"), missing.join(" "));
+    QLabel* status = nullptr;
+    for (QLabel* l : fresh.findChildren<QLabel*>()) if (l->text().contains("Hard-sphere scattering only")) status = l;
+    ok("status line lists them as hard-sphere only when the option is on", status != nullptr);
+    fresh.setIncludeAllJPi(false);
+    status = nullptr;
+    for (QLabel* l : fresh.findChildren<QLabel*>()) if (l->text().contains("Not in the calculation")) status = l;
+    ok("status line warns when the option is off", status != nullptr);
+    fresh.setIncludeAllJPi(true);
+    fresh.reset();   // clears the shared pairs model too, as opening a file does before re-reading it
+    ok("reset keeps the option on", fresh.includeAllJPi());
+    ok("reset clears the pairs (status line empty without pairs)", pairs.getPairs().isEmpty());
+    pairs.insertRows(0, 1);
+    for (int c = 0; c < PairsData::SIZE; c++) pairs.setData(pairs.index(0, c), n14N[c]);
+    fresh.addLevel(l1, false);
+    status = nullptr;
+    for (QLabel* l : fresh.findChildren<QLabel*>()) if (l->text().contains("Hard-sphere scattering only")) status = l;
+    ok("status line filled again after reset + a level", status != nullptr, status ? status->text() : "(no label)");
+    if (const char* stem = std::getenv("AZURE2_LEVEL_DIALOG_PNG")) {
+      fresh.resize(1100, 600); fresh.show(); QApplication::processEvents();
+      fresh.grab().save(QString("%1_tab.png").arg(stem));
+    }
   }
 
   std::cout << (fails ? "FAILED" : "PASSED") << " (" << fails << " failures)" << std::endl;

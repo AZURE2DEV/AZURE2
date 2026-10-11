@@ -5,6 +5,8 @@
 #include <QItemSelection>
 #include <QLineEdit>
 #include <QSpinBox>
+#include <QCheckBox>
+#include <QLabel>
 #include <QPushButton>
 #include <QTableView>
 #include <QSortFilterProxyModel>
@@ -40,6 +42,14 @@ class LevelsTab : public QWidget {
   bool readNuclearFile(QTextStream &inStream);
   void reset();
   LevelsModel *getLevelsModel() { return levelsModel; }
+  /*! Hard-sphere scattering in every J^pi up to the maximum orbital momentum, levels or not
+   *  (includeAllJPi in the .azr <config> block). On for a new project, off for a file that lacks the key. */
+  bool includeAllJPi() const { return includeAllJPiCheck->isChecked(); }
+  void setIncludeAllJPi(bool on) { includeAllJPiCheck->setChecked(on); }
+  int maxL() const { return maxLSpin->value(); }
+  void setMaxL(int l) { maxLSpin->setValue(l); }
+  /*! The J^pi the pairs allow up to the maximum orbital momentum that no active level carries. */
+  QStringList missingSpinParities();
   ChannelsModel *getChannelsModel() { return channelsModel; }
 
  public slots:
@@ -53,6 +63,7 @@ class LevelsTab : public QWidget {
   void updateChannelsPairAddedEdited();
   void updateChannelsPairRemoved(int pairIndex);
   void updateDetails(const QItemSelection &selection);
+  void updateMissingSpinParities();
   void updateReducedWidth(const QString &string);
   void calculateWignerLimit();
   void showInfo(int which = 0, QString title = "");
@@ -70,6 +81,8 @@ class LevelsTab : public QWidget {
   QSpinBox *maxLSpin;
   QSpinBox *maxMultSpin;
   QSpinBox *maxNumMultSpin;
+  QCheckBox *includeAllJPiCheck;
+  QLabel *missingJPiLabel;
   QPushButton *addLevelButton;
   QPushButton *removeLevelButton;
   QPushButton *iaeaQueryButton;

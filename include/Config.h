@@ -115,6 +115,12 @@ class Config {
   bool useHybridMethod;
   /// Use adaptive integration grid for target effects (false = uniform grid)
   bool useAdaptiveGrid;
+  /// Hard-sphere scattering in every J^pi the particle pairs allow, whether or not a level carries it
+  /// (CNuc::AddHardSphereGroups). Read from "includeAllJPi=1" in the <config> block; off when absent.
+  bool includeAllJPi;
+  /// Orbital momentum limit of that enumeration ("maxOrbitalMomentum=N" in <config>); -1 = the largest l of
+  /// any particle channel in the <levels> block.
+  int hardSphereMaxL;
   /// A constant indicating the maximum order of the Legendre polynomials to calculate.
   static const int maxLOrder = 20;
   /// Read the <config> block, then the optional <potential> block. -1 if the file cannot be read.
