@@ -394,6 +394,19 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
   that matters; coordinated multi-level flips need several backtracking GN iterations
   (`search.gn_iters_multi`) and their own polish quota (`search.multi_top`).
 - Job mail: `-m abe` (start, end, abort) so a silent crash is noticed.
+- **`pkill -f` / `pgrep -f` patterns are regular expressions, and every reaction name here has a `+`.**
+  `pgrep -f "13C+a/..."` or `pkill -f "bin/AZURE2 11B+a_udr.azr"` matches nothing (`B+` = one or more
+  B), prints nothing, and looks exactly like "no such process".  2026-10-11: a GUI "stopped" that way
+  kept running, its log was deleted under it, and the deleted file grew to 748 GB and filled the group
+  quota (/groups/rdeboer1, 5 TB) -- every job writing there died ("No space left on device", or a log
+  that ends after the module lines).  Rules: find the pid with a fixed-string match
+  (`ps -eo pid,cmd | grep -F "11B+a_udr.azr"`) or escape the plus (`13C\+a`), kill BY PID, confirm with
+  `kill -0 <pid>` failing, and only then remove its log; launch background programs with
+  `< /dev/null` and a size cap (`2>&1 | head -c 200000 > log`).  A `.nfs...` file in a directory is a
+  deleted file still held open -- `ls -la` shows its size; `ls -l /proc/<pid>/fd` finds the holder.
+- **When a whole batch of jobs dies at once, check `df -h /groups/<group>` first** (the group quota,
+  not the 900 TB filesystem `df /groups` may show).  Seven jobs failing in the same minute with
+  truncated logs looked like a broken node; it was the quota.
 - **Park-mode campaigns (`"use_park": true`, since 2026-10-06).** (1) The J > 0 wall
   (`sum (J/1e-3)^2` over levels with `J = 1 - sum gamma^2 dS/dE < 0`) is inside the
   engine's scalar chi2, so the `plain` objective sees it, but the least-squares rows
@@ -1860,3 +1873,9 @@ single session takes only 45 s per objective -- the shards were badly balanced. 
 How it was found (reusable): time each shard's eval and Jacobian separately (call each _Worker in turn) -- the slowest shard sets the
 wall time, and its contents say why. Not worth it here: more OpenMP threads per shard (pyazr's objective does not use the parallel
 chi2 path of AZURE2 249747e; 4x4 / 8x2 layouts made the Jacobian 5x slower).
+
+## 2026-10-11 — a `+` in a pkill pattern filled the group quota
+A GUI launched for an 11B+a review fell back to its text menu (no `< /dev/null`) and printed its prompt forever; `pkill -f
+"bin/AZURE2 11B+a_udr.azr"` matched nothing (`+` is a regex quantifier), the log was deleted under the live process, and the hidden
+`.nfs...` file reached 748 GB and filled /groups/rdeboer1 at 17:17.  Eight 13C+a jobs and several other sessions' MCMC jobs died.
+Found by `find -mmin -2880 -size +200M` (the .nfs file) and `ls -l /proc/<pid>/fd`; freed by killing the pid.  Gotchas in section 8.
