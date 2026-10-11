@@ -68,6 +68,17 @@ bool InParallelRegion() {
 #endif
 }
 
+// Central-difference step for parameter x0.  The usual scale*(|x0| + 1) is
+// absolute for |x0| < 1, which is right for widths and energies that pass
+// through zero but not for a normalization: a yield normalized in absolute
+// units (11B+a CASPAR thick-target yields, n ~ 2e-5) moved by 1e-6, i.e. 5%,
+// and its finite-difference gradient came out 14x too large.  A norm is
+// positive and scale-free, so its step is relative.
+double FdStep(ParamKind kind, double x0, double scale) {
+  if (kind == ParamKind::Norm && x0 != 0.0) return scale * std::fabs(x0);
+  return scale * (std::fabs(x0) + 1.0);
+}
+
 // AZURE_GRAD_CHECK on the Jacobian path: the Jacobian-path gradient, handed to
 // the finite-difference check that the adjoint gradient runs, so both are
 // compared with the same finite differences before any exit.
@@ -577,7 +588,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     ParamKind kind = pmap.Desc(idx).kind;
     if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm)) continue;  // analytic
     double x0 = p[idx];
-    double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+    double h = FdStep(kind, x0, 1.0e-6);
 
     // Fast path: a free energy shift on a self-contained segment only moves that
     // segment's points, so finite-difference just that segment's chi^2 on the
@@ -706,7 +717,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         // relative): a component that moves with it is truncation error of the
         // FD (e.g. near a narrow level), not of the analytic value.
         static const double hScale = std::getenv("AZURE_GRAD_CHECK_H") ? std::atof(std::getenv("AZURE_GRAD_CHECK_H")) : 1.0e-6;
-        double x0 = p[idx], h = hScale * (std::fabs(x0) + 1.0);
+        double x0 = p[idx], h = FdStep(pmap.Desc(idx).kind, x0, hScale);
         vector_r pp = p, pm = p;
         pp[idx] = x0 + h;
         pm[idx] = x0 - h;
