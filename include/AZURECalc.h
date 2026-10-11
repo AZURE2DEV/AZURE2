@@ -76,6 +76,8 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   bool HasG2() const override { return g2Enabled_; }
   /// Probe the analytic Jacobian at `p`; enables G2 for Minuit2 when it works.
   bool EnableG2(const std::vector<double> &p);
+  /// AZURE_DUMP_NONFINITE diagnostic (see AZURECalc.cpp).
+  void DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld) const;
   /// True when the limits manager declares at least one nuisance parameter.
   bool HasNuisanceParameters() const;
   /*!
@@ -245,6 +247,8 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   // Gauss-Newton cache: the residual Jacobian taken in Gradient() also gives G2;
   // Minuit2 asks for G2 at the same point right after the gradient.
   mutable std::vector<double> g2CacheP_, g2Cache_;
+  mutable std::vector<double> lastGradP_, lastGrad_;  ///< parameters of the last Gradient() call (AZURE_DUMP_NONFINITE)
+  mutable std::mutex lastGradMutex_;
   /// Gradient and Gauss-Newton G2 from one residual Jacobian; false if unsupported.
   bool GradientFromJacobian(const std::vector<double> &p, std::vector<double> &grad) const;
 

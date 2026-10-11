@@ -5,6 +5,8 @@
 #include <cstdlib>
 #include <string>
 #include <set>
+#include <fstream>
+#include <mutex>
 #include <sstream>
 #include "ParameterLabel.h"
 #include "Config.h"
@@ -59,6 +61,9 @@ void unsetEnvVar(const char *name) {
 #endif
 
 namespace {
+
+// Value returned to Minuit2 for a non-finite or absurdly large chi-squared.
+constexpr double kChi2Ceiling = 1.0e100;
 
 bool InParallelRegion() {
 #ifdef _OPENMP
@@ -123,6 +128,106 @@ double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config,
 }
 
 }  // namespace
+
+/*!
+ * AZURE_DUMP_NONFINITE=1 (optional threshold: AZURE_DUMP_NONFINITE=<chi2>, default 1e10): whenever a
+ * chi-squared evaluation is non-finite or above the threshold, append to nonfinite_dump.txt (in the
+ * working directory) the parameters that moved most from the last gradient point, the segments with
+ * the largest or non-finite contributions, and their offending points (with any non-finite
+ * target-effect sub-points).  At most 20 dumps per run.
+ */
+void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld) const {
+  double threshold = std::atof(std::getenv("AZURE_DUMP_NONFINITE"));
+  if (!(threshold > 1.0)) threshold = 1.0e10;
+  if (std::isfinite(chi) && chi <= threshold) return;
+  static std::atomic<int> nDump{0};
+  const int d = ++nDump;
+  if (d > 20) return;
+  AZUREParams names;
+  compound()->FillMnParams(names.GetMinuitParams(), &configure());
+  data()->FillMnParams(names.GetMinuitParams());
+  const auto &mp = names.GetMinuitParams();
+  std::ostringstream out;
+  out << "==== dump " << d << ": chi2 " << chi << " (threshold " << threshold << ")\n";
+  std::vector<double> base, g2 = g2Cache_, gl;
+  {
+    std::lock_guard<std::mutex> lk(lastGradMutex_);
+    base = lastGradP_;
+    gl = lastGrad_;
+  }
+  out << "-- parameters, sorted by |p - p_lastgradient| / max(|p_lastgradient|, 1e-3)"
+      << (base.size() == p.size() ? "" : " (no gradient point yet: |p| only)") << "\n";
+  std::vector<std::pair<double, int>> moved;
+  for (size_t i = 0; i < p.size(); i++) {
+    if ((int)i < (int)mp.Params().size() && mp.Parameter(i).IsFixed()) continue;
+    const double b = base.size() == p.size() ? base[i] : 0.0;
+    moved.push_back({std::fabs(p[i] - b) / std::max(std::fabs(b), 1.0e-3), (int)i});
+  }
+  std::sort(moved.rbegin(), moved.rend());
+  for (size_t k = 0; k < moved.size() && k < 40; k++) {
+    const int i = moved[k].second;
+    const double b = base.size() == p.size() ? base[i] : 0.0;
+    out << "  idx " << std::setw(4) << i << "  " << std::setw(34) << std::left
+        << ((int)i < (int)mp.Params().size() ? mp.GetName(i) : std::string("?")) << std::right
+        << "  now " << std::setw(14) << p[i] << "  lastgrad " << std::setw(14) << b
+        << "  rel.move " << moved[k].first;
+    if (gl.size() == p.size()) out << "  grad " << gl[i];
+    if (g2.size() == p.size()) out << "  G2 " << g2[i] << "  -grad/G2 " << (g2[i] != 0.0 && gl.size() == p.size() ? -gl[i] / g2[i] : 0.0);
+    out << "\n";
+  }
+  out << "-- segments with non-finite or largest chi2\n";
+  std::vector<std::pair<double, int>> segs;
+  for (int i = 1; i <= ld->NumSegments(); i++) {
+    ESegment *seg = ld->GetSegment(i);
+    if (!seg) continue;
+    double c = 0.0;
+    for (int pid = 1; pid <= seg->NumPoints(); pid++) {
+      EPoint *pt = seg->GetPoint(pid);
+      if (!pt) continue;
+      const double r = pt->GetFitCrossSection() - pt->GetCMCrossSection() * seg->GetNorm();
+      const double e = pt->GetCMCrossSectionError() * seg->GetNorm();
+      if (e != 0.0) c += r * r / (e * e);
+    }
+    segs.push_back({std::isfinite(c) ? c : std::numeric_limits<double>::max(), i});
+  }
+  std::sort(segs.rbegin(), segs.rend());
+  for (size_t k = 0; k < segs.size() && k < 5; k++) {
+    ESegment *seg = ld->GetSegment(segs[k].second);
+    out << "  segment " << segs[k].second << " key " << seg->GetSegmentKey() << " (" << seg->GetEntranceKey() << "->"
+        << seg->GetExitKey() << ") chi2 " << (segs[k].first == std::numeric_limits<double>::max() ? std::string("NON-FINITE") : std::to_string(segs[k].first))
+        << "  norm " << seg->GetNorm() << " shift " << seg->GetEnergyShift() << " sqrtshift " << seg->GetEnergyShiftSqrt() << "\n";
+    int shown = 0;
+    for (int pid = 1; pid <= seg->NumPoints() && shown < 6; pid++) {
+      EPoint *pt = seg->GetPoint(pid);
+      if (!pt) continue;
+      const double fit = pt->GetFitCrossSection();
+      const double e = pt->GetCMCrossSectionError() * seg->GetNorm();
+      const double pull = (e != 0.0) ? (fit - pt->GetCMCrossSection() * seg->GetNorm()) / e : 0.0;
+      if (std::isfinite(fit) && std::fabs(pull) < 1.0e4) continue;
+      shown++;
+      out << "    point " << pid << " Elab " << pt->GetLabEnergy() << " Ecm " << pt->GetCMEnergy() << " angle "
+          << pt->GetCMAngle() << " fit " << fit << " data " << pt->GetCMCrossSection() << " pull " << pull;
+      int nBad = 0;
+      double firstBadE = 0.0, firstBadS = 0.0;
+      for (int j = 1; j <= pt->NumSubPoints(); j++) {
+        const double sv = pt->GetSubPoint(j)->GetFitCrossSection();
+        if (!std::isfinite(sv) || std::fabs(sv) > 1.0e10) {
+          if (!nBad) { firstBadE = pt->GetSubPoint(j)->GetCMEnergy(); firstBadS = sv; }
+          nBad++;
+        }
+      }
+      if (pt->NumSubPoints() > 0)
+        out << "  sub-points " << pt->NumSubPoints() << " bad " << nBad
+            << (nBad ? " first at Ecm " + std::to_string(firstBadE) + " value " + std::to_string(firstBadS) : std::string());
+      out << "\n";
+    }
+  }
+  static std::mutex fileMutex;
+  std::lock_guard<std::mutex> lk(fileMutex);
+  std::ofstream f("nonfinite_dump.txt", std::ios::app);
+  f << out.str();
+  std::cerr << "[nonfinite] chi2 " << chi << ": dump " << d << " written to nonfinite_dump.txt" << std::endl;
+}
 
 double AZURECalc::operator()(const vector_r &p) const {
   int thisIteration = data()->Iterations();
@@ -240,6 +345,8 @@ double AZURECalc::operator()(const vector_r &p) const {
     localData->SetParkPenalty(parkPenalty);
   }
 
+  if (std::getenv("AZURE_DUMP_NONFINITE")) DumpNonFinite(p, chiSquared, localCompound, localData);
+
   if (!localData->IsErrorAnalysis() && thisIteration != 0) {
     if (thisIteration % 10 == 0) configure().outStream
         << "\r\tIteration: " << std::setw(6) << thisIteration
@@ -258,11 +365,15 @@ double AZURECalc::operator()(const vector_r &p) const {
     // delete localData;
   }
 
-  // Make a check if chiSquared is NaN
-  if (std::isnan(chiSquared)) {
-    // In that case return infinite since MINUIT2 can have issues with NaN values
-    return std::numeric_limits<double>::infinity();
-  }
+  // A non-finite (or absurdly large) chi-squared must reach Minuit2 as a large
+  // FINITE number.  MnLineSearch fits a parabola through the function values;
+  // +inf (which this used to return for NaN) turns that parabola into NaN, the
+  // line search returns garbage and MIGRAD ends with no status message -- the
+  // 11B+a pol_iso --use-gradient fit stopped that way after 30 evaluations
+  // (2026-10-11).  A finite ceiling makes the step simply look very bad, so the
+  // line search backtracks.  The ceiling stays far above any real chi-squared
+  // and far below overflow in the parabola arithmetic.
+  if (!std::isfinite(chiSquared) || chiSquared > kChi2Ceiling) chiSquared = kChi2Ceiling;
 
   if (configure().stopFlag && isFit)
     return 0.;
@@ -437,6 +548,10 @@ double AZURECalc::Chi2Value(const vector_r &p) const {
 }
 
 std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
+  {
+    std::lock_guard<std::mutex> lk(lastGradMutex_);
+    lastGradP_ = p;
+  }
   std::vector<double> grad(p.size(), 0.0);
   const auto tg0 = std::chrono::steady_clock::now();
   // With G2 enabled, one residual Jacobian gives both the gradient (2 J^T r +
@@ -476,6 +591,10 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
                 << worstIdx << (worstIdx >= 0 ? " (" + std::to_string(grad[worstIdx]) + " vs " + std::to_string(ga[worstIdx]) + ")" : "")
                 << std::endl;
       if (std::string(std::getenv("AZURE_GRAD_CHECK")) == "exit") std::exit(0);
+    }
+    {
+      std::lock_guard<std::mutex> lk(lastGradMutex_);
+      lastGrad_ = grad;
     }
     return grad;
   }
