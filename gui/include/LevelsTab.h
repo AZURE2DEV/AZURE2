@@ -17,6 +17,7 @@
 #include "LevelsModel.h"
 #include "ChannelsModel.h"
 #include "ChannelDetails.h"
+#include "AddLevelDialog.h"
 
 class InfoDialog;
 
@@ -33,6 +34,8 @@ class LevelsTab : public QWidget {
   void updateChannelsLevelDeleted(int levelIndex);
   void updateChannelsLevelEdited(int levelIndex);
   QList<ChannelsData> calculateChannels(int levelIndex);
+  QList<ChannelsData> calculateChannels(const LevelsData &level, int levelIndex);
+  QList<SpinParityOption> spinParityOptions();
   bool writeNuclearFile(QTextStream &outStream);
   bool readNuclearFile(QTextStream &inStream);
   void reset();

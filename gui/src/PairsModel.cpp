@@ -464,8 +464,6 @@ QString PairsModel::getSpinLabel(const PairsData &pair, int which) const {
     tempSpin = QString("%1/2").arg((int)(tempJ * 2));
   else
     tempSpin = QString("%1").arg(tempJ);
-  if (tempPi == -1)
-    return QString("%1-").arg(tempSpin);
-  else
-    return QString("%1+").arg(tempSpin);
+  // Superscript plus/minus (U+207A/B), as in the Levels table and the Add/Edit Level dialog.
+  return tempSpin + (tempPi == -1 ? QString(QChar(0x207B)) : QString(QChar(0x207A)));
 }

@@ -146,3 +146,32 @@ lines in `<segmentsData>`, counting inactive ones — the same key `<targetInt>`
 binds to, and the same key `chiSquared.out` and `normalizations.out` print.
 Those two output files are the authoritative cross-check on any claim about
 which segment is which; quote them rather than a count you did by eye.
+
+## Changing a dialog or a tab: check it headless before showing it
+
+Three things, all in `tests/gui/`, all `QT_QPA_PLATFORM=offscreen`:
+
+- A ctest for the behaviour (`level_dialog_test.cpp` is the pattern: build the
+  tab with its models, drive the widgets, assert). With
+  `AZURE2_LEVEL_DIALOG_PNG=<stem>` it also saves the dialog as PNGs under
+  `xvfb-run -a`, so the layout is looked at before the person sees it.
+- `levels_compat_check a.azr b.azr ...` (not a ctest): opens real projects
+  through the GUI's own reader and checks write-back, that the Add/Edit Level
+  list offers every level in the file, and that regenerating channels from
+  the pairs reproduces the file's set. Run it on one random file from each
+  of five reaction systems (`ls -d */ | shuf -n 5`, then one `.azr` each,
+  skipping `variants/`, `shard*`) and quote the result. Two pre-existing
+  write-back differences are expected and are not yours: 2022-era files hold
+  `1 0 0` in the three placeholder columns (the GUI writes `0 0 0.0`), and
+  pyazr-written files carry more than the 6 significant digits the GUI saves.
+- Only a GUI build goes into `~/bin/AZURE2` (`ldd ~/bin/AZURE2 | grep -c Qt`
+  must be > 0). A CLI-only build there opens as a text menu; launched with
+  `nohup` on an empty stdin it loops on the prompt and filled a 9 GB log
+  (2026-10-11). Launch with `< /dev/null 2>&1 | head -c 200000 > log`.
+
+J^π labels in the Levels and Pairs tables and the level dialog use the
+superscript signs U+207A/U+207B as plain text (QComboBox items do not render
+rich text); the LaTeX export writes `^{+}` itself. The level dialog lists only
+the J^π that give channels (`LevelsTab::spinParityOptions`, built by trying
+each candidate through `calculateChannels`), so the list and the channels
+cannot disagree.

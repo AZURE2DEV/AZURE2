@@ -1,6 +1,7 @@
 #include <QHeaderView>
 #include <QMessageBox>
 #include <QFile>
+#include <algorithm>
 
 #include "LevelsTab.h"
 #include "LevelsHeaderView.h"
@@ -234,15 +235,13 @@ void LevelsTab::setPairsModel(PairsModel *model) {
 
 void LevelsTab::addLevel() {
   AddLevelDialog aDialog;
+  aDialog.setSpinParityOptions(spinParityOptions());
   if (aDialog.exec()) {
     LevelsData newLevel;
     newLevel.isActive = 1;
     newLevel.isFixed = 0;
-    newLevel.jValue = (aDialog.jValueText->text()).toDouble();
-    if (aDialog.piValueCombo->currentIndex() == 0)
-      newLevel.piValue = -1;
-    else
-      newLevel.piValue = 1;
+    newLevel.jValue = aDialog.jValue();
+    newLevel.piValue = aDialog.piValue();
     newLevel.energy = (aDialog.energyText->text()).toDouble();
     addLevel(newLevel, false);
   }
@@ -286,7 +285,7 @@ void LevelsTab::editLevel() {
 
   QModelIndex i = levelsModel->index(index.row(), 2, QModelIndex());
   QVariant var = levelsModel->data(i, Qt::EditRole);
-  QString jValue = var.toString();
+  double jValue = var.toDouble();
   i = levelsModel->index(index.row(), 3, QModelIndex());
   var = levelsModel->data(i, Qt::EditRole);
   int piValue = var.toInt();
@@ -296,24 +295,16 @@ void LevelsTab::editLevel() {
 
   AddLevelDialog aDialog;
   aDialog.setWindowTitle(tr("Edit a Level"));
-  aDialog.jValueText->setText(jValue);
-  if (piValue == -1)
-    aDialog.piValueCombo->setCurrentIndex(0);
-  else
-    aDialog.piValueCombo->setCurrentIndex(1);
+  aDialog.setSpinParityOptions(spinParityOptions(), jValue, piValue, true);
   aDialog.energyText->setText(energy);
 
   if (aDialog.exec()) {
-    QString newJValue = aDialog.jValueText->text();
+    double newJValue = aDialog.jValue();
     if (newJValue != jValue) {
       i = levelsModel->index(index.row(), 2, QModelIndex());
       levelsModel->setData(i, newJValue, Qt::EditRole);
     }
-    int newPiValue;
-    if (aDialog.piValueCombo->currentIndex() == 0)
-      newPiValue = -1;
-    else
-      newPiValue = 1;
+    int newPiValue = aDialog.piValue();
     if (newPiValue != piValue) {
       i = levelsModel->index(index.row(), 3, QModelIndex());
       levelsModel->setData(i, newPiValue, Qt::EditRole);
@@ -419,9 +410,38 @@ void LevelsTab::updateChannelsLevelEdited(int levelIndex) {
 }
 
 QList<ChannelsData> LevelsTab::calculateChannels(int levelIndex) {
+  return calculateChannels((levelsModel->getLevels()).at(levelIndex), levelIndex);
+}
+
+QList<SpinParityOption> LevelsTab::spinParityOptions() {
+  // Every J^pi that gives at least one channel under the current pairs and limits, by trying each candidate through
+  // calculateChannels itself, so the list cannot drift from the channels the tab will actually build.
+  QList<SpinParityOption> options;
+  QList<PairsData> pairs = pairsModel->getPairs();
+  double maxJ = 0.;
+  for (const PairsData &pair : pairs) {
+    double pairMaxJ;
+    if (pair.pairType == 0)
+      pairMaxJ = pair.heavyJ + pair.lightJ + maxLSpin->value();
+    else if (pair.pairType == 20)
+      pairMaxJ = pair.heavyJ + 1.;
+    else
+      pairMaxJ = pair.heavyJ + maxMultSpin->value();
+    maxJ = std::max(maxJ, pairMaxJ);
+  }
+  for (int twoJ = 0; twoJ <= int(2. * maxJ + 0.5); twoJ++) {
+    for (int pi : {1, -1}) {
+      LevelsData level = {1, 0, twoJ / 2.0, pi, 0.};
+      int numChannels = calculateChannels(level, -1).size();
+      if (numChannels > 0) options.append({level.jValue, pi, numChannels});
+    }
+  }
+  return options;
+}
+
+QList<ChannelsData> LevelsTab::calculateChannels(const LevelsData &level, int levelIndex) {
   QList<ChannelsData> channels;
   QList<PairsData> pairs = pairsModel->getPairs();
-  LevelsData level = (levelsModel->getLevels()).at(levelIndex);
 
   int maxL = maxLSpin->value();
   int maxMult = maxMultSpin->value();
@@ -450,7 +470,10 @@ QList<ChannelsData> LevelsTab::calculateChannels(int levelIndex) {
       }
     } else {
       int numMult = 1;
-      for (int l = 1; l <= maxMult; l++) {
+      // J couples to the final state's spin and an integer multipole only when both are integer or both half-integer;
+      // the triangle condition alone would let an integer J radiate to a half-integer final state.
+      bool sameCharacter = int(2.0 * (level.jValue + pair.heavyJ) + 0.5) % 2 == 0;
+      for (int l = 1; l <= maxMult && sameCharacter; l++) {
         if (fabs(l - pair.heavyJ) <= level.jValue && level.jValue <= l + pair.heavyJ && numMult <= maxNumMult) {
           QChar radType;
           int parityChange = pair.heavyPi * level.piValue;

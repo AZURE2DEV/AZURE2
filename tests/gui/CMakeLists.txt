@@ -98,3 +98,48 @@ endif()
 add_test(NAME segments_move COMMAND segments_move_test)
 set_tests_properties(segments_move PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# The Add/Edit Level dialog lists only the J^pi values that give channels under
+# the current pairs and limits, with a fallback when no pairs are defined.
+add_executable(level_dialog_test level_dialog_test.cpp)
+set_target_properties(level_dialog_test PROPERTIES AUTOMOC OFF)
+target_include_directories(level_dialog_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(level_dialog_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(level_dialog_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(level_dialog_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME level_dialog COMMAND level_dialog_test)
+set_tests_properties(level_dialog PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# Not a ctest: a manual backward-compatibility check of the Levels tab against
+# real project files (`levels_compat_check a.azr b.azr ...`).
+add_executable(levels_compat_check levels_compat_check.cpp)
+set_target_properties(levels_compat_check PROPERTIES AUTOMOC OFF)
+target_include_directories(levels_compat_check PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(levels_compat_check PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(levels_compat_check PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(levels_compat_check PRIVATE pugixml srim_utilities)
+endif()

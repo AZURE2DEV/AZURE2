@@ -173,8 +173,6 @@ QString LevelsModel::getSpinLabel(const LevelsData &level) const {
     tempSpin = QString("%1/2").arg((int)(level.jValue * 2));
   else
     tempSpin = QString("%1").arg(level.jValue);
-  if (level.piValue == -1)
-    return QString("%1-").arg(tempSpin);
-  else
-    return QString("%1+").arg(tempSpin);
+  // Superscript plus/minus (U+207A/B), as in the Add/Edit Level dialog.
+  return tempSpin + (level.piValue == -1 ? QString(QChar(0x207B)) : QString(QChar(0x207A)));
 }
