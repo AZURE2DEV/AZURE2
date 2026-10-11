@@ -2088,6 +2088,16 @@ complete:
   resonance, up to a kernel's width away from the threshold. Workaround: drop them (running-median
   outlier test, `plot_initial.py` there) or move the grid; the fix belongs in the threshold
   handling of the bare calculation (penetrability/shift at E_cm -> 0), not in the effects.
+  RESOLVED 2026-10-11 (9dacddc, 11B+a/10-10-26_speedup/nfrepro/readme): not a Coulomb-function
+  failure but an overflow in CoulFunc::PEShift and the hard-sphere phase. ~0.5 keV above the
+  threshold eta ~115-120 and G ~1e155, F*F' is a denormal (not exactly 0), so the general formula
+  rho/(F^2+G^2)*(F F'+G G') overflows its denominator -> NaN/-inf. Both now fall back to a
+  hypot(F,G)-scaled form ONLY when the plain result is non-finite (mode-3 1 eV scan: all 116 bad
+  rows fixed, 0 of 4,884 good rows changed; mode-1 chi2 byte-identical). It also stopped a
+  --use-gradient fit: one sub-point in the band gave d chi2/d shift = -3e40 and MIGRAD left. Since
+  db98b63 a non-finite chi2 (or > 1e100) returns 1e100 to Minuit2, and AZURE_DUMP_NONFINITE=1
+  (or =<threshold>) writes nonfinite_dump.txt (worst segments/points/sub-points, largest moves
+  with grad, G2, -grad/G2). Spikes in folded curves made with an older binary may be this bug.
 
 - 2026-10-10 -- CI (GitHub Actions, dev) RULES, after a week of red builds (all fixed in d39ef31,
   3002ae7, 8687bb7, 42859b6). CI builds and tests on Linux, macOS (BSD userland) and Windows
