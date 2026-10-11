@@ -60,6 +60,14 @@ void unsetEnvVar(const char *name) {
 
 namespace {
 
+bool InParallelRegion() {
+#ifdef _OPENMP
+  return omp_in_parallel();
+#else
+  return false;
+#endif
+}
+
 // AZURE_GRAD_CHECK on the Jacobian path: the Jacobian-path gradient, handed to
 // the finite-difference check that the adjoint gradient runs, so both are
 // compared with the same finite differences before any exit.
@@ -935,14 +943,21 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
       const double norm = seg->GetNorm();
       std::vector<double> byPoint(nPts, 0.0);
       std::vector<char> present(nPts, 0);
-#pragma omp parallel for schedule(dynamic) if (parallel)
-      for (int pid = 0; pid < nPts; pid++) {
+      auto one = [&](int pid) {
         EPoint *pt = seg->GetPoint(pid + 1);
-        if (!pt) continue;
+        if (!pt) return;
         present[pid] = 1;
         const double model = seg->CalculateTheoreticalCrossSection(pid, lc, configure(), ld);
         const double denom = pt->GetCMCrossSectionError() * norm;
         byPoint[pid] = (denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0;
+      };
+      // No parallel construct inside an enclosing parallel region (see
+      // CoulFuncCache::localCache).
+      if (parallel && !InParallelRegion()) {
+#pragma omp parallel for schedule(dynamic)
+        for (int pid = 0; pid < nPts; pid++) one(pid);
+      } else {
+        for (int pid = 0; pid < nPts; pid++) one(pid);
       }
       out.clear();
       for (int pid = 0; pid < nPts; pid++)
@@ -976,8 +991,12 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     // point.  (Parallel over segments instead left the largest segment running
     // alone at the end.)
     auto updateSegment = [&](ESegment *seg) {
+      if (!InParallelRegion()) {
 #pragma omp parallel for schedule(dynamic, 1)
-      for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointEnergyWithShift(pid, lc, &configure());
+        for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointEnergyWithShift(pid, lc, &configure());
+      } else {
+        for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointEnergyWithShift(pid, lc, &configure());
+      }
     };
     for (size_t t = 0; t < localBySeg.size(); t++) {
       const int sNum = localBySeg[t].first;

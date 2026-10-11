@@ -2689,8 +2689,15 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
 #else
       const bool serial = true;
 #endif
-#pragma omp parallel for schedule(dynamic, 1) if (!serial)
-      for (int q = 0; q < (int)work.size(); q++) work[q].seg->UpdatePointEnergyWithShift(work[q].i, theCNuc, configure);
+      // No parallel construct at all when already inside a parallel region: an
+      // inactive nested team renumbers its thread 0, and per-thread state
+      // indexed by thread number would then be shared between the outer threads.
+      if (serial) {
+        for (size_t q = 0; q < work.size(); q++) work[q].seg->UpdatePointEnergyWithShift(work[q].i, theCNuc, configure);
+      } else {
+#pragma omp parallel for schedule(dynamic, 1)
+        for (int q = 0; q < (int)work.size(); q++) work[q].seg->UpdatePointEnergyWithShift(work[q].i, theCNuc, configure);
+      }
     }
 
     // Critical fix: Rebuild energy-based mapping system after energy shifts
