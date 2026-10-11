@@ -61,9 +61,14 @@ struct SegPairs {
  */
 
 void welcomeMessage(const Config &configure) {
+#ifndef AZURE2_VERSION_STRING
+#define AZURE2_VERSION_STRING "unknown"
+#endif
+  std::string versionColumn = std::string("Version ") + AZURE2_VERSION_STRING;
+  if (versionColumn.size() > 25) versionColumn.resize(25);
   configure.outStream << std::endl
                       << "O--------------------------O-------------------------------O" << std::endl
-                      << "| #### #### #  # ###  ####  ##  | Version 1.0              |" << std::endl
+                      << "| #### #### #  # ###  ####  ##  | " << std::left << std::setw(25) << versionColumn << "|" << std::endl
                       << "| #  #    # #  # #  # #    #  # |                          |" << std::endl
                       << "| ####   #  #  # ###  ##     #  |                          |" << std::endl
                       << "| #  #  #   #  # # #  #     #   | Joint Institute for      |" << std::endl

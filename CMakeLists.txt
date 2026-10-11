@@ -16,10 +16,23 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 # Version info
-set(AZURE2_VERSION_MAJOR 1)
-set(AZURE2_VERSION_MINOR 1)
+# The one place the version is written: the About box, the CLI banner and the
+# documentation (docs/source/conf.py reads these lines) all take it from here.
+# Bump it when a release is tagged on GitHub (tags: v1.0, v2.0, ...).
+set(AZURE2_VERSION_MAJOR 2)
+set(AZURE2_VERSION_MINOR 0)
 set(AZURE2_VERSION_PATCH 0)
 set(AZURE2_VERSION "${AZURE2_VERSION_MAJOR}.${AZURE2_VERSION_MINOR}.${AZURE2_VERSION_PATCH}")
+# What git says about the checkout (tag, commits since it, hash, -dirty), so a
+# build between releases identifies itself; empty outside a git checkout.
+find_package(Git QUIET)
+set(AZURE2_GIT_VERSION "")
+if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+  execute_process(COMMAND ${GIT_EXECUTABLE} describe --tags --always --dirty
+                  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+                  OUTPUT_VARIABLE AZURE2_GIT_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+endif()
+add_compile_definitions(AZURE2_VERSION_STRING="${AZURE2_VERSION}" AZURE2_GIT_VERSION="${AZURE2_GIT_VERSION}")
 
 # M_PI and friends are not ISO C++, so MinGW's headers hide them whenever
 # __STRICT_ANSI__ is set -- which -std=c++17 (as opposed to -std=gnu++17) does.
