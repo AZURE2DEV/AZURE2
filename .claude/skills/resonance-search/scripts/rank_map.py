@@ -9,12 +9,25 @@ import numpy as np
 from collections import defaultdict
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import argrelmin
+
+def detector_labels(ang, gap=2.0):
+    """One label per detector: the c.m. angle of a fixed lab detector drifts with energy (several degrees over a long run), so
+    rounding c.m. angles splits one detector into many fragments (13C+alpha ND 2021: 558 'curves' for 146 detectors).  Sorted
+    angles are cut where consecutive values differ by > gap degrees; each label is its cluster's mean angle (0.1 deg)."""
+    a = np.nan_to_num(np.asarray(ang, float), nan=-1.0)
+    order = np.argsort(a); s = a[order]
+    cid = np.concatenate([[0], np.cumsum(np.diff(s) > gap)])
+    lab = np.empty_like(a)
+    for c in np.unique(cid):
+        lab[order[cid == c]] = round(float(s[cid == c].mean()), 1)
+    return lab
+
 MIN_RUN, MIN_SCORE, MAX_SPAN, MINW, DE, SIG = 3, 25.0, 0.6, 0.010, 0.002, 0.006
 z = np.load(sys.argv[1]); out = open(sys.argv[2], "w") if len(sys.argv) > 2 else sys.stdout
 key, name, ex, ang, res = z["key"], z["name"], z["ex"], z["ang"], z["res"]
 curves = {}
 for k in np.unique(key):
-    idx = np.where(key == k)[0]; a = np.round(ang[idx], 1); e = np.round(ex[idx], 5)
+    idx = np.where(key == k)[0]; a = detector_labels(ang[idx]); e = np.round(ex[idx], 5)
     if len(np.unique(e)) >= len(np.unique(a)):
         for av in np.unique(a): s = idx[a == av]; curves[(k, "ang", av)] = s[np.argsort(ex[s])]
     else:

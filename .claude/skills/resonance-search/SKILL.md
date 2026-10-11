@@ -125,6 +125,49 @@ Open improvements: a broad-structure estimator (multi-scale curvature or local B
 the integrated data), Legendre-order J lower bounds per candidate, ENSDF cross-match (`pyazr.nds.fetch_levels`),
 and a test on a sparse-spectrum reaction where precision can be measured.
 
+## 1b. Broad structure: blur the data and the fit the same way
+
+DeBoer (2026-10-11): "These broad resonances are hard to visually see because there are often many narrow resonances
+superimposed on top of them. Could we try to do something like blur the image of the cross section so only the broad
+levels are left visible?"  Averaging over an interval D keeps what is wider than D: a narrow level (Gamma << D) is
+reduced to its AREA spread over D, many narrow ones to a smooth average (the energy averaging of intermediate-structure
+analyses; for a Lorentzian kernel and the total cross section it is exact: the average equals the calculation at the
+complex energy E + iD).  The narrow levels' area does NOT vanish -- so blurred data are compared with the EQUALLY
+BLURRED FIT, never with a curve of broad levels.
+
+```bash
+# 1. where blurring is valid for THIS data set: switch off the narrow levels and compare blurred models (~10 min)
+python3 scripts/make_broad_only.py fit.azr output/parameters.out broad_only.azr 50      # Gamma < 50 keV zeroed + fixed
+python3 scripts/dump_residuals.py broad_only.azr fit.sav work_b broad.npz
+python3 scripts/blur_compare.py full.npz broad.npz blur_compare.txt                      # per data set and D
+# 2. the broad-structure map: blurred data (x fitted norm) minus blurred fit, per detector
+python3 scripts/blur_map.py full.npz blur_map.txt --scales 0.1,0.2 --levels output/parameters.out --azr fit.azr
+# 3. look at it
+python3 scripts/blur_figure.py full.npz broad.npz output/parameters.out fig.png 0.1 --panel "set:angle:lo:hi:title" ...
+```
+
+- `blur_compare.py` prints, per data set and D, the rms relative difference full - broad (unblurred: how much the narrow
+  levels matter), blur(full) - blur(broad) (what of them SURVIVES the blur: the validity number) and blur(full) - broad.
+  13C+alpha, D = 200 keV: Cierjacks n-total 7 %, Kelly 7 %, secondary gammas 1-10 %, Si (a,a) 12 %, MANA / 5U (a,n0)
+  above 10 MeV 14-16 %, Heil (a,a) 17 % -- valid; BandH 27 %, Brandenburg 25 %, ND 2021 (a,n0) 7-10 MeV 43 % -- NOT valid:
+  there the narrow levels carry the strength and a blurred deviation can be missing NARROW area, not a missing broad level.
+- `blur_map.py`: per detector, delta = (blur(n d) - blur(fit))/|blur(fit)|; a deviation = one-sign stretch with |delta| >=
+  10 % over >= D, scored (extent/D) x mean(delta^2/(0.05^2 + sigma_b^2)) -- chi^2-like with a 5 % floor per independent blur
+  width, so point count and a fitted norm offset cannot win.  Regions on an Ex map with the levels inside.  On 13C+alpha the
+  useful scale was D = 100 keV; at 200 keV the 4-10 MeV range merged into one region.
+- **Check the global sign first.**  On 13C+alpha the blurred data sat ABOVE the blurred fit in nearly every region:
+  sum(fit)/sum(data x norm) = 0.86-0.90 for the (a,n0) angular sets (n-total 1.00), with the median point only 1 % off --
+  the fit undershoots the PEAKS (fitting with data-proportional errors pulls a curve below the data, Peelle / d'Agostini;
+  unresolved lineshapes add to it).  Report that table with the map; inside it, rank by the size of the deviation.
+- What it found first: a broad FORWARD-angle (a,n0) deficit at Ex 10.0-10.8 MeV seen by ND 2021 0 deg (blurred data ~2x
+  the blurred fit) and MANA 17 deg, on the same Ex as residual regions 10.05-10.46 -- a broad-level candidate.
+- Starting from nothing: fit the broad levels to blurred data with a blurred model, using only the data sets the validity
+  table passes; add narrow levels afterwards.
+
+**Curve grouping (all scripts).**  A fixed lab detector's c.m. angle drifts with energy (several degrees over a long run);
+grouping points by rounded c.m. angle split 13C+alpha's 40 multi-angle (a,n0) segments into 558 fragments for 146 detectors.
+`detector_labels` (gap clustering at 2 deg within a segment) is used everywhere since 2026-10-11 (evening).
+
 ## 2. Characterise each region (login node, minutes)
 
 a. **Model low or model high?**  A residual-driven level search only ADDS strength.  Where the model is
@@ -260,3 +303,8 @@ on a campaign initialised from the incumbent (candidates.json: energy, jpi or nu
   routine"): `scripts/peakfind.py` + `scripts/eval_peaks.py`, measured blind on 13C+alpha against a chance baseline.
   Lesson, twice in one day: interval clustering of dense multi-angle data chains everything into one region -- cluster
   by a density map.  And a recovery number means nothing without the chance rate at the same tolerance.
+- 2026-10-11 (late) — §1b added (DeBoer: "blur the image of the cross section so only the broad levels are left visible"):
+  `make_broad_only.py`, `blur_compare.py` (validity per data set), `blur_map.py` (broad-structure regions), `blur_figure.py`.
+  Tested on 13C+alpha against a broad-only copy of the incumbent (`13C+a/10-11-26_blur_test`).  Fixed the same day: curve
+  grouping by rounded c.m. angle fragmented every multi-angle segment (`detector_labels` now in all scripts; the residual
+  ranking and peak-finder test were re-run).

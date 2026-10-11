@@ -23,6 +23,19 @@ from collections import defaultdict
 from scipy.signal import find_peaks, peak_widths
 from scipy.ndimage import median_filter
 
+
+def detector_labels(ang, gap=2.0):
+    """One label per detector: the c.m. angle of a fixed lab detector drifts with energy (several degrees over a long run), so
+    rounding c.m. angles splits one detector into many fragments (13C+alpha ND 2021: 558 'curves' for 146 detectors).  Sorted
+    angles are cut where consecutive values differ by > gap degrees; each label is its cluster's mean angle (0.1 deg)."""
+    a = np.nan_to_num(np.asarray(ang, float), nan=-1.0)
+    order = np.argsort(a); s = a[order]
+    cid = np.concatenate([[0], np.cumsum(np.diff(s) > gap)])
+    lab = np.empty_like(a)
+    for c in np.unique(cid):
+        lab[order[cid == c]] = round(float(s[cid == c].mean()), 1)
+    return lab
+
 SCALES = (0.05, 0.15, 0.5)      # MeV baseline windows
 MIN_PTS, Z_MIN, REL_MIN, ZCAP, MAP_PROM = 8, 4.0, 0.05, 10.0, 0.002
 
@@ -103,7 +116,7 @@ def main():
     key, name, ex, ang, dat, err = z["key"], z["name"], z["ex"], z["ang"], z["dat"], z["err"]
     dets = []
     for k in np.unique(key):
-        idx = np.where(key == k)[0]; an = np.round(ang[idx], 1)
+        idx = np.where(key == k)[0]; an = detector_labels(ang[idx])
         for av in np.unique(an):
             s = idx[an == av]; s = s[np.argsort(ex[s])]
             e, y, sg = ex[s], dat[s], err[s]
