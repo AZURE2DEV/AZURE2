@@ -20,6 +20,9 @@
 #include <QCheckBox>
 #include <QLineEdit>
 #include <QRadioButton>
+#include <QHeaderView>
+#include <QTableWidget>
+#include <QSpinBox>
 #include <cstdlib>
 #include "TargetIntModel.h"
 #include "Config.h"
@@ -250,14 +253,21 @@ int main(int argc, char** argv) {
   {
     AddTargetIntDialog dialog;
     dialog.isConvolutionCheck->setChecked(true);
-    dialog.sigmaExpressionRadio->setChecked(true);
-    dialog.convolutionEqText->setText("a0*x^1.5+exp(-x)");
+    dialog.sigmaText->setText("0.030");
+    ok("a number in the width field is a constant", dialog.sigmaIsConstant());
+    dialog.sigmaText->setText("a0*x^1.5+exp(-x)");
+    ok("an expression in the width field is not", !dialog.sigmaIsConstant());
     dialog.sigmaCmRadio->setChecked(true);
     dialog.setConversionFactor(0.5);
     dialog.convertExpressionToLab();
     ok("c.m. -> lab rewrite substitutes x and divides, leaving exp alone",
-       dialog.convolutionEqText->text() == "(a0*(0.5*x)^1.5+exp(-(0.5*x)))/0.5", dialog.convolutionEqText->text());
+       dialog.sigmaText->text() == "(a0*(0.5*x)^1.5+exp(-(0.5*x)))/0.5", dialog.sigmaText->text());
     ok("after the rewrite the line is marked lab", dialog.sigmaLabRadio->isChecked());
+    dialog.numConvCoefficientSpin->setValue(5);
+    QApplication::processEvents();
+    ok("five coefficient rows all visible without scrolling",
+       dialog.convCoefficientTable->height() >= dialog.convCoefficientTable->horizontalHeader()->height() + 5 * dialog.convCoefficientTable->rowHeight(0),
+       QString::number(dialog.convCoefficientTable->height()));
     if (const char* stem = std::getenv("AZURE2_TARGET_INT_PNG")) {
       dialog.show(); QApplication::processEvents();
       dialog.grab().save(QString("%1_expression.png").arg(stem));

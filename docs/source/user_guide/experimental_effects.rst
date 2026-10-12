@@ -87,24 +87,22 @@ Gaussian distribution of beam energies about each data point,
    \qquad K \propto \exp\!\left[-\frac{(E' - E_0)^2}{2\,\sigma_b(E_0)^2}\right],
 
 integrated over :math:`E_0 \pm 3\sigma_b` and normalised by the kernel's own
-integral, so a constant cross section is reproduced exactly. The width is given
-in one of two ways, which are the same kernel:
+integral, so a constant cross section is reproduced exactly.
 
-**Constant sigma** (MeV)
-   The standard deviation :math:`\sigma_b` (not the FWHM; FWHM
-   :math:`= 2.355\,\sigma_b`). Although beam resolution is typically of order
-   keV, the value must be entered in **MeV** (e.g., ``0.001`` for 1 keV), in the
-   laboratory frame; AZURE2 converts it to the centre of mass.
-
-**sigma(E)** (expression)
-   The same width as a function of energy, for a resolution that varies across
-   the segment -- a time-of-flight measurement, for instance, where
-   :math:`\sigma_E/E = 2\sigma_t/t` gives :math:`\sigma_E \propto E^{3/2}`.
-   The variable ``x`` is the laboratory energy in MeV and the value the
-   laboratory width in MeV, exactly as for the constant; the parameters are
-   ``a0``, ``a1``, ... with their values in the table (``a0*x^1.5`` with one
-   parameter, say). Experimental resolutions are quoted in the laboratory frame,
-   so no conversion is needed.
+**sigma [MeV, lab]**
+   The standard deviation :math:`\sigma_b` of the beam energy spread (not the
+   FWHM; FWHM :math:`= 2.355\,\sigma_b`), in **MeV** in the laboratory frame
+   (``0.001`` for 1 keV); AZURE2 converts it to the centre of mass. Enter a
+   number for a constant width, or an expression of the laboratory energy
+   ``x`` (MeV) for a resolution that varies across the segment -- a
+   time-of-flight measurement, for instance, where
+   :math:`\sigma_E/E = 2\sigma_t/t` gives :math:`\sigma_E \propto E^{3/2}`,
+   ``a0*x^1.5`` with one parameter. The parameters ``a0``, ``a1``, ... take
+   their values from the table that appears for an expression. Experimental
+   resolutions are quoted in the laboratory frame, so no conversion is needed.
+   A number and an expression are the same kernel; in the project file a number
+   is kept in the line's constant-sigma field, an expression in its equation
+   field with the ``sigmalab`` keyword.
 
 .. note::
 
@@ -112,8 +110,9 @@ in one of two ways, which are the same kernel:
    different convention: the expression was evaluated at the **centre-of-mass**
    energy and its value taken as the c.m. width. Such lines (recognisable by the
    absence of the ``sigmalab`` keyword in the ``<targetInt>`` line) still
-   compute that way, and the dialog shows them as "c.m. (legacy)" with a button
-   to convert the expression to the laboratory form, an exact rewrite
+   compute that way, and for such a line the dialog shows a frame row marked
+   "c.m. (legacy)" with a button to convert the expression to the laboratory
+   form, an exact rewrite
    :math:`\sigma_{\rm lab}(x) = \sigma_{\rm cm}(F x)/F` with
    :math:`F = m_t/(m_p + m_t)` of the segment's entrance pair. Before October
    2026 the constant-sigma kernel was also not normalised over its

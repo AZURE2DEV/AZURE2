@@ -2069,8 +2069,9 @@ complete:
   `.azr` line carries the keyword `sigmalab` after the straggling/grid numbers (before any
   ranges or `beamprofile`/`udr` block). A line WITHOUT the keyword is the old convention
   below and computes as it did -- the 13C+a Cierjacks projects stay valid unconverted. The
-  GUI's Experimental Effects dialog has one "Gaussian convolution" box with a constant/
-  expression choice and a lab/c.m. choice plus "Convert to lab form" (exact rewrite
+  GUI's Experimental Effects dialog has one "Gaussian convolution" row with ONE width field
+  (a number = constant, stored in the line's constant slot; anything else = expression, stored
+  with `sigmalab`); a legacy c.m. line shows a frame row with "Convert to lab form" (exact rewrite
   sigma_lab(x) = sigma_cm(F x)/F, F = m_t/(m_p+m_t), offered when all segments of the entry
   share an entrance pair); pyazr: `add_target_effect(..., sigma_expression="a0*x^1.5",
   sigma_coefficients=[...])` writes the lab form. Check: `tests/convolution_unify/check.sh`

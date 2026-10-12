@@ -3,6 +3,7 @@
 
 #include <QDialog>
 #include <QRadioButton>
+#include <QTableWidget>
 #include <string>
 #include <vector>
 
@@ -29,13 +30,16 @@ class AddTargetIntDialog : public QDialog {
  public:
   AddTargetIntDialog(QWidget *parent = 0);
   QCheckBox *isConvolutionCheck;
-  // One Gaussian beam spread: its width is a constant or an expression sigma(E), and an expression is
-  // written in the lab frame (standard) or, for lines from before 2026-10, in the c.m. frame.
-  QRadioButton *sigmaConstantRadio;
-  QRadioButton *sigmaExpressionRadio;
+  // One Gaussian beam spread. sigmaText holds its width in lab MeV: a number ("0.03") or an expression of
+  // the lab energy x ("a0*x^1.5"); the tab stores a number in the constant slot of the line and an expression
+  // with the sigmalab keyword. A line from before 2026-10 carries its expression in the c.m. frame; for such
+  // a line the frame row appears, with the exact conversion to the lab form.
   QRadioButton *sigmaLabRadio;
   QRadioButton *sigmaCmRadio;
   QPushButton *convertToLabButton;
+  QWidget *frameRow;
+  /*! True when sigmaText parses as a plain number, i.e. a constant width. */
+  bool sigmaIsConstant() const;
   /*! c.m./lab energy ratio of the entrance pair the effect's segments share (0 = unknown or mixed); it
    *  enables the exact rewrite of a legacy c.m. expression into the lab form. */
   void setConversionFactor(double factor);
@@ -84,6 +88,8 @@ class AddTargetIntDialog : public QDialog {
   QList<double> tempQCoefficients;
   QList<double> tempConvCoefficients;
   QLineEdit *convolutionEqText;
+  /*! Sizes a coefficient table to show every row (up to 12 before it scrolls) and lets the dialog grow with it. */
+  void fitTableHeight(QTableWidget *table);
   void createParameterItem(int row, double value = 0.0);
   void createQCoefficientItem(int row, double value = 1.0);
   void createConvCoefficientItem(int row, double value = 1.0);

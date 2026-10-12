@@ -87,8 +87,9 @@ void TargetIntTab::addLine() {
     newLine.segmentsList = aDialog.segmentsListText->text();
     newLine.numPoints = aDialog.numPointsSpin->value();
 
-    newLine.isConvolution = aDialog.isConvolutionCheck->isChecked() && aDialog.sigmaConstantRadio->isChecked();
-    newLine.sigma = aDialog.sigmaText->text().toDouble();
+    // a number is stored in the line's constant slot (older readers understand it), an expression with sigmalab
+    newLine.isConvolution = aDialog.isConvolutionCheck->isChecked() && aDialog.sigmaIsConstant();
+    newLine.sigma = newLine.isConvolution ? aDialog.sigmaText->text().trimmed().toDouble() : 0.0;
 
     if (aDialog.isTargetIntegrationCheck->isChecked())
       newLine.isTargetIntegration = true;
@@ -102,9 +103,9 @@ void TargetIntTab::addLine() {
     newLine.isQCoefficients = (aDialog.isQCoefficientCheck->isChecked()) ? (true) : (false);
     for (int i = 0; i < aDialog.numQCoefficientSpin->value(); i++) newLine.qCoefficients.append(aDialog.tempQCoefficients.at(i));
 
-    newLine.isConvCoefficients = aDialog.isConvolutionCheck->isChecked() && aDialog.sigmaExpressionRadio->isChecked();
+    newLine.isConvCoefficients = aDialog.isConvolutionCheck->isChecked() && !aDialog.sigmaIsConstant() && !aDialog.sigmaText->text().trimmed().isEmpty();
     for (int i = 0; i < aDialog.numConvCoefficientSpin->value(); i++) newLine.convCoefficients.append(aDialog.tempConvCoefficients.at(i));
-    newLine.convolutionEq = aDialog.convolutionEqText->text();
+    newLine.convolutionEq = newLine.isConvCoefficients ? aDialog.sigmaText->text().trimmed() : QString();
     newLine.sigmaLab = aDialog.sigmaLabRadio->isChecked();
 
     newLine.isStraggling = aDialog.isStraggling->isChecked();
@@ -325,7 +326,6 @@ void TargetIntTab::editLine() {
   aDialog.numPointsSpin->setValue(numPoints);
 
   aDialog.isConvolutionCheck->setChecked(isConvolution || isConvCoefficient);
-  aDialog.sigmaText->setText(sigma);
 
   if (isTargetIntegration)
     aDialog.isTargetIntegrationCheck->setChecked(true);
@@ -345,10 +345,9 @@ void TargetIntTab::editLine() {
 
   aDialog.tempConvCoefficients = convCoefficients;
   aDialog.numConvCoefficientSpin->setValue(convCoefficients.size());
-  aDialog.convolutionEqText->setText(convolutionEq);
   // the frame of an existing expression is whatever the file says; a line without the keyword is legacy c.m.
-  (isConvCoefficient ? aDialog.sigmaExpressionRadio : aDialog.sigmaConstantRadio)->setChecked(true);
   (sigmaLab || !isConvCoefficient ? aDialog.sigmaLabRadio : aDialog.sigmaCmRadio)->setChecked(true);
+  aDialog.sigmaText->setText(isConvCoefficient ? convolutionEq : sigma);
   aDialog.setConversionFactor(conversionFactorFor(segmentsList));
 
   aDialog.isStraggling->setChecked(isStraggling);
@@ -388,12 +387,12 @@ void TargetIntTab::editLine() {
       targetIntModel->setData(i, newNumPoints, Qt::EditRole);
     }
 
-    bool newIsConvolution = aDialog.isConvolutionCheck->isChecked() && aDialog.sigmaConstantRadio->isChecked();
+    bool newIsConvolution = aDialog.isConvolutionCheck->isChecked() && aDialog.sigmaIsConstant();
     if (isConvolution != newIsConvolution) {
       i = targetIntModel->index(index.row(), 3, QModelIndex());
       targetIntModel->setData(i, newIsConvolution, Qt::EditRole);
     }
-    QString newSigma = aDialog.sigmaText->text();
+    QString newSigma = newIsConvolution ? aDialog.sigmaText->text().trimmed() : QString("0");
     if (sigma != newSigma) {
       i = targetIntModel->index(index.row(), 4, QModelIndex());
       targetIntModel->setData(i, newSigma, Qt::EditRole);
@@ -444,7 +443,7 @@ void TargetIntTab::editLine() {
       targetIntModel->setData(i, QVariant::fromValue<QList<double>>(qCoefficients), Qt::EditRole);
     }
 
-    bool newIsConvCoefficient = aDialog.isConvolutionCheck->isChecked() && aDialog.sigmaExpressionRadio->isChecked();
+    bool newIsConvCoefficient = aDialog.isConvolutionCheck->isChecked() && !aDialog.sigmaIsConstant() && !aDialog.sigmaText->text().trimmed().isEmpty();
     if (isConvCoefficient != newIsConvCoefficient) {
       i = targetIntModel->index(index.row(), 12, QModelIndex());
       targetIntModel->setData(i, newIsConvCoefficient, Qt::EditRole);
@@ -457,7 +456,7 @@ void TargetIntTab::editLine() {
       i = targetIntModel->index(index.row(), 13, QModelIndex());
       targetIntModel->setData(i, QVariant::fromValue<QList<double>>(convCoefficients), Qt::EditRole);
     }
-    QString newconvolutionEq = aDialog.convolutionEqText->text();
+    QString newconvolutionEq = newIsConvCoefficient ? aDialog.sigmaText->text().trimmed() : QString();
     if (convolutionEq != newconvolutionEq) {
       i = targetIntModel->index(index.row(), 14, QModelIndex());
       targetIntModel->setData(i, newconvolutionEq, Qt::EditRole);

@@ -17,6 +17,9 @@
 
 #include "AddTargetIntDialog.h"
 #include <QRegularExpression>
+#include <QScrollBar>
+#include <QHeaderView>
+#include <algorithm>
 #include "ElementMap.h"
 
 #ifdef USE_ERYA
@@ -68,12 +71,10 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   connect(isConvolutionCheck, SIGNAL(toggled(bool)), this, SLOT(convolutionCheckChanged(bool)));
   sigmaText = new QLineEdit;
   sigmaText->setEnabled(false);
-  sigmaConstantRadio = new QRadioButton(tr("constant \u03c3 [MeV, lab]:"));
-  sigmaExpressionRadio = new QRadioButton(tr("\u03c3(E)"));
-  sigmaConstantRadio->setChecked(true);
-  sigmaConstantRadio->setEnabled(false);
-  sigmaExpressionRadio->setEnabled(false);
-  connect(sigmaConstantRadio, SIGNAL(toggled(bool)), this, SLOT(sigmaModeChanged()));
+  sigmaText->setPlaceholderText(tr("0.03, or an expression of the lab energy x such as a0*x^1.5"));
+  sigmaText->setToolTip(tr("The standard deviation of the beam energy spread in lab MeV: a number, or a function of the lab "
+                           "energy x (MeV) with parameters a0, a1, ... whose values go in the table below. Both are the same kernel."));
+  connect(sigmaText, SIGNAL(textChanged(const QString &)), this, SLOT(sigmaModeChanged()));
 
   isTargetIntegrationCheck = new QCheckBox(tr("Include Target Integration"));
   isTargetIntegrationCheck->setChecked(false);
@@ -337,14 +338,14 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   topLayout->addLayout(optionsRowLayout, 2, 0, 1, 2);
   topLayout->setColumnStretch(1, 1);
 
+  // The beam spread (its row, then its parameter box) comes before target integration (its rows, then
+  // the stopping-power box), so each effect's controls sit together.
+  QGridLayout *gaussianLayout = new QGridLayout;
+  gaussianLayout->addWidget(isConvolutionCheck, 0, 0);
+  gaussianLayout->addWidget(new QLabel(tr("\u03c3 [MeV, lab] =")), 0, 1, Qt::AlignRight);
+  gaussianLayout->addWidget(sigmaText, 0, 2);
+  gaussianLayout->setColumnStretch(2, 1);
   QGridLayout *checkBoxLayout = new QGridLayout;
-  checkBoxLayout->addWidget(isConvolutionCheck, 0, 0);
-  QHBoxLayout *sigmaModeLayout = new QHBoxLayout;
-  sigmaModeLayout->addWidget(sigmaConstantRadio);
-  sigmaModeLayout->addWidget(sigmaText, 1);
-  sigmaModeLayout->addSpacing(12);
-  sigmaModeLayout->addWidget(sigmaExpressionRadio);
-  checkBoxLayout->addLayout(sigmaModeLayout, 0, 1, 1, 2);
 
   checkBoxLayout->addWidget(isTargetIntegrationCheck, 1, 0);
   checkBoxLayout->addWidget(new QLabel(tr("Active Density [atoms/cm^2]:")), 1, 1, Qt::AlignRight);
@@ -415,24 +416,26 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   qCoefficientBox->setLayout(qCoefficientLayout);
   qCoefficientBox->hide();
 
-  convCoefficientBox = new QGroupBox(tr("Beam spread \u03c3(E)"));
+  convCoefficientBox = new QGroupBox(tr("Parameters of \u03c3(E)"));
   QVBoxLayout *convCoefficientLayout = new QVBoxLayout;
   QHBoxLayout *equationConvLayout = new QHBoxLayout;
-  equationConvLayout->addWidget(new QLabel(tr("\u03c3 =")));
-  equationConvLayout->addWidget(convolutionEqText, 1);
-  equationConvLayout->addSpacing(12);
   equationConvLayout->addWidget(new QLabel(tr("Number of Coefficients:")));
   equationConvLayout->addWidget(numConvCoefficientSpin);
+  equationConvLayout->addStretch(1);
   convCoefficientLayout->addLayout(equationConvLayout);
-  QHBoxLayout *frameLayout = new QHBoxLayout;
+  frameRow = new QWidget;
+  QHBoxLayout *frameLayout = new QHBoxLayout(frameRow);
+  frameLayout->setContentsMargins(0, 0, 0, 0);
   frameLayout->addWidget(sigmaLabRadio);
   frameLayout->addWidget(sigmaCmRadio);
   frameLayout->addStretch(1);
   frameLayout->addWidget(convertToLabButton);
-  convCoefficientLayout->addLayout(frameLayout);
+  frameRow->hide();   // shown for a line read in the legacy c.m. convention
+  convCoefficientLayout->addWidget(frameRow);
   convCoefficientLayout->addWidget(convCoefficientTable);
   convCoefficientBox->setLayout(convCoefficientLayout);
   convCoefficientBox->hide();
+  convolutionEqText->hide();   // the expression lives in sigmaText; kept for the tab's bookkeeping
 
   QGridLayout *beamProfileCheckBoxLayout = new QGridLayout;
   beamProfileCheckBoxLayout->addWidget(isBeamProfileCheck, 0, 0);
@@ -476,8 +479,9 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   QVBoxLayout *mainLayout = new QVBoxLayout;
   mainLayout->addLayout(topLayout);
   mainLayout->addLayout(adaptiveGridLayout);
-  mainLayout->addLayout(checkBoxLayout);
+  mainLayout->addLayout(gaussianLayout);
   mainLayout->addWidget(convCoefficientBox);
+  mainLayout->addLayout(checkBoxLayout);
   mainLayout->addWidget(stoppingPowerBox);
   mainLayout->addLayout(qCoefficientCheckBoxLayout);
   mainLayout->addWidget(qCoefficientBox);
@@ -599,8 +603,7 @@ void AddTargetIntDialog::beamProfileChanged(int row, int column) {
 }
 
 void AddTargetIntDialog::convolutionCheckChanged(bool checked) {
-  sigmaConstantRadio->setEnabled(checked);
-  sigmaExpressionRadio->setEnabled(checked);
+  sigmaText->setEnabled(checked);
   if (checked)
     numPointsSpin->setEnabled(true);
   else if (!isTargetIntegrationCheck->isChecked())
@@ -608,10 +611,16 @@ void AddTargetIntDialog::convolutionCheckChanged(bool checked) {
   sigmaModeChanged();
 }
 
+bool AddTargetIntDialog::sigmaIsConstant() const {
+  bool ok = false;
+  sigmaText->text().trimmed().toDouble(&ok);
+  return ok;
+}
+
+// A number needs no parameters; an expression shows the coefficient table, and the frame row when the line
+// came in as legacy c.m.
 void AddTargetIntDialog::sigmaModeChanged() {
-  bool on = isConvolutionCheck->isChecked();
-  bool expression = on && sigmaExpressionRadio->isChecked();
-  sigmaText->setEnabled(on && !expression);
+  bool expression = isConvolutionCheck->isChecked() && !sigmaText->text().trimmed().isEmpty() && !sigmaIsConstant();
   if (expression) {
     convCoefficientBox->show();
     numConvCoefficientSpin->setEnabled(true);
@@ -620,13 +629,13 @@ void AddTargetIntDialog::sigmaModeChanged() {
     numConvCoefficientSpin->setEnabled(false);
     this->adjustSize();
   }
+  frameRow->setVisible(expression && sigmaCmRadio->isChecked());
   convertToLabButton->setEnabled(expression && sigmaCmRadio->isChecked() && conversionFactor_ > 0.0);
 }
 
 void AddTargetIntDialog::setConversionFactor(double factor) {
   conversionFactor_ = factor;
-  convertToLabButton->setEnabled(isConvolutionCheck->isChecked() && sigmaExpressionRadio->isChecked() &&
-                                 sigmaCmRadio->isChecked() && conversionFactor_ > 0.0);
+  sigmaModeChanged();
 }
 
 // sigma_lab(x) = sigma_cm(F x) / F: substitute the variable (whole-word x; the x of exp() is left alone)
@@ -634,11 +643,12 @@ void AddTargetIntDialog::setConversionFactor(double factor) {
 void AddTargetIntDialog::convertExpressionToLab() {
   if (!(conversionFactor_ > 0.0)) return;
   QString f = QString::number(conversionFactor_, 'g', 12);
-  QString expr = convolutionEqText->text().trimmed();
+  QString expr = sigmaText->text().trimmed();
   if (expr.isEmpty()) return;
   expr.replace(QRegularExpression("\\bx\\b"), "(" + f + "*x)");
-  convolutionEqText->setText("(" + expr + ")/" + f);
+  sigmaText->setText("(" + expr + ")/" + f);
   sigmaLabRadio->setChecked(true);
+  frameRow->hide();
 }
 
 void AddTargetIntDialog::targetIntCheckChanged(bool checked) {
@@ -675,6 +685,7 @@ void AddTargetIntDialog::parameterSpinChanged(int newNumber) {
     else
       createParameterItem(i);
   }
+  fitTableHeight(parametersTable);
 }
 
 void AddTargetIntDialog::parameterChanged(int row, int column) {
@@ -707,6 +718,7 @@ void AddTargetIntDialog::qCoefficientSpinChanged(int newNumber) {
     else
       createQCoefficientItem(i);
   }
+  fitTableHeight(qCoefficientTable);
 }
 
 void AddTargetIntDialog::convCoefficientSpinChanged(int newNumber) {
@@ -718,6 +730,7 @@ void AddTargetIntDialog::convCoefficientSpinChanged(int newNumber) {
     else
       createConvCoefficientItem(i);
   }
+  fitTableHeight(convCoefficientTable);
 }
 
 void AddTargetIntDialog::qCoefficientChanged(int row, int column) {
@@ -1090,4 +1103,14 @@ void AddTargetIntDialog::calculateDeltaE() {
     QMessageBox::critical(this, tr("Calculation Error"),
                           tr("Error during ΔE calculation: %1").arg(e.what()));
   }
+}
+
+void AddTargetIntDialog::fitTableHeight(QTableWidget *table) {
+  int rows = std::min(table->rowCount(), 12);
+  int height = table->horizontalHeader()->height() + 2 * table->frameWidth();
+  for (int r = 0; r < rows; r++) height += table->rowHeight(r);
+  if (table->rowCount() > rows) height += table->horizontalScrollBar()->sizeHint().height();
+  table->setMinimumHeight(height);
+  table->setMaximumHeight(height);
+  this->adjustSize();
 }
