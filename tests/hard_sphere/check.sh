@@ -16,6 +16,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
+# macOS has no timeout(1); run without a limit there
+TIMEOUT_CMD="$(command -v timeout || command -v gtimeout || true)"
+run_limited() { if [ -n "$TIMEOUT_CMD" ]; then "$TIMEOUT_CMD" "$@"; else shift; "$@"; fi; }
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/hard_sphere.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
@@ -29,7 +32,7 @@ run() {
   local dir="$WORK/$1"
   mkdir -p "$dir/output" "$dir/checks"
   sed "1,2s/^\(true\|false\) #Perform A-Matrix/$3 #Perform A-Matrix/" "$2" > "$dir/t.azr"
-  (cd "$dir" && printf '3\n\n\n7\n' | timeout 300 "$AZURE2_BIN" $4 --no-gui --no-readline t.azr > run.log 2>&1)
+  (cd "$dir" && printf '3\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" $4 --no-gui --no-readline t.azr > run.log 2>&1)
   if [ ! -s "$dir/output/AZUREOut_aa=1_R=1.extrap" ]; then
     bad "$1: no extrapolation written"; tail -15 "$dir/run.log"; return 1
   fi
@@ -64,7 +67,7 @@ done
 # The hard-sphere groups are reported when the compound-nucleus check is on.
 mkdir -p "$WORK/report/output" "$WORK/report/checks"
 sed '5s/^none #Compond/screen #Compond/' "$HERE/models/no_dummies.azr" > "$WORK/report/t.azr"
-(cd "$WORK/report" && printf '3\n\n\n7\n' | timeout 300 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+(cd "$WORK/report" && printf '3\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
 n="$(grep -c 'Hard-sphere group added' "$WORK/report/run.log")"
 if [ "$n" = 6 ]; then ok "six hard-sphere groups reported (1/2- 3/2+ 5/2- 7/2- 7/2+ 9/2+)"; else bad "expected 6 hard-sphere groups reported, got $n"; grep 'Hard-sphere' "$WORK/report/run.log"; fi
 
