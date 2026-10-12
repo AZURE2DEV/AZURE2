@@ -68,7 +68,8 @@ awk 'NF == 2 { printf "%s %.16e\n", $1, 2.0 * $2 }' "$WORK/table.dat" > "$WORK/t
 for m in gauss identity mix_gauss mix_two mix_scaled plain_udr mix_udr; do run "$m" || exit 1; done
 
 # (a)
-if cmp -s "$(out identity)" "$(out gauss)"; then ok "(a) mixture 1.0 0: bit-identical to the plain model"; else bad "(a) mixture 1.0 0 changed the result"; fi
+# (cksum, not cmp: the Windows CI runner's MSYS2 has coreutils but no diffutils)
+if [ "$(cksum < "$(out identity)")" = "$(cksum < "$(out gauss)")" ]; then ok "(a) mixture 1.0 0: bit-identical to the plain model"; else bad "(a) mixture 1.0 0 changed the result"; fi
 grep -q "Segment #1: mixture, 1 x this model" "$WORK/identity/run.log" && ok "(a) the block is reported" || bad "(a) no mixture report in the log"
 
 # (b) self-consistency: the table is folded on the same grid by the same kernel; the only difference is the
