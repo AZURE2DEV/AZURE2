@@ -82,3 +82,10 @@ set_tests_properties(pyazr_shared_state PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=
 set_tests_properties(pyazr_channel_order pyazr_objective pyazr_inactive_lines
                      pyazr_park_gradient pyazr_shared_state
                      PROPERTIES LABELS slow)
+
+# Hard-sphere J^pi groups (includeAllJPi=1) through pyazr's default transform
+# route: the level-less groups used to give the transform a 0 x 0 eigenproblem.
+add_test(NAME pyazr_hard_sphere_transform
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hard_sphere_transform_test.py)
+set_tests_properties(pyazr_hard_sphere_transform PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

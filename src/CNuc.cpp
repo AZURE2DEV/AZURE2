@@ -862,7 +862,11 @@ bool CNuc::TransformIn(const Config &configure) {
           }
         }
       }
-      if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
+      // A hard-sphere group (includeAllJPi) has channels but no levels: there
+      // is nothing to transform, and a 0 x 0 eigenproblem would hand GSL a
+      // null workspace (a segfault on opening a pyazr session, whose default
+      // is the transform route).
+      if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM) && !tempEnergies.empty()) {
         matrix_r nMatrix;
         matrix_r mMatrix;
         for (int mu = 0; mu < tempEnergies.size(); mu++) {
