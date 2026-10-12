@@ -167,3 +167,27 @@ endif()
 add_test(NAME pair_key_combo COMMAND pair_key_combo_test)
 set_tests_properties(pair_key_combo PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# The run thread's Config copy must carry every option the GUI sets on its
+# own Config (the hard-sphere option was missing).
+add_executable(main_thread_config_test main_thread_config_test.cpp)
+set_target_properties(main_thread_config_test PROPERTIES AUTOMOC OFF)
+target_include_directories(main_thread_config_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(main_thread_config_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(main_thread_config_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(main_thread_config_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME main_thread_config COMMAND main_thread_config_test)
+set_tests_properties(main_thread_config PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
