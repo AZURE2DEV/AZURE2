@@ -843,10 +843,30 @@ the edit) rather than trusting that it worked.
 
 **`m.save_fit(path, x=None)` is how you snapshot a fit.** It writes the `.azr`,
 writes the companion `param.sav`, and verifies the result — reopening what it
-wrote and comparing every R-matrix value against the fit. If they disagree it
-removes both files and raises, so a snapshot you still have is one that reads
-back as the fit it came from. `path` is always explicit; nothing is written in
-place. Returns `(azr_path, sav_path)`.
+wrote and comparing both the physical values transformed back and the
+reduced-width amplitudes the file reads for the particle and beta channels of
+each level against the fit's (up to a common sign of a level, which the
+standard parametrization may flip). If either disagrees it removes both files
+and raises, so a snapshot you still have is one that reads back as the fit it
+came from. `path` is always explicit; nothing is written in place. Returns
+`(azr_path, sav_path)`.
+Until 2026-10-12 only the physical values were compared, which cannot see a
+value the transform maps onto from two different parameters: the engine
+returned |B| for a beta-decay feeding amplitude, so a negative one was written
+back positive, the 12C+α snapshot's beta-delayed α χ² went 750 → 29724, and
+`verify=True` passed it (12C+α MCMC session). Both are fixed; a pyazr `.so`
+built before that date still has the bug (`tests/pyazr/beta_sign_test.py`
+tells you in a minute).
+**A reopened snapshot of a capture fit is not χ²-identical to the fit**, and
+that is not the file's fault: the re-read computes the external-capture
+integrals at the fitted level energies, while the fit session kept the ones
+of its starting energies (AZURE2 fits never refresh them; pyazr has
+`recalculate_external_capture()`). On the 12C+α r3b fit this moved the total
+by 21 of 98,642 (the E2 6.05 MeV capture segment by up to 11 % in value) — the
+same 21 units the 12C+α session had put down to "~1 χ² unit per segment".
+`ignore_externals=True` does NOT switch external capture off: it is
+`--ignore-externals`, which drops the external amplitude only where the
+internal width is zero.
 
 ```python
 azr, sav = m.save_fit("7Be_fit.azr")          # current parameters

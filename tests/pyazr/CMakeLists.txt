@@ -104,3 +104,12 @@ add_test(NAME pyazr_hard_sphere_transform
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/hard_sphere_transform_test.py)
 set_tests_properties(pyazr_hard_sphere_transform PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Beta-decay feeding amplitudes keep their sign through the physical transform
+# (GetTransformParams returned |B| until 2026-10-12), and a save_fit snapshot
+# re-reads to the same chi-squared in the Brune, Park and standard
+# parametrizations.
+add_test(NAME pyazr_beta_sign
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/beta_sign_test.py)
+set_tests_properties(pyazr_beta_sign PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

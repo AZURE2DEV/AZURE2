@@ -190,9 +190,21 @@ To snapshot a fit, prefer :meth:`~pyazr.azure2.azure2.save_fit`, which wraps
 It converts the fit to the physical values a ``<levels>`` line holds, writes
 the companion ``param.sav`` carrying the normalizations and energy shifts that
 block cannot hold, and then reopens what it wrote and checks it against the fit
---- removing both files and raising if they disagree.  ``path`` is always
-explicit; nothing is written in place.  Note a ``.azr`` names its data files
-relative to itself, so a snapshot runs from the directory the original did.
+two ways --- the physical values transformed back, and the reduced-width
+amplitudes the file reads for the particle and beta-decay channels of each
+level against the fit's, up to a common sign of the level (an eigenvector
+convention of the standard parametrization, no change of model) --- removing
+both files and raising if either disagrees.  The second check is there because
+the first cannot see a value two parameters map onto: a negative beta-decay
+feeding amplitude came back positive from the physical transform until
+2026-10-12, and the old check passed it.  Photon channels are judged on
+physical values only, since their amplitude depends on the external-capture
+integrals, which a reopened file computes afresh at the fitted level energies
+while the fit session kept those of its starting point (AZURE2 fits never
+refresh them); for the same reason the chi-squared of a reopened capture-fit
+snapshot can differ a little from the fit's.  ``path`` is always explicit;
+nothing is written in place.  Note a ``.azr`` names its data files relative to
+itself, so a snapshot runs from the directory the original did.
 
 .. warning::
 
