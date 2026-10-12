@@ -43,7 +43,7 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   independently and precisely already, so an imprecise particle mass is an easy
   thing to overlook as the one remaining low-precision input.
 - **A width of exactly 0 is a fixed parameter, whatever its fix flag says.**
-  `CNuc.cpp:1621` adds every channel as `p.Add(name, gamma, 0.1*gamma)` and then
+  `CNuc::FillMnParams` (src/CNuc.cpp) adds every channel as `p.Add(name, gamma, 0.1*gamma)` and then
   `if (gamma == 0.0) p.Fix(name)`, so a channel written with value `0` and
   `chanFix=0` ("free") is frozen at zero for the whole fit — and because the
   Minuit step is `0.1 * gamma`, a token seed like `1e-12` gives a step of
@@ -56,6 +56,17 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   applies to particle and photon channels alike, and to `gamma=0.0` channels
   handed to `AzrModel.add_level`. It is also why `deactivate_level` both zeroes
   *and* fixes a level's widths — zeroing alone would already have fixed them.
+  **The seed has to be in the `.azr`; a parameter file alone does not free it.**
+  The zero check runs on the `.azr` values, before an external parameter file
+  (`param.sav`) is read, so a channel that is 0 in the `.azr` stays fixed even
+  when the `.sav` gives it a value — the run then uses the `.sav` value as a
+  FIXED parameter, and a fit returns it unchanged. On 12C+alpha (2026-10-11,
+  `12C+a_onefile/8-6-26_claude_fit_fix`) 38 background-pole alpha1 widths seeded
+  at 0.1 MeV^1/2 only in the `.sav` came back at exactly 0.1 after a normal
+  MIGRAD termination; any nonzero width in those `.azr` rows (1000 eV was used;
+  the `.sav` still sets the value) took the model from 158 to 196 free
+  parameters. Seed the `.azr` (or check the free count) whenever a free channel
+  starts at zero.
 - **A J^π is in the calculation only if an active level carries it — unless
   `includeAllJPi=1` is in the `<config>` block.** The elastic T-matrix diagonal
   is `e^{2iω} − e^{2i(ω−φ)}(1 + U)`, so a J^π group with channels and no levels
@@ -2174,6 +2185,20 @@ complete:
   inherits it -- half of it for a `1/sqrt(2 pi)` normalisation -- so do not set a 1e-12
   tolerance on such a comparison without expecting 5.7e-10. It cancels wherever a ratio
   shares the constant.
+- 2026-10-11 -- LEVEL-MERGE DEFECT FIXED on branch `fix/level-grouping-exact-energy`
+  (deBoer's design): the 1 keV energy match had two jobs.  (a) `CNuc::Fill` groups the
+  `<levels>` rows (one row = one channel) into levels -- this is where separate same-J^pi
+  levels under 1 keV merged; rows of one level always carry the identical energy (GUI and
+  pyazr write the same number on every row, and the GUI's own reader matches exactly), so
+  grouping is now on the identical energy (`IsLevel(level, 0.0)`).  (b) Matching a state
+  typed separately in the particle pairs to a level -- `ParseExternalCapture` (capture final
+  state / ANC) and the `GetExE()` final-state comparisons -- keeps the 1 keV tolerance.  A
+  close pair is now read as two levels with a note in the run log ("... less than 1 keV
+  apart and are read as separate levels").  Regression: `tests/level_grouping/check.sh`
+  (13N copies: a 1/2+ twin 0.6 keV away is its own level; a zero-width twin leaves chi2
+  unchanged -- the old code moved it x11 by appending the zero channels; the capture final
+  state 0.4 keV off is still matched, 2 keV off is not).  Until it is merged and installed,
+  the note below still describes the binaries in use.
 - 2026-09-16 -- THE LEVEL-MERGE TOLERANCE IS A HARD-CODED 1 keV.  A FIX WAS TRIED AND
   REVERTED 2026-09-17; THE DEFECT IS STILL PRESENT.
   `JGroup::IsLevel` (src/JGroup.cpp) decides whether a `<levels>` line belongs to a level

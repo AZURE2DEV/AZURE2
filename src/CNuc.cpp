@@ -173,11 +173,16 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
           PPair *channelPair = this->GetPair(PairNum);
           this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->SetWignerLimit(channelPair->GetRedMass(), channelPair->GetChRad());
         }
+        // A <levels> row is one channel of a level; the rows of one level are written with the same energy,
+        // so they are grouped on the identical energy.  The 1 keV tolerance used to apply here too and merged
+        // two separate levels of one J^pi closer than 1 keV into one (channels appended), with no warning; it
+        // is kept only where a separately typed state is matched to a level (ParseExternalCapture and the
+        // final-state comparisons with PPair::GetExE).
         ALevel NewLevel(Line);
-        LevelNum = this->GetJGroup(JGroupNum)->IsLevel(NewLevel);
+        LevelNum = this->GetJGroup(JGroupNum)->IsLevel(NewLevel, 0.0);
         if (!LevelNum) {
           this->GetJGroup(JGroupNum)->AddLevel(NewLevel);
-          LevelNum = this->GetJGroup(JGroupNum)->IsLevel(NewLevel);
+          LevelNum = this->GetJGroup(JGroupNum)->IsLevel(NewLevel, 0.0);
         }
         this->GetJGroup(JGroupNum)->GetLevel(LevelNum)->AddGamma(Line);
       }
@@ -187,6 +192,18 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
   if (line != "</levels>") return -1;
 
   in.close();
+
+  // Levels of one J^pi closer than 1 keV are now kept apart (they were merged before); say so, since a file in
+  // which the rows of ONE level were given slightly different energies would now read as several levels.
+  for (int j = 1; j <= this->NumJGroups(); j++) {
+    JGroup *jg = this->GetJGroup(j);
+    for (int la = 2; la <= jg->NumLevels(); la++)
+      for (int lb = 1; lb < la; lb++)
+        if (fabs(jg->GetLevel(la)->GetE() - jg->GetLevel(lb)->GetE()) < 1e-3)
+          configure.outStream << "Note: J = " << jg->GetJ() << (jg->GetPi() == -1 ? "-" : "+") << " levels at "
+                              << jg->GetLevel(lb)->GetE() << " and " << jg->GetLevel(la)->GetE()
+                              << " MeV are less than 1 keV apart and are read as separate levels." << std::endl;
+  }
 
   if (radii.first != 0) {
     this->GetPair(radii.first)->SetChRad(radii.second);

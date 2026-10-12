@@ -29,14 +29,14 @@ bool JGroup::IsInRMatrix() const {
 }
 
 /*!
- * This function tests if a given level already exists in the vector of ALevel objects.  If the level exists
- * the position of the level in the vector is returned, otherwise the function returns 0.
+ * This function tests if a given level already exists in the vector of ALevel objects: the first level whose
+ * energy lies within tol (MeV) of the given one.  If the level exists the position of the level in the vector is
+ * returned, otherwise the function returns 0.  tol = 0 asks for the identical energy.
  */
 
-int JGroup::IsLevel(ALevel level) {
+int JGroup::IsLevel(ALevel level, double tol) {
   bool b = false;
   int c = 0;
-  double tol = 1e-3;
   while (!b && c < this->NumLevels()) {
     if (this->GetLevel(c + 1)->GetE() - tol <= level.GetE() &&
         level.GetE() <= this->GetLevel(c + 1)->GetE() + tol) b = true;

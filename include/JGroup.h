@@ -27,8 +27,11 @@ class JGroup {
   /// Puts a group built from a spin and parity into the R-matrix calculation: a hard-sphere group
   /// (channels, no levels) scatters through its hard-sphere phases alone, since its level sum is empty.
   void SetInRMatrix(bool inRMatrix) { isinrmatrix_ = inRMatrix; }
-  /// 1-based position of the level in the group, or 0 if it is not there.
-  int IsLevel(ALevel);
+  /// 1-based position of the first level in the group whose energy lies within tol (MeV) of the given
+  /// level's, or 0 if there is none.  The default 1 keV is for matching a state typed separately in the
+  /// particle-pairs tab (a capture final state) to a level; the rows of one level in the <levels> block
+  /// carry the same energy and are grouped with tol = 0 (CNuc::Fill).
+  int IsLevel(ALevel, double tol = 1e-3);
   /// Parity of the group, \f$\pm1\f$.
   int GetPi() const;
   /// Number of levels in the group.
