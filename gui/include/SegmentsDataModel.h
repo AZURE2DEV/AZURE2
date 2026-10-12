@@ -33,10 +33,12 @@ struct SegmentsDataData {
   int secondaryDecayL;
   double finalJ;
   double delta;
-  // Trailing "sqrtshift <b> <bError> <vary>" block (sqrt(E) energy-shift
-  // term, see SegLine.h).  Carried through verbatim so a file that uses it
-  // survives a GUI load/save; the GUI does not edit it yet.
-  QString sqrtShiftTokens;
+  // Trailing keyword blocks of the line, verbatim: "sqrtshift <b> <bError>
+  // <vary>" (sqrt(E) energy-shift term, SegLine.h) and "mixture <w_self> <n>
+  // {"file" <w>}..." (natural-abundance targets, MixtureTable.h).  Carried
+  // through so a file that uses them survives a GUI load/save; the GUI does
+  // not edit them yet.  Not a table column: set with setLineExtras().
+  QString extraTokens;
 };
 
 /*!
@@ -58,6 +60,8 @@ class SegmentsDataModel : public QAbstractTableModel {
   /// Relocate one row wholesale.  The whole struct moves, so fields added
   /// later can never be forgotten the way a per-column copy forgets them.
   bool moveLine(int from, int to);
+  /// Store the verbatim keyword blocks of a row (no table column addresses them).
+  void setLineExtras(int row, const QString &tokens);
   Qt::ItemFlags flags(const QModelIndex &index) const;
   int isSegDataLine(const SegmentsDataData &line) const;
   QList<SegmentsDataData> getLines() const { return segDataLineList; };

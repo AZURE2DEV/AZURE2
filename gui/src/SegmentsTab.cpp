@@ -15,6 +15,8 @@
 #include "PairsModel.h"
 #include "ExforDialog.h"
 
+static bool isSegmentKeyword(const QString &token);
+
 SegmentsTab::SegmentsTab(QWidget *parent) :
   QWidget(parent) {
   pairsModel = nullptr;
@@ -358,6 +360,8 @@ void SegmentsTab::addSegDataLine(SegmentsDataData line) {
     segmentsDataModel->setData(index, line.finalJ, Qt::EditRole);
     index = segmentsDataModel->index(lines.size(), 23, QModelIndex());
     segmentsDataModel->setData(index, line.delta, Qt::EditRole);
+    // Keyword blocks have no column; without this they were lost on every load.
+    segmentsDataModel->setLineExtras(lines.size(), line.extraTokens);
     segmentsDataView->resizeRowToContents(lines.size());
     updateSegDataButtons(segmentsDataView->selectionModel()->selection());
   } else {
@@ -440,6 +444,7 @@ void SegmentsTab::addSegTestLine(SegmentsTestData line) {
     segmentsTestModel->setData(index, line.operationType, Qt::EditRole);
     index = segmentsTestModel->index(lines.size(), 15, QModelIndex());
     segmentsTestModel->setData(index, line.componentsList, Qt::EditRole);
+    segmentsTestModel->setLineExtras(lines.size(), line.extraTokens);
     segmentsTestView->resizeRowToContents(lines.size());
     updateSegTestButtons(segmentsTestView->selectionModel()->selection());
   } else {
@@ -1124,13 +1129,14 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
       }
       if (dataParts.isEmpty()) dataParts = remainingData.split(" ", Qt::SkipEmptyParts);
 
-      // A trailing "sqrtshift b bError vary" block (sqrt(E) energy-shift term)
-      // is split off before the positional composite/UPOS parsing below, which
-      // must not see it, and is written back verbatim by writeSegDataFile.
-      QString sqrtShiftTokens;
+      // The trailing keyword blocks ("sqrtshift b bError vary", "mixture
+      // w_self n {file w}...") are split off before the positional
+      // composite/UPOS parsing below, which must not see them, and are
+      // written back verbatim by writeSegDataFile.
+      QString extraTokens;
       for (int k = 1; k < dataParts.size(); k++) {
-        if (dataParts[k].compare("sqrtshift", Qt::CaseInsensitive) == 0) {
-          sqrtShiftTokens = QStringList(dataParts.mid(k)).join(" ");
+        if (isSegmentKeyword(dataParts[k])) {
+          extraTokens = QStringList(dataParts.mid(k)).join(" ");
           dataParts = dataParts.mid(0, k);
           break;
         }
@@ -1277,12 +1283,19 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
 
       SegmentsDataData newLine = {isActive, entrancePairIndex, exitPairIndex, lowEnergy, highEnergy, lowAngle,
                                   highAngle, dataType, dataFile, dataNorm, dataNormError, varyNorm, phaseJ, phaseL, energyShift, energyShiftError, varyEnergyShift, isAdvanced, operationType, componentsList, isUPOS, secondaryDecayL, finalJ, delta};
-      newLine.sqrtShiftTokens = sqrtShiftTokens;
+      newLine.extraTokens = extraTokens;
       addSegDataLine(newLine);
     }
   }
   if (line.trimmed() != QString("</segmentsData>")) return false;
   return true;
+}
+
+// The keyword blocks a segment line may end with (SegLine.h / ExtrapLine.h).
+// They are carried verbatim through the models rather than parsed here.
+static bool isSegmentKeyword(const QString &token) {
+  return token.compare("sqrtshift", Qt::CaseInsensitive) == 0 ||
+         token.compare("mixture", Qt::CaseInsensitive) == 0;
 }
 
 // Quote a data-file path that contains a space.  The optional composite/UPOS
@@ -1389,8 +1402,8 @@ bool SegmentsTab::writeSegDataFile(QTextStream &outStream) {
     } else {
       outStream << " 0";
     }
-    // sqrt(E) energy-shift block, last on the line (see SegLine.h)
-    if (!lines.at(i).sqrtShiftTokens.isEmpty()) outStream << " " << lines.at(i).sqrtShiftTokens;
+    // Keyword blocks (sqrtshift, mixture), last on the line (see SegLine.h)
+    if (!lines.at(i).extraTokens.isEmpty()) outStream << " " << lines.at(i).extraTokens;
     outStream << Qt::endl;
   }
 
@@ -1417,7 +1430,22 @@ bool SegmentsTab::readSegTestFile(QTextStream &inStream) {
     line = inStream.readLine();
     if (line.trimmed().isEmpty()) continue;
     if (!inStream.atEnd() && line.trimmed() != QString("</segmentsTest>")) {
-      QTextStream in(&line);
+      // Keyword blocks ("mixture ...") are cut off before the positional
+      // parse, which would otherwise fail on the keyword, and written back
+      // verbatim by writeSegTestFile.
+      QString extraTokens;
+      QString positional = line;
+      {
+        QStringList parts = line.split(" ", Qt::SkipEmptyParts);
+        for (int k = 0; k < parts.size(); k++) {
+          if (isSegmentKeyword(parts[k])) {
+            extraTokens = QStringList(parts.mid(k)).join(" ");
+            positional = QStringList(parts.mid(0, k)).join(" ");
+            break;
+          }
+        }
+      }
+      QTextStream in(&positional);
       in >> isActive >> entrancePairIndex >> exitPairIndex >> lowEnergy >> highEnergy >> energyStep >> lowAngle >> highAngle >> angleStep >> dataType;
       if (dataType == 2) {
         in >> phaseJ >> phaseL;
@@ -1517,6 +1545,7 @@ bool SegmentsTab::readSegTestFile(QTextStream &inStream) {
 
       SegmentsTestData newLine = {isActive, entrancePairIndex, exitPairIndex, lowEnergy, highEnergy, energyStep, lowAngle,
                                   highAngle, angleStep, dataType, phaseJ, phaseL, maxAngDistOrder, isAdvanced, operationType, componentsList};
+      newLine.extraTokens = extraTokens;
       addSegTestLine(newLine);
     }
   }
@@ -1608,6 +1637,8 @@ bool SegmentsTab::writeSegTestFile(QTextStream &outStream) {
       // Write 0 for non-advanced segments for backwards compatibility
       outStream << " 0";
     }
+    // Keyword blocks (mixture), last on the line (see ExtrapLine.h)
+    if (!lines.at(i).extraTokens.isEmpty()) outStream << " " << lines.at(i).extraTokens;
     outStream << Qt::endl;
   }
 

@@ -352,6 +352,11 @@ bool SegmentsTestModel::setData(const QModelIndex &index, const QVariant &value,
   return false;
 }
 
+void SegmentsTestModel::setLineExtras(int row, const QString &tokens) {
+  if (row < 0 || row >= segTestLineList.size()) return;
+  segTestLineList[row].extraTokens = tokens;
+}
+
 bool SegmentsTestModel::insertRows(int position, int rows, const QModelIndex &index) {
   Q_UNUSED(index);
   if (rows > 0) {

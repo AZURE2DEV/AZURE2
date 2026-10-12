@@ -425,6 +425,11 @@ bool SegmentsDataModel::setData(const QModelIndex &index, const QVariant &value,
   return false;
 }
 
+void SegmentsDataModel::setLineExtras(int row, const QString &tokens) {
+  if (row < 0 || row >= segDataLineList.size()) return;
+  segDataLineList[row].extraTokens = tokens;
+}
+
 bool SegmentsDataModel::insertRows(int position, int rows, const QModelIndex &index) {
   Q_UNUSED(index);
   if (rows > 0) {

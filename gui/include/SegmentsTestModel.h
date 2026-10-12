@@ -24,6 +24,8 @@ struct SegmentsTestData {
   int isAdvanced;
   int operationType;
   QString componentsList;
+  // Trailing keyword blocks ("mixture ..."), verbatim; see SegmentsDataData.
+  QString extraTokens;
 };
 
 /*!
@@ -45,6 +47,8 @@ class SegmentsTestModel : public QAbstractTableModel {
   /// Relocate one row wholesale.  The whole struct moves, so fields added
   /// later can never be forgotten the way a per-column copy forgets them.
   bool moveLine(int from, int to);
+  /// Store the verbatim keyword blocks of a row (no table column addresses them).
+  void setLineExtras(int row, const QString &tokens);
   Qt::ItemFlags flags(const QModelIndex &index) const;
   int isSegTestLine(const SegmentsTestData &line) const;
   QList<SegmentsTestData> getLines() const { return segTestLineList; };
