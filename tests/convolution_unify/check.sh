@@ -57,9 +57,10 @@ r="$(maxrel "$(out lab_E)" "$(out legacy_cm_E)")";          if le "$r" 1e-9;  th
 r="$(maxrel "$(out tgt_fixed)" "$(out tgt_lab_const)")";    if le "$r" 1e-12; then ok "under target integration: constant == sigmalab ($r)"; else bad "target + constant vs target + sigmalab differ ($r)"; fi
 r="$(maxrel "$(out tgt_fixed)" "$(out tgt_legacy_const)")"; if le "$r" 1e-9;  then ok "under target integration: constant == legacy c.m. ($r)"; else bad "target + constant vs target + legacy c.m. differ ($r)"; fi
 
-# 2. what did not change
-r="$(maxrel "$(out bare)" "$HERE/reference_old/bare.extrap")"; if le "$r" 1e-12; then ok "no effect: unchanged ($r)"; else bad "bare calculation moved ($r)"; fi
-r="$(maxrel "$(out tgt)"  "$HERE/reference_old/tgt.extrap")";  if le "$r" 1e-10; then ok "plain target integration: unchanged ($r)"; else bad "plain target integration moved ($r)"; fi
+# 2. what did not change. The references were recorded on Linux; another platform's libm differs
+#    from it at ~1e-11, so these are held to 1e-8 -- five orders below the smallest change in part 3.
+r="$(maxrel "$(out bare)" "$HERE/reference_old/bare.extrap")"; if le "$r" 1e-8; then ok "no effect: unchanged ($r)"; else bad "bare calculation moved ($r)"; fi
+r="$(maxrel "$(out tgt)"  "$HERE/reference_old/tgt.extrap")";  if le "$r" 1e-8; then ok "plain target integration: unchanged ($r)"; else bad "plain target integration moved ($r)"; fi
 
 # 3. what changed, by how much, and why
 #    Constant sigma: the old kernel was not renormalised over its +-3 sigma window, so every point was
