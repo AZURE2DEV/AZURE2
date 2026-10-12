@@ -67,6 +67,13 @@ add_test(NAME pyazr_sav_readers
                  ${CMAKE_CURRENT_SOURCE_DIR}/sav_readers_test.py)
 set_tests_properties(pyazr_sav_readers PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# A parameter file's fixed level parameters reach the engine (load_sav), so
+# pyazr evaluates the same model as the CLI given the same file.
+add_test(NAME pyazr_sav_fixed_params
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/sav_fixed_params_test.py)
+set_tests_properties(pyazr_sav_fixed_params PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # Two sessions in one process share no state: a data session's residuals are
 # unchanged by an extrapolation (or second data) session opened beside it.
 add_test(NAME pyazr_shared_state

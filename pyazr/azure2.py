@@ -616,6 +616,13 @@ class azure2:
         A name the file lacks keeps the session's current value, exactly as
         AZURE2 does on read; a file with no name in common with the model is
         refused rather than applied to nothing.
+
+        This only *reads*.  The free-vector calls (``calculate_chi2_rwa(x)``,
+        ``update_segments_rwa(x)``, ``transform_rwa(x)``, ...) take every FIXED
+        parameter from the session, i.e. from the ``.azr``, so passing just the
+        free slice of this vector drops the file's fixed level parameters --
+        which the CLI does apply.  To evaluate "the ``.azr`` + this ``.sav``"
+        as the CLI does, use :meth:`load_sav`.
         """
         vals = self.read_sav(path)
         full = np.asarray(self.sess.params_all_rwa(), float).copy()
@@ -629,11 +636,95 @@ class azure2:
                              f"(is it a file from another project?)")
         return full
 
+    @staticmethod
+    def read_sav_basis(path):
+        """The ``#parametrization`` tag of a parameter file (0 standard,
+        1 Brune, 2 Park), or None for a file written before the tag existed."""
+        with open(path) as fh:
+            for line in fh:
+                t = line.split()
+                if len(t) >= 2 and t[0] in ("#parametrization", "parametrization"):
+                    try:
+                        return int(round(float(t[1])))
+                    except ValueError:
+                        return None
+        return None
+
+    def load_sav(self, path):
+        """Load a parameter file into the session the way the CLI does, and
+        return the free RWA vector to evaluate at.
+
+        The CLI's external parameter file (mode 1/2/3 prompt; ``AZUREParams::
+        ReadUserParameters``) sets every parameter it names, FIXED level
+        energies and widths included.  The free-vector calls of this class
+        take the fixed values from the session instead, so
+        ``x = full_rwa_from_sav(p)[~fixed]`` followed by
+        ``calculate_chi2_rwa(x)`` evaluates the ``.azr``'s fixed parameters,
+        not the file's.  When they differ the two are different models:
+        11B+alpha (10-12-26) had 10 fixed widths off by up to 1.6 %, and pyazr
+        gave chi2 9925.03 against the CLI's 9868.04 at the same file, with no
+        warning (key 72 alone +58).
+
+        This pushes the whole vector (``full_rwa_from_sav``) into the engine,
+        so every later free-vector call -- chi2, segments, Jacobian,
+        ``transform_rwa``, ``save_fit`` -- uses the file's fixed values, and
+        sets :attr:`params_rwa` to the file's free values, which it returns.
+
+        Fixed segment norms and shifts are carried along but the engine never
+        reads them (only varied ones are filled from parameters), so they stay
+        at the ``.azr`` value, as in the CLI.  Unlike the CLI, the free/fixed
+        split is NOT changed: the CLI frees a parameter fixed at 0 that the
+        file gives a nonzero value, and fixes a free one the file sets to 0.
+        Values are applied either way, so a calculation agrees; a fit started
+        from here keeps the ``.azr``'s split.  A file whose
+        ``#parametrization`` tag differs from this session's basis is refused
+        (the CLI converts; this does not).
+
+        Switching mode (:meth:`extrap_mode` / :meth:`data_mode`) re-initializes
+        the engine from the ``.azr`` and discards what this loaded: call it
+        again after the switch.  Names are matched against the engine's live
+        parameter list, so it works in either mode, as the CLI's reader does.
+        """
+        tag = self.read_sav_basis(path)
+        if tag is not None and tag != self.basis:
+            raise ValueError(
+                f"{path} holds basis {tag} amplitudes (0 standard, 1 Brune, 2 Park) "
+                f"but this session uses basis {self.basis}; open the model with the "
+                f"matching use_brune/use_park, or convert the file with the CLI.")
+        # The engine's LIVE bookkeeping, matched by name as the CLI does: the
+        # cached `parameters` describe the mode the session was first built
+        # in, and extrapolation mode has a shorter vector.
+        s = self.sess
+        fixed = np.asarray(s.params_fixed(), bool)
+        full = np.asarray(s.params_all_rwa(), float).copy()
+        vals = self.read_sav(path)
+        hit = 0
+        for i in range(full.size):
+            name = s.params_names(i)
+            if name in vals:
+                full[i] = vals[name]
+                hit += 1
+        if hit == 0:
+            raise ValueError(f"{path}: no parameter name matches this model "
+                             f"(is it a file from another project?)")
+        setter = getattr(s, "set_params_all_rwa", None)
+        if setter is not None:
+            setter(full)
+        else:
+            # Modules built before set_params_all_rwa: the same effect, at the
+            # cost of one forward pass.
+            self.sess.update_segments_all_rwa(full)
+        self.fixed_params = [bool(f) for f in fixed]
+        self.params_rwa = [float(v) for v in full[~fixed]]
+        self.params = s.params_values()
+        self._parameters = None
+        return np.asarray(self.params_rwa, float)
+
     def update_rwa_params_from_sav(self):
-        """Reload params_rwa from the run's param.sav (matched by name)."""
-        with _in_dir(self.cwd):
-            full = self.full_rwa_from_sav('output/param.sav')
-        self.params_rwa = [float(v) for v, f in zip(full, self.fixed_params) if not f]
+        """Reload the run's param.sav (matched by name) into the session --
+        fixed level parameters included, see :meth:`load_sav` -- and set
+        params_rwa to its free values."""
+        self.load_sav(os.path.join(self.cwd, 'output', 'param.sav'))
 
     def update_sav_from_rwa_params(self, best):
         """Write a free RWA vector back out to param.sav.new, by name.

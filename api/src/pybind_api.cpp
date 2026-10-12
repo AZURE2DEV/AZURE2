@@ -391,6 +391,12 @@ class Session {
     expect_free(v, "update_segments_rwa");
     return api_->UpdateSegmentsRWA(v);
   }
+  void set_params_all_rwa(py::array_t<double, py::array::forcecast> p) {
+    ConfigScope guard(config_, &ecCache_);
+    vector_r v = to_vector(p);
+    expect_all(v, "set_params_all_rwa");
+    api_->SetParamsAllRWA(v);
+  }
   int update_segments_all_rwa(py::array_t<double, py::array::forcecast> p) {
     ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
@@ -602,6 +608,10 @@ PYBIND11_MODULE(_azure2, m) {
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
       .def("update_segments_rwa", &Session::update_segments_rwa,
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
+      .def("set_params_all_rwa", &Session::set_params_all_rwa,
+           py::call_guard<py::gil_scoped_release>(), py::arg("params"),
+           "Set every parameter, fixed ones included (params_all_rwa layout), "
+           "without calculating.  Fixed values are what the free-vector calls use.")
       .def("update_segments_all_rwa", &Session::update_segments_all_rwa,
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
       .def("transform_rwa", &Session::transform_rwa, py::arg("params"))

@@ -725,6 +725,20 @@ Rules that will bite you:
   `vals = {t[0]: float(t[1]) for t in (l.split() for l in open(sav)) if len(t) >= 2 and not t[0].startswith("#") and t[0] != "parametrization"}`
   (worked example `8Be+a/10-6-26_rate_v5/v5_compat.py`). Related: since 1c3e7e3 (2026-10-05)
   `pyazr.bands.best_fit_params` raises "has N parameters but the model has M" on an old-format `.sav` in data mode.
+- **pyazr: load a `.sav` with `x = m.load_sav(path)`, not by slicing the free part of `full_rwa_from_sav`.**
+  The CLI's parameter-file reader sets FIXED level energies and widths too; pyazr's free-vector calls
+  (`calculate_chi2_rwa(x)`, `update_segments_rwa`, `transform_rwa`, `save_fit`, ...) take every fixed value from
+  the session, i.e. the `.azr`. `x = m.full_rwa_from_sav(sav)[~fixed]` therefore evaluates a different model
+  whenever the `.sav`'s fixed values differ from the `.azr`'s (a fit restarted from another fit's `.sav`, or an
+  `.azr` whose fixed widths were never updated), with no warning. 11B+α `10-10-26_speedup/pyazr_cli` (10-12-26):
+  10 fixed widths off by up to 1.6 % gave 9925.03 against the CLI's 9868.04 (key 72 alone +58); with
+  `load_sav` every `AZUREOut_*` line and `chiSquared.out` match the CLI exactly. `load_sav` pushes the whole file
+  into the engine (`sess.set_params_all_rwa`), sets `m.params_rwa` and returns the free vector;
+  `update_rwa_params_from_sav` and `bands.best_fit_params` use it. It does not change the free/fixed split (the CLI
+  frees a parameter fixed at 0 that the file sets nonzero) and refuses a file tagged with another basis.
+  `extrap_mode()`/`data_mode()` re-initialize the engine from the `.azr`: call `load_sav` again after switching.
+  Modules built before 2026-10-12 have no `load_sav`; there, `m.sess.update_segments_all_rwa(full)` (one forward
+  pass) has the same effect.
 - **Do not trust pyazr's own `m.parameters` names to equal `param.sav` names.**
   On 12C+alpha (2026-09) pyazr's `energy_39` was the 14.72 MeV level while
   `param.sav`'s `energy_39` was the 16.77 MeV one (pyazr's value was the `.azr`

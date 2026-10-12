@@ -51,6 +51,9 @@ class AZUREAPI {
   bool CalculateExternalCapture();
   // Reads the parameters values
   bool UpdateParameters();
+  // Replace every parameter value, fixed ones included (RWA basis), without
+  // calculating anything.  Returns false if p has the wrong length.
+  bool SetParamsAllRWA(const vector_r &p);
   // Reads the norms values
   void UpdateNorms();
   // Set AZURE2 to calculate data points

@@ -185,6 +185,42 @@ bool AZUREAPI::UpdateParameters() {
   return true;
 }
 
+/*!
+ * Replaces every parameter value, fixed ones included, with p (RWA basis, the
+ * params_all_rwa() layout) and refreshes the physical copies, without
+ * calculating anything.
+ *
+ * The free-vector entry points (CalculateChi2RWA, UpdateSegmentsRWA,
+ * TransformRWAParameters, ...) take the FIXED parameters from all_rwa_, i.e.
+ * from the .azr.  The CLI's external parameter file sets fixed level
+ * parameters too (AZUREParams::ReadUserParameters), so a session given only the
+ * free part of a param.sav computes a different model whenever the file's
+ * fixed values differ from the .azr's: 11B+alpha 10-12-26, 10 fixed widths,
+ * chi2 9925.03 against the CLI's 9868.04.  This is how a session takes them.
+ */
+bool AZUREAPI::SetParamsAllRWA(const vector_r &p) {
+  if (p.size() != all_rwa_.size()) return false;
+  all_rwa_ = p;
+
+  // Physical values: the R-matrix block through the same transform as
+  // UpdateParameters; norms and shifts are the same in both bases.
+  compound()->FillCompoundFromParams(all_rwa_);
+  compound()->CalcShiftFunctions(configure());
+  compound()->TransformOut(configure());
+  all_ = compound()->GetTransformParams(configure());
+  for (size_t i = all_.size(); i < all_rwa_.size(); ++i) all_.push_back(all_rwa_[i]);
+
+  values_.clear();
+  values_rwa_.clear();
+  for (size_t i = 0; i < all_rwa_.size(); ++i) {
+    if (!fixed_[i]) {
+      values_.push_back(all_[i]);
+      values_rwa_.push_back(all_rwa_[i]);
+    }
+  }
+  return true;
+}
+
 int AZUREAPI::UpdateSegments(vector_r &p) {
   calculatedConv_.clear();
   calculatedEnergies_.clear();

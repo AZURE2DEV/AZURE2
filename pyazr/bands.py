@@ -208,9 +208,17 @@ def best_fit_params(model, path=None):
     # keeps the session's value, so a file from an older layout (no
     # segment_*_energy_shift_sqrt rows, no #parametrization tag) still fits,
     # and in extrapolation mode the file's segment rows simply find no home.
-    full = model.full_rwa_from_sav(path)
-    fixed = np.asarray(model.fixed_params, float).round().astype(bool)
-    free = full[~fixed]
+    #
+    # The file's FIXED level parameters are part of the fit too (the CLI's
+    # reader applies them), and the free vector alone cannot carry them, so a
+    # session that has azure2.load_sav takes the whole file into the engine
+    # first -- names matched against the live parameter list, either mode.
+    if hasattr(model, "load_sav"):
+        free = np.asarray(model.load_sav(path), float)
+    else:
+        full = model.full_rwa_from_sav(path)
+        fixed = np.asarray(model.fixed_params, float).round().astype(bool)
+        free = full[~fixed]
 
     kinds, _ = live_parameters(model)
     if len(kinds) == free.size:
