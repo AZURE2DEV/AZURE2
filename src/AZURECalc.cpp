@@ -1063,7 +1063,10 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
           EPoint *pt = seg->GetPoint(pid + 1);
           if (!pt) continue;
           row++;
-          if (pt->IsMapped() || pt->NumLocalMappedPoints() > 0) datasetHasMapping = true;
+          // Mapping within a segment (the only kind EData::MapData makes)
+          // keeps a shift's effect inside its segment; only mapping across
+          // segments would not.
+          if (pt->IsMapped() && pt->GetMap().segment != s) datasetHasMapping = true;
         }
       }
       rowStart[ld->NumSegments() + 1] = row;
@@ -1085,10 +1088,17 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
         byPoint[pid] = (denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0;
       };
       // No parallel construct inside an enclosing parallel region (see
-      // CoulFuncCache::localCache).
+      // CoulFuncCache::localCache).  In parallel each point is calculated on
+      // its own, without point mapping (ScopedPointMappingOff, as in the
+      // AZUREGrad.cpp loops): a mapped point would otherwise read a value its
+      // host may not have calculated yet.  Serially, index order puts every
+      // host first and the sharing is kept.
       if (parallel && !InParallelRegion()) {
 #pragma omp parallel for schedule(dynamic)
-        for (int pid = 0; pid < nPts; pid++) one(pid);
+        for (int pid = 0; pid < nPts; pid++) {
+          ScopedPointMappingOff noPointMapping;
+          one(pid);
+        }
       } else {
         for (int pid = 0; pid < nPts; pid++) one(pid);
       }
@@ -1126,9 +1136,9 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     auto updateSegment = [&](ESegment *seg) {
       if (!InParallelRegion()) {
 #pragma omp parallel for schedule(dynamic, 1)
-        for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointEnergyWithShift(pid, lc, &configure());
+        for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointGroupEnergyWithShift(pid, lc, &configure());
       } else {
-        for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointEnergyWithShift(pid, lc, &configure());
+        seg->UpdatePointEnergiesWithShift(lc, &configure());
       }
     };
     for (size_t t = 0; t < localBySeg.size(); t++) {

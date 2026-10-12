@@ -316,12 +316,14 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
 
   const bool isAy = point->IsAnalyzingPower();
   if (isAy) {
-    // Supported: particle-exit A_y, full observable, no point mapping (a mapped
-    // point's sub-points are written by another point's calculation).  Capture
+    // Supported: particle-exit A_y, full observable, no point mapping in
+    // effect (a mapped point's sub-points would be written by another point's
+    // calculation).  GradOnePoint holds a ScopedPointMappingOff, so there every
+    // point, mapped or not, carries and calculates its own sub-points.  Capture
     // A_y keeps its refusal: the attenuation folded into P_k has no
     // counterpart for the P_k^1 of the numerator.
     if (xsComponent != 0) return false;
-    if (point->IsMapped() || point->NumLocalMappedPoints() > 0) return false;
+    if (!ScopedPointMappingOff::Active() && (point->IsMapped() || point->NumLocalMappedPoints() > 0)) return false;
     const int exitPairNum = compound->GetPairNumFromKey(point->GetExitKey());
     if (compound->GetPair(exitPairNum)->GetPType() != 0) return false;
   }

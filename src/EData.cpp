@@ -2810,12 +2810,19 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
     if (!toUpdate.empty()) {
       // One work item per point (with its sub-points), largest first, so a
       // segment with thousands of sub-points per point does not serialize.
+      // A point mapped onto another (EData::MapData) copies its values from
+      // that host, so it is re-energised with it, on the same thread, after
+      // it (ESegment::UpdatePointGroupEnergyWithShift); it gets no item of its
+      // own.  A mapped point costs little (a copy, its Coulomb amplitudes).
       struct Item { double cost; ESegment *seg; int i; };
       std::vector<Item> work;
       for (ESegment *s : toUpdate)
         for (int i = 0; i < s->NumPoints(); i++) {
+          if (s->ShiftHost(i)) continue;
           EPoint *pt = s->GetPoint(i + 1);
-          work.push_back({1.0 + (pt ? pt->NumSubPoints() : 0), s, i});
+          const double nsp = pt ? pt->NumSubPoints() : 0;
+          const double nMapped = pt ? pt->NumLocalMappedPoints() : 0;
+          work.push_back({(1.0 + nsp) * (1.0 + 0.1 * nMapped), s, i});
         }
       std::stable_sort(work.begin(), work.end(), [](const Item &x, const Item &y) { return x.cost > y.cost; });
 #ifdef _OPENMP
@@ -2827,10 +2834,10 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
       // inactive nested team renumbers its thread 0, and per-thread state
       // indexed by thread number would then be shared between the outer threads.
       if (serial) {
-        for (size_t q = 0; q < work.size(); q++) work[q].seg->UpdatePointEnergyWithShift(work[q].i, theCNuc, configure);
+        for (size_t q = 0; q < work.size(); q++) work[q].seg->UpdatePointGroupEnergyWithShift(work[q].i, theCNuc, configure);
       } else {
 #pragma omp parallel for schedule(dynamic, 1)
-        for (int q = 0; q < (int)work.size(); q++) work[q].seg->UpdatePointEnergyWithShift(work[q].i, theCNuc, configure);
+        for (int q = 0; q < (int)work.size(); q++) work[q].seg->UpdatePointGroupEnergyWithShift(work[q].i, theCNuc, configure);
       }
     }
 

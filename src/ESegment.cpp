@@ -708,31 +708,59 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
 }
 
 /*!
+ * The earlier point of this segment that point i (0-based) is mapped onto
+ * (EData::MapData), or NULL.
+ */
+EPoint *ESegment::ShiftHost(int i) {
+  if (i < 0 || i >= NumPoints()) return nullptr;
+  EPoint *point = GetPoint(i + 1);
+  if (!point->IsMapped()) return nullptr;
+  EnergyMap map = point->GetMap();
+  if (map.point < 1 || map.point > i) return nullptr;
+  EPoint *candidate = GetPoint(map.point);
+  if (candidate->NumSubPoints() != point->NumSubPoints()) return nullptr;
+  for (int m = 1; m <= candidate->NumLocalMappedPoints(); m++)
+    if (candidate->GetLocalMappedPoint(m) == point) return candidate;
+  return nullptr;
+}
+
+/*!
+ * Re-energises point i and then every point mapped onto it, on the calling
+ * thread.  A mapped point copies its energy-dependent values from its host
+ * (UpdatePointEnergyWithShift), so the host must be finished first: the
+ * parallel re-energise loops (EData::FillEnergyShiftsFromParams, the shift
+ * columns of AZURECalc::ResidualJacobian) hand out these groups, never single
+ * mapped points.  A point with a host returns at once.
+ */
+void ESegment::UpdatePointGroupEnergyWithShift(int i, CNuc *theCNuc, const Config *configure) {
+  if (ShiftHost(i)) return;
+  UpdatePointEnergyWithShift(i, theCNuc, configure);
+  EPoint *point = GetPoint(i + 1);
+  for (int m = 1; m <= point->NumLocalMappedPoints(); m++) {
+    const int j = (int)(point->GetLocalMappedPoint(m) - &points_[0]);
+    if (j > i && j < NumPoints() && ShiftHost(j) == point) UpdatePointEnergyWithShift(j, theCNuc, configure);
+  }
+}
+
+/*!
  * Applies the segment's energy shift to point i (0-based) and its sub-points
- * and recalculates their energy-dependent values.  Touches only that point, so
- * different points may be updated concurrently.
+ * and recalculates their energy-dependent values.  Writes only that point, so
+ * different points may be updated concurrently -- except that a mapped point
+ * reads its host (ShiftHost), so it must run after its host and not
+ * concurrently with it: UpdatePointGroupEnergyWithShift.
  */
 void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *configure) {
   {
     EPoint *point = GetPoint(i + 1);
     // A point mapped onto an earlier point of this segment (EData::MapData)
-    // is at the same energy as its host, which this loop has already moved:
-    // its energy-dependent values (and its sub-points') are copied from the
-    // host instead of recomputed.  Only the angle-dependent Coulomb amplitude
-    // is its own.
-    EPoint *host = nullptr;
-    if (point && point->IsMapped()) {
-      EnergyMap map = point->GetMap();
-      if (map.point >= 1 && map.point <= i) {
-        EPoint *candidate = GetPoint(map.point);
-        for (int m = 1; m <= candidate->NumLocalMappedPoints(); m++)
-          if (candidate->GetLocalMappedPoint(m) == point) {
-            host = candidate;
-            break;
-          }
-      }
-      if (host && host->NumSubPoints() != point->NumSubPoints()) host = nullptr;
-    }
+    // is at the same energy as its host, which has already been moved (index
+    // order in UpdatePointEnergiesWithShift; host first within a group in
+    // UpdatePointGroupEnergyWithShift): its energy-dependent values (and its
+    // sub-points') are copied from the host instead of recomputed.  Only the
+    // angle-dependent Coulomb amplitude is its own.  CopyEDependentValuesFrom
+    // refuses (and the values are recomputed) if the host is not at this
+    // energy.
+    EPoint *host = ShiftHost(i);
     if (point && point->GetOriginalEnergy() > 0) {
       double originalEnergy = point->GetOriginalEnergy();
       double shiftedEnergy = ShiftedEnergy(originalEnergy, TotalEnergyShift(originalEnergy));

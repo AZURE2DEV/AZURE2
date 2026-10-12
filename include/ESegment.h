@@ -152,6 +152,11 @@ class ESegment {
   void UpdatePointEnergiesWithShift(CNuc *theCNuc = NULL, const Config *configure = NULL);
   /// The same for one point (0-based index) and its sub-points.
   void UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *configure);
+  /// Point i (0-based) and, after it, every point mapped onto it; nothing if point i is itself
+  /// mapped onto an earlier point (its host does it).  The unit for parallel re-energising.
+  void UpdatePointGroupEnergyWithShift(int i, CNuc *theCNuc, const Config *configure);
+  /// The earlier point of this segment that point i (0-based) is mapped onto, or NULL.
+  EPoint *ShiftHost(int i);
   /// Change the exit pair key.
   void SetExitKey(int);
   /// Change the entrance pair key, for this segment and every point in it.
