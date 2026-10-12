@@ -65,7 +65,7 @@ def _format_mixture(self_weight, tables=()):
 
 
 def _rewrite_keyword_tail(line, mixture):
-    """``line`` with its keyword blocks rewritten: the sqrtshift block kept,
+    """``line`` with its keyword blocks rewritten: the sqrtshift and shiftgroup blocks kept,
     the mixture block replaced by ``mixture`` ((self_weight, tables), or None
     to drop it), written last."""
     from .datasets import _split_keyword_tail, _KEYWORDS
@@ -74,6 +74,8 @@ def _rewrite_keyword_tail(line, mixture):
     out = list(head)
     if "sqrtshift" in blocks:
         out += ["sqrtshift"] + list(blocks["sqrtshift"])
+    if "shiftgroup" in blocks:
+        out += ["shiftgroup", blocks["shiftgroup"]]
     if mixture is not None:
         out.append(_format_mixture(*mixture))
     return " ".join(out)

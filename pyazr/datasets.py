@@ -44,7 +44,7 @@ import numpy as np
 
 
 #: Keyword blocks a segment line may end with (SegLine.h / ExtrapLine.h).
-_KEYWORDS = ("sqrtshift", "mixture")
+_KEYWORDS = ("sqrtshift", "shiftgroup", "mixture")
 
 
 def _quoted_tokens(text):
@@ -65,7 +65,8 @@ def _quoted_tokens(text):
 
 
 def _parse_keyword_blocks(tokens):
-    """``{"sqrtshift": [b, bErr, vary], "mixture": (w_self, ((file, w), ...))}``
+    """``{"sqrtshift": [b, bErr, vary], "shiftgroup": label,
+    "mixture": (w_self, ((file, w), ...))}``
     from the tokens starting at the first keyword; unknown trailing text is
     ignored, like the engine does."""
     toks = _quoted_tokens(" ".join(tokens))
@@ -74,6 +75,10 @@ def _parse_keyword_blocks(tokens):
         kw = toks[i].lower(); i += 1
         if kw == "sqrtshift":
             blocks["sqrtshift"] = toks[i:i + 3]; i += 3
+        elif kw == "shiftgroup":
+            if i >= len(toks):
+                raise ValueError("shiftgroup without a label: " + " ".join(tokens))
+            blocks["shiftgroup"] = toks[i]; i += 1
         elif kw == "mixture":
             try:
                 w_self = float(toks[i]); n = int(float(toks[i + 1])); i += 2
@@ -153,6 +158,9 @@ class Segment:
     energy_shift_sqrt: float = 0.0         # b in E' = E + shift + b*sqrt(E) (MeV^1/2)
     energy_shift_sqrt_error: float = 0.0   # its systematic (MeV^1/2)
     vary_shift_sqrt: bool = False          # is b a fit parameter?
+    # segments with the same label share ONE constant energy shift: the first
+    # of them (file order) owns the parameter, the others take its value
+    shift_group: Optional[str] = None
     operation: Optional[str] = None    # 'sum' | 'ratio' for a composite segment
     components: tuple = ()             # (entrance, exit, angle, scaling) each
     # Mixture block (natural-abundance / compound target): the model is
@@ -308,6 +316,7 @@ class SegmentSet(list):
             energy_shift_sqrt=shift_sqrt,
             energy_shift_sqrt_error=shift_sqrt_error,
             vary_shift_sqrt=vary_shift_sqrt,
+            shift_group=blocks.get("shiftgroup"),
             operation=operation, components=tuple(components),
             mixture_self=mixture_self, mixture_tables=tuple(mixture_tables))
 

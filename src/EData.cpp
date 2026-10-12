@@ -290,6 +290,8 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
 
   in.close();
 
+  this->ResolveShiftGroups(configure);
+
   if (this->NumSegments() > 0) {
     if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
     this->MapData();
@@ -1661,7 +1663,7 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
   // Check if any energy shifts (constant or sqrt(E) term) are varied
   bool isVaryEnergyShift = false;
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-    if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt()) {
+    if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt() || segment->IsShiftGroupFollower()) {
       isVaryEnergyShift = true;
       break;
     }
@@ -1678,7 +1680,7 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
       // coefficient b of E' = E + shift + b*sqrt(E/MeV), in MeV^1/2.
       out << "segment_key_#, file_name, low_angle_bound, high_angle_bound, aframe, low_energy_bound, high_energy_bound, eframe, norm, shift, sqrt_shift" << std::endl;
       for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-        if (!(segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt())) continue;
+        if (!(segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt() || segment->IsShiftGroupFollower())) continue;
         out << segment->GetSegmentKey() << ","
             << segment->GetDataFile() << ","
             << segment->GetMinAngle() << ","
@@ -2645,6 +2647,66 @@ void EData::SetEnergyShiftSqrtParamOffset(int offset) {
 }
 
 /*!
+ * Links the segments of each shift group ("shiftgroup <label>" on the segment
+ * line) to the group's first segment in file order: that segment keeps its own
+ * constant-shift parameter (value, uncertainty, vary flag, penalty), and every
+ * other member takes that parameter's value instead of its own, which is fixed
+ * in the fit.  A note per group lists the members.
+ */
+
+void EData::ResolveShiftGroups(const Config &configure) {
+  std::vector<std::pair<std::string, int>> leaders;  // label, leader position
+  for (int pos = 0; pos < (int)segments_.size(); pos++) {
+    ESegment &seg = segments_[pos];
+    const std::string label = seg.GetShiftGroup();
+    if (label.empty()) continue;
+    auto it = std::find_if(leaders.begin(), leaders.end(),
+                           [&label](const std::pair<std::string, int> &e) { return e.first == label; });
+    if (it == leaders.end()) {
+      leaders.push_back({label, pos});
+      continue;
+    }
+    ESegment &leader = segments_[it->second];
+    seg.SetShiftGroupFollower(it->second, leader.GetEnergyShift());
+    leader.SetHasShiftGroupFollowers(true);
+  }
+  for (const auto &g : leaders) {
+    const ESegment &leader = segments_[g.second];
+    std::ostringstream members;
+    int n = 0;
+    for (const ESegment &seg : segments_)
+      if (seg.GetShiftLeaderPos() == g.second) {
+        members << " " << seg.GetSegmentKey();
+        n++;
+      }
+    if (n == 0) {
+      configure.outStream << "Note: shift group '" << g.first << "' has only segment #" << leader.GetSegmentKey()
+                          << "; nothing is shared." << std::endl;
+      continue;
+    }
+    configure.outStream << "Note: shift group '" << g.first << "': segments #" << leader.GetSegmentKey() << " +"
+                        << members.str() << " share one constant energy shift (segment #"
+                        << leader.GetSegmentKey() << "'s parameter, " << (leader.IsVaryEnergyShift() ? "free" : "fixed")
+                        << ")." << std::endl;
+  }
+}
+
+/*!
+ * Writes each shift-group follower's parameter as the value it actually uses,
+ * its group leader's, so that param.sav / param.fit read back unchanged.
+ */
+
+void EData::SyncShiftGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
+  const int off = energyShiftParamOffset_;
+  if (off < 0) return;
+  for (int pos = 0; pos < (int)segments_.size(); pos++) {
+    const int lead = segments_[pos].GetShiftLeaderPos();
+    if (lead < 0 || off + pos >= (int)p.Params().size() || off + lead >= (int)p.Params().size()) continue;
+    p.SetValue(off + pos, p.Value(off + lead));
+  }
+}
+
+/*!
  * Fills the Minuit parameter array from initial values in the EData object.
  */
 
@@ -2742,9 +2804,11 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
       // and the sqrt(E) coefficient at p[j].  Either moving the points means
       // the segment must be re-shifted (the mapping E -> E + a + b*sqrt(E) is
       // applied from the original energies, so one update covers both).
-      const double shiftConst = p[i];
+      // A shift-group follower reads its group leader's constant shift.
+      const int lead = segment->GetShiftLeaderPos();
+      const double shiftConst = (lead >= 0) ? p[GetEnergyShiftParamOffset() + lead] : p[i];
       const double shiftSqrt = (j >= 0 && j < (int)p.size()) ? p[j] : 0.0;
-      const bool shiftActive = segment->IsVaryEnergyShift() || shiftConst != 0.0 ||
+      const bool shiftActive = segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0 ||
                                segment->IsVaryEnergyShiftSqrt() || shiftSqrt != 0.0;
       if (shiftActive) {
         // Check if energy is the same, if so, continue
@@ -2849,9 +2913,11 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
     return;
   }
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+    const int lead = segment->GetShiftLeaderPos();
+    const double shiftConst = (lead >= 0) ? p[GetEnergyShiftParamOffset() + lead] : p[i];
     // Always apply energy shift since parameters are always present for all segments
-    if (segment->IsVaryEnergyShift() || p[i] != 0.0) {
-      segment->SetEnergyShift(p[i]);
+    if (segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0) {
+      segment->SetEnergyShift(shiftConst);
       segment->UpdatePointEnergiesWithShift();
       anyEnergyShifted = true;
 
@@ -2868,12 +2934,12 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
 
     // CRITICAL FIX: Apply the same energy shift to all component segments in total capture segments
     if (segment->IsTotalCapture() && segment->HasComponents()) {
-      if (segment->IsVaryEnergyShift() || p[i] != 0.0) {
+      if (segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0) {
         // Apply energy shift to all component segments
         const std::vector<ESegment *> &componentSegments = segment->GetComponentSegments();
         for (ESegment *componentSegment : componentSegments) {
           if (componentSegment) {
-            componentSegment->SetEnergyShift(p[i]);
+            componentSegment->SetEnergyShift(shiftConst);
             componentSegment->UpdatePointEnergiesWithShift();
             anyEnergyShifted = true;
           }

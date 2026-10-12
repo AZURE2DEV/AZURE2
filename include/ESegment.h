@@ -123,6 +123,19 @@ class ESegment {
   double GetEnergyShiftSqrtError() const;
   /// Is the sqrt(E) coefficient a free fit parameter?
   bool IsVaryEnergyShiftSqrt() const;
+  /// Shift-group label ("" if none): segments with one label share one constant shift.
+  std::string GetShiftGroup() const;
+  /// Position (0-based, in EData's segment vector) of the group member whose shift
+  /// parameter this segment uses; -1 for a segment that uses its own.
+  int GetShiftLeaderPos() const;
+  /// Does this segment take its constant shift from another segment of its group?
+  bool IsShiftGroupFollower() const;
+  /// Does another segment take its constant shift from this one?
+  bool HasShiftGroupFollowers() const;
+  /// Make this segment a follower of the group member at position pos: its own
+  /// shift stops being a fit parameter and starts at the given value.
+  void SetShiftGroupFollower(int pos, double shift);
+  void SetHasShiftGroupFollowers(bool);
   /// The whole lab-energy shift at a point's original lab energy: a + b*sqrt(E).
   double TotalEnergyShift(double labEnergy) const;
   /// Is this a composite segment, combining others by sum or ratio?
@@ -274,6 +287,9 @@ class ESegment {
   double energyShiftSqrtNominal_;
   double energyShiftSqrtError_;
   bool varyEnergyShiftSqrt_;
+  std::string shiftGroup_;
+  int shiftLeaderPos_;
+  bool hasShiftGroupFollowers_;
   bool isAdvanced_;
   int operationType_;
   std::string componentsList_;
