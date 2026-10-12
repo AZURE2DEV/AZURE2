@@ -2,6 +2,7 @@
 #define ADDTARGETINTDIALOG_H
 
 #include <QDialog>
+#include <QRadioButton>
 #include <string>
 #include <vector>
 
@@ -28,7 +29,16 @@ class AddTargetIntDialog : public QDialog {
  public:
   AddTargetIntDialog(QWidget *parent = 0);
   QCheckBox *isConvolutionCheck;
-  QCheckBox *isConvolutionDependentCheck;
+  // One Gaussian beam spread: its width is a constant or an expression sigma(E), and an expression is
+  // written in the lab frame (standard) or, for lines from before 2026-10, in the c.m. frame.
+  QRadioButton *sigmaConstantRadio;
+  QRadioButton *sigmaExpressionRadio;
+  QRadioButton *sigmaLabRadio;
+  QRadioButton *sigmaCmRadio;
+  QPushButton *convertToLabButton;
+  /*! c.m./lab energy ratio of the entrance pair the effect's segments share (0 = unknown or mixed); it
+   *  enables the exact rewrite of a legacy c.m. expression into the lab form. */
+  void setConversionFactor(double factor);
   QCheckBox *isTargetIntegrationCheck;
   QCheckBox *isQCoefficientCheck;
   QLineEdit *sigmaText;
@@ -90,7 +100,8 @@ class AddTargetIntDialog : public QDialog {
   void qCoefficientSpinChanged(int newNumber);
   void qCoefficientChanged(int row, int column);
 
-  void convCoefficientCheckChanged(bool checked);
+  void sigmaModeChanged();
+  void convertExpressionToLab();
   void convCoefficientSpinChanged(int newNumber);
   void convCoefficientChanged(int row, int column);
 
@@ -116,6 +127,7 @@ class AddTargetIntDialog : public QDialog {
   QGroupBox *udrBox;
 
   int selectedElement_;
+  double conversionFactor_ = 0.0;
   int activeElementNumber() const;
   void populateElementComboBox();
   void updateStoppingPowerFromElement(int element);

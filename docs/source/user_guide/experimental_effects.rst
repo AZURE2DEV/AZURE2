@@ -75,17 +75,50 @@ convolution or target integration. The required number depends on how rapidly
 the cross section changes with energy. Adjust using the spinner or enter a
 value directly.
 
-Gaussian Energy Convolution
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Gaussian Beam Spread
+^^^^^^^^^^^^^^^^^^^^
 
-Check **Include Gaussian Convolution** to convolve the calculated cross section
-with a Gaussian beam energy distribution.
+Check **Gaussian convolution** to average the calculated cross section over a
+Gaussian distribution of beam energies about each data point,
 
-**Sigma** (MeV)
-   The standard deviation :math:`\sigma_b` of the Gaussian convolution function
-   (not the FWHM; FWHM :math:`= 2.355\,\sigma_b`). Although beam resolution is
-   typically of order keV, the value must be entered in **MeV** (e.g., ``0.001``
-   for 1 keV), in the laboratory frame; AZURE2 converts it to the centre of mass.
+.. math::
+
+   Y(E_0) = \frac{\int K(E'; E_0)\, \sigma(E')\, dE'}{\int K(E'; E_0)\, dE'},
+   \qquad K \propto \exp\!\left[-\frac{(E' - E_0)^2}{2\,\sigma_b(E_0)^2}\right],
+
+integrated over :math:`E_0 \pm 3\sigma_b` and normalised by the kernel's own
+integral, so a constant cross section is reproduced exactly. The width is given
+in one of two ways, which are the same kernel:
+
+**Constant sigma** (MeV)
+   The standard deviation :math:`\sigma_b` (not the FWHM; FWHM
+   :math:`= 2.355\,\sigma_b`). Although beam resolution is typically of order
+   keV, the value must be entered in **MeV** (e.g., ``0.001`` for 1 keV), in the
+   laboratory frame; AZURE2 converts it to the centre of mass.
+
+**sigma(E)** (expression)
+   The same width as a function of energy, for a resolution that varies across
+   the segment -- a time-of-flight measurement, for instance, where
+   :math:`\sigma_E/E = 2\sigma_t/t` gives :math:`\sigma_E \propto E^{3/2}`.
+   The variable ``x`` is the laboratory energy in MeV and the value the
+   laboratory width in MeV, exactly as for the constant; the parameters are
+   ``a0``, ``a1``, ... with their values in the table (``a0*x^1.5`` with one
+   parameter, say). Experimental resolutions are quoted in the laboratory frame,
+   so no conversion is needed.
+
+.. note::
+
+   Projects saved before October 2026 wrote an energy-dependent width in a
+   different convention: the expression was evaluated at the **centre-of-mass**
+   energy and its value taken as the c.m. width. Such lines (recognisable by the
+   absence of the ``sigmalab`` keyword in the ``<targetInt>`` line) still
+   compute that way, and the dialog shows them as "c.m. (legacy)" with a button
+   to convert the expression to the laboratory form, an exact rewrite
+   :math:`\sigma_{\rm lab}(x) = \sigma_{\rm cm}(F x)/F` with
+   :math:`F = m_t/(m_p + m_t)` of the segment's entrance pair. Before October
+   2026 the constant-sigma kernel was also not normalised over its
+   :math:`\pm 3\sigma_b` window, so convolved segments came out 0.27 % low;
+   the normalised kernel removes that.
 
 Target Integration
 ^^^^^^^^^^^^^^^^^^

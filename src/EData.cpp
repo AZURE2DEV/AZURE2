@@ -581,51 +581,13 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
           double forwardDepth = 0.0;
           double backwardDepth = 0.0;
 
+          double targetThickness = 0.0;
           if (targetEffect->IsTargetIntegration()) {
-            double totalM = entrancePair->GetM(1) + entrancePair->GetM(2);
-            double targetThickness = cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
+            targetThickness = cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
             point->SetTargetThickness(targetThickness);
-            if (targetEffect->IsConvolution() || targetEffect->IsConvCoefficients()) {
-              if (targetEffect->IsConvCoefficients()) {
-                backwardDepth = targetThickness + targetEffect->convolutionRange * targetEffect->CalculateSigma(point->GetCMEnergy(), configure) * 5.0;
-                forwardDepth = targetEffect->convolutionRange * targetEffect->CalculateSigma(point->GetCMEnergy(), configure) * 5.0;
-              } else {
-                backwardDepth = targetThickness + targetEffect->convolutionRange * targetEffect->GetSigma() * 5.0;
-                forwardDepth = targetEffect->convolutionRange * targetEffect->GetSigma() * 5.0;
-              }
-              // Add straggling range extension at the deepest layer
-              if (targetEffect->IsStraggling()) {
-                double targetThickness_keV = targetThickness * 1000.0;  // Convert MeV to keV
-                double stragglingCoeff = targetEffect->GetStragglingCoefficient();
-                double stragglingSigma_keV = stragglingCoeff * std::sqrt(targetThickness_keV);
-                double stragglingSigma = stragglingSigma_keV / 1000.0;  // Convert back to MeV
-                double stragglingRange = targetEffect->convolutionRange * stragglingSigma;
-                backwardDepth += stragglingRange;
-              }
-            } else {
-              backwardDepth = targetThickness;
-              forwardDepth = 0.0;
-              // Add straggling range extension for target integration only
-              if (targetEffect->IsStraggling()) {
-                double targetThickness_keV = targetThickness * 1000.0;
-                double stragglingCoeff = targetEffect->GetStragglingCoefficient();
-                double stragglingSigma_keV = stragglingCoeff * std::sqrt(targetThickness_keV);
-                double stragglingSigma = stragglingSigma_keV / 1000.0;
-                double stragglingRange = targetEffect->convolutionRange * stragglingSigma;
-                backwardDepth += stragglingRange;
-              }
-            }
           }
-
-          else if (targetEffect->IsConvolution() || targetEffect->IsConvCoefficients()) {
-            if (targetEffect->IsConvCoefficients()) {
-              backwardDepth = targetEffect->convolutionRange * targetEffect->CalculateSigma(point->GetCMEnergy(), configure);
-              forwardDepth = targetEffect->convolutionRange * targetEffect->CalculateSigma(point->GetCMEnergy(), configure);
-            } else {
-              backwardDepth = targetEffect->convolutionRange * targetEffect->GetSigma();
-              forwardDepth = targetEffect->convolutionRange * targetEffect->GetSigma();
-            }
-          }
+          // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
+          targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, forwardDepth, backwardDepth);
 
           // Generate adaptive integration grid
           double startEnergy = point->GetCMEnergy() + forwardDepth;
@@ -746,51 +708,13 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
               double forwardDepth = 0.0;
               double backwardDepth = 0.0;
 
+              double targetThickness = 0.0;
               if (targetEffect->IsTargetIntegration()) {
-                double totalM = entrancePair->GetM(1) + entrancePair->GetM(2);
-                double targetThickness = cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
+                targetThickness = cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
                 point->SetTargetThickness(targetThickness);
-                if (targetEffect->IsConvolution() || targetEffect->IsConvCoefficients()) {
-                  if (targetEffect->IsConvCoefficients()) {
-                    backwardDepth = targetThickness + targetEffect->convolutionRange * targetEffect->CalculateSigma(point->GetCMEnergy(), configure) * 5.0;
-                    forwardDepth = targetEffect->convolutionRange * targetEffect->CalculateSigma(point->GetCMEnergy(), configure) * 5.0;
-                  } else {
-                    backwardDepth = targetThickness + targetEffect->convolutionRange * targetEffect->GetSigma() * 5.0;
-                    forwardDepth = targetEffect->convolutionRange * targetEffect->GetSigma() * 5.0;
-                  }
-                  // Add straggling range extension at the deepest layer (component segments)
-                  if (targetEffect->IsStraggling()) {
-                    double targetThickness_keV = targetThickness * 1000.0;  // Convert MeV to keV
-                    double stragglingCoeff = targetEffect->GetStragglingCoefficient();
-                    double stragglingSigma_keV = stragglingCoeff * std::sqrt(targetThickness_keV);
-                    double stragglingSigma = stragglingSigma_keV / 1000.0;  // Convert back to MeV
-                    double stragglingRange = targetEffect->convolutionRange * stragglingSigma;
-                    backwardDepth += stragglingRange;
-                  }
-                } else {
-                  backwardDepth = targetThickness;
-                  forwardDepth = 0.0;
-                  // Add straggling range extension for target integration only (component segments)
-                  if (targetEffect->IsStraggling()) {
-                    double targetThickness_keV = targetThickness * 1000.0;
-                    double stragglingCoeff = targetEffect->GetStragglingCoefficient();
-                    double stragglingSigma_keV = stragglingCoeff * std::sqrt(targetThickness_keV);
-                    double stragglingSigma = stragglingSigma_keV / 1000.0;
-                    double stragglingRange = targetEffect->convolutionRange * stragglingSigma;
-                    backwardDepth += stragglingRange;
-                  }
-                }
               }
-
-              else if (targetEffect->IsConvolution() || targetEffect->IsConvCoefficients()) {
-                if (targetEffect->IsConvCoefficients()) {
-                  backwardDepth = targetEffect->convolutionRange * targetEffect->CalculateSigma(point->GetCMEnergy(), configure);
-                  forwardDepth = targetEffect->convolutionRange * targetEffect->CalculateSigma(point->GetCMEnergy(), configure);
-                } else {
-                  backwardDepth = targetEffect->convolutionRange * targetEffect->GetSigma();
-                  forwardDepth = targetEffect->convolutionRange * targetEffect->GetSigma();
-                }
-              }
+              // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
+              targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, forwardDepth, backwardDepth);
 
               // Generate adaptive integration grid for component segment
               double startEnergy = point->GetCMEnergy() + forwardDepth;

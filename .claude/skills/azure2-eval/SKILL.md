@@ -2055,17 +2055,35 @@ complete:
   and 14C(p,n) polarization data, 5 segments each). `tests/polarization_product` was deleted
   with the feature.
 
-- 2026-09-29 -- ENERGY-DEPENDENT CONVOLUTION (`<targetInt>` convolution equation, isConvCoefficients):
-  the equation is evaluated at the CENTRE-OF-MASS energy of each sub-point and its value is
-  used directly as the c.m. sigma (no lab->c.m. scaling, unlike the fixed "Sigma" field which
-  is entered in the lab and converted). So sigma_b(E) must be written as a c.m. width of the
-  c.m. energy; a lab-frame time-of-flight derivation (Cierjacks 16O+n in 13C+a, Morgan 14N+n
-  in 11B+a) is off by the mass ratio (16/17, 14/15) on both axes unless converted. Until
-  this date the +-3 sigma grid window was sized from sigma_b(E_lab) while the integrand used
-  sigma_b(E_cm) -- fixed in EData.cpp (8 sites); on the Cierjacks segment-92 project the
-  narrower window moved the model by <= 1.5e-3 (chi2 247.5 -> 248.9 of 111 points), which
-  is also the size of the +-3 sigma truncation itself. The kernel is renormalized by its own
-  integral over the window, so a constant cross section is always reproduced exactly.
+- 2026-10-11 -- ONE GAUSSIAN BEAM SPREAD (supersedes the 2026-09-29 note below). The constant
+  "Sigma" field and the sigma(E) expression are one kernel now (`TargetEffect::SigmaCM`,
+  `EPoint::GridQuadrature`): a Gaussian of width sigma_b(E0) about the point, +-3 sigma,
+  normalised by its own integral, for the convolution alone, inside target integration (in
+  quadrature with straggling) and for straggling alone. What changed numerically: the
+  constant-sigma result is the old one x 1/erf(3/sqrt2) = 1.00271 at every point (it was never
+  normalised); target+beam moves by <= 3e-3, straggling by <= 1.6e-2 near the surface; a legacy
+  expression moves by <= 3e-4 (its width is now taken at the point's energy, not at each
+  sub-point). Plain target integration, UDR and beam profile are bit-identical.
+  FRAMES: a NEW expression is lab in, lab out, exactly like the constant (experimental
+  resolutions are quoted in the lab; TOF: sigma_E/E = 2 sigma_t/t, sigma_E ~ E^1.5), and the
+  `.azr` line carries the keyword `sigmalab` after the straggling/grid numbers (before any
+  ranges or `beamprofile`/`udr` block). A line WITHOUT the keyword is the old convention
+  below and computes as it did -- the 13C+a Cierjacks projects stay valid unconverted. The
+  GUI's Experimental Effects dialog has one "Gaussian convolution" box with a constant/
+  expression choice and a lab/c.m. choice plus "Convert to lab form" (exact rewrite
+  sigma_lab(x) = sigma_cm(F x)/F, F = m_t/(m_p+m_t), offered when all segments of the entry
+  share an entrance pair); pyazr: `add_target_effect(..., sigma_expression="a0*x^1.5",
+  sigma_coefficients=[...])` writes the lab form. Check: `tests/convolution_unify/check.sh`
+  (11 comparisons against reference outputs of the last pre-change build).
+- 2026-09-29 -- ENERGY-DEPENDENT CONVOLUTION, LEGACY CONVENTION (lines without `sigmalab`):
+  the equation is evaluated at the CENTRE-OF-MASS energy and its value is used directly as the
+  c.m. sigma (no lab->c.m. scaling, unlike the fixed "Sigma" field which is entered in the lab
+  and converted). So sigma_b(E) must be written as a c.m. width of the c.m. energy; a lab-frame
+  time-of-flight derivation (Cierjacks 16O+n in 13C+a, Morgan 14N+n in 11B+a) is off by the
+  mass ratio (16/17, 14/15) on both axes unless converted. Until this date the +-3 sigma grid
+  window was sized from sigma_b(E_lab) while the integrand used sigma_b(E_cm) -- fixed in
+  EData.cpp; on the Cierjacks segment-92 project the narrower window moved the model by
+  <= 1.5e-3 (chi2 247.5 -> 248.9 of 111 points). Prefer the lab form for anything new.
 
 - 2026-10-08 -- USER-DEFINED NUMERICAL RESOLUTION FUNCTION (SAMMY UDR) in AZURE2, branch
   `feature/udr-resolution`, merged into dev 2026-10-09 (2e109f8) and installed in `~/bin/AZURE2`. A `<targetInt>` line

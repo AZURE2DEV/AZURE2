@@ -89,6 +89,7 @@ AZURESetup::AZURESetup() :
   segmentsTab->setPairsModel(pairsTab->getPairsModel());
 
   targetIntTab = new TargetIntTab;
+  targetIntTab->setModels(segmentsTab->getSegmentsDataModel(), pairsTab->getPairsModel());
 
   nuclearPotentialTab = new NuclearPotentialTab();
   // The tab edits one particle pair at a time, so it needs the pair list.  The

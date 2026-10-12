@@ -111,6 +111,12 @@ lines, which a reader that does not know a key skips:
    Momentum** of the Levels and Channels tab. Absent: the largest :math:`l` of
    any particle channel in the ``<levels>`` block.
 
+A ``<targetInt>`` line may end with keyword blocks (``beamprofile ...``,
+``udr ...``, ``sigmalab``). ``sigmalab`` marks an energy-dependent beam-spread
+expression as laboratory in, laboratory out (see
+:doc:`../user_guide/experimental_effects`); an expression without it is read in
+the pre-October-2026 centre-of-mass convention.
+
 .. tip::
 
    The recommended practice is to always use the GUI to create and edit

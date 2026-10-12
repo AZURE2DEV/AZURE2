@@ -16,6 +16,7 @@
 #include <iomanip>
 
 #include "AddTargetIntDialog.h"
+#include <QRegularExpression>
 #include "ElementMap.h"
 
 #ifdef USE_ERYA
@@ -60,11 +61,19 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   numPointsSpin->setSingleStep(10);
   numPointsSpin->setValue(10);
 
-  isConvolutionCheck = new QCheckBox(tr("Include Gaussian Convolution"));
+  isConvolutionCheck = new QCheckBox(tr("Gaussian convolution"));
   isConvolutionCheck->setChecked(false);
+  isConvolutionCheck->setToolTip(tr("Average the cross section over a Gaussian spread of beam energies about each point, "
+                                    "normalised over +-3 sigma. The width is a constant or a function of energy; both are the same kernel."));
   connect(isConvolutionCheck, SIGNAL(toggled(bool)), this, SLOT(convolutionCheckChanged(bool)));
   sigmaText = new QLineEdit;
   sigmaText->setEnabled(false);
+  sigmaConstantRadio = new QRadioButton(tr("constant \u03c3 [MeV, lab]:"));
+  sigmaExpressionRadio = new QRadioButton(tr("\u03c3(E)"));
+  sigmaConstantRadio->setChecked(true);
+  sigmaConstantRadio->setEnabled(false);
+  sigmaExpressionRadio->setEnabled(false);
+  connect(sigmaConstantRadio, SIGNAL(toggled(bool)), this, SLOT(sigmaModeChanged()));
 
   isTargetIntegrationCheck = new QCheckBox(tr("Include Target Integration"));
   isTargetIntegrationCheck->setChecked(false);
@@ -181,9 +190,19 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   qlabelList.append(QString(tr("Value")));
   qCoefficientTable->setHorizontalHeaderLabels(qlabelList);
 
-  isConvolutionDependentCheck = new QCheckBox(tr("Include Energy Dependent Gaussian Convolution"));
-  isConvolutionDependentCheck->setChecked(false);
-  connect(isConvolutionDependentCheck, SIGNAL(toggled(bool)), this, SLOT(convCoefficientCheckChanged(bool)));
+  sigmaLabRadio = new QRadioButton(tr("x and \u03c3 in lab MeV (standard)"));
+  sigmaCmRadio = new QRadioButton(tr("x and \u03c3 in c.m. MeV (legacy, before Oct 2026)"));
+  sigmaLabRadio->setChecked(true);
+  sigmaLabRadio->setToolTip(tr("Experimental resolutions are quoted in the laboratory frame; AZURE2 converts to the centre of mass, "
+                               "as it does for the constant sigma."));
+  sigmaCmRadio->setToolTip(tr("How expressions were read before October 2026: evaluated at the c.m. energy, the value the c.m. width. "
+                              "Kept so that older projects compute as they did; convert them to the lab form when you can."));
+  convertToLabButton = new QPushButton(tr("Convert to lab form"));
+  convertToLabButton->setEnabled(false);
+  convertToLabButton->setToolTip(tr("Rewrite the expression exactly: sigma_lab(x) = sigma_cm(F x) / F with F = m_t / (m_p + m_t) of the "
+                                    "segments' entrance pair. Available when every segment of the list has the same entrance pair."));
+  connect(convertToLabButton, SIGNAL(clicked()), this, SLOT(convertExpressionToLab()));
+  connect(sigmaCmRadio, SIGNAL(toggled(bool)), this, SLOT(sigmaModeChanged()));
 
   convolutionEqText = new QLineEdit;
   numConvCoefficientSpin = new QSpinBox;
@@ -320,8 +339,12 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
 
   QGridLayout *checkBoxLayout = new QGridLayout;
   checkBoxLayout->addWidget(isConvolutionCheck, 0, 0);
-  checkBoxLayout->addWidget(new QLabel(tr("Sigma [MeV]:")), 0, 1, Qt::AlignRight);
-  checkBoxLayout->addWidget(sigmaText, 0, 2);
+  QHBoxLayout *sigmaModeLayout = new QHBoxLayout;
+  sigmaModeLayout->addWidget(sigmaConstantRadio);
+  sigmaModeLayout->addWidget(sigmaText, 1);
+  sigmaModeLayout->addSpacing(12);
+  sigmaModeLayout->addWidget(sigmaExpressionRadio);
+  checkBoxLayout->addLayout(sigmaModeLayout, 0, 1, 1, 2);
 
   checkBoxLayout->addWidget(isTargetIntegrationCheck, 1, 0);
   checkBoxLayout->addWidget(new QLabel(tr("Active Density [atoms/cm^2]:")), 1, 1, Qt::AlignRight);
@@ -392,19 +415,21 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   qCoefficientBox->setLayout(qCoefficientLayout);
   qCoefficientBox->hide();
 
-  QGridLayout *energyConvolutionCheckBoxLayout = new QGridLayout;
-  energyConvolutionCheckBoxLayout->addWidget(isConvolutionDependentCheck, 0, 0);
-  energyConvolutionCheckBoxLayout->addItem(new QSpacerItem(1, 20), 0, 1);
-  energyConvolutionCheckBoxLayout->addWidget(new QLabel(tr("Number of Coefficients:")), 0, 2, Qt::AlignRight);
-  energyConvolutionCheckBoxLayout->addWidget(numConvCoefficientSpin, 0, 3);
-  energyConvolutionCheckBoxLayout->setColumnStretch(1, 1);
-
-  convCoefficientBox = new QGroupBox(tr("Convolution Coefficients"));
+  convCoefficientBox = new QGroupBox(tr("Beam spread \u03c3(E)"));
   QVBoxLayout *convCoefficientLayout = new QVBoxLayout;
   QHBoxLayout *equationConvLayout = new QHBoxLayout;
-  equationConvLayout->addWidget(new QLabel(tr("y=")));
-  equationConvLayout->addWidget(convolutionEqText);
+  equationConvLayout->addWidget(new QLabel(tr("\u03c3 =")));
+  equationConvLayout->addWidget(convolutionEqText, 1);
+  equationConvLayout->addSpacing(12);
+  equationConvLayout->addWidget(new QLabel(tr("Number of Coefficients:")));
+  equationConvLayout->addWidget(numConvCoefficientSpin);
   convCoefficientLayout->addLayout(equationConvLayout);
+  QHBoxLayout *frameLayout = new QHBoxLayout;
+  frameLayout->addWidget(sigmaLabRadio);
+  frameLayout->addWidget(sigmaCmRadio);
+  frameLayout->addStretch(1);
+  frameLayout->addWidget(convertToLabButton);
+  convCoefficientLayout->addLayout(frameLayout);
   convCoefficientLayout->addWidget(convCoefficientTable);
   convCoefficientBox->setLayout(convCoefficientLayout);
   convCoefficientBox->hide();
@@ -452,11 +477,10 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   mainLayout->addLayout(topLayout);
   mainLayout->addLayout(adaptiveGridLayout);
   mainLayout->addLayout(checkBoxLayout);
+  mainLayout->addWidget(convCoefficientBox);
   mainLayout->addWidget(stoppingPowerBox);
   mainLayout->addLayout(qCoefficientCheckBoxLayout);
   mainLayout->addWidget(qCoefficientBox);
-  mainLayout->addLayout(energyConvolutionCheckBoxLayout);
-  mainLayout->addWidget(convCoefficientBox);
   mainLayout->addLayout(beamProfileCheckBoxLayout);
   mainLayout->addWidget(beamProfileBox);
   mainLayout->addWidget(isUdrCheck);
@@ -546,8 +570,7 @@ void AddTargetIntDialog::beamProfileCheckChanged(bool checked) {
   } else {
     beamProfileBox->hide();
     numBeamComponentSpin->setEnabled(false);
-    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked() &&
-        !isConvolutionDependentCheck->isChecked())
+    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked())
       numPointsSpin->setEnabled(false);
     if (!isTargetIntegrationCheck->isChecked()) {
       resonanceWidthMultiplierSpin->setEnabled(false);
@@ -576,13 +599,46 @@ void AddTargetIntDialog::beamProfileChanged(int row, int column) {
 }
 
 void AddTargetIntDialog::convolutionCheckChanged(bool checked) {
-  if (checked) {
-    sigmaText->setEnabled(true);
+  sigmaConstantRadio->setEnabled(checked);
+  sigmaExpressionRadio->setEnabled(checked);
+  if (checked)
     numPointsSpin->setEnabled(true);
+  else if (!isTargetIntegrationCheck->isChecked())
+    numPointsSpin->setEnabled(false);
+  sigmaModeChanged();
+}
+
+void AddTargetIntDialog::sigmaModeChanged() {
+  bool on = isConvolutionCheck->isChecked();
+  bool expression = on && sigmaExpressionRadio->isChecked();
+  sigmaText->setEnabled(on && !expression);
+  if (expression) {
+    convCoefficientBox->show();
+    numConvCoefficientSpin->setEnabled(true);
   } else {
-    sigmaText->setEnabled(false);
-    if (!isTargetIntegrationCheck->isChecked()) numPointsSpin->setEnabled(false);
+    convCoefficientBox->hide();
+    numConvCoefficientSpin->setEnabled(false);
+    this->adjustSize();
   }
+  convertToLabButton->setEnabled(expression && sigmaCmRadio->isChecked() && conversionFactor_ > 0.0);
+}
+
+void AddTargetIntDialog::setConversionFactor(double factor) {
+  conversionFactor_ = factor;
+  convertToLabButton->setEnabled(isConvolutionCheck->isChecked() && sigmaExpressionRadio->isChecked() &&
+                                 sigmaCmRadio->isChecked() && conversionFactor_ > 0.0);
+}
+
+// sigma_lab(x) = sigma_cm(F x) / F: substitute the variable (whole-word x; the x of exp() is left alone)
+// and divide, which is exact, then mark the line as lab.
+void AddTargetIntDialog::convertExpressionToLab() {
+  if (!(conversionFactor_ > 0.0)) return;
+  QString f = QString::number(conversionFactor_, 'g', 12);
+  QString expr = convolutionEqText->text().trimmed();
+  if (expr.isEmpty()) return;
+  expr.replace(QRegularExpression("\\bx\\b"), "(" + f + "*x)");
+  convolutionEqText->setText("(" + expr + ")/" + f);
+  sigmaLabRadio->setChecked(true);
 }
 
 void AddTargetIntDialog::targetIntCheckChanged(bool checked) {
@@ -638,19 +694,6 @@ void AddTargetIntDialog::qCoefficientCheckChanged(bool checked) {
   } else {
     qCoefficientBox->hide();
     numQCoefficientSpin->setEnabled(false);
-    this->adjustSize();
-  }
-}
-
-void AddTargetIntDialog::convCoefficientCheckChanged(bool checked) {
-  if (checked) {
-    convCoefficientBox->show();
-    numConvCoefficientSpin->setEnabled(true);
-    numPointsSpin->setEnabled(true);
-  } else {
-    convCoefficientBox->hide();
-    numConvCoefficientSpin->setEnabled(false);
-    numPointsSpin->setEnabled(false);
     this->adjustSize();
   }
 }
@@ -745,8 +788,7 @@ void AddTargetIntDialog::udrCheckChanged(bool checked) {
     pointsPerWidthSpin->setEnabled(true);
   } else {
     udrBox->hide();
-    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked() &&
-        !isConvolutionDependentCheck->isChecked() && !isBeamProfileCheck->isChecked())
+    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked() && !isBeamProfileCheck->isChecked())
       numPointsSpin->setEnabled(false);
   }
 }

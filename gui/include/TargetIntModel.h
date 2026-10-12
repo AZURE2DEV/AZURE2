@@ -7,7 +7,7 @@
 Q_DECLARE_METATYPE(QList<double>);
 
 struct TargetIntData {
-  static const int SIZE = 34;  // column 33: derived, display-only summary of the effect types
+  static const int SIZE = 35;  // column 33: derived, display-only summary of the effect types; 34: sigmaLab
   int isActive;
   QString segmentsList;
   int numPoints;
@@ -48,6 +48,9 @@ struct TargetIntData {
   double udrBurstFwhm = 0.;          // ns, Gaussian FWHM; 0 = none
   double udrChannelWidth = 0.;       // ns, rectangular; 0 = none
   bool udrCentred = true;            // re-centre the tabulated function on its centroid
+  // A sigma(E) expression (isConvCoefficients) is lab in, lab out when this is set (the `sigmalab`
+  // keyword), as the constant sigma is; false is the pre-2026-10 convention, c.m. in, c.m. out.
+  bool sigmaLab = false;
 };
 
 /*!

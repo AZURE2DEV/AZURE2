@@ -7,6 +7,8 @@
 #include <QSignalMapper>
 #include <QPointer>
 #include "TargetIntModel.h"
+#include "SegmentsDataModel.h"
+#include "PairsModel.h"
 #include "AddTargetIntDialog.h"
 
 QT_BEGIN_NAMESPACE
@@ -26,6 +28,11 @@ class TargetIntTab : public QWidget {
 
  public:
   TargetIntTab(QWidget *parent = 0);
+  /*! The segments and pairs, so an effect's entrance pair (and its c.m./lab energy ratio) can be looked up. */
+  void setModels(SegmentsDataModel *segments, PairsModel *pairs);
+  /*! c.m./lab energy ratio m_t/(m_p+m_t) of the entrance pair shared by every segment in a key list
+   *  ("1,3-5"); 0 when the pairs differ or a key is unknown. */
+  double conversionFactorFor(const QString &segmentsList) const;
   TargetIntModel *getTargetIntModel();
   bool writeFile(QTextStream &outStream);
   bool readFile(QTextStream &inStream);
@@ -41,6 +48,8 @@ class TargetIntTab : public QWidget {
 
  private:
   TargetIntModel *targetIntModel;
+  SegmentsDataModel *segmentsModel_ = nullptr;
+  PairsModel *pairsModel_ = nullptr;
   QTableView *targetIntView;
   QPushButton *addButton;
   QPushButton *deleteButton;

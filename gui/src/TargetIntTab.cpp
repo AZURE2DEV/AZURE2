@@ -1,4 +1,5 @@
 #include <QGridLayout>
+#include <cmath>
 #include <QCheckBox>
 #include <QSpacerItem>
 #include <QLineEdit>
@@ -86,10 +87,7 @@ void TargetIntTab::addLine() {
     newLine.segmentsList = aDialog.segmentsListText->text();
     newLine.numPoints = aDialog.numPointsSpin->value();
 
-    if (aDialog.isConvolutionCheck->isChecked())
-      newLine.isConvolution = true;
-    else
-      newLine.isConvolution = false;
+    newLine.isConvolution = aDialog.isConvolutionCheck->isChecked() && aDialog.sigmaConstantRadio->isChecked();
     newLine.sigma = aDialog.sigmaText->text().toDouble();
 
     if (aDialog.isTargetIntegrationCheck->isChecked())
@@ -104,9 +102,10 @@ void TargetIntTab::addLine() {
     newLine.isQCoefficients = (aDialog.isQCoefficientCheck->isChecked()) ? (true) : (false);
     for (int i = 0; i < aDialog.numQCoefficientSpin->value(); i++) newLine.qCoefficients.append(aDialog.tempQCoefficients.at(i));
 
-    newLine.isConvCoefficients = (aDialog.isConvolutionDependentCheck->isChecked()) ? (true) : (false);
+    newLine.isConvCoefficients = aDialog.isConvolutionCheck->isChecked() && aDialog.sigmaExpressionRadio->isChecked();
     for (int i = 0; i < aDialog.numConvCoefficientSpin->value(); i++) newLine.convCoefficients.append(aDialog.tempConvCoefficients.at(i));
     newLine.convolutionEq = aDialog.convolutionEqText->text();
+    newLine.sigmaLab = aDialog.sigmaLabRadio->isChecked();
 
     newLine.isStraggling = aDialog.isStraggling->isChecked();
     newLine.stragglingCoefficient = aDialog.stragglingCoefficientText->text().toDouble();
@@ -205,6 +204,8 @@ void TargetIntTab::addLine(TargetIntData line) {
   targetIntModel->setData(index, line.udrChannelWidth, Qt::EditRole);
   index = targetIntModel->index(lines.size(), 32, QModelIndex());
   targetIntModel->setData(index, line.udrCentred, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 34, QModelIndex());
+  targetIntModel->setData(index, line.sigmaLab, Qt::EditRole);
 
   targetIntView->resizeRowsToContents();
 }
@@ -260,6 +261,9 @@ void TargetIntTab::editLine() {
   i = targetIntModel->index(index.row(), 14, QModelIndex());
   var = targetIntModel->data(i, Qt::EditRole);
   QString convolutionEq = var.toString();
+  i = targetIntModel->index(index.row(), 34, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  bool sigmaLab = var.toBool();
   i = targetIntModel->index(index.row(), 15, QModelIndex());
   var = targetIntModel->data(i, Qt::EditRole);
   bool isStraggling = var.toBool();
@@ -320,10 +324,7 @@ void TargetIntTab::editLine() {
   aDialog.segmentsListText->setText(segmentsList);
   aDialog.numPointsSpin->setValue(numPoints);
 
-  if (isConvolution)
-    aDialog.isConvolutionCheck->setChecked(true);
-  else
-    aDialog.isConvolutionCheck->setChecked(false);
+  aDialog.isConvolutionCheck->setChecked(isConvolution || isConvCoefficient);
   aDialog.sigmaText->setText(sigma);
 
   if (isTargetIntegration)
@@ -342,13 +343,13 @@ void TargetIntTab::editLine() {
   aDialog.tempQCoefficients = qCoefficients;
   aDialog.numQCoefficientSpin->setValue(qCoefficients.size());
 
-  if (isConvCoefficient)
-    aDialog.isConvolutionDependentCheck->setChecked(true);
-  else
-    aDialog.isConvolutionDependentCheck->setChecked(false);
   aDialog.tempConvCoefficients = convCoefficients;
   aDialog.numConvCoefficientSpin->setValue(convCoefficients.size());
   aDialog.convolutionEqText->setText(convolutionEq);
+  // the frame of an existing expression is whatever the file says; a line without the keyword is legacy c.m.
+  (isConvCoefficient ? aDialog.sigmaExpressionRadio : aDialog.sigmaConstantRadio)->setChecked(true);
+  (sigmaLab || !isConvCoefficient ? aDialog.sigmaLabRadio : aDialog.sigmaCmRadio)->setChecked(true);
+  aDialog.setConversionFactor(conversionFactorFor(segmentsList));
 
   aDialog.isStraggling->setChecked(isStraggling);
   aDialog.stragglingCoefficientText->setText(QString::number(stragglingCoefficient));
@@ -387,8 +388,7 @@ void TargetIntTab::editLine() {
       targetIntModel->setData(i, newNumPoints, Qt::EditRole);
     }
 
-    bool newIsConvolution = false;
-    if (aDialog.isConvolutionCheck->isChecked()) newIsConvolution = true;
+    bool newIsConvolution = aDialog.isConvolutionCheck->isChecked() && aDialog.sigmaConstantRadio->isChecked();
     if (isConvolution != newIsConvolution) {
       i = targetIntModel->index(index.row(), 3, QModelIndex());
       targetIntModel->setData(i, newIsConvolution, Qt::EditRole);
@@ -444,8 +444,7 @@ void TargetIntTab::editLine() {
       targetIntModel->setData(i, QVariant::fromValue<QList<double>>(qCoefficients), Qt::EditRole);
     }
 
-    bool newIsConvCoefficient = false;
-    if (aDialog.isConvolutionDependentCheck->isChecked()) newIsConvCoefficient = true;
+    bool newIsConvCoefficient = aDialog.isConvolutionCheck->isChecked() && aDialog.sigmaExpressionRadio->isChecked();
     if (isConvCoefficient != newIsConvCoefficient) {
       i = targetIntModel->index(index.row(), 12, QModelIndex());
       targetIntModel->setData(i, newIsConvCoefficient, Qt::EditRole);
@@ -462,6 +461,11 @@ void TargetIntTab::editLine() {
     if (convolutionEq != newconvolutionEq) {
       i = targetIntModel->index(index.row(), 14, QModelIndex());
       targetIntModel->setData(i, newconvolutionEq, Qt::EditRole);
+    }
+    bool newSigmaLab = aDialog.sigmaLabRadio->isChecked();
+    if (sigmaLab != newSigmaLab) {
+      i = targetIntModel->index(index.row(), 34, QModelIndex());
+      targetIntModel->setData(i, newSigmaLab, Qt::EditRole);
     }
 
     bool newIsStraggling = aDialog.isStraggling->isChecked();
@@ -641,6 +645,9 @@ bool TargetIntTab::writeFile(QTextStream &outStream) {
     if (!lines.at(i).applyRanges.trimmed().isEmpty() || lines.at(i).transitionWidth > 0. || lines.at(i).autoTolerance > 0.) {
       outStream << " \"" << lines.at(i).applyRanges.trimmed() << "\" " << lines.at(i).transitionWidth << " " << lines.at(i).autoTolerance;
     }
+    // An expression written in the lab frame carries its keyword; a line without it is read (by this
+    // tab and by the engine) in the pre-2026-10 c.m. convention, so older projects compute as they did.
+    if (lines.at(i).isConvCoefficients && lines.at(i).sigmaLab) outStream << " sigmalab";
     // Optional beam-profile kernel, last on the line and introduced by its own
     // keyword: every older reader probes for a digit or a quote here, so an
     // alphabetic token stops it cleanly and the rest of the line is ignored
@@ -809,6 +816,14 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
         tempIsUdr = !udrFile.isEmpty() && udrFlightPath > 0.;
         if (!tempIsUdr) udrFile.clear();
       }
+      bool tempSigmaLab = false;
+      {
+        QRegularExpression labKeyword("(^|\\s)sigmalab(?=\\s|$)");
+        if (remaining.contains(labKeyword)) {
+          tempSigmaLab = true;
+          remaining = remaining.replace(labKeyword, " ").simplified();
+        }
+      }
       const QString beamKeyword("beamprofile");
       int beamPos = remaining.indexOf(beamKeyword);
       if (beamPos >= 0) {
@@ -876,7 +891,7 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
       bool tempIsTargetIntegration = false;
       if (isTargetIntegration == 1) tempIsTargetIntegration = true;
 
-      TargetIntData newLine = {isActive, segmentsList.remove('\"'), numPoints, tempIsConvolution, sigma, tempIsTargetIntegration, density, stoppingPowerEq.remove('\"'), numParameters, parameters, tempIsQCoefficient, qCoefficients, tempIsConvCoefficient, convCoefficients, convolutionEq.remove('\"'), tempIsStraggling, stragglingCoefficient, resonanceWidthMultiplier, pointsPerWidth, applyRanges, transitionWidth, autoTolerance, tempIsBeamProfile, beamProfile, beamTpcSigma, beamTruncation, beamPhotodissociation == 1, tempIsUdr, udrFile, udrFlightPath, udrBurst, udrChannel, udrCentred != 0};
+      TargetIntData newLine = {isActive, segmentsList.remove('\"'), numPoints, tempIsConvolution, sigma, tempIsTargetIntegration, density, stoppingPowerEq.remove('\"'), numParameters, parameters, tempIsQCoefficient, qCoefficients, tempIsConvCoefficient, convCoefficients, convolutionEq.remove('\"'), tempIsStraggling, stragglingCoefficient, resonanceWidthMultiplier, pointsPerWidth, applyRanges, transitionWidth, autoTolerance, tempIsBeamProfile, beamProfile, beamTpcSigma, beamTruncation, beamPhotodissociation == 1, tempIsUdr, udrFile, udrFlightPath, udrBurst, udrChannel, udrCentred != 0, tempSigmaLab};
       addLine(newLine);
     }
   }
@@ -898,4 +913,36 @@ void TargetIntTab::showInfo(int which, QString title) {
     } else
       infoDialog[which]->raise();
   }
+}
+
+void TargetIntTab::setModels(SegmentsDataModel *segments, PairsModel *pairs) {
+  segmentsModel_ = segments;
+  pairsModel_ = pairs;
+}
+
+double TargetIntTab::conversionFactorFor(const QString &segmentsList) const {
+  if (!segmentsModel_ || !pairsModel_) return 0.0;
+  QList<SegmentsDataData> segments = segmentsModel_->getLines();
+  QList<PairsData> pairs = pairsModel_->getPairs();
+  double factor = 0.0;
+  for (const QString &item : segmentsList.split(',', Qt::SkipEmptyParts)) {
+    QString range = item.trimmed();
+    int dash = range.indexOf('-', 1);
+    bool okLo = false, okHi = false;
+    int lo = (dash > 0 ? range.left(dash) : range).toInt(&okLo);
+    int hi = (dash > 0 ? range.mid(dash + 1) : range).toInt(&okHi);
+    if (!okLo || !okHi || lo < 1 || hi < lo) return 0.0;
+    for (int key = lo; key <= hi; key++) {
+      if (key > segments.size()) return 0.0;
+      int pairIndex = segments.at(key - 1).entrancePairIndex;
+      if (pairIndex < 1 || pairIndex > pairs.size()) return 0.0;
+      const PairsData &pair = pairs.at(pairIndex - 1);
+      double f = pair.heavyM / (pair.lightM + pair.heavyM);
+      if (factor == 0.0)
+        factor = f;
+      else if (std::fabs(f - factor) > 1.0e-9 * factor)
+        return 0.0;
+    }
+  }
+  return factor;
 }

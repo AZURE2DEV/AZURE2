@@ -16,6 +16,11 @@
 #include <cmath>
 #include <iostream>
 #include "TargetIntTab.h"
+#include "AddTargetIntDialog.h"
+#include <QCheckBox>
+#include <QLineEdit>
+#include <QRadioButton>
+#include <cstdlib>
 #include "TargetIntModel.h"
 #include "Config.h"
 struct SegPairs {int firstPair; int secondPair;};
@@ -217,6 +222,47 @@ int main(int argc, char** argv) {
   }
   ok("both blocks written back in order",
      out10.indexOf("beamprofile 1 ") >= 0 && out10.indexOf(" udr \"nTOF.txt\" 185 0 3.2 0") > out10.indexOf("beamprofile 1 "), out10);
+
+  // 11. One Gaussian beam spread: an expression written in the lab frame carries the sigmalab keyword and
+  // keeps it through a round trip; a legacy line without it stays without it (and is read as c.m.).
+  QString labLine = "1 \"4\" 60 0 0 0 0 \"\" 0 0 0 1 \"a0*x^1.5\" 1 0.0092 0 0.04 20 50 sigmalab\n</targetInt>\n";
+  QString out11 = roundTrip(tab, labLine, readOk);
+  ok("read a sigmalab line", readOk);
+  lines = tab.getTargetIntModel()->getLines();
+  if (lines.size() == 1) {
+    ok("expression read with the lab flag", lines.at(0).isConvCoefficients && lines.at(0).sigmaLab && lines.at(0).convolutionEq == "a0*x^1.5", lines.at(0).convolutionEq);
+    ok("constant-sigma flag off for an expression line", !lines.at(0).isConvolution);
+  }
+  ok("sigmalab written back, before any keyword block", out11.contains(" 0.04 20 50 sigmalab") || out11.contains(" 50 sigmalab"), out11);
+  QString legacyLine = "1 \"4\" 60 0 0 0 0 \"\" 0 0 0 1 \"a0*x^1.5\" 1 0.0092 0 0.04 20 50\n</targetInt>\n";
+  QString out12 = roundTrip(tab, legacyLine, readOk);
+  lines = tab.getTargetIntModel()->getLines();
+  ok("legacy expression line read as c.m.", readOk && lines.size() == 1 && lines.at(0).isConvCoefficients && !lines.at(0).sigmaLab);
+  ok("no sigmalab added to a legacy line", !out12.contains("sigmalab"), out12);
+  QString ranged = "1 \"4\" 60 0 0 0 0 \"\" 0 0 0 1 \"a0\" 1 0.03 0 0.04 20 50 \"1.5-2.5\" 0.1 0 sigmalab beamprofile 1 2.5 0.3 -1.5 1 0.07 0 1\n</targetInt>\n";
+  QString out13 = roundTrip(tab, ranged, readOk);
+  lines = tab.getTargetIntModel()->getLines();
+  ok("sigmalab read between a ranges block and a beam profile", readOk && lines.size() == 1 && lines.at(0).sigmaLab && lines.at(0).isBeamProfile && lines.at(0).applyRanges == "1.5-2.5",
+     lines.size() == 1 ? lines.at(0).applyRanges : QString("(no line)"));
+  ok("and written back in that order", out13.indexOf("\"1.5-2.5\"") < out13.indexOf("sigmalab") && out13.indexOf("sigmalab") < out13.indexOf("beamprofile"), out13);
+
+  // 12. The dialog: one checkbox, a constant or an expression; the legacy c.m. choice converts exactly.
+  {
+    AddTargetIntDialog dialog;
+    dialog.isConvolutionCheck->setChecked(true);
+    dialog.sigmaExpressionRadio->setChecked(true);
+    dialog.convolutionEqText->setText("a0*x^1.5+exp(-x)");
+    dialog.sigmaCmRadio->setChecked(true);
+    dialog.setConversionFactor(0.5);
+    dialog.convertExpressionToLab();
+    ok("c.m. -> lab rewrite substitutes x and divides, leaving exp alone",
+       dialog.convolutionEqText->text() == "(a0*(0.5*x)^1.5+exp(-(0.5*x)))/0.5", dialog.convolutionEqText->text());
+    ok("after the rewrite the line is marked lab", dialog.sigmaLabRadio->isChecked());
+    if (const char* stem = std::getenv("AZURE2_TARGET_INT_PNG")) {
+      dialog.show(); QApplication::processEvents();
+      dialog.grab().save(QString("%1_expression.png").arg(stem));
+    }
+  }
 
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;
   return fails ? 1 : 0;

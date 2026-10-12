@@ -1228,6 +1228,7 @@ class AzrModel:
         return self
 
     def add_target_effect(self, segments, n_points=200, gaussian_sigma=None,
+                          sigma_expression=None, sigma_coefficients=(),
                           beam_profile=None, tpc_sigma=0.0, truncation=0.0,
                           photodissociation=False, q_coefficients=None,
                           resonance_width_multiplier=20.0, points_per_width=50.0,
@@ -1240,8 +1241,16 @@ class AzrModel:
         ``<segmentsData>`` line, active or not, and a ``<segmentsTest>`` line
         with the same key gets the effect too (see the azure2-eval skill).
 
-        ``gaussian_sigma`` (lab MeV) is the classic beam-energy Gaussian
-        convolution.  ``beam_profile`` is the beam-profile kernel: a list of
+        ``gaussian_sigma`` (lab MeV) is the beam-energy Gaussian convolution
+        with a constant width.  ``sigma_expression`` gives the same width as
+        a function of energy instead, e.g. ``"a0*x^1.5"`` for a
+        time-of-flight resolution, with ``sigma_coefficients`` the values of
+        ``a0, a1, ...``: ``x`` is the LAB energy in MeV and the value the lab
+        width in MeV, as for ``gaussian_sigma`` (the line carries the
+        ``sigmalab`` keyword; without it AZURE2 reads an expression in the
+        pre-2026-10 convention, c.m. energy in and c.m. width out).  The two
+        are one kernel in AZURE2: give one or the other.
+        ``beam_profile`` is the beam-profile kernel: a list of
         ``(xi, omega, alpha, weight)`` skewed-Gaussian components in lab
         entrance-channel energy (MeV), with the detector energy resolution
         ``tpc_sigma`` (lab MeV; the per-point energy window comes from
@@ -1274,8 +1283,16 @@ class AzrModel:
             toks += [1, len(q_coefficients)] + [_fmt(q) for q in q_coefficients]
         else:
             toks += [0, 0]
-        toks += [0, '""', 0]                           # no energy-dependent sigma
+        if sigma_expression:
+            if gaussian_sigma is not None:
+                raise ValueError("give gaussian_sigma or sigma_expression, not both")
+            expr = str(sigma_expression).replace(" ", "")
+            toks += [1, f'"{expr}"', len(sigma_coefficients)] + [_fmt(c) for c in sigma_coefficients]
+        else:
+            toks += [0, '""', 0]                       # no energy-dependent sigma
         toks += [0, 0.04, _fmt(resonance_width_multiplier), _fmt(points_per_width)]
+        if sigma_expression:
+            toks += ["sigmalab"]                       # lab in, lab out, like gaussian_sigma
         if beam_profile:
             toks += ["beamprofile", len(beam_profile)]
             for xi, omega, alpha, weight in beam_profile:

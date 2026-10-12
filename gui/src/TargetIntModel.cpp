@@ -26,8 +26,10 @@ static bool usesSubPoints(const TargetIntData &t) {
 // One-line summary of the effect types an entry switches on, for the table.
 static QString effectSummary(const TargetIntData &t) {
   QStringList names;
-  if (t.isConvolution) names << QObject::tr("Gaussian convolution");
-  if (t.isConvCoefficients) names << QObject::tr("Energy-dependent convolution");
+  if (t.isConvCoefficients)
+    names << (t.sigmaLab ? QObject::tr("Gaussian convolution, \u03c3(E)") : QObject::tr("Gaussian convolution, \u03c3(E) c.m. (legacy)"));
+  else if (t.isConvolution)
+    names << QObject::tr("Gaussian convolution");
   if (t.isTargetIntegration) names << (t.isStraggling ? QObject::tr("Target integration + straggling") : QObject::tr("Target integration"));
   if (t.isBeamProfile) names << QObject::tr("Beam profile");
   if (t.isUdr) names << QObject::tr("User-defined resolution");
@@ -136,6 +138,8 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
         return QString(tr("NO"));
     } else if (index.column() == 33)
       return effectSummary(targetInt);
+    else if (index.column() == 34)
+      return targetInt.sigmaLab ? QString(tr("YES")) : QString(tr("NO"));
   } else if (role == Qt::EditRole) {
     TargetIntData targetInt = targetIntList.at(index.row());
     if (index.column() == 1) return targetInt.segmentsList;
@@ -170,6 +174,7 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
     if (index.column() == 30) return targetInt.udrBurstFwhm;
     if (index.column() == 31) return targetInt.udrChannelWidth;
     if (index.column() == 32) return targetInt.udrCentred;
+    if (index.column() == 34) return targetInt.sigmaLab;
   } else if (role == Qt::CheckStateRole && index.column() == 0) {
     TargetIntData targetInt = targetIntList.at(index.row());
     if (targetInt.isActive == 1)
@@ -266,6 +271,8 @@ QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, in
         return tr("UDR Centred?");
       case 33:
         return tr("Effects");
+      case 34:
+        return tr("sigma(E) in lab?");
       default:
         return QVariant();
     }
@@ -344,6 +351,8 @@ bool TargetIntModel::setData(const QModelIndex &index, const QVariant &value, in
       tempData.udrChannelWidth = value.toDouble();
     else if (index.column() == 32)
       tempData.udrCentred = value.toBool();
+    else if (index.column() == 34)
+      tempData.sigmaLab = value.toBool();
     else
       return false;
     targetIntList.replace(row, tempData);

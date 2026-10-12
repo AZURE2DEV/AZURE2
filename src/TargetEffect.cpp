@@ -169,6 +169,8 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
         beamPhotodissociation_ = (dbFlag == 1);
         isBeamProfile_ = !beamProfile_.empty() && !stream.fail();
         if (beamProfile_.empty()) stream.setstate(std::ios_base::failbit);
+      } else if (keyword == "sigmalab") {
+        sigmaLab_ = true;
       } else if (keyword == "udr") {
         stream >> std::ws;
         std::string file;
@@ -564,7 +566,48 @@ void TargetEffect::ConvertBeamProfileToCM(double factor) {
 void TargetEffect::ConvertSigmaToCM(double factor) {
   if (sigmaConverted_) return;
   sigma_ *= factor;
+  cmFactor_ = factor;
   sigmaConverted_ = true;
+}
+
+double TargetEffect::SigmaCM(double eCM, const Config &configure) const {
+  if (isConvCoefficients_ && convolutionEq_.GetEquation() != "") {
+    if (sigmaLab_) return cmFactor_ * convolutionEq_.Evaluate(configure, eCM / cmFactor_);
+    return convolutionEq_.Evaluate(configure, eCM);
+  }
+  return sigma_;
+}
+
+double TargetEffect::GaussianKernel(double e, double centroid, double sigma) {
+  return pow(2. * pi, -0.5) / sigma * exp(-pow(e - centroid, 2.0) / 2.0 / pow(sigma, 2.0));
+}
+
+double TargetEffect::StragglingSigma(double deltaE) const {
+  if (!isStraggling_ || deltaE <= 0.0) return 0.0;
+  return stragglingCoefficient_ * std::sqrt(deltaE * 1000.0) / 1000.0;
+}
+
+/*!
+ * The sub-point grid of a point reaches forwardDepth above and backwardDepth below its energy. A
+ * Gaussian beam spread needs convolutionRange sigma on each side; target integration needs the target
+ * thickness below, and with a beam spread the window is padded by a further factor 5 (kept from the
+ * original code, which sized the grid that way for the nested integral); straggling adds its own
+ * convolutionRange sigma at the back of the target. One function for what used to be written out
+ * eight times in EData.cpp.
+ */
+
+void TargetEffect::GridExtent(double eCM, double thicknessCM, const Config &configure, double &forward, double &backward) const {
+  forward = 0.0;
+  backward = 0.0;
+  double beam = this->IsGaussian() ? convolutionRange * this->SigmaCM(eCM, configure) : 0.0;
+  if (this->IsTargetIntegration()) {
+    backward = thicknessCM + (this->IsGaussian() ? 5.0 * beam : 0.0);
+    forward = this->IsGaussian() ? 5.0 * beam : 0.0;
+    backward += convolutionRange * this->StragglingSigma(thicknessCM);
+  } else if (this->IsGaussian()) {
+    backward = beam;
+    forward = beam;
+  }
 }
 
 const std::vector<TargetEffect::BeamProfileComponent> &TargetEffect::GetBeamProfile() const {
@@ -740,40 +783,6 @@ Equation *TargetEffect::GetConvolutionEq() {
   Equation *tempEquation;
   tempEquation = &convolutionEq_;
   return tempEquation;
-}
-
-/*!
- * Returns the multiplicative convolution factor for evaluation of the integrand
- * of a target effect.
- */
-
-double TargetEffect::GetConvolutionFactor(double energy, double centroid) const {
-  double sigma = this->GetSigma();
-  return pow(2. * pi, -0.5) / sigma * exp(-pow(energy - centroid, 2.0) / 2.0 / pow(sigma, 2.0));
-}
-
-/*!
- * Calculates the sigma of the Gaussian beam convolution as a function of energy.
- */
-
-double TargetEffect::CalculateSigma(double energy, const Config &configure) {
-  double sigma = 0;
-  // Check if convolution equation is defined
-  if (this->GetConvolutionEq()->GetEquation() != "") {
-    sigma = this->GetConvolutionEq()->Evaluate(configure, energy);
-  } else
-    sigma = this->GetSigma();
-  return sigma;
-}
-
-/*!
- * Returns the multiplicative convolution factor for evaluation of the integrand
- * of a target effect with energy dependent sigma.
- */
-
-double TargetEffect::CalculateConvolutionFactor(double energy, double centroid, const Config &configure) {
-  double sigma = this->CalculateSigma(energy, configure);
-  return pow(2. * pi, -0.5) / sigma * exp(-pow(energy - centroid, 2.0) / 2.0 / pow(sigma, 2.0));
 }
 
 /*!
