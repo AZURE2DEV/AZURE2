@@ -453,8 +453,22 @@ bool AZURECalc::PrecalculatePoints(CNuc *lc, EData *ld) const {
     add(seg);
     for (ESegment *comp : seg->GetComponentSegments()) add(comp);
   }
+  // A host also calculates every point mapped onto it (EData::MapData), so
+  // its work grows with that number: one Fowler-type angular distribution at
+  // a single energy is one item.  Largest items first, one at a time, so such
+  // an item does not end up last on one thread.  Each item is calculated the
+  // same way whatever the order.
+  std::vector<double> cost(work.size());
+  for (size_t k = 0; k < work.size(); k++)
+    cost[k] = (1.0 + work[k]->NumSubPoints()) * (1.0 + work[k]->NumLocalMappedPoints());
+  std::vector<size_t> order(work.size());
+  for (size_t k = 0; k < order.size(); k++) order[k] = k;
+  std::stable_sort(order.begin(), order.end(), [&cost](size_t a, size_t b) { return cost[a] > cost[b]; });
+  std::vector<EPoint *> sorted(work.size());
+  for (size_t k = 0; k < order.size(); k++) sorted[k] = work[order[k]];
+  work.swap(sorted);
   const Config &cfg = configure();
-#pragma omp parallel for schedule(dynamic, 4)
+#pragma omp parallel for schedule(dynamic, 1)
   for (int k = 0; k < (int)work.size(); k++) {
     try {
       work[k]->Calculate(lc, cfg);
