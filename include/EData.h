@@ -56,6 +56,8 @@ class EData {
   void ResetIterations();
   /// Initialize every point: EPoint::Initialize over the whole data set.
   int Initialize(CNuc *, const Config &);
+  /// Read the tables of every mixture segment and fold them on the points' grids.  -1 on any error.
+  int InitializeMixtures(const Config &);
   /// Append a segment.
   void AddSegment(ESegment);
   /// Print the data as read, or as generated for a run without data.

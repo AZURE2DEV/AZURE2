@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include "CNuc.h"
 #include "Config.h"
@@ -91,6 +92,7 @@ ESegment::ESegment(SegLine segLine) {
   segmentOperationType_ = SUM;  // Default to SUM operation
   componentScaling_ = 1.0;
   componentCalculationMutex_ = std::make_shared<std::mutex>();
+  mixture_ = segLine.mixture();
 }
 
 /*!
@@ -171,6 +173,7 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   }
   componentScaling_ = 1.0;
   componentCalculationMutex_ = std::make_shared<std::mutex>();
+  mixture_ = extrapLine.mixture();
 }
 
 /*!
@@ -841,6 +844,20 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
             subPoint->RecalcEDependentValues(theCNuc, *configure);
           }
         }
+        // The point and its sub-point grid moved: the folded table term of a
+        // mixture segment is a function of those energies, so re-evaluate it.
+        // The table range was verified at initialization for the nominal
+        // shift; a fit step wandering past it is clamped (and reported once).
+        if (this->HasMixture()) {
+          double lo = 1.0e300, hi = -1.0e300;
+          this->ComputeMixtureExternal(i, *configure, lo, hi);
+          std::string error;
+          if (!mixtureRangeWarned_ && !this->MixtureTablesCover(lo, hi, error)) {
+            mixtureRangeWarned_ = true;
+            configure->outStream << "WARNING: Segment #" << GetSegmentKey() << ": an energy shift moved points outside a mixture table ("
+                                 << error << "); its end values are used there." << std::endl;
+          }
+        }
       }
     }
   }
@@ -1075,7 +1092,7 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
 
   // If no components, return base value
   if (!HasComponents()) {
-    return baseValue;
+    return ApplyMixture(baseValue, basePoint);
   }
 
 
@@ -1104,7 +1121,7 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
         }
       }
     }
-    return sum;
+    return ApplyMixture(sum, basePoint);
   } else if (segmentOperationType_ == RATIO) {
     if (componentSegments_.empty()) {
       return baseValue;
@@ -1152,4 +1169,114 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
   }
 
   return baseValue;
+}
+
+/*!
+ * Drops the mixture block.  Component segments are copies of their parent and
+ * must not carry it: the parent applies the mixture to the combined value.
+ */
+void ESegment::ClearMixture() {
+  mixture_ = MixtureSpec();
+  mixtureTables_.clear();
+  mixtureRangeWarned_ = false;
+}
+
+/*!
+ * Reads the tables of the mixture block.  A table used by several segments is
+ * read once and shared through \p cache.
+ */
+int ESegment::LoadMixtureTables(const Config &configure,
+                                std::map<std::string, std::shared_ptr<const MixtureTable> > &cache) {
+  mixtureTables_.clear();
+  if (!mixture_.has) return 0;
+  for (size_t k = 0; k < mixture_.tables.size(); k++) {
+    const std::string &file = mixture_.tables[k].first;
+    std::map<std::string, std::shared_ptr<const MixtureTable> >::iterator it = cache.find(file);
+    if (it == cache.end()) {
+      std::string error;
+      std::shared_ptr<const MixtureTable> table = MixtureTable::Load(file, error);
+      if (!table) {
+        configure.outStream << "ERROR: Segment #" << GetSegmentKey() << ": mixture table " << error << std::endl;
+        mixtureTables_.clear();
+        return -1;
+      }
+      it = cache.insert(std::make_pair(file, table)).first;
+    }
+    mixtureTables_.push_back(it->second);
+  }
+  return 0;
+}
+
+/*!
+ * The segment's model from the R-matrix value \p inner (the segment's own value,
+ * with its components already summed): w_self * inner plus the point's folded
+ * table term.  The identity when the segment has no mixture block.
+ */
+double ESegment::ApplyMixture(double inner, const EPoint *point) const {
+  if (!mixture_.has) return inner;
+  return mixture_.selfWeight * inner + (point ? point->GetMixtureExternal() : 0.0);
+}
+
+/*!
+ * Evaluates the tables at point \p i (0-based) and stores the weighted terms on
+ * the point.  A point with a sub-point effect (convolution, target integration,
+ * UDR, beam profile) gets each table evaluated on its sub-point grid and folded
+ * by the same kernel as the R-matrix part, so the whole mixture is resolution
+ * broadened together; a plain point gets the table at its own lab energy.
+ */
+void ESegment::ComputeMixtureExternal(int i, const Config &configure, double &queriedLow, double &queriedHigh) {
+  EPoint *point = GetPoint(i + 1);
+  if (!point || !mixture_.has || mixtureTables_.size() != mixture_.tables.size()) return;
+  const double lab0 = point->GetLabEnergy();
+  const double cm0 = point->GetCMEnergy();
+  // Sub-points hold c.m. energies (their lab slot repeats the c.m. value);
+  // the parent's own ratio converts them back, as the UDR kernel does.
+  const double cmPerLab = (lab0 != 0.0) ? cm0 / lab0 : 1.0;
+  queriedLow = std::min(queriedLow, lab0);
+  queriedHigh = std::max(queriedHigh, lab0);
+
+  TargetEffect *effect = NULL;
+  if (point->IsTargetEffect() && point->GetParentData())
+    effect = point->GetParentData()->GetTargetEffect(point->GetTargetEffectNum());
+  const bool fold = effect && effect->IsSubPointEffect() && point->NumSubPoints() >= 2;
+
+  std::vector<double> terms(mixtureTables_.size(), 0.0);
+  if (fold) {
+    const int n = point->NumSubPoints();
+    std::vector<double> labSub(n);
+    for (int j = 1; j <= n; j++) {
+      labSub[j - 1] = point->GetSubPoint(j)->GetCMEnergy() / cmPerLab;
+      queriedLow = std::min(queriedLow, labSub[j - 1]);
+      queriedHigh = std::max(queriedHigh, labSub[j - 1]);
+    }
+    const double blend = point->GetTargetBlendWeight();
+    std::vector<double> values(n);
+    for (size_t k = 0; k < mixtureTables_.size(); k++) {
+      const MixtureTable &table = *mixtureTables_[k];
+      for (int j = 0; j < n; j++) values[j] = table.Interpolate(labSub[j]);
+      double folded = point->FoldSubPointValues(configure, values);
+      // Edge of an energy-restricted effect: the engine blends the folded and
+      // the bare value (EPoint::Calculate); the table term follows suit.
+      if (blend < 1.0) folded = blend * folded + (1.0 - blend) * table.Interpolate(lab0);
+      terms[k] = mixture_.tables[k].second * folded;
+    }
+  } else {
+    for (size_t k = 0; k < mixtureTables_.size(); k++)
+      terms[k] = mixture_.tables[k].second * mixtureTables_[k]->Interpolate(lab0);
+  }
+
+  point->SetMixtureTerms(terms);
+}
+
+bool ESegment::MixtureTablesCover(double lo, double hi, std::string &error) const {
+  for (size_t k = 0; k < mixtureTables_.size(); k++) {
+    const MixtureTable &table = *mixtureTables_[k];
+    if (table.Covers(lo, hi)) continue;
+    char buf[320];
+    std::snprintf(buf, sizeof buf, "segment #%d needs lab energies %.6g to %.6g MeV (its points, sub-point grids and nominal energy shift), but table \"%s\" spans %.6g to %.6g MeV",
+                  GetSegmentKey(), lo, hi, table.File().c_str(), table.MinEnergy(), table.MaxEnergy());
+    error = buf;
+    return false;
+  }
+  return true;
 }

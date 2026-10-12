@@ -240,8 +240,8 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
     // are not part of an angular-distribution segment contribute a zero.
     std::vector<double> angularDists;
 
-    // Handle component segments using the new integrated calculation method
-    if (segments[i].HasComponents()) {
+    // Handle component (and mixture) segments through the segment's own assembly
+    if (segments[i].HasComponents() || segments[i].HasMixture()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
         double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);
@@ -346,8 +346,8 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
     // are not part of an angular-distribution segment contribute a zero.
     std::vector<double> angularDists;
 
-    // Handle component segments using the new integrated calculation method
-    if (segments[i].HasComponents()) {
+    // Handle component (and mixture) segments through the segment's own assembly
+    if (segments[i].HasComponents() || segments[i].HasMixture()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
         double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);
@@ -453,8 +453,8 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
     // are not part of an angular-distribution segment contribute a zero.
     std::vector<double> angularDists;
 
-    // Handle component segments using the new integrated calculation method
-    if (segments[i].HasComponents()) {
+    // Handle component (and mixture) segments through the segment's own assembly
+    if (segments[i].HasComponents() || segments[i].HasMixture()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
         double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);

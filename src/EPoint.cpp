@@ -2006,6 +2006,17 @@ void EPoint::IntegrateTargetEffect(const Config &configure) {
       configure, [this](int j) { return this->GetSubPoint(j)->GetFitCrossSection(); }));
 }
 
+double EPoint::FoldSubPointValues(const Config &configure, const std::vector<double> &values) {
+  if ((int)values.size() < this->NumSubPoints()) return 0.0;
+  return this->IntegrateTargetEffectImpl<double>(configure, [&values](int j) { return values[j - 1]; });
+}
+
+void EPoint::SetMixtureTerms(const std::vector<double> &terms) {
+  mixture_terms_ = terms;
+  mixture_external_ = 0.0;
+  for (size_t k = 0; k < terms.size(); k++) mixture_external_ += terms[k];
+}
+
 bool EPoint::TargetEffectWeights(const Config &configure, std::vector<double> &c) {
   const int n = this->NumSubPoints();
   c.assign(n > 0 ? n : 0, 0.0);

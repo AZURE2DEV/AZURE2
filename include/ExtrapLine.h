@@ -5,6 +5,7 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include "MixtureTable.h"
 
 /// A class to read and store a line from the extrapolation input file.
 
@@ -88,6 +89,22 @@ class ExtrapLine {
               }
             }
           }
+        }
+      }
+      // Optional keyword block at the end of the line (see SegLine.h):
+      //   mixture <w_self> <n> {"<file>" <w_i>}...
+      // It may directly follow the isDiff field of a plain segment, in which
+      // case the isAdvanced read above failed without consuming it.
+      advancedStream.clear();
+      std::string keyword;
+      while (advancedStream >> keyword) {
+        if (keyword == "mixture") {
+          if (!mixture_.Read(advancedStream)) {
+            stream.setstate(std::ios::failbit);
+            break;
+          }
+        } else {
+          break;
         }
       }
     }
@@ -178,6 +195,10 @@ class ExtrapLine {
    * Returns the multipole mixing ratio for unobserved primary, observed secondary.
    */
   double delta() const { return delta_; };
+  /*!
+   * Returns the mixture block (natural-abundance / compound target), unset if absent.
+   */
+  const MixtureSpec &mixture() const { return mixture_; };
 
  private:
   int isActive_;
@@ -200,6 +221,7 @@ class ExtrapLine {
   int secondaryDecayL_;
   double Ic_;
   double delta_;
+  MixtureSpec mixture_;
 };
 
 #endif

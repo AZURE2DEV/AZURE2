@@ -61,6 +61,43 @@ Phase shift data follows the same four-column format, but the third column
 contains the phase shift value (in degrees) and the fourth column contains its
 uncertainty. The convention is :math:`-90° < \theta_\text{lab} < 90°`.
 
+Mixture Table Files
+^^^^^^^^^^^^^^^^^^^
+
+A segment on a natural-abundance or compound target can add the cross sections
+of the other isotopes as fixed tables (the ``mixture`` block of the segment
+line; see :doc:`../user_guide/segments`). A table is a two-column text file:
+
+.. code-block:: text
+
+   # 22Ne(n,tot) ENDF/B-VIII.0, retrieved 2026-10-12
+   # E_lab[MeV]  sigma[b]
+   1.0000000000e-01  2.8541000000e+00
+   1.0100000000e-01  2.8536000000e+00
+   ...
+
+- **Energy**: the lab energy of the projectile in MeV, as in a data file,
+  strictly increasing. AZURE2 interpolates linearly between rows, so the grid
+  must resolve the resonances of the tabulated isotope; it must also extend
+  beyond the data range by the width of the segment's resolution function and
+  by its energy shift, or the run stops and reports the range needed.
+- **Cross section**: in the frame AZURE2 compares the segment in -- barns for
+  angle-integrated and total cross sections, c.m. barns/sr for a differential
+  segment.
+- Lines starting with ``#`` and blank lines are ignored; at least two rows are
+  required.
+
+``pyazr.extrap_to_lab_table`` writes such a table from another AZURE2
+project's ``AZUREOut_*.extrap`` (run with its ``<targetInt>`` lines inactive,
+so the table is a bare cross section), converting its c.m. energies to the lab
+with that project's entrance-pair masses. ``pyazr.mixture.endf_to_table``
+writes one from the point-wise MF3 section of an ENDF-6 file, and
+``endf_total_to_table`` does the same for the total cross section of a file
+whose MF2 holds a Breit-Wigner (SLBW/MLBW) resolved-resonance range,
+reconstructing that range at 0 K (``breit_wigner_total``, ENDF-102 App. D)
+and joining it to the point-wise part above; Reich-Moore and R-matrix-limited
+ranges need a processing code (NJOY, PREPRO).
+
 Temperature Files
 ^^^^^^^^^^^^^^^^^
 

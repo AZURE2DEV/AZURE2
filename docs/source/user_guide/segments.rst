@@ -157,6 +157,76 @@ Editing and Managing Data Segments
    scheme to avoid double-counting uncertainties across segments that share the
    same data.
 
+Natural-abundance and compound targets (mixture segments)
+---------------------------------------------------------
+
+Neutron total cross sections, and other data taken on natural or compound
+samples, are abundance-weighted sums over the isotopes present, each with its
+own compound nucleus. An AZURE2 project describes one compound nucleus, so the
+other isotopes enter a segment as fixed **tables**: the segment's model becomes
+
+.. math::
+
+   \sigma_\text{model}(E) = w_\text{self}\,\sigma_\text{R-matrix}(E)
+   + \sum_i w_i\, T_i(E),
+
+where :math:`w_\text{self}` is the abundance of this project's target isotope
+(times its stoichiometry in a compound), and each :math:`T_i` is a tabulated
+cross section of another isotope -- an ENDF/JEFF point-wise table, or the
+extrapolation of another AZURE2 project -- with its own weight. For natural
+neon fitted as :math:`^{20}\text{Ne}+n`, :math:`w_\text{self} = 0.9048` and the
+:math:`^{22}\text{Ne}` and :math:`^{21}\text{Ne}` tables carry 0.0925 and
+0.0027. The weights are plain numbers, not fit parameters.
+
+The block is written at the end of the segment line (after any
+``sqrtshift`` block), on a ``<segmentsData>`` or a ``<segmentsTest>`` line::
+
+   ... data/Junghans_ntotal.dat 1 0 2 2 1 -999 2 3 -999 0 mixture 0.9048 2 "tables/22Ne_ntot.dat" 0.0925 "tables/21Ne_ntot.dat" 0.0027
+
+i.e. ``mixture <w_self> <n> {"<file>" <w_i>} x n``. The example is a neutron
+total written, as usual, as a **Sum** composite of the elastic exit and every
+other exit pair; the mixture applies to the combined value. Each table is a
+two-column text file, ``E_lab [MeV]  sigma [b]`` in strictly increasing lab
+energy of the projectile (the axis the data file uses), ``#`` comments
+allowed, interpolated linearly; its cross section is in the frame AZURE2
+compares the segment in (barns for an angle-integrated or total cross section,
+c.m. b/sr for a differential one). See :doc:`../reference/data_formats`.
+
+Where the resolution function acts
+   The tables are folded with the segment's **own** experimental effect --
+   Gaussian beam spread, time-of-flight (UDR) kernel, beam profile or target
+   integration from ``<targetInt>`` -- on the same sub-point grid and with the
+   same kernel as the R-matrix part, so the whole sum is broadened together,
+   as a transmission measurement sees it. The tables being
+   parameter-independent, this is done once at initialization (and again when
+   an energy shift moves the points), so a mixture costs nothing in the fit.
+   A table must cover every energy the grid reaches, including the kernel's
+   wings beyond the data range and the segment's nominal energy shift;
+   otherwise the run stops and names the range needed. Give tables a grid
+   fine enough to resolve the other isotope's resonances.
+
+Outputs
+   The fit column of ``AZUREOut_*.out`` / ``.extrap`` is the mixture total,
+   the value compared with the data. A file
+   ``AZUREOut_mixture_seg=<key>.out`` (or ``.extrap``) gives its
+   decomposition per point: the energy, the total, :math:`w_\text{self}`
+   times the R-matrix part, and each folded table term.
+
+Fitting
+   Derivatives scale by :math:`w_\text{self}` and the tables add nothing to
+   them, in the analytic gradient and in the pyazr Jacobian alike. The usual
+   normalization and energy-shift parameters apply to the whole sum.
+
+Limits
+   Supported on angle-integrated and differential cross sections (plain or
+   **Sum** composites); refused on ratios, phase shifts, analyzing powers,
+   total-capture and E1/E2-only segments, and on segments whose experimental
+   effect uses an automatic-application tolerance. The GUI preserves the block
+   on load/save but does not edit it yet: write it in the file, or with pyazr
+   (``AzrModel.set_mixture``, ``set_test_mixture``, and
+   ``pyazr.extrap_to_lab_table`` to turn another project's extrapolation into
+   a table).
+
 Segments Without Data
 ---------------------
 

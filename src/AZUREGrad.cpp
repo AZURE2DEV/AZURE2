@@ -469,17 +469,20 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
     double model = (baseComp == 1) ? point->GetFitE1CrossSection()
         : (baseComp == 2)          ? point->GetFitE2CrossSection()
                                    : point->GetFitCrossSection();
-    outModel = model;
-    double fitBar = fitBarFn(segment, i, pointIdx, model);
+    // A mixture segment's model is w_self * (R-matrix value) + fixed table
+    // terms: the adjoint seed scales by w_self and the tables add nothing.
+    outModel = segment->ApplyMixture(model, point);
+    double fitBar = fitBarFn(segment, i, pointIdx, outModel) * segment->GetMixtureSelfWeight();
     if (fitBar != 0.0)
       return amf.PointAdjoint(point, fitBar, accum, shiftDeriv, baseComp);
     return true;
   }
 
-  // Combined model (components and/or target-effect integration).
+  // Combined model (components and/or target-effect integration); the
+  // mixture (if any) is applied inside CalculateTheoreticalCrossSection.
   double model = segment->CalculateTheoreticalCrossSection(pointIdx, compound, config, data);
   outModel = model;
-  double fitBar = fitBarFn(segment, i, pointIdx, model);
+  double fitBar = fitBarFn(segment, i, pointIdx, model) * segment->GetMixtureSelfWeight();
   if (fitBar == 0.0) return true;
 
   if (!hasComp) {

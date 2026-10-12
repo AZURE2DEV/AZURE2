@@ -5,51 +5,14 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include "MixtureTable.h"
+#include "PathToken.h"
 
 /// A class to read and store a line from the data segments input file.
 
 /*!
  * The SegLine class reads and stores a line from the data segments input file.
  */
-
-/*!
- * Reads a data-file name that may be wrapped in double quotes.
- *
- * The name sits in the middle of the segment line: optional fields describing
- * composite and UPOS segments follow it, so the rest of the line cannot simply
- * be taken as the name, and a bare ">>" stops at the first space -- which
- * silently truncates any path containing one to its first word.  A quoted name
- * is therefore read as a single unit.  Unquoted names are returned exactly as
- * before, so every existing .azr file keeps parsing identically; only files
- * written with a space in the path use the quoted form.
- */
-inline bool ReadPathToken(std::istream &stream, std::string &path) {
-  std::string token;
-  if (!(stream >> token)) return false;
-  if (token.empty() || token[0] != '"') {
-    path = token;
-    return true;
-  }
-  path = token.substr(1);
-  if (!path.empty() && path[path.size() - 1] == '"') {
-    path.erase(path.size() - 1);  // the whole name fitted in one token
-    return true;
-  }
-  // ">>" stopped at the space inside the name; take the remainder up to the
-  // closing quote.  It still carries that space, so it is appended as read.
-  std::string rest;
-  if (std::getline(stream, rest, '"')) path += rest;
-  return true;
-}
-
-/*!
- * Removes a matching pair of surrounding double quotes, if present.
- */
-inline std::string StripPathQuotes(const std::string &path) {
-  if (path.size() >= 2 && path[0] == '"' && path[path.size() - 1] == '"')
-    return path.substr(1, path.size() - 2);
-  return path;
-}
 
 class SegLine {
  public:
@@ -172,13 +135,29 @@ class SegLine {
         // without it (every file written before 2026-10) and the positional
         // UPOS block before it parse exactly as they always have; a failed
         // numeric read above leaves the stream positioned on the keyword.
+        //
+        // A second keyword block,
+        //   mixture <w_self> <n> {"<file>" <w_i>}...
+        // (natural-abundance or compound targets, see MixtureTable.h), may
+        // follow or precede it.  A malformed mixture block fails the line, so
+        // a typo cannot silently turn a mixture segment into a plain one.
         advancedStream.clear();
         std::string keyword;
-        if (advancedStream >> keyword && keyword == "sqrtshift") {
-          if (!(advancedStream >> energyShiftSqrt_ >> energyShiftSqrtError_ >> varyEnergyShiftSqrt_)) {
-            energyShiftSqrt_ = 0.0;
-            energyShiftSqrtError_ = 0.0;
-            varyEnergyShiftSqrt_ = 0;
+        while (advancedStream >> keyword) {
+          if (keyword == "sqrtshift") {
+            if (!(advancedStream >> energyShiftSqrt_ >> energyShiftSqrtError_ >> varyEnergyShiftSqrt_)) {
+              energyShiftSqrt_ = 0.0;
+              energyShiftSqrtError_ = 0.0;
+              varyEnergyShiftSqrt_ = 0;
+              break;
+            }
+          } else if (keyword == "mixture") {
+            if (!mixture_.Read(advancedStream)) {
+              stream.setstate(std::ios::failbit);
+              break;
+            }
+          } else {
+            break;
           }
         }
       } else {
@@ -317,6 +296,10 @@ class SegLine {
    * Returns the multipole mixing ratio of the decay for unobserved primary, observed secondary.
    */
   double delta() const { return delta_; };
+  /*!
+   * Returns the mixture block (natural-abundance / compound target), unset if absent.
+   */
+  const MixtureSpec &mixture() const { return mixture_; };
 
  private:
   int isActive_;
@@ -346,6 +329,7 @@ class SegLine {
   int secondaryDecayL_;
   double Ic_;
   double delta_;
+  MixtureSpec mixture_;
 };
 
 #endif
