@@ -11,9 +11,14 @@ on:
 
 # A newer push supersedes an in-flight run for the same ref, so a queued job
 # cannot outlive the commit that started it.
+# One run at a time per branch. A push while a run is in progress queues a
+# new run behind it instead of cancelling it (a full run takes ~40 min on the
+# macOS leg, and a busy afternoon of pushes once left no run finished at all).
+# GitHub keeps at most one queued run per group: a further push while one is
+# already waiting replaces the waiting one, so only the newest commit waits.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
