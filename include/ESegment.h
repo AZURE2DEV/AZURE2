@@ -180,6 +180,11 @@ class ESegment {
   OperationType GetOperationType() const;
   /// Does this segment combine other segments?
   bool HasComponents() const;
+  /// A natural-target segment: its own term and every component is weighted
+  /// by the isotopic abundance of the term's entrance pair's compound nucleus
+  /// (the trailing "natural 1" token of the line).
+  bool IsNatural() const { return natural_; }
+  void SetNatural(bool natural) { natural_ = natural; }
   /// The component segments, by reference.
   const std::vector<ESegment *> &GetComponentSegments() const;
   /// Drop every component.
@@ -246,6 +251,7 @@ class ESegment {
   bool varyEnergyShiftSqrt_;
   bool isAdvanced_;
   int operationType_;
+  bool natural_ = false;
   std::string componentsList_;
   std::string datafile_;
   std::vector<EPoint> points_;

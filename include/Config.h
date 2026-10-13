@@ -121,6 +121,10 @@ class Config {
   /// Orbital momentum limit of that enumeration ("maxOrbitalMomentum=N" in <config>); -1 = the largest l of
   /// any particle channel in the <levels> block.
   int hardSphereMaxL;
+  /// Width of the sum-to-one penalty on the isotopic abundances of a project with several compound
+  /// nuclei: ((sum w) - 1)^2 / s^2 is added to chi-squared when s > 0.  Read from "abundanceSumSigma=s"
+  /// in the <config> block; 0 (off) when absent.
+  double abundanceSumSigma;
   /// A constant indicating the maximum order of the Legendre polynomials to calculate.
   static const int maxLOrder = 20;
   /// Read the <config> block, then the optional <potential> block. -1 if the file cannot be read.

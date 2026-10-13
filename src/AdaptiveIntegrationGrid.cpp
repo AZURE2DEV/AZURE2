@@ -302,6 +302,8 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
   for (int j = 1; j <= compound->NumJGroups(); j++) {
     JGroup *jgroup = compound->GetJGroup(j);
     if (!jgroup || !jgroup->IsInRMatrix()) continue;
+    // Levels of another compound nucleus are not resonances of this entrance pair.
+    if (jgroup->GetNucleus() != entrancePair->GetNucleus()) continue;
 
     int numChannels = jgroup->NumChannels();
 

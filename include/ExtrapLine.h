@@ -28,6 +28,7 @@ class ExtrapLine {
     isAdvanced_ = 0;
     operationType_ = 0;
     componentsList_ = "";
+    natural_ = 0;
     // Initialize UPOS parameters to defaults
     isUPOS_ = 0;
     secondaryDecayL_ = 0;
@@ -88,6 +89,21 @@ class ExtrapLine {
               }
             }
           }
+        }
+      }
+      // Optional keyword blocks at the end of the line (SegLine.h): a plain
+      // line has no advanced block, so the integer read above failed on the
+      // keyword itself and left the stream positioned on it.
+      advancedStream.clear();
+      std::string keyword;
+      while (advancedStream >> keyword) {
+        if (keyword == "natural") {
+          if (!(advancedStream >> natural_)) {
+            natural_ = 0;
+            break;
+          }
+        } else {
+          break;
         }
       }
     }
@@ -159,6 +175,10 @@ class ExtrapLine {
    */
   int operationType() const { return operationType_; };
   /*!
+   * Returns 1 for a natural-target test segment (trailing "natural 1" token).
+   */
+  int natural() const { return natural_; };
+  /*!
    * Returns the semicolon-separated list of components.
    */
   std::string componentsList() const { return componentsList_; };
@@ -195,6 +215,7 @@ class ExtrapLine {
   int maxAngDistOrder_;
   int isAdvanced_;
   int operationType_;
+  int natural_;
   std::string componentsList_;
   int isUPOS_;
   int secondaryDecayL_;

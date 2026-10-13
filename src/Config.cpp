@@ -36,6 +36,7 @@ void Config::Reset() {
   useAdaptiveGrid = true;   // Default to adaptive grid
   includeAllJPi = false;    // Off unless the <config> block says so: older projects compute as they always did
   hardSphereMaxL = -1;
+  abundanceSumSigma = 0.0;
 }
 
 /*!
@@ -149,6 +150,8 @@ int Config::ReadConfigFile() {
       includeAllJPi = (value == "1" || value == "true");
     else if (key == "maxOrbitalMomentum")
       hardSphereMaxL = atoi(value.c_str());
+    else if (key == "abundanceSumSigma")
+      abundanceSumSigma = atof(value.c_str());
   }
   if (line != "</config>") return -1;
   in.close();

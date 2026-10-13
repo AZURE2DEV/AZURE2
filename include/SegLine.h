@@ -75,6 +75,7 @@ class SegLine {
     // sqrt(E) energy-shift term: off unless a trailing "sqrtshift" block is present
     energyShiftSqrt_ = 0.0;
     energyShiftSqrtError_ = 0.0;
+    natural_ = 0;
     varyEnergyShiftSqrt_ = 0;
 
     // Try to parse energy shift from the remaining line, default to 0.0 for backward compatibility
@@ -172,13 +173,28 @@ class SegLine {
         // without it (every file written before 2026-10) and the positional
         // UPOS block before it parse exactly as they always have; a failed
         // numeric read above leaves the stream positioned on the keyword.
+        //   natural <0|1>
+        // marks a natural-target segment: its own term and every composite
+        // component is weighted by the isotopic abundance of the term's
+        // entrance pair's compound nucleus (the <abundances> block).
+        // Keyword blocks may come in either order; writers put natural last.
         advancedStream.clear();
         std::string keyword;
-        if (advancedStream >> keyword && keyword == "sqrtshift") {
-          if (!(advancedStream >> energyShiftSqrt_ >> energyShiftSqrtError_ >> varyEnergyShiftSqrt_)) {
-            energyShiftSqrt_ = 0.0;
-            energyShiftSqrtError_ = 0.0;
-            varyEnergyShiftSqrt_ = 0;
+        while (advancedStream >> keyword) {
+          if (keyword == "sqrtshift") {
+            if (!(advancedStream >> energyShiftSqrt_ >> energyShiftSqrtError_ >> varyEnergyShiftSqrt_)) {
+              energyShiftSqrt_ = 0.0;
+              energyShiftSqrtError_ = 0.0;
+              varyEnergyShiftSqrt_ = 0;
+              break;
+            }
+          } else if (keyword == "natural") {
+            if (!(advancedStream >> natural_)) {
+              natural_ = 0;
+              break;
+            }
+          } else {
+            break;  // not a keyword this reader knows: leave the rest alone
           }
         }
       } else {
@@ -282,6 +298,10 @@ class SegLine {
    */
   double energyShiftSqrt() const { return energyShiftSqrt_; };
   /*!
+   * Returns 1 for a natural-target segment (trailing "natural 1" token).
+   */
+  int natural() const { return natural_; };
+  /*!
    * Returns the uncertainty of the sqrt(E) energy-shift coefficient (MeV^1/2).
    */
   double energyShiftSqrtError() const { return energyShiftSqrtError_; };
@@ -341,6 +361,7 @@ class SegLine {
   int varyEnergyShiftSqrt_;
   int isAdvanced_;
   int operationType_;
+  int natural_;
   std::string componentsList_;
   int isUPOS_;
   int secondaryDecayL_;

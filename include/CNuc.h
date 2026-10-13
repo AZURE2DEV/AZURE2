@@ -22,9 +22,42 @@ class Config;
  * nuclear data objects are contained.
  */
 
+/// One compound nucleus of a project: the (Z, A) its pairs form, and the
+/// isotopic abundance of the target it stands for in a natural-target
+/// segment (see the <abundances> block).
+struct CompoundNucleus {
+  int Z = 0;
+  int A = 0;
+  double abundance = 1.0;   ///< current value (a fit parameter when vary is set)
+  double nominal = 1.0;     ///< value read from the file, centre of the prior
+  double sigma = 0.0;       ///< prior width; 0 = no prior
+  bool vary = false;
+};
+
 class CNuc {
  public:
   // -- structure ------------------------------------------------------------
+  /// Number of compound nuclei the pairs form.  One for every project written
+  /// before several nuclei could share a file.
+  int NumNuclei() const;
+  /// Nucleus \p i, 1-based.
+  CompoundNucleus *GetNucleus(int);
+  const CompoundNucleus *GetNucleus(int) const;
+  /// 1-based nucleus of pair \p pairNum (1-based pair number).
+  int NucleusOfPair(int);
+  /// "Z=10 A=23" style label of nucleus \p i.
+  std::string NucleusLabel(int) const;
+  /// Did the project carry an <abundances> block?  Only then are the
+  /// abundances Minuit parameters (one per nucleus, after the level block),
+  /// so a project without the block keeps its parameter layout.
+  bool HasAbundanceBlock() const { return hasAbundanceBlock_; }
+  /// Number of abundance parameters FillMnParams emits (NumNuclei() with the block, else 0).
+  int NumAbundanceParams() const { return hasAbundanceBlock_ ? (int)nuclei_.size() : 0; }
+  /// Sum of the current abundances.
+  double AbundanceSum() const;
+  /// The abundance penalty added to chi-squared: sum over nuclei with a prior
+  /// of ((w - w0)/sigma)^2, plus ((sum w) - 1)^2 / s^2 when \p sumSigma > 0.
+  double AbundancePenalty(double sumSigma) const;
   /// Does a pair with this key exist? Keys are what the input files write; the
   /// PPair vector position may differ, so use GetPairNumFromKey to convert.
   bool IsPairKey(int);
@@ -138,8 +171,15 @@ class CNuc {
   CNuc *Clone() const;
 
  private:
+  /// 1-based index of the nucleus with this (Z, A), appending it if new.
+  int FindOrAddNucleus(int z, int a);
+  /// Reads the optional <abundances> block of the project file into nuclei_.
+  /// Returns -1 on a malformed line.
+  int ReadAbundances(const Config &);
   std::vector<PPair> pairs_;
   std::vector<JGroup> jgroups_;
+  std::vector<CompoundNucleus> nuclei_;
+  bool hasAbundanceBlock_ = false;
   int maxLValue_;
   bool transformedIn_ = false;
 };

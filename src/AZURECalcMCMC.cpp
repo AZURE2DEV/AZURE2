@@ -118,6 +118,9 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
     }
   }
 
+  // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
+  if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundancePenalty(configure().abundanceSumSigma);
+
   // Return objects to pool instead of deleting
   ReturnPooledCNuc(localCompound);
   ReturnPooledEData(localData);
@@ -212,6 +215,9 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
       chiSquared += segmentChiSquared;
     }
   }
+
+  // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
+  if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundancePenalty(configure().abundanceSumSigma);
 
   // Return objects to pool instead of deleting
   ReturnPooledCNuc(localCompound);
@@ -394,6 +400,13 @@ void AZURECalcMCMC::BuildAutoPriors() const {
       }
     }
   }
+  // Isotopic abundances (after the level block, CNuc::FillMnParams): the
+  // <abundances> line's value and sigma are the prior, as the fit uses them.
+  for (int k = 1; k <= nuc->NumAbundanceParams(); ++k) {
+    allKinds.push_back(PARAM_ABUNDANCE);
+    allAutoMean.push_back(nuc->GetNucleus(k)->nominal);
+    allAutoStd.push_back(nuc->GetNucleus(k)->sigma);
+  }
 
   std::vector<ESegment> &segments = data()->GetSegments();
 
@@ -461,7 +474,7 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   for (size_t i = 0; i < nfree; ++i) {
     const int kind = freeKinds_[i];
 
-    if (kind == PARAM_NORM || kind == PARAM_SHIFT) {
+    if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE) {
       // Derived from the data, so it always wins over whatever the GUI holds.
       if (freeAutoStd[i] > 0.0) {
         priorMeans_[i] = freeAutoMean[i];
@@ -987,7 +1000,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
       if (kind == PARAM_ENERGY) {
         spread = energySpreadMeV;
         nEnergyCapped++;
-      } else if (kind == PARAM_NORM || kind == PARAM_SHIFT) {
+      } else if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE) {
         // Starting outside the prior only wastes steps walking back into it.
         if (j < (int)priorStds_.size() && j < (int)usePriors_.size() &&
             usePriors_[j] && priorStds_[j] > 0.0 && priorStds_[j] < spread) {

@@ -75,6 +75,9 @@ class EData {
   /// chiSquared.out (set by AZURECalc::operator(); 0 otherwise).
   void SetParkPenalty(double penalty) { parkPenalty_ = penalty; }
   double GetParkPenalty() const { return parkPenalty_; }
+  /// The abundance penalty (priors + sum-to-one) of the last evaluation, reported in chiSquared.out.
+  void SetAbundancePenalty(double penalty) { abundancePenalty_ = penalty; }
+  double GetAbundancePenalty() const { return abundancePenalty_; }
   /// External-capture amplitudes for every point that has an EC component.
   int CalculateECAmplitudes(CNuc *, const Config &);
   /// How many external-capture amplitudes this model expects in an intEC file.
@@ -88,6 +91,8 @@ class EData {
   static std::string ECSignaturePath(const std::string &integralsFile);
   /// Set up the entrance/exit pairs of the component segments in the compound nucleus.
   int InitializeComponentSegments(CNuc *, const Config &);
+  /// Validates a component's pair keys (both present, one compound nucleus) and flags its entrance pair; false with the error printed otherwise.
+  bool CheckComponentPairs(CNuc *, const ESegment &baseSegment, int entranceKey, int exitKey, const Config &);
   ESegment *CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey);
   ESegment *CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey, double fixedAngle);
   /// Map points at equal energies onto one another, so a shared energy is calculated once.
@@ -119,6 +124,7 @@ class EData {
   std::vector<TargetEffect> targetEffects_;
   std::vector<ESegment> segments_;
   std::deque<ESegment> componentSegments_;  // Separate storage for component segments (deque avoids pointer invalidation)
+  bool componentError_ = false;              // a component failed CheckComponentPairs
   int iterations_;
   int normParamOffset_;
   int energyShiftParamOffset_;
@@ -132,6 +138,8 @@ class EData {
   std::string ecSignature_;   // Signature of the calculation being set up (see ECSignature)
   std::string ecOutputFile_;  // The intEC file being written, when not reading one back
   double parkPenalty_ = 0.0;
+  double abundancePenalty_ = 0.0;
+  std::vector<std::string> nucleusLabels_;   // one per compound nucleus, for the natural decomposition file
 };
 
 #endif

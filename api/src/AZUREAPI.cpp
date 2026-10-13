@@ -277,7 +277,7 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
     std::vector<double> angularDists;
 
     // Handle component segments using the new integrated calculation method
-    if (segments[i].HasComponents()) {
+    if (segments[i].HasComponents() || segments[i].IsNatural()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
         double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);
@@ -383,7 +383,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
     std::vector<double> angularDists;
 
     // Handle component segments using the new integrated calculation method
-    if (segments[i].HasComponents()) {
+    if (segments[i].HasComponents() || segments[i].IsNatural()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
         double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);
@@ -490,7 +490,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
     std::vector<double> angularDists;
 
     // Handle component segments using the new integrated calculation method
-    if (segments[i].HasComponents()) {
+    if (segments[i].HasComponents() || segments[i].IsNatural()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
         double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);
@@ -855,6 +855,8 @@ double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
 
   // Park formalism: the J > 0 wall, part of what a fit must minimize.
   if (configure().paramMask & Config::USE_PARK_FORMALISM) chiSquared += localCompound->ParkNormPenalty();
+  // Isotopic abundances: priors and the sum-to-one term.
+  if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundancePenalty(configure().abundanceSumSigma);
 
   return chiSquared;
 }
@@ -1007,6 +1009,10 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     if (configure().paramMask & Config::USE_PARK_FORMALISM) {
       AddParkPenaltyGradient(lc, configure(), accum);
       chi2 += lc->ParkNormPenalty();
+    }
+    if (lc->HasAbundanceBlock()) {
+      AddAbundancePenaltyGradient(lc, configure(), accum);
+      chi2 += lc->AbundancePenalty(configure().abundanceSumSigma);
     }
     accum.Scatter(pmap, gradFull);
     for (int s = 1; s <= ld->NumSegments(); s++) {
@@ -1312,6 +1318,14 @@ vector_r AZUREAPI::GetParameterInfo() const {
     }
   }
 
+  // Isotopic abundances, one per compound nucleus, when the project has an
+  // <abundances> block (CNuc::FillMnParams): type 5, the nucleus's Z in the
+  // "jgroup" field and A in the "level" field, the prior sigma in "wignerLimit".
+  for (int k = 1; k <= nuc->NumAbundanceParams(); ++k) {
+    const CompoundNucleus *nucleus = nuc->GetNucleus(k);
+    push(5, nucleus->Z, -1, 0, nucleus->A, 0, -1, -1, -1, -1, -1, -1, nucleus->sigma);
+  }
+
   // Normalization parameters: one per segment with IsVaryNorm().
   std::vector<ESegment> &segments = data()->GetSegments();
   for (size_t s = 0; s < segments.size(); ++s) {
@@ -1359,6 +1373,10 @@ vector_r AZUREAPI::GetPairsInfo() const {
     info.push_back(pair->GetExE());
     info.push_back(pair->GetChRad());
     info.push_back(pair->GetI1I2Factor());
+    // the compound nucleus the pair forms (PPair's pType rule), its abundance
+    info.push_back(pair->GetNucleusZ());
+    info.push_back(pair->GetNucleusA());
+    info.push_back(nuc->GetNucleus(pair->GetNucleus())->abundance);
   }
 
   return info;

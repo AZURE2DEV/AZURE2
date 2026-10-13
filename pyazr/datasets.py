@@ -75,6 +75,35 @@ _EXTRAP_OBSERVABLE = {
 }
 
 
+# Keyword blocks a segment line may end with, and how many tokens each takes.
+_KEYWORDS = {"sqrtshift": 3, "natural": 1}
+
+
+def _split_keyword_tail(tokens):
+    """Split the trailing keyword blocks off a token list.
+
+    Returns ``(positional, blocks)``: the tokens before the first keyword, and a
+    dict keyword -> its value tokens.  Keyword blocks may come in any order.
+    """
+    tokens = list(tokens)
+    first = None
+    for k, tok in enumerate(tokens):
+        if tok.lower() in _KEYWORDS:
+            first = k
+            break
+    if first is None:
+        return tokens, {}
+    blocks, k = {}, first
+    while k < len(tokens):
+        kw = tokens[k].lower()
+        if kw not in _KEYWORDS:
+            break
+        n = _KEYWORDS[kw]
+        blocks[kw] = tokens[k + 1:k + 1 + n]
+        k += 1 + n
+    return tokens[:first], blocks
+
+
 @dataclass
 class Segment:
     """One data segment: its provenance and what it measures."""
@@ -98,6 +127,8 @@ class Segment:
     energy_shift_sqrt: float = 0.0         # b in E' = E + shift + b*sqrt(E) (MeV^1/2)
     energy_shift_sqrt_error: float = 0.0   # its systematic (MeV^1/2)
     vary_shift_sqrt: bool = False          # is b a fit parameter?
+    natural: bool = False                  # natural-target segment ("natural 1"): every term is
+                                           #   weighted by its nucleus's isotopic abundance
     operation: Optional[str] = None    # 'sum' | 'ratio' for a composite segment
     components: tuple = ()             # (entrance, exit, angle, scaling) each
 
@@ -201,19 +232,21 @@ class SegmentSet(list):
         operation, components = None, []
         tail = t[i + 1:]
 
-        # The sqrt(E) energy-shift term is a keyword block at the very end:
-        #   sqrtshift b bError vary
-        # Split it off first so the positional composite parse never sees it.
+        # Keyword blocks come at the very end, in either order:
+        #   sqrtshift b bError vary      the sqrt(E) energy-shift term
+        #   natural 1                    a natural-target (abundance-weighted) segment
+        # Split them off first so the positional composite parse never sees them.
         shift_sqrt = shift_sqrt_error = 0.0
         vary_shift_sqrt = False
-        for k, tok in enumerate(tail):
-            if tok.lower() == "sqrtshift":
-                blk = tail[k + 1:k + 4]
-                if len(blk) == 3 and all(_isfloat(b) for b in blk):
-                    shift_sqrt, shift_sqrt_error = float(blk[0]), float(blk[1])
-                    vary_shift_sqrt = int(float(blk[2])) == 1
-                tail = tail[:k]
-                break
+        natural = False
+        tail, blocks = _split_keyword_tail(tail)
+        blk = blocks.get("sqrtshift", [])
+        if len(blk) == 3 and all(_isfloat(b) for b in blk):
+            shift_sqrt, shift_sqrt_error = float(blk[0]), float(blk[1])
+            vary_shift_sqrt = int(float(blk[2])) == 1
+        blk = blocks.get("natural", [])
+        if len(blk) == 1 and _isfloat(blk[0]):
+            natural = int(float(blk[0])) == 1
         if tail and _isfloat(tail[0]) and int(float(tail[0])) == 1:
             operation = "ratio" if (len(tail) > 1 and
                                     int(float(tail[1])) == 1) else "sum"
@@ -250,6 +283,7 @@ class SegmentSet(list):
             energy_shift_sqrt=shift_sqrt,
             energy_shift_sqrt_error=shift_sqrt_error,
             vary_shift_sqrt=vary_shift_sqrt,
+            natural=natural,
             operation=operation, components=tuple(components))
 
     # -- views ----------------------------------------------------------------
@@ -350,6 +384,7 @@ class TestSegment:
     phase_J: Optional[float] = None        # isDiff == 2 only
     phase_L: Optional[int] = None          # isDiff == 2 only
     max_ang_dist_order: Optional[int] = None   # isDiff == 3 only
+    natural: bool = False                  # natural-target grid ("natural 1")
 
     @property
     def name(self) -> str:
@@ -417,13 +452,17 @@ class TestSegmentSet(list):
             phase_J = float(t[i]); phase_L = int(float(t[i + 1])); i += 2
         elif isDiff == 3:               # angular distribution carries its order
             max_order = int(float(t[i])); i += 1
+        _, blocks = _split_keyword_tail(t[i:])
+        blk = blocks.get("natural", [])
+        natural = len(blk) == 1 and _isfloat(blk[0]) and int(float(blk[0])) == 1
         return TestSegment(
             key=key, active=active, entrance_key=entrance_key,
             exit_key=exit_key,
             energy_min=eMin, energy_max=eMax, energy_step=eStep,
             angle_min=aMin, angle_max=aMax, angle_step=aStep,
             observable=_EXTRAP_OBSERVABLE.get(isDiff, f"code{isDiff}"),
-            phase_J=phase_J, phase_L=phase_L, max_ang_dist_order=max_order)
+            phase_J=phase_J, phase_L=phase_L, max_ang_dist_order=max_order,
+            natural=natural)
 
     # -- views ----------------------------------------------------------------
 

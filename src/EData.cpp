@@ -27,6 +27,68 @@
 #include <unordered_map>
 
 /*!
+ * A natural-target segment ("natural 1") adds abundance-weighted terms of
+ * several compound nuclei, so it is accepted where a SUM of cross sections is
+ * meaningful -- angle-integrated, differential and capture cross sections,
+ * plain or SUM composites -- and refused for a RATIO, a phase shift, an
+ * analyzing power and a test-mode angular-distribution segment, which are not
+ * additive.  It also needs the <abundances> block: without it every weight is
+ * 1 and the token would be silently meaningless, which is exactly what an
+ * older build would do with it too.
+ */
+static bool NaturalAllowed(CNuc *theCNuc, const ESegment &segment, int key, bool isTest, const Config &configure) {
+  const char *what = isTest ? "test segment" : "segment";
+  if (!theCNuc->HasAbundanceBlock()) {
+    configure.outStream << "ERROR: " << what << " #" << key << " is a natural-target segment, but the project has no "
+                        << "<abundances> block (one line per compound nucleus: <Z> <A> <abundance> <vary> <sigma>)." << std::endl;
+    return false;
+  }
+  if (segment.IsAdvanced() && segment.GetLegacyOperationType() != 0) {
+    configure.outStream << "ERROR: " << what << " #" << key << ": a natural-target segment cannot be a RATIO." << std::endl;
+    return false;
+  }
+  if (segment.IsPhase() || segment.IsAnalyzingPower() || (isTest && segment.IsAngularDist())) {
+    configure.outStream << "ERROR: " << what << " #" << key << ": a natural-target segment must be a cross section "
+                        << "(angle-integrated, differential or capture), not a phase shift, analyzing power or "
+                        << "angular-distribution coefficients." << std::endl;
+    return false;
+  }
+  return true;
+}
+
+/*!
+ * The decomposition of a natural-target segment, one file per segment since
+ * AZUREOut files are named by pair keys only: the energy, the total the fit
+ * compares with the data, and the abundance-weighted term of every compound
+ * nucleus (ESegment::CalculateTheoreticalCrossSection).  Same frame as the
+ * AZUREOut file (kinflag.dat), one line per point.
+ */
+static void WriteNaturalDecomposition(const Config &configure, bool isExtrap, int kinflag,
+                                      const std::vector<std::string> &nucleusLabels, ESegment *segment) {
+  std::string name = configure.outputdir + "AZUREOut_natural_seg=" + std::to_string(segment->GetSegmentKey()) +
+                     (isExtrap ? ".extrap" : ".out");
+  std::ofstream out(name.c_str());
+  if (!out) return;
+  out << "# Segment " << segment->GetSegmentKey() << ": natural target, abundance-weighted sum over compound nuclei" << std::endl;
+  out << "# E_" << (kinflag ? "lab" : "cm") << " [MeV]   total";
+  for (size_t k = 0; k < nucleusLabels.size(); k++) out << "   " << nucleusLabels[k];
+  out << std::endl;
+  out.precision(10);
+  for (int i = 1; i <= segment->NumPoints(); i++) {
+    EPoint *point = segment->GetPoint(i);
+    double kin = (kinflag != 0) ? point->GetCrossSectionKinFactor() : 1.0;
+    if (kin == 0.0) kin = 1.0;
+    out << std::setw(18) << std::scientific << (kinflag != 0 ? point->GetLabEnergy() : point->GetCMEnergy())
+        << std::setw(18) << std::scientific << point->GetFitCrossSection() / kin;
+    const std::vector<double> &terms = point->GetNaturalTerms();
+    for (size_t k = 0; k < nucleusLabels.size(); k++)
+      out << std::setw(18) << std::scientific << (k < terms.size() ? terms[k] / kin : 0.0);
+    out << std::endl;
+  }
+}
+
+
+/*!
  * The EData object has a private attribute containing the number of iterations needed to find the best fit parameters.
  * At creation, this attribute is set to 0.
  */
@@ -95,15 +157,27 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
         ESegment NewSegment(segment);
 
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
-          theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()))->SetEntrance();
+          PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
+          entrancePair->SetEntrance();
+          if (NewSegment.IsNatural() && !NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
+            // total capture: every capture pair of the ENTRANCE pair's compound nucleus
             for (int i = 1; i <= theCNuc->NumPairs(); i++) {
-              if (theCNuc->GetPair(i)->GetPType() == 10) {
+              if (theCNuc->GetPair(i)->GetPType() == 10 && theCNuc->GetPair(i)->GetNucleus() == entrancePair->GetNucleus()) {
                 isValidTotal = true;
                 break;
               }
             }
+          }
+          if (!isValidTotal && theCNuc->IsPairKey(NewSegment.GetExitKey()) &&
+              theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetExitKey()))->GetNucleus() != entrancePair->GetNucleus()) {
+            configure.outStream << "ERROR: segment #" << numTotalSegments << ": entrance pair " << NewSegment.GetEntranceKey()
+                                << " and exit pair " << NewSegment.GetExitKey() << " belong to different compound nuclei ("
+                                << theCNuc->NucleusLabel(entrancePair->GetNucleus()) << " and "
+                                << theCNuc->NucleusLabel(theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetExitKey()))->GetNucleus())
+                                << "); a reaction stays within one nucleus." << std::endl;
+            return -1;
           }
           if (isValidTotal || theCNuc->IsPairKey(NewSegment.GetExitKey())) {
             NewSegment.SetSegmentKey(numTotalSegments);
@@ -169,10 +243,12 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
                             double fixedAngle = std::stod(component.substr(anglePos));
 
                             // Create component segment with fixed angle
+                            if (!this->CheckComponentPairs(theCNuc, *filledSegment, entranceKey, exitKey, configure)) return -1;
                             componentSegment = this->CreateComponentSegment(*filledSegment, entranceKey, exitKey, fixedAngle);
                           } else {
                             // No angle specified, use standard method
                             int exitKey = std::stoi(component.substr(exitPos));
+                            if (!this->CheckComponentPairs(theCNuc, *filledSegment, entranceKey, exitKey, configure)) return -1;
                             componentSegment = this->CreateComponentSegment(*filledSegment, entranceKey, exitKey);
                           }
 
@@ -195,8 +271,9 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
                 // Set operation type to SUM for total capture
                 baseSegment->SetOperationType(SUM);
 
+                const int entranceNucleus = theCNuc->GetPair(theCNuc->GetPairNumFromKey(baseSegment->GetEntranceKey()))->GetNucleus();
                 for (int i = 1; i <= theCNuc->NumPairs(); i++) {
-                  if (theCNuc->GetPair(i)->GetPType() == 10) {
+                  if (theCNuc->GetPair(i)->GetPType() == 10 && theCNuc->GetPair(i)->GetNucleus() == entranceNucleus) {
                     numCapturePairs++;
                     if (numCapturePairs == 1) {
                       // For the first capture pair, set the base segment's exit key
@@ -282,14 +359,26 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
       if (segment.isActive() == 1) {
         ESegment NewSegment(segment);
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
+          PPair *segEntrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
+          if (NewSegment.IsNatural() && !NaturalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
+            // total capture: every capture pair of the ENTRANCE pair's compound nucleus
             for (int i = 1; i <= theCNuc->NumPairs(); i++) {
-              if (theCNuc->GetPair(i)->GetPType() == 10) {
+              if (theCNuc->GetPair(i)->GetPType() == 10 && theCNuc->GetPair(i)->GetNucleus() == segEntrance->GetNucleus()) {
                 isValidTotal = true;
                 break;
               }
             }
+          }
+          if (!isValidTotal && theCNuc->IsPairKey(NewSegment.GetExitKey()) &&
+              theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetExitKey()))->GetNucleus() != segEntrance->GetNucleus()) {
+            configure.outStream << "ERROR: test segment #" << numTotalSegments << ": entrance pair " << NewSegment.GetEntranceKey()
+                                << " and exit pair " << NewSegment.GetExitKey() << " belong to different compound nuclei ("
+                                << theCNuc->NucleusLabel(segEntrance->GetNucleus()) << " and "
+                                << theCNuc->NucleusLabel(theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetExitKey()))->GetNucleus())
+                                << "); a reaction stays within one nucleus." << std::endl;
+            return -1;
           }
           if (isValidTotal || theCNuc->IsPairKey(NewSegment.GetExitKey())) {
             NewSegment.SetSegmentKey(numTotalSegments);
@@ -382,10 +471,12 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
                           double fixedAngle = std::stod(component.substr(anglePos));
 
                           // Create component segment with fixed angle
+                          if (!this->CheckComponentPairs(theCNuc, *theSegment, entranceKey, exitKey, configure)) return -1;
                           componentSegment = this->CreateComponentSegment(*theSegment, entranceKey, exitKey, fixedAngle);
                         } else {
                           // No angle specified, use standard method
                           int exitKey = std::stoi(component.substr(exitPos));
+                          if (!this->CheckComponentPairs(theCNuc, *theSegment, entranceKey, exitKey, configure)) return -1;
                           componentSegment = this->CreateComponentSegment(*theSegment, entranceKey, exitKey);
                         }
 
@@ -414,8 +505,9 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
                 // Set operation type to SUM for total capture
                 baseSegment->SetOperationType(SUM);
 
+                const int entranceNucleus = theCNuc->GetPair(theCNuc->GetPairNumFromKey(baseSegment->GetEntranceKey()))->GetNucleus();
                 for (int i = 1; i <= theCNuc->NumPairs(); i++) {
-                  if (theCNuc->GetPair(i)->GetPType() == 10) {
+                  if (theCNuc->GetPair(i)->GetPType() == 10 && theCNuc->GetPair(i)->GetNucleus() == entranceNucleus) {
                     numCapturePairs++;
                     if (numCapturePairs == 1) {
                       // For the first capture pair, set the base segment's exit key
@@ -688,10 +780,29 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
     }
     if (segment->HasComponents()) {
       for (auto component : segment->GetComponentSegments()) {
+        // The component's grid, kinematics and lab<->c.m. factor belong to the
+        // pair the component calculates -- for a natural target another
+        // compound nucleus with its own masses -- not to the base segment's.
+        // The points were copied from the base segment with its c.m.
+        // energies; convert them for this pair before the grid is laid out
+        // (EData::Initialize repeats this, idempotently, from the lab energy).
+        PPair *compEntrance = compound->GetPair(compound->GetPairNumFromKey(component->GetEntranceKey()));
+        PPair *compExit = compound->GetPair(compound->GetPairNumFromKey(component->GetExitKey()));
+        double compConversion;
+        if (compEntrance->GetPType() == 20)
+          compConversion = (compExit->GetM(1) + compExit->GetM(2)) / compExit->GetM(2);
+        else
+          compConversion = compEntrance->GetM(2) / (compEntrance->GetM(1) + compEntrance->GetM(2));
+        for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
+          if (compEntrance->GetPType() == 20)
+            point->ConvertDecayEnergy(compExit);
+          else
+            point->ConvertLabEnergy(compEntrance);
+        }
         if (component->IsTargetEffect()) {
           TargetEffect *targetEffect = this->GetTargetEffect(component->GetTargetEffectNum());
-          targetEffect->ConvertSigmaToCM(cmConversion);
-          if (targetEffect->IsBeamProfile()) targetEffect->ConvertBeamProfileToCM(cmConversion);
+          targetEffect->ConvertSigmaToCM(compConversion);
+          if (targetEffect->IsBeamProfile()) targetEffect->ConvertBeamProfileToCM(compConversion);
           if (targetEffect->IsUdr()) {
             double eMin = 1.0e300, eMax = 0.0;
             for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
@@ -713,7 +824,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
 
               double targetThickness = 0.0;
               if (targetEffect->IsTargetIntegration()) {
-                targetThickness = cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
+                targetThickness = compConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
                 point->SetTargetThickness(targetThickness);
               }
               // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
@@ -760,11 +871,11 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 if (high <= low) high = low + 0.001;
                 startEnergy = high;
                 endEnergy = low;
-                point->SetPhotoKinematics(entrancePair->GetSepE() - exitPair->GetExE(),
-                                          (entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv);
+                point->SetPhotoKinematics(compEntrance->GetSepE() - compExit->GetExE(),
+                                          (compEntrance->GetM(1) + compEntrance->GetM(2)) * uconv);
               }
               if (targetEffect->IsUdr()) {
-                double mass = entrancePair->GetM(1) * uconv;
+                double mass = compEntrance->GetM(1) * uconv;
                 std::shared_ptr<const UdrKernel> kernel = targetEffect->BuildUdrKernel(point->GetLabEnergy(), mass);
                 point->SetUdrKernel(kernel, mass);
                 double t0 = UdrKinematics::TimeOfFlight(point->GetLabEnergy(), mass, targetEffect->GetUdrFlightPath());
@@ -781,7 +892,8 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
               if (configure.useAdaptiveGrid) {
                 AdaptiveIntegrationGrid::GridConfig gridConfig;
                 gridConfig.maxPoints = numPoints;
-                gridConfig.entranceKey = segment->GetEntranceKey();
+                // The component's own entrance pair: its resonances, on its energy axis, are what the grid must resolve.
+                gridConfig.entranceKey = component->GetEntranceKey();
                 gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
                 gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
                 gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
@@ -798,7 +910,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 double subEnergy = energyGrid[i];
                 EPoint subPoint(point->GetCMAngle(), subEnergy, &*component);
                 if (targetEffect->IsTargetIntegration()) {
-                  double stoppingPower = cmConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / cmConversion);
+                  double stoppingPower = compConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / compConversion);
                   subPoint.SetStoppingPower(stoppingPower);
                 }
                 point->AddSubPoint(subPoint);
@@ -890,6 +1002,9 @@ void EData::ResetIterations() {
  */
 
 int EData::Initialize(CNuc *compound, const Config &configure) {
+  // Labels of the compound nuclei, for the natural-target decomposition files.
+  nucleusLabels_.clear();
+  for (int k = 1; k <= compound->NumNuclei(); k++) nucleusLabels_.push_back(compound->NucleusLabel(k));
   // Identical-particle phase-shift segment validation: warn once per segment
   // if the requested L is forbidden by Bose/Fermi symmetry on an identical
   // pair. The phase branch in GenMatrixFunc would silently report delta = 0
@@ -1183,9 +1298,10 @@ void EData::PrintEDependentValues(const Config &configure, CNuc *theCNuc) {
         << std::setw(25) << "Lo"
         << std::setw(25) << "expHSP" << std::endl;
     for (EDataIterator data = begin(); data != end(); data++) {
-      double inEnergy = data.point()->GetCMEnergy() + theCNuc->GetPair(theCNuc->GetPairNumFromKey(data.segment()->GetEntranceKey()))->GetSepE();
+      PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(data.segment()->GetEntranceKey()));
+      double inEnergy = data.point()->GetCMEnergy() + entrancePair->GetSepE();
       for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
-        if (theCNuc->GetJGroup(j)->IsInRMatrix()) {
+        if (theCNuc->GetJGroup(j)->IsInRMatrix() && theCNuc->GetJGroup(j)->GetNucleus() == entrancePair->GetNucleus()) {
           JGroup *theJGroup = theCNuc->GetJGroup(j);
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
             AChannel *theChannel = theJGroup->GetChannel(ch);
@@ -1493,6 +1609,7 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
     out << std::endl
         << std::endl;
     out.flush();
+    if (segment->IsNatural()) WriteNaturalDecomposition(configure, output.IsExtrap(), kinflag, nucleusLabels_, &*segment);
     if (bandOut) {
       *bandOut << std::endl
                << std::endl;
@@ -1512,6 +1629,9 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
     // Park formalism: the J > 0 wall, when a level sits beyond it.
     if (configure.paramMask & Config::USE_PARK_FORMALISM)
       chiOut << " Total-Park-Chi-Squared: " << parkPenalty_;
+    // Isotopic abundances: their priors and the sum-to-one term.
+    if (abundancePenalty_ != 0.0)
+      chiOut << " Total-Abundance-Chi-Squared: " << abundancePenalty_;
     chiOut << std::endl
            << std::endl;
     chiOut.flush();
@@ -2333,6 +2453,38 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
 /*!
  * Creates a component segment as a full copy of the base segment with different entrance/exit keys
  */
+/*!
+ * Checks a component's pair keys before the component is created: both must
+ * exist and belong to one compound nucleus (a reaction does not change the
+ * compound nucleus), and the component's entrance pair is flagged as an
+ * entrance HERE, while CNuc::Initialize -- which builds the reaction pathways
+ * of every entrance pair -- still lies ahead.  Flagging it only in
+ * EData::Initialize, as was done, left a pair used by components alone (the
+ * second isotope of a natural target) without pathways: GetDecay(0).
+ * Returns false, with the error printed, when the component cannot be made.
+ */
+bool EData::CheckComponentPairs(CNuc *theCNuc, const ESegment &baseSegment, int entranceKey, int exitKey,
+                                const Config &configure) {
+  if (!theCNuc->IsPairKey(entranceKey) || !theCNuc->IsPairKey(exitKey)) {
+    configure.outStream << "ERROR: segment #" << baseSegment.GetSegmentKey() << ": component " << entranceKey
+                        << " -> " << exitKey << " names a pair key that is not in the compound nucleus." << std::endl;
+    componentError_ = true;
+    return false;
+  }
+  PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(entranceKey));
+  PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(exitKey));
+  if (entrancePair->GetNucleus() != exitPair->GetNucleus()) {
+    configure.outStream << "ERROR: segment #" << baseSegment.GetSegmentKey() << ": component " << entranceKey
+                        << " -> " << exitKey << " connects two compound nuclei ("
+                        << theCNuc->NucleusLabel(entrancePair->GetNucleus()) << " and "
+                        << theCNuc->NucleusLabel(exitPair->GetNucleus()) << ")." << std::endl;
+    componentError_ = true;
+    return false;
+  }
+  entrancePair->SetEntrance();
+  return true;
+}
+
 ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey) {
   // Create a copy of the base segment with different entrance/exit keys
   // Store component segments separately to avoid iterator invalidation
@@ -2352,6 +2504,7 @@ ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranc
 
   // Clear any existing components to avoid circular references
   componentSegment->ClearComponents();
+  componentSegment->SetNatural(false);   // the weighting is the base segment's job
 
   // The component segment now has the same data points as the base segment
   // but with different entrance/exit keys, so it will calculate different
@@ -2390,6 +2543,7 @@ ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranc
 
   // Clear any existing components to avoid circular references
   componentSegment->ClearComponents();
+  componentSegment->SetNatural(false);   // the weighting is the base segment's job
 
   return componentSegment;
 }

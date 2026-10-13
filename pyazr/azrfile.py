@@ -55,6 +55,14 @@ def _isnum(tok):
         return False
 
 
+def _isfloat(x):
+    try:
+        float(x)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
 def _fmt(x):
     """Round-trippable, compact token for a number."""
     if isinstance(x, int):
@@ -728,7 +736,8 @@ class AzrModel:
     def add_extrapolation(self, entrance, exit, e_min, e_max, e_step,
                           observable="angle-integrated", angle=None,
                           angle_min=0.0, angle_max=0.0, angle_step=0.0,
-                          phase_J=None, phase_L=None, order=None, active=True):
+                          phase_J=None, phase_L=None, order=None, active=True,
+                          natural=False):
         """Append one extrapolation segment (a grid to evaluate the model on).
 
         ``entrance`` / ``exit`` are particle-pair keys (``exit=-1`` for a summed
@@ -763,6 +772,8 @@ class AzrModel:
                                  "order.")
             toks += [int(order)]
         toks += [0]                           # trailing isAdvanced flag
+        if natural:
+            toks += ["natural", 1]
         line = "  ".join(_fmt(t) if not isinstance(t, str) else t for t in toks)
         lines = self._suffix.splitlines()
         if "<segmentsTest>" in lines:
@@ -814,6 +825,158 @@ class AzrModel:
         return self
 
     # -- segment normalizations (edits the <segmentsData> block) --------------
+
+    # -- compound nuclei and isotopic abundances ------------------------------
+
+    def nuclei(self):
+        """The compound nuclei the pairs form, in order of first appearance:
+        ``{Nucleus: [pair keys]}`` (see :mod:`pyazr.nuclei` for the rule)."""
+        from .nuclei import nucleus_of_channel
+        out = {}
+        for lv in self.levels:
+            for c in lv.channels:
+                nuc = nucleus_of_channel(c)
+                out.setdefault(nuc, [])
+                if c.pair not in out[nuc]:
+                    out[nuc].append(c.pair)
+        return out
+
+    def nucleus_of_pair(self, pair_key):
+        """The compound nucleus a pair (by file key) forms."""
+        for nuc, keys in self.nuclei().items():
+            if pair_key in keys:
+                return nuc
+        raise KeyError(f"no pair with key {pair_key}")
+
+    @property
+    def abundances(self):
+        """The ``<abundances>`` block as ``{Nucleus: (value, vary, sigma)}``;
+        a nucleus without a line is ``(1.0, False, 0.0)``.  Only a project with
+        the block has abundance fit parameters at all."""
+        out = {nuc: (1.0, False, 0.0) for nuc in self.nuclei()}
+        for line in self._abundance_lines():
+            t = line.split()
+            if len(t) >= 5:
+                from .nuclei import Nucleus
+                out[Nucleus(int(t[0]), int(t[1]))] = (float(t[2]), int(float(t[3])) == 1, float(t[4]))
+        return out
+
+    @property
+    def has_abundance_block(self):
+        return "<abundances>" in self._suffix.splitlines()
+
+    def _abundance_lines(self):
+        lines = self._suffix.splitlines()
+        try:
+            a, b = lines.index("<abundances>"), lines.index("</abundances>")
+        except ValueError:
+            return []
+        return [ln for ln in lines[a + 1:b] if ln.strip() and not ln.strip().startswith("#")]
+
+    def set_abundance(self, nucleus, value=None, vary=None, sigma=None):
+        """Set a nucleus's isotopic abundance (``value``), whether it is a fit
+        parameter (``vary``) and its prior width (``sigma``, 0 = none).  The
+        ``<abundances>`` block is created right after ``</levels>`` when the
+        file has none; fields left ``None`` keep their current value.
+        ``nucleus`` is a label such as ``"23Ne"``, ``(Z, A)`` or a Nucleus.
+        """
+        from .nuclei import Nucleus
+        nuc = Nucleus.parse(nucleus)
+        if nuc not in self.nuclei():
+            raise KeyError(f"no pair of this project forms {nuc.label}: {[n.label for n in self.nuclei()]}")
+        cur = self.abundances.get(nuc, (1.0, False, 0.0))
+        value = cur[0] if value is None else float(value)
+        vary = cur[1] if vary is None else bool(vary)
+        sigma = cur[2] if sigma is None else float(sigma)
+        new = f"{nuc.Z} {nuc.A} {_fmt(value)} {1 if vary else 0} {_fmt(sigma)}"
+        lines = self._suffix.splitlines()
+        if "<abundances>" not in lines:
+            at = lines.index("</levels>") + 1 if "</levels>" in lines else 0
+            lines[at:at] = ["<abundances>", new, "</abundances>"]
+        else:
+            a, b = lines.index("<abundances>"), lines.index("</abundances>")
+            for i in range(a + 1, b):
+                t = lines[i].split()
+                if len(t) >= 2 and int(t[0]) == nuc.Z and int(t[1]) == nuc.A:
+                    lines[i] = new
+                    break
+            else:
+                lines.insert(b, new)
+        self._suffix = "\n".join(lines) + "\n"
+        return self
+
+    @property
+    def abundance_sum_sigma(self):
+        """The ``abundanceSumSigma`` config key (0 = no sum-to-one penalty)."""
+        for line in self._prefix.splitlines():
+            if line.strip().startswith("abundanceSumSigma="):
+                return float(line.split("=", 1)[1].split("#")[0])
+        return 0.0
+
+    @abundance_sum_sigma.setter
+    def abundance_sum_sigma(self, value):
+        lines = self._prefix.splitlines(keepends=True)
+        lines = [ln for ln in lines if not ln.strip().startswith("abundanceSumSigma=")]
+        if value and float(value) > 0:
+            end = next(i for i, ln in enumerate(lines) if ln.strip() == "</config>")
+            lines.insert(end, f"abundanceSumSigma={float(value):g}\n")
+        self._prefix = "".join(lines)
+
+    def set_natural(self, file_substr, natural=True):
+        """Mark (or unmark) every ``<segmentsData>`` line matching
+        ``file_substr`` as a natural-target segment (the trailing ``natural 1``
+        token).  Refused on a RATIO composite.  Returns the number of lines changed."""
+        return self._set_natural_block("segmentsData", lambda ln: file_substr in ln, natural)
+
+    def set_test_natural(self, key, natural=True):
+        """As :meth:`set_natural` for the ``<segmentsTest>`` line with this 1-based key."""
+        counter = [0]
+
+        def pick(ln):
+            counter[0] += 1
+            return counter[0] == key
+        return self._set_natural_block("segmentsTest", pick, natural)
+
+    def _set_natural_block(self, block, pick, natural):
+        from .datasets import _split_keyword_tail
+        if f"<{block}>" not in self._suffix:
+            raise ValueError(f"no <{block}> block to edit.")
+        out, changed, inside = [], 0, False
+        for line in self._suffix.splitlines():
+            s = line.strip()
+            if s == f"<{block}>":
+                inside = True
+            elif s == f"</{block}>":
+                inside = False
+            elif inside and s and pick(line):
+                toks = line.split()
+                # keyword tail off, composite kind checked, keyword tail back with natural set
+                first = next((k for k, t in enumerate(toks) if t.lower() in ("sqrtshift", "natural")), len(toks))
+                positional, blocks = _split_keyword_tail(toks[first:])
+                head = toks[:first]
+                if natural:
+                    adv = [t for t in head]
+                    # a RATIO composite is "... 1 1 n ..." after the data file (data) / isDiff fields (test)
+                    if block == "segmentsData":
+                        i = 8 + (2 if int(float(head[7])) == 2 else 0) + 3
+                        if i + 2 < len(head):
+                            i += 3
+                        while i < len(head) and _isfloat(head[i]):
+                            i += 1
+                        adv = head[i + 1:]
+                    else:
+                        isDiff = int(float(head[9]))
+                        adv = head[10 + (2 if isDiff == 2 else 1 if isDiff == 3 else 0):]
+                    if len(adv) >= 2 and int(float(adv[0])) == 1 and int(float(adv[1])) == 1:
+                        raise ValueError("a natural-target segment cannot be a RATIO composite")
+                    blocks["natural"] = ["1"]
+                else:
+                    blocks.pop("natural", None)
+                line = " ".join(head + [tok for kw, vals in blocks.items() for tok in [kw] + list(vals)])
+                changed += 1
+            out.append(line)
+        self._suffix = "\n".join(out) + "\n"
+        return changed
 
     def set_segment_norm(self, file_substr, vary=None, sys_error=None):
         """Edit the normalization of every ``<segmentsData>`` line whose text
@@ -1125,7 +1288,8 @@ class AzrModel:
                          energy_shift=0.0, energy_shift_error=0.0,
                          vary_shift=False, phase_J=None, phase_L=None,
                          active=True, energy_shift_sqrt=0.0,
-                         energy_shift_sqrt_error=0.0, vary_shift_sqrt=False):
+                         energy_shift_sqrt_error=0.0, vary_shift_sqrt=False,
+                         natural=False):
         """Append one data segment (a ``<segmentsData>`` line).
 
         ``data_file`` is the data file path (relative to the run directory,
@@ -1165,6 +1329,8 @@ class AzrModel:
         if energy_shift_sqrt or energy_shift_sqrt_error or vary_shift_sqrt:
             toks += ["sqrtshift", _fmt(energy_shift_sqrt),
                      _fmt(energy_shift_sqrt_error), 1 if vary_shift_sqrt else 0]
+        if natural:
+            toks += ["natural", 1]
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
         lines = self._suffix.splitlines()
         if "<segmentsData>" not in lines:

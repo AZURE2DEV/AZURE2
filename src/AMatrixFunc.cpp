@@ -147,8 +147,11 @@ void AMatrixFunc::FillMatrices(EPoint *point) {
         compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetSepE() +
         compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetExE();
   const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
+  // Groups of another compound nucleus are not part of this point's matrices
+  // (EPoint::CalcEDependentValues left their rows empty).
+  activeNucleus_ = compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetNucleus();
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
-    if (compound()->GetJGroup(j)->IsInRMatrix()) {
+    if (compound()->GetJGroup(j)->IsInRMatrix() && compound()->GetJGroup(j)->GetNucleus() == activeNucleus_) {
       // Cache JGroup pointer to avoid repeated calls
       JGroup *jGroup = compound()->GetJGroup(j);
       int numLevels = jGroup->NumLevels();
@@ -254,7 +257,7 @@ void AMatrixFunc::FillMatrices(EPoint *point) {
 
 void AMatrixFunc::InvertMatrices() {
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
-    if (compound()->GetJGroup(j)->IsInRMatrix()) {
+    if (compound()->GetJGroup(j)->IsInRMatrix() && compound()->GetJGroup(j)->GetNucleus() == activeNucleus_) {
       matrix_c *theAInvMatrix = this->GetJSpecAInvMatrix(j);
       // Add validation to catch corrupted matrices before processing
       if (theAInvMatrix->empty()) {
@@ -588,7 +591,7 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
   const double i1i2 = compound()->GetPair(aa)->GetI1I2Factor();
   const bool isDiff = point->IsDifferential();
   const bool isPhase = point->IsPhase();
-  if (isPhase && aa != ir) return false;  // phase output is for elastic only
+  if (isPhase && aa != exitPairNum) return false;  // phase output is for elastic only
   // The cross section carried by an analyzing-power point is the differential
   // one at the point's angle (GenMatrixFunc computes it before A_y and a
   // target-effect sub-point keeps it); anything else is not supported.
@@ -753,7 +756,7 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     //      w_temp = geom (2J+1) I1I2,  T_temp = sum_m T(k,m) sharing (J,l,l'). ----
     for (int k = 1; k <= nK; k++) {
       // Mirror the angle-integrated UPOS over-counting guard.
-      if (aa != ir && compound()->GetPair(exitPairNum)->GetPType() == 0) {
+      if (aa != exitPairNum && compound()->GetPair(exitPairNum)->GetPType() == 0) {
         if (theDecay->GetKGroup(k)->GetSp() != theDecay->GetKGroup(k)->GetSp2()) continue;
       }
       int numM = theDecay->GetKGroup(k)->NumMGroups();
@@ -813,7 +816,7 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     // UPOS / normal-angular-distribution case.
     PPair *exitPairDiff = compound()->GetPair(exitPairNum);
     double rtFactor = 1.0, itFactor = 1.0;
-    if (aa == ir && compound()->GetPair(aa)->IsIdentical()) {
+    if (aa == exitPairNum && compound()->GetPair(aa)->IsIdentical()) {
       rtFactor = 4.0;
       itFactor = 2.0;
     }
@@ -838,7 +841,7 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
       Tadd(K, m2, r2, fitBar * W * T1);
     };
 
-    const bool inelasticParticle = (aa != ir && exitPairDiff->GetPType() == 0);
+    const bool inelasticParticle = (aa != exitPairNum && exitPairDiff->GetPType() == 0);
     for (int kL = 1; kL <= theDecay->NumKLGroups(); kL++) {
       int K = theDecay->GetKLGroup(kL)->GetK();
       int lOrder = theDecay->GetKLGroup(kL)->GetLOrder();
@@ -886,7 +889,7 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
       }
     }
 
-    if (aa == ir) {  // elastic Coulomb-nuclear interference
+    if (aa == exitPairNum) {  // elastic Coulomb-nuclear interference
       complex cI = I * geom * itFactor / (std::sqrt(pi) * 100.0);
       for (int k = 1; k <= nK; k++) {
         for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {

@@ -80,8 +80,11 @@ void RMatrixFunc::FillMatrices(EPoint *point) {
     inEnergy = point->GetCMEnergy() +
         compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetSepE() +
         compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetExE();
+  // Groups of another compound nucleus are not part of this point's matrices
+  // (EPoint::CalcEDependentValues left their rows empty).
+  activeNucleus_ = compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetNucleus();
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
-    if (compound()->GetJGroup(j)->IsInRMatrix()) {
+    if (compound()->GetJGroup(j)->IsInRMatrix() && compound()->GetJGroup(j)->GetNucleus() == activeNucleus_) {
       if (configure().paramMask & Config::USE_BRUNE_FORMALISM) {
         matrix_c qMatrixInverse;
         for (int la = 1; la <= compound()->GetJGroup(j)->NumLevels(); la++) {
@@ -173,6 +176,11 @@ void RMatrixFunc::FillMatrices(EPoint *point) {
 
 void RMatrixFunc::InvertMatrices() {
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
+    if (compound()->GetJGroup(j)->IsInRMatrix() && compound()->GetJGroup(j)->GetNucleus() != activeNucleus_) {
+      // Another nucleus's group: keep the per-group vectors aligned with an empty entry.
+      this->AddRLInvMatrix(matrix_c());
+      continue;
+    }
     if (compound()->GetJGroup(j)->IsInRMatrix()) {
       matrix_c *theRLMatrix = this->GetJSpecRLMatrix(j);
       MatrixInv matrixInv(*theRLMatrix);

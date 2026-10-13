@@ -95,6 +95,10 @@ std::string Level(JGroup *jgroup, ALevel *level, int jgroupIndex, int levelIndex
   out << "J^pi=" << JPi(jgroup->GetJ(), jgroup->GetPi()) << ", E=" << std::fixed
       << level->GetE() << " MeV (J-group " << jgroupIndex << ", level "
       << levelIndex << ")";
+  // A project with several compound nuclei says which one; a single-nucleus
+  // label is unchanged.
+  if (jgroup->NucleusLabelled())
+    out << " [Z=" << jgroup->GetNucleusZ() << " A=" << jgroup->GetNucleusA() << "]";
   return out.str();
 }
 
@@ -135,6 +139,7 @@ int NumParameters(CNuc *compound, EData *data) {
       JGroup *jgroup = compound->GetJGroup(j);
       n += jgroup->NumLevels() * (1 + jgroup->NumChannels());
     }
+    n += compound->NumAbundanceParams();
   }
   if (data) {
     std::vector<ESegment> &segments = data->GetSegments();
@@ -166,6 +171,11 @@ std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
           index++;
         }
       }
+    }
+    // then the isotopic abundances, one per nucleus (CNuc::FillMnParams)
+    for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
+      if (index == minuitIndex) return "abundance of nucleus " + compound->NucleusLabel(k);
+      index++;
     }
   }
 

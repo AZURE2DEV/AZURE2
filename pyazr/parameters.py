@@ -17,7 +17,7 @@ from typing import Optional
 
 
 # Parameter kinds, indexed by the integer ``type`` code in the C++ record.
-_KINDS = {0: "energy", 1: "width", 2: "norm", 3: "shift", 4: "shift_sqrt"}
+_KINDS = {0: "energy", 1: "width", 2: "norm", 3: "shift", 4: "shift_sqrt", 5: "abundance"}
 
 
 @dataclass(frozen=True)
@@ -67,7 +67,7 @@ class Parameter:
 
     index: int                      # position among *all* parameters
     name: str                       # raw AZURE2 parameter name
-    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt'
+    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'abundance'
     fixed: bool                     # held fixed during the fit?
     value: float                    # current (physical) value
     free_index: Optional[int]       # position among the non-fixed parameters
@@ -95,6 +95,20 @@ class Parameter:
     # Data-segment information (norm / shift parameters).
     segment_key: Optional[int] = None
 
+    # Compound nucleus of an isotopic-abundance parameter (projects with an
+    # ``<abundances>`` block): charge and mass number, and the prior width
+    # (0 = no prior) the ``<abundances>`` line carries.
+    nucleus_Z: Optional[int] = None
+    nucleus_A: Optional[int] = None
+    prior_sigma: Optional[float] = None
+
+    @property
+    def nucleus(self):
+        """``(Z, A)`` of an abundance parameter's compound nucleus, else ``None``."""
+        if self.nucleus_Z is None:
+            return None
+        return (self.nucleus_Z, self.nucleus_A)
+
     @property
     def jpi(self) -> Optional[str]:
         """The level's spin-parity as a string, e.g. ``"2+"`` (or ``None``)."""
@@ -114,6 +128,16 @@ class Parameter:
          pair, radtype, fixed, value, segment_key, wigner_limit) = record
 
         rad = chr(int(round(radtype))) if radtype != -1 else None
+
+        if int(round(type_code)) == 5:
+            # an isotopic abundance: Z rides in the jgroup field, A in the level
+            # field and the prior sigma in the Wigner-limit field (AZUREAPI.h)
+            return cls(
+                index=index, name=name, kind="abundance",
+                fixed=bool(round(fixed)), value=float(value), free_index=free_index,
+                nucleus_Z=int(round(jgroup)), nucleus_A=int(round(level)),
+                prior_sigma=float(wigner_limit),
+            )
 
         return cls(
             index=index,
@@ -206,7 +230,7 @@ class Pair:
 
     # Number of doubles per record emitted by AZUREAPI::GetPairsInfo.
     # Must match AZUREAPI::kPairInfoFields.
-    _NFIELDS = 16
+    _NFIELDS = 19
 
     number: int             # 1-based pair number (matches Parameter.pair)
     key: int                # user pair key from the .azr file
@@ -224,6 +248,14 @@ class Pair:
     excitation: float       # pair excitation energy (MeV)
     channel_radius: float   # channel radius (fm)
     i1i2factor: float       # 1 / ((2 J1 + 1)(2 J2 + 1))
+    nucleus_Z: int = 0      # the compound nucleus the pair forms (Z1+Z2 for a particle
+    nucleus_A: int = 0      #   pair, Z2 for a gamma pair, Z2-Z1 for a beta pair; A = round(M))
+    abundance: float = 1.0  # current isotopic abundance of that nucleus (1 unless <abundances>)
+
+    @property
+    def nucleus(self):
+        """``(Z, A)`` of the compound nucleus this pair forms."""
+        return (self.nucleus_Z, self.nucleus_A)
 
     @property
     def is_photon(self) -> bool:
@@ -234,7 +266,7 @@ class Pair:
     def from_record(cls, record):
         """Build a :class:`Pair` from one ``GET_PAIRS_INFO`` record."""
         (number, key, ptype, is_entrance, J1, parity1, Z1, M1, J2, parity2,
-         Z2, M2, sepE, exE, chRad, i1i2factor) = record
+         Z2, M2, sepE, exE, chRad, i1i2factor, nucZ, nucA, abundance) = record
         return cls(
             number=int(round(number)),
             key=int(round(key)),
@@ -246,6 +278,8 @@ class Pair:
             M2=float(M2),
             sep_energy=float(sepE), excitation=float(exE),
             channel_radius=float(chRad), i1i2factor=float(i1i2factor),
+            nucleus_Z=int(round(nucZ)), nucleus_A=int(round(nucA)),
+            abundance=float(abundance),
         )
 
     def __repr__(self):
@@ -370,6 +404,12 @@ class ParameterSet(list):
     def shifts(self):
         """The (constant) energy-shift parameters, one per segment."""
         return ParameterSet(p for p in self if p.kind == "shift")
+
+    @property
+    def abundances(self):
+        """The isotopic-abundance parameters, one per compound nucleus of a
+        project with an ``<abundances>`` block (none otherwise)."""
+        return ParameterSet(p for p in self if p.kind == "abundance")
 
     @property
     def sqrt_shifts(self):

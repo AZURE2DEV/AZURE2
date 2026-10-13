@@ -62,7 +62,8 @@ class AZURECalcMCMC {
   enum ParamKind { PARAM_ENERGY = 0,
                    PARAM_WIDTH = 1,
                    PARAM_NORM = 2,
-                   PARAM_SHIFT = 3 };
+                   PARAM_SHIFT = 3,
+                   PARAM_ABUNDANCE = 5 };
 
   /*!
    * Run MCMC sampling with specified parameters.

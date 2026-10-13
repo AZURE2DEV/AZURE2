@@ -1094,8 +1094,12 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   this->SetGeometricalFactor(geofactor);
   this->SetSFactorConversion(sfactorconv);
 
+  // Only the groups of the entrance pair's compound nucleus take part in this
+  // point: a group of another nucleus in the file has thresholds on a
+  // different energy axis, and its rows stay empty (every consumer skips it).
+  const int nucleus = entrancePair->GetNucleus();
   for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
-    if (theCNuc->GetJGroup(j)->IsInRMatrix()) {
+    if (theCNuc->GetJGroup(j)->IsInRMatrix() && theCNuc->GetJGroup(j)->GetNucleus() == nucleus) {
       JGroup *theJGroup = theCNuc->GetJGroup(j);
       for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
         AChannel *theChannel = theJGroup->GetChannel(ch);

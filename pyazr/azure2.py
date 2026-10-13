@@ -828,6 +828,9 @@ class azure2:
         model = AzrModel.from_file(self.file)
         model.apply_fit(self.parameters, want, physical=True, include_fixed=True,
                         pairs=self.pairs)
+        # isotopic abundances (projects with an <abundances> block): the fitted values
+        for p in self.parameters.abundances:
+            model.set_abundance((p.nucleus_Z, p.nucleus_A), value=float(want[p.index]))
         model.write(path)
 
         sav = None
@@ -1281,7 +1284,40 @@ class azure2:
         if self.options.get("use_park"):
             J = np.asarray(self.sess.park_norms(x), float)
             park = float(np.sum((J[J < 0] / 1.0e-3) ** 2))
-        return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "park": park}
+        # Isotopic abundances (projects with an <abundances> block): the prior
+        # ((w - w0)/sigma)^2 per nucleus and the sum-to-one term
+        # ((sum w) - 1)^2 / abundanceSumSigma^2.  Like the Park term these are
+        # added by the engine inside calculate_chi2_rwa, so objective() does
+        # not add them again; reported here (one number) so a fit can see them.
+        abundance = 0.0
+        abund = self.parameters.abundances
+        if abund:
+            model = AzrModel.from_file(self.file)
+            nominal = model.abundances
+            total = 0.0
+            for p in abund:
+                value = (float(x[p.free_index]) if not p.fixed and p.free_index is not None
+                         and p.free_index < x.size else float(p.value))
+                total += value
+                w0, _, sigma = nominal.get((p.nucleus_Z, p.nucleus_A), (value, False, 0.0))
+                if sigma > 0:
+                    abundance += ((value - w0) / sigma) ** 2
+            s_sum = model.abundance_sum_sigma
+            if s_sum > 0:
+                abundance += ((total - 1.0) / s_sum) ** 2
+        return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "park": park,
+                "abundance": abundance}
+
+    @property
+    def nuclei(self):
+        """The compound nuclei of the project: ``{(Z, A): PairSet}`` of the
+        pairs that form each, in pair-number order (one entry for every project
+        written before several nuclei could share a file)."""
+        from .parameters import PairSet
+        out = {}
+        for pair in self.pairs:
+            out.setdefault(pair.nucleus, PairSet()).append(pair)
+        return out
 
     @property
     def basis(self):

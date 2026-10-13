@@ -60,6 +60,9 @@ class RMatrixFunc : public GenMatrixFunc {
   vector_matrix_c rl_matrices_;
   vector_matrix_c rl_inv_matrices_;
   vector_matrix_c rl_inv_r_matrices_;
+  /// Compound nucleus (1-based) of the point being evaluated: groups of the
+  /// others are skipped by FillMatrices and InvertMatrices.
+  int activeNucleus_ = 0;
 };
 
 #endif

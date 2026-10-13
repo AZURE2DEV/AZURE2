@@ -344,6 +344,12 @@ double AZURECalc::operator()(const vector_r &p) const {
     chiSquared += parkPenalty;
     localData->SetParkPenalty(parkPenalty);
   }
+  // Isotopic abundances: their priors and the sum-to-one term.
+  if (localCompound->HasAbundanceBlock()) {
+    double abundancePenalty = localCompound->AbundancePenalty(configure().abundanceSumSigma);
+    chiSquared += abundancePenalty;
+    localData->SetAbundancePenalty(abundancePenalty);
+  }
 
   if (std::getenv("AZURE_DUMP_NONFINITE")) DumpNonFinite(p, chiSquared, localCompound, localData);
 
@@ -522,6 +528,7 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
     chiSquared += segChi;
   }
   if (limitsManager_) chiSquared += CalculateNuisanceChiSquared(p);
+  if (compound()->HasAbundanceBlock()) chiSquared += compound()->AbundancePenalty(configure().abundanceSumSigma);
   return chiSquared;
 }
 
@@ -672,7 +679,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   }
   if (eg) {
     AddParkPenaltyGradient(lc, configure(), accum); // Park J > 0 wall
-    accum.Scatter(pmap, grad);                      // energies + reduced widths
+    AddAbundancePenaltyGradient(lc, configure(), accum);  // abundance priors, sum-to-one
+    accum.Scatter(pmap, grad);                      // energies + reduced widths, abundances
     AddNuisanceGradient(p, grad);                   // nuisance penalty
     for (int s = 1; s <= ld->NumSegments(); s++) {  // normalizations
       ESegment *seg = ld->GetSegment(s);
@@ -801,10 +809,10 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   static std::atomic<bool> gradChecked{false};
   if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
     if (!gradChecked.exchange(true)) {
-      static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt"};
+      static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "abundance"};
       struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;
-      int nBad[5] = {0, 0, 0, 0, 0}, nAll[5] = {0, 0, 0, 0, 0}, nBadJ[5] = {0, 0, 0, 0, 0};
+      int nBad[6] = {0, 0, 0, 0, 0, 0}, nAll[6] = {0, 0, 0, 0, 0, 0}, nBadJ[6] = {0, 0, 0, 0, 0, 0};
       const bool haveJ = g_jacGradForCheck.size() == grad.size();
       const auto tc0 = std::chrono::steady_clock::now();
       const double f0 = Chi2Value(p);
@@ -874,11 +882,11 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
                 [](const Row &a, const Row &b) { return std::max(a.score, a.scoreJ) > std::max(b.score, b.scoreJ); });
       std::cerr << "[grad-check] chi2 " << f0 << ", analytic block " << (eg ? "used" : "BAILED (all finite differences)")
                 << "; components with relative disagreement > 1e-2:";
-      for (int k = 0; k < 5; k++)
+      for (int k = 0; k < 6; k++)
         if (nAll[k]) std::cerr << " " << kindName[k] << " " << nBad[k] << "/" << nAll[k];
       if (haveJ) {
         std::cerr << "; Jacobian path:";
-        for (int k = 0; k < 5; k++)
+        for (int k = 0; k < 6; k++)
           if (nAll[k]) std::cerr << " " << kindName[k] << " " << nBadJ[k] << "/" << nAll[k];
       }
       std::cerr << std::endl;
@@ -935,6 +943,21 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
       if (e != 0.0) { grad[idx] += 2.0 * (p[idx] - seg->GetNominalEnergyShiftSqrt()) / (e * e); g2[idx] += 2.0 / (e * e); }
     }
   }
+  // Isotopic abundances: prior and sum-to-one gradient and (diagonal) curvature.
+  if (compound()->HasAbundanceBlock()) {
+    const double s = configure().abundanceSumSigma;
+    const double sum = compound()->AbundanceSum();
+    for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
+      const int idx = pmap.AbundanceIndex(k);
+      if (idx < 0 || idx >= (int)p.size()) continue;
+      const CompoundNucleus *nucleus = compound()->GetNucleus(k);
+      if (nucleus->sigma > 0.0) {
+        grad[idx] += 2.0 * (p[idx] - nucleus->nominal) / (nucleus->sigma * nucleus->sigma);
+        g2[idx] += 2.0 / (nucleus->sigma * nucleus->sigma);
+      }
+      if (s > 0.0) { grad[idx] += 2.0 * (sum - 1.0) / (s * s); g2[idx] += 2.0 / (s * s); }
+    }
+  }
   g2CacheP_ = p;
   g2Cache_ = g2;
   return true;
@@ -971,6 +994,16 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
         seg->GetEnergyShiftSqrtError() != 0.0)
       g2[idx] += 2.0 / (seg->GetEnergyShiftSqrtError() * seg->GetEnergyShiftSqrtError());
   }
+  if (compound()->HasAbundanceBlock()) {
+    const double s = configure().abundanceSumSigma;
+    for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
+      const int idx = pmap.AbundanceIndex(k);
+      if (idx < 0 || idx >= (int)g2.size()) continue;
+      const CompoundNucleus *nucleus = compound()->GetNucleus(k);
+      if (nucleus->sigma > 0.0) g2[idx] += 2.0 / (nucleus->sigma * nucleus->sigma);
+      if (s > 0.0) g2[idx] += 2.0 / (s * s);
+    }
+  }
   static std::atomic<int> g2Calls{0};
   if (std::getenv("AZURE_GRAD_TIMING")) {
     int c = ++g2Calls;
@@ -999,7 +1032,8 @@ bool AZURECalc::HasNuisanceParameters() const {
   for (const auto &mp : fp.GetMinuitParams().Parameters()) {
     const std::string &name = mp.GetName();
     if (mp.IsFixed() && name.find("segment") == std::string::npos) continue;
-    const bool inert = name.find("norm") != std::string::npos || name.find("shift") != std::string::npos;
+    const bool inert = name.find("norm") != std::string::npos || name.find("shift") != std::string::npos ||
+                       name.find("abundance") != std::string::npos;
     if (!inert && limitsManager_->IsNuisanceParameterByIndex(nf)) return true;
     nf++;
   }
@@ -1415,6 +1449,26 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
           break;
         }
       }
+    } else if (name.find("abundance_") == 0) {
+      // Isotopic abundance: its <abundances> prior is a diagonal penalty row.
+      // The sum-to-one term couples the abundances and is not a per-parameter
+      // penalty: the least-squares drivers leave it out (warned once), MIGRAD
+      // carries it exactly (AZURECalc::operator()).
+      for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
+        const CompoundNucleus *nucleus = compound()->GetNucleus(k);
+        char vn[64];
+        snprintf(vn, sizeof(vn), "abundance_%d_%d", nucleus->Z, nucleus->A);
+        if (name != vn) continue;
+        if (nucleus->sigma > 0.0) {
+          pen_nom[a] = nucleus->nominal;
+          pen_inv2[a] = 1.0 / (nucleus->sigma * nucleus->sigma);
+        }
+        break;
+      }
+      static std::atomic<bool> warnedSum{false};
+      if (configure().abundanceSumSigma > 0.0 && !warnedSum.exchange(true))
+        configure().outStream << "WARNING: abundanceSumSigma is set, but the least-squares fitter applies only the "
+                              << "per-nucleus abundance priors; the sum-to-one penalty is carried by MIGRAD only." << std::endl;
     } else if (limitsManager_ && limitsManager_->IsNuisanceParameterByIndex(a)) {
       double sig = limitsManager_->GetConvertedErrorByIndex(a);
       if (sig > 0.0) {
@@ -1813,7 +1867,9 @@ void AZURECalc::AddNuisanceGradient(const vector_r &p, std::vector<double> &grad
   for (int nf = 0; nf < (int)nonFixedToActualIndex.size() && nf < (int)p.size(); nf++) {
     int actualIndex = nonFixedToActualIndex[nf];
     std::string paramName = tempParams.GetMinuitParams().Parameter(actualIndex).GetName();
-    if (paramName.find("norm") != std::string::npos || paramName.find("shift") != std::string::npos) continue;
+    // Norms, shifts and abundances carry their own priors (segment errors, the <abundances> sigma).
+    if (paramName.find("norm") != std::string::npos || paramName.find("shift") != std::string::npos ||
+        paramName.find("abundance") != std::string::npos) continue;
     if (!limitsManager_->IsNuisanceParameterByIndex(nf)) continue;
     double nominalValue = limitsManager_->GetConvertedNominalValueByIndex(nf);
     double paramError = limitsManager_->GetConvertedErrorByIndex(nf);
@@ -1845,8 +1901,9 @@ double AZURECalc::CalculateNuisanceChiSquared(const vector_r &p) const {
     int actualIndex = nonFixedToActualIndex[nonFixedIndex];
     std::string paramName = tempParams.GetMinuitParams().Parameter(actualIndex).GetName();
 
-    // If norm or shift in param name, skip
-    if (paramName.find("norm") != std::string::npos || paramName.find("shift") != std::string::npos) {
+    // If norm, shift or abundance in param name, skip: those carry their own priors
+    if (paramName.find("norm") != std::string::npos || paramName.find("shift") != std::string::npos ||
+        paramName.find("abundance") != std::string::npos) {
       continue;
     }
 

@@ -990,6 +990,19 @@ std::string createPrettyParameterName(const std::string &paramName) {
     } catch (...) {}
   }
 
+  // Isotopic abundance: "abundance_Z_A" -> "Abundance Z=.. A=.."
+  if (paramName.find("abundance_") == 0) {
+    try {
+      size_t firstUnderscore = paramName.find('_');
+      size_t secondUnderscore = paramName.find('_', firstUnderscore + 1);
+      if (secondUnderscore != std::string::npos) {
+        int z = std::stoi(paramName.substr(firstUnderscore + 1, secondUnderscore - firstUnderscore - 1));
+        int a = std::stoi(paramName.substr(secondUnderscore + 1));
+        return "Abundance Z=" + std::to_string(z) + " A=" + std::to_string(a);
+      }
+    } catch (...) {}
+  }
+
   // Generic fallback - keep original name
   return paramName;
 }

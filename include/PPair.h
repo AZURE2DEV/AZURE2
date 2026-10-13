@@ -34,6 +34,17 @@ class PPair {
   /// The pair's key as written in the input file -- its 1-based position, and
   /// what an AChannel's pair number refers to.
   int GetPairKey() const;
+  /// Charge number of the compound nucleus this pair forms, inferred from the
+  /// pair columns: Z1+Z2 for a particle pair, Z2 for a gamma pair, Z2-Z1 for a
+  /// beta pair (Z1 = -1 for beta-minus).
+  int GetNucleusZ() const;
+  /// Mass number of the compound nucleus: round(M1+M2) for a particle pair,
+  /// round(M2) otherwise.
+  int GetNucleusA() const;
+  /// 1-based index of the compound nucleus in the CNuc's nucleus list, set by
+  /// CNuc::AddPair; 0 until the pair is added.
+  int GetNucleus() const;
+  void SetNucleus(int);
   /// Mass of particle 1 or 2, in u.
   double GetM(int) const;
   /// g-factor of particle 1 or 2.
@@ -82,6 +93,9 @@ class PPair {
   int pair_pi_[2];
   int pair_ptype_;
   int pair_key_;
+  int nucleus_z_;
+  int nucleus_a_;
+  int nucleus_;
   double pair_m_[2];
   double pair_g_[2];
   double pair_j_[2];

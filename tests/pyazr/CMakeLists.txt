@@ -112,3 +112,10 @@ add_test(NAME pyazr_list_args
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/list_args_test.py)
 set_tests_properties(pyazr_list_args PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Several compound nuclei in one project: the <abundances> block, natural
+# segments, the abundance fit parameters and merge_projects, against the engine.
+add_test(NAME pyazr_natural_target
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/natural_target_test.py)
+set_tests_properties(pyazr_natural_target PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

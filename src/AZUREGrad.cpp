@@ -89,6 +89,23 @@ void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &
 }
 
 /*!
+ * Gradient of the abundance penalty (CNuc::AbundancePenalty): the prior
+ * ((w - w0)/sigma)^2 of every nucleus with a sigma, and the sum-to-one term
+ * ((sum w) - 1)^2 / s^2, which couples every abundance through the sum.
+ */
+void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum) {
+  if (!compound->HasAbundanceBlock()) return;
+  const double s = configure.abundanceSumSigma;
+  const double sumTerm = (s > 0.0) ? 2.0 * (compound->AbundanceSum() - 1.0) / (s * s) : 0.0;
+  for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
+    const CompoundNucleus *nucleus = compound->GetNucleus(k);
+    double g = sumTerm;
+    if (nucleus->sigma > 0.0) g += 2.0 * (nucleus->abundance - nucleus->nominal) / (nucleus->sigma * nucleus->sigma);
+    accum.AddAbundance(k, g);
+  }
+}
+
+/*!
  * Allocates and zeroes the physics-coordinate gradient accumulators.
  */
 void GradAccum::Init(CNuc *compound) {
@@ -102,6 +119,7 @@ void GradAccum::Init(CNuc *compound) {
     e[j - 1].assign(nLevels, 0.0);
     gamma[j - 1].assign(nLevels, std::vector<double>(nCh, 0.0));
   }
+  abundance.assign(compound->NumAbundanceParams(), 0.0);
 }
 
 /*!
@@ -111,6 +129,7 @@ void GradAccum::Zero() {
   for (auto &row : e) std::fill(row.begin(), row.end(), 0.0);
   for (auto &lev : gamma)
     for (auto &row : lev) std::fill(row.begin(), row.end(), 0.0);
+  std::fill(abundance.begin(), abundance.end(), 0.0);
 }
 
 /*!
@@ -124,6 +143,7 @@ void GradAccum::Add(const GradAccum &o) {
         gamma[j][la][ch] += o.gamma[j][la][ch];
     }
   }
+  for (int k = 0; k < (int)abundance.size() && k < (int)o.abundance.size(); k++) abundance[k] += o.abundance[k];
 }
 
 /*!
@@ -139,6 +159,10 @@ void GradAccum::Scatter(const ParamIndexMap &map, vector_r &gradFull) const {
         if (gi >= 0 && gi < (int)gradFull.size()) gradFull[gi] += gamma[j][la][ch];
       }
     }
+  }
+  for (int k = 0; k < (int)abundance.size(); k++) {
+    int ai = map.AbundanceIndex(k + 1);
+    if (ai >= 0 && ai < (int)gradFull.size()) gradFull[ai] += abundance[k];
   }
 }
 
@@ -182,6 +206,11 @@ int ParamIndexMap::EnergyShiftSqrtIndex(int segment) const {
   return (it == sqrtShiftIndex_.end()) ? -1 : it->second;
 }
 
+int ParamIndexMap::AbundanceIndex(int nucleus) const {
+  auto it = abundanceIndex_.find(nucleus);
+  return (it == abundanceIndex_.end()) ? -1 : it->second;
+}
+
 /*!
  * Builds the parameter-index map by mirroring, in the exact same order, the
  * assignment loops in:
@@ -214,6 +243,15 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
         i++;
       }
     }
+  }
+
+  // --- Isotopic abundances: one per compound nucleus, only with an <abundances> block. ---
+  for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
+    map.abundanceIndex_[k] = i;
+    ParamDesc d{ParamKind::Abundance, -1, -1, -1, -1, false};
+    d.nucleus = k;
+    map.desc_.push_back(d);
+    i++;
   }
 
   // --- Norm parameters: one per varying-norm segment. ---
@@ -457,6 +495,12 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
 
   int baseComp = segment->GetCrossSectionComponent();
   bool hasComp = segment->HasComponents();
+  // A natural-target segment weights each term by its nucleus's abundance;
+  // d(model)/d(abundance_k) is the unweighted sum of that nucleus's terms.
+  const bool natural = segment->IsNatural();
+  auto abundanceOf = [&](int entranceKey) {
+    return compound->GetPair(compound->GetPairNumFromKey(entranceKey))->GetNucleus();
+  };
 
   TargetEffect *te = point->IsTargetEffect()
       ? point->GetParentData()->GetTargetEffect(point->GetTargetEffectNum())
@@ -474,6 +518,16 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
     double model = (baseComp == 1) ? point->GetFitE1CrossSection()
         : (baseComp == 2)          ? point->GetFitE2CrossSection()
                                    : point->GetFitCrossSection();
+    double weight = 1.0;
+    if (natural) {
+      const int nucleus = abundanceOf(segment->GetEntranceKey());
+      weight = compound->GetNucleus(nucleus)->abundance;
+      outModel = weight * model;
+      double fitBar = fitBarFn(segment, i, pointIdx, outModel);
+      if (fitBar == 0.0) return true;
+      accum.AddAbundance(nucleus, fitBar * model);
+      return amf.PointAdjoint(point, fitBar * weight, accum, shiftDeriv, baseComp);
+    }
     outModel = model;
     double fitBar = fitBarFn(segment, i, pointIdx, model);
     if (fitBar != 0.0)
@@ -487,10 +541,20 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
   double fitBar = fitBarFn(segment, i, pointIdx, model);
   if (fitBar == 0.0) return true;
 
+  // The base term's own (unweighted) value, as the point still holds it.
+  double baseVal = (baseComp == 1) ? point->GetFitE1CrossSection()
+      : (baseComp == 2)            ? point->GetFitE2CrossSection()
+                                   : point->GetFitCrossSection();
+  double baseWeight = 1.0;
+  if (natural) {
+    const int nucleus = abundanceOf(segment->GetEntranceKey());
+    baseWeight = compound->GetNucleus(nucleus)->abundance;
+    accum.AddAbundance(nucleus, fitBar * baseVal);
+  }
   if (!hasComp) {
-    return GradAdjointPoint(point, baseComp, fitBar, accum, shiftDeriv, compound, config);
+    return GradAdjointPoint(point, baseComp, fitBar * baseWeight, accum, shiftDeriv, compound, config);
   } else if (segment->GetOperationType() == SUM) {
-    if (!GradAdjointPoint(point, baseComp, fitBar, accum, shiftDeriv, compound, config))
+    if (!GradAdjointPoint(point, baseComp, fitBar * baseWeight, accum, shiftDeriv, compound, config))
       return false;
     for (ESegment *comp : segment->GetComponentSegments()) {
       if (!comp || pointIdx >= comp->NumPoints()) continue;
@@ -498,8 +562,14 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
       if (!cp) continue;
       double cv = cp->GetFitCrossSection();
       if (std::isnan(cv) || std::isinf(cv)) continue;
+      double compWeight = 1.0;
+      if (natural) {
+        const int nucleus = abundanceOf(comp->GetEntranceKey());
+        compWeight = compound->GetNucleus(nucleus)->abundance;
+        accum.AddAbundance(nucleus, fitBar * comp->GetComponentScaling() * cv);
+      }
       if (!GradAdjointPoint(cp, comp->GetCrossSectionComponent(),
-                            fitBar * comp->GetComponentScaling(), accum,
+                            fitBar * comp->GetComponentScaling() * compWeight, accum,
                             shiftDeriv, compound, config))
         return false;
     }

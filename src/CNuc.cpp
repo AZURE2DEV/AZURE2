@@ -75,14 +75,53 @@ int CNuc::IsJGroup(JGroup jGroup) {
   bool b = false;
   int c = 0;
   while (!b && c < this->NumJGroups()) {
+    // A group belongs to one compound nucleus: the same J^pi of another
+    // nucleus in the file is a different group, with its own level matrix.
     if (jGroup.GetJ() == this->GetJGroup(c + 1)->GetJ() &&
-        jGroup.GetPi() == this->GetJGroup(c + 1)->GetPi()) b = true;
+        jGroup.GetPi() == this->GetJGroup(c + 1)->GetPi() &&
+        jGroup.GetNucleus() == this->GetJGroup(c + 1)->GetNucleus()) b = true;
     c++;
   }
   if (b)
     return c;
   else
     return 0;
+}
+
+/*!
+ * The compound nuclei of the project, one per distinct (Z, A) the pairs form.
+ */
+
+int CNuc::NumNuclei() const {
+  return nuclei_.size();
+}
+
+CompoundNucleus *CNuc::GetNucleus(int nucleusNum) {
+  return &nuclei_[nucleusNum - 1];
+}
+
+const CompoundNucleus *CNuc::GetNucleus(int nucleusNum) const {
+  return &nuclei_[nucleusNum - 1];
+}
+
+int CNuc::NucleusOfPair(int pairNum) {
+  return this->GetPair(pairNum)->GetNucleus();
+}
+
+std::string CNuc::NucleusLabel(int nucleusNum) const {
+  std::ostringstream out;
+  out << "Z=" << nuclei_[nucleusNum - 1].Z << " A=" << nuclei_[nucleusNum - 1].A;
+  return out.str();
+}
+
+int CNuc::FindOrAddNucleus(int z, int a) {
+  for (unsigned int i = 0; i < nuclei_.size(); i++)
+    if (nuclei_[i].Z == z && nuclei_[i].A == a) return i + 1;
+  CompoundNucleus nucleus;
+  nucleus.Z = z;
+  nucleus.A = a;
+  nuclei_.push_back(nucleus);
+  return nuclei_.size();
 }
 
 /*!
@@ -120,6 +159,9 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
   while (line != "<levels>" && !in.eof()) getline(in, line);
   if (line != "<levels>") return -1;
   std::map<int, int> ecPairs;
+  // Which compound nucleus each level (by its ID, column 9) belongs to: the
+  // channel lines of one level must all come from pairs of one nucleus.
+  std::map<int, int> levelNucleus;
   line = "";
   while (!in.eof() && line != "</levels>") {
     getline(in, line);
@@ -154,7 +196,20 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
           std::map<int, int>::iterator it = ecPairs.find(PairNum);
           if (it == ecPairs.end()) ecPairs[PairNum] = Line.ecMultMask();
         }
+        const int nucleusNum = this->GetPair(PairNum)->GetNucleus();
+        std::map<int, int>::iterator lvl = levelNucleus.find(Line.levelID());
+        if (lvl == levelNucleus.end()) {
+          levelNucleus[Line.levelID()] = nucleusNum;
+        } else if (lvl->second != nucleusNum) {
+          configure.outStream << "ERROR: level ID " << Line.levelID() << " (J = " << Line.levelJ()
+                              << (Line.levelPi() == -1 ? "-" : "+") << ", E = " << Line.levelE()
+                              << " MeV) has channels of two compound nuclei, "
+                              << this->NucleusLabel(lvl->second) << " and " << this->NucleusLabel(nucleusNum)
+                              << ": a level belongs to one nucleus." << std::endl;
+          return -1;
+        }
         JGroup NewJGroup(Line);
+        NewJGroup.SetNucleus(nucleusNum, this->GetPair(PairNum)->GetNucleusZ(), this->GetPair(PairNum)->GetNucleusA());
         JGroupNum = this->IsJGroup(NewJGroup);
         if (!JGroupNum) {
           this->AddJGroup(NewJGroup);
@@ -214,7 +269,82 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
   if ((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) && this->NumJGroups() > 0 && this->NumPairs() > 0)
     this->ParseExternalCapture(configure, ecPairs);
 
+  if (this->NumNuclei() > 1)
+    for (int j = 1; j <= this->NumJGroups(); j++) this->GetJGroup(j)->SetNucleusLabelled(true);
+
+  if (this->ReadAbundances(configure) == -1) return -1;
+
   return 0;
+}
+
+/*!
+ * The optional <abundances> block: one line per compound nucleus,
+ *   <Z> <A> <abundance> <vary> <prior sigma>
+ * A nucleus without a line keeps 1.0, fixed.  A line for a (Z, A) the pairs do
+ * not form is reported and ignored.  Without the block no abundance becomes a
+ * Minuit parameter, so every project written before the block existed keeps
+ * its parameter layout, param.par and <parameterSettings> indices.
+ */
+
+int CNuc::ReadAbundances(const Config &configure) {
+  hasAbundanceBlock_ = false;
+  for (unsigned int i = 0; i < nuclei_.size(); i++) {
+    nuclei_[i].abundance = nuclei_[i].nominal = 1.0;
+    nuclei_[i].sigma = 0.0;
+    nuclei_[i].vary = false;
+  }
+  std::ifstream in(configure.configfile.c_str());
+  if (!in) return -1;
+  std::string line = "";
+  while (line != "<abundances>" && !in.eof()) getline(in, line);
+  if (line != "<abundances>") return 0;
+  hasAbundanceBlock_ = true;
+  line = "";
+  while (!in.eof() && line != "</abundances>") {
+    getline(in, line);
+    std::string entry = line;
+    size_t hash = entry.find('#');
+    if (hash != std::string::npos) entry = entry.substr(0, hash);
+    if (entry.find_first_not_of(" \t\r") == std::string::npos) continue;
+    if (line == "</abundances>") break;
+    std::istringstream stm(entry);
+    int z, a, vary;
+    double value, sigma;
+    if (!(stm >> z >> a >> value >> vary >> sigma)) {
+      configure.outStream << "ERROR: <abundances> line \"" << line
+                          << "\" is not \"<Z> <A> <abundance> <vary> <sigma>\"." << std::endl;
+      return -1;
+    }
+    bool found = false;
+    for (unsigned int i = 0; i < nuclei_.size(); i++) {
+      if (nuclei_[i].Z != z || nuclei_[i].A != a) continue;
+      nuclei_[i].abundance = nuclei_[i].nominal = value;
+      nuclei_[i].vary = (vary == 1);
+      nuclei_[i].sigma = sigma;
+      found = true;
+    }
+    if (!found)
+      configure.outStream << "WARNING: <abundances> names Z=" << z << " A=" << a
+                          << ", which no pair of the project forms; ignored." << std::endl;
+  }
+  if (line != "</abundances>") return -1;
+  return 0;
+}
+
+double CNuc::AbundanceSum() const {
+  double sum = 0.0;
+  for (unsigned int i = 0; i < nuclei_.size(); i++) sum += nuclei_[i].abundance;
+  return sum;
+}
+
+double CNuc::AbundancePenalty(double sumSigma) const {
+  if (!hasAbundanceBlock_) return 0.0;
+  double penalty = 0.0;
+  for (unsigned int i = 0; i < nuclei_.size(); i++)
+    if (nuclei_[i].sigma > 0.0)
+      penalty += pow((nuclei_[i].abundance - nuclei_[i].nominal) / nuclei_[i].sigma, 2.0);
+  if (sumSigma > 0.0) penalty += pow((this->AbundanceSum() - 1.0) / sumSigma, 2.0);
+  return penalty;
 }
 
 /*!
@@ -245,6 +375,7 @@ int CNuc::AddHardSphereGroups(const Config &configure, int maxL) {
         int chPi = sPi * (chL % 2 == 0 ? 1 : -1);
         for (double jValue = fabs(chS - chL); jValue <= chS + chL + 1.0e-6; jValue += 1.0) {
           JGroup newJGroup(jValue, chPi);
+          newJGroup.SetNucleus(pair->GetNucleus(), pair->GetNucleusZ(), pair->GetNucleusA());
           if (this->IsJGroup(newJGroup)) continue;
           newJGroup.SetInRMatrix(true);
           this->AddJGroup(newJGroup);
@@ -253,6 +384,7 @@ int CNuc::AddHardSphereGroups(const Config &configure, int maxL) {
           for (int ir = 1; ir <= this->NumPairs(); ir++) {
             PPair *chPair = this->GetPair(ir);
             if (chPair->GetPType() != 0) continue;
+            if (chPair->GetNucleus() != pair->GetNucleus()) continue;   // one nucleus per group
             double t1 = chPair->GetJ(1), t2 = chPair->GetJ(2);
             int tPi = chPair->GetPi(1) * chPair->GetPi(2);
             bool identicalPair = chPair->IsIdentical();
@@ -338,6 +470,7 @@ void CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecP
     double jValue = exitPair->GetJ(2);
     int parity = exitPair->GetPi(2);
     JGroup newJGroup(jValue, parity);
+    newJGroup.SetNucleus(exitPair->GetNucleus(), exitPair->GetNucleusZ(), exitPair->GetNucleusA());
     int jGroupNum = this->IsJGroup(newJGroup);
     int levelNum = 0;
     if (jGroupNum) {
@@ -378,7 +511,7 @@ void CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecP
       levelNum = this->GetJGroup(jGroupNum)->IsLevel(newLevel);
       this->GetJGroup(jGroupNum)->GetLevel(levelNum)->SetECParams(ec->first, ec->second);
       for (int ir = 1; ir <= this->NumPairs(); ir++) {
-        if (this->GetPair(ir)->GetPType() == 0) {
+        if (this->GetPair(ir)->GetPType() == 0 && this->GetPair(ir)->GetNucleus() == exitPair->GetNucleus()) {
           double s1 = this->GetPair(ir)->GetJ(1);
           double s2 = this->GetPair(ir)->GetJ(2);
           int sPi = this->GetPair(ir)->GetPi(1) * this->GetPair(ir)->GetPi(2);
@@ -500,6 +633,7 @@ void CNuc::Initialize(const Config &configure) {
  */
 
 void CNuc::AddPair(PPair pPair) {
+  pPair.SetNucleus(this->FindOrAddNucleus(pPair.GetNucleusZ(), pPair.GetNucleusA()));
   pairs_.push_back(pPair);
 }
 
@@ -534,7 +668,10 @@ void CNuc::PrintNuc(const Config &configure) {
         << "*          Particle Pairs          *" << std::endl
         << "************************************" << std::endl;
     for (int i = 1; i <= this->NumPairs(); i++) {
-      out << "Pair Number: " << i << "  Pair Key: " << this->GetPair(i)->GetPairKey() << std::endl;
+      out << "Pair Number: " << i << "  Pair Key: " << this->GetPair(i)->GetPairKey();
+      if (this->NumNuclei() > 1)
+        out << "  Compound Nucleus: " << this->NucleusLabel(this->GetPair(i)->GetNucleus());
+      out << std::endl;
       out << std::setw(30) << "Light Particle J: " << this->GetPair(i)->GetJ(1) << std::endl
           << std::setw(30) << "Light Particle Parity: " << this->GetPair(i)->GetPi(1) << std::endl
           << std::setw(30) << "Light Particle Z: " << this->GetPair(i)->GetZ(1) << std::endl
@@ -620,6 +757,8 @@ void CNuc::FillCompoundFromParamsPhysical(const vector_r &p) {
       level->SetSqrtNFFactor(1.0 / sqrt(nFSum));
     }
   }
+  if (hasAbundanceBlock_)
+    for (unsigned int k = 0; k < nuclei_.size(); k++) nuclei_[k].abundance = p[i++];
 }
 
 /*!
@@ -1447,7 +1586,7 @@ void CNuc::CalcAngularDists(int maxL) {
                 }
                 // Calculate z1z2_upos for Unobserved Primary, Observed Secondary (UPOS) case
                 double z1z2_upos = 0.;
-                if (this->GetPair(theDecay->GetPairNum())->GetPType() == 0 && aa != ir) {
+                if (this->GetPair(theDecay->GetPairNum())->GetPType() == 0 && aa != theDecay->GetPairNum()) {
                   double sp2 = theDecay->GetKGroup(k)->GetSp2();
                   double j1f = this->GetPair(theDecay->GetPairNum())->GetJ(1);
                   double j2f = this->GetPair(theDecay->GetPairNum())->GetJ(2);
@@ -1465,7 +1604,7 @@ void CNuc::CalcAngularDists(int maxL) {
                     theDecay->AddKLGroup(NewKLGroup);
                     KLGroupNum = theDecay->IsKLGroup(NewKLGroup);
                   }
-                  if (aa == ir || this->GetPair(theDecay->GetPairNum())->GetPType() == 10) {
+                  if (aa == theDecay->GetPairNum() || this->GetPair(theDecay->GetPairNum())->GetPType() == 10) {
                     // Standard interference (elastic or gamma capture)
                     Interference NewInterference(path1, path2, z1z2, interferenceType);
                     int InterNum = theDecay->GetKLGroup(KLGroupNum)->IsInterference(NewInterference);
@@ -1730,6 +1869,7 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config *config
       bool isUnbound = false;
       for (int ir = 1; ir <= this->NumPairs(); ir++) {
         PPair *pair = this->GetPair(ir);
+        if (pair->GetNucleus() != this->GetJGroup(j)->GetNucleus()) continue;   // thresholds of this nucleus only
         if (pair->GetPType() == 0 &&
             level->GetE() > (pair->GetSepE() + pair->GetExE())) isUnbound = true;
       }
@@ -1762,6 +1902,19 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config *config
       energyIndex++;
     }
   }
+  // Isotopic abundances, one per compound nucleus, right after the level
+  // block (so EData::FillMnParams, which takes its offsets from the vector
+  // size, needs no change); only when the project carries an <abundances>
+  // block.  A fixed abundance is still a parameter, so the layout does not
+  // depend on which ones vary.
+  if (hasAbundanceBlock_) {
+    for (unsigned int k = 0; k < nuclei_.size(); k++) {
+      snprintf(varname, sizeof(varname), "abundance_%d_%d", nuclei_[k].Z, nuclei_[k].A);
+      p.Add(varname, nuclei_[k].abundance, nuclei_[k].sigma > 0.0 ? nuclei_[k].sigma : 0.1 * nuclei_[k].abundance + 1e-3);
+      p.SetLowerLimit(varname, 0.0);
+      if (!nuclei_[k].vary) p.Fix(varname);
+    }
+  }
 }
 
 /*!
@@ -1787,6 +1940,8 @@ void CNuc::FillCompoundFromParams(const vector_r &p) {
       level->SetSqrtNFFactor(1.0 / sqrt(nFSum));
     }
   }
+  if (hasAbundanceBlock_)
+    for (unsigned int k = 0; k < nuclei_.size(); k++) nuclei_[k].abundance = p[i++];
 }
 
 /*!
@@ -2203,7 +2358,9 @@ void CNuc::PrintTransformParams(const Config &configure) {
           out << '+';
         out.precision(4);
         out << "  E_level = " << std::setw(8) << theLevel->GetTransformE() << " MeV"
-            << "  ITERATIONS = " << std::setw(5) << theLevel->GetTransformIterations() << std::endl;
+            << "  ITERATIONS = " << std::setw(5) << theLevel->GetTransformIterations();
+        if (this->NumNuclei() > 1) out << "  NUCLEUS " << this->NucleusLabel(theJGroup->GetNucleus());
+        out << std::endl;
         for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
           AChannel *theChannel = this->GetJGroup(j)->GetChannel(ch);
           PPair *exitPair = this->GetPair(theChannel->GetPairNum());
@@ -2312,6 +2469,9 @@ vector_r CNuc::GetTransformParams(const Config &configure) {
       }
     }
   }
+  // Abundances are the same in both bases; they follow the level block as in FillMnParams.
+  if (hasAbundanceBlock_)
+    for (unsigned int k = 0; k < nuclei_.size(); k++) params.push_back(nuclei_[k].abundance);
 
   return params;
 }

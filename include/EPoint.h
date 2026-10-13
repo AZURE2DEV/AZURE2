@@ -271,6 +271,10 @@ class EPoint {
   void SetGeometricalFactor(double);
   /// Record the calculated cross section.
   void SetFitCrossSection(double);
+  /// The abundance-weighted term of each compound nucleus at this point of a
+  /// natural-target segment, indexed by nucleus (ESegment::CalculateTheoreticalCrossSection).
+  const std::vector<double> &GetNaturalTerms() const { return natural_terms_; }
+  void SetNaturalTerms(const std::vector<double> &terms) { natural_terms_ = terms; }
   void SetFitE1CrossSection(double);
   void SetFitE2CrossSection(double);
   /// Set the cross-section to S-factor conversion.
@@ -389,6 +393,7 @@ class EPoint {
   double lab_dcrosssection_;
   double geofactor_;
   double fitcrosssection_;
+  std::vector<double> natural_terms_;
   double fitE1crosssection_;
   double fitE2crosssection_;
   double sfactorconv_;

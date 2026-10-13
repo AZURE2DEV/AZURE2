@@ -145,6 +145,9 @@ class AMatrixFunc : public GenMatrixFunc {
   mutable std::vector<std::vector<double>> shiftFunctions_;
   mutable int cached_max_levels_;
   mutable int cached_max_channels_;
+  /// Compound nucleus (1-based) of the point being evaluated: groups of the
+  /// others are skipped by FillMatrices and InvertMatrices.
+  int activeNucleus_ = 0;
 };
 
 #endif
