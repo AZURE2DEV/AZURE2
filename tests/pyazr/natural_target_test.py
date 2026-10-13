@@ -109,6 +109,9 @@ def run(work):
                          {"13N": 0.6, "14N": 0.4})
     check("pair keys offset", rep.pair_map == [{1: 1}, {2: 3}], str(rep.pair_map))
     check("test segments renumbered", rep.test_map == [{1: 1}, {1: 2}], str(rep.test_map))
+    text = open(merged).read()
+    # the GUI's readers reject an empty <lastRun> or <mcmc> block (natural-neon merge, 2026-10-13)
+    check("no empty <lastRun>/<mcmc> block in the merged file", "<lastRun>\n</lastRun>" not in text and "<mcmc>" not in text)
     ab = AzrModel.from_file(merged)
     check("merged abundances", ab.abundances == {Nucleus(7, 13): (0.6, False, 0.0), Nucleus(7, 14): (0.4, False, 0.0)}, str(ab.abundances))
     ab.add_extrapolation(1, 1, 1.0, 3.0, 0.002, "angle-integrated", natural=False)   # a copy of S1, plain

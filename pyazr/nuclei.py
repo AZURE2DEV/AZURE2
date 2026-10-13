@@ -116,15 +116,19 @@ def merge_projects(models, out, abundances, sum_sigma=0.0, shared=(), natural=Tr
     dropped.
 
     Not merged, reported in the returned :class:`MergeReport`: the members'
-    ``<parameterSettings>`` (names refer to GUI rows), ``<lastRun>`` and
-    ``<mcmc>`` blocks, and member engine flags (one engine has one set).
+    ``<parameterSettings>`` (names refer to GUI rows) and ``<mcmc>`` blocks,
+    members' ``<lastRun>`` blocks other than member 0's (kept verbatim: its
+    pair keys do not move), and member engine flags (one engine has one set).
     """
     from .azrfile import AzrModel
     import shlex
     from .datasets import _split_keyword_tail
 
     def _quoted_tokens(line):
-        return shlex.split(line, posix=True)
+        # non-POSIX mode keeps the quotes on a quoted token (a data path with a
+        # space, a <targetInt> stopping-power equation), so the line is written
+        # back as the GUI and the engine read it
+        return shlex.split(line, posix=False)
 
     out = os.path.abspath(out)
     out_dir = os.path.dirname(out)
@@ -328,15 +332,24 @@ def merge_projects(models, out, abundances, sum_sigma=0.0, shared=(), natural=Tr
         else:
             value, vary, sigma = float(spec), 0, 0.0
         abund_lines.append(f"{nuc.Z} {nuc.A} {value:g} {int(bool(vary))} {sigma:g}")
+    # member 0's <lastRun> block is carried verbatim (its pair keys are unchanged); an EMPTY
+    # <lastRun> or <mcmc> block is not valid for the GUI's readers, so neither is written
+    # when there is nothing to put in it.
+    last_run = block_lines(base._suffix, "lastRun")
     suffix = ["</levels>", "<abundances>"] + abund_lines + ["</abundances>", "<segmentsData>"] + \
              [ln for ln in data_lines if ln is not None] + ["</segmentsData>", "<segmentsTest>"] + test_lines + \
              ["</segmentsTest>", "<targetInt>"] + target_lines + ["</targetInt>",
-             "<parameterSettings>", "</parameterSettings>", "<lastRun>", "</lastRun>", "<mcmc>", "<parameters>", "</parameters>", "</mcmc>"]
+             "<parameterSettings>", "</parameterSettings>"] + \
+             (["<lastRun>"] + last_run + ["</lastRun>"] if last_run else [])
     merged._suffix = "\n".join(suffix) + "\n"
     merged.set_output_dir(os.path.join(out_dir, "output"))
     for mi, m in enumerate(members):
         if block_lines(m._suffix, "parameterSettings"):
             warnings.append(f"member {mi}: <parameterSettings> dropped (its names refer to GUI rows)")
+        if block_lines(m._suffix, "mcmc"):
+            warnings.append(f"member {mi}: <mcmc> block dropped (its parameters are named by position)")
+        if mi > 0 and block_lines(m._suffix, "lastRun"):
+            warnings.append(f"member {mi}: <lastRun> block dropped (member 0's is kept)")
     merged.write(out)
     return MergeReport(pair_map, segment_map, test_map, warnings)
 
