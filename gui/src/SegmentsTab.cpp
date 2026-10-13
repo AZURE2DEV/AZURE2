@@ -1295,6 +1295,7 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
 // They are carried verbatim through the models rather than parsed here.
 static bool isSegmentKeyword(const QString &token) {
   return token.compare("sqrtshift", Qt::CaseInsensitive) == 0 ||
+         token.compare("shiftgroup", Qt::CaseInsensitive) == 0 ||
          token.compare("mixture", Qt::CaseInsensitive) == 0;
 }
 

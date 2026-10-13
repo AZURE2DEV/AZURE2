@@ -76,6 +76,8 @@ class SegLine {
     energyShiftSqrt_ = 0.0;
     energyShiftSqrtError_ = 0.0;
     varyEnergyShiftSqrt_ = 0;
+    // shared constant energy shift: off unless a trailing "shiftgroup" block is present
+    shiftGroup_ = "";
 
     // Try to parse energy shift from the remaining line, default to 0.0 for backward compatibility
     std::istringstream restStream(dummyString);
@@ -172,13 +174,32 @@ class SegLine {
         // without it (every file written before 2026-10) and the positional
         // UPOS block before it parse exactly as they always have; a failed
         // numeric read above leaves the stream positioned on the keyword.
+        //
+        // A shift-group block,
+        //   shiftgroup <label>
+        // makes every segment carrying the same label share ONE constant
+        // energy shift: the first such segment (in file order) owns the fit
+        // parameter and its penalty, the others take its value (their own
+        // shift value, uncertainty and vary flag are ignored).  For data sets
+        // split into per-angle segments that share one energy calibration.
+        // The two blocks may come in either order.
         advancedStream.clear();
         std::string keyword;
-        if (advancedStream >> keyword && keyword == "sqrtshift") {
-          if (!(advancedStream >> energyShiftSqrt_ >> energyShiftSqrtError_ >> varyEnergyShiftSqrt_)) {
-            energyShiftSqrt_ = 0.0;
-            energyShiftSqrtError_ = 0.0;
-            varyEnergyShiftSqrt_ = 0;
+        while (advancedStream >> keyword) {
+          if (keyword == "sqrtshift") {
+            if (!(advancedStream >> energyShiftSqrt_ >> energyShiftSqrtError_ >> varyEnergyShiftSqrt_)) {
+              energyShiftSqrt_ = 0.0;
+              energyShiftSqrtError_ = 0.0;
+              varyEnergyShiftSqrt_ = 0;
+              break;
+            }
+          } else if (keyword == "shiftgroup") {
+            if (!(advancedStream >> shiftGroup_)) {
+              stream.setstate(std::ios::failbit);
+              break;
+            }
+          } else {
+            break;
           }
         }
       } else {
@@ -290,6 +311,10 @@ class SegLine {
    */
   int varyEnergyShiftSqrt() const { return varyEnergyShiftSqrt_; };
   /*!
+   * Returns the shift-group label ("" when the segment is in no group).
+   */
+  std::string shiftGroup() const { return shiftGroup_; };
+  /*!
    * Returns non-zero if this is an advanced segment (sum/ratio).
    */
   int isAdvanced() const { return isAdvanced_; };
@@ -339,6 +364,7 @@ class SegLine {
   double energyShiftSqrt_;
   double energyShiftSqrtError_;
   int varyEnergyShiftSqrt_;
+  std::string shiftGroup_;
   int isAdvanced_;
   int operationType_;
   std::string componentsList_;

@@ -43,6 +43,38 @@ from typing import List, Optional
 import numpy as np
 
 
+#: Keyword blocks a segment line may end with (SegLine.h).
+_KEYWORDS = ("sqrtshift", "shiftgroup")
+
+
+def _parse_keyword_blocks(tokens):
+    """``{"sqrtshift": [b, bErr, vary], "shiftgroup": label}`` from the tokens
+    starting at the first keyword; unknown trailing text is ignored, like the
+    engine does."""
+    toks = list(tokens)
+    blocks, i = {}, 0
+    while i < len(toks):
+        kw = toks[i].lower(); i += 1
+        if kw == "sqrtshift":
+            blocks["sqrtshift"] = toks[i:i + 3]; i += 3
+        elif kw == "shiftgroup":
+            if i >= len(toks):
+                raise ValueError("shiftgroup without a label: " + " ".join(tokens))
+            blocks["shiftgroup"] = toks[i]; i += 1
+        else:
+            break
+    return blocks
+
+
+def _split_keyword_tail(tail):
+    """Split a segment line's trailing tokens into the positional part and
+    the keyword blocks (:func:`_parse_keyword_blocks`)."""
+    for k, tok in enumerate(tail):
+        if tok.lower() in _KEYWORDS:
+            return tail[:k], _parse_keyword_blocks(tail[k:])
+    return tail, {}
+
+
 def _isfloat(tok):
     try:
         float(tok)
@@ -98,6 +130,9 @@ class Segment:
     energy_shift_sqrt: float = 0.0         # b in E' = E + shift + b*sqrt(E) (MeV^1/2)
     energy_shift_sqrt_error: float = 0.0   # its systematic (MeV^1/2)
     vary_shift_sqrt: bool = False          # is b a fit parameter?
+    # segments with the same label share ONE constant energy shift: the first
+    # of them (file order) owns the parameter, the others take its value
+    shift_group: Optional[str] = None
     operation: Optional[str] = None    # 'sum' | 'ratio' for a composite segment
     components: tuple = ()             # (entrance, exit, angle, scaling) each
 
@@ -204,16 +239,14 @@ class SegmentSet(list):
         # The sqrt(E) energy-shift term is a keyword block at the very end:
         #   sqrtshift b bError vary
         # Split it off first so the positional composite parse never sees it.
+        # A shift-group block (shiftgroup <label>) may come before or after it.
         shift_sqrt = shift_sqrt_error = 0.0
         vary_shift_sqrt = False
-        for k, tok in enumerate(tail):
-            if tok.lower() == "sqrtshift":
-                blk = tail[k + 1:k + 4]
-                if len(blk) == 3 and all(_isfloat(b) for b in blk):
-                    shift_sqrt, shift_sqrt_error = float(blk[0]), float(blk[1])
-                    vary_shift_sqrt = int(float(blk[2])) == 1
-                tail = tail[:k]
-                break
+        tail, blocks = _split_keyword_tail(tail)
+        blk = blocks.get("sqrtshift")
+        if blk is not None and len(blk) == 3 and all(_isfloat(b) for b in blk):
+            shift_sqrt, shift_sqrt_error = float(blk[0]), float(blk[1])
+            vary_shift_sqrt = int(float(blk[2])) == 1
         if tail and _isfloat(tail[0]) and int(float(tail[0])) == 1:
             operation = "ratio" if (len(tail) > 1 and
                                     int(float(tail[1])) == 1) else "sum"
@@ -250,6 +283,7 @@ class SegmentSet(list):
             energy_shift_sqrt=shift_sqrt,
             energy_shift_sqrt_error=shift_sqrt_error,
             vary_shift_sqrt=vary_shift_sqrt,
+            shift_group=blocks.get("shiftgroup"),
             operation=operation, components=tuple(components))
 
     # -- views ----------------------------------------------------------------
