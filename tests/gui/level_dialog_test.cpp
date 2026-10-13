@@ -50,7 +50,7 @@ static QString labels(const QList<SpinParityOption>& options) {
 }
 
 static QString comboLabels(AddLevelDialog& dialog) {
-  QComboBox* combo = dialog.findChild<QComboBox*>();
+  QComboBox* combo = dialog.findChild<QComboBox*>("spinParityCombo");
   QStringList out;
   for (int i = 0; i < combo->count(); i++) out << combo->itemText(i);
   return out.join("|");
@@ -75,7 +75,7 @@ int main(int argc, char** argv) {
   {
     AddLevelDialog dialog;
     dialog.setSpinParityOptions(tab.spinParityOptions());
-    QComboBox* combo = dialog.findChild<QComboBox*>();
+    QComboBox* combo = dialog.findChild<QComboBox*>("spinParityCombo");
     ok("fallback lists 0+ .. 10- (42 entries)", combo->count() == 42, QString::number(combo->count()));
     save(dialog, "nopairs");
   }
@@ -138,7 +138,7 @@ int main(int argc, char** argv) {
     AddLevelDialog dialog;
     dialog.setSpinParityOptions(options, 2.5, -1, true);
     ok("edit selects 5/2-", dialog.jValue() == 2.5 && dialog.piValue() == -1);
-    ok("no extra entry when the J^pi is in the list", dialog.findChild<QComboBox*>()->count() == options.size());
+    ok("no extra entry when the J^pi is in the list", dialog.findChild<QComboBox*>("spinParityCombo")->count() == options.size());
   }
 
   // 5. Edit: a J^pi with no channels (9/2-, read from a file) stays selectable, in order.

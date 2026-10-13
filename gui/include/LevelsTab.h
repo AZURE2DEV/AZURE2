@@ -37,7 +37,10 @@ class LevelsTab : public QWidget {
   void updateChannelsLevelEdited(int levelIndex);
   QList<ChannelsData> calculateChannels(int levelIndex);
   QList<ChannelsData> calculateChannels(const LevelsData &level, int levelIndex);
+  /*! The J^pi that give at least one channel under the current pairs and limits (every pair). */
   QList<SpinParityOption> spinParityOptions();
+  /*! The same for the pairs of one compound nucleus ((0, 0) = every pair). */
+  QList<SpinParityOption> spinParityOptions(const Nucleus &nucleus);
   bool writeNuclearFile(QTextStream &outStream);
   bool readNuclearFile(QTextStream &inStream);
   void reset();
@@ -70,13 +73,16 @@ class LevelsTab : public QWidget {
   void fixAllWidths();
   void fixAllEnergies();
   void exportLatexTable();
+  /*! Show the nucleus column and filter only when the pairs form more than one compound nucleus. */
+  void updateNucleusColumn();
+  /*! Show the levels of one nucleus (0 = all). */
+  void filterByNucleus(int index);
 
  signals:
   void readNewPair(PairsData, int, bool);
   void readExistingPair(PairsData, int, bool);
 
  private:
-  int calculateCompoundNucleus(int &massNumber, int &atomicNumber);
 
   QSpinBox *maxLSpin;
   QSpinBox *maxMultSpin;
@@ -89,6 +95,7 @@ class LevelsTab : public QWidget {
   QPushButton *fixAllWidthsButton;
   QPushButton *fixAllEnergiesButton;
   QPushButton *exportLatexButton;
+  QComboBox *nucleusFilterCombo;
   PairsModel *pairsModel;
   LevelsModel *levelsModel;
   ChannelsModel *channelsModel;

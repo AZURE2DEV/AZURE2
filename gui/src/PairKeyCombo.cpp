@@ -24,9 +24,12 @@ QString PairKeyCombo::labelFor(int key) const {
   QList<PairsData> pairs = pairsModel ? pairsModel->getPairs() : QList<PairsData>();
   if (key < 1 || key > pairs.size()) return tr("%1: (no such pair)").arg(key);
   const PairsData &pair = pairs.at(key - 1);
+  // With several compound nuclei in the project, say which one the pair forms.
+  QString nucleus;
+  if (pairsModel->nuclei().size() > 1) nucleus = QString("  -> %1").arg(PairsModel::nucleusLabel(PairsModel::nucleusOf(pair), false));
   if (mode == Exit && entranceKey >= 1 && entranceKey <= pairs.size())
-    return QString("%1: %2").arg(key).arg(PairsModel::plainText(pairsModel->getReactionLabel(pairs.at(entranceKey - 1), pair)));
-  return QString("%1: %2").arg(key).arg(pairsModel->getPairLabel(pair));
+    return QString("%1: %2%3").arg(key).arg(PairsModel::plainText(pairsModel->getReactionLabel(pairs.at(entranceKey - 1), pair))).arg(nucleus);
+  return QString("%1: %2%3").arg(key).arg(pairsModel->getPairLabel(pair)).arg(nucleus);
 }
 
 void PairKeyCombo::refresh() {

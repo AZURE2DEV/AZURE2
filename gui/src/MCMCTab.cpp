@@ -208,7 +208,7 @@ bool MCMCTab::isAutoPriorCategory(const QString &category) {
   // Normalizations and energy shifts carry an experimental error in the
   // segment definition, so AZURECalcMCMC::BuildAutoPriors() derives their
   // priors from the data and overrides whatever this table holds.
-  return category == "norm" || category == "shift";
+  return category == "norm" || category == "shift" || category == "abundance";
 }
 
 QString MCMCTab::categoryFromStoredName(const QString &name) {
@@ -216,6 +216,7 @@ QString MCMCTab::categoryFromStoredName(const QString &name) {
   // ("normalization of segment 3 (data/x.dat)"). Older files carry the
   // previous forms, "Segment N Normalization" or "Parameter
   // (segment_N_norm)"; all of them are recognised here.
+  if (name.startsWith("abundance", Qt::CaseInsensitive)) return "abundance";
   if (name.contains("norm", Qt::CaseInsensitive)) return "norm";
   if (name.contains("shift", Qt::CaseInsensitive)) return "shift";
   return "loaded";
@@ -605,6 +606,13 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
     // Collected before `data` is released.
     QMap<int, QPair<double, double>> autoNormPrior;  // key -> (mean, sigma)
     QMap<int, QPair<double, double>> autoShiftPrior;
+    // Isotopic abundances: the <abundances> block's (value, sigma), keyed by parameter name.
+    QMap<QString, QPair<double, double>> autoAbundancePrior;
+    for (int n = 0; n < compound->NumNuclei(); n++) {
+      const CompoundNucleus *nucleus = compound->GetNucleus(n);
+      autoAbundancePrior[QString("abundance_%1_%2").arg(nucleus->Z).arg(nucleus->A)] =
+          qMakePair(nucleus->nominal, nucleus->sigma);
+    }
 
     // Physical descriptions of every parameter, gathered here because the
     // compound nucleus and data are released a few lines below.
@@ -655,7 +663,9 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
         param.autoPrior = false;
 
         // Determine category based on parameter name
-        if (paramName.contains("norm", Qt::CaseInsensitive)) {
+        if (paramName.startsWith("abundance_")) {
+          param.category = "abundance";
+        } else if (paramName.contains("norm", Qt::CaseInsensitive)) {
           param.category = "norm";
         } else if (paramName.contains("shift", Qt::CaseInsensitive)) {
           param.category = "shift";
@@ -669,7 +679,14 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
 
         // Parameter names are "segment_<key>_norm" and
         // "segment_<key>_energy_shift" (see EData::FillMnParams).
-        if (isAutoPriorCategory(param.category)) {
+        if (param.category == "abundance") {
+          if (autoAbundancePrior.contains(paramName)) {
+            param.priorMean = autoAbundancePrior[paramName].first;
+            param.priorStd = autoAbundancePrior[paramName].second;
+            param.useGaussianPrior = (param.priorStd > 0.0);
+            param.autoPrior = true;
+          }
+        } else if (isAutoPriorCategory(param.category)) {
           const QStringList tokens = paramName.split('_');
           bool haveKey = false;
           int segmentKey = tokens.size() > 1 ? tokens[1].toInt(&haveKey) : 0;

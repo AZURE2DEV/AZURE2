@@ -169,7 +169,7 @@ set_tests_properties(pair_key_combo PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # Segment lines round-trip through the Segments tab with their trailing
-# keyword blocks (sqrtshift, mixture) intact; the sqrtshift block used to be
+# keyword blocks (sqrtshift, natural) intact; the sqrtshift block used to be
 # dropped on load.
 add_executable(segments_roundtrip_test segments_roundtrip_test.cpp)
 set_target_properties(segments_roundtrip_test PROPERTIES AUTOMOC OFF)
@@ -191,6 +191,31 @@ if(USE_ERYA)
 endif()
 add_test(NAME segments_roundtrip COMMAND segments_roundtrip_test)
 set_tests_properties(segments_roundtrip PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# Several compound nuclei in one project: nuclei of the pairs, the abundance
+# table and its <abundances> block, levels per nucleus, the "natural 1"
+# segment keyword in the dialogs and models, abundance fitting parameters.
+add_executable(natural_target_test natural_target_test.cpp)
+set_target_properties(natural_target_test PROPERTIES AUTOMOC OFF)
+target_include_directories(natural_target_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(natural_target_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(natural_target_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(natural_target_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME natural_target COMMAND natural_target_test)
+set_tests_properties(natural_target PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # The run thread's Config copy must carry every option the GUI sets on its

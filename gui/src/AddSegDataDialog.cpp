@@ -4,6 +4,7 @@
 #include <QGroupBox>
 #include <QGridLayout>
 #include "DialogScrollArea.h"
+#include "PairsModel.h"
 #include <QFileDialog>
 
 AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
@@ -95,6 +96,14 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
 
   advancedModeCheck = new QCheckBox(tr("Advanced Settings (Sum or Ratio of Components)"));
   connect(advancedModeCheck, SIGNAL(stateChanged(int)), this, SLOT(advancedModeChanged(int)));
+
+  naturalCheck = new QCheckBox(tr("Natural target (weight each term by its nucleus's isotopic abundance)"));
+  naturalCheck->setObjectName("naturalCheck");
+  naturalCheck->setToolTip(tr("Weight this segment's term and each of its components by the isotopic abundance\n"
+                              "of the compound nucleus its entrance pair forms (the Particle Pairs tab sets the\n"
+                              "abundances). Not available for ratios, phase shifts or analyzing powers."));
+  naturalCheck->setVisible(false);
+  connect(advancedModeCheck, SIGNAL(stateChanged(int)), this, SLOT(updateNaturalCheck()));
 
   advancedModeBox = new QGroupBox(tr("Advanced Segment Definition"));
   advancedModeBox->setVisible(false);
@@ -257,6 +266,7 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   advancedModeBox->setLayout(advancedLayout);
 
   lowerLayout->addWidget(advancedModeBox, 7, 0, 1, 3);
+  lowerLayout->addWidget(naturalCheck, 8, 0, 1, 3);
 
   valueLayout->addLayout(lowerLayout, 2, 0, 1, 2);
   valueBox->setLayout(valueLayout);
@@ -334,6 +344,7 @@ void AddSegDataDialog::dataTypeChanged(int index) {
 
   // Update fixed angle visibility when data type changes
   operationTypeChanged(operationCombo->currentIndex());
+  updateNaturalCheck();
 }
 
 void AddSegDataDialog::varyNormChanged(int state) {
@@ -375,6 +386,7 @@ void AddSegDataDialog::operationTypeChanged(int index) {
   // Per-component scaling factor only applies to Sum mode
   componentScalingLabel->setVisible(!isRatio);
   componentScalingText->setVisible(!isRatio);
+  updateNaturalCheck();
 }
 
 void AddSegDataDialog::useFixedAngleChanged(int state) {
@@ -440,7 +452,24 @@ void AddSegDataDialog::uposChanged(int state) {
   fitDialogToContent(this);
 }
 
+bool AddSegDataDialog::naturalAllowed() const {
+  // The engine's NaturalAllowed: a weighted sum is only meaningful for additive observables.
+  int code = dataTypeCode();
+  if (code == 2 || code == 7) return false;
+  if (advancedModeCheck->isChecked() && operationCombo->currentIndex() == 1) return false;  // ratio
+  return true;
+}
+
+void AddSegDataDialog::updateNaturalCheck() {
+  bool allowed = naturalAllowed();
+  naturalCheck->setEnabled(allowed);
+  if (!allowed) naturalCheck->setChecked(false);
+}
+
 void AddSegDataDialog::setPairsModel(PairsModel *model) {
+  // The check box only means something when the pairs form more than one compound nucleus.
+  naturalCheck->setVisible(model && model->nuclei().size() > 1);
+  updateNaturalCheck();
   for (PairKeyCombo *combo : {entrancePairCombo, exitPairCombo, componentEntranceCombo, componentExitCombo}) combo->setPairsModel(model);
   // A fresh dialog starts on the first pair, as the key boxes started on 1.
   if (entrancePairCombo->key() == 0) entrancePairCombo->setKey(1);

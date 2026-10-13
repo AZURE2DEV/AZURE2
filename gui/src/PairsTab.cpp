@@ -9,6 +9,8 @@
 #include "PairsTab.h"
 #include "RichTextDelegate.h"
 #include "InfoDialog.h"
+#include <QLabel>
+#include <QRegularExpression>
 #include <iostream>
 
 PairsTab::PairsTab(QWidget *parent) :
@@ -30,6 +32,12 @@ PairsTab::PairsTab(QWidget *parent) :
   RichTextDelegate *rt = new RichTextDelegate();
   pairsView->setItemDelegateForColumn(0, rt);
   pairsView->setItemDelegateForColumn(5, rt);
+  pairsView->setItemDelegateForColumn(PairsModel::NucleusColumn, rt);
+  pairsView->setColumnHidden(PairsModel::NucleusColumn, true);   // shown once the pairs form more than one nucleus
+  connect(pairsModel, SIGNAL(rowsInserted(QModelIndex, int, int)), this, SLOT(updateNucleusColumn()));
+  connect(pairsModel, SIGNAL(rowsRemoved(QModelIndex, int, int)), this, SLOT(updateNucleusColumn()));
+  connect(pairsModel, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(updateNucleusColumn()));
+  connect(pairsModel, SIGNAL(modelReset()), this, SLOT(updateNucleusColumn()));
   pairsView->setSelectionBehavior(QAbstractItemView::SelectRows);
   pairsView->setSelectionMode(QAbstractItemView::SingleSelection);
   pairsView->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -38,7 +46,7 @@ PairsTab::PairsTab(QWidget *parent) :
   connect(pairsView->selectionModel(), SIGNAL(selectionChanged(QItemSelection, QItemSelection)), this, SLOT(updateButtons(QItemSelection)));
   connect(pairsView, SIGNAL(doubleClicked(QModelIndex)), this, SLOT(editPair()));
 
-  for (int i = 0; i < PairsData::SIZE; i++) pairsView->horizontalHeader()->setSectionResizeMode(i, QHeaderView::Stretch);
+  for (int i = 0; i < pairsModel->columnCount(QModelIndex()); i++) pairsView->horizontalHeader()->setSectionResizeMode(i, QHeaderView::Stretch);
 
   addButton = new QPushButton(tr("+"));
   addButton->setMaximumSize(28, 28);
@@ -74,14 +82,108 @@ PairsTab::PairsTab(QWidget *parent) :
   buttonBox->setHorizontalSpacing(0);
 #endif
 
+  // Isotopic abundances: one row per compound nucleus, shown once the pairs
+  // form more than one (a natural-abundance target), hidden otherwise.
+  abundancesModel = new AbundancesModel(this);
+  abundancesModel->setPairsModel(pairsModel);
+  abundancesView = new QTableView;
+  abundancesView->setModel(abundancesModel);
+  abundancesView->verticalHeader()->setVisible(false);
+  abundancesView->horizontalHeader()->setHighlightSections(false);
+  abundancesView->setSelectionBehavior(QAbstractItemView::SelectRows);
+  abundancesView->setSelectionMode(QAbstractItemView::SingleSelection);
+  abundancesView->setShowGrid(false);
+  for (int i = 0; i < AbundancesModel::NumCols; i++) abundancesView->horizontalHeader()->setSectionResizeMode(i, QHeaderView::Stretch);
+  abundancesView->setMaximumHeight(140);
+  sumSigmaSpin = new QDoubleSpinBox;
+  sumSigmaSpin->setDecimals(4);
+  sumSigmaSpin->setRange(0.0, 10.0);
+  sumSigmaSpin->setSingleStep(0.001);
+  sumSigmaSpin->setValue(0.0);
+  sumSigmaSpin->setToolTip(tr("Width of the sum-to-one prior on the fitted abundances, ((sum w) - 1)^2 / sigma^2; 0 switches it off."));
+  QHBoxLayout *sumRow = new QHBoxLayout;
+  sumRow->addWidget(new QLabel(tr("Sum-to-one prior sigma (0 = off):")));
+  sumRow->addWidget(sumSigmaSpin);
+  sumRow->addStretch(1);
+  QVBoxLayout *abundancesLayout = new QVBoxLayout;
+  abundancesLayout->addWidget(new QLabel(tr("Each nucleus's term in a natural-target segment (\"natural\" in the segment dialog) is weighted by the "
+                                            "abundance of its target isotope.  A fitted abundance becomes the parameter abundance_<Z>_<A>.")));
+  abundancesLayout->addWidget(abundancesView);
+  abundancesLayout->addLayout(sumRow);
+  abundancesBox = new QGroupBox(tr("Isotopic abundances (natural-abundance target: one row per compound nucleus)"));
+  abundancesBox->setLayout(abundancesLayout);
+  abundancesBox->setVisible(false);
+  connect(abundancesModel, SIGNAL(modelReset()), this, SLOT(updateAbundancesBox()));
+
   QVBoxLayout *layout = new QVBoxLayout();
   layout->addWidget(pairsView);
   layout->addLayout(buttonBox);
+  layout->addWidget(abundancesBox);
   setLayout(layout);
+}
+
+AbundancesModel *PairsTab::getAbundancesModel() {
+  return abundancesModel;
+}
+
+void PairsTab::updateAbundancesBox() {
+  abundancesBox->setVisible(pairsModel->nuclei().size() > 1);
+}
+
+bool PairsTab::readAbundances(QTextStream &inStream) {
+  QString line("");
+  while (!inStream.atEnd()) {
+    line = inStream.readLine();
+    if (line.trimmed() == QString("</abundances>")) return true;
+    QString entry = line.section('#', 0, 0).trimmed();
+    if (entry.isEmpty()) continue;
+    QStringList t = entry.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    if (t.size() < 5) return false;
+    Nucleus nucleus;
+    nucleus.Z = t.at(0).toInt();
+    nucleus.A = t.at(1).toInt();
+    if (!abundancesModel->setEntry(nucleus, t.at(2).toDouble(), t.at(3).toInt() == 1, t.at(4).toDouble())) return false;
+  }
+  return false;
+}
+
+bool PairsTab::writeAbundances(QTextStream &outStream) {
+  QList<AbundanceEntry> entries = abundancesModel->entries();
+  for (int i = 0; i < entries.size(); i++) {
+    const AbundanceEntry &e = entries.at(i);
+    outStream << e.nucleus.Z << " " << e.nucleus.A << " " << e.value << " " << (e.vary ? 1 : 0) << " " << e.sigma
+              << "   # " << PairsModel::nucleusLabel(e.nucleus, false) << Qt::endl;
+  }
+  return true;
+}
+
+bool PairsTab::hasAbundanceBlock() const {
+  return abundancesModel->hasBlock();
+}
+
+double PairsTab::abundanceSumSigma() const {
+  return sumSigmaSpin->value();
+}
+
+void PairsTab::setAbundanceSumSigma(double sigma) {
+  sumSigmaSpin->setValue(sigma);
+}
+
+void PairsTab::reset() {
+  abundancesModel->clear();
+  sumSigmaSpin->setValue(0.0);
 }
 
 PairsModel *PairsTab::getPairsModel() {
   return pairsModel;
+}
+
+/*!
+ * The compound-nucleus column only matters when the pairs form more than one
+ * nucleus; a single-nucleus project looks as it always did.
+ */
+void PairsTab::updateNucleusColumn() {
+  pairsView->setColumnHidden(PairsModel::NucleusColumn, pairsModel->nuclei().size() < 2);
 }
 
 void PairsTab::addPair() {

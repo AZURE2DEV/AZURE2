@@ -14,6 +14,7 @@ class QwtPlotMarker;
 class QwtLegend;
 class PlotTab;
 class LevelsModel;
+class PairsModel;
 
 struct PlotPoint {
   double energy;
@@ -144,6 +145,8 @@ class AZUREPlot : public QwtPlot {
   void setBandVisible(bool visible);
   bool isBandVisible() const { return bandVisible; };
   void setLevelsModel(LevelsModel *model);
+  /*! With it, a level marker is drawn against an entrance pair only when the level belongs to that pair's compound nucleus. */
+  void setPairsModel(PairsModel *model);
   void setLevelsVisible(bool visible);
   void refreshLevelMarkers();
 
@@ -171,6 +174,7 @@ class AZUREPlot : public QwtPlot {
   QwtPlotGrid *grid;
   QwtLegend *legend;
   LevelsModel *levelsModel;
+  PairsModel *pairsModel = nullptr;
   bool levelsVisible;
   bool bandVisible;
   QList<QwtPlotMarker *> levelMarkers;

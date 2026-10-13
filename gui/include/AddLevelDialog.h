@@ -40,11 +40,21 @@ class AddLevelDialog : public QDialog {
   double jValue() const;
   int piValue() const;
   static QString spinParityLabel(double jValue, int piValue);
+  /*!
+   * A project whose pairs form several compound nuclei: a drop-down picks the level's nucleus and the J^pi list
+   * follows it (one option list per nucleus, same order as the labels). Hidden with fewer than two nuclei; on an edit
+   * (editable = false) the nucleus is shown but cannot be changed, since the channels would have to be rebuilt.
+   */
+  void setNucleusOptions(const QStringList &labels, const QList<QList<SpinParityOption> > &optionsPerNucleus,
+                         int current = 0, bool editable = true);
+  /*! Index into the labels passed to setNucleusOptions (0 when none were). */
+  int nucleusIndex() const;
 
   QLineEdit *energyText;
 
  private slots:
   void updateOkButton();
+  void nucleusChanged(int index);
 
  private:
   void addOption(double jValue, int piValue, const QString &suffix);
@@ -52,6 +62,9 @@ class AddLevelDialog : public QDialog {
   QLabel *spinParityLabelWidget;
   QLabel *energyLabel;
   QComboBox *spinParityCombo;
+  QLabel *nucleusLabelWidget;
+  QComboBox *nucleusCombo;
+  QList<QList<SpinParityOption> > nucleusOptions;
   QLabel *noteLabel;
 
   QPushButton *okButton;

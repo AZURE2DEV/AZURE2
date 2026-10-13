@@ -59,6 +59,13 @@ class AddSegDataDialog : public QDialog {
   QLabel *energyShiftErrorLabel;
   QCheckBox *varyEnergyShiftCheck;
 
+  /*! "Natural target": the term and each component are weighted by the isotopic
+   *  abundance of their entrance pair's compound nucleus (keyword tail "natural 1").
+   *  Shown only when the pairs form more than one compound nucleus; cleared and
+   *  disabled for the observables the engine refuses (ratio, phase shift, analyzing power). */
+  QCheckBox *naturalCheck;
+  /*! True when the current observable and operation allow a natural-target segment. */
+  bool naturalAllowed() const;
   QCheckBox *advancedModeCheck;
   QGroupBox *advancedModeBox;
   QComboBox *operationCombo;
@@ -88,6 +95,7 @@ class AddSegDataDialog : public QDialog {
   void varyNormChanged(int);
   void advancedModeChanged(int);
   void operationTypeChanged(int);
+  void updateNaturalCheck();
   void useFixedAngleChanged(int);
   void addComponent();
   void removeComponent();

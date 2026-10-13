@@ -14,6 +14,7 @@
 #include "InfoDialog.h"
 #include "PairsModel.h"
 #include "ExforDialog.h"
+#include "SegmentKeywords.h"
 
 static bool isSegmentKeyword(const QString &token);
 
@@ -304,6 +305,7 @@ void SegmentsTab::addSegDataLine() {
       newLine.finalJ = 0.0;
       newLine.delta = 0.0;
     }
+    newLine.extraTokens = SegmentKeywords::withNatural(QString(), aDialog.naturalCheck->isChecked());
     addSegDataLine(newLine);
   }
 }
@@ -404,6 +406,7 @@ void SegmentsTab::addSegTestLine() {
       newLine.operationType = 0;
       newLine.componentsList = "";
     }
+    newLine.extraTokens = SegmentKeywords::withNatural(QString(), aDialog.naturalCheck->isChecked());
     addSegTestLine(newLine);
   }
 }
@@ -527,9 +530,12 @@ void SegmentsTab::editSegDataLine() {
   var = segmentsDataModel->data(i, Qt::EditRole);
   QString delta = var.toString();
 
+  QString extraTokens = segmentsDataModel->getLines().at(index.row()).extraTokens;
+
   AddSegDataDialog aDialog;
   aDialog.setPairsModel(pairsModel);
   aDialog.setWindowTitle(tr("Edit a Segment From Data"));
+  aDialog.naturalCheck->setChecked(SegmentKeywords::isNatural(extraTokens));
   aDialog.entrancePairCombo->setKey(entrancePairIndex);
   aDialog.exitPairCombo->setKey(exitPairIndex);
   aDialog.lowEnergyText->setText(lowEnergy);
@@ -706,6 +712,8 @@ void SegmentsTab::editSegDataLine() {
       i = segmentsDataModel->index(index.row(), 23, QModelIndex());
       segmentsDataModel->setData(i, newDelta, Qt::EditRole);
     }
+    QString newExtraTokens = SegmentKeywords::withNatural(extraTokens, aDialog.naturalCheck->isChecked());
+    if (newExtraTokens != extraTokens) segmentsDataModel->setLineExtras(index.row(), newExtraTokens);
   }
 }
 
@@ -760,9 +768,12 @@ void SegmentsTab::editSegTestLine() {
   var = segmentsTestModel->data(i, Qt::EditRole);
   QString componentsList = var.toString();
 
+  QString extraTokens = segmentsTestModel->getLines().at(index.row()).extraTokens;
+
   AddSegTestDialog aDialog;
   aDialog.setPairsModel(pairsModel);
   aDialog.setWindowTitle(tr("Edit a Segment Without Data"));
+  aDialog.naturalCheck->setChecked(SegmentKeywords::isNatural(extraTokens));
   aDialog.entrancePairCombo->setKey(entrancePairIndex);
   aDialog.exitPairCombo->setKey(exitPairIndex);
   aDialog.lowEnergyText->setText(lowEnergy);
@@ -876,6 +887,8 @@ void SegmentsTab::editSegTestLine() {
       i = segmentsTestModel->index(index.row(), 15, QModelIndex());
       segmentsTestModel->setData(i, newComponentsList, Qt::EditRole);
     }
+    QString newExtraTokens = SegmentKeywords::withNatural(extraTokens, aDialog.naturalCheck->isChecked());
+    if (newExtraTokens != extraTokens) segmentsTestModel->setLineExtras(index.row(), newExtraTokens);
   }
 }
 
@@ -1294,8 +1307,7 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
 // The keyword blocks a segment line may end with (SegLine.h / ExtrapLine.h).
 // They are carried verbatim through the models rather than parsed here.
 static bool isSegmentKeyword(const QString &token) {
-  return token.compare("sqrtshift", Qt::CaseInsensitive) == 0 ||
-         token.compare("mixture", Qt::CaseInsensitive) == 0;
+  return SegmentKeywords::isKeyword(token);
 }
 
 // Quote a data-file path that contains a space.  The optional composite/UPOS

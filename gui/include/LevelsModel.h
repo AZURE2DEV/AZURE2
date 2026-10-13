@@ -3,14 +3,23 @@
 
 #include <QAbstractTableModel>
 #include <QList>
+#include "PairsModel.h"
 
 struct LevelsData {
-  static const int SIZE = 5;
+  static const int SIZE = 6;
   int isActive;
   int isFixed;
   double jValue;
   int piValue;
   double energy;
+  // The compound nucleus the level belongs to (PairsModel::nucleusOf of its
+  // channels' pairs).  (0, 0) = not assigned: the level takes channels from
+  // every pair and matches a level of any nucleus, which is the behaviour of
+  // a single-nucleus project and of the older tests.
+  int nucZ = 0;
+  int nucA = 0;
+  Nucleus nucleus() const { return {nucZ, nucA}; }
+  bool hasNucleus() const { return nucZ > 0 || nucA > 0; }
 };
 
 /*!
@@ -30,9 +39,13 @@ class LevelsModel : public QAbstractTableModel {
   bool insertRows(int position, int rows, const QModelIndex &index = QModelIndex());
   bool removeRows(int position, int rows, const QModelIndex &index = QModelIndex());
   Qt::ItemFlags flags(const QModelIndex &index) const;
+  /*! Row of a level with the same J, parity, energy and nucleus (an unassigned nucleus matches any), or -1. */
   int isLevel(const LevelsData &level) const;
   QList<LevelsData> getLevels() const { return levelsList; };
   QString getSpinLabel(const LevelsData &level) const;
+  /*! The read-only column showing the level's compound nucleus (hidden by the tab with one nucleus). */
+  static const int NucleusColumn = 5;
+  void setNucleus(int row, const Nucleus &nucleus);
 
  private:
   QList<LevelsData> levelsList;

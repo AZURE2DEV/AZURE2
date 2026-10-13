@@ -2,7 +2,7 @@
 // Segments tab's own readers and writers.
 //
 // A segment line may end with keyword blocks the GUI does not edit --
-// "sqrtshift b bError vary" (sqrt(E) energy-shift term) and "mixture w_self
+// "sqrtshift b bError vary" (sqrt(E) energy-shift term) and "natural 1
 // n {file w}..." (natural-abundance targets) -- which it has to carry through
 // a load/save verbatim.  The sqrtshift block used to be lost on every load:
 // the reader split it off, but the row was then rebuilt column by column and
@@ -67,9 +67,9 @@ int main(int argc, char** argv) {
   // ---- data segments -------------------------------------------------------
   const QString dataBlock =
       "1 1 1 0.5 3 0 180 1 1 0 5 0.004 0.002 0 data/xs_40.dat 0 0 sqrtshift 0.003 0.001 0\n"
-      "1 2 2 0 2.5 0 180 0 1 0 0 0 0 0 data/Junghans_ntotal.dat 1 0 2 2 1 -999 2 3 -999 0 mixture 0.9048 2 \"tables/22Ne.dat\" 0.0925 \"tables/21Ne.dat\" 0.0027\n"
+      "1 2 2 0 2.5 0 180 0 1 0 0 0 0 0 data/Junghans_ntotal.dat 1 0 2 2 1 -999 2 3 -999 0 natural 1\n"
       "1 1 1 1 3 0 180 4 1 0 1 0 0 0 data/plain.dat 0 0\n"
-      "0 1 2 0 5 0 180 0 1 1 7.2 0 0 0 data/both.dat 0 0 sqrtshift 0.001 0.002 1 mixture 0.5 1 \"t.dat\" 0.5\n"
+      "0 1 2 0 5 0 180 0 1 1 7.2 0 0 0 data/both.dat 0 0 sqrtshift 0.001 0.002 1 natural 1\n"
       "</segmentsData>\n";
   {
     QString in(dataBlock);
@@ -79,14 +79,14 @@ int main(int argc, char** argv) {
     ok("four data lines", lines.size() == 4, QString::number(lines.size()));
     if (lines.size() == 4) {
       ok("sqrtshift block kept on the row", lines[0].extraTokens == "sqrtshift 0.003 0.001 0", lines[0].extraTokens);
-      ok("mixture block kept on a composite row",
-         lines[1].extraTokens == "mixture 0.9048 2 \"tables/22Ne.dat\" 0.0925 \"tables/21Ne.dat\" 0.0027", lines[1].extraTokens);
+      ok("natural block kept on a composite row",
+         lines[1].extraTokens == "natural 1", lines[1].extraTokens);
       ok("composite components still parsed", lines[1].isAdvanced == 1 && lines[1].componentsList.split(";").size() == 2,
          lines[1].componentsList);
       ok("plain row has no extras", lines[2].extraTokens.isEmpty(), lines[2].extraTokens);
-      ok("both blocks kept together", lines[3].extraTokens == "sqrtshift 0.001 0.002 1 mixture 0.5 1 \"t.dat\" 0.5",
+      ok("both blocks kept together", lines[3].extraTokens == "sqrtshift 0.001 0.002 1 natural 1",
          lines[3].extraTokens);
-      ok("data file of the mixture row", lines[1].dataFile == "data/Junghans_ntotal.dat", lines[1].dataFile);
+      ok("data file of the natural row", lines[1].dataFile == "data/Junghans_ntotal.dat", lines[1].dataFile);
     }
     QString out;
     QTextStream outStream(&out);
@@ -99,8 +99,8 @@ int main(int argc, char** argv) {
 
   // ---- test segments -------------------------------------------------------
   const QString testBlock =
-      "1 1 1 1 3 0.002 120 120 1 1 mixture 0.5 1 \"table.dat\" 0.5\n"
-      "1 2 2 0 2.5 0.01 0 180 0 0 1 0 2 2 1 -999 2 3 -999 mixture 0.9048 1 \"tables/22Ne.dat\" 0.0925\n"
+      "1 1 1 1 3 0.002 120 120 1 1 natural 1\n"
+      "1 2 2 0 2.5 0.01 0 180 0 0 1 0 2 2 1 -999 2 3 -999 natural 1\n"
       "1 1 1 1.5 3 0.002 120 120 1 1 0\n"
       "</segmentsTest>\n";
   {
@@ -110,9 +110,9 @@ int main(int argc, char** argv) {
     QList<SegmentsTestData> lines = tab.getSegmentsTestModel()->getLines();
     ok("three test lines", lines.size() == 3, QString::number(lines.size()));
     if (lines.size() == 3) {
-      ok("mixture after a plain test line (no isAdvanced token)", lines[0].extraTokens == "mixture 0.5 1 \"table.dat\" 0.5"
+      ok("natural after a plain test line (no isAdvanced token)", lines[0].extraTokens == "natural 1"
                                                                    && lines[0].isAdvanced == 0, lines[0].extraTokens);
-      ok("mixture after a composite test line", lines[1].extraTokens == "mixture 0.9048 1 \"tables/22Ne.dat\" 0.0925"
+      ok("natural after a composite test line", lines[1].extraTokens == "natural 1"
                                                 && lines[1].isAdvanced == 1, lines[1].extraTokens);
       ok("plain test line has no extras", lines[2].extraTokens.isEmpty(), lines[2].extraTokens);
     }
@@ -123,8 +123,8 @@ int main(int argc, char** argv) {
     QStringList got = tokens(out);
     // The writer always emits the isAdvanced token, so the first line gains a "0" before its block.
     QStringList want;
-    want << "1 1 1 1 3 0.002 120 120 1 1 0 mixture 0.5 1 \"table.dat\" 0.5"
-         << "1 2 2 0 2.5 0.01 0 180 0 0 1 0 2 2 1 -999 2 3 -999 mixture 0.9048 1 \"tables/22Ne.dat\" 0.0925"
+    want << "1 1 1 1 3 0.002 120 120 1 1 0 natural 1"
+         << "1 2 2 0 2.5 0.01 0 180 0 0 1 0 2 2 1 -999 2 3 -999 natural 1"
          << "1 1 1 1.5 3 0.002 120 120 1 1 0";
     ok("test lines written back with their blocks last", got == want, got.join(" | "));
   }

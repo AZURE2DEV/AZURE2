@@ -222,6 +222,8 @@ void CurveStyleDialog::accept() {
 
 // ---------------- PlotTab ----------------
 
+void PlotTab::setPairsModel(PairsModel *model) { azurePlot->setPairsModel(model); }
+
 PlotTab::PlotTab(Config &config, SegmentsDataModel *dataModel, SegmentsTestModel *testModel, LevelsModel *levelsModel, QWidget *parent) :
   QWidget(parent),
   configure(config) {

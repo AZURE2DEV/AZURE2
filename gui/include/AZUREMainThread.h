@@ -82,6 +82,7 @@ class AZUREMainThread : public QThread {
     // here too or a GUI run silently computes without the hard-sphere groups.
     configure_.includeAllJPi = configure.includeAllJPi;
     configure_.hardSphereMaxL = configure.hardSphereMaxL;
+    configure_.abundanceSumSigma = configure.abundanceSumSigma;
     connect(&buffer_, SIGNAL(updateLog(QString)), tab->runtimeText, SLOT(write(QString)));
     connect(tab->stopAZUREButton, SIGNAL(clicked()), this, SLOT(stopAZURE()));
     connect(this, SIGNAL(readyToRun()), &worker_, SLOT(run()));

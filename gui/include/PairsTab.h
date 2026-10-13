@@ -10,6 +10,10 @@
 #include <QPointer>
 
 #include "PairsModel.h"
+#include "AbundancesModel.h"
+#include <QGroupBox>
+#include <QDoubleSpinBox>
+#include <QTextStream>
 #include "AddPairDialog.h"
 
 QT_BEGIN_NAMESPACE
@@ -29,7 +33,18 @@ class PairsTab : public QWidget {
  public:
   PairsTab(QWidget *parent = 0);
   PairsModel *getPairsModel();
+  AbundancesModel *getAbundancesModel();
   bool parseOldECSection(QTextStream &);
+  /*! Read the <abundances> block (one line per nucleus: Z A abundance vary sigma) up to its closing tag. */
+  bool readAbundances(QTextStream &);
+  /*! Write the block's lines (no tags), one per compound nucleus. */
+  bool writeAbundances(QTextStream &);
+  /*! Should the file carry an <abundances> block: more than one nucleus, or a non-default entry. */
+  bool hasAbundanceBlock() const;
+  double abundanceSumSigma() const;
+  void setAbundanceSumSigma(double sigma);
+  /*! A new file: default abundances, no sum-to-one prior. */
+  void reset();
 
  public slots:
   void addPair();
@@ -39,6 +54,8 @@ class PairsTab : public QWidget {
   void removePair();
   void updateButtons(const QItemSelection &selection);
   void showInfo(int which = 0, QString title = "");
+  void updateNucleusColumn();
+  void updateAbundancesBox();
 
  signals:
   void pairAdded(int);
@@ -48,6 +65,10 @@ class PairsTab : public QWidget {
  private:
   PairsModel *pairsModel;
   QTableView *pairsView;
+  AbundancesModel *abundancesModel;
+  QTableView *abundancesView;
+  QGroupBox *abundancesBox;
+  QDoubleSpinBox *sumSigmaSpin;
   QPushButton *addButton;
   QPushButton *deleteButton;
   QSignalMapper *mapper;

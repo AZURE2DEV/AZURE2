@@ -102,6 +102,7 @@ AZURESetup::AZURESetup() :
 
   fittingTab = new FittingTab();
   fittingTab->setTabReferences(levelsTab, segmentsTab);
+  fittingTab->setAbundancesModel(pairsTab->getAbundancesModel());
   fittingTab->setConfig(&GetConfig());
 
   runTab = new RunTab();
@@ -110,6 +111,7 @@ AZURESetup::AZURESetup() :
 
 #ifdef USE_QWT
   plotTab = new PlotTab(config, segmentsTab->getSegmentsDataModel(), segmentsTab->getSegmentsTestModel(), levelsTab->getLevelsModel());
+  plotTab->setPairsModel(pairsTab->getPairsModel());
 #endif
 
 #ifdef USE_MCMC
@@ -325,9 +327,17 @@ bool AZURESetup::readFile(QString filename) {
   if (fileMaxL > levelsTab->maxL()) levelsTab->setMaxL(fileMaxL);
   GetConfig().includeAllJPi = fileIncludeAllJPi;
   GetConfig().hardSphereMaxL = levelsTab->maxL();
+  pairsTab->setAbundanceSumSigma(fileAbundanceSumSigma);
+  GetConfig().abundanceSumSigma = fileAbundanceSumSigma;
 
+  // The optional <abundances> block sits between </levels> and <segmentsData>.
   line = QString("");
-  while (line.trimmed() != QString("<segmentsData>") && !in.atEnd()) line = in.readLine();
+  while (line.trimmed() != QString("<abundances>") && line.trimmed() != QString("<segmentsData>") && !in.atEnd()) line = in.readLine();
+  if (!in.atEnd() && line.trimmed() == QString("<abundances>")) {
+    if (!pairsTab->readAbundances(in)) return false;
+    line = QString("");
+    while (line.trimmed() != QString("<segmentsData>") && !in.atEnd()) line = in.readLine();
+  }
   if (in.atEnd()) return false;
   if (!segmentsTab->readSegDataFile(in)) return false;
 
@@ -591,6 +601,7 @@ bool AZURESetup::readConfig(QTextStream &inStream) {
   // Optional key=value lines after the fixed ones; absent keys keep the defaults of an older file.
   fileIncludeAllJPi = false;
   fileMaxL = -1;
+  fileAbundanceSumSigma = 0.0;
   QString line("");
   while (line.trimmed() != QString("</config>") && !inStream.atEnd()) {
     line = inStream.readLine();
@@ -602,6 +613,8 @@ bool AZURESetup::readConfig(QTextStream &inStream) {
       fileIncludeAllJPi = (value == "1" || value == "true");
     else if (key == "maxOrbitalMomentum")
       fileMaxL = value.toInt();
+    else if (key == "abundanceSumSigma")
+      fileAbundanceSumSigma = value.toDouble();
   }
   if (line.trimmed() != QString("</config>")) return false;
 
@@ -693,6 +706,10 @@ bool AZURESetup::writeFile(QString filename) {
   GetConfig().hardSphereMaxL = levelsTab->maxL();
   out << "includeAllJPi=" << (levelsTab->includeAllJPi() ? 1 : 0) << " #Hard-sphere scattering in every J^pi up to maxOrbitalMomentum" << Qt::endl;
   out << "maxOrbitalMomentum=" << levelsTab->maxL() << Qt::endl;
+  // Only a project with a sum-to-one prior on its abundances carries the key, so other files are unchanged.
+  GetConfig().abundanceSumSigma = pairsTab->abundanceSumSigma();
+  if (pairsTab->abundanceSumSigma() > 0.0)
+    out << "abundanceSumSigma=" << pairsTab->abundanceSumSigma() << " #Sum-to-one prior on the isotopic abundances" << Qt::endl;
   out << "</config>" << Qt::endl;
 
   // Write potential section after config.  A pair may be switched on while the
@@ -709,6 +726,14 @@ bool AZURESetup::writeFile(QString filename) {
   out << "<levels>" << Qt::endl;
   if (!levelsTab->writeNuclearFile(out)) return false;
   out << "</levels>" << Qt::endl;
+
+  // Isotopic abundances, one line per compound nucleus, only for a project
+  // that needs them (several nuclei, or a non-default entry).
+  if (pairsTab->hasAbundanceBlock()) {
+    out << "<abundances>" << Qt::endl;
+    if (!pairsTab->writeAbundances(out)) return false;
+    out << "</abundances>" << Qt::endl;
+  }
 
   out << "<segmentsData>" << Qt::endl;
   if (!segmentsTab->writeSegDataFile(out)) return false;
@@ -1518,6 +1543,7 @@ void AZURESetup::reset() {
   GetConfig().Reset();
   aMatrixAction->activate(QAction::Trigger);
   levelsTab->reset();
+  pairsTab->reset();
   segmentsTab->reset();
   targetIntTab->reset();
   fittingTab->reset();

@@ -14,7 +14,54 @@ int PairsModel::rowCount(const QModelIndex &parent) const {
 
 int PairsModel::columnCount(const QModelIndex &parent) const {
   Q_UNUSED(parent);
-  return PairsData::SIZE;
+  return PairsData::SIZE + 1;   // the PairsData columns and the derived compound-nucleus column
+}
+
+Nucleus PairsModel::nucleusOf(const PairsData &pair) {
+  Nucleus nucleus;
+  if (pair.pairType == 20) {
+    nucleus.Z = pair.heavyZ - pair.lightZ;
+    nucleus.A = (int)floor(pair.heavyM + 0.5);
+  } else if (pair.pairType == 10) {
+    nucleus.Z = pair.heavyZ;
+    nucleus.A = (int)floor(pair.heavyM + 0.5);
+  } else {
+    nucleus.Z = pair.lightZ + pair.heavyZ;
+    nucleus.A = (int)floor(pair.lightM + pair.heavyM + 0.5);
+  }
+  return nucleus;
+}
+
+QList<Nucleus> PairsModel::nuclei() const {
+  QList<Nucleus> out;
+  for (int i = 0; i < pairsList.size(); i++) {
+    Nucleus nucleus = nucleusOf(pairsList.at(i));
+    if (!out.contains(nucleus)) out.append(nucleus);
+  }
+  return out;
+}
+
+int PairsModel::nucleusIndex(const Nucleus &nucleus) const {
+  return nuclei().indexOf(nucleus);
+}
+
+QString PairsModel::nucleusLabel(const Nucleus &nucleus, bool html) {
+  QString symbol = (nucleus.Z >= 0 && nucleus.Z < (int)(sizeof(elements) / sizeof(elements[0])))
+                       ? elements[nucleus.Z].second : QString("Z%1").arg(nucleus.Z);
+  QString label = QString("<sup>%1</sup>%2").arg(nucleus.A).arg(symbol);
+  return html ? label : plainText(label);
+}
+
+QString PairsModel::nucleusLongLabel(const Nucleus &nucleus) const {
+  for (int i = 0; i < pairsList.size(); i++) {
+    const PairsData &pair = pairsList.at(i);
+    if (pair.pairType != 0 || nucleusOf(pair) != nucleus) continue;
+    QString pairLabel = getPairLabel(pair);
+    int bracket = pairLabel.indexOf(" [");
+    if (bracket > 0) pairLabel = pairLabel.left(bracket);
+    return QString("%1 (%2)").arg(nucleusLabel(nucleus, false)).arg(pairLabel);
+  }
+  return nucleusLabel(nucleus, false);
 }
 
 QVariant PairsModel::data(const QModelIndex &index, int role) const {
@@ -59,6 +106,8 @@ QVariant PairsModel::data(const QModelIndex &index, int role) const {
         return "Particle, Particle";
     } else if (index.column() == 14)
       return pair.ecMultMask;
+    else if (index.column() == NucleusColumn)
+      return nucleusLabel(nucleusOf(pair));
   } else if (role == Qt::EditRole) {
     PairsData pair = pairsList.at(index.row());
     if (index.column() == 0)
@@ -131,6 +180,8 @@ QVariant PairsModel::headerData(int section, Qt::Orientation orientation, int ro
         return tr("Pair\nType");
       case 14:
         return tr("EC\nMultipolarities");
+      case NucleusColumn:
+        return tr("Compound\nNucleus");
       default:
         return QVariant();
     }

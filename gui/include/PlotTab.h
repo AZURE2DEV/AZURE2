@@ -11,6 +11,7 @@
 
 class Config;
 class AZUREPlot;
+class PairsModel;
 class PlotEntry;
 class SegmentsDataModel;
 class SegmentsTestModel;
@@ -125,6 +126,12 @@ class PlotTab : public QWidget {
 
   Config &configure;
   AZUREPlot *azurePlot;
+
+ public:
+  /*! Level markers are then drawn only against the entrance pairs of the level's compound nucleus. */
+  void setPairsModel(PairsModel *model);
+
+ private:
   QListView *dataSegmentSelectorList;
   QListView *testSegmentSelectorList;
   QComboBox *dataInChannelCombo;

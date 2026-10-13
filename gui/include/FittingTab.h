@@ -13,6 +13,7 @@
 class InfoDialog;
 class LevelsTab;
 class SegmentsTab;
+class AbundancesModel;
 class Config;
 
 struct FittingParameter {
@@ -23,7 +24,7 @@ struct FittingParameter {
   double error;
   double fitError;  // NEW: Error from fitting (separate from nuisance calculation error)
   bool useAsNuisance;
-  QString category;  // "level", "norm", "shift"
+  QString category;  // "level", "abundance", "norm", "shift"
   int minuitIndex;   // Index in Minuit parameters
 
   // For level parameters
@@ -63,6 +64,9 @@ class FittingTab : public QWidget {
   void refreshFromMinuitParameters();
   void populateFromCurrentGUIState();
   void setTabReferences(LevelsTab *levelsTab, SegmentsTab *segmentsTab);
+  /*! The isotopic abundances of the Particle Pairs tab: one parameter abundance_<Z>_<A> per compound nucleus when
+   *  the project carries an <abundances> block (Value = abundance, Error = prior sigma, Nuisance = fitted). */
+  void setAbundancesModel(AbundancesModel *model);
 
  protected:
   void showEvent(QShowEvent *event) override;
@@ -82,12 +86,15 @@ class FittingTab : public QWidget {
   void onSegmentEnergyShiftErrorChanged(int segmentIndex, double error);
   void onSegmentNormalizationVaryChanged(int segmentIndex, bool vary);
   void onSegmentEnergyShiftVaryChanged(int segmentIndex, bool vary);
+  /*! Mirror the Particle Pairs tab's abundance table into the abundance rows (value, sigma, fitted). */
+  void syncAbundances();
 
  private:
   void setupParameterTable(QTableWidget *table, const QString &title);
   void addParameterRow(QTableWidget *table, const FittingParameter &param);
   void updateParameterFromTable(const QString &paramName, int column, const QVariant &value);
   void syncSegmentVaryStates();
+  void writeAbundance(const FittingParameter &param);
   void assignMinuitIndices();
   void updateParameterInOtherTabs(const QString &paramName, const FittingParameter &param);
   void writeSegmentColumn(const FittingParameter &param, int column, const QVariant &value);
@@ -107,6 +114,7 @@ class FittingTab : public QWidget {
  private:
   QTabWidget *paramTabWidget;
   QTableWidget *levelParamsTable;
+  QTableWidget *abundanceParamsTable;
   QTableWidget *normParamsTable;
   QTableWidget *shiftParamsTable;
 
@@ -125,6 +133,7 @@ class FittingTab : public QWidget {
   // Tab references for reading current GUI state
   LevelsTab *levelsTab_;
   SegmentsTab *segmentsTab_;
+  AbundancesModel *abundancesModel_ = nullptr;
   Config *config_ = nullptr;  // for the current .azr path (backup on load)
 };
 

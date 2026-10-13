@@ -13,6 +13,17 @@ AddLevelDialog::AddLevelDialog(QWidget *parent) :
   spinParityCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
   spinParityCombo->setMaxVisibleItems(20);
   spinParityCombo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+  spinParityCombo->setObjectName("spinParityCombo");
+
+  // Both boxes carry object names; tests look the J^pi box up by its name.
+  nucleusLabelWidget = new QLabel(tr("Compound Nucleus:"));
+  nucleusCombo = new QComboBox;
+  nucleusCombo->setObjectName("nucleusCombo");
+  nucleusCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+  nucleusCombo->setToolTip(tr("The compound nucleus this level belongs to; its channels come from that nucleus's pairs only."));
+  nucleusLabelWidget->setVisible(false);
+  nucleusCombo->setVisible(false);
+  connect(nucleusCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(nucleusChanged(int)));
 
   noteLabel = new QLabel;
   noteLabel->setWordWrap(true);
@@ -24,6 +35,7 @@ AddLevelDialog::AddLevelDialog(QWidget *parent) :
 
   QFormLayout *formLayout = new QFormLayout;
   formLayout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+  formLayout->addRow(nucleusLabelWidget, nucleusCombo);
   formLayout->addRow(energyLabel, energyText);
   formLayout->addRow(spinParityLabelWidget, spinParityCombo);
 
@@ -113,4 +125,30 @@ void AddLevelDialog::updateOkButton() {
   bool ok = false;
   energyText->text().trimmed().toDouble(&ok);
   okButton->setEnabled(ok && spinParityCombo->count() > 0);
+}
+
+void AddLevelDialog::setNucleusOptions(const QStringList &labels, const QList<QList<SpinParityOption> > &optionsPerNucleus,
+                                       int current, bool editable) {
+  nucleusCombo->blockSignals(true);
+  nucleusCombo->clear();
+  nucleusOptions = optionsPerNucleus;
+  for (const QString &label : labels) nucleusCombo->addItem(label);
+  if (current < 0 || current >= labels.size()) current = 0;
+  if (!labels.isEmpty()) nucleusCombo->setCurrentIndex(current);
+  nucleusCombo->blockSignals(false);
+  bool several = labels.size() > 1;
+  nucleusLabelWidget->setVisible(several);
+  nucleusCombo->setVisible(several);
+  nucleusCombo->setEnabled(editable);
+  if (!several || !editable) return;
+  // The J^pi list of the chosen nucleus; an edit keeps the list the caller set with its current J^pi.
+  nucleusChanged(current);
+}
+
+int AddLevelDialog::nucleusIndex() const { return nucleusCombo->count() > 0 ? nucleusCombo->currentIndex() : 0; }
+
+void AddLevelDialog::nucleusChanged(int index) {
+  if (index < 0 || index >= nucleusOptions.size()) return;
+  setSpinParityOptions(nucleusOptions.at(index));
+  updateOkButton();
 }
