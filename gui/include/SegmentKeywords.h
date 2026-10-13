@@ -6,7 +6,7 @@
 
 /*!
  * The keyword blocks a segment line may end with (SegLine.h / ExtrapLine.h):
- * "sqrtshift <b> <bError> <vary>" and "natural <0|1>".  The GUI keeps the
+ * "sqrtshift <b> <bError> <vary>", "natural <0|1>" and "shiftgroup <label>".  The GUI keeps the
  * tail verbatim in SegmentsDataData::extraTokens / SegmentsTestData::extraTokens
  * and edits only the natural flag through these helpers, so a block it does
  * not know survives a load/save untouched.
@@ -14,8 +14,12 @@
 namespace SegmentKeywords {
 
 inline bool isKeyword(const QString &token) {
+  // sqrtshift, natural and shiftgroup are the engine's (SegLine.h); mixture is the
+  // retired 2026-10-12 block, still carried through a load/save of an old file.
   return token.compare("sqrtshift", Qt::CaseInsensitive) == 0 ||
-         token.compare("natural", Qt::CaseInsensitive) == 0;
+         token.compare("natural", Qt::CaseInsensitive) == 0 ||
+         token.compare("shiftgroup", Qt::CaseInsensitive) == 0 ||
+         token.compare("mixture", Qt::CaseInsensitive) == 0;
 }
 
 /*! True when the tail carries "natural 1". */

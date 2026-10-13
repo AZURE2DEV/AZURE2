@@ -424,6 +424,7 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
     ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
     if (mp.Params().size() == p.size())
       for (unsigned int i = 0; i < p.size(); i++) mp.SetValue(i, p[i]);
+    ld->SyncShiftGroupParams(mp);
     WriteParameters(params, configure());
     ld->WriteOutputFiles(configure(), true);
     lc->TransformOut(configure());
@@ -740,7 +741,10 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     if ((kind == ParamKind::EnergyShift || kind == ParamKind::EnergyShiftSqrt) && localShiftOk) {
       int s = pmap.Desc(idx).segment;
       ESegment *seg = (s >= 1) ? ld->GetSegment(s) : nullptr;
-      if (seg && !seg->HasComponents() && !seg->IsTotalCapture()) {
+      // A shift-group leader's constant shift also moves its followers' points,
+      // so it takes the full-dataset difference below.
+      const bool sharedShift = seg && kind == ParamKind::EnergyShift && seg->HasShiftGroupFollowers();
+      if (seg && !seg->HasComponents() && !seg->IsTotalCapture() && !sharedShift) {
         // The constant shift and the sqrt(E) coefficient enter the same
         // E -> E + a + b*sqrt(E) mapping; difference whichever one this is.
         const bool isSqrt = (kind == ParamKind::EnergyShiftSqrt);
@@ -1167,7 +1171,11 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
       if (packed < 0 || packed >= nCols) continue;
       const int sNum = pmap.Desc(f).segment;
       ESegment *lseg = (sNum >= 1 && sNum <= ld->NumSegments()) ? ld->GetSegment(sNum) : nullptr;
-      if (!datasetHasMapping && lseg && !lseg->HasComponents() && !lseg->IsTotalCapture()) {
+      // A shift-group leader's constant shift moves its followers' residuals too:
+      // full-dataset column.
+      const bool sharedShift =
+          lseg && pmap.Desc(f).kind == ParamKind::EnergyShift && lseg->HasShiftGroupFollowers();
+      if (!datasetHasMapping && lseg && !lseg->HasComponents() && !lseg->IsTotalCapture() && !sharedShift) {
         const LocalShift ls{f, packed, pmap.Desc(f).kind == ParamKind::EnergyShiftSqrt};
         auto it = std::find_if(localBySeg.begin(), localBySeg.end(),
                                [sNum](const std::pair<int, std::vector<LocalShift>> &e) { return e.first == sNum; });

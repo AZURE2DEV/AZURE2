@@ -103,6 +103,10 @@ class EData {
   void SetEnergyShiftParamOffset(int);
   void SetEnergyShiftSqrtParamOffset(int);
   /// Seed the Minuit parameter array with the normalizations and energy shifts.
+  /// Link the members of each "shiftgroup" to the group's first segment (called by Fill).
+  void ResolveShiftGroups(const Config &);
+  /// Set each shift-group follower's parameter to its leader's value (for the parameter files).
+  void SyncShiftGroupParams(ROOT::Minuit2::MnUserParameters &) const;
   void FillMnParams(ROOT::Minuit2::MnUserParameters &);
   /// Write the normalizations back from a Minuit parameter vector.
   void FillNormsFromParams(const vector_r &);

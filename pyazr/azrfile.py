@@ -384,6 +384,21 @@ class AzrLevel:
                 f"{', fixed' if self.fixed else ''})")
 
 
+def _nuclei_module():
+    """``pyazr.nuclei``, also when this file is loaded standalone by path (the
+    apply_fit test does that, so a relative import has no parent package)."""
+    try:
+        from . import nuclei
+        return nuclei
+    except ImportError:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "pyazr_nuclei_standalone", os.path.join(os.path.dirname(os.path.abspath(__file__)), "nuclei.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+
 class AzrModel:
     """A ``.azr`` file parsed into an editable level scheme.
 
@@ -831,7 +846,7 @@ class AzrModel:
     def nuclei(self):
         """The compound nuclei the pairs form, in order of first appearance:
         ``{Nucleus: [pair keys]}`` (see :mod:`pyazr.nuclei` for the rule)."""
-        from .nuclei import nucleus_of_channel
+        nucleus_of_channel = _nuclei_module().nucleus_of_channel
         out = {}
         for lv in self.levels:
             for c in lv.channels:
@@ -857,7 +872,7 @@ class AzrModel:
         for line in self._abundance_lines():
             t = line.split()
             if len(t) >= 5:
-                from .nuclei import Nucleus
+                Nucleus = _nuclei_module().Nucleus
                 out[Nucleus(int(t[0]), int(t[1]))] = (float(t[2]), int(float(t[3])) == 1, float(t[4]))
         return out
 
@@ -880,7 +895,7 @@ class AzrModel:
         file has none; fields left ``None`` keep their current value.
         ``nucleus`` is a label such as ``"23Ne"``, ``(Z, A)`` or a Nucleus.
         """
-        from .nuclei import Nucleus
+        Nucleus = _nuclei_module().Nucleus
         nuc = Nucleus.parse(nucleus)
         if nuc not in self.nuclei():
             raise KeyError(f"no pair of this project forms {nuc.label}: {[n.label for n in self.nuclei()]}")
@@ -938,7 +953,7 @@ class AzrModel:
         return self._set_natural_block("segmentsTest", pick, natural)
 
     def _set_natural_block(self, block, pick, natural):
-        from .datasets import _split_keyword_tail
+        from .datasets import _split_keyword_tail, _KEYWORDS
         if f"<{block}>" not in self._suffix:
             raise ValueError(f"no <{block}> block to edit.")
         out, changed, inside = [], 0, False
@@ -951,7 +966,7 @@ class AzrModel:
             elif inside and s and pick(line):
                 toks = line.split()
                 # keyword tail off, composite kind checked, keyword tail back with natural set
-                first = next((k for k, t in enumerate(toks) if t.lower() in ("sqrtshift", "natural")), len(toks))
+                first = next((k for k, t in enumerate(toks) if t.lower() in _KEYWORDS), len(toks))
                 positional, blocks = _split_keyword_tail(toks[first:])
                 head = toks[:first]
                 if natural:

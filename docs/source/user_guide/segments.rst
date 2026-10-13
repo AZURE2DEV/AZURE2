@@ -123,6 +123,24 @@ appears with the following fields:
    ``param.sav``, and ``shifts.out`` reports it in its last column. The GUI
    preserves the block when it loads and saves a file but does not edit it.
 
+   **Shared shift (shift groups).** A data set split into several segments
+   (one per angle, say) usually has one beam-energy calibration, so its
+   segments should share one shift rather than each fitting its own. Ending
+   the lines with the keyword block ``shiftgroup <label>`` does that: all
+   segments with the same label use the constant shift of the **first** of
+   them in file order -- its value, uncertainty, vary flag and penalty -- and
+   the other members' own shift value, uncertainty and vary flag are ignored,
+   e.g.::
+
+      1 2 1 0 3.567 157 161 4 1 1 10 0 0.02 1 data/pa0.dat 0 0 shiftgroup Frawley_pa0
+      1 2 1 0 3.567 148 153 4 1 1 10 0 0.02 1 data/pa0.dat 0 0 shiftgroup Frawley_pa0
+
+   fits one shift for both, with one 20 keV penalty. Each member keeps its
+   ``segment_<key>_energy_shift`` entry in ``param.sav`` (fixed, written with
+   the shared value), so parameter files stay compatible. The
+   :math:`\sqrt{E}` term is not shared. The run log notes each group and its
+   members. The GUI preserves the block but does not edit it.
+
 **Data File**
    Path to the experimental data file. Use the **Choose...** button to browse,
    or enter the path directly. Paths can be absolute or relative to the Input

@@ -70,6 +70,9 @@ ESegment::ESegment(SegLine segLine) {
   lastEnergyShiftSqrt_ = 0.0;
   energyShiftSqrtError_ = segLine.energyShiftSqrtError();
   varyEnergyShiftSqrt_ = (segLine.varyEnergyShiftSqrt() == 1);
+  shiftGroup_ = segLine.shiftGroup();
+  shiftLeaderPos_ = -1;
+  hasShiftGroupFollowers_ = false;
   if (segLine.varyNorm() == 1)
     varyNorm_ = true;
   else
@@ -147,6 +150,9 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   energyShiftSqrt_ = energyShiftSqrtNominal_ = 0.0;
   lastEnergyShiftSqrt_ = 0.0;
   energyShiftSqrtError_ = 0.0;
+  shiftGroup_ = "";
+  shiftLeaderPos_ = -1;
+  hasShiftGroupFollowers_ = false;
   varyEnergyShiftSqrt_ = false;
   varyNorm_ = false;
 
@@ -641,6 +647,22 @@ double ESegment::GetEnergyShiftSqrtError() const {
 /*!
  * Returns true if the sqrt(E) coefficient is a fit parameter.
  */
+
+std::string ESegment::GetShiftGroup() const { return shiftGroup_; }
+
+int ESegment::GetShiftLeaderPos() const { return shiftLeaderPos_; }
+
+bool ESegment::IsShiftGroupFollower() const { return shiftLeaderPos_ >= 0; }
+
+bool ESegment::HasShiftGroupFollowers() const { return hasShiftGroupFollowers_; }
+
+void ESegment::SetShiftGroupFollower(int pos, double shift) {
+  shiftLeaderPos_ = pos;
+  varyEnergyShift_ = false;  // the group's parameter belongs to its first member
+  energyShift_ = shift;
+}
+
+void ESegment::SetHasShiftGroupFollowers(bool has) { hasShiftGroupFollowers_ = has; }
 
 bool ESegment::IsVaryEnergyShiftSqrt() const {
   return varyEnergyShiftSqrt_;

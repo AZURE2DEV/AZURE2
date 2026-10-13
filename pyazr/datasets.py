@@ -75,8 +75,9 @@ _EXTRAP_OBSERVABLE = {
 }
 
 
-# Keyword blocks a segment line may end with, and how many tokens each takes.
-_KEYWORDS = {"sqrtshift": 3, "natural": 1}
+# Keyword blocks a segment line may end with (SegLine.h), and how many tokens
+# each takes: sqrtshift b bError vary; natural <0|1>; shiftgroup <label>.
+_KEYWORDS = {"sqrtshift": 3, "natural": 1, "shiftgroup": 1}
 
 
 def _split_keyword_tail(tokens):
@@ -129,6 +130,9 @@ class Segment:
     vary_shift_sqrt: bool = False          # is b a fit parameter?
     natural: bool = False                  # natural-target segment ("natural 1"): every term is
                                            #   weighted by its nucleus's isotopic abundance
+    # segments with the same label share ONE constant energy shift: the first
+    # of them (file order) owns the parameter, the others take its value
+    shift_group: Optional[str] = None
     operation: Optional[str] = None    # 'sum' | 'ratio' for a composite segment
     components: tuple = ()             # (entrance, exit, angle, scaling) each
 
@@ -235,16 +239,17 @@ class SegmentSet(list):
         # Keyword blocks come at the very end, in either order:
         #   sqrtshift b bError vary      the sqrt(E) energy-shift term
         #   natural 1                    a natural-target (abundance-weighted) segment
+        #   shiftgroup <label>           segments sharing one constant energy shift
         # Split them off first so the positional composite parse never sees them.
         shift_sqrt = shift_sqrt_error = 0.0
         vary_shift_sqrt = False
         natural = False
         tail, blocks = _split_keyword_tail(tail)
-        blk = blocks.get("sqrtshift", [])
+        blk = blocks.get("sqrtshift") or []
         if len(blk) == 3 and all(_isfloat(b) for b in blk):
             shift_sqrt, shift_sqrt_error = float(blk[0]), float(blk[1])
             vary_shift_sqrt = int(float(blk[2])) == 1
-        blk = blocks.get("natural", [])
+        blk = blocks.get("natural") or []
         if len(blk) == 1 and _isfloat(blk[0]):
             natural = int(float(blk[0])) == 1
         if tail and _isfloat(tail[0]) and int(float(tail[0])) == 1:
@@ -284,6 +289,7 @@ class SegmentSet(list):
             energy_shift_sqrt_error=shift_sqrt_error,
             vary_shift_sqrt=vary_shift_sqrt,
             natural=natural,
+            shift_group=(blocks.get("shiftgroup") or [None])[0],
             operation=operation, components=tuple(components))
 
     # -- views ----------------------------------------------------------------
