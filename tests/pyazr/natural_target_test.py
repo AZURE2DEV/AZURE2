@@ -130,6 +130,38 @@ def run(work):
     check("merged 14N grid == B.azr", np.allclose(out_m[1], out_b[0], rtol=1e-10, atol=0), f"{np.max(np.abs(out_m[1] / out_b[0] - 1)):.2e}")
     check("plain natural copy of S1 == 0.6 sigma_A", np.allclose(out_m[2], 0.6 * out_a[0], rtol=1e-12, atol=0))
 
+    # ---- 2b. two nuclei with the SAME J^pi set: J-group numbering per nucleus -----
+    # The engine numbers J-groups per (J, parity, nucleus); engine_level_keys() keyed on
+    # (J, parity) alone collapsed them, so apply_fit/save_fit placed nothing (natural neon,
+    # 21Ne and 23Ne both half-integer, 2026-10-13).  A twin of A with a 13-mass target has
+    # exactly A's J^pi list.
+    print("\n2b. same J^pi in two nuclei")
+    twin = os.path.join(work, "A_twin.azr")
+    with open(os.path.join(MODELS, "A.azr")) as f, open(twin, "w") as g:
+        for ln in f:
+            g.write(ln.replace(" 1.00782 12.0 1 6 ", " 1.00782 13.00335 1 6 ") if ln.strip() and ln.split()[0] != "<" and len(ln.split()) > 20 else ln)
+    merged2 = os.path.join(work, "AA.azr")
+    merge_projects([os.path.join(MODELS, "A.azr"), twin], merged2, {"13N": 0.5, "14N": 0.5})
+    aa = AzrModel.from_file(merged2)
+    check("twin forms a second nucleus", sorted(n.label for n in aa.nuclei()) == ["13N", "14N"], str(aa.nuclei()))
+    lvlmap = aa.engine_level_keys()
+    with azure2(merged2, cwd=work, data_mode=False, use_brune=True) as s:
+        bad = []
+        for pp in s.parameters:
+            if pp.kind != "energy":
+                continue
+            lv = lvlmap.get((pp.jgroup, pp.level))
+            if lv is None or abs(lv.energy - float(pp.level_energy or 0.0)) > 1e-6:
+                bad.append((pp.name, pp.jgroup, pp.level, pp.level_energy, None if lv is None else lv.energy))
+        check("engine_level_keys numbers J-groups per nucleus like the engine", not bad, str(bad[:4]))
+        ngroups = len({pp.jgroup for pp in s.parameters if pp.jgroup is not None and pp.kind in ("energy", "width")})
+        check("twice A's J-groups", ngroups == 6, str(ngroups))
+        try:
+            s.save_fit(os.path.join(work, "AA_snapshot.azr"), np.asarray(s.params_rwa, float))
+            check("save_fit round trip with same-J^pi nuclei", True)
+        except Exception as err:   # noqa: BLE001
+            check("save_fit round trip with same-J^pi nuclei", False, str(err)[:300])
+
     # ---- 3. the runtime side ---------------------------------------------------
     print("\n3. runtime")
     mfile = os.path.join(work, "M.azr")

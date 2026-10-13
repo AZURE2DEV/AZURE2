@@ -1016,8 +1016,8 @@ class AzrModel:
         """``{(jgroup, level): AzrLevel}`` -- the numbering AZURE2 itself uses.
 
         The engine builds a J-group the first time it meets a ``(J, parity)``
-        while reading ``<levels>``, and numbers levels within a group in file
-        order.  Reproducing that here gives the same ``(jgroup, level)`` a
+        of a compound nucleus while reading ``<levels>``, and numbers levels
+        within a group in file order.  Reproducing that here gives the same ``(jgroup, level)`` a
         :class:`~pyazr.parameters.Parameter` reports, which is the only reliable
         way to say *which* level a fitted value belongs to: a level at
         ``Ex = 0`` comes back from the API with ``level_energy = None``, so an
@@ -1033,11 +1033,18 @@ class AzrModel:
         archive's 5/2+ block was silently corrupted that way at two bakes.
         Use :meth:`purge_inactive_levels` to remove such lines for good.
         """
+        # A J-group is (J, parity, compound nucleus): a project with several
+        # nuclei (natural targets) has one 1/2+ group per nucleus, numbered in
+        # the order the file first shows each.  The nucleus of a level is that
+        # of its channels' pair (the engine refuses a level naming two).  With
+        # one nucleus the key gains a constant and the numbering is unchanged.
         order, seen, out = [], {}, {}
+        several = len(self.nuclei()) > 1
         for lv in self.levels:
             if not lv.active:
                 continue
-            k = (int(round(2 * lv.J)), int(lv.parity))
+            nuc = self.nucleus_of_pair(lv.channels[0].pair) if (several and lv.channels) else None
+            k = (int(round(2 * lv.J)), int(lv.parity), nuc)
             if k not in seen:
                 order.append(k)
                 seen[k] = 0
