@@ -3,6 +3,7 @@
 #include <QPushButton>
 #include <QGroupBox>
 #include <QGridLayout>
+#include "DialogScrollArea.h"
 #include <QFileDialog>
 #include <QMessageBox>
 
@@ -268,11 +269,15 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   buttonBox->addWidget(cancelButton);
   buttonBox->addWidget(okButton);
 
+  // The options outgrew small screens (UPOS, composites, mixture): the body
+  // scrolls, the buttons stay put, and the dialog never exceeds the screen.
+  DialogScrollArea *scroll = new DialogScrollArea(valueBox);
   QVBoxLayout *mainLayout = new QVBoxLayout;
-  mainLayout->addWidget(valueBox);
+  mainLayout->addWidget(scroll, 1);
   mainLayout->addLayout(buttonBox);
 
   setLayout(mainLayout);
+  capDialogToScreen(this);
 
   connect(okButton, SIGNAL(clicked()), this, SLOT(tryAccept()));
   connect(cancelButton, SIGNAL(clicked()), this, SLOT(reject()));
@@ -383,7 +388,7 @@ void AddSegDataDialog::advancedModeChanged(int state) {
     entrancePairCombo->setEnabled(true);
     exitPairCombo->setEnabled(true);
   }
-  adjustSize();
+  fitDialogToContent(this);
 }
 
 void AddSegDataDialog::operationTypeChanged(int index) {
@@ -463,7 +468,7 @@ void AddSegDataDialog::uposChanged(int state) {
   finalJText->setVisible(visible);
   deltaLabel->setVisible(visible);
   deltaText->setVisible(visible);
-  adjustSize();
+  fitDialogToContent(this);
 }
 
 void AddSegDataDialog::setPairsModel(PairsModel *model) {
@@ -473,4 +478,9 @@ void AddSegDataDialog::setPairsModel(PairsModel *model) {
   if (exitPairCombo->key() == 0) exitPairCombo->setKey(1);
   if (componentEntranceCombo->key() == 0) componentEntranceCombo->setKey(1);
   if (componentExitCombo->key() == 0) componentExitCombo->setKey(1);
+}
+
+void AddSegDataDialog::showEvent(QShowEvent *event) {
+  QDialog::showEvent(event);
+  fitDialogToContent(this);
 }

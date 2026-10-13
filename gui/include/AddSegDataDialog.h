@@ -2,6 +2,7 @@
 #define ADDSEGDATADIALOG_H
 
 #include <QDialog>
+#include <QShowEvent>
 #include <QLineEdit>
 #include <QSpinBox>
 #include "PairKeyCombo.h"
@@ -100,6 +101,10 @@ class AddSegDataDialog : public QDialog {
   void addComponent();
   void removeComponent();
   void uposChanged(int);
+
+ protected:
+  /*! Sized to the content within the screen on every opening (DialogScrollArea.h). */
+  void showEvent(QShowEvent *event) override;
 
  private:
   QPushButton *okButton;

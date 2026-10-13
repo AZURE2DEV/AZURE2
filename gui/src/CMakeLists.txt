@@ -84,7 +84,7 @@ set(AZURESETUP_HEADERS
     ../include/TargetIntModel.h ../include/TargetIntTab.h ../include/FittingTab.h
     ../include/TextEditBuffer.h ../include/AboutAZURE2Dialog.h ../include/InfoDialog.h
     ../include/IAEALevelData.h ../include/IAEALevelDialog.h ../include/NuclearPotentialTab.h
-    ../include/ExforData.h ../include/ExforDialog.h ../include/MixtureEditor.h
+    ../include/ExforData.h ../include/ExforDialog.h ../include/MixtureEditor.h ../include/DialogScrollArea.h
 )
 
 set(AZURESETUP_RCCS AZURESetup.qrc)

@@ -14,6 +14,8 @@
 #include <QString>
 #include <QStringList>
 #include <QTableWidgetItem>
+#include <QScreen>
+#include <QRect>
 #include <cstdlib>
 #include <iostream>
 #include "MixtureEditor.h"
@@ -143,10 +145,14 @@ int main(int argc, char** argv) {
 
     if (const char* stem = std::getenv("AZURE2_MIXTURE_EDITOR_PNG")) {
       d.advancedModeCheck->setChecked(false);
-      d.show();
-      d.adjustSize();   // as a dialog opened with the block already present sizes itself
+      d.show();   // sized to its content within the screen by its showEvent
       QApplication::processEvents();
       d.grab().save(QString::fromLocal8Bit(stem) + "_data.png");
+      {
+        const QRect a = d.screen() ? d.screen()->availableGeometry() : QRect();
+        std::cout << "  dialog " << d.width() << "x" << d.height() << " (max " << d.maximumWidth() << "x" << d.maximumHeight()
+                  << "), screen available " << a.width() << "x" << a.height() << std::endl;
+      }
       d.hide();
     }
 

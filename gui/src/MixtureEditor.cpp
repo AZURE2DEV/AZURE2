@@ -1,4 +1,5 @@
 #include "MixtureEditor.h"
+#include "DialogScrollArea.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -264,7 +265,10 @@ bool MixtureEditor::validate(QString *error) const {
 
 void MixtureEditor::enableChanged(int state) {
   box_->setVisible(state == Qt::Checked);
-  if (QWidget *w = window()) w->adjustSize();
+  if (QDialog *d = qobject_cast<QDialog *>(window()))
+    fitDialogToContent(d);
+  else if (QWidget *w = window())
+    w->adjustSize();
 }
 
 void MixtureEditor::addTable() {

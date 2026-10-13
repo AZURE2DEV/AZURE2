@@ -5,6 +5,7 @@
 #include <QPushButton>
 #include <QGroupBox>
 #include <QGridLayout>
+#include "DialogScrollArea.h"
 #include <QHBoxLayout>
 
 
@@ -198,11 +199,15 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   buttonBox->addWidget(cancelButton);
   buttonBox->addWidget(okButton);
 
+  // The options outgrew small screens (UPOS, composites, mixture): the body
+  // scrolls, the buttons stay put, and the dialog never exceeds the screen.
+  DialogScrollArea *scroll = new DialogScrollArea(valueBox);
   QVBoxLayout *mainLayout = new QVBoxLayout;
-  mainLayout->addWidget(valueBox);
+  mainLayout->addWidget(scroll, 1);
   mainLayout->addLayout(buttonBox);
 
   setLayout(mainLayout);
+  capDialogToScreen(this);
 
   connect(okButton, SIGNAL(clicked()), this, SLOT(tryAccept()));
   connect(cancelButton, SIGNAL(clicked()), this, SLOT(reject()));
@@ -307,7 +312,7 @@ void AddSegTestDialog::advancedModeChanged(int state) {
     entrancePairCombo->setEnabled(true);
     exitPairCombo->setEnabled(true);
   }
-  adjustSize();
+  fitDialogToContent(this);
 }
 
 void AddSegTestDialog::operationTypeChanged(int index) {
@@ -385,4 +390,9 @@ void AddSegTestDialog::setPairsModel(PairsModel *model) {
   if (exitPairCombo->key() == 0) exitPairCombo->setKey(1);
   if (componentEntranceCombo->key() == 0) componentEntranceCombo->setKey(1);
   if (componentExitCombo->key() == 0) componentExitCombo->setKey(1);
+}
+
+void AddSegTestDialog::showEvent(QShowEvent *event) {
+  QDialog::showEvent(event);
+  fitDialogToContent(this);
 }
