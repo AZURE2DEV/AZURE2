@@ -781,10 +781,26 @@ class azure2:
           beside the file carrying every parameter, free and fixed; hand that to
           AZURE2 as the external parameter file and the model is whole.
         - **A written file is not a fit until it reads back as one.** With
-          ``verify`` (the default) the result is reopened and its own
-          parameters transformed back; if any R-matrix value disagrees the
-          files are removed and this raises, rather than leaving a snapshot
-          that is quietly a mixture.
+          ``verify`` (the default) the result is reopened and checked two
+          ways: its physical values transformed back must match, and the
+          reduced-width amplitudes it reads for the particle and beta-decay
+          channels of every level must be ``x``'s, up to a common sign of
+          the level (the standard parametrization's eigenvector convention,
+          no change of model). If either disagrees the files are removed and
+          this raises, rather than leaving a snapshot that is quietly a
+          mixture. The second check exists because the first cannot see a
+          value two parameters map onto: the engine returned ``|B|`` for a
+          beta-decay amplitude until 2026-10-12, and a snapshot with the
+          sign lost passed. See :meth:`_snapshot_mismatch` for why photon
+          channels are judged on physical values only.
+
+        Fixed level parameters are written too, at their *current* observed
+        values. A parameter is fixed in reduced-width space; its observed
+        width or ANC moves with the free widths of the same level (Brune's
+        ``1 + sum gamma^2 dS/dE`` and the external width), so a snapshot that
+        kept the file's old observed values would read back as a different
+        model. On the 12C+alpha evaluation the difference was 21 chi-squared
+        units, with fixed amplitudes drifting by up to 14 % on re-read.
 
         A ``.azr`` names its data files and its output directory *relative to
         itself*, so a snapshot only runs from the directory the original did.
@@ -793,11 +809,24 @@ class azure2:
         Returns ``(azr_path, sav_path_or_None)``.
         """
         x = np.asarray(self.params_rwa if x is None else x, float).ravel()
-        want = np.asarray(self.transform_rwa(x), float)
+        # Every parameter, with the free ones from x: the fixed ones are fixed
+        # in reduced-width space, and their observed values (what <levels>
+        # holds) move with the free widths of the same level, so a faithful
+        # snapshot writes their current observed values rather than keeping
+        # the file's.  On the 12C+alpha evaluation keeping them moved the
+        # re-read chi-squared by 21 units (fixed amplitudes drifting by up
+        # to 14 % on re-read).
+        full = np.asarray(self.sess.params_all_rwa(), float).copy()
+        free = [i for i, p in enumerate(self.parameters) if not p.fixed]
+        if x.size != len(free):
+            raise ValueError(f"x has {x.size} entries; the session has "
+                             f"{len(free)} free parameters.")
+        full[free] = x
+        want = np.asarray(self.transform_all_rwa(full, free_only=False), float)
 
         path = os.path.abspath(path)
         model = AzrModel.from_file(self.file)
-        model.apply_fit(self.parameters, x, transform=self.transform_rwa,
+        model.apply_fit(self.parameters, want, physical=True, include_fixed=True,
                         pairs=self.pairs)
         model.write(path)
 
@@ -835,7 +864,11 @@ class azure2:
                             **{k: v for k, v in self.options.items()
                                if k != "data_mode"},
                             data_mode=(self.mode == "data")) as check:
-                    got = np.asarray(check.transform_rwa(check.params_rwa), float)
+                    back_full = np.asarray(check.sess.params_all_rwa(), float)
+                    got = np.asarray(check.transform_all_rwa(back_full,
+                                                             free_only=False), float)
+                    back = {p.name: float(back_full[i])
+                            for i, p in enumerate(check.parameters)}
             except Exception as err:
                 self._discard(path, sav)
                 raise RuntimeError(
@@ -846,16 +879,14 @@ class azure2:
                     os.remove(probe)
                 if tmpdir and os.path.isdir(tmpdir):
                     shutil.rmtree(tmpdir, ignore_errors=True)
-            if got.shape != want.shape or not np.allclose(got, want, rtol=1e-4,
-                                                          atol=0.0):
-                n = (0 if got.shape != want.shape
-                     else int(np.sum(~np.isclose(got, want, rtol=1e-4))))
+            bad = self._snapshot_mismatch(full, want, got, back)
+            if bad:
                 self._discard(path, sav)
                 raise RuntimeError(
                     "the snapshot does not read back as the fit it was made "
-                    f"from ({n or 'a different number of'} parameter(s) "
-                    "disagree); it has been removed. This means the .azr and "
-                    "the parameter set do not describe the same model.")
+                    f"from ({'; '.join(bad)}); it has been removed. This means "
+                    "the .azr and the parameter set do not describe the same "
+                    "model.")
         return path, sav
 
     @staticmethod
@@ -865,15 +896,95 @@ class azure2:
             if f and os.path.exists(f):
                 os.remove(f)
 
+    def _snapshot_mismatch(self, x, want, got, back):
+        """Why a re-read snapshot is not the fit it was made from; ``[]`` if it is.
+
+        ``x``, ``want``, ``got`` and ``back`` cover every parameter, fixed ones
+        included (``params_all_rwa`` order; ``back`` by name).  Two
+        comparisons, because neither alone is enough:
+
+        - the **physical values** (``transform_rwa`` of both sides), which
+          is what the file holds.  A transform that maps two parameters onto
+          one value passes this alone: the engine returned ``|B|`` for a
+          beta-decay amplitude until 2026-10-12, and a snapshot with the
+          sign lost read back as a different model (12C+alpha).
+        - the **re-read reduced-width amplitudes** of the particle and
+          beta-decay channels, and the level energies, against ``x`` --
+          level by level, allowing a common sign of the whole level, which
+          the standard parametrization's eigenvector convention may flip and
+          which is no change of model.
+
+        Photon channels are left to the first comparison on purpose: their
+        amplitude is derived from the written width together with the
+        external width of the level, a sum over the level's particle
+        amplitudes, so it is only as exact as the written widths are, and the
+        physical comparison is the direct one.
+        """
+        if got.shape != want.shape:
+            return [f"{got.size} physical parameters instead of {want.size}"]
+        bad = []
+        levels = {}
+        for i, p in enumerate(self.parameters):
+            if p.kind not in ("energy", "width") or i >= want.size:
+                continue
+            if p.name not in back:
+                bad.append(f"{p.name} is not in the re-read file")
+                continue
+            levels.setdefault((p.jgroup, p.level), []).append(
+                (p, float(want[i]), float(got[i]), float(x[i]), back[p.name]))
+
+        def same(pairs, rtol):
+            """Equal, or equal with the level's common sign flipped."""
+            if not pairs:
+                return True
+            a = np.array([v[0] for v in pairs])
+            b = np.array([v[1] for v in pairs])
+            return bool(np.allclose(a, b, rtol=rtol, atol=1e-12)
+                        or np.allclose(a, -b, rtol=rtol, atol=1e-12))
+
+        for (jg, lv), items in sorted(levels.items()):
+            ok = all(abs(w - g) <= 1e-5 * max(1.0, abs(w))
+                     for p, w, g, a, b in items if p.kind == "energy")
+            # the written physical widths, every channel (sign carried)
+            ok = ok and same([(w, g) for p, w, g, a, b in items
+                              if p.kind == "width"], 1e-4)
+            # the re-read amplitudes: particle and beta channels only, since
+            # a photon channel's amplitude depends on the external-capture
+            # integrals the re-read computed afresh
+            ok = ok and same([(a, b) for p, w, g, a, b in items
+                              if p.kind == "width"
+                              and p.radiation_type in ("P", "F", "G")], 1e-3)
+            ok = ok and all(abs(a - b) <= 1e-5 * max(1.0, abs(a))
+                            for p, w, g, a, b in items if p.kind == "energy")
+            if not ok:
+                p0 = items[0][0]
+                bad.append(f"level {p0.jpi} #{lv} (J-group {jg}, E = {p0.level_energy}) "
+                           "re-reads to different parameters")
+        return bad
+
     # -- transforms -----------------------------------------------------------
 
     def transform_rwa(self, params):
         """Map a reduced-width-amplitude vector to physical parameters: level energies in MeV, partial widths in eV, ANCs in fm^-1/2."""
         return self.sess.transform_rwa(params)
 
-    def transform_all_rwa(self, params):
-        """As transform_rwa, over every parameter rather than the free ones."""
-        return self.sess.transform_all_rwa(params)
+    def transform_all_rwa(self, params, free_only=True):
+        """As transform_rwa, taking every parameter rather than the free ones.
+
+        Returns the free parameters' physical values, like ``transform_rwa``;
+        with ``free_only=False`` every R-matrix parameter's, fixed ones
+        included, in ``params_all_rwa`` order (the level parameters come
+        first).  The latter is what a snapshot of a fit writes, since a fixed
+        parameter's observed value moves with the free widths of its level.
+        """
+        if free_only:
+            return self.sess.transform_all_rwa(params)
+        try:
+            return self.sess.transform_all_rwa_full(params)
+        except AttributeError:
+            raise RuntimeError(
+                "this _azure2 module predates transform_all_rwa_full "
+                "(2026-10-12); rebuild it to snapshot fixed parameters.") from None
 
     def transform_physical(self, params):
         """The inverse of transform_rwa: physical parameters back to reduced-width amplitudes."""

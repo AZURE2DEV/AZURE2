@@ -104,3 +104,19 @@ add_test(NAME pyazr_hard_sphere_transform
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/hard_sphere_transform_test.py)
 set_tests_properties(pyazr_hard_sphere_transform PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Beta-decay feeding amplitudes keep their sign through the physical transform
+# (GetTransformParams returned |B| until 2026-10-12), and a save_fit snapshot
+# re-reads to the same chi-squared in the Brune, Park and standard
+# parametrizations.
+add_test(NAME pyazr_beta_sign
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/beta_sign_test.py)
+set_tests_properties(pyazr_beta_sign PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# A parameter vector passed as a list (or a non-float64 array) must work like
+# an ndarray: the cast's temporary used to be freed with the GIL released.
+add_test(NAME pyazr_list_args
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/list_args_test.py)
+set_tests_properties(pyazr_list_args PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

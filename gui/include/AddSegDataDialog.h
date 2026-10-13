@@ -2,9 +2,11 @@
 #define ADDSEGDATADIALOG_H
 
 #include <QDialog>
+#include <QShowEvent>
 #include <QLineEdit>
 #include <QSpinBox>
 #include "PairKeyCombo.h"
+#include "MixtureEditor.h"
 #include <QComboBox>
 #include <QLabel>
 #include <QCheckBox>
@@ -81,8 +83,16 @@ class AddSegDataDialog : public QDialog {
   QLabel *deltaLabel;
   QLineEdit *deltaText;
 
+  /*! The row's trailing keyword text ("sqrtshift ...", "mixture ..."): the
+   *  mixture block is edited here, anything else rides along untouched. */
+  MixtureEditor *mixtureEditor;
+  /*! A mixture is only defined for angle-integrated and differential cross
+   *  sections (plain or summed); the reason it is not, otherwise. */
+  bool mixtureCompatible(QString *why = 0) const;
+
  public slots:
   void setChooseFile();
+  void tryAccept();
   void dataTypeChanged(int);
   void varyNormChanged(int);
   void advancedModeChanged(int);
@@ -91,6 +101,10 @@ class AddSegDataDialog : public QDialog {
   void addComponent();
   void removeComponent();
   void uposChanged(int);
+
+ protected:
+  /*! Sized to the content within the screen on every opening (DialogScrollArea.h). */
+  void showEvent(QShowEvent *event) override;
 
  private:
   QPushButton *okButton;

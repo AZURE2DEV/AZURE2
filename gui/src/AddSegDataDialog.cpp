@@ -3,7 +3,9 @@
 #include <QPushButton>
 #include <QGroupBox>
 #include <QGridLayout>
+#include "DialogScrollArea.h"
 #include <QFileDialog>
+#include <QMessageBox>
 
 AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   QDialog(parent) {
@@ -257,6 +259,9 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
 
   lowerLayout->addWidget(advancedModeBox, 7, 0, 1, 3);
 
+  mixtureEditor = new MixtureEditor;
+  lowerLayout->addWidget(mixtureEditor, 8, 0, 1, 3);
+
   valueLayout->addLayout(lowerLayout, 2, 0, 1, 2);
   valueBox->setLayout(valueLayout);
 
@@ -264,16 +269,47 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   buttonBox->addWidget(cancelButton);
   buttonBox->addWidget(okButton);
 
+  // The options outgrew small screens (UPOS, composites, mixture): the body
+  // scrolls, the buttons stay put, and the dialog never exceeds the screen.
+  DialogScrollArea *scroll = new DialogScrollArea(valueBox);
   QVBoxLayout *mainLayout = new QVBoxLayout;
-  mainLayout->addWidget(valueBox);
+  mainLayout->addWidget(scroll, 1);
   mainLayout->addLayout(buttonBox);
 
   setLayout(mainLayout);
+  capDialogToScreen(this);
 
-  connect(okButton, SIGNAL(clicked()), this, SLOT(accept()));
+  connect(okButton, SIGNAL(clicked()), this, SLOT(tryAccept()));
   connect(cancelButton, SIGNAL(clicked()), this, SLOT(reject()));
 
   setWindowTitle(tr("Add a Segment From Data"));
+}
+
+bool AddSegDataDialog::mixtureCompatible(QString *why) const {
+  if (!mixtureEditor->isMixtureEnabled()) return true;
+  const int code = dataTypeCode();
+  // The engine's MixtureAllowed: angle-integrated (0), differential (1) and
+  // c.m. differential (4) cross sections, plain or summed; not a ratio, phase
+  // shift, total capture, single multipole or analyzing power.
+  if (code != 0 && code != 1 && code != 4) {
+    if (why) *why = tr("A mixture is defined for angle-integrated and differential cross sections only "
+                      "(not phase shifts, total capture, single multipoles or analyzing powers).");
+    return false;
+  }
+  if (advancedModeCheck->isChecked() && operationCombo->currentIndex() == 1) {
+    if (why) *why = tr("A mixture cannot be combined with a ratio segment.");
+    return false;
+  }
+  return true;
+}
+
+void AddSegDataDialog::tryAccept() {
+  QString why;
+  if (!mixtureEditor->validate(&why) || !mixtureCompatible(&why)) {
+    QMessageBox::warning(this, tr("Mixture"), why);
+    return;
+  }
+  accept();
 }
 
 void AddSegDataDialog::setChooseFile() {
@@ -352,7 +388,7 @@ void AddSegDataDialog::advancedModeChanged(int state) {
     entrancePairCombo->setEnabled(true);
     exitPairCombo->setEnabled(true);
   }
-  adjustSize();
+  fitDialogToContent(this);
 }
 
 void AddSegDataDialog::operationTypeChanged(int index) {
@@ -432,7 +468,7 @@ void AddSegDataDialog::uposChanged(int state) {
   finalJText->setVisible(visible);
   deltaLabel->setVisible(visible);
   deltaText->setVisible(visible);
-  adjustSize();
+  fitDialogToContent(this);
 }
 
 void AddSegDataDialog::setPairsModel(PairsModel *model) {
@@ -442,4 +478,9 @@ void AddSegDataDialog::setPairsModel(PairsModel *model) {
   if (exitPairCombo->key() == 0) exitPairCombo->setKey(1);
   if (componentEntranceCombo->key() == 0) componentEntranceCombo->setKey(1);
   if (componentExitCombo->key() == 0) componentExitCombo->setKey(1);
+}
+
+void AddSegDataDialog::showEvent(QShowEvent *event) {
+  QDialog::showEvent(event);
+  fitDialogToContent(this);
 }

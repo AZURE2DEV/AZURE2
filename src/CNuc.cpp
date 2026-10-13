@@ -2297,8 +2297,14 @@ vector_r CNuc::GetTransformParams(const Config &configure) {
           int tempSign = (theLevel->GetBigGamma(ch) < 0) ? (-1) : (1);
           params.push_back(tempSign * sqrt(fabs(theLevel->GetBigGamma(ch))) / 100.0 / sqrt(fstruc * hbarc));
         } else if (theChannel->GetRadType() == 'F' || theChannel->GetRadType() == 'G') {
-          int tempSign = (theLevel->GetBigGamma(ch) < 0) ? (-1) : (1);
-          params.push_back(tempSign * theLevel->GetBigGamma(ch));
+          // A beta-decay feeding amplitude is already the value the <levels>
+          // line holds (Brune normalization, TransformOut), sign included.
+          // Multiplying by its own sign, as was done here, returned |B| and
+          // so a negative amplitude came back positive from every consumer
+          // of this vector: the GUI's level write-back, the MCMC physical
+          // vector and pyazr's save_fit snapshots, which then described a
+          // different beta-delayed spectrum (12C+a, 2026-10-12).
+          params.push_back(theLevel->GetBigGamma(ch));
         } else {
           int tempSign = (theLevel->GetBigGamma(ch) < 0) ? (-1) : (1);
           params.push_back(tempSign * fabs(theLevel->GetBigGamma(ch)) * 1e6);

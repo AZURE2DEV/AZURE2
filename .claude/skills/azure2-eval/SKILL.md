@@ -51,8 +51,9 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   Cloudflare (worked example 17O+a/10-12-26_natNe_mixture/readme). Allowed on
   angle-integrated and differential cross sections, plain or SUM composites (the way a
   neutron total is written); refused on ratio, phase shift, A_y, total capture, E1/E2-only
-  and on effects with an auto-application tolerance. The GUI preserves the block but does
-  not edit it. Test: `tests/mixture/check.sh` (self-consistency: half the model plus half a
+  and on effects with an auto-application tolerance. The GUI edits the block in the segment
+  dialogs since 2026-10-12 (`MixtureEditor`: tick "Natural-abundance or compound target", w_self,
+  one row per table + weight; `sqrtshift` text on the line is carried along). Test: `tests/mixture/check.sh` (self-consistency: half the model plus half a
   table of itself equals the folded model to 1e-4 under Gaussian and UDR kernels).
   A simultaneous fit of several isotopes' projects is stage 2 (rmfit `Mixture`, planned).
 
@@ -843,10 +844,44 @@ the edit) rather than trusting that it worked.
 
 **`m.save_fit(path, x=None)` is how you snapshot a fit.** It writes the `.azr`,
 writes the companion `param.sav`, and verifies the result — reopening what it
-wrote and comparing every R-matrix value against the fit. If they disagree it
-removes both files and raises, so a snapshot you still have is one that reads
-back as the fit it came from. `path` is always explicit; nothing is written in
-place. Returns `(azr_path, sav_path)`.
+wrote and comparing both the physical values transformed back and the
+reduced-width amplitudes the file reads for the particle and beta channels of
+each level against the fit's (up to a common sign of a level, which the
+standard parametrization may flip). If either disagrees it removes both files
+and raises, so a snapshot you still have is one that reads back as the fit it
+came from. `path` is always explicit; nothing is written in place. Returns
+`(azr_path, sav_path)`.
+Until 2026-10-12 only the physical values were compared, which cannot see a
+value the transform maps onto from two different parameters: the engine
+returned |B| for a beta-decay feeding amplitude, so a negative one was written
+back positive, the 12C+α snapshot's beta-delayed α χ² went 750 → 29724, and
+`verify=True` passed it (12C+α MCMC session). Both are fixed; a pyazr `.so`
+built before that date still has the bug (`tests/pyazr/beta_sign_test.py`
+tells you in a minute).
+**Fixed parameters are fixed in reduced-width space, not in what the file
+shows.** A fixed channel's observed width or ANC moves whenever the free
+widths of the same level move (Brune's `1 + Σγ²dS/dE`, the external width),
+and a fixed width's observed value moves with the level's energy through
+`P(E)`. So a `<levels>` block that keeps the file's old observed values for
+the fixed channels plus the fitted values for the free ones is NOT the fit:
+on the 12C+α r3b fit it re-read 21 χ² units off (98,642 → 98,663), with 19
+fixed amplitudes drifting by up to 14 % and free E1 amplitudes by 1 %. The
+same re-anchoring is what the 12C+α session's Brune→Park conversion on the
+original `.azr` showed (+13.7). Since 2026-10-12 `save_fit` writes every
+level parameter at its current observed value (`transform_all_rwa(full,
+free_only=False)`, `apply_fit(..., include_fixed=True)`) and the re-read is
+exact; `load_sav` of the companion `.sav` gives the same (it carries the
+fixed rwa). The external-capture integrals are NOT the issue here: they
+depend only on the EC final-level energies (fixed in practice), pair data
+and the data grid, so `recalculate_external_capture()` changes a fit's χ² by
+~0.1 at most — and note it uses the level energies from the file, not the
+session's current ones. `ignore_externals=True` does NOT switch external
+capture off: it is `--ignore-externals`, which drops the external amplitude
+only where the internal width is zero. What a fresh load does rebuild
+differently from a running session is the adaptive target-integration
+sub-point grid (built from the level widths at start-up): on
+`tests/hybrid_potential` the round trip is exact with `<targetInt>` off and
+0.17 % in χ² with it on.
 
 ```python
 azr, sav = m.save_fit("7Be_fit.azr")          # current parameters

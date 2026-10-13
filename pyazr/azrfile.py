@@ -938,7 +938,7 @@ class AzrModel:
         return gone
 
     def apply_fit(self, parameters, x, transform=None, physical=False,
-                  pairs=None, strict=True):
+                  pairs=None, strict=True, include_fixed=False):
         """Write a fitted parameter vector into the levels block.
 
         **The ``gamma`` field of a ``<levels>`` line is not a reduced-width
@@ -977,6 +977,15 @@ class AzrModel:
         rather than skipping it: a partial write produces a file that loads
         cleanly and is a mixture of two fits.
 
+        With ``include_fixed`` the vector is indexed by *parameter position*
+        (``len(parameters)`` entries, fixed ones included) and must be physical
+        (``physical=True``); every level parameter is written, fixed ones too.
+        That is what a faithful snapshot needs: a parameter is fixed in
+        reduced-width space, and its observed width moves with the free widths
+        of the same level (Brune's ``1 + sum gamma^2 dS/dE`` and the external
+        width), so keeping the file's old observed value for it changes the
+        model on re-read. :meth:`~pyazr.azure2.azure2.save_fit` uses this.
+
         Note this covers ``<levels>`` only -- normalizations and energy shifts
         are not in that block, so a fit that moved them is only half saved.
         :meth:`pyazr.azure2.azure2.save_fit` writes the companion
@@ -992,24 +1001,32 @@ class AzrModel:
             if physical:
                 raise ValueError("pass transform= or physical=True, not both.")
             x = transform(x)
+        if include_fixed and not physical:
+            raise ValueError("include_fixed needs physical=True: the engine's "
+                             "transform of the free vector cannot supply the "
+                             "fixed parameters' values.")
 
         lvlmap = self.engine_level_keys()
         # engine pair number -> the pair key the file writes
         pairkey = {p.number: p.key for p in pairs} if pairs is not None else {}
         written, unplaced = 0, []
-        for p in parameters:
-            if p.fixed or p.free_index is None:
-                continue
+        for pos, p in enumerate(parameters):
+            if include_fixed:
+                idx = pos
+            else:
+                if p.fixed or p.free_index is None:
+                    continue
+                idx = p.free_index
             if p.kind not in ("energy", "width"):
                 continue            # norms and shifts do not live in <levels>
-            if p.free_index >= len(x):
-                unplaced.append(f"{p.name} (free_index {p.free_index} beyond the vector)")
+            if idx >= len(x):
+                unplaced.append(f"{p.name} (index {idx} beyond the vector)")
                 continue
             lv = lvlmap.get((p.jgroup, p.level))
             if lv is None:
                 unplaced.append(f"{p.name} (no level at jgroup {p.jgroup}, level {p.level})")
                 continue
-            v = float(x[p.free_index])
+            v = float(x[idx])
             if p.kind == "energy":
                 lv.set_energy(v)
                 written += 1
@@ -1028,8 +1045,9 @@ class AzrModel:
 
         if unplaced and strict:
             raise ValueError(
-                f"apply_fit could not place {len(unplaced)} of the free "
-                f"parameters, so the result would be a mixture of two fits:\n  "
+                f"apply_fit could not place {len(unplaced)} of the "
+                f"{'level' if include_fixed else 'free'} parameters, so the "
+                "result would be a mixture of two fits:\n  "
                 + "\n  ".join(unplaced[:8])
                 + (f"\n  ... and {len(unplaced) - 8} more" if len(unplaced) > 8 else "")
                 + "\nThe .azr and the parameter set do not describe the same model. "
