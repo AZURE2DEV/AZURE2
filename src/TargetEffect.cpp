@@ -28,35 +28,43 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
   transitionWidth_ = 0.0;
   autoTolerance_ = 0.0;
 
-  int isActive;
+  // Every field has a default: a line may end before the optional ones, and
+  // an extraction attempted at the end of the stream leaves its target
+  // untouched (the sentry fails before num_get runs), so an uninitialized
+  // flag read whatever the stack held.  With isConvCoefficients = 1 by
+  // accident the empty convolution equation went through Equation::Initialize,
+  // which prints "Error: empty equation." and exits -- seen 2026-10-13 on the
+  // compute nodes for the 17O+a file, whose inactive lines stop after the
+  // Q-coefficient count, while the same file loaded on the login node.
+  int isActive = 0;
   std::string segmentList;
-  int numIntegrationPoints;
-  int isConvolution;
-  double sigma;
-  int isTargetIntegration;
-  double density;
+  int numIntegrationPoints = 0;
+  int isConvolution = 0;
+  double sigma = 0.0;
+  int isTargetIntegration = 0;
+  double density = 0.0;
   std::string stoppingPowerEq;
-  int numParameters;
+  int numParameters = 0;
   vector_r parameters;
-  int isQCoefficients;
-  int numQCoefficients;
+  int isQCoefficients = 0;
+  int numQCoefficients = 0;
   vector_r qCoefficients;
-  int isConvCoefficients;
-  int numConvCoefficients;
+  int isConvCoefficients = 0;
+  int numConvCoefficients = 0;
   vector_r convCoefficients;
   std::string convolutionEq;
 
   stream >> isActive >> segmentList >> numIntegrationPoints >> isConvolution >> sigma >> isTargetIntegration >> density >> stoppingPowerEq >> numParameters;
   if (!stream.eof()) {
     for (int i = 0; i < numParameters; i++) {
-      double tempParameter;
+      double tempParameter = 0.0;
       stream >> tempParameter;
       parameters.push_back(tempParameter);
     }
 
     stream >> isQCoefficients >> numQCoefficients;
-    for (int i = 0; i < numQCoefficients; i++) {
-      double tempQCoefficient;
+    for (int i = 0; i < numQCoefficients && stream.good(); i++) {
+      double tempQCoefficient = 0.0;
       stream >> tempQCoefficient;
       qCoefficients.push_back(tempQCoefficient);
     }
@@ -64,8 +72,8 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
     qCoefficients_ = qCoefficients;
 
     stream >> isConvCoefficients >> convolutionEq >> numConvCoefficients;
-    for (int i = 0; i < numConvCoefficients; i++) {
-      double tempConvCoefficient;
+    for (int i = 0; i < numConvCoefficients && stream.good(); i++) {
+      double tempConvCoefficient = 0.0;
       stream >> tempConvCoefficient;
       convCoefficients.push_back(tempConvCoefficient);
     }
