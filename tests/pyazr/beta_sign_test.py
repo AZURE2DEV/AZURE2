@@ -17,7 +17,9 @@ Checks, in the Brune, Park and standard parametrizations:
   * transform_rwa carries the sign of every beta amplitude (Brune: identity);
   * a save_fit snapshot re-reads to the same chi-squared;
   * flipping that sign changes the chi-squared, so the two checks above
-    are not vacuous.
+    are not vacuous;
+  * a fixed width is written at its current observed value, so a snapshot
+    whose level energies moved re-reads to the same chi-squared.
 
 Run from anywhere:  python3 tests/pyazr/beta_sign_test.py
 """
@@ -112,6 +114,53 @@ for label, opts in MODES:
         for f in (snap, sav):
             if os.path.exists(f):
                 os.remove(f)
+
+# --------------------------------------------------------------------------
+print("\nfixed parameters are written at their current observed values")
+# A parameter is fixed in reduced-width space.  Fix the 9.58 MeV level's alpha
+# width and move its energy: the observed width 2 P(E) gamma^2 / (1 + ...)
+# changes with E, so a snapshot that kept the file's old width would read
+# back as a different model (12C+alpha, 2026-10-12: 21 chi2 units, fixed
+# amplitudes drifting by up to 14 %).
+variant = os.path.join(PROJECT, "_beta_sign_fixed.azr")
+snap = os.path.join(PROJECT, "_beta_sign_fixed_snap.azr")
+sav = os.path.splitext(snap)[0] + ".sav"
+try:
+    text = open(AZR).read()
+    line = "1 -1 9.5822148 0 1 1 0 2 2 1 0 374277.9827112448"
+    assert line in text
+    open(variant, "w").write(text.replace(line, line.replace(" 1 0 374277", " 1 1 374277")))
+    with azure2(variant, cwd=PROJECT, **COMMON, use_brune=True) as m:
+        x = np.asarray(m.params_rwa, float).copy()
+        fixed_alpha = [p for p in m.parameters
+                       if p.fixed and p.kind == "width" and p.radiation_type == "P"
+                       and abs((p.level_energy or 0) - 9.5822148) < 1e-6]
+        check("the 9.58 MeV alpha width is fixed", len(fixed_alpha) == 1)
+        e_idx = [p.free_index for p in m.parameters
+                 if not p.fixed and p.kind == "energy"
+                 and abs((p.level_energy or 0) - 9.5822148) < 1e-6]
+        check("its energy is free", len(e_idx) == 1)
+        x[e_idx[0]] += 0.020                      # +20 keV
+        chi2 = float(m.calculate_chi2_rwa(x)[0])
+        all_before = np.asarray(m.sess.params_all_rwa(), float).copy()
+        m.save_fit(snap, x=x, param_sav=False, verify=True)
+    with azure2(snap, cwd=PROJECT, **COMMON, use_brune=True) as back:
+        xb = np.asarray(back.params_rwa, float)
+        chi2_back = float(back.calculate_chi2_rwa(xb)[0])
+        all_after = np.asarray(back.sess.params_all_rwa(), float)
+        fixed_i = [i for i, p in enumerate(back.parameters) if p.fixed and p.kind == "width"]
+    check("the fixed amplitude re-reads unchanged",
+          np.allclose(all_after[fixed_i], all_before[fixed_i], rtol=1e-6),
+          f"{all_before[fixed_i]} -> {all_after[fixed_i]}")
+    check("the snapshot with a moved energy re-reads to the same chi-squared",
+          abs(chi2_back - chi2) <= 1e-6 * max(1.0, chi2), f"{chi2:.6g} -> {chi2_back:.6g}")
+    snap_text = open(snap).read()
+    check("the fixed width was rewritten at its new observed value",
+          "374277.9827112448" not in snap_text)
+finally:
+    for f in (variant, snap, sav):
+        if os.path.exists(f):
+            os.remove(f)
 
 print()
 if failures:

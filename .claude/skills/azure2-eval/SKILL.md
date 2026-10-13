@@ -857,16 +857,30 @@ back positive, the 12C+α snapshot's beta-delayed α χ² went 750 → 29724, an
 `verify=True` passed it (12C+α MCMC session). Both are fixed; a pyazr `.so`
 built before that date still has the bug (`tests/pyazr/beta_sign_test.py`
 tells you in a minute).
-**A reopened snapshot of a capture fit is not χ²-identical to the fit**, and
-that is not the file's fault: the re-read computes the external-capture
-integrals at the fitted level energies, while the fit session kept the ones
-of its starting energies (AZURE2 fits never refresh them; pyazr has
-`recalculate_external_capture()`). On the 12C+α r3b fit this moved the total
-by 21 of 98,642 (the E2 6.05 MeV capture segment by up to 11 % in value) — the
-same 21 units the 12C+α session had put down to "~1 χ² unit per segment".
-`ignore_externals=True` does NOT switch external capture off: it is
-`--ignore-externals`, which drops the external amplitude only where the
-internal width is zero.
+**Fixed parameters are fixed in reduced-width space, not in what the file
+shows.** A fixed channel's observed width or ANC moves whenever the free
+widths of the same level move (Brune's `1 + Σγ²dS/dE`, the external width),
+and a fixed width's observed value moves with the level's energy through
+`P(E)`. So a `<levels>` block that keeps the file's old observed values for
+the fixed channels plus the fitted values for the free ones is NOT the fit:
+on the 12C+α r3b fit it re-read 21 χ² units off (98,642 → 98,663), with 19
+fixed amplitudes drifting by up to 14 % and free E1 amplitudes by 1 %. The
+same re-anchoring is what the 12C+α session's Brune→Park conversion on the
+original `.azr` showed (+13.7). Since 2026-10-12 `save_fit` writes every
+level parameter at its current observed value (`transform_all_rwa(full,
+free_only=False)`, `apply_fit(..., include_fixed=True)`) and the re-read is
+exact; `load_sav` of the companion `.sav` gives the same (it carries the
+fixed rwa). The external-capture integrals are NOT the issue here: they
+depend only on the EC final-level energies (fixed in practice), pair data
+and the data grid, so `recalculate_external_capture()` changes a fit's χ² by
+~0.1 at most — and note it uses the level energies from the file, not the
+session's current ones. `ignore_externals=True` does NOT switch external
+capture off: it is `--ignore-externals`, which drops the external amplitude
+only where the internal width is zero. What a fresh load does rebuild
+differently from a running session is the adaptive target-integration
+sub-point grid (built from the level widths at start-up): on
+`tests/hybrid_potential` the round trip is exact with `<targetInt>` off and
+0.17 % in χ² with it on.
 
 ```python
 azr, sav = m.save_fit("7Be_fit.azr")          # current parameters

@@ -269,6 +269,9 @@ class AZUREAPI {
    * Transform all RWA parameters to physical values
    */
   vector_r TransformAllRWAParameters(const vector_r &p) const;
+  /// As TransformAllRWAParameters, but returns every R-matrix parameter's
+  /// physical value, fixed ones included (the <levels> block of a snapshot).
+  vector_r TransformAllRWAParametersFull(const vector_r &p) const;
 
   /*!
    * Calculate chi-squared from RWA parameters

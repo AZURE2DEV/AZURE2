@@ -425,6 +425,16 @@ class Session {
     }
     return to_array(out);
   }
+  py::array_t<double> transform_all_rwa_full(py::array_t<double, py::array::forcecast> p) {
+    vector_r v = to_vector(p), out;
+    expect_all(v, "transform_all_rwa_full");
+    {
+      py::gil_scoped_release release;
+      ConfigScope guard(config_, &ecCache_);
+      out = api_->TransformAllRWAParametersFull(v);
+    }
+    return to_array(out);
+  }
 
   // -- chi-squared and derivatives -------------------------------------------
 
@@ -616,6 +626,8 @@ PYBIND11_MODULE(_azure2, m) {
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
       .def("transform_rwa", &Session::transform_rwa, py::arg("params"))
       .def("transform_all_rwa", &Session::transform_all_rwa, py::arg("params"))
+      .def("transform_all_rwa_full", &Session::transform_all_rwa_full, py::arg("params"),
+           "As transform_all_rwa, returning every R-matrix parameter's physical value, fixed ones included.")
       .def("calculate_chi2_rwa", &Session::calculate_chi2_rwa,
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
       .def("park_norms", &Session::park_norms, py::arg("params"),

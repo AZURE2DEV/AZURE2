@@ -792,14 +792,15 @@ class azure2:
           value two parameters map onto: the engine returned ``|B|`` for a
           beta-decay amplitude until 2026-10-12, and a snapshot with the
           sign lost passed. See :meth:`_snapshot_mismatch` for why photon
-          channels are judged on physical values only (external capture).
+          channels are judged on physical values only.
 
-        A reopened snapshot of a capture fit computes its external-capture
-        integrals at the fitted level energies, whereas the fit session kept
-        the ones of its starting point (AZURE2 fits never refresh them), so
-        its chi-squared can differ a little from the fit's; that is the fit's
-        property, not the file's, and ``recalculate_external_capture`` in
-        the session shows the size of it.
+        Fixed level parameters are written too, at their *current* observed
+        values. A parameter is fixed in reduced-width space; its observed
+        width or ANC moves with the free widths of the same level (Brune's
+        ``1 + sum gamma^2 dS/dE`` and the external width), so a snapshot that
+        kept the file's old observed values would read back as a different
+        model. On the 12C+alpha evaluation the difference was 21 chi-squared
+        units, with fixed amplitudes drifting by up to 14 % on re-read.
 
         A ``.azr`` names its data files and its output directory *relative to
         itself*, so a snapshot only runs from the directory the original did.
@@ -808,10 +809,24 @@ class azure2:
         Returns ``(azr_path, sav_path_or_None)``.
         """
         x = np.asarray(self.params_rwa if x is None else x, float).ravel()
-        want = np.asarray(self.transform_rwa(x), float)
+        # Every parameter, with the free ones from x: the fixed ones are fixed
+        # in reduced-width space, and their observed values (what <levels>
+        # holds) move with the free widths of the same level, so a faithful
+        # snapshot writes their current observed values rather than keeping
+        # the file's.  On the 12C+alpha evaluation keeping them moved the
+        # re-read chi-squared by 21 units (fixed amplitudes drifting by up
+        # to 14 % on re-read).
+        full = np.asarray(self.sess.params_all_rwa(), float).copy()
+        free = [i for i, p in enumerate(self.parameters) if not p.fixed]
+        if x.size != len(free):
+            raise ValueError(f"x has {x.size} entries; the session has "
+                             f"{len(free)} free parameters.")
+        full[free] = x
+        want = np.asarray(self.transform_all_rwa(full, free_only=False), float)
+
         path = os.path.abspath(path)
         model = AzrModel.from_file(self.file)
-        model.apply_fit(self.parameters, x, transform=self.transform_rwa,
+        model.apply_fit(self.parameters, want, physical=True, include_fixed=True,
                         pairs=self.pairs)
         model.write(path)
 
@@ -849,10 +864,11 @@ class azure2:
                             **{k: v for k, v in self.options.items()
                                if k != "data_mode"},
                             data_mode=(self.mode == "data")) as check:
-                    xv = np.asarray(check.params_rwa, float)
-                    got = np.asarray(check.transform_rwa(xv), float)
-                    back = {p.name: float(xv[p.free_index])
-                            for p in check.parameters if not p.fixed}
+                    back_full = np.asarray(check.sess.params_all_rwa(), float)
+                    got = np.asarray(check.transform_all_rwa(back_full,
+                                                             free_only=False), float)
+                    back = {p.name: float(back_full[i])
+                            for i, p in enumerate(check.parameters)}
             except Exception as err:
                 self._discard(path, sav)
                 raise RuntimeError(
@@ -863,7 +879,7 @@ class azure2:
                     os.remove(probe)
                 if tmpdir and os.path.isdir(tmpdir):
                     shutil.rmtree(tmpdir, ignore_errors=True)
-            bad = self._snapshot_mismatch(x, want, got, back)
+            bad = self._snapshot_mismatch(full, want, got, back)
             if bad:
                 self._discard(path, sav)
                 raise RuntimeError(
@@ -883,7 +899,9 @@ class azure2:
     def _snapshot_mismatch(self, x, want, got, back):
         """Why a re-read snapshot is not the fit it was made from; ``[]`` if it is.
 
-        Two comparisons, because neither alone is enough:
+        ``x``, ``want``, ``got`` and ``back`` cover every parameter, fixed ones
+        included (``params_all_rwa`` order; ``back`` by name).  Two
+        comparisons, because neither alone is enough:
 
         - the **physical values** (``transform_rwa`` of both sides), which
           is what the file holds.  A transform that maps two parameters onto
@@ -897,26 +915,21 @@ class azure2:
           which is no change of model.
 
         Photon channels are left to the first comparison on purpose: their
-        amplitude is derived from the width together with the external-capture
-        amplitude, which the re-read computes afresh at the snapshot's level
-        energies while the session keeps the ones of its starting point
-        (AZURE2 fits never refresh them), so the two amplitudes differ by
-        however much the energies moved -- a property of the fit, not of the
-        file.  The same refresh moves the chi-squared of a reopened snapshot
-        of a capture fit by a little; call ``recalculate_external_capture``
-        in the session to see by how much.
+        amplitude is derived from the written width together with the
+        external width of the level, a sum over the level's particle
+        amplitudes, so it is only as exact as the written widths are, and the
+        physical comparison is the direct one.
         """
         if got.shape != want.shape:
             return [f"{got.size} physical parameters instead of {want.size}"]
         bad = []
         levels = {}
-        for p in self.parameters:
-            if p.fixed or p.kind not in ("energy", "width"):
+        for i, p in enumerate(self.parameters):
+            if p.kind not in ("energy", "width") or i >= want.size:
                 continue
             if p.name not in back:
-                bad.append(f"{p.name} is not free in the re-read file")
+                bad.append(f"{p.name} is not in the re-read file")
                 continue
-            i = p.free_index
             levels.setdefault((p.jgroup, p.level), []).append(
                 (p, float(want[i]), float(got[i]), float(x[i]), back[p.name]))
 
@@ -955,9 +968,23 @@ class azure2:
         """Map a reduced-width-amplitude vector to physical parameters: level energies in MeV, partial widths in eV, ANCs in fm^-1/2."""
         return self.sess.transform_rwa(params)
 
-    def transform_all_rwa(self, params):
-        """As transform_rwa, over every parameter rather than the free ones."""
-        return self.sess.transform_all_rwa(params)
+    def transform_all_rwa(self, params, free_only=True):
+        """As transform_rwa, taking every parameter rather than the free ones.
+
+        Returns the free parameters' physical values, like ``transform_rwa``;
+        with ``free_only=False`` every R-matrix parameter's, fixed ones
+        included, in ``params_all_rwa`` order (the level parameters come
+        first).  The latter is what a snapshot of a fit writes, since a fixed
+        parameter's observed value moves with the free widths of its level.
+        """
+        if free_only:
+            return self.sess.transform_all_rwa(params)
+        try:
+            return self.sess.transform_all_rwa_full(params)
+        except AttributeError:
+            raise RuntimeError(
+                "this _azure2 module predates transform_all_rwa_full "
+                "(2026-10-12); rebuild it to snapshot fixed parameters.") from None
 
     def transform_physical(self, params):
         """The inverse of transform_rwa: physical parameters back to reduced-width amplitudes."""

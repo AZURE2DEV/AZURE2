@@ -618,6 +618,23 @@ vector_r AZUREAPI::TransformAllRWAParameters(const vector_r &p) const {
   return transformed;
 }
 
+// Transform every parameter (fixed ones included) to physical values, and
+// return all of them.  A snapshot of a fit needs the fixed channels too: they
+// are fixed in reduced-width space, so their observed widths move with the
+// free widths of the same level (the 1 + sum gamma^2 dS/dE factor and the
+// external width), and a <levels> block that keeps their old observed values
+// reads back as a different model (12C+alpha, 2026-10-12: +21 chi2 units).
+vector_r AZUREAPI::TransformAllRWAParametersFull(const vector_r &p) const {
+  vector_r params = all_rwa_;
+  for (int i = 0; i < p.size() && i < params.size(); ++i) {
+    params[i] = p[i];
+  }
+  CNuc *localCompound = compound();
+  localCompound->FillCompoundFromParams(params);
+  localCompound->TransformOut(configure());
+  return compound()->GetTransformParams(configure());
+}
+
 bool AZUREAPI::CalculateExternalCapture() {
   configure().paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
   data()->CalculateECAmplitudes(compound(), configure());

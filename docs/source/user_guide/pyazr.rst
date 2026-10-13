@@ -197,14 +197,15 @@ convention of the standard parametrization, no change of model) --- removing
 both files and raising if either disagrees.  The second check is there because
 the first cannot see a value two parameters map onto: a negative beta-decay
 feeding amplitude came back positive from the physical transform until
-2026-10-12, and the old check passed it.  Photon channels are judged on
-physical values only, since their amplitude depends on the external-capture
-integrals, which a reopened file computes afresh at the fitted level energies
-while the fit session kept those of its starting point (AZURE2 fits never
-refresh them); for the same reason the chi-squared of a reopened capture-fit
-snapshot can differ a little from the fit's.  ``path`` is always explicit;
-nothing is written in place.  Note a ``.azr`` names its data files relative to
-itself, so a snapshot runs from the directory the original did.
+2026-10-12, and the old check passed it.  Fixed level parameters are written
+too, at their *current* observed values: a parameter is fixed in reduced-width
+space, and its observed width or ANC moves with the free widths of the same
+level (Brune's ``1 + sum gamma^2 dS/dE`` and the external width), so a
+snapshot that kept the file's old observed values would read back as a
+different model (21 chi-squared units on the 12C+alpha evaluation, fixed
+amplitudes drifting by up to 14 %).  ``path`` is always explicit; nothing is
+written in place.  Note a ``.azr`` names its data files relative to itself, so
+a snapshot runs from the directory the original did.
 
 .. warning::
 
