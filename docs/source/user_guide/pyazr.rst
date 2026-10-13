@@ -178,7 +178,9 @@ the group.
 Also available: ``set_channel_radius``, ``set_segment_norm``,
 ``set_segment_active``, ``set_segment_datafile``, ``add_data_segment``,
 ``remove_data_segments``, ``clear_data_segments``, ``set_extrapolations`` and
-``apply_fit``.
+``apply_fit``; for a project with several compound nuclei (next section)
+``nuclei``, ``nucleus_of_pair``, ``abundances``, ``set_abundance``,
+``abundance_sum_sigma``, ``set_natural`` and ``set_test_natural``.
 
 To snapshot a fit, prefer :meth:`~pyazr.azure2.azure2.save_fit`, which wraps
 ``apply_fit``:
@@ -218,6 +220,43 @@ a snapshot runs from the directory the original did.
    output directory) so the integrals are recomputed;
    ``azure2.recalculate_external_capture()`` forces it inside a live session.
    See ``pyazr/examples/edit_model.py``.
+
+Several compound nuclei (natural targets)
+-----------------------------------------
+
+A natural or compound target is an abundance-weighted sum of cross sections
+of different compound nuclei (see the Particle Pairs page of the user guide).
+``merge_projects`` builds one such project from single-nucleus ones: pair keys
+are offset, segments renumbered, composite components and ``<targetInt>``
+lists remapped, the level blocks concatenated, and the ``<abundances>`` block
+written; a *shared* group of segments (the same natural-target data set
+present in every member) becomes one ``natural`` Sum line whose components
+are the members' terms:
+
+.. code-block:: python
+
+   from pyazr import merge_projects, Nucleus, azure2
+
+   report = merge_projects(
+       ["20Ne/17O+a.azr", "22Ne/22Ne+n.azr", "21Ne/21Ne+n.azr"], "natNe.azr",
+       abundances={Nucleus(10, 21): 0.9048, Nucleus(10, 23): 0.0925, Nucleus(10, 22): 0.0027},
+       sum_sigma=0.0,
+       shared=[{0: 1, 1: 1, 2: 1}],   # one dict per common data set: member index -> its segment key
+   )
+   print(report)
+
+   m = azure2("natNe.azr")
+   m.nuclei                     # the compound nuclei and their abundances
+   m.parameters.abundances      # the abundance parameters, kind "abundance"
+   m.penalties()["abundance"]   # the prior and sum-to-one terms at the current point
+
+``<parameterSettings>`` and ``<mcmc>`` blocks name parameters by position and
+are dropped with a warning. On the file side ``AzrModel.nuclei()``,
+``abundances``, ``set_abundance(nucleus, value, vary, sigma)``,
+``abundance_sum_sigma`` and ``set_natural(key, True)`` edit the new pieces;
+``Segment.natural`` reports the flag; ``Pair.nucleus`` and
+``Parameter.nucleus`` identify the nucleus at run time; ``save_fit`` writes a
+fitted abundance back into the block.
 
 Decomposing a cross section
 ---------------------------

@@ -145,3 +145,47 @@ What is not symmetrized
    only the channel rule above; no exchange factor is applied to their cross
    sections, the same convention as for spin-0 pairs. The vector analyzing
    power is defined for a spin-1/2 beam only (it is zero for d+d).
+
+Several Compound Nuclei in One Project
+--------------------------------------
+
+A natural or compound target gives an abundance-weighted sum of cross
+sections of *different* compound nuclei: natural neon under a neutron beam is
+0.9048 n+\ :sup:`20`\ Ne (:sup:`21`\ Ne), 0.0925 n+\ :sup:`22`\ Ne
+(:sup:`23`\ Ne) and 0.0027 n+\ :sup:`21`\ Ne (:sup:`22`\ Ne). One project
+can hold the level schemes of all of them.
+
+The compound nucleus of a pair is inferred from its columns -- for a
+(Particle, Particle) pair :math:`Z = Z_1 + Z_2` and :math:`A` the rounded sum
+of the masses, for a (Particle, Gamma) pair the heavy particle itself, for a
+(Beta Decay) pair the daughter -- so nothing has to be entered. Pairs with the
+same :math:`(Z, A)` belong to one nucleus, and a project whose pairs all form
+one nucleus behaves exactly as before. As soon as the pairs form more than one,
+the tab shows
+
+- a read-only **Compound Nucleus** column, and the pair drop-downs of the
+  other tabs append the nucleus to each pair (``n + 22Ne -> 23Ne``);
+- the **Isotopic abundances** table: one row per compound nucleus, with the
+  abundance of the *target isotope* that forms it (the row is labelled with
+  both, ``23Ne (22Ne+n)``), a **Fit?** box that makes the abundance a fit
+  parameter named ``abundance_<Z>_<A>``, and a **Prior Sigma** that adds
+  :math:`((w - w_0)/\sigma)^2` to the chi-squared when it is not zero. The
+  **Sum-to-one sigma** below the table adds :math:`((\sum w - 1)/s)^2`;
+  zero switches it off.
+
+Which segments are weighted by these abundances is decided segment by
+segment (the **Natural target** box, :doc:`segments`); the levels of each
+nucleus are entered on the :doc:`levels_channels` tab, and the abundances
+appear on the :doc:`fitting` and :doc:`mcmc` tabs. In the file the table is
+the ``<abundances>`` block and the sum sigma the ``abundanceSumSigma`` key
+(:doc:`../reference/data_formats`); a project without the block has no
+abundance parameters at all. The pyazr function
+:func:`pyazr.merge_projects` builds such a project from several
+single-nucleus ones.
+
+.. note::
+
+   The identity in the file is the **compound** nucleus (:sup:`23`\ Ne for
+   n+\ :sup:`22`\ Ne), while the abundance is that of the target isotope
+   (:sup:`22`\ Ne). Every label shows both; the parameter name uses the
+   compound nucleus, ``abundance_10_23``.

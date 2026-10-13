@@ -157,6 +157,39 @@ Editing and Managing Data Segments
    scheme to avoid double-counting uncertainties across segments that share the
    same data.
 
+Natural-Abundance Targets (Natural Segments)
+--------------------------------------------
+
+When the particle pairs form more than one compound nucleus
+(:doc:`particle_pairs`), both segment dialogs offer a **Natural target** box.
+A natural segment is the abundance-weighted sum: its own term, and each
+component of a **Sum** composite, is multiplied by the isotopic abundance of
+the compound nucleus its *entrance pair* forms, as entered in the Pairs tab's
+abundance table (or fitted, when the abundance is a fit parameter). The row's
+reaction label is prefixed *nat*.
+
+For natural neon under a neutron beam, the total cross section is one Sum
+composite with the components n+\ :sup:`20`\ Ne, n+\ :sup:`22`\ Ne and
+n+\ :sup:`21`\ Ne (elastic exit pairs, one per nucleus) and the box ticked;
+the engine then computes
+:math:`0.9048\,\sigma(\mathrm{n}+{}^{20}\mathrm{Ne}) + 0.0925\,\sigma(\mathrm{n}+{}^{22}\mathrm{Ne}) + 0.0027\,\sigma(\mathrm{n}+{}^{21}\mathrm{Ne})`.
+A plain (non-composite) natural segment is just its own cross section times
+its nucleus's abundance, which is what an isotopically enriched target with a
+known enrichment needs.
+
+The box is only available for additive observables: angle-integrated and
+differential cross sections, total capture and the two centre-of-mass
+differential forms for data segments; angle-integrated, differential and
+total capture for test segments. It is cleared and disabled for a **Ratio**
+composite, a phase shift, an analyzing power and a test segment of
+angular-distribution coefficients. The entrance and exit pair of every term
+must form the same compound nucleus. In the file the flag is the keyword
+``natural 1`` at the end of the segment line (after a ``sqrtshift`` block,
+if any), and the engine refuses it in a project without an ``<abundances>``
+block. Each natural segment also gets an output file
+``AZUREOut_natural_seg=<key>.out`` (``.extrap`` for a test segment) with the
+total and one column per nucleus (:doc:`../reference/output_files`).
+
 Segments Without Data
 ---------------------
 

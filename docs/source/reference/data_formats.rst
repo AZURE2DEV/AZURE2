@@ -111,6 +111,44 @@ lines, which a reader that does not know a key skips:
    Momentum** of the Levels and Channels tab. Absent: the largest :math:`l` of
    any particle channel in the ``<levels>`` block.
 
+``abundanceSumSigma=s``
+   Adds :math:`((\sum_k w_k - 1)/s)^2` to the chi-squared, :math:`w_k` the
+   isotopic abundances of the compound nuclei (below); absent or ``0`` is off.
+
+Several compound nuclei.  The compound nucleus of a pair is inferred from its
+columns (particle pair :math:`Z = z_1 + z_2`, :math:`A = \mathrm{round}(m_1 +
+m_2)`; gamma pair the heavy particle; beta pair the daughter), and a project
+may hold levels of several. An optional ``<abundances>`` block right after
+``</levels>`` has one line per compound nucleus::
+
+   <abundances>
+   10 21 0.9048 0 0
+   10 23 0.0925 1 0.01
+   10 22 0.0027 0 0
+   </abundances>
+
+``Z A value vary sigma``: the isotopic abundance (of the target isotope that
+forms the compound nucleus), whether it is a fit parameter (then named
+``abundance_<Z>_<A>``, emitted right after the level parameters) and the sigma
+of a Gaussian prior on it (0 = none). Without the block every abundance is 1,
+fixed, and no parameter exists. A nucleus not formed by any pair draws a
+warning.
+
+A ``<segmentsData>`` or ``<segmentsTest>`` line may end with the keyword
+blocks ``sqrtshift <b> <bError> <vary>`` and ``natural 1`` (in that order).
+``natural 1`` multiplies the segment's own term and each composite component
+by the abundance of the term's entrance pair's compound nucleus; it is
+allowed for angle-integrated, differential and capture observables (data
+``isDiff`` 0, 1, 3, 4, 5, 6; test 0, 1, 4, 5), never for a ratio, and only
+in a project with an ``<abundances>`` block.
+
+.. note::
+
+   Compatibility: an engine older than this feature ignores the
+   ``<abundances>`` block and the key, but reads ``natural 1`` as positional
+   fields and misparses the line; a GUI older than it drops the block on
+   save. A single-nucleus project is unaffected either way.
+
 A ``<targetInt>`` line may end with keyword blocks (``beamprofile ...``,
 ``udr ...``, ``sigmalab``). ``sigmalab`` marks an energy-dependent beam-spread
 expression as laboratory in, laboratory out (see

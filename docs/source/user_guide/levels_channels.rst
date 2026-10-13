@@ -26,6 +26,9 @@ Adding a Level
 
 Click the **+** button in the lower-left corner. A dialog appears prompting for:
 
+- **Compound Nucleus** -- only shown when the particle pairs form more than one
+  (:doc:`particle_pairs`): which nucleus the level belongs to. The J\ :sup:`π`
+  list follows the choice.
 - **Excitation Energy** -- the excitation energy of the compound nucleus (in MeV).
 - **Spin (J)** -- the total spin. Half-integer values should be given as decimals
   (e.g., ``1.5``).
@@ -39,8 +42,9 @@ Importing Levels from IAEA Database
 
 Click the **NDS** button to query the IAEA Nuclear Data Services for known level
 schemes. AZURE2 automatically determines the compound nucleus from the defined
-particle pairs. The dialog displays retrieved levels with their energies and
-spin-parities, allowing you to select which levels to import.
+particle pairs (and asks which one when the pairs form several). The dialog
+displays retrieved levels with their energies and spin-parities, allowing you
+to select which levels to import.
 
 Editing a Level
 ^^^^^^^^^^^^^^^
@@ -63,6 +67,20 @@ Other Buttons
    - **Fix All Widths** -- fix all channel width parameters at once.
    - **Fix All Energies** -- fix all level energies at once.
    - **Export LaTeX** -- export the level scheme as a LaTeX table for publication.
+
+Levels of Several Compound Nuclei
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When the particle pairs form more than one compound nucleus
+(:doc:`particle_pairs`), every level belongs to one of them: the one chosen
+in the dialog, or, for a level read from a file, the nucleus of its channels'
+pair. The table gains a **Compound Nucleus** column and a drop-down above it
+that shows one nucleus's levels at a time. A level's channels are built from
+its own nucleus's pairs only, the missing-J\ :sup:`π` report is given per
+nucleus, and two levels with the same J\ :sup:`π` and energy in different
+nuclei are different levels. A level cannot be moved to another nucleus; add
+it again there. The file keeps one block of level lines per nucleus; the
+engine refuses a level whose channels name two nuclei.
 
 Channels
 --------

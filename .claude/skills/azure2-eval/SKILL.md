@@ -42,6 +42,32 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   not a rounded mass number — the Separation Energy field is entered
   independently and precisely already, so an imprecise particle mass is an easy
   thing to overlook as the one remaining low-precision input.
+- **Several compound nuclei in one `.azr` (natural targets): the identity is
+  the COMPOUND nucleus, the abundance is the TARGET isotope's.** On
+  `feature/multi-compound-nucleus` (2026-10-13) a project may hold the level
+  schemes of several compound nuclei; the nucleus of a pair is inferred from
+  its columns (particle pair Z=z1+z2, A=round(m1+m2); γ pair the heavy
+  particle; β pair the daughter), so n+²²Ne lines are ²³Ne lines and the
+  parameter for natural neon's 9.25 % of ²²Ne is `abundance_10_23`. A natural
+  data set is ONE segment line: a SUM composite whose components are the
+  members' elastic terms (one per nucleus) plus the `natural 1` keyword; the
+  abundances come from the `<abundances>` block (`Z A value vary sigma`, a
+  parameter per nucleus only when the block exists, emitted right after the
+  level parameters and before the norms) and `abundanceSumSigma=s` in
+  `<config>`. Build such a project with `pyazr.merge_projects(models, out,
+  abundances={Nucleus(10,21): 0.9048, ...}, shared=[...])` rather than by
+  hand (pair keys offset, segments renumbered, components/targetInt
+  remapped; `<parameterSettings>`/`<mcmc>` are dropped). GUI: the Pairs tab
+  shows the nucleus column and abundance table once the pairs form two
+  nuclei; every level belongs to one nucleus (dialog drop-down); the segment
+  dialogs have the "Natural target" box; the Fitting tab an "Abundances"
+  sub-tab. Before any extrapolation of such a model remember the
+  `<targetInt>` rule below applies per segment as usual. Cross-check a merge
+  against the members: each nucleus alone (components of the other nuclei
+  removed, abundances 1/0/0) must reproduce the standalone project's χ² to
+  1e-10 (`tests/natural_target/check.sh` does exactly this). rmfit: keys of
+  kind `abundance`, prior rows from the block, the sum-to-one term is NOT a
+  row (fix the abundances or accept priors only).
 - **A width of exactly 0 is a fixed parameter, whatever its fix flag says.**
   `CNuc.cpp:1621` adds every channel as `p.Add(name, gamma, 0.1*gamma)` and then
   `if (gamma == 0.0) p.Fix(name)`, so a channel written with value `0` and
@@ -1593,6 +1619,18 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
     `penalties()["shift_sqrt"]`, `add_data_segment(energy_shift_sqrt=...)`.
     The GUI preserves the block but cannot edit it. Test:
     `tests/energy_shift_sqrt` (check.sh fits a known a, b back).
+  - `natural 1` (keyword block, after `sqrtshift` if both; branch
+    `feature/multi-compound-nucleus`, 2026-10-13) marks a natural-abundance
+    target segment: the line's own term and every SUM component are
+    multiplied by the isotopic abundance of the term's ENTRANCE pair's
+    compound nucleus (the `<abundances>` block after `</levels>`, lines
+    `Z A value vary sigma`; config key `abundanceSumSigma=s`). Refused on
+    RATIO, phase shifts (2), analyzing powers (7), test angular-coefficient
+    lines (3), and in a project without the block. Output
+    `AZUREOut_natural_seg=<key>.out/.extrap` (total + one column per
+    nucleus). pyazr: `Segment.natural`, `AzrModel.set_natural`,
+    `merge_projects`, `parameters.abundances`, `penalties()["abundance"]`.
+    Test: `tests/natural_target`.
   - `isAdvanced` 1 = composite segment. `operationType` 0 = SUM of the listed
     components (the segment's own exit is included), 1 = RATIO (dimensionless:
     the lab->c.m. cross-section conversion is skipped). `nComp` = -1 is a

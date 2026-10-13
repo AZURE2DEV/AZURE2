@@ -46,6 +46,10 @@ Choose the horizontal axis quantity:
 - **Excitation Energy** -- excitation energy of the compound nucleus
 - **CoM Angle** -- center-of-mass angle
 
+Level markers are drawn against the entrance pair of each plotted segment; in
+a project with several compound nuclei (:doc:`particle_pairs`) only the levels
+of that pair's nucleus are marked on the centre-of-mass energy axis.
+
 Y-Axis
 ^^^^^^
 
