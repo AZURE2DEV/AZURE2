@@ -379,25 +379,25 @@ class Session {
 
   // -- segment updates (return the number of segments) ------------------------
 
-  int update_segments(py::array_t<double, py::array::forcecast> p) {
+  int update_segments(const py::array_t<double, py::array::forcecast> &p) {
     ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
     expect_free(v, "update_segments");
     return api_->UpdateSegments(v);
   }
-  int update_segments_rwa(py::array_t<double, py::array::forcecast> p) {
+  int update_segments_rwa(const py::array_t<double, py::array::forcecast> &p) {
     ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
     expect_free(v, "update_segments_rwa");
     return api_->UpdateSegmentsRWA(v);
   }
-  void set_params_all_rwa(py::array_t<double, py::array::forcecast> p) {
+  void set_params_all_rwa(const py::array_t<double, py::array::forcecast> &p) {
     ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
     expect_all(v, "set_params_all_rwa");
     api_->SetParamsAllRWA(v);
   }
-  int update_segments_all_rwa(py::array_t<double, py::array::forcecast> p) {
+  int update_segments_all_rwa(const py::array_t<double, py::array::forcecast> &p) {
     ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
     expect_all(v, "update_segments_all_rwa");
@@ -406,7 +406,7 @@ class Session {
 
   // -- transforms ------------------------------------------------------------
 
-  py::array_t<double> transform_rwa(py::array_t<double, py::array::forcecast> p) {
+  py::array_t<double> transform_rwa(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p), out;
     {
       py::gil_scoped_release release;
@@ -415,7 +415,7 @@ class Session {
     }
     return to_array(out);
   }
-  py::array_t<double> transform_all_rwa(py::array_t<double, py::array::forcecast> p) {
+  py::array_t<double> transform_all_rwa(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p), out;
     expect_all(v, "transform_all_rwa");
     {
@@ -425,7 +425,7 @@ class Session {
     }
     return to_array(out);
   }
-  py::array_t<double> transform_all_rwa_full(py::array_t<double, py::array::forcecast> p) {
+  py::array_t<double> transform_all_rwa_full(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p), out;
     expect_all(v, "transform_all_rwa_full");
     {
@@ -438,25 +438,25 @@ class Session {
 
   // -- chi-squared and derivatives -------------------------------------------
 
-  double calculate_chi2_rwa(py::array_t<double, py::array::forcecast> p) {
+  double calculate_chi2_rwa(const py::array_t<double, py::array::forcecast> &p) {
     ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
     expect_free(v, "calculate_chi2_rwa");
     return api_->CalculateChi2RWA(v);
   }
-  double calculate_chi2_physical(py::array_t<double, py::array::forcecast> p) {
+  double calculate_chi2_physical(const py::array_t<double, py::array::forcecast> &p) {
     ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
     expect_free(v, "calculate_chi2_physical");
     return api_->CalculateChi2Physical(v);
   }
-  py::array_t<double> park_norms(py::array_t<double, py::array::forcecast> p) {
+  py::array_t<double> park_norms(const py::array_t<double, py::array::forcecast> &p) {
     ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
     expect_free(v, "park_norms");
     return to_array(api_->ParkNorms(v));
   }
-  py::array_t<double> calculate_chi2_grad_rwa(py::array_t<double, py::array::forcecast> p) {
+  py::array_t<double> calculate_chi2_grad_rwa(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p), out;
     expect_free(v, "calculate_chi2_grad_rwa");
     {
@@ -466,7 +466,7 @@ class Session {
     }
     return to_array(out);
   }
-  py::array_t<double> calculate_residual_jacobian_rwa(py::array_t<double, py::array::forcecast> p) {
+  py::array_t<double> calculate_residual_jacobian_rwa(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p), out;
     expect_free(v, "calculate_residual_jacobian_rwa");
     {
@@ -476,7 +476,7 @@ class Session {
     }
     return to_array(out);
   }
-  py::array_t<double> calculate_model_gradients_rwa(py::array_t<double, py::array::forcecast> p) {
+  py::array_t<double> calculate_model_gradients_rwa(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p), out;
     expect_free(v, "calculate_model_gradients_rwa");
     {
@@ -489,7 +489,7 @@ class Session {
 
   // -- external region and caches --------------------------------------------
 
-  py::array_t<double> coulomb_functions(py::array_t<double, py::array::forcecast> request) {
+  py::array_t<double> coulomb_functions(const py::array_t<double, py::array::forcecast> &request) {
     vector_r v = to_vector(request), out;
     {
       py::gil_scoped_release release;
@@ -498,7 +498,7 @@ class Session {
     }
     return to_array(out);
   }
-  py::array_t<double> ec_integrals(py::array_t<double, py::array::forcecast> request) {
+  py::array_t<double> ec_integrals(const py::array_t<double, py::array::forcecast> &request) {
     vector_r v = to_vector(request), out;
     {
       py::gil_scoped_release release;

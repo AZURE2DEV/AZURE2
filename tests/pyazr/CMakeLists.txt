@@ -113,3 +113,10 @@ add_test(NAME pyazr_beta_sign
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/beta_sign_test.py)
 set_tests_properties(pyazr_beta_sign PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# A parameter vector passed as a list (or a non-float64 array) must work like
+# an ndarray: the cast's temporary used to be freed with the GIL released.
+add_test(NAME pyazr_list_args
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/list_args_test.py)
+set_tests_properties(pyazr_list_args PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
