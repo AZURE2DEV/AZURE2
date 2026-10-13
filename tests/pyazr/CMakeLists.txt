@@ -90,14 +90,6 @@ set_tests_properties(pyazr_channel_order pyazr_objective pyazr_inactive_lines
                      pyazr_park_gradient pyazr_shared_state
                      PROPERTIES LABELS slow)
 
-# Mixture segments (natural-abundance targets): the keyword block is read and
-# written, tables are built, and with the engine the values and the Jacobian
-# scale by w_self while the folded table adds nothing to the derivatives.
-add_test(NAME pyazr_mixture
-         COMMAND ${Python3_EXECUTABLE}
-                 ${CMAKE_CURRENT_SOURCE_DIR}/mixture_test.py)
-set_tests_properties(pyazr_mixture PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
-
 # Hard-sphere J^pi groups (includeAllJPi=1) through pyazr's default transform
 # route: the level-less groups used to give the transform a 0 x 0 eigenproblem.
 add_test(NAME pyazr_hard_sphere_transform

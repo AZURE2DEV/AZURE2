@@ -140,18 +140,6 @@ class EPoint {
   double GetUdrProjectileMass() const { return udr_mass_; };
   /// Is this one of the sub-points a target-effect integral is built from?
   bool IsSubPoint() const { return is_sub_point_; };
-  //! Mixture segments (natural-abundance targets, MixtureTable.h): the sum of
-  //! the weighted, resolution-folded table terms at this point, and the terms
-  //! one by one.  Parameter-independent, set by ESegment::ComputeMixtureExternal.
-  double GetMixtureExternal() const { return mixture_external_; };
-  const std::vector<double> &GetMixtureTerms() const { return mixture_terms_; };
-  void SetMixtureTerms(const std::vector<double> &terms);
-  /*!
-   * Folds the given values, one per sub-point (index j-1 for sub-point j),
-   * with this point's target effect exactly as the sub-point cross sections
-   * are folded.  Used for the tables of a mixture segment.
-   */
-  double FoldSubPointValues(const Config &, const std::vector<double> &values);
   /// Unobserved-primary, observed-secondary point?
   bool IsUPOS() const;
   /// Entrance pair key, as written in the input files; not necessarily its PPair position.
@@ -395,8 +383,6 @@ class EPoint {
   double excitation_energy_;
   std::shared_ptr<const UdrKernel> udr_kernel_;
   double udr_mass_ = 0.0;
-  double mixture_external_ = 0.0;
-  std::vector<double> mixture_terms_;
   double cm_crosssection_;
   double cm_dcrosssection_;
   double lab_crosssection_;

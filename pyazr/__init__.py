@@ -21,8 +21,6 @@ from .angular import angular_distribution
 from .bands import (Band, load_covariance, rmatrix_columns, best_fit_params,
                     live_parameters, step_sizes, sensitivities, trimmed_model,
                     uncertainty_bands, extrapolation_bands)
-from .mixture import (pair_masses, lab_from_cm, read_extrap, write_table,
-                      extrap_to_lab_table)
 
 __all__ = ["azure2",
            "angular_distribution",
@@ -43,7 +41,5 @@ __all__ = ["azure2",
            "penetrability", "shift", "shift_derivative", "whittaker",
            "Band", "load_covariance", "rmatrix_columns", "best_fit_params",
            "live_parameters", "step_sizes", "sensitivities", "trimmed_model",
-           "uncertainty_bands", "extrapolation_bands",
-           "pair_masses", "lab_from_cm", "read_extrap", "write_table",
-           "extrap_to_lab_table"]
+           "uncertainty_bands", "extrapolation_bands"]
 __version__ = '2.8.0'

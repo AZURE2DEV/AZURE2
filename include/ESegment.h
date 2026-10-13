@@ -2,9 +2,6 @@
 #define ESEGMENT_H
 
 #include "EPoint.h"
-#include "MixtureTable.h"
-#include <map>
-#include <string>
 #include <vector>
 #include <mutex>
 #include <memory>
@@ -195,33 +192,6 @@ class ESegment {
   /// Scale factor as a component; 1.0 unless it is one.
   double GetComponentScaling() const;
 
-  // Mixture: natural-abundance / compound targets (MixtureTable.h).  The
-  // segment's model is  w_self * (own value [+ components]) + sum_i w_i * fold(T_i),
-  // the tables being folded once with the segment's own resolution function.
-  /// Does the segment carry a mixture block?
-  bool HasMixture() const { return mixture_.has; };
-  /// Weight of this project's own R-matrix value; 1 without a mixture block.
-  double GetMixtureSelfWeight() const { return mixture_.has ? mixture_.selfWeight : 1.0; };
-  /// The mixture block as read from the file.
-  const MixtureSpec &GetMixtureSpec() const { return mixture_; };
-  /// The loaded tables, in the order of the block.
-  const std::vector<std::shared_ptr<const MixtureTable> > &GetMixtureTables() const { return mixtureTables_; };
-  /// Drop the mixture block (component segments must not inherit it).
-  void ClearMixture();
-  /// Read the tables (shared through \p cache by path).  -1 and a message on failure.
-  int LoadMixtureTables(const Config &, std::map<std::string, std::shared_ptr<const MixtureTable> > &cache);
-  /// The segment's model from its R-matrix value at a point: w_self * inner + the point's table term.
-  double ApplyMixture(double inner, const EPoint *point) const;
-  /*!
-   * Evaluates and stores the folded table term of point \p i (0-based), and
-   * widens [\p queriedLow, \p queriedHigh] (lab MeV) to the energies it read
-   * the tables at.  Outside a table its end value is used; whether that is
-   * acceptable is the caller's decision (see EData::InitializeMixtures).
-   */
-  void ComputeMixtureExternal(int i, const Config &, double &queriedLow, double &queriedHigh);
-  /// Is [lo, hi] inside every table?  If not, \p error names the first table that falls short.
-  bool MixtureTablesCover(double lo, double hi, std::string &error) const;
-
   // Calculate theoretical cross section including components
   /// Theoretical value at a point, combining the components if this is a composite segment.
   /*!
@@ -285,12 +255,6 @@ class ESegment {
   OperationType segmentOperationType_;
   double componentScaling_;
   mutable std::shared_ptr<std::mutex> componentCalculationMutex_;
-
-  // Mixture block and its tables (shared: copies of the segment, and the
-  // fit's pooled EData clones, reuse the same table data).
-  MixtureSpec mixture_;
-  std::vector<std::shared_ptr<const MixtureTable> > mixtureTables_;
-  bool mixtureRangeWarned_ = false;
 };
 
 #endif

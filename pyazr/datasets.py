@@ -43,61 +43,6 @@ from typing import List, Optional
 import numpy as np
 
 
-#: Keyword blocks a segment line may end with (SegLine.h / ExtrapLine.h).
-_KEYWORDS = ("sqrtshift", "mixture")
-
-
-def _quoted_tokens(text):
-    """Whitespace tokens of ``text``, keeping a double-quoted path (which may
-    hold spaces) as one token without its quotes."""
-    out, cur, quoted = [], [], False
-    for ch in text:
-        if ch == '"':
-            quoted = not quoted
-        elif ch.isspace() and not quoted:
-            if cur:
-                out.append("".join(cur)); cur = []
-        else:
-            cur.append(ch)
-    if cur:
-        out.append("".join(cur))
-    return out
-
-
-def _parse_keyword_blocks(tokens):
-    """``{"sqrtshift": [b, bErr, vary], "mixture": (w_self, ((file, w), ...))}``
-    from the tokens starting at the first keyword; unknown trailing text is
-    ignored, like the engine does."""
-    toks = _quoted_tokens(" ".join(tokens))
-    blocks, i = {}, 0
-    while i < len(toks):
-        kw = toks[i].lower(); i += 1
-        if kw == "sqrtshift":
-            blocks["sqrtshift"] = toks[i:i + 3]; i += 3
-        elif kw == "mixture":
-            try:
-                w_self = float(toks[i]); n = int(float(toks[i + 1])); i += 2
-                tables = []
-                for _ in range(n):
-                    tables.append((toks[i], float(toks[i + 1]))); i += 2
-            except (IndexError, ValueError):
-                raise ValueError("malformed mixture block: "
-                                 + " ".join(tokens))
-            blocks["mixture"] = (w_self, tuple(tables))
-        else:
-            break
-    return blocks
-
-
-def _split_keyword_tail(tail):
-    """Split a segment line's trailing tokens into the positional part and
-    the keyword blocks (:func:`_parse_keyword_blocks`)."""
-    for k, tok in enumerate(tail):
-        if tok.lower() in _KEYWORDS:
-            return tail[:k], _parse_keyword_blocks(tail[k:])
-    return tail, {}
-
-
 def _isfloat(tok):
     try:
         float(tok)
@@ -155,11 +100,6 @@ class Segment:
     vary_shift_sqrt: bool = False          # is b a fit parameter?
     operation: Optional[str] = None    # 'sum' | 'ratio' for a composite segment
     components: tuple = ()             # (entrance, exit, angle, scaling) each
-    # Mixture block (natural-abundance / compound target): the model is
-    # mixture_self * (this project's value) + sum of the folded tables
-    # (file, weight).  None / () without the block.
-    mixture_self: Optional[float] = None
-    mixture_tables: tuple = ()
 
     @property
     def composite(self) -> bool:
@@ -261,17 +201,19 @@ class SegmentSet(list):
         operation, components = None, []
         tail = t[i + 1:]
 
-        # The keyword blocks (sqrt(E) energy-shift term "sqrtshift b bError
-        # vary", natural-abundance "mixture w_self n {file w}...") come last.
-        # Split them off first so the positional composite parse never sees them.
+        # The sqrt(E) energy-shift term is a keyword block at the very end:
+        #   sqrtshift b bError vary
+        # Split it off first so the positional composite parse never sees it.
         shift_sqrt = shift_sqrt_error = 0.0
         vary_shift_sqrt = False
-        tail, blocks = _split_keyword_tail(tail)
-        blk = blocks.get("sqrtshift", [])
-        if len(blk) == 3 and all(_isfloat(b) for b in blk):
-            shift_sqrt, shift_sqrt_error = float(blk[0]), float(blk[1])
-            vary_shift_sqrt = int(float(blk[2])) == 1
-        mixture_self, mixture_tables = blocks.get("mixture", (None, ()))
+        for k, tok in enumerate(tail):
+            if tok.lower() == "sqrtshift":
+                blk = tail[k + 1:k + 4]
+                if len(blk) == 3 and all(_isfloat(b) for b in blk):
+                    shift_sqrt, shift_sqrt_error = float(blk[0]), float(blk[1])
+                    vary_shift_sqrt = int(float(blk[2])) == 1
+                tail = tail[:k]
+                break
         if tail and _isfloat(tail[0]) and int(float(tail[0])) == 1:
             operation = "ratio" if (len(tail) > 1 and
                                     int(float(tail[1])) == 1) else "sum"
@@ -308,8 +250,7 @@ class SegmentSet(list):
             energy_shift_sqrt=shift_sqrt,
             energy_shift_sqrt_error=shift_sqrt_error,
             vary_shift_sqrt=vary_shift_sqrt,
-            operation=operation, components=tuple(components),
-            mixture_self=mixture_self, mixture_tables=tuple(mixture_tables))
+            operation=operation, components=tuple(components))
 
     # -- views ----------------------------------------------------------------
 
@@ -409,8 +350,6 @@ class TestSegment:
     phase_J: Optional[float] = None        # isDiff == 2 only
     phase_L: Optional[int] = None          # isDiff == 2 only
     max_ang_dist_order: Optional[int] = None   # isDiff == 3 only
-    mixture_self: Optional[float] = None   # mixture block, as on Segment
-    mixture_tables: tuple = ()
 
     @property
     def name(self) -> str:
@@ -478,16 +417,13 @@ class TestSegmentSet(list):
             phase_J = float(t[i]); phase_L = int(float(t[i + 1])); i += 2
         elif isDiff == 3:               # angular distribution carries its order
             max_order = int(float(t[i])); i += 1
-        _, blocks = _split_keyword_tail(t[i:])
-        mixture_self, mixture_tables = blocks.get("mixture", (None, ()))
         return TestSegment(
             key=key, active=active, entrance_key=entrance_key,
             exit_key=exit_key,
             energy_min=eMin, energy_max=eMax, energy_step=eStep,
             angle_min=aMin, angle_max=aMax, angle_step=aStep,
             observable=_EXTRAP_OBSERVABLE.get(isDiff, f"code{isDiff}"),
-            phase_J=phase_J, phase_L=phase_L, max_ang_dist_order=max_order,
-            mixture_self=mixture_self, mixture_tables=tuple(mixture_tables))
+            phase_J=phase_J, phase_L=phase_L, max_ang_dist_order=max_order)
 
     # -- views ----------------------------------------------------------------
 

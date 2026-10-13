@@ -56,58 +56,6 @@ int EData::NumSegments() const {
  * Returns -1 if the input files could not be read, otherwise returns 0.
  */
 
-/*!
- * The decomposition of a mixture segment (MixtureTable.h), one file per segment
- * since AZUREOut files are named by pair keys only: the energy, the total the
- * fit compares with the data, this project's weighted R-matrix part, and the
- * folded, weighted term of each table.  Same frame as the AZUREOut file
- * (kinflag.dat), one line per point.
- */
-static void WriteMixtureDecomposition(const Config &configure, bool isExtrap, int kinflag, ESegment *segment) {
-  std::string name = configure.outputdir + "AZUREOut_mixture_seg=" + std::to_string(segment->GetSegmentKey()) +
-                     (isExtrap ? ".extrap" : ".out");
-  std::ofstream out(name.c_str());
-  if (!out) return;
-  const MixtureSpec &spec = segment->GetMixtureSpec();
-  out << "# Segment " << segment->GetSegmentKey() << ": mixture, w_self = " << spec.selfWeight << std::endl;
-  out << "# E_" << (kinflag ? "lab" : "cm") << " [MeV]   total   w_self*R-matrix";
-  for (size_t k = 0; k < spec.tables.size(); k++)
-    out << "   " << spec.tables[k].second << "*\"" << spec.tables[k].first << "\"";
-  out << std::endl;
-  out.precision(10);
-  for (int i = 1; i <= segment->NumPoints(); i++) {
-    EPoint *point = segment->GetPoint(i);
-    double kin = (kinflag != 0) ? point->GetCrossSectionKinFactor() : 1.0;
-    if (kin == 0.0) kin = 1.0;
-    double total = point->GetFitCrossSection();
-    out << std::setw(18) << std::scientific << (kinflag != 0 ? point->GetLabEnergy() : point->GetCMEnergy())
-        << std::setw(18) << std::scientific << total / kin
-        << std::setw(18) << std::scientific << (total - point->GetMixtureExternal()) / kin;
-    const std::vector<double> &terms = point->GetMixtureTerms();
-    for (size_t k = 0; k < terms.size(); k++) out << std::setw(18) << std::scientific << terms[k] / kin;
-    out << std::endl;
-  }
-}
-
-/*!
- * A mixture block (natural-abundance / compound target, MixtureTable.h) adds
- * folded tables to a cross section, so it is accepted on angle-integrated and
- * differential cross sections (plain, or SUM composites such as a neutron
- * total) and refused on quantities that are not linear in the cross section
- * (ratio, phase shift, analyzing power) and on total-capture / E1-E2 segments.
- */
-static bool MixtureAllowed(const Config &configure, const char *kind, int key, bool hasMixture, int isDiff,
-                           bool isTest, int exitKey, int isAdvanced, int operationType) {
-  if (!hasMixture) return true;
-  bool okType = isTest ? (isDiff == 0 || isDiff == 1 || isDiff == 5) : (isDiff == 0 || isDiff == 1 || isDiff == 4);
-  if (okType && exitKey != -1 && !(isAdvanced == 1 && operationType == 1)) return true;
-  configure.outStream << "ERROR: " << kind << " segment #" << key
-                      << ": a mixture block is only supported on angle-integrated or differential"
-                      << " cross sections that are plain or SUM composites (not ratio, phase shift,"
-                      << " analyzing power, total capture or E1/E2-only segments)." << std::endl;
-  return false;
-}
-
 int EData::Fill(const Config &configure, CNuc *theCNuc) {
   std::ifstream in(configure.configfile.c_str());
   if (!in) return -1;
@@ -145,9 +93,6 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
       }
       if (segment.isActive() == 1) {
         ESegment NewSegment(segment);
-        if (!MixtureAllowed(configure, "Data", numTotalSegments, NewSegment.HasMixture(), segment.isDiff(), false,
-                            segment.exitKey(), segment.isAdvanced(), segment.operationType()))
-          return -1;
 
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
           theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()))->SetEntrance();
@@ -336,9 +281,6 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
       }
       if (segment.isActive() == 1) {
         ESegment NewSegment(segment);
-        if (!MixtureAllowed(configure, "Test", numTotalSegments, NewSegment.HasMixture(), segment.isDiff(), true,
-                            segment.exitKey(), segment.isAdvanced(), segment.operationType()))
-          return -1;
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
@@ -1018,57 +960,6 @@ int EData::Initialize(CNuc *compound, const Config &configure) {
     configure.outStream << "Initializing Component Segments..." << std::endl;
   if (this->InitializeComponentSegments(compound, configure) == -1) return -1;
 
-  // Mixture segments: read the tables and fold them on the (now complete) sub-point grids
-  if (this->InitializeMixtures(configure) == -1) return -1;
-
-  return 0;
-}
-
-/*!
- * Reads the tables of every mixture segment (MixtureTable.h) and evaluates the
- * folded table term of each of its points.  The tables are parameter
- * independent, so this is done once here and again only when an energy shift
- * moves the points (ESegment::UpdatePointEnergyWithShift).  A table that does
- * not cover a segment's energies, including its nominal shift, is an error:
- * clamping it would fold a step into the resolution function unnoticed.
- */
-int EData::InitializeMixtures(const Config &configure) {
-  std::map<std::string, std::shared_ptr<const MixtureTable> > cache;
-  for (int s = 1; s <= this->NumSegments(); s++) {
-    ESegment *segment = this->GetSegment(s);
-    if (!segment->HasMixture()) continue;
-    if (segment->IsTargetEffect()) {
-      TargetEffect *effect = this->GetTargetEffect(segment->GetTargetEffectNum());
-      if (effect && effect->GetAutoTolerance() > 0.) {
-        configure.outStream << "ERROR: Segment #" << segment->GetSegmentKey()
-                            << ": a mixture segment cannot use an automatic-application tolerance on its"
-                            << " experimental effect (the effect would be skipped point by point); set it to 0."
-                            << std::endl;
-        return -1;
-      }
-    }
-    if (segment->LoadMixtureTables(configure, cache) == -1) return -1;
-    // Every point's term first, collecting the whole segment's energy range (points, sub-point
-    // grids, nominal shift), then one coverage check that names the full range needed.
-    double lo = 1.0e300, hi = -1.0e300, margin = 0.0;
-    for (int i = 0; i < segment->NumPoints(); i++) {
-      segment->ComputeMixtureExternal(i, configure, lo, hi);
-      margin = std::max(margin, std::fabs(segment->TotalEnergyShift(segment->GetPoint(i + 1)->GetLabEnergy())));
-    }
-    std::string error;
-    if (segment->NumPoints() > 0 && !segment->MixtureTablesCover(lo - margin, hi + margin, error)) {
-      configure.outStream << "ERROR: mixture: " << error << std::endl;
-      return -1;
-    }
-    if (!(configure.paramMask & Config::USE_API)) {
-      const MixtureSpec &spec = segment->GetMixtureSpec();
-      configure.outStream << "Segment #" << segment->GetSegmentKey() << ": mixture, " << spec.selfWeight
-                          << " x this model";
-      for (size_t k = 0; k < spec.tables.size(); k++)
-        configure.outStream << " + " << spec.tables[k].second << " x \"" << spec.tables[k].first << "\"";
-      configure.outStream << std::endl;
-    }
-  }
   return 0;
 }
 
@@ -1607,7 +1498,6 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
                << std::endl;
       bandOut->flush();
     }
-    if (segment->HasMixture()) WriteMixtureDecomposition(configure, output.IsExtrap(), kinflag, &*segment);
     firstSumIterator = GetSegments().end();
   }
 
@@ -2462,8 +2352,6 @@ ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranc
 
   // Clear any existing components to avoid circular references
   componentSegment->ClearComponents();
-  // The parent applies its mixture to the combined value; a component carries none
-  componentSegment->ClearMixture();
 
   // The component segment now has the same data points as the base segment
   // but with different entrance/exit keys, so it will calculate different
@@ -2502,7 +2390,6 @@ ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranc
 
   // Clear any existing components to avoid circular references
   componentSegment->ClearComponents();
-  componentSegment->ClearMixture();
 
   return componentSegment;
 }

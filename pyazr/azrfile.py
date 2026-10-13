@@ -55,30 +55,6 @@ def _isnum(tok):
         return False
 
 
-def _format_mixture(self_weight, tables=()):
-    """The ``mixture`` keyword block of a segment line (MixtureTable.h):
-    ``mixture <w_self> <n> {"<file>" <w>}...``.  Table paths are quoted."""
-    toks = ["mixture", _fmt(float(self_weight)), str(len(tables))]
-    for path, w in tables:
-        toks += ['"%s"' % str(path), _fmt(float(w))]
-    return " ".join(toks)
-
-
-def _rewrite_keyword_tail(line, mixture):
-    """``line`` with its keyword blocks rewritten: the sqrtshift block kept,
-    the mixture block replaced by ``mixture`` ((self_weight, tables), or None
-    to drop it), written last."""
-    from .datasets import _split_keyword_tail, _KEYWORDS
-    t = line.split()
-    head, blocks = _split_keyword_tail(t)
-    out = list(head)
-    if "sqrtshift" in blocks:
-        out += ["sqrtshift"] + list(blocks["sqrtshift"])
-    if mixture is not None:
-        out.append(_format_mixture(*mixture))
-    return " ".join(out)
-
-
 def _fmt(x):
     """Round-trippable, compact token for a number."""
     if isinstance(x, int):
@@ -752,19 +728,12 @@ class AzrModel:
     def add_extrapolation(self, entrance, exit, e_min, e_max, e_step,
                           observable="angle-integrated", angle=None,
                           angle_min=0.0, angle_max=0.0, angle_step=0.0,
-                          phase_J=None, phase_L=None, order=None, active=True,
-                          mixture=None):
+                          phase_J=None, phase_L=None, order=None, active=True):
         """Append one extrapolation segment (a grid to evaluate the model on).
 
         ``entrance`` / ``exit`` are particle-pair keys (``exit=-1`` for a summed
         / total observable such as capture).  The model is evaluated on the
-        energy grid ``e_min : e_max : e_step`` in the LAB energy of the
-        projectile, the same axis a data file uses (``EData::MakePoints``
-        converts to c.m. with the entrance pair's masses).
-
-        ``mixture=(self_weight, [(table_file, weight), ...])`` makes it a
-        mixture segment (natural-abundance / compound target, see
-        :func:`set_mixture`).
+        energy grid ``e_min : e_max : e_step`` (entrance-channel c.m. MeV).
 
         ``observable`` is one of ``angle-integrated``, ``differential``,
         ``differential-cm``, ``total-capture``, ``angular-distribution``,
@@ -794,8 +763,6 @@ class AzrModel:
                                  "order.")
             toks += [int(order)]
         toks += [0]                           # trailing isAdvanced flag
-        if mixture is not None:
-            toks += [_format_mixture(*mixture)]
         line = "  ".join(_fmt(t) if not isinstance(t, str) else t for t in toks)
         lines = self._suffix.splitlines()
         if "<segmentsTest>" in lines:
@@ -1158,8 +1125,7 @@ class AzrModel:
                          energy_shift=0.0, energy_shift_error=0.0,
                          vary_shift=False, phase_J=None, phase_L=None,
                          active=True, energy_shift_sqrt=0.0,
-                         energy_shift_sqrt_error=0.0, vary_shift_sqrt=False,
-                         mixture=None):
+                         energy_shift_sqrt_error=0.0, vary_shift_sqrt=False):
         """Append one data segment (a ``<segmentsData>`` line).
 
         ``data_file`` is the data file path (relative to the run directory,
@@ -1177,9 +1143,7 @@ class AzrModel:
         is the coefficient b of a sqrt(E) shift term, E' = E + shift +
         b*sqrt(E/MeV) (b in MeV^1/2), with its ``_error`` and
         ``vary_shift_sqrt``; the block is written only when one of the three
-        is set, so a plain segment line is unchanged.  ``mixture=(self_weight,
-        [(table_file, weight), ...])`` makes it a mixture segment (see
-        :func:`set_mixture`).
+        is set, so a plain segment line is unchanged.
 
         Returns ``self`` so calls chain.
         """
@@ -1201,8 +1165,6 @@ class AzrModel:
         if energy_shift_sqrt or energy_shift_sqrt_error or vary_shift_sqrt:
             toks += ["sqrtshift", _fmt(energy_shift_sqrt),
                      _fmt(energy_shift_sqrt_error), 1 if vary_shift_sqrt else 0]
-        if mixture is not None:
-            toks += [_format_mixture(*mixture)]
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
         lines = self._suffix.splitlines()
         if "<segmentsData>" not in lines:
@@ -1210,59 +1172,6 @@ class AzrModel:
         end = lines.index("</segmentsData>")
         self._suffix = "\n".join(lines[:end] + [line] + lines[end:])
         return self
-
-    def _edit_segment_lines(self, block, selector, edit):
-        """Apply ``edit(line) -> line`` to the lines of ``<block>`` chosen by
-        ``selector``: a 1-based key (counting every line of the block, as the
-        engine does) or a substring of the line text.  Returns the count."""
-        tag, end_tag = f"<{block}>", f"</{block}>"
-        if tag not in self._suffix:
-            raise ValueError(f"no {tag} block to edit.")
-        out, changed, inside, key = [], 0, False, 0
-        for line in self._suffix.splitlines():
-            s = line.strip()
-            if s == tag:
-                inside = True
-            elif s == end_tag:
-                inside = False
-            elif inside and s:
-                key += 1
-                hit = (key == selector) if isinstance(selector, int) \
-                    else (selector in line)
-                if hit:
-                    line = edit(line)
-                    changed += 1
-            out.append(line)
-        self._suffix = "\n".join(out)
-        if changed == 0:
-            raise KeyError(f"no {tag} line matches {selector!r}.")
-        return changed
-
-    def set_mixture(self, segment, self_weight, tables=()):
-        """Make a ``<segmentsData>`` line a mixture segment (natural-abundance
-        or compound target; ``MixtureTable.h``): its model becomes
-        ``self_weight * (this project's value) + sum_i w_i * fold(table_i)``,
-        each table a two-column ``E_lab[MeV]  sigma[b]`` file folded with the
-        segment's own resolution function.  ``tables`` is ``[(path, weight),
-        ...]``; ``segment`` is a 1-based segment key or a substring of the
-        line (e.g. the data-file name).  An existing mixture block is replaced;
-        a sqrtshift block is kept.  Returns the number of lines changed.
-        """
-        spec = (float(self_weight), [(str(p), float(w)) for p, w in tables])
-        return self._edit_segment_lines(
-            "segmentsData", segment, lambda l: _rewrite_keyword_tail(l, spec))
-
-    def remove_mixture(self, segment):
-        """Drop the mixture block of the matching ``<segmentsData>`` line(s)."""
-        return self._edit_segment_lines(
-            "segmentsData", segment, lambda l: _rewrite_keyword_tail(l, None))
-
-    def set_test_mixture(self, key, self_weight, tables=()):
-        """As :func:`set_mixture`, for the ``<segmentsTest>`` line ``key``
-        (1-based, counting every line of the block)."""
-        spec = (float(self_weight), [(str(p), float(w)) for p, w in tables])
-        return self._edit_segment_lines(
-            "segmentsTest", int(key), lambda l: _rewrite_keyword_tail(l, spec))
 
     def remove_data_segments(self, file_substr):
         """Remove every ``<segmentsData>`` line whose text matches

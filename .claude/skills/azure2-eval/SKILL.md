@@ -30,32 +30,6 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
 
 ## Golden rules
 
-- **Natural-abundance / compound targets: use a `mixture` block, not a diluted fit.**
-  Since 2026-10-12 a `<segmentsData>` or `<segmentsTest>` line can end with
-  `mixture <w_self> <n> {"<file>" <w_i>}...` (MixtureTable.h): the model becomes
-  `w_self * (this project's value) + sum_i w_i * fold(T_i)`, each `T_i` a two-column
-  `E_lab[MeV] sigma[b]` table (ENDF/JEFF point-wise, or another AZURE2 project's bare
-  extrapolation via `pyazr.extrap_to_lab_table`) folded with the segment's OWN `<targetInt>`
-  kernel on the same sub-point grid. Weights are fixed numbers (abundance x stoichiometry;
-  natural Ne: 0.9048 ²⁰Ne / 0.0027 ²¹Ne / 0.0925 ²²Ne). Tables are in LAB energy and in the
-  frame AZURE2 compares in (barns; c.m. b/sr for differential), must cover the grid incl.
-  the kernel wings and the nominal energy shift (the run stops and prints the range
-  otherwise), and must resolve the other isotope's resonances (linear interpolation).
-  The fit column of `AZUREOut_*` is the mixture total; `AZUREOut_mixture_seg=<key>.*`
-  decomposes it. Derivatives (analytic gradient, pyazr `residual_jacobian`) scale by
-  `w_self`; the tables add nothing. Edit with `AzrModel.set_mixture(segment, w_self, tables)`
-  / `set_test_mixture`; `SegmentSet` exposes `mixture_self` / `mixture_tables`. Tables from
-  evaluations: `pyazr.mixture.endf_total_to_table(endf_file, out)` (point-wise MF3 plus a
-  Breit-Wigner LRF 1/2 resolved range reconstructed at 0 K; Reich-Moore / LRF 7 need NJOY);
-  ENDF/B-VIII.0 files come from the NNDC library zip when the IAEA servlets are behind
-  Cloudflare (worked example 17O+a/10-12-26_natNe_mixture/readme). Allowed on
-  angle-integrated and differential cross sections, plain or SUM composites (the way a
-  neutron total is written); refused on ratio, phase shift, A_y, total capture, E1/E2-only
-  and on effects with an auto-application tolerance. The GUI preserves the block but does
-  not edit it. Test: `tests/mixture/check.sh` (self-consistency: half the model plus half a
-  table of itself equals the folded model to 1e-4 under Gaussian and UDR kernels).
-  A simultaneous fit of several isotopes' projects is stage 2 (rmfit `Mixture`, planned).
-
 - **Particle pair masses must be precise atomic masses, not bare mass numbers.**
   The GUI's "Particle Pairs" tab labels the field "Mass (M)" and glosses it as
   "the mass number," but the underlying field (`PPair` in the source) is a
@@ -101,12 +75,6 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
     or `grep includeAllJPi` before trusting an elastic curve, and add the two
     lines (or tick the box, on by default for new projects) when the model
     relies on dummies — the dummies stay harmless;
-  - 2026-10-12: a hard-sphere group has no levels, and `CNuc::TransformIn` (pyazr's default
-    `transform=True`, the CLI's --transform-params route) built a 0 x 0 eigenproblem for it:
-    a segfault on opening a pyazr session on such a file. Fixed (the group is skipped);
-    regression `tests/pyazr/hard_sphere_transform_test.py`. The GUI run thread also did not
-    copy `includeAllJPi`/`hardSphereMaxL` into its Config, so GUI runs silently ignored the
-    option until 2026-10-12 (`tests/gui/main_thread_config_test`).
   - with the option on, `deactivate_level` / `levelYN=0` removes the resonance
     and keeps the partial wave (hard-sphere stays), and switching every level
     off gives the pure hard-sphere + Coulomb curve; with it off, a J^π
