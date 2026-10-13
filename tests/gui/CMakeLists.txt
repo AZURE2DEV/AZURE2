@@ -216,28 +216,3 @@ endif()
 add_test(NAME main_thread_config COMMAND main_thread_config_test)
 set_tests_properties(main_thread_config PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
-
-# The mixture-block editor of the segment dialogs: read/write of the block
-# beside a sqrtshift block, verbatim keeping of an unreadable one, and the
-# observables the engine refuses.
-add_executable(mixture_editor_test mixture_editor_test.cpp)
-set_target_properties(mixture_editor_test PROPERTIES AUTOMOC OFF)
-target_include_directories(mixture_editor_test PRIVATE
-    ${AZURE2_SOURCE_DIR}/gui/include
-    ${AZURE2_SOURCE_DIR}/include
-)
-target_link_libraries(mixture_editor_test PRIVATE
-    ${AZURESETUP_LIBRARIES}
-    ${AZUREAPI_LIBRARIES}
-    AZURE2Core
-    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
-)
-if(USE_QWT)
-    target_link_libraries(mixture_editor_test PRIVATE ${QWT_LIBRARIES})
-endif()
-if(USE_ERYA)
-    target_link_libraries(mixture_editor_test PRIVATE pugixml srim_utilities)
-endif()
-add_test(NAME mixture_editor COMMAND mixture_editor_test)
-set_tests_properties(mixture_editor PROPERTIES
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

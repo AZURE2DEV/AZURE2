@@ -36,9 +36,8 @@ struct SegmentsDataData {
   // Trailing keyword blocks of the line, verbatim: "sqrtshift <b> <bError>
   // <vary>" (sqrt(E) energy-shift term, SegLine.h) and "mixture <w_self> <n>
   // {"file" <w>}..." (natural-abundance targets, MixtureTable.h).  Carried
-  // through so a file that uses them survives a GUI load/save; the mixture
-  // block is edited by MixtureEditor in the segment dialogs.  Not a table
-  // column: set with setLineExtras().
+  // through so a file that uses them survives a GUI load/save; the GUI does
+  // not edit them yet.  Not a table column: set with setLineExtras().
   QString extraTokens;
 };
 

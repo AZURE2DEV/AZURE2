@@ -304,7 +304,6 @@ void SegmentsTab::addSegDataLine() {
       newLine.finalJ = 0.0;
       newLine.delta = 0.0;
     }
-    newLine.extraTokens = aDialog.mixtureEditor->tokens();
     addSegDataLine(newLine);
   }
 }
@@ -405,7 +404,6 @@ void SegmentsTab::addSegTestLine() {
       newLine.operationType = 0;
       newLine.componentsList = "";
     }
-    newLine.extraTokens = aDialog.mixtureEditor->tokens();
     addSegTestLine(newLine);
   }
 }
@@ -579,13 +577,7 @@ void SegmentsTab::editSegDataLine() {
   aDialog.finalJText->setText(finalJ);
   aDialog.deltaText->setText(delta);
 
-  // The keyword blocks have no column: hand the row's text to the editor.
-  const QString extraTokens = segmentsDataModel->getLines().at(index.row()).extraTokens;
-  aDialog.mixtureEditor->setTokens(extraTokens);
-
   if (aDialog.exec()) {
-    const QString newExtraTokens = aDialog.mixtureEditor->tokens();
-    if (newExtraTokens != extraTokens) segmentsDataModel->setLineExtras(index.row(), newExtraTokens);
     int newEntrancePairIndex = aDialog.entrancePairCombo->key();
     if (newEntrancePairIndex != entrancePairIndex) {
       i = segmentsDataModel->index(index.row(), 1, QModelIndex());
@@ -799,12 +791,7 @@ void SegmentsTab::editSegTestLine() {
     }
   }
 
-  const QString extraTokens = segmentsTestModel->getLines().at(index.row()).extraTokens;
-  aDialog.mixtureEditor->setTokens(extraTokens);
-
   if (aDialog.exec()) {
-    const QString newExtraTokens = aDialog.mixtureEditor->tokens();
-    if (newExtraTokens != extraTokens) segmentsTestModel->setLineExtras(index.row(), newExtraTokens);
     int newEntrancePairIndex = aDialog.entrancePairCombo->key();
     if (newEntrancePairIndex != entrancePairIndex) {
       i = segmentsTestModel->index(index.row(), 1, QModelIndex());
