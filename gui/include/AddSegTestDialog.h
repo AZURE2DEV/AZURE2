@@ -5,6 +5,7 @@
 #include <QLineEdit>
 #include <QSpinBox>
 #include "PairKeyCombo.h"
+#include "MixtureEditor.h"
 #include <QComboBox>
 #include <QLabel>
 #include <QCheckBox>
@@ -66,8 +67,13 @@ class AddSegTestDialog : public QDialog {
   QPushButton *addComponentButton;
   QPushButton *removeComponentButton;
 
+  /*! The row's trailing keyword text; the mixture block is edited here. */
+  MixtureEditor *mixtureEditor;
+  bool mixtureCompatible(QString *why = 0) const;
+
  public slots:
   void dataTypeChanged(int);
+  void tryAccept();
   void advancedModeChanged(int);
   void operationTypeChanged(int);
   void useFixedAngleChanged(int);

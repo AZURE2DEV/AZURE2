@@ -1,5 +1,7 @@
 #include "AddSegTestDialog.h"
 
+#include <QMessageBox>
+
 #include <QPushButton>
 #include <QGroupBox>
 #include <QGridLayout>
@@ -186,6 +188,9 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
 
   lowerLayout->addWidget(advancedModeBox, 2, 0, 1, 4);
 
+  mixtureEditor = new MixtureEditor;
+  lowerLayout->addWidget(mixtureEditor, 3, 0, 1, 4);
+
   valueLayout->addLayout(lowerLayout, 2, 0, 1, 2);
   valueBox->setLayout(valueLayout);
 
@@ -199,10 +204,37 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
 
   setLayout(mainLayout);
 
-  connect(okButton, SIGNAL(clicked()), this, SLOT(accept()));
+  connect(okButton, SIGNAL(clicked()), this, SLOT(tryAccept()));
   connect(cancelButton, SIGNAL(clicked()), this, SLOT(reject()));
 
   setWindowTitle(tr("Add a Segment Without Data"));
+}
+
+bool AddSegTestDialog::mixtureCompatible(QString *why) const {
+  if (!mixtureEditor->isMixtureEnabled()) return true;
+  const int code = dataTypeCode();
+  // The engine's MixtureAllowed for test segments: angle-integrated (0),
+  // differential (1) and c.m. differential (5); not a ratio, phase shift,
+  // angular-distribution coefficients, total capture or analyzing power.
+  if (code != 0 && code != 1 && code != 5) {
+    if (why) *why = tr("A mixture is defined for angle-integrated and differential cross sections only "
+                      "(not phase shifts, angular-distribution coefficients, total capture or analyzing powers).");
+    return false;
+  }
+  if (advancedModeCheck->isChecked() && operationCombo->currentIndex() == 1) {
+    if (why) *why = tr("A mixture cannot be combined with a ratio segment.");
+    return false;
+  }
+  return true;
+}
+
+void AddSegTestDialog::tryAccept() {
+  QString why;
+  if (!mixtureEditor->validate(&why) || !mixtureCompatible(&why)) {
+    QMessageBox::warning(this, tr("Mixture"), why);
+    return;
+  }
+  accept();
 }
 
 int AddSegTestDialog::dataTypeCode() const {

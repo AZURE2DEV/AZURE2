@@ -221,11 +221,15 @@ Limits
    Supported on angle-integrated and differential cross sections (plain or
    **Sum** composites); refused on ratios, phase shifts, analyzing powers,
    total-capture and E1/E2-only segments, and on segments whose experimental
-   effect uses an automatic-application tolerance. The GUI preserves the block
-   on load/save but does not edit it yet: write it in the file, or with pyazr
-   (``AzrModel.set_mixture``, ``set_test_mixture``, and
-   ``pyazr.extrap_to_lab_table`` to turn another project's extrapolation into
-   a table).
+   effect uses an automatic-application tolerance. In the GUI the block is
+   edited in the segment dialogs (Segments tab, add or double-click a row):
+   tick **Natural-abundance or compound target**, set the abundance of this
+   nucleus and add one row per table file with its weight; the sum of the
+   weights is shown, and the dialog refuses the observables the engine refuses.
+   Any other keyword block on the line (``sqrtshift``) is carried along
+   unchanged. With pyazr use ``AzrModel.set_mixture``, ``set_test_mixture``,
+   and ``pyazr.extrap_to_lab_table`` to turn another project's extrapolation
+   into a table.
 
 Segments Without Data
 ---------------------

@@ -51,8 +51,9 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   Cloudflare (worked example 17O+a/10-12-26_natNe_mixture/readme). Allowed on
   angle-integrated and differential cross sections, plain or SUM composites (the way a
   neutron total is written); refused on ratio, phase shift, A_y, total capture, E1/E2-only
-  and on effects with an auto-application tolerance. The GUI preserves the block but does
-  not edit it. Test: `tests/mixture/check.sh` (self-consistency: half the model plus half a
+  and on effects with an auto-application tolerance. The GUI edits the block in the segment
+  dialogs since 2026-10-12 (`MixtureEditor`: tick "Natural-abundance or compound target", w_self,
+  one row per table + weight; `sqrtshift` text on the line is carried along). Test: `tests/mixture/check.sh` (self-consistency: half the model plus half a
   table of itself equals the folded model to 1e-4 under Gaussian and UDR kernels).
   A simultaneous fit of several isotopes' projects is stage 2 (rmfit `Mixture`, planned).
 
