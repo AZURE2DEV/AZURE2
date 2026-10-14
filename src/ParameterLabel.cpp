@@ -141,6 +141,8 @@ int NumParameters(CNuc *compound, EData *data) {
     for (size_t s = 0; s < segments.size(); s++)
       if (segments[s].IsVaryNorm()) n++;
     n += 2 * (int)segments.size();  // energy shift and sqrt(E) coefficient, every segment
+    for (size_t s = 0; s < segments.size(); s++)  // shift-function parameters of the segments declaring one
+      if (segments[s].OwnsShiftFn() && segments[s].HasShiftFn()) n += segments[s].NumShiftFnParams();
   }
   return n;
 }
@@ -201,6 +203,18 @@ std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
       return out.str();
     }
     index++;
+  }
+  for (size_t s = 0; s < segments.size(); s++) {
+    if (!segments[s].OwnsShiftFn() || !segments[s].HasShiftFn()) continue;
+    for (int j = 0; j < segments[s].NumShiftFnParams(); j++) {
+      if (index == minuitIndex) {
+        std::ostringstream out;
+        out << "parameter a" << j << " of the energy-shift function " << segments[s].GetShiftFnExpression()
+            << " of segment " << segments[s].GetSegmentKey() << " (" << segments[s].GetDataFile() << ")";
+        return out.str();
+      }
+      index++;
+    }
   }
 
   return std::string();

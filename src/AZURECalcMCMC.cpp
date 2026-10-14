@@ -375,6 +375,7 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   //   one norm per segment with IsVaryNorm()
   //   one energy shift per segment (all segments)
   //   one sqrt(E) energy-shift coefficient per segment (all segments)
+  //   the shift-function parameters of each segment declaring a "shiftfn" block
   // AZUREAPI::GetParameterInfo() walks the same sequence.
   std::vector<int> allKinds;
   std::vector<double> allAutoMean;
@@ -420,6 +421,16 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     allKinds.push_back(PARAM_SHIFT);
     allAutoMean.push_back(segments[s].GetNominalEnergyShiftSqrt());
     allAutoStd.push_back(segments[s].GetEnergyShiftSqrtError());
+  }
+
+  // Shift-function parameters, of the segments that declare a function, same prior rule.
+  for (size_t s = 0; s < segments.size(); ++s) {
+    if (!segments[s].OwnsShiftFn() || !segments[s].HasShiftFn()) continue;
+    for (int j = 0; j < segments[s].NumShiftFnParams(); ++j) {
+      allKinds.push_back(PARAM_SHIFT);
+      allAutoMean.push_back(segments[s].GetNominalShiftFnValues()[j]);
+      allAutoStd.push_back(segments[s].GetShiftFnErrors()[j]);
+    }
   }
 
   if (allKinds.size() != fixed_.size()) {

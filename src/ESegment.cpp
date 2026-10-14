@@ -1,4 +1,5 @@
 #include <cmath>
+#include <limits>
 #include "CNuc.h"
 #include "Config.h"
 #include "DataLine.h"
@@ -73,6 +74,15 @@ ESegment::ESegment(SegLine segLine) {
   shiftGroup_ = segLine.shiftGroup();
   shiftLeaderPos_ = -1;
   hasShiftGroupFollowers_ = false;
+  hasSqrtShiftBlock_ = segLine.hasSqrtShift();
+  shiftFnDeclared_ = segLine.shiftFn();
+  shiftFnNominal_ = segLine.shiftFnValues();
+  shiftFnError_ = segLine.shiftFnErrors();
+  for (int v : segLine.shiftFnVary()) shiftFnVary_.push_back(v == 1);
+  hasShiftFn_ = false;
+  shiftFnConfig_ = nullptr;
+  shiftFnSourcePos_ = -1;
+  shiftFnParamStart_ = -1;
   if (segLine.varyNorm() == 1)
     varyNorm_ = true;
   else
@@ -152,6 +162,11 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   shiftGroup_ = "";
   shiftLeaderPos_ = -1;
   hasShiftGroupFollowers_ = false;
+  hasSqrtShiftBlock_ = false;
+  hasShiftFn_ = false;
+  shiftFnConfig_ = nullptr;
+  shiftFnSourcePos_ = -1;
+  shiftFnParamStart_ = -1;
   varyEnergyShiftSqrt_ = false;
   varyNorm_ = false;
 
@@ -674,8 +689,60 @@ bool ESegment::IsVaryEnergyShiftSqrt() const {
  */
 
 double ESegment::TotalEnergyShift(double labEnergy) const {
-  if (energyShiftSqrt_ == 0.0) return energyShift_;
-  return energyShift_ + energyShiftSqrt_ * sqrt(fabs(labEnergy));
+  const double shift = (energyShiftSqrt_ == 0.0) ? energyShift_ : energyShift_ + energyShiftSqrt_ * sqrt(fabs(labEnergy));
+  if (!hasShiftFn_) return shift;
+  return shift + shiftFn_.Evaluate(*shiftFnConfig_, labEnergy);
+}
+
+double ESegment::ShiftFnTerm(double labEnergy) const {
+  return hasShiftFn_ ? shiftFn_.Evaluate(*shiftFnConfig_, labEnergy) : 0.0;
+}
+
+bool ESegment::OwnsShiftFn() const { return !shiftFnDeclared_.empty(); }
+std::string ESegment::GetDeclaredShiftFn() const { return shiftFnDeclared_; }
+const std::vector<double> &ESegment::GetNominalShiftFnValues() const { return shiftFnNominal_; }
+const std::vector<double> &ESegment::GetShiftFnErrors() const { return shiftFnError_; }
+bool ESegment::IsVaryShiftFn(int j) const { return j >= 0 && j < (int)shiftFnVary_.size() && shiftFnVary_[j]; }
+bool ESegment::HasSqrtShiftBlock() const { return hasSqrtShiftBlock_; }
+bool ESegment::HasShiftFn() const { return hasShiftFn_; }
+std::string ESegment::GetShiftFnExpression() const { return hasShiftFn_ ? shiftFn_.GetEquation() : std::string(); }
+int ESegment::NumShiftFnParams() const { return (int)shiftFnValues_.size(); }
+int ESegment::GetShiftFnSourcePos() const { return shiftFnSourcePos_; }
+int ESegment::GetShiftFnParamStart() const { return shiftFnParamStart_; }
+void ESegment::SetShiftFnParamStart(int start) { shiftFnParamStart_ = start; }
+const std::vector<double> &ESegment::GetShiftFnValues() const { return shiftFnValues_; }
+const std::vector<double> &ESegment::GetLastShiftFnValues() const { return lastShiftFnValues_; }
+void ESegment::SetLastShiftFnValues(const std::vector<double> &values) { lastShiftFnValues_ = values; }
+
+void ESegment::SetShiftFnValue(int j, double value) {
+  if (!hasShiftFn_ || j < 0 || j >= (int)shiftFnValues_.size()) return;
+  shiftFnValues_[j] = value;
+  shiftFn_.SetParameter(j, value, *shiftFnConfig_);
+}
+
+void ESegment::InstallShiftFn(const ESegment &owner, int ownerPos, const Config &configure) {
+  const int n = (int)owner.shiftFnNominal_.size();
+  shiftFn_ = Equation(owner.shiftFnDeclared_, n, configure);
+  shiftFnConfig_ = &configure;
+  hasShiftFn_ = true;
+  shiftFnSourcePos_ = ownerPos;
+  shiftFnValues_.assign(n, 0.0);
+  for (int j = 0; j < n; j++) SetShiftFnValue(j, owner.shiftFnNominal_[j]);
+  // Never "already applied": the first FillEnergyShiftsFromParams re-energises the points.
+  lastShiftFnValues_.assign(n, std::numeric_limits<double>::quiet_NaN());
+}
+
+void ESegment::CopyShiftFnFrom(const ESegment &other) {
+  if (!other.hasShiftFn_) return;
+  if (!hasShiftFn_ || shiftFn_.GetEquation() != other.shiftFn_.GetEquation()) {
+    shiftFn_ = other.shiftFn_;
+    shiftFnConfig_ = other.shiftFnConfig_;
+    hasShiftFn_ = true;
+    shiftFnSourcePos_ = other.shiftFnSourcePos_;
+    shiftFnValues_.assign(other.shiftFnValues_.size(), 0.0);
+  }
+  for (int j = 0; j < (int)other.shiftFnValues_.size(); j++)
+    if (shiftFnValues_[j] != other.shiftFnValues_[j]) SetShiftFnValue(j, other.shiftFnValues_[j]);
 }
 
 void ESegment::AddShiftPenalty(double &chi) const {
@@ -683,6 +750,11 @@ void ESegment::AddShiftPenalty(double &chi) const {
     chi += pow((energyShift_ - energyShiftNominal_) / energyShiftError_, 2.0);
   if (varyEnergyShiftSqrt_ && energyShiftSqrtError_ != 0.0)
     chi += pow((energyShiftSqrt_ - energyShiftSqrtNominal_) / energyShiftSqrtError_, 2.0);
+  // The shift function's parameters are penalised once, on the segment that owns them.
+  if (OwnsShiftFn() && hasShiftFn_)
+    for (int j = 0; j < (int)shiftFnValues_.size(); j++)
+      if (shiftFnVary_[j] && shiftFnError_[j] != 0.0)
+        chi += pow((shiftFnValues_[j] - shiftFnNominal_[j]) / shiftFnError_[j], 2.0);
 }
 
 void ESegment::SetEnergyShiftSqrt(double energyShiftSqrt) {

@@ -985,6 +985,11 @@ std::string createPrettyParameterName(const std::string &paramName) {
       size_t secondUnderscore = paramName.find('_', firstUnderscore + 1);
       if (secondUnderscore != std::string::npos) {
         int segmentNum = std::stoi(paramName.substr(firstUnderscore + 1, secondUnderscore - firstUnderscore - 1));
+        const size_t fn = paramName.find("_energy_shift_fn");
+        if (fn != std::string::npos)
+          return "Segment " + std::to_string(segmentNum) + " Energy-Shift Function a" + paramName.substr(fn + 16);
+        if (paramName.find("_energy_shift_sqrt") != std::string::npos)
+          return "Segment " + std::to_string(segmentNum) + " sqrt(E) Energy-Shift Coefficient (MeV^1/2)";
         return "Segment " + std::to_string(segmentNum) + " Energy Shift (keV)";
       }
     } catch (...) {}
