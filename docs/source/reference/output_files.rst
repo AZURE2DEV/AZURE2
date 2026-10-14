@@ -103,10 +103,10 @@ as above. Five columns:
    * - 5
      - Extrapolated center-of-mass S-factor (MeV b or MeV b/sr)
 
-AZUREOut_natural_seg=\*.out / .extrap
+AZUREOut_sample_seg=\*.out / .extrap
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-One file per natural-target segment (``natural 1``, see
+One file per natural-target segment (``sample 1``, see
 :doc:`../user_guide/segments`): the centre-of-mass energy, the weighted total
 the segment is compared with, and one column per compound nucleus holding
 that nucleus's abundance-weighted contribution, so the columns add up to the

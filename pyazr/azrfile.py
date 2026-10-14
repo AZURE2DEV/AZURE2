@@ -798,7 +798,7 @@ class AzrModel:
             toks += [int(order)]
         toks += [0]                           # trailing isAdvanced flag
         if natural:
-            toks += ["natural", natural if isinstance(natural, str) else 1]
+            toks += ["sample", natural if isinstance(natural, str) else 1]
         line = "  ".join(_fmt(t) if not isinstance(t, str) else t for t in toks)
         lines = self._suffix.splitlines()
         if "<segmentsTest>" in lines:
@@ -1015,11 +1015,20 @@ class AzrModel:
 
     def set_natural(self, file_substr, natural=True):
         """Mark (or unmark) every ``<segmentsData>`` line matching
-        ``file_substr`` as a natural-target segment: ``natural=True`` writes
-        ``natural 1`` (the unnamed, or only, sample), a string writes
-        ``natural <sample>``, ``False`` removes the block.  Refused on a RATIO
-        composite.  Returns the number of lines changed."""
+        ``file_substr`` as a sample (abundance-weighted) segment: ``natural=True``
+        writes ``sample 1`` (the unnamed, or only, sample), a string writes
+        ``sample <name>``, ``False`` removes the block (an older ``natural``
+        block is replaced).  Refused on a RATIO composite.  Returns the number
+        of lines changed."""
         return self._set_natural_block("segmentsData", lambda ln: file_substr in ln, natural)
+
+    def set_sample(self, file_substr, sample=True):
+        """:meth:`set_natural` under the name the keyword now has."""
+        return self.set_natural(file_substr, sample)
+
+    def set_test_sample(self, key, sample=True):
+        """:meth:`set_test_natural` under the name the keyword now has."""
+        return self.set_test_natural(key, sample)
 
     def set_test_natural(self, key, natural=True):
         """As :meth:`set_natural` for the ``<segmentsTest>`` line with this 1-based key."""
@@ -1061,10 +1070,12 @@ class AzrModel:
                         isDiff = int(float(head[9]))
                         adv = head[10 + (2 if isDiff == 2 else 1 if isDiff == 3 else 0):]
                     if len(adv) >= 2 and int(float(adv[0])) == 1 and int(float(adv[1])) == 1:
-                        raise ValueError("a natural-target segment cannot be a RATIO composite")
-                    blocks["natural"] = [natural if isinstance(natural, str) else "1"]
+                        raise ValueError("a sample segment cannot be a RATIO composite")
+                    blocks.pop("natural", None)
+                    blocks["sample"] = [natural if isinstance(natural, str) else "1"]
                 else:
                     blocks.pop("natural", None)
+                    blocks.pop("sample", None)
                 line = " ".join(head + [tok for kw, vals in blocks.items() for tok in [kw] + list(vals)])
                 changed += 1
             out.append(line)
@@ -1430,7 +1441,7 @@ class AzrModel:
             toks += ["sqrtshift", _fmt(energy_shift_sqrt),
                      _fmt(energy_shift_sqrt_error), 1 if vary_shift_sqrt else 0]
         if natural:
-            toks += ["natural", natural if isinstance(natural, str) else 1]
+            toks += ["sample", natural if isinstance(natural, str) else 1]
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
         lines = self._suffix.splitlines()
         if "<segmentsData>" not in lines:

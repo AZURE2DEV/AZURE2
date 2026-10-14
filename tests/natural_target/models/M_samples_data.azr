@@ -39,7 +39,7 @@ enr: sum 0.01
 </abundances>
 <segmentsData>
 1 1 1 1.0 3.0 0 0 0 1 0 0 0 0 0 data.dat 1 0 1 2 2 -999 natural 1
-1 1 1 1.0 3.0 0 0 0 1 0 0 0 0 0 data_enr.dat 1 0 1 2 2 -999 natural enr
+1 1 1 1.0 3.0 0 0 0 1 0 0 0 0 0 data_enr.dat 1 0 1 2 2 -999 sample enr
 </segmentsData>
 <segmentsTest>
 

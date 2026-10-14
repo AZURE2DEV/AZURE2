@@ -24,9 +24,9 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
 
   if (role == Qt::DisplayRole) {
     SegmentsDataData line = segDataLineList.at(index.row());
-    // A natural-target segment (keyword tail "natural 1") is flagged in front of its reaction.
+    // A sample segment (keyword tail "sample <1|name>") shows its sample in front of its reaction.
     const QString natTok = SegmentKeywords::naturalSample(line.extraTokens);
-    const QString nat = natTok.isEmpty() ? QString() : (natTok == "1" ? QString("<i>nat</i> ") : QString("<i>nat:%1</i> ").arg(natTok));
+    const QString nat = natTok.isEmpty() ? QString() : (natTok == "1" ? QString("<i>[default sample]</i> ") : QString("<i>[%1]</i> ").arg(natTok));
     if (index.column() == 1) {
       if (line.isAdvanced == 1) {
         // Handle advanced segments (sum/ratio)

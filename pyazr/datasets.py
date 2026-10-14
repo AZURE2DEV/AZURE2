@@ -45,9 +45,9 @@ import numpy as np
 
 def _natural_token(blocks):
     """``(natural, sample)`` from the keyword blocks: ``natural 0`` -> (False, ""),
-    ``natural 1`` -> (True, "") (the unnamed, or only, sample), ``natural <name>``
-    -> (True, name)."""
-    blk = blocks.get("natural") or []
+    ``sample 1`` -> (True, "") (the unnamed, or only, sample), ``sample <name>``
+    -> (True, name); the older ``natural`` keyword is read the same way."""
+    blk = blocks.get("sample") or blocks.get("natural") or []
     if len(blk) != 1:
         return False, ""
     tok = blk[0]
@@ -90,7 +90,7 @@ _EXTRAP_OBSERVABLE = {
 
 # Keyword blocks a segment line may end with (SegLine.h), and how many tokens
 # each takes: sqrtshift b bError vary; natural <0|1>; shiftgroup <label>.
-_KEYWORDS = {"sqrtshift": 3, "natural": 1, "shiftgroup": 1}
+_KEYWORDS = {"sqrtshift": 3, "sample": 1, "natural": 1, "shiftgroup": 1}
 
 
 def _split_keyword_tail(tokens):
@@ -141,14 +141,21 @@ class Segment:
     energy_shift_sqrt: float = 0.0         # b in E' = E + shift + b*sqrt(E) (MeV^1/2)
     energy_shift_sqrt_error: float = 0.0   # its systematic (MeV^1/2)
     vary_shift_sqrt: bool = False          # is b a fit parameter?
-    natural: bool = False                  # natural-target segment ("natural 1" / "natural <sample>"): every
-                                           #   term is weighted by its nucleus's isotopic abundance
+    natural: bool = False                  # sample segment ("sample 1" / "sample <name>", older files
+                                           #   "natural ..."): every term is weighted by its nucleus's abundance
     natural_sample: str = ""               # the sample's name ("" = the unnamed, or only, sample)
     # segments with the same label share ONE constant energy shift: the first
     # of them (file order) owns the parameter, the others take its value
     shift_group: Optional[str] = None
     operation: Optional[str] = None    # 'sum' | 'ratio' for a composite segment
     components: tuple = ()             # (entrance, exit, angle, scaling) each
+
+
+    @property
+    def sample(self):
+        """The sample the segment's abundance weights come from: ``None`` for an
+        unweighted segment, ``""`` for the default sample, else the name."""
+        return (self.natural_sample if self.natural else None)
 
     @property
     def composite(self) -> bool:
@@ -252,7 +259,7 @@ class SegmentSet(list):
 
         # Keyword blocks come at the very end, in either order:
         #   sqrtshift b bError vary      the sqrt(E) energy-shift term
-        #   natural 1                    a natural-target (abundance-weighted) segment
+        #   sample 1 | sample <name>     an abundance-weighted (sample) segment; alias natural
         #   shiftgroup <label>           segments sharing one constant energy shift
         # Split them off first so the positional composite parse never sees them.
         shift_sqrt = shift_sqrt_error = 0.0
@@ -402,8 +409,14 @@ class TestSegment:
     phase_J: Optional[float] = None        # isDiff == 2 only
     phase_L: Optional[int] = None          # isDiff == 2 only
     max_ang_dist_order: Optional[int] = None   # isDiff == 3 only
-    natural: bool = False                  # natural-target grid ("natural 1" / "natural <sample>")
+    natural: bool = False                  # sample grid ("sample 1" / "sample <name>", older "natural ...")
     natural_sample: str = ""               # the sample's name ("" = the unnamed, or only, sample)
+
+    @property
+    def sample(self):
+        """The sample the segment's abundance weights come from: ``None`` for an
+        unweighted segment, ``""`` for the default sample, else the name."""
+        return (self.natural_sample if self.natural else None)
 
     @property
     def name(self) -> str:

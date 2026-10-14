@@ -11,7 +11,7 @@ do, by the rule the engine applies (``PPair``):
 
 Pairs with the same (Z, A) form one nucleus; the engine keeps their J^pi
 groups apart, so the level matrix is block-diagonal.  A segment line ending in
-``natural 1`` weights its own term and each composite component by the
+``sample 1`` (older files: ``natural 1``) weights its own term and each composite component by the
 isotopic abundance of the term's entrance pair's nucleus, read from the
 ``<abundances>`` block (one line per nucleus: ``Z A abundance vary sigma``).
 
@@ -112,7 +112,7 @@ def merge_projects(models, out, abundances, sum_sigma=0.0, shared=(), natural=Tr
     mapping member index -> that member's data-segment key: the first member's
     line is kept as the carrier, turned into a SUM composite whose components
     are the other members' main terms (and their components), marked
-    ``natural 1`` when ``natural`` is set, and the other members' lines are
+    ``sample 1`` when ``natural`` is set, and the other members' lines are
     dropped.
 
     Not merged, reported in the returned :class:`MergeReport`: the members'
@@ -272,7 +272,8 @@ def merge_projects(models, out, abundances, sum_sigma=0.0, shared=(), natural=Tr
         comps.extend(group_extra[g])
         new_tail = ["1", "0", str(len(comps))] + [tok for c in comps for tok in c] + ["0"]
         if natural:
-            blocks["natural"] = ["1"]
+            blocks.pop("natural", None)
+            blocks["sample"] = ["1"]
         new_tail += [tok for kw, vals in blocks.items() for tok in [kw] + list(vals)]
         data_lines[segment_map[mi][key] - 1] = " ".join(toks[:i + 1] + new_tail)
 

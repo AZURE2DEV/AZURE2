@@ -111,7 +111,7 @@ PairsTab::PairsTab(QWidget *parent) :
   sampleCombo = new QComboBox;
   sampleCombo->setObjectName("sampleCombo");
   sampleCombo->setToolTip(tr("The sample whose abundances the table shows.  A segment chooses its sample in the segment dialog "
-                             "(\"natural 1\" is the default sample, \"natural <name>\" a named one)."));
+                             "(\"sample 1\" is the default sample, \"sample <name>\" a named one)."));
   addSampleButton = new QPushButton(tr("+ sample"));
   addSampleButton->setToolTip(tr("Add a named sample (one word), e.g. an enriched target."));
   removeSampleButton = new QPushButton(tr("- sample"));
@@ -137,7 +137,7 @@ PairsTab::PairsTab(QWidget *parent) :
   connect(sampleSumSigmaSpin, SIGNAL(valueChanged(double)), this, SLOT(sampleSumSigmaEdited(double)));
   connect(abundancesModel, SIGNAL(samplesChanged()), this, SLOT(updateSampleCombo()));
   QVBoxLayout *abundancesLayout = new QVBoxLayout;
-  abundancesLayout->addWidget(new QLabel(tr("Each nucleus's term in a natural-target segment (\"natural\" in the segment dialog) is weighted by the "
+  abundancesLayout->addWidget(new QLabel(tr("Each nucleus's term in a sample segment (\"Sample\" in the segment dialog) is weighted by the "
                                             "abundance of its target isotope in the segment's sample.  A fitted abundance becomes the parameter "
                                             "abundance[_<sample>]_<Z>_<A>.")));
   abundancesLayout->addLayout(sampleRow);

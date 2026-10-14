@@ -101,8 +101,8 @@ def main():
     S3 = f"1 1 1 {grid} 1 0 1 2 2 -999 natural 1"
     S4 = f"1 2 2 {grid} natural 1"
     # a second, named sample ("enr": 0.1 / 0.9) chosen on the segment line
-    S5 = f"1 1 1 {grid} 1 0 1 2 2 -999 natural enr"
-    S6 = f"1 2 2 {grid} natural enr"
+    S5 = f"1 1 1 {grid} 1 0 1 2 2 -999 sample enr"     # the keyword's name since samples; "natural" stays an alias
+    S6 = f"1 2 2 {grid} sample enr"
     lv_a, _ = levels([(PAIR_A, LEVELS_A)])
     lv_b, _ = levels([(PAIR_B, LEVELS_B)])
     lv_m, _ = levels([(PAIR_A, LEVELS_A), (PAIR_B, LEVELS_B)])
@@ -126,7 +126,7 @@ def main():
         "M_samples_data.azr": model(lv_m_fixed, "", ["7 13 0.5 1 0", "7 14 0.5 1 0", "enr: 7 13 0.5 1 0", "enr: 7 14 0.5 1 0", "enr: sum 0.01"],
                                     config_extra="abundanceSumSigma=0.01",
                                     segments_data="1 1 1 1.0 3.0 0 0 0 1 0 0 0 0 0 data.dat 1 0 1 2 2 -999 natural 1\n"
-                                                  "1 1 1 1.0 3.0 0 0 0 1 0 0 0 0 0 data_enr.dat 1 0 1 2 2 -999 natural enr"),
+                                                  "1 1 1 1.0 3.0 0 0 0 1 0 0 0 0 0 data_enr.dat 1 0 1 2 2 -999 sample enr"),
         # data mode: S3 against data.dat (check.sh writes it), abundances free, sum-to-one prior
         "M_data.azr": model(lv_m_fixed, "", ["7 13 0.5 1 0", "7 14 0.5 1 0"], config_extra="abundanceSumSigma=0.01",
                             segments_data="1 1 1 1.0 3.0 0 0 0 1 0 0 0 0 0 data.dat 1 0 1 2 2 -999 natural 1"),
@@ -137,7 +137,7 @@ def main():
         # refused: a component naming a pair key that does not exist
         "bad_key.azr": model(lv_m, f"1 1 1 {grid} 1 0 1 9 9 -999 natural 1", ab),
         # refused: a sample the block does not define
-        "bad_sample.azr": model(lv_m, f"1 1 1 {grid} natural nosuch", ab),
+        "bad_sample.azr": model(lv_m, f"1 1 1 {grid} sample nosuch", ab),
     }
     for name, text in files.items():
         with open(os.path.join(OUT, name), "w") as f:

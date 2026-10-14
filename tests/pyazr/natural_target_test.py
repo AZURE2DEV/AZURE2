@@ -180,7 +180,7 @@ def run(work):
     ms2.set_test_natural(1, "enr")
     check("sample edits round-trip", ms2.samples["enr"][Nucleus(7, 13)] == (0.3, True, 0.02) and ms2.sample_sum_sigma("enr") == 0.05
           and ms2.sample_sum_sigma("") == 0.07 and TestSegmentSet.from_file.__func__ is not None
-          and ms2._suffix.count("natural enr") == 3, ms2._suffix)
+          and ms2._suffix.count("sample enr") == 3, ms2._suffix)
     msd = os.path.join(work, "M_samples_data.azr")
     md = AzrModel.from_file(os.path.join(MODELS, "M_samples_data.azr"))
     md.write(msd)
@@ -226,7 +226,7 @@ def run(work):
     # the data line must be a SUM over both nuclei: rewrite it with the component
     lines = mm._suffix.splitlines()
     i = max(k for k, ln in enumerate(lines) if "data.dat" in ln)
-    lines[i] = lines[i].replace("data.dat  0  0  natural  1", "data.dat 1 0 1 2 2 -999 natural 1")
+    lines[i] = lines[i].replace("data.dat  0  0  sample  1", "data.dat 1 0 1 2 2 -999 sample 1")
     mm._suffix = "\n".join(lines) + "\n"
     mm.write(mfile)
     segs = SegmentSet.from_file(mfile)

@@ -97,7 +97,7 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   advancedModeCheck = new QCheckBox(tr("Advanced Settings (Sum or Ratio of Components)"));
   connect(advancedModeCheck, SIGNAL(stateChanged(int)), this, SLOT(advancedModeChanged(int)));
 
-  naturalLabel = new QLabel(tr("Natural target (sample):"));
+  naturalLabel = new QLabel(tr("Sample (abundance weights):"));
   naturalCombo = new QComboBox;
   naturalCombo->setObjectName("naturalCombo");
   naturalCombo->setToolTip(tr("Weight this segment's term and each of its components by the isotopic abundance\n"
@@ -475,15 +475,15 @@ void AddSegDataDialog::setSamples(const QStringList &samples) {
   QString keep = naturalToken();
   naturalCombo->blockSignals(true);
   naturalCombo->clear();
-  naturalCombo->addItem(tr("No"), QString());
+  naturalCombo->addItem(tr("none (single nucleus, unweighted)"), QString());
   for (int s = 0; s < samples.size(); s++) {
     if (samples.at(s).isEmpty())
-      naturalCombo->addItem(tr("Yes: default sample"), QString("1"));
+      naturalCombo->addItem(tr("default sample"), QString("1"));
     else
-      naturalCombo->addItem(tr("Yes: sample %1").arg(samples.at(s)), samples.at(s));
+      naturalCombo->addItem(samples.at(s), samples.at(s));
   }
   if (!samples.contains(QString()) && naturalCombo->findData(QString("1")) < 0 && samples.size() == 1)
-    naturalCombo->setItemData(1, QString("1"));   // a single named sample is also what "natural 1" means
+    naturalCombo->setItemData(1, QString("1"));   // a single named sample is also what "sample 1" means
   naturalCombo->blockSignals(false);
   setNaturalToken(keep);
 }
@@ -496,7 +496,7 @@ void AddSegDataDialog::setNaturalToken(const QString &token) {
   int at = naturalCombo->findData(token);
   if (at < 0 && !token.isEmpty()) {
     // a sample the table does not list (yet): keep it selectable so an edit does not lose it
-    naturalCombo->addItem(tr("Yes: sample %1 (not in the Pairs tab)").arg(token), token);
+    naturalCombo->addItem(tr("%1 (not in the Pairs tab)").arg(token), token);
     at = naturalCombo->count() - 1;
   }
   naturalCombo->setCurrentIndex(std::max(0, at));

@@ -184,7 +184,7 @@ the tab shows
   plain *natural* segment uses.
 
 Which segments are weighted by these abundances is decided segment by
-segment (the **Natural target** box, :doc:`segments`); the levels of each
+segment (the **Sample** box, :doc:`segments`); the levels of each
 nucleus are entered on the :doc:`levels_channels` tab, and the abundances
 appear on the :doc:`fitting` and :doc:`mcmc` tabs. In the file the table is
 the ``<abundances>`` block and the sum sigma the ``abundanceSumSigma`` key

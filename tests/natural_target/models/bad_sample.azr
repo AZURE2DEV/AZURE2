@@ -36,7 +36,7 @@ maxOrbitalMomentum=4
 <segmentsData>
 </segmentsData>
 <segmentsTest>
-1 1 1 1.0 3.0 0.002 0 0 0 0 natural nosuch
+1 1 1 1.0 3.0 0.002 0 0 0 0 sample nosuch
 </segmentsTest>
 <targetInt>
 </targetInt>

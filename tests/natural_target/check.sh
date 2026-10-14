@@ -82,7 +82,7 @@ for route in true false; do
     awk '{ printf "%.12e %.12e\n", $1, 0.4 * $2 }' "$WORK/b.$tag" > "$WORK/b4.$tag"
     r="$(maxrel "$WORK/m4.$tag" "$WORK/b4.$tag")"
     if le "$r" 1e-9; then ok "$tag: plain natural segment == 0.4 sigma_B (max rel $r)"; else bad "$tag: plain natural segment vs 0.4 B (max rel $r)"; fi
-    dec="$WORK/M_$tag/output/AZUREOut_natural_seg=3.extrap"
+    dec="$WORK/M_$tag/output/AZUREOut_sample_seg=3.extrap"
     if [ -s "$dec" ]; then
       awk '!/^#/ && NF >= 4 { printf "%.12e %.12e\n", $1, $3 }' "$dec" > "$WORK/d1.$tag"
       awk '!/^#/ && NF >= 4 { printf "%.12e %.12e\n", $1, $4 }' "$dec" > "$WORK/d2.$tag"
@@ -93,7 +93,7 @@ for route in true false; do
       # the decomposition file is written with 10 significant digits
       if le "$r1" 1e-9 && le "$r2" 1e-9 && le "$res" 1e-10; then ok "$tag: decomposition file carries 0.6 A and 0.4 B and they add up"; else bad "$tag: decomposition file ($r1, $r2, residual $res)"; fi
     else
-      bad "$tag: no decomposition file AZUREOut_natural_seg=3.extrap"
+      bad "$tag: no decomposition file AZUREOut_sample_seg=3.extrap"
     fi
   done
 done
@@ -129,7 +129,7 @@ if [ -s "$m1" ] && [ -s "$m2" ] && [ -s "$WORK/a.Amat" ]; then
   xs "$m1" 2 > "$WORK/m3.samples"
   r="$(maxrel "$WORK/m3.samples" "$WORK/sum.Amat")"
   if le "$r" 1e-9; then ok "samples: the unnamed sample's SUM is unchanged by the second sample (max rel $r)"; else bad "samples: unnamed sample's SUM changed (max rel $r)"; fi
-  if grep -q "sample enr" "$WORK/M_samples/output/AZUREOut_natural_seg=5.extrap" 2>/dev/null; then ok "samples: decomposition file names its sample"; else bad "samples: decomposition file of segment 5 missing or without the sample name"; fi
+  if grep -q "sample enr" "$WORK/M_samples/output/AZUREOut_sample_seg=5.extrap" 2>/dev/null; then ok "samples: decomposition file names its sample"; else bad "samples: decomposition file of segment 5 missing or without the sample name"; fi
 else
   bad "samples: an extrapolation is missing"; tail -5 "$WORK/M_samples/run.log"
 fi

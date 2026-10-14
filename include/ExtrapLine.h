@@ -97,7 +97,7 @@ class ExtrapLine {
       advancedStream.clear();
       std::string keyword;
       while (advancedStream >> keyword) {
-        if (keyword == "natural") {
+        if (keyword == "sample" || keyword == "natural") {
           if (!(advancedStream >> natural_)) {
             natural_ = "0";
             break;
@@ -175,7 +175,7 @@ class ExtrapLine {
    */
   int operationType() const { return operationType_; };
   /*!
-   * Returns the natural-target token: "0" (none), "1" (the default sample) or a sample name.
+   * Returns the sample token ("sample <t>", alias "natural <t>"): "0" (none), "1" (the default sample) or a sample name.
    */
   const std::string &natural() const { return natural_; };
   /*!

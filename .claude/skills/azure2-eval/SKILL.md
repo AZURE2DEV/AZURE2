@@ -50,7 +50,8 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   particle; β pair the daughter), so n+²²Ne lines are ²³Ne lines and the
   parameter for natural neon's 9.25 % of ²²Ne is `abundance_10_23`. A natural
   data set is ONE segment line: a SUM composite whose components are the
-  members' elastic terms (one per nucleus) plus the `natural 1` keyword; the
+  members' elastic terms (one per nucleus) plus the `sample 1` keyword (`natural 1` in
+  older files); the
   abundances come from the `<abundances>` block (`Z A value vary sigma`, a
   parameter per nucleus only when the block exists, emitted right after the
   level parameters and before the norms) and `abundanceSumSigma=s` in
@@ -1619,7 +1620,7 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
     `penalties()["shift_sqrt"]`, `add_data_segment(energy_shift_sqrt=...)`.
     The GUI preserves the block but cannot edit it. Test:
     `tests/energy_shift_sqrt` (check.sh fits a known a, b back).
-  - `natural 1` (keyword block, after `sqrtshift` if both; branch
+  - `sample 1` / `sample <name>` (keyword block, alias `natural` in files written on 2026-10-13; branch
     `feature/multi-compound-nucleus`, 2026-10-13) marks a natural-abundance
     target segment: the line's own term and every SUM component are
     multiplied by the isotopic abundance of the term's ENTRANCE pair's
@@ -1628,7 +1629,7 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
     (DeBoer 2026-10-13, data sets on targets of different composition):
     `<name>: Z A value vary sigma` lines form a named sample, `<name>: sum s`
     its own sum-to-one width (0 = off, e.g. a stoichiometric Al2O3 sample with
-    weights 2 and 3); `natural <name>` picks it on the segment line, `natural
+    weights 2 and 3); `sample <name>` picks it on the segment line, `sample
     1` = the unnamed sample; parameters `abundance_<name>_Z_A`, emitted sample
     by sample after the unnamed one. pyazr: `AzrModel.samples`,
     `set_abundance(..., sample=)`, `set_sample_sum_sigma`, `set_natural(key,
@@ -1636,7 +1637,7 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
     RATIO, phase shifts (2), analyzing powers (7), test angular-coefficient
     lines (3), in a project without the block, and for a sample name the
     block does not define. Output
-    `AZUREOut_natural_seg=<key>.out/.extrap` (total + one column per
+    `AZUREOut_sample_seg=<key>.out/.extrap` (total + one column per
     nucleus). pyazr: `Segment.natural`, `AzrModel.set_natural`,
     `merge_projects`, `parameters.abundances`, `penalties()["abundance"]`.
     Test: `tests/natural_target`.

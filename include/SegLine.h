@@ -175,8 +175,8 @@ class SegLine {
         // without it (every file written before 2026-10) and the positional
         // UPOS block before it parse exactly as they always have; a failed
         // numeric read above leaves the stream positioned on the keyword.
-        //   natural <0|1|sample>
-        // marks a natural-target segment: its own term and every composite
+        //   sample <0|1|name>      (alias: natural, the keyword before samples existed)
+        // marks a sample segment: its own term and every composite
         // component is weighted by the isotopic abundance of the term's
         // entrance pair's compound nucleus in the named sample of the
         // <abundances> block ("1" = the unnamed, or the only, sample).
@@ -201,7 +201,7 @@ class SegLine {
               varyEnergyShiftSqrt_ = 0;
               break;
             }
-          } else if (keyword == "natural") {
+          } else if (keyword == "sample" || keyword == "natural") {
             if (!(advancedStream >> natural_)) {
               natural_ = "0";
               break;
@@ -316,7 +316,7 @@ class SegLine {
    */
   double energyShiftSqrt() const { return energyShiftSqrt_; };
   /*!
-   * Returns the natural-target token: "0" (none), "1" (the default sample) or a sample name.
+   * Returns the sample token ("sample <t>", alias "natural <t>"): "0" (none), "1" (the default sample) or a sample name.
    */
   const std::string &natural() const { return natural_; };
   /*!

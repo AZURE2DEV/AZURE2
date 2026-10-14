@@ -159,12 +159,13 @@ the level parameters. A sample name is one token without ``:`` or ``#``.
 Stoichiometric weights need not sum to one: give that sample ``sum 0``.
 
 A ``<segmentsData>`` or ``<segmentsTest>`` line may end with the keyword
-blocks ``sqrtshift <b> <bError> <vary>``, ``natural <1|name>`` and
-``shiftgroup <label>`` (in any order; writers put ``natural`` last).
-``natural 1`` multiplies the segment's own term and each composite component
+blocks ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>`` and
+``shiftgroup <label>`` (in any order; writers put ``sample`` last).  ``natural``
+is the keyword's older name and is still read.
+``sample 1`` multiplies the segment's own term and each composite component
 by the abundance of the term's entrance pair's compound nucleus in the
 unnamed sample (or the only sample, if every sample is named);
-``natural <name>`` uses the named sample. It is allowed for
+``sample <name>`` uses the named sample. It is allowed for
 angle-integrated, differential and capture observables (data ``isDiff`` 0,
 1, 3, 4, 5, 6; test 0, 1, 4, 5), never for a ratio, only in a project with
 an ``<abundances>`` block, and a name the block does not define is refused.
@@ -172,7 +173,7 @@ an ``<abundances>`` block, and a name the block does not define is refused.
 .. note::
 
    Compatibility: an engine older than this feature ignores the
-   ``<abundances>`` block and the key, but reads ``natural 1`` as positional
+   ``<abundances>`` block and the key, but reads ``sample 1`` as positional
    fields and misparses the line; a GUI older than it drops the block on
    save. A single-nucleus project is unaffected either way.
 

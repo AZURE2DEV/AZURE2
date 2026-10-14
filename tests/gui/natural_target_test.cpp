@@ -216,8 +216,8 @@ int main(int argc, char** argv) {
   // ---- 4. natural segments ------------------------------------------------
   ok("isNatural", SegmentKeywords::isNatural("natural 1") && !SegmentKeywords::isNatural("natural 0") &&
      !SegmentKeywords::isNatural("") && SegmentKeywords::isNatural("sqrtshift 0.1 0.2 1 natural 1"));
-  ok("withNatural adds the block last", SegmentKeywords::withNatural("sqrtshift 0.1 0.2 1", true) == "sqrtshift 0.1 0.2 1 natural 1" &&
-     SegmentKeywords::withNatural("", true) == "natural 1");
+  ok("withNatural adds the block last", SegmentKeywords::withNatural("sqrtshift 0.1 0.2 1", true) == "sqrtshift 0.1 0.2 1 sample 1" &&
+     SegmentKeywords::withNatural("", true) == "sample 1");
   ok("withNatural(false) removes it and keeps the rest", SegmentKeywords::withNatural("natural 1 sqrtshift 0.1 0.2 1", false) == "sqrtshift 0.1 0.2 1" &&
      SegmentKeywords::withNatural("natural 1", false).isEmpty());
   {
@@ -260,21 +260,21 @@ int main(int argc, char** argv) {
     SegmentsDataModel* model = segmentsTab.getSegmentsDataModel();
     QString natLabel = model->data(model->index(0, 1), Qt::DisplayRole).toString();
     QString plainLabel = model->data(model->index(1, 1), Qt::DisplayRole).toString();
-    ok("natural row is flagged 'nat' in its label", natLabel.contains("<i>nat</i>"), natLabel);
-    QString in2("1 2 2 1.0 2.0 0 0 0 1 0 0 0 0 0 enr.dat 0 0 natural enr\n</segmentsData>\n");
+    ok("default-sample row is flagged in its label", natLabel.contains("<i>[default sample]</i>"), natLabel);
+    QString in2("1 2 2 1.0 2.0 0 0 0 1 0 0 0 0 0 enr.dat 0 0 sample enr\n</segmentsData>\n");
     QTextStream inStream2(&in2);
     segmentsTab.readSegDataFile(inStream2);
     QString sampleLabel = model->data(model->index(2, 1), Qt::DisplayRole).toString();
-    ok("a named-sample row is flagged nat:<sample>", sampleLabel.contains("<i>nat:enr</i>"), sampleLabel);
-    ok("SegmentKeywords sample token", SegmentKeywords::naturalSample("sqrtshift 0.1 0.2 1 natural enr") == "enr" &&
-       SegmentKeywords::naturalSample("natural 1") == "1" && SegmentKeywords::naturalSample("natural 0").isEmpty() &&
-       SegmentKeywords::withNaturalToken("natural 1", "enr") == "natural enr");
-    ok("plain row is not", !plainLabel.contains("nat"), plainLabel);
+    ok("a named-sample row is flagged [sample]", sampleLabel.contains("<i>[enr]</i>"), sampleLabel);
+    ok("SegmentKeywords sample token (sample and the older natural)", SegmentKeywords::naturalSample("sqrtshift 0.1 0.2 1 sample enr") == "enr" &&
+       SegmentKeywords::naturalSample("natural 1") == "1" && SegmentKeywords::naturalSample("sample 0").isEmpty() &&
+       SegmentKeywords::withNaturalToken("natural 1", "enr") == "sample enr" && SegmentKeywords::withNatural("sample enr", false).isEmpty());
+    ok("plain row is not", !plainLabel.contains("sample"), plainLabel);
     QString out;
     QTextStream outStream(&out);
     outStream.setFieldAlignment(QTextStream::AlignLeft);
     segmentsTab.writeSegDataFile(outStream);
-    ok("natural written last on its line", tokens(out).first().endsWith(" natural 1"), tokens(out).first());
+    ok("the older natural block is carried through a load/save verbatim", tokens(out).first().endsWith(" natural 1"), tokens(out).first());
   }
 
   // ---- 5. fitting parameters -----------------------------------------------

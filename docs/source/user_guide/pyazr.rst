@@ -180,7 +180,7 @@ Also available: ``set_channel_radius``, ``set_segment_norm``,
 ``remove_data_segments``, ``clear_data_segments``, ``set_extrapolations`` and
 ``apply_fit``; for a project with several compound nuclei (next section)
 ``nuclei``, ``nucleus_of_pair``, ``abundances``, ``set_abundance``,
-``abundance_sum_sigma``, ``set_natural`` and ``set_test_natural``.
+``abundance_sum_sigma``, ``set_sample`` and ``set_test_sample``.
 
 To snapshot a fit, prefer :meth:`~pyazr.azure2.azure2.save_fit`, which wraps
 ``apply_fit``:
@@ -255,7 +255,7 @@ are dropped with a warning. On the file side ``AzrModel.nuclei()``,
 ``abundances`` (the default sample), ``samples`` (every sample),
 ``set_abundance(nucleus, value, vary, sigma, sample="")``,
 ``sample_sum_sigma`` / ``set_sample_sum_sigma(sample, sigma)``,
-``abundance_sum_sigma`` and ``set_natural(key, True)`` (or ``set_natural(key,
+``abundance_sum_sigma`` and ``set_sample(key, True)`` (or ``set_sample(key,
 "enr22Ne")`` for a named sample) edit the new pieces; ``Segment.natural`` and
 ``Segment.natural_sample`` report the flag and the sample; ``Pair.nucleus`` and
 ``Parameter.nucleus`` identify the nucleus at run time; ``save_fit`` writes a

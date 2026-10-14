@@ -27,7 +27,7 @@
 #include <unordered_map>
 
 /*!
- * A natural-target segment ("natural 1") adds abundance-weighted terms of
+ * A sample segment ("sample <1|name>", alias "natural") adds abundance-weighted terms of
  * several compound nuclei, so it is accepted where a SUM of cross sections is
  * meaningful -- angle-integrated, differential and capture cross sections,
  * plain or SUM composites -- and refused for a RATIO, a phase shift, an
@@ -41,14 +41,14 @@ static bool NaturalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTes
   const std::string &token = segment.GetNaturalToken();
   if (token == "0") return true;   // not a natural segment
   if (!theCNuc->HasAbundanceBlock()) {
-    configure.outStream << "ERROR: " << what << " #" << key << " is a natural-target segment, but the project has no "
+    configure.outStream << "ERROR: " << what << " #" << key << " is a sample (abundance-weighted) segment, but the project has no "
                         << "<abundances> block (one line per compound nucleus: [<sample>:] <Z> <A> <abundance> <vary> <sigma>)." << std::endl;
     return false;
   }
   // "1" = the unnamed sample (or the only one); anything else names a sample of the block.
   int sample = (token == "1") ? theCNuc->DefaultSample() : theCNuc->FindSample(token);
   if (sample == 0) {
-    configure.outStream << "ERROR: " << what << " #" << key << ": natural-target sample \"" << token
+    configure.outStream << "ERROR: " << what << " #" << key << ": sample \"" << token
                         << "\" is not in the <abundances> block";
     if (token == "1") configure.outStream << " (it has several named samples and no unnamed one: name one on the segment line)";
     configure.outStream << "." << std::endl;
@@ -56,11 +56,11 @@ static bool NaturalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTes
   }
   segment.SetNaturalSample(sample);
   if (segment.IsAdvanced() && segment.GetLegacyOperationType() != 0) {
-    configure.outStream << "ERROR: " << what << " #" << key << ": a natural-target segment cannot be a RATIO." << std::endl;
+    configure.outStream << "ERROR: " << what << " #" << key << ": a sample segment cannot be a RATIO." << std::endl;
     return false;
   }
   if (segment.IsPhase() || segment.IsAnalyzingPower() || (isTest && segment.IsAngularDist())) {
-    configure.outStream << "ERROR: " << what << " #" << key << ": a natural-target segment must be a cross section "
+    configure.outStream << "ERROR: " << what << " #" << key << ": a sample segment must be a cross section "
                         << "(angle-integrated, differential or capture), not a phase shift, analyzing power or "
                         << "angular-distribution coefficients." << std::endl;
     return false;
@@ -69,7 +69,7 @@ static bool NaturalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTes
 }
 
 /*!
- * The decomposition of a natural-target segment, one file per segment since
+ * The decomposition of a sample segment, one file per segment since
  * AZUREOut files are named by pair keys only: the energy, the total the fit
  * compares with the data, and the abundance-weighted term of every compound
  * nucleus (ESegment::CalculateTheoreticalCrossSection).  Same frame as the
@@ -77,11 +77,11 @@ static bool NaturalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTes
  */
 static void WriteNaturalDecomposition(const Config &configure, bool isExtrap, int kinflag,
                                       const std::vector<std::string> &nucleusLabels, ESegment *segment) {
-  std::string name = configure.outputdir + "AZUREOut_natural_seg=" + std::to_string(segment->GetSegmentKey()) +
+  std::string name = configure.outputdir + "AZUREOut_sample_seg=" + std::to_string(segment->GetSegmentKey()) +
                      (isExtrap ? ".extrap" : ".out");
   std::ofstream out(name.c_str());
   if (!out) return;
-  out << "# Segment " << segment->GetSegmentKey() << ": natural target, abundance-weighted sum over compound nuclei (sample "
+  out << "# Segment " << segment->GetSegmentKey() << ": abundance-weighted sum over compound nuclei (sample "
       << segment->GetNaturalToken() << ")" << std::endl;
   out << "# E_" << (kinflag ? "lab" : "cm") << " [MeV]   total";
   for (size_t k = 0; k < nucleusLabels.size(); k++) out << "   " << nucleusLabels[k];
@@ -1017,7 +1017,7 @@ void EData::ResetIterations() {
  */
 
 int EData::Initialize(CNuc *compound, const Config &configure) {
-  // Labels of the compound nuclei, for the natural-target decomposition files.
+  // Labels of the compound nuclei, for the sample decomposition files.
   nucleusLabels_.clear();
   for (int k = 1; k <= compound->NumNuclei(); k++) nucleusLabels_.push_back(compound->NucleusLabel(k));
   // Identical-particle phase-shift segment validation: warn once per segment

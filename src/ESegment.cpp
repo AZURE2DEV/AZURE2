@@ -1150,7 +1150,7 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
   else
     baseValue = basePoint->GetFitCrossSection();
 
-  // A natural-target segment: every term is weighted by the isotopic
+  // A sample segment: every term is weighted by the isotopic
   // abundance of its entrance pair's compound nucleus, and the weighted terms
   // are kept per nucleus on the base point for the decomposition output.
   std::vector<double> naturalTerms;
