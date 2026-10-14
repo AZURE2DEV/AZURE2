@@ -179,12 +179,15 @@ Natural-Abundance Targets (Natural Segments)
 --------------------------------------------
 
 When the particle pairs form more than one compound nucleus
-(:doc:`particle_pairs`), both segment dialogs offer a **Natural target** box.
+(:doc:`particle_pairs`), both segment dialogs offer a **Natural target**
+drop-down: *No*, the default sample, or any named sample of the Pairs tab.
 A natural segment is the abundance-weighted sum: its own term, and each
 component of a **Sum** composite, is multiplied by the isotopic abundance of
-the compound nucleus its *entrance pair* forms, as entered in the Pairs tab's
-abundance table (or fitted, when the abundance is a fit parameter). The row's
-reaction label is prefixed *nat*.
+the compound nucleus its *entrance pair* forms in the chosen sample, as
+entered in the Pairs tab's abundance table (or fitted, when the abundance is
+a fit parameter). The row's reaction label is prefixed *nat* (*nat:name* for
+a named sample). Data sets taken on different targets simply name different
+samples.
 
 For natural neon under a neutron beam, the total cross section is one Sum
 composite with the components n+\ :sup:`20`\ Ne, n+\ :sup:`22`\ Ne and
@@ -202,9 +205,10 @@ total capture for test segments. It is cleared and disabled for a **Ratio**
 composite, a phase shift, an analyzing power and a test segment of
 angular-distribution coefficients. The entrance and exit pair of every term
 must form the same compound nucleus. In the file the flag is the keyword
-``natural 1`` at the end of the segment line (after a ``sqrtshift`` block,
-if any), and the engine refuses it in a project without an ``<abundances>``
-block. Each natural segment also gets an output file
+``natural 1`` (default sample) or ``natural <name>`` at the end of the
+segment line (after a ``sqrtshift`` block, if any), and the engine refuses it
+in a project without an ``<abundances>`` block or with a sample name the
+block does not define. Each natural segment also gets an output file
 ``AZUREOut_natural_seg=<key>.out`` (``.extrap`` for a test segment) with the
 total and one column per nucleus (:doc:`../reference/output_files`).
 

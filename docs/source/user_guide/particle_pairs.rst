@@ -170,16 +170,26 @@ the tab shows
   both, ``23Ne (22Ne+n)``), a **Fit?** box that makes the abundance a fit
   parameter named ``abundance_<Z>_<A>``, and a **Prior Sigma** that adds
   :math:`((w - w_0)/\sigma)^2` to the chi-squared when it is not zero. The
-  **Sum-to-one sigma** below the table adds :math:`((\sum w - 1)/s)^2`;
-  zero switches it off.
+  **Default sum-to-one sigma** below the table adds :math:`((\sum w - 1)/s)^2`
+  per sample; zero switches it off.
+- the **Sample** row above the table. Data sets taken on targets of
+  different composition (natural neon and an enriched ²²Ne target, say, or a
+  compound target) each need their own abundance set: a *sample*. The table
+  shows one sample at a time; **+ sample** adds a named one (one word),
+  **- sample** removes it, and the sample's **own sum-to-one sigma** overrides
+  the default (``0`` switches the term off for a stoichiometric sample whose
+  weights do not sum to one, such as 2 and 3 for Al₂O₃). A named sample's
+  parameters are ``abundance_<name>_<Z>_<A>``. Every segment picks its sample
+  in the segment dialog (:doc:`segments`); the default sample is the one a
+  plain *natural* segment uses.
 
 Which segments are weighted by these abundances is decided segment by
 segment (the **Natural target** box, :doc:`segments`); the levels of each
 nucleus are entered on the :doc:`levels_channels` tab, and the abundances
 appear on the :doc:`fitting` and :doc:`mcmc` tabs. In the file the table is
 the ``<abundances>`` block and the sum sigma the ``abundanceSumSigma`` key
-(:doc:`../reference/data_formats`); a project without the block has no
-abundance parameters at all. The pyazr function
+(:doc:`../reference/data_formats`), named samples as ``<name>:``-prefixed
+lines; a project without the block has no abundance parameters at all. The pyazr function
 :func:`pyazr.merge_projects` builds such a project from several
 single-nucleus ones.
 

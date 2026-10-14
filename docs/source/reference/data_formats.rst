@@ -112,8 +112,10 @@ lines, which a reader that does not know a key skips:
    any particle channel in the ``<levels>`` block.
 
 ``abundanceSumSigma=s``
-   Adds :math:`((\sum_k w_k - 1)/s)^2` to the chi-squared, :math:`w_k` the
-   isotopic abundances of the compound nuclei (below); absent or ``0`` is off.
+   The default sum-to-one width: every sample of the ``<abundances>`` block
+   (below) without a ``sum`` line of its own adds
+   :math:`((\sum_k w_k - 1)/s)^2` to the chi-squared, :math:`w_k` its
+   abundances; absent or ``0`` is off.
 
 Several compound nuclei.  The compound nucleus of a pair is inferred from its
 columns (particle pair :math:`Z = z_1 + z_2`, :math:`A = \mathrm{round}(m_1 +
@@ -134,13 +136,38 @@ of a Gaussian prior on it (0 = none). Without the block every abundance is 1,
 fixed, and no parameter exists. A nucleus not formed by any pair draws a
 warning.
 
+**Samples.** Data sets taken on targets of different composition (a natural
+one and an enriched one, or a compound such as Al\ :sub:`2`\ O\ :sub:`3`)
+need several abundance sets in one project. A line prefixed with
+``<name>:`` belongs to the named sample; the lines without a prefix form the
+unnamed (default) sample; ``[<name>:] sum <s>`` gives a sample its own
+sum-to-one width (``0`` off, absent: ``abundanceSumSigma``)::
+
+   <abundances>
+   10 21 0.9048 0 0
+   10 23 0.0925 0 0
+   10 22 0.0027 0 0
+   enr22Ne: 10 23 0.99 1 0.005
+   enr22Ne: 10 21 0.01 0 0
+   enr22Ne: sum 0.01
+   </abundances>
+
+A nucleus without a line in a sample is 1, fixed. Each sample's abundances
+are parameters, named ``abundance_<name>_<Z>_<A>`` for a named sample,
+emitted sample by sample (the unnamed one first, in file order) right after
+the level parameters. A sample name is one token without ``:`` or ``#``.
+Stoichiometric weights need not sum to one: give that sample ``sum 0``.
+
 A ``<segmentsData>`` or ``<segmentsTest>`` line may end with the keyword
-blocks ``sqrtshift <b> <bError> <vary>`` and ``natural 1`` (in that order).
+blocks ``sqrtshift <b> <bError> <vary>``, ``natural <1|name>`` and
+``shiftgroup <label>`` (in any order; writers put ``natural`` last).
 ``natural 1`` multiplies the segment's own term and each composite component
-by the abundance of the term's entrance pair's compound nucleus; it is
-allowed for angle-integrated, differential and capture observables (data
-``isDiff`` 0, 1, 3, 4, 5, 6; test 0, 1, 4, 5), never for a ratio, and only
-in a project with an ``<abundances>`` block.
+by the abundance of the term's entrance pair's compound nucleus in the
+unnamed sample (or the only sample, if every sample is named);
+``natural <name>`` uses the named sample. It is allowed for
+angle-integrated, differential and capture observables (data ``isDiff`` 0,
+1, 3, 4, 5, 6; test 0, 1, 4, 5), never for a ratio, only in a project with
+an ``<abundances>`` block, and a name the block does not define is refused.
 
 .. note::
 

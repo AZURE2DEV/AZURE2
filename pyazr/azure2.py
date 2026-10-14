@@ -830,7 +830,7 @@ class azure2:
                         pairs=self.pairs)
         # isotopic abundances (projects with an <abundances> block): the fitted values
         for p in self.parameters.abundances:
-            model.set_abundance((p.nucleus_Z, p.nucleus_A), value=float(want[p.index]))
+            model.set_abundance((p.nucleus_Z, p.nucleus_A), value=float(want[p.index]), sample=p.sample or "")
         model.write(path)
 
         sav = None
@@ -1293,18 +1293,23 @@ class azure2:
         abund = self.parameters.abundances
         if abund:
             model = AzrModel.from_file(self.file)
-            nominal = model.abundances
-            total = 0.0
+            samples = model.samples
+            totals = {}
             for p in abund:
                 value = (float(x[p.free_index]) if not p.fixed and p.free_index is not None
                          and p.free_index < x.size else float(p.value))
-                total += value
-                w0, _, sigma = nominal.get((p.nucleus_Z, p.nucleus_A), (value, False, 0.0))
+                name = p.sample or ""
+                totals[name] = totals.get(name, 0.0) + value
+                w0, _, sigma = samples.get(name, {}).get((p.nucleus_Z, p.nucleus_A), (value, False, 0.0))
                 if sigma > 0:
                     abundance += ((value - w0) / sigma) ** 2
-            s_sum = model.abundance_sum_sigma
-            if s_sum > 0:
-                abundance += ((total - 1.0) / s_sum) ** 2
+            # one sum-to-one term per sample: its own "sum" line, else the config key
+            for name, total in totals.items():
+                s_sum = model.sample_sum_sigma(name)
+                if s_sum is None:
+                    s_sum = model.abundance_sum_sigma
+                if s_sum > 0:
+                    abundance += ((total - 1.0) / s_sum) ** 2
         return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "park": park,
                 "abundance": abundance}
 

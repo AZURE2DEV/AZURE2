@@ -1624,9 +1624,18 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
     target segment: the line's own term and every SUM component are
     multiplied by the isotopic abundance of the term's ENTRANCE pair's
     compound nucleus (the `<abundances>` block after `</levels>`, lines
-    `Z A value vary sigma`; config key `abundanceSumSigma=s`). Refused on
+    `Z A value vary sigma`; config key `abundanceSumSigma=s`). SAMPLES
+    (DeBoer 2026-10-13, data sets on targets of different composition):
+    `<name>: Z A value vary sigma` lines form a named sample, `<name>: sum s`
+    its own sum-to-one width (0 = off, e.g. a stoichiometric Al2O3 sample with
+    weights 2 and 3); `natural <name>` picks it on the segment line, `natural
+    1` = the unnamed sample; parameters `abundance_<name>_Z_A`, emitted sample
+    by sample after the unnamed one. pyazr: `AzrModel.samples`,
+    `set_abundance(..., sample=)`, `set_sample_sum_sigma`, `set_natural(key,
+    "name")`, `Segment.natural_sample`, `Parameter.sample`. Refused on
     RATIO, phase shifts (2), analyzing powers (7), test angular-coefficient
-    lines (3), and in a project without the block. Output
+    lines (3), in a project without the block, and for a sample name the
+    block does not define. Output
     `AZUREOut_natural_seg=<key>.out/.extrap` (total + one column per
     nucleus). pyazr: `Segment.natural`, `AzrModel.set_natural`,
     `merge_projects`, `parameters.abundances`, `penalties()["abundance"]`.

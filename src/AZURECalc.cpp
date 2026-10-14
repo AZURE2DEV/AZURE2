@@ -949,17 +949,21 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
   }
   // Isotopic abundances: prior and sum-to-one gradient and (diagonal) curvature.
   if (compound()->HasAbundanceBlock()) {
-    const double s = configure().abundanceSumSigma;
-    const double sum = compound()->AbundanceSum();
     for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
       const int idx = pmap.AbundanceIndex(k);
       if (idx < 0 || idx >= (int)p.size()) continue;
-      const CompoundNucleus *nucleus = compound()->GetNucleus(k);
-      if (nucleus->sigma > 0.0) {
-        grad[idx] += 2.0 * (p[idx] - nucleus->nominal) / (nucleus->sigma * nucleus->sigma);
-        g2[idx] += 2.0 / (nucleus->sigma * nucleus->sigma);
+      int sample, nucleus;
+      compound()->AbundanceOf(k, sample, nucleus);
+      const SampleAbundance &e = compound()->GetSample(sample)->entries[nucleus - 1];
+      if (e.sigma > 0.0) {
+        grad[idx] += 2.0 * (p[idx] - e.nominal) / (e.sigma * e.sigma);
+        g2[idx] += 2.0 / (e.sigma * e.sigma);
       }
-      if (s > 0.0) { grad[idx] += 2.0 * (sum - 1.0) / (s * s); g2[idx] += 2.0 / (s * s); }
+      const double s = compound()->SampleSumSigma(sample, configure().abundanceSumSigma);
+      if (s > 0.0) {
+        grad[idx] += 2.0 * (compound()->AbundanceSum(sample) - 1.0) / (s * s);
+        g2[idx] += 2.0 / (s * s);
+      }
     }
   }
   g2CacheP_ = p;
@@ -999,12 +1003,14 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
       g2[idx] += 2.0 / (seg->GetEnergyShiftSqrtError() * seg->GetEnergyShiftSqrtError());
   }
   if (compound()->HasAbundanceBlock()) {
-    const double s = configure().abundanceSumSigma;
     for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
       const int idx = pmap.AbundanceIndex(k);
       if (idx < 0 || idx >= (int)g2.size()) continue;
-      const CompoundNucleus *nucleus = compound()->GetNucleus(k);
-      if (nucleus->sigma > 0.0) g2[idx] += 2.0 / (nucleus->sigma * nucleus->sigma);
+      int sample, nucleus;
+      compound()->AbundanceOf(k, sample, nucleus);
+      const SampleAbundance &e = compound()->GetSample(sample)->entries[nucleus - 1];
+      if (e.sigma > 0.0) g2[idx] += 2.0 / (e.sigma * e.sigma);
+      const double s = compound()->SampleSumSigma(sample, configure().abundanceSumSigma);
       if (s > 0.0) g2[idx] += 2.0 / (s * s);
     }
   }
@@ -1462,21 +1468,22 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
       // The sum-to-one term couples the abundances and is not a per-parameter
       // penalty: the least-squares drivers leave it out (warned once), MIGRAD
       // carries it exactly (AZURECalc::operator()).
+      bool anySum = false;
       for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
-        const CompoundNucleus *nucleus = compound()->GetNucleus(k);
-        char vn[64];
-        snprintf(vn, sizeof(vn), "abundance_%d_%d", nucleus->Z, nucleus->A);
-        if (name != vn) continue;
-        if (nucleus->sigma > 0.0) {
-          pen_nom[a] = nucleus->nominal;
-          pen_inv2[a] = 1.0 / (nucleus->sigma * nucleus->sigma);
+        int sample, nucleus;
+        compound()->AbundanceOf(k, sample, nucleus);
+        if (compound()->SampleSumSigma(sample, configure().abundanceSumSigma) > 0.0) anySum = true;
+        if (name != compound()->AbundanceParamName(sample, nucleus)) continue;
+        const SampleAbundance &e = compound()->GetSample(sample)->entries[nucleus - 1];
+        if (e.sigma > 0.0) {
+          pen_nom[a] = e.nominal;
+          pen_inv2[a] = 1.0 / (e.sigma * e.sigma);
         }
-        break;
       }
       static std::atomic<bool> warnedSum{false};
-      if (configure().abundanceSumSigma > 0.0 && !warnedSum.exchange(true))
-        configure().outStream << "WARNING: abundanceSumSigma is set, but the least-squares fitter applies only the "
-                              << "per-nucleus abundance priors; the sum-to-one penalty is carried by MIGRAD only." << std::endl;
+      if (anySum && !warnedSum.exchange(true))
+        configure().outStream << "WARNING: a sum-to-one width is set for the abundances, but the least-squares fitter applies only "
+                              << "the per-nucleus abundance priors; the sum-to-one penalty is carried by MIGRAD only." << std::endl;
     } else if (limitsManager_ && limitsManager_->IsNuisanceParameterByIndex(a)) {
       double sig = limitsManager_->GetConvertedErrorByIndex(a);
       if (sig > 0.0) {

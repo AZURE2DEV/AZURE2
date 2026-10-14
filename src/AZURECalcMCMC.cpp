@@ -403,9 +403,12 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   // Isotopic abundances (after the level block, CNuc::FillMnParams): the
   // <abundances> line's value and sigma are the prior, as the fit uses them.
   for (int k = 1; k <= nuc->NumAbundanceParams(); ++k) {
+    int sample, nucleus;
+    nuc->AbundanceOf(k, sample, nucleus);
+    const SampleAbundance &e = nuc->GetSample(sample)->entries[nucleus - 1];
     allKinds.push_back(PARAM_ABUNDANCE);
-    allAutoMean.push_back(nuc->GetNucleus(k)->nominal);
-    allAutoStd.push_back(nuc->GetNucleus(k)->sigma);
+    allAutoMean.push_back(e.nominal);
+    allAutoStd.push_back(e.sigma);
   }
 
   std::vector<ESegment> &segments = data()->GetSegments();

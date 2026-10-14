@@ -87,6 +87,7 @@ AZURESetup::AZURESetup() :
 
   segmentsTab = new SegmentsTab;
   segmentsTab->setPairsModel(pairsTab->getPairsModel());
+  segmentsTab->setAbundancesModel(pairsTab->getAbundancesModel());
 
   targetIntTab = new TargetIntTab;
   targetIntTab->setModels(segmentsTab->getSegmentsDataModel(), pairsTab->getPairsModel());

@@ -42,14 +42,15 @@ Abundance Parameters
 
 Shown only when the project carries an ``<abundances>`` block (a project
 whose particle pairs form more than one compound nucleus, see
-:doc:`particle_pairs`). One row per compound nucleus, named
-``abundance_<Z>_<A>`` as in ``param.sav``: **Value** is the isotopic
-abundance, **Error** the sigma of its Gaussian prior (0 = none) and **Use as
-Nuisance** whether it is fitted at all. The three are the same quantities as
-the Pairs tab's abundance table and are written back there. In AZURE2's
-parameter vector the abundances sit between the level parameters and the
-normalizations; one that is not fitted takes no slot. The sum-to-one term of
-the Pairs tab is added by the engine and has no row here.
+:doc:`particle_pairs`). One row per compound nucleus and sample, named
+``abundance_<Z>_<A>`` (default sample) or ``abundance_<sample>_<Z>_<A>`` as
+in ``param.sav``: **Value** is the isotopic abundance, **Error** the sigma of
+its Gaussian prior (0 = none) and **Use as Nuisance** whether it is fitted at
+all. The three are the same quantities as the Pairs tab's abundance table and
+are written back there. In AZURE2's parameter vector the abundances sit
+between the level parameters and the normalizations, sample by sample; one
+that is not fitted takes no slot. The sum-to-one terms of the Pairs tab (one
+per sample) are added by the engine and have no row here.
 
 Normalization Parameters
 ^^^^^^^^^^^^^^^^^^^^^^^^

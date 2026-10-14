@@ -299,11 +299,11 @@ void FittingTab::populateFromCurrentGUIState() {
   // Value = abundance, Error = the prior's sigma (0 = none), Nuisance = fitted; all three live in the
   // Particle Pairs tab's abundance table and are written back there.
   if (abundancesModel_ && abundancesModel_->hasBlock()) {
-    QList<AbundanceEntry> entries = abundancesModel_->entries();
+    QList<AbundanceEntry> entries = abundancesModel_->allEntries();   // sample by sample, the engine's order
     for (int i = 0; i < entries.size(); i++) {
       const AbundanceEntry &e = entries[i];
       FittingParameter abundanceParam;
-      abundanceParam.name = QString("abundance_%1_%2").arg(e.nucleus.Z).arg(e.nucleus.A);
+      abundanceParam.name = AbundancesModel::parameterName(e);
       abundanceParam.value = e.value;
       abundanceParam.lowerLimit = 0;
       abundanceParam.upperLimit = 0;
@@ -472,19 +472,21 @@ void FittingTab::setAbundancesModel(AbundancesModel *model) {
   if (!model) return;
   // New nuclei change the parameter list; edited entries only change rows in place.
   connect(model, SIGNAL(modelReset()), this, SLOT(refreshParameters()));
+  connect(model, SIGNAL(samplesChanged()), this, SLOT(refreshParameters()));
   connect(model, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(syncAbundances()));
 }
 
 void FittingTab::writeAbundance(const FittingParameter &param) {
   if (param.category != "abundance" || !abundancesModel_) return;
-  QList<AbundanceEntry> entries = abundancesModel_->entries();
+  QList<AbundanceEntry> entries = abundancesModel_->allEntries();
   if (param.channelIndex < 0 || param.channelIndex >= entries.size()) return;
-  abundancesModel_->setEntry(entries[param.channelIndex].nucleus, param.value, param.useAsNuisance, param.error);
+  const AbundanceEntry &e = entries[param.channelIndex];
+  abundancesModel_->setEntry(e.sample, e.nucleus, param.value, param.useAsNuisance, param.error);
 }
 
 void FittingTab::syncAbundances() {
   if (!abundancesModel_) return;
-  QList<AbundanceEntry> entries = abundancesModel_->entries();
+  QList<AbundanceEntry> entries = abundancesModel_->allEntries();
   bool renumber = false;
   int seen = 0;
   for (int i = 0; i < fittingParameters.size(); i++) {
@@ -750,11 +752,11 @@ void FittingTab::loadSettings() {
         // Value = abundance, Error = the prior's sigma (0 = none), Nuisance = fitted; all three live in the
         // Particle Pairs tab's abundance table and are written back there.
         if (abundancesModel_ && abundancesModel_->hasBlock()) {
-          QList<AbundanceEntry> entries = abundancesModel_->entries();
+          QList<AbundanceEntry> entries = abundancesModel_->allEntries();   // sample by sample, the engine's order
           for (int i = 0; i < entries.size(); i++) {
             const AbundanceEntry &e = entries[i];
             FittingParameter abundanceParam;
-            abundanceParam.name = QString("abundance_%1_%2").arg(e.nucleus.Z).arg(e.nucleus.A);
+            abundanceParam.name = AbundancesModel::parameterName(e);
             abundanceParam.value = e.value;
             abundanceParam.lowerLimit = 0;
             abundanceParam.upperLimit = 0;

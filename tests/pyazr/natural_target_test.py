@@ -162,6 +162,53 @@ def run(work):
         except Exception as err:   # noqa: BLE001
             check("save_fit round trip with same-J^pi nuclei", False, str(err)[:300])
 
+    # ---- 2c. named samples: several abundance sets in one project ----------------
+    print("\n2c. samples")
+    ms = AzrModel.from_file(os.path.join(MODELS, "M_samples.azr"))
+    smp = ms.samples
+    check("two samples read", sorted(smp) == ["", "enr"] and smp["enr"][Nucleus(7, 14)] == (0.9, False, 0.0)
+          and smp[""][Nucleus(7, 13)] == (0.6, False, 0.0), str(smp))
+    check("abundances is the unnamed sample", ms.abundances == smp[""])
+    check("sample sum sigma", ms.sample_sum_sigma("enr") == 0.01 and ms.sample_sum_sigma("") is None)
+    tsegs = TestSegmentSet.from_file(os.path.join(MODELS, "M_samples.azr"))
+    check("natural_sample on the test lines", [(s.natural, s.natural_sample) for s in tsegs] ==
+          [(False, ""), (False, ""), (True, ""), (True, ""), (True, "enr"), (True, "enr")], str([(s.natural, s.natural_sample) for s in tsegs]))
+    ms2 = AzrModel.from_file(os.path.join(MODELS, "M_samples.azr"))
+    ms2.set_abundance("13N", 0.3, True, 0.02, sample="enr")
+    ms2.set_sample_sum_sigma("enr", 0.05)
+    ms2.set_sample_sum_sigma("", 0.07)
+    ms2.set_test_natural(1, "enr")
+    check("sample edits round-trip", ms2.samples["enr"][Nucleus(7, 13)] == (0.3, True, 0.02) and ms2.sample_sum_sigma("enr") == 0.05
+          and ms2.sample_sum_sigma("") == 0.07 and TestSegmentSet.from_file.__func__ is not None
+          and ms2._suffix.count("natural enr") == 3, ms2._suffix)
+    msd = os.path.join(work, "M_samples_data.azr")
+    md = AzrModel.from_file(os.path.join(MODELS, "M_samples_data.azr"))
+    md.write(msd)
+    # both data files must exist when the session opens (the engine silently drops a segment whose
+    # file is missing); section 3 overwrites data.dat with its own mixture later
+    e_lab = 1.0 + 0.002 * np.arange(out_a[0].size)
+    for f, (wa, wb) in (("data.dat", (0.6, 0.4)), ("data_enr.dat", (0.1, 0.9))):
+        y = wa * out_a[0] + wb * out_b[0]
+        with open(os.path.join(work, f), "w") as fh:
+            for e, v in zip(e_lab, y):
+                fh.write(f"{e:.6f} 0 {v:.12e} {0.001 * v:.12e}\n")
+    with azure2(msd, cwd=work, use_brune=True) as s:
+        ab = s.parameters.abundances
+        check("four abundance parameters, sample by sample",
+              [p.name for p in ab] == ["abundance_7_13", "abundance_7_14", "abundance_enr_7_13", "abundance_enr_7_14"]
+              and [p.sample for p in ab] == ["", "", "enr", "enr"] and [p.sample_index for p in ab] == [1, 1, 2, 2], str([(p.name, p.sample, p.sample_index) for p in ab]))
+        x0 = np.asarray(s.params_rwa, float)
+        pen = s.penalties(x0)["abundance"]
+        # both samples at 0.5 + 0.5 = 1: no sum penalty, no priors
+        check("penalties: two sum-to-one terms at zero", abs(pen) < 1e-12, str(pen))
+        x1 = x0.copy()
+        x1[ab[2].free_index] = 0.6    # enr sample sums to 1.1: ((0.1)/0.01)^2 = 100
+        pen1 = s.penalties(x1)["abundance"]
+        check("penalties: the enr sample's own sum width", abs(pen1 - 100.0) < 1e-6, str(pen1))
+        azr_path, _ = s.save_fit(os.path.join(work, "M_samples_snapshot.azr"), x1)
+        back = AzrModel.from_file(azr_path).samples
+        check("save_fit writes each sample's fitted values", abs(back["enr"][Nucleus(7, 13)][0] - 0.6) < 1e-12 and back[""][Nucleus(7, 13)][0] == 0.5, str(back))
+
     # ---- 3. the runtime side ---------------------------------------------------
     print("\n3. runtime")
     mfile = os.path.join(work, "M.azr")

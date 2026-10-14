@@ -252,9 +252,12 @@ are the members' terms:
 
 ``<parameterSettings>`` and ``<mcmc>`` blocks name parameters by position and
 are dropped with a warning. On the file side ``AzrModel.nuclei()``,
-``abundances``, ``set_abundance(nucleus, value, vary, sigma)``,
-``abundance_sum_sigma`` and ``set_natural(key, True)`` edit the new pieces;
-``Segment.natural`` reports the flag; ``Pair.nucleus`` and
+``abundances`` (the default sample), ``samples`` (every sample),
+``set_abundance(nucleus, value, vary, sigma, sample="")``,
+``sample_sum_sigma`` / ``set_sample_sum_sigma(sample, sigma)``,
+``abundance_sum_sigma`` and ``set_natural(key, True)`` (or ``set_natural(key,
+"enr22Ne")`` for a named sample) edit the new pieces; ``Segment.natural`` and
+``Segment.natural_sample`` report the flag and the sample; ``Pair.nucleus`` and
 ``Parameter.nucleus`` identify the nucleus at run time; ``save_fit`` writes a
 fitted abundance back into the block.
 

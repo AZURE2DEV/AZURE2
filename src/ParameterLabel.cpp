@@ -172,9 +172,14 @@ std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
         }
       }
     }
-    // then the isotopic abundances, one per nucleus (CNuc::FillMnParams)
+    // then the isotopic abundances, one per (sample, nucleus) (CNuc::FillMnParams)
     for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
-      if (index == minuitIndex) return "abundance of nucleus " + compound->NucleusLabel(k);
+      if (index == minuitIndex) {
+        int sample, nucleus;
+        compound->AbundanceOf(k, sample, nucleus);
+        const std::string &name = compound->GetSample(sample)->name;
+        return "abundance of nucleus " + compound->NucleusLabel(nucleus) + (name.empty() ? "" : " in sample " + name);
+      }
       index++;
     }
   }

@@ -14,6 +14,10 @@ tests/convolution_unify/models/fixed.azr:
   A_thick.azr, B_thick.azr, M_thick.azr
                the same under a target-integration effect (no beam spread): exact once each
                component's sub-point grid is built with its own pair
+  M_samples.azr   M plus a named sample "enr" (0.1 / 0.9, own sum-to-one width): S5 = SUM natural enr
+                  = 0.1 S1 + 0.9 S2, S6 = pair 2 natural enr = 0.9 S2
+  M_samples_data.azr  two data segments on two samples, four abundances free: the fit must find
+                  0.6 / 0.4 and 0.1 / 0.9
   M_data.azr   S3 as a DATA segment reading data.dat (written by check.sh from A and B),
                abundances 0.5 / 0.5 FREE with abundanceSumSigma=0.01: the fit must find 0.6 / 0.4
   bad_level.azr, bad_ratio.azr, bad_key.azr
@@ -96,12 +100,16 @@ def main():
     S2 = f"1 2 2 {grid}"
     S3 = f"1 1 1 {grid} 1 0 1 2 2 -999 natural 1"
     S4 = f"1 2 2 {grid} natural 1"
+    # a second, named sample ("enr": 0.1 / 0.9) chosen on the segment line
+    S5 = f"1 1 1 {grid} 1 0 1 2 2 -999 natural enr"
+    S6 = f"1 2 2 {grid} natural enr"
     lv_a, _ = levels([(PAIR_A, LEVELS_A)])
     lv_b, _ = levels([(PAIR_B, LEVELS_B)])
     lv_m, _ = levels([(PAIR_A, LEVELS_A), (PAIR_B, LEVELS_B)])
     lv_b_from_1, _ = levels([(PAIR_B, LEVELS_B)], first_id=1)
     lv_m_fixed, _ = levels([(PAIR_A, LEVELS_A), (PAIR_B, LEVELS_B)], fixed=True)   # free levels would absorb the weights
     ab = ["7 13 0.6 0 0", "7 14 0.4 0 0"]
+    ab_samples = ab + ["enr: 7 13 0.1 0 0", "enr: 7 14 0.9 0 0", "enr: sum 0.01"]
     tgt_line = read_block(open(TGT).read(), "targetInt").splitlines()[1]     # the skeleton's target-integration line
     tgt_m = tgt_line.replace('"1"', '"1-4"', 1)
     files = {
@@ -111,6 +119,14 @@ def main():
         "A_thick.azr": model(lv_a, S1, target_int=tgt_line),
         "B_thick.azr": model(lv_b, S2, target_int=tgt_line),
         "M_thick.azr": model(lv_m, "\n".join([S1, S2, S3, S4]), ab, target_int=tgt_m),
+        # two samples: the unnamed one (0.6 / 0.4) and "enr" (0.1 / 0.9); S5 = 0.1 S1 + 0.9 S2, S6 = 0.9 S2
+        "M_samples.azr": model(lv_m, "\n".join([S1, S2, S3, S4, S5, S6]), ab_samples),
+        # data mode with two samples: data.dat (0.6 / 0.4) on the unnamed sample, data_enr.dat (0.1 / 0.9) on "enr",
+        # all four abundances free from 0.5, each sample with its own sum-to-one prior
+        "M_samples_data.azr": model(lv_m_fixed, "", ["7 13 0.5 1 0", "7 14 0.5 1 0", "enr: 7 13 0.5 1 0", "enr: 7 14 0.5 1 0", "enr: sum 0.01"],
+                                    config_extra="abundanceSumSigma=0.01",
+                                    segments_data="1 1 1 1.0 3.0 0 0 0 1 0 0 0 0 0 data.dat 1 0 1 2 2 -999 natural 1\n"
+                                                  "1 1 1 1.0 3.0 0 0 0 1 0 0 0 0 0 data_enr.dat 1 0 1 2 2 -999 natural enr"),
         # data mode: S3 against data.dat (check.sh writes it), abundances free, sum-to-one prior
         "M_data.azr": model(lv_m_fixed, "", ["7 13 0.5 1 0", "7 14 0.5 1 0"], config_extra="abundanceSumSigma=0.01",
                             segments_data="1 1 1 1.0 3.0 0 0 0 1 0 0 0 0 0 data.dat 1 0 1 2 2 -999 natural 1"),
@@ -120,6 +136,8 @@ def main():
         "bad_ratio.azr": model(lv_m, f"1 1 1 {grid} 1 1 1 2 2 -999 natural 1", ab),
         # refused: a component naming a pair key that does not exist
         "bad_key.azr": model(lv_m, f"1 1 1 {grid} 1 0 1 9 9 -999 natural 1", ab),
+        # refused: a sample the block does not define
+        "bad_sample.azr": model(lv_m, f"1 1 1 {grid} natural nosuch", ab),
     }
     for name, text in files.items():
         with open(os.path.join(OUT, name), "w") as f:

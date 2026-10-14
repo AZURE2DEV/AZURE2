@@ -75,7 +75,7 @@ class SegLine {
     // sqrt(E) energy-shift term: off unless a trailing "sqrtshift" block is present
     energyShiftSqrt_ = 0.0;
     energyShiftSqrtError_ = 0.0;
-    natural_ = 0;
+    natural_ = "0";
     varyEnergyShiftSqrt_ = 0;
     // shared constant energy shift: off unless a trailing "shiftgroup" block is present
     shiftGroup_ = "";
@@ -175,10 +175,11 @@ class SegLine {
         // without it (every file written before 2026-10) and the positional
         // UPOS block before it parse exactly as they always have; a failed
         // numeric read above leaves the stream positioned on the keyword.
-        //   natural <0|1>
+        //   natural <0|1|sample>
         // marks a natural-target segment: its own term and every composite
         // component is weighted by the isotopic abundance of the term's
-        // entrance pair's compound nucleus (the <abundances> block).
+        // entrance pair's compound nucleus in the named sample of the
+        // <abundances> block ("1" = the unnamed, or the only, sample).
         // Keyword blocks may come in either order; writers put natural last.
         //
         //
@@ -202,7 +203,7 @@ class SegLine {
             }
           } else if (keyword == "natural") {
             if (!(advancedStream >> natural_)) {
-              natural_ = 0;
+              natural_ = "0";
               break;
             }
           } else if (keyword == "shiftgroup") {
@@ -315,9 +316,9 @@ class SegLine {
    */
   double energyShiftSqrt() const { return energyShiftSqrt_; };
   /*!
-   * Returns 1 for a natural-target segment (trailing "natural 1" token).
+   * Returns the natural-target token: "0" (none), "1" (the default sample) or a sample name.
    */
-  int natural() const { return natural_; };
+  const std::string &natural() const { return natural_; };
   /*!
    * Returns the uncertainty of the sqrt(E) energy-shift coefficient (MeV^1/2).
    */
@@ -383,7 +384,7 @@ class SegLine {
   std::string shiftGroup_;
   int isAdvanced_;
   int operationType_;
-  int natural_;
+  std::string natural_;
   std::string componentsList_;
   int isUPOS_;
   int secondaryDecayL_;

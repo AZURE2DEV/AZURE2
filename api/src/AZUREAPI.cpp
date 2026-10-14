@@ -1318,12 +1318,17 @@ vector_r AZUREAPI::GetParameterInfo() const {
     }
   }
 
-  // Isotopic abundances, one per compound nucleus, when the project has an
-  // <abundances> block (CNuc::FillMnParams): type 5, the nucleus's Z in the
-  // "jgroup" field and A in the "level" field, the prior sigma in "wignerLimit".
+  // Isotopic abundances, one per (sample, compound nucleus), when the project
+  // has an <abundances> block (CNuc::FillMnParams): type 5, the nucleus's Z in
+  // the "jgroup" field and A in the "level" field, the 1-based sample in the
+  // "channel" field, the prior sigma in "wignerLimit".  The sample's name is
+  // in the parameter name (GetParameterNames): abundance[_<sample>]_<Z>_<A>.
   for (int k = 1; k <= nuc->NumAbundanceParams(); ++k) {
-    const CompoundNucleus *nucleus = nuc->GetNucleus(k);
-    push(5, nucleus->Z, -1, 0, nucleus->A, 0, -1, -1, -1, -1, -1, -1, nucleus->sigma);
+    int sample, nucleusIndex;
+    nuc->AbundanceOf(k, sample, nucleusIndex);
+    const CompoundNucleus *nucleus = nuc->GetNucleus(nucleusIndex);
+    const SampleAbundance &e = nuc->GetSample(sample)->entries[nucleusIndex - 1];
+    push(5, nucleus->Z, -1, 0, nucleus->A, 0, sample, -1, -1, -1, -1, -1, e.sigma);
   }
 
   // Normalization parameters: one per segment with IsVaryNorm().
@@ -1373,10 +1378,10 @@ vector_r AZUREAPI::GetPairsInfo() const {
     info.push_back(pair->GetExE());
     info.push_back(pair->GetChRad());
     info.push_back(pair->GetI1I2Factor());
-    // the compound nucleus the pair forms (PPair's pType rule), its abundance
+    // the compound nucleus the pair forms (PPair's pType rule), its abundance in the default sample
     info.push_back(pair->GetNucleusZ());
     info.push_back(pair->GetNucleusA());
-    info.push_back(nuc->GetNucleus(pair->GetNucleus())->abundance);
+    info.push_back(nuc->GetAbundance(nuc->DefaultSample(), pair->GetNucleus()));
   }
 
   return info;

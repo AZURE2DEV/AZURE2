@@ -22,13 +22,17 @@ inline bool isKeyword(const QString &token) {
          token.compare("mixture", Qt::CaseInsensitive) == 0;
 }
 
-/*! True when the tail carries "natural 1". */
-inline bool isNatural(const QString &extras) {
+/*! The natural-target token of the tail: "" when there is none (or "natural 0"), "1" for the default
+ *  sample, else the sample's name. */
+inline QString naturalSample(const QString &extras) {
   QStringList tokens = extras.split(' ', Qt::SkipEmptyParts);
   for (int i = 0; i + 1 < tokens.size(); i++)
-    if (tokens[i].compare("natural", Qt::CaseInsensitive) == 0) return tokens[i + 1].toInt() != 0;
-  return false;
+    if (tokens[i].compare("natural", Qt::CaseInsensitive) == 0) return tokens[i + 1] == "0" ? QString() : tokens[i + 1];
+  return QString();
 }
+
+/*! True when the tail carries a natural block ("natural 1" or "natural <sample>"). */
+inline bool isNatural(const QString &extras) { return !naturalSample(extras).isEmpty(); }
 
 /*! The tail with its natural block removed (every other block kept in order). */
 inline QString withoutNatural(const QString &extras) {
@@ -44,12 +48,17 @@ inline QString withoutNatural(const QString &extras) {
   return out.join(' ');
 }
 
-/*! The tail with the natural flag set or cleared; "natural 1" is written last,
- *  the order the engine's writers use, and a cleared flag leaves no block. */
-inline QString withNatural(const QString &extras, bool natural) {
+/*! The tail with the natural token set ("1" or a sample name) or cleared (""); the block is
+ *  written last, the order the engine's writers use, and a cleared token leaves no block. */
+inline QString withNaturalToken(const QString &extras, const QString &token) {
   QString rest = withoutNatural(extras);
-  if (!natural) return rest;
-  return rest.isEmpty() ? QString("natural 1") : rest + " natural 1";
+  if (token.isEmpty()) return rest;
+  return rest.isEmpty() ? "natural " + token : rest + " natural " + token;
+}
+
+/*! The tail with the natural flag set (default sample) or cleared. */
+inline QString withNatural(const QString &extras, bool natural) {
+  return withNaturalToken(extras, natural ? QString("1") : QString());
 }
 
 }  // namespace SegmentKeywords

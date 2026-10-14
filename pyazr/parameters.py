@@ -101,6 +101,8 @@ class Parameter:
     nucleus_Z: Optional[int] = None
     nucleus_A: Optional[int] = None
     prior_sigma: Optional[float] = None
+    sample: Optional[str] = None        # the sample's name ("" = the unnamed sample)
+    sample_index: Optional[int] = None  # 1-based sample of the <abundances> block
 
     @property
     def nucleus(self):
@@ -131,12 +133,17 @@ class Parameter:
 
         if int(round(type_code)) == 5:
             # an isotopic abundance: Z rides in the jgroup field, A in the level
-            # field and the prior sigma in the Wigner-limit field (AZUREAPI.h)
+            # field, the 1-based sample in the channel field and the prior sigma
+            # in the Wigner-limit field (AZUREAPI.h); the sample's name is in
+            # the parameter name, abundance[_<sample>]_<Z>_<A>
+            stem = name[len("abundance_"):] if name.startswith("abundance_") else name
+            sample = stem.rsplit("_", 2)[0] if stem.count("_") >= 2 else ""
             return cls(
                 index=index, name=name, kind="abundance",
                 fixed=bool(round(fixed)), value=float(value), free_index=free_index,
                 nucleus_Z=int(round(jgroup)), nucleus_A=int(round(level)),
-                prior_sigma=float(wigner_limit),
+                prior_sigma=float(wigner_limit), sample=sample,
+                sample_index=int(round(channel)) if channel >= 1 else None,
             )
 
         return cls(

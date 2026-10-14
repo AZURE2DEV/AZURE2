@@ -6,6 +6,7 @@
 #include <QTextStream>
 #include <QMessageBox>
 
+#include <QInputDialog>
 #include "PairsTab.h"
 #include "RichTextDelegate.h"
 #include "InfoDialog.h"
@@ -102,14 +103,47 @@ PairsTab::PairsTab(QWidget *parent) :
   sumSigmaSpin->setValue(0.0);
   sumSigmaSpin->setToolTip(tr("Width of the sum-to-one prior on the fitted abundances, ((sum w) - 1)^2 / sigma^2; 0 switches it off."));
   QHBoxLayout *sumRow = new QHBoxLayout;
-  sumRow->addWidget(new QLabel(tr("Sum-to-one prior sigma (0 = off):")));
+  sumRow->addWidget(new QLabel(tr("Default sum-to-one prior sigma (0 = off):")));
   sumRow->addWidget(sumSigmaSpin);
   sumRow->addStretch(1);
+  // Samples: a project may hold several abundance sets (a natural target and an
+  // enriched one, say); the table shows one at a time.
+  sampleCombo = new QComboBox;
+  sampleCombo->setObjectName("sampleCombo");
+  sampleCombo->setToolTip(tr("The sample whose abundances the table shows.  A segment chooses its sample in the segment dialog "
+                             "(\"natural 1\" is the default sample, \"natural <name>\" a named one)."));
+  addSampleButton = new QPushButton(tr("+ sample"));
+  addSampleButton->setToolTip(tr("Add a named sample (one word), e.g. an enriched target."));
+  removeSampleButton = new QPushButton(tr("- sample"));
+  removeSampleButton->setEnabled(false);
+  sampleSumSigmaSpin = new QDoubleSpinBox;
+  sampleSumSigmaSpin->setDecimals(4);
+  sampleSumSigmaSpin->setRange(-1.0, 10.0);
+  sampleSumSigmaSpin->setSingleStep(0.001);
+  sampleSumSigmaSpin->setSpecialValueText(tr("default"));
+  sampleSumSigmaSpin->setValue(-1.0);
+  sampleSumSigmaSpin->setToolTip(tr("This sample's own sum-to-one prior sigma: ((sum w) - 1)^2 / sigma^2 over its abundances; "
+                                    "0 switches it off for this sample, \"default\" uses the default sigma above."));
+  QHBoxLayout *sampleRow = new QHBoxLayout;
+  sampleRow->addWidget(new QLabel(tr("Sample:")));
+  sampleRow->addWidget(sampleCombo, 1);
+  sampleRow->addWidget(addSampleButton);
+  sampleRow->addWidget(removeSampleButton);
+  sampleRow->addWidget(new QLabel(tr("  its sum-to-one sigma:")));
+  sampleRow->addWidget(sampleSumSigmaSpin);
+  connect(sampleCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(sampleChosen(int)));
+  connect(addSampleButton, SIGNAL(clicked()), this, SLOT(addSample()));
+  connect(removeSampleButton, SIGNAL(clicked()), this, SLOT(removeSample()));
+  connect(sampleSumSigmaSpin, SIGNAL(valueChanged(double)), this, SLOT(sampleSumSigmaEdited(double)));
+  connect(abundancesModel, SIGNAL(samplesChanged()), this, SLOT(updateSampleCombo()));
   QVBoxLayout *abundancesLayout = new QVBoxLayout;
   abundancesLayout->addWidget(new QLabel(tr("Each nucleus's term in a natural-target segment (\"natural\" in the segment dialog) is weighted by the "
-                                            "abundance of its target isotope.  A fitted abundance becomes the parameter abundance_<Z>_<A>.")));
+                                            "abundance of its target isotope in the segment's sample.  A fitted abundance becomes the parameter "
+                                            "abundance[_<sample>]_<Z>_<A>.")));
+  abundancesLayout->addLayout(sampleRow);
   abundancesLayout->addWidget(abundancesView);
   abundancesLayout->addLayout(sumRow);
+  updateSampleCombo();
   abundancesBox = new QGroupBox(tr("Isotopic abundances (natural-abundance target: one row per compound nucleus)"));
   abundancesBox->setLayout(abundancesLayout);
   abundancesBox->setVisible(false);
@@ -138,23 +172,89 @@ bool PairsTab::readAbundances(QTextStream &inStream) {
     QString entry = line.section('#', 0, 0).trimmed();
     if (entry.isEmpty()) continue;
     QStringList t = entry.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    // optional "<sample>:" prefix
+    QString sample;
+    if (!t.isEmpty() && t.first().endsWith(':')) {
+      sample = t.first().chopped(1);
+      t.removeFirst();
+    }
+    if (t.size() >= 2 && t.at(0) == "sum") {
+      abundancesModel->setSampleSumSigma(sample, t.at(1).toDouble());
+      continue;
+    }
     if (t.size() < 5) return false;
     Nucleus nucleus;
     nucleus.Z = t.at(0).toInt();
     nucleus.A = t.at(1).toInt();
-    if (!abundancesModel->setEntry(nucleus, t.at(2).toDouble(), t.at(3).toInt() == 1, t.at(4).toDouble())) return false;
+    if (!abundancesModel->setEntry(sample, nucleus, t.at(2).toDouble(), t.at(3).toInt() == 1, t.at(4).toDouble())) return false;
   }
   return false;
 }
 
 bool PairsTab::writeAbundances(QTextStream &outStream) {
-  QList<AbundanceEntry> entries = abundancesModel->entries();
-  for (int i = 0; i < entries.size(); i++) {
-    const AbundanceEntry &e = entries.at(i);
-    outStream << e.nucleus.Z << " " << e.nucleus.A << " " << e.value << " " << (e.vary ? 1 : 0) << " " << e.sigma
-              << "   # " << PairsModel::nucleusLabel(e.nucleus, false) << Qt::endl;
+  QStringList samples = abundancesModel->samples();
+  for (int s = 0; s < samples.size(); s++) {
+    const QString prefix = samples.at(s).isEmpty() ? QString() : samples.at(s) + ": ";
+    QList<AbundanceEntry> entries = abundancesModel->entries(samples.at(s));
+    for (int i = 0; i < entries.size(); i++) {
+      const AbundanceEntry &e = entries.at(i);
+      outStream << prefix << e.nucleus.Z << " " << e.nucleus.A << " " << e.value << " " << (e.vary ? 1 : 0) << " " << e.sigma
+                << "   # " << PairsModel::nucleusLabel(e.nucleus, false) << Qt::endl;
+    }
+    double sigma = abundancesModel->sampleSumSigma(samples.at(s));
+    if (sigma >= 0.0) outStream << prefix << "sum " << sigma << "   # this sample's sum-to-one prior sigma" << Qt::endl;
   }
   return true;
+}
+
+void PairsTab::updateSampleCombo() {
+  QStringList samples = abundancesModel->samples();
+  QString current = abundancesModel->currentSample();
+  sampleCombo->blockSignals(true);
+  sampleCombo->clear();
+  for (int s = 0; s < samples.size(); s++) {
+    sampleCombo->addItem(samples.at(s).isEmpty() ? tr("(default sample)") : samples.at(s));
+    sampleCombo->setItemData(s, samples.at(s), Qt::UserRole);
+  }
+  sampleCombo->setCurrentIndex(std::max(0, samples.indexOf(current)));
+  sampleCombo->blockSignals(false);
+  removeSampleButton->setEnabled(!current.isEmpty());
+  sampleSumSigmaSpin->blockSignals(true);
+  sampleSumSigmaSpin->setValue(abundancesModel->sampleSumSigma(current));
+  sampleSumSigmaSpin->blockSignals(false);
+}
+
+void PairsTab::sampleChosen(int index) {
+  if (index < 0) return;
+  abundancesModel->setCurrentSample(sampleCombo->itemData(index, Qt::UserRole).toString());
+  updateSampleCombo();
+}
+
+void PairsTab::addSample() {
+  bool ok = false;
+  QString name = QInputDialog::getText(this, tr("New sample"), tr("Name of the sample (one word, e.g. enr22Ne):"),
+                                       QLineEdit::Normal, QString(), &ok).trimmed();
+  if (!ok || name.isEmpty()) return;
+  if (!abundancesModel->addSample(name)) {
+    QMessageBox::warning(this, tr("New sample"), tr("\"%1\" is not a new one-word name without ':' or '#'.").arg(name));
+    return;
+  }
+  abundancesModel->setCurrentSample(name);
+  updateSampleCombo();
+}
+
+void PairsTab::removeSample() {
+  QString current = abundancesModel->currentSample();
+  if (current.isEmpty()) return;
+  if (QMessageBox::question(this, tr("Remove sample"), tr("Remove sample \"%1\" and its abundances?  Segments that name it "
+                                                          "will be refused by the engine until they are changed.").arg(current)) != QMessageBox::Yes)
+    return;
+  abundancesModel->removeSample(current);
+  updateSampleCombo();
+}
+
+void PairsTab::sampleSumSigmaEdited(double sigma) {
+  abundancesModel->setSampleSumSigma(abundancesModel->currentSample(), sigma);
 }
 
 bool PairsTab::hasAbundanceBlock() const {

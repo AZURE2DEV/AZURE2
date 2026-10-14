@@ -384,6 +384,16 @@ class AzrLevel:
                 f"{', fixed' if self.fixed else ''})")
 
 
+def _split_sample_prefix(line):
+    """``("name", rest)`` of an ``<abundances>`` line with an optional
+    ``<name>:`` prefix (``""`` without one); comments are stripped."""
+    text = line.split("#", 1)[0].strip()
+    t = text.split(None, 1)
+    if t and t[0].endswith(":"):
+        return t[0][:-1], (t[1] if len(t) > 1 else "")
+    return "", text
+
+
 def _nuclei_module():
     """``pyazr.nuclei``, also when this file is loaded standalone by path (the
     apply_fit test does that, so a relative import has no parent package)."""
@@ -788,7 +798,7 @@ class AzrModel:
             toks += [int(order)]
         toks += [0]                           # trailing isAdvanced flag
         if natural:
-            toks += ["natural", 1]
+            toks += ["natural", natural if isinstance(natural, str) else 1]
         line = "  ".join(_fmt(t) if not isinstance(t, str) else t for t in toks)
         lines = self._suffix.splitlines()
         if "<segmentsTest>" in lines:
@@ -865,16 +875,76 @@ class AzrModel:
 
     @property
     def abundances(self):
-        """The ``<abundances>`` block as ``{Nucleus: (value, vary, sigma)}``;
-        a nucleus without a line is ``(1.0, False, 0.0)``.  Only a project with
-        the block has abundance fit parameters at all."""
-        out = {nuc: (1.0, False, 0.0) for nuc in self.nuclei()}
+        """The default sample of the ``<abundances>`` block as
+        ``{Nucleus: (value, vary, sigma)}`` -- the unnamed sample (lines with no
+        ``<name>:`` prefix), or the only sample; a nucleus without a line is
+        ``(1.0, False, 0.0)``.  Only a project with the block has abundance fit
+        parameters at all.  See :attr:`samples` for every sample."""
+        samples = self.samples
+        if "" in samples:
+            return samples[""]
+        if len(samples) == 1:
+            return next(iter(samples.values()))
+        return {nuc: (1.0, False, 0.0) for nuc in self.nuclei()}
+
+    @property
+    def samples(self):
+        """Every sample of the ``<abundances>`` block: ``{name: {Nucleus:
+        (value, vary, sigma)}}``, the unnamed sample under ``""``; a nucleus
+        without a line in a sample is ``(1.0, False, 0.0)``.  A file without
+        the block has no samples (``{}``); one with the block but no lines has
+        the unnamed sample at the defaults, as the engine reads it."""
+        Nucleus = _nuclei_module().Nucleus
+        defaults = {nuc: (1.0, False, 0.0) for nuc in self.nuclei()}
+        out = {}
+        if not self.has_abundance_block:
+            return out
         for line in self._abundance_lines():
-            t = line.split()
+            name, rest = _split_sample_prefix(line)
+            t = rest.split()
+            if not t:
+                continue
+            out.setdefault(name, dict(defaults))
+            if t[0] == "sum":
+                continue
             if len(t) >= 5:
-                Nucleus = _nuclei_module().Nucleus
-                out[Nucleus(int(t[0]), int(t[1]))] = (float(t[2]), int(float(t[3])) == 1, float(t[4]))
+                out[name][Nucleus(int(t[0]), int(t[1]))] = (float(t[2]), int(float(t[3])) == 1, float(t[4]))
+        if not out:
+            out[""] = dict(defaults)
         return out
+
+    def sample_sum_sigma(self, sample=""):
+        """The sum-to-one width of a sample (its ``[<name>:] sum <sigma>`` line),
+        or ``None`` when it has none and the config's ``abundanceSumSigma`` applies."""
+        for line in self._abundance_lines():
+            name, rest = _split_sample_prefix(line)
+            t = rest.split()
+            if name == sample and len(t) >= 2 and t[0] == "sum":
+                return float(t[1])
+        return None
+
+    def set_sample_sum_sigma(self, sample, sigma):
+        """Set (``sigma`` > 0), switch off (0) or remove (``None``, back to the
+        config's ``abundanceSumSigma``) a sample's own sum-to-one width."""
+        lines = self._suffix.splitlines()
+        if "<abundances>" not in lines:
+            raise ValueError("no <abundances> block (set an abundance first).")
+        a, b = lines.index("<abundances>"), lines.index("</abundances>")
+        prefix = f"{sample}: " if sample else ""
+        new = None if sigma is None else f"{prefix}sum {_fmt(float(sigma))}"
+        for i in range(a + 1, b):
+            name, rest = _split_sample_prefix(lines[i])
+            if name == sample and rest.split()[:1] == ["sum"]:
+                if new is None:
+                    del lines[i]
+                else:
+                    lines[i] = new
+                break
+        else:
+            if new is not None:
+                lines.insert(b, new)
+        self._suffix = "\n".join(lines) + "\n"
+        return self
 
     @property
     def has_abundance_block(self):
@@ -888,22 +958,27 @@ class AzrModel:
             return []
         return [ln for ln in lines[a + 1:b] if ln.strip() and not ln.strip().startswith("#")]
 
-    def set_abundance(self, nucleus, value=None, vary=None, sigma=None):
+    def set_abundance(self, nucleus, value=None, vary=None, sigma=None, sample=""):
         """Set a nucleus's isotopic abundance (``value``), whether it is a fit
-        parameter (``vary``) and its prior width (``sigma``, 0 = none).  The
-        ``<abundances>`` block is created right after ``</levels>`` when the
-        file has none; fields left ``None`` keep their current value.
-        ``nucleus`` is a label such as ``"23Ne"``, ``(Z, A)`` or a Nucleus.
+        parameter (``vary``) and its prior width (``sigma``, 0 = none) in one
+        sample (``sample``: ``""`` the unnamed one, else the sample's name,
+        created on first use).  The ``<abundances>`` block is created right
+        after ``</levels>`` when the file has none; fields left ``None`` keep
+        their current value.  ``nucleus`` is a label such as ``"23Ne"``,
+        ``(Z, A)`` or a Nucleus.
         """
         Nucleus = _nuclei_module().Nucleus
         nuc = Nucleus.parse(nucleus)
         if nuc not in self.nuclei():
             raise KeyError(f"no pair of this project forms {nuc.label}: {[n.label for n in self.nuclei()]}")
-        cur = self.abundances.get(nuc, (1.0, False, 0.0))
+        if ":" in sample or "#" in sample or any(ch.isspace() for ch in sample):
+            raise ValueError(f"a sample name is one token without ':' or '#': {sample!r}")
+        cur = self.samples.get(sample, {}).get(nuc, (1.0, False, 0.0))
         value = cur[0] if value is None else float(value)
         vary = cur[1] if vary is None else bool(vary)
         sigma = cur[2] if sigma is None else float(sigma)
-        new = f"{nuc.Z} {nuc.A} {_fmt(value)} {1 if vary else 0} {_fmt(sigma)}"
+        prefix = f"{sample}: " if sample else ""
+        new = f"{prefix}{nuc.Z} {nuc.A} {_fmt(value)} {1 if vary else 0} {_fmt(sigma)}"
         lines = self._suffix.splitlines()
         if "<abundances>" not in lines:
             at = lines.index("</levels>") + 1 if "</levels>" in lines else 0
@@ -911,8 +986,9 @@ class AzrModel:
         else:
             a, b = lines.index("<abundances>"), lines.index("</abundances>")
             for i in range(a + 1, b):
-                t = lines[i].split()
-                if len(t) >= 2 and int(t[0]) == nuc.Z and int(t[1]) == nuc.A:
+                name, rest = _split_sample_prefix(lines[i])
+                t = rest.split()
+                if name == sample and len(t) >= 2 and t[0] != "sum" and int(t[0]) == nuc.Z and int(t[1]) == nuc.A:
                     lines[i] = new
                     break
             else:
@@ -939,8 +1015,10 @@ class AzrModel:
 
     def set_natural(self, file_substr, natural=True):
         """Mark (or unmark) every ``<segmentsData>`` line matching
-        ``file_substr`` as a natural-target segment (the trailing ``natural 1``
-        token).  Refused on a RATIO composite.  Returns the number of lines changed."""
+        ``file_substr`` as a natural-target segment: ``natural=True`` writes
+        ``natural 1`` (the unnamed, or only, sample), a string writes
+        ``natural <sample>``, ``False`` removes the block.  Refused on a RATIO
+        composite.  Returns the number of lines changed."""
         return self._set_natural_block("segmentsData", lambda ln: file_substr in ln, natural)
 
     def set_test_natural(self, key, natural=True):
@@ -984,7 +1062,7 @@ class AzrModel:
                         adv = head[10 + (2 if isDiff == 2 else 1 if isDiff == 3 else 0):]
                     if len(adv) >= 2 and int(float(adv[0])) == 1 and int(float(adv[1])) == 1:
                         raise ValueError("a natural-target segment cannot be a RATIO composite")
-                    blocks["natural"] = ["1"]
+                    blocks["natural"] = [natural if isinstance(natural, str) else "1"]
                 else:
                     blocks.pop("natural", None)
                 line = " ".join(head + [tok for kw, vals in blocks.items() for tok in [kw] + list(vals)])
@@ -1352,7 +1430,7 @@ class AzrModel:
             toks += ["sqrtshift", _fmt(energy_shift_sqrt),
                      _fmt(energy_shift_sqrt_error), 1 if vary_shift_sqrt else 0]
         if natural:
-            toks += ["natural", 1]
+            toks += ["natural", natural if isinstance(natural, str) else 1]
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
         lines = self._suffix.splitlines()
         if "<segmentsData>" not in lines:

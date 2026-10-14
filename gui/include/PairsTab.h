@@ -35,9 +35,9 @@ class PairsTab : public QWidget {
   PairsModel *getPairsModel();
   AbundancesModel *getAbundancesModel();
   bool parseOldECSection(QTextStream &);
-  /*! Read the <abundances> block (one line per nucleus: Z A abundance vary sigma) up to its closing tag. */
+  /*! Read the <abundances> block ("[<sample>:] Z A abundance vary sigma" and "[<sample>:] sum sigma" lines) up to its closing tag. */
   bool readAbundances(QTextStream &);
-  /*! Write the block's lines (no tags), one per compound nucleus. */
+  /*! Write the block's lines (no tags): every sample's nuclei, then its own sum-to-one width if any. */
   bool writeAbundances(QTextStream &);
   /*! Should the file carry an <abundances> block: more than one nucleus, or a non-default entry. */
   bool hasAbundanceBlock() const;
@@ -56,6 +56,12 @@ class PairsTab : public QWidget {
   void showInfo(int which = 0, QString title = "");
   void updateNucleusColumn();
   void updateAbundancesBox();
+  /*! The sample selector follows the model's samples; the sum width shown is the chosen sample's. */
+  void updateSampleCombo();
+  void sampleChosen(int index);
+  void addSample();
+  void removeSample();
+  void sampleSumSigmaEdited(double sigma);
 
  signals:
   void pairAdded(int);
@@ -69,6 +75,10 @@ class PairsTab : public QWidget {
   QTableView *abundancesView;
   QGroupBox *abundancesBox;
   QDoubleSpinBox *sumSigmaSpin;
+  QComboBox *sampleCombo;
+  QPushButton *addSampleButton;
+  QPushButton *removeSampleButton;
+  QDoubleSpinBox *sampleSumSigmaSpin;
   QPushButton *addButton;
   QPushButton *deleteButton;
   QSignalMapper *mapper;

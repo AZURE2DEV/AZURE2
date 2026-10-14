@@ -36,13 +36,25 @@
  * 1 and the token would be silently meaningless, which is exactly what an
  * older build would do with it too.
  */
-static bool NaturalAllowed(CNuc *theCNuc, const ESegment &segment, int key, bool isTest, const Config &configure) {
+static bool NaturalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {
   const char *what = isTest ? "test segment" : "segment";
+  const std::string &token = segment.GetNaturalToken();
+  if (token == "0") return true;   // not a natural segment
   if (!theCNuc->HasAbundanceBlock()) {
     configure.outStream << "ERROR: " << what << " #" << key << " is a natural-target segment, but the project has no "
-                        << "<abundances> block (one line per compound nucleus: <Z> <A> <abundance> <vary> <sigma>)." << std::endl;
+                        << "<abundances> block (one line per compound nucleus: [<sample>:] <Z> <A> <abundance> <vary> <sigma>)." << std::endl;
     return false;
   }
+  // "1" = the unnamed sample (or the only one); anything else names a sample of the block.
+  int sample = (token == "1") ? theCNuc->DefaultSample() : theCNuc->FindSample(token);
+  if (sample == 0) {
+    configure.outStream << "ERROR: " << what << " #" << key << ": natural-target sample \"" << token
+                        << "\" is not in the <abundances> block";
+    if (token == "1") configure.outStream << " (it has several named samples and no unnamed one: name one on the segment line)";
+    configure.outStream << "." << std::endl;
+    return false;
+  }
+  segment.SetNaturalSample(sample);
   if (segment.IsAdvanced() && segment.GetLegacyOperationType() != 0) {
     configure.outStream << "ERROR: " << what << " #" << key << ": a natural-target segment cannot be a RATIO." << std::endl;
     return false;
@@ -69,7 +81,8 @@ static void WriteNaturalDecomposition(const Config &configure, bool isExtrap, in
                      (isExtrap ? ".extrap" : ".out");
   std::ofstream out(name.c_str());
   if (!out) return;
-  out << "# Segment " << segment->GetSegmentKey() << ": natural target, abundance-weighted sum over compound nuclei" << std::endl;
+  out << "# Segment " << segment->GetSegmentKey() << ": natural target, abundance-weighted sum over compound nuclei (sample "
+      << segment->GetNaturalToken() << ")" << std::endl;
   out << "# E_" << (kinflag ? "lab" : "cm") << " [MeV]   total";
   for (size_t k = 0; k < nucleusLabels.size(); k++) out << "   " << nucleusLabels[k];
   out << std::endl;
@@ -159,7 +172,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
           PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
           entrancePair->SetEntrance();
-          if (NewSegment.IsNatural() && !NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
             // total capture: every capture pair of the ENTRANCE pair's compound nucleus
@@ -362,7 +375,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
         ESegment NewSegment(segment);
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
           PPair *segEntrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
-          if (NewSegment.IsNatural() && !NaturalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
+          if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
             // total capture: every capture pair of the ENTRANCE pair's compound nucleus

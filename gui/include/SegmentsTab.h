@@ -17,6 +17,7 @@
 
 class InfoDialog;
 class PairsModel;
+class AbundancesModel;
 
 /*!
  * The Segments tab: the data segments the fit runs against and the test segments an extrapolation is evaluated on, held in two separate models.
@@ -68,6 +69,8 @@ class SegmentsTab : public QWidget {
   /*bool writeSegTestFile(QString filename);*/
   bool writeSegTestFile(QTextStream &outStream);
   void setPairsModel(PairsModel *model);
+  /*! The abundance table, for the samples the segment dialogs offer (may stay unset: default sample only). */
+  void setAbundancesModel(AbundancesModel *model) { abundancesModel = model; }
   void updateFilterComboboxes(PairsModel *model);
   void updateFilterComboboxes();  // Update filters using stored model
   void showInfo(int which = 0, QString title = "");
@@ -78,6 +81,7 @@ class SegmentsTab : public QWidget {
 
   /*QLineEdit *segDataFileText;*/
   PairsModel *pairsModel;
+  AbundancesModel *abundancesModel = nullptr;
   SegmentsDataModel *segmentsDataModel;
   QTableView *segmentsDataView;
   QPushButton *segDataAddButton;

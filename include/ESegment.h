@@ -195,9 +195,16 @@ class ESegment {
   bool HasComponents() const;
   /// A natural-target segment: its own term and every component is weighted
   /// by the isotopic abundance of the term's entrance pair's compound nucleus
-  /// (the trailing "natural 1" token of the line).
-  bool IsNatural() const { return natural_; }
-  void SetNatural(bool natural) { natural_ = natural; }
+  /// in the segment's sample (the trailing "natural <1|sample>" token of the
+  /// line, resolved to a 1-based sample of the <abundances> block by
+  /// EData::Fill; 0 = not a natural segment).
+  bool IsNatural() const { return naturalSample_ > 0; }
+  int GetNaturalSample() const { return naturalSample_; }
+  void SetNaturalSample(int sample) { naturalSample_ = sample; }
+  /// The token as read ("0", "1" or a sample name), before resolution.
+  const std::string &GetNaturalToken() const { return naturalToken_; }
+  /// Components are never weighted themselves (the base segment does it).
+  void SetNatural(bool natural) { if (!natural) naturalSample_ = 0; }
   /// The component segments, by reference.
   const std::vector<ESegment *> &GetComponentSegments() const;
   /// Drop every component.
@@ -267,7 +274,8 @@ class ESegment {
   bool hasShiftGroupFollowers_;
   bool isAdvanced_;
   int operationType_;
-  bool natural_ = false;
+  std::string naturalToken_ = "0";
+  int naturalSample_ = 0;
   std::string componentsList_;
   std::string datafile_;
   std::vector<EPoint> points_;

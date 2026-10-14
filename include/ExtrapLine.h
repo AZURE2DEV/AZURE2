@@ -28,7 +28,7 @@ class ExtrapLine {
     isAdvanced_ = 0;
     operationType_ = 0;
     componentsList_ = "";
-    natural_ = 0;
+    natural_ = "0";
     // Initialize UPOS parameters to defaults
     isUPOS_ = 0;
     secondaryDecayL_ = 0;
@@ -99,7 +99,7 @@ class ExtrapLine {
       while (advancedStream >> keyword) {
         if (keyword == "natural") {
           if (!(advancedStream >> natural_)) {
-            natural_ = 0;
+            natural_ = "0";
             break;
           }
         } else {
@@ -175,9 +175,9 @@ class ExtrapLine {
    */
   int operationType() const { return operationType_; };
   /*!
-   * Returns 1 for a natural-target test segment (trailing "natural 1" token).
+   * Returns the natural-target token: "0" (none), "1" (the default sample) or a sample name.
    */
-  int natural() const { return natural_; };
+  const std::string &natural() const { return natural_; };
   /*!
    * Returns the semicolon-separated list of components.
    */
@@ -215,7 +215,7 @@ class ExtrapLine {
   int maxAngDistOrder_;
   int isAdvanced_;
   int operationType_;
-  int natural_;
+  std::string natural_;
   std::string componentsList_;
   int isUPOS_;
   int secondaryDecayL_;

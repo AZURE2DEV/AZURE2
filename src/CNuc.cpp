@@ -288,17 +288,23 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
 
 int CNuc::ReadAbundances(const Config &configure) {
   hasAbundanceBlock_ = false;
-  for (unsigned int i = 0; i < nuclei_.size(); i++) {
-    nuclei_[i].abundance = nuclei_[i].nominal = 1.0;
-    nuclei_[i].sigma = 0.0;
-    nuclei_[i].vary = false;
-  }
+  samples_.clear();
   std::ifstream in(configure.configfile.c_str());
   if (!in) return -1;
   std::string line = "";
   while (line != "<abundances>" && !in.eof()) getline(in, line);
   if (line != "<abundances>") return 0;
   hasAbundanceBlock_ = true;
+  // A sample is created the first time its name appears; the unnamed sample is "".
+  auto sampleOf = [&](const std::string &name) -> AbundanceSample & {
+    for (unsigned int s = 0; s < samples_.size(); s++)
+      if (samples_[s].name == name) return samples_[s];
+    AbundanceSample sample;
+    sample.name = name;
+    sample.entries.assign(nuclei_.size(), SampleAbundance());
+    samples_.push_back(sample);
+    return samples_.back();
+  };
   line = "";
   while (!in.eof() && line != "</abundances>") {
     getline(in, line);
@@ -307,20 +313,44 @@ int CNuc::ReadAbundances(const Config &configure) {
     if (hash != std::string::npos) entry = entry.substr(0, hash);
     if (entry.find_first_not_of(" \t\r") == std::string::npos) continue;
     if (line == "</abundances>") break;
+    // optional "<name>:" prefix (one token ending in a colon)
+    std::string name;
+    std::istringstream probe(entry);
+    std::string first;
+    probe >> first;
+    if (!first.empty() && first.back() == ':') {
+      name = first.substr(0, first.size() - 1);
+      std::string rest;
+      getline(probe, rest);
+      entry = rest;
+    }
     std::istringstream stm(entry);
+    std::string head;
+    if (!(stm >> head)) continue;
+    if (head == "sum") {
+      double s;
+      if (!(stm >> s)) {
+        configure.outStream << "ERROR: <abundances> line \"" << line << "\" is not \"[<sample>:] sum <sigma>\"." << std::endl;
+        return -1;
+      }
+      sampleOf(name).sumSigma = s;
+      continue;
+    }
+    std::istringstream stm2(entry);
     int z, a, vary;
     double value, sigma;
-    if (!(stm >> z >> a >> value >> vary >> sigma)) {
+    if (!(stm2 >> z >> a >> value >> vary >> sigma)) {
       configure.outStream << "ERROR: <abundances> line \"" << line
-                          << "\" is not \"<Z> <A> <abundance> <vary> <sigma>\"." << std::endl;
+                          << "\" is not \"[<sample>:] <Z> <A> <abundance> <vary> <sigma>\" or \"[<sample>:] sum <sigma>\"." << std::endl;
       return -1;
     }
     bool found = false;
     for (unsigned int i = 0; i < nuclei_.size(); i++) {
       if (nuclei_[i].Z != z || nuclei_[i].A != a) continue;
-      nuclei_[i].abundance = nuclei_[i].nominal = value;
-      nuclei_[i].vary = (vary == 1);
-      nuclei_[i].sigma = sigma;
+      SampleAbundance &e = sampleOf(name).entries[i];
+      e.abundance = e.nominal = value;
+      e.vary = (vary == 1);
+      e.sigma = sigma;
       found = true;
     }
     if (!found)
@@ -328,22 +358,66 @@ int CNuc::ReadAbundances(const Config &configure) {
                           << ", which no pair of the project forms; ignored." << std::endl;
   }
   if (line != "</abundances>") return -1;
+  // An empty block still means "abundances are parameters": one unnamed sample at the defaults.
+  if (samples_.empty()) sampleOf("");
   return 0;
 }
 
-double CNuc::AbundanceSum() const {
+int CNuc::FindSample(const std::string &name) const {
+  for (unsigned int s = 0; s < samples_.size(); s++)
+    if (samples_[s].name == name) return (int)s + 1;
+  return 0;
+}
+
+int CNuc::DefaultSample() const {
+  int unnamed = this->FindSample("");
+  if (unnamed > 0) return unnamed;
+  return samples_.size() == 1 ? 1 : 0;
+}
+
+void CNuc::AbundanceOf(int ordinal, int &sample, int &nucleus) const {
+  const int n = (int)nuclei_.size();
+  sample = (ordinal - 1) / n + 1;
+  nucleus = (ordinal - 1) % n + 1;
+}
+
+std::string CNuc::AbundanceParamName(int sample, int nucleus) const {
+  char buf[128];
+  const std::string &name = samples_[sample - 1].name;
+  if (name.empty())
+    snprintf(buf, sizeof(buf), "abundance_%d_%d", nuclei_[nucleus - 1].Z, nuclei_[nucleus - 1].A);
+  else
+    snprintf(buf, sizeof(buf), "abundance_%s_%d_%d", name.c_str(), nuclei_[nucleus - 1].Z, nuclei_[nucleus - 1].A);
+  return std::string(buf);
+}
+
+double CNuc::GetAbundance(int sample, int nucleus) const {
+  if (sample < 1 || sample > (int)samples_.size()) return 1.0;
+  return samples_[sample - 1].entries[nucleus - 1].abundance;
+}
+
+double CNuc::AbundanceSum(int sample) const {
   double sum = 0.0;
-  for (unsigned int i = 0; i < nuclei_.size(); i++) sum += nuclei_[i].abundance;
+  for (unsigned int i = 0; i < nuclei_.size(); i++) sum += samples_[sample - 1].entries[i].abundance;
   return sum;
 }
 
-double CNuc::AbundancePenalty(double sumSigma) const {
+double CNuc::SampleSumSigma(int sample, double globalSumSigma) const {
+  const double own = samples_[sample - 1].sumSigma;
+  return own >= 0.0 ? own : globalSumSigma;
+}
+
+double CNuc::AbundancePenalty(double globalSumSigma) const {
   if (!hasAbundanceBlock_) return 0.0;
   double penalty = 0.0;
-  for (unsigned int i = 0; i < nuclei_.size(); i++)
-    if (nuclei_[i].sigma > 0.0)
-      penalty += pow((nuclei_[i].abundance - nuclei_[i].nominal) / nuclei_[i].sigma, 2.0);
-  if (sumSigma > 0.0) penalty += pow((this->AbundanceSum() - 1.0) / sumSigma, 2.0);
+  for (unsigned int s = 0; s < samples_.size(); s++) {
+    for (unsigned int i = 0; i < nuclei_.size(); i++) {
+      const SampleAbundance &e = samples_[s].entries[i];
+      if (e.sigma > 0.0) penalty += pow((e.abundance - e.nominal) / e.sigma, 2.0);
+    }
+    const double sig = this->SampleSumSigma((int)s + 1, globalSumSigma);
+    if (sig > 0.0) penalty += pow((this->AbundanceSum((int)s + 1) - 1.0) / sig, 2.0);
+  }
   return penalty;
 }
 
@@ -758,7 +832,8 @@ void CNuc::FillCompoundFromParamsPhysical(const vector_r &p) {
     }
   }
   if (hasAbundanceBlock_)
-    for (unsigned int k = 0; k < nuclei_.size(); k++) nuclei_[k].abundance = p[i++];
+    for (unsigned int s = 0; s < samples_.size(); s++)
+      for (unsigned int k = 0; k < nuclei_.size(); k++) samples_[s].entries[k].abundance = p[i++];
 }
 
 /*!
@@ -1902,17 +1977,20 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config *config
       energyIndex++;
     }
   }
-  // Isotopic abundances, one per compound nucleus, right after the level
-  // block (so EData::FillMnParams, which takes its offsets from the vector
-  // size, needs no change); only when the project carries an <abundances>
-  // block.  A fixed abundance is still a parameter, so the layout does not
-  // depend on which ones vary.
+  // Isotopic abundances, one per compound nucleus and sample (sample by
+  // sample), right after the level block (so EData::FillMnParams, which
+  // takes its offsets from the vector size, needs no change); only when the
+  // project carries an <abundances> block.  A fixed abundance is still a
+  // parameter, so the layout does not depend on which ones vary.
   if (hasAbundanceBlock_) {
-    for (unsigned int k = 0; k < nuclei_.size(); k++) {
-      snprintf(varname, sizeof(varname), "abundance_%d_%d", nuclei_[k].Z, nuclei_[k].A);
-      p.Add(varname, nuclei_[k].abundance, nuclei_[k].sigma > 0.0 ? nuclei_[k].sigma : 0.1 * nuclei_[k].abundance + 1e-3);
-      p.SetLowerLimit(varname, 0.0);
-      if (!nuclei_[k].vary) p.Fix(varname);
+    for (unsigned int s = 0; s < samples_.size(); s++) {
+      for (unsigned int k = 0; k < nuclei_.size(); k++) {
+        const SampleAbundance &e = samples_[s].entries[k];
+        std::string name = this->AbundanceParamName((int)s + 1, (int)k + 1);
+        p.Add(name, e.abundance, e.sigma > 0.0 ? e.sigma : 0.1 * e.abundance + 1e-3);
+        p.SetLowerLimit(name, 0.0);
+        if (!e.vary) p.Fix(name);
+      }
     }
   }
 }
@@ -1941,7 +2019,8 @@ void CNuc::FillCompoundFromParams(const vector_r &p) {
     }
   }
   if (hasAbundanceBlock_)
-    for (unsigned int k = 0; k < nuclei_.size(); k++) nuclei_[k].abundance = p[i++];
+    for (unsigned int s = 0; s < samples_.size(); s++)
+      for (unsigned int k = 0; k < nuclei_.size(); k++) samples_[s].entries[k].abundance = p[i++];
 }
 
 /*!
@@ -2471,7 +2550,8 @@ vector_r CNuc::GetTransformParams(const Config &configure) {
   }
   // Abundances are the same in both bases; they follow the level block as in FillMnParams.
   if (hasAbundanceBlock_)
-    for (unsigned int k = 0; k < nuclei_.size(); k++) params.push_back(nuclei_[k].abundance);
+    for (unsigned int s = 0; s < samples_.size(); s++)
+      for (unsigned int k = 0; k < nuclei_.size(); k++) params.push_back(samples_[s].entries[k].abundance);
 
   return params;
 }

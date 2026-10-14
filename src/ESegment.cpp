@@ -80,7 +80,7 @@ ESegment::ESegment(SegLine segLine) {
   isAdvanced_ = segLine.isAdvanced() == 1;
   operationType_ = segLine.operationType();
   componentsList_ = segLine.componentsList();
-  natural_ = segLine.natural() == 1;
+  naturalToken_ = segLine.natural();
   if (segLine.isUPOS() == 1)
     isUPOS_ = true;
   else
@@ -160,7 +160,7 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   isAdvanced_ = (extrapLine.isAdvanced() == 1);
   operationType_ = extrapLine.operationType();
   componentsList_ = extrapLine.componentsList();
-  natural_ = extrapLine.natural() == 1;
+  naturalToken_ = extrapLine.natural();
 
   isUPOS_ = false;
   secondaryDecayL_ = 0;
@@ -1154,16 +1154,17 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
   // abundance of its entrance pair's compound nucleus, and the weighted terms
   // are kept per nucleus on the base point for the decomposition output.
   std::vector<double> naturalTerms;
-  if (natural_) {
+  const bool natural = this->IsNatural();
+  if (natural) {
     naturalTerms.assign(cnuc->NumNuclei(), 0.0);
     const int nucleus = cnuc->GetPair(cnuc->GetPairNumFromKey(this->GetEntranceKey()))->GetNucleus();
-    baseValue *= cnuc->GetNucleus(nucleus)->abundance;
+    baseValue *= cnuc->GetAbundance(naturalSample_, nucleus);
     naturalTerms[nucleus - 1] += baseValue;
   }
 
   // If no components, return base value
   if (!HasComponents()) {
-    if (natural_) basePoint->SetNaturalTerms(naturalTerms);
+    if (natural) basePoint->SetNaturalTerms(naturalTerms);
     return baseValue;
   }
 
@@ -1188,9 +1189,9 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
           // Check if NaN or infinite and skip if so
           if (!std::isnan(compValue) && !std::isinf(compValue)) {
             double term = componentSegment->GetComponentScaling() * compValue;
-            if (natural_) {
+            if (natural) {
               const int nucleus = cnuc->GetPair(cnuc->GetPairNumFromKey(componentSegment->GetEntranceKey()))->GetNucleus();
-              term *= cnuc->GetNucleus(nucleus)->abundance;
+              term *= cnuc->GetAbundance(naturalSample_, nucleus);
               naturalTerms[nucleus - 1] += term;
             }
             sum += term;
@@ -1199,7 +1200,7 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
         }
       }
     }
-    if (natural_) basePoint->SetNaturalTerms(naturalTerms);
+    if (natural) basePoint->SetNaturalTerms(naturalTerms);
     return sum;
   } else if (segmentOperationType_ == RATIO) {
     if (componentSegments_.empty()) {

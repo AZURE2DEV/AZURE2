@@ -57,12 +57,16 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   advancedModeCheck = new QCheckBox(tr("Advanced Mode (Sum/Ratio)"));
   connect(advancedModeCheck, SIGNAL(stateChanged(int)), this, SLOT(advancedModeChanged(int)));
 
-  naturalCheck = new QCheckBox(tr("Natural target (weight each term by its nucleus's isotopic abundance)"));
-  naturalCheck->setObjectName("naturalCheck");
-  naturalCheck->setToolTip(tr("Weight this segment's term and each of its components by the isotopic abundance\n"
-                              "of the compound nucleus its entrance pair forms (the Particle Pairs tab sets the\n"
-                              "abundances). Not available for ratios, phase shifts or analyzing powers."));
-  naturalCheck->setVisible(false);
+  naturalLabel = new QLabel(tr("Natural target (sample):"));
+  naturalCombo = new QComboBox;
+  naturalCombo->setObjectName("naturalCombo");
+  naturalCombo->setToolTip(tr("Weight this segment's term and each of its components by the isotopic abundance\n"
+                              "of the compound nucleus its entrance pair forms, in the chosen sample (the Particle\n"
+                              "Pairs tab sets the samples and abundances). Not available for ratios, phase shifts\n"
+                              "or analyzing powers."));
+  naturalLabel->setVisible(false);
+  naturalCombo->setVisible(false);
+  setSamples(QStringList() << QString());
   connect(advancedModeCheck, SIGNAL(stateChanged(int)), this, SLOT(updateNaturalCheck()));
 
   advancedModeBox = new QGroupBox(tr("Advanced Segment Definition"));
@@ -195,7 +199,8 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   advancedModeBox->setLayout(advancedLayout);
 
   lowerLayout->addWidget(advancedModeBox, 2, 0, 1, 4);
-  lowerLayout->addWidget(naturalCheck, 3, 0, 1, 4);
+  lowerLayout->addWidget(naturalLabel, 3, 0, Qt::AlignRight);
+  lowerLayout->addWidget(naturalCombo, 3, 1, 1, 3);
 
   valueLayout->addLayout(lowerLayout, 2, 0, 1, 2);
   valueBox->setLayout(valueLayout);
@@ -373,13 +378,45 @@ bool AddSegTestDialog::naturalAllowed() const {
 
 void AddSegTestDialog::updateNaturalCheck() {
   bool allowed = naturalAllowed();
-  naturalCheck->setEnabled(allowed);
-  if (!allowed) naturalCheck->setChecked(false);
+  naturalCombo->setEnabled(allowed);
+  if (!allowed) naturalCombo->setCurrentIndex(0);
+}
+
+void AddSegTestDialog::setSamples(const QStringList &samples) {
+  QString keep = naturalToken();
+  naturalCombo->blockSignals(true);
+  naturalCombo->clear();
+  naturalCombo->addItem(tr("No"), QString());
+  for (int s = 0; s < samples.size(); s++) {
+    if (samples.at(s).isEmpty())
+      naturalCombo->addItem(tr("Yes: default sample"), QString("1"));
+    else
+      naturalCombo->addItem(tr("Yes: sample %1").arg(samples.at(s)), samples.at(s));
+  }
+  if (!samples.contains(QString()) && naturalCombo->findData(QString("1")) < 0 && samples.size() == 1)
+    naturalCombo->setItemData(1, QString("1"));   // a single named sample is also what "natural 1" means
+  naturalCombo->blockSignals(false);
+  setNaturalToken(keep);
+}
+
+QString AddSegTestDialog::naturalToken() const {
+  return naturalCombo->currentData().toString();
+}
+
+void AddSegTestDialog::setNaturalToken(const QString &token) {
+  int at = naturalCombo->findData(token);
+  if (at < 0 && !token.isEmpty()) {
+    // a sample the table does not list (yet): keep it selectable so an edit does not lose it
+    naturalCombo->addItem(tr("Yes: sample %1 (not in the Pairs tab)").arg(token), token);
+    at = naturalCombo->count() - 1;
+  }
+  naturalCombo->setCurrentIndex(std::max(0, at));
 }
 
 void AddSegTestDialog::setPairsModel(PairsModel *model) {
   // The check box only means something when the pairs form more than one compound nucleus.
-  naturalCheck->setVisible(model && model->nuclei().size() > 1);
+  naturalLabel->setVisible(model && model->nuclei().size() > 1);
+  naturalCombo->setVisible(model && model->nuclei().size() > 1);
   updateNaturalCheck();
   for (PairKeyCombo *combo : {entrancePairCombo, exitPairCombo, componentEntranceCombo, componentExitCombo}) combo->setPairsModel(model);
   // A fresh dialog starts on the first pair, as the key boxes started on 1.

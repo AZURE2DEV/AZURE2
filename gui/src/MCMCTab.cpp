@@ -608,10 +608,11 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
     QMap<int, QPair<double, double>> autoShiftPrior;
     // Isotopic abundances: the <abundances> block's (value, sigma), keyed by parameter name.
     QMap<QString, QPair<double, double>> autoAbundancePrior;
-    for (int n = 0; n < compound->NumNuclei(); n++) {
-      const CompoundNucleus *nucleus = compound->GetNucleus(n);
-      autoAbundancePrior[QString("abundance_%1_%2").arg(nucleus->Z).arg(nucleus->A)] =
-          qMakePair(nucleus->nominal, nucleus->sigma);
+    for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
+      int sample, nucleus;
+      compound->AbundanceOf(k, sample, nucleus);
+      const SampleAbundance &e = compound->GetSample(sample)->entries[nucleus - 1];
+      autoAbundancePrior[QString::fromStdString(compound->AbundanceParamName(sample, nucleus))] = qMakePair(e.nominal, e.sigma);
     }
 
     // Physical descriptions of every parameter, gathered here because the

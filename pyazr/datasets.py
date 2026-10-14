@@ -43,6 +43,19 @@ from typing import List, Optional
 import numpy as np
 
 
+def _natural_token(blocks):
+    """``(natural, sample)`` from the keyword blocks: ``natural 0`` -> (False, ""),
+    ``natural 1`` -> (True, "") (the unnamed, or only, sample), ``natural <name>``
+    -> (True, name)."""
+    blk = blocks.get("natural") or []
+    if len(blk) != 1:
+        return False, ""
+    tok = blk[0]
+    if _isfloat(tok):
+        return int(float(tok)) == 1, ""
+    return True, tok
+
+
 def _isfloat(tok):
     try:
         float(tok)
@@ -128,8 +141,9 @@ class Segment:
     energy_shift_sqrt: float = 0.0         # b in E' = E + shift + b*sqrt(E) (MeV^1/2)
     energy_shift_sqrt_error: float = 0.0   # its systematic (MeV^1/2)
     vary_shift_sqrt: bool = False          # is b a fit parameter?
-    natural: bool = False                  # natural-target segment ("natural 1"): every term is
-                                           #   weighted by its nucleus's isotopic abundance
+    natural: bool = False                  # natural-target segment ("natural 1" / "natural <sample>"): every
+                                           #   term is weighted by its nucleus's isotopic abundance
+    natural_sample: str = ""               # the sample's name ("" = the unnamed, or only, sample)
     # segments with the same label share ONE constant energy shift: the first
     # of them (file order) owns the parameter, the others take its value
     shift_group: Optional[str] = None
@@ -249,9 +263,7 @@ class SegmentSet(list):
         if len(blk) == 3 and all(_isfloat(b) for b in blk):
             shift_sqrt, shift_sqrt_error = float(blk[0]), float(blk[1])
             vary_shift_sqrt = int(float(blk[2])) == 1
-        blk = blocks.get("natural") or []
-        if len(blk) == 1 and _isfloat(blk[0]):
-            natural = int(float(blk[0])) == 1
+        natural, natural_sample = _natural_token(blocks)
         if tail and _isfloat(tail[0]) and int(float(tail[0])) == 1:
             operation = "ratio" if (len(tail) > 1 and
                                     int(float(tail[1])) == 1) else "sum"
@@ -288,7 +300,7 @@ class SegmentSet(list):
             energy_shift_sqrt=shift_sqrt,
             energy_shift_sqrt_error=shift_sqrt_error,
             vary_shift_sqrt=vary_shift_sqrt,
-            natural=natural,
+            natural=natural, natural_sample=natural_sample,
             shift_group=(blocks.get("shiftgroup") or [None])[0],
             operation=operation, components=tuple(components))
 
@@ -390,7 +402,8 @@ class TestSegment:
     phase_J: Optional[float] = None        # isDiff == 2 only
     phase_L: Optional[int] = None          # isDiff == 2 only
     max_ang_dist_order: Optional[int] = None   # isDiff == 3 only
-    natural: bool = False                  # natural-target grid ("natural 1")
+    natural: bool = False                  # natural-target grid ("natural 1" / "natural <sample>")
+    natural_sample: str = ""               # the sample's name ("" = the unnamed, or only, sample)
 
     @property
     def name(self) -> str:
@@ -459,8 +472,7 @@ class TestSegmentSet(list):
         elif isDiff == 3:               # angular distribution carries its order
             max_order = int(float(t[i])); i += 1
         _, blocks = _split_keyword_tail(t[i:])
-        blk = blocks.get("natural", [])
-        natural = len(blk) == 1 and _isfloat(blk[0]) and int(float(blk[0])) == 1
+        natural, natural_sample = _natural_token(blocks)
         return TestSegment(
             key=key, active=active, entrance_key=entrance_key,
             exit_key=exit_key,
@@ -468,7 +480,7 @@ class TestSegmentSet(list):
             angle_min=aMin, angle_max=aMax, angle_step=aStep,
             observable=_EXTRAP_OBSERVABLE.get(isDiff, f"code{isDiff}"),
             phase_J=phase_J, phase_L=phase_L, max_ang_dist_order=max_order,
-            natural=natural)
+            natural=natural, natural_sample=natural_sample)
 
     # -- views ----------------------------------------------------------------
 

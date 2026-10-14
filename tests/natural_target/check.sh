@@ -37,7 +37,7 @@ run() {
   local dir="$WORK/$1" mode="${5:-3}"
   mkdir -p "$dir/output" "$dir/checks"
   sed "1,2s/^\(true\|false\) #Perform A-Matrix/$3 #Perform A-Matrix/" "$2" > "$dir/t.azr"
-  [ -f "$WORK/data.dat" ] && cp "$WORK/data.dat" "$dir/"
+  for f in data.dat data_enr.dat; do [ -f "$WORK/$f" ] && cp "$WORK/$f" "$dir/"; done
   (cd "$dir" && printf "$mode\n\n\n7\n" | run_limited 600 "$AZURE2_BIN" $4 --no-gui --no-readline t.azr > run.log 2>&1)
 }
 # block FILE N -> the N-th blank-line-separated block of an output file (segments with the same pair keys share a file)
@@ -115,6 +115,25 @@ else
   bad "thick: an extrapolation is missing"; tail -5 "$WORK/M_thick/run.log"
 fi
 
+# ---- (b3) a second, named sample on the segment line ----------------------------------------------------
+run "M_samples" "$M/M_samples.azr" true "" || true
+m1="$WORK/M_samples/output/AZUREOut_aa=1_R=1.extrap"; m2="$WORK/M_samples/output/AZUREOut_aa=2_R=2.extrap"
+if [ -s "$m1" ] && [ -s "$m2" ] && [ -s "$WORK/a.Amat" ]; then
+  xs "$m1" 3 > "$WORK/m5.samples"; xs "$m2" 3 > "$WORK/m6.samples"
+  paste "$WORK/a.Amat" "$WORK/b.Amat" | awk '{ printf "%.12e %.12e\n", $1, 0.1 * $2 + 0.9 * $4 }' > "$WORK/sum.samples"
+  r="$(maxrel "$WORK/m5.samples" "$WORK/sum.samples")"
+  if le "$r" 1e-9; then ok "samples: SUM on sample enr == 0.1 sigma_A + 0.9 sigma_B (max rel $r)"; else bad "samples: SUM on sample enr vs 0.1 A + 0.9 B (max rel $r)"; fi
+  awk '{ printf "%.12e %.12e\n", $1, 0.9 * $2 }' "$WORK/b.Amat" > "$WORK/b9.samples"
+  r="$(maxrel "$WORK/m6.samples" "$WORK/b9.samples")"
+  if le "$r" 1e-9; then ok "samples: plain segment on sample enr == 0.9 sigma_B (max rel $r)"; else bad "samples: plain segment on enr vs 0.9 B (max rel $r)"; fi
+  xs "$m1" 2 > "$WORK/m3.samples"
+  r="$(maxrel "$WORK/m3.samples" "$WORK/sum.Amat")"
+  if le "$r" 1e-9; then ok "samples: the unnamed sample's SUM is unchanged by the second sample (max rel $r)"; else bad "samples: unnamed sample's SUM changed (max rel $r)"; fi
+  if grep -q "sample enr" "$WORK/M_samples/output/AZUREOut_natural_seg=5.extrap" 2>/dev/null; then ok "samples: decomposition file names its sample"; else bad "samples: decomposition file of segment 5 missing or without the sample name"; fi
+else
+  bad "samples: an extrapolation is missing"; tail -5 "$WORK/M_samples/run.log"
+fi
+
 # ---- (c) data mode: abundances as fit parameters --------------------------------------------------------
 # data.dat = 0.6 sigma_A + 0.4 sigma_B on the 2 keV lab grid of the test segments, 0.1 % errors, no noise
 # (the two nuclei differ by a few percent, so 1 % errors would leave the abundances almost unconstrained)
@@ -128,6 +147,20 @@ if [ -s "$WORK/a.Amat" ] && [ -s "$WORK/b.Amat" ]; then
     if echo "$line" | grep -Eq "abundance[^0-9]*0/[0-9]+"; then ok "gradient check: abundances agree with finite differences ($line)"; else bad "gradient check: $line"; fi
   else
     bad "gradient check printed nothing about the abundances"; grep -i "grad" "$WORK/gradcheck/run.log" | head -5
+  fi
+  # two samples: data_enr.dat = 0.1 sigma_A + 0.9 sigma_B; four free abundances, two sum-to-one priors
+  paste "$WORK/a.Amat" "$WORK/b.Amat" | awk '{ e = 1.0 + (NR - 1) * 0.002; v = 0.1 * $2 + 0.9 * $4; printf "%.6f 0 %.12e %.12e\n", e, v, 0.001 * v }' > "$WORK/data_enr.dat"
+  (cd "$WORK" && mkdir -p gradcheck2/output gradcheck2/checks && cp data.dat data_enr.dat gradcheck2/ && cp "$M/M_samples_data.azr" gradcheck2/t.azr &&
+   cd gradcheck2 && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit run_limited 600 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
+  line="$(grep "abundance" "$WORK/gradcheck2/run.log" | head -1)"
+  if echo "$line" | grep -Eq "abundance[^0-9]*0/4"; then ok "gradient check with two samples: 4 abundances agree with finite differences"; else bad "gradient check with two samples: $line"; fi
+  run "fit2" "$M/M_samples_data.azr" true "" 2 || true
+  sav="$WORK/fit2/output/param.sav"
+  if [ -s "$sav" ]; then
+    v="$(awk '$1 == "abundance_7_13" || $1 == "abundance_7_14" || $1 == "abundance_enr_7_13" || $1 == "abundance_enr_7_14" { printf "%s ", $2 }' "$sav")"
+    if awk -v v="$v" 'BEGIN { n = split(v, a, " "); exit !(n == 4 && (a[1]-0.6)^2 < 1e-6 && (a[2]-0.4)^2 < 1e-6 && (a[3]-0.1)^2 < 1e-6 && (a[4]-0.9)^2 < 1e-6) }'; then ok "fit with two samples recovers 0.6 / 0.4 and 0.1 / 0.9 ($v)"; else bad "fit with two samples gave $v (want 0.6 0.4 0.1 0.9)"; tail -5 "$WORK/fit2/run.log"; fi
+  else
+    bad "two-sample fit wrote no param.sav"; tail -8 "$WORK/fit2/run.log"
   fi
   # a fit from 0.5 / 0.5 must find 0.6 / 0.4
   run "fit" "$M/M_data.azr" true "" 2 || true
@@ -144,7 +177,7 @@ else
 fi
 
 # ---- (d) refused models ----------------------------------------------------------------------------------
-for name in bad_level bad_ratio bad_key; do
+for name in bad_level bad_ratio bad_key bad_sample; do
   run "$name" "$M/$name.azr" true "" || true
   if grep -q "ERROR" "$WORK/$name/run.log" && ! ls "$WORK/$name/output"/AZUREOut_* > /dev/null 2>&1; then
     ok "$name refused: $(grep -m1 ERROR "$WORK/$name/run.log" | cut -c1-90)"

@@ -95,12 +95,13 @@ void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &
  */
 void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum) {
   if (!compound->HasAbundanceBlock()) return;
-  const double s = configure.abundanceSumSigma;
-  const double sumTerm = (s > 0.0) ? 2.0 * (compound->AbundanceSum() - 1.0) / (s * s) : 0.0;
   for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
-    const CompoundNucleus *nucleus = compound->GetNucleus(k);
-    double g = sumTerm;
-    if (nucleus->sigma > 0.0) g += 2.0 * (nucleus->abundance - nucleus->nominal) / (nucleus->sigma * nucleus->sigma);
+    int sample, nucleus;
+    compound->AbundanceOf(k, sample, nucleus);
+    const double s = compound->SampleSumSigma(sample, configure.abundanceSumSigma);
+    double g = (s > 0.0) ? 2.0 * (compound->AbundanceSum(sample) - 1.0) / (s * s) : 0.0;
+    const SampleAbundance &e = compound->GetSample(sample)->entries[nucleus - 1];
+    if (e.sigma > 0.0) g += 2.0 * (e.abundance - e.nominal) / (e.sigma * e.sigma);
     accum.AddAbundance(k, g);
   }
 }
@@ -206,8 +207,8 @@ int ParamIndexMap::EnergyShiftSqrtIndex(int segment) const {
   return (it == sqrtShiftIndex_.end()) ? -1 : it->second;
 }
 
-int ParamIndexMap::AbundanceIndex(int nucleus) const {
-  auto it = abundanceIndex_.find(nucleus);
+int ParamIndexMap::AbundanceIndex(int ordinal) const {
+  auto it = abundanceIndex_.find(ordinal);
   return (it == abundanceIndex_.end()) ? -1 : it->second;
 }
 
@@ -245,11 +246,11 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
     }
   }
 
-  // --- Isotopic abundances: one per compound nucleus, only with an <abundances> block. ---
+  // --- Isotopic abundances: one per (sample, nucleus), only with an <abundances> block. ---
   for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
     map.abundanceIndex_[k] = i;
     ParamDesc d{ParamKind::Abundance, -1, -1, -1, -1, false};
-    d.nucleus = k;
+    compound->AbundanceOf(k, d.sample, d.nucleus);
     map.desc_.push_back(d);
     i++;
   }
@@ -498,6 +499,7 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
   // A natural-target segment weights each term by its nucleus's abundance;
   // d(model)/d(abundance_k) is the unweighted sum of that nucleus's terms.
   const bool natural = segment->IsNatural();
+  const int sample = segment->GetNaturalSample();
   auto abundanceOf = [&](int entranceKey) {
     return compound->GetPair(compound->GetPairNumFromKey(entranceKey))->GetNucleus();
   };
@@ -521,11 +523,11 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
     double weight = 1.0;
     if (natural) {
       const int nucleus = abundanceOf(segment->GetEntranceKey());
-      weight = compound->GetNucleus(nucleus)->abundance;
+      weight = compound->GetAbundance(sample, nucleus);
       outModel = weight * model;
       double fitBar = fitBarFn(segment, i, pointIdx, outModel);
       if (fitBar == 0.0) return true;
-      accum.AddAbundance(nucleus, fitBar * model);
+      accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * model);
       return amf.PointAdjoint(point, fitBar * weight, accum, shiftDeriv, baseComp);
     }
     outModel = model;
@@ -548,8 +550,8 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
   double baseWeight = 1.0;
   if (natural) {
     const int nucleus = abundanceOf(segment->GetEntranceKey());
-    baseWeight = compound->GetNucleus(nucleus)->abundance;
-    accum.AddAbundance(nucleus, fitBar * baseVal);
+    baseWeight = compound->GetAbundance(sample, nucleus);
+    accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * baseVal);
   }
   if (!hasComp) {
     return GradAdjointPoint(point, baseComp, fitBar * baseWeight, accum, shiftDeriv, compound, config);
@@ -565,8 +567,8 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
       double compWeight = 1.0;
       if (natural) {
         const int nucleus = abundanceOf(comp->GetEntranceKey());
-        compWeight = compound->GetNucleus(nucleus)->abundance;
-        accum.AddAbundance(nucleus, fitBar * comp->GetComponentScaling() * cv);
+        compWeight = compound->GetAbundance(sample, nucleus);
+        accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * comp->GetComponentScaling() * cv);
       }
       if (!GradAdjointPoint(cp, comp->GetCrossSectionComponent(),
                             fitBar * comp->GetComponentScaling() * compWeight, accum,

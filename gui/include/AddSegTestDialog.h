@@ -53,12 +53,18 @@ class AddSegTestDialog : public QDialog {
   QLabel *totalCaptureLabel;
   QSpinBox *angDistSpin;
 
-  /*! "Natural target": the term and each component are weighted by the isotopic
-   *  abundance of their entrance pair's compound nucleus (keyword tail "natural 1").
-   *  Shown only when the pairs form more than one compound nucleus; cleared and
-   *  disabled for the observables the engine refuses (ratio, phase shift, analyzing power). */
-  QCheckBox *naturalCheck;
-  /*! True when the current observable and operation allow a natural-target segment. */
+  /*! "Natural target": the term and each component are weighted by the isotopic abundance of their
+   *  entrance pair's compound nucleus in one sample of the <abundances> block (keyword tail
+   *  "natural 1" for the default sample, "natural <name>" for a named one).  Shown only when the pairs
+   *  form more than one compound nucleus; reset to "No" and disabled for the observables the engine
+   *  refuses (ratio, phase shift, analyzing power). */
+  QLabel *naturalLabel;
+  QComboBox *naturalCombo;
+  /*! Fill the drop-down from the model's samples ("" = the default sample first). */
+  void setSamples(const QStringList &samples);
+  /*! The chosen token: "" (not natural), "1" (default sample) or a sample name. */
+  QString naturalToken() const;
+  void setNaturalToken(const QString &token);
   bool naturalAllowed() const;
   QCheckBox *advancedModeCheck;
   QGroupBox *advancedModeBox;

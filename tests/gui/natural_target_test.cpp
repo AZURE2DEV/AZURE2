@@ -104,9 +104,18 @@ int main(int argc, char** argv) {
   ok("abundance table has one row per nucleus", abundances->rowCount() == 2, QString::number(abundances->rowCount()));
   ok("two nuclei: the block is written even at the defaults", pairsTab.hasAbundanceBlock() && abundances->isDefault());
   {
-    QString in("7 13 0.6 0 0\n7 14 0.4 1 0.05\n</abundances>\n");
+    QString in("7 13 0.6 0 0\n7 14 0.4 1 0.05\nenr: 7 13 0.1 0 0\nenr: 7 14 0.9 1 0.02\nenr: sum 0.01\n</abundances>\n");
     QTextStream inStream(&in);
     ok("block read", pairsTab.readAbundances(inStream));
+    ok("two samples", abundances->samples() == (QStringList() << QString() << "enr"), abundances->samples().join(","));
+    AbundanceEntry e2 = abundances->entry("enr", Nucleus{7, 14});
+    ok("the named sample's entry", e2.value == 0.9 && e2.vary && e2.sigma == 0.02 && e2.sample == "enr");
+    ok("the named sample's own sum width", abundances->sampleSumSigma("enr") == 0.01 && abundances->sampleSumSigma(QString()) == -1.0);
+    ok("parameter names", AbundancesModel::parameterName(e2) == "abundance_enr_7_14" &&
+       AbundancesModel::parameterName(abundances->entry(Nucleus{7, 13})) == "abundance_7_13");
+    abundances->setCurrentSample("enr");
+    ok("the table shows the chosen sample", abundances->data(abundances->index(1, AbundancesModel::ValueCol), Qt::DisplayRole).toDouble() == 0.9);
+    abundances->setCurrentSample(QString());
     AbundanceEntry a = abundances->entry(Nucleus{7, 13}), b = abundances->entry(Nucleus{7, 14});
     ok("entries", a.value == 0.6 && !a.vary && a.sigma == 0.0 && b.value == 0.4 && b.vary && b.sigma == 0.05,
        QString("%1 %2 %3 / %4 %5 %6").arg(a.value).arg(a.vary).arg(a.sigma).arg(b.value).arg(b.vary).arg(b.sigma));
@@ -115,7 +124,8 @@ int main(int argc, char** argv) {
     pairsTab.writeAbundances(outStream);
     QStringList written = tokens(out);
     for (QString& line : written) line = line.section('#', 0, 0).trimmed();  // the writer comments each line with the nucleus
-    ok("block written back", written == (QStringList() << "7 13 0.6 0 0" << "7 14 0.4 1 0.05"), tokens(out).join(" | "));
+    ok("block written back, sample by sample", written == (QStringList() << "7 13 0.6 0 0" << "7 14 0.4 1 0.05" << "enr: 7 13 0.1 0 0" << "enr: 7 14 0.9 1 0.02" << "enr: sum 0.01"), tokens(out).join(" | "));
+    ok("a bad sample name is refused", !abundances->addSample("two words") && !abundances->addSample("a:b"));
     ok("sum sigma default off", pairsTab.abundanceSumSigma() == 0.0);
     pairsTab.setAbundanceSumSigma(0.01);
     ok("sum sigma set", pairsTab.abundanceSumSigma() == 0.01);
@@ -213,27 +223,31 @@ int main(int argc, char** argv) {
   {
     AddSegDataDialog dialog;
     dialog.setPairsModel(&pairs);
-    ok("data dialog: natural box shown with two nuclei", !dialog.naturalCheck->isHidden() && dialog.naturalCheck->isEnabled());
-    dialog.naturalCheck->setChecked(true);
+    dialog.setSamples(QStringList() << QString() << "enr");
+    ok("data dialog: natural box shown with two nuclei", !dialog.naturalCombo->isHidden() && dialog.naturalCombo->isEnabled());
+    ok("data dialog lists No, the default sample and enr", dialog.naturalCombo->count() == 3, QString::number(dialog.naturalCombo->count()));
+    dialog.setNaturalToken("enr");
+    ok("token round trip", dialog.naturalToken() == "enr", dialog.naturalToken());
+    dialog.setNaturalToken("1");
     dialog.advancedModeCheck->setChecked(true);
     dialog.operationCombo->setCurrentIndex(1);  // ratio
-    ok("ratio clears and disables it", !dialog.naturalCheck->isEnabled() && !dialog.naturalCheck->isChecked());
+    ok("ratio clears and disables it", !dialog.naturalCombo->isEnabled() && dialog.naturalToken().isEmpty());
     dialog.operationCombo->setCurrentIndex(0);  // sum
-    ok("sum allows it again", dialog.naturalCheck->isEnabled());
+    ok("sum allows it again", dialog.naturalCombo->isEnabled());
     dialog.setDataTypeCode(2);  // phase shift
-    ok("phase shift refuses it", !dialog.naturalCheck->isEnabled());
+    ok("phase shift refuses it", !dialog.naturalCombo->isEnabled());
     dialog.setDataTypeCode(0);
     ok("total cross section allows it", dialog.naturalAllowed());
     PairsModel one;
     addPair(one, 0, P_12C);
     AddSegDataDialog single;
     single.setPairsModel(&one);
-    ok("data dialog: hidden with one nucleus", single.naturalCheck->isHidden());
+    ok("data dialog: hidden with one nucleus", single.naturalCombo->isHidden());
     AddSegTestDialog test;
     test.setPairsModel(&pairs);
-    ok("test dialog: shown with two nuclei", !test.naturalCheck->isHidden());
+    ok("test dialog: shown with two nuclei", !test.naturalCombo->isHidden());
     test.setDataTypeCode(3);  // angular-distribution coefficients
-    ok("test dialog: refused for angular-distribution coefficients", !test.naturalCheck->isEnabled());
+    ok("test dialog: refused for angular-distribution coefficients", !test.naturalCombo->isEnabled());
   }
   SegmentsTab segmentsTab;
   segmentsTab.setPairsModel(&pairs);
@@ -247,6 +261,14 @@ int main(int argc, char** argv) {
     QString natLabel = model->data(model->index(0, 1), Qt::DisplayRole).toString();
     QString plainLabel = model->data(model->index(1, 1), Qt::DisplayRole).toString();
     ok("natural row is flagged 'nat' in its label", natLabel.contains("<i>nat</i>"), natLabel);
+    QString in2("1 2 2 1.0 2.0 0 0 0 1 0 0 0 0 0 enr.dat 0 0 natural enr\n</segmentsData>\n");
+    QTextStream inStream2(&in2);
+    segmentsTab.readSegDataFile(inStream2);
+    QString sampleLabel = model->data(model->index(2, 1), Qt::DisplayRole).toString();
+    ok("a named-sample row is flagged nat:<sample>", sampleLabel.contains("<i>nat:enr</i>"), sampleLabel);
+    ok("SegmentKeywords sample token", SegmentKeywords::naturalSample("sqrtshift 0.1 0.2 1 natural enr") == "enr" &&
+       SegmentKeywords::naturalSample("natural 1") == "1" && SegmentKeywords::naturalSample("natural 0").isEmpty() &&
+       SegmentKeywords::withNaturalToken("natural 1", "enr") == "natural enr");
     ok("plain row is not", !plainLabel.contains("nat"), plainLabel);
     QString out;
     QTextStream outStream(&out);
@@ -268,14 +290,16 @@ int main(int argc, char** argv) {
       if (params[i].category == "level") lastLevel = i;
       if (params[i].category == "norm" && firstNorm < 0) firstNorm = i;
     }
-    ok("one abundance parameter per nucleus", nAbundance == 2, QString::number(nAbundance));
+    ok("one abundance parameter per nucleus and sample", nAbundance == 4, QString::number(nAbundance));
     ok("abundances sit after the levels and before the normalizations",
        firstAbundance > lastLevel && (firstNorm < 0 || firstAbundance < firstNorm),
        QString("%1 %2 %3").arg(lastLevel).arg(firstAbundance).arg(firstNorm));
-    if (nAbundance == 2) {
+    if (nAbundance == 4) {
       const FittingParameter& a = params[firstAbundance];
       const FittingParameter& b = params[firstAbundance + 1];
-      ok("named as in param.sav", a.name == "abundance_7_13" && b.name == "abundance_7_14", a.name + " " + b.name);
+      ok("named as in param.sav, samples as blocks", a.name == "abundance_7_13" && b.name == "abundance_7_14" &&
+         params[firstAbundance + 2].name == "abundance_enr_7_13" && params[firstAbundance + 3].name == "abundance_enr_7_14",
+         a.name + " " + b.name + " " + params[firstAbundance + 2].name);
       ok("value, sigma and vary from the table", a.value == 0.6 && !a.useAsNuisance && b.value == 0.4 && b.useAsNuisance && b.error == 0.05);
       ok("only the fitted abundance takes a Minuit slot", a.minuitIndex == -1 && b.minuitIndex >= 0,
          QString("%1 %2").arg(a.minuitIndex).arg(b.minuitIndex));

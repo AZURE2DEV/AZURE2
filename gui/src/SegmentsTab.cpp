@@ -15,6 +15,7 @@
 #include "PairsModel.h"
 #include "ExforDialog.h"
 #include "SegmentKeywords.h"
+#include "AbundancesModel.h"
 
 static bool isSegmentKeyword(const QString &token);
 
@@ -252,6 +253,7 @@ void SegmentsTab::deleteSegTestLine() {
 void SegmentsTab::addSegDataLine() {
   AddSegDataDialog aDialog;
   aDialog.setPairsModel(pairsModel);
+  aDialog.setSamples(abundancesModel ? abundancesModel->samples() : QStringList() << QString());
   if (aDialog.exec()) {
     SegmentsDataData newLine;
     newLine.isActive = 1;
@@ -305,7 +307,7 @@ void SegmentsTab::addSegDataLine() {
       newLine.finalJ = 0.0;
       newLine.delta = 0.0;
     }
-    newLine.extraTokens = SegmentKeywords::withNatural(QString(), aDialog.naturalCheck->isChecked());
+    newLine.extraTokens = SegmentKeywords::withNaturalToken(QString(), aDialog.naturalToken());
     addSegDataLine(newLine);
   }
 }
@@ -374,6 +376,7 @@ void SegmentsTab::addSegDataLine(SegmentsDataData line) {
 void SegmentsTab::addSegTestLine() {
   AddSegTestDialog aDialog;
   aDialog.setPairsModel(pairsModel);
+  aDialog.setSamples(abundancesModel ? abundancesModel->samples() : QStringList() << QString());
   if (aDialog.exec()) {
     SegmentsTestData newLine;
     newLine.isActive = 1;
@@ -406,7 +409,7 @@ void SegmentsTab::addSegTestLine() {
       newLine.operationType = 0;
       newLine.componentsList = "";
     }
-    newLine.extraTokens = SegmentKeywords::withNatural(QString(), aDialog.naturalCheck->isChecked());
+    newLine.extraTokens = SegmentKeywords::withNaturalToken(QString(), aDialog.naturalToken());
     addSegTestLine(newLine);
   }
 }
@@ -534,8 +537,9 @@ void SegmentsTab::editSegDataLine() {
 
   AddSegDataDialog aDialog;
   aDialog.setPairsModel(pairsModel);
+  aDialog.setSamples(abundancesModel ? abundancesModel->samples() : QStringList() << QString());
   aDialog.setWindowTitle(tr("Edit a Segment From Data"));
-  aDialog.naturalCheck->setChecked(SegmentKeywords::isNatural(extraTokens));
+  aDialog.setNaturalToken(SegmentKeywords::naturalSample(extraTokens));
   aDialog.entrancePairCombo->setKey(entrancePairIndex);
   aDialog.exitPairCombo->setKey(exitPairIndex);
   aDialog.lowEnergyText->setText(lowEnergy);
@@ -712,7 +716,7 @@ void SegmentsTab::editSegDataLine() {
       i = segmentsDataModel->index(index.row(), 23, QModelIndex());
       segmentsDataModel->setData(i, newDelta, Qt::EditRole);
     }
-    QString newExtraTokens = SegmentKeywords::withNatural(extraTokens, aDialog.naturalCheck->isChecked());
+    QString newExtraTokens = SegmentKeywords::withNaturalToken(extraTokens, aDialog.naturalToken());
     if (newExtraTokens != extraTokens) segmentsDataModel->setLineExtras(index.row(), newExtraTokens);
   }
 }
@@ -772,8 +776,9 @@ void SegmentsTab::editSegTestLine() {
 
   AddSegTestDialog aDialog;
   aDialog.setPairsModel(pairsModel);
+  aDialog.setSamples(abundancesModel ? abundancesModel->samples() : QStringList() << QString());
   aDialog.setWindowTitle(tr("Edit a Segment Without Data"));
-  aDialog.naturalCheck->setChecked(SegmentKeywords::isNatural(extraTokens));
+  aDialog.setNaturalToken(SegmentKeywords::naturalSample(extraTokens));
   aDialog.entrancePairCombo->setKey(entrancePairIndex);
   aDialog.exitPairCombo->setKey(exitPairIndex);
   aDialog.lowEnergyText->setText(lowEnergy);
@@ -887,7 +892,7 @@ void SegmentsTab::editSegTestLine() {
       i = segmentsTestModel->index(index.row(), 15, QModelIndex());
       segmentsTestModel->setData(i, newComponentsList, Qt::EditRole);
     }
-    QString newExtraTokens = SegmentKeywords::withNatural(extraTokens, aDialog.naturalCheck->isChecked());
+    QString newExtraTokens = SegmentKeywords::withNaturalToken(extraTokens, aDialog.naturalToken());
     if (newExtraTokens != extraTokens) segmentsTestModel->setLineExtras(index.row(), newExtraTokens);
   }
 }
