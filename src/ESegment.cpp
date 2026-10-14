@@ -678,6 +678,13 @@ double ESegment::TotalEnergyShift(double labEnergy) const {
   return energyShift_ + energyShiftSqrt_ * sqrt(fabs(labEnergy));
 }
 
+void ESegment::AddShiftPenalty(double &chi) const {
+  if (varyEnergyShift_ && energyShiftError_ != 0.0)
+    chi += pow((energyShift_ - energyShiftNominal_) / energyShiftError_, 2.0);
+  if (varyEnergyShiftSqrt_ && energyShiftSqrtError_ != 0.0)
+    chi += pow((energyShiftSqrt_ - energyShiftSqrtNominal_) / energyShiftSqrtError_, 2.0);
+}
+
 void ESegment::SetEnergyShiftSqrt(double energyShiftSqrt) {
   energyShiftSqrt_ = energyShiftSqrt;
 }

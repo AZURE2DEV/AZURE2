@@ -135,6 +135,11 @@ class ESegment {
   void SetHasShiftGroupFollowers(bool);
   /// The whole lab-energy shift at a point's original lab energy: a + b*sqrt(E).
   double TotalEnergyShift(double labEnergy) const;
+  /// Add this segment's energy-shift penalties, ((x - nominal)/sigma)^2 for each varied
+  /// shift term with sigma != 0, to chi.  The one definition every chi^2 path uses; the
+  /// index form (gradient, curvature, least-squares priors) is ForEachShiftPenalty in
+  /// AZURECalc.cpp and must list the same terms.
+  void AddShiftPenalty(double &chi) const;
   /// Is this a composite segment, combining others by sum or ratio?
   bool IsAdvanced() const;
   /// Combination type as an integer: 0 sum, 1 ratio.

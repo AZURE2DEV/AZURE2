@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <string>
+#include <map>
 #include <set>
 #include <fstream>
 #include <mutex>
@@ -112,19 +113,27 @@ double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config,
     double err = pt->GetCMCrossSectionError() * norm;
     if (err != 0.0) chi += (r * r) / (err * err);
   }
-  if (segment->IsVaryEnergyShift()) {
-    double sh = segment->GetEnergyShift();
-    double shn = segment->GetNominalEnergyShift();
-    double she = segment->GetEnergyShiftError();
-    if (she != 0.0) chi += pow((sh - shn) / she, 2.0);
-  }
-  if (segment->IsVaryEnergyShiftSqrt()) {
-    double sq = segment->GetEnergyShiftSqrt();
-    double sqn = segment->GetNominalEnergyShiftSqrt();
-    double sqe = segment->GetEnergyShiftSqrtError();
-    if (sqe != 0.0) chi += pow((sq - sqn) / sqe, 2.0);
-  }
+  segment->AddShiftPenalty(chi);
   return chi;
+}
+
+// The shift penalties as (full parameter index, nominal, sigma), for the code
+// that needs a penalty's derivatives rather than its value: d/dx = 2 (x - nominal)
+// / sigma^2, curvature 2 / sigma^2.  Exactly the terms ESegment::AddShiftPenalty
+// adds, so the gradient, G2 and the least-squares priors stay consistent with
+// chi^2.
+template <class F>
+void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
+  for (int s = 1; s <= data->NumSegments(); s++) {
+    ESegment *seg = data->GetSegment(s);
+    if (!seg) continue;
+    int idx;
+    if (seg->IsVaryEnergyShift() && seg->GetEnergyShiftError() != 0.0 && (idx = pmap.EnergyShiftIndex(s)) >= 0)
+      f(idx, seg->GetNominalEnergyShift(), seg->GetEnergyShiftError());
+    if (seg->IsVaryEnergyShiftSqrt() && seg->GetEnergyShiftSqrtError() != 0.0 &&
+        (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0)
+      f(idx, seg->GetNominalEnergyShiftSqrt(), seg->GetEnergyShiftSqrtError());
+  }
 }
 
 }  // namespace
@@ -310,24 +319,8 @@ double AZURECalc::operator()(const vector_r &p) const {
         chiSquared += pow((dataNorm - dataNormNominal) / dataNormError, 2.0);
       }
 
-      // Add energy shift chi-squared contribution
-      if (segment->IsVaryEnergyShift()) {
-        double energyShift = segment->GetEnergyShift();
-        double energyShiftNominal = segment->GetNominalEnergyShift();
-        double energyShiftError = segment->GetEnergyShiftError();
-        if (energyShiftError != 0.) {
-          chiSquared += pow((energyShift - energyShiftNominal) / energyShiftError, 2.0);
-        }
-      }
-      // ... and the same for the sqrt(E) energy-shift coefficient
-      if (segment->IsVaryEnergyShiftSqrt()) {
-        double sq = segment->GetEnergyShiftSqrt();
-        double sqn = segment->GetNominalEnergyShiftSqrt();
-        double sqe = segment->GetEnergyShiftSqrtError();
-        if (sqe != 0.) {
-          chiSquared += pow((sq - sqn) / sqe, 2.0);
-        }
-      }
+      // Add the energy-shift penalties
+      segment->AddShiftPenalty(chiSquared);
 
       segment->SetSegmentChiSquared(segmentChiSquared);
       chiSquared += segmentChiSquared;
@@ -508,18 +501,7 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
     double nom = segment->GetNominalNorm();
     double nerr = nom / 100.0 * segment->GetNormError();
     if (nerr != 0.0) chiSquared += pow((dataNorm - nom) / nerr, 2.0);
-    if (segment->IsVaryEnergyShift()) {
-      double sh = segment->GetEnergyShift();
-      double shn = segment->GetNominalEnergyShift();
-      double she = segment->GetEnergyShiftError();
-      if (she != 0.0) chiSquared += pow((sh - shn) / she, 2.0);
-    }
-    if (segment->IsVaryEnergyShiftSqrt()) {
-      double sq = segment->GetEnergyShiftSqrt();
-      double sqn = segment->GetNominalEnergyShiftSqrt();
-      double sqe = segment->GetEnergyShiftSqrtError();
-      if (sqe != 0.0) chiSquared += pow((sq - sqn) / sqe, 2.0);
-    }
+    segment->AddShiftPenalty(chiSquared);
     chiSquared += segChi;
   }
   if (limitsManager_) chiSquared += CalculateNuisanceChiSquared(p);
@@ -930,15 +912,12 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
       const double n0 = seg->GetNominalNorm(), nerr = n0 / 100.0 * seg->GetNormError();
       if (nerr != 0.0) { grad[idx] += 2.0 * (p[idx] - n0) / (nerr * nerr); g2[idx] += 2.0 / (nerr * nerr); }
     }
-    if (seg->IsVaryEnergyShift() && (idx = pmap.EnergyShiftIndex(s)) >= 0 && idx < (int)p.size()) {
-      const double e = seg->GetEnergyShiftError();
-      if (e != 0.0) { grad[idx] += 2.0 * (p[idx] - seg->GetNominalEnergyShift()) / (e * e); g2[idx] += 2.0 / (e * e); }
-    }
-    if (seg->IsVaryEnergyShiftSqrt() && (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0 && idx < (int)p.size()) {
-      const double e = seg->GetEnergyShiftSqrtError();
-      if (e != 0.0) { grad[idx] += 2.0 * (p[idx] - seg->GetNominalEnergyShiftSqrt()) / (e * e); g2[idx] += 2.0 / (e * e); }
-    }
   }
+  ForEachShiftPenalty(data(), pmap, [&](int idx, double nominal, double e) {
+    if (idx >= (int)p.size()) return;
+    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    g2[idx] += 2.0 / (e * e);
+  });
   g2CacheP_ = p;
   g2Cache_ = g2;
   return true;
@@ -968,13 +947,10 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
       const double nerr = seg->GetNominalNorm() / 100.0 * seg->GetNormError();
       if (nerr != 0.0) g2[idx] += 2.0 / (nerr * nerr);
     }
-    if (seg->IsVaryEnergyShift() && (idx = pmap.EnergyShiftIndex(s)) >= 0 && idx < (int)g2.size() &&
-        seg->GetEnergyShiftError() != 0.0)
-      g2[idx] += 2.0 / (seg->GetEnergyShiftError() * seg->GetEnergyShiftError());
-    if (seg->IsVaryEnergyShiftSqrt() && (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0 && idx < (int)g2.size() &&
-        seg->GetEnergyShiftSqrtError() != 0.0)
-      g2[idx] += 2.0 / (seg->GetEnergyShiftSqrtError() * seg->GetEnergyShiftSqrtError());
   }
+  ForEachShiftPenalty(data(), pmap, [&](int idx, double, double e) {
+    if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
+  });
   static std::atomic<int> g2Calls{0};
   if (std::getenv("AZURE_GRAD_TIMING")) {
     int c = ++g2Calls;
@@ -1373,6 +1349,10 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
   hi.assign(nFree, std::numeric_limits<double>::infinity());
   pen_nom.assign(nFree, 0.0);
   pen_inv2.assign(nFree, 0.0);
+  // Shift priors by full parameter index (p2f holds full indices of the same map).
+  std::map<int, std::pair<double, double>> shiftPrior;  // full index -> (nominal, sigma)
+  ForEachShiftPenalty(data(), BuildParamIndexMap(compound(), data(), std::vector<bool>()),
+                      [&](int idx, double nominal, double sig) { shiftPrior[idx] = {nominal, sig}; });
   for (int a = 0; a < nFree; a++) {
     int f = p2f[a];
     x[a] = full[f];
@@ -1400,28 +1380,10 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
         }
       }
     } else if (name.find("shift") != std::string::npos) {
-      for (int s = 1; s <= data()->NumSegments(); s++) {
-        ESegment *seg = data()->GetSegment(s);
-        if (!seg) continue;
-        char vn[64], vs[64];
-        snprintf(vn, sizeof(vn), "segment_%d_energy_shift", seg->GetSegmentKey());
-        snprintf(vs, sizeof(vs), "segment_%d_energy_shift_sqrt", seg->GetSegmentKey());
-        if (name == vn && seg->IsVaryEnergyShift()) {
-          double sig = seg->GetEnergyShiftError();
-          if (sig != 0.0) {
-            pen_nom[a] = seg->GetNominalEnergyShift();
-            pen_inv2[a] = 1.0 / (sig * sig);
-          }
-          break;
-        }
-        if (name == vs && seg->IsVaryEnergyShiftSqrt()) {
-          double sig = seg->GetEnergyShiftSqrtError();
-          if (sig != 0.0) {
-            pen_nom[a] = seg->GetNominalEnergyShiftSqrt();
-            pen_inv2[a] = 1.0 / (sig * sig);
-          }
-          break;
-        }
+      auto it = shiftPrior.find(f);
+      if (it != shiftPrior.end()) {
+        pen_nom[a] = it->second.first;
+        pen_inv2[a] = 1.0 / (it->second.second * it->second.second);
       }
     } else if (limitsManager_ && limitsManager_->IsNuisanceParameterByIndex(a)) {
       double sig = limitsManager_->GetConvertedErrorByIndex(a);
