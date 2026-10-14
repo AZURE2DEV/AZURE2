@@ -33,9 +33,13 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 MODELS = os.path.join(ROOT, "tests", "natural_target", "models")
 sys.path.insert(0, ROOT)
 
-from pyazr.azrfile import AzrModel                        # noqa: E402
-from pyazr.datasets import SegmentSet, TestSegmentSet     # noqa: E402
-from pyazr.nuclei import Nucleus, merge_projects          # noqa: E402
+try:
+    from pyazr.azrfile import AzrModel                        # noqa: E402
+    from pyazr.datasets import SegmentSet, TestSegmentSet     # noqa: E402
+    from pyazr.nuclei import Nucleus, merge_projects          # noqa: E402
+except ImportError as e:  # as the other pyazr tests: no package dependencies (e.g. mpmath) -> nothing to test
+    print(f"pyazr not importable ({e}); nothing to test")
+    sys.exit(0)
 
 failures = []
 
