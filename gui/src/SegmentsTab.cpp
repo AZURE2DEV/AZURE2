@@ -1296,6 +1296,7 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
 static bool isSegmentKeyword(const QString &token) {
   return token.compare("sqrtshift", Qt::CaseInsensitive) == 0 ||
          token.compare("shiftgroup", Qt::CaseInsensitive) == 0 ||
+         token.compare("shiftfn", Qt::CaseInsensitive) == 0 ||
          token.compare("mixture", Qt::CaseInsensitive) == 0;
 }
 

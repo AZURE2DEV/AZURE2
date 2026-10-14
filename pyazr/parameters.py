@@ -17,7 +17,7 @@ from typing import Optional
 
 
 # Parameter kinds, indexed by the integer ``type`` code in the C++ record.
-_KINDS = {0: "energy", 1: "width", 2: "norm", 3: "shift", 4: "shift_sqrt"}
+_KINDS = {0: "energy", 1: "width", 2: "norm", 3: "shift", 4: "shift_sqrt", 5: "shift_fn"}
 
 
 @dataclass(frozen=True)
@@ -67,7 +67,7 @@ class Parameter:
 
     index: int                      # position among *all* parameters
     name: str                       # raw AZURE2 parameter name
-    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt'
+    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'shift_fn'
     fixed: bool                     # held fixed during the fit?
     value: float                    # current (physical) value
     free_index: Optional[int]       # position among the non-fixed parameters
@@ -94,6 +94,11 @@ class Parameter:
 
     # Data-segment information (norm / shift parameters).
     segment_key: Optional[int] = None
+
+    @property
+    def fn_term(self) -> Optional[int]:
+        """j of a shift-function parameter aj (``kind == 'shift_fn'``), else ``None``."""
+        return self.channel if self.kind == "shift_fn" else None
 
     @property
     def jpi(self) -> Optional[str]:
@@ -149,8 +154,10 @@ class Parameter:
             bits.append(f"rad={self.radiation_type}")
             if self.wigner_limit is not None:
                 bits.append(f"wigner={self.wigner_limit:.4g}")
-        if self.kind in ("norm", "shift", "shift_sqrt"):
+        if self.kind in ("norm", "shift", "shift_sqrt", "shift_fn"):
             bits.append(f"segment={self.segment_key}")
+        if self.kind == "shift_fn":
+            bits.append(f"a{self.fn_term}")
         return "Parameter(" + ", ".join(bits) + ")"
 
 
@@ -380,6 +387,18 @@ class ParameterSet(list):
         ``sqrtshift`` block.
         """
         return ParameterSet(p for p in self if p.kind == "shift_sqrt")
+
+    @property
+    def fn_shifts(self):
+        """The shift-function parameters a0, a1, ... of the segments whose line
+        carries a ``shiftfn`` block (none otherwise).
+
+        Segment energies are shifted as E' = E + a + f(E; a0, a1, ...); for
+        these parameters :attr:`Parameter.fn_term` is j and
+        :attr:`Parameter.segment_key` the segment that declares f (on a shift
+        group, its first segment; f applies to every member).
+        """
+        return ParameterSet(p for p in self if p.kind == "shift_fn")
 
     # -- lookups --------------------------------------------------------------
 

@@ -16,10 +16,14 @@ Layout of a ``<segmentsData>`` line (see ``include/SegLine.h``)::
         [phaseJ phaseL if isDiff==2]
         dataNorm varyNorm dataNormError
         [energyShift energyShiftError varyEnergyShift]      (optional)
-        dataFile  [advanced flags ...]  [sqrtshift b bError varyB]
+        dataFile  [advanced flags ...]  [keyword blocks]
 
-The trailing ``sqrtshift`` keyword block adds a sqrt(E) term to the segment's
-energy shift, E' = E + energyShift + b*sqrt(E/MeV), b in MeV^1/2.
+The trailing keyword blocks (any order): ``sqrtshift b bError varyB`` adds a
+sqrt(E) term to the segment's energy shift, E' = E + energyShift + b*sqrt(E/MeV),
+b in MeV^1/2; ``shiftgroup <label>`` makes the segments with one label share one
+constant shift (the first one's); ``shiftfn "<f(x)>" N v0 s0 vary0 ...`` adds
+f(x; a0..a(N-1)) at the original lab energy x (MeV), on a group's first segment
+for the whole group.
 
 Layout of a ``<segmentsTest>`` line (see ``include/ExtrapLine.h``)::
 
@@ -44,13 +48,14 @@ import numpy as np
 
 
 #: Keyword blocks a segment line may end with (SegLine.h).
-_KEYWORDS = ("sqrtshift", "shiftgroup")
+_KEYWORDS = ("sqrtshift", "shiftgroup", "shiftfn")
 
 
 def _parse_keyword_blocks(tokens):
-    """``{"sqrtshift": [b, bErr, vary], "shiftgroup": label}`` from the tokens
-    starting at the first keyword; unknown trailing text is ignored, like the
-    engine does."""
+    """``{"sqrtshift": [b, bErr, vary], "shiftgroup": label,
+    "shiftfn": (expression, [(v, sigma, vary), ...])}`` from the tokens starting
+    at the first keyword; unknown trailing text is ignored, like the engine
+    does."""
     toks = list(tokens)
     blocks, i = {}, 0
     while i < len(toks):
@@ -61,6 +66,24 @@ def _parse_keyword_blocks(tokens):
             if i >= len(toks):
                 raise ValueError("shiftgroup without a label: " + " ".join(tokens))
             blocks["shiftgroup"] = toks[i]; i += 1
+        elif kw == "shiftfn":
+            # A quoted expression (blanks inside are dropped, as the engine
+            # does), then N and N (value, sigma, vary) triples.
+            if i >= len(toks):
+                raise ValueError("shiftfn without an expression: " + " ".join(tokens))
+            expr = toks[i]; i += 1
+            if expr.startswith('"'):
+                while not (len(expr) > 1 and expr.endswith('"')) and i < len(toks):
+                    expr += toks[i]; i += 1
+                expr = expr.strip('"')
+            try:
+                n = int(toks[i]); i += 1
+                params = [(float(toks[i + 3 * j]), float(toks[i + 3 * j + 1]),
+                           int(float(toks[i + 3 * j + 2])) == 1) for j in range(n)]
+            except (IndexError, ValueError):
+                raise ValueError("malformed shiftfn block: " + " ".join(tokens))
+            i += 3 * n
+            blocks["shiftfn"] = (expr, params)
         else:
             break
     return blocks
@@ -133,6 +156,11 @@ class Segment:
     # segments with the same label share ONE constant energy shift: the first
     # of them (file order) owns the parameter, the others take its value
     shift_group: Optional[str] = None
+    # energy-shift function f(x; a0..) added at the original lab energy x (MeV):
+    # the expression, and (value, sigma, vary) per parameter aj; on a shift
+    # group it is declared on the first segment and applies to all members
+    shift_fn: Optional[str] = None
+    shift_fn_params: tuple = ()
     operation: Optional[str] = None    # 'sum' | 'ratio' for a composite segment
     components: tuple = ()             # (entrance, exit, angle, scaling) each
 
@@ -284,6 +312,8 @@ class SegmentSet(list):
             energy_shift_sqrt_error=shift_sqrt_error,
             vary_shift_sqrt=vary_shift_sqrt,
             shift_group=blocks.get("shiftgroup"),
+            shift_fn=blocks["shiftfn"][0] if "shiftfn" in blocks else None,
+            shift_fn_params=tuple(blocks["shiftfn"][1]) if "shiftfn" in blocks else (),
             operation=operation, components=tuple(components))
 
     # -- views ----------------------------------------------------------------

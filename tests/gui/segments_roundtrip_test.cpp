@@ -3,7 +3,8 @@
 //
 // A segment line may end with keyword blocks the GUI does not edit --
 // "sqrtshift b bError vary" (sqrt(E) energy-shift term) and "mixture w_self
-// n {file w}..." (natural-abundance targets) -- which it has to carry through
+// n {file w}..." (natural-abundance targets), "shiftgroup <label>" and
+// "shiftfn \"<f(x)>\" N v s vary ..." (energy-shift function) -- which it has to carry through
 // a load/save verbatim.  The sqrtshift block used to be lost on every load:
 // the reader split it off, but the row was then rebuilt column by column and
 // the field had no column.  Both blocks are now stored on the row directly.
@@ -70,14 +71,18 @@ int main(int argc, char** argv) {
       "1 2 2 0 2.5 0 180 0 1 0 0 0 0 0 data/Junghans_ntotal.dat 1 0 2 2 1 -999 2 3 -999 0 mixture 0.9048 2 \"tables/22Ne.dat\" 0.0925 \"tables/21Ne.dat\" 0.0027\n"
       "1 1 1 1 3 0 180 4 1 0 1 0 0 0 data/plain.dat 0 0\n"
       "0 1 2 0 5 0 180 0 1 1 7.2 0 0 0 data/both.dat 0 0 sqrtshift 0.001 0.002 1 mixture 0.5 1 \"t.dat\" 0.5\n"
+      "1 1 1 0.5 3 0 180 1 1 0 5 0 0.01 1 data/g.dat 0 0 shiftgroup G shiftfn \"a0*(sqrt(x)-sqrt(1.7))\" 1 0 0.02 1\n"
       "</segmentsData>\n";
   {
     QString in(dataBlock);
     QTextStream inStream(&in);
     ok("data block read", tab.readSegDataFile(inStream));
     QList<SegmentsDataData> lines = tab.getSegmentsDataModel()->getLines();
-    ok("four data lines", lines.size() == 4, QString::number(lines.size()));
-    if (lines.size() == 4) {
+    ok("five data lines", lines.size() == 5, QString::number(lines.size()));
+    if (lines.size() == 5) {
+      ok("shiftgroup and shiftfn blocks kept on the row",
+         lines[4].extraTokens == "shiftgroup G shiftfn \"a0*(sqrt(x)-sqrt(1.7))\" 1 0 0.02 1", lines[4].extraTokens);
+      ok("data file of the shift-function row", lines[4].dataFile == "data/g.dat", lines[4].dataFile);
       ok("sqrtshift block kept on the row", lines[0].extraTokens == "sqrtshift 0.003 0.001 0", lines[0].extraTokens);
       ok("mixture block kept on a composite row",
          lines[1].extraTokens == "mixture 0.9048 2 \"tables/22Ne.dat\" 0.0925 \"tables/21Ne.dat\" 0.0027", lines[1].extraTokens);
