@@ -1020,8 +1020,15 @@ the data's energy calibration is the first suspect, and the constant
    reading gives dE ~ sqrt(E), an error in k gives dE ~ E (the relativistic
    term ~ E^2, ~8 keV at 4 MeV). Over a factor-3 energy range sqrt(E) and
    linear are indistinguishable (1102 vs 1123) -- choose by the apparatus,
-   not by chi2. AZURE2 fits a and b (the `sqrtshift` block, ".azr file
-   anatomy" below); there is no linear term.
+   not by chi2. AZURE2 fits a and b with the `sqrtshift` block, and ANY form
+   with a `shiftfn` block (".azr file anatomy" below; since 2026-10-14), e.g.
+   `shiftfn "a0*(x-1.5)" 1 0 0.01 1` for a linear term. Write the function
+   CENTRED inside the data (`a0*(sqrt(x)-sqrt(E0))`, E0 in the data): a is
+   then the shift at E0 and its penalty means something. `sqrtshift` cannot
+   be centred -- its a is the shift at E = 0, so the a-penalty fights the
+   fit (11B+a Dayras 16: scan a = +94 keV, b = -0.059, shift at the data only
+   22 -> 4 keV; the 16 +- 10 keV a-penalty would cost ~60, more than the whole
+   gain).
 3. **Free the segment's shifts, but SEED them at the scan optimum.** MIGRAD
    started from zero shift sits in a local minimum next to zero: trial122 (a
    and b freed from 0 with 20 keV / 0.02 MeV^1/2 widths) ended at a = -0.12
@@ -1045,6 +1052,20 @@ the data's energy calibration is the first suspect, and the constant
    cost ~1.5 at the Bashkin optimum; a width tight enough to bias the result
    only hides the calibration problem. deBoer et al. 2021 report a residual
    alpha- vs proton-induced calibration difference in the same data.
+5. **One calibration per experiment, not per segment.** A data set split into
+   segments (one per angle, one per figure) has ONE accelerator calibration:
+   share it with `shiftgroup <label>` on every member and put any `shiftfn`
+   on the group's first segment. Per-segment energy-dependent terms fit
+   angle-by-angle structure instead: 11B+a 10-14 (10-13-26_sqrtshift), b
+   freed per segment gained 91 chi2 for 10 parameters, but b changed SIGN
+   between angles of one experiment (Harris 54.7 deg -0.016 vs 90 deg
+   +0.006; Henderson 90 deg -0.033 vs 141 deg +0.006) -- no calibration does
+   that. Conversely, grouping digitized sets can cost a lot (11B+a frozen
+   group scan +1,913, mostly Fowler/Bartholomew: different figures, different
+   digitization offsets) -- group by what shares a calibration, and test it.
+   The start-up log prints, per function, the condition number of its free
+   terms over the group's energies; a term that only duplicates a (sqrt(x)
+   on one single-energy angular distribution) is warned about.
 
 ### What a snapshot still cannot carry
 
@@ -1593,6 +1614,31 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
     `penalties()["shift_sqrt"]`, `add_data_segment(energy_shift_sqrt=...)`.
     The GUI preserves the block but cannot edit it. Test:
     `tests/energy_shift_sqrt` (check.sh fits a known a, b back).
+  - `shiftgroup <label>` (keyword block, 2026-10-13): every segment with the
+    label uses the constant shift of the FIRST of them (file order): its
+    value, error, vary flag and penalty; the others' own shift fields are
+    ignored and their `segment_<key>_energy_shift` is fixed and written back
+    with the shared value. Test: `tests/shift_groups`.
+  - `shiftfn "<f(x)>" N v0 s0 vary0 ...` (keyword block, 2026-10-14): adds
+    f(x; a0..a(N-1)), x = the point's ORIGINAL lab energy in MeV, to the
+    shift; each aj has value (= penalty nominal), penalty width and vary flag;
+    parameter `segment_<key>_energy_shift_fn<j>`, after every other
+    parameter and only for segments declaring a function. On a shift group:
+    on the first segment only, applies to all members (a follower declaring
+    one, or shiftfn + sqrtshift on any member, stops AZURE2 at start-up).
+    Evaluated at every point and sub-point; thickness/stopping stay at the
+    unshifted energy. chiSquared.out's totals line ends with
+    `Total-Shift-Chi-Squared:` whenever any shift is free (before 2026-10-14
+    it had no shift penalty at all: the run log's last "Total Chi-Squared"
+    ran higher by exactly that); shifts.out adds one `#` line per function.
+    pyazr: `Segment.shift_fn/shift_fn_params`, `parameters.fn_shifts`
+    (`kind == "shift_fn"`, `.fn_term`), `penalties()["shift_fn"]`,
+    `add_data_segment(shift_fn=..., shift_fn_params=[(v, s, vary)])`. Tests:
+    `tests/shift_fn`, `tests/pyazr/shift_fn_test.py`.
+  - Since 2026-10-14 a `.sav` value never frees or fixes an energy-shift
+    parameter (constant, sqrt or fn): shifts follow the .azr vary flag. Before,
+    a shift fixed at 0 in the .azr was FREED, unpenalised, by a nonzero .sav
+    value.
   - `isAdvanced` 1 = composite segment. `operationType` 0 = SUM of the listed
     components (the segment's own exit is included), 1 = RATIO (dimensionless:
     the lab->c.m. cross-section conversion is skipped). `nComp` = -1 is a
