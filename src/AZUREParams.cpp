@@ -2,6 +2,13 @@
 #include "Config.h"
 #include "CNuc.h"
 
+namespace {
+// segment_<key>_energy_shift, ..._energy_shift_sqrt, ..._energy_shift_fn<j>
+bool IsEnergyShiftName(const std::string &name) {
+  return name.compare(0, 8, "segment_") == 0 && name.find("_energy_shift") != std::string::npos;
+}
+}  // namespace
+
 /*!
  * This function returns the MnUserParameters object used by Minuit to store
  * the fit parameters.
@@ -56,9 +63,14 @@ void AZUREParams::ReadUserParameters(const Config &configure) {
   for (int i = 0; i < GetMinuitParams().Params().size(); i++) {
     for (int ii = 0; ii < names.size(); ii++) {
       if (GetMinuitParams().GetName(i) == names[ii]) {
-        if (GetMinuitParams().Value(i) == 0.0 && values[ii] != 0.0 &&
+        // A level parameter fixed at zero is freed by a nonzero .sav value, and a
+        // free one fixed by a zero.  An energy shift is not: it follows the vary
+        // flag of its .azr segment line, because its penalty does (a freed shift
+        // would float with no penalty).  The .sav still sets its value.
+        const bool isShift = IsEnergyShiftName(GetMinuitParams().GetName(i));
+        if (!isShift && GetMinuitParams().Value(i) == 0.0 && values[ii] != 0.0 &&
             GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Release(i);
-        if (GetMinuitParams().Value(i) != 0.0 && values[ii] == 0.0 &&
+        if (!isShift && GetMinuitParams().Value(i) != 0.0 && values[ii] == 0.0 &&
             !GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Fix(i);
         GetMinuitParams().SetValue(i, values[ii]);
         GetMinuitParams().SetError(i, errors[ii]);
@@ -107,9 +119,14 @@ void AZUREParams::ReadUserParameters(const std::string &filename) {
   for (int i = 0; i < GetMinuitParams().Params().size(); i++) {
     for (int ii = 0; ii < names.size(); ii++) {
       if (GetMinuitParams().GetName(i) == names[ii]) {
-        if (GetMinuitParams().Value(i) == 0.0 && values[ii] != 0.0 &&
+        // A level parameter fixed at zero is freed by a nonzero .sav value, and a
+        // free one fixed by a zero.  An energy shift is not: it follows the vary
+        // flag of its .azr segment line, because its penalty does (a freed shift
+        // would float with no penalty).  The .sav still sets its value.
+        const bool isShift = IsEnergyShiftName(GetMinuitParams().GetName(i));
+        if (!isShift && GetMinuitParams().Value(i) == 0.0 && values[ii] != 0.0 &&
             GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Release(i);
-        if (GetMinuitParams().Value(i) != 0.0 && values[ii] == 0.0 &&
+        if (!isShift && GetMinuitParams().Value(i) != 0.0 && values[ii] == 0.0 &&
             !GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Fix(i);
         GetMinuitParams().SetValue(i, values[ii]);
         GetMinuitParams().SetError(i, errors[ii]);
