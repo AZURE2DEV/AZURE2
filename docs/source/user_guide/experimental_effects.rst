@@ -208,6 +208,18 @@ be normalized to the same thing the density counts.**
    choose :math:`N` so that :math:`\epsilon(E_0)\,N` reproduces the quoted
    loss at the energy of interest.
 
+.. note::
+
+   **Energy shifts under target integration.** A segment's energy shift
+   (constant, :math:`\sqrt{E}` or shift function, :doc:`segments`) moves
+   every sub-point by the shift evaluated at that sub-point's own original
+   energy, so a constant shift translates the sub-point grid rigidly and an
+   energy-dependent one stretches it. The target thickness, the stopping
+   powers and the resolution kernels stay those computed for the unshifted
+   energy. This is a first-order approximation in
+   :math:`\Delta E\,\mathrm{d}\epsilon/\mathrm{d}E`, accurate while the shift
+   is small compared with the energy over which the stopping power changes.
+
 Restricting an Effect to Energy Ranges
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

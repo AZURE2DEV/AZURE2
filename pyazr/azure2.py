@@ -1235,7 +1235,9 @@ class azure2:
             ((shift - nominal_shift) / shift_error)^2
 
         and the same again for a free sqrt(E) shift coefficient (the b of
-        E' = E + shift + b*sqrt(E), key ``"shift_sqrt"``).
+        E' = E + shift + b*sqrt(E), key ``"shift_sqrt"``) and, summed per
+        segment, for each free parameter aj of a shift function declared on the
+        segment (``shiftfn``, key ``"shift_fn"``).
 
         Minimize the bare chi-squared instead and the normalizations drift to
         absorb every discrepancy -- a "better" number AZURE2 would never have
@@ -1245,7 +1247,9 @@ class azure2:
 
         Note the denominator uses the *nominal* normalization, and that
         ``norm_error`` is a percentage.  Returns ``{"norm": array, "shift":
-        array, "shift_sqrt": array}``, one entry per segment.
+        array, "shift_sqrt": array, "shift_fn": array}``, one entry per segment,
+        and the single numbers ``"park"`` and ``"abundance"`` (isotopic-abundance
+        priors and sum-to-one terms; both already inside the engine's chi-squared).
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         norm = np.zeros(self.nsegments)
@@ -1254,6 +1258,8 @@ class azure2:
         current = {p.segment_key: p for p in self.parameters.norms}
         shifting = {p.segment_key: p for p in self.parameters.shifts}
         sqrting = {p.segment_key: p for p in self.parameters.sqrt_shifts}
+        shift_fn = np.zeros(self.nsegments)
+        fn_par = {(p.segment_key, p.fn_term): p for p in self.parameters.fn_shifts}
         for i, d in enumerate(self.active_datasets):
             p = current.get(d.key)
             value = (float(x[p.free_index])
@@ -1275,6 +1281,14 @@ class azure2:
                         and q.free_index < x.size else d.energy_shift_sqrt)
                 shift_sqrt[i] = ((bval - d.energy_shift_sqrt)
                                  / d.energy_shift_sqrt_error) ** 2
+            for j, (nominal, sigma, vary) in enumerate(d.shift_fn_params):
+                if not (vary and sigma):
+                    continue
+                q = fn_par.get((d.key, j))
+                aval = (float(x[q.free_index])
+                        if q is not None and not q.fixed and q.free_index is not None
+                        and q.free_index < x.size else nominal)
+                shift_fn[i] += ((aval - nominal) / sigma) ** 2
         # Park formalism: the J > 0 wall, sum (J/1e-3)^2 over levels with J < 0.
         # The engine adds it to calculate_chi2_rwa itself (it is part of what
         # AZURE2 minimizes), so objective() does not add it again; it is
@@ -1310,8 +1324,8 @@ class azure2:
                     s_sum = model.abundance_sum_sigma
                 if s_sum > 0:
                     abundance += ((total - 1.0) / s_sum) ** 2
-        return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "park": park,
-                "abundance": abundance}
+        return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "shift_fn": shift_fn,
+                "park": park, "abundance": abundance}
 
     @property
     def nuclei(self):
@@ -1351,15 +1365,15 @@ class azure2:
         """What AZURE2's own fit minimizes: chi-squared plus the penalties.
 
         This is the number to hand a minimizer.  ``chiSquared.out`` reports the
-        two halves separately, as ``Total-Chi-Squared`` and
-        ``Total-Norm-Chi-Squared``.
+        parts separately, as ``Total-Chi-Squared``, ``Total-Norm-Chi-Squared``
+        and, when a shift is free, ``Total-Shift-Chi-Squared``.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         pen = self.penalties(x)
         # pen["park"] is already inside calculate_chi2_rwa (engine side).
         return (float(np.sum(self.calculate_chi2_rwa(x)))
                 + float(np.sum(pen["norm"])) + float(np.sum(pen["shift"]))
-                + float(np.sum(pen["shift_sqrt"])))
+                + float(np.sum(pen["shift_sqrt"])) + float(np.sum(pen["shift_fn"])))
 
     def chi2_and_grad(self, params):
         """Value and analytic gradient of the (data) chi-squared.

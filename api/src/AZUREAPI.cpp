@@ -1118,7 +1118,8 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params) const {
     for (int f = 0; f < pmap.NumFull(); f++) {
       if (fixed_[f]) continue;
       if (pmap.Desc(f).kind != ParamKind::EnergyShift &&
-          pmap.Desc(f).kind != ParamKind::EnergyShiftSqrt) continue;
+          pmap.Desc(f).kind != ParamKind::EnergyShiftSqrt &&
+          pmap.Desc(f).kind != ParamKind::EnergyShiftFn) continue;
       const int packed = pmap.FullToPacked(f);
       if (packed < 0 || packed >= (int)params.size()) continue;
 
@@ -1266,7 +1267,8 @@ vector_r AZUREAPI::GetEnergyShiftIndices() {
 
 // Structured metadata for every parameter.  The parameters are walked in the
 // exact order CNuc::FillMnParams (energies + widths) then EData::FillMnParams
-// (norms, energy shifts, then sqrt(E) shift coefficients) emit them, so the
+// (norms, energy shifts, sqrt(E) shift coefficients, then shift-function
+// parameters) emit them, so the
 // records line up one-to-one with
 // names_ / all_ / fixed_.  See AZUREAPI.h for the field layout.
 vector_r AZUREAPI::GetParameterInfo() const {
@@ -1319,7 +1321,7 @@ vector_r AZUREAPI::GetParameterInfo() const {
   }
 
   // Isotopic abundances, one per (sample, compound nucleus), when the project
-  // has an <abundances> block (CNuc::FillMnParams): type 5, the nucleus's Z in
+  // has an <abundances> block (CNuc::FillMnParams): type 6, the nucleus's Z in
   // the "jgroup" field and A in the "level" field, the 1-based sample in the
   // "channel" field, the prior sigma in "wignerLimit".  The sample's name is
   // in the parameter name (GetParameterNames): abundance[_<sample>]_<Z>_<A>.
@@ -1328,7 +1330,7 @@ vector_r AZUREAPI::GetParameterInfo() const {
     nuc->AbundanceOf(k, sample, nucleusIndex);
     const CompoundNucleus *nucleus = nuc->GetNucleus(nucleusIndex);
     const SampleAbundance &e = nuc->GetSample(sample)->entries[nucleusIndex - 1];
-    push(5, nucleus->Z, -1, 0, nucleus->A, 0, sample, -1, -1, -1, -1, -1, e.sigma);
+    push(6, nucleus->Z, -1, 0, nucleus->A, 0, sample, -1, -1, -1, -1, -1, e.sigma);
   }
 
   // Normalization parameters: one per segment with IsVaryNorm().
@@ -1349,6 +1351,15 @@ vector_r AZUREAPI::GetParameterInfo() const {
   for (size_t s = 0; s < segments.size(); ++s) {
     push(4, -1, -1, 0, -1, 0, -1, -1, -1, -1, -1,
          segments[s].GetSegmentKey(), -1);
+  }
+
+  // Shift-function parameters aj of each segment declaring a "shiftfn" block;
+  // j goes in the channel field.
+  for (size_t s = 0; s < segments.size(); ++s) {
+    if (!segments[s].OwnsShiftFn() || !segments[s].HasShiftFn()) continue;
+    for (int j = 0; j < segments[s].NumShiftFnParams(); ++j)
+      push(5, -1, -1, 0, -1, 0, j, -1, -1, -1, -1,
+           segments[s].GetSegmentKey(), -1);
   }
 
   return info;

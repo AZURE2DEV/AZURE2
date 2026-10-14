@@ -40,6 +40,9 @@ class EData {
   int GetEnergyShiftParamOffset() const;
   /// Index at which the sqrt(E) energy-shift coefficients start in the Minuit vector.
   int GetEnergyShiftSqrtParamOffset() const;
+  /// Index at which the shift-function parameters start in the Minuit vector (after the sqrt(E)
+  /// coefficients): the parameters of each segment that declares a "shiftfn" block, in segment order.
+  int GetEnergyShiftFnParamOffset() const;
   /// Read the target-effects input file and build the TargetEffect objects.
   int ReadTargetEffectsFile(const Config &, CNuc *);
   /// Is this a fit? AZURECalc clones the compound nucleus and data per thread only when it is.
@@ -102,9 +105,13 @@ class EData {
   void SetNormParamOffset(int);
   void SetEnergyShiftParamOffset(int);
   void SetEnergyShiftSqrtParamOffset(int);
+  void SetEnergyShiftFnParamOffset(int);
   /// Seed the Minuit parameter array with the normalizations and energy shifts.
   /// Link the members of each "shiftgroup" to the group's first segment (called by Fill).
-  void ResolveShiftGroups(const Config &);
+  /// Also installs and checks the shift functions ("shiftfn"); returns -1 on an invalid one.
+  int ResolveShiftGroups(const Config &);
+  /// Install and check the shift functions (called by ResolveShiftGroups).
+  int ResolveShiftFunctions(const Config &);
   /// Set each shift-group follower's parameter to its leader's value (for the parameter files).
   void SyncShiftGroupParams(ROOT::Minuit2::MnUserParameters &) const;
   void FillMnParams(ROOT::Minuit2::MnUserParameters &);
@@ -133,6 +140,7 @@ class EData {
   int normParamOffset_;
   int energyShiftParamOffset_;
   int energyShiftSqrtParamOffset_;
+  int energyShiftFnParamOffset_ = 0;
   bool isFit_;
   bool isErrorAnalysis_;
   std::streampos ecReadPos_;  // File offset where component-segment EC integrals begin in the intEC file

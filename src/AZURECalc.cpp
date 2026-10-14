@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <string>
+#include <map>
 #include <set>
 #include <fstream>
 #include <mutex>
@@ -112,19 +113,76 @@ double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config,
     double err = pt->GetCMCrossSectionError() * norm;
     if (err != 0.0) chi += (r * r) / (err * err);
   }
-  if (segment->IsVaryEnergyShift()) {
-    double sh = segment->GetEnergyShift();
-    double shn = segment->GetNominalEnergyShift();
-    double she = segment->GetEnergyShiftError();
-    if (she != 0.0) chi += pow((sh - shn) / she, 2.0);
-  }
-  if (segment->IsVaryEnergyShiftSqrt()) {
-    double sq = segment->GetEnergyShiftSqrt();
-    double sqn = segment->GetNominalEnergyShiftSqrt();
-    double sqe = segment->GetEnergyShiftSqrtError();
-    if (sqe != 0.0) chi += pow((sq - sqn) / sqe, 2.0);
-  }
+  segment->AddShiftPenalty(chi);
   return chi;
+}
+
+// The shift penalties as (full parameter index, nominal, sigma), for the code
+// that needs a penalty's derivatives rather than its value: d/dx = 2 (x - nominal)
+// / sigma^2, curvature 2 / sigma^2.  Exactly the terms ESegment::AddShiftPenalty
+// adds, so the gradient, G2 and the least-squares priors stay consistent with
+// chi^2.
+template <class F>
+void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
+  for (int s = 1; s <= data->NumSegments(); s++) {
+    ESegment *seg = data->GetSegment(s);
+    if (!seg) continue;
+    int idx;
+    if (seg->IsVaryEnergyShift() && seg->GetEnergyShiftError() != 0.0 && (idx = pmap.EnergyShiftIndex(s)) >= 0)
+      f(idx, seg->GetNominalEnergyShift(), seg->GetEnergyShiftError());
+    if (seg->IsVaryEnergyShiftSqrt() && seg->GetEnergyShiftSqrtError() != 0.0 &&
+        (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0)
+      f(idx, seg->GetNominalEnergyShiftSqrt(), seg->GetEnergyShiftSqrtError());
+    if (seg->OwnsShiftFn() && seg->HasShiftFn())
+      for (int j = 0; j < seg->NumShiftFnParams(); j++)
+        if (seg->IsVaryShiftFn(j) && seg->GetShiftFnErrors()[j] != 0.0 && (idx = pmap.EnergyShiftFnIndex(s, j)) >= 0)
+          f(idx, seg->GetNominalShiftFnValues()[j], seg->GetShiftFnErrors()[j]);
+  }
+}
+
+// The segments (1-based) whose points one energy-shift parameter moves, and how to
+// set it on them: its own segment, plus every follower of its shift group for a
+// group's constant shift and for each shift-function parameter.
+struct ShiftParamTarget {
+  ParamKind kind;
+  int fnTerm;
+  std::vector<int> segs;
+  double Get(EData *ld) const {
+    ESegment *seg = ld->GetSegment(segs.front());
+    if (kind == ParamKind::EnergyShiftSqrt) return seg->GetEnergyShiftSqrt();
+    if (kind == ParamKind::EnergyShiftFn) return seg->GetShiftFnValues()[fnTerm];
+    return seg->GetEnergyShift();
+  }
+  void Set(EData *ld, double v) const {
+    for (int s : segs) {
+      ESegment *seg = ld->GetSegment(s);
+      if (kind == ParamKind::EnergyShiftSqrt) seg->SetEnergyShiftSqrt(v);
+      else if (kind == ParamKind::EnergyShiftFn) seg->SetShiftFnValue(fnTerm, v);
+      else seg->SetEnergyShift(v);
+    }
+  }
+  // Every member self-contained (no components, not a total-capture sum), so the
+  // parameter moves these segments' rows and nothing else.
+  bool Local(EData *ld) const {
+    for (int s : segs) {
+      ESegment *seg = ld->GetSegment(s);
+      if (seg->HasComponents() || seg->IsTotalCapture()) return false;
+    }
+    return true;
+  }
+};
+
+ShiftParamTarget ShiftTargets(EData *ld, const ParamDesc &d) {
+  ShiftParamTarget t{d.kind, d.fnTerm, {d.segment}};
+  const int pos = d.segment - 1;
+  for (int s = 1; s <= ld->NumSegments(); s++) {
+    if (s == d.segment) continue;
+    ESegment *seg = ld->GetSegment(s);
+    if ((d.kind == ParamKind::EnergyShift && seg->GetShiftLeaderPos() == pos) ||
+        (d.kind == ParamKind::EnergyShiftFn && seg->GetShiftFnSourcePos() == pos))
+      t.segs.push_back(s);
+  }
+  return t;
 }
 
 }  // namespace
@@ -310,24 +368,8 @@ double AZURECalc::operator()(const vector_r &p) const {
         chiSquared += pow((dataNorm - dataNormNominal) / dataNormError, 2.0);
       }
 
-      // Add energy shift chi-squared contribution
-      if (segment->IsVaryEnergyShift()) {
-        double energyShift = segment->GetEnergyShift();
-        double energyShiftNominal = segment->GetNominalEnergyShift();
-        double energyShiftError = segment->GetEnergyShiftError();
-        if (energyShiftError != 0.) {
-          chiSquared += pow((energyShift - energyShiftNominal) / energyShiftError, 2.0);
-        }
-      }
-      // ... and the same for the sqrt(E) energy-shift coefficient
-      if (segment->IsVaryEnergyShiftSqrt()) {
-        double sq = segment->GetEnergyShiftSqrt();
-        double sqn = segment->GetNominalEnergyShiftSqrt();
-        double sqe = segment->GetEnergyShiftSqrtError();
-        if (sqe != 0.) {
-          chiSquared += pow((sq - sqn) / sqe, 2.0);
-        }
-      }
+      // Add the energy-shift penalties
+      segment->AddShiftPenalty(chiSquared);
 
       segment->SetSegmentChiSquared(segmentChiSquared);
       chiSquared += segmentChiSquared;
@@ -514,18 +556,7 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
     double nom = segment->GetNominalNorm();
     double nerr = nom / 100.0 * segment->GetNormError();
     if (nerr != 0.0) chiSquared += pow((dataNorm - nom) / nerr, 2.0);
-    if (segment->IsVaryEnergyShift()) {
-      double sh = segment->GetEnergyShift();
-      double shn = segment->GetNominalEnergyShift();
-      double she = segment->GetEnergyShiftError();
-      if (she != 0.0) chiSquared += pow((sh - shn) / she, 2.0);
-    }
-    if (segment->IsVaryEnergyShiftSqrt()) {
-      double sq = segment->GetEnergyShiftSqrt();
-      double sqn = segment->GetNominalEnergyShiftSqrt();
-      double sqe = segment->GetEnergyShiftSqrtError();
-      if (sqe != 0.0) chiSquared += pow((sq - sqn) / sqe, 2.0);
-    }
+    segment->AddShiftPenalty(chiSquared);
     chiSquared += segChi;
   }
   if (limitsManager_) chiSquared += CalculateNuisanceChiSquared(p);
@@ -735,31 +766,31 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     double x0 = p[idx];
     double h = FdStep(kind, x0, 1.0e-6);
 
-    // Fast path: a free energy shift on a self-contained segment only moves that
-    // segment's points, so finite-difference just that segment's chi^2 on the
-    // already-filled clone instead of re-solving the entire dataset twice.
-    if ((kind == ParamKind::EnergyShift || kind == ParamKind::EnergyShiftSqrt) && localShiftOk) {
-      int s = pmap.Desc(idx).segment;
-      ESegment *seg = (s >= 1) ? ld->GetSegment(s) : nullptr;
-      // A shift-group leader's constant shift also moves its followers' points,
-      // so it takes the full-dataset difference below.
-      const bool sharedShift = seg && kind == ParamKind::EnergyShift && seg->HasShiftGroupFollowers();
-      if (seg && !seg->HasComponents() && !seg->IsTotalCapture() && !sharedShift) {
-        // The constant shift and the sqrt(E) coefficient enter the same
-        // E -> E + a + b*sqrt(E) mapping; difference whichever one this is.
-        const bool isSqrt = (kind == ParamKind::EnergyShiftSqrt);
-        auto setShift = [&](double v) {
-          if (isSqrt) seg->SetEnergyShiftSqrt(v); else seg->SetEnergyShift(v);
+    // Fast path: a free energy shift on self-contained segments only moves those
+    // segments' points (its own, plus its shift group's followers for a group's
+    // constant shift or a shift-function parameter), so finite-difference just
+    // their chi^2 on the already-filled clone instead of re-solving the entire
+    // dataset twice.
+    if ((kind == ParamKind::EnergyShift || kind == ParamKind::EnergyShiftSqrt || kind == ParamKind::EnergyShiftFn) &&
+        localShiftOk && pmap.Desc(idx).segment >= 1) {
+      const int s = pmap.Desc(idx).segment;
+      const ShiftParamTarget target = ShiftTargets(ld, pmap.Desc(idx));
+      if (target.Local(ld)) {
+        auto groupChi = [&](double v) {
+          target.Set(ld, v);
+          double c = 0.0;
+          for (int m : target.segs) {
+            ESegment *seg = ld->GetSegment(m);
+            seg->UpdatePointEnergiesWithShift(lc, &configure());
+            c += SegmentLocalChi2(seg, lc, configure(), ld);
+          }
+          return c;
         };
-        double d0 = isSqrt ? seg->GetEnergyShiftSqrt() : seg->GetEnergyShift();
-        setShift(x0 + h);
-        seg->UpdatePointEnergiesWithShift(lc, &configure());
-        double chiP = SegmentLocalChi2(seg, lc, configure(), ld);
-        setShift(x0 - h);
-        seg->UpdatePointEnergiesWithShift(lc, &configure());
-        double chiM = SegmentLocalChi2(seg, lc, configure(), ld);
-        setShift(d0);  // restore base state on the clone
-        seg->UpdatePointEnergiesWithShift(lc, &configure());
+        const double d0 = target.Get(ld);
+        double chiP = groupChi(x0 + h);
+        double chiM = groupChi(x0 - h);
+        target.Set(ld, d0);  // restore base state on the clone
+        for (int m : target.segs) ld->GetSegment(m)->UpdatePointEnergiesWithShift(lc, &configure());
         grad[idx] = (chiP - chiM) / (2.0 * h);
 
         // Optional self-check: compare against the exact full-dataset finite
@@ -813,10 +844,11 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   static std::atomic<bool> gradChecked{false};
   if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
     if (!gradChecked.exchange(true)) {
-      static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "abundance"};
+      static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance"};
       struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;
-      int nBad[6] = {0, 0, 0, 0, 0, 0}, nAll[6] = {0, 0, 0, 0, 0, 0}, nBadJ[6] = {0, 0, 0, 0, 0, 0};
+      constexpr int kNumKinds = sizeof(kindName) / sizeof(kindName[0]);  // one per ParamKind
+      int nBad[kNumKinds] = {}, nAll[kNumKinds] = {}, nBadJ[kNumKinds] = {};
       const bool haveJ = g_jacGradForCheck.size() == grad.size();
       const auto tc0 = std::chrono::steady_clock::now();
       const double f0 = Chi2Value(p);
@@ -855,6 +887,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
           extra.push_back(pmap.NormIndex(sNum));
           extra.push_back(pmap.EnergyShiftIndex(sNum));
           extra.push_back(pmap.EnergyShiftSqrtIndex(sNum));
+          for (int j = 0; pmap.EnergyShiftFnIndex(sNum, j) >= 0; j++) extra.push_back(pmap.EnergyShiftFnIndex(sNum, j));
         }
       for (int v : extra)
         if (std::find(freeIdx.begin(), freeIdx.end(), v) != freeIdx.end() &&
@@ -886,11 +919,11 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
                 [](const Row &a, const Row &b) { return std::max(a.score, a.scoreJ) > std::max(b.score, b.scoreJ); });
       std::cerr << "[grad-check] chi2 " << f0 << ", analytic block " << (eg ? "used" : "BAILED (all finite differences)")
                 << "; components with relative disagreement > 1e-2:";
-      for (int k = 0; k < 6; k++)
+      for (int k = 0; k < kNumKinds; k++)
         if (nAll[k]) std::cerr << " " << kindName[k] << " " << nBad[k] << "/" << nAll[k];
       if (haveJ) {
         std::cerr << "; Jacobian path:";
-        for (int k = 0; k < 6; k++)
+        for (int k = 0; k < kNumKinds; k++)
           if (nAll[k]) std::cerr << " " << kindName[k] << " " << nBadJ[k] << "/" << nAll[k];
       }
       std::cerr << std::endl;
@@ -938,15 +971,12 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
       const double n0 = seg->GetNominalNorm(), nerr = n0 / 100.0 * seg->GetNormError();
       if (nerr != 0.0) { grad[idx] += 2.0 * (p[idx] - n0) / (nerr * nerr); g2[idx] += 2.0 / (nerr * nerr); }
     }
-    if (seg->IsVaryEnergyShift() && (idx = pmap.EnergyShiftIndex(s)) >= 0 && idx < (int)p.size()) {
-      const double e = seg->GetEnergyShiftError();
-      if (e != 0.0) { grad[idx] += 2.0 * (p[idx] - seg->GetNominalEnergyShift()) / (e * e); g2[idx] += 2.0 / (e * e); }
-    }
-    if (seg->IsVaryEnergyShiftSqrt() && (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0 && idx < (int)p.size()) {
-      const double e = seg->GetEnergyShiftSqrtError();
-      if (e != 0.0) { grad[idx] += 2.0 * (p[idx] - seg->GetNominalEnergyShiftSqrt()) / (e * e); g2[idx] += 2.0 / (e * e); }
-    }
   }
+  ForEachShiftPenalty(data(), pmap, [&](int idx, double nominal, double e) {
+    if (idx >= (int)p.size()) return;
+    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    g2[idx] += 2.0 / (e * e);
+  });
   // Isotopic abundances: prior and sum-to-one gradient and (diagonal) curvature.
   if (compound()->HasAbundanceBlock()) {
     for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
@@ -995,13 +1025,10 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
       const double nerr = seg->GetNominalNorm() / 100.0 * seg->GetNormError();
       if (nerr != 0.0) g2[idx] += 2.0 / (nerr * nerr);
     }
-    if (seg->IsVaryEnergyShift() && (idx = pmap.EnergyShiftIndex(s)) >= 0 && idx < (int)g2.size() &&
-        seg->GetEnergyShiftError() != 0.0)
-      g2[idx] += 2.0 / (seg->GetEnergyShiftError() * seg->GetEnergyShiftError());
-    if (seg->IsVaryEnergyShiftSqrt() && (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0 && idx < (int)g2.size() &&
-        seg->GetEnergyShiftSqrtError() != 0.0)
-      g2[idx] += 2.0 / (seg->GetEnergyShiftSqrtError() * seg->GetEnergyShiftSqrtError());
   }
+  ForEachShiftPenalty(data(), pmap, [&](int idx, double, double e) {
+    if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
+  });
   if (compound()->HasAbundanceBlock()) {
     for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
       const int idx = pmap.AbundanceIndex(k);
@@ -1165,31 +1192,27 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
         if (present[pid]) out.push_back(byPoint[pid]);
     };
 
-    // Segment-local shift columns.
-    struct LocalShift { int f, packed; bool isSqrt; };
-    std::vector<std::pair<int, std::vector<LocalShift>>> localBySeg;  // (segment, shifts)
+    // Local shift columns: a parameter whose segments (its own, plus its shift
+    // group's followers for a group's constant shift or a shift-function
+    // parameter) are all self-contained is differenced on their rows alone.
+    struct LocalShift { int f, packed; ShiftParamTarget target; };
+    std::vector<LocalShift> localCols;
     std::vector<int> fullShifts;
     for (int f = 0; f < pmap.NumFull() && f < (int)full.size(); f++) {
       if (fixed[f]) continue;
-      if (pmap.Desc(f).kind != ParamKind::EnergyShift &&
-          pmap.Desc(f).kind != ParamKind::EnergyShiftSqrt) continue;
+      const ParamKind kind = pmap.Desc(f).kind;
+      if (kind != ParamKind::EnergyShift && kind != ParamKind::EnergyShiftSqrt && kind != ParamKind::EnergyShiftFn) continue;
       const int packed = pmap.FullToPacked(f);
       if (packed < 0 || packed >= nCols) continue;
       const int sNum = pmap.Desc(f).segment;
-      ESegment *lseg = (sNum >= 1 && sNum <= ld->NumSegments()) ? ld->GetSegment(sNum) : nullptr;
-      // A shift-group leader's constant shift moves its followers' residuals too:
-      // full-dataset column.
-      const bool sharedShift =
-          lseg && pmap.Desc(f).kind == ParamKind::EnergyShift && lseg->HasShiftGroupFollowers();
-      if (!datasetHasMapping && lseg && !lseg->HasComponents() && !lseg->IsTotalCapture() && !sharedShift) {
-        const LocalShift ls{f, packed, pmap.Desc(f).kind == ParamKind::EnergyShiftSqrt};
-        auto it = std::find_if(localBySeg.begin(), localBySeg.end(),
-                               [sNum](const std::pair<int, std::vector<LocalShift>> &e) { return e.first == sNum; });
-        if (it == localBySeg.end()) localBySeg.push_back({sNum, {ls}});
-        else it->second.push_back(ls);
-      } else {
-        fullShifts.push_back(f);
+      if (!datasetHasMapping && sNum >= 1 && sNum <= ld->NumSegments()) {
+        const ShiftParamTarget target = ShiftTargets(ld, pmap.Desc(f));
+        if (target.Local(ld)) {
+          localCols.push_back({f, packed, target});
+          continue;
+        }
       }
+      fullShifts.push_back(f);
     }
     // Segments in sequence, each one's points in parallel: re-energising a
     // point (UpdatePointEnergyWithShift) and evaluating it touch only that
@@ -1203,32 +1226,29 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
         seg->UpdatePointEnergiesWithShift(lc, &configure());
       }
     };
-    for (size_t t = 0; t < localBySeg.size(); t++) {
-      const int sNum = localBySeg[t].first;
-      ESegment *lseg = ld->GetSegment(sNum);
-      vector_r rP, rM;
-      for (const LocalShift &ls : localBySeg[t].second) {
-        const double x0 = full[ls.f];
-        const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
-        auto setShift = [&](double v) {
-          if (ls.isSqrt) lseg->SetEnergyShiftSqrt(v); else lseg->SetEnergyShift(v);
-        };
-        const double d0 = ls.isSqrt ? lseg->GetEnergyShiftSqrt() : lseg->GetEnergyShift();
-        setShift(x0 + h);
-        updateSegment(lseg);
-        segmentResiduals(lseg, rP, true);
-        setShift(x0 - h);
-        updateSegment(lseg);
-        segmentResiduals(lseg, rM, true);
-        setShift(d0);
-        updateSegment(lseg);
+    for (const LocalShift &ls : localCols) {
+      const std::vector<int> &segs = ls.target.segs;
+      std::vector<vector_r> rP(segs.size()), rM(segs.size());
+      const double x0 = full[ls.f];
+      const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+      const double d0 = ls.target.Get(ld);
+      ls.target.Set(ld, x0 + h);
+      for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
+      for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rP[m], true);
+      ls.target.Set(ld, x0 - h);
+      for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
+      for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rM[m], true);
+      ls.target.Set(ld, d0);
+      for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
+      for (size_t m = 0; m < segs.size(); m++) {
+        const int sNum = segs[m];
         const size_t r0 = (size_t)rowStart[sNum], nSegRows = (size_t)(rowStart[sNum + 1] - rowStart[sNum]);
-        if (rP.size() == nSegRows && rM.size() == nSegRows)
+        if (rP[m].size() == nSegRows && rM[m].size() == nSegRows)
           for (size_t r = 0; r < nSegRows; r++)
-            jac[(r0 + r) * (size_t)nCols + (size_t)ls.packed] = (rP[r] - rM[r]) / (2.0 * h);
+            jac[(r0 + r) * (size_t)nCols + (size_t)ls.packed] = (rP[m][r] - rM[m][r]) / (2.0 * h);
       }
     }
-    for (const auto &e : localBySeg) nShiftLocal += (int)e.second.size();
+    nShiftLocal = (int)localCols.size();
 
     for (int f : fullShifts) {
       const int packed = pmap.FullToPacked(f);
@@ -1413,6 +1433,10 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
   hi.assign(nFree, std::numeric_limits<double>::infinity());
   pen_nom.assign(nFree, 0.0);
   pen_inv2.assign(nFree, 0.0);
+  // Shift priors by full parameter index (p2f holds full indices of the same map).
+  std::map<int, std::pair<double, double>> shiftPrior;  // full index -> (nominal, sigma)
+  ForEachShiftPenalty(data(), BuildParamIndexMap(compound(), data(), std::vector<bool>()),
+                      [&](int idx, double nominal, double sig) { shiftPrior[idx] = {nominal, sig}; });
   for (int a = 0; a < nFree; a++) {
     int f = p2f[a];
     x[a] = full[f];
@@ -1440,28 +1464,10 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
         }
       }
     } else if (name.find("shift") != std::string::npos) {
-      for (int s = 1; s <= data()->NumSegments(); s++) {
-        ESegment *seg = data()->GetSegment(s);
-        if (!seg) continue;
-        char vn[64], vs[64];
-        snprintf(vn, sizeof(vn), "segment_%d_energy_shift", seg->GetSegmentKey());
-        snprintf(vs, sizeof(vs), "segment_%d_energy_shift_sqrt", seg->GetSegmentKey());
-        if (name == vn && seg->IsVaryEnergyShift()) {
-          double sig = seg->GetEnergyShiftError();
-          if (sig != 0.0) {
-            pen_nom[a] = seg->GetNominalEnergyShift();
-            pen_inv2[a] = 1.0 / (sig * sig);
-          }
-          break;
-        }
-        if (name == vs && seg->IsVaryEnergyShiftSqrt()) {
-          double sig = seg->GetEnergyShiftSqrtError();
-          if (sig != 0.0) {
-            pen_nom[a] = seg->GetNominalEnergyShiftSqrt();
-            pen_inv2[a] = 1.0 / (sig * sig);
-          }
-          break;
-        }
+      auto it = shiftPrior.find(f);
+      if (it != shiftPrior.end()) {
+        pen_nom[a] = it->second.first;
+        pen_inv2[a] = 1.0 / (it->second.second * it->second.second);
       }
     } else if (name.find("abundance_") == 0) {
       // Isotopic abundance: its <abundances> prior is a diagonal penalty row.

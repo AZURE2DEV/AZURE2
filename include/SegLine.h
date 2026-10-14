@@ -79,6 +79,10 @@ class SegLine {
     varyEnergyShiftSqrt_ = 0;
     // shared constant energy shift: off unless a trailing "shiftgroup" block is present
     shiftGroup_ = "";
+    hasSqrtShift_ = false;
+    // energy-shift function: off unless a trailing "shiftfn" block is present
+    shiftFn_ = "";
+    parseError_ = "";
 
     // Try to parse energy shift from the remaining line, default to 0.0 for backward compatibility
     std::istringstream restStream(dummyString);
@@ -180,8 +184,7 @@ class SegLine {
         // component is weighted by the isotopic abundance of the term's
         // entrance pair's compound nucleus in the named sample of the
         // <abundances> block ("1" = the unnamed, or the only, sample).
-        // Keyword blocks may come in either order; writers put natural last.
-        //
+        // Writers put the sample block last.
         //
         // A shift-group block,
         //   shiftgroup <label>
@@ -190,7 +193,16 @@ class SegLine {
         // parameter and its penalty, the others take its value (their own
         // shift value, uncertainty and vary flag are ignored).  For data sets
         // split into per-angle segments that share one energy calibration.
-        // The two blocks may come in either order.
+        //
+        // A shift-function block,
+        //   shiftfn "<expression in x>" N v0 s0 vary0 ... v(N-1) s(N-1) vary(N-1)
+        // adds f(x; a0..a(N-1)) to the shift, E' = E + energyShift + f(E),
+        // with x the point's original lab energy in MeV and aj fit parameters
+        // with their own value, uncertainty (penalty width) and vary flag.  The
+        // expression is read by the Equation class (as <targetInt> equations);
+        // it is quoted, and blanks inside it are dropped.  On a shift group it
+        // goes on the group's first segment and applies to every member.
+        // The blocks may come in any order.
         advancedStream.clear();
         std::string keyword;
         while (advancedStream >> keyword) {
@@ -199,6 +211,36 @@ class SegLine {
               energyShiftSqrt_ = 0.0;
               energyShiftSqrtError_ = 0.0;
               varyEnergyShiftSqrt_ = 0;
+              break;
+            }
+            hasSqrtShift_ = true;
+          } else if (keyword == "shiftfn") {
+            std::string expression;
+            int numParams = 0;
+            if (!ReadPathToken(advancedStream, expression) || !(advancedStream >> numParams) || numParams < 1) {
+              parseError_ = "shiftfn needs a quoted expression and a parameter count >= 1";
+              stream.setstate(std::ios::failbit);
+              break;
+            }
+            for (char c : expression)
+              if (c != ' ' && c != '\t') shiftFn_.push_back(c);
+            for (int j = 0; j < numParams; j++) {
+              double value, error;
+              int vary;
+              if (!(advancedStream >> value >> error >> vary)) {
+                parseError_ = "shiftfn \"" + shiftFn_ + "\" declares " + std::to_string(numParams) +
+                              " parameters but gives value, uncertainty and vary flag for only " + std::to_string(j);
+                stream.setstate(std::ios::failbit);
+                break;
+              }
+              shiftFnValues_.push_back(value);
+              shiftFnErrors_.push_back(error);
+              shiftFnVary_.push_back(vary);
+            }
+            if (!parseError_.empty()) break;
+            if (shiftFn_.empty()) {
+              parseError_ = "shiftfn has an empty expression";
+              stream.setstate(std::ios::failbit);
               break;
             }
           } else if (keyword == "sample" || keyword == "natural") {
@@ -332,6 +374,24 @@ class SegLine {
    */
   std::string shiftGroup() const { return shiftGroup_; };
   /*!
+   * Returns true if the line carries a "sqrtshift" block.
+   */
+  bool hasSqrtShift() const { return hasSqrtShift_; };
+  /*!
+   * Returns the shift-function expression ("" when the line has no "shiftfn" block).
+   */
+  std::string shiftFn() const { return shiftFn_; };
+  /*!
+   * Returns the starting values, uncertainties and vary flags of the shift-function parameters.
+   */
+  const std::vector<double> &shiftFnValues() const { return shiftFnValues_; };
+  const std::vector<double> &shiftFnErrors() const { return shiftFnErrors_; };
+  const std::vector<int> &shiftFnVary() const { return shiftFnVary_; };
+  /*!
+   * Returns why the line could not be read ("" if it could, or if the reason is not known).
+   */
+  std::string parseError() const { return parseError_; };
+  /*!
    * Returns non-zero if this is an advanced segment (sum/ratio).
    */
   int isAdvanced() const { return isAdvanced_; };
@@ -382,6 +442,12 @@ class SegLine {
   double energyShiftSqrtError_;
   int varyEnergyShiftSqrt_;
   std::string shiftGroup_;
+  bool hasSqrtShift_;
+  std::string shiftFn_;
+  std::vector<double> shiftFnValues_;
+  std::vector<double> shiftFnErrors_;
+  std::vector<int> shiftFnVary_;
+  std::string parseError_;
   int isAdvanced_;
   int operationType_;
   std::string natural_;

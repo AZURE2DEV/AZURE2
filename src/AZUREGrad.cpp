@@ -213,12 +213,22 @@ int ParamIndexMap::AbundanceIndex(int ordinal) const {
 }
 
 /*!
+ * Returns the full-vector index of parameter aj of a segment's shift function, or -1.
+ */
+int ParamIndexMap::EnergyShiftFnIndex(int segment, int j) const {
+  auto it = fnShiftIndex_.find({segment, j});
+  return (it == fnShiftIndex_.end()) ? -1 : it->second;
+}
+
+/*!
  * Builds the parameter-index map by mirroring, in the exact same order, the
  * assignment loops in:
  *   - CNuc::FillCompoundFromParams      (level energies + gammas)
  *   - EData::FillNormsFromParams        (norms, only for IsVaryNorm segments)
  *   - EData::FillEnergyShiftsFromParams (one energy shift per segment, then
- *                                        one sqrt(E) coefficient per segment)
+ *                                        one sqrt(E) coefficient per segment,
+ *                                        then the shift-function parameters of
+ *                                        each segment that declares them)
  *
  * Keeping this in lock-step with those routines is what guarantees the returned
  * gradient vector is a permutation-correct match for the sampler's parameter
@@ -289,6 +299,22 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
       if (segment) {
         map.sqrtShiftIndex_[s] = i;
         map.desc_.push_back(ParamDesc{ParamKind::EnergyShiftSqrt, -1, -1, -1, s, false});
+        i++;
+      }
+    }
+  }
+
+  // --- Shift-function parameters: those of each segment that declares one (EData::FillMnParams). ---
+  map.energyShiftFnOffset_ = i;
+  if (data) {
+    for (int s = 1; s <= data->NumSegments(); s++) {
+      ESegment *segment = data->GetSegment(s);
+      if (!segment || !segment->OwnsShiftFn() || !segment->HasShiftFn()) continue;
+      for (int j = 0; j < segment->NumShiftFnParams(); j++) {
+        map.fnShiftIndex_[{s, j}] = i;
+        ParamDesc d{ParamKind::EnergyShiftFn, -1, -1, -1, s, false};
+        d.fnTerm = j;
+        map.desc_.push_back(d);
         i++;
       }
     }

@@ -9,6 +9,11 @@
 #include "AdaptiveIntegrationGrid.h"
 #include "Minuit2/MnUserParameters.h"
 #include "GSLException.h"
+#include <gsl/gsl_linalg.h>
+#include <gsl/gsl_matrix.h>
+#include <gsl/gsl_vector.h>
+#include <cmath>
+#include <limits>
 #include "NuclearPotentialManager.h"
 #include <algorithm>
 #include <cinttypes>
@@ -152,7 +157,12 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
       std::istringstream stm;
       stm.str(line);
       SegLine segment(stm);
-      if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) return -1;
+      if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) {
+        if (!segment.parseError().empty())
+          configure.outStream << "ERROR: Data segment #" << numTotalSegments + 1 << ": " << segment.parseError() << "."
+                              << std::endl;
+        return -1;
+      }
       numTotalSegments++;
       if (segment.isDiff() == 8) {
         // Polarization x Cross Section was removed: the outgoing polarization of
@@ -325,7 +335,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
 
   in.close();
 
-  this->ResolveShiftGroups(configure);
+  if (this->ResolveShiftGroups(configure) == -1) return -1;
 
   if (this->NumSegments() > 0) {
     if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
@@ -606,6 +616,10 @@ int EData::GetEnergyShiftParamOffset() const {
 
 int EData::GetEnergyShiftSqrtParamOffset() const {
   return energyShiftSqrtParamOffset_;
+}
+
+int EData::GetEnergyShiftFnParamOffset() const {
+  return energyShiftFnParamOffset_;
 }
 
 /*!
@@ -1644,6 +1658,19 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
     // Park formalism: the J > 0 wall, when a level sits beyond it.
     if (configure.paramMask & Config::USE_PARK_FORMALISM)
       chiOut << " Total-Park-Chi-Squared: " << parkPenalty_;
+    // The energy-shift penalties the fit minimised (ESegment::AddShiftPenalty), when
+    // any shift is a fit parameter.  Without this the file reported less than the
+    // minimiser's own total by exactly this amount.
+    bool anyShiftVaried = false;
+    double totalShiftChiSquared = 0.;
+    for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+      if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt()) anyShiftVaried = true;
+      if (segment->OwnsShiftFn())
+        for (int q = 0; q < segment->NumShiftFnParams(); q++)
+          if (segment->IsVaryShiftFn(q)) anyShiftVaried = true;
+      segment->AddShiftPenalty(totalShiftChiSquared);
+    }
+    if (anyShiftVaried) chiOut << " Total-Shift-Chi-Squared: " << totalShiftChiSquared;
     // Isotopic abundances: their priors and the sum-to-one term.
     if (abundancePenalty_ != 0.0)
       chiOut << " Total-Abundance-Chi-Squared: " << abundancePenalty_;
@@ -1686,7 +1713,8 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
   // Check if any energy shifts (constant or sqrt(E) term) are varied
   bool isVaryEnergyShift = false;
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-    if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt() || segment->IsShiftGroupFollower()) {
+    if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt() || segment->IsShiftGroupFollower() ||
+        segment->HasShiftFn()) {
       isVaryEnergyShift = true;
       break;
     }
@@ -1703,7 +1731,9 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
       // coefficient b of E' = E + shift + b*sqrt(E/MeV), in MeV^1/2.
       out << "segment_key_#, file_name, low_angle_bound, high_angle_bound, aframe, low_energy_bound, high_energy_bound, eframe, norm, shift, sqrt_shift" << std::endl;
       for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-        if (!(segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt() || segment->IsShiftGroupFollower())) continue;
+        if (!(segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt() || segment->IsShiftGroupFollower() ||
+              segment->HasShiftFn()))
+          continue;
         out << segment->GetSegmentKey() << ","
             << segment->GetDataFile() << ","
             << segment->GetMinAngle() << ","
@@ -1722,6 +1752,46 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
             << segment->GetEnergyShift() << ","
             << segment->GetEnergyShiftSqrt() << std::endl;
       }
+      // Shift functions: one line per function, after the per-segment rows.  The
+      // lines start with '#' so that readers of the rows above skip them.
+      bool header = false;
+      double totalShiftChi = 0.;
+      for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++)
+        segment->AddShiftPenalty(totalShiftChi);
+      for (int pos = 0; pos < (int)segments_.size(); pos++) {
+        ESegment &owner = segments_[pos];
+        if (!owner.OwnsShiftFn() || !owner.HasShiftFn()) continue;
+        if (!header) {
+          out << "# shift functions: dE(x) = shift + f(x), x = original lab energy of a point (MeV), dE in MeV" << std::endl
+              << "# segment_key_#, member_keys, f(x), shift, a0 a1 ..., x_low, x_high, dE(x_low), dE(x_high), penalty"
+              << std::endl;
+          header = true;
+        }
+        std::ostringstream keys;
+        double lo = std::numeric_limits<double>::infinity(), hi = -lo;
+        for (int m = 0; m < (int)segments_.size(); m++) {
+          if (m != pos && segments_[m].GetShiftLeaderPos() != pos) continue;
+          keys << (m == pos ? "" : " ") << segments_[m].GetSegmentKey();
+          for (int pid = 1; pid <= segments_[m].NumPoints(); pid++) {
+            EPoint *pt = segments_[m].GetPoint(pid);
+            const double x = pt->GetOriginalEnergy() > 0 ? pt->GetOriginalEnergy() : pt->GetLabEnergy();
+            lo = std::min(lo, x);
+            hi = std::max(hi, x);
+          }
+        }
+        // The function's own penalty: the owner's shift penalties minus those of its
+        // constant and sqrt(E) terms.
+        double pen = 0.0, penOwn = 0.0;
+        owner.AddShiftPenalty(pen);
+        if (owner.IsVaryEnergyShift() && owner.GetEnergyShiftError() != 0.0)
+          penOwn = pow((owner.GetEnergyShift() - owner.GetNominalEnergyShift()) / owner.GetEnergyShiftError(), 2.0);
+        out << "# " << owner.GetSegmentKey() << "," << keys.str() << "," << owner.GetShiftFnExpression() << ","
+            << owner.GetEnergyShift() << ",";
+        for (int q = 0; q < owner.NumShiftFnParams(); q++) out << (q ? " " : "") << owner.GetShiftFnValues()[q];
+        out << "," << lo << "," << hi << "," << owner.TotalEnergyShift(lo) << "," << owner.TotalEnergyShift(hi) << ","
+            << pen - penOwn << std::endl;
+      }
+      if (header) out << "# Total-Shift-Chi-Squared: " << totalShiftChi << std::endl;
       out.flush();
       out.close();
     } else
@@ -2700,6 +2770,10 @@ void EData::SetEnergyShiftSqrtParamOffset(int offset) {
   energyShiftSqrtParamOffset_ = offset;
 }
 
+void EData::SetEnergyShiftFnParamOffset(int offset) {
+  energyShiftFnParamOffset_ = offset;
+}
+
 /*!
  * Links the segments of each shift group ("shiftgroup <label>" on the segment
  * line) to the group's first segment in file order: that segment keeps its own
@@ -2708,7 +2782,7 @@ void EData::SetEnergyShiftSqrtParamOffset(int offset) {
  * in the fit.  A note per group lists the members.
  */
 
-void EData::ResolveShiftGroups(const Config &configure) {
+int EData::ResolveShiftGroups(const Config &configure) {
   std::vector<std::pair<std::string, int>> leaders;  // label, leader position
   for (int pos = 0; pos < (int)segments_.size(); pos++) {
     ESegment &seg = segments_[pos];
@@ -2743,6 +2817,172 @@ void EData::ResolveShiftGroups(const Config &configure) {
                         << leader.GetSegmentKey() << "'s parameter, " << (leader.IsVaryEnergyShift() ? "free" : "fixed")
                         << ")." << std::endl;
   }
+  return ResolveShiftFunctions(configure);
+}
+
+namespace {
+
+// Indices j of the parameters "aj" an Equation expression refers to.  The Equation
+// class reads "a" followed by digits as a parameter (asin, acos, atan are not).
+std::set<int> ShiftFnParamRefs(const std::string &expression) {
+  std::set<int> refs;
+  for (size_t k = 0; k + 1 < expression.size(); k++) {
+    if (expression[k] != 'a' || !std::isdigit((unsigned char)expression[k + 1])) continue;
+    size_t e = k + 1;
+    while (e < expression.size() && std::isdigit((unsigned char)expression[e])) e++;
+    refs.insert(std::atoi(expression.substr(k + 1, e - k - 1).c_str()));
+    k = e - 1;
+  }
+  return refs;
+}
+
+}  // namespace
+
+/*!
+ * Shift functions ("shiftfn" block, design note 10-13-26): the segment declaring one
+ * owns its parameters; it and every follower of its shift group apply
+ * dE(x) = a + f(x; a0..), x the point's original lab energy.  Rejected: a follower
+ * declaring a function (the group's calibration belongs to its first segment), a
+ * function together with a sqrt(E) term on any member (two descriptions of one
+ * calibration), and an expression referring to an undeclared parameter or leaving a
+ * declared one unused.  For each function the free shift terms (a, if varied, and
+ * every varied aj) are checked for degeneracy over the group's data energies; a term
+ * with no effect there is an error.  One log line per function.
+ */
+
+int EData::ResolveShiftFunctions(const Config &configure) {
+  int fnStart = 0;
+  for (int pos = 0; pos < (int)segments_.size(); pos++) {
+    ESegment &owner = segments_[pos];
+    if (!owner.OwnsShiftFn()) continue;
+    const int key = owner.GetSegmentKey();
+    const std::string expression = owner.GetDeclaredShiftFn();
+    const int n = (int)owner.GetNominalShiftFnValues().size();
+    if (owner.IsShiftGroupFollower()) {
+      configure.outStream << "ERROR: Data segment #" << key << " declares a shiftfn, but it is not the first segment of "
+                          << "shift group '" << owner.GetShiftGroup() << "' (segment #"
+                          << segments_[owner.GetShiftLeaderPos()].GetSegmentKey()
+                          << " is): put the block on that segment; it applies to the whole group." << std::endl;
+      return -1;
+    }
+    std::vector<int> members{pos};
+    for (int f = 0; f < (int)segments_.size(); f++)
+      if (segments_[f].GetShiftLeaderPos() == pos) members.push_back(f);
+    for (int m : members)
+      if (segments_[m].HasSqrtShiftBlock()) {
+        configure.outStream << "ERROR: Data segment #" << segments_[m].GetSegmentKey() << " has a sqrtshift block and "
+                            << "shift function \"" << expression << "\" (segment #" << key
+                            << "): two descriptions of one energy calibration.  Write the sqrt(E) term into the function, "
+                            << "e.g. a" << n << "*sqrt(x), and drop the sqrtshift block." << std::endl;
+        return -1;
+      }
+    const std::set<int> refs = ShiftFnParamRefs(expression);
+    for (int j : refs)
+      if (j >= n) {
+        configure.outStream << "ERROR: Data segment #" << key << ": shift function \"" << expression << "\" uses a" << j
+                            << " but declares " << n << " parameter" << (n == 1 ? "" : "s") << " (a0..a" << n - 1 << ")."
+                            << std::endl;
+        return -1;
+      }
+    for (int j = 0; j < n; j++)
+      if (!refs.count(j)) {
+        configure.outStream << "ERROR: Data segment #" << key << ": shift function \"" << expression << "\" declares a"
+                            << j << " but never uses it." << std::endl;
+        return -1;
+      }
+    for (int m : members) segments_[m].InstallShiftFn(owner, pos, configure);
+    owner.SetShiftFnParamStart(fnStart);
+    fnStart += n;
+
+    // Degeneracy check: columns = d(dE)/d(term) at the group's distinct original lab energies.
+    std::vector<double> energies;
+    for (int m : members)
+      for (int pid = 1; pid <= segments_[m].NumPoints(); pid++) {
+        EPoint *pt = segments_[m].GetPoint(pid);
+        energies.push_back(pt->GetOriginalEnergy() > 0 ? pt->GetOriginalEnergy() : pt->GetLabEnergy());
+      }
+    std::sort(energies.begin(), energies.end());
+    energies.erase(std::unique(energies.begin(), energies.end()), energies.end());
+    std::vector<std::string> names;
+    std::vector<std::vector<double>> cols;
+    if (owner.IsVaryEnergyShift()) {
+      names.push_back("a");
+      cols.push_back(std::vector<double>(energies.size(), 1.0));
+    }
+    ESegment probe = owner;  // a scratch copy: the owner's own values stay untouched
+    for (int j = 0; j < n; j++) {
+      if (!owner.IsVaryShiftFn(j)) continue;
+      const double v0 = owner.GetShiftFnValues()[j], h = 1.0e-6 * (std::fabs(v0) + 1.0);
+      std::vector<double> c(energies.size());
+      for (size_t e = 0; e < energies.size(); e++) {
+        probe.SetShiftFnValue(j, v0 + h);
+        const double fp = probe.ShiftFnTerm(energies[e]);
+        probe.SetShiftFnValue(j, v0 - h);
+        c[e] = (fp - probe.ShiftFnTerm(energies[e])) / (2.0 * h);
+      }
+      probe.SetShiftFnValue(j, v0);
+      double norm = 0.0;
+      for (double v : c) norm += v * v;
+      if (!(norm > 0.0) || !std::isfinite(norm)) {
+        configure.outStream << "ERROR: Data segment #" << key << ": in shift function \"" << expression << "\", a" << j
+                            << " has no effect at this group's energies (" << energies.front() << "-" << energies.back()
+                            << " MeV); check the expression." << std::endl;
+        return -1;
+      }
+      names.push_back("a" + std::to_string(j));
+      cols.push_back(c);
+    }
+    std::ostringstream note;
+    note << "Note: shift function on segment #" << key;
+    if (members.size() > 1) {
+      note << " (group '" << owner.GetShiftGroup() << "', segments #" << key;
+      for (size_t m = 1; m < members.size(); m++) note << " " << segments_[members[m]].GetSegmentKey();
+      note << ")";
+    }
+    note << ": dE = a + " << expression << ", x = lab energy (MeV);";
+    for (int j = 0; j < n; j++) {
+      const double err = owner.GetShiftFnErrors()[j];
+      note << " a" << j << " " << owner.GetNominalShiftFnValues()[j]
+           << (owner.IsVaryShiftFn(j) ? (err != 0.0 ? " free (penalty width " + std::to_string(err) + ")" : " free, unpenalised")
+                                      : " fixed")
+           << (j + 1 < n ? "," : ".");
+    }
+    const int m = (int)energies.size(), k = (int)cols.size();
+    if (k >= 2) {
+      // Condition number of the column-normalised matrix (scale-free).
+      double cond = std::numeric_limits<double>::infinity();
+      if (m >= k) {
+        gsl_matrix *A = gsl_matrix_alloc(m, k);
+        gsl_matrix *V = gsl_matrix_alloc(k, k);
+        gsl_vector *S = gsl_vector_alloc(k), *work = gsl_vector_alloc(k);
+        for (int c = 0; c < k; c++) {
+          double norm = 0.0;
+          for (int r = 0; r < m; r++) norm += cols[c][r] * cols[c][r];
+          norm = std::sqrt(norm);
+          for (int r = 0; r < m; r++) gsl_matrix_set(A, r, c, cols[c][r] / norm);
+        }
+        gsl_set_error_handler_off();
+        if (gsl_linalg_SV_decomp(A, V, S, work) == 0 && gsl_vector_get(S, k - 1) > 0.0)
+          cond = gsl_vector_get(S, 0) / gsl_vector_get(S, k - 1);
+        gsl_matrix_free(A);
+        gsl_matrix_free(V);
+        gsl_vector_free(S);
+        gsl_vector_free(work);
+      }
+      note << " Condition number of the free terms (";
+      for (int c = 0; c < k; c++) note << names[c] << (c + 1 < k ? ", " : "");
+      note << ") over " << m << " energ" << (m == 1 ? "y" : "ies") << " " << energies.front() << "-" << energies.back()
+           << " MeV: " << cond << ".";
+      configure.outStream << note.str() << std::endl;
+      if (!(cond < 1.0e8))
+        configure.outStream << "WARNING: shift function on segment #" << key << ": its free terms cannot be told apart "
+                            << "over this group's energies (condition number " << cond << "); fix one of them or "
+                            << "constrain it with a penalty." << std::endl;
+    } else {
+      configure.outStream << note.str() << std::endl;
+    }
+  }
+  return 0;
 }
 
 /*!
@@ -2801,6 +3041,19 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
     double stepSize = (segment->GetEnergyShiftSqrtError() > 0.0) ? segment->GetEnergyShiftSqrtError() * 0.01 : 0.0005;
     p.Add(varname, segment->GetEnergyShiftSqrt(), stepSize);
     if (!segment->IsVaryEnergyShiftSqrt()) p.Fix(varname);
+  }
+
+  // Shift-function parameters: only segments that declare a "shiftfn" block have
+  // any, so a model without one gets no new parameter at all.
+  SetEnergyShiftFnParamOffset(p.Params().size());
+  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+    if (!segment->OwnsShiftFn() || !segment->HasShiftFn()) continue;
+    for (int j = 0; j < segment->NumShiftFnParams(); j++) {
+      snprintf(varname, sizeof(varname), "segment_%d_energy_shift_fn%d", segment->GetSegmentKey(), j);
+      const double err = segment->GetShiftFnErrors()[j];
+      p.Add(varname, segment->GetShiftFnValues()[j], (err > 0.0) ? err * 0.01 : 0.0005);
+      if (!segment->IsVaryShiftFn(j)) p.Fix(varname);
+    }
   }
 }
 
@@ -2862,11 +3115,22 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
       const int lead = segment->GetShiftLeaderPos();
       const double shiftConst = (lead >= 0) ? p[GetEnergyShiftParamOffset() + lead] : p[i];
       const double shiftSqrt = (j >= 0 && j < (int)p.size()) ? p[j] : 0.0;
+      // A shift function's parameters sit in the shift-function block, at the
+      // owning segment's (this one or its group leader) start.
+      std::vector<double> fnValues;
+      if (segment->HasShiftFn()) {
+        const int start = data->GetSegment(segment->GetShiftFnSourcePos() + 1)->GetShiftFnParamStart();
+        for (int q = 0; q < segment->NumShiftFnParams(); q++) {
+          const int idx = GetEnergyShiftFnParamOffset() + start + q;
+          fnValues.push_back((start >= 0 && idx < (int)p.size()) ? p[idx] : segment->GetShiftFnValues()[q]);
+        }
+      }
       const bool shiftActive = segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0 ||
-                               segment->IsVaryEnergyShiftSqrt() || shiftSqrt != 0.0;
+                               segment->IsVaryEnergyShiftSqrt() || shiftSqrt != 0.0 || segment->HasShiftFn();
       if (shiftActive) {
         // Check if energy is the same, if so, continue
-        if (segment->GetLastEnergyShift() == shiftConst && segment->GetLastEnergyShiftSqrt() == shiftSqrt) {
+        if (segment->GetLastEnergyShift() == shiftConst && segment->GetLastEnergyShiftSqrt() == shiftSqrt &&
+            (!segment->HasShiftFn() || segment->GetLastShiftFnValues() == fnValues)) {
           i++;
           j++;
           continue;
@@ -2876,6 +3140,8 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
         segment->SetLastEnergyShift(shiftConst);
         segment->SetEnergyShiftSqrt(shiftSqrt);
         segment->SetLastEnergyShiftSqrt(shiftSqrt);
+        for (int q = 0; q < (int)fnValues.size(); q++) segment->SetShiftFnValue(q, fnValues[q]);
+        if (segment->HasShiftFn()) segment->SetLastShiftFnValues(fnValues);
         queueUpdate(&*segment);
         anyEnergyShifted = true;
 
@@ -2885,6 +3151,7 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
             if (componentSegment) {
               componentSegment->SetEnergyShift(segment->GetEnergyShift());
               componentSegment->SetEnergyShiftSqrt(segment->GetEnergyShiftSqrt());
+              componentSegment->CopyShiftFnFrom(*segment);
               queueUpdate(componentSegment);
             }
           }
@@ -2905,7 +3172,8 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
               // loop.  Advancing them inside the component loop desyncs the
               // parameter-to-segment mapping for every subsequent segment.
               if (componentSegment->GetLastEnergyShift() == shiftConst &&
-                  componentSegment->GetLastEnergyShiftSqrt() == shiftSqrt) {
+                  componentSegment->GetLastEnergyShiftSqrt() == shiftSqrt &&
+                  (!segment->HasShiftFn() || componentSegment->GetLastShiftFnValues() == fnValues)) {
                 continue;
               }
 
@@ -2913,6 +3181,10 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
               componentSegment->SetLastEnergyShift(shiftConst);
               componentSegment->SetEnergyShiftSqrt(shiftSqrt);
               componentSegment->SetLastEnergyShiftSqrt(shiftSqrt);
+              if (segment->HasShiftFn()) {
+                componentSegment->CopyShiftFnFrom(*segment);
+                componentSegment->SetLastShiftFnValues(fnValues);
+              }
               queueUpdate(componentSegment);
               anyEnergyShifted = true;
             }
@@ -2969,8 +3241,15 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     const int lead = segment->GetShiftLeaderPos();
     const double shiftConst = (lead >= 0) ? p[GetEnergyShiftParamOffset() + lead] : p[i];
+    if (segment->HasShiftFn()) {
+      const int start = GetSegment(segment->GetShiftFnSourcePos() + 1)->GetShiftFnParamStart();
+      for (int q = 0; q < segment->NumShiftFnParams(); q++) {
+        const int idx = GetEnergyShiftFnParamOffset() + start + q;
+        if (start >= 0 && idx < (int)p.size()) segment->SetShiftFnValue(q, p[idx]);
+      }
+    }
     // Always apply energy shift since parameters are always present for all segments
-    if (segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0) {
+    if (segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0 || segment->HasShiftFn()) {
       segment->SetEnergyShift(shiftConst);
       segment->UpdatePointEnergiesWithShift();
       anyEnergyShifted = true;
@@ -2980,6 +3259,7 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
         for (ESegment *componentSegment : segment->GetComponentSegments()) {
           if (componentSegment) {
             componentSegment->SetEnergyShift(segment->GetEnergyShift());
+            componentSegment->CopyShiftFnFrom(*segment);
             componentSegment->UpdatePointEnergiesWithShift();
           }
         }
@@ -2988,12 +3268,13 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
 
     // CRITICAL FIX: Apply the same energy shift to all component segments in total capture segments
     if (segment->IsTotalCapture() && segment->HasComponents()) {
-      if (segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0) {
+      if (segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0 || segment->HasShiftFn()) {
         // Apply energy shift to all component segments
         const std::vector<ESegment *> &componentSegments = segment->GetComponentSegments();
         for (ESegment *componentSegment : componentSegments) {
           if (componentSegment) {
             componentSegment->SetEnergyShift(shiftConst);
+            componentSegment->CopyShiftFnFrom(*segment);
             componentSegment->UpdatePointEnergiesWithShift();
             anyEnergyShifted = true;
           }
@@ -3051,6 +3332,7 @@ EData *EData::Clone() const {
   dataCopy->normParamOffset_ = this->normParamOffset_;
   dataCopy->energyShiftParamOffset_ = this->energyShiftParamOffset_;
   dataCopy->energyShiftSqrtParamOffset_ = this->energyShiftSqrtParamOffset_;
+  dataCopy->energyShiftFnParamOffset_ = this->energyShiftFnParamOffset_;
   dataCopy->isFit_ = this->isFit_;
   dataCopy->isErrorAnalysis_ = this->isErrorAnalysis_;
   dataCopy->targetEffects_ = this->targetEffects_;

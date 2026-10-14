@@ -2,6 +2,7 @@
 #define ESEGMENT_H
 
 #include "EPoint.h"
+#include "Equation.h"
 #include <vector>
 #include <mutex>
 #include <memory>
@@ -135,6 +136,47 @@ class ESegment {
   void SetHasShiftGroupFollowers(bool);
   /// The whole lab-energy shift at a point's original lab energy: a + b*sqrt(E).
   double TotalEnergyShift(double labEnergy) const;
+  /// Add this segment's energy-shift penalties, ((x - nominal)/sigma)^2 for each varied
+  /// shift term with sigma != 0, to chi.  The one definition every chi^2 path uses; the
+  /// index form (gradient, curvature, least-squares priors) is ForEachShiftPenalty in
+  /// AZURECalc.cpp and must list the same terms.
+  void AddShiftPenalty(double &chi) const;
+  /// Shift function ("shiftfn" block): does this segment's own line declare one?  Such a
+  /// segment owns the function's fit parameters (and their penalties).
+  bool OwnsShiftFn() const;
+  /// Expression, starting values (the penalties' nominal values), uncertainties and vary
+  /// flags declared on this segment's line (owners only).
+  std::string GetDeclaredShiftFn() const;
+  const std::vector<double> &GetNominalShiftFnValues() const;
+  const std::vector<double> &GetShiftFnErrors() const;
+  bool IsVaryShiftFn(int j) const;
+  /// Does this line carry a "sqrtshift" block?
+  bool HasSqrtShiftBlock() const;
+  /// Is a shift function applied to this segment's points (its own, or its group leader's)?
+  bool HasShiftFn() const;
+  /// Expression of the applied shift function ("" if none).
+  std::string GetShiftFnExpression() const;
+  /// Number of parameters of the applied shift function.
+  int NumShiftFnParams() const;
+  /// Position (0-based, in EData's segment vector) of the segment that owns the applied
+  /// shift function's parameters (this segment or its group leader); -1 if none.
+  int GetShiftFnSourcePos() const;
+  /// Owners: index of the function's first parameter within EData's shift-function block.
+  int GetShiftFnParamStart() const;
+  void SetShiftFnParamStart(int);
+  /// Current and last-applied parameter values of the applied shift function.
+  const std::vector<double> &GetShiftFnValues() const;
+  const std::vector<double> &GetLastShiftFnValues() const;
+  void SetShiftFnValue(int j, double value);
+  void SetLastShiftFnValues(const std::vector<double> &);
+  /// Apply the shift function owned by the segment at position ownerPos (this one, or its
+  /// group leader) to this segment; its parameters start at the owner's declared values.
+  void InstallShiftFn(const ESegment &owner, int ownerPos, const Config &);
+  /// Copy the applied shift function (expression and current values) of another segment,
+  /// for the components of a composite or total-capture segment.
+  void CopyShiftFnFrom(const ESegment &);
+  /// f(x) alone, at original lab energy x (MeV); 0 without a shift function.
+  double ShiftFnTerm(double labEnergy) const;
   /// Is this a composite segment, combining others by sum or ratio?
   bool IsAdvanced() const;
   /// Combination type as an integer: 0 sum, 1 ratio.
@@ -272,6 +314,20 @@ class ESegment {
   std::string shiftGroup_;
   int shiftLeaderPos_;
   bool hasShiftGroupFollowers_;
+  bool hasSqrtShiftBlock_;
+  // Shift function declared on this line (owner) ...
+  std::string shiftFnDeclared_;
+  std::vector<double> shiftFnNominal_;
+  std::vector<double> shiftFnError_;
+  std::vector<bool> shiftFnVary_;
+  // ... and the one applied to the points (own or the group leader's).
+  bool hasShiftFn_;
+  Equation shiftFn_;
+  std::vector<double> shiftFnValues_;
+  std::vector<double> lastShiftFnValues_;
+  const Config *shiftFnConfig_;
+  int shiftFnSourcePos_;
+  int shiftFnParamStart_;
   bool isAdvanced_;
   int operationType_;
   std::string naturalToken_ = "0";

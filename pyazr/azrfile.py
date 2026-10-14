@@ -1400,6 +1400,7 @@ class AzrModel:
                          vary_shift=False, phase_J=None, phase_L=None,
                          active=True, energy_shift_sqrt=0.0,
                          energy_shift_sqrt_error=0.0, vary_shift_sqrt=False,
+                         shift_group=None, shift_fn=None, shift_fn_params=(),
                          natural=False):
         """Append one data segment (a ``<segmentsData>`` line).
 
@@ -1418,7 +1419,13 @@ class AzrModel:
         is the coefficient b of a sqrt(E) shift term, E' = E + shift +
         b*sqrt(E/MeV) (b in MeV^1/2), with its ``_error`` and
         ``vary_shift_sqrt``; the block is written only when one of the three
-        is set, so a plain segment line is unchanged.
+        is set, so a plain segment line is unchanged.  ``shift_group`` (a
+        label) writes a ``shiftgroup`` block; ``shift_fn`` (an expression in
+        the lab energy x, MeV, without blanks) with ``shift_fn_params``, one
+        ``(value, sigma, vary)`` per parameter a0, a1, ..., writes a
+        ``shiftfn`` block: E' = E + shift + f(x).  ``natural=True`` (or a
+        sample name) writes a ``sample`` block: every term is weighted by the
+        abundance of its entrance pair's compound nucleus.
 
         Returns ``self`` so calls chain.
         """
@@ -1440,7 +1447,16 @@ class AzrModel:
         if energy_shift_sqrt or energy_shift_sqrt_error or vary_shift_sqrt:
             toks += ["sqrtshift", _fmt(energy_shift_sqrt),
                      _fmt(energy_shift_sqrt_error), 1 if vary_shift_sqrt else 0]
-        if natural:
+        if shift_group:
+            toks += ["shiftgroup", str(shift_group)]
+        if shift_fn:
+            if any(c.isspace() for c in shift_fn) or not shift_fn_params:
+                raise ValueError("shift_fn needs an expression without blanks and "
+                                 "one (value, sigma, vary) per parameter.")
+            toks += ["shiftfn", '"' + shift_fn + '"', len(shift_fn_params)]
+            for v, sig, vary in shift_fn_params:
+                toks += [_fmt(v), _fmt(sig), 1 if vary else 0]
+        if natural:                           # writers put the sample block last
             toks += ["sample", natural if isinstance(natural, str) else 1]
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
         lines = self._suffix.splitlines()

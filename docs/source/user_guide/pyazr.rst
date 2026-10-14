@@ -115,7 +115,7 @@ name like ``width_1_2``:
        print(w.name, w.jpi, "L =", w.L, "S =", w.S, "pair", w.pair)
 
 Filtered views (``.free``, ``.energies``, ``.widths``, ``.norms``,
-``.shifts``) and lookups (``.by_level(...)``, ``.by_name(...)``,
+``.shifts``, ``.sqrt_shifts``, ``.fn_shifts``) and lookups (``.by_level(...)``, ``.by_name(...)``,
 ``.by_physical_level()``) are all available. A ``LevelKey`` prints as
 ``5/2-#2@6.588MeV``; ``(jgroup, level)`` is its identity, since AZURE2 restarts
 level numbering inside every J-group.
@@ -141,7 +141,10 @@ what is wanted is :math:`\partial\,\mathrm{model}/\partial E`, and AZURE2
 applies a shift by rebuilding every energy-dependent quantity of the affected
 points --- level matrix, penetrabilities, Coulomb and hard-sphere phases,
 external-capture amplitudes, and the target-integration sub-point grid. A fit
-with many free shifts is dominated by their columns.
+with many free shifts is dominated by their columns. This covers the
+:math:`\sqrt{E}` coefficients and the shift-function parameters
+(``kind == "shift_fn"``, :attr:`Parameter.fn_term` = j) as well;
+``penalties()`` and ``objective()`` include their penalties.
 
 .. warning::
 

@@ -92,7 +92,7 @@ class AZUREAPI {
   vector_r GetEnergyShiftIndices();
   // Number of numeric fields packed per parameter by GetParameterInfo().
   // Keep this in sync with pyazr/parameters.py (Parameter._NFIELDS).
-  static const int kParamInfoFields = 15;  // unchanged: an abundance record reuses the fields (see type 5)
+  static const int kParamInfoFields = 15;  // unchanged: shift-function and abundance records reuse the fields (types 5, 6)
   /*!
    * Returns structured metadata describing every parameter, in the same order
    * as params_names() / params_all() / params_fixed().
@@ -101,9 +101,12 @@ class AZUREAPI {
    * fields (and -1 for "not applicable") are:
    *   0  type          0=energy, 1=width, 2=norm, 3=energy-shift,
    *                    4=sqrt(E) energy-shift coefficient,
-   *                    5=isotopic abundance of a compound nucleus (only in a
+   *                    5=shift-function parameter aj of a segment's "shiftfn"
+   *                      block: j in field 6, the segment in field 13,
+   *                    6=isotopic abundance of a compound nucleus (only in a
    *                      project with an <abundances> block): its Z in field 1
-   *                      and A in field 4, the prior sigma in field 14
+   *                      and A in field 4, the 1-based sample in field 6, the
+   *                      prior sigma in field 14
    *   1  jgroup        1-based J-group index (R-matrix params only)
    *   2  J             total spin of the J-group / level
    *   3  parity        +1 / -1
