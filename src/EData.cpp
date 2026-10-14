@@ -1514,6 +1514,16 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
     // Park formalism: the J > 0 wall, when a level sits beyond it.
     if (configure.paramMask & Config::USE_PARK_FORMALISM)
       chiOut << " Total-Park-Chi-Squared: " << parkPenalty_;
+    // The energy-shift penalties the fit minimised (ESegment::AddShiftPenalty), when
+    // any shift is a fit parameter.  Without this the file reported less than the
+    // minimiser's own total by exactly this amount.
+    bool anyShiftVaried = false;
+    double totalShiftChiSquared = 0.;
+    for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+      if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt()) anyShiftVaried = true;
+      segment->AddShiftPenalty(totalShiftChiSquared);
+    }
+    if (anyShiftVaried) chiOut << " Total-Shift-Chi-Squared: " << totalShiftChiSquared;
     chiOut << std::endl
            << std::endl;
     chiOut.flush();
