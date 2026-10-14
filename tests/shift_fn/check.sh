@@ -41,6 +41,7 @@ seg() { awk -F, -v k="$2" '$1 == k { print $2 }' "$1/output/chiSquared.out" 2>/d
 total() { awk '/^Total-Chi-Squared:/ { print $2 }' "$1/output/chiSquared.out" 2>/dev/null; }
 field() { awk -v f="$2" '/^Total-Chi-Squared:/ { for (i = 1; i < NF; i++) if ($i == f) print $(i+1) }' "$1/output/chiSquared.out" 2>/dev/null; }
 par() { awk -v n="$2" '$1 == n { print $2 }' "$1/output/param.sav" 2>/dev/null; }
+par_file() { awk -v n="$2" '$1 == n { print $2 }' "$1" 2>/dev/null; }
 relclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; if (m == 0) m = 1e-300; exit !(d <= t * m) }'; }
 absclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(d < t) }'; }
 # Largest relative difference between the model columns (4) of two segments' blocks in
@@ -191,8 +192,11 @@ else bad "no degeneracy warning for a0 + 0*x with a free"; fi
 # ---- 7. a .sav value does not free a fixed function parameter -------------------
 mk sav_fixed 1 "" "1 1 1 0 100 40 40 4 1 0 0 0 1 1 data/xs_40_lin_mislabelled.dat 0 0 shiftfn \"a0*(x-1)\" 1 0 0 0"
 if run sav_fixed 2 ""; then
-  sed 's/^\(segment_1_energy_shift_fn0 \+\)[-0-9.e+]*/\10.002/' "$WORK/sav_fixed/output/param.sav" > "$WORK/sav_fixed/start.sav"
-  if run sav_fixed 2 "" start.sav; then
+  # POSIX BRE only: BSD sed (macOS) reads "\+" as a literal "+", which left the .sav unedited.
+  sed 's/^\(segment_1_energy_shift_fn0  *\)[-0-9.e+]*/\10.002/' "$WORK/sav_fixed/output/param.sav" > "$WORK/sav_fixed/start.sav"
+  if ! absclose "$(par_file "$WORK/sav_fixed/start.sav" segment_1_energy_shift_fn0)" 0.002 1e-12; then
+    bad "test setup: start.sav does not carry a0 = 0.002"
+  elif run sav_fixed 2 "" start.sav; then
     v="$(par "$WORK/sav_fixed" segment_1_energy_shift_fn0)"
     if absclose "$v" 0.002 1e-12; then ok "fixed a0 stays at the .sav value ($v)"; else bad "fixed a0 moved to $v (.sav 0.002)"; fi
   fi
