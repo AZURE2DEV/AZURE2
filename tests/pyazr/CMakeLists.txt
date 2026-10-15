@@ -133,3 +133,9 @@ add_test(NAME pyazr_natural_target
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/natural_target_test.py)
 set_tests_properties(pyazr_natural_target PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# fetch_levels: IAEA LiveChart, falling back to the NNDC ENSDF API when LiveChart
+# is unreachable or answers with a challenge page.  Offline (canned answers).
+add_test(NAME pyazr_nds_levels_fallback
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/nds_levels_fallback_test.py)

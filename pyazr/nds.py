@@ -9,7 +9,9 @@ The two web services wrapped here:
   wrap the ``x4list`` / ``x4get`` Web-API.
 - **LiveChart/ENSDF** (``https://www-nds.iaea.org/relnsd/v1/data``): evaluated
   level schemes, gamma transitions and ground-state properties.  ``fetch_levels``
-  / ``fetch_gammas`` / ``fetch_ground_state`` wrap it.
+  / ``fetch_gammas`` / ``fetch_ground_state`` wrap it.  ``fetch_levels`` falls
+  back to the NNDC ENSDF API (``https://www.nndc.bnl.gov/ensdf-api/``, the same
+  ENSDF adopted levels as JSON) when LiveChart cannot be reached.
 
 ``ExforData.to_azr`` converts an EXFOR dataset into an AZURE2 data file
 (``energy angle crossSection error``, lab frame) and returns the keyword
@@ -40,6 +42,7 @@ import io
 import json
 import math
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 import warnings
@@ -48,6 +51,7 @@ import numpy as np
 
 EXFOR_URL = "https://nds.iaea.org/exfor/"
 LIVECHART_URL = "https://www-nds.iaea.org/relnsd/v1/data"
+ENSDF_API_URL = "https://www.nndc.bnl.gov/ensdf-api"
 CROSSREF_URL = "https://api.crossref.org/works"
 UA = {"User-Agent": "pyazr/nds (research tool)"}
 
@@ -694,6 +698,8 @@ class Level:
     jp: str             # "1+", "3/2-", ...
     half_life: str      # "STABLE", "1.23E-3 S", ...
     half_life_sec: float
+    width_kev: float = None    # ENSDF total width, keV (NNDC source only; None when not given)
+    source: str = "livechart"  # "livechart" or "nndc": which service the record came from
 
     def __repr__(self):  # pragma: no cover
         return (f"<Level {self.symbol}{self.z + self.n} idx={self.index} "
@@ -761,16 +767,51 @@ def _livechart(fields, nuclides):
     if not re.match(r"^[0-9]+[a-z]+$", nuclides):
         raise ValueError(f"nuclides must be like '14n', got {nuclides!r}.")
     text = _http_get(LIVECHART_URL, {"fields": fields, "nuclides": nuclides})
-    return list(csv.DictReader(io.StringIO(text)))
+    reader = csv.DictReader(io.StringIO(text))
+    # A challenge or error page (HTML, sometimes with HTTP 200) has no CSV header: without this check it
+    # reads as a header line and zero rows, i.e. a silent empty level scheme.
+    if text.lstrip().startswith("<") or not reader.fieldnames or "z" not in reader.fieldnames:
+        raise ValueError(f"LiveChart did not answer with its CSV (starts {text.strip()[:60]!r}).")
+    return list(reader)
 
 
-def fetch_levels(nuclide):
-    """Level scheme for ``nuclide`` (e.g. ``"14n"``) from ENSDF via LiveChart.
+def fetch_levels(nuclide, source="auto"):
+    """Level scheme for ``nuclide`` (e.g. ``"14n"``) from the ENSDF adopted levels.
 
     Returns a list of :class:`Level` ordered by excitation energy.  Energies
     are in keV (``.energy_mev`` gives MeV); ``.spin`` / ``.parity`` parse the
     ``J^pi`` column.
+
+    ``source`` picks the service: ``"livechart"`` (IAEA LiveChart, CSV),
+    ``"nndc"`` (the NNDC ENSDF API at ``ENSDF_API_URL``, JSON) or ``"auto"``
+    (the default): LiveChart first, and the NNDC API with a warning when
+    LiveChart cannot be reached or does not answer with its CSV -- from some
+    networks every IAEA request gets a Cloudflare challenge page (HTTP 403;
+    the Notre Dame CRC cluster, 2026-10-15).  Both serve the ENSDF adopted
+    levels, and the NNDC records are written in LiveChart's formats, checked
+    against it on 14N and 16O (2026-10-15: same levels, energies and
+    uncertainties): a multi-valued ``jp`` as ``"2+ 1+"`` / ``"(0+ 2+)"`` (the API
+    says ``"2+,1+"`` / ``"(0+),(2+)"``), ``half_life`` as the bare number
+    LiveChart gives (``"68"`` for 68 fs, ``"12"`` for a 12 keV width -- the unit
+    is not in it; use ``half_life_sec``) or ``"STABLE"``.  A NNDC record also
+    carries ``width_kev``, the evaluated total width in keV when ENSDF gives one.
     """
+    if source not in ("auto", "livechart", "nndc"):
+        raise ValueError(f"source must be 'auto', 'livechart' or 'nndc', got {source!r}.")
+    if not re.match(r"^[0-9]+[a-zA-Z]+$", nuclide):
+        raise ValueError(f"nuclides must be like '14n', got {nuclide!r}.")
+    if source != "nndc":
+        try:
+            return _levels_livechart(nuclide.lower())
+        except (OSError, KeyError, ValueError) as err:   # URLError/HTTPError/timeouts are OSError;
+            if source == "livechart":                      # KeyError/ValueError = not LiveChart's CSV
+                raise
+            warnings.warn(f"LiveChart did not answer for {nuclide!r} ({err.__class__.__name__}: "
+                          f"{str(err)[:120]}); using the NNDC ENSDF API ({ENSDF_API_URL}).")
+    return _levels_nndc(nuclide)
+
+
+def _levels_livechart(nuclide):
     out = []
     for row in _livechart("levels", nuclide):
         out.append(Level(
@@ -781,6 +822,54 @@ def fetch_levels(nuclide):
             jp=row["jp"], half_life=row["half_life"],
             half_life_sec=float(row["half_life_sec"] or 0),
         ))
+    return out
+
+
+_WIDTH_TO_KEV = {"EV": 1e-3, "KEV": 1.0, "MEV": 1e3}
+
+
+def _levels_nndc(nuclide, page=500):
+    """ENSDF adopted levels from the NNDC ENSDF API (``/levels``, paged)."""
+    rows, offset = [], 0
+    while True:
+        d = json.loads(_http_get(f"{ENSDF_API_URL}/levels",
+                                 {"nuclide": nuclide, "document-type": "adopted",
+                                  "limit": page, "offset": offset}))
+        rows += d["results"]
+        offset += page
+        if not d["meta"].get("next") or offset >= d["meta"].get("total", 0):
+            break
+    out = []
+    for r in rows:
+        ds = r.get("datasetSummary") or {}
+        e = r.get("energy") or {}
+        unc = (e.get("uncertainty") or {}).get("value")
+        hl = r.get("halflife") or {}
+        w = (r.get("decayWidths") or {}).get("totalWidth") or {}
+        if r.get("isStable"):
+            half_life = "STABLE"
+        elif hl.get("value") is not None:
+            half_life = f"{hl['value']:g}"            # LiveChart: the number alone, unit elsewhere
+        elif w.get("value") is not None:
+            half_life = f"{w['value']:g}"             # a width (keV for broad levels), as LiveChart
+        else:
+            half_life = ""
+        width = None
+        if w.get("value") is not None and str(w.get("unit", "")).upper() in _WIDTH_TO_KEV:
+            width = float(w["value"]) * _WIDTH_TO_KEV[str(w["unit"]).upper()]
+        out.append(Level(
+            z=int(ds.get("z", 0)), n=int(ds.get("n", 0)),
+            symbol=str(ds.get("elementSymbol", "")),
+            index=int(r.get("levelIndex", len(out))),
+            energy=float(e.get("value") or 0),
+            energy_unc=float(unc or 0),
+            jp=((r.get("spinParity") or {}).get("stringRepresentation") or "")
+                .replace("),(", " ").replace(",", " "),     # LiveChart's spelling of a J^pi list
+            half_life=half_life,
+            half_life_sec=float(r.get("halflifeSeconds") or 0),
+            width_kev=width, source="nndc",
+        ))
+    out.sort(key=lambda lv: (lv.energy, lv.index))
     return out
 
 

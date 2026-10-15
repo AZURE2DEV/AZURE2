@@ -304,7 +304,8 @@ holds the measured reaction data; LiveChart/ENSDF the evaluated level schemes.
                     observable="total-capture")       # lab E, barns
    AzrModel.from_file("13N.azr").add_data_segment(**kw).write("13N_new.azr")
 
-   # level scheme of the compound nucleus, from ENSDF
+   # level scheme of the compound nucleus, from ENSDF (IAEA LiveChart, or the
+   # NNDC ENSDF API when LiveChart cannot be reached; source="nndc" forces it)
    for lv in nds.fetch_levels("14n"):
        print(lv.energy_mev, lv.jp, lv.half_life)
 
