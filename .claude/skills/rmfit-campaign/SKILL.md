@@ -274,8 +274,10 @@ candidate is then scored as "nothing there".  The recipe that found it:
    at 9.4 it was the backward angles 0.35-0.71 of the data over 400 keV).  A narrow spike (two 10 keV bands, pull changing sign) is a
    lineshape / resolution question, not a level search.  Write the anatomy into the readme first.
 2. **Width-floor level add, every J^π, with the local release and a same-budget control.**  `structure add --local-release 0.5
-   --local-nfev 80 --pinned-nfev 60 --nfev 150` with `width_floor_windows: [[E-0.0005, E+0.0005, 100000, <pair>]]` (the found width's
-   channel; here n₀ ≥ 100 keV); seeds Γ_n0 150 + Γ_α0 30 keV in the lowest L; one campaign directory per J^π (an accepted level is
+   --local-nfev 80 --pinned-nfev 60 --nfev 150` with `total_width_floor_windows: [[E-0.0005, E+0.0005, 100000]]` (a floor on the
+   TOTAL width over the level's open channels, 2026-10-12 -- NOT the older per-channel `width_floor_windows`, which forces the width
+   into one named channel; see the 2026-10-12 log entry) and `setenv RMFIT_SEED_OMITTED 1` so every open channel of the group exists
+   and can take width; seeds Γ_n0 150 + Γ_α0 30 keV in the lowest L; one campaign directory per J^π (an accepted level is
    adopted into its base, so groups must not share one), three groups per node job.  The floor is one-sided on the sign the amplitude
    starts with and never above 0.95 of the cap; it is skipped for an amplitude that is exactly 0 (the control's "level off" state --
    the first run had the control carrying the floored level, start 42k too high; a control whose start differs from the incumbent is
@@ -1879,3 +1881,58 @@ A GUI launched for an 11B+a review fell back to its text menu (no `< /dev/null`)
 "bin/AZURE2 11B+a_udr.azr"` matched nothing (`+` is a regex quantifier), the log was deleted under the live process, and the hidden
 `.nfs...` file reached 748 GB and filled /groups/rdeboer1 at 17:17.  Eight 13C+a jobs and several other sessions' MCMC jobs died.
 Found by `find -mmin -2880 -size +200M` (the .nfs file) and `ls -l /proc/<pid>/fd`; freed by killing the pid.  Gotchas in section 8.
+
+## 2026-10-12 — the width floor belongs on the TOTAL width; a level add only has the channels the candidate names
+DeBoer: "the floor should apply to the total width, not just the n0 width. A state could have a large alpha width instead and a small
+neutron width and still be fine ... It doesn't matter if all of the partial widths are small, as long as at least one of them is large
+enough to satisfy the floor."  Two defects in every floored level add before this date:
+1. `width_floor_windows` floors ONE channel (pair), so a broad level that the data want alpha-dominated (or in n1/n2 above their
+   thresholds) was forced to carry >= the floor in n0 and judged on that.  13C+a/10-11-26_broad103: 1/2+ and 3/2- at 10.3 MeV gave the
+   biggest gains (+4,252 / +2,767 vs control) and were both rejected "unphysical" with n0 at the floor -- possibly the floor's fault.
+2. `structure.add_level_variant` creates ONLY the channels named in the candidate (here n0 + a0); the group's other channels are written
+   gamma = 0 and FIXED unless `RMFIT_SEED_OMITTED=1` (then every open, non-dead channel is freed with a tiny seed).  So no width could ever
+   move to n1, n2 or a1 in those tests, whatever the floor.
+Fix: `BoundsPolicy.total_width_floor_windows = [[e_min, e_max, gamma_min_ev], ...]`, matched on the level's SEED energy like the old
+floor.  It is a one-sided penalty row in `polish`, residual max(0, gmin - Gamma_tot)/(sigma * gmin) with sigma = 1e-4 relative
+(`total_floor_sigma`; at 0.005 the floor sagged by a third under a strong data pull -- sag ~ pull*sigma^2/2), appended after the data
+rows so `rows_objective` counts it and `rows_chi2` excludes it.  Gamma_tot = sum over OPEN channels (Gamma_W > 0 at x_ref) of
+Gamma_W,c theta_c^2; no sign lock, single amplitudes stay free.  No floor for a level whose amplitudes are all exactly 0 (the control).
+The level add logs "total width of <lvl> after the released polish: X keV (floor Y keV)" and, if the floor binds (within 1 %), puts
+"Gamma_total[lvl] at the Y keV floor" in at_bound -> unphysical.  The old per-channel floor is kept for deliberate tests of one channel's
+width (10-5-26_an0_reconcile, 10-6-26_32m_widen).  Test: tests/test_total_width_floor.py (alpha-dominated level passes with
+Gamma_n0 -> 0; the old floor holds Gamma_n0 at 100 keV on the same data; an unwanted level is held at the floor and reported binding).
+Installed with local.py / campaign.py .bak-2026-10-12.  First use: 13C+a/10-12-26_broad103_total (the two 10.3 MeV cases re-run, 1/2+
+also seeded in n1 s-wave).  Rule: a floored level add sets RMFIT_SEED_OMITTED=1 and uses the total floor.
+
+
+## 2026-10-12 (b) — sharded convolution follows AZURE2 dad58dc; local ±mΓ table in every level add; seed reset after the window scan
+1. **Sharded vs single disagreed by ~52 on 13C+a.**  `model.build_conv_spec` re-implements `<targetInt>` Gaussian convolution for the
+   shards (the engine's own convolution needs every segment in one session).  It still used the PRE-dad58dc convention (constant sigma,
+   kernel over +-3 sigma NOT normalised -> results 0.27 % low); AZURE2 dad58dc normalised the kernel.  So `polish` (sharded) scored the
+   Nelson segment 170 ~52 below the `verify` (single) number -- read as a "+53 offset between builds" for half a day.  Now: one sigma per
+   data point, normalised kernel over +-3 sigma, and the three dad58dc sigma forms -- `sigmalab` (lab sigma(E_lab) expression x cm_conv),
+   legacy expression (evaluated at the point's E_cm), constant (x cm_conv).  `TargetEffectSpec.sigma_lab`; `sigma_eq` evaluates general
+   AZURE2 expressions (a0..aN, x, ^, sqrt, exp, ...) through a restricted eval.  Test tests/test_conv_spec_dad58dc.py.  RULE: when the
+   engine's convolution changes, re-run a shard-vs-single comparison per convolved segment before trusting any sharded number; job
+   scripts for convolved models carry a CONV GUARD (`'sigma_lab' in dataclasses.fields(TargetEffectSpec)`).
+2. **Local significance (DeBoer: "give the difference between the chi2 with and without the new resonance based on something like +/-
+   3 times the width of the resonance to either side").**  `diagnose.window_delta(ev, x_with, x_without, e_r, gamma_mev, multiples=(1,2,3),
+   min_half_mev=0)` + `format_window_delta`; `_run_level_add` now saves the control vector as a ledger candidate (status "control",
+   score stage "control" -- never "verified", so it cannot become the incumbent), scores candidate and control on ONE fresh SingleSession,
+   logs "control on a fresh single session" and the ±1/2/3Γ table (inside / outside, per data set inside ±3Γ), and stores control_cid,
+   control_single and the window JSON in the round stats.  Optional `BoundsPolicy.window_min_half_mev`.  Test tests/test_window_delta.py;
+   13N level-add regression shows the table.
+3. **Seed reset after the window scan.**  With RMFIT_SEED_OMITTED=1 the window polish put large widths into channels the window data do
+   not constrain, and they were copied into the full model (10-12-26_broad103_total 3/2-: full model started at 2.5M, test void).  Channels
+   in `info["seeded_omitted"]` are now reset to their file seeds after the window amplitudes are copied (log line "reset ... seeded-omitted").
+Installed with campaign.py / diagnose.py / model.py .bak-2026-10-12b after test_bounds_13n and test_local_release_13n passed on the dev copy.
+
+**2026-10-13 -- shared-package rule: every rmfit edit passes `tests/test_keys.py` AND a Sharded fixture before it stays.**  An edit to
+`engine.py` by another session (abundance priors for AZURE2's multi-compound-nucleus branch) passed `self.azr` from
+`Sharded._assemble`, an attribute only `SingleSession` has; every sharded run started after the edit died at its first evaluator
+start-up (`AttributeError: 'Sharded' object has no attribute 'azr'`, five 13C+a level adds in 10-13-26_add1033_f100), while
+the 13N single-session tests stayed green.  A second edit (`keys.py` pair-node tags) broke `sign_distance` (KeyError), which only
+perturbation diagnostics and crossover call.  Both fixed the same day (`self.base_azr`; enumerate (member, pair) throughout);
+the rule and the queue template `tests/_queue_sharded/run_crc_sharded` (test_keys + test_levelscan_13n on 3 shards) are in
+`rmfit/README.md`.  Drivers that are already running keep their loaded module, so a bad install shows up only in NEW jobs: after
+any rmfit install, check the first new job's log past its evaluator start-up before trusting a quiet queue.
