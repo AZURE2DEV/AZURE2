@@ -44,6 +44,10 @@ it absorb every discrepancy in the model.
 A segment with **Vary Norm?** enabled but no quoted error has no penalty, and
 its normalization is genuinely unconstrained.
 
+Segments that share one normalization (``normgroup``, :doc:`segments`)
+contribute this term once, with the first member's :math:`n^{\text{nom}}` and
+:math:`\epsilon`; the other members carry no normalization penalty.
+
 The energy-shift penalty
 ------------------------
 

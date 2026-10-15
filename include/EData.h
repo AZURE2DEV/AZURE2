@@ -114,6 +114,12 @@ class EData {
   int ResolveShiftFunctions(const Config &);
   /// Set each shift-group follower's parameter to its leader's value (for the parameter files).
   void SyncShiftGroupParams(ROOT::Minuit2::MnUserParameters &) const;
+  /// Link the members of each "normgroup" to the group's first segment (called by Fill).
+  void ResolveNormGroups(const Config &);
+  /// Set each norm-group follower's (fixed) norm parameter to its leader's value.
+  void SyncNormGroupParams(ROOT::Minuit2::MnUserParameters &) const;
+  /// The segment (1-based) whose norm segment s uses: its norm-group leader, or s itself.
+  int NormOwner(int s) const;
   void FillMnParams(ROOT::Minuit2::MnUserParameters &);
   /// Write the normalizations back from a Minuit parameter vector.
   void FillNormsFromParams(const vector_r &);

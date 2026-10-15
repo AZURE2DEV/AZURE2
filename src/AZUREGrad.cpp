@@ -732,7 +732,9 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
     if (!segment) continue;
     const auto ts0 = std::chrono::steady_clock::now();
     const double norm = segment->GetNorm();
-    const int normFull = segment->IsVaryNorm() ? pmap.NormIndex(i) : -1;
+    // A norm-group follower's rows depend on its leader's norm parameter.
+    const int normOwner = data->NormOwner(i);
+    const int normFull = data->GetSegment(normOwner)->IsVaryNorm() ? pmap.NormIndex(normOwner) : -1;
     const int nPoints = segment->NumPoints();
     bool bail = false;
 

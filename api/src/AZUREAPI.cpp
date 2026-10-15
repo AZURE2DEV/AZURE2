@@ -992,14 +992,16 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     // gradient stay consistent). Runs in the parallel point loop, so guard it.
 #pragma omp atomic
     chi2 += (r * r) / (err * err);
-    if (seg->IsVaryNorm() && norm != 0.0 && i >= 1 && i < (int)normData.size()) {
+    // A norm-group follower's points move its leader's norm (o), the one parameter.
+    const int o = ld->NormOwner(i);
+    if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->GetSegment(o)->IsVaryNorm()) {
       double e2 = cmErr * cmErr;
       // fitBarFn runs inside the parallel point loop of AccumulateEGammaGradient,
-      // and all points of a segment share the same normData[i], so guard the
+      // and all points of a segment share the same normData[o], so guard the
       // accumulation.
       double dNorm = -2.0 * r * dataval / (e2 * norm * norm) - 2.0 * r * r / (e2 * norm * norm * norm);
 #pragma omp atomic
-      normData[i] += dNorm;
+      normData[o] += dNorm;
     }
     return 2.0 * r / (err * err);
   };
@@ -1017,7 +1019,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     accum.Scatter(pmap, gradFull);
     for (int s = 1; s <= ld->NumSegments(); s++) {
       ESegment *seg = ld->GetSegment(s);
-      if (!seg || !seg->IsVaryNorm()) continue;
+      if (!seg || !seg->IsVaryNorm() || seg->IsNormGroupFollower()) continue;  // a follower's norm is fixed
       int idx = pmap.NormIndex(s);
       if (idx >= 0 && idx < (int)gradFull.size()) gradFull[idx] = normData[s];
     }

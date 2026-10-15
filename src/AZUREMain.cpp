@@ -351,6 +351,7 @@ int AZUREMain::operator()() {
         }
 
         data()->SyncShiftGroupParams(params.GetMinuitParams());
+        data()->SyncNormGroupParams(params.GetMinuitParams());
         params.WriteUserParameters(configure(), true);
       } else {
 #endif
@@ -374,6 +375,7 @@ int AZUREMain::operator()() {
             haveBandCov = true;  // saved later, after optional reduced-chi^2 scaling
           }
           data()->SyncShiftGroupParams(params.GetMinuitParams());
+          data()->SyncNormGroupParams(params.GetMinuitParams());
           params.WriteUserParameters(configure(), true);
         } else if (configure().paramMask & Config::USE_LM_MINIMIZER) {
           // Levenberg-Marquardt / Gauss-Newton using the analytic residual
@@ -396,6 +398,7 @@ int AZUREMain::operator()() {
             haveBandCov = true;  // saved later, after optional reduced-chi^2 scaling
           }
           data()->SyncShiftGroupParams(params.GetMinuitParams());
+          data()->SyncNormGroupParams(params.GetMinuitParams());
           params.WriteUserParameters(configure(), true);
         } else {
           // Use Minuit2 MIGRAD for minimization (default).  When the analytic-
@@ -559,6 +562,7 @@ int AZUREMain::operator()() {
           }
           params.GetMinuitParams() = min.UserParameters();
           data()->SyncShiftGroupParams(params.GetMinuitParams());
+          data()->SyncNormGroupParams(params.GetMinuitParams());
           params.WriteUserParameters(configure(), true);
         }  // end MIGRAD (else of Levenberg-Marquardt selector)
 #ifdef USE_NLOPT

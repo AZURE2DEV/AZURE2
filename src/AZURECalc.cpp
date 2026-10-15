@@ -467,6 +467,7 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
     if (mp.Params().size() == p.size())
       for (unsigned int i = 0; i < p.size(); i++) mp.SetValue(i, p[i]);
     ld->SyncShiftGroupParams(mp);
+    ld->SyncNormGroupParams(mp);
     WriteParameters(params, configure());
     ld->WriteOutputFiles(configure(), true);
     lc->TransformOut(configure());
@@ -689,14 +690,16 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     double r = model - dataval * norm;
     double err = cmErr * norm;
     if (err == 0.0) return 0.0;
-    if (seg->IsVaryNorm() && norm != 0.0 && i >= 1 && i < (int)normData.size()) {
+    // A norm-group follower's points move its leader's norm (o), the one parameter.
+    const int o = ld->NormOwner(i);
+    if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->GetSegment(o)->IsVaryNorm()) {
       double e2 = cmErr * cmErr;
       // fitBarFn runs inside the parallel point loop of AccumulateEGammaGradient,
-      // and all points of a segment share the same normData[i], so guard the
+      // and all points of a segment share the same normData[o], so guard the
       // accumulation.
       double dNorm = -2.0 * r * dataval / (e2 * norm * norm) - 2.0 * r * r / (e2 * norm * norm * norm);
 #pragma omp atomic
-      normData[i] += dNorm;
+      normData[o] += dNorm;
     }
     return 2.0 * r / (err * err);
   };
@@ -716,7 +719,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     AddNuisanceGradient(p, grad);                   // nuisance penalty
     for (int s = 1; s <= ld->NumSegments(); s++) {  // normalizations
       ESegment *seg = ld->GetSegment(s);
-      if (!seg || !seg->IsVaryNorm()) continue;
+      if (!seg || !seg->IsVaryNorm() || seg->IsNormGroupFollower()) continue;  // a follower's norm is fixed
       int idx = pmap.NormIndex(s);
       if (idx < 0 || idx >= (int)grad.size()) continue;
       double g = normData[s];

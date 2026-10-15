@@ -336,6 +336,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
   in.close();
 
   if (this->ResolveShiftGroups(configure) == -1) return -1;
+  this->ResolveNormGroups(configure);
 
   if (this->NumSegments() > 0) {
     if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
@@ -3001,6 +3002,79 @@ void EData::SyncShiftGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
 }
 
 /*!
+ * Links the segments of each normalization group ("normgroup <label>" on the
+ * segment line) to the group's first segment in file order: that segment keeps
+ * its own norm (value, uncertainty, vary flag, penalty), and every other member
+ * takes its value instead.  A follower whose line varies its norm keeps that
+ * parameter, fixed, so the parameter layout does not depend on the groups.  A
+ * note per group lists the members.
+ */
+
+void EData::ResolveNormGroups(const Config &configure) {
+  std::vector<std::pair<std::string, int>> leaders;  // label, leader position
+  for (int pos = 0; pos < (int)segments_.size(); pos++) {
+    ESegment &seg = segments_[pos];
+    const std::string label = seg.GetNormGroup();
+    if (label.empty()) continue;
+    auto it = std::find_if(leaders.begin(), leaders.end(),
+                           [&label](const std::pair<std::string, int> &e) { return e.first == label; });
+    if (it == leaders.end()) {
+      leaders.push_back({label, pos});
+      continue;
+    }
+    ESegment &leader = segments_[it->second];
+    seg.SetNormGroupFollower(it->second, leader.GetNorm(), leader.GetNominalNorm());
+    leader.SetHasNormGroupFollowers(true);
+  }
+  for (const auto &g : leaders) {
+    const ESegment &leader = segments_[g.second];
+    std::ostringstream members;
+    int n = 0;
+    for (const ESegment &seg : segments_)
+      if (seg.GetNormLeaderPos() == g.second) {
+        members << " " << seg.GetSegmentKey();
+        n++;
+      }
+    if (n == 0) {
+      configure.outStream << "Note: normalization group '" << g.first << "' has only segment #"
+                          << leader.GetSegmentKey() << "; nothing is shared." << std::endl;
+      continue;
+    }
+    configure.outStream << "Note: normalization group '" << g.first << "': segments #" << leader.GetSegmentKey()
+                        << " +" << members.str() << " share one normalization (segment #" << leader.GetSegmentKey()
+                        << "'s, " << (leader.IsVaryNorm() ? "free" : "fixed") << ")." << std::endl;
+  }
+}
+
+int EData::NormOwner(int s) const {
+  if (s < 1 || s > (int)segments_.size()) return s;
+  const int lead = segments_[s - 1].GetNormLeaderPos();
+  return (lead >= 0) ? lead + 1 : s;
+}
+
+/*!
+ * Writes each norm-group follower's (fixed) norm parameter as the value it
+ * actually uses, its group leader's, so that param.sav / param.fit read back
+ * unchanged.
+ */
+
+void EData::SyncNormGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
+  const int off = GetNormParamOffset();
+  if (off < 0) return;
+  std::vector<int> index(segments_.size(), -1);  // norm parameter of each segment, -1 = none
+  int i = off;
+  for (int pos = 0; pos < (int)segments_.size(); pos++)
+    if (segments_[pos].IsVaryNorm()) index[pos] = i++;
+  for (int pos = 0; pos < (int)segments_.size(); pos++) {
+    const int lead = segments_[pos].GetNormLeaderPos();
+    if (lead < 0 || index[pos] < 0 || index[pos] >= (int)p.Params().size()) continue;
+    const double value = (index[lead] >= 0 && index[lead] < (int)p.Params().size()) ? p.Value(index[lead])
+                                                                                     : segments_[lead].GetNorm();
+    p.SetValue(index[pos], value);
+  }
+}
+
+/*!
  * Fills the Minuit parameter array from initial values in the EData object.
  */
 
@@ -3012,6 +3086,7 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
       snprintf(varname, sizeof(varname), "segment_%d_norm", segment->GetSegmentKey());
       p.Add(varname, segment->GetNorm(), segment->GetNorm() * 0.05);
       p.SetLowerLimit(varname, 0.0);
+      if (segment->IsNormGroupFollower()) p.Fix(varname);  // the group's norm is its leader's parameter
 
       // Parameter settings will be applied by ParameterLimitsManager during fit
     }
@@ -3079,6 +3154,9 @@ void EData::FillNormsFromParams(const vector_r &p) {
     }
     // With component segments, no need to skip - total capture is handled within the segment
   }
+  // Norm-group followers take their leader's norm (a follower's own parameter is fixed).
+  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++)
+    if (segment->IsNormGroupFollower()) segment->SetNorm(GetSegments()[segment->GetNormLeaderPos()].GetNorm());
 }
 
 /*!

@@ -9,7 +9,8 @@
 #       is 0.4 sigma_B; the same under a target-integration effect to 1e-10;
 #   (c) in data mode the two abundances are fit parameters: the analytic
 #       gradient agrees with finite differences (AZURE_GRAD_CHECK) and a fit
-#       from 0.5/0.5 recovers 0.6/0.4;
+#       from 0.5/0.5 recovers 0.6/0.4; a normgroup over a natural SUM and a
+#       plain segment: the shared norm's gradient agrees too;
 #   (d) a level with channels of both nuclei, "natural 1" on a RATIO and a
 #       component naming a missing pair key are refused.
 #
@@ -148,6 +149,16 @@ if [ -s "$WORK/a.Amat" ] && [ -s "$WORK/b.Amat" ]; then
   else
     bad "gradient check printed nothing about the abundances"; grep -i "grad" "$WORK/gradcheck/run.log" | head -5
   fi
+  # a normalization group over the natural SUM (leader, norm free) and a plain segment on the same data
+  # (follower): the follower's rows must reach the leader's norm column on both gradient paths
+  (cd "$WORK" && mkdir -p gradcheck_ng/output gradcheck_ng/checks && cp data.dat gradcheck_ng/ &&
+   awk '/<segmentsData>/ { print; print "1 1 1 1.0 3.0 0 0 0 1.05 1 10 0 0 0 data.dat 1 0 1 2 2 -999 normgroup N natural 1";
+                           print "1 1 1 1.0 3.0 0 0 0 1 1 10 0 0 0 data.dat 0 0 normgroup N"; skip = 1; next }
+        /<\/segmentsData>/ { skip = 0 } skip { next } { print }' "$M/M_data.azr" > gradcheck_ng/t.azr &&
+   cd gradcheck_ng && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit run_limited 600 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
+  line="$(grep "components with relative" "$WORK/gradcheck_ng/run.log" | head -1)"
+  if echo "$line" | grep -q "norm 0/1 .*Jacobian path:.* norm 0/1"; then ok "normalization group over a natural SUM and a plain segment: norm gradient agrees with finite differences"
+  else bad "normalization group gradient check: $line"; fi
   # two samples: data_enr.dat = 0.1 sigma_A + 0.9 sigma_B; four free abundances, two sum-to-one priors
   paste "$WORK/a.Amat" "$WORK/b.Amat" | awk '{ e = 1.0 + (NR - 1) * 0.002; v = 0.1 * $2 + 0.9 * $4; printf "%.6f 0 %.12e %.12e\n", e, v, 0.001 * v }' > "$WORK/data_enr.dat"
   (cd "$WORK" && mkdir -p gradcheck2/output gradcheck2/checks && cp data.dat data_enr.dat gradcheck2/ && cp "$M/M_samples_data.azr" gradcheck2/t.azr &&

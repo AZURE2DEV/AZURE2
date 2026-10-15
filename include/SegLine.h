@@ -79,6 +79,8 @@ class SegLine {
     varyEnergyShiftSqrt_ = 0;
     // shared constant energy shift: off unless a trailing "shiftgroup" block is present
     shiftGroup_ = "";
+    // shared normalization: off unless a trailing "normgroup" block is present
+    normGroup_ = "";
     hasSqrtShift_ = false;
     // energy-shift function: off unless a trailing "shiftfn" block is present
     shiftFn_ = "";
@@ -194,6 +196,15 @@ class SegLine {
         // shift value, uncertainty and vary flag are ignored).  For data sets
         // split into per-angle segments that share one energy calibration.
         //
+        // A normalization-group block,
+        //   normgroup <label>
+        // does the same for the normalization: the first segment with the
+        // label (in file order) owns the norm parameter, its vary flag and its
+        // penalty; the others take its value (their own norm, uncertainty and
+        // vary flag are ignored).  For data sets split into segments that share
+        // one absolute scale (e.g. an excitation function and angular
+        // distributions from the same runs).
+        //
         // A shift-function block,
         //   shiftfn "<expression in x>" N v0 s0 vary0 ... v(N-1) s(N-1) vary(N-1)
         // adds f(x; a0..a(N-1)) to the shift, E' = E + energyShift + f(E),
@@ -250,6 +261,12 @@ class SegLine {
             }
           } else if (keyword == "shiftgroup") {
             if (!(advancedStream >> shiftGroup_)) {
+              stream.setstate(std::ios::failbit);
+              break;
+            }
+          } else if (keyword == "normgroup") {
+            if (!(advancedStream >> normGroup_)) {
+              parseError_ = "normgroup needs a label";
               stream.setstate(std::ios::failbit);
               break;
             }
@@ -374,6 +391,10 @@ class SegLine {
    */
   std::string shiftGroup() const { return shiftGroup_; };
   /*!
+   * Returns the normalization-group label ("" when the segment is in no group).
+   */
+  std::string normGroup() const { return normGroup_; };
+  /*!
    * Returns true if the line carries a "sqrtshift" block.
    */
   bool hasSqrtShift() const { return hasSqrtShift_; };
@@ -442,6 +463,7 @@ class SegLine {
   double energyShiftSqrtError_;
   int varyEnergyShiftSqrt_;
   std::string shiftGroup_;
+  std::string normGroup_;
   bool hasSqrtShift_;
   std::string shiftFn_;
   std::vector<double> shiftFnValues_;

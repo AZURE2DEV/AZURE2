@@ -1230,7 +1230,8 @@ class azure2:
 
             ((norm - nominal) / (nominal/100 * norm_error))^2
 
-        and, for a segment whose energy shift is free,
+        (once per ``normgroup``, on its first member) and, for a segment whose
+        energy shift is free,
 
             ((shift - nominal_shift) / shift_error)^2
 
@@ -1260,13 +1261,17 @@ class azure2:
         sqrting = {p.segment_key: p for p in self.parameters.sqrt_shifts}
         shift_fn = np.zeros(self.nsegments)
         fn_par = {(p.segment_key, p.fn_term): p for p in self.parameters.fn_shifts}
+        norm_groups = set()                  # labels whose first member has been seen
         for i, d in enumerate(self.active_datasets):
             p = current.get(d.key)
             value = (float(x[p.free_index])
                      if p is not None and not p.fixed and p.free_index is not None
                      and p.free_index < x.size else d.norm)
             sigma = d.norm / 100.0 * d.norm_error
-            if sigma:
+            follower = bool(d.norm_group) and d.norm_group in norm_groups
+            if d.norm_group:
+                norm_groups.add(d.norm_group)
+            if sigma and not follower:       # a normgroup's penalty is its first member's
                 norm[i] = ((value - d.norm) / sigma) ** 2
             if d.vary_shift and d.energy_shift_error:
                 q = shifting.get(d.key)

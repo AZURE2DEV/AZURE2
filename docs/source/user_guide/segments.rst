@@ -88,6 +88,30 @@ appears with the following fields:
    Check this box to allow the normalization factor to be varied as a free
    parameter during fitting.
 
+   **Shared normalization (normalization groups, input file only).** Segments
+   that come from one measurement often share one absolute scale -- an
+   excitation function and the angular distributions it was integrated from,
+   or one data set split into per-angle segments. Ending their lines with the
+   keyword block ``normgroup <label>`` makes all segments with the same label
+   use the normalization of the **first** of them in file order -- its value,
+   vary flag, uncertainty and penalty -- and the other members' own
+   normalization, uncertainty and vary flag are ignored, e.g.::
+
+      1 1 3 0 2.3 0 180 0 1 1 10 0.016 0.01 1 data/Dayras_ap.dat 0 0 normgroup Dayras
+      1 1 3 1.572 1.572 0 180 4 1 1 0 0.030 0.01 1 data/Dayras_ang.dat 0 0 normgroup Dayras
+      1 1 3 2.032 2.032 0 180 4 1 1 0 0.081 0.05 1 data/Dayras_ang.dat 0 0 normgroup Dayras
+
+   fits one normalization for the three segments with one 10 % penalty.
+   A member whose own line varies its normalization keeps its
+   ``segment_<key>_norm`` entry in ``param.sav`` (fixed, written with the
+   shared value), so parameter files and parameter numbering do not depend
+   on the groups. ``chiSquared.out`` lists every member's (shared)
+   normalization and the penalty on the first member only. The run log notes
+   each group and its members. The keyword may be combined with
+   ``shiftgroup``; writers put it before a ``sample`` block. The GUI preserves
+   the block but does not edit it, and its Fitting tab still lists a member's
+   own vary flag.
+
 **Energy Shift**
    An energy calibration shift applied to the data (in MeV).
 

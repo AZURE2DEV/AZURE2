@@ -74,6 +74,9 @@ ESegment::ESegment(SegLine segLine) {
   shiftGroup_ = segLine.shiftGroup();
   shiftLeaderPos_ = -1;
   hasShiftGroupFollowers_ = false;
+  normGroup_ = segLine.normGroup();
+  normLeaderPos_ = -1;
+  hasNormGroupFollowers_ = false;
   hasSqrtShiftBlock_ = segLine.hasSqrtShift();
   shiftFnDeclared_ = segLine.shiftFn();
   shiftFnNominal_ = segLine.shiftFnValues();
@@ -163,6 +166,9 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   shiftGroup_ = "";
   shiftLeaderPos_ = -1;
   hasShiftGroupFollowers_ = false;
+  normGroup_ = "";
+  normLeaderPos_ = -1;
+  hasNormGroupFollowers_ = false;
   hasSqrtShiftBlock_ = false;
   hasShiftFn_ = false;
   shiftFnConfig_ = nullptr;
@@ -678,6 +684,26 @@ void ESegment::SetShiftGroupFollower(int pos, double shift) {
 }
 
 void ESegment::SetHasShiftGroupFollowers(bool has) { hasShiftGroupFollowers_ = has; }
+
+std::string ESegment::GetNormGroup() const { return normGroup_; }
+
+int ESegment::GetNormLeaderPos() const { return normLeaderPos_; }
+
+bool ESegment::IsNormGroupFollower() const { return normLeaderPos_ >= 0; }
+
+bool ESegment::HasNormGroupFollowers() const { return hasNormGroupFollowers_; }
+
+void ESegment::SetNormGroupFollower(int pos, double norm, double nominal) {
+  normLeaderPos_ = pos;
+  // The group's norm, its nominal value and its penalty belong to the first member.
+  // varyNorm_ is kept: a follower with a varied norm keeps its (fixed) parameter, so
+  // the parameter layout, and every index after it, does not depend on the groups.
+  dataNorm_ = norm;
+  dataNormNominal_ = nominal;
+  dataNormError_ = 0.0;
+}
+
+void ESegment::SetHasNormGroupFollowers(bool has) { hasNormGroupFollowers_ = has; }
 
 bool ESegment::IsVaryEnergyShiftSqrt() const {
   return varyEnergyShiftSqrt_;

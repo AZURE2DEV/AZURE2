@@ -3,7 +3,7 @@
 //
 // A segment line may end with keyword blocks the GUI does not edit --
 // "sqrtshift b bError vary" (sqrt(E) energy-shift term), "natural 1" / "sample <name>"
-// (natural-abundance targets), "shiftgroup <label>" and
+// (natural-abundance targets), "shiftgroup <label>", "normgroup <label>" and
 // "shiftfn \"<f(x)>\" N v s vary ..." (energy-shift function) -- which it has to carry through
 // a load/save verbatim.  The sqrtshift block used to be lost on every load:
 // the reader split it off, but the row was then rebuilt column by column and
@@ -73,14 +73,20 @@ int main(int argc, char** argv) {
       "1 1 1 1 3 0 180 4 1 0 1 0 0 0 data/plain.dat 0 0\n"
       "0 1 2 0 5 0 180 0 1 1 7.2 0 0 0 data/both.dat 0 0 sqrtshift 0.001 0.002 1 natural 1\n"
       "1 1 1 0.5 3 0 180 1 1 0 5 0 0.01 1 data/g.dat 0 0 shiftgroup G shiftfn \"a0*(sqrt(x)-sqrt(1.7))\" 1 0 0.02 1\n"
+      "1 1 1 0.5 3 0 180 1 1 1 10 0 0 0 data/n.dat 0 0 normgroup D sample 1\n"
       "</segmentsData>\n";
   {
     QString in(dataBlock);
     QTextStream inStream(&in);
     ok("data block read", tab.readSegDataFile(inStream));
     QList<SegmentsDataData> lines = tab.getSegmentsDataModel()->getLines();
-    ok("five data lines", lines.size() == 5, QString::number(lines.size()));
-    if (lines.size() == 5) {
+    ok("six data lines", lines.size() == 6, QString::number(lines.size()));
+    if (lines.size() == 6) {
+      ok("normgroup block kept before the sample block", lines[5].extraTokens == "normgroup D sample 1",
+         lines[5].extraTokens);
+      ok("data file of the normgroup row", lines[5].dataFile == "data/n.dat", lines[5].dataFile);
+      ok("sample token read past the normgroup block", SegmentKeywords::naturalSample(lines[5].extraTokens) == "1",
+         SegmentKeywords::naturalSample(lines[5].extraTokens));
       ok("shiftgroup and shiftfn blocks kept on the row",
          lines[4].extraTokens == "shiftgroup G shiftfn \"a0*(sqrt(x)-sqrt(1.7))\" 1 0 0.02 1", lines[4].extraTokens);
       ok("data file of the shift-function row", lines[4].dataFile == "data/g.dat", lines[4].dataFile);

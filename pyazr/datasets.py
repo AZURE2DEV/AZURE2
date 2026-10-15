@@ -21,7 +21,8 @@ Layout of a ``<segmentsData>`` line (see ``include/SegLine.h``)::
 The trailing keyword blocks (any order): ``sqrtshift b bError varyB`` adds a
 sqrt(E) term to the segment's energy shift, E' = E + energyShift + b*sqrt(E/MeV),
 b in MeV^1/2; ``shiftgroup <label>`` makes the segments with one label share one
-constant shift (the first one's); ``shiftfn "<f(x)>" N v0 s0 vary0 ...`` adds
+constant shift (the first one's); ``normgroup <label>`` does the same for the
+normalization (the first one's norm, vary flag and penalty); ``shiftfn "<f(x)>" N v0 s0 vary0 ...`` adds
 f(x; a0..a(N-1)) at the original lab energy x (MeV), on a group's first segment
 for the whole group; ``sample 1`` / ``sample <name>`` (alias ``natural``) weights
 every term by the abundance of its entrance pair's compound nucleus.
@@ -95,8 +96,10 @@ _EXTRAP_OBSERVABLE = {
 
 # Keyword blocks a segment line may end with (SegLine.h), and how many tokens
 # each takes: sqrtshift b bError vary; sample <1|name> (alias natural);
-# shiftgroup <label>; shiftfn takes a variable number (see _split_keyword_tail).
-_KEYWORDS = {"sqrtshift": 3, "sample": 1, "natural": 1, "shiftgroup": 1, "shiftfn": None}
+# shiftgroup <label>; normgroup <label>; shiftfn takes a variable number (see
+# _split_keyword_tail).
+_KEYWORDS = {"sqrtshift": 3, "sample": 1, "natural": 1, "shiftgroup": 1, "normgroup": 1,
+             "shiftfn": None}
 
 
 def _split_keyword_tail(tokens):
@@ -141,8 +144,8 @@ def _split_keyword_tail(tokens):
             k = end
             continue
         n = _KEYWORDS[kw]
-        if kw == "shiftgroup" and k + 1 >= len(tokens):
-            raise ValueError("shiftgroup without a label: " + " ".join(tokens))
+        if kw in ("shiftgroup", "normgroup") and k + 1 >= len(tokens):
+            raise ValueError(kw + " without a label: " + " ".join(tokens))
         blocks[kw] = tokens[k + 1:k + 1 + n]
         k += 1 + n
     return tokens[:first], blocks
@@ -198,6 +201,9 @@ class Segment:
     # segments with the same label share ONE constant energy shift: the first
     # of them (file order) owns the parameter, the others take its value
     shift_group: Optional[str] = None
+    # segments with the same label share ONE normalization: the first of them
+    # (file order) owns the norm, its vary flag and its penalty
+    norm_group: Optional[str] = None
     # energy-shift function f(x; a0..) added at the original lab energy x (MeV):
     # the expression, and (value, sigma, vary) per parameter aj; on a shift
     # group it is declared on the first segment and applies to all members
@@ -317,6 +323,7 @@ class SegmentSet(list):
         #   sqrtshift b bError vary      the sqrt(E) energy-shift term
         #   sample 1 | sample <name>     an abundance-weighted (sample) segment; alias natural
         #   shiftgroup <label>           segments sharing one constant energy shift
+        #   normgroup <label>            segments sharing one normalization
         #   shiftfn "<f(x)>" N v s vary  a shift function f(x; a0..a(N-1))
         # Split them off first so the positional composite parse never sees them.
         shift_sqrt = shift_sqrt_error = 0.0
@@ -368,6 +375,7 @@ class SegmentSet(list):
             vary_shift_sqrt=vary_shift_sqrt,
             natural=natural, natural_sample=natural_sample,
             shift_group=(blocks.get("shiftgroup") or [None])[0],
+            norm_group=(blocks.get("normgroup") or [None])[0],
             shift_fn=shift_fn, shift_fn_params=tuple(shift_fn_params),
             operation=operation, components=tuple(components))
 

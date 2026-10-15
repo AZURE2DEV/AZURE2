@@ -58,6 +58,13 @@ add_test(NAME pyazr_shift_fn
                  ${CMAKE_CURRENT_SOURCE_DIR}/shift_fn_test.py)
 set_tests_properties(pyazr_shift_fn PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# Normalization groups (normgroup): read, written, and (with the engine) the
+# follower's norm fixed, the penalty once and the shared column differenced.
+add_test(NAME pyazr_norm_group
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/norm_group_test.py)
+set_tests_properties(pyazr_norm_group PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # Park parametrization (--use-park): Brune equivalence of the cross sections,
 # analytic gradient and residual Jacobian against finite differences (the
 # adjoint differentiates Park's level matrix and its J-dependent terms), and

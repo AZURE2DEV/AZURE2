@@ -134,6 +134,19 @@ class ESegment {
   /// shift stops being a fit parameter and starts at the given value.
   void SetShiftGroupFollower(int pos, double shift);
   void SetHasShiftGroupFollowers(bool);
+  /// Normalization-group label ("" if none): segments with one label share one norm.
+  std::string GetNormGroup() const;
+  /// Position (0-based, in EData's segment vector) of the group member whose norm this
+  /// segment uses; -1 for a segment that uses its own.
+  int GetNormLeaderPos() const;
+  /// Does this segment take its normalization from another segment of its group?
+  bool IsNormGroupFollower() const;
+  /// Does another segment take its normalization from this one?
+  bool HasNormGroupFollowers() const;
+  /// Make this segment a follower of the group member at position pos: it takes that
+  /// member's norm and nominal norm, and carries no norm penalty of its own.
+  void SetNormGroupFollower(int pos, double norm, double nominal);
+  void SetHasNormGroupFollowers(bool);
   /// The whole lab-energy shift at a point's original lab energy: a + b*sqrt(E).
   double TotalEnergyShift(double labEnergy) const;
   /// Add this segment's energy-shift penalties, ((x - nominal)/sigma)^2 for each varied
@@ -314,6 +327,9 @@ class ESegment {
   std::string shiftGroup_;
   int shiftLeaderPos_;
   bool hasShiftGroupFollowers_;
+  std::string normGroup_;
+  int normLeaderPos_;
+  bool hasNormGroupFollowers_;
   bool hasSqrtShiftBlock_;
   // Shift function declared on this line (owner) ...
   std::string shiftFnDeclared_;

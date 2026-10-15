@@ -1668,6 +1668,16 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
     value, error, vary flag and penalty; the others' own shift fields are
     ignored and their `segment_<key>_energy_shift` is fixed and written back
     with the shared value. Test: `tests/shift_groups`.
+  - `normgroup <label>` (keyword block, 2026-10-14): the same for the
+    normalization -- every segment with the label uses the norm of the FIRST
+    of them (value, vary flag, error, the one penalty). A follower whose own
+    line varies its norm keeps `segment_<key>_norm` (fixed, written with the
+    shared value), so parameter numbering is unchanged; a follower carries no
+    norm penalty (chiSquared.out column 5 = 0). Use it for an excitation
+    function plus the angular distributions it was integrated from (11B+a
+    Dayras 16/85/86). pyazr: `Segment.norm_group`,
+    `add_data_segment(norm_group=...)`; `penalties()["norm"]` only on the
+    leader. Tests: `tests/norm_groups`, `tests/pyazr/norm_group_test.py`.
   - `shiftfn "<f(x)>" N v0 s0 vary0 ...` (keyword block, 2026-10-14): adds
     f(x; a0..a(N-1)), x = the point's ORIGINAL lab energy in MeV, to the
     shift; each aj has value (= penalty nominal), penalty width and vary flag;
