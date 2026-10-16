@@ -1074,7 +1074,11 @@ bool AZURECalc::HasNuisanceParameters() const {
     if (mp.IsFixed() && name.find("segment") == std::string::npos) continue;
     const bool inert = name.find("norm") != std::string::npos || name.find("shift") != std::string::npos ||
                        name.find("abundance") != std::string::npos;
-    if (!inert && limitsManager_->IsNuisanceParameterByIndex(nf)) return true;
+    if (!inert && limitsManager_->IsNuisanceParameterByIndex(nf)) {
+      if (std::getenv("AZURE_GRAD_DEBUG"))
+        std::cerr << "[grad] analytic G2 off: nuisance prior on '" << name << "'" << std::endl;
+      return true;
+    }
     nf++;
   }
   return false;
