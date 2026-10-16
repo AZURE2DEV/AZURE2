@@ -1936,3 +1936,26 @@ perturbation diagnostics and crossover call.  Both fixed the same day (`self.bas
 the rule and the queue template `tests/_queue_sharded/run_crc_sharded` (test_keys + test_levelscan_13n on 3 shards) are in
 `rmfit/README.md`.  Drivers that are already running keep their loaded module, so a bad install shows up only in NEW jobs: after
 any rmfit install, check the first new job's log past its evaluator start-up before trusting a quiet queue.
+
+## 2026-10-15 — windowed `<targetInt>` convolution in sharded fits; fixed-angle conv pieces
+DeBoer: "I was working towards this sort of targeted application of the convolution for data sets, but I'm not sure if it ever got
+implemented."  The ENGINE has it (TargetEffect.cpp; docs user_guide/experimental_effects.rst): after the four straggling/grid numbers a
+`<targetInt>` line may carry a quoted window list `"lo1-hi1,lo2-hi2"` (lab MeV), a blend width (smoothstep at each edge) and an auto
+tolerance; points outside every window are ordinary points; model = b x convolved + (1-b) x bare.  rmfit's sharded convolution
+(`model.build_conv_spec`) ignored all of it and folded every point on one uniform grid at min(sigma)/10 over the whole segment.
+1. `TargetEffectSpec.ranges / blend_width / auto_tolerance / blend_weight()` (= TargetEffect::BlendWeight), parsed as the engine does.
+2. `_windowed_conv_spec`: grid = every data energy + one uniform lattice per cluster of windowed points (step = cluster min sigma / pps);
+   kernel = symmetric stencil e + k sigma/pps, |k| <= 3 pps, Gaussian weights, linearly interpolated onto the grid (exact for linear
+   sigma(E)); blend as the engine.  No ranges -> the old path, bit-identical (13C+a Nelson/Kelly pieces compared).  A line with an auto
+   tolerance stays a plain piece (the shard's engine applies it).  `RMFIT_CONV_PPS` (default 10) sets the density.
+3. BUG FIXED: `write_shard` wrote conv grid rows with angle 0.0, so a FIXED-ANGLE conv segment kept no rows ("Segment #N is empty",
+   then "N active <segmentsData> lines but the engine reports M segments").  Every conv piece before 10-15 was angle-integrated.
+   Grid rows now carry the segment's angle when minA == maxA.
+Equality, 13C+a merged model, windowed target-thickness lines on Heil (28 angles) + ND 2021 (18 angles), frozen vs the engine's own
+single session: pps 10 -11.3, pps 5 +2.8 (6e-6; worst segment 14), pps 3 -709 (too coarse).  Sharded objective 6.6 s plain, 11.3 s
+at pps 5 (1.7x), 16.8 s at pps 10; the engine's own single-session evaluation of the same lines is 3.7x its plain cost and the full
+(unwindowed, 40 sub-points) version 7-11x and ~90 GB per session.  RULE: fits with windowed lines run with RMFIT_CONV_PPS=5 and a CONV
+GUARD ('ranges' in TargetEffectSpec fields).  Tests: tests/test_conv_windows.py (16 checks), test_conv_spec_dad58dc, test_keys,
+test_levelscan_13n on 3 shards (dev copy, job 1552050).  Installed model.py with .bak-2026-10-15.  Worked example and numbers:
+13C+a/10-15-26_resolution_refs/readme.  NOTE: `rmfit init` scores its baseline on a SINGLE session; a "method check" via init is not
+a sharded check.
