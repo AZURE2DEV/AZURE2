@@ -34,6 +34,8 @@ class Config;
  *   mix <level ID> <pair key> <l> <s> <value> <vary> <prior sigma>
  *   factor <level ID> <pair key> <value>          overrides a computed Clebsch-Gordan factor
  *   pairT <pair key> <t1> <t2>                     particle isospins of a pair (default |N-Z|/2)
+ *   soft <level ID> <sigma E> <sigma gamma>        soft tie: the level's derived slots are free,
+ *                                                  with a penalty ((value - tie)/sigma)^2 each
  *
  * Everything works on the flat Minuit parameter vector: Apply() overwrites the
  * derived slots from the free ones, so every path that fills the compound
@@ -103,7 +105,18 @@ struct IsospinLevel {
   int id = 0;
   double t = 0.0;
   int ref = 0;  ///< index of the reference member
+  bool soft = false;            ///< soft tie: derived slots free, penalised
+  double sigmaE = 0.0, sigmaGamma = 0.0;
   std::vector<IsospinMember> members;
+};
+
+/// One soft-tie penalty term: ((q[slot] - target)/sigma)^2 with
+/// target = constant + sum coefficient * q[source].
+struct IsospinSoftTerm {
+  int slot = -1;
+  std::vector<std::pair<int, double>> sources;
+  double constant = 0.0;
+  double sigma = 1.0;
 };
 
 class IsospinLevels {
@@ -151,6 +164,18 @@ class IsospinLevels {
   /// Prior penalty on the shifts and mixes that have a prior width.
   double Penalty() const;
   bool HasPenalty() const;
+  /// Soft-tie penalty at a flat parameter vector (0 without soft levels); the
+  /// argument-free form uses the last ReadParams vector.
+  double SoftPenalty(const vector_r &q) const;
+  double SoftPenalty() const { return SoftPenalty(lastQ_); }
+  bool HasSoftTies() const { return !softTerms_.empty(); }
+  /// d(SoftPenalty)/d(flat index) at q, as (index, value) pairs.
+  std::vector<std::pair<int, double>> SoftPenaltyGradient(const vector_r &q) const;
+  std::vector<std::pair<int, double>> SoftPenaltyGradient() const { return SoftPenaltyGradient(lastQ_); }
+  /// Adds the soft penalty's diagonal curvature 2 coef^2 / sigma^2 to g2 (flat indices).
+  void AddSoftCurvature(std::vector<double> &g2) const;
+  /// Soft levels' derived slots: set to their tie targets and freed (FillMnParams only).
+  void InitSoftParams(ROOT::Minuit2::MnUserParameters &p) const;
   /// Whether a flat index is a derived (fixed, synced) slot.
   bool IsDerivedSlot(int slot) const { return derived_.count(slot) > 0; }
   /// Label of parameter flat index i if it is an isospin parameter, else "".
@@ -170,6 +195,9 @@ class IsospinLevels {
   std::vector<IsospinPairT> pairTs_;
   std::vector<IsospinLevel> levels_;
   std::set<int> derived_;
+  std::vector<IsospinSoftTerm> softTerms_;
+  std::vector<std::pair<int, std::pair<double, double>>> softSpec_;  // level ID -> (sigma E, sigma gamma)
+  vector_r lastQ_;
   int firstParam_ = -1;
 
   const IsospinShift *ShiftOf(int nucleus) const;

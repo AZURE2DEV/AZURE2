@@ -15,7 +15,12 @@ Checks:
   3. chi2_and_grad against central differences of calculate_chi2_rwa, every
      free parameter (owner widths, reference energies, shifts, mix);
   4. residual_jacobian columns against central differences of the residuals;
-  5. the physical-parameter chi-squared is refused (NaN).
+  5. the physical-parameter chi-squared is refused (NaN);
+  6. the file side: AzrModel.isospin, engine_level_keys per nucleus,
+     renumbering keeps the block's IDs in step, join_levels and set_isospin_*
+     rebuild the model from separate levels;
+  7. save_fit of moved shifts and mix: the block carries them, the snapshot
+     re-evaluates equal (save_fit's own verification) and reloads equal.
 
 Run from anywhere:  python3 tests/pyazr/isospin_test.py
 """
@@ -33,6 +38,7 @@ sys.path.insert(0, ROOT)
 
 try:
     from pyazr import azure2                                  # noqa: E402
+    from pyazr.azrfile import AzrModel                        # noqa: E402
 except ImportError as e:  # as the other pyazr tests: no package dependencies -> nothing to test
     print(f"pyazr not importable ({e}); nothing to test")
     sys.exit(0)
@@ -142,6 +148,92 @@ def run(work):
             check("calculate_chi2_physical refused (NaN)", np.isnan(v), str(v))
         except Exception as e:  # an exception is a refusal too
             check("calculate_chi2_physical refused", True, str(e))
+
+        # ---- 7. save_fit -------------------------------------------------------------
+        print("\n7. save_fit")
+        xs = x.copy()
+        ish = {p.name: p.free_index for p in s.parameters.isospin}
+        xs[ish["isospin_shift_1_4"]] = -0.83
+        xs[ish["isospin_shift_2_4"]] = -0.61
+        xs[ish["isospin_mix_1"]] = 0.035
+        chi_s = float(np.sum(s.calculate_chi2_rwa(xs)))
+        snap = os.path.join(work, "iso_saved.azr")
+        try:
+            s.save_fit(snap, xs)          # verify=True re-evaluates the snapshot
+            saved_ok = True
+        except Exception as e:
+            saved_ok = False
+            check("save_fit verified the snapshot", False, str(e)[:300])
+        if saved_ok:
+            check("save_fit verified the snapshot", True)
+            blk = AzrModel.from_file(snap).isospin
+            check("the block carries the fitted shifts and mix",
+                  abs(blk["shifts"][(1, 4)][1] + 0.83) < 1e-9 and abs(blk["shifts"][(2, 4)][1] + 0.61) < 1e-9
+                  and abs(blk["mixes"][0][4] - 0.035) < 1e-9, str(blk))
+            with azure2(snap, cwd=work, use_brune=False) as s2:
+                chi2 = float(np.sum(s2.calculate_chi2_rwa(np.asarray(s2.params_rwa, float))))
+            check("the snapshot reloads with the same chi-squared", abs(chi2 - chi_s) < 1e-6 * max(1.0, chi_s), f"{chi2} vs {chi_s}")
+
+    # ---- 6. file side -----------------------------------------------------------------
+    print("\n6. file side")
+    m = AzrModel.from_file(os.path.join(MODELS, "iso_mix.azr"))
+    iso = m.isospin
+    check("block parsed", iso["reference"] == (3, 4, 1) and iso["levels"] == {1: 1.0, 2: 0.0}
+          and iso["shifts"][(1, 4)] == (2, -0.86, False, -0.86, 0.0) and iso["mixes"] == [(1, 5, 1, 1.0, 0.05, False, 0.0)], str(iso))
+    keys = m.engine_level_keys()
+    check("one engine level per nucleus of the T=1 level", sorted(keys) == [(1, 1), (2, 1), (3, 1), (3, 2)], str(sorted(keys)))
+    check("each key holds that nucleus's lines only",
+          [c.pair for c in keys[(1, 1)].channels] == [1] and [c.pair for c in keys[(2, 1)].channels] == [2]
+          and [c.pair for c in keys[(3, 1)].channels] == [3, 4, 5], str({k: [c.pair for c in v.channels] for k, v in keys.items()}))
+    keys[(2, 1)].set_energy(4.2)
+    check("set_energy on a member touches only its lines",
+          [c.levelE for c in m.levels[0].channels] == [5.0, 4.2, 24.1736, 24.1736, 24.1736], str([c.levelE for c in m.levels[0].channels]))
+    # renumbering: IDs 7 and 9 in the file come back as 1 and 2, the block with them
+    text = open(os.path.join(MODELS, "iso_mix.azr")).read()
+    m7 = AzrModel.from_file(os.path.join(MODELS, "iso_mix.azr"))
+    for c in m7.levels[0].channels:
+        c._set("levelID", 7)
+    for c in m7.levels[1].channels:
+        c._set("levelID", 9)
+    m7._suffix = m7._suffix.replace("level 1 1", "level 7 1").replace("level 2 0", "level 9 0").replace("mix 1 5", "mix 7 5")
+    m7.write(os.path.join(work, "renum.azr"))
+    r = AzrModel.from_file(os.path.join(work, "renum.azr")).isospin
+    check("renumbering keeps the block in step", r["levels"] == {1: 1.0, 2: 0.0} and r["mixes"][0][0] == 1, str(r))
+    # rebuild iso_mix.azr from separate levels: one per nucleus, no block
+    b = AzrModel.from_file(os.path.join(MODELS, "iso_mix.azr"))
+    lv1 = b.levels[0]
+    parts = {}
+    for c in lv1.channels:
+        parts.setdefault(b.nucleus_of_pair(c.pair), []).append(c)
+    from pyazr.azrfile import AzrLevel
+    b.levels = [AzrLevel(ch) for ch in parts.values()] + b.levels[1:]
+    lines = b._suffix.splitlines()
+    i, j = lines.index("<isospin>"), lines.index("</isospin>")
+    b._suffix = "\n".join(lines[:i] + lines[j + 1:]) + "\n"
+    b._renumber()
+    check("no block after removing it", not b.has_isospin_block)
+    joined = b.join_levels(*b.levels[:3], T=1)
+    b.set_isospin_level(b.levels[1], 0)
+    b.set_isospin_reference("4Li", pair=1)
+    b.set_isospin_shift("4H", pair=2, value=-0.86, vary=False, centre=-0.86, sigma=0)
+    b.set_isospin_shift("4He", pair=3, value=-0.64, vary=False, centre=-0.64, sigma=0)
+    b.add_isospin_mix(joined, pair=5, L=1, S=1, value=0.05, vary=False, sigma=0)
+    b.write(os.path.join(work, "rebuilt.azr"))
+    rb = AzrModel.from_file(os.path.join(work, "rebuilt.azr"))
+    check("rebuilt block equals the original's", rb.isospin == iso, f"{rb.isospin} vs {iso}")
+    same_lines = sorted(c.to_line().split() for lv in rb.levels for c in lv.channels) == \
+        sorted(c.to_line().split() for lv in AzrModel.from_file(os.path.join(MODELS, "iso_mix.azr")).levels for c in lv.channels)
+    check("rebuilt levels equal the original's (same lines, one ID per isospin level)", same_lines and len(rb.levels) == 2)
+    # soft tie: the line, and a session in which the T=1 level's derived slots are free
+    sm = AzrModel.from_file(os.path.join(MODELS, "iso.azr"))
+    sm.set_isospin_soft(1, 0.05, 0.02)
+    check("set_isospin_soft writes the line", sm.isospin["soft"] == {1: (0.05, 0.02)}, str(sm.isospin["soft"]))
+    sm.set_output_dir(os.path.join(work, "output"))
+    sm.write(os.path.join(work, "soft.azr"))
+    with azure2(os.path.join(work, "soft.azr"), cwd=work, use_brune=False, data_mode=False) as ss:
+        free = [p.name for p in ss.parameters if p.kind in ("energy", "width") and not p.fixed]
+    check("soft slots are free parameters", {"energy_2", "width_2_1", "energy_3", "width_3_1", "width_3_2", "width_3_3"} <= set(free),
+          str(free))
 
     print()
     if failures:

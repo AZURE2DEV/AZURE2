@@ -18,6 +18,10 @@ struct LevelsData {
   // a single-nucleus project and of the older tests.
   int nucZ = 0;
   int nucA = 0;
+  // The level ID the line carried in the file.  An isospin level (<isospin>
+  // block) is one ID whose lines span several nuclei; the GUI holds one level
+  // per nucleus and uses this to write them back as one ID.  0 = not from a file.
+  int fileId = 0;
   Nucleus nucleus() const { return {nucZ, nucA}; }
   bool hasNucleus() const { return nucZ > 0 || nucA > 0; }
 };
@@ -46,6 +50,8 @@ class LevelsModel : public QAbstractTableModel {
   /*! The read-only column showing the level's compound nucleus (hidden by the tab with one nucleus). */
   static const int NucleusColumn = 5;
   void setNucleus(int row, const Nucleus &nucleus);
+  /*! The level ID the level's lines carried in the file (LevelsData::fileId). */
+  void setFileId(int row, int fileId);
 
  private:
   QList<LevelsData> levelsList;

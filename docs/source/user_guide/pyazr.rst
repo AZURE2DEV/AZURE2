@@ -264,6 +264,43 @@ are dropped with a warning. On the file side ``AzrModel.nuclei()``,
 ``Parameter.nucleus`` identify the nucleus at run time; ``save_fit`` writes a
 fitted abundance back into the block.
 
+Isospin levels
+--------------
+
+Several compound nuclei can share isospin-labelled levels, as in Hale's
+charge-independent analysis of the A=4 system (the ``<isospin>`` block, see
+:doc:`../reference/data_formats`). An isospin level is one level ID whose lines
+span every nucleus it lives in; ``merge_projects`` drops a member's block, so
+join the levels and declare them on the merged model:
+
+.. code-block:: python
+
+   from pyazr import AzrModel, azure2
+
+   m = AzrModel.from_file("A4.azr")
+   t1 = m.join_levels(li4_2minus, h4_2minus, he4_2minus, T=1)   # one AzrLevel per nucleus
+   m.set_isospin_level(he4_t0_2minus, 0)
+   m.set_isospin_reference("4Li", pair=1)                       # energies measured from p+3He
+   m.set_isospin_shift("4H",  pair=2, value=-0.86, vary=True, centre=-0.86, sigma=0.3)
+   m.set_isospin_shift("4He", pair=3, value=-0.64, vary=True, centre=-0.64, sigma=0.3)
+   m.add_isospin_mix(t1, pair=5, L=1, S=1, value=0.0, vary=True, sigma=0.1)
+   m.write("A4_iso.azr")
+
+   s = azure2("A4_iso.azr", use_brune=False)   # isospin levels are a formal-parameter fit
+   s.parameters.isospin          # isospin_shift_<Z>_<A>, isospin_mix_<k>; kind "isospin"
+   s.penalties()["isospin"]      # their priors (already inside calculate_chi2_rwa)
+
+``AzrModel.isospin`` returns the block parsed; ``set_isospin_mix(k, ...)``
+edits a mix line and ``set_isospin_soft(level, sigma_E, sigma_gamma)`` soft-ties
+a level. Level renumbering (``write``, ``remove_level``, ...) keeps the
+block's IDs in step. ``engine_level_keys`` (and so ``apply_fit`` and
+``save_fit``) maps each engine level of an isospin level to that nucleus's
+lines only, and ``save_fit`` writes the fitted shifts and mixes back into the
+block. The gradient, ``residual_jacobian`` and MCMC work through the ties; the
+physical-parameter calls (``calculate_chi2_physical``, ``update_segments``)
+are refused, since the physical-to-formal transform would mix stale derived
+members into the free ones.
+
 Decomposing a cross section
 ---------------------------
 

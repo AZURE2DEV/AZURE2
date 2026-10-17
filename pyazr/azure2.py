@@ -822,6 +822,10 @@ class azure2:
             raise ValueError(f"x has {x.size} entries; the session has "
                              f"{len(free)} free parameters.")
         full[free] = x
+        # isospin levels: the derived (fixed) slots follow the free ones, as the
+        # engine computes them, so the snapshot and its verification see the tie
+        if len(self.parameters.isospin):
+            full = np.asarray(self.sess.tie_all_rwa(full), float)
         want = np.asarray(self.transform_all_rwa(full, free_only=False), float)
 
         path = os.path.abspath(path)
@@ -831,12 +835,21 @@ class azure2:
         # isotopic abundances (projects with an <abundances> block): the fitted values
         for p in self.parameters.abundances:
             model.set_abundance((p.nucleus_Z, p.nucleus_A), value=float(want[p.index]), sample=p.sample or "")
+        # isospin shifts and mix amplitudes (projects with an <isospin> block): the fitted
+        # values, from the rwa vector (the same in both bases; the physical transform
+        # returns only the level and abundance slots)
+        for p in self.parameters.isospin:
+            if p.name.startswith("isospin_shift_"):
+                z, a = p.name[len("isospin_shift_"):].split("_")
+                model.set_isospin_shift((int(z), int(a)), value=float(full[p.index]))
+            elif p.name.startswith("isospin_mix_"):
+                model.set_isospin_mix(int(p.name[len("isospin_mix_"):]), value=float(full[p.index]))
         model.write(path)
 
         sav = None
         if param_sav:
             sav = os.path.splitext(path)[0] + ".sav"
-            allrwa = list(np.asarray(self.sess.params_all_rwa(), float))
+            allrwa = list(full) if len(self.parameters.isospin) else list(np.asarray(self.sess.params_all_rwa(), float))
             free = iter(range(len(x)))
             with open(sav, "w") as fh:
                 # AZURE2 tags every parameter file with the amplitudes it holds

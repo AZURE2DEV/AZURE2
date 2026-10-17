@@ -2,6 +2,7 @@
 #include <QMessageBox>
 #include <QInputDialog>
 #include <QFile>
+#include <QRegularExpression>
 #include <algorithm>
 
 #include "LevelsTab.h"
@@ -351,6 +352,7 @@ void LevelsTab::addLevel(LevelsData level, bool fromFile) {
     index = levelsModel->index(levels.size(), 4, QModelIndex());
     levelsModel->setData(index, level.energy, Qt::EditRole);
     levelsModel->setNucleus(levels.size(), level.nucleus());
+    levelsModel->setFileId(levels.size(), level.fileId);
     levelsView->resizeRowsToContents();
     if (!fromFile) updateChannelsLevelAdded(levels.size());
     updateMissingSpinParities();
@@ -940,46 +942,65 @@ bool LevelsTab::writeNuclearFile(QTextStream &outStream) {
       }
     }
   }
-  int levelId = 1;
-  for (int i = 0; i < sortedLevels.size(); i++) {
-    for (int ii = 0; ii < sortedLevels.at(i).size(); ii++) {
-      for (int ch = 0; ch < channels.size(); ch++) {
-        if (channels.at(ch).levelIndex == levelsMap.at(i).at(ii)) {
-          outStream << qSetFieldWidth(4) << sortedLevels.at(i).at(ii).jValue
-                    << qSetFieldWidth(5) << sortedLevels.at(i).at(ii).piValue
-                    << qSetFieldWidth(13) << full(sortedLevels.at(i).at(ii).energy)
-                    << qSetFieldWidth(5) << sortedLevels.at(i).at(ii).isFixed
-                    << qSetFieldWidth(5) << "1"
-                    << qSetFieldWidth(5) << channels.at(ch).pairIndex + 1
-                    << qSetFieldWidth(5) << int(channels.at(ch).sValue * 2)
-                    << qSetFieldWidth(5) << int(channels.at(ch).lValue * 2)
-                    << qSetFieldWidth(5) << levelId
-                    << qSetFieldWidth(5) << sortedLevels.at(i).at(ii).isActive
-                    << qSetFieldWidth(5) << channels.at(ch).isFixed
-                    << qSetFieldWidth(20) << full(channels.at(ch).reducedWidth)
-                    << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightJ
-                    << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightPi
-                    << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyJ
-                    << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyPi
-                    << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).excitationEnergy)
-                    << qSetFieldWidth(8) << full(pairs.at(channels.at(ch).pairIndex).lightM)
-                    << qSetFieldWidth(8) << full(pairs.at(channels.at(ch).pairIndex).heavyM)
-                    << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightZ
-                    << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyZ
-                    << qSetFieldWidth(13) << full(pairs.at(0).seperationEnergy)
-                    << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).seperationEnergy)
-                    << "    0    0          0.0"
-                    << qSetFieldWidth(6) << pairs.at(channels.at(ch).pairIndex).pairType
-                    << qSetFieldWidth(8) << full(pairs.at(channels.at(ch).pairIndex).channelRadius)
-                    << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).lightG)
-                    << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).heavyG)
-                    << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).ecMultMask
-                    << qSetFieldWidth(0) << Qt::endl;
-        }
+  // Isospin levels: the members of one declared level ID (one GUI level per
+  // nucleus) are written together, consecutively, under one new ID.  Without an
+  // <isospin> block every level is written alone, exactly as before.
+  const QSet<int> isoIds = isospinLevelIds();
+  isospinIdMap.clear();
+  auto writeLevel = [&](int i, int ii, int id) {
+    for (int ch = 0; ch < channels.size(); ch++) {
+      if (channels.at(ch).levelIndex == levelsMap.at(i).at(ii)) {
+        outStream << qSetFieldWidth(4) << sortedLevels.at(i).at(ii).jValue
+                  << qSetFieldWidth(5) << sortedLevels.at(i).at(ii).piValue
+                  << qSetFieldWidth(13) << full(sortedLevels.at(i).at(ii).energy)
+                  << qSetFieldWidth(5) << sortedLevels.at(i).at(ii).isFixed
+                  << qSetFieldWidth(5) << "1"
+                  << qSetFieldWidth(5) << channels.at(ch).pairIndex + 1
+                  << qSetFieldWidth(5) << int(channels.at(ch).sValue * 2)
+                  << qSetFieldWidth(5) << int(channels.at(ch).lValue * 2)
+                  << qSetFieldWidth(5) << id
+                  << qSetFieldWidth(5) << sortedLevels.at(i).at(ii).isActive
+                  << qSetFieldWidth(5) << channels.at(ch).isFixed
+                  << qSetFieldWidth(20) << full(channels.at(ch).reducedWidth)
+                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightJ
+                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightPi
+                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyJ
+                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyPi
+                  << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).excitationEnergy)
+                  << qSetFieldWidth(8) << full(pairs.at(channels.at(ch).pairIndex).lightM)
+                  << qSetFieldWidth(8) << full(pairs.at(channels.at(ch).pairIndex).heavyM)
+                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightZ
+                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyZ
+                  << qSetFieldWidth(13) << full(pairs.at(0).seperationEnergy)
+                  << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).seperationEnergy)
+                  << "    0    0          0.0"
+                  << qSetFieldWidth(6) << pairs.at(channels.at(ch).pairIndex).pairType
+                  << qSetFieldWidth(8) << full(pairs.at(channels.at(ch).pairIndex).channelRadius)
+                  << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).lightG)
+                  << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).heavyG)
+                  << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).ecMultMask
+                  << qSetFieldWidth(0) << Qt::endl;
       }
-      outStream << Qt::endl;
-      levelId++;
     }
+  };
+  QList<QPair<int, int>> order;
+  for (int i = 0; i < sortedLevels.size(); i++)
+    for (int ii = 0; ii < sortedLevels.at(i).size(); ii++) order.append(qMakePair(i, ii));
+  QSet<int> written;
+  int levelId = 1;
+  for (const QPair<int, int> &o : order) {
+    const int fileId = sortedLevels.at(o.first).at(o.second).fileId;
+    if (isoIds.contains(fileId)) {
+      if (written.contains(fileId)) continue;
+      written.insert(fileId);
+      for (const QPair<int, int> &q : order)
+        if (sortedLevels.at(q.first).at(q.second).fileId == fileId) writeLevel(q.first, q.second, levelId);
+      isospinIdMap.insert(fileId, levelId);
+    } else {
+      writeLevel(o.first, o.second, levelId);
+    }
+    outStream << Qt::endl;
+    levelId++;
   }
 
   outStream.setFieldAlignment(QTextStream::AlignLeft);
@@ -1074,6 +1095,7 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
       Nucleus nucleus = PairsModel::nucleusOf(newPair);  // the engine's rule: the level belongs to its channels' nucleus
       newLevel.nucZ = nucleus.Z;
       newLevel.nucA = nucleus.A;
+      newLevel.fileId = levelId;
       int levelIndex = levelsModel->isLevel(newLevel);
       if (levelIndex == -1) {
         addLevel(newLevel, true);
@@ -1135,7 +1157,41 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
   return true;
 }
 
+QSet<int> LevelsTab::isospinLevelIds() const {
+  QSet<int> ids;
+  for (const QString &line : isospinBlock) {
+    const QStringList t = line.section('#', 0, 0).split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    if (t.size() >= 2 && t.at(0) == "level") ids.insert(t.at(1).toInt());
+  }
+  return ids;
+}
+
+bool LevelsTab::readIsospinBlock(QTextStream &inStream) {
+  isospinBlock.clear();
+  while (!inStream.atEnd()) {
+    const QString line = inStream.readLine();
+    if (line.trimmed() == QString("</isospin>")) return true;
+    isospinBlock.append(line);
+  }
+  return false;
+}
+
+bool LevelsTab::writeIsospinBlock(QTextStream &outStream) const {
+  // "level", "mix", "factor" and "soft" lines name a level ID in their second field.
+  static const QRegularExpression idField("^(\\s*(level|mix|factor|soft)\\s+)(\\d+)");
+  for (const QString &line : isospinBlock) {
+    QString out = line;
+    QRegularExpressionMatch m = idField.match(line);
+    if (m.hasMatch() && isospinIdMap.contains(m.captured(3).toInt()))
+      out = m.captured(1) + QString::number(isospinIdMap.value(m.captured(3).toInt())) + line.mid(m.capturedEnd(3));
+    outStream << out << Qt::endl;
+  }
+  return true;
+}
+
 void LevelsTab::reset() {
+  isospinBlock.clear();
+  isospinIdMap.clear();
   pairsModel->removeRows(0, pairsModel->getPairs().size(), QModelIndex());
   levelsModel->removeRows(0, levelsModel->getLevels().size(), QModelIndex());
   channelsModel->removeRows(0, channelsModel->getChannels().size(), QModelIndex());

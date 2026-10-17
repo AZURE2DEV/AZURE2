@@ -111,9 +111,12 @@ void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAc
  * for every varied shift and mix amplitude that has a prior.
  */
 void AddIsospinPenaltyGradient(CNuc *compound, GradAccum &accum) {
-  if (!compound->Isospin().HasPenalty()) return;
-  const std::vector<double> g = compound->Isospin().PenaltyGradient();
-  for (int k = 0; k < (int)g.size(); k++) accum.AddIsospin(k, g[k]);
+  if (compound->Isospin().HasPenalty()) {
+    const std::vector<double> g = compound->Isospin().PenaltyGradient();
+    for (int k = 0; k < (int)g.size(); k++) accum.AddIsospin(k, g[k]);
+  }
+  // Soft ties: by full index (the soft slots are free level slots).
+  for (const auto &sv : compound->Isospin().SoftPenaltyGradient()) accum.AddSlot(sv.first, sv.second);
 }
 
 /*!
@@ -132,6 +135,7 @@ void GradAccum::Init(CNuc *compound) {
   }
   abundance.assign(compound->NumAbundanceParams(), 0.0);
   isospin.assign(compound->Isospin().NumParams(), 0.0);
+  slot.clear();
 }
 
 /*!
@@ -143,6 +147,7 @@ void GradAccum::Zero() {
     for (auto &row : lev) std::fill(row.begin(), row.end(), 0.0);
   std::fill(abundance.begin(), abundance.end(), 0.0);
   std::fill(isospin.begin(), isospin.end(), 0.0);
+  slot.clear();
 }
 
 /*!
@@ -158,6 +163,7 @@ void GradAccum::Add(const GradAccum &o) {
   }
   for (int k = 0; k < (int)abundance.size() && k < (int)o.abundance.size(); k++) abundance[k] += o.abundance[k];
   for (int k = 0; k < (int)isospin.size() && k < (int)o.isospin.size(); k++) isospin[k] += o.isospin[k];
+  slot.insert(slot.end(), o.slot.begin(), o.slot.end());
 }
 
 /*!
@@ -182,6 +188,8 @@ void GradAccum::Scatter(const ParamIndexMap &map, vector_r &gradFull) const {
     int ii = map.IsospinIndex(k);
     if (ii >= 0 && ii < (int)gradFull.size()) gradFull[ii] += isospin[k];
   }
+  for (const auto &sv : slot)
+    if (sv.first >= 0 && sv.first < (int)gradFull.size()) gradFull[sv.first] += sv.second;
   // Isospin levels: a derived slot is a linear function of free slots, so its
   // gradient passes on to them (chain rule); its own entry is cleared (it is fixed).
   for (const IsospinTie &t : map.IsospinTies()) {

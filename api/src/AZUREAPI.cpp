@@ -631,6 +631,13 @@ vector_r AZUREAPI::TransformAllRWAParameters(const vector_r &p) const {
 // free widths of the same level (the 1 + sum gamma^2 dS/dE factor and the
 // external width), and a <levels> block that keeps their old observed values
 // reads back as a different model (12C+alpha, 2026-10-12: +21 chi2 units).
+vector_r AZUREAPI::TieAllRWA(const vector_r &p) const {
+  vector_r q = all_rwa_;
+  for (size_t i = 0; i < p.size() && i < q.size(); ++i) q[i] = p[i];
+  compound()->Isospin().Apply(q);
+  return q;
+}
+
 vector_r AZUREAPI::TransformAllRWAParametersFull(const vector_r &p) const {
   vector_r params = all_rwa_;
   for (int i = 0; i < p.size() && i < params.size(); ++i) {
@@ -865,7 +872,8 @@ double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
   // Isotopic abundances: priors and the sum-to-one term.
   if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundancePenalty(configure().abundanceSumSigma);
   // Isospin levels: priors on the internal Coulomb shifts and mix amplitudes.
-  if (localCompound->Isospin().HasPenalty()) chiSquared += localCompound->Isospin().Penalty();
+  if (localCompound->Isospin().HasPenalty() || localCompound->Isospin().HasSoftTies())
+    chiSquared += localCompound->Isospin().Penalty() + localCompound->Isospin().SoftPenalty();
 
   return chiSquared;
 }
@@ -1031,9 +1039,9 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
       AddAbundancePenaltyGradient(lc, configure(), accum);
       chi2 += lc->AbundancePenalty(configure().abundanceSumSigma);
     }
-    if (lc->Isospin().HasPenalty()) {
+    if (lc->Isospin().HasPenalty() || lc->Isospin().HasSoftTies()) {
       AddIsospinPenaltyGradient(lc, accum);
-      chi2 += lc->Isospin().Penalty();
+      chi2 += lc->Isospin().Penalty() + lc->Isospin().SoftPenalty();
     }
     accum.Scatter(pmap, gradFull);
     for (int s = 1; s <= ld->NumSegments(); s++) {

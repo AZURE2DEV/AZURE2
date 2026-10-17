@@ -174,6 +174,7 @@ after ``</levels>`` (and after ``</abundances>``)::
    mix 1 5 1 1 0.0 1 0              # level 1, pair 5 (d+d), l=1, s=1: value, vary, prior sigma
    factor 1 3 0.7071                # optional: override a computed Clebsch-Gordan factor
    pairT 6 0.5 0.5                  # optional: particle isospins of pair 6
+   soft 2 0.05 0.02                 # optional: soft-tie level 2 (sigma E MeV, sigma gamma MeV^1/2)
    </isospin>
 
 - In each nucleus, a level's formal reduced-width amplitude in a channel of
@@ -190,6 +191,13 @@ after ``</levels>`` (and after ``</abundances>``)::
   the free one. A channel with factor 0 is zero unless a ``mix`` line gives
   it a free amplitude (``isospin_mix_<k>``). Derived slots stay in the
   parameter list, fixed, and are written synced.
+- A ``soft`` line relaxes one level's tie: its derived slots become free
+  parameters with the penalty :math:`((x - x_\mathrm{tie})/\sigma)^2` each
+  (forbidden channels centred on 0), reported with the priors as
+  ``Total-Isospin-Chi-Squared``; they start on their tie values. A soft level
+  takes no ``mix`` lines, and the LM and GSL fitters refuse it (the penalty
+  couples parameters); MIGRAD, with or without the analytic gradient, and MCMC
+  (in the likelihood) carry it.
 - Every J-group holding an isospin level uses :math:`B_c = -l_c`, so
   partners share their boundary values. Isospin levels need the standard
   parametrization (``--no-brune``). The analytic gradient, the LM and GSL

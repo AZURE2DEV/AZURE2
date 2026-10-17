@@ -528,9 +528,17 @@ class AzrModel:
             f"new particle pair is not supported -- reference an existing pair.")
 
     def _renumber(self):
-        """Give every level a fresh consecutive levelID (1-based)."""
+        """Give every level a fresh consecutive levelID (1-based).  The
+        ``<isospin>`` block names levels by ID, so its ``level``, ``mix`` and
+        ``factor`` lines follow."""
+        old = [lv.level_id for lv in self.levels]
         for i, lv in enumerate(self.levels, start=1):
             lv._renumber(i)
+        if self.has_isospin_block:
+            mapping = {o: i for i, o in enumerate(old, start=1)}
+            self._edit_isospin_lines(lambda kind, t: (
+                [t[0], str(mapping.get(int(t[1]), int(t[1])))] + t[2:]
+                if kind in ("level", "mix", "factor", "soft") and len(t) >= 2 else t))
 
     # -- editing --------------------------------------------------------------
 
@@ -1013,6 +1021,235 @@ class AzrModel:
             lines.insert(end, f"abundanceSumSigma={float(value):g}\n")
         self._prefix = "".join(lines)
 
+    # -- isospin levels (the <isospin> block) ----------------------------------
+
+    @property
+    def has_isospin_block(self):
+        return "<isospin>" in [ln.strip() for ln in self._suffix.splitlines()]
+
+    def _edit_isospin_lines(self, edit):
+        """Apply ``edit(kind, tokens) -> tokens or None`` to every line of the
+        block (None drops the line); comments after '#' are kept."""
+        lines = self._suffix.splitlines()
+        stripped = [ln.strip() for ln in lines]
+        a, b = stripped.index("<isospin>"), stripped.index("</isospin>")
+        out = []
+        for ln in lines[a + 1:b]:
+            body, hash_, comment = ln.partition("#")
+            t = body.split()
+            if not t:
+                out.append(ln)
+                continue
+            new = edit(t[0], t)
+            if new is None:
+                continue
+            out.append(" ".join(new) + (("   " + hash_ + comment) if hash_ else ""))
+        self._suffix = "\n".join(lines[:a + 1] + out + lines[b:]) + "\n"
+
+    def _ensure_isospin_block(self):
+        if self.has_isospin_block:
+            return
+        lines = self._suffix.splitlines()
+        stripped = [ln.strip() for ln in lines]
+        # after </abundances> if present, else right after </levels>
+        at = (stripped.index("</abundances>") + 1 if "</abundances>" in stripped
+              else stripped.index("</levels>") + 1 if "</levels>" in stripped else 0)
+        lines[at:at] = ["<isospin>", "</isospin>"]
+        self._suffix = "\n".join(lines) + "\n"
+
+    def _isospin_tokens(self):
+        if not self.has_isospin_block:
+            return []
+        lines = [ln.strip() for ln in self._suffix.splitlines()]
+        a, b = lines.index("<isospin>"), lines.index("</isospin>")
+        return [ln.split("#")[0].split() for ln in lines[a + 1:b] if ln.split("#")[0].strip()]
+
+    @property
+    def isospin(self):
+        """The ``<isospin>`` block parsed: ``{"reference": (Z, A, pair) or None,
+        "shifts": {(Z, A): (pair, value, vary, centre, sigma)},
+        "levels": {level_id: T}, "mixes": [(level_id, pair, L, S, value, vary,
+        sigma)], "factors": [(level_id, pair, value)], "pairT": {pair: (t1, t2)},
+        "soft": {level_id: (sigma_E, sigma_gamma)}}``
+        (all empty without a block).  Mixes are in parameter order:
+        ``isospin_mix_<k>`` is ``mixes[k-1]``."""
+        out = {"reference": None, "shifts": {}, "levels": {}, "mixes": [], "factors": [], "pairT": {}, "soft": {}}
+        for t in self._isospin_tokens():
+            k = t[0]
+            if k == "reference" and len(t) >= 4:
+                out["reference"] = (int(t[1]), int(t[2]), int(t[3]))
+            elif k == "shift" and len(t) >= 8:
+                out["shifts"][(int(t[1]), int(t[2]))] = (int(t[3]), float(t[4]), bool(int(t[5])), float(t[6]), float(t[7]))
+            elif k == "level" and len(t) >= 3:
+                out["levels"][int(t[1])] = float(t[2])
+            elif k == "mix" and len(t) >= 8:
+                out["mixes"].append((int(t[1]), int(t[2]), int(t[3]), float(t[4]), float(t[5]), bool(int(t[6])), float(t[7])))
+            elif k == "factor" and len(t) >= 4:
+                out["factors"].append((int(t[1]), int(t[2]), float(t[3])))
+            elif k == "pairT" and len(t) >= 4:
+                out["pairT"][int(t[1])] = (float(t[2]), float(t[3]))
+            elif k == "soft" and len(t) >= 4:
+                out["soft"][int(t[1])] = (float(t[2]), float(t[3]))
+        return out
+
+    def _nucleus_arg(self, nucleus):
+        Nucleus = _nuclei_module().Nucleus
+        nuc = Nucleus.parse(nucleus)
+        if nuc not in self.nuclei():
+            raise KeyError(f"no pair of this project forms {nuc.label}: {[n.label for n in self.nuclei()]}")
+        return nuc
+
+    def set_isospin_reference(self, nucleus, pair):
+        """The reference nucleus of the isospin levels and the pair (file key)
+        whose threshold its level energies are measured from."""
+        nuc = self._nucleus_arg(nucleus)
+        if pair not in self.nuclei()[nuc]:
+            raise KeyError(f"pair {pair} is not a pair of {nuc.label}")
+        self._ensure_isospin_block()
+        line = ["reference", str(nuc.Z), str(nuc.A), str(int(pair))]
+        found = []
+        self._edit_isospin_lines(lambda k, t: (found.append(1) or line) if k == "reference" else t)
+        if not found:
+            self._insert_isospin_line(line, first=True)
+        return self
+
+    def _insert_isospin_line(self, tokens, first=False):
+        lines = self._suffix.splitlines()
+        stripped = [ln.strip() for ln in lines]
+        a, b = stripped.index("<isospin>"), stripped.index("</isospin>")
+        lines.insert(a + 1 if first else b, " ".join(tokens))
+        self._suffix = "\n".join(lines) + "\n"
+
+    def set_isospin_shift(self, nucleus, pair=None, value=None, vary=None, centre=None, sigma=None):
+        """The internal Coulomb shift of a nucleus's isospin levels: the pair
+        (file key) whose threshold its energies are measured from, the shift
+        (MeV), whether it is a fit parameter, and its prior centre and width
+        (0 = no prior).  Fields left ``None`` keep their value (new line:
+        value 0, fixed, centre 0, no prior; ``pair`` is then required)."""
+        nuc = self._nucleus_arg(nucleus)
+        cur = self.isospin["shifts"].get((nuc.Z, nuc.A))
+        if cur is None and pair is None:
+            raise ValueError(f"a new shift line for {nuc.label} needs pair=")
+        cur = cur or (pair, 0.0, False, 0.0, 0.0)
+        pair = cur[0] if pair is None else int(pair)
+        value = cur[1] if value is None else float(value)
+        vary = cur[2] if vary is None else bool(vary)
+        centre = cur[3] if centre is None else float(centre)
+        sigma = cur[4] if sigma is None else float(sigma)
+        line = ["shift", str(nuc.Z), str(nuc.A), str(pair), _fmt(value), "1" if vary else "0", _fmt(centre), _fmt(sigma)]
+        self._ensure_isospin_block()
+        found = []
+        self._edit_isospin_lines(lambda k, t: (found.append(1) or line)
+                                 if k == "shift" and len(t) >= 3 and (int(t[1]), int(t[2])) == (nuc.Z, nuc.A) else t)
+        if not found:
+            self._insert_isospin_line(line)
+        return self
+
+    def _level_id_arg(self, level):
+        if isinstance(level, AzrLevel):
+            return level.level_id
+        ids = [lv.level_id for lv in self.levels]
+        if int(level) not in ids:
+            raise KeyError(f"no level with ID {level}")
+        return int(level)
+
+    def set_isospin_level(self, level, T):
+        """Declare a level (an :class:`AzrLevel` or its ID) an isospin level
+        with isospin ``T``; ``T=None`` removes the declaration."""
+        lid = self._level_id_arg(level)
+        self._ensure_isospin_block()
+        found = []
+
+        def edit(k, t):
+            if k == "level" and len(t) >= 2 and int(t[1]) == lid:
+                found.append(1)
+                return None if T is None else ["level", str(lid), _fmt(float(T))]
+            return t
+        self._edit_isospin_lines(edit)
+        if not found and T is not None:
+            self._insert_isospin_line(["level", str(lid), _fmt(float(T))])
+        return self
+
+    def set_isospin_soft(self, level, sigma_E=None, sigma_gamma=None):
+        """Soft-tie a declared isospin level: its derived slots become free
+        parameters with the penalty ((value - tie) / sigma)^2 each (``sigma_E``
+        in MeV, ``sigma_gamma`` in MeV^1/2); ``sigma_E=None`` removes the line.
+        A soft level takes no mix lines (it frees its forbidden channels
+        already), and the LM / GSL fitters refuse it."""
+        lid = self._level_id_arg(level)
+        self._ensure_isospin_block()
+        found = []
+
+        def edit(k, t):
+            if k == "soft" and len(t) >= 2 and int(t[1]) == lid:
+                found.append(1)
+                return None if sigma_E is None else ["soft", str(lid), _fmt(float(sigma_E)), _fmt(float(sigma_gamma))]
+            return t
+        self._edit_isospin_lines(edit)
+        if not found and sigma_E is not None:
+            self._insert_isospin_line(["soft", str(lid), _fmt(float(sigma_E)), _fmt(float(sigma_gamma))])
+        return self
+
+    def add_isospin_mix(self, level, pair, L, S, value=0.0, vary=True, sigma=0.0):
+        """A free isospin-forbidden amplitude (MeV^1/2) for a level's channel
+        ``(pair, L, S)``; it becomes parameter ``isospin_mix_<k>``, k = its
+        position among the mix lines."""
+        lid = self._level_id_arg(level)
+        self._ensure_isospin_block()
+        self._insert_isospin_line(["mix", str(lid), str(int(pair)), str(int(L)), _fmt(float(S)),
+                                   _fmt(float(value)), "1" if vary else "0", _fmt(float(sigma))])
+        return self
+
+    def set_isospin_mix(self, k, value=None, vary=None, sigma=None):
+        """Edit mix line ``k`` (1-based, as in ``isospin_mix_<k>``)."""
+        n = [0]
+
+        def edit(kind, t):
+            if kind != "mix":
+                return t
+            n[0] += 1
+            if n[0] != k:
+                return t
+            t = list(t)
+            if value is not None:
+                t[5] = _fmt(float(value))
+            if vary is not None:
+                t[6] = "1" if vary else "0"
+            if sigma is not None:
+                t[7] = _fmt(float(sigma))
+            return t
+        if not self.has_isospin_block:
+            raise KeyError("no <isospin> block")
+        self._edit_isospin_lines(edit)
+        if n[0] < k:
+            raise KeyError(f"there are {n[0]} mix lines, not {k}")
+        return self
+
+    def join_levels(self, *levels, T=None):
+        """Make one isospin level of several levels of different nuclei (one
+        :class:`AzrLevel` per nucleus, each keeping its own energy and widths):
+        their lines move, consecutively, under the first one's ID, the others
+        are removed, and with ``T`` the joined level is declared in the
+        ``<isospin>`` block.  Returns the joined level."""
+        lvs = [lv if isinstance(lv, AzrLevel) else self.levels[[x.level_id for x in self.levels].index(int(lv))]
+               for lv in levels]
+        if len(lvs) < 2:
+            raise ValueError("join_levels needs two or more levels")
+        if len({(lv.J, lv.parity) for lv in lvs}) != 1:
+            raise ValueError("the levels of one isospin level must share J and parity")
+        nuc = [self.nucleus_of_pair(lv.channels[0].pair) for lv in lvs]
+        if len(set(nuc)) != len(nuc):
+            raise ValueError("join_levels takes one level per compound nucleus")
+        first = lvs[0]
+        for lv in lvs[1:]:
+            for c in lv.channels:
+                c._set("levelID", first.level_id)
+            first.channels.extend(lv.channels)
+        self.levels = [lv for lv in self.levels if not any(lv is x for x in lvs[1:])]
+        if T is not None:
+            self.set_isospin_level(first, T)
+        return first
+
     def set_natural(self, file_substr, natural=True):
         """Mark (or unmark) every ``<segmentsData>`` line matching
         ``file_substr`` as a sample (abundance-weighted) segment: ``natural=True``
@@ -1142,18 +1379,33 @@ class AzrModel:
         # the order the file first shows each.  The nucleus of a level is that
         # of its channels' pair (the engine refuses a level naming two).  With
         # one nucleus the key gains a constant and the numbering is unchanged.
+        #
+        # An isospin level (<isospin> block) is one level ID whose lines span
+        # several nuclei; the engine builds one level per nucleus from it, in
+        # the order its lines show the nuclei.  Each of those keys maps to an
+        # AzrLevel over that nucleus's lines only (sharing the line objects), so
+        # set_energy and the channel writes of apply_fit touch only them.
         order, seen, out = [], {}, {}
         several = len(self.nuclei()) > 1
+        nucleus_of = {}
+        if several:
+            for nuc, keys in self.nuclei().items():
+                for key in keys:
+                    nucleus_of[key] = nuc
         for lv in self.levels:
             if not lv.active:
                 continue
-            nuc = self.nucleus_of_pair(lv.channels[0].pair) if (several and lv.channels) else None
-            k = (int(round(2 * lv.J)), int(lv.parity), nuc)
-            if k not in seen:
-                order.append(k)
-                seen[k] = 0
-            seen[k] += 1
-            out[(order.index(k) + 1, seen[k])] = lv
+            parts = {}
+            for c in lv.channels:
+                parts.setdefault(nucleus_of.get(c.pair) if several else None, []).append(c)
+            for nuc, chans in parts.items():
+                part = lv if len(parts) == 1 else AzrLevel(chans)
+                k = (int(round(2 * lv.J)), int(lv.parity), nuc)
+                if k not in seen:
+                    order.append(k)
+                    seen[k] = 0
+                seen[k] += 1
+                out[(order.index(k) + 1, seen[k])] = part
         return out
 
     @property

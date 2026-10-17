@@ -2037,6 +2037,7 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config *config
   if (isospin_.Active()) {
     isospin_.AddParams(p);
     isospin_.Sync(p);
+    isospin_.InitSoftParams(p);
   }
 }
 

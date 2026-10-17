@@ -393,8 +393,8 @@ double AZURECalc::operator()(const vector_r &p) const {
     localData->SetAbundancePenalty(abundancePenalty);
   }
   // Isospin levels: priors on the shifts and mix amplitudes.
-  if (localCompound->Isospin().HasPenalty()) {
-    double isospinPenalty = localCompound->Isospin().Penalty();
+  if (localCompound->Isospin().HasPenalty() || localCompound->Isospin().HasSoftTies()) {
+    double isospinPenalty = localCompound->Isospin().Penalty() + localCompound->Isospin().SoftPenalty();
     chiSquared += isospinPenalty;
     localData->SetIsospinPenalty(isospinPenalty);
   }
@@ -572,7 +572,7 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
   // last full evaluation left there, so using it here froze the abundance prior in the LM/GSL cost and in the
   // finite-difference gradient columns (found 2026-10-17 by the isospin-levels session).
   if (lc->HasAbundanceBlock()) chiSquared += lc->AbundancePenalty(configure().abundanceSumSigma);
-  if (lc->Isospin().HasPenalty()) chiSquared += lc->Isospin().Penalty();
+  if (lc->Isospin().HasPenalty() || lc->Isospin().HasSoftTies()) chiSquared += lc->Isospin().Penalty() + lc->Isospin().SoftPenalty();
   return chiSquared;
 }
 
@@ -999,6 +999,10 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
     grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
     g2[idx] += 2.0 / (e * e);
   });
+  // Isospin soft ties (their slots and sources are free, so p is the right point).
+  for (const auto &sv : compound()->Isospin().SoftPenaltyGradient(p))
+    if (sv.first < (int)p.size()) grad[sv.first] += sv.second;
+  compound()->Isospin().AddSoftCurvature(g2);
   // Isotopic abundances: prior and sum-to-one gradient and (diagonal) curvature.  The sample sums are taken at
   // p: compound() holds the abundances of the last full evaluation, so its AbundanceSum was stale here.
   std::vector<double> sumAtP;
@@ -1067,6 +1071,7 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
   compound()->Isospin().ForEachPrior([&](int idx, double, double e) {
     if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
   });
+  compound()->Isospin().AddSoftCurvature(g2);
   if (compound()->HasAbundanceBlock()) {
     for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
       const int idx = pmap.AbundanceIndex(k);

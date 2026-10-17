@@ -331,13 +331,15 @@ bool AZURESetup::readFile(QString filename) {
   pairsTab->setAbundanceSumSigma(fileAbundanceSumSigma);
   GetConfig().abundanceSumSigma = fileAbundanceSumSigma;
 
-  // The optional <abundances> block sits between </levels> and <segmentsData>.
+  // The optional <abundances> and <isospin> blocks sit between </levels> and <segmentsData>.
   line = QString("");
-  while (line.trimmed() != QString("<abundances>") && line.trimmed() != QString("<segmentsData>") && !in.atEnd()) line = in.readLine();
-  if (!in.atEnd() && line.trimmed() == QString("<abundances>")) {
-    if (!pairsTab->readAbundances(in)) return false;
-    line = QString("");
-    while (line.trimmed() != QString("<segmentsData>") && !in.atEnd()) line = in.readLine();
+  while (line.trimmed() != QString("<segmentsData>") && !in.atEnd()) {
+    line = in.readLine();
+    if (line.trimmed() == QString("<abundances>")) {
+      if (!pairsTab->readAbundances(in)) return false;
+    } else if (line.trimmed() == QString("<isospin>")) {
+      if (!levelsTab->readIsospinBlock(in)) return false;
+    }
   }
   if (in.atEnd()) return false;
   if (!segmentsTab->readSegDataFile(in)) return false;
@@ -734,6 +736,13 @@ bool AZURESetup::writeFile(QString filename) {
     out << "<abundances>" << Qt::endl;
     if (!pairsTab->writeAbundances(out)) return false;
     out << "</abundances>" << Qt::endl;
+  }
+
+  // Isospin levels: the block as read, its level IDs following the levels' new IDs.
+  if (levelsTab->hasIsospinBlock()) {
+    out << "<isospin>" << Qt::endl;
+    if (!levelsTab->writeIsospinBlock(out)) return false;
+    out << "</isospin>" << Qt::endl;
   }
 
   out << "<segmentsData>" << Qt::endl;

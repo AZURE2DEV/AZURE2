@@ -49,6 +49,8 @@ int IsospinLevels::Read(const Config &configure) {
   pairTs_.clear();
   levels_.clear();
   derived_.clear();
+  softTerms_.clear();
+  softSpec_.clear();
   std::ifstream in(configure.configfile.c_str());
   if (!in) return -1;
   std::string line;
@@ -113,8 +115,15 @@ int IsospinLevels::Read(const Config &configure) {
       if (s.fail() || !IsHalfInteger(p.t1) || !IsHalfInteger(p.t2))
         return fail(raw, "expected: pairT <pair key> <t1> <t2> (non-negative integers or half-integers)");
       pairTs_.push_back(p);
+    } else if (kind == "soft") {
+      int id = 0;
+      double sE = 0.0, sG = 0.0;
+      s >> id >> sE >> sG;
+      if (s.fail() || sE <= 0.0 || sG <= 0.0)
+        return fail(raw, "expected: soft <level ID> <sigma E (MeV)> <sigma gamma (MeV^1/2)>, both > 0");
+      softSpec_.push_back({id, {sE, sG}});
     } else {
-      return fail(raw, "unknown keyword \"" + kind + "\" (reference, shift, level, mix, factor, pairT)");
+      return fail(raw, "unknown keyword \"" + kind + "\" (reference, shift, level, mix, factor, pairT, soft)");
     }
   }
   configure.outStream << "ERROR: <isospin> block has no closing </isospin>." << std::endl;
@@ -326,6 +335,24 @@ int IsospinLevels::Resolve(const Config &configure, CNuc &c) {
     levels_.push_back(L);
   }
 
+  // Soft ties.
+  for (const auto &sp : softSpec_) {
+    IsospinLevel *L = nullptr;
+    for (IsospinLevel &l : levels_)
+      if (l.id == sp.first) L = &l;
+    if (!L) return fail("soft names level ID " + std::to_string(sp.first) + ", which has no 'level' line.");
+    L->soft = true;
+    L->sigmaE = sp.second.first;
+    L->sigmaGamma = sp.second.second;
+    for (const IsospinMix &mx : mixes_)
+      if (mx.levelID == L->id)
+        return fail("level ID " + std::to_string(L->id) + " has both a soft tie and a mix line; the soft tie already "
+                    "frees its forbidden channels.");
+  }
+  if (!softSpec_.empty() && (configure.paramMask & (Config::USE_LM_MINIMIZER | Config::USE_GSL_LM_MINIMIZER)))
+    return fail("the LM / GSL least-squares fitters take per-parameter priors only, and a soft tie couples parameters; "
+                "fit with MIGRAD (with or without --use-gradient).");
+
   // Mix and factor lines must name existing level lines.
   for (size_t i = 0; i < mixes_.size(); i++) {
     IsospinMix &mx = mixes_[i];
@@ -362,13 +389,43 @@ int IsospinLevels::Resolve(const Config &configure, CNuc &c) {
                   " matches no channel of a declared level.");
   }
 
-  // Derived slots.
-  for (const IsospinLevel &L : levels_)
+  // Derived slots (fixed, overwritten), or soft-tie terms for a soft level.
+  auto shiftParamOf = [&](int nucleus) {
+    const IsospinShift *e = ShiftOf(nucleus);
+    return (e && !e->reference) ? e->param : -1;
+  };
+  for (const IsospinLevel &L : levels_) {
+    const IsospinMember &r = L.members[L.ref];
     for (size_t i = 0; i < L.members.size(); i++) {
-      if ((int)i != L.ref && L.members.size() > 1) derived_.insert(L.members[i].energySlot);
-      for (const IsospinWidth &w : L.members[i].widths)
-        if (w.ownerSlot != -1) derived_.insert(w.slot);
+      const IsospinMember &m = L.members[i];
+      if ((int)i != L.ref && L.members.size() > 1) {
+        if (!L.soft) {
+          derived_.insert(m.energySlot);
+        } else {
+          IsospinSoftTerm t;
+          t.slot = m.energySlot;
+          t.sigma = L.sigmaE;
+          t.constant = m.threshold - r.threshold;
+          t.sources.push_back({r.energySlot, 1.0});
+          if (shiftParamOf(m.nucleus) >= 0) t.sources.push_back({shiftParamOf(m.nucleus), 1.0});
+          if (shiftParamOf(r.nucleus) >= 0) t.sources.push_back({shiftParamOf(r.nucleus), -1.0});
+          softTerms_.push_back(t);
+        }
+      }
+      for (const IsospinWidth &w : m.widths) {
+        if (w.ownerSlot == -1) continue;
+        if (!L.soft) {
+          derived_.insert(w.slot);
+        } else {
+          IsospinSoftTerm t;
+          t.slot = w.slot;
+          t.sigma = L.sigmaGamma;
+          if (w.ownerSlot >= 0) t.sources.push_back({w.ownerSlot, w.ratio});
+          softTerms_.push_back(t);
+        }
+      }
     }
+  }
 
   // Report.
   out << "Isospin levels: " << levels_.size() << " level(s); reference " << c.NucleusLabel(refNucleus)
@@ -376,7 +433,8 @@ int IsospinLevels::Resolve(const Config &configure, CNuc &c) {
   out << "  note: the GUI does not keep the <isospin> block yet; edit this project as text." << std::endl;
   for (const IsospinLevel &L : levels_) {
     JGroup *g = c.GetJGroup(L.members[L.ref].jGroup);
-    out << "  level ID " << L.id << "  T=" << L.t << "  J=" << g->GetJ() << (g->GetPi() < 0 ? "-" : "+") << "  in";
+    out << "  level ID " << L.id << "  T=" << L.t << "  J=" << g->GetJ() << (g->GetPi() < 0 ? "-" : "+")
+        << (L.soft ? "  SOFT (sigma E " + Fmt(L.sigmaE) + " MeV, sigma gamma " + Fmt(L.sigmaGamma) + " MeV^1/2)" : "") << "  in";
     for (size_t i = 0; i < L.members.size(); i++)
       out << " " << c.NucleusLabel(L.members[i].nucleus) << ((int)i == L.ref ? " (reference)" : "");
     out << std::endl;
@@ -455,6 +513,7 @@ void IsospinLevels::AddParams(ROOT::Minuit2::MnUserParameters &p) {
 void IsospinLevels::Apply(vector_r &q) const {
   if (!active_) return;
   for (const IsospinLevel &L : levels_) {
+    if (L.soft) continue;  // free slots, penalised instead (SoftPenalty)
     const IsospinMember &r = L.members[L.ref];
     if (L.members.size() > 1) {
       const double eps = q[r.energySlot] - r.threshold - ShiftValue(r.nucleus, q);
@@ -482,6 +541,7 @@ std::vector<IsospinTie> IsospinLevels::Ties() const {
     return (e && !e->reference) ? e->param : -1;
   };
   for (const IsospinLevel &L : levels_) {
+    if (L.soft) continue;
     const IsospinMember &r = L.members[L.ref];
     if (L.members.size() > 1)
       for (size_t i = 0; i < L.members.size(); i++) {
@@ -534,6 +594,7 @@ std::vector<double> IsospinLevels::PenaltyGradient() const {
 
 void IsospinLevels::ReadParams(const vector_r &q) {
   if (!active_) return;
+  if (!softTerms_.empty()) lastQ_ = q;
   for (IsospinShift &e : shifts_)
     if (!e.reference && e.param >= 0 && e.param < (int)q.size()) e.value = q[e.param];
   for (IsospinMix &m : mixes_)
@@ -570,6 +631,53 @@ bool IsospinLevels::HasPenalty() const {
   return false;
 }
 
+double IsospinLevels::SoftPenalty(const vector_r &q) const {
+  double chi2 = 0.0;
+  for (const IsospinSoftTerm &t : softTerms_) {
+    if (t.slot >= (int)q.size()) continue;
+    double target = t.constant;
+    for (const auto &s : t.sources) target += s.second * q[s.first];
+    chi2 += std::pow((q[t.slot] - target) / t.sigma, 2.0);
+  }
+  return chi2;
+}
+
+std::vector<std::pair<int, double>> IsospinLevels::SoftPenaltyGradient(const vector_r &q) const {
+  std::vector<std::pair<int, double>> g;
+  for (const IsospinSoftTerm &t : softTerms_) {
+    if (t.slot >= (int)q.size()) continue;
+    double target = t.constant;
+    for (const auto &s : t.sources) target += s.second * q[s.first];
+    const double d = 2.0 * (q[t.slot] - target) / (t.sigma * t.sigma);
+    g.push_back({t.slot, d});
+    for (const auto &s : t.sources) g.push_back({s.first, -s.second * d});
+  }
+  return g;
+}
+
+void IsospinLevels::AddSoftCurvature(std::vector<double> &g2) const {
+  for (const IsospinSoftTerm &t : softTerms_) {
+    const double c = 2.0 / (t.sigma * t.sigma);
+    if (t.slot < (int)g2.size()) g2[t.slot] += c;
+    for (const auto &s : t.sources)
+      if (s.first < (int)g2.size()) g2[s.first] += c * s.second * s.second;
+  }
+}
+
+void IsospinLevels::InitSoftParams(ROOT::Minuit2::MnUserParameters &p) const {
+  if (softTerms_.empty()) return;
+  const vector_r q = p.Params();
+  for (const IsospinSoftTerm &t : softTerms_) {
+    if (t.slot >= (int)q.size()) continue;
+    double target = t.constant;
+    for (const auto &s : t.sources) target += s.second * q[s.first];
+    p.SetValue(t.slot, target);
+    // A width at exactly 0 is otherwise fixed (CNuc::FillMnParams); a soft slot starts free.
+    if (p.Parameter(t.slot).IsFixed()) p.Release(t.slot);
+    p.SetError(t.slot, std::max(0.1 * std::fabs(target), t.sigma));
+  }
+}
+
 std::string IsospinLevels::ParamLabel(int i) const {
   if (!active_) return std::string();
   for (const IsospinShift &e : shifts_)
@@ -588,7 +696,7 @@ std::string IsospinLevels::MemberLabel(int jGroup, int level) const {
     for (size_t i = 0; i < L.members.size(); i++)
       if (L.members[i].jGroup == jGroup && L.members[i].level == level)
         return "ISOSPIN LEVEL " + std::to_string(L.id) + " T=" + Fmt(L.t) +
-               ((int)i == L.ref ? " (reference)" : " (derived)");
+               ((int)i == L.ref ? " (reference)" : (L.soft ? " (soft)" : " (derived)"));
   return std::string();
 }
 
@@ -597,6 +705,7 @@ void IsospinLevels::Write(const Config &configure, CNuc &c) const {
   std::ofstream out((configure.outputdir + "isospin.out").c_str());
   if (!out) return;
   out << "ISOSPIN LEVELS (formal parameters, B_c = -l_c in their J-groups)" << std::endl << std::endl;
+  if (!softTerms_.empty()) out << "soft-tie penalty = " << std::setprecision(8) << SoftPenalty() << std::endl;
   for (const IsospinShift &e : shifts_) {
     out << (e.reference ? "reference " : "shift     ") << "Z=" << e.z << " A=" << e.a << "  threshold pair " << e.pairKey
         << " at Ex = " << std::setprecision(6) << e.threshold << " MeV";
@@ -616,6 +725,7 @@ void IsospinLevels::Write(const Config &configure, CNuc &c) const {
       ALevel *lev = c.GetJGroup(m.jGroup)->GetLevel(m.level);
       out << "  " << c.NucleusLabel(m.nucleus) << " (T3=" << m.t3 << ")" << ((int)i == L.ref ? "  reference" : "  derived")
           << "  formal E = " << std::setprecision(14) << lev->GetFitE() << " MeV" << std::endl;
+      if (L.soft && (int)i != L.ref) out << "    (soft tie)" << std::endl;
       for (const IsospinWidth &w : m.widths) {
         AChannel *chan = c.GetJGroup(m.jGroup)->GetChannel(w.channel);
         out << "    pair " << std::setw(2) << c.GetPair(chan->GetPairNum())->GetPairKey() << "  l=" << chan->GetL()
@@ -625,6 +735,8 @@ void IsospinLevels::Write(const Config &configure, CNuc &c) const {
         out << "  gamma = " << std::setw(22) << std::setprecision(14) << lev->GetFitGamma(w.channel) << " MeV^1/2";
         if (w.ownerSlot == -1)
           out << "  free";
+        else if (L.soft)
+          out << (w.ownerSlot == -2 ? "  soft (forbidden, target 0)" : "  soft");
         else if (w.ownerSlot == -2)
           out << (w.mix >= 0 ? "  forbidden, mix " + std::to_string(w.mix + 1) : "  forbidden");
         else

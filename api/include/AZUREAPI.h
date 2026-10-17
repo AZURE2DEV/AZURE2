@@ -283,6 +283,9 @@ class AZUREAPI {
   /// As TransformAllRWAParameters, but returns every R-matrix parameter's
   /// physical value, fixed ones included (the <levels> block of a snapshot).
   vector_r TransformAllRWAParametersFull(const vector_r &p) const;
+  /*! Every parameter (params_all_rwa layout) with the derived isospin slots
+   *  recomputed from the free ones (<isospin> block); p unchanged without one. */
+  vector_r TieAllRWA(const vector_r &p) const;
 
   /*!
    * Calculate chi-squared from RWA parameters

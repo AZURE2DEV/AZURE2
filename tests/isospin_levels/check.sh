@@ -17,6 +17,10 @@
 # (e) AZURE_GRAD_CHECK on iso_free.azr (every reference parameter free, priors): the
 #     analytic gradient and the Jacobian path agree with finite differences through the ties.
 # (f) MCMC: a short RWA run samples the 8 free parameters; the physical-parameter run is refused.
+# (g) Soft tie (iso_soft.azr): at the start (soft slots on their tie targets) every extrapolation
+#     equals the hard-tie model's; the gradient check (from shifts -0.8 / -0.6, off the minimum)
+#     agrees for all 13 free parameters, soft slots included; LM is refused; a MIGRAD fit reports
+#     the soft penalty in Total-Isospin-Chi-Squared and isospin.out.
 #
 # The models are written by make_models.py (committed).
 
@@ -200,6 +204,31 @@ if [ -s "$WORK/nt.dat" ]; then
     ok "refused: MCMC on physical parameters"
   else
     bad "MCMC on physical parameters was not refused"
+  fi
+fi
+
+# ---- (g) soft tie --------------------------------------------------------------------------------
+run soft "$M/iso_soft.azr" 3 "--no-brune"
+n=0; for f in "$WORK/iso/output/"*.extrap; do cmp -s "$f" "$WORK/soft/output/$(basename "$f")" || n=$((n + 1)); done
+if [ "$n" = 0 ] && [ -n "$(ls "$WORK/soft/output/"*.extrap 2>/dev/null)" ]; then ok "soft tie at its start == hard tie (every extrapolation identical)"
+else bad "soft tie at its start differs from the hard tie in $n file(s)"; fi
+grep -q "SOFT (sigma E 0.05" "$WORK/soft/run.log" && grep -q "soft" "$WORK/soft/output/isospin.out" && ok "soft tie reported (start-up log, isospin.out)" || bad "soft tie not reported"
+if [ -s "$WORK/nt.dat" ]; then
+  mkdir -p "$WORK/gcs/output" "$WORK/gcs/checks"; cp "$WORK"/*.dat "$WORK/gcs/"
+  sed 's/^shift 1 4 2 -0.86 1/shift 1 4 2 -0.8 1/; s/^shift 2 4 3 -0.64 1/shift 2 4 3 -0.6 1/' "$M/iso_soft.azr" > "$WORK/gcs/t.azr"
+  (cd "$WORK/gcs" && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 run_limited 900 "$AZURE2_BIN" --no-brune --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
+  line="$(grep "components with relative" "$WORK/gcs/run.log" | head -1)"
+  if echo "$line" | grep -q "energy 0/4 gamma 0/7 isospin 0/2; Jacobian path: energy 0/4 gamma 0/7 isospin 0/2"; then
+    ok "soft-tie gradient check: 13 free parameters (soft slots included) agree with finite differences on both paths"
+  else
+    bad "soft-tie gradient check: '$line'"
+  fi
+  refused soft_lm "$M/iso_soft.azr" "--no-brune --use-lm" 2 "a soft tie couples parameters"
+  run softfit "$M/iso_soft.azr" 2 "--no-brune --use-gradient"
+  if grep -q "Total-Isospin-Chi-Squared" "$WORK/softfit/output/chiSquared.out" 2>/dev/null && grep -q "soft-tie penalty" "$WORK/softfit/output/isospin.out"; then
+    ok "soft-tie fit: $(grep -o 'Total-Isospin-Chi-Squared: [^ ]*' "$WORK/softfit/output/chiSquared.out"), $(grep 'soft-tie penalty' "$WORK/softfit/output/isospin.out")"
+  else
+    bad "soft-tie fit did not report the soft penalty"; tail -5 "$WORK/softfit/run.log"
   fi
 fi
 

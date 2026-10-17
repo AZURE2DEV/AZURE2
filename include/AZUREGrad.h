@@ -151,6 +151,8 @@ struct GradAccum {
   std::vector<double> abundance;
   // isospin[k]              -> d/d(isospin parameter k), shifts then mixes (zero-length without an <isospin> block)
   std::vector<double> isospin;
+  // (full index, d/dx) of the isospin soft-tie penalty, added as they come
+  std::vector<std::pair<int, double>> slot;
 
   /// Allocate (and zero) the accumulators to match the compound's dimensions.
   void Init(CNuc *compound);
@@ -169,6 +171,8 @@ struct GradAccum {
   void AddAbundance(int ordinal, double v) {
     if (ordinal >= 1 && ordinal <= (int)abundance.size()) abundance[ordinal - 1] += v;
   }
+  /// Add a contribution by full parameter index (the soft-tie penalty).
+  void AddSlot(int fullIndex, double v) { slot.push_back({fullIndex, v}); }
   /// Add an isospin-parameter contribution (0-based k).
   void AddIsospin(int k, double v) {
     if (k >= 0 && k < (int)isospin.size()) isospin[k] += v;
