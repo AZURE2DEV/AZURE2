@@ -1249,8 +1249,10 @@ class azure2:
         Note the denominator uses the *nominal* normalization, and that
         ``norm_error`` is a percentage.  Returns ``{"norm": array, "shift":
         array, "shift_sqrt": array, "shift_fn": array}``, one entry per segment,
-        and the single numbers ``"park"`` and ``"abundance"`` (isotopic-abundance
-        priors and sum-to-one terms; both already inside the engine's chi-squared).
+        and the single numbers ``"park"``, ``"abundance"`` (isotopic-abundance
+        priors and sum-to-one terms) and ``"isospin"`` (priors on the internal
+        Coulomb shifts and isospin-forbidden amplitudes of an ``<isospin>``
+        block); all three are already inside the engine's chi-squared.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         norm = np.zeros(self.nsegments)
@@ -1329,8 +1331,18 @@ class azure2:
                     s_sum = model.abundance_sum_sigma
                 if s_sum > 0:
                     abundance += ((total - 1.0) / s_sum) ** 2
+        # Isospin levels (projects with an <isospin> block): ((x - centre)/sigma)^2
+        # for every varied shift and mix amplitude with a prior.  Added by the
+        # engine inside calculate_chi2_rwa, like the Park and abundance terms.
+        isospin = 0.0
+        for p in self.parameters.isospin:
+            if p.fixed or not p.prior_sigma:
+                continue
+            value = (float(x[p.free_index]) if p.free_index is not None and p.free_index < x.size
+                     else float(p.value))
+            isospin += ((value - p.prior_centre) / p.prior_sigma) ** 2
         return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "shift_fn": shift_fn,
-                "park": park, "abundance": abundance}
+                "park": park, "abundance": abundance, "isospin": isospin}
 
     @property
     def nuclei(self):

@@ -21,6 +21,8 @@ Radii 4.9 fm (nucleon + trinucleon) and 7.0 fm (d+d), as in Hale's analysis.
                    (mix = 0.05 MeV^1/2): the truth of the recovery fit
   iso_fit.azr      every level parameter fixed, shifts started at -0.5 / -0.4 and the
                    mix at 0, all free; data segments read the data written by check.sh
+  iso_free.azr     the same data with every reference parameter free, priors on the
+                   shifts (0.3 MeV) and the mix (0.1): the gradient check model
   standalone_4H.azr  4H alone, one T=1 level with the formal parameters check.sh copies
                    from iso.azr's isospin.out (run with --no-transform)
   bad_undeclared.azr  level 1 spans three nuclei with no <isospin> block
@@ -94,15 +96,15 @@ def levels(fixed=False, rad2=None, t0_in_4li=False):
     return "<levels>\n" + "\n".join(L) + "\n</levels>"
 
 
-def block(shift_h=-0.86, shift_he=-0.64, vary=0, mix=None, extra=""):
+def block(shift_h=-0.86, shift_he=-0.64, vary=0, mix=None, extra="", prior=0):
     b = ["<isospin>",
          "reference 3 4 1",
-         f"shift 1 4 2 {shift_h} {vary} -0.86 0",
-         f"shift 2 4 3 {shift_he} {vary} -0.64 0",
+         f"shift 1 4 2 {shift_h} {vary} -0.86 {prior}",
+         f"shift 2 4 3 {shift_he} {vary} -0.64 {prior}",
          "level 1 1",
          "level 2 0"]
     if mix is not None:
-        b.append(f"mix 1 5 1 1 {mix[0]} {mix[1]} 0")
+        b.append(f"mix 1 5 1 1 {mix[0]} {mix[1]} {mix[2] if len(mix) > 2 else 0}")
     if extra:
         b.append(extra)
     b.append("</isospin>")
@@ -132,6 +134,7 @@ def main():
     model("iso.azr", levels(), block())
     model("iso_mix.azr", levels(), block(mix=(0.05, 0)))
     model("iso_fit.azr", levels(fixed=True), block(-0.5 + 0.0, -0.4, vary=1, mix=(0.0, 1)), test=TEST, data=DATA)
+    model("iso_free.azr", levels(), block(-0.8, -0.6, vary=1, mix=(0.02, 1, 0.1), prior=0.3), test=TEST, data=DATA)
     standalone_4h()
     model("bad_undeclared.azr", levels(), "")
     model("bad_radius.azr", levels(rad2=5.0), block())

@@ -726,7 +726,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   if (eg) {
     AddParkPenaltyGradient(lc, configure(), accum); // Park J > 0 wall
     AddAbundancePenaltyGradient(lc, configure(), accum);  // abundance priors, sum-to-one
-    accum.Scatter(pmap, grad);                      // energies + reduced widths, abundances
+    AddIsospinPenaltyGradient(lc, accum);           // isospin shift and mix priors
+    accum.Scatter(pmap, grad);                      // energies + reduced widths, abundances, isospin (chain rule)
     AddNuisanceGradient(p, grad);                   // nuisance penalty
     for (int s = 1; s <= ld->NumSegments(); s++) {  // normalizations
       ESegment *seg = ld->GetSegment(s);
@@ -776,7 +777,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
     if (idx < nMn && fp.GetMinuitParams().Parameter(idx).IsFixed()) continue;
     ParamKind kind = pmap.Desc(idx).kind;
-    if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm)) continue;  // analytic
+    if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
+               kind == ParamKind::Isospin)) continue;  // analytic (isospin: chain rule in Scatter)
     double x0 = p[idx];
     double h = FdStep(kind, x0, 1.0e-6);
 
@@ -844,7 +846,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
         if (idx < nMn && fp.GetMinuitParams().Parameter(idx).IsFixed()) continue;
         ParamKind kind = pmap.Desc(idx).kind;
-        if (!(eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm))) nfd++;
+        if (!(eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
+                     kind == ParamKind::Isospin))) nfd++;
       }
       std::cerr << "[grad-timing] call " << c << ": setup+adjoint " << ms(tg0, tg1) << " ms (analytic " << (eg ? "ok" : "BAILED")
                 << "), finite-difference part " << ms(tg1, tg2) << " ms for " << nfd << " parameters" << std::endl;
@@ -858,7 +861,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   static std::atomic<bool> gradChecked{false};
   if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
     if (!gradChecked.exchange(true)) {
-      static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance"};
+      static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "isospin"};
       struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;
       constexpr int kNumKinds = sizeof(kindName) / sizeof(kindName[0]);  // one per ParamKind
@@ -991,6 +994,11 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
     grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
     g2[idx] += 2.0 / (e * e);
   });
+  compound()->Isospin().ForEachPrior([&](int idx, double nominal, double e) {
+    if (idx >= (int)p.size()) return;
+    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    g2[idx] += 2.0 / (e * e);
+  });
   // Isotopic abundances: prior and sum-to-one gradient and (diagonal) curvature.  The sample sums are taken at
   // p: compound() holds the abundances of the last full evaluation, so its AbundanceSum was stale here.
   std::vector<double> sumAtP;
@@ -1056,6 +1064,9 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
   ForEachShiftPenalty(data(), pmap, [&](int idx, double, double e) {
     if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
   });
+  compound()->Isospin().ForEachPrior([&](int idx, double, double e) {
+    if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
+  });
   if (compound()->HasAbundanceBlock()) {
     for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
       const int idx = pmap.AbundanceIndex(k);
@@ -1097,7 +1108,7 @@ bool AZURECalc::HasNuisanceParameters() const {
     const std::string &name = mp.GetName();
     if (mp.IsFixed() && name.find("segment") == std::string::npos) continue;
     const bool inert = name.find("norm") != std::string::npos || name.find("shift") != std::string::npos ||
-                       name.find("abundance") != std::string::npos;
+                       name.find("abundance") != std::string::npos || name.find("isospin") != std::string::npos;
     if (!inert && limitsManager_->IsNuisanceParameterByIndex(nf)) {
       if (std::getenv("AZURE_GRAD_DEBUG"))
         std::cerr << "[grad] analytic G2 off: nuisance prior on '" << name << "'" << std::endl;
@@ -1468,6 +1479,8 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
   std::map<int, std::pair<double, double>> shiftPrior;  // full index -> (nominal, sigma)
   ForEachShiftPenalty(data(), BuildParamIndexMap(compound(), data(), std::vector<bool>()),
                       [&](int idx, double nominal, double sig) { shiftPrior[idx] = {nominal, sig}; });
+  // Isospin shifts and mix amplitudes: their <isospin> priors, by the same full index.
+  compound()->Isospin().ForEachPrior([&](int idx, double nominal, double sig) { shiftPrior[idx] = {nominal, sig}; });
   for (int a = 0; a < nFree; a++) {
     int f = p2f[a];
     x[a] = full[f];
@@ -1495,6 +1508,12 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
         }
       }
     } else if (name.find("shift") != std::string::npos) {
+      auto it = shiftPrior.find(f);
+      if (it != shiftPrior.end()) {
+        pen_nom[a] = it->second.first;
+        pen_inv2[a] = 1.0 / (it->second.second * it->second.second);
+      }
+    } else if (name.find("isospin_mix_") == 0) {
       auto it = shiftPrior.find(f);
       if (it != shiftPrior.end()) {
         pen_nom[a] = it->second.first;
@@ -1921,7 +1940,7 @@ void AZURECalc::AddNuisanceGradient(const vector_r &p, std::vector<double> &grad
     std::string paramName = tempParams.GetMinuitParams().Parameter(actualIndex).GetName();
     // Norms, shifts and abundances carry their own priors (segment errors, the <abundances> sigma).
     if (paramName.find("norm") != std::string::npos || paramName.find("shift") != std::string::npos ||
-        paramName.find("abundance") != std::string::npos) continue;
+        paramName.find("abundance") != std::string::npos || paramName.find("isospin") != std::string::npos) continue;
     if (!limitsManager_->IsNuisanceParameterByIndex(nf)) continue;
     double nominalValue = limitsManager_->GetConvertedNominalValueByIndex(nf);
     double paramError = limitsManager_->GetConvertedErrorByIndex(nf);
@@ -1955,7 +1974,7 @@ double AZURECalc::CalculateNuisanceChiSquared(const vector_r &p) const {
 
     // If norm, shift or abundance in param name, skip: those carry their own priors
     if (paramName.find("norm") != std::string::npos || paramName.find("shift") != std::string::npos ||
-        paramName.find("abundance") != std::string::npos) {
+        paramName.find("abundance") != std::string::npos || paramName.find("isospin") != std::string::npos) {
       continue;
     }
 

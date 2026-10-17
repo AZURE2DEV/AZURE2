@@ -11,10 +11,12 @@
 # (b) The 4H member equals a standalone 4H project built from its formal parameters
 #     (--no-transform) to 1e-10 in the n+t cross section.
 # (c) Refused models: a cross-nucleus level without the block, unequal radii in one
-#     arrangement, mix on an allowed channel, T too small for a nucleus, --use-brune,
-#     --use-gradient.
-# (d) Pseudo-data from iso_mix.azr (shifts -0.86 / -0.64, mix 0.05): a MIGRAD fit from
-#     -0.5 / -0.4 / 0 recovers all three.
+#     arrangement, mix on an allowed channel, T too small for a nucleus, --use-brune.
+# (d) Pseudo-data from iso_mix.azr (shifts -0.86 / -0.64, mix 0.05): MIGRAD (numerical and
+#     analytic gradient), LM and GSL least squares from -0.5 / -0.4 / 0 recover all three.
+# (e) AZURE_GRAD_CHECK on iso_free.azr (every reference parameter free, priors): the
+#     analytic gradient and the Jacobian path agree with finite differences through the ties.
+# (f) MCMC: a short RWA run samples the 8 free parameters; the physical-parameter run is refused.
 #
 # The models are written by make_models.py (committed).
 
@@ -129,7 +131,6 @@ refused radius "$M/bad_radius.azr" "--no-brune" 3 "need equal radii"
 refused mix_allowed "$M/bad_mix.azr" "--no-brune" 3 "isospin-allowed"
 refused T_too_small "$M/bad_T.azr" "--no-brune" 3 "has T=0 but lines in"
 refused brune "$M/iso.azr" "--use-brune" 3 "run with --no-brune"
-refused gradient "$M/iso.azr" "--no-brune --use-gradient" 3 "analytic gradient"
 
 # ---- (d) recovery fit ----------------------------------------------------------------------------
 run truth "$M/iso_mix.azr" 3 "--no-brune"
@@ -142,15 +143,19 @@ if [ -s "$T/AZUREOut_aa=2_R=2.extrap" ] && [ -s "$T/AZUREOut_aa=5_R=3.extrap" ];
   mk "$T/AZUREOut_aa=3_R=4.extrap" 1.2 0.05 ptn.dat
   mk "$T/AZUREOut_aa=5_R=3.extrap" 0.1 0.02 ddp.dat
   mk "$T/AZUREOut_aa=5_R=4.extrap" 0.1 0.02 ddn.dat
-  run fit "$M/iso_fit.azr" 2 "--no-brune"
+  for fl in "" "--use-gradient" "--use-lm" "--use-gsl-lm"; do
+    tag="fit${fl//-/_}"
+    run "$tag" "$M/iso_fit.azr" 2 "--no-brune $fl"
+    s="$WORK/$tag/output/param.sav"
+    v="$(awk '$1 == "isospin_shift_1_4" || $1 == "isospin_shift_2_4" || $1 == "isospin_mix_1" { printf "%s ", $2 }' "$s" 2>/dev/null)"
+    if awk -v v="$v" 'BEGIN { n = split(v, a, " "); exit !(n == 3 && (a[1]+0.86)^2 < 1e-8 && (a[2]+0.64)^2 < 1e-8 && (a[3]-0.05)^2 < 1e-8) }'; then
+      ok "fit ${fl:-(MIGRAD)} recovers shift(4H) -0.86, shift(4He) -0.64, mix 0.05 from -0.5 / -0.4 / 0 ($v)"
+    else
+      bad "fit ${fl:-(MIGRAD)} gave '$v' (want -0.86 -0.64 0.05)"; tail -5 "$WORK/$tag/run.log"
+    fi
+  done
   sav="$WORK/fit/output/param.sav"
   if [ -s "$sav" ]; then
-    v="$(awk '$1 == "isospin_shift_1_4" || $1 == "isospin_shift_2_4" || $1 == "isospin_mix_1" { printf "%s ", $2 }' "$sav")"
-    if awk -v v="$v" 'BEGIN { n = split(v, a, " "); exit !(n == 3 && (a[1]+0.86)^2 < 1e-8 && (a[2]+0.64)^2 < 1e-8 && (a[3]-0.05)^2 < 1e-8) }'; then
-      ok "fit recovers shift(4H) -0.86, shift(4He) -0.64, mix 0.05 from -0.5 / -0.4 / 0 ($v)"
-    else
-      bad "fit gave '$v' (want -0.86 -0.64 0.05)"; tail -5 "$WORK/fit/run.log"
-    fi
     # The derived slots are written synced to the fitted shift and mix (param.sav keeps 8 digits).
     if awk '{ v[$1] = $2 } END { d1 = v["energy_2"] - (v["energy_1"] + v["isospin_shift_1_4"]);
              d2 = v["energy_3"] - (v["energy_1"] + 19.8136 + v["isospin_shift_2_4"]); d3 = v["width_3_3"] - v["isospin_mix_1"];
@@ -164,6 +169,38 @@ if [ -s "$T/AZUREOut_aa=2_R=2.extrap" ] && [ -s "$T/AZUREOut_aa=5_R=3.extrap" ];
   fi
 else
   bad "truth model produced no extrapolations"; tail -5 "$WORK/truth/run.log"
+fi
+
+# ---- (e) gradient check through the ties ----------------------------------------------------------
+if [ -s "$WORK/nt.dat" ]; then
+  mkdir -p "$WORK/gc/output" "$WORK/gc/checks"; cp "$WORK"/*.dat "$WORK/gc/"; cp "$M/iso_free.azr" "$WORK/gc/t.azr"
+  (cd "$WORK/gc" && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 run_limited 900 "$AZURE2_BIN" --no-brune --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
+  line="$(grep "components with relative" "$WORK/gc/run.log" | head -1)"
+  if echo "$line" | grep -q "energy 0/2 gamma 0/3 isospin 0/3; Jacobian path: energy 0/2 gamma 0/3 isospin 0/3"; then
+    ok "gradient check: reference energies, owner widths, shifts and mix agree with finite differences on both paths"
+  else
+    bad "gradient check: '$line'"
+  fi
+fi
+
+# ---- (f) MCMC ----------------------------------------------------------------------------------------
+if [ -s "$WORK/nt.dat" ]; then
+  mkdir -p "$WORK/mc/output" "$WORK/mc/checks"; cp "$WORK"/*.dat "$WORK/mc/"; cp "$M/iso_free.azr" "$WORK/mc/t.azr"
+  (cd "$WORK/mc" && printf '6\n\n8\n100\n1\n0.5\n2\nyes\nyes\n' | run_limited 900 "$AZURE2_BIN" --no-brune --no-gui --no-readline t.azr > run.log 2>&1)
+  hdr="$(head -1 "$WORK/mc/output/samples.mcmc" 2>/dev/null)"
+  if [ "$hdr" = "step,walker,logprob,loglikelihood,logprior,param0,param1,param2,param3,param4,param5,param6,param7" ] &&
+     grep -q "3 energy shifts taken from" "$WORK/mc/run.log"; then
+    ok "MCMC (RWA): 8 free parameters sampled, isospin priors applied ($(($(wc -l < "$WORK/mc/output/samples.mcmc") - 1)) samples)"
+  else
+    bad "MCMC (RWA): header '$hdr'"; grep -a -i -m3 "error\|prior" "$WORK/mc/run.log"
+  fi
+  mkdir -p "$WORK/mcp/output" "$WORK/mcp/checks"; cp "$WORK"/*.dat "$WORK/mcp/"; cp "$M/iso_free.azr" "$WORK/mcp/t.azr"
+  (cd "$WORK/mcp" && printf '6\n\n8\n100\n1\n0.5\n2\nno\nyes\n' | run_limited 300 "$AZURE2_BIN" --no-brune --no-gui --no-readline t.azr > run.log 2>&1)
+  if grep -a -q "switch the MCMC parameter type to RWA" "$WORK/mcp/run.log" && [ ! -s "$WORK/mcp/output/samples.mcmc" ]; then
+    ok "refused: MCMC on physical parameters"
+  else
+    bad "MCMC on physical parameters was not refused"
+  fi
 fi
 
 echo "isospin_levels: $nok ok, $nbad failed"

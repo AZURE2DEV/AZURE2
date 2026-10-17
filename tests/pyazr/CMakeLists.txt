@@ -134,6 +134,14 @@ add_test(NAME pyazr_natural_target
                  ${CMAKE_CURRENT_SOURCE_DIR}/natural_target_test.py)
 set_tests_properties(pyazr_natural_target PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# Isospin-labelled levels across compound nuclei (<isospin> block): the
+# parameter records, the prior penalty, the gradient and residual Jacobian
+# through the ties, the physical-parameter refusal.
+add_test(NAME pyazr_isospin
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/isospin_test.py)
+set_tests_properties(pyazr_isospin PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # fetch_levels: IAEA LiveChart, falling back to the NNDC ENSDF API when LiveChart
 # is unreachable or answers with a challenge page.  Offline (canned answers).
 add_test(NAME pyazr_nds_levels_fallback

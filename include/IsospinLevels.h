@@ -92,6 +92,13 @@ struct IsospinMember {
   std::vector<IsospinWidth> widths;
 };
 
+/// A derived slot of the flat parameter vector as a linear function of free
+/// slots: d(slot)/d(source) = coefficient.  Used to carry gradients back.
+struct IsospinTie {
+  int slot = -1;
+  std::vector<std::pair<int, double>> sources;
+};
+
 struct IsospinLevel {
   int id = 0;
   double t = 0.0;
@@ -117,6 +124,24 @@ class IsospinLevels {
   void AddParams(ROOT::Minuit2::MnUserParameters &p);
   /// Number of isospin parameters.
   int NumParams() const;
+  /// Flat index of isospin parameter k (0-based: the shifts, then the mixes).
+  int ParamIndex(int k) const { return firstParam_ + k; }
+  /// Every derived slot as a linear function of the free ones (the shifts and
+  /// mixes included), for the chain rule of the gradient.
+  std::vector<IsospinTie> Ties() const;
+  /// Prior centre and width (0 = none) of parameter k; mixes are centred on 0.
+  void ParamPrior(int k, double &centre, double &sigma) const;
+  /// d(Penalty)/d(parameter k), for k = 0..NumParams()-1.
+  std::vector<double> PenaltyGradient() const;
+  /// f(flat index, prior centre, prior sigma) for every varied shift and mix with a prior.
+  template <class F>
+  void ForEachPrior(F f) const {
+    if (!active_) return;
+    for (const IsospinShift &e : shifts_)
+      if (!e.reference && e.vary && e.sigma > 0.0) f(e.param, e.nominal, e.sigma);
+    for (const IsospinMix &m : mixes_)
+      if (m.vary && m.sigma > 0.0) f(m.param, 0.0, m.sigma);
+  }
   /// Overwrites the derived slots of a flat parameter vector from the free ones.
   void Apply(vector_r &q) const;
   /// Stores the shift and mix values of a flat parameter vector (for the penalty and the report).

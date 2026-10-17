@@ -246,6 +246,13 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
   localData = data();
 
   AZUREParams params;
+  if (localCompound->Isospin().Active()) {
+    // The physical-to-formal transform mixes the levels of a J-group, so stale
+    // derived isospin members would leak into the free ones: use the RWA calls.
+    configure().outStream << "ERROR: projects with isospin levels take reduced-width-amplitude parameters "
+                          << "(UpdateSegmentsRWA / CalculateChi2RWA), not physical ones." << std::endl;
+    return -1;
+  }
   localCompound->FillCompoundFromParamsPhysical(params_);
   bool isValid = localCompound->TransformIn(configure());
 
@@ -857,6 +864,8 @@ double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
   if (configure().paramMask & Config::USE_PARK_FORMALISM) chiSquared += localCompound->ParkNormPenalty();
   // Isotopic abundances: priors and the sum-to-one term.
   if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundancePenalty(configure().abundanceSumSigma);
+  // Isospin levels: priors on the internal Coulomb shifts and mix amplitudes.
+  if (localCompound->Isospin().HasPenalty()) chiSquared += localCompound->Isospin().Penalty();
 
   return chiSquared;
 }
@@ -896,6 +905,12 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
   EData *localData = data();
 
   AZUREParams params;
+  if (localCompound->Isospin().Active()) {
+    // See UpdateSegments: physical parameters are not available with isospin levels.
+    configure().outStream << "ERROR: projects with isospin levels take reduced-width-amplitude parameters "
+                          << "(CalculateChi2RWA), not physical ones." << std::endl;
+    return std::numeric_limits<double>::quiet_NaN();
+  }
   localCompound->FillCompoundFromParamsPhysical(params_);
   bool isValid = localCompound->TransformIn(configure());
 
@@ -1016,6 +1031,10 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
       AddAbundancePenaltyGradient(lc, configure(), accum);
       chi2 += lc->AbundancePenalty(configure().abundanceSumSigma);
     }
+    if (lc->Isospin().HasPenalty()) {
+      AddIsospinPenaltyGradient(lc, accum);
+      chi2 += lc->Isospin().Penalty();
+    }
     accum.Scatter(pmap, gradFull);
     for (int s = 1; s <= ld->NumSegments(); s++) {
       ESegment *seg = ld->GetSegment(s);
@@ -1045,7 +1064,8 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
   for (int f = 0; f < (int)full.size() && f < pmap.NumFull(); f++) {
     if (fixed_[f]) continue;
     ParamKind kind = pmap.Desc(f).kind;
-    if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm)) continue;
+    if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
+               kind == ParamKind::Isospin)) continue;  // analytic (isospin: chain rule in Scatter)
     int packed = pmap.FullToPacked(f);
     if (packed < 0 || packed >= (int)params.size()) continue;
     double x0 = params[packed];
@@ -1257,7 +1277,8 @@ vector_r AZUREAPI::GetEnergyShiftIndices() {
   for (int i = 0; i < totalParams; ++i) {
     if (!fixed_[i]) {
       // Check if "Eshift" is in the parameter name
-      if (names_[i].find("shift") != std::string::npos) {
+      // segment_<k>_energy_shift[_sqrt|_fn<j>]; not isospin_shift_<Z>_<A>
+      if (names_[i].find("energy_shift") != std::string::npos) {
         indices.push_back(k);
       }
       ++k;
@@ -1333,6 +1354,17 @@ vector_r AZUREAPI::GetParameterInfo() const {
     const CompoundNucleus *nucleus = nuc->GetNucleus(nucleusIndex);
     const SampleAbundance &e = nuc->GetSample(sample)->entries[nucleusIndex - 1];
     push(6, nucleus->Z, -1, 0, nucleus->A, 0, sample, -1, -1, -1, -1, -1, e.sigma);
+  }
+
+  // Isospin parameters (projects with an <isospin> block, CNuc::FillMnParams):
+  // type 7, the internal Coulomb shifts and then the mix amplitudes; k (0-based)
+  // in the "channel" field, the prior centre in "levelE" and the prior sigma
+  // (0 = none) in "wignerLimit".  The name says which: isospin_shift_<Z>_<A>
+  // or isospin_mix_<k+1>.
+  for (int k = 0; k < nuc->Isospin().NumParams(); ++k) {
+    double centre, sigma;
+    nuc->Isospin().ParamPrior(k, centre, sigma);
+    push(7, -1, -1, 0, -1, centre, k, -1, -1, -1, -1, -1, sigma);
   }
 
   // Normalization parameters: one per segment with IsVaryNorm().

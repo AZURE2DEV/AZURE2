@@ -1109,6 +1109,8 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
       configure.outStream << "Creating New param.par File..." << std::endl;
       params.WriteUserParameters(configure, false);
     }
+    // A parameter file may hold values (or a free flag) for derived isospin slots.
+    compound->SyncIsospinParams(params.GetMinuitParams());
 
     // Setup compound nucleus from parameters
     compound->FillCompoundFromParams(params.GetMinuitParams().Params());

@@ -18,7 +18,7 @@ from typing import Optional
 
 # Parameter kinds, indexed by the integer ``type`` code in the C++ record.
 _KINDS = {0: "energy", 1: "width", 2: "norm", 3: "shift", 4: "shift_sqrt", 5: "shift_fn",
-          6: "abundance"}
+          6: "abundance", 7: "isospin"}
 
 
 @dataclass(frozen=True)
@@ -68,7 +68,7 @@ class Parameter:
 
     index: int                      # position among *all* parameters
     name: str                       # raw AZURE2 parameter name
-    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'shift_fn' | 'abundance'
+    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'shift_fn' | 'abundance' | 'isospin'
     fixed: bool                     # held fixed during the fit?
     value: float                    # current (physical) value
     free_index: Optional[int]       # position among the non-fixed parameters
@@ -104,6 +104,11 @@ class Parameter:
     prior_sigma: Optional[float] = None
     sample: Optional[str] = None        # the sample's name ("" = the unnamed sample)
     sample_index: Optional[int] = None  # 1-based sample of the <abundances> block
+    # Isospin parameter (projects with an ``<isospin>`` block): an internal
+    # Coulomb shift (name isospin_shift_<Z>_<A>) or an isospin-forbidden
+    # amplitude (isospin_mix_<k>); its prior centre (prior_sigma holds the width).
+    prior_centre: Optional[float] = None
+    isospin_index: Optional[int] = None  # 0-based: the shifts, then the mixes
 
     @property
     def nucleus(self):
@@ -150,6 +155,17 @@ class Parameter:
                 nucleus_Z=int(round(jgroup)), nucleus_A=int(round(level)),
                 prior_sigma=float(wigner_limit), sample=sample,
                 sample_index=int(round(channel)) if channel >= 1 else None,
+            )
+
+        if int(round(type_code)) == 7:
+            # an isospin shift or mix amplitude: k in the channel field, the
+            # prior centre in the level-energy field, the prior sigma in the
+            # Wigner-limit field (AZUREAPI.h)
+            return cls(
+                index=index, name=name, kind="isospin",
+                fixed=bool(round(fixed)), value=float(value), free_index=free_index,
+                prior_centre=float(level_energy), prior_sigma=float(wigner_limit),
+                isospin_index=int(round(channel)),
             )
 
         return cls(
@@ -425,6 +441,13 @@ class ParameterSet(list):
         """The isotopic-abundance parameters, one per compound nucleus of a
         project with an ``<abundances>`` block (none otherwise)."""
         return ParameterSet(p for p in self if p.kind == "abundance")
+
+    @property
+    def isospin(self):
+        """The isospin parameters of a project with an ``<isospin>`` block: the
+        internal Coulomb shifts (``isospin_shift_<Z>_<A>``), then the
+        isospin-forbidden amplitudes (``isospin_mix_<k>``); none otherwise."""
+        return ParameterSet(p for p in self if p.kind == "isospin")
 
     @property
     def sqrt_shifts(self):

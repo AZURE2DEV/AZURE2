@@ -153,13 +153,6 @@ int IsospinLevels::Resolve(const Config &configure, CNuc &c) {
     return fail("isospin levels need the standard (formal) parametrization, not the Park formalism.");
   if (configure.paramMask & Config::USE_RMC_FORMALISM)
     return fail("isospin levels are not available with the RMC formalism.");
-  if (configure.paramMask & (Config::USE_ANALYTIC_GRADIENT | Config::USE_LM_MINIMIZER | Config::USE_GSL_LM_MINIMIZER))
-    return fail("the analytic gradient and the LM / GSL least-squares minimizers do not handle isospin levels yet; "
-                "fit with MIGRAD's numerical gradient (no --use-gradient, --use-lm, --use-gsl-lm).");
-  if (configure.paramMask & Config::PERFORM_MCMC)
-    return fail("MCMC does not handle isospin levels yet.");
-  if (configure.paramMask & Config::USE_API)
-    return fail("the API (pyazr) does not handle isospin levels yet; use the command line.");
 
   // Nuclei of the reference and shift lines, and their thresholds.
   int nRef = 0;
@@ -479,6 +472,64 @@ void IsospinLevels::Apply(vector_r &q) const {
           q[w.slot] = (w.mix >= 0) ? q[mixes_[w.mix].param] : 0.0;
       }
   }
+}
+
+std::vector<IsospinTie> IsospinLevels::Ties() const {
+  std::vector<IsospinTie> ties;
+  if (!active_) return ties;
+  auto shiftParam = [&](int nucleus) {
+    const IsospinShift *e = ShiftOf(nucleus);
+    return (e && !e->reference) ? e->param : -1;
+  };
+  for (const IsospinLevel &L : levels_) {
+    const IsospinMember &r = L.members[L.ref];
+    if (L.members.size() > 1)
+      for (size_t i = 0; i < L.members.size(); i++) {
+        if ((int)i == L.ref) continue;
+        const IsospinMember &m = L.members[i];
+        IsospinTie t;
+        t.slot = m.energySlot;
+        t.sources.push_back({r.energySlot, 1.0});
+        if (shiftParam(m.nucleus) >= 0) t.sources.push_back({shiftParam(m.nucleus), 1.0});
+        if (shiftParam(r.nucleus) >= 0) t.sources.push_back({shiftParam(r.nucleus), -1.0});
+        ties.push_back(t);
+      }
+    for (const IsospinMember &m : L.members)
+      for (const IsospinWidth &w : m.widths) {
+        if (w.ownerSlot == -1) continue;
+        IsospinTie t;
+        t.slot = w.slot;
+        if (w.ownerSlot >= 0)
+          t.sources.push_back({w.ownerSlot, w.ratio});
+        else if (w.mix >= 0)
+          t.sources.push_back({mixes_[w.mix].param, 1.0});
+        ties.push_back(t);
+      }
+  }
+  return ties;
+}
+
+void IsospinLevels::ParamPrior(int k, double &centre, double &sigma) const {
+  centre = 0.0;
+  sigma = 0.0;
+  const int idx = firstParam_ + k;
+  for (const IsospinShift &e : shifts_)
+    if (!e.reference && e.param == idx) {
+      centre = e.nominal;
+      sigma = e.sigma;
+    }
+  for (const IsospinMix &m : mixes_)
+    if (m.param == idx) sigma = m.sigma;
+}
+
+std::vector<double> IsospinLevels::PenaltyGradient() const {
+  std::vector<double> g(NumParams(), 0.0);
+  if (!active_) return g;
+  for (const IsospinShift &e : shifts_)
+    if (!e.reference && e.vary && e.sigma > 0.0) g[e.param - firstParam_] = 2.0 * (e.value - e.nominal) / (e.sigma * e.sigma);
+  for (const IsospinMix &m : mixes_)
+    if (m.vary && m.sigma > 0.0) g[m.param - firstParam_] = 2.0 * m.value / (m.sigma * m.sigma);
+  return g;
 }
 
 void IsospinLevels::ReadParams(const vector_r &q) {

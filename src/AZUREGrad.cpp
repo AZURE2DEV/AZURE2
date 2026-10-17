@@ -107,6 +107,16 @@ void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAc
 }
 
 /*!
+ * Gradient of the isospin priors (IsospinLevels::Penalty): 2 (x - x0) / sigma^2
+ * for every varied shift and mix amplitude that has a prior.
+ */
+void AddIsospinPenaltyGradient(CNuc *compound, GradAccum &accum) {
+  if (!compound->Isospin().HasPenalty()) return;
+  const std::vector<double> g = compound->Isospin().PenaltyGradient();
+  for (int k = 0; k < (int)g.size(); k++) accum.AddIsospin(k, g[k]);
+}
+
+/*!
  * Allocates and zeroes the physics-coordinate gradient accumulators.
  */
 void GradAccum::Init(CNuc *compound) {
@@ -121,6 +131,7 @@ void GradAccum::Init(CNuc *compound) {
     gamma[j - 1].assign(nLevels, std::vector<double>(nCh, 0.0));
   }
   abundance.assign(compound->NumAbundanceParams(), 0.0);
+  isospin.assign(compound->Isospin().NumParams(), 0.0);
 }
 
 /*!
@@ -131,6 +142,7 @@ void GradAccum::Zero() {
   for (auto &lev : gamma)
     for (auto &row : lev) std::fill(row.begin(), row.end(), 0.0);
   std::fill(abundance.begin(), abundance.end(), 0.0);
+  std::fill(isospin.begin(), isospin.end(), 0.0);
 }
 
 /*!
@@ -145,6 +157,7 @@ void GradAccum::Add(const GradAccum &o) {
     }
   }
   for (int k = 0; k < (int)abundance.size() && k < (int)o.abundance.size(); k++) abundance[k] += o.abundance[k];
+  for (int k = 0; k < (int)isospin.size() && k < (int)o.isospin.size(); k++) isospin[k] += o.isospin[k];
 }
 
 /*!
@@ -164,6 +177,19 @@ void GradAccum::Scatter(const ParamIndexMap &map, vector_r &gradFull) const {
   for (int k = 0; k < (int)abundance.size(); k++) {
     int ai = map.AbundanceIndex(k + 1);
     if (ai >= 0 && ai < (int)gradFull.size()) gradFull[ai] += abundance[k];
+  }
+  for (int k = 0; k < (int)isospin.size(); k++) {
+    int ii = map.IsospinIndex(k);
+    if (ii >= 0 && ii < (int)gradFull.size()) gradFull[ii] += isospin[k];
+  }
+  // Isospin levels: a derived slot is a linear function of free slots, so its
+  // gradient passes on to them (chain rule); its own entry is cleared (it is fixed).
+  for (const IsospinTie &t : map.IsospinTies()) {
+    if (t.slot < 0 || t.slot >= (int)gradFull.size()) continue;
+    const double g = gradFull[t.slot];
+    for (const auto &src : t.sources)
+      if (src.first >= 0 && src.first < (int)gradFull.size()) gradFull[src.first] += src.second * g;
+    gradFull[t.slot] = 0.0;
   }
 }
 
@@ -210,6 +236,11 @@ int ParamIndexMap::EnergyShiftSqrtIndex(int segment) const {
 int ParamIndexMap::AbundanceIndex(int ordinal) const {
   auto it = abundanceIndex_.find(ordinal);
   return (it == abundanceIndex_.end()) ? -1 : it->second;
+}
+
+int ParamIndexMap::IsospinIndex(int k) const {
+  auto it = isospinIndex_.find(k);
+  return (it == isospinIndex_.end()) ? -1 : it->second;
 }
 
 /*!
@@ -264,6 +295,16 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
     map.desc_.push_back(d);
     i++;
   }
+
+  // --- Isospin shifts, then mix amplitudes, only with an <isospin> block (CNuc::FillMnParams). ---
+  for (int k = 0; k < compound->Isospin().NumParams(); k++) {
+    map.isospinIndex_[k] = i;
+    ParamDesc d{ParamKind::Isospin, -1, -1, -1, -1, false};
+    d.isospin = k;
+    map.desc_.push_back(d);
+    i++;
+  }
+  map.isospinTies_ = compound->Isospin().Ties();
 
   // --- Norm parameters: one per varying-norm segment. ---
   map.normOffset_ = i;

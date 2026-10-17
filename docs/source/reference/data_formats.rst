@@ -192,8 +192,13 @@ after ``</levels>`` (and after ``</abundances>``)::
   parameter list, fixed, and are written synced.
 - Every J-group holding an isospin level uses :math:`B_c = -l_c`, so
   partners share their boundary values. Isospin levels need the standard
-  parametrization (``--no-brune``); the analytic gradient, the LM and GSL
-  least-squares minimizers, MCMC and the API refuse them for now.
+  parametrization (``--no-brune``). The analytic gradient, the LM and GSL
+  least-squares fitters, MCMC and the API work through the ties (a derived
+  slot's derivative passes to the free slots it follows); MCMC and the API
+  take reduced-width amplitudes only, since the physical-to-formal transform
+  would mix stale derived members into the free ones. pyazr lists the shifts
+  and mixes as ``parameters.isospin`` (kind ``"isospin"``) and reports their
+  priors as ``penalties()["isospin"]`` (already in the engine's chi-squared).
 - The start-up log prints every factor; ``isospin.out`` lists the formal
   parameters of every member, and ``parameters.out`` labels the members.
   The GUI does not keep the block yet: edit such projects as text.
