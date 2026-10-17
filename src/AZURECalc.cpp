@@ -392,6 +392,12 @@ double AZURECalc::operator()(const vector_r &p) const {
     chiSquared += abundancePenalty;
     localData->SetAbundancePenalty(abundancePenalty);
   }
+  // Isospin levels: priors on the shifts and mix amplitudes.
+  if (localCompound->Isospin().HasPenalty()) {
+    double isospinPenalty = localCompound->Isospin().Penalty();
+    chiSquared += isospinPenalty;
+    localData->SetIsospinPenalty(isospinPenalty);
+  }
 
   if (std::getenv("AZURE_DUMP_NONFINITE")) DumpNonFinite(p, chiSquared, localCompound, localData);
 
@@ -468,6 +474,7 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
       for (unsigned int i = 0; i < p.size(); i++) mp.SetValue(i, p[i]);
     ld->SyncShiftGroupParams(mp);
     ld->SyncNormGroupParams(mp);
+    lc->SyncIsospinParams(mp);
     WriteParameters(params, configure());
     ld->WriteOutputFiles(configure(), true);
     lc->TransformOut(configure());
@@ -565,6 +572,7 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
   // last full evaluation left there, so using it here froze the abundance prior in the LM/GSL cost and in the
   // finite-difference gradient columns (found 2026-10-17 by the isospin-levels session).
   if (lc->HasAbundanceBlock()) chiSquared += lc->AbundancePenalty(configure().abundanceSumSigma);
+  if (lc->Isospin().HasPenalty()) chiSquared += lc->Isospin().Penalty();
   return chiSquared;
 }
 

@@ -184,6 +184,11 @@ std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
       }
       index++;
     }
+    // then the isospin shifts and mix amplitudes (<isospin> block)
+    for (int k = 0; k < compound->Isospin().NumParams(); k++) {
+      if (index == minuitIndex) return compound->Isospin().ParamLabel(index);
+      index++;
+    }
   }
 
   if (!data) return std::string();

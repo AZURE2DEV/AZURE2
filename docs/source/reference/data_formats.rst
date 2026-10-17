@@ -158,6 +158,46 @@ emitted sample by sample (the unnamed one first, in file order) right after
 the level parameters. A sample name is one token without ``:`` or ``#``.
 Stoichiometric weights need not sum to one: give that sample ``sum 0``.
 
+**Isospin levels.** Several compound nuclei can share isospin-labelled
+levels, as in Hale's charge-independent R-matrix analysis of the A=4 system
+(Tilley, Weller and Hale, Nucl. Phys. A541, 1 (1992)). Such a level is one
+level ID whose channel lines span every nucleus it lives in (each line with
+that nucleus's own excitation energy), declared in an ``<isospin>`` block
+after ``</levels>`` (and after ``</abundances>``)::
+
+   <isospin>
+   reference 3 4 1                  # 4Li: energies measured from pair 1 (p+3He)
+   shift 1 4 2 -0.86 1 -0.86 0.3    # 4H:  pair 2 (n+t), shift, vary, prior centre, prior sigma
+   shift 2 4 3 -0.64 1 -0.64 0.3    # 4He: pair 3 (p+t)
+   level 1 1                        # level ID 1 has T=1
+   level 2 0                        # level ID 2 has T=0
+   mix 1 5 1 1 0.0 1 0              # level 1, pair 5 (d+d), l=1, s=1: value, vary, prior sigma
+   factor 1 3 0.7071                # optional: override a computed Clebsch-Gordan factor
+   pairT 6 0.5 0.5                  # optional: particle isospins of pair 6
+   </isospin>
+
+- In each nucleus, a level's formal reduced-width amplitude in a channel of
+  pair (a, b) is :math:`\langle t_a t_{3a}\, t_b t_{3b} | T T_3\rangle`
+  times one amplitude per isospin channel (arrangement, l, s). Particle
+  isospins default to :math:`t = |N-Z|/2`, :math:`t_3 = (Z-N)/2`; pairs whose
+  particles match in mass number, spin, parity and isospin form one
+  arrangement and must share a channel radius.
+- The member in the ``reference`` nucleus (otherwise the first in file
+  order) holds the free parameters. The others are derived: energies
+  :math:`E_m = E_\mathrm{ref} - T_\mathrm{ref} + T_m + \Delta_m` (:math:`T` the
+  named threshold's excitation energy, :math:`\Delta_m` the nucleus's shift,
+  a parameter ``isospin_shift_<Z>_<A>``), amplitudes the factor ratio times
+  the free one. A channel with factor 0 is zero unless a ``mix`` line gives
+  it a free amplitude (``isospin_mix_<k>``). Derived slots stay in the
+  parameter list, fixed, and are written synced.
+- Every J-group holding an isospin level uses :math:`B_c = -l_c`, so
+  partners share their boundary values. Isospin levels need the standard
+  parametrization (``--no-brune``); the analytic gradient, the LM and GSL
+  least-squares minimizers, MCMC and the API refuse them for now.
+- The start-up log prints every factor; ``isospin.out`` lists the formal
+  parameters of every member, and ``parameters.out`` labels the members.
+  The GUI does not keep the block yet: edit such projects as text.
+
 A ``<segmentsData>`` or ``<segmentsTest>`` line may end with the keyword
 blocks ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>`` and
 ``shiftgroup <label>`` (in any order; writers put ``sample`` last).  ``natural``

@@ -6,7 +6,7 @@ ECIntegral.cpp ECAmplitudeCache.cpp MatrixInv.cpp LevelMatrixSolver.cpp
 PPair.cpp AZURECalc.cpp
 ECMGroup.cpp ReactionRate.cpp AZUREMain.cpp EData.cpp ShftFunc.cpp
 RMatrixFunc.cpp AZUREOutput.cpp  EDataIterator.cpp   TargetEffect.cpp
-AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp Equation.cpp
+AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp IsospinLevels.cpp Equation.cpp
 JGroup.cpp Config.cpp ESegment.cpp KGroup.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp Straggling.cpp
 AdaptiveIntegrationGrid.cpp NuclearPotentialManager.cpp AZUREGrad.cpp

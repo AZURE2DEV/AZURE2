@@ -81,6 +81,8 @@ class EData {
   /// The abundance penalty (priors + sum-to-one) of the last evaluation, reported in chiSquared.out.
   void SetAbundancePenalty(double penalty) { abundancePenalty_ = penalty; }
   double GetAbundancePenalty() const { return abundancePenalty_; }
+  /// The isospin prior penalty (shifts, mixes) of the last evaluation, reported in chiSquared.out when it exists.
+  void SetIsospinPenalty(double penalty) { isospinPenalty_ = penalty; hasIsospinPenalty_ = true; }
   /// External-capture amplitudes for every point that has an EC component.
   int CalculateECAmplitudes(CNuc *, const Config &);
   /// How many external-capture amplitudes this model expects in an intEC file.
@@ -157,6 +159,8 @@ class EData {
   std::string ecOutputFile_;  // The intEC file being written, when not reading one back
   double parkPenalty_ = 0.0;
   double abundancePenalty_ = 0.0;
+  double isospinPenalty_ = 0.0;
+  bool hasIsospinPenalty_ = false;
   std::vector<std::string> nucleusLabels_;   // one per compound nucleus, for the natural decomposition file
 };
 

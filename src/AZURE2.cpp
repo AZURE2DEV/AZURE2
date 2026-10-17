@@ -995,6 +995,10 @@ std::string createPrettyParameterName(const std::string &paramName) {
     } catch (...) {}
   }
 
+  // Isospin levels: "isospin_shift_Z_A", "isospin_mix_k"
+  if (paramName.find("isospin_shift_") == 0) return "Isospin Coulomb Shift (MeV) " + paramName.substr(14);
+  if (paramName.find("isospin_mix_") == 0) return "Isospin-Forbidden Amplitude " + paramName.substr(12);
+
   // Isotopic abundance: "abundance[_<sample>]_Z_A" -> "Abundance [sample ..] Z=.. A=.."
   if (paramName.find("abundance_") == 0) {
     try {

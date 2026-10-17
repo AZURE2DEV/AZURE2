@@ -1,6 +1,7 @@
 #ifndef CNUC_H
 #define CNUC_H
 
+#include "IsospinLevels.h"
 #include <string>
 #include <map>
 #include "JGroup.h"
@@ -65,6 +66,10 @@ class CNuc {
   /// abundances Minuit parameters (one per nucleus and sample, after the
   /// level block), so a project without the block keeps its parameter layout.
   bool HasAbundanceBlock() const { return hasAbundanceBlock_; }
+  /// Isospin-labelled levels across nuclei (the optional <isospin> block).
+  const IsospinLevels &Isospin() const { return isospin_; }
+  /// Writes the derived isospin parameters into p and keeps them fixed.
+  void SyncIsospinParams(ROOT::Minuit2::MnUserParameters &p) const { isospin_.Sync(p); }
   /// Number of samples the <abundances> block defines (0 without the block).
   int NumSamples() const { return (int)samples_.size(); }
   /// Sample \p s, 1-based.
@@ -216,6 +221,7 @@ class CNuc {
   std::vector<CompoundNucleus> nuclei_;
   std::vector<AbundanceSample> samples_;
   bool hasAbundanceBlock_ = false;
+  IsospinLevels isospin_;
   int maxLValue_;
   bool transformedIn_ = false;
 };

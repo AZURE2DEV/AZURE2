@@ -1675,6 +1675,9 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
     // Isotopic abundances: their priors and the sum-to-one term.
     if (abundancePenalty_ != 0.0)
       chiOut << " Total-Abundance-Chi-Squared: " << abundancePenalty_;
+    // Isospin levels: priors on the internal Coulomb shifts and isospin-forbidden amplitudes.
+    if (hasIsospinPenalty_)
+      chiOut << " Total-Isospin-Chi-Squared: " << isospinPenalty_;
     chiOut << std::endl
            << std::endl;
     chiOut.flush();
