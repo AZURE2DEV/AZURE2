@@ -1959,3 +1959,19 @@ GUARD ('ranges' in TargetEffectSpec fields).  Tests: tests/test_conv_windows.py 
 test_levelscan_13n on 3 shards (dev copy, job 1552050).  Installed model.py with .bak-2026-10-15.  Worked example and numbers:
 13C+a/10-15-26_resolution_refs/readme.  NOTE: `rmfit init` scores its baseline on a SINGLE session; a "method check" via init is not
 a sharded check.
+
+## 2026-10-16 — recall test of the level add; split rule ignored distant poles; the seed decides alpha-dominated levels
+DeBoer: "One way we can check that our algorythem is good would be to go through the resonances that we have in the fit, especially
+those at lower energy and makes sure that they wouldn't be excluded by our criteria."  13C+a/10-15-26_recall: eight established
+levels (Gamma >= 25 keV) each removed from the incumbent and re-added by the standard floored add (seed +10 keV, 2:1 n0:a0 in the
+lowest L, RMFIT_SEED_OMITTED=1, total floor 25 keV, local release 0.5 MeV, same-budget control, +-m Gamma table).
+1. All SIX n0-dominated levels came back (energy within 3-13 keV, width within 5-15 %, gains +28k .. +554k vs control, rho <= 0.05).
+2. Two of them were labelled "splits": the partner was the J^pi group's background pole at 50 MeV, "41,927 keV away", whose
+   "physical width" at the reference energy is tens of MeV, so `split_evidence` called it unresolved and its re-shuffled MeV of width
+   passed the transfer test (the 9/2+ 10.33 add of 10-13 had the same false flag).  FIX: `split_evidence(max_sep_kev=1000)` and
+   `_run_level_add` drops neighbours at or above `policy.bg_energy`.  tests/test_split_evidence.py replays both cases; fixture
+   (test_keys, test_levelscan_13n, test_level_add_energy_13n on 3 shards) passed; installed structure.py / campaign.py .bak-2026-10-16.
+3. Both ALPHA-dominated levels (5/2+ 9.963 a0 115 keV; 3/2+ 10.036 a0 48 keV) were NOT recovered: the n0-heavy seed stalls at the
+   floor (+617 vs control) or ends worse than the control (-22,675).  A negative level-add result for a level that could be
+   alpha-dominated is not trustworthy from an n0-heavy seed alone.  Test running: the same adds from a 2:1 a0:n0 seed
+   (10-15-26_recall/<tag>_aseed, plus 1/2+ 7.958 as the cross-check).  Expected rule: run both seeds, keep the better.
