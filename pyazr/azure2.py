@@ -2018,6 +2018,43 @@ class azure2:
             self.sess.set_data()
         self.sess.initialize()
         self.mode = "extrap" if extrap else "data"
+        self._sync_layout()
+
+    def _sync_layout(self):
+        """Follow the engine's parameter layout after a mode switch.
+
+        The engine lists one normalization (if varied) and two energy-shift
+        parameters per segment of the *current* segment set, so the
+        ``<segmentsTest>`` grids of extrapolation mode give a different
+        parameter count from the ``<segmentsData>`` segments (e.g. 220 against
+        212 on a 12C+12C model with eight test segments).  The cached
+        ``fixed_params`` used to keep the data-mode layout, so the parameter
+        table (:attr:`parameters`), :meth:`_all_rwa` and :meth:`save_fit` mixed
+        the two: "parameter_info returned 220 parameters but params_fixed
+        reported 212".  Refresh the cached layout from the engine whenever it
+        changed, and carry the free R-matrix block of ``params_rwa`` /
+        ``params`` over -- energies and widths come first and are the same in
+        both modes, so a vector the caller set (``update_rwa_params_from_sav``)
+        is kept; the norm/shift tail is the engine's for the new segment set.
+        """
+        s = self.sess
+        fixed = list(s.params_fixed())
+        if fixed == list(self.fixed_params):
+            return
+        info = np.asarray(s.parameter_info(), dtype=float).reshape(-1, Parameter._NFIELDS)
+        nrm = int(np.sum((np.round(info[:, 0]) <= 1) & (np.round(info[:, 11]) == 0)))
+        rwa = np.asarray(s.params_values_rwa(), float).copy()
+        val = np.asarray(s.params_values(), float).copy()
+        old_rwa = np.asarray(self.params_rwa, float).ravel()
+        old_val = np.asarray(self.params, float).ravel()
+        k = min(nrm, rwa.size, old_rwa.size)
+        rwa[:k] = old_rwa[:k]
+        k = min(nrm, val.size, old_val.size)
+        val[:k] = old_val[:k]
+        self.params_rwa = rwa
+        self.params = val
+        self.fixed_params = fixed
+        self._parameters = None
 
     def extrap_mode(self):
         """Switch to the <segmentsTest> grids. Re-initializes the engine."""

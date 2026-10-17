@@ -225,6 +225,13 @@ add_test(NAME pyazr_sav_readers
                  ${CMAKE_CURRENT_SOURCE_DIR}/sav_readers_test.py)
 set_tests_properties(pyazr_sav_readers PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
+# The parameter table, _all_rwa and the free vector follow the engine's layout
+# in data and extrapolation mode (test segments change the parameter count).
+add_test(NAME pyazr_extrap_layout
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/extrap_layout_test.py)
+set_tests_properties(pyazr_extrap_layout PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so
