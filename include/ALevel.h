@@ -50,6 +50,8 @@ class ALevel {
   int GetECPairNum() const;
   /// Bit mask of the external-capture multipolarities feeding this level.
   unsigned char GetECMultMask() const;
+  /// Level ID from column 9 of the level line; 0 for a level not read from one.
+  int GetLevelID() const { return levelID_; }
 
   // -- input / formal parameters ---------------------------------------------
   /// Level energy as read from the input file (MeV).
@@ -129,6 +131,7 @@ class ALevel {
   int transform_iter_;
   int ecPairNum_;
   unsigned char ecMultMask_;
+  int levelID_ = 0;
   double level_e_;
   double fitlevel_e_;
   double sqrt_nf_factor_;

@@ -1523,7 +1523,17 @@ void CNuc::CalcBoundaryConditions(const Config &configure) {
         continue;
       }
       ALevel *firstLevel = theJGroup->GetLevel(1);
-      if (firstLevel->IsInRMatrix()) {
+      if (theJGroup->BoundaryMinusL()) {
+        // Fixed B_c = -l_c, the same in every nucleus, so that the formal
+        // parameters of isospin partners are related by Clebsch-Gordan factors.
+        for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
+          AChannel *theChannel = theJGroup->GetChannel(ch);
+          if (this->GetPair(theChannel->GetPairNum())->GetPType() == 0)
+            theChannel->SetBoundaryCondition(-(double)theChannel->GetL());
+          else
+            theChannel->SetBoundaryCondition(theJGroup->GetChannel(1)->GetBoundaryCondition());
+        }
+      } else if (firstLevel->IsInRMatrix()) {
         for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
           AChannel *theChannel = theJGroup->GetChannel(ch);
           PPair *thePair = this->GetPair(theChannel->GetPairNum());
