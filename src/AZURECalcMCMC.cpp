@@ -119,7 +119,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
   }
 
   // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
-  if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundancePenalty(configure().abundanceSumSigma);
+  if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundanceSumPenalty(configure().abundanceSumSigma);  // per-nucleus priors: CalculateLogPrior
 
   // Return objects to pool instead of deleting
   ReturnPooledCNuc(localCompound);
@@ -217,7 +217,7 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
   }
 
   // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
-  if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundancePenalty(configure().abundanceSumSigma);
+  if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundanceSumPenalty(configure().abundanceSumSigma);  // per-nucleus priors: CalculateLogPrior
 
   // Return objects to pool instead of deleting
   ReturnPooledCNuc(localCompound);

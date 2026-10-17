@@ -9,7 +9,9 @@
 //      check box (hidden with one nucleus, refused for a ratio or a phase
 //      shift) and the "nat" flag on the row label;
 //   5. the Fitting tab's abundance parameters sit between the levels and
-//      the normalizations and count only when fitted.
+//      the normalizations and count only when fitted;
+//   6. a level block written back keeps every digit of its masses, energy
+//      and width (no 6-significant-digit rounding).
 //
 // Runs without a display; the CMake target passes QT_QPA_PLATFORM=offscreen.
 
@@ -313,6 +315,29 @@ int main(int argc, char** argv) {
     int n = 0;
     for (const FittingParameter& p : plain.getFittingParameters()) if (p.category == "abundance") n++;
     ok("no abundance parameter without a block", n == 0, QString::number(n));
+  }
+
+  // ---- 6. full precision on save --------------------------------------------
+  // QTextStream's default 6 significant digits used to round every mass, energy and width the GUI wrote
+  // (1.008664916 -> 1.00866; 2026-10-17).  A level block read and written back keeps its digits.
+  {
+    PairsTab precTab;
+    LevelsTab precLevels;
+    precLevels.setPairsModel(precTab.getPairsModel());
+    QObject::connect(&precLevels, SIGNAL(readNewPair(PairsData, int, bool)), &precTab, SLOT(addPair(PairsData, int, bool)));
+    QObject::connect(&precLevels, SIGNAL(readExistingPair(PairsData, int, bool)), &precTab, SLOT(editPair(PairsData, int, bool)));
+    QString in("0.5 1 8.877123456 0 1 1 1 0 1 1 0 66415.7184335701 0.5 1 0 1 0 1.008664916 19.99244018 0 10 "
+               "6.76116 6.76116 0 0 0.0 0 4.25 0 0 0\n</levels>\n");
+    QTextStream inStream(&in);
+    ok("precision: level block read", precLevels.readNuclearFile(inStream));
+    QString out;
+    QTextStream outStream(&out);
+    precLevels.writeNuclearFile(outStream);
+    QStringList got = tokens(out);
+    QStringList fields = got.isEmpty() ? QStringList() : got.first().split(' ');
+    bool all = fields.contains("8.877123456") && fields.contains("66415.7184335701") &&
+               fields.contains("1.008664916") && fields.contains("19.99244018");
+    ok("precision: energy, width and masses written with all their digits", all, got.join(" | "));
   }
 
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;

@@ -10,7 +10,8 @@
 #   (c) in data mode the two abundances are fit parameters: the analytic
 #       gradient agrees with finite differences (AZURE_GRAD_CHECK) and a fit
 #       from 0.5/0.5 recovers 0.6/0.4; a normgroup over a natural SUM and a
-#       plain segment: the shared norm's gradient agrees too;
+#       plain segment: the shared norm's gradient agrees too; an abundance prior
+#       acts the same in --use-lm and --use-gsl-lm as in MIGRAD;
 #   (d) a level with channels of both nuclei, "natural 1" on a RATIO and a
 #       component naming a missing pair key are refused.
 #
@@ -183,6 +184,24 @@ if [ -s "$WORK/a.Amat" ] && [ -s "$WORK/b.Amat" ]; then
   else
     bad "fit wrote no param.sav"; tail -8 "$WORK/fit/run.log"
   fi
+  # an abundance prior must act in the least-squares minimizers as in MIGRAD (prior 0.5 +- 0.002 against data that
+  # want 0.6).  Guards AZURECalc::Chi2On, which took the prior from compound() instead of the evaluated copy until
+  # 2026-10-17; that copy is refreshed between LM/GSL steps, so this case passed with the old code as well -- the
+  # check keeps the three minimizers in agreement rather than reproducing a failure.
+  sed 's/^7 13 0.5 1 0$/7 13 0.5 1 0.002/' "$M/M_data.azr" > "$WORK/M_prior.azr"
+  for mz in migrad lm gsl; do
+    case $mz in migrad) fl="--use-gradient" ;; lm) fl="--use-lm" ;; gsl) fl="--use-gsl-lm" ;; esac
+    run "prior_$mz" "$WORK/M_prior.azr" true "$fl" 2 || true
+  done
+  pm="$(awk '$1 == "abundance_7_13" { print $2 }' "$WORK/prior_migrad/output/param.sav" 2>/dev/null)"
+  for mz in lm gsl; do
+    pv="$(awk '$1 == "abundance_7_13" { print $2 }' "$WORK/prior_$mz/output/param.sav" 2>/dev/null)"
+    if [ -n "$pm" ] && [ -n "$pv" ] && awk -v a="$pm" -v b="$pv" 'BEGIN { exit !((a - b)^2 < 1e-8 && (a - 0.6)^2 > 1e-6) }'; then
+      ok "abundance prior acts in --use-$mz as in MIGRAD (abundance_7_13 $pv vs $pm; data alone 0.6)"
+    else
+      bad "abundance prior in --use-$mz: abundance_7_13 $pv, MIGRAD $pm (data alone 0.6)"; tail -3 "$WORK/prior_$mz/run.log"
+    fi
+  done
 else
   bad "no A/B extrapolations for the data-mode check"
 fi

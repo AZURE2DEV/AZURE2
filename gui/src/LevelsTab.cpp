@@ -884,6 +884,12 @@ bool LevelsTab::writeNuclearFile(QTextStream &outStream) {
   QList<ChannelsData> channels = channelsModel->getChannels();
 
   outStream.setFieldAlignment(QTextStream::AlignRight);
+  // Level energies, widths, masses, separation energies, radii and g-factors at full precision.  Through the
+  // stream they went out with QTextStream's default 6 significant digits (1.008665 -> 1.00866, against the
+  // full-AME-mass rule; 1.5e-3 on an n+t cross section near a resonance -- found 2026-10-17 by the isospin-levels
+  // session).  Each value carries its own leading space: the field widths below are minimums, and a long number
+  // in a narrow field would otherwise run into its neighbour.
+  auto full = [](double v) { return QStringLiteral(" ") + QString::number(v, 'g', 15); };
 
   double lowJ = 0;
   double highJ = 0;
@@ -941,7 +947,7 @@ bool LevelsTab::writeNuclearFile(QTextStream &outStream) {
         if (channels.at(ch).levelIndex == levelsMap.at(i).at(ii)) {
           outStream << qSetFieldWidth(4) << sortedLevels.at(i).at(ii).jValue
                     << qSetFieldWidth(5) << sortedLevels.at(i).at(ii).piValue
-                    << qSetFieldWidth(13) << sortedLevels.at(i).at(ii).energy
+                    << qSetFieldWidth(13) << full(sortedLevels.at(i).at(ii).energy)
                     << qSetFieldWidth(5) << sortedLevels.at(i).at(ii).isFixed
                     << qSetFieldWidth(5) << "1"
                     << qSetFieldWidth(5) << channels.at(ch).pairIndex + 1
@@ -950,23 +956,23 @@ bool LevelsTab::writeNuclearFile(QTextStream &outStream) {
                     << qSetFieldWidth(5) << levelId
                     << qSetFieldWidth(5) << sortedLevels.at(i).at(ii).isActive
                     << qSetFieldWidth(5) << channels.at(ch).isFixed
-                    << qSetFieldWidth(20) << channels.at(ch).reducedWidth
+                    << qSetFieldWidth(20) << full(channels.at(ch).reducedWidth)
                     << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightJ
                     << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightPi
                     << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyJ
                     << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyPi
-                    << qSetFieldWidth(13) << pairs.at(channels.at(ch).pairIndex).excitationEnergy
-                    << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).lightM
-                    << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).heavyM
+                    << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).excitationEnergy)
+                    << qSetFieldWidth(8) << full(pairs.at(channels.at(ch).pairIndex).lightM)
+                    << qSetFieldWidth(8) << full(pairs.at(channels.at(ch).pairIndex).heavyM)
                     << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightZ
                     << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyZ
-                    << qSetFieldWidth(13) << pairs.at(0).seperationEnergy
-                    << qSetFieldWidth(13) << pairs.at(channels.at(ch).pairIndex).seperationEnergy
+                    << qSetFieldWidth(13) << full(pairs.at(0).seperationEnergy)
+                    << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).seperationEnergy)
                     << "    0    0          0.0"
                     << qSetFieldWidth(6) << pairs.at(channels.at(ch).pairIndex).pairType
-                    << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).channelRadius
-                    << qSetFieldWidth(13) << pairs.at(channels.at(ch).pairIndex).lightG
-                    << qSetFieldWidth(13) << pairs.at(channels.at(ch).pairIndex).heavyG
+                    << qSetFieldWidth(8) << full(pairs.at(channels.at(ch).pairIndex).channelRadius)
+                    << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).lightG)
+                    << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).heavyG)
                     << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).ecMultMask
                     << qSetFieldWidth(0) << Qt::endl;
         }

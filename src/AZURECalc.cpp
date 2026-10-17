@@ -561,7 +561,10 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
     chiSquared += segChi;
   }
   if (limitsManager_) chiSquared += CalculateNuisanceChiSquared(p);
-  if (compound()->HasAbundanceBlock()) chiSquared += compound()->AbundancePenalty(configure().abundanceSumSigma);
+  // The working copy lc holds the abundances of p (FillCompoundFromParams above); compound() holds whatever the
+  // last full evaluation left there, so using it here froze the abundance prior in the LM/GSL cost and in the
+  // finite-difference gradient columns (found 2026-10-17 by the isospin-levels session).
+  if (lc->HasAbundanceBlock()) chiSquared += lc->AbundancePenalty(configure().abundanceSumSigma);
   return chiSquared;
 }
 
@@ -980,7 +983,20 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
     grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
     g2[idx] += 2.0 / (e * e);
   });
-  // Isotopic abundances: prior and sum-to-one gradient and (diagonal) curvature.
+  // Isotopic abundances: prior and sum-to-one gradient and (diagonal) curvature.  The sample sums are taken at
+  // p: compound() holds the abundances of the last full evaluation, so its AbundanceSum was stale here.
+  std::vector<double> sumAtP;
+  if (compound()->HasAbundanceBlock()) {
+    sumAtP.assign(compound()->NumSamples(), 0.0);
+    for (int smp = 1; smp <= compound()->NumSamples(); smp++) sumAtP[smp - 1] = compound()->AbundanceSum(smp);
+    for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
+      const int idx = pmap.AbundanceIndex(k);
+      if (idx < 0 || idx >= (int)p.size()) continue;
+      int sample, nucleus;
+      compound()->AbundanceOf(k, sample, nucleus);
+      sumAtP[sample - 1] += p[idx] - compound()->GetSample(sample)->entries[nucleus - 1].abundance;
+    }
+  }
   if (compound()->HasAbundanceBlock()) {
     for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
       const int idx = pmap.AbundanceIndex(k);
@@ -994,7 +1010,7 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
       }
       const double s = compound()->SampleSumSigma(sample, configure().abundanceSumSigma);
       if (s > 0.0) {
-        grad[idx] += 2.0 * (compound()->AbundanceSum(sample) - 1.0) / (s * s);
+        grad[idx] += 2.0 * (sumAtP[sample - 1] - 1.0) / (s * s);
         g2[idx] += 2.0 / (s * s);
       }
     }

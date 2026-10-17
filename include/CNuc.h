@@ -92,6 +92,7 @@ class CNuc {
   /// entry with a prior contributes ((w - w0)/sigma)^2, and each sample whose
   /// width s is > 0 contributes ((sum w) - 1)^2 / s^2.
   double AbundancePenalty(double globalSumSigma) const;
+  double AbundanceSumPenalty(double globalSumSigma) const;  // sum-to-one terms only (MCMC: priors come from BuildAutoPriors)
   /// Does a pair with this key exist? Keys are what the input files write; the
   /// PPair vector position may differ, so use GetPairNumFromKey to convert.
   bool IsPairKey(int);

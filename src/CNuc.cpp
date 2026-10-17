@@ -422,6 +422,22 @@ double CNuc::AbundancePenalty(double globalSumSigma) const {
 }
 
 /*!
+ * The sum-to-one part of AbundancePenalty alone: ((sum_i w_i) - 1)^2 / s^2 per sample with s > 0.  The MCMC
+ * likelihood uses this, because AZURECalcMCMC::BuildAutoPriors already turns each abundance's (w0, sigma) into a
+ * Gaussian prior (PARAM_ABUNDANCE); adding the full AbundancePenalty there counted that prior twice and made the
+ * posterior width of an abundance 1/sqrt(2) too narrow (found 2026-10-17 by the isospin-levels session).
+ */
+double CNuc::AbundanceSumPenalty(double globalSumSigma) const {
+  if (!hasAbundanceBlock_) return 0.0;
+  double penalty = 0.0;
+  for (unsigned int s = 0; s < samples_.size(); s++) {
+    const double sig = this->SampleSumSigma((int)s + 1, globalSumSigma);
+    if (sig > 0.0) penalty += pow((this->AbundanceSum((int)s + 1) - 1.0) / sig, 2.0);
+  }
+  return penalty;
+}
+
+/*!
  * Every J^pi group in the calculation scatters through the hard-sphere phases of its channels whether or
  * not it has levels (the elastic T-matrix diagonal is e^{2i omega} - e^{2i(omega - phi)}(1 + U), and U is
  * the level sum). The <levels> block, though, only creates a group when an active level carries it, so a
