@@ -33,11 +33,14 @@ About 55 s on two threads.
 |---|---|---|---|---|
 | 1 | Vaughn et al., Phys. Rev. 118, 683 (1960) (11106003) | natural Ne | natural sum over the three nuclei | 842.214 (76) |
 | 2 | Almeida & Käppeler, ApJ 265, 417 (1983), low-energy run (21808) | natural Ne | natural sum | 548.689 (376) |
-| 3 | Almeida & Käppeler 1983, low-energy run (21808) | ²¹Ne, 95.4 % | ²¹Ne only, folded σ = 0.1 % | 443.244 (255) |
-| 4 | Almeida & Käppeler 1983, low-energy run (21808) | ²²Ne, 99.8 % | ²²Ne only, folded σ = 0.1 % | 267.78 (259) |
+| 3 | Almeida & Käppeler 1983, low-energy run (21808) | ²¹Ne, 95.4 % | ²¹Ne only, folded σ = 1 keV | 443.244 (255) |
+| 4 | Almeida & Käppeler 1983, low-energy run (21808) | ²²Ne, 99.8 % | ²²Ne only, folded σ = 1 keV | 267.78 (259) |
 | 5 | Sikkema 1958 (20203) | ²²Ne, 98.1 % | ²²Ne only, folded 10.6 keV | 136.554 (35) |
 | 6 | Sikkema 1958 (20261) | ²⁰Ne | ²⁰Ne only, folded 10.6 keV | 254.02 (35) |
 | 7 | Junghans et al., EPJ Web Conf. 239, 01006 (2020) (23755005), E_lab 0.84–1.26 MeV | natural Ne | natural sum, folded with the energy-dependent nELBE resolution | 862.32 (272) |
+
+The Almeida resolution is not tabulated; σ = 1 keV stands for the 1 % FWHM
+assumed in the fit. Sikkema is folded with 25 keV FWHM.
 
 Segment 7 is the joint fit's 0.8–1.2 MeV c.m. window of the Junghans total.
 `data/Junghans_ntotal.dat` holds only that window's rows. The other Junghans
