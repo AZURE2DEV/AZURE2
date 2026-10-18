@@ -875,7 +875,17 @@ only where the internal width is zero. What a fresh load does rebuild
 differently from a running session is the adaptive target-integration
 sub-point grid (built from the level widths at start-up): on
 `tests/hybrid_potential` the round trip is exact with `<targetInt>` off and
-0.17 % in χ² with it on.
+0.17 % in χ² with it on. The grid is placed once, in `EData::ReadTargetEffectsFile`
+(`AdaptiveIntegrationGrid::GenerateGrid` from the FILE's level energies and widths
+when the project is read), and never re-placed when a fit moves the levels -- CLI
+fits and pyazr sessions alike. So a fit with narrow levels under `<targetInt>`
+minimizes against the start model's grid. Natural neon refit1 (2026-10-18,
+`17O+a/10-13-26_natNe_seg1`, readme 18:40-19:15): the same x gives 25,773.959 in a
+session opened on the start `.azr` and 25,776.084 in one opened on `refit1_fit.azr`
+(= a fresh CLI mode 1 with the `.sav`), the difference at a few points beside
+narrow resonances (E_cm 0.75 and 2.23 MeV); no history dependence inside a session, and rounding x to
+8 digits changes nothing. After a fit that moved narrow levels under target
+integration, `save_fit`, open a new session on the saved `.azr` and polish.
 
 ```python
 azr, sav = m.save_fit("7Be_fit.azr")          # current parameters
