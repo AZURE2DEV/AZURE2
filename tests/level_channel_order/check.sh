@@ -44,9 +44,12 @@ awk '/<levels>/ { f = 1; print; next } /<\/levels>/ { f = 0 }
 awk '/<levels>/ { f = 1; print; next } /<\/levels>/ { f = 0 }
      f && $9 == 10 && $6 == 2 && $8 == 4 { next }
      { print }' "$REF/13N.azr" > "$WORK/short.azr"
+# awk only: the Windows runner has no diff
+ndiff() { awk 'NR == FNR { a[FNR] = $0; n = FNR; next } { m = FNR; if (a[FNR] != $0) d++ } END { print d + (n > m ? n - m : m - n) }' "$1" "$2"; }
+nlines() { awk 'END { print NR }' "$1"; }
 # reversing three lines leaves the middle one in place: two lines differ
-[ "$(diff "$REF/13N.azr" "$WORK/reordered.azr" | grep -c '^>')" = 2 ] || { bad "reordered model not built"; exit 1; }
-[ "$(diff "$REF/13N.azr" "$WORK/short.azr" | grep -c '^<')" = 1 ] || { bad "short model not built"; exit 1; }
+[ "$(ndiff "$REF/13N.azr" "$WORK/reordered.azr")" = 2 ] || { bad "reordered model not built"; exit 1; }
+[ "$(( $(nlines "$REF/13N.azr") - $(nlines "$WORK/short.azr") ))" = 1 ] || { bad "short model not built"; exit 1; }
 
 # run NAME MODEL -> $WORK/NAME/output/chiSquared.out, $WORK/NAME/run.log
 run() {
@@ -66,7 +69,7 @@ run reordered "$WORK/reordered.azr" || exit 1
 run short     "$WORK/short.azr"     || exit 1
 ref="$(total "$WORK/ref")"
 for m in reordered short; do
-  if cmp -s "$WORK/ref/output/chiSquared.out" "$WORK/$m/output/chiSquared.out"; then
+  if [ "$(ndiff "$WORK/ref/output/chiSquared.out" "$WORK/$m/output/chiSquared.out")" = 0 ]; then
     ok "$m: chiSquared.out identical to the reference (total $ref)"
   else
     bad "$m: total chi2 $(total "$WORK/$m"), reference $ref"
