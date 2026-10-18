@@ -23,6 +23,8 @@ class ExtrapLine {
       stream >> phaseJ_ >> phaseL_;
     else if (isDiff_ == 3)
       stream >> maxAngDistOrder_;
+    else if (isDiff_ == 9)
+      stream >> spinObservable_;  // a spin observable (SpinObservable.h)
 
     // Initialize advanced segment parameters to defaults
     isAdvanced_ = 0;
@@ -161,6 +163,8 @@ class ExtrapLine {
    * if the segment is to contain phase shift.
    */
   int phaseL() const { return phaseL_; };
+  //! The observable token of an isDiff 9 segment (empty otherwise).
+  std::string spinObservable() const { return spinObservable_; };
   /*!
    * Returns the maximum polynomial order if segment is
    * angular distribution.
@@ -212,6 +216,7 @@ class ExtrapLine {
   int isDiff_;
   double phaseJ_;
   int phaseL_;
+  std::string spinObservable_;
   int maxAngDistOrder_;
   int isAdvanced_;
   int operationType_;

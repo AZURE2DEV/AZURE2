@@ -741,6 +741,9 @@ class AzrModel:
         # like code 5, but the quantity is a dimensionless ratio, not a cross
         # section.
         "analyzing-power": 7,
+        # General spin observable (target analyzing power, spin correlation, tensor
+        # analyzing power, outgoing polarization, transfer), named by spin=.
+        "spin": 9,
     }
 
     def _splice_segments_test(self, new_lines):
@@ -761,6 +764,22 @@ class AzrModel:
         self._suffix = "\n".join(lines[:start + 1] + new_lines
                                  + lines[end:])
 
+    def _spin_token(self, spin, entrance):
+        """The isDiff 9 token for ``spin`` (token or literature name), resolved with the
+        entrance pair's spins so that e.g. ``"Ayy"`` cannot be misread."""
+        from . import spin as _spin
+        if spin is None:
+            raise ValueError('observable="spin" needs spin= (e.g. "t:y", "b:y*t:y", "b:T20").')
+        if ":" in str(spin):
+            return _spin.check(str(spin))
+        j1 = j2 = None
+        try:
+            c = self._pair_template(int(entrance))
+            j1, j2 = c._get("j1", float), c._get("j2", float)
+        except ValueError:
+            pass
+        return _spin.resolve(str(spin), j1, j2)
+
     def clear_extrapolations(self):
         """Remove every ``<segmentsTest>`` line (leave the block empty)."""
         self._splice_segments_test([])
@@ -770,7 +789,7 @@ class AzrModel:
                           observable="angle-integrated", angle=None,
                           angle_min=0.0, angle_max=0.0, angle_step=0.0,
                           phase_J=None, phase_L=None, order=None, active=True,
-                          natural=False):
+                          natural=False, spin=None):
         """Append one extrapolation segment (a grid to evaluate the model on).
 
         ``entrance`` / ``exit`` are particle-pair keys (``exit=-1`` for a summed
@@ -782,7 +801,9 @@ class AzrModel:
         ``phase-shift``.  For a single-angle differential give ``angle=`` (sets
         min=max, step 0); for an angular grid give ``angle_min/max/step``.
         ``phase_J``/``phase_L`` are required for a phase-shift, ``order`` for an
-        angular distribution.
+        angular distribution, and ``spin`` (a token such as ``"t:y"`` or a
+        literature name such as ``"A0y"``, see :mod:`pyazr.spin`) for
+        ``observable="spin"``.
         """
         if observable not in self._EXTRAP_CODE:
             raise ValueError(f"unknown observable {observable!r}; expected one "
@@ -804,6 +825,8 @@ class AzrModel:
                 raise ValueError("an angular-distribution extrapolation needs "
                                  "order.")
             toks += [int(order)]
+        elif isDiff == 9:                     # spin observable carries its token
+            toks += [self._spin_token(spin, entrance)]
         toks += [0]                           # trailing isAdvanced flag
         if natural:
             toks += ["sample", natural if isinstance(natural, str) else 1]
@@ -1466,7 +1489,10 @@ class AzrModel:
 
         ``strict`` (the default) raises if any free parameter finds no home,
         rather than skipping it: a partial write produces a file that loads
-        cleanly and is a mixture of two fits.
+        cleanly and is a mixture of two fits.  The one exception is a fixed zero width
+        on a channel the level has no line for: the engine supplies that width
+        itself (a level of a J-group gets a zero, fixed width for every group
+        channel it does not list), so there is nothing to write.
 
         With ``include_fixed`` the vector is indexed by *parameter position*
         (``len(parameters)`` entries, fixed ones included) and must be physical
@@ -1530,6 +1556,8 @@ class AzrModel:
                     written += 1
                     break
             else:
+                if p.fixed and v == 0.0:
+                    continue        # a channel this level does not list: the engine's zero, fixed width
                 unplaced.append(
                     f"{p.name} (no channel pair={want_pair} L={p.L} S={p.S} "
                     f"in {lv.jpi} at {lv.energy} MeV)")
@@ -1640,7 +1668,7 @@ class AzrModel:
     _DATA_CODE = {
         "angle-integrated": 0, "differential": 1, "phase-shift": 2,
         "total-capture": 3, "differential-cm": 4, "angle-integrated-E1": 5,
-        "angle-integrated-E2": 6, "analyzing-power": 7,
+        "angle-integrated-E2": 6, "analyzing-power": 7, "spin": 9,
     }
 
     def add_data_segment(self, data_file, entrance, exit,
@@ -1653,7 +1681,7 @@ class AzrModel:
                          active=True, energy_shift_sqrt=0.0,
                          energy_shift_sqrt_error=0.0, vary_shift_sqrt=False,
                          shift_group=None, shift_fn=None, shift_fn_params=(),
-                         natural=False, norm_group=None):
+                         natural=False, norm_group=None, spin=None):
         """Append one data segment (a ``<segmentsData>`` line).
 
         ``data_file`` is the data file path (relative to the run directory,
@@ -1694,6 +1722,8 @@ class AzrModel:
                 raise ValueError("a phase-shift data segment needs phase_J "
                                  "and phase_L.")
             toks += [_fmt(phase_J), int(phase_L)]
+        elif isDiff == 9:                     # spin observable carries its token
+            toks += [self._spin_token(spin, entrance)]
         toks += [_fmt(norm), 1 if vary_norm else 0, _fmt(norm_error),
                  _fmt(energy_shift), _fmt(energy_shift_error),
                  1 if vary_shift else 0, str(data_file), 0, 0]

@@ -10,7 +10,7 @@ AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp IsospinLevels.cpp Equation.
 JGroup.cpp Config.cpp ESegment.cpp KGroup.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp Straggling.cpp
 AdaptiveIntegrationGrid.cpp NuclearPotentialManager.cpp AZUREGrad.cpp
-CovarianceBand.cpp ParameterLabel.cpp PolarizationFunc.cpp)
+CovarianceBand.cpp ParameterLabel.cpp PolarizationFunc.cpp SpinObservable.cpp)
 
 # Add GUI stub when GUI is not enabled
 if(NOT BUILD_GUI)

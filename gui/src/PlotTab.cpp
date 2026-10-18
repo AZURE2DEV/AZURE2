@@ -483,7 +483,7 @@ void PlotTab::testChannelFilterChanged() {
  */
 void PlotTab::noteSelectionQuantity(int dataType, bool isTestSegment) {
   int q;
-  if (dataType == 7) {
+  if (dataType == 7 || dataType == 9) {  // A_y and the other spin observables: signed ratios
     q = AZUREPlot::YQ_ANALYZING_POWER;
   } else if (dataType == 2) {
     q = AZUREPlot::YQ_PHASE_SHIFT;
@@ -510,7 +510,7 @@ QList<PlotEntry *> PlotTab::getDataSegments() {
     int exitKey = segDataProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toInt();
     sourceIndex = segDataProxyModel->mapToSource(segDataProxyModel->index(indexes[i].row(), 7, QModelIndex()));
     int dataType = segDataProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toInt();
-    if (dataType == 7) selectionHasSignedObservable_ = true;
+    if (dataType == 7 || dataType == 9) selectionHasSignedObservable_ = true;
     noteSelectionQuantity(dataType, false);
     QString filename = (dataType == 3) ? QString::fromStdString(configure.outputdir) + QString("AZUREOut_aa=%1_TOTAL_CAPTURE.out").arg(entranceKey) : QString::fromStdString(configure.outputdir) + QString("AZUREOut_aa=%1_R=%2.out").arg(entranceKey).arg(exitKey);
     sourceIndex = segDataProxyModel->mapToSource(segDataProxyModel->index(indexes[i].row(), 8, QModelIndex()));
@@ -524,7 +524,7 @@ QList<PlotEntry *> PlotTab::getDataSegments() {
       if (previousEntranceKey == entranceKey && previousExitKey == exitKey) numPreviousInBlock++;
     }
     PlotEntry *newPlotEntry = new PlotEntry(0, entranceKey, exitKey, numPreviousInBlock, filename);
-    newPlotEntry->setAllowNonPositive(dataType == 7);
+    newPlotEntry->setAllowNonPositive(dataType == 7 || dataType == 9);
     if (!segmentDataFile.isEmpty()) {
       newPlotEntry->setLabel(PlotEntry::labelFromFilename(segmentDataFile));
     }
@@ -544,7 +544,7 @@ QList<PlotEntry *> PlotTab::getTestSegments() {
     int exitKey = segTestProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toInt();
     sourceIndex = segTestProxyModel->mapToSource(segTestProxyModel->index(indexes[i].row(), 9, QModelIndex()));
     int dataType = segTestProxyModel->sourceModel()->data(sourceIndex, Qt::EditRole).toInt();
-    if (dataType == 7) selectionHasSignedObservable_ = true;
+    if (dataType == 7 || dataType == 9) selectionHasSignedObservable_ = true;
     noteSelectionQuantity(dataType, true);
     QString filename = (dataType == 4) ? QString::fromStdString(configure.outputdir) + QString("AZUREOut_aa=%1_TOTAL_CAPTURE.extrap").arg(entranceKey) : QString::fromStdString(configure.outputdir) + QString("AZUREOut_aa=%1_R=%2.extrap").arg(entranceKey).arg(exitKey);
     int numPreviousInBlock = 0;
@@ -556,7 +556,7 @@ QList<PlotEntry *> PlotTab::getTestSegments() {
       if (previousEntranceKey == entranceKey && previousExitKey == exitKey) numPreviousInBlock++;
     }
     PlotEntry *newPlotEntry = new PlotEntry(1, entranceKey, exitKey, numPreviousInBlock, filename);
-    newPlotEntry->setAllowNonPositive(dataType == 7);
+    newPlotEntry->setAllowNonPositive(dataType == 7 || dataType == 9);
     testSegmentPlotEntries.push_back(newPlotEntry);
   }
   return testSegmentPlotEntries;

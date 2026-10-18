@@ -706,7 +706,9 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
       if (aa == exitPairNum) M.AddCoulomb();
       if (M.size() == 0) return false;
 
-      const std::vector<complex> bar = M.AnalyzingPowerBar();
+      const std::vector<complex> bar = point->GetSpinObservable()
+          ? M.SpinObservableBar(*point->GetSpinObservable())
+          : M.AnalyzingPowerBar();
       for (int k = 1; k <= nK; k++) {
         for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
           MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);

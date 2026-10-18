@@ -28,12 +28,14 @@ ESegment::ESegment(SegLine segLine) {
   // isDiff 7 is the vector analyzing power: differential in the centre-of-mass
   // frame, so it needs the same angular machinery as a differential cross
   // section even though the quantity itself is a dimensionless ratio.
-  isAnalyzingPower_ = (segLine.isDiff() == 7);
-  if (segLine.isDiff() == 1 || segLine.isDiff() == 4 || segLine.isDiff() == 7)
+  // isDiff 9 is a general spin observable (SpinObservable.h) and shares all of A_y's plumbing.
+  isAnalyzingPower_ = (segLine.isDiff() == 7 || segLine.isDiff() == 9);
+  this->SetSpinObservable(segLine.isDiff() == 9, segLine.spinObservable());
+  if (segLine.isDiff() == 1 || segLine.isDiff() == 4 || segLine.isDiff() == 7 || segLine.isDiff() == 9)
     isdifferential_ = true;
   else
     isdifferential_ = false;
-  if (segLine.isDiff() == 4 || segLine.isDiff() == 7)
+  if (segLine.isDiff() == 4 || segLine.isDiff() == 7 || segLine.isDiff() == 9)
     iscmdifferential_ = true;
   else
     iscmdifferential_ = false;
@@ -126,12 +128,13 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   e_step_ = extrapLine.eStep();
   a_step_ = extrapLine.aStep();
   segment_chi_squared_ = 0.0;
-  isAnalyzingPower_ = (extrapLine.isDiff() == 7);
-  if (extrapLine.isDiff() == 1 || extrapLine.isDiff() == 5 || extrapLine.isDiff() == 7)
+  isAnalyzingPower_ = (extrapLine.isDiff() == 7 || extrapLine.isDiff() == 9);
+  this->SetSpinObservable(extrapLine.isDiff() == 9, extrapLine.spinObservable());
+  if (extrapLine.isDiff() == 1 || extrapLine.isDiff() == 5 || extrapLine.isDiff() == 7 || extrapLine.isDiff() == 9)
     isdifferential_ = true;
   else
     isdifferential_ = false;
-  if (extrapLine.isDiff() == 5 || extrapLine.isDiff() == 7)
+  if (extrapLine.isDiff() == 5 || extrapLine.isDiff() == 7 || extrapLine.isDiff() == 9)
     iscmdifferential_ = true;
   else
     iscmdifferential_ = false;
@@ -1036,6 +1039,7 @@ void ESegment::AddPoint(EPoint point) {
   // The observable is a property of the segment; stamp it on the point so the
   // calculation does not have to look back up.
   point.SetIsAnalyzingPower(this->IsAnalyzingPower());
+  point.SetSpinObservable(spinObservable_);
   points_.push_back(point);
 }
 
@@ -1354,4 +1358,23 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
   }
 
   return baseValue;
+}
+
+/*!
+ * Records the spin observable of an isDiff 9 segment.  A token that does not parse leaves the observable
+ * empty and keeps the message; EData reports it, with the segment number, at start-up.
+ */
+
+void ESegment::SetSpinObservable(bool isSpin, const std::string &token) {
+  spinObservable_.reset();
+  spinToken_ = token;
+  spinParseError_.clear();
+  if (!isSpin) return;
+  auto obs = std::make_shared<SpinObservable>();
+  if (token.empty())
+    spinParseError_ = "isDiff 9 needs an observable token (e.g. t:y, b:y*t:y, b:T20)";
+  else if (!obs->Parse(token, spinParseError_))
+    spinParseError_ = "observable \"" + token + "\": " + spinParseError_;
+  else
+    spinObservable_ = obs;
 }

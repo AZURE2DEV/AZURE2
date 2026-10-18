@@ -124,6 +124,16 @@ Fix Width
    The **Fix?** checkbox in the channels list prevents the width parameter from
    varying during a fit. A width left at zero is automatically held fixed.
 
+.. note::
+
+   In the project file each level has one line per channel. The engine matches
+   each line's width to its channel by (particle pair, *l*, *s*), so the lines of
+   a hand-edited level may come in any order. A level that has no line for a
+   channel which another level of its :math:`J^\pi` group lists gets a zero,
+   fixed width for that channel. Both cases print a ``WARNING: level J = ...``
+   line. Before 2026-10-17 the widths were stored in line order, so a reordered
+   or shortened level silently got the wrong widths.
+
 Channel Configuration
 ---------------------
 

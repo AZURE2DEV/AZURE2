@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "Constants.h"
+#include "SpinObservable.h"
 
 class CNuc;
 class EPoint;
@@ -110,6 +111,15 @@ class AmplitudeMatrix {
   complex PathwayAdjoint(int jNum, int chNum, int chpNum,
                          const std::vector<complex> &bar) const;
 
+  /*!
+   * General spin observable (isDiff 9):  Re(c Tr(F A F^dagger B)) / Tr(F F^dagger),  with F the amplitude
+   * in the product basis of the particles' spin projections (both channel spins decomposed with the
+   * Lane-Thomas coefficients ParticleCG uses), A the entrance and B the exit operator of \p obs.
+   * \c SpinObservableBar is its reverse mode, 2 dO/dM* per amplitude slot, for \c PathwayAdjoint.
+   */
+  double SpinObservableValue(const SpinObservable &obs) const;
+  std::vector<complex> SpinObservableBar(const SpinObservable &obs) const;
+
   //! Largest |M| with v != v' -- the spin-flip strength, which is what makes
   //! a vector analyzing power non-zero. Diagnostic.
   double MaxSpinFlip() const;
@@ -122,6 +132,15 @@ class AmplitudeMatrix {
   complex &At(double s, double v, double sp, double vp);
   int IndexOf(double s, double v, double sp, double vp) const;
   complex Get(double s, double v, double sp, double vp) const;
+
+  //! Product-basis pieces shared by the value and its bar: F, the operators A and B, and per amplitude
+  //! slot the list of (product index, coefficient) it maps to.
+  struct Product {
+    int din = 0, dout = 0;
+    std::vector<complex> F, A, B;
+    std::vector<std::vector<std::pair<int, double>>> slots;
+  };
+  Product BuildProduct(const SpinObservable &obs) const;
 
   //! Exchange symmetrization of one nuclear pathway: 1 + (-1)^(l'+s') for
   //! elastic scattering of identical particles, 1 otherwise.

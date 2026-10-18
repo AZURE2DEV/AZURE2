@@ -97,6 +97,15 @@ class ALevel {
 
   /// Append a channel, taking its initial width from the input file line.
   void AddGamma(NucLine);
+  /// Put the width of an input file line at its J-group channel number (1-based), padding any channel
+  /// before it with a zero, fixed width.  CNuc::Fill uses this: AddGamma(NucLine) appended in the order of
+  /// the level's own lines, which only matched the group's channel numbering when every level listed every
+  /// channel in the same order.
+  void SetGammaFromLine(int channelNum, NucLine nucLine);
+  /// Pad the width vectors with zero, fixed widths up to n channels.
+  void PadChannels(int n);
+  /// Number of channels the width vectors hold.
+  int NumGammas() const { return (int)gammas_.size(); }
   /// Append a channel with the given initial reduced width amplitude.
   void AddGamma(double);
   void SetGamma(int, double);

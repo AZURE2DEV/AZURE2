@@ -691,7 +691,10 @@ bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint *point, double *spinSum,
   if (std::getenv("AZURE2_POL_DEBUG2"))
     std::printf("FLIP n=%zu maxflip=%.6e\n", M.size(), M.MaxSpinFlip());
   if (spinSum) *spinSum = M.UnpolarizedCrossSection();
-  if (analyzingPower) *analyzingPower = M.AnalyzingPowerAy();
+  // isDiff 9 points carry their observable; isDiff 7 (A_y) keeps its own, original route.
+  if (analyzingPower)
+    *analyzingPower = point->GetSpinObservable() ? M.SpinObservableValue(*point->GetSpinObservable())
+                                                 : M.AnalyzingPowerAy();
   return true;
 }
 

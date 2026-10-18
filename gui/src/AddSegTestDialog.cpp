@@ -37,9 +37,19 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   dataTypeCombo->addItem(tr("Angle Integrated Total Capture"));
   dataTypeCombo->addItem(tr("C.M. Differential"));
   dataTypeCombo->addItem(tr("Analyzing Power"));
-  // Codes 0-5 happen to equal their position; the analyzing power is 7.
+  dataTypeCombo->addItem(tr("Spin Observable"));
+  // Codes 0-5 happen to equal their position; the analyzing power is 7, a spin observable 9.
   for (int i = 0; i < dataTypeCombo->count(); i++) dataTypeCombo->setItemData(i, i);
-  dataTypeCombo->setItemData(dataTypeCombo->count() - 1, 7);
+  dataTypeCombo->setItemData(dataTypeCombo->count() - 2, 7);
+  dataTypeCombo->setItemData(dataTypeCombo->count() - 1, 9);
+  spinText = new QLineEdit;
+  spinText->setVisible(false);
+  spinText->setMinimumWidth(110);
+  spinText->setToolTip(tr("Spin observable token (isDiff 9):\n"
+                            "  b:y  beam A_y      t:y  target A_0y      b:y*t:y  spin correlation C_yy\n"
+                            "  b:yy b:xx b:zz b:xz  spin-1 tensor powers      b:iT11 b:T20 b:T21 b:T22  spherical\n"
+                            "  e1:y e2:y  outgoing polarization      b:y>e1:y  polarization transfer\n"
+                            "Madison frame (y along k_in x k_out)."));
   connect(dataTypeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(dataTypeChanged(int)));
   QRegExp spinRX("^\\d{0,2}(\\.[05]{0,1})?$");
   QValidator *spinValidator = new QRegExpValidator(spinRX, this);
@@ -165,6 +175,10 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   angDistSpin->setVisible(false);
   phaseLayout->addWidget(angDistLabel);
   phaseLayout->addWidget(angDistSpin);
+  spinLabel = new QLabel(tr("Observable:"));
+  spinLabel->setVisible(false);
+  phaseLayout->addWidget(spinLabel);
+  phaseLayout->addWidget(spinText);
   lowerLayout->addLayout(phaseLayout, 0, 3);
 
   lowerLayout->addWidget(advancedModeCheck, 1, 0, 1, 4);
@@ -274,7 +288,10 @@ void AddSegTestDialog::dataTypeChanged(int index) {
     totalCaptureLabel->setVisible(false);
     exitPairCombo->setVisible(true);
   }
-  if (index == 5 || index == 6) {  // C.M. differential, or the analyzing power
+  const bool isSpin = (dataTypeCode() == 9);
+  spinLabel->setVisible(isSpin);
+  spinText->setVisible(isSpin);
+  if (index == 5 || index == 6 || isSpin) {  // C.M. differential, the analyzing power, a spin observable
     lowAngleText->setEnabled(true);
     highAngleText->setEnabled(true);
     angleStepText->setEnabled(true);
@@ -371,7 +388,7 @@ void AddSegTestDialog::removeComponent() {
 bool AddSegTestDialog::naturalAllowed() const {
   // The engine's NaturalAllowed: a weighted sum is only meaningful for additive observables.
   int code = dataTypeCode();
-  if (code == 2 || code == 3 || code == 7) return false;
+  if (code == 2 || code == 3 || code == 7 || code == 9) return false;
   if (advancedModeCheck->isChecked() && operationCombo->currentIndex() == 1) return false;  // ratio
   return true;
 }
