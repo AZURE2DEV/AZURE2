@@ -327,8 +327,9 @@ of a sample segment shows its reaction prefixed with *[default sample]*.
 Normalization priors follow the experiments' quoted systematic uncertainties:
 0.5 % for Almeida and Käppeler, 15 % for Sikkema, and an assumed 5 % for
 Vaughn and Hinterberger. The Junghans normalization is fixed at 1, so the
-Junghans data set the absolute scale. The Hinterberger line also carries a
-free energy shift with no penalty.
+Junghans data set the absolute scale. The Hinterberger line also frees an
+energy shift with no penalty, but the fit reported here held it at zero
+(see Step 8).
 
 Step 5: Resolution
 ------------------
@@ -498,9 +499,10 @@ The n+\ :sup:`21`\ Ne term is below 1 % everywhere.
 Step 8: How the fit was made
 ----------------------------
 
-The fit has 90 free parameters: the energies and widths of the
-:sup:`21`\ Ne and :sup:`23`\ Ne levels, the ten free normalizations and the
-Hinterberger energy shift. It was built up in stages. Each stage is a
+The fit has 89 free parameters: the energies and widths of the
+:sup:`21`\ Ne and :sup:`23`\ Ne levels and the ten free normalizations. The
+fitting script fixed every energy shift by default, so the Hinterberger
+shift stayed at zero although the segment line frees it. It was built up in stages. Each stage is a
 modelling decision checked against the data, not just more iterations:
 
 1. **The Junghans data alone**, starting from the literature levels, all
