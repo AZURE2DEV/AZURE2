@@ -222,9 +222,8 @@ bool BuildBandData(CNuc *compound, EData *data, const Config &config,
   if (!ComputeModelGradients(compound, data, config, pmap, sdp, fullGrad, /*skipTHM=*/true))
     return false;
 
-  // THM (HOES) points: the adjoint differentiates the T-matrix observable, not
-  // the HOES one, so their rows come from ComputeTHMRows (central differences of
-  // the HOES model).  What the output file shows for a THM point is the model m
+  // THM (HOES) points: their rows come from ComputeTHMRows (the HOES adjoint;
+  // the T-matrix adjoint above does not cover them).  What the output file shows for a THM point is the model m
   // next to the data scaled by the profiled norm, d n*; the parameters move
   // both.  The band is therefore that of the model as it lies against the data,
   // q = s(p) m(p) / s(p0), s = 1/n*, whose gradient at the best fit is

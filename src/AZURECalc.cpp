@@ -431,13 +431,37 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   const std::vector<bool> fixedMask = FixedMask();
   const int nMn = (int)fixedMask.size();
 
-  // THM (HOES) segments are excluded from the analytic adjoint (it
-  // differentiates the T-matrix observable, not HOES); their energy/gamma/norm
-  // contribution is added below by central differences of the THM-only chi^2.
+  // THM (HOES) segments are excluded from the T-matrix adjoint; their
+  // energy/gamma contribution comes from the HOES adjoint below (their norms,
+  // and everything with AZURE2_THM_FD=1, by central differences of the
+  // THM-only chi^2).
   bool haveTHM = false;
   for (int s = 1; s <= data()->NumSegments() && !haveTHM; s++) {
     ESegment *seg = data()->GetSegment(s);
     if (seg && seg->IsTHM()) haveTHM = true;
+  }
+
+  // THM rows by the HOES adjoint (ComputeTHMRows): the THM data term of chi^2
+  // is sum_i r_i^2 over its rows, the norm profiled as Chi2Value(.., true)
+  // does, so its energy / reduced-width / coherent-background gradient is
+  // 2 J^T r.  THM norms keep the central differences of the THM-only chi^2
+  // below (they also carry its norm penalty).  AZURE2_THM_FD=1 restores the
+  // differences for every THM column.
+  bool thmAnalytic = false;
+  if (eg && haveTHM && !ThmFiniteDifferencesRequested()) {
+    ParamIndexMap tmap = BuildParamIndexMap(lc, ld, fixedMask);
+    std::vector<THMRows> thm = ComputeTHMRows(lc, ld, configure(), p, tmap);
+    const int nCols = tmap.NumPacked();
+    for (const THMRows &tr : thm)
+      for (int col = 0; col < nCols; col++) {
+        const int f = tmap.PackedToFull(col);
+        const ParamKind kind = tmap.Desc(f).kind;
+        if (kind != ParamKind::LevelEnergy && kind != ParamKind::Gamma && kind != ParamKind::ThmCoherent) continue;
+        double g = 0.0;
+        for (size_t i = 0; i < tr.r.size(); i++) g += tr.r[i] * tr.J[i * nCols + col];
+        if (f < (int)grad.size()) grad[f] += 2.0 * g;
+      }
+    thmAnalytic = true;
   }
 
   // Segment-local energy-shift gradient is exact only when a shift's effect is
@@ -471,6 +495,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
                kind == ParamKind::ThmCoherent)) {
       if (!haveTHM) continue;  // fully analytic
+      if (thmAnalytic && kind != ParamKind::Norm) continue;  // THM part added above
       if (kind == ParamKind::Norm) {
         // A norm belongs to exactly one segment: non-THM norms are fully
         // analytic (handled above); THM norms are fully finite-difference.

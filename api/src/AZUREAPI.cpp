@@ -1112,7 +1112,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params) const {
   vector_r residuals, jacobian;
   int nCols = 0;
   // THM rows are left zero by the adjoint and filled here: residuals with the
-  // profiled norm, Jacobian by central differences of the HOES model plus the
+  // profiled norm, Jacobian from the HOES adjoint plus the
   // analytic dependence of the profiled scale (see ComputeTHMRows).
   bool ok = ComputeResidualJacobian(lc, ld, configure(), pmap, sdp, residuals, jacobian, nCols,
                                     /*skipTHM=*/true);
@@ -1228,8 +1228,8 @@ vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) const {
   const std::vector<int> rc = BandPackedColumns(pmap);
   const int nCols = (int)rc.size();
 
-  // THM (HOES) rows come from central differences of the HOES model (the
-  // adjoint differentiates the T-matrix observable); see ComputeTHMRows.
+  // THM (HOES) rows come from the HOES adjoint (the T-matrix adjoint does not
+  // cover them); see ComputeTHMRows.
   std::map<EPoint *, vector_r> grad;
   if (!ComputeModelGradients(lc, ld, configure(), pmap, sdp, grad, /*skipTHM=*/true))
     return vector_r{-1.0};

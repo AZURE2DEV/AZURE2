@@ -51,6 +51,13 @@ void ThmLegendreCoefficients(const std::vector<ThmPartialWave> &waves, const std
                              std::vector<double> &b);
 
 /*!
+ * Adjoint of sum_L w[L] b_L(x) (b_L as ThmLegendreCoefficients): xBar[i] =
+ * d/dRe x_i + i d/dIm x_i of that real form, which is bilinear in x.
+ */
+void ThmLegendreAdjoint(const std::vector<ThmPartialWave> &waves, const std::vector<complex> &x,
+                        const std::vector<double> &w, std::vector<complex> &xBar);
+
+/*!
  * The angular window of a THM experiment: theta (degrees) is the c.m. angle
  * of particle 1 of the exit pair relative to particle 2, measured from the
  * relative momentum of particle 1 of the entrance pair (the transferred

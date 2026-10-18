@@ -243,6 +243,11 @@ bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
                            std::map<EPoint *, vector_r> &gradByPoint,
                            bool skipTHM = false);
 
+/// True when AZURE2_THM_FD is set (and not empty or "0"): THM (HOES) model
+/// derivatives by central differences, as before the HOES adjoint -- for
+/// testing the analytic path against.
+bool ThmFiniteDifferencesRequested();
+
 /// THM (HOES) rows of one THM segment: model, residuals and their parameter
 /// derivatives with the segment norm profiled (see ComputeTHMRows).
 struct THMRows {
@@ -266,10 +271,12 @@ struct THMRows {
 /*!
  * \brief THM (HOES) rows for every THM segment, at the parameters `full`.
  *
- * THM points are outside the analytic adjoint (it differentiates the T-matrix
- * observable), so their model Jacobian J_m is taken by central differences in
- * the level energies and reduced widths (h = 1e-6 (|x| + 1), the step
- * AZURECalc::Gradient uses for its THM part); norm and energy-shift columns are
+ * THM points are outside the T-matrix adjoint; their model Jacobian J_m (level
+ * energies, reduced widths, THM coherent backgrounds) comes from the HOES
+ * adjoint, THMMatrixFunc::THMPointAdjoint, one sweep per point -- or from
+ * central differences (h = 1e-6 (|x| + 1)) with AZURE2_THM_FD=1, or for a
+ * configuration the adjoint does not cover (a THM segment with components, a
+ * target effect with an automatic tolerance, RMC); norm and energy-shift columns are
  * left zero (a caller differences shifts on the whole residual vector).  The
  * residual of a point of a profiled segment is r_i = (s m_i - d_i)/e_i with
  * s = 1/n* = S_md/S_mm, a function of the parameters; its derivative is taken

@@ -3131,17 +3131,48 @@ A THM segment with a free norm has its arbitrary scale profiled out
 (``ESegment::IsProfiledNorm``): :math:`n^* = S_{mm}/S_{md}` and
 :math:`\chi^2 = S_{dd} - S_{md}^2/S_{mm}`, no penalty, no fit parameter (the
 segments of a THM experiment share one, with an optional background: see
-"THM experiments"). The
-analytic adjoint differentiates the T-matrix observable, not the HOES one, so
-every derivative of a THM point is taken by central differences of the HOES
-model, :math:`J_m`, with the dependence of the profiled scale
-:math:`s = 1/n^*` added analytically (``ComputeTHMRows`` in ``AZUREGrad.h``;
-used by ``pyazr``'s Jacobian and gradients and the CLI band). The MIGRAD
-gradient (``AZURECalc::Gradient``) takes the THM part instead as central
-differences of the re-profiled THM :math:`\chi^2` itself (``Chi2Value``), one
-pair of evaluations per free parameter -- the same derivative (the profiled
-scale and background are at their optimum, so their own dependence drops out
-of the gradient), computed serially on a clone of the data.
+"THM experiments"). The model Jacobian :math:`J_m` of a THM point comes
+from its own reverse-mode adjoint (``THMMatrixFunc::THMPointAdjoint``),
+with the dependence of the profiled scale :math:`s = 1/n^*` (or of the
+profile of a THM experiment) added analytically (``ComputeTHMRows`` in
+``AZUREGrad.h``; used by ``pyazr``'s Jacobian, gradients and model
+gradients, the CLI band and the MIGRAD gradient ``AZURECalc::Gradient``,
+which adds :math:`2 J^T r` over the THM rows). The adjoint seeds
+:math:`\bar a = 2 W a` for each incoherent term :math:`W|a|^2` (per
+:math:`J^\pi` group, exit channel and entrance bucket; through the Legendre
+sum with an angular window), and propagates it
+
+* to the exit widths, explicitly (:math:`a` is linear in
+  :math:`\gamma_{\lambda c'}`; a width below the :math:`10^{-12}` cutoff
+  still has its derivative);
+* to the level matrix :math:`A` and on to :math:`E_\lambda` and
+  :math:`\gamma_{\lambda c}` through :math:`A^{-1}` (the same code as the
+  T-matrix adjoint, ``AMatrixFunc::LevelMatrixAdjoint``: Brune shift terms,
+  Park overlap);
+* to the entrance vertices :math:`v_\lambda = \sum_c \gamma_{\lambda c}
+  M_l(B)` -- the widths, and the boundary :math:`B` (``vertex=perlevel``
+  under Brune: :math:`S_c(E_\lambda)`; ``vertex=constant``:
+  :math:`S_c(E_\mathrm{min})` of the lowest level; :math:`M_l` is linear in
+  :math:`B`);
+* to the coherent background values (``cbackground=``) and to its unit
+  vertex;
+* with ``lineshape=on``, to :math:`N_C(\zeta, E_\lambda - E,
+  \Gamma_\lambda)`, analytic in its arguments; :math:`\partial
+  \Gamma_\lambda/\partial(E_\lambda, \gamma_{\lambda c})` of the total
+  width (``ThmLevelWidth``) is a central difference of that one scalar per
+  level and parameter, once per evaluation (``BuildThmAdjointContext``).
+
+The kinematic factor, the exit penetrability, the weights :math:`w(E)` and
+:math:`R(E)`, and the vertex pieces (plane-wave :math:`j_l`, the Coulomb
+term, the DW :math:`a_k, d_k`) depend on the energy only; a folded point is
+linear in its sub-point cross sections (weights from the combiner, as for a
+target effect, and the edge blend). Not covered, so differenced as before:
+a THM segment with components, a target effect with an automatic tolerance,
+RMC. ``AZURE2_THM_FD=1`` selects the central differences for every THM
+column (step :math:`10^{-6}(|x|+1)`), for testing; their truncation error
+reaches :math:`10^{-4}` relative on the energy of a narrow level (the
+adjoint agrees with a Richardson-extrapolated difference to
+:math:`10^{-9}` there). Norms and energy shifts are differenced as before.
 
 The cross-section band (``--covariance-band``) of a THM point is that of the
 model *as it lies against the data*. The output file shows the model
@@ -3205,8 +3236,8 @@ levels of :math:`J` down to 0.02, to :math:`4\times10^{-10}`), the widths in
 ``parameters.out`` to :math:`10^{-5}` (Brune's round trip of the input). A
 parameter file written in one mode reproduces the model in the other (to the
 8 digits of ``param.par``), and independent fits find the same minimum.
-The THM rows of the Jacobian are central differences of the HOES model in the
-fit's own amplitudes, so under Park they include the dependence of
+The THM rows of the Jacobian are taken in the fit's own amplitudes (the
+HOES adjoint, or central differences with ``AZURE2_THM_FD=1``), so under Park they include the dependence of
 :math:`J_\lambda` on every amplitude and on the energy of the level;
 ``tests/pyazr/thm_park_test.py`` checks them against differences of the
 residuals and against the Brune Jacobian times

@@ -25,11 +25,42 @@
  * docs/THM_IMPLEMENTATION.md and mrmpy MRMModel.unsmeared.
  */
 
+/*!
+ * What the HOES adjoint needs beyond the point and the filled compound,
+ * computed once per derivative evaluation (BuildThmAdjointContext).
+ */
+struct ThmAdjointContext {
+  /// dS_c/dE at the level energies (BuildShiftDerivTable); Brune only, else null.
+  const vector_matrix_r *shiftDeriv = nullptr;
+  /// vertex=constant: [j-1][ch-1] dS_c/dE at the lowest level of the J group.
+  std::vector<std::vector<double>> lowestShiftDeriv;
+  /// lineshape=on: [j-1][la-1] = {dGamma/dE, dGamma/dgamma_1, ...} of the
+  /// level's total width (ThmLevelWidth); empty without a line shape.
+  std::vector<std::vector<std::vector<double>>> widthDeriv;
+};
+
+/// The context for the compound as filled (CalcShiftFunctions already run
+/// under Brune); `lineshape` asks for the width derivatives.
+ThmAdjointContext BuildThmAdjointContext(CNuc *compound, const Config &configure, const vector_matrix_r *shiftDeriv,
+                                         bool lineshape);
+
 class THMMatrixFunc : public AMatrixFunc {
  public:
   THMMatrixFunc(CNuc *compound, const Config &configure);
   /// Computes the HOES cross section for the point and stores it as the fit XS.
   void CalculateTHMCrossSection(EPoint *point);
+  /*!
+   * Reverse-mode derivative of the HOES cross section of `point` (one point
+   * or folding sub-point, before any folding): accumulates fitBar d sigma/dE
+   * and d sigma/dgamma into `accum` and, if given, fitBar d sigma/d(coherent
+   * background value k) into (*coherentBar)[k] (CNuc::ThmCoherentValues
+   * order).  Assumes ClearMatrices/FillMatrices/InvertMatrices for the point.
+   * The cross section itself, recomputed on the way, goes to *sigmaOut (it is
+   * the value CalculateTHMCrossSection gives).  Returns false for a
+   * configuration it does not cover (RMC; a line shape without widthDeriv).
+   */
+  bool THMPointAdjoint(EPoint *point, double fitBar, GradAccum &accum, const ThmAdjointContext &ctx,
+                       std::vector<double> *coherentBar = nullptr, double *sigmaOut = nullptr);
 };
 
 #endif

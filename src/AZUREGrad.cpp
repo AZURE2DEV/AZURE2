@@ -13,6 +13,10 @@
 #include "ChannelFunc.h"
 #include "CoulFunc.h"
 #include "ShftFunc.h"
+#include "THMMatrixFunc.h"
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
 #include <cmath>
 #include <algorithm>
 #ifdef _OPENMP
@@ -425,7 +429,64 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
   }
 }
 
+
+// THM (HOES) model derivative of one point -- a point or a mapped point, with
+// its folding if it has one -- by the HOES adjoint (THMMatrixFunc::
+// THMPointAdjoint): d m/d(E, gamma) into `accum`, d m/d(coherent value k)
+// into coherentBar[k].  A folded point is linear in its sub-point cross
+// sections; the weights come from the combiner as in GradTargetEffectAdjoint,
+// and an edge blend adds (1 - w) times the bare point.  The automatic
+// application of a target effect (a tolerance) switches between the folded
+// and the bare value by a test on the sub-points: not covered (false).
+bool ThmPointModelGradient(EPoint *point, CNuc *compound, const Config &config, const ThmAdjointContext &ctx,
+                           GradAccum &accum, std::vector<double> &coherentBar) {
+  static thread_local THMMatrixFunc reusable(compound, config);
+  reusable.Reset(compound, config);
+  THMMatrixFunc &f = reusable;
+  auto adjoint = [&](EPoint *pt, double weight) -> bool {
+    f.ClearMatrices();
+    f.FillMatrices(pt);
+    f.InvertMatrices();
+    return f.THMPointAdjoint(pt, weight, accum, ctx, &coherentBar);
+  };
+  TargetEffect *te = point->IsTargetEffect()
+      ? point->GetParentData()->GetTargetEffect(point->GetTargetEffectNum())
+      : nullptr;
+  if (!(te && te->IsSubPointEffect())) return adjoint(point, 1.0);
+  if (point->IsAnalyzingPower() || te->GetAutoTolerance() > 0.0) return false;
+  const int nsp = point->NumSubPoints();
+  if (nsp <= 0) return true;
+  std::vector<double> sigma(nsp), c(nsp, 0.0);
+  for (int i = 1; i <= nsp; i++) sigma[i - 1] = point->GetSubPoint(i)->GetFitCrossSection();
+  const double model = point->GetFitCrossSection();
+  for (int i = 1; i <= nsp; i++) {
+    const double s0 = sigma[i - 1], h = 1.0e-3 * (std::fabs(s0) + 1.0);
+    point->GetSubPoint(i)->SetFitCrossSection(s0 + h);
+    point->IntegrateTargetEffect(config);
+    const double yp = point->GetFitCrossSection();
+    point->GetSubPoint(i)->SetFitCrossSection(s0 - h);
+    point->IntegrateTargetEffect(config);
+    const double ym = point->GetFitCrossSection();
+    point->GetSubPoint(i)->SetFitCrossSection(s0);
+    c[i - 1] = (yp - ym) / (2.0 * h);
+  }
+  point->SetFitCrossSection(model);
+  const double blend = point->GetTargetBlendWeight();
+  for (int i = 1; i <= nsp; i++)
+    if (c[i - 1] != 0.0 && !adjoint(point->GetSubPoint(i), blend * c[i - 1])) return false;
+  if (blend < 1.0 && !adjoint(point, 1.0 - blend)) return false;
+  return true;
+}
+
 }  // namespace
+
+/// AZURE2_THM_FD=1 (any value but empty or 0): THM rows by central
+/// differences, the path before the HOES adjoint (kept for testing).
+bool ThmFiniteDifferencesRequested() {
+  const char *e = std::getenv("AZURE2_THM_FD");
+  return e && *e && std::strcmp(e, "0") != 0;
+}
+
 
 bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
                               const ParamIndexMap &pmap,
@@ -738,9 +799,74 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, const Config &config,
     rows[t].J.assign(m0[t].size() * (size_t)nCols, 0.0);
   }
 
-  // d m / d p by central differences, E and gamma columns -- and the THM
-  // coherent backgrounds (cbackground=), which only THM points see.
-  for (int c = 0; c < nCols; c++) {
+  // d m / d p, E and gamma columns -- and the THM coherent backgrounds
+  // (cbackground=), which only THM points see -- by the HOES adjoint: one
+  // reverse sweep per point (ThmPointModelGradient).  A configuration it does
+  // not cover, or AZURE2_THM_FD=1, takes the central differences below.
+  bool analytic = !ThmFiniteDifferencesRequested();
+  for (size_t t = 0; t < rows.size() && analytic; t++)
+    if (ld->GetSegment(rows[t].segment)->HasComponents()) analytic = false;
+  if (analytic) {
+    vector_matrix_r shiftDeriv;
+    const vector_matrix_r *sdp = nullptr;
+    if (brune) {
+      shiftDeriv = BuildShiftDerivTable(lc, config);
+      sdp = &shiftDeriv;
+    }
+    bool lineshape = false;
+    for (size_t t = 0; t < rows.size(); t++)
+      if (ld->GetSegment(rows[t].segment)->GetThmLineshape()) lineshape = true;
+    const ThmAdjointContext ctx = BuildThmAdjointContext(lc, config, sdp, lineshape);
+    const int nCoherent = ld->NumThmCoherentParams();
+    std::vector<size_t> slot(order.size());
+    {
+      std::vector<size_t> next(rows.size(), 0);
+      for (size_t k = 0; k < order.size(); k++) slot[k] = next[order[k].first]++;
+    }
+    bool bail = false;
+    const long n = (long)order.size();
+#pragma omp parallel
+    {
+      GradAccum accum;
+      accum.Init(lc);
+      vector_r fullRow(pmap.NumFull(), 0.0);
+      std::vector<double> coherentBar(nCoherent, 0.0);
+#pragma omp for schedule(dynamic)
+      for (long k = 0; k < n; k++) {
+        if (bail) continue;
+        ESegment *seg = ld->GetSegment(rows[order[k].first].segment);
+        EPoint *pt = seg->GetPoint(order[k].second + 1);
+        accum.Zero();
+        std::fill(coherentBar.begin(), coherentBar.end(), 0.0);
+        if (!ThmPointModelGradient(pt, lc, config, ctx, accum, coherentBar)) {
+#pragma omp critical
+          bail = true;
+          continue;
+        }
+        std::fill(fullRow.begin(), fullRow.end(), 0.0);
+        accum.Scatter(pmap, fullRow);
+        double *row = &rows[order[k].first].Jm[slot[k] * nCols];
+        for (int c = 0; c < nCols; c++) {
+          const int f = pmap.PackedToFull(c);
+          const ParamDesc &desc = pmap.Desc(f);
+          if (desc.kind == ParamKind::LevelEnergy || desc.kind == ParamKind::Gamma)
+            row[c] = fullRow[f];
+          else if (desc.kind == ParamKind::ThmCoherent && desc.channel >= 1 && desc.channel <= nCoherent)
+            row[c] = coherentBar[desc.channel - 1];
+        }
+      }
+    }
+    if (bail) {
+      analytic = false;
+      for (size_t t = 0; t < rows.size(); t++) std::fill(rows[t].Jm.begin(), rows[t].Jm.end(), 0.0);
+      if (std::getenv("AZURE_GRAD_DEBUG"))
+        std::cerr << "[grad] THM adjoint: a point outside its path (a target effect with an automatic "
+                     "tolerance, RMC, ...) -> central differences for the THM rows" << std::endl;
+    }
+  }
+
+  // Central differences (AZURE2_THM_FD=1, or the adjoint declined).
+  for (int c = 0; c < nCols && !analytic; c++) {
     const int f = pmap.PackedToFull(c);
     const ParamKind kind = pmap.Desc(f).kind;
     if (kind == ParamKind::ThmCoherent) {

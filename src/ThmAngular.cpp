@@ -61,6 +61,22 @@ void ThmLegendreCoefficients(const std::vector<ThmPartialWave> &waves, const std
   for (const Term &t : table.terms) b[t.L] += t.c * std::real(x[t.i] * std::conj(x[t.j]));
 }
 
+void ThmLegendreAdjoint(const std::vector<ThmPartialWave> &waves, const std::vector<complex> &x,
+                        const std::vector<double> &w, std::vector<complex> &xBar) {
+  thread_local Table table;
+  if (!table.built || !(table.key == waves)) Build(waves, table);
+  xBar.assign(x.size(), complex(0.0, 0.0));
+  // d Re(x_i x_j^*) / d Re x_i + i d/d Im x_i = x_j, and symmetrically for x_j
+  // (i == j gives 2 x_i, as |x_i|^2 requires).
+  for (const Term &t : table.terms) {
+    if (t.L >= (int)w.size()) continue;
+    const double c = w[t.L] * t.c;
+    if (c == 0.0) continue;
+    xBar[t.i] += c * x[t.j];
+    xBar[t.j] += c * x[t.i];
+  }
+}
+
 double ThmAngleWindow::Mean(const std::vector<double> &b) const {
   double sum = 0.0;
   const int n = std::min((int)b.size(), (int)meanP.size());

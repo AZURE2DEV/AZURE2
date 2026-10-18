@@ -97,6 +97,19 @@ class AMatrixFunc : public GenMatrixFunc {
   bool PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
                     const vector_matrix_r *shiftDeriv = nullptr,
                     int xsComponent = 0);
+  /*!
+   * The level-matrix part of the adjoint, shared by PointAdjoint and the THM
+   * (HOES) adjoint: given the cotangent `aBar` of the level matrix A of J
+   * group `jNum` (active-level indexing, as GetAMatrix), accumulates its
+   * contribution to dE and dgamma -- the inverse lemma Mbar = -A^H Abar A^H
+   * and the structural dependence of M = A^{-1} (Brune terms through
+   * `shiftDeriv`, Park terms through the stored shift values).  `levelOf`
+   * maps active level r (1-based) to its level number; null means every level
+   * is in the R matrix.  `inEnergy` is the compound-system energy of the point.
+   */
+  void LevelMatrixAdjoint(EPoint *point, int jNum, const matrix_c &aBar, double inEnergy,
+                          const vector_matrix_r *shiftDeriv, GradAccum &accum,
+                          const std::vector<int> *levelOf = nullptr);
   /// Store an \f$A^{-1}\f$ element.
   void AddAInvMatrixElement(int, int, int, complex);
 

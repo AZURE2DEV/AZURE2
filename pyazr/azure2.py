@@ -1610,8 +1610,7 @@ class azure2:
             shifts are finite-differenced.  THM (HOES) points are outside the
             adjoint: their contribution, with the norm profiled, is
             ``2 J^T r`` over the THM rows of :meth:`residual_jacobian` (model
-            Jacobian by central differences, two THM forward passes per free
-            R-matrix parameter, like the CLI's own THM gradient).  (For a Gaussian log-likelihood use
+            Jacobian from the HOES adjoint, as the CLI's own THM gradient).  (For a Gaussian log-likelihood use
             ``lnL = -0.5*(chi2 + const)`` and ``grad_lnL = -0.5*grad``.)
         """
         resp = np.asarray(
@@ -1644,10 +1643,12 @@ class azure2:
         least-squares driver accepts silently by never moving those
         parameters.)
 
-        THM (HOES) segments: the adjoint does not cover the HOES observable,
-        so the model Jacobian ``J_m`` of a THM point is taken by central
-        differences (step ``1e-6 (|x| + 1)``) in every free level energy and
-        reduced width -- two THM forward passes per column.  With a free norm
+        THM (HOES) segments: the model Jacobian ``J_m`` of a THM point comes
+        from the reverse-mode adjoint of the HOES observable (level energies,
+        reduced widths, THM coherent backgrounds; one sweep per point).  Set
+        ``AZURE2_THM_FD=1`` in the environment for the former central
+        differences (step ``1e-6 (|x| + 1)``, two THM forward passes per
+        column), e.g. to check one against the other.  With a free norm
         the scale is profiled: ``r_i = (s m_i - d_i)/e_i`` with
         ``s = 1/n* = S_md/S_mm`` a function of the parameters, and its
         dependence is added analytically,
@@ -1688,8 +1689,8 @@ class azure2:
         passes a finite-difference estimate would take.  See
         :func:`pyazr.bands.uncertainty_bands`.
 
-        THM (HOES) points are outside the adjoint; their rows are central
-        differences of the HOES model (see :meth:`residual_jacobian`).
+        THM (HOES) points have their own adjoint (see
+        :meth:`residual_jacobian`).
 
         Raises ``RuntimeError`` if the model contains a segment outside the
         supported analytic path.
