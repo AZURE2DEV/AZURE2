@@ -994,6 +994,9 @@ void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect *targetEffect) 
     double e1 = this->GetLabEnergy();
     double qValue = entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
     double gamma = m1 * m3 / m2 / m4 * e1 / (e1 + qValue);
+    // UPOS: the detected radiation is the secondary gamma ray, not the exit particle, so the exit particle's
+    // lab -> c.m. transformation of the attenuation coefficients does not apply; Q is used as given.
+    if (this->IsUPOS()) gamma = 0.0;
     int numQ = targetEffect->NumQCoefficients();
     std::vector<std::vector<double>> U(numQ, std::vector<double>(numQ, 0.0));
     // double U[numQ][numQ]={0.0};
