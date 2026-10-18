@@ -80,6 +80,7 @@ _OBSERVABLE = {
     5: "angle-integrated-E1",
     6: "angle-integrated-E2",
     7: "analyzing-power",
+    9: "spin",                      # general spin observable, named by a token (spin.py)
 }
 
 # isDiff codes for <segmentsTest> -- ESegment::ESegment(ExtrapLine).
@@ -91,6 +92,7 @@ _EXTRAP_OBSERVABLE = {
     4: "total-capture",
     5: "differential-cm",
     7: "analyzing-power",
+    9: "spin",
 }
 
 
@@ -211,6 +213,7 @@ class Segment:
     shift_fn_params: tuple = ()
     operation: Optional[str] = None    # 'sum' | 'ratio' for a composite segment
     components: tuple = ()             # (entrance, exit, angle, scaling) each
+    spin: Optional[str] = None         # isDiff 9: the spin-observable token (pyazr.spin)
 
 
     @property
@@ -297,8 +300,11 @@ class SegmentSet(list):
                                   float(t[5]), float(t[6]))
         isDiff = int(float(t[7]))
         i = 8
+        spin = None
         if isDiff == 2:                 # phase-shift carries J, L
             i += 2
+        elif isDiff == 9:               # spin observable carries its token
+            spin = t[i]; i += 1
         norm = float(t[i]); vary_norm = int(float(t[i + 1])) == 1
         norm_error = float(t[i + 2]); i += 3
         # optional energy-shift triple, then the (non-numeric) data file
@@ -377,7 +383,7 @@ class SegmentSet(list):
             shift_group=(blocks.get("shiftgroup") or [None])[0],
             norm_group=(blocks.get("normgroup") or [None])[0],
             shift_fn=shift_fn, shift_fn_params=tuple(shift_fn_params),
-            operation=operation, components=tuple(components))
+            operation=operation, components=tuple(components), spin=spin)
 
     # -- views ----------------------------------------------------------------
 
@@ -477,6 +483,7 @@ class TestSegment:
     phase_J: Optional[float] = None        # isDiff == 2 only
     phase_L: Optional[int] = None          # isDiff == 2 only
     max_ang_dist_order: Optional[int] = None   # isDiff == 3 only
+    spin: Optional[str] = None             # isDiff == 9 only: the spin-observable token
     natural: bool = False                  # sample grid ("sample 1" / "sample <name>", older "natural ...")
     natural_sample: str = ""               # the sample's name ("" = the unnamed, or only, sample)
 
@@ -552,6 +559,9 @@ class TestSegmentSet(list):
             phase_J = float(t[i]); phase_L = int(float(t[i + 1])); i += 2
         elif isDiff == 3:               # angular distribution carries its order
             max_order = int(float(t[i])); i += 1
+        spin = None
+        if isDiff == 9:                 # spin observable carries its token
+            spin = t[i]; i += 1
         _, blocks = _split_keyword_tail(t[i:])
         natural, natural_sample = _natural_token(blocks)
         return TestSegment(
@@ -561,6 +571,7 @@ class TestSegmentSet(list):
             angle_min=aMin, angle_max=aMax, angle_step=aStep,
             observable=_EXTRAP_OBSERVABLE.get(isDiff, f"code{isDiff}"),
             phase_J=phase_J, phase_L=phase_L, max_ang_dist_order=max_order,
+            spin=spin,
             natural=natural, natural_sample=natural_sample)
 
     # -- views ----------------------------------------------------------------

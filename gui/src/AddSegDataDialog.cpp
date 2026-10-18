@@ -33,9 +33,19 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   dataTypeCombo->addItem(tr("Angle Integrated (E1 only)"));
   dataTypeCombo->addItem(tr("Angle Integrated (E2 only)"));
   dataTypeCombo->addItem(tr("Analyzing Power"));
-  // Codes 0-6 happen to equal their position; the analyzing power is 7.
+  dataTypeCombo->addItem(tr("Spin Observable"));
+  // Codes 0-6 happen to equal their position; the analyzing power is 7, a spin observable 9.
   for (int i = 0; i < dataTypeCombo->count(); i++) dataTypeCombo->setItemData(i, i);
-  dataTypeCombo->setItemData(dataTypeCombo->count() - 1, 7);
+  dataTypeCombo->setItemData(dataTypeCombo->count() - 2, 7);
+  dataTypeCombo->setItemData(dataTypeCombo->count() - 1, 9);
+  spinText = new QLineEdit;
+  spinText->setVisible(false);
+  spinText->setMinimumWidth(110);
+  spinText->setToolTip(tr("Spin observable token (isDiff 9):\n"
+                            "  b:y  beam A_y      t:y  target A_0y      b:y*t:y  spin correlation C_yy\n"
+                            "  b:yy b:xx b:zz b:xz  spin-1 tensor powers      b:iT11 b:T20 b:T21 b:T22  spherical\n"
+                            "  e1:y e2:y  outgoing polarization      b:y>e1:y  polarization transfer\n"
+                            "Madison frame (y along k_in x k_out)."));
   connect(dataTypeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(dataTypeChanged(int)));
   QRegExp spinRX("^\\d{0,2}(\\.[05]{0,1})?$");
   QValidator *spinValidator = new QRegExpValidator(spinRX, this);
@@ -192,6 +202,10 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   phaseLValueLabel->setVisible(false);
   phaseLayout->addWidget(phaseLValueLabel, 0, 3);
   phaseLayout->addWidget(phaseLValueText, 0, 4);
+  spinLabel = new QLabel(tr("Observable:"));
+  spinLabel->setVisible(false);
+  phaseLayout->addWidget(spinLabel, 0, 5);
+  phaseLayout->addWidget(spinText, 0, 6);
   lowerLayout->addLayout(phaseLayout, 0, 2);
 
   lowerLayout->addWidget(new QLabel(tr("Data Norm.:")), 1, 0, Qt::AlignRight);
@@ -339,11 +353,15 @@ void AddSegDataDialog::dataTypeChanged(int index) {
     totalCaptureLabel->setVisible(false);
     exitPairCombo->setVisible(true);
   }
-  if (index == 4 || index == 7) {  // C.M. differential or A_y
+  const bool isSpin = (dataTypeCode() == 9);
+  spinLabel->setVisible(isSpin);
+  spinText->setVisible(isSpin);
+  if (index == 4 || index == 7 || isSpin) {  // C.M. differential, A_y or a spin observable
     lowAngleText->setEnabled(true);
     highAngleText->setEnabled(true);
   }
-  // A_y is a ratio: a normalization factor has no meaning for it.
+  // A_y is a ratio: a normalization factor has no meaning for it.  A spin observable's norm is the
+  // beam/target polarization scale and may vary (design note D8).
   varyNormCheck->setEnabled(index != 7);
   if (index == 7) varyNormCheck->setChecked(false);
 
@@ -460,7 +478,7 @@ void AddSegDataDialog::uposChanged(int state) {
 bool AddSegDataDialog::naturalAllowed() const {
   // The engine's NaturalAllowed: a weighted sum is only meaningful for additive observables.
   int code = dataTypeCode();
-  if (code == 2 || code == 7) return false;
+  if (code == 2 || code == 7 || code == 9) return false;
   if (advancedModeCheck->isChecked() && operationCombo->currentIndex() == 1) return false;  // ratio
   return true;
 }

@@ -74,6 +74,41 @@ static bool NaturalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTes
 }
 
 /*!
+ * An isDiff 9 segment names a spin observable (SpinObservable.h).  Its token must parse, both pairs must be
+ * particle pairs (capture spin observables other than A_y are not implemented), and every particle the
+ * observable addresses must have the spin the operator needs.
+ */
+static bool SpinAllowed(CNuc *theCNuc, const ESegment &segment, int key, bool isTest, const Config &configure) {
+  if (!segment.IsSpinSegment()) return true;
+  const char *what = isTest ? "Test segment" : "Data segment";
+  if (!segment.GetSpinParseError().empty()) {
+    configure.outStream << "ERROR: " << what << " #" << key << ": " << segment.GetSpinParseError() << "." << std::endl;
+    return false;
+  }
+  if (!theCNuc->IsPairKey(segment.GetEntranceKey()) || !theCNuc->IsPairKey(segment.GetExitKey())) {
+    configure.outStream << "ERROR: " << what << " #" << key << ": a spin observable needs one entrance and one exit pair."
+                        << std::endl;
+    return false;
+  }
+  PPair *in = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()));
+  PPair *out = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetExitKey()));
+  if (in->GetPType() != 0 || out->GetPType() != 0) {
+    configure.outStream << "ERROR: " << what << " #" << key << ": spin observable \"" << segment.GetSpinToken()
+                        << "\" needs particle pairs on both sides (for capture only A_y, isDiff 7, is implemented)."
+                        << std::endl;
+    return false;
+  }
+  std::string error;
+  if (!segment.GetSpinObservable()->Check(in->GetJ(1), in->GetJ(2), out->GetJ(1), out->GetJ(2),
+                                          in == out, error)) {
+    configure.outStream << "ERROR: " << what << " #" << key << ": spin observable \"" << segment.GetSpinToken()
+                        << "\": " << error << "." << std::endl;
+    return false;
+  }
+  return true;
+}
+
+/*!
  * The decomposition of a sample segment, one file per segment since
  * AZUREOut files are named by pair keys only: the energy, the total the fit
  * compares with the data, and the abundance-weighted term of every compound
@@ -183,6 +218,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
           PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
           entrancePair->SetEntrance();
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!SpinAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
             // total capture: every capture pair of the ENTRANCE pair's compound nucleus
@@ -387,6 +423,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
           PPair *segEntrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
+          if (!SpinAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
             // total capture: every capture pair of the ENTRANCE pair's compound nucleus
@@ -2651,6 +2688,7 @@ bool SharesCalculation(EPoint &a, EPoint &b) {
       a.GetTargetBlendWeight() != b.GetTargetBlendWeight())
     return false;
   if (a.IsAnalyzingPower() != b.IsAnalyzingPower()) return false;
+  if (a.GetSpinObservable() != b.GetSpinObservable()) return false;
   if (a.NumSubPoints() != b.NumSubPoints()) return false;
   std::vector<EPoint> &sa = a.GetSubPoints();
   std::vector<EPoint> &sb = b.GetSubPoints();

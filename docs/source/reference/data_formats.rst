@@ -61,6 +61,73 @@ Phase shift data follows the same four-column format, but the third column
 contains the phase shift value (in degrees) and the fourth column contains its
 uncertainty. The convention is :math:`-90° < \theta_\text{lab} < 90°`.
 
+Spin Observable Data (isDiff 9)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Analyzing powers of a polarized beam or target, beam-target spin correlations,
+spin-1 tensor analyzing powers, outgoing-particle polarizations and polarization
+transfer coefficients use the same four columns as an analyzing power
+(``E_lab  theta_cm  value  error``; the angle is **centre-of-mass**). The segment
+line names the observable with one token after ``isDiff`` 9, in both
+``<segmentsData>`` and ``<segmentsTest>``::
+
+   1 1 1  2.0 6.0  0 180  9 t:y  1 1 2.0  0 0 0  data/A0y.dat
+   1 1 1  2.0 6.0 0.5  30 150 10  9 b:y*t:y  0
+
+Grammar: ``token := side ['>' side]``, ``side := term {'*' term}``,
+``term := who ':' op``.
+
+.. list-table::
+   :widths: 25 75
+   :header-rows: 1
+
+   * - Part
+     - Meaning
+   * - ``b``, ``t``
+     - beam (light particle of the entrance pair), target (heavy particle)
+   * - ``e1``, ``e2``
+     - light and heavy particle of the exit pair (outgoing polarization, transfer)
+   * - ``x``, ``y``, ``z``
+     - vector operator :math:`S_i/j` (Pauli matrices for spin 1/2, Ohlsen's
+       :math:`S_i` for spin 1); ``b:y`` is :math:`A_y` (the same as isDiff 7)
+   * - ``xx`` ``yy`` ``zz`` ``xy`` ``xz`` ``yz``
+     - Cartesian tensor :math:`\tfrac32(S_iS_j+S_jS_i)-2\delta_{ij}`, spin 1 only
+       (:math:`A_{yy}`, :math:`A_{zz}`, ... of a deuteron beam)
+   * - ``Tkq``, ``iTkq``
+     - spherical tensor :math:`\tau_{kq}` (Madison normalization,
+       :math:`\langle j m'|\tau_{kq}|j m\rangle=\sqrt{2k+1}\,\langle j m\,k q|j m'\rangle`);
+       ``iT11`` multiplies by *i*. Any spin with :math:`k\le 2j`.
+   * - ``*``
+     - product of operators on different particles (``b:y*t:y`` is the spin
+       correlation :math:`C_{yy}`)
+   * - ``>``
+     - polarization transfer from the entrance operator (left) to the exit
+       operator (right), e.g. ``b:y>e1:y`` is :math:`K_y^{y'}`
+
+The value is :math:`\mathrm{Re}(c\,\mathrm{Tr}(F A F^\dagger B))/\mathrm{Tr}(F F^\dagger)`,
+with :math:`F` the scattering amplitude in the product basis of the particles'
+spin projections, :math:`A` the entrance and :math:`B` the exit operator, and
+:math:`c=i` for an ``iTkq`` term. The frame is Madison's: *z* along
+:math:`\mathbf k_\text{in}`, *y* along :math:`\mathbf k_\text{in}\times\mathbf k_\text{out}`;
+exit operators use the same *y* (only normal components, *y*, are meaningful
+for outgoing particles in this version). For a spin-1 beam
+:math:`iT_{11}=\tfrac{\sqrt3}{2}A_y`, :math:`T_{20}=A_{zz}/\sqrt2`,
+:math:`T_{21}=-A_{xz}/\sqrt3`, :math:`T_{22}=(A_{xx}-A_{yy})/(2\sqrt3)`.
+
+.. warning::
+
+   Literature names are ambiguous: :math:`A_{yy}` is the spin correlation of
+   two spin-1/2 particles in the p+\ :sup:`3`\ He literature but the tensor
+   analyzing power of a deuteron beam. Files therefore carry only the explicit
+   token (``b:y*t:y`` or ``b:yy``); pyazr accepts literature names and resolves
+   them from the pair's spins (``pyazr.spin.resolve``).
+
+Both pairs must be particle pairs (for capture only the beam :math:`A_y`,
+isDiff 7, is implemented), and every addressed particle must carry the spin its
+operator needs; otherwise AZURE2 stops at start-up with a message naming the
+segment. The segment normalization multiplies the model observable (a
+polarization scale), with the quoted polarization uncertainty as its prior.
+
 Temperature Files
 ^^^^^^^^^^^^^^^^^
 

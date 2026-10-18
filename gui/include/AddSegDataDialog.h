@@ -49,6 +49,8 @@ class AddSegDataDialog : public QDialog {
   QLabel *dataNormErrorLabel;
   QCheckBox *varyNormCheck;
   QLineEdit *phaseJValueText;
+  QLineEdit *spinText;  //!< isDiff 9 observable token
+  QLabel *spinLabel;
   QLineEdit *phaseLValueText;
   QLabel *phaseLValueLabel;
   QLabel *phaseJValueLabel;

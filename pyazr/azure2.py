@@ -1644,10 +1644,22 @@ class azure2:
         Segments that are not analyzing-power segments return their cross
         section as usual, so check what you asked for.
 
-        Defined for a spin-1/2 projectile on a spin-0 target, in the Madison
+        Defined for a spin-1/2 projectile on a target of any spin, in the Madison
         convention with y along k_in x k_out. Bounded by one in magnitude, zero
         in the pure-Coulomb limit, and zero at 0 and 180 degrees.
+
+        Spin-observable segments (``observable="spin"``, isDiff 9: target
+        analyzing powers, spin correlations, tensor analyzing powers, outgoing
+        polarizations, transfer coefficients; see :mod:`pyazr.spin`) come back
+        the same way; :meth:`calculate_spin_observable` is the same call under
+        that name.
         """
+        return self.calculate(params)
+
+    def calculate_spin_observable(self, params):
+        """Spin observables per segment (isDiff 9 and isDiff 7 segments), in the
+        cross-section slot; other segments return their cross sections.  Alias of
+        :meth:`calculate`; see :meth:`calculate_analyzing_power`."""
         return self.calculate(params)
 
     def calculate_analyzing_power_rwa(self, params):
