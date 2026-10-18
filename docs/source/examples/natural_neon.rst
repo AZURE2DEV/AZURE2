@@ -423,6 +423,12 @@ the fitted parameters. In the GUI, open ``natural_neon.azr``, choose
 ``natural_neon_fit.sav``. The run takes about 10 minutes on four threads,
 most of it for the folded Junghans segment.
 
+The fitted model is the pair of files. ``natural_neon.azr`` holds the fitted
+level parameters, but its segment lines keep the nominal normalizations and
+a zero energy shift; the fitted normalizations and the Hinterberger shift
+are only in ``natural_neon_fit.sav``. A calculation without the parameter
+file is therefore not the fit.
+
 ``output/chiSquared.out`` then gives, per segment:
 
 .. list-table::
@@ -480,14 +486,19 @@ penalty adds 26, 16 of it from key 7.
 
 The fit itself, which evaluated the model through :doc:`../user_guide/pyazr`,
 recorded 25,748. The segments without resolution agree with it to within
-0.04, the rounding of the eight-digit ``.sav`` file. Four folded segments
+0.04 (the parameters read back from the ``.sav``). Four folded segments
 differ: key 1 by −2.9 (10,919 in the fit), key 3 by +0.3, key 9 by +3.9
 (979) and key 11 by +0.8. For keys 1 and 9 the difference sits at a few
-points beside narrow resonances near 0.75 and 2.23 MeV, where the
-integration grid falls differently. The command-line program of the build
-that ran the fit gives the same numbers as the current one, so the difference
-is between the fit's own evaluation and a fresh calculation, not between
-versions.
+points beside narrow resonances near 0.75 and 2.23 MeV. The adaptive
+sub-point grid of a ``<targetInt>`` line is placed around the levels once,
+when the project is read, and is not moved when a fit moves the levels. The
+fit started from the stage-4 energies and kept that grid for its whole run;
+a calculation from ``natural_neon.azr`` places the grid at the fitted
+energies. Evaluated on the same parameters, a pyazr session opened on the
+starting project gives the fit's 25,774 and one opened on the fitted
+project gives this page's 25,776, so the difference is the grid placement,
+not the code version. To evaluate a fit against a grid at its own energies,
+restart from the saved project and polish.
 
 .. figure:: natural_neon_fit.png
    :alt: The eleven neon total cross-section data sets with the fitted
