@@ -3,6 +3,7 @@
 #include <sstream>
 #include <algorithm>
 #include <set>
+#include <map>
 #include <tuple>
 #include "AngCoeff.h"
 #include "CNuc.h"
@@ -153,6 +154,7 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
   transformedIn_ = false;
   int PairNum, LevelNum, ChannelNum, JGroupNum;
   int maxLValue = 0;
+  std::map<std::pair<int, int>, std::vector<int> > channelsListed;  // (group, level) -> group channel numbers, in line order
   std::ifstream in(configure.configfile.c_str());
   if (!in) return -1;
   std::string line = "";
@@ -234,7 +236,10 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
           this->GetJGroup(JGroupNum)->AddLevel(NewLevel);
           LevelNum = this->GetJGroup(JGroupNum)->IsLevel(NewLevel);
         }
-        this->GetJGroup(JGroupNum)->GetLevel(LevelNum)->AddGamma(Line);
+        // The width belongs to the GROUP's channel number: levels of one J-group may list their channel
+        // lines in a different order, or not list a channel another level of the group carries.
+        this->GetJGroup(JGroupNum)->GetLevel(LevelNum)->SetGammaFromLine(ChannelNum, Line);
+        channelsListed[std::make_pair(JGroupNum, LevelNum)].push_back(ChannelNum);
       }
     }
   }
@@ -242,6 +247,39 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
   if (line != "</levels>") return -1;
 
   in.close();
+
+  // Every level of a J-group needs one width per group channel.  Until 2026-10-17 widths were appended in the
+  // order of each level's own lines, so a level listing fewer channels than its group left a short width vector
+  // (TransformIn wrote past its end: heap corruption, "free(): invalid next size" at exit), and a level listing
+  // the same channels in another order had its widths attached to the wrong channels without a message
+  // (reported by the A = 4 isospin session).  Widths now go to their group channel number; a channel a level
+  // does not list gets a zero, fixed width, with a warning, and a different line order is reported.
+  for (const auto &entry : channelsListed) {
+    JGroup *group = this->GetJGroup(entry.first.first);
+    ALevel *level = group->GetLevel(entry.first.second);
+    const std::vector<int> &listed = entry.second;
+    std::ostringstream what;
+    what << "level J = " << group->GetJ() << (group->GetPi() == -1 ? "-" : "+") << ", E = " << level->GetE() << " MeV";
+    std::set<int> seen;
+    bool reordered = false;
+    for (size_t k = 0; k < listed.size(); k++) {
+      if (!seen.insert(listed[k]).second)
+        configure.outStream << "WARNING: " << what.str() << " lists channel " << listed[k]
+                            << " of its J-group twice; the later line's width is used." << std::endl;
+      if (k > 0 && listed[k] < listed[k - 1]) reordered = true;
+    }
+    if (reordered)
+      configure.outStream << "WARNING: " << what.str() << " lists its channels in a different order from its "
+                          << "J-group; each width is matched to its channel (pair, l, s)." << std::endl;
+    for (int ch = 1; ch <= group->NumChannels(); ch++) {
+      if (seen.count(ch)) continue;
+      AChannel *c = group->GetChannel(ch);
+      configure.outStream << "WARNING: " << what.str() << " has no line for channel " << ch << " of its J-group (pair "
+                          << this->GetPair(c->GetPairNum())->GetPairKey() << ", l = " << c->GetL() << ", s = " << c->GetS()
+                          << "); a zero, fixed width is used." << std::endl;
+    }
+    level->PadChannels(group->NumChannels());
+  }
 
   if (radii.first != 0) {
     this->GetPair(radii.first)->SetChRad(radii.second);

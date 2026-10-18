@@ -217,6 +217,26 @@ void ALevel::AddGamma(NucLine nucLine) {
   shift_derivs2_.push_back(0.0);
 }
 
+void ALevel::PadChannels(int n) {
+  while ((int)gammas_.size() < n) {
+    gammas_.push_back(0.0);
+    fitgammas_.push_back(0.0);
+    transform_gammas_.push_back(0.0);
+    big_gammas_.push_back(0.0);
+    external_gammas_.push_back(complex(0.0, 0.0));
+    channelfixed_.push_back(true);
+    shifts_.push_back(0.0);
+    shift_derivs_.push_back(0.0);
+    shift_derivs2_.push_back(0.0);
+  }
+}
+
+void ALevel::SetGammaFromLine(int channelNum, NucLine nucLine) {
+  this->PadChannels(channelNum);
+  gammas_[channelNum - 1] = nucLine.gamma();
+  channelfixed_[channelNum - 1] = (nucLine.channelFix() == 1);
+}
+
 /*!
  * This function adds a position in the width vectors corresponding to a new channel.
  * The initial reduced width amplitude is set directly.

@@ -1214,7 +1214,10 @@ class AzrModel:
 
         ``strict`` (the default) raises if any free parameter finds no home,
         rather than skipping it: a partial write produces a file that loads
-        cleanly and is a mixture of two fits.
+        cleanly and is a mixture of two fits.  The one exception is a fixed zero width
+        on a channel the level has no line for: the engine supplies that width
+        itself (a level of a J-group gets a zero, fixed width for every group
+        channel it does not list), so there is nothing to write.
 
         With ``include_fixed`` the vector is indexed by *parameter position*
         (``len(parameters)`` entries, fixed ones included) and must be physical
@@ -1278,6 +1281,8 @@ class AzrModel:
                     written += 1
                     break
             else:
+                if p.fixed and v == 0.0:
+                    continue        # a channel this level does not list: the engine's zero, fixed width
                 unplaced.append(
                     f"{p.name} (no channel pair={want_pair} L={p.L} S={p.S} "
                     f"in {lv.jpi} at {lv.energy} MeV)")
