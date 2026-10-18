@@ -54,11 +54,12 @@ Everything is in ``examples/natural_neon/`` of the AZURE2 repository:
      - Contents
    * - ``natural_neon.azr``
      - The project: 7 pairs, 88 levels in three nuclei, the natural
-       abundances, 11 data segments, 1 test segment, 4 resolution lines.
+       abundances, 11 data segments, 1 test segment, 5 resolution lines.
        The levels are at their fitted values; the normalizations are at
        their nominal value 1.
    * - ``natural_neon_fit.sav``
-     - The full fitted parameter set, including the fitted normalizations.
+     - The full fitted parameter set, including the fitted normalizations
+       and the fitted energy shift of the Hinterberger data.
    * - ``data/*.dat``
      - The 11 data sets (laboratory energy in MeV, total cross section in b,
        uncertainty in b).
@@ -100,28 +101,28 @@ The data
      - 1.58 -- 2.33
      - 1,055
      - 5 %
-     - none
+     - KfK time of flight
    * - 4, 5
      - Almeida and Käppeler, ApJ **265**, 417 (1983), low and high runs
        (EXFOR 21808)
      - natural
      - 0.03 -- 0.354, 0.133 -- 0.801
      - 376, 345
-     - 0.5 %
+     - 5 %
      - none
    * - 6, 7
      - Almeida and Käppeler (1983)
      - :sup:`21`\ Ne (95.4 %)
      - 0.03 -- 0.259, 0.133 -- 0.252
      - 255, 113
-     - 0.5 %
+     - 5 %
      - σ = 1, 2 keV
    * - 8, 9
      - Almeida and Käppeler (1983)
      - :sup:`22`\ Ne (99.8 %)
      - 0.03 -- 0.354, 0.133 -- 0.801
      - 259, 345
-     - 0.5 %
+     - 5 %
      - σ = 1, 2 keV
    * - 10
      - Sikkema (1958) (EXFOR 20203)
@@ -158,8 +159,10 @@ That is 6,328 points in all. Notes on the data:
   for 18 of the 164 points only.
 - **Resolutions.** Almeida and Käppeler give no resolution. The σ of 1 and
   2 keV stands for an assumed 1 % FWHM. Sikkema's 25 keV FWHM is
-  σ = 10.6 keV. The Vaughn and Hinterberger data are fitted without a
-  resolution function.
+  σ = 10.6 keV. The Hinterberger resolution is that of the KfK
+  time-of-flight spectrometer (EXFOR 21921001): a 190 m flight path and
+  :math:`\Delta E/E` = 1/4000 at 2 MeV, so 0.5 keV FWHM there. The Vaughn
+  data are fitted without a resolution function.
 
 Step 1: Particle pairs for three compound nuclei
 ------------------------------------------------
@@ -257,8 +260,10 @@ time, and a level's channels are built only from its own nucleus's pairs.
 
 :sup:`23`\ Ne (n+\ :sup:`22`\ Ne), 13 levels
    Heil *et al.* (2014), from the same Almeida and Käppeler data, below
-   0.8 MeV, and six levels at :math:`E_x` = 7.1--7.7 MeV that Sikkema's
-   data show. All are fitted.
+   0.8 MeV, which are fitted, and six levels at :math:`E_x` = 7.1--7.6 MeV
+   (neutron energies above 1.85 MeV) that Sikkema's data show. These six
+   are fixed at the values of a fit to the enriched :sup:`22`\ Ne data
+   alone (Step 8).
 
 :sup:`22`\ Ne (n+\ :sup:`21`\ Ne), 40 levels
    The ENDF/B-VIII.0 (TENDL-2015) multilevel Breit--Wigner resonances,
@@ -317,24 +322,39 @@ nucleus's pairs, without the sample keyword. It is that isotope's own total:
 
 .. code-block:: text
 
-   1 4 4 0.03 0.354 0 180 0 1 1 0.5 0 0 0 data/Almeida1983_22Ne_ntot_lo.dat 1 0 1 4 5 -999 0
+   1 4 4 0.03 0.354 0 180 0 1 1 5 0 0 0 data/Almeida1983_22Ne_ntot_lo.dat 1 0 1 4 5 -999 0
    1 2 2 1.85 2.5 0 180 0 1 1 15.0 0 0 0 data/Sikkema1958_20Ne_ntot.dat 1 0 2 2 1 -999 2 3 -999 0
 
 In the GUI, both kinds are made in the data segment dialog: the composite
 operation **Sum** with its components, and the **Sample** drop-down. The row
 of a sample segment shows its reaction prefixed with *[default sample]*.
 
-Normalization priors follow the experiments' quoted systematic uncertainties:
-0.5 % for Almeida and Käppeler, 15 % for Sikkema, and an assumed 5 % for
-Vaughn and Hinterberger. The Junghans normalization is fixed at 1, so the
-Junghans data set the absolute scale. The Hinterberger line also frees an
-energy shift with no penalty, but the fit reported here held it at zero
-(see Step 8).
+The normalization priors are 15 % for Sikkema, as quoted, and 5 % for the
+others. Almeida and Käppeler quote 0.5 %, but their natural and isotopic
+samples disagree with the Junghans data by more than that (see Step 8 and
+the last section). Vaughn and Hinterberger quote none, so 5 % is assumed. The
+Junghans normalization is fixed at 1, so the Junghans data set the absolute
+scale.
+
+The Hinterberger line also frees an energy shift with no penalty: the fields
+after the normalization error are the shift 0, its uncertainty 0 (no
+prior) and the vary flag 1:
+
+.. code-block:: text
+
+   1 2 2 0 2.33 0 180 0 1 1 5 0 0 1 data/Hinterberger_20Ne_ntot.dat 1 0 2 2 1 -999 2 3 -999 0
+
+AZURE2 calculates each point at :math:`E + \Delta E`. The fit gives
+:math:`\Delta E = -1.36` keV, so Hinterberger's energy scale reads
+1.36 keV high against the Junghans scale. The value is in
+``natural_neon_fit.sav`` as ``segment_3_energy_shift``. Like a
+normalization, a parameter file sets a shift's value but not whether it is
+fitted; the segment line decides that.
 
 Step 5: Resolution
 ------------------
 
-Four ``<targetInt>`` lines fold the calculation with the experimental
+Five ``<targetInt>`` lines fold the calculation with the experimental
 resolution:
 
 .. code-block:: text
@@ -343,6 +363,7 @@ resolution:
    1 "10,11" 30 1 0.0106 0 0 "" 0 0 0
    1 "6,8" 15 1 0.0010 0 0 "" 0 0 0
    1 "7,9" 15 1 0.0020 0 0 "" 0 0 0
+   1 "3" 20 0 0 0 0 "" 0 0 0 1 "sqrt(a0*x^3)" 1 5.5e-09 0 0.04 20 50 sigmalab
 
 The first is the nELBE time-of-flight resolution, a Gaussian whose
 laboratory width depends on energy:
@@ -360,8 +381,20 @@ timing width :math:`\sigma_t = 0.295` ns combines the 0.61 ns FWHM
 bremsstrahlung peak seen with the neon sample and the 0.49 ns time bin. The
 FWHM is 0.19 keV at 0.1 MeV, 2.8 keV at 1 MeV and 9.4 keV at 2.5 MeV. The
 ``sigmalab`` keyword marks the expression as laboratory energy in,
-laboratory width out. The other three lines are constant widths in MeV
+laboratory width out. The middle three lines are constant widths in MeV
 (laboratory frame).
+
+The last line is the KfK resolution of the Hinterberger data, the timing
+term alone: :math:`\sigma_E = \sqrt{a_0 E^3}` with
+:math:`a_0 = 5.5\times10^{-9}` MeV\ :sup:`−1`, which is σ = 0.21 keV at
+2 MeV, more than ten times finer than nELBE. It is small next to the sharp
+Hinterberger resonances, which are 2 to 4 keV wide in the data, their natural
+widths. The Junghans data show the same resonances 6 to 24 keV wide.
+
+A segment's energy shift moves the sub-points of its resolution grid with it
+(:doc:`../user_guide/experimental_effects`). In this model, one evaluation
+with a nonzero Hinterberger shift took about 1.5 times as long as one at zero
+shift.
 
 The natural composites of Almeida and Käppeler (keys 4, 5) are not folded.
 Folding a six-component composite with three nuclei raised one evaluation
@@ -387,7 +420,7 @@ directories:
 The first answer selects **Calculate Segments With Data**, the second reads
 the fitted parameters. In the GUI, open ``natural_neon.azr``, choose
 **Calculate With Data**, and under **Parameters File** pick **Use** with
-``natural_neon_fit.sav``. The run takes about 9 minutes on four threads,
+``natural_neon_fit.sav``. The run takes about 10 minutes on four threads,
 most of it for the folded Junghans segment.
 
 ``output/chiSquared.out`` then gives, per segment:
@@ -404,48 +437,57 @@ most of it for the folded Junghans segment.
    * - 1
      - Junghans, natural
      - 3,434
-     - 11,295
+     - 10,916
      - 1 (fixed)
    * - 2
      - Vaughn, natural
      - 76
-     - 842
+     - 845
      - 1.043
    * - 3
      - Hinterberger, :sup:`20`\ Ne
      - 1,055
-     - 10,621
-     - 0.976
+     - 10,506
+     - 0.963
    * - 4, 5
      - Almeida, natural, low / high
      - 376 / 345
-     - 549 / 693
-     - 1.005 / 0.939
+     - 560 / 568
+     - 1.025 / 0.889
    * - 6, 7
      - Almeida, :sup:`21`\ Ne, low / high
      - 255 / 113
-     - 443 / 401
-     - 0.998 / 0.998
+     - 433 / 367
+     - 0.915 / 0.800
    * - 8, 9
      - Almeida, :sup:`22`\ Ne, low / high
      - 259 / 345
-     - 268 / 1,081
-     - 0.986 / 0.996
+     - 295 / 983
+     - 1.009 / 1.027
    * - 10
      - Sikkema, :sup:`22`\ Ne
      - 35
-     - 137
-     - 0.949
+     - 28
+     - 1.082
    * - 11
      - Sikkema, :sup:`20`\ Ne
      - 35
-     - 254
-     - 1.025
+     - 248
+     - 1.014
 
-The data χ² is 26,584 for 6,328 points (χ²/N = 4.2), and the normalization
-penalty adds 159, 148 of it from key 5. The engine that ran the fit gave
-the same numbers for the unfolded segments. The folded ones differ by
-1.3 in all, from small changes to the convolution since then.
+The data χ² is 25,750 for 6,328 points (χ²/N = 4.07), and the normalization
+penalty adds 26, 16 of it from key 7.
+
+The fit itself, which evaluated the model through :doc:`../user_guide/pyazr`,
+recorded 25,748. The segments without resolution agree with it to within
+0.04, the rounding of the eight-digit ``.sav`` file. Four folded segments
+differ: key 1 by −2.9 (10,919 in the fit), key 3 by +0.3, key 9 by +3.9
+(979) and key 11 by +0.8. For keys 1 and 9 the difference sits at a few
+points beside narrow resonances near 0.75 and 2.23 MeV, where the
+integration grid falls differently. The command-line program of the build
+that ran the fit gives the same numbers as the current one, so the difference
+is between the fit's own evaluation and a fresh calculation, not between
+versions.
 
 .. figure:: natural_neon_fit.png
    :alt: The eleven neon total cross-section data sets with the fitted
@@ -489,21 +531,22 @@ the example is the natural sum on a 0.2 keV laboratory grid from 0.01 to
    abundance-weighted terms, with the Junghans data, which include the
    experimental resolution.
 
-Off resonance, n+\ :sup:`22`\ Ne gives 10 to 12 % of the natural total,
-a little more than its 9.25 % abundance. In the n+\ :sup:`20`\ Ne s-wave
-interference minimum near 0.39 MeV it gives almost all of it, and its
-resonances at neutron energies of 0.27 to 0.80 MeV stand out in the natural
-data.
-The n+\ :sup:`21`\ Ne term is below 1 % everywhere.
+Above 0.45 MeV, n+\ :sup:`22`\ Ne typically gives 12 to 13 % of the natural
+total, more than its 9.25 % abundance; below 0.3 MeV it gives about 5 %. In
+the n+\ :sup:`20`\ Ne s-wave interference minimum near 0.39 MeV it gives about
+half (54 %), and its resonances at neutron energies of 0.27 to 0.80 MeV stand
+out in the natural data. The n+\ :sup:`21`\ Ne term is typically 0.3 % of the
+total. It reaches a few per cent only at its own resonances below 0.43 MeV
+and in the minimum, where it gives 6 %.
 
 Step 8: How the fit was made
 ----------------------------
 
-The fit has 89 free parameters: the energies and widths of the
-:sup:`21`\ Ne and :sup:`23`\ Ne levels and the ten free normalizations. The
-fitting script fixed every energy shift by default, so the Hinterberger
-shift stayed at zero although the segment line frees it. It was built up in stages. Each stage is a
-modelling decision checked against the data, not just more iterations:
+The fit has 79 free parameters: the energies and widths of the
+:sup:`21`\ Ne levels and of the :sup:`23`\ Ne levels below 1.85 MeV, the ten
+free normalizations, and the Hinterberger energy shift. It was built up in
+stages. Each stage is a modelling decision checked against the data, not just
+more iterations:
 
 1. **The Junghans data alone**, starting from the literature levels, all
    fixed: a calculation to see what the literature implies. It was 10 to
@@ -522,35 +565,62 @@ modelling decision checked against the data, not just more iterations:
    two :sup:`23`\ Ne levels to absorb misfit of the :sup:`20`\ Ne term. It
    could do so because at 9.25 % abundance the n+\ :sup:`22`\ Ne term is
    free to borrow structure.
-5. **The joint fit of all eleven data sets**, from χ² = 45,404 to 26,741,
-   with the parameters of stages 3 and 4 as the start.
+5. **A first joint fit of all eleven data sets**, from χ² = 45,404 to
+   26,741, with the parameters of stages 3 and 4 as the start. It raised
+   three questions, which the evaluator answered:
+
+   - The Almeida and Käppeler natural high run wanted a normalization of
+     0.939, 12 σ from its 0.5 % prior. Bin-integrated ratios to the Junghans
+     data, without a model, gave the same kind of factor (1.09 for the high
+     run, 1.07 for the low run). The difference is in the samples, so the
+     Almeida priors were widened to 5 %.
+   - The six :sup:`23`\ Ne levels above 1.85 MeV, seen only by Sikkema's 35
+     points, grew broad: the 1/2\ :sup:`−` at :math:`E_x` = 7.2 MeV from
+     :math:`\Gamma_n` = 38 to 881 keV, a 1/2\ :sup:`+` from 56 to 503 keV.
+     At 9.25 % of the natural sample they had become a smooth background
+     under the natural data. They were fixed at their stage-4 values.
+   - The Hinterberger data got their resolution function.
+
+   The fitting script had also held every energy shift at zero by default,
+   although the Hinterberger line frees its shift. A scan of the shift at
+   ±2 keV showed that it matters: χ² rose by 9,224 at +2 keV and by 4,815
+   at −2 keV.
+6. **The joint fit again**, with those changes and the Hinterberger shift
+   free within ±5 keV, unpenalized. It started at 30,817, because the
+   normalizations were back at 1 and the six levels back at their stage-4
+   values, and ended at 25,774 (data 25,748, normalization penalty 26).
+   Freeing the shift, with the level energies following it, was worth about
+   1,000 of the gain. Fixing the six :sup:`23`\ Ne levels cost nothing: the
+   Junghans χ² above 2 MeV fell from 653 to 613, so no background levels were
+   needed in their place.
 
 The minimizer was a bounded trust-region least-squares fit (SciPy) on the
 residuals and analytic Jacobian of :doc:`../user_guide/pyazr`, with the
 normalization penalties as extra residual rows. Level energies were bounded
 to ±0.3 MeV of the start and widths to the Wigner limit. One evaluation of
-the full model takes about 80 s on four threads, and the joint fit took
-14 h for 150 evaluations. It was flat from about the 30th.
+the full model takes about 85 s on four threads. The first joint fit took
+14 h for 150 evaluations and was flat from about the 30th. The second took
+9.5 h for 176 evaluations and was stopped by hand once each iteration gained
+less than 0.01.
 
 What the fit leaves open
 ------------------------
 
-- The :sup:`23`\ Ne levels above :math:`E_{\mathrm{c.m.}}` = 1.85 MeV are
-  constrained only by Sikkema's 35 points, and in the joint fit they grew
-  broad: the 1/2\ :sup:`−` at :math:`E_x` = 7.25 MeV from
-  :math:`\Gamma_n` = 38 to 881 keV, the 1/2\ :sup:`+` at 7.29 MeV from 56 to
-  503 keV. At 9.25 % of the natural sample they then act as a smooth
-  background under the natural data. This is the same borrowing as in
-  stage 4: in a natural-target fit, the minor nuclei need data of their own.
-- The high-run normalization of Almeida and Käppeler's natural sample went
-  to 0.939, 12 σ from its 0.5 % prior. A model-free comparison with the
-  Junghans data gives the same factor, so it is a real difference between
-  the two samples' scales, not a model effect.
-- The Hinterberger and Junghans data disagree at 1.2--1.6 and
-  2.0--2.5 MeV, and the Junghans χ² rose by 1,356 against the fit to the
-  Junghans data alone.
-- Some :sup:`21`\ Ne levels drop out: the 1/2\ :sup:`+` at 5.97 MeV and two
-  3/2\ :sup:`−` near 9 MeV go to zero width. Their J\ :sup:`π` may be wrong.
+- The :sup:`23`\ Ne levels above 1.85 MeV are fixed, not fitted. The data
+  cannot determine them: Sikkema's 35 points are all that see them alone, and
+  at 9.25 % abundance the n+\ :sup:`22`\ Ne term in the natural data can
+  absorb any misfit of the :sup:`20`\ Ne term. This is the lesson of stages 4
+  and 5: in a natural-target fit, the minor nuclei need data of their own.
+- The Almeida and Käppeler :sup:`21`\ Ne high run goes to a normalization of
+  0.800, 4 σ from its 5 % prior. It is the only prior under strain: its
+  penalty is 16 of the total 26. The natural high run is at 0.889.
+- The Hinterberger data still have χ²/N = 10 (10,506 for 1,055 points),
+  after the shift. The Junghans χ² is 981 above the fit to the Junghans data
+  alone (9,938 in stage 3). Its worst window is 1.2--1.6 MeV, with
+  χ² = 3,048.
+- Two :sup:`21`\ Ne levels go to zero width: the 5/2\ :sup:`+` at
+  :math:`E_x` = 8.93 MeV and the 3/2\ :sup:`−` at 9.13 MeV. Their
+  J\ :sup:`π` may be wrong.
 - Self-shielding in the Junghans and Vaughn transmission samples is not
   included.
 

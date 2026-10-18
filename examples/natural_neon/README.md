@@ -7,8 +7,8 @@ The walkthrough is the documentation page *Worked Example: Neutrons on Natural N
 
 | File | Contents |
 |---|---|
-| `natural_neon.azr` | the project; levels at their fitted values, normalizations at their nominal value 1 |
-| `natural_neon_fit.sav` | the fitted parameters, including the normalizations |
+| `natural_neon.azr` | the project; levels at their fitted values, normalizations at their nominal value 1, energy shifts at 0 |
+| `natural_neon_fit.sav` | the fitted parameters, including the normalizations and the Hinterberger energy shift |
 | `data/` | the data sets (lab MeV, b, b) |
 | `plot_natural_neon.py` | the two figures of the documentation page |
 

@@ -45,6 +45,10 @@ SETS = [(1, "Junghans, natural", b2[0]), (2, "Vaughn, natural", b2[1]),
         (8, "Almeida, $^{22}$Ne, low", b4[0]), (9, "Almeida, $^{22}$Ne, high", b4[1]),
         (10, "Sikkema, $^{22}$Ne", b4[2])]
 
+def minor_label(v, _):
+    return f"{v:g}" if round(v / 10 ** np.floor(np.log10(v))) in (2, 5) else ""
+
+
 fig, axs = plt.subplots(3, 4, figsize=(12, 8.2))
 for ax, (key, name, a) in zip(axs.flat, SETS):
     e, model, y, err = a[:, 0], a[:, 3], a[:, 5], a[:, 6]
@@ -55,8 +59,11 @@ for ax, (key, name, a) in zip(axs.flat, SETS):
     pos = y[y > 0]
     ax.set_ylim(max(np.percentile(pos, 0.5) / 2, 1e-2), max(y.max(), model.max()) * 1.5)
     ax.set_title(f"{key}: {name}\n$\\chi^2$ = {chi2:,.0f} for {len(e)} points", fontsize=8.5)
-    ax.tick_params(labelsize=7)
-    ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+    ax.tick_params(which="both", labelsize=7)
+    lo, hi = ax.get_ylim()
+    # a narrow panel gets minor labels at 2 and 5, or it may have no label at all
+    ax.yaxis.set_minor_formatter(matplotlib.ticker.FuncFormatter(minor_label) if hi / lo < 100
+                                 else matplotlib.ticker.NullFormatter())
 for ax in axs[:, 0]:
     ax.set_ylabel(r"$\sigma_\mathrm{tot}$ (b)", fontsize=8)
 for ax in axs[-1, :]:
