@@ -303,11 +303,11 @@ double CoulFunc::PEShift_dE(int l, double radius, double energy) {
   double result;
   double error;
 
-  // AZURE_SHIFT_DE_RICHARDSON=1: a Richardson-extrapolated central difference with
-  // a step of 1e-3 E, accurate to ~1e-10.  The default below, a 1 eV central
-  // difference of the exact S, carries its rounding noise: up to 3e-5 relative at
-  // a few MeV for alpha+12C (2026-10-19).
-  static const bool richardson = (std::getenv("AZURE_SHIFT_DE_RICHARDSON") != nullptr);
+  // A Richardson-extrapolated central difference with a step of 1e-3 E, accurate
+  // to ~1e-10.  AZURE_SHIFT_DE_1EV=1 restores the route used before 2026-10-19, a
+  // 1 eV central difference of the exact S, which carries its rounding noise: up
+  // to 3e-5 relative at a few MeV for alpha+12C.
+  static const bool richardson = (std::getenv("AZURE_SHIFT_DE_1EV") == nullptr);
   if (richardson && energy > 0.0) {
     const double h = 1e-3 * energy;
     auto cd = [&](double hh) { return (PEShift(l, radius, energy + hh) - PEShift(l, radius, energy - hh)) / (2.0 * hh); };

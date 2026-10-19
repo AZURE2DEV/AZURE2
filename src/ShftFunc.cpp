@@ -41,11 +41,11 @@ double ShftFunc::operator()(int l, double energy) {
     const double rho = sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * params_.bindingEnergy);
     if (rho > 0.0) return NeutralBoundShift(l, rho);
   }
-  // Charged channel: the table's Whittaker branch, at eta_b and rho_b = kappa a;
-  // or, with AZURE_BOUND_SHIFT_U_RATIO=1, the exact S = z W'/W from
-  // U' = -a U(a+1, b+1, z) (CoulombTable::ExactBound).  The default is still the
-  // numerical radial derivative of W below, whose noise makes the 1 eV central
-  // difference dS/dE wrong by 3e-4 - 4e-3 (p+12C, 2026-10-19).
+  // Charged channel: the table's Whittaker branch, at eta_b and rho_b = kappa a,
+  // else the exact S = z W'/W from U' = -a U(a+1, b+1, z) (CoulombTable::ExactBound).
+  // The numerical radial derivative of W below is the fallback, and with
+  // AZURE_BOUND_SHIFT_NUMERICAL=1 the route used before 2026-10-19: its noise makes
+  // the 1 eV central difference dS/dE wrong by 3e-4 - 4e-3 (p+12C).
   if (!neutral_ && params_.bindingEnergy > 0.0 && (table_ || UseURatio())) {
     const double etaB = sqrt(uconv / 2.) * fstruc * zz_ * sqrt(redmass_ / params_.bindingEnergy);
     const double rhoB = sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * params_.bindingEnergy);
@@ -115,7 +115,7 @@ const CoulombTable *ShftFunc::SharedTable(bool neutral) {
 }
 
 bool ShftFunc::UseURatio() {
-  static const bool use = (std::getenv("AZURE_BOUND_SHIFT_U_RATIO") != nullptr);
+  static const bool use = (std::getenv("AZURE_BOUND_SHIFT_NUMERICAL") == nullptr);
   return use;
 }
 

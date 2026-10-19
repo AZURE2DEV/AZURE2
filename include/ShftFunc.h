@@ -84,7 +84,7 @@ class ShftFunc {
   /// The universal Coulomb table for a charged pair when Config::useCoulombTable is set.
   const CoulombTable *table_;
   static const CoulombTable *SharedTable(bool neutral);
-  /// AZURE_BOUND_SHIFT_U_RATIO=1: charged closed channels from the exact U ratio.
+  /// Charged closed channels from the exact U ratio, unless AZURE_BOUND_SHIFT_NUMERICAL=1.
   static bool UseURatio();
 };
 
