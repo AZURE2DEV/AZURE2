@@ -48,6 +48,8 @@ class AZUREParams {
   static const char *BasisName(int);
 
  private:
+  /// The body of both ReadUserParameters overloads; "could not read" goes to out.
+  void ApplyUserParameterFile(const std::string &filename, std::ostream &out);
   ROOT::Minuit2::MnUserParameters params_;
   int basisTag_ = kBasisUnknown;
 };
