@@ -74,14 +74,23 @@ Available Options
    * - ``--coulomb-table[=FILE]``
      - Take :math:`P`, :math:`S` and the hard-sphere phase of charged
        channels, open and closed, from the universal Coulomb table, with the
-       exact routines outside it.  ``FILE`` defaults to
+       exact routines outside it (the default).  ``FILE`` defaults to
        ``$AZURE2_COULOMB_TABLE``, else ``~/.azure2/coulomb_table.bin``; build
        it once with ``azure2-coulomb-table build`` (about 5 min on four
-       threads, 88 MB).  The natural-neon example runs 5.4 times faster.
-       Pairs with a nuclear potential and neutral pairs are not tabulated.
-       Off by default (see :doc:`../developer/coulomb_table`).
+       threads, 88 MB).  Without a table file the run says so once and uses
+       the exact routines.  The natural-neon example runs 5.4 times faster.
+       Pairs with a nuclear potential and neutral pairs are not tabulated
+       (see :doc:`../developer/coulomb_table`).
    * - ``--no-coulomb-table``
-     - Exact Coulomb functions everywhere (the default).
+     - Exact Coulomb functions everywhere.
+   * - ``--no-grid-replacement``
+     - Keep the adaptive sub-point grids of experimental effects
+       (``<targetInt>``) where the input file's levels put them.  By default
+       they are laid out again on every evaluation for the current levels
+       and energy shifts, so a fit integrates each narrow resonance on a grid
+       built for where the resonance is, and the result does not depend on
+       which file the session started from.  Segments with external capture
+       keep their grids either way.
    * - ``--no-transform``
      - Do not perform parameter transformations; input formal R-matrix
        parameters directly (equivalent to the GUI option).

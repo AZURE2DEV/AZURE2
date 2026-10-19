@@ -253,8 +253,9 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
 
   localCompound->FillMnParams(params.GetMinuitParams());
   localData->FillMnParams(params.GetMinuitParams());
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+  // After the compound: the sub-point grids are laid out from its fit values.
+  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
   int newKey = -1;
@@ -903,8 +904,9 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
 
   localCompound->FillMnParams(params.GetMinuitParams());
   localData->FillMnParams(params.GetMinuitParams());
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+  // After the compound: the sub-point grids are laid out from its fit values.
+  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
   // Process segments with components - use new integrated calculation method

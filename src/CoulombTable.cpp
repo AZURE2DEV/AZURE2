@@ -136,10 +136,18 @@ const CoulombTable *CoulombTable::Shared(const std::string &path) {
         tables[file] = std::move(t);
       } else {
         failed.insert(file);
-        std::cerr << "WARNING: Coulomb table not used: " << error
-                  << "; using the exact Coulomb functions. Build one with "
-                     "'azure2-coulomb-table build "
-                  << file << "'." << std::endl;
+        // The table is on by default, so a missing default file is the normal
+        // state of a new installation: say so once, without alarm.  A file that
+        // was named, or exists and cannot be read, is a warning.
+        if (path.empty() && !std::ifstream(file.c_str()).good())
+          std::cerr << "Coulomb table: none at " << file
+                    << "; using the exact Coulomb functions (build one with "
+                       "'azure2-coulomb-table build', about 5 min on 4 threads)." << std::endl;
+        else
+          std::cerr << "WARNING: Coulomb table not used: " << error
+                    << "; using the exact Coulomb functions. Build one with "
+                       "'azure2-coulomb-table build "
+                    << file << "'." << std::endl;
       }
     }
   }

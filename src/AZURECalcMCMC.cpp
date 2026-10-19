@@ -168,8 +168,9 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
 
   localCompound->FillMnParams(params.GetMinuitParams(), &configure());
   localData->FillMnParams(params.GetMinuitParams());
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+  // After the compound: the sub-point grids are laid out from its fit values.
+  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
 
   // Fill Compound Nucleus From Minuit Parameters
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
@@ -812,8 +813,9 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
               AZUREParams params;
               localCompound->FillMnParams(params.GetMinuitParams(), &g_mcmc_for_callbacks->configure());
               localData->FillMnParams(params.GetMinuitParams());
-              localData->FillEnergyShiftsFromParams(fullParams, localData, localCompound, &g_mcmc_for_callbacks->configure());
               localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+              // After the compound: the sub-point grids are laid out from its fit values.
+              localData->FillEnergyShiftsFromParams(fullParams, localData, localCompound, &g_mcmc_for_callbacks->configure());
               rwaFullParams = params.GetMinuitParams().Params();  // RWA params after TransformIn
 
               if (g_mcmc_for_callbacks->configure().paramMask & Config::USE_BRUNE_FORMALISM) {

@@ -109,8 +109,9 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--ignore-externals:" << std::setw(0) << "Ignore external resonant capture amplitude if internal width is zero." << std::endl
             << std::setw(25) << std::left << "\t--use-rmc:" << std::setw(0) << "Use Reich-Moore approximation for capture (neutron capture only)." << std::endl
             << std::setw(25) << std::left << "\t--gsl-coul:" << std::setw(0) << "Use GSL Coulomb functions (faster, but less accurate)." << std::endl
-            << std::setw(25) << std::left << "\t--coulomb-table[=FILE]:" << std::setw(0) << "Charged channels from the universal Coulomb table (default FILE: $AZURE2_COULOMB_TABLE or ~/.azure2/coulomb_table.bin)." << std::endl
-            << std::setw(25) << std::left << "\t--no-coulomb-table:" << std::setw(0) << "Exact Coulomb functions everywhere (the default)." << std::endl
+            << std::setw(25) << std::left << "\t--coulomb-table[=FILE]:" << std::setw(0) << "Charged channels from the universal Coulomb table (the default; FILE: $AZURE2_COULOMB_TABLE or ~/.azure2/coulomb_table.bin)." << std::endl
+            << std::setw(25) << std::left << "\t--no-coulomb-table:" << std::setw(0) << "Exact Coulomb functions everywhere." << std::endl
+            << std::setw(25) << std::left << "\t--no-grid-replacement:" << std::setw(0) << "Keep the adaptive sub-point grids placed from the input file's levels (default: re-place them as levels and shifts move)." << std::endl
 #ifdef USE_NLOPT
             << std::setw(25) << std::left << "\t--use-nlopt:" << std::setw(0) << "Use NLopt minimizer (BOBYQA) instead of Minuit2." << std::endl
 #endif
@@ -185,6 +186,10 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
       configure.coulombTablePath = it->substr(16);
     } else if (*it == "--no-coulomb-table")
       configure.useCoulombTable = false;
+    else if (*it == "--grid-replacement")
+      configure.replaceSubPointGrids = true;
+    else if (*it == "--no-grid-replacement")
+      configure.replaceSubPointGrids = false;
     else if (*it == "--ignore-externals")
       configure.paramMask |= Config::IGNORE_ZERO_WIDTHS;
     else if (*it == "--use-rmc")

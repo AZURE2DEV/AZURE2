@@ -1,8 +1,10 @@
 Universal Coulomb-function tables
 =================================
 
-Status: stages 1 and 2 of 4. The table and its tool exist, and the engine
-reads the table with ``--coulomb-table`` (off by default). Design from the natural-neon work of October 2026
+Status: stages 1 to 3 of 4. The table and its tool exist; the engine reads
+the table by default (``--no-coulomb-table`` turns it off) and lays the
+target-integration grids out again on every evaluation
+(``--no-grid-replacement`` turns that off). Design from the natural-neon work of October 2026
 (``17O+a/10-13-26_natNe_seg1/coulomb_table_spec.md`` in the fit archive).
 
 Why
@@ -224,18 +226,87 @@ Validation, 2026-10-19 (the 100-per-decade table):
     Richardson-extrapolated central difference with a step of
     :math:`10^{-3} E`.
 
-  Both are off by default; making them the default exact route would move
-  results of charged-particle fits with bound or sub-threshold levels by up
-  to ~1e-3 in χ², toward the correct values.
+  Both became the default exact route in stage 3 (below).
+
+Stage 3: default on, and the grid follows the levels
+----------------------------------------------------
+
+Three changes, 2026-10-19:
+
+- **The table is on by default** (``Config::useCoulombTable``; pyazr
+  ``use_coulomb_table=True``). Without a table file the run says once that it
+  uses the exact routines; a file that was named, or exists and cannot be
+  read, is a warning.
+- **The exact route is accurate.** Closed charged channels take :math:`S`
+  from the U ratio (``CoulombTable::ExactBound``) and open channels take
+  :math:`dS/dE` by the Richardson-extrapolated difference, so the exact
+  routines and the table agree at every printed digit.
+  ``AZURE_BOUND_SHIFT_NUMERICAL=1`` and ``AZURE_SHIFT_DE_1EV=1`` restore the
+  earlier routes for comparison.
+- **Sub-point grids are re-placed** (``EData::ReplaceSubPointGrids``, called
+  from ``FillEnergyShiftsFromParams`` on every evaluation;
+  ``Config::replaceSubPointGrids``, CLI ``--no-grid-replacement``, pyazr
+  ``replace_grids``). Each adaptive grid remembers how it was laid out
+  (``EPoint::SubGridSpec``: window, node budget, step, width multiplier). The
+  current fit values are converted to observed energies and widths on a
+  private copy of the compound nucleus (``CNuc::TransformOut``, then
+  ``GetTransformParams``), which is what a saved file would hold, and the same
+  generator lays the grid out again. A point whose grid is unchanged (every
+  node within 1e-12 relative) keeps its sub-points; the others get new ones,
+  energised at once or, in a segment with an energy shift, by the shift step.
+  The resonances are offset by the point's c.m. shift, so the dense part of
+  the grid lands on each resonance after the sub-points move with the data.
+  Segments that need external-capture amplitudes keep their grids, because
+  those integrals are computed once at initialization. The four physical-
+  parameter entry points (pyazr ``UpdateSegments`` and
+  ``CalculateChi2Physical``, the two MCMC likelihoods) now fill the compound
+  nucleus before the shifts, so the grids see the current levels.
+
+The fixed-point check of the spec (natural neon, the objective at a fit's end
+point in a session started from the fit's start file, A, and from its saved
+file, B):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 20 20 20 20
+
+   * - Model
+     - A, re-placed
+     - B, re-placed
+     - A, placed once
+     - B, placed once
+   * - refit1
+     - 25,776.076357
+     - 25,776.076357
+     - 25,773.959055
+     - 25,776.084014
+   * - refit1q
+     - 25,693.609423
+     - 25,693.609423
+     - 25,691.859348
+     - 25,694.137433
+
+With the grid placed once the objective depended on the file the session
+started from by 2.1–2.3; re-placed, the two agree to 1e-14. The objective a
+fit reports is then a function of its parameters alone.
+
+Cost: laying 29,322 grids out again takes 0.2–0.5 s per evaluation on four
+threads when the levels have not moved; rebuilding them costs about as much
+as a cold evaluation of those sub-points with the table (3,664 grids,
+604,562 sub-points: 23 s, once, when a session starts from a file whose levels
+are far from the point evaluated). The natural-neon example, mode 1: 85 s
+re-placed, 82 s placed once, the same χ² to every printed digit. A fit moves
+the levels a little at every step and rebuilds only the grids near the
+resonances that moved.
+
+The analytic gradient treats the grid as fixed for the step it differentiates;
+the change of the quadrature nodes with the parameters is not part of it.
 
 Remaining stages
 ----------------
 
-3. Default on; re-placing the target-integration grid as levels move; the
-   refit1 fixed-point check.
-4. User documentation and the CLI reference.
+4. User documentation (the user guide's experimental-effects page) and the
+   skill.
 
-Decisions still open: where the table file lives and whether a copy ships;
-the density (the table above) and :math:`l_{max}`; re-placing the grid every
-evaluation or only when an energy moved; whether ``save_fit`` should write
-fitted norms and shifts into the segment lines in the same change.
+Decisions still open: whether a copy of the table ships; whether ``save_fit``
+should write fitted norms and shifts into the segment lines.

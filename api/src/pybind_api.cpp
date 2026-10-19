@@ -104,7 +104,8 @@ struct RuntimeOptions {
   bool use_gsl_coul = false;        // USE_GSL_COULOMB_FUNC
   bool use_rmc = false;             // USE_RMC_FORMALISM
   bool use_park = false;            // USE_PARK_FORMALISM (implies Brune)
-  bool use_coulomb_table = false;   // Config::useCoulombTable
+  bool use_coulomb_table = true;    // Config::useCoulombTable
+  bool replace_grids = true;        // Config::replaceSubPointGrids
   std::string coulomb_table;        // Config::coulombTablePath ("" = the default file)
 };
 
@@ -139,6 +140,7 @@ void apply_options(Config &config, const RuntimeOptions &opt) {
     config.paramMask &= ~Config::USE_RMC_FORMALISM;
   config.useCoulombTable = opt.use_coulomb_table;
   config.coulombTablePath = opt.coulomb_table;
+  config.replaceSubPointGrids = opt.replace_grids;
   // Park shares Brune's per-level shift functions, so it switches Brune on.
   if (opt.use_park)
     config.paramMask |= (Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
@@ -548,6 +550,7 @@ PYBIND11_MODULE(_azure2, m) {
       .def_readwrite("use_gsl_coul", &RuntimeOptions::use_gsl_coul)
       .def_readwrite("use_coulomb_table", &RuntimeOptions::use_coulomb_table)
       .def_readwrite("coulomb_table", &RuntimeOptions::coulomb_table)
+      .def_readwrite("replace_grids", &RuntimeOptions::replace_grids)
       .def_readwrite("use_rmc", &RuntimeOptions::use_rmc)
       .def_readwrite("use_park", &RuntimeOptions::use_park);
 

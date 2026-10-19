@@ -875,17 +875,18 @@ only where the internal width is zero. What a fresh load does rebuild
 differently from a running session is the adaptive target-integration
 sub-point grid (built from the level widths at start-up): on
 `tests/hybrid_potential` the round trip is exact with `<targetInt>` off and
-0.17 % in χ² with it on. The grid is placed once, in `EData::ReadTargetEffectsFile`
-(`AdaptiveIntegrationGrid::GenerateGrid` from the FILE's level energies and widths
-when the project is read), and never re-placed when a fit moves the levels -- CLI
-fits and pyazr sessions alike. So a fit with narrow levels under `<targetInt>`
-minimizes against the start model's grid. Natural neon refit1 (2026-10-18,
-`17O+a/10-13-26_natNe_seg1`, readme 18:40-19:15): the same x gives 25,773.959 in a
-session opened on the start `.azr` and 25,776.084 in one opened on `refit1_fit.azr`
-(= a fresh CLI mode 1 with the `.sav`), the difference at a few points beside
-narrow resonances (E_cm 0.75 and 2.23 MeV); no history dependence inside a session, and rounding x to
-8 digits changes nothing. After a fit that moved narrow levels under target
-integration, `save_fit`, open a new session on the saved `.azr` and polish.
+0.17 % in χ² with it on. Until 2026-10-19 the grid was placed once, in
+`EData::ReadTargetEffectsFile` (`AdaptiveIntegrationGrid::GenerateGrid` from the FILE's level
+energies and widths), and never re-placed when a fit moved the levels, so a fit with narrow levels
+under `<targetInt>` minimized against the start model's grid: natural neon refit1, the same x gave
+25,773.959 in a session opened on the start `.azr` and 25,776.084 in one opened on `refit1_fit.azr`.
+SINCE 2026-10-19 (Coulomb table stage 3) the grids are RE-PLACED on every evaluation by default
+(`EData::ReplaceSubPointGrids`: current fit values -> observed E and widths on a private CNuc copy ->
+same generator, resonances offset by the segment's c.m. energy shift; unchanged grids keep their
+sub-points). Both refit1 sessions now give 25,776.076357, refit1q 25,693.609423 from either file.
+`--no-grid-replacement` / pyazr `replace_grids=False` restores the old behaviour; segments that need
+external-capture amplitudes always keep their grids. A fit run on an older build reports the
+start-file grid's objective: re-evaluate its end point in a current session before comparing.
 
 ```python
 azr, sav = m.save_fit("7Be_fit.azr")          # current parameters
@@ -2132,20 +2133,21 @@ complete:
   the old route for comparisons. Open neutral channels were NOT changed: Michel's routine at eta = 0
   is ~0.3 us per call, no slower than the Riccati-Bessel form; the open-channel Coulomb cost in a
   profile is the charged channels.
-- 2026-10-19 -- `--coulomb-table[=FILE]` (pyazr `use_coulomb_table=True`): P, S and the hard-sphere
-  phase of charged channels, open and closed, from the universal table (`CoulombTable`, design and
-  validation in `docs/source/developer/coulomb_table.rst`). Build the file once:
-  `azure2-coulomb-table build` -> `~/.azure2/coulomb_table.bin` (or `$AZURE2_COULOMB_TABLE`;
-  100 nodes/decade, 88 MB, ~5 min on 4 threads); off by default; missing file = one warning, exact
-  routines. Natural-neon example mode 1: 473 -> 88 s, same chi2 to every printed digit. Not tabulated:
-  neutral pairs, pairs with a nuclear potential, the EC integrals. EXPECT charged-particle suites with
-  bound/sub-threshold levels to move by up to ~1e-3 in chi2 when it is switched on: that is the
-  EXACT route's error, not the table's -- dS/dE is a 1 eV central difference of a numerically
-  differentiated Whittaker S (3e-4..4e-3 relative error, p+12C) or of Michel's S (<= 3e-5). The
-  comparison switches `AZURE_BOUND_SHIFT_U_RATIO=1` (exact U-ratio closed S) and
-  `AZURE_SHIFT_DE_RICHARDSON=1` (Richardson dS/dE) make the exact route reproduce the table at every
-  printed digit. And `--gsl-coul` is wrong by up to 3-6 % in P and S for 0.1 <= eta < 10,
-  1 <= rho < 10 (Michel agrees with mpmath to 1e-9): do not use it.
+- 2026-10-19 -- Universal Coulomb table, ON BY DEFAULT since stage 3 (`--no-coulomb-table`, pyazr
+  `use_coulomb_table=False` to switch off): P, S and the hard-sphere phase of charged channels, open
+  and closed (`CoulombTable`, design and validation in `docs/source/developer/coulomb_table.rst`).
+  Build the file once: `azure2-coulomb-table build` -> `~/.azure2/coulomb_table.bin` (or
+  `$AZURE2_COULOMB_TABLE`; 100 nodes/decade, 88 MB, ~5 min on 4 threads); no file = one line
+  "Coulomb table: none at ...", exact routines. Natural-neon example mode 1: 473 -> 88 s, same chi2
+  to every printed digit. Not tabulated: neutral pairs, pairs with a nuclear potential, the EC
+  integrals. The EXACT route was made accurate at the same time: closed charged S from the U ratio,
+  open-channel dS/dE by Richardson (the old 1 eV difference of a numerically differentiated
+  Whittaker S was off by 3e-4..4e-3, p+12C); `AZURE_BOUND_SHIFT_NUMERICAL=1` / `AZURE_SHIFT_DE_1EV=1`
+  restore the old routes. EXPECT charged-particle fits with bound/sub-threshold levels to move by up
+  to ~1e-3 in chi2 against results from older builds (13N suite 9.3e-4); table and exact route now
+  agree. Grid re-placement (stage 3) is described under the save/reopen notes above
+  (`--no-grid-replacement`). And `--gsl-coul` is wrong by up to 3-6 % in P and S for
+  0.1 <= eta < 10, 1 <= rho < 10 (Michel agrees with mpmath to 1e-9): do not use it.
 - 2026-09-13 -- pyazr and `output/intEC.dat`: a session that RELOADS an existing cache for the
   12C+alpha truncated model returns a wrong chi2 (120,593 instead of 113,512, sometimes ~1e26)
   while the CLI reloading the same cache is exact; confirmed with the pre-fix module too, so it is

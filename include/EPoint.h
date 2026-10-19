@@ -138,6 +138,19 @@ class EPoint {
   };
   const UdrKernel *GetUdrKernel() const { return udr_kernel_.get(); };
   double GetUdrProjectileMass() const { return udr_mass_; };
+  /// How the adaptive sub-point grid of this point was laid out (EData::ReadTargetEffectsFile),
+  /// so EData::ReplaceSubPointGrids can lay it out again for other level parameters.
+  /// Energies are c.m., unshifted.
+  struct SubGridSpec {
+    bool valid = false;
+    double startEnergy = 0.0, endEnergy = 0.0;
+    int maxPoints = 0, entranceKey = 0;
+    double baseEnergyStep = 0.0, resonanceWidthMultiplier = 0.0, pointsPerWidth = 0.0;
+    bool targetIntegration = false;
+    double stoppingConversion = 1.0;  ///< c.m./lab factor of the stopping power
+  };
+  void SetSubGridSpec(const SubGridSpec &spec) { sub_grid_spec_ = spec; };
+  const SubGridSpec &GetSubGridSpec() const { return sub_grid_spec_; };
   /// Is this one of the sub-points a target-effect integral is built from?
   bool IsSubPoint() const { return is_sub_point_; };
   /// Unobserved-primary, observed-secondary point?
@@ -371,6 +384,7 @@ class EPoint {
   bool is_ang_dist_;
   bool is_analyzing_power_ = false;
   bool is_sub_point_ = false;
+  SubGridSpec sub_grid_spec_;
   double analyzing_power_ = 0.0;
   int entrance_key_;
   int exit_key_;

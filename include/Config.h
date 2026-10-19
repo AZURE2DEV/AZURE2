@@ -116,10 +116,15 @@ class Config {
   /// Use adaptive integration grid for target effects (false = uniform grid)
   bool useAdaptiveGrid;
   /// Take P, S and the hard-sphere phase of charged channels from the universal Coulomb
-  /// table (CoulombTable) where it covers them (--coulomb-table); off by default.
+  /// table (CoulombTable) where it covers them; on by default (--no-coulomb-table turns it
+  /// off).  Without a table file the run warns once and uses the exact routines.
   bool useCoulombTable;
   /// The table file; empty = $AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin.
   std::string coulombTablePath;
+  /// Lay the adaptive sub-point grids of experimental effects out again on every
+  /// evaluation, for the current levels and energy shifts (EData::ReplaceSubPointGrids);
+  /// on by default, --no-grid-replacement keeps the grids placed from the input file.
+  bool replaceSubPointGrids;
   /// Hard-sphere scattering in every J^pi the particle pairs allow, whether or not a level carries it
   /// (CNuc::AddHardSphereGroups). Read from "includeAllJPi=1" in the <config> block; off when absent.
   bool includeAllJPi;
