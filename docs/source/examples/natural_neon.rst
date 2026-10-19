@@ -53,7 +53,7 @@ Everything is in ``examples/natural_neon/`` of the AZURE2 repository:
    * - File
      - Contents
    * - ``natural_neon.azr``
-     - The project: 7 pairs, 88 levels in three nuclei, the natural
+     - The project: 7 pairs, 86 levels in three nuclei, the natural
        abundances, 11 data segments, 1 test segment, 5 resolution lines.
        The levels are at their fitted values; the normalizations are at
        their nominal value 1.
@@ -247,7 +247,7 @@ The ``<levels>`` block holds one group of level lines per nucleus. On the
 Levels and Channels tab a drop-down above the table shows one nucleus at a
 time, and a level's channels are built only from its own nucleus's pairs.
 
-:sup:`21`\ Ne (n+\ :sup:`20`\ Ne), 35 levels
+:sup:`21`\ Ne (n+\ :sup:`20`\ Ne), 33 levels
    The resonances reported between threshold and 2.6 MeV neutron energy:
    ENSDF (from Mughabghab's Atlas) and the SAMMY analysis of Heil *et al.*,
    Phys. Rev. C **90**, 045804 (2014). Energies and widths are fitted. They
@@ -256,7 +256,8 @@ time, and a level's channels are built only from its own nucleus's pairs.
    at :math:`E_x` = 1.761 and 16.761 MeV (5 MeV below and 10 MeV above the
    threshold) in the s-, p- and d-wave :math:`J^\pi`, with widths held
    within the Wigner limit. Several J\ :sup:`π` of these levels come from
-   earlier R-matrix fits and are only weakly constrained.
+   earlier R-matrix fits and are only weakly constrained. Two levels whose
+   widths went to zero in the fit were removed (Step 8).
 
 :sup:`23`\ Ne (n+\ :sup:`22`\ Ne), 13 levels
    Heil *et al.* (2014), from the same Almeida and Käppeler data, below
@@ -345,8 +346,8 @@ prior) and the vary flag 1:
    1 2 2 0 2.33 0 180 0 1 1 5 0 0 1 data/Hinterberger_20Ne_ntot.dat 1 0 2 2 1 -999 2 3 -999 0
 
 AZURE2 calculates each point at :math:`E + \Delta E`. The fit gives
-:math:`\Delta E = -1.36` keV, so Hinterberger's energy scale reads
-1.36 keV high against the Junghans scale. The value is in
+:math:`\Delta E = -1.84` keV, so Hinterberger's energy scale reads
+1.84 keV high against the Junghans scale. The value is in
 ``natural_neon_fit.sav`` as ``segment_3_energy_shift``. Like a
 normalization, a parameter file sets a shift's value but not whether it is
 fitted; the segment line decides that.
@@ -443,33 +444,33 @@ file is therefore not the fit.
    * - 1
      - Junghans, natural
      - 3,434
-     - 10,916
+     - 10,891
      - 1 (fixed)
    * - 2
      - Vaughn, natural
      - 76
-     - 845
+     - 836
      - 1.043
    * - 3
      - Hinterberger, :sup:`20`\ Ne
      - 1,055
-     - 10,506
+     - 10,463
      - 0.963
    * - 4, 5
      - Almeida, natural, low / high
      - 376 / 345
-     - 560 / 568
+     - 559 / 568
      - 1.025 / 0.889
    * - 6, 7
      - Almeida, :sup:`21`\ Ne, low / high
      - 255 / 113
      - 433 / 367
-     - 0.915 / 0.800
+     - 0.915 / 0.799
    * - 8, 9
      - Almeida, :sup:`22`\ Ne, low / high
      - 259 / 345
-     - 295 / 983
-     - 1.009 / 1.027
+     - 295 / 980
+     - 1.009 / 1.026
    * - 10
      - Sikkema, :sup:`22`\ Ne
      - 35
@@ -478,25 +479,24 @@ file is therefore not the fit.
    * - 11
      - Sikkema, :sup:`20`\ Ne
      - 35
-     - 248
+     - 246
      - 1.014
 
-The data χ² is 25,750 for 6,328 points (χ²/N = 4.07), and the normalization
+The data χ² is 25,668 for 6,328 points (χ²/N = 4.06), and the normalization
 penalty adds 26, 16 of it from key 7.
 
 The fit itself, which evaluated the model through :doc:`../user_guide/pyazr`,
-recorded 25,748. The segments without resolution agree with it to within
-0.04 (the parameters read back from the ``.sav``). Four folded segments
-differ: key 1 by −2.9 (10,919 in the fit), key 3 by +0.3, key 9 by +3.9
-(979) and key 11 by +0.8. For keys 1 and 9 the difference sits at a few
-points beside narrow resonances near 0.75 and 2.23 MeV. The adaptive
-sub-point grid of a ``<targetInt>`` line is placed around the levels once,
-when the project is read, and is not moved when a fit moves the levels. The
-fit started from the stage-4 energies and kept that grid for its whole run;
+recorded 25,666 (25,692 with the penalty). The segments without resolution
+agree with it to within 0.005 (the parameters read back from the ``.sav``).
+Four folded segments differ: key 1 by +1.0, key 3 by +0.5, key 9 by +0.5 and
+key 11 by +0.2, at points beside narrow resonances. The adaptive sub-point
+grid of a ``<targetInt>`` line is placed around the levels once, when the
+project is read, and is not moved when a fit moves the levels. The fit
+started from the previous fit's levels and kept that grid for its whole run;
 a calculation from ``natural_neon.azr`` places the grid at the fitted
 energies. Evaluated on the same parameters, a pyazr session opened on the
-starting project gives the fit's 25,774 and one opened on the fitted
-project gives this page's 25,776, so the difference is the grid placement,
+starting project gives the fit's 25,691.9 and one opened on the fitted
+project gives this page's 25,694.1, so the difference is the grid placement,
 not the code version. To evaluate a fit against a grid at its own energies,
 restart from the saved project and polish.
 
@@ -553,7 +553,7 @@ and in the minimum, where it gives 6 %.
 Step 8: How the fit was made
 ----------------------------
 
-The fit has 79 free parameters: the energies and widths of the
+The fit has 75 free parameters: the energies and widths of the
 :sup:`21`\ Ne levels and of the :sup:`23`\ Ne levels below 1.85 MeV, the ten
 free normalizations, and the Hinterberger energy shift. It was built up in
 stages. Each stage is a modelling decision checked against the data, not just
@@ -605,6 +605,19 @@ more iterations:
    Junghans χ² above 2 MeV fell from 653 to 613, so no background levels were
    needed in their place.
 
+7. **A polish on the saved project**, without the two :sup:`21`\ Ne levels
+   whose widths the joint fit had taken to zero (5/2\ :sup:`+` at
+   :math:`E_x` = 8.930 MeV, 3/2\ :sup:`−` at 9.130 MeV). A level with no
+   width has no gradient in its energy or width, and it spoiled the
+   least-squares step: the same polish with the two levels kept had its
+   first step rejected five times and gained 6 in seven iterations. Without
+   them the first step gained 79. The polish started at 25,776 on the grid of
+   the saved project and ended at 25,692 (data 25,666, normalization penalty
+   26), with the Hinterberger shift at −1.84 keV. The largest moves from
+   stage 6 were the 3/2\ :sup:`−` at 8.992 MeV (+3.5 keV) and the
+   :sup:`23`\ Ne 1/2\ :sup:`+` at 5.957 MeV (+2.2 keV); the normalizations
+   did not move.
+
 The minimizer was a bounded trust-region least-squares fit (SciPy) on the
 residuals and analytic Jacobian of :doc:`../user_guide/pyazr`, with the
 normalization penalties as extra residual rows. Level energies were bounded
@@ -612,7 +625,7 @@ to ±0.3 MeV of the start and widths to the Wigner limit. One evaluation of
 the full model takes about 85 s on four threads. The first joint fit took
 14 h for 150 evaluations and was flat from about the 30th. The second took
 9.5 h for 176 evaluations and was stopped by hand once each iteration gained
-less than 0.01.
+less than 0.01. The polish took 9.1 h for 80 evaluations.
 
 What the fit leaves open
 ------------------------
@@ -623,15 +636,17 @@ What the fit leaves open
   absorb any misfit of the :sup:`20`\ Ne term. This is the lesson of stages 4
   and 5: in a natural-target fit, the minor nuclei need data of their own.
 - The Almeida and Käppeler :sup:`21`\ Ne high run goes to a normalization of
-  0.800, 4 σ from its 5 % prior. It is the only prior under strain: its
+  0.799, 4 σ from its 5 % prior. It is the only prior under strain: its
   penalty is 16 of the total 26. The natural high run is at 0.889.
-- The Hinterberger data still have χ²/N = 10 (10,506 for 1,055 points),
-  after the shift. The Junghans χ² is 981 above the fit to the Junghans data
-  alone (9,938 in stage 3). Its worst window is 1.2--1.6 MeV, with
-  χ² = 3,048.
-- Two :sup:`21`\ Ne levels go to zero width: the 5/2\ :sup:`+` at
-  :math:`E_x` = 8.93 MeV and the 3/2\ :sup:`−` at 9.13 MeV. Their
-  J\ :sup:`π` may be wrong.
+- The Hinterberger data still have χ²/N = 10 (10,463 for 1,055 points),
+  after the shift. The Junghans χ² is 953 above the fit to the Junghans data
+  alone (9,938 in stage 3). The worst energy window is 1.2--1.6 MeV, with
+  χ² = 3,044.
+- Two :sup:`21`\ Ne levels that went to zero width, the 5/2\ :sup:`+` at
+  :math:`E_x` = 8.93 MeV and the 3/2\ :sup:`−` at 9.13 MeV, were removed;
+  their J\ :sup:`π` may have been wrong, or the levels may not be seen in
+  these data. Three other :sup:`21`\ Ne levels at 8.84--9.00 MeV keep
+  neutron widths of only 50--170 eV.
 - Self-shielding in the Junghans and Vaughn transmission samples is not
   included.
 
