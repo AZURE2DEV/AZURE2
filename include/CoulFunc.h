@@ -8,6 +8,7 @@
 
 class PPair;
 class CoulFuncCache;
+class CoulombTable;
 class NuclearPotential;
 
 /// The return structure of the CoulFunc function class.
@@ -76,6 +77,9 @@ class CoulFunc {
   double Penetrability(int, double, double);
   /// Shift function \f$S_l\f$ at (l, radius, energy), positive energies.
   double PEShift(int, double, double);
+  /// Hard-sphere phase factor exp(-i phi_l) = (G - iF)/|G + iF| at (l, radius, energy):
+  /// from the Coulomb table when one is in use and covers the point, else from the waves.
+  std::complex<double> HardSpherePhase(int, double, double);
   /// Energy derivative \f$dS_l/dE\f$ -- the term that makes the observed-width transformation singular when it grows too large.
   double PEShift_dE(int, double, double);
   /// Second energy derivative of the shift function (numerical).
@@ -136,6 +140,15 @@ class CoulFunc {
   double radiusLast_;
   double energyLast_;
   struct CoulWaves coulLast_;
+
+  // The universal Coulomb table (charged pairs without a nuclear potential, when
+  // Config::useCoulombTable is set), with a one-deep memo of its last lookup: a
+  // point asks for P, S and the phase of the same (l, radius, energy) in turn.
+  const CoulombTable *table_ = nullptr;
+  bool TableLookup(int l, double radius, double energy);
+  int tLastL_ = -1;
+  double tLastR_ = 0.0, tLastE_ = 0.0, tP_ = 0.0, tS_ = 0.0, tPhi_ = 0.0;
+  bool tOk_ = false;
 
   // Hybrid method parameters
   std::shared_ptr<NuclearPotential> nuclearPotential_;

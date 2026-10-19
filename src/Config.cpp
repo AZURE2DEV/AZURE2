@@ -34,6 +34,8 @@ void Config::Reset() {
   nloptAlgorithm = 0;       // Default to SBPLX
   useHybridMethod = false;  // Default to disabled
   useAdaptiveGrid = true;   // Default to adaptive grid
+  useCoulombTable = false;  // exact Coulomb functions unless --coulomb-table
+  coulombTablePath.clear();
   includeAllJPi = false;    // Off unless the <config> block says so: older projects compute as they always did
   hardSphereMaxL = -1;
   abundanceSumSigma = 0.0;

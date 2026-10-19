@@ -1141,9 +1141,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
             for (int ll = 1; ll <= theChannel->GetL(); ll++)
               expCP *= complex((double)ll / sqrt(pow(eta, 2.0) + pow((double)ll, 2.0)),
                                eta / sqrt(pow(eta, 2.0) + pow((double)ll, 2.0)));
-            struct CoulWaves
-                coul = theCoulombFunction(lValue, radius, localEnergy);
-            complex expHSP = CoulombHardSpherePhase(coul);
+            complex expHSP = theCoulombFunction.HardSpherePhase(lValue, radius, localEnergy);
             this->AddLoElement(j, ch, loElement);
             this->AddSqrtPenetrability(j, ch, sqrt(localPene));
             this->AddExpCoulombPhase(j, ch, expCP);
@@ -1408,16 +1406,15 @@ void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                 ECMGroup *theECMGroup = theKGroup->GetECMGroup(ecm);
                 // entrance Phase Calculations;
                 CoulFunc theCoulombFunction(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-                struct CoulWaves
-                    coul = theCoulombFunction(theECMGroup->GetL(), entrancePair->GetChRad(),
-                                              this->GetCMEnergy());
+
                 double eta = sqrt(uconv / 2.) * fstruc * entrancePair->GetZ(1) * entrancePair->GetZ(2) *
                     sqrt(entrancePair->GetRedMass() / this->GetCMEnergy());
                 complex expCP(1.0, 0.0);
                 for (int ll = 1; ll <= theECMGroup->GetL(); ll++)
                   expCP *= complex((double)ll / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)),
                                    eta / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)));
-                complex expHSP = CoulombHardSpherePhase(coul);
+                complex expHSP = theCoulombFunction.HardSpherePhase(theECMGroup->GetL(), entrancePair->GetChRad(),
+                                                                     this->GetCMEnergy());
 
                 double levelEnergy = ecLevel->GetE();
                 double sqrtGammaPene = pow((inEnergy - levelEnergy) / hbarc, theECMGroup->GetMult() + 0.5);

@@ -5,7 +5,13 @@
 #include <complex>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <fstream>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <set>
 
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_sf_hyperg.h>
@@ -76,6 +82,72 @@ inline double H01(double t) { return (3 - 2 * t) * t * t; }
 inline double H11(double t) { return (t - 1) * t * t; }
 
 }  // namespace
+
+std::atomic<long> CoulombTable::hits_{0}, CoulombTable::misses_{0};
+
+namespace {
+// Prints how much the table was used when the process ends, if it was used at all.
+struct UsageReport {
+  std::atomic<long> *hits, *misses;
+  ~UsageReport() {
+    const long h = hits->load(), m = misses->load();
+    if (h + m > 0)
+      std::cerr << "Coulomb table: " << h << " lookups, " << m
+                << " outside the table (exact routine used)" << std::endl;
+  }
+};
+}  // namespace
+
+std::string CoulombTable::DefaultPath() {
+  if (const char *e = std::getenv("AZURE2_COULOMB_TABLE"))
+    if (*e) return e;
+  const char *home = std::getenv("HOME");
+  if (!home || !*home) home = std::getenv("USERPROFILE");
+  return std::string(home ? home : ".") + "/.azure2/coulomb_table.bin";
+}
+
+const CoulombTable *CoulombTable::Shared(const std::string &path) {
+  // CoulFunc objects are built per channel and point, so the common case -- the
+  // same path as last time on this thread -- must not take the lock.
+  thread_local std::string lastPath;
+  thread_local const CoulombTable *last = nullptr;
+  thread_local bool lastSet = false;
+  if (lastSet && path == lastPath) return last;
+
+  static std::mutex mutex;
+  static std::map<std::string, std::unique_ptr<CoulombTable>> tables;
+  static std::set<std::string> failed;
+  static UsageReport report{&hits_, &misses_};
+  const std::string file = path.empty() ? DefaultPath() : path;
+  const CoulombTable *result = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    auto it = tables.find(file);
+    if (it != tables.end()) {
+      result = it->second.get();
+    } else if (!failed.count(file)) {
+      auto t = std::make_unique<CoulombTable>();
+      std::string error;
+      if (t->Load(file, error)) {
+        std::cerr << "Coulomb table: " << file << " (l = 0.." << t->LMax() << ", "
+                  << 1.0 / t->EtaAxis().dx << " nodes per decade, eta*rho <= " << t->EtaRhoMax() << ")"
+                  << std::endl;
+        result = t.get();
+        tables[file] = std::move(t);
+      } else {
+        failed.insert(file);
+        std::cerr << "WARNING: Coulomb table not used: " << error
+                  << "; using the exact Coulomb functions. Build one with "
+                     "'azure2-coulomb-table build "
+                  << file << "'." << std::endl;
+      }
+    }
+  }
+  lastPath = path;
+  last = result;
+  lastSet = true;
+  return result;
+}
 
 double CoulombTable::LogGamow(double eta) {
   const double x = 2.0 * M_PI * eta;
@@ -261,7 +333,11 @@ double CoulombTable::Eval(const Sheet &s, double x, double y) const {
 }
 
 bool CoulombTable::LookupOpen(int l, double eta, double rho, Open &out) const {
-  if (l < 0 || l > lMax_ || !Inside(eta, rho)) return false;
+  if (l < 0 || l > lMax_ || !Inside(eta, rho)) {
+    misses_.fetch_add(1, std::memory_order_relaxed);
+    return false;
+  }
+  hits_.fetch_add(1, std::memory_order_relaxed);
   const double x = std::log10(eta), y = std::log10(rho);
   double lp, sv, ph;
   if (order_ == 4) {
@@ -281,7 +357,11 @@ bool CoulombTable::LookupOpen(int l, double eta, double rho, Open &out) const {
 }
 
 bool CoulombTable::LookupBound(int l, double etaB, double rhoB, double &S) const {
-  if (l < 0 || l > lMax_ || !Inside(etaB, rhoB)) return false;
+  if (l < 0 || l > lMax_ || !Inside(etaB, rhoB)) {
+    misses_.fetch_add(1, std::memory_order_relaxed);
+    return false;
+  }
+  hits_.fetch_add(1, std::memory_order_relaxed);
   const double x = std::log10(etaB), y = std::log10(rhoB);
   S = Eval(At(l, BOUND), x, y) - rhoB;
   return std::isfinite(S);

@@ -6,6 +6,7 @@
 #include <memory>
 
 class ShftFunc;
+class CoulombTable;
 
 /// A function class for negative energy shift functions.
 
@@ -25,7 +26,9 @@ class ShftFunc {
     totalSepE_ = pPair->GetSepE() + pPair->GetExE();
     radius_ = (double)pPair->GetChRad();
     neutral_ = (pPair->GetZ(1) * pPair->GetZ(2) == 0);
+    zz_ = pPair->GetZ(1) * pPair->GetZ(2);
     redmass_ = pPair->GetRedMass();
+    table_ = SharedTable(neutral_);
     params_.whitFunc = std::make_unique<WhitFunc>(pPair);
   };
   /*!
@@ -76,7 +79,13 @@ class ShftFunc {
   double totalSepE_;
   double radius_;
   bool neutral_;
+  int zz_;
   double redmass_;
+  /// The universal Coulomb table for a charged pair when Config::useCoulombTable is set.
+  const CoulombTable *table_;
+  static const CoulombTable *SharedTable(bool neutral);
+  /// AZURE_BOUND_SHIFT_U_RATIO=1: charged closed channels from the exact U ratio.
+  static bool UseURatio();
 };
 
 #endif

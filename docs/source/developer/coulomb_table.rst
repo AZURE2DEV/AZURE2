@@ -1,8 +1,8 @@
 Universal Coulomb-function tables
 =================================
 
-Status: stage 1 of 4 (the table and its tool exist; the engine does not read
-them yet). Design from the natural-neon work of October 2026
+Status: stages 1 and 2 of 4. The table and its tool exist, and the engine
+reads the table with ``--coulomb-table`` (off by default). Design from the natural-neon work of October 2026
 (``17O+a/10-13-26_natNe_seg1/coulomb_table_spec.md`` in the fit archive).
 
 Why
@@ -178,13 +178,59 @@ little-endian, with a header giving the format version, the axes, ``l_max``,
 the :math:`\eta\rho` limit and the generator. ctest ``coulomb_table_small``
 builds and validates a small table in a few seconds.
 
+Stage 2: the engine reads the table
+-----------------------------------
+
+``--coulomb-table[=FILE]`` (CLI) or ``use_coulomb_table=True,
+coulomb_table=...`` (pyazr) sets ``Config::useCoulombTable``. Below the
+existing interfaces, so no caller changes:
+
+- ``CoulFunc::Penetrability``, ``CoulFunc::PEShift`` and the new
+  ``CoulFunc::HardSpherePhase`` (used by ``EPoint`` for the per-point phase)
+  look up open charged channels, with a one-deep memo so a point's three
+  requests cost one lookup;
+- ``ShftFunc`` looks up closed charged channels;
+- neutral pairs, pairs with a nuclear potential (hybrid model) and the
+  external-capture integrals, which need :math:`F` and :math:`G` themselves at
+  many radii, keep the exact routines;
+- the table is loaded once per process (``CoulombTable::Shared``); a missing
+  or unreadable file prints one warning and the run continues with the exact
+  routines; at exit the run prints how many lookups the table served and how
+  many fell outside it.
+
+Validation, 2026-10-19 (the 100-per-decade table):
+
+- With the table off, the natural-neon example is byte-identical to the build
+  before this change; ctest 27/27, ``tests/run_tests.sh`` 29/29 with the
+  table off and on.
+- The natural-neon example, mode 1, four threads: 473 s without the table,
+  88 s with it (20.5 million lookups, 7,695 outside the table), the same χ²
+  and outputs to every printed digit.
+- Several suites move with the table on by more than 1e-6: 13N 9.3e-4,
+  β-delayed α 6.9e-4, thick-target resonance 3.5e-4, others 1e-5 – 9e-5. The
+  table is not the cause. :math:`dS/dE` enters the conversions between
+  observed and formal parameters, and the exact route takes it as a 1 eV
+  central difference: of :math:`S` from a numerical radial derivative of the
+  Whittaker function for closed channels (3e-4 – 4e-3 relative error for
+  p+¹²C), and of Michel's :math:`S` for open ones (up to 3e-5 at a few MeV).
+  The table's :math:`dS/dE` is within 1e-8 of the exact value. With the two
+  comparison switches below the exact route reproduces the table at every
+  printed digit in every suite without a nuclear potential:
+
+  - ``AZURE_BOUND_SHIFT_U_RATIO=1``: closed charged channels from the exact
+    U ratio (``CoulombTable::ExactBound``) instead of the numerical
+    derivative of :math:`W`;
+  - ``AZURE_SHIFT_DE_RICHARDSON=1``: open-channel :math:`dS/dE` by a
+    Richardson-extrapolated central difference with a step of
+    :math:`10^{-3} E`.
+
+  Both are off by default; making them the default exact route would move
+  results of charged-particle fits with bound or sub-threshold levels by up
+  to ~1e-3 in χ², toward the correct values.
+
 Remaining stages
 ----------------
 
-2. Engine lookup behind ``--coulomb-table[=path]`` / ``--no-coulomb-table``
-   (and the pyazr option), at the point where :math:`P`, :math:`S` and the
-   hard-sphere phase are taken per channel (``EPoint::CalcEDependentValues``),
-   default off; regression suites to 1e-6 in χ²; timing.
 3. Default on; re-placing the target-integration grid as levels move; the
    refit1 fixed-point check.
 4. User documentation and the CLI reference.

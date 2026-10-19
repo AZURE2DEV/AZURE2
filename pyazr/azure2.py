@@ -77,7 +77,7 @@ class azure2:
     def __init__(self, file, cwd=None, data_mode=True, use_brune=True,
                  ignore_externals=True, transform=True,
                  use_long_wavelength=True, use_gsl_coul=False, use_rmc=False,
-                 use_park=False):
+                 use_park=False, use_coulomb_table=False, coulomb_table=None):
         """Build the R-matrix engine for ``file`` in this interpreter.
 
         Parameters
@@ -95,6 +95,11 @@ class azure2:
             ``--ignore-externals``, ``--no-transform`` and ``--no-long-wavelength``
             (the ``use_*`` options are ON by default, ``transform`` too).
         use_gsl_coul : use GSL's Coulomb functions instead of AZURE2's own.
+        use_coulomb_table : take P, S and the hard-sphere phase of charged
+            channels from the universal Coulomb table (CLI ``--coulomb-table``),
+            falling back to the exact routines outside it.
+        coulomb_table : the table file; ``None`` = ``$AZURE2_COULOMB_TABLE``,
+            else ``~/.azure2/coulomb_table.bin``.
         use_rmc : use the R-matrix-with-channels (RMC) formalism instead of
             Brune; mutually exclusive with ``use_brune`` (Brune wins).
         use_park : use Park's level-dependent boundary conditions (Phys. Rev.
@@ -125,7 +130,8 @@ class azure2:
             ignore_externals=bool(ignore_externals), transform=bool(transform),
             use_long_wavelength=bool(use_long_wavelength),
             use_gsl_coul=bool(use_gsl_coul), use_rmc=bool(use_rmc),
-            use_park=bool(use_park))
+            use_park=bool(use_park), use_coulomb_table=bool(use_coulomb_table),
+            coulomb_table=str(coulomb_table or ""))
 
         opts = _azure2.RuntimeOptions()
         for name, value in self.options.items():

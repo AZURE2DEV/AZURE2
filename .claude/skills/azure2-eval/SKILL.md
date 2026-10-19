@@ -2132,6 +2132,20 @@ complete:
   the old route for comparisons. Open neutral channels were NOT changed: Michel's routine at eta = 0
   is ~0.3 us per call, no slower than the Riccati-Bessel form; the open-channel Coulomb cost in a
   profile is the charged channels.
+- 2026-10-19 -- `--coulomb-table[=FILE]` (pyazr `use_coulomb_table=True`): P, S and the hard-sphere
+  phase of charged channels, open and closed, from the universal table (`CoulombTable`, design and
+  validation in `docs/source/developer/coulomb_table.rst`). Build the file once:
+  `azure2-coulomb-table build` -> `~/.azure2/coulomb_table.bin` (or `$AZURE2_COULOMB_TABLE`;
+  100 nodes/decade, 88 MB, ~5 min on 4 threads); off by default; missing file = one warning, exact
+  routines. Natural-neon example mode 1: 473 -> 88 s, same chi2 to every printed digit. Not tabulated:
+  neutral pairs, pairs with a nuclear potential, the EC integrals. EXPECT charged-particle suites with
+  bound/sub-threshold levels to move by up to ~1e-3 in chi2 when it is switched on: that is the
+  EXACT route's error, not the table's -- dS/dE is a 1 eV central difference of a numerically
+  differentiated Whittaker S (3e-4..4e-3 relative error, p+12C) or of Michel's S (<= 3e-5). The
+  comparison switches `AZURE_BOUND_SHIFT_U_RATIO=1` (exact U-ratio closed S) and
+  `AZURE_SHIFT_DE_RICHARDSON=1` (Richardson dS/dE) make the exact route reproduce the table at every
+  printed digit. And `--gsl-coul` is wrong by up to 3-6 % in P and S for 0.1 <= eta < 10,
+  1 <= rho < 10 (Michel agrees with mpmath to 1e-9): do not use it.
 - 2026-09-13 -- pyazr and `output/intEC.dat`: a session that RELOADS an existing cache for the
   12C+alpha truncated model returns a wrong chi2 (120,593 instead of 113,512, sometimes ~1e26)
   while the CLI reloading the same cache is exact; confirmed with the pre-fix module too, so it is

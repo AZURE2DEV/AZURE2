@@ -1,6 +1,7 @@
 #ifndef COULOMBTABLE_H
 #define COULOMBTABLE_H
 
+#include <atomic>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -47,7 +48,7 @@ class CoulombTable {
     int lMax = 10;
     double etaMin = 1e-3, etaMax = 100.0;
     double rhoMin = 1e-3, rhoMax = 100.0;
-    double perDecade = 30.0;
+    double perDecade = 100.0;  // within 1e-7 everywhere (2026-10-18 sweep)
     /// Upper limit of eta * rho = 0.0344 Z1 Z2 mu[u] a[fm], a constant of a channel
     /// (p+12C ~0.8, 12C+a ~7, 12C+12C ~45, 16O+16O ~120); larger values go to the
     /// exact routine.  A channel's Coulomb turning point lies at eta ~ sqrt(eta rho / 2),
@@ -79,6 +80,12 @@ class CoulombTable {
   bool LookupOpen(int l, double eta, double rho, Open &out) const;
   /// Table lookup of a closed channel's shift function; false outside the table.
   bool LookupBound(int l, double etaB, double rhoB, double &S) const;
+
+  /// The table at path (empty: DefaultPath()), loaded once per process and shared by all
+  /// threads; nullptr, after one warning, when it cannot be read.
+  static const CoulombTable *Shared(const std::string &path);
+  /// $AZURE2_COULOMB_TABLE if set, else ~/.azure2/coulomb_table.bin.
+  static std::string DefaultPath();
 
   /// The exact open-channel values (Michel's routine, AZURE2's default); phi in (-pi, pi].
   static Open ExactOpen(int l, double eta, double rho);
@@ -115,6 +122,9 @@ class CoulombTable {
   bool Cell(double x, double y, int &i, int &j, double &u, double &v) const;
   const Sheet &At(int l, Kind k) const { return sheets_[l * NKIND + k]; }
   Sheet &At(int l, Kind k) { return sheets_[l * NKIND + k]; }
+
+  // Lookups served and refused (outside the table), for the summary printed at exit.
+  static std::atomic<long> hits_, misses_;
 
   int lMax_ = -1;
   int order_ = 8;

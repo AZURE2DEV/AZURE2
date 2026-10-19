@@ -1,5 +1,8 @@
 #include "ShftFunc.h"
+#include "Config.h"
 #include "Constants.h"
+#include "CoulombTable.h"
+#include <cmath>
 #include <cstdlib>
 #include <math.h>
 #include <gsl/gsl_deriv.h>
@@ -37,6 +40,21 @@ double ShftFunc::operator()(int l, double energy) {
   if (neutral_ && UseNeutralClosedForm()) {
     const double rho = sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * params_.bindingEnergy);
     if (rho > 0.0) return NeutralBoundShift(l, rho);
+  }
+  // Charged channel: the table's Whittaker branch, at eta_b and rho_b = kappa a;
+  // or, with AZURE_BOUND_SHIFT_U_RATIO=1, the exact S = z W'/W from
+  // U' = -a U(a+1, b+1, z) (CoulombTable::ExactBound).  The default is still the
+  // numerical radial derivative of W below, whose noise makes the 1 eV central
+  // difference dS/dE wrong by 3e-4 - 4e-3 (p+12C, 2026-10-19).
+  if (!neutral_ && params_.bindingEnergy > 0.0 && (table_ || UseURatio())) {
+    const double etaB = sqrt(uconv / 2.) * fstruc * zz_ * sqrt(redmass_ / params_.bindingEnergy);
+    const double rhoB = sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * params_.bindingEnergy);
+    double s;
+    if (table_ && table_->LookupBound(l, etaB, rhoB, s)) return s;
+    if (UseURatio()) {
+      s = CoulombTable::ExactBound(l, etaB, rhoB);
+      if (std::isfinite(s)) return s;
+    }
   }
 
   double result;
@@ -89,6 +107,16 @@ double ShftFunc::EnergySecondDerivative(int l, double energy) {
   double d1 = (operator()(l, energy + h) - 2.0 * s0 + operator()(l, energy - h)) / (h * h);
   double d2 = (operator()(l, energy + 2.0 * h) - 2.0 * s0 + operator()(l, energy - 2.0 * h)) / (4.0 * h * h);
   return (4.0 * d1 - d2) / 3.0;
+}
+
+const CoulombTable *ShftFunc::SharedTable(bool neutral) {
+  if (neutral || !g_config || !g_config->useCoulombTable) return nullptr;
+  return CoulombTable::Shared(g_config->coulombTablePath);
+}
+
+bool ShftFunc::UseURatio() {
+  static const bool use = (std::getenv("AZURE_BOUND_SHIFT_U_RATIO") != nullptr);
+  return use;
 }
 
 bool ShftFunc::UseNeutralClosedForm() {

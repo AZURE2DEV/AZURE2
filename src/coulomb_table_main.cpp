@@ -3,7 +3,7 @@
 // the tables yet.
 //
 //   azure2-coulomb-table build FILE [--lmax 10] [--eta 1e-3 100] [--rho 1e-3 100]
-//                              [--per-decade 30] [--eta-rho-max 500] [--threads N]
+//                              [--per-decade 100] [--eta-rho-max 150] [--threads N]
 //   azure2-coulomb-table validate FILE [--n 200000] [--seed 1] [--order 4|6|8] [--eta-rho-max X]
 //                                 [--limit 1e-7] [--threads N]
 //                                 (--eta-rho-max: test only that part of the domain;
@@ -11,13 +11,15 @@
 //   azure2-coulomb-table info FILE
 //
 // build writes FILE.new and renames it over FILE, so jobs that have FILE open
-// keep reading the old one.
+// keep reading the old one.  Without FILE: the engine's default file
+// ($AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin).
 
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <random>
 #include <string>
 #include <vector>
@@ -39,9 +41,10 @@ namespace {
 
 int Usage() {
   std::fprintf(stderr,
-               "usage: azure2-coulomb-table build FILE [--lmax L] [--eta LO HI] [--rho LO HI] [--per-decade N] [--eta-rho-max X] [--threads N]\n"
-               "       azure2-coulomb-table validate FILE [--n N] [--seed S] [--order 4|6|8] [--eta-rho-max X] [--limit E] [--threads N]\n"
-               "       azure2-coulomb-table info FILE\n");
+               "FILE defaults to $AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin\n"
+               "usage: azure2-coulomb-table build [FILE] [--lmax L] [--eta LO HI] [--rho LO HI] [--per-decade N] [--eta-rho-max X] [--threads N]\n"
+               "       azure2-coulomb-table validate [FILE] [--n N] [--seed S] [--order 4|6|8] [--eta-rho-max X] [--limit E] [--threads N]\n"
+               "       azure2-coulomb-table info [FILE]\n");
   return 2;
 }
 
@@ -252,8 +255,12 @@ int Validate(const CoulombTable &t, long n, unsigned seed, int threads, double e
 }  // namespace
 
 int main(int argc, char **argv) {
-  if (argc < 3) return Usage();
-  const std::string cmd = argv[1], path = argv[2];
+  if (argc < 2) return Usage();
+  const std::string cmd = argv[1];
+  // FILE may be omitted: the file the engine reads by default
+  const bool hasPath = argc >= 3 && argv[2][0] != '-';
+  const std::string path = hasPath ? argv[2] : CoulombTable::DefaultPath();
+  const int firstOption = hasPath ? 3 : 2;
   CoulombTable::BuildSpec spec;
   long n = 200000;
   unsigned seed = 1;
@@ -264,7 +271,7 @@ int main(int argc, char **argv) {
 #else
   int threads = 1;
 #endif
-  for (int a = 3; a < argc; a++) {
+  for (int a = firstOption; a < argc; a++) {
     const std::string o = argv[a];
     auto need = [&](int k) {
       if (a + k >= argc) {
@@ -290,6 +297,9 @@ int main(int argc, char **argv) {
     auto t0 = std::chrono::steady_clock::now();
     t.Build(spec);
     auto t1 = std::chrono::steady_clock::now();
+    std::error_code ec;
+    const std::filesystem::path parent = std::filesystem::path(path).parent_path();
+    if (!parent.empty()) std::filesystem::create_directories(parent, ec);
     const std::string tmp = path + ".new";
     if (!t.Save(tmp) || std::rename(tmp.c_str(), path.c_str()) != 0) {
       std::fprintf(stderr, "ERROR: could not write %s\n", path.c_str());

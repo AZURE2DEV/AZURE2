@@ -115,6 +115,11 @@ class Config {
   bool useHybridMethod;
   /// Use adaptive integration grid for target effects (false = uniform grid)
   bool useAdaptiveGrid;
+  /// Take P, S and the hard-sphere phase of charged channels from the universal Coulomb
+  /// table (CoulombTable) where it covers them (--coulomb-table); off by default.
+  bool useCoulombTable;
+  /// The table file; empty = $AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin.
+  std::string coulombTablePath;
   /// Hard-sphere scattering in every J^pi the particle pairs allow, whether or not a level carries it
   /// (CNuc::AddHardSphereGroups). Read from "includeAllJPi=1" in the <config> block; off when absent.
   bool includeAllJPi;

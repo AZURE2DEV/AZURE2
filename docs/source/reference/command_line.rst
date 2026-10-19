@@ -67,7 +67,21 @@ Available Options
      - Use the RMC capture formalism for neutron capture (equivalent to the
        GUI option).
    * - ``--gsl-coul``
-     - Use GSL Coulomb functions (equivalent to the GUI option).
+     - Use GSL Coulomb functions (equivalent to the GUI option).  Not
+       recommended: against the default routine, :math:`P` and :math:`S` are
+       wrong by up to 3–6 % for :math:`0.1 \le \eta < 10`,
+       :math:`1 \le \rho < 10` (see :doc:`../developer/coulomb_table`).
+   * - ``--coulomb-table[=FILE]``
+     - Take :math:`P`, :math:`S` and the hard-sphere phase of charged
+       channels, open and closed, from the universal Coulomb table, with the
+       exact routines outside it.  ``FILE`` defaults to
+       ``$AZURE2_COULOMB_TABLE``, else ``~/.azure2/coulomb_table.bin``; build
+       it once with ``azure2-coulomb-table build`` (about 5 min on four
+       threads, 88 MB).  The natural-neon example runs 5.4 times faster.
+       Pairs with a nuclear potential and neutral pairs are not tabulated.
+       Off by default (see :doc:`../developer/coulomb_table`).
+   * - ``--no-coulomb-table``
+     - Exact Coulomb functions everywhere (the default).
    * - ``--no-transform``
      - Do not perform parameter transformations; input formal R-matrix
        parameters directly (equivalent to the GUI option).
