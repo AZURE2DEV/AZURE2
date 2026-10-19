@@ -38,3 +38,10 @@ if(USE_ERYA)
            COMMAND compound_stopping_reference_test
            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/external)
 endif()
+
+# Closed-channel shift function of neutral (eta = 0) pairs,
+# ShftFunc::NeutralBoundShift, against the numerical Whittaker derivative it
+# replaces and the l = 0, 1 textbook expressions; prints the speed-up.
+add_executable(neutral_channel_reference_test neutral_channel_reference_test.cpp)
+target_link_libraries(neutral_channel_reference_test PRIVATE AZURE2Core)
+add_test(NAME neutral_channel_reference COMMAND neutral_channel_reference_test)

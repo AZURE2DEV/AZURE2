@@ -24,6 +24,8 @@ class ShftFunc {
   ShftFunc(PPair *pPair) {
     totalSepE_ = pPair->GetSepE() + pPair->GetExE();
     radius_ = (double)pPair->GetChRad();
+    neutral_ = (pPair->GetZ(1) * pPair->GetZ(2) == 0);
+    redmass_ = pPair->GetRedMass();
     params_.whitFunc = std::make_unique<WhitFunc>(pPair);
   };
   /*!
@@ -46,6 +48,14 @@ class ShftFunc {
    * difference of EnergyDerivative with a 1 keV step).
    */
   double EnergySecondDerivative(int l, double energy);
+  /*!
+   * Exact shift function of a closed neutral channel (eta = 0) at rho = kappa a:
+   * S_0 = -rho, S_l = -rho^2 / (l - S_{l-1}) - l, i.e. rho u'/u for the decaying
+   * solution u = rho k_l(rho).  Every term is negative, so the recursion is stable.
+   */
+  static double NeutralBoundShift(int l, double rho);
+  /// Is the closed form in use (off with AZURE_NO_NEUTRAL_CLOSED_FORM, for comparisons)?
+  static bool UseNeutralClosedForm();
 
  private:
   /// Separation plus excitation energy of the pair, the threshold this is measured from.
@@ -65,6 +75,8 @@ class ShftFunc {
   Params params_;
   double totalSepE_;
   double radius_;
+  bool neutral_;
+  double redmass_;
 };
 
 #endif

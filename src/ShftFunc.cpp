@@ -1,4 +1,6 @@
 #include "ShftFunc.h"
+#include "Constants.h"
+#include <cstdlib>
 #include <math.h>
 #include <gsl/gsl_deriv.h>
 
@@ -28,6 +30,14 @@ double ShftFunc::theWhitFunc(double x, void *p) {
 double ShftFunc::operator()(int l, double energy) {
   params_.bindingEnergy = fabs(energy - totalSepE());
   params_.lValue = l;
+
+  // Neutral channel: the Whittaker function is rho k_l(rho) up to a constant,
+  // whose logarithmic derivative has the closed form below.  The general route
+  // takes a numerical derivative of GSL's hyperg_U (6-10 calls per value).
+  if (neutral_ && UseNeutralClosedForm()) {
+    const double rho = sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * params_.bindingEnergy);
+    if (rho > 0.0) return NeutralBoundShift(l, rho);
+  }
 
   double result;
   double error;
@@ -79,4 +89,15 @@ double ShftFunc::EnergySecondDerivative(int l, double energy) {
   double d1 = (operator()(l, energy + h) - 2.0 * s0 + operator()(l, energy - h)) / (h * h);
   double d2 = (operator()(l, energy + 2.0 * h) - 2.0 * s0 + operator()(l, energy - 2.0 * h)) / (4.0 * h * h);
   return (4.0 * d1 - d2) / 3.0;
+}
+
+bool ShftFunc::UseNeutralClosedForm() {
+  static const bool use = (std::getenv("AZURE_NO_NEUTRAL_CLOSED_FORM") == nullptr);
+  return use;
+}
+
+double ShftFunc::NeutralBoundShift(int l, double rho) {
+  double s = -rho;
+  for (int ll = 1; ll <= l; ll++) s = -rho * rho / (ll - s) - ll;
+  return s;
 }

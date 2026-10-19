@@ -2119,6 +2119,19 @@ complete:
   on an evaluation shows `RecalcEDependentValues -> ShftFunc::theWhitFunc -> gsl_sf_hyperg_U`.
   Timing recipe that found it: switch data groups off in copies of the model and time
   `calculate_chi2_rwa` (the beta-only copy told the story in one line), then sample stacks.
+- 2026-10-18 (17O+a/10-13-26_natNe_seg1, readme 20:30-21:30) -- CLOSED NEUTRAL CHANNELS USE A
+  CLOSED FORM. `ShftFunc` took S_l = a W'/W by a numerical radial derivative of GSL's hyperg_U
+  Whittaker function (6-10 calls per channel per point; 29 % of a cold natural-neon evaluation in a
+  perf profile). For Z1 Z2 = 0 it now uses `ShftFunc::NeutralBoundShift`: S_0 = -rho,
+  S_l = -rho^2/(l - S_{l-1}) - l, rho = kappa a (170x faster, agrees to 3e-9 =
+  `tests/reference/neutral_channel_reference_test`). The example's mode 1 went 628 -> 453 s. Results
+  move by up to 3.6e-5 relative (Hinterberger chi2 +0.4 of 10,506) because dS/dE, a 1 eV central
+  difference of S, was noisy on the old route: 1e-6 to 5.5e-3 relative error vs the analytic value,
+  1e-9 now. Charged closed channels still take the old route, so their dS/dE (Brune basis,
+  observed-width and ANC conversions) carries that noise. `AZURE_NO_NEUTRAL_CLOSED_FORM=1` restores
+  the old route for comparisons. Open neutral channels were NOT changed: Michel's routine at eta = 0
+  is ~0.3 us per call, no slower than the Riccati-Bessel form; the open-channel Coulomb cost in a
+  profile is the charged channels.
 - 2026-09-13 -- pyazr and `output/intEC.dat`: a session that RELOADS an existing cache for the
   12C+alpha truncated model returns a wrong chi2 (120,593 instead of 113,512, sometimes ~1e26)
   while the CLI reloading the same cache is exact; confirmed with the pre-fix module too, so it is
