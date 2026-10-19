@@ -421,7 +421,8 @@ directories:
 The first answer selects **Calculate Segments With Data**, the second reads
 the fitted parameters. In the GUI, open ``natural_neon.azr``, choose
 **Calculate With Data**, and under **Parameters File** pick **Use** with
-``natural_neon_fit.sav``. The run takes about 10 minutes on four threads,
+``natural_neon_fit.sav``. The run takes about 1.5 minutes on four threads
+with the Coulomb-function table (about 8 minutes with ``--no-coulomb-table``),
 most of it for the folded Junghans segment.
 
 The fitted model is the pair of files. ``natural_neon.azr`` holds the fitted
@@ -488,17 +489,16 @@ penalty adds 26, 16 of it from key 7.
 The fit itself, which evaluated the model through :doc:`../user_guide/pyazr`,
 recorded 25,666 (25,692 with the penalty). The segments without resolution
 agree with it to within 0.005 (the parameters read back from the ``.sav``).
-Four folded segments differ: key 1 by +1.0, key 3 by +0.5, key 9 by +0.5 and
-key 11 by +0.2, at points beside narrow resonances. The adaptive sub-point
-grid of a ``<targetInt>`` line is placed around the levels once, when the
-project is read, and is not moved when a fit moves the levels. The fit
-started from the previous fit's levels and kept that grid for its whole run;
-a calculation from ``natural_neon.azr`` places the grid at the fitted
-energies. Evaluated on the same parameters, a pyazr session opened on the
-starting project gives the fit's 25,691.9 and one opened on the fitted
-project gives this page's 25,694.1, so the difference is the grid placement,
-not the code version. To evaluate a fit against a grid at its own energies,
-restart from the saved project and polish.
+Three folded segments differ, at points beside narrow resonances: key 1 by
++1.0, key 9 by +0.5 and key 11 by +0.2. The fit ran on a version of AZURE2
+that placed the adaptive sub-point grid of a ``<targetInt>`` line around the
+levels once, when the project was read, and kept it while the fit moved the
+levels, so the fit was evaluated on the grid of its starting project. AZURE2
+now places the grid again at every evaluation, at the current level energies
+and the segment's energy shift. At the fitted parameters, pyazr sessions
+opened on the starting project and on the fitted project both give 25,693.6,
+this page's value. The fit's own number is 1.8 lower because of the grid it
+was evaluated on, not because the model is different.
 
 .. figure:: natural_neon_fit.png
    :alt: The eleven neon total cross-section data sets with the fitted
