@@ -45,3 +45,11 @@ endif()
 add_executable(neutral_channel_reference_test neutral_channel_reference_test.cpp)
 target_link_libraries(neutral_channel_reference_test PRIVATE AZURE2Core)
 add_test(NAME neutral_channel_reference COMMAND neutral_channel_reference_test)
+
+# Universal Coulomb tables (CoulombTable, azure2-coulomb-table): a small table
+# (l <= 2, eta in [0.1, 3], rho in [0.1, 10], 30 nodes per decade) built and validated in
+# a few seconds; the full-size validation is in docs/source/developer/coulomb_table.rst.
+add_test(NAME coulomb_table_small
+         COMMAND ${CMAKE_COMMAND} -DTOOL=$<TARGET_FILE:azure2-coulomb-table>
+                 -DOUT=${CMAKE_CURRENT_BINARY_DIR}/coulomb_table_small.bin
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/coulomb_table_small.cmake)

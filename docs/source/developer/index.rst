@@ -11,6 +11,7 @@ wish to understand, modify, or extend the code.
    edata_and_target_effects
    architecture
    physics_core
+   coulomb_table
    gui_structure
    api
    contributing
