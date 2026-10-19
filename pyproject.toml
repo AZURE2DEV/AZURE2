@@ -34,7 +34,7 @@ dynamic = ["version"]
 
 [project.urls]
 Homepage = "https://azure.nd.edu/"
-Documentation = "https://rdeboer1.github.io/AZURE2/"
+Documentation = "https://azure2dev.github.io/AZURE2/"
 Source = "https://github.com/rdeboer1/AZURE2"
 
 [project.optional-dependencies]
