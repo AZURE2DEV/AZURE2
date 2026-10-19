@@ -1673,8 +1673,8 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
     `merge_projects`, `parameters.abundances` (API record type 6; type 5 is
     a shift-function parameter), `penalties()["abundance"]`.
     Tests: `tests/natural_target` (synthetic p+C), `tests/natural_neon`
-    (refit1, the natural-neon model of record since 2026-10-18, on real EXFOR
-    data, three nuclei; each segment reproduces the fit's chi2).
+    (refit1q, the natural-neon model of record since 2026-10-19, on real EXFOR
+    data, three nuclei; each segment reproduces the fit's chi2 to 4e-5).
   - `shiftgroup <label>` (keyword block, 2026-10-13): every segment with the
     label uses the constant shift of the FIRST of them (file order): its
     value, error, vary flag and penalty; the others' own shift fields are
