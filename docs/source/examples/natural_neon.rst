@@ -422,7 +422,7 @@ The first answer selects **Calculate Segments With Data**, the second reads
 the fitted parameters. In the GUI, open ``natural_neon.azr``, choose
 **Calculate With Data**, and under **Parameters File** pick **Use** with
 ``natural_neon_fit.sav``. The run takes about 1.5 minutes on four threads
-with the Coulomb-function table (about 8 minutes with ``--no-coulomb-table``),
+with the Coulomb-function table (about 6 minutes with ``--no-coulomb-table``),
 most of it for the folded Junghans segment.
 
 The fitted model is the pair of files. ``natural_neon.azr`` holds the fitted

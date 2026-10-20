@@ -78,7 +78,7 @@ Available Options
        ``$AZURE2_COULOMB_TABLE``, else ``~/.azure2/coulomb_table.bin``; build
        it once with ``azure2-coulomb-table build`` (about 5 min on four
        threads, 88 MB).  Without a table file the run says so once and uses
-       the exact routines.  The natural-neon example runs 5.4 times faster.
+       the exact routines.  The natural-neon example runs about four times faster.
        Pairs with a nuclear potential and neutral pairs are not tabulated
        (see :doc:`../developer/coulomb_table`).
    * - ``--no-coulomb-table``

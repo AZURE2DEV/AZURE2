@@ -1,7 +1,7 @@
 Universal Coulomb-function tables
 =================================
 
-Status: stages 1 to 3 of 4. The table and its tool exist; the engine reads
+Status: complete (stages 1 to 4, October 2026). The table and its tool exist; the engine reads
 the table by default (``--no-coulomb-table`` turns it off) and lays the
 target-integration grids out again on every evaluation
 (``--no-grid-replacement`` turns that off). Design from the natural-neon work of October 2026
@@ -172,7 +172,7 @@ The tool
    $ azure2-coulomb-table info table.bin
 
 ``build`` takes ``--lmax`` (10), ``--eta`` and ``--rho`` ranges (1e-3 to 100),
-``--per-decade`` (30) and ``--eta-rho-max`` (150). It writes ``FILE.new`` and
+``--per-decade`` (100) and ``--eta-rho-max`` (150). It writes ``FILE.new`` and
 renames it over ``FILE``, so a job that has the old file open keeps reading
 it. ``validate`` takes ``--n``, ``--seed``, ``--order``, ``--limit`` (1e-7) and
 ``--eta-rho-max`` (test only that part of the domain). The file is binary,
@@ -302,11 +302,14 @@ resonances that moved.
 The analytic gradient treats the grid as fixed for the step it differentiates;
 the change of the quadrature nodes with the parameters is not part of it.
 
-Remaining stages
-----------------
+Stage 4: user documentation
+---------------------------
 
-4. User documentation (the user guide's experimental-effects page) and the
-   skill.
+The user guide describes the table under **Configure → Runtime Options**
+(:doc:`../user_guide/configure_menu`) and the re-placed grids, with the two
+adaptive-grid settings of the dialog, under **Experimental Effects**
+(:doc:`../user_guide/experimental_effects`); the command-line options are in
+:doc:`../reference/command_line`.
 
 Decisions still open: whether a copy of the table ships; whether ``save_fit``
 should write fitted norms and shifts into the segment lines.
