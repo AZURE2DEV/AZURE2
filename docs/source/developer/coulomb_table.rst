@@ -174,7 +174,13 @@ The tool
 ``build`` takes ``--lmax`` (10), ``--eta`` and ``--rho`` ranges (1e-3 to 100),
 ``--per-decade`` (100) and ``--eta-rho-max`` (150). It writes ``FILE.new`` and
 renames it over ``FILE``, so a job that has the old file open keeps reading
-it. ``validate`` takes ``--n``, ``--seed``, ``--order``, ``--limit`` (1e-7) and
+it. ``AZURE2 --build-coulomb-table[=FILE]`` and the GUI's **Configure → Build
+Coulomb Table...** run the same build (``CoulombTable::BuildFile``) with the
+default specification, so a ready-built AZURE2, which ships without the tool,
+can make the table; the GUI reports progress from ``BuildSpec::rowsDone``,
+cancels through ``BuildSpec::cancel``, and calls
+``CoulombTable::ForgetMissing`` afterwards so the running process loads the
+new file at its next calculation (ctest ``coulomb_table_build``). ``validate`` takes ``--n``, ``--seed``, ``--order``, ``--limit`` (1e-7) and
 ``--eta-rho-max`` (test only that part of the domain). The file is binary,
 little-endian, with a header giving the format version, the axes, ``l_max``,
 the :math:`\eta\rho` limit and the generator. ctest ``coulomb_table_small``
@@ -312,7 +318,8 @@ adaptive-grid settings of the dialog, under **Experimental Effects**
 :doc:`../reference/command_line`.
 
 The table does not ship with AZURE2 (decided 2026-10-20): each user builds it
-once with ``azure2-coulomb-table build``, about 5 minutes, and keeps it in
+once with ``AZURE2 --build-coulomb-table`` or the GUI's **Configure → Build
+Coulomb Table...**, about 5 minutes, and keeps it in
 ``~/.azure2/``. The file is 88 MB, and building it takes only minutes, so a
 copy in the repository or the release is not worth its size.
 

@@ -2136,7 +2136,8 @@ complete:
 - 2026-10-19 -- Universal Coulomb table, ON BY DEFAULT since stage 3 (`--no-coulomb-table`, pyazr
   `use_coulomb_table=False` to switch off): P, S and the hard-sphere phase of charged channels, open
   and closed (`CoulombTable`, design and validation in `docs/source/developer/coulomb_table.rst`).
-  Build the file once: `azure2-coulomb-table build` -> `~/.azure2/coulomb_table.bin` (or
+  Build the file once: `AZURE2 --build-coulomb-table` (or GUI Configure > Build Coulomb Table...;
+  not distributed, decided 2026-10-20) -> `~/.azure2/coulomb_table.bin` (or
   `$AZURE2_COULOMB_TABLE`; 100 nodes/decade, 88 MB, ~5 min on 4 threads); no file = one line
   "Coulomb table: none at ...", exact routines. Natural-neon example mode 1: 473 -> 88 s, same chi2
   to every printed digit. Not tabulated: neutral pairs, pairs with a nuclear potential, the EC

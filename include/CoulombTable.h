@@ -55,6 +55,10 @@ class CoulombTable {
     /// so the limit also bounds the eta at which the table meets a turning point.
     double etaRhoMax = 150.0;
     int threads = 1;
+    /// Optional progress and cancel hooks (GUI, CLI): rows of BuildRows() done so far,
+    /// and a flag that stops the build early (Build then returns false).
+    std::atomic<int> *rowsDone = nullptr;
+    const std::atomic<bool> *cancel = nullptr;
   };
   /// Open-channel values from the table or from the exact routine.
   struct Open {
@@ -69,8 +73,14 @@ class CoulombTable {
   void SetOrder(int order);
   int Order() const { return order_; }
 
-  /// Build from the exact routines.
-  void Build(const BuildSpec &spec);
+  /// Build from the exact routines; false when spec.cancel stopped it.
+  bool Build(const BuildSpec &spec);
+  /// The number of rows Build computes (the unit of spec.rowsDone).
+  static int BuildRows(const BuildSpec &spec);
+  /// Build and write path (empty: DefaultPath()), creating its directory; the file is
+  /// written as path.new and renamed over path, so a process reading the old file keeps
+  /// it.  False with a reason in error on cancel or an I/O error; nothing is left behind.
+  static bool BuildFile(const std::string &path, const BuildSpec &spec, std::string &error);
   /// Write the table; returns false on an I/O error.
   bool Save(const std::string &path) const;
   /// Read a table; returns false (with a reason in error) on any mismatch.
@@ -84,6 +94,9 @@ class CoulombTable {
   /// The table at path (empty: DefaultPath()), loaded once per process and shared by all
   /// threads; nullptr, after one warning, when it cannot be read.
   static const CoulombTable *Shared(const std::string &path);
+  /// Forget which files Shared() could not read, so the next lookup tries them again
+  /// (after a table was built while the process runs, e.g. from the GUI).
+  static void ForgetMissing();
   /// $AZURE2_COULOMB_TABLE if set, else ~/.azure2/coulomb_table.bin.
   static std::string DefaultPath();
 

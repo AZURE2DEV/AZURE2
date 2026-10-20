@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -86,6 +87,25 @@ inline double H11(double t) { return (t - 1) * t * t; }
 std::atomic<long> CoulombTable::hits_{0}, CoulombTable::misses_{0};
 
 namespace {
+// The tables Shared() has loaded and the files it could not read, for the whole process;
+// ForgetMissing() clears the second and moves the generation on, so the per-thread cache
+// in Shared() looks again.
+std::mutex &SharedMutex() {
+  static std::mutex m;
+  return m;
+}
+std::map<std::string, std::unique_ptr<CoulombTable>> &SharedTables() {
+  static std::map<std::string, std::unique_ptr<CoulombTable>> t;
+  return t;
+}
+std::set<std::string> &SharedFailed() {
+  static std::set<std::string> f;
+  return f;
+}
+std::atomic<int> g_sharedGeneration{0};
+}  // namespace
+
+namespace {
 // Prints how much the table was used when the process ends, if it was used at all.
 struct UsageReport {
   std::atomic<long> *hits, *misses;
@@ -112,16 +132,17 @@ const CoulombTable *CoulombTable::Shared(const std::string &path) {
   thread_local std::string lastPath;
   thread_local const CoulombTable *last = nullptr;
   thread_local bool lastSet = false;
-  if (lastSet && path == lastPath) return last;
+  thread_local int lastGeneration = -1;
+  const int generation = g_sharedGeneration.load(std::memory_order_acquire);
+  if (lastSet && path == lastPath && generation == lastGeneration) return last;
 
-  static std::mutex mutex;
-  static std::map<std::string, std::unique_ptr<CoulombTable>> tables;
-  static std::set<std::string> failed;
+  std::lock_guard<std::mutex> lock(SharedMutex());
+  auto &tables = SharedTables();
+  auto &failed = SharedFailed();
   static UsageReport report{&hits_, &misses_};
   const std::string file = path.empty() ? DefaultPath() : path;
   const CoulombTable *result = nullptr;
   {
-    std::lock_guard<std::mutex> lock(mutex);
     auto it = tables.find(file);
     if (it != tables.end()) {
       result = it->second.get();
@@ -142,11 +163,12 @@ const CoulombTable *CoulombTable::Shared(const std::string &path) {
         if (path.empty() && !std::ifstream(file.c_str()).good())
           std::cerr << "Coulomb table: none at " << file
                     << "; using the exact Coulomb functions (build one with "
-                       "'azure2-coulomb-table build', about 5 min on 4 threads)." << std::endl;
+                       "'AZURE2 --build-coulomb-table' or, in the GUI, Configure > Build Coulomb "
+                       "Table..., about 5 min on 4 threads)." << std::endl;
         else
           std::cerr << "WARNING: Coulomb table not used: " << error
                     << "; using the exact Coulomb functions. Build one with "
-                       "'azure2-coulomb-table build "
+                       "'AZURE2 --build-coulomb-table="
                     << file << "'." << std::endl;
       }
     }
@@ -154,7 +176,14 @@ const CoulombTable *CoulombTable::Shared(const std::string &path) {
   lastPath = path;
   last = result;
   lastSet = true;
+  lastGeneration = generation;
   return result;
+}
+
+void CoulombTable::ForgetMissing() {
+  std::lock_guard<std::mutex> lock(SharedMutex());
+  SharedFailed().clear();
+  g_sharedGeneration.fetch_add(1, std::memory_order_release);
 }
 
 double CoulombTable::LogGamow(double eta) {
@@ -197,7 +226,7 @@ double CoulombTable::ExactBound(int l, double etaB, double rhoB) {
   return -rhoB + (l + 1.0) - a * z * ratio;
 }
 
-void CoulombTable::Build(const BuildSpec &spec) {
+bool CoulombTable::Build(const BuildSpec &spec) {
   lMax_ = spec.lMax;
   auto axis = [&](double lo, double hi) {
     Axis a;
@@ -220,6 +249,7 @@ void CoulombTable::Build(const BuildSpec &spec) {
   int threads = std::max(1, spec.threads);
 #pragma omp parallel for schedule(dynamic, 1) num_threads(threads)
   for (int r = 0; r < nrows; r++) {
+    if (spec.cancel && spec.cancel->load(std::memory_order_relaxed)) continue;
     const int l = r / nx, i = r % nx;
     const double eta = std::pow(10.0, eta_.x0 + i * eta_.dx);
     const double lg = LogGamow(eta);
@@ -251,9 +281,39 @@ void CoulombTable::Build(const BuildSpec &spec) {
       sf.f[k] = phi - rho;
       sb.f[k] = ExactBound(l, eta, rho) + rho;  // S_b -> -rho_b at large rho_b
     }
+    if (spec.rowsDone) spec.rowsDone->fetch_add(1, std::memory_order_relaxed);
+  }
+  if (spec.cancel && spec.cancel->load()) {
+    sheets_.clear();
+    return false;
   }
   if (order_ == 4)
     for (Sheet &s : sheets_) Derivatives(s);
+  return true;
+}
+
+int CoulombTable::BuildRows(const BuildSpec &spec) {
+  const double span = std::log10(spec.etaMax) - std::log10(spec.etaMin);
+  return (spec.lMax + 1) * std::max(2, int(std::lround(span * spec.perDecade)) + 1);
+}
+
+bool CoulombTable::BuildFile(const std::string &path, const BuildSpec &spec, std::string &error) {
+  const std::string file = path.empty() ? DefaultPath() : path;
+  CoulombTable t;
+  if (!t.Build(spec)) {
+    error = "cancelled";
+    return false;
+  }
+  std::error_code ec;
+  const std::filesystem::path parent = std::filesystem::path(file).parent_path();
+  if (!parent.empty()) std::filesystem::create_directories(parent, ec);
+  const std::string tmp = file + ".new";
+  if (!t.Save(tmp) || std::rename(tmp.c_str(), file.c_str()) != 0) {
+    std::remove(tmp.c_str());
+    error = "could not write " + file;
+    return false;
+  }
+  return true;
 }
 
 void CoulombTable::SetOrder(int order) {

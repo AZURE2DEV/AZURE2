@@ -154,10 +154,11 @@ symbols.
 AZURE2 takes the Coulomb functions of charged-particle channels from a table
 when it finds one: the results are the same and a calculation is several times
 faster (about four times for the natural-neon example). The table is not
-distributed; build it once after compiling:
+distributed; build it once, from the GUI (**Configure → Build Coulomb
+Table...**) or from the command line, with a ready-built AZURE2 or your own:
 
 ```bash
-./build/src/azure2-coulomb-table build
+./build/src/AZURE2 --build-coulomb-table
 ```
 
 This takes about 5 minutes on four threads and writes 88 MB to
@@ -223,6 +224,7 @@ Useful flags (`AZURE2 --help` for the full list):
 | `--use-brune`         | Use the alternative level matrix of C. R. Brune. |
 | `--gsl-coul`          | Use GSL Coulomb functions (faster, less accurate). |
 | `--no-coulomb-table`  | Compute every Coulomb function directly instead of taking charged channels from the table. |
+| `--build-coulomb-table[=FILE]` | Build the Coulomb table (about 5 min, 88 MB) and exit. |
 | `--no-grid-replacement` | Keep the experimental-effect sub-point grids where the file's levels put them, instead of laying them out again at every evaluation. |
 | `--use-rmc`           | Reich–Moore approximation for capture (neutron capture). |
 | `--ignore-externals`  | Ignore external resonant capture when the internal width is zero. |

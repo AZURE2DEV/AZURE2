@@ -1,6 +1,7 @@
 // azure2-coulomb-table: build, validate and describe the universal Coulomb tables
-// (CoulombTable).  Stage 1 of the Coulomb-table design: the engine does not read
-// the tables yet.
+// (CoulombTable).  AZURE2 itself builds the default table with --build-coulomb-table
+// (and the GUI from Configure > Build Coulomb Table...); this tool adds the build
+// options, validation and info.
 //
 //   azure2-coulomb-table build FILE [--lmax 10] [--eta 1e-3 100] [--rho 1e-3 100]
 //                              [--per-decade 100] [--eta-rho-max 150] [--threads N]
@@ -293,19 +294,16 @@ int main(int argc, char **argv) {
   }
   spec.threads = threads;
   if (cmd == "build") {
-    CoulombTable t;
     auto t0 = std::chrono::steady_clock::now();
-    t.Build(spec);
-    auto t1 = std::chrono::steady_clock::now();
-    std::error_code ec;
-    const std::filesystem::path parent = std::filesystem::path(path).parent_path();
-    if (!parent.empty()) std::filesystem::create_directories(parent, ec);
-    const std::string tmp = path + ".new";
-    if (!t.Save(tmp) || std::rename(tmp.c_str(), path.c_str()) != 0) {
-      std::fprintf(stderr, "ERROR: could not write %s\n", path.c_str());
+    std::string error;
+    if (!CoulombTable::BuildFile(path, spec, error)) {
+      std::fprintf(stderr, "ERROR: %s\n", error.c_str());
       return 1;
     }
+    auto t1 = std::chrono::steady_clock::now();
     std::printf("built in %.1f s on %d threads\n", std::chrono::duration<double>(t1 - t0).count(), threads);
+    CoulombTable t;
+    if (!LoadOrSay(t, path)) return 1;
     Info(t, path);
     return 0;
   }

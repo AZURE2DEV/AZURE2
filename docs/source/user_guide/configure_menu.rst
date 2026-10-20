@@ -126,14 +126,16 @@ faster: the natural-neon example (:doc:`../examples/natural_neon`) takes about
 The dialog has no switch for the table: the GUI uses it whenever it finds
 the file. The file is ``~/.azure2/coulomb_table.bin``, or the file named by
 the environment variable ``AZURE2_COULOMB_TABLE``. It is not part of the
-download. Build it once with the program ``azure2-coulomb-table``, which is
-built next to ``AZURE2`` (in ``build/src/``):
+download. Build it once, either with **Configure → Build Coulomb Table...**,
+which shows the progress and can be cancelled, or from the command line:
 
 .. code-block:: console
 
-   $ azure2-coulomb-table build
+   $ AZURE2 --build-coulomb-table
 
-This takes about 5 minutes on four threads and writes 88 MB. Without the
+This takes about 5 minutes on four threads and writes 88 MB.
+``--build-coulomb-table=FILE`` writes another file. Calculations started after
+the build use the table; there is no need to restart AZURE2. Without the
 file, a run prints one line saying so and computes the functions directly;
 the results are the same, only slower. A run that used the table reports, at
 the end, how many values it took from it and how many fell outside it.

@@ -54,6 +54,13 @@ add_test(NAME coulomb_table_small
                  -DOUT=${CMAKE_CURRENT_BINARY_DIR}/coulomb_table_small.bin
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/coulomb_table_small.cmake)
 
+# CoulombTable::BuildFile (AZURE2 --build-coulomb-table, the GUI's Build Coulomb Table...):
+# a small table built, counted, cancelled, and picked up by Shared() after ForgetMissing().
+add_executable(coulomb_table_build_test coulomb_table_build_test.cpp)
+target_link_libraries(coulomb_table_build_test PRIVATE AZURE2Core)
+add_test(NAME coulomb_table_build COMMAND coulomb_table_build_test)
+set_tests_properties(coulomb_table_build PROPERTIES TIMEOUT 120)
+
 # AZUREParams::ReadUserParameters on a param.sav with "nan" errors (written after a
 # fit with an invalid covariance), blank and malformed lines: it used to loop
 # until std::bad_alloc.  The timeout turns a hang into a failure.

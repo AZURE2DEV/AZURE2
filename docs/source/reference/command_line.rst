@@ -76,13 +76,18 @@ Available Options
        channels, open and closed, from the universal Coulomb table, with the
        exact routines outside it (the default).  ``FILE`` defaults to
        ``$AZURE2_COULOMB_TABLE``, else ``~/.azure2/coulomb_table.bin``; build
-       it once with ``azure2-coulomb-table build`` (about 5 min on four
+       it once with ``--build-coulomb-table`` (about 5 min on four
        threads, 88 MB).  Without a table file the run says so once and uses
        the exact routines.  The natural-neon example runs about four times faster.
        Pairs with a nuclear potential and neutral pairs are not tabulated
        (see :doc:`../developer/coulomb_table`).
    * - ``--no-coulomb-table``
      - Exact Coulomb functions everywhere.
+   * - ``--build-coulomb-table[=FILE]``
+     - Build the Coulomb table with the default specification on all OpenMP
+       threads, write it to ``FILE`` (default as for ``--coulomb-table``),
+       report progress in steps of 10 % and exit; no project file is needed.
+       The same build as **Configure → Build Coulomb Table...** in the GUI.
    * - ``--no-grid-replacement``
      - Keep the adaptive sub-point grids of experimental effects
        (``<targetInt>``) where the input file's levels put them.  By default

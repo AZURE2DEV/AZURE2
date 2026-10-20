@@ -17,6 +17,13 @@
 #include "GSLException.h"
 #include "CoulFuncCache.h"
 #include "ECAmplitudeCache.h"
+#include "CoulombTable.h"
+#include <atomic>
+#include <chrono>
+#include <thread>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include <stdlib.h>
 #include <iostream>
 #include <iomanip>
@@ -111,6 +118,7 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--gsl-coul:" << std::setw(0) << "Use GSL Coulomb functions (faster, but less accurate)." << std::endl
             << std::setw(25) << std::left << "\t--coulomb-table[=FILE]:" << std::setw(0) << "Charged channels from the universal Coulomb table (the default; FILE: $AZURE2_COULOMB_TABLE or ~/.azure2/coulomb_table.bin)." << std::endl
             << std::setw(25) << std::left << "\t--no-coulomb-table:" << std::setw(0) << "Exact Coulomb functions everywhere." << std::endl
+            << std::setw(25) << std::left << "\t--build-coulomb-table[=FILE]:" << std::setw(0) << "Build the Coulomb table (about 5 min on 4 threads, 88 MB; FILE as for --coulomb-table) and exit." << std::endl
             << std::setw(25) << std::left << "\t--no-grid-replacement:" << std::setw(0) << "Keep the adaptive sub-point grids placed from the input file's levels (default: re-place them as levels and shifts move)." << std::endl
 #ifdef USE_NLOPT
             << std::setw(25) << std::left << "\t--use-nlopt:" << std::setw(0) << "Use NLopt minimizer (BOBYQA) instead of Minuit2." << std::endl
@@ -118,6 +126,51 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--use-gradient:" << std::setw(0) << "Use Minuit2 (MIGRAD) with the analytic gradient (default: numerical)." << std::endl
             << std::setw(25) << std::left << "\t--use-lm:" << std::setw(0) << "Use the Levenberg-Marquardt minimizer (analytic Jacobian; falls back to MIGRAD)." << std::endl
             << std::setw(25) << std::left << "\t--use-gsl-lm:" << std::setw(0) << "Use the GSL trust-region least-squares minimizer with geodesic acceleration (analytic Jacobian; falls back to MIGRAD)." << std::endl;
+}
+
+/*!
+ * --build-coulomb-table[=FILE]: build the universal Coulomb table with the default
+ * specification (CoulombTable::BuildSpec) on all OpenMP threads, write it to FILE (default
+ * CoulombTable::DefaultPath()) and report progress.  The table is not distributed, so this
+ * is how a user of a ready-built AZURE2 makes one.
+ */
+int buildCoulombTable(const std::string &path) {
+  const std::string file = path.empty() ? CoulombTable::DefaultPath() : path;
+  CoulombTable::BuildSpec spec;
+#ifdef _OPENMP
+  spec.threads = omp_get_max_threads();
+#endif
+  std::atomic<int> done{0};
+  std::atomic<bool> finished{false};
+  spec.rowsDone = &done;
+  const int rows = CoulombTable::BuildRows(spec);
+  std::cout << "Building the Coulomb table " << file << " on " << spec.threads
+            << " thread(s): about 5 min on 4 threads, 88 MB." << std::endl;
+  const auto t0 = std::chrono::steady_clock::now();
+  bool ok = false;
+  std::string error;
+  std::thread worker([&] {
+    ok = CoulombTable::BuildFile(file, spec, error);
+    finished = true;
+  });
+  int reported = 0;
+  while (!finished) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    const int percent = int(100.0 * done.load() / rows);
+    if (percent >= reported + 10) {
+      reported = percent / 10 * 10;
+      std::cout << "  " << reported << " %" << std::endl;
+    }
+  }
+  worker.join();
+  const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+  if (!ok) {
+    std::cerr << "ERROR: Coulomb table not built: " << error << std::endl;
+    return 1;
+  }
+  std::cout << "Coulomb table written to " << file << " in " << std::fixed << std::setprecision(0) << seconds
+            << " s." << std::endl;
+  return 0;
 }
 
 /*!
@@ -1413,6 +1466,13 @@ int main(int argc, char *argv[]) {
 
   // Set GSL Error Handler
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
+
+  // --build-coulomb-table[=FILE] builds the table and exits, GUI build or not
+  for (int i = 1; i < argc; i++) {
+    const std::string arg = argv[i];
+    if (arg == "--build-coulomb-table") return buildCoulombTable("");
+    if (arg.compare(0, 22, "--build-coulomb-table=") == 0) return buildCoulombTable(arg.substr(22));
+  }
 
   // Initialize caches for performance optimization
   InitializeCoulFuncCache();
