@@ -6,8 +6,9 @@ something for such a project. The THM machinery itself (HOES cross section,
 `<thm>` keys, experiments, R(E), the DW vertex, the ps and angle windows,
 cbackground=, thm_experiments.out) is new and does nothing unless it is used.
 
-`origin/dev` 6f3228e is merged into `thm` (3628a87, October 2026; see
-"Merge of origin/dev 6f3228e" below), so all of dev is already in `thm`.
+`origin/dev` 64ed575 is merged into `thm` (October 2026; see "Merge of
+origin/dev 64ed575" below; the previous merge was 6f3228e, 3628a87), so all of
+dev is already in `thm`.
 The dev changes merged by 18c49ea, f56c150, da72def, 497548a, e191991 and
 3628a87 are not differences: the Wigner-limit bound, the elastic identical-pair factor
 (7c34992), the adaptive-grid convergence work, target-integration anchoring,
@@ -18,11 +19,11 @@ cache guard.
 
 | commit | change | reason | re-pinned (tests/*/expected) |
 |---|---|---|---|
-| b6cc41b | ShftFunc below threshold from the U(a,b,z) recurrence with an exponent carry; exact S_l(0) at E = 0; linear interpolation for eta > 300; an open channel with eta > 100 is closed (P = 0, S = 2 S(0) - S(-e)) | NaN and underflow near threshold; ~1e-9 noise in S became 0.03-0.5 % in dS/dE (Brune transform) | 22c3d03: 13N, 13N_capture_ay, 7Li_p_ay, beam_profile_kernel, data_file_comments, hybrid_potential, polarization_product, target_effect_ranges, thick_target_resonance (all < 1e-3) |
+| b6cc41b | ShftFunc below threshold: exact S_l(0) at E = 0; an open channel with eta > 100 is closed (P = 0, S = 2 S(0) - S(-e)); near threshold (outside eta <= 1000 and (eta <= 50 or z >= 0.05)) S is interpolated linearly between S(-bindingMin) and S(0).  Since the merge of 64ed575 the exact value itself is dev's U ratio (`CoulombTable::ExactBound`, dev 441d14f) and the neutral closed form (dev af3075e); dev uses the same values where its table or the U ratio is finite, and the numerical radial derivative (0 or NaN close to threshold) elsewhere | NaN and underflow near threshold; ~1e-9 noise in S became 0.03-0.5 % in dS/dE (Brune transform) | 22c3d03: 13N, 13N_capture_ay, 7Li_p_ay, beam_profile_kernel, data_file_comments, hybrid_potential, polarization_product, target_effect_ranges, thick_target_resonance (all < 1e-3) |
 | 12fe484 | ChannelFunc: one helper for S, P and dS/dE at a channel energy (e < 0, e = 0, eta > 100 closed, Coulomb), used by the CNuc transforms, the boundary conditions, AZUREGrad, the adaptive grid, EPoint and ECIntegral; GSL U trusted only for eta <= 50 or z >= 0.1 | a level at or near threshold aborted the CLI or gave NaN; dS/dE was 0 for a level exactly at threshold | none; a width that cannot be converted (P = 0) becomes gamma = 0 with a WARNING |
-| ec416de | dS/dE central difference with starting step \|e\|/4 within [1 eV, 1 keV] (was 1 eV) | round-off dominated: 1.6e-3 in chi2 between compilers | 7Li_p_ay, beam_profile_kernel, data_file_comments, target_effect_ranges; 15bb0a2: 13N, hybrid_potential (< 7e-5) |
+| ec416de | dS/dE central difference with starting step \|e\|/4 within [1 eV, 1 keV] (was 1 eV).  Since the merge of 64ed575 a stencil wholly above threshold uses dev's Richardson difference (PEShift_dE, 441d14f), as dev; the step rule remains for closed channels (dev: 1 eV) and stencils that cross threshold | round-off dominated: 1.6e-3 in chi2 between compilers | 7Li_p_ay, beam_profile_kernel, data_file_comments, target_effect_ranges; 15bb0a2: 13N, hybrid_potential (< 7e-5) |
 | 02ae97b | adaptive grid: geometric tails beyond the resonance core; anchors quantised (width to 1.25^n, energy to width/4); only the finest of overlapping lattices kept; a pure Gaussian convolution whose `<targetInt>` line omits the multiplier uses a 2-width core (an explicit value, and target integration, keep 20) | narrow resonances folded 16-38 % high; the union of lattices tripled the sub-points | thick_target_resonance 19.0249 -> 30.8444, hybrid_potential (+1.6e-3) |
-| 02ae97b, 528b672 | sub-point grid refresh: a folded point rebuilds its sub-points when a fit moves a narrow level's anchor (Brune; 528b672 formal parameters too). Not for components, beam profiles, energy-shifted segments or EC models | the grid was built once at the input parameters | fits only; no fixed-parameter pin |
+| (02ae97b, 528b672) | the thm sub-point grid refresh (EPoint::RefreshSubPointGrid) is gone since the merge of 64ed575: dev re-places every grid at every evaluation (EData::ReplaceSubPointGrids, a163c06, `--no-grid-replacement`), from the observed values of the current parameters (TransformOut on a copy), which serves Brune, formal parameters and Park alike.  No difference from dev left; the quantized anchors of the row above make the re-placed grid piecewise constant | -- | -- |
 | df8c2c8 | (1 + delta_12) = 2 for every cross section out of an identical entrance pair (reactions, capture, differential); none for an identical exit pair; the adjoint gradient follows; a rate run prints a note | dev applied it to elastic only: 12C(12C,a), d(d,p), d(d,g) were a factor 2 low | none (new tests/identical_entrance_reaction) |
 | 76888ad | a `<targetInt>` line listing several segments gives each segment its own copy, so sigma lab -> c.m. is converted once | the shared object was converted once per listed segment | target_effect_ranges 3861.5 -> 3838.66. dev fixed the same bug with a once-only guard (f0444ab, pin 3838.73); both are kept, and the 7e-5 between the pins is the shift-function rows above. A line shared by segments of different entrance pairs still differs: thm converts each copy with its own pair's factor, dev uses the first segment's |
 | 79358bb | EPoint::CalcEDependentValues clears its L_o, P and phase tables before refilling | a second call appended copies; lookups read the stale first copy | none. dev fixed the same doubling in RecalcEDependentValues (797c2ea, rows emptied in place); since the merge both functions use dev's ClearEDependentRows, so no output difference remains |
@@ -133,8 +134,9 @@ marked):
 - The Park penalty is added in CalculateChi2RWA only (as dev), not in
   thm's shared EvaluateFilledChi2 (residuals, Chi2Physical).
 - Dev's three new check.sh scripts take thm's time guard (tests/lib/guard.sh).
-- c8d8db5: the GUI keeps a segment line's `sqrtshift` block on save.  **Differs
-  from dev**, whose GUI drops it (the tokens never reached the model).
+- c8d8db5: the GUI keeps a segment line's `sqrtshift` block on save.  Since the
+  merge of 64ed575 this is dev's `extraTokens` (3209835: every keyword block,
+  sqrtshift included), so no difference is left.
 
 Verified after the merge (one heavy process at a time, OMP_NUM_THREADS=1):
 classic test projects give the same files as 101e028 (thm before the merge)
@@ -171,6 +173,174 @@ Still open:
 
 - 12fe484: the narrower GSL U trust region could move S slightly for light
   pairs at large eta that no test covers.
+
+## Merge of origin/dev 64ed575 (October 2026)
+
+dev between 6f3228e and 64ed575 (137 commits): the universal Coulomb table
+(stages 1-4: `azure2-coulomb-table`, `--coulomb-table[=FILE]`, on by default,
+`--build-coulomb-table`, Configure > Build Coulomb Table; not distributed),
+sub-point grids re-placed at every evaluation (EData::ReplaceSubPointGrids,
+`--no-grid-replacement`), exact shift functions (U-ratio S for closed charged
+channels, Richardson dS/dE for open ones), the closed form for closed neutral
+channels, level widths matched to their J-group channel by (pair, l, s), the
+Q-coefficient fix for UPOS points, the abundance prior in the LM/GSL cost and
+MCMC, full precision for GUI level lines, the minuit_index fallback limited to
+compatible names, the AZUREParams nan-error fix, several compound nuclei in
+one project (samples, `<abundances>`, abundance parameters, `merge_projects`),
+shift groups, normalization groups, energy-shift functions (`shiftfn`), the
+SAMMY UDR resolution function, hard-sphere groups (`includeAllJPi`), one
+Gaussian beam-spread quadrature (dad58dc: a normalised kernel, lab sigma(E)),
+point mapping within a segment, PrecalculatePoints (one parallel pass), the
+Jacobian G2 for `--use-gradient`, the target-integrated A_y adjoint, the EOF
+prompt fix, ERYA table fix, the natural_neon suite and example, docs moved to
+azure2dev.github.io, skills.  All of it is in, with these decisions:
+
+- **Shift functions, one implementation.**  ShftFunc below threshold: S(0) at
+  E = 0; dev's neutral closed form; dev's table bound sheet when a table is in
+  use; else dev's U ratio (`CoulombTable::ExactBound`, U' = -a U(a+1, b+1, z)),
+  with thm's linear continuation to S(0) where GSL's U is not trusted: eta >
+  1000, or eta > 50 and z = 2 kappa a < 0.05 (b6cc41b had eta <= 300, z >= 0.1
+  and the U(a-1, b)/U(a, b) form).  Against mpmath (p+p ... 12C+12C, l = 0-3,
+  binding 1e-10-3 MeV) the largest error of the function is 8.7e-9 (was 2.2e-8
+  with thm's form, and dev's U ratio alone is off by up to 1.3e-6 at p+p, eta
+  111, z 1.2e-3, and NaN within ~1e-7 MeV of threshold, where dev falls back to
+  the numerical derivative that underflows to 0).  WhittakerShift is that U
+  ratio; `AZURE_BOUND_SHIFT_NUMERICAL=1` still selects dev's old route.  Open
+  channels: dev's Richardson dS/dE (PEShift_dE) for every stencil wholly above
+  threshold; ChannelFunc keeps thm's branches at and below threshold and for
+  eta > 100.  ExactBound and the shift-function SVD of EData use GslQuiet
+  (dev swapped the process-wide GSL handler, not thread-safe, and the SVD one
+  was never restored).
+- **Sub-point grids: dev's re-placement only.**  thm's
+  EPoint::RefreshSubPointGrid, CurrentGridAnchors, the thm SubGridSpec and
+  GridConfig::useFitParameters / formalParameters / parkAmplitudes are
+  removed: ReplaceSubPointGrids re-places every grid each evaluation from the
+  observed values of the current parameters (TransformOut on a copy), which
+  covers Brune, formal parameters (thm_nonbrune_grid_test passes) and Park
+  (e186e78's intent: the same grid in both parametrizations; thm_park passes),
+  shifted segments (thm_energy_shift) and components.  The THM fold window
+  (thmConvolutionRange, 5 sigma) is applied after dev's TargetEffect::
+  GridExtent.  Note: `--no-grid-replacement` keeps the file-based grid, which
+  for examples/f19_pag_thm is far off (chi2 626 instead of 77.64); thm's
+  refresh used to replace it at the first evaluation.
+- **Coulomb table and THM.**  The THM quantities that are the R-matrix's P and
+  S (the vertex boundary S_c, ThmLevelWidth's P and dS/dE, R(E)'s
+  penetrabilities through the point tables) use the table where it covers the
+  channel, as the R-matrix does; the thread-local memos of
+  ThmVertexBoundary::ShiftAtLevelEnergy and ThmLevelWidth carry the table in
+  their keys.  The Coulomb waves of ThmCoulombTerm (N_C, coulombIntegral),
+  the DW vertex and ThmDistortion (cwfcomp) bypass it, as does thm's
+  CoulFuncCache exact-energy table (it holds F, G, which the table does not
+  replace).  Table against exact on every THM example and test: models
+  within 1e-8 relative, formal parameters of the transform-limited levels
+  within 5e-6.
+- **Parameter layout and type codes.**  Levels, abundances (dev), norms,
+  shifts, sqrt(E), shift-function parameters (dev), THM cbkg (last).
+  GetParameterInfo types: 5 shift_fn, 6 abundance (dev), **7 cbkg (was 5 on
+  thm)**; kParamInfoFields 16 (field 15 input_is_rwa).  ParamKind order ...
+  Abundance, ThmCoherent.  MCMC kinds: PARAM_ABUNDANCE 6 (dev: 5; internal),
+  PARAM_CBKG 7, shift-function parameters as PARAM_SHIFT (dev's prior rule);
+  the by-name classification knows abundance_* and segment_N_energy_shift_fnJ.
+  pyazr `_KINDS`, `bands._BAND_KINDS = (0, 1, 7)`.
+- **Pair record**: kPairInfoFields 20: dev's nucleus Z, A, abundance in
+  fields 16-18 (dev's positions), thm's binding energy **moved to field 19**
+  (was 16).  pyazr `Pair._NFIELDS = 20`.
+- **Width matching by (pair, l, s)** (b70d1c8): ALevel::SetGammaFromLine and
+  PadChannels carry thm's gammaIsRWA flag with the width (dev's code did not
+  know it: a reordered level would have kept the flag on the wrong channel).
+- AZURELabel::IsEnergyShiftName also matches `_energy_shift_fnJ`, so the LM
+  penalty rows (dev's ForEachShiftPenalty priors), the limits manager and
+  GetEnergyShiftIndices treat shift-function parameters as dev's substring
+  test did.  The LM/GSL penalty rows: norms and shifts by name form (thm),
+  shift priors from ForEachShiftPenalty and abundance rows (dev), nuisance
+  priors by full index (thm, 953486f).
+- minuit_index fallback (b10255d): `cbkg_*` settings, like `segment_*`, are
+  exact Minuit names and never fall back by index; abundances are left out
+  of the nuisance priors (they carry their own).
+- Chi2On(thmOnly) / Chi2Value: dev's pooled copies and PrecalculatePoints
+  (THM-only for the THM finite differences), thm's THM experiment profiling,
+  the Park wall (thm dcb8064) and dev's abundance penalty (not in the
+  THM-only part).  Gradient: dev's structure (Jacobian path, FdStep, shift
+  groups), thm's FixedMask, the HOES adjoint rows, THM-only differences for
+  THM norms; a shift parameter of a THM experiment segment is not local.
+- CopyEDependentValuesFrom (dev, mapped points) copies the THM tables too.
+- THM form factors (thm_jl_, rhodjl, coul) are stored for THM points only:
+  for classic points they were three zeros per channel per sub-point, 0.6 GB
+  with dev's hard-sphere groups on tests/convolution_unify (430k sub-points).
+  The merged CLI still peaks 15 % above dev there (1.74 vs 1.52 GB; EPoint
+  896 vs 744 bytes) -- the THM members of every point.
+- EOF at a prompt: thm's readAnswer (the prompt named, exit 1, blank defaults
+  taken) replaces dev's promptLine.  **Differs from dev**: at the main menu dev
+  printed "End of input on stdin: exiting." and exited through the Exit
+  option; here it is the error and exit 1 (tests/cli_eof).
+- dev's banner left the log stream left-aligned (`std::left` before the
+  version column): every later number of the log moved ("Iteration: 440
+  Chi-Squared"); `std::right` restored after it.  **Differs from dev**.
+- `--help` lists `--grid-replacement`; tests/cli_help reads `--flag[=FILE]`.
+- pyazr: save_fit has thm's options (norms=, close_session=, cbkg, prior
+  centres, chi2 check) and dev's verification (_snapshot_mismatch: amplitudes
+  up to a level's sign) and abundances; the chi2 check is 1e-4 in the
+  standard parametrization (dev's beta_sign_test: ~1e-5 from the iterative
+  inverse transform), 1e-6 otherwise.  transform_all_rwa takes
+  `include_fixed=` (thm) and `free_only=` (dev).  calculate_rwa in
+  extrapolation mode accepts a data-mode vector (its free R-matrix and
+  abundance block), as before dev's length check (extrap_layout_test).
+  update_rwa_params_from_sav is dev's load_sav on the configured output dir.
+  penalties(): nominal_norm (prior centres) with dev's normgroup rule.
+- GUI: SegmentsData/TestData carry isTHM then dev's extraTokens (thm's
+  sqrtShiftTokens is gone: dev keeps every keyword block); level lines keep
+  thm's round-trip writer, in dev's per-nucleus order; PairsData column 15
+  (THM binding) before dev's derived Compound Nucleus column (16); MCMC tab
+  categories know abundance and shift_fn.
+- Tests: tests/thm_coherent_background/toy's exit pair is n + 16O (one
+  compound nucleus; it was n + 12C, which dev now refuses);
+  park_chi2_fallback makes the adjoint bail with an auto-tolerance target
+  effect (a convolved A_y no longer does, 2e726db); park_formalism's
+  iteration regex takes either alignment; target_int_tab_test's long-number
+  case is section 13.
+- CI: thm's venv Python (pybind11, numpy, scipy, mpmath) for all three
+  runners, dev's queued concurrency and `-LE slow`; dev's second Python
+  pinning block (system python3, PYBIND11_FINDPYTHON) dropped as redundant.
+
+Results that move (no table file; the table changes nothing beyond 1e-8):
+
+- Classic against dev 64ed575 (dev's tests and examples, and the classic
+  tests of thm, both binaries on the same inputs): identical apart from
+  section A -- thick_target_resonance 19.0249 -> 30.8444 (02ae97b),
+  hybrid_potential 2.46215e6 -> 2.46612e6 (1.6e-3), 13N segment 1 814.402 ->
+  814.349 (6.5e-5), target_effect_ranges 3838.74 -> 3838.66 (2.1e-5),
+  beam_profile_kernel 40.4474 -> 40.4393 (2.0e-4; thm's grid and dS/dE rows
+  on top of dev's detailed-balance fix), parameters.out of 7Li_p_ay-type
+  projects in the 7th digit.  All of these are the pins thm already had,
+  except beam_profile_kernel (re-pinned 40.4393).  natural_neon (test and
+  example) needs more than 2.4 GB with either binary and could not be run
+  here.
+- THM against ab85222 (every THM example and test): dev's normalised Gaussian
+  kernel moves every folded model by the kernel's missing tail, 2.70e-3
+  (1 - erf(3/sqrt 2)) for direct data under a 3-sigma window and 5.7e-7 for
+  THM segments (5 sigma); the shift-function and dS/dE changes move the rest
+  by <= 1e-5 (formal parameters of transform-limited levels up to 1e-4, e.g.
+  f19's 810.82 -> 810.90 MeV^1/2 at the same widths).  Data chi2:
+  c12c12_tumino2018 111.651 -> 111.613 (-3.4e-4; total with priors 112.0758
+  -> 112.0376), li7_tumino2006 439.104 -> 439.148 (+1.0e-4),
+  li6_pizzone2011 156.991 -> 157.036 (+2.9e-4), f19_pag_thm 77.6398 ->
+  77.6400, 7Li_p_a 2138.48 -> 2138.45 (-1.3e-5), 6Li_d 682.147 -> 682.146,
+  18O_p_a_thm norm 2.9425e-5 -> 2.94251e-5; the others in the 7th digit.
+  Re-pinned: tests/6Li_d, 7Li_p_a, 18O_p_a_thm, the examples' documented
+  totals, pair_identity's 112.0376.  THM check.sh: all pass; the only pin
+  moved is thm_options kinematics=lambda32, 5499.08 -> 5604.98 (1.9 %): the
+  lowest point (E = 76 keV) folds the 1/k_i of lambda32 through E = 0, an
+  integrable singularity that makes it depend on where the sub-points fall,
+  and dev's re-placement keeps the anchor of level 5002 at -0.336 MeV (Gamma_alpha
+  134 keV) that thm's refresh dropped; that point moves 18 %, every other by
+  <= 1e-4.
+- THM best fits (/home/almalinux/thm_bestfits/12C_12C, file alone): plain_6.5
+  91.5788 -> 91.5550, plain_8.5 70.3198 -> 70.3222, NCxR_8.5 100.470 ->
+  100.472 (the direct segments' kernel normalisation; single segments by up
+  to 3 % of their small chi2).
+
+Still open: natural_neon on this box (memory); the merged EPoint is 152
+bytes larger than dev's.
 
 ## Bugs from origin/dev fixed on thm (October 2026)
 
@@ -209,19 +379,29 @@ non-zero; under Park, LM's cost includes the J penalty (zero where J > 0).
    with the merge.  Re-pin dev's tests/*/expected that A moves (the thm pins
    are already moved; a new dev test may need it).
 3. Parameter layout and type codes: classic as dev; check that a newer dev
-   did not add parameters after the sqrt(E) block (the cbkg block must stay
-   last) or reuse type code 5.
+   did not add parameters after the shift-function block (the cbkg block must
+   stay last) or reuse type code 7 (cbkg; 5 and 6 are dev's shift_fn and
+   abundance); the pair record keeps dev's fields first (binding energy
+   last, field 19).
 4. Engine seams to re-check: EData.cpp/EDataThm.cpp hooks, EPoint THM
-   tables and RefreshSubPointGrid, AZURECalc/AZUREGrad/AZUREAPI THM paths,
-   CNuc TransformIn (gammaIsRWA, Park), ChannelFunc users, Config.h flags.
+   tables (CalcEDependentValues, CopyEDependentValuesFrom, mapped points),
+   ReplaceSubPointGrids and THM sub-points, AZURECalc (Chi2On thmOnly,
+   Gradient)/AZUREGrad/AZUREAPI THM paths, CNuc TransformIn (gammaIsRWA,
+   Park), ALevel per-channel vectors (gamma_is_rwa_), ChannelFunc and
+   ShftFunc, the Coulomb-table keys of the THM memos, Config.h flags.
 5. GUI: SegmentsDataData/SegmentsTestData fields (isTHM last before any new
    dev field), level lines 32/33, parameterSettings rows and prior_centre,
    the Runtime Options box; open + save of a classic project must stay byte
    for byte (tests/gui/thm_opt_in, parameter_settings, level_precision).
-6. pyazr: `_KINDS`, `_NFIELDS`, `penalties()`, the sav readers (by name).
-7. Tests and CI: tests/pyazr/CMakeLists.txt (AZURE2_BIN), tests/reference,
-   tests/gui, .github/workflows/build.yml; run build/ and build-gui ctest and
-   tests/run_tests.sh under the memory cap.
+6. pyazr: `_KINDS`, `_NFIELDS` (Parameter 16, Pair 20), `penalties()`, the
+   sav readers (by name), save_fit (both verifications), mode-dependent
+   vector lengths.
+7. Tests and CI: tests/pyazr/CMakeLists.txt (AZURE2_BIN, the SKIP 77 block
+   last), tests/reference, tests/gui, .github/workflows/build.yml (one Python
+   pinning block); run build/ and build-gui ctest and tests/run_tests.sh under
+   the memory cap (convolution_unify, natural_target and natural_neon need
+   more than 2.4 GB of address space with dev's binary too).
+9. A test toy model must be one compound nucleus per level (dev's rule).
 8. THM + `--use-park` is allowed (see "THM under Park"); dev has neither
    THM nor gammaIsRWA, so only the adaptive-grid row there touches dev's
    classic Park projects.
