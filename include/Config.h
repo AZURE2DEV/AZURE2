@@ -121,6 +121,13 @@ class Config {
   bool useCoulombTable;
   /// The table file; empty = $AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin.
   std::string coulombTablePath;
+  /// External-capture integrals from per-term energy tables (ECTable) instead of a
+  /// direct integral at every energy, and shifted points evaluated at their shifted
+  /// energies from the same tables; on by default, --no-ec-table restores the direct
+  /// integrals and the linear interpolation of shifted amplitudes.
+  bool useECTable;
+  /// Nodes per decade of E_out of those tables ($AZURE2_EC_TABLE_NODES overrides).
+  int ecTableNodesPerDecade;
   /// Lay the adaptive sub-point grids of experimental effects out again on every
   /// evaluation, for the current levels and energy shifts (EData::ReplaceSubPointGrids);
   /// on by default, --no-grid-replacement keeps the grids placed from the input file.
