@@ -28,6 +28,7 @@
 #include "InfoDialog.h"
 #include "LevelsTab.h"
 #include "SegmentsTab.h"
+#include "AbundancesModel.h"
 #include "AZURESetup.h"
 #include "CNuc.h"
 #include "Config.h"
@@ -47,6 +48,12 @@ FittingTab::FittingTab(QWidget *parent) :
   levelParamsTable = new QTableWidget;
   setupParameterTable(levelParamsTable, "Level Parameters");
   paramTabWidget->addTab(levelParamsTable, "Level Parameters");
+
+  // Shown only when the project has an <abundances> block (updateParameterTables).
+  abundanceParamsTable = new QTableWidget;
+  setupParameterTable(abundanceParamsTable, "Abundance Parameters");
+  paramTabWidget->addTab(abundanceParamsTable, "Abundances");
+  paramTabWidget->setTabVisible(paramTabWidget->indexOf(abundanceParamsTable), false);
 
   normParamsTable = new QTableWidget;
   setupParameterTable(normParamsTable, "Normalization Parameters", true);
@@ -176,6 +183,7 @@ void FittingTab::addParameterRow(QTableWidget *table, const FittingParameter &pa
 void FittingTab::updateParameterTables() {
   // Clear existing tables
   levelParamsTable->setRowCount(0);
+  abundanceParamsTable->setRowCount(0);
   normParamsTable->setRowCount(0);
   shiftParamsTable->setRowCount(0);
   cbkgParamsTable->setRowCount(0);
@@ -186,6 +194,8 @@ void FittingTab::updateParameterTables() {
 
     if (param.category == "level") {
       targetTable = levelParamsTable;
+    } else if (param.category == "abundance") {
+      targetTable = abundanceParamsTable;
     } else if (param.category == "norm") {
       targetTable = normParamsTable;
     } else if (param.category == "shift") {
@@ -199,6 +209,7 @@ void FittingTab::updateParameterTables() {
     }
   }
   showCoherentTab();
+  paramTabWidget->setTabVisible(paramTabWidget->indexOf(abundanceParamsTable), abundanceParamsTable->rowCount() > 0);
 }
 
 void FittingTab::reset() {
@@ -390,6 +401,30 @@ void FittingTab::populateFromCurrentGUIState() {
     }
   }
 
+
+  // Abundances: CNuc::FillMnParams emits one abundance_<Z>_<A> right after the levels and before the
+  // normalizations, only when the project carries an <abundances> block (an old project keeps its layout).
+  // Value = abundance, Error = the prior's sigma (0 = none), Nuisance = fitted; all three live in the
+  // Particle Pairs tab's abundance table and are written back there.
+  if (abundancesModel_ && abundancesModel_->hasBlock()) {
+    QList<AbundanceEntry> entries = abundancesModel_->allEntries();   // sample by sample, the engine's order
+    for (int i = 0; i < entries.size(); i++) {
+      const AbundanceEntry &e = entries[i];
+      FittingParameter abundanceParam;
+      abundanceParam.name = AbundancesModel::parameterName(e);
+      abundanceParam.value = e.value;
+      abundanceParam.lowerLimit = 0;
+      abundanceParam.upperLimit = 0;
+      abundanceParam.error = e.sigma;
+      abundanceParam.fitError = 0.0;
+      abundanceParam.useAsNuisance = e.vary;
+      abundanceParam.category = "abundance";
+      abundanceParam.levelIndex = -1;
+      abundanceParam.channelIndex = i;  // row in the abundance table
+      fittingParameters.append(abundanceParam);
+    }
+  }
+
   // Get normalization and shift parameters from SegmentsDataModel
   // IMPORTANT: Follow same order as EData::FillMnParams() - ALL norms first, then ALL shifts
   SegmentsDataModel *segmentsModel = segmentsTab_->getSegmentsDataModel();
@@ -429,6 +464,7 @@ void FittingTab::showEvent(QShowEvent *event) {
   // Reflect free/fix changes to normalizations or energy shifts made in the
   // Segments tab while this tab was hidden.
   syncSegmentVaryStates();
+  syncAbundances();
 }
 
 // Number the parameters exactly the way AZURE2 does, so the minuit_index written
@@ -472,6 +508,9 @@ void FittingTab::assignMinuitIndices() {
                    channels[param.channelIndex].isFixed == 0 &&
                    channels[param.channelIndex].reducedWidth != 0.0);
       }
+    } else if (param.category == "abundance") {
+      // Emitted fixed unless its vary flag is set, so it counts only when fitted.
+      counted = param.useAsNuisance;
     } else if (param.category == "norm" || param.category == "shift") {
       bool segmentActive = (param.channelIndex >= 0 && param.channelIndex < segments.size() &&
                             segments[param.channelIndex].isActive == 1);
@@ -507,6 +546,58 @@ void FittingTab::syncSegmentVaryStates() {
   // Freeing or fixing a normalization changes which parameters AZURE2 puts in
   // its Minuit vector, so the recorded indices have to be renumbered with it.
   assignMinuitIndices();
+}
+
+void FittingTab::setAbundancesModel(AbundancesModel *model) {
+  abundancesModel_ = model;
+  if (!model) return;
+  // New nuclei change the parameter list; edited entries only change rows in place.
+  connect(model, SIGNAL(modelReset()), this, SLOT(refreshParameters()));
+  connect(model, SIGNAL(samplesChanged()), this, SLOT(refreshParameters()));
+  connect(model, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(syncAbundances()));
+}
+
+void FittingTab::writeAbundance(const FittingParameter &param) {
+  if (param.category != "abundance" || !abundancesModel_) return;
+  QList<AbundanceEntry> entries = abundancesModel_->allEntries();
+  if (param.channelIndex < 0 || param.channelIndex >= entries.size()) return;
+  const AbundanceEntry &e = entries[param.channelIndex];
+  abundancesModel_->setEntry(e.sample, e.nucleus, param.value, param.useAsNuisance, param.error);
+}
+
+void FittingTab::syncAbundances() {
+  if (!abundancesModel_) return;
+  QList<AbundanceEntry> entries = abundancesModel_->allEntries();
+  bool renumber = false;
+  int seen = 0;
+  for (int i = 0; i < fittingParameters.size(); i++) {
+    FittingParameter &p = fittingParameters[i];
+    if (p.category != "abundance") continue;
+    seen++;
+    int row = p.channelIndex;
+    if (row < 0 || row >= entries.size()) continue;
+    const AbundanceEntry &e = entries[row];
+    if (p.value != e.value) {
+      p.value = e.value;
+      updateParameterTableValue(p.name, e.value);
+    }
+    if (p.error != e.sigma) {
+      p.error = e.sigma;
+      updateParameterTableError(p.name, e.sigma);
+    }
+    if (p.useAsNuisance != e.vary) {
+      p.useAsNuisance = e.vary;
+      updateParameterTableCheckbox(p.name, e.vary);
+      renumber = true;
+    }
+  }
+  // The block appearing or vanishing adds or removes the rows themselves.
+  int shouldHave = abundancesModel_->hasBlock() ? entries.size() : 0;
+  if (seen != shouldHave) {
+    populateFromCurrentGUIState();
+    return;
+  }
+  if (renumber) assignMinuitIndices();
 }
 
 double FittingTab::transformRWAParameterToPhysical(const QString &paramName, double rwaValue) {
@@ -627,6 +718,7 @@ void FittingTab::parameterItemChanged(QTableWidgetItem *item) {
       // nothing else: dataNormError (10) or energyShiftError (15).
       const FittingParameter &p = fittingParameters[paramIndex];
       writeSegmentColumn(p, p.category == "norm" ? 10 : 15, value);
+      writeAbundance(p);
     }
 
   } else if (col == 7) {  // Prior centre (norms and shifts): empty = the Value
@@ -654,6 +746,9 @@ void FittingTab::parameterItemChanged(QTableWidgetItem *item) {
     // column: varyNorm (11) or varyEnergyShift (16).
     const FittingParameter &p = fittingParameters[paramIndex];
     writeSegmentColumn(p, p.category == "norm" ? 11 : 16, p.useAsNuisance ? 1 : 0);
+    writeAbundance(p);
+    // Fitting or fixing an abundance changes the Minuit vector, as with a normalization.
+    if (p.category == "abundance") assignMinuitIndices();
   }
 }
 
@@ -781,6 +876,29 @@ void FittingTab::loadSettings() {
         }
 
         // Add ALL normalization and shift parameters from all active segments
+        // Abundances: CNuc::FillMnParams emits one abundance_<Z>_<A> right after the levels and before the
+        // normalizations, only when the project carries an <abundances> block (an old project keeps its layout).
+        // Value = abundance, Error = the prior's sigma (0 = none), Nuisance = fitted; all three live in the
+        // Particle Pairs tab's abundance table and are written back there.
+        if (abundancesModel_ && abundancesModel_->hasBlock()) {
+          QList<AbundanceEntry> entries = abundancesModel_->allEntries();   // sample by sample, the engine's order
+          for (int i = 0; i < entries.size(); i++) {
+            const AbundanceEntry &e = entries[i];
+            FittingParameter abundanceParam;
+            abundanceParam.name = AbundancesModel::parameterName(e);
+            abundanceParam.value = e.value;
+            abundanceParam.lowerLimit = 0;
+            abundanceParam.upperLimit = 0;
+            abundanceParam.error = e.sigma;
+            abundanceParam.fitError = 0.0;
+            abundanceParam.useAsNuisance = e.vary;
+            abundanceParam.category = "abundance";
+            abundanceParam.levelIndex = -1;
+            abundanceParam.channelIndex = i;  // row in the abundance table
+            fittingParameters.append(abundanceParam);
+          }
+        }
+
         SegmentsDataModel *segmentsModel = segmentsTab_->getSegmentsDataModel();
         if (segmentsModel) {
           QList<SegmentsDataData> segments = segmentsModel->getLines();
@@ -864,7 +982,9 @@ void FittingTab::loadSettings() {
           }
         }
         // Match energy shift parameters and extract segment identifier
-        else if (key.contains("shift", Qt::CaseInsensitive) && !key.contains("_rwa") && !key.contains("_sqrt")) {
+        // (not the sqrt(E) coefficients or shift-function parameters, which share the name stem)
+        else if (key.contains("shift", Qt::CaseInsensitive) && !key.contains("_rwa") && !key.contains("_sqrt") &&
+                 !key.contains("_energy_shift_fn")) {
           // Try multiple patterns to extract segment identifier
           QRegExp segmentNumRegex("segment_(\\d+)_energy_shift", Qt::CaseInsensitive);
           QRegExp segmentShiftRegex("segment_(\\d+)_shift", Qt::CaseInsensitive);
@@ -1294,7 +1414,8 @@ void FittingTab::loadSettings() {
                     param.fitError = it.value().second;
                     // Find the exact parameter name from params.sav
                     for (const QString &savKey : savParams.keys()) {
-                      if (savKey.contains("shift", Qt::CaseInsensitive) && !savKey.contains("_rwa") && !savKey.contains("_sqrt")) {
+                      if (savKey.contains("shift", Qt::CaseInsensitive) && !savKey.contains("_rwa") && !savKey.contains("_sqrt") &&
+                          !savKey.contains("_energy_shift_fn")) {
                         // Check if this savKey corresponds to this segmentId
                         QRegExp segmentNumRegex("segment_(\\d+)_energy_shift", Qt::CaseInsensitive);
                         QRegExp segmentShiftRegex("segment_(\\d+)_shift", Qt::CaseInsensitive);
@@ -1465,8 +1586,16 @@ void FittingTab::loadSettings() {
       // and that a .sav does not describe at all.  Loading fitted *values* must not
       // silently redefine which parameters are free or how tightly they are
       // constrained.
-      for (const FittingParameter &param : fittingParameters) {
+      for (FittingParameter &param : fittingParameters) {
         if (param.category == "level") updateParameterInOtherTabs(param.name, param);
+        // An abundance is named abundance_<Z>_<A> in the .sav exactly as here; its value goes back to the
+        // Particle Pairs tab, the vary flag and sigma stay what the user set.
+        if (param.category == "abundance" && savParams.contains(param.name)) {
+          param.value = savParams[param.name].first;
+          param.fitError = savParams[param.name].second;
+          updatedCount++;
+          updateParameterInOtherTabs(param.name, param);
+        }
       }
 
       // Refresh the parameter tables with ALL parameters (including fixed and non-varying)
@@ -1651,6 +1780,8 @@ void FittingTab::updateParameterInOtherTabs(const QString &paramName, const Fitt
         }
       }
     }
+  } else if (param.category == "abundance") {
+    writeAbundance(param);
   } else if (param.category == "norm" || param.category == "shift") {
     // Update normalization or shift parameters in SegmentsDataModel
     SegmentsDataModel *segmentsModel = segmentsTab_->getSegmentsDataModel();
@@ -1683,7 +1814,9 @@ void FittingTab::updateParameterInOtherTabs(const QString &paramName, const Fitt
 void FittingTab::updateParameterTableValue(const QString &paramName, double value) {
   // Determine which table the parameter belongs to
   QTableWidget *targetTable = nullptr;
-  if (paramName.contains("Normalization")) {
+  if (paramName.startsWith("abundance_")) {
+    targetTable = abundanceParamsTable;
+  } else if (paramName.contains("Normalization")) {
     targetTable = normParamsTable;
   } else if (paramName.contains("Energy Shift")) {
     targetTable = shiftParamsTable;
@@ -1949,7 +2082,9 @@ void FittingTab::onSegmentEnergyShiftChanged(int segmentIndex, double value) {
 void FittingTab::updateParameterTableError(const QString &paramName, double error) {
   // Determine which table the parameter belongs to
   QTableWidget *targetTable = nullptr;
-  if (paramName.contains("Normalization")) {
+  if (paramName.startsWith("abundance_")) {
+    targetTable = abundanceParamsTable;
+  } else if (paramName.contains("Normalization")) {
     targetTable = normParamsTable;
   } else if (paramName.contains("Energy Shift")) {
     targetTable = shiftParamsTable;

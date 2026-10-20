@@ -4,9 +4,12 @@
 #include <string>
 #include <fstream>
 #include <vector>
+#include <memory>
+#include <iosfwd>
 #include "Constants.h"
 #include "Equation.h"
 #include "Straggling.h"
+#include "UdrKernel.h"
 
 /// An AZURE target effect entry
 
@@ -39,16 +42,27 @@ class TargetEffect {
   int NumConvCoefficients() const;
   /// Gaussian beam-spread sigma.
   double GetSigma() const;
-  /// Beam sigma at a given energy, where it is energy dependent.
-  double CalculateSigma(double, const Config &);
+  /// Is there a Gaussian beam spread at all (a constant sigma or an expression)?
+  bool IsGaussian() const { return isConvolution_ || isConvCoefficients_; }
+  /// Is an expression sigma(E) written in the lab frame (E in lab MeV, sigma in lab MeV, the `sigmalab`
+  /// keyword), as the constant sigma always is? Without the keyword an expression is the pre-2026-10
+  /// convention: evaluated at the c.m. energy, its value the c.m. width.
+  bool IsSigmaLab() const { return sigmaLab_; }
+  /// The c.m. beam-spread sigma at c.m. energy \p eCM: the one place every kernel takes its width from.
+  /// A constant sigma was converted lab -> c.m. by ConvertSigmaToCM; a lab expression is evaluated at
+  /// eCM / F and its value scaled by F, the same factor; a legacy expression is used as it stands.
+  double SigmaCM(double eCM, const Config &) const;
+  /// The normalised Gaussian kernel exp(-(e - centroid)^2 / 2 sigma^2) / (sigma sqrt(2 pi)).
+  static double GaussianKernel(double e, double centroid, double sigma);
+  /// Straggling sigma (c.m. MeV) after an energy loss of \p deltaE (c.m. MeV): coefficient * sqrt(dE[keV]) keV.
+  double StragglingSigma(double deltaE) const;
+  /// How far the sub-point grid of a point at c.m. energy \p eCM must reach above (\p forward) and below
+  /// (\p backward) it for this effect; \p thicknessCM is the point's target thickness (c.m. MeV, 0 if none).
+  void GridExtent(double eCM, double thicknessCM, const Config &, double &forward, double &backward) const;
   /// Target density in atoms/cm^2. Target integration only.
   double GetDensity() const;
   /// Energy loss across the target at a given energy, from the stopping cross section and the density.
   double TargetThickness(double, const Config &);
-  /// Weight of one sub-point in the convolution integrand.
-  double GetConvolutionFactor(double, double) const;
-  /// As above with an energy-dependent sigma.
-  double CalculateConvolutionFactor(double, double, const Config &);
   /// Attenuation coefficient of the given order.
   double GetQCoefficient(int) const;
   /// Convolution coefficient of the given order.
@@ -124,7 +138,44 @@ class TargetEffect {
   void ConvertSigmaToCM(double factor);
   const std::vector<BeamProfileComponent> &GetBeamProfile() const;
 
+  /// User-defined numerical resolution function (SAMMY's UDR): a file of
+  /// time-of-flight delay distributions tabulated at a set of energies, in
+  /// SAMMY's UDR format, convolved with a Gaussian burst and a rectangular
+  /// channel width.  Written as the trailing block
+  /// `udr "<file>" flightPath_m burstFWHM_ns channel_ns centred` of a
+  /// targetInt line; a negative channel value is |n| bins per decade of
+  /// energy (logarithmic binning), i.e. a width of t ln(10)/(2n) in time.
+  bool IsUdr() const;
+  const std::string &GetUdrFile() const;
+  double GetUdrFlightPath() const;
+  double GetUdrBurstFwhm() const;
+  double GetUdrChannelWidth() const;
+  bool IsUdrCentred() const;
+  /// Read the tabulated functions whose energies lie within a decade of
+  /// [eMin, eMax] (lab MeV), plus the bracketing ones; merges with what is
+  /// already loaded.  Returns false if the file cannot be read.
+  bool LoadUdrTable(double eMinLab, double eMaxLab, std::ostream &log);
+  /// The kernel for a point at lab energy eLab (MeV) for a projectile of rest
+  /// energy mass (MeV): the table interpolated in energy, centred if asked,
+  /// convolved with the burst and channel width, normalised.
+  std::shared_ptr<const UdrKernel> BuildUdrKernel(double eLab, double mass) const;
+
  private:
+  struct UdrTable {
+    std::string file;
+    std::vector<double> energy;                ///< lab MeV, ascending
+    std::vector<std::vector<double> > tau;     ///< microseconds, per energy
+    std::vector<std::vector<double> > r;       ///< per microsecond, per energy
+    double loadedMin = 0.0, loadedMax = 0.0;   ///< lab MeV range the table covers
+  };
+  bool isUdr_ = false;
+  std::string udrFile_;
+  double udrFlightPath_ = 0.0;   ///< metres
+  double udrBurstFwhm_ = 0.0;    ///< nanoseconds
+  double udrChannelWidth_ = 0.0; ///< nanoseconds
+  bool udrCentred_ = true;
+  std::shared_ptr<UdrTable> udrTable_;  ///< shared between copies of the effect
+
   bool isConvolution_;
   bool isTargetIntegration_;
   bool isActive_;
@@ -138,6 +189,8 @@ class TargetEffect {
   vector_r qCoefficients_;
   vector_r convCoefficients_;
   Equation convolutionEq_;
+  bool sigmaLab_ = false;        ///< the expression is lab in, lab out (`sigmalab` keyword)
+  double cmFactor_ = 1.0;        ///< c.m. / lab energy of the entrance pair, set by ConvertSigmaToCM
 
   // ERYA straggling integration variables
   bool isStraggling_;

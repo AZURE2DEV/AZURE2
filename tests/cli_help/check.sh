@@ -44,11 +44,12 @@ fi
 
 # The flags as printed: "<tab>--flag:" at the start of a line.
 (cd "$WORK" && $RUN "$AZURE2_BIN" --help < /dev/null 2>&1 | head -c 100000 | tr -d '\r' > help.txt)
-printed="$(sed -n 's/^[[:space:]]*\(--[a-z][a-z-]*\):.*/\1/p' "$WORK/help.txt" | sort -u)"
+# A flag that takes a value prints as "--flag[=FILE]:".
+printed="$(sed -n 's/^[[:space:]]*\(--[a-z][a-z-]*\)\(\[=[A-Z]*\]\)\{0,1\}:.*/\1/p' "$WORK/help.txt" | sort -u)"
 # The flags of the source: every "--flag" string literal of src/AZURE2.cpp.
 literals="$(tr -d '\r' < "$SRC" | grep -o '"--[a-z][a-z-]*"' | tr -d '"' | sort -u)"
 # The flags of the documentation's table: "* - ``--flag``" rows.
-documented="$(tr -d '\r' < "$DOC" | sed -n 's/^ *\* - ``\(--[a-z][a-z-]*\)``.*/\1/p' | sort -u)"
+documented="$(tr -d '\r' < "$DOC" | sed -n 's/^ *\* - ``\(--[a-z][a-z-]*\)\(\[=[A-Z]*\]\)\{0,1\}``.*/\1/p' | sort -u)"
 
 if [ -z "$printed" ] || [ -z "$literals" ] || [ -z "$documented" ]; then
   bad "could not read the flags (help: $(echo $printed | wc -w), source: $(echo $literals | wc -w), docs: $(echo $documented | wc -w))"

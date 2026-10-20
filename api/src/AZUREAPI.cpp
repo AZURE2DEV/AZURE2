@@ -187,6 +187,42 @@ bool AZUREAPI::UpdateParameters() {
   return true;
 }
 
+/*!
+ * Replaces every parameter value, fixed ones included, with p (RWA basis, the
+ * params_all_rwa() layout) and refreshes the physical copies, without
+ * calculating anything.
+ *
+ * The free-vector entry points (CalculateChi2RWA, UpdateSegmentsRWA,
+ * TransformRWAParameters, ...) take the FIXED parameters from all_rwa_, i.e.
+ * from the .azr.  The CLI's external parameter file sets fixed level
+ * parameters too (AZUREParams::ReadUserParameters), so a session given only the
+ * free part of a param.sav computes a different model whenever the file's
+ * fixed values differ from the .azr's: 11B+alpha 10-12-26, 10 fixed widths,
+ * chi2 9925.03 against the CLI's 9868.04.  This is how a session takes them.
+ */
+bool AZUREAPI::SetParamsAllRWA(const vector_r &p) {
+  if (p.size() != all_rwa_.size()) return false;
+  all_rwa_ = p;
+
+  // Physical values: the R-matrix block through the same transform as
+  // UpdateParameters; norms and shifts are the same in both bases.
+  compound()->FillCompoundFromParams(all_rwa_);
+  compound()->CalcShiftFunctions(configure());
+  compound()->TransformOut(configure());
+  all_ = compound()->GetTransformParams(configure());
+  for (size_t i = all_.size(); i < all_rwa_.size(); ++i) all_.push_back(all_rwa_[i]);
+
+  values_.clear();
+  values_rwa_.clear();
+  for (size_t i = 0; i < all_rwa_.size(); ++i) {
+    if (!fixed_[i]) {
+      values_.push_back(all_[i]);
+      values_rwa_.push_back(all_rwa_[i]);
+    }
+  }
+  return true;
+}
+
 int AZUREAPI::UpdateSegments(vector_r &p) {
   calculatedConv_.clear();
   calculatedEnergies_.clear();
@@ -219,8 +255,9 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
 
   localCompound->FillMnParams(params.GetMinuitParams());
   localData->FillMnParams(params.GetMinuitParams());
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+  // After the compound: the sub-point grids are laid out from its fit values.
+  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
   int newKey = -1;
@@ -243,7 +280,7 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
     std::vector<double> angularDists;
 
     // Handle component segments using the new integrated calculation method
-    if (segments[i].HasComponents()) {
+    if (segments[i].HasComponents() || segments[i].IsNatural()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
         double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);
@@ -349,7 +386,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
     std::vector<double> angularDists;
 
     // Handle component segments using the new integrated calculation method
-    if (segments[i].HasComponents()) {
+    if (segments[i].HasComponents() || segments[i].IsNatural()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
         double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);
@@ -456,7 +493,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
     std::vector<double> angularDists;
 
     // Handle component segments using the new integrated calculation method
-    if (segments[i].HasComponents()) {
+    if (segments[i].HasComponents() || segments[i].IsNatural()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
         double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);
@@ -583,6 +620,23 @@ vector_r AZUREAPI::TransformAllRWAParameters(const vector_r &p, bool includeFixe
   }
 
   return transformed;
+}
+
+// Transform every parameter (fixed ones included) to physical values, and
+// return all of them.  A snapshot of a fit needs the fixed channels too: they
+// are fixed in reduced-width space, so their observed widths move with the
+// free widths of the same level (the 1 + sum gamma^2 dS/dE factor and the
+// external width), and a <levels> block that keeps their old observed values
+// reads back as a different model (12C+alpha, 2026-10-12: +21 chi2 units).
+vector_r AZUREAPI::TransformAllRWAParametersFull(const vector_r &p) const {
+  vector_r params = all_rwa_;
+  for (int i = 0; i < p.size() && i < params.size(); ++i) {
+    params[i] = p[i];
+  }
+  CNuc *localCompound = compound();
+  localCompound->FillCompoundFromParams(params);
+  localCompound->TransformOut(configure());
+  return compound()->GetTransformParams(configure());
 }
 
 bool AZUREAPI::CalculateExternalCapture() {
@@ -869,6 +923,8 @@ double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
   double chiSquared = EvaluateFilledChi2(nullptr);
   // Park formalism: the J > 0 wall, part of what a fit must minimize.
   if (configure().paramMask & Config::USE_PARK_FORMALISM) chiSquared += compound()->ParkNormPenalty();
+  // Isotopic abundances: priors and the sum-to-one term.
+  if (compound()->HasAbundanceBlock()) chiSquared += compound()->AbundancePenalty(configure().abundanceSumSigma);
   return chiSquared;
 }
 
@@ -932,11 +988,12 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
 
   localCompound->FillMnParams(params.GetMinuitParams());
   localData->FillMnParams(params.GetMinuitParams());
-  // Norms and shifts sit at the same offsets in the physical vector as in the
-  // Minuit one (all_ is the transformed R-matrix block plus all_rwa_'s tail).
+  // Norms sit at the same offsets in the physical vector as in the Minuit one
+  // (all_ is the transformed R-matrix block plus all_rwa_'s tail).
   localData->FillNormsFromParams(params_);
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+  // After the compound: the sub-point grids are laid out from its fit values.
+  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
   return EvaluateFilledChi2(nullptr);
@@ -989,14 +1046,16 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     // gradient stay consistent). Runs in the parallel point loop, so guard it.
 #pragma omp atomic
     chi2 += (r * r) / (err * err);
-    if (seg->IsVaryNorm() && norm != 0.0 && i >= 1 && i < (int)normData.size()) {
+    // A norm-group follower's points move its leader's norm (o), the one parameter.
+    const int o = ld->NormOwner(i);
+    if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->GetSegment(o)->IsVaryNorm()) {
       double e2 = cmErr * cmErr;
       // fitBarFn runs inside the parallel point loop of AccumulateEGammaGradient,
-      // and all points of a segment share the same normData[i], so guard the
+      // and all points of a segment share the same normData[o], so guard the
       // accumulation.
       double dNorm = -2.0 * r * dataval / (e2 * norm * norm) - 2.0 * r * r / (e2 * norm * norm * norm);
 #pragma omp atomic
-      normData[i] += dNorm;
+      normData[o] += dNorm;
     }
     return 2.0 * r / (err * err);
   };
@@ -1007,10 +1066,14 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
       AddParkPenaltyGradient(lc, configure(), accum);
       chi2 += lc->ParkNormPenalty();
     }
+    if (lc->HasAbundanceBlock()) {
+      AddAbundancePenaltyGradient(lc, configure(), accum);
+      chi2 += lc->AbundancePenalty(configure().abundanceSumSigma);
+    }
     accum.Scatter(pmap, gradFull);
     for (int s = 1; s <= ld->NumSegments(); s++) {
       ESegment *seg = ld->GetSegment(s);
-      if (!seg || !seg->IsVaryNorm()) continue;
+      if (!seg || !seg->IsVaryNorm() || seg->IsNormGroupFollower()) continue;  // a follower's norm is fixed
       int idx = pmap.NormIndex(s);
       if (idx >= 0 && idx < (int)gradFull.size()) gradFull[idx] = normData[s];
     }
@@ -1159,7 +1222,8 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params) const {
     for (int f = 0; f < pmap.NumFull(); f++) {
       if (fixed_[f]) continue;
       if (pmap.Desc(f).kind != ParamKind::EnergyShift &&
-          pmap.Desc(f).kind != ParamKind::EnergyShiftSqrt) continue;
+          pmap.Desc(f).kind != ParamKind::EnergyShiftSqrt &&
+          pmap.Desc(f).kind != ParamKind::EnergyShiftFn) continue;
       const int packed = pmap.FullToPacked(f);
       if (packed < 0 || packed >= (int)params.size()) continue;
 
@@ -1323,8 +1387,9 @@ vector_r AZUREAPI::GetEnergyShiftIndices() {
 
 // Structured metadata for every parameter.  The parameters are walked in the
 // exact order CNuc::FillMnParams (energies + widths) then EData::FillMnParams
-// (norms, energy shifts, sqrt(E) shift coefficients, then the THM coherent
-// backgrounds) emit them, so the records line up one-to-one with
+// (norms, energy shifts, sqrt(E) shift coefficients, shift-function
+// parameters, then the THM coherent backgrounds) emit them, so the records
+// line up one-to-one with
 // names_ / all_ / fixed_.  See AZUREAPI.h for the field layout.
 vector_r AZUREAPI::GetParameterInfo() const {
   vector_r info;
@@ -1377,6 +1442,19 @@ vector_r AZUREAPI::GetParameterInfo() const {
     }
   }
 
+  // Isotopic abundances, one per (sample, compound nucleus), when the project
+  // has an <abundances> block (CNuc::FillMnParams): type 6, the nucleus's Z in
+  // the "jgroup" field and A in the "level" field, the 1-based sample in the
+  // "channel" field, the prior sigma in "wignerLimit".  The sample's name is
+  // in the parameter name (GetParameterNames): abundance[_<sample>]_<Z>_<A>.
+  for (int k = 1; k <= nuc->NumAbundanceParams(); ++k) {
+    int sample, nucleusIndex;
+    nuc->AbundanceOf(k, sample, nucleusIndex);
+    const CompoundNucleus *nucleus = nuc->GetNucleus(nucleusIndex);
+    const SampleAbundance &e = nuc->GetSample(sample)->entries[nucleusIndex - 1];
+    push(6, nucleus->Z, -1, 0, nucleus->A, 0, sample, -1, -1, -1, -1, -1, e.sigma, -1);
+  }
+
   // Normalization parameters: one per segment with IsVaryNorm(), except a
   // profiled (free THM) norm, which EData::FillMnParams leaves out too.
   std::vector<ESegment> &segments = data()->GetSegments();
@@ -1398,6 +1476,16 @@ vector_r AZUREAPI::GetParameterInfo() const {
          segments[s].GetSegmentKey(), -1, -1);
   }
 
+  // Shift-function parameters aj of each segment declaring a "shiftfn" block;
+  // j goes in the channel field.
+  for (size_t s = 0; s < segments.size(); ++s) {
+    if (!segments[s].OwnsShiftFn() || !segments[s].HasShiftFn()) continue;
+    for (int j = 0; j < segments[s].NumShiftFnParams(); ++j)
+      push(5, -1, -1, 0, -1, 0, j, -1, -1, -1, -1,
+           segments[s].GetSegmentKey(), -1, -1);
+  }
+
+
   // THM coherent backgrounds (cbackground=), last: Re c0, Im c0 [, Re c1,
   // Im c1] per combination, with its J group, entrance channel (channel, L,
   // S) and exit pair number (pair).
@@ -1408,7 +1496,7 @@ vector_r AZUREAPI::GetParameterInfo() const {
       JGroup *jg = nuc->GetJGroup(c.jGroup);
       AChannel *in = jg->GetChannel(c.entrance);
       for (int k = 0; k < 2 * c.form; ++k)
-        push(5, c.jGroup, jg->GetJ(), jg->GetPi(), -1, 0, c.entrance, in->GetL(), in->GetS(),
+        push(7, c.jGroup, jg->GetJ(), jg->GetPi(), -1, 0, c.entrance, in->GetL(), in->GetS(),
              jg->GetChannel(c.exit)->GetPairNum(), -1, -1, -1, -1);
     }
   }
@@ -1440,6 +1528,11 @@ vector_r AZUREAPI::GetPairsInfo() const {
     info.push_back(pair->GetExE());
     info.push_back(pair->GetChRad());
     info.push_back(pair->GetI1I2Factor());
+    // the compound nucleus the pair forms (PPair's pType rule), its abundance in the default sample
+    info.push_back(pair->GetNucleusZ());
+    info.push_back(pair->GetNucleusA());
+    info.push_back(nuc->GetAbundance(nuc->DefaultSample(), pair->GetNucleus()));
+    // field 19: the binding energy of the pair's composite projectile (THM)
     info.push_back(pair->GetBindingEnergy());
   }
 

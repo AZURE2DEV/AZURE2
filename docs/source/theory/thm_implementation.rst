@@ -927,7 +927,7 @@ c12c12_tumino2018`` at its parameters, the four THM segments one experiment,
 as the example's own line ``experiment[E1] segments=1-4 beam=14N
 target=12C spectator=d Ebeam=30`` has them: ``lineshape=on`` and
 ``distortion=`` can be switched on there, also in the GUI's THM workspace;
-with both off the example gives data :math:`\chi^2` 111.651, THM 61.02):
+with both off the example gives data :math:`\chi^2` 111.613, THM 61.02):
 :math:`E_{sF}` = 2.76-0.88 MeV over :math:`E` = 0.82-2.69 MeV,
 :math:`\eta_0` = 1.55-2.74, :math:`\zeta` = -0.28 to -0.49 into
 :math:`\alpha_{0,1}` and -0.13 to -0.24 into :math:`p_{0,1}`; the folded

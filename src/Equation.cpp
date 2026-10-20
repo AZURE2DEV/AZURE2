@@ -201,6 +201,7 @@ void Equation::Parse(const Config &configure) {
     configure.outStream << e.what() << std::endl;
     std::exit(-1);
   }
+  Compile();
 }
 /*!
  * Returns the vector containing all the parameters in the Equation object.
@@ -416,6 +417,15 @@ Equation::Associativity Equation::GetOperatorAssociativity(char c) const {
 std::string Equation::BinaryOperation(double left, double right, char op, const Config &configure) const {
   std::ostringstream stm;
   stm.precision(15);
+  stm << ApplyOperator(left, right, op, configure);
+  return stm.str();
+}
+
+/*!
+ * Evaluates an operator for two specified numbers.
+ */
+
+double Equation::ApplyOperator(double left, double right, char op, const Config &configure) const {
   double result;
   switch (op) {
     case '+':
@@ -440,8 +450,7 @@ std::string Equation::BinaryOperation(double left, double right, char op, const 
     default:
       result = 0.0;
   }
-  stm << result;
-  return stm.str();
+  return result;
 }
 
 /*!
@@ -503,6 +512,92 @@ double Equation::GetTokenValue(TokenPair token, double x, const Config &configur
  */
 
 double Equation::Evaluate(const Config &configure, double x) const {
+  if (output_.empty() || program_.size() != output_.size()) return EvaluateTokens(configure, x);
+  // Postfix program on a double stack; a small fixed buffer covers every
+  // practical expression without a heap allocation per call.
+  double buffer[64];
+  std::vector<double> heapStack;
+  double *stack = buffer;
+  if (program_.size() > 64) {
+    heapStack.resize(program_.size());
+    stack = heapStack.data();
+  }
+  int top = 0;
+  for (const Instruction &in : program_) {
+    switch (in.kind) {
+      case Instruction::NUMBER: stack[top++] = in.value; break;
+      case Instruction::VARIABLE: stack[top++] = x; break;
+      case Instruction::PARAMETER: stack[top++] = parameters_[in.index]; break;
+      case Instruction::NEGATE: stack[top++] = -1. * subEquations_[in.index].Evaluate(configure, x); break;
+      case Instruction::FUNCTION:
+        stack[top++] = in.function.Evaluate(subEquations_[in.index].Evaluate(configure, x));
+        break;
+      case Instruction::OPERATOR: {
+        if (top < 2) return EvaluateTokens(configure, x);
+        double right = stack[--top];
+        double left = stack[--top];
+        stack[top++] = ApplyOperator(left, right, in.op, configure);
+        break;
+      }
+      default: stack[top++] = 0.0;
+    }
+  }
+  return top > 0 ? stack[top - 1] : 0.0;
+}
+
+/*!
+ * Translates the postfix token list into a program of typed instructions, so
+ * that Evaluate does no string handling.  Function tokens are resolved exactly
+ * as FunctionOperation does it (prefix match in the order of functionList_).
+ */
+
+void Equation::Compile() {
+  program_.clear();
+  program_.reserve(output_.size());
+  for (const TokenPair &token : output_) {
+    Instruction in;
+    if (token.first == NUMBER) {
+      in.kind = Instruction::NUMBER;
+      std::istringstream stm(token.second);
+      stm >> in.value;
+    } else if (token.first == VARIABLE) {
+      in.kind = Instruction::VARIABLE;
+    } else if (token.first == PARAMETER) {
+      in.kind = Instruction::PARAMETER;
+      unsigned int paramNumber = 0;
+      std::istringstream stm(token.second);
+      stm >> paramNumber;
+      in.index = (int)paramNumber;
+    } else if (token.first == OPERATOR) {
+      in.kind = Instruction::OPERATOR;
+      in.op = token.second[0];
+    } else if (token.first == FUNCTION) {
+      if (token.second.substr(0, 3) == "neg") {
+        in.kind = Instruction::NEGATE;
+        std::istringstream stm(token.second.substr(3));
+        stm >> in.index;
+      } else {
+        for (std::map<std::string, GenericFunction>::const_iterator it = functionList_.begin();
+             it != functionList_.end(); it++) {
+          if (it->first == token.second.substr(0, it->first.length())) {
+            in.kind = Instruction::FUNCTION;
+            in.function = it->second;
+            std::istringstream stm(token.second.substr(it->first.length()));
+            stm >> in.index;
+            break;
+          }
+        }
+      }
+    }
+    program_.push_back(in);
+  }
+}
+
+/*!
+ * Evaluates the Equation object by rewriting the token list (reference path).
+ */
+
+double Equation::EvaluateTokens(const Config &configure, double x) const {
   // std::cout << "Evaluating equation: " << infixEquation_ << " for x = " << x << std::endl;
   std::vector<TokenPair> localOutput = output_;
   std::istringstream stm;

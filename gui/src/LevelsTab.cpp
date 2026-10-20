@@ -1,6 +1,8 @@
 #include <QHeaderView>
 #include <QMessageBox>
+#include <QInputDialog>
 #include <QFile>
+#include <algorithm>
 
 #include "LevelsTab.h"
 #include <QSet>
@@ -20,6 +22,7 @@
 
 LevelsTab::LevelsTab(QWidget *parent) :
   QWidget(parent) {
+  pairsModel = nullptr;
   levelsModel = new LevelsModel(this);
   levelsModelProxy = new QSortFilterProxyModel(this);
   levelsModelProxy->setSourceModel(levelsModel);
@@ -38,6 +41,9 @@ LevelsTab::LevelsTab(QWidget *parent) :
   levelsView->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
   levelsView->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
   levelsView->setColumnHidden(3, true);
+  // The compound nucleus of each level: only shown when the pairs form more than one (updateNucleusColumn).
+  levelsView->setColumnHidden(LevelsModel::NucleusColumn, true);
+  levelsView->setItemDelegateForColumn(LevelsModel::NucleusColumn, new RichTextDelegate());
   levelsView->setSelectionBehavior(QAbstractItemView::SelectRows);
   levelsView->setSelectionMode(QAbstractItemView::SingleSelection);
   levelsView->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -64,6 +70,17 @@ LevelsTab::LevelsTab(QWidget *parent) :
   maxNumMultSpin->setSingleStep(1);
   maxNumMultSpin->setValue(2);
   QLabel *maxNumMultLabel = new QLabel(tr("Maximum Gamma Multipolarities\nPer Decay"));
+  includeAllJPiCheck = new QCheckBox(tr("Hard-sphere scattering in every J%1 (levels or not)").arg(QChar(0x03C0)));
+  includeAllJPiCheck->setToolTip(tr("AZURE2 only includes a J\u03c0 in the calculation when a level carries it. Without this, every J\u03c0 "
+                                    "that has no level is missing from elastic scattering (its hard-sphere phase shift), unless a fixed "
+                                    "zero-width level is added by hand. With it, every J\u03c0 the particle pairs allow up to the maximum "
+                                    "orbital momentum scatters, levels or not; switching a level off then removes its resonance and keeps "
+                                    "the partial wave. Switch it off to recover the old convention, where a J\u03c0 disappears with its levels."));
+  includeAllJPiCheck->setChecked(true);
+  missingJPiLabel = new QLabel;
+  missingJPiLabel->setWordWrap(true);
+  missingJPiLabel->setTextFormat(Qt::RichText);
+  connect(includeAllJPiCheck, SIGNAL(toggled(bool)), this, SLOT(updateMissingSpinParities()));
   connect(maxLSpin, SIGNAL(valueChanged(int)), this, SLOT(updateChannelsPairAddedEdited()));
   connect(maxMultSpin, SIGNAL(valueChanged(int)), this, SLOT(updateChannelsPairAddedEdited()));
   connect(maxNumMultSpin, SIGNAL(valueChanged(int)), this, SLOT(updateChannelsPairAddedEdited()));
@@ -123,6 +140,11 @@ LevelsTab::LevelsTab(QWidget *parent) :
   fixAllEnergiesButton->setMaximumHeight(28);
   connect(fixAllEnergiesButton, SIGNAL(clicked()), this, SLOT(fixAllEnergies()));
 
+  nucleusFilterCombo = new QComboBox;
+  nucleusFilterCombo->setObjectName("nucleusFilterCombo");
+  nucleusFilterCombo->setToolTip(tr("Show the levels of one compound nucleus only."));
+  nucleusFilterCombo->setVisible(false);
+  connect(nucleusFilterCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(filterByNucleus(int)));
   exportLatexButton = new QPushButton(tr("Export LaTeX"));
   exportLatexButton->setMaximumHeight(28);
   exportLatexButton->setToolTip(tr("Export levels and widths to LaTeX table"));
@@ -178,9 +200,10 @@ LevelsTab::LevelsTab(QWidget *parent) :
   QGroupBox *levelsBox = new QGroupBox(tr("Compound Nucleus Levels"));
   QGridLayout *levelsLayout = new QGridLayout;
   levelsLayout->setContentsMargins(6, 6, 6, 6);
-  levelsLayout->addWidget(levelsView, 0, 0);
-  levelsLayout->addLayout(buttonBox, 1, 0);
-  levelsLayout->addLayout(fixButtonBox, 2, 0);
+  levelsLayout->addWidget(nucleusFilterCombo, 0, 0);
+  levelsLayout->addWidget(levelsView, 1, 0);
+  levelsLayout->addLayout(buttonBox, 2, 0);
+  levelsLayout->addLayout(fixButtonBox, 3, 0);
 #ifdef MACX_SPACING
   levelsLayout->setVerticalSpacing(0);
 #endif
@@ -194,6 +217,8 @@ LevelsTab::LevelsTab(QWidget *parent) :
   configLayout->addWidget(maxMultLabel, 1, 1);
   configLayout->addWidget(maxNumMultSpin, 2, 0);
   configLayout->addWidget(maxNumMultLabel, 2, 1);
+  configLayout->addWidget(includeAllJPiCheck, 3, 0, 1, 2);
+  configLayout->addWidget(missingJPiLabel, 4, 0, 1, 2);
   configLayout->setColumnStretch(0, 0);
   configLayout->setColumnStretch(1, 1);
   configBox->setLayout(configLayout);
@@ -233,26 +258,89 @@ LevelsTab::LevelsTab(QWidget *parent) :
 void LevelsTab::setPairsModel(PairsModel *model) {
   pairsModel = model;
   channelsModel->setPairsModel(model);
+  if (model) {
+    connect(model, SIGNAL(rowsInserted(QModelIndex, int, int)), this, SLOT(updateNucleusColumn()));
+    connect(model, SIGNAL(rowsRemoved(QModelIndex, int, int)), this, SLOT(updateNucleusColumn()));
+    connect(model, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(updateNucleusColumn()));
+    connect(model, SIGNAL(modelReset()), this, SLOT(updateNucleusColumn()));
+  }
+  updateNucleusColumn();
+}
+
+void LevelsTab::updateNucleusColumn() {
+  QList<Nucleus> nuclei = pairsModel ? pairsModel->nuclei() : QList<Nucleus>();
+  bool several = nuclei.size() > 1;
+  levelsView->setColumnHidden(LevelsModel::NucleusColumn, !several);
+  // The filter drop-down follows the nuclei, keeping the selection when its nucleus is still there.
+  QString selected = nucleusFilterCombo->currentIndex() > 0 ? nucleusFilterCombo->currentText() : QString();
+  nucleusFilterCombo->blockSignals(true);
+  nucleusFilterCombo->clear();
+  nucleusFilterCombo->addItem(tr("All compound nuclei"));
+  for (const Nucleus &nucleus : nuclei) {
+    nucleusFilterCombo->addItem(pairsModel->nucleusLongLabel(nucleus));
+    nucleusFilterCombo->setItemData(nucleusFilterCombo->count() - 1, PairsModel::nucleusLabel(nucleus), Qt::UserRole);
+  }
+  int keep = selected.isEmpty() ? -1 : nucleusFilterCombo->findText(selected);
+  nucleusFilterCombo->setCurrentIndex(keep > 0 ? keep : 0);
+  nucleusFilterCombo->blockSignals(false);
+  nucleusFilterCombo->setVisible(several);
+  filterByNucleus(nucleusFilterCombo->currentIndex());
+  if (!several) return;
+  // A level added before a second nucleus appeared has no nucleus: it would take channels from every pair, which
+  // the engine refuses (a level of two compound nuclei), so it is given the first nucleus.
+  bool assigned = false;
+  QList<LevelsData> levels = levelsModel->getLevels();
+  for (int i = 0; i < levels.size(); i++) {
+    if (levels.at(i).hasNucleus()) continue;
+    levelsModel->setNucleus(i, nuclei.first());
+    assigned = true;
+  }
+  if (assigned) updateChannelsPairAddedEdited();
+}
+
+void LevelsTab::filterByNucleus(int index) {
+  if (index <= 0 || index >= nucleusFilterCombo->count()) {
+    levelsModelProxy->setFilterRegExp(QRegExp());
+    return;
+  }
+  levelsModelProxy->setFilterKeyColumn(LevelsModel::NucleusColumn);
+  levelsModelProxy->setFilterRegExp(QRegExp("^" + QRegExp::escape(nucleusFilterCombo->itemData(index, Qt::UserRole).toString()) + "$"));
 }
 
 void LevelsTab::addLevel() {
   AddLevelDialog aDialog;
+  QList<Nucleus> nuclei = pairsModel ? pairsModel->nuclei() : QList<Nucleus>();
+  QStringList labels;
+  QList<QList<SpinParityOption> > perNucleus;
+  for (const Nucleus &nucleus : nuclei) {
+    labels << pairsModel->nucleusLongLabel(nucleus);
+    perNucleus << spinParityOptions(nucleus);
+  }
+  aDialog.setSpinParityOptions(spinParityOptions());
+  aDialog.setNucleusOptions(labels, perNucleus, 0, true);
   if (aDialog.exec()) {
     LevelsData newLevel;
     newLevel.isActive = 1;
     newLevel.isFixed = 0;
-    newLevel.jValue = (aDialog.jValueText->text()).toDouble();
-    if (aDialog.piValueCombo->currentIndex() == 0)
-      newLevel.piValue = -1;
-    else
-      newLevel.piValue = 1;
+    newLevel.jValue = aDialog.jValue();
+    newLevel.piValue = aDialog.piValue();
     newLevel.energy = (aDialog.energyText->text()).toDouble();
+    if (!nuclei.isEmpty()) {
+      Nucleus nucleus = nuclei.at(aDialog.nucleusIndex());
+      newLevel.nucZ = nucleus.Z;
+      newLevel.nucA = nucleus.A;
+    }
     addLevel(newLevel, false);
   }
 }
 
 void LevelsTab::addLevel(LevelsData level, bool fromFile) {
   QList<LevelsData> levels = levelsModel->getLevels();
+  // A level of a single-nucleus project belongs to that nucleus; with several, callers say which.
+  if (!level.hasNucleus() && pairsModel && pairsModel->nuclei().size() == 1) {
+    level.nucZ = pairsModel->nuclei().first().Z;
+    level.nucA = pairsModel->nuclei().first().A;
+  }
   if (levelsModel->isLevel(level) == -1) {
     levelsModel->insertRows(levels.size(), 1, QModelIndex());
     QModelIndex index = levelsModel->index(levels.size(), 0, QModelIndex());
@@ -265,8 +353,10 @@ void LevelsTab::addLevel(LevelsData level, bool fromFile) {
     levelsModel->setData(index, level.piValue, Qt::EditRole);
     index = levelsModel->index(levels.size(), 4, QModelIndex());
     levelsModel->setData(index, level.energy, Qt::EditRole);
+    levelsModel->setNucleus(levels.size(), level.nucleus());
     levelsView->resizeRowsToContents();
     if (!fromFile) updateChannelsLevelAdded(levels.size());
+    updateMissingSpinParities();
   } else {
     QMessageBox::information(this, tr("Duplicate Level"), tr("This level already exists."));
   }
@@ -279,6 +369,7 @@ void LevelsTab::removeLevel() {
 
   levelsModel->removeRows(index.row(), 1, QModelIndex());
   updateChannelsLevelDeleted(index.row());
+  updateMissingSpinParities();
   selectionModel->clearSelection();
 }
 
@@ -289,7 +380,7 @@ void LevelsTab::editLevel() {
 
   QModelIndex i = levelsModel->index(index.row(), 2, QModelIndex());
   QVariant var = levelsModel->data(i, Qt::EditRole);
-  QString jValue = var.toString();
+  double jValue = var.toDouble();
   i = levelsModel->index(index.row(), 3, QModelIndex());
   var = levelsModel->data(i, Qt::EditRole);
   int piValue = var.toInt();
@@ -297,26 +388,29 @@ void LevelsTab::editLevel() {
   var = levelsModel->data(i, Qt::EditRole);
   QString energy = var.toString();
 
+  Nucleus nucleus = levelsModel->getLevels().at(index.row()).nucleus();
+
   AddLevelDialog aDialog;
   aDialog.setWindowTitle(tr("Edit a Level"));
-  aDialog.jValueText->setText(jValue);
-  if (piValue == -1)
-    aDialog.piValueCombo->setCurrentIndex(0);
-  else
-    aDialog.piValueCombo->setCurrentIndex(1);
+  aDialog.setSpinParityOptions(spinParityOptions(nucleus), jValue, piValue, true);
   aDialog.energyText->setText(energy);
+  // The nucleus is shown but fixed: the level's channels belong to it.
+  QList<Nucleus> nuclei = pairsModel ? pairsModel->nuclei() : QList<Nucleus>();
+  QStringList labels;
+  QList<QList<SpinParityOption> > perNucleus;
+  for (const Nucleus &n : nuclei) {
+    labels << pairsModel->nucleusLongLabel(n);
+    perNucleus << spinParityOptions(n);
+  }
+  aDialog.setNucleusOptions(labels, perNucleus, std::max(0, pairsModel ? pairsModel->nucleusIndex(nucleus) : 0), false);
 
   if (aDialog.exec()) {
-    QString newJValue = aDialog.jValueText->text();
+    double newJValue = aDialog.jValue();
     if (newJValue != jValue) {
       i = levelsModel->index(index.row(), 2, QModelIndex());
       levelsModel->setData(i, newJValue, Qt::EditRole);
     }
-    int newPiValue;
-    if (aDialog.piValueCombo->currentIndex() == 0)
-      newPiValue = -1;
-    else
-      newPiValue = 1;
+    int newPiValue = aDialog.piValue();
     if (newPiValue != piValue) {
       i = levelsModel->index(index.row(), 3, QModelIndex());
       levelsModel->setData(i, newPiValue, Qt::EditRole);
@@ -327,6 +421,7 @@ void LevelsTab::editLevel() {
       levelsModel->setData(i, newEnergy, Qt::EditRole);
     }
     updateChannelsLevelEdited(index.row());
+    updateMissingSpinParities();
   }
 }
 
@@ -425,9 +520,44 @@ void LevelsTab::updateChannelsLevelEdited(int levelIndex) {
 }
 
 QList<ChannelsData> LevelsTab::calculateChannels(int levelIndex) {
+  return calculateChannels((levelsModel->getLevels()).at(levelIndex), levelIndex);
+}
+
+QList<SpinParityOption> LevelsTab::spinParityOptions() {
+  return spinParityOptions(Nucleus{0, 0});
+}
+
+QList<SpinParityOption> LevelsTab::spinParityOptions(const Nucleus &nucleus) {
+  // Every J^pi that gives at least one channel under the current pairs and limits, by trying each candidate through
+  // calculateChannels itself, so the list cannot drift from the channels the tab will actually build.
+  QList<SpinParityOption> options;
+  QList<PairsData> pairs = pairsModel->getPairs();
+  bool filter = nucleus.Z > 0 || nucleus.A > 0;
+  double maxJ = 0.;
+  for (const PairsData &pair : pairs) {
+    if (filter && PairsModel::nucleusOf(pair) != nucleus) continue;
+    double pairMaxJ;
+    if (pair.pairType == 0)
+      pairMaxJ = pair.heavyJ + pair.lightJ + maxLSpin->value();
+    else if (pair.pairType == 20)
+      pairMaxJ = pair.heavyJ + 1.;
+    else
+      pairMaxJ = pair.heavyJ + maxMultSpin->value();
+    maxJ = std::max(maxJ, pairMaxJ);
+  }
+  for (int twoJ = 0; twoJ <= int(2. * maxJ + 0.5); twoJ++) {
+    for (int pi : {1, -1}) {
+      LevelsData level = {1, 0, twoJ / 2.0, pi, 0., nucleus.Z, nucleus.A};
+      int numChannels = calculateChannels(level, -1).size();
+      if (numChannels > 0) options.append({level.jValue, pi, numChannels});
+    }
+  }
+  return options;
+}
+
+QList<ChannelsData> LevelsTab::calculateChannels(const LevelsData &level, int levelIndex) {
   QList<ChannelsData> channels;
   QList<PairsData> pairs = pairsModel->getPairs();
-  LevelsData level = (levelsModel->getLevels()).at(levelIndex);
 
   int maxL = maxLSpin->value();
   int maxMult = maxMultSpin->value();
@@ -435,6 +565,8 @@ QList<ChannelsData> LevelsTab::calculateChannels(int levelIndex) {
 
   for (int i = 0; i < pairs.size(); i++) {
     PairsData pair = pairs.at(i);
+    // A level with a compound nucleus takes channels from that nucleus's pairs only.
+    if (level.hasNucleus() && PairsModel::nucleusOf(pair) != level.nucleus()) continue;
     if (pair.pairType == 0) {
       for (double s = fabs(pair.heavyJ - pair.lightJ); s <= pair.heavyJ + pair.lightJ; s += 1.0) {
         for (double l = fabs(s - level.jValue); l <= s + level.jValue; l += 1.0) {
@@ -456,7 +588,10 @@ QList<ChannelsData> LevelsTab::calculateChannels(int levelIndex) {
       }
     } else {
       int numMult = 1;
-      for (int l = 1; l <= maxMult; l++) {
+      // J couples to the final state's spin and an integer multipole only when both are integer or both half-integer;
+      // the triangle condition alone would let an integer J radiate to a half-integer final state.
+      bool sameCharacter = int(2.0 * (level.jValue + pair.heavyJ) + 0.5) % 2 == 0;
+      for (int l = 1; l <= maxMult && sameCharacter; l++) {
         if (fabs(l - pair.heavyJ) <= level.jValue && level.jValue <= l + pair.heavyJ && numMult <= maxNumMult) {
           QChar radType;
           int parityChange = pair.heavyPi * level.piValue;
@@ -491,6 +626,46 @@ void LevelsTab::updateFilter(const QItemSelection &selection) {
     proxyModel->setFilterRegExp(QString("\\b%1\\b").arg(row));
   }
   channelsView->resizeRowsToContents();
+}
+
+QStringList LevelsTab::missingSpinParities() {
+  QStringList missing;
+  QList<LevelsData> levels = levelsModel->getLevels();
+  // One pass per compound nucleus (the J^pi of one nucleus's pairs against its own levels); a single nucleus is
+  // reported as before, without a prefix.
+  QList<Nucleus> nuclei = pairsModel ? pairsModel->nuclei() : QList<Nucleus>();
+  bool several = nuclei.size() > 1;
+  if (!several) nuclei = QList<Nucleus>() << Nucleus{0, 0};
+  for (const Nucleus &nucleus : nuclei) {
+    QString prefix = several ? PairsModel::nucleusLabel(nucleus) + " " : QString();
+    for (const SpinParityOption &option : spinParityOptions(nucleus)) {
+      // only J^pi with a particle channel scatter; a capture-only J^pi has nothing to add without a level
+      LevelsData probe = {1, 0, option.jValue, option.piValue, 0., nucleus.Z, nucleus.A};
+      bool particle = false;
+      for (const ChannelsData &c : calculateChannels(probe, -1)) particle |= (c.radType == 'P');
+      if (!particle) continue;
+      bool carried = false;
+      for (const LevelsData &l : levels)
+        carried |= (l.isActive == 1 && l.jValue == option.jValue && l.piValue == option.piValue &&
+                    (!several || !l.hasNucleus() || l.nucleus() == nucleus));
+      if (!carried) missing << prefix + AddLevelDialog::spinParityLabel(option.jValue, option.piValue);
+    }
+  }
+  return missing;
+}
+
+void LevelsTab::updateMissingSpinParities() {
+  QStringList missing = missingSpinParities();
+  QString jpi = QString("J<sup>%1</sup>").arg(QChar(0x03C0));
+  if (pairsModel == nullptr || pairsModel->getPairs().isEmpty())
+    missingJPiLabel->setText("");
+  else if (missing.isEmpty())
+    missingJPiLabel->setText(tr("Every %1 up to l = %2 has an active level.").arg(jpi).arg(maxLSpin->value()));
+  else if (includeAllJPiCheck->isChecked())
+    missingJPiLabel->setText(tr("Hard-sphere scattering only (no active level): %1").arg(missing.join(", ")));
+  else
+    missingJPiLabel->setText(tr("<font color='#b00020'>Not in the calculation (no active level, and the option above is off): %1</font>")
+                               .arg(missing.join(", ")));
 }
 
 void LevelsTab::updateChannelsPairAddedEdited() {
@@ -532,6 +707,7 @@ void LevelsTab::updateChannelsPairAddedEdited() {
     }
   }
   channelsView->resizeRowsToContents();
+  updateMissingSpinParities();
 }
 
 void LevelsTab::updateChannelsPairRemoved(int pairIndex) {
@@ -741,13 +917,19 @@ QList<int> LevelsTab::writeOrder() {
       highJ = tempJ;
   }
   QList<int> order;
+  // One block per compound nucleus, in order of first appearance, each sorted by J, parity and energy as before
+  // (a single-nucleus project is written exactly as it always was).
+  QList<Nucleus> nucleusOrder;
+  for (const LevelsData &level : levels)
+    if (!nucleusOrder.contains(level.nucleus())) nucleusOrder.append(level.nucleus());
+  for (const Nucleus &nucleus : nucleusOrder)
   for (double j = lowJ; j <= highJ; j += 0.5) {
     for (int pi = -1; pi <= 1; pi += 2) {
       // Insertion by energy within the (J, parity) group; a level is placed
       // before the first one of equal or higher energy.
       QList<int> group;
       for (int la = 0; la < levels.size(); la++) {
-        if (levels.at(la).jValue != j || levels.at(la).piValue != pi) continue;
+        if (levels.at(la).jValue != j || levels.at(la).piValue != pi || levels.at(la).nucleus() != nucleus) continue;
         int mu = 0;
         while (mu < group.size() && levels.at(la).energy > levels.at(group.at(mu)).energy) mu++;
         group.insert(mu, la);
@@ -919,6 +1101,9 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
           emit(readExistingPair(newPair, pairIndex, true));
       }
       LevelsData newLevel = {levelYN, levelFix, levelJ, levelPi, levelEnergy};
+      Nucleus nucleus = PairsModel::nucleusOf(newPair);  // the engine's rule: the level belongs to its channels' nucleus
+      newLevel.nucZ = nucleus.Z;
+      newLevel.nucA = nucleus.A;
       int levelIndex = levelsModel->isLevel(newLevel);
       if (levelIndex == -1) {
         addLevel(newLevel, true);
@@ -973,6 +1158,7 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
   if (maxLValue > maxLSpin->value()) maxLSpin->setValue(maxLValue);
   if (maxMultValue > maxMultSpin->value()) maxMultSpin->setValue(maxMultValue);
   if (maxNumMultValue > maxNumMultSpin->value()) maxNumMultSpin->setValue(maxNumMultValue);
+  updateMissingSpinParities();
   maxLSpin->blockSignals(false);
   maxMultSpin->blockSignals(false);
   maxNumMultSpin->blockSignals(false);
@@ -985,6 +1171,8 @@ void LevelsTab::reset() {
   pairsModel->removeRows(0, pairsModel->getPairs().size(), QModelIndex());
   levelsModel->removeRows(0, levelsModel->getLevels().size(), QModelIndex());
   channelsModel->removeRows(0, channelsModel->getChannels().size(), QModelIndex());
+  includeAllJPiCheck->setChecked(true);
+  missingJPiLabel->setText("");
   maxLSpin->blockSignals(true);
   maxMultSpin->blockSignals(true);
   maxNumMultSpin->blockSignals(true);
@@ -1005,30 +1193,6 @@ void LevelsTab::showInfo(int which, QString title) {
     } else
       infoDialog[which]->raise();
   }
-}
-
-int LevelsTab::calculateCompoundNucleus(int &massNumber, int &atomicNumber) {
-  // Get the first pair (entrance channel)
-  QList<PairsData> pairs = pairsModel->getPairs();
-  if (pairs.isEmpty()) {
-    return -1;  // No pairs defined
-  }
-
-  const PairsData &entrancePair = pairs.first();
-
-  // Calculate compound nucleus as sum of light + heavy particles
-  // Mass number A = A_light + A_heavy
-  // Atomic number Z = Z_light + Z_heavy
-
-  // Mass numbers are approximated from the particle masses
-  // For nuclear physics: M(A,Z) ≈ A * u where u is atomic mass unit
-  int lightA = static_cast<int>(entrancePair.lightM + 0.5);
-  int heavyA = static_cast<int>(entrancePair.heavyM + 0.5);
-
-  massNumber = lightA + heavyA;
-  atomicNumber = entrancePair.lightZ + entrancePair.heavyZ;
-
-  return 0;  // Success
 }
 
 void LevelsTab::fixAllWidths() {
@@ -1056,14 +1220,24 @@ void LevelsTab::addLevelsFromIAEA() {
     return;
   }
 
-  // Calculate compound nucleus from pairs
-  int massNumber = 0;
-  int atomicNumber = 0;
-  if (calculateCompoundNucleus(massNumber, atomicNumber) != 0) {
-    QMessageBox::warning(this, tr("Error"),
-                         tr("Could not determine compound nucleus from pairs."));
+  // The compound nucleus from the pairs; with several, the user picks which one to import.
+  QList<Nucleus> nuclei = pairsModel->nuclei();
+  if (nuclei.isEmpty()) {
+    QMessageBox::warning(this, tr("Error"), tr("Could not determine compound nucleus from pairs."));
     return;
   }
+  Nucleus chosen = nuclei.first();
+  if (nuclei.size() > 1) {
+    QStringList labels;
+    for (const Nucleus &nucleus : nuclei) labels << pairsModel->nucleusLongLabel(nucleus);
+    bool picked = false;
+    QString pick = QInputDialog::getItem(this, tr("Compound Nucleus"), tr("Import the levels of which compound nucleus?"),
+                                         labels, 0, false, &picked);
+    if (!picked) return;
+    chosen = nuclei.at(std::max(0, labels.indexOf(pick)));
+  }
+  int massNumber = chosen.A;
+  int atomicNumber = chosen.Z;
 
   // Create and show the IAEA dialog
   IAEALevelDialog dialog(this);
@@ -1075,7 +1249,9 @@ void LevelsTab::addLevelsFromIAEA() {
     int addedCount = 0;
     int duplicateCount = 0;
 
-    for (const LevelsData &level : newLevels) {
+    for (LevelsData level : newLevels) {
+      level.nucZ = chosen.Z;
+      level.nucA = chosen.A;
       if (levelsModel->isLevel(level) == -1) {
         addLevel(level, false);
         addedCount++;

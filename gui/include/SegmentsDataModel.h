@@ -34,12 +34,14 @@ struct SegmentsDataData {
   double finalJ;
   double delta;
   // THM (modified R-matrix / half-off-shell) flag; written as isDiff offset +10.
-  // Last field so existing brace-initializers (which omit it) default it to 0.
+  // After the fields existing brace-initializers set, so they default it to 0.
   int isTHM;
-  // Trailing "sqrtshift <b> <bError> <vary>" block (sqrt(E) energy-shift
-  // term, see SegLine.h).  Carried through verbatim so a file that uses it
-  // survives a GUI load/save; the GUI does not edit it yet.
-  QString sqrtShiftTokens;
+  // Trailing keyword blocks of the line, verbatim: "sqrtshift <b> <bError>
+  // <vary>" (sqrt(E) energy-shift term, SegLine.h) and "mixture <w_self> <n>
+  // {"file" <w>}..." (natural-abundance targets, MixtureTable.h).  Carried
+  // through so a file that uses them survives a GUI load/save; the GUI does
+  // not edit them yet.  Not a table column: set with setLineExtras().
+  QString extraTokens;
 };
 
 /*!
@@ -61,8 +63,8 @@ class SegmentsDataModel : public QAbstractTableModel {
   /// Relocate one row wholesale.  The whole struct moves, so fields added
   /// later can never be forgotten the way a per-column copy forgets them.
   bool moveLine(int from, int to);
-  /// The verbatim "sqrtshift ..." block of a row (not a table column).
-  void setSqrtShiftTokens(int row, const QString &tokens);
+  /// Store the verbatim keyword blocks of a row (no table column addresses them).
+  void setLineExtras(int row, const QString &tokens);
   Qt::ItemFlags flags(const QModelIndex &index) const;
   int isSegDataLine(const SegmentsDataData &line) const;
   QList<SegmentsDataData> getLines() const { return segDataLineList; };

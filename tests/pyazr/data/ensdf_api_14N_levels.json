@@ -1,0 +1,199 @@
+{
+ "meta": {
+  "total": 3,
+  "limit": 500,
+  "offset": 0
+ },
+ "results": [
+  {
+   "id": 25199,
+   "datasetId": 1531,
+   "levelIndex": 0,
+   "isStable": true,
+   "counts": {
+    "feedingGammas": 22,
+    "emittedGammas": 0
+   },
+   "spinParity": {
+    "values": [
+     {
+      "twoTimesSpin": 2,
+      "spin": 1.0,
+      "parity": "+"
+     }
+    ],
+    "stringRepresentation": "1+"
+   },
+   "energy": {
+    "value": 0.0,
+    "unit": "keV",
+    "uncertainty": {
+     "type": "none"
+    }
+   },
+   "multipoleMoments": {
+    "M1": {
+     "value": 0.403761,
+     "unit": "u_N",
+     "uncertainty": {
+      "type": "symmetric",
+      "value": 6e-08
+     }
+    },
+    "E2": {
+     "value": 0.0193,
+     "unit": "eb",
+     "uncertainty": {
+      "type": "symmetric",
+      "value": 0.0008
+     }
+    }
+   },
+   "datasetSummary": {
+    "id": 1531,
+    "database": "ENSDF",
+    "documentType": "adopted",
+    "datasetName": "ADOPTED LEVELS, GAMMAS",
+    "z": 7,
+    "n": 7,
+    "a": 14,
+    "elementSymbol": "N",
+    "nuclideId": 203,
+    "cutoffDate": "1990-07-01"
+   }
+  },
+  {
+   "id": 25200,
+   "datasetId": 1531,
+   "levelIndex": 1,
+   "isStable": false,
+   "counts": {
+    "feedingGammas": 10,
+    "emittedGammas": 1
+   },
+   "spinParity": {
+    "values": [
+     {
+      "twoTimesSpin": 0,
+      "spin": 0.0,
+      "parity": "+"
+     }
+    ],
+    "stringRepresentation": "0+"
+   },
+   "energy": {
+    "value": 2312.798,
+    "unit": "keV",
+    "uncertainty": {
+     "type": "symmetric",
+     "value": 0.011
+    }
+   },
+   "halflife": {
+    "value": 68.0,
+    "unit": "fs",
+    "uncertainty": {
+     "type": "symmetric",
+     "value": 3.0
+    }
+   },
+   "halflifeSeconds": 6.8e-14,
+   "datasetSummary": {
+    "id": 1531,
+    "database": "ENSDF",
+    "documentType": "adopted",
+    "datasetName": "ADOPTED LEVELS, GAMMAS",
+    "z": 7,
+    "n": 7,
+    "a": 14,
+    "elementSymbol": "N",
+    "nuclideId": 203,
+    "cutoffDate": "1990-07-01"
+   }
+  },
+  {
+   "id": 25223,
+   "datasetId": 1531,
+   "levelIndex": 24,
+   "isStable": false,
+   "counts": {
+    "feedingGammas": 0,
+    "emittedGammas": 1
+   },
+   "spinParity": {
+    "values": [
+     {
+      "twoTimesSpin": 4,
+      "spin": 2.0,
+      "parity": "+"
+     },
+     {
+      "twoTimesSpin": 2,
+      "spin": 1.0,
+      "parity": "+"
+     }
+    ],
+    "stringRepresentation": "2+,1+"
+   },
+   "energy": {
+    "value": 10101.0,
+    "unit": "keV",
+    "uncertainty": {
+     "type": "symmetric",
+     "value": 15.0
+    }
+   },
+   "halflifeSeconds": 3.8019813511339936e-20,
+   "decayWidths": {
+    "totalWidth": {
+     "value": 12.0,
+     "unit": "keV",
+     "uncertainty": {
+      "type": "symmetric",
+      "value": 3.0
+     }
+    },
+    "partialWidths": {
+     "g": {
+      "value": 0.21,
+      "unit": "eV",
+      "uncertainty": {
+       "type": "symmetric",
+       "value": 0.02
+      }
+     }
+    }
+   },
+   "decayBranchingRatios": {
+    "IT": {
+     "value": 0.0017,
+     "unit": "%",
+     "uncertainty": {
+      "type": "symmetric",
+      "value": 0.0005
+     }
+    },
+    "P": {
+     "value": 99.9983,
+     "unit": "%",
+     "uncertainty": {
+      "type": "symmetric",
+      "value": 0.0005
+     }
+    }
+   },
+   "datasetSummary": {
+    "id": 1531,
+    "database": "ENSDF",
+    "documentType": "adopted",
+    "datasetName": "ADOPTED LEVELS, GAMMAS",
+    "z": 7,
+    "n": 7,
+    "a": 14,
+    "elementSymbol": "N",
+    "nuclideId": 203,
+    "cutoffDate": "1990-07-01"
+   }
+  }
+ ]
+}

@@ -65,6 +65,14 @@ def _isnum(tok):
         return False
 
 
+def _isfloat(x):
+    try:
+        float(x)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
 def _fmt(x):
     """Round-trippable, compact token for a number."""
     if isinstance(x, int):
@@ -1338,6 +1346,31 @@ class AzrLevel:
                 f"{', fixed' if self.fixed else ''})")
 
 
+def _split_sample_prefix(line):
+    """``("name", rest)`` of an ``<abundances>`` line with an optional
+    ``<name>:`` prefix (``""`` without one); comments are stripped."""
+    text = line.split("#", 1)[0].strip()
+    t = text.split(None, 1)
+    if t and t[0].endswith(":"):
+        return t[0][:-1], (t[1] if len(t) > 1 else "")
+    return "", text
+
+
+def _nuclei_module():
+    """``pyazr.nuclei``, also when this file is loaded standalone by path (the
+    apply_fit test does that, so a relative import has no parent package)."""
+    try:
+        from . import nuclei
+        return nuclei
+    except ImportError:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "pyazr_nuclei_standalone", os.path.join(os.path.dirname(os.path.abspath(__file__)), "nuclei.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+
 class AzrModel:
     """A ``.azr`` file parsed into an editable level scheme.
 
@@ -1703,7 +1736,7 @@ class AzrModel:
                           observable="angle-integrated", angle=None,
                           angle_min=0.0, angle_max=0.0, angle_step=0.0,
                           phase_J=None, phase_L=None, order=None, active=True,
-                          frame="lab"):
+                          frame="lab", natural=False):
         """Append one extrapolation segment (a grid to evaluate the model on).
 
         ``entrance`` / ``exit`` are particle-pair keys (``exit=-1`` for a summed
@@ -1765,6 +1798,8 @@ class AzrModel:
                                  "order.")
             toks += [int(order)]
         toks += [0]                           # trailing isAdvanced flag
+        if natural:
+            toks += ["sample", natural if isinstance(natural, str) else 1]
         line = "  ".join(_fmt(t) if not isinstance(t, str) else t for t in toks)
         lines = self._suffix.splitlines()
         if "<segmentsTest>" in lines:
@@ -1816,6 +1851,237 @@ class AzrModel:
         return self
 
     # -- segment normalizations (edits the <segmentsData> block) --------------
+
+    # -- compound nuclei and isotopic abundances ------------------------------
+
+    def nuclei(self):
+        """The compound nuclei the pairs form, in order of first appearance:
+        ``{Nucleus: [pair keys]}`` (see :mod:`pyazr.nuclei` for the rule)."""
+        nucleus_of_channel = _nuclei_module().nucleus_of_channel
+        out = {}
+        for lv in self.levels:
+            for c in lv.channels:
+                nuc = nucleus_of_channel(c)
+                out.setdefault(nuc, [])
+                if c.pair not in out[nuc]:
+                    out[nuc].append(c.pair)
+        return out
+
+    def nucleus_of_pair(self, pair_key):
+        """The compound nucleus a pair (by file key) forms."""
+        for nuc, keys in self.nuclei().items():
+            if pair_key in keys:
+                return nuc
+        raise KeyError(f"no pair with key {pair_key}")
+
+    @property
+    def abundances(self):
+        """The default sample of the ``<abundances>`` block as
+        ``{Nucleus: (value, vary, sigma)}`` -- the unnamed sample (lines with no
+        ``<name>:`` prefix), or the only sample; a nucleus without a line is
+        ``(1.0, False, 0.0)``.  Only a project with the block has abundance fit
+        parameters at all.  See :attr:`samples` for every sample."""
+        samples = self.samples
+        if "" in samples:
+            return samples[""]
+        if len(samples) == 1:
+            return next(iter(samples.values()))
+        return {nuc: (1.0, False, 0.0) for nuc in self.nuclei()}
+
+    @property
+    def samples(self):
+        """Every sample of the ``<abundances>`` block: ``{name: {Nucleus:
+        (value, vary, sigma)}}``, the unnamed sample under ``""``; a nucleus
+        without a line in a sample is ``(1.0, False, 0.0)``.  A file without
+        the block has no samples (``{}``); one with the block but no lines has
+        the unnamed sample at the defaults, as the engine reads it."""
+        Nucleus = _nuclei_module().Nucleus
+        defaults = {nuc: (1.0, False, 0.0) for nuc in self.nuclei()}
+        out = {}
+        if not self.has_abundance_block:
+            return out
+        for line in self._abundance_lines():
+            name, rest = _split_sample_prefix(line)
+            t = rest.split()
+            if not t:
+                continue
+            out.setdefault(name, dict(defaults))
+            if t[0] == "sum":
+                continue
+            if len(t) >= 5:
+                out[name][Nucleus(int(t[0]), int(t[1]))] = (float(t[2]), int(float(t[3])) == 1, float(t[4]))
+        if not out:
+            out[""] = dict(defaults)
+        return out
+
+    def sample_sum_sigma(self, sample=""):
+        """The sum-to-one width of a sample (its ``[<name>:] sum <sigma>`` line),
+        or ``None`` when it has none and the config's ``abundanceSumSigma`` applies."""
+        for line in self._abundance_lines():
+            name, rest = _split_sample_prefix(line)
+            t = rest.split()
+            if name == sample and len(t) >= 2 and t[0] == "sum":
+                return float(t[1])
+        return None
+
+    def set_sample_sum_sigma(self, sample, sigma):
+        """Set (``sigma`` > 0), switch off (0) or remove (``None``, back to the
+        config's ``abundanceSumSigma``) a sample's own sum-to-one width."""
+        lines = self._suffix.splitlines()
+        if "<abundances>" not in lines:
+            raise ValueError("no <abundances> block (set an abundance first).")
+        a, b = lines.index("<abundances>"), lines.index("</abundances>")
+        prefix = f"{sample}: " if sample else ""
+        new = None if sigma is None else f"{prefix}sum {_fmt(float(sigma))}"
+        for i in range(a + 1, b):
+            name, rest = _split_sample_prefix(lines[i])
+            if name == sample and rest.split()[:1] == ["sum"]:
+                if new is None:
+                    del lines[i]
+                else:
+                    lines[i] = new
+                break
+        else:
+            if new is not None:
+                lines.insert(b, new)
+        self._suffix = "\n".join(lines) + "\n"
+        return self
+
+    @property
+    def has_abundance_block(self):
+        return "<abundances>" in self._suffix.splitlines()
+
+    def _abundance_lines(self):
+        lines = self._suffix.splitlines()
+        try:
+            a, b = lines.index("<abundances>"), lines.index("</abundances>")
+        except ValueError:
+            return []
+        return [ln for ln in lines[a + 1:b] if ln.strip() and not ln.strip().startswith("#")]
+
+    def set_abundance(self, nucleus, value=None, vary=None, sigma=None, sample=""):
+        """Set a nucleus's isotopic abundance (``value``), whether it is a fit
+        parameter (``vary``) and its prior width (``sigma``, 0 = none) in one
+        sample (``sample``: ``""`` the unnamed one, else the sample's name,
+        created on first use).  The ``<abundances>`` block is created right
+        after ``</levels>`` when the file has none; fields left ``None`` keep
+        their current value.  ``nucleus`` is a label such as ``"23Ne"``,
+        ``(Z, A)`` or a Nucleus.
+        """
+        Nucleus = _nuclei_module().Nucleus
+        nuc = Nucleus.parse(nucleus)
+        if nuc not in self.nuclei():
+            raise KeyError(f"no pair of this project forms {nuc.label}: {[n.label for n in self.nuclei()]}")
+        if ":" in sample or "#" in sample or any(ch.isspace() for ch in sample):
+            raise ValueError(f"a sample name is one token without ':' or '#': {sample!r}")
+        cur = self.samples.get(sample, {}).get(nuc, (1.0, False, 0.0))
+        value = cur[0] if value is None else float(value)
+        vary = cur[1] if vary is None else bool(vary)
+        sigma = cur[2] if sigma is None else float(sigma)
+        prefix = f"{sample}: " if sample else ""
+        new = f"{prefix}{nuc.Z} {nuc.A} {_fmt(value)} {1 if vary else 0} {_fmt(sigma)}"
+        lines = self._suffix.splitlines()
+        if "<abundances>" not in lines:
+            at = lines.index("</levels>") + 1 if "</levels>" in lines else 0
+            lines[at:at] = ["<abundances>", new, "</abundances>"]
+        else:
+            a, b = lines.index("<abundances>"), lines.index("</abundances>")
+            for i in range(a + 1, b):
+                name, rest = _split_sample_prefix(lines[i])
+                t = rest.split()
+                if name == sample and len(t) >= 2 and t[0] != "sum" and int(t[0]) == nuc.Z and int(t[1]) == nuc.A:
+                    lines[i] = new
+                    break
+            else:
+                lines.insert(b, new)
+        self._suffix = "\n".join(lines) + "\n"
+        return self
+
+    @property
+    def abundance_sum_sigma(self):
+        """The ``abundanceSumSigma`` config key (0 = no sum-to-one penalty)."""
+        for line in self._prefix.splitlines():
+            if line.strip().startswith("abundanceSumSigma="):
+                return float(line.split("=", 1)[1].split("#")[0])
+        return 0.0
+
+    @abundance_sum_sigma.setter
+    def abundance_sum_sigma(self, value):
+        lines = self._prefix.splitlines(keepends=True)
+        lines = [ln for ln in lines if not ln.strip().startswith("abundanceSumSigma=")]
+        if value and float(value) > 0:
+            end = next(i for i, ln in enumerate(lines) if ln.strip() == "</config>")
+            lines.insert(end, f"abundanceSumSigma={float(value):g}\n")
+        self._prefix = "".join(lines)
+
+    def set_natural(self, file_substr, natural=True):
+        """Mark (or unmark) every ``<segmentsData>`` line matching
+        ``file_substr`` as a sample (abundance-weighted) segment: ``natural=True``
+        writes ``sample 1`` (the unnamed, or only, sample), a string writes
+        ``sample <name>``, ``False`` removes the block (an older ``natural``
+        block is replaced).  Refused on a RATIO composite.  Returns the number
+        of lines changed."""
+        return self._set_natural_block("segmentsData", lambda ln: file_substr in ln, natural)
+
+    def set_sample(self, file_substr, sample=True):
+        """:meth:`set_natural` under the name the keyword now has."""
+        return self.set_natural(file_substr, sample)
+
+    def set_test_sample(self, key, sample=True):
+        """:meth:`set_test_natural` under the name the keyword now has."""
+        return self.set_test_natural(key, sample)
+
+    def set_test_natural(self, key, natural=True):
+        """As :meth:`set_natural` for the ``<segmentsTest>`` line with this 1-based key."""
+        counter = [0]
+
+        def pick(ln):
+            counter[0] += 1
+            return counter[0] == key
+        return self._set_natural_block("segmentsTest", pick, natural)
+
+    def _set_natural_block(self, block, pick, natural):
+        from .datasets import _split_keyword_tail, _KEYWORDS
+        if f"<{block}>" not in self._suffix:
+            raise ValueError(f"no <{block}> block to edit.")
+        out, changed, inside = [], 0, False
+        for line in self._suffix.splitlines():
+            s = line.strip()
+            if s == f"<{block}>":
+                inside = True
+            elif s == f"</{block}>":
+                inside = False
+            elif inside and s and pick(line):
+                toks = line.split()
+                # keyword tail off, composite kind checked, keyword tail back with natural set
+                first = next((k for k, t in enumerate(toks) if t.lower() in _KEYWORDS), len(toks))
+                positional, blocks = _split_keyword_tail(toks[first:])
+                head = toks[:first]
+                if natural:
+                    adv = [t for t in head]
+                    # a RATIO composite is "... 1 1 n ..." after the data file (data) / isDiff fields (test)
+                    if block == "segmentsData":
+                        i = 8 + (2 if int(float(head[7])) == 2 else 0) + 3
+                        if i + 2 < len(head):
+                            i += 3
+                        while i < len(head) and _isfloat(head[i]):
+                            i += 1
+                        adv = head[i + 1:]
+                    else:
+                        isDiff = int(float(head[9]))
+                        adv = head[10 + (2 if isDiff == 2 else 1 if isDiff == 3 else 0):]
+                    if len(adv) >= 2 and int(float(adv[0])) == 1 and int(float(adv[1])) == 1:
+                        raise ValueError("a sample segment cannot be a RATIO composite")
+                    blocks.pop("natural", None)
+                    blocks["sample"] = [natural if isinstance(natural, str) else "1"]
+                else:
+                    blocks.pop("natural", None)
+                    blocks.pop("sample", None)
+                line = " ".join(head + [tok for kw, vals in blocks.items() for tok in [kw] + list(vals)])
+                changed += 1
+            out.append(line)
+        self._suffix = "\n".join(out) + "\n"
+        return changed
 
     def set_segment_norm(self, file_substr, vary=None, sys_error=None):
         """Edit the normalization of every ``<segmentsData>`` line whose text
@@ -2025,8 +2291,8 @@ class AzrModel:
         """``{(jgroup, level): AzrLevel}`` -- the numbering AZURE2 itself uses.
 
         The engine builds a J-group the first time it meets a ``(J, parity)``
-        while reading ``<levels>``, and numbers levels within a group in file
-        order.  Reproducing that here gives the same ``(jgroup, level)`` a
+        of a compound nucleus while reading ``<levels>``, and numbers levels
+        within a group in file order.  Reproducing that here gives the same ``(jgroup, level)`` a
         :class:`~pyazr.parameters.Parameter` reports, which is the only reliable
         way to say *which* level a fitted value belongs to: a level at
         ``Ex = 0`` comes back from the API with ``level_energy = None``, so an
@@ -2042,11 +2308,18 @@ class AzrModel:
         archive's 5/2+ block was silently corrupted that way at two bakes.
         Use :meth:`purge_inactive_levels` to remove such lines for good.
         """
+        # A J-group is (J, parity, compound nucleus): a project with several
+        # nuclei (natural targets) has one 1/2+ group per nucleus, numbered in
+        # the order the file first shows each.  The nucleus of a level is that
+        # of its channels' pair (the engine refuses a level naming two).  With
+        # one nucleus the key gains a constant and the numbering is unchanged.
         order, seen, out = [], {}, {}
+        several = len(self.nuclei()) > 1
         for lv in self.levels:
             if not lv.active:
                 continue
-            k = (int(round(2 * lv.J)), int(lv.parity))
+            nuc = self.nucleus_of_pair(lv.channels[0].pair) if (several and lv.channels) else None
+            k = (int(round(2 * lv.J)), int(lv.parity), nuc)
             if k not in seen:
                 order.append(k)
                 seen[k] = 0
@@ -2112,7 +2385,19 @@ class AzrModel:
 
         ``strict`` (the default) raises if any free parameter finds no home,
         rather than skipping it: a partial write produces a file that loads
-        cleanly and is a mixture of two fits.
+        cleanly and is a mixture of two fits.  The one exception is a fixed zero width
+        on a channel the level has no line for: the engine supplies that width
+        itself (a level of a J-group gets a zero, fixed width for every group
+        channel it does not list), so there is nothing to write.
+
+        With ``include_fixed`` the vector is indexed by *parameter position*
+        (``len(parameters)`` entries, fixed ones included) and must be physical
+        (``physical=True``); every level parameter is written, fixed ones too.
+        That is what a faithful snapshot needs: a parameter is fixed in
+        reduced-width space, and its observed width moves with the free widths
+        of the same level (Brune's ``1 + sum gamma^2 dS/dE`` and the external
+        width), so keeping the file's old observed value for it changes the
+        model on re-read. :meth:`~pyazr.azure2.azure2.save_fit` uses this.
 
         ``include_fixed``: ``x`` is a vector over *every* parameter (index
         :attr:`Parameter.index`, as ``transform_all_rwa(..., include_fixed=True)``
@@ -2136,6 +2421,10 @@ class AzrModel:
             if physical:
                 raise ValueError("pass transform= or physical=True, not both.")
             x = transform(x)
+        if include_fixed and not physical:
+            raise ValueError("include_fixed needs physical=True: the engine's "
+                             "transform of the free vector cannot supply the "
+                             "fixed parameters' values.")
 
         lvlmap = self.engine_level_keys()
         # engine pair number -> the pair key the file writes
@@ -2167,14 +2456,17 @@ class AzrModel:
                     written += 1
                     break
             else:
+                if p.fixed and v == 0.0:
+                    continue        # a channel this level does not list: the engine's zero, fixed width
                 unplaced.append(
                     f"{p.name} (no channel pair={want_pair} L={p.L} S={p.S} "
                     f"in {lv.jpi} at {lv.energy} MeV)")
 
         if unplaced and strict:
             raise ValueError(
-                f"apply_fit could not place {len(unplaced)} of the free "
-                f"parameters, so the result would be a mixture of two fits:\n  "
+                f"apply_fit could not place {len(unplaced)} of the "
+                f"{'level' if include_fixed else 'free'} parameters, so the "
+                "result would be a mixture of two fits:\n  "
                 + "\n  ".join(unplaced[:8])
                 + (f"\n  ... and {len(unplaced) - 8} more" if len(unplaced) > 8 else "")
                 + "\nThe .azr and the parameter set do not describe the same model. "
@@ -2287,7 +2579,9 @@ class AzrModel:
                          energy_shift=0.0, energy_shift_error=0.0,
                          vary_shift=False, phase_J=None, phase_L=None,
                          active=True, energy_shift_sqrt=0.0,
-                         energy_shift_sqrt_error=0.0, vary_shift_sqrt=False):
+                         energy_shift_sqrt_error=0.0, vary_shift_sqrt=False,
+                         shift_group=None, shift_fn=None, shift_fn_params=(),
+                         natural=False, norm_group=None):
         """Append one data segment (a ``<segmentsData>`` line).
 
         ``data_file`` is the data file path (relative to the run directory,
@@ -2305,7 +2599,14 @@ class AzrModel:
         is the coefficient b of a sqrt(E) shift term, E' = E + shift +
         b*sqrt(E/MeV) (b in MeV^1/2), with its ``_error`` and
         ``vary_shift_sqrt``; the block is written only when one of the three
-        is set, so a plain segment line is unchanged.
+        is set, so a plain segment line is unchanged.  ``shift_group`` (a
+        label) writes a ``shiftgroup`` block and ``norm_group`` a ``normgroup``
+        block (segments with one label share the first one's normalization); ``shift_fn`` (an expression in
+        the lab energy x, MeV, without blanks) with ``shift_fn_params``, one
+        ``(value, sigma, vary)`` per parameter a0, a1, ..., writes a
+        ``shiftfn`` block: E' = E + shift + f(x).  ``natural=True`` (or a
+        sample name) writes a ``sample`` block: every term is weighted by the
+        abundance of its entrance pair's compound nucleus.
 
         Returns ``self`` so calls chain.
         """
@@ -2336,6 +2637,19 @@ class AzrModel:
         if energy_shift_sqrt or energy_shift_sqrt_error or vary_shift_sqrt:
             toks += ["sqrtshift", _fmt(energy_shift_sqrt),
                      _fmt(energy_shift_sqrt_error), 1 if vary_shift_sqrt else 0]
+        if shift_group:
+            toks += ["shiftgroup", str(shift_group)]
+        if norm_group:
+            toks += ["normgroup", str(norm_group)]
+        if shift_fn:
+            if any(c.isspace() for c in shift_fn) or not shift_fn_params:
+                raise ValueError("shift_fn needs an expression without blanks and "
+                                 "one (value, sigma, vary) per parameter.")
+            toks += ["shiftfn", '"' + shift_fn + '"', len(shift_fn_params)]
+            for v, sig, vary in shift_fn_params:
+                toks += [_fmt(v), _fmt(sig), 1 if vary else 0]
+        if natural:                           # writers put the sample block last
+            toks += ["sample", natural if isinstance(natural, str) else 1]
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
         lines = self._suffix.splitlines()
         if "<segmentsData>" not in lines:
@@ -2418,10 +2732,12 @@ class AzrModel:
         return self
 
     def add_target_effect(self, segments, n_points=200, gaussian_sigma=None,
+                          sigma_expression=None, sigma_coefficients=(),
                           beam_profile=None, tpc_sigma=0.0, truncation=0.0,
                           photodissociation=False, q_coefficients=None,
                           resonance_width_multiplier=20.0, points_per_width=50.0,
-                          active=True):
+                          udr_file=None, flight_path=None, udr_burst=0.0,
+                          udr_channel=0.0, udr_centred=True, active=True):
         """Append one experimental effect (a ``<targetInt>`` line).
 
         ``segments`` is the segment-key list as AZURE2 writes it (``"3"``,
@@ -2429,8 +2745,16 @@ class AzrModel:
         ``<segmentsData>`` line, active or not, and a ``<segmentsTest>`` line
         with the same key gets the effect too (see the azure2-eval skill).
 
-        ``gaussian_sigma`` (lab MeV) is the classic beam-energy Gaussian
-        convolution.  ``beam_profile`` is the beam-profile kernel: a list of
+        ``gaussian_sigma`` (lab MeV) is the beam-energy Gaussian convolution
+        with a constant width.  ``sigma_expression`` gives the same width as
+        a function of energy instead, e.g. ``"a0*x^1.5"`` for a
+        time-of-flight resolution, with ``sigma_coefficients`` the values of
+        ``a0, a1, ...``: ``x`` is the LAB energy in MeV and the value the lab
+        width in MeV, as for ``gaussian_sigma`` (the line carries the
+        ``sigmalab`` keyword; without it AZURE2 reads an expression in the
+        pre-2026-10 convention, c.m. energy in and c.m. width out).  The two
+        are one kernel in AZURE2: give one or the other.
+        ``beam_profile`` is the beam-profile kernel: a list of
         ``(xi, omega, alpha, weight)`` skewed-Gaussian components in lab
         entrance-channel energy (MeV), with the detector energy resolution
         ``tpc_sigma`` (lab MeV; the per-point energy window comes from
@@ -2439,8 +2763,17 @@ class AzrModel:
         inverse reaction of a photodissociation measurement,
         ``photodissociation=True`` to weight the average with the
         detailed-balance factor.  ``q_coefficients`` are the finite-geometry
-        attenuation coefficients Q_0..Q_n.  Target integration and straggling
-        are not exposed here.  Returns ``self``.
+        attenuation coefficients Q_0..Q_n.
+
+        ``udr_file`` is a user-defined numerical resolution function in
+        SAMMY's UDR format (time-of-flight delay distributions, microseconds
+        vs. probability, tabulated at energies in eV -- the format n_TOF
+        distributes its resolution functions in).  It needs the nominal
+        ``flight_path`` in metres; ``udr_burst`` (Gaussian FWHM, ns) and
+        ``udr_channel`` (rectangular width, ns) are convolved on top, and
+        ``udr_centred`` re-centres the tabulated function on its centroid as
+        SAMMY does.  Target integration and straggling are not exposed here.
+        Returns ``self``.
         """
         if not isinstance(segments, str):
             segments = ",".join(str(int(k)) for k in segments)
@@ -2454,13 +2787,26 @@ class AzrModel:
             toks += [1, len(q_coefficients)] + [_fmt(q) for q in q_coefficients]
         else:
             toks += [0, 0]
-        toks += [0, '""', 0]                           # no energy-dependent sigma
+        if sigma_expression:
+            if gaussian_sigma is not None:
+                raise ValueError("give gaussian_sigma or sigma_expression, not both")
+            expr = str(sigma_expression).replace(" ", "")
+            toks += [1, f'"{expr}"', len(sigma_coefficients)] + [_fmt(c) for c in sigma_coefficients]
+        else:
+            toks += [0, '""', 0]                       # no energy-dependent sigma
         toks += [0, 0.04, _fmt(resonance_width_multiplier), _fmt(points_per_width)]
+        if sigma_expression:
+            toks += ["sigmalab"]                       # lab in, lab out, like gaussian_sigma
         if beam_profile:
             toks += ["beamprofile", len(beam_profile)]
             for xi, omega, alpha, weight in beam_profile:
                 toks += [_fmt(xi), _fmt(omega), _fmt(alpha), _fmt(weight)]
             toks += [_fmt(tpc_sigma), _fmt(truncation), 1 if photodissociation else 0]
+        if udr_file:
+            if not flight_path or flight_path <= 0:
+                raise ValueError("udr_file needs a positive flight_path in metres")
+            toks += ["udr", f'"{udr_file}"', _fmt(flight_path), _fmt(udr_burst),
+                     _fmt(udr_channel), 1 if udr_centred else 0]
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
         lines = self._suffix.splitlines()
         if "<targetInt>" in lines:

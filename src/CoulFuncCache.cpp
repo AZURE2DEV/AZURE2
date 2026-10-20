@@ -64,7 +64,14 @@ CoulFuncCache::CoulFuncCache() {
  */
 std::map<CoulFuncCache::CoulFuncKey, CoulFuncCache::CoulFuncData> &CoulFuncCache::localCache() const {
 #ifdef _OPENMP
-  int tid = omp_get_thread_num();
+  // The thread's number in the innermost ACTIVE team.  omp_get_thread_num()
+  // is the number in the innermost team, and a parallel construct that does
+  // not go parallel (an if(false) clause, or nesting disabled) makes a team of
+  // one in which every thread is number 0: all of Minuit's numerical-gradient
+  // threads then shared cache 0 and corrupted the heap ("double free or
+  // corruption", tests/energy_shift_sqrt, 2026-10-10).
+  const int level = omp_get_active_level();
+  int tid = (level > 0) ? omp_get_ancestor_thread_num(level) : 0;
 #else
   int tid = 0;
 #endif

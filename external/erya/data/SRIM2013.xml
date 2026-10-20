@@ -6,7 +6,11 @@
 <Program_Version>2.70</Program_Version>
 <Date_File_Creation>2019-07-18T15:55:54.00Z</Date_File_Creation>
 <Remark>Combined 1999 version of Ziegler's Parameters and 2013 SRIM tables.
-The Density and Mean Ionization Potential are added from third part sources.</Remark>
+The Density and Mean Ionization Potential are added from third part sources.
+2026-10-17: the F (Z=9) and Ne (Z=10) entries were corrupted (columns shifted
+after A-6, A-7 = 0, atomic mass 0; protons in F came out x3.6 too high at 0.34 MeV).
+A-1..A-8 refitted to SRIM-2013 SR Module gas-phase proton tables, 10 keV - 10 MeV
+(rms 0.8%, max 3% at 10 keV); A-9 set to 0; atomic masses filled in.</Remark>
 </Contents>
 </File_Details>
 <Ziegler_Data>
@@ -420,31 +424,31 @@ The Density and Mean Ionization Potential are added from third part sources.</Re
 <value>F</value>
 </Element_Name>
 <A-1>
-<value>0.69040800</value>
+<value>0.62189662</value>
 </A-1>
 <A-2>
-<value>0.00462723</value>
+<value>0.00600000</value>
 </A-2>
 <A-3>
-<value>0.32674900</value>
+<value>1.20525472</value>
 </A-3>
 <A-4>
-<value>1.10520000</value>
+<value>0.60046497</value>
 </A-4>
 <A-5>
-<value>1301.90000000</value>
+<value>812.18465981</value>
 </A-5>
 <A-6>
-<value>0.94352500</value>
+<value>0.92710208</value>
 </A-6>
 <A-7>
-<value>0.00000000</value>
+<value>12768.25596285</value>
 </A-7>
 <A-8>
-<value>47.03730000</value>
+<value>0.13386891</value>
 </A-8>
 <A-9>
-<value>0.02802450</value>
+<value>0.00000000</value>
 </A-9>
 <A-10>
 <value>0.00000000</value>
@@ -456,7 +460,7 @@ The Density and Mean Ionization Potential are added from third part sources.</Re
 <value>0.00000000</value>
 </A-12>
 <Atomic_Mass>
-<value>0.00000000</value>
+<value>18.99840300</value>
 </Atomic_Mass>
 <Atomic_Density>
 <value>0.00169600</value>
@@ -470,31 +474,31 @@ The Density and Mean Ionization Potential are added from third part sources.</Re
 <value>Ne</value>
 </Element_Name>
 <A-1>
-<value>0.28123500</value>
+<value>0.05000000</value>
 </A-1>
 <A-2>
-<value>0.00459698</value>
+<value>0.00600000</value>
 </A-2>
 <A-3>
-<value>0.52563000</value>
+<value>1.45616717</value>
 </A-3>
 <A-4>
-<value>0.87818300</value>
+<value>0.56173273</value>
 </A-4>
 <A-5>
-<value>1158.30000000</value>
+<value>1088.48028739</value>
 </A-5>
 <A-6>
-<value>0.93856400</value>
+<value>0.93872186</value>
 </A-6>
 <A-7>
-<value>0.00000000</value>
+<value>5525.48878129</value>
 </A-7>
 <A-8>
-<value>10.16060000</value>
+<value>0.05959090</value>
 </A-8>
 <A-9>
-<value>0.04141470</value>
+<value>0.00000000</value>
 </A-9>
 <A-10>
 <value>0.00000000</value>
@@ -506,7 +510,7 @@ The Density and Mean Ionization Potential are added from third part sources.</Re
 <value>0.00000000</value>
 </A-12>
 <Atomic_Mass>
-<value>0.00000000</value>
+<value>20.17970000</value>
 </Atomic_Mass>
 <Atomic_Density>
 <value>0.00089990</value>

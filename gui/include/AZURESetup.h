@@ -56,6 +56,8 @@ class AZURESetup : public QMainWindow {
   Config &GetConfig();
   void open(QString filename);
   void saveProject() { save(); }  // Public wrapper for MCMCTab to use
+  /*! Grabs the window once per tab into dir/tab<n>_<name>.png (see AZURE2_SCREENSHOT_DIR in main.cpp). */
+  void saveTabScreenshots(const QString &dir);
 
   // Convert RWA parameter to physical value using proper R-Matrix transformation
   /*! A Config whose configfile is a snapshot of the current GUI state.
@@ -161,6 +163,7 @@ class AZURESetup : public QMainWindow {
       left without segments is removed, and the status bar says so. */
   void followDataSegments(const QVector<int> &newNumber);
   void followTestSegments(const QVector<int> &newNumber);
+  void buildCoulombTable();
   void showAbout();
   void showTabInfo();
   void openWebsite();
@@ -204,6 +207,7 @@ class AZURESetup : public QMainWindow {
   QAction *rMatrixAction;
   QAction *editOptionsAction;
   QAction *thmWorkspaceAction;
+  QAction *buildCoulombTableAction;
   QAction *recentSeparator;
   QAction *clearRecentAction;
   enum { numRecent = 5 };
@@ -220,6 +224,9 @@ class AZURESetup : public QMainWindow {
   QMenu *recentFileMenu;
   QMenu *helpMenu;
   QTabWidget *tabWidget;
+  bool fileIncludeAllJPi = false;
+  int fileMaxL = -1;
+  double fileAbundanceSumSigma = 0.0;
   PairsTab *pairsTab;
   LevelsTab *levelsTab;
   SegmentsTab *segmentsTab;

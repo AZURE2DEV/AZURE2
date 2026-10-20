@@ -65,6 +65,33 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    */
   bool CheckGradient() const override { return false; }
   /*!
+   * Diagonal second derivatives for Minuit2 (Gauss-Newton: 2 * sum_i (dr_i/dp)^2
+   * from the analytic residual Jacobian, plus the norm and energy-shift penalty
+   * curvatures).  Without it Minuit2 seeds MIGRAD with a full numerical
+   * gradient + G2 pass and NegativeG2 line searches, which costs as much as the
+   * numerical fit it is meant to replace.  Enabled by EnableG2() only after a
+   * successful probe (an unsupported configuration keeps the numerical seed).
+   */
+  std::vector<double> G2(const std::vector<double> &) const override;
+  bool HasG2() const override { return g2Enabled_; }
+  /// Probe the analytic Jacobian at `p`; enables G2 for Minuit2 when it works.
+  bool EnableG2(const std::vector<double> &p);
+  /// AZURE_DUMP_NONFINITE diagnostic (see AZURECalc.cpp).
+  void DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld) const;
+  /// True when the limits manager declares at least one nuisance parameter.
+  bool HasNuisanceParameters() const;
+  /*!
+   * Calculate every non-mapped point of every segment and component segment in
+   * one OpenMP pass (a point's Calculate also fills its mapped copies), so the
+   * per-segment loops only combine.  Returns false -- and does nothing -- when
+   * already inside a parallel region (Minuit's parallel numerical gradient) or
+   * when AZURE_SERIAL_CHI2 is set; callers then use the per-point path.
+   */
+  bool PrecalculatePoints(CNuc *lc, EData *ld, bool thmOnly = false) const;
+  /// chi^2 of `p` evaluated on the given working copies (optionally per segment).
+  double Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<double> *segChis = nullptr,
+                bool thmOnly = false) const;
+  /*!
    * Side-effect-free chi-squared evaluation (no iteration counter / file output
    * / object pools), used by the finite-difference part of Gradient().
    */
@@ -232,6 +259,14 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   mutable std::stack<std::unique_ptr<EData>> edata_pool_;
   mutable std::mutex pool_mutex_;
   mutable bool pools_initialized_;
+  bool g2Enabled_ = false;
+  // Gauss-Newton cache: the residual Jacobian taken in Gradient() also gives G2;
+  // Minuit2 asks for G2 at the same point right after the gradient.
+  mutable std::vector<double> g2CacheP_, g2Cache_;
+  mutable std::vector<double> lastGradP_, lastGrad_;  ///< parameters of the last Gradient() call (AZURE_DUMP_NONFINITE)
+  mutable std::mutex lastGradMutex_;
+  /// Gradient and Gauss-Newton G2 from one residual Jacobian; false if unsupported.
+  bool GradientFromJacobian(const std::vector<double> &p, std::vector<double> &grad) const;
 
   // Working copies for WriteIterationOutput, cloned on first use and reused for
   // every later snapshot.  Cloning the whole data set afresh every 100

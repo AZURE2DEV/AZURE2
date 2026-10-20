@@ -206,11 +206,13 @@ MCMCTab::MCMCTab(QWidget *parent) :
 }
 
 bool MCMCTab::isAutoPriorCategory(const QString &category) {
-  // Normalizations, energy shifts and sqrt(E) shift coefficients carry an
-  // experimental error in the segment definition, so
+  // Normalizations, energy shifts, sqrt(E) shift coefficients and
+  // shift-function parameters carry an experimental error in the segment
+  // definition, and isotopic abundances one in the <abundances> block, so
   // AZURECalcMCMC::BuildAutoPriors() derives their priors from the data and
   // overrides whatever this table holds.
-  return category == "norm" || category == "shift" || category == "shift_sqrt";
+  return category == "norm" || category == "shift" || category == "shift_sqrt" || category == "shift_fn" ||
+         category == "abundance";
 }
 
 QString MCMCTab::categoryOfName(const QString &name, bool isRWA, int *segmentKey) {
@@ -224,6 +226,20 @@ QString MCMCTab::categoryOfName(const QString &name, bool isRWA, int *segmentKey
     if (numeric && segmentKey) *segmentKey = key;
     return numeric;
   };
+  if (name.startsWith("abundance_")) return "abundance";
+  {
+    // segment_<key>_energy_shift_fn<j>
+    const int at = name.lastIndexOf("_energy_shift_fn");
+    bool keyOk = false, jOk = false;
+    if (name.startsWith("segment_") && at > 8) {
+      const int key = name.mid(8, at - 8).toInt(&keyOk);
+      name.mid(at + 16).toInt(&jOk);
+      if (keyOk && jOk) {
+        if (segmentKey) *segmentKey = key;
+        return "shift_fn";
+      }
+    }
+  }
   if (segment("_norm")) return "norm";
   if (segment("_energy_shift_sqrt")) return "shift_sqrt";
   if (segment("_energy_shift")) return "shift";
@@ -237,8 +253,11 @@ QString MCMCTab::categoryFromStoredName(const QString &name) {
   // previous forms, "Segment N Normalization" or "Parameter
   // (segment_N_norm)"; all of them are recognised here.
   if (name.startsWith("THM coherent background")) return "cbkg";
+  if (name.startsWith("abundance", Qt::CaseInsensitive)) return "abundance";
   if (name.contains("sqrt(E) energy-shift", Qt::CaseInsensitive) || name.contains("_energy_shift_sqrt"))
     return "shift_sqrt";
+  if (name.contains("energy-shift function", Qt::CaseInsensitive) || name.contains("_energy_shift_fn"))
+    return "shift_fn";
   if (name.contains("norm", Qt::CaseInsensitive)) return "norm";
   if (name.contains("shift", Qt::CaseInsensitive)) return "shift";
   return "loaded";
@@ -409,7 +428,7 @@ void MCMCTab::setupProgressControls() {
   QHBoxLayout *iterLayout = new QHBoxLayout();
   iterLayout->addWidget(new QLabel("Current Iteration:"));
   currentIterationLabel = new QLabel("0");
-  currentIterationLabel->setStyleSheet("font-weight: bold; color: white;");
+  currentIterationLabel->setStyleSheet("font-weight: bold; color: #1f4f8f;");
   iterLayout->addWidget(currentIterationLabel);
   iterLayout->addStretch();
   progressLayout->addLayout(iterLayout);
@@ -418,17 +437,17 @@ void MCMCTab::setupProgressControls() {
   QHBoxLayout *probLayout = new QHBoxLayout();
   probLayout->addWidget(new QLabel("Current Log Probability:"));
   logProbLabel = new QLabel("N/A");
-  logProbLabel->setStyleSheet("font-weight: bold; color: white;");
+  logProbLabel->setStyleSheet("font-weight: bold; color: #1f4f8f;");
   probLayout->addWidget(logProbLabel);
 
   probLayout->addWidget(new QLabel("Log Likelihood:"));
   logLikelihoodLabel = new QLabel("N/A");
-  logLikelihoodLabel->setStyleSheet("font-weight: bold; color: white;");
+  logLikelihoodLabel->setStyleSheet("font-weight: bold; color: #1f4f8f;");
   probLayout->addWidget(logLikelihoodLabel);
 
   probLayout->addWidget(new QLabel("Log Prior:"));
   logPriorLabel = new QLabel("N/A");
-  logPriorLabel->setStyleSheet("font-weight: bold; color: white;");
+  logPriorLabel->setStyleSheet("font-weight: bold; color: #1f4f8f;");
   probLayout->addWidget(logPriorLabel);
 
   probLayout->addStretch();
@@ -621,6 +640,16 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
     QMap<int, QPair<double, double>> autoNormPrior;  // key -> (mean, sigma)
     QMap<int, QPair<double, double>> autoShiftPrior;
     QMap<int, QPair<double, double>> autoShiftSqrtPrior;
+    // Isotopic abundances: the <abundances> block's (value, sigma), keyed by parameter name.
+    QMap<QString, QPair<double, double>> autoAbundancePrior;
+    for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
+      int sample, nucleus;
+      compound->AbundanceOf(k, sample, nucleus);
+      const SampleAbundance &e = compound->GetSample(sample)->entries[nucleus - 1];
+      autoAbundancePrior[QString::fromStdString(compound->AbundanceParamName(sample, nucleus))] = qMakePair(e.nominal, e.sigma);
+    }
+    // Shift-function parameters: the segment line's (value, sigma), keyed by parameter name.
+    QMap<QString, QPair<double, double>> autoShiftFnPrior;
 
     // Physical descriptions of every parameter, gathered here because the
     // compound nucleus and data are released a few lines below.
@@ -642,6 +671,10 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
             segments[s].GetEnergyShiftError());
         autoShiftSqrtPrior[key] = qMakePair(segments[s].GetNominalEnergyShiftSqrt(),
                                             segments[s].GetEnergyShiftSqrtError());
+        if (segments[s].OwnsShiftFn() && segments[s].HasShiftFn())
+          for (int j = 0; j < segments[s].NumShiftFnParams(); j++)
+            autoShiftFnPrior[QString("segment_%1_energy_shift_fn%2").arg(key).arg(j)] =
+                qMakePair(segments[s].GetNominalShiftFnValues()[j], segments[s].GetShiftFnErrors()[j]);
       }
     }
 
@@ -677,7 +710,16 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
         // "segment_<key>_energy_shift_sqrt" (EData::FillMnParams).
         int segmentKey = 0;
         param.category = categoryOfName(paramName, isRWA, &segmentKey);
-        if (isAutoPriorCategory(param.category)) {
+        if (param.category == "abundance" || param.category == "shift_fn") {
+          const QMap<QString, QPair<double, double>> &named =
+              param.category == "abundance" ? autoAbundancePrior : autoShiftFnPrior;
+          if (named.contains(paramName)) {
+            param.priorMean = named[paramName].first;
+            param.priorStd = named[paramName].second;
+            param.useGaussianPrior = (param.priorStd > 0.0);
+            param.autoPrior = true;
+          }
+        } else if (isAutoPriorCategory(param.category)) {
           const QMap<int, QPair<double, double>> &source = param.category == "norm"    ? autoNormPrior
                                                            : param.category == "shift" ? autoShiftPrior
                                                                                        : autoShiftSqrtPrior;

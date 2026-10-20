@@ -130,7 +130,7 @@ name like ``width_1_2``:
        print(w.name, w.jpi, "L =", w.L, "S =", w.S, "pair", w.pair)
 
 Filtered views (``.free``, ``.energies``, ``.widths``, ``.norms``,
-``.shifts``, ``.sqrt_shifts``, ``.cbkg``) and lookups (``.by_level(...)``,
+``.shifts``, ``.sqrt_shifts``, ``.fn_shifts``, ``.abundances``, ``.cbkg``) and lookups (``.by_level(...)``,
 ``.by_name(...)``, ``.by_physical_level()``) are all available. A
 parameter's ``kind`` is the engine's type code, in the order of the
 parameter vector:
@@ -144,7 +144,11 @@ code    ``kind``         parameters
 3       ``shift``        segment energy shifts (``segment_N_energy_shift``)
 4       ``shift_sqrt``   :math:`\sqrt{E}` shift coefficients
                          (``segment_N_energy_shift_sqrt``)
-5       ``cbkg``         THM coherent background (``cbkg_*``), last
+5       ``shift_fn``     shift-function parameters a0, a1, ...
+                         (``segment_N_energy_shift_fnJ``)
+6       ``abundance``    isotopic abundances (``abundance_*``; after the
+                         level block)
+7       ``cbkg``         THM coherent background (``cbkg_*``), last
 ======  ===============  ===================================================
 
 A THM segment's free norm is profiled, not a parameter, and has no entry. A ``LevelKey`` prints as
@@ -172,7 +176,10 @@ what is wanted is :math:`\partial\,\mathrm{model}/\partial E`, and AZURE2
 applies a shift by rebuilding every energy-dependent quantity of the affected
 points --- level matrix, penetrabilities, Coulomb and hard-sphere phases,
 external-capture amplitudes, and the target-integration sub-point grid. A fit
-with many free shifts is dominated by their columns.
+with many free shifts is dominated by their columns. This covers the
+:math:`\sqrt{E}` coefficients and the shift-function parameters
+(``kind == "shift_fn"``, :attr:`Parameter.fn_term` = j) as well;
+``penalties()`` and ``objective()`` include their penalties.
 
 .. warning::
 
@@ -209,7 +216,9 @@ the group.
 Also available: ``set_channel_radius``, ``set_segment_norm``,
 ``set_segment_active``, ``set_segment_datafile``, ``add_data_segment``,
 ``remove_data_segments``, ``clear_data_segments``, ``set_extrapolations``,
-``apply_fit``, and for the ``<thm>`` block ``thm_options``, ``set_thm_option``,
+``apply_fit``; for a project with several compound nuclei (next section)
+``nuclei``, ``nucleus_of_pair``, ``abundances``, ``set_abundance``,
+``abundance_sum_sigma``, ``set_sample`` and ``set_test_sample``; and for the ``<thm>`` block ``thm_options``, ``set_thm_option``,
 ``clear_thm_option``, ``set_thm_weight``, ``clear_thm_weight``,
 ``thm_experiments``, ``set_thm_experiment`` and ``clear_thm_experiment``
 (:doc:`../theory/thm_implementation`; a session reports a THM experiment's
@@ -274,9 +283,15 @@ had: a fixed Brune amplitude keeps its amplitude, not its width), writes
 the fitted free normalizations and energy shifts into their ``<segmentsData>``
 lines, writes the companion ``param.sav`` carrying every parameter, and then
 reopens what it wrote and checks it against the fit (``verify``: the
-parameters, and with ``norms="fitted"`` the data :math:`\chi^2` and the prior
-terms of the snapshot run alone, to :math:`10^{-6}`) --- removing both files
-and raising if they disagree. A coherent THM background is written back into
+physical values transformed back, the reduced-width amplitudes the file reads
+for the particle and beta-decay channels of each level against the fit's, up
+to a common sign of the level, and with ``norms="fitted"`` the data
+:math:`\chi^2` and the prior terms of the snapshot run alone, to
+:math:`10^{-6}`) --- removing both files and raising if they disagree.  (The
+amplitude check is there because the physical one cannot see a value two
+parameters map onto: a negative beta-decay feeding amplitude came back
+positive from the physical transform until 2026-10-12.)  A fitted isotopic
+abundance is written back into the ``<abundances>`` block. A coherent THM background is written back into
 its ``cbackground=`` key.  A prior whose field now
 holds the fitted value keeps its centre as an explicit ``prior_centre`` row
 of ``<parameterSettings>`` (the centre the fit used), so a fit started from
@@ -327,8 +342,48 @@ to ``cwd``, as the engine resolves it (not necessarily ``output/``).
 
 ``pyazr.bands`` (``sensitivities``, ``uncertainty_bands``,
 ``extrapolation_bands``) spans the columns the CLI's ``covariance.dat`` spans:
-level energies, reduced widths and THM ``cbkg`` values (kinds 0, 1 and 5);
+level energies, reduced widths and THM ``cbkg`` values (kinds 0, 1 and 7);
 norms and shifts only rescale or move the data and carry no band.
+
+Several compound nuclei (natural targets)
+-----------------------------------------
+
+A natural or compound target is an abundance-weighted sum of cross sections
+of different compound nuclei (see the Particle Pairs page of the user guide).
+``merge_projects`` builds one such project from single-nucleus ones: pair keys
+are offset, segments renumbered, composite components and ``<targetInt>``
+lists remapped, the level blocks concatenated, and the ``<abundances>`` block
+written; a *shared* group of segments (the same natural-target data set
+present in every member) becomes one ``natural`` Sum line whose components
+are the members' terms:
+
+.. code-block:: python
+
+   from pyazr import merge_projects, Nucleus, azure2
+
+   report = merge_projects(
+       ["20Ne/17O+a.azr", "22Ne/22Ne+n.azr", "21Ne/21Ne+n.azr"], "natNe.azr",
+       abundances={Nucleus(10, 21): 0.9048, Nucleus(10, 23): 0.0925, Nucleus(10, 22): 0.0027},
+       sum_sigma=0.0,
+       shared=[{0: 1, 1: 1, 2: 1}],   # one dict per common data set: member index -> its segment key
+   )
+   print(report)
+
+   m = azure2("natNe.azr")
+   m.nuclei                     # the compound nuclei and their abundances
+   m.parameters.abundances      # the abundance parameters, kind "abundance"
+   m.penalties()["abundance"]   # the prior and sum-to-one terms at the current point
+
+``<parameterSettings>`` and ``<mcmc>`` blocks name parameters by position and
+are dropped with a warning. On the file side ``AzrModel.nuclei()``,
+``abundances`` (the default sample), ``samples`` (every sample),
+``set_abundance(nucleus, value, vary, sigma, sample="")``,
+``sample_sum_sigma`` / ``set_sample_sum_sigma(sample, sigma)``,
+``abundance_sum_sigma`` and ``set_sample(key, True)`` (or ``set_sample(key,
+"enr22Ne")`` for a named sample) edit the new pieces; ``Segment.natural`` and
+``Segment.natural_sample`` report the flag and the sample; ``Pair.nucleus`` and
+``Parameter.nucleus`` identify the nucleus at run time; ``save_fit`` writes a
+fitted abundance back into the block.
 
 Decomposing a cross section
 ---------------------------
@@ -370,7 +425,8 @@ holds the measured reaction data; LiveChart/ENSDF the evaluated level schemes.
                     observable="total-capture")       # lab E, barns
    AzrModel.from_file("13N.azr").add_data_segment(**kw).write("13N_new.azr")
 
-   # level scheme of the compound nucleus, from ENSDF
+   # level scheme of the compound nucleus, from ENSDF (IAEA LiveChart, or the
+   # NNDC ENSDF API when LiveChart cannot be reached; source="nndc" forces it)
    for lv in nds.fetch_levels("14n"):
        print(lv.energy_mev, lv.jp, lv.half_life)
 

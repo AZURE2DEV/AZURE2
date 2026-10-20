@@ -53,6 +53,22 @@ Platform scripts that detect Qwt and set the options live in ``scripts/``
 (``build_linux.sh``, ``build_macos.sh``, ``build_windows.sh``,
 ``build_docker.sh``).
 
+5. Build the Coulomb-function table once (recommended):
+
+   .. code-block:: bash
+
+      ./src/AZURE2 --build-coulomb-table
+
+   AZURE2 takes the Coulomb functions of charged-particle channels from this
+   table when it finds it; the results are the same and a calculation is
+   several times faster (about four times for the natural-neon example). The
+   table is not distributed with AZURE2. The build takes about 5 minutes on
+   four threads and writes 88 MB to ``~/.azure2/coulomb_table.bin`` (or to the
+   file named by the environment variable ``AZURE2_COULOMB_TABLE``). Without
+   it, AZURE2 says so once per run and computes the functions directly. The
+   GUI builds it too (**Configure → Build Coulomb Table...**), which is the way
+   for the ready-built downloads. See :doc:`../user_guide/configure_menu`.
+
 CMake Options
 ^^^^^^^^^^^^^
 

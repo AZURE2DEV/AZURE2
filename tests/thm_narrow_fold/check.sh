@@ -19,7 +19,7 @@
 #     built at Fill time from the .azr, as it is when a fit moves a level --
 #     against a run whose .azr carries the moved energy.  The stale grid put
 #     the peak between coarse sub-points (68 % off); the grid is now rebuilt
-#     from the current parameters (EPoint::RefreshSubPointGrid) and the two
+#     from the current parameters (EData::ReplaceSubPointGrids) and the two
 #     agree to rounding.
 #
 #   ./tests/thm_narrow_fold/check.sh path/to/AZURE2

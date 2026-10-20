@@ -95,8 +95,12 @@ or external capture calculations.
 tab is set too low, resulting in missing channels.
 
 **Solution**: Increase L_max and verify that at least one channel exists for
-each particle pair for each :math:`J^\pi`. Consider adding dummy levels to
-include all necessary hard-sphere phase shifts.
+each particle pair for each :math:`J^\pi`. For elastic scattering, tick
+**Include hard-sphere scattering for every** :math:`J^\pi` on the **Levels and
+Channels** tab (on by default in new projects; off in projects saved before it
+existed): every :math:`J^\pi` up to L_max then scatters whether or not a level
+carries it, and the line under the box lists the :math:`J^\pi` that have none.
+Older projects did this with fixed zero-width dummy levels, which still work.
 
 Getting Help
 ------------

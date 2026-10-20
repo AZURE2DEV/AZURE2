@@ -336,15 +336,16 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     struct CoulWaves
         coul = coulfunction()->operator()(theInitialLValue, chanRad, outEnergy);
     if (isChannelCapture) {
-      complex chanExpHSP(coul.G / sqrt(pow(coul.F, 2.0) + pow(coul.G, 2.0)),
-                         -coul.F / sqrt(pow(coul.F, 2.0) + pow(coul.G, 2.0)));
+      complex chanExpHSP = CoulombHardSpherePhase(coul);
       overlapIntegral = complex(0.0, -0.5) *
           sqrt(coulfunction()->Penetrability(theInitialLValue, chanRad, outEnergy)) *
           pow(redMass * uconv / 2. / fabs(outEnergy), 0.25) / sqrt(hbarc) *
           chanExpHSP * (GW() + complex(0.0, 1.0) * FW());
-    } else
-      overlapIntegral = (coul.G / sqrt(pow(coul.F, 2.0) + pow(coul.G, 2.0)) * FW() - coul.F / sqrt(pow(coul.F, 2.0) + pow(coul.G, 2.0)) * GW()) *
+    } else {
+      const complex hsp = CoulombHardSpherePhase(coul);
+      overlapIntegral = (std::real(hsp) * FW() + std::imag(hsp) * GW()) *
           pow(redMass * uconv / 2. / fabs(outEnergy), 0.25) / sqrt(hbarc);
+    }
     // FW_/GW_ were integrated with the bound-state Whittaker rescaled by
     // 10^-log10RefOut; restore it.  When the reference is far enough below the
     // double range the contribution really is negligible, so it becomes zero

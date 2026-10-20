@@ -27,6 +27,8 @@ QVariant LevelsModel::data(const QModelIndex &index, int role) const {
       return level.piValue;
     else if (index.column() == 4)
       return level.energy;
+    else if (index.column() == NucleusColumn)
+      return level.hasNucleus() ? PairsModel::nucleusLabel(level.nucleus()) : QString();
   } else if (role == Qt::EditRole) {
     LevelsData level = levelsList.at(index.row());
     if (index.column() == 2)
@@ -35,6 +37,8 @@ QVariant LevelsModel::data(const QModelIndex &index, int role) const {
       return level.piValue;
     else if (index.column() == 4)
       return level.energy;
+    else if (index.column() == NucleusColumn)
+      return QString("%1 %2").arg(level.nucZ).arg(level.nucA);
   } else if (role == Qt::TextAlignmentRole)
     return Qt::AlignCenter;
   else if (role == Qt::CheckStateRole && (index.column() == 0 || index.column() == 1)) {
@@ -68,6 +72,8 @@ QVariant LevelsModel::headerData(int section, Qt::Orientation orientation, int r
         return tr("Parity");
       case 4:
         return tr("Energy\n[MeV]");
+      case NucleusColumn:
+        return tr("Compound\nNucleus");
       default:
         return QVariant();
     }
@@ -92,7 +98,13 @@ bool LevelsModel::setData(const QModelIndex &index, const QVariant &value, int r
         tempData.piValue = value.toInt();
       else if (index.column() == 4)
         tempData.energy = value.toDouble();
-      else
+      else if (index.column() == NucleusColumn) {
+        // "Z A", the EditRole form
+        QStringList parts = value.toString().split(' ', Qt::SkipEmptyParts);
+        if (parts.size() != 2) return false;
+        tempData.nucZ = parts[0].toInt();
+        tempData.nucA = parts[1].toInt();
+      } else
         return false;
 
       levelsList.replace(row, tempData);
@@ -159,7 +171,8 @@ int LevelsModel::isLevel(const LevelsData &level) const {
     LevelsData tempLevel = levelsList.value(i);
     if (tempLevel.jValue == level.jValue &&
         tempLevel.piValue == level.piValue &&
-        tempLevel.energy == level.energy) {
+        tempLevel.energy == level.energy &&
+        (!tempLevel.hasNucleus() || !level.hasNucleus() || tempLevel.nucleus() == level.nucleus())) {
       foundLevel = i;
       break;
     }
@@ -173,8 +186,15 @@ QString LevelsModel::getSpinLabel(const LevelsData &level) const {
     tempSpin = QString("%1/2").arg((int)(level.jValue * 2));
   else
     tempSpin = QString("%1").arg(level.jValue);
-  if (level.piValue == -1)
-    return QString("%1-").arg(tempSpin);
-  else
-    return QString("%1+").arg(tempSpin);
+  // Superscript plus/minus (U+207A/B), as in the Add/Edit Level dialog.
+  return tempSpin + (level.piValue == -1 ? QString(QChar(0x207B)) : QString(QChar(0x207A)));
+}
+
+void LevelsModel::setNucleus(int row, const Nucleus &nucleus) {
+  if (row < 0 || row >= levelsList.size()) return;
+  LevelsData tempData = levelsList.value(row);
+  tempData.nucZ = nucleus.Z;
+  tempData.nucA = nucleus.A;
+  levelsList.replace(row, tempData);
+  emit(dataChanged(index(row, NucleusColumn), index(row, NucleusColumn)));
 }

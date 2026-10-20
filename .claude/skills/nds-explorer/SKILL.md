@@ -33,6 +33,7 @@ edits, load the **`azure2-eval`** skill as well — this skill hands data to it.
 | EXFOR data | `https://nds.iaea.org/exfor/x4get?DatasetID=…&op=csv` | one dataset's numbers with units | `fetch_exfor()` |
 | EXFOR bibliography | `https://nds.iaea.org/exfor/x4get?sub=ENTRY` | title, authors, journal reference | `reference()` |
 | LiveChart levels | `https://www-nds.iaea.org/relnsd/v1/data?fields=levels&nuclides=…` | level scheme CSV | `fetch_levels()` |
+| NNDC ENSDF API (fallback) | `https://www.nndc.bnl.gov/ensdf-api/levels?nuclide=…&document-type=adopted` | the same adopted levels, JSON | `fetch_levels(source="nndc")` |
 | LiveChart gammas | `…?fields=gammas&nuclides=…` | gamma transitions | `fetch_gammas()` |
 | LiveChart ground state | `…?fields=ground_states&nuclides=…` | masses, J^pi, separations | `fetch_ground_state()` |
 | CrossRef | `https://api.crossref.org/works` | DOI for a paper | `resolve_doi()` |
@@ -154,7 +155,8 @@ changes the integration grid, so delete `output/intEC.dat` and
 ## Level structure, gammas, ground state
 
 `fetch_levels("14n")` → list of `Level` (`energy` keV, `.energy_mev`, `jp`,
-`.spin` float, `.parity` ±1, `half_life`). This is the ENSDF-evaluated scheme
+`.spin` float, `.parity` ±1, `half_life`; from the NNDC fallback also `width_kev`, and `source` says which
+service answered). This is the ENSDF-evaluated scheme
 and is what you seed an R-matrix J-group structure from. `fetch_gammas("14n")`
 gives transitions (energy keV, multipolarity, intensity) for decay-scheme
 cross-checks. `fetch_ground_state("14n")` gives J^pi, spin/parity, mass excess,
@@ -242,6 +244,19 @@ independent one.** A capture measurement compiled twice, once as `SIG` and once
 as `SIG,,SFC`, is the cheapest possible check and catches both bugs at once.
 
 ## Common failure modes
+
+- **IAEA answers with a Cloudflare challenge** — HTTP 403 with a "Just a moment..." HTML page (or that page
+  with HTTP 200), intermittently, for EXFOR (`x4list`/`x4get`), the dataexplorer API and LiveChart alike.
+  Seen from the Notre Dame CRC cluster on 2026-10-15: LiveChart answered one request and refused the next
+  ones for minutes.  `fetch_levels` falls back to the NNDC ENSDF API by itself (a `UserWarning` says so):
+  same ENSDF adopted levels, checked against LiveChart on 14N and 16O (same levels, energies and
+  uncertainties), written in LiveChart's spellings (`jp` "2+ 1+", `half_life` the bare number), plus
+  `Level.width_kev` and `Level.source`.  Only the trailing zeros of a half-life text (LiveChart "4.70",
+  NNDC "4.7") and `half_life_sec` at ~1e-7 for width-only levels can differ.  Force a service with
+  `source="livechart"` / `"nndc"`.  `fetch_gammas` / `fetch_ground_state` and the EXFOR calls have no
+  fallback yet (the ENSDF API has `/gammas`; EXFOR has no NNDC equivalent here) -- retry later.  NNDC also
+  serves ENDF evaluations at `https://www.nndc.bnl.gov/endf-api/` (pointwise cross sections; its listed
+  SHA-1 for the main GNDS .xml files does not match the served files, the ENDF-6 ones do; 2026-10-15).
 
 - **`x4list` returns the HTML "Select" page, not JSON** — the request was
   malformed (e.g. `quantity="AP"` instead of `pol`). `search_exfor` raises with

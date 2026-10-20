@@ -1,4 +1,5 @@
 #include "Config.h"
+#include <cstdlib>
 #include "NuclearPotentialManager.h"
 #ifndef NO_STAT
 #include <sys/stat.h>
@@ -34,6 +35,12 @@ void Config::Reset() {
   useHybridMethod = false;  // Default to disabled
   useAdaptiveGrid = true;   // Default to adaptive grid
   thm = ThmOptions();
+  useCoulombTable = true;   // the universal Coulomb table where it covers a channel (--no-coulomb-table)
+  replaceSubPointGrids = true;  // re-place the adaptive sub-point grids (--no-grid-replacement)
+  coulombTablePath.clear();
+  includeAllJPi = false;    // Off unless the <config> block says so: older projects compute as they always did
+  hardSphereMaxL = -1;
+  abundanceSumSigma = 0.0;
 }
 
 /*!
@@ -128,8 +135,28 @@ int Config::ReadConfigFile() {
     screenCheckMask |= CHECK_ANGULAR_DISTS;
   else if (temp == "file")
     fileCheckMask |= CHECK_ANGULAR_DISTS;
+  // Optional key=value lines after the fixed ones. A reader that does not know a key skips it, so a
+  // project carrying them still opens in older builds.
   line = "";
-  while (line != "</config>" && !in.eof()) getline(in, line);
+  while (line != "</config>" && !in.eof()) {
+    getline(in, line);
+    std::string entry = line;
+    size_t hash = entry.find('#');
+    if (hash != std::string::npos) entry = entry.substr(0, hash);
+    size_t eq = entry.find('=');
+    if (eq == std::string::npos) continue;
+    std::string key = entry.substr(0, eq), value = entry.substr(eq + 1);
+    key.erase(0, key.find_first_not_of(" \t\r"));
+    key.erase(key.find_last_not_of(" \t\r") + 1);
+    value.erase(0, value.find_first_not_of(" \t\r"));
+    value.erase(value.find_last_not_of(" \t\r") + 1);
+    if (key == "includeAllJPi")
+      includeAllJPi = (value == "1" || value == "true");
+    else if (key == "maxOrbitalMomentum")
+      hardSphereMaxL = atoi(value.c_str());
+    else if (key == "abundanceSumSigma")
+      abundanceSumSigma = atof(value.c_str());
+  }
   if (line != "</config>") return -1;
   in.close();
   // A malformed optional block has already been reported: -2, so the caller

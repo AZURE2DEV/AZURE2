@@ -4,9 +4,11 @@
 #include <sstream>
 #include <algorithm>
 #include <set>
+#include <map>
 #include <tuple>
 #include "AngCoeff.h"
 #include "CNuc.h"
+#include <mutex>
 #include "ParameterLabel.h"
 #include "Config.h"
 #include "ChannelFunc.h"
@@ -76,14 +78,53 @@ int CNuc::IsJGroup(JGroup jGroup) {
   bool b = false;
   int c = 0;
   while (!b && c < this->NumJGroups()) {
+    // A group belongs to one compound nucleus: the same J^pi of another
+    // nucleus in the file is a different group, with its own level matrix.
     if (jGroup.GetJ() == this->GetJGroup(c + 1)->GetJ() &&
-        jGroup.GetPi() == this->GetJGroup(c + 1)->GetPi()) b = true;
+        jGroup.GetPi() == this->GetJGroup(c + 1)->GetPi() &&
+        jGroup.GetNucleus() == this->GetJGroup(c + 1)->GetNucleus()) b = true;
     c++;
   }
   if (b)
     return c;
   else
     return 0;
+}
+
+/*!
+ * The compound nuclei of the project, one per distinct (Z, A) the pairs form.
+ */
+
+int CNuc::NumNuclei() const {
+  return nuclei_.size();
+}
+
+CompoundNucleus *CNuc::GetNucleus(int nucleusNum) {
+  return &nuclei_[nucleusNum - 1];
+}
+
+const CompoundNucleus *CNuc::GetNucleus(int nucleusNum) const {
+  return &nuclei_[nucleusNum - 1];
+}
+
+int CNuc::NucleusOfPair(int pairNum) {
+  return this->GetPair(pairNum)->GetNucleus();
+}
+
+std::string CNuc::NucleusLabel(int nucleusNum) const {
+  std::ostringstream out;
+  out << "Z=" << nuclei_[nucleusNum - 1].Z << " A=" << nuclei_[nucleusNum - 1].A;
+  return out.str();
+}
+
+int CNuc::FindOrAddNucleus(int z, int a) {
+  for (unsigned int i = 0; i < nuclei_.size(); i++)
+    if (nuclei_[i].Z == z && nuclei_[i].A == a) return i + 1;
+  CompoundNucleus nucleus;
+  nucleus.Z = z;
+  nucleus.A = a;
+  nuclei_.push_back(nucleus);
+  return nuclei_.size();
 }
 
 /*!
@@ -115,12 +156,16 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
   transformedIn_ = false;
   int PairNum, LevelNum, ChannelNum, JGroupNum;
   int maxLValue = 0;
+  std::map<std::pair<int, int>, std::vector<int> > channelsListed;  // (group, level) -> group channel numbers, in line order
   std::ifstream in(configure.configfile.c_str());
   if (!in) return -1;
   std::string line = "";
   while (line != "<levels>" && !in.eof()) getline(in, line);
   if (line != "<levels>") return -1;
   std::map<int, int> ecPairs;
+  // Which compound nucleus each level (by its ID, column 9) belongs to: the
+  // channel lines of one level must all come from pairs of one nucleus.
+  std::map<int, int> levelNucleus;
   line = "";
   while (!in.eof() && line != "</levels>") {
     getline(in, line);
@@ -137,6 +182,13 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
       NucLine Line(stm);
       if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) return -1;
       if (Line.l() > maxLValue && Line.pType() == 0) maxLValue = Line.l();
+      if (Line.isActive() != 1 && configure.includeAllJPi) {
+        // A pair is a property of the system, not of the level that happens to mention it: with every
+        // J^pi scattering through its hard sphere, a pair whose levels are all switched off still has
+        // channels, so it is kept.
+        PPair NewPair(Line);
+        if (!this->IsPair(NewPair)) this->AddPair(NewPair);
+      }
       if (Line.isActive() == 1) {
         PPair NewPair(Line);
         PairNum = this->IsPair(NewPair);
@@ -148,7 +200,20 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
           std::map<int, int>::iterator it = ecPairs.find(PairNum);
           if (it == ecPairs.end()) ecPairs[PairNum] = Line.ecMultMask();
         }
+        const int nucleusNum = this->GetPair(PairNum)->GetNucleus();
+        std::map<int, int>::iterator lvl = levelNucleus.find(Line.levelID());
+        if (lvl == levelNucleus.end()) {
+          levelNucleus[Line.levelID()] = nucleusNum;
+        } else if (lvl->second != nucleusNum) {
+          configure.outStream << "ERROR: level ID " << Line.levelID() << " (J = " << Line.levelJ()
+                              << (Line.levelPi() == -1 ? "-" : "+") << ", E = " << Line.levelE()
+                              << " MeV) has channels of two compound nuclei, "
+                              << this->NucleusLabel(lvl->second) << " and " << this->NucleusLabel(nucleusNum)
+                              << ": a level belongs to one nucleus." << std::endl;
+          return -1;
+        }
         JGroup NewJGroup(Line);
+        NewJGroup.SetNucleus(nucleusNum, this->GetPair(PairNum)->GetNucleusZ(), this->GetPair(PairNum)->GetNucleusA());
         JGroupNum = this->IsJGroup(NewJGroup);
         if (!JGroupNum) {
           this->AddJGroup(NewJGroup);
@@ -173,7 +238,10 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
           this->GetJGroup(JGroupNum)->AddLevel(NewLevel);
           LevelNum = this->GetJGroup(JGroupNum)->IsLevel(NewLevel);
         }
-        this->GetJGroup(JGroupNum)->GetLevel(LevelNum)->AddGamma(Line);
+        // The width belongs to the GROUP's channel number: levels of one J-group may list their channel
+        // lines in a different order, or not list a channel another level of the group carries.
+        this->GetJGroup(JGroupNum)->GetLevel(LevelNum)->SetGammaFromLine(ChannelNum, Line);
+        channelsListed[std::make_pair(JGroupNum, LevelNum)].push_back(ChannelNum);
       }
     }
   }
@@ -181,6 +249,39 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
   if (line != "</levels>") return -1;
 
   in.close();
+
+  // Every level of a J-group needs one width per group channel.  Until 2026-10-17 widths were appended in the
+  // order of each level's own lines, so a level listing fewer channels than its group left a short width vector
+  // (TransformIn wrote past its end: heap corruption, "free(): invalid next size" at exit), and a level listing
+  // the same channels in another order had its widths attached to the wrong channels without a message
+  // (reported by the A = 4 isospin session).  Widths now go to their group channel number; a channel a level
+  // does not list gets a zero, fixed width, with a warning, and a different line order is reported.
+  for (const auto &entry : channelsListed) {
+    JGroup *group = this->GetJGroup(entry.first.first);
+    ALevel *level = group->GetLevel(entry.first.second);
+    const std::vector<int> &listed = entry.second;
+    std::ostringstream what;
+    what << "level J = " << group->GetJ() << (group->GetPi() == -1 ? "-" : "+") << ", E = " << level->GetE() << " MeV";
+    std::set<int> seen;
+    bool reordered = false;
+    for (size_t k = 0; k < listed.size(); k++) {
+      if (!seen.insert(listed[k]).second)
+        configure.outStream << "WARNING: " << what.str() << " lists channel " << listed[k]
+                            << " of its J-group twice; the later line's width is used." << std::endl;
+      if (k > 0 && listed[k] < listed[k - 1]) reordered = true;
+    }
+    if (reordered)
+      configure.outStream << "WARNING: " << what.str() << " lists its channels in a different order from its "
+                          << "J-group; each width is matched to its channel (pair, l, s)." << std::endl;
+    for (int ch = 1; ch <= group->NumChannels(); ch++) {
+      if (seen.count(ch)) continue;
+      AChannel *c = group->GetChannel(ch);
+      configure.outStream << "WARNING: " << what.str() << " has no line for channel " << ch << " of its J-group (pair "
+                          << this->GetPair(c->GetPairNum())->GetPairKey() << ", l = " << c->GetL() << ", s = " << c->GetS()
+                          << "); a zero, fixed width is used." << std::endl;
+    }
+    level->PadChannels(group->NumChannels());
+  }
 
   if (radii.first != 0) {
     this->GetPair(radii.first)->SetChRad(radii.second);
@@ -199,11 +300,246 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
   }
 
   this->SetMaxLValue(maxLValue);
+  if (configure.includeAllJPi) {
+    int hardSphereMaxL = configure.hardSphereMaxL >= 0 ? configure.hardSphereMaxL : maxLValue;
+    if (hardSphereMaxL > maxLValue) this->SetMaxLValue(hardSphereMaxL);
+    this->AddHardSphereGroups(configure, hardSphereMaxL);
+  }
   if (this->CheckIdenticalChannels(configure) == -1) return -1;
   if ((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) && this->NumJGroups() > 0 && this->NumPairs() > 0)
     this->ParseExternalCapture(configure, ecPairs);
 
+  if (this->NumNuclei() > 1)
+    for (int j = 1; j <= this->NumJGroups(); j++) this->GetJGroup(j)->SetNucleusLabelled(true);
+
+  if (this->ReadAbundances(configure) == -1) return -1;
+
   return 0;
+}
+
+/*!
+ * The optional <abundances> block: one line per compound nucleus,
+ *   <Z> <A> <abundance> <vary> <prior sigma>
+ * A nucleus without a line keeps 1.0, fixed.  A line for a (Z, A) the pairs do
+ * not form is reported and ignored.  Without the block no abundance becomes a
+ * Minuit parameter, so every project written before the block existed keeps
+ * its parameter layout, param.par and <parameterSettings> indices.
+ */
+
+int CNuc::ReadAbundances(const Config &configure) {
+  hasAbundanceBlock_ = false;
+  samples_.clear();
+  std::ifstream in(configure.configfile.c_str());
+  if (!in) return -1;
+  std::string line = "";
+  while (line != "<abundances>" && !in.eof()) getline(in, line);
+  if (line != "<abundances>") return 0;
+  hasAbundanceBlock_ = true;
+  // A sample is created the first time its name appears; the unnamed sample is "".
+  auto sampleOf = [&](const std::string &name) -> AbundanceSample & {
+    for (unsigned int s = 0; s < samples_.size(); s++)
+      if (samples_[s].name == name) return samples_[s];
+    AbundanceSample sample;
+    sample.name = name;
+    sample.entries.assign(nuclei_.size(), SampleAbundance());
+    samples_.push_back(sample);
+    return samples_.back();
+  };
+  line = "";
+  while (!in.eof() && line != "</abundances>") {
+    getline(in, line);
+    std::string entry = line;
+    size_t hash = entry.find('#');
+    if (hash != std::string::npos) entry = entry.substr(0, hash);
+    if (entry.find_first_not_of(" \t\r") == std::string::npos) continue;
+    if (line == "</abundances>") break;
+    // optional "<name>:" prefix (one token ending in a colon)
+    std::string name;
+    std::istringstream probe(entry);
+    std::string first;
+    probe >> first;
+    if (!first.empty() && first.back() == ':') {
+      name = first.substr(0, first.size() - 1);
+      std::string rest;
+      getline(probe, rest);
+      entry = rest;
+    }
+    std::istringstream stm(entry);
+    std::string head;
+    if (!(stm >> head)) continue;
+    if (head == "sum") {
+      double s;
+      if (!(stm >> s)) {
+        configure.outStream << "ERROR: <abundances> line \"" << line << "\" is not \"[<sample>:] sum <sigma>\"." << std::endl;
+        return -1;
+      }
+      sampleOf(name).sumSigma = s;
+      continue;
+    }
+    std::istringstream stm2(entry);
+    int z, a, vary;
+    double value, sigma;
+    if (!(stm2 >> z >> a >> value >> vary >> sigma)) {
+      configure.outStream << "ERROR: <abundances> line \"" << line
+                          << "\" is not \"[<sample>:] <Z> <A> <abundance> <vary> <sigma>\" or \"[<sample>:] sum <sigma>\"." << std::endl;
+      return -1;
+    }
+    bool found = false;
+    for (unsigned int i = 0; i < nuclei_.size(); i++) {
+      if (nuclei_[i].Z != z || nuclei_[i].A != a) continue;
+      SampleAbundance &e = sampleOf(name).entries[i];
+      e.abundance = e.nominal = value;
+      e.vary = (vary == 1);
+      e.sigma = sigma;
+      found = true;
+    }
+    if (!found)
+      configure.outStream << "WARNING: <abundances> names Z=" << z << " A=" << a
+                          << ", which no pair of the project forms; ignored." << std::endl;
+  }
+  if (line != "</abundances>") return -1;
+  // An empty block still means "abundances are parameters": one unnamed sample at the defaults.
+  if (samples_.empty()) sampleOf("");
+  return 0;
+}
+
+int CNuc::FindSample(const std::string &name) const {
+  for (unsigned int s = 0; s < samples_.size(); s++)
+    if (samples_[s].name == name) return (int)s + 1;
+  return 0;
+}
+
+int CNuc::DefaultSample() const {
+  int unnamed = this->FindSample("");
+  if (unnamed > 0) return unnamed;
+  return samples_.size() == 1 ? 1 : 0;
+}
+
+void CNuc::AbundanceOf(int ordinal, int &sample, int &nucleus) const {
+  const int n = (int)nuclei_.size();
+  sample = (ordinal - 1) / n + 1;
+  nucleus = (ordinal - 1) % n + 1;
+}
+
+std::string CNuc::AbundanceParamName(int sample, int nucleus) const {
+  char buf[128];
+  const std::string &name = samples_[sample - 1].name;
+  if (name.empty())
+    snprintf(buf, sizeof(buf), "abundance_%d_%d", nuclei_[nucleus - 1].Z, nuclei_[nucleus - 1].A);
+  else
+    snprintf(buf, sizeof(buf), "abundance_%s_%d_%d", name.c_str(), nuclei_[nucleus - 1].Z, nuclei_[nucleus - 1].A);
+  return std::string(buf);
+}
+
+double CNuc::GetAbundance(int sample, int nucleus) const {
+  if (sample < 1 || sample > (int)samples_.size()) return 1.0;
+  return samples_[sample - 1].entries[nucleus - 1].abundance;
+}
+
+double CNuc::AbundanceSum(int sample) const {
+  double sum = 0.0;
+  for (unsigned int i = 0; i < nuclei_.size(); i++) sum += samples_[sample - 1].entries[i].abundance;
+  return sum;
+}
+
+double CNuc::SampleSumSigma(int sample, double globalSumSigma) const {
+  const double own = samples_[sample - 1].sumSigma;
+  return own >= 0.0 ? own : globalSumSigma;
+}
+
+double CNuc::AbundancePenalty(double globalSumSigma) const {
+  if (!hasAbundanceBlock_) return 0.0;
+  double penalty = 0.0;
+  for (unsigned int s = 0; s < samples_.size(); s++) {
+    for (unsigned int i = 0; i < nuclei_.size(); i++) {
+      const SampleAbundance &e = samples_[s].entries[i];
+      if (e.sigma > 0.0) penalty += pow((e.abundance - e.nominal) / e.sigma, 2.0);
+    }
+    const double sig = this->SampleSumSigma((int)s + 1, globalSumSigma);
+    if (sig > 0.0) penalty += pow((this->AbundanceSum((int)s + 1) - 1.0) / sig, 2.0);
+  }
+  return penalty;
+}
+
+/*!
+ * The sum-to-one part of AbundancePenalty alone: ((sum_i w_i) - 1)^2 / s^2 per sample with s > 0.  The MCMC
+ * likelihood uses this, because AZURECalcMCMC::BuildAutoPriors already turns each abundance's (w0, sigma) into a
+ * Gaussian prior (PARAM_ABUNDANCE); adding the full AbundancePenalty there counted that prior twice and made the
+ * posterior width of an abundance 1/sqrt(2) too narrow (found 2026-10-17 by the isospin-levels session).
+ */
+double CNuc::AbundanceSumPenalty(double globalSumSigma) const {
+  if (!hasAbundanceBlock_) return 0.0;
+  double penalty = 0.0;
+  for (unsigned int s = 0; s < samples_.size(); s++) {
+    const double sig = this->SampleSumSigma((int)s + 1, globalSumSigma);
+    if (sig > 0.0) penalty += pow((this->AbundanceSum((int)s + 1) - 1.0) / sig, 2.0);
+  }
+  return penalty;
+}
+
+/*!
+ * Every J^pi group in the calculation scatters through the hard-sphere phases of its channels whether or
+ * not it has levels (the elastic T-matrix diagonal is e^{2i omega} - e^{2i(omega - phi)}(1 + U), and U is
+ * the level sum). The <levels> block, though, only creates a group when an active level carries it, so a
+ * J^pi with no level was simply absent, and an elastic calculation lost its potential scattering in that
+ * partial wave unless the user remembered a zero-width "dummy" level. With includeAllJPi set this adds
+ * the missing groups: for every particle pair, channel spin s and l <= maxL, every (J, pi) that has no
+ * group yet gets one with the particle channels of all pairs and no levels -- the same channel set the
+ * setup utility builds for a level of that J^pi. Capture and beta-decay pairs add nothing here: with no
+ * level there is nothing for a photon or a beta to connect.
+ *
+ * A level switched off in the file still leaves its J^pi scattering, which is what a decomposition into
+ * resonant and potential parts needs; the old convention (the whole partial wave disappears with its
+ * levels) is what includeAllJPi=0 gives.
+ */
+
+int CNuc::AddHardSphereGroups(const Config &configure, int maxL) {
+  int added = 0;
+  for (int aa = 1; aa <= this->NumPairs(); aa++) {
+    PPair *pair = this->GetPair(aa);
+    if (pair->GetPType() != 0) continue;
+    double s1 = pair->GetJ(1), s2 = pair->GetJ(2);
+    int sPi = pair->GetPi(1) * pair->GetPi(2);
+    for (double chS = fabs(s1 - s2); chS <= s1 + s2 + 1.0e-6; chS += 1.0) {
+      for (int chL = 0; chL <= maxL; chL++) {
+        int chPi = sPi * (chL % 2 == 0 ? 1 : -1);
+        for (double jValue = fabs(chS - chL); jValue <= chS + chL + 1.0e-6; jValue += 1.0) {
+          JGroup newJGroup(jValue, chPi);
+          newJGroup.SetNucleus(pair->GetNucleus(), pair->GetNucleusZ(), pair->GetNucleusA());
+          if (this->IsJGroup(newJGroup)) continue;
+          newJGroup.SetInRMatrix(true);
+          this->AddJGroup(newJGroup);
+          int jGroupNum = this->IsJGroup(newJGroup);
+          JGroup *jg = this->GetJGroup(jGroupNum);
+          for (int ir = 1; ir <= this->NumPairs(); ir++) {
+            PPair *chPair = this->GetPair(ir);
+            if (chPair->GetPType() != 0) continue;
+            if (chPair->GetNucleus() != pair->GetNucleus()) continue;   // one nucleus per group
+            double t1 = chPair->GetJ(1), t2 = chPair->GetJ(2);
+            int tPi = chPair->GetPi(1) * chPair->GetPi(2);
+            bool identicalPair = chPair->IsIdentical();
+            for (double cS = fabs(t1 - t2); cS <= t1 + t2 + 1.0e-6; cS += 1.0) {
+              for (int cL = 0; cL <= maxL; cL++) {
+                if (tPi * (cL % 2 == 0 ? 1 : -1) != chPi) continue;
+                if (fabs(cS - cL) > jValue + 1.0e-6 || jValue > cS + cL + 1.0e-6) continue;
+                // Bose/Fermi symmetry for an identical pair: only l+s even (CheckIdenticalChannels).
+                if (identicalPair && (cL + (int)(cS + 0.5)) % 2 != 0) continue;
+                AChannel newChannel(cL, cS, ir, 'P');
+                if (jg->IsChannel(newChannel)) continue;
+                jg->AddChannel(newChannel);
+                jg->GetChannel(jg->NumChannels())->SetWignerLimit(chPair->GetRedMass(), chPair->GetChRad());
+              }
+            }
+          }
+          added++;
+          if (configure.screenCheckMask & Config::CHECK_COMPOUND_NUCLEUS)
+            configure.outStream << "Hard-sphere group added: J = " << jValue << (chPi == -1 ? "-" : "+")
+                                << " with " << jg->NumChannels() << " channels" << std::endl;
+        }
+      }
+    }
+  }
+  return added;
 }
 
 /*!
@@ -264,6 +600,7 @@ void CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecP
     double jValue = exitPair->GetJ(2);
     int parity = exitPair->GetPi(2);
     JGroup newJGroup(jValue, parity);
+    newJGroup.SetNucleus(exitPair->GetNucleus(), exitPair->GetNucleusZ(), exitPair->GetNucleusA());
     int jGroupNum = this->IsJGroup(newJGroup);
     int levelNum = 0;
     if (jGroupNum) {
@@ -304,7 +641,7 @@ void CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecP
       levelNum = this->GetJGroup(jGroupNum)->IsLevel(newLevel);
       this->GetJGroup(jGroupNum)->GetLevel(levelNum)->SetECParams(ec->first, ec->second);
       for (int ir = 1; ir <= this->NumPairs(); ir++) {
-        if (this->GetPair(ir)->GetPType() == 0) {
+        if (this->GetPair(ir)->GetPType() == 0 && this->GetPair(ir)->GetNucleus() == exitPair->GetNucleus()) {
           double s1 = this->GetPair(ir)->GetJ(1);
           double s2 = this->GetPair(ir)->GetJ(2);
           int sPi = this->GetPair(ir)->GetPi(1) * this->GetPair(ir)->GetPi(2);
@@ -426,6 +763,7 @@ void CNuc::Initialize(const Config &configure) {
  */
 
 void CNuc::AddPair(PPair pPair) {
+  pPair.SetNucleus(this->FindOrAddNucleus(pPair.GetNucleusZ(), pPair.GetNucleusA()));
   pairs_.push_back(pPair);
 }
 
@@ -460,7 +798,10 @@ void CNuc::PrintNuc(const Config &configure) {
         << "*          Particle Pairs          *" << std::endl
         << "************************************" << std::endl;
     for (int i = 1; i <= this->NumPairs(); i++) {
-      out << "Pair Number: " << i << "  Pair Key: " << this->GetPair(i)->GetPairKey() << std::endl;
+      out << "Pair Number: " << i << "  Pair Key: " << this->GetPair(i)->GetPairKey();
+      if (this->NumNuclei() > 1)
+        out << "  Compound Nucleus: " << this->NucleusLabel(this->GetPair(i)->GetNucleus());
+      out << std::endl;
       out << std::setw(30) << "Light Particle J: " << this->GetPair(i)->GetJ(1) << std::endl
           << std::setw(30) << "Light Particle Parity: " << this->GetPair(i)->GetPi(1) << std::endl
           << std::setw(30) << "Light Particle Z: " << this->GetPair(i)->GetZ(1) << std::endl
@@ -546,6 +887,9 @@ void CNuc::FillCompoundFromParamsPhysical(const vector_r &p) {
       level->SetSqrtNFFactor(1.0 / sqrt(nFSum));
     }
   }
+  if (hasAbundanceBlock_)
+    for (unsigned int s = 0; s < samples_.size(); s++)
+      for (unsigned int k = 0; k < nuclei_.size(); k++) samples_[s].entries[k].abundance = p[i++];
 }
 
 /*!
@@ -899,7 +1243,11 @@ bool CNuc::TransformIn(const Config &configure) {
           }
         }
       }
-      if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
+      // A hard-sphere group (includeAllJPi) has channels but no levels: there
+      // is nothing to transform, and a 0 x 0 eigenproblem would hand GSL a
+      // null workspace (a segfault on opening a pyazr session, whose default
+      // is the transform route).
+      if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM) && !tempEnergies.empty()) {
         matrix_r nMatrix;
         matrix_r mMatrix;
         for (int mu = 0; mu < tempEnergies.size(); mu++) {
@@ -1319,6 +1667,12 @@ void CNuc::CalcBoundaryConditions(const Config &configure) {
   for (int j = 1; j <= this->NumJGroups(); j++) {
     if (this->GetJGroup(j)->IsInRMatrix()) {
       JGroup *theJGroup = this->GetJGroup(j);
+      if (theJGroup->NumLevels() == 0) {
+        // A hard-sphere group: with no levels its R-matrix is zero and the boundary condition drops out
+        // of the collision matrix, so any value serves. Zero keeps the Lo matrix finite.
+        for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) theJGroup->GetChannel(ch)->SetBoundaryCondition(0.0);
+        continue;
+      }
       ALevel *firstLevel = theJGroup->GetLevel(1);
       if (firstLevel->IsInRMatrix()) {
         for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
@@ -1465,7 +1819,7 @@ void CNuc::CalcAngularDists(int maxL) {
                 }
                 // Calculate z1z2_upos for Unobserved Primary, Observed Secondary (UPOS) case
                 double z1z2_upos = 0.;
-                if (this->GetPair(theDecay->GetPairNum())->GetPType() == 0 && aa != ir) {
+                if (this->GetPair(theDecay->GetPairNum())->GetPType() == 0 && aa != theDecay->GetPairNum()) {
                   double sp2 = theDecay->GetKGroup(k)->GetSp2();
                   double j1f = this->GetPair(theDecay->GetPairNum())->GetJ(1);
                   double j2f = this->GetPair(theDecay->GetPairNum())->GetJ(2);
@@ -1483,7 +1837,7 @@ void CNuc::CalcAngularDists(int maxL) {
                     theDecay->AddKLGroup(NewKLGroup);
                     KLGroupNum = theDecay->IsKLGroup(NewKLGroup);
                   }
-                  if (aa == ir || this->GetPair(theDecay->GetPairNum())->GetPType() == 10) {
+                  if (aa == theDecay->GetPairNum() || this->GetPair(theDecay->GetPairNum())->GetPType() == 10) {
                     // Standard interference (elastic or gamma capture)
                     Interference NewInterference(path1, path2, z1z2, interferenceType);
                     int InterNum = theDecay->GetKLGroup(KLGroupNum)->IsInterference(NewInterference);
@@ -1558,9 +1912,19 @@ struct AyPathway {
  */
 
 void CNuc::CalcCaptureAnalyzingPower(int aa, int decayNum, int maxL) {
+  // Built lazily from the first capture A_y point that needs it, which may be
+  // computed on any OpenMP thread.  Setting the flag before the tables were
+  // filled let a second thread read half-built tables (13N_capture_ay chi2
+  // varied from run to run once all points were computed in one parallel
+  // pass), so the build is serialized and the flag is set only when it is done.
   Decay *theDecay = this->GetPair(aa)->GetDecay(decayNum);
+  static std::mutex captureAyMutex;
+  std::lock_guard<std::mutex> lock(captureAyMutex);
   if (theDecay->IsCaptureAyBuilt()) return;
-  theDecay->SetCaptureAyBuilt();
+  struct MarkBuilt {
+    Decay *d;
+    ~MarkBuilt() { d->SetCaptureAyBuilt(); }
+  } markBuilt{theDecay};  // on every return path below, after the tables are complete
 
   PPair *entrancePair = this->GetPair(aa);
   PPair *exitPair = this->GetPair(theDecay->GetPairNum());
@@ -1738,6 +2102,7 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config *config
       bool isUnbound = false;
       for (int ir = 1; ir <= this->NumPairs(); ir++) {
         PPair *pair = this->GetPair(ir);
+        if (pair->GetNucleus() != this->GetJGroup(j)->GetNucleus()) continue;   // thresholds of this nucleus only
         if (pair->GetPType() == 0 &&
             level->GetE() > (pair->GetSepE() + pair->GetExE())) isUnbound = true;
       }
@@ -1776,6 +2141,22 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config *config
       energyIndex++;
     }
   }
+  // Isotopic abundances, one per compound nucleus and sample (sample by
+  // sample), right after the level block (so EData::FillMnParams, which
+  // takes its offsets from the vector size, needs no change); only when the
+  // project carries an <abundances> block.  A fixed abundance is still a
+  // parameter, so the layout does not depend on which ones vary.
+  if (hasAbundanceBlock_) {
+    for (unsigned int s = 0; s < samples_.size(); s++) {
+      for (unsigned int k = 0; k < nuclei_.size(); k++) {
+        const SampleAbundance &e = samples_[s].entries[k];
+        std::string name = this->AbundanceParamName((int)s + 1, (int)k + 1);
+        p.Add(name, e.abundance, e.sigma > 0.0 ? e.sigma : 0.1 * e.abundance + 1e-3);
+        p.SetLowerLimit(name, 0.0);
+        if (!e.vary) p.Fix(name);
+      }
+    }
+  }
 }
 
 /*!
@@ -1801,6 +2182,9 @@ void CNuc::FillCompoundFromParams(const vector_r &p) {
       level->SetSqrtNFFactor(1.0 / sqrt(nFSum));
     }
   }
+  if (hasAbundanceBlock_)
+    for (unsigned int s = 0; s < samples_.size(); s++)
+      for (unsigned int k = 0; k < nuclei_.size(); k++) samples_[s].entries[k].abundance = p[i++];
 }
 
 /*!
@@ -2203,7 +2587,9 @@ void CNuc::PrintTransformParams(const Config &configure) {
           out << '+';
         out.precision(4);
         out << "  E_level = " << std::setw(8) << theLevel->GetTransformE() << " MeV"
-            << "  ITERATIONS = " << std::setw(5) << theLevel->GetTransformIterations() << std::endl;
+            << "  ITERATIONS = " << std::setw(5) << theLevel->GetTransformIterations();
+        if (this->NumNuclei() > 1) out << "  NUCLEUS " << this->NucleusLabel(theJGroup->GetNucleus());
+        out << std::endl;
         for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
           AChannel *theChannel = this->GetJGroup(j)->GetChannel(ch);
           PPair *exitPair = this->GetPair(theChannel->GetPairNum());
@@ -2309,8 +2695,14 @@ vector_r CNuc::GetTransformParams(const Config &configure) {
           int tempSign = (theLevel->GetBigGamma(ch) < 0) ? (-1) : (1);
           params.push_back(tempSign * sqrt(fabs(theLevel->GetBigGamma(ch))) / 100.0 / sqrt(fstruc * hbarc));
         } else if (theChannel->GetRadType() == 'F' || theChannel->GetRadType() == 'G') {
-          int tempSign = (theLevel->GetBigGamma(ch) < 0) ? (-1) : (1);
-          params.push_back(tempSign * theLevel->GetBigGamma(ch));
+          // A beta-decay feeding amplitude is already the value the <levels>
+          // line holds (Brune normalization, TransformOut), sign included.
+          // Multiplying by its own sign, as was done here, returned |B| and
+          // so a negative amplitude came back positive from every consumer
+          // of this vector: the GUI's level write-back, the MCMC physical
+          // vector and pyazr's save_fit snapshots, which then described a
+          // different beta-delayed spectrum (12C+a, 2026-10-12).
+          params.push_back(theLevel->GetBigGamma(ch));
         } else {
           int tempSign = (theLevel->GetBigGamma(ch) < 0) ? (-1) : (1);
           params.push_back(tempSign * fabs(theLevel->GetBigGamma(ch)) * 1e6);
@@ -2318,6 +2710,10 @@ vector_r CNuc::GetTransformParams(const Config &configure) {
       }
     }
   }
+  // Abundances are the same in both bases; they follow the level block as in FillMnParams.
+  if (hasAbundanceBlock_)
+    for (unsigned int s = 0; s < samples_.size(); s++)
+      for (unsigned int k = 0; k < nuclei_.size(); k++) params.push_back(samples_[s].entries[k].abundance);
 
   return params;
 }

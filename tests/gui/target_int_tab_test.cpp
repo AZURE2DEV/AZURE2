@@ -16,6 +16,14 @@
 #include <cmath>
 #include <iostream>
 #include "TargetIntTab.h"
+#include "AddTargetIntDialog.h"
+#include <QCheckBox>
+#include <QLineEdit>
+#include <QRadioButton>
+#include <QHeaderView>
+#include <QTableWidget>
+#include <QSpinBox>
+#include <cstdlib>
 #include "TargetIntModel.h"
 #include "Config.h"
 struct SegPairs {int firstPair; int secondPair;};
@@ -176,28 +184,118 @@ int main(int argc, char** argv) {
   QString out8 = roundTrip(tab, legacy, readOk);
   ok("no beam-profile token invented", !out8.contains("beamprofile"), out8);
 
-  // 9. A sigma or density whose round-trip text fills the 15-wide column (17
-  //    digits, as Python writes 0.1 + 0.2) keeps a space before the next field.
+  // 9. A user-defined resolution block: quoted path with a space, flight
+  //    path, burst, channel width and the centring flag; alone and after a
+  //    beam-profile block on the same line.
+  QString udrLine =
+      "1 \"4\" 200 0 0 0 0 \"\" 0 0 0 0 \"\" 0 0 0.04 20 50 "
+      "udr \"data/RF EAR1_v2.txt\" 183.5 7 0 1\n</targetInt>\n";
+  QString out9 = roundTrip(tab, udrLine, readOk);
+  ok("read a line carrying a UDR block", readOk);
+  lines = tab.getTargetIntModel()->getLines();
+  if (lines.size() == 1) {
+    const TargetIntData& d = lines.at(0);
+    ok("UDR flag read", d.isUdr);
+    ok("UDR path with a space kept", d.udrFile == "data/RF EAR1_v2.txt", d.udrFile);
+    ok("flight path read", d.udrFlightPath == 183.5);
+    ok("burst read", d.udrBurstFwhm == 7.);
+    ok("channel width read", d.udrChannelWidth == 0.);
+    ok("centring read", d.udrCentred);
+    ok("no beam profile invented", !d.isBeamProfile);
+    ok("grid parameters before the keyword still read", d.resonanceWidthMultiplier == 20. && d.pointsPerWidth == 50.);
+  }
+  ok("UDR block written back", out9.contains("udr \"data/RF EAR1_v2.txt\" 183.5 7 0 1"), out9);
+  bool readOk9 = false;
+  QString out9b = roundTrip(tab, out9 + "</targetInt>\n", readOk9);
+  ok("UDR round trip stable", readOk9 && out9b == out9, out9b);
+  ok("no UDR token on a legacy line", !out8.contains(" udr "), out8);
+
+  QString bothBlocks =
+      "1 \"3\" 200 0 0 0 0 \"\" 0 0 0 0 \"\" 0 0 0.04 20 50 "
+      "beamprofile 1 2.5 0.3 -1.5 1 0.07 0 1 udr nTOF.txt 185 0 3.2 0\n</targetInt>\n";
+  QString out10 = roundTrip(tab, bothBlocks, readOk);
+  ok("read beam-profile and UDR blocks together", readOk);
+  lines = tab.getTargetIntModel()->getLines();
+  if (lines.size() == 1) {
+    const TargetIntData& d = lines.at(0);
+    ok("beam profile still read beside UDR", d.isBeamProfile && d.beamProfile.size() == 4);
+    ok("unquoted UDR path read", d.isUdr && d.udrFile == "nTOF.txt", d.udrFile);
+    ok("uncentred flag read", !d.udrCentred);
+    ok("channel width read beside burst zero", d.udrChannelWidth == 3.2 && d.udrBurstFwhm == 0.);
+  }
+  ok("both blocks written back in order",
+     out10.indexOf("beamprofile 1 ") >= 0 && out10.indexOf(" udr \"nTOF.txt\" 185 0 3.2 0") > out10.indexOf("beamprofile 1 "), out10);
+
+  // 11. One Gaussian beam spread: an expression written in the lab frame carries the sigmalab keyword and
+  // keeps it through a round trip; a legacy line without it stays without it (and is read as c.m.).
+  QString labLine = "1 \"4\" 60 0 0 0 0 \"\" 0 0 0 1 \"a0*x^1.5\" 1 0.0092 0 0.04 20 50 sigmalab\n</targetInt>\n";
+  QString out11 = roundTrip(tab, labLine, readOk);
+  ok("read a sigmalab line", readOk);
+  lines = tab.getTargetIntModel()->getLines();
+  if (lines.size() == 1) {
+    ok("expression read with the lab flag", lines.at(0).isConvCoefficients && lines.at(0).sigmaLab && lines.at(0).convolutionEq == "a0*x^1.5", lines.at(0).convolutionEq);
+    ok("constant-sigma flag off for an expression line", !lines.at(0).isConvolution);
+  }
+  ok("sigmalab written back, before any keyword block", out11.contains(" 0.04 20 50 sigmalab") || out11.contains(" 50 sigmalab"), out11);
+  QString legacyLine = "1 \"4\" 60 0 0 0 0 \"\" 0 0 0 1 \"a0*x^1.5\" 1 0.0092 0 0.04 20 50\n</targetInt>\n";
+  QString out12 = roundTrip(tab, legacyLine, readOk);
+  lines = tab.getTargetIntModel()->getLines();
+  ok("legacy expression line read as c.m.", readOk && lines.size() == 1 && lines.at(0).isConvCoefficients && !lines.at(0).sigmaLab);
+  ok("no sigmalab added to a legacy line", !out12.contains("sigmalab"), out12);
+  QString ranged = "1 \"4\" 60 0 0 0 0 \"\" 0 0 0 1 \"a0\" 1 0.03 0 0.04 20 50 \"1.5-2.5\" 0.1 0 sigmalab beamprofile 1 2.5 0.3 -1.5 1 0.07 0 1\n</targetInt>\n";
+  QString out13 = roundTrip(tab, ranged, readOk);
+  lines = tab.getTargetIntModel()->getLines();
+  ok("sigmalab read between a ranges block and a beam profile", readOk && lines.size() == 1 && lines.at(0).sigmaLab && lines.at(0).isBeamProfile && lines.at(0).applyRanges == "1.5-2.5",
+     lines.size() == 1 ? lines.at(0).applyRanges : QString("(no line)"));
+  ok("and written back in that order", out13.indexOf("\"1.5-2.5\"") < out13.indexOf("sigmalab") && out13.indexOf("sigmalab") < out13.indexOf("beamprofile"), out13);
+
+  // 12. The dialog: one checkbox, a constant or an expression; the legacy c.m. choice converts exactly.
+  {
+    AddTargetIntDialog dialog;
+    dialog.isConvolutionCheck->setChecked(true);
+    dialog.sigmaText->setText("0.030");
+    ok("a number in the width field is a constant", dialog.sigmaIsConstant());
+    dialog.sigmaText->setText("a0*x^1.5+exp(-x)");
+    ok("an expression in the width field is not", !dialog.sigmaIsConstant());
+    dialog.sigmaCmRadio->setChecked(true);
+    dialog.setConversionFactor(0.5);
+    dialog.convertExpressionToLab();
+    ok("c.m. -> lab rewrite substitutes x and divides, leaving exp alone",
+       dialog.sigmaText->text() == "(a0*(0.5*x)^1.5+exp(-(0.5*x)))/0.5", dialog.sigmaText->text());
+    ok("after the rewrite the line is marked lab", dialog.sigmaLabRadio->isChecked());
+    dialog.numConvCoefficientSpin->setValue(5);
+    QApplication::processEvents();
+    ok("five coefficient rows all visible without scrolling",
+       dialog.convCoefficientTable->height() >= dialog.convCoefficientTable->horizontalHeader()->height() + 5 * dialog.convCoefficientTable->rowHeight(0),
+       QString::number(dialog.convCoefficientTable->height()));
+    if (const char* stem = std::getenv("AZURE2_TARGET_INT_PNG")) {
+      dialog.show(); QApplication::processEvents();
+      dialog.grab().save(QString("%1_expression.png").arg(stem));
+    }
+  }
+
+  // 13. A sigma or density whose round-trip text fills the 15-wide column (17
+  //     digits, as Python writes 0.1 + 0.2) keeps a space before the next field.
   QString longNumbers =
       "1 \"1\" 50 1 0.30000000000000004 1 0.12345678901234566 \"\" 0 0 0 0 \"\" 0 0 0.04 5 50\n</targetInt>\n";
   // Left-aligned, as AZURESetup::writeConfig leaves the project stream.
-  QString out9;
+  QString outLong;
   {
     tab.reset();
     QString in(longNumbers);
     QTextStream inStream(&in);
     readOk = tab.readFile(inStream);
-    QTextStream outStream(&out9);
+    QTextStream outStream(&outLong);
     outStream.setFieldAlignment(QTextStream::AlignLeft);
     tab.writeFile(outStream);
   }
   ok("read a line with 17-digit numbers", readOk);
-  ok("sigma and the next field stay two tokens", out9.contains("0.30000000000000004 "), out9);
-  ok("density and the next field stay two tokens", out9.contains("0.12345678901234566 "), out9);
-  bool readOk9 = false;
-  QString out9b = roundTrip(tab, out9 + "</targetInt>\n", readOk9);
+  ok("sigma and the next field stay two tokens", outLong.contains("0.30000000000000004 "), outLong);
+  ok("density and the next field stay two tokens", outLong.contains("0.12345678901234566 "), outLong);
+  bool readOkLong = false;
+  QString outLongB = roundTrip(tab, outLong + "</targetInt>\n", readOkLong);
   lines = tab.getTargetIntModel()->getLines();
-  ok("re-read: sigma exact", readOk9 && lines.size() == 1 && lines.at(0).sigma == 0.30000000000000004, out9b);
+  ok("re-read: sigma exact", readOkLong && lines.size() == 1 && lines.at(0).sigma == 0.30000000000000004, outLongB);
 
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;
   return fails ? 1 : 0;

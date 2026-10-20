@@ -15,6 +15,7 @@
 #include "AZUREPlot.h"
 #include "PlotTab.h"
 #include "LevelsModel.h"
+#include "PairsModel.h"
 #include <qwt_text.h>
 #include "qwt_plot_curve.h"
 #include "qwt_plot_grid.h"
@@ -542,6 +543,11 @@ void AZUREPlot::clearLevelMarkers() {
   levelMarkers.clear();
 }
 
+void AZUREPlot::setPairsModel(PairsModel *model) {
+  pairsModel = model;
+  refreshLevelMarkers();
+}
+
 void AZUREPlot::refreshLevelMarkers() {
   clearLevelMarkers();
   if (!levelsVisible || !levelsModel) {
@@ -584,6 +590,11 @@ void AZUREPlot::refreshLevelMarkers() {
     } else {  // xAxisType==0
       QMap<int, double>::const_iterator it = thresholdByEntrance.constBegin();
       for (; it != thresholdByEntrance.constEnd(); ++it) {
+        // A level of another compound nucleus has no resonance in this entrance pair's cross section.
+        int key = it.key();
+        if (pairsModel && lvl.hasNucleus() && key >= 1 && key <= pairsModel->getPairs().size() &&
+            PairsModel::nucleusOf(pairsModel->getPairs().at(key - 1)) != lvl.nucleus())
+          continue;
         xPositions.append(lvl.energy - it.value());
       }
     }

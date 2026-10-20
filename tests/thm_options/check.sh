@@ -130,7 +130,7 @@ vertex=perlevel")")" 2741.85
 expect "kinematics=lacognata == no block" "$(run lacognata "$(block kinematics=lacognata)")" "$none" 0
 expect "kinematics=triple"    "$(run triple    "$(block kinematics=triple)")"    2381.01
 expect "kinematics=kf3body"   "$(run kf3body   "$(block kinematics=kf3body)")"   2625.33
-expect "kinematics=lambda32"  "$(run lambda32  "$(block kinematics=lambda32)")"  5499.08
+expect "kinematics=lambda32"  "$(run lambda32  "$(block kinematics=lambda32)")"  5604.98
 
 # (d) on-shell vertex and the external Coulomb term
 expect "vertex=onshell"    "$(run onshell "$(block vertex=onshell)")"    2070.75

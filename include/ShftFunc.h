@@ -6,6 +6,7 @@
 #include <memory>
 
 class ShftFunc;
+class CoulombTable;
 
 /// A function class for negative energy shift functions.
 
@@ -25,6 +26,10 @@ class ShftFunc {
   ShftFunc(PPair *pPair) {
     totalSepE_ = pPair->GetSepE() + pPair->GetExE();
     radius_ = (double)pPair->GetChRad();
+    neutral_ = (pPair->GetZ(1) * pPair->GetZ(2) == 0);
+    zz_ = pPair->GetZ(1) * pPair->GetZ(2);
+    redmass_ = pPair->GetRedMass();
+    table_ = SharedTable(neutral_);
     params_.whitFunc = std::make_unique<WhitFunc>(pPair);
   };
   /*!
@@ -58,6 +63,14 @@ class ShftFunc {
    * energy (MeV, > 0).  False if GSL cannot evaluate it.
    */
   bool WhittakerShift(int l, double binding, double &s) const;
+  /*!
+   * Exact shift function of a closed neutral channel (eta = 0) at rho = kappa a:
+   * S_0 = -rho, S_l = -rho^2 / (l - S_{l-1}) - l, i.e. rho u'/u for the decaying
+   * solution u = rho k_l(rho).  Every term is negative, so the recursion is stable.
+   */
+  static double NeutralBoundShift(int l, double rho);
+  /// Is the closed form in use (off with AZURE_NO_NEUTRAL_CLOSED_FORM, for comparisons)?
+  static bool UseNeutralClosedForm();
 
  private:
   /// Separation plus excitation energy of the pair, the threshold this is measured from.
@@ -67,6 +80,10 @@ class ShftFunc {
   /// GSL adaptor for the shift function, for differentiation.
   static double thisShftFunc(double, void *);
   static double thisShftFuncDeriv(double, void *);
+  /// GSL adaptor for the Whittaker function at params_ (NumericalShift).
+  static double theWhitFunc(double, void *);
+  /// The numerical radial derivative of W at params_ (AZURE_BOUND_SHIFT_NUMERICAL=1).
+  double NumericalShift();
   typedef struct Params {
     int lValue;
     double bindingEnergy;
@@ -75,6 +92,14 @@ class ShftFunc {
   Params params_;
   double totalSepE_;
   double radius_;
+  bool neutral_;
+  int zz_;
+  double redmass_;
+  /// The universal Coulomb table for a charged pair when Config::useCoulombTable is set.
+  const CoulombTable *table_;
+  static const CoulombTable *SharedTable(bool neutral);
+  /// Charged closed channels from the exact U ratio, unless AZURE_BOUND_SHIFT_NUMERICAL=1.
+  static bool UseURatio();
 };
 
 #endif

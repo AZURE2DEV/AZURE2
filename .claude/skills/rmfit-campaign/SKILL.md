@@ -274,8 +274,10 @@ candidate is then scored as "nothing there".  The recipe that found it:
    at 9.4 it was the backward angles 0.35-0.71 of the data over 400 keV).  A narrow spike (two 10 keV bands, pull changing sign) is a
    lineshape / resolution question, not a level search.  Write the anatomy into the readme first.
 2. **Width-floor level add, every J^π, with the local release and a same-budget control.**  `structure add --local-release 0.5
-   --local-nfev 80 --pinned-nfev 60 --nfev 150` with `width_floor_windows: [[E-0.0005, E+0.0005, 100000, <pair>]]` (the found width's
-   channel; here n₀ ≥ 100 keV); seeds Γ_n0 150 + Γ_α0 30 keV in the lowest L; one campaign directory per J^π (an accepted level is
+   --local-nfev 80 --pinned-nfev 60 --nfev 150` with `total_width_floor_windows: [[E-0.0005, E+0.0005, 100000]]` (a floor on the
+   TOTAL width over the level's open channels, 2026-10-12 -- NOT the older per-channel `width_floor_windows`, which forces the width
+   into one named channel; see the 2026-10-12 log entry) and `setenv RMFIT_SEED_OMITTED 1` so every open channel of the group exists
+   and can take width; seeds Γ_n0 150 + Γ_α0 30 keV in the lowest L; one campaign directory per J^π (an accepted level is
    adopted into its base, so groups must not share one), three groups per node job.  The floor is one-sided on the sign the amplitude
    starts with and never above 0.95 of the cap; it is skipped for an amplitude that is exactly 0 (the control's "level off" state --
    the first run had the control carrying the floored level, start 42k too high; a control whose start differs from the incumbent is
@@ -394,6 +396,19 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
   that matters; coordinated multi-level flips need several backtracking GN iterations
   (`search.gn_iters_multi`) and their own polish quota (`search.multi_top`).
 - Job mail: `-m abe` (start, end, abort) so a silent crash is noticed.
+- **`pkill -f` / `pgrep -f` patterns are regular expressions, and every reaction name here has a `+`.**
+  `pgrep -f "13C+a/..."` or `pkill -f "bin/AZURE2 11B+a_udr.azr"` matches nothing (`B+` = one or more
+  B), prints nothing, and looks exactly like "no such process".  2026-10-11: a GUI "stopped" that way
+  kept running, its log was deleted under it, and the deleted file grew to 748 GB and filled the group
+  quota (/groups/rdeboer1, 5 TB) -- every job writing there died ("No space left on device", or a log
+  that ends after the module lines).  Rules: find the pid with a fixed-string match
+  (`ps -eo pid,cmd | grep -F "11B+a_udr.azr"`) or escape the plus (`13C\+a`), kill BY PID, confirm with
+  `kill -0 <pid>` failing, and only then remove its log; launch background programs with
+  `< /dev/null` and a size cap (`2>&1 | head -c 200000 > log`).  A `.nfs...` file in a directory is a
+  deleted file still held open -- `ls -la` shows its size; `ls -l /proc/<pid>/fd` finds the holder.
+- **When a whole batch of jobs dies at once, check `df -h /groups/<group>` first** (the group quota,
+  not the 900 TB filesystem `df /groups` may show).  Seven jobs failing in the same minute with
+  truncated logs looked like a broken node; it was the quota.
 - **Park-mode campaigns (`"use_park": true`, since 2026-10-06).** (1) The J > 0 wall
   (`sum (J/1e-3)^2` over levels with `J = 1 - sum gamma^2 dS/dE < 0`) is inside the
   engine's scalar chi2, so the `plain` objective sees it, but the least-squares rows
@@ -1829,3 +1844,134 @@ not a veto; the readme records the split and the evaluator decides.
 The six-step process that found the broad 1/2⁻ at 9.348 MeV (localise with a band map and pulls → width-floor level add with local
 release and controls over all J^π → cross-checks: widen-the-neighbour, data-only window screen, per-dataset/angle attribution → full free
 refit → propagate to models that freeze the block → next region) is written up as section 3c, with the traps met on the way.
+
+## 2026-10-10 — near-degenerate BROAD same-J^pi levels are separated at write time, not fixed
+AZURE2 merges same-J^pi levels < 1 keV apart when it reads a model, so a polish can drive two levels into a pair that cannot be
+written. Narrow pairs (the 9/2+ doublet of 09-19) are a lineshape question and still fail. For BROAD levels the fix is a small energy
+adjustment (DeBoer: "give the energy of the broader level a little adjustment"). Measured on the 13C+a merged incumbent: moving a
+~6 MeV-wide 1/2+ by 1 / 2 / 5 keV costs +1.2 / +3.9 / +21 chi2 frozen (of 420,772); the ~0.6 MeV partner costs +2.9 per keV.
+Installed (local.py, engine.py; backups .bak-2026-10-10; tests test_separate_close_levels.py stub, test_bake_separate_13n.py real
+engine):
+- `local.separate_close_levels(ev, x)`: every same-J^pi pair < 1.5 keV apart -> the broader member WITH A FREE ENERGY moves away to
+  2.5 keV separation if the shift is < 1 % of its width (Gamma = sum of its free physical widths); otherwise the pair is refused.
+  If the broader one's energy is fixed, the other moves when it qualifies.
+- `engine.bake(..., separate=True, separate_max_cost=10.0)` applies it before writing, re-scores, and raises if the cost exceeds the
+  cap; the log line names level, shift, width and cost. Refused pairs are printed; < 1 keV refused pairs still fail the key-set check.
+- `sanity`: a < 1 keV pair that bake can separate is listed under `separable_pairs` (ok), not `merge_pairs` (fail).
+Do not fix the energies of such a pair any more (13C+a 10-9-26_merged_next did, before this existed). The 13N trap met while testing:
+at 2.37 MeV the Brune transform caps an L=0 width near 45 keV whatever amplitude or file value is given, so "broad" test levels have to
+sit where the penetrability allows it (the 20 MeV background level).
+
+## 2026-10-10 — shard layout: composite sums are split, free-shift segments get their own shard (~4x per iteration)
+Measured on the 13C+a merged model (44,469 points, 16 shards x 1 thread): one objective 25 s, one Jacobian 115-141 s, although a
+single session takes only 45 s per objective -- the shards were badly balanced. Two causes, both fixed in rmfit/model.py (backup
+.bak-2026-10-10b, test tests/test_shard_layout.py):
+- a composite "sum" segment (the Cierjacks n-total, 13,129 points summed over 8 exits) was never split and sat alone in one shard.
+  plan_pieces now splits sum composites by energy like plain segments, with the cost multiplied by the component count
+  (RMFIT_SPLIT_SUM=0 restores the old rule). Objective 25 s -> 3-4.5 s, bit-identical.
+- a free energy shift is finite-differenced in the Jacobian and each step re-evaluates the WHOLE shard (~0.024 s per point per shift),
+  so shards holding shifted segments took 28-92 s while the rest took 10-17 s. build_shards now gives each free-shift segment a shard
+  of its own while they are no more than half the shards (RMFIT_SHIFT_SOLO=0 restores). Jacobian 115-141 s -> 25-29 s, |J| identical.
+How it was found (reusable): time each shard's eval and Jacobian separately (call each _Worker in turn) -- the slowest shard sets the
+wall time, and its contents say why. Not worth it here: more OpenMP threads per shard (pyazr's objective does not use the parallel
+chi2 path of AZURE2 249747e; 4x4 / 8x2 layouts made the Jacobian 5x slower).
+
+## 2026-10-11 — a `+` in a pkill pattern filled the group quota
+A GUI launched for an 11B+a review fell back to its text menu (no `< /dev/null`) and printed its prompt forever; `pkill -f
+"bin/AZURE2 11B+a_udr.azr"` matched nothing (`+` is a regex quantifier), the log was deleted under the live process, and the hidden
+`.nfs...` file reached 748 GB and filled /groups/rdeboer1 at 17:17.  Eight 13C+a jobs and several other sessions' MCMC jobs died.
+Found by `find -mmin -2880 -size +200M` (the .nfs file) and `ls -l /proc/<pid>/fd`; freed by killing the pid.  Gotchas in section 8.
+
+## 2026-10-12 — the width floor belongs on the TOTAL width; a level add only has the channels the candidate names
+DeBoer: "the floor should apply to the total width, not just the n0 width. A state could have a large alpha width instead and a small
+neutron width and still be fine ... It doesn't matter if all of the partial widths are small, as long as at least one of them is large
+enough to satisfy the floor."  Two defects in every floored level add before this date:
+1. `width_floor_windows` floors ONE channel (pair), so a broad level that the data want alpha-dominated (or in n1/n2 above their
+   thresholds) was forced to carry >= the floor in n0 and judged on that.  13C+a/10-11-26_broad103: 1/2+ and 3/2- at 10.3 MeV gave the
+   biggest gains (+4,252 / +2,767 vs control) and were both rejected "unphysical" with n0 at the floor -- possibly the floor's fault.
+2. `structure.add_level_variant` creates ONLY the channels named in the candidate (here n0 + a0); the group's other channels are written
+   gamma = 0 and FIXED unless `RMFIT_SEED_OMITTED=1` (then every open, non-dead channel is freed with a tiny seed).  So no width could ever
+   move to n1, n2 or a1 in those tests, whatever the floor.
+Fix: `BoundsPolicy.total_width_floor_windows = [[e_min, e_max, gamma_min_ev], ...]`, matched on the level's SEED energy like the old
+floor.  It is a one-sided penalty row in `polish`, residual max(0, gmin - Gamma_tot)/(sigma * gmin) with sigma = 1e-4 relative
+(`total_floor_sigma`; at 0.005 the floor sagged by a third under a strong data pull -- sag ~ pull*sigma^2/2), appended after the data
+rows so `rows_objective` counts it and `rows_chi2` excludes it.  Gamma_tot = sum over OPEN channels (Gamma_W > 0 at x_ref) of
+Gamma_W,c theta_c^2; no sign lock, single amplitudes stay free.  No floor for a level whose amplitudes are all exactly 0 (the control).
+The level add logs "total width of <lvl> after the released polish: X keV (floor Y keV)" and, if the floor binds (within 1 %), puts
+"Gamma_total[lvl] at the Y keV floor" in at_bound -> unphysical.  The old per-channel floor is kept for deliberate tests of one channel's
+width (10-5-26_an0_reconcile, 10-6-26_32m_widen).  Test: tests/test_total_width_floor.py (alpha-dominated level passes with
+Gamma_n0 -> 0; the old floor holds Gamma_n0 at 100 keV on the same data; an unwanted level is held at the floor and reported binding).
+Installed with local.py / campaign.py .bak-2026-10-12.  First use: 13C+a/10-12-26_broad103_total (the two 10.3 MeV cases re-run, 1/2+
+also seeded in n1 s-wave).  Rule: a floored level add sets RMFIT_SEED_OMITTED=1 and uses the total floor.
+
+
+## 2026-10-12 (b) — sharded convolution follows AZURE2 dad58dc; local ±mΓ table in every level add; seed reset after the window scan
+1. **Sharded vs single disagreed by ~52 on 13C+a.**  `model.build_conv_spec` re-implements `<targetInt>` Gaussian convolution for the
+   shards (the engine's own convolution needs every segment in one session).  It still used the PRE-dad58dc convention (constant sigma,
+   kernel over +-3 sigma NOT normalised -> results 0.27 % low); AZURE2 dad58dc normalised the kernel.  So `polish` (sharded) scored the
+   Nelson segment 170 ~52 below the `verify` (single) number -- read as a "+53 offset between builds" for half a day.  Now: one sigma per
+   data point, normalised kernel over +-3 sigma, and the three dad58dc sigma forms -- `sigmalab` (lab sigma(E_lab) expression x cm_conv),
+   legacy expression (evaluated at the point's E_cm), constant (x cm_conv).  `TargetEffectSpec.sigma_lab`; `sigma_eq` evaluates general
+   AZURE2 expressions (a0..aN, x, ^, sqrt, exp, ...) through a restricted eval.  Test tests/test_conv_spec_dad58dc.py.  RULE: when the
+   engine's convolution changes, re-run a shard-vs-single comparison per convolved segment before trusting any sharded number; job
+   scripts for convolved models carry a CONV GUARD (`'sigma_lab' in dataclasses.fields(TargetEffectSpec)`).
+2. **Local significance (DeBoer: "give the difference between the chi2 with and without the new resonance based on something like +/-
+   3 times the width of the resonance to either side").**  `diagnose.window_delta(ev, x_with, x_without, e_r, gamma_mev, multiples=(1,2,3),
+   min_half_mev=0)` + `format_window_delta`; `_run_level_add` now saves the control vector as a ledger candidate (status "control",
+   score stage "control" -- never "verified", so it cannot become the incumbent), scores candidate and control on ONE fresh SingleSession,
+   logs "control on a fresh single session" and the ±1/2/3Γ table (inside / outside, per data set inside ±3Γ), and stores control_cid,
+   control_single and the window JSON in the round stats.  Optional `BoundsPolicy.window_min_half_mev`.  Test tests/test_window_delta.py;
+   13N level-add regression shows the table.
+3. **Seed reset after the window scan.**  With RMFIT_SEED_OMITTED=1 the window polish put large widths into channels the window data do
+   not constrain, and they were copied into the full model (10-12-26_broad103_total 3/2-: full model started at 2.5M, test void).  Channels
+   in `info["seeded_omitted"]` are now reset to their file seeds after the window amplitudes are copied (log line "reset ... seeded-omitted").
+Installed with campaign.py / diagnose.py / model.py .bak-2026-10-12b after test_bounds_13n and test_local_release_13n passed on the dev copy.
+
+**2026-10-13 -- shared-package rule: every rmfit edit passes `tests/test_keys.py` AND a Sharded fixture before it stays.**  An edit to
+`engine.py` by another session (abundance priors for AZURE2's multi-compound-nucleus branch) passed `self.azr` from
+`Sharded._assemble`, an attribute only `SingleSession` has; every sharded run started after the edit died at its first evaluator
+start-up (`AttributeError: 'Sharded' object has no attribute 'azr'`, five 13C+a level adds in 10-13-26_add1033_f100), while
+the 13N single-session tests stayed green.  A second edit (`keys.py` pair-node tags) broke `sign_distance` (KeyError), which only
+perturbation diagnostics and crossover call.  Both fixed the same day (`self.base_azr`; enumerate (member, pair) throughout);
+the rule and the queue template `tests/_queue_sharded/run_crc_sharded` (test_keys + test_levelscan_13n on 3 shards) are in
+`rmfit/README.md`.  Drivers that are already running keep their loaded module, so a bad install shows up only in NEW jobs: after
+any rmfit install, check the first new job's log past its evaluator start-up before trusting a quiet queue.
+
+## 2026-10-15 — windowed `<targetInt>` convolution in sharded fits; fixed-angle conv pieces
+DeBoer: "I was working towards this sort of targeted application of the convolution for data sets, but I'm not sure if it ever got
+implemented."  The ENGINE has it (TargetEffect.cpp; docs user_guide/experimental_effects.rst): after the four straggling/grid numbers a
+`<targetInt>` line may carry a quoted window list `"lo1-hi1,lo2-hi2"` (lab MeV), a blend width (smoothstep at each edge) and an auto
+tolerance; points outside every window are ordinary points; model = b x convolved + (1-b) x bare.  rmfit's sharded convolution
+(`model.build_conv_spec`) ignored all of it and folded every point on one uniform grid at min(sigma)/10 over the whole segment.
+1. `TargetEffectSpec.ranges / blend_width / auto_tolerance / blend_weight()` (= TargetEffect::BlendWeight), parsed as the engine does.
+2. `_windowed_conv_spec`: grid = every data energy + one uniform lattice per cluster of windowed points (step = cluster min sigma / pps);
+   kernel = symmetric stencil e + k sigma/pps, |k| <= 3 pps, Gaussian weights, linearly interpolated onto the grid (exact for linear
+   sigma(E)); blend as the engine.  No ranges -> the old path, bit-identical (13C+a Nelson/Kelly pieces compared).  A line with an auto
+   tolerance stays a plain piece (the shard's engine applies it).  `RMFIT_CONV_PPS` (default 10) sets the density.
+3. BUG FIXED: `write_shard` wrote conv grid rows with angle 0.0, so a FIXED-ANGLE conv segment kept no rows ("Segment #N is empty",
+   then "N active <segmentsData> lines but the engine reports M segments").  Every conv piece before 10-15 was angle-integrated.
+   Grid rows now carry the segment's angle when minA == maxA.
+Equality, 13C+a merged model, windowed target-thickness lines on Heil (28 angles) + ND 2021 (18 angles), frozen vs the engine's own
+single session: pps 10 -11.3, pps 5 +2.8 (6e-6; worst segment 14), pps 3 -709 (too coarse).  Sharded objective 6.6 s plain, 11.3 s
+at pps 5 (1.7x), 16.8 s at pps 10; the engine's own single-session evaluation of the same lines is 3.7x its plain cost and the full
+(unwindowed, 40 sub-points) version 7-11x and ~90 GB per session.  RULE: fits with windowed lines run with RMFIT_CONV_PPS=5 and a CONV
+GUARD ('ranges' in TargetEffectSpec fields).  Tests: tests/test_conv_windows.py (16 checks), test_conv_spec_dad58dc, test_keys,
+test_levelscan_13n on 3 shards (dev copy, job 1552050).  Installed model.py with .bak-2026-10-15.  Worked example and numbers:
+13C+a/10-15-26_resolution_refs/readme.  NOTE: `rmfit init` scores its baseline on a SINGLE session; a "method check" via init is not
+a sharded check.
+
+## 2026-10-16 — recall test of the level add; split rule ignored distant poles; the seed decides alpha-dominated levels
+DeBoer: "One way we can check that our algorythem is good would be to go through the resonances that we have in the fit, especially
+those at lower energy and makes sure that they wouldn't be excluded by our criteria."  13C+a/10-15-26_recall: eight established
+levels (Gamma >= 25 keV) each removed from the incumbent and re-added by the standard floored add (seed +10 keV, 2:1 n0:a0 in the
+lowest L, RMFIT_SEED_OMITTED=1, total floor 25 keV, local release 0.5 MeV, same-budget control, +-m Gamma table).
+1. All SIX n0-dominated levels came back (energy within 3-13 keV, width within 5-15 %, gains +28k .. +554k vs control, rho <= 0.05).
+2. Two of them were labelled "splits": the partner was the J^pi group's background pole at 50 MeV, "41,927 keV away", whose
+   "physical width" at the reference energy is tens of MeV, so `split_evidence` called it unresolved and its re-shuffled MeV of width
+   passed the transfer test (the 9/2+ 10.33 add of 10-13 had the same false flag).  FIX: `split_evidence(max_sep_kev=1000)` and
+   `_run_level_add` drops neighbours at or above `policy.bg_energy`.  tests/test_split_evidence.py replays both cases; fixture
+   (test_keys, test_levelscan_13n, test_level_add_energy_13n on 3 shards) passed; installed structure.py / campaign.py .bak-2026-10-16.
+3. Both ALPHA-dominated levels (5/2+ 9.963 a0 115 keV; 3/2+ 10.036 a0 48 keV) were NOT recovered: the n0-heavy seed stalls at the
+   floor (+617 vs control) or ends worse than the control (-22,675).  A negative level-add result for a level that could be
+   alpha-dominated is not trustworthy from an n0-heavy seed alone.  Test running: the same adds from a 2:1 a0:n0 seed
+   (10-15-26_recall/<tag>_aseed, plus 1/2+ 7.958 as the cross-check).  Expected rule: run both seeds, keep the better.

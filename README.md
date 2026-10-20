@@ -8,9 +8,9 @@ a fast C++ calculation engine, parameter fitting via Minuit2, optional Bayesian
 for scripting and external samplers. The `thm` branch adds the Trojan Horse
 Method (see [Trojan Horse Method](#trojan-horse-method-thm) below).
 
-**Documentation:** <https://rdeboer1.github.io/AZURE2/> — user guide, the
+**Documentation:** <https://azure2dev.github.io/AZURE2/> — user guide, the
 physics and conventions, and the C++ API reference at
-[`/api/`](https://rdeboer1.github.io/AZURE2/api/).
+[`/api/`](https://azure2dev.github.io/AZURE2/api/).
 
 Upstream project: <https://azure.nd.edu/> · Source:
 <https://github.com/rdeboer1/AZURE2>
@@ -155,6 +155,22 @@ rebuild `_azure2`, so build both after an engine change. `CMAKE_BUILD_TYPE`
 defaults to `Release`; set it to `Debug` explicitly if you want an unoptimized
 build with symbols.
 
+### The Coulomb-function table
+
+AZURE2 takes the Coulomb functions of charged-particle channels from a table
+when it finds one: the results are the same and a calculation is several times
+faster (about four times for the natural-neon example). The table is not
+distributed; build it once, from the GUI (**Configure → Build Coulomb
+Table...**) or from the command line, with a ready-built AZURE2 or your own:
+
+```bash
+./build/src/AZURE2 --build-coulomb-table
+```
+
+This takes about 5 minutes on four threads and writes 88 MB to
+`~/.azure2/coulomb_table.bin` (or to the file named by `$AZURE2_COULOMB_TABLE`).
+Without it AZURE2 says so once per run and computes the functions directly.
+
 ### Convenience scripts
 
 Platform build scripts that auto-detect Qwt and set sensible options live in
@@ -216,6 +232,9 @@ Useful flags (`AZURE2 --help` for the full list):
 | `--use-park`          | Fit Park's amplitudes (the observed widths); same cross sections as Brune's. |
 | `--use-lm`            | Levenberg–Marquardt on the analytic Jacobian (falls back to MIGRAD). |
 | `--gsl-coul`          | Use GSL Coulomb functions (faster, less accurate). |
+| `--no-coulomb-table`  | Compute every Coulomb function directly instead of taking charged channels from the table. |
+| `--build-coulomb-table[=FILE]` | Build the Coulomb table (about 5 min, 88 MB) and exit. |
+| `--no-grid-replacement` | Keep the experimental-effect sub-point grids where the file's levels put them, instead of laying them out again at every evaluation. |
 | `--use-rmc`           | Reich–Moore approximation for capture (neutron capture). |
 | `--ignore-externals`  | Ignore external resonant capture when the internal width is zero. |
 | `--no-transform`      | Skip the initial parameter transformations. |
@@ -390,7 +409,7 @@ requires) are in `docs/source/developer/contributing.rst`.
 
 ## Documentation
 
-The site at <https://rdeboer1.github.io/AZURE2/> is published by CI from the
+The site at <https://azure2dev.github.io/AZURE2/> is published by CI from the
 default branch (`qt5`); pushes to other branches build the documentation to
 catch breakage but do not publish. Sources live in `docs/`; the generated output is not tracked.
 To build it locally:

@@ -27,9 +27,9 @@ AdaptiveIntegrationGrid::AdaptiveIntegrationGrid(const GridConfig &config) :
  * multiple of a quarter of that width.  The grid built from the anchors is
  * then piecewise constant in the level parameters: it changes only when a
  * level moves by about a quarter of its width or its width changes by about
- * 25 %, so a fit that rebuilds the grid as a narrow level moves (see
- * EPoint::RefreshSubPointGrid) gets the same grid at the same parameters in
- * every thread, and a finite-difference step almost never straddles a change.
+ * 25 %, so the grid re-placed as a fit moves a narrow level
+ * (EData::ReplaceSubPointGrids) is the same at the same parameters in every
+ * thread, and a finite-difference step almost never straddles a change.
  * The peak stays within Gamma/8 of the centre of its uniform core.
  */
 AdaptiveIntegrationGrid::ResonanceInfo AdaptiveIntegrationGrid::Quantize(const ResonanceInfo &resonance) {
@@ -309,16 +309,15 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
   double separationEnergy = entrancePair->GetSepE();
   double excitationEnergy = entrancePair->GetExE();
 
-  // The level parameters to read: the stored ones, or the current fit values
-  // (observed energies and Brune amplitudes during a fit).
-  const bool fit = config_.useFitParameters;
-  auto levelE = [fit](ALevel *lv) { return fit ? lv->GetFitE() : lv->GetE(); };
-  auto levelGamma = [fit](ALevel *lv, int ch) { return fit ? lv->GetFitGamma(ch) : lv->GetGamma(ch); };
+  auto levelE = [](ALevel *lv) { return lv->GetE(); };
+  auto levelGamma = [](ALevel *lv, int ch) { return lv->GetGamma(ch); };
 
   // Loop through all J-groups
   for (int j = 1; j <= compound->NumJGroups(); j++) {
     JGroup *jgroup = compound->GetJGroup(j);
     if (!jgroup || !jgroup->IsInRMatrix()) continue;
+    // Levels of another compound nucleus are not resonances of this entrance pair.
+    if (jgroup->GetNucleus() != entrancePair->GetNucleus()) continue;
 
     int numChannels = jgroup->NumChannels();
 
@@ -329,29 +328,6 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
 
       // Get level energy (in compound excitation energy)
       double levelExcitationEnergy = levelE(level);
-      // Formal parameters (Brune off): E_lambda is not where the peak is.
-      // Anchor the level at the Thomas estimate of the observed energy,
-      // E_lambda - sum gamma^2 (S - B) / (1 + sum gamma^2 dS/dE), every
-      // particle channel (closed ones shift the level too), and take the
-      // widths there.  Interference between levels is ignored: the anchor only
-      // has to put the lattice on the peak, to a fraction of its width.
-      if (fit && config_.formalParameters && !config_.inputWidthsArePhysical) {
-        double shiftSum = 0.0;
-        double slopeSum = 0.0;
-        for (int ch = 1; ch <= numChannels; ch++) {
-          AChannel *channel = jgroup->GetChannel(ch);
-          if (channel->GetRadType() != 'P') continue;
-          PPair *chPair = compound->GetPair(channel->GetPairNum());
-          double gamma = levelGamma(level, ch);
-          if (gamma == 0.0) continue;
-          ChannelFunc channelFunc(chPair, false);
-          double localEnergy = levelExcitationEnergy - chPair->GetExE() - chPair->GetSepE();
-          shiftSum += gamma * gamma *
-                      (channelFunc.Shift(channel->GetL(), localEnergy) - channel->GetBoundaryCondition());
-          slopeSum += gamma * gamma * channelFunc.ShiftDerivative(channel->GetL(), localEnergy);
-        }
-        if (1.0 + slopeSum > 0.0 && std::isfinite(shiftSum)) levelExcitationEnergy -= shiftSum / (1.0 + slopeSum);
-      }
       auto levelEnergy = [&](ALevel *) { return levelExcitationEnergy; };
 
       // Check if level has widths (Γ > 0) to be considered a resonance
@@ -365,7 +341,7 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
       if (!hasWidth) continue;  // skip levels with no widths
 
       // Convert to CM energy: E_cm = E_excitation - S - E_ex
-      double levelCMEnergy = levelExcitationEnergy - separationEnergy - excitationEnergy;
+      double levelCMEnergy = levelExcitationEnergy - separationEnergy - excitationEnergy - config_.resonanceOffset;
 
       // Total width Gamma_total = Gamma_particle + Gamma_radiative, in MeV.
       // The Breit-Wigner cross section carries the total width in its
@@ -480,31 +456,8 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
                   2.0 * gamma * gamma * pene * 1.0e6);
         }
       }
-      // Park's amplitudes (--use-park) are Brune's times sqrt(J), with
-      // J = 1 - sum gamma^2 dS/dE over every particle channel, closed ones
-      // included.  The estimate is the one of the same Brune parameters --
-      // the particle sum over the open channels normalized by them alone,
-      // the radiative widths not normalized -- so that both parametrizations
-      // anchor the grid at the same places:
-      //   sum 2 P gamma_B^2 / (1 + sum_open gamma_B^2 S') = sum 2 P gamma^2 / (J + normSum).
       double radiativeScale = 1.0;
-      if (config_.parkAmplitudes) {
-        double parkNorm = 1.0;
-        for (int ch = 1; ch <= numChannels; ch++) {
-          AChannel *channel = jgroup->GetChannel(ch);
-          PPair *chPair = compound->GetPair(channel->GetPairNum());
-          if (channel->GetRadType() != 'P' || chPair->GetPType() != 0) continue;
-          double gamma = levelGamma(level, ch);
-          if (gamma == 0.0) continue;
-          double localEnergy = levelEnergy(level) - chPair->GetExE() - chPair->GetSepE();
-          parkNorm -= gamma * gamma * ChannelFunc(chPair, false).ShiftDerivative(channel->GetL(), localEnergy);
-        }
-        if (parkNorm > 0.0) {
-          if (parkNorm + normSum > 0.0) totalWidth /= (parkNorm + normSum);
-          radiativeScale = 1.0 / parkNorm;
-        }
-      } else if (1.0 + normSum > 0.0)
-        totalWidth /= (1.0 + normSum);
+      if (1.0 + normSum > 0.0) totalWidth /= (1.0 + normSum);
 
       double particleWidth = totalWidth;  // before radiative channels
 

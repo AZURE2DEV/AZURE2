@@ -3,6 +3,8 @@
 #include <QPushButton>
 #include <QGroupBox>
 #include <QGridLayout>
+#include "DialogScrollArea.h"
+#include "PairsModel.h"
 #include <QFileDialog>
 
 AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
@@ -10,14 +12,10 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   //  this->setMaximumSize(370,420);
   //  this->setMinimumSize(370,420);
 
-  entrancePairIndexSpin = new QSpinBox;
-  entrancePairIndexSpin->setMinimum(1);
-  entrancePairIndexSpin->setMaximum(100);
-  entrancePairIndexSpin->setSingleStep(1);
-  exitPairIndexSpin = new QSpinBox;
-  exitPairIndexSpin->setMinimum(1);
-  exitPairIndexSpin->setMaximum(100);
-  exitPairIndexSpin->setSingleStep(1);
+  entrancePairCombo = new PairKeyCombo(PairKeyCombo::Entrance);
+  exitPairCombo = new PairKeyCombo(PairKeyCombo::Exit);
+  // The exit list reads as reactions with the chosen entrance pair.
+  connect(entrancePairCombo, SIGNAL(keyChanged(int)), exitPairCombo, SLOT(setEntranceKey(int)));
   lowEnergyText = new QLineEdit;
   highEnergyText = new QLineEdit;
   lowAngleText = new QLineEdit;
@@ -99,6 +97,18 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   advancedModeCheck = new QCheckBox(tr("Advanced Settings (Sum or Ratio of Components)"));
   connect(advancedModeCheck, SIGNAL(stateChanged(int)), this, SLOT(advancedModeChanged(int)));
 
+  naturalLabel = new QLabel(tr("Sample (abundance weights):"));
+  naturalCombo = new QComboBox;
+  naturalCombo->setObjectName("naturalCombo");
+  naturalCombo->setToolTip(tr("Weight this segment's term and each of its components by the isotopic abundance\n"
+                              "of the compound nucleus its entrance pair forms, in the chosen sample (the Particle\n"
+                              "Pairs tab sets the samples and abundances). Not available for ratios, phase shifts\n"
+                              "or analyzing powers."));
+  naturalLabel->setVisible(false);
+  naturalCombo->setVisible(false);
+  setSamples(QStringList() << QString());
+  connect(advancedModeCheck, SIGNAL(stateChanged(int)), this, SLOT(updateNaturalCheck()));
+
   advancedModeBox = new QGroupBox(tr("Advanced Segment Definition"));
   advancedModeBox->setVisible(false);
 
@@ -109,17 +119,9 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   componentsList = new QListWidget;
   componentsList->setMaximumHeight(100);
 
-  componentEntranceSpin = new QSpinBox;
-  componentEntranceSpin->setMinimum(1);
-  componentEntranceSpin->setMaximum(100);
-  componentEntranceSpin->setSingleStep(1);
-  componentEntranceSpin->setValue(1);
-
-  componentExitSpin = new QSpinBox;
-  componentExitSpin->setMinimum(1);
-  componentExitSpin->setMaximum(100);
-  componentExitSpin->setSingleStep(1);
-  componentExitSpin->setValue(1);
+  componentEntranceCombo = new PairKeyCombo(PairKeyCombo::Entrance);
+  componentExitCombo = new PairKeyCombo(PairKeyCombo::Exit);
+  connect(componentEntranceCombo, SIGNAL(keyChanged(int)), componentExitCombo, SLOT(setEntranceKey(int)));
 
   useFixedAngleCheck = new QCheckBox(tr("Use fixed angle for denominator"));
   useFixedAngleCheck->setVisible(false);
@@ -150,10 +152,10 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   QGroupBox *valueBox = new QGroupBox;
   QGridLayout *valueLayout = new QGridLayout;
   QGridLayout *pairLayout = new QGridLayout;
-  pairLayout->addWidget(new QLabel(tr("Entrance Pair Key:")), 0, 0, Qt::AlignRight);
-  pairLayout->addWidget(entrancePairIndexSpin, 0, 1);
-  pairLayout->addWidget(new QLabel(tr("Exit Pair Key:")), 0, 2, Qt::AlignRight);
-  pairLayout->addWidget(exitPairIndexSpin, 0, 3);
+  pairLayout->addWidget(new QLabel(tr("Entrance Pair:")), 0, 0, Qt::AlignRight);
+  pairLayout->addWidget(entrancePairCombo, 0, 1);
+  pairLayout->addWidget(new QLabel(tr("Exit Pair:")), 0, 2, Qt::AlignRight);
+  pairLayout->addWidget(exitPairCombo, 0, 3);
   totalCaptureLabel = new QLabel(tr("Total Capture"));
   totalCaptureLabel->setVisible(false);
   pairLayout->addWidget(totalCaptureLabel, 0, 4);
@@ -255,10 +257,10 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   advancedLayout->addWidget(componentsList, 1, 1, 4, 1);
 
   // Add component entrance/exit spinboxes above buttons
-  advancedLayout->addWidget(new QLabel(tr("Entrance Pair Key:")), 1, 2);
-  advancedLayout->addWidget(componentEntranceSpin, 1, 3);
-  advancedLayout->addWidget(new QLabel(tr("Exit Pair Key:")), 2, 2);
-  advancedLayout->addWidget(componentExitSpin, 2, 3);
+  advancedLayout->addWidget(new QLabel(tr("Entrance Pair:")), 1, 2);
+  advancedLayout->addWidget(componentEntranceCombo, 1, 3);
+  advancedLayout->addWidget(new QLabel(tr("Exit Pair:")), 2, 2);
+  advancedLayout->addWidget(componentExitCombo, 2, 3);
 
   // Add fixed angle checkbox and input
   advancedLayout->addWidget(useFixedAngleCheck, 3, 2, 1, 2);
@@ -276,6 +278,8 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   advancedModeBox->setLayout(advancedLayout);
 
   lowerLayout->addWidget(advancedModeBox, 7, 0, 1, 3);
+  lowerLayout->addWidget(naturalLabel, 8, 0, Qt::AlignRight);
+  lowerLayout->addWidget(naturalCombo, 8, 1, 1, 2);
 
   valueLayout->addLayout(lowerLayout, 2, 0, 1, 2);
   valueBox->setLayout(valueLayout);
@@ -284,11 +288,15 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   buttonBox->addWidget(cancelButton);
   buttonBox->addWidget(okButton);
 
+  // The options outgrew small screens (UPOS, composites, mixture): the body
+  // scrolls, the buttons stay put, and the dialog never exceeds the screen.
+  DialogScrollArea *scroll = new DialogScrollArea(valueBox);
   QVBoxLayout *mainLayout = new QVBoxLayout;
-  mainLayout->addWidget(valueBox);
+  mainLayout->addWidget(scroll, 1);
   mainLayout->addLayout(buttonBox);
 
   setLayout(mainLayout);
+  capDialogToScreen(this);
 
   connect(okButton, SIGNAL(clicked()), this, SLOT(accept()));
   connect(cancelButton, SIGNAL(clicked()), this, SLOT(reject()));
@@ -337,11 +345,11 @@ void AddSegDataDialog::dataTypeChanged(int index) {
     highAngleText->setEnabled(false);
   }
   if (index == 3) {
-    exitPairIndexSpin->setVisible(false);
+    exitPairCombo->setVisible(false);
     totalCaptureLabel->setVisible(true);
   } else {
     totalCaptureLabel->setVisible(false);
-    exitPairIndexSpin->setVisible(true);
+    exitPairCombo->setVisible(true);
   }
   if (index == 4 || index == 7) {  // C.M. differential or A_y
     lowAngleText->setEnabled(true);
@@ -353,6 +361,7 @@ void AddSegDataDialog::dataTypeChanged(int index) {
 
   // Update fixed angle visibility when data type changes
   operationTypeChanged(operationCombo->currentIndex());
+  updateNaturalCheck();
 }
 
 void AddSegDataDialog::varyNormChanged(int state) {
@@ -369,14 +378,14 @@ void AddSegDataDialog::advancedModeChanged(int state) {
   if (state == Qt::Checked) {
     advancedModeBox->setVisible(true);
     // Keep the spinboxes enabled so users can select pairs to add as components
-    entrancePairIndexSpin->setEnabled(true);
-    exitPairIndexSpin->setEnabled(true);
+    entrancePairCombo->setEnabled(true);
+    exitPairCombo->setEnabled(true);
   } else {
     advancedModeBox->setVisible(false);
-    entrancePairIndexSpin->setEnabled(true);
-    exitPairIndexSpin->setEnabled(true);
+    entrancePairCombo->setEnabled(true);
+    exitPairCombo->setEnabled(true);
   }
-  adjustSize();
+  fitDialogToContent(this);
 }
 
 void AddSegDataDialog::operationTypeChanged(int index) {
@@ -394,6 +403,7 @@ void AddSegDataDialog::operationTypeChanged(int index) {
   // Per-component scaling factor only applies to Sum mode
   componentScalingLabel->setVisible(!isRatio);
   componentScalingText->setVisible(!isRatio);
+  updateNaturalCheck();
 }
 
 void AddSegDataDialog::useFixedAngleChanged(int state) {
@@ -407,8 +417,9 @@ void AddSegDataDialog::useFixedAngleChanged(int state) {
 }
 
 void AddSegDataDialog::addComponent() {
-  int entrance = componentEntranceSpin->value();
-  int exit = componentExitSpin->value();
+  int entrance = componentEntranceCombo->key();
+  int exit = componentExitCombo->key();
+  if (entrance < 1 || exit < 1) return;
   QString component = QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit);
 
   // For ratio, only allow one component (the denominator)
@@ -455,5 +466,68 @@ void AddSegDataDialog::uposChanged(int state) {
   finalJText->setVisible(visible);
   deltaLabel->setVisible(visible);
   deltaText->setVisible(visible);
-  adjustSize();
+  fitDialogToContent(this);
+}
+
+bool AddSegDataDialog::naturalAllowed() const {
+  // The engine's NaturalAllowed: a weighted sum is only meaningful for additive observables.
+  int code = dataTypeCode();
+  if (code == 2 || code == 7) return false;
+  if (advancedModeCheck->isChecked() && operationCombo->currentIndex() == 1) return false;  // ratio
+  return true;
+}
+
+void AddSegDataDialog::updateNaturalCheck() {
+  bool allowed = naturalAllowed();
+  naturalCombo->setEnabled(allowed);
+  if (!allowed) naturalCombo->setCurrentIndex(0);
+}
+
+void AddSegDataDialog::setSamples(const QStringList &samples) {
+  QString keep = naturalToken();
+  naturalCombo->blockSignals(true);
+  naturalCombo->clear();
+  naturalCombo->addItem(tr("none (single nucleus, unweighted)"), QString());
+  for (int s = 0; s < samples.size(); s++) {
+    if (samples.at(s).isEmpty())
+      naturalCombo->addItem(tr("default sample"), QString("1"));
+    else
+      naturalCombo->addItem(samples.at(s), samples.at(s));
+  }
+  if (!samples.contains(QString()) && naturalCombo->findData(QString("1")) < 0 && samples.size() == 1)
+    naturalCombo->setItemData(1, QString("1"));   // a single named sample is also what "sample 1" means
+  naturalCombo->blockSignals(false);
+  setNaturalToken(keep);
+}
+
+QString AddSegDataDialog::naturalToken() const {
+  return naturalCombo->currentData().toString();
+}
+
+void AddSegDataDialog::setNaturalToken(const QString &token) {
+  int at = naturalCombo->findData(token);
+  if (at < 0 && !token.isEmpty()) {
+    // a sample the table does not list (yet): keep it selectable so an edit does not lose it
+    naturalCombo->addItem(tr("%1 (not in the Pairs tab)").arg(token), token);
+    at = naturalCombo->count() - 1;
+  }
+  naturalCombo->setCurrentIndex(std::max(0, at));
+}
+
+void AddSegDataDialog::setPairsModel(PairsModel *model) {
+  // The check box only means something when the pairs form more than one compound nucleus.
+  naturalLabel->setVisible(model && model->nuclei().size() > 1);
+  naturalCombo->setVisible(model && model->nuclei().size() > 1);
+  updateNaturalCheck();
+  for (PairKeyCombo *combo : {entrancePairCombo, exitPairCombo, componentEntranceCombo, componentExitCombo}) combo->setPairsModel(model);
+  // A fresh dialog starts on the first pair, as the key boxes started on 1.
+  if (entrancePairCombo->key() == 0) entrancePairCombo->setKey(1);
+  if (exitPairCombo->key() == 0) exitPairCombo->setKey(1);
+  if (componentEntranceCombo->key() == 0) componentEntranceCombo->setKey(1);
+  if (componentExitCombo->key() == 0) componentExitCombo->setKey(1);
+}
+
+void AddSegDataDialog::showEvent(QShowEvent *event) {
+  QDialog::showEvent(event);
+  fitDialogToContent(this);
 }

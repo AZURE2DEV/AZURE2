@@ -5,6 +5,8 @@
 #include <QItemSelection>
 #include <QLineEdit>
 #include <QSpinBox>
+#include <QCheckBox>
+#include <QLabel>
 #include <QPushButton>
 #include <QTableView>
 #include <QSortFilterProxyModel>
@@ -17,6 +19,7 @@
 #include "LevelsModel.h"
 #include "ChannelsModel.h"
 #include "ChannelDetails.h"
+#include "AddLevelDialog.h"
 
 class InfoDialog;
 
@@ -33,6 +36,11 @@ class LevelsTab : public QWidget {
   void updateChannelsLevelDeleted(int levelIndex);
   void updateChannelsLevelEdited(int levelIndex);
   QList<ChannelsData> calculateChannels(int levelIndex);
+  QList<ChannelsData> calculateChannels(const LevelsData &level, int levelIndex);
+  /*! The J^pi that give at least one channel under the current pairs and limits (every pair). */
+  QList<SpinParityOption> spinParityOptions();
+  /*! The same for the pairs of one compound nucleus ((0, 0) = every pair). */
+  QList<SpinParityOption> spinParityOptions(const Nucleus &nucleus);
   bool writeNuclearFile(QTextStream &outStream);
   // Model indices of the levels in the order writeNuclearFile writes them
   // (J ascending, parity -1 before +1, energy ascending).  This, not the model
@@ -41,6 +49,14 @@ class LevelsTab : public QWidget {
   bool readNuclearFile(QTextStream &inStream);
   void reset();
   LevelsModel *getLevelsModel() { return levelsModel; }
+  /*! Hard-sphere scattering in every J^pi up to the maximum orbital momentum, levels or not
+   *  (includeAllJPi in the .azr <config> block). On for a new project, off for a file that lacks the key. */
+  bool includeAllJPi() const { return includeAllJPiCheck->isChecked(); }
+  void setIncludeAllJPi(bool on) { includeAllJPiCheck->setChecked(on); }
+  int maxL() const { return maxLSpin->value(); }
+  void setMaxL(int l) { maxLSpin->setValue(l); }
+  /*! The J^pi the pairs allow up to the maximum orbital momentum that no active level carries. */
+  QStringList missingSpinParities();
   ChannelsModel *getChannelsModel() { return channelsModel; }
 
  public slots:
@@ -54,29 +70,36 @@ class LevelsTab : public QWidget {
   void updateChannelsPairAddedEdited();
   void updateChannelsPairRemoved(int pairIndex);
   void updateDetails(const QItemSelection &selection);
+  void updateMissingSpinParities();
   void updateReducedWidth(const QString &string);
   void calculateWignerLimit();
   void showInfo(int which = 0, QString title = "");
   void fixAllWidths();
   void fixAllEnergies();
   void exportLatexTable();
+  /*! Show the nucleus column and filter only when the pairs form more than one compound nucleus. */
+  void updateNucleusColumn();
+  /*! Show the levels of one nucleus (0 = all). */
+  void filterByNucleus(int index);
 
  signals:
   void readNewPair(PairsData, int, bool);
   void readExistingPair(PairsData, int, bool);
 
  private:
-  int calculateCompoundNucleus(int &massNumber, int &atomicNumber);
 
   QSpinBox *maxLSpin;
   QSpinBox *maxMultSpin;
   QSpinBox *maxNumMultSpin;
+  QCheckBox *includeAllJPiCheck;
+  QLabel *missingJPiLabel;
   QPushButton *addLevelButton;
   QPushButton *removeLevelButton;
   QPushButton *iaeaQueryButton;
   QPushButton *fixAllWidthsButton;
   QPushButton *fixAllEnergiesButton;
   QPushButton *exportLatexButton;
+  QComboBox *nucleusFilterCombo;
   PairsModel *pairsModel;
   LevelsModel *levelsModel;
   ChannelsModel *channelsModel;

@@ -19,6 +19,8 @@ from .transform import (Channel, Level, TransformedChannel, TransformedLevel,
                         penetrability, shift, shift_derivative, whittaker)
 from .angular import angular_distribution
 from .tabulate import tabulate, TabulatedCrossSection
+from .nuclei import (Nucleus, MergeReport, merge_projects, nucleus_of,
+                     nucleus_of_pair, nucleus_of_channel)
 from .bands import (Band, load_covariance, rmatrix_columns, best_fit_params,
                     live_parameters, step_sizes, sensitivities, trimmed_model,
                     uncertainty_bands, extrapolation_bands)
@@ -44,6 +46,8 @@ __all__ = ["azure2",
            "transform_out", "partial_widths", "LevelWidthTransformer",
            "levels_from_azr", "levels_from_scheme",
            "penetrability", "shift", "shift_derivative", "whittaker",
+           "Nucleus", "MergeReport", "merge_projects", "nucleus_of",
+           "nucleus_of_pair", "nucleus_of_channel",
            "Band", "load_covariance", "rmatrix_columns", "best_fit_params",
            "live_parameters", "step_sizes", "sensitivities", "trimmed_model",
            "uncertainty_bands", "extrapolation_bands",

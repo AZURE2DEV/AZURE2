@@ -21,6 +21,8 @@ param.sav
 Contains the best-fit formal R-matrix parameters after a fit is completed. This
 file can be loaded back into AZURE2 to reproduce a fit or to use as starting
 parameters for subsequent calculations (extrapolation, reaction rate, etc.).
+In a project with an ``<abundances>`` block the isotopic abundances follow the
+level parameters as ``abundance_<Z>_<A>`` (:doc:`data_formats`).
 
 ``param.par`` and ``param.sav`` hold one row per parameter, ``name value
 error``, after a first line ``#parametrization`` with the basis 0, 1 or 2
@@ -141,6 +143,15 @@ as above. Five columns:
        analyzing power (dimensionless) for an analyzing-power segment
    * - 5
      - Extrapolated center-of-mass S-factor (MeV b or MeV b/sr)
+
+AZUREOut_sample_seg=\*.out / .extrap
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+One file per natural-target segment (``sample 1``, see
+:doc:`../user_guide/segments`): the centre-of-mass energy, the weighted total
+the segment is compared with, and one column per compound nucleus holding
+that nucleus's abundance-weighted contribution, so the columns add up to the
+total. ``.out`` for a data segment, ``.extrap`` for a test segment.
 
 Uncertainty and Statistics
 --------------------------

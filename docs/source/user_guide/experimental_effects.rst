@@ -78,17 +78,92 @@ convolution or target integration. The required number depends on how rapidly
 the cross section changes with energy. Adjust using the spinner or enter a
 value directly.
 
-Gaussian Energy Convolution
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Where the sub-points go
+^^^^^^^^^^^^^^^^^^^^^^^
 
-Check **Include Gaussian Convolution** to convolve the calculated cross section
-with a Gaussian beam energy distribution.
+Every effect that integrates over energy (beam spread, target integration, a
+beam profile, a numerical resolution function) evaluates the cross section on
+a grid of sub-points around each data point. The grid is adaptive: fine at the
+narrow resonances inside the integration range and coarse elsewhere. Two
+settings in the dialog shape it, with **Integration Points** as the upper
+bound on the number of sub-points:
 
-**Sigma** (MeV)
-   The standard deviation :math:`\sigma_b` of the Gaussian convolution function
-   (not the FWHM; FWHM :math:`= 2.355\,\sigma_b`). Although beam resolution is
-   typically of order keV, the value must be entered in **MeV** (e.g., ``0.001``
-   for 1 keV), in the laboratory frame; AZURE2 converts it to the centre of mass.
+**Resonance Width Multiplier** (column *Width Mult.*)
+   How far the fine part of the grid reaches on either side of a resonance:
+   the step grows from the fine to the coarse value over about half this
+   many total widths.
+
+**Points Per Width** (column *Pts/Width*)
+   The step at the centre of a resonance is its total width divided by this
+   number.
+
+The resonances are found from the current level energies and widths, shifted
+by the segment's energy shift. The grids are laid out again at every
+evaluation, so when a fit moves a narrow level or a segment's energy shift,
+the fine part of the grid moves with it. A grid whose resonances have not
+moved keeps its sub-points, so this costs little: in the natural-neon example
+(:doc:`../examples/natural_neon`, 29,322 grids) 0.1--0.5 s in an evaluation
+of about 80 s. When many levels have moved at once, as in the first
+evaluation of a session opened on a project far from its parameters, it takes
+10--20 s to redo a few thousand grids.
+
+.. note::
+
+   Before October 2026 the grids were placed once, from the level parameters
+   in the project file, and kept for the whole session. A fit that moved a
+   narrow level then integrated it on a grid built for its old position, and
+   the χ² of a fitted model depended on the file the session started from:
+   in the natural-neon fit, 25,773.96 from the starting project and 25,776.08
+   from the fitted one, at the same parameters. Both now give 25,776.08.
+   Recalculated with a current version, folded segments of older fits can
+   therefore move slightly. The command-line option ``--no-grid-replacement``
+   (pyazr: ``replace_grids=False``) restores the old behaviour for comparison
+   with older results; the GUI always lays the grids out again. Segments with
+   external capture keep their first grid either way.
+
+Gaussian Beam Spread
+^^^^^^^^^^^^^^^^^^^^
+
+Check **Gaussian convolution** to average the calculated cross section over a
+Gaussian distribution of beam energies about each data point,
+
+.. math::
+
+   Y(E_0) = \frac{\int K(E'; E_0)\, \sigma(E')\, dE'}{\int K(E'; E_0)\, dE'},
+   \qquad K \propto \exp\!\left[-\frac{(E' - E_0)^2}{2\,\sigma_b(E_0)^2}\right],
+
+integrated over :math:`E_0 \pm 3\sigma_b` and normalised by the kernel's own
+integral, so a constant cross section is reproduced exactly.
+
+**sigma [MeV, lab]**
+   The standard deviation :math:`\sigma_b` of the beam energy spread (not the
+   FWHM; FWHM :math:`= 2.355\,\sigma_b`), in **MeV** in the laboratory frame
+   (``0.001`` for 1 keV); AZURE2 converts it to the centre of mass. Enter a
+   number for a constant width, or an expression of the laboratory energy
+   ``x`` (MeV) for a resolution that varies across the segment -- a
+   time-of-flight measurement, for instance, where
+   :math:`\sigma_E/E = 2\sigma_t/t` gives :math:`\sigma_E \propto E^{3/2}`,
+   ``a0*x^1.5`` with one parameter. The parameters ``a0``, ``a1``, ... take
+   their values from the table that appears for an expression. Experimental
+   resolutions are quoted in the laboratory frame, so no conversion is needed.
+   A number and an expression are the same kernel; in the project file a number
+   is kept in the line's constant-sigma field, an expression in its equation
+   field with the ``sigmalab`` keyword.
+
+.. note::
+
+   Projects saved before October 2026 wrote an energy-dependent width in a
+   different convention: the expression was evaluated at the **centre-of-mass**
+   energy and its value taken as the c.m. width. Such lines (recognisable by the
+   absence of the ``sigmalab`` keyword in the ``<targetInt>`` line) still
+   compute that way, and for such a line the dialog shows a frame row marked
+   "c.m. (legacy)" with a button to convert the expression to the laboratory
+   form, an exact rewrite
+   :math:`\sigma_{\rm lab}(x) = \sigma_{\rm cm}(F x)/F` with
+   :math:`F = m_t/(m_p + m_t)` of the segment's entrance pair. Before October
+   2026 the constant-sigma kernel was also not normalised over its
+   :math:`\pm 3\sigma_b` window, so convolved segments came out 0.27 % low;
+   the normalised kernel removes that.
 
 Target Integration
 ^^^^^^^^^^^^^^^^^^
@@ -181,6 +256,18 @@ be normalized to the same thing the density counts.**
    choose :math:`N` so that :math:`\epsilon(E_0)\,N` reproduces the quoted
    loss at the energy of interest.
 
+.. note::
+
+   **Energy shifts under target integration.** A segment's energy shift
+   (constant, :math:`\sqrt{E}` or shift function, :doc:`segments`) moves
+   every sub-point by the shift evaluated at that sub-point's own original
+   energy, so a constant shift translates the sub-point grid rigidly and an
+   energy-dependent one stretches it. The target thickness, the stopping
+   powers and the resolution kernels stay those computed for the unshifted
+   energy. This is a first-order approximation in
+   :math:`\Delta E\,\mathrm{d}\epsilon/\mathrm{d}E`, accurate while the shift
+   is small compared with the energy over which the stopping power changes.
+
 Restricting an Effect to Energy Ranges
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -222,7 +309,7 @@ inside an energy window :math:`[a, b]` with a Gaussian resolution
 .. math::
 
    \langle\sigma\rangle = \frac{\int G(E)\,W(E)\,D(E)\,\sigma(E)\,dE}
-                                 {\int G(E)\,W(E)\,D(E)\,dE},
+                                 {\int G(E)\,W(E)\,dE},
    \qquad
    W(E) = \tfrac{1}{2}\left[\operatorname{erf}\frac{b-E}{s\sqrt2}
                               - \operatorname{erf}\frac{a-E}{s\sqrt2}\right]
@@ -236,9 +323,12 @@ with :math:`G(E)` the beam profile, a weighted sum of skewed Gaussians
    \left[1+\operatorname{erf}\frac{\alpha\,(E-\xi)}{\omega\sqrt2}\right],
 
 and :math:`D(E)` the detailed-balance factor of the inverse reaction
-relative to its value at the point's own energy (``dbFlag`` = 1), so that a
-capture cross section is averaged the way the photodissociation measurement
-averaged it.  The formalism follows Haverson (2026), appendix A.
+relative to its value at the point's own energy (``dbFlag`` = 1).  The
+measurement spreads its luminosity over :math:`G\,W` and averages the
+photodissociation cross section :math:`f_{db}\,\sigma`; the datum is that
+average divided by :math:`f_{db}` at the point's energy, so :math:`D` weights
+the numerator only (with :math:`D = 1` everywhere when ``dbFlag`` = 0).  The
+formalism follows Haverson (2026), appendix A.
 
 The effect is written as a trailing block of the ``targetInt`` line, after
 the optional straggling and energy-range tokens::
@@ -271,6 +361,94 @@ truncation, and the **Weight by detailed balance** box.  The tab reads and
 writes the tokens, so a project can be loaded, edited and saved without
 losing them.  ``pyazr.AzrModel.add_target_effect`` writes the same line
 from a script.
+
+User-defined numerical resolution function (SAMMY UDR)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Time-of-flight facilities increasingly publish their resolution function
+as a *numerical* distribution of flight-time delays, obtained from a
+simulation of the neutron source and the beam line, rather than as an
+analytic parametrization: n_TOF at CERN distributes the response of each
+experimental area this way, in the format of SAMMY's **user-defined
+resolution function** (UDR).  AZURE2 reads the same files.
+
+The file holds, for each of a set of neutron energies, the probability
+density :math:`R(\tau;E)` that a neutron of energy :math:`E` is detected
+with a delay :math:`\tau` (microseconds) relative to its true flight time
+over the nominal path.  A positive delay -- moderation in the target, a
+longer path in the detector -- makes the neutron look slower than it is,
+so the true energies :math:`E'` contributing to a data point at nominal
+energy :math:`E_0` are those with
+
+.. math::
+
+   t(E') = t(E_0) - \tau, \qquad t(E) = \frac{L}{v(E)},
+
+:math:`L` the nominal flight path and :math:`v` the (relativistic) velocity.
+The fitted value of the point is the exact integral of the piecewise-linear
+tabulated kernel against the cross section interpolated linearly between
+the sub-points of the integration grid,
+
+.. math::
+
+   \langle\sigma\rangle(E_0) = \frac{\sum_i w_i\,\sigma(E_i)}{\sum_i w_i},
+   \qquad
+   w_i = \int R(\tau;E_0)\,\phi_i(\tau)\,d\tau ,
+
+with :math:`\phi_i` the hat function of sub-point :math:`i` on the delay
+axis -- the scheme of SAMMY's ``Udr_Resb``.  Before use the tabulated
+function at the point's energy is obtained by linear interpolation between
+the two bracketing tabulated energies, re-centred on its centroid (so that
+the mean delay, which is part of the nominal flight path, is removed --
+SAMMY does the same; it can be switched off), and convolved with a Gaussian
+**burst width** and a rectangular **channel width** in time, both given in
+nanoseconds.
+
+File format (SAMMY Table III C5.1): any descriptive text, a line containing
+at least five hyphens, then blocks of an energy line (eV; anything after the
+number is ignored) followed by ``time  density`` pairs in microseconds and
+per microsecond, blocks separated by blank lines.  The normalisation of the
+tabulated density is irrelevant; the kernel is normalised numerically.  Only
+the energies within a decade of the segment's range are read, so the 146 MB
+n_TOF files load in a few seconds.
+
+The effect is written as a trailing block of the ``targetInt`` line, after
+the optional ranges and beam-profile tokens::
+
+   udr "<file>"  L  burstFWHM  channel  centred
+
+with ``L`` in metres, the widths in ns (0 = none) and ``centred`` 1 or 0.
+A *negative* channel value ``-n`` stands for ``n`` bins per decade of
+energy, the logarithmic binning of n_TOF data, and gives each point a
+channel of :math:`t\,\ln 10/(2n)` at its own flight time (SAMMY manual
+eq. III C3 a.14).
+The flight path must be the one the experiment used to turn flight times
+into the energies of the data file.
+
+Two points about the n_TOF files in particular (n_TOF-PUB-2021-001).  The
+proton burst is already folded into them -- the Transport Code that makes
+the histogram smooths in time with the nominal 7 ns r.m.s. pulse, and the
+tabulated delay distribution keeps a 6-7 ns r.m.s. width up to the highest
+energies, where moderation contributes nothing -- so ``burstFWHM`` should
+be 0 for them, and a separate file exists per pulse type (7 ns high
+intensity, 14 ns low intensity).  Check any new file the same way: the
+width of its highest-energy blocks is the burst it contains.  And the EAR2
+file is specific to one experiment (flight path, sample size and alignment
+change its shape), produced for that measurement with the Transport Code
+and ``RF2sammy``; the n_TOF validation of EAR2 does not let SAMMY re-centre
+the function but fits the flight path instead, which here is ``centred 0``
+with ``L`` the length the data's time-to-energy conversion used.  The sub-point grid of each point covers
+the kernel's support in true energy, on the adaptive grid described for the
+other effects, so the usual advice on ``resonance_width_multiplier`` and
+``points_per_width`` applies.  The kernel applies to any observable of the
+segment and is supported by the analytic gradient.
+
+In the GUI, check **Include User-Defined Resolution Function** in the
+*Add/Edit Experimental Effect* dialog and give the file (``Browse...``),
+the flight path, the burst and channel widths and the centring choice.
+``pyazr.AzrModel.add_target_effect(..., udr_file=, flight_path=,
+udr_burst=, udr_channel=, udr_centred=)`` writes the same line from a
+script.
 
 Straggling
 ^^^^^^^^^^

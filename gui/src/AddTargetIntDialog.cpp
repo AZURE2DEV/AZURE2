@@ -10,11 +10,16 @@
 #include <QPushButton>
 #include <QComboBox>
 #include <QMessageBox>
+#include <QFileDialog>
 #include <vector>
 #include <cmath>
 #include <iomanip>
 
 #include "AddTargetIntDialog.h"
+#include <QRegularExpression>
+#include <QScrollBar>
+#include <QHeaderView>
+#include <algorithm>
 #include "ElementMap.h"
 
 #ifdef USE_ERYA
@@ -59,11 +64,17 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   numPointsSpin->setSingleStep(10);
   numPointsSpin->setValue(10);
 
-  isConvolutionCheck = new QCheckBox(tr("Include Gaussian Convolution"));
+  isConvolutionCheck = new QCheckBox(tr("Gaussian convolution"));
   isConvolutionCheck->setChecked(false);
+  isConvolutionCheck->setToolTip(tr("Average the cross section over a Gaussian spread of beam energies about each point, "
+                                    "normalised over +-3 sigma. The width is a constant or a function of energy; both are the same kernel."));
   connect(isConvolutionCheck, SIGNAL(toggled(bool)), this, SLOT(convolutionCheckChanged(bool)));
   sigmaText = new QLineEdit;
   sigmaText->setEnabled(false);
+  sigmaText->setPlaceholderText(tr("0.03, or an expression of the lab energy x such as a0*x^1.5"));
+  sigmaText->setToolTip(tr("The standard deviation of the beam energy spread in lab MeV: a number, or a function of the lab "
+                           "energy x (MeV) with parameters a0, a1, ... whose values go in the table below. Both are the same kernel."));
+  connect(sigmaText, SIGNAL(textChanged(const QString &)), this, SLOT(sigmaModeChanged()));
 
   isTargetIntegrationCheck = new QCheckBox(tr("Include Target Integration"));
   isTargetIntegrationCheck->setChecked(false);
@@ -180,9 +191,19 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   qlabelList.append(QString(tr("Value")));
   qCoefficientTable->setHorizontalHeaderLabels(qlabelList);
 
-  isConvolutionDependentCheck = new QCheckBox(tr("Include Energy Dependent Gaussian Convolution"));
-  isConvolutionDependentCheck->setChecked(false);
-  connect(isConvolutionDependentCheck, SIGNAL(toggled(bool)), this, SLOT(convCoefficientCheckChanged(bool)));
+  sigmaLabRadio = new QRadioButton(tr("x and \u03c3 in lab MeV (standard)"));
+  sigmaCmRadio = new QRadioButton(tr("x and \u03c3 in c.m. MeV (legacy, before Oct 2026)"));
+  sigmaLabRadio->setChecked(true);
+  sigmaLabRadio->setToolTip(tr("Experimental resolutions are quoted in the laboratory frame; AZURE2 converts to the centre of mass, "
+                               "as it does for the constant sigma."));
+  sigmaCmRadio->setToolTip(tr("How expressions were read before October 2026: evaluated at the c.m. energy, the value the c.m. width. "
+                              "Kept so that older projects compute as they did; convert them to the lab form when you can."));
+  convertToLabButton = new QPushButton(tr("Convert to lab form"));
+  convertToLabButton->setEnabled(false);
+  convertToLabButton->setToolTip(tr("Rewrite the expression exactly: sigma_lab(x) = sigma_cm(F x) / F with F = m_t / (m_p + m_t) of the "
+                                    "segments' entrance pair. Available when every segment of the list has the same entrance pair."));
+  connect(convertToLabButton, SIGNAL(clicked()), this, SLOT(convertExpressionToLab()));
+  connect(sigmaCmRadio, SIGNAL(toggled(bool)), this, SLOT(sigmaModeChanged()));
 
   convolutionEqText = new QLineEdit;
   numConvCoefficientSpin = new QSpinBox;
@@ -252,25 +273,55 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   beamPhotodissociationCheck->setChecked(false);
   beamPhotodissociationCheck->setToolTip(tr("Average the cross section the way the inverse photodissociation measurement averaged it, by weighting the integrand with the detailed-balance factor relative to its value at the point's own energy."));
 
+  // User-defined numerical resolution function (SAMMY UDR): time-of-flight
+  // delay distributions tabulated at a set of energies, read from a file in
+  // SAMMY's UDR format (the format n_TOF distributes its response functions
+  // in), convolved with the burst and channel widths.
+  isUdrCheck = new QCheckBox(tr("Include User-Defined Resolution Function (SAMMY UDR)"));
+  isUdrCheck->setChecked(false);
+  isUdrCheck->setToolTip(tr("Fold the cross section with a numerical time-of-flight resolution function tabulated in a SAMMY UDR file."));
+  connect(isUdrCheck, SIGNAL(toggled(bool)), this, SLOT(udrCheckChanged(bool)));
+  udrFileText = new QLineEdit;
+  udrFileText->setToolTip(tr("SAMMY UDR file: free text, a line of hyphens, then blocks of an energy in eV followed by (delay in microseconds, probability) pairs."));
+  udrBrowseButton = new QPushButton(tr("Browse..."));
+  connect(udrBrowseButton, SIGNAL(clicked()), this, SLOT(udrBrowse()));
+  udrFlightPathText = new QLineEdit;
+  udrFlightPathText->setText("0");
+  udrFlightPathText->setToolTip(tr("Nominal flight path in metres, the one the energies of the data were derived with."));
+  udrBurstText = new QLineEdit;
+  udrBurstText->setText("0");
+  udrBurstText->setToolTip(tr("FWHM in ns of a Gaussian burst width convolved with the tabulated function; 0 for none."));
+  udrChannelText = new QLineEdit;
+  udrChannelText->setText("0");
+  udrChannelText->setToolTip(tr("Width in ns of a rectangular time-of-flight channel convolved with the tabulated function; 0 for none. A negative value -n means n bins per decade of energy (logarithmic binning), i.e. a width of t ln(10)/(2n) at each point's flight time."));
+  udrCentredCheck = new QCheckBox(tr("Re-centre the function on its centroid"));
+  udrCentredCheck->setChecked(true);
+  udrCentredCheck->setToolTip(tr("Shift each tabulated function so that its mean delay is zero, as SAMMY does: the mean delay is then part of the nominal flight path. Uncheck to apply the delays exactly as tabulated."));
+
   cancelButton = new QPushButton(tr("Cancel"));
   okButton = new QPushButton(tr("Accept"));
   okButton->setDefault(true);
 
-  QHBoxLayout *segListLayout = new QHBoxLayout;
-  segListLayout->addWidget(new QLabel(tr("Segments List:")));
-  segListLayout->addWidget(segmentsListText);
+  // The two free-text lists (segments, energy windows) each get a full-width
+  // row: sharing one row with the numeric options squeezed them to a few
+  // characters as the dialog grew.  The short numeric fields share the third row.
+  const int listMinWidth = segmentsListText->fontMetrics().horizontalAdvance(QString(48, QLatin1Char('0')));
+  segmentsListText->setMinimumWidth(listMinWidth);
+  applyRangesText->setMinimumWidth(listMinWidth);
+  const int numberWidth = transitionWidthText->fontMetrics().horizontalAdvance(QString(12, QLatin1Char('0')));
+  transitionWidthText->setMaximumWidth(numberWidth);
+  autoToleranceText->setMaximumWidth(numberWidth);
 
-  QHBoxLayout *applyRangesLayout = new QHBoxLayout;
-  applyRangesLayout->addWidget(new QLabel(tr("Apply in Energy Ranges (lab, MeV):")));
-  applyRangesLayout->addWidget(applyRangesText);
-  applyRangesLayout->addWidget(new QLabel(tr("Blend Width:")));
-  applyRangesLayout->addWidget(transitionWidthText);
-  applyRangesLayout->addWidget(new QLabel(tr("Auto Tolerance:")));
-  applyRangesLayout->addWidget(autoToleranceText);
-
-  QHBoxLayout *numPointsLayout = new QHBoxLayout;
-  numPointsLayout->addWidget(new QLabel(tr("Number of Integration Points:")));
-  numPointsLayout->addWidget(numPointsSpin);
+  QHBoxLayout *optionsRowLayout = new QHBoxLayout;
+  optionsRowLayout->addWidget(new QLabel(tr("Blend Width [MeV]:")));
+  optionsRowLayout->addWidget(transitionWidthText);
+  optionsRowLayout->addSpacing(12);
+  optionsRowLayout->addWidget(new QLabel(tr("Auto Tolerance:")));
+  optionsRowLayout->addWidget(autoToleranceText);
+  optionsRowLayout->addSpacing(12);
+  optionsRowLayout->addWidget(new QLabel(tr("Number of Integration Points:")));
+  optionsRowLayout->addWidget(numPointsSpin);
+  optionsRowLayout->addStretch(1);
 
   QHBoxLayout *adaptiveGridLayout = new QHBoxLayout;
   adaptiveGridLayout->addWidget(new QLabel(tr("Resonance Width Multiplier:")));
@@ -279,15 +330,22 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   adaptiveGridLayout->addWidget(new QLabel(tr("Points Per Width:")));
   adaptiveGridLayout->addWidget(pointsPerWidthSpin);
 
-  QHBoxLayout *topLayout = new QHBoxLayout;
-  topLayout->addLayout(segListLayout);
-  topLayout->addLayout(applyRangesLayout);
-  topLayout->addLayout(numPointsLayout);
+  QGridLayout *topLayout = new QGridLayout;
+  topLayout->addWidget(new QLabel(tr("Segments List:")), 0, 0);
+  topLayout->addWidget(segmentsListText, 0, 1);
+  topLayout->addWidget(new QLabel(tr("Apply in Energy Ranges (lab, MeV):")), 1, 0);
+  topLayout->addWidget(applyRangesText, 1, 1);
+  topLayout->addLayout(optionsRowLayout, 2, 0, 1, 2);
+  topLayout->setColumnStretch(1, 1);
 
+  // The beam spread (its row, then its parameter box) comes before target integration (its rows, then
+  // the stopping-power box), so each effect's controls sit together.
+  QGridLayout *gaussianLayout = new QGridLayout;
+  gaussianLayout->addWidget(isConvolutionCheck, 0, 0);
+  gaussianLayout->addWidget(new QLabel(tr("\u03c3 [MeV, lab] =")), 0, 1, Qt::AlignRight);
+  gaussianLayout->addWidget(sigmaText, 0, 2);
+  gaussianLayout->setColumnStretch(2, 1);
   QGridLayout *checkBoxLayout = new QGridLayout;
-  checkBoxLayout->addWidget(isConvolutionCheck, 0, 0);
-  checkBoxLayout->addWidget(new QLabel(tr("Sigma [MeV]:")), 0, 1, Qt::AlignRight);
-  checkBoxLayout->addWidget(sigmaText, 0, 2);
 
   checkBoxLayout->addWidget(isTargetIntegrationCheck, 1, 0);
   checkBoxLayout->addWidget(new QLabel(tr("Active Density [atoms/cm^2]:")), 1, 1, Qt::AlignRight);
@@ -358,22 +416,26 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   qCoefficientBox->setLayout(qCoefficientLayout);
   qCoefficientBox->hide();
 
-  QGridLayout *energyConvolutionCheckBoxLayout = new QGridLayout;
-  energyConvolutionCheckBoxLayout->addWidget(isConvolutionDependentCheck, 0, 0);
-  energyConvolutionCheckBoxLayout->addItem(new QSpacerItem(1, 20), 0, 1);
-  energyConvolutionCheckBoxLayout->addWidget(new QLabel(tr("Number of Coefficients:")), 0, 2, Qt::AlignRight);
-  energyConvolutionCheckBoxLayout->addWidget(numConvCoefficientSpin, 0, 3);
-  energyConvolutionCheckBoxLayout->setColumnStretch(1, 1);
-
-  convCoefficientBox = new QGroupBox(tr("Convolution Coefficients"));
+  convCoefficientBox = new QGroupBox(tr("Parameters of \u03c3(E)"));
   QVBoxLayout *convCoefficientLayout = new QVBoxLayout;
   QHBoxLayout *equationConvLayout = new QHBoxLayout;
-  equationConvLayout->addWidget(new QLabel(tr("y=")));
-  equationConvLayout->addWidget(convolutionEqText);
+  equationConvLayout->addWidget(new QLabel(tr("Number of Coefficients:")));
+  equationConvLayout->addWidget(numConvCoefficientSpin);
+  equationConvLayout->addStretch(1);
   convCoefficientLayout->addLayout(equationConvLayout);
+  frameRow = new QWidget;
+  QHBoxLayout *frameLayout = new QHBoxLayout(frameRow);
+  frameLayout->setContentsMargins(0, 0, 0, 0);
+  frameLayout->addWidget(sigmaLabRadio);
+  frameLayout->addWidget(sigmaCmRadio);
+  frameLayout->addStretch(1);
+  frameLayout->addWidget(convertToLabButton);
+  frameRow->hide();   // shown for a line read in the legacy c.m. convention
+  convCoefficientLayout->addWidget(frameRow);
   convCoefficientLayout->addWidget(convCoefficientTable);
   convCoefficientBox->setLayout(convCoefficientLayout);
   convCoefficientBox->hide();
+  convolutionEqText->hide();   // the expression lives in sigmaText; kept for the tab's bookkeeping
 
   QGridLayout *beamProfileCheckBoxLayout = new QGridLayout;
   beamProfileCheckBoxLayout->addWidget(isBeamProfileCheck, 0, 0);
@@ -395,6 +457,21 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   beamProfileBox->setLayout(beamProfileLayout);
   beamProfileBox->hide();
 
+  udrBox = new QGroupBox(tr("User-Defined Resolution Function (SAMMY UDR)"));
+  QGridLayout *udrLayout = new QGridLayout;
+  udrLayout->addWidget(new QLabel(tr("UDR File:")), 0, 0, Qt::AlignRight);
+  udrLayout->addWidget(udrFileText, 0, 1, 1, 4);
+  udrLayout->addWidget(udrBrowseButton, 0, 5);
+  udrLayout->addWidget(new QLabel(tr("Flight Path [m]:")), 1, 0, Qt::AlignRight);
+  udrLayout->addWidget(udrFlightPathText, 1, 1);
+  udrLayout->addWidget(new QLabel(tr("Burst FWHM [ns]:")), 1, 2, Qt::AlignRight);
+  udrLayout->addWidget(udrBurstText, 1, 3);
+  udrLayout->addWidget(new QLabel(tr("Channel Width [ns]:")), 1, 4, Qt::AlignRight);
+  udrLayout->addWidget(udrChannelText, 1, 5);
+  udrLayout->addWidget(udrCentredCheck, 2, 0, 1, 6);
+  udrBox->setLayout(udrLayout);
+  udrBox->hide();
+
   QHBoxLayout *buttonBox = new QHBoxLayout;
   buttonBox->addWidget(cancelButton);
   buttonBox->addWidget(okButton);
@@ -402,14 +479,16 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   QVBoxLayout *mainLayout = new QVBoxLayout;
   mainLayout->addLayout(topLayout);
   mainLayout->addLayout(adaptiveGridLayout);
+  mainLayout->addLayout(gaussianLayout);
+  mainLayout->addWidget(convCoefficientBox);
   mainLayout->addLayout(checkBoxLayout);
   mainLayout->addWidget(stoppingPowerBox);
   mainLayout->addLayout(qCoefficientCheckBoxLayout);
   mainLayout->addWidget(qCoefficientBox);
-  mainLayout->addLayout(energyConvolutionCheckBoxLayout);
-  mainLayout->addWidget(convCoefficientBox);
   mainLayout->addLayout(beamProfileCheckBoxLayout);
   mainLayout->addWidget(beamProfileBox);
+  mainLayout->addWidget(isUdrCheck);
+  mainLayout->addWidget(udrBox);
   mainLayout->addLayout(buttonBox);
 
   setLayout(mainLayout);
@@ -495,8 +574,7 @@ void AddTargetIntDialog::beamProfileCheckChanged(bool checked) {
   } else {
     beamProfileBox->hide();
     numBeamComponentSpin->setEnabled(false);
-    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked() &&
-        !isConvolutionDependentCheck->isChecked())
+    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked())
       numPointsSpin->setEnabled(false);
     if (!isTargetIntegrationCheck->isChecked()) {
       resonanceWidthMultiplierSpin->setEnabled(false);
@@ -525,13 +603,52 @@ void AddTargetIntDialog::beamProfileChanged(int row, int column) {
 }
 
 void AddTargetIntDialog::convolutionCheckChanged(bool checked) {
-  if (checked) {
-    sigmaText->setEnabled(true);
+  sigmaText->setEnabled(checked);
+  if (checked)
     numPointsSpin->setEnabled(true);
+  else if (!isTargetIntegrationCheck->isChecked())
+    numPointsSpin->setEnabled(false);
+  sigmaModeChanged();
+}
+
+bool AddTargetIntDialog::sigmaIsConstant() const {
+  bool ok = false;
+  sigmaText->text().trimmed().toDouble(&ok);
+  return ok;
+}
+
+// A number needs no parameters; an expression shows the coefficient table, and the frame row when the line
+// came in as legacy c.m.
+void AddTargetIntDialog::sigmaModeChanged() {
+  bool expression = isConvolutionCheck->isChecked() && !sigmaText->text().trimmed().isEmpty() && !sigmaIsConstant();
+  if (expression) {
+    convCoefficientBox->show();
+    numConvCoefficientSpin->setEnabled(true);
   } else {
-    sigmaText->setEnabled(false);
-    if (!isTargetIntegrationCheck->isChecked()) numPointsSpin->setEnabled(false);
+    convCoefficientBox->hide();
+    numConvCoefficientSpin->setEnabled(false);
+    this->adjustSize();
   }
+  frameRow->setVisible(expression && sigmaCmRadio->isChecked());
+  convertToLabButton->setEnabled(expression && sigmaCmRadio->isChecked() && conversionFactor_ > 0.0);
+}
+
+void AddTargetIntDialog::setConversionFactor(double factor) {
+  conversionFactor_ = factor;
+  sigmaModeChanged();
+}
+
+// sigma_lab(x) = sigma_cm(F x) / F: substitute the variable (whole-word x; the x of exp() is left alone)
+// and divide, which is exact, then mark the line as lab.
+void AddTargetIntDialog::convertExpressionToLab() {
+  if (!(conversionFactor_ > 0.0)) return;
+  QString f = QString::number(conversionFactor_, 'g', 12);
+  QString expr = sigmaText->text().trimmed();
+  if (expr.isEmpty()) return;
+  expr.replace(QRegularExpression("\\bx\\b"), "(" + f + "*x)");
+  sigmaText->setText("(" + expr + ")/" + f);
+  sigmaLabRadio->setChecked(true);
+  frameRow->hide();
 }
 
 void AddTargetIntDialog::targetIntCheckChanged(bool checked) {
@@ -568,6 +685,7 @@ void AddTargetIntDialog::parameterSpinChanged(int newNumber) {
     else
       createParameterItem(i);
   }
+  fitTableHeight(parametersTable);
 }
 
 void AddTargetIntDialog::parameterChanged(int row, int column) {
@@ -591,19 +709,6 @@ void AddTargetIntDialog::qCoefficientCheckChanged(bool checked) {
   }
 }
 
-void AddTargetIntDialog::convCoefficientCheckChanged(bool checked) {
-  if (checked) {
-    convCoefficientBox->show();
-    numConvCoefficientSpin->setEnabled(true);
-    numPointsSpin->setEnabled(true);
-  } else {
-    convCoefficientBox->hide();
-    numConvCoefficientSpin->setEnabled(false);
-    numPointsSpin->setEnabled(false);
-    this->adjustSize();
-  }
-}
-
 void AddTargetIntDialog::qCoefficientSpinChanged(int newNumber) {
   qCoefficientTable->clearContents();
   qCoefficientTable->setRowCount(newNumber);
@@ -613,6 +718,7 @@ void AddTargetIntDialog::qCoefficientSpinChanged(int newNumber) {
     else
       createQCoefficientItem(i);
   }
+  fitTableHeight(qCoefficientTable);
 }
 
 void AddTargetIntDialog::convCoefficientSpinChanged(int newNumber) {
@@ -624,6 +730,7 @@ void AddTargetIntDialog::convCoefficientSpinChanged(int newNumber) {
     else
       createConvCoefficientItem(i);
   }
+  fitTableHeight(convCoefficientTable);
 }
 
 void AddTargetIntDialog::qCoefficientChanged(int row, int column) {
@@ -684,6 +791,25 @@ void AddTargetIntDialog::populateElementComboBox() {
   if (alIndex >= 0) {
     elementComboBox->setCurrentIndex(alIndex);
   }
+}
+
+void AddTargetIntDialog::udrCheckChanged(bool checked) {
+  if (checked) {
+    udrBox->show();
+    numPointsSpin->setEnabled(true);
+    resonanceWidthMultiplierSpin->setEnabled(true);
+    pointsPerWidthSpin->setEnabled(true);
+  } else {
+    udrBox->hide();
+    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked() && !isBeamProfileCheck->isChecked())
+      numPointsSpin->setEnabled(false);
+  }
+}
+
+void AddTargetIntDialog::udrBrowse() {
+  QString file = QFileDialog::getOpenFileName(this, tr("Select a SAMMY UDR resolution-function file"),
+                                              udrFileText->text(), tr("All files (*)"));
+  if (!file.isEmpty()) udrFileText->setText(file);
 }
 
 void AddTargetIntDialog::elementSelectionChanged(int index) {
@@ -977,4 +1103,14 @@ void AddTargetIntDialog::calculateDeltaE() {
     QMessageBox::critical(this, tr("Calculation Error"),
                           tr("Error during ΔE calculation: %1").arg(e.what()));
   }
+}
+
+void AddTargetIntDialog::fitTableHeight(QTableWidget *table) {
+  int rows = std::min(table->rowCount(), 12);
+  int height = table->horizontalHeader()->height() + 2 * table->frameWidth();
+  for (int r = 0; r < rows; r++) height += table->rowHeight(r);
+  if (table->rowCount() > rows) height += table->horizontalScrollBar()->sizeHint().height();
+  table->setMinimumHeight(height);
+  table->setMaximumHeight(height);
+  this->adjustSize();
 }

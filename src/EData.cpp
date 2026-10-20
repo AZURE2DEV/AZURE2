@@ -9,13 +9,23 @@
 #include "AdaptiveIntegrationGrid.h"
 #include "Minuit2/MnUserParameters.h"
 #include "GSLException.h"
+#include <gsl/gsl_linalg.h>
+#include <gsl/gsl_matrix.h>
+#include <gsl/gsl_vector.h>
+#include <cmath>
+#include <limits>
 #include "NuclearPotentialManager.h"
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cinttypes>
 #include <cmath>
+#include <cstdlib>
+#include <string>
 #include <cstdio>
 #include <iostream>
 #include <iomanip>
+#include <algorithm>
 #include <set>
 #include <sstream>
 #ifdef _OPENMP
@@ -23,6 +33,81 @@
 #endif
 #include <time.h>
 #include <unordered_map>
+
+/*!
+ * A sample segment ("sample <1|name>", alias "natural") adds abundance-weighted terms of
+ * several compound nuclei, so it is accepted where a SUM of cross sections is
+ * meaningful -- angle-integrated, differential and capture cross sections,
+ * plain or SUM composites -- and refused for a RATIO, a phase shift, an
+ * analyzing power and a test-mode angular-distribution segment, which are not
+ * additive.  It also needs the <abundances> block: without it every weight is
+ * 1 and the token would be silently meaningless, which is exactly what an
+ * older build would do with it too.
+ */
+static bool NaturalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {
+  const char *what = isTest ? "test segment" : "segment";
+  const std::string &token = segment.GetNaturalToken();
+  if (token == "0") return true;   // not a natural segment
+  if (!theCNuc->HasAbundanceBlock()) {
+    configure.outStream << "ERROR: " << what << " #" << key << " is a sample (abundance-weighted) segment, but the project has no "
+                        << "<abundances> block (one line per compound nucleus: [<sample>:] <Z> <A> <abundance> <vary> <sigma>)." << std::endl;
+    return false;
+  }
+  // "1" = the unnamed sample (or the only one); anything else names a sample of the block.
+  int sample = (token == "1") ? theCNuc->DefaultSample() : theCNuc->FindSample(token);
+  if (sample == 0) {
+    configure.outStream << "ERROR: " << what << " #" << key << ": sample \"" << token
+                        << "\" is not in the <abundances> block";
+    if (token == "1") configure.outStream << " (it has several named samples and no unnamed one: name one on the segment line)";
+    configure.outStream << "." << std::endl;
+    return false;
+  }
+  segment.SetNaturalSample(sample);
+  if (segment.IsAdvanced() && segment.GetLegacyOperationType() != 0) {
+    configure.outStream << "ERROR: " << what << " #" << key << ": a sample segment cannot be a RATIO." << std::endl;
+    return false;
+  }
+  if (segment.IsPhase() || segment.IsAnalyzingPower() || (isTest && segment.IsAngularDist())) {
+    configure.outStream << "ERROR: " << what << " #" << key << ": a sample segment must be a cross section "
+                        << "(angle-integrated, differential or capture), not a phase shift, analyzing power or "
+                        << "angular-distribution coefficients." << std::endl;
+    return false;
+  }
+  return true;
+}
+
+/*!
+ * The decomposition of a sample segment, one file per segment since
+ * AZUREOut files are named by pair keys only: the energy, the total the fit
+ * compares with the data, and the abundance-weighted term of every compound
+ * nucleus (ESegment::CalculateTheoreticalCrossSection).  Same frame as the
+ * AZUREOut file (kinflag.dat), one line per point.
+ */
+static void WriteNaturalDecomposition(const Config &configure, bool isExtrap, int kinflag,
+                                      const std::vector<std::string> &nucleusLabels, ESegment *segment) {
+  std::string name = configure.outputdir + "AZUREOut_sample_seg=" + std::to_string(segment->GetSegmentKey()) +
+                     (isExtrap ? ".extrap" : ".out");
+  std::ofstream out(name.c_str());
+  if (!out) return;
+  out << "# Segment " << segment->GetSegmentKey() << ": abundance-weighted sum over compound nuclei (sample "
+      << segment->GetNaturalToken() << ")" << std::endl;
+  out << "# E_" << (kinflag ? "lab" : "cm") << " [MeV]   total";
+  for (size_t k = 0; k < nucleusLabels.size(); k++) out << "   " << nucleusLabels[k];
+  out << std::endl;
+  out.precision(10);
+  for (int i = 1; i <= segment->NumPoints(); i++) {
+    EPoint *point = segment->GetPoint(i);
+    double kin = (kinflag != 0) ? point->GetCrossSectionKinFactor() : 1.0;
+    if (kin == 0.0) kin = 1.0;
+    out << std::setw(18) << std::scientific << (kinflag != 0 ? point->GetLabEnergy() : point->GetCMEnergy())
+        << std::setw(18) << std::scientific << point->GetFitCrossSection() / kin;
+    const std::vector<double> &terms = point->GetNaturalTerms();
+    for (size_t k = 0; k < nucleusLabels.size(); k++)
+      out << std::setw(18) << std::scientific << (k < terms.size() ? terms[k] / kin : 0.0);
+    out << std::endl;
+  }
+}
+
 
 /*!
  * The EData object has a private attribute containing the number of iterations needed to find the best fit parameters.
@@ -131,7 +216,12 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
       std::istringstream stm;
       stm.str(line);
       SegLine segment(stm);
-      if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) return -1;
+      if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) {
+        if (!segment.parseError().empty())
+          configure.outStream << "ERROR: Data segment #" << numTotalSegments + 1 << ": " << segment.parseError() << "."
+                              << std::endl;
+        return -1;
+      }
       numTotalSegments++;
       if (segment.isDiff() == 8 || segment.isDiff() == 18) {
         // Polarization x Cross Section was removed: the outgoing polarization of
@@ -150,15 +240,27 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
         ESegment NewSegment(segment);
 
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
-          theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()))->SetEntrance();
+          PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
+          entrancePair->SetEntrance();
+          if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
+            // total capture: every capture pair of the ENTRANCE pair's compound nucleus
             for (int i = 1; i <= theCNuc->NumPairs(); i++) {
-              if (theCNuc->GetPair(i)->GetPType() == 10) {
+              if (theCNuc->GetPair(i)->GetPType() == 10 && theCNuc->GetPair(i)->GetNucleus() == entrancePair->GetNucleus()) {
                 isValidTotal = true;
                 break;
               }
             }
+          }
+          if (!isValidTotal && theCNuc->IsPairKey(NewSegment.GetExitKey()) &&
+              theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetExitKey()))->GetNucleus() != entrancePair->GetNucleus()) {
+            configure.outStream << "ERROR: segment #" << numTotalSegments << ": entrance pair " << NewSegment.GetEntranceKey()
+                                << " and exit pair " << NewSegment.GetExitKey() << " belong to different compound nuclei ("
+                                << theCNuc->NucleusLabel(entrancePair->GetNucleus()) << " and "
+                                << theCNuc->NucleusLabel(theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetExitKey()))->GetNucleus())
+                                << "); a reaction stays within one nucleus." << std::endl;
+            return -1;
           }
           if (isValidTotal || theCNuc->IsPairKey(NewSegment.GetExitKey())) {
             NewSegment.SetSegmentKey(numTotalSegments);
@@ -225,10 +327,12 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
                             double fixedAngle = std::stod(component.substr(anglePos));
 
                             // Create component segment with fixed angle
+                            if (!this->CheckComponentPairs(theCNuc, *filledSegment, entranceKey, exitKey, configure)) return -1;
                             componentSegment = this->CreateComponentSegment(*filledSegment, entranceKey, exitKey, fixedAngle);
                           } else {
                             // No angle specified, use standard method
                             int exitKey = std::stoi(component.substr(exitPos));
+                            if (!this->CheckComponentPairs(theCNuc, *filledSegment, entranceKey, exitKey, configure)) return -1;
                             componentSegment = this->CreateComponentSegment(*filledSegment, entranceKey, exitKey);
                           }
 
@@ -251,8 +355,9 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
                 // Set operation type to SUM for total capture
                 baseSegment->SetOperationType(SUM);
 
+                const int entranceNucleus = theCNuc->GetPair(theCNuc->GetPairNumFromKey(baseSegment->GetEntranceKey()))->GetNucleus();
                 for (int i = 1; i <= theCNuc->NumPairs(); i++) {
-                  if (theCNuc->GetPair(i)->GetPType() == 10) {
+                  if (theCNuc->GetPair(i)->GetPType() == 10 && theCNuc->GetPair(i)->GetNucleus() == entranceNucleus) {
                     numCapturePairs++;
                     if (numCapturePairs == 1) {
                       // For the first capture pair, set the base segment's exit key
@@ -290,6 +395,9 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
   if (line != "</segmentsData>") return -1;
 
   in.close();
+
+  if (this->ResolveShiftGroups(configure) == -1) return -1;
+  this->ResolveNormGroups(configure);
 
   if (ReadPriorCentres(configure) != 0) return -1;
 
@@ -424,14 +532,26 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
       if (segment.isActive() == 1) {
         ESegment NewSegment(segment);
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
+          PPair *segEntrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
+          if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
+            // total capture: every capture pair of the ENTRANCE pair's compound nucleus
             for (int i = 1; i <= theCNuc->NumPairs(); i++) {
-              if (theCNuc->GetPair(i)->GetPType() == 10) {
+              if (theCNuc->GetPair(i)->GetPType() == 10 && theCNuc->GetPair(i)->GetNucleus() == segEntrance->GetNucleus()) {
                 isValidTotal = true;
                 break;
               }
             }
+          }
+          if (!isValidTotal && theCNuc->IsPairKey(NewSegment.GetExitKey()) &&
+              theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetExitKey()))->GetNucleus() != segEntrance->GetNucleus()) {
+            configure.outStream << "ERROR: test segment #" << numTotalSegments << ": entrance pair " << NewSegment.GetEntranceKey()
+                                << " and exit pair " << NewSegment.GetExitKey() << " belong to different compound nuclei ("
+                                << theCNuc->NucleusLabel(segEntrance->GetNucleus()) << " and "
+                                << theCNuc->NucleusLabel(theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetExitKey()))->GetNucleus())
+                                << "); a reaction stays within one nucleus." << std::endl;
+            return -1;
           }
           if (isValidTotal || theCNuc->IsPairKey(NewSegment.GetExitKey())) {
             NewSegment.SetSegmentKey(numTotalSegments);
@@ -525,10 +645,12 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
                           double fixedAngle = std::stod(component.substr(anglePos));
 
                           // Create component segment with fixed angle
+                          if (!this->CheckComponentPairs(theCNuc, *theSegment, entranceKey, exitKey, configure)) return -1;
                           componentSegment = this->CreateComponentSegment(*theSegment, entranceKey, exitKey, fixedAngle);
                         } else {
                           // No angle specified, use standard method
                           int exitKey = std::stoi(component.substr(exitPos));
+                          if (!this->CheckComponentPairs(theCNuc, *theSegment, entranceKey, exitKey, configure)) return -1;
                           componentSegment = this->CreateComponentSegment(*theSegment, entranceKey, exitKey);
                         }
 
@@ -557,8 +679,9 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
                 // Set operation type to SUM for total capture
                 baseSegment->SetOperationType(SUM);
 
+                const int entranceNucleus = theCNuc->GetPair(theCNuc->GetPairNumFromKey(baseSegment->GetEntranceKey()))->GetNucleus();
                 for (int i = 1; i <= theCNuc->NumPairs(); i++) {
-                  if (theCNuc->GetPair(i)->GetPType() == 10) {
+                  if (theCNuc->GetPair(i)->GetPType() == 10 && theCNuc->GetPair(i)->GetNucleus() == entranceNucleus) {
                     numCapturePairs++;
                     if (numCapturePairs == 1) {
                       // For the first capture pair, set the base segment's exit key
@@ -639,63 +762,6 @@ int EData::GetEnergyShiftParamOffset() const {
   return energyShiftParamOffset_;
 }
 
-namespace {
-
-/*
-Builds the sub-points of a target-effect point on [endEnergy, startEnergy] (CM)
-and records on the point how the grid was built, so EPoint::RefreshSubPointGrid
-can rebuild it the same way from the current fit parameters.
-*/
-void FillSubPoints(EPoint *point, ESegment *segment, TargetEffect *targetEffect, double startEnergy,
-                   double endEnergy, double cmConversion, int entranceKey, bool refreshable,
-                   CNuc *compound, const Config &configure) {
-  std::vector<double> energyGrid;
-  int numPoints = targetEffect->NumSubPoints();
-  SubGridSpec spec;
-  if (configure.useAdaptiveGrid) {
-    AdaptiveIntegrationGrid::GridConfig gridConfig;
-    gridConfig.maxPoints = numPoints;
-    gridConfig.entranceKey = entranceKey;
-    gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
-    gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
-    gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
-    gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth();
-    AdaptiveIntegrationGrid gridGenerator(gridConfig);
-    std::vector<AdaptiveIntegrationGrid::ResonanceInfo> anchors = gridGenerator.Anchors(compound);
-    energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, anchors);
-    spec.refreshable = refreshable;
-    spec.startEnergy = startEnergy;
-    spec.endEnergy = endEnergy;
-    spec.baseEnergyStep = gridConfig.baseEnergyStep;
-    spec.resonanceWidthMultiplier = gridConfig.resonanceWidthMultiplier;
-    spec.pointsPerWidth = gridConfig.pointsPerWidth;
-    spec.entranceKey = entranceKey;
-    spec.cmConversion = cmConversion;
-    for (const AdaptiveIntegrationGrid::ResonanceInfo &r : gridGenerator.AnchorsInReach(startEnergy, endEnergy, anchors)) {
-      spec.anchors.push_back(r.id);
-      spec.anchors.push_back(r.energy);
-      spec.anchors.push_back(r.particleWidth);
-    }
-  } else {
-    double step = (startEnergy - endEnergy) / numPoints;
-    for (int i = 0; i <= numPoints; i++)
-      energyGrid.push_back(startEnergy - i * step);
-  }
-
-  for (size_t i = 0; i < energyGrid.size(); i++) {
-    double subEnergy = energyGrid[i];
-    EPoint subPoint(point->GetCMAngle(), subEnergy, segment);
-    if (targetEffect->IsTargetIntegration()) {
-      double stoppingPower = cmConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / cmConversion);
-      subPoint.SetStoppingPower(stoppingPower);
-    }
-    point->AddSubPoint(subPoint);
-  }
-  point->SetSubGridSpec(spec);
-}
-
-}  // namespace
-
 /*!
  * Returns the index at which the sqrt(E) energy-shift coefficients start in
  * the Minuit parameter vector (one per segment, after the energy shifts).
@@ -705,10 +771,206 @@ int EData::GetEnergyShiftSqrtParamOffset() const {
   return energyShiftSqrtParamOffset_;
 }
 
+int EData::GetEnergyShiftFnParamOffset() const {
+  return energyShiftFnParamOffset_;
+}
+
 /*!
  * Reads the target effects input file and creates the TargetEffect objects
  * to be applied to the data.
  */
+
+namespace {
+EPoint::SubGridSpec MakeSubGridSpec(const AdaptiveIntegrationGrid::GridConfig &gc, double start, double end,
+                                    const TargetEffect *effect, double conversion) {
+  EPoint::SubGridSpec spec;
+  spec.valid = true;
+  spec.startEnergy = start;
+  spec.endEnergy = end;
+  spec.maxPoints = gc.maxPoints;
+  spec.entranceKey = gc.entranceKey;
+  spec.baseEnergyStep = gc.baseEnergyStep;
+  spec.resonanceWidthMultiplier = gc.resonanceWidthMultiplier;
+  spec.pointsPerWidth = gc.pointsPerWidth;
+  spec.targetIntegration = effect->IsTargetIntegration();
+  spec.stoppingConversion = conversion;
+  return spec;
+}
+}  // namespace
+
+EData::GridNucleus::GridNucleus() {}
+EData::GridNucleus::GridNucleus(const GridNucleus &) {}
+EData::GridNucleus &EData::GridNucleus::operator=(const GridNucleus &) { return *this; }
+EData::GridNucleus::~GridNucleus() {}
+
+namespace {
+// Does this segment need external-capture amplitudes at its sub-points?  They are
+// integrals computed once at initialization (CalculateECAmplitudes), so its grid
+// cannot be re-placed.
+bool SegmentNeedsEC(ESegment &segment, CNuc *theCNuc, const Config &configure) {
+  if (!(configure.paramMask & Config::USE_EXTERNAL_CAPTURE)) return false;
+  const int ir = theCNuc->GetPairNumFromKey(segment.GetExitKey());
+  for (int j = 1; j <= theCNuc->NumJGroups(); j++)
+    for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
+      ALevel *level = theCNuc->GetJGroup(j)->GetLevel(la);
+      if (level->IsECLevel() && level->GetECPairNum() == ir) return true;
+    }
+  return false;
+}
+}  // namespace
+
+/*!
+ * Re-places the adaptive sub-point grids (DeBoer 2026-10-19, Coulomb table stage 3).
+ *
+ * ReadTargetEffectsFile lays each grid out once, from the level energies and
+ * widths in the input file.  A fit that moves a narrow level then integrates it
+ * on a grid built for another position, and the objective depends on which file
+ * the session started from (natural neon refit1: 25,773.96 from the start file,
+ * 25,776.08 from the fitted one, same parameters).  Here the grid is laid out
+ * again for the current parameters: the fit values are converted to observed
+ * energies and widths, as a saved file would hold them (CNuc::TransformOut on a
+ * private copy of the compound nucleus), and fed to the same generator with the
+ * same window, so the grid of a parameter set is the one a session started from
+ * its saved file would place.  Only points whose grid changed get new
+ * sub-points; their Coulomb functions are table lookups.
+ *
+ * Energy shifts: the sub-points are laid out at the unshifted energies and moved
+ * with the data by the shift step; the resonances are offset by the point's c.m.
+ * shift so the dense part of the grid lands on each resonance after the move.
+ *
+ * A grid differs from the current one if a node moved by more than 1e-12
+ * relative: the round trip from the file's observed values through the formal
+ * parameters and back changes them in the last digits only.
+ */
+int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const std::vector<ESegment *> &shiftActive,
+                                std::vector<ESegment *> &reshift) {
+  if (!configure.replaceSubPointGrids || !configure.useAdaptiveGrid || !theCNuc) return 0;
+  const auto t0 = std::chrono::steady_clock::now();
+
+  struct Item { ESegment *seg; int i; double offset; bool shifted; };
+  std::vector<Item> work;
+  static std::atomic<bool> ecNoted{false};
+  auto collect = [&](ESegment *seg) {
+    bool any = false;
+    for (int i = 1; i <= seg->NumPoints() && !any; i++) any = seg->GetPoint(i)->GetSubGridSpec().valid;
+    if (!any) return;
+    if (SegmentNeedsEC(*seg, theCNuc, configure)) {
+      if (!ecNoted.exchange(true))
+        configure.outStream << "Note: the sub-point grids of segments with external capture are not re-placed "
+                               "(their capture integrals are computed once)." << std::endl;
+      return;
+    }
+    const bool shifted = std::find(shiftActive.begin(), shiftActive.end(), seg) != shiftActive.end();
+    PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg->GetEntranceKey()));
+    PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg->GetExitKey()));
+    // The c.m./lab factor the shift step uses for sub-points (ESegment::UpdatePointEnergyWithShift).
+    const double cmFactor = (entrancePair->GetPType() == 20)
+        ? (exitPair->GetM(1) + exitPair->GetM(2)) / exitPair->GetM(2)
+        : entrancePair->GetM(2) / (entrancePair->GetM(1) + entrancePair->GetM(2));
+    for (int i = 1; i <= seg->NumPoints(); i++) {
+      EPoint *point = seg->GetPoint(i);
+      if (!point->GetSubGridSpec().valid) continue;
+      const double offset = shifted ? cmFactor * seg->TotalEnergyShift(point->GetOriginalEnergy()) : 0.0;
+      work.push_back({seg, i, offset, shifted});
+    }
+  };
+  for (ESegment &seg : segments_) collect(&seg);
+  for (ESegment &seg : componentSegments_) collect(&seg);
+  if (work.empty()) return 0;
+
+  // The observed parameters of the current fit values, on the private copy.
+  if (!gridNuc_.nuc) gridNuc_.nuc.reset(theCNuc->Clone());
+  CNuc *g = gridNuc_.nuc.get();
+  for (int j = 1; j <= theCNuc->NumJGroups(); j++)
+    for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
+      ALevel *from = theCNuc->GetJGroup(j)->GetLevel(la);
+      ALevel *to = g->GetJGroup(j)->GetLevel(la);
+      to->SetFitE(from->GetFitE());
+      for (int ch = 1; ch <= theCNuc->GetJGroup(j)->NumChannels(); ch++) to->SetFitGamma(ch, from->GetFitGamma(ch));
+    }
+  g->TransformOut(configure);
+  g->FillCompoundFromParamsPhysical(g->GetTransformParams(configure));
+  const auto t1 = std::chrono::steady_clock::now();
+
+  std::atomic<int> changed{0};
+  std::atomic<long> newSubPoints{0};
+  // For AZURE_GRID_TIMING: per work item, -1 = a different number of nodes, else the
+  // largest node move (MeV) of a grid that changed.
+  std::vector<double> moved(work.size(), 0.0);
+  auto replace = [&](const Item &it, size_t q) {
+    EPoint *point = it.seg->GetPoint(it.i);
+    const EPoint::SubGridSpec &spec = point->GetSubGridSpec();
+    AdaptiveIntegrationGrid::GridConfig gc;
+    gc.maxPoints = spec.maxPoints;
+    gc.entranceKey = spec.entranceKey;
+    gc.inputWidthsArePhysical = true;
+    gc.baseEnergyStep = spec.baseEnergyStep;
+    gc.resonanceWidthMultiplier = spec.resonanceWidthMultiplier;
+    gc.pointsPerWidth = spec.pointsPerWidth;
+    gc.resonanceOffset = it.offset;
+    std::vector<double> grid = AdaptiveIntegrationGrid(gc).GenerateGrid(spec.startEnergy, spec.endEnergy, g);
+    std::vector<EPoint> &subs = point->GetSubPoints();
+    bool same = (subs.size() == grid.size());
+    for (size_t k = 0; same && k < grid.size(); k++)
+      same = std::fabs(subs[k].GetOriginalEnergy() - grid[k]) <= 1.0e-12 * std::max(1.0, std::fabs(grid[k]));
+    if (same) return;
+    if (subs.size() != grid.size())
+      moved[q] = -1.0;
+    else
+      for (size_t k = 0; k < grid.size(); k++) moved[q] = std::max(moved[q], std::fabs(subs[k].GetOriginalEnergy() - grid[k]));
+    TargetEffect *effect = this->GetTargetEffect(it.seg->GetTargetEffectNum());
+    TargetEffect *qEffect = effect->IsQCoefficients() ? effect : nullptr;
+    subs.clear();
+    for (double e : grid) {
+      EPoint sub(point->GetCMAngle(), e, it.seg);
+      if (spec.targetIntegration)
+        sub.SetStoppingPower(spec.stoppingConversion *
+                             effect->GetStoppingPowerEq()->Evaluate(configure, e / spec.stoppingConversion));
+      sub.CalcLegendreP(configure.maxLOrder, theCNuc, qEffect);
+      // A shifted segment's sub-points are moved and energised by the shift step.
+      if (!it.shifted) {
+        sub.CalcEDependentValues(theCNuc, configure);
+        sub.CalcCoulombAmplitude(theCNuc);
+      }
+      point->AddSubPoint(sub);
+    }
+    changed++;
+    newSubPoints += (long)grid.size();
+  };
+#ifdef _OPENMP
+  const bool serial = omp_in_parallel();
+#else
+  const bool serial = true;
+#endif
+  if (serial) {
+    for (size_t q = 0; q < work.size(); q++) replace(work[q], q);
+  } else {
+#pragma omp parallel for schedule(dynamic, 4)
+    for (int q = 0; q < (int)work.size(); q++) replace(work[q], (size_t)q);
+  }
+  if (changed > 0)
+    for (const Item &it : work)
+      if (it.shifted && std::find(reshift.begin(), reshift.end(), it.seg) == reshift.end()) reshift.push_back(it.seg);
+
+  if (std::getenv("AZURE_GRID_TIMING")) {
+    static std::atomic<int> calls{0};
+    const int c = ++calls;
+    if (c <= 20 || c % 50 == 0) {
+      auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
+      int resized = 0;
+      double maxMove = 0.0;
+      for (double m : moved) {
+        if (m < 0.0) resized++;
+        else maxMove = std::max(maxMove, m);
+      }
+      std::cerr << "[grid] call " << c << ": " << work.size() << " grids, " << changed.load() << " re-placed ("
+                << newSubPoints.load() << " sub-points; " << resized << " with a new node count, largest node move "
+                << maxMove * 1.0e6 << " eV otherwise); observed parameters " << ms(t0, t1) << " ms, grids "
+                << ms(t1, std::chrono::steady_clock::now()) << " ms" << std::endl;
+    }
+  }
+  return changed.load();
+}
 
 int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
   std::ifstream in(configure.configfile.c_str());
@@ -785,6 +1047,14 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
       TargetEffect *targetEffect = this->GetTargetEffect(segment->GetTargetEffectNum());
       targetEffect->ConvertSigmaToCM(cmConversion);
       if (targetEffect->IsBeamProfile()) targetEffect->ConvertBeamProfileToCM(cmConversion);
+      if (targetEffect->IsUdr()) {
+        double eMin = 1.0e300, eMax = 0.0;
+        for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
+          eMin = std::min(eMin, point->GetLabEnergy());
+          eMax = std::max(eMax, point->GetLabEnergy());
+        }
+        if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream)) return -1;
+      }
 
       for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
         // An effect restricted to energy ranges leaves points outside them
@@ -799,53 +1069,17 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
           double forwardDepth = 0.0;
           double backwardDepth = 0.0;
 
+          double targetThickness = 0.0;
           if (targetEffect->IsTargetIntegration()) {
-            double totalM = entrancePair->GetM(1) + entrancePair->GetM(2);
-            double targetThickness = cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
+            targetThickness = cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
             point->SetTargetThickness(targetThickness);
-            if (targetEffect->IsConvolution() || targetEffect->IsConvCoefficients()) {
-              if (targetEffect->IsConvCoefficients()) {
-                backwardDepth = targetThickness + targetEffect->convolutionRange * targetEffect->CalculateSigma(point->GetCMEnergy(), configure) * 5.0;
-                forwardDepth = targetEffect->convolutionRange * targetEffect->CalculateSigma(point->GetCMEnergy(), configure) * 5.0;
-              } else {
-                backwardDepth = targetThickness + targetEffect->convolutionRange * targetEffect->GetSigma() * 5.0;
-                forwardDepth = targetEffect->convolutionRange * targetEffect->GetSigma() * 5.0;
-              }
-              // Add straggling range extension at the deepest layer
-              if (targetEffect->IsStraggling()) {
-                double targetThickness_keV = targetThickness * 1000.0;  // Convert MeV to keV
-                double stragglingCoeff = targetEffect->GetStragglingCoefficient();
-                double stragglingSigma_keV = stragglingCoeff * std::sqrt(targetThickness_keV);
-                double stragglingSigma = stragglingSigma_keV / 1000.0;  // Convert back to MeV
-                double stragglingRange = targetEffect->convolutionRange * stragglingSigma;
-                backwardDepth += stragglingRange;
-              }
-            } else {
-              backwardDepth = targetThickness;
-              forwardDepth = 0.0;
-              // Add straggling range extension for target integration only
-              if (targetEffect->IsStraggling()) {
-                double targetThickness_keV = targetThickness * 1000.0;
-                double stragglingCoeff = targetEffect->GetStragglingCoefficient();
-                double stragglingSigma_keV = stragglingCoeff * std::sqrt(targetThickness_keV);
-                double stragglingSigma = stragglingSigma_keV / 1000.0;
-                double stragglingRange = targetEffect->convolutionRange * stragglingSigma;
-                backwardDepth += stragglingRange;
-              }
-            }
           }
-
-          else if (targetEffect->IsConvolution() || targetEffect->IsConvCoefficients()) {
-            double convRange = segment->IsTHM() ? targetEffect->thmConvolutionRange
-                                                : targetEffect->convolutionRange;
-            if (targetEffect->IsConvCoefficients()) {
-              backwardDepth = convRange * targetEffect->CalculateSigma(point->GetCMEnergy(), configure);
-              forwardDepth = convRange * targetEffect->CalculateSigma(point->GetCMEnergy(), configure);
-            } else {
-              backwardDepth = convRange * targetEffect->GetSigma();
-              forwardDepth = convRange * targetEffect->GetSigma();
-            }
-          }
+          // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
+          targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, forwardDepth, backwardDepth);
+          // A THM (HOES) segment's Gaussian fold reaches thmConvolutionRange sigma (5), not convolutionRange.
+          if (segment->IsTHM() && targetEffect->IsGaussian() && !targetEffect->IsTargetIntegration())
+            forwardDepth = backwardDepth =
+                TargetEffect::thmConvolutionRange * targetEffect->SigmaCM(point->GetCMEnergy(), configure);
 
           // Generate adaptive integration grid
           double startEnergy = point->GetCMEnergy() + forwardDepth;
@@ -908,20 +1142,87 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             point->SetPhotoKinematics(entrancePair->GetSepE() - exitPair->GetExE(),
                                       (entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv);
           }
-          // The grid of a main segment may be rebuilt later when a fit moves a
-          // narrow level (EPoint::RefreshSubPointGrid); a beam-profile window
-          // is absolute and is left as built.
-          FillSubPoints(&*point, &*segment, targetEffect, startEnergy, endEnergy, cmConversion,
-                        segment->GetEntranceKey(), !targetEffect->IsBeamProfile(), compound, configure);
+          if (targetEffect->IsUdr()) {
+            // A delay tau maps the point's nominal flight time t0 to a true
+            // flight time t0 - tau: the kernel's support in delay becomes a
+            // window in true energy, extending above the point for positive
+            // delays (moderation) and below it for negative ones.
+            double mass = entrancePair->GetM(1) * uconv;
+            std::shared_ptr<const UdrKernel> kernel = targetEffect->BuildUdrKernel(point->GetLabEnergy(), mass);
+            point->SetUdrKernel(kernel, mass);
+            double t0 = UdrKinematics::TimeOfFlight(point->GetLabEnergy(), mass, targetEffect->GetUdrFlightPath());
+            double eHighLab = UdrKinematics::EnergyFromTime(t0 - kernel->tauMax, mass, targetEffect->GetUdrFlightPath());
+            double eLowLab = UdrKinematics::EnergyFromTime(t0 - kernel->tauMin, mass, targetEffect->GetUdrFlightPath());
+            double cmPerLab = point->GetCMEnergy() / point->GetLabEnergy();
+            if (eHighLab <= point->GetLabEnergy()) eHighLab = point->GetLabEnergy() * 1.0001;
+            if (eLowLab <= 0.0 || eLowLab >= point->GetLabEnergy()) eLowLab = point->GetLabEnergy() * 0.9999;
+            startEnergy = eHighLab * cmPerLab;
+            endEnergy = std::max(eLowLab * cmPerLab, 0.001);
+          }
+          std::vector<double> energyGrid;
+          int numPoints = targetEffect->NumSubPoints();
+          if (configure.useAdaptiveGrid) {
+            AdaptiveIntegrationGrid::GridConfig gridConfig;
+            gridConfig.maxPoints = numPoints;
+            gridConfig.entranceKey = segment->GetEntranceKey();
+            gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
+            gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
+            gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
+            gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth();
+            AdaptiveIntegrationGrid gridGenerator(gridConfig);
+            energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
+            point->SetSubGridSpec(MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, cmConversion));
+          } else {
+            double step = (startEnergy - endEnergy) / numPoints;
+            for (int i = 0; i <= numPoints; i++)
+              energyGrid.push_back(startEnergy - i * step);
+          }
+
+          for (size_t i = 0; i < energyGrid.size(); i++) {
+            double subEnergy = energyGrid[i];
+            EPoint subPoint(point->GetCMAngle(), subEnergy, &*segment);
+            if (targetEffect->IsTargetIntegration()) {
+              double stoppingPower = cmConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / cmConversion);
+              subPoint.SetStoppingPower(stoppingPower);
+            }
+            point->AddSubPoint(subPoint);
+          }
         }
       }
     }
     if (segment->HasComponents()) {
       for (auto component : segment->GetComponentSegments()) {
+        // The component's grid, kinematics and lab<->c.m. factor belong to the
+        // pair the component calculates -- for a natural target another
+        // compound nucleus with its own masses -- not to the base segment's.
+        // The points were copied from the base segment with its c.m.
+        // energies; convert them for this pair before the grid is laid out
+        // (EData::Initialize repeats this, idempotently, from the lab energy).
+        PPair *compEntrance = compound->GetPair(compound->GetPairNumFromKey(component->GetEntranceKey()));
+        PPair *compExit = compound->GetPair(compound->GetPairNumFromKey(component->GetExitKey()));
+        double compConversion;
+        if (compEntrance->GetPType() == 20)
+          compConversion = (compExit->GetM(1) + compExit->GetM(2)) / compExit->GetM(2);
+        else
+          compConversion = compEntrance->GetM(2) / (compEntrance->GetM(1) + compEntrance->GetM(2));
+        for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
+          if (compEntrance->GetPType() == 20)
+            point->ConvertDecayEnergy(compExit);
+          else
+            point->ConvertLabEnergy(compEntrance);
+        }
         if (component->IsTargetEffect()) {
           TargetEffect *targetEffect = this->GetTargetEffect(component->GetTargetEffectNum());
-          targetEffect->ConvertSigmaToCM(cmConversion);
-          if (targetEffect->IsBeamProfile()) targetEffect->ConvertBeamProfileToCM(cmConversion);
+          targetEffect->ConvertSigmaToCM(compConversion);
+          if (targetEffect->IsBeamProfile()) targetEffect->ConvertBeamProfileToCM(compConversion);
+          if (targetEffect->IsUdr()) {
+            double eMin = 1.0e300, eMax = 0.0;
+            for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
+              eMin = std::min(eMin, point->GetLabEnergy());
+              eMax = std::max(eMax, point->GetLabEnergy());
+            }
+            if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream)) return -1;
+          }
 
           for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
             double blendWeight = targetEffect->BlendWeight(point->GetLabEnergy());
@@ -933,53 +1234,17 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
               double forwardDepth = 0.0;
               double backwardDepth = 0.0;
 
+              double targetThickness = 0.0;
               if (targetEffect->IsTargetIntegration()) {
-                double totalM = entrancePair->GetM(1) + entrancePair->GetM(2);
-                double targetThickness = cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
+                targetThickness = compConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
                 point->SetTargetThickness(targetThickness);
-                if (targetEffect->IsConvolution() || targetEffect->IsConvCoefficients()) {
-                  if (targetEffect->IsConvCoefficients()) {
-                    backwardDepth = targetThickness + targetEffect->convolutionRange * targetEffect->CalculateSigma(point->GetCMEnergy(), configure) * 5.0;
-                    forwardDepth = targetEffect->convolutionRange * targetEffect->CalculateSigma(point->GetCMEnergy(), configure) * 5.0;
-                  } else {
-                    backwardDepth = targetThickness + targetEffect->convolutionRange * targetEffect->GetSigma() * 5.0;
-                    forwardDepth = targetEffect->convolutionRange * targetEffect->GetSigma() * 5.0;
-                  }
-                  // Add straggling range extension at the deepest layer (component segments)
-                  if (targetEffect->IsStraggling()) {
-                    double targetThickness_keV = targetThickness * 1000.0;  // Convert MeV to keV
-                    double stragglingCoeff = targetEffect->GetStragglingCoefficient();
-                    double stragglingSigma_keV = stragglingCoeff * std::sqrt(targetThickness_keV);
-                    double stragglingSigma = stragglingSigma_keV / 1000.0;  // Convert back to MeV
-                    double stragglingRange = targetEffect->convolutionRange * stragglingSigma;
-                    backwardDepth += stragglingRange;
-                  }
-                } else {
-                  backwardDepth = targetThickness;
-                  forwardDepth = 0.0;
-                  // Add straggling range extension for target integration only (component segments)
-                  if (targetEffect->IsStraggling()) {
-                    double targetThickness_keV = targetThickness * 1000.0;
-                    double stragglingCoeff = targetEffect->GetStragglingCoefficient();
-                    double stragglingSigma_keV = stragglingCoeff * std::sqrt(targetThickness_keV);
-                    double stragglingSigma = stragglingSigma_keV / 1000.0;
-                    double stragglingRange = targetEffect->convolutionRange * stragglingSigma;
-                    backwardDepth += stragglingRange;
-                  }
-                }
               }
-
-              else if (targetEffect->IsConvolution() || targetEffect->IsConvCoefficients()) {
-                double convRange = component->IsTHM() ? targetEffect->thmConvolutionRange
-                                                      : targetEffect->convolutionRange;
-                if (targetEffect->IsConvCoefficients()) {
-                  backwardDepth = convRange * targetEffect->CalculateSigma(point->GetCMEnergy(), configure);
-                  forwardDepth = convRange * targetEffect->CalculateSigma(point->GetCMEnergy(), configure);
-                } else {
-                  backwardDepth = convRange * targetEffect->GetSigma();
-                  forwardDepth = convRange * targetEffect->GetSigma();
-                }
-              }
+              // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
+              targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, forwardDepth, backwardDepth);
+              // A THM (HOES) segment's Gaussian fold reaches thmConvolutionRange sigma (5), not convolutionRange.
+              if (component->IsTHM() && targetEffect->IsGaussian() && !targetEffect->IsTargetIntegration())
+                forwardDepth = backwardDepth =
+                    TargetEffect::thmConvolutionRange * targetEffect->SigmaCM(point->GetCMEnergy(), configure);
 
               // Generate adaptive integration grid for component segment
               double startEnergy = point->GetCMEnergy() + forwardDepth;
@@ -1033,13 +1298,51 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 if (high <= low) high = low + 0.001;
                 startEnergy = high;
                 endEnergy = low;
-                point->SetPhotoKinematics(entrancePair->GetSepE() - exitPair->GetExE(),
-                                          (entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv);
+                point->SetPhotoKinematics(compEntrance->GetSepE() - compExit->GetExE(),
+                                          (compEntrance->GetM(1) + compEntrance->GetM(2)) * uconv);
               }
-              // A component's points are converted again after this
-              // (InitializeComponentSegments), so its grid is never rebuilt.
-              FillSubPoints(&*point, &*component, targetEffect, startEnergy, endEnergy, cmConversion,
-                            segment->GetEntranceKey(), false, compound, configure);
+              if (targetEffect->IsUdr()) {
+                double mass = compEntrance->GetM(1) * uconv;
+                std::shared_ptr<const UdrKernel> kernel = targetEffect->BuildUdrKernel(point->GetLabEnergy(), mass);
+                point->SetUdrKernel(kernel, mass);
+                double t0 = UdrKinematics::TimeOfFlight(point->GetLabEnergy(), mass, targetEffect->GetUdrFlightPath());
+                double eHighLab = UdrKinematics::EnergyFromTime(t0 - kernel->tauMax, mass, targetEffect->GetUdrFlightPath());
+                double eLowLab = UdrKinematics::EnergyFromTime(t0 - kernel->tauMin, mass, targetEffect->GetUdrFlightPath());
+                double cmPerLab = point->GetCMEnergy() / point->GetLabEnergy();
+                if (eHighLab <= point->GetLabEnergy()) eHighLab = point->GetLabEnergy() * 1.0001;
+                if (eLowLab <= 0.0 || eLowLab >= point->GetLabEnergy()) eLowLab = point->GetLabEnergy() * 0.9999;
+                startEnergy = eHighLab * cmPerLab;
+                endEnergy = std::max(eLowLab * cmPerLab, 0.001);
+              }
+              std::vector<double> energyGrid;
+              int numPoints = targetEffect->NumSubPoints();
+              if (configure.useAdaptiveGrid) {
+                AdaptiveIntegrationGrid::GridConfig gridConfig;
+                gridConfig.maxPoints = numPoints;
+                // The component's own entrance pair: its resonances, on its energy axis, are what the grid must resolve.
+                gridConfig.entranceKey = component->GetEntranceKey();
+                gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
+                gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
+                gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
+                gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth();
+                AdaptiveIntegrationGrid gridGenerator(gridConfig);
+                energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
+                point->SetSubGridSpec(MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, compConversion));
+              } else {
+                double step = (startEnergy - endEnergy) / numPoints;
+                for (int i = 0; i <= numPoints; i++)
+                  energyGrid.push_back(startEnergy - i * step);
+              }
+
+              for (size_t i = 0; i < energyGrid.size(); i++) {
+                double subEnergy = energyGrid[i];
+                EPoint subPoint(point->GetCMAngle(), subEnergy, &*component);
+                if (targetEffect->IsTargetIntegration()) {
+                  double stoppingPower = compConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / compConversion);
+                  subPoint.SetStoppingPower(stoppingPower);
+                }
+                point->AddSubPoint(subPoint);
+              }
             }
           }
         }
@@ -1127,6 +1430,9 @@ void EData::ResetIterations() {
  */
 
 int EData::Initialize(CNuc *compound, const Config &configure) {
+  // Labels of the compound nuclei, for the sample decomposition files.
+  nucleusLabels_.clear();
+  for (int k = 1; k <= compound->NumNuclei(); k++) nucleusLabels_.push_back(compound->NucleusLabel(k));
   // Identical-particle phase-shift segment validation: warn once per segment
   // if the requested L is forbidden by Bose/Fermi symmetry on an identical
   // pair. The phase branch in GenMatrixFunc would silently report delta = 0
@@ -1278,7 +1584,10 @@ void EData::PrintData(const Config &configure) {
         EnergyMap map = data.point()->GetMap();
         char tempMap[25];
         snprintf(tempMap, sizeof(tempMap), "(%d,%d)", map.segment, map.point);
-        out << std::setw(12) << tempMap << std::endl;
+        // Same columns as an unmapped point: a mapped point has its own
+        // (identical) sub-point grid.
+        out << std::setw(12) << tempMap
+            << std::setw(18) << data.point()->NumSubPoints();
       } else
         out << std::setw(12) << "Not Mapped"
             << std::setw(18) << data.point()->NumSubPoints();
@@ -1417,9 +1726,10 @@ void EData::PrintEDependentValues(const Config &configure, CNuc *theCNuc) {
         << std::setw(25) << "Lo"
         << std::setw(25) << "expHSP" << std::endl;
     for (EDataIterator data = begin(); data != end(); data++) {
-      double inEnergy = data.point()->GetCMEnergy() + theCNuc->GetPair(theCNuc->GetPairNumFromKey(data.segment()->GetEntranceKey()))->GetSepE();
+      PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(data.segment()->GetEntranceKey()));
+      double inEnergy = data.point()->GetCMEnergy() + entrancePair->GetSepE();
       for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
-        if (theCNuc->GetJGroup(j)->IsInRMatrix()) {
+        if (theCNuc->GetJGroup(j)->IsInRMatrix() && theCNuc->GetJGroup(j)->GetNucleus() == entrancePair->GetNucleus()) {
           JGroup *theJGroup = theCNuc->GetJGroup(j);
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
             AChannel *theChannel = theJGroup->GetChannel(ch);
@@ -1741,6 +2051,7 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
     out << std::endl
         << std::endl;
     out.flush();
+    if (segment->IsNatural()) WriteNaturalDecomposition(configure, output.IsExtrap(), kinflag, nucleusLabels_, &*segment);
     if (bandOut) {
       *bandOut << std::endl
                << std::endl;
@@ -1760,6 +2071,22 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
     // Park formalism: the J > 0 wall, when a level sits beyond it.
     if (configure.paramMask & Config::USE_PARK_FORMALISM)
       chiOut << " Total-Park-Chi-Squared: " << parkPenalty_;
+    // The energy-shift penalties the fit minimised (ESegment::AddShiftPenalty), when
+    // any shift is a fit parameter.  Without this the file reported less than the
+    // minimiser's own total by exactly this amount.
+    bool anyShiftVaried = false;
+    double totalShiftChiSquared = 0.;
+    for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+      if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt()) anyShiftVaried = true;
+      if (segment->OwnsShiftFn())
+        for (int q = 0; q < segment->NumShiftFnParams(); q++)
+          if (segment->IsVaryShiftFn(q)) anyShiftVaried = true;
+      segment->AddShiftPenalty(totalShiftChiSquared);
+    }
+    if (anyShiftVaried) chiOut << " Total-Shift-Chi-Squared: " << totalShiftChiSquared;
+    // Isotopic abundances: their priors and the sum-to-one term.
+    if (abundancePenalty_ != 0.0)
+      chiOut << " Total-Abundance-Chi-Squared: " << abundancePenalty_;
     chiOut << std::endl
            << std::endl;
     chiOut.flush();
@@ -1801,7 +2128,8 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
   // Check if any energy shifts (constant or sqrt(E) term) are varied
   bool isVaryEnergyShift = false;
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-    if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt()) {
+    if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt() || segment->IsShiftGroupFollower() ||
+        segment->HasShiftFn()) {
       isVaryEnergyShift = true;
       break;
     }
@@ -1818,7 +2146,9 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
       // coefficient b of E' = E + shift + b*sqrt(E/MeV), in MeV^1/2.
       out << "segment_key_#, file_name, low_angle_bound, high_angle_bound, aframe, low_energy_bound, high_energy_bound, eframe, norm, shift, sqrt_shift" << std::endl;
       for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-        if (!(segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt())) continue;
+        if (!(segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt() || segment->IsShiftGroupFollower() ||
+              segment->HasShiftFn()))
+          continue;
         out << segment->GetSegmentKey() << ","
             << segment->GetDataFile() << ","
             << segment->GetMinAngle() << ","
@@ -1837,6 +2167,46 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
             << segment->GetEnergyShift() << ","
             << segment->GetEnergyShiftSqrt() << std::endl;
       }
+      // Shift functions: one line per function, after the per-segment rows.  The
+      // lines start with '#' so that readers of the rows above skip them.
+      bool header = false;
+      double totalShiftChi = 0.;
+      for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++)
+        segment->AddShiftPenalty(totalShiftChi);
+      for (int pos = 0; pos < (int)segments_.size(); pos++) {
+        ESegment &owner = segments_[pos];
+        if (!owner.OwnsShiftFn() || !owner.HasShiftFn()) continue;
+        if (!header) {
+          out << "# shift functions: dE(x) = shift + f(x), x = original lab energy of a point (MeV), dE in MeV" << std::endl
+              << "# segment_key_#, member_keys, f(x), shift, a0 a1 ..., x_low, x_high, dE(x_low), dE(x_high), penalty"
+              << std::endl;
+          header = true;
+        }
+        std::ostringstream keys;
+        double lo = std::numeric_limits<double>::infinity(), hi = -lo;
+        for (int m = 0; m < (int)segments_.size(); m++) {
+          if (m != pos && segments_[m].GetShiftLeaderPos() != pos) continue;
+          keys << (m == pos ? "" : " ") << segments_[m].GetSegmentKey();
+          for (int pid = 1; pid <= segments_[m].NumPoints(); pid++) {
+            EPoint *pt = segments_[m].GetPoint(pid);
+            const double x = pt->GetOriginalEnergy() > 0 ? pt->GetOriginalEnergy() : pt->GetLabEnergy();
+            lo = std::min(lo, x);
+            hi = std::max(hi, x);
+          }
+        }
+        // The function's own penalty: the owner's shift penalties minus those of its
+        // constant and sqrt(E) terms.
+        double pen = 0.0, penOwn = 0.0;
+        owner.AddShiftPenalty(pen);
+        if (owner.IsVaryEnergyShift() && owner.GetEnergyShiftError() != 0.0)
+          penOwn = pow((owner.GetEnergyShift() - owner.GetNominalEnergyShift()) / owner.GetEnergyShiftError(), 2.0);
+        out << "# " << owner.GetSegmentKey() << "," << keys.str() << "," << owner.GetShiftFnExpression() << ","
+            << owner.GetEnergyShift() << ",";
+        for (int q = 0; q < owner.NumShiftFnParams(); q++) out << (q ? " " : "") << owner.GetShiftFnValues()[q];
+        out << "," << lo << "," << hi << "," << owner.TotalEnergyShift(lo) << "," << owner.TotalEnergyShift(hi) << ","
+            << pen - penOwn << std::endl;
+      }
+      if (header) out << "# Total-Shift-Chi-Squared: " << totalShiftChi << std::endl;
       out.flush();
       out.close();
     } else
@@ -1942,8 +2312,9 @@ long long WalkECAmplitudes(Segments &segments, CNuc *theCNuc, ECSignatureHash *h
             }
           }
         }
+        // Every point carries its own amplitudes, mapped or not (see
+        // CalculateECAmplitudes), so the intEC file does not depend on mapping.
         for (auto point = segment->GetPoints().begin(); point != segment->GetPoints().end(); point++) {
-          if (point->IsMapped()) continue;
           for (int k = 1; k <= decay->NumKGroups(); k++)
             for (int ecm = 1; ecm <= decay->GetKGroup(k)->NumECMGroups(); ecm++)
               count += 1 + (long long)point->NumSubPoints();
@@ -2199,7 +2570,10 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                 for (int i = 1; i <= numPoints; i++) {
                   if (configure.stopFlag || localStop) continue;
                   EPoint *point = segment->GetPoint(i);
-                  if (!(point->IsMapped())) {
+                  // Mapped points compute their own amplitudes too: the
+                  // amplitudes are a one-off setup cost, and the intEC file
+                  // then has the same layout with and without point mapping.
+                  {
                     try {
                       point->CalculateECAmplitudes(theCNuc, configure);
                     } catch (GSLException e) {
@@ -2240,7 +2614,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
               }
               for (EPointIterator point = segment->GetPoints().begin();
                    point < segment->GetPoints().end(); point++) {
-                if (!(point->IsMapped())) {
+                {
                   for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
                     for (int ecm = 1; ecm <= entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups(); ecm++) {
                       if (!usePrevious) {
@@ -2257,13 +2631,6 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                           ecAmplitude = complex(0.0, 0.0);
                           in >> ecAmplitude;
                           subPoint->AddECAmplitude(k, ecm, ecAmplitude);
-                        }
-                      }
-                      for (EPointMapIterator mappedPoint = point->GetMappedPoints().begin();
-                           mappedPoint < point->GetMappedPoints().begin(); mappedPoint++) {
-                        (*mappedPoint)->AddECAmplitude(k, ecm, point->GetECAmplitude(k, ecm));
-                        for (int i = 1; i <= point->NumSubPoints(); i++) {
-                          (*mappedPoint)->GetSubPoint(i)->AddECAmplitude(k, ecm, point->GetSubPoint(i)->GetECAmplitude(k, ecm));
                         }
                       }
                     }
@@ -2586,6 +2953,38 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
 /*!
  * Creates a component segment as a full copy of the base segment with different entrance/exit keys
  */
+/*!
+ * Checks a component's pair keys before the component is created: both must
+ * exist and belong to one compound nucleus (a reaction does not change the
+ * compound nucleus), and the component's entrance pair is flagged as an
+ * entrance HERE, while CNuc::Initialize -- which builds the reaction pathways
+ * of every entrance pair -- still lies ahead.  Flagging it only in
+ * EData::Initialize, as was done, left a pair used by components alone (the
+ * second isotope of a natural target) without pathways: GetDecay(0).
+ * Returns false, with the error printed, when the component cannot be made.
+ */
+bool EData::CheckComponentPairs(CNuc *theCNuc, const ESegment &baseSegment, int entranceKey, int exitKey,
+                                const Config &configure) {
+  if (!theCNuc->IsPairKey(entranceKey) || !theCNuc->IsPairKey(exitKey)) {
+    configure.outStream << "ERROR: segment #" << baseSegment.GetSegmentKey() << ": component " << entranceKey
+                        << " -> " << exitKey << " names a pair key that is not in the compound nucleus." << std::endl;
+    componentError_ = true;
+    return false;
+  }
+  PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(entranceKey));
+  PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(exitKey));
+  if (entrancePair->GetNucleus() != exitPair->GetNucleus()) {
+    configure.outStream << "ERROR: segment #" << baseSegment.GetSegmentKey() << ": component " << entranceKey
+                        << " -> " << exitKey << " connects two compound nuclei ("
+                        << theCNuc->NucleusLabel(entrancePair->GetNucleus()) << " and "
+                        << theCNuc->NucleusLabel(exitPair->GetNucleus()) << ")." << std::endl;
+    componentError_ = true;
+    return false;
+  }
+  entrancePair->SetEntrance();
+  return true;
+}
+
 ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey) {
   // Create a copy of the base segment with different entrance/exit keys
   // Store component segments separately to avoid iterator invalidation
@@ -2605,6 +3004,7 @@ ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranc
 
   // Clear any existing components to avoid circular references
   componentSegment->ClearComponents();
+  componentSegment->SetNatural(false);   // the weighting is the base segment's job
 
   // The component segment now has the same data points as the base segment
   // but with different entrance/exit keys, so it will calculate different
@@ -2643,21 +3043,116 @@ ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranc
 
   // Clear any existing components to avoid circular references
   componentSegment->ClearComponents();
+  componentSegment->SetNatural(false);   // the weighting is the base segment's job
 
   return componentSegment;
 }
 
+namespace {
+
+// True when the calculation of `b` can be taken from that of `a`: both are
+// points of the SAME segment at the same energy, so they share the energy
+// shift, normalization, target effect and -- checked here, sub-point by
+// sub-point -- the integration grid.  Only the angle (and anything else
+// that enters through GenMatrixFunc::CalculateCrossSection on the point
+// itself) may differ.
+bool SharesCalculation(EPoint &a, EPoint &b) {
+  if (a.GetEntranceKey() != b.GetEntranceKey() || a.GetExitKey() != b.GetExitKey()) return false;
+  if (a.GetOriginalEnergy() != b.GetOriginalEnergy() || a.GetLabEnergy() != b.GetLabEnergy() ||
+      a.GetCMEnergy() != b.GetCMEnergy())
+    return false;
+  if (a.IsTargetEffect() != b.IsTargetEffect() || a.GetTargetEffectNum() != b.GetTargetEffectNum() ||
+      a.GetTargetBlendWeight() != b.GetTargetBlendWeight())
+    return false;
+  if (a.IsAnalyzingPower() != b.IsAnalyzingPower()) return false;
+  if (a.NumSubPoints() != b.NumSubPoints()) return false;
+  std::vector<EPoint> &sa = a.GetSubPoints();
+  std::vector<EPoint> &sb = b.GetSubPoints();
+  for (size_t i = 0; i < sa.size(); i++) {
+    if (sa[i].GetOriginalEnergy() != sb[i].GetOriginalEnergy() ||
+        sa[i].GetCMEnergy() != sb[i].GetCMEnergy() ||
+        sa[i].GetLabEnergy() != sb[i].GetLabEnergy() ||
+        sa[i].GetStoppingPower() != sb[i].GetStoppingPower())
+      return false;
+  }
+  return true;
+}
+
+}  // namespace
+
 /*!
- * This function determined what points should be mapped to another to reduce
- * redundant calculations at like energies.
+ * Maps points onto other points of the SAME segment at the same energy, so the
+ * energy-dependent part of the calculation (the T-matrix of the point and of
+ * each target-effect sub-point) is done once per energy; each mapped point
+ * then only forms its own observable (angle, Coulomb amplitude, A_y) from it
+ * and integrates its own target effect (EPoint::Calculate).
+ *
+ * Mapping across segments, which AZURE2 used to do, stays off: since
+ * per-segment energy shifts and their gradients exist, two segments at the
+ * same nominal energy are not at the same energy in general.  Within one
+ * segment a shift is a function of the original energy alone, so points with
+ * the same original energy stay together whatever the shift.  The host is
+ * always the lowest-index point of a group: every loop that calculates a
+ * segment walks it in index order, so the host is calculated before the
+ * points that read from it (ESegment::CalculateTheoreticalCrossSection,
+ * ESegment::UpdatePointEnergiesWithShift).  The analytic-gradient loops
+ * (AZUREGrad.cpp), which run the points of a segment in parallel, switch
+ * mapping off on their threads (ScopedPointMappingOff) and calculate every
+ * point on its own.
+ *
+ * Segments with components (SUM/RATIO, total capture) are not mapped.
+ * AZURE_NO_POINT_MAPPING=1 in the environment switches mapping off entirely.
  */
 
 void EData::MapData() {
-  // Disable all point mapping - just clear existing mappings
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
       point->ClearMapping();
       point->ClearLocalMappedPoints();
+    }
+  }
+  const char *off = std::getenv("AZURE_NO_POINT_MAPPING");
+  if (off && *off && std::string(off) != "0") return;
+
+  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+    if (segment->HasComponents() || segment->IsTotalCapture()) continue;
+    std::vector<EPoint> &points = segment->GetPoints();
+    const int n = (int)points.size();
+    if (n < 2) continue;
+    const int segmentNum = (int)(segment - GetSegments().begin()) + 1;
+
+    // Group by energy; a stable sort keeps index order inside a group, so the
+    // first point of a group is its lowest-index point.
+    std::vector<int> order(n);
+    for (int i = 0; i < n; i++) order[i] = i;
+    std::stable_sort(order.begin(), order.end(), [&points](int x, int y) {
+      if (points[x].GetOriginalEnergy() != points[y].GetOriginalEnergy())
+        return points[x].GetOriginalEnergy() < points[y].GetOriginalEnergy();
+      return points[x].GetCMEnergy() < points[y].GetCMEnergy();
+    });
+
+    std::vector<int> hosts;
+    int start = 0;
+    while (start < n) {
+      int end = start + 1;
+      while (end < n && points[order[end]].GetOriginalEnergy() == points[order[start]].GetOriginalEnergy() &&
+             points[order[end]].GetCMEnergy() == points[order[start]].GetCMEnergy())
+        end++;
+      hosts.clear();
+      for (int k = start; k < end; k++) {
+        EPoint &p = points[order[k]];
+        bool mapped = false;
+        for (int h : hosts) {
+          if (SharesCalculation(points[h], p)) {
+            p.SetMap(segmentNum, h + 1);
+            points[h].AddLocalMappedPoint(&p);
+            mapped = true;
+            break;
+          }
+        }
+        if (!mapped) hosts.push_back(order[k]);
+      }
+      start = end;
     }
   }
 }
@@ -2690,6 +3185,313 @@ void EData::SetEnergyShiftSqrtParamOffset(int offset) {
   energyShiftSqrtParamOffset_ = offset;
 }
 
+void EData::SetEnergyShiftFnParamOffset(int offset) {
+  energyShiftFnParamOffset_ = offset;
+}
+
+/*!
+ * Links the segments of each shift group ("shiftgroup <label>" on the segment
+ * line) to the group's first segment in file order: that segment keeps its own
+ * constant-shift parameter (value, uncertainty, vary flag, penalty), and every
+ * other member takes that parameter's value instead of its own, which is fixed
+ * in the fit.  A note per group lists the members.
+ */
+
+int EData::ResolveShiftGroups(const Config &configure) {
+  std::vector<std::pair<std::string, int>> leaders;  // label, leader position
+  for (int pos = 0; pos < (int)segments_.size(); pos++) {
+    ESegment &seg = segments_[pos];
+    const std::string label = seg.GetShiftGroup();
+    if (label.empty()) continue;
+    auto it = std::find_if(leaders.begin(), leaders.end(),
+                           [&label](const std::pair<std::string, int> &e) { return e.first == label; });
+    if (it == leaders.end()) {
+      leaders.push_back({label, pos});
+      continue;
+    }
+    ESegment &leader = segments_[it->second];
+    seg.SetShiftGroupFollower(it->second, leader.GetEnergyShift());
+    leader.SetHasShiftGroupFollowers(true);
+  }
+  for (const auto &g : leaders) {
+    const ESegment &leader = segments_[g.second];
+    std::ostringstream members;
+    int n = 0;
+    for (const ESegment &seg : segments_)
+      if (seg.GetShiftLeaderPos() == g.second) {
+        members << " " << seg.GetSegmentKey();
+        n++;
+      }
+    if (n == 0) {
+      configure.outStream << "Note: shift group '" << g.first << "' has only segment #" << leader.GetSegmentKey()
+                          << "; nothing is shared." << std::endl;
+      continue;
+    }
+    configure.outStream << "Note: shift group '" << g.first << "': segments #" << leader.GetSegmentKey() << " +"
+                        << members.str() << " share one constant energy shift (segment #"
+                        << leader.GetSegmentKey() << "'s parameter, " << (leader.IsVaryEnergyShift() ? "free" : "fixed")
+                        << ")." << std::endl;
+  }
+  return ResolveShiftFunctions(configure);
+}
+
+namespace {
+
+// Indices j of the parameters "aj" an Equation expression refers to.  The Equation
+// class reads "a" followed by digits as a parameter (asin, acos, atan are not).
+std::set<int> ShiftFnParamRefs(const std::string &expression) {
+  std::set<int> refs;
+  for (size_t k = 0; k + 1 < expression.size(); k++) {
+    if (expression[k] != 'a' || !std::isdigit((unsigned char)expression[k + 1])) continue;
+    size_t e = k + 1;
+    while (e < expression.size() && std::isdigit((unsigned char)expression[e])) e++;
+    refs.insert(std::atoi(expression.substr(k + 1, e - k - 1).c_str()));
+    k = e - 1;
+  }
+  return refs;
+}
+
+}  // namespace
+
+/*!
+ * Shift functions ("shiftfn" block, design note 10-13-26): the segment declaring one
+ * owns its parameters; it and every follower of its shift group apply
+ * dE(x) = a + f(x; a0..), x the point's original lab energy.  Rejected: a follower
+ * declaring a function (the group's calibration belongs to its first segment), a
+ * function together with a sqrt(E) term on any member (two descriptions of one
+ * calibration), and an expression referring to an undeclared parameter or leaving a
+ * declared one unused.  For each function the free shift terms (a, if varied, and
+ * every varied aj) are checked for degeneracy over the group's data energies; a term
+ * with no effect there is an error.  One log line per function.
+ */
+
+int EData::ResolveShiftFunctions(const Config &configure) {
+  int fnStart = 0;
+  for (int pos = 0; pos < (int)segments_.size(); pos++) {
+    ESegment &owner = segments_[pos];
+    if (!owner.OwnsShiftFn()) continue;
+    const int key = owner.GetSegmentKey();
+    const std::string expression = owner.GetDeclaredShiftFn();
+    const int n = (int)owner.GetNominalShiftFnValues().size();
+    if (owner.IsShiftGroupFollower()) {
+      configure.outStream << "ERROR: Data segment #" << key << " declares a shiftfn, but it is not the first segment of "
+                          << "shift group '" << owner.GetShiftGroup() << "' (segment #"
+                          << segments_[owner.GetShiftLeaderPos()].GetSegmentKey()
+                          << " is): put the block on that segment; it applies to the whole group." << std::endl;
+      return -1;
+    }
+    std::vector<int> members{pos};
+    for (int f = 0; f < (int)segments_.size(); f++)
+      if (segments_[f].GetShiftLeaderPos() == pos) members.push_back(f);
+    for (int m : members)
+      if (segments_[m].HasSqrtShiftBlock()) {
+        configure.outStream << "ERROR: Data segment #" << segments_[m].GetSegmentKey() << " has a sqrtshift block and "
+                            << "shift function \"" << expression << "\" (segment #" << key
+                            << "): two descriptions of one energy calibration.  Write the sqrt(E) term into the function, "
+                            << "e.g. a" << n << "*sqrt(x), and drop the sqrtshift block." << std::endl;
+        return -1;
+      }
+    const std::set<int> refs = ShiftFnParamRefs(expression);
+    for (int j : refs)
+      if (j >= n) {
+        configure.outStream << "ERROR: Data segment #" << key << ": shift function \"" << expression << "\" uses a" << j
+                            << " but declares " << n << " parameter" << (n == 1 ? "" : "s") << " (a0..a" << n - 1 << ")."
+                            << std::endl;
+        return -1;
+      }
+    for (int j = 0; j < n; j++)
+      if (!refs.count(j)) {
+        configure.outStream << "ERROR: Data segment #" << key << ": shift function \"" << expression << "\" declares a"
+                            << j << " but never uses it." << std::endl;
+        return -1;
+      }
+    for (int m : members) segments_[m].InstallShiftFn(owner, pos, configure);
+    owner.SetShiftFnParamStart(fnStart);
+    fnStart += n;
+
+    // Degeneracy check: columns = d(dE)/d(term) at the group's distinct original lab energies.
+    std::vector<double> energies;
+    for (int m : members)
+      for (int pid = 1; pid <= segments_[m].NumPoints(); pid++) {
+        EPoint *pt = segments_[m].GetPoint(pid);
+        energies.push_back(pt->GetOriginalEnergy() > 0 ? pt->GetOriginalEnergy() : pt->GetLabEnergy());
+      }
+    std::sort(energies.begin(), energies.end());
+    energies.erase(std::unique(energies.begin(), energies.end()), energies.end());
+    std::vector<std::string> names;
+    std::vector<std::vector<double>> cols;
+    if (owner.IsVaryEnergyShift()) {
+      names.push_back("a");
+      cols.push_back(std::vector<double>(energies.size(), 1.0));
+    }
+    ESegment probe = owner;  // a scratch copy: the owner's own values stay untouched
+    for (int j = 0; j < n; j++) {
+      if (!owner.IsVaryShiftFn(j)) continue;
+      const double v0 = owner.GetShiftFnValues()[j], h = 1.0e-6 * (std::fabs(v0) + 1.0);
+      std::vector<double> c(energies.size());
+      for (size_t e = 0; e < energies.size(); e++) {
+        probe.SetShiftFnValue(j, v0 + h);
+        const double fp = probe.ShiftFnTerm(energies[e]);
+        probe.SetShiftFnValue(j, v0 - h);
+        c[e] = (fp - probe.ShiftFnTerm(energies[e])) / (2.0 * h);
+      }
+      probe.SetShiftFnValue(j, v0);
+      double norm = 0.0;
+      for (double v : c) norm += v * v;
+      if (!(norm > 0.0) || !std::isfinite(norm)) {
+        configure.outStream << "ERROR: Data segment #" << key << ": in shift function \"" << expression << "\", a" << j
+                            << " has no effect at this group's energies (" << energies.front() << "-" << energies.back()
+                            << " MeV); check the expression." << std::endl;
+        return -1;
+      }
+      names.push_back("a" + std::to_string(j));
+      cols.push_back(c);
+    }
+    std::ostringstream note;
+    note << "Note: shift function on segment #" << key;
+    if (members.size() > 1) {
+      note << " (group '" << owner.GetShiftGroup() << "', segments #" << key;
+      for (size_t m = 1; m < members.size(); m++) note << " " << segments_[members[m]].GetSegmentKey();
+      note << ")";
+    }
+    note << ": dE = a + " << expression << ", x = lab energy (MeV);";
+    for (int j = 0; j < n; j++) {
+      const double err = owner.GetShiftFnErrors()[j];
+      note << " a" << j << " " << owner.GetNominalShiftFnValues()[j]
+           << (owner.IsVaryShiftFn(j) ? (err != 0.0 ? " free (penalty width " + std::to_string(err) + ")" : " free, unpenalised")
+                                      : " fixed")
+           << (j + 1 < n ? "," : ".");
+    }
+    const int m = (int)energies.size(), k = (int)cols.size();
+    if (k >= 2) {
+      // Condition number of the column-normalised matrix (scale-free).
+      double cond = std::numeric_limits<double>::infinity();
+      if (m >= k) {
+        gsl_matrix *A = gsl_matrix_alloc(m, k);
+        gsl_matrix *V = gsl_matrix_alloc(k, k);
+        gsl_vector *S = gsl_vector_alloc(k), *work = gsl_vector_alloc(k);
+        for (int c = 0; c < k; c++) {
+          double norm = 0.0;
+          for (int r = 0; r < m; r++) norm += cols[c][r] * cols[c][r];
+          norm = std::sqrt(norm);
+          for (int r = 0; r < m; r++) gsl_matrix_set(A, r, c, cols[c][r] / norm);
+        }
+        int svd;
+        {
+          GslQuiet quiet;  // scoped: a process-wide handler swap would outlive this check
+          svd = gsl_linalg_SV_decomp(A, V, S, work);
+        }
+        if (svd == 0 && gsl_vector_get(S, k - 1) > 0.0)
+          cond = gsl_vector_get(S, 0) / gsl_vector_get(S, k - 1);
+        gsl_matrix_free(A);
+        gsl_matrix_free(V);
+        gsl_vector_free(S);
+        gsl_vector_free(work);
+      }
+      note << " Condition number of the free terms (";
+      for (int c = 0; c < k; c++) note << names[c] << (c + 1 < k ? ", " : "");
+      note << ") over " << m << " energ" << (m == 1 ? "y" : "ies") << " " << energies.front() << "-" << energies.back()
+           << " MeV: " << cond << ".";
+      configure.outStream << note.str() << std::endl;
+      if (!(cond < 1.0e8))
+        configure.outStream << "WARNING: shift function on segment #" << key << ": its free terms cannot be told apart "
+                            << "over this group's energies (condition number " << cond << "); fix one of them or "
+                            << "constrain it with a penalty." << std::endl;
+    } else {
+      configure.outStream << note.str() << std::endl;
+    }
+  }
+  return 0;
+}
+
+/*!
+ * Writes each shift-group follower's parameter as the value it actually uses,
+ * its group leader's, so that param.sav / param.fit read back unchanged.
+ */
+
+void EData::SyncShiftGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
+  const int off = energyShiftParamOffset_;
+  if (off < 0) return;
+  for (int pos = 0; pos < (int)segments_.size(); pos++) {
+    const int lead = segments_[pos].GetShiftLeaderPos();
+    if (lead < 0 || off + pos >= (int)p.Params().size() || off + lead >= (int)p.Params().size()) continue;
+    p.SetValue(off + pos, p.Value(off + lead));
+  }
+}
+
+/*!
+ * Links the segments of each normalization group ("normgroup <label>" on the
+ * segment line) to the group's first segment in file order: that segment keeps
+ * its own norm (value, uncertainty, vary flag, penalty), and every other member
+ * takes its value instead.  A follower whose line varies its norm keeps that
+ * parameter, fixed, so the parameter layout does not depend on the groups.  A
+ * note per group lists the members.
+ */
+
+void EData::ResolveNormGroups(const Config &configure) {
+  std::vector<std::pair<std::string, int>> leaders;  // label, leader position
+  for (int pos = 0; pos < (int)segments_.size(); pos++) {
+    ESegment &seg = segments_[pos];
+    const std::string label = seg.GetNormGroup();
+    if (label.empty()) continue;
+    auto it = std::find_if(leaders.begin(), leaders.end(),
+                           [&label](const std::pair<std::string, int> &e) { return e.first == label; });
+    if (it == leaders.end()) {
+      leaders.push_back({label, pos});
+      continue;
+    }
+    ESegment &leader = segments_[it->second];
+    seg.SetNormGroupFollower(it->second, leader.GetNorm(), leader.GetNominalNorm());
+    leader.SetHasNormGroupFollowers(true);
+  }
+  for (const auto &g : leaders) {
+    const ESegment &leader = segments_[g.second];
+    std::ostringstream members;
+    int n = 0;
+    for (const ESegment &seg : segments_)
+      if (seg.GetNormLeaderPos() == g.second) {
+        members << " " << seg.GetSegmentKey();
+        n++;
+      }
+    if (n == 0) {
+      configure.outStream << "Note: normalization group '" << g.first << "' has only segment #"
+                          << leader.GetSegmentKey() << "; nothing is shared." << std::endl;
+      continue;
+    }
+    configure.outStream << "Note: normalization group '" << g.first << "': segments #" << leader.GetSegmentKey()
+                        << " +" << members.str() << " share one normalization (segment #" << leader.GetSegmentKey()
+                        << "'s, " << (leader.IsVaryNorm() ? "free" : "fixed") << ")." << std::endl;
+  }
+}
+
+int EData::NormOwner(int s) const {
+  if (s < 1 || s > (int)segments_.size()) return s;
+  const int lead = segments_[s - 1].GetNormLeaderPos();
+  return (lead >= 0) ? lead + 1 : s;
+}
+
+/*!
+ * Writes each norm-group follower's (fixed) norm parameter as the value it
+ * actually uses, its group leader's, so that param.sav / param.fit read back
+ * unchanged.
+ */
+
+void EData::SyncNormGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
+  const int off = GetNormParamOffset();
+  if (off < 0) return;
+  std::vector<int> index(segments_.size(), -1);  // norm parameter of each segment, -1 = none
+  int i = off;
+  for (int pos = 0; pos < (int)segments_.size(); pos++)
+    if (segments_[pos].IsVaryNorm()) index[pos] = i++;
+  for (int pos = 0; pos < (int)segments_.size(); pos++) {
+    const int lead = segments_[pos].GetNormLeaderPos();
+    if (lead < 0 || index[pos] < 0 || index[pos] >= (int)p.Params().size()) continue;
+    const double value = (index[lead] >= 0 && index[lead] < (int)p.Params().size()) ? p.Value(index[lead])
+                                                                                     : segments_[lead].GetNorm();
+    p.SetValue(index[pos], value);
+  }
+}
+
 /*!
  * Fills the Minuit parameter array from initial values in the EData object.
  */
@@ -2702,6 +3504,7 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
       snprintf(varname, sizeof(varname), "segment_%d_norm", segment->GetSegmentKey());
       p.Add(varname, segment->GetNorm(), segment->GetNorm() * 0.05);
       p.SetLowerLimit(varname, 0.0);
+      if (segment->IsNormGroupFollower()) p.Fix(varname);  // the group's norm is its leader's parameter
 
       // Parameter settings will be applied by ParameterLimitsManager during fit
     }
@@ -2731,6 +3534,19 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
     double stepSize = (segment->GetEnergyShiftSqrtError() > 0.0) ? segment->GetEnergyShiftSqrtError() * 0.01 : 0.0005;
     p.Add(varname, segment->GetEnergyShiftSqrt(), stepSize);
     if (!segment->IsVaryEnergyShiftSqrt()) p.Fix(varname);
+  }
+
+  // Shift-function parameters: only segments that declare a "shiftfn" block have
+  // any, so a model without one gets no new parameter at all.
+  SetEnergyShiftFnParamOffset(p.Params().size());
+  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+    if (!segment->OwnsShiftFn() || !segment->HasShiftFn()) continue;
+    for (int j = 0; j < segment->NumShiftFnParams(); j++) {
+      snprintf(varname, sizeof(varname), "segment_%d_energy_shift_fn%d", segment->GetSegmentKey(), j);
+      const double err = segment->GetShiftFnErrors()[j];
+      p.Add(varname, segment->GetShiftFnValues()[j], (err > 0.0) ? err * 0.01 : 0.0005);
+      if (!segment->IsVaryShiftFn(j)) p.Fix(varname);
+    }
   }
 
   // THM coherent backgrounds (cbackground=): Re/Im of each amplitude, last.
@@ -2763,6 +3579,9 @@ void EData::FillNormsFromParams(const vector_r &p) {
     }
     // With component segments, no need to skip - total capture is handled within the segment
   }
+  // Norm-group followers take their leader's norm (a follower's own parameter is fixed).
+  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++)
+    if (segment->IsNormGroupFollower()) segment->SetNorm(GetSegments()[segment->GetNormLeaderPos()].GetNorm());
 }
 
 /*!
@@ -2780,6 +3599,20 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
   bool anyEnergyShifted = false;
 
   if (data) {
+    // Re-energising a point (ESegment::UpdatePointEnergyWithShift: Coulomb
+    // functions of the point and its sub-points) touches only that point, so
+    // the shift values are set here in the original order and the points of
+    // the segments that moved are re-energised afterwards in parallel, each
+    // segment once, in its final state.  A line search moves every shift at once; serially that cost
+    // ~195 s per evaluation on the 11B+a mixed grid against 0.5 s for the
+    // points.  Inside an enclosing parallel region (Minuit's numerical
+    // gradient) the loop stays serial, as before.
+    std::vector<ESegment *> toUpdate;
+    auto queueUpdate = [&toUpdate](ESegment *s) {
+      if (std::find(toUpdate.begin(), toUpdate.end(), s) == toUpdate.end()) toUpdate.push_back(s);
+    };
+    // Segments (and their components) whose points carry an energy shift, moved or not.
+    std::vector<ESegment *> shiftActiveSegments;
     for (ESegmentIterator segment = data->GetSegments().begin(); segment < data->GetSegments().end(); segment++) {
       k++;
 
@@ -2787,13 +3620,30 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
       // and the sqrt(E) coefficient at p[j].  Either moving the points means
       // the segment must be re-shifted (the mapping E -> E + a + b*sqrt(E) is
       // applied from the original energies, so one update covers both).
-      const double shiftConst = p[i];
+      // A shift-group follower reads its group leader's constant shift.
+      const int lead = segment->GetShiftLeaderPos();
+      const double shiftConst = (lead >= 0) ? p[GetEnergyShiftParamOffset() + lead] : p[i];
       const double shiftSqrt = (j >= 0 && j < (int)p.size()) ? p[j] : 0.0;
-      const bool shiftActive = segment->IsVaryEnergyShift() || shiftConst != 0.0 ||
-                               segment->IsVaryEnergyShiftSqrt() || shiftSqrt != 0.0;
+      // A shift function's parameters sit in the shift-function block, at the
+      // owning segment's (this one or its group leader) start.
+      std::vector<double> fnValues;
+      if (segment->HasShiftFn()) {
+        const int start = data->GetSegment(segment->GetShiftFnSourcePos() + 1)->GetShiftFnParamStart();
+        for (int q = 0; q < segment->NumShiftFnParams(); q++) {
+          const int idx = GetEnergyShiftFnParamOffset() + start + q;
+          fnValues.push_back((start >= 0 && idx < (int)p.size()) ? p[idx] : segment->GetShiftFnValues()[q]);
+        }
+      }
+      const bool shiftActive = segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0 ||
+                               segment->IsVaryEnergyShiftSqrt() || shiftSqrt != 0.0 || segment->HasShiftFn();
       if (shiftActive) {
+        shiftActiveSegments.push_back(&*segment);
+        if (segment->HasComponents())
+          for (ESegment *componentSegment : segment->GetComponentSegments())
+            if (componentSegment) shiftActiveSegments.push_back(componentSegment);
         // Check if energy is the same, if so, continue
-        if (segment->GetLastEnergyShift() == shiftConst && segment->GetLastEnergyShiftSqrt() == shiftSqrt) {
+        if (segment->GetLastEnergyShift() == shiftConst && segment->GetLastEnergyShiftSqrt() == shiftSqrt &&
+            (!segment->HasShiftFn() || segment->GetLastShiftFnValues() == fnValues)) {
           i++;
           j++;
           continue;
@@ -2803,7 +3653,9 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
         segment->SetLastEnergyShift(shiftConst);
         segment->SetEnergyShiftSqrt(shiftSqrt);
         segment->SetLastEnergyShiftSqrt(shiftSqrt);
-        segment->UpdatePointEnergiesWithShift(theCNuc, configure);
+        for (int q = 0; q < (int)fnValues.size(); q++) segment->SetShiftFnValue(q, fnValues[q]);
+        if (segment->HasShiftFn()) segment->SetLastShiftFnValues(fnValues);
+        queueUpdate(&*segment);
         anyEnergyShifted = true;
 
         // Apply the same energy shift to ALL component segments of this master segment
@@ -2812,7 +3664,8 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
             if (componentSegment) {
               componentSegment->SetEnergyShift(segment->GetEnergyShift());
               componentSegment->SetEnergyShiftSqrt(segment->GetEnergyShiftSqrt());
-              componentSegment->UpdatePointEnergiesWithShift(theCNuc, configure);
+              componentSegment->CopyShiftFnFrom(*segment);
+              queueUpdate(componentSegment);
             }
           }
         }
@@ -2832,7 +3685,8 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
               // loop.  Advancing them inside the component loop desyncs the
               // parameter-to-segment mapping for every subsequent segment.
               if (componentSegment->GetLastEnergyShift() == shiftConst &&
-                  componentSegment->GetLastEnergyShiftSqrt() == shiftSqrt) {
+                  componentSegment->GetLastEnergyShiftSqrt() == shiftSqrt &&
+                  (!segment->HasShiftFn() || componentSegment->GetLastShiftFnValues() == fnValues)) {
                 continue;
               }
 
@@ -2840,7 +3694,11 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
               componentSegment->SetLastEnergyShift(shiftConst);
               componentSegment->SetEnergyShiftSqrt(shiftSqrt);
               componentSegment->SetLastEnergyShiftSqrt(shiftSqrt);
-              componentSegment->UpdatePointEnergiesWithShift(theCNuc, configure);
+              if (segment->HasShiftFn()) {
+                componentSegment->CopyShiftFnFrom(*segment);
+                componentSegment->SetLastShiftFnValues(fnValues);
+              }
+              queueUpdate(componentSegment);
               anyEnergyShifted = true;
             }
           }
@@ -2852,6 +3710,48 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
       j++;
     }
 
+    // The sub-point grids, for the levels and shifts just set.  Sub-points of
+    // shifted segments are moved and energised by the step below.
+    if (theCNuc && configure) {
+      std::vector<ESegment *> reshift;
+      if (data->ReplaceSubPointGrids(theCNuc, *configure, shiftActiveSegments, reshift) > 0) anyEnergyShifted = true;
+      for (ESegment *s : reshift) queueUpdate(s);
+    }
+
+    if (!toUpdate.empty()) {
+      // One work item per point (with its sub-points), largest first, so a
+      // segment with thousands of sub-points per point does not serialize.
+      // A point mapped onto another (EData::MapData) copies its values from
+      // that host, so it is re-energised with it, on the same thread, after
+      // it (ESegment::UpdatePointGroupEnergyWithShift); it gets no item of its
+      // own.  A mapped point costs little (a copy, its Coulomb amplitudes).
+      struct Item { double cost; ESegment *seg; int i; };
+      std::vector<Item> work;
+      for (ESegment *s : toUpdate)
+        for (int i = 0; i < s->NumPoints(); i++) {
+          if (s->ShiftHost(i)) continue;
+          EPoint *pt = s->GetPoint(i + 1);
+          const double nsp = pt ? pt->NumSubPoints() : 0;
+          const double nMapped = pt ? pt->NumLocalMappedPoints() : 0;
+          work.push_back({(1.0 + nsp) * (1.0 + 0.1 * nMapped), s, i});
+        }
+      std::stable_sort(work.begin(), work.end(), [](const Item &x, const Item &y) { return x.cost > y.cost; });
+#ifdef _OPENMP
+      const bool serial = omp_in_parallel();
+#else
+      const bool serial = true;
+#endif
+      // No parallel construct at all when already inside a parallel region: an
+      // inactive nested team renumbers its thread 0, and per-thread state
+      // indexed by thread number would then be shared between the outer threads.
+      if (serial) {
+        for (size_t q = 0; q < work.size(); q++) work[q].seg->UpdatePointGroupEnergyWithShift(work[q].i, theCNuc, configure);
+      } else {
+#pragma omp parallel for schedule(dynamic, 1)
+        for (int q = 0; q < (int)work.size(); q++) work[q].seg->UpdatePointGroupEnergyWithShift(work[q].i, theCNuc, configure);
+      }
+    }
+
     // Critical fix: Rebuild energy-based mapping system after energy shifts
     if (anyEnergyShifted) {
       data->MapData();
@@ -2860,9 +3760,18 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
     return;
   }
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+    const int lead = segment->GetShiftLeaderPos();
+    const double shiftConst = (lead >= 0) ? p[GetEnergyShiftParamOffset() + lead] : p[i];
+    if (segment->HasShiftFn()) {
+      const int start = GetSegment(segment->GetShiftFnSourcePos() + 1)->GetShiftFnParamStart();
+      for (int q = 0; q < segment->NumShiftFnParams(); q++) {
+        const int idx = GetEnergyShiftFnParamOffset() + start + q;
+        if (start >= 0 && idx < (int)p.size()) segment->SetShiftFnValue(q, p[idx]);
+      }
+    }
     // Always apply energy shift since parameters are always present for all segments
-    if (segment->IsVaryEnergyShift() || p[i] != 0.0) {
-      segment->SetEnergyShift(p[i]);
+    if (segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0 || segment->HasShiftFn()) {
+      segment->SetEnergyShift(shiftConst);
       segment->UpdatePointEnergiesWithShift();
       anyEnergyShifted = true;
 
@@ -2871,6 +3780,7 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
         for (ESegment *componentSegment : segment->GetComponentSegments()) {
           if (componentSegment) {
             componentSegment->SetEnergyShift(segment->GetEnergyShift());
+            componentSegment->CopyShiftFnFrom(*segment);
             componentSegment->UpdatePointEnergiesWithShift();
           }
         }
@@ -2879,12 +3789,13 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
 
     // CRITICAL FIX: Apply the same energy shift to all component segments in total capture segments
     if (segment->IsTotalCapture() && segment->HasComponents()) {
-      if (segment->IsVaryEnergyShift() || p[i] != 0.0) {
+      if (segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0 || segment->HasShiftFn()) {
         // Apply energy shift to all component segments
         const std::vector<ESegment *> &componentSegments = segment->GetComponentSegments();
         for (ESegment *componentSegment : componentSegments) {
           if (componentSegment) {
-            componentSegment->SetEnergyShift(p[i]);
+            componentSegment->SetEnergyShift(shiftConst);
+            componentSegment->CopyShiftFnFrom(*segment);
             componentSegment->UpdatePointEnergiesWithShift();
             anyEnergyShifted = true;
           }
@@ -2942,6 +3853,7 @@ EData *EData::Clone() const {
   dataCopy->normParamOffset_ = this->normParamOffset_;
   dataCopy->energyShiftParamOffset_ = this->energyShiftParamOffset_;
   dataCopy->energyShiftSqrtParamOffset_ = this->energyShiftSqrtParamOffset_;
+  dataCopy->energyShiftFnParamOffset_ = this->energyShiftFnParamOffset_;
   dataCopy->isFit_ = this->isFit_;
   dataCopy->isErrorAnalysis_ = this->isErrorAnalysis_;
   dataCopy->targetEffects_ = this->targetEffects_;

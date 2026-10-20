@@ -78,7 +78,7 @@ THM (HOES) fits
        (``experiment[E1] segments=1-4`` with the three-body kinematics, so
        the line shape, :math:`R(E)` and the DW vertex can be switched on);
        an identical-boson entrance pair
-     - 112.076 (111.651 + 0.425) / 247; THM 61.02 / 192; direct norms
+     - 112.038 (111.613 + 0.425) / 247; THM 61.02 / 192; direct norms
        stored fixed
    * - ``o17_guardo``
      - 17O(n,α)14C, the Guardo et al. 2017 points as first added to the
@@ -116,12 +116,12 @@ points?").
        Cruz 2005/2008, Cassagnou 1962, Mani 1964
      - an identical exit pair (data that count both α halved); a free norm
        with no prior (Cassagnou)
-     - 448.575 (439.104 + 9.471) / 294
+     - 448.619 (439.148 + 9.471) / 294
    * - ``li6_pizzone2011``
      - 6Li(d,α)4He; THM: Pizzone et al., PRC 83 (2011) 045801; direct:
        Engstler 1992, Elwyn 1977, McClenahan 1975, Jeronymo 1962
      - the same reading for a second Li reaction
-     - 158.918 (156.991 + 1.927) / 132
+     - 158.963 (157.036 + 1.927) / 132
 
 ``examples/run_gui.sh`` and ``examples/run_mcmc.sh`` start the GUI and an
 MCMC script in the Docker image of ``packaging/docker`` (README.md,

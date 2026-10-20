@@ -1,4 +1,5 @@
 #include <QGridLayout>
+#include <cmath>
 #include <QCheckBox>
 #include <QSpacerItem>
 #include <QLineEdit>
@@ -6,6 +7,7 @@
 #include <QPushButton>
 #include <QTextStream>
 #include <QHeaderView>
+#include <QRegularExpression>
 
 #include "TargetIntTab.h"
 #include "RoundTripNumber.h"
@@ -19,30 +21,24 @@ TargetIntTab::TargetIntTab(QWidget *parent) :
   targetIntView->verticalHeader()->setHighlightSections(false);
   targetIntView->horizontalHeader()->setHighlightSections(false);
 
-  targetIntView->setColumnHidden(4, true);
-  targetIntView->setColumnHidden(6, true);
-  targetIntView->setColumnHidden(7, true);
-  targetIntView->setColumnHidden(8, true);
-  targetIntView->setColumnHidden(9, true);
-  targetIntView->setColumnHidden(11, true);
-  targetIntView->setColumnHidden(13, true);
-  targetIntView->setColumnHidden(14, true);
-  targetIntView->setColumnHidden(15, true);
-  targetIntView->setColumnHidden(16, true);
-  targetIntView->setColumnHidden(17, true);
-  targetIntView->setColumnHidden(18, true);
-  targetIntView->setColumnHidden(23, true);
-  targetIntView->setColumnHidden(24, true);
-  targetIntView->setColumnHidden(25, true);
-  targetIntView->setColumnHidden(26, true);
+  // The table shows only what most effect types share; each type's own
+  // parameters (sigma, density, stopping power, coefficients, beam profile,
+  // UDR file ...) are in the Add/Edit dialog.  Shown: the active flag, the
+  // segments, a one-line summary of the effect types (column 33, derived),
+  // the sub-point grid (integration points, width multiplier, points per
+  // width; all but the attenuation coefficients) and the energy-range options
+  // (all types).
+  const QList<int> shown = {0, 1, 33, 2, 17, 18, 19, 20, 21};
+  for (int c = 0; c < TargetIntData::SIZE; c++)
+    targetIntView->setColumnHidden(c, !shown.contains(c));
+  QHeaderView *header = targetIntView->horizontalHeader();
+  header->moveSection(header->visualIndex(33), 2);  // summary right after the segment list
 
   targetIntView->setColumnWidth(0, 27);
-  targetIntView->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
-  targetIntView->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-  targetIntView->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
-  targetIntView->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
-  targetIntView->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
-  targetIntView->horizontalHeader()->setSectionResizeMode(10, QHeaderView::Stretch);
+  header->setSectionResizeMode(QHeaderView::ResizeToContents);
+  header->setSectionResizeMode(0, QHeaderView::Fixed);
+  header->setSectionResizeMode(19, QHeaderView::Stretch);  // range lists can be long; they take the spare width
+  targetIntView->setWordWrap(false);                        // one line per entry
   targetIntView->setSelectionBehavior(QAbstractItemView::SelectRows);
   targetIntView->setSelectionMode(QAbstractItemView::SingleSelection);
   targetIntView->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -92,11 +88,9 @@ void TargetIntTab::addLine() {
     newLine.segmentsList = aDialog.segmentsListText->text();
     newLine.numPoints = aDialog.numPointsSpin->value();
 
-    if (aDialog.isConvolutionCheck->isChecked())
-      newLine.isConvolution = true;
-    else
-      newLine.isConvolution = false;
-    newLine.sigma = aDialog.sigmaText->text().toDouble();
+    // a number is stored in the line's constant slot (older readers understand it), an expression with sigmalab
+    newLine.isConvolution = aDialog.isConvolutionCheck->isChecked() && aDialog.sigmaIsConstant();
+    newLine.sigma = newLine.isConvolution ? aDialog.sigmaText->text().trimmed().toDouble() : 0.0;
 
     if (aDialog.isTargetIntegrationCheck->isChecked())
       newLine.isTargetIntegration = true;
@@ -110,9 +104,10 @@ void TargetIntTab::addLine() {
     newLine.isQCoefficients = (aDialog.isQCoefficientCheck->isChecked()) ? (true) : (false);
     for (int i = 0; i < aDialog.numQCoefficientSpin->value(); i++) newLine.qCoefficients.append(aDialog.tempQCoefficients.at(i));
 
-    newLine.isConvCoefficients = (aDialog.isConvolutionDependentCheck->isChecked()) ? (true) : (false);
+    newLine.isConvCoefficients = aDialog.isConvolutionCheck->isChecked() && !aDialog.sigmaIsConstant() && !aDialog.sigmaText->text().trimmed().isEmpty();
     for (int i = 0; i < aDialog.numConvCoefficientSpin->value(); i++) newLine.convCoefficients.append(aDialog.tempConvCoefficients.at(i));
-    newLine.convolutionEq = aDialog.convolutionEqText->text();
+    newLine.convolutionEq = newLine.isConvCoefficients ? aDialog.sigmaText->text().trimmed() : QString();
+    newLine.sigmaLab = aDialog.sigmaLabRadio->isChecked();
 
     newLine.isStraggling = aDialog.isStraggling->isChecked();
     newLine.stragglingCoefficient = aDialog.stragglingCoefficientText->text().toDouble();
@@ -128,6 +123,13 @@ void TargetIntTab::addLine() {
     newLine.beamTpcSigma = aDialog.beamTpcSigmaText->text().toDouble();
     newLine.beamTruncation = aDialog.beamTruncationText->text().toDouble();
     newLine.beamPhotodissociation = aDialog.beamPhotodissociationCheck->isChecked();
+
+    newLine.isUdr = aDialog.isUdrCheck->isChecked();
+    newLine.udrFile = aDialog.udrFileText->text().trimmed();
+    newLine.udrFlightPath = aDialog.udrFlightPathText->text().toDouble();
+    newLine.udrBurstFwhm = aDialog.udrBurstText->text().toDouble();
+    newLine.udrChannelWidth = aDialog.udrChannelText->text().toDouble();
+    newLine.udrCentred = aDialog.udrCentredCheck->isChecked();
 
     addLine(newLine);
   }
@@ -192,6 +194,20 @@ void TargetIntTab::addLine(TargetIntData line) {
   targetIntModel->setData(index, line.beamTruncation, Qt::EditRole);
   index = targetIntModel->index(lines.size(), 26, QModelIndex());
   targetIntModel->setData(index, line.beamPhotodissociation, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 27, QModelIndex());
+  targetIntModel->setData(index, line.isUdr, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 28, QModelIndex());
+  targetIntModel->setData(index, line.udrFile, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 29, QModelIndex());
+  targetIntModel->setData(index, line.udrFlightPath, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 30, QModelIndex());
+  targetIntModel->setData(index, line.udrBurstFwhm, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 31, QModelIndex());
+  targetIntModel->setData(index, line.udrChannelWidth, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 32, QModelIndex());
+  targetIntModel->setData(index, line.udrCentred, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 34, QModelIndex());
+  targetIntModel->setData(index, line.sigmaLab, Qt::EditRole);
 
   targetIntView->resizeRowsToContents();
 }
@@ -247,6 +263,9 @@ void TargetIntTab::editLine() {
   i = targetIntModel->index(index.row(), 14, QModelIndex());
   var = targetIntModel->data(i, Qt::EditRole);
   QString convolutionEq = var.toString();
+  i = targetIntModel->index(index.row(), 34, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  bool sigmaLab = var.toBool();
   i = targetIntModel->index(index.row(), 15, QModelIndex());
   var = targetIntModel->data(i, Qt::EditRole);
   bool isStraggling = var.toBool();
@@ -283,17 +302,31 @@ void TargetIntTab::editLine() {
   i = targetIntModel->index(index.row(), 26, QModelIndex());
   var = targetIntModel->data(i, Qt::EditRole);
   bool beamPhotodissociation = var.toBool();
+  i = targetIntModel->index(index.row(), 27, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  bool isUdr = var.toBool();
+  i = targetIntModel->index(index.row(), 28, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  QString udrFile = var.toString();
+  i = targetIntModel->index(index.row(), 29, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  double udrFlightPath = var.toDouble();
+  i = targetIntModel->index(index.row(), 30, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  double udrBurstFwhm = var.toDouble();
+  i = targetIntModel->index(index.row(), 31, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  double udrChannelWidth = var.toDouble();
+  i = targetIntModel->index(index.row(), 32, QModelIndex());
+  var = targetIntModel->data(i, Qt::EditRole);
+  bool udrCentred = var.toBool();
 
   AddTargetIntDialog aDialog;
   aDialog.setWindowTitle(tr("Edit an Experimental Effect Line"));
   aDialog.segmentsListText->setText(segmentsList);
   aDialog.numPointsSpin->setValue(numPoints);
 
-  if (isConvolution)
-    aDialog.isConvolutionCheck->setChecked(true);
-  else
-    aDialog.isConvolutionCheck->setChecked(false);
-  aDialog.sigmaText->setText(sigma);
+  aDialog.isConvolutionCheck->setChecked(isConvolution || isConvCoefficient);
 
   if (isTargetIntegration)
     aDialog.isTargetIntegrationCheck->setChecked(true);
@@ -311,13 +344,12 @@ void TargetIntTab::editLine() {
   aDialog.tempQCoefficients = qCoefficients;
   aDialog.numQCoefficientSpin->setValue(qCoefficients.size());
 
-  if (isConvCoefficient)
-    aDialog.isConvolutionDependentCheck->setChecked(true);
-  else
-    aDialog.isConvolutionDependentCheck->setChecked(false);
   aDialog.tempConvCoefficients = convCoefficients;
   aDialog.numConvCoefficientSpin->setValue(convCoefficients.size());
-  aDialog.convolutionEqText->setText(convolutionEq);
+  // the frame of an existing expression is whatever the file says; a line without the keyword is legacy c.m.
+  (sigmaLab || !isConvCoefficient ? aDialog.sigmaLabRadio : aDialog.sigmaCmRadio)->setChecked(true);
+  aDialog.sigmaText->setText(isConvCoefficient ? convolutionEq : sigma);
+  aDialog.setConversionFactor(conversionFactorFor(segmentsList));
 
   aDialog.isStraggling->setChecked(isStraggling);
   aDialog.stragglingCoefficientText->setText(QString::number(stragglingCoefficient));
@@ -337,6 +369,13 @@ void TargetIntTab::editLine() {
   aDialog.isBeamProfileCheck->setChecked(isBeamProfile);
   aDialog.numBeamComponentSpin->setValue(beamProfile.size() / 4);
 
+  aDialog.udrFileText->setText(udrFile);
+  aDialog.udrFlightPathText->setText(QString::number(udrFlightPath, 'g', 10));
+  aDialog.udrBurstText->setText(QString::number(udrBurstFwhm, 'g', 10));
+  aDialog.udrChannelText->setText(QString::number(udrChannelWidth, 'g', 10));
+  aDialog.udrCentredCheck->setChecked(udrCentred);
+  aDialog.isUdrCheck->setChecked(isUdr);
+
   if (aDialog.exec()) {
     QString newSegmentsList = aDialog.segmentsListText->text();
     if (segmentsList != newSegmentsList) {
@@ -349,13 +388,12 @@ void TargetIntTab::editLine() {
       targetIntModel->setData(i, newNumPoints, Qt::EditRole);
     }
 
-    bool newIsConvolution = false;
-    if (aDialog.isConvolutionCheck->isChecked()) newIsConvolution = true;
+    bool newIsConvolution = aDialog.isConvolutionCheck->isChecked() && aDialog.sigmaIsConstant();
     if (isConvolution != newIsConvolution) {
       i = targetIntModel->index(index.row(), 3, QModelIndex());
       targetIntModel->setData(i, newIsConvolution, Qt::EditRole);
     }
-    QString newSigma = aDialog.sigmaText->text();
+    QString newSigma = newIsConvolution ? aDialog.sigmaText->text().trimmed() : QString("0");
     if (sigma != newSigma) {
       i = targetIntModel->index(index.row(), 4, QModelIndex());
       targetIntModel->setData(i, newSigma, Qt::EditRole);
@@ -406,8 +444,7 @@ void TargetIntTab::editLine() {
       targetIntModel->setData(i, QVariant::fromValue<QList<double>>(qCoefficients), Qt::EditRole);
     }
 
-    bool newIsConvCoefficient = false;
-    if (aDialog.isConvolutionDependentCheck->isChecked()) newIsConvCoefficient = true;
+    bool newIsConvCoefficient = aDialog.isConvolutionCheck->isChecked() && !aDialog.sigmaIsConstant() && !aDialog.sigmaText->text().trimmed().isEmpty();
     if (isConvCoefficient != newIsConvCoefficient) {
       i = targetIntModel->index(index.row(), 12, QModelIndex());
       targetIntModel->setData(i, newIsConvCoefficient, Qt::EditRole);
@@ -420,10 +457,15 @@ void TargetIntTab::editLine() {
       i = targetIntModel->index(index.row(), 13, QModelIndex());
       targetIntModel->setData(i, QVariant::fromValue<QList<double>>(convCoefficients), Qt::EditRole);
     }
-    QString newconvolutionEq = aDialog.convolutionEqText->text();
+    QString newconvolutionEq = newIsConvCoefficient ? aDialog.sigmaText->text().trimmed() : QString();
     if (convolutionEq != newconvolutionEq) {
       i = targetIntModel->index(index.row(), 14, QModelIndex());
       targetIntModel->setData(i, newconvolutionEq, Qt::EditRole);
+    }
+    bool newSigmaLab = aDialog.sigmaLabRadio->isChecked();
+    if (sigmaLab != newSigmaLab) {
+      i = targetIntModel->index(index.row(), 34, QModelIndex());
+      targetIntModel->setData(i, newSigmaLab, Qt::EditRole);
     }
 
     bool newIsStraggling = aDialog.isStraggling->isChecked();
@@ -494,6 +536,36 @@ void TargetIntTab::editLine() {
     if (beamPhotodissociation != newBeamPhotodissociation) {
       i = targetIntModel->index(index.row(), 26, QModelIndex());
       targetIntModel->setData(i, newBeamPhotodissociation, Qt::EditRole);
+    }
+    bool newIsUdr = aDialog.isUdrCheck->isChecked();
+    if (isUdr != newIsUdr) {
+      i = targetIntModel->index(index.row(), 27, QModelIndex());
+      targetIntModel->setData(i, newIsUdr, Qt::EditRole);
+    }
+    QString newUdrFile = aDialog.udrFileText->text().trimmed();
+    if (udrFile != newUdrFile) {
+      i = targetIntModel->index(index.row(), 28, QModelIndex());
+      targetIntModel->setData(i, newUdrFile, Qt::EditRole);
+    }
+    double newUdrFlightPath = aDialog.udrFlightPathText->text().toDouble();
+    if (udrFlightPath != newUdrFlightPath) {
+      i = targetIntModel->index(index.row(), 29, QModelIndex());
+      targetIntModel->setData(i, newUdrFlightPath, Qt::EditRole);
+    }
+    double newUdrBurstFwhm = aDialog.udrBurstText->text().toDouble();
+    if (udrBurstFwhm != newUdrBurstFwhm) {
+      i = targetIntModel->index(index.row(), 30, QModelIndex());
+      targetIntModel->setData(i, newUdrBurstFwhm, Qt::EditRole);
+    }
+    double newUdrChannelWidth = aDialog.udrChannelText->text().toDouble();
+    if (udrChannelWidth != newUdrChannelWidth) {
+      i = targetIntModel->index(index.row(), 31, QModelIndex());
+      targetIntModel->setData(i, newUdrChannelWidth, Qt::EditRole);
+    }
+    bool newUdrCentred = aDialog.udrCentredCheck->isChecked();
+    if (udrCentred != newUdrCentred) {
+      i = targetIntModel->index(index.row(), 32, QModelIndex());
+      targetIntModel->setData(i, newUdrCentred, Qt::EditRole);
     }
   }
 }
@@ -573,6 +645,9 @@ bool TargetIntTab::writeFile(QTextStream &outStream) {
     if (!lines.at(i).applyRanges.trimmed().isEmpty() || lines.at(i).transitionWidth > 0. || lines.at(i).autoTolerance > 0.) {
       outStream << " \"" << lines.at(i).applyRanges.trimmed() << "\" " << roundTripNumber(lines.at(i).transitionWidth) << " " << roundTripNumber(lines.at(i).autoTolerance);
     }
+    // An expression written in the lab frame carries its keyword; a line without it is read (by this
+    // tab and by the engine) in the pre-2026-10 c.m. convention, so older projects compute as they did.
+    if (lines.at(i).isConvCoefficients && lines.at(i).sigmaLab) outStream << " sigmalab";
     // Optional beam-profile kernel, last on the line and introduced by its own
     // keyword: every older reader probes for a digit or a quote here, so an
     // alphabetic token stops it cleanly and the rest of the line is ignored
@@ -590,6 +665,16 @@ bool TargetIntTab::writeFile(QTextStream &outStream) {
       outStream << " " << roundTripNumber(lines.at(i).beamTpcSigma)
                 << " " << roundTripNumber(lines.at(i).beamTruncation)
                 << " " << (lines.at(i).beamPhotodissociation ? 1 : 0);
+    }
+    // Optional user-defined resolution function, likewise keyword-introduced
+    // and last on the line; the file name is quoted so that paths with spaces
+    // survive.
+    if (lines.at(i).isUdr && !lines.at(i).udrFile.trimmed().isEmpty()) {
+      outStream << " udr \"" << lines.at(i).udrFile.trimmed() << "\" "
+                << QString::number(lines.at(i).udrFlightPath, 'g', 12)
+                << " " << QString::number(lines.at(i).udrBurstFwhm, 'g', 12)
+                << " " << QString::number(lines.at(i).udrChannelWidth, 'g', 12)
+                << " " << (lines.at(i).udrCentred ? 1 : 0);
     }
     outStream << Qt::endl;
   }
@@ -700,6 +785,44 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
       double beamTpcSigma = 0.;
       double beamTruncation = 0.;
       int beamPhotodissociation = 0;
+      // The user-defined-resolution block is split off first: it is written
+      // after the beam profile, and its quoted path must not be seen by the
+      // ranges parser below.
+      bool tempIsUdr = false;
+      QString udrFile;
+      double udrFlightPath = 0., udrBurst = 0., udrChannel = 0.;
+      int udrCentred = 1;
+      int udrPos = remaining.indexOf(QRegularExpression("(^|\\s)udr\\s"));
+      if (udrPos >= 0) {
+        QString udrPart = remaining.mid(udrPos).trimmed().mid(3).trimmed();
+        remaining = remaining.left(udrPos).trimmed();
+        if (udrPart.startsWith('"')) {
+          int closeQuote = udrPart.indexOf('"', 1);
+          if (closeQuote > 0) {
+            udrFile = udrPart.mid(1, closeQuote - 1);
+            udrPart = udrPart.mid(closeQuote + 1).trimmed();
+          }
+        } else {
+          int space = udrPart.indexOf(QRegularExpression("\\s"));
+          udrFile = (space > 0) ? udrPart.left(space) : udrPart;
+          udrPart = (space > 0) ? udrPart.mid(space).trimmed() : QString();
+        }
+        QTextStream udrStream(&udrPart);
+        udrStream >> udrFlightPath;
+        if (udrStream.status() == QTextStream::Ok) udrStream >> udrBurst;
+        if (udrStream.status() == QTextStream::Ok) udrStream >> udrChannel;
+        if (udrStream.status() == QTextStream::Ok) udrStream >> udrCentred;
+        tempIsUdr = !udrFile.isEmpty() && udrFlightPath > 0.;
+        if (!tempIsUdr) udrFile.clear();
+      }
+      bool tempSigmaLab = false;
+      {
+        QRegularExpression labKeyword("(^|\\s)sigmalab(?=\\s|$)");
+        if (remaining.contains(labKeyword)) {
+          tempSigmaLab = true;
+          remaining = remaining.replace(labKeyword, " ").simplified();
+        }
+      }
       const QString beamKeyword("beamprofile");
       int beamPos = remaining.indexOf(beamKeyword);
       if (beamPos >= 0) {
@@ -767,7 +890,7 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
       bool tempIsTargetIntegration = false;
       if (isTargetIntegration == 1) tempIsTargetIntegration = true;
 
-      TargetIntData newLine = {isActive, segmentsList.remove('\"'), numPoints, tempIsConvolution, sigma, tempIsTargetIntegration, density, stoppingPowerEq.remove('\"'), numParameters, parameters, tempIsQCoefficient, qCoefficients, tempIsConvCoefficient, convCoefficients, convolutionEq.remove('\"'), tempIsStraggling, stragglingCoefficient, resonanceWidthMultiplier, pointsPerWidth, applyRanges, transitionWidth, autoTolerance, tempIsBeamProfile, beamProfile, beamTpcSigma, beamTruncation, beamPhotodissociation == 1};
+      TargetIntData newLine = {isActive, segmentsList.remove('\"'), numPoints, tempIsConvolution, sigma, tempIsTargetIntegration, density, stoppingPowerEq.remove('\"'), numParameters, parameters, tempIsQCoefficient, qCoefficients, tempIsConvCoefficient, convCoefficients, convolutionEq.remove('\"'), tempIsStraggling, stragglingCoefficient, resonanceWidthMultiplier, pointsPerWidth, applyRanges, transitionWidth, autoTolerance, tempIsBeamProfile, beamProfile, beamTpcSigma, beamTruncation, beamPhotodissociation == 1, tempIsUdr, udrFile, udrFlightPath, udrBurst, udrChannel, udrCentred != 0, tempSigmaLab};
       addLine(newLine);
     }
   }
@@ -789,4 +912,36 @@ void TargetIntTab::showInfo(int which, QString title) {
     } else
       infoDialog[which]->raise();
   }
+}
+
+void TargetIntTab::setModels(SegmentsDataModel *segments, PairsModel *pairs) {
+  segmentsModel_ = segments;
+  pairsModel_ = pairs;
+}
+
+double TargetIntTab::conversionFactorFor(const QString &segmentsList) const {
+  if (!segmentsModel_ || !pairsModel_) return 0.0;
+  QList<SegmentsDataData> segments = segmentsModel_->getLines();
+  QList<PairsData> pairs = pairsModel_->getPairs();
+  double factor = 0.0;
+  for (const QString &item : segmentsList.split(',', Qt::SkipEmptyParts)) {
+    QString range = item.trimmed();
+    int dash = range.indexOf('-', 1);
+    bool okLo = false, okHi = false;
+    int lo = (dash > 0 ? range.left(dash) : range).toInt(&okLo);
+    int hi = (dash > 0 ? range.mid(dash + 1) : range).toInt(&okHi);
+    if (!okLo || !okHi || lo < 1 || hi < lo) return 0.0;
+    for (int key = lo; key <= hi; key++) {
+      if (key > segments.size()) return 0.0;
+      int pairIndex = segments.at(key - 1).entrancePairIndex;
+      if (pairIndex < 1 || pairIndex > pairs.size()) return 0.0;
+      const PairsData &pair = pairs.at(pairIndex - 1);
+      double f = pair.heavyM / (pair.lightM + pair.heavyM);
+      if (factor == 0.0)
+        factor = f;
+      else if (std::fabs(f - factor) > 1.0e-9 * factor)
+        return 0.0;
+    }
+  }
+  return factor;
 }

@@ -16,8 +16,9 @@
  * past the bound (J = -0.54, penalty 2.9e5, as tests/park_formalism section 4);
  * free: that width and the 2- level's first width (J > 0).  Two variants:
  *   A  as is -- the analytic adjoint applies;
- *   B  a 0.1 keV Gaussian convolution on the analyzing-power segment: sub-
- *      points under A_y are not handled by the adjoint, which bails, and
+ *   B  a 0.1 keV Gaussian convolution on the analyzing-power segment with an
+ *      automatic-application tolerance, which the adjoint does not handle
+ *      (it bails; a convolved A_y alone no longer makes it), and
  *      Gradient() is finite differences of Chi2Value throughout.
  * Checked, at the starting point:
  *   - AccumulateEGammaGradient succeeds for A and bails for B (the fallback is
@@ -100,7 +101,10 @@ bool writeProject(const std::string &source, const std::string &target, bool con
       }
     }
     out << line << "\n";
-    if (line == "<targetInt>" && convolve) out << "1 \"4\" 10 1 0.0001 0 0 \"\" 0 0 0 0 \"\" 0\n";
+    // The automatic-application tolerance (last token, 1e-12: the fold is
+    // always applied) is what makes the adjoint bail; a convolved A_y did
+    // until dev's target-integrated A_y adjoint (2e726db).
+    if (line == "<targetInt>" && convolve) out << "1 \"4\" 10 1 0.0001 0 0 \"\" 0 0 0 0 \"\" 0 \"\" 0 1e-12\n";
   }
   return wallDone;
 }

@@ -1,4 +1,14 @@
 #include "AZURECalc.h"
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cstdlib>
+#include <string>
+#include <map>
+#include <set>
+#include <fstream>
+#include <mutex>
+#include <sstream>
 #include "ParameterLabel.h"
 #include "Config.h"
 #include "CNuc.h"
@@ -13,6 +23,7 @@
 #include <iostream>
 #include <iomanip>
 #include <thread>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -25,9 +36,60 @@
 
 #ifdef _OPENMP
 #include <omp.h>
+
+// setenv/unsetenv are POSIX and missing from the Windows (MinGW) runtime.
+// There, _putenv("NAME=value") sets a variable for getenv and "NAME=" removes it.
+namespace {
+void setEnvVar(const char *name, const char *value) {
+#ifdef _WIN32
+  static thread_local std::string entry;
+  entry = std::string(name) + "=" + value;
+  _putenv(entry.c_str());
+#else
+  setenv(name, value, 1);
+#endif
+}
+void unsetEnvVar(const char *name) {
+#ifdef _WIN32
+  static thread_local std::string entry;
+  entry = std::string(name) + "=";
+  _putenv(entry.c_str());
+#else
+  unsetenv(name);
+#endif
+}
+}  // namespace
 #endif
 
 namespace {
+
+// Value returned to Minuit2 for a non-finite or absurdly large chi-squared.
+constexpr double kChi2Ceiling = 1.0e100;
+
+bool InParallelRegion() {
+#ifdef _OPENMP
+  return omp_in_parallel();
+#else
+  return false;
+#endif
+}
+
+// Central-difference step for parameter x0.  The usual scale*(|x0| + 1) is
+// absolute for |x0| < 1, which is right for widths and energies that pass
+// through zero but not for a normalization: a yield normalized in absolute
+// units (11B+a CASPAR thick-target yields, n ~ 2e-5) moved by 1e-6, i.e. 5%,
+// and its finite-difference gradient came out 14x too large.  A norm is
+// positive and scale-free, so its step is relative.
+double FdStep(ParamKind kind, double x0, double scale) {
+  if (kind == ParamKind::Norm && x0 != 0.0) return scale * std::fabs(x0);
+  return scale * (std::fabs(x0) + 1.0);
+}
+
+// AZURE_GRAD_CHECK on the Jacobian path: the Jacobian-path gradient, handed to
+// the finite-difference check that the adjoint gradient runs, so both are
+// compared with the same finite differences before any exit.
+std::vector<double> g_jacGradForCheck;
+bool g_deferCheckExit = false;
 
 // chi^2 contribution of a single segment: its data term plus its own
 // energy-shift nuisance penalty, evaluated at the segment's current shift.
@@ -51,22 +113,179 @@ double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config,
     double err = pt->GetCMCrossSectionError() * norm;
     if (err != 0.0) chi += (r * r) / (err * err);
   }
-  if (segment->IsVaryEnergyShift()) {
-    double sh = segment->GetEnergyShift();
-    double shn = segment->GetNominalEnergyShift();
-    double she = segment->GetEnergyShiftError();
-    if (she != 0.0) chi += pow((sh - shn) / she, 2.0);
-  }
-  if (segment->IsVaryEnergyShiftSqrt()) {
-    double sq = segment->GetEnergyShiftSqrt();
-    double sqn = segment->GetNominalEnergyShiftSqrt();
-    double sqe = segment->GetEnergyShiftSqrtError();
-    if (sqe != 0.0) chi += pow((sq - sqn) / sqe, 2.0);
-  }
+  segment->AddShiftPenalty(chi);
   return chi;
 }
 
+// The shift penalties as (full parameter index, nominal, sigma), for the code
+// that needs a penalty's derivatives rather than its value: d/dx = 2 (x - nominal)
+// / sigma^2, curvature 2 / sigma^2.  Exactly the terms ESegment::AddShiftPenalty
+// adds, so the gradient, G2 and the least-squares priors stay consistent with
+// chi^2.
+template <class F>
+void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
+  for (int s = 1; s <= data->NumSegments(); s++) {
+    ESegment *seg = data->GetSegment(s);
+    if (!seg) continue;
+    int idx;
+    if (seg->IsVaryEnergyShift() && seg->GetEnergyShiftError() != 0.0 && (idx = pmap.EnergyShiftIndex(s)) >= 0)
+      f(idx, seg->GetNominalEnergyShift(), seg->GetEnergyShiftError());
+    if (seg->IsVaryEnergyShiftSqrt() && seg->GetEnergyShiftSqrtError() != 0.0 &&
+        (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0)
+      f(idx, seg->GetNominalEnergyShiftSqrt(), seg->GetEnergyShiftSqrtError());
+    if (seg->OwnsShiftFn() && seg->HasShiftFn())
+      for (int j = 0; j < seg->NumShiftFnParams(); j++)
+        if (seg->IsVaryShiftFn(j) && seg->GetShiftFnErrors()[j] != 0.0 && (idx = pmap.EnergyShiftFnIndex(s, j)) >= 0)
+          f(idx, seg->GetNominalShiftFnValues()[j], seg->GetShiftFnErrors()[j]);
+  }
+}
+
+// The segments (1-based) whose points one energy-shift parameter moves, and how to
+// set it on them: its own segment, plus every follower of its shift group for a
+// group's constant shift and for each shift-function parameter.
+struct ShiftParamTarget {
+  ParamKind kind;
+  int fnTerm;
+  std::vector<int> segs;
+  double Get(EData *ld) const {
+    ESegment *seg = ld->GetSegment(segs.front());
+    if (kind == ParamKind::EnergyShiftSqrt) return seg->GetEnergyShiftSqrt();
+    if (kind == ParamKind::EnergyShiftFn) return seg->GetShiftFnValues()[fnTerm];
+    return seg->GetEnergyShift();
+  }
+  void Set(EData *ld, double v) const {
+    for (int s : segs) {
+      ESegment *seg = ld->GetSegment(s);
+      if (kind == ParamKind::EnergyShiftSqrt) seg->SetEnergyShiftSqrt(v);
+      else if (kind == ParamKind::EnergyShiftFn) seg->SetShiftFnValue(fnTerm, v);
+      else seg->SetEnergyShift(v);
+    }
+  }
+  // Every member self-contained (no components, not a total-capture sum), so the
+  // parameter moves these segments' rows and nothing else.
+  bool Local(EData *ld) const {
+    for (int s : segs) {
+      ESegment *seg = ld->GetSegment(s);
+      if (seg->HasComponents() || seg->IsTotalCapture()) return false;
+    }
+    return true;
+  }
+};
+
+ShiftParamTarget ShiftTargets(EData *ld, const ParamDesc &d) {
+  ShiftParamTarget t{d.kind, d.fnTerm, {d.segment}};
+  const int pos = d.segment - 1;
+  for (int s = 1; s <= ld->NumSegments(); s++) {
+    if (s == d.segment) continue;
+    ESegment *seg = ld->GetSegment(s);
+    if ((d.kind == ParamKind::EnergyShift && seg->GetShiftLeaderPos() == pos) ||
+        (d.kind == ParamKind::EnergyShiftFn && seg->GetShiftFnSourcePos() == pos))
+      t.segs.push_back(s);
+  }
+  return t;
+}
+
 }  // namespace
+
+/*!
+ * AZURE_DUMP_NONFINITE=1 (optional threshold: AZURE_DUMP_NONFINITE=<chi2>, default 1e10): whenever a
+ * chi-squared evaluation is non-finite or above the threshold, append to nonfinite_dump.txt (in the
+ * working directory) the parameters that moved most from the last gradient point, the segments with
+ * the largest or non-finite contributions, and their offending points (with any non-finite
+ * target-effect sub-points).  At most 20 dumps per run.
+ */
+void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld) const {
+  double threshold = std::atof(std::getenv("AZURE_DUMP_NONFINITE"));
+  if (!(threshold > 1.0)) threshold = 1.0e10;
+  if (std::isfinite(chi) && chi <= threshold) return;
+  static std::atomic<int> nDump{0};
+  const int d = ++nDump;
+  if (d > 20) return;
+  AZUREParams names;
+  compound()->FillMnParams(names.GetMinuitParams(), &configure());
+  data()->FillMnParams(names.GetMinuitParams());
+  const auto &mp = names.GetMinuitParams();
+  std::ostringstream out;
+  out << "==== dump " << d << ": chi2 " << chi << " (threshold " << threshold << ")\n";
+  std::vector<double> base, g2 = g2Cache_, gl;
+  {
+    std::lock_guard<std::mutex> lk(lastGradMutex_);
+    base = lastGradP_;
+    gl = lastGrad_;
+  }
+  out << "-- parameters, sorted by |p - p_lastgradient| / max(|p_lastgradient|, 1e-3)"
+      << (base.size() == p.size() ? "" : " (no gradient point yet: |p| only)") << "\n";
+  std::vector<std::pair<double, int>> moved;
+  for (size_t i = 0; i < p.size(); i++) {
+    if ((int)i < (int)mp.Params().size() && mp.Parameter(i).IsFixed()) continue;
+    const double b = base.size() == p.size() ? base[i] : 0.0;
+    moved.push_back({std::fabs(p[i] - b) / std::max(std::fabs(b), 1.0e-3), (int)i});
+  }
+  std::sort(moved.rbegin(), moved.rend());
+  for (size_t k = 0; k < moved.size() && k < 40; k++) {
+    const int i = moved[k].second;
+    const double b = base.size() == p.size() ? base[i] : 0.0;
+    out << "  idx " << std::setw(4) << i << "  " << std::setw(34) << std::left
+        << ((int)i < (int)mp.Params().size() ? mp.GetName(i) : std::string("?")) << std::right
+        << "  now " << std::setw(14) << p[i] << "  lastgrad " << std::setw(14) << b
+        << "  rel.move " << moved[k].first;
+    if (gl.size() == p.size()) out << "  grad " << gl[i];
+    if (g2.size() == p.size()) out << "  G2 " << g2[i] << "  -grad/G2 " << (g2[i] != 0.0 && gl.size() == p.size() ? -gl[i] / g2[i] : 0.0);
+    out << "\n";
+  }
+  out << "-- segments with non-finite or largest chi2\n";
+  std::vector<std::pair<double, int>> segs;
+  for (int i = 1; i <= ld->NumSegments(); i++) {
+    ESegment *seg = ld->GetSegment(i);
+    if (!seg) continue;
+    double c = 0.0;
+    for (int pid = 1; pid <= seg->NumPoints(); pid++) {
+      EPoint *pt = seg->GetPoint(pid);
+      if (!pt) continue;
+      const double r = pt->GetFitCrossSection() - pt->GetCMCrossSection() * seg->GetNorm();
+      const double e = pt->GetCMCrossSectionError() * seg->GetNorm();
+      if (e != 0.0) c += r * r / (e * e);
+    }
+    segs.push_back({std::isfinite(c) ? c : std::numeric_limits<double>::max(), i});
+  }
+  std::sort(segs.rbegin(), segs.rend());
+  for (size_t k = 0; k < segs.size() && k < 5; k++) {
+    ESegment *seg = ld->GetSegment(segs[k].second);
+    out << "  segment " << segs[k].second << " key " << seg->GetSegmentKey() << " (" << seg->GetEntranceKey() << "->"
+        << seg->GetExitKey() << ") chi2 " << (segs[k].first == std::numeric_limits<double>::max() ? std::string("NON-FINITE") : std::to_string(segs[k].first))
+        << "  norm " << seg->GetNorm() << " shift " << seg->GetEnergyShift() << " sqrtshift " << seg->GetEnergyShiftSqrt() << "\n";
+    int shown = 0;
+    for (int pid = 1; pid <= seg->NumPoints() && shown < 6; pid++) {
+      EPoint *pt = seg->GetPoint(pid);
+      if (!pt) continue;
+      const double fit = pt->GetFitCrossSection();
+      const double e = pt->GetCMCrossSectionError() * seg->GetNorm();
+      const double pull = (e != 0.0) ? (fit - pt->GetCMCrossSection() * seg->GetNorm()) / e : 0.0;
+      if (std::isfinite(fit) && std::fabs(pull) < 1.0e4) continue;
+      shown++;
+      out << "    point " << pid << " Elab " << pt->GetLabEnergy() << " Ecm " << pt->GetCMEnergy() << " angle "
+          << pt->GetCMAngle() << " fit " << fit << " data " << pt->GetCMCrossSection() << " pull " << pull;
+      int nBad = 0;
+      double firstBadE = 0.0, firstBadS = 0.0;
+      for (int j = 1; j <= pt->NumSubPoints(); j++) {
+        const double sv = pt->GetSubPoint(j)->GetFitCrossSection();
+        if (!std::isfinite(sv) || std::fabs(sv) > 1.0e10) {
+          if (!nBad) { firstBadE = pt->GetSubPoint(j)->GetCMEnergy(); firstBadS = sv; }
+          nBad++;
+        }
+      }
+      if (pt->NumSubPoints() > 0)
+        out << "  sub-points " << pt->NumSubPoints() << " bad " << nBad
+            << (nBad ? " first at Ecm " + std::to_string(firstBadE) + " value " + std::to_string(firstBadS) : std::string());
+      out << "\n";
+    }
+  }
+  static std::mutex fileMutex;
+  std::lock_guard<std::mutex> lk(fileMutex);
+  std::ofstream f("nonfinite_dump.txt", std::ios::app);
+  f << out.str();
+  std::cerr << "[nonfinite] chi2 " << chi << ": dump " << d << " written to nonfinite_dump.txt" << std::endl;
+}
 
 double AZURECalc::operator()(const vector_r &p) const {
   int thisIteration = data()->Iterations();
@@ -94,10 +313,25 @@ double AZURECalc::operator()(const vector_r &p) const {
   }
 
   // Fill Compound Nucleus From Minuit Parameters
+  const auto te0 = std::chrono::steady_clock::now();
   localCompound->FillCompoundFromParams(p);
   localData->FillNormsFromParams(p);
   localData->FillEnergyShiftsFromParams(p, localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  const auto te1 = std::chrono::steady_clock::now();
+
+  // Calculate all points in one parallel pass when not already inside a parallel
+  // region (MIGRAD with the analytic gradient, line searches, plain calculations).
+  const bool pre = PrecalculatePoints(localCompound, localData);
+  if (std::getenv("AZURE_GRAD_TIMING")) {
+    static std::atomic<int> evals{0};
+    const int c = ++evals;
+    if (c <= 20 || c % 50 == 0) {
+      auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
+      std::cerr << "[eval-timing] evaluation " << c << ": parameters + energy shifts " << ms(te0, te1)
+                << " ms, points " << ms(te1, std::chrono::steady_clock::now()) << " ms" << std::endl;
+    }
+  }
 
   // Process segments with components - use new integrated calculation method
   double chiSquared = 0.0;
@@ -106,7 +340,7 @@ double AZURECalc::operator()(const vector_r &p) const {
     if (segment) {
       // Recalculate points using the new combined calculation method
       for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-        double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
+        double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData, pre);
         EPoint *point = segment->GetPoint(pointIdx + 1);
         if (point) {
           point->SetFitCrossSection(theoreticalValue);
@@ -147,24 +381,8 @@ double AZURECalc::operator()(const vector_r &p) const {
         }
       }
 
-      // Add energy shift chi-squared contribution
-      if (segment->IsVaryEnergyShift()) {
-        double energyShift = segment->GetEnergyShift();
-        double energyShiftNominal = segment->GetNominalEnergyShift();
-        double energyShiftError = segment->GetEnergyShiftError();
-        if (energyShiftError != 0.) {
-          chiSquared += pow((energyShift - energyShiftNominal) / energyShiftError, 2.0);
-        }
-      }
-      // ... and the same for the sqrt(E) energy-shift coefficient
-      if (segment->IsVaryEnergyShiftSqrt()) {
-        double sq = segment->GetEnergyShiftSqrt();
-        double sqn = segment->GetNominalEnergyShiftSqrt();
-        double sqe = segment->GetEnergyShiftSqrtError();
-        if (sqe != 0.) {
-          chiSquared += pow((sq - sqn) / sqe, 2.0);
-        }
-      }
+      // Add the energy-shift penalties
+      segment->AddShiftPenalty(chiSquared);
 
       if (thmGroup < 0) {
         segment->SetSegmentChiSquared(segmentChiSquared);
@@ -183,6 +401,14 @@ double AZURECalc::operator()(const vector_r &p) const {
     chiSquared += parkPenalty;
     localData->SetParkPenalty(parkPenalty);
   }
+  // Isotopic abundances: their priors and the sum-to-one term.
+  if (localCompound->HasAbundanceBlock()) {
+    double abundancePenalty = localCompound->AbundancePenalty(configure().abundanceSumSigma);
+    chiSquared += abundancePenalty;
+    localData->SetAbundancePenalty(abundancePenalty);
+  }
+
+  if (std::getenv("AZURE_DUMP_NONFINITE")) DumpNonFinite(p, chiSquared, localCompound, localData);
 
   if (!localData->IsErrorAnalysis() && thisIteration != 0) {
     if (thisIteration % 10 == 0) configure().outStream
@@ -202,11 +428,15 @@ double AZURECalc::operator()(const vector_r &p) const {
     // delete localData;
   }
 
-  // Make a check if chiSquared is NaN
-  if (std::isnan(chiSquared)) {
-    // In that case return infinite since MINUIT2 can have issues with NaN values
-    return std::numeric_limits<double>::infinity();
-  }
+  // A non-finite (or absurdly large) chi-squared must reach Minuit2 as a large
+  // FINITE number.  MnLineSearch fits a parabola through the function values;
+  // +inf (which this used to return for NaN) turns that parabola into NaN, the
+  // line search returns garbage and MIGRAD ends with no status message -- the
+  // 11B+a pol_iso --use-gradient fit stopped that way after 30 evaluations
+  // (2026-10-11).  A finite ceiling makes the step simply look very bad, so the
+  // line search backtracks.  The ceiling stays far above any real chi-squared
+  // and far below overflow in the parabola arithmetic.
+  if (!std::isfinite(chiSquared) || chiSquared > kChi2Ceiling) chiSquared = kChi2Ceiling;
 
   if (configure().stopFlag && isFit)
     return 0.;
@@ -251,6 +481,8 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
     ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
     if (mp.Params().size() == p.size())
       for (unsigned int i = 0; i < p.size(); i++) mp.SetValue(i, p[i]);
+    ld->SyncShiftGroupParams(mp);
+    ld->SyncNormGroupParams(mp);
     WriteParameters(params, configure());
     ld->WriteOutputFiles(configure(), true);
     lc->TransformOut(configure());
@@ -264,32 +496,76 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
   }
 }
 
-double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
-  // Side-effect-free chi-squared (mirrors the chi-squared math of operator()).
-  // With thmOnly=true, only THM (HOES) segments are computed and summed; this is
-  // used when invoking Gradient() to finite-difference the THM contribution (in this
-  // way the computing cost scales with the number of THM points alone, rather than the whole dataset).
-  // The nuisance penalty is excluded there because it is per-parameter and it is analitically treated by Gradient().
-  // In a MIGRAD fit the copies come from the pools operator() fills (no copy
-  // of the whole data per call; a pooled copy is refilled from p, and its
-  // sub-point grids are rebuilt where their anchors differ, so the values are
-  // those of a fresh clone).  Elsewhere (LM, GSL-LM) fresh clones, as before:
-  // a pool holds max(4, threads) copies, which those fits do not need.
-  const bool pooled = pools_initialized_;
-  CNuc *lc = pooled ? GetPooledCNuc() : compound()->Clone();
-  EData *ld = pooled ? GetPooledEData() : data()->Clone();
+bool AZURECalc::PrecalculatePoints(CNuc *lc, EData *ld, bool thmOnly) const {
+#ifdef _OPENMP
+  if (omp_in_parallel()) return false;
+#else
+  return false;
+#endif
+  if (std::getenv("AZURE_SERIAL_CHI2")) return false;
+  std::vector<EPoint *> work;
+  std::set<ESegment *> seen;
+  auto add = [&](ESegment *seg) {
+    if (!seg || !seen.insert(seg).second) return;
+    for (int p = 1; p <= seg->NumPoints(); p++) {
+      EPoint *pt = seg->GetPoint(p);
+      if (pt && !pt->IsMapped()) work.push_back(pt);
+    }
+  };
+  for (int i = 1; i <= ld->NumSegments(); i++) {
+    ESegment *seg = ld->GetSegment(i);
+    if (!seg || (thmOnly && !seg->IsTHM())) continue;
+    add(seg);
+    for (ESegment *comp : seg->GetComponentSegments()) add(comp);
+  }
+  // A host also calculates every point mapped onto it (EData::MapData), so
+  // its work grows with that number: one Fowler-type angular distribution at
+  // a single energy is one item.  Largest items first, one at a time, so such
+  // an item does not end up last on one thread.  Each item is calculated the
+  // same way whatever the order.
+  std::vector<double> cost(work.size());
+  for (size_t k = 0; k < work.size(); k++)
+    cost[k] = (1.0 + work[k]->NumSubPoints()) * (1.0 + work[k]->NumLocalMappedPoints());
+  std::vector<size_t> order(work.size());
+  for (size_t k = 0; k < order.size(); k++) order[k] = k;
+  std::stable_sort(order.begin(), order.end(), [&cost](size_t a, size_t b) { return cost[a] > cost[b]; });
+  std::vector<EPoint *> sorted(work.size());
+  for (size_t k = 0; k < order.size(); k++) sorted[k] = work[order[k]];
+  work.swap(sorted);
+  const Config &cfg = configure();
+#pragma omp parallel for schedule(dynamic, 1)
+  for (int k = 0; k < (int)work.size(); k++) {
+    try {
+      work[k]->Calculate(lc, cfg);
+    } catch (...) {
+      work[k]->SetFitCrossSection(0.0);  // as the per-point path, which returns 0 on failure
+    }
+  }
+  return true;
+}
+
+/*!
+ * The chi-squared of p on the working copies lc and ld (mirrors the chi-squared
+ * math of operator()).  With thmOnly, only THM (HOES) segments are computed and
+ * summed: Gradient() finite-differences the THM contribution that way, at a
+ * cost that scales with the THM points alone.  The nuisance, Park and abundance
+ * penalties are left out there: Gradient() adds them analytically.
+ */
+double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<double> *segChis, bool thmOnly) const {
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
   ld->FillEnergyShiftsFromParams(p, ld, lc, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
+  const bool pre = PrecalculatePoints(lc, ld, thmOnly);
 
   double chiSquared = 0.0;
+  if (segChis) segChis->assign(ld->NumSegments() + 1, 0.0);
   for (int i = 1; i <= ld->NumSegments(); i++) {
     ESegment *segment = ld->GetSegment(i);
     if (!segment) continue;
     if (thmOnly && !segment->IsTHM()) continue;
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
-      double th = segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld);
+      double th = segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld, pre);
       EPoint *pt = segment->GetPoint(pid + 1);
       if (pt) pt->SetFitCrossSection(th);
     }
@@ -315,46 +591,117 @@ double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
       double nerr = nom / 100.0 * segment->GetNormError();
       if (nerr != 0.0) chiSquared += pow((dataNorm - nom) / nerr, 2.0);
     }
-    if (segment->IsVaryEnergyShift()) {
-      double sh = segment->GetEnergyShift();
-      double shn = segment->GetNominalEnergyShift();
-      double she = segment->GetEnergyShiftError();
-      if (she != 0.0) chiSquared += pow((sh - shn) / she, 2.0);
-    }
-    if (segment->IsVaryEnergyShiftSqrt()) {
-      double sq = segment->GetEnergyShiftSqrt();
-      double sqn = segment->GetNominalEnergyShiftSqrt();
-      double sqe = segment->GetEnergyShiftSqrtError();
-      if (sqe != 0.0) chiSquared += pow((sq - sqn) / sqe, 2.0);
-    }
+    if (segChis) (*segChis)[i] = segChi;
+    segment->AddShiftPenalty(chiSquared);
     chiSquared += segChi;
   }
-  if (!thmOnly && limitsManager_) chiSquared += CalculateNuisanceChiSquared(p);
+  if (thmOnly) return chiSquared;
+  if (limitsManager_) chiSquared += CalculateNuisanceChiSquared(p);
   // Park's J > 0 wall, as operator() adds it: the finite-difference fallback of
   // Gradient() differentiates this function, and LM / GSL-LM take it as their
-  // cost.  Not in the THM-only part, whose differences are added to an
-  // analytic gradient that already carries the wall (AddParkPenaltyGradient).
-  if (!thmOnly && (configure().paramMask & Config::USE_PARK_FORMALISM)) chiSquared += lc->ParkNormPenalty();
-
-  if (pooled) {
-    ReturnPooledCNuc(lc);
-    ReturnPooledEData(ld);
-  } else {
-    delete lc;
-    delete ld;
-  }
+  // cost.
+  if (configure().paramMask & Config::USE_PARK_FORMALISM) chiSquared += lc->ParkNormPenalty();
+  // The working copy lc holds the abundances of p (FillCompoundFromParams above); compound() holds whatever the
+  // last full evaluation left there, so using it here froze the abundance prior in the LM/GSL cost and in the
+  // finite-difference gradient columns (found 2026-10-17 by the isospin-levels session).
+  if (lc->HasAbundanceBlock()) chiSquared += lc->AbundancePenalty(configure().abundanceSumSigma);
   return chiSquared;
 }
 
+double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
+  // Side-effect-free chi-squared (mirrors the chi-squared math of operator()).
+  // Pooled working copies keep their applied energy shifts and mapping between
+  // calls; a fresh Clone() re-shifts every shifted segment and rebuilds the
+  // mapping each time.
+  CNuc *lc = GetPooledCNuc();
+  EData *ld = GetPooledEData();
+  std::vector<double> segPooled;
+  const bool poolCheck = std::getenv("AZURE_POOL_CHECK") != nullptr;
+  const double chi = Chi2On(lc, ld, p, poolCheck ? &segPooled : nullptr, thmOnly);
+  ReturnPooledCNuc(lc);
+  ReturnPooledEData(ld);
+  if (poolCheck) {
+    static std::atomic<int> pc{0};
+    if (++pc <= 5) {
+      CNuc *fc = compound()->Clone();
+      EData *fd = data()->Clone();
+      std::vector<double> segFresh;
+      setEnvVar("AZURE_SERIAL_CHI2", "1");  // reference: per-point (serial) path on a fresh copy
+      const double chiFresh = Chi2On(fc, fd, p, &segFresh, thmOnly);
+      unsetEnvVar("AZURE_SERIAL_CHI2");
+      delete fc;
+      delete fd;
+      std::cerr << "[pool-check] pooled+parallel " << chi << " fresh+serial " << chiFresh << std::endl;
+      std::vector<std::pair<double, int>> d;
+      for (size_t i = 1; i < segFresh.size() && i < segPooled.size(); i++)
+        d.push_back({std::fabs(segPooled[i] - segFresh[i]), (int)i});
+      std::sort(d.rbegin(), d.rend());
+      for (int k = 0; k < 6 && k < (int)d.size() && d[k].first > 1e-6; k++)
+        std::cerr << "[pool-check]   segment " << d[k].second << ": pooled " << segPooled[d[k].second] << " fresh "
+                  << segFresh[d[k].second] << std::endl;
+    }
+  }
+  return chi;
+}
+
 std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
+  {
+    std::lock_guard<std::mutex> lk(lastGradMutex_);
+    lastGradP_ = p;
+  }
   std::vector<double> grad(p.size(), 0.0);
+  const auto tg0 = std::chrono::steady_clock::now();
+  // With G2 enabled, one residual Jacobian gives both the gradient (2 J^T r +
+  // penalties) and Minuit's G2, which it requests at the same point next.
+  if (g2Enabled_ && !std::getenv("AZURE_GRAD_ADJOINT") && GradientFromJacobian(p, grad)) {
+    if (std::getenv("AZURE_GRAD_TIMING")) {
+      static std::atomic<int> jc{0};
+      int c = ++jc;
+      if (c <= 5 || c % 50 == 0)
+        std::cerr << "[grad-timing] call " << c << " (Jacobian path, gradient + G2): "
+                  << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tg0).count() << " ms" << std::endl;
+    }
+    // AZURE_GRAD_CHECK: on the first call also take the adjoint gradient (which
+    // itself runs the sampled finite-difference check) and compare all components.
+    static std::atomic<bool> jChecked{false};
+    if (std::getenv("AZURE_GRAD_CHECK") && !jChecked.exchange(true)) {
+      setEnvVar("AZURE_GRAD_ADJOINT", "1");
+      g_jacGradForCheck = grad;
+      g_deferCheckExit = true;
+      std::vector<double> ga = Gradient(p);
+      g_deferCheckExit = false;
+      g_jacGradForCheck.clear();
+      unsetEnvVar("AZURE_GRAD_ADJOINT");
+      AZUREParams fpc;
+      compound()->FillMnParams(fpc.GetMinuitParams(), &configure());
+      data()->FillMnParams(fpc.GetMinuitParams());
+      const int nMnc = fpc.GetMinuitParams().Params().size();
+      double worst = 0.0; int worstIdx = -1, nFree = 0;
+      for (size_t i = 0; i < grad.size() && i < ga.size(); i++) {
+        if ((int)i < nMnc && fpc.GetMinuitParams().Parameter(i).IsFixed()) continue;  // Minuit ignores these
+        nFree++;
+        if (grad[i] == 0.0 && ga[i] == 0.0) continue;
+        const double rel = std::fabs(grad[i] - ga[i]) / (std::fabs(grad[i]) + std::fabs(ga[i]) + 1.0);
+        if (rel > worst) { worst = rel; worstIdx = (int)i; }
+      }
+      std::cerr << "[grad-check] Jacobian-path vs adjoint gradient over " << nFree << " free parameters: worst relative difference " << worst << " at idx "
+                << worstIdx << (worstIdx >= 0 ? " (" + std::to_string(grad[worstIdx]) + " vs " + std::to_string(ga[worstIdx]) + ")" : "")
+                << std::endl;
+      if (std::string(std::getenv("AZURE_GRAD_CHECK")) == "exit") std::exit(0);
+    }
+    {
+      std::lock_guard<std::mutex> lk(lastGradMutex_);
+      lastGrad_ = grad;
+    }
+    return grad;
+  }
   const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
 
   // --- Analytic energy / reduced-width block via the shared adjoint engine. ---
-  // Pooled copies in a MIGRAD fit, as in Chi2Value.
-  const bool pooled = pools_initialized_;
-  CNuc *lc = pooled ? GetPooledCNuc() : compound()->Clone();
-  EData *ld = pooled ? GetPooledEData() : data()->Clone();
+  // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh
+  // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
+  CNuc *lc = GetPooledCNuc();
+  EData *ld = GetPooledEData();
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
   ld->FillEnergyShiftsFromParams(p, ld, lc, &configure());
@@ -386,19 +733,22 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     double r = model - dataval * norm;
     double err = cmErr * norm;
     if (err == 0.0) return 0.0;
-    if (seg->IsVaryNorm() && norm != 0.0 && i >= 1 && i < (int)normData.size()) {
+    // A norm-group follower's points move its leader's norm (o), the one parameter.
+    const int o = ld->NormOwner(i);
+    if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->GetSegment(o)->IsVaryNorm()) {
       double e2 = cmErr * cmErr;
       // fitBarFn runs inside the parallel point loop of AccumulateEGammaGradient,
-      // and all points of a segment share the same normData[i], so guard the
+      // and all points of a segment share the same normData[o], so guard the
       // accumulation.
       double dNorm = -2.0 * r * dataval / (e2 * norm * norm) - 2.0 * r * r / (e2 * norm * norm * norm);
 #pragma omp atomic
-      normData[i] += dNorm;
+      normData[o] += dNorm;
     }
     return 2.0 * r / (err * err);
   };
 
   bool eg = AccumulateEGammaGradient(lc, ld, configure(), pmap, sdp, fitBarFn, accum);
+  const auto tg1 = std::chrono::steady_clock::now();
   if (!eg && std::getenv("AZURE_GRAD_DEBUG")) {
     std::cerr << "[grad] analytic energy/gamma adjoint bailed -> full finite "
                  "differences (no speed-up). An unsupported segment/config is "
@@ -407,11 +757,12 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   }
   if (eg) {
     AddParkPenaltyGradient(lc, configure(), accum); // Park J > 0 wall
-    accum.Scatter(pmap, grad);                      // energies + reduced widths
+    AddAbundancePenaltyGradient(lc, configure(), accum);  // abundance priors, sum-to-one
+    accum.Scatter(pmap, grad);                      // energies + reduced widths, abundances
     AddNuisanceGradient(p, grad);                   // nuisance penalty
     for (int s = 1; s <= ld->NumSegments(); s++) {  // normalizations
       ESegment *seg = ld->GetSegment(s);
-      if (!seg || !seg->IsVaryNorm()) continue;
+      if (!seg || !seg->IsVaryNorm() || seg->IsNormGroupFollower()) continue;  // a follower's norm is fixed
       // THM segments never enter the analytic accumulation (their normData
       // stays 0); their norm gradient -- data term AND penalty -- comes from
       // the THM-only finite differences below.
@@ -428,6 +779,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
 
   // Fixed-parameter mask: Minuit ignores the gradient of fixed parameters, so
   // do not waste finite differences on them (large fits fix most energy shifts).
+  // The minimizer's flags (FixedMask), not only the file's.
   const std::vector<bool> fixedMask = FixedMask();
   const int nMn = (int)fixedMask.size();
 
@@ -466,8 +818,11 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
 
   // Segment-local energy-shift gradient is exact only when a shift's effect is
   // confined to its own segment's data term.  A dataset that maps points across
-  // segments breaks that confinement, so detect any mapping once and, if
+  // segments breaks that confinement, so detect any such mapping once and, if
   // present, keep every shift on the (correct) full-dataset finite difference.
+  // Mapping within a segment (the only kind EData::MapData makes) keeps it:
+  // host and mapped point move together, and SegmentLocalChi2 walks the
+  // segment in index order, host first.
   // Likewise, nuisance penalties handled by the limits manager can couple a
   // shift to the global chi^2, so disable the local path when one is active.
   bool datasetHasMapping = false;
@@ -476,17 +831,17 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     if (!seg) continue;
     for (int pid = 0; pid < seg->NumPoints(); pid++) {
       EPoint *pt = seg->GetPoint(pid + 1);
-      if (pt && pt->IsMapped()) {
+      if (pt && pt->IsMapped() && pt->GetMap().segment != s) {
         datasetHasMapping = true;
         break;
       }
     }
   }
-  const bool localShiftOk = !datasetHasMapping && (limitsManager_ == nullptr);
+  const bool localShiftOk = !datasetHasMapping && !HasNuisanceParameters();
 
-  // --- Finite differences only for what is left: non-fixed energy shifts, and
-  //     the THM-segment contribution to energies/gammas/norms, and (if the
-  //     analytic path bailed) the energy/gamma and norm blocks too. ---
+  // --- Finite differences only for what is left: non-fixed energy shifts, the
+  //     THM-segment contribution to energies/gammas/norms, and (if the analytic
+  //     path bailed) the energy/gamma and norm blocks too. ---
   for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
     if (idx < nMn && fixedMask[idx]) continue;
     ParamKind kind = pmap.Desc(idx).kind;
@@ -503,7 +858,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         if (!seg || !seg->IsTHM()) continue;
       }
       double x0 = p[idx];
-      double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+      double h = FdStep(kind, x0, 1.0e-6);
       vector_r pp = p;
       pp[idx] = x0 + h;
       vector_r pm = p;
@@ -515,31 +870,36 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       continue;
     }
     double x0 = p[idx];
-    double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+    double h = FdStep(kind, x0, 1.0e-6);
 
-    // Fast path: a free energy shift on a self-contained segment only moves that
-    // segment's points, so finite-difference just that segment's chi^2 on the
-    // already-filled clone instead of re-solving the entire dataset twice.
-    if ((kind == ParamKind::EnergyShift || kind == ParamKind::EnergyShiftSqrt) && localShiftOk) {
-      int s = pmap.Desc(idx).segment;
-      ESegment *seg = (s >= 1) ? ld->GetSegment(s) : nullptr;
+    // Fast path: a free energy shift on self-contained segments only moves those
+    // segments' points (its own, plus its shift group's followers for a group's
+    // constant shift or a shift-function parameter), so finite-difference just
+    // their chi^2 on the already-filled clone instead of re-solving the entire
+    // dataset twice.
+    if ((kind == ParamKind::EnergyShift || kind == ParamKind::EnergyShiftSqrt || kind == ParamKind::EnergyShiftFn) &&
+        localShiftOk && pmap.Desc(idx).segment >= 1) {
+      const int s = pmap.Desc(idx).segment;
+      const ShiftParamTarget target = ShiftTargets(ld, pmap.Desc(idx));
       // (Not for a segment of a THM experiment: its chi^2 is not its own.)
-      if (seg && !seg->HasComponents() && !seg->IsTotalCapture() && ld->ThmGroupOf(s) < 0) {
-        // The constant shift and the sqrt(E) coefficient enter the same
-        // E -> E + a + b*sqrt(E) mapping; difference whichever one this is.
-        const bool isSqrt = (kind == ParamKind::EnergyShiftSqrt);
-        auto setShift = [&](double v) {
-          if (isSqrt) seg->SetEnergyShiftSqrt(v); else seg->SetEnergyShift(v);
+      bool inThmGroup = false;
+      for (int m : target.segs) inThmGroup = inThmGroup || ld->ThmGroupOf(m) >= 0;
+      if (target.Local(ld) && !inThmGroup) {
+        auto groupChi = [&](double v) {
+          target.Set(ld, v);
+          double c = 0.0;
+          for (int m : target.segs) {
+            ESegment *seg = ld->GetSegment(m);
+            seg->UpdatePointEnergiesWithShift(lc, &configure());
+            c += SegmentLocalChi2(seg, lc, configure(), ld);
+          }
+          return c;
         };
-        double d0 = isSqrt ? seg->GetEnergyShiftSqrt() : seg->GetEnergyShift();
-        setShift(x0 + h);
-        seg->UpdatePointEnergiesWithShift(lc, &configure());
-        double chiP = SegmentLocalChi2(seg, lc, configure(), ld);
-        setShift(x0 - h);
-        seg->UpdatePointEnergiesWithShift(lc, &configure());
-        double chiM = SegmentLocalChi2(seg, lc, configure(), ld);
-        setShift(d0);  // restore base state on the clone
-        seg->UpdatePointEnergiesWithShift(lc, &configure());
+        const double d0 = target.Get(ld);
+        double chiP = groupChi(x0 + h);
+        double chiM = groupChi(x0 - h);
+        target.Set(ld, d0);  // restore base state on the clone
+        for (int m : target.segs) ld->GetSegment(m)->UpdatePointEnergiesWithShift(lc, &configure());
         grad[idx] = (chiP - chiM) / (2.0 * h);
 
         // Optional self-check: compare against the exact full-dataset finite
@@ -569,47 +929,127 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     grad[idx] = (Chi2Value(pp) - Chi2Value(pm)) / (2.0 * h);
   }
 
-  // Env-gated self-check (first call only): compare the assembled gradient
-  // against full central finite differences of the chi-squared. Slow;
-  // diagnostics for the analytic/THM-hybrid path only.
-  if (std::getenv("AZURE_GRAD_CHECK")) {
-    static bool checked = false;
-    if (!checked) {
-      checked = true;
-      double worst = 0.0;
-      int worstIdx = -1;
-      double worstGrad = 0.0, worstFd = 0.0;
+  const auto tg2 = std::chrono::steady_clock::now();
+  static std::atomic<int> gradCalls{0};
+  if (std::getenv("AZURE_GRAD_CHECK") || std::getenv("AZURE_GRAD_TIMING")) {
+    int c = ++gradCalls;
+    if (c <= 5 || c % 50 == 0) {
+      auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
+      int nfd = 0;
       for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
         if (idx < nMn && fixedMask[idx]) continue;
-        double x0 = p[idx];
-        double h = 1.0e-6 * (std::fabs(x0) + 1.0);
-        vector_r pp = p;
-        pp[idx] = x0 + h;
-        vector_r pm = p;
-        pm[idx] = x0 - h;
-        double fd = (Chi2Value(pp) - Chi2Value(pm)) / (2.0 * h);
-        double d = std::fabs(grad[idx] - fd) / (std::fabs(fd) + 1.0);
-        if (d > worst) {
-          worst = d;
-          worstIdx = idx;
-          worstGrad = grad[idx];
-          worstFd = fd;
-        }
+        ParamKind kind = pmap.Desc(idx).kind;
+        if (!(eg && !haveTHM && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm))) nfd++;
       }
-      std::cerr << "[grad-check] worst |grad-fd|/(|fd|+1) = " << worst
-                << " at param " << worstIdx << " (grad " << worstGrad
-                << ", fd " << worstFd << "), analytic path "
-                << (eg ? "ACTIVE" : "BAILED") << std::endl;
+      std::cerr << "[grad-timing] call " << c << ": setup+adjoint " << ms(tg0, tg1) << " ms (analytic " << (eg ? "ok" : "BAILED")
+                << "), finite-difference part " << ms(tg1, tg2) << " ms for " << nfd << " parameters" << std::endl;
     }
   }
 
-  if (pooled) {
-    ReturnPooledCNuc(lc);
-    ReturnPooledEData(ld);
-  } else {
-    delete lc;
-    delete ld;
+  // Optional full self-check, AZURE_GRAD_CHECK=1 (or =exit to stop the run after
+  // it): on the first call, compare every non-fixed gradient component with a
+  // central finite difference of the side-effect-free chi-squared and list the
+  // worst disagreements.  Minuit itself never checks (CheckGradient() is false).
+  static std::atomic<bool> gradChecked{false};
+  if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
+    if (!gradChecked.exchange(true)) {
+      static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "cbkg"};
+      struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
+      std::vector<Row> rows;
+      constexpr int kNumKinds = sizeof(kindName) / sizeof(kindName[0]);  // one per ParamKind
+      int nBad[kNumKinds] = {}, nAll[kNumKinds] = {}, nBadJ[kNumKinds] = {};
+      const bool haveJ = g_jacGradForCheck.size() == grad.size();
+      const auto tc0 = std::chrono::steady_clock::now();
+      const double f0 = Chi2Value(p);
+      std::cerr << "[grad-check] one Chi2Value: " << std::chrono::duration<double>(std::chrono::steady_clock::now() - tc0).count() << " s" << std::endl;
+      std::vector<int> freeIdx;
+      for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++)
+        if (!(idx < nMn && fixedMask[idx])) freeIdx.push_back(idx);
+      const char *cn = std::getenv("AZURE_GRAD_CHECK_N");
+      const int nCheck = cn ? std::atoi(cn) : 16;
+      const int stride = std::max(1, (int)freeIdx.size() / std::max(1, nCheck));
+      std::vector<int> checkIdx;
+      for (int q = 0; q < (int)freeIdx.size(); q += stride) checkIdx.push_back(freeIdx[q]);
+      // Targeted additions: AZURE_GRAD_CHECK_IDX = "i,j,a-b" (parameter
+      // indices) and AZURE_GRAD_CHECK_SEGS = "s,a-b" (1-based segment numbers
+      // in data order: their norm and energy-shift parameters).  Fixed
+      // parameters are skipped.
+      auto parseList = [](const char *spec) {
+        std::vector<int> out;
+        std::stringstream ss(spec);
+        std::string item;
+        while (std::getline(ss, item, ',')) {
+          if (item.empty()) continue;
+          size_t dash = item.find('-', 1);
+          int lo = std::atoi(item.substr(0, dash).c_str());
+          int hi = (dash == std::string::npos) ? lo : std::atoi(item.substr(dash + 1).c_str());
+          for (int v = lo; v <= hi; v++) out.push_back(v);
+        }
+        return out;
+      };
+      std::vector<int> extra;
+      if (const char *ci = std::getenv("AZURE_GRAD_CHECK_IDX"))
+        for (int v : parseList(ci)) extra.push_back(v);
+      if (const char *cs = std::getenv("AZURE_GRAD_CHECK_SEGS"))
+        for (int sNum : parseList(cs)) {
+          if (sNum < 1 || sNum > ld->NumSegments()) continue;
+          extra.push_back(pmap.NormIndex(sNum));
+          extra.push_back(pmap.EnergyShiftIndex(sNum));
+          extra.push_back(pmap.EnergyShiftSqrtIndex(sNum));
+          for (int j = 0; pmap.EnergyShiftFnIndex(sNum, j) >= 0; j++) extra.push_back(pmap.EnergyShiftFnIndex(sNum, j));
+        }
+      for (int v : extra)
+        if (std::find(freeIdx.begin(), freeIdx.end(), v) != freeIdx.end() &&
+            std::find(checkIdx.begin(), checkIdx.end(), v) == checkIdx.end())
+          checkIdx.push_back(v);
+      for (int idx : checkIdx) {
+        // AZURE_GRAD_CHECK_H scales the finite-difference step (default 1e-6
+        // relative): a component that moves with it is truncation error of the
+        // FD (e.g. near a narrow level), not of the analytic value.
+        static const double hScale = std::getenv("AZURE_GRAD_CHECK_H") ? std::atof(std::getenv("AZURE_GRAD_CHECK_H")) : 1.0e-6;
+        double x0 = p[idx], h = FdStep(pmap.Desc(idx).kind, x0, hScale);
+        vector_r pp = p, pm = p;
+        pp[idx] = x0 + h;
+        pm[idx] = x0 - h;
+        double fd = (Chi2Value(pp) - Chi2Value(pm)) / (2.0 * h);
+        auto scoreOf = [&](double g) {
+          return std::fabs(g - fd) / (std::fabs(fd) + std::fabs(g) + 1.0e-6 * std::fabs(f0) + 1.0);
+        };
+        double score = scoreOf(grad[idx]);
+        double gj = haveJ ? g_jacGradForCheck[idx] : 0.0, scoreJ = haveJ ? scoreOf(gj) : 0.0;
+        ParamDesc d = pmap.Desc(idx);
+        int k = (int)d.kind;
+        nAll[k]++;
+        if (score > 1.0e-2) nBad[k]++;
+        if (scoreJ > 1.0e-2) nBadJ[k]++;
+        rows.push_back({score, grad[idx], fd, idx, d, gj, scoreJ});
+      }
+      std::sort(rows.begin(), rows.end(),
+                [](const Row &a, const Row &b) { return std::max(a.score, a.scoreJ) > std::max(b.score, b.scoreJ); });
+      std::cerr << "[grad-check] chi2 " << f0 << ", analytic block " << (eg ? "used" : "BAILED (all finite differences)")
+                << "; components with relative disagreement > 1e-2:";
+      for (int k = 0; k < kNumKinds; k++)
+        if (nAll[k]) std::cerr << " " << kindName[k] << " " << nBad[k] << "/" << nAll[k];
+      if (haveJ) {
+        std::cerr << "; Jacobian path:";
+        for (int k = 0; k < kNumKinds; k++)
+          if (nAll[k]) std::cerr << " " << kindName[k] << " " << nBadJ[k] << "/" << nAll[k];
+      }
+      std::cerr << std::endl;
+      for (int r = 0; r < (int)rows.size() && r < 60; r++) {
+        const Row &w = rows[r];
+        std::cerr << "[grad-check] idx " << w.idx << " " << kindName[(int)w.d.kind] << " J" << w.d.jGroup << " L" << w.d.level
+                  << " ch" << w.d.channel << " seg" << w.d.segment << "  analytic " << w.g << "  fd " << w.fd
+                  << "  rel " << w.score;
+        if (haveJ) std::cerr << "  jacobian " << w.gj << "  relJ " << w.scoreJ;
+        std::cerr << std::endl;
+      }
+      if (std::string(gc) == "exit" && !g_deferCheckExit) std::exit(0);
+    }
   }
+
+  ReturnPooledCNuc(lc);
+  ReturnPooledEData(ld);
 
   return grad;
 }
@@ -625,10 +1065,169 @@ std::vector<bool> AZURECalc::FixedMask() const {
   return fixed;
 }
 
+bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<double> &grad) const {
+  if (configure().paramMask & Config::USE_PARK_FORMALISM) return false;  // Park wall penalty not in J
+  vector_r r, jac;
+  std::vector<int> packedToFull;
+  if (!ResidualJacobian(p, r, jac, packedToFull) || r.empty()) return false;
+  const size_t nCols = packedToFull.size(), nRes = r.size();
+  std::vector<double> g2(p.size(), 0.0);
+  grad.assign(p.size(), 0.0);
+  for (size_t i = 0; i < nRes; i++)
+    for (size_t a = 0; a < nCols; a++) {
+      const double d = jac[i * nCols + a];
+      const int f = packedToFull[a];
+      if (f < 0 || f >= (int)p.size()) continue;
+      grad[f] += 2.0 * r[i] * d;
+      g2[f] += 2.0 * d * d;
+    }
+  // Penalties (x - x0)^2 / sigma^2: gradient 2 (x - x0) / sigma^2, curvature 2 / sigma^2.
+  ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
+  for (int s = 1; s <= data()->NumSegments(); s++) {
+    ESegment *seg = data()->GetSegment(s);
+    if (!seg) continue;
+    int idx;
+    if (seg->IsVaryNorm() && (idx = pmap.NormIndex(s)) >= 0 && idx < (int)p.size()) {
+      const double n0 = seg->GetNominalNorm(), nerr = n0 / 100.0 * seg->GetNormError();
+      if (nerr != 0.0) { grad[idx] += 2.0 * (p[idx] - n0) / (nerr * nerr); g2[idx] += 2.0 / (nerr * nerr); }
+    }
+  }
+  ForEachShiftPenalty(data(), pmap, [&](int idx, double nominal, double e) {
+    if (idx >= (int)p.size()) return;
+    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    g2[idx] += 2.0 / (e * e);
+  });
+  // Isotopic abundances: prior and sum-to-one gradient and (diagonal) curvature.  The sample sums are taken at
+  // p: compound() holds the abundances of the last full evaluation, so its AbundanceSum was stale here.
+  std::vector<double> sumAtP;
+  if (compound()->HasAbundanceBlock()) {
+    sumAtP.assign(compound()->NumSamples(), 0.0);
+    for (int smp = 1; smp <= compound()->NumSamples(); smp++) sumAtP[smp - 1] = compound()->AbundanceSum(smp);
+    for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
+      const int idx = pmap.AbundanceIndex(k);
+      if (idx < 0 || idx >= (int)p.size()) continue;
+      int sample, nucleus;
+      compound()->AbundanceOf(k, sample, nucleus);
+      sumAtP[sample - 1] += p[idx] - compound()->GetSample(sample)->entries[nucleus - 1].abundance;
+    }
+  }
+  if (compound()->HasAbundanceBlock()) {
+    for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
+      const int idx = pmap.AbundanceIndex(k);
+      if (idx < 0 || idx >= (int)p.size()) continue;
+      int sample, nucleus;
+      compound()->AbundanceOf(k, sample, nucleus);
+      const SampleAbundance &e = compound()->GetSample(sample)->entries[nucleus - 1];
+      if (e.sigma > 0.0) {
+        grad[idx] += 2.0 * (p[idx] - e.nominal) / (e.sigma * e.sigma);
+        g2[idx] += 2.0 / (e.sigma * e.sigma);
+      }
+      const double s = compound()->SampleSumSigma(sample, configure().abundanceSumSigma);
+      if (s > 0.0) {
+        grad[idx] += 2.0 * (sumAtP[sample - 1] - 1.0) / (s * s);
+        g2[idx] += 2.0 / (s * s);
+      }
+    }
+  }
+  g2CacheP_ = p;
+  g2Cache_ = g2;
+  return true;
+}
+
+std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
+  if (!g2Cache_.empty() && g2CacheP_ == p) return g2Cache_;
+  const auto t0 = std::chrono::steady_clock::now();
+  std::vector<double> g2(p.size(), 0.0);
+  vector_r r, jac;
+  std::vector<int> packedToFull;
+  if (!ResidualJacobian(p, r, jac, packedToFull) || r.empty()) return std::vector<double>();
+  const size_t nCols = packedToFull.size(), nRes = r.size();
+  for (size_t i = 0; i < nRes; i++)
+    for (size_t a = 0; a < nCols; a++) {
+      const double d = jac[i * nCols + a];
+      const int f = packedToFull[a];
+      if (f >= 0 && f < (int)g2.size()) g2[f] += 2.0 * d * d;
+    }
+  // Penalty curvatures, (x - x0)^2 / sigma^2 -> 2 / sigma^2.
+  ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
+  for (int s = 1; s <= data()->NumSegments(); s++) {
+    ESegment *seg = data()->GetSegment(s);
+    if (!seg) continue;
+    int idx;
+    if (seg->IsVaryNorm() && (idx = pmap.NormIndex(s)) >= 0 && idx < (int)g2.size()) {
+      const double nerr = seg->GetNominalNorm() / 100.0 * seg->GetNormError();
+      if (nerr != 0.0) g2[idx] += 2.0 / (nerr * nerr);
+    }
+  }
+  ForEachShiftPenalty(data(), pmap, [&](int idx, double, double e) {
+    if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
+  });
+  if (compound()->HasAbundanceBlock()) {
+    for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
+      const int idx = pmap.AbundanceIndex(k);
+      if (idx < 0 || idx >= (int)g2.size()) continue;
+      int sample, nucleus;
+      compound()->AbundanceOf(k, sample, nucleus);
+      const SampleAbundance &e = compound()->GetSample(sample)->entries[nucleus - 1];
+      if (e.sigma > 0.0) g2[idx] += 2.0 / (e.sigma * e.sigma);
+      const double s = compound()->SampleSumSigma(sample, configure().abundanceSumSigma);
+      if (s > 0.0) g2[idx] += 2.0 / (s * s);
+    }
+  }
+  static std::atomic<int> g2Calls{0};
+  if (std::getenv("AZURE_GRAD_TIMING")) {
+    int c = ++g2Calls;
+    if (c <= 5 || c % 50 == 0)
+      std::cerr << "[g2-timing] call " << c << ": " << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count()
+                << " ms" << std::endl;
+  }
+  return g2;
+}
+
+bool AZURECalc::HasNuisanceParameters() const {
+  // The CLI always hands AZURECalc a ParameterLimitsManager, so "a manager
+  // exists" is not the question; whether it declares any nuisance parameter is.
+  if (!limitsManager_) return false;
+  AZUREParams fp;
+  compound()->FillMnParams(fp.GetMinuitParams(), &configure());
+  data()->FillMnParams(fp.GetMinuitParams());
+  // Index the parameters exactly as CalculateNuisanceChiSquared and
+  // AddNuisanceGradient do, and ignore the ones they skip: a nuisance flag on a
+  // norm or shift adds nothing to chi^2 or the gradient (those penalties come
+  // from the segment's own norm/shift error, which G2 already includes), so it
+  // must not switch off the analytic G2 or the segment-local shift derivative.
+  // The GUI writes nuisance = 1 on penalized norms, so without this filter a
+  // model with norm uncertainties lost both (11B+a, 2026-10-10).
+  int nf = 0;
+  for (const auto &mp : fp.GetMinuitParams().Parameters()) {
+    const std::string &name = mp.GetName();
+    if (mp.IsFixed() && name.find("segment") == std::string::npos) continue;
+    const bool inert = name.find("norm") != std::string::npos || name.find("shift") != std::string::npos ||
+                       name.find("abundance") != std::string::npos;
+    if (!inert && limitsManager_->IsNuisanceParameterByIndex(nf)) {
+      if (std::getenv("AZURE_GRAD_DEBUG"))
+        std::cerr << "[grad] analytic G2 off: nuisance prior on '" << name << "'" << std::endl;
+      return true;
+    }
+    nf++;
+  }
+  return false;
+}
+
+bool AZURECalc::EnableG2(const std::vector<double> &p) {
+  g2Enabled_ = false;
+  if (HasNuisanceParameters()) return false;  // nuisance penalties are not in the Jacobian
+  std::vector<double> g2 = G2(p);
+  g2Enabled_ = !g2.empty();
+  return g2Enabled_;
+}
+
 bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
                                  vector_r &jac, std::vector<int> &packedToFull) const {
-  CNuc *lc = compound()->Clone();
-  EData *ld = data()->Clone();
+  // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh
+  // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
+  CNuc *lc = GetPooledCNuc();
+  EData *ld = GetPooledEData();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
   ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
@@ -646,7 +1245,10 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
 
   ParamIndexMap pmap = BuildParamIndexMap(lc, ld, fixed);
   int nCols = 0;
+  const auto tj0 = std::chrono::steady_clock::now();
   bool ok = ComputeResidualJacobian(lc, ld, configure(), pmap, sdp, residuals, jac, nCols);
+  const auto tj1 = std::chrono::steady_clock::now();
+  int nShiftLocal = 0, nShiftFull = 0;
 
   // Energy-shift columns by central differences, as AZUREAPI::
   // CalculateResidualJacobianRWA does for pyazr.  The adjoint does not cover a
@@ -658,14 +1260,133 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     const size_t nRes = residuals.size();
     vector_r rPlus, rMinus, jTmp;
     int nc = 0;
+
+    // A shift of a self-contained segment (no components, not a total-capture
+    // sum, no cross-segment energy mapping) moves only that segment's rows, so
+    // its column is differenced on those rows alone; every other row of the
+    // full re-evaluation below would difference to exactly zero.  The full
+    // path re-solved the WHOLE Jacobian, adjoints included, twice per shift:
+    // with 55 free shifts on 11B+a one gradient took over an hour.  Same
+    // criterion as the segment-local shift gradient in Gradient().
+    bool datasetHasMapping = false;
+    std::vector<int> rowStart(ld->NumSegments() + 2, 0);
+    {
+      int row = 0;
+      for (int s = 1; s <= ld->NumSegments(); s++) {
+        rowStart[s] = row;
+        ESegment *seg = ld->GetSegment(s);
+        if (!seg) continue;
+        for (int pid = 0; pid < seg->NumPoints(); pid++) {
+          EPoint *pt = seg->GetPoint(pid + 1);
+          if (!pt) continue;
+          row++;
+          // Mapping within a segment (the only kind EData::MapData makes)
+          // keeps a shift's effect inside its segment; only mapping across
+          // segments would not.
+          if (pt->IsMapped() && pt->GetMap().segment != s) datasetHasMapping = true;
+        }
+      }
+      rowStart[ld->NumSegments() + 1] = row;
+      if ((size_t)row != nRes) datasetHasMapping = true;  // row layout not understood: use the full path
+    }
+    // Residuals of one segment's rows, in row order, exactly as
+    // ComputeResidualJacobian forms them.
+    auto segmentResiduals = [&](ESegment *seg, vector_r &out, bool parallel) {
+      const int nPts = seg->NumPoints();
+      const double norm = seg->GetNorm();
+      std::vector<double> byPoint(nPts, 0.0);
+      std::vector<char> present(nPts, 0);
+      auto one = [&](int pid) {
+        EPoint *pt = seg->GetPoint(pid + 1);
+        if (!pt) return;
+        present[pid] = 1;
+        const double model = seg->CalculateTheoreticalCrossSection(pid, lc, configure(), ld);
+        const double denom = pt->GetCMCrossSectionError() * norm;
+        byPoint[pid] = (denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0;
+      };
+      // No parallel construct inside an enclosing parallel region (see
+      // CoulFuncCache::localCache).  In parallel each point is calculated on
+      // its own, without point mapping (ScopedPointMappingOff, as in the
+      // AZUREGrad.cpp loops): a mapped point would otherwise read a value its
+      // host may not have calculated yet.  Serially, index order puts every
+      // host first and the sharing is kept.
+      if (parallel && !InParallelRegion()) {
+#pragma omp parallel for schedule(dynamic)
+        for (int pid = 0; pid < nPts; pid++) {
+          ScopedPointMappingOff noPointMapping;
+          one(pid);
+        }
+      } else {
+        for (int pid = 0; pid < nPts; pid++) one(pid);
+      }
+      out.clear();
+      for (int pid = 0; pid < nPts; pid++)
+        if (present[pid]) out.push_back(byPoint[pid]);
+    };
+
+    // Local shift columns: a parameter whose segments (its own, plus its shift
+    // group's followers for a group's constant shift or a shift-function
+    // parameter) are all self-contained is differenced on their rows alone.
+    struct LocalShift { int f, packed; ShiftParamTarget target; };
+    std::vector<LocalShift> localCols;
+    std::vector<int> fullShifts;
     for (int f = 0; f < pmap.NumFull() && f < (int)full.size(); f++) {
       if (fixed[f]) continue;
-      if (pmap.Desc(f).kind != ParamKind::EnergyShift &&
-          pmap.Desc(f).kind != ParamKind::EnergyShiftSqrt) continue;
+      const ParamKind kind = pmap.Desc(f).kind;
+      if (kind != ParamKind::EnergyShift && kind != ParamKind::EnergyShiftSqrt && kind != ParamKind::EnergyShiftFn) continue;
       const int packed = pmap.FullToPacked(f);
       if (packed < 0 || packed >= nCols) continue;
+      const int sNum = pmap.Desc(f).segment;
+      if (!datasetHasMapping && sNum >= 1 && sNum <= ld->NumSegments()) {
+        const ShiftParamTarget target = ShiftTargets(ld, pmap.Desc(f));
+        if (target.Local(ld)) {
+          localCols.push_back({f, packed, target});
+          continue;
+        }
+      }
+      fullShifts.push_back(f);
+    }
+    // Segments in sequence, each one's points in parallel: re-energising a
+    // point (UpdatePointEnergyWithShift) and evaluating it touch only that
+    // point.  (Parallel over segments instead left the largest segment running
+    // alone at the end.)
+    auto updateSegment = [&](ESegment *seg) {
+      if (!InParallelRegion()) {
+#pragma omp parallel for schedule(dynamic, 1)
+        for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointGroupEnergyWithShift(pid, lc, &configure());
+      } else {
+        seg->UpdatePointEnergiesWithShift(lc, &configure());
+      }
+    };
+    for (const LocalShift &ls : localCols) {
+      const std::vector<int> &segs = ls.target.segs;
+      std::vector<vector_r> rP(segs.size()), rM(segs.size());
+      const double x0 = full[ls.f];
+      const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+      const double d0 = ls.target.Get(ld);
+      ls.target.Set(ld, x0 + h);
+      for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
+      for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rP[m], true);
+      ls.target.Set(ld, x0 - h);
+      for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
+      for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rM[m], true);
+      ls.target.Set(ld, d0);
+      for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
+      for (size_t m = 0; m < segs.size(); m++) {
+        const int sNum = segs[m];
+        const size_t r0 = (size_t)rowStart[sNum], nSegRows = (size_t)(rowStart[sNum + 1] - rowStart[sNum]);
+        if (rP[m].size() == nSegRows && rM[m].size() == nSegRows)
+          for (size_t r = 0; r < nSegRows; r++)
+            jac[(r0 + r) * (size_t)nCols + (size_t)ls.packed] = (rP[m][r] - rM[m][r]) / (2.0 * h);
+      }
+    }
+    nShiftLocal = (int)localCols.size();
+
+    for (int f : fullShifts) {
+      const int packed = pmap.FullToPacked(f);
       const double x0 = full[f];
       const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+      nShiftFull++;
       auto residualsAt = [&](double value, vector_r &out) -> bool {
         vector_r fk = full;
         fk[f] = value;
@@ -686,12 +1407,22 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     ld->FillNormsFromParams(full);
     ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
   }
+  if (std::getenv("AZURE_GRAD_TIMING")) {
+    static std::atomic<int> rjCalls{0};
+    const int c = ++rjCalls;
+    if (c <= 5 || c % 50 == 0) {
+      auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
+      std::cerr << "[grad-timing] residual Jacobian " << c << ": adjoint rows " << ms(tj0, tj1) << " ms, energy-shift columns "
+                << ms(tj1, std::chrono::steady_clock::now()) << " ms (" << nShiftLocal << " segment-local, " << nShiftFull
+                << " full)" << std::endl;
+    }
+  }
 
   packedToFull.resize(pmap.NumPacked());
   for (int a = 0; a < pmap.NumPacked(); a++) packedToFull[a] = pmap.PackedToFull(a);
 
-  delete lc;
-  delete ld;
+  ReturnPooledCNuc(lc);
+  ReturnPooledEData(ld);
   return ok;
 }
 
@@ -841,6 +1572,10 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
   hi.assign(nFree, std::numeric_limits<double>::infinity());
   pen_nom.assign(nFree, 0.0);
   pen_inv2.assign(nFree, 0.0);
+  // Shift priors by full parameter index (p2f holds full indices of the same map).
+  std::map<int, std::pair<double, double>> shiftPrior;  // full index -> (nominal, sigma)
+  ForEachShiftPenalty(data(), BuildParamIndexMap(compound(), data(), std::vector<bool>()),
+                      [&](int idx, double nominal, double sig) { shiftPrior[idx] = {nominal, sig}; });
   for (int a = 0; a < nFree; a++) {
     int f = p2f[a];
     x[a] = full[f];
@@ -868,29 +1603,32 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
         }
       }
     } else if (AZURELabel::IsEnergyShiftName(name)) {
-      for (int s = 1; s <= data()->NumSegments(); s++) {
-        ESegment *seg = data()->GetSegment(s);
-        if (!seg) continue;
-        char vn[64], vs[64];
-        snprintf(vn, sizeof(vn), "segment_%d_energy_shift", seg->GetSegmentKey());
-        snprintf(vs, sizeof(vs), "segment_%d_energy_shift_sqrt", seg->GetSegmentKey());
-        if (name == vn && seg->IsVaryEnergyShift()) {
-          double sig = seg->GetEnergyShiftError();
-          if (sig != 0.0) {
-            pen_nom[a] = seg->GetNominalEnergyShift();
-            pen_inv2[a] = 1.0 / (sig * sig);
-          }
-          break;
-        }
-        if (name == vs && seg->IsVaryEnergyShiftSqrt()) {
-          double sig = seg->GetEnergyShiftSqrtError();
-          if (sig != 0.0) {
-            pen_nom[a] = seg->GetNominalEnergyShiftSqrt();
-            pen_inv2[a] = 1.0 / (sig * sig);
-          }
-          break;
+      auto it = shiftPrior.find(f);
+      if (it != shiftPrior.end()) {
+        pen_nom[a] = it->second.first;
+        pen_inv2[a] = 1.0 / (it->second.second * it->second.second);
+      }
+    } else if (name.compare(0, 10, "abundance_") == 0) {
+      // Isotopic abundance: its <abundances> prior is a diagonal penalty row.
+      // The sum-to-one term couples the abundances and is not a per-parameter
+      // penalty: the least-squares drivers leave it out (warned once), MIGRAD
+      // carries it exactly (AZURECalc::operator()).
+      bool anySum = false;
+      for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
+        int sample, nucleus;
+        compound()->AbundanceOf(k, sample, nucleus);
+        if (compound()->SampleSumSigma(sample, configure().abundanceSumSigma) > 0.0) anySum = true;
+        if (name != compound()->AbundanceParamName(sample, nucleus)) continue;
+        const SampleAbundance &e = compound()->GetSample(sample)->entries[nucleus - 1];
+        if (e.sigma > 0.0) {
+          pen_nom[a] = e.nominal;
+          pen_inv2[a] = 1.0 / (e.sigma * e.sigma);
         }
       }
+      static std::atomic<bool> warnedSum{false};
+      if (anySum && !warnedSum.exchange(true))
+        configure().outStream << "WARNING: a sum-to-one width is set for the abundances, but the least-squares fitter applies only "
+                              << "the per-nucleus abundance priors; the sum-to-one penalty is carried by MIGRAD only." << std::endl;
     } else if (limitsManager_) {
       // Looked up by the full-vector index f, not by a: a counts the
       // parameters free in this Jacobian, the limits manager's non-fixed index
@@ -1066,8 +1804,10 @@ void AZURECalc::FinalizeLeastSquaresCovariance(const vector_r &full,
 bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   // Forward-only counterpart of ResidualJacobian (no adjoint): same row order
   // and residual r = (model - data*n)/(cmErr*n) as ComputeResidualJacobian.
-  CNuc *lc = compound()->Clone();
-  EData *ld = data()->Clone();
+  // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh
+  // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
+  CNuc *lc = GetPooledCNuc();
+  EData *ld = GetPooledEData();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
   ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
@@ -1086,8 +1826,8 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
       residuals.push_back(denom != 0.0 ? (th - pt->GetCMCrossSection() * norm) / denom : 0.0);
     }
   }
-  delete lc;
-  delete ld;
+  ReturnPooledCNuc(lc);
+  ReturnPooledEData(ld);
   return true;
 }
 

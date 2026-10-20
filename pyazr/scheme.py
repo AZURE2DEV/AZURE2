@@ -158,16 +158,24 @@ class LevelScheme:
 
     def _pairs_block(self):
         lines = ["Particle pairs:"]
+        # The compound nucleus is only worth a column when the pairs form more
+        # than one (a natural-target project); see pyazr.nuclei.
+        nuclei = {(getattr(p, "nucleus_Z", 0), getattr(p, "nucleus_A", 0)) for p in self.pairs}
+        several = len(nuclei) > 1
         for p in self.pairs:
             kind = "photon  " if p.is_photon else "particle"
             flags = " [entrance]" if p.is_entrance else ""
+            nucleus = ""
+            if several:
+                from .nuclei import Nucleus
+                nucleus = f"   -> {Nucleus(p.nucleus_Z, p.nucleus_A).label}"
             lines.append(
                 f"  {p.number}: {kind}  "
                 f"J={_fmt_spin(p.J1)}{'+' if p.parity1 > 0 else '-'}"
                 f" & {_fmt_spin(p.J2)}{'+' if p.parity2 > 0 else '-'}"
                 f"   Z={p.Z1}+{p.Z2}"
                 f"   Sep={p.sep_energy:.4g} MeV   r={p.channel_radius:g} fm"
-                f"{flags}")
+                f"{nucleus}{flags}")
         return lines
 
     def format(self, widths=True):

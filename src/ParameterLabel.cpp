@@ -95,6 +95,10 @@ std::string Level(JGroup *jgroup, ALevel *level, int jgroupIndex, int levelIndex
   out << "J^pi=" << JPi(jgroup->GetJ(), jgroup->GetPi()) << ", E=" << std::fixed
       << level->GetE() << " MeV (J-group " << jgroupIndex << ", level "
       << levelIndex << ")";
+  // A project with several compound nuclei says which one; a single-nucleus
+  // label is unchanged.
+  if (jgroup->NucleusLabelled())
+    out << " [Z=" << jgroup->GetNucleusZ() << " A=" << jgroup->GetNucleusA() << "]";
   return out.str();
 }
 
@@ -135,12 +139,15 @@ int NumParameters(CNuc *compound, EData *data) {
       JGroup *jgroup = compound->GetJGroup(j);
       n += jgroup->NumLevels() * (1 + jgroup->NumChannels());
     }
+    n += compound->NumAbundanceParams();
   }
   if (data) {
     std::vector<ESegment> &segments = data->GetSegments();
     for (size_t s = 0; s < segments.size(); s++)
       if (segments[s].IsVaryNorm()) n++;
     n += 2 * (int)segments.size();  // energy shift and sqrt(E) coefficient, every segment
+    for (size_t s = 0; s < segments.size(); s++)  // shift-function parameters of the segments declaring one
+      if (segments[s].OwnsShiftFn() && segments[s].HasShiftFn()) n += segments[s].NumShiftFnParams();
   }
   return n;
 }
@@ -166,6 +173,16 @@ std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
           index++;
         }
       }
+    }
+    // then the isotopic abundances, one per (sample, nucleus) (CNuc::FillMnParams)
+    for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
+      if (index == minuitIndex) {
+        int sample, nucleus;
+        compound->AbundanceOf(k, sample, nucleus);
+        const std::string &name = compound->GetSample(sample)->name;
+        return "abundance of nucleus " + compound->NucleusLabel(nucleus) + (name.empty() ? "" : " in sample " + name);
+      }
+      index++;
     }
   }
 
@@ -202,6 +219,18 @@ std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
       return out.str();
     }
     index++;
+  }
+  for (size_t s = 0; s < segments.size(); s++) {
+    if (!segments[s].OwnsShiftFn() || !segments[s].HasShiftFn()) continue;
+    for (int j = 0; j < segments[s].NumShiftFnParams(); j++) {
+      if (index == minuitIndex) {
+        std::ostringstream out;
+        out << "parameter a" << j << " of the energy-shift function " << segments[s].GetShiftFnExpression()
+            << " of segment " << segments[s].GetSegmentKey() << " (" << segments[s].GetDataFile() << ")";
+        return out.str();
+      }
+      index++;
+    }
   }
   for (int k = 0; k < data->NumThmCoherentParams(); k++) {
     if (index == minuitIndex)

@@ -1,6 +1,7 @@
 #include <QVariant>
 
 #include "TargetIntModel.h"
+#include <QStringList>
 
 TargetIntModel::TargetIntModel(QObject *parent) :
   QAbstractTableModel(parent) {
@@ -16,6 +17,26 @@ int TargetIntModel::columnCount(const QModelIndex &parent) const {
   return TargetIntData::SIZE;
 }
 
+// Effects that integrate over sub-points (and so use the integration-point
+// count and the adaptive grid).  The attenuation coefficients alone do not.
+static bool usesSubPoints(const TargetIntData &t) {
+  return t.isTargetIntegration || t.isConvolution || t.isConvCoefficients || t.isBeamProfile || t.isUdr;
+}
+
+// One-line summary of the effect types an entry switches on, for the table.
+static QString effectSummary(const TargetIntData &t) {
+  QStringList names;
+  if (t.isConvCoefficients)
+    names << (t.sigmaLab ? QObject::tr("Gaussian convolution, \u03c3(E)") : QObject::tr("Gaussian convolution, \u03c3(E) c.m. (legacy)"));
+  else if (t.isConvolution)
+    names << QObject::tr("Gaussian convolution");
+  if (t.isTargetIntegration) names << (t.isStraggling ? QObject::tr("Target integration + straggling") : QObject::tr("Target integration"));
+  if (t.isBeamProfile) names << QObject::tr("Beam profile");
+  if (t.isUdr) names << QObject::tr("User-defined resolution");
+  if (t.isQCoefficients) names << QObject::tr("Attenuation coefficients");
+  return names.isEmpty() ? QObject::tr("none") : names.join(", ");
+}
+
 QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
   if (!index.isValid()) return QVariant();
   if (index.row() >= targetIntList.size() || index.row() < 0) return QVariant();
@@ -24,7 +45,7 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
     if (index.column() == 1)
       return targetInt.segmentsList;
     else if (index.column() == 2) {
-      if (targetInt.isTargetIntegration || targetInt.isConvolution || targetInt.isConvCoefficients)
+      if (usesSubPoints(targetInt))
         return targetInt.numPoints;
       else
         return QString(tr("N/A"));
@@ -72,9 +93,9 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
     } else if (index.column() == 16)
       return targetInt.stragglingCoefficient;
     else if (index.column() == 17)
-      return targetInt.resonanceWidthMultiplier;
+      return usesSubPoints(targetInt) ? QVariant(targetInt.resonanceWidthMultiplier) : QVariant(tr("N/A"));
     else if (index.column() == 18)
-      return targetInt.pointsPerWidth;
+      return usesSubPoints(targetInt) ? QVariant(targetInt.pointsPerWidth) : QVariant(tr("N/A"));
     else if (index.column() == 19)
       return targetInt.applyRanges.isEmpty() ? QString(tr("ALL")) : targetInt.applyRanges;
     else if (index.column() == 20)
@@ -97,7 +118,28 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
         return QString(tr("YES"));
       else
         return QString(tr("NO"));
-    }
+    } else if (index.column() == 27) {
+      if (targetInt.isUdr)
+        return QString(tr("YES"));
+      else
+        return QString(tr("NO"));
+    } else if (index.column() == 28)
+      return targetInt.udrFile;
+    else if (index.column() == 29)
+      return targetInt.udrFlightPath;
+    else if (index.column() == 30)
+      return targetInt.udrBurstFwhm;
+    else if (index.column() == 31)
+      return targetInt.udrChannelWidth;
+    else if (index.column() == 32) {
+      if (targetInt.udrCentred)
+        return QString(tr("YES"));
+      else
+        return QString(tr("NO"));
+    } else if (index.column() == 33)
+      return effectSummary(targetInt);
+    else if (index.column() == 34)
+      return targetInt.sigmaLab ? QString(tr("YES")) : QString(tr("NO"));
   } else if (role == Qt::EditRole) {
     TargetIntData targetInt = targetIntList.at(index.row());
     if (index.column() == 1) return targetInt.segmentsList;
@@ -126,6 +168,13 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
     if (index.column() == 24) return targetInt.beamTpcSigma;
     if (index.column() == 25) return targetInt.beamTruncation;
     if (index.column() == 26) return targetInt.beamPhotodissociation;
+    if (index.column() == 27) return targetInt.isUdr;
+    if (index.column() == 28) return targetInt.udrFile;
+    if (index.column() == 29) return targetInt.udrFlightPath;
+    if (index.column() == 30) return targetInt.udrBurstFwhm;
+    if (index.column() == 31) return targetInt.udrChannelWidth;
+    if (index.column() == 32) return targetInt.udrCentred;
+    if (index.column() == 34) return targetInt.sigmaLab;
   } else if (role == Qt::CheckStateRole && index.column() == 0) {
     TargetIntData targetInt = targetIntList.at(index.row());
     if (targetInt.isActive == 1)
@@ -138,6 +187,19 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
 }
 
 QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, int role) const {
+  // Full names for the abbreviated headers of the columns the tab shows.
+  if (role == Qt::ToolTipRole && orientation == Qt::Horizontal) {
+    switch (section) {
+      case 2: return tr("Number of integration (sub-)points per data point");
+      case 17: return tr("Resonance width multiplier of the adaptive integration grid");
+      case 18: return tr("Points per resonance width of the adaptive integration grid");
+      case 19: return tr("Lab-energy windows the effect is applied in (ALL = whole segment)");
+      case 20: return tr("Width of the smooth blend at each range edge [MeV]; 0 = hard edges");
+      case 21: return tr("Relative tolerance for automatic per-point application; 0 = always apply");
+      case 33: return tr("Effect types switched on in this entry; their parameters are in the Edit dialog");
+      default: return QVariant();
+    }
+  }
   if (role != Qt::DisplayRole) return QVariant();
   if (orientation == Qt::Horizontal) {
     switch (section) {
@@ -146,7 +208,7 @@ QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, in
       case 1:
         return tr("Segment List");
       case 2:
-        return tr("Number of Integration Points");
+        return tr("Int. Points");
       case 3:
         return tr("Convolution Active?");
       case 4:
@@ -176,15 +238,15 @@ QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, in
       case 16:
         return tr("Straggling Coefficient");
       case 17:
-        return tr("Resonance Width Multiplier");
+        return tr("Width Mult.");
       case 18:
-        return tr("Points Per Width");
+        return tr("Pts/Width");
       case 19:
-        return tr("Apply in Energy Ranges");
+        return tr("Ranges [lab MeV]");
       case 20:
-        return tr("Blend Width");
+        return tr("Blend [MeV]");
       case 21:
-        return tr("Auto Tolerance");
+        return tr("Auto Tol.");
       case 22:
         return tr("Beam Profile Active?");
       case 23:
@@ -195,6 +257,22 @@ QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, in
         return tr("Profile Truncation");
       case 26:
         return tr("Detailed Balance Weight?");
+      case 27:
+        return tr("User-Defined Resolution?");
+      case 28:
+        return tr("UDR File");
+      case 29:
+        return tr("Flight Path [m]");
+      case 30:
+        return tr("Burst FWHM [ns]");
+      case 31:
+        return tr("Channel Width [ns]");
+      case 32:
+        return tr("UDR Centred?");
+      case 33:
+        return tr("Effects");
+      case 34:
+        return tr("sigma(E) in lab?");
       default:
         return QVariant();
     }
@@ -261,10 +339,24 @@ bool TargetIntModel::setData(const QModelIndex &index, const QVariant &value, in
       tempData.beamTruncation = value.toDouble();
     else if (index.column() == 26)
       tempData.beamPhotodissociation = value.toBool();
+    else if (index.column() == 27)
+      tempData.isUdr = value.toBool();
+    else if (index.column() == 28)
+      tempData.udrFile = value.toString();
+    else if (index.column() == 29)
+      tempData.udrFlightPath = value.toDouble();
+    else if (index.column() == 30)
+      tempData.udrBurstFwhm = value.toDouble();
+    else if (index.column() == 31)
+      tempData.udrChannelWidth = value.toDouble();
+    else if (index.column() == 32)
+      tempData.udrCentred = value.toBool();
+    else if (index.column() == 34)
+      tempData.sigmaLab = value.toBool();
     else
       return false;
     targetIntList.replace(row, tempData);
-    emit(dataChanged(index, index));
+    emit(dataChanged(this->index(row, 0), this->index(row, TargetIntData::SIZE - 1)));
     return true;
   } else if (role == Qt::CheckStateRole) {
     int row = index.row();

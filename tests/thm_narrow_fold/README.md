@@ -29,7 +29,7 @@ was 16 % off at 150 sub-points. A level moved by 1–2 keV left the grid 13–70
 off. A fit that freed that level's energy stopped 1 keV short of the true
 value, at chi2 25 where the true minimum is 0.
 
-What changed (`AdaptiveIntegrationGrid`, `EPoint::RefreshSubPointGrid`):
+What changed (`AdaptiveIntegrationGrid`; the fit-time rebuild was `EPoint::RefreshSubPointGrid` on thm and is now dev's `EData::ReplaceSubPointGrids`, which re-places every grid at every evaluation):
 
 * The lattice of each narrow resonance now continues past its uniform core,
   ±resonanceWidthMultiplier·Γ, in geometric tails. The tail step is

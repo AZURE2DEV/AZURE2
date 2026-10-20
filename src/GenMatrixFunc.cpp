@@ -19,6 +19,11 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
   complex sumE1(0., 0.);
   complex sumE2(0., 0.);
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
+  // `ir` below is the DECAY INDEX within the entrance pair's list; whether the
+  // reaction is elastic is a question about pair numbers, so compare those.
+  // (aa == ir happened to hold for the first pair of a file, which is why a
+  // second compound nucleus's elastic segments came out as inelastic.)
+  const int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
   int ir = 0;
   while (ir < compound()->GetPair(aa)->NumDecays()) {
     ir++;
@@ -80,7 +85,7 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
         for (int k = 1; k <= theDecay->NumKGroups(); k++) {
           // For inelastic particle reactions (aa!=ir, GetPType==0) with UPOS 3-param KGroups,
           // skip KGroups where sp!=sp2 to avoid over-counting in angle-integrated XS.
-          if (aa != ir && compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()))->GetPType() == 0) {
+          if (aa != exitPairNum && compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()))->GetPType() == 0) {
             if (theDecay->GetKGroup(k)->GetSp() != theDecay->GetKGroup(k)->GetSp2()) continue;
           }
           this->ClearTempTMatrices();
@@ -219,7 +224,7 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
                                               ->GetInterference(inter);
           complex T1(0.0, 0.0), T2(0.0, 0.0);
           std::string interferenceType = theInterference->GetInterferenceType();
-          if (aa != ir && exitPairDiff->GetPType() == 0) {
+          if (aa != exitPairNum && exitPairDiff->GetPType() == 0) {
             // Different entrance and exit pairs with particle exit - may be UPOS
             double sp1 = theDecay->GetKGroup(theDecay->GetKLGroup(kL)->GetK())->GetSp();
             double sp2 = theDecay->GetKGroup(theDecay->GetKLGroup(kL)->GetK())->GetSp2();
@@ -340,7 +345,7 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
       double rtFactor = 1.0;
       double itFactor = 1.0;
       if (compound()->GetPair(aa)->IsIdentical()) {
-        if (aa == ir) {
+        if (aa == exitPairNum) {
           rtFactor = 4.0;
           itFactor = 2.0;
         } else {
@@ -351,7 +356,7 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
           compound()->GetPair(aa)->GetI1I2Factor() * rtFactor;
 
       complex CT(0., 0.), IT(0., 0.);
-      if (aa == ir) {
+      if (aa == exitPairNum) {
         complex coulombAmplitude = point->GetCoulombAmplitude();
         PPair *elasticPair = compound()->GetPair(aa);
         if (elasticPair->HasSpinDependentExchange()) {
@@ -386,7 +391,7 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
         IT = complex(0., 1.) / sqrt(pi) * sum * point->GetGeometricalFactor() * itFactor;
       }
       point->SetFitCrossSection((real(CT) + real(RT) + real(IT)) / 100.);
-    } else if (aa == ir) {
+    } else if (aa == exitPairNum) {
       double segmentJ = point->GetJ();
       int segmentL = point->GetL();
       PPair *entrancePair = compound()->GetPair(aa);

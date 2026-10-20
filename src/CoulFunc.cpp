@@ -6,12 +6,14 @@
 #include <gsl/gsl_sf_coulomb.h>
 #include <gsl/gsl_deriv.h>
 #include <vector>
+#include <cstdlib>
 #include <cmath>
 #include <algorithm>
 #include <complex>
 #include "NuclearPotential.h"
 #include "NuclearPotentialManager.h"
 #include "Config.h"
+#include "CoulombTable.h"
 
 /*!
  * The CoulFunc object is created with reference to a PPair object.
@@ -47,6 +49,33 @@ CoulFunc::CoulFunc(PPair *pPair, bool useGSLFunctions) :
   // This pair's potential, falling back to the manager's default when the pair
   // has no setting of its own.
   nuclearPotential_ = NuclearPotentialManager::instance().getPotential(pairKey_);
+
+  // The table holds plain Coulomb functions of charged channels: not neutral
+  // pairs (eta = 0, already cheap) and not pairs with a nuclear potential.
+  if (g_config && g_config->useCoulombTable && z1_ * z2_ != 0 && !(useHybridMethod_ && nuclearPotential_))
+    table_ = CoulombTable::Shared(g_config->coulombTablePath);
+}
+
+bool CoulFunc::TableLookup(int l, double radius, double energy) {
+  if (l == tLastL_ && radius == tLastR_ && energy == tLastE_) return tOk_;
+  tLastL_ = l;
+  tLastR_ = radius;
+  tLastE_ = energy;
+  const double eta = sqrt(uconv / 2.) * fstruc * z1() * z2() * sqrt(redmass() / energy);
+  const double rho = sqrt(2. * uconv) / hbarc * radius * sqrt(redmass() * energy);
+  CoulombTable::Open o;
+  tOk_ = energy > 0.0 && table_->LookupOpen(l, eta, rho, o);
+  if (tOk_) {
+    tP_ = o.P;
+    tS_ = o.S;
+    tPhi_ = o.phi;
+  }
+  return tOk_;
+}
+
+std::complex<double> CoulFunc::HardSpherePhase(int l, double radius, double energy) {
+  if (table_ && TableLookup(l, radius, energy)) return std::complex<double>(std::cos(tPhi_), -std::sin(tPhi_));
+  return CoulombHardSpherePhase(this->operator()(l, radius, energy));
 }
 
 /*!
@@ -220,6 +249,7 @@ CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
  */
 
 double CoulFunc::Penetrability(int l, double radius, double energy) {
+  if (table_ && TableLookup(l, radius, energy)) return tP_;
   struct CoulWaves coul = this->operator()(l, radius, energy);
   double rho = sqrt(2. * uconv) / hbarc * radius * sqrt(redmass() * energy);
   return rho / (pow(coul.F, 2.0) + pow(coul.G, 2.0));
@@ -231,13 +261,28 @@ double CoulFunc::Penetrability(int l, double radius, double energy) {
  */
 
 double CoulFunc::PEShift(int l, double radius, double energy) {
+  if (table_ && TableLookup(l, radius, energy)) return tS_;
   struct CoulWaves coul = this->operator()(l, radius, energy);
   double rho = sqrt(2. * uconv) / hbarc * radius * sqrt(redmass() * energy);
+  double shift;
   if (pow(coul.F, 2.0) == 0. && coul.F * coul.dF == 0.)
-    return rho * (coul.dG / coul.G);
+    shift = rho * (coul.dG / coul.G);
   else
-    return rho / (pow(coul.F, 2.0) + pow(coul.G, 2.0)) *
+    shift = rho / (pow(coul.F, 2.0) + pow(coul.G, 2.0)) *
         (coul.F * coul.dF + coul.G * coul.dG);
+  // Just above a charged-particle threshold (eta >~ 110; 11B+alpha within ~1 keV)
+  // the products overflow: G^2 or G G' is inf, and with F F' a denormal rather
+  // than exactly 0 the formula above returns NaN or -inf.  For 11B+a that made a
+  // ~50 eV band 0.5 keV above the alpha threshold give bare cross sections of
+  // 1e26-1e37 b, which any target-effect sub-point landing there folded into the
+  // data (Henderson 14C(p,p), key 76; --use-gradient fit 1526734 stopped on it).
+  // Scaling by hypot(F, G) avoids the overflow; it is used only when the plain
+  // formula failed, so every value that formula got right is unchanged.
+  if (!std::isfinite(shift)) {
+    const double h = std::hypot(coul.F, coul.G);
+    shift = rho * ((coul.F / h) * (coul.dF / h) + (coul.G / h) * (coul.dG / h));
+  }
+  return shift;
 }
 
 double CoulFunc::thisPEShift(double x, void *p) {
@@ -257,6 +302,17 @@ double CoulFunc::thisPEShift(double x, void *p) {
 double CoulFunc::PEShift_dE(int l, double radius, double energy, double step) {
   double result;
   double error;
+
+  // A Richardson-extrapolated central difference with a step of 1e-3 E, accurate
+  // to ~1e-10.  AZURE_SHIFT_DE_1EV=1 restores the route used before 2026-10-19, a
+  // 1 eV central difference of the exact S, which carries its rounding noise: up
+  // to 3e-5 relative at a few MeV for alpha+12C.
+  static const bool richardson = (std::getenv("AZURE_SHIFT_DE_1EV") == nullptr);
+  if (richardson && energy > 0.0) {
+    const double h = 1e-3 * energy;
+    auto cd = [&](double hh) { return (PEShift(l, radius, energy + hh) - PEShift(l, radius, energy - hh)) / (2.0 * hh); };
+    return (4.0 * cd(0.5 * h) - cd(h)) / 3.0;
+  }
 
   dEShiftParams_.radius = radius;
   dEShiftParams_.lValue = l;

@@ -97,6 +97,30 @@ appears with the following fields:
    Check this box to allow the normalization factor to be varied as a free
    parameter during fitting.
 
+   **Shared normalization (normalization groups, input file only).** Segments
+   that come from one measurement often share one absolute scale -- an
+   excitation function and the angular distributions it was integrated from,
+   or one data set split into per-angle segments. Ending their lines with the
+   keyword block ``normgroup <label>`` makes all segments with the same label
+   use the normalization of the **first** of them in file order -- its value,
+   vary flag, uncertainty and penalty -- and the other members' own
+   normalization, uncertainty and vary flag are ignored, e.g.::
+
+      1 1 3 0 2.3 0 180 0 1 1 10 0.016 0.01 1 data/Dayras_ap.dat 0 0 normgroup Dayras
+      1 1 3 1.572 1.572 0 180 4 1 1 0 0.030 0.01 1 data/Dayras_ang.dat 0 0 normgroup Dayras
+      1 1 3 2.032 2.032 0 180 4 1 1 0 0.081 0.05 1 data/Dayras_ang.dat 0 0 normgroup Dayras
+
+   fits one normalization for the three segments with one 10 % penalty.
+   A member whose own line varies its normalization keeps its
+   ``segment_<key>_norm`` entry in ``param.sav`` (fixed, written with the
+   shared value), so parameter files and parameter numbering do not depend
+   on the groups. ``chiSquared.out`` lists every member's (shared)
+   normalization and the penalty on the first member only. The run log notes
+   each group and its members. The keyword may be combined with
+   ``shiftgroup``; writers put it before a ``sample`` block. The GUI preserves
+   the block but does not edit it, and its Fitting tab still lists a member's
+   own vary flag.
+
 **Energy Shift**
    An energy calibration shift applied to the data (in MeV).
 
@@ -131,6 +155,121 @@ appears with the following fields:
    The fit parameter is named ``segment_<key>_energy_shift_sqrt`` in
    ``param.sav``, and ``shifts.out`` reports it in its last column. The GUI
    preserves the block when it loads and saves a file but does not edit it.
+
+   **Shared shift (shift groups).** A data set split into several segments
+   (one per angle, say) usually has one beam-energy calibration, so its
+   segments should share one shift rather than each fitting its own. Ending
+   the lines with the keyword block ``shiftgroup <label>`` does that: all
+   segments with the same label use the constant shift of the **first** of
+   them in file order -- its value, uncertainty, vary flag and penalty -- and
+   the other members' own shift value, uncertainty and vary flag are ignored,
+   e.g.::
+
+      1 2 1 0 3.567 157 161 4 1 1 10 0 0.02 1 data/pa0.dat 0 0 shiftgroup Frawley_pa0
+      1 2 1 0 3.567 148 153 4 1 1 10 0 0.02 1 data/pa0.dat 0 0 shiftgroup Frawley_pa0
+
+   fits one shift for both, with one 20 keV penalty. Each member keeps its
+   ``segment_<key>_energy_shift`` entry in ``param.sav`` (fixed, written with
+   the shared value), so parameter files stay compatible. The
+   :math:`\sqrt{E}` term is not shared (use a shift function for that, below).
+   The run log notes each group and its members. The GUI preserves the block
+   but does not edit it.
+
+**Energy-shift function** (input file only)
+   Different calibration errors shift the energy scale in different ways: an
+   offset in an analyzing magnet's field reading as :math:`\sqrt{E}`, an error
+   in its calibration constant or in a time-of-flight path length as
+   :math:`E`, a time-of-flight time-zero offset as :math:`E^{3/2}`. Instead of
+   a fixed keyword per form, a segment may carry a general function,
+
+   .. math::
+
+      E' = E + \Delta E + f(x;\,a_0, a_1, \ldots),
+
+   with :math:`x` the point's original laboratory energy in MeV and every
+   :math:`a_j` a fit parameter with its own value, uncertainty and vary flag.
+   The keyword block, at the end of the line like the others, is::
+
+      shiftfn "<f(x)>" N v0 s0 vary0  v1 s1 vary1 ...
+
+   with the expression in double quotes (blanks inside are ignored), ``N``
+   the number of parameters and one value, uncertainty (penalty width) and
+   vary flag per parameter. The expression is read like the ``<targetInt>``
+   equations (:doc:`experimental_effects`): ``x``, parameters ``a0``, ``a1``,
+   ..., numbers, ``+ - * / ^`` and ``sqrt``, ``exp``, ``ln``, ``log``,
+   ``sin``, ``cos``, ``tan``, ``asin``, ``acos``, ``atan``.
+
+   On a shift group the block goes on the group's **first** segment and the
+   function applies to every member with one set of parameters -- one
+   calibration for one experiment. Four Henderson :sup:`14`\ C(p,p) angles
+   sharing one magnet-offset calibration::
+
+      1 3 3 0 10  90  90 4 1 1 0 -0.0047 0.01 1 data/pp.dat 0 0 shiftgroup H shiftfn "a0*(sqrt(x)-sqrt(1.7))" 1 0 0.02 1
+      1 3 3 0 10 125 125 4 1 1 0  0      0    0 data/pp.dat 0 0 shiftgroup H
+      1 3 3 0 10 141 141 4 1 1 0  0      0    0 data/pp.dat 0 0 shiftgroup H
+      1 3 3 0 10 165 165 4 1 1 0  0      0    0 data/pp.dat 0 0 shiftgroup H
+
+   fit two parameters for the four segments: the shared constant shift
+   (10 keV penalty) and the :math:`\sqrt{E}` coefficient (0.02
+   MeV\ :sup:`1/2`).
+
+   *Centre the function inside the data.* The constant :math:`\Delta E` and
+   its penalty refer to the energy where :math:`f` vanishes. Written as
+   ``a0*sqrt(x)``, that is :math:`E = 0`, far below the data, and the 10 keV
+   penalty then constrains the shift at zero energy rather than any shift the
+   data see; written as ``a0*(sqrt(x)-sqrt(1.7))`` it is the shift at
+   1.7 MeV, inside the data. (The ``sqrtshift`` block cannot be centred; use a
+   function where this matters.) Forms by mechanism, with :math:`E_0` a number
+   you choose inside the data:
+
+   .. list-table::
+      :header-rows: 1
+
+      * - Calibration error
+        - Form
+        - ``shiftfn``
+      * - Analyzing-magnet field offset (:math:`E = kB^2`)
+        - :math:`\propto \sqrt{E}`
+        - ``"a0*(sqrt(x)-sqrt(E0))"``
+      * - Magnet calibration constant :math:`k`
+        - :math:`\propto E`
+        - ``"a0*(x-E0)"`` (:math:`a_0 = \Delta k/k`)
+      * - Time-of-flight path length :math:`L`
+        - :math:`\propto E`
+        - ``"a0*(x-E0)"`` (:math:`a_0 = 2\Delta L/L`)
+      * - Time-of-flight time zero
+        - :math:`\propto E^{3/2}`
+        - ``"a0*(x^1.5-E0^1.5)"``
+
+   Choose the form from the apparatus, not from :math:`\chi^2`.
+
+   The parameters are named ``segment_<key>_energy_shift_fn<j>`` in
+   ``param.sav`` (``<key>`` the segment declaring the function) and come after
+   every other parameter, so files without a function keep their parameters
+   exactly. Each free :math:`a_j` with a nonzero uncertainty adds a penalty
+   (:doc:`chi_squared`). The function is evaluated at every point and every
+   target-integration or convolution sub-point at its own original energy;
+   the target thickness and stopping powers stay those of the unshifted
+   energy, as for every shift (:doc:`experimental_effects`).
+
+   AZURE2 stops at start-up for a follower that declares a function (put it
+   on the group's first segment), for a function together with ``sqrtshift``
+   on any member (two descriptions of one calibration; write the
+   :math:`\sqrt{E}` term into the function), and for an expression that uses
+   an undeclared parameter, leaves a declared one unused, or has a free term
+   with no effect at the group's energies. It warns when the free terms --
+   :math:`\Delta E` if varied, and each varied :math:`a_j` -- cannot be told
+   apart over the group's energies (for example a :math:`\sqrt{x}` term on a
+   single-energy angular distribution, where it only duplicates
+   :math:`\Delta E`). The run log has one line per function with its
+   members, parameters and that condition number, and ``shifts.out`` one
+   ``#`` line per function with the shift at the group's lowest and highest
+   energies and its penalty. The GUI preserves the block but does not edit
+   it.
+
+   A ``param.sav`` value sets an energy-shift parameter (constant,
+   :math:`\sqrt{E}` or function) but never frees or fixes it: shifts follow
+   the vary flag of their segment line, because their penalties do.
 
 **Data File**
    Path to the experimental data file. Use the **Choose...** button to browse,
@@ -175,6 +314,43 @@ data segments.
    When including systematic uncertainties, carefully consider the segmentation
    scheme to avoid double-counting uncertainties across segments that share the
    same data.
+
+Natural and Enriched Targets (Sample Segments)
+----------------------------------------------
+
+When the particle pairs form more than one compound nucleus
+(:doc:`particle_pairs`), both segment dialogs offer a **Sample**
+drop-down: *No*, the default sample, or any named sample of the Pairs tab.
+A sample segment is the abundance-weighted sum: its own term, and each
+component of a **Sum** composite, is multiplied by the isotopic abundance of
+the compound nucleus its *entrance pair* forms in the chosen sample, as
+entered in the Pairs tab's abundance table (or fitted, when the abundance is
+a fit parameter). The row's reaction label is prefixed with the sample in brackets, *[default sample]* or
+*[name]*. Data sets taken on different targets simply name different
+samples.
+
+For natural neon under a neutron beam, the total cross section is one Sum
+composite with the components n+\ :sup:`20`\ Ne, n+\ :sup:`22`\ Ne and
+n+\ :sup:`21`\ Ne (elastic exit pairs, one per nucleus) and the box ticked;
+the engine then computes
+:math:`0.9048\,\sigma(\mathrm{n}+{}^{20}\mathrm{Ne}) + 0.0925\,\sigma(\mathrm{n}+{}^{22}\mathrm{Ne}) + 0.0027\,\sigma(\mathrm{n}+{}^{21}\mathrm{Ne})`.
+A plain (non-composite) sample segment is just its own cross section times
+its nucleus's abundance, which is what an isotopically enriched target with a
+known enrichment needs.
+
+The box is only available for additive observables: angle-integrated and
+differential cross sections, total capture and the two centre-of-mass
+differential forms for data segments; angle-integrated, differential and
+total capture for test segments. It is cleared and disabled for a **Ratio**
+composite, a phase shift, an analyzing power and a test segment of
+angular-distribution coefficients. The entrance and exit pair of every term
+must form the same compound nucleus. In the file the flag is the keyword
+``sample 1`` (default sample) or ``sample <name>`` at the end of the
+segment line (after a ``sqrtshift`` block, if any), and the engine refuses it
+in a project without an ``<abundances>`` block or with a sample name the
+block does not define. Each sample segment also gets an output file
+``AZUREOut_sample_seg=<key>.out`` (``.extrap`` for a test segment) with the
+total and one column per nucleus (:doc:`../reference/output_files`).
 
 Segments Without Data
 ---------------------

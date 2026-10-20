@@ -55,6 +55,9 @@ class AZUREAPI {
   bool CalculateExternalCapture();
   // Reads the parameters values
   bool UpdateParameters();
+  // Replace every parameter value, fixed ones included (RWA basis), without
+  // calculating anything.  Returns false if p has the wrong length.
+  bool SetParamsAllRWA(const vector_r &p);
   // Reads the norms values
   void UpdateNorms();
   // Set AZURE2 to calculate data points
@@ -93,7 +96,7 @@ class AZUREAPI {
   vector_r GetEnergyShiftIndices();
   // Number of numeric fields packed per parameter by GetParameterInfo().
   // Keep this in sync with pyazr/parameters.py (Parameter._NFIELDS).
-  static const int kParamInfoFields = 16;
+  static const int kParamInfoFields = 16;  // field 15: input_is_rwa (thm); shift-function and abundance records reuse the fields (types 5, 6)
   /*!
    * Returns structured metadata describing every parameter, in the same order
    * as params_names() / params_all() / params_fixed().
@@ -102,7 +105,13 @@ class AZUREAPI {
    * fields (and -1 for "not applicable") are:
    *   0  type          0=energy, 1=width, 2=norm, 3=energy-shift,
    *                    4=sqrt(E) energy-shift coefficient,
-   *                    5=THM coherent background (cbkg; cbackground=)
+   *                    5=shift-function parameter aj of a segment's "shiftfn"
+   *                      block: j in field 6, the segment in field 13,
+   *                    6=isotopic abundance of a compound nucleus (only in a
+   *                      project with an <abundances> block): its Z in field 1
+   *                      and A in field 4, the 1-based sample in field 6, the
+   *                      prior sigma in field 14
+   *                    7=THM coherent background (cbkg; cbackground=)
    *   1  jgroup        1-based J-group index (R-matrix params only)
    *   2  J             total spin of the J-group / level
    *   3  parity        +1 / -1
@@ -128,7 +137,7 @@ class AZUREAPI {
 
   // Number of numeric fields packed per particle pair by GetPairsInfo().
   // Keep this in sync with pyazr/parameters.py (Pair._NFIELDS).
-  static const int kPairInfoFields = 17;
+  static const int kPairInfoFields = 20;
   /*!
    * Returns structured metadata describing every particle pair, in 1-based
    * pair-number order (the same number stored in field 9 -- "pair" -- of
@@ -154,7 +163,11 @@ class AZUREAPI {
    *   15 i1i2factor    1 / ((2 J1 + 1)(2 J2 + 1)); the entrance pair's value is
    *                    the denominator of the statistical spin factor
    *                    omega = (2 J + 1) * i1i2factor
-   *   16 bindingE      Trojan Horse binding energy of the pair (MeV); 0 unless
+   *   16 nucleusZ      Z of the compound nucleus the pair forms
+   *   17 nucleusA      A of that compound nucleus
+   *   18 abundance     its isotopic abundance in the default sample (1 without
+   *                    an <abundances> block)
+   *   19 bindingE      Trojan Horse binding energy of the pair (MeV); 0 unless
    *                    the pair is used as a THM entrance channel
    */
   vector_r GetPairsInfo() const;
@@ -282,6 +295,9 @@ class AZUREAPI {
    * from the whole vector.
    */
   vector_r TransformAllRWAParameters(const vector_r &p, bool includeFixed = false) const;
+  /// As TransformAllRWAParameters, but returns every R-matrix parameter's
+  /// physical value, fixed ones included (the <levels> block of a snapshot).
+  vector_r TransformAllRWAParametersFull(const vector_r &p) const;
 
   /*!
    * Calculate chi-squared from RWA parameters

@@ -208,6 +208,20 @@ add_test(NAME pyazr_sqrt_shift
                  ${CMAKE_CURRENT_SOURCE_DIR}/sqrt_shift_test.py)
 set_tests_properties(pyazr_sqrt_shift PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
+# Energy-shift functions (shiftfn): read, written, and (with the engine) listed,
+# penalised and differenced exactly as AZURE2 does.
+add_test(NAME pyazr_shift_fn
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shift_fn_test.py)
+set_tests_properties(pyazr_shift_fn PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Normalization groups (normgroup): read, written, and (with the engine) the
+# follower's norm fixed, the penalty once and the shared column differenced.
+add_test(NAME pyazr_norm_group
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/norm_group_test.py)
+set_tests_properties(pyazr_norm_group PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # Park parametrization (--use-park): Brune equivalence of the cross sections,
 # analytic gradient and residual Jacobian against finite differences (the
 # adjoint differentiates Park's level matrix and its J-dependent terms), and
@@ -224,6 +238,66 @@ add_test(NAME pyazr_sav_readers
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/sav_readers_test.py)
 set_tests_properties(pyazr_sav_readers PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
+# A parameter file's fixed level parameters reach the engine (load_sav), so
+# pyazr evaluates the same model as the CLI given the same file.
+add_test(NAME pyazr_sav_fixed_params
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/sav_fixed_params_test.py)
+set_tests_properties(pyazr_sav_fixed_params PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Two sessions in one process share no state: a data session's residuals are
+# unchanged by an extrapolation (or second data) session opened beside it.
+add_test(NAME pyazr_shared_state
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shared_state_test.py)
+set_tests_properties(pyazr_shared_state PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Tests that take minutes rather than seconds (measured 2026-10-10 on a CRC
+# login node at their thread counts: park_gradient 41 min, shared_state 22,
+# objective 7, inactive_lines 6.5, channel_order 6).  CI excludes them with
+# `ctest -LE slow`; run the whole set (`ctest`, or `ctest -L slow` for these
+# alone) before changing pyazr or the engine paths they exercise.
+set_tests_properties(pyazr_channel_order pyazr_objective pyazr_inactive_lines
+                     pyazr_park_gradient pyazr_shared_state
+                     PROPERTIES LABELS slow)
+
+# Hard-sphere J^pi groups (includeAllJPi=1) through pyazr's default transform
+# route: the level-less groups used to give the transform a 0 x 0 eigenproblem.
+add_test(NAME pyazr_hard_sphere_transform
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hard_sphere_transform_test.py)
+set_tests_properties(pyazr_hard_sphere_transform PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Beta-decay feeding amplitudes keep their sign through the physical transform
+# (GetTransformParams returned |B| until 2026-10-12), and a save_fit snapshot
+# re-reads to the same chi-squared in the Brune, Park and standard
+# parametrizations.
+add_test(NAME pyazr_beta_sign
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/beta_sign_test.py)
+set_tests_properties(pyazr_beta_sign PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# A parameter vector passed as a list (or a non-float64 array) must work like
+# an ndarray: the cast's temporary used to be freed with the GIL released.
+add_test(NAME pyazr_list_args
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/list_args_test.py)
+set_tests_properties(pyazr_list_args PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Several compound nuclei in one project: the <abundances> block, natural
+# segments, the abundance fit parameters and merge_projects, against the engine.
+add_test(NAME pyazr_natural_target
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/natural_target_test.py)
+set_tests_properties(pyazr_natural_target PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# fetch_levels: IAEA LiveChart, falling back to the NNDC ENSDF API when LiveChart
+# is unreachable or answers with a challenge page.  Offline (canned answers).
+add_test(NAME pyazr_nds_levels_fallback
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/nds_levels_fallback_test.py)
+
 
 # The parameter table, _all_rwa and the free vector follow the engine's layout
 # in data and extrapolation mode (test segments change the parameter count).

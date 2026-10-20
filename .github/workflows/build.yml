@@ -9,11 +9,14 @@ on:
   pull_request:
   workflow_dispatch:
 
-# A newer push supersedes an in-flight run for the same ref, so a queued job
-# cannot outlive the commit that started it.
+# One run at a time per branch. A push while a run is in progress queues a
+# new run behind it instead of cancelling it (a full run takes ~40 min on the
+# macOS leg, and a busy afternoon of pushes once left no run finished at all).
+# GitHub keeps at most one queued run per group: a further push while one is
+# already waiting replaces the waiting one, so only the newest commit waits.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -213,6 +216,7 @@ jobs:
           EXTRA+=(-DPYBIND11_FINDPYTHON=ON)
           EXTRA+=(-DPython_EXECUTABLE="$PYAZR_PYTHON")
           EXTRA+=(-DPython3_EXECUTABLE="$PYAZR_PYTHON")
+          EXTRA+=(-DPYTHON_EXECUTABLE="$PYAZR_PYTHON")
           if [ -n "${PYBIND11_DIR:-}" ]; then EXTRA+=(-Dpybind11_DIR="$PYBIND11_DIR"); fi
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
@@ -276,10 +280,12 @@ jobs:
       # is therefore listed in a warning annotation, and a skipped pyazr test
       # fails the job where matrix.pyazr_engine says it must run.
       - name: Unit tests
+        # The pyazr tests labelled slow (tests/pyazr/CMakeLists.txt) take 5-40 min
+        # each; run them locally (ctest -L slow) when changing pyazr.
         run: |
           set -o pipefail
           rc=0
-          ctest --test-dir build --output-on-failure 2>&1 | tee unit-tests.log || rc=$?
+          ctest --test-dir build --output-on-failure -LE slow 2>&1 | tee unit-tests.log || rc=$?
           # ctest's closing "The following tests did not run:" block, one
           # "<n> - <name> (Skipped)" line per test.
           SKIPPED="$(awk '/ - .* \(Skipped\)/ { sub(/^[ \t]*[0-9]+ - /, ""); sub(/ \(Skipped\).*$/, ""); print }' unit-tests.log)"

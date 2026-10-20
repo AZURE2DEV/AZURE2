@@ -18,8 +18,9 @@ inline int TriIndex(int i, int j) {
 
 // A parameter's identity, used to match columns across runs.  R-matrix columns
 // are keyed on (kind, jGroup, level, channel); norm/shift columns on
-// (kind, segment), THM coherent-background ones on (kind, index), with the
-// unused slots set to -1.
+// (kind, segment), shift-function terms on (kind, segment, j), abundances on
+// (kind, sample, nucleus), THM coherent-background ones on (kind, index), with
+// the unused slots set to -1.
 std::tuple<int, int, int, int> IdentityKey(const ParamDesc &d) {
   int kind = (int)d.kind;
   switch (d.kind) {
@@ -28,6 +29,8 @@ std::tuple<int, int, int, int> IdentityKey(const ParamDesc &d) {
     case ParamKind::Norm: return std::make_tuple(kind, d.segment, -1, -1);
     case ParamKind::EnergyShift: return std::make_tuple(kind, d.segment, -1, -1);
     case ParamKind::EnergyShiftSqrt: return std::make_tuple(kind, d.segment, -1, -1);
+    case ParamKind::EnergyShiftFn: return std::make_tuple(kind, d.segment, d.fnTerm, -1);
+    case ParamKind::Abundance: return std::make_tuple(kind, d.sample, d.nucleus, -1);
     case ParamKind::ThmCoherent: return std::make_tuple(kind, d.channel, -1, -1);  // channel = its index
   }
   return std::make_tuple(kind, -1, -1, -1);

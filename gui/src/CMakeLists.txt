@@ -69,12 +69,13 @@ set(AZURESETUP_SOURCES
     TargetIntModel.cpp ChannelsModel.cpp main.cpp TargetIntTab.cpp FittingTab.cpp
     AboutAZURE2Dialog.cpp InfoDialog.cpp InTabDocs.cpp
     IAEALevelData.cpp IAEALevelDialog.cpp NuclearPotentialTab.cpp
-    ExforData.cpp ExforDialog.cpp ThmSettings.cpp ThmModelPage.cpp
+    ExforData.cpp ExforDialog.cpp PairKeyCombo.cpp AzureTheme.cpp AbundancesModel.cpp
+    ThmSettings.cpp ThmModelPage.cpp
     ThmExperimentsPage.cpp ThmChannelsPage.cpp ThmWorkspace.cpp AZURESetupThm.cpp FittingTabThm.cpp
 )
 
 set(AZURESETUP_HEADERS
-    ../include/AddLevelDialog.h ../include/AddPairDialog.h ../include/AddSegDataDialog.h
+    ../include/AddLevelDialog.h ../include/AddPairDialog.h ../include/AddSegDataDialog.h ../include/PairKeyCombo.h ../include/AzureTheme.h
     ../include/AddSegTestDialog.h ../include/AddTargetIntDialog.h ../include/AZUREMainThread.h
     ../include/AZURESetup.h ../include/ChannelDetails.h ../include/ChannelsModel.h
     ../include/ChooseFileButton.h ../include/EditChecksDialog.h ../include/EditDirsDialog.h
@@ -85,7 +86,8 @@ set(AZURESETUP_HEADERS
     ../include/TargetIntModel.h ../include/TargetIntTab.h ../include/FittingTab.h
     ../include/TextEditBuffer.h ../include/AboutAZURE2Dialog.h ../include/InfoDialog.h
     ../include/IAEALevelData.h ../include/IAEALevelDialog.h ../include/NuclearPotentialTab.h
-    ../include/ExforData.h ../include/ExforDialog.h ../include/ThmSettings.h
+    ../include/ExforData.h ../include/ExforDialog.h ../include/DialogScrollArea.h ../include/AbundancesModel.h
+    ../include/ThmSettings.h
     ../include/ThmModelPage.h ../include/ThmExperimentsPage.h ../include/ThmChannelsPage.h
     ../include/ThmWorkspace.h
 )

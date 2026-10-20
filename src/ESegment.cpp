@@ -1,4 +1,5 @@
 #include <cmath>
+#include <limits>
 #include "CNuc.h"
 #include "Config.h"
 #include "DataLine.h"
@@ -82,6 +83,21 @@ ESegment::ESegment(SegLine segLine) {
   lastEnergyShiftSqrt_ = 0.0;
   energyShiftSqrtError_ = segLine.energyShiftSqrtError();
   varyEnergyShiftSqrt_ = (segLine.varyEnergyShiftSqrt() == 1);
+  shiftGroup_ = segLine.shiftGroup();
+  shiftLeaderPos_ = -1;
+  hasShiftGroupFollowers_ = false;
+  normGroup_ = segLine.normGroup();
+  normLeaderPos_ = -1;
+  hasNormGroupFollowers_ = false;
+  hasSqrtShiftBlock_ = segLine.hasSqrtShift();
+  shiftFnDeclared_ = segLine.shiftFn();
+  shiftFnNominal_ = segLine.shiftFnValues();
+  shiftFnError_ = segLine.shiftFnErrors();
+  for (int v : segLine.shiftFnVary()) shiftFnVary_.push_back(v == 1);
+  hasShiftFn_ = false;
+  shiftFnConfig_ = nullptr;
+  shiftFnSourcePos_ = -1;
+  shiftFnParamStart_ = -1;
   if (segLine.varyNorm() == 1)
     varyNorm_ = true;
   else
@@ -89,6 +105,7 @@ ESegment::ESegment(SegLine segLine) {
   isAdvanced_ = segLine.isAdvanced() == 1;
   operationType_ = segLine.operationType();
   componentsList_ = segLine.componentsList();
+  naturalToken_ = segLine.natural();
   if (segLine.isUPOS() == 1)
     isUPOS_ = true;
   else
@@ -162,6 +179,17 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   energyShiftSqrt_ = energyShiftSqrtNominal_ = 0.0;
   lastEnergyShiftSqrt_ = 0.0;
   energyShiftSqrtError_ = 0.0;
+  shiftGroup_ = "";
+  shiftLeaderPos_ = -1;
+  hasShiftGroupFollowers_ = false;
+  normGroup_ = "";
+  normLeaderPos_ = -1;
+  hasNormGroupFollowers_ = false;
+  hasSqrtShiftBlock_ = false;
+  hasShiftFn_ = false;
+  shiftFnConfig_ = nullptr;
+  shiftFnSourcePos_ = -1;
+  shiftFnParamStart_ = -1;
   varyEnergyShiftSqrt_ = false;
   varyNorm_ = false;
 
@@ -169,6 +197,7 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   isAdvanced_ = (extrapLine.isAdvanced() == 1);
   operationType_ = extrapLine.operationType();
   componentsList_ = extrapLine.componentsList();
+  naturalToken_ = extrapLine.natural();
 
   isUPOS_ = false;
   secondaryDecayL_ = 0;
@@ -715,6 +744,42 @@ double ESegment::GetEnergyShiftSqrtError() const {
  * Returns true if the sqrt(E) coefficient is a fit parameter.
  */
 
+std::string ESegment::GetShiftGroup() const { return shiftGroup_; }
+
+int ESegment::GetShiftLeaderPos() const { return shiftLeaderPos_; }
+
+bool ESegment::IsShiftGroupFollower() const { return shiftLeaderPos_ >= 0; }
+
+bool ESegment::HasShiftGroupFollowers() const { return hasShiftGroupFollowers_; }
+
+void ESegment::SetShiftGroupFollower(int pos, double shift) {
+  shiftLeaderPos_ = pos;
+  varyEnergyShift_ = false;  // the group's parameter belongs to its first member
+  energyShift_ = shift;
+}
+
+void ESegment::SetHasShiftGroupFollowers(bool has) { hasShiftGroupFollowers_ = has; }
+
+std::string ESegment::GetNormGroup() const { return normGroup_; }
+
+int ESegment::GetNormLeaderPos() const { return normLeaderPos_; }
+
+bool ESegment::IsNormGroupFollower() const { return normLeaderPos_ >= 0; }
+
+bool ESegment::HasNormGroupFollowers() const { return hasNormGroupFollowers_; }
+
+void ESegment::SetNormGroupFollower(int pos, double norm, double nominal) {
+  normLeaderPos_ = pos;
+  // The group's norm, its nominal value and its penalty belong to the first member.
+  // varyNorm_ is kept: a follower with a varied norm keeps its (fixed) parameter, so
+  // the parameter layout, and every index after it, does not depend on the groups.
+  dataNorm_ = norm;
+  dataNormNominal_ = nominal;
+  dataNormError_ = 0.0;
+}
+
+void ESegment::SetHasNormGroupFollowers(bool has) { hasNormGroupFollowers_ = has; }
+
 bool ESegment::IsVaryEnergyShiftSqrt() const {
   return varyEnergyShiftSqrt_;
 }
@@ -727,8 +792,72 @@ bool ESegment::IsVaryEnergyShiftSqrt() const {
  */
 
 double ESegment::TotalEnergyShift(double labEnergy) const {
-  if (energyShiftSqrt_ == 0.0) return energyShift_;
-  return energyShift_ + energyShiftSqrt_ * sqrt(fabs(labEnergy));
+  const double shift = (energyShiftSqrt_ == 0.0) ? energyShift_ : energyShift_ + energyShiftSqrt_ * sqrt(fabs(labEnergy));
+  if (!hasShiftFn_) return shift;
+  return shift + shiftFn_.Evaluate(*shiftFnConfig_, labEnergy);
+}
+
+double ESegment::ShiftFnTerm(double labEnergy) const {
+  return hasShiftFn_ ? shiftFn_.Evaluate(*shiftFnConfig_, labEnergy) : 0.0;
+}
+
+bool ESegment::OwnsShiftFn() const { return !shiftFnDeclared_.empty(); }
+std::string ESegment::GetDeclaredShiftFn() const { return shiftFnDeclared_; }
+const std::vector<double> &ESegment::GetNominalShiftFnValues() const { return shiftFnNominal_; }
+const std::vector<double> &ESegment::GetShiftFnErrors() const { return shiftFnError_; }
+bool ESegment::IsVaryShiftFn(int j) const { return j >= 0 && j < (int)shiftFnVary_.size() && shiftFnVary_[j]; }
+bool ESegment::HasSqrtShiftBlock() const { return hasSqrtShiftBlock_; }
+bool ESegment::HasShiftFn() const { return hasShiftFn_; }
+std::string ESegment::GetShiftFnExpression() const { return hasShiftFn_ ? shiftFn_.GetEquation() : std::string(); }
+int ESegment::NumShiftFnParams() const { return (int)shiftFnValues_.size(); }
+int ESegment::GetShiftFnSourcePos() const { return shiftFnSourcePos_; }
+int ESegment::GetShiftFnParamStart() const { return shiftFnParamStart_; }
+void ESegment::SetShiftFnParamStart(int start) { shiftFnParamStart_ = start; }
+const std::vector<double> &ESegment::GetShiftFnValues() const { return shiftFnValues_; }
+const std::vector<double> &ESegment::GetLastShiftFnValues() const { return lastShiftFnValues_; }
+void ESegment::SetLastShiftFnValues(const std::vector<double> &values) { lastShiftFnValues_ = values; }
+
+void ESegment::SetShiftFnValue(int j, double value) {
+  if (!hasShiftFn_ || j < 0 || j >= (int)shiftFnValues_.size()) return;
+  shiftFnValues_[j] = value;
+  shiftFn_.SetParameter(j, value, *shiftFnConfig_);
+}
+
+void ESegment::InstallShiftFn(const ESegment &owner, int ownerPos, const Config &configure) {
+  const int n = (int)owner.shiftFnNominal_.size();
+  shiftFn_ = Equation(owner.shiftFnDeclared_, n, configure);
+  shiftFnConfig_ = &configure;
+  hasShiftFn_ = true;
+  shiftFnSourcePos_ = ownerPos;
+  shiftFnValues_.assign(n, 0.0);
+  for (int j = 0; j < n; j++) SetShiftFnValue(j, owner.shiftFnNominal_[j]);
+  // Never "already applied": the first FillEnergyShiftsFromParams re-energises the points.
+  lastShiftFnValues_.assign(n, std::numeric_limits<double>::quiet_NaN());
+}
+
+void ESegment::CopyShiftFnFrom(const ESegment &other) {
+  if (!other.hasShiftFn_) return;
+  if (!hasShiftFn_ || shiftFn_.GetEquation() != other.shiftFn_.GetEquation()) {
+    shiftFn_ = other.shiftFn_;
+    shiftFnConfig_ = other.shiftFnConfig_;
+    hasShiftFn_ = true;
+    shiftFnSourcePos_ = other.shiftFnSourcePos_;
+    shiftFnValues_.assign(other.shiftFnValues_.size(), 0.0);
+  }
+  for (int j = 0; j < (int)other.shiftFnValues_.size(); j++)
+    if (shiftFnValues_[j] != other.shiftFnValues_[j]) SetShiftFnValue(j, other.shiftFnValues_[j]);
+}
+
+void ESegment::AddShiftPenalty(double &chi) const {
+  if (varyEnergyShift_ && energyShiftError_ != 0.0)
+    chi += pow((energyShift_ - energyShiftNominal_) / energyShiftError_, 2.0);
+  if (varyEnergyShiftSqrt_ && energyShiftSqrtError_ != 0.0)
+    chi += pow((energyShiftSqrt_ - energyShiftSqrtNominal_) / energyShiftSqrtError_, 2.0);
+  // The shift function's parameters are penalised once, on the segment that owns them.
+  if (OwnsShiftFn() && hasShiftFn_)
+    for (int j = 0; j < (int)shiftFnValues_.size(); j++)
+      if (shiftFnVary_[j] && shiftFnError_[j] != 0.0)
+        chi += pow((shiftFnValues_[j] - shiftFnNominal_[j]) / shiftFnError_[j], 2.0);
 }
 
 void ESegment::SetEnergyShiftSqrt(double energyShiftSqrt) {
@@ -776,6 +905,52 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
   // No lock needed since each thread works on independent EData clones
   // after fixing EData::Clone to properly remap component segment pointers
 
+  for (int i = 0; i < NumPoints(); i++) UpdatePointEnergyWithShift(i, theCNuc, configure);
+}
+
+/*!
+ * The earlier point of this segment that point i (0-based) is mapped onto
+ * (EData::MapData), or NULL.
+ */
+EPoint *ESegment::ShiftHost(int i) {
+  if (i < 0 || i >= NumPoints()) return nullptr;
+  EPoint *point = GetPoint(i + 1);
+  if (!point->IsMapped()) return nullptr;
+  EnergyMap map = point->GetMap();
+  if (map.point < 1 || map.point > i) return nullptr;
+  EPoint *candidate = GetPoint(map.point);
+  if (candidate->NumSubPoints() != point->NumSubPoints()) return nullptr;
+  for (int m = 1; m <= candidate->NumLocalMappedPoints(); m++)
+    if (candidate->GetLocalMappedPoint(m) == point) return candidate;
+  return nullptr;
+}
+
+/*!
+ * Re-energises point i and then every point mapped onto it, on the calling
+ * thread.  A mapped point copies its energy-dependent values from its host
+ * (UpdatePointEnergyWithShift), so the host must be finished first: the
+ * parallel re-energise loops (EData::FillEnergyShiftsFromParams, the shift
+ * columns of AZURECalc::ResidualJacobian) hand out these groups, never single
+ * mapped points.  A point with a host returns at once.
+ */
+void ESegment::UpdatePointGroupEnergyWithShift(int i, CNuc *theCNuc, const Config *configure) {
+  if (ShiftHost(i)) return;
+  UpdatePointEnergyWithShift(i, theCNuc, configure);
+  EPoint *point = GetPoint(i + 1);
+  for (int m = 1; m <= point->NumLocalMappedPoints(); m++) {
+    const int j = (int)(point->GetLocalMappedPoint(m) - &points_[0]);
+    if (j > i && j < NumPoints() && ShiftHost(j) == point) UpdatePointEnergyWithShift(j, theCNuc, configure);
+  }
+}
+
+/*!
+ * Applies the segment's energy shift to point i (0-based) and its sub-points
+ * and recalculates their energy-dependent values.  Writes only that point, so
+ * different points may be updated concurrently -- except that a mapped point
+ * reads its host (ShiftHost), so it must run after its host and not
+ * concurrently with it: UpdatePointGroupEnergyWithShift.
+ */
+void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *configure) {
   // An ordinary segment's energies are positive and must stay so: points at
   // E <= 0 are left alone and a shift is floored above zero (ShiftedEnergy).
   // A THM (HOES) segment has points and folding sub-points below the entrance
@@ -783,8 +958,17 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
   // (as the guard did) tore the fold of every point within its reach of
   // threshold, and a point below threshold never moved at all.
   const bool thm = this->IsTHM();
-  for (int i = 0; i < NumPoints(); i++) {
+  {
     EPoint *point = GetPoint(i + 1);
+    // A point mapped onto an earlier point of this segment (EData::MapData)
+    // is at the same energy as its host, which has already been moved (index
+    // order in UpdatePointEnergiesWithShift; host first within a group in
+    // UpdatePointGroupEnergyWithShift): its energy-dependent values (and its
+    // sub-points') are copied from the host instead of recomputed.  Only the
+    // angle-dependent Coulomb amplitude is its own.  CopyEDependentValuesFrom
+    // refuses (and the values are recomputed) if the host is not at this
+    // energy.
+    EPoint *host = ShiftHost(i);
     if (point && (thm || point->GetOriginalEnergy() > 0)) {
       double originalEnergy = point->GetOriginalEnergy();
       double shiftedEnergy = thm ? originalEnergy + TotalEnergyShift(originalEnergy)
@@ -840,7 +1024,11 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
           }
           point->CalcLegendreP(configure->maxLOrder, theCNuc, effect);
         }
-        point->RecalcEDependentValues(theCNuc, *configure);
+        // The sub-points are moved and recalculated below, one by one.
+        if (host && point->CopyEDependentValuesFrom(*host))
+          point->CalcCoulombAmplitude(theCNuc, false);
+        else
+          point->RecalcEDependentValues(theCNuc, *configure, false);
 
         // IMPORTANT: Also apply energy shift to all subpoints (used in convolution/target integration)
         for (int j = 1; j <= point->NumSubPoints(); j++) {
@@ -849,7 +1037,14 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
             double subOriginalEnergy = subPoint->GetOriginalEnergy();
             // Subpoints hold c.m. energies: evaluate the lab shift at the
             // subpoint's own lab energy and convert it to the c.m. frame.
-            double cmFactor = (entrancePair->GetM(2)) / (entrancePair->GetM(1) + entrancePair->GetM(2));
+            double cmFactor;
+            // A beta-delayed segment (entrance ptype 20) carries the light decay
+            // particle's lab energy; c.m. = lab*(M1+M2)/M2 of the EXIT pair
+            // (EPoint::ConvertDecayEnergy), not the entrance-pair ratio.
+            if (entrancePair->GetPType() == 20)
+              cmFactor = (exitPair->GetM(1) + exitPair->GetM(2)) / exitPair->GetM(2);
+            else
+              cmFactor = (entrancePair->GetM(2)) / (entrancePair->GetM(1) + entrancePair->GetM(2));
             double energyShiftCM = cmFactor * TotalEnergyShift(subOriginalEnergy / cmFactor);
             double subShiftedEnergy = thm ? subOriginalEnergy + energyShiftCM
                                           : ShiftedEnergy(subOriginalEnergy, energyShiftCM);
@@ -861,7 +1056,11 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
 
             // Recalculate energy dependent values for subpoint
             if (entrancePair->GetPType() == 20) {
-              subPoint->ConvertDecayEnergy(exitPair);
+              // The c.m. energy was set above. ConvertDecayEnergy would read the lab
+              // slot (now holding the c.m. value) and multiply by (M1+M2)/M2 again,
+              // pushing every convolution sub-point of a beta-delayed spectrum up by
+              // 4/3 and corrupting the folded yield; only the excitation energy needs updating.
+              subPoint->ConvertExcitationEnergy(exitPair);
             } else if (this->IsCMDifferential()) {
               // subPoint->ConvertLabEnergy(entrancePair);
             } else if (!this->IsCMDifferential()) {
@@ -902,7 +1101,10 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
               }
               subPoint->CalcLegendreP(configure->maxLOrder, theCNuc, subEffect);
             }
-            subPoint->RecalcEDependentValues(theCNuc, *configure);
+            if (host && subPoint->CopyEDependentValuesFrom(*host->GetSubPoint(j)))
+              subPoint->CalcCoulombAmplitude(theCNuc);
+            else
+              subPoint->RecalcEDependentValues(theCNuc, *configure);
           }
         }
       }
@@ -1106,7 +1308,8 @@ double ESegment::GetComponentScaling() const {
  * Calculates the theoretical cross section for this segment, including
  * combination with any additional components according to the operation type
  */
-double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, const Config &configure, EData *edata) {
+double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, const Config &configure, EData *edata,
+                                                   bool precalculated) {
   if (pointIndex < 0 || pointIndex >= NumPoints()) {
     return 0.0;
   }
@@ -1118,7 +1321,7 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
   }
 
   // Calculate base point if not already calculated
-  if (!basePoint->IsMapped()) {
+  if (!precalculated && (!basePoint->IsMapped() || ScopedPointMappingOff::Active())) {
     try {
       basePoint->Calculate(cnuc, configure);
     } catch (...) {
@@ -1136,8 +1339,21 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
   else
     baseValue = basePoint->GetFitCrossSection();
 
+  // A sample segment: every term is weighted by the isotopic
+  // abundance of its entrance pair's compound nucleus, and the weighted terms
+  // are kept per nucleus on the base point for the decomposition output.
+  std::vector<double> naturalTerms;
+  const bool natural = this->IsNatural();
+  if (natural) {
+    naturalTerms.assign(cnuc->NumNuclei(), 0.0);
+    const int nucleus = cnuc->GetPair(cnuc->GetPairNumFromKey(this->GetEntranceKey()))->GetNucleus();
+    baseValue *= cnuc->GetAbundance(naturalSample_, nucleus);
+    naturalTerms[nucleus - 1] += baseValue;
+  }
+
   // If no components, return base value
   if (!HasComponents()) {
+    if (natural) basePoint->SetNaturalTerms(naturalTerms);
     return baseValue;
   }
 
@@ -1151,7 +1367,7 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
         EPoint *componentPoint = componentSegment->GetPoint(pointIndex + 1);
         if (componentPoint) {
           // No lock needed since each thread works on independent EData clones
-          if (!componentPoint->IsMapped()) {
+          if (!precalculated && (!componentPoint->IsMapped() || ScopedPointMappingOff::Active())) {
             try {
               componentPoint->Calculate(cnuc, configure);
             } catch (...) {
@@ -1161,12 +1377,19 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
           double compValue = componentPoint->GetFitCrossSection();
           // Check if NaN or infinite and skip if so
           if (!std::isnan(compValue) && !std::isinf(compValue)) {
-            sum += componentSegment->GetComponentScaling() * compValue;
+            double term = componentSegment->GetComponentScaling() * compValue;
+            if (natural) {
+              const int nucleus = cnuc->GetPair(cnuc->GetPairNumFromKey(componentSegment->GetEntranceKey()))->GetNucleus();
+              term *= cnuc->GetAbundance(naturalSample_, nucleus);
+              naturalTerms[nucleus - 1] += term;
+            }
+            sum += term;
           }
           compIdx++;
         }
       }
     }
+    if (natural) basePoint->SetNaturalTerms(naturalTerms);
     return sum;
   } else if (segmentOperationType_ == RATIO) {
     if (componentSegments_.empty()) {
@@ -1179,7 +1402,7 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
       EPoint *denominatorPoint = firstComponent->GetPoint(pointIndex + 1);
       if (denominatorPoint) {
         // No lock needed since each thread works on independent EData clones
-        if (!denominatorPoint->IsMapped()) {
+        if (!precalculated && (!denominatorPoint->IsMapped() || ScopedPointMappingOff::Active())) {
           try {
             denominatorPoint->Calculate(cnuc, configure);
           } catch (...) {

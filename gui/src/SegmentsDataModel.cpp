@@ -1,5 +1,6 @@
 #include "SegmentsDataModel.h"
 #include "PairsModel.h"
+#include "SegmentKeywords.h"
 #include <QColor>
 
 SegmentsDataModel::SegmentsDataModel(QObject *parent) :
@@ -23,6 +24,9 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
 
   if (role == Qt::DisplayRole) {
     SegmentsDataData line = segDataLineList.at(index.row());
+    // A sample segment (keyword tail "sample <1|name>") shows its sample in front of its reaction.
+    const QString natTok = SegmentKeywords::naturalSample(line.extraTokens);
+    const QString nat = natTok.isEmpty() ? QString() : (natTok == "1" ? QString("<i>[default sample]</i> ") : QString("<i>[%1]</i> ").arg(natTok));
     if (index.column() == 1) {
       if (line.isAdvanced == 1) {
         // Handle advanced segments (sum/ratio)
@@ -120,7 +124,7 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
             }
           }
         }
-        return QString("<div align='left'>%1</div>").arg(result);
+        return QString("<div align='left'>%1</div>").arg(nat + result);
       } else if (line.dataType == 3) {
         int i = 0;
         QList<PairsData> pairsList = pairsModel->getPairs();
@@ -128,14 +132,14 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
           if (pairsList[i].pairType == 10) break;
         if (pairsList.size() >= line.entrancePairIndex && i < pairsList.size()) {
           PairsData firstPair = pairsModel->getPairs().at(line.entrancePairIndex - 1);
-          return QString("<div align='left'>%1</div>").arg(pairsModel->getReactionLabelTotalCapture(firstPair));
+          return QString("<div align='left'>%1</div>").arg(nat + pairsModel->getReactionLabelTotalCapture(firstPair));
         } else
           return QString("<div align='left'><font style='color:red;font-weight:bold;'>UNDEFINED</font></div>");
       } else {
         if (pairsModel->getPairs().size() >= line.entrancePairIndex && pairsModel->getPairs().size() >= line.exitPairIndex) {
           PairsData firstPair = pairsModel->getPairs().at(line.entrancePairIndex - 1);
           PairsData secondPair = pairsModel->getPairs().at(line.exitPairIndex - 1);
-          return QString("<div align='left'>%1</div>").arg(pairsModel->getReactionLabel(firstPair, secondPair));
+          return QString("<div align='left'>%1</div>").arg(nat + pairsModel->getReactionLabel(firstPair, secondPair));
         } else
           return QString("<div align='left'><font style='color:red;font-weight:bold;'>UNDEFINED</font></div>");
       }
@@ -429,6 +433,11 @@ bool SegmentsDataModel::setData(const QModelIndex &index, const QVariant &value,
   return false;
 }
 
+void SegmentsDataModel::setLineExtras(int row, const QString &tokens) {
+  if (row < 0 || row >= segDataLineList.size()) return;
+  segDataLineList[row].extraTokens = tokens;
+}
+
 bool SegmentsDataModel::insertRows(int position, int rows, const QModelIndex &index) {
   Q_UNUSED(index);
   if (rows > 0) {
@@ -521,10 +530,6 @@ QString SegmentsDataModel::getReactionLabel(const QModelIndex &index) {
  * (the UPOS block, most recently); moving the struct itself cannot lose
  * anything.
  */
-
-void SegmentsDataModel::setSqrtShiftTokens(int row, const QString &tokens) {
-  if (row >= 0 && row < segDataLineList.size()) segDataLineList[row].sqrtShiftTokens = tokens;
-}
 
 bool SegmentsDataModel::moveLine(int from, int to) {
   if (from < 0 || to < 0 || from >= segDataLineList.size() || to >= segDataLineList.size() || from == to) return false;

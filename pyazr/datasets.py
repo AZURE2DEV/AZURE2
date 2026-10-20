@@ -16,10 +16,16 @@ Layout of a ``<segmentsData>`` line (see ``include/SegLine.h``)::
         [phaseJ phaseL if isDiff==2]
         dataNorm varyNorm dataNormError
         [energyShift energyShiftError varyEnergyShift]      (optional)
-        dataFile  [advanced flags ...]  [sqrtshift b bError varyB]
+        dataFile  [advanced flags ...]  [keyword blocks]
 
-The trailing ``sqrtshift`` keyword block adds a sqrt(E) term to the segment's
-energy shift, E' = E + energyShift + b*sqrt(E/MeV), b in MeV^1/2.
+The trailing keyword blocks (any order): ``sqrtshift b bError varyB`` adds a
+sqrt(E) term to the segment's energy shift, E' = E + energyShift + b*sqrt(E/MeV),
+b in MeV^1/2; ``shiftgroup <label>`` makes the segments with one label share one
+constant shift (the first one's); ``normgroup <label>`` does the same for the
+normalization (the first one's norm, vary flag and penalty); ``shiftfn "<f(x)>" N v0 s0 vary0 ...`` adds
+f(x; a0..a(N-1)) at the original lab energy x (MeV), on a group's first segment
+for the whole group; ``sample 1`` / ``sample <name>`` (alias ``natural``) weights
+every term by the abundance of its entrance pair's compound nucleus.
 
 Layout of a ``<segmentsTest>`` line (see ``include/ExtrapLine.h``)::
 
@@ -42,6 +48,19 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 import numpy as np
+
+
+def _natural_token(blocks):
+    """``(natural, sample)`` from the keyword blocks: ``natural 0`` -> (False, ""),
+    ``sample 1`` -> (True, "") (the unnamed, or only, sample), ``sample <name>``
+    -> (True, name); the older ``natural`` keyword is read the same way."""
+    blk = blocks.get("sample") or blocks.get("natural") or []
+    if len(blk) != 1:
+        return False, ""
+    tok = blk[0]
+    if _isfloat(tok):
+        return int(float(tok)) == 1, ""
+    return True, tok
 
 
 def _isfloat(tok):
@@ -90,6 +109,84 @@ def _decode_observable(isDiff, table):
     return table.get(code, f"code{code}"), thm
 
 
+# Keyword blocks a segment line may end with (SegLine.h), and how many tokens
+# each takes: sqrtshift b bError vary; sample <1|name> (alias natural);
+# shiftgroup <label>; normgroup <label>; shiftfn takes a variable number (see
+# _split_keyword_tail).
+_KEYWORDS = {"sqrtshift": 3, "sample": 1, "natural": 1, "shiftgroup": 1, "normgroup": 1,
+             "shiftfn": None}
+
+
+def _split_keyword_tail(tokens):
+    """Split the trailing keyword blocks off a token list.
+
+    Returns ``(positional, blocks)``: the tokens before the first keyword, and a
+    dict keyword -> its value tokens, verbatim, so ``[kw] + tokens`` writes the
+    block back unchanged.  Keyword blocks may come in any order; unknown
+    trailing text is ignored, as the engine does.  A ``shiftfn`` block is a
+    quoted expression (possibly split at blanks), N, and N (value, sigma, vary)
+    triples; :func:`_shiftfn_block` interprets its tokens.
+    """
+    tokens = list(tokens)
+    first = None
+    for k, tok in enumerate(tokens):
+        if tok.lower() in _KEYWORDS:
+            first = k
+            break
+    if first is None:
+        return tokens, {}
+    blocks, k = {}, first
+    while k < len(tokens):
+        kw = tokens[k].lower()
+        if kw not in _KEYWORDS:
+            break
+        if kw == "shiftfn":
+            j = k + 1
+            if j >= len(tokens):
+                raise ValueError("shiftfn without an expression: " + " ".join(tokens))
+            if tokens[j].startswith('"'):
+                while not (len(tokens[j]) > 1 and tokens[j].endswith('"')) and j + 1 < len(tokens):
+                    j += 1
+            try:
+                n = int(tokens[j + 1])
+            except (IndexError, ValueError):
+                raise ValueError("malformed shiftfn block: " + " ".join(tokens))
+            end = j + 2 + 3 * n
+            if n < 1 or end > len(tokens):
+                raise ValueError("malformed shiftfn block: " + " ".join(tokens))
+            blocks[kw] = tokens[k + 1:end]
+            _shiftfn_block(blocks[kw])          # validate the numbers now
+            k = end
+            continue
+        n = _KEYWORDS[kw]
+        if kw in ("shiftgroup", "normgroup") and k + 1 >= len(tokens):
+            raise ValueError(kw + " without a label: " + " ".join(tokens))
+        blocks[kw] = tokens[k + 1:k + 1 + n]
+        k += 1 + n
+    return tokens[:first], blocks
+
+
+def _shiftfn_block(vals):
+    """``(expression, [(value, sigma, vary), ...])`` from a ``shiftfn`` block's
+    tokens (:func:`_split_keyword_tail`); blanks inside the expression are
+    dropped, as the engine does."""
+    j = 0
+    expr = vals[0]
+    if expr.startswith('"'):
+        while not (len(expr) > 1 and expr.endswith('"')) and j + 1 < len(vals):
+            j += 1
+            expr += vals[j]
+        expr = expr.strip('"')
+    try:
+        n = int(vals[j + 1])
+        i = j + 2
+        params = [(float(vals[i + 3 * t]), float(vals[i + 3 * t + 1]),
+                   int(float(vals[i + 3 * t + 2])) == 1) for t in range(n)]
+    except (IndexError, ValueError):
+        raise ValueError("malformed shiftfn block: shiftfn " + " ".join(vals))
+    return expr, params
+
+
 @dataclass
 class Segment:
     """One data segment: its provenance and what it measures."""
@@ -114,6 +211,20 @@ class Segment:
     energy_shift_sqrt: float = 0.0         # b in E' = E + shift + b*sqrt(E) (MeV^1/2)
     energy_shift_sqrt_error: float = 0.0   # its systematic (MeV^1/2)
     vary_shift_sqrt: bool = False          # is b a fit parameter?
+    natural: bool = False                  # sample segment ("sample 1" / "sample <name>", older files
+                                           #   "natural ..."): every term is weighted by its nucleus's abundance
+    natural_sample: str = ""               # the sample's name ("" = the unnamed, or only, sample)
+    # segments with the same label share ONE constant energy shift: the first
+    # of them (file order) owns the parameter, the others take its value
+    shift_group: Optional[str] = None
+    # segments with the same label share ONE normalization: the first of them
+    # (file order) owns the norm, its vary flag and its penalty
+    norm_group: Optional[str] = None
+    # energy-shift function f(x; a0..) added at the original lab energy x (MeV):
+    # the expression, and (value, sigma, vary) per parameter aj; on a shift
+    # group it is declared on the first segment and applies to all members
+    shift_fn: Optional[str] = None
+    shift_fn_params: tuple = ()
     operation: Optional[str] = None    # 'sum' | 'ratio' for a composite segment
     components: tuple = ()             # (entrance, exit, angle, scaling) each
     # Centres of the norm and shift priors.  The norm / shift field above is
@@ -127,6 +238,13 @@ class Segment:
             self.nominal_norm = self.norm
         if self.nominal_shift is None:
             self.nominal_shift = self.energy_shift
+
+
+    @property
+    def sample(self):
+        """The sample the segment's abundance weights come from: ``None`` for an
+        unweighted segment, ``""`` for the default sample, else the name."""
+        return (self.natural_sample if self.natural else None)
 
     @property
     def composite(self) -> bool:
@@ -246,19 +364,24 @@ class SegmentSet(list):
         operation, components = None, []
         tail = t[i + 1:]
 
-        # The sqrt(E) energy-shift term is a keyword block at the very end:
-        #   sqrtshift b bError vary
-        # Split it off first so the positional composite parse never sees it.
+        # Keyword blocks come at the very end, in either order:
+        #   sqrtshift b bError vary      the sqrt(E) energy-shift term
+        #   sample 1 | sample <name>     an abundance-weighted (sample) segment; alias natural
+        #   shiftgroup <label>           segments sharing one constant energy shift
+        #   normgroup <label>            segments sharing one normalization
+        #   shiftfn "<f(x)>" N v s vary  a shift function f(x; a0..a(N-1))
+        # Split them off first so the positional composite parse never sees them.
         shift_sqrt = shift_sqrt_error = 0.0
         vary_shift_sqrt = False
-        for k, tok in enumerate(tail):
-            if tok.lower() == "sqrtshift":
-                blk = tail[k + 1:k + 4]
-                if len(blk) == 3 and all(_isfloat(b) for b in blk):
-                    shift_sqrt, shift_sqrt_error = float(blk[0]), float(blk[1])
-                    vary_shift_sqrt = int(float(blk[2])) == 1
-                tail = tail[:k]
-                break
+        natural = False
+        tail, blocks = _split_keyword_tail(tail)
+        blk = blocks.get("sqrtshift") or []
+        if len(blk) == 3 and all(_isfloat(b) for b in blk):
+            shift_sqrt, shift_sqrt_error = float(blk[0]), float(blk[1])
+            vary_shift_sqrt = int(float(blk[2])) == 1
+        natural, natural_sample = _natural_token(blocks)
+        shift_fn, shift_fn_params = (_shiftfn_block(blocks["shiftfn"])
+                                     if "shiftfn" in blocks else (None, ()))
         if tail and _isfloat(tail[0]) and int(float(tail[0])) == 1:
             operation = "ratio" if (len(tail) > 1 and
                                     int(float(tail[1])) == 1) else "sum"
@@ -296,6 +419,10 @@ class SegmentSet(list):
             energy_shift_sqrt=shift_sqrt,
             energy_shift_sqrt_error=shift_sqrt_error,
             vary_shift_sqrt=vary_shift_sqrt,
+            natural=natural, natural_sample=natural_sample,
+            shift_group=(blocks.get("shiftgroup") or [None])[0],
+            norm_group=(blocks.get("normgroup") or [None])[0],
+            shift_fn=shift_fn, shift_fn_params=tuple(shift_fn_params),
             operation=operation, components=tuple(components))
 
     # -- views ----------------------------------------------------------------
@@ -398,6 +525,14 @@ class TestSegment:
     phase_L: Optional[int] = None          # isDiff == 2 only
     max_ang_dist_order: Optional[int] = None   # isDiff == 3 only
     thm: bool = False                      # Trojan Horse (half-off-shell)?
+    natural: bool = False                  # sample grid ("sample 1" / "sample <name>", older "natural ...")
+    natural_sample: str = ""               # the sample's name ("" = the unnamed, or only, sample)
+
+    @property
+    def sample(self):
+        """The sample the segment's abundance weights come from: ``None`` for an
+        unweighted segment, ``""`` for the default sample, else the name."""
+        return (self.natural_sample if self.natural else None)
 
     @property
     def name(self) -> str:
@@ -465,6 +600,8 @@ class TestSegmentSet(list):
             phase_J = float(t[i]); phase_L = int(float(t[i + 1])); i += 2
         elif isDiff == 3:               # angular distribution carries its order
             max_order = int(float(t[i])); i += 1
+        _, blocks = _split_keyword_tail(t[i:])
+        natural, natural_sample = _natural_token(blocks)
         return TestSegment(
             key=key, active=active, entrance_key=entrance_key,
             exit_key=exit_key,
@@ -472,7 +609,8 @@ class TestSegmentSet(list):
             angle_min=aMin, angle_max=aMax, angle_step=aStep,
             observable=_decode_observable(isDiff, _EXTRAP_OBSERVABLE)[0],
             phase_J=phase_J, phase_L=phase_L, max_ang_dist_order=max_order,
-            thm=_decode_observable(isDiff, _EXTRAP_OBSERVABLE)[1])
+            thm=_decode_observable(isDiff, _EXTRAP_OBSERVABLE)[1],
+            natural=natural, natural_sample=natural_sample)
 
     # -- views ----------------------------------------------------------------
 

@@ -51,14 +51,34 @@ namespace {
 // not a lock: calls run with the GIL released, so two Python threads driving
 // sessions at once would race on g_config -- hence "one thread" above.
 struct ConfigScope {
-  explicit ConfigScope(Config *c) :
-    previous_(g_config) { g_config = c; }
-  ~ConfigScope() { g_config = previous_; }
+  // Besides the Config, every call swaps in the session's own external-capture
+  // amplitude cache.  `g_ecAmplitudeCache` is process-global and its keys
+  // (k-group, EC m-group, entrance, exit, segment key) say nothing about which
+  // session they belong to, so with one shared object a second session on the
+  // same model -- an extrapolation grid beside a data session, say -- first
+  // deleted the first session's entries (InitializeECAmplitudeCache) and then
+  // filled the cache under colliding keys, and the first session interpolated
+  // its capture amplitudes from the wrong grid: residuals off by up to 28 %,
+  // silently, for as long as the process lived (8Be+alpha, 2026-10-07).
+  // `slot` is the session's cache pointer; whatever the call leaves in the
+  // global (Initialize re-creates it) is captured back into the slot on exit.
+  ConfigScope(Config *c, ECAmplitudeCache **slot) :
+    previous_(g_config), previousCache_(g_ecAmplitudeCache), slot_(slot) {
+    g_config = c;
+    g_ecAmplitudeCache = *slot_;
+  }
+  ~ConfigScope() {
+    *slot_ = g_ecAmplitudeCache;
+    g_ecAmplitudeCache = previousCache_;
+    g_config = previous_;
+  }
   ConfigScope(const ConfigScope &) = delete;
   ConfigScope &operator=(const ConfigScope &) = delete;
 
  private:
   Config *previous_;
+  ECAmplitudeCache *previousCache_;
+  ECAmplitudeCache **slot_;
 };
 
 // Convert a std::vector<double> to a new float64 numpy array (a copy, so the
@@ -94,6 +114,9 @@ struct RuntimeOptions {
   bool use_gsl_coul = false;        // USE_GSL_COULOMB_FUNC
   bool use_rmc = false;             // USE_RMC_FORMALISM
   bool use_park = false;            // USE_PARK_FORMALISM (implies Brune)
+  bool use_coulomb_table = true;    // Config::useCoulombTable
+  bool replace_grids = true;        // Config::replaceSubPointGrids
+  std::string coulomb_table;        // Config::coulombTablePath ("" = the default file)
 };
 
 void apply_options(Config &config, const RuntimeOptions &opt) {
@@ -125,6 +148,9 @@ void apply_options(Config &config, const RuntimeOptions &opt) {
     config.paramMask |= Config::USE_RMC_FORMALISM;
   else
     config.paramMask &= ~Config::USE_RMC_FORMALISM;
+  config.useCoulombTable = opt.use_coulomb_table;
+  config.coulombTablePath = opt.coulomb_table;
+  config.replaceSubPointGrids = opt.replace_grids;
   // Park shares Brune's per-level shift functions, so it switches Brune on.
   if (opt.use_park)
     config.paramMask |= (Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
@@ -144,7 +170,7 @@ class Session {
     config_->paramMask |= Config::USE_API;  // silence the "Calculating ..." chatter
     apply_options(*config_, opt);
 
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
 
     // The API stub used to guard the CLI's reads against --use-api; the binding
     // is the API, so mirror the checks main() performed for a headless run.
@@ -173,6 +199,10 @@ class Session {
     // another is live must not pull the config out from under it.
     if (g_config == config_) g_config = nullptr;
     if (config_ != nullptr) delete config_;
+    if (ecCache_ != nullptr) {
+      if (g_ecAmplitudeCache == ecCache_) g_ecAmplitudeCache = nullptr;
+      delete ecCache_;
+    }
   }
 
   Session(const Session &) = delete;
@@ -197,21 +227,21 @@ class Session {
   // -- lifecycle -----------------------------------------------------------
 
   bool rebuild() {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     return api_->Rebuild();
   }
 
   bool write_output_files() {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     return api_->WriteOutputFiles();
   }
 
   bool initialize() {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     return api_->Initialize() == 0;
   }
   bool calculate_external_capture() {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     return api_->CalculateExternalCapture();
   }
 
@@ -220,7 +250,7 @@ class Session {
   void set_data() { api_->SetData(); }
   void set_extrap() { api_->SetExtrap(); }
   bool set_radius(int idx, double radius) {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     return api_->SetRadius(idx, radius);
   }
 
@@ -295,7 +325,7 @@ class Session {
   // -- data bookkeeping ------------------------------------------------------
 
   int update_data() {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     return api_->UpdateData();
   }
   void update_norms() { api_->UpdateNorms(); }
@@ -345,41 +375,82 @@ class Session {
   py::array_t<double> calculated_excitation_energies(int i) const { return to_array(api_->calculated_excitation_energies(i)); }
   py::array_t<double> calculated_conv(int i) const { return to_array(api_->calculated_conv(i)); }
 
+  // -- argument checks ---------------------------------------------------------
+  // The engine copies p[k] for every free parameter without looking at p's
+  // length.  A short vector therefore read past its end and left the norms and
+  // shifts at whatever the engine last held: cross sections and S-factors still
+  // right (they use no norm), chi2 garbage, no error (12C+alpha, 2026-10-08).
+  void expect_free(const vector_r &v, const char *what) const {
+    std::vector<bool> fixed = api_->params_fixed();
+    size_t nfree = 0;
+    for (bool f : fixed) if (!f) nfree++;
+    if (v.size() != nfree)
+      throw AZURE2Error(std::string(what) + ": expected the free parameter vector (" +
+                        std::to_string(nfree) + " values, params_rwa / params order), got " +
+                        std::to_string(v.size()) + ".");
+  }
+  void expect_all(const vector_r &v, const char *what) const {
+    size_t nall = api_->params_fixed().size();
+    if (v.size() != nall)
+      throw AZURE2Error(std::string(what) + ": expected every parameter (" + std::to_string(nall) +
+                        " values, fixed ones included), got " + std::to_string(v.size()) + ".");
+  }
+
   // -- segment updates (return the number of segments) ------------------------
 
   int update_segments(const py::array_t<double, py::array::forcecast> &p) {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
+    expect_free(v, "update_segments");
     return api_->UpdateSegments(v);
   }
   int update_segments_rwa(const py::array_t<double, py::array::forcecast> &p) {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
+    expect_free(v, "update_segments_rwa");
     return api_->UpdateSegmentsRWA(v);
   }
-  int update_segments_all_rwa(const py::array_t<double, py::array::forcecast> &p) {
-    ConfigScope guard(config_);
+  void set_params_all_rwa(const py::array_t<double, py::array::forcecast> &p) {
+    ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
+    expect_all(v, "set_params_all_rwa");
+    api_->SetParamsAllRWA(v);
+  }
+  int update_segments_all_rwa(const py::array_t<double, py::array::forcecast> &p) {
+    ConfigScope guard(config_, &ecCache_);
+    vector_r v = to_vector(p);
+    expect_all(v, "update_segments_all_rwa");
     return api_->UpdateSegmentsAllRWA(v);
   }
 
   // -- transforms ------------------------------------------------------------
 
-  py::array_t<double> transform_rwa(py::array_t<double, py::array::forcecast> p) {
+  py::array_t<double> transform_rwa(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p), out;
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_);
+      ConfigScope guard(config_, &ecCache_);
       out = api_->TransformRWAParameters(v);
     }
     return to_array(out);
   }
-  py::array_t<double> transform_all_rwa(py::array_t<double, py::array::forcecast> p, bool include_fixed) {
+  py::array_t<double> transform_all_rwa(const py::array_t<double, py::array::forcecast> &p, bool include_fixed) {
     vector_r v = to_vector(p), out;
+    expect_all(v, "transform_all_rwa");
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_);
+      ConfigScope guard(config_, &ecCache_);
       out = api_->TransformAllRWAParameters(v, include_fixed);
+    }
+    return to_array(out);
+  }
+  py::array_t<double> transform_all_rwa_full(const py::array_t<double, py::array::forcecast> &p) {
+    vector_r v = to_vector(p), out;
+    expect_all(v, "transform_all_rwa_full");
+    {
+      py::gil_scoped_release release;
+      ConfigScope guard(config_, &ecCache_);
+      out = api_->TransformAllRWAParametersFull(v);
     }
     return to_array(out);
   }
@@ -387,34 +458,39 @@ class Session {
   // -- chi-squared and derivatives -------------------------------------------
 
   double calculate_chi2_rwa(const py::array_t<double, py::array::forcecast> &p) {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
+    expect_free(v, "calculate_chi2_rwa");
     return api_->CalculateChi2RWA(v);
   }
   double calculate_chi2_physical(const py::array_t<double, py::array::forcecast> &p) {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
+    expect_free(v, "calculate_chi2_physical");
     return api_->CalculateChi2Physical(v);
   }
-  py::array_t<double> park_norms(py::array_t<double, py::array::forcecast> p) {
-    ConfigScope guard(config_);
+  py::array_t<double> park_norms(const py::array_t<double, py::array::forcecast> &p) {
+    ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
+    expect_free(v, "park_norms");
     return to_array(api_->ParkNorms(v));
   }
-  py::array_t<double> calculate_chi2_grad_rwa(py::array_t<double, py::array::forcecast> p) {
+  py::array_t<double> calculate_chi2_grad_rwa(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p), out;
+    expect_free(v, "calculate_chi2_grad_rwa");
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_);
+      ConfigScope guard(config_, &ecCache_);
       out = api_->CalculateChi2GradRWA(v);
     }
     return to_array(out);
   }
-  py::array_t<double> calculate_residual_jacobian_rwa(py::array_t<double, py::array::forcecast> p) {
+  py::array_t<double> calculate_residual_jacobian_rwa(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p), out;
+    expect_free(v, "calculate_residual_jacobian_rwa");
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_);
+      ConfigScope guard(config_, &ecCache_);
       out = api_->CalculateResidualJacobianRWA(v);
     }
     return to_array(out);
@@ -423,18 +499,18 @@ class Session {
     vector_r v = to_vector(p), out;
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_);
+      ConfigScope guard(config_, &ecCache_);
       out = api_->CalculateResidualsRWA(v);
     }
     return to_array(out);
   }
   py::array_t<double> current_norms() {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     return to_array(api_->GetCurrentNorms());
   }
   // The THM experiments as the last chi-squared evaluation profiled them.
   py::list thm_experiments() {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     py::list out;
     for (const ThmExperimentReport &r : api_->GetThmExperiments()) {
       py::dict d;
@@ -456,7 +532,7 @@ class Session {
   }
   // The Coulomb line shape of a THM experiment at the current parameters.
   py::dict thm_lineshape(const std::string &name, py::array_t<double, py::array::forcecast> e) {
-    ConfigScope guard(config_);
+    ConfigScope guard(config_, &ecCache_);
     ThmLineshapeReport r;
     std::string why;
     if (!api_->GetThmLineshape(name, to_vector(e), r, why)) throw AZURE2Error(why);
@@ -507,7 +583,7 @@ class Session {
     {
       // The DW vertex and R(E) can take seconds: without the GIL.
       py::gil_scoped_release release;
-      ConfigScope guard(config_);
+      ConfigScope guard(config_, &ecCache_);
       ok = api_->GetThmVertex(name, energies, r, why);
     }
     if (!ok) throw AZURE2Error(why);
@@ -594,7 +670,7 @@ class Session {
     bool ok;
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_);
+      ConfigScope guard(config_, &ecCache_);
       ok = api_->GetThmDistortion(name, energies, r, why);
     }
     if (!ok) throw AZURE2Error(why);
@@ -625,11 +701,12 @@ class Session {
     d["lmax"] = r.lmax;
     return d;
   }
-  py::array_t<double> calculate_model_gradients_rwa(py::array_t<double, py::array::forcecast> p) {
+  py::array_t<double> calculate_model_gradients_rwa(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p), out;
+    expect_free(v, "calculate_model_gradients_rwa");
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_);
+      ConfigScope guard(config_, &ecCache_);
       out = api_->CalculateModelGradientsRWA(v);
     }
     return to_array(out);
@@ -637,20 +714,20 @@ class Session {
 
   // -- external region and caches --------------------------------------------
 
-  py::array_t<double> coulomb_functions(py::array_t<double, py::array::forcecast> request) {
+  py::array_t<double> coulomb_functions(const py::array_t<double, py::array::forcecast> &request) {
     vector_r v = to_vector(request), out;
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_);
+      ConfigScope guard(config_, &ecCache_);
       out = api_->GetCoulombFunctions(v);
     }
     return to_array(out);
   }
-  py::array_t<double> ec_integrals(py::array_t<double, py::array::forcecast> request) {
+  py::array_t<double> ec_integrals(const py::array_t<double, py::array::forcecast> &request) {
     vector_r v = to_vector(request), out;
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_);
+      ConfigScope guard(config_, &ecCache_);
       out = api_->GetECIntegrals(v);
     }
     return to_array(out);
@@ -666,6 +743,7 @@ class Session {
 
  private:
   Config *config_;
+  ECAmplitudeCache *ecCache_ = nullptr;  // this session's external-capture amplitude cache
   AZUREAPI *api_;
 };
 
@@ -694,6 +772,9 @@ PYBIND11_MODULE(_azure2, m) {
       .def_readwrite("transform", &RuntimeOptions::transform)
       .def_readwrite("use_long_wavelength", &RuntimeOptions::use_long_wavelength)
       .def_readwrite("use_gsl_coul", &RuntimeOptions::use_gsl_coul)
+      .def_readwrite("use_coulomb_table", &RuntimeOptions::use_coulomb_table)
+      .def_readwrite("coulomb_table", &RuntimeOptions::coulomb_table)
+      .def_readwrite("replace_grids", &RuntimeOptions::replace_grids)
       .def_readwrite("use_rmc", &RuntimeOptions::use_rmc)
       .def_readwrite("use_park", &RuntimeOptions::use_park);
 
@@ -770,11 +851,17 @@ PYBIND11_MODULE(_azure2, m) {
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
       .def("update_segments_rwa", &Session::update_segments_rwa,
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
+      .def("set_params_all_rwa", &Session::set_params_all_rwa,
+           py::call_guard<py::gil_scoped_release>(), py::arg("params"),
+           "Set every parameter, fixed ones included (params_all_rwa layout), "
+           "without calculating.  Fixed values are what the free-vector calls use.")
       .def("update_segments_all_rwa", &Session::update_segments_all_rwa,
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
       .def("transform_rwa", &Session::transform_rwa, py::arg("params"))
       .def("transform_all_rwa", &Session::transform_all_rwa, py::arg("params"),
            py::arg("include_fixed") = false)
+      .def("transform_all_rwa_full", &Session::transform_all_rwa_full, py::arg("params"),
+           "As transform_all_rwa, returning every R-matrix parameter's physical value, fixed ones included.")
       .def("calculate_chi2_rwa", &Session::calculate_chi2_rwa,
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
       .def("park_norms", &Session::park_norms, py::arg("params"),

@@ -2,6 +2,8 @@
 #define ADDTARGETINTDIALOG_H
 
 #include <QDialog>
+#include <QRadioButton>
+#include <QTableWidget>
 #include <string>
 #include <vector>
 
@@ -28,7 +30,19 @@ class AddTargetIntDialog : public QDialog {
  public:
   AddTargetIntDialog(QWidget *parent = 0);
   QCheckBox *isConvolutionCheck;
-  QCheckBox *isConvolutionDependentCheck;
+  // One Gaussian beam spread. sigmaText holds its width in lab MeV: a number ("0.03") or an expression of
+  // the lab energy x ("a0*x^1.5"); the tab stores a number in the constant slot of the line and an expression
+  // with the sigmalab keyword. A line from before 2026-10 carries its expression in the c.m. frame; for such
+  // a line the frame row appears, with the exact conversion to the lab form.
+  QRadioButton *sigmaLabRadio;
+  QRadioButton *sigmaCmRadio;
+  QPushButton *convertToLabButton;
+  QWidget *frameRow;
+  /*! True when sigmaText parses as a plain number, i.e. a constant width. */
+  bool sigmaIsConstant() const;
+  /*! c.m./lab energy ratio of the entrance pair the effect's segments share (0 = unknown or mixed); it
+   *  enables the exact rewrite of a legacy c.m. expression into the lab form. */
+  void setConversionFactor(double factor);
   QCheckBox *isTargetIntegrationCheck;
   QCheckBox *isQCoefficientCheck;
   QLineEdit *sigmaText;
@@ -52,6 +66,13 @@ class AddTargetIntDialog : public QDialog {
   QLineEdit *beamTpcSigmaText;
   QLineEdit *beamTruncationText;
   QList<double> tempBeamProfile;   // flattened (xi, omega, alpha, weight) quadruples
+  QCheckBox *isUdrCheck;
+  QLineEdit *udrFileText;
+  QPushButton *udrBrowseButton;
+  QLineEdit *udrFlightPathText;
+  QLineEdit *udrBurstText;
+  QLineEdit *udrChannelText;
+  QCheckBox *udrCentredCheck;
   QLineEdit *applyRangesText;
   QLineEdit *transitionWidthText;
   QLineEdit *autoToleranceText;
@@ -67,6 +88,8 @@ class AddTargetIntDialog : public QDialog {
   QList<double> tempQCoefficients;
   QList<double> tempConvCoefficients;
   QLineEdit *convolutionEqText;
+  /*! Sizes a coefficient table to show every row (up to 12 before it scrolls) and lets the dialog grow with it. */
+  void fitTableHeight(QTableWidget *table);
   void createParameterItem(int row, double value = 0.0);
   void createQCoefficientItem(int row, double value = 1.0);
   void createConvCoefficientItem(int row, double value = 1.0);
@@ -83,13 +106,17 @@ class AddTargetIntDialog : public QDialog {
   void qCoefficientSpinChanged(int newNumber);
   void qCoefficientChanged(int row, int column);
 
-  void convCoefficientCheckChanged(bool checked);
+  void sigmaModeChanged();
+  void convertExpressionToLab();
   void convCoefficientSpinChanged(int newNumber);
   void convCoefficientChanged(int row, int column);
 
   void beamProfileCheckChanged(bool checked);
   void beamComponentSpinChanged(int newNumber);
   void beamProfileChanged(int row, int column);
+
+  void udrCheckChanged(bool checked);
+  void udrBrowse();
 
   void elementSelectionChanged(int index);
   void compoundFormulaChanged(const QString &formula);
@@ -103,8 +130,10 @@ class AddTargetIntDialog : public QDialog {
   QGroupBox *qCoefficientBox;
   QGroupBox *convCoefficientBox;
   QGroupBox *beamProfileBox;
+  QGroupBox *udrBox;
 
   int selectedElement_;
+  double conversionFactor_ = 0.0;
   int activeElementNumber() const;
   void populateElementComboBox();
   void updateStoppingPowerFromElement(int element);

@@ -39,3 +39,10 @@ an independent numpy implementation of the kernel
 Re-pinned 2026-09-26: the shift-function fix b6cc41b removed ~1e-9 noise from S(E) that ShftFunc::EnergyDerivative amplified into dS/dE, which enters the Brune transformation of sub-threshold levels. 40.4045 -> 40.4033, segment 1 by 1.9e-4.
 
 Re-pinned 2026-09-28: the dS/dE fix (ChannelFunc::DerivativeStep) starts the central difference of the shift function from a quarter of the distance to threshold, at most 1 keV, instead of 1 eV, where it was round-off dominated (~1e-7..1e-5 relative, and different with and without FMA -- Linux and Windows CI differed from an x86-64-v3 build by up to 1.6e-3 in tests/thm_options). 40.4033 -> 40.3958 (1.9e-4), segment 2 by 2.2e-4.
+
+Re-baselined 2026-10-08 (40.4045 -> 40.4477) for the detailed-balance normalisation fix
+in `EPoint::IntegrateTargetEffect`.  The weight D now multiplies the numerator only,
+Y = Int G W D sigma / Int G W; before, it was also in the denominator, which cancelled
+its normalisation at the point energy.  The new value was checked point by point against
+the corrected numpy kernel (Smith 2021 beams, no window: <= 0.05 %) and by
+`tests/reference/beam_profile_reference_test` (26/26).

@@ -330,7 +330,23 @@ EOF
         
         # Create the final DMG
         FINAL_DMG_NAME="AZURE2-$(date +%Y%m%d)-macOS-$(uname -m).dmg"
-        hdiutil create -srcfolder "$DMG_TEMP" -volname "AZURE2" -fs HFS+ -fsargs "-c c=64,a=16,e=16" -format UDBZ "$FINAL_DMG_NAME"
+        # hdiutil on GitHub's macOS runners intermittently fails with
+        # "create failed - Resource busy" (a background process holding the
+        # image); retry a few times, removing any partial image in between.
+        DMG_OK=0
+        for attempt in 1 2 3 4 5; do
+            if hdiutil create -srcfolder "$DMG_TEMP" -volname "AZURE2" -fs HFS+ -fsargs "-c c=64,a=16,e=16" -format UDBZ "$FINAL_DMG_NAME"; then
+                DMG_OK=1
+                break
+            fi
+            echo -e "${YELLOW}hdiutil create failed (attempt $attempt of 5); retrying in 15 s...${NC}"
+            rm -f "$FINAL_DMG_NAME"
+            sleep 15
+        done
+        if [ "$DMG_OK" -ne 1 ]; then
+            echo -e "${RED}hdiutil create failed 5 times; giving up.${NC}"
+            exit 1
+        fi
         
         # Cleanup
         rm -rf "$DMG_TEMP"

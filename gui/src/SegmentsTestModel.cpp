@@ -1,5 +1,6 @@
 #include "SegmentsTestModel.h"
 #include "PairsModel.h"
+#include "SegmentKeywords.h"
 
 SegmentsTestModel::SegmentsTestModel(QObject *parent) :
   QAbstractTableModel(parent) {
@@ -22,6 +23,9 @@ QVariant SegmentsTestModel::data(const QModelIndex &index, int role) const {
 
   if (role == Qt::DisplayRole) {
     SegmentsTestData line = segTestLineList.at(index.row());
+    // A sample segment (keyword tail "sample <1|name>") shows its sample in front of its reaction.
+    const QString natTok = SegmentKeywords::naturalSample(line.extraTokens);
+    const QString nat = natTok.isEmpty() ? QString() : (natTok == "1" ? QString("<i>[default sample]</i> ") : QString("<i>[%1]</i> ").arg(natTok));
     if (index.column() == 1) {
       if (line.isAdvanced == 1) {
         // Handle advanced segments (sum/ratio)
@@ -119,7 +123,7 @@ QVariant SegmentsTestModel::data(const QModelIndex &index, int role) const {
             }
           }
         }
-        return QString("<div align='left'>%1</div>").arg(result);
+        return QString("<div align='left'>%1</div>").arg(nat + result);
       } else if (line.dataType == 4) {
         int i = 0;
         QList<PairsData> pairsList = pairsModel->getPairs();
@@ -127,14 +131,14 @@ QVariant SegmentsTestModel::data(const QModelIndex &index, int role) const {
           if (pairsList[i].pairType == 10) break;
         if (pairsList.size() >= line.entrancePairIndex && i < pairsList.size()) {
           PairsData firstPair = pairsModel->getPairs().at(line.entrancePairIndex - 1);
-          return QString("<center>%1</center>").arg(pairsModel->getReactionLabelTotalCapture(firstPair));
+          return QString("<center>%1</center>").arg(nat + pairsModel->getReactionLabelTotalCapture(firstPair));
         } else
           return QString("<center><font style='color:red;font-weight:bold;'>UNDEFINED</font></center>");
       } else {
         if (pairsModel->getPairs().size() >= line.entrancePairIndex && pairsModel->getPairs().size() >= line.exitPairIndex) {
           PairsData firstPair = pairsModel->getPairs().at(line.entrancePairIndex - 1);
           PairsData secondPair = pairsModel->getPairs().at(line.exitPairIndex - 1);
-          return QString("<center>%1</center>").arg(pairsModel->getReactionLabel(firstPair, secondPair));
+          return QString("<center>%1</center>").arg(nat + pairsModel->getReactionLabel(firstPair, secondPair));
         } else
           return QString("<center><font style='color:red;font-weight:bold'>UNDEFINED</font></center>");
       }
@@ -354,6 +358,11 @@ bool SegmentsTestModel::setData(const QModelIndex &index, const QVariant &value,
     return true;
   }
   return false;
+}
+
+void SegmentsTestModel::setLineExtras(int row, const QString &tokens) {
+  if (row < 0 || row >= segTestLineList.size()) return;
+  segTestLineList[row].extraTokens = tokens;
 }
 
 bool SegmentsTestModel::insertRows(int position, int rows, const QModelIndex &index) {

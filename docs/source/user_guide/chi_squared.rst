@@ -106,6 +106,10 @@ penalty too when it sits away from an explicit centre (``f19_pag_thm`` and
 ``param.sav`` moved it. The same holds for the energy-shift column and its
 penalty below.
 
+Segments that share one normalization (``normgroup``, :doc:`segments`)
+contribute this term once, with the first member's :math:`n^{\text{nom}}` and
+:math:`\epsilon`; the other members carry no normalization penalty.
+
 The energy-shift penalty
 ------------------------
 
@@ -120,7 +124,11 @@ this time with an absolute rather than a percentage error:
 A segment whose :math:`\sqrt{E}` shift coefficient :math:`b_s` is free (the
 ``sqrtshift`` block, see :doc:`segments`) adds the same kind of term,
 :math:`((b_s - b_s^{\text{nom}})/\delta b_s)^2`, with :math:`\delta b_s` in
-MeV\ :sup:`1/2`.
+MeV\ :sup:`1/2`, and so does each free parameter :math:`a_j` of an
+energy-shift function (the ``shiftfn`` block), once, on the segment that
+declares the function: :math:`((a_j - a_j^{\text{nom}})/\delta a_j)^2`, with
+the nominal value the one in the input file. A free shift term with no
+uncertainty has no penalty.
 
 Nuisance parameters
 -------------------
@@ -169,6 +177,12 @@ The file separates the two contributions::
 - **Norm-Chi-Squared** and **Total-Norm-Chi-Squared** are the normalization
   penalty.
 - **N** is the number of points in the segment, and **Total-N** their sum.
+- **Total-Shift-Chi-Squared**, at the end of the totals line whenever an
+  energy shift is a fit parameter, is the sum of the energy-shift penalties
+  (constant, :math:`\sqrt{E}` and shift-function terms).  ``shifts.out``
+  breaks it down per shift function.  Files written before October 2026 lack
+  it, and their totals fall short of the minimizer's own value by exactly this
+  amount.
 
 The quantity the minimizer actually descends is the sum of all of them, plus
 the energy-shift and nuisance terms, which the file does not list. Quoting

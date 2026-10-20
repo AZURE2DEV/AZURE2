@@ -366,3 +366,146 @@ if(USE_MCMC)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
         TIMEOUT 300)
 endif()
+
+# The Add/Edit Level dialog lists only the J^pi values that give channels under
+# the current pairs and limits, with a fallback when no pairs are defined.
+add_executable(level_dialog_test level_dialog_test.cpp)
+set_target_properties(level_dialog_test PROPERTIES AUTOMOC OFF)
+target_include_directories(level_dialog_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(level_dialog_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(level_dialog_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(level_dialog_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME level_dialog COMMAND level_dialog_test)
+set_tests_properties(level_dialog PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# Not a ctest: a manual backward-compatibility check of the Levels tab against
+# real project files (`levels_compat_check a.azr b.azr ...`).
+add_executable(levels_compat_check levels_compat_check.cpp)
+set_target_properties(levels_compat_check PROPERTIES AUTOMOC OFF)
+target_include_directories(levels_compat_check PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(levels_compat_check PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(levels_compat_check PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(levels_compat_check PRIVATE pugixml srim_utilities)
+endif()
+
+# The particle-pair drop-downs that replaced typed pair keys: labels, key
+# round trip, exit items relabelled as reactions with the entrance pair.
+add_executable(pair_key_combo_test pair_key_combo_test.cpp)
+set_target_properties(pair_key_combo_test PROPERTIES AUTOMOC OFF)
+target_include_directories(pair_key_combo_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(pair_key_combo_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(pair_key_combo_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(pair_key_combo_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME pair_key_combo COMMAND pair_key_combo_test)
+set_tests_properties(pair_key_combo PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# Segment lines round-trip through the Segments tab with their trailing
+# keyword blocks (sqrtshift, natural) intact; the sqrtshift block used to be
+# dropped on load.
+add_executable(segments_roundtrip_test segments_roundtrip_test.cpp)
+set_target_properties(segments_roundtrip_test PROPERTIES AUTOMOC OFF)
+target_include_directories(segments_roundtrip_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(segments_roundtrip_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(segments_roundtrip_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(segments_roundtrip_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME segments_roundtrip COMMAND segments_roundtrip_test)
+set_tests_properties(segments_roundtrip PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# Several compound nuclei in one project: nuclei of the pairs, the abundance
+# table and its <abundances> block, levels per nucleus, the "natural 1"
+# segment keyword in the dialogs and models, abundance fitting parameters.
+add_executable(natural_target_test natural_target_test.cpp)
+set_target_properties(natural_target_test PROPERTIES AUTOMOC OFF)
+target_include_directories(natural_target_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(natural_target_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(natural_target_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(natural_target_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME natural_target COMMAND natural_target_test)
+set_tests_properties(natural_target PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# The run thread's Config copy must carry every option the GUI sets on its
+# own Config (the hard-sphere option was missing).
+add_executable(main_thread_config_test main_thread_config_test.cpp)
+set_target_properties(main_thread_config_test PROPERTIES AUTOMOC OFF)
+target_include_directories(main_thread_config_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(main_thread_config_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(main_thread_config_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(main_thread_config_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME main_thread_config COMMAND main_thread_config_test)
+set_tests_properties(main_thread_config PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

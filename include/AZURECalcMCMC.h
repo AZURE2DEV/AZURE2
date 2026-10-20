@@ -63,9 +63,10 @@ class AZURECalcMCMC {
   enum ParamKind { PARAM_ENERGY = 0,
                    PARAM_WIDTH = 1,
                    PARAM_NORM = 2,
-                   PARAM_SHIFT = 3,
-                   PARAM_SHIFT_SQRT = 4,  // sqrt(E) energy-shift coefficient
-                   PARAM_CBKG = 5 };      // THM coherent background (cbkg_*)
+                   PARAM_SHIFT = 3,         // also a shift-function parameter aj (as dev)
+                   PARAM_SHIFT_SQRT = 4,    // sqrt(E) energy-shift coefficient
+                   PARAM_ABUNDANCE = 6,     // isotopic abundance (GetParameterInfo type 6)
+                   PARAM_CBKG = 7 };        // THM coherent background (cbkg_*; GetParameterInfo type 7)
 
   /*!
    * Run MCMC sampling with specified parameters.

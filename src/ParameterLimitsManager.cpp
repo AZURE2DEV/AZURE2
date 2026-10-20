@@ -211,7 +211,32 @@ std::string ParameterLimitsManager::SettingNameForMinuitName(const std::string &
  * parameter's limits and nuisance prior to a different parameter.  The index is
  * still honoured, but only for entries whose name matched nothing -- which keeps
  * older files working without letting a stale index override a name match.
+ *
+ * An entry whose name matched nothing is not always from an older file: it can
+ * name a parameter that no longer exists (a segment made inactive, a level
+ * renumbered or removed), and its stale index then points at an unrelated
+ * parameter.  12C+a (2026-10-16): 33 such bindings, among them a level energy
+ * given segment_113_norm's nuisance flag, which switched off the analytic G2.
+ * So the index fallback only pairs compatible names: a normalization or shift
+ * entry (stored under its exact Minuit name) never falls back, and a "Level N
+ * ..." entry only binds to a parameter of level N of the same kind (energy or
+ * width; channel numbers are not compared, older files numbered them globally).
+ * Entries in any other format fall back as before.
  */
+static bool SettingFitsParameter(const std::string &setting, const std::string &param) {
+  if (setting.compare(0, 8, "segment_") == 0) return false;  // exact Minuit names: matched by name or not at all
+  if (setting.compare(0, 5, "cbkg_") == 0) return false;     // THM coherent background: exact Minuit names too
+  if (setting.compare(0, 6, "Level ") != 0) return true;     // unknown format: keep the old behaviour
+  const size_t sp = setting.find(' ', 6);
+  if (sp == std::string::npos) return true;
+  const std::string level = setting.substr(6, sp - 6);
+  const bool isEnergy = setting.find(" Energy") != std::string::npos;
+  const bool isWidth = setting.find(" Width") != std::string::npos;
+  if (isEnergy) return param == "energy_" + level;
+  if (isWidth) return param.compare(0, 7 + level.size(), "width_" + level + "_") == 0;
+  return true;
+}
+
 
 void ParameterLimitsManager::BuildIndexMap(const ROOT::Minuit2::MnUserParameters &p) {
   std::vector<int> nonFixedToActualIndex;
@@ -238,7 +263,8 @@ void ParameterLimitsManager::BuildIndexMap(const ROOT::Minuit2::MnUserParameters
     if (indexToSetting_[nonFixedIndex]) continue;
     for (std::map<std::string, ParameterSetting>::iterator it = parameterSettings_.begin();
          it != parameterSettings_.end(); ++it) {
-      if (it->second.minuitIndex == (int)nonFixedIndex && !claimed.count(&it->second)) {
+      if (it->second.minuitIndex == (int)nonFixedIndex && !claimed.count(&it->second) &&
+          SettingFitsParameter(it->first, p.Parameter(nonFixedToActualIndex[nonFixedIndex]).GetName())) {
         indexToSetting_[nonFixedIndex] = &it->second;
         claimed[&it->second] = true;
         break;
@@ -247,14 +273,16 @@ void ParameterLimitsManager::BuildIndexMap(const ROOT::Minuit2::MnUserParameters
   }
 
   // The same association keyed by the full-vector index, for the nuisance
-  // prior.  Norms and shifts are left out, as the chi-squared always has.
+  // prior.  Norms, shifts and abundances are left out, as the chi-squared
+  // always has: they carry their own priors (segment errors, <abundances>).
   priorByActualIndex_.assign(p.Params().size(), NULL);
   for (size_t nonFixedIndex = 0; nonFixedIndex < nonFixedToActualIndex.size(); nonFixedIndex++) {
     ParameterSetting *setting = indexToSetting_[nonFixedIndex];
     if (!setting || !setting->useAsNuisance) continue;
     const int actualIndex = nonFixedToActualIndex[nonFixedIndex];
     const std::string &name = p.Parameter(actualIndex).GetName();
-    if (AZURELabel::IsNormName(name) || AZURELabel::IsEnergyShiftName(name)) continue;
+    if (AZURELabel::IsNormName(name) || AZURELabel::IsEnergyShiftName(name) || name.compare(0, 10, "abundance_") == 0)
+      continue;
     priorByActualIndex_[actualIndex] = setting;
   }
 }

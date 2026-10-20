@@ -8,6 +8,8 @@
 class ChooseFileButton;
 class FilteredTextEdit;
 class InfoDialog;
+class PairKeyCombo;
+class PairsModel;
 
 QT_BEGIN_NAMESPACE
 
@@ -64,8 +66,9 @@ class RunTab : public QWidget {
   QGroupBox *rateParamsGroup;
   QRadioButton *gridTempButton;
   QRadioButton *fileTempButton;
-  QLineEdit *rateEntranceKey;
-  QLineEdit *rateExitKey;
+  PairKeyCombo *rateEntranceKey;
+  PairKeyCombo *rateExitKey;
+  void setPairsModel(PairsModel *model);
   QLineEdit *minTempText;
   QLineEdit *maxTempText;
   QLineEdit *tempStepText;

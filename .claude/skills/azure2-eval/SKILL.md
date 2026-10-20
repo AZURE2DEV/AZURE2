@@ -42,6 +42,33 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   not a rounded mass number — the Separation Energy field is entered
   independently and precisely already, so an imprecise particle mass is an easy
   thing to overlook as the one remaining low-precision input.
+- **Several compound nuclei in one `.azr` (natural targets): the identity is
+  the COMPOUND nucleus, the abundance is the TARGET isotope's.** On
+  `feature/multi-compound-nucleus` (2026-10-13) a project may hold the level
+  schemes of several compound nuclei; the nucleus of a pair is inferred from
+  its columns (particle pair Z=z1+z2, A=round(m1+m2); γ pair the heavy
+  particle; β pair the daughter), so n+²²Ne lines are ²³Ne lines and the
+  parameter for natural neon's 9.25 % of ²²Ne is `abundance_10_23`. A natural
+  data set is ONE segment line: a SUM composite whose components are the
+  members' elastic terms (one per nucleus) plus the `sample 1` keyword (`natural 1` in
+  older files); the
+  abundances come from the `<abundances>` block (`Z A value vary sigma`, a
+  parameter per nucleus only when the block exists, emitted right after the
+  level parameters and before the norms) and `abundanceSumSigma=s` in
+  `<config>`. Build such a project with `pyazr.merge_projects(models, out,
+  abundances={Nucleus(10,21): 0.9048, ...}, shared=[...])` rather than by
+  hand (pair keys offset, segments renumbered, components/targetInt
+  remapped; `<parameterSettings>`/`<mcmc>` are dropped). GUI: the Pairs tab
+  shows the nucleus column and abundance table once the pairs form two
+  nuclei; every level belongs to one nucleus (dialog drop-down); the segment
+  dialogs have the "Natural target" box; the Fitting tab an "Abundances"
+  sub-tab. Before any extrapolation of such a model remember the
+  `<targetInt>` rule below applies per segment as usual. Cross-check a merge
+  against the members: each nucleus alone (components of the other nuclei
+  removed, abundances 1/0/0) must reproduce the standalone project's χ² to
+  1e-10 (`tests/natural_target/check.sh` does exactly this). rmfit: keys of
+  kind `abundance`, prior rows from the block, the sum-to-one term is NOT a
+  row (fix the abundances or accept priors only).
 - **A width of exactly 0 is a fixed parameter, whatever its fix flag says.**
   `CNuc.cpp:1621` adds every channel as `p.Add(name, gamma, 0.1*gamma)` and then
   `if (gamma == 0.0) p.Fix(name)`, so a channel written with value `0` and
@@ -56,6 +83,32 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   applies to particle and photon channels alike, and to `gamma=0.0` channels
   handed to `AzrModel.add_level`. It is also why `deactivate_level` both zeroes
   *and* fixes a level's widths — zeroing alone would already have fixed them.
+- **A J^π is in the calculation only if an active level carries it — unless
+  `includeAllJPi=1` is in the `<config>` block.** The elastic T-matrix diagonal
+  is `e^{2iω} − e^{2i(ω−φ)}(1 + U)`, so a J^π group with channels and no levels
+  still scatters through its hard-sphere phase φ; but `CNuc::Fill` only creates
+  a group from an *active* level line, so a J^π with no level was absent and
+  its potential scattering silently missing from elastic data. The old fix was
+  a fixed zero-width "dummy" level per J^π (easily mistaken for a background
+  pole). Since 2026-10-11 the `.azr` can carry `includeAllJPi=1` and
+  `maxOrbitalMomentum=N` after the fixed `<config>` lines: `CNuc::AddHardSphereGroups`
+  then adds a level-less group with its particle channels for every J^π the
+  pairs allow up to `N` (default: the largest particle-channel l in the file).
+  `tests/hard_sphere/check.sh` shows this is bit-identical to the dummy-level
+  model on both routes, and that without either the p+12C elastic cross
+  section is off by up to 14 %. Consequences for evaluation work:
+  - a file without the key (every project saved before 2026-10-11) computes as
+    before: check the Levels tab's status line ("Not in the calculation: …")
+    or `grep includeAllJPi` before trusting an elastic curve, and add the two
+    lines (or tick the box, on by default for new projects) when the model
+    relies on dummies — the dummies stay harmless;
+  - with the option on, `deactivate_level` / `levelYN=0` removes the resonance
+    and keeps the partial wave (hard-sphere stays), and switching every level
+    off gives the pure hard-sphere + Coulomb curve; with it off, a J^π
+    disappears with its levels, the old decomposition semantics;
+  - pairs on inactive lines are kept when the option is on, so a pair whose
+    levels are all off still has channels;
+  - capture and β pairs get nothing from it: no level, no photon vertex.
 - **Input is LAB frame, forward kinematics** (light particle = projectile).
   **All output files and API results are CENTER-OF-MASS.** Never mix them.
   This includes `add_extrapolation(e_min, e_max, e_step)` — those are **lab**
@@ -73,6 +126,28 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   this for you via `cwd=`, defaulting to the `.azr`'s directory), because the
   `.azr` stores `output/`, `checks/` and data paths *relative to itself*.
 - The `output/` directory must exist; AZURE2 writes results there.
+- **STOP before any extrapolation (mode 3, `extrap_mode()`, `set_extrapolations`):
+  `<targetInt>` resolution/target-integration entries are matched by segment
+  NUMBER and are applied to `<segmentsTest>` lines too.** Test segment k silently
+  inherits the convolution of whatever `<targetInt>` line lists key k. The
+  output looks like a smooth, plausible cross section, so nothing flags it. For
+  a bare (unfolded) cross section, run mode 3 on a copy of the `.azr` with every
+  `<targetInt>` line set inactive (first field `0`). Keep any mode-1 χ² check on
+  the original file, because switching the entries off changes the data χ². This
+  has bitten more than once:
+  - 13C+a/9-9-26_seg92_9halfplus (2026-09-10).
+  - 22Ne+a/10-8-26_composite_rate (2026-10-08): (α,γ) came out folded with
+    Jaeger's 2.6 keV Gaussian, n1 with Wolke's resolution and n2 with Harms's.
+    A dense-grid rerun then gave different σ at identical energies. Two cluster
+    jobs were wasted; details are in "The same key collision" further down.
+
+  **Symptom to watch for:** a mode-3 run that is slow or memory-hungry is
+  convolving. On 22Ne+a, 13k points took 224 s and 65k points used 30 GB of RSS
+  with `<targetInt>` active. The same grids ran in about 1 s with it off.
+  Related: a fit's `param.sav` also carries `segment_k_energy_shift` / `_norm`
+  for data segment k. Shifts are applied to test segment k; on 22Ne+a the norms
+  were verified not to change the extrapolated σ. Zero shifts are harmless;
+  otherwise strip the `segment_*` lines.
 - **Delete `output/intEC.extrap` whenever the `<segmentsTest>` grid changes.**
   AZURE2 caches external-capture integrals there and silently reuses them on a
   different grid — this corrupts capture cross sections *and* data-mode χ²
@@ -82,7 +157,19 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
 - **Several sessions can be open at once**, each an independent engine that
   enters its own directory per call — that is how `save_fit` verifies what it
   wrote. The engine is not *thread*-safe, so parallelism is one session per
-  process, not per thread.
+  process, not per thread. **True only from dev 2026-10-07 on** (the commit
+  after 8cdc841): before it, the external-capture amplitude cache was one
+  process-global object with session-blind keys, so the FIRST session opened
+  in a process computed wrong capture cross sections from the moment a SECOND
+  session on the same model was created (data beside extrapolation, or two
+  data sessions), by up to 28 %, silently, for the rest of the process --
+  found on the 8Be+a photodisintegration rate (native chi2 148.55 right, probe
+  6718 instead of 231.71). Sessions opened and closed one after another were
+  fine. Any multi-session result (a custom objective combining a data session
+  with an extrapolation probe, `save_fit`'s verification while the fit session
+  is open, rmfit's sharded workers if they ever shared a process) computed
+  with an older `_azure2*.so` in one process is suspect for capture channels;
+  check the `.so` date. Regression test: `tests/pyazr/shared_state_test.py`.
 - CLI mode does **not** read Runtime Options from the `.azr` — pass them as
   flags every time (`--gsl-coul`, `--ignore-externals`, …). **Three
   parametrizations** (since 2026-10-06, dev 397668d): the Brune
@@ -190,8 +277,10 @@ printf '2\nn\n\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 # Fit starting from saved params:
 printf '2\nn\noutput/param.sav\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 
-# Extrapolate (no data) using saved params:
-printf '3\nn\noutput/param.sav\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
+# Extrapolate (no data) using saved params.
+# !! First deactivate every <targetInt> line (first field 0) in a COPY of the .azr,
+# !! or test segments get folded with the data segments' resolution (Golden rules).
+printf '3\nn\noutput/param.sav\n\n7\n' | AZURE2 --no-gui --no-readline 7Be_extrap.azr
 ```
 
 **Get this ordering wrong and the run silently ignores your parameter file.**
@@ -255,10 +344,34 @@ worker gets its own, under either `spawn` or `fork`.
   1 Brune, 2 Park, 0 standard) — a vector from one is meaningless in another.
 - **plain methods** (`calculate`, `calculate_chi2`) take the transformed
   **physical** vector `m.params` (level energies in MeV, partial widths in eV).
+- `calculate_rwa` returns, per segment, the observable the chi-squared is
+  built from: the E1 or E2 component for an `angle-integrated-E1`/`-E2`
+  segment (since 2026-10-07; before, the total, so it disagreed with
+  `residual_jacobian` on those segments), the total otherwise.
 - `m.transform_rwa(x)` maps rwa → physical; it takes either the full free
   vector or just the leading R-matrix block (energies + widths), so the
   norm/shift tail can be sliced off:
   `nR = 1 + max(p.free_index for p in m.parameters if p.kind in ("energy","width") and not p.fixed and p.free_index is not None)`.
+  **It RETURNS only that block — length `nR`, indexed by `free_index`** — whatever
+  the input length. Confirmed 2026-10-08 on the 12C+a production model: 365 free
+  parameters (14 energies and 69 widths interleaved over free_index 0–82, then
+  264 norms, then 18 shifts); `transform_rwa` returns 83 for an input of 365, 83
+  or 69 alike, and `out[p.free_index]` is the physical value for every parameter
+  in the block.
+- **Never feed a `transform_rwa` result back into `calculate`, `calculate_sfactor`
+  or `calculate_chi2`.** Those take the FULL physical free vector. Since dev
+  2026-10-08 (the commit after fc69e3b) every free-vector entry point of the
+  binding checks the length and raises `AZURE2Error: <call>: expected the free
+  parameter vector (N values ...), got n`; before it they accepted a short one
+  *silently* — no exception, 400 segments returned as usual — and the missing
+  normalizations and energy shifts were then whatever the engine last held. The damage is selective, which is what makes it dangerous:
+  S-factors and cross sections come out right, because they do not use the norms,
+  while chi-squared is nonsense. Seen 2026-10-08: a scan that passed the 83-vector
+  to `calculate` gave a total chi2 of 1e34 and sent the 15N+p data sets to 1e12
+  while one alpha ANC was the only thing being changed, and the chi2 was
+  non-monotonic in it — the signature to watch for. Change a physical value by
+  editing the `.azr` and rebuilding the model, and keep every numeric call on the
+  full free rwa vector.
 
 Both vectors hold only the **free** parameters, in `.azr` order:
 `p.free_index` is the position in that vector, `p.index` the position among all
@@ -608,6 +721,20 @@ Rules that will bite you:
   `vals = {t[0]: float(t[1]) for t in (l.split() for l in open(sav)) if len(t) >= 2 and not t[0].startswith("#") and t[0] != "parametrization"}`
   (worked example `8Be+a/10-6-26_rate_v5/v5_compat.py`). Related: since 1c3e7e3 (2026-10-05)
   `pyazr.bands.best_fit_params` raises "has N parameters but the model has M" on an old-format `.sav` in data mode.
+- **pyazr: load a `.sav` with `x = m.load_sav(path)`, not by slicing the free part of `full_rwa_from_sav`.**
+  The CLI's parameter-file reader sets FIXED level energies and widths too; pyazr's free-vector calls
+  (`calculate_chi2_rwa(x)`, `update_segments_rwa`, `transform_rwa`, `save_fit`, ...) take every fixed value from
+  the session, i.e. the `.azr`. `x = m.full_rwa_from_sav(sav)[~fixed]` therefore evaluates a different model
+  whenever the `.sav`'s fixed values differ from the `.azr`'s (a fit restarted from another fit's `.sav`, or an
+  `.azr` whose fixed widths were never updated), with no warning. 11B+α `10-10-26_speedup/pyazr_cli` (10-12-26):
+  10 fixed widths off by up to 1.6 % gave 9925.03 against the CLI's 9868.04 (key 72 alone +58); with
+  `load_sav` every `AZUREOut_*` line and `chiSquared.out` match the CLI exactly. `load_sav` pushes the whole file
+  into the engine (`sess.set_params_all_rwa`), sets `m.params_rwa` and returns the free vector;
+  `update_rwa_params_from_sav` and `bands.best_fit_params` use it. It does not change the free/fixed split (the CLI
+  frees a parameter fixed at 0 that the file sets nonzero) and refuses a file tagged with another basis.
+  `extrap_mode()`/`data_mode()` re-initialize the engine from the `.azr`: call `load_sav` again after switching.
+  Modules built before 2026-10-12 have no `load_sav`; there, `m.sess.update_segments_all_rwa(full)` (one forward
+  pass) has the same effect.
 - **Do not trust pyazr's own `m.parameters` names to equal `param.sav` names.**
   On 12C+alpha (2026-09) pyazr's `energy_39` was the 14.72 MeV level while
   `param.sav`'s `energy_39` was the 16.77 MeV one (pyazr's value was the `.azr`
@@ -712,10 +839,55 @@ the edit) rather than trusting that it worked.
 
 **`m.save_fit(path, x=None)` is how you snapshot a fit.** It writes the `.azr`,
 writes the companion `param.sav`, and verifies the result — reopening what it
-wrote and comparing every R-matrix value against the fit. If they disagree it
-removes both files and raises, so a snapshot you still have is one that reads
-back as the fit it came from. `path` is always explicit; nothing is written in
-place. Returns `(azr_path, sav_path)`.
+wrote and comparing both the physical values transformed back and the
+reduced-width amplitudes the file reads for the particle and beta channels of
+each level against the fit's (up to a common sign of a level, which the
+standard parametrization may flip). If either disagrees it removes both files
+and raises, so a snapshot you still have is one that reads back as the fit it
+came from. `path` is always explicit; nothing is written in place. Returns
+`(azr_path, sav_path)`.
+Until 2026-10-12 only the physical values were compared, which cannot see a
+value the transform maps onto from two different parameters: the engine
+returned |B| for a beta-decay feeding amplitude, so a negative one was written
+back positive, the 12C+α snapshot's beta-delayed α χ² went 750 → 29724, and
+`verify=True` passed it (12C+α MCMC session). Both are fixed; a pyazr `.so`
+built before that date still has the bug (`tests/pyazr/beta_sign_test.py`
+tells you in a minute).
+**Fixed parameters are fixed in reduced-width space, not in what the file
+shows.** A fixed channel's observed width or ANC moves whenever the free
+widths of the same level move (Brune's `1 + Σγ²dS/dE`, the external width),
+and a fixed width's observed value moves with the level's energy through
+`P(E)`. So a `<levels>` block that keeps the file's old observed values for
+the fixed channels plus the fitted values for the free ones is NOT the fit:
+on the 12C+α r3b fit it re-read 21 χ² units off (98,642 → 98,663), with 19
+fixed amplitudes drifting by up to 14 % and free E1 amplitudes by 1 %. The
+same re-anchoring is what the 12C+α session's Brune→Park conversion on the
+original `.azr` showed (+13.7). Since 2026-10-12 `save_fit` writes every
+level parameter at its current observed value (`transform_all_rwa(full,
+free_only=False)`, `apply_fit(..., include_fixed=True)`) and the re-read is
+exact; `load_sav` of the companion `.sav` gives the same (it carries the
+fixed rwa). The external-capture integrals are NOT the issue here: they
+depend only on the EC final-level energies (fixed in practice), pair data
+and the data grid, so `recalculate_external_capture()` changes a fit's χ² by
+~0.1 at most — and note it uses the level energies from the file, not the
+session's current ones. `ignore_externals=True` does NOT switch external
+capture off: it is `--ignore-externals`, which drops the external amplitude
+only where the internal width is zero. What a fresh load does rebuild
+differently from a running session is the adaptive target-integration
+sub-point grid (built from the level widths at start-up): on
+`tests/hybrid_potential` the round trip is exact with `<targetInt>` off and
+0.17 % in χ² with it on. Until 2026-10-19 the grid was placed once, in
+`EData::ReadTargetEffectsFile` (`AdaptiveIntegrationGrid::GenerateGrid` from the FILE's level
+energies and widths), and never re-placed when a fit moved the levels, so a fit with narrow levels
+under `<targetInt>` minimized against the start model's grid: natural neon refit1, the same x gave
+25,773.959 in a session opened on the start `.azr` and 25,776.084 in one opened on `refit1_fit.azr`.
+SINCE 2026-10-19 (Coulomb table stage 3) the grids are RE-PLACED on every evaluation by default
+(`EData::ReplaceSubPointGrids`: current fit values -> observed E and widths on a private CNuc copy ->
+same generator, resonances offset by the segment's c.m. energy shift; unchanged grids keep their
+sub-points). Both refit1 sessions now give 25,776.076357, refit1q 25,693.609423 from either file.
+`--no-grid-replacement` / pyazr `replace_grids=False` restores the old behaviour; segments that need
+external-capture amplitudes always keep their grids. A fit run on an older build reports the
+start-file grid's objective: re-evaluate its end point in a current session before comparing.
 
 ```python
 azr, sav = m.save_fit("7Be_fit.azr")          # current parameters
@@ -887,8 +1059,15 @@ the data's energy calibration is the first suspect, and the constant
    reading gives dE ~ sqrt(E), an error in k gives dE ~ E (the relativistic
    term ~ E^2, ~8 keV at 4 MeV). Over a factor-3 energy range sqrt(E) and
    linear are indistinguishable (1102 vs 1123) -- choose by the apparatus,
-   not by chi2. AZURE2 fits a and b (the `sqrtshift` block, ".azr file
-   anatomy" below); there is no linear term.
+   not by chi2. AZURE2 fits a and b with the `sqrtshift` block, and ANY form
+   with a `shiftfn` block (".azr file anatomy" below; since 2026-10-14), e.g.
+   `shiftfn "a0*(x-1.5)" 1 0 0.01 1` for a linear term. Write the function
+   CENTRED inside the data (`a0*(sqrt(x)-sqrt(E0))`, E0 in the data): a is
+   then the shift at E0 and its penalty means something. `sqrtshift` cannot
+   be centred -- its a is the shift at E = 0, so the a-penalty fights the
+   fit (11B+a Dayras 16: scan a = +94 keV, b = -0.059, shift at the data only
+   22 -> 4 keV; the 16 +- 10 keV a-penalty would cost ~60, more than the whole
+   gain).
 3. **Free the segment's shifts, but SEED them at the scan optimum.** MIGRAD
    started from zero shift sits in a local minimum next to zero: trial122 (a
    and b freed from 0 with 20 keV / 0.02 MeV^1/2 widths) ended at a = -0.12
@@ -912,6 +1091,20 @@ the data's energy calibration is the first suspect, and the constant
    cost ~1.5 at the Bashkin optimum; a width tight enough to bias the result
    only hides the calibration problem. deBoer et al. 2021 report a residual
    alpha- vs proton-induced calibration difference in the same data.
+5. **One calibration per experiment, not per segment.** A data set split into
+   segments (one per angle, one per figure) has ONE accelerator calibration:
+   share it with `shiftgroup <label>` on every member and put any `shiftfn`
+   on the group's first segment. Per-segment energy-dependent terms fit
+   angle-by-angle structure instead: 11B+a 10-14 (10-13-26_sqrtshift), b
+   freed per segment gained 91 chi2 for 10 parameters, but b changed SIGN
+   between angles of one experiment (Harris 54.7 deg -0.016 vs 90 deg
+   +0.006; Henderson 90 deg -0.033 vs 141 deg +0.006) -- no calibration does
+   that. Conversely, grouping digitized sets can cost a lot (11B+a frozen
+   group scan +1,913, mostly Fowler/Bartholomew: different figures, different
+   digitization offsets) -- group by what shares a calibration, and test it.
+   The start-up log prints, per function, the condition number of its free
+   terms over the group's energies; a term that only duplicates a (sqrt(x)
+   on one single-energy angular distribution) is warned about.
 
 ### What a snapshot still cannot carry
 
@@ -982,6 +1175,9 @@ mdl.set_extrapolations([
 (needs `order=`), `phase-shift` (needs `phase_J=`, `phase_L=`). Energies are
 **lab** (`cm2lab = m_target/(m_beam+m_target)`; ³He+α 0.5703, p+⁶Li 0.8565 —
 divide c.m. by it). Remember to delete `output/intEC.extrap` afterwards.
+**And check `<targetInt>`:** any active entry whose segment list includes a
+test segment's key folds that extrapolation (Golden rules). For bare cross
+sections, deactivate the entries in a copy of the `.azr` first.
 
 Note the `isDiff` codes differ between the two blocks: in `<segmentsData>` 3 is
 total-capture and 4 is differential-cm; in `<segmentsTest>` 3 is angular
@@ -1547,6 +1743,65 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
     `penalties()["shift_sqrt"]`, `add_data_segment(energy_shift_sqrt=...)`.
     The GUI preserves the block but cannot edit it. Test:
     `tests/energy_shift_sqrt` (check.sh fits a known a, b back).
+  - `sample 1` / `sample <name>` (keyword block, alias `natural` in files written on 2026-10-13; branch
+    `feature/multi-compound-nucleus`, 2026-10-13) marks a natural-abundance
+    target segment: the line's own term and every SUM component are
+    multiplied by the isotopic abundance of the term's ENTRANCE pair's
+    compound nucleus (the `<abundances>` block after `</levels>`, lines
+    `Z A value vary sigma`; config key `abundanceSumSigma=s`). SAMPLES
+    (DeBoer 2026-10-13, data sets on targets of different composition):
+    `<name>: Z A value vary sigma` lines form a named sample, `<name>: sum s`
+    its own sum-to-one width (0 = off, e.g. a stoichiometric Al2O3 sample with
+    weights 2 and 3); `sample <name>` picks it on the segment line, `sample
+    1` = the unnamed sample; parameters `abundance_<name>_Z_A`, emitted sample
+    by sample after the unnamed one. pyazr: `AzrModel.samples`,
+    `set_abundance(..., sample=)`, `set_sample_sum_sigma`, `set_natural(key,
+    "name")`, `Segment.natural_sample`, `Parameter.sample`. Refused on
+    RATIO, phase shifts (2), analyzing powers (7), test angular-coefficient
+    lines (3), in a project without the block, and for a sample name the
+    block does not define. Output
+    `AZUREOut_sample_seg=<key>.out/.extrap` (total + one column per
+    nucleus). pyazr: `Segment.natural`, `AzrModel.set_natural`,
+    `merge_projects`, `parameters.abundances` (API record type 6; type 5 is
+    a shift-function parameter), `penalties()["abundance"]`.
+    Tests: `tests/natural_target` (synthetic p+C), `tests/natural_neon`
+    (refit1q, the natural-neon model of record since 2026-10-19, on real EXFOR
+    data, three nuclei; levels re-saved from the fit's .sav, so each segment equals the fit exactly).
+  - `shiftgroup <label>` (keyword block, 2026-10-13): every segment with the
+    label uses the constant shift of the FIRST of them (file order): its
+    value, error, vary flag and penalty; the others' own shift fields are
+    ignored and their `segment_<key>_energy_shift` is fixed and written back
+    with the shared value. Test: `tests/shift_groups`.
+  - `normgroup <label>` (keyword block, 2026-10-14): the same for the
+    normalization -- every segment with the label uses the norm of the FIRST
+    of them (value, vary flag, error, the one penalty). A follower whose own
+    line varies its norm keeps `segment_<key>_norm` (fixed, written with the
+    shared value), so parameter numbering is unchanged; a follower carries no
+    norm penalty (chiSquared.out column 5 = 0). Use it for an excitation
+    function plus the angular distributions it was integrated from (11B+a
+    Dayras 16/85/86). pyazr: `Segment.norm_group`,
+    `add_data_segment(norm_group=...)`; `penalties()["norm"]` only on the
+    leader. Tests: `tests/norm_groups`, `tests/pyazr/norm_group_test.py`.
+  - `shiftfn "<f(x)>" N v0 s0 vary0 ...` (keyword block, 2026-10-14): adds
+    f(x; a0..a(N-1)), x = the point's ORIGINAL lab energy in MeV, to the
+    shift; each aj has value (= penalty nominal), penalty width and vary flag;
+    parameter `segment_<key>_energy_shift_fn<j>`, after every other
+    parameter and only for segments declaring a function. On a shift group:
+    on the first segment only, applies to all members (a follower declaring
+    one, or shiftfn + sqrtshift on any member, stops AZURE2 at start-up).
+    Evaluated at every point and sub-point; thickness/stopping stay at the
+    unshifted energy. chiSquared.out's totals line ends with
+    `Total-Shift-Chi-Squared:` whenever any shift is free (before 2026-10-14
+    it had no shift penalty at all: the run log's last "Total Chi-Squared"
+    ran higher by exactly that); shifts.out adds one `#` line per function.
+    pyazr: `Segment.shift_fn/shift_fn_params`, `parameters.fn_shifts`
+    (`kind == "shift_fn"`, `.fn_term`), `penalties()["shift_fn"]`,
+    `add_data_segment(shift_fn=..., shift_fn_params=[(v, s, vary)])`. Tests:
+    `tests/shift_fn`, `tests/pyazr/shift_fn_test.py`.
+  - Since 2026-10-14 a `.sav` value never frees or fixes an energy-shift
+    parameter (constant, sqrt or fn): shifts follow the .azr vary flag. Before,
+    a shift fixed at 0 in the .azr was FREED, unpenalised, by a nonzero .sav
+    value.
   - `isAdvanced` 1 = composite segment. `operationType` 0 = SUM of the listed
     components (the segment's own exit is included), 1 = RATIO (dimensionless:
     the lab->c.m. cross-section conversion is skipped). `nComp` = -1 is a
@@ -1664,6 +1919,45 @@ and its **angle column is centre-of-mass**, not lab.
 - `reactionrates.dat` (mode 5); `samples.mcmc` (mode 6).
 - `intEC.dat` / `intEC.extrap` — external-capture integral caches; see the
   golden rule above.
+
+### Long fits on the cluster: memory, kills and restarting from `param.fit`
+
+**Memory footprint.** A mode-2 fit holds a pool of max(4, `OMP_NUM_THREADS`) + 1
+copies of the model and data (CNuc + EData), plus one persistent copy for the
+`param.fit` snapshots (since 797c2ea).  Each copy is the whole data set
+*including every target-integration and convolution sub-point*, so heavy
+target-effect models are large.  11B+a (4,600 points, many `<targetInt>`
+segments): ~3.4 GB per copy, ~80-100 GB at 24 threads, steady for days.
+Measure it with `qstat -j <id> | grep usage` (`maxvmem`) and reserve it on the
+node; see the `crc-cluster-jobs` skill (`-l m_mem_free=<GB per slot>`).
+
+**Binaries older than 797c2ea (2026-10-05) leak.**  Freed but unreusable memory
+piled up in glibc's per-thread arenas: whole-model clones at every snapshot, plus
+per-shift reallocation in `EPoint::RecalcEDependentValues`.  Resident memory grew
+6-17 MB per evaluation at 24 threads until the node killed the fit (~250 GB after
+a day).  Investigation: `11B+a/10-4-26_memleak/readme`.  If a long fit's memory
+climbs, check the build date first.  Separately, 588c584 (2026-10-07) removed a
+dangling `EPoint::parentSegment_` pointer read on every target-effect point; it
+is the likely cause of an occasional segfault (exit 139) on such models.
+
+**When a fit is killed, the job script keeps going.**  Only the AZURE2 process
+dies ("Killed" / exit 137 for out-of-memory; "Bus error" when its binary was
+replaced on NFS; exit 139 for a segfault).  So the job itself can restart the fit
+from the last snapshot, losing at most 100 evaluations:
+
+- Template: `11B+a/10-3-26_an_newcut_refits/make_autorestart.py <dir> <azr>
+  <outdir> <start.sav> <jobname>` writes `run_crc_auto`, a csh loop.  After each
+  pass it treats `<outdir>/chiSquared.out` as "finished": that file is written
+  only at the end of a fit, never by the snapshots.  Otherwise it copies
+  `param.fit` to `restart_<JOB_ID>_<n>.sav` and runs mode 2 again from it.
+- Guards: at most 15 restarts, and the job stops after two passes die within 10
+  minutes of starting.  That pattern means the node is out of memory, so resubmit
+  elsewhere rather than burning restarts.  The script requests `m_mem_free=5G`
+  per slot.
+- A restart resets MINUIT's covariance, so the first few hundred evaluations
+  after each restart rebuild the gradient (expect brief chi2 excursions).
+- The `param.fit` caveat above still applies: if the last snapshot fell on a bad
+  probe, verify with a mode-1 calculate before trusting the restart.
 
 ## Verifying a run
 
@@ -1917,6 +2211,35 @@ complete:
   on an evaluation shows `RecalcEDependentValues -> ShftFunc::theWhitFunc -> gsl_sf_hyperg_U`.
   Timing recipe that found it: switch data groups off in copies of the model and time
   `calculate_chi2_rwa` (the beta-only copy told the story in one line), then sample stacks.
+- 2026-10-18 (17O+a/10-13-26_natNe_seg1, readme 20:30-21:30) -- CLOSED NEUTRAL CHANNELS USE A
+  CLOSED FORM. `ShftFunc` took S_l = a W'/W by a numerical radial derivative of GSL's hyperg_U
+  Whittaker function (6-10 calls per channel per point; 29 % of a cold natural-neon evaluation in a
+  perf profile). For Z1 Z2 = 0 it now uses `ShftFunc::NeutralBoundShift`: S_0 = -rho,
+  S_l = -rho^2/(l - S_{l-1}) - l, rho = kappa a (170x faster, agrees to 3e-9 =
+  `tests/reference/neutral_channel_reference_test`). The example's mode 1 went 628 -> 453 s. Results
+  move by up to 3.6e-5 relative (Hinterberger chi2 +0.4 of 10,506) because dS/dE, a 1 eV central
+  difference of S, was noisy on the old route: 1e-6 to 5.5e-3 relative error vs the analytic value,
+  1e-9 now. Charged closed channels still take the old route, so their dS/dE (Brune basis,
+  observed-width and ANC conversions) carries that noise. `AZURE_NO_NEUTRAL_CLOSED_FORM=1` restores
+  the old route for comparisons. Open neutral channels were NOT changed: Michel's routine at eta = 0
+  is ~0.3 us per call, no slower than the Riccati-Bessel form; the open-channel Coulomb cost in a
+  profile is the charged channels.
+- 2026-10-19 -- Universal Coulomb table, ON BY DEFAULT since stage 3 (`--no-coulomb-table`, pyazr
+  `use_coulomb_table=False` to switch off): P, S and the hard-sphere phase of charged channels, open
+  and closed (`CoulombTable`, design and validation in `docs/source/developer/coulomb_table.rst`).
+  Build the file once: `AZURE2 --build-coulomb-table` (or GUI Configure > Build Coulomb Table...;
+  not distributed, decided 2026-10-20) -> `~/.azure2/coulomb_table.bin` (or
+  `$AZURE2_COULOMB_TABLE`; 100 nodes/decade, 88 MB, ~5 min on 4 threads); no file = one line
+  "Coulomb table: none at ...", exact routines. Natural-neon example mode 1: 473 -> 88 s, same chi2
+  to every printed digit. Not tabulated: neutral pairs, pairs with a nuclear potential, the EC
+  integrals. The EXACT route was made accurate at the same time: closed charged S from the U ratio,
+  open-channel dS/dE by Richardson (the old 1 eV difference of a numerically differentiated
+  Whittaker S was off by 3e-4..4e-3, p+12C); `AZURE_BOUND_SHIFT_NUMERICAL=1` / `AZURE_SHIFT_DE_1EV=1`
+  restore the old routes. EXPECT charged-particle fits with bound/sub-threshold levels to move by up
+  to ~1e-3 in chi2 against results from older builds (13N suite 9.3e-4); table and exact route now
+  agree. Grid re-placement (stage 3) is described under the save/reopen notes above
+  (`--no-grid-replacement`). And `--gsl-coul` is wrong by up to 3-6 % in P and S for
+  0.1 <= eta < 10, 1 <= rho < 10 (Michel agrees with mpmath to 1e-9): do not use it.
 - 2026-09-13 -- pyazr and `output/intEC.dat`: a session that RELOADS an existing cache for the
   12C+alpha truncated model returns a wrong chi2 (120,593 instead of 113,512, sometimes ~1e26)
   while the CLI reloading the same cache is exact; confirmed with the pre-fix module too, so it is
@@ -2018,17 +2341,108 @@ complete:
   and 14C(p,n) polarization data, 5 segments each). `tests/polarization_product` was deleted
   with the feature.
 
-- 2026-09-29 -- ENERGY-DEPENDENT CONVOLUTION (`<targetInt>` convolution equation, isConvCoefficients):
-  the equation is evaluated at the CENTRE-OF-MASS energy of each sub-point and its value is
-  used directly as the c.m. sigma (no lab->c.m. scaling, unlike the fixed "Sigma" field which
-  is entered in the lab and converted). So sigma_b(E) must be written as a c.m. width of the
-  c.m. energy; a lab-frame time-of-flight derivation (Cierjacks 16O+n in 13C+a, Morgan 14N+n
-  in 11B+a) is off by the mass ratio (16/17, 14/15) on both axes unless converted. Until
-  this date the +-3 sigma grid window was sized from sigma_b(E_lab) while the integrand used
-  sigma_b(E_cm) -- fixed in EData.cpp (8 sites); on the Cierjacks segment-92 project the
-  narrower window moved the model by <= 1.5e-3 (chi2 247.5 -> 248.9 of 111 points), which
-  is also the size of the +-3 sigma truncation itself. The kernel is renormalized by its own
-  integral over the window, so a constant cross section is always reproduced exactly.
+- 2026-10-11 -- ONE GAUSSIAN BEAM SPREAD (supersedes the 2026-09-29 note below). The constant
+  "Sigma" field and the sigma(E) expression are one kernel now (`TargetEffect::SigmaCM`,
+  `EPoint::GridQuadrature`): a Gaussian of width sigma_b(E0) about the point, +-3 sigma,
+  normalised by its own integral, for the convolution alone, inside target integration (in
+  quadrature with straggling) and for straggling alone. What changed numerically: the
+  constant-sigma result is the old one x 1/erf(3/sqrt2) = 1.00271 at every point (it was never
+  normalised); target+beam moves by <= 3e-3, straggling by <= 1.6e-2 near the surface; a legacy
+  expression moves by <= 3e-4 (its width is now taken at the point's energy, not at each
+  sub-point). Plain target integration, UDR and beam profile are bit-identical.
+  FRAMES: a NEW expression is lab in, lab out, exactly like the constant (experimental
+  resolutions are quoted in the lab; TOF: sigma_E/E = 2 sigma_t/t, sigma_E ~ E^1.5), and the
+  `.azr` line carries the keyword `sigmalab` after the straggling/grid numbers (before any
+  ranges or `beamprofile`/`udr` block). A line WITHOUT the keyword is the old convention
+  below and computes as it did -- the 13C+a Cierjacks projects stay valid unconverted. The
+  GUI's Experimental Effects dialog has one "Gaussian convolution" row with ONE width field
+  (a number = constant, stored in the line's constant slot; anything else = expression, stored
+  with `sigmalab`); a legacy c.m. line shows a frame row with "Convert to lab form" (exact rewrite
+  sigma_lab(x) = sigma_cm(F x)/F, F = m_t/(m_p+m_t), offered when all segments of the entry
+  share an entrance pair); pyazr: `add_target_effect(..., sigma_expression="a0*x^1.5",
+  sigma_coefficients=[...])` writes the lab form. Check: `tests/convolution_unify/check.sh`
+  (11 comparisons against reference outputs of the last pre-change build).
+- 2026-09-29 -- ENERGY-DEPENDENT CONVOLUTION, LEGACY CONVENTION (lines without `sigmalab`):
+  the equation is evaluated at the CENTRE-OF-MASS energy and its value is used directly as the
+  c.m. sigma (no lab->c.m. scaling, unlike the fixed "Sigma" field which is entered in the lab
+  and converted). So sigma_b(E) must be written as a c.m. width of the c.m. energy; a lab-frame
+  time-of-flight derivation (Cierjacks 16O+n in 13C+a, Morgan 14N+n in 11B+a) is off by the
+  mass ratio (16/17, 14/15) on both axes unless converted. Until this date the +-3 sigma grid
+  window was sized from sigma_b(E_lab) while the integrand used sigma_b(E_cm) -- fixed in
+  EData.cpp; on the Cierjacks segment-92 project the narrower window moved the model by
+  <= 1.5e-3 (chi2 247.5 -> 248.9 of 111 points). Prefer the lab form for anything new.
+
+- 2026-10-08 -- USER-DEFINED NUMERICAL RESOLUTION FUNCTION (SAMMY UDR) in AZURE2, branch
+  `feature/udr-resolution`, merged into dev 2026-10-09 (2e109f8) and installed in `~/bin/AZURE2`. A `<targetInt>` line
+  can end with `udr "<file>" L_m burstFWHM_ns channel_ns centred`: the file is SAMMY's UDR
+  format (text, a line of hyphens, then blocks "energy_eV" + "(delay_us, density)" pairs,
+  blank-line separated), which is what n_TOF distributes (`RF_EAR1_v2_CORR.txt`: 600 energies
+  x 9000 delays, 146 MB; only the blocks within a decade of the segment are read). Semantics
+  copied from SAMMY's mudr3/mudr2: linear interpolation between the two bracketing tabulated
+  energies, re-centring on the centroid (SAMMY always does; `centred 0` switches it off),
+  Gaussian burst and rectangular channel in time, and per-point weights from the EXACT integral
+  of the piecewise-linear kernel against hat functions of the sub-points on the delay axis.
+  Delay -> energy: t(E') = t(E0) - tau with relativistic t(E) = L/v, so a positive delay maps
+  to a HIGHER true energy (moderated neutrons look slower). Channel width -n means n bins per
+  decade (n_TOF: 10 below 300 keV, 100 above). Reference test `tests/reference/
+  udr_reference_test.cpp` (moments, centring, widths in quadrature, interpolation, kinematics);
+  GUI round trip in `tests/gui/target_int_tab_test.cpp`; `AzrModel.add_target_effect(udr_file=,
+  flight_path=, udr_burst=, udr_channel=, udr_centred=)`. The analytic Jacobian needs nothing
+  new: `GradTargetEffectAdjoint` finite-differences the combiner per sub-point.
+  CAVEATS: (1) the 14N(n,p) Torres-Sanchez 2023 data in 11B+a are from n_TOF EAR-2 (L =
+  19.75 m, DSSSD) -- the uploaded file is the EAR1 response, so it is a mechanism test only;
+  the EAR2 RF file is needed for the real fit -- and per n_TOF-PUB-2021-001 (now in ~/SAMMY)
+  there is NO general EAR2 file: it is made per experiment (flight path, sample size, alignment)
+  with the Transport Code + RF2sammy at CERN, so ask the authors for the one their SAMMY fit
+  used, or get EOS access (`11B+a/10-8-26_udr_ntof/readme` has the paths). (2) The n_TOF files
+  ALREADY CONTAIN THE PROTON BURST (Transport Code `-S 7e-9`; the EAR1 file's delay rms stays
+  6-7 ns up to 500 MeV, where moderation is nil): use `burstFWHM 0` for them, and the HI (7 ns)
+  and LI (14 ns) pulse types have separate files. Check a new file by the width of its top-energy
+  blocks. (3) n_TOF's own EAR2 validation (Dec 2022 talk, ~/SAMMY) does NOT re-centre the RF
+  in SAMMY and fits L0 instead -> `centred 0` with L = the length the data's TOF->E used; use
+  `centred 1` only if that L already includes the mean lambda. (4) The kernel is evaluated at
+  the point's NOMINAL energy (as SAMMY does), not at each sub-point's true energy. (5) One
+  channel value per line: n_TOF DSSSD data are 10 bpd below 300 keV and 100 above -- split the
+  segment at 300 keV if the low part ever matters. (6) Validation and benchmark runs go to the
+  queue (user instruction 2026-10-08): `13C+a/10-8-26_udr_validation` (synthetic Gaussian-in-
+  time UDR vs numpy fold on the Cierjacks segment, 7.6e-4 worst rel. diff) and
+  `11B+a/10-8-26_udr_ntof` (analytic sigma(E) vs UDR on segment 103).
+
+- 2026-10-08 -- CHANNEL-THRESHOLD BLOW-UP CAUGHT BY SUB-POINT GRIDS. AZURE2's bare cross section
+  is not merely bumpy at a channel threshold: on a 10 eV grid across the 11B+alpha threshold in the
+  11B+a model (E_cm = 0.1579 MeV, 0.1698 MeV lab for 14N+n) it reaches 1.7e37 b within ~20 eV of
+  the threshold (`11B+a/10-8-26_udr_ntof/diag_spike/`). Any target effect that integrates over
+  sub-points (Gaussian, target integration, beam profile, UDR) catches it whenever the adaptive grid
+  drops a sub-point there: isolated folded values of 1e24-1e37 b, at grid energies that MOVE when
+  the sub-point count changes (150 vs 151 gave different bad energies), while the same curve on the
+  data points can be clean by luck. Symptom in a mode-3 curve: one-point spikes far from any
+  resonance, up to a kernel's width away from the threshold. Workaround: drop them (running-median
+  outlier test, `plot_initial.py` there) or move the grid; the fix belongs in the threshold
+  handling of the bare calculation (penetrability/shift at E_cm -> 0), not in the effects.
+  RESOLVED 2026-10-11 (9dacddc, 11B+a/10-10-26_speedup/nfrepro/readme): not a Coulomb-function
+  failure but an overflow in CoulFunc::PEShift and the hard-sphere phase. ~0.5 keV above the
+  threshold eta ~115-120 and G ~1e155, F*F' is a denormal (not exactly 0), so the general formula
+  rho/(F^2+G^2)*(F F'+G G') overflows its denominator -> NaN/-inf. Both now fall back to a
+  hypot(F,G)-scaled form ONLY when the plain result is non-finite (mode-3 1 eV scan: all 116 bad
+  rows fixed, 0 of 4,884 good rows changed; mode-1 chi2 byte-identical). It also stopped a
+  --use-gradient fit: one sub-point in the band gave d chi2/d shift = -3e40 and MIGRAD left. Since
+  db98b63 a non-finite chi2 (or > 1e100) returns 1e100 to Minuit2, and AZURE_DUMP_NONFINITE=1
+  (or =<threshold>) writes nonfinite_dump.txt (worst segments/points/sub-points, largest moves
+  with grad, G2, -grad/G2). Spikes in folded curves made with an older binary may be this bug.
+
+- 2026-10-10 -- CI (GitHub Actions, dev) RULES, after a week of red builds (all fixed in d39ef31,
+  3002ae7, 8687bb7, 42859b6). CI builds and tests on Linux, macOS (BSD userland) and Windows
+  (MinGW), now WITH numpy and pybind11, so the pyazr tests really run there. Before pushing:
+  (1) no `setenv`/`unsetenv` in C++ -- MinGW lacks them; use `setEnvVar`/`unsetEnvVar` at the top
+  of src/AZURECalc.cpp (`_putenv` on Windows); (2) no GNU-only shell in tests (`sed -i` without a
+  suffix, `sed '0,/re/'`, `grep -P`) -- macOS runs BSD tools; awk/perl are portable; (3) a pyazr
+  test must import numpy AND pyazr inside its skip guard (`try: ... except: print("skip: ...");
+  sys.exit(0)`), as all of tests/pyazr/*.py do; (4) CI runs `ctest -LE slow`: a test that takes
+  minutes gets `LABELS slow` in tests/pyazr/CMakeLists.txt, and `ctest -L slow` (park_gradient
+  ~41 min, shared_state ~22, objective, inactive_lines, channel_order ~6-7 each) is run locally
+  when pyazr or the engine paths they cover change. Job logs need a GitHub token (the one in
+  ~/.git-credentials works); annotations are public but capped at 10 per step. Pushing a change
+  to .github/workflows/ needs the token's `workflow` scope (granted 2026-10-10).
 
 - **A regression reference is not a correctness check.** `tests/run_tests.sh` pins each
   project's chi-squared against a number this code produced, so it catches a change and
@@ -2104,3 +2518,78 @@ to a few thousand points where a uniform grid of equal fidelity would need
 `E_cm E_lab sigma` columns. Central values only -- combine the knots with
 the analytic parameter Jacobian and a fit covariance yourself if you need
 uncertainty bands.
+
+- 2026-10-07 (22Ne+a/10-6-26_claude_refit) -- CORRECTION to "A norm or shift that is NOT varied
+  comes from the .azr field; the .sav value is ignored": for ENERGY SHIFTS that is no longer true
+  with the current binary. Every param.sav written by a fit lists segment_<k>_energy_shift (and
+  _shift_sqrt) for every segment, varied or not, and a run given that file applies the listed
+  value. A fixed +2.75 keV centring shift set in the .azr was silently replaced by the 0 in the
+  refit's param.sav (Jaeger chi2 39,315 instead of 7,905). When a fixed shift is set or changed in
+  the .azr, also change it in (or delete it from) any parameter file the run will read.
+
+- 2026-10-10 (12C+a_onefile/8-6-26_claude_fit_fix) -- `--use-gradient` (analytic-gradient MIGRAD)
+  was no faster than the numerical fit until commit "fix(gradient): make --use-gradient actually
+  fast". Two causes: (1) Minuit2 seeds MIGRAD with a full NUMERICAL gradient + G2 pass and
+  NegativeG2LineSearch loops whenever the FCN gives a gradient but no G2 -- a 79-parameter local
+  fit was still in that phase after 20+ min, and the printed "Iteration" counter freezes there
+  (Minuit's parallel numerical-gradient threads do not advance it), so a stalled-looking log is
+  not proof of a hang; (2) the fast per-segment energy-shift derivative was gated on "no limits
+  manager", which the CLI never satisfies. Now AZURECalc supplies a Gauss-Newton G2 from the
+  residual Jacobian (log line "Seeding MIGRAD with the analytic Gauss-Newton G2."; "Analytic G2
+  unavailable ..." means the old numerical seed) and takes gradient + G2 from one Jacobian per
+  step (~2.6 s per step for 79 free parameters on 11k points, 8 threads).
+  Result on that model: the analytic fit went BELOW the numerical fit's final chi2 (which
+  MIGRAD declared converged early on its noisy numerical gradient) and then converged ~490 lower;
+  a numerical-MIGRAD control can therefore overstate a structure test's gain (1+ level: -902 vs
+  the numerical control, -545 vs the analytic one). Compare test and control with the SAME
+  minimizer, preferably `--use-gradient`.
+  Diagnostics: `AZURE_GRAD_TIMING=1` (per-call timing), `AZURE_GRAD_CHECK=1|exit` with
+  `AZURE_GRAD_CHECK_N=12` (sampled analytic vs central finite differences; the FD uses the
+  single-threaded Chi2Value, ~10x slower than a fit evaluation), `AZURE_GRAD_DEBUG=1` (names the
+  segment/reason when the adjoint bails and everything falls back to finite differences),
+  `AZURE_GRAD_ADJOINT=1` (force the adjoint gradient instead of the Jacobian path).
+  Follow-up the same day (commit "perf(fit): parallel chi2 ..."): a SINGLE chi2 evaluation was serial
+  everywhere (operator(), Chi2Value); numerical MIGRAD only used all cores because Minuit evaluates
+  parameters in parallel, so with --use-gradient every line-search evaluation ran on ONE core. Now
+  all points are computed in one OpenMP pass (skipped inside an existing parallel region, or with
+  AZURE_SERIAL_CHI2=1), and Chi2Value/Gradient/ResidualJacobian reuse the pooled working copies (a
+  fresh Clone() re-applied every energy shift and rebuilt the energy mapping on every call, ~1 s).
+  12C+a local fit: one chi2 3.6 s -> 0.35 s, gradient+G2 step 2.6 s -> 1.3 s, whole fit 3-4x faster
+  with identical results. AZURE_POOL_CHECK=1 compares pooled+parallel against fresh+serial chi2.
+  It exposed a latent race: CNuc::CalcCaptureAnalyzingPower set its "built" flag before filling
+  the tables (capture A_y chi2 varied run to run with >1 thread); now built under a mutex.
+
+- 2026-10-10 (11B+a/10-10-26_speedup) -- --use-gradient ON MODELS WITH PENALIZED NORMS, A_y DATA WITH TARGET
+  INTEGRATION AND MANY FREE SHIFTS (11B+a: 233 free, 55 shifts).  The fit fell back to the numerical seed
+  plus all-FD gradients.  Fixed on dev:
+  (1) HasNuisanceParameters counted the nuisance=1 flag the GUI writes on penalized norms in
+      <parameterSettings>.  Those flags are inert (CalculateNuisanceChiSquared and AddNuisanceGradient skip
+      norm/shift names), but they disabled the analytic G2 AND the segment-local shift derivative.  If the
+      log says "Analytic G2 unavailable" on a model with norm errors, this was it.
+  (2) GradTargetEffectAdjoint refused target-integrated A_y, so the whole analytic block bailed
+      (AZURE_GRAD_DEBUG names the segment).  New adjoint:
+        d<A> = sum c_i [s_i dA_i + (A_i - <A>) ds_i] / sum c_i s_i
+      with the yield weights c_i, plus PointAdjoint(..., ayCrossSection).
+  (3) The residual-Jacobian shift columns rebuilt a full forward+adjoint Jacobian per +-h per free shift
+      (110 per step).  Now segment-local.
+  (4) The target-effect combiner weights came from FD, O(nsp^3) per point (CASPAR ~2200 sub-points: >30 min
+      per Jacobian).  Now exact, in one templated integrator pass.
+  (5) Line-search evaluations re-energised shifted segments serially (195 s per evaluation).  Now in
+      parallel over points; no nested parallel regions inside Minuit's gradient threads.
+  (6) RACE FOUND ON THE WAY: CoulFuncCache::localCache indexed per-thread maps by omp_get_thread_num(),
+      which is 0 for every Minuit thread inside an inactive nested team ("double free" in
+      tests/energy_shift_sqrt).  Now omp_get_ancestor_thread_num(omp_get_active_level()).
+  (7) PRE-EXISTING: the FD step for norms was 1e-6*(|x|+1), i.e. 5% of a 2e-5 thick-target norm, so the
+      FD gradient was wrong by up to 14x (CASPAR).  Dev's FD fallback used it in fits.  Now 1e-6*|x|.
+  Validation: tests 16/16 (x3 runs); 11B+a mode 1 byte-identical on two grids; AZURE_GRAD_CHECK 0/37 >1e-2
+  incl. A_y-only model (1.6e-6), shift_sqrt, the CASPAR norms; remaining 1e-4..1e-3 are FD truncation
+  near narrow levels (shrink as h^2).
+  Measured: the 11B+a fit is dominated by RE-SHIFTING (every sub-point's Coulomb functions are recomputed
+  when a segment shift changes), not by chi2.  249747e's parallel chi2 gave no speed-up there
+  (2420 vs 2430 evaluations in 3 h).  On the 11B+a mixed grid, --use-gradient took the log chi2 from
+  10063.1 to 10048.5 in 30 min (numerical: 10059.0 after 3 h).
+  New diagnostics: AZURE_GRAD_CHECK also checks the Jacobian path; AZURE_GRAD_CHECK_IDX/_SEGS/_H;
+  AZURE_TE_WEIGHTS_CHECK/_FD; AZURE_GRAD_TIMING breakdown.
+  Not merged yet: feature/segment-mapping (same-energy mapping within a segment, re-shift 3x faster).
+  SPEED TIP for any model with target effects: check the points-per-width field (last field of a
+  <targetInt> line).  11B+a used 200-300 where 10 was converged (11B+a/10-10-26_speedup/readme).

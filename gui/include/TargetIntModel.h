@@ -7,7 +7,7 @@
 Q_DECLARE_METATYPE(QList<double>);
 
 struct TargetIntData {
-  static const int SIZE = 27;
+  static const int SIZE = 35;  // column 33: derived, display-only summary of the effect types; 34: sigmaLab
   int isActive;
   QString segmentsList;
   int numPoints;
@@ -39,6 +39,18 @@ struct TargetIntData {
   double beamTpcSigma = 0.;          // detector energy resolution, MeV (lab)
   double beamTruncation = 0.;        // zero each component beyond this many s.d.; 0 = none
   bool beamPhotodissociation = false;  // weight the average with the detailed-balance factor
+  // Optional user-defined numerical resolution function (SAMMY UDR): a file
+  // of time-of-flight delay distributions, the nominal flight path, and the
+  // burst / channel widths convolved on top.
+  bool isUdr = false;
+  QString udrFile;
+  double udrFlightPath = 0.;         // metres
+  double udrBurstFwhm = 0.;          // ns, Gaussian FWHM; 0 = none
+  double udrChannelWidth = 0.;       // ns, rectangular; 0 = none
+  bool udrCentred = true;            // re-centre the tabulated function on its centroid
+  // A sigma(E) expression (isConvCoefficients) is lab in, lab out when this is set (the `sigmalab`
+  // keyword), as the constant sigma is; false is the pre-2026-10 convention, c.m. in, c.m. out.
+  bool sigmaLab = false;
 };
 
 /*!

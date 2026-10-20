@@ -476,3 +476,42 @@ not written, and a project whose options are all default and that has no
 experiment has no ``<thm>`` block. The workspace writes nothing else: values
 left as they were read are saved exactly as they were read, comments included,
 and an edited experiment is written as one line in place of its first.
+
+Coulomb functions from a table
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For charged-particle channels, open and closed, AZURE2 takes the
+penetrability, the shift function and the hard-sphere phase from a
+precomputed table when one is available. The table covers orbital angular
+momenta 0 to 10 and the Sommerfeld parameter η and :math:`\rho = ka` from
+10\ :sup:`−3` to 100 each, with :math:`\eta\rho \le 150`. Outside that range, for neutral channels, for
+pairs with a nuclear potential (**Use Hybrid Coulomb method**) and for
+external capture, AZURE2 computes the functions directly. The table agrees
+with the direct calculation to better than 10\ :sup:`−7`, and a calculation
+gives the same χ² to every printed digit with or without it. It is much
+faster: the natural-neon example (:doc:`../examples/natural_neon`) takes about
+1.5 minutes on four threads with the table and about 6 minutes without it.
+
+The dialog has no switch for the table: the GUI uses it whenever it finds
+the file. The file is ``~/.azure2/coulomb_table.bin``, or the file named by
+the environment variable ``AZURE2_COULOMB_TABLE``. It is not part of the
+download. Build it once, either with **Configure → Build Coulomb Table...**,
+which shows the progress and can be cancelled, or from the command line:
+
+.. code-block:: console
+
+   $ AZURE2 --build-coulomb-table
+
+This takes about 5 minutes on four threads and writes 88 MB.
+``--build-coulomb-table=FILE`` writes another file. Calculations started after
+the build use the table; there is no need to restart AZURE2. Without the
+file, a run prints one line saying so and computes the functions directly;
+the results are the same, only slower. A run that used the table reports, at
+the end, how many values it took from it and how many fell outside it.
+
+From the command line the table can be switched off with
+``--no-coulomb-table`` or another file named with ``--coulomb-table=FILE``
+(pyazr: ``use_coulomb_table=False``, ``coulomb_table="FILE"``); see
+:doc:`/reference/command_line`. Within the table's range it takes the place
+of both the default routine and **Use GSL Coulomb functions**. The design and
+the validation are in :doc:`../developer/coulomb_table`.

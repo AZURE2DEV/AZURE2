@@ -28,6 +28,23 @@ PPair::PPair(NucLine nucLine) {
   i1i2factor_ = 1.0 / (2. * nucLine.j1() + 1.0) / (2. * nucLine.j2() + 1.0);
   entrance_ = false;
   ec_entrance_ = false;
+  nucleus_ = 0;
+
+  // The compound nucleus the pair forms.  A particle pair is light + heavy
+  // (Z1+Z2, M1+M2).  A gamma pair (pType 10) is the nucleus itself with a
+  // photon (M1 = 0).  A beta pair (pType 20) is the parent (Z2, M2) emitting
+  // an electron of charge Z1 = -1 (or a positron, +1), so the daughter the
+  // levels belong to has Z2 - Z1 and the same mass number.
+  if (pair_ptype_ == 20) {
+    nucleus_z_ = pair_z_[1] - pair_z_[0];
+    nucleus_a_ = (int)std::floor(pair_m_[1] + 0.5);
+  } else if (pair_ptype_ == 10) {
+    nucleus_z_ = pair_z_[1];
+    nucleus_a_ = (int)std::floor(pair_m_[1] + 0.5);
+  } else {
+    nucleus_z_ = pair_z_[0] + pair_z_[1];
+    nucleus_a_ = (int)std::floor(pair_m_[0] + pair_m_[1] + 0.5);
+  }
 
   // Auto-detect identical-particle pair. Two particles are treated as
   // identical when Z, mass, intrinsic spin, parity, and excitation energy
@@ -131,6 +148,22 @@ int PPair::IsDecay(int pairNum) {
 
 int PPair::GetPairKey() const {
   return pair_key_;
+}
+
+int PPair::GetNucleusZ() const {
+  return nucleus_z_;
+}
+
+int PPair::GetNucleusA() const {
+  return nucleus_a_;
+}
+
+int PPair::GetNucleus() const {
+  return nucleus_;
+}
+
+void PPair::SetNucleus(int nucleus) {
+  nucleus_ = nucleus;
 }
 
 /*!

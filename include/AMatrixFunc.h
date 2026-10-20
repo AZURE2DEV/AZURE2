@@ -93,10 +93,15 @@ class AMatrixFunc : public GenMatrixFunc {
    * outside the supported path (RMC / active-level compaction / angular-dist
    * coefficients), so the caller can fall back to finite differences.  See
    * PLAN.md Phases 2-4, 6.
+   *
+   * `ayCrossSection` (analyzing-power points only): back-propagate the
+   * differential cross section the point carries alongside A_y instead of A_y
+   * itself.  A target-integrated A_y weights each sub-point's A_y by that cross
+   * section, so its adjoint needs both (GradTargetEffectAdjoint).
    */
   bool PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
                     const vector_matrix_r *shiftDeriv = nullptr,
-                    int xsComponent = 0);
+                    int xsComponent = 0, bool ayCrossSection = false);
   /*!
    * The level-matrix part of the adjoint, shared by PointAdjoint and the THM
    * (HOES) adjoint: given the cotangent `aBar` of the level matrix A of J
@@ -153,6 +158,9 @@ class AMatrixFunc : public GenMatrixFunc {
   mutable std::vector<std::vector<double>> shiftFunctions_;
   mutable int cached_max_levels_;
   mutable int cached_max_channels_;
+  /// Compound nucleus (1-based) of the point being evaluated: groups of the
+  /// others are skipped by FillMatrices and InvertMatrices.
+  int activeNucleus_ = 0;
 };
 
 #endif

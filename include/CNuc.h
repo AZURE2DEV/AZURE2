@@ -22,9 +22,77 @@ class Config;
  * nuclear data objects are contained.
  */
 
+/// One compound nucleus of a project: the (Z, A) its pairs form.
+struct CompoundNucleus {
+  int Z = 0;
+  int A = 0;
+};
+
+/// The isotopic abundance of one compound nucleus's target in one sample.
+struct SampleAbundance {
+  double abundance = 1.0;   ///< current value (a fit parameter when vary is set)
+  double nominal = 1.0;     ///< value read from the file, centre of the prior
+  double sigma = 0.0;       ///< prior width; 0 = no prior
+  bool vary = false;
+};
+
+/// A sample: one set of isotopic (or stoichiometric) abundances, one entry per
+/// compound nucleus.  The <abundances> block holds one unnamed sample (the
+/// lines without a "<name>:" prefix) and any number of named ones; a segment
+/// chooses its sample with "natural 1" (the unnamed, or the only, sample) or
+/// "natural <name>".  Each sample has its own sum-to-one penalty width: the
+/// block's "<name>: sum <s>" line, else the config's abundanceSumSigma.
+struct AbundanceSample {
+  std::string name;                      ///< "" for the unnamed sample
+  std::vector<SampleAbundance> entries;   ///< index nucleus-1
+  double sumSigma = -1.0;                ///< < 0: use the config's abundanceSumSigma
+};
+
 class CNuc {
  public:
   // -- structure ------------------------------------------------------------
+  /// Number of compound nuclei the pairs form.  One for every project written
+  /// before several nuclei could share a file.
+  int NumNuclei() const;
+  /// Nucleus \p i, 1-based.
+  CompoundNucleus *GetNucleus(int);
+  const CompoundNucleus *GetNucleus(int) const;
+  /// 1-based nucleus of pair \p pairNum (1-based pair number).
+  int NucleusOfPair(int);
+  /// "Z=10 A=23" style label of nucleus \p i.
+  std::string NucleusLabel(int) const;
+  /// Did the project carry an <abundances> block?  Only then are the
+  /// abundances Minuit parameters (one per nucleus and sample, after the
+  /// level block), so a project without the block keeps its parameter layout.
+  bool HasAbundanceBlock() const { return hasAbundanceBlock_; }
+  /// Number of samples the <abundances> block defines (0 without the block).
+  int NumSamples() const { return (int)samples_.size(); }
+  /// Sample \p s, 1-based.
+  AbundanceSample *GetSample(int s) { return &samples_[s - 1]; }
+  const AbundanceSample *GetSample(int s) const { return &samples_[s - 1]; }
+  /// 1-based index of the sample with this name, 0 if there is none.
+  int FindSample(const std::string &name) const;
+  /// The sample "natural 1" means: the unnamed one if present, else the only one; 0 if ambiguous or none.
+  int DefaultSample() const;
+  /// Number of abundance parameters FillMnParams emits: samples x nuclei with the block, else 0.
+  int NumAbundanceParams() const { return hasAbundanceBlock_ ? (int)(samples_.size() * nuclei_.size()) : 0; }
+  /// 1-based ordinal of the abundance parameter of (sample, nucleus), both 1-based: samples are blocks of nuclei.
+  int AbundanceOrdinal(int sample, int nucleus) const { return (sample - 1) * (int)nuclei_.size() + nucleus; }
+  /// The (sample, nucleus) of a 1-based abundance ordinal.
+  void AbundanceOf(int ordinal, int &sample, int &nucleus) const;
+  /// Minuit name: "abundance_<Z>_<A>" for the unnamed sample, "abundance_<sample>_<Z>_<A>" otherwise.
+  std::string AbundanceParamName(int sample, int nucleus) const;
+  /// Current abundance of nucleus \p nucleus in sample \p sample (1 when there is no block).
+  double GetAbundance(int sample, int nucleus) const;
+  /// Sum of the current abundances of one sample.
+  double AbundanceSum(int sample) const;
+  /// The sum-to-one width of a sample: its own "sum" line, else \p globalSumSigma.
+  double SampleSumSigma(int sample, double globalSumSigma) const;
+  /// The abundance penalty added to chi-squared, summed over samples: every
+  /// entry with a prior contributes ((w - w0)/sigma)^2, and each sample whose
+  /// width s is > 0 contributes ((sum w) - 1)^2 / s^2.
+  double AbundancePenalty(double globalSumSigma) const;
+  double AbundanceSumPenalty(double globalSumSigma) const;  // sum-to-one terms only (MCMC: priors come from BuildAutoPriors)
   /// Does a pair with this key exist? Keys are what the input files write; the
   /// PPair vector position may differ, so use GetPairNumFromKey to convert.
   bool IsPairKey(int);
@@ -51,6 +119,9 @@ class CNuc {
   /// Returns -1 if a file cannot be read. \p radii optionally overrides one
   /// pair's channel radius, as SetRadius does.
   int Fill(const Config &, std::pair<int, double> radii = std::pair<int, double>(0, 0.0));
+  /// Adds a level-less J^pi group, with its particle channels, for every J^pi the particle pairs allow up to
+  /// \p maxL that no active level provides. Such a group contributes hard-sphere scattering only.
+  int AddHardSphereGroups(const Config &, int maxL);
   /// Refuse (return -1) a channel with L+S odd on an identical pair with spin.
   int CheckIdenticalChannels(const Config &);
   /// Read the external-capture file into the ECLevel vector and check each
@@ -143,8 +214,16 @@ class CNuc {
   void SetThmCoherentValues(const std::vector<double> &v) { thmCoherentValues_ = v; }
 
  private:
+  /// 1-based index of the nucleus with this (Z, A), appending it if new.
+  int FindOrAddNucleus(int z, int a);
+  /// Reads the optional <abundances> block of the project file into samples_.
+  /// Returns -1 on a malformed line.
+  int ReadAbundances(const Config &);
   std::vector<PPair> pairs_;
   std::vector<JGroup> jgroups_;
+  std::vector<CompoundNucleus> nuclei_;
+  std::vector<AbundanceSample> samples_;
+  bool hasAbundanceBlock_ = false;
   int maxLValue_;
   bool transformedIn_ = false;
   std::vector<double> thmCoherentValues_;

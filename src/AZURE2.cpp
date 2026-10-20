@@ -17,6 +17,13 @@
 #include "GSLException.h"
 #include "CoulFuncCache.h"
 #include "ECAmplitudeCache.h"
+#include "CoulombTable.h"
+#include <atomic>
+#include <chrono>
+#include <thread>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include <stdlib.h>
 #include <iostream>
 #include <iomanip>
@@ -32,6 +39,7 @@
 #include <readline/history.h>
 #endif
 #include <string.h>
+#include <cstdlib>
 
 // Global Config pointer for use across the codebase
 Config *g_config = nullptr;
@@ -49,9 +57,14 @@ struct SegPairs {
  */
 
 void welcomeMessage(const Config &configure) {
+#ifndef AZURE2_VERSION_STRING
+#define AZURE2_VERSION_STRING "unknown"
+#endif
+  std::string versionColumn = std::string("Version ") + AZURE2_VERSION_STRING;
+  if (versionColumn.size() > 25) versionColumn.resize(25);
   configure.outStream << std::endl
                       << "O--------------------------O-------------------------------O" << std::endl
-                      << "| #### #### #  # ###  ####  ##  | Version 1.0              |" << std::endl
+                      << "| #### #### #  # ###  ####  ##  | " << std::left << std::setw(25) << versionColumn << std::right << "|" << std::endl
                       << "| #  #    # #  # #  # #    #  # |                          |" << std::endl
                       << "| ####   #  #  # ###  ##     #  |                          |" << std::endl
                       << "| #  #  #   #  # # #  #     #   | Joint Institute for      |" << std::endl
@@ -95,6 +108,11 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--ignore-externals:" << std::setw(0) << "Ignore external resonant capture amplitude if internal width is zero." << std::endl
             << std::setw(25) << std::left << "\t--use-rmc:" << std::setw(0) << "Use Reich-Moore approximation for capture (neutron capture only)." << std::endl
             << std::setw(25) << std::left << "\t--gsl-coul:" << std::setw(0) << "Use GSL Coulomb functions (faster, but less accurate)." << std::endl
+            << std::setw(25) << std::left << "\t--coulomb-table[=FILE]:" << std::setw(0) << "Charged channels from the universal Coulomb table (the default; FILE: $AZURE2_COULOMB_TABLE or ~/.azure2/coulomb_table.bin)." << std::endl
+            << std::setw(25) << std::left << "\t--no-coulomb-table:" << std::setw(0) << "Exact Coulomb functions everywhere." << std::endl
+            << std::setw(25) << std::left << "\t--build-coulomb-table[=FILE]:" << std::setw(0) << "Build the Coulomb table (about 5 min on 4 threads, 88 MB; FILE as for --coulomb-table) and exit." << std::endl
+            << std::setw(25) << std::left << "\t--grid-replacement:" << std::setw(0) << "Re-place the adaptive sub-point grids as levels and shifts move (the default)." << std::endl
+            << std::setw(25) << std::left << "\t--no-grid-replacement:" << std::setw(0) << "Keep the adaptive sub-point grids placed from the input file's levels (default: re-place them as levels and shifts move)." << std::endl
 #ifdef USE_NLOPT
             << std::setw(25) << std::left << "\t--use-nlopt:" << std::setw(0) << "Use NLopt minimizer (BOBYQA) instead of Minuit2." << std::endl
 #endif
@@ -104,6 +122,51 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--covariance-band:" << std::setw(0) << "Compute the cross-section uncertainty band without asking (from covariance.dat)." << std::endl
             << std::setw(25) << std::left << "\t--scale-covariance:" << std::setw(0) << "Scale the band's covariance to a reduced chi-squared of 1." << std::endl
             << std::setw(25) << std::left << "\t--use-api:" << std::setw(0) << "Removed (the socket API is gone): exits with a pointer to pyazr." << std::endl;
+}
+
+/*!
+ * --build-coulomb-table[=FILE]: build the universal Coulomb table with the default
+ * specification (CoulombTable::BuildSpec) on all OpenMP threads, write it to FILE (default
+ * CoulombTable::DefaultPath()) and report progress.  The table is not distributed, so this
+ * is how a user of a ready-built AZURE2 makes one.
+ */
+int buildCoulombTable(const std::string &path) {
+  const std::string file = path.empty() ? CoulombTable::DefaultPath() : path;
+  CoulombTable::BuildSpec spec;
+#ifdef _OPENMP
+  spec.threads = omp_get_max_threads();
+#endif
+  std::atomic<int> done{0};
+  std::atomic<bool> finished{false};
+  spec.rowsDone = &done;
+  const int rows = CoulombTable::BuildRows(spec);
+  std::cout << "Building the Coulomb table " << file << " on " << spec.threads
+            << " thread(s): about 5 min on 4 threads, 88 MB." << std::endl;
+  const auto t0 = std::chrono::steady_clock::now();
+  bool ok = false;
+  std::string error;
+  std::thread worker([&] {
+    ok = CoulombTable::BuildFile(file, spec, error);
+    finished = true;
+  });
+  int reported = 0;
+  while (!finished) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    const int percent = int(100.0 * done.load() / rows);
+    if (percent >= reported + 10) {
+      reported = percent / 10 * 10;
+      std::cout << "  " << reported << " %" << std::endl;
+    }
+  }
+  worker.join();
+  const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+  if (!ok) {
+    std::cerr << "ERROR: Coulomb table not built: " << error << std::endl;
+    return 1;
+  }
+  std::cout << "Coulomb table written to " << file << " in " << std::fixed << std::setprecision(0) << seconds
+            << " s." << std::endl;
+  return 0;
 }
 
 /*!
@@ -165,6 +228,17 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
       configure.paramMask &= ~(Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
     else if (*it == "--gsl-coul")
       configure.paramMask |= Config::USE_GSL_COULOMB_FUNC;
+    else if (*it == "--coulomb-table")
+      configure.useCoulombTable = true;
+    else if (it->compare(0, 16, "--coulomb-table=") == 0) {
+      configure.useCoulombTable = true;
+      configure.coulombTablePath = it->substr(16);
+    } else if (*it == "--no-coulomb-table")
+      configure.useCoulombTable = false;
+    else if (*it == "--grid-replacement")
+      configure.replaceSubPointGrids = true;
+    else if (*it == "--no-grid-replacement")
+      configure.replaceSubPointGrids = false;
     else if (*it == "--ignore-externals")
       configure.paramMask |= Config::IGNORE_ZERO_WIDTHS;
     else if (*it == "--use-rmc")
@@ -1000,7 +1074,27 @@ std::string createPrettyParameterName(const std::string &paramName) {
       size_t secondUnderscore = paramName.find('_', firstUnderscore + 1);
       if (secondUnderscore != std::string::npos) {
         int segmentNum = std::stoi(paramName.substr(firstUnderscore + 1, secondUnderscore - firstUnderscore - 1));
+        const size_t fn = paramName.find("_energy_shift_fn");
+        if (fn != std::string::npos)
+          return "Segment " + std::to_string(segmentNum) + " Energy-Shift Function a" + paramName.substr(fn + 16);
+        if (paramName.find("_energy_shift_sqrt") != std::string::npos)
+          return "Segment " + std::to_string(segmentNum) + " sqrt(E) Energy-Shift Coefficient (MeV^1/2)";
         return "Segment " + std::to_string(segmentNum) + " Energy Shift (keV)";
+      }
+    } catch (...) {}
+  }
+
+  // Isotopic abundance: "abundance[_<sample>]_Z_A" -> "Abundance [sample ..] Z=.. A=.."
+  if (paramName.find("abundance_") == 0) {
+    try {
+      size_t lastUnderscore = paramName.rfind('_');
+      size_t prevUnderscore = paramName.rfind('_', lastUnderscore - 1);
+      if (lastUnderscore != std::string::npos && prevUnderscore != std::string::npos && prevUnderscore > 9) {
+        int z = std::stoi(paramName.substr(prevUnderscore + 1, lastUnderscore - prevUnderscore - 1));
+        int a = std::stoi(paramName.substr(lastUnderscore + 1));
+        std::string sample = paramName.substr(10, prevUnderscore > 10 ? prevUnderscore - 10 : 0);
+        return "Abundance " + (sample.empty() ? std::string() : "sample " + sample + " ") +
+               "Z=" + std::to_string(z) + " A=" + std::to_string(a);
       }
     } catch (...) {}
   }
@@ -1401,6 +1495,13 @@ int main(int argc, char *argv[]) {
 
   // Set GSL Error Handler
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
+
+  // --build-coulomb-table[=FILE] builds the table and exits, GUI build or not
+  for (int i = 1; i < argc; i++) {
+    const std::string arg = argv[i];
+    if (arg == "--build-coulomb-table") return buildCoulombTable("");
+    if (arg.compare(0, 22, "--build-coulomb-table=") == 0) return buildCoulombTable(arg.substr(22));
+  }
 
   // Initialize caches for performance optimization
   InitializeCoulFuncCache();

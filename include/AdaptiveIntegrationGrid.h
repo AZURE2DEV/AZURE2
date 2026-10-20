@@ -29,7 +29,7 @@
  *
  * The anchors are quantized (see Quantize) so the lattice is a deterministic,
  * piecewise-constant function of the level parameters: the grid can then be
- * rebuilt when a fit moves a narrow level (EPoint::RefreshSubPointGrid)
+ * re-placed when a fit moves a narrow level (EData::ReplaceSubPointGrids)
  * without each evaluation seeing a slightly different grid.
  */
 class AdaptiveIntegrationGrid {
@@ -48,20 +48,12 @@ class AdaptiveIntegrationGrid {
     /// parameter transformation is enabled but has not run yet.  This is the
     /// state during EData::Fill in every CLI and API flow.
     bool inputWidthsArePhysical;
-    /// Read the current fit values (ALevel::GetFitE / GetFitGamma: observed
-    /// energies and Brune amplitudes) instead of the stored level parameters.
-    bool useFitParameters;
-    /// With useFitParameters: the fit values are formal R-matrix parameters
-    /// (E_lambda, gamma; Brune formalism off), not observed energies and Brune
-    /// amplitudes.  Each level is then anchored at the Thomas estimate of its
-    /// observed energy, E_lambda - sum_c gamma_c^2 (S_c - B_c) / (1 + sum_c
-    /// gamma_c^2 dS_c/dE), with the widths taken there.
-    bool formalParameters;
-    /// With useFitParameters: the fit amplitudes are Park's (--use-park),
-    /// gamma_Park = gamma_Brune sqrt(J), J = 1 - sum_c gamma_c^2 dS_c/dE.  The
-    /// widths are then those of the same Brune parameters, so that both
-    /// parametrizations anchor the grid at the same places.
-    bool parkAmplitudes;
+    /// Subtracted from every resonance's c.m. energy.  The sub-points of a segment
+    /// with an energy shift are laid out at the unshifted energies and moved with
+    /// the data; offsetting the resonances by the segment's c.m. shift puts the
+    /// dense part of the grid where the resonance is after the move
+    /// (EData::ReplaceSubPointGrids).
+    double resonanceOffset;
 
     GridConfig() :
       maxPoints(1000),
@@ -75,9 +67,7 @@ class AdaptiveIntegrationGrid {
       pointsPerWidth(50.0),
       entranceKey(0),
       inputWidthsArePhysical(false),
-      useFitParameters(false),
-      formalParameters(false),
-      parkAmplitudes(false) {}
+      resonanceOffset(0.0) {}
   };
 
   /// Tail step / distance for a convolutionCoreWidths core: tailRatio /

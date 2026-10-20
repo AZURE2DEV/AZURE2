@@ -15,6 +15,10 @@
 #include "InfoDialog.h"
 #include "PairsModel.h"
 #include "ExforDialog.h"
+#include "SegmentKeywords.h"
+#include "AbundancesModel.h"
+
+static bool isSegmentKeyword(const QString &token);
 
 SegmentsTab::SegmentsTab(QWidget *parent) :
   QWidget(parent) {
@@ -291,14 +295,16 @@ void SegmentsTab::deleteSegTestLine() {
 void SegmentsTab::addSegDataLine() {
   AddSegDataDialog aDialog;
   aDialog.thmCheck->setVisible(thmEnabled_);
+  aDialog.setPairsModel(pairsModel);
+  aDialog.setSamples(abundancesModel ? abundancesModel->samples() : QStringList() << QString());
   if (aDialog.exec()) {
     SegmentsDataData newLine;
     newLine.isActive = 1;
-    newLine.entrancePairIndex = aDialog.entrancePairIndexSpin->value();
+    newLine.entrancePairIndex = aDialog.entrancePairCombo->key();
     if (aDialog.dataTypeCode() == 3)
       newLine.exitPairIndex = -1;
     else
-      newLine.exitPairIndex = aDialog.exitPairIndexSpin->value();
+      newLine.exitPairIndex = aDialog.exitPairCombo->key();
     newLine.lowEnergy = aDialog.lowEnergyText->text().toDouble();
     newLine.highEnergy = aDialog.highEnergyText->text().toDouble();
     newLine.lowAngle = aDialog.lowAngleText->text().toDouble();
@@ -345,6 +351,7 @@ void SegmentsTab::addSegDataLine() {
       newLine.finalJ = 0.0;
       newLine.delta = 0.0;
     }
+    newLine.extraTokens = SegmentKeywords::withNaturalToken(QString(), aDialog.naturalToken());
     addSegDataLine(newLine);
   }
 }
@@ -403,9 +410,8 @@ void SegmentsTab::addSegDataLine(SegmentsDataData line, bool fromFile) {
     segmentsDataModel->setData(index, line.delta, Qt::EditRole);
     index = segmentsDataModel->index(lines.size(), 24, QModelIndex());
     segmentsDataModel->setData(index, line.isTHM, Qt::EditRole);
-    // Not a column: without this the sqrtshift block read from the file never
-    // reached the model and a save dropped it.
-    segmentsDataModel->setSqrtShiftTokens(lines.size(), line.sqrtShiftTokens);
+    // Keyword blocks have no column; without this they were lost on every load.
+    segmentsDataModel->setLineExtras(lines.size(), line.extraTokens);
     segmentsDataView->resizeRowToContents(lines.size());
     updateSegDataButtons(segmentsDataView->selectionModel()->selection());
     if (!fromFile) {
@@ -422,14 +428,16 @@ void SegmentsTab::addSegDataLine(SegmentsDataData line, bool fromFile) {
 void SegmentsTab::addSegTestLine() {
   AddSegTestDialog aDialog;
   aDialog.thmCheck->setVisible(thmEnabled_);
+  aDialog.setPairsModel(pairsModel);
+  aDialog.setSamples(abundancesModel ? abundancesModel->samples() : QStringList() << QString());
   if (aDialog.exec()) {
     SegmentsTestData newLine;
     newLine.isActive = 1;
-    newLine.entrancePairIndex = aDialog.entrancePairIndexSpin->value();
+    newLine.entrancePairIndex = aDialog.entrancePairCombo->key();
     if (aDialog.dataTypeCode() == 4)
       newLine.exitPairIndex = -1;
     else
-      newLine.exitPairIndex = aDialog.exitPairIndexSpin->value();
+      newLine.exitPairIndex = aDialog.exitPairCombo->key();
     newLine.lowEnergy = aDialog.lowEnergyText->text().toDouble();
     newLine.highEnergy = aDialog.highEnergyText->text().toDouble();
     newLine.energyStep = aDialog.energyStepText->text().toDouble();
@@ -455,6 +463,7 @@ void SegmentsTab::addSegTestLine() {
       newLine.operationType = 0;
       newLine.componentsList = "";
     }
+    newLine.extraTokens = SegmentKeywords::withNaturalToken(QString(), aDialog.naturalToken());
     addSegTestLine(newLine);
   }
 }
@@ -497,6 +506,7 @@ void SegmentsTab::addSegTestLine(SegmentsTestData line, bool fromFile) {
     segmentsTestModel->setData(index, line.componentsList, Qt::EditRole);
     index = segmentsTestModel->index(lines.size(), 16, QModelIndex());
     segmentsTestModel->setData(index, line.isTHM, Qt::EditRole);
+    segmentsTestModel->setLineExtras(lines.size(), line.extraTokens);
     segmentsTestView->resizeRowToContents(lines.size());
     updateSegTestButtons(segmentsTestView->selectionModel()->selection());
   } else {
@@ -582,11 +592,16 @@ void SegmentsTab::editSegDataLine() {
   var = segmentsDataModel->data(i, Qt::EditRole);
   QString delta = var.toString();
 
+  QString extraTokens = segmentsDataModel->getLines().at(index.row()).extraTokens;
+
   AddSegDataDialog aDialog;
   aDialog.thmCheck->setVisible(thmEnabled_);
+  aDialog.setPairsModel(pairsModel);
+  aDialog.setSamples(abundancesModel ? abundancesModel->samples() : QStringList() << QString());
   aDialog.setWindowTitle(tr("Edit a Segment From Data"));
-  aDialog.entrancePairIndexSpin->setValue(entrancePairIndex);
-  aDialog.exitPairIndexSpin->setValue(exitPairIndex);
+  aDialog.setNaturalToken(SegmentKeywords::naturalSample(extraTokens));
+  aDialog.entrancePairCombo->setKey(entrancePairIndex);
+  aDialog.exitPairCombo->setKey(exitPairIndex);
   aDialog.lowEnergyText->setText(lowEnergy);
   aDialog.highEnergyText->setText(highEnergy);
   aDialog.lowAngleText->setText(lowAngle);
@@ -634,12 +649,12 @@ void SegmentsTab::editSegDataLine() {
   aDialog.deltaText->setText(delta);
 
   if (aDialog.exec()) {
-    int newEntrancePairIndex = aDialog.entrancePairIndexSpin->value();
+    int newEntrancePairIndex = aDialog.entrancePairCombo->key();
     if (newEntrancePairIndex != entrancePairIndex) {
       i = segmentsDataModel->index(index.row(), 1, QModelIndex());
       segmentsDataModel->setData(i, newEntrancePairIndex, Qt::EditRole);
     }
-    int newExitPairIndex = (aDialog.dataTypeCode() == 3) ? -1 : aDialog.exitPairIndexSpin->value();
+    int newExitPairIndex = (aDialog.dataTypeCode() == 3) ? -1 : aDialog.exitPairCombo->key();
     if (newExitPairIndex != exitPairIndex) {
       i = segmentsDataModel->index(index.row(), 2, QModelIndex());
       segmentsDataModel->setData(i, newExitPairIndex, Qt::EditRole);
@@ -767,6 +782,8 @@ void SegmentsTab::editSegDataLine() {
       i = segmentsDataModel->index(index.row(), 23, QModelIndex());
       segmentsDataModel->setData(i, newDelta, Qt::EditRole);
     }
+    QString newExtraTokens = SegmentKeywords::withNaturalToken(extraTokens, aDialog.naturalToken());
+    if (newExtraTokens != extraTokens) segmentsDataModel->setLineExtras(index.row(), newExtraTokens);
   }
 }
 
@@ -824,11 +841,16 @@ void SegmentsTab::editSegTestLine() {
   var = segmentsTestModel->data(i, Qt::EditRole);
   QString componentsList = var.toString();
 
+  QString extraTokens = segmentsTestModel->getLines().at(index.row()).extraTokens;
+
   AddSegTestDialog aDialog;
   aDialog.thmCheck->setVisible(thmEnabled_);
+  aDialog.setPairsModel(pairsModel);
+  aDialog.setSamples(abundancesModel ? abundancesModel->samples() : QStringList() << QString());
   aDialog.setWindowTitle(tr("Edit a Segment Without Data"));
-  aDialog.entrancePairIndexSpin->setValue(entrancePairIndex);
-  aDialog.exitPairIndexSpin->setValue(exitPairIndex);
+  aDialog.setNaturalToken(SegmentKeywords::naturalSample(extraTokens));
+  aDialog.entrancePairCombo->setKey(entrancePairIndex);
+  aDialog.exitPairCombo->setKey(exitPairIndex);
   aDialog.lowEnergyText->setText(lowEnergy);
   aDialog.highEnergyText->setText(highEnergy);
   aDialog.energyStepText->setText(energyStep);
@@ -857,12 +879,12 @@ void SegmentsTab::editSegTestLine() {
   }
 
   if (aDialog.exec()) {
-    int newEntrancePairIndex = aDialog.entrancePairIndexSpin->value();
+    int newEntrancePairIndex = aDialog.entrancePairCombo->key();
     if (newEntrancePairIndex != entrancePairIndex) {
       i = segmentsTestModel->index(index.row(), 1, QModelIndex());
       segmentsTestModel->setData(i, newEntrancePairIndex, Qt::EditRole);
     }
-    int newExitPairIndex = (aDialog.dataTypeCode() == 4) ? -1 : aDialog.exitPairIndexSpin->value();
+    int newExitPairIndex = (aDialog.dataTypeCode() == 4) ? -1 : aDialog.exitPairCombo->key();
     if (newExitPairIndex != exitPairIndex) {
       i = segmentsTestModel->index(index.row(), 2, QModelIndex());
       segmentsTestModel->setData(i, newExitPairIndex, Qt::EditRole);
@@ -946,6 +968,8 @@ void SegmentsTab::editSegTestLine() {
       i = segmentsTestModel->index(index.row(), 15, QModelIndex());
       segmentsTestModel->setData(i, newComponentsList, Qt::EditRole);
     }
+    QString newExtraTokens = SegmentKeywords::withNaturalToken(extraTokens, aDialog.naturalToken());
+    if (newExtraTokens != extraTokens) segmentsTestModel->setLineExtras(index.row(), newExtraTokens);
   }
 }
 
@@ -1202,13 +1226,14 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
       }
       if (dataParts.isEmpty()) dataParts = remainingData.split(" ", Qt::SkipEmptyParts);
 
-      // A trailing "sqrtshift b bError vary" block (sqrt(E) energy-shift term)
-      // is split off before the positional composite/UPOS parsing below, which
-      // must not see it, and is written back verbatim by writeSegDataFile.
-      QString sqrtShiftTokens;
+      // The trailing keyword blocks ("sqrtshift b bError vary", "mixture
+      // w_self n {file w}...") are split off before the positional
+      // composite/UPOS parsing below, which must not see them, and are
+      // written back verbatim by writeSegDataFile.
+      QString extraTokens;
       for (int k = 1; k < dataParts.size(); k++) {
-        if (dataParts[k].compare("sqrtshift", Qt::CaseInsensitive) == 0) {
-          sqrtShiftTokens = QStringList(dataParts.mid(k)).join(" ");
+        if (isSegmentKeyword(dataParts[k])) {
+          extraTokens = QStringList(dataParts.mid(k)).join(" ");
           dataParts = dataParts.mid(0, k);
           break;
         }
@@ -1355,12 +1380,18 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
 
       SegmentsDataData newLine = {isActive, entrancePairIndex, exitPairIndex, lowEnergy, highEnergy, lowAngle,
                                   highAngle, dataType, dataFile, dataNorm, dataNormError, varyNorm, phaseJ, phaseL, energyShift, energyShiftError, varyEnergyShift, isAdvanced, operationType, componentsList, isUPOS, secondaryDecayL, finalJ, delta, isTHM};
-      newLine.sqrtShiftTokens = sqrtShiftTokens;
+      newLine.extraTokens = extraTokens;
       addSegDataLine(newLine, true);
     }
   }
   if (line.trimmed() != QString("</segmentsData>")) return false;
   return true;
+}
+
+// The keyword blocks a segment line may end with (SegLine.h / ExtrapLine.h).
+// They are carried verbatim through the models rather than parsed here.
+static bool isSegmentKeyword(const QString &token) {
+  return SegmentKeywords::isKeyword(token);
 }
 
 // Quote a data-file path that contains a space.  The optional composite/UPOS
@@ -1470,8 +1501,8 @@ bool SegmentsTab::writeSegDataFile(QTextStream &outStream) {
     } else {
       outStream << " 0";
     }
-    // sqrt(E) energy-shift block, last on the line (see SegLine.h)
-    if (!lines.at(i).sqrtShiftTokens.isEmpty()) outStream << " " << lines.at(i).sqrtShiftTokens;
+    // Keyword blocks (sqrtshift, mixture), last on the line (see SegLine.h)
+    if (!lines.at(i).extraTokens.isEmpty()) outStream << " " << lines.at(i).extraTokens;
     outStream << Qt::endl;
   }
 
@@ -1498,7 +1529,22 @@ bool SegmentsTab::readSegTestFile(QTextStream &inStream) {
     line = inStream.readLine();
     if (line.trimmed().isEmpty()) continue;
     if (!inStream.atEnd() && line.trimmed() != QString("</segmentsTest>")) {
-      QTextStream in(&line);
+      // Keyword blocks ("mixture ...") are cut off before the positional
+      // parse, which would otherwise fail on the keyword, and written back
+      // verbatim by writeSegTestFile.
+      QString extraTokens;
+      QString positional = line;
+      {
+        QStringList parts = line.split(" ", Qt::SkipEmptyParts);
+        for (int k = 0; k < parts.size(); k++) {
+          if (isSegmentKeyword(parts[k])) {
+            extraTokens = QStringList(parts.mid(k)).join(" ");
+            positional = QStringList(parts.mid(0, k)).join(" ");
+            break;
+          }
+        }
+      }
+      QTextStream in(&positional);
       in >> isActive >> entrancePairIndex >> exitPairIndex >> lowEnergy >> highEnergy >> energyStep >> lowAngle >> highAngle >> angleStep >> dataType;
       // THM segments carry an isDiff offset of +10; strip it into isTHM.
       int isTHM = (dataType >= 10) ? 1 : 0;
@@ -1601,6 +1647,7 @@ bool SegmentsTab::readSegTestFile(QTextStream &inStream) {
 
       SegmentsTestData newLine = {isActive, entrancePairIndex, exitPairIndex, lowEnergy, highEnergy, energyStep, lowAngle,
                                   highAngle, angleStep, dataType, phaseJ, phaseL, maxAngDistOrder, isAdvanced, operationType, componentsList, isTHM};
+      newLine.extraTokens = extraTokens;
       addSegTestLine(newLine, true);
     }
   }
@@ -1693,6 +1740,8 @@ bool SegmentsTab::writeSegTestFile(QTextStream &outStream) {
       // Write 0 for non-advanced segments for backwards compatibility
       outStream << " 0";
     }
+    // Keyword blocks (mixture), last on the line (see ExtrapLine.h)
+    if (!lines.at(i).extraTokens.isEmpty()) outStream << " " << lines.at(i).extraTokens;
     outStream << Qt::endl;
   }
 

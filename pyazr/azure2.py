@@ -98,7 +98,8 @@ class azure2:
     def __init__(self, file, cwd=None, data_mode=True, use_brune=True,
                  ignore_externals=True, transform=True,
                  use_long_wavelength=True, use_gsl_coul=False, use_rmc=False,
-                 use_park=False):
+                 use_park=False, use_coulomb_table=True, coulomb_table=None,
+                 replace_grids=True):
         """Build the R-matrix engine for ``file`` in this interpreter.
 
         Parameters
@@ -116,6 +117,16 @@ class azure2:
             ``--ignore-externals``, ``--no-transform`` and ``--no-long-wavelength``
             (the ``use_*`` options are ON by default, ``transform`` too).
         use_gsl_coul : use GSL's Coulomb functions instead of AZURE2's own.
+        use_coulomb_table : take P, S and the hard-sphere phase of charged
+            channels from the universal Coulomb table (the default; CLI
+            ``--no-coulomb-table`` turns it off), falling back to the exact
+            routines outside it or when there is no table file.
+        coulomb_table : the table file; ``None`` = ``$AZURE2_COULOMB_TABLE``,
+            else ``~/.azure2/coulomb_table.bin``.
+        replace_grids : lay the adaptive sub-point grids of target effects out
+            again on every evaluation, for the current levels and energy
+            shifts (the default; CLI ``--no-grid-replacement``).  ``False``
+            keeps the grids placed from the file's levels.
         use_rmc : use the R-matrix-with-channels (RMC) formalism instead of
             Brune; mutually exclusive with ``use_brune`` (Brune wins).
         use_park : use Park's level-dependent boundary conditions (Phys. Rev.
@@ -146,7 +157,8 @@ class azure2:
             ignore_externals=bool(ignore_externals), transform=bool(transform),
             use_long_wavelength=bool(use_long_wavelength),
             use_gsl_coul=bool(use_gsl_coul), use_rmc=bool(use_rmc),
-            use_park=bool(use_park))
+            use_park=bool(use_park), use_coulomb_table=bool(use_coulomb_table),
+            coulomb_table=str(coulomb_table or ""), replace_grids=bool(replace_grids))
 
         opts = _azure2.RuntimeOptions()
         for name, value in self.options.items():
@@ -650,6 +662,13 @@ class azure2:
         A name the file lacks keeps the session's current value, exactly as
         AZURE2 does on read; a file with no name in common with the model is
         refused rather than applied to nothing.
+
+        This only *reads*.  The free-vector calls (``calculate_chi2_rwa(x)``,
+        ``update_segments_rwa(x)``, ``transform_rwa(x)``, ...) take every FIXED
+        parameter from the session, i.e. from the ``.azr``, so passing just the
+        free slice of this vector drops the file's fixed level parameters --
+        which the CLI does apply.  To evaluate "the ``.azr`` + this ``.sav``"
+        as the CLI does, use :meth:`load_sav`.
         """
         vals = self.read_sav(path)
         full = np.asarray(self.sess.params_all_rwa(), float).copy()
@@ -663,11 +682,95 @@ class azure2:
                              f"(is it a file from another project?)")
         return full
 
+    @staticmethod
+    def read_sav_basis(path):
+        """The ``#parametrization`` tag of a parameter file (0 standard,
+        1 Brune, 2 Park), or None for a file written before the tag existed."""
+        with open(path) as fh:
+            for line in fh:
+                t = line.split()
+                if len(t) >= 2 and t[0] in ("#parametrization", "parametrization"):
+                    try:
+                        return int(round(float(t[1])))
+                    except ValueError:
+                        return None
+        return None
+
+    def load_sav(self, path):
+        """Load a parameter file into the session the way the CLI does, and
+        return the free RWA vector to evaluate at.
+
+        The CLI's external parameter file (mode 1/2/3 prompt; ``AZUREParams::
+        ReadUserParameters``) sets every parameter it names, FIXED level
+        energies and widths included.  The free-vector calls of this class
+        take the fixed values from the session instead, so
+        ``x = full_rwa_from_sav(p)[~fixed]`` followed by
+        ``calculate_chi2_rwa(x)`` evaluates the ``.azr``'s fixed parameters,
+        not the file's.  When they differ the two are different models:
+        11B+alpha (10-12-26) had 10 fixed widths off by up to 1.6 %, and pyazr
+        gave chi2 9925.03 against the CLI's 9868.04 at the same file, with no
+        warning (key 72 alone +58).
+
+        This pushes the whole vector (``full_rwa_from_sav``) into the engine,
+        so every later free-vector call -- chi2, segments, Jacobian,
+        ``transform_rwa``, ``save_fit`` -- uses the file's fixed values, and
+        sets :attr:`params_rwa` to the file's free values, which it returns.
+
+        Fixed segment norms and shifts are carried along but the engine never
+        reads them (only varied ones are filled from parameters), so they stay
+        at the ``.azr`` value, as in the CLI.  Unlike the CLI, the free/fixed
+        split is NOT changed: the CLI frees a parameter fixed at 0 that the
+        file gives a nonzero value, and fixes a free one the file sets to 0.
+        Values are applied either way, so a calculation agrees; a fit started
+        from here keeps the ``.azr``'s split.  A file whose
+        ``#parametrization`` tag differs from this session's basis is refused
+        (the CLI converts; this does not).
+
+        Switching mode (:meth:`extrap_mode` / :meth:`data_mode`) re-initializes
+        the engine from the ``.azr`` and discards what this loaded: call it
+        again after the switch.  Names are matched against the engine's live
+        parameter list, so it works in either mode, as the CLI's reader does.
+        """
+        tag = self.read_sav_basis(path)
+        if tag is not None and tag != self.basis:
+            raise ValueError(
+                f"{path} holds basis {tag} amplitudes (0 standard, 1 Brune, 2 Park) "
+                f"but this session uses basis {self.basis}; open the model with the "
+                f"matching use_brune/use_park, or convert the file with the CLI.")
+        # The engine's LIVE bookkeeping, matched by name as the CLI does: the
+        # cached `parameters` describe the mode the session was first built
+        # in, and extrapolation mode has a shorter vector.
+        s = self.sess
+        fixed = np.asarray(s.params_fixed(), bool)
+        full = np.asarray(s.params_all_rwa(), float).copy()
+        vals = self.read_sav(path)
+        hit = 0
+        for i in range(full.size):
+            name = s.params_names(i)
+            if name in vals:
+                full[i] = vals[name]
+                hit += 1
+        if hit == 0:
+            raise ValueError(f"{path}: no parameter name matches this model "
+                             f"(is it a file from another project?)")
+        setter = getattr(s, "set_params_all_rwa", None)
+        if setter is not None:
+            setter(full)
+        else:
+            # Modules built before set_params_all_rwa: the same effect, at the
+            # cost of one forward pass.
+            self.sess.update_segments_all_rwa(full)
+        self.fixed_params = [bool(f) for f in fixed]
+        self.params_rwa = [float(v) for v in full[~fixed]]
+        self.params = s.params_values()
+        self._parameters = None
+        return np.asarray(self.params_rwa, float)
+
     def update_rwa_params_from_sav(self):
-        """Reload params_rwa from the run's param.sav (matched by name)."""
-        with _in_dir(self.cwd):
-            full = self.full_rwa_from_sav(os.path.join(self.output_dir, 'param.sav'))
-        self.params_rwa = [float(v) for v, f in zip(full, self.fixed_params) if not f]
+        """Reload the run's param.sav (matched by name) into the session --
+        fixed level parameters included, see :meth:`load_sav` -- and set
+        params_rwa to its free values."""
+        self.load_sav(os.path.join(self.cwd, self.output_dir, 'param.sav'))
 
     def update_sav_from_rwa_params(self, best):
         """Write a free RWA vector back out to param.sav.new, by name.
@@ -762,12 +865,22 @@ class azure2:
           ``param_sav`` (the default) writes the companion ``<name>.sav``
           beside the file, carrying every parameter, free and fixed.
         - **A written file is not a fit until it reads back as one.** With
-          ``verify`` (the default) the result is reopened and its own
-          parameters transformed back; if any R-matrix value disagrees the
-          files are removed and this raises, rather than leaving a snapshot
-          that is quietly a mixture.  With ``norms="fitted"`` (data mode) the
-          reopened file's data chi-squared and its prior terms
-          (:meth:`penalties`) must also equal the fit's (rel. 1e-6).
+          ``verify`` (the default) the result is reopened and checked two
+          ways: its physical values transformed back must match, and the
+          reduced-width amplitudes it reads for the particle and beta-decay
+          channels of every level must be ``x``'s, up to a common sign of
+          the level (the standard parametrization's eigenvector convention,
+          no change of model). If either disagrees the files are removed and
+          this raises, rather than leaving a snapshot that is quietly a
+          mixture. The second check exists because the first cannot see a
+          value two parameters map onto: the engine returned ``|B|`` for a
+          beta-decay amplitude until 2026-10-12, and a snapshot with the
+          sign lost passed. See :meth:`_snapshot_mismatch` for why photon
+          channels are judged on physical values only.  With
+          ``norms="fitted"`` (data mode) the reopened file's data chi-squared
+          and its prior terms (:meth:`penalties`) must also equal the fit's
+          (rel. 1e-6; 1e-4 in the standard parametrization, whose transform is
+          inverted iteratively on reading).
 
         A ``.azr`` names its data files and its output directory *relative to
         itself*, so a snapshot only runs from the directory the original did.
@@ -789,14 +902,23 @@ class azure2:
             raise ValueError("norms='nominal' keeps the fitted norms in the .sav "
                              "only; it needs param_sav=True.")
         x = np.asarray(self.params_rwa if x is None else x, float).ravel()
-        # Every parameter's physical value, fixed ones included (see above).
-        want = np.asarray(self.transform_all_rwa(self._all_rwa(x), include_fixed=True), float)
+        free = [i for i, p in enumerate(self.parameters) if not p.fixed]
+        if x.size != len(free):
+            raise ValueError(f"x has {x.size} entries; the session has "
+                             f"{len(free)} free parameters.")
+        # Every parameter, with the free ones from x, and every parameter's
+        # physical value, fixed ones included (see above).
+        full = self._all_rwa(x)
+        want = np.asarray(self.transform_all_rwa(full, include_fixed=True), float)
 
         path = os.path.abspath(path)
         model = AzrModel.from_file(self.file)
         model.apply_fit(self.parameters, want, physical=True, pairs=self.pairs,
                         include_fixed=True)
-        self._save_cbkg(model, np.asarray(self._all_rwa(x), float))
+        # isotopic abundances (projects with an <abundances> block): the fitted values
+        for p in self.parameters.abundances:
+            model.set_abundance((p.nucleus_Z, p.nucleus_A), value=float(want[p.index]), sample=p.sample or "")
+        self._save_cbkg(model, np.asarray(full, float))
         if norms == "fitted":
             values, centres = {}, {}
             datasets = self.datasets
@@ -864,8 +986,10 @@ class azure2:
                 os.close(fd)
                 copy.write(probe)
                 with azure2(probe, cwd=self.cwd, **check_options) as check:
-                    got = np.asarray(check.transform_all_rwa(
-                        check._all_rwa(check.params_rwa), include_fixed=True), float)
+                    back_full = np.asarray(check.sess.params_all_rwa(), float)
+                    got = np.asarray(check.transform_all_rwa(back_full, include_fixed=True), float)
+                    back = {p.name: float(back_full[i])
+                            for i, p in enumerate(check.parameters)}
                     chi_got = None
                     if chi_want is not None:
                         chi_got = check.calculate_chi2_rwa(check.params_rwa)[0]
@@ -880,25 +1004,29 @@ class azure2:
                     os.remove(probe)
                 if tmpdir and os.path.isdir(tmpdir):
                     shutil.rmtree(tmpdir, ignore_errors=True)
-            if got.shape != want.shape or not np.allclose(got, want, rtol=1e-4,
-                                                          atol=0.0):
-                n = (0 if got.shape != want.shape
-                     else int(np.sum(~np.isclose(got, want, rtol=1e-4))))
+            bad = self._snapshot_mismatch(full, want, got, back)
+            if bad:
                 self._discard(path, sav)
                 raise RuntimeError(
                     "the snapshot does not read back as the fit it was made "
-                    f"from ({n or 'a different number of'} parameter(s) "
-                    "disagree); it has been removed. This means the .azr and "
-                    "the parameter set do not describe the same model.")
+                    f"from ({'; '.join(bad)}); it has been removed. This means "
+                    "the .azr and the parameter set do not describe the same "
+                    "model.")
             if chi_got is not None:
-                if not np.isclose(chi_got, chi_want, rtol=1e-6, atol=1e-9):
+                # The standard parametrization (basis 0) inverts its transform
+                # iteratively on reading (energies to 1e-6 MeV), which leaves
+                # ~1e-5 in the chi-squared of a steep spectrum
+                # (tests/pyazr/beta_sign_test.py); Brune and Park read back
+                # exactly.
+                rtol = 1e-4 if self.basis == 0 else 1e-6
+                if not np.isclose(chi_got, chi_want, rtol=rtol, atol=1e-9):
                     self._discard(path, sav)
                     raise RuntimeError(
                         f"the snapshot run on its own gives chi2 = {chi_got:.10g}, "
                         f"the fit {chi_want:.10g}; it has been removed.")
                 got_p = sum(float(np.sum(v)) for v in pen_got.values())
                 want_p = sum(float(np.sum(v)) for v in pen_want.values())
-                if not np.isclose(got_p, want_p, rtol=1e-6, atol=1e-9):
+                if not np.isclose(got_p, want_p, rtol=rtol, atol=1e-9):
                     self._discard(path, sav)
                     raise RuntimeError(
                         f"the snapshot's priors give {got_p:.10g}, the fit's "
@@ -949,17 +1077,85 @@ class azure2:
             if f and os.path.exists(f):
                 os.remove(f)
 
+    def _snapshot_mismatch(self, x, want, got, back):
+        """Why a re-read snapshot is not the fit it was made from; ``[]`` if it is.
+
+        ``x``, ``want``, ``got`` and ``back`` cover every parameter, fixed ones
+        included (``params_all_rwa`` order; ``back`` by name).  Two
+        comparisons, because neither alone is enough:
+
+        - the **physical values** (``transform_rwa`` of both sides), which
+          is what the file holds.  A transform that maps two parameters onto
+          one value passes this alone: the engine returned ``|B|`` for a
+          beta-decay amplitude until 2026-10-12, and a snapshot with the
+          sign lost read back as a different model (12C+alpha).
+        - the **re-read reduced-width amplitudes** of the particle and
+          beta-decay channels, and the level energies, against ``x`` --
+          level by level, allowing a common sign of the whole level, which
+          the standard parametrization's eigenvector convention may flip and
+          which is no change of model.
+
+        Photon channels are left to the first comparison on purpose: their
+        amplitude is derived from the written width together with the
+        external width of the level, a sum over the level's particle
+        amplitudes, so it is only as exact as the written widths are, and the
+        physical comparison is the direct one.
+        """
+        if got.shape != want.shape:
+            return [f"{got.size} physical parameters instead of {want.size}"]
+        bad = []
+        levels = {}
+        for i, p in enumerate(self.parameters):
+            if p.kind not in ("energy", "width") or i >= want.size:
+                continue
+            if p.name not in back:
+                bad.append(f"{p.name} is not in the re-read file")
+                continue
+            levels.setdefault((p.jgroup, p.level), []).append(
+                (p, float(want[i]), float(got[i]), float(x[i]), back[p.name]))
+
+        def same(pairs, rtol):
+            """Equal, or equal with the level's common sign flipped."""
+            if not pairs:
+                return True
+            a = np.array([v[0] for v in pairs])
+            b = np.array([v[1] for v in pairs])
+            return bool(np.allclose(a, b, rtol=rtol, atol=1e-12)
+                        or np.allclose(a, -b, rtol=rtol, atol=1e-12))
+
+        for (jg, lv), items in sorted(levels.items()):
+            ok = all(abs(w - g) <= 1e-5 * max(1.0, abs(w))
+                     for p, w, g, a, b in items if p.kind == "energy")
+            # the written physical widths, every channel (sign carried)
+            ok = ok and same([(w, g) for p, w, g, a, b in items
+                              if p.kind == "width"], 1e-4)
+            # the re-read amplitudes: particle and beta channels only, since
+            # a photon channel's amplitude depends on the external-capture
+            # integrals the re-read computed afresh
+            ok = ok and same([(a, b) for p, w, g, a, b in items
+                              if p.kind == "width"
+                              and p.radiation_type in ("P", "F", "G")], 1e-3)
+            ok = ok and all(abs(a - b) <= 1e-5 * max(1.0, abs(a))
+                            for p, w, g, a, b in items if p.kind == "energy")
+            if not ok:
+                p0 = items[0][0]
+                bad.append(f"level {p0.jpi} #{lv} (J-group {jg}, E = {p0.level_energy}) "
+                           "re-reads to different parameters")
+        return bad
+
     # -- transforms -----------------------------------------------------------
 
     def transform_rwa(self, params):
         """Map a reduced-width-amplitude vector to physical parameters: level energies in MeV, partial widths in eV, ANCs in fm^-1/2."""
         return self.sess.transform_rwa(params)
 
-    def transform_all_rwa(self, params, include_fixed=False):
+    def transform_all_rwa(self, params, include_fixed=False, free_only=None):
         """As transform_rwa, taking every parameter rather than the free ones.
 
         Returns the physical values of the free parameters, or with
-        ``include_fixed`` of every parameter.  A *fixed* width holds its
+        ``include_fixed`` (equivalently ``free_only=False``) of every
+        parameter, in ``params_all_rwa`` order (the level parameters come
+        first) -- what a snapshot of a fit writes.  A *fixed* width holds its
         reduced-width amplitude (as in the CLI's fits), so its physical value
         is not constant: it follows the level's other widths through the
         Brune denominator ``1 + sum_c gamma_c^2 dS_c/dE``.  Under Park
@@ -967,6 +1163,8 @@ class azure2:
         channel entered as an amplitude (``gammaIsRWA``) is returned as
         Brune's amplitude in both modes, the convention of the .azr.
         """
+        if free_only is not None:
+            include_fixed = not free_only
         return self.sess.transform_all_rwa(params, include_fixed=bool(include_fixed))
 
     def _all_rwa(self, x):
@@ -1494,12 +1692,15 @@ class azure2:
 
             ((norm - nominal) / (nominal/100 * norm_error))^2
 
-        and, for a segment whose energy shift is free,
+        (once per ``normgroup``, on its first member) and, for a segment whose
+        energy shift is free,
 
             ((shift - nominal_shift) / shift_error)^2
 
         and the same again for a free sqrt(E) shift coefficient (the b of
-        E' = E + shift + b*sqrt(E), key ``"shift_sqrt"``).
+        E' = E + shift + b*sqrt(E), key ``"shift_sqrt"``) and, summed per
+        segment, for each free parameter aj of a shift function declared on the
+        segment (``shiftfn``, key ``"shift_fn"``).
 
         Minimize the bare chi-squared instead and the normalizations drift to
         absorb every discrepancy -- a "better" number AZURE2 would never have
@@ -1515,8 +1716,10 @@ class azure2:
         Note the denominator uses the *nominal* normalization, and that
         ``norm_error`` is a percentage.  A THM segment with a free norm has no
         norm penalty: its scale is profiled out, not a parameter.  Returns
-        ``{"norm": array, "shift": array, "shift_sqrt": array, "park": float}``,
-        one entry per segment (``park`` is one number).
+        ``{"norm": array, "shift": array, "shift_sqrt": array, "shift_fn": array}``,
+        one entry per segment, and the single numbers ``"park"`` and
+        ``"abundance"`` (isotopic-abundance priors and sum-to-one terms; both
+        already inside the engine's chi-squared).
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         norm = np.zeros(self.nsegments)
@@ -1525,13 +1728,19 @@ class azure2:
         current = {p.segment_key: p for p in self.parameters.norms}
         shifting = {p.segment_key: p for p in self.parameters.shifts}
         sqrting = {p.segment_key: p for p in self.parameters.sqrt_shifts}
+        shift_fn = np.zeros(self.nsegments)
+        fn_par = {(p.segment_key, p.fn_term): p for p in self.parameters.fn_shifts}
+        norm_groups = set()                  # labels whose first member has been seen
         for i, d in enumerate(self.active_datasets):
             p = current.get(d.key)
             value = (float(x[p.free_index])
                      if p is not None and not p.fixed and p.free_index is not None
                      and p.free_index < x.size else d.norm)
             sigma = d.nominal_norm / 100.0 * d.norm_error
-            if sigma:
+            follower = bool(d.norm_group) and d.norm_group in norm_groups
+            if d.norm_group:
+                norm_groups.add(d.norm_group)
+            if sigma and not follower:       # a normgroup's penalty is its first member's
                 norm[i] = ((value - d.nominal_norm) / sigma) ** 2
             if d.vary_shift and d.energy_shift_error:
                 q = shifting.get(d.key)
@@ -1546,6 +1755,14 @@ class azure2:
                         and q.free_index < x.size else d.energy_shift_sqrt)
                 shift_sqrt[i] = ((bval - d.energy_shift_sqrt)
                                  / d.energy_shift_sqrt_error) ** 2
+            for j, (nominal, sigma, vary) in enumerate(d.shift_fn_params):
+                if not (vary and sigma):
+                    continue
+                q = fn_par.get((d.key, j))
+                aval = (float(x[q.free_index])
+                        if q is not None and not q.fixed and q.free_index is not None
+                        and q.free_index < x.size else nominal)
+                shift_fn[i] += ((aval - nominal) / sigma) ** 2
         # Park formalism: the J > 0 wall, sum (J/1e-3)^2 over levels with J < 0.
         # The engine adds it to calculate_chi2_rwa itself (it is part of what
         # AZURE2 minimizes), so objective() does not add it again; it is
@@ -1555,7 +1772,45 @@ class azure2:
         if self.options.get("use_park"):
             J = np.asarray(self.sess.park_norms(x), float)
             park = float(np.sum((J[J < 0] / 1.0e-3) ** 2))
-        return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "park": park}
+        # Isotopic abundances (projects with an <abundances> block): the prior
+        # ((w - w0)/sigma)^2 per nucleus and the sum-to-one term
+        # ((sum w) - 1)^2 / abundanceSumSigma^2.  Like the Park term these are
+        # added by the engine inside calculate_chi2_rwa, so objective() does
+        # not add them again; reported here (one number) so a fit can see them.
+        abundance = 0.0
+        abund = self.parameters.abundances
+        if abund:
+            model = AzrModel.from_file(self.file)
+            samples = model.samples
+            totals = {}
+            for p in abund:
+                value = (float(x[p.free_index]) if not p.fixed and p.free_index is not None
+                         and p.free_index < x.size else float(p.value))
+                name = p.sample or ""
+                totals[name] = totals.get(name, 0.0) + value
+                w0, _, sigma = samples.get(name, {}).get((p.nucleus_Z, p.nucleus_A), (value, False, 0.0))
+                if sigma > 0:
+                    abundance += ((value - w0) / sigma) ** 2
+            # one sum-to-one term per sample: its own "sum" line, else the config key
+            for name, total in totals.items():
+                s_sum = model.sample_sum_sigma(name)
+                if s_sum is None:
+                    s_sum = model.abundance_sum_sigma
+                if s_sum > 0:
+                    abundance += ((total - 1.0) / s_sum) ** 2
+        return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "shift_fn": shift_fn,
+                "park": park, "abundance": abundance}
+
+    @property
+    def nuclei(self):
+        """The compound nuclei of the project: ``{(Z, A): PairSet}`` of the
+        pairs that form each, in pair-number order (one entry for every project
+        written before several nuclei could share a file)."""
+        from .parameters import PairSet
+        out = {}
+        for pair in self.pairs:
+            out.setdefault(pair.nucleus, PairSet()).append(pair)
+        return out
 
     @property
     def basis(self):
@@ -1584,15 +1839,15 @@ class azure2:
         """What AZURE2's own fit minimizes: chi-squared plus the penalties.
 
         This is the number to hand a minimizer.  ``chiSquared.out`` reports the
-        two halves separately, as ``Total-Chi-Squared`` and
-        ``Total-Norm-Chi-Squared``.
+        parts separately, as ``Total-Chi-Squared``, ``Total-Norm-Chi-Squared``
+        and, when a shift is free, ``Total-Shift-Chi-Squared``.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         pen = self.penalties(x)
         # pen["park"] is already inside calculate_chi2_rwa (engine side).
         return (float(np.sum(self.calculate_chi2_rwa(x)))
                 + float(np.sum(pen["norm"])) + float(np.sum(pen["shift"]))
-                + float(np.sum(pen["shift_sqrt"])))
+                + float(np.sum(pen["shift_sqrt"])) + float(np.sum(pen["shift_fn"])))
 
     def chi2_and_grad(self, params):
         """Value and analytic gradient of the (data) chi-squared.
@@ -1954,23 +2209,66 @@ class azure2:
         return [self._unpack_angular_dists(s.calculated_angular_dists(i))
                 for i in range(nsegments)]
 
-    def calculate(self, params):
-        """Calculated observable per segment, from a physical parameter vector. Cross sections are centre-of-mass, in b or b/sr."""
+    def _segment_values(self, i):
+        """The calculated observable of result segment ``i`` -- the E1 or E2
+        component for an ``angle-integrated-E1`` / ``-E2`` data segment, which is
+        what its chi-squared and residuals are built from, the total otherwise.
+
+        The engine stores the total and the two multipole components side by
+        side; until 2026-10-07 this returned the total for every segment, so
+        ``calculate_rwa`` and ``residual_jacobian`` disagreed on component
+        segments (8Be+alpha photodisintegration E2 data).
+        """
         s = self.sess
-        nsegments = int(s.update_segments(params))
-        return [s.calculated_segments(i) for i in range(nsegments)]
+        if self.mode == "data":
+            try:
+                obs = self.active_datasets[i].observable
+            except Exception:
+                obs = ""
+            if obs == "angle-integrated-E1":
+                return s.calculated_segments_e1(i)
+            if obs == "angle-integrated-E2":
+                return s.calculated_segments_e2(i)
+        return s.calculated_segments(i)
+
+    def calculate(self, params):
+        """Calculated observable per segment, from a physical parameter vector.
+        Cross sections are centre-of-mass, in b or b/sr; an E1/E2 component
+        segment gets its component (see :meth:`_segment_values`)."""
+        nsegments = int(self.sess.update_segments(params))
+        return [self._segment_values(i) for i in range(nsegments)]
+
+    def _mode_free_vector(self, params):
+        """A free RWA vector for the engine's current layout.
+
+        In extrapolation mode a data-mode vector (longer: the data segments'
+        norms and shifts) is accepted, as before the binding refused vectors
+        of the wrong length (dev, 2026-10): its free R-matrix (and abundance)
+        block, which comes first and is the same in both modes (see
+        :meth:`_sync_layout`), is taken, the tail is the session's.  Any other
+        length goes to the engine as given, which refuses it.
+        """
+        x = np.asarray(params, float).ravel()
+        cur = np.asarray(self.params_rwa, float).ravel()
+        if self.mode != "extrap" or x.size <= cur.size:
+            return params
+        info = np.asarray(self.sess.parameter_info(), dtype=float).reshape(-1, Parameter._NFIELDS)
+        kind = np.round(info[:, 0])
+        free = np.round(info[:, 11]) == 0
+        head = int(np.sum(free & ((kind <= 1) | (kind == 6))))
+        y = cur.copy()
+        y[:head] = x[:head]
+        return y
 
     def calculate_rwa(self, params):
         """As calculate, from a free RWA vector. This is the usual entry point."""
-        s = self.sess
-        nsegments = int(s.update_segments_rwa(params))
-        return [s.calculated_segments(i) for i in range(nsegments)]
+        nsegments = int(self.sess.update_segments_rwa(self._mode_free_vector(params)))
+        return [self._segment_values(i) for i in range(nsegments)]
 
     def calculate_all_rwa(self, params):
         """As calculate_rwa, taking every parameter rather than the free ones."""
-        s = self.sess
-        nsegments = int(s.update_segments_all_rwa(params))
-        return [s.calculated_segments(i) for i in range(nsegments)]
+        nsegments = int(self.sess.update_segments_all_rwa(params))
+        return [self._segment_values(i) for i in range(nsegments)]
 
     def calculate_energies(self, params=None):
         """Centre-of-mass energies of the calculated points, per segment.

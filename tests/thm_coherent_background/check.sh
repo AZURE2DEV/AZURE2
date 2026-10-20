@@ -8,8 +8,10 @@
 # amplitude of one (J^pi, entrance (s,l), exit (s',l')) combination before
 # squaring; Re and Im of c0 (and c1) are ordinary fit parameters (cbkg_*).
 #
-# Models: toy/ (one 1/2+ level, neutral l = 0 entrance n + 16O and exit
-# n + 12C channels, formal parameters: every factor is elementary) and
+# Models: toy/ (one 1/2+ level, neutral l = 0 entrance n + 16O(2.143 MeV)
+# and exit n + 16O channels -- one compound nucleus, as AZURE2 requires since
+# dev's several-compound-nuclei projects (October 2026; the exit was n + 12C
+# before) --, formal parameters: every factor is elementary) and
 # tests/18O_p_a_thm (the 18O(p,a) 1/2+ doublet, two THM segments).
 #
 #   (a) without the key nothing moves: an experiment line without
@@ -101,7 +103,7 @@ echo "(c) toy model: the closed form |M (g_f g_c A + c(E))|^2"
 formula() {
   tr -d '\r' < "$5" | awk -v cr0="$1" -v ci0="$2" -v cr1="$3" -v ci1="$4" -v ref="${6:-}" '
     BEGIN { hc = 197.32696310; u = 931.4940880; mn = 1.00866492
-            mi = mn * 15.99052821 / (mn + 15.99052821) * u; mf = mn * 11.99670964 / (mn + 11.99670964) * u
+            mi = mn * 15.99052821 / (mn + 15.99052821) * u; mf = mn * 15.99052821 / (mn + 15.99052821) * u
             if (ref != "") while ((getline line < ref) > 0) { split(line, f, " "); if (f[4] != "") m0[++k] = f[4] } }
     NF > 3 { E = $1; n++
       Pc = sqrt(2 * mi * E) / hc * 5.0; kf = sqrt(2 * mf * (E + 2.143)) / hc; Pf = kf * 4.5

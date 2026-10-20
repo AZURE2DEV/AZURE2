@@ -77,6 +77,15 @@ class AZUREMainThread : public QThread {
     configure_.nloptAlgorithm = configure.nloptAlgorithm;
     configure_.useHybridMethod = configure.useHybridMethod;
     configure_.useAdaptiveGrid = configure.useAdaptiveGrid;
+    configure_.useCoulombTable = configure.useCoulombTable;
+    configure_.coulombTablePath = configure.coulombTablePath;
+    configure_.replaceSubPointGrids = configure.replaceSubPointGrids;
+    // The <config> block is parsed only by the CLI entry point; the GUI sets
+    // these on its own Config from the Levels tab, so they have to be copied
+    // here too or a GUI run silently computes without the hard-sphere groups.
+    configure_.includeAllJPi = configure.includeAllJPi;
+    configure_.hardSphereMaxL = configure.hardSphereMaxL;
+    configure_.abundanceSumSigma = configure.abundanceSumSigma;
     connect(&buffer_, SIGNAL(updateLog(QString)), tab->runtimeText, SLOT(write(QString)));
     connect(tab->stopAZUREButton, SIGNAL(clicked()), this, SLOT(stopAZURE()));
     connect(this, SIGNAL(readyToRun()), &worker_, SLOT(run()));

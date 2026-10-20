@@ -1,4 +1,8 @@
 #include "AZUREGrad.h"
+#include <atomic>
+#include <chrono>
+#include <iostream>
+#include <cstdlib>
 #include "CNuc.h"
 #include "EData.h"
 #include "JGroup.h"
@@ -82,6 +86,24 @@ void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &
 }
 
 /*!
+ * Gradient of the abundance penalty (CNuc::AbundancePenalty): the prior
+ * ((w - w0)/sigma)^2 of every nucleus with a sigma, and the sum-to-one term
+ * ((sum w) - 1)^2 / s^2, which couples every abundance through the sum.
+ */
+void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum) {
+  if (!compound->HasAbundanceBlock()) return;
+  for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
+    int sample, nucleus;
+    compound->AbundanceOf(k, sample, nucleus);
+    const double s = compound->SampleSumSigma(sample, configure.abundanceSumSigma);
+    double g = (s > 0.0) ? 2.0 * (compound->AbundanceSum(sample) - 1.0) / (s * s) : 0.0;
+    const SampleAbundance &e = compound->GetSample(sample)->entries[nucleus - 1];
+    if (e.sigma > 0.0) g += 2.0 * (e.abundance - e.nominal) / (e.sigma * e.sigma);
+    accum.AddAbundance(k, g);
+  }
+}
+
+/*!
  * Allocates and zeroes the physics-coordinate gradient accumulators.
  */
 void GradAccum::Init(CNuc *compound) {
@@ -95,6 +117,7 @@ void GradAccum::Init(CNuc *compound) {
     e[j - 1].assign(nLevels, 0.0);
     gamma[j - 1].assign(nLevels, std::vector<double>(nCh, 0.0));
   }
+  abundance.assign(compound->NumAbundanceParams(), 0.0);
 }
 
 /*!
@@ -104,6 +127,7 @@ void GradAccum::Zero() {
   for (auto &row : e) std::fill(row.begin(), row.end(), 0.0);
   for (auto &lev : gamma)
     for (auto &row : lev) std::fill(row.begin(), row.end(), 0.0);
+  std::fill(abundance.begin(), abundance.end(), 0.0);
 }
 
 /*!
@@ -117,6 +141,7 @@ void GradAccum::Add(const GradAccum &o) {
         gamma[j][la][ch] += o.gamma[j][la][ch];
     }
   }
+  for (int k = 0; k < (int)abundance.size() && k < (int)o.abundance.size(); k++) abundance[k] += o.abundance[k];
 }
 
 /*!
@@ -132,6 +157,10 @@ void GradAccum::Scatter(const ParamIndexMap &map, vector_r &gradFull) const {
         if (gi >= 0 && gi < (int)gradFull.size()) gradFull[gi] += gamma[j][la][ch];
       }
     }
+  }
+  for (int k = 0; k < (int)abundance.size(); k++) {
+    int ai = map.AbundanceIndex(k + 1);
+    if (ai >= 0 && ai < (int)gradFull.size()) gradFull[ai] += abundance[k];
   }
 }
 
@@ -175,13 +204,28 @@ int ParamIndexMap::EnergyShiftSqrtIndex(int segment) const {
   return (it == sqrtShiftIndex_.end()) ? -1 : it->second;
 }
 
+int ParamIndexMap::AbundanceIndex(int ordinal) const {
+  auto it = abundanceIndex_.find(ordinal);
+  return (it == abundanceIndex_.end()) ? -1 : it->second;
+}
+
+/*!
+ * Returns the full-vector index of parameter aj of a segment's shift function, or -1.
+ */
+int ParamIndexMap::EnergyShiftFnIndex(int segment, int j) const {
+  auto it = fnShiftIndex_.find({segment, j});
+  return (it == fnShiftIndex_.end()) ? -1 : it->second;
+}
+
 /*!
  * Builds the parameter-index map by mirroring, in the exact same order, the
  * assignment loops in:
  *   - CNuc::FillCompoundFromParams      (level energies + gammas)
  *   - EData::FillNormsFromParams        (norms, only for IsVaryNorm segments)
  *   - EData::FillEnergyShiftsFromParams (one energy shift per segment, then
- *                                        one sqrt(E) coefficient per segment)
+ *                                        one sqrt(E) coefficient per segment,
+ *                                        then the shift-function parameters of
+ *                                        each segment that declares them)
  *
  * Keeping this in lock-step with those routines is what guarantees the returned
  * gradient vector is a permutation-correct match for the sampler's parameter
@@ -207,6 +251,15 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
         i++;
       }
     }
+  }
+
+  // --- Isotopic abundances: one per (sample, nucleus), only with an <abundances> block. ---
+  for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
+    map.abundanceIndex_[k] = i;
+    ParamDesc d{ParamKind::Abundance, -1, -1, -1, -1, false};
+    compound->AbundanceOf(k, d.sample, d.nucleus);
+    map.desc_.push_back(d);
+    i++;
   }
 
   // --- Norm parameters: one per varying-norm segment. ---
@@ -248,6 +301,22 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
     }
   }
 
+  // --- Shift-function parameters: those of each segment that declares one (EData::FillMnParams). ---
+  map.energyShiftFnOffset_ = i;
+  if (data) {
+    for (int s = 1; s <= data->NumSegments(); s++) {
+      ESegment *segment = data->GetSegment(s);
+      if (!segment || !segment->OwnsShiftFn() || !segment->HasShiftFn()) continue;
+      for (int j = 0; j < segment->NumShiftFnParams(); j++) {
+        map.fnShiftIndex_[{s, j}] = i;
+        ParamDesc d{ParamKind::EnergyShiftFn, -1, -1, -1, s, false};
+        d.fnTerm = j;
+        map.desc_.push_back(d);
+        i++;
+      }
+    }
+  }
+
   // --- THM coherent backgrounds (cbackground=): the last block, if any. ---
   if (data)
     for (int k = 0; k < data->NumThmCoherentParams(); k++) {
@@ -278,42 +347,126 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
 
 namespace {
 
-// Forward + adjoint for one target-effect (sub-point integrated) point.  Its
-// yield is linear in the sub-point cross sections, so the combination weights
-// c_i = d(yield)/d(sigma_i) come from central differences on the cheap
-// IntegrateTargetEffect combiner; each sub-point is then back-propagated.
+// Forward + adjoint for one target-effect (sub-point integrated) point.  The
+// integrator IntegrateTargetEffect is a fixed linear functional of the values
+// in the sub-points' cross-section slots, Y = sum_i c_i s_i, so the weights
+// c_i = dY/ds_i come from central differences on that cheap combiner (exact up
+// to rounding); each sub-point is then back-propagated with PointAdjoint.
+//
+// A cross section (or E1/E2 component) is Y itself.  A target-averaged
+// analyzing power is the ratio of two such functionals with the SAME weights
+// (EPoint::IntegrateTargetEffectForObservable runs the one integrator on s_i
+// and on s_i A_i, s_i being the sub-point's differential cross section at the
+// point's angle):
+//     <A> = N / D,   N = sum_i c_i s_i A_i,   D = sum_i c_i s_i,
+//     d<A> = sum_i c_i [ s_i dA_i + (A_i - <A>) ds_i ] / D,
+// so each sub-point contributes an A_y cotangent fitBar c_i s_i / D and a
+// differential-cross-section cotangent fitBar c_i (A_i - <A>) / D.
+// AZURE_GRAD_TIMING: thread-summed time in the target-effect combiner weights
+// (central differences on IntegrateTargetEffect) and in the sub-point adjoints.
+std::atomic<long long> g_teCombinerNs{0}, g_teAdjointNs{0};
+
 bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
                              const vector_matrix_r *shiftDeriv, int xsComponent,
                              CNuc *compound, const Config &config) {
   int nsp = point->NumSubPoints();
   if (nsp <= 0) return true;
-  // A target-averaged analyzing power is a ratio of two integrals,
-  // Int A_y sigma dE / Int sigma dE (EPoint::IntegrateTargetEffectForObservable),
-  // not a fixed linear combination of the sub-point values.  The weights below
-  // would treat it as one, and each sub-point's own A_y adjoint would then be
-  // combined without the cross-section weighting -- a wrong Jacobian with no
-  // diagnostic.  PointAdjoint refuses such a point, but it is only ever called
-  // here on the sub-points, so the refusal has to be made at this level.
-  if (point->IsAnalyzingPower()) return false;
+
+  // EPoint::Calculate blends the integrated value with the bare one at the
+  // edge of an energy-restricted effect (blend < 1) and, with an automatic
+  // tolerance, may replace it by the bare value altogether.  Neither is the
+  // pure integrator differentiated below, so leave such points to finite
+  // differences.
+  {
+    TargetEffect *te = point->GetParentData()->GetTargetEffect(point->GetTargetEffectNum());
+    if (point->GetTargetBlendWeight() < 1.0) return false;
+    if (te && te->GetAutoTolerance() > 0.) return false;
+  }
+
+  const bool isAy = point->IsAnalyzingPower();
+  if (isAy) {
+    // Supported: particle-exit A_y, full observable, no point mapping in
+    // effect (a mapped point's sub-points would be written by another point's
+    // calculation).  GradOnePoint holds a ScopedPointMappingOff, so there every
+    // point, mapped or not, carries and calculates its own sub-points.  Capture
+    // A_y keeps its refusal: the attenuation folded into P_k has no
+    // counterpart for the P_k^1 of the numerator.
+    if (xsComponent != 0) return false;
+    if (!ScopedPointMappingOff::Active() && (point->IsMapped() || point->NumLocalMappedPoints() > 0)) return false;
+    const int exitPairNum = compound->GetPairNumFromKey(point->GetExitKey());
+    if (compound->GetPair(exitPairNum)->GetPType() != 0) return false;
+  }
 
   std::vector<double> sigma(nsp);
   for (int i = 1; i <= nsp; i++) sigma[i - 1] = point->GetSubPoint(i)->GetFitCrossSection();
   double model = point->GetFitCrossSection();
 
-  std::vector<double> c(nsp, 0.0);
-  for (int i = 1; i <= nsp; i++) {
-    double s0 = sigma[i - 1];
-    double h = 1.0e-3 * (std::fabs(s0) + 1.0);
-    point->GetSubPoint(i)->SetFitCrossSection(s0 + h);
+  const auto tc0 = std::chrono::steady_clock::now();
+  // Exact weights in one pass of the integrator on a linear form
+  // (EPoint::TargetEffectWeights).  The central differences used before cost
+  // 2 nsp integrator calls, each O(nsp) or O(nsp^2) (straggling, convolution
+  // + target integration): O(nsp^3) per point, which made one Jacobian of the
+  // 11B+a base grid (CASPAR thick targets, ~2200 sub-points per point) take
+  // longer than 30 min.  They remain as the fallback and as a check
+  // (AZURE_TE_WEIGHTS_CHECK=N compares the first N points).
+  auto fdWeights = [&](std::vector<double> &w) {
+    w.assign(nsp, 0.0);
+    for (int i = 1; i <= nsp; i++) {
+      double s0 = sigma[i - 1];
+      double h = 1.0e-3 * (std::fabs(s0) + 1.0);
+      point->GetSubPoint(i)->SetFitCrossSection(s0 + h);
+      point->IntegrateTargetEffect(config);
+      double yp = point->GetFitCrossSection();
+      point->GetSubPoint(i)->SetFitCrossSection(s0 - h);
+      point->IntegrateTargetEffect(config);
+      double ym = point->GetFitCrossSection();
+      point->GetSubPoint(i)->SetFitCrossSection(s0);
+      w[i - 1] = (yp - ym) / (2.0 * h);
+    }
+  };
+  std::vector<double> c;
+  if (std::getenv("AZURE_TE_WEIGHTS_FD") || !point->TargetEffectWeights(config, c)) {
+    fdWeights(c);
+  } else if (const char *wc = std::getenv("AZURE_TE_WEIGHTS_CHECK")) {
+    static std::atomic<int> nChecked{0};
+    if (nChecked++ < std::atoi(wc)) {
+      std::vector<double> cfd;
+      fdWeights(cfd);
+      double cmax = 0.0, dmax = 0.0, yW = 0.0;
+      for (int i = 0; i < nsp; i++) {
+        cmax = std::max(cmax, std::fabs(cfd[i]));
+        dmax = std::max(dmax, std::fabs(c[i] - cfd[i]));
+        yW += c[i] * sigma[i];
+      }
+      point->IntegrateTargetEffect(config);
+      const double yI = point->GetFitCrossSection();
+#pragma omp critical
+      std::cerr << "[te-weights] entrance " << point->GetEntranceKey() << " exit " << point->GetExitKey() << " E " << point->GetCMEnergy() << " nsp " << nsp
+                << ": max|c - c_fd|/max|c_fd| " << (cmax > 0 ? dmax / cmax : dmax) << ", sum c*s " << yW
+                << " vs integrator " << yI << std::endl;
+    }
+  }
+  // For A_y: the denominator D and the average <A>, from the same integrator
+  // calls the forward pass makes.
+  double den = 0.0, avg = 0.0;
+  if (isAy) {
     point->IntegrateTargetEffect(config);
-    double yp = point->GetFitCrossSection();
-    point->GetSubPoint(i)->SetFitCrossSection(s0 - h);
+    den = point->GetFitCrossSection();
+    for (int i = 1; i <= nsp; i++)
+      point->GetSubPoint(i)->SetFitCrossSection(sigma[i - 1] * point->GetSubPoint(i)->GetAnalyzingPower());
     point->IntegrateTargetEffect(config);
-    double ym = point->GetFitCrossSection();
-    point->GetSubPoint(i)->SetFitCrossSection(s0);
-    c[i - 1] = (yp - ym) / (2.0 * h);
+    const double num = point->GetFitCrossSection();
+    for (int i = 1; i <= nsp; i++) point->GetSubPoint(i)->SetFitCrossSection(sigma[i - 1]);
+    // The forward pass returns 0 for D = 0, a constant: no gradient.
+    if (!(std::fabs(den) > 0.0)) {
+      point->SetFitCrossSection(model);
+      return true;
+    }
+    avg = num / den;
   }
   point->SetFitCrossSection(model);
+  const auto tc1 = std::chrono::steady_clock::now();
+  g_teCombinerNs += std::chrono::duration_cast<std::chrono::nanoseconds>(tc1 - tc0).count();
 
   bool ok = true;
   for (int i = 1; i <= nsp && ok; i++) {
@@ -324,8 +477,16 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     amf.FillMatrices(sp);
     amf.InvertMatrices();
     amf.CalculateTMatrix(sp);
-    if (!amf.PointAdjoint(sp, fitBar * c[i - 1], accum, shiftDeriv, xsComponent)) ok = false;
+    if (!isAy) {
+      if (!amf.PointAdjoint(sp, fitBar * c[i - 1], accum, shiftDeriv, xsComponent)) ok = false;
+      continue;
+    }
+    const double ayBar = fitBar * c[i - 1] * sigma[i - 1] / den;
+    const double xsBar = fitBar * c[i - 1] * (sp->GetAnalyzingPower() - avg) / den;
+    if (ayBar != 0.0 && !amf.PointAdjoint(sp, ayBar, accum, shiftDeriv, 0, false)) ok = false;
+    if (ok && xsBar != 0.0 && !amf.PointAdjoint(sp, xsBar, accum, shiftDeriv, 0, true)) ok = false;
   }
+  g_teAdjointNs += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - tc1).count();
   return ok;
 }
 
@@ -356,12 +517,22 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
                   CNuc *compound, const Config &config,
                   const vector_matrix_r *shiftDeriv, const FitBarFn &fitBarFn,
                   GradAccum &accum, double &outModel) {
+  // The points of a segment are processed in parallel here, so each one is
+  // calculated on its own, without point mapping (see ScopedPointMappingOff).
+  ScopedPointMappingOff noPointMapping;
   EPoint *point = segment->GetPoint(pointIdx + 1);
   outModel = 0.0;
   if (!point) return true;
 
   int baseComp = segment->GetCrossSectionComponent();
   bool hasComp = segment->HasComponents();
+  // A natural-target segment weights each term by its nucleus's abundance;
+  // d(model)/d(abundance_k) is the unweighted sum of that nucleus's terms.
+  const bool natural = segment->IsNatural();
+  const int sample = segment->GetNaturalSample();
+  auto abundanceOf = [&](int entranceKey) {
+    return compound->GetPair(compound->GetPairNumFromKey(entranceKey))->GetNucleus();
+  };
 
   TargetEffect *te = point->IsTargetEffect()
       ? point->GetParentData()->GetTargetEffect(point->GetTargetEffectNum())
@@ -379,6 +550,16 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
     double model = (baseComp == 1) ? point->GetFitE1CrossSection()
         : (baseComp == 2)          ? point->GetFitE2CrossSection()
                                    : point->GetFitCrossSection();
+    double weight = 1.0;
+    if (natural) {
+      const int nucleus = abundanceOf(segment->GetEntranceKey());
+      weight = compound->GetAbundance(sample, nucleus);
+      outModel = weight * model;
+      double fitBar = fitBarFn(segment, i, pointIdx, outModel);
+      if (fitBar == 0.0) return true;
+      accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * model);
+      return amf.PointAdjoint(point, fitBar * weight, accum, shiftDeriv, baseComp);
+    }
     outModel = model;
     double fitBar = fitBarFn(segment, i, pointIdx, model);
     if (fitBar != 0.0)
@@ -392,10 +573,20 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
   double fitBar = fitBarFn(segment, i, pointIdx, model);
   if (fitBar == 0.0) return true;
 
+  // The base term's own (unweighted) value, as the point still holds it.
+  double baseVal = (baseComp == 1) ? point->GetFitE1CrossSection()
+      : (baseComp == 2)            ? point->GetFitE2CrossSection()
+                                   : point->GetFitCrossSection();
+  double baseWeight = 1.0;
+  if (natural) {
+    const int nucleus = abundanceOf(segment->GetEntranceKey());
+    baseWeight = compound->GetAbundance(sample, nucleus);
+    accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * baseVal);
+  }
   if (!hasComp) {
-    return GradAdjointPoint(point, baseComp, fitBar, accum, shiftDeriv, compound, config);
+    return GradAdjointPoint(point, baseComp, fitBar * baseWeight, accum, shiftDeriv, compound, config);
   } else if (segment->GetOperationType() == SUM) {
-    if (!GradAdjointPoint(point, baseComp, fitBar, accum, shiftDeriv, compound, config))
+    if (!GradAdjointPoint(point, baseComp, fitBar * baseWeight, accum, shiftDeriv, compound, config))
       return false;
     for (ESegment *comp : segment->GetComponentSegments()) {
       if (!comp || pointIdx >= comp->NumPoints()) continue;
@@ -403,8 +594,14 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
       if (!cp) continue;
       double cv = cp->GetFitCrossSection();
       if (std::isnan(cv) || std::isinf(cv)) continue;
+      double compWeight = 1.0;
+      if (natural) {
+        const int nucleus = abundanceOf(comp->GetEntranceKey());
+        compWeight = compound->GetAbundance(sample, nucleus);
+        accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * comp->GetComponentScaling() * cv);
+      }
       if (!GradAdjointPoint(cp, comp->GetCrossSectionComponent(),
-                            fitBar * comp->GetComponentScaling(), accum,
+                            fitBar * comp->GetComponentScaling() * compWeight, accum,
                             shiftDeriv, compound, config))
         return false;
     }
@@ -536,6 +733,24 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
       }
     }
     if (bail) {
+      if (std::getenv("AZURE_GRAD_DEBUG")) {
+        static std::atomic<bool> told{false};
+        if (!told.exchange(true)) {
+          bool inactiveLevel = false;
+          for (int j = 1; j <= compound->NumJGroups(); j++) {
+            JGroup *jg = compound->GetJGroup(j);
+            if (!jg->IsInRMatrix()) continue;
+            for (int la = 1; la <= jg->NumLevels(); la++)
+              if (!jg->GetLevel(la)->IsInRMatrix()) inactiveLevel = true;
+          }
+          EPoint *pt = segment->GetPoint(1);
+          std::cerr << "[grad] adjoint bailed on segment " << i << " (entrance " << segment->GetEntranceKey()
+                    << ", exit " << segment->GetExitKey() << ", components " << segment->HasComponents()
+                    << ", angular-dist " << (pt && pt->IsAngularDist()) << ", A_y " << (pt && pt->IsAnalyzingPower())
+                    << ", target effect " << (pt && pt->IsTargetEffect()) << "); a level outside the R matrix in an "
+                    << "R-matrix J group: " << (inactiveLevel ? "YES" : "no") << std::endl;
+        }
+      }
       ok = false;
       break;
     }
@@ -577,6 +792,9 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
   jacobian.assign((size_t)totalRows * nCols, 0.0);
 
   bool ok = true;
+  const bool timing = std::getenv("AZURE_GRAD_TIMING") != nullptr;
+  const long long comb0 = g_teCombinerNs.load(), adj0 = g_teAdjointNs.load();
+  std::vector<std::pair<double, int>> segMs;
   for (int i = 1; i <= nSeg && ok; i++) {
     ESegment *segment = data->GetSegment(i);
     if (!segment) continue;
@@ -589,8 +807,11 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
       if (skipTHM) continue;
       return false;
     }
+    const auto ts0 = std::chrono::steady_clock::now();
     const double norm = segment->GetNorm();
-    const int normFull = segment->IsVaryNorm() ? pmap.NormIndex(i) : -1;
+    // A norm-group follower's rows depend on its leader's norm parameter.
+    const int normOwner = data->NormOwner(i);
+    const int normFull = data->GetSegment(normOwner)->IsVaryNorm() ? pmap.NormIndex(normOwner) : -1;
     const int nPoints = segment->NumPoints();
     bool bail = false;
 
@@ -640,7 +861,32 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
         }
       }
     }
-    if (bail) ok = false;
+    if (bail) {
+      ok = false;
+      if (std::getenv("AZURE_GRAD_DEBUG")) {
+        EPoint *pt = segment->GetPoint(1);
+        std::cerr << "[grad] Jacobian/gradient adjoint bailed on segment " << i << " (key " << segment->GetSegmentKey()
+                  << ", entrance " << segment->GetEntranceKey() << ", exit " << segment->GetExitKey()
+                  << ", components " << segment->HasComponents() << ", angular-dist " << (pt && pt->IsAngularDist())
+                  << ", A_y " << (pt && pt->IsAnalyzingPower()) << ", target effect " << (pt && pt->IsTargetEffect())
+                  << ")" << std::endl;
+      }
+    }
+    if (timing)
+      segMs.push_back({std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - ts0).count(),
+                       segment->GetSegmentKey()});
+  }
+  if (timing) {
+    static std::atomic<int> calls{0};
+    const int c = ++calls;
+    if (c <= 3 || c % 50 == 0) {
+      std::sort(segMs.begin(), segMs.end(), [](const std::pair<double, int> &a, const std::pair<double, int> &b) { return a.first > b.first; });
+      std::cerr << "[grad-timing] Jacobian rows " << c << ": target-effect combiner weights "
+                << (g_teCombinerNs.load() - comb0) / 1.0e6 << " ms, sub-point adjoints " << (g_teAdjointNs.load() - adj0) / 1.0e6
+                << " ms (thread-summed); slowest segments (key:ms)";
+      for (size_t k = 0; k < segMs.size() && k < 6; k++) std::cerr << " " << segMs[k].second << ":" << (long)segMs[k].first;
+      std::cerr << std::endl;
+    }
   }
 
   if (!ok) {
@@ -716,7 +962,17 @@ bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
         }
       }
     }
-    if (bail) ok = false;
+    if (bail) {
+      ok = false;
+      if (std::getenv("AZURE_GRAD_DEBUG")) {
+        EPoint *pt = segment->GetPoint(1);
+        std::cerr << "[grad] Jacobian/gradient adjoint bailed on segment " << i << " (key " << segment->GetSegmentKey()
+                  << ", entrance " << segment->GetEntranceKey() << ", exit " << segment->GetExitKey()
+                  << ", components " << segment->HasComponents() << ", angular-dist " << (pt && pt->IsAngularDist())
+                  << ", A_y " << (pt && pt->IsAnalyzingPower()) << ", target effect " << (pt && pt->IsTargetEffect())
+                  << ")" << std::endl;
+      }
+    }
   }
 
   if (!ok) gradByPoint.clear();

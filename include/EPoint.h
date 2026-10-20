@@ -1,9 +1,13 @@
 #ifndef EPOINT_H
 #define EPOINT_H
 #include <limits>
+#include <vector>
+#include <utility>
+#include <memory>
 
 #include <cstring>
 #include "Constants.h"
+#include "UdrKernel.h"
 
 /// A container structure for a reference to a data point.
 
@@ -37,29 +41,6 @@ struct ThmCoherentBackground;
 struct ThmLineshape;
 struct ThmSpectatorWindow;
 
-/// How a target-effect point's sub-point grid was built.
-
-/*!
- * Kept so the grid can be rebuilt when a fit moves a narrow level off the
- * lattice it was built around (EPoint::RefreshSubPointGrid).
- */
-
-struct SubGridSpec {
-  /// The grid may be rebuilt (adaptive grid, main segment, no beam profile).
-  bool refreshable = false;
-  /// Integration window (CM, MeV): startEnergy > endEnergy.
-  double startEnergy = 0.;
-  double endEnergy = 0.;
-  /// Smooth step, core half-extent in widths, core points per width.
-  double baseEnergyStep = 0.;
-  double resonanceWidthMultiplier = 0.;
-  double pointsPerWidth = 0.;
-  int entranceKey = 0;
-  /// Lab-to-CM energy factor, for the stopping power of target integration.
-  double cmConversion = 1.;
-  /// The anchors that shaped the grid: (id, E, Gamma) per anchor in reach.
-  std::vector<double> anchors;
-};
 
 /// An AZURE data point
 
@@ -68,6 +49,72 @@ struct SubGridSpec {
  * measured cross section and uncertainty, s-factor conversions, and
  * several flags that determine the type of data (angle integrated or differential) to be analysed.
  */
+
+/*!
+ * A linear form sum_k c_k s_{j_k} in the sub-point values s_j of a
+ * target-effect point.  EPoint::IntegrateTargetEffect is linear in those
+ * values, so evaluating it on this type instead of double yields its exact
+ * weights in one pass (EPoint::TargetEffectWeights), which the analytic
+ * gradient needs for every target-integrated point.  Only the operations the
+ * integrator performs are provided; a nonzero constant marks the form invalid.
+ */
+class TELinearForm {
+ public:
+  TELinearForm(double v = 0.0) : valid_(v == 0.0) {}
+  static TELinearForm Unit(int j) {
+    TELinearForm f;
+    f.terms_.emplace_back(j, 1.0);
+    return f;
+  }
+  TELinearForm &operator*=(double a) {
+    for (auto &t : terms_) t.second *= a;
+    return *this;
+  }
+  TELinearForm &operator/=(double a) {
+    for (auto &t : terms_) t.second /= a;
+    return *this;
+  }
+  TELinearForm &operator+=(const TELinearForm &o) {
+    terms_.insert(terms_.end(), o.terms_.begin(), o.terms_.end());
+    valid_ = valid_ && o.valid_;
+    return *this;
+  }
+  friend TELinearForm operator*(TELinearForm f, double a) { return f *= a; }
+  friend TELinearForm operator*(double a, TELinearForm f) { return f *= a; }
+  friend TELinearForm operator/(TELinearForm f, double a) { return f /= a; }
+  friend TELinearForm operator+(TELinearForm f, const TELinearForm &o) { return f += o; }
+  bool Valid() const { return valid_; }
+  const std::vector<std::pair<int, double>> &Terms() const { return terms_; }
+
+ private:
+  std::vector<std::pair<int, double>> terms_;
+  bool valid_;
+};
+
+/*!
+ * While an object of this type is alive on a thread, point mapping
+ * (EData::MapData) is ignored by the calculations made on THAT thread: a host
+ * point's EPoint::Calculate no longer fills its mapped points, and
+ * ESegment::CalculateTheoreticalCrossSection calculates a mapped point itself
+ * instead of reading back the value its host left there.  Every mapped point
+ * carries its own sub-points and energy-dependent values, so the result is the
+ * same; only the sharing is lost.  The analytic-gradient loops (AZUREGrad.cpp)
+ * use it: they run the points of a segment in parallel, and sharing there would
+ * have a mapped point read -- and finite-difference -- sub-point values its
+ * host is writing on another thread.
+ */
+class ScopedPointMappingOff {
+ public:
+  ScopedPointMappingOff();
+  ~ScopedPointMappingOff();
+  ScopedPointMappingOff(const ScopedPointMappingOff &) = delete;
+  ScopedPointMappingOff &operator=(const ScopedPointMappingOff &) = delete;
+  /// True while mapping is switched off on the calling thread.
+  static bool Active();
+
+ private:
+  bool previous_;
+};
 
 class EPoint {
  public:
@@ -122,6 +169,27 @@ class EPoint {
   //! target-effect integration needs the cross section as the weight.
   double GetAnalyzingPower() const { return analyzing_power_; };
   void SetAnalyzingPower(double v) { analyzing_power_ = v; };
+  //! The user-defined resolution kernel built for this point (shared, so
+  //! copies of the point and of the data set do not duplicate it), and the
+  //! projectile rest energy (MeV) its time-of-flight conversion uses.
+  void SetUdrKernel(std::shared_ptr<const UdrKernel> k, double projectileMass) {
+    udr_kernel_ = k; udr_mass_ = projectileMass;
+  };
+  const UdrKernel *GetUdrKernel() const { return udr_kernel_.get(); };
+  double GetUdrProjectileMass() const { return udr_mass_; };
+  /// How the adaptive sub-point grid of this point was laid out (EData::ReadTargetEffectsFile),
+  /// so EData::ReplaceSubPointGrids can lay it out again for other level parameters.
+  /// Energies are c.m., unshifted.
+  struct SubGridSpec {
+    bool valid = false;
+    double startEnergy = 0.0, endEnergy = 0.0;
+    int maxPoints = 0, entranceKey = 0;
+    double baseEnergyStep = 0.0, resonanceWidthMultiplier = 0.0, pointsPerWidth = 0.0;
+    bool targetIntegration = false;
+    double stoppingConversion = 1.0;  ///< c.m./lab factor of the stopping power
+  };
+  void SetSubGridSpec(const SubGridSpec &spec) { sub_grid_spec_ = spec; };
+  const SubGridSpec &GetSubGridSpec() const { return sub_grid_spec_; };
   /// Is this one of the sub-points a target-effect integral is built from?
   bool IsSubPoint() const { return is_sub_point_; };
   /// Unobserved-primary, observed-secondary point?
@@ -269,6 +337,10 @@ class EPoint {
   void SetGeometricalFactor(double);
   /// Record the calculated cross section.
   void SetFitCrossSection(double);
+  /// The abundance-weighted term of each compound nucleus at this point of a
+  /// natural-target segment, indexed by nucleus (ESegment::CalculateTheoreticalCrossSection).
+  const std::vector<double> &GetNaturalTerms() const { return natural_terms_; }
+  void SetNaturalTerms(const std::vector<double> &terms) { natural_terms_ = terms; }
   void SetFitE1CrossSection(double);
   void SetFitE2CrossSection(double);
   /// Set the cross-section to S-factor conversion.
@@ -283,9 +355,12 @@ class EPoint {
   /// Compute the Legendre polynomials up to a maximum order.
   void CalcLegendreP(int, CNuc *, TargetEffect *);
   /// Compute the geometrical factor, S-factor conversion, \f$L_o\f$ elements, penetrabilities and phases together.
-  void CalcEDependentValues(CNuc *, const Config &);
+  /// With includeSubPoints false the sub-points are left alone (their energies are updated, and their values recomputed, separately).
+  void CalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true);
   /// Recompute those at the current, possibly shifted, energy.
-  void RecalcEDependentValues(CNuc *, const Config &);
+  void RecalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true);
+  /// Take the energy-dependent values (not the angle-dependent Coulomb amplitude) from a point at the same energy; false if the energies differ.
+  bool CopyEDependentValuesFrom(const EPoint &);
   /// Empties the per-JGroup rows of the energy-dependent arrays, keeping their storage.
   void ClearEDependentRows();
   /// Store an \f$L_o\f$ element at (J-group, channel).
@@ -299,7 +374,7 @@ class EPoint {
   /// Store a hard-sphere phase factor at (J-group, channel).
   void AddExpHardSpherePhase(int, int, complex);
   /// Compute the Coulomb amplitude \f$C_\alpha\f$.
-  void CalcCoulombAmplitude(CNuc *);
+  void CalcCoulombAmplitude(CNuc *, bool includeSubPoints = true);
   /// Set the Coulomb amplitude directly.
   void SetCoulombAmplitude(complex);
   /// Compute the external-capture amplitudes for every matching pathway.
@@ -315,6 +390,10 @@ class EPoint {
   void SetTargetEffectNum(int);
   void AddSubPoint(EPoint);
   void IntegrateTargetEffect(const Config &);
+  /// Exact weights c (0-based, one per sub-point) of IntegrateTargetEffect:
+  /// yield = sum_i c[i] * (sub-point i's cross-section slot).  False if the
+  /// integrator is not a pure linear form for this point.
+  bool TargetEffectWeights(const Config &, std::vector<double> &c);
   void IntegrateTargetEffectForObservable(const Config &);
   /// Integrate the E1 and E2 components of the cross section over the same
   /// sub-points as the total, for a segment compared against one component.
@@ -347,15 +426,13 @@ class EPoint {
   EPoint *GetSubPoint(int);
   std::vector<EPoint> &GetSubPoints();
   std::vector<EPoint *> &GetMappedPoints();
-  /// How the sub-point grid was built (see SubGridSpec).
-  void SetSubGridSpec(const SubGridSpec &spec) { subGrid_ = spec; }
-  const SubGridSpec &GetSubGridSpec() const { return subGrid_; }
-  /// Rebuild the sub-point grid if the current fit parameters anchor it
-  /// differently; returns true when it was rebuilt.
-  bool RefreshSubPointGrid(CNuc *, const Config &);
   void StoreSubpointOffsets();                                                          // Store offsets for adaptive grid preservation
   void ApplySubpointShift(double energyShift, CNuc *theCNuc, const Config &configure);  // Intelligent shift preserving resonance structure
  private:
+  /// Body of IntegrateTargetEffect on a value type V (double or TELinearForm);
+  /// rd(j) supplies sub-point j's value.
+  template <class V, class Read>
+  V IntegrateTargetEffectImpl(const Config &, Read rd);
   bool is_differential_;
   bool is_phase_;
   bool is_thm_;
@@ -370,6 +447,7 @@ class EPoint {
   bool is_ang_dist_;
   bool is_analyzing_power_ = false;
   bool is_sub_point_ = false;
+  SubGridSpec sub_grid_spec_;
   double analyzing_power_ = 0.0;
   int entrance_key_;
   int exit_key_;
@@ -384,12 +462,15 @@ class EPoint {
   double cm_energy_;
   double lab_energy_;
   double excitation_energy_;
+  std::shared_ptr<const UdrKernel> udr_kernel_;
+  double udr_mass_ = 0.0;
   double cm_crosssection_;
   double cm_dcrosssection_;
   double lab_crosssection_;
   double lab_dcrosssection_;
   double geofactor_;
   double fitcrosssection_;
+  std::vector<double> natural_terms_;
   double fitE1crosssection_;
   double fitE2crosssection_;
   double sfactorconv_;
@@ -463,7 +544,6 @@ class EPoint {
   matrix_r ec_energies_;  // Energies at which EC amplitudes were calculated
   std::vector<EPoint *> local_mapped_points_;
   std::vector<EPoint> integrationPoints_;
-  SubGridSpec subGrid_;
   EData *parentData_;
   // Which cross-section component the owning segment is compared against (0 full,
   // 1 E1, 2 E2), copied in at construction.  Not a pointer to the segment: points are

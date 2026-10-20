@@ -24,6 +24,9 @@ class JGroup {
   /// False for a group that exists only to carry a bound state for external
   /// capture -- a subthreshold state has no R-Matrix level of its own.
   bool IsInRMatrix() const;
+  /// Puts a group built from a spin and parity into the R-matrix calculation: a hard-sphere group
+  /// (channels, no levels) scatters through its hard-sphere phases alone, since its level sum is empty.
+  void SetInRMatrix(bool inRMatrix) { isinrmatrix_ = inRMatrix; }
   /// 1-based position of the level in the group, or 0 if it is not there.
   int IsLevel(ALevel);
   /// Parity of the group, \f$\pm1\f$.
@@ -36,6 +39,18 @@ class JGroup {
   int IsChannel(AChannel);
   /// Total angular momentum of the group.
   double GetJ() const;
+  /// The compound nucleus the group belongs to: its 1-based index in the
+  /// CNuc's nucleus list (0 until set) and its charge and mass numbers.  A
+  /// group holds channels of one nucleus only, so the level matrix of a
+  /// project with several nuclei is block-diagonal by construction.
+  int GetNucleus() const { return nucleus_; }
+  int GetNucleusZ() const { return nucleusZ_; }
+  int GetNucleusA() const { return nucleusA_; }
+  void SetNucleus(int index, int z, int a) { nucleus_ = index; nucleusZ_ = z; nucleusA_ = a; }
+  /// Whether labels of this group's levels should name the nucleus: set by
+  /// CNuc::Fill on every group when the project holds more than one nucleus.
+  bool NucleusLabelled() const { return nucleusLabelled_; }
+  void SetNucleusLabelled(bool on) { nucleusLabelled_ = on; }
   /// Append a level.
   void AddLevel(ALevel);
   /// Append a channel; it applies to every level in the group.
@@ -48,6 +63,10 @@ class JGroup {
  private:
   bool isinrmatrix_;
   int pi_;
+  int nucleus_ = 0;
+  int nucleusZ_ = 0;
+  int nucleusA_ = 0;
+  bool nucleusLabelled_ = false;
   double j_;
   std::vector<ALevel> levels_;
   std::vector<AChannel> channels_;

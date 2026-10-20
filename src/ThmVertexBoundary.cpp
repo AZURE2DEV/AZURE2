@@ -1,4 +1,5 @@
 #include "ThmVertexBoundary.h"
+#include "CoulombTable.h"
 #include "AChannel.h"
 #include "ALevel.h"
 #include "Config.h"
@@ -59,7 +60,7 @@ complex ThmVertexBoundary::OnShellAt(double e) const {
  */
 double ThmVertexBoundary::ShiftAtLevelEnergy(PPair *pair, int l, double levelEnergy, bool useGSL) {
   struct Entry {
-    int z1, z2; double redmass, radius; long hybridTag; int l; double e; bool gsl; double s;
+    int z1, z2; double redmass, radius; long hybridTag; int l; double e; bool gsl; const void *table; double s;
   };
   static const int kMemo = 32;
   thread_local Entry memo[kMemo];
@@ -69,16 +70,19 @@ double ThmVertexBoundary::ShiftAtLevelEnergy(PPair *pair, int l, double levelEne
   const bool hybrid = (g_config ? g_config->useHybridMethod : false) &&
       NuclearPotentialManager::instance().isPairEnabled(pair->GetPairKey());
   const long hybridTag = hybrid ? NuclearPotentialManager::instance().tagFor(pair->GetPairKey()) : 0;
+  // The Coulomb table in use (CoulFunc and ShftFunc read S from it where it
+  // covers the channel), so a session with and one without it do not share values.
+  const void *table = (g_config && g_config->useCoulombTable) ? CoulombTable::Shared(g_config->coulombTablePath) : nullptr;
   double resonanceEnergy = levelEnergy - (pair->GetSepE() + pair->GetExE());
   for (int i = 0; i < filled; i++) {
     const Entry &m = memo[i];
     if (m.z1 == z1 && m.z2 == z2 && m.redmass == redmass && m.radius == radius &&
-        m.hybridTag == hybridTag && m.l == l && m.e == resonanceEnergy && m.gsl == useGSL)
+        m.hybridTag == hybridTag && m.l == l && m.e == resonanceEnergy && m.gsl == useGSL && m.table == table)
       return m.s;
   }
   // Continuous through threshold, and at it (ChannelFunc).
   double s = ChannelFunc(pair, useGSL).Shift(l, resonanceEnergy);
-  memo[next] = Entry{z1, z2, redmass, radius, hybridTag, l, resonanceEnergy, useGSL, s};
+  memo[next] = Entry{z1, z2, redmass, radius, hybridTag, l, resonanceEnergy, useGSL, table, s};
   next = (next + 1) % kMemo;
   if (filled < kMemo) filled++;
   return s;

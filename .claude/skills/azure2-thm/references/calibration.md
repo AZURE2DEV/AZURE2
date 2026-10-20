@@ -97,11 +97,11 @@ in brackets where different; N is the number of points. The authoritative list i
 | `f19_pag_thm` | 79.408 (77.640) / 59 |
 | `o18_lacognata2008` | 35.877 / 30 |
 | `o18_lacognata2010` | 330.054 (329.692) / 161 |
-| `c12c12_tumino2018` | 112.076 (111.651) / 247 |
+| `c12c12_tumino2018` | 112.038 (111.613) / 247 |
 | `o17_guardo2017_fit` | 12.996 / 23 |
 | `n15_lacognata2007` | 224.425 (223.414) / 208 |
-| `li7_tumino2006` | 448.575 (439.104) / 294 |
-| `li6_pizzone2011` | 158.918 (156.991) / 132 |
+| `li7_tumino2006` | 448.619 (439.148) / 294 |
+| `li6_pizzone2011` | 158.963 (157.036) / 132 |
 
 Command: `printf '1\n\n\n7\n' | build/src/AZURE2 --no-gui --no-readline <name>.azr`, run
 from the example directory, under `prlimit` and with `OMP_NUM_THREADS=1`. A different

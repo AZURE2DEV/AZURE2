@@ -1,4 +1,6 @@
 #include "ThmLineshape.h"
+#include "CoulombTable.h"
+#include <cstdint>
 
 #include "ALevel.h"
 #include "AChannel.h"
@@ -94,6 +96,9 @@ double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config
   key.push_back(jgroup->GetPi());
   key.push_back(energy);
   key.push_back(level->GetE());  // the ground-state test below
+  // The Coulomb table in use (P and dS/dE come from it where it covers a channel).
+  key.push_back((double)reinterpret_cast<std::uintptr_t>(
+      (g_config && g_config->useCoulombTable) ? CoulombTable::Shared(g_config->coulombTablePath) : nullptr));
   const bool hybridOn = g_config ? g_config->useHybridMethod : false;
   for (int ch = 1; ch <= numChannels; ch++) {
     AChannel *channel = jgroup->GetChannel(ch);

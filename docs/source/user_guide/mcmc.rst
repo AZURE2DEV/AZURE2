@@ -58,7 +58,12 @@ you wish to impose on each:
    * - **Use Gaussian Prior**
      - Impose the prior. Unchecked means an unbounded uniform prior.
    * - **Category**
-     - ``level`` or ``level_rwa``, or ``cbkg`` for a THM coherent background.
+     - ``level`` or ``level_rwa``; ``abundance`` for the isotopic abundances
+       of a project with several compound nuclei (:doc:`particle_pairs`),
+       whose prior is taken from the abundance table's value and sigma like a
+       normalization's from the segment, and whose sum-to-one term enters the
+       log-likelihood as it enters the chi-squared; ``cbkg`` for a THM coherent
+       background.
 
 Populate the table with **Load Physical Parameters** or **Load RWA
 Parameters**. The latter reads ``param.par`` of the output directory by

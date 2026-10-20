@@ -121,7 +121,7 @@ grep -q "^ *#parametrization *2\." "$WORK/fit.park/output/param.sav" && ok "p+p 
 # point's chi2 ("Iteration: N00 Chi-Squared: X").  Without the tag a Park run
 # took the file's Park amplitudes for Brune's and converted them: another model.
 pfit="$WORK/fit.park/output/param.fit"
-snap="$(tr '\r' '\n' < "$WORK/fit.park/run.log" | awk '/Iteration: *[0-9]*00 Chi-Squared:/ { x = $NF } END { print x }')"
+snap="$(tr '\r' '\n' < "$WORK/fit.park/run.log" | awk '/Iteration: *[0-9]*00 +Chi-Squared:/ { x = $NF } END { print x }')"
 if [ ! -f "$pfit" ] || [ -z "$snap" ]; then
   bad "p+p fit: no param.fit or no 100th-evaluation chi2 in the log"
 else
@@ -147,11 +147,10 @@ fi
 # 2P/(dS/dE) at this radius).  Both modes warn; Park's chi2 then carries the
 # penalty on top of the data chi2.
 stage identical_pp_res wall
-# First " 300000.0 " only; awk to a temporary file (BSD/macOS sed has no
-# -i without a suffix and no 0,/re/ address).
-awk '!done && index($0, " 300000.0 ") { sub(/ 300000\.0 /, " 51000000 "); done = 1 } { print }' \
-  "$WORK/wall/identical_pp_res.azr" > "$WORK/wall/identical_pp_res.azr.tmp" &&
-  mv "$WORK/wall/identical_pp_res.azr.tmp" "$WORK/wall/identical_pp_res.azr"
+# First occurrence only, written so that BSD (macOS) and GNU tools both accept it:
+# GNU sed's "-i" and "0,/re/" are not portable.
+awk '!done && sub(/ 300000\.0 /, " 51000000 ") { done = 1 } 1' "$WORK/wall/identical_pp_res.azr" > "$WORK/wall/identical_pp_res.azr.tmp" \
+  && mv "$WORK/wall/identical_pp_res.azr.tmp" "$WORK/wall/identical_pp_res.azr"
 w="$(run wall identical_pp_res calc "" --use-park)"
 grep -q "Park norm J = .* is not positive" "$WORK/wall/run.log" && ok "wall: J <= 0 reported (--use-park)" || bad "wall: no J <= 0 warning"
 penw="$(awk '/^Total-Chi-Squared:/ { for (i = 1; i < NF; i++) if ($i == "Total-Park-Chi-Squared:") print $(i+1) }' "$WORK/wall/output/chiSquared.out")"

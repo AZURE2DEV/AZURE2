@@ -1,11 +1,14 @@
 #ifndef COULFUNC_H
 #define COULFUNC_H
 
+#include <cmath>
+#include <complex>
 #include <memory>
 #include <gsl/gsl_sf_coulomb.h>
 
 class PPair;
 class CoulFuncCache;
+class CoulombTable;
 class NuclearPotential;
 
 /// The return structure of the CoulFunc function class.
@@ -25,6 +28,20 @@ struct CoulWaves {
   /// Derivative of irregular solution with respect to \f$ \rho \f$
   double dG;
 };
+
+/*!
+ * exp(i phi) of the hard-sphere phase, (G - i F)/sqrt(F^2 + G^2).  Just above a
+ * charged-particle threshold (eta >~ 110) G^2 overflows and the plain formula
+ * returns 0 instead of a unit phase; the scaled form (hypot) is used only then,
+ * so every value the plain formula gets right is unchanged to the bit.
+ */
+inline std::complex<double> CoulombHardSpherePhase(const CoulWaves &c) {
+  const double s = std::sqrt(std::pow(c.F, 2.0) + std::pow(c.G, 2.0));
+  const double re = c.G / s, im = -c.F / s;
+  if (std::isfinite(re) && std::isfinite(im) && std::isfinite(s) && s > 0.0) return std::complex<double>(re, im);
+  const double h = std::hypot(c.F, c.G);
+  return std::complex<double>(c.G / h, -c.F / h);
+}
 
 /// A function class to calculate Coulomb functions for positive energy channels
 
@@ -60,6 +77,9 @@ class CoulFunc {
   double Penetrability(int, double, double);
   /// Shift function \f$S_l\f$ at (l, radius, energy), positive energies.
   double PEShift(int, double, double);
+  /// Hard-sphere phase factor exp(-i phi_l) = (G - iF)/|G + iF| at (l, radius, energy):
+  /// from the Coulomb table when one is in use and covers the point, else from the waves.
+  std::complex<double> HardSpherePhase(int, double, double);
   /// Energy derivative \f$dS_l/dE\f$ -- the term that makes the observed-width transformation singular when it grows too large.
   double PEShift_dE(int, double, double, double step = 1.0e-6);
   /// Second energy derivative of the shift function (numerical).
@@ -120,6 +140,15 @@ class CoulFunc {
   double radiusLast_;
   double energyLast_;
   struct CoulWaves coulLast_;
+
+  // The universal Coulomb table (charged pairs without a nuclear potential, when
+  // Config::useCoulombTable is set), with a one-deep memo of its last lookup: a
+  // point asks for P, S and the phase of the same (l, radius, energy) in turn.
+  const CoulombTable *table_ = nullptr;
+  bool TableLookup(int l, double radius, double energy);
+  int tLastL_ = -1;
+  double tLastR_ = 0.0, tLastE_ = 0.0, tP_ = 0.0, tS_ = 0.0, tPhi_ = 0.0;
+  bool tOk_ = false;
 
   // Hybrid method parameters
   std::shared_ptr<NuclearPotential> nuclearPotential_;

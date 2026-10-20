@@ -12,6 +12,15 @@
 #include <QDesktopServices>
 #include <QStatusBar>
 #include <algorithm>
+#include <QProgressDialog>
+#include <algorithm>
+#include <QCoreApplication>
+#include <QFileInfo>
+#include <QElapsedTimer>
+#include <atomic>
+#include <thread>
+#include <chrono>
+#include "CoulombTable.h"
 
 #include "AZURESetup.h"
 #include "FittingTab.h"
@@ -63,6 +72,19 @@ AZURESetup::AZURESetup() :
   setMinimumSize(1000, 640);
 
   tabWidget = new QTabWidget();
+  // The logo at the right end of the tab bar; clicking it opens the About box.
+  QToolButton *logoButton = new QToolButton;
+  logoButton->setIcon(QIcon(":/azure-icon.png"));
+  logoButton->setIconSize(QSize(26, 26));
+  logoButton->setText("AZURE2");
+  logoButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  logoButton->setAutoRaise(true);
+  logoButton->setCursor(Qt::PointingHandCursor);
+  logoButton->setToolTip(tr("AZURE2 -- about this program"));
+  logoButton->setStyleSheet("QToolButton { border: none; padding: 0 8px; color: #1f4f8f; font-weight: bold; }"
+                            "QToolButton:hover { background: #e3edf8; border-radius: 4px; }");
+  connect(logoButton, &QToolButton::clicked, this, [this]() { AboutAZURE2Dialog about(this); about.exec(); });
+  tabWidget->setCornerWidget(logoButton, Qt::TopRightCorner);
 
   pairsTab = new PairsTab;
 
@@ -76,8 +98,10 @@ AZURESetup::AZURESetup() :
 
   segmentsTab = new SegmentsTab;
   segmentsTab->setPairsModel(pairsTab->getPairsModel());
+  segmentsTab->setAbundancesModel(pairsTab->getAbundancesModel());
 
   targetIntTab = new TargetIntTab;
+  targetIntTab->setModels(segmentsTab->getSegmentsDataModel(), pairsTab->getPairsModel());
 
   nuclearPotentialTab = new NuclearPotentialTab();
   // The tab edits one particle pair at a time, so it needs the pair list.  The
@@ -90,16 +114,19 @@ AZURESetup::AZURESetup() :
 
   fittingTab = new FittingTab();
   fittingTab->setTabReferences(levelsTab, segmentsTab);
+  fittingTab->setAbundancesModel(pairsTab->getAbundancesModel());
   fittingTab->setConfig(&GetConfig());
   // Segment lines are numbered by position: what names them by number follows a move or a delete.
   connect(segmentsTab, SIGNAL(dataSegmentsRenumbered(QVector<int>)), this, SLOT(followDataSegments(QVector<int>)));
   connect(segmentsTab, SIGNAL(testSegmentsRenumbered(QVector<int>)), this, SLOT(followTestSegments(QVector<int>)));
 
   runTab = new RunTab();
+  runTab->setPairsModel(pairsTab->getPairsModel());
   connect(runTab->calcButton, SIGNAL(clicked()), this, SLOT(SaveAndRun()));
 
 #ifdef USE_QWT
   plotTab = new PlotTab(config, segmentsTab->getSegmentsDataModel(), segmentsTab->getSegmentsTestModel(), levelsTab->getLevelsModel());
+  plotTab->setPairsModel(pairsTab->getPairsModel());
 #endif
 
 #ifdef USE_MCMC
@@ -199,6 +226,10 @@ void AZURESetup::createActions() {
       tr("The Trojan Horse (HOES) observable: model options, experiments, binding energies"));
   connect(thmWorkspaceAction, SIGNAL(triggered()), this, SLOT(editThmWorkspace()));
 
+  buildCoulombTableAction = new QAction(tr("Build &Coulomb Table..."), this);
+  buildCoulombTableAction->setStatusTip(tr("Build the table AZURE2 takes charged-particle Coulomb functions from"));
+  connect(buildCoulombTableAction, SIGNAL(triggered()), this, SLOT(buildCoulombTable()));
+
   showTabInfoAction = new QAction(tr("Show Documentation For Current Tab"), this);
   showTabInfoAction->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_D));
   connect(showTabInfoAction, SIGNAL(triggered()), this, SLOT(showTabInfo()));
@@ -231,6 +262,7 @@ void AZURESetup::createMenus() {
   configMenu->addAction(editDirsAction);
   configMenu->addAction(editOptionsAction);
   configMenu->addAction(thmWorkspaceAction);
+  configMenu->addAction(buildCoulombTableAction);
 
   helpMenu = menuBar()->addMenu(tr("&Documentation"));
   helpMenu->addAction(showTabInfoAction);
@@ -318,9 +350,21 @@ bool AZURESetup::readFile(QString filename) {
   }
   if (in.atEnd()) return false;
   if (!levelsTab->readNuclearFile(in)) return false;
+  levelsTab->setIncludeAllJPi(fileIncludeAllJPi);
+  if (fileMaxL > levelsTab->maxL()) levelsTab->setMaxL(fileMaxL);
+  GetConfig().includeAllJPi = fileIncludeAllJPi;
+  GetConfig().hardSphereMaxL = levelsTab->maxL();
+  pairsTab->setAbundanceSumSigma(fileAbundanceSumSigma);
+  GetConfig().abundanceSumSigma = fileAbundanceSumSigma;
 
+  // The optional <abundances> block sits between </levels> and <segmentsData>.
   line = QString("");
-  while (line.trimmed() != QString("<segmentsData>") && !in.atEnd()) line = in.readLine();
+  while (line.trimmed() != QString("<abundances>") && line.trimmed() != QString("<segmentsData>") && !in.atEnd()) line = in.readLine();
+  if (!in.atEnd() && line.trimmed() == QString("<abundances>")) {
+    if (!pairsTab->readAbundances(in)) return false;
+    line = QString("");
+    while (line.trimmed() != QString("<segmentsData>") && !in.atEnd()) line = in.readLine();
+  }
   if (in.atEnd()) return false;
   if (!segmentsTab->readSegDataFile(in)) return false;
 
@@ -558,8 +602,8 @@ bool AZURESetup::readLastRun(QTextStream &inStream) {
   else
     GetConfig().paramMask &= ~Config::SCALE_COVARIANCE_BY_CHI2;
 
-  if (rateEntrancePair != 0) runTab->rateEntranceKey->setText(QString("%1").arg(rateEntrancePair));
-  if (rateExitPair != 0) runTab->rateExitKey->setText(QString("%1").arg(rateExitPair));
+  runTab->rateEntranceKey->setKey(rateEntrancePair);
+  runTab->rateExitKey->setKey(rateExitPair);
 
   if (minTemp != -1.) runTab->minTempText->setText(QString("%1").arg(minTemp));
   if (maxTemp != -1.) runTab->maxTempText->setText(QString("%1").arg(maxTemp));
@@ -637,9 +681,24 @@ bool AZURESetup::readConfig(QTextStream &inStream) {
   inStream >> angDistsCheck;
   dummyString = inStream.readLine();
 
+  // Optional key=value lines after the fixed ones; absent keys keep the defaults of an older file.
+  fileIncludeAllJPi = false;
+  fileMaxL = -1;
+  fileAbundanceSumSigma = 0.0;
   QString line("");
-  while (line.trimmed() != QString("</config>") && !inStream.atEnd())
+  while (line.trimmed() != QString("</config>") && !inStream.atEnd()) {
     line = inStream.readLine();
+    QString entry = line.section('#', 0, 0);
+    int eq = entry.indexOf('=');
+    if (eq < 0) continue;
+    QString key = entry.left(eq).trimmed(), value = entry.mid(eq + 1).trimmed();
+    if (key == "includeAllJPi")
+      fileIncludeAllJPi = (value == "1" || value == "true");
+    else if (key == "maxOrbitalMomentum")
+      fileMaxL = value.toInt();
+    else if (key == "abundanceSumSigma")
+      fileAbundanceSumSigma = value.toDouble();
+  }
   if (line.trimmed() != QString("</config>")) return false;
 
   if (isAMatrix == "false")
@@ -737,6 +796,15 @@ bool AZURESetup::writeFile(QString filename) {
 bool AZURESetup::writeProject(QTextStream &out, const QString &directory) {
   out << "<config>" << Qt::endl;
   if (!this->writeConfig(out, directory)) return false;
+  // The hard-sphere option and its limit live in the file so that --no-gui and pyazr runs agree with the GUI.
+  GetConfig().includeAllJPi = levelsTab->includeAllJPi();
+  GetConfig().hardSphereMaxL = levelsTab->maxL();
+  out << "includeAllJPi=" << (levelsTab->includeAllJPi() ? 1 : 0) << " #Hard-sphere scattering in every J^pi up to maxOrbitalMomentum" << Qt::endl;
+  out << "maxOrbitalMomentum=" << levelsTab->maxL() << Qt::endl;
+  // Only a project with a sum-to-one prior on its abundances carries the key, so other files are unchanged.
+  GetConfig().abundanceSumSigma = pairsTab->abundanceSumSigma();
+  if (pairsTab->abundanceSumSigma() > 0.0)
+    out << "abundanceSumSigma=" << pairsTab->abundanceSumSigma() << " #Sum-to-one prior on the isotopic abundances" << Qt::endl;
   out << "</config>" << Qt::endl;
 
   // Write potential section after config.  A pair may be switched on while the
@@ -753,6 +821,14 @@ bool AZURESetup::writeProject(QTextStream &out, const QString &directory) {
   out << "<levels>" << Qt::endl;
   if (!levelsTab->writeNuclearFile(out)) return false;
   out << "</levels>" << Qt::endl;
+
+  // Isotopic abundances, one line per compound nucleus, only for a project
+  // that needs them (several nuclei, or a non-default entry).
+  if (pairsTab->hasAbundanceBlock()) {
+    out << "<abundances>" << Qt::endl;
+    if (!pairsTab->writeAbundances(out)) return false;
+    out << "</abundances>" << Qt::endl;
+  }
 
   out << "<segmentsData>" << Qt::endl;
   if (!segmentsTab->writeSegDataFile(out)) return false;
@@ -946,14 +1022,7 @@ bool AZURESetup::writeLastRun(QTextStream &outStream) {
   outStream << paramMask << Qt::endl;
   outStream << '"' << runTab->paramFileText->text() << '"' << Qt::endl;
   outStream << '"' << runTab->integralsFileText->text() << '"' << Qt::endl;
-  if (!runTab->rateEntranceKey->text().isEmpty())
-    outStream << runTab->rateEntranceKey->text() << ' ';
-  else
-    outStream << "0 ";
-  if (!runTab->rateExitKey->text().isEmpty())
-    outStream << runTab->rateExitKey->text();
-  else
-    outStream << 0;
+  outStream << runTab->rateEntranceKey->key() << ' ' << runTab->rateExitKey->key();
   outStream << Qt::endl;
   if (runTab->fileTempButton->isChecked())
     outStream << "1 ";
@@ -1095,6 +1164,74 @@ void AZURESetup::editDirs() {
   if (aDialog.exec()) {
     GetConfig().outputdir = aDialog.outputDirectoryText->text().toStdString();
     GetConfig().checkdir = aDialog.checksDirectoryText->text().toStdString();
+  }
+}
+
+// Configure > Build Coulomb Table...: the table is not distributed with AZURE2, so a user
+// of a ready-built AZURE2 makes it here (the same build as AZURE2 --build-coulomb-table).
+// The build runs on a worker thread; this loop keeps the window responsive and offers
+// Cancel.  Calculations started afterwards use the new table (CoulombTable::ForgetMissing).
+void AZURESetup::buildCoulombTable() {
+  const QString path = QString::fromStdString(CoulombTable::DefaultPath());
+  const QString intro =
+      tr("AZURE2 takes the Coulomb functions of charged-particle channels from a table when it "
+         "finds one. The results are the same and calculations are several times faster.");
+  const QString question = QFileInfo::exists(path)
+      ? tr("%1\n\nA table already exists at\n%2\n\nBuild it again?").arg(intro, path)
+      : tr("%1\n\nThere is no table at\n%2\n\nBuild it now? It takes about 5 minutes on four "
+           "threads and needs 88 MB of disk space.").arg(intro, path);
+  if (QMessageBox::question(this, tr("Build Coulomb Table"), question, QMessageBox::Yes | QMessageBox::No,
+                            QMessageBox::Yes) != QMessageBox::Yes)
+    return;
+
+  CoulombTable::BuildSpec spec;
+  spec.threads = std::max(1u, std::thread::hardware_concurrency());
+  std::atomic<int> done{0};
+  std::atomic<bool> cancel{false}, finished{false};
+  spec.rowsDone = &done;
+  spec.cancel = &cancel;
+  const int rows = CoulombTable::BuildRows(spec);
+
+  QProgressDialog progress(tr("Building the Coulomb table on %1 thread(s)...").arg(spec.threads), tr("Cancel"), 0,
+                           rows, this);
+  progress.setWindowTitle(tr("Build Coulomb Table"));
+  progress.setWindowModality(Qt::WindowModal);
+  progress.setAutoClose(false);
+  progress.setAutoReset(false);
+  progress.setMinimumDuration(0);
+  progress.setValue(0);
+
+  bool ok = false;
+  std::string error;
+  const std::string file = path.toStdString();
+  QElapsedTimer timer;
+  timer.start();
+  std::thread worker([&] {
+    ok = CoulombTable::BuildFile(file, spec, error);
+    finished = true;
+  });
+  while (!finished) {
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
+    progress.setValue(std::min(done.load(), rows - 1));
+    if (progress.wasCanceled()) {
+      cancel = true;
+      progress.setLabelText(tr("Cancelling..."));
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+  worker.join();
+  progress.close();
+
+  if (ok) {
+    CoulombTable::ForgetMissing();
+    QMessageBox::information(this, tr("Build Coulomb Table"),
+                             tr("The Coulomb table was written to\n%1\nin %2 s. Calculations started from now on "
+                                "use it.").arg(path).arg(timer.elapsed() / 1000));
+  } else if (cancel) {
+    QMessageBox::information(this, tr("Build Coulomb Table"), tr("Cancelled; no table was written."));
+  } else {
+    QMessageBox::warning(this, tr("Build Coulomb Table"),
+                         tr("The Coulomb table was not built: %1").arg(QString::fromStdString(error)));
   }
 }
 
@@ -1293,8 +1430,8 @@ void AZURESetup::SaveAndRun() {
   if (!(GetConfig().paramMask & Config::CALCULATE_REACTION_RATE)) {
     if (!readSegmentFile(GetConfig(), segPairs)) return;
   } else {
-    GetConfig().rateParams.entrancePair = runTab->rateEntranceKey->text().toInt();
-    GetConfig().rateParams.exitPair = runTab->rateExitKey->text().toInt();
+    GetConfig().rateParams.entrancePair = runTab->rateEntranceKey->key();
+    GetConfig().rateParams.exitPair = runTab->rateExitKey->key();
     if (GetConfig().rateParams.entrancePair == GetConfig().rateParams.exitPair) {
       QMessageBox::information(this, tr("No Scattering Rates"),
                                tr("Reaction rates cannot be calculated for elastic scattering."));
@@ -1309,8 +1446,8 @@ void AZURESetup::SaveAndRun() {
       GetConfig().rateParams.useFile = true;
       GetConfig().rateParams.temperatureFile = runTab->fileTempText->text().toStdString();
     }
-    SegPairs tempPair = {runTab->rateEntranceKey->text().toInt(),
-                         runTab->rateExitKey->text().toInt()};
+    SegPairs tempPair = {runTab->rateEntranceKey->key(),
+                         runTab->rateExitKey->key()};
     segPairs.push_back(tempPair);
   }
   if (segPairs.size() == 0) {
@@ -1436,6 +1573,8 @@ void AZURESetup::SaveAndRun() {
     }
   }
 
+  GetConfig().includeAllJPi = levelsTab->includeAllJPi();
+  GetConfig().hardSphereMaxL = levelsTab->maxL();
   azureMain = new AZUREMainThread(runTab, GetConfig());
   connect(azureMain, SIGNAL(finished()), this, SLOT(DeleteThread()));
   setWindowTitle(QString("AZURE2 -- %1 -- Running").arg(QString::fromStdString(GetConfig().configfile)));
@@ -1566,6 +1705,7 @@ void AZURESetup::reset() {
   GetConfig().Reset();
   aMatrixAction->activate(QAction::Trigger);
   levelsTab->reset();
+  pairsTab->reset();
   segmentsTab->reset();
   targetIntTab->reset();
   fittingTab->reset();
@@ -1957,4 +2097,16 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysicalWithOldStructure(
     }
     return results;
   }
+}
+
+void AZURESetup::saveTabScreenshots(const QString &dir) {
+  QDir().mkpath(dir);
+  int current = tabWidget->currentIndex();
+  for (int i = 0; i < tabWidget->count(); i++) {
+    tabWidget->setCurrentIndex(i);
+    QApplication::processEvents();
+    QString name = tabWidget->tabText(i).remove('&').toLower().replace(' ', '_');
+    this->grab().save(QString("%1/tab%2_%3.png").arg(dir).arg(i).arg(name));
+  }
+  tabWidget->setCurrentIndex(current);
 }

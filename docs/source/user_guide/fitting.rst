@@ -8,7 +8,7 @@ and nuisance parameter flags.
 Parameter Tables
 ----------------
 
-Parameters are organized into three sub-tabs, and a fourth, *THM Background*,
+Parameters are organized into sub-tabs, and one more, *THM Background*,
 when THM is on (:doc:`configure_menu`, Runtime Options) and a THM experiment
 has a coherent background (``cbackground=``, THM Workspace, Experiments
 page): its free ``cbkg_*`` parameters, whose values edited here (or loaded
@@ -40,6 +40,21 @@ Displays one row for each level-channel combination with the following columns:
    * - **Use as Nuisance**
      - Check to treat this parameter as a nuisance parameter with a Gaussian
        prior in the chi-squared calculation.
+
+Abundance Parameters
+^^^^^^^^^^^^^^^^^^^^
+
+Shown only when the project carries an ``<abundances>`` block (a project
+whose particle pairs form more than one compound nucleus, see
+:doc:`particle_pairs`). One row per compound nucleus and sample, named
+``abundance_<Z>_<A>`` (default sample) or ``abundance_<sample>_<Z>_<A>`` as
+in ``param.sav``: **Value** is the isotopic abundance, **Error** the sigma of
+its Gaussian prior (0 = none) and **Use as Nuisance** whether it is fitted at
+all. The three are the same quantities as the Pairs tab's abundance table and
+are written back there. In AZURE2's parameter vector the abundances sit
+between the level parameters and the normalizations, sample by sample; one
+that is not fitted takes no slot. The sum-to-one terms of the Pairs tab (one
+per sample) are added by the engine and have no row here.
 
 Normalization Parameters
 ^^^^^^^^^^^^^^^^^^^^^^^^

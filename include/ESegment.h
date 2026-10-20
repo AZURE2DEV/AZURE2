@@ -2,6 +2,7 @@
 #define ESEGMENT_H
 
 #include "EPoint.h"
+#include "Equation.h"
 #include <vector>
 #include <mutex>
 #include <memory>
@@ -141,8 +142,75 @@ class ESegment {
   double GetEnergyShiftSqrtError() const;
   /// Is the sqrt(E) coefficient a free fit parameter?
   bool IsVaryEnergyShiftSqrt() const;
+  /// Shift-group label ("" if none): segments with one label share one constant shift.
+  std::string GetShiftGroup() const;
+  /// Position (0-based, in EData's segment vector) of the group member whose shift
+  /// parameter this segment uses; -1 for a segment that uses its own.
+  int GetShiftLeaderPos() const;
+  /// Does this segment take its constant shift from another segment of its group?
+  bool IsShiftGroupFollower() const;
+  /// Does another segment take its constant shift from this one?
+  bool HasShiftGroupFollowers() const;
+  /// Make this segment a follower of the group member at position pos: its own
+  /// shift stops being a fit parameter and starts at the given value.
+  void SetShiftGroupFollower(int pos, double shift);
+  void SetHasShiftGroupFollowers(bool);
+  /// Normalization-group label ("" if none): segments with one label share one norm.
+  std::string GetNormGroup() const;
+  /// Position (0-based, in EData's segment vector) of the group member whose norm this
+  /// segment uses; -1 for a segment that uses its own.
+  int GetNormLeaderPos() const;
+  /// Does this segment take its normalization from another segment of its group?
+  bool IsNormGroupFollower() const;
+  /// Does another segment take its normalization from this one?
+  bool HasNormGroupFollowers() const;
+  /// Make this segment a follower of the group member at position pos: it takes that
+  /// member's norm and nominal norm, and carries no norm penalty of its own.
+  void SetNormGroupFollower(int pos, double norm, double nominal);
+  void SetHasNormGroupFollowers(bool);
   /// The whole lab-energy shift at a point's original lab energy: a + b*sqrt(E).
   double TotalEnergyShift(double labEnergy) const;
+  /// Add this segment's energy-shift penalties, ((x - nominal)/sigma)^2 for each varied
+  /// shift term with sigma != 0, to chi.  The one definition every chi^2 path uses; the
+  /// index form (gradient, curvature, least-squares priors) is ForEachShiftPenalty in
+  /// AZURECalc.cpp and must list the same terms.
+  void AddShiftPenalty(double &chi) const;
+  /// Shift function ("shiftfn" block): does this segment's own line declare one?  Such a
+  /// segment owns the function's fit parameters (and their penalties).
+  bool OwnsShiftFn() const;
+  /// Expression, starting values (the penalties' nominal values), uncertainties and vary
+  /// flags declared on this segment's line (owners only).
+  std::string GetDeclaredShiftFn() const;
+  const std::vector<double> &GetNominalShiftFnValues() const;
+  const std::vector<double> &GetShiftFnErrors() const;
+  bool IsVaryShiftFn(int j) const;
+  /// Does this line carry a "sqrtshift" block?
+  bool HasSqrtShiftBlock() const;
+  /// Is a shift function applied to this segment's points (its own, or its group leader's)?
+  bool HasShiftFn() const;
+  /// Expression of the applied shift function ("" if none).
+  std::string GetShiftFnExpression() const;
+  /// Number of parameters of the applied shift function.
+  int NumShiftFnParams() const;
+  /// Position (0-based, in EData's segment vector) of the segment that owns the applied
+  /// shift function's parameters (this segment or its group leader); -1 if none.
+  int GetShiftFnSourcePos() const;
+  /// Owners: index of the function's first parameter within EData's shift-function block.
+  int GetShiftFnParamStart() const;
+  void SetShiftFnParamStart(int);
+  /// Current and last-applied parameter values of the applied shift function.
+  const std::vector<double> &GetShiftFnValues() const;
+  const std::vector<double> &GetLastShiftFnValues() const;
+  void SetShiftFnValue(int j, double value);
+  void SetLastShiftFnValues(const std::vector<double> &);
+  /// Apply the shift function owned by the segment at position ownerPos (this one, or its
+  /// group leader) to this segment; its parameters start at the owner's declared values.
+  void InstallShiftFn(const ESegment &owner, int ownerPos, const Config &);
+  /// Copy the applied shift function (expression and current values) of another segment,
+  /// for the components of a composite or total-capture segment.
+  void CopyShiftFnFrom(const ESegment &);
+  /// f(x) alone, at original lab energy x (MeV); 0 without a shift function.
+  double ShiftFnTerm(double labEnergy) const;
   /// Is this a composite segment, combining others by sum or ratio?
   bool IsAdvanced() const;
   /// Combination type as an integer: 0 sum, 1 ratio.
@@ -200,6 +268,13 @@ class ESegment {
   void SetLastEnergyShiftSqrt(double);
   /// Re-apply the current energy shift to every point, undoing the previous one.
   void UpdatePointEnergiesWithShift(CNuc *theCNuc = NULL, const Config *configure = NULL);
+  /// The same for one point (0-based index) and its sub-points.
+  void UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *configure);
+  /// Point i (0-based) and, after it, every point mapped onto it; nothing if point i is itself
+  /// mapped onto an earlier point (its host does it).  The unit for parallel re-energising.
+  void UpdatePointGroupEnergyWithShift(int i, CNuc *theCNuc, const Config *configure);
+  /// The earlier point of this segment that point i (0-based) is mapped onto, or NULL.
+  EPoint *ShiftHost(int i);
   /// Change the exit pair key.
   void SetExitKey(int);
   /// Change the entrance pair key, for this segment and every point in it.
@@ -226,6 +301,18 @@ class ESegment {
   OperationType GetOperationType() const;
   /// Does this segment combine other segments?
   bool HasComponents() const;
+  /// A natural-target segment: its own term and every component is weighted
+  /// by the isotopic abundance of the term's entrance pair's compound nucleus
+  /// in the segment's sample (the trailing "natural <1|sample>" token of the
+  /// line, resolved to a 1-based sample of the <abundances> block by
+  /// EData::Fill; 0 = not a natural segment).
+  bool IsNatural() const { return naturalSample_ > 0; }
+  int GetNaturalSample() const { return naturalSample_; }
+  void SetNaturalSample(int sample) { naturalSample_ = sample; }
+  /// The token as read ("0", "1" or a sample name), before resolution.
+  const std::string &GetNaturalToken() const { return naturalToken_; }
+  /// Components are never weighted themselves (the base segment does it).
+  void SetNatural(bool natural) { if (!natural) naturalSample_ = 0; }
   /// The component segments, by reference.
   const std::vector<ESegment *> &GetComponentSegments() const;
   /// Drop every component.
@@ -240,7 +327,13 @@ class ESegment {
 
   // Calculate theoretical cross section including components
   /// Theoretical value at a point, combining the components if this is a composite segment.
-  double CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, const Config &configure, EData *edata);
+  /*!
+   * `precalculated`: every non-mapped point of this segment and of its components
+   * has already been Calculate()d for the current parameters (AZURECalc does
+   * that in one parallel pass), so only the combination is done here.
+   */
+  double CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, const Config &configure, EData *edata,
+                                          bool precalculated = false);
 
  private:
   bool isdifferential_;
@@ -292,8 +385,30 @@ class ESegment {
   double energyShiftSqrtNominal_;
   double energyShiftSqrtError_;
   bool varyEnergyShiftSqrt_;
+  std::string shiftGroup_;
+  int shiftLeaderPos_;
+  bool hasShiftGroupFollowers_;
+  std::string normGroup_;
+  int normLeaderPos_;
+  bool hasNormGroupFollowers_;
+  bool hasSqrtShiftBlock_;
+  // Shift function declared on this line (owner) ...
+  std::string shiftFnDeclared_;
+  std::vector<double> shiftFnNominal_;
+  std::vector<double> shiftFnError_;
+  std::vector<bool> shiftFnVary_;
+  // ... and the one applied to the points (own or the group leader's).
+  bool hasShiftFn_;
+  Equation shiftFn_;
+  std::vector<double> shiftFnValues_;
+  std::vector<double> lastShiftFnValues_;
+  const Config *shiftFnConfig_;
+  int shiftFnSourcePos_;
+  int shiftFnParamStart_;
   bool isAdvanced_;
   int operationType_;
+  std::string naturalToken_ = "0";
+  int naturalSample_ = 0;
   std::string componentsList_;
   std::string datafile_;
   std::vector<EPoint> points_;

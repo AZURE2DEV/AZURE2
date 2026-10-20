@@ -36,7 +36,9 @@ enum class ParamKind {
   Norm,         ///< dataset normalization n_k for a segment
   EnergyShift,  ///< per-segment energy shift (constant term)
   EnergyShiftSqrt,  ///< per-segment sqrt(E) energy-shift coefficient
-  ThmCoherent   ///< Re or Im of a THM coherent-background amplitude (cbackground=)
+  EnergyShiftFn,    ///< parameter aj of a segment's shift function ("shiftfn")
+  Abundance,        ///< isotopic abundance of a compound nucleus (projects with an <abundances> block)
+  ThmCoherent       ///< Re or Im of a THM coherent-background amplitude (cbackground=)
 };
 
 /// Description of one entry in the full (unfiltered) flat parameter vector.
@@ -47,6 +49,9 @@ struct ParamDesc {
   int channel;  ///< 1-based channel index  (Gamma; ThmCoherent: its 1-based index in that block; else -1)
   int segment;  ///< 1-based segment index  (Norm/EnergyShift/EnergyShiftSqrt only, else -1)
   bool fixed;   ///< whether this parameter is fixed (excluded from packed vector)
+  int nucleus = -1;  ///< 1-based compound nucleus (Abundance only, else -1)
+  int sample = -1;   ///< 1-based sample of the <abundances> block (Abundance only, else -1)
+  int fnTerm = -1;  ///< j of a shift-function parameter aj (EnergyShiftFn only, else -1)
 };
 
 /*!
@@ -58,6 +63,8 @@ struct ParamDesc {
  *   - the norm parameters (starting at normOffset)
  *   - the energy-shift parameters (starting at energyShiftOffset)
  *   - the sqrt(E) energy-shift coefficients (starting at energyShiftSqrtOffset)
+ *   - the shift-function parameters a0.. of each segment declaring a "shiftfn" block,
+ *     in segment order (starting at energyShiftFnOffset; none without such a block)
  *   - the THM coherent-background parameters (cbackground=; none without it)
  *
  * "Full" indices run over every entry above (matching the `all_rwa_` vector in
@@ -78,6 +85,10 @@ class ParamIndexMap {
   int EnergyShiftIndex(int segment) const;
   /// Full index of the sqrt(E) energy-shift coefficient for a 1-based segment, or -1.
   int EnergyShiftSqrtIndex(int segment) const;
+  /// Full index of the abundance parameter with this 1-based ordinal (CNuc::AbundanceOrdinal), or -1.
+  int AbundanceIndex(int ordinal) const;
+  /// Full index of parameter aj of the shift function declared on a 1-based segment, or -1.
+  int EnergyShiftFnIndex(int segment, int j) const;
 
   /// Number of entries in the full (unfiltered) parameter vector.
   int NumFull() const { return (int)desc_.size(); }
@@ -95,6 +106,7 @@ class ParamIndexMap {
   int NormOffset() const { return normOffset_; }
   int EnergyShiftOffset() const { return energyShiftOffset_; }
   int EnergyShiftSqrtOffset() const { return energyShiftSqrtOffset_; }
+  int EnergyShiftFnOffset() const { return energyShiftFnOffset_; }
 
   friend ParamIndexMap BuildParamIndexMap(CNuc *, EData *, const std::vector<bool> &);
 
@@ -105,12 +117,15 @@ class ParamIndexMap {
   std::map<int, int> normIndex_;                         ///< segment -> full idx
   std::map<int, int> shiftIndex_;                        ///< segment -> full idx
   std::map<int, int> sqrtShiftIndex_;                    ///< segment -> full idx
+  std::map<int, int> abundanceIndex_;                    ///< abundance ordinal -> full idx
+  std::map<std::pair<int, int>, int> fnShiftIndex_;      ///< (segment, j) -> full idx
   std::vector<int> fullToPacked_;
   std::vector<int> packedToFull_;
   int numPacked_ = 0;
   int normOffset_ = 0;
   int energyShiftOffset_ = 0;
   int energyShiftSqrtOffset_ = 0;
+  int energyShiftFnOffset_ = 0;
 };
 
 /*!
@@ -125,6 +140,8 @@ struct GradAccum {
   std::vector<std::vector<double>> e;
   // gamma[j-1][la-1][ch-1]  -> dlnL/dgamma_{j,la,ch}
   std::vector<std::vector<std::vector<double>>> gamma;
+  // abundance[k-1]          -> d/dw_k, one per (sample, nucleus) in ordinal order (zero-length without an <abundances> block)
+  std::vector<double> abundance;
 
   /// Allocate (and zero) the accumulators to match the compound's dimensions.
   void Init(CNuc *compound);
@@ -138,6 +155,10 @@ struct GradAccum {
   /// Add a gamma contribution (1-based indices).
   void AddGamma(int jGroup, int level, int channel, double v) {
     gamma[jGroup - 1][level - 1][channel - 1] += v;
+  }
+  /// Add an abundance contribution (1-based ordinal, CNuc::AbundanceOrdinal); ignored without an <abundances> block.
+  void AddAbundance(int ordinal, double v) {
+    if (ordinal >= 1 && ordinal <= (int)abundance.size()) abundance[ordinal - 1] += v;
   }
   /// Scatter into the flat (full) gradient vector using the index map.
   void Scatter(const ParamIndexMap &map, vector_r &gradFull) const;
@@ -173,6 +194,8 @@ vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure);
  * has J < 0; a no-op outside the Park formalism.
  */
 void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum);
+/// Gradient of the isotopic-abundance priors and sum-to-one penalty (CNuc::AbundancePenalty), into the accumulator.
+void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum);
 
 /*!
  * \brief Shared analytic gradient engine used by both AZUREAPI (log-likelihood)

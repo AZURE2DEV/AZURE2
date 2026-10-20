@@ -12,8 +12,12 @@ copyright = "University of Notre Dame"
 author = "AZURE2 developers"
 
 # Keep in step with AZURE2_VERSION in the top-level CMakeLists.txt.
-release = "1.1.0"
-version = "1.1"
+# The version comes from the CMakeLists.txt version block, the single source.
+import os, re
+_cmake = open(os.path.join(os.path.dirname(__file__), "..", "..", "CMakeLists.txt")).read()
+_v = {k: re.search(r"set\(AZURE2_VERSION_%s (\d+)\)" % k, _cmake).group(1) for k in ("MAJOR", "MINOR", "PATCH")}
+release = "%s.%s.%s" % (_v["MAJOR"], _v["MINOR"], _v["PATCH"])
+version = "%s.%s" % (_v["MAJOR"], _v["MINOR"])
 
 extensions = [
     "sphinx.ext.mathjax",

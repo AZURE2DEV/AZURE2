@@ -7,6 +7,7 @@
 #include "ThmExperiment.h"
 #include <memory>
 #include <deque>
+#include <memory>
 #include <ios>
 
 // THM types EData holds by pointer or takes by reference (EDataThm.cpp).
@@ -65,6 +66,9 @@ class EData {
   int ReadPriorCentres(const Config &);
   /// Index at which the sqrt(E) energy-shift coefficients start in the Minuit vector.
   int GetEnergyShiftSqrtParamOffset() const;
+  /// Index at which the shift-function parameters start in the Minuit vector (after the sqrt(E)
+  /// coefficients): the parameters of each segment that declares a "shiftfn" block, in segment order.
+  int GetEnergyShiftFnParamOffset() const;
   /// Read the target-effects input file and build the TargetEffect objects.
   int ReadTargetEffectsFile(const Config &, CNuc *);
   /// Is this a fit? AZURECalc clones the compound nucleus and data per thread only when it is.
@@ -100,6 +104,9 @@ class EData {
   /// chiSquared.out (set by AZURECalc::operator(); 0 otherwise).
   void SetParkPenalty(double penalty) { parkPenalty_ = penalty; }
   double GetParkPenalty() const { return parkPenalty_; }
+  /// The abundance penalty (priors + sum-to-one) of the last evaluation, reported in chiSquared.out.
+  void SetAbundancePenalty(double penalty) { abundancePenalty_ = penalty; }
+  double GetAbundancePenalty() const { return abundancePenalty_; }
   /// External-capture amplitudes for every point that has an EC component.
   int CalculateECAmplitudes(CNuc *, const Config &);
   /// How many external-capture amplitudes this model expects in an intEC file.
@@ -113,6 +120,8 @@ class EData {
   static std::string ECSignaturePath(const std::string &integralsFile);
   /// Set up the entrance/exit pairs of the component segments in the compound nucleus.
   int InitializeComponentSegments(CNuc *, const Config &);
+  /// Validates a component's pair keys (both present, one compound nucleus) and flags its entrance pair; false with the error printed otherwise.
+  bool CheckComponentPairs(CNuc *, const ESegment &baseSegment, int entranceKey, int exitKey, const Config &);
   ESegment *CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey);
   ESegment *CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey, double fixedAngle);
   /// Map points at equal energies onto one another, so a shared energy is calculated once.
@@ -122,12 +131,35 @@ class EData {
   void SetNormParamOffset(int);
   void SetEnergyShiftParamOffset(int);
   void SetEnergyShiftSqrtParamOffset(int);
+  void SetEnergyShiftFnParamOffset(int);
   /// Seed the Minuit parameter array with the normalizations and energy shifts.
+  /// Link the members of each "shiftgroup" to the group's first segment (called by Fill).
+  /// Also installs and checks the shift functions ("shiftfn"); returns -1 on an invalid one.
+  int ResolveShiftGroups(const Config &);
+  /// Install and check the shift functions (called by ResolveShiftGroups).
+  int ResolveShiftFunctions(const Config &);
+  /// Set each shift-group follower's parameter to its leader's value (for the parameter files).
+  void SyncShiftGroupParams(ROOT::Minuit2::MnUserParameters &) const;
+  /// Link the members of each "normgroup" to the group's first segment (called by Fill).
+  void ResolveNormGroups(const Config &);
+  /// Set each norm-group follower's (fixed) norm parameter to its leader's value.
+  void SyncNormGroupParams(ROOT::Minuit2::MnUserParameters &) const;
+  /// The segment (1-based) whose norm segment s uses: its norm-group leader, or s itself.
+  int NormOwner(int s) const;
   void FillMnParams(ROOT::Minuit2::MnUserParameters &);
   /// Write the normalizations back from a Minuit parameter vector.
   void FillNormsFromParams(const vector_r &);
   /// Write the energy shifts back from a Minuit parameter vector.
   void FillEnergyShiftsFromParams(const vector_r &, EData *data = nullptr, CNuc *theCNuc = nullptr, const Config *configure = nullptr);
+  /// Lay the adaptive sub-point grids out again for the levels theCNuc holds now
+  /// (its fit values, as observed parameters) and the segments' energy shifts, and
+  /// rebuild the sub-points of every point whose grid changed.  Sub-points of a
+  /// segment in \p shiftActive are left for the energy-shift step to energise and
+  /// their segments are appended to \p reshift; the others are energised here.
+  /// Returns the number of points whose grid changed.  Called by
+  /// FillEnergyShiftsFromParams.
+  int ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const std::vector<ESegment *> &shiftActive,
+                           std::vector<ESegment *> &reshift);
   /// Drop the last segment.
   void DeleteLastSegment();
   /// Segment \p i, 1-based.
@@ -247,10 +279,12 @@ class EData {
   std::vector<TargetEffect> targetEffects_;
   std::vector<ESegment> segments_;
   std::deque<ESegment> componentSegments_;  // Separate storage for component segments (deque avoids pointer invalidation)
+  bool componentError_ = false;              // a component failed CheckComponentPairs
   int iterations_;
   int normParamOffset_;
   int energyShiftParamOffset_;
   int energyShiftSqrtParamOffset_;
+  int energyShiftFnParamOffset_ = 0;
   bool isFit_;
   bool isErrorAnalysis_;
   std::streampos ecReadPos_;  // File offset where component-segment EC integrals begin in the intEC file
@@ -267,6 +301,19 @@ class EData {
   /// Writes output/thm_experiments.out.
   void WriteThmExperiments(const Config &);
   double parkPenalty_ = 0.0;
+  double abundancePenalty_ = 0.0;
+  std::vector<std::string> nucleusLabels_;   // one per compound nucleus, for the natural decomposition file
+  // A copy of the compound nucleus that holds the observed level parameters the
+  // sub-point grids are laid out from (ReplaceSubPointGrids).  Never shared: a
+  // copy or Clone of the EData starts without one.
+  struct GridNucleus {
+    std::unique_ptr<CNuc> nuc;
+    GridNucleus();
+    GridNucleus(const GridNucleus &);
+    GridNucleus &operator=(const GridNucleus &);
+    ~GridNucleus();
+  };
+  GridNucleus gridNuc_;
 };
 
 #endif

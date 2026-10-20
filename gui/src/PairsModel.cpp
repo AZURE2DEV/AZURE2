@@ -1,6 +1,7 @@
 #include "PairsModel.h"
 #include "ElementMap.h"
 #include <math.h>
+#include <QRegularExpression>
 
 PairsModel::PairsModel(QObject *parent) :
   QAbstractTableModel(parent) {
@@ -13,7 +14,54 @@ int PairsModel::rowCount(const QModelIndex &parent) const {
 
 int PairsModel::columnCount(const QModelIndex &parent) const {
   Q_UNUSED(parent);
-  return PairsData::SIZE;
+  return PairsData::SIZE + 1;   // the PairsData columns and the derived compound-nucleus column
+}
+
+Nucleus PairsModel::nucleusOf(const PairsData &pair) {
+  Nucleus nucleus;
+  if (pair.pairType == 20) {
+    nucleus.Z = pair.heavyZ - pair.lightZ;
+    nucleus.A = (int)floor(pair.heavyM + 0.5);
+  } else if (pair.pairType == 10) {
+    nucleus.Z = pair.heavyZ;
+    nucleus.A = (int)floor(pair.heavyM + 0.5);
+  } else {
+    nucleus.Z = pair.lightZ + pair.heavyZ;
+    nucleus.A = (int)floor(pair.lightM + pair.heavyM + 0.5);
+  }
+  return nucleus;
+}
+
+QList<Nucleus> PairsModel::nuclei() const {
+  QList<Nucleus> out;
+  for (int i = 0; i < pairsList.size(); i++) {
+    Nucleus nucleus = nucleusOf(pairsList.at(i));
+    if (!out.contains(nucleus)) out.append(nucleus);
+  }
+  return out;
+}
+
+int PairsModel::nucleusIndex(const Nucleus &nucleus) const {
+  return nuclei().indexOf(nucleus);
+}
+
+QString PairsModel::nucleusLabel(const Nucleus &nucleus, bool html) {
+  QString symbol = (nucleus.Z >= 0 && nucleus.Z < (int)(sizeof(elements) / sizeof(elements[0])))
+                       ? elements[nucleus.Z].second : QString("Z%1").arg(nucleus.Z);
+  QString label = QString("<sup>%1</sup>%2").arg(nucleus.A).arg(symbol);
+  return html ? label : plainText(label);
+}
+
+QString PairsModel::nucleusLongLabel(const Nucleus &nucleus) const {
+  for (int i = 0; i < pairsList.size(); i++) {
+    const PairsData &pair = pairsList.at(i);
+    if (pair.pairType != 0 || nucleusOf(pair) != nucleus) continue;
+    QString pairLabel = getPairLabel(pair);
+    int bracket = pairLabel.indexOf(" [");
+    if (bracket > 0) pairLabel = pairLabel.left(bracket);
+    return QString("%1 (%2)").arg(nucleusLabel(nucleus, false)).arg(pairLabel);
+  }
+  return nucleusLabel(nucleus, false);
 }
 
 QVariant PairsModel::data(const QModelIndex &index, int role) const {
@@ -60,6 +108,8 @@ QVariant PairsModel::data(const QModelIndex &index, int role) const {
       return pair.ecMultMask;
     else if (index.column() == 15)
       return pair.bindingEnergy;
+    else if (index.column() == NucleusColumn)
+      return nucleusLabel(nucleusOf(pair));
   } else if (role == Qt::EditRole) {
     PairsData pair = pairsList.at(index.row());
     if (index.column() == 0)
@@ -136,6 +186,8 @@ QVariant PairsModel::headerData(int section, Qt::Orientation orientation, int ro
         return tr("EC\nMultipolarities");
       case 15:
         return tr("THM\nBinding");
+      case NucleusColumn:
+        return tr("Compound\nNucleus");
       default:
         return QVariant();
     }
@@ -473,8 +525,35 @@ QString PairsModel::getSpinLabel(const PairsData &pair, int which) const {
     tempSpin = QString("%1/2").arg((int)(tempJ * 2));
   else
     tempSpin = QString("%1").arg(tempJ);
-  if (tempPi == -1)
-    return QString("%1-").arg(tempSpin);
-  else
-    return QString("%1+").arg(tempSpin);
+  // Superscript plus/minus (U+207A/B), as in the Levels table and the Add/Edit Level dialog.
+  return tempSpin + (tempPi == -1 ? QString(QChar(0x207B)) : QString(QChar(0x207A)));
+}
+
+QString PairsModel::getPairLabel(const PairsData &pair) const { return plainText(getParticleLabel(pair, -1)); }
+
+QString PairsModel::plainText(const QString &html) {
+  static const QString superscripts = QString::fromUtf8("\u2070\u00b9\u00b2\u00b3\u2074\u2075\u2076\u2077\u2078\u2079");
+  QString out = html;
+  QRegularExpression sup("<sup>([^<]*)</sup>");
+  QRegularExpressionMatch m;
+  int from = 0;
+  while ((m = sup.match(out, from)).hasMatch()) {
+    QString inner = m.captured(1), repl;
+    for (QChar c : inner) {
+      if (c.isDigit())
+        repl += superscripts.at(c.digitValue());
+      else if (c == '+')
+        repl += QChar(0x207A);
+      else if (c == '-')
+        repl += QChar(0x207B);
+      else
+        repl += c;
+    }
+    out.replace(m.capturedStart(0), m.capturedLength(0), repl);
+    from = m.capturedStart(0) + repl.length();
+  }
+  out.remove(QRegularExpression("<[^>]*>"));
+  out.replace("&alpha;", QString(QChar(0x03B1))).replace("&beta;", QString(QChar(0x03B2))).replace("&gamma;", QString(QChar(0x03B3)));
+  out.replace("&nbsp;", " ").replace("&amp;", "&");
+  return out.simplified();
 }

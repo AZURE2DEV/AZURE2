@@ -128,6 +128,20 @@ try:
 except ValueError:
     check("strict=False writes the rest", False, "it still raised")
 
+print("  a fixed zero width on a channel the level does not list is skipped")
+model = AzrModel.from_file(PROJECTS[0])
+unlisted = parameter(pair=99, L=7, S=0.5, jgroup=1, level=1, fixed=True, free_index=None)
+try:
+    model.apply_fit([unlisted], [0.0], physical=True, include_fixed=True)
+    check("fixed zero, no line: nothing to place", model.applied == 0 and not model.unplaced)
+except ValueError as err:
+    check("fixed zero, no line: nothing to place", False, str(err).splitlines()[0])
+try:
+    model.apply_fit([unlisted], [5.0], physical=True, include_fixed=True)
+    check("fixed nonzero, no line: still refused", False, "it was skipped")
+except ValueError:
+    check("fixed nonzero, no line: still refused", True)
+
 # --------------------------------------------------------------------------
 print("\n4. rwa values are refused unless the caller says they are physical")
 model = AzrModel.from_file(PROJECTS[0])

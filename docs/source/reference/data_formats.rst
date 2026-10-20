@@ -99,6 +99,93 @@ The file contains sections for:
   segment's own value; see :ref:`nominal-norm`)
 - MCMC settings (if enabled)
 
+The ``<config>`` block holds a fixed sequence of lines (formalism, output and
+checks directories, the check-file switches) followed by optional ``key=value``
+lines, which a reader that does not know a key skips:
+
+``includeAllJPi=1``
+   Hard-sphere scattering in every :math:`J^\pi` the particle pairs allow,
+   whether or not a level carries it (see :doc:`../user_guide/levels_channels`).
+   Absent or ``0``: only the :math:`J^\pi` of active levels enter the calculation,
+   as in projects saved before the key existed.
+
+``maxOrbitalMomentum=N``
+   The orbital-momentum limit of that enumeration, i.e. the **Maximum Orbital
+   Momentum** of the Levels and Channels tab. Absent: the largest :math:`l` of
+   any particle channel in the ``<levels>`` block.
+
+``abundanceSumSigma=s``
+   The default sum-to-one width: every sample of the ``<abundances>`` block
+   (below) without a ``sum`` line of its own adds
+   :math:`((\sum_k w_k - 1)/s)^2` to the chi-squared, :math:`w_k` its
+   abundances; absent or ``0`` is off.
+
+Several compound nuclei.  The compound nucleus of a pair is inferred from its
+columns (particle pair :math:`Z = z_1 + z_2`, :math:`A = \mathrm{round}(m_1 +
+m_2)`; gamma pair the heavy particle; beta pair the daughter), and a project
+may hold levels of several. An optional ``<abundances>`` block right after
+``</levels>`` has one line per compound nucleus::
+
+   <abundances>
+   10 21 0.9048 0 0
+   10 23 0.0925 1 0.01
+   10 22 0.0027 0 0
+   </abundances>
+
+``Z A value vary sigma``: the isotopic abundance (of the target isotope that
+forms the compound nucleus), whether it is a fit parameter (then named
+``abundance_<Z>_<A>``, emitted right after the level parameters) and the sigma
+of a Gaussian prior on it (0 = none). Without the block every abundance is 1,
+fixed, and no parameter exists. A nucleus not formed by any pair draws a
+warning.
+
+**Samples.** Data sets taken on targets of different composition (a natural
+one and an enriched one, or a compound such as Al\ :sub:`2`\ O\ :sub:`3`)
+need several abundance sets in one project. A line prefixed with
+``<name>:`` belongs to the named sample; the lines without a prefix form the
+unnamed (default) sample; ``[<name>:] sum <s>`` gives a sample its own
+sum-to-one width (``0`` off, absent: ``abundanceSumSigma``)::
+
+   <abundances>
+   10 21 0.9048 0 0
+   10 23 0.0925 0 0
+   10 22 0.0027 0 0
+   enr22Ne: 10 23 0.99 1 0.005
+   enr22Ne: 10 21 0.01 0 0
+   enr22Ne: sum 0.01
+   </abundances>
+
+A nucleus without a line in a sample is 1, fixed. Each sample's abundances
+are parameters, named ``abundance_<name>_<Z>_<A>`` for a named sample,
+emitted sample by sample (the unnamed one first, in file order) right after
+the level parameters. A sample name is one token without ``:`` or ``#``.
+Stoichiometric weights need not sum to one: give that sample ``sum 0``.
+
+A ``<segmentsData>`` or ``<segmentsTest>`` line may end with the keyword
+blocks ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>`` and
+``shiftgroup <label>`` (in any order; writers put ``sample`` last).  ``natural``
+is the keyword's older name and is still read.
+``sample 1`` multiplies the segment's own term and each composite component
+by the abundance of the term's entrance pair's compound nucleus in the
+unnamed sample (or the only sample, if every sample is named);
+``sample <name>`` uses the named sample. It is allowed for
+angle-integrated, differential and capture observables (data ``isDiff`` 0,
+1, 3, 4, 5, 6; test 0, 1, 4, 5), never for a ratio, only in a project with
+an ``<abundances>`` block, and a name the block does not define is refused.
+
+.. note::
+
+   Compatibility: an engine older than this feature ignores the
+   ``<abundances>`` block and the key, but reads ``sample 1`` as positional
+   fields and misparses the line; a GUI older than it drops the block on
+   save. A single-nucleus project is unaffected either way.
+
+A ``<targetInt>`` line may end with keyword blocks (``beamprofile ...``,
+``udr ...``, ``sigmalab``). ``sigmalab`` marks an energy-dependent beam-spread
+expression as laboratory in, laboratory out (see
+:doc:`../user_guide/experimental_effects`); an expression without it is read in
+the pre-October-2026 centre-of-mass convention.
+
 .. tip::
 
    The recommended practice is to always use the GUI to create and edit
