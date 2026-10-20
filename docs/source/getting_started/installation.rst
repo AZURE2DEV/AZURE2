@@ -49,6 +49,21 @@ Building from Source
 
       make && make install
 
+5. Build the Coulomb-function table once (recommended):
+
+   .. code-block:: bash
+
+      ./src/azure2-coulomb-table build
+
+   AZURE2 takes the Coulomb functions of charged-particle channels from this
+   table when it finds it; the results are the same and a calculation is
+   several times faster (about four times for the natural-neon example). The
+   table is not distributed with AZURE2. The build takes about 5 minutes on
+   four threads and writes 88 MB to ``~/.azure2/coulomb_table.bin`` (or to the
+   file named by the environment variable ``AZURE2_COULOMB_TABLE``). Without
+   it, AZURE2 says so once per run and computes the functions directly. See
+   :doc:`../user_guide/configure_menu`.
+
 CMake Options
 ^^^^^^^^^^^^^
 

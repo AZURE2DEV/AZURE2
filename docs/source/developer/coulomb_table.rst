@@ -311,5 +311,10 @@ adaptive-grid settings of the dialog, under **Experimental Effects**
 (:doc:`../user_guide/experimental_effects`); the command-line options are in
 :doc:`../reference/command_line`.
 
-Decisions still open: whether a copy of the table ships; whether ``save_fit``
-should write fitted norms and shifts into the segment lines.
+The table does not ship with AZURE2 (decided 2026-10-20): each user builds it
+once with ``azure2-coulomb-table build``, about 5 minutes, and keeps it in
+``~/.azure2/``. The file is 88 MB, and building it takes only minutes, so a
+copy in the repository or the release is not worth its size.
+
+Still open: whether ``save_fit`` should write fitted norms and shifts into the
+segment lines.

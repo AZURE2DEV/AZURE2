@@ -149,6 +149,21 @@ The resulting executable is `build/src/AZURE2`. `CMAKE_BUILD_TYPE` defaults to
 `Release`; set it to `Debug` explicitly if you want an unoptimized build with
 symbols.
 
+### The Coulomb-function table
+
+AZURE2 takes the Coulomb functions of charged-particle channels from a table
+when it finds one: the results are the same and a calculation is several times
+faster (about four times for the natural-neon example). The table is not
+distributed; build it once after compiling:
+
+```bash
+./build/src/azure2-coulomb-table build
+```
+
+This takes about 5 minutes on four threads and writes 88 MB to
+`~/.azure2/coulomb_table.bin` (or to the file named by `$AZURE2_COULOMB_TABLE`).
+Without it AZURE2 says so once per run and computes the functions directly.
+
 ### Convenience scripts
 
 Platform build scripts that auto-detect Qwt and set sensible options live in
@@ -207,6 +222,8 @@ Useful flags (`AZURE2 --help` for the full list):
 | `--no-gui`            | Run without the graphical setup utility. |
 | `--use-brune`         | Use the alternative level matrix of C. R. Brune. |
 | `--gsl-coul`          | Use GSL Coulomb functions (faster, less accurate). |
+| `--no-coulomb-table`  | Compute every Coulomb function directly instead of taking charged channels from the table. |
+| `--no-grid-replacement` | Keep the experimental-effect sub-point grids where the file's levels put them, instead of laying them out again at every evaluation. |
 | `--use-rmc`           | Reich–Moore approximation for capture (neutron capture). |
 | `--ignore-externals`  | Ignore external resonant capture when the internal width is zero. |
 | `--no-transform`      | Skip the initial parameter transformations. |
