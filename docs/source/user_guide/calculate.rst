@@ -127,7 +127,10 @@ Parameter and Integral Files
    - **Create New Integrals File** (default) -- compute the external capture
      integrals from scratch.
    - **Use** -- load a previously computed integrals file (``intEC.dat``) to
-     speed up calculations.
+     speed up calculations.  Since the integrals come from energy tables
+     (:doc:`../developer/ec_table`), a new file takes seconds even for
+     convolved or target-integrated capture data, and the run log reports
+     ``External capture table: N integrals, M computed at table nodes``.
 
    .. note::
 

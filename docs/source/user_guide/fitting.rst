@@ -72,6 +72,16 @@ Shift?** enabled. A segment's :math:`\sqrt{E}` shift coefficient (the
 engine under the name ``segment_<key>_energy_shift_sqrt`` but is not listed
 here.
 
+A shifted capture segment evaluates its external-capture amplitudes at the
+shifted energies, from the same energy tables as every other point
+(:doc:`../developer/ec_table`), so a shift gives the same cross sections as
+data whose energies were moved by the same amount.  Before October 2026 (and
+still with ``--no-ec-table``) the amplitudes of a shifted point were
+interpolated linearly between the segment's own points and held constant
+beyond its ends -- errors of several percent in the gaps between points and up
+to orders of magnitude for low-energy points moved below the segment's lowest
+energy.
+
 Controls
 --------
 

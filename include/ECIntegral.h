@@ -62,6 +62,12 @@ class ECIntegral {
   ~ECIntegral() = default;
   /// External-capture radial integral for one pathway: entrance and exit l, the multipolarity and radiation type, and the energies.
   complex operator()(int, int, double, double, double, double, int, char, double, double, bool, bool = false);
+  /// Relative tolerance of the adaptive radial quadrature (default 1e-4); ECTable
+  /// computes its few nodes much tighter than a direct integral at every energy.
+  void SetRelativeTolerance(double epsrel) { epsrel_ = epsrel; }
+  /// Nonzero if a quadrature of the last call reported an error (GSL status),
+  /// which happens only with the GSL error handler off.
+  int Status() const { return status_; }
 
  private:
   /// Clear the cached FW, GW and WW integrals.
@@ -93,6 +99,8 @@ class ECIntegral {
   const Config *configure_;
   double FW_;
   double GW_;
+  double epsrel_ = 1e-4;
+  int status_ = 0;
 
   /*!
    * Calculate integral directly

@@ -88,6 +88,17 @@ Available Options
        threads, write it to ``FILE`` (default as for ``--coulomb-table``),
        report progress in steps of 10 % and exit; no project file is needed.
        The same build as **Configure → Build Coulomb Table...** in the GUI.
+   * - ``--no-ec-table``
+     - Compute every external-capture integral directly, at every data point
+       and sub-point, and interpolate the amplitudes of shifted points
+       linearly between the segment's own points (flat beyond its ends), as
+       before the energy tables.  By default each capture term is tabulated in
+       energy once, at nodes converged to 1e-10, and every point -- shifted or
+       not, sub-point or rate energy -- is interpolated from the table
+       (8-point Lagrange, 50 nodes per decade, error below 1e-9; see
+       :doc:`../developer/ec_table`).  ``AZURE2_EC_TABLE_CHECK=1`` also computes
+       every tabulated integral directly and reports the largest difference;
+       ``AZURE2_EC_TABLE_NODES=N`` sets the node density.
    * - ``--no-grid-replacement``
      - Keep the adaptive sub-point grids of experimental effects
        (``<targetInt>``) where the input file's levels put them.  By default

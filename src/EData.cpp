@@ -4,6 +4,7 @@
 #include "CovarianceBand.h"
 #include "EData.h"
 #include "ECAmplitudeCache.h"
+#include "ECTable.h"
 #include "ExtrapLine.h"
 #include "SegLine.h"
 #include "AdaptiveIntegrationGrid.h"
@@ -2300,6 +2301,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
     }
   }
   ecUsePrevious_ = usePrevious;
+  ECTable::ResetCounters();
 
   if (usePrevious)
     in.open(configure.integralsfile.c_str());
@@ -2433,6 +2435,9 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
     out.flush();
     out.close();
   }
+  if (!usePrevious && configure.useECTable && !(configure.paramMask & Config::USE_API) &&
+      ECTable::Lookups() + ECTable::DirectCalls() > 0)
+    configure.outStream << "\t" << ECTable::Report() << std::endl;
   // Remember where the regular-segment integrals end so the component-segment
   // integrals (appended to the same file) can be resumed from here on read.
   if (in.is_open()) {
