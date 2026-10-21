@@ -14,7 +14,13 @@ const char *const kNames[kNumStages] = {"evaluation",     "points",          "E-
                                         "channel solves", "cross sections",  "gradient",
                                         "grad forward",   "grad T-cotangent", "grad back-propagation",
                                         "grad level matrix", "grad rows"};
+std::atomic<long long> g_count[kNumCounters];
+const char *const kCounterNames[kNumCounters] = {"channel-space solves", "level route: size",
+                                                 "level route: no formal set-up", "level route: near pole",
+                                                 "level route: pivot", "level route: forced"};
 }  // namespace
+
+void CountEvent(Counter counter) { g_count[counter].fetch_add(1, std::memory_order_relaxed); }
 
 void Add(Stage stage, long long ns) {
   g_ns[stage].fetch_add(ns, std::memory_order_relaxed);
@@ -31,6 +37,11 @@ void Report(std::ostream &out, const char *label) {
     if (calls == 0) continue;
     s << "\n[profile]   " << std::left << std::setw(22) << kNames[k] << std::right << std::fixed
       << std::setprecision(1) << std::setw(10) << ns / 1.0e6 << "  " << calls;
+  }
+  for (int k = 0; k < kNumCounters; k++) {
+    const long long n = g_count[k].exchange(0);
+    if (n == 0) continue;
+    s << "\n[profile]   " << std::left << std::setw(32) << kCounterNames[k] << std::right << n;
   }
   out << s.str() << std::endl;
 }

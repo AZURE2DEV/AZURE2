@@ -156,6 +156,19 @@ struct GradAccum {
   std::vector<double> abundance;
   // screening[k-1]          -> d/dU_e (eV) of screening parameter k (grows on first use)
   std::vector<double> screening;
+  /*!
+   * Cotangents of the formal energies and widths of the Brune and Park level
+   * matrices, fe[j-1][k] and fgamma[j-1][k][ch-1] for formal level k
+   * (AMatrixFunc::FormalBilinearAdjoint).  Used only when `formal` is set: a
+   * scalar gradient pass sums them over all points and resolves them into
+   * e/gamma once at its end (AMatrixFunc::ResolveFormalCotangents), instead of
+   * taking the level-matrix adjoint at every energy.
+   */
+  std::vector<std::vector<double>> fe;
+  std::vector<std::vector<std::vector<double>>> fgamma;
+  bool formal = false;
+  /// A formal cotangent was added since the last Zero().
+  bool formalUsed = false;
 
   /// Allocate (and zero) the accumulators to match the compound's dimensions.
   void Init(CNuc *compound);

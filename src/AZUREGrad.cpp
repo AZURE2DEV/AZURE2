@@ -123,6 +123,9 @@ void GradAccum::Init(CNuc *compound) {
     e[j - 1].assign(nLevels, 0.0);
     gamma[j - 1].assign(nLevels, std::vector<double>(nCh, 0.0));
   }
+  fe = e;
+  fgamma = gamma;
+  formalUsed = false;
   abundance.assign(compound->NumAbundanceParams(), 0.0);
   screening.clear();
 }
@@ -136,6 +139,12 @@ void GradAccum::Zero() {
     for (auto &row : lev) std::fill(row.begin(), row.end(), 0.0);
   std::fill(abundance.begin(), abundance.end(), 0.0);
   std::fill(screening.begin(), screening.end(), 0.0);
+  if (formalUsed) {
+    for (auto &row : fe) std::fill(row.begin(), row.end(), 0.0);
+    for (auto &lev : fgamma)
+      for (auto &row : lev) std::fill(row.begin(), row.end(), 0.0);
+    formalUsed = false;
+  }
 }
 
 /*!
@@ -152,6 +161,14 @@ void GradAccum::Add(const GradAccum &o) {
   for (int k = 0; k < (int)abundance.size() && k < (int)o.abundance.size(); k++) abundance[k] += o.abundance[k];
   if (o.screening.size() > screening.size()) screening.resize(o.screening.size(), 0.0);
   for (int k = 0; k < (int)o.screening.size(); k++) screening[k] += o.screening[k];
+  if (o.formalUsed) {
+    for (int j = 0; j < (int)fe.size() && j < (int)o.fe.size(); j++)
+      for (int k = 0; k < (int)fe[j].size() && k < (int)o.fe[j].size(); k++) {
+        fe[j][k] += o.fe[j][k];
+        for (int ch = 0; ch < (int)fgamma[j][k].size(); ch++) fgamma[j][k][ch] += o.fgamma[j][k][ch];
+      }
+    formalUsed = true;
+  }
 }
 
 /*!
@@ -960,7 +977,12 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
   const int nThreads = 1;
 #endif
   std::vector<GradAccum> threadAccum(nThreads);
-  for (GradAccum &ta : threadAccum) ta.Init(compound);
+  for (GradAccum &ta : threadAccum) {
+    ta.Init(compound);
+    // A scalar pass: the Brune and Park level-matrix adjoints are summed in the
+    // formal parameters and resolved once below.
+    ta.formal = true;
+  }
 
   const std::vector<GradItem> items = BuildGradItems(data);
   bool bail = false;
@@ -1024,6 +1046,10 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
     return false;
   }
   for (const GradAccum &ta : threadAccum) accum.Add(ta);
+  if (accum.formalUsed) {
+    AMatrixFunc amf(compound, config);
+    amf.ResolveFormalCotangents(accum, shiftDeriv);
+  }
   return true;
 }
 

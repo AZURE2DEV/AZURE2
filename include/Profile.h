@@ -38,6 +38,17 @@ enum Stage {
   kNumStages
 };
 
+/// Events counted alongside the stages: the route each J-group's level matrix takes at an energy.
+enum Counter {
+  kChannelRoute,       ///< solved in channel space
+  kLevelRouteSize,     ///< level space: no fewer coupled channels than levels
+  kLevelRouteSetup,    ///< level space: no formal representation (eigen-decomposition, RMC with Brune/Park)
+  kLevelRoutePole,     ///< level space: an energy too close to a formal pole
+  kLevelRoutePivot,    ///< level space: 1 - R Lambda ill-conditioned
+  kLevelRouteForced,   ///< level space: AZURE_LEVEL_SPACE or SetLevelSpaceOnly
+  kNumCounters
+};
+
 /// True when AZURE_PROFILE is set to anything but "0" (read once).
 inline bool Enabled() {
   static const bool on = [] {
@@ -49,6 +60,12 @@ inline bool Enabled() {
 
 /// Adds `ns` nanoseconds to a stage (and one call).
 void Add(Stage stage, long long ns);
+
+/// Counts one event (only when profiling).
+void CountEvent(Counter counter);
+inline void Count(Counter counter) {
+  if (Enabled()) CountEvent(counter);
+}
 
 /// Writes the stages accumulated since the last report under `label`, then clears them.
 void Report(std::ostream &out, const char *label);

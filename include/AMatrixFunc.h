@@ -3,8 +3,11 @@
 
 #include "GenMatrixFunc.h"
 #include "LevelMatrixSolver.h"
+#include "ChannelSpace.h"
+#include <memory>
 
 struct GradAccum;
+class JGroup;
 
 /*!
  * Cotangents of the T-matrix elements of one decay (AMatrixFunc::PointTBar):
@@ -38,6 +41,21 @@ struct BilinearTerm {
  * The AMatrixFunc function class calculates the T-Matrix for a given energy point using the compound
  * nucleus object.  The AMatrixFunc class is a child class of GenMatrixFunc, where the cross section is
  * calculated from the T-Matrix.
+ *
+ * Each J-group takes one of two routes at each energy:
+ *
+ *   - channel space (the default, ChannelSpace.h): the level matrix is never
+ *     formed; the bilinear forms \f$g_c^T A g_{c'}\f$ come from the c x c matrix
+ *     \f$(1 - R\Lambda)^{-1} R\f$ of the formal representation of the level
+ *     matrix.  Taken when the J-group has fewer coupled channels than levels;
+ *   - level space: the level matrix is filled and LU-factored.  Taken otherwise,
+ *     near a formal pole or for an ill-conditioned \f$1 - R\Lambda\f$, when the
+ *     formal representation cannot be built, with AZURE_LEVEL_SPACE=1, and for
+ *     an object switched to it with SetLevelSpaceOnly().
+ *
+ * Both routes serve the same interface: GetUBilinear, the channel-capture and
+ * general bilinear forms, the A g_c solves of the adjoint and, through the
+ * Woodbury identity, individual elements of A (GetAMatrixElement).
  */
 
 class AMatrixFunc : public GenMatrixFunc {
@@ -60,6 +78,24 @@ class AMatrixFunc : public GenMatrixFunc {
     compound_ = compound;
     configure_ = &configure;
   };
+  /*!
+   * Solves every J-group of this object in level space (fill and LU), as
+   * before the channel-space route existed.  For callers that want the level
+   * matrix itself or many of its elements.
+   */
+  void SetLevelSpaceOnly(bool levelOnly) { level_only_ = levelOnly; };
+  /// True if J-group jGroupNum (1-based) is solved in channel space at the current energy.
+  bool IsChannelRoute(int jGroupNum) const {
+    return jGroupNum >= 1 && jGroupNum <= (int)route_.size() && route_[jGroupNum - 1] == kRouteChannel;
+  };
+  /*!
+   * Turns the formal-parameter cotangents a gradient pass accumulated in
+   * `accum` (GradAccum::fe/fg, see FormalBilinearAdjoint) into cotangents of the
+   * level energies and reduced widths, through the adjoint of the generalized
+   * eigen-decomposition that defines the formal parameters, and clears them.
+   * The parameters held by the compound must be those of the pass.
+   */
+  void ResolveFormalCotangents(GradAccum &accum, const vector_matrix_r *shiftDeriv);
 
   /// Drop the stored level matrices.
   void ClearMatrices();
@@ -196,9 +232,59 @@ class AMatrixFunc : public GenMatrixFunc {
   double InEnergy(EPoint *point);
   /// d(level matrix) part of the adjoint of one J-group, given the level-matrix
   /// cotangent Mbar (n x n): structural energy and reduced-width gradients of
-  /// the standard, Brune and Park level matrices.
+  /// the standard, Brune and Park level matrices.  The channel kernel is read
+  /// from `energyPoint` (Lo-matrix plus, for Brune and Park particle channels,
+  /// the boundary condition) unless `lambda` gives it per channel.
   void LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix_c &Mbar, double inEnergy,
-                          GradAccum &accum, const vector_matrix_r *shiftDeriv);
+                          GradAccum &accum, const vector_matrix_r *shiftDeriv,
+                          const complex *lambda = nullptr);
+
+  enum Route : char { kRouteNone = 0, kRouteLevel = 1, kRouteChannel = 2 };
+  /// Per-energy channel-space state of one J-group.
+  struct ChannelState {
+    std::vector<complex> dinv;   ///< 1/(e_lambda - E), n
+    std::vector<complex> lam;    ///< Lambda per channel, nch
+    std::vector<complex> lamAct; ///< Lambda over the active channels, m
+    std::vector<complex> R;      ///< R over the active channels, m x m
+    std::vector<complex> lu;     ///< LU factors of 1 - R Lambda
+    std::vector<int> piv;
+    std::vector<complex> F;      ///< (1 - R Lambda)^-1 R, column b at F[b*m]
+    std::vector<char> fcol;      ///< columns of F computed
+    std::vector<vector_c> usolve;  ///< formal channel solves A_f Gamma_c (per channel)
+    std::vector<char> uvalid;
+    matrix_c inverse;            ///< A, materialized on request
+    bool inverseValid = false;
+    vector_c w1, w2, w3;         ///< scratch
+    std::vector<double> rreal;   ///< scratch of the real R
+    std::vector<double> P;       ///< pencil route: LU factors of K - E N
+    std::vector<int> ppiv;
+    std::vector<double> X;       ///< pencil route: (K - E N)^-1 G over the active channels, n x m
+  };
+  /// Level matrix of J-group j at this energy, into a_inv_matrices_ (level route).
+  void FillLevelMatrix(int j, EPoint *point, double inEnergy);
+  /// Channel-space solve of J-group j at this energy; false sends it to the level route.
+  bool SolveChannelSpace(int j, EPoint *point, double inEnergy);
+  /// R of the pencil route (no formal representation); false sends the J-group to the level route.
+  bool SolvePencil(int j, double inEnergy);
+  /// R of the formal route; false sends the J-group to the level route.
+  bool SolveFormal(int j, double inEnergy);
+  /// Column b (position among the active channels) of (1 - R Lambda)^-1 R.
+  const complex *FColumn(int j, int b);
+  /// A u in channel space (level-space vectors over the active levels).
+  void ApplyA(int j, const complex *u, complex *out);
+  /// u^T A v in channel space.
+  complex ChannelBilinear(int j, const complex *u, const complex *v);
+  /// Formal channel solve A_f Gamma_c (zero for a channel without widths), cached per energy.
+  const vector_c &FormalSolve(int j, int ch0);
+  /*!
+   * Adjoint of the bilinear terms of J-group j in the formal representation:
+   * O(n c) per term, no n x n matrix.  The cotangents go to the level
+   * parameters directly for the standard level matrix (V = 1), and to the
+   * formal ones (GradAccum::fe/fg) otherwise.
+   */
+  void FormalBilinearAdjoint(int j, const std::vector<BilinearTerm> &terms, GradAccum &accum);
+  /// AZURE_CHANNEL_VERIFY: compare the channel-space solve of J-group j with the level matrix.
+  void VerifyChannelSpace(int j, EPoint *point, double inEnergy);
 
   const Config *configure_;
   CNuc *compound_;
@@ -238,6 +324,18 @@ class AMatrixFunc : public GenMatrixFunc {
   /// Compound nucleus (1-based) of the point being evaluated: groups of the
   /// others are skipped by FillMatrices and InvertMatrices.
   int activeNucleus_ = 0;
+
+  /// Route of each J-group at the current energy.
+  std::vector<char> route_;
+  /// Formal representation of each J-group (per parameter set).
+  std::vector<std::shared_ptr<ChannelSpace::FormalLevels>> formal_;
+  /// J-group each entry of formal_ belongs to (the object may be Reset to another compound).
+  std::vector<const JGroup *> formal_jgroup_;
+  /// Channel-space state of each J-group (per energy).
+  std::vector<ChannelState> chan_;
+  /// Active levels of each J-group (original numbers).
+  std::vector<std::vector<int>> active_levels_;
+  bool level_only_ = false;
 };
 
 #endif
