@@ -36,6 +36,9 @@ TIMEOUT_CMD="$(command -v timeout || command -v gtimeout || true)"
 run_limited() { if [ -n "$TIMEOUT_CMD" ]; then "$TIMEOUT_CMD" "$@"; else shift; "$@"; fi; }
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/angle_mapping.XXXXXX")"
+# Byte-identical files without cmp (not in every MSYS2 image); \r stripped so a
+# CRLF-writing Windows build compares like the others.
+same_file() { [ -f "$2" ] && [ "$(tr -d '\r' < "$1")" = "$(tr -d '\r' < "$2")" ]; }
 [ -n "${KEEP_WORK:-}" ] || trap 'rm -rf "$WORK"' EXIT
 
 failures=0
@@ -66,7 +69,7 @@ else
   for other in within nomap; do
     diffs=""
     for f in "$WORK/map/output"/*; do
-      cmp -s "$f" "$WORK/$other/output/$(basename "$f")" || diffs="$diffs $(basename "$f")"
+      same_file "$f" "$WORK/$other/output/$(basename "$f")" || diffs="$diffs $(basename "$f")"
     done
     if [ -z "$diffs" ]; then ok "outputs ($n files) byte-identical with mapping across segments and '$other'"
     else bad "outputs differ between mapping across segments and '$other':$diffs"; fi
