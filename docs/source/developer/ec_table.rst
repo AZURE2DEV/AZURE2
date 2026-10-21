@@ -114,7 +114,27 @@ Cost
 13N test model with its target integration (369,696 integrals): 1400 node
 integrals and 11 s for the whole run on two threads, against 177 s with ``--no-ec-table``
 (the same total :math:`\chi^2`, 336,454, and every segment to the printed digits).
-The 12C(α,γ) measurements are in the fit archive's
+
+:sup:`12`\ C(α,γ) model (151 segments, 4 threads; totals of :math:`\chi^2` identical
+to every printed digit, the worst segment :math:`4\times 10^{-5}` relative, the
+old integrals' scatter):
+
+=========================================  ===================  =====
+run                                        ``--no-ec-table``    table
+=========================================  ===================  =====
+12.7 keV resolution on the capture data    243 s                66 s
+target integration                         78 s                 41 s
+reaction rate (2418 energies)              28 s                 11 s
+plain calculation, cold start              15 s                 25 s
+=========================================  ===================  =====
+
+The last line is the trade-off: 13,250 of that run's 18,689 integrals belong to
+channels closed at the data energies (:math:`E_\mathrm{out} \le 0`), which are
+computed directly in both routes, and with few points per term the table's
+nodes, converged to :math:`10^{-10}`, cost more than the direct integrals they
+replace.  A fit reads ``intEC.dat`` back either way.  Shifted segments equal
+the moved data to every printed digit, where the interpolation was off by up to
+15 %.  Details: the fit archive's
 ``12C+a_onefile/10-20-26_EC_table_timing/readme``.
 
 Tests

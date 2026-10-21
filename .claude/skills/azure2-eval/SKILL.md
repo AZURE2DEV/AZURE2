@@ -2149,6 +2149,18 @@ complete:
   agree. Grid re-placement (stage 3) is described under the save/reopen notes above
   (`--no-grid-replacement`). And `--gsl-coul` is wrong by up to 3-6 % in P and S for
   0.1 <= eta < 10, 1 <= rho < 10 (Michel agrees with mpmath to 1e-9): do not use it.
+- 2026-10-21 -- EXTERNAL-CAPTURE ENERGY TABLE, ON BY DEFAULT (`--no-ec-table`, pyazr `use_ec_table=False`;
+  design `docs/source/developer/ec_table.rst`; 12C+a_onefile/10-20-26_EC_table_timing). Each capture term's
+  radial integral is tabulated on demand in ln(E_out), 50 nodes/decade, nodes converged to 1e-10 (8-point
+  Lagrange after dividing out sqrt(P) or the hard-sphere phase); E_out <= 0 terms are computed directly.
+  `AZURE2_EC_TABLE_CHECK=1` compares every tabulated integral with a converged direct one (12C: 5.5e-8);
+  `AZURE2_EC_TABLE_NODES=N` changes the density. The run log prints "External capture table: ...".
+  12C(a,g): resolution folding 243 -> 66 s, target integration 78 -> 41 s, rate 28 -> 11 s, chi2 the same
+  to the printed digits; a plain COLD start 15 -> 25 s (few points per term; intEC.dat reuse unaffected).
+  SHIFTED CAPTURE SEGMENTS are now evaluated at the shifted energies (= data moved by the shift, exactly).
+  OLDER BUILDS interpolated the EC amplitudes linearly between the segment's own points and held them FLAT
+  beyond its ends: 0.4-15 % errors on 12C cascades, a factor 57 at the low end of the 13N LUNA data at
+  -30 keV -- fitted energy shifts of capture segments from older builds are biased; refit them.
 - 2026-09-13 -- pyazr and `output/intEC.dat`: a session that RELOADS an existing cache for the
   12C+alpha truncated model returns a wrong chi2 (120,593 instead of 113,512, sometimes ~1e26)
   while the CLI reloading the same cache is exact; confirmed with the pre-fix module too, so it is
