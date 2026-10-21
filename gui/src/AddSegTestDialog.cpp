@@ -6,6 +6,7 @@
 #include "DialogScrollArea.h"
 #include "PairsModel.h"
 #include <QHBoxLayout>
+#include <QStandardItemModel>
 
 
 AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
@@ -17,6 +18,9 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   exitPairCombo = new PairKeyCombo(PairKeyCombo::Exit);
   // The exit list reads as reactions with the chosen entrance pair.
   connect(entrancePairCombo, SIGNAL(keyChanged(int)), exitPairCombo, SLOT(setEntranceKey(int)));
+  // Total capture (isDiff 4) is the last exit item when the project has a gamma pair.
+  exitPairCombo->setTotalCaptureOffered(true);
+  connect(exitPairCombo, SIGNAL(keyChanged(int)), this, SLOT(exitPairChanged(int)));
   lowEnergyText = new QLineEdit;
   highEnergyText = new QLineEdit;
   energyStepText = new QLineEdit;
@@ -29,18 +33,26 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   angleStepText = new QLineEdit;
   angleStepText->setText("0");
   angleStepText->setEnabled(false);
+  // The observable. Each item carries its base isDiff code as item data, and items are only ever looked up
+  // by that code (findData), never by position. The frame of a differential cross section (Lab 1, C.M. 5)
+  // is a separate drop-down, and total capture (4) is an item of the exit-pair list.
   dataTypeCombo = new QComboBox;
-  dataTypeCombo->addItem(tr("Angle Integrated"));
-  dataTypeCombo->addItem(tr("Differential"));
-  dataTypeCombo->addItem(tr("Phase Shift"));
-  dataTypeCombo->addItem(tr("Angular Distribution Coefficients"));
-  dataTypeCombo->addItem(tr("Angle Integrated Total Capture"));
-  dataTypeCombo->addItem(tr("C.M. Differential"));
-  dataTypeCombo->addItem(tr("Analyzing Power"));
-  // Codes 0-5 happen to equal their position; the analyzing power is 7.
-  for (int i = 0; i < dataTypeCombo->count(); i++) dataTypeCombo->setItemData(i, i);
-  dataTypeCombo->setItemData(dataTypeCombo->count() - 1, 7);
+  dataTypeCombo->setObjectName("dataTypeCombo");
+  dataTypeCombo->addItem(tr("Angle Integrated"), 0);
+  dataTypeCombo->addItem(tr("Differential"), 1);
+  dataTypeCombo->addItem(tr("Phase Shift"), 2);
+  dataTypeCombo->addItem(tr("Angular Distribution Coefficients"), 3);
+  dataTypeCombo->addItem(tr("Analyzing Power"), 7);
   connect(dataTypeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(dataTypeChanged(int)));
+  frameLabel = new QLabel(tr("Frame:"));
+  frameLabel->setVisible(false);
+  frameCombo = new QComboBox;
+  frameCombo->setObjectName("frameCombo");
+  frameCombo->addItem(tr("Lab"), 1);
+  frameCombo->addItem(tr("C.M."), 5);
+  frameCombo->setToolTip(tr("Frame of the calculated angles and cross sections"));
+  frameCombo->setVisible(false);
+  connect(frameCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(dataTypeChanged(int)));
   QRegExp spinRX("^\\d{0,2}(\\.[05]{0,1})?$");
   QValidator *spinValidator = new QRegExpValidator(spinRX, this);
   phaseJValueText = new QLineEdit;
@@ -116,9 +128,6 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   pairLayout->addWidget(entrancePairCombo, 0, 1);
   pairLayout->addWidget(new QLabel(tr("Exit Pair:")), 0, 2, Qt::AlignRight);
   pairLayout->addWidget(exitPairCombo, 0, 3);
-  totalCaptureLabel = new QLabel(tr("Total Capture"));
-  totalCaptureLabel->setVisible(false);
-  pairLayout->addWidget(totalCaptureLabel, 0, 4);
   valueLayout->addLayout(pairLayout, 0, 0, 1, 2);
   QGroupBox *energyBox = new QGroupBox(tr("Lab Energy [MeV]"));
   QGridLayout *energyLayout = new QGridLayout;
@@ -130,7 +139,7 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   energyLayout->addWidget(energyStepText, 2, 1);
   energyBox->setLayout(energyLayout);
   valueLayout->addWidget(energyBox, 1, 0);
-  QGroupBox *angleBox = new QGroupBox(tr("Lab Angle [degrees]"));
+  angleBox = new QGroupBox(tr("Lab Angle [degrees]"));
   QGridLayout *angleLayout = new QGridLayout;
   angleLayout->addWidget(new QLabel(tr("Low Angle:")), 0, 0, Qt::AlignRight);
   angleLayout->addWidget(lowAngleText, 0, 1);
@@ -154,6 +163,8 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   lowerLayout->setColumnStretch(2, 1);
 
   QHBoxLayout *phaseLayout = new QHBoxLayout;
+  phaseLayout->addWidget(frameLabel);
+  phaseLayout->addWidget(frameCombo);
   phaseJValueLabel = new QLabel(tr("J:"));
   phaseJValueLabel->setVisible(false);
   phaseLayout->addWidget(phaseJValueLabel);
@@ -229,65 +240,78 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   connect(cancelButton, SIGNAL(clicked()), this, SLOT(reject()));
 
   setWindowTitle(tr("Add a Segment Without Data"));
+  dataTypeChanged(0);
+}
+
+int AddSegTestDialog::observableCode() const {
+  const QVariant code = dataTypeCombo->currentData();
+  return code.isValid() ? code.toInt() : 0;
 }
 
 int AddSegTestDialog::dataTypeCode() const {
-  const QVariant code = dataTypeCombo->currentData();
-  return code.isValid() ? code.toInt() : dataTypeCombo->currentIndex();
+  const int observable = observableCode();
+  if (observable == 0 && exitPairCombo->key() == PairKeyCombo::TotalCapture) return 4;
+  if (observable == 1) return frameCombo->currentData().toInt();
+  return observable;
 }
 
 void AddSegTestDialog::setDataTypeCode(int code) {
-  const int i = dataTypeCombo->findData(code);
-  dataTypeCombo->setCurrentIndex(i >= 0 ? i : code);
+  int observable = code;
+  if (code == 4) observable = 0;
+  if (code == 5) observable = 1;
+  if (code == 4)
+    exitPairCombo->setKey(PairKeyCombo::TotalCapture);
+  else if (exitPairCombo->key() == PairKeyCombo::TotalCapture)
+    exitPairCombo->setKey(0);  // only a total-capture line has no exit pair
+  frameCombo->setCurrentIndex(frameCombo->findData(code == 5 ? 5 : 1));
+  int i = dataTypeCombo->findData(observable);
+  if (i < 0) {
+    // a code this dialog does not offer: keep it selectable so an edit does not change it
+    dataTypeCombo->addItem(tr("Observable %1").arg(code), code);
+    i = dataTypeCombo->count() - 1;
+  }
+  dataTypeCombo->setCurrentIndex(i);
+  dataTypeChanged(i);
 }
 
-void AddSegTestDialog::dataTypeChanged(int index) {
+void AddSegTestDialog::exitPairChanged(int key) {
+  // Total capture is an angle-integrated observable only.
+  if (key == PairKeyCombo::TotalCapture && observableCode() != 0) dataTypeCombo->setCurrentIndex(dataTypeCombo->findData(0));
+  dataTypeChanged(dataTypeCombo->currentIndex());
+}
+
+void AddSegTestDialog::dataTypeChanged(int) {
+  const int code = dataTypeCode();
+  const int observable = observableCode();
+  const bool phase = (code == 2), angDist = (code == 3);
   // Phase shifts and angular-distribution coefficients have no THM form (the
   // engine reads their extra fields only for an isDiff of exactly 2 or 3).
-  thmCheck->setEnabled(index != 2 && index != 3);
-  if (index == 2 || index == 3) thmCheck->setChecked(false);
-  if (index == 2) {
-    angDistLabel->setVisible(false);
-    angDistSpin->setVisible(false);
-    phaseJValueLabel->setVisible(true);
-    phaseLValueLabel->setVisible(true);
-    phaseJValueText->setVisible(true);
-    phaseLValueText->setVisible(true);
-  } else if (index == 3) {
-    phaseJValueLabel->setVisible(false);
-    phaseLValueLabel->setVisible(false);
-    phaseJValueText->setVisible(false);
-    phaseLValueText->setVisible(false);
-    angDistLabel->setVisible(true);
-    angDistSpin->setVisible(true);
-  } else {
-    phaseJValueLabel->setVisible(false);
-    phaseLValueLabel->setVisible(false);
-    phaseJValueText->setVisible(false);
-    phaseLValueText->setVisible(false);
-    angDistLabel->setVisible(false);
-    angDistSpin->setVisible(false);
-  }
-  if (index == 1) {
-    lowAngleText->setEnabled(true);
-    highAngleText->setEnabled(true);
-    angleStepText->setEnabled(true);
-  } else {
-    lowAngleText->setEnabled(false);
-    highAngleText->setEnabled(false);
-    angleStepText->setEnabled(false);
-  }
-  if (index == 4) {
-    exitPairCombo->setVisible(false);
-    totalCaptureLabel->setVisible(true);
-  } else {
-    totalCaptureLabel->setVisible(false);
-    exitPairCombo->setVisible(true);
-  }
-  if (index == 5 || index == 6) {  // C.M. differential, or the analyzing power
-    lowAngleText->setEnabled(true);
-    highAngleText->setEnabled(true);
-    angleStepText->setEnabled(true);
+  thmCheck->setEnabled(!phase && !angDist);
+  if (phase || angDist) thmCheck->setChecked(false);
+  phaseJValueLabel->setVisible(phase);
+  phaseLValueLabel->setVisible(phase);
+  phaseJValueText->setVisible(phase);
+  phaseLValueText->setVisible(phase);
+  angDistLabel->setVisible(angDist);
+  angDistSpin->setVisible(angDist);
+  // lab or C.M. differential, or A_y
+  const bool angles = (code == 1 || code == 5 || code == 7);
+  lowAngleText->setEnabled(angles);
+  highAngleText->setEnabled(angles);
+  angleStepText->setEnabled(angles);
+  // C.M. differential and A_y take centre-of-mass angles
+  angleBox->setTitle((code == 5 || code == 7) ? tr("C.M. Angle [degrees]") : tr("Lab Angle [degrees]"));
+  frameLabel->setVisible(observable == 1);
+  frameCombo->setVisible(observable == 1);
+  // With "Total capture" as the exit pair only the angle-integrated observable is offered.
+  const bool totalCapture = (exitPairCombo->key() == PairKeyCombo::TotalCapture);
+  if (QStandardItemModel *items = qobject_cast<QStandardItemModel *>(dataTypeCombo->model())) {
+    for (int i = 0; i < items->rowCount(); i++) {
+      QStandardItem *item = items->item(i);
+      const bool allowed = !totalCapture || item->data(Qt::UserRole).toInt() == 0;
+      item->setEnabled(allowed);
+      item->setToolTip(allowed ? QString() : tr("Total capture is angle integrated: choose a single exit pair for this observable"));
+    }
   }
 
   // Update fixed angle visibility when data type changes
@@ -312,7 +336,8 @@ void AddSegTestDialog::advancedModeChanged(int state) {
 void AddSegTestDialog::operationTypeChanged(int index) {
   // Show fixed angle option only when Ratio is selected AND segment is differential
   bool isRatio = (index == 1);
-  bool isDifferential = (dataTypeCombo->currentIndex() == 1) || (dataTypeCombo->currentIndex() == 5);  // Differential or CM Differential
+  const int code = dataTypeCode();
+  bool isDifferential = (code == 1) || (code == 5);  // Differential, lab or C.M.
 
   if (isRatio && isDifferential) {
     useFixedAngleCheck->setVisible(true);
@@ -434,6 +459,7 @@ void AddSegTestDialog::setPairsModel(PairsModel *model) {
   if (exitPairCombo->key() == 0) exitPairCombo->setKey(1);
   if (componentEntranceCombo->key() == 0) componentEntranceCombo->setKey(1);
   if (componentExitCombo->key() == 0) componentExitCombo->setKey(1);
+  dataTypeChanged(dataTypeCombo->currentIndex());
 }
 
 void AddSegTestDialog::showEvent(QShowEvent *event) {

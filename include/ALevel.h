@@ -2,6 +2,7 @@
 #define ALEVEL_H
 
 #include "Constants.h"
+#include <cstdint>
 
 #include <limits>
 
@@ -128,6 +129,13 @@ class ALevel {
   /// computed, so CNuc::CalcShiftFunctions can skip a level that has not
   /// moved; NaN means "never".
   bool ShiftFunctionsValidAt(double) const;
+  /*!
+   * A number that changes whenever the fitted energy, a fitted width, a shift
+   * function or the Park overlap of the level is set, unique over all levels
+   * of the process: equal stamps on one object mean those values are
+   * unchanged (ChannelSpace::Update keys its cache on it).
+   */
+  std::uint64_t Stamp() const { return stamp_; }
   void SetShiftFunctionsEnergy(double);
   void InvalidateShiftFunctions();
   /// Mark the level as an external-capture final state of a pair, with its
@@ -135,6 +143,8 @@ class ALevel {
   void SetECParams(int, unsigned char);
 
  private:
+  static std::uint64_t NewStamp();
+  std::uint64_t stamp_ = NewStamp();
   bool isinrmatrix_;
   bool energyfixed_;
   bool isECLevel_;

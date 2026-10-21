@@ -311,6 +311,12 @@ def merge_projects(models, out, abundances, sum_sigma=0.0, shared=(), natural=Tr
             elif s and s not in potential_lines:
                 warnings.append(f"member {mi}: potential setting {s!r} ignored (member 0's defaults apply)")
 
+    # 5b. measured scattering lengths: every member's lines, pair keys offset
+    scatlen_lines = []
+    for mi, m in enumerate(members):
+        for e in m.scattering_lengths:
+            scatlen_lines.append(e._replace(pair=pair_map[mi][e.pair]).line())
+
     # 6. assemble: member 0's config (output dir to out's), merged levels, abundances, segments, targetInt
     base = members[0]
     text = base._prefix
@@ -339,7 +345,9 @@ def merge_projects(models, out, abundances, sum_sigma=0.0, shared=(), natural=Tr
     last_run = block_lines(base._suffix, "lastRun")
     suffix = ["</levels>", "<abundances>"] + abund_lines + ["</abundances>", "<segmentsData>"] + \
              [ln for ln in data_lines if ln is not None] + ["</segmentsData>", "<segmentsTest>"] + test_lines + \
-             ["</segmentsTest>", "<targetInt>"] + target_lines + ["</targetInt>",
+             ["</segmentsTest>"] + \
+             (["<scatteringLengths>"] + scatlen_lines + ["</scatteringLengths>"] if scatlen_lines else []) + \
+             ["<targetInt>"] + target_lines + ["</targetInt>",
              "<parameterSettings>", "</parameterSettings>"] + \
              (["<lastRun>"] + last_run + ["</lastRun>"] if last_run else [])
     merged._suffix = "\n".join(suffix) + "\n"

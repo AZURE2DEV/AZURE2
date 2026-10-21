@@ -48,6 +48,37 @@ class TargetEffect {
   /// keyword), as the constant sigma always is? Without the keyword an expression is the pre-2026-10
   /// convention: evaluated at the c.m. energy, its value the c.m. width.
   bool IsSigmaLab() const { return sigmaLab_; }
+  /*!
+   * Electron screening (`screening Ue vary sigma`, Ue and sigma in eV): every point and sub-point of the
+   * effect's segments gets its bare cross section times exp(pi eta U_e / E).  U_e is a fit parameter
+   * (EData::FillMnParams) when vary is 1, with a Gaussian prior of width sigma about the value read when
+   * sigma > 0.  The line need not carry convolution or target integration.
+   */
+  bool HasScreening() const { return hasScreening_; }
+  /*!
+   * Its place among the active <targetInt> lines (1-based; 0 until read).  A
+   * line listing several segments gives each segment its own copy of the
+   * effect (EData::ReadTargetEffectsFile), so effect numbers and lines differ;
+   * a screening parameter belongs to the line, shared by its copies.
+   */
+  int GetLineNumber() const { return lineNumber_; }
+  void SetLineNumber(int n) { lineNumber_ = n; }
+  /// A `screening` keyword without its three numbers (or a negative sigma).
+  bool HasScreeningError() const { return screeningError_; }
+  /// Current U_e in eV (the value read, or the fit parameter's).
+  double GetScreeningUe() const { return screeningUe_; }
+  void SetScreeningUe(double ueEv) { screeningUe_ = ueEv; }
+  /// U_e as read from the line, the centre of the prior, eV.
+  double GetScreeningNominal() const { return screeningNominal_; }
+  bool IsScreeningVaried() const { return screeningVary_; }
+  /// Prior width in eV, 0 = no prior.
+  double GetScreeningSigma() const { return screeningSigma_; }
+  /// ((U_e - nominal) / sigma)^2, or 0 without a prior.
+  double ScreeningPenalty() const {
+    if (!hasScreening_ || screeningSigma_ <= 0.0) return 0.0;
+    const double r = (screeningUe_ - screeningNominal_) / screeningSigma_;
+    return r * r;
+  }
   /// The c.m. beam-spread sigma at c.m. energy \p eCM: the one place every kernel takes its width from.
   /// A constant sigma was converted lab -> c.m. by ConvertSigmaToCM; a lab expression is evaluated at
   /// eCM / F and its value scaled by F, the same factor; a legacy expression is used as it stands.
@@ -190,6 +221,13 @@ class TargetEffect {
   vector_r convCoefficients_;
   Equation convolutionEq_;
   bool sigmaLab_ = false;        ///< the expression is lab in, lab out (`sigmalab` keyword)
+  bool hasScreening_ = false;     ///< `screening` keyword present
+  bool screeningError_ = false;   ///< malformed `screening` block
+  int lineNumber_ = 0;
+  double screeningUe_ = 0.0;      ///< eV
+  double screeningNominal_ = 0.0; ///< eV, as read
+  bool screeningVary_ = false;
+  double screeningSigma_ = 0.0;   ///< eV, prior width (0 = none)
   double cmFactor_ = 1.0;        ///< c.m. / lab energy of the entrance pair, set by ConvertSigmaToCM
 
   // ERYA straggling integration variables

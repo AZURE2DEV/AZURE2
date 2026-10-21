@@ -450,6 +450,62 @@ the flight path, the burst and channel widths and the centring choice.
 udr_burst=, udr_channel=, udr_centred=)`` writes the same line from a
 script.
 
+Electron Screening
+^^^^^^^^^^^^^^^^^^
+
+At the low energies of direct measurements of charged-particle reactions the
+atomic electrons of the target screen the Coulomb barrier, and the measured
+cross section exceeds the bare (nuclear) one that the R-matrix describes. In
+the usual description (Assenbaum, Langanke and Rolfs, *Z. Phys. A* **327**,
+461 (1987)) the screened cross section is the bare one at an energy raised by
+the screening potential :math:`U_e`, which for :math:`U_e \ll E` is
+
+.. math::
+
+   \sigma_{\mathrm{s}}(E) = f(E)\,\sigma_{\mathrm{b}}(E), \qquad
+   f(E) = \exp\!\left(\frac{\pi\eta\,U_e}{E}\right),
+
+with :math:`\eta` the Sommerfeld parameter of the entrance pair and
+:math:`E` the centre-of-mass energy. The effect grows quickly towards low
+energy: for :sup:`13`\ C(:math:`\alpha`,n) at :math:`E = 0.25` MeV it is
+about 8 % for :math:`U_e = 0.94` keV.
+
+Check **Include Electron Screening** to multiply the bare cross section of the
+listed segments by :math:`f(E)`. The factor is applied at every point and at
+every sub-point of the line's other effects, so it sits inside the beam-spread
+convolution and the target integration: a thick-target yield integrates the
+screened cross section. It acts on cross sections only; a phase shift, an
+analyzing power and a ratio segment of the same entrance pair are unchanged,
+and a neutral entrance pair has :math:`f = 1`. A line may carry screening and
+nothing else.
+
+- **U_e [eV]** is the screening potential. **Adiabatic Limit** fills in the
+  usual upper estimate for neutral atoms, the binding the united atom gains:
+  :math:`U_{\mathrm{ad}} = B(Z_1+Z_2) - B(Z_1) - B(Z_2)`, with :math:`B` the
+  total electron binding energy of the neutral atom (the sum of its ionization
+  energies, NIST). It is 934.7 eV for :math:`\alpha` + :sup:`13`\ C and
+  442.4 eV for p + :sup:`12`\ C. Switching screening on fills it in when the
+  listed segments share one charged entrance pair; any value can be typed over
+  it. Measured values of :math:`U_e` are often larger than the adiabatic limit.
+- **Fit U_e** makes :math:`U_e` a fit parameter, ``screening_<n>`` (eV), with
+  :math:`n` the line's place among the *active* experimental-effect lines. It
+  is fitted by every fitter (MIGRAD, ``--use-gradient``, ``--use-lm``,
+  ``--use-gsl-lm``) and sampled by MCMC; its derivative is analytic.
+- **Prior Sigma [eV]** adds :math:`((U_e - U_e^{0})/\sigma)^2` to
+  :math:`\chi^2`, :math:`U_e^{0}` being the value entered; 0 means no prior.
+  It is reported as ``Total-Screening-Chi-Squared`` in ``chiSquared.out``.
+
+The fitted :math:`U_e` is written to ``param.sav`` with the other parameters
+and read back from it; the value on the ``<targetInt>`` line stays the prior's
+centre. ``pyazr.AzrModel.add_target_effect(..., screening=(Ue, vary, sigma))``
+and ``AzrModel.set_screening`` write the block from a script.
+
+.. note::
+
+   Like every experimental effect, the line also acts on the extrapolation
+   (``<segmentsTest>``) segments with the same keys. To extrapolate the bare
+   cross section, deactivate the line in a copy of the project.
+
 Straggling
 ^^^^^^^^^^
 

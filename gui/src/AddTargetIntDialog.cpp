@@ -472,6 +472,36 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   udrBox->setLayout(udrLayout);
   udrBox->hide();
 
+  // Electron screening: the bare cross section of the listed segments times exp(pi eta U_e / E), with U_e
+  // optionally a fit parameter (screening_<n>) and a Gaussian prior about the value given.
+  isScreeningCheck = new QCheckBox(tr("Include Electron Screening"));
+  isScreeningCheck->setChecked(false);
+  isScreeningCheck->setToolTip(tr("Multiply the bare cross section of these segments, at every point and every "
+                                  "integration sub-point, by exp(pi eta U_e / E) (Assenbaum et al. 1987)."));
+  connect(isScreeningCheck, SIGNAL(toggled(bool)), this, SLOT(screeningCheckChanged(bool)));
+  screeningUeText = new QLineEdit;
+  screeningUeText->setText("0");
+  screeningUeText->setToolTip(tr("Screening potential U_e in eV."));
+  adiabaticButton = new QPushButton(tr("Adiabatic Limit"));
+  adiabaticButton->setToolTip(tr("U_e = B(Z1+Z2) - B(Z1) - B(Z2) from the total electron binding energies of the "
+                                 "neutral atoms (NIST), for the entrance pair of the listed segments."));
+  connect(adiabaticButton, SIGNAL(clicked()), this, SLOT(useAdiabaticScreening()));
+  screeningVaryCheck = new QCheckBox(tr("Fit U_e"));
+  screeningVaryCheck->setToolTip(tr("Make U_e a fit parameter (screening_<n> in the Fitting tab)."));
+  screeningSigmaText = new QLineEdit;
+  screeningSigmaText->setText("0");
+  screeningSigmaText->setToolTip(tr("Width of a Gaussian prior on U_e about the value above, in eV; 0 = no prior."));
+  screeningBox = new QGroupBox(tr("Electron Screening"));
+  QGridLayout *screeningLayout = new QGridLayout;
+  screeningLayout->addWidget(new QLabel(tr("U_e [eV]:")), 0, 0, Qt::AlignRight);
+  screeningLayout->addWidget(screeningUeText, 0, 1);
+  screeningLayout->addWidget(adiabaticButton, 0, 2);
+  screeningLayout->addWidget(screeningVaryCheck, 1, 0, 1, 2);
+  screeningLayout->addWidget(new QLabel(tr("Prior Sigma [eV]:")), 1, 2, Qt::AlignRight);
+  screeningLayout->addWidget(screeningSigmaText, 1, 3);
+  screeningBox->setLayout(screeningLayout);
+  screeningBox->hide();
+
   QHBoxLayout *buttonBox = new QHBoxLayout;
   buttonBox->addWidget(cancelButton);
   buttonBox->addWidget(okButton);
@@ -489,6 +519,8 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   mainLayout->addWidget(beamProfileBox);
   mainLayout->addWidget(isUdrCheck);
   mainLayout->addWidget(udrBox);
+  mainLayout->addWidget(isScreeningCheck);
+  mainLayout->addWidget(screeningBox);
   mainLayout->addLayout(buttonBox);
 
   setLayout(mainLayout);
@@ -803,6 +835,28 @@ void AddTargetIntDialog::udrCheckChanged(bool checked) {
     udrBox->hide();
     if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked() && !isBeamProfileCheck->isChecked())
       numPointsSpin->setEnabled(false);
+  }
+}
+
+void AddTargetIntDialog::setAdiabaticProvider(std::function<double(const QString &)> provider) {
+  adiabaticProvider_ = provider;
+}
+
+void AddTargetIntDialog::screeningCheckChanged(bool checked) {
+  screeningBox->setVisible(checked);
+  // A new screening entry starts at the adiabatic limit when the segments give one.
+  if (checked && screeningUeText->text().trimmed().toDouble() == 0.0) useAdiabaticScreening();
+  this->adjustSize();
+}
+
+void AddTargetIntDialog::useAdiabaticScreening() {
+  const double ue = adiabaticProvider_ ? adiabaticProvider_(segmentsListText->text()) : -1.0;
+  if (ue > 0.0) {
+    screeningUeText->setText(QString::number(ue, 'f', 1));
+    adiabaticButton->setToolTip(tr("Adiabatic limit for these segments: %1 eV").arg(QString::number(ue, 'f', 1)));
+  } else {
+    adiabaticButton->setToolTip(tr("No adiabatic limit for these segments: list segments whose entrance pair is "
+                                   "a charged particle on a charged target (the same pair for all of them)."));
   }
 }
 

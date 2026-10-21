@@ -1,4 +1,5 @@
 #include "Decay.h"
+#include <algorithm>
 
 /*!
  * The Decay object is created with a reference to a particle pair number, which represents
@@ -160,4 +161,46 @@ bool Decay::IsCaptureAyBuilt() const {
 
 void Decay::SetCaptureAyBuilt() {
   captureAyBuilt_ = true;
+}
+
+/*!
+ * Flattens the interferences of the k,L groups.  An interference type other
+ * than two of 'R'/'E' is stored with r1 = r2 = 0, which the users treat as
+ * unknown.
+ */
+void Decay::BuildFlatInterferences() {
+  flat_.clear();
+  flatPathways_.clear();
+  flatOrders_ = 0;
+  auto position = [this](int k, int m, char rad) {
+    for (size_t i = 0; i < flatPathways_.size(); i++)
+      if (flatPathways_[i].k == k && flatPathways_[i].m == m && flatPathways_[i].rad == rad) return (int)i;
+    flatPathways_.push_back(InterferencePathway{k, m, rad});
+    return (int)flatPathways_.size() - 1;
+  };
+  for (KLGroup &kl : klgroups_) {
+    const int k = kl.GetK();
+    KGroup *kg = this->GetKGroup(k);
+    const bool spEqual = kg && kg->GetSp() == kg->GetSp2();
+    for (int i = 1; i <= kl.NumInterferences(); i++) {
+      Interference *itf = kl.GetInterference(i);
+      const std::string &t = itf->GetInterferenceType();
+      FlatInterference f;
+      f.k = k;
+      f.m1 = itf->GetM1();
+      f.m2 = itf->GetM2();
+      f.l = kl.GetLOrder();
+      f.r1 = f.r2 = 0;
+      if (t.size() == 2 && (t[0] == 'R' || t[0] == 'E') && (t[1] == 'R' || t[1] == 'E')) {
+        f.r1 = t[0];
+        f.r2 = t[1];
+      }
+      f.z = itf->GetZ1Z2();
+      f.spEqual = spEqual;
+      f.s1 = f.r1 ? position(k, f.m1, f.r1) : -1;
+      f.s2 = f.r2 ? position(k, f.m2, f.r2) : -1;
+      flatOrders_ = std::max(flatOrders_, f.l + 1);
+      flat_.push_back(f);
+    }
+  }
 }

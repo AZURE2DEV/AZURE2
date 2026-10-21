@@ -7,7 +7,8 @@
 Q_DECLARE_METATYPE(QList<double>);
 
 struct TargetIntData {
-  static const int SIZE = 35;  // column 33: derived, display-only summary of the effect types; 34: sigmaLab
+  static const int SIZE = 39;  // column 33: derived, display-only summary of the effect types; 34: sigmaLab;
+                               // 35-38: electron screening (on, U_e eV, vary, prior sigma eV)
   int isActive;
   QString segmentsList;
   int numPoints;
@@ -51,6 +52,13 @@ struct TargetIntData {
   // A sigma(E) expression (isConvCoefficients) is lab in, lab out when this is set (the `sigmalab`
   // keyword), as the constant sigma is; false is the pre-2026-10 convention, c.m. in, c.m. out.
   bool sigmaLab = false;
+  // Electron screening (the `screening Ue vary sigma` block): the bare cross section of the listed
+  // segments times exp(pi eta U_e / E); U_e a fit parameter when screeningVary, with a Gaussian prior of
+  // width screeningSigma (eV, 0 = none) about screeningUe.
+  bool isScreening = false;
+  double screeningUe = 0.;     // eV
+  bool screeningVary = false;
+  double screeningSigma = 0.;  // eV
 };
 
 /*!

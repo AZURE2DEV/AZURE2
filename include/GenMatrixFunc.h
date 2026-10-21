@@ -57,8 +57,11 @@ class GenMatrixFunc {
    *This virtual function in implemented in the child class.
    */
   virtual void CalculateTMatrix(EPoint *) = 0;
-  /// Cross section at a point from the T-matrix the subclass built.
+  /// The observable of the point from the T-matrix the subclass built, times the electron-screening factor where the
+  /// point carries one (CalculateBareCrossSection, then EPoint::ScreeningFactor).
   void CalculateCrossSection(EPoint *);
+  /// The observable without electron screening.
+  void CalculateBareCrossSection(EPoint *);
 
   /*!
    * Spin-summed |M|^2 from the channel-spin amplitude matrix, and the vector
@@ -150,13 +153,23 @@ class GenMatrixFunc {
   void InvalidateTMatrixProducts() { rt_decay_ = nullptr; }
 
  private:
-  /// The interference products Z1Z2 T1 conj(T2) of the differential sum (the
-  /// entrance = exit or capture case), in the order CalculateCrossSection adds
-  /// them, for the T-matrix held now: they do not depend on the angle, so the
-  /// points that share one T-matrix (EData::MapData) compute them once.
+  /// The interference products Z1Z2 T1 conj(T2) of the differential sum,
+  /// summed by Legendre order (rt_wl_[L]), for the T-matrix held now: they do
+  /// not depend on the angle, so the points that share one T-matrix
+  /// (EData::MapData) compute them once, and each point's sum is one term per
+  /// order.  Entrance = exit pair, capture, and particle exits other than
+  /// UPOS (whose sum keeps only the k-groups of equal channel spins).
   const Decay *rt_decay_ = nullptr;
-  std::vector<complex> rt_w_;
-  std::vector<int> rt_l_;
+  std::vector<complex> rt_wl_;
+  /// The Coulomb-nuclear interference per (channel spin, l), BuildCoulombInterference.
+  struct CoulombTerm {
+    double s;
+    int l;
+    complex c;
+  };
+  std::vector<CoulombTerm> rt_it_;
+  bool rt_it_built_ = false;
+  void BuildCoulombInterference(Decay *theDecay, bool elastic);
   std::vector<TempTMatrix> temp_t_matrices_;
   std::vector<TempTMatrix> temp_t_matrices_E1_;
   std::vector<TempTMatrix> temp_t_matrices_E2_;

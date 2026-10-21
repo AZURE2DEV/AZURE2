@@ -494,10 +494,16 @@ The host is calculated first by every loop over the whole data set, and
 calculates the observables of the points mapped onto it
 (``EPoint::Calculate``); ``AZURECalc::PrecalculatePoints`` hands out hosts
 only.  The angle-independent products :math:`Z_1Z_2\,T_1T_2^*` of the
-differential sum are formed once per T-matrix
-(``GenMatrixFunc::CalculateCrossSection``) and reused by every point that
-shares it, with the same arithmetic in the same order.  The results are
-byte-identical with and without mapping.
+differential sum are formed once per T-matrix and summed by Legendre order
+(``GenMatrixFunc::CalculateCrossSection``, from the flat interference table of
+the decay, ``Decay::FlatInterferences``), as are the Coulomb-nuclear
+interference terms of elastic scattering per channel spin and :math:`l`
+(``BuildCoulombInterference``); every point that shares the T-matrix then
+needs one term per order.  Particle exits other than UPOS take the same path.
+The results are byte-identical with and without mapping.  The adjoint does the
+same: the T-matrix cotangents of a differential point are, per pathway, a sum
+over orders of coefficients taken once per T-matrix
+(``AMatrixFunc::TBarProducts``).
 
 THM segments
 ^^^^^^^^^^^^
@@ -536,12 +542,44 @@ from them, and back-propagates:
   each member is cheaper (few members, many channel pairs) or the decay has
   external capture.
 
+Electron screening (a ``screening`` block on a ``<targetInt>`` line) is a
+factor :math:`f = e^{k U_e}` on each point's own observable, applied after the
+bare one is formed from the shared T-matrix (``GenMatrixFunc::CalculateCrossSection``),
+so points with different screening may share a calculation.  In the adjoint
+``PointTBar`` scales the point's cotangent by :math:`f` and records
+:math:`\partial Y/\partial U_e`; ``TBarAdjoint`` adds it, and the
+bilinear-basis rows of ``GroupRows``, which do not back-propagate the
+member, add it to the member's row directly.
+
 The cotangent of the level matrix is a sum of rank-one terms,
 :math:`\bar M = -\sum_t \beta_t\, \overline{A g_c}\,\overline{A g_{c'}}^T`,
 formed from the solves :math:`A g_c` in :math:`O(n^2)` per term instead of the
 two :math:`O(n^3)` products :math:`A^H \bar A A^H` (kept for external capture),
 and its structural derivatives (standard, Brune and Park level matrices) are
 a few row-times-matrix products (``AMatrixFunc::LevelMatrixAdjoint``).
+On the channel-space route (:doc:`level_matrix`) the adjoint of a bilinear form
+is taken in the formal representation of the level matrix instead, in
+:math:`O(n c)` per term with no :math:`n \times n` matrix
+(``AMatrixFunc::FormalBilinearAdjoint``); for the Brune and Park matrices the
+scalar gradient sums the formal cotangents over all points and resolves them
+into the level parameters once per pass (``ResolveFormalCotangents``), while
+the Jacobian rows keep ``LevelMatrixAdjoint`` with the solves :math:`A g_c` of
+the Woodbury form.  Where the scalar gradient does take the level-matrix
+adjoint (the level route, the pencil route), it defers it too: the level
+matrix is :math:`K - EN - G\Lambda(E)G^T` with :math:`K, N` independent of the
+energy, so only :math:`\sum_E \mathrm{Re}\,\bar M(E)` and
+:math:`\sum_E E\,\mathrm{Re}\,\bar M(E)` are accumulated (``GradAccum::lmK``,
+``lmN``) and contracted with the structural derivatives of :math:`K, N` once
+per pass; the kernel term is differentiated at each energy from the rank-one
+terms of :math:`\bar M`, in :math:`O(n c)` each.  The rows (residual Jacobian,
+model gradients) need each point's derivative with respect to every free
+parameter, so they go the other way: a level parameter changes
+:math:`K - EN` by rank two in its level's row and column,
+:math:`dK = e_l k^T + k e_l^T`, :math:`dN = e_l q^T + q e_l^T` (``ChannelSpace::
+CurrentLevelDerivatives``, per parameter set and free mask), and with the
+solves :math:`u = A g` its derivative is :math:`O(n)` per free parameter
+(``AMatrixFunc::LevelAdjoint``, ``LevelBasis``; standard and Brune level
+matrices, Park keeps ``LevelMatrixAdjoint``).
 Points with components or sub-point target effects are still differentiated
 one by one (``GradOnePoint``), with the same back-propagation.  The gradient
 equals the point-by-point one to rounding (about :math:`10^{-14}` of its
@@ -550,7 +588,10 @@ largest component on such a project).
 On a 19-segment project of that kind (14 406 points, 694 free parameters, one
 thread) one evaluation went from 7.0 s to 2.2 s, one residual Jacobian (the
 gradient and G2 of ``--use-gradient``) from 51 s to 4.8 s, and 20 MIGRAD
-calls from 355 s to 68 s; peak memory went down slightly.
+calls from 355 s to 68 s; peak memory went down slightly.  Solving the level
+matrix in channel space (:doc:`level_matrix`), the sums by Legendre order and
+the gradient changes above then took them to 0.36 s, 1.4 s (1.0 s for the
+adjoint gradient) and 17.5 s (two threads: 0.21 s, 0.75 s and 11 s).
 
 Environment switches
 ^^^^^^^^^^^^^^^^^^^^
@@ -568,6 +609,9 @@ Environment switches
 ``AZURE_GRAD_DENSE=1``
    Back-propagate through the level matrix with the dense
    :math:`A^H \bar A A^H` products.
+``AZURE_LEVEL_SPACE=1``
+   Solve every J-group with the level matrix (fill and LU), not in channel
+   space (:doc:`level_matrix`).
 
 None of them changes a result beyond rounding; they exist to check that and
 to time the alternatives.

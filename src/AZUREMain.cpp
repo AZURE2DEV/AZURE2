@@ -1,5 +1,6 @@
 #include "AZURECalc.h"
 #include "AZUREMain.h"
+#include "ScatteringLength.h"
 #include "ParameterLabel.h"
 #include "AZUREParams.h"
 #include "Config.h"
@@ -686,6 +687,16 @@ int AZUREMain::operator()() {
       }
     }
     data()->WriteOutputFiles(configure(), false, bandPtr);
+    // s-wave scattering lengths of every particle pair at the parameters just written, and the
+    // measured ones of the <scatteringLengths> block.
+    try {
+      std::string report = ScatteringLength::Report(compound(), configure(), compound()->ScatteringLengthConstraints());
+      std::ofstream slOut((configure().outputdir + "scatteringLengths.out").c_str());
+      slOut << report;
+      configure().outStream << std::endl << report << std::endl;
+    } catch (const std::exception &e) {
+      configure().outStream << "Scattering lengths not calculated: " << e.what() << std::endl;
+    }
   } else {
     // Calculate Reaction Rate
     //  This uses the adaptive integration routines of GSL.  As the energy stepsize is

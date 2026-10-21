@@ -12,6 +12,31 @@
  * and serves as a container class for the KGroup and the KLGroup vectors and their subsequent reaction pathways.
  */
 
+/// One interference term of the differential cross section, flattened (Decay::FlatInterferences).
+struct FlatInterference {
+  int k;        ///< k-group (1-based)
+  int m1, m2;   ///< pathways (1-based)
+  int l;        ///< Legendre order
+  char r1, r2;  ///< 'R' internal, 'E' external capture pathway
+  double z;     ///< Z1Z2 coefficient
+  bool spEqual; ///< the k-group has equal entrance and exit channel spins
+  int s1, s2;   ///< positions of the two pathways in Decay::InterferencePathways
+};
+
+/// A pathway taking part in an interference (Decay::InterferencePathways).
+struct InterferencePathway {
+  int k, m;   ///< k-group and pathway (1-based)
+  char rad;   ///< 'R' internal, 'E' external capture
+};
+
+/// A pathway whose entrance and exit channel are the same (Decay::DiagonalPathways).
+struct DiagonalPathway {
+  int k, m;         ///< k-group and pathway (1-based)
+  double s;         ///< channel spin
+  int l;            ///< orbital angular momentum
+  double statSpin;  ///< MGroup::GetStatSpinFactor
+};
+
 class Decay {
  public:
   /// Build for the exit pair with this 1-based pair number.
@@ -47,6 +72,25 @@ class Decay {
   /// would never look at.
   bool IsCaptureAyBuilt() const;
   void SetCaptureAyBuilt();
+  /*!
+   * The interferences of all k,L groups as one flat table, in the order of
+   * the groups (CNuc::CalcAngularDists builds it after the groups): what the
+   * differential sums run over at every energy, without walking the groups.
+   */
+  const std::vector<FlatInterference> &FlatInterferences() const { return flat_; }
+  /// Rebuild FlatInterferences() from the k,L groups.
+  void BuildFlatInterferences();
+  /// The distinct pathways of FlatInterferences(), in order of first appearance.
+  const std::vector<InterferencePathway> &InterferencePathways() const { return flatPathways_; }
+  /// One more than the largest Legendre order of FlatInterferences().
+  int NumInterferenceOrders() const { return flatOrders_; }
+  /*!
+   * The pathways with equal entrance and exit channel, which carry the
+   * Coulomb-nuclear interference of elastic scattering (built with
+   * FlatInterferences by CNuc::CalcAngularDists).
+   */
+  const std::vector<DiagonalPathway> &DiagonalPathways() const { return diag_; }
+  void SetDiagonalPathways(const std::vector<DiagonalPathway> &d) { diag_ = d; }
 
  private:
   int pair_;
@@ -54,6 +98,17 @@ class Decay {
   std::vector<KLGroup> klgroups_;
   std::vector<CaptureAyTerm> captureAy_;
   bool captureAyBuilt_ = false;
+  std::vector<FlatInterference> flat_;
+  std::vector<InterferencePathway> flatPathways_;
+  int flatOrders_ = 0;
+  std::vector<DiagonalPathway> diag_;
+  // Whether the tables above were built (a decay may have none of either).
+ public:
+  bool TablesBuilt() const { return tables_built_; }
+  void SetTablesBuilt() { tables_built_ = true; }
+
+ private:
+  bool tables_built_ = false;
 };
 
 

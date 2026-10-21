@@ -1,5 +1,6 @@
 #ifndef EPOINT_H
 #define EPOINT_H
+#include <cmath>
 #include <limits>
 #include <vector>
 #include <utility>
@@ -192,6 +193,20 @@ class EPoint {
   const SubGridSpec &GetSubGridSpec() const { return sub_grid_spec_; };
   /// Is this one of the sub-points a target-effect integral is built from?
   bool IsSubPoint() const { return is_sub_point_; };
+  /*!
+   * Electron screening (a `screening` block on the point's <targetInt> line): the calculated
+   * cross section is the bare one times f = exp(k U_e), k = pi eta / E_cm of the entrance pair
+   * (CalcEDependentValues), U_e in MeV.  param is the 1-based number of the screening
+   * parameter (EData::ScreeningEffects), 0 = not screened.  Set by EData::ApplyScreening on every
+   * point and sub-point of the effect's segments; a new sub-point inherits it (AddSubPoint).
+   */
+  void SetScreening(double ueMeV, int param) { screen_ue_ = ueMeV; screen_param_ = param; }
+  int GetScreeningParam() const { return screen_param_; }
+  double GetScreeningUe() const { return screen_ue_; }
+  /// d ln f / d U_e (1/MeV); 0 for a neutral or non-particle entrance pair.
+  double GetScreeningK() const { return screen_k_; }
+  /// The factor f applied to this point's cross section (1 when not screened).
+  double ScreeningFactor() const { return (screen_param_ > 0 && screen_k_ != 0.0) ? std::exp(screen_k_ * screen_ue_) : 1.0; }
   /// Unobserved-primary, observed-secondary point?
   bool IsUPOS() const;
   /// Entrance pair key, as written in the input files; not necessarily its PPair position.
@@ -475,6 +490,9 @@ class EPoint {
   double fitE1crosssection_;
   double fitE2crosssection_;
   double sfactorconv_;
+  double screen_k_ = 0.0;
+  double screen_ue_ = 0.0;
+  int screen_param_ = 0;
   double j_value_;
   double stoppingPower_;
   double targetThickness_;

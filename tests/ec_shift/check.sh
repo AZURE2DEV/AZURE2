@@ -112,5 +112,17 @@ if run "direct" "$WORK/plain.azr" "--no-ec-table" "0.030"; then
   else bad "table vs --no-ec-table, no shift: max rel diff $r (limit 1e-3)"; fi
 fi
 
+# A fit: Minuit's first evaluations and the analytic gradient run on working copies whose points hold no
+# stored capture amplitudes; the shifted-amplitude memo indexed past the end there (segfault in
+# GetECAmplitudeWithShift, dev 855409e..888190f).  AZURE_GRAD_CHECK=exit stops after the first gradient.
+fit="$WORK/fit"
+mkdir -p "$fit/output" "$fit/checks"
+ln -s "$SRC/data" "$fit/data"
+cp "$WORK/shift_0.030.azr" "$fit/t.azr"
+(cd "$fit" && printf '2\nn\n\n\n' | AZURE_GRAD_CHECK=exit run_limited 600 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
+st=$?
+if [ "$st" -eq 0 ] && grep -q "\[grad-check\]" "$fit/run.log"; then ok "fit of the shifted capture segments runs (first gradient checked)"
+else bad "fit of the shifted capture segments: exit $st"; tail -5 "$fit/run.log"; fi
+
 if [ "$failures" -eq 0 ]; then echo "PASS ec_shift"; exit 0; fi
 echo "FAIL ec_shift ($failures)"; exit 1

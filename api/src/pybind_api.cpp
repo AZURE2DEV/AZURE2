@@ -471,6 +471,12 @@ class Session {
     expect_free(v, "calculate_chi2_physical");
     return api_->CalculateChi2Physical(v);
   }
+  py::array_t<double> scattering_lengths_rwa(const py::array_t<double, py::array::forcecast> &p) {
+    ConfigScope guard(config_, &ecCache_);
+    vector_r v = to_vector(p);
+    expect_free(v, "scattering_lengths_rwa");
+    return to_array(api_->CalculateScatteringLengthsRWA(v));
+  }
   py::array_t<double> park_norms(const py::array_t<double, py::array::forcecast> &p) {
     ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
@@ -867,6 +873,9 @@ PYBIND11_MODULE(_azure2, m) {
            "As transform_all_rwa, returning every R-matrix parameter's physical value, fixed ones included.")
       .def("calculate_chi2_rwa", &Session::calculate_chi2_rwa,
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
+      .def("scattering_lengths_rwa", &Session::scattering_lengths_rwa, py::arg("params"),
+           "s-wave scattering lengths of every particle pair at a free RWA vector: 6 numbers per channel "
+           "(pair key, channel spin, parity, Re a0 fm, Im a0 fm, has-levels flag).")
       .def("park_norms", &Session::park_norms, py::arg("params"),
            "Park overlap J of every R-matrix level (1 in Brune mode).")
       .def("calculate_chi2_physical", &Session::calculate_chi2_physical,

@@ -72,6 +72,7 @@ set(AZURESETUP_SOURCES
     ExforData.cpp ExforDialog.cpp PairKeyCombo.cpp AzureTheme.cpp AbundancesModel.cpp
     ThmSettings.cpp ThmModelPage.cpp
     ThmExperimentsPage.cpp ThmChannelsPage.cpp ThmWorkspace.cpp AZURESetupThm.cpp FittingTabThm.cpp
+    ScatteringLengthsModel.cpp
 )
 
 set(AZURESETUP_HEADERS
@@ -90,6 +91,7 @@ set(AZURESETUP_HEADERS
     ../include/ThmSettings.h
     ../include/ThmModelPage.h ../include/ThmExperimentsPage.h ../include/ThmChannelsPage.h
     ../include/ThmWorkspace.h
+    ../include/ScatteringLengthsModel.h
 )
 
 set(AZURESETUP_RCCS AZURESetup.qrc)

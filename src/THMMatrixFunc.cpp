@@ -188,7 +188,14 @@ void ThmApplyWeights(const Config &configure, const EPoint *point, double &sigma
 }  // namespace
 
 THMMatrixFunc::THMMatrixFunc(CNuc *compound, const Config &configure) :
-  AMatrixFunc(compound, configure) {}
+  AMatrixFunc(compound, configure) {
+  // The HOES amplitude reads individual elements of the level matrix
+  // (GetAMatrixElement over the active levels) and its adjoint the whole of it
+  // (GetAMatrix, LevelMatrixABarAdjoint): the level-space route, filled and
+  // LU-factored, as before the channel-space route existed.  Never the
+  // channel-space route, whose A is only materialized column by column.
+  this->SetLevelSpaceOnly(true);
+}
 
 /*!
  * HOES cross section of the modified R-matrix formalism (arbitrary units).

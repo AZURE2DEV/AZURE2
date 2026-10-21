@@ -2,11 +2,13 @@ Segments Tab
 ============
 
 The **Segments** tab defines the energies and angles at which cross sections are
-calculated. It is divided into two halves:
+calculated. It is divided into two halves, with a small table below them:
 
 - **Segments From Data** (upper) -- for calculations that reference experimental
   data files.
 - **Segments Without Data** (lower) -- for pure calculations and extrapolations.
+- **Measured Scattering Lengths** (bottom) -- optional constraints on the s-wave
+  scattering lengths of the particle pairs.
 
 Each segment is automatically assigned a numerical key that is referenced in the
 **Experimental Effects** tab.
@@ -24,10 +26,13 @@ Creating a Data Segment
 Click the **+** button in the lower-left corner of the upper frame. A dialog
 appears with the following fields:
 
-**Entrance and Exit Pair Keys**
-   Select the entrance and exit particle pairs by their numerical keys (as
-   assigned in the **Particle Pairs** tab). Values can be entered directly or
-   set using the spinner controls.
+**Entrance and Exit Pairs**
+   Select the entrance and exit particle pairs from the drop-down lists. Each
+   item starts with the pair's key (as assigned in the **Particle Pairs** tab);
+   exit items read as the reaction with the chosen entrance pair. When the
+   project has at least one gamma (capture) pair, the exit list ends with
+   **Total capture (all γ pairs)**: the angle-integrated capture cross section
+   summed over every gamma pair (see **Data Type** below).
 
 **Energy Range**
    The **Low Energy** and **High Energy** fields select a range of data from the
@@ -35,38 +40,87 @@ appears with the following fields:
    are in the laboratory frame, in MeV.
 
 **Angle Range**
-   For differential cross sections, specify the **Low Angle** and **High Angle**
-   (in degrees, laboratory frame) to select a subset of the data. For angle-integrated
-   or phase-shift data types, these fields are disabled.
+   For differential cross sections and analyzing powers, specify the **Low
+   Angle** and **High Angle** (in degrees, in the frame of the data) to select a
+   subset of the data. The box title names the frame: **C.M. Angle** for a
+   C.M. differential cross section and an analyzing power, **Lab Angle**
+   otherwise. For angle-integrated or phase-shift data types, these fields are
+   disabled.
 
 **Data Type**
-   Select from the drop-down menu:
+   Select the observable from the drop-down menu. Two of them have a second
+   drop-down next to them:
 
    .. list-table::
       :widths: 30 70
 
       * - **Angle Integrated**
-        - Angle-integrated cross section data.
+        - Angle-integrated cross section data. With a gamma (capture) exit
+          pair, a **Multipolarity** drop-down appears: **All** (default),
+          **E1 only** or **E2 only**. The E1/E2 choices compare the data with
+          only that multipolarity's part of the calculated capture cross
+          section. With **Total capture (all γ pairs)** as the exit pair, the
+          segment is the angle-integrated total capture cross section, summed
+          over all gamma-ray transitions; each significant gamma-ray cascade
+          transition must be defined as a separate particle pair. Total capture
+          has no E1/E2 variant, so the multipolarity drop-down is hidden for it.
       * - **Differential**
-        - Differential cross section data at specific angles.
+        - Differential cross section data at specific angles. A **Frame**
+          drop-down chooses **Lab** (default) or **C.M.**: the frame in which
+          the data file gives its angles and cross sections.
       * - **Phase Shift**
         - Phase shift data. Requires specifying the total angular momentum (*J*)
           and orbital angular momentum (*l*). The convention is
           :math:`-90° < \theta_\text{lab} < 90°`.
-      * - **Total Capture**
-        - Angle-integrated total capture cross section, summed over all gamma-ray
-          transitions. Each significant gamma-ray cascade transition must be
-          defined as a separate particle pair.
-      * - **C.M. Differential**
-        - Differential cross section data given in the center-of-mass frame.
       * - **Analyzing Power**
         - Vector analyzing power :math:`A_y` for a spin-1/2 projectile, in the
           Madison convention, for a **particle or a capture** exit channel.
-          Angles are centre-of-mass, as for **C.M. Differential**, and the data
-          file carries ``E_lab  theta_cm  A_y  dA_y``. Because :math:`A_y` is a
-          ratio, **Vary Norm?** is disabled for it -- a normalization factor has
-          no meaning for a quantity that is already normalized. See
-          :doc:`../theory/polarization_theory`.
+          Angles are centre-of-mass, as for a C.M. differential cross section,
+          and the data file carries ``E_lab  theta_cm  A_y  dA_y``. Because
+          :math:`A_y` is a ratio, **Vary Norm?** is disabled for it -- a
+          normalization factor has no meaning for a quantity that is already
+          normalized. See :doc:`../theory/polarization_theory`.
+
+   While **Total capture (all γ pairs)** is the exit pair, only **Angle
+   Integrated** can be chosen; the other observables are greyed out until a
+   single exit pair is selected again.
+
+   The choices map onto the observable code (``isDiff``) of the segment line in
+   the ``.azr`` file, which is unchanged:
+
+   .. list-table::
+      :header-rows: 1
+      :widths: 55 15 30
+
+      * - Dialog choice
+        - Code
+        - Exit pair key written
+      * - Angle Integrated (Multipolarity All, or a particle exit pair)
+        - 0
+        - the exit pair
+      * - Differential, Frame Lab
+        - 1
+        - the exit pair
+      * - Phase Shift
+        - 2
+        - the exit pair
+      * - Angle Integrated, exit **Total capture (all γ pairs)**
+        - 3
+        - ``-1``
+      * - Differential, Frame C.M.
+        - 4
+        - the exit pair
+      * - Angle Integrated, gamma exit, Multipolarity E1 only
+        - 5
+        - the exit pair
+      * - Angle Integrated, gamma exit, Multipolarity E2 only
+        - 6
+        - the exit pair
+      * - Analyzing Power
+        - 7
+        - the exit pair
+
+   Editing a segment restores these controls from its code.
 
 .. note::
 
@@ -338,10 +392,9 @@ A plain (non-composite) sample segment is just its own cross section times
 its nucleus's abundance, which is what an isotopically enriched target with a
 known enrichment needs.
 
-The box is only available for additive observables: angle-integrated and
-differential cross sections, total capture and the two centre-of-mass
-differential forms for data segments; angle-integrated, differential and
-total capture for test segments. It is cleared and disabled for a **Ratio**
+The box is only available for additive observables: angle-integrated cross
+sections (including total capture and the E1/E2-only forms) and differential
+cross sections in either frame, for data and test segments alike. It is cleared and disabled for a **Ratio**
 composite, a phase shift, an analyzing power and a test segment of
 angular-distribution coefficients. The entrance and exit pair of every term
 must form the same compound nucleus. In the file the flag is the keyword
@@ -380,12 +433,19 @@ segment dialog but includes:
    (in degrees).
 
 **Data Types**
-   In addition to the standard types, this mode supports:
+   The observable list and the **Total capture (all γ pairs)** exit item work
+   as for data segments, with two differences: there is no **Multipolarity**
+   drop-down (test segments have no E1/E2-only codes), and the list adds
+   **Angular Distribution Coefficients**. In full:
 
-   - **Angular Distribution Coefficient** -- output Legendre polynomial
-     coefficients. Requires specifying the polynomial order.
+   - **Angle Integrated** -- code 0; with the **Total capture (all γ pairs)**
+     exit item, the total capture cross section, code 4 (exit key ``-1``).
+   - **Differential** -- with **Frame** **Lab** (code 1) or **C.M.** (code 5).
+   - **Phase Shift** -- code 2.
+   - **Angular Distribution Coefficients** -- output Legendre polynomial
+     coefficients, code 3. Requires specifying the polynomial order.
    - **Analyzing Power** -- the vector analyzing power on the chosen energy and
-     angle grid, in the centre-of-mass frame.
+     angle grid, in the centre-of-mass frame, code 7.
 
 .. warning::
 
@@ -407,3 +467,38 @@ segment dialog but includes:
    logarithmic axis cannot display a quantity that goes negative, and it drops
    such points silently rather than complaining, so the curve would look
    merely sparse.
+
+Measured Scattering Lengths
+---------------------------
+
+AZURE2 computes the s-wave scattering length :math:`a_0` of every particle pair
+at the pair's threshold after each calculation or fit and writes it to
+``output/scatteringLengths.out``. The **Measured Scattering Lengths** table at
+the bottom of the tab adds measured values to the fit: each active row adds
+:math:`((a_0 - \text{value})/\sigma)^2` to :math:`\chi^2`, so a scattering
+length counts like one more data point. The definition and how the R-matrix
+parameters determine :math:`a_0` are in :doc:`../theory/scattering_length`.
+
+Click **+** to add a row and **-** to remove the selected one; double-click a
+cell to edit it. The columns are: the check box (whether the row enters
+:math:`\chi^2`); **Pair**, a drop-down of the particle pairs (gamma and beta
+pairs are not offered); **Spin s (J**\ :math:`\pi`\ **)**, the channel spin
+:math:`s`, which for :math:`l = 0` is the :math:`J^\pi` of the channel, chosen
+from the values the pair allows (:math:`|j_1 - j_2|` to :math:`j_1 + j_2`, only
+even ones for a pair of identical particles), or **coherent**, the
+spin-weighted combination
+:math:`\sum_s (2s+1)\,a_s / ((2j_1+1)(2j_2+1))` that a neutron measurement on
+an unpolarized target usually gives (not defined for identical particles);
+**Re a0** and **Re** :math:`\sigma` in fm; and, optionally, **Im a0** and
+**Im** :math:`\sigma` for a pair with open reaction channels at its threshold.
+A :math:`\sigma` of 0 leaves that part unconstrained; blank imaginary cells
+mean no imaginary part.
+
+A row refers to its pair by the pair's key, the row number on the **Particle
+Pairs** tab. When a pair is deleted or edited, rows whose pair no longer exists,
+is no longer a particle pair, or no longer allows the row's channel spin are
+not removed: they turn red, and the tooltip says why. They are saved as they
+are, and the calculation stops with an error naming the line until they are
+corrected. The table is saved as a ``<scatteringLengths>`` block after
+``</segmentsTest>``, and only when it has at least one row; comments in a block
+written by hand are not kept when the GUI saves the file.

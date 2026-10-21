@@ -273,15 +273,17 @@ void ParameterLimitsManager::BuildIndexMap(const ROOT::Minuit2::MnUserParameters
   }
 
   // The same association keyed by the full-vector index, for the nuisance
-  // prior.  Norms, shifts and abundances are left out, as the chi-squared
-  // always has: they carry their own priors (segment errors, <abundances>).
+  // prior.  Norms, shifts, abundances and electron-screening potentials are
+  // left out, as the chi-squared always has: they carry their own priors
+  // (segment errors, <abundances>, the screening block).
   priorByActualIndex_.assign(p.Params().size(), NULL);
   for (size_t nonFixedIndex = 0; nonFixedIndex < nonFixedToActualIndex.size(); nonFixedIndex++) {
     ParameterSetting *setting = indexToSetting_[nonFixedIndex];
     if (!setting || !setting->useAsNuisance) continue;
     const int actualIndex = nonFixedToActualIndex[nonFixedIndex];
     const std::string &name = p.Parameter(actualIndex).GetName();
-    if (AZURELabel::IsNormName(name) || AZURELabel::IsEnergyShiftName(name) || name.compare(0, 10, "abundance_") == 0)
+    if (AZURELabel::IsNormName(name) || AZURELabel::IsEnergyShiftName(name) || name.compare(0, 10, "abundance_") == 0 ||
+        name.compare(0, 10, "screening_") == 0)
       continue;
     priorByActualIndex_[actualIndex] = setting;
   }

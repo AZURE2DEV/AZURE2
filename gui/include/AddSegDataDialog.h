@@ -35,14 +35,29 @@ class AddSegDataDialog : public QDialog {
   QLineEdit *highEnergyText;
   QLineEdit *lowAngleText;
   QLineEdit *highAngleText;
+  /*! Titled "C.M. Angle [degrees]" for a C.M. differential cross section and an analyzing power, "Lab Angle [degrees]" otherwise. */
+  QGroupBox *angleBox;
+  /*! The observable: Angle Integrated (0), Differential (1), Phase Shift (2), Analyzing Power (7). Each item
+   *  carries that base isDiff code as item data; look items up with findData, never by position. */
   QComboBox *dataTypeCombo;
   QCheckBox *thmCheck;
+  /*! Differential only: Lab (isDiff 1) or C.M. (isDiff 4), as item data. */
+  QLabel *frameLabel;
+  QComboBox *frameCombo;
+  /*! Angle Integrated with a gamma exit pair only: All (0), E1 only (5), E2 only (6), as item data.
+   *  Hidden otherwise, and then read as All. */
+  QLabel *multipolarityLabel;
+  QComboBox *multipolarityCombo;
 
-  /*! The observable code written to the .azr. It is not the combo box index:
-   *  the analyzing power is code 7 in both segment kinds, but the two lists
-   *  have different lengths, so the code is carried as item data instead. */
+  /*! The isDiff code written to the .azr, from the observable, its frame or multipolarity, and the exit pair
+   *  (the exit item "Total capture", key PairKeyCombo::TotalCapture, with Angle Integrated is code 3). */
   int dataTypeCode() const;
+  /*! Sets the observable, frame, multipolarity and, for code 3, the total-capture exit item. */
   void setDataTypeCode(int code);
+  /*! The base code of the observable list's current item. */
+  int observableCode() const;
+  /*! True when the multipolarity drop-down applies: Angle Integrated with a gamma exit pair. */
+  bool multipolarityApplies() const;
 
   QLineEdit *dataFileText;
   QLineEdit *dataNormText;
@@ -53,7 +68,6 @@ class AddSegDataDialog : public QDialog {
   QLineEdit *phaseLValueText;
   QLabel *phaseLValueLabel;
   QLabel *phaseJValueLabel;
-  QLabel *totalCaptureLabel;
   QLineEdit *energyShiftText;
   QLabel *energyShiftLabel;
   QLineEdit *energyShiftErrorText;
@@ -99,6 +113,7 @@ class AddSegDataDialog : public QDialog {
  public slots:
   void setChooseFile();
   void dataTypeChanged(int);
+  void exitPairChanged(int key);
   void varyNormChanged(int);
   void advancedModeChanged(int);
   void operationTypeChanged(int);

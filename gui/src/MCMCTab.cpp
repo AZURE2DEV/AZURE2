@@ -208,11 +208,12 @@ MCMCTab::MCMCTab(QWidget *parent) :
 bool MCMCTab::isAutoPriorCategory(const QString &category) {
   // Normalizations, energy shifts, sqrt(E) shift coefficients and
   // shift-function parameters carry an experimental error in the segment
-  // definition, and isotopic abundances one in the <abundances> block, so
+  // definition, isotopic abundances one in the <abundances> block and
+  // electron-screening potentials one on their <targetInt> line, so
   // AZURECalcMCMC::BuildAutoPriors() derives their priors from the data and
   // overrides whatever this table holds.
   return category == "norm" || category == "shift" || category == "shift_sqrt" || category == "shift_fn" ||
-         category == "abundance";
+         category == "abundance" || category == "screening";
 }
 
 QString MCMCTab::categoryOfName(const QString &name, bool isRWA, int *segmentKey) {
@@ -227,6 +228,7 @@ QString MCMCTab::categoryOfName(const QString &name, bool isRWA, int *segmentKey
     return numeric;
   };
   if (name.startsWith("abundance_")) return "abundance";
+  if (name.startsWith("screening_")) return "screening";
   {
     // segment_<key>_energy_shift_fn<j>
     const int at = name.lastIndexOf("_energy_shift_fn");
@@ -258,6 +260,7 @@ QString MCMCTab::categoryFromStoredName(const QString &name) {
     return "shift_sqrt";
   if (name.contains("energy-shift function", Qt::CaseInsensitive) || name.contains("_energy_shift_fn"))
     return "shift_fn";
+  if (name.contains("screening", Qt::CaseInsensitive)) return "screening";
   if (name.contains("norm", Qt::CaseInsensitive)) return "norm";
   if (name.contains("shift", Qt::CaseInsensitive)) return "shift";
   return "loaded";
@@ -719,6 +722,10 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
             param.useGaussianPrior = (param.priorStd > 0.0);
             param.autoPrior = true;
           }
+        } else if (param.category == "screening") {
+          // The engine takes U_e's prior from its <targetInt> line (AZURECalcMCMC::BuildAutoPriors).
+          param.useGaussianPrior = false;
+          param.autoPrior = true;
         } else if (isAutoPriorCategory(param.category)) {
           const QMap<int, QPair<double, double>> &source = param.category == "norm"    ? autoNormPrior
                                                            : param.category == "shift" ? autoShiftPrior

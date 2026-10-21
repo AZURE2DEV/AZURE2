@@ -1,4 +1,5 @@
 #include "AZURECalcMCMC.h"
+#include "ScatteringLength.h"
 #include "ParameterLabel.h"
 #include "Config.h"
 #include "CNuc.h"
@@ -125,6 +126,8 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
 
   // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
   if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundanceSumPenalty(configure().abundanceSumSigma);  // per-nucleus priors: CalculateLogPrior
+  if (localCompound->HasScatteringLengthConstraints())  // measured scattering lengths: part of the likelihood
+    chiSquared += ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
 
   // Return objects to pool instead of deleting
   ReturnPooledCNuc(localCompound);
@@ -224,6 +227,8 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
 
   // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
   if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundanceSumPenalty(configure().abundanceSumSigma);  // per-nucleus priors: CalculateLogPrior
+  if (localCompound->HasScatteringLengthConstraints())  // measured scattering lengths: part of the likelihood
+    chiSquared += ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
 
   // Return objects to pool instead of deleting
   ReturnPooledCNuc(localCompound);
@@ -392,7 +397,8 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   // level-energy spread were dropped for the whole run.  Blocks: per
   // J-group and level one energy and one width per channel; one isotopic
   // abundance per (sample, nucleus) with an <abundances> block; norms; energy
-  // shifts; sqrt(E) coefficients; shift-function parameters; THM cbkg (last).
+  // shifts; sqrt(E) coefficients; shift-function parameters; electron-screening
+  // potentials (screening_<n>); THM cbkg (last).
   std::vector<int> allKinds;
   std::vector<double> allAutoMean;
   std::vector<double> allAutoStd;  // <= 0 means "no automatic prior available"
@@ -434,10 +440,22 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     return s;
   };
 
+  // screening_<n> (EData::FillMnParams): the target effect n with a screening block, or null.
+  auto screeningOf = [&](const std::string &name) -> const TargetEffect * {
+    if (name.compare(0, 10, "screening_") != 0) return nullptr;
+    const std::string n = name.substr(10);
+    if (n.empty() || n.find_first_not_of("0123456789") != std::string::npos) return nullptr;
+    for (int k = 1; k <= data()->NumScreeningParams(); ++k)
+      if (data()->GetScreeningEffect(k) == std::atoi(n.c_str()))
+        return data()->GetScreeningTargetEffect(k);
+    return nullptr;
+  };
+
   for (size_t i = 0; i < paramNames_.size(); ++i) {
     const std::string &name = paramNames_[i];
     int kind = -1;
     double mean = 0.0, std = -1.0;
+    const TargetEffect *te = nullptr;
     ESegment *seg = nullptr;
     int term = -1;
     if (name.compare(0, 7, "energy_") == 0) {
@@ -467,6 +485,12 @@ void AZURECalcMCMC::BuildAutoPriors() const {
       kind = PARAM_SHIFT;
       mean = seg->GetNominalShiftFnValues()[term];
       std = seg->GetShiftFnErrors()[term];
+    } else if ((te = screeningOf(name))) {
+      // an electron-screening potential (eV): its value and sigma are the
+      // prior, as the fit uses them (as dev)
+      kind = PARAM_SCREENING;
+      mean = te->GetScreeningNominal();
+      std = te->GetScreeningSigma();
     } else if (name.compare(0, 5, "cbkg_") == 0) {
       kind = PARAM_CBKG;
     } else {
@@ -520,7 +544,8 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   for (size_t i = 0; i < nfree; ++i) {
     const int kind = freeKinds_[i];
 
-    if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_SHIFT_SQRT || kind == PARAM_ABUNDANCE) {
+    if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_SHIFT_SQRT || kind == PARAM_ABUNDANCE ||
+        kind == PARAM_SCREENING) {
       // Derived from the data, so it always wins over whatever the GUI holds.
       if (freeAutoStd[i] > 0.0) {
         priorMeans_[i] = freeAutoMean[i];
@@ -1105,7 +1130,8 @@ bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
       if (kind == PARAM_ENERGY) {
         spread = energySpreadMeV;
         nEnergyCapped++;
-      } else if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_SHIFT_SQRT || kind == PARAM_ABUNDANCE) {
+      } else if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_SHIFT_SQRT || kind == PARAM_ABUNDANCE ||
+                 kind == PARAM_SCREENING) {
         // Starting outside the prior only wastes steps walking back into it.
         if (j < (int)priorStds_.size() && j < (int)usePriors_.size() &&
             usePriors_[j] && priorStds_[j] > 0.0 && priorStds_[j] < spread) {

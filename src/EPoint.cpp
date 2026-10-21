@@ -3,6 +3,7 @@
 #include "ALevel.h"
 #include "JGroup.h"
 #include "PPair.h"
+#include "Profile.h"
 #include "AngCoeff.h"
 #include "CNuc.h"
 #include "Config.h"
@@ -15,6 +16,7 @@
 #include "EData.h"
 #include "ESegment.h"
 #include "RMatrixFunc.h"
+#include "ScatteringLength.h"
 #include "ShftFunc.h"
 #include "ThmFunc.h"
 #include "ThmLineshape.h"
@@ -643,8 +645,10 @@ complex EPoint::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *th
     const size_t k = kGroupNum - 1, m = ecMGroupNum - 1;
     if (k < ec_energies_.size() && m < ec_energies_[k].size() && ec_energies_[k][m] == currentEnergy)
       return ec_amplitudes_[k][m];
-    if (ec_shifted_.size() < ec_amplitudes_.size()) ec_shifted_.resize(ec_amplitudes_.size());
-    if (k < ec_shifted_.size() && ec_shifted_[k].size() <= m) ec_shifted_[k].resize(m + 1);
+    // Sized from the requested indices: a point without stored amplitudes (a sub-point or a fit's
+    // working copy) has an empty ec_amplitudes_, and sizing from it indexed past the end.
+    if (ec_shifted_.size() <= k) ec_shifted_.resize(k + 1);
+    if (ec_shifted_[k].size() <= m) ec_shifted_[k].resize(m + 1);
     ShiftedECAmplitude &memo = ec_shifted_[k][m];
     if (memo.valid && memo.energy == currentEnergy) return memo.amplitude;
 
@@ -1194,6 +1198,7 @@ void WarnThmBelowB(const Config &configure, double energy, double bindingE) {
  */
 
 void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints) {
+  AZUREProfile::Timer profileTimer(AZUREProfile::kEDependent);
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
 
@@ -1214,6 +1219,13 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   if (this->IsTHM()) sfactorconv = 1.;
   this->SetGeometricalFactor(geofactor);
   this->SetSFactorConversion(sfactorconv);
+  // Electron screening: f = exp(pi eta U_e / E), so d ln f / d U_e = pi eta / E (charged particle pairs only).
+  screen_k_ = 0.0;
+  if (entrancePair->GetPType() == 0 && entrancePair->GetZ(1) * entrancePair->GetZ(2) != 0 && this->GetCMEnergy() > 0.0) {
+    const double eta = sqrt(uconv / 2.) * fstruc * entrancePair->GetZ(1) * entrancePair->GetZ(2) *
+                       sqrt(entrancePair->GetRedMass() / this->GetCMEnergy());
+    screen_k_ = pi * eta / this->GetCMEnergy();
+  }
 
   // Every table below is rebuilt from scratch: a second call (a parent
   // point's CalcEDependentValues reaches its sub-points again, e.g. after an
@@ -1258,7 +1270,16 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
         double localEnergy = inEnergy - thePair->GetSepE() - thePair->GetExE();
         if (thePair->GetPType() == 0) {
           ChannelFunc channelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-          if (channelFunc.IsClosed(localEnergy)) {
+          if (fabs(localEnergy) <= ScatteringLength::kThresholdTolerance) {
+            // Exactly at the channel's threshold (the entrance channel of a scattering length):
+            // the E -> 0 limit, P = 0 and S_l(0) from the zero-energy Coulomb solutions, in
+            // place of the Whittaker log-derivative at zero binding, which is ill-conditioned.
+            complex loElement(ScatteringLength::ZeroEnergyShift(thePair, lValue) - theChannel->GetBoundaryCondition(), 0.0);
+            this->AddLoElement(j, ch, loElement);
+            this->AddSqrtPenetrability(j, ch, 0.0);
+            this->AddExpCoulombPhase(j, ch, 1.0);
+            this->AddExpHardSpherePhase(j, ch, 1.0);
+          } else if (channelFunc.IsClosed(localEnergy)) {
             // At and below threshold, and just above it where the Coulomb
             // barrier makes P = 0 to double precision: the shift function
             // continued through E = 0 (ChannelFunc).  The Coulomb-wave
@@ -1422,6 +1443,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
     EPoint *mappedPoint = this->GetLocalMappedPoint(i);
     mappedPoint->geofactor_ = geofactor_;
     mappedPoint->sfactorconv_ = sfactorconv_;
+    mappedPoint->screen_k_ = screen_k_;
     mappedPoint->lo_elements_ = lo_elements_;
     mappedPoint->penetrabilities_ = penetrabilities_;
     mappedPoint->thm_jl_ = thm_jl_;
@@ -1435,6 +1457,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
       EPoint *subMappedPoint = mappedPoint->GetSubPoint(ii);
       subMappedPoint->geofactor_ = this->GetSubPoint(ii)->geofactor_;
       subMappedPoint->sfactorconv_ = this->GetSubPoint(ii)->sfactorconv_;
+      subMappedPoint->screen_k_ = this->GetSubPoint(ii)->screen_k_;
       subMappedPoint->lo_elements_ = this->GetSubPoint(ii)->lo_elements_;
       subMappedPoint->penetrabilities_ = this->GetSubPoint(ii)->penetrabilities_;
       subMappedPoint->thm_jl_ = this->GetSubPoint(ii)->thm_jl_;
@@ -1513,6 +1536,7 @@ bool EPoint::CopyEDependentValuesFrom(const EPoint &other) {
     return false;
   geofactor_ = other.geofactor_;
   sfactorconv_ = other.sfactorconv_;
+  screen_k_ = other.screen_k_;
   lo_elements_ = other.lo_elements_;
   penetrabilities_ = other.penetrabilities_;
   coulombphase_ = other.coulombphase_;
@@ -2151,6 +2175,8 @@ void EPoint::AddSubPoint(EPoint subPoint) {
   // section, and A_y is never computed at all.
   subPoint.is_analyzing_power_ = this->is_analyzing_power_;
   subPoint.is_sub_point_ = true;
+  subPoint.screen_ue_ = this->screen_ue_;
+  subPoint.screen_param_ = this->screen_param_;
   integrationPoints_.push_back(subPoint);
 }
 

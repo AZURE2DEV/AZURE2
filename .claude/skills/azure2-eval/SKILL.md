@@ -1890,6 +1890,9 @@ and its **angle column is centre-of-mass**, not lab.
 - `AZUREOut_*.extrap` — 5 cols: cm E, excitation E, cm angle, σ, S (mode 3).
 - `chiSquared.out` — per-segment χ²/N and norms; last line total χ². **The
   quickest scalar check that a run succeeded.**
+- `scatteringLengths.out` — s-wave scattering length of every channel spin of every particle pair at
+  the run's parameters, then the `<scatteringLengths>` constraints with their χ² (see the 2026-10-20
+  note at the end).
 - `param.par` initial / `param.sav` best-fit formal params (reload as the
   external parameter file); `parameters.out` physical/observable params.
 - `param.fit` is rewritten while MINUIT runs: every 100th objective evaluation
@@ -2262,6 +2265,21 @@ complete:
   12C+a 9-13-26 _timing/map_check. To check a file: is "Level N Channel M" (M = global channel-line row in an
   old GUI block) the engine's width_N_M? Separately (old behaviour, unchanged): the GUI keeps settings only
   for the parameters it lists as free, so script-made bounds on fixed parameters vanish on a GUI save.
+- 2026-10-21 (on dev since 2026-10-21, ff356ab) -- ELECTRON SCREENING as an experimental effect. A
+  <targetInt> line may carry `screening Ue_eV vary sigma_eV` (alone or with any other effect): the bare
+  cross section of its segments, at every point AND every sub-point (so inside convolution / target
+  integration), times f = exp(pi eta U_e / E_cm) of the entrance pair (cross sections only: phase shifts,
+  A_y, ratios untouched; neutral pairs f = 1). vary 1 -> fit parameter `screening_<n>` (eV, n = place
+  among ACTIVE <targetInt> lines, after the shift-fn block), analytic gradient/Jacobian column, prior
+  ((U_e-U_e0)/sigma)^2 in every fitter + MCMC auto prior, `Total-Screening-Chi-Squared` in chiSquared.out.
+  The line's U_e is the prior centre; the fitted value lives in param.sav (save_fit does not move it).
+  GUI: Experimental Effects dialog, "Include Electron Screening", Adiabatic Limit button =
+  B(Z1+Z2)-B(Z1)-B(Z2) from NIST total binding energies (alpha+13C 934.7 eV, p+12C 442.4 eV). pyazr:
+  add_target_effect(screening=(Ue, vary, sigma)), AzrModel.screenings / set_screening,
+  parameters.screenings, penalties()["screening"] (in objective()). TRAP: like every effect the line also
+  screens <segmentsTest> segments of the same keys -> deactivate it in a copy for bare extrapolations.
+  Older engines REFUSE the keyword. Tests: tests/electron_screening (exact factor 5e-11, inside a beam
+  spread, gradient, MIGRAD/LM recover U_e, prior), tests/pyazr/screening_test.py.
 - 2026-10-21 -- EXTERNAL-CAPTURE ENERGY TABLE, ON BY DEFAULT (`--no-ec-table`, pyazr `use_ec_table=False`;
   design `docs/source/developer/ec_table.rst`; 12C+a_onefile/10-20-26_EC_table_timing). Each capture term's
   radial integral is tabulated on demand in ln(E_out), 50 nodes/decade, nodes converged to 1e-10 (8-point
@@ -2274,6 +2292,30 @@ complete:
   OLDER BUILDS interpolated the EC amplitudes linearly between the segment's own points and held them FLAT
   beyond its ends: 0.4-15 % errors on 12C cascades, a factor 57 at the low end of the 13N LUNA data at
   -30 keV -- fitted energy shifts of capture segments from older builds are biased; refit them.
+  FITS WITH EXTERNAL CAPTURE SEGFAULTED in dev 855409e..ce3c827 (installed ~/bin/AZURE2 888190f): the first
+  MIGRAD evaluation / gradient died in EPoint::GetECAmplitudeWithShift (a working copy's points hold no stored
+  amplitudes; the shifted-amplitude memo was sized from them and indexed past the end). Calculations (mode 1)
+  were fine. Fixed on dev 2dcb846 (2026-10-21); tests/ec_shift now runs a gradient-checked fit.
+- 2026-10-20 (on dev since 2026-10-21; 7Be+p/10-20-26_scattering_length) -- S-WAVE SCATTERING
+  LENGTHS. Every calculation and fit writes `output/scatteringLengths.out` (and the run log): a0 of every
+  channel spin of every particle pair at its threshold, a0 = -a [M/(x^2 K1^2) - 2 I1/(x^2 K1)],
+  M = gamma^T A gamma at E = 0 (Paneru 2019 Eq. 7 = Paneru 2024 Eq. 26), a (1 - M) for neutrons; the same
+  in the standard, Brune and Park bases; complex when a lower channel is open; "hard sphere" = no level
+  has a width in that channel spin. Measured values go in an optional block
+  `<scatteringLengths>` / `active pairKey s value sigma [imValue imSigma]` / `</scatteringLengths>`
+  (s = -1: coherent sum_s (2s+1) a_s/((2j1+1)(2j2+1)); neutron tables give BOUND b, enter b A/(A+1)):
+  each line is a chi2 term in every fitter (exact gradient through the level-matrix adjoint, one LM/GSL
+  residual row per constrained part), the MCMC likelihood and `calculate_chi2_rwa`; chiSquared.out
+  gains `Total-Scattering-Length-Chi-Squared`. pyazr: `m.scattering_lengths(x)` (posterior from a
+  chain), `m.penalties()["scattering_length"]`, `AzrModel.scattering_lengths` /
+  `add_scattering_length` / `set_scattering_lengths`. Validated on Paneru 2024 3He+4He (33.0996 vs
+  33.10 fm) and by the effective-range expansion of AZURE2's own phase shifts (4e-5). TRAP when building
+  a model from published gamma~ (Brune): the .azr width is the OBSERVED width
+  2 P gamma~^2 / (1 + sum gamma~^2 dS/dE), not 2 P gamma~^2 -- dropping the denominator moved the
+  3He+4He a0 by 0.6 % (check `g_int` in parameters.out). Paneru 2019's a02 = -3.18 fm does not follow
+  from its printed Table II (-5.02). Side effect for everyone: a particle channel exactly at its
+  threshold (|E| < 1e-10 MeV) now takes the exact E -> 0 limit (P = 0, S_l(0) from K_2l/K_2l+1)
+  instead of the ill-conditioned zero-binding Whittaker route.
 - 2026-09-13 -- pyazr and `output/intEC.dat`: a session that RELOADS an existing cache for the
   12C+alpha truncated model returns a wrong chi2 (120,593 instead of 113,512, sometimes ~1e26)
   while the CLI reloading the same cache is exact; confirmed with the pre-fix module too, so it is

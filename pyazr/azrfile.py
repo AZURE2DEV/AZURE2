@@ -31,7 +31,7 @@ import math
 import os
 import re
 import tempfile
-from typing import List, Optional
+from typing import List, NamedTuple, Optional
 
 # Field order of a <levels> channel line, matching NucLine's read order.
 _FIELDS = [
@@ -1371,6 +1371,26 @@ def _nuclei_module():
         return mod
 
 
+class ScatteringLengthLine(NamedTuple):
+    """One line of the ``<scatteringLengths>`` block: a measured s-wave
+    scattering length (fm) of particle pair ``pair`` (its key) in channel spin
+    ``s`` (``-1``: the coherent combination sum_s (2s+1)/((2j1+1)(2j2+1)) a_s).
+    ``sigma`` constrains Re a, ``im_sigma`` Im a; 0 leaves that part free."""
+    pair: int
+    s: float
+    value: float
+    sigma: float
+    im_value: float = 0.0
+    im_sigma: float = 0.0
+    active: bool = True
+
+    def line(self):
+        out = f"{1 if self.active else 0} {self.pair} {_fmt(self.s)} {_fmt(self.value)} {_fmt(self.sigma)}"
+        if self.im_sigma or self.im_value:
+            out += f" {_fmt(self.im_value)} {_fmt(self.im_sigma)}"
+        return out
+
+
 class AzrModel:
     """A ``.azr`` file parsed into an editable level scheme.
 
@@ -2013,6 +2033,65 @@ class AzrModel:
             end = next(i for i, ln in enumerate(lines) if ln.strip() == "</config>")
             lines.insert(end, f"abundanceSumSigma={float(value):g}\n")
         self._prefix = "".join(lines)
+
+    # -- measured scattering lengths ------------------------------------------
+
+    @property
+    def scattering_lengths(self):
+        """The ``<scatteringLengths>`` block as a list of
+        :class:`ScatteringLengthLine` (empty without the block).  Each active
+        line adds ((Re a0 - value)/sigma)^2 (and the same for Im a0 when
+        ``im_sigma`` > 0) to the chi-squared AZURE2 minimizes; the computed
+        lengths of every pair are :meth:`azure2.scattering_lengths` and
+        ``output/scatteringLengths.out``."""
+        lines = self._suffix.splitlines()
+        try:
+            a, b = lines.index("<scatteringLengths>"), lines.index("</scatteringLengths>")
+        except ValueError:
+            return []
+        out = []
+        for ln in lines[a + 1:b]:
+            t = ln.split("#", 1)[0].split()
+            if not t:
+                continue
+            if len(t) not in (5, 7):
+                raise ValueError(f"<scatteringLengths> line {ln!r}: expected 'active pairKey s value sigma [imValue imSigma]'")
+            im = (float(t[5]), float(t[6])) if len(t) == 7 else (0.0, 0.0)
+            out.append(ScatteringLengthLine(int(t[1]), float(t[2]), float(t[3]), float(t[4]), im[0], im[1],
+                                            int(t[0]) != 0))
+        return out
+
+    def set_scattering_lengths(self, entries):
+        """Replace the ``<scatteringLengths>`` block with ``entries`` (an
+        iterable of :class:`ScatteringLengthLine`); an empty list removes the
+        block.  A new block goes after ``</segmentsTest>`` (else after
+        ``</segmentsData>``), where the GUI writes it."""
+        entries = list(entries)
+        lines = self._suffix.splitlines()
+        if "<scatteringLengths>" in lines:
+            a, b = lines.index("<scatteringLengths>"), lines.index("</scatteringLengths>")
+            del lines[a:b + 1]
+            at = a
+        else:
+            at = None
+            for tag in ("</segmentsTest>", "</segmentsData>"):
+                if tag in lines:
+                    at = lines.index(tag) + 1
+                    break
+            if at is None:
+                at = len(lines)
+        if entries:
+            lines[at:at] = ["<scatteringLengths>"] + [e.line() for e in entries] + ["</scatteringLengths>"]
+        self._suffix = "\n".join(lines) + "\n"
+        return self
+
+    def add_scattering_length(self, pair, s, value, sigma, im_value=0.0, im_sigma=0.0, active=True):
+        """Append one measured scattering length (fm) to the block (created if
+        missing): pair key, channel spin (``-1`` = coherent), value and
+        uncertainty of Re a0, optionally of Im a0."""
+        entry = ScatteringLengthLine(int(pair), float(s), float(value), float(sigma), float(im_value),
+                                     float(im_sigma), bool(active))
+        return self.set_scattering_lengths(self.scattering_lengths + [entry])
 
     def set_natural(self, file_substr, natural=True):
         """Mark (or unmark) every ``<segmentsData>`` line matching
@@ -2737,7 +2816,7 @@ class AzrModel:
                           photodissociation=False, q_coefficients=None,
                           resonance_width_multiplier=20.0, points_per_width=50.0,
                           udr_file=None, flight_path=None, udr_burst=0.0,
-                          udr_channel=0.0, udr_centred=True, active=True):
+                          udr_channel=0.0, udr_centred=True, screening=None, active=True):
         """Append one experimental effect (a ``<targetInt>`` line).
 
         ``segments`` is the segment-key list as AZURE2 writes it (``"3"``,
@@ -2773,6 +2852,13 @@ class AzrModel:
         ``udr_channel`` (rectangular width, ns) are convolved on top, and
         ``udr_centred`` re-centres the tabulated function on its centroid as
         SAMMY does.  Target integration and straggling are not exposed here.
+
+        ``screening`` is electron screening, ``(Ue_eV, vary, sigma_eV)`` or a plain
+        ``Ue_eV`` (fixed, no prior): the bare cross section of every point and
+        sub-point of these segments is multiplied by exp(pi eta U_e / E).  With
+        ``vary`` U_e is a fit parameter (``screening_<n>``), with a Gaussian prior
+        of width ``sigma`` about the value given when ``sigma > 0``.  A line may
+        carry screening alone (no other option).
         Returns ``self``.
         """
         if not isinstance(segments, str):
@@ -2807,6 +2893,11 @@ class AzrModel:
                 raise ValueError("udr_file needs a positive flight_path in metres")
             toks += ["udr", f'"{udr_file}"', _fmt(flight_path), _fmt(udr_burst),
                      _fmt(udr_channel), 1 if udr_centred else 0]
+        if screening is not None:
+            ue, vary, sigma = (screening, False, 0.0) if not isinstance(screening, (tuple, list)) else screening
+            if sigma < 0:
+                raise ValueError("the screening prior sigma must be >= 0")
+            toks += ["screening", _fmt(ue), 1 if vary else 0, _fmt(sigma)]
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
         lines = self._suffix.splitlines()
         if "<targetInt>" in lines:
@@ -3402,6 +3493,53 @@ class AzrModel:
             self._set_suffix_lines(lines[:end] + block + lines[end:])
         else:
             self._set_suffix_lines(lines + block)
+
+    _SCREENING_RE = re.compile(r"\bscreening\s+(\S+)\s+(\S+)\s+(\S+)")
+
+    def _target_int_lines(self):
+        """(index into the suffix lines, line) of every non-blank <targetInt> line."""
+        lines = self._suffix.splitlines()
+        if "<targetInt>" not in lines:
+            return lines, []
+        a, b = lines.index("<targetInt>"), lines.index("</targetInt>")
+        return lines, [(i, lines[i]) for i in range(a + 1, b) if lines[i].strip()]
+
+    @property
+    def screenings(self):
+        """Electron screening of the <targetInt> lines: ``{effect: (Ue_eV, vary, sigma_eV)}``
+        keyed by the effect number AZURE2 uses (the place among the ACTIVE lines), for the
+        lines with a ``screening`` block."""
+        _, tl = self._target_int_lines()
+        out, n = {}, 0
+        for _, line in tl:
+            if line.split()[0] != "1":
+                continue
+            n += 1
+            m = self._SCREENING_RE.search(line)
+            if m:
+                out[n] = (float(m.group(1)), int(float(m.group(2))) != 0, float(m.group(3)))
+        return out
+
+    def set_screening(self, effect, ue=None, vary=None, sigma=None):
+        """Set (or add) electron screening on active <targetInt> line ``effect`` (1-based among
+        the active lines, as in ``screening_<effect>``).  Arguments left ``None`` keep the
+        line's values (U_e 0, fixed, no prior for a line without a block).  Returns ``self``."""
+        lines, tl = self._target_int_lines()
+        active = [(i, line) for i, line in tl if line.split()[0] == "1"]
+        if not 1 <= effect <= len(active):
+            raise ValueError(f"no active <targetInt> line {effect} ({len(active)} active)")
+        i, line = active[effect - 1]
+        m = self._SCREENING_RE.search(line)
+        old = (float(m.group(1)), int(float(m.group(2))) != 0, float(m.group(3))) if m else (0.0, False, 0.0)
+        ue = old[0] if ue is None else float(ue)
+        vary = old[1] if vary is None else bool(vary)
+        sigma = old[2] if sigma is None else float(sigma)
+        if sigma < 0:
+            raise ValueError("the screening prior sigma must be >= 0")
+        block = f"screening {_fmt(ue)} {1 if vary else 0} {_fmt(sigma)}"
+        lines[i] = self._SCREENING_RE.sub(block, line) if m else line.rstrip() + "  " + block
+        self._suffix = "\n".join(lines)
+        return self
 
     # -- rendering ------------------------------------------------------------
 

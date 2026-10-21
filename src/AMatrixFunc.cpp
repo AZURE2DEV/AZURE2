@@ -1,4 +1,5 @@
 #include "AMatrixFunc.h"
+#include "Profile.h"
 #include "AngCoeff.h"
 #include "PolarizationFunc.h"
 #include "CNuc.h"
@@ -20,6 +21,7 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
+#include <limits>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -43,6 +45,25 @@ AMatrixFunc::AMatrixFunc(CNuc *compound, const Config &configure) :
 const matrix_c &AMatrixFunc::GetAMatrix(int jGroupNum) const {
   static const matrix_c emptyMatrix;
   if (jGroupNum < 1 || jGroupNum > (int)solvers_.size()) return emptyMatrix;
+  if (route_[jGroupNum - 1] == kRouteChannel) {
+    // A = V A_f V^T, one column per unit vector.  The cache is part of the
+    // object's per-energy state, like the factorization's own inverse.
+    AMatrixFunc *self = const_cast<AMatrixFunc *>(this);
+    ChannelState &st = self->chan_[jGroupNum - 1];
+    if (!st.inverseValid) {
+      const int n = (*formal_[jGroupNum - 1]).n;
+      st.inverse.assign(n, vector_c(n, complex(0.0, 0.0)));
+      vector_c unit(n), col(n);
+      for (int c = 0; c < n; c++) {
+        std::fill(unit.begin(), unit.end(), complex(0.0, 0.0));
+        unit[c] = 1.0;
+        self->ApplyA(jGroupNum, unit.data(), col.data());
+        for (int r = 0; r < n; r++) st.inverse[r][c] = col[r];
+      }
+      st.inverseValid = true;
+    }
+    return st.inverse;
+  }
   if (!solver_valid_[jGroupNum - 1]) return emptyMatrix;
   return solvers_[jGroupNum - 1].Inverse();
 }
@@ -55,13 +76,15 @@ const matrix_c &AMatrixFunc::GetAMatrix(int jGroupNum) const {
 
 complex AMatrixFunc::GetAMatrixElement(int jGroupNum, int lambdaNum, int muNum) const {
   if (jGroupNum < 1 || jGroupNum > (int)solvers_.size()) return complex(0.0, 0.0);
-  if (!solver_valid_[jGroupNum - 1]) return complex(0.0, 0.0);
+  const bool channel = (route_[jGroupNum - 1] == kRouteChannel);
+  if (!channel && !solver_valid_[jGroupNum - 1]) return complex(0.0, 0.0);
   const std::vector<int> &map = level_active_index_[jGroupNum - 1];
   if (lambdaNum < 1 || lambdaNum >= (int)map.size()) return complex(0.0, 0.0);
   if (muNum < 1 || muNum >= (int)map.size()) return complex(0.0, 0.0);
   const int row = map[lambdaNum];
   const int col = map[muNum];
   if (row == 0 || col == 0) return complex(0.0, 0.0);
+  if (channel) return this->GetAMatrix(jGroupNum)[row - 1][col - 1];
   return solvers_[jGroupNum - 1].Inverse()[row - 1][col - 1];
 }
 
@@ -79,6 +102,7 @@ matrix_c *AMatrixFunc::GetJSpecAInvMatrix(int jGroupNum) {
  */
 
 void AMatrixFunc::ClearMatrices() {
+  tbar_decay_ = nullptr;
   tmatrix_.clear();
   ec_tmatrix_.clear();
   InvalidateTMatrixProducts();
@@ -99,10 +123,17 @@ void AMatrixFunc::ClearMatrices() {
     channel_solve_valid_.resize(numJGroups);
     raw_solves_.resize(numJGroups);
     raw_solve_valid_.resize(numJGroups);
+    route_.resize(numJGroups);
+    formal_.resize(numJGroups);
+    formal_jgroup_.assign(numJGroups, nullptr);
+    chan_.resize(numJGroups);
+    active_levels_.resize(numJGroups);
   }
 
+  all_levels_active_ = true;
   for (int j = 1; j <= numJGroups; ++j) {
     solver_valid_[j - 1] = 0;
+    route_[j - 1] = kRouteNone;
     if (!compound()->GetJGroup(j)->IsInRMatrix()) {
       // keep empty placeholders to preserve external indexing
       level_active_index_[j - 1].clear();
@@ -119,16 +150,19 @@ void AMatrixFunc::ClearMatrices() {
 
     // Build original->active map (1-based for readability in existing code)
     std::vector<int> &map = level_active_index_[j - 1];
+    std::vector<int> &levels = active_levels_[j - 1];
     map.assign(numLevels + 1, 0);
+    levels.clear();
     int act = 0;
     for (int la = 1; la <= numLevels; ++la) {
-      if (jg->GetLevel(la)->IsInRMatrix()) map[la] = ++act;
+      if (jg->GetLevel(la)->IsInRMatrix()) {
+        map[la] = ++act;
+        levels.push_back(la);
+      } else
+        all_levels_active_ = false;
     }
-
-    // Pre-size to dense (act x act) with zeros; no push_backs later
-    matrix_c &M = a_inv_matrices_[j - 1];
-    M.resize(act);
-    for (int r = 0; r < act; ++r) M[r].assign(act, complex(0.0, 0.0));
+    // The level matrix itself is sized and zeroed only for the level route
+    // (FillLevelMatrix).
 
     gamma_vectors_[j - 1].resize(numChannels);
     gamma_valid_[j - 1].assign(numChannels, 0);
@@ -145,110 +179,140 @@ void AMatrixFunc::ClearMatrices() {
  */
 
 void AMatrixFunc::FillMatrices(EPoint *point) {
-  double inEnergy;
-  if (compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetPType() == 20)
-    inEnergy = point->GetCMEnergy() +
-        compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()))->GetSepE() +
-        compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()))->GetExE();
-  else
-    inEnergy = point->GetCMEnergy() +
-        compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetSepE() +
-        compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetExE();
-  const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
+  AZUREProfile::Timer profileTimer(AZUREProfile::kFill);
+  const double inEnergy = this->InEnergy(point);
   // Groups of another compound nucleus are not part of this point's matrices
   // (EPoint::CalcEDependentValues left their rows empty).
   activeNucleus_ = compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetNucleus();
+  const bool channelSpace = !level_only_ && ChannelSpace::Enabled();
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
-    if (compound()->GetJGroup(j)->IsInRMatrix() && compound()->GetJGroup(j)->GetNucleus() == activeNucleus_) {
-      // Cache JGroup pointer to avoid repeated calls
-      JGroup *jGroup = compound()->GetJGroup(j);
-      int numLevels = jGroup->NumLevels();
-      int numChannels = jGroup->NumChannels();
-
-      // Ensure pre-allocated buffers are large enough - resize only when needed
-      if (numLevels > cached_max_levels_ || numChannels > cached_max_channels_) {
-        cached_max_levels_ = std::max(numLevels, cached_max_levels_);
-        cached_max_channels_ = std::max(numChannels, cached_max_channels_);
-
-        levelGammas_.resize(cached_max_levels_ + 1);
-        levelEnergies_.resize(cached_max_levels_ + 1);
-        shiftFunctions_.resize(cached_max_levels_ + 1);
-
-        for (int la = 0; la <= cached_max_levels_; la++) {
-          levelGammas_[la].resize(cached_max_channels_ + 1);
-          shiftFunctions_[la].resize(cached_max_channels_ + 1);
-        }
+    JGroup *jGroup = compound()->GetJGroup(j);
+    if (!jGroup->IsInRMatrix() || jGroup->GetNucleus() != activeNucleus_) continue;
+    route_[j - 1] = kRouteLevel;
+    if (channelSpace) {
+      if (!formal_[j - 1] || formal_jgroup_[j - 1] != jGroup) {
+        formal_[j - 1] = ChannelSpace::Cached(jGroup);
+        formal_jgroup_[j - 1] = jGroup;
       }
+      ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
+      ChannelSpace::Update(jGroup, active_levels_[j - 1], configure(), f);
+      if (f.usable) {
+        if (this->SolveChannelSpace(j, point, inEnergy)) {
+          route_[j - 1] = kRouteChannel;
+          AZUREProfile::Count(AZUREProfile::kChannelRoute);
+          static const bool verify = std::getenv("AZURE_CHANNEL_VERIFY") != nullptr;
+          if (verify) this->VerifyChannelSpace(j, point, inEnergy);
+          continue;
+        }
+      } else {
+        AZUREProfile::Count(f.status == 1 ? AZUREProfile::kLevelRouteSize : AZUREProfile::kLevelRouteSetup);
+      }
+    } else {
+      AZUREProfile::Count(AZUREProfile::kLevelRouteForced);
+    }
+    this->FillLevelMatrix(j, point, inEnergy);
+  }
+}
 
-      // Pre-cache gamma values for all levels and channels using pre-allocated buffers
-      for (int la = 1; la <= numLevels; la++) {
-        if (jGroup->GetLevel(la)->IsInRMatrix()) {
-          ALevel *level = jGroup->GetLevel(la);
-          levelEnergies_[la] = level->GetFitE();
+/*!
+ * The level matrix of J-group j at one energy (the level route).
+ */
 
+void AMatrixFunc::FillLevelMatrix(int j, EPoint *point, double inEnergy) {
+  const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
+  {
+    const int act = (int)active_levels_[j - 1].size();
+    matrix_c &M = a_inv_matrices_[j - 1];
+    M.resize(act);
+    for (int r = 0; r < act; ++r) M[r].assign(act, complex(0.0, 0.0));
+  }
+  // Cache JGroup pointer to avoid repeated calls
+  JGroup *jGroup = compound()->GetJGroup(j);
+  int numLevels = jGroup->NumLevels();
+  int numChannels = jGroup->NumChannels();
+
+  // Ensure pre-allocated buffers are large enough - resize only when needed
+  if (numLevels > cached_max_levels_ || numChannels > cached_max_channels_) {
+    cached_max_levels_ = std::max(numLevels, cached_max_levels_);
+    cached_max_channels_ = std::max(numChannels, cached_max_channels_);
+
+    levelGammas_.resize(cached_max_levels_ + 1);
+    levelEnergies_.resize(cached_max_levels_ + 1);
+    shiftFunctions_.resize(cached_max_levels_ + 1);
+
+    for (int la = 0; la <= cached_max_levels_; la++) {
+      levelGammas_[la].resize(cached_max_channels_ + 1);
+      shiftFunctions_[la].resize(cached_max_channels_ + 1);
+    }
+  }
+
+  // Pre-cache gamma values for all levels and channels using pre-allocated buffers
+  for (int la = 1; la <= numLevels; la++) {
+    if (jGroup->GetLevel(la)->IsInRMatrix()) {
+      ALevel *level = jGroup->GetLevel(la);
+      levelEnergies_[la] = level->GetFitE();
+
+      for (int ch = 1; ch <= numChannels; ch++) {
+        levelGammas_[la][ch] = level->GetFitGamma(ch);
+        shiftFunctions_[la][ch] = level->GetShiftFunction(ch);
+      }
+    }
+  }
+
+  for (int la = 1; la <= numLevels; la++) {
+    if (jGroup->GetLevel(la)->IsInRMatrix()) {
+      ALevel *level = jGroup->GetLevel(la);
+      for (int lap = 1; lap <= numLevels; lap++) {
+        if (jGroup->GetLevel(lap)->IsInRMatrix()) {
+          ALevel *levelp = jGroup->GetLevel(lap);
+          complex sum(0.0, 0.0);
+          double parkOverlap = 0.0;
           for (int ch = 1; ch <= numChannels; ch++) {
-            levelGammas_[la][ch] = level->GetFitGamma(ch);
-            shiftFunctions_[la][ch] = level->GetShiftFunction(ch);
-          }
-        }
-      }
+            double gammaCh = levelGammas_[la][ch];
+            double gammaChp = levelGammas_[lap][ch];
 
-      for (int la = 1; la <= numLevels; la++) {
-        if (jGroup->GetLevel(la)->IsInRMatrix()) {
-          ALevel *level = jGroup->GetLevel(la);
-          for (int lap = 1; lap <= numLevels; lap++) {
-            if (jGroup->GetLevel(lap)->IsInRMatrix()) {
-              ALevel *levelp = jGroup->GetLevel(lap);
-              complex sum(0.0, 0.0);
-              double parkOverlap = 0.0;
-              for (int ch = 1; ch <= numChannels; ch++) {
-                double gammaCh = levelGammas_[la][ch];
-                double gammaChp = levelGammas_[lap][ch];
+            // Early termination for effectively zero gamma values
+            if (fabs(gammaCh) < 1.0e-12 || fabs(gammaChp) < 1.0e-12) continue;
 
-                // Early termination for effectively zero gamma values
-                if (fabs(gammaCh) < 1.0e-12 || fabs(gammaChp) < 1.0e-12) continue;
+            complex loElement = point->GetLoElement(j, ch);
+            sum += gammaCh * gammaChp * loElement;
 
-                complex loElement = point->GetLoElement(j, ch);
-                sum += gammaCh * gammaChp * loElement;
+            // Cache channel pointer and radiation type to avoid repeated calls
+            AChannel *channel = jGroup->GetChannel(ch);
+            char radType = channel->GetRadType();
 
-                // Cache channel pointer and radiation type to avoid repeated calls
-                AChannel *channel = jGroup->GetChannel(ch);
-                char radType = channel->GetRadType();
-
-                if ((radType == 'M' || radType == 'E') &&
-                    la == lap &&
-                    (configure().paramMask & Config::USE_RMC_FORMALISM))
-                  sum += complex(0.0, 1.0) * gammaCh * gammaChp;
-                if (park && radType == 'P') {
-                  // Park (2021) Eq. (22) with B_{lambda c} = S_c(E_lambda), Eq. (26):
-                  // the kernel is S_c(E) - S_c(E_lambda) + i P_c, where loElement
-                  // is S_c(E) - B_c + i P_c.  Eq. (9) gives the off-diagonal overlap.
-                  sum += gammaCh * gammaChp * (channel->GetBoundaryCondition() - shiftFunctions_[la][ch]);
-                  if (la != lap)
-                    parkOverlap -= gammaCh * gammaChp * (shiftFunctions_[la][ch] - shiftFunctions_[lap][ch]) /
-                        (levelEnergies_[la] - levelEnergies_[lap]);
-                } else if ((configure().paramMask & Config::USE_BRUNE_FORMALISM) && radType == 'P') {
-                  sum += gammaCh * gammaChp * channel->GetBoundaryCondition();
-                  if (la == lap)
-                    sum -= gammaCh * gammaChp * shiftFunctions_[la][ch];
-                  else
-                    sum -= gammaCh * gammaChp *
-                        (shiftFunctions_[la][ch] * (inEnergy - levelEnergies_[lap]) - shiftFunctions_[lap][ch] * (inEnergy - levelEnergies_[la])) /
-                        (levelEnergies_[la] - levelEnergies_[lap]);
-                }
-              }
-              if (park) {
-                // Park (2021) Eqs. (21)-(22): A^-1 = (E_lambda - E) J - gamma (S - B_lambda + iP) gamma^T,
-                // with the diagonal overlap J_{lambda lambda} of Eq. (28).
-                if (la == lap) parkOverlap = level->GetParkNorm();
-                this->AddAInvMatrixElement(j, la, lap, (levelEnergies_[la] - inEnergy) * parkOverlap - sum);
-              } else if (la == lap) {
-                double resenergy = levelEnergies_[la];
-                this->AddAInvMatrixElement(j, la, lap, resenergy - inEnergy - sum);
-              } else
-                this->AddAInvMatrixElement(j, la, lap, -sum);
+            if ((radType == 'M' || radType == 'E') &&
+                la == lap &&
+                (configure().paramMask & Config::USE_RMC_FORMALISM))
+              sum += complex(0.0, 1.0) * gammaCh * gammaChp;
+            if (park && radType == 'P') {
+              // Park (2021) Eq. (22) with B_{lambda c} = S_c(E_lambda), Eq. (26):
+              // the kernel is S_c(E) - S_c(E_lambda) + i P_c, where loElement
+              // is S_c(E) - B_c + i P_c.  Eq. (9) gives the off-diagonal overlap.
+              sum += gammaCh * gammaChp * (channel->GetBoundaryCondition() - shiftFunctions_[la][ch]);
+              if (la != lap)
+                parkOverlap -= gammaCh * gammaChp * (shiftFunctions_[la][ch] - shiftFunctions_[lap][ch]) /
+                    (levelEnergies_[la] - levelEnergies_[lap]);
+            } else if ((configure().paramMask & Config::USE_BRUNE_FORMALISM) && radType == 'P') {
+              sum += gammaCh * gammaChp * channel->GetBoundaryCondition();
+              if (la == lap)
+                sum -= gammaCh * gammaChp * shiftFunctions_[la][ch];
+              else
+                sum -= gammaCh * gammaChp *
+                    (shiftFunctions_[la][ch] * (inEnergy - levelEnergies_[lap]) - shiftFunctions_[lap][ch] * (inEnergy - levelEnergies_[la])) /
+                    (levelEnergies_[la] - levelEnergies_[lap]);
             }
           }
+          if (park) {
+            // Park (2021) Eqs. (21)-(22): A^-1 = (E_lambda - E) J - gamma (S - B_lambda + iP) gamma^T,
+            // with the diagonal overlap J_{lambda lambda} of Eq. (28).
+            if (la == lap) parkOverlap = level->GetParkNorm();
+            this->AddAInvMatrixElement(j, la, lap, (levelEnergies_[la] - inEnergy) * parkOverlap - sum);
+          } else if (la == lap) {
+            double resenergy = levelEnergies_[la];
+            this->AddAInvMatrixElement(j, la, lap, resenergy - inEnergy - sum);
+          } else
+            this->AddAInvMatrixElement(j, la, lap, -sum);
         }
       }
     }
@@ -264,18 +328,20 @@ void AMatrixFunc::FillMatrices(EPoint *point) {
  */
 
 void AMatrixFunc::InvertMatrices() {
+  AZUREProfile::Timer profileTimer(AZUREProfile::kFactor);
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
     if (compound()->GetJGroup(j)->IsInRMatrix() && compound()->GetJGroup(j)->GetNucleus() == activeNucleus_) {
+      // Anything derived from the previous solve is now stale.
+      gamma_valid_[j - 1].assign(gamma_valid_[j - 1].size(), 0);
+      channel_solve_valid_[j - 1].assign(channel_solve_valid_[j - 1].size(), 0);
+      raw_solve_valid_[j - 1].assign(raw_solve_valid_[j - 1].size(), 0);
+      if (route_[j - 1] != kRouteLevel) continue;  // solved in channel space by FillMatrices
       matrix_c *theAInvMatrix = this->GetJSpecAInvMatrix(j);
       // Add validation to catch corrupted matrices before processing
       if (theAInvMatrix->empty()) {
         continue;  // Skip empty matrices
       }
       solver_valid_[j - 1] = solvers_[j - 1].Decompose(*theAInvMatrix) ? 1 : 0;
-      // Anything derived from the previous factorization is now stale.
-      gamma_valid_[j - 1].assign(gamma_valid_[j - 1].size(), 0);
-      channel_solve_valid_[j - 1].assign(channel_solve_valid_[j - 1].size(), 0);
-      raw_solve_valid_[j - 1].assign(raw_solve_valid_[j - 1].size(), 0);
     }
   }
   chan_cap_cache_.clear();
@@ -292,7 +358,7 @@ const vector_r &AMatrixFunc::GetGammaVector(int jGroupNum, int chNum) {
   if (!gamma_valid_[jGroupNum - 1][chNum - 1]) {
     JGroup *jGroup = compound()->GetJGroup(jGroupNum);
     const std::vector<int> &map = level_active_index_[jGroupNum - 1];
-    gammas.assign(solvers_[jGroupNum - 1].size(), 0.0);
+    gammas.assign(active_levels_[jGroupNum - 1].size(), 0.0);
     for (int la = 1; la < (int)map.size(); la++) {
       const int row = map[la];
       if (row == 0) continue;
@@ -314,6 +380,7 @@ const vector_r &AMatrixFunc::GetGammaVector(int jGroupNum, int chNum) {
 const vector_c &AMatrixFunc::GetChannelSolve(int jGroupNum, int chNum) {
   vector_c &solve = channel_solves_[jGroupNum - 1][chNum - 1];
   if (!channel_solve_valid_[jGroupNum - 1][chNum - 1]) {
+    AZUREProfile::Timer profileTimer(AZUREProfile::kChannelSolve);
     const vector_r &gammas = this->GetGammaVector(jGroupNum, chNum);
     const int n = (int)gammas.size();
     solve.resize(n);
@@ -331,6 +398,13 @@ const vector_c &AMatrixFunc::GetChannelSolve(int jGroupNum, int chNum) {
 
 complex AMatrixFunc::GetUBilinear(int jGroupNum, int chNum, int chpNum) {
   if (jGroupNum < 1 || jGroupNum > (int)solvers_.size()) return complex(0.0, 0.0);
+  if (route_[jGroupNum - 1] == kRouteChannel) {
+    // F = G^T A G is symmetric: one column per exit channel serves every entrance.
+    const ChannelSpace::FormalLevels &f = (*formal_[jGroupNum - 1]);
+    const int a = f.pos[chNum - 1], b = f.pos[chpNum - 1];
+    if (a < 0 || b < 0) return complex(0.0, 0.0);
+    return this->FColumn(jGroupNum, b)[a];
+  }
   if (!solver_valid_[jGroupNum - 1]) return complex(0.0, 0.0);
   // Fill the solve cache first: it populates the gamma cache for chpNum, so
   // taking the chNum reference afterwards keeps it clear that nothing can move
@@ -358,10 +432,11 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
         entry.chpNum == chpNum && entry.maskChannel == maskChannel) return entry.value;
   }
   complex value(0.0, 0.0);
-  if (solver_valid_[jGroupNum - 1]) {
+  const bool channel = (route_[jGroupNum - 1] == kRouteChannel);
+  if (channel || solver_valid_[jGroupNum - 1]) {
     JGroup *jGroup = compound()->GetJGroup(jGroupNum);
     const std::vector<int> &map = level_active_index_[jGroupNum - 1];
-    const int n = solvers_[jGroupNum - 1].size();
+    const int n = (int)active_levels_[jGroupNum - 1].size();
     chan_cap_entrance_.assign(n, complex(0.0, 0.0));
     chan_cap_exit_.assign(n, complex(0.0, 0.0));
     for (int la = 1; la < (int)map.size(); la++) {
@@ -372,7 +447,8 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
       chan_cap_entrance_[row - 1] = level->GetFitGamma(chNum);
       chan_cap_exit_[row - 1] = level->GetFitGamma(chpNum);
     }
-    value = solvers_[jGroupNum - 1].Bilinear(chan_cap_entrance_, chan_cap_exit_);
+    value = channel ? this->ChannelBilinear(jGroupNum, chan_cap_entrance_.data(), chan_cap_exit_.data())
+                    : solvers_[jGroupNum - 1].Bilinear(chan_cap_entrance_, chan_cap_exit_);
   }
   ChanCapEntry entry;
   entry.jGroupNum = jGroupNum;
@@ -389,6 +465,8 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
  */
 
 void AMatrixFunc::CalculateTMatrix(EPoint *point) {
+  AZUREProfile::Timer profileTimer(AZUREProfile::kTMatrix);
+  tbar_decay_ = nullptr;
   // Cache frequently accessed values to avoid repeated function calls
   int entranceKey = point->GetEntranceKey();
   int exitKey = point->GetExitKey();
@@ -547,6 +625,7 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
  */
 bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar, int xsComponent,
                             bool ayCrossSection) {
+  AZUREProfile::Timer profileTimer(AZUREProfile::kGradTBar);
   const complex I(0.0, 1.0);
 
   // --- Common gating. ---
@@ -564,13 +643,9 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
   if (isBetaDelayed && xsComponent != 0) return false;
 
   // Active-level compaction unsupported here: require every level of every
-  // in-R-matrix JGroup to itself be in the R matrix (so original idx == active).
-  for (int j = 1; j <= compound()->NumJGroups(); j++) {
-    JGroup *jg = compound()->GetJGroup(j);
-    if (!jg->IsInRMatrix()) continue;
-    for (int la = 1; la <= jg->NumLevels(); la++)
-      if (!jg->GetLevel(la)->IsInRMatrix()) return false;
-  }
+  // in-R-matrix JGroup to itself be in the R matrix (so original idx == active;
+  // ClearMatrices records it).
+  if (!all_levels_active_) return false;
 
   // Locate the decay matching the exit pair (mirror CalculateCrossSection).
   int ir = 0;
@@ -589,6 +664,20 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
   // one at the point's angle (GenMatrixFunc computes it before A_y and a
   // target-effect sub-point keeps it); anything else is not supported.
   if (ayCrossSection && (!point->IsAnalyzingPower() || !isDiff || isPhase || xsComponent != 0)) return false;
+
+  // Electron screening (GenMatrixFunc::CalculateCrossSection): a screened observable is f times the bare
+  // one, so the bare one's cotangent is f fitBar, and dY/dU_e = k Y per MeV, 1e-6 k Y per eV, with Y the
+  // screened value this point holds from its forward calculation.  A phase shift and an A_y value are
+  // not screened (an A_y sub-point's cross section is: ayCrossSection).
+  bar.screen.clear();
+  if (point->GetScreeningParam() > 0 && point->GetScreeningK() != 0.0 && !isPhase &&
+      !(point->IsAnalyzingPower() && !ayCrossSection)) {
+    double y = point->GetFitCrossSection();
+    if (xsComponent == 1) y = point->GetFitE1CrossSection();
+    else if (xsComponent == 2) y = point->GetFitE2CrossSection();
+    bar.screen.push_back({point->GetScreeningParam(), fitBar * 1.0e-6 * point->GetScreeningK() * y});
+    fitBar *= point->ScreeningFactor();
+  }
 
   // === Cross-section -> T:  build the T-matrix cotangents. ===
   // tBar  : cotangents of the internal T(k,m).
@@ -845,6 +934,23 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
     };
 
     const bool inelasticParticle = (aa != exitPairNum && exitPairDiff->GetPType() == 0);
+    // Away from UPOS the sum is linear in the Legendre polynomials with
+    // angle-independent coefficients: the cotangent of each pathway is a sum
+    // over orders of products taken once per T-matrix (TBarProducts).
+    if (!(inelasticParticle && point->IsUPOS()) && this->TBarProducts(theDecay, inelasticParticle)) {
+      const complex scale = fitBar * cR;
+      const std::vector<InterferencePathway> &paths = theDecay->InterferencePathways();
+      const int nl = theDecay->NumInterferenceOrders();
+      tbar_legendre_.assign(nl, 0.0);
+      const int nP = std::min(nl, point->GetMaxLOrder() + 1);
+      for (int l = 0; l < nP; l++) tbar_legendre_[l] = point->GetLegendreP(l);
+      for (size_t p = 0; p < paths.size(); p++) {
+        const complex *q = &tbar_q_[p * nl];
+        complex s(0.0, 0.0);
+        for (int l = 0; l < nl; l++) s += q[l] * tbar_legendre_[l];
+        if (s != complex(0.0, 0.0)) Tadd(paths[p].k, paths[p].m, paths[p].rad, scale * s);
+      }
+    } else
     for (int kL = 1; kL <= theDecay->NumKLGroups(); kL++) {
       int K = theDecay->GetKLGroup(kL)->GetK();
       int lOrder = theDecay->GetKLGroup(kL)->GetLOrder();
@@ -892,7 +998,13 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
       }
     }
 
-    if (aa == exitPairNum) {  // elastic Coulomb-nuclear interference
+    if (aa == exitPairNum && theDecay->TablesBuilt()) {  // elastic Coulomb-nuclear interference
+      const complex cI = I * geom * itFactor / (std::sqrt(pi) * 100.0);
+      for (const DiagonalPathway &d : theDecay->DiagonalPathways()) {
+        const complex B = cI * d.statSpin * point->GetCoulombAmplitude(d.s) * point->GetLegendreP(d.l);
+        tBar[d.k - 1][d.m - 1] += fitBar * B;
+      }
+    } else if (aa == exitPairNum) {  // elastic Coulomb-nuclear interference
       complex cI = I * geom * itFactor / (std::sqrt(pi) * 100.0);
       for (int k = 1; k <= nK; k++) {
         for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
@@ -921,7 +1033,9 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
  */
 void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, GradAccum &accum,
                               const vector_matrix_r *shiftDeriv) {
+  AZUREProfile::Timer profileTimer(AZUREProfile::kGradBackprop);
   const complex I(0.0, 1.0);
+  for (const auto &s : bar.screen) accum.AddScreening(s.first, s.second);
   EPoint *point = energyPoint;
   // Brune formalism: the boundary/shift terms change the M-construction kernel
   // (handled in the structural gamma step via cached shift values) and add
@@ -1197,8 +1311,9 @@ double AMatrixFunc::InEnergy(EPoint *point) {
  * FillMatrices).
  */
 void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix_c &Mbar, double inEnergy,
-                                     GradAccum &accum, const vector_matrix_r *shiftDeriv,
+                                     GradAccum &accum, const vector_matrix_r *shiftDeriv, const complex *lambda,
                                      const std::vector<int> *levelOf) {
+  AZUREProfile::Timer profileTimer(AZUREProfile::kGradLevelMatrix);
   EPoint *point = energyPoint;
   // Active level r (1-based) -> its level number (THM blocks, levelOf), else r.
   auto lev = [levelOf](int r) -> int { return levelOf ? (*levelOf)[r] : r; };
@@ -1275,9 +1390,10 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
     //   d J[a][a]/d g_a,d = -2 g_a,d S'_a,d,
     //   d J[a][c]/d g_a,d = d J[c][a]/d g_a,d = -g_c,d (S_a,d - S_c,d)/(E_a - E_c).
     for (int d = 1; d <= numChannels; d++) {
-      complex Ld = point->GetLoElement(jNum, d);
       const bool pd = isParticle(d);
-      double Bd = pd ? jg->GetChannel(d)->GetBoundaryCondition() : 0.0;
+      // lambda[d-1] stands for L_d + B_d (particle) or L_d.
+      complex Ld = lambda ? lambda[d - 1] : point->GetLoElement(jNum, d);
+      double Bd = (pd && !lambda) ? jg->GetChannel(d)->GetBoundaryCondition() : 0.0;
       for (int a = 1; a <= n; a++) {
         ALevel *la_ = jg->GetLevel(lev(a));
         double Ea = la_->GetFitE();
@@ -1315,31 +1431,43 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
   // flat arrays: the loops below are n^2 per channel, and the accessor calls
   // and divisions they used to make per element dominated the gradient.
   const int nch = jg->NumChannels();
-  std::vector<double> &E = lma_e_, &G = lma_g_, &S = lma_s_, &inv = lma_inv_, &reSym = lma_resym_,
-                      &imSym = lma_imsym_;
-  E.resize(n);
-  G.resize((size_t)n * nch);
-  S.resize((size_t)n * nch);
-  for (int la = 0; la < n; la++) {
-    ALevel *level = jg->GetLevel(lev(la + 1));
-    E[la] = level->GetFitE();
-    for (int ch = 0; ch < nch; ch++) {
-      G[(size_t)la * nch + ch] = level->GetFitGamma(ch + 1);
-      S[(size_t)la * nch + ch] = level->GetShiftFunction(ch + 1);
+  // E, G, S, S G and 1/(E_r - E_c) off the diagonal: kept per parameter set
+  // for the whole J-group; gathered here over the active levels when a THM
+  // block leaves levels out of the R matrix (levelOf).
+  const ChannelSpace::LevelArrays *levelArraysPtr;
+  if (levelOf) {
+    ChannelSpace::LevelArrays &la = lma_active_;
+    la.n = n;
+    la.nch = nch;
+    la.E.resize(n);
+    la.G.resize((size_t)n * nch);
+    la.S.resize((size_t)n * nch);
+    la.SG.resize((size_t)n * nch);
+    for (int r = 0; r < n; r++) {
+      ALevel *level = jg->GetLevel(lev(r + 1));
+      la.E[r] = level->GetFitE();
+      for (int ch = 0; ch < nch; ch++) {
+        la.G[(size_t)r * nch + ch] = level->GetFitGamma(ch + 1);
+        la.S[(size_t)r * nch + ch] = level->GetShiftFunction(ch + 1);
+        la.SG[(size_t)r * nch + ch] = la.S[(size_t)r * nch + ch] * la.G[(size_t)r * nch + ch];
+      }
     }
+    la.inv.assign((size_t)n * n, 0.0);
+    for (int r = 0; r < n; r++)
+      for (int c = 0; c < n; c++)
+        if (r != c) la.inv[(size_t)r * n + c] = 1.0 / (la.E[r] - la.E[c]);
+    levelArraysPtr = &la;
+  } else {
+    levelArraysPtr = &ChannelSpace::CurrentLevelArrays(jg);
   }
+  const ChannelSpace::LevelArrays &levelArrays = *levelArraysPtr;
+  const std::vector<double> &E = levelArrays.E, &G = levelArrays.G, &S = levelArrays.S, &inv = levelArrays.inv;
+  std::vector<double> &reSym = lma_resym_, &imSym = lma_imsym_;
   std::vector<char> &bruneP = lma_brunep_;
   bruneP.assign(nch, 0);
   bool anyBruneP = false;
   for (int ch = 0; ch < nch; ch++)
     if (brune && jg->GetChannel(ch + 1)->GetRadType() == 'P') bruneP[ch] = anyBruneP = true;
-  // 1/(E_r - E_c) off the diagonal.
-  if (anyBruneP) {
-    inv.assign((size_t)n * n, 0.0);
-    for (int r = 0; r < n; r++)
-      for (int c = 0; c < n; c++)
-        if (r != c) inv[(size_t)r * n + c] = 1.0 / (E[r] - E[c]);
-  }
 
   // Brune adds explicit E_lambda dependence through the boundary/shift kernel
   //   M[r][c] = ... - sum_{ch P} g_r,ch g_c,ch K_ch[r][c],
@@ -1403,16 +1531,17 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
       reSym[(size_t)a * n + c] = std::real(sym);
       imSym[(size_t)a * n + c] = std::imag(sym);
     }
-  std::vector<double> &SG = lma_sg_, &acc = lma_acc_;
-  if (anyBruneP) {
-    SG.resize((size_t)n * nch);
-    for (size_t k = 0; k < SG.size(); k++) SG[k] = S[k] * G[k];
-  }
+  const std::vector<double> &SG = levelArrays.SG;
+  std::vector<double> &acc = lma_acc_;
   acc.resize((size_t)4 * nch);
   double *sRe = &acc[0], *sIm = &acc[nch], *t1 = &acc[2 * (size_t)nch], *t2 = &acc[3 * (size_t)nch];
   std::vector<complex> &Lconst = lma_l_;
   Lconst.resize(nch);
   for (int d = 0; d < nch; d++) {
+    if (lambda) {
+      Lconst[d] = lambda[d];
+      continue;
+    }
     complex Ld = point->GetLoElement(jNum, d + 1);
     if (bruneP[d]) Ld += jg->GetChannel(d + 1)->GetBoundaryCondition();
     Lconst[d] = Ld;
@@ -1485,7 +1614,7 @@ void AMatrixFunc::LevelMatrixABarAdjoint(EPoint *point, int jNum, const matrix_c
       for (int t = 0; t < n; t++) s += Ah[r][t] * tmp[t][c];
       Mbar[r][c] = -s;
     }
-  this->LevelMatrixAdjoint(point, jNum, Mbar, inEnergy, accum, shiftDeriv, levelOf);
+  this->LevelMatrixAdjoint(point, jNum, Mbar, inEnergy, accum, shiftDeriv, nullptr, levelOf);
 }
 
 /*!
@@ -1497,19 +1626,93 @@ void AMatrixFunc::LevelMatrixABarAdjoint(EPoint *point, int jNum, const matrix_c
 const vector_c &AMatrixFunc::GetRawChannelSolve(int jGroupNum, int chNum) {
   vector_c &solve = raw_solves_[jGroupNum - 1][chNum - 1];
   if (!raw_solve_valid_[jGroupNum - 1][chNum - 1]) {
+    AZUREProfile::Timer profileTimer(AZUREProfile::kChannelSolve);
     JGroup *jGroup = compound()->GetJGroup(jGroupNum);
     const std::vector<int> &map = level_active_index_[jGroupNum - 1];
-    const int n = solvers_[jGroupNum - 1].size();
+    const int n = (int)active_levels_[jGroupNum - 1].size();
     solve.assign(n, complex(0.0, 0.0));
     for (int la = 1; la < (int)map.size(); la++) {
       const int row = map[la];
       if (row == 0) continue;
       solve[row - 1] = jGroup->GetLevel(la)->GetFitGamma(chNum);
     }
-    if (n > 0) solvers_[jGroupNum - 1].Solve(&solve[0]);
+    if (n > 0) {
+      if (route_[jGroupNum - 1] == kRouteChannel) {
+        // The widths as they are equal the ones the channel route was built
+        // from unless one is below the 1e-12 cutoff: A g_c then comes from the
+        // channel solves already at hand.
+        const ChannelSpace::FormalLevels &f = (*formal_[jGroupNum - 1]);
+        bool same = true;
+        for (int k = 0; k < n && same; k++) same = (std::real(solve[k]) == f.gcut[(size_t)k * f.nch + chNum - 1]);
+        if (same && !f.pencil) {
+          const vector_c &uf = this->FormalSolve(jGroupNum, chNum - 1);
+          if (f.identity)
+            solve = uf;
+          else
+            for (int r = 0; r < n; r++) {
+              const double *vr = &f.V[(size_t)r * n];
+              complex sum(0.0, 0.0);
+              for (int k = 0; k < n; k++) sum += vr[k] * uf[k];
+              solve[r] = sum;
+            }
+        } else if (same) {
+          // Pencil: A g_c = Z X (e_c + z),  (1 - Lambda R) z = Lambda R e_c.
+          ChannelState &st = chan_[jGroupNum - 1];
+          const int m = (int)f.act.size(), b = f.pos[chNum - 1];
+          std::fill(solve.begin(), solve.end(), complex(0.0, 0.0));
+          if (b >= 0) {
+            vector_c &z = st.wz;
+            z.resize(m);
+            for (int a = 0; a < m; a++) z[a] = st.lamAct[a] * st.R[(size_t)a * m + b];
+            this->SolveBordered(jGroupNum, nullptr, z.data());
+            z[b] += 1.0;
+            vector_c &y = st.w4;
+            y.resize(n);
+            for (int k = 0; k < n; k++) {
+              complex sum(0.0, 0.0);
+              for (int a = 0; a < m; a++) sum += st.X[(size_t)k * m + a] * z[a];
+              y[k] = sum;
+            }
+            for (int r = 0; r < n; r++) {
+              const double *zr = &f.Z[(size_t)r * n];
+              complex sum(0.0, 0.0);
+              for (int k = 0; k < n; k++) sum += zr[k] * y[k];
+              solve[r] = sum;
+            }
+          }
+        } else {
+          vector_c &tmp = chan_[jGroupNum - 1].w3;
+          tmp = solve;
+          this->ApplyA(jGroupNum, tmp.data(), solve.data());
+        }
+      } else
+        solvers_[jGroupNum - 1].Solve(&solve[0]);
+    }
     raw_solve_valid_[jGroupNum - 1][chNum - 1] = 1;
   }
   return solve;
+}
+
+/*!
+ * The channel kernel Lambda_d of J-group j at the energy of `point`, as
+ * LevelMatrixAdjoint takes it: the Lo-matrix element, plus the boundary
+ * condition for the particle channels of the Brune and Park level matrices.
+ */
+const std::vector<complex> &AMatrixFunc::KernelLambda(EPoint *point, int j) {
+  JGroup *jg = compound()->GetJGroup(j);
+  const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
+  const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
+  const int nch = jg->NumChannels();
+  kernel_scratch_.resize(nch);
+  for (int d = 1; d <= nch; d++) {
+    AChannel *ch = jg->GetChannel(d);
+    complex l = point->GetLoElement(j, d);
+    const bool particle = park ? (ch->GetRadType() == 'P' && compound()->GetPair(ch->GetPairNum())->GetPType() == 0)
+                               : (brune && ch->GetRadType() == 'P');
+    if (particle) l += ch->GetBoundaryCondition();
+    kernel_scratch_[d - 1] = l;
+  }
+  return kernel_scratch_;
 }
 
 /*!
@@ -1576,11 +1779,87 @@ bool AMatrixFunc::CollectBilinearTerms(EPoint *energyPoint, const TMatrixCotange
 void AMatrixFunc::BilinearAdjoint(EPoint *energyPoint, int jNum, const std::vector<BilinearTerm> &terms,
                                   GradAccum &accum, const vector_matrix_r *shiftDeriv) {
   if (terms.empty()) return;
-  if (jNum < 1 || jNum > (int)solvers_.size() || !solver_valid_[jNum - 1]) return;
-  const int n = solvers_[jNum - 1].size();
+  if (jNum < 1 || jNum > (int)solvers_.size()) return;
+  const bool channel = (route_[jNum - 1] == kRouteChannel);
+  if (!channel && !solver_valid_[jNum - 1]) return;
+  const int n = (int)active_levels_[jNum - 1].size();
   if (n == 0) return;
+  // In channel space the adjoint is taken in the formal representation: for
+  // the standard level matrix that is the level matrix itself; for Brune and
+  // Park only a scalar gradient pass can use it (its formal cotangents are
+  // resolved once at the end of the pass, ResolveFormalCotangents).
+  if (channel) {
+    const ChannelSpace::FormalLevels &f = (*formal_[jNum - 1]);
+    if (f.identity || (accum.formal && f.adjointOK)) {
+      this->FormalBilinearAdjoint(jNum, terms, accum);
+      return;
+    }
+  }
   // All levels are in the R matrix on this path (PointTBar), so active index
   // = level index.
+  if (accum.formal) {
+    // A scalar pass: Mbar = -sum_t beta_t conj(u_ch) conj(u_chp)^T enters the
+    // structural adjoint through K - E N, linearly in E, so only Re(Mbar) and
+    // E Re(Mbar) are summed here (resolved once per pass), and the kernel
+    // G Lambda(E) G^T is differentiated now, through the rank-one terms:
+    //   gammabar_{l d} -= Re(conj(Lambda_d) ((Mbar + Mbar^T) g_d)_l).
+    JGroup *jg = compound()->GetJGroup(jNum);
+    const int nch = jg->NumChannels();
+    const double inEnergy = this->InEnergy(energyPoint);
+    std::vector<double> &K = accum.lmK[jNum - 1], &N = accum.lmN[jNum - 1];
+    if (!accum.lmUsed[jNum - 1]) {
+      K.assign((size_t)n * n, 0.0);
+      N.assign((size_t)n * n, 0.0);
+      accum.lmUsed[jNum - 1] = 1;
+    }
+    accum.formalUsed = true;
+    const std::vector<complex> &lam = this->KernelLambda(energyPoint, jNum);
+    const std::vector<double> &G = ChannelSpace::CurrentLevelArrays(jg).G;
+    vector_c ga(nch), gb(nch);
+    for (const BilinearTerm &t : terms) {
+      const vector_c &uEn = this->GetRawChannelSolve(jNum, t.ch);
+      const vector_c &uEx = this->GetRawChannelSolve(jNum, t.chp);
+      const complex cb = conj(t.beta);
+      for (int la = 1; la <= n; la++) {
+        accum.AddGamma(jNum, la, t.ch, std::real(cb * uEx[la - 1]));
+        accum.AddGamma(jNum, la, t.chp, std::real(cb * uEn[la - 1]));
+      }
+      // conj(u)^T g_d for both solves.
+      std::fill(ga.begin(), ga.end(), complex(0.0, 0.0));
+      std::fill(gb.begin(), gb.end(), complex(0.0, 0.0));
+      for (int la = 0; la < n; la++) {
+        const complex ca = conj(uEn[la]), cbx = conj(uEx[la]);
+        const double *g = &G[(size_t)la * nch];
+        for (int d = 0; d < nch; d++) {
+          ga[d] += ca * g[d];
+          gb[d] += cbx * g[d];
+        }
+      }
+      for (int la = 0; la < n; la++) {
+        const complex a = -t.beta * conj(uEn[la]), b = -t.beta * conj(uEx[la]);
+        // (Mbar g_d)_l = a_l (conj(uEx) . g_d);  (Mbar^T g_d)_l = b_l (conj(uEn) . g_d).
+        for (int d = 0; d < nch; d++)
+          accum.gamma[jNum - 1][la][d] -= std::real(conj(lam[d]) * (a * gb[d] + b * ga[d]));
+        double *kr = &K[(size_t)la * n], *nr = &N[(size_t)la * n];
+        for (int c = 0; c < n; c++) {
+          const double v = std::real(a * conj(uEx[c]));
+          kr[c] += v;
+          nr[c] += inEnergy * v;
+        }
+      }
+    }
+    return;
+  }
+  // A row of the residual Jacobian or of the model gradients: the rank-two
+  // derivatives of the level matrix by free parameter (LevelAdjoint).
+  if (accum.mask && this->LevelAdjoint(energyPoint, jNum, terms, *accum.mask, shiftDeriv,
+                                       [&](int l, int ch, double v) {
+                                         if (ch < 0)
+                                           accum.e[jNum - 1][l] += v;
+                                         else
+                                           accum.gamma[jNum - 1][l][ch] += v;
+                                       }))
+    return;
   matrix_c &Mbar = mbar_scratch_;
   Mbar.resize(n);
   for (int r = 0; r < n; r++) Mbar[r].assign(n, complex(0.0, 0.0));
@@ -1599,4 +1878,803 @@ void AMatrixFunc::BilinearAdjoint(EPoint *energyPoint, int jNum, const std::vect
     }
   }
   this->LevelMatrixAdjoint(energyPoint, jNum, Mbar, this->InEnergy(energyPoint), accum, shiftDeriv);
+}
+
+/*!
+ * One diagonal bilinear form g_ch^T A g_ch with cotangent mBar (the scattering length's M_cc).  The
+ * general BilinearAdjoint takes every level of the group as active, so groups with a level left out
+ * of the R-matrix are refused here, as is the RMC formalism.
+ */
+bool AMatrixFunc::BilinearAdjoint(EPoint *point, int jGroupNum, int chNum, complex mBar, GradAccum &accum,
+                                  const vector_matrix_r *shiftDeriv) {
+  if (configure().paramMask & Config::USE_RMC_FORMALISM) return false;
+  if (jGroupNum < 1 || jGroupNum > (int)solvers_.size()) return false;
+  // Solved in channel space (FillMatrices) or as a level matrix (InvertMatrices).
+  if (route_[jGroupNum - 1] != kRouteChannel && !solver_valid_[jGroupNum - 1]) return false;
+  JGroup *jg = compound()->GetJGroup(jGroupNum);
+  if (!jg->IsInRMatrix()) return false;
+  for (int la = 1; la <= jg->NumLevels(); la++)
+    if (!jg->GetLevel(la)->IsInRMatrix()) return false;
+  this->BilinearAdjoint(point, jGroupNum, std::vector<BilinearTerm>{BilinearTerm{chNum, chNum, mBar}}, accum,
+                        shiftDeriv);
+  return true;
+}
+
+/*!
+ * The per-energy part of the channel route for J-group j: the kernel
+ * \f$\Lambda\f$, \f$D^{-1}\f$, \f$R = \Gamma^T D^{-1}\Gamma\f$ over the coupled channels and
+ * the factors of \f$1 - R\Lambda\f$.  Returns false (the level route is then
+ * taken) near a formal pole, where \f$R\f$ is dominated by one level and the
+ * Woodbury form loses digits the level matrix keeps, or when \f$1 - R\Lambda\f$
+ * is ill-conditioned.
+ */
+bool AMatrixFunc::SolveChannelSpace(int j, EPoint *point, double inEnergy) {
+  const ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
+  ChannelState &st = chan_[j - 1];
+  const int n = f.n, nch = f.nch, m = (int)f.act.size();
+  st.inverseValid = false;
+  st.lam.resize(nch);
+  for (int c = 0; c < nch; c++) {
+    complex l = point->GetLoElement(j, c + 1);
+    l += f.lamShift[c];
+    st.lam[c] = l;
+  }
+  st.lamAct.resize(m);
+  for (int a = 0; a < m; a++) st.lamAct[a] = st.lam[f.act[a]];
+  st.defl.clear();
+  if (f.pencil) {
+    if (!this->SolvePencil(j, inEnergy)) return false;
+  } else if (!this->SolveFormal(j, inEnergy)) return false;
+  // The bordered system of the deflated levels p and the channels:
+  //   S = [ D_p        -Gamma_p    ]
+  //       [ -Lambda Gamma_p^T   1 - Lambda R ]
+  // (just 1 - Lambda R without deflated levels).
+  const int kd = (int)st.defl.size(), ns = kd + m;
+  st.lu.assign((size_t)ns * ns, complex(0.0, 0.0));
+  for (int p = 0; p < kd; p++) {
+    const int lv = st.defl[p];
+    st.lu[(size_t)p * ns + p] = (f.e[lv] - inEnergy) + f.elo[lv];
+    for (int a = 0; a < m; a++) {
+      const double g = f.gamma[(size_t)lv * m + a];
+      st.lu[(size_t)p * ns + kd + a] = -g;
+      st.lu[(size_t)(kd + a) * ns + p] = -st.lamAct[a] * g;
+    }
+  }
+  for (int a = 0; a < m; a++)
+    for (int b = 0; b < m; b++)
+      st.lu[(size_t)(kd + a) * ns + kd + b] =
+          (a == b ? complex(1.0, 0.0) : complex(0.0, 0.0)) - st.lamAct[a] * st.R[(size_t)a * m + b];
+  st.piv.resize(ns);
+  if (ns > 0 && !(ChannelSpace::LUFactor(st.lu.data(), st.piv.data(), ns) >= ChannelSpace::kMinPivotRatio)) {
+    AZUREProfile::Count(AZUREProfile::kLevelRoutePivot);
+    return false;
+  }
+  st.F.resize((size_t)m * m);
+  st.fcol.assign(m, 0);
+  st.usolve.resize(nch);
+  st.uvalid.assign(nch, 0);
+  return true;
+}
+
+/*!
+ * R of the pencil route: \f$R = G^T (K - E N)^{-1} G\f$ from a real LU of the
+ * pencil.  Refused near a formal pole, where (K - E N) is nearly singular: the
+ * estimated relative error of R (round-off times the condition of the pencil)
+ * times the size of \f$R\Lambda\f$ must stay below kMaxPoleError.
+ */
+bool AMatrixFunc::SolvePencil(int j, double inEnergy) {
+  const ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
+  ChannelState &st = chan_[j - 1];
+  const int n = f.n, m = (int)f.act.size();
+  // H - E T, formed in extended precision: H and E T are much larger than
+  // their difference near a formal pole.  Upper Hessenberg.
+  st.P.assign((size_t)n * n, 0.0);
+  const long double e = inEnergy;
+  double pmax = 0.0;
+  for (int i = 0; i < n; i++)
+    for (int k = std::max(0, i - 1); k < n; k++) {
+      const double v = (double)(f.H[(size_t)i * n + k] - e * f.T[(size_t)i * n + k]);
+      st.P[(size_t)i * n + k] = v;
+      pmax = std::max(pmax, std::fabs(v));
+    }
+  st.hswap.resize(n);
+  const double ratio = ChannelSpace::HessenbergLU(st.P.data(), st.hswap.data(), n);
+  if (!(ratio > 0.0)) {
+    AZUREProfile::Count(AZUREProfile::kLevelRoutePole);
+    return false;
+  }
+  // X = (H - E T)^-1 Qt G;  R = (Z^T G)^T X  (= G^T (K - E N)^-1 G).
+  st.X.assign(f.gq.begin(), f.gq.end());
+  ChannelSpace::HessenbergSolve(st.P.data(), st.hswap.data(), n, st.X.data(), m);
+  st.R.assign((size_t)m * m, complex(0.0, 0.0));
+  double rl = 0.0, x2max = 0.0;
+  for (int a = 0; a < m; a++) {
+    double x2 = 0.0;
+    for (int k = 0; k < n; k++) x2 += st.X[(size_t)k * m + a] * st.X[(size_t)k * m + a];
+    x2max = std::max(x2max, x2 * std::abs(st.lamAct[a]));
+    for (int b = a; b < m; b++) {
+      double sab = 0.0, sba = 0.0;
+      for (int k = 0; k < n; k++) {
+        sab += f.gz[(size_t)k * m + a] * st.X[(size_t)k * m + b];
+        sba += f.gz[(size_t)k * m + b] * st.X[(size_t)k * m + a];
+      }
+      const double r = 0.5 * (sab + sba);
+      st.R[(size_t)a * m + b] = st.R[(size_t)b * m + a] = r;
+      rl = std::max(rl, std::fabs(r) * std::max(std::abs(st.lamAct[a]), std::abs(st.lamAct[b])));
+    }
+  }
+  // Round-off of R Lambda: the pencil is known to a few ulps of its entries,
+  // dP, and dR = -G^T P^-1 dP P^-1 G, so the column of channel a of R Lambda
+  // is uncertain by about ulps eps |P| |P^-1 G_a|^2 |Lambda_a| -- the analogue
+  // of eta on the formal route (P^-1 G = Z X).
+  const double err = ChannelSpace::kEnergyUlps * std::numeric_limits<double>::epsilon() * pmax * x2max;
+  if (!(rl <= ChannelSpace::kMaxPoleRatio) || !(err <= ChannelSpace::kMaxPoleError)) {
+    AZUREProfile::Count(AZUREProfile::kLevelRoutePole);
+    return false;
+  }
+  return true;
+}
+
+/*!
+ * R of the formal route: \f$R = \Gamma^T D^{-1} \Gamma\f$.
+ */
+bool AMatrixFunc::SolveFormal(int j, double inEnergy) {
+  const ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
+  ChannelState &st = chan_[j - 1];
+  const int n = f.n, m = (int)f.act.size();
+  st.dinv.resize(n);
+  st.isDefl.assign(n, 0);
+  // Levels near a pole are deflated: kept as unknowns of the bordered system
+  // (SolveChannelSpace) rather than summed into R.  Level k contributes
+  // w_k / (e_k - E) to R, w_k = Gamma_k Gamma_k^T, which the kernel turns into
+  // terms of size s_k = |Gamma_k|^2_Lambda / |e_k - E|.  Near a formal pole
+  // two things would go wrong that the level matrix does not suffer from: the
+  // large terms cancel in (1 - Lambda R)^-1 (kappa_k = s_k), and the absolute
+  // error of e_k - E (round-off of E and of the formal energy e_k, a few ulps
+  // of the energies involved) becomes a relative error of s_k
+  // (eta_k = s_k de / |e_k - E|).
+  const double de = ChannelSpace::kEnergyUlps * std::numeric_limits<double>::epsilon() * (f.emax + std::fabs(inEnergy));
+  for (int k = 0; k < n; k++) {
+    const complex d = (f.e[k] - inEnergy) + f.elo[k];
+    const double *g = &f.gamma[(size_t)k * m];
+    double w = 0.0;
+    for (int a = 0; a < m; a++) w += g[a] * g[a] * std::abs(st.lamAct[a]);
+    st.dinv[k] = (d == complex(0.0, 0.0)) ? complex(0.0, 0.0) : 1.0 / d;
+    const double inv = std::abs(st.dinv[k]);
+    const double kappa = w * inv;
+    if (w > 0.0 && (d == complex(0.0, 0.0) || !(kappa <= ChannelSpace::kDeflateRatio) ||
+                    !(kappa * de * inv <= ChannelSpace::kMaxPoleError))) {
+      // A deflated level is solved with the channels; the round-off of that
+      // solve moves e_k - E by a few ulps of the (unit-scale) bordered system,
+      // which matters within the level's width w_k: relative error
+      // ~ eps w_k / (|e_k - E|^2 + w_k^2).  Narrower than that, the level
+      // matrix is taken.
+      const double ad = std::abs(d);
+      if (!(ChannelSpace::kEnergyUlps * std::numeric_limits<double>::epsilon() * w / (ad * ad + w * w) <=
+            ChannelSpace::kMaxPoleError)) {
+        AZUREProfile::Count(AZUREProfile::kLevelRoutePole);
+        return false;
+      }
+      st.isDefl[k] = 1;
+      st.defl.push_back(k);
+    }
+  }
+  if ((int)st.defl.size() > ChannelSpace::kMaxDeflated) {
+    AZUREProfile::Count(AZUREProfile::kLevelRoutePole);
+    return false;
+  }
+  if (!st.defl.empty()) AZUREProfile::Count(AZUREProfile::kDeflated);
+  // R = Gamma^T D^-1 Gamma, symmetric; real unless the formal energies are complex.
+  st.R.assign((size_t)m * m, complex(0.0, 0.0));
+  if (!f.complexE) {
+    std::vector<double> &rr = st.rreal;
+    rr.assign((size_t)m * m, 0.0);
+    for (int k = 0; k < n; k++) {
+      if (st.isDefl[k]) continue;
+      const double w = std::real(st.dinv[k]);
+      const double *g = &f.gamma[(size_t)k * m];
+      for (int a = 0; a < m; a++) {
+        const double ga = g[a] * w;
+        if (ga == 0.0) continue;
+        double *row = &rr[(size_t)a * m];
+        for (int b = a; b < m; b++) row[b] += ga * g[b];
+      }
+    }
+    for (int a = 0; a < m; a++)
+      for (int b = a; b < m; b++) st.R[(size_t)a * m + b] = st.R[(size_t)b * m + a] = rr[(size_t)a * m + b];
+  } else {
+    for (int k = 0; k < n; k++) {
+      if (st.isDefl[k]) continue;
+      const complex w = st.dinv[k];
+      const double *g = &f.gamma[(size_t)k * m];
+      for (int a = 0; a < m; a++) {
+        if (g[a] == 0.0) continue;
+        const complex ga = g[a] * w;
+        complex *row = &st.R[(size_t)a * m];
+        for (int b = a; b < m; b++) row[b] += ga * g[b];
+      }
+    }
+    for (int a = 0; a < m; a++)
+      for (int b = a + 1; b < m; b++) st.R[(size_t)b * m + a] = st.R[(size_t)a * m + b];
+  }
+  return true;
+}
+
+/*!
+ * Solves the bordered system of SolveChannelSpace for the right-hand side
+ * (wp over the deflated levels, wz over the channels), in place: on return wp
+ * holds y_p and wz holds z = Lambda Gamma^T y.
+ */
+void AMatrixFunc::SolveBordered(int j, complex *wp, complex *wz) {
+  ChannelState &st = chan_[j - 1];
+  const int kd = (int)st.defl.size(), m = (int)(*formal_[j - 1]).act.size(), ns = kd + m;
+  if (ns == 0) return;
+  vector_c &b = st.w3b;
+  b.resize(ns);
+  for (int p = 0; p < kd; p++) b[p] = wp[p];
+  for (int a = 0; a < m; a++) b[kd + a] = wz[a];
+  ChannelSpace::LUSolve(st.lu.data(), st.piv.data(), ns, b.data());
+  for (int p = 0; p < kd; p++) wp[p] = b[p];
+  for (int a = 0; a < m; a++) wz[a] = b[kd + a];
+}
+
+/*!
+ * Column b of \f$F = \Gamma^T A_f \Gamma = G^T A G\f$: with the deflated levels p,
+ * \f$F_b = \Gamma_p^T y_p + R_b + R z\f$ from the bordered system with
+ * right-hand side \f$(\Gamma_{p b}, \Lambda R_b)\f$ (without deflated levels
+ * \f$(1 - R\Lambda)^{-1} R_b\f$).
+ */
+const complex *AMatrixFunc::FColumn(int j, int b) {
+  ChannelState &st = chan_[j - 1];
+  const ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
+  const int m = (int)f.act.size(), kd = (int)st.defl.size();
+  complex *col = &st.F[(size_t)b * m];
+  if (!st.fcol[b]) {
+    vector_c &yp = st.wp, &z = st.wz;
+    yp.resize(kd);
+    z.resize(m);
+    for (int p = 0; p < kd; p++) yp[p] = f.gamma[(size_t)st.defl[p] * m + b];
+    for (int a = 0; a < m; a++) z[a] = st.lamAct[a] * st.R[(size_t)a * m + b];
+    this->SolveBordered(j, yp.data(), z.data());
+    for (int a = 0; a < m; a++) {
+      complex s = st.R[(size_t)a * m + b];
+      for (int c = 0; c < m; c++) s += st.R[(size_t)a * m + c] * z[c];
+      for (int p = 0; p < kd; p++) s += f.gamma[(size_t)st.defl[p] * m + a] * yp[p];
+      col[a] = s;
+    }
+    st.fcol[b] = 1;
+  }
+  return col;
+}
+
+/*!
+ * \f$y = A_f w\f$ on the formal route (formal-level coordinates): with
+ * \f$t = \Gamma_r^T D_r^{-1} w_r\f$ the bordered system with right-hand side
+ * \f$(w_p, \Lambda t)\f$ gives \f$y_p\f$ and \f$z\f$, and
+ * \f$y_r = D_r^{-1}(w_r + \Gamma_r z)\f$.
+ */
+void AMatrixFunc::FormalApply(int j, const complex *w, complex *y) {
+  const ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
+  ChannelState &st = chan_[j - 1];
+  const int n = f.n, m = (int)f.act.size(), kd = (int)st.defl.size();
+  vector_c &yp = st.wp, &z = st.wz;
+  yp.resize(kd);
+  z.assign(m, complex(0.0, 0.0));
+  for (int p = 0; p < kd; p++) yp[p] = w[st.defl[p]];
+  for (int k = 0; k < n; k++) {
+    if (st.isDefl[k]) continue;
+    const complex t = st.dinv[k] * w[k];
+    if (t == complex(0.0, 0.0)) continue;
+    const double *g = &f.gamma[(size_t)k * m];
+    for (int a = 0; a < m; a++) z[a] += g[a] * t;
+  }
+  for (int a = 0; a < m; a++) z[a] *= st.lamAct[a];
+  this->SolveBordered(j, yp.data(), z.data());
+  for (int k = 0; k < n; k++) {
+    if (st.isDefl[k]) continue;
+    const double *g = &f.gamma[(size_t)k * m];
+    complex s = w[k];
+    for (int a = 0; a < m; a++) s += g[a] * z[a];
+    y[k] = st.dinv[k] * s;
+  }
+  for (int p = 0; p < kd; p++) y[st.defl[p]] = yp[p];
+}
+
+/*!
+ * \f$A u\f$ in channel space: \f$V A_f V^T u\f$ on the formal route
+ * (FormalApply), \f$P^{-1}u + P^{-1}G z\f$ with \f$(1 - \Lambda R) z = \Lambda G^T P^{-1} u\f$
+ * on the pencil route (P = K - E N).
+ */
+void AMatrixFunc::ApplyA(int j, const complex *u, complex *out) {
+  const ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
+  ChannelState &st = chan_[j - 1];
+  const int n = f.n, m = (int)f.act.size();
+  vector_c &w = st.w1, &q = st.w2;
+  if (f.pencil) {
+    // P = Qt^T (H - E T) Z^T:  P^-1 u = Z (H - E T)^-1 Qt u,  P^-1 G = Z X,
+    // G^T P^-1 u = X^T Z^T u.
+    std::vector<double> &re = st.rreal;
+    re.assign((size_t)n * 4, 0.0);
+    double *qu = re.data(), *zu = re.data() + 2 * (size_t)n;  // n x 2 each: Qt u and Z^T u
+    for (int i = 0; i < n; i++) {
+      const double *qt = &f.Qt[(size_t)i * n];
+      double qr = 0.0, qi = 0.0, zr = 0.0, zi = 0.0;
+      for (int k = 0; k < n; k++) {
+        qr += qt[k] * std::real(u[k]);
+        qi += qt[k] * std::imag(u[k]);
+        const double zz = f.Z[(size_t)k * n + i];
+        zr += zz * std::real(u[k]);
+        zi += zz * std::imag(u[k]);
+      }
+      qu[2 * i] = qr;
+      qu[2 * i + 1] = qi;
+      zu[2 * i] = zr;
+      zu[2 * i + 1] = zi;
+    }
+    ChannelSpace::HessenbergSolve(st.P.data(), st.hswap.data(), n, qu, 2);
+    q.resize(m);
+    for (int a = 0; a < m; a++) {
+      complex s(0.0, 0.0);
+      for (int k = 0; k < n; k++) s += st.X[(size_t)k * m + a] * complex(zu[2 * k], zu[2 * k + 1]);
+      q[a] = st.lamAct[a] * s;
+    }
+    this->SolveBordered(j, nullptr, q.data());
+    vector_c &y = st.w1;
+    y.resize(n);
+    for (int k = 0; k < n; k++) {
+      complex s(qu[2 * k], qu[2 * k + 1]);
+      for (int a = 0; a < m; a++) s += st.X[(size_t)k * m + a] * q[a];
+      y[k] = s;
+    }
+    for (int r = 0; r < n; r++) {
+      const double *zr = &f.Z[(size_t)r * n];
+      complex s(0.0, 0.0);
+      for (int k = 0; k < n; k++) s += zr[k] * y[k];
+      out[r] = s;
+    }
+    return;
+  }
+  w.assign(n, complex(0.0, 0.0));
+  if (f.identity)
+    for (int k = 0; k < n; k++) w[k] = u[k];
+  else
+    for (int r = 0; r < n; r++) {
+      const complex ur = u[r];
+      if (ur == complex(0.0, 0.0)) continue;
+      const double *vr = &f.V[(size_t)r * n];
+      for (int k = 0; k < n; k++) w[k] += vr[k] * ur;
+    }
+  vector_c &y = st.w4;
+  y.resize(n);
+  this->FormalApply(j, w.data(), y.data());
+  if (f.identity)
+    for (int k = 0; k < n; k++) out[k] = y[k];
+  else
+    for (int r = 0; r < n; r++) {
+      const double *vr = &f.V[(size_t)r * n];
+      complex s(0.0, 0.0);
+      for (int k = 0; k < n; k++) s += vr[k] * y[k];
+      out[r] = s;
+    }
+}
+
+/*!
+ * \f$u^T A v\f$ in channel space (the channel-capture pathways, whose level
+ * vectors are masked and so are not columns of \f$G\f$).
+ */
+complex AMatrixFunc::ChannelBilinear(int j, const complex *u, const complex *v) {
+  const ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
+  const int n = f.n;
+  vector_c av(n);
+  this->ApplyA(j, v, av.data());
+  complex s(0.0, 0.0);
+  for (int k = 0; k < n; k++) s += u[k] * av[k];
+  return s;
+}
+
+/*!
+ * \f$u_c = A_f \Gamma_c\f$ over the formal levels (zero for a channel without
+ * widths), cached per energy.
+ */
+const vector_c &AMatrixFunc::FormalSolve(int j, int ch0) {
+  const ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
+  ChannelState &st = chan_[j - 1];
+  vector_c &u = st.usolve[ch0];
+  if (!st.uvalid[ch0]) {
+    AZUREProfile::Timer profileTimer(AZUREProfile::kChannelSolve);
+    const int n = f.n, m = (int)f.act.size();
+    u.assign(n, complex(0.0, 0.0));
+    const int b = f.pos[ch0];
+    if (b >= 0) {
+      vector_c &w = st.w2;
+      w.resize(n);
+      for (int k = 0; k < n; k++) w[k] = f.gamma[(size_t)k * m + b];
+      this->FormalApply(j, w.data(), u.data());
+    }
+    st.uvalid[ch0] = 1;
+  }
+  return u;
+}
+
+/*!
+ * Adjoint of sum_t beta_t F_{ch,chp} in the formal representation
+ * \f$M_f = D - \Gamma\Lambda\Gamma^T\f$, \f$F_{ab} = \Gamma_a^T M_f^{-1}\Gamma_b\f$.  With
+ * \f$u_c = M_f^{-1}\Gamma_c\f$ and \f$Y_{db} = \delta_{db} + \Lambda_d F_{db}\f$:
+ *
+ *   \f$\bar e_\lambda \mathrel{+}= -\mathrm{Re}(\bar\beta\, u_{a\lambda} u_{b\lambda})\f$,
+ *   \f$\bar\Gamma_{\lambda d} \mathrel{+}= \mathrm{Re}(\bar\beta\,(u_{a\lambda} Y_{db} + u_{b\lambda} Y_{da}))\f$,
+ *
+ * the first from \f$dD\f$, the second from the explicit widths and from
+ * \f$-\Gamma\Lambda\Gamma^T\f$ (using \f$\Gamma^T u_b = F e_b\f$).  O(n c) per term.
+ */
+void AMatrixFunc::FormalBilinearAdjoint(int j, const std::vector<BilinearTerm> &terms, GradAccum &accum) {
+  const ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
+  ChannelState &st = chan_[j - 1];
+  const int n = f.n, nch = f.nch;
+  const bool toFormal = !f.identity;
+  if (toFormal) accum.formalUsed = true;
+  std::vector<double> &eOut = toFormal ? accum.fe[j - 1] : accum.e[j - 1];
+  std::vector<std::vector<double>> &gOut = toFormal ? accum.fgamma[j - 1] : accum.gamma[j - 1];
+  const std::vector<int> &lev = active_levels_[j - 1];
+  vector_c ya(nch), yb(nch);
+  auto column = [&](int c0, vector_c &y) {
+    std::fill(y.begin(), y.end(), complex(0.0, 0.0));
+    y[c0] = 1.0;
+    const int b = f.pos[c0];
+    if (b < 0) return;
+    const complex *Fb = this->FColumn(j, b);
+    const int m = (int)f.act.size();
+    for (int a = 0; a < m; a++) y[f.act[a]] += st.lamAct[a] * Fb[a];
+  };
+  for (const BilinearTerm &t : terms) {
+    const int a = t.ch - 1, b = t.chp - 1;
+    const complex cb = conj(t.beta);
+    const vector_c &ua = this->FormalSolve(j, a);
+    const vector_c &ub = this->FormalSolve(j, b);
+    column(a, ya);
+    column(b, yb);
+    for (int k = 0; k < n; k++) {
+      const int row = toFormal ? k : lev[k] - 1;
+      const complex pa = cb * ua[k], pb = cb * ub[k];
+      eOut[row] -= std::real(pa * ub[k]);
+      if (pa == complex(0.0, 0.0) && pb == complex(0.0, 0.0)) continue;
+      double *g = &gOut[row][0];
+      for (int d = 0; d < nch; d++) g[d] += std::real(pa * yb[d] + pb * ya[d]);
+    }
+  }
+}
+
+/*!
+ * Formal cotangents (ebar, Gammabar) -> level parameters.  With K V = N V diag(e),
+ * V^T N V = 1 and Gamma = V^T G, a variation gives
+ *   de_l = v_l^T (dK - e_l dN) v_l,  dV = V Omega,
+ *   Omega_kl = v_k^T (dK - e_l dN) v_l / (e_l - e_k) (k != l),  Omega_ll = -v_l^T dN v_l / 2,
+ * so with H = V^T Vbar = Gamma Gammabar^T (Vbar = G Gammabar^T)
+ *   Kbar = V Phi V^T,  Phi_ll = ebar_l,  Phi_kl = H_kl / (e_l - e_k),
+ *   Nbar = V Psi V^T,  Psi_ll = -e_l ebar_l - H_ll / 2,  Psi_kl = -e_l H_kl / (e_l - e_k),
+ * taken symmetric (K and N are), and Gbar = V Gammabar.  Kbar and Nbar go
+ * through the structural level-matrix adjoint: with the channel kernel set to
+ * zero, LevelMatrixAdjoint(X, E) contracts X with dK - E dN, so
+ *   <Kbar, dK> + <Nbar, dN> = LMA(Kbar + Nbar, 0) + LMA(-Nbar, 1).
+ */
+void AMatrixFunc::ResolveFormalCotangents(GradAccum &accum, const vector_matrix_r *shiftDeriv) {
+  if (!accum.formalUsed) return;
+  this->ClearMatrices();
+  // Deferred level-matrix cotangents: with X_K = sum Re Mbar, X_N = sum E Re Mbar,
+  // <X_K, dK> - <X_N, dN> = LMA(X_K - X_N, 0) + LMA(X_N, 1) with a zero kernel.
+  for (int j = 1; j <= compound()->NumJGroups() && j <= (int)accum.lmUsed.size(); j++) {
+    if (!accum.lmUsed[j - 1]) continue;
+    JGroup *jg = compound()->GetJGroup(j);
+    const int n = (int)std::lround(std::sqrt((double)accum.lmK[j - 1].size()));
+    matrix_c X1(n, vector_c(n)), X2(n, vector_c(n));
+    for (int r = 0; r < n; r++)
+      for (int c = 0; c < n; c++) {
+        const double xk = accum.lmK[j - 1][(size_t)r * n + c], xn = accum.lmN[j - 1][(size_t)r * n + c];
+        X1[r][c] = xk - xn;
+        X2[r][c] = xn;
+      }
+    const std::vector<complex> zero(jg->NumChannels(), complex(0.0, 0.0));
+    this->LevelMatrixAdjoint(nullptr, j, X1, 0.0, accum, shiftDeriv, zero.data());
+    this->LevelMatrixAdjoint(nullptr, j, X2, 1.0, accum, shiftDeriv, zero.data());
+    std::fill(accum.lmK[j - 1].begin(), accum.lmK[j - 1].end(), 0.0);
+    std::fill(accum.lmN[j - 1].begin(), accum.lmN[j - 1].end(), 0.0);
+    accum.lmUsed[j - 1] = 0;
+  }
+  for (int j = 1; j <= compound()->NumJGroups(); j++) {
+    JGroup *jg = compound()->GetJGroup(j);
+    if (!jg->IsInRMatrix() || j > (int)accum.fe.size()) continue;
+    bool any = false;
+    for (size_t k = 0; k < accum.fe[j - 1].size() && !any; k++) {
+      if (accum.fe[j - 1][k] != 0.0) any = true;
+      for (double g : accum.fgamma[j - 1][k])
+        if (g != 0.0) any = true;
+    }
+    if (!any) continue;
+    formal_[j - 1] = ChannelSpace::Cached(jg);
+    formal_jgroup_[j - 1] = jg;
+    ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
+    ChannelSpace::Update(jg, active_levels_[j - 1], configure(), f);
+    const int n = f.n, nch = f.nch, m = (int)f.act.size();
+    const std::vector<double> &ebar = accum.fe[j - 1];
+    const std::vector<std::vector<double>> &gbar = accum.fgamma[j - 1];
+    std::vector<double> e(n);
+    for (int k = 0; k < n; k++) e[k] = std::real(f.e[k]);
+    // H = Gamma Gammabar^T over the coupled channels.
+    std::vector<double> H((size_t)n * n, 0.0);
+    for (int k = 0; k < n; k++)
+      for (int l = 0; l < n; l++) {
+        double s = 0.0;
+        for (int a = 0; a < m; a++) s += f.gamma[(size_t)k * m + a] * gbar[l][f.act[a]];
+        H[(size_t)k * n + l] = s;
+      }
+    std::vector<double> Phi((size_t)n * n, 0.0), Psi((size_t)n * n, 0.0);
+    for (int l = 0; l < n; l++) {
+      Phi[(size_t)l * n + l] = ebar[l];
+      Psi[(size_t)l * n + l] = -e[l] * ebar[l] - 0.5 * H[(size_t)l * n + l];
+      for (int k = 0; k < n; k++) {
+        if (k == l) continue;
+        const double num = H[(size_t)k * n + l] - H[(size_t)l * n + k];
+        const double den = e[l] - e[k];
+        const double ratio = (num == 0.0 || den == 0.0) ? 0.0 : num / (2.0 * den);
+        Phi[(size_t)k * n + l] = ratio;
+        Psi[(size_t)k * n + l] = -e[l] * ratio - 0.5 * H[(size_t)l * n + k];
+      }
+    }
+    // Psi as built is symmetric only up to round-off; use its symmetric part.
+    for (int k = 0; k < n; k++)
+      for (int l = k + 1; l < n; l++) {
+        const double s = 0.5 * (Psi[(size_t)k * n + l] + Psi[(size_t)l * n + k]);
+        Psi[(size_t)k * n + l] = Psi[(size_t)l * n + k] = s;
+      }
+    // V X V^T for X = Phi, Psi.
+    auto congruence = [&](const std::vector<double> &X) {
+      std::vector<double> T((size_t)n * n, 0.0), out((size_t)n * n, 0.0);
+      for (int r = 0; r < n; r++)
+        for (int l = 0; l < n; l++) {
+          double s = 0.0;
+          for (int k = 0; k < n; k++) s += f.V[(size_t)r * n + k] * X[(size_t)k * n + l];
+          T[(size_t)r * n + l] = s;
+        }
+      for (int r = 0; r < n; r++)
+        for (int c = 0; c < n; c++) {
+          double s = 0.0;
+          for (int l = 0; l < n; l++) s += T[(size_t)r * n + l] * f.V[(size_t)c * n + l];
+          out[(size_t)r * n + c] = s;
+        }
+      return out;
+    };
+    const std::vector<double> Kbar = congruence(Phi), Nbar = congruence(Psi);
+    matrix_c X1(n, vector_c(n)), X2(n, vector_c(n));
+    for (int r = 0; r < n; r++)
+      for (int c = 0; c < n; c++) {
+        X1[r][c] = Kbar[(size_t)r * n + c] + Nbar[(size_t)r * n + c];
+        X2[r][c] = -Nbar[(size_t)r * n + c];
+      }
+    // The kernel: zero, but for the reference shifts that Update moved into K
+    // (constants, like the kernel: F does not depend on them).
+    std::vector<complex> kernel(nch, complex(0.0, 0.0));
+    for (int c = 0; c < nch; c++)
+      if (jg->GetChannel(c + 1)->GetRadType() == 'P')
+        kernel[c] = jg->GetChannel(c + 1)->GetBoundaryCondition() - f.lamShift[c];
+    this->LevelMatrixAdjoint(nullptr, j, X1, 0.0, accum, shiftDeriv, kernel.data());
+    this->LevelMatrixAdjoint(nullptr, j, X2, 1.0, accum, shiftDeriv, kernel.data());
+    // Gbar = V Gammabar.
+    const std::vector<int> &lev = active_levels_[j - 1];
+    for (int r = 0; r < n; r++)
+      for (int c = 0; c < nch; c++) {
+        double s = 0.0;
+        for (int k = 0; k < n; k++) s += f.V[(size_t)r * n + k] * gbar[k][c];
+        accum.gamma[j - 1][lev[r] - 1][c] += s;
+      }
+    for (size_t k = 0; k < accum.fe[j - 1].size(); k++) {
+      accum.fe[j - 1][k] = 0.0;
+      std::fill(accum.fgamma[j - 1][k].begin(), accum.fgamma[j - 1][k].end(), 0.0);
+    }
+  }
+  accum.formalUsed = false;
+}
+
+/*!
+ * AZURE_CHANNEL_VERIFY=1: compares the channel-space bilinear forms
+ * \f$G^T A G\f$ of J-group j with those of the level matrix, filled here and
+ * LU-factored in double and in extended precision, and reports each new worst
+ * difference (relative to the largest form of the J-group) on std::cerr.
+ */
+void AMatrixFunc::VerifyChannelSpace(int j, EPoint *point, double inEnergy) {
+  typedef std::complex<long double> cld;
+  static double worst = 0.0;
+  this->FillLevelMatrix(j, point, inEnergy);
+  LevelMatrixSolver lu;
+  if (!lu.Decompose(a_inv_matrices_[j - 1])) return;
+  const ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
+  const int n = f.n, nch = f.nch, m = (int)f.act.size();
+  // Extended-precision LU of the same level matrix, as the referee.
+  const matrix_c &M = a_inv_matrices_[j - 1];
+  std::vector<cld> a((size_t)n * n);
+  for (int r = 0; r < n; r++)
+    for (int c = 0; c < n; c++) a[(size_t)r * n + c] = cld(std::real(M[r][c]), std::imag(M[r][c]));
+  std::vector<int> pv(n);
+  for (int k = 0; k < n; k++) {
+    int p = k;
+    for (int i = k + 1; i < n; i++)
+      if (std::abs(a[(size_t)i * n + k]) > std::abs(a[(size_t)p * n + k])) p = i;
+    pv[k] = p;
+    if (p != k)
+      for (int c = 0; c < n; c++) std::swap(a[(size_t)k * n + c], a[(size_t)p * n + c]);
+    for (int i = k + 1; i < n; i++) {
+      const cld fct = a[(size_t)i * n + k] / a[(size_t)k * n + k];
+      a[(size_t)i * n + k] = fct;
+      for (int c = k + 1; c < n; c++) a[(size_t)i * n + c] -= fct * a[(size_t)k * n + c];
+    }
+  }
+  std::vector<complex> ref((size_t)m * m), lev((size_t)m * m);
+  std::vector<cld> x(n);
+  vector_c ga(n), gb(n);
+  for (int b = 0; b < m; b++) {
+    for (int k = 0; k < n; k++) x[k] = f.gcut[(size_t)k * nch + f.act[b]];
+    for (int k = 0; k < n; k++)
+      if (pv[k] != k) std::swap(x[k], x[pv[k]]);
+    for (int i = 1; i < n; i++)
+      for (int c = 0; c < i; c++) x[i] -= a[(size_t)i * n + c] * x[c];
+    for (int i = n - 1; i >= 0; i--) {
+      for (int c = i + 1; c < n; c++) x[i] -= a[(size_t)i * n + c] * x[c];
+      x[i] /= a[(size_t)i * n + i];
+    }
+    for (int k = 0; k < n; k++) gb[k] = f.gcut[(size_t)k * nch + f.act[b]];
+    for (int aa = 0; aa < m; aa++) {
+      cld sum = 0;
+      for (int k = 0; k < n; k++) sum += (long double)f.gcut[(size_t)k * nch + f.act[aa]] * x[k];
+      ref[(size_t)aa * m + b] = complex((double)sum.real(), (double)sum.imag());
+      for (int k = 0; k < n; k++) ga[k] = f.gcut[(size_t)k * nch + f.act[aa]];
+      lev[(size_t)aa * m + b] = lu.Bilinear(ga, gb);
+    }
+  }
+  double fmax = 0.0, dChannel = 0.0, dLevel = 0.0, dRoutes = 0.0;
+  for (int b = 0; b < m; b++)
+    for (int aa = 0; aa < m; aa++) {
+      const complex ch = this->FColumn(j, b)[aa];
+      const size_t k = (size_t)aa * m + b;
+      fmax = std::max(fmax, std::abs(ref[k]));
+      dChannel = std::max(dChannel, std::abs(ch - ref[k]));
+      dLevel = std::max(dLevel, std::abs(lev[k] - ref[k]));
+      dRoutes = std::max(dRoutes, std::abs(ch - lev[k]));
+    }
+  if (!(fmax > 0.0)) return;
+  const double rel = dRoutes / fmax;
+#pragma omp critical(channel_verify)
+  if (rel > worst) {
+    worst = rel;
+    std::cerr << "[channel-verify] J-group " << j << " (" << n << " levels, " << m << " channels, "
+              << (f.pencil ? "pencil" : f.identity ? "standard" : "formal") << ") at " << inEnergy
+              << " MeV: channel vs level route " << rel << " of the largest form; against an extended-precision LU: channel "
+              << dChannel / fmax << ", level " << dLevel / fmax << std::endl;
+  }
+}
+
+/*!
+ * The cotangent coefficients of the differential sum of `theDecay` for the
+ * T-matrix held now, by pathway and Legendre order: model += cR Re(sum_i
+ * Z1Z2_i T1_i conj(T2_i) P_{L_i}) gives T1bar += cR Z1Z2 P_L T2 and
+ * T2bar += cR Z1Z2 P_L T1, so each pathway's cotangent is cR sum_L q_L P_L with
+ * q_L summed over the interferences once.  `particleExit` keeps only the
+ * k-groups of equal channel spins, as the forward sum.  False (nothing built)
+ * for an interference type the adjoint does not know.
+ */
+bool AMatrixFunc::TBarProducts(Decay *theDecay, bool particleExit) {
+  if (tbar_decay_ == theDecay && tbar_particle_ == particleExit) return true;
+  if (!theDecay->TablesBuilt()) return false;
+  const std::vector<FlatInterference> &flat = theDecay->FlatInterferences();
+  const int nl = theDecay->NumInterferenceOrders();
+  const size_t np = theDecay->InterferencePathways().size();
+  tbar_q_.assign(np * nl, complex(0.0, 0.0));
+  const std::vector<vector_c> *T = tmatrix_.empty() ? nullptr : &tmatrix_[0];
+  for (const FlatInterference &f : flat) {
+    if (particleExit && !f.spEqual) continue;
+    if (!f.r1 || !f.r2) {  // an interference type the adjoint does not know
+      tbar_decay_ = nullptr;
+      return false;
+    }
+    const complex T1 = (f.r1 == 'E') ? ec_tmatrix_[f.k - 1][f.m1 - 1] : (T ? (*T)[f.k - 1][f.m1 - 1] : complex(0.0, 0.0));
+    const complex T2 = (f.r2 == 'E') ? ec_tmatrix_[f.k - 1][f.m2 - 1] : (T ? (*T)[f.k - 1][f.m2 - 1] : complex(0.0, 0.0));
+    tbar_q_[(size_t)f.s1 * nl + f.l] += f.z * T2;
+    tbar_q_[(size_t)f.s2 * nl + f.l] += f.z * T1;
+  }
+  tbar_decay_ = theDecay;
+  tbar_particle_ = particleExit;
+  return true;
+}
+
+/*!
+ * See the declaration.  With conj(Mbar) = -sum_t conj(beta_t) u_ch u_chp^T
+ * (u = A g, the widths as they are), a level parameter's derivative is
+ *   -Re(sum_t conj(beta_t) u_ch^T dM u_chp),  dM = dK - E dN - (dG Lambda G^T + G Lambda dG^T),
+ * and for dK = e_l k^T + k e_l^T:  u^T dK v = u_l (k . v) + (k . u) v_l.  The
+ * widths also enter g_ch^T A g_chp explicitly: conj(beta) u_chp and
+ * conj(beta) u_ch for the entrance and exit width.  `add(level, ch, value)`
+ * receives the derivatives (ch = -1: the level energy).
+ */
+template <class Add>
+bool AMatrixFunc::LevelAdjoint(EPoint *energyPoint, int j, const std::vector<BilinearTerm> &terms,
+                               const FreeMask &mask, const vector_matrix_r *shiftDeriv, Add add) {
+  if (configure().paramMask & Config::USE_PARK_FORMALISM) return false;
+  if (j < 1 || j > (int)route_.size() || j > (int)mask.e.size()) return false;
+  const bool channel = (route_[j - 1] == kRouteChannel);
+  if (!channel && !solver_valid_[j - 1]) return false;
+  // The standard level matrix in channel space has the cheaper formal adjoint.
+  if (channel && (*formal_[j - 1]).identity) return false;
+  JGroup *jg = compound()->GetJGroup(j);
+  const int n = (int)active_levels_[j - 1].size(), nch = jg->NumChannels();
+  if (n == 0 || n != jg->NumLevels()) return false;
+  const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
+  if (brune && !shiftDeriv) return false;
+  const ChannelSpace::LevelDerivatives &ld = ChannelSpace::CurrentLevelDerivatives(
+      jg, brune, mask.e[j - 1], mask.g[j - 1], shiftDeriv ? &(*shiftDeriv)[j - 1] : nullptr);
+  const ChannelSpace::LevelArrays &arrays = ChannelSpace::CurrentLevelArrays(jg);
+  const std::vector<complex> &lam = this->KernelLambda(energyPoint, j);
+  const double E = this->InEnergy(energyPoint);
+  // The channels the terms involve, their solves u_c = A g_c and g_d . u_c.
+  std::vector<int> &used = la_used_;
+  used.clear();
+  std::vector<int> &slot = la_slot_;
+  slot.assign(nch, -1);
+  for (const BilinearTerm &t : terms)
+    for (int c : {t.ch - 1, t.chp - 1})
+      if (slot[c] < 0) {
+        slot[c] = (int)used.size();
+        used.push_back(c);
+      }
+  const int nu = (int)used.size();
+  std::vector<const vector_c *> &u = la_u_;
+  u.resize(nu);
+  for (int s = 0; s < nu; s++) u[s] = &this->GetRawChannelSolve(j, used[s] + 1);
+  vector_c &gu = la_gu_;  // [s][d] = g_d . u_s
+  gu.assign((size_t)nu * nch, complex(0.0, 0.0));
+  for (int i = 0; i < n; i++) {
+    const double *g = &arrays.G[(size_t)i * nch];
+    for (int s = 0; s < nu; s++) {
+      const complex ui = (*u[s])[i];
+      complex *row = &gu[(size_t)s * nch];
+      for (int d = 0; d < nch; d++) row[d] += g[d] * ui;
+    }
+  }
+  vector_c &ku = la_ku_;
+  ku.resize(nu);
+  for (const ChannelSpace::LevelDerivatives::Entry &e : ld.entries) {
+    const int l = e.level;
+    if (!e.zero) {
+      std::fill(ku.begin(), ku.end(), complex(0.0, 0.0));
+      for (int i = 0; i < n; i++) {
+        const double kt = e.k[i] - E * e.q[i];
+        if (kt == 0.0) continue;
+        for (int s = 0; s < nu; s++) ku[s] += kt * (*u[s])[i];
+      }
+    }
+    double v = 0.0;
+    for (const BilinearTerm &t : terms) {
+      const int sa = slot[t.ch - 1], sb = slot[t.chp - 1];
+      const complex ua = (*u[sa])[l], ub = (*u[sb])[l];
+      complex dm(0.0, 0.0);
+      if (!e.zero) dm += ua * ku[sb] + ku[sa] * ub;
+      if (e.ch >= 0) dm -= lam[e.ch] * (ua * gu[(size_t)sb * nch + e.ch] + gu[(size_t)sa * nch + e.ch] * ub);
+      const complex cb = conj(t.beta);
+      v -= std::real(cb * dm);
+      if (e.ch == t.ch - 1) v += std::real(cb * ub);
+      if (e.ch == t.chp - 1) v += std::real(cb * ua);
+    }
+    add(l, e.ch, v);
+  }
+  return true;
+}
+
+bool AMatrixFunc::LevelBasis(EPoint *energyPoint, int j, const BilinearTerm &term, const FreeMask &mask,
+                             const vector_matrix_r *shiftDeriv, std::vector<double> &block) {
+  const int n = (int)active_levels_[j - 1].size(), nch = compound()->GetJGroup(j)->NumChannels();
+  block.assign((size_t)n * (1 + nch), 0.0);
+  return this->LevelAdjoint(energyPoint, j, std::vector<BilinearTerm>{term}, mask, shiftDeriv,
+                            [&](int l, int ch, double v) {
+                              if (ch < 0)
+                                block[l] += v;
+                              else
+                                block[n + (size_t)l * nch + ch] += v;
+                            });
 }

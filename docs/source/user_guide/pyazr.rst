@@ -385,6 +385,34 @@ are dropped with a warning. On the file side ``AzrModel.nuclei()``,
 ``Parameter.nucleus`` identify the nucleus at run time; ``save_fit`` writes a
 fitted abundance back into the block.
 
+Scattering lengths
+------------------
+
+``scattering_lengths(params)`` returns the s-wave scattering length of every
+channel spin of every particle pair at a free RWA vector
+(:doc:`../theory/scattering_length`), so the posterior of :math:`a_0` follows
+from an MCMC chain sample by sample:
+
+.. code-block:: python
+
+   m = azure2("7Be+p.azr")
+   for v in m.scattering_lengths():          # current parameters
+       print(v.pair, v.jpi, v.a0, v.has_levels)
+   a02 = [next(v.a0.real for v in m.scattering_lengths(x) if v.pair == 1 and v.jpi == "2-")
+          for x in chain]                     # chain: free RWA vectors
+
+``a0`` is complex when a lower channel is open at the pair's threshold.  The
+measured lengths of a ``<scatteringLengths>`` block are already inside
+``calculate_chi2_rwa`` (and its gradient and ``residual_jacobian``, one row per
+constrained part after the data rows); ``penalties()["scattering_length"]``
+reports their sum.  On the file side ``AzrModel.scattering_lengths`` lists the
+block as ``ScatteringLengthLine`` tuples,
+``add_scattering_length(pair, s, value, sigma, im_value=0, im_sigma=0)``
+appends a line (``s = -1``: the coherent combination) and
+``set_scattering_lengths(lines)`` replaces the block (an empty list removes
+it); ``merge_projects`` carries every member's lines with their pair keys
+remapped.
+
 Decomposing a cross section
 ---------------------------
 

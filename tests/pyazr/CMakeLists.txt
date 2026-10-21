@@ -313,6 +313,20 @@ add_test(NAME pyazr_thm_adjoint
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_adjoint_test.py)
 set_tests_properties(pyazr_thm_adjoint PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# Scattering lengths: the <scatteringLengths> block helpers, azure2.scattering_lengths against the
+# tests/scattering_length reference values, the constraint chi2, its gradient and Jacobian rows.
+add_test(NAME pyazr_scattering_length
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/scattering_length_test.py)
+set_tests_properties(pyazr_scattering_length PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Electron screening: the AzrModel helpers for the screening block of a <targetInt> line, the
+# screening_<n> parameter and its prior, and its analytic gradient and Jacobian column.
+add_test(NAME pyazr_screening
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/screening_test.py)
+set_tests_properties(pyazr_screening PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so

@@ -38,6 +38,7 @@ enum class ParamKind {
   EnergyShiftSqrt,  ///< per-segment sqrt(E) energy-shift coefficient
   EnergyShiftFn,    ///< parameter aj of a segment's shift function ("shiftfn")
   Abundance,        ///< isotopic abundance of a compound nucleus (projects with an <abundances> block)
+  Screening,        ///< electron-screening potential U_e (eV) of a <targetInt> line with a screening block
   ThmCoherent       ///< Re or Im of a THM coherent-background amplitude (cbackground=)
 };
 
@@ -52,6 +53,7 @@ struct ParamDesc {
   int nucleus = -1;  ///< 1-based compound nucleus (Abundance only, else -1)
   int sample = -1;   ///< 1-based sample of the <abundances> block (Abundance only, else -1)
   int fnTerm = -1;  ///< j of a shift-function parameter aj (EnergyShiftFn only, else -1)
+  int screening = -1;  ///< 1-based screening parameter (EData::GetScreeningEffect), Screening only, else -1
 };
 
 /*!
@@ -89,6 +91,11 @@ class ParamIndexMap {
   int AbundanceIndex(int ordinal) const;
   /// Full index of parameter aj of the shift function declared on a 1-based segment, or -1.
   int EnergyShiftFnIndex(int segment, int j) const;
+  /// Full index of the 1-based screening parameter k, or -1.
+  int ScreeningIndex(int k) const {
+    auto it = screeningIndex_.find(k);
+    return (it == screeningIndex_.end()) ? -1 : it->second;
+  }
 
   /// Number of entries in the full (unfiltered) parameter vector.
   int NumFull() const { return (int)desc_.size(); }
@@ -125,6 +132,7 @@ class ParamIndexMap {
   std::map<int, int> sqrtShiftIndex_;                    ///< segment -> full idx
   std::map<int, int> abundanceIndex_;                    ///< abundance ordinal -> full idx
   std::map<std::pair<int, int>, int> fnShiftIndex_;      ///< (segment, j) -> full idx
+  std::map<int, int> screeningIndex_;                    ///< screening parameter k -> full idx
   std::vector<int> fullToPacked_;
   std::vector<int> packedToFull_;
   int numPacked_ = 0;
@@ -132,6 +140,12 @@ class ParamIndexMap {
   int energyShiftOffset_ = 0;
   int energyShiftSqrtOffset_ = 0;
   int energyShiftFnOffset_ = 0;
+};
+
+/// Free level parameters of each J-group, [j-1][level-1] and [j-1][level-1][ch-1].
+struct FreeLevelMask {
+  std::vector<std::vector<char>> e;
+  std::vector<std::vector<std::vector<char>>> g;
 };
 
 /*!
@@ -148,6 +162,37 @@ struct GradAccum {
   std::vector<std::vector<std::vector<double>>> gamma;
   // abundance[k-1]          -> d/dw_k, one per (sample, nucleus) in ordinal order (zero-length without an <abundances> block)
   std::vector<double> abundance;
+  // screening[k-1]          -> d/dU_e (eV) of screening parameter k (grows on first use)
+  std::vector<double> screening;
+  /*!
+   * Cotangents of the formal energies and widths of the Brune and Park level
+   * matrices, fe[j-1][k] and fgamma[j-1][k][ch-1] for formal level k
+   * (AMatrixFunc::FormalBilinearAdjoint).  Used only when `formal` is set: a
+   * scalar gradient pass sums them over all points and resolves them into
+   * e/gamma once at its end (AMatrixFunc::ResolveFormalCotangents), instead of
+   * taking the level-matrix adjoint at every energy.
+   */
+  std::vector<std::vector<double>> fe;
+  std::vector<std::vector<std::vector<double>>> fgamma;
+  bool formal = false;
+  /// A formal cotangent was added since the last Zero().
+  bool formalUsed = false;
+  /*!
+   * Deferred level-matrix cotangents of a scalar pass (`formal` set), per
+   * J-group, n x n row-major: lmK = sum Re(Mbar(E)), lmN = sum E Re(Mbar(E))
+   * over the energies whose level matrix took the level-space adjoint.  The
+   * energy-independent part of the structural adjoint (K and N) is then taken
+   * once per pass (AMatrixFunc::ResolveFormalCotangents); only the channel
+   * kernel G Lambda(E) G^T is differentiated at each energy.  Allocated on use.
+   */
+  std::vector<std::vector<double>> lmK, lmN;
+  std::vector<char> lmUsed;
+  /*!
+   * The free level parameters of a pass that takes rows (residual Jacobian,
+   * model gradients): the level-matrix adjoint is then taken by free
+   * parameter (AMatrixFunc::LevelAdjoint).  Not owned.
+   */
+  const FreeLevelMask *mask = nullptr;
 
   /// Allocate (and zero) the accumulators to match the compound's dimensions.
   void Init(CNuc *compound);
@@ -165,6 +210,12 @@ struct GradAccum {
   /// Add an abundance contribution (1-based ordinal, CNuc::AbundanceOrdinal); ignored without an <abundances> block.
   void AddAbundance(int ordinal, double v) {
     if (ordinal >= 1 && ordinal <= (int)abundance.size()) abundance[ordinal - 1] += v;
+  }
+  /// Add a contribution to d/dU_e (eV) of screening parameter k (1-based).
+  void AddScreening(int k, double v) {
+    if (k < 1) return;
+    if (k > (int)screening.size()) screening.resize(k, 0.0);
+    screening[k - 1] += v;
   }
   /// Scatter into the flat (full) gradient vector using the index map.
   void Scatter(const ParamIndexMap &map, vector_r &gradFull) const;

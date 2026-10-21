@@ -148,6 +148,7 @@ int NumParameters(CNuc *compound, EData *data) {
     n += 2 * (int)segments.size();  // energy shift and sqrt(E) coefficient, every segment
     for (size_t s = 0; s < segments.size(); s++)  // shift-function parameters of the segments declaring one
       if (segments[s].OwnsShiftFn() && segments[s].HasShiftFn()) n += segments[s].NumShiftFnParams();
+    n += data->NumScreeningParams();  // electron-screening potentials
   }
   return n;
 }
@@ -231,6 +232,14 @@ std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
       }
       index++;
     }
+  }
+  for (int k = 1; k <= data->NumScreeningParams(); k++) {
+    if (index == minuitIndex) {
+      std::ostringstream out;
+      out << "electron-screening potential U_e (eV) of experimental effect " << data->GetScreeningEffect(k);
+      return out.str();
+    }
+    index++;
   }
   for (int k = 0; k < data->NumThmCoherentParams(); k++) {
     if (index == minuitIndex)

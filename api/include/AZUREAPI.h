@@ -111,7 +111,11 @@ class AZUREAPI {
    *                      project with an <abundances> block): its Z in field 1
    *                      and A in field 4, the 1-based sample in field 6, the
    *                      prior sigma in field 14
-   *                    7=THM coherent background (cbkg; cbackground=)
+   *                    7=electron-screening potential U_e (eV) of a <targetInt>
+   *                      line with a screening block: the effect number in
+   *                      field 6, the prior centre in field 5, the prior sigma
+   *                      in field 14 (0 = none)
+   *                    8=THM coherent background (cbkg; cbackground=)
    *   1  jgroup        1-based J-group index (R-matrix params only)
    *   2  J             total spin of the J-group / level
    *   3  parity        +1 / -1
@@ -308,6 +312,16 @@ class AZUREAPI {
    * Calculate chi-squared from physical parameters
    */
   double CalculateChi2Physical(const vector_r &physicalParams) const;
+
+  /// Fields per channel in CalculateScatteringLengthsRWA's result.
+  static constexpr int kScatLenFields = 6;
+  /*!
+   * s-wave scattering lengths (ScatteringLength) of every s-wave channel spin of every particle pair,
+   * at a free RWA vector as CalculateChi2RWA takes.  Flattened, kScatLenFields per channel: pair key,
+   * channel spin, parity, Re a0 (fm), Im a0 (fm), 1 if a level has the channel (else the hard-sphere
+   * value, 0).  The measured ones of the <scatteringLengths> block are part of CalculateChi2RWA.
+   */
+  vector_r CalculateScatteringLengthsRWA(const vector_r &rwaParams) const;
 
   /*!
    * Park formalism: the overlap J = 1 - sum_c gamma_c^2 dS_c/dE of every

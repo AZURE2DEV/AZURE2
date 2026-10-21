@@ -534,3 +534,55 @@ endif()
 add_test(NAME parameter_settings_numbering COMMAND parameter_settings_numbering_test)
 set_tests_properties(parameter_settings_numbering PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# The Segments tab's "Measured Scattering Lengths" table and its optional
+# <scatteringLengths> block: allowed channel spins, round trip, flags for rows
+# whose pair is gone, reset, and a whole project file through AZURESetup.
+add_executable(scattering_lengths_test scattering_lengths_test.cpp)
+set_target_properties(scattering_lengths_test PROPERTIES AUTOMOC OFF)
+target_include_directories(scattering_lengths_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(scattering_lengths_test PRIVATE AZURE2_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(scattering_lengths_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(scattering_lengths_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(scattering_lengths_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME scattering_lengths COMMAND scattering_lengths_test)
+set_tests_properties(scattering_lengths PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# The segment dialogs' observable controls: a short observable list, the
+# Lab / C.M. frame of a differential cross section, the E1 / E2 multipolarity
+# of angle-integrated capture and the "Total capture" exit item, all mapping
+# onto the unchanged isDiff codes, with edit round trips for every code.
+add_executable(segment_observable_test segment_observable_test.cpp)
+set_target_properties(segment_observable_test PROPERTIES AUTOMOC OFF)
+target_include_directories(segment_observable_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(segment_observable_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(segment_observable_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(segment_observable_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME segment_observable COMMAND segment_observable_test)
+set_tests_properties(segment_observable PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

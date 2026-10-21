@@ -15,6 +15,7 @@ import tempfile
 from contextlib import contextmanager
 
 import numpy as np
+from typing import NamedTuple
 
 try:
     from . import _azure2
@@ -63,6 +64,25 @@ def _config_output_dir(path):
     if "#" in line:
         line = line[:line.rindex("#")]
     return line.strip(" \n\t\r")
+
+class ScatteringLength(NamedTuple):
+    """The s-wave scattering length of one channel spin of a particle pair
+    (:meth:`azure2.scattering_lengths`).  ``a0`` is complex when a lower channel
+    is open at the pair's threshold; ``has_levels`` is False when no level has a
+    width in the channel (``a0`` is then the hard-sphere value)."""
+    pair: int
+    s: float
+    parity: int
+    a0: complex
+    has_levels: bool
+
+    @property
+    def jpi(self):
+        """J^pi of the channel (J = s for l = 0), e.g. ``"1/2+"``."""
+        j = self.s
+        text = f"{int(round(2 * j))}/2" if abs(j - round(j)) > 1e-6 else f"{int(round(j))}"
+        return text + ("+" if self.parity > 0 else "-")
+
 
 class _Engine:
     """A ``_azure2.Session`` whose every call is made from the model's directory.
@@ -949,6 +969,8 @@ class azure2:
                 model.set_segment_values(values)
             if centres:
                 model.set_prior_centres(centres)
+        # Electron-screening potentials are not written into the <targetInt> lines: the value there is the
+        # prior's centre, and the fitted U_e travels in the .sav, like a normalization.
         model.write(path)
 
         sav = None
@@ -1725,7 +1747,10 @@ class azure2:
         ``{"norm": array, "shift": array, "shift_sqrt": array, "shift_fn": array}``,
         one entry per segment, and the single numbers ``"park"`` and
         ``"abundance"`` (isotopic-abundance priors and sum-to-one terms; both
-        already inside the engine's chi-squared).
+        already inside the engine's chi-squared), and ``"screening"``: the
+        electron-screening priors ((U_e - nominal)/sigma)^2 of the <targetInt>
+        lines with a ``screening`` block, which :meth:`objective` adds like the
+        normalization terms.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         norm = np.zeros(self.nsegments)
@@ -1804,8 +1829,20 @@ class azure2:
                     s_sum = model.abundance_sum_sigma
                 if s_sum > 0:
                     abundance += ((total - 1.0) / s_sum) ** 2
+        # Measured scattering lengths (<scatteringLengths>): engine side as well, reported here.
+        scattering_length = self.scattering_length_chi2(x)
+        # Electron screening: the prior of each free U_e with a sigma (not inside calculate_chi2_rwa,
+        # like the normalization terms).
+        screening = 0.0
+        for p in self.parameters.screenings:
+            if p.fixed or not p.prior_sigma:
+                continue
+            value = (float(x[p.free_index]) if p.free_index is not None and p.free_index < x.size
+                     else float(p.value))
+            screening += ((value - p.prior_nominal) / p.prior_sigma) ** 2
         return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "shift_fn": shift_fn,
-                "park": park, "abundance": abundance}
+                "park": park, "abundance": abundance, "scattering_length": scattering_length,
+                "screening": screening}
 
     @property
     def nuclei(self):
@@ -1826,6 +1863,43 @@ class azure2:
         if self.options.get("use_park"):
             return 2
         return 1 if self.options.get("use_brune") else 0
+
+    def scattering_lengths(self, params=None):
+        """The s-wave scattering lengths of every particle pair at a free RWA
+        vector (default ``params_rwa``): a list of :class:`ScatteringLength`,
+        one per allowed channel spin (identical pairs: even s only).
+
+        a0 = -a [M/(x^2 K1^2) - 2 I1/(x^2 K1)] with M = gamma^T A gamma at the
+        pair's threshold (Paneru et al., PRC 99, 045807 (2019), Eq. 7), a (1 - M)
+        for a neutral pair; the same in every parametrization.  Call it on each
+        sample of an MCMC chain for the posterior of a0.  The measured ones of
+        the ``<scatteringLengths>`` block are already part of
+        :meth:`calculate_chi2_rwa` (see :meth:`penalties`)."""
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        flat = np.asarray(self.sess.scattering_lengths_rwa(x), float).reshape(-1, 6)
+        return [ScatteringLength(int(r[0]), float(r[1]), int(r[2]), complex(r[3], r[4]), bool(r[5])) for r in flat]
+
+    def scattering_length_chi2(self, params=None):
+        """chi-squared of the measured scattering lengths (``<scatteringLengths>``)
+        at a free RWA vector: the term the engine adds inside
+        :meth:`calculate_chi2_rwa`, recomputed from :meth:`scattering_lengths`."""
+        lines = [e for e in AzrModel.from_file(self.file).scattering_lengths if e.active]
+        if not lines:
+            return 0.0
+        values = self.scattering_lengths(params)
+        pairs = {p.key: p for p in self.pairs}
+        chi2 = 0.0
+        for e in lines:
+            if e.s < 0:
+                w = pairs[e.pair].i1i2factor
+                a = sum((2 * v.s + 1) * w * v.a0 for v in values if v.pair == e.pair)
+            else:
+                a = next(v.a0 for v in values if v.pair == e.pair and abs(v.s - e.s) < 1e-6)
+            if e.sigma > 0:
+                chi2 += ((a.real - e.value) / e.sigma) ** 2
+            if e.im_sigma > 0:
+                chi2 += ((a.imag - e.im_value) / e.im_sigma) ** 2
+        return chi2
 
     def park_norms(self, params=None):
         """Park formalism: the overlap J = 1 - sum_c gamma_c^2 dS_c/dE of every
@@ -1850,10 +1924,12 @@ class azure2:
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         pen = self.penalties(x)
-        # pen["park"] is already inside calculate_chi2_rwa (engine side).
+        # pen["park"], pen["abundance"] and pen["scattering_length"] are already inside
+        # calculate_chi2_rwa (engine side).
         return (float(np.sum(self.calculate_chi2_rwa(x)))
                 + float(np.sum(pen["norm"])) + float(np.sum(pen["shift"]))
-                + float(np.sum(pen["shift_sqrt"])) + float(np.sum(pen["shift_fn"])))
+                + float(np.sum(pen["shift_sqrt"])) + float(np.sum(pen["shift_fn"]))
+                + pen["screening"])
 
     def chi2_and_grad(self, params):
         """Value and analytic gradient of the (data) chi-squared.

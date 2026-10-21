@@ -1,4 +1,5 @@
 #include "AZUREGrad.h"
+#include "Profile.h"
 #include <atomic>
 #include <chrono>
 #include <iostream>
@@ -119,7 +120,14 @@ void GradAccum::Init(CNuc *compound) {
     e[j - 1].assign(nLevels, 0.0);
     gamma[j - 1].assign(nLevels, std::vector<double>(nCh, 0.0));
   }
+  fe = e;
+  fgamma = gamma;
+  formalUsed = false;
+  lmK.assign(nJ, {});
+  lmN.assign(nJ, {});
+  lmUsed.assign(nJ, 0);
   abundance.assign(compound->NumAbundanceParams(), 0.0);
+  screening.clear();
 }
 
 /*!
@@ -130,6 +138,19 @@ void GradAccum::Zero() {
   for (auto &lev : gamma)
     for (auto &row : lev) std::fill(row.begin(), row.end(), 0.0);
   std::fill(abundance.begin(), abundance.end(), 0.0);
+  std::fill(screening.begin(), screening.end(), 0.0);
+  if (formalUsed) {
+    for (auto &row : fe) std::fill(row.begin(), row.end(), 0.0);
+    for (auto &lev : fgamma)
+      for (auto &row : lev) std::fill(row.begin(), row.end(), 0.0);
+    formalUsed = false;
+  }
+  for (size_t j = 0; j < lmUsed.size(); j++)
+    if (lmUsed[j]) {
+      std::fill(lmK[j].begin(), lmK[j].end(), 0.0);
+      std::fill(lmN[j].begin(), lmN[j].end(), 0.0);
+      lmUsed[j] = 0;
+    }
 }
 
 /*!
@@ -144,6 +165,29 @@ void GradAccum::Add(const GradAccum &o) {
     }
   }
   for (int k = 0; k < (int)abundance.size() && k < (int)o.abundance.size(); k++) abundance[k] += o.abundance[k];
+  if (o.screening.size() > screening.size()) screening.resize(o.screening.size(), 0.0);
+  for (int k = 0; k < (int)o.screening.size(); k++) screening[k] += o.screening[k];
+  for (size_t j = 0; j < o.lmUsed.size() && j < lmUsed.size(); j++)
+    if (o.lmUsed[j]) {
+      if (lmK[j].size() != o.lmK[j].size()) {
+        lmK[j].assign(o.lmK[j].size(), 0.0);
+        lmN[j].assign(o.lmN[j].size(), 0.0);
+      }
+      for (size_t k = 0; k < lmK[j].size(); k++) {
+        lmK[j][k] += o.lmK[j][k];
+        lmN[j][k] += o.lmN[j][k];
+      }
+      lmUsed[j] = 1;
+      formalUsed = true;
+    }
+  if (o.formalUsed) {
+    for (int j = 0; j < (int)fe.size() && j < (int)o.fe.size(); j++)
+      for (int k = 0; k < (int)fe[j].size() && k < (int)o.fe[j].size(); k++) {
+        fe[j][k] += o.fe[j][k];
+        for (int ch = 0; ch < (int)fgamma[j][k].size(); ch++) fgamma[j][k][ch] += o.fgamma[j][k][ch];
+      }
+    formalUsed = true;
+  }
 }
 
 /*!
@@ -163,6 +207,10 @@ void GradAccum::Scatter(const ParamIndexMap &map, vector_r &gradFull) const {
   for (int k = 0; k < (int)abundance.size(); k++) {
     int ai = map.AbundanceIndex(k + 1);
     if (ai >= 0 && ai < (int)gradFull.size()) gradFull[ai] += abundance[k];
+  }
+  for (int k = 0; k < (int)screening.size(); k++) {
+    int si = map.ScreeningIndex(k + 1);
+    if (si >= 0 && si < (int)gradFull.size()) gradFull[si] += screening[k];
   }
 }
 
@@ -322,6 +370,17 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
         map.desc_.push_back(d);
         i++;
       }
+    }
+  }
+
+  // --- Electron-screening potentials: one per <targetInt> line with a screening block (EData::FillMnParams). ---
+  if (data) {
+    for (int k = 1; k <= data->NumScreeningParams(); k++) {
+      map.screeningIndex_[k] = i;
+      ParamDesc d{ParamKind::Screening, -1, -1, -1, -1, false};
+      d.screening = k;
+      map.desc_.push_back(d);
+      i++;
     }
   }
 
@@ -791,6 +850,7 @@ void AddCotangent(TMatrixCotangent &dst, const TMatrixCotangent &src) {
     for (size_t m = 0; m < src.t[k].size() && m < dst.t[k].size(); m++) dst.t[k][m] += src.t[k][m];
   for (size_t k = 0; k < src.ec.size() && k < dst.ec.size(); k++)
     for (size_t m = 0; m < src.ec[k].size() && m < dst.ec[k].size(); m++) dst.ec[k][m] += src.ec[k][m];
+  dst.screen.insert(dst.screen.end(), src.screen.begin(), src.screen.end());
 }
 
 // The forward solve of a group, at its host's energy, and each member's model
@@ -800,6 +860,7 @@ void AddCotangent(TMatrixCotangent &dst, const TMatrixCotangent &src) {
 void GroupForward(AMatrixFunc &amf, const GradItem &it, CNuc *compound, std::vector<double> &rawModel,
                   std::vector<double> &weight) {
   EPoint *host = it.members[0].pt;
+  AZUREProfile::Timer profileTimer(AZUREProfile::kGradForward);
   amf.ClearMatrices();
   amf.FillMatrices(host);
   amf.InvertMatrices();
@@ -862,7 +923,8 @@ bool GroupGradient(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const v
 // its own -- still from the one shared forward solve.
 template <class FitBarOf, class RowFn>
 bool GroupRows(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vector_matrix_r *shiftDeriv,
-               FitBarOf fitBarOf, RowFn rowFn, GradAccum &accum, GradAccum &scratch) {
+               FitBarOf fitBarOf, RowFn rowFn, GradAccum &accum, GradAccum &scratch,
+               const AMatrixFunc::FreeMask *mask) {
   std::vector<double> rawModel, weight;
   GroupForward(amf, it, compound, rawModel, weight);
   EPoint *host = it.members[0].pt;
@@ -885,6 +947,16 @@ bool GroupRows(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vecto
   std::vector<Key> keys;
   std::vector<std::vector<int>> keyOf(g);
   double costMembers = 0.0, costBasis = 0.0;
+  const bool levelBasis = mask && !(amf.configure().paramMask & Config::USE_PARK_FORMALISM);
+  std::vector<double> freeCount;
+  if (levelBasis) {
+    freeCount.assign(mask->e.size(), 0.0);
+    for (size_t j = 0; j < mask->e.size(); j++)
+      for (size_t la = 0; la < mask->e[j].size(); la++) {
+        freeCount[j] += mask->e[j][la];
+        for (char f : mask->g[j][la]) freeCount[j] += f;
+      }
+  }
   if (bilinear) {
     for (size_t q = 0; q < g; q++) {
       for (int j = 1; j <= (int)terms[q].size(); j++) {
@@ -897,7 +969,9 @@ bool GroupRows(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vecto
           while (k < (int)keys.size() && !(keys[k].j == j && keys[k].ch == t.ch && keys[k].chp == t.chp)) k++;
           if (k == (int)keys.size()) {
             keys.push_back({j, t.ch, t.chp});
-            costBasis += 2.0 * n2 * (1.0 + jg->NumChannels());
+            // LevelBasis: O(n) per free parameter of the group; else the
+            // structural adjoint, O(n^2 c).
+            costBasis += (levelBasis ? 2.0 * freeCount[j - 1] * jg->NumLevels() : 2.0 * n2 * (1.0 + jg->NumChannels()));
           }
           keyOf[q].push_back(k);
           costBasis += 2.0 * jg->NumLevels() * (1.0 + jg->NumChannels());
@@ -923,12 +997,17 @@ bool GroupRows(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vecto
   // The basis: for each channel pair, the J-group block (E then gamma, level by
   // level) of the adjoint with cotangent 1 and with cotangent i.
   std::vector<std::vector<double>> basisRe(keys.size()), basisIm(keys.size());
+  AZUREProfile::Timer profileBasis(AZUREProfile::kGradBackprop);
   for (size_t k = 0; k < keys.size(); k++) {
     const int j = keys[k].j;
     JGroup *jg = compound->GetJGroup(j);
     const int n = jg->NumLevels(), nch = jg->NumChannels();
     for (int part = 0; part < 2; part++) {
       std::vector<double> &block = part ? basisIm[k] : basisRe[k];
+      // The rank-two derivatives of the level matrix by free parameter
+      // (LevelBasis), O(n) each, where they apply.
+      const BilinearTerm term{keys[k].ch, keys[k].chp, part ? complex(0.0, 1.0) : complex(1.0, 0.0)};
+      if (mask && amf.LevelBasis(host, j, term, *mask, shiftDeriv, block)) continue;
       for (int la = 0; la < n; la++) {
         scratch.e[j - 1][la] = 0.0;
         std::fill(scratch.gamma[j - 1][la].begin(), scratch.gamma[j - 1][la].end(), 0.0);
@@ -942,11 +1021,15 @@ bool GroupRows(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vecto
       }
     }
   }
+  profileBasis.Stop();
+  AZUREProfile::Timer profileRows(AZUREProfile::kGradRows);
   for (size_t q = 0; q < g; q++) {
     const GroupMember &m = it.members[q];
     accum.Zero();
     if (fitBar[q] != 0.0) {
       if (m.seg->IsNatural()) accum.AddAbundance(AbundanceOrdinalOf(compound, m.seg), fitBar[q] * rawModel[q]);
+      // The electron-screening derivative is not in the bilinear forms (TBarAdjoint adds it on the other route).
+      for (const auto &s : bars[q].screen) accum.AddScreening(s.first, s.second);
       size_t t = 0;
       for (int j = 1; j <= (int)terms[q].size(); j++)
         for (const BilinearTerm &term : terms[q][j - 1]) {
@@ -1005,7 +1088,12 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
   const int nThreads = 1;
 #endif
   std::vector<GradAccum> threadAccum(nThreads);
-  for (GradAccum &ta : threadAccum) ta.Init(compound);
+  for (GradAccum &ta : threadAccum) {
+    ta.Init(compound);
+    // A scalar pass: the Brune and Park level-matrix adjoints are summed in the
+    // formal parameters and resolved once below.
+    ta.formal = true;
+  }
 
   // THM (HOES) segments are computed by THMMatrixFunc, not the T-matrix
   // observable this adjoint differentiates; they are left out here. Their
@@ -1074,6 +1162,10 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
     return false;
   }
   for (const GradAccum &ta : threadAccum) accum.Add(ta);
+  if (accum.formalUsed) {
+    AMatrixFunc amf(compound, config);
+    amf.ResolveFormalCotangents(accum, shiftDeriv);
+  }
   return true;
 }
 
@@ -1084,9 +1176,30 @@ namespace {
 // fitBarOf(member) times its gradient.  Shared by the residual Jacobian and the
 // model gradients.  Returns false, with `bailSeg` set, if a point is outside
 // the analytic path.
+// The free level parameters of the packed vector, per J-group (FormalBasis).
+AMatrixFunc::FreeMask BuildFreeMask(CNuc *compound, const ParamIndexMap &pmap) {
+  AMatrixFunc::FreeMask mask;
+  const int nJ = compound->NumJGroups();
+  mask.e.assign(nJ, {});
+  mask.g.assign(nJ, {});
+  auto isFree = [&pmap](int full) { return full >= 0 && full < pmap.NumFull() && pmap.FullToPacked(full) >= 0; };
+  for (int j = 1; j <= nJ; j++) {
+    JGroup *jg = compound->GetJGroup(j);
+    const int nl = jg->NumLevels(), nch = jg->NumChannels();
+    mask.e[j - 1].assign(nl, 0);
+    mask.g[j - 1].assign(nl, std::vector<char>(nch, 0));
+    for (int la = 1; la <= nl; la++) {
+      mask.e[j - 1][la - 1] = isFree(pmap.EIndexFlat(j, la));
+      for (int ch = 1; ch <= nch; ch++) mask.g[j - 1][la - 1][ch - 1] = isFree(pmap.GammaIndexFlat(j, la, ch));
+    }
+  }
+  return mask;
+}
+
 template <class FitBarOf, class WriteRow>
 bool ForEachRow(CNuc *compound, EData *data, const Config &config, const vector_matrix_r *shiftDeriv,
-                FitBarOf fitBarOf, WriteRow writeRow, int &bailSeg, int &numGroups, bool skipTHM) {
+                FitBarOf fitBarOf, WriteRow writeRow, int &bailSeg, int &numGroups, bool skipTHM,
+                const AMatrixFunc::FreeMask *mask) {
   const std::vector<GradItem> items = BuildGradItems(data, skipTHM);
   numGroups = 0;
   for (const GradItem &it : items)
@@ -1098,6 +1211,7 @@ bool ForEachRow(CNuc *compound, EData *data, const Config &config, const vector_
     GradAccum accum, scratch;  // per-thread, reused across its rows
     accum.Init(compound);
     scratch.Init(compound);
+    accum.mask = mask;
     AMatrixFunc amf(compound, config);
 #pragma omp for schedule(dynamic, 1)
     for (int k = 0; k < (int)items.size(); k++) {
@@ -1107,7 +1221,7 @@ bool ForEachRow(CNuc *compound, EData *data, const Config &config, const vector_
       if (it.grouped && it.members.size() > 1) {
         auto fb = [&](size_t q, double) { return fitBarOf(it.members[q]); };
         auto row = [&](size_t q, double model, GradAccum &acc) { writeRow(it.members[q], model, acc); };
-        ok = GroupRows(amf, it, compound, shiftDeriv, fb, row, accum, scratch);
+        ok = GroupRows(amf, it, compound, shiftDeriv, fb, row, accum, scratch, mask);
       } else {
         for (const GroupMember &m : it.members) {
           const double fitBar = fitBarOf(m);
@@ -1208,8 +1322,9 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
     }
   };
   int bailSeg = 0, numGroups = 0;
+  const AMatrixFunc::FreeMask mask = BuildFreeMask(compound, pmap);
   const bool ok = ForEachRow(compound, data, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups,
-                             /*skipTHM=*/true);
+                             /*skipTHM=*/true, &mask);
   if (!ok) ReportBail("Jacobian/gradient", data->GetSegment(bailSeg), bailSeg);
 
   if (timing) {
@@ -1265,8 +1380,10 @@ bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
     }
   };
   int bailSeg = 0, numGroups = 0;
+  const AMatrixFunc::FreeMask mask = BuildFreeMask(compound, pmap);
   // skipTHM: the rows of THM (HOES) points are left zero for the caller.
-  const bool ok = ForEachRow(compound, data, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups, skipTHM);
+  const bool ok = ForEachRow(compound, data, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups, skipTHM,
+                             &mask);
   if (!ok) {
     ReportBail("Jacobian/gradient", data->GetSegment(bailSeg), bailSeg);
     gradByPoint.clear();

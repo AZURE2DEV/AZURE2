@@ -1,4 +1,6 @@
 #include "AZURECalc.h"
+#include "Profile.h"
+#include "ScatteringLength.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -137,6 +139,18 @@ void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
       for (int j = 0; j < seg->NumShiftFnParams(); j++)
         if (seg->IsVaryShiftFn(j) && seg->GetShiftFnErrors()[j] != 0.0 && (idx = pmap.EnergyShiftFnIndex(s, j)) >= 0)
           f(idx, seg->GetNominalShiftFnValues()[j], seg->GetShiftFnErrors()[j]);
+  }
+}
+
+// The electron-screening priors ((U_e - nominal)/sigma)^2, U_e in eV: f(full index, nominal, sigma) for each
+// screening parameter with sigma > 0 (EData::ScreeningPenalty is their sum).
+template <class F>
+void ForEachScreeningPrior(EData *data, const ParamIndexMap &pmap, F f) {
+  for (int k = 1; k <= data->NumScreeningParams(); k++) {
+    const TargetEffect *te = data->GetScreeningTargetEffect(k);
+    if (te->GetScreeningSigma() <= 0.0) continue;
+    const int idx = pmap.ScreeningIndex(k);
+    if (idx >= 0) f(idx, te->GetScreeningNominal(), te->GetScreeningSigma());
   }
 }
 
@@ -324,6 +338,8 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld
 }
 
 double AZURECalc::operator()(const vector_r &p) const {
+  AZUREProfile::ScopedReport profileReport("evaluation");
+  AZUREProfile::Timer profileTimer(AZUREProfile::kEvaluation);
   int thisIteration = data()->Iterations();
   data()->Iterate();
   bool isFit = data()->IsFit();
@@ -437,11 +453,19 @@ double AZURECalc::operator()(const vector_r &p) const {
     chiSquared += parkPenalty;
     localData->SetParkPenalty(parkPenalty);
   }
+  // Electron-screening potentials: their priors.
+  chiSquared += localData->ScreeningPenalty();
   // Isotopic abundances: their priors and the sum-to-one term.
   if (localCompound->HasAbundanceBlock()) {
     double abundancePenalty = localCompound->AbundancePenalty(configure().abundanceSumSigma);
     chiSquared += abundancePenalty;
     localData->SetAbundancePenalty(abundancePenalty);
+  }
+  // Measured scattering lengths (<scatteringLengths>), evaluated at each pair's threshold.
+  if (localCompound->HasScatteringLengthConstraints()) {
+    double slChi2 = ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
+    chiSquared += slChi2;
+    localData->SetScatteringLengthChi2(slChi2);
   }
 
   if (std::getenv("AZURE_DUMP_NONFINITE")) DumpNonFinite(p, chiSquared, localCompound, localData);
@@ -569,6 +593,7 @@ bool AZURECalc::PrecalculatePoints(CNuc *lc, EData *ld, bool thmOnly) const {
   for (size_t k = 0; k < order.size(); k++) sorted[k] = work[order[k]];
   work.swap(sorted);
   const Config &cfg = configure();
+  AZUREProfile::Timer profileTimer(AZUREProfile::kPoints);
 #pragma omp parallel for schedule(dynamic, 1)
   for (int k = 0; k < (int)work.size(); k++) {
     try {
@@ -641,6 +666,9 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
   // last full evaluation left there, so using it here froze the abundance prior in the LM/GSL cost and in the
   // finite-difference gradient columns (found 2026-10-17 by the isospin-levels session).
   if (lc->HasAbundanceBlock()) chiSquared += lc->AbundancePenalty(configure().abundanceSumSigma);
+  if (lc->HasScatteringLengthConstraints())
+    chiSquared += ScatteringLength::Chi2(lc, configure(), lc->ScatteringLengthConstraints());
+  chiSquared += ld->ScreeningPenalty();
   return chiSquared;
 }
 
@@ -681,6 +709,8 @@ double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
 }
 
 std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
+  AZUREProfile::ScopedReport profileReport("gradient");
+  AZUREProfile::Timer profileTimer(AZUREProfile::kGradient);
   {
     std::lock_guard<std::mutex> lk(lastGradMutex_);
     lastGradP_ = p;
@@ -791,11 +821,19 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
                  "present (RMC, or a not-yet-handled case)."
               << std::endl;
   }
+  // Measured scattering lengths: exact through the level-matrix adjoint at each threshold; where that
+  // is unsupported (RMC, levels left out of the R-matrix) every parameter falls back to finite differences.
+  if (eg && lc->HasScatteringLengthConstraints() &&
+      !ScatteringLength::Chi2Gradient(lc, configure(), lc->ScatteringLengthConstraints(), accum, sdp))
+    eg = false;
   if (eg) {
     AddParkPenaltyGradient(lc, configure(), accum); // Park J > 0 wall
     AddAbundancePenaltyGradient(lc, configure(), accum);  // abundance priors, sum-to-one
-    accum.Scatter(pmap, grad);                      // energies + reduced widths, abundances
+    accum.Scatter(pmap, grad);                      // energies + reduced widths, abundances, screening
     AddNuisanceGradient(p, grad);                   // nuisance penalty
+    ForEachScreeningPrior(ld, pmap, [&](int idx, double nominal, double e) {  // screening priors
+      if (idx < (int)grad.size()) grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    });
     for (int s = 1; s <= ld->NumSegments(); s++) {  // normalizations
       ESegment *seg = ld->GetSegment(s);
       if (!seg || !seg->IsVaryNorm() || seg->IsNormGroupFollower()) continue;  // a follower's norm is fixed
@@ -869,7 +907,10 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     if (idx < nMn && fixedMask[idx]) continue;
     ParamKind kind = pmap.Desc(idx).kind;
     // A THM coherent background (cbackground=) moves THM points only: the
-    // THM-only chi^2 below differentiates it completely.
+    // THM-only chi^2 below differentiates it completely.  An electron-screening
+    // potential is analytic (the screening factor of the classic points; a THM
+    // segment carries none).
+    if (eg && kind == ParamKind::Screening) continue;  // analytic
     if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
                kind == ParamKind::ThmCoherent)) {
       if (!haveTHM) continue;  // fully analytic
@@ -962,7 +1003,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
         if (idx < nMn && fixedMask[idx]) continue;
         ParamKind kind = pmap.Desc(idx).kind;
-        if (!(eg && !haveTHM && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm))) nfd++;
+        if (!(eg && !haveTHM && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm)) &&
+            !(eg && kind == ParamKind::Screening)) nfd++;
       }
       std::cerr << "[grad-timing] call " << c << ": setup+adjoint " << ms(tg0, tg1) << " ms (analytic " << (eg ? "ok" : "BAILED")
                 << "), finite-difference part " << ms(tg1, tg2) << " ms for " << nfd << " parameters" << std::endl;
@@ -976,7 +1018,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   static std::atomic<bool> gradChecked{false};
   if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
     if (!gradChecked.exchange(true)) {
-      static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "cbkg"};
+      static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening", "cbkg"};
       struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;
       constexpr int kNumKinds = sizeof(kindName) / sizeof(kindName[0]);  // one per ParamKind
@@ -1125,6 +1167,11 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
     grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
     g2[idx] += 2.0 / (e * e);
   });
+  ForEachScreeningPrior(data(), pmap, [&](int idx, double nominal, double e) {
+    if (idx >= (int)p.size()) return;
+    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    g2[idx] += 2.0 / (e * e);
+  });
   // Isotopic abundances: prior and sum-to-one gradient and (diagonal) curvature.  The sample sums are taken at
   // p: compound() holds the abundances of the last full evaluation, so its AbundanceSum was stale here.
   std::vector<double> sumAtP;
@@ -1190,6 +1237,9 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
   ForEachShiftPenalty(data(), pmap, [&](int idx, double, double e) {
     if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
   });
+  ForEachScreeningPrior(data(), pmap, [&](int idx, double, double e) {
+    if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
+  });
   if (compound()->HasAbundanceBlock()) {
     for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
       const int idx = pmap.AbundanceIndex(k);
@@ -1231,7 +1281,7 @@ bool AZURECalc::HasNuisanceParameters() const {
     const std::string &name = mp.GetName();
     if (mp.IsFixed() && name.find("segment") == std::string::npos) continue;
     const bool inert = name.find("norm") != std::string::npos || name.find("shift") != std::string::npos ||
-                       name.find("abundance") != std::string::npos;
+                       name.find("abundance") != std::string::npos || name.find("screening") != std::string::npos;
     if (!inert && limitsManager_->IsNuisanceParameterByIndex(nf)) {
       if (std::getenv("AZURE_GRAD_DEBUG"))
         std::cerr << "[grad] analytic G2 off: nuisance prior on '" << name << "'" << std::endl;
@@ -1446,6 +1496,33 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     }
   }
 
+  // Measured scattering lengths: one row per constrained part (Re, Im) after the data rows, in the
+  // order of ScatteringLength::Residuals, with exact rows from the level-matrix adjoint at each
+  // threshold.  They depend on no energy shift (zero columns there).
+  if (ok && lc->HasScatteringLengthConstraints()) {
+    if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
+    const std::vector<ScatteringLength::Constraint> &cons = lc->ScatteringLengthConstraints();
+    vector_r rs;
+    ScatteringLength::Residuals(lc, configure(), cons, rs);
+    for (size_t q = 0; q < rs.size() && ok; q++) {
+      GradAccum acc;
+      acc.Init(lc);
+      if (!ScatteringLength::Chi2Gradient(lc, configure(), cons, acc, sdp, (int)q)) {
+        ok = false;
+        break;
+      }
+      vector_r rowFull(pmap.NumFull(), 0.0);
+      acc.Scatter(pmap, rowFull);
+      residuals.push_back(rs[q]);
+      const size_t base = jac.size();
+      jac.resize(base + (size_t)nCols, 0.0);
+      for (int f = 0; f < pmap.NumFull(); f++) {
+        const int a = pmap.FullToPacked(f);
+        if (a >= 0 && a < nCols) jac[base + (size_t)a] = rowFull[f];
+      }
+    }
+  }
+
   packedToFull.resize(pmap.NumPacked());
   for (int a = 0; a < pmap.NumPacked(); a++) packedToFull[a] = pmap.PackedToFull(a);
 
@@ -1635,6 +1712,16 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
       if (it != shiftPrior.end()) {
         pen_nom[a] = it->second.first;
         pen_inv2[a] = 1.0 / (it->second.second * it->second.second);
+      }
+    } else if (name.compare(0, 10, "screening_") == 0) {
+      // Electron-screening potential: its prior is a diagonal penalty row.
+      for (int k = 1; k <= data()->NumScreeningParams(); k++) {
+        if (name != "screening_" + std::to_string(data()->GetScreeningEffect(k))) continue;
+        const TargetEffect *te = data()->GetScreeningTargetEffect(k);
+        if (te->GetScreeningSigma() > 0.0) {
+          pen_nom[a] = te->GetScreeningNominal();
+          pen_inv2[a] = 1.0 / (te->GetScreeningSigma() * te->GetScreeningSigma());
+        }
       }
     } else if (name.compare(0, 10, "abundance_") == 0) {
       // Isotopic abundance: its <abundances> prior is a diagonal penalty row.
@@ -1854,6 +1941,9 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
       residuals.push_back(denom != 0.0 ? (th - pt->GetCMCrossSection() * norm) / denom : 0.0);
     }
   }
+  // Measured scattering lengths, as the last rows of ResidualJacobian.
+  if (lc->HasScatteringLengthConstraints())
+    ScatteringLength::Residuals(lc, configure(), lc->ScatteringLengthConstraints(), residuals);
   ReturnPooledCNuc(lc);
   ReturnPooledEData(ld);
   return true;

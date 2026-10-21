@@ -69,6 +69,29 @@ class EData {
   /// Index at which the shift-function parameters start in the Minuit vector (after the sqrt(E)
   /// coefficients): the parameters of each segment that declares a "shiftfn" block, in segment order.
   int GetEnergyShiftFnParamOffset() const;
+  /*!
+   * Electron screening.  The <targetInt> lines with a `screening` block, in line order, each with one
+   * parameter `screening_<n>` (n = the effect number: its place among the active <targetInt> lines),
+   * U_e in eV, after the shift-function parameters.  None without a screening block.  A line listing
+   * several segments has one copy of its effect per segment (ReadTargetEffectsFile); the parameter is
+   * the line's, shared by every copy.
+   */
+  int NumScreeningParams() const { return (int)screeningEffects_.size(); }
+  /// Effect number of screening parameter k (1-based): its place among the active <targetInt> lines.
+  int GetScreeningEffect(int k) const { return screeningEffects_[k - 1]; }
+  /// The target effect of screening parameter k (the first copy of its line; every copy holds the same U_e).
+  TargetEffect *GetScreeningTargetEffect(int k) { return this->GetTargetEffect(screeningCopies_[k - 1].front()); }
+  const TargetEffect *GetScreeningTargetEffect(int k) const {
+    return const_cast<EData *>(this)->GetTargetEffect(screeningCopies_[k - 1].front());
+  }
+  int GetScreeningParamOffset() const { return screeningParamOffset_; }
+  /// Push each screening effect's current U_e onto the points and sub-points of its segments.
+  void ApplyScreening();
+  /// Set the screening effects' U_e from a parameter vector, then ApplyScreening (called by
+  /// FillEnergyShiftsFromParams, so every evaluation sees the vector's values).
+  void FillScreeningFromParams(const vector_r &);
+  /// Sum of the screening priors ((U_e - nominal)/sigma)^2.
+  double ScreeningPenalty() const;
   /// Read the target-effects input file and build the TargetEffect objects.
   int ReadTargetEffectsFile(const Config &, CNuc *);
   /// Is this a fit? AZURECalc clones the compound nucleus and data per thread only when it is.
@@ -107,6 +130,9 @@ class EData {
   /// The abundance penalty (priors + sum-to-one) of the last evaluation, reported in chiSquared.out.
   void SetAbundancePenalty(double penalty) { abundancePenalty_ = penalty; }
   double GetAbundancePenalty() const { return abundancePenalty_; }
+  /// chi2 of the measured scattering lengths (<scatteringLengths>) at the last evaluation.
+  void SetScatteringLengthChi2(double chi2) { scatteringLengthChi2_ = chi2; }
+  double GetScatteringLengthChi2() const { return scatteringLengthChi2_; }
   /// External-capture amplitudes for every point that has an EC component.
   int CalculateECAmplitudes(CNuc *, const Config &);
   /// How many external-capture amplitudes this model expects in an intEC file.
@@ -286,6 +312,9 @@ class EData {
   int energyShiftParamOffset_;
   int energyShiftSqrtParamOffset_;
   int energyShiftFnParamOffset_ = 0;
+  int screeningParamOffset_ = -1;  // -1 until FillMnParams has laid the vector out
+  std::vector<int> screeningEffects_;  // line numbers (effect numbers) with a screening block, in order
+  std::vector<std::vector<int>> screeningCopies_;  // per screening parameter: the target effects of its line
   bool isFit_;
   bool isErrorAnalysis_;
   std::streampos ecReadPos_;  // File offset where component-segment EC integrals begin in the intEC file
@@ -303,6 +332,7 @@ class EData {
   void WriteThmExperiments(const Config &);
   double parkPenalty_ = 0.0;
   double abundancePenalty_ = 0.0;
+  double scatteringLengthChi2_ = 0.0;
   std::vector<std::string> nucleusLabels_;   // one per compound nucleus, for the natural decomposition file
   // A copy of the compound nucleus that holds the observed level parameters the
   // sub-point grids are laid out from (ReplaceSubPointGrids).  Never shared: a
