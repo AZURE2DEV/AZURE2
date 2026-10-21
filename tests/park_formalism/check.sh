@@ -17,7 +17,10 @@
 #   3. parameter files: a Brune-mode param.sav read by a Park-mode run (and
 #      the other way round) is converted on read and reproduces the chi2;
 #   4. a width above the J > 0 bound is reported, and the penalty makes the
-#      Park objective exceed the data chi2.
+#      Park objective exceed the data chi2; there the analytic gradient of the
+#      objective, penalty included, agrees with finite differences on the
+#      adjoint path and on the residual-Jacobian path (rows by free parameter,
+#      AMatrixFunc::LevelBasis), which --use-gradient takes in Park mode too.
 #
 # Models: tests/13N (12C+p elastic scattering and capture, external capture
 # included) and tests/identical_pp_res (a two-channel 3P2-3F2 group).
@@ -70,7 +73,7 @@ for project in 13N identical_pp_res; do
   if [ -z "$b" ] || [ -z "$p" ]; then bad "$project: no chi-squared (Brune '$b', Park '$p')"
   elif close "$b" "$p" "$TOL"; then ok "$project: Brune $b = Park $p"
   else bad "$project: Brune $b, Park $p"; fi
-  if cmp -s "$WORK/$project.brune/output/param.par" "$WORK/$project.park/output/param.par"; then
+  if [ "$(tr -d '\r' < "$WORK/$project.brune/output/param.par")" = "$(tr -d '\r' < "$WORK/$project.park/output/param.par")" ]; then
     bad "$project: param.par identical in both modes (--use-park had no effect)"
   else ok "$project: reduced width amplitudes differ between the modes"; fi
   grep -q "^ *#parametrization *1\." "$WORK/$project.brune/output/param.par" && \
@@ -125,6 +128,29 @@ grep -q "Park norm J = .* is not positive" "$WORK/wall/run.log" && ok "wall: J <
 penw="$(awk '/^Total-Chi-Squared:/ { for (i = 1; i < NF; i++) if ($i == "Total-Park-Chi-Squared:") print $(i+1) }' "$WORK/wall/output/chiSquared.out")"
 if [ -n "$penw" ] && awk -v p="$penw" 'BEGIN { exit !(p > 1.0) }'; then ok "wall: chiSquared.out reports the penalty, Total-Park-Chi-Squared = $penw"
 else bad "wall: no positive Total-Park-Chi-Squared in chiSquared.out ('$penw')"; fi
+
+# The gradient there (mode 2, --use-gradient, AZURE_GRAD_CHECK=exit: every component against central finite
+# differences of the objective, and the Jacobian-path gradient beside the adjoint one).  1e-3 of the largest
+# component: the finite differences in E_lambda move by ~7e-5 of it between steps here (dS/dE and d2S/dE2 are
+# numerical derivatives, and this level's J is far from 1), while leaving out the wall's gradient is 2e-2.
+(cd "$WORK/wall" && printf '2\nn\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_H=1e-7 \
+  "$AZURE2_BIN" --no-gui --no-readline --use-park --use-gradient identical_pp_res.azr > grad.log 2>&1)
+gw="$(awk '{ sub(/\r$/, "") }
+           /^\[grad-check\] idx / { a = f = ""; j = "-"
+             for (i = 4; i <= NF; i++) { if ($i == "analytic") a = $(i + 1); if ($i == "fd") f = $(i + 1); if ($i == "jacobian") j = $(i + 1) }
+             n++; g[n] = a; d[n] = f; q[n] = j; x = a < 0 ? -a : a; if (x > m) m = x; if (j != "-") nj++ }
+           END { if (n == 0 || m == 0) { print "none"; exit }
+                 for (k = 1; k <= n; k++) { e = g[k] - d[k]; if (e < 0) e = -e; if (e > w) w = e
+                                            if (q[k] != "-") { e = q[k] - d[k]; if (e < 0) e = -e; if (e > w) w = e } }
+                 printf "%.2e %d %d", w / m, n, nj }' "$WORK/wall/grad.log")"
+read -r gworst gn gnj <<EOF_GW
+$gw
+EOF_GW
+if awk -v w="$gworst" -v n="${gn:-0}" -v j="${gnj:-0}" 'BEGIN { exit !(n > 0 && j == n && w + 0 <= 1e-3) }'; then
+  ok "wall: gradient with the penalty = finite differences on both paths for $gn parameters (worst $gworst of the largest)"
+else
+  bad "wall: gradient vs finite differences at the wall: worst '$gworst', $gn parameters, ${gnj:-0} on the Jacobian path"
+fi
 
 [ "$failures" -eq 0 ] && echo "  PASS" || echo "  FAIL ($failures)"
 [ "$failures" -eq 0 ]

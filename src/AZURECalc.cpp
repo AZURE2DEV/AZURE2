@@ -1023,7 +1023,6 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
 }
 
 bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<double> &grad) const {
-  if (configure().paramMask & Config::USE_PARK_FORMALISM) return false;  // Park wall penalty not in J
   vector_r r, jac;
   std::vector<int> packedToFull;
   if (!ResidualJacobian(p, r, jac, packedToFull) || r.empty()) return false;
@@ -1048,6 +1047,20 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
       const double n0 = seg->GetNominalNorm(), nerr = n0 / 100.0 * seg->GetNormError();
       if (nerr != 0.0) { grad[idx] += 2.0 * (p[idx] - n0) / (nerr * nerr); g2[idx] += 2.0 / (nerr * nerr); }
     }
+  }
+  // Park: the J > 0 wall, sum over the levels with J < 0 of (J/s)^2, is not a
+  // residual.  Its gradient (zero while every J > 0) as the adjoint path adds it.
+  if (configure().paramMask & Config::USE_PARK_FORMALISM) {
+    CNuc *lc = GetPooledCNuc();
+    lc->FillCompoundFromParams(p);
+    lc->CalcShiftFunctions(configure());
+    if (lc->ParkNormPenalty() > 0.0) {
+      GradAccum accum;
+      accum.Init(lc);
+      AddParkPenaltyGradient(lc, configure(), accum);
+      accum.Scatter(pmap, grad);
+    }
+    ReturnPooledCNuc(lc);
   }
   ForEachShiftPenalty(data(), pmap, [&](int idx, double nominal, double e) {
     if (idx >= (int)p.size()) return;
