@@ -79,6 +79,7 @@ matrix_c *AMatrixFunc::GetJSpecAInvMatrix(int jGroupNum) {
 void AMatrixFunc::ClearMatrices() {
   tmatrix_.clear();
   ec_tmatrix_.clear();
+  InvalidateTMatrixProducts();
   chan_cap_cache_.clear();
 
   const int numJGroups = compound()->NumJGroups();
@@ -849,7 +850,7 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
       KGroup *kg = theDecay->GetKGroup(K);
       for (int inter = 1; inter <= theDecay->GetKLGroup(kL)->NumInterferences(); inter++) {
         Interference *itf = theDecay->GetKLGroup(kL)->GetInterference(inter);
-        std::string type = itf->GetInterferenceType();  // "RR","ER","RE","EE"
+        const std::string &type = itf->GetInterferenceType();  // "RR","ER","RE","EE"
         if (type.size() != 2) return false;
         char rad1 = type[0], rad2 = type[1];  // 'R' internal, 'E' external
         int m1 = itf->GetM1(), m2 = itf->GetM2();

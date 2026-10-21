@@ -64,6 +64,7 @@ void RMatrixFunc::ClearMatrices() {
   rl_inv_r_matrices_.clear();
   tmatrix_.clear();
   ec_tmatrix_.clear();
+  InvalidateTMatrixProducts();
 }
 
 /*!
