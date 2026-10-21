@@ -524,8 +524,9 @@ On a 19-segment project of that kind (14 406 points, 694 free parameters, one
 thread) one evaluation went from 7.0 s to 2.2 s, one residual Jacobian (the
 gradient and G2 of ``--use-gradient``) from 51 s to 4.8 s, and 20 MIGRAD
 calls from 355 s to 68 s; peak memory went down slightly.  Solving the level
-matrix in channel space (:doc:`level_matrix`) then took them to 1.3 s, 3.7 s
-(2.9 s for the adjoint gradient) and 47 s.
+matrix in channel space (:doc:`level_matrix`), the sums by Legendre order and
+the gradient changes above then took them to 0.36 s, 1.4 s (1.0 s for the
+adjoint gradient) and 17.5 s (two threads: 0.21 s, 0.75 s and 11 s).
 
 Environment switches
 ^^^^^^^^^^^^^^^^^^^^

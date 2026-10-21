@@ -239,9 +239,14 @@ parameters change (``ALevel::Stamp``).
 parameter cotangents.  For Brune and Park a scalar gradient pass sums them over
 all points (``GradAccum::fe``/``fgamma``) and resolves them once, through the
 adjoint of the eigen-decomposition and of :math:`K, N`
-(``ResolveFormalCotangents``).  The rows of the residual Jacobian, the pencil
-route and formal levels that are (nearly) degenerate keep the level-matrix
-adjoint (``LevelMatrixAdjoint``) with the solves :math:`A g_c` from ``ApplyA``.
+(``ResolveFormalCotangents``).  Where the scalar pass takes the level-matrix
+adjoint (pencil route, level route, nearly degenerate formal levels), it
+accumulates :math:`\sum_E \mathrm{Re}\,\bar M` and :math:`\sum_E E\,\mathrm{Re}\,\bar M`
+and contracts them with :math:`dK, dN` once per pass.  The rows of the
+residual Jacobian and of the model gradients take, per free parameter, the
+rank-two change of :math:`K - EN` it makes (``LevelAdjoint``); Park keeps
+``LevelMatrixAdjoint``.  The solves :math:`A g_c` come from the channel solves
+of the route (``GetRawChannelSolve``, ``ApplyA``).
 
 T-Matrix Calculation: ``AMatrixFunc::CalculateTMatrix()``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
