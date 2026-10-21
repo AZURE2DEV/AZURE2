@@ -11,9 +11,9 @@
 #   2. a0*x^1.5 equals the same data written at the shifted energies;
 #   3. a follower uses its leader's function;
 #   4. a fit recovers a and a0 of a linear calibration error shared by two
-#      segments (chi2 = 0 at the truth; only reported for the numerical gradient),
-#      with Minuit's numerical gradient,
-#      --use-gradient and --use-lm, and writes segment_<key>_energy_shift_fn0,
+#      segments (chi2 = 0 at the truth, only reported for the first), with
+#      Minuit's numerical gradient, --use-gradient and --use-lm, and writes
+#      segment_<key>_energy_shift_fn0,
 #      Total-Shift-Chi-Squared and the shifts.out function line;
 #   5. --use-gradient's group-local shift columns agree with full-dataset finite
 #      differences (AZURE_SHIFT_GRAD_CHECK);
