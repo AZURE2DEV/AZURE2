@@ -60,14 +60,23 @@ r="$(maxrel "$(out tgt_fixed)" "$(out tgt_legacy_const)")"; if le "$r" 1e-9;  th
 # 2. what did not change. The references were recorded on Linux; another platform's libm differs
 #    from it at ~1e-11, so these are held to 1e-8 -- five orders below the smallest change in part 3.
 r="$(maxrel "$(out bare)" "$HERE/reference_old/bare.extrap")"; if le "$r" 1e-8; then ok "no effect: unchanged ($r)"; else bad "bare calculation moved ($r)"; fi
-r="$(maxrel "$(out tgt)"  "$HERE/reference_old/tgt.extrap")";  if le "$r" 1e-8; then ok "plain target integration: unchanged ($r)"; else bad "plain target integration moved ($r)"; fi
+#    thm: the references hold dev's sub-point grid; thm's adaptive grid (MERGE_NOTES.md section A, row
+#    02ae97b: geometric tails, quantised anchors) is converged where dev's is not -- tgt at the default grid
+#    is 3e-8 from a 4x finer one on thm and 6.3e-5 on dev, near the 3.50/3.55 MeV levels -- so target
+#    integration is held to dev's own grid error (6.1e-5 measured), not to 1e-8.
+THM_GRID_TOL=1e-4
+r="$(maxrel "$(out tgt)"  "$HERE/reference_old/tgt.extrap")";  if le "$r" "$THM_GRID_TOL"; then ok "plain target integration: unchanged up to dev's grid error ($r)"; else bad "plain target integration moved ($r)"; fi
 
 # 3. what changed, by how much, and why
 #    Constant sigma: the old kernel was not renormalised over its +-3 sigma window, so every point was
 #    low by erf(3/sqrt 2) = 0.9973002; the new result is the old one divided by that (as the 2-point
 #    quadrature integrates the kernel, within 1e-5) and by the same factor at every energy.
+#    thm: the factor is the same at every energy only up to the grid difference of part 2 (MERGE_NOTES.md
+#    section A, 02ae97b): thm's fold is converged to 2e-7, dev's (the reference) is off by up to 1.1e-4 near
+#    the 3.50/3.55 MeV levels (measured spread 1.0025900-1.0027200), so the spread is held to 1.5e-4.
+THM_SPREAD_TOL=1.5e-4
 read lo med hi <<< "$(ratiostat "$(out fixed)" "$HERE/reference_old/fixed.extrap")"
-if within "$med" 1.0027069 1e-5 && within "$lo" "$med" 2e-6 && within "$hi" "$med" 2e-6; then ok "constant sigma: new/old = 1/erf(3/sqrt2) = 1.0027069 everywhere (min $lo, median $med, max $hi)"; else bad "constant sigma: new/old not the kernel normalisation (min $lo, median $med, max $hi; expected 1.0027069)"; fi
+if within "$med" 1.0027069 1e-5 && within "$lo" "$med" "$THM_SPREAD_TOL" && within "$hi" "$med" "$THM_SPREAD_TOL"; then ok "constant sigma: new/old = 1/erf(3/sqrt2) = 1.0027069 everywhere (min $lo, median $med, max $hi)"; else bad "constant sigma: new/old not the kernel normalisation (min $lo, median $med, max $hi; expected 1.0027069)"; fi
 #    Legacy c.m. expression: already normalised before; the width is now taken at the point's energy
 #    instead of at each sub-point, a change of order sigma'(E) * 3 sigma -- small for E^1.5.
 r="$(maxrel "$(out legacy_cm_E)" "$HERE/reference_old/legacy_cm_E.extrap")"; if le "$r" 2e-2; then ok "legacy c.m. sigma(E): width now at the point energy, moved by at most $r"; else bad "legacy c.m. sigma(E) moved by $r (expected < 2e-2)"; fi
