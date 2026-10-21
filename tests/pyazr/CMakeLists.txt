@@ -139,3 +139,10 @@ set_tests_properties(pyazr_natural_target PROPERTIES ENVIRONMENT "OMP_NUM_THREAD
 add_test(NAME pyazr_nds_levels_fallback
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/nds_levels_fallback_test.py)
+
+# Scattering lengths: the <scatteringLengths> block helpers, azure2.scattering_lengths against the
+# tests/scattering_length reference values, the constraint chi2, its gradient and Jacobian rows.
+add_test(NAME pyazr_scattering_length
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/scattering_length_test.py)
+set_tests_properties(pyazr_scattering_length PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

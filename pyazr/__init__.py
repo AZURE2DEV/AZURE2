@@ -1,8 +1,8 @@
-from .azure2 import azure2
+from .azure2 import azure2, ScatteringLength
 from .parameters import (Pair, PairSet, Parameter, ParameterSet, LevelKey,
                          NuclearPotential)
 from .scheme import LevelScheme, SchemeLevel, SchemeChannel
-from .azrfile import AzrModel, AzrLevel, AzrChannel
+from .azrfile import AzrModel, AzrLevel, AzrChannel, ScatteringLengthLine
 from .datasets import (Segment, SegmentSet, TestSegment, TestSegmentSet,
                        fitted_norms)
 # nds also defines a Level, but transform.Level owns the name here; reach the
@@ -24,7 +24,7 @@ from .bands import (Band, load_covariance, rmatrix_columns, best_fit_params,
                     live_parameters, step_sizes, sensitivities, trimmed_model,
                     uncertainty_bands, extrapolation_bands)
 
-__all__ = ["azure2",
+__all__ = ["azure2", "ScatteringLength", "ScatteringLengthLine",
            "angular_distribution",
            "Pair", "PairSet", "Parameter", "ParameterSet", "LevelKey",
            "NuclearPotential",

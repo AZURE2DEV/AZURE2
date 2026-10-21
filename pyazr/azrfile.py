@@ -29,7 +29,7 @@ which the ``S`` / ``L`` properties convert.
 import os
 import re
 import tempfile
-from typing import List, Optional
+from typing import List, NamedTuple, Optional
 
 # Field order of a <levels> channel line, matching NucLine's read order.
 _FIELDS = [
@@ -407,6 +407,26 @@ def _nuclei_module():
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         return mod
+
+
+class ScatteringLengthLine(NamedTuple):
+    """One line of the ``<scatteringLengths>`` block: a measured s-wave
+    scattering length (fm) of particle pair ``pair`` (its key) in channel spin
+    ``s`` (``-1``: the coherent combination sum_s (2s+1)/((2j1+1)(2j2+1)) a_s).
+    ``sigma`` constrains Re a, ``im_sigma`` Im a; 0 leaves that part free."""
+    pair: int
+    s: float
+    value: float
+    sigma: float
+    im_value: float = 0.0
+    im_sigma: float = 0.0
+    active: bool = True
+
+    def line(self):
+        out = f"{1 if self.active else 0} {self.pair} {_fmt(self.s)} {_fmt(self.value)} {_fmt(self.sigma)}"
+        if self.im_sigma or self.im_value:
+            out += f" {_fmt(self.im_value)} {_fmt(self.im_sigma)}"
+        return out
 
 
 class AzrModel:
@@ -1012,6 +1032,65 @@ class AzrModel:
             end = next(i for i, ln in enumerate(lines) if ln.strip() == "</config>")
             lines.insert(end, f"abundanceSumSigma={float(value):g}\n")
         self._prefix = "".join(lines)
+
+    # -- measured scattering lengths ------------------------------------------
+
+    @property
+    def scattering_lengths(self):
+        """The ``<scatteringLengths>`` block as a list of
+        :class:`ScatteringLengthLine` (empty without the block).  Each active
+        line adds ((Re a0 - value)/sigma)^2 (and the same for Im a0 when
+        ``im_sigma`` > 0) to the chi-squared AZURE2 minimizes; the computed
+        lengths of every pair are :meth:`azure2.scattering_lengths` and
+        ``output/scatteringLengths.out``."""
+        lines = self._suffix.splitlines()
+        try:
+            a, b = lines.index("<scatteringLengths>"), lines.index("</scatteringLengths>")
+        except ValueError:
+            return []
+        out = []
+        for ln in lines[a + 1:b]:
+            t = ln.split("#", 1)[0].split()
+            if not t:
+                continue
+            if len(t) not in (5, 7):
+                raise ValueError(f"<scatteringLengths> line {ln!r}: expected 'active pairKey s value sigma [imValue imSigma]'")
+            im = (float(t[5]), float(t[6])) if len(t) == 7 else (0.0, 0.0)
+            out.append(ScatteringLengthLine(int(t[1]), float(t[2]), float(t[3]), float(t[4]), im[0], im[1],
+                                            int(t[0]) != 0))
+        return out
+
+    def set_scattering_lengths(self, entries):
+        """Replace the ``<scatteringLengths>`` block with ``entries`` (an
+        iterable of :class:`ScatteringLengthLine`); an empty list removes the
+        block.  A new block goes after ``</segmentsTest>`` (else after
+        ``</segmentsData>``), where the GUI writes it."""
+        entries = list(entries)
+        lines = self._suffix.splitlines()
+        if "<scatteringLengths>" in lines:
+            a, b = lines.index("<scatteringLengths>"), lines.index("</scatteringLengths>")
+            del lines[a:b + 1]
+            at = a
+        else:
+            at = None
+            for tag in ("</segmentsTest>", "</segmentsData>"):
+                if tag in lines:
+                    at = lines.index(tag) + 1
+                    break
+            if at is None:
+                at = len(lines)
+        if entries:
+            lines[at:at] = ["<scatteringLengths>"] + [e.line() for e in entries] + ["</scatteringLengths>"]
+        self._suffix = "\n".join(lines) + "\n"
+        return self
+
+    def add_scattering_length(self, pair, s, value, sigma, im_value=0.0, im_sigma=0.0, active=True):
+        """Append one measured scattering length (fm) to the block (created if
+        missing): pair key, channel spin (``-1`` = coherent), value and
+        uncertainty of Re a0, optionally of Im a0."""
+        entry = ScatteringLengthLine(int(pair), float(s), float(value), float(sigma), float(im_value),
+                                     float(im_sigma), bool(active))
+        return self.set_scattering_lengths(self.scattering_lengths + [entry])
 
     def set_natural(self, file_substr, natural=True):
         """Mark (or unmark) every ``<segmentsData>`` line matching

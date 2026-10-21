@@ -1795,6 +1795,9 @@ and its **angle column is centre-of-mass**, not lab.
 - `AZUREOut_*.extrap` — 5 cols: cm E, excitation E, cm angle, σ, S (mode 3).
 - `chiSquared.out` — per-segment χ²/N and norms; last line total χ². **The
   quickest scalar check that a run succeeded.**
+- `scatteringLengths.out` — s-wave scattering length of every channel spin of every particle pair at
+  the run's parameters, then the `<scatteringLengths>` constraints with their χ² (see the 2026-10-20
+  note at the end).
 - `param.par` initial / `param.sav` best-fit formal params (reload as the
   external parameter file); `parameters.out` physical/observable params.
 - `param.fit` is rewritten while MINUIT runs: every 100th objective evaluation
@@ -2149,6 +2152,26 @@ complete:
   agree. Grid re-placement (stage 3) is described under the save/reopen notes above
   (`--no-grid-replacement`). And `--gsl-coul` is wrong by up to 3-6 % in P and S for
   0.1 <= eta < 10, 1 <= rho < 10 (Michel agrees with mpmath to 1e-9): do not use it.
+- 2026-10-20 (branch feature/scattering-length; 7Be+p/10-20-26_scattering_length) -- S-WAVE SCATTERING
+  LENGTHS. Every calculation and fit writes `output/scatteringLengths.out` (and the run log): a0 of every
+  channel spin of every particle pair at its threshold, a0 = -a [M/(x^2 K1^2) - 2 I1/(x^2 K1)],
+  M = gamma^T A gamma at E = 0 (Paneru 2019 Eq. 7 = Paneru 2024 Eq. 26), a (1 - M) for neutrons; the same
+  in the standard, Brune and Park bases; complex when a lower channel is open; "hard sphere" = no level
+  has a width in that channel spin. Measured values go in an optional block
+  `<scatteringLengths>` / `active pairKey s value sigma [imValue imSigma]` / `</scatteringLengths>`
+  (s = -1: coherent sum_s (2s+1) a_s/((2j1+1)(2j2+1)); neutron tables give BOUND b, enter b A/(A+1)):
+  each line is a chi2 term in every fitter (exact gradient through the level-matrix adjoint, one LM/GSL
+  residual row per constrained part), the MCMC likelihood and `calculate_chi2_rwa`; chiSquared.out
+  gains `Total-Scattering-Length-Chi-Squared`. pyazr: `m.scattering_lengths(x)` (posterior from a
+  chain), `m.penalties()["scattering_length"]`, `AzrModel.scattering_lengths` /
+  `add_scattering_length` / `set_scattering_lengths`. Validated on Paneru 2024 3He+4He (33.0996 vs
+  33.10 fm) and by the effective-range expansion of AZURE2's own phase shifts (4e-5). TRAP when building
+  a model from published gamma~ (Brune): the .azr width is the OBSERVED width
+  2 P gamma~^2 / (1 + sum gamma~^2 dS/dE), not 2 P gamma~^2 -- dropping the denominator moved the
+  3He+4He a0 by 0.6 % (check `g_int` in parameters.out). Paneru 2019's a02 = -3.18 fm does not follow
+  from its printed Table II (-5.02). Side effect for everyone: a particle channel exactly at its
+  threshold (|E| < 1e-10 MeV) now takes the exact E -> 0 limit (P = 0, S_l(0) from K_2l/K_2l+1)
+  instead of the ill-conditioned zero-binding Whittaker route.
 - 2026-09-13 -- pyazr and `output/intEC.dat`: a session that RELOADS an existing cache for the
   12C+alpha truncated model returns a wrong chi2 (120,593 instead of 113,512, sometimes ~1e26)
   while the CLI reloading the same cache is exact; confirmed with the pre-fix module too, so it is

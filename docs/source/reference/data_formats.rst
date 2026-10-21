@@ -177,6 +177,39 @@ an ``<abundances>`` block, and a name the block does not define is refused.
    fields and misparses the line; a GUI older than it drops the block on
    save. A single-nucleus project is unaffected either way.
 
+**Measured scattering lengths.** An optional ``<scatteringLengths>`` block
+(anywhere in the file; the GUI writes it after ``</segmentsTest>``) lists
+measured s-wave scattering lengths, in fm, that the fit must reproduce
+(:doc:`../theory/scattering_length`)::
+
+   <scatteringLengths>
+   # active pairKey s value sigma [imValue imSigma]
+   1 1 1 17.34 1.2
+   1 1 2 -3.18 0.5
+   1 3 -1 3.59 0.02
+   1 2 1 9.0 0.5 -0.3 0.05
+   </scatteringLengths>
+
+``active pairKey s value sigma``: whether the line is used, the particle pair
+(its key), the channel spin :math:`s` (:math:`J = s`, parity
+:math:`\pi_1\pi_2` for :math:`l = 0`), and the real part of the scattering
+length with its uncertainty.  ``s = -1`` selects the coherent combination
+:math:`\sum_s (2s+1)\,a_s / ((2j_1+1)(2j_2+1))` of a neutron-type
+measurement (not for an identical pair).  Two optional numbers constrain the
+imaginary part, for a pair whose threshold lies above an open channel.  Each
+active line adds :math:`((\mathrm{Re}\,a_0 - \mathrm{value})/\mathrm{sigma})^2`
+(and the same for the imaginary part when its sigma is nonzero) to the
+chi-squared; ``sigma = 0`` leaves that part unconstrained.  ``#`` starts a
+comment.  An unknown pair key, a photon pair, a channel spin the pair does not
+have, or a malformed line stops the run with a message naming the line.
+Neutron tables list *bound* lengths :math:`b`; enter the free length
+:math:`b\,A/(A+1)`.
+
+.. note::
+
+   Compatibility: an engine older than this feature ignores the block (the
+   constraints then do nothing); a GUI older than it drops the block on save.
+
 A ``<targetInt>`` line may end with keyword blocks (``beamprofile ...``,
 ``udr ...``, ``sigmalab``). ``sigmalab`` marks an energy-dependent beam-spread
 expression as laboratory in, laboratory out (see

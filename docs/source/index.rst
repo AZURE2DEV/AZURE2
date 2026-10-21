@@ -54,6 +54,7 @@ A. M. Lane and R. G. Thomas, *Reviews of Modern Physics* **30**, 257 (1958).
 
    theory/polarization_theory
    theory/polarization_implementation
+   theory/scattering_length
 
 .. toctree::
    :maxdepth: 2

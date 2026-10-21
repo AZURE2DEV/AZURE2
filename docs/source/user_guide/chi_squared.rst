@@ -97,6 +97,13 @@ The file separates the two contributions::
   breaks it down per shift function.  Files written before October 2026 lack
   it, and their totals fall short of the minimizer's own value by exactly this
   amount.
+- **Total-Scattering-Length-Chi-Squared**, when the project has a
+  ``<scatteringLengths>`` block, is the sum over its active lines of
+  :math:`((a_0 - a_{\mathrm{exp}})/\sigma)^2` (real and, if given, imaginary
+  part), with :math:`a_0` the s-wave scattering length at the pair's threshold
+  (:doc:`../theory/scattering_length`).  ``scatteringLengths.out`` lists each
+  line's model value and contribution.  The term is part of every fitter's
+  objective and of the MCMC likelihood.
 
 The quantity the minimizer actually descends is the sum of all of them. Quoting
 ``Total-Chi-Squared`` as "the χ²" of a fit with free normalizations understates

@@ -132,6 +132,29 @@ minimises is the sum of both — see :doc:`../user_guide/chi_squared`.
 
 This file is the quickest scalar check that a run succeeded.
 
+With a ``<scatteringLengths>`` block the totals line ends with
+``Total-Scattering-Length-Chi-Squared``, the constraint term of
+:doc:`../theory/scattering_length` (also part of the minimised sum).
+
+scatteringLengths.out
+^^^^^^^^^^^^^^^^^^^^^
+
+Written after every calculation and fit (also printed in the run log): the
+s-wave scattering length of every channel spin of every particle pair at the
+parameters of the run::
+
+     Pair  Particles     J^pi           x      Re a0 (fm)      Im a0 (fm)  note
+        1  p+7Be         1-        2.0438    1.706777e+01   -0.000000e+00
+        1  p+7Be         2-        2.0438   -5.018396e+00   -0.000000e+00
+        2  p+7Be         0-        2.0438    2.583014e+01   -0.000000e+00  no level in this channel (hard sphere)
+        2  p+7Be         1-        2.0438    9.603285e+00   -2.637272e-01
+
+``x`` is :math:`(8Z_1Z_2e^2\mu a/\hbar^2)^{1/2}` (0 for a neutral pair).  A
+nonzero imaginary part means a channel with a lower threshold is open; a
+channel spin in which no level has a width gets the pure Coulomb (hard-sphere)
+value and the note.  The measured lengths of the ``<scatteringLengths>`` block
+follow, each with its model value and :math:`\chi^2`, and their total.
+
 param.errors
 ^^^^^^^^^^^^
 
