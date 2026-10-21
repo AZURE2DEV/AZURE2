@@ -284,16 +284,12 @@ class AMatrixFunc : public GenMatrixFunc {
    * formal ones (GradAccum::fe/fg) otherwise.
    */
   void FormalBilinearAdjoint(int j, const std::vector<BilinearTerm> &terms, GradAccum &accum);
-  /// Cotangent coefficients of one pathway of the differential sum, by Legendre order.
-  struct TBarProduct {
-    int k;
-    int m;
-    char rad;  ///< 'R' internal, 'E' external capture
-    std::vector<complex> q;
-  };
-  /// Builds tbar_products_ for the T-matrix held now (see the definition).
+  /// Builds tbar_q_ for the T-matrix held now (see the definition).
   bool TBarProducts(Decay *theDecay, bool particleExit);
-  std::vector<TBarProduct> tbar_products_;
+  /// Cotangent coefficients of the differential sum, [pathway][order], over
+  /// Decay::InterferencePathways and its orders.
+  std::vector<complex> tbar_q_;
+  std::vector<double> tbar_legendre_;
   const Decay *tbar_decay_ = nullptr;
   bool tbar_particle_ = false;
   /// AZURE_CHANNEL_VERIFY: compare the channel-space solve of J-group j with the level matrix.
@@ -349,6 +345,8 @@ class AMatrixFunc : public GenMatrixFunc {
   /// Active levels of each J-group (original numbers).
   std::vector<std::vector<int>> active_levels_;
   bool level_only_ = false;
+  /// Every level of every J-group in the R-matrix is itself in it (ClearMatrices).
+  bool all_levels_active_ = true;
 };
 
 #endif

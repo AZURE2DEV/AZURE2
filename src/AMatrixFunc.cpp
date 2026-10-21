@@ -130,6 +130,7 @@ void AMatrixFunc::ClearMatrices() {
     active_levels_.resize(numJGroups);
   }
 
+  all_levels_active_ = true;
   for (int j = 1; j <= numJGroups; ++j) {
     solver_valid_[j - 1] = 0;
     route_[j - 1] = kRouteNone;
@@ -157,7 +158,8 @@ void AMatrixFunc::ClearMatrices() {
       if (jg->GetLevel(la)->IsInRMatrix()) {
         map[la] = ++act;
         levels.push_back(la);
-      }
+      } else
+        all_levels_active_ = false;
     }
     // The level matrix itself is sized and zeroed only for the level route
     // (FillLevelMatrix).
@@ -641,13 +643,9 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
   if (isBetaDelayed && xsComponent != 0) return false;
 
   // Active-level compaction unsupported here: require every level of every
-  // in-R-matrix JGroup to itself be in the R matrix (so original idx == active).
-  for (int j = 1; j <= compound()->NumJGroups(); j++) {
-    JGroup *jg = compound()->GetJGroup(j);
-    if (!jg->IsInRMatrix()) continue;
-    for (int la = 1; la <= jg->NumLevels(); la++)
-      if (!jg->GetLevel(la)->IsInRMatrix()) return false;
-  }
+  // in-R-matrix JGroup to itself be in the R matrix (so original idx == active;
+  // ClearMatrices records it).
+  if (!all_levels_active_) return false;
 
   // Locate the decay matching the exit pair (mirror CalculateCrossSection).
   int ir = 0;
@@ -933,11 +931,16 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
     // over orders of products taken once per T-matrix (TBarProducts).
     if (!(inelasticParticle && point->IsUPOS()) && this->TBarProducts(theDecay, inelasticParticle)) {
       const complex scale = fitBar * cR;
-      for (const TBarProduct &e : tbar_products_) {
+      const std::vector<InterferencePathway> &paths = theDecay->InterferencePathways();
+      const int nl = theDecay->NumInterferenceOrders();
+      tbar_legendre_.assign(nl, 0.0);
+      const int nP = std::min(nl, point->GetMaxLOrder() + 1);
+      for (int l = 0; l < nP; l++) tbar_legendre_[l] = point->GetLegendreP(l);
+      for (size_t p = 0; p < paths.size(); p++) {
+        const complex *q = &tbar_q_[p * nl];
         complex s(0.0, 0.0);
-        for (size_t l = 0; l < e.q.size(); l++)
-          if (e.q[l] != complex(0.0, 0.0)) s += e.q[l] * point->GetLegendreP((int)l);
-        Tadd(e.k, e.m, e.rad, scale * s);
+        for (int l = 0; l < nl; l++) s += q[l] * tbar_legendre_[l];
+        if (s != complex(0.0, 0.0)) Tadd(paths[p].k, paths[p].m, paths[p].rad, scale * s);
       }
     } else
     for (int kL = 1; kL <= theDecay->NumKLGroups(); kL++) {
@@ -987,7 +990,13 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
       }
     }
 
-    if (aa == exitPairNum) {  // elastic Coulomb-nuclear interference
+    if (aa == exitPairNum && theDecay->TablesBuilt()) {  // elastic Coulomb-nuclear interference
+      const complex cI = I * geom * itFactor / (std::sqrt(pi) * 100.0);
+      for (const DiagonalPathway &d : theDecay->DiagonalPathways()) {
+        const complex B = cI * d.statSpin * point->GetCoulombAmplitude(d.s) * point->GetLegendreP(d.l);
+        tBar[d.k - 1][d.m - 1] += fitBar * B;
+      }
+    } else if (aa == exitPairNum) {  // elastic Coulomb-nuclear interference
       complex cI = I * geom * itFactor / (std::sqrt(pi) * 100.0);
       for (int k = 1; k <= nK; k++) {
         for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
@@ -2266,35 +2275,22 @@ void AMatrixFunc::VerifyChannelSpace(int j, EPoint *point, double inEnergy) {
  */
 bool AMatrixFunc::TBarProducts(Decay *theDecay, bool particleExit) {
   if (tbar_decay_ == theDecay && tbar_particle_ == particleExit) return true;
-  tbar_products_.clear();
-  const int nK = theDecay->NumKGroups();
-  std::vector<std::vector<int>> idxR(nK + 1), idxE(nK + 1);
-  auto slot = [&](int K, int m, char rad) -> TBarProduct & {
-    std::vector<int> &idx = (rad == 'E') ? idxE[K] : idxR[K];
-    if ((int)idx.size() <= m) idx.resize(m + 1, -1);
-    if (idx[m] < 0) {
-      idx[m] = (int)tbar_products_.size();
-      tbar_products_.push_back(TBarProduct{K, m, rad, std::vector<complex>()});
-    }
-    return tbar_products_[idx[m]];
-  };
+  if (!theDecay->TablesBuilt()) return false;
   const std::vector<FlatInterference> &flat = theDecay->FlatInterferences();
-  if (flat.empty() && theDecay->NumKLGroups() > 0) return false;  // table not built
+  const int nl = theDecay->NumInterferenceOrders();
+  const size_t np = theDecay->InterferencePathways().size();
+  tbar_q_.assign(np * nl, complex(0.0, 0.0));
+  const std::vector<vector_c> *T = tmatrix_.empty() ? nullptr : &tmatrix_[0];
   for (const FlatInterference &f : flat) {
     if (particleExit && !f.spEqual) continue;
-    if (!f.r1) {  // an interference type the adjoint does not know
-      tbar_products_.clear();
+    if (!f.r1 || !f.r2) {  // an interference type the adjoint does not know
       tbar_decay_ = nullptr;
       return false;
     }
-    const complex T1 = (f.r1 == 'E') ? this->GetECTMatrixElement(f.k, f.m1) : this->GetTMatrixElement(f.k, f.m1);
-    const complex T2 = (f.r2 == 'E') ? this->GetECTMatrixElement(f.k, f.m2) : this->GetTMatrixElement(f.k, f.m2);
-    TBarProduct &e1 = slot(f.k, f.m1, f.r1);
-    if ((int)e1.q.size() <= f.l) e1.q.resize(f.l + 1, complex(0.0, 0.0));
-    e1.q[f.l] += f.z * T2;
-    TBarProduct &e2 = slot(f.k, f.m2, f.r2);
-    if ((int)e2.q.size() <= f.l) e2.q.resize(f.l + 1, complex(0.0, 0.0));
-    e2.q[f.l] += f.z * T1;
+    const complex T1 = (f.r1 == 'E') ? ec_tmatrix_[f.k - 1][f.m1 - 1] : (T ? (*T)[f.k - 1][f.m1 - 1] : complex(0.0, 0.0));
+    const complex T2 = (f.r2 == 'E') ? ec_tmatrix_[f.k - 1][f.m2 - 1] : (T ? (*T)[f.k - 1][f.m2 - 1] : complex(0.0, 0.0));
+    tbar_q_[(size_t)f.s1 * nl + f.l] += f.z * T2;
+    tbar_q_[(size_t)f.s2 * nl + f.l] += f.z * T1;
   }
   tbar_decay_ = theDecay;
   tbar_particle_ = particleExit;

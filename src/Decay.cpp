@@ -1,4 +1,5 @@
 #include "Decay.h"
+#include <algorithm>
 
 /*!
  * The Decay object is created with a reference to a particle pair number, which represents
@@ -169,6 +170,14 @@ void Decay::SetCaptureAyBuilt() {
  */
 void Decay::BuildFlatInterferences() {
   flat_.clear();
+  flatPathways_.clear();
+  flatOrders_ = 0;
+  auto position = [this](int k, int m, char rad) {
+    for (size_t i = 0; i < flatPathways_.size(); i++)
+      if (flatPathways_[i].k == k && flatPathways_[i].m == m && flatPathways_[i].rad == rad) return (int)i;
+    flatPathways_.push_back(InterferencePathway{k, m, rad});
+    return (int)flatPathways_.size() - 1;
+  };
   for (KLGroup &kl : klgroups_) {
     const int k = kl.GetK();
     KGroup *kg = this->GetKGroup(k);
@@ -188,6 +197,9 @@ void Decay::BuildFlatInterferences() {
       }
       f.z = itf->GetZ1Z2();
       f.spEqual = spEqual;
+      f.s1 = f.r1 ? position(k, f.m1, f.r1) : -1;
+      f.s2 = f.r2 ? position(k, f.m2, f.r2) : -1;
+      flatOrders_ = std::max(flatOrders_, f.l + 1);
       flat_.push_back(f);
     }
   }

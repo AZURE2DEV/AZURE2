@@ -1758,6 +1758,16 @@ void CNuc::CalcAngularDists(int maxL) {
         }
       }
       theDecay->BuildFlatInterferences();
+      std::vector<DiagonalPathway> diag;
+      for (int k = 1; k <= theDecay->NumKGroups(); k++)
+        for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+          MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
+          AChannel *en = this->GetJGroup(mg->GetJNum())->GetChannel(mg->GetChNum());
+          AChannel *ex = this->GetJGroup(mg->GetJNum())->GetChannel(mg->GetChpNum());
+          if (en == ex) diag.push_back(DiagonalPathway{k, m, en->GetS(), en->GetL(), mg->GetStatSpinFactor()});
+        }
+      theDecay->SetDiagonalPathways(diag);
+      theDecay->SetTablesBuilt();
     }
   }
 }

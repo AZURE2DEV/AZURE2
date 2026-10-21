@@ -246,7 +246,7 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
       const bool particleExit = (aa != exitPairNum && exitPairDiff->GetPType() == 0);
       if (!point->IsAngularDist() && !(particleExit && point->IsUPOS())) {
         const std::vector<FlatInterference> &flat = theDecay->FlatInterferences();
-        if (rt_decay_ != theDecay && (!flat.empty() || theDecay->NumKLGroups() == 0)) {
+        if (rt_decay_ != theDecay && theDecay->TablesBuilt()) {
           rt_wl_.clear();
           const std::vector<vector_c> *T = tmatrix_.empty() ? nullptr : &tmatrix_[0];
           for (const FlatInterference &f : flat) {
@@ -863,6 +863,15 @@ void GenMatrixFunc::BuildCoulombInterference(Decay *theDecay, bool elastic) {
   rt_it_.clear();
   rt_it_built_ = elastic;
   if (!elastic) return;
+  if (theDecay->TablesBuilt()) {
+    for (const DiagonalPathway &d : theDecay->DiagonalPathways()) {
+      size_t i = 0;
+      while (i < rt_it_.size() && !(rt_it_[i].s == d.s && rt_it_[i].l == d.l)) i++;
+      if (i == rt_it_.size()) rt_it_.push_back(CoulombTerm{d.s, d.l, complex(0.0, 0.0)});
+      rt_it_[i].c += d.statSpin * conj(this->GetTMatrixElement(d.k, d.m));
+    }
+    return;
+  }
   for (int k = 1; k <= theDecay->NumKGroups(); k++) {
     for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
       MGroup *theMGroup = theDecay->GetKGroup(k)->GetMGroup(m);
