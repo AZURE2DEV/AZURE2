@@ -29,7 +29,9 @@ Checks:
 4. The constraint lines: coherent = 3/8 a01 + 5/8 a02, chi2 total = sum of lines (inactive 0) = the
    `Total-Scattering-Length-Chi-Squared` of chiSquared.out = 48.3471.
 5. `AZURE_GRAD_CHECK` on be7p_fit (8 parameters) in the Brune, standard and Park parametrizations:
-   analytic vs finite differences < 1e-6 (observed 4e-10, 4e-10, 4e-8).
+   analytic vs finite differences < 1e-6 (observed 4e-10..7e-8); Park < 1e-3 (4e-8 with the Coulomb
+   table, 2.5e-4 with the exact Coulomb routine as in CI: Park's dS/dE at the level energy is a numerical
+   derivative and its noise enters the finite differences, as in tests/pyazr/park_gradient_test.py).
 6. A `--use-lm` fit with the constraints reaches data + constraint chi2 < 6 (from 227 + 48).
 7. Malformed block lines are refused with the line named.
 

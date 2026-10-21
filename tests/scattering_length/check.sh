@@ -88,14 +88,19 @@ check "chi2 total in chiSquared.out" "$(sed -n 's/.*Total-Scattering-Length-Chi-
 check "chi2 total, reference" "$total" 48.3471 1e-4
 
 # 5. Analytic gradient (level-matrix adjoint at the thresholds) against finite differences, in the
-#    three parametrizations; AZURE_GRAD_CHECK compares every free energy and width.
+#    three parametrizations; AZURE_GRAD_CHECK compares every free energy and width.  Park's level
+#    matrix holds dS/dE at the level energies, which AZURE2 differentiates numerically, so a finite
+#    difference in E_lambda carries that noise: 4e-8 with the Coulomb table, 2.5e-4 with the exact
+#    Coulomb routine (CI, no table) -- the 1e-4-class tolerance of tests/pyazr/park_gradient_test.py.
 for form in "" --no-brune --use-park; do
+  limit=1e-6
+  [ "$form" = --use-park ] && limit=1e-3
   AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=40 run "grad${form}" be7p_fit.azr 2 --use-gradient $form
   log="$WORK/grad${form}/run.log"
   worst="$(awk '/\[grad-check\] idx/ { for (i = 1; i <= NF; i++) if ($i == "rel" || $i == "relJ") if ($(i + 1) + 0 > m) m = $(i + 1) + 0 } END { print m + 0 }' "$log")"
   n="$(grep -c '\[grad-check\] idx' "$log")"
-  if [ "$n" -ge 8 ] && awk -v w="$worst" 'BEGIN { exit !(w < 1e-6) }'; then ok "gradient ${form:---use-brune}: $n parameters, worst relative difference $worst"
-  else bad "gradient ${form:---use-brune}: $n parameters checked, worst relative difference ${worst} (limit 1e-6)"; tail -5 "$log"; fi
+  if [ "$n" -ge 8 ] && awk -v w="$worst" -v l="$limit" 'BEGIN { exit !(w < l) }'; then ok "gradient ${form:---use-brune}: $n parameters, worst relative difference $worst (limit $limit)"
+  else bad "gradient ${form:---use-brune}: $n parameters checked, worst relative difference ${worst} (limit $limit)"; grep '\[grad-check\] idx' "$log"; fi
 done
 
 # 6. A fit with the constraints (least squares: the constraints are residual rows).
