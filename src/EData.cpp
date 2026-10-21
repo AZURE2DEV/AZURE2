@@ -1871,6 +1871,9 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
     // Isotopic abundances: their priors and the sum-to-one term.
     if (abundancePenalty_ != 0.0)
       chiOut << " Total-Abundance-Chi-Squared: " << abundancePenalty_;
+    // Measured scattering lengths (<scatteringLengths>; table in scatteringLengths.out).
+    if (scatteringLengthChi2_ != 0.0)
+      chiOut << " Total-Scattering-Length-Chi-Squared: " << scatteringLengthChi2_;
     chiOut << std::endl
            << std::endl;
     chiOut.flush();

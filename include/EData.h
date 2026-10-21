@@ -82,6 +82,9 @@ class EData {
   /// The abundance penalty (priors + sum-to-one) of the last evaluation, reported in chiSquared.out.
   void SetAbundancePenalty(double penalty) { abundancePenalty_ = penalty; }
   double GetAbundancePenalty() const { return abundancePenalty_; }
+  /// chi2 of the measured scattering lengths (<scatteringLengths>) at the last evaluation.
+  void SetScatteringLengthChi2(double chi2) { scatteringLengthChi2_ = chi2; }
+  double GetScatteringLengthChi2() const { return scatteringLengthChi2_; }
   /// External-capture amplitudes for every point that has an EC component.
   int CalculateECAmplitudes(CNuc *, const Config &);
   /// How many external-capture amplitudes this model expects in an intEC file.
@@ -167,6 +170,7 @@ class EData {
   std::string ecOutputFile_;  // The intEC file being written, when not reading one back
   double parkPenalty_ = 0.0;
   double abundancePenalty_ = 0.0;
+  double scatteringLengthChi2_ = 0.0;
   std::vector<std::string> nucleusLabels_;   // one per compound nucleus, for the natural decomposition file
   // A copy of the compound nucleus that holds the observed level parameters the
   // sub-point grids are laid out from (ReplaceSubPointGrids).  Never shared: a

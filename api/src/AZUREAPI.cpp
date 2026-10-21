@@ -1,4 +1,5 @@
 #include "AZUREAPI.h"
+#include "ScatteringLength.h"
 #include "AZUREParams.h"
 
 #include "GSLException.h"
@@ -858,6 +859,9 @@ double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
   if (configure().paramMask & Config::USE_PARK_FORMALISM) chiSquared += localCompound->ParkNormPenalty();
   // Isotopic abundances: priors and the sum-to-one term.
   if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundancePenalty(configure().abundanceSumSigma);
+  // Measured scattering lengths (<scatteringLengths>).
+  if (localCompound->HasScatteringLengthConstraints())
+    chiSquared += ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
 
   return chiSquared;
 }
@@ -1009,6 +1013,11 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
   };
 
   bool ok = AccumulateEGammaGradient(lc, ld, configure(), pmap, sdp, fb, accum);
+  // Measured scattering lengths: the level-matrix adjoint at each threshold (false -> finite differences).
+  if (ok && lc->HasScatteringLengthConstraints()) {
+    ok = ScatteringLength::Chi2Gradient(lc, configure(), lc->ScatteringLengthConstraints(), accum, sdp);
+    if (ok) chi2 += ScatteringLength::Chi2(lc, configure(), lc->ScatteringLengthConstraints());
+  }
   if (ok) {
     if (configure().paramMask & Config::USE_PARK_FORMALISM) {
       AddParkPenaltyGradient(lc, configure(), accum);

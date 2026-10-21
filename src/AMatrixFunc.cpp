@@ -1087,6 +1087,21 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
   }
 
   // === A -> M lemma + structural E / gamma, once per JGroup. ===
+  this->LevelMatrixAdjoint(point, aBar, aBarUsed, inEnergy, accum, shiftDeriv, brune, park);
+  return true;
+}
+
+/*!
+ * The level-matrix stage of the adjoint: from the cotangents aBar of the A-matrix of each J-group
+ * (aBarUsed marks the groups that have one) to the level energies and reduced widths, through
+ * A^-1 = M (Mbar = -A^H Abar A^H) and the structural dependence of M on E_lambda and gamma_lambda,c
+ * in the standard, Brune and Park parametrizations.  The channel values are the point's
+ * (GetLoElement), so the same code serves data points and the threshold point of a scattering
+ * length.
+ */
+void AMatrixFunc::LevelMatrixAdjoint(EPoint *point, const std::vector<matrix_c> &aBar,
+                                     const std::vector<bool> &aBarUsed, double inEnergy, GradAccum &accum,
+                                     const vector_matrix_r *shiftDeriv, bool brune, bool park) {
   for (int jNum = 1; jNum <= compound()->NumJGroups(); jNum++) {
     if (!aBarUsed[jNum - 1]) continue;
     JGroup *jg = compound()->GetJGroup(jNum);
@@ -1292,6 +1307,43 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
       }
     }
   }
+}
 
+bool AMatrixFunc::BilinearAdjoint(EPoint *point, int jGroupNum, int chNum, complex mBar, GradAccum &accum,
+                                  const vector_matrix_r *shiftDeriv) {
+  if (configure().paramMask & Config::USE_RMC_FORMALISM) return false;
+  JGroup *jg = compound()->GetJGroup(jGroupNum);
+  if (!jg->IsInRMatrix() || !solver_valid_[jGroupNum - 1]) return false;
+  const int n = jg->NumLevels();
+  for (int la = 1; la <= n; la++)
+    if (!jg->GetLevel(la)->IsInRMatrix()) return false;  // active-level compaction, as in PointAdjoint
+  const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
+  const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
+  PPair *entrance = compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()));
+  const double inEnergy = point->GetCMEnergy() + entrance->GetSepE() + entrance->GetExE();
+
+  std::vector<matrix_c> aBar(compound()->NumJGroups());
+  std::vector<bool> aBarUsed(compound()->NumJGroups(), false);
+  aBar[jGroupNum - 1].assign(n, vector_c(n, complex(0.0, 0.0)));
+  aBarUsed[jGroupNum - 1] = true;
+  // B = sum_{la,lap} g_la A[la][lap] g_lap with the 1e-12 width cutoff of GetGammaVector, so the
+  // cotangent of A[la][lap] is g_la g_lap mBar, and each explicit width carries g A.
+  auto gamma = [&](int la) {
+    double g = jg->GetLevel(la)->GetFitGamma(chNum);
+    return fabs(g) < 1.0e-12 ? 0.0 : g;
+  };
+  for (int la = 1; la <= n; la++) {
+    double gla = gamma(la);
+    if (gla == 0.0) continue;
+    for (int lap = 1; lap <= n; lap++) {
+      double glap = gamma(lap);
+      if (glap == 0.0) continue;
+      complex Aval = this->GetAMatrixElement(jGroupNum, la, lap);
+      aBar[jGroupNum - 1][la - 1][lap - 1] += gla * glap * mBar;
+      accum.AddGamma(jGroupNum, la, chNum, std::real(conj(mBar) * (glap * Aval)));
+      accum.AddGamma(jGroupNum, lap, chNum, std::real(conj(mBar) * (gla * Aval)));
+    }
+  }
+  this->LevelMatrixAdjoint(point, aBar, aBarUsed, inEnergy, accum, shiftDeriv, brune, park);
   return true;
 }

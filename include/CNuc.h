@@ -5,6 +5,7 @@
 #include <map>
 #include "JGroup.h"
 #include "PPair.h"
+#include "ScatteringLength.h"
 
 namespace ROOT {
 namespace Minuit2 {
@@ -65,6 +66,10 @@ class CNuc {
   /// abundances Minuit parameters (one per nucleus and sample, after the
   /// level block), so a project without the block keeps its parameter layout.
   bool HasAbundanceBlock() const { return hasAbundanceBlock_; }
+  /// Measured scattering lengths of the optional <scatteringLengths> block (ScatteringLength::ReadConstraints).
+  const std::vector<ScatteringLength::Constraint> &ScatteringLengthConstraints() const { return scatLenConstraints_; }
+  /// Is there an active constrained scattering length (a chi2 term)?
+  bool HasScatteringLengthConstraints() const { return ScatteringLength::NumResiduals(scatLenConstraints_) > 0; }
   /// Number of samples the <abundances> block defines (0 without the block).
   int NumSamples() const { return (int)samples_.size(); }
   /// Sample \p s, 1-based.
@@ -216,6 +221,7 @@ class CNuc {
   std::vector<CompoundNucleus> nuclei_;
   std::vector<AbundanceSample> samples_;
   bool hasAbundanceBlock_ = false;
+  std::vector<ScatteringLength::Constraint> scatLenConstraints_;
   int maxLValue_;
   bool transformedIn_ = false;
 };

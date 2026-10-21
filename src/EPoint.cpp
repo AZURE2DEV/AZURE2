@@ -9,6 +9,7 @@
 #include "EData.h"
 #include "ESegment.h"
 #include "RMatrixFunc.h"
+#include "ScatteringLength.h"
 #include "ShftFunc.h"
 #include "TargetEffect.h"
 #include "Straggling.h"
@@ -1110,7 +1111,16 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
         int lValue = theChannel->GetL();
         double localEnergy = inEnergy - thePair->GetSepE() - thePair->GetExE();
         if (thePair->GetPType() == 0) {
-          if (localEnergy <= 0.0) {
+          if (fabs(localEnergy) <= ScatteringLength::kThresholdTolerance) {
+            // Exactly at the channel's threshold (the entrance channel of a scattering length):
+            // the E -> 0 limit, P = 0 and S_l(0) from the zero-energy Coulomb solutions, in
+            // place of the Whittaker log-derivative at zero binding, which is ill-conditioned.
+            complex loElement(ScatteringLength::ZeroEnergyShift(thePair, lValue) - theChannel->GetBoundaryCondition(), 0.0);
+            this->AddLoElement(j, ch, loElement);
+            this->AddSqrtPenetrability(j, ch, 0.0);
+            this->AddExpCoulombPhase(j, ch, 1.0);
+            this->AddExpHardSpherePhase(j, ch, 1.0);
+          } else if (localEnergy < 0.0) {
             ShftFunc theShiftFunction(thePair);
             double localShift = theShiftFunction(lValue, inEnergy);
             double boundary = theChannel->GetBoundaryCondition();
