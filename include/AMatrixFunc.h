@@ -327,7 +327,7 @@ class AMatrixFunc : public GenMatrixFunc {
   /// Scratch level-matrix cotangent of BilinearAdjoint.
   matrix_c mbar_scratch_;
   /// Scratch of LevelMatrixAdjoint.
-  std::vector<double> lma_e_, lma_g_, lma_s_, lma_inv_, lma_resym_, lma_imsym_, lma_de_, lma_sg_, lma_acc_;
+  std::vector<double> lma_resym_, lma_imsym_, lma_de_, lma_acc_;
   std::vector<char> lma_brunep_;
   std::vector<complex> lma_l_;
   std::vector<ChanCapEntry> chan_cap_cache_;

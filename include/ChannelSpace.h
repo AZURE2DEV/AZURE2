@@ -113,6 +113,25 @@ struct FormalLevels {
  */
 std::shared_ptr<FormalLevels> Cached(const JGroup *jg);
 
+/// The level data LevelMatrixAdjoint reads, per J-group (levels 1..n), kept per thread.
+struct LevelArrays {
+  std::vector<std::uint64_t> key;  ///< levels and their ALevel::Stamp
+  int n = 0, nch = 0;
+  std::vector<double> E;    ///< fitted level energies (n)
+  std::vector<double> G;    ///< fitted widths, n x nch
+  std::vector<double> S;    ///< shift functions at the level energies, n x nch
+  std::vector<double> SG;   ///< S times G
+  std::vector<double> inv;  ///< 1/(E_r - E_c) off the diagonal, n x n
+};
+
+/*!
+ * The LevelArrays of J-group `jg` (all its levels) for the current
+ * parameters: rebuilt when a level's parameters changed, so the n^2
+ * divisions of `inv` are paid once per parameter set, not once per
+ * level-matrix adjoint.
+ */
+const LevelArrays &CurrentLevelArrays(JGroup *jg);
+
 /*!
  * Brings `f` up to date with the parameters of J-group `jg` (active levels
  * `levels`, 1-based original numbers).  Returns true if it was rebuilt.  The

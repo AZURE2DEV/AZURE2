@@ -42,6 +42,43 @@ std::shared_ptr<FormalLevels> Cached(const JGroup *jg) {
   return f;
 }
 
+const LevelArrays &CurrentLevelArrays(JGroup *jg) {
+  thread_local std::unordered_map<const JGroup *, LevelArrays> cache;
+  if (cache.size() >= 1024 && cache.find(jg) == cache.end()) cache.clear();
+  LevelArrays &a = cache[jg];
+  const int n = jg->NumLevels(), nch = jg->NumChannels();
+  std::vector<std::uint64_t> key(2 + 2 * (size_t)n);
+  key[0] = n;
+  key[1] = nch;
+  for (int i = 0; i < n; i++) {
+    ALevel *level = jg->GetLevel(i + 1);
+    key[2 + 2 * i] = reinterpret_cast<std::uintptr_t>(level);
+    key[3 + 2 * i] = level->Stamp();
+  }
+  if (key == a.key) return a;
+  a.key.swap(key);
+  a.n = n;
+  a.nch = nch;
+  a.E.resize(n);
+  a.G.resize((size_t)n * nch);
+  a.S.resize((size_t)n * nch);
+  a.SG.resize((size_t)n * nch);
+  for (int i = 0; i < n; i++) {
+    ALevel *level = jg->GetLevel(i + 1);
+    a.E[i] = level->GetFitE();
+    for (int c = 0; c < nch; c++) {
+      a.G[(size_t)i * nch + c] = level->GetFitGamma(c + 1);
+      a.S[(size_t)i * nch + c] = level->GetShiftFunction(c + 1);
+      a.SG[(size_t)i * nch + c] = a.S[(size_t)i * nch + c] * a.G[(size_t)i * nch + c];
+    }
+  }
+  a.inv.assign((size_t)n * n, 0.0);
+  for (int r = 0; r < n; r++)
+    for (int c = 0; c < n; c++)
+      if (r != c) a.inv[(size_t)r * n + c] = 1.0 / (a.E[r] - a.E[c]);
+  return a;
+}
+
 double LUFactor(complex *a, int *piv, int m) {
   double pmin = 0.0, pmax = 0.0;
   for (int k = 0; k < m; k++) {

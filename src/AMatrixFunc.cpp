@@ -1420,31 +1420,15 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
   // flat arrays: the loops below are n^2 per channel, and the accessor calls
   // and divisions they used to make per element dominated the gradient.
   const int nch = jg->NumChannels();
-  std::vector<double> &E = lma_e_, &G = lma_g_, &S = lma_s_, &inv = lma_inv_, &reSym = lma_resym_,
-                      &imSym = lma_imsym_;
-  E.resize(n);
-  G.resize((size_t)n * nch);
-  S.resize((size_t)n * nch);
-  for (int la = 0; la < n; la++) {
-    ALevel *level = jg->GetLevel(la + 1);
-    E[la] = level->GetFitE();
-    for (int ch = 0; ch < nch; ch++) {
-      G[(size_t)la * nch + ch] = level->GetFitGamma(ch + 1);
-      S[(size_t)la * nch + ch] = level->GetShiftFunction(ch + 1);
-    }
-  }
+  // E, G, S, S G and 1/(E_r - E_c) off the diagonal, kept per parameter set.
+  const ChannelSpace::LevelArrays &levelArrays = ChannelSpace::CurrentLevelArrays(jg);
+  const std::vector<double> &E = levelArrays.E, &G = levelArrays.G, &S = levelArrays.S, &inv = levelArrays.inv;
+  std::vector<double> &reSym = lma_resym_, &imSym = lma_imsym_;
   std::vector<char> &bruneP = lma_brunep_;
   bruneP.assign(nch, 0);
   bool anyBruneP = false;
   for (int ch = 0; ch < nch; ch++)
     if (brune && jg->GetChannel(ch + 1)->GetRadType() == 'P') bruneP[ch] = anyBruneP = true;
-  // 1/(E_r - E_c) off the diagonal.
-  if (anyBruneP) {
-    inv.assign((size_t)n * n, 0.0);
-    for (int r = 0; r < n; r++)
-      for (int c = 0; c < n; c++)
-        if (r != c) inv[(size_t)r * n + c] = 1.0 / (E[r] - E[c]);
-  }
 
   // Brune adds explicit E_lambda dependence through the boundary/shift kernel
   //   M[r][c] = ... - sum_{ch P} g_r,ch g_c,ch K_ch[r][c],
@@ -1508,11 +1492,8 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
       reSym[(size_t)a * n + c] = std::real(sym);
       imSym[(size_t)a * n + c] = std::imag(sym);
     }
-  std::vector<double> &SG = lma_sg_, &acc = lma_acc_;
-  if (anyBruneP) {
-    SG.resize((size_t)n * nch);
-    for (size_t k = 0; k < SG.size(); k++) SG[k] = S[k] * G[k];
-  }
+  const std::vector<double> &SG = levelArrays.SG;
+  std::vector<double> &acc = lma_acc_;
   acc.resize((size_t)4 * nch);
   double *sRe = &acc[0], *sIm = &acc[nch], *t1 = &acc[2 * (size_t)nch], *t2 = &acc[3 * (size_t)nch];
   std::vector<complex> &Lconst = lma_l_;
@@ -1754,10 +1735,7 @@ void AMatrixFunc::BilinearAdjoint(EPoint *energyPoint, int jNum, const std::vect
     }
     accum.formalUsed = true;
     const std::vector<complex> &lam = this->KernelLambda(energyPoint, jNum);
-    std::vector<double> &G = lma_g_;
-    G.resize((size_t)n * nch);
-    for (int la = 0; la < n; la++)
-      for (int d = 0; d < nch; d++) G[(size_t)la * nch + d] = jg->GetLevel(la + 1)->GetFitGamma(d + 1);
+    const std::vector<double> &G = ChannelSpace::CurrentLevelArrays(jg).G;
     vector_c ga(nch), gb(nch);
     for (const BilinearTerm &t : terms) {
       const vector_c &uEn = this->GetRawChannelSolve(jNum, t.ch);
