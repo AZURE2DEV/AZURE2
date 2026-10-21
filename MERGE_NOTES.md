@@ -6,9 +6,9 @@ something for such a project. The THM machinery itself (HOES cross section,
 `<thm>` keys, experiments, R(E), the DW vertex, the ps and angle windows,
 cbackground=, thm_experiments.out) is new and does nothing unless it is used.
 
-`origin/dev` 7e6dba8 is merged into `thm` (October 2026; see "Merge of
-origin/dev 7e6dba8" below; the previous merges were 64ed575, 4a93bc1, and
-6f3228e, 3628a87), so all of dev is already in `thm`.
+`origin/dev` 8673c5c is merged into `thm` (October 2026; see "Merge of
+origin/dev 8673c5c" below; the previous merges were 7e6dba8, 64ed575,
+4a93bc1, and 6f3228e, 3628a87), so all of dev is already in `thm`.
 The dev changes merged by 18c49ea, f56c150, da72def, 497548a, e191991 and
 3628a87 are not differences: the Wigner-limit bound, the elastic identical-pair factor
 (7c34992), the adaptive-grid convergence work, target-integration anchoring,
@@ -348,6 +348,129 @@ Still open: the merged EPoint is 152 bytes larger than dev's; the three
 convolution_unify models with target integration and a beam spread need more
 than 3.0 GB of address space with either binary (checked here on 21 points).
 
+## Merge of origin/dev 8673c5c (October 2026)
+
+dev between 7e6dba8 and 8673c5c: R. deBoer's scattering lengths (dfd15a4,
+448244d, 79d06ae: `scatteringLengths.out` after every calculation, the
+`<scatteringLengths>` block of measured values, fittable with the adjoint),
+electron screening as an experimental effect (ff356ab: `screening Ue vary
+sigma` on a `<targetInt>` line, parameter `screening_<n>`), the segment
+dialogs' compact observable list (0c0f8eb), tests/shift_fn, the segfault of
+fits with external capture (2dcb846; thm had it since the merge of 7e6dba8);
+and the speed-up: the channel-space level-matrix route (e3ff2a9, 487e194,
+3ae98f2: formal and pencil routes, near-pole deflation, chosen per J-group and
+energy; `AZURE_LEVEL_SPACE=1` forces the level route, `AMatrixFunc::
+SetLevelSpaceOnly(true)` one object), differential sums by Legendre order
+once per T-matrix (1e7eced) and their cotangents (2bc807f), the deferred
+level-matrix adjoint and the Jacobian rows by free parameter (8546dfa,
+a22a2a1, 095bcc2), `AZURE_PROFILE` timers (c84ba60), the ALevel stamp
+(875f508), tests/channel_space and tests/13N/check.sh.  All of it is in, with
+these decisions:
+
+- **THM stays on the level-space route.**  `THMMatrixFunc` is switched to it
+  in its constructor (`SetLevelSpaceOnly(true)`; `Reset` keeps it), so every
+  THM point -- the forward HOES amplitude (`GetAMatrixElement` over the active
+  levels) and the HOES adjoint (`GetAMatrix`, `LevelMatrixABarAdjoint`) --
+  is solved by filling and LU-factoring the level matrix, as before; no THM
+  object ever holds a channel-route group, so the adjoint always has the
+  factorization it reads.  `THMMatrixFunc` forms its observable from its own
+  amplitudes and never calls `GenMatrixFunc::CalculateCrossSection`, so the
+  Legendre-order sums (`rt_wl_`), the Coulomb-interference table and the
+  per-order T-cotangents (`tbar_q_`, `PointTBar`) are not on any THM path;
+  `ThmPointModelGradient` and `ComputeTHMRows` use `LevelMatrixABarAdjoint`
+  -> `LevelMatrixAdjoint` directly (structural, not the deferred `lmK/lmN`
+  path of a scalar pass).
+- **Classic segments of a THM project take dev's routes** (channel space where
+  it is chosen, the Legendre-order sums, the grouped and deferred gradient):
+  every output of every THM example and test, and of the 12C+12C best fits,
+  is byte for byte what it was (below), so nothing forces them back.
+- `LevelMatrixAdjoint(..., lambda, levelOf)`: dev's kernel argument `lambda`
+  first, then thm's `levelOf` (active level -> level number).  Without
+  `levelOf` the level data come from dev's per-parameter-set cache
+  (`ChannelSpace::CurrentLevelArrays`); a THM block with levels left out of
+  the R matrix gathers them over its active levels (`lma_active_`), the same
+  arithmetic as before.
+- **Parameter layout and type codes.**  Levels, abundances, norms, shifts,
+  sqrt(E), shift-function parameters, **screening potentials (dev)**, THM
+  cbkg (still last).  `GetParameterInfo` type codes: 7 = screening (dev),
+  **8 = cbkg (was 7 on thm)**.  `ParamKind` ... Abundance, Screening,
+  ThmCoherent.  MCMC kinds: PARAM_SCREENING 7 (dev), PARAM_CBKG 8 (internal;
+  was 7).  pyazr `_KINDS` {7: screening, 8: cbkg}, `bands._BAND_KINDS =
+  (0, 1, 8)`.  thm's by-name MCMC classification knows `screening_<n>` (its
+  prior from the `<targetInt>` line, as dev's BuildAutoPriors); the GUI's
+  `MCMCTab::categoryOfName` too.  The nuisance priors by full index skip
+  `screening_*` as they skip norms, shifts and abundances (dev skipped it by
+  substring).
+- **Screening parameters belong to `<targetInt>` lines.**  thm gives every
+  segment listed on a line its own copy of the effect (76888ad), so effect
+  numbers and lines differ there.  A screening parameter is the line's
+  (`TargetEffect::GetLineNumber`, the place among the active lines, dev's
+  numbering of `screening_<n>` and of `GetParameterInfo` field 6), shared by
+  every copy: `EData::GetScreeningTargetEffect(k)` is the first copy, U_e is
+  set on all of them, the prior is counted once.  **Differs from dev** only
+  for a screening line that lists no existing segment: no copy, so no
+  parameter (dev makes one that moves nothing).
+- A THM segment carries no screening factor: the factor is applied in
+  `GenMatrixFunc::CalculateCrossSection`, which `THMMatrixFunc` does not use,
+  so a screening line on a THM segment moves nothing there (zero derivative).
+- **EPoint at threshold.**  dev's exact-threshold branch (|E| <= 1e-10 MeV:
+  S_l(0) from `ScatteringLength::ZeroEnergyShift`, P = 0), which the
+  scattering lengths evaluate, comes first; thm's `ChannelFunc` branch (closed
+  channels, the Coulomb threshold) keeps every other energy at or near
+  threshold.
+- pyazr: `CalculateChi2RWA` adds the scattering-length chi^2 (dev) on thm's
+  `FillFromFullRWA`/`EvaluateFilledChi2`; the screening priors are not in it,
+  as on dev (`penalties()["screening"]`, added by `objective`).
+  `CalculateScatteringLengthsRWA`, `ScatteringLength`, `ScatteringLengthLine`
+  and the AzrModel screening helpers are dev's.
+- GUI: the THM tick lives in dev's new observable row of Add/Edit Data
+  Segment (after the multipolarity box) and keeps its column in Add/Edit Test
+  Segment; it is disabled by observable code (data: phase shift; test: phase
+  shift and angular-distribution coefficients), as thm's index rules did.
+  `<scatteringLengths>` is read after thm's THM content.
+- Tests: dev's tests/13N, channel_space, electron_screening and
+  scattering_length check.sh take thm's time guard (tests/lib/guard.sh);
+  pyazr_scattering_length and pyazr_screening exit 77 without the package or
+  the engine (thm's convention; they exited 0) and are registered before the
+  SKIP_RETURN_CODE block.
+- docs/source/developer/level_matrix.rst notes that THM is always on the
+  level route.
+
+Output: `scatteringLengths.out` (dev) is written by every calculation, THM
+projects included; it is new, every other file is unchanged.
+
+Verified after the merge (one heavy process at a time, OMP_NUM_THREADS=1,
+engines under a 1.6 GB address-space cap; reference: 97e2e1a built from the
+same sources, tag thm-premerge-2026-10-22b; dev: 8673c5c's own build):
+
+- THM: every THM example and THM test project (13 projects, 73 output files)
+  byte for byte as 97e2e1a; the 12C+12C best fits too (33 files): plain_6.5
+  92.2140340427, plain_8.5 70.7968723529, NCxR_8.5 100.894445567 (totals with
+  priors), identical.  Each run also writes the new scatteringLengths.out.
+  The 18 THM check.sh scripts of 97e2e1a pass with both binaries and give the
+  same 4323 work files, apart from 13 that hold the temporary directory names
+  (run.azr, one thm_experiments.out); thm_park's MIGRAD and MCMC runs
+  included.
+- Classic (97e2e1a's 18 classic test projects, natural_neon apart): 87 of 87
+  files byte for byte as 97e2e1a, although dev's channel-space route and
+  Legendre-order sums are on for them.  Against dev 8673c5c: the 29 files of
+  the previous merge's list, i.e. section A (thick_target_resonance,
+  hybrid_potential, 13N and its EC table, beam_profile_kernel,
+  target_effect_ranges, the 7Li_p_ay-type parameters.out/param.par in the 7th
+  digit, 13N_capture_ay 3e-8, beta_delayed_alpha 1.3e-7, the last also with
+  `AZURE_LEVEL_SPACE=1` on dev); dev 8673c5c gives exactly dev 7e6dba8's files
+  on these projects.
+- Suites: build/ ctest 61/61 (pyazr_thm_adjoint, pyazr_thm_park,
+  pyazr_park_gradient, pyazr_thm_profiled, pyazr_scattering_length,
+  pyazr_screening included), build-gui ctest 81/81, tests/run_tests.sh under
+  2.4 GB 66 passed, 0 failed (convolution_unify, natural_target and
+  natural_neon left out: memory; not run this time).  dev's tests/13N,
+  channel_space, electron_screening, scattering_length, shift_fn, ec_shift
+  and angle_mapping check.sh pass on thm.
+- Speed (one thread, the same as 97e2e1a): CLI evaluation f19_pag_thm 8 s,
+  c12c12_tumino2018 46 s; pyazr chi2_and_grad (HOES adjoint) f19 1.20 ->
+  1.21 s, c12c12 (230 parameters) 1.83 -> 1.79 s, same chi^2 and gradient.
+
 ## Merge of origin/dev 7e6dba8 (October 2026)
 
 dev between 64ed575 and 7e6dba8: external-capture energy tables (687105f,
@@ -479,10 +602,11 @@ non-zero; under Park, LM's cost includes the J penalty (zero where J > 0).
    with the merge.  Re-pin dev's tests/*/expected that A moves (the thm pins
    are already moved; a new dev test may need it).
 3. Parameter layout and type codes: classic as dev; check that a newer dev
-   did not add parameters after the shift-function block (the cbkg block must
-   stay last) or reuse type code 7 (cbkg; 5 and 6 are dev's shift_fn and
-   abundance); the pair record keeps dev's fields first (binding energy
-   last, field 19).
+   did not add parameters after the screening block (the cbkg block must
+   stay last) or reuse type code 8 (cbkg; 5, 6 and 7 are dev's shift_fn,
+   abundance and screening); the pair record keeps dev's fields first
+   (binding energy last, field 19).  THMMatrixFunc must stay on the
+   level-space route (SetLevelSpaceOnly, see the merge of 8673c5c).
 4. Engine seams to re-check: EData.cpp/EDataThm.cpp hooks, EData::MapData
    (THM segments map within themselves only), the energy groups of
    AZUREGrad.cpp (THM segments left out), AMatrixFunc::LevelMatrixAdjoint
