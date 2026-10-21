@@ -575,8 +575,10 @@ complex EPoint::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *th
     const size_t k = kGroupNum - 1, m = ecMGroupNum - 1;
     if (k < ec_energies_.size() && m < ec_energies_[k].size() && ec_energies_[k][m] == currentEnergy)
       return ec_amplitudes_[k][m];
-    if (ec_shifted_.size() < ec_amplitudes_.size()) ec_shifted_.resize(ec_amplitudes_.size());
-    if (k < ec_shifted_.size() && ec_shifted_[k].size() <= m) ec_shifted_[k].resize(m + 1);
+    // Sized from the requested indices: a point without stored amplitudes (a sub-point or a fit's
+    // working copy) has an empty ec_amplitudes_, and sizing from it indexed past the end.
+    if (ec_shifted_.size() <= k) ec_shifted_.resize(k + 1);
+    if (ec_shifted_[k].size() <= m) ec_shifted_[k].resize(m + 1);
     ShiftedECAmplitude &memo = ec_shifted_[k][m];
     if (memo.valid && memo.energy == currentEnergy) return memo.amplitude;
 

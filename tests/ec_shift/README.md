@@ -25,3 +25,9 @@ amplitudes of its segment's own points and held them flat beyond the segment's
 ends — 9 % off for +30 keV and a factor 57 for −30 keV, where the lowest LUNA
 points move below the segment's lowest energy and the steeply falling amplitude
 was held constant.
+
+The last check runs a fit (mode 2, `--use-gradient`, `AZURE_GRAD_CHECK=exit`)
+of the shifted model.  Fits with external capture crashed from dev 855409e
+(the energy tables) until the shifted-amplitude memo was sized from the
+requested indices: a fit's working copies hold points without stored
+amplitudes.
