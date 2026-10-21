@@ -159,6 +159,7 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
     // (which only ever probe for digits or a quote) stop in front of them:
     //   beamprofile N {xi omega alpha weight}xN tpcSigma nCut dbFlag
     //   udr "<file>" flightPath_m burstFWHM_ns channel_ns centred
+    //   screening Ue_eV vary sigma_eV
     while (stream.good()) {
       stream >> std::ws;
       if (!(stream.good() && std::isalpha(stream.peek()))) break;
@@ -179,6 +180,18 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
         if (beamProfile_.empty()) stream.setstate(std::ios_base::failbit);
       } else if (keyword == "sigmalab") {
         sigmaLab_ = true;
+      } else if (keyword == "screening") {
+        int vary = 0;
+        stream >> screeningNominal_ >> vary >> screeningSigma_;
+        if (stream.fail() || screeningSigma_ < 0.0) {
+          // Flagged as well as failed: at the end of the line the fail bit is cleared below.
+          screeningError_ = true;
+          stream.setstate(std::ios_base::failbit);
+        } else {
+          hasScreening_ = true;
+          screeningVary_ = (vary != 0);
+          screeningUe_ = screeningNominal_;
+        }
       } else if (keyword == "udr") {
         stream >> std::ws;
         std::string file;

@@ -33,6 +33,9 @@ class TargetIntTab : public QWidget {
   /*! c.m./lab energy ratio m_t/(m_p+m_t) of the entrance pair shared by every segment in a key list
    *  ("1,3-5"); 0 when the pairs differ or a key is unknown. */
   double conversionFactorFor(const QString &segmentsList) const;
+  /// The adiabatic-limit screening potential (eV) of the segments' common entrance pair, or -1 when the
+  /// list is empty, names a missing segment, mixes pairs, or the pair is not charged on charged.
+  double adiabaticScreeningFor(const QString &segmentsList) const;
   TargetIntModel *getTargetIntModel();
   bool writeFile(QTextStream &outStream);
   bool readFile(QTextStream &inStream);

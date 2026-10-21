@@ -4,6 +4,7 @@
 #include <QDialog>
 #include <QRadioButton>
 #include <QTableWidget>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -73,6 +74,15 @@ class AddTargetIntDialog : public QDialog {
   QLineEdit *udrBurstText;
   QLineEdit *udrChannelText;
   QCheckBox *udrCentredCheck;
+  // Electron screening of the listed segments: U_e (eV), fitted or not, with an optional prior width.
+  QCheckBox *isScreeningCheck;
+  QLineEdit *screeningUeText;
+  QPushButton *adiabaticButton;
+  QCheckBox *screeningVaryCheck;
+  QLineEdit *screeningSigmaText;
+  /*! The adiabatic-limit U_e (eV) of a segment list ("6,7"), < 0 when it has none (neutral or mixed
+   *  entrance pairs); the tab installs it, the dialog asks it when screening is switched on. */
+  void setAdiabaticProvider(std::function<double(const QString &)> provider);
   QLineEdit *applyRangesText;
   QLineEdit *transitionWidthText;
   QLineEdit *autoToleranceText;
@@ -118,6 +128,10 @@ class AddTargetIntDialog : public QDialog {
   void udrCheckChanged(bool checked);
   void udrBrowse();
 
+  void screeningCheckChanged(bool checked);
+  /// Fill U_e with the adiabatic limit of the listed segments' entrance pair.
+  void useAdiabaticScreening();
+
   void elementSelectionChanged(int index);
   void compoundFormulaChanged(const QString &formula);
   void fetchStoppingPowerParameters();
@@ -131,6 +145,8 @@ class AddTargetIntDialog : public QDialog {
   QGroupBox *convCoefficientBox;
   QGroupBox *beamProfileBox;
   QGroupBox *udrBox;
+  QGroupBox *screeningBox;
+  std::function<double(const QString &)> adiabaticProvider_;
 
   int selectedElement_;
   double conversionFactor_ = 0.0;

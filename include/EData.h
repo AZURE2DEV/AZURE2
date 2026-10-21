@@ -44,6 +44,22 @@ class EData {
   /// Index at which the shift-function parameters start in the Minuit vector (after the sqrt(E)
   /// coefficients): the parameters of each segment that declares a "shiftfn" block, in segment order.
   int GetEnergyShiftFnParamOffset() const;
+  /*!
+   * Electron screening.  The target effects with a `screening` block, in effect order, each with one
+   * parameter `screening_<n>` (n = the effect number: its place among the active <targetInt> lines),
+   * U_e in eV, after the shift-function parameters.  None without a screening block.
+   */
+  int NumScreeningParams() const { return (int)screeningEffects_.size(); }
+  /// Effect number of screening parameter k (1-based).
+  int GetScreeningEffect(int k) const { return screeningEffects_[k - 1]; }
+  int GetScreeningParamOffset() const { return screeningParamOffset_; }
+  /// Push each screening effect's current U_e onto the points and sub-points of its segments.
+  void ApplyScreening();
+  /// Set the screening effects' U_e from a parameter vector, then ApplyScreening (called by
+  /// FillEnergyShiftsFromParams, so every evaluation sees the vector's values).
+  void FillScreeningFromParams(const vector_r &);
+  /// Sum of the screening priors ((U_e - nominal)/sigma)^2.
+  double ScreeningPenalty() const;
   /// Read the target-effects input file and build the TargetEffect objects.
   int ReadTargetEffectsFile(const Config &, CNuc *);
   /// Is this a fit? AZURECalc clones the compound nucleus and data per thread only when it is.
@@ -161,6 +177,8 @@ class EData {
   int energyShiftParamOffset_;
   int energyShiftSqrtParamOffset_;
   int energyShiftFnParamOffset_ = 0;
+  int screeningParamOffset_ = -1;  // -1 until FillMnParams has laid the vector out
+  std::vector<int> screeningEffects_;  // effect numbers with a screening block, in order
   bool isFit_;
   bool isErrorAnalysis_;
   std::streampos ecReadPos_;  // File offset where component-segment EC integrals begin in the intEC file

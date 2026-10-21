@@ -29,6 +29,7 @@ std::tuple<int, int, int, int> IdentityKey(const ParamDesc &d) {
     case ParamKind::EnergyShiftSqrt: return std::make_tuple(kind, d.segment, -1, -1);
     case ParamKind::EnergyShiftFn: return std::make_tuple(kind, d.segment, d.fnTerm, -1);
     case ParamKind::Abundance: return std::make_tuple(kind, d.sample, d.nucleus, -1);
+    case ParamKind::Screening: return std::make_tuple(kind, d.screening, -1, -1);
   }
   return std::make_tuple(kind, -1, -1, -1);
 }

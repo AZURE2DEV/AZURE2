@@ -141,6 +141,18 @@ void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
   }
 }
 
+// The electron-screening priors ((U_e - nominal)/sigma)^2, U_e in eV: f(full index, nominal, sigma) for each
+// screening parameter with sigma > 0 (EData::ScreeningPenalty is their sum).
+template <class F>
+void ForEachScreeningPrior(EData *data, const ParamIndexMap &pmap, F f) {
+  for (int k = 1; k <= data->NumScreeningParams(); k++) {
+    const TargetEffect *te = data->GetTargetEffect(data->GetScreeningEffect(k));
+    if (te->GetScreeningSigma() <= 0.0) continue;
+    const int idx = pmap.ScreeningIndex(k);
+    if (idx >= 0) f(idx, te->GetScreeningNominal(), te->GetScreeningSigma());
+  }
+}
+
 // The segments (1-based) whose points one energy-shift parameter moves, and how to
 // set it on them: its own segment, plus every follower of its shift group for a
 // group's constant shift and for each shift-function parameter.
@@ -423,6 +435,8 @@ double AZURECalc::operator()(const vector_r &p) const {
     chiSquared += parkPenalty;
     localData->SetParkPenalty(parkPenalty);
   }
+  // Electron-screening potentials: their priors.
+  chiSquared += localData->ScreeningPenalty();
   // Isotopic abundances: their priors and the sum-to-one term.
   if (localCompound->HasAbundanceBlock()) {
     double abundancePenalty = localCompound->AbundancePenalty(configure().abundanceSumSigma);
@@ -610,6 +624,7 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
   if (lc->HasAbundanceBlock()) chiSquared += lc->AbundancePenalty(configure().abundanceSumSigma);
   if (lc->HasScatteringLengthConstraints())
     chiSquared += ScatteringLength::Chi2(lc, configure(), lc->ScatteringLengthConstraints());
+  chiSquared += ld->ScreeningPenalty();
   return chiSquared;
 }
 
@@ -768,8 +783,11 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   if (eg) {
     AddParkPenaltyGradient(lc, configure(), accum); // Park J > 0 wall
     AddAbundancePenaltyGradient(lc, configure(), accum);  // abundance priors, sum-to-one
-    accum.Scatter(pmap, grad);                      // energies + reduced widths, abundances
+    accum.Scatter(pmap, grad);                      // energies + reduced widths, abundances, screening
     AddNuisanceGradient(p, grad);                   // nuisance penalty
+    ForEachScreeningPrior(ld, pmap, [&](int idx, double nominal, double e) {  // screening priors
+      if (idx < (int)grad.size()) grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    });
     for (int s = 1; s <= ld->NumSegments(); s++) {  // normalizations
       ESegment *seg = ld->GetSegment(s);
       if (!seg || !seg->IsVaryNorm() || seg->IsNormGroupFollower()) continue;  // a follower's norm is fixed
@@ -805,7 +823,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
     if (idx < nMn && fp.GetMinuitParams().Parameter(idx).IsFixed()) continue;
     ParamKind kind = pmap.Desc(idx).kind;
-    if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm)) continue;  // analytic
+    if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
+               kind == ParamKind::Screening)) continue;  // analytic
     double x0 = p[idx];
     double h = FdStep(kind, x0, 1.0e-6);
 
@@ -873,7 +892,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
         if (idx < nMn && fp.GetMinuitParams().Parameter(idx).IsFixed()) continue;
         ParamKind kind = pmap.Desc(idx).kind;
-        if (!(eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm))) nfd++;
+        if (!(eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
+                     kind == ParamKind::Screening))) nfd++;
       }
       std::cerr << "[grad-timing] call " << c << ": setup+adjoint " << ms(tg0, tg1) << " ms (analytic " << (eg ? "ok" : "BAILED")
                 << "), finite-difference part " << ms(tg1, tg2) << " ms for " << nfd << " parameters" << std::endl;
@@ -887,7 +907,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   static std::atomic<bool> gradChecked{false};
   if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
     if (!gradChecked.exchange(true)) {
-      static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance"};
+      static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening"};
       struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;
       constexpr int kNumKinds = sizeof(kindName) / sizeof(kindName[0]);  // one per ParamKind
@@ -1025,6 +1045,11 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
     grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
     g2[idx] += 2.0 / (e * e);
   });
+  ForEachScreeningPrior(data(), pmap, [&](int idx, double nominal, double e) {
+    if (idx >= (int)p.size()) return;
+    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    g2[idx] += 2.0 / (e * e);
+  });
   // Isotopic abundances: prior and sum-to-one gradient and (diagonal) curvature.  The sample sums are taken at
   // p: compound() holds the abundances of the last full evaluation, so its AbundanceSum was stale here.
   std::vector<double> sumAtP;
@@ -1090,6 +1115,9 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
   ForEachShiftPenalty(data(), pmap, [&](int idx, double, double e) {
     if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
   });
+  ForEachScreeningPrior(data(), pmap, [&](int idx, double, double e) {
+    if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
+  });
   if (compound()->HasAbundanceBlock()) {
     for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
       const int idx = pmap.AbundanceIndex(k);
@@ -1131,7 +1159,7 @@ bool AZURECalc::HasNuisanceParameters() const {
     const std::string &name = mp.GetName();
     if (mp.IsFixed() && name.find("segment") == std::string::npos) continue;
     const bool inert = name.find("norm") != std::string::npos || name.find("shift") != std::string::npos ||
-                       name.find("abundance") != std::string::npos;
+                       name.find("abundance") != std::string::npos || name.find("screening") != std::string::npos;
     if (!inert && limitsManager_->IsNuisanceParameterByIndex(nf)) {
       if (std::getenv("AZURE_GRAD_DEBUG"))
         std::cerr << "[grad] analytic G2 off: nuisance prior on '" << name << "'" << std::endl;
@@ -1561,6 +1589,16 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
         pen_nom[a] = it->second.first;
         pen_inv2[a] = 1.0 / (it->second.second * it->second.second);
       }
+    } else if (name.find("screening_") == 0) {
+      // Electron-screening potential: its prior is a diagonal penalty row.
+      for (int k = 1; k <= data()->NumScreeningParams(); k++) {
+        if (name != "screening_" + std::to_string(data()->GetScreeningEffect(k))) continue;
+        const TargetEffect *te = data()->GetTargetEffect(data()->GetScreeningEffect(k));
+        if (te->GetScreeningSigma() > 0.0) {
+          pen_nom[a] = te->GetScreeningNominal();
+          pen_inv2[a] = 1.0 / (te->GetScreeningSigma() * te->GetScreeningSigma());
+        }
+      }
     } else if (name.find("abundance_") == 0) {
       // Isotopic abundance: its <abundances> prior is a diagonal penalty row.
       // The sum-to-one term couples the abundances and is not a per-parameter
@@ -1985,7 +2023,7 @@ void AZURECalc::AddNuisanceGradient(const vector_r &p, std::vector<double> &grad
     std::string paramName = tempParams.GetMinuitParams().Parameter(actualIndex).GetName();
     // Norms, shifts and abundances carry their own priors (segment errors, the <abundances> sigma).
     if (paramName.find("norm") != std::string::npos || paramName.find("shift") != std::string::npos ||
-        paramName.find("abundance") != std::string::npos) continue;
+        paramName.find("abundance") != std::string::npos || paramName.find("screening") != std::string::npos) continue;
     if (!limitsManager_->IsNuisanceParameterByIndex(nf)) continue;
     double nominalValue = limitsManager_->GetConvertedNominalValueByIndex(nf);
     double paramError = limitsManager_->GetConvertedErrorByIndex(nf);
@@ -2019,7 +2057,7 @@ double AZURECalc::CalculateNuisanceChiSquared(const vector_r &p) const {
 
     // If norm, shift or abundance in param name, skip: those carry their own priors
     if (paramName.find("norm") != std::string::npos || paramName.find("shift") != std::string::npos ||
-        paramName.find("abundance") != std::string::npos) {
+        paramName.find("abundance") != std::string::npos || paramName.find("screening") != std::string::npos) {
       continue;
     }
 

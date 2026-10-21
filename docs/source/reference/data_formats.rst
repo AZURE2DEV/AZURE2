@@ -211,7 +211,12 @@ Neutron tables list *bound* lengths :math:`b`; enter the free length
    constraints then do nothing); a GUI older than it drops the block on save.
 
 A ``<targetInt>`` line may end with keyword blocks (``beamprofile ...``,
-``udr ...``, ``sigmalab``). ``sigmalab`` marks an energy-dependent beam-spread
+``udr ...``, ``sigmalab``, ``screening Ue vary sigma``). ``screening`` is
+electron screening of the listed segments: the screening potential in eV, 1 to
+make it a fit parameter (``screening_<n>``), and the width in eV of a Gaussian
+prior about the value given (0 = none); see
+:doc:`../user_guide/experimental_effects`. An engine older than October 2026
+refuses a line with this keyword, and an older GUI drops it on save. ``sigmalab`` marks an energy-dependent beam-spread
 expression as laboratory in, laboratory out (see
 :doc:`../user_guide/experimental_effects`); an expression without it is read in
 the pre-October-2026 centre-of-mass convention.

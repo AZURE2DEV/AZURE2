@@ -590,6 +590,20 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
   // target-effect sub-point keeps it); anything else is not supported.
   if (ayCrossSection && (!point->IsAnalyzingPower() || !isDiff || isPhase || xsComponent != 0)) return false;
 
+  // Electron screening (GenMatrixFunc::CalculateCrossSection): a screened observable is f times the bare
+  // one, so the bare one's cotangent is f fitBar, and dY/dU_e = k Y per MeV, 1e-6 k Y per eV, with Y the
+  // screened value this point holds from its forward calculation.  A phase shift and an A_y value are
+  // not screened (an A_y sub-point's cross section is: ayCrossSection).
+  bar.screen.clear();
+  if (point->GetScreeningParam() > 0 && point->GetScreeningK() != 0.0 && !isPhase &&
+      !(point->IsAnalyzingPower() && !ayCrossSection)) {
+    double y = point->GetFitCrossSection();
+    if (xsComponent == 1) y = point->GetFitE1CrossSection();
+    else if (xsComponent == 2) y = point->GetFitE2CrossSection();
+    bar.screen.push_back({point->GetScreeningParam(), fitBar * 1.0e-6 * point->GetScreeningK() * y});
+    fitBar *= point->ScreeningFactor();
+  }
+
   // === Cross-section -> T:  build the T-matrix cotangents. ===
   // tBar  : cotangents of the internal T(k,m).
   // ecBar : cotangents of the external-capture T(k,ecm).
@@ -914,6 +928,7 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
 void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, GradAccum &accum,
                               const vector_matrix_r *shiftDeriv) {
   const complex I(0.0, 1.0);
+  for (const auto &s : bar.screen) accum.AddScreening(s.first, s.second);
   EPoint *point = energyPoint;
   // Brune formalism: the boundary/shift terms change the M-construction kernel
   // (handled in the structural gamma step via cached shift values) and add

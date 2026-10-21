@@ -869,6 +869,8 @@ class azure2:
         # isotopic abundances (projects with an <abundances> block): the fitted values
         for p in self.parameters.abundances:
             model.set_abundance((p.nucleus_Z, p.nucleus_A), value=float(want[p.index]), sample=p.sample or "")
+        # Electron-screening potentials are not written into the <targetInt> lines: the value there is the
+        # prior's centre, and the fitted U_e travels in the .sav, like a normalization.
         model.write(path)
 
         sav = None
@@ -1288,7 +1290,10 @@ class azure2:
         ``norm_error`` is a percentage.  Returns ``{"norm": array, "shift":
         array, "shift_sqrt": array, "shift_fn": array}``, one entry per segment,
         and the single numbers ``"park"`` and ``"abundance"`` (isotopic-abundance
-        priors and sum-to-one terms; both already inside the engine's chi-squared).
+        priors and sum-to-one terms; both already inside the engine's chi-squared),
+        and ``"screening"``: the electron-screening priors ((U_e - nominal)/sigma)^2 of
+        the <targetInt> lines with a ``screening`` block, which :meth:`objective` adds
+        like the normalization terms.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         norm = np.zeros(self.nsegments)
@@ -1369,8 +1374,18 @@ class azure2:
                     abundance += ((total - 1.0) / s_sum) ** 2
         # Measured scattering lengths (<scatteringLengths>): engine side as well, reported here.
         scattering_length = self.scattering_length_chi2(x)
+        # Electron screening: the prior of each free U_e with a sigma (not inside calculate_chi2_rwa,
+        # like the normalization terms).
+        screening = 0.0
+        for p in self.parameters.screenings:
+            if p.fixed or not p.prior_sigma:
+                continue
+            value = (float(x[p.free_index]) if p.free_index is not None and p.free_index < x.size
+                     else float(p.value))
+            screening += ((value - p.prior_nominal) / p.prior_sigma) ** 2
         return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "shift_fn": shift_fn,
-                "park": park, "abundance": abundance, "scattering_length": scattering_length}
+                "park": park, "abundance": abundance, "scattering_length": scattering_length,
+                "screening": screening}
 
     @property
     def nuclei(self):
@@ -1456,7 +1471,8 @@ class azure2:
         # calculate_chi2_rwa (engine side).
         return (float(np.sum(self.calculate_chi2_rwa(x)))
                 + float(np.sum(pen["norm"])) + float(np.sum(pen["shift"]))
-                + float(np.sum(pen["shift_sqrt"])) + float(np.sum(pen["shift_fn"])))
+                + float(np.sum(pen["shift_sqrt"])) + float(np.sum(pen["shift_fn"]))
+                + pen["screening"])
 
     def chi2_and_grad(self, params):
         """Value and analytic gradient of the (data) chi-squared.

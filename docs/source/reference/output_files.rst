@@ -22,7 +22,9 @@ Contains the best-fit formal R-matrix parameters after a fit is completed. This
 file can be loaded back into AZURE2 to reproduce a fit or to use as starting
 parameters for subsequent calculations (extrapolation, reaction rate, etc.).
 In a project with an ``<abundances>`` block the isotopic abundances follow the
-level parameters as ``abundance_<Z>_<A>`` (:doc:`data_formats`).
+level parameters as ``abundance_<Z>_<A>`` (:doc:`data_formats`). An
+experimental-effect line with a ``screening`` block adds its screening potential
+(eV) as ``screening_<n>`` after the energy-shift parameters.
 
 parameters.out
 ^^^^^^^^^^^^^^

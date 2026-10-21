@@ -107,6 +107,10 @@ class AZUREAPI {
    *                      project with an <abundances> block): its Z in field 1
    *                      and A in field 4, the 1-based sample in field 6, the
    *                      prior sigma in field 14
+   *                    7=electron-screening potential U_e (eV) of a <targetInt>
+   *                      line with a screening block: the effect number in
+   *                      field 6, the prior centre in field 5, the prior sigma
+   *                      in field 14 (0 = none)
    *   1  jgroup        1-based J-group index (R-matrix params only)
    *   2  J             total spin of the J-group / level
    *   3  parity        +1 / -1

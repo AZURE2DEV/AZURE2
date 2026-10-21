@@ -63,7 +63,8 @@ class AZURECalcMCMC {
                    PARAM_WIDTH = 1,
                    PARAM_NORM = 2,
                    PARAM_SHIFT = 3,
-                   PARAM_ABUNDANCE = 5 };
+                   PARAM_ABUNDANCE = 5,
+                   PARAM_SCREENING = 7 };
 
   /*!
    * Run MCMC sampling with specified parameters.

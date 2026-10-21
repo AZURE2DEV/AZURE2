@@ -57,8 +57,11 @@ class GenMatrixFunc {
    *This virtual function in implemented in the child class.
    */
   virtual void CalculateTMatrix(EPoint *) = 0;
-  /// Cross section at a point from the T-matrix the subclass built.
+  /// The observable of the point from the T-matrix the subclass built, times the electron-screening factor where the
+  /// point carries one (CalculateBareCrossSection, then EPoint::ScreeningFactor).
   void CalculateCrossSection(EPoint *);
+  /// The observable without electron screening.
+  void CalculateBareCrossSection(EPoint *);
 
   /*!
    * Spin-summed |M|^2 from the channel-spin amplitude matrix, and the vector

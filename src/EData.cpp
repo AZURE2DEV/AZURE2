@@ -843,6 +843,11 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
       std::istringstream stm;
       stm.str(line);
       TargetEffect targetEffect(stm, configure);
+      if (targetEffect.HasScreeningError()) {
+        std::cout << "ERROR: <targetInt> line \"" << line << "\": a screening block is 'screening Ue_eV vary sigma_eV'"
+                  << std::endl;
+        return -1;
+      }
       if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) return -1;
       if (targetEffect.IsActive()) {
         this->AddTargetEffect(targetEffect);
@@ -1148,6 +1153,10 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
       }
     }
   }
+  screeningEffects_.clear();
+  for (int n = 1; n <= this->NumTargetEffects(); n++)
+    if (this->GetTargetEffect(n)->HasScreening()) screeningEffects_.push_back(n);
+  this->ApplyScreening();
   return 0;
 }
 
@@ -1872,6 +1881,13 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
     // Isotopic abundances: their priors and the sum-to-one term.
     if (abundancePenalty_ != 0.0)
       chiOut << " Total-Abundance-Chi-Squared: " << abundancePenalty_;
+    // Electron-screening priors, when a screening potential has one.
+    {
+      bool anyPrior = false;
+      for (int k = 1; k <= this->NumScreeningParams(); k++)
+        if (this->GetTargetEffect(this->GetScreeningEffect(k))->GetScreeningSigma() > 0.0) anyPrior = true;
+      if (anyPrior) chiOut << " Total-Screening-Chi-Squared: " << this->ScreeningPenalty();
+    }
     // Measured scattering lengths (<scatteringLengths>; table in scatteringLengths.out).
     if (scatteringLengthChi2_ != 0.0)
       chiOut << " Total-Scattering-Length-Chi-Squared: " << scatteringLengthChi2_;
@@ -3428,6 +3444,52 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
       if (!segment->IsVaryShiftFn(j)) p.Fix(varname);
     }
   }
+
+  // Electron-screening potentials (eV): one per target effect with a "screening" block, none otherwise.
+  screeningParamOffset_ = p.Params().size();
+  for (int k = 1; k <= this->NumScreeningParams(); k++) {
+    const TargetEffect *te = this->GetTargetEffect(this->GetScreeningEffect(k));
+    snprintf(varname, sizeof(varname), "screening_%d", this->GetScreeningEffect(k));
+    const double ue = te->GetScreeningUe();
+    p.Add(varname, ue, std::max(10.0, 0.05 * std::fabs(ue)));
+    p.SetLowerLimit(varname, 0.0);
+    if (!te->IsScreeningVaried()) p.Fix(varname);
+  }
+}
+
+void EData::ApplyScreening() {
+  if (screeningEffects_.empty()) return;
+  std::vector<int> paramOf(this->NumTargetEffects() + 1, 0);
+  for (int k = 1; k <= this->NumScreeningParams(); k++) paramOf[this->GetScreeningEffect(k)] = k;
+  auto apply = [&](ESegment &seg) {
+    const int te = seg.GetTargetEffectNum();
+    if (te <= 0 || te >= (int)paramOf.size() || paramOf[te] == 0) return;
+    const double ueMeV = this->GetTargetEffect(te)->GetScreeningUe() * 1.0e-6;
+    for (int i = 1; i <= seg.NumPoints(); i++) {
+      EPoint *point = seg.GetPoint(i);
+      point->SetScreening(ueMeV, paramOf[te]);
+      for (int j = 1; j <= point->NumSubPoints(); j++) point->GetSubPoint(j)->SetScreening(ueMeV, paramOf[te]);
+    }
+  };
+  for (ESegment &seg : segments_) apply(seg);
+  for (ESegment &seg : componentSegments_) apply(seg);
+}
+
+void EData::FillScreeningFromParams(const vector_r &p) {
+  if (screeningEffects_.empty() || screeningParamOffset_ < 0) return;
+  for (int k = 1; k <= this->NumScreeningParams(); k++) {
+    const int idx = screeningParamOffset_ + k - 1;
+    if (idx < 0 || idx >= (int)p.size()) return;  // a vector without the screening block
+    this->GetTargetEffect(this->GetScreeningEffect(k))->SetScreeningUe(p[idx]);
+  }
+  this->ApplyScreening();
+}
+
+double EData::ScreeningPenalty() const {
+  double chi2 = 0.0;
+  for (int k = 1; k <= this->NumScreeningParams(); k++)
+    chi2 += const_cast<EData *>(this)->GetTargetEffect(this->GetScreeningEffect(k))->ScreeningPenalty();
+  return chi2;
 }
 
 
@@ -3462,6 +3524,8 @@ void EData::FillNormsFromParams(const vector_r &p) {
  */
 
 void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *theCNuc, const Config *configure) {
+  // Screening first: sub-points rebuilt below (ReplaceSubPointGrids) inherit their parent's U_e.
+  this->FillScreeningFromParams(p);
   int i = GetEnergyShiftParamOffset();
   int j = GetEnergyShiftSqrtParamOffset();
   int k = 0;
@@ -3723,6 +3787,8 @@ EData *EData::Clone() const {
   dataCopy->energyShiftParamOffset_ = this->energyShiftParamOffset_;
   dataCopy->energyShiftSqrtParamOffset_ = this->energyShiftSqrtParamOffset_;
   dataCopy->energyShiftFnParamOffset_ = this->energyShiftFnParamOffset_;
+  dataCopy->screeningParamOffset_ = this->screeningParamOffset_;
+  dataCopy->screeningEffects_ = this->screeningEffects_;
   dataCopy->isFit_ = this->isFit_;
   dataCopy->isErrorAnalysis_ = this->isErrorAnalysis_;
   dataCopy->targetEffects_ = this->targetEffects_;

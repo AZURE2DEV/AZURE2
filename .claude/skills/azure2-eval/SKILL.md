@@ -2174,6 +2174,21 @@ complete:
   12C+a 9-13-26 _timing/map_check. To check a file: is "Level N Channel M" (M = global channel-line row in an
   old GUI block) the engine's width_N_M? Separately (old behaviour, unchanged): the GUI keeps settings only
   for the parameters it lists as free, so script-made bounds on fixed parameters vanish on a GUI save.
+- 2026-10-21 (branch feature/electron-screening) -- ELECTRON SCREENING as an experimental effect. A
+  <targetInt> line may carry `screening Ue_eV vary sigma_eV` (alone or with any other effect): the bare
+  cross section of its segments, at every point AND every sub-point (so inside convolution / target
+  integration), times f = exp(pi eta U_e / E_cm) of the entrance pair (cross sections only: phase shifts,
+  A_y, ratios untouched; neutral pairs f = 1). vary 1 -> fit parameter `screening_<n>` (eV, n = place
+  among ACTIVE <targetInt> lines, after the shift-fn block), analytic gradient/Jacobian column, prior
+  ((U_e-U_e0)/sigma)^2 in every fitter + MCMC auto prior, `Total-Screening-Chi-Squared` in chiSquared.out.
+  The line's U_e is the prior centre; the fitted value lives in param.sav (save_fit does not move it).
+  GUI: Experimental Effects dialog, "Include Electron Screening", Adiabatic Limit button =
+  B(Z1+Z2)-B(Z1)-B(Z2) from NIST total binding energies (alpha+13C 934.7 eV, p+12C 442.4 eV). pyazr:
+  add_target_effect(screening=(Ue, vary, sigma)), AzrModel.screenings / set_screening,
+  parameters.screenings, penalties()["screening"] (in objective()). TRAP: like every effect the line also
+  screens <segmentsTest> segments of the same keys -> deactivate it in a copy for bare extrapolations.
+  Older engines REFUSE the keyword. Tests: tests/electron_screening (exact factor 5e-11, inside a beam
+  spread, gradient, MIGRAD/LM recover U_e, prior), tests/pyazr/screening_test.py.
 - 2026-10-21 -- EXTERNAL-CAPTURE ENERGY TABLE, ON BY DEFAULT (`--no-ec-table`, pyazr `use_ec_table=False`;
   design `docs/source/developer/ec_table.rst`; 12C+a_onefile/10-20-26_EC_table_timing). Each capture term's
   radial integral is tabulated on demand in ln(E_out), 50 nodes/decade, nodes converged to 1e-10 (8-point

@@ -123,6 +123,7 @@ void GradAccum::Init(CNuc *compound) {
     gamma[j - 1].assign(nLevels, std::vector<double>(nCh, 0.0));
   }
   abundance.assign(compound->NumAbundanceParams(), 0.0);
+  screening.clear();
 }
 
 /*!
@@ -133,6 +134,7 @@ void GradAccum::Zero() {
   for (auto &lev : gamma)
     for (auto &row : lev) std::fill(row.begin(), row.end(), 0.0);
   std::fill(abundance.begin(), abundance.end(), 0.0);
+  std::fill(screening.begin(), screening.end(), 0.0);
 }
 
 /*!
@@ -147,6 +149,8 @@ void GradAccum::Add(const GradAccum &o) {
     }
   }
   for (int k = 0; k < (int)abundance.size() && k < (int)o.abundance.size(); k++) abundance[k] += o.abundance[k];
+  if (o.screening.size() > screening.size()) screening.resize(o.screening.size(), 0.0);
+  for (int k = 0; k < (int)o.screening.size(); k++) screening[k] += o.screening[k];
 }
 
 /*!
@@ -166,6 +170,10 @@ void GradAccum::Scatter(const ParamIndexMap &map, vector_r &gradFull) const {
   for (int k = 0; k < (int)abundance.size(); k++) {
     int ai = map.AbundanceIndex(k + 1);
     if (ai >= 0 && ai < (int)gradFull.size()) gradFull[ai] += abundance[k];
+  }
+  for (int k = 0; k < (int)screening.size(); k++) {
+    int si = map.ScreeningIndex(k + 1);
+    if (si >= 0 && si < (int)gradFull.size()) gradFull[si] += screening[k];
   }
 }
 
@@ -325,6 +333,17 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
         map.desc_.push_back(d);
         i++;
       }
+    }
+  }
+
+  // --- Electron-screening potentials: one per <targetInt> line with a screening block (EData::FillMnParams). ---
+  if (data) {
+    for (int k = 1; k <= data->NumScreeningParams(); k++) {
+      map.screeningIndex_[k] = i;
+      ParamDesc d{ParamKind::Screening, -1, -1, -1, -1, false};
+      d.screening = k;
+      map.desc_.push_back(d);
+      i++;
     }
   }
 
@@ -729,6 +748,7 @@ void AddCotangent(TMatrixCotangent &dst, const TMatrixCotangent &src) {
     for (size_t m = 0; m < src.t[k].size() && m < dst.t[k].size(); m++) dst.t[k][m] += src.t[k][m];
   for (size_t k = 0; k < src.ec.size() && k < dst.ec.size(); k++)
     for (size_t m = 0; m < src.ec[k].size() && m < dst.ec[k].size(); m++) dst.ec[k][m] += src.ec[k][m];
+  dst.screen.insert(dst.screen.end(), src.screen.begin(), src.screen.end());
 }
 
 // The forward solve of a group, at its host's energy, and each member's model

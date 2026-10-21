@@ -1631,7 +1631,7 @@ class AzrModel:
                           photodissociation=False, q_coefficients=None,
                           resonance_width_multiplier=20.0, points_per_width=50.0,
                           udr_file=None, flight_path=None, udr_burst=0.0,
-                          udr_channel=0.0, udr_centred=True, active=True):
+                          udr_channel=0.0, udr_centred=True, screening=None, active=True):
         """Append one experimental effect (a ``<targetInt>`` line).
 
         ``segments`` is the segment-key list as AZURE2 writes it (``"3"``,
@@ -1667,6 +1667,13 @@ class AzrModel:
         ``udr_channel`` (rectangular width, ns) are convolved on top, and
         ``udr_centred`` re-centres the tabulated function on its centroid as
         SAMMY does.  Target integration and straggling are not exposed here.
+
+        ``screening`` is electron screening, ``(Ue_eV, vary, sigma_eV)`` or a plain
+        ``Ue_eV`` (fixed, no prior): the bare cross section of every point and
+        sub-point of these segments is multiplied by exp(pi eta U_e / E).  With
+        ``vary`` U_e is a fit parameter (``screening_<n>``), with a Gaussian prior
+        of width ``sigma`` about the value given when ``sigma > 0``.  A line may
+        carry screening alone (no other option).
         Returns ``self``.
         """
         if not isinstance(segments, str):
@@ -1701,6 +1708,11 @@ class AzrModel:
                 raise ValueError("udr_file needs a positive flight_path in metres")
             toks += ["udr", f'"{udr_file}"', _fmt(flight_path), _fmt(udr_burst),
                      _fmt(udr_channel), 1 if udr_centred else 0]
+        if screening is not None:
+            ue, vary, sigma = (screening, False, 0.0) if not isinstance(screening, (tuple, list)) else screening
+            if sigma < 0:
+                raise ValueError("the screening prior sigma must be >= 0")
+            toks += ["screening", _fmt(ue), 1 if vary else 0, _fmt(sigma)]
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
         lines = self._suffix.splitlines()
         if "<targetInt>" in lines:
@@ -1708,6 +1720,53 @@ class AzrModel:
             self._suffix = "\n".join(lines[:end] + [line] + lines[end:])
         else:
             self._splice_target_int([line])
+        return self
+
+    _SCREENING_RE = re.compile(r"\bscreening\s+(\S+)\s+(\S+)\s+(\S+)")
+
+    def _target_int_lines(self):
+        """(index into the suffix lines, line) of every non-blank <targetInt> line."""
+        lines = self._suffix.splitlines()
+        if "<targetInt>" not in lines:
+            return lines, []
+        a, b = lines.index("<targetInt>"), lines.index("</targetInt>")
+        return lines, [(i, lines[i]) for i in range(a + 1, b) if lines[i].strip()]
+
+    @property
+    def screenings(self):
+        """Electron screening of the <targetInt> lines: ``{effect: (Ue_eV, vary, sigma_eV)}``
+        keyed by the effect number AZURE2 uses (the place among the ACTIVE lines), for the
+        lines with a ``screening`` block."""
+        _, tl = self._target_int_lines()
+        out, n = {}, 0
+        for _, line in tl:
+            if line.split()[0] != "1":
+                continue
+            n += 1
+            m = self._SCREENING_RE.search(line)
+            if m:
+                out[n] = (float(m.group(1)), int(float(m.group(2))) != 0, float(m.group(3)))
+        return out
+
+    def set_screening(self, effect, ue=None, vary=None, sigma=None):
+        """Set (or add) electron screening on active <targetInt> line ``effect`` (1-based among
+        the active lines, as in ``screening_<effect>``).  Arguments left ``None`` keep the
+        line's values (U_e 0, fixed, no prior for a line without a block).  Returns ``self``."""
+        lines, tl = self._target_int_lines()
+        active = [(i, line) for i, line in tl if line.split()[0] == "1"]
+        if not 1 <= effect <= len(active):
+            raise ValueError(f"no active <targetInt> line {effect} ({len(active)} active)")
+        i, line = active[effect - 1]
+        m = self._SCREENING_RE.search(line)
+        old = (float(m.group(1)), int(float(m.group(2))) != 0, float(m.group(3))) if m else (0.0, False, 0.0)
+        ue = old[0] if ue is None else float(ue)
+        vary = old[1] if vary is None else bool(vary)
+        sigma = old[2] if sigma is None else float(sigma)
+        if sigma < 0:
+            raise ValueError("the screening prior sigma must be >= 0")
+        block = f"screening {_fmt(ue)} {1 if vary else 0} {_fmt(sigma)}"
+        lines[i] = self._SCREENING_RE.sub(block, line) if m else line.rstrip() + "  " + block
+        self._suffix = "\n".join(lines)
         return self
 
     # -- rendering ------------------------------------------------------------

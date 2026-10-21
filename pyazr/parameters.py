@@ -18,7 +18,7 @@ from typing import Optional
 
 # Parameter kinds, indexed by the integer ``type`` code in the C++ record.
 _KINDS = {0: "energy", 1: "width", 2: "norm", 3: "shift", 4: "shift_sqrt", 5: "shift_fn",
-          6: "abundance"}
+          6: "abundance", 7: "screening"}
 
 
 @dataclass(frozen=True)
@@ -68,7 +68,7 @@ class Parameter:
 
     index: int                      # position among *all* parameters
     name: str                       # raw AZURE2 parameter name
-    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'shift_fn' | 'abundance'
+    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'shift_fn' | 'abundance' | 'screening'
     fixed: bool                     # held fixed during the fit?
     value: float                    # current (physical) value
     free_index: Optional[int]       # position among the non-fixed parameters
@@ -104,6 +104,12 @@ class Parameter:
     prior_sigma: Optional[float] = None
     sample: Optional[str] = None        # the sample's name ("" = the unnamed sample)
     sample_index: Optional[int] = None  # 1-based sample of the <abundances> block
+
+    # Electron-screening potential U_e (eV) of a <targetInt> line with a ``screening`` block: the
+    # effect's number (its place among the active <targetInt> lines) and the prior centre; the prior
+    # width is ``prior_sigma`` (0 = none).
+    effect: Optional[int] = None
+    prior_nominal: Optional[float] = None
 
     @property
     def nucleus(self):
@@ -152,6 +158,16 @@ class Parameter:
                 sample_index=int(round(channel)) if channel >= 1 else None,
             )
 
+        if int(round(type_code)) == 7:
+            # an electron-screening potential (eV): the effect number rides in the channel field, the
+            # prior centre in the level-energy field and its sigma in the Wigner-limit field (AZUREAPI.h)
+            return cls(
+                index=index, name=name, kind="screening",
+                fixed=bool(round(fixed)), value=float(value), free_index=free_index,
+                effect=int(round(channel)), prior_nominal=float(level_energy),
+                prior_sigma=float(wigner_limit),
+            )
+
         return cls(
             index=index,
             name=name,
@@ -190,6 +206,10 @@ class Parameter:
             bits.append(f"segment={self.segment_key}")
         if self.kind == "shift_fn":
             bits.append(f"a{self.fn_term}")
+        if self.kind == "screening":
+            bits.append(f"effect={self.effect}")
+            if self.prior_sigma:
+                bits.append(f"prior={self.prior_nominal:.6g}+-{self.prior_sigma:.6g}")
         return "Parameter(" + ", ".join(bits) + ")"
 
 
@@ -425,6 +445,12 @@ class ParameterSet(list):
         """The isotopic-abundance parameters, one per compound nucleus of a
         project with an ``<abundances>`` block (none otherwise)."""
         return ParameterSet(p for p in self if p.kind == "abundance")
+
+    @property
+    def screenings(self):
+        """The electron-screening potentials U_e (eV), one per <targetInt> line with a ``screening``
+        block (none otherwise)."""
+        return ParameterSet(p for p in self if p.kind == "screening")
 
     @property
     def sqrt_shifts(self):

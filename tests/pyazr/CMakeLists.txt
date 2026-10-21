@@ -146,3 +146,10 @@ add_test(NAME pyazr_scattering_length
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/scattering_length_test.py)
 set_tests_properties(pyazr_scattering_length PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Electron screening: the AzrModel helpers for the screening block of a <targetInt> line, the
+# screening_<n> parameter and its prior, and its analytic gradient and Jacobian column.
+add_test(NAME pyazr_screening
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/screening_test.py)
+set_tests_properties(pyazr_screening PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

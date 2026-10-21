@@ -97,6 +97,9 @@ The file separates the two contributions::
   breaks it down per shift function.  Files written before October 2026 lack
   it, and their totals fall short of the minimizer's own value by exactly this
   amount.
+- **Total-Screening-Chi-Squared**, when an electron-screening potential has a
+  prior (:doc:`experimental_effects`), is the sum of
+  :math:`((U_e - U_e^{0})/\sigma)^2`.
 - **Total-Scattering-Length-Chi-Squared**, when the project has a
   ``<scatteringLengths>`` block, is the sum over its active lines of
   :math:`((a_0 - a_{\mathrm{exp}})/\sigma)^2` (real and, if given, imaginary

@@ -1067,6 +1067,9 @@ std::string createPrettyParameterName(const std::string &paramName) {
     } catch (...) {}
   }
 
+  // Electron screening: "screening_<n>" -> "Screening U_e (eV), effect n"
+  if (paramName.find("screening_") == 0) return "Screening U_e (eV), effect " + paramName.substr(10);
+
   // Isotopic abundance: "abundance[_<sample>]_Z_A" -> "Abundance [sample ..] Z=.. A=.."
   if (paramName.find("abundance_") == 0) {
     try {

@@ -14,7 +14,25 @@
  * then calculates the cross section from the T-Matrix elements.
  */
 
+/*!
+ * Electron screening multiplies the bare cross section by f = exp(pi eta U_e / E) (Assenbaum et al.
+ * 1987).  It acts on cross sections only: a phase shift, the angular-distribution coefficients and an
+ * analyzing power are left as they are, while an analyzing-power sub-point keeps its (screened) cross
+ * section as the weight of the target average.  The E1 and E2 components are scaled with the total.
+ */
 void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
+  this->CalculateBareCrossSection(point);
+  if (point->GetScreeningParam() == 0) return;
+  if (point->IsAngularDist() || point->IsPhase()) return;
+  if (point->IsAnalyzingPower() && !point->IsSubPoint()) return;
+  const double f = point->ScreeningFactor();
+  if (f == 1.0) return;
+  point->SetFitCrossSection(f * point->GetFitCrossSection());
+  point->SetFitE1CrossSection(f * point->GetFitE1CrossSection());
+  point->SetFitE2CrossSection(f * point->GetFitE2CrossSection());
+}
+
+void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
   complex sum(0., 0.);
   complex sumE1(0., 0.);
   complex sumE2(0., 0.);

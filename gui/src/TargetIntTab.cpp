@@ -8,6 +8,8 @@
 #include <QTextStream>
 #include <QHeaderView>
 #include <QRegularExpression>
+#include "ElectronBinding.h"
+#include <algorithm>
 
 #include "TargetIntTab.h"
 #include "InfoDialog.h"
@@ -81,6 +83,7 @@ TargetIntModel *TargetIntTab::getTargetIntModel() {
 
 void TargetIntTab::addLine() {
   AddTargetIntDialog aDialog;
+  aDialog.setAdiabaticProvider([this](const QString &segs) { return adiabaticScreeningFor(segs); });
   if (aDialog.exec()) {
     TargetIntData newLine;
     newLine.isActive = 1;
@@ -129,6 +132,11 @@ void TargetIntTab::addLine() {
     newLine.udrBurstFwhm = aDialog.udrBurstText->text().toDouble();
     newLine.udrChannelWidth = aDialog.udrChannelText->text().toDouble();
     newLine.udrCentred = aDialog.udrCentredCheck->isChecked();
+
+    newLine.isScreening = aDialog.isScreeningCheck->isChecked();
+    newLine.screeningUe = aDialog.screeningUeText->text().toDouble();
+    newLine.screeningVary = aDialog.screeningVaryCheck->isChecked();
+    newLine.screeningSigma = std::max(0.0, aDialog.screeningSigmaText->text().toDouble());
 
     addLine(newLine);
   }
@@ -207,6 +215,14 @@ void TargetIntTab::addLine(TargetIntData line) {
   targetIntModel->setData(index, line.udrCentred, Qt::EditRole);
   index = targetIntModel->index(lines.size(), 34, QModelIndex());
   targetIntModel->setData(index, line.sigmaLab, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 35, QModelIndex());
+  targetIntModel->setData(index, line.isScreening, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 36, QModelIndex());
+  targetIntModel->setData(index, line.screeningUe, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 37, QModelIndex());
+  targetIntModel->setData(index, line.screeningVary, Qt::EditRole);
+  index = targetIntModel->index(lines.size(), 38, QModelIndex());
+  targetIntModel->setData(index, line.screeningSigma, Qt::EditRole);
 
   targetIntView->resizeRowsToContents();
 }
@@ -319,8 +335,13 @@ void TargetIntTab::editLine() {
   i = targetIntModel->index(index.row(), 32, QModelIndex());
   var = targetIntModel->data(i, Qt::EditRole);
   bool udrCentred = var.toBool();
+  const bool isScreening = targetIntModel->data(targetIntModel->index(index.row(), 35), Qt::EditRole).toBool();
+  const double screeningUe = targetIntModel->data(targetIntModel->index(index.row(), 36), Qt::EditRole).toDouble();
+  const bool screeningVary = targetIntModel->data(targetIntModel->index(index.row(), 37), Qt::EditRole).toBool();
+  const double screeningSigma = targetIntModel->data(targetIntModel->index(index.row(), 38), Qt::EditRole).toDouble();
 
   AddTargetIntDialog aDialog;
+  aDialog.setAdiabaticProvider([this](const QString &segs) { return adiabaticScreeningFor(segs); });
   aDialog.setWindowTitle(tr("Edit an Experimental Effect Line"));
   aDialog.segmentsListText->setText(segmentsList);
   aDialog.numPointsSpin->setValue(numPoints);
@@ -374,6 +395,12 @@ void TargetIntTab::editLine() {
   aDialog.udrChannelText->setText(QString::number(udrChannelWidth, 'g', 10));
   aDialog.udrCentredCheck->setChecked(udrCentred);
   aDialog.isUdrCheck->setChecked(isUdr);
+
+  // U_e is set before the check, so switching the box on does not replace it with the adiabatic limit.
+  aDialog.screeningUeText->setText(QString::number(screeningUe, 'g', 10));
+  aDialog.screeningVaryCheck->setChecked(screeningVary);
+  aDialog.screeningSigmaText->setText(QString::number(screeningSigma, 'g', 10));
+  aDialog.isScreeningCheck->setChecked(isScreening);
 
   if (aDialog.exec()) {
     QString newSegmentsList = aDialog.segmentsListText->text();
@@ -566,6 +593,11 @@ void TargetIntTab::editLine() {
       i = targetIntModel->index(index.row(), 32, QModelIndex());
       targetIntModel->setData(i, newUdrCentred, Qt::EditRole);
     }
+    targetIntModel->setData(targetIntModel->index(index.row(), 35), aDialog.isScreeningCheck->isChecked(), Qt::EditRole);
+    targetIntModel->setData(targetIntModel->index(index.row(), 36), aDialog.screeningUeText->text().toDouble(), Qt::EditRole);
+    targetIntModel->setData(targetIntModel->index(index.row(), 37), aDialog.screeningVaryCheck->isChecked(), Qt::EditRole);
+    targetIntModel->setData(targetIntModel->index(index.row(), 38),
+                            std::max(0.0, aDialog.screeningSigmaText->text().toDouble()), Qt::EditRole);
   }
 }
 
@@ -647,6 +679,10 @@ bool TargetIntTab::writeFile(QTextStream &outStream) {
     // An expression written in the lab frame carries its keyword; a line without it is read (by this
     // tab and by the engine) in the pre-2026-10 c.m. convention, so older projects compute as they did.
     if (lines.at(i).isConvCoefficients && lines.at(i).sigmaLab) outStream << " sigmalab";
+    // Electron screening, keyword-introduced; written before the blocks that run to the end of the line.
+    if (lines.at(i).isScreening)
+      outStream << " screening " << QString::number(lines.at(i).screeningUe, 'g', 12) << " "
+                << (lines.at(i).screeningVary ? 1 : 0) << " " << QString::number(lines.at(i).screeningSigma, 'g', 12);
     // Optional beam-profile kernel, last on the line and introduced by its own
     // keyword: every older reader probes for a digit or a quote here, so an
     // alphabetic token stops it cleanly and the rest of the line is ignored
@@ -788,6 +824,22 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
       // The user-defined-resolution block is split off first: it is written
       // after the beam profile, and its quoted path must not be seen by the
       // ranges parser below.
+      // Electron screening: three numbers after its keyword, wherever on the line (pyazr writes it last).
+      bool tempIsScreening = false;
+      double screeningUe = 0., screeningSigma = 0.;
+      int screeningVary = 0;
+      {
+        QRegularExpression screeningKeyword("(^|\\s)screening\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)");
+        QRegularExpressionMatch sm = screeningKeyword.match(remaining);
+        if (sm.hasMatch()) {
+          bool ok1 = false, ok2 = false, ok3 = false;
+          screeningUe = sm.captured(2).toDouble(&ok1);
+          screeningVary = (int)sm.captured(3).toDouble(&ok2);
+          screeningSigma = sm.captured(4).toDouble(&ok3);
+          tempIsScreening = ok1 && ok2 && ok3;
+          remaining = (remaining.left(sm.capturedStart()) + " " + remaining.mid(sm.capturedEnd())).simplified();
+        }
+      }
       bool tempIsUdr = false;
       QString udrFile;
       double udrFlightPath = 0., udrBurst = 0., udrChannel = 0.;
@@ -890,7 +942,7 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
       bool tempIsTargetIntegration = false;
       if (isTargetIntegration == 1) tempIsTargetIntegration = true;
 
-      TargetIntData newLine = {isActive, segmentsList.remove('\"'), numPoints, tempIsConvolution, sigma, tempIsTargetIntegration, density, stoppingPowerEq.remove('\"'), numParameters, parameters, tempIsQCoefficient, qCoefficients, tempIsConvCoefficient, convCoefficients, convolutionEq.remove('\"'), tempIsStraggling, stragglingCoefficient, resonanceWidthMultiplier, pointsPerWidth, applyRanges, transitionWidth, autoTolerance, tempIsBeamProfile, beamProfile, beamTpcSigma, beamTruncation, beamPhotodissociation == 1, tempIsUdr, udrFile, udrFlightPath, udrBurst, udrChannel, udrCentred != 0, tempSigmaLab};
+      TargetIntData newLine = {isActive, segmentsList.remove('\"'), numPoints, tempIsConvolution, sigma, tempIsTargetIntegration, density, stoppingPowerEq.remove('\"'), numParameters, parameters, tempIsQCoefficient, qCoefficients, tempIsConvCoefficient, convCoefficients, convolutionEq.remove('\"'), tempIsStraggling, stragglingCoefficient, resonanceWidthMultiplier, pointsPerWidth, applyRanges, transitionWidth, autoTolerance, tempIsBeamProfile, beamProfile, beamTpcSigma, beamTruncation, beamPhotodissociation == 1, tempIsUdr, udrFile, udrFlightPath, udrBurst, udrChannel, udrCentred != 0, tempSigmaLab, tempIsScreening, screeningUe, screeningVary != 0, screeningSigma};
       addLine(newLine);
     }
   }
@@ -917,6 +969,34 @@ void TargetIntTab::showInfo(int which, QString title) {
 void TargetIntTab::setModels(SegmentsDataModel *segments, PairsModel *pairs) {
   segmentsModel_ = segments;
   pairsModel_ = pairs;
+}
+
+double TargetIntTab::adiabaticScreeningFor(const QString &segmentsList) const {
+  if (!segmentsModel_ || !pairsModel_) return -1.0;
+  QList<SegmentsDataData> segments = segmentsModel_->getLines();
+  QList<PairsData> pairs = pairsModel_->getPairs();
+  int z1 = -1, z2 = -1;
+  for (const QString &item : segmentsList.split(',', Qt::SkipEmptyParts)) {
+    QString range = item.trimmed();
+    int dash = range.indexOf('-', 1);
+    bool okLo = false, okHi = false;
+    int lo = (dash > 0 ? range.left(dash) : range).toInt(&okLo);
+    int hi = (dash > 0 ? range.mid(dash + 1) : range).toInt(&okHi);
+    if (!okLo || !okHi || lo < 1 || hi < lo) return -1.0;
+    for (int key = lo; key <= hi; key++) {
+      if (key > segments.size()) return -1.0;
+      int pairIndex = segments.at(key - 1).entrancePairIndex;
+      if (pairIndex < 1 || pairIndex > pairs.size()) return -1.0;
+      const PairsData &pair = pairs.at(pairIndex - 1);
+      if (z1 < 0) {
+        z1 = pair.lightZ;
+        z2 = pair.heavyZ;
+      } else if (pair.lightZ != z1 || pair.heavyZ != z2) {
+        return -1.0;
+      }
+    }
+  }
+  return (z1 > 0 && z2 > 0) ? AdiabaticScreeningEv(z1, z2) : -1.0;
 }
 
 double TargetIntTab::conversionFactorFor(const QString &segmentsList) const {

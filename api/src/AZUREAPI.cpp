@@ -1078,7 +1078,8 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
   for (int f = 0; f < (int)full.size() && f < pmap.NumFull(); f++) {
     if (fixed_[f]) continue;
     ParamKind kind = pmap.Desc(f).kind;
-    if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm)) continue;
+    if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
+               kind == ParamKind::Screening)) continue;
     int packed = pmap.FullToPacked(f);
     if (packed < 0 || packed >= (int)params.size()) continue;
     double x0 = params[packed];
@@ -1417,6 +1418,14 @@ vector_r AZUREAPI::GetParameterInfo() const {
     for (int j = 0; j < segments[s].NumShiftFnParams(); ++j)
       push(5, -1, -1, 0, -1, 0, j, -1, -1, -1, -1,
            segments[s].GetSegmentKey(), -1);
+  }
+
+  // Electron-screening potentials (eV): the effect number in field 6, the prior centre in field 5 and its
+  // sigma in field 14 (0 = no prior).
+  for (int k = 1; k <= data()->NumScreeningParams(); ++k) {
+    const TargetEffect *te = data()->GetTargetEffect(data()->GetScreeningEffect(k));
+    push(7, -1, -1, 0, -1, te->GetScreeningNominal(), data()->GetScreeningEffect(k), -1, -1, -1, -1, -1,
+         te->GetScreeningSigma());
   }
 
   return info;

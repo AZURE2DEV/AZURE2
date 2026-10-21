@@ -389,6 +389,7 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   //   one energy shift per segment (all segments)
   //   one sqrt(E) energy-shift coefficient per segment (all segments)
   //   the shift-function parameters of each segment declaring a "shiftfn" block
+  //   one electron-screening potential per <targetInt> line with a screening block
   // AZUREAPI::GetParameterInfo() walks the same sequence.
   std::vector<int> allKinds;
   std::vector<double> allAutoMean;
@@ -456,6 +457,15 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     }
   }
 
+  // Electron-screening potentials (eV), one per <targetInt> line with a screening block: its value and
+  // sigma are the prior, as the fit uses them.
+  for (int k = 1; k <= data()->NumScreeningParams(); ++k) {
+    const TargetEffect *te = data()->GetTargetEffect(data()->GetScreeningEffect(k));
+    allKinds.push_back(PARAM_SCREENING);
+    allAutoMean.push_back(te->GetScreeningNominal());
+    allAutoStd.push_back(te->GetScreeningSigma());
+  }
+
   if (allKinds.size() != fixed_.size()) {
     configure().outStream << "Warning: parameter classification produced "
                           << allKinds.size() << " entries but there are "
@@ -495,7 +505,7 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   for (size_t i = 0; i < nfree; ++i) {
     const int kind = freeKinds_[i];
 
-    if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE) {
+    if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE || kind == PARAM_SCREENING) {
       // Derived from the data, so it always wins over whatever the GUI holds.
       if (freeAutoStd[i] > 0.0) {
         priorMeans_[i] = freeAutoMean[i];
@@ -1022,7 +1032,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
       if (kind == PARAM_ENERGY) {
         spread = energySpreadMeV;
         nEnergyCapped++;
-      } else if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE) {
+      } else if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE || kind == PARAM_SCREENING) {
         // Starting outside the prior only wastes steps walking back into it.
         if (j < (int)priorStds_.size() && j < (int)usePriors_.size() &&
             usePriors_[j] && priorStds_[j] > 0.0 && priorStds_[j] < spread) {

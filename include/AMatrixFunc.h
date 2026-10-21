@@ -15,6 +15,9 @@ struct GradAccum;
 struct TMatrixCotangent {
   std::vector<vector_c> t;
   std::vector<vector_c> ec;
+  /// Electron screening: (screening parameter k, d/dU_e in eV) of the points these cotangents came from
+  /// (PointTBar), added to the accumulator by TBarAdjoint.
+  std::vector<std::pair<int, double>> screen;
 };
 
 /*!

@@ -25,6 +25,7 @@
 #include <QSpinBox>
 #include <cstdlib>
 #include "TargetIntModel.h"
+#include "ElectronBinding.h"
 #include "Config.h"
 struct SegPairs {int firstPair; int secondPair;};
 
@@ -272,6 +273,36 @@ int main(int argc, char** argv) {
       dialog.show(); QApplication::processEvents();
       dialog.grab().save(QString("%1_expression.png").arg(stem));
     }
+  }
+
+  // Electron screening: the block round-trips wherever it sits (pyazr writes it after udr), is written
+  // before the blocks that run to the end of the line, and the adiabatic limit follows NIST binding energies.
+  {
+    QString scrLine =
+        "1 \"6,7\" 200 1 0.002 0 0 \"\" 0 0 0 0 \"\" 0 0 0.04 20 50 "
+        "udr \"res file.udr\" 185 7 1.6 1 screening 934.7 1 200\n</targetInt>\n";
+    bool readS = false;
+    QString outS = roundTrip(tab, scrLine, readS);
+    ok("read a line with screening after udr", readS);
+    QList<TargetIntData> sl = tab.getTargetIntModel()->getLines();
+    ok("screening row present", sl.size() == 1, outS);
+    if (sl.size() == 1) {
+      const TargetIntData &d = sl.at(0);
+      ok("screening flagged, U_e 934.7, fitted, prior 200",
+         d.isScreening && d.screeningUe == 934.7 && d.screeningVary && d.screeningSigma == 200.);
+      ok("udr still read beside it", d.isUdr && d.udrFile == "res file.udr" && d.udrCentred);
+      ok("Gaussian width still read", d.isConvolution && d.sigma == 0.002);
+    }
+    ok("screening written before udr", outS.contains(" screening 934.7 1 200 udr "), outS);
+    bool readS2 = false;
+    QString outS2 = roundTrip(tab, outS + "</targetInt>\n", readS2);
+    ok("second round trip identical", readS2 && outS2 == outS, outS2);
+    QString noScr = roundTrip(tab, legacy, readS);
+    ok("a line without screening gains no block", !noScr.contains("screening"), noScr);
+    ok("adiabatic limit alpha + 13C = 934.73 eV", std::fabs(AdiabaticScreeningEv(2, 6) - 934.73) < 0.01,
+       QString::number(AdiabaticScreeningEv(2, 6), 'f', 3));
+    ok("adiabatic limit p + 12C = B(N) - B(H) - B(C) = 442.35 eV", std::fabs(AdiabaticScreeningEv(1, 6) - (1486.058 - 13.598 - 1030.108)) < 1e-9);
+    ok("no adiabatic limit for a neutron", AdiabaticScreeningEv(0, 6) < 0.0);
   }
 
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;

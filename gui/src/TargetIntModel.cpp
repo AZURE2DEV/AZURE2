@@ -34,6 +34,9 @@ static QString effectSummary(const TargetIntData &t) {
   if (t.isBeamProfile) names << QObject::tr("Beam profile");
   if (t.isUdr) names << QObject::tr("User-defined resolution");
   if (t.isQCoefficients) names << QObject::tr("Attenuation coefficients");
+  if (t.isScreening)
+    names << QObject::tr("Electron screening, U_e = %1 eV%2")
+                 .arg(QString::number(t.screeningUe, 'g', 6), t.screeningVary ? QObject::tr(" (fitted)") : QString());
   return names.isEmpty() ? QObject::tr("none") : names.join(", ");
 }
 
@@ -140,6 +143,14 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
       return effectSummary(targetInt);
     else if (index.column() == 34)
       return targetInt.sigmaLab ? QString(tr("YES")) : QString(tr("NO"));
+    else if (index.column() == 35)
+      return targetInt.isScreening ? QString(tr("YES")) : QString(tr("NO"));
+    else if (index.column() == 36)
+      return targetInt.screeningUe;
+    else if (index.column() == 37)
+      return targetInt.screeningVary ? QString(tr("YES")) : QString(tr("NO"));
+    else if (index.column() == 38)
+      return targetInt.screeningSigma;
   } else if (role == Qt::EditRole) {
     TargetIntData targetInt = targetIntList.at(index.row());
     if (index.column() == 1) return targetInt.segmentsList;
@@ -175,6 +186,10 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
     if (index.column() == 31) return targetInt.udrChannelWidth;
     if (index.column() == 32) return targetInt.udrCentred;
     if (index.column() == 34) return targetInt.sigmaLab;
+    if (index.column() == 35) return targetInt.isScreening;
+    if (index.column() == 36) return targetInt.screeningUe;
+    if (index.column() == 37) return targetInt.screeningVary;
+    if (index.column() == 38) return targetInt.screeningSigma;
   } else if (role == Qt::CheckStateRole && index.column() == 0) {
     TargetIntData targetInt = targetIntList.at(index.row());
     if (targetInt.isActive == 1)
@@ -273,6 +288,14 @@ QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, in
         return tr("Effects");
       case 34:
         return tr("sigma(E) in lab?");
+      case 35:
+        return tr("Screening?");
+      case 36:
+        return tr("U_e [eV]");
+      case 37:
+        return tr("Fit U_e?");
+      case 38:
+        return tr("U_e Prior Sigma [eV]");
       default:
         return QVariant();
     }
@@ -353,6 +376,14 @@ bool TargetIntModel::setData(const QModelIndex &index, const QVariant &value, in
       tempData.udrCentred = value.toBool();
     else if (index.column() == 34)
       tempData.sigmaLab = value.toBool();
+    else if (index.column() == 35)
+      tempData.isScreening = value.toBool();
+    else if (index.column() == 36)
+      tempData.screeningUe = value.toDouble();
+    else if (index.column() == 37)
+      tempData.screeningVary = value.toBool();
+    else if (index.column() == 38)
+      tempData.screeningSigma = value.toDouble();
     else
       return false;
     targetIntList.replace(row, tempData);

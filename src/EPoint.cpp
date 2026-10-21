@@ -1131,6 +1131,13 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   }
   this->SetGeometricalFactor(geofactor);
   this->SetSFactorConversion(sfactorconv);
+  // Electron screening: f = exp(pi eta U_e / E), so d ln f / d U_e = pi eta / E (charged particle pairs only).
+  screen_k_ = 0.0;
+  if (entrancePair->GetPType() == 0 && entrancePair->GetZ(1) * entrancePair->GetZ(2) != 0 && this->GetCMEnergy() > 0.0) {
+    const double eta = sqrt(uconv / 2.) * fstruc * entrancePair->GetZ(1) * entrancePair->GetZ(2) *
+                       sqrt(entrancePair->GetRedMass() / this->GetCMEnergy());
+    screen_k_ = pi * eta / this->GetCMEnergy();
+  }
 
   // Only the groups of the entrance pair's compound nucleus take part in this
   // point: a group of another nucleus in the file has thresholds on a
@@ -1228,6 +1235,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
     EPoint *mappedPoint = this->GetLocalMappedPoint(i);
     mappedPoint->geofactor_ = geofactor_;
     mappedPoint->sfactorconv_ = sfactorconv_;
+    mappedPoint->screen_k_ = screen_k_;
     mappedPoint->lo_elements_ = lo_elements_;
     mappedPoint->penetrabilities_ = penetrabilities_;
     mappedPoint->coulombphase_ = coulombphase_;
@@ -1237,6 +1245,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
       EPoint *subMappedPoint = mappedPoint->GetSubPoint(ii);
       subMappedPoint->geofactor_ = this->GetSubPoint(ii)->geofactor_;
       subMappedPoint->sfactorconv_ = this->GetSubPoint(ii)->sfactorconv_;
+      subMappedPoint->screen_k_ = this->GetSubPoint(ii)->screen_k_;
       subMappedPoint->lo_elements_ = this->GetSubPoint(ii)->lo_elements_;
       subMappedPoint->penetrabilities_ = this->GetSubPoint(ii)->penetrabilities_;
       subMappedPoint->coulombphase_ = this->GetSubPoint(ii)->coulombphase_;
@@ -1311,6 +1320,7 @@ bool EPoint::CopyEDependentValuesFrom(const EPoint &other) {
     return false;
   geofactor_ = other.geofactor_;
   sfactorconv_ = other.sfactorconv_;
+  screen_k_ = other.screen_k_;
   lo_elements_ = other.lo_elements_;
   penetrabilities_ = other.penetrabilities_;
   coulombphase_ = other.coulombphase_;
@@ -1860,6 +1870,8 @@ void EPoint::AddSubPoint(EPoint subPoint) {
   // section, and A_y is never computed at all.
   subPoint.is_analyzing_power_ = this->is_analyzing_power_;
   subPoint.is_sub_point_ = true;
+  subPoint.screen_ue_ = this->screen_ue_;
+  subPoint.screen_param_ = this->screen_param_;
   integrationPoints_.push_back(subPoint);
 }
 
