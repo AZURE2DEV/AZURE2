@@ -2188,7 +2188,10 @@ complete:
   parameters.screenings, penalties()["screening"] (in objective()). TRAP: like every effect the line also
   screens <segmentsTest> segments of the same keys -> deactivate it in a copy for bare extrapolations.
   Older engines REFUSE the keyword. Tests: tests/electron_screening (exact factor 5e-11, inside a beam
-  spread, gradient, MIGRAD/LM recover U_e, prior), tests/pyazr/screening_test.py.
+  spread, gradient, MIGRAD/LM recover U_e, prior), tests/pyazr/screening_test.py, and the real-data
+  benchmark tests/screening_6li (Cruz 2005 6Li(p,a) on Li2WO4 / Li metal / PdLi against Skowronski's 7Be fit
+  held fixed: U_e 323 / 1211 / 3433 eV vs published 320 / 1320 / 3760).  TRAP from it: EXFOR O1282 tags its
+  energies EN (lab) but they are c.m.; read as lab the metals come out 26-27 % low.
 - 2026-10-21 -- EXTERNAL-CAPTURE ENERGY TABLE, ON BY DEFAULT (`--no-ec-table`, pyazr `use_ec_table=False`;
   design `docs/source/developer/ec_table.rst`; 12C+a_onefile/10-20-26_EC_table_timing). Each capture term's
   radial integral is tabulated on demand in ln(E_out), 50 nodes/decade, nodes converged to 1e-10 (8-point

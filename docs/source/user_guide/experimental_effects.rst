@@ -504,6 +504,14 @@ and ``AzrModel.set_screening`` write the block from a script.
    (``<segmentsTest>``) segments with the same keys. To extrapolate the bare
    cross section, deactivate the line in a copy of the project.
 
+**Benchmark.** ``tests/screening_6li`` fits the screening potentials of the
+6Li(p,α)3He data of Cruz *et al.*, *Phys. Lett. B* **624**, 181 (2005), taken
+on a Li₂WO₄ insulator, Li metal and a PdLi alloy, against a 7Be R-matrix
+evaluation fitted only to data above :math:`E_p = 100` keV and held fixed.
+With one screening line per target and the normalizations free it finds
+:math:`U_e` = 323 ± 98, 1211 ± 65 and 3433 ± 231 eV, against the published
+320 ± 110, 1320 ± 70 and 3760 ± 260 eV.
+
 Straggling
 ^^^^^^^^^^
 
