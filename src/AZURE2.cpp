@@ -110,6 +110,8 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--gsl-coul:" << std::setw(0) << "Use GSL Coulomb functions (faster, but less accurate)." << std::endl
             << std::setw(25) << std::left << "\t--coulomb-table[=FILE]:" << std::setw(0) << "Charged channels from the universal Coulomb table (the default; FILE: $AZURE2_COULOMB_TABLE or ~/.azure2/coulomb_table.bin)." << std::endl
             << std::setw(25) << std::left << "\t--no-coulomb-table:" << std::setw(0) << "Exact Coulomb functions everywhere." << std::endl
+            << std::setw(25) << std::left << "\t--ec-table:" << std::setw(0) << "External capture from per-term energy tables (the default; undoes an earlier --no-ec-table)." << std::endl
+            << std::setw(25) << std::left << "\t--no-ec-table:" << std::setw(0) << "External capture integrals at every energy (no energy tables); shifted amplitudes interpolated." << std::endl
             << std::setw(25) << std::left << "\t--build-coulomb-table[=FILE]:" << std::setw(0) << "Build the Coulomb table (about 5 min on 4 threads, 88 MB; FILE as for --coulomb-table) and exit." << std::endl
             << std::setw(25) << std::left << "\t--grid-replacement:" << std::setw(0) << "Re-place the adaptive sub-point grids as levels and shifts move (the default)." << std::endl
             << std::setw(25) << std::left << "\t--no-grid-replacement:" << std::setw(0) << "Keep the adaptive sub-point grids placed from the input file's levels (default: re-place them as levels and shifts move)." << std::endl
@@ -235,6 +237,10 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
       configure.coulombTablePath = it->substr(16);
     } else if (*it == "--no-coulomb-table")
       configure.useCoulombTable = false;
+    else if (*it == "--ec-table")
+      configure.useECTable = true;
+    else if (*it == "--no-ec-table")
+      configure.useECTable = false;
     else if (*it == "--grid-replacement")
       configure.replaceSubPointGrids = true;
     else if (*it == "--no-grid-replacement")

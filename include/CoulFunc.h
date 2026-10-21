@@ -105,6 +105,9 @@ class CoulFunc {
   /// The key of the pair this object was built for, which is what selects
   /// its nuclear potential out of NuclearPotentialManager.
   int pairKey() const { return pairKey_; }
+  /// The nuclear potential these waves are computed under (0 = plain Coulomb);
+  /// part of the ECTable term key.
+  long hybridTag() const { return hybridTag_; }
 
   // The global (radius-keyed, mutex-protected) Coulomb cache only helps when the
   // same radius is queried across many energies (e.g. penetrabilities at the

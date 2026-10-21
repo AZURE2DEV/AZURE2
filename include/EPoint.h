@@ -299,7 +299,8 @@ class EPoint {
   complex GetCoulombAmplitude(double s) const;
   /// External-capture amplitude for the pathway at (KGroup, ECMGroup), both 1-based.
   complex GetECAmplitude(int, int) const;
-  /// As GetECAmplitude, but interpolated to the shifted energy through the amplitude cache.
+  /// As GetECAmplitude, at the point's current (shifted) energy: from the energy tables
+  /// (ECTable), or interpolated through the amplitude cache with --no-ec-table.
   complex GetECAmplitudeWithShift(int, int, CNuc *, const Config &) const;
   /// Where this point is mapped, if it is.
   EnergyMap GetMap() const;
@@ -542,6 +543,15 @@ class EPoint {
   bool eDependentValid_ = false;
   matrix_c ec_amplitudes_;
   matrix_r ec_energies_;  // Energies at which EC amplitudes were calculated
+  /// The amplitude at the last shifted energy of each pathway (GetECAmplitudeWithShift).
+  struct ShiftedECAmplitude {
+    double energy = 0.0;
+    complex amplitude = complex(0.0, 0.0);
+    double levelEnergy = 0.0;
+    bool valid = false;
+    bool hasLevelEnergy = false;
+  };
+  mutable std::vector<std::vector<ShiftedECAmplitude>> ec_shifted_;
   std::vector<EPoint *> local_mapped_points_;
   std::vector<EPoint> integrationPoints_;
   EData *parentData_;

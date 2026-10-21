@@ -1845,7 +1845,11 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
   `R-matrix/11B+a/8-27-26_claude/build_mirrored_test_segments.py` for a
   working implementation (also handles the `isDiff` code remap between the two
   sections, see below).
-- `<parameterSettings>` — free/fixed, limits, nuisance, category, Minuit index.
+- `<parameterSettings>` — free/fixed, limits, nuisance, category, Minuit index. "Level N Energy (MeV)" /
+  "Level N Channel M Width (eV)" ARE the engine's `energy_N` / `width_N_M` of the same file (active levels
+  J-group by J-group, M = channel within the J-group); a block with the line `# level numbering: engine` is
+  written that way (GUI since 2026-10-21). See the 2026-10-21 note: older GUI saves put limits and nuisance
+  priors on OTHER levels.
 - `<mcmc>` — walkers, steps, threads.
 
   **The same key collision reaches the parameter file.** A mode-3 run given a
@@ -2240,6 +2244,36 @@ complete:
   agree. Grid re-placement (stage 3) is described under the save/reopen notes above
   (`--no-grid-replacement`). And `--gsl-coul` is wrong by up to 3-6 % in P and S for
   0.1 <= eta < 10, 1 <= rho < 10 (Michel agrees with mpmath to 1e-9): do not use it.
+- 2026-10-21 (on dev since 2026-10-21) -- GUI-SAVED LIMITS AND NUISANCE PRIORS SAT ON
+  OTHER LEVELS. The Fitting tab named "Level N ..." by its model row (inactive levels counted, widths numbered by
+  the global channel row), but writes the levels sorted by J, parity, energy, and the engine reads "Level N" as
+  its energy_N (active levels only, J-group by J-group). After the first GUI save of a file not in that order,
+  or with an inactive level ahead of active ones, every level setting moved: a prior centred on the 3.52 MeV
+  level was applied to the 5.0 MeV one (chi2 +21,904), with an inactive level first to the 9.0 MeV one
+  (+160,000). "Load from .sav" mapped energy_N to GUI rows the same way. Fixed: names in the engine numbering
+  of the written file, a marker line `# level numbering: engine`; an UNMARKED block is read the way (engine or
+  GUI rows) under which more entries' value columns equal the parameter's current value (tie: engine) -- the
+  old GUI header comment is no evidence, scripts copied it (12C+a 9-13-26 ANC priors are engine-numbered and
+  correct); .sav values matched by level identity (J, parity, energy; pair, l, s) against the file on disk.
+  ARCHIVE SCAN (2026-10-21, value-column evidence): 605 GUI-written files whose limits/priors the engine
+  applied to ANOTHER parameter, 440 of them in 12C+a_onefile/8-6-26_claude_fit_fix (+ struct_runs): Wigner-
+  type bounds (+-2.66) of one channel's width landed on another channel of the same background level; also
+  11B+a/10-16-26_broad_3p_constrained/bg_ref|bg_test (but its rwa-category bounds are script-written) and
+  12C+a 9-13-26 _timing/map_check. To check a file: is "Level N Channel M" (M = global channel-line row in an
+  old GUI block) the engine's width_N_M? Separately (old behaviour, unchanged): the GUI keeps settings only
+  for the parameters it lists as free, so script-made bounds on fixed parameters vanish on a GUI save.
+- 2026-10-21 -- EXTERNAL-CAPTURE ENERGY TABLE, ON BY DEFAULT (`--no-ec-table`, pyazr `use_ec_table=False`;
+  design `docs/source/developer/ec_table.rst`; 12C+a_onefile/10-20-26_EC_table_timing). Each capture term's
+  radial integral is tabulated on demand in ln(E_out), 50 nodes/decade, nodes converged to 1e-10 (8-point
+  Lagrange after dividing out sqrt(P) or the hard-sphere phase); E_out <= 0 terms are computed directly.
+  `AZURE2_EC_TABLE_CHECK=1` compares every tabulated integral with a converged direct one (12C: 5.5e-8);
+  `AZURE2_EC_TABLE_NODES=N` changes the density. The run log prints "External capture table: ...".
+  12C(a,g): resolution folding 243 -> 66 s, target integration 78 -> 41 s, rate 28 -> 11 s, chi2 the same
+  to the printed digits; a plain COLD start 15 -> 25 s (few points per term; intEC.dat reuse unaffected).
+  SHIFTED CAPTURE SEGMENTS are now evaluated at the shifted energies (= data moved by the shift, exactly).
+  OLDER BUILDS interpolated the EC amplitudes linearly between the segment's own points and held them FLAT
+  beyond its ends: 0.4-15 % errors on 12C cascades, a factor 57 at the low end of the 13N LUNA data at
+  -30 keV -- fitted energy shifts of capture segments from older builds are biased; refit them.
 - 2026-09-13 -- pyazr and `output/intEC.dat`: a session that RELOADS an existing cache for the
   12C+alpha truncated model returns a wrong chi2 (120,593 instead of 113,512, sometimes ~1e26)
   while the CLI reloading the same cache is exact; confirmed with the pre-fix module too, so it is

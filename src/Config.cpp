@@ -38,6 +38,8 @@ void Config::Reset() {
   useCoulombTable = true;   // the universal Coulomb table where it covers a channel (--no-coulomb-table)
   replaceSubPointGrids = true;  // re-place the adaptive sub-point grids (--no-grid-replacement)
   coulombTablePath.clear();
+  useECTable = true;            // external-capture energy tables (--no-ec-table)
+  ecTableNodesPerDecade = 50;   // ECTable node density; $AZURE2_EC_TABLE_NODES overrides
   includeAllJPi = false;    // Off unless the <config> block says so: older projects compute as they always did
   hardSphereMaxL = -1;
   abundanceSumSigma = 0.0;

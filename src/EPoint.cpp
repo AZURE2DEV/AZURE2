@@ -11,6 +11,7 @@
 #include "DataLine.h"
 #include "ECIntegral.h"
 #include "ECAmplitudeCache.h"
+#include "ECTable.h"
 #include "EData.h"
 #include "ESegment.h"
 #include "RMatrixFunc.h"
@@ -607,6 +608,8 @@ complex EPoint::GetCoulombAmplitude(double s) const {
   return coulombdirect_ + sign * coulombexchange_;
 }
 
+static complex ECPathwayAmplitude(CNuc *, const Config &, PPair *, int, double, KGroup *, ECMGroup *, double);
+
 /*!
  * Returns the external capture amplitude for a given external reaction pathway
  * specified by positions in the KGroup and subsequent ECMGroup vectors.
@@ -617,20 +620,49 @@ complex EPoint::GetECAmplitude(int kGroupNum, int ecMGroupNum) const {
 }
 
 /*!
- * Returns the external capture amplitude with current energy (including shifts)
- * This method uses the ECAmplitudeCache to get interpolated values.
+ * Returns the external capture amplitude at the point's current energy, which
+ * an energy shift may have moved away from the energy the amplitude was
+ * computed at.
+ *
+ * With the energy tables (Config::useECTable, the default) a moved point is
+ * evaluated at its new energy, from the same tables as every other amplitude,
+ * and the result is kept until the energy moves again.  The final level's
+ * energy is the one the point's own amplitudes were computed with (recorded at
+ * the first shifted evaluation), so shifted and unshifted segments stay
+ * consistent even where an MCMC moves that level.
+ *
+ * With --no-ec-table the amplitude is interpolated linearly between the
+ * energies of the segment's own points (ECAmplitudeCache) and held flat beyond
+ * its ends, as before the tables.
  */
 complex EPoint::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *theCNuc, const Config &configure) const {
-  // Check if we have valid indices
-  // if(kGroupNum < 1 || kGroupNum > ec_amplitudes_.size()) {
-  //  return complex(0.0, 0.0);
-  //}
-  // if(ecMGroupNum < 1 || ecMGroupNum > ec_amplitudes_[kGroupNum-1].size()) {
-  //  return complex(0.0, 0.0);
-  //}
-
   // Get current energy including shifts
   double currentEnergy = this->GetCMEnergy();
+
+  if (configure.useECTable) {
+    const size_t k = kGroupNum - 1, m = ecMGroupNum - 1;
+    if (k < ec_energies_.size() && m < ec_energies_[k].size() && ec_energies_[k][m] == currentEnergy)
+      return ec_amplitudes_[k][m];
+    if (ec_shifted_.size() < ec_amplitudes_.size()) ec_shifted_.resize(ec_amplitudes_.size());
+    if (k < ec_shifted_.size() && ec_shifted_[k].size() <= m) ec_shifted_[k].resize(m + 1);
+    ShiftedECAmplitude &memo = ec_shifted_[k][m];
+    if (memo.valid && memo.energy == currentEnergy) return memo.amplitude;
+
+    PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+    int ir = theCNuc->GetPairNumFromKey(this->GetExitKey());
+    KGroup *theKGroup = entrancePair->GetDecay(ir)->GetKGroup(kGroupNum);
+    ECMGroup *theECMGroup = theKGroup->GetECMGroup(ecMGroupNum);
+    int j = theECMGroup->GetJGroupNum();
+    if (!memo.hasLevelEnergy) {
+      memo.levelEnergy = theCNuc->GetJGroup(j)->GetLevel(theECMGroup->GetLevelNum())->GetE();
+      memo.hasLevelEnergy = true;
+    }
+    memo.amplitude = ECPathwayAmplitude(theCNuc, configure, entrancePair, j, memo.levelEnergy, theKGroup,
+                                        theECMGroup, currentEnergy);
+    memo.energy = currentEnergy;
+    memo.valid = true;
+    return memo.amplitude;
+  }
 
   // Use ECAmplitudeCache for interpolation at any energy
   if (g_ecAmplitudeCache) {
@@ -1621,6 +1653,71 @@ void EPoint::SetCoulombAmplitude(complex amplitude) {
 }
 
 /*!
+ * The external-capture amplitude of one pathway (KGroup, ECMGroup of the decay
+ * to the point's exit pair) at c.m. energy cmEnergy, for the final level of
+ * J-group j at energy levelEnergy: the entrance Coulomb and hard-sphere phases,
+ * the photon-energy factor and the radial integral (from ECTable, or directly
+ * with --no-ec-table).  CalculateECAmplitudes calls it at the point's energy;
+ * GetECAmplitudeWithShift at a shifted one.
+ */
+static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair *entrancePair, int j,
+                                  double levelEnergy, KGroup *theKGroup, ECMGroup *theECMGroup,
+                                  double cmEnergy) {
+  // A closed entrance channel -- at or below threshold, or so close above it
+  // that P = 0 in double precision (ChannelFunc) -- captures nothing: the
+  // amplitude carries the entrance Coulomb wave, whose routines return NaN or
+  // garbage there (e.g. a Gaussian-folding sub-point at E_cm <= 0).
+  if (ChannelFunc(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC)).IsClosed(cmEnergy))
+    return complex(0.0, 0.0);
+  double inEnergy = cmEnergy + entrancePair->GetSepE() + entrancePair->GetExE();
+  // entrance Phase Calculations;
+  CoulFunc theCoulombFunction(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+
+  double eta = sqrt(uconv / 2.) * fstruc * entrancePair->GetZ(1) * entrancePair->GetZ(2) *
+      sqrt(entrancePair->GetRedMass() / cmEnergy);
+  complex expCP(1.0, 0.0);
+  for (int ll = 1; ll <= theECMGroup->GetL(); ll++)
+    expCP *= complex((double)ll / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)),
+                     eta / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)));
+  complex expHSP = theCoulombFunction.HardSpherePhase(theECMGroup->GetL(), entrancePair->GetChRad(), cmEnergy);
+
+  double sqrtGammaPene = pow((inEnergy - levelEnergy) / hbarc, theECMGroup->GetMult() + 0.5);
+
+  AChannel *theFinalChannel = theCNuc->GetJGroup(j)->GetChannel(theECMGroup->GetFinalChannel());
+  PPair *theFinalPair = theCNuc->GetPair(theFinalChannel->GetPairNum());
+  int theInitialLValue;
+  double theInitialSValue;
+  if (theECMGroup->IsChannelCapture()) {
+    MGroup *theChanCapMGroup = entrancePair->GetDecay(theECMGroup->GetChanCapDecay())->GetKGroup(theECMGroup->GetChanCapKGroup())->GetMGroup(theECMGroup->GetChanCapMGroup());
+    theInitialLValue = theCNuc->GetJGroup(theChanCapMGroup->GetJNum())->GetChannel(theChanCapMGroup->GetChpNum())->GetL();
+    theInitialSValue = theCNuc->GetJGroup(theChanCapMGroup->GetJNum())->GetChannel(theChanCapMGroup->GetChpNum())->GetS();
+  } else {
+    theInitialLValue = theECMGroup->GetL();
+    theInitialSValue = theKGroup->GetS();
+  }
+
+  complex integrals;
+  if (configure.useECTable) {
+    integrals = ECTable::Integral(theFinalPair, configure, theInitialLValue, theFinalChannel->GetL(),
+                                  theInitialSValue, theFinalChannel->GetS(),
+                                  theECMGroup->GetJ(), theCNuc->GetJGroup(j)->GetJ(),
+                                  theECMGroup->GetMult(), theECMGroup->GetRadType(),
+                                  inEnergy, levelEnergy, theECMGroup->IsChannelCapture());
+  } else {
+    ECIntegral theECIntegral(theFinalPair, configure);
+    integrals = theECIntegral(theInitialLValue, theFinalChannel->GetL(),
+                              theInitialSValue, theFinalChannel->GetS(),
+                              theECMGroup->GetJ(), theCNuc->GetJGroup(j)->GetJ(),
+                              theECMGroup->GetMult(), theECMGroup->GetRadType(),
+                              inEnergy, levelEnergy,
+                              theECMGroup->IsChannelCapture());
+  }
+
+  // calculate the total radial integral
+  return expCP * expHSP * sqrtGammaPene * integrals;
+}
+
+/*!
  * Calculates the external capture amplitudes for the data point.
  * The amplitudes are calculated for all reaction pathways with corresponding
  * entrance and exit pairs.
@@ -1637,60 +1734,12 @@ void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
           ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
           int ir = theCNuc->GetPairNumFromKey(this->GetExitKey());
           if (ecLevel->GetECPairNum() == ir) {
-            double inEnergy = this->GetCMEnergy() + entrancePair->GetSepE() + entrancePair->GetExE();
             for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
               KGroup *theKGroup = entrancePair->GetDecay(ir)->GetKGroup(k);
               for (int ecm = 1; ecm <= theKGroup->NumECMGroups(); ecm++) {
                 ECMGroup *theECMGroup = theKGroup->GetECMGroup(ecm);
-                // A closed entrance channel -- at or below threshold, or so
-                // close above it that P = 0 in double precision (ChannelFunc)
-                // -- captures nothing: the amplitude carries the entrance
-                // Coulomb wave, whose routines return NaN or garbage there
-                // (e.g. a Gaussian-folding sub-point at E_cm <= 0).
-                if (ChannelFunc(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC))
-                        .IsClosed(this->GetCMEnergy())) {
-                  this->AddECAmplitude(k, ecm, complex(0.0, 0.0));
-                  continue;
-                }
-                // entrance Phase Calculations;
-                CoulFunc theCoulombFunction(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-
-                double eta = sqrt(uconv / 2.) * fstruc * entrancePair->GetZ(1) * entrancePair->GetZ(2) *
-                    sqrt(entrancePair->GetRedMass() / this->GetCMEnergy());
-                complex expCP(1.0, 0.0);
-                for (int ll = 1; ll <= theECMGroup->GetL(); ll++)
-                  expCP *= complex((double)ll / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)),
-                                   eta / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)));
-                complex expHSP = theCoulombFunction.HardSpherePhase(theECMGroup->GetL(), entrancePair->GetChRad(),
-                                                                     this->GetCMEnergy());
-
-                double levelEnergy = ecLevel->GetE();
-                double sqrtGammaPene = pow((inEnergy - levelEnergy) / hbarc, theECMGroup->GetMult() + 0.5);
-
-                // Initialize variables
-                AChannel *theFinalChannel = theCNuc->GetJGroup(j)->GetChannel(theECMGroup->GetFinalChannel());
-                PPair *theFinalPair = theCNuc->GetPair(theFinalChannel->GetPairNum());
-                int theInitialLValue;
-                double theInitialSValue;
-                if (theECMGroup->IsChannelCapture()) {
-                  MGroup *theChanCapMGroup = entrancePair->GetDecay(theECMGroup->GetChanCapDecay())->GetKGroup(theECMGroup->GetChanCapKGroup())->GetMGroup(theECMGroup->GetChanCapMGroup());
-                  theInitialLValue = theCNuc->GetJGroup(theChanCapMGroup->GetJNum())->GetChannel(theChanCapMGroup->GetChpNum())->GetL();
-                  theInitialSValue = theCNuc->GetJGroup(theChanCapMGroup->GetJNum())->GetChannel(theChanCapMGroup->GetChpNum())->GetS();
-                } else {
-                  theInitialLValue = theECMGroup->GetL();
-                  theInitialSValue = theKGroup->GetS();
-                }
-
-                ECIntegral theECIntegral(theFinalPair, configure);
-                complex integrals = theECIntegral(theInitialLValue, theFinalChannel->GetL(),
-                                                  theInitialSValue, theFinalChannel->GetS(),
-                                                  theECMGroup->GetJ(), theCNuc->GetJGroup(j)->GetJ(),
-                                                  theECMGroup->GetMult(), theECMGroup->GetRadType(),
-                                                  inEnergy, levelEnergy,
-                                                  theECMGroup->IsChannelCapture());
-
-                // calculate the total radial integral
-                complex ecAmplitude = expCP * expHSP * sqrtGammaPene * integrals;
+                complex ecAmplitude = ECPathwayAmplitude(theCNuc, configure, entrancePair, j, ecLevel->GetE(),
+                                                         theKGroup, theECMGroup, this->GetCMEnergy());
                 this->AddECAmplitude(k, ecm, ecAmplitude);
               }
             }
@@ -1720,8 +1769,10 @@ void EPoint::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude,
   assert(ecMGroupNum == ec_amplitudes_[kGroupNum - 1].size());
   assert(ec_amplitudes_[kGroupNum - 1].size() == ec_energies_[kGroupNum - 1].size());
 
-  // Add to shared cache for interpolation across different EPoints
-  if (g_ecAmplitudeCache) {
+  // Add to shared cache for interpolation across different EPoints.  The energy
+  // tables evaluate shifted points directly (GetECAmplitudeWithShift), so the
+  // cache is only filled without them.
+  if (g_ecAmplitudeCache && !(g_config && g_config->useECTable)) {
     ECAmplitudeCache::AmplitudeKey key;
     key.kGroupNum = kGroupNum;
     key.ecMGroupNum = ecMGroupNum;
@@ -1755,6 +1806,7 @@ void EPoint::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude)
 void EPoint::ClearECAmplitudes() {
   ec_amplitudes_.clear();
   ec_energies_.clear();
+  ec_shifted_.clear();
 }
 
 /*!

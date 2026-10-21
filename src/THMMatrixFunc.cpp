@@ -467,7 +467,7 @@ ThmAdjointContext BuildThmAdjointContext(CNuc *compound, const Config &configure
  *     zbar = d/dRe z + i d/dIm z): 2 W amp for an incoherent |amp|^2 term of
  *     weight W, or through the Legendre sum of the angular window;
  *  3. amp -> gEx (explicit, also for a width under the cutoff the forward
- *     skips, whose derivative is not zero), A (-> LevelMatrixAdjoint), v,
+ *     skips, whose derivative is not zero), A (-> LevelMatrixABarAdjoint), v,
  *     N_C, the coherent background c(E) and its unit vertex u;
  *  4. v_la = sum_c gamma_{la,c} M(B) -> gamma_{la,c}, and through the
  *     boundary B (ThmVertexBoundary): S_c(E_la) under vertex=perlevel with
@@ -840,7 +840,7 @@ bool THMMatrixFunc::THMPointAdjoint(EPoint *point, double fitBar, GradAccum &acc
   for (Block &b : blocks) {
     matrix_c &Ab = aBar[b.j - 1];
     if (Ab.empty()) continue;
-    LevelMatrixAdjoint(point, b.j, Ab, inEnergy, ctx.shiftDeriv, accum, &b.levelOf);
+    LevelMatrixABarAdjoint(point, b.j, Ab, inEnergy, ctx.shiftDeriv, accum, &b.levelOf);
     Ab.clear();  // once per J group (the blocks of its passes share it)
   }
   return true;

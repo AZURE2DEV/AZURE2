@@ -125,7 +125,8 @@ class EData {
   ESegment *CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey);
   ESegment *CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey, double fixedAngle);
   /// Map points at equal energies onto one another, so a shared energy is calculated once.
-  void MapData();
+  /// The compound nucleus tells which segments have a particle exit; null is conservative.
+  void MapData(CNuc *theCNuc = nullptr);
   /// Append a target-effect definition.
   void AddTargetEffect(TargetEffect);
   void SetNormParamOffset(int);

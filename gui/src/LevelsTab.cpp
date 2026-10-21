@@ -901,7 +901,7 @@ void LevelsTab::calculateWignerLimit() {
   channelDetails->wignerLimitText->setText(text);
 }
 
-QList<int> LevelsTab::writeOrder() {
+QList<int> LevelsTab::writtenLevelOrder() {
   QList<LevelsData> levels = levelsModel->getLevels();
 
   double lowJ = 0;
@@ -940,6 +940,51 @@ QList<int> LevelsTab::writeOrder() {
   return order;
 }
 
+LevelsTab::EngineNumbering LevelsTab::engineNumbering(const QList<int> &order) {
+  QList<LevelsData> levels = levelsModel->getLevels();
+  QList<ChannelsData> channels = channelsModel->getChannels();
+  EngineNumbering out;
+  out.level.fill(0, levels.size());
+  out.channel.fill(0, channels.size());
+  // J-groups in order of first appearance among the active levels, each with its levels in order.
+  struct Group {
+    Nucleus nucleus;
+    double j;
+    int pi;
+    QList<int> rows;
+  };
+  QList<Group> groups;
+  for (int row : order) {
+    if (row < 0 || row >= levels.size() || levels.at(row).isActive != 1) continue;
+    // A level without channels writes no line (writeNuclearFile), so the engine never sees it.
+    bool hasChannel = false;
+    for (const ChannelsData &c : channels) hasChannel = hasChannel || c.levelIndex == row;
+    if (!hasChannel) continue;
+    const LevelsData &l = levels.at(row);
+    int g = 0;
+    while (g < groups.size() && !(groups[g].nucleus == l.nucleus() && groups[g].j == l.jValue && groups[g].pi == l.piValue)) g++;
+    if (g == groups.size()) groups.append({l.nucleus(), l.jValue, l.piValue, {}});
+    groups[g].rows.append(row);
+  }
+  int n = 0;
+  for (const Group &group : groups) {
+    // The group's channels (pair, l, s) in order of first appearance over its levels' channel lines.
+    QList<ChannelsData> keys;
+    for (int row : group.rows) {
+      out.level[row] = ++n;
+      for (int ch = 0; ch < channels.size(); ch++) {
+        const ChannelsData &c = channels.at(ch);
+        if (c.levelIndex != row) continue;
+        int m = 0;
+        while (m < keys.size() && !(keys[m].pairIndex == c.pairIndex && keys[m].lValue == c.lValue && keys[m].sValue == c.sValue)) m++;
+        if (m == keys.size()) keys.append(c);
+        out.channel[ch] = m + 1;
+      }
+    }
+  }
+  return out;
+}
+
 bool LevelsTab::writeNuclearFile(QTextStream &outStream) {
   QList<PairsData> pairs = pairsModel->getPairs();
   QList<LevelsData> levels = levelsModel->getLevels();
@@ -951,7 +996,7 @@ bool LevelsTab::writeNuclearFile(QTextStream &outStream) {
   // into the column before it.
   auto col = [](int width, const QString &text) { return text.size() >= width ? " " + text : text.rightJustified(width); };
 
-  const QList<int> order = writeOrder();
+  const QList<int> order = this->writtenLevelOrder();
   int levelId = 1;
   for (int la : order) {
     const LevelsData &level = levels.at(la);

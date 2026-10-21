@@ -76,7 +76,7 @@ QStringList FittingTab::coherentNames(const ThmExperimentRecord &record, QList<d
     double s;
     int l;
   };
-  const QList<int> order = const_cast<FittingTab *>(this)->engineLevelOrder(levelsTab_->writeOrder());
+  const QList<int> order = const_cast<FittingTab *>(this)->engineLevelOrder(levelsTab_->writtenLevelOrder());
   static const char *parts[4] = {"re0", "im0", "re1", "im1"};
   for (const ThmExperiment::CoherentTerm &t : terms) {
     QList<Channel> group;

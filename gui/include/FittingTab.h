@@ -2,6 +2,8 @@
 #define FITTINGTAB_H
 
 #include <QWidget>
+#include <QMap>
+#include <QPair>
 #include <QSignalMapper>
 #include <QPointer>
 #include <QTextStream>
@@ -31,9 +33,13 @@ struct FittingParameter {
   QString category;  // "level", "abundance", "norm", "shift", "cbkg" (THM coherent background)
   int minuitIndex;   // Index in Minuit parameters
 
-  // For level parameters
+  // For level parameters: the model rows of the level and channel (the Levels tab's models)
   int levelIndex;
   int channelIndex;
+  // ... and the engine's numbering of them, energy_<engineLevel> / width_<engineLevel>_<engineChannel>
+  // (LevelsTab::engineNumbering of the order the project is written in); 0 = not a parameter of the engine.
+  int engineLevel = 0;
+  int engineChannel = 0;
 };
 
 QT_BEGIN_NAMESPACE
@@ -119,6 +125,8 @@ class FittingTab : public QWidget {
   void updateParameterTableCheckbox(const QString &paramName, bool checked);
   void applyParameterSettings();
   QList<int> engineLevelOrder(const QList<int> &fileOrder);
+  /// Rename the level entries just read into the engine numbering of the written order.
+  void translateLevelSettings(bool marked);
   QString findMatchingParameterKey(const FittingParameter &param, const QStringList &savKeys);
   double convertReducedToPhysical(double reducedWidth, int levelIndex, int channelIndex);
   double convertPhysicalToReduced(double physicalWidth, int levelIndex, int channelIndex);
@@ -172,6 +180,8 @@ class FittingTab : public QWidget {
   QMap<QString, double> priorCentres_;
   /// The rows above, in segment order (norm before shift), as written.
   QStringList priorCentreRows() const;
+  // loadSettings: the engine's names (energy_N, width_N_M) of the project file on disk, by model rows
+  QMap<QPair<int, int>, QString> diskEngineNames_;
 
   // Tab references for reading current GUI state
   LevelsTab *levelsTab_;

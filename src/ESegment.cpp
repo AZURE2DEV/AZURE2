@@ -1,3 +1,4 @@
+#include <functional>
 #include <cmath>
 #include <limits>
 #include "CNuc.h"
@@ -910,7 +911,8 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
 
 /*!
  * The earlier point of this segment that point i (0-based) is mapped onto
- * (EData::MapData), or NULL.
+ * (EData::MapData), or NULL -- also for a point mapped onto a point of another
+ * segment, which this segment's shift step re-energises on its own.
  */
 EPoint *ESegment::ShiftHost(int i) {
   if (i < 0 || i >= NumPoints()) return nullptr;
@@ -937,8 +939,14 @@ void ESegment::UpdatePointGroupEnergyWithShift(int i, CNuc *theCNuc, const Confi
   if (ShiftHost(i)) return;
   UpdatePointEnergyWithShift(i, theCNuc, configure);
   EPoint *point = GetPoint(i + 1);
+  // A point mapped from another segment (EData::MapData) is not this
+  // segment's to move: it is re-energised with its own segment, on its own.
+  std::less<const EPoint *> before;
+  const EPoint *first = &points_.front(), *last = &points_.back();
   for (int m = 1; m <= point->NumLocalMappedPoints(); m++) {
-    const int j = (int)(point->GetLocalMappedPoint(m) - &points_[0]);
+    const EPoint *mapped = point->GetLocalMappedPoint(m);
+    if (before(mapped, first) || before(last, mapped)) continue;
+    const int j = (int)(mapped - first);
     if (j > i && j < NumPoints() && ShiftHost(j) == point) UpdatePointEnergyWithShift(j, theCNuc, configure);
   }
 }

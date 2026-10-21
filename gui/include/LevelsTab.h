@@ -15,6 +15,7 @@
 #include <QFileDialog>
 #include <QClipboard>
 #include <QApplication>
+#include <QVector>
 #include "PairsModel.h"
 #include "LevelsModel.h"
 #include "ChannelsModel.h"
@@ -42,11 +43,24 @@ class LevelsTab : public QWidget {
   /*! The same for the pairs of one compound nucleus ((0, 0) = every pair). */
   QList<SpinParityOption> spinParityOptions(const Nucleus &nucleus);
   bool writeNuclearFile(QTextStream &outStream);
-  // Model indices of the levels in the order writeNuclearFile writes them
-  // (J ascending, parity -1 before +1, energy ascending).  This, not the model
-  // order, is the order AZURE2 numbers the levels of a saved file in.
-  QList<int> writeOrder();
   bool readNuclearFile(QTextStream &inStream);
+  /*! Model rows of the levels in the order writeNuclearFile writes them: compound nuclei in order of first
+   *  appearance, then J, parity and energy. */
+  QList<int> writtenLevelOrder();
+  /*!
+   * How AZURE2 numbers the parameters of these levels when it reads a file that lists them in `order` (model
+   * rows), following CNuc::Fill and CNuc::FillMnParams: only active levels with at least one channel line exist; J-groups (nucleus, J, parity)
+   * are numbered in order of first appearance and an active level's energy is energy_N, N counting the levels
+   * group by group; a width is width_N_M, M the channel's position among the channels (pair, l, s) of the
+   * level's J-group in order of first appearance.  level[row] = N (0: inactive), channel[channel row] = M
+   * (0: the level is inactive).  The Fitting tab names its "Level N ..." parameters, and so the
+   * <parameterSettings> block, in this numbering, which is the one the engine reads them in.
+   */
+  struct EngineNumbering {
+    QVector<int> level;
+    QVector<int> channel;
+  };
+  EngineNumbering engineNumbering(const QList<int> &order);
   void reset();
   LevelsModel *getLevelsModel() { return levelsModel; }
   /*! Hard-sphere scattering in every J^pi up to the maximum orbital momentum, levels or not

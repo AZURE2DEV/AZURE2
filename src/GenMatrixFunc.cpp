@@ -216,6 +216,45 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
       }
       std::vector<double> angularCoeff(std::min(point->GetMaxLOrder() + 1, point->GetMaxAngDistOrder() + 1), 0.);
       PPair *exitPairDiff = compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()));
+      // Entrance = exit pair, or a non-particle exit: the interference sum is
+      // a sum of products that do not depend on the angle, each times a
+      // Legendre polynomial.  The products are taken once per T-matrix and
+      // reused by every point that shares it; each is the same expression,
+      // added in the same order, as in the loop below.
+      const bool standardCase = !(aa != exitPairNum && exitPairDiff->GetPType() == 0);
+      if (standardCase && !point->IsAngularDist()) {
+        if (rt_decay_ != theDecay) {
+          rt_w_.clear();
+          rt_l_.clear();
+          for (int kL = 1; kL <= theDecay->NumKLGroups(); kL++) {
+            KLGroup *klGroup = theDecay->GetKLGroup(kL);
+            const int kNum = klGroup->GetK();
+            const int lOrder = klGroup->GetLOrder();
+            for (int inter = 1; inter <= klGroup->NumInterferences(); inter++) {
+              Interference *theInterference = klGroup->GetInterference(inter);
+              complex T1(0.0, 0.0), T2(0.0, 0.0);
+              const std::string &interferenceType = theInterference->GetInterferenceType();
+              if (interferenceType == "RR") {
+                T1 = this->GetTMatrixElement(kNum, theInterference->GetM1());
+                T2 = this->GetTMatrixElement(kNum, theInterference->GetM2());
+              } else if (interferenceType == "ER") {
+                T1 = this->GetECTMatrixElement(kNum, theInterference->GetM1());
+                T2 = this->GetTMatrixElement(kNum, theInterference->GetM2());
+              } else if (interferenceType == "RE") {
+                T1 = this->GetTMatrixElement(kNum, theInterference->GetM1());
+                T2 = this->GetECTMatrixElement(kNum, theInterference->GetM2());
+              } else if (interferenceType == "EE") {
+                T1 = this->GetECTMatrixElement(kNum, theInterference->GetM1());
+                T2 = this->GetECTMatrixElement(kNum, theInterference->GetM2());
+              }
+              rt_w_.push_back(theInterference->GetZ1Z2() * T1 * conj(T2));
+              rt_l_.push_back(lOrder);
+            }
+          }
+          rt_decay_ = theDecay;
+        }
+        for (size_t i = 0; i < rt_w_.size(); i++) sum += rt_w_[i] * point->GetLegendreP(rt_l_[i]);
+      } else
       for (int kL = 1; kL <= theDecay->NumKLGroups(); kL++) {
         for (int inter = 1; inter <= theDecay->GetKLGroup(kL)
                                          ->NumInterferences();
@@ -223,7 +262,7 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
           Interference *theInterference = theDecay->GetKLGroup(kL)
                                               ->GetInterference(inter);
           complex T1(0.0, 0.0), T2(0.0, 0.0);
-          std::string interferenceType = theInterference->GetInterferenceType();
+          const std::string &interferenceType = theInterference->GetInterferenceType();
           if (aa != exitPairNum && exitPairDiff->GetPType() == 0) {
             // Different entrance and exit pairs with particle exit - may be UPOS
             double sp1 = theDecay->GetKGroup(theDecay->GetKLGroup(kL)->GetK())->GetSp();
@@ -529,6 +568,7 @@ void GenMatrixFunc::ClearTempTMatricesE2() {
  */
 
 void GenMatrixFunc::AddTMatrixElement(int kGroupNum, int mGroupNum, complex tMatrixElement, int decayNum) {
+  rt_decay_ = nullptr;
   matrix_c d;
   vector_c e;
   while (decayNum > tmatrix_.size()) tmatrix_.push_back(d);
@@ -544,6 +584,7 @@ void GenMatrixFunc::AddTMatrixElement(int kGroupNum, int mGroupNum, complex tMat
  */
 
 void GenMatrixFunc::AddECTMatrixElement(int kGroupNum, int mGroupNum, complex tMatrixElement) {
+  rt_decay_ = nullptr;
   vector_c d;
   while (kGroupNum > ec_tmatrix_.size()) ec_tmatrix_.push_back(d);
   ec_tmatrix_[kGroupNum - 1].push_back(tMatrixElement);

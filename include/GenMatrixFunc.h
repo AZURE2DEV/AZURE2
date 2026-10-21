@@ -35,6 +35,8 @@ struct TempTMatrix {
  * AMatrixFunc and RMatrixFunc.
  */
 
+class Decay;
+
 class GenMatrixFunc {
  public:
   GenMatrixFunc() {};
@@ -144,8 +146,17 @@ class GenMatrixFunc {
   std::vector<matrix_c> tmatrix_;
   /// Vector of external T-matrix elements accessable to child class.
   matrix_c ec_tmatrix_;
+  /// Forget everything derived from the T-matrix (ClearMatrices).
+  void InvalidateTMatrixProducts() { rt_decay_ = nullptr; }
 
  private:
+  /// The interference products Z1Z2 T1 conj(T2) of the differential sum (the
+  /// entrance = exit or capture case), in the order CalculateCrossSection adds
+  /// them, for the T-matrix held now: they do not depend on the angle, so the
+  /// points that share one T-matrix (EData::MapData) compute them once.
+  const Decay *rt_decay_ = nullptr;
+  std::vector<complex> rt_w_;
+  std::vector<int> rt_l_;
   std::vector<TempTMatrix> temp_t_matrices_;
   std::vector<TempTMatrix> temp_t_matrices_E1_;
   std::vector<TempTMatrix> temp_t_matrices_E2_;

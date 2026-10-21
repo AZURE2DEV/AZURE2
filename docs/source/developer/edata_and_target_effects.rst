@@ -55,9 +55,11 @@ and initialization of all data:
 2. **Convert to CM frame** -- laboratory energies and angles are converted to
    center-of-mass frame values using the kinematics of the entrance/exit pair.
 
-3. **Map duplicate points** -- if multiple segments reference the same
-   physical point (same energy, angle, and reaction), the point is calculated
-   only once and other occurrences are mapped to it via ``EnergyMap``.
+3. **Map points at a shared energy** -- points of the same reaction at the
+   same energy, in one segment or in several, share one energy-dependent
+   calculation: the first of them in data order (the host) calculates it and
+   the others are mapped onto it via ``EnergyMap`` (see
+   `Point mapping across segments`_ below).
 
 4. **Create sub-points** -- for each data point that has an associated target
    effect, a grid of sub-points is generated for numerical integration
@@ -359,7 +361,7 @@ Summary: Data Flow Diagram
        ▼
    EData::Fill()
        ├── Create EPoint objects (convert to CM frame)
-       ├── Map duplicate points across segments
+       ├── Map points at a shared energy (within and across segments)
        └── For target-effect points:
            ├── Compute target thickness from stopping power
            ├── Determine integration range (target + convolution + straggling)
@@ -451,3 +453,121 @@ convolution flavour: a fixed beam sigma, or the energy-dependent convolution
 equation evaluated at each depth energy.  The latter combination used to fall
 through to pure target integration on a grid sized for the convolution,
 corrupting the yield.
+
+Point mapping across segments
+-----------------------------
+
+Angular distributions are often stored one angle per segment (an EXFOR entry
+per angle, say): sixteen one-angle segments of 12 000 points at 800 distinct
+energies are not unusual.
+Everything that depends on the energy alone -- the Coulomb functions,
+penetrabilities and phases (``EPoint::CalcEDependentValues``), the level
+matrix, its factorization and the T-matrix -- is the same for all the angles
+at one energy, and only the observable (Legendre polynomials, Coulomb
+amplitude, :math:`A_y`) differs.
+
+``EData::MapData`` therefore groups the points of all segments (except
+composite SUM/RATIO and total-capture segments) by entrance pair, exit pair and
+energy, and maps each point onto the first point in data order (segment, then
+point index) that shares its calculation (``SharesCalculation``): the same
+original, laboratory and c.m. energies, the same target effect, blend weight
+and sub-point grid (energies and stopping powers, point by point), and the
+same kind of observable (cross section or :math:`A_y`, angular-distribution
+coefficients or not).  The observable type may otherwise differ: an
+angle-integrated and a differential point share the T-matrix.  The
+normalization plays no part, since it scales the data, not the model.
+
+Across segments the energy shifts must also agree *as functions of the fit
+parameters* (``ShiftsAgree``): the same free parameters (a shift group's
+shared constant shift, a shared shift function), no free :math:`\sqrt{E}`
+coefficient (it is each segment's own), and the same fixed values.  Two
+segments mapped onto each other are then at the same energy whatever a fit or
+a finite-difference step does to the shifts; segments whose shifts only
+coincide at the current values are not mapped.  Every change of a shift or of
+a sub-point grid rebuilds the mapping (``EData::FillEnergyShiftsFromParams``).
+The segment-local energy-shift derivatives of ``AZURECalc::Gradient`` and
+``AZURECalc::ResidualJacobian`` stay local as long as a parameter's segments
+are mapped only among themselves; they move all of them before calculating
+any.
+
+The host is calculated first by every loop over the whole data set, and
+calculates the observables of the points mapped onto it
+(``EPoint::Calculate``); ``AZURECalc::PrecalculatePoints`` hands out hosts
+only.  The angle-independent products :math:`Z_1Z_2\,T_1T_2^*` of the
+differential sum are formed once per T-matrix
+(``GenMatrixFunc::CalculateCrossSection``) and reused by every point that
+shares it, with the same arithmetic in the same order.  The results are
+byte-identical with and without mapping.
+
+THM segments
+^^^^^^^^^^^^
+
+A THM (HOES) segment is mapped within itself only, and no point of another
+segment is mapped onto one of its points.  Its model comes from
+``THMMatrixFunc`` and from options that ``SharesCalculation`` does not compare
+(the observable, vertex model, kinematics, spectator and angle windows, line
+shape, distortion, the THM experiment with its profiled norm and background,
+the coherent background, the 5-sigma fold); and the THM gradient rows
+(``ComputeTHMRows``) and the THM-only differences of ``AZURECalc::Gradient``
+calculate the THM segments alone, so a host in another segment would not be
+up to date there.  Within one THM segment every option is shared, and the
+points at one energy are mapped as before.  The energy-grouped gradient below
+leaves THM segments out; their rows come from the HOES adjoint
+(``THMMatrixFunc::THMPointAdjoint``) or THM-only differences.
+
+Energy-grouped analytic gradient
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The analytic gradient and the residual Jacobian (``AZUREGrad.cpp``) work on
+the same groups (``BuildGradItems``): one work item per host with the points
+mapped onto it, in parallel over items, so no two threads touch one point.  An
+item solves the level matrix and T-matrix once, forms each member's observable
+from them, and back-propagates:
+
+- for the scalar gradient (``AccumulateEGammaGradient``), the members'
+  T-matrix cotangents are summed and back-propagated once
+  (``AMatrixFunc::PointTBar``, ``TBarAdjoint``; the back-propagation is linear
+  in them);
+- for the rows of the residual Jacobian and the model gradients
+  (``GroupRows``), the derivatives of the group's level-matrix bilinear forms
+  :math:`g_c^T A\, g_{c'}` are taken once, for the cotangents 1 and *i*
+  (``AMatrixFunc::BilinearAdjoint``), and every member's row is a combination
+  of them with its own angle-dependent coefficients -- unless back-propagating
+  each member is cheaper (few members, many channel pairs) or the decay has
+  external capture.
+
+The cotangent of the level matrix is a sum of rank-one terms,
+:math:`\bar M = -\sum_t \beta_t\, \overline{A g_c}\,\overline{A g_{c'}}^T`,
+formed from the solves :math:`A g_c` in :math:`O(n^2)` per term instead of the
+two :math:`O(n^3)` products :math:`A^H \bar A A^H` (kept for external capture),
+and its structural derivatives (standard, Brune and Park level matrices) are
+a few row-times-matrix products (``AMatrixFunc::LevelMatrixAdjoint``).
+Points with components or sub-point target effects are still differentiated
+one by one (``GradOnePoint``), with the same back-propagation.  The gradient
+equals the point-by-point one to rounding (about :math:`10^{-14}` of its
+largest component on such a project).
+
+On a 19-segment project of that kind (14 406 points, 694 free parameters, one
+thread) one evaluation went from 7.0 s to 2.2 s, one residual Jacobian (the
+gradient and G2 of ``--use-gradient``) from 51 s to 4.8 s, and 20 MIGRAD
+calls from 355 s to 68 s; peak memory went down slightly.
+
+Environment switches
+^^^^^^^^^^^^^^^^^^^^
+
+``AZURE_NO_CROSS_SEGMENT_MAPPING=1``
+   Map points within each segment only, as before October 2026.  (A shifted
+   capture segment is always mapped within itself only: its external-capture
+   amplitudes at a shifted energy may be interpolated from its own points.
+   So is a THM segment, see below.)
+``AZURE_NO_POINT_MAPPING=1``
+   No point mapping at all: every point calculates its own energy-dependent
+   values and T-matrix.
+``AZURE_NO_GROUPED_GRADIENT=1``
+   Differentiate every point on its own (``GradOnePoint``), as before.
+``AZURE_GRAD_DENSE=1``
+   Back-propagate through the level matrix with the dense
+   :math:`A^H \bar A A^H` products.
+
+None of them changes a result beyond rounding; they exist to check that and
+to time the alternatives.
