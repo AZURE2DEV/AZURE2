@@ -486,6 +486,14 @@ formed from the solves :math:`A g_c` in :math:`O(n^2)` per term instead of the
 two :math:`O(n^3)` products :math:`A^H \bar A A^H` (kept for external capture),
 and its structural derivatives (standard, Brune and Park level matrices) are
 a few row-times-matrix products (``AMatrixFunc::LevelMatrixAdjoint``).
+On the channel-space route (:doc:`level_matrix`) the adjoint of a bilinear form
+is taken in the formal representation of the level matrix instead, in
+:math:`O(n c)` per term with no :math:`n \times n` matrix
+(``AMatrixFunc::FormalBilinearAdjoint``); for the Brune and Park matrices the
+scalar gradient sums the formal cotangents over all points and resolves them
+into the level parameters once per pass (``ResolveFormalCotangents``), while
+the Jacobian rows keep ``LevelMatrixAdjoint`` with the solves :math:`A g_c` of
+the Woodbury form.
 Points with components or sub-point target effects are still differentiated
 one by one (``GradOnePoint``), with the same back-propagation.  The gradient
 equals the point-by-point one to rounding (about :math:`10^{-14}` of its
@@ -494,7 +502,9 @@ largest component on such a project).
 On a 19-segment project of that kind (14 406 points, 694 free parameters, one
 thread) one evaluation went from 7.0 s to 2.2 s, one residual Jacobian (the
 gradient and G2 of ``--use-gradient``) from 51 s to 4.8 s, and 20 MIGRAD
-calls from 355 s to 68 s; peak memory went down slightly.
+calls from 355 s to 68 s; peak memory went down slightly.  Solving the level
+matrix in channel space (:doc:`level_matrix`) then took them to 1.3 s, 3.7 s
+(2.9 s for the adjoint gradient) and 47 s.
 
 Environment switches
 ^^^^^^^^^^^^^^^^^^^^
@@ -511,6 +521,9 @@ Environment switches
 ``AZURE_GRAD_DENSE=1``
    Back-propagate through the level matrix with the dense
    :math:`A^H \bar A A^H` products.
+``AZURE_LEVEL_SPACE=1``
+   Solve every J-group with the level matrix (fill and LU), not in channel
+   space (:doc:`level_matrix`).
 
 None of them changes a result beyond rounding; they exist to check that and
 to time the alternatives.

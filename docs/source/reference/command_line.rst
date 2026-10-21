@@ -163,6 +163,41 @@ is converted on read (``gamma_Park = gamma_Brune sqrt(J)``), with a message.  A
 file without the tag (written before it existed) is taken as Brune's.  The GUI
 offers the mode as "Use Park parametrization" under Runtime Options.
 
+Level-matrix solver and profiling
+---------------------------------
+
+At every energy each :math:`J^\pi` group is solved in *channel space* when it
+has fewer coupled channels than levels: the bilinear forms of the level matrix
+come from a :math:`c \times c` system for :math:`c` channels instead of the
+:math:`n \times n` level matrix of :math:`n` levels (Woodbury identity, see
+:doc:`../developer/level_matrix`).  The other groups, and the energies too close
+to a pole of the formal R-matrix for the channel-space form to keep full
+precision, use the level matrix as before.  Results agree with the level-matrix
+solution to about :math:`10^{-12}` relative; the analytic gradient is computed
+in the same way.  Two environment variables control and report this:
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Variable
+     - Effect
+   * - ``AZURE_LEVEL_SPACE=1``
+     - Solve every group with the level matrix (the route of earlier versions),
+       for comparison.
+   * - ``AZURE_PROFILE=1``
+     - After every evaluation and gradient, write to standard error the time
+       spent (summed over threads) in the matrix fill and solve, the T-matrix,
+       the channel solves, the cross-section sums, the Coulomb functions and
+       penetrabilities, and the stages of the gradient, with the number of
+       channel-space and level-matrix solves and why a group fell back to the
+       level matrix.  No cost when unset.
+
+``AZURE_CHANNEL_VERIFY=1`` (slow) compares every channel-space solve with the
+level matrix and reports the largest difference seen so far;
+``AZURE_CHANNEL_DEBUG=1`` reports the formal representation of each group
+(and why a group has none).
+
 Examples
 --------
 
