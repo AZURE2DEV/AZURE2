@@ -2174,7 +2174,7 @@ complete:
   12C+a 9-13-26 _timing/map_check. To check a file: is "Level N Channel M" (M = global channel-line row in an
   old GUI block) the engine's width_N_M? Separately (old behaviour, unchanged): the GUI keeps settings only
   for the parameters it lists as free, so script-made bounds on fixed parameters vanish on a GUI save.
-- 2026-10-21 (branch feature/electron-screening) -- ELECTRON SCREENING as an experimental effect. A
+- 2026-10-21 (on dev since 2026-10-21, ff356ab) -- ELECTRON SCREENING as an experimental effect. A
   <targetInt> line may carry `screening Ue_eV vary sigma_eV` (alone or with any other effect): the bare
   cross section of its segments, at every point AND every sub-point (so inside convolution / target
   integration), times f = exp(pi eta U_e / E_cm) of the entrance pair (cross sections only: phase shifts,
@@ -2204,7 +2204,7 @@ complete:
   FITS WITH EXTERNAL CAPTURE SEGFAULTED in dev 855409e..ce3c827 (installed ~/bin/AZURE2 888190f): the first
   MIGRAD evaluation / gradient died in EPoint::GetECAmplitudeWithShift (a working copy's points hold no stored
   amplitudes; the shifted-amplitude memo was sized from them and indexed past the end). Calculations (mode 1)
-  were fine. Fixed on branch fix/ec-shifted-memo; tests/ec_shift now runs a gradient-checked fit.
+  were fine. Fixed on dev 2dcb846 (2026-10-21); tests/ec_shift now runs a gradient-checked fit.
 - 2026-10-20 (on dev since 2026-10-21; 7Be+p/10-20-26_scattering_length) -- S-WAVE SCATTERING
   LENGTHS. Every calculation and fit writes `output/scatteringLengths.out` (and the run log): a0 of every
   channel spin of every particle pair at its threshold, a0 = -a [M/(x^2 K1^2) - 2 I1/(x^2 K1)],
