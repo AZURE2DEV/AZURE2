@@ -32,6 +32,11 @@
 #include "NuclearPotentialTab.h"
 #include "NuclearPotentialManager.h"
 #include "CNuc.h"
+#include <cmath>
+#include "PPair.h"
+#include "AChannel.h"
+#include "ALevel.h"
+#include "JGroup.h"
 #include "EData.h"
 #include "AZUREParams.h"
 
@@ -1861,6 +1866,50 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysical(const QStringList &par
  * @param oldLevelChannelCounts Map of energyIndex -> number of channels in that level (from the .sav file)
  * @return Vector of physical parameters in the same order as paramNames
  */
+QMap<QPair<int, int>, QString> AZURESetup::EngineParameterNamesOnDisk() {
+  QMap<QPair<int, int>, QString> names;
+  QList<LevelsData> levels = levelsTab->getLevelsModel()->getLevels();
+  QList<ChannelsData> channels = levelsTab->getChannelsModel()->getChannels();
+  try {
+    CNuc compound;
+    if (compound.Fill(config) == -1) return names;
+    // CNuc::FillMnParams numbering: energy_N over the levels group by group, width_N_M over the group's channels.
+    int energyIndex = 1;
+    for (int j = 1; j <= compound.NumJGroups(); j++) {
+      JGroup *group = compound.GetJGroup(j);
+      for (int la = 1; la <= group->NumLevels(); la++) {
+        ALevel *level = group->GetLevel(la);
+        int row = -1;
+        for (int r = 0; r < levels.size() && row < 0; r++) {
+          const LevelsData &l = levels.at(r);
+          if (l.isActive == 1 && l.jValue == group->GetJ() && l.piValue == group->GetPi() &&
+              std::fabs(l.energy - level->GetE()) <= 1.0e-9 * std::max(1.0, std::fabs(l.energy)))
+            row = r;
+        }
+        if (row >= 0) {
+          names.insert(qMakePair(row, -1), QString("energy_%1").arg(energyIndex));
+          for (int ch = 1; ch <= group->NumChannels(); ch++) {
+            AChannel *channel = group->GetChannel(ch);
+            const int pairKey = compound.GetPair(channel->GetPairNum())->GetPairKey();
+            for (int c = 0; c < channels.size(); c++) {
+              const ChannelsData &d = channels.at(c);
+              if (d.levelIndex == row && d.pairIndex + 1 == pairKey && d.lValue == channel->GetL() &&
+                  std::fabs(d.sValue - channel->GetS()) < 1.0e-6) {
+                names.insert(qMakePair(row, c), QString("width_%1_%2").arg(energyIndex).arg(ch));
+                break;
+              }
+            }
+          }
+        }
+        energyIndex++;
+      }
+    }
+  } catch (...) {
+    names.clear();
+  }
+  return names;
+}
+
 std::vector<double> AZURESetup::BatchConvertRWAToPhysicalWithOldStructure(
     const QStringList &paramNames, const std::vector<double> &rwaValues, const QMap<int, int> &oldLevelChannelCounts) {
   std::vector<double> results;

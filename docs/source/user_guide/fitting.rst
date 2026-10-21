@@ -22,7 +22,12 @@ Displays one row for each level-channel combination with the following columns:
    * - Column
      - Description
    * - **Name**
-     - Identifier for the parameter (level energy or channel width).
+     - Identifier for the parameter (level energy or channel width), numbered
+       as AZURE2 numbers its parameters: ``Level N`` is ``energy_N`` and
+       ``Level N Channel M`` is ``width_N_M`` of ``param.sav``, counting the
+       active levels in the order the project file lists them (by
+       :math:`J^\pi`, then energy) and the channels within each
+       :math:`J^\pi` group.
    * - **Value**
      - Current parameter value (editable).
    * - **Lower Limit**

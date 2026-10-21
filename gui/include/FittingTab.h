@@ -2,6 +2,8 @@
 #define FITTINGTAB_H
 
 #include <QWidget>
+#include <QMap>
+#include <QPair>
 #include <QSignalMapper>
 #include <QPointer>
 #include <QTextStream>
@@ -27,9 +29,13 @@ struct FittingParameter {
   QString category;  // "level", "abundance", "norm", "shift"
   int minuitIndex;   // Index in Minuit parameters
 
-  // For level parameters
+  // For level parameters: the model rows of the level and channel (the Levels tab's models)
   int levelIndex;
   int channelIndex;
+  // ... and the engine's numbering of them, energy_<engineLevel> / width_<engineLevel>_<engineChannel>
+  // (LevelsTab::engineNumbering of the order the project is written in); 0 = not a parameter of the engine.
+  int engineLevel = 0;
+  int engineChannel = 0;
 };
 
 QT_BEGIN_NAMESPACE
@@ -102,6 +108,8 @@ class FittingTab : public QWidget {
   void updateParameterTableError(const QString &paramName, double error);
   void updateParameterTableCheckbox(const QString &paramName, bool checked);
   void applyParameterSettings();
+  /// Rename the level entries just read into the engine numbering of the written order.
+  void translateLevelSettings(bool engineNumbered);
   QString findMatchingParameterKey(const FittingParameter &param, const QStringList &savKeys);
   double convertReducedToPhysical(double reducedWidth, int levelIndex, int channelIndex);
   double convertPhysicalToReduced(double physicalWidth, int levelIndex, int channelIndex);
@@ -129,6 +137,8 @@ class FittingTab : public QWidget {
 
   QList<FittingParameter> fittingParameters;
   QList<FittingParameter> savedParameterSettings;  // Settings from <parameterSettings> section
+  // loadSettings: the engine's names (energy_N, width_N_M) of the project file on disk, by model rows
+  QMap<QPair<int, int>, QString> diskEngineNames_;
 
   // Tab references for reading current GUI state
   LevelsTab *levelsTab_;
