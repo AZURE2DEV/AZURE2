@@ -27,9 +27,13 @@
 
 /*!
  * Precompute dS_ch/dE_level for every (jGroup, level, channel).  Mirrors the
- * bound/unbound branch of CNuc::CalcShiftFunctions.
+ * bound/unbound branch of CNuc::CalcShiftFunctions.  In the Park formalism
+ * CalcShiftFunctions (which the callers run first) already holds the same
+ * derivative on each level, from the same function at the same energy: it is
+ * read from there instead of being differentiated again.
  */
 vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure) {
+  const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   vector_matrix_r tab(compound->NumJGroups());
   for (int j = 1; j <= compound->NumJGroups(); j++) {
     JGroup *jg = compound->GetJGroup(j);
@@ -44,6 +48,10 @@ vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure) {
         PPair *pair = compound->GetPair(channel->GetPairNum());
         // The Brune boundary/shift block applies only to particle 'P' channels.
         if (pair->GetPType() != 0 || channel->GetRadType() != 'P') continue;
+        if (park && level->ShiftFunctionsValidAt(level->GetFitE())) {
+          tab[j - 1][la - 1][ch - 1] = level->GetShiftDerivative(ch);
+          continue;
+        }
         int l = channel->GetL();
         double levelEnergy = level->GetFitE();
         double resonanceEnergy = levelEnergy - (pair->GetSepE() + pair->GetExE());

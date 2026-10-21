@@ -2635,7 +2635,7 @@ void CNuc::SetMaxLValue(int maxL) {
  * functions at new level energies when the Brune parametrization is used.
  */
 
-void CNuc::CalcShiftFunctions(const Config &configure) {
+void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   for (int j = 1; j <= this->NumJGroups(); j++) {
     if (this->GetJGroup(j)->IsInRMatrix()) {
@@ -2649,33 +2649,43 @@ void CNuc::CalcShiftFunctions(const Config &configure) {
           // moved since the last call.  Park's J below depends on the widths
           // too and is always refreshed.
           const bool recompute = !theLevel->ShiftFunctionsValidAt(levelEnergy);
+          // d^2S/dE^2 (Park) enters only the gradient: the numerical second
+          // derivative costs five shift functions per channel, so a chi-squared
+          // alone leaves it out, and a later call that asks for it fills it in.
+          const bool second = park && secondDerivatives && !theLevel->ShiftSecondDerivativesValidAt(levelEnergy);
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
             AChannel *theChannel = theJGroup->GetChannel(ch);
             PPair *thePair = this->GetPair(theChannel->GetPairNum());
             if (thePair->GetPType() == 0) {
-              if (!recompute) continue;
+              if (!recompute && !second) continue;
               int lValue = theChannel->GetL();
+              const bool parkP = park && theChannel->GetRadType() == 'P';
               double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
               if (resonanceEnergy < 0.0) {
                 ShftFunc theShiftFunction(thePair);
-                theLevel->SetShiftFunction(ch, theShiftFunction(lValue, levelEnergy));
-                if (park && theChannel->GetRadType() == 'P')
-                  theLevel->SetShiftDerivatives(ch, theShiftFunction.EnergyDerivative(lValue, levelEnergy),
-                                                theShiftFunction.EnergySecondDerivative(lValue, levelEnergy));
+                if (recompute) {
+                  theLevel->SetShiftFunction(ch, theShiftFunction(lValue, levelEnergy));
+                  if (parkP) theLevel->SetShiftDerivative(ch, theShiftFunction.EnergyDerivative(lValue, levelEnergy));
+                }
+                if (second && parkP)
+                  theLevel->SetShiftSecondDerivative(ch, theShiftFunction.EnergySecondDerivative(lValue, levelEnergy));
               } else {
                 CoulFunc theCoulombFunction(thePair,
                                             !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
                 double radius = thePair->GetChRad();
-                theLevel->SetShiftFunction(ch, theCoulombFunction.PEShift(lValue, radius, resonanceEnergy));
-                if (park && theChannel->GetRadType() == 'P')
-                  theLevel->SetShiftDerivatives(ch, theCoulombFunction.PEShift_dE(lValue, radius, resonanceEnergy),
-                                                theCoulombFunction.PEShift_d2E(lValue, radius, resonanceEnergy));
+                if (recompute) {
+                  theLevel->SetShiftFunction(ch, theCoulombFunction.PEShift(lValue, radius, resonanceEnergy));
+                  if (parkP) theLevel->SetShiftDerivative(ch, theCoulombFunction.PEShift_dE(lValue, radius, resonanceEnergy));
+                }
+                if (second && parkP)
+                  theLevel->SetShiftSecondDerivative(ch, theCoulombFunction.PEShift_d2E(lValue, radius, resonanceEnergy));
               }
             } else {
               theLevel->SetShiftFunction(ch, theJGroup->GetLevel(1)->GetShiftFunction(1));
             }
           }
           if (recompute) theLevel->SetShiftFunctionsEnergy(levelEnergy);
+          if (second) theLevel->SetShiftSecondDerivativesEnergy(levelEnergy);
           if (park) {
             // Park (2021) Eq. (28): J = 1 - sum_c gamma_c^2 (dS_c/dE) at E_lambda.
             double parkNorm = 1.0;

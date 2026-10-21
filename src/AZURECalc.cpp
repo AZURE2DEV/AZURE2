@@ -369,7 +369,8 @@ double AZURECalc::operator()(const vector_r &p) const {
   localCompound->FillCompoundFromParams(p);
   localData->FillNormsFromParams(p);
   localData->FillEnergyShiftsFromParams(p, localData, localCompound, &configure());
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  // A chi-squared alone: no Park second derivatives (CNuc::CalcShiftFunctions).
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), false);
   const auto te1 = std::chrono::steady_clock::now();
 
   // Calculate all points in one parallel pass when not already inside a parallel
@@ -594,7 +595,7 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
   ld->FillEnergyShiftsFromParams(p, ld, lc, &configure());
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), false);
   const bool pre = PrecalculatePoints(lc, ld);
 
   double chiSquared = 0.0;
@@ -1825,7 +1826,7 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
   ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), false);
 
   residuals.clear();
   for (int i = 1; i <= ld->NumSegments(); i++) {

@@ -64,7 +64,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
     localCompound->FillCompoundFromParams(p);
     localData->FillNormsFromParams(p);
     localData->FillEnergyShiftsFromParams(p, localData, localCompound, &configure());
-    if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+    if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), false);
     // Park formalism: a level with J <= 0 has no R-matrix meaning -- outside the prior.
     if ((configure().paramMask & Config::USE_PARK_FORMALISM) && localCompound->ParkNormPenalty() > 0.0) {
       ReturnPooledCNuc(localCompound);
@@ -176,7 +176,7 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
   localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
 
   // Fill Compound Nucleus From Minuit Parameters
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), false);
   // Park formalism: observed widths beyond the J > 0 bound are outside the prior.
   if ((configure().paramMask & Config::USE_PARK_FORMALISM) && localCompound->ParkNormPenalty() > 0.0) {
     ReturnPooledCNuc(localCompound);

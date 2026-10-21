@@ -90,7 +90,8 @@ class ALevel {
   /// 1 unless the Park formalism is in use.
   double GetParkNorm() const;
   /// dS_c/dE and d^2S_c/dE^2 at the level energy, filled by
-  /// CNuc::CalcShiftFunctions in the Park formalism (0 otherwise).
+  /// CNuc::CalcShiftFunctions in the Park formalism (0 otherwise; the second
+  /// derivative only when it was asked for, see ShiftSecondDerivativesValidAt).
   double GetShiftDerivative(int) const;
   double GetShiftSecondDerivative(int) const;
 
@@ -122,6 +123,8 @@ class ALevel {
   void SetShiftFunction(int, double);
   void SetParkNorm(double);
   void SetShiftDerivatives(int, double, double);
+  void SetShiftDerivative(int, double);
+  void SetShiftSecondDerivative(int, double);
   /// Energy at which the shift functions (and their derivatives) were last
   /// computed, so CNuc::CalcShiftFunctions can skip a level that has not
   /// moved; NaN means "never".
@@ -134,6 +137,11 @@ class ALevel {
    */
   std::uint64_t Stamp() const { return stamp_; }
   void SetShiftFunctionsEnergy(double);
+  /// Energy at which the second derivatives d^2S_c/dE^2 were last computed
+  /// (Park; only the gradient needs them), as ShiftFunctionsValidAt.
+  bool ShiftSecondDerivativesValidAt(double) const;
+  void SetShiftSecondDerivativesEnergy(double);
+  /// Forget both energies: the next CNuc::CalcShiftFunctions recomputes.
   void InvalidateShiftFunctions();
   /// Mark the level as an external-capture final state of a pair, with its
   /// multipolarity mask.
@@ -154,6 +162,7 @@ class ALevel {
   double transform_e_;
   double park_norm_ = 1.0;
   double shift_cache_energy_ = std::numeric_limits<double>::quiet_NaN();
+  double shift_d2_energy_ = std::numeric_limits<double>::quiet_NaN();
   std::vector<bool> channelfixed_;
   vector_r gammas_;
   vector_r fitgammas_;

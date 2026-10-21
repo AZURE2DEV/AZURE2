@@ -151,7 +151,9 @@ class CNuc {
   void CalcCaptureAnalyzingPower(int, int, int);
   /// Recompute the shift functions at the current level energies. Needed every
   /// iteration under the Brune parameterization, where they move with the fit.
-  void CalcShiftFunctions(const Config &);
+  /// In the Park formalism also dS/dE and J, and, unless `secondDerivatives`
+  /// is false (a chi-squared alone needs none), d^2S/dE^2 for the gradient.
+  void CalcShiftFunctions(const Config &, bool secondDerivatives = true);
   /// Forget every level's cached shift functions (after a change of the
   /// nuclear potential, which moves them at fixed energy).
   void InvalidateShiftFunctions();
