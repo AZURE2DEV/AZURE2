@@ -2,6 +2,8 @@
 #define AZURESETUP_H
 
 #include <QMainWindow>
+#include <QMap>
+#include <QPair>
 
 #include "PairsTab.h"
 #include "LevelsTab.h"
@@ -71,8 +73,17 @@ class AZURESetup : public QMainWindow {
   std::vector<double> BatchConvertRWAToPhysicalWithOldStructure(
       const QStringList &paramNames, const std::vector<double> &rwaValues, const QMap<int, int> &oldLevelChannelCounts);
 
+  /*!
+   * The engine's parameter names (energy_N, width_N_M) of the project file on disk, keyed by the Levels tab's
+   * model rows (level row, channel row or -1 for the energy).  Matched by identity -- J, parity, nucleus and
+   * energy of a level; pair, l and s of a channel -- so a .sav written by a run of that file lands on the right
+   * levels whatever the order of the file and of the GUI's rows.  Empty if the file cannot be read.
+   */
+  QMap<QPair<int, int>, QString> EngineParameterNamesOnDisk();
+
   // Getter for FittingTab (for MCMCTab access)
   FittingTab *getFittingTab() const { return fittingTab; }
+  LevelsTab *getLevelsTab() const { return levelsTab; }
 
  public slots:
   void SaveAndRun();

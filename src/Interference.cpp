@@ -30,7 +30,7 @@ Interference::Interference(int mGroupNum1, int mGroupNum2, double z1z2Coeff, dou
  * Returns the interference type.
  */
 
-std::string Interference::GetInterferenceType() const {
+const std::string &Interference::GetInterferenceType() const {
   return intertype_;
 }
 

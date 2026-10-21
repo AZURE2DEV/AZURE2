@@ -4,6 +4,7 @@
 #include "CovarianceBand.h"
 #include "EData.h"
 #include "ECAmplitudeCache.h"
+#include "ECTable.h"
 #include "ExtrapLine.h"
 #include "SegLine.h"
 #include "AdaptiveIntegrationGrid.h"
@@ -342,7 +343,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
 
   if (this->NumSegments() > 0) {
     if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
-    this->MapData();
+    this->MapData(theCNuc);
   }
 
   return 0;
@@ -576,7 +577,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
 
   if (this->NumSegments() > 0) {
     if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
-    this->MapData();
+    this->MapData(theCNuc);
   }
 
   return 0;
@@ -2303,6 +2304,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
     }
   }
   ecUsePrevious_ = usePrevious;
+  ECTable::ResetCounters();
 
   if (usePrevious)
     in.open(configure.integralsfile.c_str());
@@ -2436,6 +2438,9 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
     out.flush();
     out.close();
   }
+  if (!usePrevious && configure.useECTable && !(configure.paramMask & Config::USE_API) &&
+      ECTable::Lookups() + ECTable::DirectCalls() > 0)
+    configure.outStream << "\t" << ECTable::Report() << std::endl;
   // Remember where the regular-segment integrals end so the component-segment
   // integrals (appended to the same file) can be resumed from here on read.
   if (in.is_open()) {
@@ -2835,12 +2840,13 @@ ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranc
 
 namespace {
 
-// True when the calculation of `b` can be taken from that of `a`: both are
-// points of the SAME segment at the same energy, so they share the energy
-// shift, normalization, target effect and -- checked here, sub-point by
-// sub-point -- the integration grid.  Only the angle (and anything else
-// that enters through GenMatrixFunc::CalculateCrossSection on the point
-// itself) may differ.
+// True when the calculation of `b` can be taken from that of `a`: both are at
+// the same energy, with the same entrance and exit pair, so they share the
+// T-matrix of the point and -- checked here, sub-point by sub-point -- of the
+// integration grid.  Only what enters through GenMatrixFunc::
+// CalculateCrossSection on the point itself (angle, Coulomb amplitude,
+// observable type) may differ.  Whether `a` and `b` may sit in different
+// segments is the caller's question (ShiftsAgree).
 bool SharesCalculation(EPoint &a, EPoint &b) {
   if (a.GetEntranceKey() != b.GetEntranceKey() || a.GetExitKey() != b.GetExitKey()) return false;
   if (a.GetOriginalEnergy() != b.GetOriginalEnergy() || a.GetLabEnergy() != b.GetLabEnergy() ||
@@ -2850,6 +2856,7 @@ bool SharesCalculation(EPoint &a, EPoint &b) {
       a.GetTargetBlendWeight() != b.GetTargetBlendWeight())
     return false;
   if (a.IsAnalyzingPower() != b.IsAnalyzingPower()) return false;
+  if (a.IsAngularDist() != b.IsAngularDist()) return false;
   if (a.NumSubPoints() != b.NumSubPoints()) return false;
   std::vector<EPoint> &sa = a.GetSubPoints();
   std::vector<EPoint> &sb = b.GetSubPoints();
@@ -2863,33 +2870,90 @@ bool SharesCalculation(EPoint &a, EPoint &b) {
   return true;
 }
 
+// The energy shift of a segment as a function of the fit parameters: which
+// free parameters move it, and its current fixed form.  Two segments whose
+// shifts agree here are at the same energy for EVERY value of the free shift
+// parameters, not only the current one: a finite-difference step on a shift
+// (AZURECalc's segment-local shift derivatives) moves both together, so a
+// mapping between them stays valid without being rebuilt.
+struct ShiftForm {
+  int constOwner = -1;  // segment position of the free constant shift, -1 if fixed
+  bool sqrtFree = false;
+  int fnOwner = -1;     // segment position of the shift function with a free parameter, -1 if none
+  double constShift = 0.0, sqrtShift = 0.0;
+  bool hasFn = false;
+  std::string fnExpression;
+  std::vector<double> fnValues;
+};
+
+ShiftForm ShiftFormOf(std::vector<ESegment> &segments, int pos) {
+  ESegment &seg = segments[pos];
+  ShiftForm f;
+  const int lead = seg.GetShiftLeaderPos() >= 0 ? seg.GetShiftLeaderPos() : pos;
+  if (segments[lead].IsVaryEnergyShift()) f.constOwner = lead;
+  f.sqrtFree = seg.IsVaryEnergyShiftSqrt();
+  f.constShift = seg.GetEnergyShift();
+  f.sqrtShift = seg.GetEnergyShiftSqrt();
+  f.hasFn = seg.HasShiftFn();
+  if (f.hasFn) {
+    f.fnExpression = seg.GetShiftFnExpression();
+    f.fnValues = seg.GetShiftFnValues();
+    const int src = seg.GetShiftFnSourcePos();
+    if (src >= 0)
+      for (int j = 0; j < segments[src].NumShiftFnParams(); j++)
+        if (segments[src].IsVaryShiftFn(j)) f.fnOwner = src;
+  }
+  return f;
+}
+
+// A free sqrt(E) coefficient is the segment's own parameter, so a segment with
+// one agrees with no other segment.
+bool ShiftsAgree(const ShiftForm &a, const ShiftForm &b) {
+  if (a.sqrtFree || b.sqrtFree) return false;
+  return a.constOwner == b.constOwner && a.fnOwner == b.fnOwner && a.constShift == b.constShift &&
+         a.sqrtShift == b.sqrtShift && a.hasFn == b.hasFn && a.fnExpression == b.fnExpression &&
+         a.fnValues == b.fnValues;
+}
+
 }  // namespace
 
 /*!
- * Maps points onto other points of the SAME segment at the same energy, so the
- * energy-dependent part of the calculation (the T-matrix of the point and of
- * each target-effect sub-point) is done once per energy; each mapped point
- * then only forms its own observable (angle, Coulomb amplitude, A_y) from it
- * and integrates its own target effect (EPoint::Calculate).
+ * Maps points onto other points at the same energy, so the energy-dependent
+ * part of the calculation (the energy-dependent values, and the level matrix
+ * and T-matrix of the point and of each target-effect sub-point) is done once
+ * per energy; each mapped point then only forms its own observable (angle,
+ * Coulomb amplitude, A_y) from it and integrates its own target effect
+ * (EPoint::Calculate).
  *
- * Mapping across segments, which AZURE2 used to do, stays off: since
- * per-segment energy shifts and their gradients exist, two segments at the
- * same nominal energy are not at the same energy in general.  Within one
- * segment a shift is a function of the original energy alone, so points with
- * the same original energy stay together whatever the shift.  The host is
- * always the lowest-index point of a group: every loop that calculates a
- * segment walks it in index order, so the host is calculated before the
- * points that read from it (ESegment::CalculateTheoreticalCrossSection,
- * ESegment::UpdatePointEnergiesWithShift).  The analytic-gradient loops
- * (AZUREGrad.cpp), which run the points of a segment in parallel, switch
- * mapping off on their threads (ScopedPointMappingOff) and calculate every
- * point on its own.
+ * Points are mapped within a segment and across segments.  Two points share a
+ * calculation (SharesCalculation) when they have the same entrance and exit
+ * pair, the same original, lab and c.m. energies, the same target effect and
+ * sub-point grid, and the same kind of observable (cross section or A_y,
+ * angular-distribution coefficients or not).  Across segments their energy
+ * shifts must also agree as functions of the fit parameters (ShiftsAgree):
+ * the same free parameters and the same fixed values.  Then the two segments
+ * are at the same energy whatever a fit or a finite-difference step does to
+ * the shifts.  Segments whose shifts merely coincide at the current values are
+ * mapped too, but only while they coincide: every change of a shift or of a
+ * sub-point grid rebuilds the mapping (EData::FillEnergyShiftsFromParams).
+ * Normalizations play no part: they scale the data, not the model.
  *
- * Segments with components (SUM/RATIO, total capture) are not mapped.
- * AZURE_NO_POINT_MAPPING=1 in the environment switches mapping off entirely.
+ * The host of a group is its first point in data order (segment, then point
+ * index): every loop that calculates the whole data set walks it in that order,
+ * so a host is calculated before the points that read from it
+ * (ESegment::CalculateTheoreticalCrossSection; ESegment::
+ * UpdatePointEnergiesWithShift for the energy-dependent values, within a
+ * segment).  The parallel loops (AZURECalc::PrecalculatePoints) hand out hosts
+ * only, each of which calculates its mapped points.  The analytic gradient
+ * (AZUREGrad.cpp) works on the same groups: one forward solve per group.
+ *
+ * Segments with components (SUM/RATIO, total capture) are not mapped; a
+ * shifted segment without a particle exit (external capture) only within itself.
+ * AZURE_NO_POINT_MAPPING=1 in the environment switches mapping off entirely;
+ * AZURE_NO_CROSS_SEGMENT_MAPPING=1 keeps it within each segment only.
  */
 
-void EData::MapData() {
+void EData::MapData(CNuc *theCNuc) {
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
       point->ClearMapping();
@@ -2898,47 +2962,82 @@ void EData::MapData() {
   }
   const char *off = std::getenv("AZURE_NO_POINT_MAPPING");
   if (off && *off && std::string(off) != "0") return;
+  const char *crossOff = std::getenv("AZURE_NO_CROSS_SEGMENT_MAPPING");
+  const bool crossSegment = !(crossOff && *crossOff && std::string(crossOff) != "0");
 
-  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-    if (segment->HasComponents() || segment->IsTotalCapture()) continue;
-    std::vector<EPoint> &points = segment->GetPoints();
-    const int n = (int)points.size();
-    if (n < 2) continue;
-    const int segmentNum = (int)(segment - GetSegments().begin()) + 1;
-
-    // Group by energy; a stable sort keeps index order inside a group, so the
-    // first point of a group is its lowest-index point.
-    std::vector<int> order(n);
-    for (int i = 0; i < n; i++) order[i] = i;
-    std::stable_sort(order.begin(), order.end(), [&points](int x, int y) {
-      if (points[x].GetOriginalEnergy() != points[y].GetOriginalEnergy())
-        return points[x].GetOriginalEnergy() < points[y].GetOriginalEnergy();
-      return points[x].GetCMEnergy() < points[y].GetCMEnergy();
-    });
-
-    std::vector<int> hosts;
-    int start = 0;
-    while (start < n) {
-      int end = start + 1;
-      while (end < n && points[order[end]].GetOriginalEnergy() == points[order[start]].GetOriginalEnergy() &&
-             points[order[end]].GetCMEnergy() == points[order[start]].GetCMEnergy())
-        end++;
-      hosts.clear();
-      for (int k = start; k < end; k++) {
-        EPoint &p = points[order[k]];
-        bool mapped = false;
-        for (int h : hosts) {
-          if (SharesCalculation(points[h], p)) {
-            p.SetMap(segmentNum, h + 1);
-            points[h].AddLocalMappedPoint(&p);
-            mapped = true;
-            break;
-          }
-        }
-        if (!mapped) hosts.push_back(order[k]);
-      }
-      start = end;
+  std::vector<ESegment> &segments = GetSegments();
+  const int numSegments = (int)segments.size();
+  std::vector<ShiftForm> shiftForms(numSegments);
+  for (int s = 0; s < numSegments; s++) shiftForms[s] = ShiftFormOf(segments, s);
+  // External-capture amplitudes at a shifted energy may be interpolated from
+  // the energies of the segment's own points (ECAmplitudeCache), so a shifted
+  // capture segment is mapped within itself only.  Without the compound
+  // nucleus at hand, every shifted segment is.
+  std::vector<char> ownOnly(numSegments, 0);
+  for (int s = 0; s < numSegments; s++) {
+    const ShiftForm &f = shiftForms[s];
+    const bool shifted = f.constOwner >= 0 || f.sqrtFree || f.fnOwner >= 0 || f.constShift != 0.0 ||
+                         f.sqrtShift != 0.0 || f.hasFn;
+    if (!shifted) continue;
+    if (!theCNuc) {
+      ownOnly[s] = 1;
+      continue;
     }
+    const int exitPair = theCNuc->GetPairNumFromKey(segments[s].GetExitKey());
+    if (exitPair < 1 || theCNuc->GetPair(exitPair)->GetPType() != 0) ownOnly[s] = 1;
+  }
+
+  // Every point of every mappable segment, in data order.
+  struct Ref { int seg, point; };
+  std::vector<Ref> refs;
+  for (int s = 0; s < numSegments; s++) {
+    if (segments[s].HasComponents() || segments[s].IsTotalCapture()) continue;
+    for (int p = 0; p < segments[s].NumPoints(); p++) refs.push_back({s, p});
+  }
+  auto pointOf = [&segments](const Ref &r) -> EPoint & { return segments[r.seg].GetPoints()[r.point]; };
+
+  // Group by pair and energy; a stable sort keeps data order inside a group,
+  // so the first point of a group is its first point in data order.
+  std::stable_sort(refs.begin(), refs.end(), [&](const Ref &x, const Ref &y) {
+    EPoint &a = pointOf(x), &b = pointOf(y);
+    if (a.GetEntranceKey() != b.GetEntranceKey()) return a.GetEntranceKey() < b.GetEntranceKey();
+    if (a.GetExitKey() != b.GetExitKey()) return a.GetExitKey() < b.GetExitKey();
+    if (a.GetOriginalEnergy() != b.GetOriginalEnergy()) return a.GetOriginalEnergy() < b.GetOriginalEnergy();
+    return a.GetCMEnergy() < b.GetCMEnergy();
+  });
+
+  std::vector<Ref> hosts;
+  const int n = (int)refs.size();
+  int start = 0;
+  while (start < n) {
+    EPoint &first = pointOf(refs[start]);
+    int end = start + 1;
+    while (end < n) {
+      EPoint &e = pointOf(refs[end]);
+      if (e.GetEntranceKey() != first.GetEntranceKey() || e.GetExitKey() != first.GetExitKey() ||
+          e.GetOriginalEnergy() != first.GetOriginalEnergy() || e.GetCMEnergy() != first.GetCMEnergy())
+        break;
+      end++;
+    }
+    hosts.clear();
+    for (int k = start; k < end; k++) {
+      EPoint &p = pointOf(refs[k]);
+      bool mapped = false;
+      for (const Ref &h : hosts) {
+        if (h.seg != refs[k].seg && !(crossSegment && !ownOnly[h.seg] && !ownOnly[refs[k].seg] &&
+                                      ShiftsAgree(shiftForms[h.seg], shiftForms[refs[k].seg])))
+          continue;
+        EPoint &hp = pointOf(h);
+        if (SharesCalculation(hp, p)) {
+          p.SetMap(h.seg + 1, h.point + 1);
+          hp.AddLocalMappedPoint(&p);
+          mapped = true;
+          break;
+        }
+      }
+      if (!mapped) hosts.push_back(refs[k]);
+    }
+    start = end;
   }
 }
 
@@ -3524,7 +3623,7 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
 
     // Critical fix: Rebuild energy-based mapping system after energy shifts
     if (anyEnergyShifted) {
-      data->MapData();
+      data->MapData(theCNuc);
     }
 
     return;
@@ -3579,7 +3678,7 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
 
   // Critical fix: Rebuild energy-based mapping system after energy shifts
   if (anyEnergyShifted) {
-    this->MapData();
+    this->MapData(theCNuc);
   }
 }
 

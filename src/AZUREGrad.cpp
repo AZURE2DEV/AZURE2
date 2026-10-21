@@ -18,6 +18,8 @@
 #include "ShftFunc.h"
 #include <cmath>
 #include <algorithm>
+#include <string>
+#include <unordered_map>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -153,10 +155,10 @@ void GradAccum::Add(const GradAccum &o) {
 void GradAccum::Scatter(const ParamIndexMap &map, vector_r &gradFull) const {
   for (int j = 0; j < (int)e.size(); j++) {
     for (int la = 0; la < (int)e[j].size(); la++) {
-      int ei = map.EIndex(j + 1, la + 1);
+      int ei = map.EIndexFlat(j + 1, la + 1);
       if (ei >= 0 && ei < (int)gradFull.size()) gradFull[ei] += e[j][la];
       for (int ch = 0; ch < (int)gamma[j][la].size(); ch++) {
-        int gi = map.GammaIndex(j + 1, la + 1, ch + 1);
+        int gi = map.GammaIndexFlat(j + 1, la + 1, ch + 1);
         if (gi >= 0 && gi < (int)gradFull.size()) gradFull[gi] += gamma[j][la][ch];
       }
     }
@@ -240,15 +242,21 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
   int i = 0;
 
   // --- R-matrix parameters: mirror FillCompoundFromParams exactly. ---
+  map.eFlat_.assign(compound->NumJGroups(), {});
+  map.gammaFlat_.assign(compound->NumJGroups(), {});
   for (int j = 1; j <= compound->NumJGroups(); j++) {
     JGroup *jGroup = compound->GetJGroup(j);
+    map.eFlat_[j - 1].assign(jGroup->NumLevels(), -1);
+    map.gammaFlat_[j - 1].assign(jGroup->NumLevels(), std::vector<int>(jGroup->NumChannels(), -1));
     for (int la = 1; la <= jGroup->NumLevels(); la++) {
       // Energy parameter.
+      map.eFlat_[j - 1][la - 1] = i;
       map.eIndex_[{j, la}] = i;
       map.desc_.push_back(ParamDesc{ParamKind::LevelEnergy, j, la, -1, -1, false});
       i++;
       // One gamma per channel.
       for (int ch = 1; ch <= jGroup->NumChannels(); ch++) {
+        map.gammaFlat_[j - 1][la - 1][ch - 1] = i;
         map.gammaIndex_[{j, la, ch}] = i;
         map.desc_.push_back(ParamDesc{ParamKind::Gamma, j, la, ch, -1, false});
         i++;
@@ -622,6 +630,292 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
   }
 }
 
+// ---------------------------------------------------------------------------
+// Energy groups.  Point mapping (EData::MapData) collects the points that share
+// one energy-dependent calculation -- one level matrix and T-matrix -- within a
+// segment and across segments.  The gradient works on the same groups: one
+// forward solve per group, each member's observable from the shared T-matrix,
+// and the back-propagation through the level matrix once per group.
+// ---------------------------------------------------------------------------
+
+struct GroupMember {
+  ESegment *seg;
+  int segNum;    // 1-based
+  int pointIdx;  // 0-based
+  EPoint *pt;
+};
+
+struct GradItem {
+  std::vector<GroupMember> members;  // members[0] is the host
+  bool grouped;                      // false: every member on its own (GradOnePoint)
+};
+
+// A point whose gradient can be taken from a shared T-matrix: no components
+// (SUM/RATIO) and no sub-point target effect.  The others keep GradOnePoint.
+bool Groupable(ESegment *seg, EPoint *pt) {
+  if (seg->HasComponents()) return false;
+  if (pt->IsTargetEffect()) {
+    TargetEffect *te = pt->GetParentData()->GetTargetEffect(pt->GetTargetEffectNum());
+    if (te && te->IsSubPointEffect()) return false;
+  }
+  return true;
+}
+
+bool GroupedGradientOff() {
+  static const bool off = [] {
+    const char *e = std::getenv("AZURE_NO_GROUPED_GRADIENT");
+    return e && *e && std::string(e) != "0";
+  }();
+  return off;
+}
+
+// The work items of one gradient pass: each groupable host with the groupable
+// points mapped onto it, and every other point on its own.  Largest first, so
+// a big group does not end up last on one thread.
+std::vector<GradItem> BuildGradItems(EData *data) {
+  const bool off = GroupedGradientOff();
+  std::unordered_map<const EPoint *, std::pair<int, int>> where;
+  for (int s = 1; s <= data->NumSegments(); s++) {
+    ESegment *seg = data->GetSegment(s);
+    if (!seg) continue;
+    for (int p = 1; p <= seg->NumPoints(); p++) where[seg->GetPoint(p)] = {s, p - 1};
+  }
+  auto hostOf = [&](EPoint *pt) -> EPoint * {
+    if (!pt->IsMapped()) return nullptr;
+    EnergyMap m = pt->GetMap();
+    if (m.segment < 1 || m.segment > data->NumSegments()) return nullptr;
+    ESegment *hs = data->GetSegment(m.segment);
+    if (m.point < 1 || m.point > hs->NumPoints()) return nullptr;
+    EPoint *h = hs->GetPoint(m.point);
+    if (!Groupable(hs, h) || h->GetCMEnergy() != pt->GetCMEnergy()) return nullptr;
+    for (int k = 1; k <= h->NumLocalMappedPoints(); k++)
+      if (h->GetLocalMappedPoint(k) == pt) return h;
+    return nullptr;
+  };
+  std::vector<GradItem> items;
+  for (int s = 1; s <= data->NumSegments(); s++) {
+    ESegment *seg = data->GetSegment(s);
+    if (!seg) continue;
+    for (int p = 1; p <= seg->NumPoints(); p++) {
+      EPoint *pt = seg->GetPoint(p);
+      if (!pt) continue;
+      const bool g = !off && Groupable(seg, pt);
+      if (g && hostOf(pt)) continue;  // its host's item calculates it
+      GradItem it;
+      it.grouped = g;
+      it.members.push_back({seg, s, p - 1, pt});
+      if (g)
+        for (int k = 1; k <= pt->NumLocalMappedPoints(); k++) {
+          EPoint *m = pt->GetLocalMappedPoint(k);
+          auto w = where.find(m);
+          if (w == where.end()) continue;
+          ESegment *ms = data->GetSegment(w->second.first);
+          if (Groupable(ms, m) && hostOf(m) == pt) it.members.push_back({ms, w->second.first, w->second.second, m});
+        }
+      items.push_back(std::move(it));
+    }
+  }
+  std::stable_sort(items.begin(), items.end(),
+                   [](const GradItem &a, const GradItem &b) { return a.members.size() > b.members.size(); });
+  return items;
+}
+
+void AddCotangent(TMatrixCotangent &dst, const TMatrixCotangent &src) {
+  if (dst.t.empty() && dst.ec.empty()) {
+    dst = src;
+    return;
+  }
+  for (size_t k = 0; k < src.t.size() && k < dst.t.size(); k++)
+    for (size_t m = 0; m < src.t[k].size() && m < dst.t[k].size(); m++) dst.t[k][m] += src.t[k][m];
+  for (size_t k = 0; k < src.ec.size() && k < dst.ec.size(); k++)
+    for (size_t m = 0; m < src.ec[k].size() && m < dst.ec[k].size(); m++) dst.ec[k][m] += src.ec[k][m];
+}
+
+// The forward solve of a group, at its host's energy, and each member's model
+// from the shared T-matrix (the plain-point forward of GradOnePoint).
+// `rawModel` is the member's unweighted observable, `weight` its natural-target
+// abundance (1 otherwise).
+void GroupForward(AMatrixFunc &amf, const GradItem &it, CNuc *compound, std::vector<double> &rawModel,
+                  std::vector<double> &weight) {
+  EPoint *host = it.members[0].pt;
+  amf.ClearMatrices();
+  amf.FillMatrices(host);
+  amf.InvertMatrices();
+  amf.CalculateTMatrix(host);
+  const size_t g = it.members.size();
+  rawModel.assign(g, 0.0);
+  weight.assign(g, 1.0);
+  for (size_t q = 0; q < g; q++) {
+    const GroupMember &m = it.members[q];
+    amf.GenMatrixFunc::CalculateCrossSection(m.pt);
+    const int comp = m.seg->GetCrossSectionComponent();
+    rawModel[q] = (comp == 1) ? m.pt->GetFitE1CrossSection() : (comp == 2) ? m.pt->GetFitE2CrossSection()
+                                                                          : m.pt->GetFitCrossSection();
+    if (m.seg->IsNatural()) {
+      const int nucleus = compound->GetPair(compound->GetPairNumFromKey(m.seg->GetEntranceKey()))->GetNucleus();
+      weight[q] = compound->GetAbundance(m.seg->GetNaturalSample(), nucleus);
+    }
+  }
+}
+
+int AbundanceOrdinalOf(CNuc *compound, ESegment *seg) {
+  const int nucleus = compound->GetPair(compound->GetPairNumFromKey(seg->GetEntranceKey()))->GetNucleus();
+  return compound->AbundanceOrdinal(seg->GetNaturalSample(), nucleus);
+}
+
+// The scalar-objective adjoint of a group: the members' T-matrix cotangents are
+// summed (the back-propagation is linear in them) and back-propagated once.
+bool GroupGradient(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vector_matrix_r *shiftDeriv,
+                   const FitBarFn &fitBarFn, GradAccum &accum) {
+  std::vector<double> rawModel, weight;
+  GroupForward(amf, it, compound, rawModel, weight);
+  TMatrixCotangent sum, bar;
+  bool any = false;
+  for (size_t q = 0; q < it.members.size(); q++) {
+    const GroupMember &m = it.members[q];
+    const double model = weight[q] * rawModel[q];
+    const double fitBar = fitBarFn(m.seg, m.segNum, m.pointIdx, model);
+    if (fitBar == 0.0) continue;
+    if (m.seg->IsNatural()) accum.AddAbundance(AbundanceOrdinalOf(compound, m.seg), fitBar * rawModel[q]);
+    if (!amf.PointTBar(m.pt, fitBar * weight[q], bar, m.seg->GetCrossSectionComponent())) return false;
+    AddCotangent(sum, bar);
+    any = true;
+  }
+  if (any) amf.TBarAdjoint(it.members[0].pt, sum, accum, shiftDeriv);
+  return true;
+}
+
+// d(member model)/d(E, gamma) for every member of a group, as rows.  For each
+// member `rowFn(q, model, accum)` receives the member's combined model and its
+// gradient (scaled by fitBarOf(q, model)) in `accum`.
+//
+// The derivatives of the level matrix and T-matrix are taken once per group:
+// each member's row is a combination, with its own angle-dependent
+// coefficients, of the derivatives of the group's bilinear forms g_c^T A g_c'
+// (AMatrixFunc::BilinearAdjoint with the cotangents 1 and i, the real and
+// imaginary parts of the derivative).  A member then costs one contraction
+// with that basis instead of a back-propagation through the level matrix.
+// Where the basis would cost more than the members (few members, many channel
+// pairs) or the decay has external capture, each member is back-propagated on
+// its own -- still from the one shared forward solve.
+template <class FitBarOf, class RowFn>
+bool GroupRows(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vector_matrix_r *shiftDeriv,
+               FitBarOf fitBarOf, RowFn rowFn, GradAccum &accum, GradAccum &scratch) {
+  std::vector<double> rawModel, weight;
+  GroupForward(amf, it, compound, rawModel, weight);
+  EPoint *host = it.members[0].pt;
+  const size_t g = it.members.size();
+  std::vector<double> model(g), fitBar(g);
+  std::vector<TMatrixCotangent> bars(g);
+  std::vector<std::vector<std::vector<BilinearTerm>>> terms(g);
+  bool bilinear = true;
+  for (size_t q = 0; q < g; q++) {
+    const GroupMember &m = it.members[q];
+    model[q] = weight[q] * rawModel[q];
+    fitBar[q] = fitBarOf(q, model[q]);
+    if (fitBar[q] == 0.0) continue;
+    if (!amf.PointTBar(m.pt, fitBar[q] * weight[q], bars[q], m.seg->GetCrossSectionComponent())) return false;
+    if (bilinear && !amf.CollectBilinearTerms(host, bars[q], terms[q])) bilinear = false;
+  }
+
+  // Cost of the two routes, in units of level-matrix elements.
+  struct Key { int j, ch, chp; };
+  std::vector<Key> keys;
+  std::vector<std::vector<int>> keyOf(g);
+  double costMembers = 0.0, costBasis = 0.0;
+  if (bilinear) {
+    for (size_t q = 0; q < g; q++) {
+      for (int j = 1; j <= (int)terms[q].size(); j++) {
+        if (terms[q][j - 1].empty()) continue;
+        JGroup *jg = compound->GetJGroup(j);
+        const double n2 = (double)jg->NumLevels() * jg->NumLevels();
+        costMembers += n2 * (terms[q][j - 1].size() + jg->NumChannels());
+        for (const BilinearTerm &t : terms[q][j - 1]) {
+          int k = 0;
+          while (k < (int)keys.size() && !(keys[k].j == j && keys[k].ch == t.ch && keys[k].chp == t.chp)) k++;
+          if (k == (int)keys.size()) {
+            keys.push_back({j, t.ch, t.chp});
+            costBasis += 2.0 * n2 * (1.0 + jg->NumChannels());
+          }
+          keyOf[q].push_back(k);
+          costBasis += 2.0 * jg->NumLevels() * (1.0 + jg->NumChannels());
+        }
+      }
+    }
+  }
+  const bool useBasis = bilinear && costBasis < costMembers;
+
+  if (!useBasis) {
+    for (size_t q = 0; q < g; q++) {
+      const GroupMember &m = it.members[q];
+      accum.Zero();
+      if (fitBar[q] != 0.0) {
+        if (m.seg->IsNatural()) accum.AddAbundance(AbundanceOrdinalOf(compound, m.seg), fitBar[q] * rawModel[q]);
+        amf.TBarAdjoint(host, bars[q], accum, shiftDeriv);
+      }
+      rowFn(q, model[q], accum);
+    }
+    return true;
+  }
+
+  // The basis: for each channel pair, the J-group block (E then gamma, level by
+  // level) of the adjoint with cotangent 1 and with cotangent i.
+  std::vector<std::vector<double>> basisRe(keys.size()), basisIm(keys.size());
+  for (size_t k = 0; k < keys.size(); k++) {
+    const int j = keys[k].j;
+    JGroup *jg = compound->GetJGroup(j);
+    const int n = jg->NumLevels(), nch = jg->NumChannels();
+    for (int part = 0; part < 2; part++) {
+      std::vector<double> &block = part ? basisIm[k] : basisRe[k];
+      for (int la = 0; la < n; la++) {
+        scratch.e[j - 1][la] = 0.0;
+        std::fill(scratch.gamma[j - 1][la].begin(), scratch.gamma[j - 1][la].end(), 0.0);
+      }
+      std::vector<BilinearTerm> one{{keys[k].ch, keys[k].chp, part ? complex(0.0, 1.0) : complex(1.0, 0.0)}};
+      amf.BilinearAdjoint(host, j, one, scratch, shiftDeriv);
+      block.assign((size_t)n * (1 + nch), 0.0);
+      for (int la = 0; la < n; la++) {
+        block[la] = scratch.e[j - 1][la];
+        for (int d = 0; d < nch; d++) block[n + (size_t)la * nch + d] = scratch.gamma[j - 1][la][d];
+      }
+    }
+  }
+  for (size_t q = 0; q < g; q++) {
+    const GroupMember &m = it.members[q];
+    accum.Zero();
+    if (fitBar[q] != 0.0) {
+      if (m.seg->IsNatural()) accum.AddAbundance(AbundanceOrdinalOf(compound, m.seg), fitBar[q] * rawModel[q]);
+      size_t t = 0;
+      for (int j = 1; j <= (int)terms[q].size(); j++)
+        for (const BilinearTerm &term : terms[q][j - 1]) {
+          const int k = keyOf[q][t++];
+          const double a = std::real(term.beta), b = std::imag(term.beta);
+          const std::vector<double> &re = basisRe[k], &im = basisIm[k];
+          JGroup *jg = compound->GetJGroup(j);
+          const int n = jg->NumLevels(), nch = jg->NumChannels();
+          for (int la = 0; la < n; la++) {
+            accum.e[j - 1][la] += a * re[la] + b * im[la];
+            double *gr = &accum.gamma[j - 1][la][0];
+            const double *r0 = &re[n + (size_t)la * nch], *i0 = &im[n + (size_t)la * nch];
+            for (int d = 0; d < nch; d++) gr[d] += a * r0[d] + b * i0[d];
+          }
+        }
+    }
+    rowFn(q, model[q], accum);
+  }
+  return true;
+}
+
+void ReportBail(const char *what, ESegment *segment, int i) {
+  if (!std::getenv("AZURE_GRAD_DEBUG") || !segment) return;
+  EPoint *pt = segment->GetPoint(1);
+  std::cerr << "[grad] " << what << " adjoint bailed on segment " << i << " (key " << segment->GetSegmentKey()
+            << ", entrance " << segment->GetEntranceKey() << ", exit " << segment->GetExitKey()
+            << ", components " << segment->HasComponents() << ", angular-dist " << (pt && pt->IsAngularDist())
+            << ", A_y " << (pt && pt->IsAnalyzingPower()) << ", target effect " << (pt && pt->IsTargetEffect())
+            << ")" << std::endl;
+}
+
 }  // namespace
 
 bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
@@ -629,13 +923,12 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
                               const vector_matrix_r *shiftDeriv,
                               const FitBarFn &fitBarFn,
                               GradAccum &accum) {
-  // Each point's forward+adjoint solve is independent and only reads the shared
-  // `compound`, exactly like the forward cross-section loops in EData.cpp, so we
-  // parallelize each segment's point loop the same way.  The one shared write is
-  // the per-point accumulation into `accum`, so each thread accumulates into its
-  // OWN GradAccum and they are summed once at the end (a reduction).  The norm
-  // gradient is accumulated through `fitBarFn`'s side effect, which the callers
-  // guard with `#pragma omp atomic`.
+  // The work items (energy groups and single points, BuildGradItems) are
+  // independent and only read the shared `compound`, so they run in parallel.
+  // The one shared write is the accumulation into `accum`, so each thread
+  // accumulates into its OWN GradAccum and they are summed once at the end (a
+  // reduction).  The norm gradient is accumulated through `fitBarFn`'s side
+  // effect, which the callers guard with `#pragma omp atomic`.
 #ifdef _OPENMP
   const int nThreads = std::max(1, omp_get_max_threads());
 #else
@@ -644,57 +937,128 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
   std::vector<GradAccum> threadAccum(nThreads);
   for (GradAccum &ta : threadAccum) ta.Init(compound);
 
-  bool ok = true;
-  for (int i = 1; i <= data->NumSegments() && ok; i++) {
-    ESegment *segment = data->GetSegment(i);
-    if (!segment) continue;
-    const int nPoints = segment->NumPoints();
-    bool bail = false;
-#pragma omp parallel for shared(bail)
-    for (int pointIdx = 0; pointIdx < nPoints; pointIdx++) {
+  const std::vector<GradItem> items = BuildGradItems(data);
+  bool bail = false;
+  int bailSeg = 0;
+#pragma omp parallel shared(bail, bailSeg)
+  {
+    AMatrixFunc amf(compound, config);
+#pragma omp for schedule(dynamic, 1)
+    for (int k = 0; k < (int)items.size(); k++) {
       if (bail) continue;
 #ifdef _OPENMP
       GradAccum &local = threadAccum[omp_get_thread_num()];
 #else
       GradAccum &local = threadAccum[0];
 #endif
-      double model;
-      if (!GradOnePoint(segment, data, i, pointIdx, compound, config, shiftDeriv,
-                        fitBarFn, local, model)) {
-#pragma omp critical
-        bail = true;
-      }
-    }
-    if (bail) {
-      if (std::getenv("AZURE_GRAD_DEBUG")) {
-        static std::atomic<bool> told{false};
-        if (!told.exchange(true)) {
-          bool inactiveLevel = false;
-          for (int j = 1; j <= compound->NumJGroups(); j++) {
-            JGroup *jg = compound->GetJGroup(j);
-            if (!jg->IsInRMatrix()) continue;
-            for (int la = 1; la <= jg->NumLevels(); la++)
-              if (!jg->GetLevel(la)->IsInRMatrix()) inactiveLevel = true;
+      const GradItem &it = items[k];
+      bool ok = true;
+      if (it.grouped && it.members.size() > 1) {
+        ok = GroupGradient(amf, it, compound, shiftDeriv, fitBarFn, local);
+      } else {
+        for (const GroupMember &m : it.members) {
+          double model;
+          if (!GradOnePoint(m.seg, data, m.segNum, m.pointIdx, compound, config, shiftDeriv, fitBarFn, local, model)) {
+            ok = false;
+            break;
           }
-          EPoint *pt = segment->GetPoint(1);
-          std::cerr << "[grad] adjoint bailed on segment " << i << " (entrance " << segment->GetEntranceKey()
-                    << ", exit " << segment->GetExitKey() << ", components " << segment->HasComponents()
-                    << ", angular-dist " << (pt && pt->IsAngularDist()) << ", A_y " << (pt && pt->IsAnalyzingPower())
-                    << ", target effect " << (pt && pt->IsTargetEffect()) << "); a level outside the R matrix in an "
-                    << "R-matrix J group: " << (inactiveLevel ? "YES" : "no") << std::endl;
         }
       }
-      ok = false;
-      break;
+      if (!ok) {
+#pragma omp critical
+        {
+          if (!bail) bailSeg = it.members[0].segNum;
+          bail = true;
+        }
+      }
     }
   }
-
-  // Reduce the per-thread partials only on success; on bail the caller ignores
-  // `accum` and falls back to finite differences, so leave it untouched.
-  if (ok)
-    for (const GradAccum &ta : threadAccum) accum.Add(ta);
-  return ok;
+  if (bail) {
+    if (std::getenv("AZURE_GRAD_DEBUG")) {
+      static std::atomic<bool> told{false};
+      if (!told.exchange(true)) {
+        bool inactiveLevel = false;
+        for (int j = 1; j <= compound->NumJGroups(); j++) {
+          JGroup *jg = compound->GetJGroup(j);
+          if (!jg->IsInRMatrix()) continue;
+          for (int la = 1; la <= jg->NumLevels(); la++)
+            if (!jg->GetLevel(la)->IsInRMatrix()) inactiveLevel = true;
+        }
+        ESegment *segment = data->GetSegment(bailSeg);
+        EPoint *pt = segment ? segment->GetPoint(1) : nullptr;
+        std::cerr << "[grad] adjoint bailed on segment " << bailSeg << " (entrance "
+                  << (segment ? segment->GetEntranceKey() : 0) << ", exit " << (segment ? segment->GetExitKey() : 0)
+                  << ", components " << (segment && segment->HasComponents()) << ", angular-dist "
+                  << (pt && pt->IsAngularDist()) << ", A_y " << (pt && pt->IsAnalyzingPower()) << ", target effect "
+                  << (pt && pt->IsTargetEffect()) << "); a level outside the R matrix in an "
+                  << "R-matrix J group: " << (inactiveLevel ? "YES" : "no") << std::endl;
+      }
+    }
+    // On bail the caller ignores `accum` and falls back to finite differences,
+    // so leave it untouched.
+    return false;
+  }
+  for (const GradAccum &ta : threadAccum) accum.Add(ta);
+  return true;
 }
+
+namespace {
+
+// Rows of d(model)/d(theta) for every point, through the energy groups:
+// writeRow(member, model, accum) receives each point's combined model and
+// fitBarOf(member) times its gradient.  Shared by the residual Jacobian and the
+// model gradients.  Returns false, with `bailSeg` set, if a point is outside
+// the analytic path.
+template <class FitBarOf, class WriteRow>
+bool ForEachRow(CNuc *compound, EData *data, const Config &config, const vector_matrix_r *shiftDeriv,
+                FitBarOf fitBarOf, WriteRow writeRow, int &bailSeg, int &numGroups) {
+  const std::vector<GradItem> items = BuildGradItems(data);
+  numGroups = 0;
+  for (const GradItem &it : items)
+    if (it.grouped && it.members.size() > 1) numGroups++;
+  bool bail = false;
+  bailSeg = 0;
+#pragma omp parallel shared(bail, bailSeg)
+  {
+    GradAccum accum, scratch;  // per-thread, reused across its rows
+    accum.Init(compound);
+    scratch.Init(compound);
+    AMatrixFunc amf(compound, config);
+#pragma omp for schedule(dynamic, 1)
+    for (int k = 0; k < (int)items.size(); k++) {
+      if (bail) continue;
+      const GradItem &it = items[k];
+      bool ok = true;
+      if (it.grouped && it.members.size() > 1) {
+        auto fb = [&](size_t q, double) { return fitBarOf(it.members[q]); };
+        auto row = [&](size_t q, double model, GradAccum &acc) { writeRow(it.members[q], model, acc); };
+        ok = GroupRows(amf, it, compound, shiftDeriv, fb, row, accum, scratch);
+      } else {
+        for (const GroupMember &m : it.members) {
+          const double fitBar = fitBarOf(m);
+          FitBarFn oneFitBar = [fitBar](ESegment *, int, int, double) -> double { return fitBar; };
+          accum.Zero();
+          double model = 0.0;
+          if (!GradOnePoint(m.seg, data, m.segNum, m.pointIdx, compound, config, shiftDeriv, oneFitBar, accum, model)) {
+            ok = false;
+            break;
+          }
+          writeRow(m, model, accum);
+        }
+      }
+      if (!ok) {
+#pragma omp critical
+        {
+          if (!bail) bailSeg = it.members[0].segNum;
+          bail = true;
+        }
+      }
+    }
+  }
+  return !bail;
+}
+
+}  // namespace
 
 bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
                              const ParamIndexMap &pmap,
@@ -707,10 +1071,12 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
 
   // Each (non-null) point is one independent row, so pre-assign every point a
   // global row index (mirroring the serial null-skip) and pre-size the outputs.
-  // Rows can then be filled in parallel with no contention -- each thread owns
-  // its own accumulator and scatter buffer and writes only its own rows.
+  // Rows can then be filled in parallel with no contention -- each work item
+  // writes only the rows of its own points.
   const int nSeg = data->NumSegments();
   std::vector<std::vector<int>> rowOf(nSeg + 1);
+  std::vector<double> norm(nSeg + 1, 0.0);
+  std::vector<int> normFull(nSeg + 1, -1);
   int totalRows = 0;
   for (int i = 1; i <= nSeg; i++) {
     ESegment *segment = data->GetSegment(i);
@@ -719,97 +1085,57 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
     rowOf[i].assign(nPoints, -1);
     for (int pointIdx = 0; pointIdx < nPoints; pointIdx++)
       if (segment->GetPoint(pointIdx + 1)) rowOf[i][pointIdx] = totalRows++;
+    norm[i] = segment->GetNorm();
+    // A norm-group follower's rows depend on its leader's norm parameter.
+    const int normOwner = data->NormOwner(i);
+    normFull[i] = data->GetSegment(normOwner)->IsVaryNorm() ? pmap.NormIndex(normOwner) : -1;
   }
   residuals.assign(totalRows, 0.0);
   jacobian.assign((size_t)totalRows * nCols, 0.0);
 
-  bool ok = true;
   const bool timing = std::getenv("AZURE_GRAD_TIMING") != nullptr;
   const long long comb0 = g_teCombinerNs.load(), adj0 = g_teAdjointNs.load();
-  std::vector<std::pair<double, int>> segMs;
-  for (int i = 1; i <= nSeg && ok; i++) {
-    ESegment *segment = data->GetSegment(i);
-    if (!segment) continue;
-    const auto ts0 = std::chrono::steady_clock::now();
-    const double norm = segment->GetNorm();
-    // A norm-group follower's rows depend on its leader's norm parameter.
-    const int normOwner = data->NormOwner(i);
-    const int normFull = data->GetSegment(normOwner)->IsVaryNorm() ? pmap.NormIndex(normOwner) : -1;
-    const int nPoints = segment->NumPoints();
-    bool bail = false;
+  const auto ts0 = std::chrono::steady_clock::now();
 
-#pragma omp parallel
-    {
-      GradAccum accum;  // per-thread, reused across its rows
-      accum.Init(compound);
-      vector_r fullRow(pmap.NumFull(), 0.0);
-#pragma omp for
-      for (int pointIdx = 0; pointIdx < nPoints; pointIdx++) {
-        if (bail) continue;
-        const int row = rowOf[i][pointIdx];
-        if (row < 0) continue;
-        EPoint *pt = segment->GetPoint(pointIdx + 1);
-        double cmErr = pt->GetCMCrossSectionError();
-        double dataval = pt->GetCMCrossSection();
-
-        // Residual r = (model - data*n)/(cmErr*n);  d r / d model = 1/(cmErr*n).
-        // PointAdjoint with this cotangent yields d r / d(E,gamma) directly.
-        double denom = cmErr * norm;
-        FitBarFn resFitBar = [denom](ESegment *, int, int, double) -> double {
-          return (denom != 0.0) ? 1.0 / denom : 0.0;
-        };
-
-        accum.Zero();
-        double model = 0.0;
-        if (!GradOnePoint(segment, data, i, pointIdx, compound, config, shiftDeriv,
-                          resFitBar, accum, model)) {
-#pragma omp critical
-          bail = true;
-          continue;
-        }
-
-        residuals[row] = (denom != 0.0) ? (model - dataval * norm) / denom : 0.0;
-
-        // Scatter this row's d r / d(E,gamma) into the packed columns.
-        std::fill(fullRow.begin(), fullRow.end(), 0.0);
-        accum.Scatter(pmap, fullRow);
-        // Norm column:  d r / d n = -model/(cmErr*n^2).
-        if (normFull >= 0 && cmErr != 0.0 && norm != 0.0)
-          fullRow[normFull] += -model / (cmErr * norm * norm);
-
-        const size_t base = (size_t)row * nCols;
-        for (int f = 0; f < pmap.NumFull(); f++) {
-          int packed = pmap.FullToPacked(f);
-          if (packed >= 0 && packed < nCols) jacobian[base + packed] = fullRow[f];
-        }
-      }
+  // Residual r = (model - data*n)/(cmErr*n);  d r / d model = 1/(cmErr*n), the
+  // cotangent that yields d r / d(E,gamma) directly.
+  auto fitBarOf = [&](const GroupMember &m) {
+    const double denom = m.pt->GetCMCrossSectionError() * norm[m.segNum];
+    return (denom != 0.0) ? 1.0 / denom : 0.0;
+  };
+  static thread_local vector_r fullRow;
+  auto writeRow = [&](const GroupMember &m, double model, const GradAccum &accum) {
+    const int row = rowOf[m.segNum][m.pointIdx];
+    if (row < 0) return;
+    const double n = norm[m.segNum];
+    const double cmErr = m.pt->GetCMCrossSectionError();
+    const double denom = cmErr * n;
+    residuals[row] = (denom != 0.0) ? (model - m.pt->GetCMCrossSection() * n) / denom : 0.0;
+    // Scatter this row's d r / d(E,gamma) into the packed columns.
+    fullRow.assign(pmap.NumFull(), 0.0);
+    accum.Scatter(pmap, fullRow);
+    // Norm column:  d r / d n = -model/(cmErr*n^2).
+    if (normFull[m.segNum] >= 0 && cmErr != 0.0 && n != 0.0) fullRow[normFull[m.segNum]] += -model / (cmErr * n * n);
+    const size_t base = (size_t)row * nCols;
+    for (int f = 0; f < pmap.NumFull(); f++) {
+      int packed = pmap.FullToPacked(f);
+      if (packed >= 0 && packed < nCols) jacobian[base + packed] = fullRow[f];
     }
-    if (bail) {
-      ok = false;
-      if (std::getenv("AZURE_GRAD_DEBUG")) {
-        EPoint *pt = segment->GetPoint(1);
-        std::cerr << "[grad] Jacobian/gradient adjoint bailed on segment " << i << " (key " << segment->GetSegmentKey()
-                  << ", entrance " << segment->GetEntranceKey() << ", exit " << segment->GetExitKey()
-                  << ", components " << segment->HasComponents() << ", angular-dist " << (pt && pt->IsAngularDist())
-                  << ", A_y " << (pt && pt->IsAnalyzingPower()) << ", target effect " << (pt && pt->IsTargetEffect())
-                  << ")" << std::endl;
-      }
-    }
-    if (timing)
-      segMs.push_back({std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - ts0).count(),
-                       segment->GetSegmentKey()});
-  }
+  };
+  int bailSeg = 0, numGroups = 0;
+  const bool ok = ForEachRow(compound, data, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups);
+  if (!ok) ReportBail("Jacobian/gradient", data->GetSegment(bailSeg), bailSeg);
+
   if (timing) {
     static std::atomic<int> calls{0};
     const int c = ++calls;
-    if (c <= 3 || c % 50 == 0) {
-      std::sort(segMs.begin(), segMs.end(), [](const std::pair<double, int> &a, const std::pair<double, int> &b) { return a.first > b.first; });
-      std::cerr << "[grad-timing] Jacobian rows " << c << ": target-effect combiner weights "
-                << (g_teCombinerNs.load() - comb0) / 1.0e6 << " ms, sub-point adjoints " << (g_teAdjointNs.load() - adj0) / 1.0e6
-                << " ms (thread-summed); slowest segments (key:ms)";
-      for (size_t k = 0; k < segMs.size() && k < 6; k++) std::cerr << " " << segMs[k].second << ":" << (long)segMs[k].first;
-      std::cerr << std::endl;
-    }
+    if (c <= 3 || c % 50 == 0)
+      std::cerr << "[grad-timing] Jacobian rows " << c << ": " << totalRows << " rows, " << numGroups
+                << " energy groups, "
+                << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - ts0).count()
+                << " ms; target-effect combiner weights " << (g_teCombinerNs.load() - comb0) / 1.0e6
+                << " ms, sub-point adjoints " << (g_teAdjointNs.load() - adj0) / 1.0e6 << " ms (thread-summed)"
+                << std::endl;
   }
 
   if (!ok) {
@@ -830,72 +1156,32 @@ bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
   // Pre-create every point's (zero-initialized) packed row so the parallel loop
   // only writes into slots that already exist -- std::map insertion is not
   // thread-safe, so all keys must be present before the parallel region.
-  std::vector<std::vector<EPoint *>> ptsOf(nSeg + 1);
   for (int i = 1; i <= nSeg; i++) {
     ESegment *segment = data->GetSegment(i);
     if (!segment) continue;
-    const int nPoints = segment->NumPoints();
-    ptsOf[i].assign(nPoints, nullptr);
-    for (int pointIdx = 0; pointIdx < nPoints; pointIdx++) {
+    for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
       EPoint *pt = segment->GetPoint(pointIdx + 1);
-      ptsOf[i][pointIdx] = pt;
       if (pt) gradByPoint[pt] = vector_r(nCols, 0.0);
     }
   }
 
-  bool ok = true;
-  for (int i = 1; i <= nSeg && ok; i++) {
-    ESegment *segment = data->GetSegment(i);
-    if (!segment) continue;
-    const int nPoints = segment->NumPoints();
-    bool bail = false;
-
-#pragma omp parallel
-    {
-      GradAccum accum;  // per-thread, reused across its rows
-      accum.Init(compound);
-      vector_r fullRow(pmap.NumFull(), 0.0);
-#pragma omp for
-      for (int pointIdx = 0; pointIdx < nPoints; pointIdx++) {
-        if (bail) continue;
-        EPoint *pt = ptsOf[i][pointIdx];
-        if (!pt) continue;
-
-        // fitBar = d(model)/d(model) = 1 gives d(model)/d(E,gamma) directly.
-        FitBarFn oneFitBar = [](ESegment *, int, int, double) -> double { return 1.0; };
-
-        accum.Zero();
-        double model = 0.0;
-        if (!GradOnePoint(segment, data, i, pointIdx, compound, config, shiftDeriv,
-                          oneFitBar, accum, model)) {
-#pragma omp critical
-          bail = true;
-          continue;
-        }
-
-        std::fill(fullRow.begin(), fullRow.end(), 0.0);
-        accum.Scatter(pmap, fullRow);
-
-        vector_r &row = gradByPoint[pt];  // key pre-inserted above
-        for (int f = 0; f < pmap.NumFull(); f++) {
-          int packed = pmap.FullToPacked(f);
-          if (packed >= 0 && packed < nCols) row[packed] = fullRow[f];
-        }
-      }
+  // fitBar = d(model)/d(model) = 1 gives d(model)/d(E,gamma) directly.
+  auto fitBarOf = [](const GroupMember &) { return 1.0; };
+  static thread_local vector_r fullRow;
+  auto writeRow = [&](const GroupMember &m, double, const GradAccum &accum) {
+    fullRow.assign(pmap.NumFull(), 0.0);
+    accum.Scatter(pmap, fullRow);
+    vector_r &row = gradByPoint[m.pt];  // key pre-inserted above
+    for (int f = 0; f < pmap.NumFull(); f++) {
+      int packed = pmap.FullToPacked(f);
+      if (packed >= 0 && packed < nCols) row[packed] = fullRow[f];
     }
-    if (bail) {
-      ok = false;
-      if (std::getenv("AZURE_GRAD_DEBUG")) {
-        EPoint *pt = segment->GetPoint(1);
-        std::cerr << "[grad] Jacobian/gradient adjoint bailed on segment " << i << " (key " << segment->GetSegmentKey()
-                  << ", entrance " << segment->GetEntranceKey() << ", exit " << segment->GetExitKey()
-                  << ", components " << segment->HasComponents() << ", angular-dist " << (pt && pt->IsAngularDist())
-                  << ", A_y " << (pt && pt->IsAnalyzingPower()) << ", target effect " << (pt && pt->IsTargetEffect())
-                  << ")" << std::endl;
-      }
-    }
+  };
+  int bailSeg = 0, numGroups = 0;
+  const bool ok = ForEachRow(compound, data, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups);
+  if (!ok) {
+    ReportBail("Jacobian/gradient", data->GetSegment(bailSeg), bailSeg);
+    gradByPoint.clear();
   }
-
-  if (!ok) gradByPoint.clear();
   return ok;
 }

@@ -198,6 +198,12 @@ amplitudes and its signature must match the calculation at hand; otherwise a
 signature -- written by an older AZURE2, or copied without its ``.sig`` -- is
 recomputed once, with a warning, and gets one.
 
+With the external-capture energy tables (the default, see
+:doc:`../developer/ec_table`) computing the integrals afresh costs seconds even
+with resolution or target integration, so reusing the file saves little.  The
+file stores six significant digits, so a reused file moves segment
+:math:`\chi^2` values by up to about 1e-5 relative to a fresh calculation.
+
 intEC.extrap
 ^^^^^^^^^^^^
 

@@ -98,7 +98,7 @@ class azure2:
                  ignore_externals=True, transform=True,
                  use_long_wavelength=True, use_gsl_coul=False, use_rmc=False,
                  use_park=False, use_coulomb_table=True, coulomb_table=None,
-                 replace_grids=True):
+                 replace_grids=True, use_ec_table=True):
         """Build the R-matrix engine for ``file`` in this interpreter.
 
         Parameters
@@ -126,6 +126,11 @@ class azure2:
             again on every evaluation, for the current levels and energy
             shifts (the default; CLI ``--no-grid-replacement``).  ``False``
             keeps the grids placed from the file's levels.
+        use_ec_table : external-capture integrals from per-term energy tables,
+            computed at nodes and interpolated (the default; CLI
+            ``--no-ec-table``).  Shifted points are then evaluated at their
+            shifted energies.  ``False`` integrates at every energy and
+            interpolates shifted amplitudes between the segment's points.
         use_rmc : use the R-matrix-with-channels (RMC) formalism instead of
             Brune; mutually exclusive with ``use_brune`` (Brune wins).
         use_park : use Park's level-dependent boundary conditions (Phys. Rev.
@@ -157,7 +162,8 @@ class azure2:
             use_long_wavelength=bool(use_long_wavelength),
             use_gsl_coul=bool(use_gsl_coul), use_rmc=bool(use_rmc),
             use_park=bool(use_park), use_coulomb_table=bool(use_coulomb_table),
-            coulomb_table=str(coulomb_table or ""), replace_grids=bool(replace_grids))
+            coulomb_table=str(coulomb_table or ""), replace_grids=bool(replace_grids),
+            use_ec_table=bool(use_ec_table))
 
         opts = _azure2.RuntimeOptions()
         for name, value in self.options.items():

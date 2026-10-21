@@ -98,8 +98,8 @@ bool g_deferCheckExit = false;
 // lines guarded by IsVaryEnergyShift), so a finite difference of this over the
 // segment's shift equals a finite difference of the whole chi^2 -- *provided*
 // no other segment's contribution depends on this shift.  That holds when the
-// segment is self-contained: no components and no cross-segment energy mapping
-// (see the eligibility guard in Gradient()).  All other segments then produce
+// segment is self-contained: no components, and no point mapping onto segments
+// the shift does not move (see the eligibility guard in Gradient()).  All other segments then produce
 // identical +h/-h contributions that cancel in the central difference.
 double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config,
                         EData *ld) {
@@ -184,6 +184,42 @@ ShiftParamTarget ShiftTargets(EData *ld, const ParamDesc &d) {
       t.segs.push_back(s);
   }
   return t;
+}
+
+// For each segment (1-based), the other segments its points share a calculation
+// with through point mapping across segments (EData::MapData): those whose
+// points are mapped onto its points, and those its points are mapped onto.
+std::vector<std::vector<int>> CrossSegmentPartners(EData *ld) {
+  std::vector<std::vector<int>> partners(ld->NumSegments() + 1);
+  for (int s = 1; s <= ld->NumSegments(); s++) {
+    ESegment *seg = ld->GetSegment(s);
+    if (!seg) continue;
+    for (int pid = 1; pid <= seg->NumPoints(); pid++) {
+      EPoint *pt = seg->GetPoint(pid);
+      if (!pt || !pt->IsMapped()) continue;
+      const int h = pt->GetMap().segment;
+      if (h == s || h < 1 || h > ld->NumSegments()) continue;
+      partners[s].push_back(h);
+      partners[h].push_back(s);
+    }
+  }
+  for (std::vector<int> &v : partners) {
+    std::sort(v.begin(), v.end());
+    v.erase(std::unique(v.begin(), v.end()), v.end());
+  }
+  return partners;
+}
+
+// True when no point of `segs` shares a calculation with a point outside them.
+// A shift parameter that moves exactly `segs` can then be differenced on their
+// rows alone: EData::MapData maps across segments only where the shifts agree
+// as functions of the parameters, so mapped partners move together, and the
+// host -- first in data order -- is calculated first (`segs` is ascending).
+bool MappingConfined(const std::vector<std::vector<int>> &partners, const std::vector<int> &segs) {
+  for (int s : segs)
+    for (int q : partners[s])
+      if (std::find(segs.begin(), segs.end(), q) == segs.end()) return false;
+  return true;
 }
 
 }  // namespace
@@ -755,27 +791,14 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   const int nMn = fp.GetMinuitParams().Params().size();
 
   // Segment-local energy-shift gradient is exact only when a shift's effect is
-  // confined to its own segment's data term.  A dataset that maps points across
-  // segments breaks that confinement, so detect any such mapping once and, if
-  // present, keep every shift on the (correct) full-dataset finite difference.
-  // Mapping within a segment (the only kind EData::MapData makes) keeps it:
-  // host and mapped point move together, and SegmentLocalChi2 walks the
-  // segment in index order, host first.
-  // Likewise, nuisance penalties handled by the limits manager can couple a
-  // shift to the global chi^2, so disable the local path when one is active.
-  bool datasetHasMapping = false;
-  for (int s = 1; s <= ld->NumSegments() && !datasetHasMapping; s++) {
-    ESegment *seg = ld->GetSegment(s);
-    if (!seg) continue;
-    for (int pid = 0; pid < seg->NumPoints(); pid++) {
-      EPoint *pt = seg->GetPoint(pid + 1);
-      if (pt && pt->IsMapped() && pt->GetMap().segment != s) {
-        datasetHasMapping = true;
-        break;
-      }
-    }
-  }
-  const bool localShiftOk = !datasetHasMapping && !HasNuisanceParameters();
+  // confined to its own segments' data term.  Point mapping across segments
+  // (EData::MapData) keeps it so as long as the mapped partners of those
+  // segments are among them (MappingConfined): partners move together, and
+  // groupChi re-energises them all before it calculates them, host first.
+  // Nuisance penalties handled by the limits manager can couple a shift to the
+  // global chi^2, so disable the local path when one is active.
+  const std::vector<std::vector<int>> partners = CrossSegmentPartners(ld);
+  const bool localShiftOk = !HasNuisanceParameters();
 
   // --- Finite differences only for what is left: non-fixed energy shifts, and
   //     (if the analytic path bailed) the energy/gamma and norm blocks too. ---
@@ -795,15 +818,15 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         localShiftOk && pmap.Desc(idx).segment >= 1) {
       const int s = pmap.Desc(idx).segment;
       const ShiftParamTarget target = ShiftTargets(ld, pmap.Desc(idx));
-      if (target.Local(ld)) {
+      if (target.Local(ld) && MappingConfined(partners, target.segs)) {
         auto groupChi = [&](double v) {
           target.Set(ld, v);
+          // Every segment is moved before any is calculated: a host calculates
+          // the observables of points mapped onto it from other segments, with
+          // their energy-dependent values (EPoint::Calculate).
+          for (int m : target.segs) ld->GetSegment(m)->UpdatePointEnergiesWithShift(lc, &configure());
           double c = 0.0;
-          for (int m : target.segs) {
-            ESegment *seg = ld->GetSegment(m);
-            seg->UpdatePointEnergiesWithShift(lc, &configure());
-            c += SegmentLocalChi2(seg, lc, configure(), ld);
-          }
+          for (int m : target.segs) c += SegmentLocalChi2(ld->GetSegment(m), lc, configure(), ld);
           return c;
         };
         const double d0 = target.Get(ld);
@@ -947,7 +970,11 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
           if (nAll[k]) std::cerr << " " << kindName[k] << " " << nBadJ[k] << "/" << nAll[k];
       }
       std::cerr << std::endl;
-      for (int r = 0; r < (int)rows.size() && r < 60; r++) {
+      // Full precision, so two runs (e.g. AZURE_NO_GROUPED_GRADIENT) can be
+      // compared value by value; AZURE_GRAD_CHECK_ROWS lists more than 60.
+      const std::streamsize prec = std::cerr.precision(15);
+      const int maxRows = std::getenv("AZURE_GRAD_CHECK_ROWS") ? std::atoi(std::getenv("AZURE_GRAD_CHECK_ROWS")) : 60;
+      for (int r = 0; r < (int)rows.size() && r < maxRows; r++) {
         const Row &w = rows[r];
         std::cerr << "[grad-check] idx " << w.idx << " " << kindName[(int)w.d.kind] << " J" << w.d.jGroup << " L" << w.d.level
                   << " ch" << w.d.channel << " seg" << w.d.segment << "  analytic " << w.g << "  fd " << w.fd
@@ -955,6 +982,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         if (haveJ) std::cerr << "  jacobian " << w.gj << "  relJ " << w.scoreJ;
         std::cerr << std::endl;
       }
+      std::cerr.precision(prec);
       if (std::string(gc) == "exit" && !g_deferCheckExit) std::exit(0);
     }
   }
@@ -1167,13 +1195,14 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     int nc = 0;
 
     // A shift of a self-contained segment (no components, not a total-capture
-    // sum, no cross-segment energy mapping) moves only that segment's rows, so
+    // sum, no point mapping onto other segments) moves only that segment's rows, so
     // its column is differenced on those rows alone; every other row of the
     // full re-evaluation below would difference to exactly zero.  The full
     // path re-solved the WHOLE Jacobian, adjoints included, twice per shift:
     // with 55 free shifts on 11B+a one gradient took over an hour.  Same
     // criterion as the segment-local shift gradient in Gradient().
-    bool datasetHasMapping = false;
+    bool rowLayoutUnknown = false;
+    const std::vector<std::vector<int>> partners = CrossSegmentPartners(ld);
     std::vector<int> rowStart(ld->NumSegments() + 2, 0);
     {
       int row = 0;
@@ -1185,14 +1214,10 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
           EPoint *pt = seg->GetPoint(pid + 1);
           if (!pt) continue;
           row++;
-          // Mapping within a segment (the only kind EData::MapData makes)
-          // keeps a shift's effect inside its segment; only mapping across
-          // segments would not.
-          if (pt->IsMapped() && pt->GetMap().segment != s) datasetHasMapping = true;
         }
       }
       rowStart[ld->NumSegments() + 1] = row;
-      if ((size_t)row != nRes) datasetHasMapping = true;  // row layout not understood: use the full path
+      if ((size_t)row != nRes) rowLayoutUnknown = true;  // row layout not understood: use the full path
     }
     // Residuals of one segment's rows, in row order, exactly as
     // ComputeResidualJacobian forms them.
@@ -1242,9 +1267,12 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
       const int packed = pmap.FullToPacked(f);
       if (packed < 0 || packed >= nCols) continue;
       const int sNum = pmap.Desc(f).segment;
-      if (!datasetHasMapping && sNum >= 1 && sNum <= ld->NumSegments()) {
+      if (!rowLayoutUnknown && sNum >= 1 && sNum <= ld->NumSegments()) {
         const ShiftParamTarget target = ShiftTargets(ld, pmap.Desc(f));
-        if (target.Local(ld)) {
+        // Mapping across segments keeps the column local while it stays among
+        // the parameter's segments (MappingConfined): they are all moved, then
+        // all evaluated, below.
+        if (target.Local(ld) && MappingConfined(partners, target.segs)) {
           localCols.push_back({f, packed, target});
           continue;
         }

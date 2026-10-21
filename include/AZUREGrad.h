@@ -106,9 +106,15 @@ class ParamIndexMap {
   int EnergyShiftSqrtOffset() const { return energyShiftSqrtOffset_; }
   int EnergyShiftFnOffset() const { return energyShiftFnOffset_; }
 
+  /// Full index of E_{j,la} / gamma_{j,la,ch} (1-based) without a map lookup, or -1.
+  int EIndexFlat(int jGroup, int level) const { return eFlat_[jGroup - 1][level - 1]; }
+  int GammaIndexFlat(int jGroup, int level, int channel) const { return gammaFlat_[jGroup - 1][level - 1][channel - 1]; }
+
   friend ParamIndexMap BuildParamIndexMap(CNuc *, EData *, const std::vector<bool> &);
 
  private:
+  std::vector<std::vector<int>> eFlat_;                  ///< [j-1][la-1] -> full idx
+  std::vector<std::vector<std::vector<int>>> gammaFlat_; ///< [j-1][la-1][ch-1] -> full idx
   std::vector<ParamDesc> desc_;                          ///< per full index
   std::map<std::pair<int, int>, int> eIndex_;            ///< (j,la) -> full idx
   std::map<std::tuple<int, int, int>, int> gammaIndex_;  ///< (j,la,ch) -> full idx
