@@ -169,6 +169,16 @@ struct GradAccum {
   bool formal = false;
   /// A formal cotangent was added since the last Zero().
   bool formalUsed = false;
+  /*!
+   * Deferred level-matrix cotangents of a scalar pass (`formal` set), per
+   * J-group, n x n row-major: lmK = sum Re(Mbar(E)), lmN = sum E Re(Mbar(E))
+   * over the energies whose level matrix took the level-space adjoint.  The
+   * energy-independent part of the structural adjoint (K and N) is then taken
+   * once per pass (AMatrixFunc::ResolveFormalCotangents); only the channel
+   * kernel G Lambda(E) G^T is differentiated at each energy.  Allocated on use.
+   */
+  std::vector<std::vector<double>> lmK, lmN;
+  std::vector<char> lmUsed;
 
   /// Allocate (and zero) the accumulators to match the compound's dimensions.
   void Init(CNuc *compound);

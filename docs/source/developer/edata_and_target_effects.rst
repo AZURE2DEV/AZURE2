@@ -499,7 +499,14 @@ is taken in the formal representation of the level matrix instead, in
 scalar gradient sums the formal cotangents over all points and resolves them
 into the level parameters once per pass (``ResolveFormalCotangents``), while
 the Jacobian rows keep ``LevelMatrixAdjoint`` with the solves :math:`A g_c` of
-the Woodbury form.
+the Woodbury form.  Where the scalar gradient does take the level-matrix
+adjoint (the level route, the pencil route), it defers it too: the level
+matrix is :math:`K - EN - G\Lambda(E)G^T` with :math:`K, N` independent of the
+energy, so only :math:`\sum_E \mathrm{Re}\,\bar M(E)` and
+:math:`\sum_E E\,\mathrm{Re}\,\bar M(E)` are accumulated (``GradAccum::lmK``,
+``lmN``) and contracted with the structural derivatives of :math:`K, N` once
+per pass; the kernel term is differentiated at each energy from the rank-one
+terms of :math:`\bar M`, in :math:`O(n c)` each.
 Points with components or sub-point target effects are still differentiated
 one by one (``GradOnePoint``), with the same back-propagation.  The gradient
 equals the point-by-point one to rounding (about :math:`10^{-14}` of its

@@ -272,6 +272,9 @@ class AMatrixFunc : public GenMatrixFunc {
   bool SolvePencil(int j, double inEnergy);
   /// R of the formal route; false sends the J-group to the level route.
   bool SolveFormal(int j, double inEnergy);
+  /// Channel kernel Lambda_d of J-group j at the energy of `point` (as LevelMatrixAdjoint takes it).
+  const std::vector<complex> &KernelLambda(EPoint *point, int j);
+  std::vector<complex> kernel_scratch_;
   /// Solves the bordered system (deflated levels, channels) in place (wp may be null without deflated levels).
   void SolveBordered(int j, complex *wp, complex *wz);
   /// y = A_f w on the formal route, in formal-level coordinates.

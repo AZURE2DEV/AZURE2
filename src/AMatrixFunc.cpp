@@ -1578,15 +1578,81 @@ const vector_c &AMatrixFunc::GetRawChannelSolve(int jGroupNum, int chNum) {
     }
     if (n > 0) {
       if (route_[jGroupNum - 1] == kRouteChannel) {
-        vector_c &tmp = chan_[jGroupNum - 1].w3;
-        tmp = solve;
-        this->ApplyA(jGroupNum, tmp.data(), solve.data());
+        // The widths as they are equal the ones the channel route was built
+        // from unless one is below the 1e-12 cutoff: A g_c then comes from the
+        // channel solves already at hand.
+        const ChannelSpace::FormalLevels &f = (*formal_[jGroupNum - 1]);
+        bool same = true;
+        for (int k = 0; k < n && same; k++) same = (std::real(solve[k]) == f.gcut[(size_t)k * f.nch + chNum - 1]);
+        if (same && !f.pencil) {
+          const vector_c &uf = this->FormalSolve(jGroupNum, chNum - 1);
+          if (f.identity)
+            solve = uf;
+          else
+            for (int r = 0; r < n; r++) {
+              const double *vr = &f.V[(size_t)r * n];
+              complex sum(0.0, 0.0);
+              for (int k = 0; k < n; k++) sum += vr[k] * uf[k];
+              solve[r] = sum;
+            }
+        } else if (same) {
+          // Pencil: A g_c = Z X (e_c + z),  (1 - Lambda R) z = Lambda R e_c.
+          ChannelState &st = chan_[jGroupNum - 1];
+          const int m = (int)f.act.size(), b = f.pos[chNum - 1];
+          std::fill(solve.begin(), solve.end(), complex(0.0, 0.0));
+          if (b >= 0) {
+            vector_c &z = st.wz;
+            z.resize(m);
+            for (int a = 0; a < m; a++) z[a] = st.lamAct[a] * st.R[(size_t)a * m + b];
+            this->SolveBordered(jGroupNum, nullptr, z.data());
+            z[b] += 1.0;
+            vector_c &y = st.w4;
+            y.resize(n);
+            for (int k = 0; k < n; k++) {
+              complex sum(0.0, 0.0);
+              for (int a = 0; a < m; a++) sum += st.X[(size_t)k * m + a] * z[a];
+              y[k] = sum;
+            }
+            for (int r = 0; r < n; r++) {
+              const double *zr = &f.Z[(size_t)r * n];
+              complex sum(0.0, 0.0);
+              for (int k = 0; k < n; k++) sum += zr[k] * y[k];
+              solve[r] = sum;
+            }
+          }
+        } else {
+          vector_c &tmp = chan_[jGroupNum - 1].w3;
+          tmp = solve;
+          this->ApplyA(jGroupNum, tmp.data(), solve.data());
+        }
       } else
         solvers_[jGroupNum - 1].Solve(&solve[0]);
     }
     raw_solve_valid_[jGroupNum - 1][chNum - 1] = 1;
   }
   return solve;
+}
+
+/*!
+ * The channel kernel Lambda_d of J-group j at the energy of `point`, as
+ * LevelMatrixAdjoint takes it: the Lo-matrix element, plus the boundary
+ * condition for the particle channels of the Brune and Park level matrices.
+ */
+const std::vector<complex> &AMatrixFunc::KernelLambda(EPoint *point, int j) {
+  JGroup *jg = compound()->GetJGroup(j);
+  const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
+  const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
+  const int nch = jg->NumChannels();
+  kernel_scratch_.resize(nch);
+  for (int d = 1; d <= nch; d++) {
+    AChannel *ch = jg->GetChannel(d);
+    complex l = point->GetLoElement(j, d);
+    const bool particle = park ? (ch->GetRadType() == 'P' && compound()->GetPair(ch->GetPairNum())->GetPType() == 0)
+                               : (brune && ch->GetRadType() == 'P');
+    if (particle) l += ch->GetBoundaryCondition();
+    kernel_scratch_[d - 1] = l;
+  }
+  return kernel_scratch_;
 }
 
 /*!
@@ -1671,6 +1737,62 @@ void AMatrixFunc::BilinearAdjoint(EPoint *energyPoint, int jNum, const std::vect
   }
   // All levels are in the R matrix on this path (PointTBar), so active index
   // = level index.
+  if (accum.formal) {
+    // A scalar pass: Mbar = -sum_t beta_t conj(u_ch) conj(u_chp)^T enters the
+    // structural adjoint through K - E N, linearly in E, so only Re(Mbar) and
+    // E Re(Mbar) are summed here (resolved once per pass), and the kernel
+    // G Lambda(E) G^T is differentiated now, through the rank-one terms:
+    //   gammabar_{l d} -= Re(conj(Lambda_d) ((Mbar + Mbar^T) g_d)_l).
+    JGroup *jg = compound()->GetJGroup(jNum);
+    const int nch = jg->NumChannels();
+    const double inEnergy = this->InEnergy(energyPoint);
+    std::vector<double> &K = accum.lmK[jNum - 1], &N = accum.lmN[jNum - 1];
+    if (!accum.lmUsed[jNum - 1]) {
+      K.assign((size_t)n * n, 0.0);
+      N.assign((size_t)n * n, 0.0);
+      accum.lmUsed[jNum - 1] = 1;
+    }
+    accum.formalUsed = true;
+    const std::vector<complex> &lam = this->KernelLambda(energyPoint, jNum);
+    std::vector<double> &G = lma_g_;
+    G.resize((size_t)n * nch);
+    for (int la = 0; la < n; la++)
+      for (int d = 0; d < nch; d++) G[(size_t)la * nch + d] = jg->GetLevel(la + 1)->GetFitGamma(d + 1);
+    vector_c ga(nch), gb(nch);
+    for (const BilinearTerm &t : terms) {
+      const vector_c &uEn = this->GetRawChannelSolve(jNum, t.ch);
+      const vector_c &uEx = this->GetRawChannelSolve(jNum, t.chp);
+      const complex cb = conj(t.beta);
+      for (int la = 1; la <= n; la++) {
+        accum.AddGamma(jNum, la, t.ch, std::real(cb * uEx[la - 1]));
+        accum.AddGamma(jNum, la, t.chp, std::real(cb * uEn[la - 1]));
+      }
+      // conj(u)^T g_d for both solves.
+      std::fill(ga.begin(), ga.end(), complex(0.0, 0.0));
+      std::fill(gb.begin(), gb.end(), complex(0.0, 0.0));
+      for (int la = 0; la < n; la++) {
+        const complex ca = conj(uEn[la]), cbx = conj(uEx[la]);
+        const double *g = &G[(size_t)la * nch];
+        for (int d = 0; d < nch; d++) {
+          ga[d] += ca * g[d];
+          gb[d] += cbx * g[d];
+        }
+      }
+      for (int la = 0; la < n; la++) {
+        const complex a = -t.beta * conj(uEn[la]), b = -t.beta * conj(uEx[la]);
+        // (Mbar g_d)_l = a_l (conj(uEx) . g_d);  (Mbar^T g_d)_l = b_l (conj(uEn) . g_d).
+        for (int d = 0; d < nch; d++)
+          accum.gamma[jNum - 1][la][d] -= std::real(conj(lam[d]) * (a * gb[d] + b * ga[d]));
+        double *kr = &K[(size_t)la * n], *nr = &N[(size_t)la * n];
+        for (int c = 0; c < n; c++) {
+          const double v = std::real(a * conj(uEx[c]));
+          kr[c] += v;
+          nr[c] += inEnergy * v;
+        }
+      }
+    }
+    return;
+  }
   matrix_c &Mbar = mbar_scratch_;
   Mbar.resize(n);
   for (int r = 0; r < n; r++) Mbar[r].assign(n, complex(0.0, 0.0));
@@ -2169,6 +2291,26 @@ void AMatrixFunc::FormalBilinearAdjoint(int j, const std::vector<BilinearTerm> &
 void AMatrixFunc::ResolveFormalCotangents(GradAccum &accum, const vector_matrix_r *shiftDeriv) {
   if (!accum.formalUsed) return;
   this->ClearMatrices();
+  // Deferred level-matrix cotangents: with X_K = sum Re Mbar, X_N = sum E Re Mbar,
+  // <X_K, dK> - <X_N, dN> = LMA(X_K - X_N, 0) + LMA(X_N, 1) with a zero kernel.
+  for (int j = 1; j <= compound()->NumJGroups() && j <= (int)accum.lmUsed.size(); j++) {
+    if (!accum.lmUsed[j - 1]) continue;
+    JGroup *jg = compound()->GetJGroup(j);
+    const int n = (int)std::lround(std::sqrt((double)accum.lmK[j - 1].size()));
+    matrix_c X1(n, vector_c(n)), X2(n, vector_c(n));
+    for (int r = 0; r < n; r++)
+      for (int c = 0; c < n; c++) {
+        const double xk = accum.lmK[j - 1][(size_t)r * n + c], xn = accum.lmN[j - 1][(size_t)r * n + c];
+        X1[r][c] = xk - xn;
+        X2[r][c] = xn;
+      }
+    const std::vector<complex> zero(jg->NumChannels(), complex(0.0, 0.0));
+    this->LevelMatrixAdjoint(nullptr, j, X1, 0.0, accum, shiftDeriv, zero.data());
+    this->LevelMatrixAdjoint(nullptr, j, X2, 1.0, accum, shiftDeriv, zero.data());
+    std::fill(accum.lmK[j - 1].begin(), accum.lmK[j - 1].end(), 0.0);
+    std::fill(accum.lmN[j - 1].begin(), accum.lmN[j - 1].end(), 0.0);
+    accum.lmUsed[j - 1] = 0;
+  }
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
     JGroup *jg = compound()->GetJGroup(j);
     if (!jg->IsInRMatrix() || j > (int)accum.fe.size()) continue;

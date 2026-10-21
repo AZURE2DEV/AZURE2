@@ -126,6 +126,9 @@ void GradAccum::Init(CNuc *compound) {
   fe = e;
   fgamma = gamma;
   formalUsed = false;
+  lmK.assign(nJ, {});
+  lmN.assign(nJ, {});
+  lmUsed.assign(nJ, 0);
   abundance.assign(compound->NumAbundanceParams(), 0.0);
   screening.clear();
 }
@@ -145,6 +148,12 @@ void GradAccum::Zero() {
       for (auto &row : lev) std::fill(row.begin(), row.end(), 0.0);
     formalUsed = false;
   }
+  for (size_t j = 0; j < lmUsed.size(); j++)
+    if (lmUsed[j]) {
+      std::fill(lmK[j].begin(), lmK[j].end(), 0.0);
+      std::fill(lmN[j].begin(), lmN[j].end(), 0.0);
+      lmUsed[j] = 0;
+    }
 }
 
 /*!
@@ -161,6 +170,19 @@ void GradAccum::Add(const GradAccum &o) {
   for (int k = 0; k < (int)abundance.size() && k < (int)o.abundance.size(); k++) abundance[k] += o.abundance[k];
   if (o.screening.size() > screening.size()) screening.resize(o.screening.size(), 0.0);
   for (int k = 0; k < (int)o.screening.size(); k++) screening[k] += o.screening[k];
+  for (size_t j = 0; j < o.lmUsed.size() && j < lmUsed.size(); j++)
+    if (o.lmUsed[j]) {
+      if (lmK[j].size() != o.lmK[j].size()) {
+        lmK[j].assign(o.lmK[j].size(), 0.0);
+        lmN[j].assign(o.lmN[j].size(), 0.0);
+      }
+      for (size_t k = 0; k < lmK[j].size(); k++) {
+        lmK[j][k] += o.lmK[j][k];
+        lmN[j][k] += o.lmN[j][k];
+      }
+      lmUsed[j] = 1;
+      formalUsed = true;
+    }
   if (o.formalUsed) {
     for (int j = 0; j < (int)fe.size() && j < (int)o.fe.size(); j++)
       for (int k = 0; k < (int)fe[j].size() && k < (int)o.fe[j].size(); k++) {
