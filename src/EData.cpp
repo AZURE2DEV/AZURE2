@@ -343,7 +343,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
 
   if (this->NumSegments() > 0) {
     if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
-    this->MapData();
+    this->MapData(theCNuc);
   }
 
   return 0;
@@ -577,7 +577,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
 
   if (this->NumSegments() > 0) {
     if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
-    this->MapData();
+    this->MapData(theCNuc);
   }
 
   return 0;
@@ -2944,12 +2944,13 @@ bool ShiftsAgree(const ShiftForm &a, const ShiftForm &b) {
  * only, each of which calculates its mapped points.  The analytic gradient
  * (AZUREGrad.cpp) works on the same groups: one forward solve per group.
  *
- * Segments with components (SUM/RATIO, total capture) are not mapped.
+ * Segments with components (SUM/RATIO, total capture) are not mapped; a
+ * shifted segment without a particle exit (external capture) only within itself.
  * AZURE_NO_POINT_MAPPING=1 in the environment switches mapping off entirely;
  * AZURE_NO_CROSS_SEGMENT_MAPPING=1 keeps it within each segment only.
  */
 
-void EData::MapData() {
+void EData::MapData(CNuc *theCNuc) {
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
       point->ClearMapping();
@@ -2965,6 +2966,23 @@ void EData::MapData() {
   const int numSegments = (int)segments.size();
   std::vector<ShiftForm> shiftForms(numSegments);
   for (int s = 0; s < numSegments; s++) shiftForms[s] = ShiftFormOf(segments, s);
+  // External-capture amplitudes at a shifted energy may be interpolated from
+  // the energies of the segment's own points (ECAmplitudeCache), so a shifted
+  // capture segment is mapped within itself only.  Without the compound
+  // nucleus at hand, every shifted segment is.
+  std::vector<char> ownOnly(numSegments, 0);
+  for (int s = 0; s < numSegments; s++) {
+    const ShiftForm &f = shiftForms[s];
+    const bool shifted = f.constOwner >= 0 || f.sqrtFree || f.fnOwner >= 0 || f.constShift != 0.0 ||
+                         f.sqrtShift != 0.0 || f.hasFn;
+    if (!shifted) continue;
+    if (!theCNuc) {
+      ownOnly[s] = 1;
+      continue;
+    }
+    const int exitPair = theCNuc->GetPairNumFromKey(segments[s].GetExitKey());
+    if (exitPair < 1 || theCNuc->GetPair(exitPair)->GetPType() != 0) ownOnly[s] = 1;
+  }
 
   // Every point of every mappable segment, in data order.
   struct Ref { int seg, point; };
@@ -3003,7 +3021,8 @@ void EData::MapData() {
       EPoint &p = pointOf(refs[k]);
       bool mapped = false;
       for (const Ref &h : hosts) {
-        if (h.seg != refs[k].seg && !(crossSegment && ShiftsAgree(shiftForms[h.seg], shiftForms[refs[k].seg])))
+        if (h.seg != refs[k].seg && !(crossSegment && !ownOnly[h.seg] && !ownOnly[refs[k].seg] &&
+                                      ShiftsAgree(shiftForms[h.seg], shiftForms[refs[k].seg])))
           continue;
         EPoint &hp = pointOf(h);
         if (SharesCalculation(hp, p)) {
@@ -3601,7 +3620,7 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
 
     // Critical fix: Rebuild energy-based mapping system after energy shifts
     if (anyEnergyShifted) {
-      data->MapData();
+      data->MapData(theCNuc);
     }
 
     return;
@@ -3656,7 +3675,7 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
 
   // Critical fix: Rebuild energy-based mapping system after energy shifts
   if (anyEnergyShifted) {
-    this->MapData();
+    this->MapData(theCNuc);
   }
 }
 
