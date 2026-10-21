@@ -1,4 +1,5 @@
 #include "AngCoeff.h"
+#include "Profile.h"
 #include "CNuc.h"
 #include "EPoint.h"
 #include <cstdio>
@@ -21,6 +22,7 @@
  * section as the weight of the target average.  The E1 and E2 components are scaled with the total.
  */
 void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
+  AZUREProfile::Timer profileTimer(AZUREProfile::kCrossSection);
   this->CalculateBareCrossSection(point);
   if (point->GetScreeningParam() == 0) return;
   if (point->IsAngularDist() || point->IsPhase()) return;

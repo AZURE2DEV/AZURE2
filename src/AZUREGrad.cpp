@@ -1,4 +1,5 @@
 #include "AZUREGrad.h"
+#include "Profile.h"
 #include <atomic>
 #include <chrono>
 #include <iostream>
@@ -758,6 +759,7 @@ void AddCotangent(TMatrixCotangent &dst, const TMatrixCotangent &src) {
 void GroupForward(AMatrixFunc &amf, const GradItem &it, CNuc *compound, std::vector<double> &rawModel,
                   std::vector<double> &weight) {
   EPoint *host = it.members[0].pt;
+  AZUREProfile::Timer profileTimer(AZUREProfile::kGradForward);
   amf.ClearMatrices();
   amf.FillMatrices(host);
   amf.InvertMatrices();
@@ -881,6 +883,7 @@ bool GroupRows(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vecto
   // The basis: for each channel pair, the J-group block (E then gamma, level by
   // level) of the adjoint with cotangent 1 and with cotangent i.
   std::vector<std::vector<double>> basisRe(keys.size()), basisIm(keys.size());
+  AZUREProfile::Timer profileBasis(AZUREProfile::kGradBackprop);
   for (size_t k = 0; k < keys.size(); k++) {
     const int j = keys[k].j;
     JGroup *jg = compound->GetJGroup(j);
@@ -900,6 +903,8 @@ bool GroupRows(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vecto
       }
     }
   }
+  profileBasis.Stop();
+  AZUREProfile::Timer profileRows(AZUREProfile::kGradRows);
   for (size_t q = 0; q < g; q++) {
     const GroupMember &m = it.members[q];
     accum.Zero();

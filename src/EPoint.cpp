@@ -1,4 +1,5 @@
 #include "AMatrixFunc.h"
+#include "Profile.h"
 #include "AngCoeff.h"
 #include "CNuc.h"
 #include "Config.h"
@@ -1114,6 +1115,7 @@ void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect *targetEffect) 
  */
 
 void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints) {
+  AZUREProfile::Timer profileTimer(AZUREProfile::kEDependent);
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
 

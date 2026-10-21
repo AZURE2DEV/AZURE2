@@ -1,4 +1,5 @@
 #include "AMatrixFunc.h"
+#include "Profile.h"
 #include "AngCoeff.h"
 #include "PolarizationFunc.h"
 #include "CNuc.h"
@@ -145,6 +146,7 @@ void AMatrixFunc::ClearMatrices() {
  */
 
 void AMatrixFunc::FillMatrices(EPoint *point) {
+  AZUREProfile::Timer profileTimer(AZUREProfile::kFill);
   double inEnergy;
   if (compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetPType() == 20)
     inEnergy = point->GetCMEnergy() +
@@ -264,6 +266,7 @@ void AMatrixFunc::FillMatrices(EPoint *point) {
  */
 
 void AMatrixFunc::InvertMatrices() {
+  AZUREProfile::Timer profileTimer(AZUREProfile::kFactor);
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
     if (compound()->GetJGroup(j)->IsInRMatrix() && compound()->GetJGroup(j)->GetNucleus() == activeNucleus_) {
       matrix_c *theAInvMatrix = this->GetJSpecAInvMatrix(j);
@@ -314,6 +317,7 @@ const vector_r &AMatrixFunc::GetGammaVector(int jGroupNum, int chNum) {
 const vector_c &AMatrixFunc::GetChannelSolve(int jGroupNum, int chNum) {
   vector_c &solve = channel_solves_[jGroupNum - 1][chNum - 1];
   if (!channel_solve_valid_[jGroupNum - 1][chNum - 1]) {
+    AZUREProfile::Timer profileTimer(AZUREProfile::kChannelSolve);
     const vector_r &gammas = this->GetGammaVector(jGroupNum, chNum);
     const int n = (int)gammas.size();
     solve.resize(n);
@@ -389,6 +393,7 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
  */
 
 void AMatrixFunc::CalculateTMatrix(EPoint *point) {
+  AZUREProfile::Timer profileTimer(AZUREProfile::kTMatrix);
   // Cache frequently accessed values to avoid repeated function calls
   int entranceKey = point->GetEntranceKey();
   int exitKey = point->GetExitKey();
@@ -547,6 +552,7 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
  */
 bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar, int xsComponent,
                             bool ayCrossSection) {
+  AZUREProfile::Timer profileTimer(AZUREProfile::kGradTBar);
   const complex I(0.0, 1.0);
 
   // --- Common gating. ---
@@ -927,6 +933,7 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
  */
 void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, GradAccum &accum,
                               const vector_matrix_r *shiftDeriv) {
+  AZUREProfile::Timer profileTimer(AZUREProfile::kGradBackprop);
   const complex I(0.0, 1.0);
   for (const auto &s : bar.screen) accum.AddScreening(s.first, s.second);
   EPoint *point = energyPoint;
@@ -1205,6 +1212,7 @@ double AMatrixFunc::InEnergy(EPoint *point) {
  */
 void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix_c &Mbar, double inEnergy,
                                      GradAccum &accum, const vector_matrix_r *shiftDeriv) {
+  AZUREProfile::Timer profileTimer(AZUREProfile::kGradLevelMatrix);
   EPoint *point = energyPoint;
   const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
   const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
@@ -1461,6 +1469,7 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
 const vector_c &AMatrixFunc::GetRawChannelSolve(int jGroupNum, int chNum) {
   vector_c &solve = raw_solves_[jGroupNum - 1][chNum - 1];
   if (!raw_solve_valid_[jGroupNum - 1][chNum - 1]) {
+    AZUREProfile::Timer profileTimer(AZUREProfile::kChannelSolve);
     JGroup *jGroup = compound()->GetJGroup(jGroupNum);
     const std::vector<int> &map = level_active_index_[jGroupNum - 1];
     const int n = solvers_[jGroupNum - 1].size();

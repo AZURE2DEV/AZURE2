@@ -1,4 +1,5 @@
 #include "AZURECalc.h"
+#include "Profile.h"
 #include "ScatteringLength.h"
 #include <algorithm>
 #include <atomic>
@@ -337,6 +338,8 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld
 }
 
 double AZURECalc::operator()(const vector_r &p) const {
+  AZUREProfile::ScopedReport profileReport("evaluation");
+  AZUREProfile::Timer profileTimer(AZUREProfile::kEvaluation);
   int thisIteration = data()->Iterations();
   data()->Iterate();
   bool isFit = data()->IsFit();
@@ -575,6 +578,7 @@ bool AZURECalc::PrecalculatePoints(CNuc *lc, EData *ld) const {
   for (size_t k = 0; k < order.size(); k++) sorted[k] = work[order[k]];
   work.swap(sorted);
   const Config &cfg = configure();
+  AZUREProfile::Timer profileTimer(AZUREProfile::kPoints);
 #pragma omp parallel for schedule(dynamic, 1)
   for (int k = 0; k < (int)work.size(); k++) {
     try {
@@ -665,6 +669,8 @@ double AZURECalc::Chi2Value(const vector_r &p) const {
 }
 
 std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
+  AZUREProfile::ScopedReport profileReport("gradient");
+  AZUREProfile::Timer profileTimer(AZUREProfile::kGradient);
   {
     std::lock_guard<std::mutex> lk(lastGradMutex_);
     lastGradP_ = p;
