@@ -6,6 +6,29 @@
 
 struct GradAccum;
 
+/*!
+ * Cotangents of the T-matrix elements of one decay (AMatrixFunc::PointTBar):
+ * t[k-1][m-1] for the internal pathways T(k,m), ec[k-1][m-1] for the
+ * external-capture ones.  Same convention as PointAdjoint: zbar = dL/dRe(z) +
+ * i dL/dIm(z).
+ */
+struct TMatrixCotangent {
+  std::vector<vector_c> t;
+  std::vector<vector_c> ec;
+};
+
+/*!
+ * One term beta * g_ch^T A g_chp of the level-matrix bilinear forms of a
+ * J-group: the internal T-matrix depends on the level matrix only through these
+ * (AMatrixFunc::CollectBilinearTerms), so its adjoint is a sum over them
+ * (AMatrixFunc::BilinearAdjoint).  beta is the cotangent of the bilinear form.
+ */
+struct BilinearTerm {
+  int ch;
+  int chp;
+  complex beta;
+};
+
 /// A function class to calculate the T-Matrix using the A-Matrix
 
 /*!
@@ -102,6 +125,42 @@ class AMatrixFunc : public GenMatrixFunc {
   bool PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
                     const vector_matrix_r *shiftDeriv = nullptr,
                     int xsComponent = 0, bool ayCrossSection = false);
+
+  /*!
+   * The first half of PointAdjoint: the cotangents of the T-matrix elements
+   * held by this object, for `fitBar` times the derivative of `point`'s
+   * observable.  The T-matrix may be that of another point at the same energy
+   * (a host of point mapping, EData::MapData): only the angle-dependent parts
+   * (Legendre polynomials, Coulomb amplitude, A_y coefficients) are read from
+   * `point`.  Returns false, with `bar` unusable, where PointAdjoint would.
+   */
+  bool PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
+                 int xsComponent = 0, bool ayCrossSection = false);
+  /*!
+   * The second half of PointAdjoint: back-propagates T-matrix cotangents to the
+   * level energies and reduced widths, at the energy of `energyPoint` (whose
+   * T-matrix this object holds).  Linear in `bar`, so the cotangents of all the
+   * points sharing one T-matrix may be summed first.
+   */
+  void TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, GradAccum &accum,
+                   const vector_matrix_r *shiftDeriv = nullptr);
+  /*!
+   * The internal-pathway cotangents of `bar` as bilinear-form terms, per
+   * J-group (terms[j-1]), merged by channel pair.  False if the decay has
+   * external capture, whose channel-capture terms are not of this form
+   * (TBarAdjoint then takes the dense path).
+   */
+  bool CollectBilinearTerms(EPoint *energyPoint, const TMatrixCotangent &bar,
+                            std::vector<std::vector<BilinearTerm>> &terms);
+  /*!
+   * Adjoint of the bilinear terms of J-group j: the explicit reduced-width
+   * derivatives and, through d(A) = -A d(M) A, the level-matrix ones, at the
+   * energy of `energyPoint`.  The cotangent of A is a sum of rank-one terms, so
+   * that of the level matrix is formed from the solves A g_c in O(n^2) per
+   * term instead of the two O(n^3) products of the dense path.
+   */
+  void BilinearAdjoint(EPoint *energyPoint, int jNum, const std::vector<BilinearTerm> &terms,
+                       GradAccum &accum, const vector_matrix_r *shiftDeriv = nullptr);
   /// Store an \f$A^{-1}\f$ element.
   void AddAInvMatrixElement(int, int, int, complex);
 
@@ -117,6 +176,16 @@ class AMatrixFunc : public GenMatrixFunc {
 
   const vector_r &GetGammaVector(int jGroupNum, int chNum);
   const vector_c &GetChannelSolve(int jGroupNum, int chNum);
+  /// A times the reduced-width vector of a channel WITHOUT the 1e-12 cutoff
+  /// (the adjoint differentiates the widths as they are), cached per energy.
+  const vector_c &GetRawChannelSolve(int jGroupNum, int chNum);
+  /// Beam energy in the compound system, as FillMatrices takes it.
+  double InEnergy(EPoint *point);
+  /// d(level matrix) part of the adjoint of one J-group, given the level-matrix
+  /// cotangent Mbar (n x n): structural energy and reduced-width gradients of
+  /// the standard, Brune and Park level matrices.
+  void LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix_c &Mbar, double inEnergy,
+                          GradAccum &accum, const vector_matrix_r *shiftDeriv);
 
   const Config *configure_;
   CNuc *compound_;
@@ -135,6 +204,14 @@ class AMatrixFunc : public GenMatrixFunc {
   /// A times the reduced-width vector of a channel.
   std::vector<std::vector<vector_c>> channel_solves_;
   std::vector<std::vector<char>> channel_solve_valid_;
+  std::vector<std::vector<vector_c>> raw_solves_;
+  std::vector<std::vector<char>> raw_solve_valid_;
+  /// Scratch level-matrix cotangent of BilinearAdjoint.
+  matrix_c mbar_scratch_;
+  /// Scratch of LevelMatrixAdjoint.
+  std::vector<double> lma_e_, lma_g_, lma_s_, lma_inv_, lma_resym_, lma_imsym_, lma_de_, lma_sg_, lma_acc_;
+  std::vector<char> lma_brunep_;
+  std::vector<complex> lma_l_;
   std::vector<ChanCapEntry> chan_cap_cache_;
   vector_c chan_cap_entrance_;
   vector_c chan_cap_exit_;
