@@ -6,9 +6,9 @@ something for such a project. The THM machinery itself (HOES cross section,
 `<thm>` keys, experiments, R(E), the DW vertex, the ps and angle windows,
 cbackground=, thm_experiments.out) is new and does nothing unless it is used.
 
-`origin/dev` 64ed575 is merged into `thm` (October 2026; see "Merge of
-origin/dev 64ed575" below; the previous merge was 6f3228e, 3628a87), so all of
-dev is already in `thm`.
+`origin/dev` 7e6dba8 is merged into `thm` (October 2026; see "Merge of
+origin/dev 7e6dba8" below; the previous merges were 64ed575, 4a93bc1, and
+6f3228e, 3628a87), so all of dev is already in `thm`.
 The dev changes merged by 18c49ea, f56c150, da72def, 497548a, e191991 and
 3628a87 are not differences: the Wigner-limit bound, the elastic identical-pair factor
 (7c34992), the adaptive-grid convergence work, target-integration anchoring,
@@ -41,7 +41,7 @@ cache guard.
 - GUI:
   - 5832bee, ee092f9, 2887d99: level lines have 33 fields (32: THM binding energy, 33: gammaIsRWA; both 0 for classic). Dev's engine ignores trailing tokens.
   - d2d30a9, 2887d99, 3e7bd97: doubles are saved with round-trip precision (was 6 digits) and fixed-width columns keep a space; opening no longer rounds free level parameters. A GUI-saved classic project can therefore give a different chi2 than on dev (7Li_p_a: 2137.82733857 vs 2137.82673527 after open + save on dev).
-  - f3210c7: `<parameterSettings>` level rows use AZURE2's numbering; legacy rows are recognised by value.
+  - f3210c7: `<parameterSettings>` level rows use AZURE2's numbering.  Since the merge of 7e6dba8 this is dev's implementation (be817bf, e36d485: the `# level numbering: engine` marker, unmarked blocks read by their value column); left as differences: a reduced-width-amplitude channel's row says `Width (MeV^(1/2))`, and a level without channel lines is not numbered (it writes no line).
   - 32701d7: pairs are identified by key; repeated segment lines read from a file are kept.
   - 57aba50, 065041b: the RWA -> physical conversion on a param.sav load runs on the live GUI state (a temporary snapshot) and leaves the open project alone.
   - 2b0755d, 0304f52: the plot validates cross section and S factor separately; the band follows the points kept.
@@ -348,6 +348,100 @@ Still open: the merged EPoint is 152 bytes larger than dev's; the three
 convolution_unify models with target integration and a beam spread need more
 than 3.0 GB of address space with either binary (checked here on 21 points).
 
+## Merge of origin/dev 7e6dba8 (October 2026)
+
+dev between 64ed575 and 7e6dba8: external-capture energy tables (687105f,
+ECTable, `--no-ec-table`; shifted capture points exact), the GUI's engine
+numbering of `<parameterSettings>` level entries (be817bf, e36d485), and the
+speed-up: point mapping across segments (ccdd364, 92d837e), interference
+products once per T-matrix (deec7fc), the rank-one level-matrix cotangent
+and flat structural loops of the adjoint (e8b1c08), the energy-grouped
+analytic gradient and residual Jacobian (861d506), tests/angle_mapping and
+tests/ec_shift.  All of it is in, with these decisions:
+
+- **THM and point mapping across segments.**  A THM (HOES) segment is
+  mapped within itself only, and no point of another segment (THM or
+  classic) is mapped onto one of its points (`EData::MapData`: THM segments
+  are `ownOnly`, like a shifted capture segment).  Extending
+  `SharesCalculation` instead would have to compare every THM option --
+  experiment, observable and isDiff, vertex model and the DW vertex,
+  kinematics, the ps nodes and theta windows, distortion, line shape, cbkg,
+  the THM binding energy of the pair, R(E), weights, the 5-sigma fold -- and
+  any option added later would silently map unequal points.  Two code paths
+  also assume a THM point's host is in a THM segment: the THM-only chi^2 of
+  `AZURECalc::Gradient` (Chi2On thmOnly; PrecalculatePoints hands out the
+  unmapped THM points only, so a host in a classic segment would not be
+  recalculated) and `ComputeTHMRows` (it evaluates THM segments alone, mapped
+  points after their hosts).  Within one THM segment every option is shared,
+  so mapping there is what thm already did (one-angle THM segments with
+  identical settings are not mapped onto each other; not needed so far).
+  Classic segments of a THM project are mapped across segments as on dev.
+- **Grouped gradient.**  `BuildGradItems` leaves THM segments out
+  (`skipTHM`): `AccumulateEGammaGradient` always (their gradient is the HOES
+  adjoint or the THM-only differences, as before), `ComputeResidualJacobian`
+  refuses a THM segment unless `skipTHM` (the LM fallback, as before), and
+  `ComputeModelGradients` honours `skipTHM`.  No group mixes THM and classic
+  points, since MapData never maps across them.  `ThmPointModelGradient`,
+  `ComputeTHMRows`, the cbkg columns, profiled norms and THM penalty rows are
+  unchanged.
+- **Adjoint.**  dev's `PointTBar`/`TBarAdjoint`/`BilinearAdjoint` and the flat
+  `LevelMatrixAdjoint(Mbar)` are kept, with thm's identical-entrance
+  (1 + delta_12) factor in `PointTBar`.  `LevelMatrixAdjoint` takes thm's
+  `levelOf` (active level -> level number), and the HOES adjoint enters
+  through `LevelMatrixABarAdjoint` (the dense inverse lemma, then
+  `LevelMatrixAdjoint`).  The Park branch is dev's, unchanged; the Brune
+  terms use the stored ShftFunc/ChannelFunc shift values and thm's dS/dE
+  table, as before; gammaIsRWA acts in TransformIn, before the adjoint.
+- **Interference-product cache** (deec7fc): only `GenMatrixFunc::
+  CalculateCrossSection` reads it; `THMMatrixFunc` forms the HOES observable
+  from its own amplitudes and never goes through it, and the cache is dropped
+  at every `ClearMatrices`/T-matrix store, so no THM point reads products of
+  another observable.
+- **CopyEDependentValuesFrom** still copies the THM tables; with THM
+  segments mapped within themselves a THM point's host is in its segment.
+- **EC amplitudes.**  thm's closed-entrance-channel guard (zero amplitude
+  where P = 0) moved into dev's `ECPathwayAmplitude`, so it also covers
+  shifted and tabulated amplitudes.
+- **GUI**: dev's engine numbering of level entries replaces thm's
+  `engineLevelOrder`/legacy reader (see B, f3210c7); `engineNumbering` skips a
+  level without channel lines, as thm's order did; thm's units, round-trip
+  level writer, prior centres and THM members are kept.  dev's
+  `getPairsTab`/`getSegmentsTab` replace thm's copies.
+- `--help` prints `--ec-table` (dev parses it; tests/cli_help).
+  tests/angle_mapping and tests/ec_shift take thm's time guard.
+
+Verified after the merge (one heavy process at a time, OMP_NUM_THREADS=1,
+engines under a 1.6 GB address-space cap; reference: c5c747d built from the
+same sources):
+
+- THM: every THM example and THM test project (13 projects, 73 output files)
+  byte for byte as c5c747d; the ¹²C+¹²C best fits too (33 files): plain_6.5
+  92.2140340427, plain_8.5 70.7968723529, NCxR_8.5 100.894445567 (totals with
+  priors), identical.  The 18 THM check.sh scripts of c5c747d pass with both
+  binaries and give the same 4838 work files, apart from temporary paths in
+  logs and run files and the analytic gradient's last bits (dev's flat
+  structural loops): thm_band's band 2.7e-11, thm_park's two MIGRAD fits end
+  with the same chi^2 to 12 digits and models within 7e-10 (a flat
+  direction: a width 1e-4 apart).  The first gradient of that fit agrees with
+  c5c747d's to ~1e-15 relative.
+- Classic (c5c747d's 17 classic test projects, natural_neon apart): 71 of
+  78 files byte for byte; the other 7 are 13N, 13N_capture_ay and
+  beam_profile_kernel, dev's EC tables (687105f: 13N_capture_ay 1e-5 in one
+  small capture value, chi^2 3.73951 -> 3.7395); with `--no-ec-table` they
+  are byte for byte too.  Against dev 7e6dba8 the differences are those of
+  section A only (the previous merge's list).
+- Suites: build/ ctest 59/59 (pyazr_thm_adjoint, thm_park, park_gradient
+  included), build-gui ctest 77/77, tests/run_tests.sh under 2.4 GB 62
+  passed, 3 failed: cli_help (fixed above, rerun: pass), natural_target and
+  convolution_unify (out of memory, as with dev's binary).  natural_target
+  passes under 3.0 GB; convolution_unify's first model needs more than
+  3.0 GB (known).  natural_neon (project and check.sh) passes under 2.4 GB.
+  tests/angle_mapping/check.sh and tests/ec_shift/check.sh pass on thm.
+- Speed (one thread): CLI evaluation f19_pag_thm 8.2 s, c12c12_tumino2018
+  45.9 s, both as before; pyazr chi2_and_grad (HOES adjoint) f19 1.78 ->
+  1.29 s, c12c12 (230 parameters) 2.81 -> 1.99 s, same values; the CLI's
+  first gradient on f19 1.28 -> 1.02 s.
+
 ## Bugs from origin/dev fixed on thm (October 2026)
 
 Found after the merge of 6f3228e; each came with dev's code, so `dev` has it
@@ -389,7 +483,10 @@ non-zero; under Park, LM's cost includes the J penalty (zero where J > 0).
    stay last) or reuse type code 7 (cbkg; 5 and 6 are dev's shift_fn and
    abundance); the pair record keeps dev's fields first (binding energy
    last, field 19).
-4. Engine seams to re-check: EData.cpp/EDataThm.cpp hooks, EPoint THM
+4. Engine seams to re-check: EData.cpp/EDataThm.cpp hooks, EData::MapData
+   (THM segments map within themselves only), the energy groups of
+   AZUREGrad.cpp (THM segments left out), AMatrixFunc::LevelMatrixAdjoint
+   (levelOf) and LevelMatrixABarAdjoint (the HOES adjoint), EPoint THM
    tables (CalcEDependentValues, CopyEDependentValuesFrom, mapped points),
    ReplaceSubPointGrids and THM sub-points, AZURECalc (Chi2On thmOnly,
    Gradient)/AZUREGrad/AZUREAPI THM paths, CNuc TransformIn (gammaIsRWA,
