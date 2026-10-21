@@ -2160,11 +2160,17 @@ complete:
   or with an inactive level ahead of active ones, every level setting moved: a prior centred on the 3.52 MeV
   level was applied to the 5.0 MeV one (chi2 +21,904), with an inactive level first to the 9.0 MeV one
   (+160,000). "Load from .sav" mapped energy_N to GUI rows the same way. Fixed: names in the engine numbering
-  of the written file, a marker line `# level numbering: engine`, older blocks translated on read by their row
-  meaning, .sav values matched by level identity (J, parity, energy; pair, l, s) against the file on disk.
-  CHECK OLD FITS made through the GUI with level limits/priors: in a model whose levels were not in J order or
-  had inactive levels, the limits/priors were on the wrong levels -- compare the settings' value column with
-  the level each name points at (energy_N order in param.sav).
+  of the written file, a marker line `# level numbering: engine`; an UNMARKED block is read the way (engine or
+  GUI rows) under which more entries' value columns equal the parameter's current value (tie: engine) -- the
+  old GUI header comment is no evidence, scripts copied it (12C+a 9-13-26 ANC priors are engine-numbered and
+  correct); .sav values matched by level identity (J, parity, energy; pair, l, s) against the file on disk.
+  ARCHIVE SCAN (2026-10-21, value-column evidence): 605 GUI-written files whose limits/priors the engine
+  applied to ANOTHER parameter, 440 of them in 12C+a_onefile/8-6-26_claude_fit_fix (+ struct_runs): Wigner-
+  type bounds (+-2.66) of one channel's width landed on another channel of the same background level; also
+  11B+a/10-16-26_broad_3p_constrained/bg_ref|bg_test (but its rwa-category bounds are script-written) and
+  12C+a 9-13-26 _timing/map_check. To check a file: is "Level N Channel M" (M = global channel-line row in an
+  old GUI block) the engine's width_N_M? Separately (old behaviour, unchanged): the GUI keeps settings only
+  for the parameters it lists as free, so script-made bounds on fixed parameters vanish on a GUI save.
 - 2026-09-13 -- pyazr and `output/intEC.dat`: a session that RELOADS an existing cache for the
   12C+alpha truncated model returns a wrong chi2 (120,593 instead of 113,512, sometimes ~1e26)
   while the CLI reloading the same cache is exact; confirmed with the pre-fix module too, so it is

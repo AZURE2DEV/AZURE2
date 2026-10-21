@@ -109,7 +109,7 @@ class FittingTab : public QWidget {
   void updateParameterTableCheckbox(const QString &paramName, bool checked);
   void applyParameterSettings();
   /// Rename the level entries just read into the engine numbering of the written order.
-  void translateLevelSettings(bool engineNumbered);
+  void translateLevelSettings(bool marked);
   QString findMatchingParameterKey(const FittingParameter &param, const QStringList &savKeys);
   double convertReducedToPhysical(double reducedWidth, int levelIndex, int channelIndex);
   double convertPhysicalToReduced(double physicalWidth, int levelIndex, int channelIndex);

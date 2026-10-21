@@ -5,7 +5,8 @@
 // 5.0 MeV one and added 21,904 to chi2; 2026-10-21).  The project below has both: the levels are not in the
 // written order and an inactive 1- level comes first.  Each entry carries a distinct error, and after a GUI
 // read/write the error must sit on the same physical level and channel, judged by the engine itself (CNuc::Fill
-// of the written file).  The older row-numbered block is read too, and a second read/write changes nothing.
+// of the written file).  The older GUI's row-numbered block and a script's engine-numbered block without the
+// marker (told apart by their value columns) are read too, and a second read/write changes nothing.
 #include <QApplication>
 #include <QDir>
 #include <QFile>
@@ -149,13 +150,22 @@ int main(int argc, char **argv) {
          << entry("Level 3 Channel 1 Width (eV)", 842304.94, 331) << entry("Level 3 Channel 2 Width (eV)", 285549.81, 332);
   // The older GUI's numbering: model row (the inactive level is row 1) and the channel's row in the channel table.
   QStringList legacy;
-  legacy << entry("Level 2 Energy (MeV)", 3.52, 0.011) << entry("Level 3 Energy (MeV)", 9.0, 0.022)
+  legacy << "# Fitting parameter settings (only non-fixed parameters shown)"
+         << "# Format: name value lower_limit upper_limit error fit_error nuisance category minuit_index"
+         << entry("Level 2 Energy (MeV)", 3.52, 0.011) << entry("Level 3 Energy (MeV)", 9.0, 0.022)
          << entry("Level 4 Energy (MeV)", 5.0, 0.033) << entry("Level 2 Channel 2 Width (eV)", 7120152.86, 111)
          << entry("Level 3 Channel 3 Width (eV)", 9780292.75, 221) << entry("Level 3 Channel 4 Width (eV)", -15363065.0, 222)
          << entry("Level 4 Channel 5 Width (eV)", 842304.94, 331) << entry("Level 4 Channel 6 Width (eV)", 285549.81, 332);
 
+  // A block written by a script for the engine: no marker, engine numbering, even under the older GUI's header
+  // comment (the 12C+a models of 2026-09 carry it over engine-numbered ANC priors); its values decide.
+  QStringList script = marked;
+  script.removeFirst();
+  script.prepend("# Fitting parameter settings (only non-fixed parameters shown)");
+
   for (const auto &kind : {std::make_pair(std::string("engine-numbered block"), marked.join("\n")),
-                           std::make_pair(std::string("older row-numbered block"), legacy.join("\n"))}) {
+                           std::make_pair(std::string("older row-numbered GUI block"), legacy.join("\n")),
+                           std::make_pair(std::string("script-written block (engine numbering)"), script.join("\n"))}) {
     const QString in = dir + "/in.azr", a = dir + "/a.azr", b = dir + "/b.azr";
     ok(kind.first + ": fixture written", writeText(in, project(kind.second)));
     {
